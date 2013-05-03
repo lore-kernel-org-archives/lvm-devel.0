@@ -1,390 +1,133 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Fri,  3 May 2013 11:08:32 -0500
-Subject: [PATCH] lvm2app: Add thin and thin pool lv creation V2
-Message-ID: <1367597312-7157-1-git-send-email-tasleson@redhat.com>
+Date: Fri,  3 May 2013 18:38:52 -0500
+Subject: [PATCH] python-lvm: Bindings for thin pool, thin lv creation.
+Message-ID: <1367624332-16074-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: "M. Mohan Kumar" <mohan@in.ibm.com>
-
-Add thin and thin pool lv creation support to lvm library
-
-This is Mohan's patch, re-worked to include suggestions
-from Zdenek.
-
-V2: Remove const lvm_lv_params_create_thin
-    Add const lvm_lv_params_skip_zero_get
-
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- liblvm/lvm2app.h | 116 +++++++++++++++++++++++++++++++
- liblvm/lvm_lv.c  | 205 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 321 insertions(+)
+ python/liblvm.c | 97 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 97 insertions(+)
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 93a78c3..0a00425 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -97,6 +97,7 @@ struct volume_group;
- struct logical_volume;
- struct lv_segment;
- struct pv_segment;
-+struct lvm_lv_create_params;
- 
- /**
-  * \class lvm_t
-@@ -153,6 +154,14 @@ typedef struct lv_segment *lvseg_t;
- typedef struct pv_segment *pvseg_t;
- 
- /**
-+ * \class lv_create_params
-+ *
-+ * This lv_create_params represents the plethora of available options when
-+ * creating a logical volume
-+ */
-+typedef struct lvm_lv_create_params *lv_create_params_t;
-+
-+/**
-  * Logical Volume object list.
-  *
-  * Lists of these structures are returned by lvm_vg_list_lvs().
-@@ -1400,6 +1409,113 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size);
-  */
- lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size);
- 
-+/**
-+ * Thin provisioning discard policies
-+ */
-+typedef enum {
-+	LVM_THIN_DISCARDS_IGNORE,
-+	LVM_THIN_DISCARDS_NO_PASSDOWN,
-+	LVM_THIN_DISCARDS_PASSDOWN,
-+} lvm_thin_discards_t;
-+
-+/**
-+ * Create a thinpool parameter passing object for the specified VG
-+ *
-+ * \param   vg
-+ * Volume Group handle.
-+ *
-+ * \param   pool_name
-+ * Name of the pool.
-+ *
-+ * \param   size
-+ * size of the pool
-+ *
-+ * \param   chunk_size
-+ * data block size of the pool
-+ * Default value is DEFAULT_THIN_POOL_CHUNK_SIZE * 2 when 0 passed as chunk_size
-+ * DM_THIN_MIN_DATA_BLOCK_SIZE < chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE
-+ *
-+ * \param meta_size
-+ * Size of thin pool's metadata logical volume. Allowed range is 2MB-16GB.
-+ * Default value (ie if 0) pool size / pool chunk size * 64
-+ *
-+ * \param discard
-+ * Thin discard policy
-+ * Note: THIN_DISCARDS_PASSDOWN is the default.
-+ *
-+ * \return
-+ * Valid lv_create_params pointer on success, else NULL on error.
-+ * Note: Memory is associated with the vg, it will get reclaimed when vg is
-+ * closed.
-+ *
-+ */
-+lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
-+		const char *pool_name, uint64_t size, uint32_t chunk_size,
-+		uint64_t meta_size, lvm_thin_discards_t discard);
-+
-+#define lvm_lv_params_create_thin_pool_default(vg, pool_name, size) \
-+			lvm_lv_params_create_thin_pool((vg), (pool_name), (size), 0, 0, \
-+			LVM_THIN_DISCARDS_PASSDOWN)
-+
-+
-+/**
-+ * Set the value of zero skip for the lv_create_params
-+ *
-+ * \param params
-+ * lv_create_prams to change
-+ *
-+ * \param skip
-+ * Value of skip zero to be set (0 == zero, 1 == skip zero)
-+ *
-+ * \return
-+ * 0 on success, else -1
-+ */
-+int lvm_lv_params_skip_zero_set(lv_create_params_t params, int skip);
-+
-+/**
-+ * Get the value of zero skip for the lv_create_params
-+ *
-+ * \param params
-+ * lv_create_prams to query
-+ *
-+ * \return
-+ * -1 on error, else 0 == zero, 1 == skip zero
-+ */
-+int lvm_lv_params_skip_zero_get(const lv_create_params_t params);
-+
-+/**
-+ * Create a thin LV creation parameters in a given VG & thin pool
-+ *
-+ * \param   vg
-+ * Volume Group handle.
-+ *
-+ * \param   pool_name
-+ * Name of the pool.
-+ *
-+ * \param lvname
-+ * Name of the LV to create
-+ *
-+ * \param   size
-+ * Size of logical volume
-+ *
-+ * \return
-+ * Valid lv_create_params pointer on success, else NULL on error.
-+ * Note: Memory is associated with the vg, it will get reclaimed when vg is
-+ * closed.
-+ *
-+ */
-+lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
-+									const char *lvname, uint64_t size);
-+/**
-+ * Create the actual logical volume.
-+ *
-+ * \param	params		The parameters object for lv creation
-+ *
-+ * \return
-+ * Valid lv pointer on success, else NULL on error.
-+ */
-+lv_t lvm_lv_create(lv_create_params_t params);
-+
- /************************** physical volume handling ************************/
- 
- /**
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 91948a6..e1b76be 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -22,6 +22,15 @@
- #include "lvm_misc.h"
- #include "lvm2app.h"
- 
-+struct lvm_lv_create_params
-+{
-+	uint32_t magic;
-+	vg_t vg;
-+	struct lvcreate_params lvp;
-+};
-+
-+#define LV_CREATE_PARAMS_MAGIC 0xFEED0001
-+
- static int _lv_check_handle(const lv_t lv, const int vg_writeable)
- {
- 	if (!lv || !lv->vg || vg_read_error(lv->vg))
-@@ -350,3 +359,199 @@ lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_siz
- 		return NULL;
- 	return (lv_t) lvl->lv;
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 09892ca..0afee93 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -1032,6 +1032,101 @@ liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
+ 	return (PyObject *)lvobj;
  }
-+
-+/* Set defaults for thin pool specific LV parameters */
-+static void _lv_set_pool_params(struct lvcreate_params *lp,
-+				vg_t vg, const char *pool,
-+				uint64_t extents, uint64_t meta_size)
+ 
++static PyObject *
++liblvm_lvm_vg_create_lv_thinpool(vgobject *self, PyObject *args)
 +{
-+	_lv_set_default_params(lp, vg, NULL, extents);
++	const char *pool_name;
++	uint64_t size = 0;
++	uint32_t chunk_size = 0;
++	uint64_t meta_size = 0;
++	int skip_zero = 0;
++	lvm_thin_discards_t discard = LVM_THIN_DISCARDS_PASSDOWN;
++	lvobject *lvobj;
++	lv_create_params_t lvp = NULL;
 +
-+	lp->pool = pool;
++	VG_VALID(self);
 +
-+	lp->create_thin_pool = 1;
-+	lp->segtype = get_segtype_from_string(vg->cmd, "thin-pool");
-+	lp->stripes = 1;
-+
-+	if (!meta_size) {
-+		lp->poolmetadatasize = extents * vg->extent_size /
-+			(lp->chunk_size * (SECTOR_SIZE / 64));
-+		while ((lp->poolmetadatasize >
-+			(2 * DEFAULT_THIN_POOL_OPTIMAL_SIZE / SECTOR_SIZE)) &&
-+		       lp->chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE) {
-+			lp->chunk_size <<= 1;
-+			lp->poolmetadatasize >>= 1;
-+	         }
-+	} else
-+		lp->poolmetadatasize = meta_size;
-+
-+	if (lp->poolmetadatasize % vg->extent_size)
-+		lp->poolmetadatasize +=
-+			vg->extent_size - lp->poolmetadatasize % vg->extent_size;
-+
-+	lp->poolmetadataextents =
-+		extents_from_size(vg->cmd, lp->poolmetadatasize / SECTOR_SIZE,
-+						   vg->extent_size);
-+}
-+
-+lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
-+		const char *pool_name, uint64_t size, uint32_t chunk_size,
-+		uint64_t meta_size, lvm_thin_discards_t discard)
-+{
-+	uint64_t extents = 0;
-+	struct lvm_lv_create_params *lvcp = NULL;
-+
-+	if (meta_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
-+		log_error("Invalid metadata size");
++	if (!PyArg_ParseTuple(args, "sK|kKii", &pool_name, &size, &chunk_size,
++			&meta_size, &discard, &skip_zero)) {
 +		return NULL;
 +	}
 +
-+	if (meta_size &&
-+		meta_size < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE)) {
-+		log_error("Invalid metadata size");
-+		return NULL;
-+	}
-+
-+	if (vg_read_error(vg))
++	if ((lvobj = PyObject_New(lvobject, &LibLVMlvType)) == NULL)
 +		return NULL;
 +
-+	if (!vg_check_write_mode(vg))
-+		return NULL;
++	/* Initialize the parent ptr in case lv create fails and we dealloc lvobj */
++	lvobj->parent_vgobj = NULL;
 +
-+	if (pool_name == NULL || !strlen(pool_name)) {
-+		log_error("pool_name invalid");
-+		return NULL;
-+	}
++	lvp = lvm_lv_params_create_thin_pool(self->vg, pool_name, size, chunk_size,
++				meta_size, discard);
 +
-+	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
-+					  vg->extent_size))) {
-+		log_error("Unable to create LV thin pool without size.");
-+		return NULL;
-+	}
++	if (lvp) {
++		if (skip_zero) {
++			if ( -1 != lvm_lv_params_skip_zero_set(lvp, 1)) {
++				PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++							Py_DECREF(lvobj);
++							return NULL;
++			}
++		}
 +
-+	lvcp = dm_pool_zalloc(vg->vgmem, sizeof (struct lvm_lv_create_params));
-+
-+	if (lvcp) {
-+		lvcp->vg = vg;
-+		lvcp->lvp.discards = discard;
-+
-+		if (chunk_size)
-+			lvcp->lvp.chunk_size = chunk_size;
-+		else
-+			lvcp->lvp.chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE * 2;
-+
-+		if (lvcp->lvp.chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE ||
-+				lvcp->lvp.chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE) {
-+			log_error("Invalid chunk_size");
++		if ((lvobj->lv = lvm_lv_create(lvp)) == NULL) {
++			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++			Py_DECREF(lvobj);
 +			return NULL;
 +		}
-+
-+		_lv_set_pool_params(&lvcp->lvp, vg, pool_name, extents, meta_size);
-+
-+		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
++	} else {
++		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++				Py_DECREF(lvobj);
++				return NULL;
 +	}
-+	return lvcp;
++
++	lvobj->parent_vgobj = self;
++	Py_INCREF(lvobj->parent_vgobj);
++
++	return (PyObject *)lvobj;
 +}
 +
-+/* Set defaults for thin LV specific parameters */
-+static void _lv_set_thin_params(struct lvcreate_params *lp,
-+				vg_t vg, const char *pool,
-+				const char *lvname,
-+				uint64_t extents)
++static PyObject *
++liblvm_lvm_vg_create_lv_thin(vgobject *self, PyObject *args)
 +{
-+	_lv_set_default_params(lp, vg, lvname, extents);
++	const char *pool_name;
++	const char *lv_name;
++	uint64_t size = 0;
++	lvobject *lvobj;
++	lv_create_params_t lvp = NULL;
 +
-+	lp->thin = 1;
-+	lp->pool = pool;
-+	lp->segtype = get_segtype_from_string(vg->cmd, "thin");
++	VG_VALID(self);
 +
-+	lp->voriginsize = extents * vg->extent_size;
-+	lp->voriginextents = extents_from_size(vg->cmd, lp->voriginsize,
-+						   vg->extent_size);
-+
-+	lp->stripes = 1;
-+}
-+
-+lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
-+									const char *lvname, uint64_t size)
-+{
-+	struct lvm_lv_create_params *lvcp = NULL;
-+	uint64_t extents = 0;
-+
-+	/* precondition checks */
-+	if (vg_read_error(vg))
-+		return NULL;
-+
-+	if (!vg_check_write_mode(vg))
-+		return NULL;
-+
-+	if (pool_name == NULL || !strlen(pool_name)) {
-+		log_error("pool_name invalid");
++	if (!PyArg_ParseTuple(args, "ssK", &pool_name, &lv_name, &size)) {
 +		return NULL;
 +	}
 +
-+	if (lvname == NULL || !strlen(lvname)) {
-+		log_error("lvname invalid");
++	if ((lvobj = PyObject_New(lvobject, &LibLVMlvType)) == NULL)
 +		return NULL;
-+	}
 +
-+	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
-+			vg->extent_size))) {
-+		log_error("Unable to create thin LV without size.");
-+		return NULL;
-+	}
++	/* Initialize the parent ptr in case lv create fails and we dealloc lvobj */
++	lvobj->parent_vgobj = NULL;
 +
-+	lvcp = dm_pool_zalloc(vg->vgmem, sizeof (struct lvm_lv_create_params));
-+	if (lvcp) {
-+		lvcp->vg = vg;
-+		_lv_set_thin_params(&lvcp->lvp, vg, pool_name, lvname, extents);
-+		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
-+	}
++	lvp = lvm_lv_params_create_thin(self->vg, pool_name, lv_name,size);
 +
-+	return lvcp;
-+}
-+
-+int lvm_lv_params_skip_zero_set(lv_create_params_t params, int skip)
-+{
-+	int rc = -1;
-+
-+	if (skip == 0 || skip == 1) {
-+		if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
-+			params->lvp.zero = skip;
-+			rc = 0;
-+		} else {
-+			log_error("Invalid lv_create_params parameter");
++	if (lvp) {
++		if ((lvobj->lv = lvm_lv_create(lvp)) == NULL) {
++			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++			Py_DECREF(lvobj);
++			return NULL;
 +		}
 +	} else {
-+		log_error("Invalid skip value");
++		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++				Py_DECREF(lvobj);
++				return NULL;
 +	}
-+	return rc;
++
++	lvobj->parent_vgobj = self;
++	Py_INCREF(lvobj->parent_vgobj);
++
++	return (PyObject *)lvobj;
 +}
 +
-+int lvm_lv_params_skip_zero_get(const lv_create_params_t params)
-+{
-+	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
-+		return params->lvp.zero;
-+	}
-+	log_error("Invalid lv_create_params parameter");
-+	return -1;
-+}
-+
-+lv_t lvm_lv_create(lv_create_params_t params)
-+{
-+	struct lv_list *lvl = NULL;
-+
-+	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
-+		if (!params->lvp.segtype) {
-+			log_error("segtype parameter is NULL");
-+			return_NULL;
-+		}
-+		if (!lv_create_single(params->vg, &params->lvp))
-+				return_NULL;
-+		if (!(lvl = find_lv_in_vg(params->vg, params->lvp.pool)))
-+			return_NULL;
-+		return (lv_t) lvl->lv;
-+	}
-+	log_error("Invalid lv_create_params parameter");
-+	return NULL;
-+}
+ static void
+ liblvm_lv_dealloc(lvobject *self)
+ {
+@@ -1759,6 +1854,8 @@ static PyMethodDef liblvm_vg_methods[] = {
+ 	{ "pvFromUuid", 	(PyCFunction)liblvm_lvm_pv_from_uuid, METH_VARARGS },
+ 	{ "getTags",		(PyCFunction)liblvm_lvm_vg_get_tags, METH_NOARGS },
+ 	{ "createLvLinear",	(PyCFunction)liblvm_lvm_vg_create_lv_linear, METH_VARARGS },
++	{ "createLvThinpool", (PyCFunction)liblvm_lvm_vg_create_lv_thinpool, METH_VARARGS },
++	{ "createLvThin", 	(PyCFunction)liblvm_lvm_vg_create_lv_thin, METH_VARARGS },
+ 	{ NULL, NULL }		/* sentinel */
+ };
+ 
 -- 
 1.8.1.4
 
