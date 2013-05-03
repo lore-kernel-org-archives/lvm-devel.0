@@ -1,54 +1,60 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Thu, 02 May 2013 17:24:44 -0500
-Subject: [PATCH] RFC: lvm2app: Add thin and thin pool lv creation
-In-Reply-To: <51824A5E.5010603@redhat.com>
-References: <1367263243-17331-1-git-send-email-tasleson@redhat.com>
-	<51824A5E.5010603@redhat.com>
-Message-ID: <5182E7AC.1060903@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  3 May 2013 09:03:27 +0000 (UTC)
+Subject: master - udev: add a few comments about variables used to recognize events
+Message-ID: <20130503090327.A274F60E48@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 05/02/2013 06:13 AM, Zdenek Kabelac wrote:
-> Dne 29.4.2013 21:20, Tony Asleson napsal(a):
->> +lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const
->> char *pool_name,
->> +                                    const char *lvname, uint64_t size)
-> 
-> Hmmm - here the vg doesn't remain unmodified - we use it's memory pool
-> for lvcp - so I'd prefer to use it here without 'const'
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=baf9ef2047675279c72f27abeb2c328f5de2c78d
+Commit:        baf9ef2047675279c72f27abeb2c328f5de2c78d
+Parent:        f39f5b86c3f94fe83744054012d6d8b33bb7d7a0
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri May 3 11:01:57 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri May 3 11:01:57 2013 +0200
 
-In this case having the const or not actually doesn't matter to the
-compiler as we have a typedef'd structure pointer and thus the const is
-meaningless.  However, from a documentation standpoint I agree that the
-const should be removed.
+udev: add a few comments about variables used to recognize events
 
-I'm actually thinking we should get rid of the typedef struct pointers
-so that we can actually use const correctly and have it enforced by the
-compiler.  However, this would break existing user code.
+---
+ udev/10-dm.rules.in |   18 ++++++++++++++++++
+ 1 files changed, 18 insertions(+), 0 deletions(-)
 
->> +int lvm_lv_params_skip_zero_get(lv_create_params_t params)
-> 
-> 
-> add const for '_get()'
-
-Yeah good idea, but again not enforced by the compiler unless we ditch
-typedef struct pointer.  Which we can do for this newly created structure.
-
-> Any API test case ?
-
-I had a simple little C program to try this code out, but I haven't
-created a test case.  I wanted to see if this approach would be
-acceptable to everyone before I go ahead and create the python bindings
-and add this to the unit test case.
-
-Zdenek, you appear good with this patch (except for a few minor
-changes), how about everyone else?
-
-Thanks,
-Tony
-
+diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
+index 512d156..3a157d5 100644
+--- a/udev/10-dm.rules.in
++++ b/udev/10-dm.rules.in
+@@ -77,11 +77,29 @@ LABEL="dm_flags_done"
+ # before (e.g. in initrd). If udev is used in initrd, we require the udev init
+ # script to not remove the existing udev database so we can reuse the information
+ # stored at the time of device activation in the initrd.
++# The DM_ACTIVATION variable tells when any device stacked above should be
++# (re)activated as well.
+ ACTION!="add", GOTO="dm_no_coldplug"
+ ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1", GOTO="dm_disable"
+ ENV{DM_ACTIVATION}="1"
+ LABEL="dm_no_coldplug"
+ 
++# Putting it together, following table is used to recognize genuine and spurious events.
++# N.B. Spurious events are generated based on use of the WATCH udev
++# rule or by triggering an event manually by "udevadm trigger" call
++# or by "echo <event_name> > /sys/block/dm-X/uevent".
++#
++#        EVENT              DM_UDEV_PRIMARY_SOURCE_FLAG   DM_ACTIVATION
++# ======================================================================
++# add event (genuine)                  0                        0
++# change event (genuine)               1                        1
++# add event (spurious)
++#   |_ dev still not active            0                        0
++#   \_ dev already active              1                        1
++# change event (spurious)
++#   |_ dev still not active            0                        0
++#   \_ dev already active              1                        0
++
+ # "dm" sysfs subdirectory is available in newer versions of DM
+ # only (kernels >= 2.6.29). We have to check for its existence
+ # and use dmsetup tool instead to get the DM name, uuid and 
 
 
