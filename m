@@ -1,60 +1,53 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 03 May 2013 15:29:21 +0200
-Subject: [PATCH] RFC: lvm2app: Add thin and thin pool lv creation
-In-Reply-To: <5182E7AC.1060903@redhat.com>
-References: <1367263243-17331-1-git-send-email-tasleson@redhat.com>
-	<51824A5E.5010603@redhat.com> <5182E7AC.1060903@redhat.com>
-Message-ID: <5183BBB1.8040008@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri,  3 May 2013 13:44:27 +0000 (UTC)
+Subject: master - config: fix bitfield for section
+Message-ID: <20130503134427.1181260F82@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 3.5.2013 00:24, Tony Asleson napsal(a):
-> On 05/02/2013 06:13 AM, Zdenek Kabelac wrote:
->> Dne 29.4.2013 21:20, Tony Asleson napsal(a):
->>> +lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const
->>> char *pool_name,
->>> +                                    const char *lvname, uint64_t size)
->>
->> Hmmm - here the vg doesn't remain unmodified - we use it's memory pool
->> for lvcp - so I'd prefer to use it here without 'const'
->
-> In this case having the const or not actually doesn't matter to the
-> compiler as we have a typedef'd structure pointer and thus the const is
-> meaningless.  However, from a documentation standpoint I agree that the
-> const should be removed.
->
-> I'm actually thinking we should get rid of the typedef struct pointers
-> so that we can actually use const correctly and have it enforced by the
-> compiler.  However, this would break existing user code.
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f319a61e9c374bd3277deba90216f67fdcb505e9
+Commit:        f319a61e9c374bd3277deba90216f67fdcb505e9
+Parent:        2ac217d408470dcecb69b83d9cbf7a254747fa5b
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Apr 29 12:38:56 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri May 3 15:42:44 2013 +0200
 
-Yep, it's purely a hint for user, that passed object is being modified, as we 
-are not in C++ :) there is not a really good way to enforce this on code level :)
+config: fix bitfield for section
 
+Since the cfg_def_type_t is used as bitfield in some tests,
+use bitshifting to create valid bit sequence.
 
->>> +int lvm_lv_params_skip_zero_get(lv_create_params_t params)
->>
->>
->> add const for '_get()'
->
-> Yeah good idea, but again not enforced by the compiler unless we ditch
-> typedef struct pointer.  Which we can do for this newly created structure.
->
->> Any API test case ?
->
-> I had a simple little C program to try this code out, but I haven't
-> created a test case.  I wanted to see if this approach would be
-> acceptable to everyone before I go ahead and create the python bindings
-> and add this to the unit test case.
->
-> Zdenek, you appear good with this patch (except for a few minor
-> changes), how about everyone else?
+(in release fix)
+---
+ lib/config/config.h |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
-I guess it's worth to try to commit this and see what happens.
-
-Zdenek
+diff --git a/lib/config/config.h b/lib/config/config.h
+index 7e40420..155d69a 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -34,12 +34,12 @@ struct cmd_context;
+ 
+ /* configuration definition item type (for item's accepted types) */
+ typedef enum {
+-	CFG_TYPE_SECTION = 0,		/* section */
+-	CFG_TYPE_ARRAY = 1,		/* setting */
+-	CFG_TYPE_BOOL = 2,		/* setting */
+-	CFG_TYPE_INT = 4,		/* setting */
+-	CFG_TYPE_FLOAT = 8,		/* setting */
+-	CFG_TYPE_STRING = 16		/* setting */
++	CFG_TYPE_SECTION =	1 << 0,	/* section */
++	CFG_TYPE_ARRAY =	1 << 1,	/* setting */
++	CFG_TYPE_BOOL =		1 << 2,	/* setting */
++	CFG_TYPE_INT =		1 << 3,	/* setting */
++	CFG_TYPE_FLOAT =	1 << 4,	/* setting */
++	CFG_TYPE_STRING =	1 << 5,	/* setting */
+ } cfg_def_type_t;
+ 
+ /* configuration definition item value (for item's default value) */
 
 
