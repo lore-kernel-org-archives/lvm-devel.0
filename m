@@ -1,66 +1,60 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  3 May 2013 11:57:33 +0000 (UTC)
-Subject: master - udev: fire pvscan --cache properly on CHANGE event for MD devices
-Message-ID: <20130503115733.4B81961142@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 03 May 2013 15:29:21 +0200
+Subject: [PATCH] RFC: lvm2app: Add thin and thin pool lv creation
+In-Reply-To: <5182E7AC.1060903@redhat.com>
+References: <1367263243-17331-1-git-send-email-tasleson@redhat.com>
+	<51824A5E.5010603@redhat.com> <5182E7AC.1060903@redhat.com>
+Message-ID: <5183BBB1.8040008@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ac217d408470dcecb69b83d9cbf7a254747fa5b
-Commit:        2ac217d408470dcecb69b83d9cbf7a254747fa5b
-Parent:        baf9ef2047675279c72f27abeb2c328f5de2c78d
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri May 3 13:20:07 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri May 3 13:55:53 2013 +0200
+Dne 3.5.2013 00:24, Tony Asleson napsal(a):
+> On 05/02/2013 06:13 AM, Zdenek Kabelac wrote:
+>> Dne 29.4.2013 21:20, Tony Asleson napsal(a):
+>>> +lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const
+>>> char *pool_name,
+>>> +                                    const char *lvname, uint64_t size)
+>>
+>> Hmmm - here the vg doesn't remain unmodified - we use it's memory pool
+>> for lvcp - so I'd prefer to use it here without 'const'
+>
+> In this case having the const or not actually doesn't matter to the
+> compiler as we have a typedef'd structure pointer and thus the const is
+> meaningless.  However, from a documentation standpoint I agree that the
+> const should be removed.
+>
+> I'm actually thinking we should get rid of the typedef struct pointers
+> so that we can actually use const correctly and have it enforced by the
+> compiler.  However, this would break existing user code.
+>
 
-udev: fire pvscan --cache properly on CHANGE event for MD devices
+Yep, it's purely a hint for user, that passed object is being modified, as we 
+are not in C++ :) there is not a really good way to enforce this on code level :)
 
-Commit 756bcabbfe297688ba240a880bc2b55265ad33f0 restricted the
-situations at which the LVM autoactivation fires - only on ADD
-event for devices other than DM. However, this caused a problem
-for MD devices...
 
-MD devices are activated in a very similar way as DM devices:
-the MD dev is created on first appeareance of MD array member
-(ADD event) and stays *inactive* until the array is complete.
-Just then the MD dev turns to active state and this is reported
-to userspace by CHANGE event.
+>>> +int lvm_lv_params_skip_zero_get(lv_create_params_t params)
+>>
+>>
+>> add const for '_get()'
+>
+> Yeah good idea, but again not enforced by the compiler unless we ditch
+> typedef struct pointer.  Which we can do for this newly created structure.
+>
+>> Any API test case ?
+>
+> I had a simple little C program to try this code out, but I haven't
+> created a test case.  I wanted to see if this approach would be
+> acceptable to everyone before I go ahead and create the python bindings
+> and add this to the unit test case.
+>
+> Zdenek, you appear good with this patch (except for a few minor
+> changes), how about everyone else?
 
-Unfortunately, we can't differentiate between the CHANGE event
-coming from udev trigger/WATCH rule and CHANGE event coming from
-the transition to active state - MD would need to add similar logic
-we already use to detect this in DM world. For now, we just have
-to enable pvscan --cache on *all* CHANGE events for MD so the
-autoactivation of the LVM volumes on top of MD works.
+I guess it's worth to try to commit this and see what happens.
 
-A downside of this is that a spurious CHANGE event for MD dev
-can cause the LVM volumes on top of it to be automatically activated.
-However, one should not open/change the device underneath until
-the device above in the stack is removed! So this situation should
-only happen if one opens the MD dev for read-write by mistake
-(and hence firing the CHANGE event because of the WATCH udev rule),
-or if calling udev trigger manually for the MD dev.
-
-(No WHATS_NEW here as this fixes the commit mentioned
-above and which has not been released yet.)
----
- udev/69-dm-lvm-metad.rules.in |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
-
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index 66c58b3..a0e48a1 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -21,6 +21,7 @@ SUBSYSTEM!="block", GOTO="lvm_end"
- ENV{ID_FS_TYPE}!="LVM2_member|LVM1_member", GOTO="lvm_end"
- 
- ACTION=="remove", GOTO="lvm_scan"
-+ACTION=="change", KERNEL=="md[0-9]*", GOTO="lvm_scan"
- 
- # If the PV is not a dm device, scan only after device addition (ADD event)
- KERNEL!="dm-[0-9]*", ACTION!="add", GOTO="lvm_end"
+Zdenek
 
 
