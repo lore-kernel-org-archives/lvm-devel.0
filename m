@@ -1,12 +1,14 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Fri,  3 May 2013 18:38:52 -0500
-Subject: [PATCH] python-lvm: Bindings for thin pool, thin lv creation.
-Message-ID: <1367624332-16074-1-git-send-email-tasleson@redhat.com>
+Date: Mon,  6 May 2013 10:15:15 -0500
+Subject: [PATCH] python-lvm: Bindings for thin pool, thin lv creation V2
+Message-ID: <1367853315-6444-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
+
+V2: Bug fix.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
@@ -14,7 +16,7 @@ Signed-off-by: Tony Asleson <tasleson@redhat.com>
  1 file changed, 97 insertions(+)
 
 diff --git a/python/liblvm.c b/python/liblvm.c
-index 09892ca..0afee93 100644
+index 09892ca..ce979e7 100644
 --- a/python/liblvm.c
 +++ b/python/liblvm.c
 @@ -1032,6 +1032,101 @@ liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
@@ -51,7 +53,7 @@ index 09892ca..0afee93 100644
 +
 +	if (lvp) {
 +		if (skip_zero) {
-+			if ( -1 != lvm_lv_params_skip_zero_set(lvp, 1)) {
++			if ( -1 == lvm_lv_params_skip_zero_set(lvp, 1)) {
 +				PyErr_SetObject(LibLVMError, liblvm_get_last_error());
 +							Py_DECREF(lvobj);
 +							return NULL;
