@@ -1,20 +1,21 @@
-From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
-Date: Mon, 06 May 2013 17:47:31 +0200
+From: M. Mohan Kumar <mohan@in.ibm.com>
+Date: Mon, 06 May 2013 21:18:54 +0530
 Subject: [PATCH] lvm2app: Add thin and thin pool lv creation V2
 In-Reply-To: <5187CE2E.8060309@redhat.com>
 References: <1367597312-7157-1-git-send-email-tasleson@redhat.com>
 	<87k3ncck85.fsf@in.ibm.com> <5187CE2E.8060309@redhat.com>
-Message-ID: <5187D093.7080105@gmail.com>
+Message-ID: <87bo8ocdnd.fsf@in.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 6.5.2013 17:37, Tony Asleson napsal(a):
+Tony Asleson <tasleson@redhat.com> writes:
+
 > On 05/06/2013 08:26 AM, M. Mohan Kumar wrote:
 >> Tony Asleson <tasleson@redhat.com> writes:
->>
+>> 
 >>> + *
 >>> + */
 >>> +lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
@@ -39,53 +40,53 @@ Dne 6.5.2013 17:37, Tony Asleson napsal(a):
 >>> + * 0 on success, else -1
 >>> + */
 >>> +int lvm_lv_params_skip_zero_set(lv_create_params_t params, int skip);
->>
+>> 
 >> Are we going to provide as many helper functions to get/set parameters
 >> in lv_create_params structure? For example if an user does wants a new
 >> LV to be created in deactivation state, should we provide a helper
 >> something like this?
->>
+>> 
 >> int lvm_lv_params_activation_set(lv_create_params_t params, int
 >> activate);
->>
+>> 
 >> In this case lvm-api wont be flooded with lots of helper functions?
 >> Instead of individual helper function how about a common helper function
 >> to take care of this?
->>
+>> 
 >> int lvm_lv_params_set(lv_create_params_t params, enum lv_create_param_type,
->>                        type, void *data);
->>
+>>                       type, void *data);
+>> 
 >> lvm_lv_params_set function will validate 'data' based on the
 >> lv_create_param_type and will return error if 'data' does not match
 >> given enum (resource)?
->>
+>> 
 >> enum lv_create_param_type {
->>       LV_CR_INVALID,
->>       LV_CR_ZERO,
->>       LV_CR_ACTIVATION,
->>
->>       LV_CR_MAX_PARAM,
+>>      LV_CR_INVALID,
+>>      LV_CR_ZERO,
+>>      LV_CR_ACTIVATION,
+>> 
+>>      LV_CR_MAX_PARAM,
 >> };
->>
+>> 
 >> In above zero case, this function will be invoked like this:
->>
+>> 
 >> lvm_lv_params_set(params, LV_CR_ZERO, &zero);
->>
+>> 
 >> lvm_lv_params_set will do:
->>                    switch (type) {
->>                    case LV_CR_ZERO:
->>                       memcpy (&zero_skip, data, sizeof(int));
->>                       break;
->>                    case LV_CR_ACTIVATION:
->>                         memcpy (&activation, data, sizeof(int));
->>                         if (activation < CHANGE_AY && activation >
->>                            CHANGE_AAY) {
->>                            log_error();
->>                            return -1;
->>                         }
->>                    }
->>
->>
+>>                   switch (type) {
+>>                   case LV_CR_ZERO:
+>>                      memcpy (&zero_skip, data, sizeof(int));
+>>                      break;
+>>                   case LV_CR_ACTIVATION:
+>>                        memcpy (&activation, data, sizeof(int));
+>>                        if (activation < CHANGE_AY && activation >
+>>                           CHANGE_AAY) {
+>>                           log_error();
+>>                           return -1;
+>>                        }
+>>                   }
+>> 
+>> 
 >
 > Yeah, this is probably a better approach to minimize API explosion.  The
 > only thing I would like to add is a size_t data_len field.  This way we
@@ -93,15 +94,7 @@ Dne 6.5.2013 17:37, Tony Asleson napsal(a):
 >
 > Does that sound reasonable?  I guess if we only support simple fixed
 > type sizes it would be redundant.
-
-
-We already have the API 'explosion' for  lvs/pvs/vgs properties.
-So I think it could probably share the same principal for lvcreate attrs.
-
-I liked the 'X protocol' way of using string named fields - but then
-you lose compile time check whether you pass valid arguments...
-
-Zdenek
-
+>
++1 
 
 
