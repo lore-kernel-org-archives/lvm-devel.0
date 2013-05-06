@@ -1,136 +1,86 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Mon,  6 May 2013 10:15:15 -0500
-Subject: [PATCH] python-lvm: Bindings for thin pool, thin lv creation V2
-Message-ID: <1367853315-6444-1-git-send-email-tasleson@redhat.com>
+From: M. Mohan Kumar <mohan@in.ibm.com>
+Date: Mon, 06 May 2013 18:56:50 +0530
+Subject: [PATCH] lvm2app: Add thin and thin pool lv creation V2
+In-Reply-To: <1367597312-7157-1-git-send-email-tasleson@redhat.com>
+References: <1367597312-7157-1-git-send-email-tasleson@redhat.com>
+Message-ID: <87k3ncck85.fsf@in.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-V2: Bug fix.
+Tony Asleson <tasleson@redhat.com> writes:
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
----
- python/liblvm.c | 97 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 97 insertions(+)
+> + *
+> + */
+> +lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
+> +		const char *pool_name, uint64_t size, uint32_t chunk_size,
+> +		uint64_t meta_size, lvm_thin_discards_t discard);
+> +
+> +#define lvm_lv_params_create_thin_pool_default(vg, pool_name, size) \
+> +			lvm_lv_params_create_thin_pool((vg), (pool_name), (size), 0, 0, \
+> +			LVM_THIN_DISCARDS_PASSDOWN)
+> +
+> +
+> +/**
+> + * Set the value of zero skip for the lv_create_params
+> + *
+> + * \param params
+> + * lv_create_prams to change
+> + *
+> + * \param skip
+> + * Value of skip zero to be set (0 == zero, 1 == skip zero)
+> + *
+> + * \return
+> + * 0 on success, else -1
+> + */
+> +int lvm_lv_params_skip_zero_set(lv_create_params_t params, int skip);
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 09892ca..ce979e7 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -1032,6 +1032,101 @@ liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
- 	return (PyObject *)lvobj;
- }
- 
-+static PyObject *
-+liblvm_lvm_vg_create_lv_thinpool(vgobject *self, PyObject *args)
-+{
-+	const char *pool_name;
-+	uint64_t size = 0;
-+	uint32_t chunk_size = 0;
-+	uint64_t meta_size = 0;
-+	int skip_zero = 0;
-+	lvm_thin_discards_t discard = LVM_THIN_DISCARDS_PASSDOWN;
-+	lvobject *lvobj;
-+	lv_create_params_t lvp = NULL;
-+
-+	VG_VALID(self);
-+
-+	if (!PyArg_ParseTuple(args, "sK|kKii", &pool_name, &size, &chunk_size,
-+			&meta_size, &discard, &skip_zero)) {
-+		return NULL;
-+	}
-+
-+	if ((lvobj = PyObject_New(lvobject, &LibLVMlvType)) == NULL)
-+		return NULL;
-+
-+	/* Initialize the parent ptr in case lv create fails and we dealloc lvobj */
-+	lvobj->parent_vgobj = NULL;
-+
-+	lvp = lvm_lv_params_create_thin_pool(self->vg, pool_name, size, chunk_size,
-+				meta_size, discard);
-+
-+	if (lvp) {
-+		if (skip_zero) {
-+			if ( -1 == lvm_lv_params_skip_zero_set(lvp, 1)) {
-+				PyErr_SetObject(LibLVMError, liblvm_get_last_error());
-+							Py_DECREF(lvobj);
-+							return NULL;
-+			}
-+		}
-+
-+		if ((lvobj->lv = lvm_lv_create(lvp)) == NULL) {
-+			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
-+			Py_DECREF(lvobj);
-+			return NULL;
-+		}
-+	} else {
-+		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
-+				Py_DECREF(lvobj);
-+				return NULL;
-+	}
-+
-+	lvobj->parent_vgobj = self;
-+	Py_INCREF(lvobj->parent_vgobj);
-+
-+	return (PyObject *)lvobj;
-+}
-+
-+static PyObject *
-+liblvm_lvm_vg_create_lv_thin(vgobject *self, PyObject *args)
-+{
-+	const char *pool_name;
-+	const char *lv_name;
-+	uint64_t size = 0;
-+	lvobject *lvobj;
-+	lv_create_params_t lvp = NULL;
-+
-+	VG_VALID(self);
-+
-+	if (!PyArg_ParseTuple(args, "ssK", &pool_name, &lv_name, &size)) {
-+		return NULL;
-+	}
-+
-+	if ((lvobj = PyObject_New(lvobject, &LibLVMlvType)) == NULL)
-+		return NULL;
-+
-+	/* Initialize the parent ptr in case lv create fails and we dealloc lvobj */
-+	lvobj->parent_vgobj = NULL;
-+
-+	lvp = lvm_lv_params_create_thin(self->vg, pool_name, lv_name,size);
-+
-+	if (lvp) {
-+		if ((lvobj->lv = lvm_lv_create(lvp)) == NULL) {
-+			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
-+			Py_DECREF(lvobj);
-+			return NULL;
-+		}
-+	} else {
-+		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
-+				Py_DECREF(lvobj);
-+				return NULL;
-+	}
-+
-+	lvobj->parent_vgobj = self;
-+	Py_INCREF(lvobj->parent_vgobj);
-+
-+	return (PyObject *)lvobj;
-+}
-+
- static void
- liblvm_lv_dealloc(lvobject *self)
- {
-@@ -1759,6 +1854,8 @@ static PyMethodDef liblvm_vg_methods[] = {
- 	{ "pvFromUuid", 	(PyCFunction)liblvm_lvm_pv_from_uuid, METH_VARARGS },
- 	{ "getTags",		(PyCFunction)liblvm_lvm_vg_get_tags, METH_NOARGS },
- 	{ "createLvLinear",	(PyCFunction)liblvm_lvm_vg_create_lv_linear, METH_VARARGS },
-+	{ "createLvThinpool", (PyCFunction)liblvm_lvm_vg_create_lv_thinpool, METH_VARARGS },
-+	{ "createLvThin", 	(PyCFunction)liblvm_lvm_vg_create_lv_thin, METH_VARARGS },
- 	{ NULL, NULL }		/* sentinel */
- };
- 
--- 
-1.8.1.4
+Are we going to provide as many helper functions to get/set parameters
+in lv_create_params structure? For example if an user does wants a new
+LV to be created in deactivation state, should we provide a helper
+something like this?
+
+int lvm_lv_params_activation_set(lv_create_params_t params, int
+activate);
+
+In this case lvm-api wont be flooded with lots of helper functions?
+Instead of individual helper function how about a common helper function
+to take care of this?
+
+int lvm_lv_params_set(lv_create_params_t params, enum lv_create_param_type,
+                      type, void *data);
+
+lvm_lv_params_set function will validate 'data' based on the
+lv_create_param_type and will return error if 'data' does not match
+given enum (resource)?
+
+enum lv_create_param_type {
+     LV_CR_INVALID,
+     LV_CR_ZERO,
+     LV_CR_ACTIVATION,
+
+     LV_CR_MAX_PARAM,
+};
+
+In above zero case, this function will be invoked like this:
+
+lvm_lv_params_set(params, LV_CR_ZERO, &zero);
+
+lvm_lv_params_set will do:
+                  switch (type) {
+                  case LV_CR_ZERO:
+                     memcpy (&zero_skip, data, sizeof(int));
+                     break;
+                  case LV_CR_ACTIVATION:
+                       memcpy (&activation, data, sizeof(int));
+                       if (activation < CHANGE_AY && activation >
+                          CHANGE_AAY) {
+                          log_error();
+                          return -1;
+                       }
+                  }
+
 
 
