@@ -1,117 +1,70 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Wed,  8 May 2013 17:45:25 -0500
-Subject: [PATCH 03/19] lvm2app: Move percent_of_extents to lvm-percent.[h|c]
-In-Reply-To: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
-References: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1368053141-13836-4-git-send-email-tasleson@redhat.com>
+Date: Wed,  8 May 2013 17:45:22 -0500
+Subject: [PATCH 00/19] Looking for reviews
+Message-ID: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
----
- lib/misc/lvm-percent.c |  5 +++++
- lib/misc/lvm-percent.h | 17 +++++++++++++++++
- tools/toollib.c        |  6 ------
- tools/tools.h          | 16 ----------------
- 4 files changed, 22 insertions(+), 22 deletions(-)
+Many of these patches have been around for a while.
+Looking for comments.  If I don't hear anything I
+will assume everything is good and push them in the
+next few days.
 
-diff --git a/lib/misc/lvm-percent.c b/lib/misc/lvm-percent.c
-index 4b73db4..1dafa57 100644
---- a/lib/misc/lvm-percent.c
-+++ b/lib/misc/lvm-percent.c
-@@ -38,3 +38,8 @@ percent_t make_percent(uint64_t numerator, uint64_t denominator)
-     }
- }
- 
-+uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
-+{
-+	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
-+			   ((roundup) ? 99 : 0)) / 100);
-+}
-diff --git a/lib/misc/lvm-percent.h b/lib/misc/lvm-percent.h
-index bf30a7e..ff3de42 100644
---- a/lib/misc/lvm-percent.h
-+++ b/lib/misc/lvm-percent.h
-@@ -31,6 +31,21 @@
- typedef int32_t percent_t;
- 
- typedef enum {
-+	SIGN_NONE = 0,
-+	SIGN_PLUS = 1,
-+	SIGN_MINUS = 2
-+} sign_t;
-+
-+typedef enum {
-+	PERCENT_NONE = 0,
-+	PERCENT_VG,
-+	PERCENT_FREE,
-+	PERCENT_LV,
-+	PERCENT_PVS,
-+	PERCENT_ORIGIN
-+} percent_type_t;
-+
-+typedef enum {
- 	PERCENT_0 = 0,
- 	PERCENT_1 = 1000000,
- 	PERCENT_100 = 100 * PERCENT_1,
-@@ -41,4 +56,6 @@ typedef enum {
- float percent_to_float(percent_t v);
- percent_t make_percent(uint64_t numerator, uint64_t denominator);
- 
-+uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
-+
- #endif
-diff --git a/tools/toollib.c b/tools/toollib.c
-index e9be968..6b2df0d 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1746,9 +1746,3 @@ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
- 	return 1;
- }
- 
--/* Return percents of extents and avoid overflow, with optional roundup */
--uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
--{
--	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
--			   ((roundup) ? 99 : 0)) / 100);
--}
-diff --git a/tools/tools.h b/tools/tools.h
-index 15d1f84..6e820bf 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -74,21 +74,6 @@ enum {
- #undef arg
- };
- 
--typedef enum {
--	SIGN_NONE = 0,
--	SIGN_PLUS = 1,
--	SIGN_MINUS = 2
--} sign_t;
--
--typedef enum {
--	PERCENT_NONE = 0,
--	PERCENT_VG,
--	PERCENT_FREE,
--	PERCENT_LV,
--	PERCENT_PVS,
--	PERCENT_ORIGIN
--} percent_type_t;
--
- #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
- #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
- 
-@@ -189,7 +174,6 @@ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned
- int mirror_remove_missing(struct cmd_context *cmd,
- 			  struct logical_volume *lv, int force);
- 
--uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
- 
- int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
- 		       activation_change_t activate);
+Thanks,
+Tony
+
+Tony Asleson (19):
+  lvm2app: Add thin and thin pool lv creation V4
+  lvm2app: Implementation of pv resize (v6)
+  lvm2app: Move percent_of_extents to lvm-percent.[h|c]
+  lvm2app: Rework argument handling for lv resize
+  lvm2app: Move core lv re-size code (v2)
+  lvm2app: Implement lv resize (v2)
+  lvm2app: Add function to retrieve list of PVs
+  lvm2app: Implement lvm_pv_remove
+  python-lvm: Add bindings for lvm_pv_remove
+  lvm2app: Set suppress to 1
+  _get_pvs: Remove unused variable
+  lib2app: Fix warnings in lvm_list_pvs_free
+  lib2app: Added PV create.
+  python-lvm: Add pvCreate python method
+  lvm2app: Add method to retrieve attr from lv.
+  python-lvm: Add method to retrieve lv attr.
+  lvm2app: Add function to retrieve the origin.
+  python-lvm: Added lv method getOrigin
+  python-lvm: Bindings for thin pool, thin lv creation V3
+
+ lib/metadata/lv_manip.c          | 734 ++++++++++++++++++++++++++++++++++++
+ lib/metadata/metadata-exported.h |  59 ++-
+ lib/metadata/metadata.c          |  82 ++--
+ lib/metadata/metadata.h          |   7 +
+ lib/metadata/pv_manip.c          | 152 ++++++++
+ lib/misc/lvm-percent.c           |   5 +
+ lib/misc/lvm-percent.h           |  17 +
+ lib/report/columns.h             |   2 +
+ lib/report/properties.c          |  30 ++
+ lib/report/properties.h          |   6 +
+ lib/report/report.c              |   1 +
+ lib/report/report.h              |   3 +-
+ liblvm/lvm2app.h                 | 219 ++++++++++-
+ liblvm/lvm_base.c                |   6 +
+ liblvm/lvm_lv.c                  | 241 +++++++++++-
+ liblvm/lvm_misc.c                |  16 +-
+ liblvm/lvm_misc.h                |   6 +-
+ liblvm/lvm_pv.c                  | 135 ++++++-
+ liblvm/lvm_vg.c                  |   4 +-
+ python/liblvm.c                  | 331 +++++++++++++++-
+ tools/lvresize.c                 | 793 ++-------------------------------------
+ tools/pvcreate.c                 |  11 +-
+ tools/pvremove.c                 | 135 +------
+ tools/reporter.c                 |   4 +
+ tools/toollib.c                  |   6 -
+ tools/tools.h                    |  16 -
+ 26 files changed, 2049 insertions(+), 972 deletions(-)
+
 -- 
 1.8.1.4
 
