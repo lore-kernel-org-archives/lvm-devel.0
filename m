@@ -1,9 +1,9 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Wed,  8 May 2013 17:45:24 -0500
-Subject: [PATCH 02/19] lvm2app: Implementation of pv resize (v6)
+Date: Wed,  8 May 2013 17:45:25 -0500
+Subject: [PATCH 03/19] lvm2app: Move percent_of_extents to lvm-percent.[h|c]
 In-Reply-To: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
 References: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1368053141-13836-3-git-send-email-tasleson@redhat.com>
+Message-ID: <1368053141-13836-4-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,52 +12,106 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- liblvm/lvm2app.h |  2 --
- liblvm/lvm_pv.c  | 20 +++++++++++++++++---
- 2 files changed, 17 insertions(+), 5 deletions(-)
+ lib/misc/lvm-percent.c |  5 +++++
+ lib/misc/lvm-percent.h | 17 +++++++++++++++++
+ tools/toollib.c        |  6 ------
+ tools/tools.h          | 16 ----------------
+ 4 files changed, 22 insertions(+), 22 deletions(-)
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index b1d6abd..633b026 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -1759,8 +1759,6 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
-  *
-  * \memberof pv_t
-  *
-- * NOTE: This function is currently not implemented.
-- *
-  * \param   pv
-  * Physical volume handle.
-  *
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index 3924af4..18b1069 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -123,7 +123,21 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
- 
- int lvm_pv_resize(const pv_t pv, uint64_t new_size)
- {
--	/* FIXME: add pv resize code here */
--	log_error("NOT IMPLEMENTED YET");
--	return -1;
-+	uint64_t size = new_size >> SECTOR_SHIFT;
-+
-+	if (new_size % SECTOR_SIZE) {
-+		log_errno(EINVAL, "Size not a multiple of 512");
-+		return -1;
-+	}
-+
-+	if (!vg_check_write_mode(pv->vg)) {
-+		return -1;
-+	}
-+
-+	if (!pv_resize(pv, pv->vg, size)) {
-+		log_error("PV re-size failed!");
-+		return -1;
-+	} else {
-+		return 0;
-+	}
+diff --git a/lib/misc/lvm-percent.c b/lib/misc/lvm-percent.c
+index 4b73db4..1dafa57 100644
+--- a/lib/misc/lvm-percent.c
++++ b/lib/misc/lvm-percent.c
+@@ -38,3 +38,8 @@ percent_t make_percent(uint64_t numerator, uint64_t denominator)
+     }
  }
+ 
++uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
++{
++	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
++			   ((roundup) ? 99 : 0)) / 100);
++}
+diff --git a/lib/misc/lvm-percent.h b/lib/misc/lvm-percent.h
+index bf30a7e..ff3de42 100644
+--- a/lib/misc/lvm-percent.h
++++ b/lib/misc/lvm-percent.h
+@@ -31,6 +31,21 @@
+ typedef int32_t percent_t;
+ 
+ typedef enum {
++	SIGN_NONE = 0,
++	SIGN_PLUS = 1,
++	SIGN_MINUS = 2
++} sign_t;
++
++typedef enum {
++	PERCENT_NONE = 0,
++	PERCENT_VG,
++	PERCENT_FREE,
++	PERCENT_LV,
++	PERCENT_PVS,
++	PERCENT_ORIGIN
++} percent_type_t;
++
++typedef enum {
+ 	PERCENT_0 = 0,
+ 	PERCENT_1 = 1000000,
+ 	PERCENT_100 = 100 * PERCENT_1,
+@@ -41,4 +56,6 @@ typedef enum {
+ float percent_to_float(percent_t v);
+ percent_t make_percent(uint64_t numerator, uint64_t denominator);
+ 
++uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
++
+ #endif
+diff --git a/tools/toollib.c b/tools/toollib.c
+index e9be968..6b2df0d 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1746,9 +1746,3 @@ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
+ 	return 1;
+ }
+ 
+-/* Return percents of extents and avoid overflow, with optional roundup */
+-uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
+-{
+-	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
+-			   ((roundup) ? 99 : 0)) / 100);
+-}
+diff --git a/tools/tools.h b/tools/tools.h
+index 15d1f84..6e820bf 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -74,21 +74,6 @@ enum {
+ #undef arg
+ };
+ 
+-typedef enum {
+-	SIGN_NONE = 0,
+-	SIGN_PLUS = 1,
+-	SIGN_MINUS = 2
+-} sign_t;
+-
+-typedef enum {
+-	PERCENT_NONE = 0,
+-	PERCENT_VG,
+-	PERCENT_FREE,
+-	PERCENT_LV,
+-	PERCENT_PVS,
+-	PERCENT_ORIGIN
+-} percent_type_t;
+-
+ #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
+ #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
+ 
+@@ -189,7 +174,6 @@ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned
+ int mirror_remove_missing(struct cmd_context *cmd,
+ 			  struct logical_volume *lv, int force);
+ 
+-uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
+ 
+ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
+ 		       activation_change_t activate);
 -- 
 1.8.1.4
 
