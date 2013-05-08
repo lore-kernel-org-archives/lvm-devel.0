@@ -1,61 +1,47 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Wed,  8 May 2013 17:45:36 -0500
-Subject: [PATCH 14/19] python-lvm: Add pvCreate python method
+Date: Wed,  8 May 2013 17:45:40 -0500
+Subject: [PATCH 18/19] python-lvm: Added lv method getOrigin
 In-Reply-To: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
 References: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1368053141-13836-15-git-send-email-tasleson@redhat.com>
+Message-ID: <1368053141-13836-19-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Added to base namespace.
-
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- python/liblvm.c | 21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+ python/liblvm.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
 
 diff --git a/python/liblvm.c b/python/liblvm.c
-index 9d0d8f8..c76a3d0 100644
+index 96e94d4..09892ca 100644
 --- a/python/liblvm.c
 +++ b/python/liblvm.c
-@@ -263,6 +263,26 @@ liblvm_lvm_pv_remove(PyObject *self, PyObject *arg)
+@@ -1202,6 +1202,14 @@ liblvm_lvm_lv_get_attr(lvobject *self)
  }
  
  static PyObject *
-+liblvm_lvm_pv_create(PyObject *self, PyObject *arg)
++liblvm_lvm_lv_get_origin(lvobject *self)
 +{
-+	const char *pv_name;
-+	uint64_t size;
-+	LVM_VALID();
++	LV_VALID(self);
 +
-+	if (!PyArg_ParseTuple(arg, "sl", &pv_name, &size))
-+			return NULL;
-+
-+	int rc = lvm_pv_create(libh, pv_name, size);
-+	if (0 != rc) {
-+		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
-+		return NULL;
-+	}
-+
-+	Py_INCREF(Py_None);
-+	return Py_None;
++	return Py_BuildValue("s", lvm_lv_get_origin(self->lv));
 +}
 +
 +static PyObject *
- liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
+ liblvm_lvm_lv_get_name(lvobject *self)
  {
- 	double converted;
-@@ -1683,6 +1703,7 @@ static PyMethodDef Liblvm_methods[] = {
- 	{ "listVgNames",	(PyCFunction)liblvm_lvm_list_vg_names, METH_NOARGS },
- 	{ "listVgUuids",	(PyCFunction)liblvm_lvm_list_vg_uuids, METH_NOARGS },
- 	{ "listPvs",		(PyCFunction)liblvm_lvm_list_pvs, METH_NOARGS },
-+	{ "pvCreate",		(PyCFunction)liblvm_lvm_pv_create, METH_VARARGS },
- 	{ "pvRemove",		(PyCFunction)liblvm_lvm_pv_remove, METH_VARARGS },
- 	{ "percentToFloat",	(PyCFunction)liblvm_lvm_percent_to_float, METH_VARARGS },
- 	{ "vgNameFromPvid",	(PyCFunction)liblvm_lvm_vgname_from_pvid, METH_VARARGS },
+ 	LV_VALID(self);
+@@ -1758,6 +1766,7 @@ static PyMethodDef liblvm_lv_methods[] = {
+ 	/* lv methods */
+ 	{ "getAttr",		(PyCFunction)liblvm_lvm_lv_get_attr, METH_NOARGS },
+ 	{ "getName",		(PyCFunction)liblvm_lvm_lv_get_name, METH_NOARGS },
++	{ "getOrigin",		(PyCFunction)liblvm_lvm_lv_get_origin, METH_NOARGS },
+ 	{ "getUuid",		(PyCFunction)liblvm_lvm_lv_get_uuid, METH_NOARGS },
+ 	{ "activate",		(PyCFunction)liblvm_lvm_lv_activate, METH_NOARGS },
+ 	{ "deactivate",		(PyCFunction)liblvm_lvm_lv_deactivate, METH_NOARGS },
 -- 
 1.8.1.4
 
