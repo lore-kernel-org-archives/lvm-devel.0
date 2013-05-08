@@ -1,171 +1,169 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Wed,  8 May 2013 17:45:35 -0500
-Subject: [PATCH 13/19] lib2app: Added PV create.
+Date: Wed,  8 May 2013 17:45:41 -0500
+Subject: [PATCH 19/19] python-lvm: Bindings for thin pool, thin lv creation V3
 In-Reply-To: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
 References: <1368053141-13836-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1368053141-13836-14-git-send-email-tasleson@redhat.com>
+Message-ID: <1368053141-13836-20-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+V2: Bug fix.
+V3: Use updated property interface, add constants for discard.
+
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/metadata/metadata.h |  3 +++
- lib/metadata/pv_manip.c | 22 ++++++++++++++++++++++
- liblvm/lvm2app.h        | 10 ++++++++++
- liblvm/lvm_pv.c         | 26 ++++++++++++++++++++++++++
- tools/pvcreate.c        | 11 ++---------
- 5 files changed, 63 insertions(+), 9 deletions(-)
+ python/liblvm.c | 121 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 121 insertions(+)
 
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 74dcff7..25a52af 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -345,6 +345,9 @@ int pvremove_single(struct cmd_context *cmd, const char *pv_name,
- 			   void *handle __attribute__((unused)), unsigned force_count,
- 			   unsigned prompt);
- 
-+int pvcreate_locked(struct cmd_context *cmd, const char *pv_name,
-+					struct pvcreate_params *pp);
-+
- /* Manipulate PV structures */
- int pv_add(struct volume_group *vg, struct physical_volume *pv);
- int pv_remove(struct volume_group *vg, struct physical_volume *pv);
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index 3823f76..894cf58 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -20,6 +20,8 @@
- #include "locking.h"
- #include "defaults.h"
- #include "lvmetad.h"
-+#include "display.h"
-+#include "label.h"
- 
- static struct pv_segment *_alloc_pv_segment(struct dm_pool *mem,
- 					    struct physical_volume *pv,
-@@ -672,3 +674,23 @@ out:
- 
- 	return ret;
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 09892ca..d30b647 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -1032,6 +1032,109 @@ liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
+ 	return (PyObject *)lvobj;
  }
-+
-+int pvcreate_locked(struct cmd_context *cmd, const char *pv_name,
-+		struct pvcreate_params *pp)
+ 
++static PyObject *
++liblvm_lvm_vg_create_lv_thinpool(vgobject *self, PyObject *args)
 +{
-+	int ret = ECMD_PROCESSED;
++	const char *pool_name;
++	uint64_t size = 0;
++	uint32_t chunk_size = 0;
++	uint64_t meta_size = 0;
++	int skip_zero = 0;
++	lvm_thin_discards_t discard = LVM_THIN_DISCARDS_PASSDOWN;
++	lvobject *lvobj;
++	lv_create_params_t lvp = NULL;
++	struct lvm_property_value prop_value;
 +
-+	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
-+		log_error("Can't get lock for orphan PVs");
-+		return ECMD_FAILED;
++	VG_VALID(self);
++
++	if (!PyArg_ParseTuple(args, "sK|kKii", &pool_name, &size, &chunk_size,
++			&meta_size, &discard, &skip_zero)) {
++		return NULL;
 +	}
 +
-+	if (!(pvcreate_single(cmd, pv_name, pp, 1))) {
-+		stack;
-+		ret = ECMD_FAILED;
-+	}
++	if ((lvobj = PyObject_New(lvobject, &LibLVMlvType)) == NULL)
++		return NULL;
 +
-+	unlock_vg(cmd, VG_ORPHANS);
++	/* Initialize the parent ptr in case lv create fails and we dealloc lvobj */
++	lvobj->parent_vgobj = NULL;
 +
-+	return ret;
-+}
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index a92d4dd..a397297 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -572,6 +572,16 @@ struct dm_list *lvm_list_pvs(lvm_t libh);
- int lvm_list_pvs_free(struct dm_list *pvlist);
- 
- /**
-+ *  Create a physical volume.
-+ *  \param	libh	Library handle
-+ *  \param	pv_name	The physical volume name
-+ *  \param	size	Size of physical volume, 0 = use all available.
-+ *  \return
-+ *  0 on success, else -1 with library errno and text set.
-+ */
-+int lvm_pv_create(lvm_t libh, const char *pv_name, uint64_t size);
++	lvp = lvm_lv_params_create_thin_pool(self->vg, pool_name, size, chunk_size,
++				meta_size, discard);
 +
-+/**
-  *  Remove a physical volume.
-  *  Note: You cannot remove a PV while iterating through the list of PVs as
-  *  locks are held for the PV list.
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index 568ab5b..8e0eb49 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -226,3 +226,29 @@ int lvm_pv_resize(const pv_t pv, uint64_t new_size)
- 		return 0;
- 	}
- }
++	if (lvp) {
++		if (skip_zero) {
++			prop_value = lvm_lv_params_get_property(lvp, "skip_zero");
 +
-+int lvm_pv_create(lvm_t libh, const char *pv_name, uint64_t size)
-+{
-+	int rc = -1;
-+	struct pvcreate_params pp;
-+	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	uint64_t size_sectors = size;
++			if (prop_value.is_valid) {
++				prop_value.value.integer = 1;
 +
-+	pvcreate_params_set_defaults(&pp);
-+
-+	if (size_sectors != 0 ) {
-+		if( size_sectors % SECTOR_SIZE ) {
-+			log_errno(EINVAL, "Size not a multiple of 512");
-+					return -1;
++				if( -1 == lvm_lv_params_set_property(lvp, "skip_zero",
++						&prop_value)) {
++					PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++					Py_DECREF(lvobj);
++					return NULL;
++				}
++			}
 +		}
-+		size_sectors = size_sectors >> SECTOR_SHIFT;
++
++		if ((lvobj->lv = lvm_lv_create(lvp)) == NULL) {
++			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++			Py_DECREF(lvobj);
++			return NULL;
++		}
++	} else {
++		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++				Py_DECREF(lvobj);
++				return NULL;
 +	}
 +
-+	pp.size = size_sectors;
++	lvobj->parent_vgobj = self;
++	Py_INCREF(lvobj->parent_vgobj);
 +
-+	if (ECMD_PROCESSED == pvcreate_locked(cmd, pv_name, &pp)) {
-+		rc = 0;
-+	}
-+
-+	return rc;
++	return (PyObject *)lvobj;
 +}
-diff --git a/tools/pvcreate.c b/tools/pvcreate.c
-index da51eec..18ce077 100644
---- a/tools/pvcreate.c
-+++ b/tools/pvcreate.c
-@@ -15,6 +15,7 @@
++
++static PyObject *
++liblvm_lvm_vg_create_lv_thin(vgobject *self, PyObject *args)
++{
++	const char *pool_name;
++	const char *lv_name;
++	uint64_t size = 0;
++	lvobject *lvobj;
++	lv_create_params_t lvp = NULL;
++
++	VG_VALID(self);
++
++	if (!PyArg_ParseTuple(args, "ssK", &pool_name, &lv_name, &size)) {
++		return NULL;
++	}
++
++	if ((lvobj = PyObject_New(lvobject, &LibLVMlvType)) == NULL)
++		return NULL;
++
++	/* Initialize the parent ptr in case lv create fails and we dealloc lvobj */
++	lvobj->parent_vgobj = NULL;
++
++	lvp = lvm_lv_params_create_thin(self->vg, pool_name, lv_name,size);
++
++	if (lvp) {
++		if ((lvobj->lv = lvm_lv_create(lvp)) == NULL) {
++			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++			Py_DECREF(lvobj);
++			return NULL;
++		}
++	} else {
++		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++				Py_DECREF(lvobj);
++				return NULL;
++	}
++
++	lvobj->parent_vgobj = self;
++	Py_INCREF(lvobj->parent_vgobj);
++
++	return (PyObject *)lvobj;
++}
++
+ static void
+ liblvm_lv_dealloc(lvobject *self)
+ {
+@@ -1759,6 +1862,8 @@ static PyMethodDef liblvm_vg_methods[] = {
+ 	{ "pvFromUuid", 	(PyCFunction)liblvm_lvm_pv_from_uuid, METH_VARARGS },
+ 	{ "getTags",		(PyCFunction)liblvm_lvm_vg_get_tags, METH_NOARGS },
+ 	{ "createLvLinear",	(PyCFunction)liblvm_lvm_vg_create_lv_linear, METH_VARARGS },
++	{ "createLvThinpool", (PyCFunction)liblvm_lvm_vg_create_lv_thinpool, METH_VARARGS },
++	{ "createLvThin", 	(PyCFunction)liblvm_lvm_vg_create_lv_thin, METH_VARARGS },
+ 	{ NULL, NULL }		/* sentinel */
+ };
  
- #include "tools.h"
- #include "metadata-exported.h"
-+#include "metadata.h"
+@@ -1915,6 +2020,22 @@ initlvm(void)
+ 	if (m == NULL)
+ 		return;
  
- /*
-  * Intial sanity checking of recovery-related command-line arguments.
-@@ -96,7 +97,6 @@ int pvcreate(struct cmd_context *cmd, int argc, char **argv)
- 	int i;
- 	int ret = ECMD_PROCESSED;
- 	struct pvcreate_params pp;
--	struct physical_volume *pv;
- 
- 	pvcreate_params_set_defaults(&pp);
- 
-@@ -108,19 +108,12 @@ int pvcreate(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 
- 	for (i = 0; i < argc; i++) {
--		if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
--			log_error("Can't get lock for orphan PVs");
--			return ECMD_FAILED;
--		}
--
- 		dm_unescape_colons_and_at_signs(argv[i], NULL, NULL);
- 
--		if (!(pv = pvcreate_single(cmd, argv[i], &pp, 1))) {
--			stack;
-+		if (ECMD_PROCESSED != pvcreate_locked(cmd, argv[i], &pp)) {
- 			ret = ECMD_FAILED;
- 		}
- 
--		unlock_vg(cmd, VG_ORPHANS);
- 		if (sigint_caught())
- 			return ret;
- 	}
++
++	if (-1 == PyModule_AddIntConstant(m, "THIN_DISCARDS_IGNORE",
++										LVM_THIN_DISCARDS_IGNORE)) {
++		return;
++	}
++
++	if (-1 == PyModule_AddIntConstant(m, "THIN_DISCARDS_NO_PASSDOWN",
++											LVM_THIN_DISCARDS_NO_PASSDOWN)) {
++		return;
++	}
++
++	if ( -1 == PyModule_AddIntConstant(m, "THIN_DISCARDS_PASSDOWN",
++											LVM_THIN_DISCARDS_PASSDOWN)) {
++		return;
++	}
++
+ 	LibLVMError = PyErr_NewException("Liblvm.LibLVMError",
+ 					 NULL, NULL);
+ 	if (LibLVMError) {
 -- 
 1.8.1.4
 
