@@ -1,28 +1,51 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 13 May 2013 13:30:10 -0400
-Subject: [PATCH] metadata: fix bug that allowed PE alignment to be misaligned
-Message-ID: <1368466210-6142-1-git-send-email-snitzer@redhat.com>
+From: Mike Snitzer <msnitzer@fedoraproject.org>
+Date: Mon, 13 May 2013 20:01:43 +0000 (UTC)
+Subject: master - Fix alignment of PV data area if detected alignment less than 1 MB
+Message-ID: <20130513200143.4D13160DF7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The default PE alignment could be selected (via MAX()) even if it was
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8ad7865b421459553a05e220f992ba2d26bd60e6
+Commit:        8ad7865b421459553a05e220f992ba2d26bd60e6
+Parent:        6fc67f5509fda25a91536fbeeb7099f8327ff3d8
+Author:        Mike Snitzer <snitzer@redhat.com>
+AuthorDate:    Mon May 13 15:56:47 2013 -0400
+Committer:     Mike Snitzer <snitzer@redhat.com>
+CommitterDate: Mon May 13 15:56:47 2013 -0400
+
+Fix alignment of PV data area if detected alignment less than 1 MB
+
+This fixes a long standing regression since LVM2 2.02.74 (commit 4efb1d9c,
+"Update heuristic used for default and detected data alignment.")
+
+The default PE alignment could be used (via MAX()) even if it was
 determined that the device's MD stripe width, or minimal_io_size or
 optimal_io_size were not factors of the default PE alignment (either 64K
 or the newer default of 1MB, etc).  This bug would manifest if the
 default PE alignment was larger than the overriding hint that the
 device provided (e.g. default of 1MB vs optimal_io_size of 768K).
 
-This fixes a long standing regression since LVM2 2.02.74 (commit 4efb1d9c,  
-"Update heuristic used for default and detected data alignment.")
-
 Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- lib/metadata/metadata.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ WHATS_NEW                      |    1 +
+ lib/metadata/metadata.c        |    6 +++---
+ test/shell/topology-support.sh |   27 +++++++++++++++++++++++++++
+ 3 files changed, 31 insertions(+), 3 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 11d3e6f..513210c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix alignment of PV data area if detected alignment less than 1 MB (2.02.74).
+   Fix memory resource leak in memlocking error path.
+   Fix premature DM version checking which caused useless mapper/control access.
+   Add "active" LV reporting field to show activation state.
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
 index bde1cb0..357e849 100644
 --- a/lib/metadata/metadata.c
@@ -50,7 +73,47 @@ index bde1cb0..357e849 100644
  	}
  
  out:
--- 
-1.7.1
+diff --git a/test/shell/topology-support.sh b/test/shell/topology-support.sh
+index e952dc0..df73c6a 100644
+--- a/test/shell/topology-support.sh
++++ b/test/shell/topology-support.sh
+@@ -23,6 +23,16 @@ check_logical_block_size() {
+     fi
+ }
+ 
++check_optimal_io_size() {
++    local DEV_=$(cat SCSI_DEBUG_DEV)
++    # Verify optimal_io_size
++    SYSFS_OPTIMAL_IO_SIZE=$(echo /sys/block/$(basename $DEV_)/queue/optimal_io_size)
++    if [ -f "$SYSFS_OPTIMAL_IO_SIZE" ] ; then
++	ACTUAL_OPTIMAL_IO_SIZE=$(cat $SYSFS_OPTIMAL_IO_SIZE)
++	test $ACTUAL_OPTIMAL_IO_SIZE = $1
++    fi
++}
++
+ lvdev_() {
+     echo "$DM_DEV_DIR/$1/$2"
+ }
+@@ -103,3 +113,20 @@ aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
+ vgcreate -c n $vg $(cat DEVICES)
+ test_snapshot_mount
+ vgremove $vg
++
++aux cleanup_scsi_debug_dev
++
++# ---------------------------------------------
++# Create "enterprise-class" 512 drive w/ HW raid stripe_size = 768K
++# (logical_block_size=512, physical_block_size=512, alignment_offset=0):
++# - tests case where optimal_io_size=768k < default PE alignment=1MB
++LOGICAL_BLOCK_SIZE=512
++aux prepare_scsi_debug_dev $DEV_SIZE \
++    sector_size=$LOGICAL_BLOCK_SIZE opt_blks=1536
++check_logical_block_size $LOGICAL_BLOCK_SIZE
++check_optimal_io_size 786432
++
++aux prepare_pvs 1 $PER_DEV_SIZE
++check pv_field $(cat DEVICES) pe_start 768.00k
++
++aux cleanup_scsi_debug_dev
 
 
