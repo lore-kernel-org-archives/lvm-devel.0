@@ -1,50 +1,56 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 13 May 2013 11:13:58 +0000 (UTC)
-Subject: master - thin: limited support for -l%FREE allocation
-Message-ID: <20130513111358.1CA5F612C5@fedorahosted.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Mon, 13 May 2013 13:30:10 -0400
+Subject: [PATCH] metadata: fix bug that allowed PE alignment to be misaligned
+Message-ID: <1368466210-6142-1-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6fc67f5509fda25a91536fbeeb7099f8327ff3d8
-Commit:        6fc67f5509fda25a91536fbeeb7099f8327ff3d8
-Parent:        55fe07ad98315d9471a86affd0680749e349a0a6
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 13 13:03:04 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 13 13:13:22 2013 +0200
+The default PE alignment could be selected (via MAX()) even if it was
+determined that the device's MD stripe width, or minimal_io_size or
+optimal_io_size were not factors of the default PE alignment (either 64K
+or the newer default of 1MB, etc).  This bug would manifest if the
+default PE alignment was larger than the overriding hint that the
+device provided (e.g. default of 1MB vs optimal_io_size of 768K).
 
-thin: limited support for -l%FREE allocation
+This fixes a long standing regression since LVM2 2.02.74 (commit 4efb1d9c,  
+"Update heuristic used for default and detected data alignment.")
 
-This is just a temporary fix to support allocation of -l%FREE.
-
-The number of free extent serves to calculate estimated metadata
-size. This value is then substracted twice to keep some
-free space for recover.
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- tools/lvcreate.c |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ lib/metadata/metadata.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index df05cbb..7580155 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -321,6 +321,14 @@ static int _update_extents_params(struct volume_group *vg,
- 		if (!(lp->poolmetadataextents =
- 		      extents_from_size(vg->cmd, lp->poolmetadatasize, vg->extent_size)))
- 			return_0;
-+		if (lcp->percent == PERCENT_FREE) {
-+			if (lp->extents <= (2 * lp->poolmetadataextents)) {
-+				log_error("Not enough space for thin pool creation.");
-+				return 0;
-+			}
-+			/* FIXME: persistent hidden space in VG wanted */
-+			lp->extents -= (2 * lp->poolmetadataextents);
-+		}
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index bde1cb0..357e849 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -86,7 +86,7 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
+ 	if (find_config_tree_bool(pv->fmt->cmd, devices_md_chunk_alignment_CFG)) {
+ 		temp_pe_align = dev_md_stripe_width(pv->fmt->cmd->sysfs_dir, pv->dev);
+ 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
+-			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
++			pv->pe_align = temp_pe_align;
  	}
  
- 	return 1;
+ 	/*
+@@ -99,11 +99,11 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
+ 	if (find_config_tree_bool(pv->fmt->cmd, devices_data_alignment_detection_CFG)) {
+ 		temp_pe_align = dev_minimum_io_size(pv->fmt->cmd->sysfs_dir, pv->dev);
+ 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
+-			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
++			pv->pe_align = temp_pe_align;
+ 
+ 		temp_pe_align = dev_optimal_io_size(pv->fmt->cmd->sysfs_dir, pv->dev);
+ 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
+-			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
++			pv->pe_align = temp_pe_align;
+ 	}
+ 
+ out:
+-- 
+1.7.1
 
 
