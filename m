@@ -1,64 +1,114 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun, 26 May 2013 17:12:03 +0000 (UTC)
-Subject: dev-mornfall-nix - test: Skip the double log failure test on 2.6 kernels as it deadlocks.
-Message-ID: <20130526171203.132F061055@fedorahosted.org>
+Date: Sun, 26 May 2013 22:55:50 +0000 (UTC)
+Subject: dev-mornfall-nix - filters: Do not assume that toplevel filter is persistent.
+Message-ID: <20130526225550.7D71060EE5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=32408226c7187d4526699bd2d93a6fcfb8c56299
-Commit:        32408226c7187d4526699bd2d93a6fcfb8c56299
-Parent:        66c0f037fe61b9bf23d623f5c10f750af58870a6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9fe5889a0d9584ebdd898059bf9638d19279fc39
+Commit:        9fe5889a0d9584ebdd898059bf9638d19279fc39
+Parent:        32408226c7187d4526699bd2d93a6fcfb8c56299
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun May 26 18:53:29 2013 +0200
+AuthorDate:    Mon May 27 00:49:40 2013 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Sun May 26 18:54:46 2013 +0200
+CommitterDate: Mon May 27 00:49:40 2013 +0200
 
-test: Skip the double log failure test on 2.6 kernels as it deadlocks.
+filters: Do not assume that toplevel filter is persistent.
 
+Add a generic dump operation to filters and make the composite filter call
+through to its components. Previously, when global filter was set, the code
+would treat the toplevel composite filter's private area as if it belonged a
+persistent filter, trying to write nonsense into a non-sensical file.
 ---
- test/shell/lvconvert-repair-replace.sh |   26 ++++++++++++++------------
- 1 files changed, 14 insertions(+), 12 deletions(-)
+ lib/commands/toolcontext.c      |    4 ++--
+ lib/device/dev-cache.h          |    1 +
+ lib/filters/filter-composite.c  |   12 ++++++++++++
+ lib/filters/filter-persistent.c |    6 ++++++
+ 4 files changed, 21 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-replace.sh b/test/shell/lvconvert-repair-replace.sh
-index 974628a..8543698 100644
---- a/test/shell/lvconvert-repair-replace.sh
-+++ b/test/shell/lvconvert-repair-replace.sh
-@@ -28,19 +28,21 @@ aux enable_dev "$dev1" "$dev2"
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 5c1719b..ec1ea15 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1650,8 +1650,8 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ 	struct dm_config_tree *cft_cmdline;
+ 	FILE *new_stream;
  
- vgremove -ff $vg; vgcreate -c n $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
+-	if (cmd->dump_filter)
+-		persistent_filter_dump(cmd->filter, 1);
++	if (cmd->dump_filter && cmd->filter->dump)
++		cmd->filter->dump(cmd->filter);
  
--# 2-way, mirrored log
--# Double log failure, full replace
--lvcreate --mirrorlog mirrored -m 1 --ig -L 1 -n 2way $vg \
--    "$dev1" "$dev2" "$dev3":0 "$dev4":0
--aux disable_dev "$dev3" "$dev4"
--echo y | lvconvert --repair $vg/2way 2>&1 | tee 2way.out
--lvs -a -o +devices $vg | not grep unknown
--not grep "WARNING: Failed" 2way.out
--vgreduce --removemissing $vg
--check mirror $vg 2way
--aux enable_dev "$dev3" "$dev4"
-+if kernel_at_least 3 0 0; then
-+    # 2-way, mirrored log
-+    # Double log failure, full replace
-+    lvcreate --mirrorlog mirrored -m 1 --ig -L 1 -n 2way $vg \
-+        "$dev1" "$dev2" "$dev3":0 "$dev4":0
-+    aux disable_dev "$dev3" "$dev4"
-+    echo y | lvconvert --repair $vg/2way 2>&1 | tee 2way.out
-+    lvs -a -o +devices $vg | not grep unknown
-+    not grep "WARNING: Failed" 2way.out
-+    vgreduce --removemissing $vg
-+    check mirror $vg 2way
-+    aux enable_dev "$dev3" "$dev4"
+ 	archive_exit(cmd);
+ 	backup_exit(cmd);
+diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
+index 3267c9d..4119d90 100644
+--- a/lib/device/dev-cache.h
++++ b/lib/device/dev-cache.h
+@@ -26,6 +26,7 @@ struct dev_filter {
+ 	int (*passes_filter) (struct dev_filter * f, struct device * dev);
+ 	void (*destroy) (struct dev_filter * f);
+ 	void (*wipe) (struct dev_filter * f);
++	void (*dump) (struct dev_filter * f);
+ 	void *private;
+ 	unsigned use_count;
+ };
+diff --git a/lib/filters/filter-composite.c b/lib/filters/filter-composite.c
+index 2298000..0d09c04 100644
+--- a/lib/filters/filter-composite.c
++++ b/lib/filters/filter-composite.c
+@@ -49,6 +49,17 @@ static void _composite_destroy(struct dev_filter *f)
+ 	dm_free(f);
+ }
  
--vgremove -ff $vg; vgcreate -c n $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
-+    vgremove -ff $vg; vgcreate -c n $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
-+fi
++static void _dump(struct dev_filter *f)
++{
++	struct dev_filter **filters = (struct dev_filter **) f->private;
++
++	while (*filters) {
++		if ((*filters)->dump)
++			(*filters)->dump(*filters);
++		filters++;
++	}
++}
++
+ struct dev_filter *composite_filter_create(int n, struct dev_filter **filters)
+ {
+ 	struct dev_filter **filters_copy, *cft;
+@@ -72,6 +83,7 @@ struct dev_filter *composite_filter_create(int n, struct dev_filter **filters)
  
- # 3-way, mirrored log
- # Single log failure, replace
+ 	cft->passes_filter = _and_p;
+ 	cft->destroy = _composite_destroy;
++	cft->dump = _dump;
+ 	cft->use_count = 0;
+ 	cft->private = filters_copy;
+ 
+diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
+index 0d53fce..7288d9d 100644
+--- a/lib/filters/filter-persistent.c
++++ b/lib/filters/filter-persistent.c
+@@ -274,6 +274,11 @@ out:
+ 	return r;
+ }
+ 
++static void _dump(struct dev_filter *f)
++{
++	persistent_filter_dump(f, 1);
++}
++
+ static int _lookup_p(struct dev_filter *f, struct device *dev)
+ {
+ 	struct pfilter *pf = (struct pfilter *) f->private;
+@@ -367,6 +372,7 @@ struct dev_filter *persistent_filter_create(struct dev_filter *real,
+ 	f->use_count = 0;
+ 	f->private = pf;
+ 	f->wipe = _persistent_filter_wipe;
++	f->dump = _dump;
+ 
+ 	return f;
+ 
 
 
