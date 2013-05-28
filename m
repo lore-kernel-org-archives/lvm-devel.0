@@ -1,39 +1,32 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 28 May 2013 10:43:36 +0000 (UTC)
-Subject: master - WHATS_NEW: ea_start, ea_size -> ba_start, ba_size
-Message-ID: <20130528104336.323B2610E6@fedorahosted.org>
+From: Bryn M. Reeves <bmr@redhat.com>
+Date: Tue, 28 May 2013 12:07:30 +0100
+Subject: Bug Report
+In-Reply-To: <519FEA6D.6080001@me.com>
+References: <519FEA6D.6080001@me.com>
+Message-ID: <51A48FF2.7040907@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=be25f7ac83bcf0f910a6213d4c1d195fbdd0d45d
-Commit:        be25f7ac83bcf0f910a6213d4c1d195fbdd0d45d
-Parent:        732859d21f3b41bdb188f92b60f25d5c94dcee8a
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue May 28 12:43:26 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue May 28 12:43:26 2013 +0200
+On 05/24/2013 11:32 PM, Rajiv Shah wrote:
+> I am reporting a bug on behalf of William Schaub at the Ubuntu Launchpad
+> Bug Tracker. The link below directs you to the report and a patch.
+> https://bugs.launchpad.net/ubuntu/+source/lvm2/+bug/1173904
 
-WHATS_NEW: ea_start,ea_size -> ba_start,ba_size
+The patch attached to the launchpad ticket modifies debian/rules and 
+debian/dmeventd.install to enable internal mirrors and add the correct 
+dmeventd files.
 
----
- WHATS_NEW |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+The debian directory is not included in upstream lvm2 so this needs to 
+be changed in the Ubuntu packaging.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 977519c..40fd569 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -38,7 +38,7 @@ Version 2.02.99 -
-   Add --withcomments and --withversions switch to lvm dumpconfig.
-   Add --type {current|default|missing|new} and --atversion to lvm dumpconfig.
-   Support automatic config validation and add 'config' section to lvm.conf.
--  Add pvs -o ea_start,ea_size to report bootloader area start and size.
-+  Add pvs -o ba_start,ba_size to report bootloader area start and size.
-   Add --bootloaderareasize to pvcreate and vgconvert to create a bootloader area.
-   Add PV header extension: extension version, flags and bootloader areas.
-   Initial support for lvconvert of thin external origin.
+There's another hunk changing tools/Makefile.in but it just shuffles 
+some LVMLIBS/LIBS command line arguments around - it doesn't look like 
+it actually fixes anything.
+
+Regards,
+Bryn.
 
 
