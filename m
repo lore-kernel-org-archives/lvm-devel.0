@@ -1,32 +1,52 @@
-From: Bryn M. Reeves <bmr@redhat.com>
-Date: Tue, 28 May 2013 12:07:30 +0100
-Subject: Bug Report
-In-Reply-To: <519FEA6D.6080001@me.com>
-References: <519FEA6D.6080001@me.com>
-Message-ID: <51A48FF2.7040907@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 29 May 2013 10:55:20 +0000 (UTC)
+Subject: master - dmeventd: always return success on dmevetnd -V
+Message-ID: <20130529105520.06BD2613BC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 05/24/2013 11:32 PM, Rajiv Shah wrote:
-> I am reporting a bug on behalf of William Schaub at the Ubuntu Launchpad
-> Bug Tracker. The link below directs you to the report and a patch.
-> https://bugs.launchpad.net/ubuntu/+source/lvm2/+bug/1173904
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6ad17fd7129dc7f50c0623181681157faea806a1
+Commit:        6ad17fd7129dc7f50c0623181681157faea806a1
+Parent:        be25f7ac83bcf0f910a6213d4c1d195fbdd0d45d
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed May 29 12:54:42 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed May 29 12:54:42 2013 +0200
 
-The patch attached to the launchpad ticket modifies debian/rules and 
-debian/dmeventd.install to enable internal mirrors and add the correct 
-dmeventd files.
+dmeventd: always return success on dmevetnd -V
 
-The debian directory is not included in upstream lvm2 so this needs to 
-be changed in the Ubuntu packaging.
+---
+ daemons/dmeventd/dmeventd.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-There's another hunk changing tools/Makefile.in but it just shuffles 
-some LVMLIBS/LIBS command line arguments around - it doesn't look like 
-it actually fixes anything.
-
-Regards,
-Bryn.
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 95fb837..4710910 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1928,10 +1928,10 @@ int main(int argc, char *argv[])
+ 		switch (opt) {
+ 		case 'h':
+ 			usage(argv[0], stdout);
+-			exit(0);
++			exit(EXIT_SUCCESS);
+ 		case '?':
+ 			usage(argv[0], stderr);
+-			exit(0);
++			exit(EXIT_SUCCESS);
+ 		case 'R':
+ 			_restart++;
+ 			break;
+@@ -1943,7 +1943,7 @@ int main(int argc, char *argv[])
+ 			break;
+ 		case 'V':
+ 			printf("dmeventd version: %s\n", DM_LIB_VERSION);
+-			exit(1);
++			exit(EXIT_SUCCESS);
+ 		}
+ 	}
+ 
 
 
