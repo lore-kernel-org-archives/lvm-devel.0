@@ -1,149 +1,119 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue,  9 Aug 2016 15:46:37 +0000 (UTC)
-Subject: master - test: fix lvcreate-large-raid.sh
-Message-ID: <20160809154637.7A60160ACD@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 30 May 2013 15:37:08 +0000 (UTC)
+Subject: master - tests: snapshot testing
+Message-ID: <20130530153708.23DC56142D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48e14390c13d26e86c359532d796258608414cee
-Commit:        48e14390c13d26e86c359532d796258608414cee
-Parent:        3d3f62e10acee60bd61a401b76f009a611d22f9e
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Aug 9 17:45:37 2016 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Aug 9 17:45:37 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a766ea16b86501b6241cf7ba96dd0f28e1cf35b7
+Commit:        a766ea16b86501b6241cf7ba96dd0f28e1cf35b7
+Parent:        cd9350198e3178251a54c442183465e8b7719251
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 29 23:36:44 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 30 17:35:23 2013 +0200
 
-test: fix lvcreate-large-raid.sh
+tests: snapshot testing
 
-RAID6 LVs may not be created with --nosync or data corruption
-may occur in case of device failures.  The underlying MD raid6
-personality used to drive the RaidLV performs read-modify-write
-updates on stripes and thus relies on properly written parity
-(P and Q Syndromes) during initial synchronization.
-
-Once on it, enhance test to create/extend more and
-larger RaidLVs and check sync/nosync status.
 ---
- test/shell/lvcreate-large-raid.sh |   63 ++++++++++++++++++++++++++++--------
- 1 files changed, 49 insertions(+), 14 deletions(-)
+ test/shell/snapshots-usage.sh |   87 +++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 87 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvcreate-large-raid.sh b/test/shell/lvcreate-large-raid.sh
-index 133e517..088d995 100644
---- a/test/shell/lvcreate-large-raid.sh
-+++ b/test/shell/lvcreate-large-raid.sh
-@@ -1,5 +1,5 @@
- #!/bin/sh
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2012,2016 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -21,13 +21,13 @@ aux can_use_16T || skip
- 
- aux have_raid 1 3 0 || skip
- 
--aux prepare_vg 5
-+aux prepare_vg 5 32
- 
--lvcreate --type snapshot -s -l 20%FREE -n $lv1 $vg --virtualsize 256T
--lvcreate --type snapshot -s -l 20%FREE -n $lv2 $vg --virtualsize 256T
--lvcreate --type snapshot -s -l 20%FREE -n $lv3 $vg --virtualsize 256T
--lvcreate --type snapshot -s -l 20%FREE -n $lv4 $vg --virtualsize 256T
--lvcreate --type snapshot -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
-+# Fake 5 PiB volume group $vg1 via snapshot LVs
-+for device in "$lv1" "$lv2" "$lv3" "$lv4" "$lv5"
-+do
-+	lvcreate --type snapshot -s -l 20%FREE -n $device $vg --virtualsize 1P
-+done
- 
- #FIXME this should be 1024T
- #check lv_field $vg/$lv size "128.00m"
-@@ -35,41 +35,76 @@ lvcreate --type snapshot -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
- aux extend_filter_LVMTEST
- 
- pvcreate "$DM_DEV_DIR"/$vg/$lv[12345]
--vgcreate $vg1 "$DM_DEV_DIR"/$vg/$lv[12345]
-+vgcreate -s 2M $vg1 "$DM_DEV_DIR"/$vg/$lv[12345]
+diff --git a/test/shell/snapshots-usage.sh b/test/shell/snapshots-usage.sh
+new file mode 100644
+index 0000000..ae08378
+--- /dev/null
++++ b/test/shell/snapshots-usage.sh
+@@ -0,0 +1,87 @@
++#!/bin/bash
++# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+# Delay PVs so that resynchronization doesn't fill
-+# the snapshots before removal of the RaidLV
-+for device in "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
-+do
-+	aux delay_dev "$device" 0 1
-+done
- 
- # bz837927 START
- 
- #
- # Create large RAID LVs
- #
--# We need '--nosync' or our virtual devices won't work
++# no automatic extensions please
 +
-+# 200 TiB raid1
- lvcreate --type raid1 -m 1 -L 200T -n $lv1 $vg1 --nosync
- check lv_field $vg1/$lv1 size "200.00t"
-+aux check_status_chars $vg1 $lv1 "AA"
++. lib/test
++
++fill() {
++	dd if=/dev/zero of=$DM_DEV_DIR/$vg1/lvol0 bs=$1 count=1
++}
++
++aux prepare_vg
++
++lvcreate -s -l 100%FREE -n $lv $vg --virtualsize 15P
++
++aux lvmconf "activation/snapshot_autoextend_percent = 20" \
++            "activation/snapshot_autoextend_threshold = 50"
++aux lvmconf 'devices/filter = [ "a|dev/mapper/.*$|", "a|dev/LVMTEST|", "r|.*|" ]'
++aux lvmconf 'devices/global_filter = [ "a|dev/mapper/.*$|", "a|dev/LVMTEST|", "r|.*|" ]'
++
++# Check usability with smallest extent size
++pvcreate --setphysicalvolumesize 4T $DM_DEV_DIR/$vg/$lv
++vgcreate -s 1K $vg1 $DM_DEV_DIR/$vg/$lv
++
++# Check border size
++lvcreate -aey -L4095G $vg1
++lvcreate -s -L100K $vg1/lvol0
++fill 1K
++check lv_field $vg1/lvol1 data_percent "12.00"
 +lvremove -ff $vg1
 +
-+# 1 PiB raid1
-+lvcreate --type raid1 -m 1 -L 1P -n $lv1 $vg1 --nosync
-+check lv_field $vg1/$lv1 size "1.00p"
-+aux check_status_chars $vg1 $lv1 "AA"
- lvremove -ff $vg1
- 
--for segtype in raid4 raid5 raid6; do
-+# 750 TiB raid4/5
-+for segtype in raid4 raid5; do
-         lvcreate --type $segtype -i 3 -L 750T -n $lv1 $vg1 --nosync
-         check lv_field $vg1/$lv1 size "750.00t"
-+        aux check_status_chars $vg1 $lv1 "AAAA"
-         lvremove -ff $vg1
- done
- 
-+# 750 TiB raid6 (with --nosync rejection check)
-+[ aux have_raid 1 9 0 ] && not lvcreate --type raid6 -i 3 -L 750T -n $lv1 $vg1 --nosync
-+lvcreate --type raid6 -i 3 -L 750T -n $lv1 $vg1
-+check lv_field $vg1/$lv1 size "750.00t"
-+aux check_status_chars $vg1 $lv1 "aaaaa"
++# Create 1KB snapshot
++lvcreate -aey -l1 $vg1
++not lvcreate -s -l1 $vg1/lvol0
++not lvcreate -s -l3 $vg1/lvol0
++lvcreate -s -l30 $vg1/lvol0
++check lv_field $vg1/lvol1 size "12.00k"
++
++not lvcreate -s -c512 -l512 $vg1/lvol0
++lvcreate -aey -s -c128 -l1700 $vg1/lvol0
++# 3 * 128
++check lv_field $vg1/lvol2 size "384.00k"
++
 +lvremove -ff $vg1
 +
-+# 1 PiB raid6 (with --nosync rejection check), then extend up to 2 PiB
-+[ aux have_raid 1 9 0 ] && not lvcreate --type raid6 -i 3 -L -L 1P -n $lv1 $vg1 --nosync
-+lvcreate --type raid6 -i 3 -L 1P -n $lv1 $vg1
-+check lv_field $vg1/$lv1 size "1.00p"
-+aux check_status_chars $vg1 $lv1 "aaaaa"
-+lvextend -L +1P $vg1/$lv1
-+check lv_field $vg1/$lv1 size "2.00p"
-+aux check_status_chars $vg1 $lv1 "aaaaa"
-+lvremove -ff $vg1
++lvcreate -aey -l20 $vg1
++lvcreate -s -l12 $vg1/lvol0
 +
- #
--# Convert large linear to RAID1 (belong in different test script?)
-+# Convert large 200 TiB linear to RAID1 (belong in different test script?)
- #
- lvcreate -aey -L 200T -n $lv1 $vg1
--# Need to deactivate or the up-convert will start sync'ing
--lvchange -an $vg1/$lv1
- lvconvert --type raid1 -m 1 $vg1/$lv1
- check lv_field $vg1/$lv1 size "200.00t"
-+aux check_status_chars $vg1 $lv1 "aa"
- lvremove -ff $vg1
- 
- #
--# Extending large RAID LV (belong in different script?)
-+# Extending large 200 TiB RAID LV to 400 TiB (belong in different script?)
- #
- lvcreate --type raid1 -m 1 -L 200T -n $lv1 $vg1 --nosync
- check lv_field $vg1/$lv1 size "200.00t"
-+aux check_status_chars $vg1 $lv1 "AA"
- lvextend -L +200T $vg1/$lv1
- check lv_field $vg1/$lv1 size "400.00t"
-+aux check_status_chars $vg1 $lv1 "AA"
- lvremove -ff $vg1
- 
- # bz837927 END
++# Fill 1KB -> 100% snapshot (1x 4KB chunk)
++fill 1K
++check lv_field $vg1/lvol1 data_percent "100.00"
++
++# Check it resizes 100% full valid snapshot
++lvextend --use-policies $vg1/lvol1
++check lv_field $vg1/lvol1 data_percent "80.00"
++
++fill 4K
++lvextend --use-policies $vg1/lvol1
++check lv_field $vg1/lvol1 size "18.00k"
++
++lvextend -l+33 $vg1/lvol1
++check lv_field $vg1/lvol1 size "28.00k"
++
++fill 20K
++vgremove -ff $vg1
++
++# Check usability with large extent size
++pvcreate $DM_DEV_DIR/$vg/$lv
++vgcreate -s 4G $vg1 $DM_DEV_DIR/$vg/$lv
++
++lvcreate -aey -l1 $vg1
++lvcreate -s -l1 $vg1/lvol0
++check lv_field $vg1/lvol1 size "4.00g"
++
++lvcreate -aey -V15E -l1 -s $vg1
++check lv_field $vg1/lvol2 origin_size "15.00e"
++
++vgremove -ff $vg1
++vgremove -ff $vg
 
 
