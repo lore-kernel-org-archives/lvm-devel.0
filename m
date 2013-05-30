@@ -1,53 +1,57 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 30 May 2013 09:46:00 +0000 (UTC)
-Subject: master - man: ea_start/ea_size -> ba_start/ba_size
-Message-ID: <20130530094600.F3AB060D1F@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 30 May 2013 15:36:47 +0000 (UTC)
+Subject: master - args: do not accept >=16EiB sizes
+Message-ID: <20130530153647.33C9561354@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e7cdd60f0043d54651a8441803daaea345897f1
-Commit:        5e7cdd60f0043d54651a8441803daaea345897f1
-Parent:        798ed9ea1c72b24a02d38106ecaea9379a673c6f
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu May 30 11:45:44 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu May 30 11:45:44 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=99f04835802ee675242a4896697eb784717ee998
+Commit:        99f04835802ee675242a4896697eb784717ee998
+Parent:        c5c452a137ba36840d71f3bde23b1a6b496ede4f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 29 14:50:21 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 30 17:23:51 2013 +0200
 
-man: ea_start/ea_size -> ba_start/ba_size
+args: do not accept >=16EiB sizes
 
+Instead of seeing wierd overflows inside the lvm code,
+giving false error messages, kill the user experiment in the begining.
+
+Who needs to use more then 16EiB with lvm2 and 64bit anyway...
 ---
- man/pvcreate.8.in |    2 +-
- man/pvs.8.in      |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW          |    1 +
+ tools/lvmcmdline.c |    4 ++++
+ 2 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/man/pvcreate.8.in b/man/pvcreate.8.in
-index c3a652c..bd979aa 100644
---- a/man/pvcreate.8.in
-+++ b/man/pvcreate.8.in
-@@ -174,7 +174,7 @@ The start of the bootloader area is always aligned, see also \fB--dataalignment\
- and \fB--dataalignmentoffset\fP. The bootloader area size may eventually
- end up increased due to the alignment, but it's never less than the
- size that is requested. To see the bootloader area start and size of
--an existing Physical Volume use \fBpvs -o +ea_start,ea_size\fP.
-+an existing Physical Volume use \fBpvs -o +ba_start,ba_size\fP.
- .TP
- .B \-\-setphysicalvolumesize \fIsize
- Overrides the automatically-detected size of the PV.  Use with care.
-diff --git a/man/pvs.8.in b/man/pvs.8.in
-index 7fff4fd..7ec724a 100644
---- a/man/pvs.8.in
-+++ b/man/pvs.8.in
-@@ -63,7 +63,7 @@ and \fB-o pvseg_all\fP to select all Physical Volume segment columns.
- Use \fB-o help\fP to view the full list of columns available.
- .IP
- Column names include: pv_fmt, pv_uuid, dev_size, pv_name, pv_mda_free,
--pv_mda_size, ea_start, ea_size, pe_start, pv_size, pv_free, pv_used,
-+pv_mda_size, ba_start, ba_size, pe_start, pv_size, pv_free, pv_used,
- pv_attr, pv_pe_count, pv_pe_alloc_count, pv_tags, pv_mda_count,
- pv_mda_used_count, pvseg_start, and pvseg_size
- .IP
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f5adc0b..86357fd 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Do not accept size parameters bigger then 16EiB.
+   Fix release of PV's fid in free_pv_fid().
+   Skip monitoring of snapshots that are already bigger then origin.
+   Add lv_is_cow_covering_origin() to check if cow covers origin size.
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 0b64ed8..89ead2c 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -340,6 +340,10 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)), struct arg
+ 	} else
+ 		v *= factor;
+ 
++	if ((uint64_t) v >= (UINT64_MAX >> SECTOR_SHIFT)) {
++		log_error("Size is too big (>=16EiB).");
++		return 0;
++	}
+ 	av->i_value = (int32_t) v;
+ 	av->ui_value = (uint32_t) v;
+ 	av->i64_value = (int64_t) v;
 
 
