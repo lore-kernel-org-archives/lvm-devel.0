@@ -1,50 +1,60 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed,  3 Aug 2016 20:49:57 +0000 (UTC)
-Subject: master - man: minor corrections in pvscan
-Message-ID: <20160803204957.0CC1760B3B@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 30 May 2013 15:36:59 +0000 (UTC)
+Subject: master - lvresize: check for max snapshot size
+Message-ID: <20130530153659.B188A61145@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=be497175e03b5cb51f2972a84528216bba06412a
-Commit:        be497175e03b5cb51f2972a84528216bba06412a
-Parent:        2b01dca28aca71af1388e96d4ed3627d352d9399
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 3 15:49:43 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Aug 3 15:49:43 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3ced1bf694359a67162cccc7f0e3d94e50929f6e
+Commit:        3ced1bf694359a67162cccc7f0e3d94e50929f6e
+Parent:        bd3ece0128926cc156b7fcb6409acc1a2afb16db
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 29 21:23:02 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 30 17:35:23 2013 +0200
 
-man: minor corrections in pvscan
+lvresize: check for max snapshot size
 
+As for lvcreate, lvresize also doesn't need to grow bigger then needed.
 ---
- man/pvscan.8.in |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvresize.c |   10 ++++++++++
+ 2 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/man/pvscan.8.in b/man/pvscan.8.in
-index 38f424f..5ff5fa5 100644
---- a/man/pvscan.8.in
-+++ b/man/pvscan.8.in
-@@ -79,7 +79,7 @@ When given specific device name arguments, pvscan \-\-cache will only
- read the named devices.
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d757e2b..7589f12 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Detect maximum usable size for snapshot for lvresize.
+   Creation of snapshot takes at most 100% origin coverage.
+   Add cow_max_extents() to calc extents for 100% origin coverage.
+   For creation of snapshot require size for at least 3 chunks.
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index b1008ec..a32930e 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -527,6 +527,16 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 			return EINVALID_CMD_LINE;
+ 		}
+ 		lp->extents += lv->le_count;
++		if (lv_is_cow(lv)) {
++			extents_used = cow_max_extents(origin_from_cow(lv), find_cow(lv)->chunk_size);
++			if (extents_used < lp->extents) {
++				log_print_unless_silent("Reached maximum COW size %s.",
++							display_size(vg->cmd, (uint64_t) vg->extent_size * extents_used));
++				lp->extents = extents_used;
++				if (lp->extents == lv->le_count)
++					return ECMD_PROCESSED;
++			}
++		}
+ 	}
  
- .IP \[bu] 2
--LVM udev rules and systemd services are used to intiate automatic device
-+LVM udev rules and systemd services are used to initiate automatic device
- scanning.
- 
- .IP \[bu] 2
-@@ -99,8 +99,8 @@ if the global_filter has changed, then all devices must be rescanned
- for metadata with the command pvscan \-\-cache.
- 
- .IP \[bu] 2
--lvmetad ignores older metadata formats, e.g. lvm1, and should not be
--used if they exist.
-+lvmetad does not cache older metadata formats, e.g. lvm1, and will
-+be temporarily disabled if they are seen.
- 
- .IP \[bu] 2
- To notify lvmetad about a device that is no longer present, the major and
+ 	if (lp->sign == SIGN_MINUS) {
 
 
