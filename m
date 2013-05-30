@@ -1,50 +1,76 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  2 Aug 2016 14:59:51 +0000 (UTC)
-Subject: master - lvconvert: Forbid stripe parameters with --repair.
-Message-ID: <20160802145951.DFF7A60B3C@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 30 May 2013 15:36:57 +0000 (UTC)
+Subject: master - lvcreate: reduce too large cow
+Message-ID: <20130530153657.9EEBF61145@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=804a397643a38b9c82d22eacaca2138f2af57bec
-Commit:        804a397643a38b9c82d22eacaca2138f2af57bec
-Parent:        d0d03f315bd988bab50e45c4907ab626a780e600
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Aug 2 15:57:45 2016 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Aug 2 15:59:12 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bd3ece0128926cc156b7fcb6409acc1a2afb16db
+Commit:        bd3ece0128926cc156b7fcb6409acc1a2afb16db
+Parent:        eb7e206a73a4fae5b93ffcdf96640675f7a72a73
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 29 21:43:46 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 30 17:35:14 2013 +0200
 
-lvconvert: Forbid stripe parameters with --repair.
+lvcreate: reduce too large cow
 
+Detect maximum usable size of snapshot COW device,
+and do not waste more space for such LV then needed.
 ---
- WHATS_NEW         |    1 +
- tools/lvconvert.c |    1 -
- 2 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvcreate.c |   18 ++++++++++++++++++
+ 2 files changed, 19 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 2e81ab0..aa839bd 100644
+index c7eb82a..d757e2b 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 2.02.163 - 
- =================================
-+  Forbid stripe parameters with lvconvert --repair.
-   Unify stripe size validation into get_stripe_params to catch missing cases.
-   Further lvconvert validation logic refactoring.
+ Version 2.02.99 - 
+ ===================================
++  Creation of snapshot takes at most 100% origin coverage.
+   Add cow_max_extents() to calc extents for 100% origin coverage.
+   For creation of snapshot require size for at least 3 chunks.
+   Fix lvresize --use-policies of VALID but 100% full snapshot.
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 7580155..497c474 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -241,6 +241,7 @@ static int _update_extents_params(struct volume_group *vg,
+ 	struct logical_volume *origin = NULL;
+ 	uint32_t size_rest;
+ 	uint32_t stripesize_extents;
++	uint32_t extents;
  
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index dd0102f..80760c6 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -449,7 +449,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 		if (arg_outside_list_is_set(cmd, "cannot be used with --repair",
- 					    repair_ARG,
- 					    alloc_ARG, usepolicies_ARG,
--					    stripes_long_ARG, stripesize_ARG,
- 					    force_ARG, noudevsync_ARG, test_ARG,
- 					    -1))
- 			return_0;
+ 	if (lcp->size &&
+ 	    !(lp->extents = extents_from_size(vg->cmd, lcp->size,
+@@ -299,6 +300,23 @@ static int _update_extents_params(struct volume_group *vg,
+ 			break;
+ 	}
+ 
++	if (lp->snapshot && lp->origin) {
++		if (!origin && !(origin = find_lv(vg, lp->origin))) {
++			log_error("Couldn't find origin volume '%s'.",
++				  lp->origin);
++			return 0;
++		}
++
++		extents = cow_max_extents(origin, lp->chunk_size);
++
++		if (extents < lp->extents) {
++				log_print_unless_silent("Reducing COW size %s down to maximum usable size %s.",
++						display_size(vg->cmd, (uint64_t) vg->extent_size * lp->extents),
++						display_size(vg->cmd, (uint64_t) vg->extent_size * extents));
++			lp->extents = extents;
++		}
++	}
++
+ 	if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
+ 		stripesize_extents = 1;
+ 
 
 
