@@ -1,57 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 31 May 2013 19:44:07 +0000 (UTC)
-Subject: master - tests: min snap chunk count is 3
-Message-ID: <20130531194407.A334960FA7@fedorahosted.org>
+Date: Fri, 31 May 2013 19:44:09 +0000 (UTC)
+Subject: master - tests: skip if the system already uses tested minor
+Message-ID: <20130531194409.C1B0260FA7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1c83c159631dd9be40d47da168ce1c77423798b9
-Commit:        1c83c159631dd9be40d47da168ce1c77423798b9
-Parent:        31f3274ed8a81cbf6c25c7bc6307e58894f436a9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=274eae592fc0d1787e5794c8d4f6d17c8a595659
+Commit:        274eae592fc0d1787e5794c8d4f6d17c8a595659
+Parent:        1c83c159631dd9be40d47da168ce1c77423798b9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 31 11:01:59 2013 +0200
+AuthorDate:    Fri May 31 12:48:37 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 31 21:42:31 2013 +0200
+CommitterDate: Fri May 31 21:42:32 2013 +0200
 
-tests: min snap chunk count is 3
+tests: skip if the system already uses tested minor
 
 ---
- test/api/percent.sh |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ test/shell/activate-minor.sh |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/test/api/percent.sh b/test/api/percent.sh
-index 07b8bc6..8f7d5da 100644
---- a/test/api/percent.sh
-+++ b/test/api/percent.sh
-@@ -1,5 +1,5 @@
- #!/bin/sh
--# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2010-2013 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -15,14 +15,14 @@
+diff --git a/test/shell/activate-minor.sh b/test/shell/activate-minor.sh
+index 5433f01..3726faa 100644
+--- a/test/shell/activate-minor.sh
++++ b/test/shell/activate-minor.sh
+@@ -11,6 +11,10 @@
  
- kernel_at_least 2 6 33 || skip
+ . lib/test
  
--aux prepare_devs 2
-+aux prepare_pvs 2
- 
--vgcreate -c n -s 4k $vg $(cat DEVICES)
--lvcreate -l 5 -n foo $vg
--lvcreate -s -n snap $vg/foo -l 2 -c 4k
-+vgcreate -s 4k $vg $(cat DEVICES)
-+lvcreate -aey -l 5 -n foo $vg
-+lvcreate -s -n snap $vg/foo -l 3 -c 4k
- lvcreate -s -n snap2 $vg/foo -l 6 -c 4k
- dd if=/dev/urandom of="$DM_DEV_DIR/$vg/snap2" count=1 bs=1024
--lvcreate -m 1 -n mirr $vg -l 1 --mirrorlog core
-+lvcreate -aey -m 1 -n mirr $vg -l 1 --mirrorlog core
- lvs $vg
- aux apitest percent $vg
- 
++# Just skip this test if minor is already in use...
++dmsetup info | tee info
++egrep "^Major, minor: *[0-9]+, 123" info && skip
++
+ aux prepare_vg 2
+ lvcreate -a n --zero n -l 1 -n foo $vg
+ lvchange $vg/foo -My --major=255 --minor=123
 
 
