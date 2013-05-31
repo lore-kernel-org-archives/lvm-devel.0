@@ -1,67 +1,56 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 31 May 2013 09:36:25 +0200
+From: Brassow Jonathan <jbrassow@redhat.com>
+Date: Fri, 31 May 2013 09:36:37 -0500
 Subject: [PATCH] DM RAID: Add ability to throttle sync operations for RAID LVs.
-In-Reply-To: <1369948507.8964.3.camel@f16>
-References: <1369948507.8964.3.camel@f16>
-Message-ID: <51A852F9.2080208@redhat.com>
+In-Reply-To: <51A852F9.2080208@redhat.com>
+References: <1369948507.8964.3.camel@f16> <51A852F9.2080208@redhat.com>
+Message-ID: <B9A5B415-4C73-4904-A4DC-98F8F0CB27E2@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 30.5.2013 23:15, Jonathan Brassow napsal(a):
-> Please take a look at the following patch that adds throttling for RAID
-> sync operations.  Any feedback on what the 'lvs' header should look like
-> when reporting the min/max recovery rate would be helpful also.  (Right
-> now it is MinSync and MaxSync.)
->
->   brassow
->
->
-> This patch adds the ability to set the minimum and maximum I/O rate for
-> sync operations in RAID LVs.  The options are available for 'lvcreate' and
-> 'lvchange' and are as follows:
->    --minrecoveryrate <Rate>
->    --maxrecoveryrate <Rate>
-> The rate is specified in kiB/sec/disk.  Setting the rate to 0 removes the
-> preference.
->
 
-Patch seems to be missing  libdm API extension to set min/max rates.
+On May 31, 2013, at 2:36 AM, Zdenek Kabelac wrote:
 
-Maybe the argument for min/max should be specified in 'size' units/second.
-So you could easily say   1M   - just like with other args where we give size.
+> Dne 30.5.2013 23:15, Jonathan Brassow napsal(a):
+>> Please take a look at the following patch that adds throttling for RAID
+>> sync operations.  Any feedback on what the 'lvs' header should look like
+>> when reporting the min/max recovery rate would be helpful also.  (Right
+>> now it is MinSync and MaxSync.)
+>> 
+>>  brassow
+>> 
+>> 
+>> This patch adds the ability to set the minimum and maximum I/O rate for
+>> sync operations in RAID LVs.  The options are available for 'lvcreate' and
+>> 'lvchange' and are as follows:
+>>   --minrecoveryrate <Rate>
+>>   --maxrecoveryrate <Rate>
+>> The rate is specified in kiB/sec/disk.  Setting the rate to 0 removes the
+>> preference.
+>> 
+> 
+> Patch seems to be missing  libdm API extension to set min/max rates.
 
+I had already put those in previously - see 'dm_tree_node_raid_params' and 'dm_tree_node_add_raid_target_with_params()'.
 
-> +.RB [ \-\-maxrecoveryrate " " \fIRate\fP ]
-> +.RB [ \-\-minrecoveryrate " " \fIRate\fP ]
+> 
+> Maybe the argument for min/max should be specified in 'size' units/second.
+> So you could easily say   1M   - just like with other args where we give size.
 
-.RB [ \-\-minrecoveryrate
-.IB Rate ]
+That sounds like a good idea.
 
-is a bit better - since you give roff a change to insert spaces more evenly.
+> 
+> 
+>> +.RB [ \-\-maxrecoveryrate " " \fIRate\fP ]
+>> +.RB [ \-\-minrecoveryrate " " \fIRate\fP ]
+> 
+> .RB [ \-\-minrecoveryrate
+> .IB Rate ]
 
+Ok, will do.
 
-> --- lvm2.orig/man/lvcreate.8.in
-> +++ lvm2/man/lvcreate.8.in
-> @@ -19,6 +19,8 @@ lvcreate \- create a logical volume in a
->   .RB [ \-\-ignoremonitoring ]
->   .RB [ \-\-monitor
->   .RI { y | n }]
-> +.RB [ \-\-maxrecoveryrate " " \fIRate\fP ]
-> +.RB [ \-\-minrecoveryrate " " \fIRate\fP ]
-
-- " -
-
-
-
-> +arg(minrecoveryrate_ARG, '\0', "minrecoveryrate", int_arg, 0)
-> +arg(maxrecoveryrate_ARG, '\0', "maxrecoveryrate", int_arg, 0)
-
-I'd vote for 'size_arg'
-
-
-Zdenek
+ brassow
 
 
