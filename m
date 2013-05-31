@@ -1,82 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 May 2013 15:36:45 +0000 (UTC)
-Subject: master - libdm: add public macro DM_TO_STRING
-Message-ID: <20130530153645.1F06D61354@fedorahosted.org>
+Date: Fri, 31 May 2013 19:59:21 +0000 (UTC)
+Subject: master - tests: missed skip in test
+Message-ID: <20130531195921.5843860EF4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c5c452a137ba36840d71f3bde23b1a6b496ede4f
-Commit:        c5c452a137ba36840d71f3bde23b1a6b496ede4f
-Parent:        2f1a571c9707d596d7716cec9488e54ba4c0c946
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c5f7d401e5e558ea7dffaa326a27dd432241e639
+Commit:        c5f7d401e5e558ea7dffaa326a27dd432241e639
+Parent:        db2b65704cb3e6d2b17dbc775017b36d8a23b5bd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 29 12:46:21 2013 +0200
+AuthorDate:    Fri May 31 21:58:51 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 16:53:59 2013 +0200
+CommitterDate: Fri May 31 21:58:51 2013 +0200
 
-libdm: add public macro DM_TO_STRING
+tests: missed skip in test
 
-Since this stringifying macro is usable in more places,
-move it to the public header with DM_ prefix.
 ---
- WHATS_NEW_DM         |    1 +
- libdm/libdevmapper.h |    4 ++++
- libdm/libdm-common.c |    8 ++------
- 3 files changed, 7 insertions(+), 6 deletions(-)
+ test/shell/lvconvert-repair-raid.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 4a2947a..46ce9b0 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.78 - 
- ===================================
-+  Add DM_TO_STRING public macro.
-   Always return success on dmeventd -V command call.
-   Fix parsing of 64bit snapshot status in dmeventd snapshot plugin.
-   Add dm_get_status_snapshot() for parsing snapshot status.
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 1bf5807..dba8548 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -34,6 +34,10 @@
- # define __typeof__ typeof
- #endif
+diff --git a/test/shell/lvconvert-repair-raid.sh b/test/shell/lvconvert-repair-raid.sh
+index f087f32..31d5116 100644
+--- a/test/shell/lvconvert-repair-raid.sh
++++ b/test/shell/lvconvert-repair-raid.sh
+@@ -12,12 +12,12 @@
+ . lib/test
  
-+/* Macros to make string defines */
-+#define DM_TO_STRING_EXP(A) #A
-+#define DM_TO_STRING(A) DM_TO_STRING_EXP(A)
-+
- #ifdef __cplusplus
- extern "C" {
- #endif
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 4b0ba08..d18de9c 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -1591,10 +1591,6 @@ static void _unmangle_mountinfo_string(const char *src, char *buf)
- 	*buf = '\0';
- }
+ test -e LOCAL_CLVMD && skip
++aux target_at_least dm-raid 1 1 0 || skip
  
--/* Macros to make string defines */
--#define TO_STRING_EXP(A) #A
--#define TO_STRING(A) TO_STRING_EXP(A)
--
- /* Parse one line of mountinfo and unmangled target line */
- static int _mountinfo_parse_line(const char *line, unsigned *maj, unsigned *min, char *buf)
- {
-@@ -1602,8 +1598,8 @@ static int _mountinfo_parse_line(const char *line, unsigned *maj, unsigned *min,
- 	char target[PATH_MAX + 1];
+ aux lvmconf 'allocation/maximise_cling = 0'
+ aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
  
- 	/* TODO: maybe detect availability of  %ms  glib support ? */
--	if (sscanf(line, "%*u %*u %u:%u %" TO_STRING(PATH_MAX)
--		   "s %" TO_STRING(PATH_MAX) "s",
-+	if (sscanf(line, "%*u %*u %u:%u %" DM_TO_STRING(PATH_MAX)
-+		   "s %" DM_TO_STRING(PATH_MAX) "s",
- 		   maj, min, root, target) < 4) {
- 		log_error("Failed to parse mountinfo line.");
- 		return 0;
+ aux prepare_vg 8
+-aux target_at_least dm-raid 1 1 0
+ 
+ # RAID5 single replace
+ lvcreate --type raid5 -i 2 -l 2 -n $lv1 $vg "$dev1" "$dev2" "$dev3"
 
 
