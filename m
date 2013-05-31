@@ -1,56 +1,54 @@
-From: Brassow Jonathan <jbrassow@redhat.com>
-Date: Fri, 31 May 2013 09:36:37 -0500
-Subject: [PATCH] DM RAID: Add ability to throttle sync operations for RAID LVs.
-In-Reply-To: <51A852F9.2080208@redhat.com>
-References: <1369948507.8964.3.camel@f16> <51A852F9.2080208@redhat.com>
-Message-ID: <B9A5B415-4C73-4904-A4DC-98F8F0CB27E2@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Fri, 31 May 2013 16:26:36 +0000 (UTC)
+Subject: master - Clean-up: Fix copy-n-paste error
+Message-ID: <20130531162636.7AED561137@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7061b74ec6850651e5610a8da7ff0a16b1f6d155
+Commit:        7061b74ec6850651e5610a8da7ff0a16b1f6d155
+Parent:        09cc5f65dbe34027c91011907e25ea4c21edfd13
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri May 17 14:30:29 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Fri May 31 11:14:37 2013 -0500
 
-On May 31, 2013, at 2:36 AM, Zdenek Kabelac wrote:
+Clean-up:  Fix copy-n-paste error
 
-> Dne 30.5.2013 23:15, Jonathan Brassow napsal(a):
->> Please take a look at the following patch that adds throttling for RAID
->> sync operations.  Any feedback on what the 'lvs' header should look like
->> when reporting the min/max recovery rate would be helpful also.  (Right
->> now it is MinSync and MaxSync.)
->> 
->>  brassow
->> 
->> 
->> This patch adds the ability to set the minimum and maximum I/O rate for
->> sync operations in RAID LVs.  The options are available for 'lvcreate' and
->> 'lvchange' and are as follows:
->>   --minrecoveryrate <Rate>
->>   --maxrecoveryrate <Rate>
->> The rate is specified in kiB/sec/disk.  Setting the rate to 0 removes the
->> preference.
->> 
-> 
-> Patch seems to be missing  libdm API extension to set min/max rates.
+Description for --with-raid should be s/mirror/raid/.
+---
+ configure    |    2 +-
+ configure.in |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-I had already put those in previously - see 'dm_tree_node_raid_params' and 'dm_tree_node_add_raid_target_with_params()'.
-
-> 
-> Maybe the argument for min/max should be specified in 'size' units/second.
-> So you could easily say   1M   - just like with other args where we give size.
-
-That sounds like a good idea.
-
-> 
-> 
->> +.RB [ \-\-maxrecoveryrate " " \fIRate\fP ]
->> +.RB [ \-\-minrecoveryrate " " \fIRate\fP ]
-> 
-> .RB [ \-\-minrecoveryrate
-> .IB Rate ]
-
-Ok, will do.
-
- brassow
+diff --git a/configure b/configure
+index b58c52d..b167274 100755
+--- a/configure
++++ b/configure
+@@ -1588,7 +1588,7 @@ Optional Packages:
+                           [[TYPE=internal]]
+   --with-mirrors=TYPE     mirror support: internal/shared/none
+                           [[TYPE=internal]]
+-  --with-raid=TYPE        mirror support: internal/shared/none
++  --with-raid=TYPE        raid support: internal/shared/none
+                           [[TYPE=internal]]
+   --with-replicators=TYPE replicator support: internal/shared/none
+                           [[TYPE=none]]
+diff --git a/configure.in b/configure.in
+index 75e0d84..b4dfc19 100644
+--- a/configure.in
++++ b/configure.in
+@@ -364,7 +364,7 @@ dnl -- raid inclusion type
+ AC_MSG_CHECKING(whether to include raid)
+ AC_ARG_WITH(raid,
+ 	    AC_HELP_STRING([--with-raid=TYPE],
+-			   [mirror support: internal/shared/none
++			   [raid support: internal/shared/none
+ 			    [[TYPE=internal]]]),
+ 	    RAID=$withval, RAID=internal)
+ AC_MSG_RESULT($RAID)
 
 
