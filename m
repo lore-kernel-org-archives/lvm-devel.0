@@ -1,37 +1,67 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 29 May 2013 11:24:44 +0000 (UTC)
-Subject: master - WHATS_NEW: return success on dmeventd -V
-Message-ID: <20130529112444.D5E0961032@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 31 May 2013 09:36:25 +0200
+Subject: [PATCH] DM RAID: Add ability to throttle sync operations for RAID LVs.
+In-Reply-To: <1369948507.8964.3.camel@f16>
+References: <1369948507.8964.3.camel@f16>
+Message-ID: <51A852F9.2080208@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=798ed9ea1c72b24a02d38106ecaea9379a673c6f
-Commit:        798ed9ea1c72b24a02d38106ecaea9379a673c6f
-Parent:        6ad17fd7129dc7f50c0623181681157faea806a1
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed May 29 13:24:16 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed May 29 13:24:16 2013 +0200
+Dne 30.5.2013 23:15, Jonathan Brassow napsal(a):
+> Please take a look at the following patch that adds throttling for RAID
+> sync operations.  Any feedback on what the 'lvs' header should look like
+> when reporting the min/max recovery rate would be helpful also.  (Right
+> now it is MinSync and MaxSync.)
+>
+>   brassow
+>
+>
+> This patch adds the ability to set the minimum and maximum I/O rate for
+> sync operations in RAID LVs.  The options are available for 'lvcreate' and
+> 'lvchange' and are as follows:
+>    --minrecoveryrate <Rate>
+>    --maxrecoveryrate <Rate>
+> The rate is specified in kiB/sec/disk.  Setting the rate to 0 removes the
+> preference.
+>
 
-WHATS_NEW: return success on dmeventd -V
+Patch seems to be missing  libdm API extension to set min/max rates.
 
----
- WHATS_NEW_DM |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+Maybe the argument for min/max should be specified in 'size' units/second.
+So you could easily say   1M   - just like with other args where we give size.
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 6dcf9f8..4a2947a 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.78 - 
- ===================================
-+  Always return success on dmeventd -V command call.
-   Fix parsing of 64bit snapshot status in dmeventd snapshot plugin.
-   Add dm_get_status_snapshot() for parsing snapshot status.
-   Detecte mounted fs also via reading /proc/self/mountinfo.
+
+> +.RB [ \-\-maxrecoveryrate " " \fIRate\fP ]
+> +.RB [ \-\-minrecoveryrate " " \fIRate\fP ]
+
+.RB [ \-\-minrecoveryrate
+.IB Rate ]
+
+is a bit better - since you give roff a change to insert spaces more evenly.
+
+
+> --- lvm2.orig/man/lvcreate.8.in
+> +++ lvm2/man/lvcreate.8.in
+> @@ -19,6 +19,8 @@ lvcreate \- create a logical volume in a
+>   .RB [ \-\-ignoremonitoring ]
+>   .RB [ \-\-monitor
+>   .RI { y | n }]
+> +.RB [ \-\-maxrecoveryrate " " \fIRate\fP ]
+> +.RB [ \-\-minrecoveryrate " " \fIRate\fP ]
+
+- " -
+
+
+
+> +arg(minrecoveryrate_ARG, '\0', "minrecoveryrate", int_arg, 0)
+> +arg(maxrecoveryrate_ARG, '\0', "maxrecoveryrate", int_arg, 0)
+
+I'd vote for 'size_arg'
+
+
+Zdenek
 
 
