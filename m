@@ -1,37 +1,53 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 20 Feb 2019 15:05:26 -0500
-Subject: master - WHATS_NEW: scan_lvs default change
-Message-ID: <201902202005.x1KK5QO1011337@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Sat,  1 Jun 2013 22:51:30 +0000 (UTC)
+Subject: master - vgimportclone: override global_filter in lvm.conf
+Message-ID: <20130601225130.214FE61304@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=71a302effe82f1cc89f0b26b358493cfaaed7de7
-Commit:        71a302effe82f1cc89f0b26b358493cfaaed7de7
-Parent:        fedeab28c3096b5afb3fdc397fe8d18455247756
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 20 14:04:49 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Feb 20 14:04:49 2019 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05bf4b8cc3e3d15e79c9964e496dbe396beacb3c
+Commit:        05bf4b8cc3e3d15e79c9964e496dbe396beacb3c
+Parent:        c5f7d401e5e558ea7dffaa326a27dd432241e639
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Sun Apr 28 22:38:22 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sun Jun 2 00:47:17 2013 +0200
 
-WHATS_NEW: scan_lvs default change
+vgimportclone: override global_filter in lvm.conf
 
+The global filter in system's lvm.conf may conflict with the custom filter we
+set up in vgimportclone (they can easily fail to intersect). Since we explicitly
+avoid talking to lvmetad in vgimportclone, it is safe and reasonable to do so.
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ WHATS_NEW                |    1 +
+ scripts/vgimportclone.sh |    1 +
+ 2 files changed, 2 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 29ade99..8088060 100644
+index 7589f12..56868b7 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 2.03.02 - 
+ Version 2.02.99 - 
  ===================================
-+  Change scan_lvs default to 0 so LVs are not scanned for PVs.
-   Thin-pool selects power-of-2 chunk size by default.
-   Cache selects power-of-2 chunk size by default.
-   Support reszing for VDOPoolLV and VDOLV.
++  Override system's global_filter settings for vgimportclone.
+   Detect maximum usable size for snapshot for lvresize.
+   Creation of snapshot takes at most 100% origin coverage.
+   Add cow_max_extents() to calc extents for 100% origin coverage.
+diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
+index 520ca02..d6ad75d 100755
+--- a/scripts/vgimportclone.sh
++++ b/scripts/vgimportclone.sh
+@@ -250,6 +250,7 @@ LVMCONF=${TMP_LVM_SYSTEM_DIR}/lvm.conf
+      /^[ \t]*scan[ \t]*=/{print "scan = [ \"" DEV "\" ]";next} \
+      /^[ \t]*cache[ \t]*=/{print "cache = \"" CACHE "\"";next} \
+      /^[ \t]*use_lvmetad[ \t]*=/{print "use_lvmetad = 0";next} \
++     /^[ \t]*global_filter[ \t]*=/{print "global_filter = [ \"a|.*|\" ]";next} \
+      /^[ \t]*cache_dir[ \t]*=/{print "cache_dir = \"" CACHE_DIR "\"";next} \
+      {print $0}' > ${LVMCONF}
+ 
 
 
