@@ -1,125 +1,94 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  3 Jun 2013 06:42:57 +0000 (UTC)
-Subject: master - filters: dump filter returns error code
-Message-ID: <20130603064257.862DE610C9@fedorahosted.org>
+Date: Mon,  3 Jun 2013 06:42:59 +0000 (UTC)
+Subject: master - cleanup: code update and typo fix
+Message-ID: <20130603064259.9EFF3610C9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f05c5a97c35f4a01b20cb3b31003b53348ce81d9
-Commit:        f05c5a97c35f4a01b20cb3b31003b53348ce81d9
-Parent:        4a657a13b1c6e4570c15c14fd8acb910b106f5cf
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=803b7af70660332ce001c55fb9bc9e8511985421
+Commit:        803b7af70660332ce001c55fb9bc9e8511985421
+Parent:        f05c5a97c35f4a01b20cb3b31003b53348ce81d9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Jun 2 23:27:34 2013 +0200
+AuthorDate:    Mon Jun 3 08:38:07 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jun 3 08:42:25 2013 +0200
+CommitterDate: Mon Jun 3 08:42:33 2013 +0200
 
-filters: dump filter returns error code
+cleanup: code update and typo fix
 
-Add int return value from dump() function.
-Report stack for error case.
-Update composable filter.
+Use the same style of loop for all filter functions.
+Fix type compsoite -> Composite.
 ---
- WHATS_NEW                      |    1 +
- lib/cache/lvmcache.c           |    5 +++--
- lib/commands/toolcontext.c     |    5 +++--
- lib/device/dev-cache.h         |    2 +-
- lib/filters/filter-composite.c |   17 +++++++++--------
- 5 files changed, 17 insertions(+), 13 deletions(-)
+ lib/filters/filter-composite.c |   20 ++++++++------------
+ 1 files changed, 8 insertions(+), 12 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index cd2d8ed..fe42b81 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Report backtrace from dump filter error path.
-   Do not use persistent filter with lvmetad.
-   Composable persistent filter functionality for global filter.
-   Override system's global_filter settings for vgimportclone.
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 81b8de1..6f935db 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -708,8 +708,9 @@ int lvmcache_label_scan(struct cmd_context *cmd, int full_scan)
- 	 * device cache for the benefit of short-lived processes.
- 	 */
- 	if (full_scan == 2 && cmd->is_long_lived &&
--	    cmd->dump_filter && cmd->filter && cmd->filter->dump)
--		cmd->filter->dump(cmd->filter, 0);
-+	    cmd->dump_filter && cmd->filter && cmd->filter->dump &&
-+	    !cmd->filter->dump(cmd->filter, 0))
-+		stack;
- 
- 	r = 1;
- 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 00887ab..c409f2a 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1652,8 +1652,9 @@ void destroy_toolcontext(struct cmd_context *cmd)
- 	struct dm_config_tree *cft_cmdline;
- 	FILE *new_stream;
- 
--	if (cmd->dump_filter && cmd->filter && cmd->filter->dump)
--		cmd->filter->dump(cmd->filter, 1);
-+	if (cmd->dump_filter && cmd->filter && cmd->filter->dump &&
-+	    !cmd->filter->dump(cmd->filter, 1))
-+		stack;
- 
- 	archive_exit(cmd);
- 	backup_exit(cmd);
-diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
-index b886098..0d342c5 100644
---- a/lib/device/dev-cache.h
-+++ b/lib/device/dev-cache.h
-@@ -26,7 +26,7 @@ struct dev_filter {
- 	int (*passes_filter) (struct dev_filter * f, struct device * dev);
- 	void (*destroy) (struct dev_filter * f);
- 	void (*wipe) (struct dev_filter * f);
--	void (*dump) (struct dev_filter * f, int merge_existing);
-+	int (*dump) (struct dev_filter * f, int merge_existing);
- 	void *private;
- 	unsigned use_count;
- };
 diff --git a/lib/filters/filter-composite.c b/lib/filters/filter-composite.c
-index bc37213..1229460 100644
+index 1229460..c2b103d 100644
 --- a/lib/filters/filter-composite.c
 +++ b/lib/filters/filter-composite.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2006 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -49,15 +49,16 @@ static void _composite_destroy(struct dev_filter *f)
- 	dm_free(f);
- }
+@@ -20,13 +20,11 @@
  
--static void _dump(struct dev_filter *f, int merge_existing)
-+static int _dump(struct dev_filter *f, int merge_existing)
+ static int _and_p(struct dev_filter *f, struct device *dev)
  {
 -	struct dev_filter **filters = (struct dev_filter **) f->private;
 +	struct dev_filter **filters;
  
 -	while (*filters) {
--		if ((*filters)->dump)
--			(*filters)->dump(*filters, merge_existing);
++	for (filters = (struct dev_filter **) f->private; *filters; ++filters)
+ 		if (!(*filters)->passes_filter(*filters, dev))
+-			return 0;
 -		filters++;
 -	}
-+	for (filters = (struct dev_filter **) f->private; *filters; ++filters)
-+		if ((*filters)->dump &&
-+		    !(*filters)->dump(*filters, merge_existing))
 +			return_0;
-+
-+	return 1;
- }
  
- static void _wipe(struct dev_filter *f)
+ 	log_debug_devs("Using %s", dev_name(dev));
+ 
+@@ -35,15 +33,13 @@ static int _and_p(struct dev_filter *f, struct device *dev)
+ 
+ static void _composite_destroy(struct dev_filter *f)
+ {
+-	struct dev_filter **filters = (struct dev_filter **) f->private;
++	struct dev_filter **filters;
+ 
+ 	if (f->use_count)
+ 		log_error(INTERNAL_ERROR "Destroying composite filter while in use %u times.", f->use_count);
+ 
+-	while (*filters) {
++	for (filters = (struct dev_filter **) f->private; *filters; ++filters)
+ 		(*filters)->destroy(*filters);
+-		filters++;
+-	}
+ 
+ 	dm_free(f->private);
+ 	dm_free(f);
+@@ -65,7 +61,7 @@ static void _wipe(struct dev_filter *f)
+ {
+ 	struct dev_filter **filters;
+ 
+-	for (filters = (struct dev_filter **) f->private; *filters; filters++)
++	for (filters = (struct dev_filter **) f->private; *filters; ++filters)
+ 		if ((*filters)->wipe)
+ 			(*filters)->wipe(*filters);
+ }
+@@ -78,7 +74,7 @@ struct dev_filter *composite_filter_create(int n, struct dev_filter **filters)
+ 		return_NULL;
+ 
+ 	if (!(filters_copy = dm_malloc(sizeof(*filters) * (n + 1)))) {
+-		log_error("composite filters allocation failed");
++		log_error("Composite filters allocation failed.");
+ 		return NULL;
+ 	}
+ 
+@@ -86,7 +82,7 @@ struct dev_filter *composite_filter_create(int n, struct dev_filter **filters)
+ 	filters_copy[n] = NULL;
+ 
+ 	if (!(cft = dm_zalloc(sizeof(*cft)))) {
+-		log_error("compsoite filters allocation failed");
++		log_error("Composite filters allocation failed.");
+ 		dm_free(filters_copy);
+ 		return NULL;
+ 	}
 
 
