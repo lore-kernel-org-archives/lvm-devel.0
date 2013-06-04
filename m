@@ -1,42 +1,89 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:02 +0000 (UTC)
-Subject: dev-mornfall-activate - config_def_check: fix memory leak
-Message-ID: <20130604192402.C57D660E4F@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:04 +0000 (UTC)
+Subject: dev-mornfall-activate - udev: also autoactivate on coldplug
+Message-ID: <20130604192404.E5AAA61265@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ccb9eb861c3b65ffc1aac024425e2cc10950077
-Commit:        2ccb9eb861c3b65ffc1aac024425e2cc10950077
-Parent:        2e0740f7ef420c7b981bc67cb606d180701b8c1d
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Apr 16 10:42:03 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=764195207d4773cf6f1674a2fb16e9a0acda304a
+Commit:        764195207d4773cf6f1674a2fb16e9a0acda304a
+Parent:        2ccb9eb861c3b65ffc1aac024425e2cc10950077
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Apr 19 12:17:53 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Apr 16 10:45:37 2013 +0200
+CommitterDate: Fri Apr 19 12:43:36 2013 +0200
 
-config_def_check: fix memory leak
+udev: also autoactivate on coldplug
 
-There is no need to strdup a key when inserting into
-the hash table as the table allocates memory and copies
-the string.  This was causing memory to be lost.
+Commit 756bcabbfe297688ba240a880bc2b55265ad33f0 fixed autoactivation
+to not trigger on each uevent for a PV that appeared in the system
+most notably the events that are triggered artificially (udevadm
+trigger or as the result of the WATCH udev rule being applied that
+consequently generates CHANGE uevents). This fixed a situation in
+which VGs/LVs were activated when they should not.
+
+BUT we still need to care about the coldplug used at boot to
+retrigger the ADD events - the "udevadm trigger --action=add"!
+
+For non-DM-based PVs, this is already covered as for these we
+run the autoactivation on ADD event only.
+
+However, for DM-based PVs, we still need to run the
+autoactivation even for the artificial ADD event, reusing
+the udev DB content from previous proper CHANGE event that
+came with the DM device activation.
+
+Simply, this patch fixes a situation in which we run extra
+"udevadm trigger --action=add" (or echo add > /sys/block/<dev>/uevent)
+for DM-based PVs (cryptsetup devices, multipath devices, any
+other DM devices...).
+
+Without this patch, while using lvmetad + autoactivation,
+any VG/LV that has a DM-based PV and for which we do not
+call the activation directly, the VG/LV is not activated.
+
+For example a VG with an LV with root FS on it which is directly
+activated in initrd and then missing activation of the rest
+of the LVs in the VG because of unhandled uevent retrigger on
+boot after switching to root FS (the "coldplug").
+
+(No WHATS_NEW here as this fixes the commit mentioned
+above and which was not released yet.)
 ---
- lib/config/config.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ udev/10-dm.rules.in           |    5 ++++-
+ udev/69-dm-lvm-metad.rules.in |    1 +
+ 2 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 009eb5f..2c77f30 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -577,7 +577,7 @@ int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_
- 				cmd->cft_def_hash = NULL;
- 				r = 0; goto out;
- 			}
--			dm_hash_insert(cmd->cft_def_hash, dm_strdup(vp), def);
-+			dm_hash_insert(cmd->cft_def_hash, vp, def);
- 		}
- 	}
+diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
+index cfee145..512d156 100644
+--- a/udev/10-dm.rules.in
++++ b/udev/10-dm.rules.in
+@@ -77,7 +77,10 @@ LABEL="dm_flags_done"
+ # before (e.g. in initrd). If udev is used in initrd, we require the udev init
+ # script to not remove the existing udev database so we can reuse the information
+ # stored at the time of device activation in the initrd.
+-ACTION=="add", ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1", GOTO="dm_disable"
++ACTION!="add", GOTO="dm_no_coldplug"
++ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1", GOTO="dm_disable"
++ENV{DM_ACTIVATION}="1"
++LABEL="dm_no_coldplug"
  
+ # "dm" sysfs subdirectory is available in newer versions of DM
+ # only (kernels >= 2.6.29). We have to check for its existence
+diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+index b16a27a..66c58b3 100644
+--- a/udev/69-dm-lvm-metad.rules.in
++++ b/udev/69-dm-lvm-metad.rules.in
+@@ -26,6 +26,7 @@ ACTION=="remove", GOTO="lvm_scan"
+ KERNEL!="dm-[0-9]*", ACTION!="add", GOTO="lvm_end"
+ 
+ # If the PV is a dm device, scan only after proper mapping activation (CHANGE event + DM_ACTIVATION=1)
++# or after a coldplug (event retrigger) with "add" event (ADD event + DM_ACTIVATION=1)
+ KERNEL=="dm-[0-9]*", ENV{DM_ACTIVATION}!="1", GOTO="lvm_end"
+ 
+ LABEL="lvm_scan"
 
 
