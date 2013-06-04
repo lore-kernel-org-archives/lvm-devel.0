@@ -1,38 +1,41 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:23:33 +0000 (UTC)
-Subject: dev-mornfall-activate - test: Re-instate exec in lvm-wrapper, catching crashes inside not.
-Message-ID: <20130604192333.A02E860EDA@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:23:35 +0000 (UTC)
+Subject: dev-mornfall-activate - config: remove typo in handling devices/write_cache_state config
+Message-ID: <20130604192335.B3B0060EDA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=91c9771fc3c97b0ff1169cf81f29918d3e3a501d
-Commit:        91c9771fc3c97b0ff1169cf81f29918d3e3a501d
-Parent:        cbcbb677313aa8a4116bcfd13ceccef05fb1f9a9
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Thu Apr 11 16:22:35 2013 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Apr 11 16:22:35 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e7ccad2ef0e813f6ca42ab5090e76aa5bee05912
+Commit:        e7ccad2ef0e813f6ca42ab5090e76aa5bee05912
+Parent:        91c9771fc3c97b0ff1169cf81f29918d3e3a501d
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Apr 11 16:32:10 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Apr 11 16:32:10 2013 +0200
 
-test: Re-instate exec in lvm-wrapper, catching crashes inside not.
+config: remove typo in handling devices/write_cache_state config
 
+...which caused the cmd->dump_filter to be always set irrespective
+of the actual devices/write_cache_state setting.
 ---
- test/lib/lvm-wrapper.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/commands/toolcontext.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/lvm-wrapper.sh b/test/lib/lvm-wrapper.sh
-index d3a2a36..c69e29a 100644
---- a/test/lib/lvm-wrapper.sh
-+++ b/test/lib/lvm-wrapper.sh
-@@ -28,5 +28,5 @@ if test -n "$LVM_VALGRIND"; then
- 	esac
- fi
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 5dff340..c42a0bf 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -932,7 +932,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
+ 	}
  
--$RUN_VALGRIND "$abs_top_builddir/tools/lvm" $CMD "$@" && \
--	rm -f debug.log # Remove log for successful command
-+# the exec is important, because otherwise fatal signals inside "not" go unnoticed
-+exec $RUN_VALGRIND "$abs_top_builddir/tools/lvm" $CMD "$@"
+ 	/* Should we ever dump persistent filter state? */
+-	if (find_config_tree_bool(cmd, devices_write_cache_state_CFG));
++	if (find_config_tree_bool(cmd, devices_write_cache_state_CFG))
+ 		cmd->dump_filter = 1;
+ 
+ 	if (!*cmd->system_dir)
 
 
