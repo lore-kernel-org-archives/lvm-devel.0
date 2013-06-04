@@ -1,89 +1,42 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:46 +0000 (UTC)
-Subject: dev-mornfall-activate - vgread: fix fid transfer for lvm1 and pool format
-Message-ID: <20130604192446.CA62960F3D@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:25:51 +0000 (UTC)
+Subject: dev-mornfall-activate - pvscan: missing test for id_read_format
+Message-ID: <20130604192551.BB8156115D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1951798d7225dce35baa7689a308998f27379b6f
-Commit:        1951798d7225dce35baa7689a308998f27379b6f
-Parent:        5e7eae59da2ce859e99c62b578f9164b87a1f944
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dacc340cc89e9be5cb88986a444466edb3a06e52
+Commit:        dacc340cc89e9be5cb88986a444466edb3a06e52
+Parent:        f319a61e9c374bd3277deba90216f67fdcb505e9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 21:36:08 2013 +0200
+AuthorDate:    Mon Apr 29 12:34:50 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:13:57 2013 +0200
+CommitterDate: Fri May 3 15:42:44 2013 +0200
 
-vgread: fix fid transfer for lvm1 and pool format
+pvscan: missing test for id_read_format
 
-Assign fid as the last step before returning VG.
-Make the format reader for 'lvm1' and 'pool' equal to 'lvm2' format reader.
-
-It has caused memory corruption to lvmetad as it later calls
-destroy_instance() to allocated fid. This patch should fix problems
-with crashing test lvmetad-lvm1.sh.
+(in release fix)
 ---
- WHATS_NEW                     |    1 +
- lib/format1/format1.c         |    4 ++--
- lib/format_pool/format_pool.c |    4 ++--
- 3 files changed, 5 insertions(+), 4 deletions(-)
+ tools/pvscan.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5d4c7a7..c1324de 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Fix assignment order for vg fid for lvm1 and pool format.
-   Fix memleak in dmeventd thin plugin in device list obtaining err path.
-   Add explicit message about unsupported pvmove for thin/thinpool volumes.
-   Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index f47ed95..2864227 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -200,8 +200,6 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
- 	if (dm_list_empty(&pvs))
- 		goto_bad;
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index ab58c5f..7c55faa 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -103,7 +103,9 @@ static int _auto_activation_handler(struct cmd_context *cmd,
+ 	if (partial)
+ 		return 1;
  
--	vg_set_fid(vg, fid);
--
- 	if (!_check_vgs(&pvs, vg))
- 		goto_bad;
- 
-@@ -226,6 +224,8 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
- 	if ((vg->status & PARTIAL_VG) && !_fix_partial_vg(vg, &pvs))
- 		goto_bad;
- 
-+	vg_set_fid(vg, fid);
+-	id_read_format(&vgid_raw, vgid);
++	if (!id_read_format(&vgid_raw, vgid))
++		return_0;
 +
- 	return vg;
- 
- bad:
-diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
-index c051968..0891524 100644
---- a/lib/format_pool/format_pool.c
-+++ b/lib/format_pool/format_pool.c
-@@ -122,8 +122,6 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
- 	if (!read_pool_pds(fid->fmt, vg_name, vg->vgmem, &pds))
- 		goto_bad;
- 
--	vg_set_fid(vg, fid);
--
- 	/* Setting pool seqno to 1 because the code always did this,
- 	 * although we don't think it's needed. */
- 	vg->seqno = 1;
-@@ -155,6 +153,8 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
- 	if (!import_pool_segments(&vg->lvs, vg->vgmem, usp, sp_count))
- 		goto_bad;
- 
-+	vg_set_fid(vg, fid);
-+
- 	return vg;
- 
- bad:
+ 	/* NB. This is safe because we know lvmetad is running and we won't hit
+ 	 * disk. */
+ 	if (!(vg = vg_read_internal(cmd, NULL, (const char *) &vgid_raw, 0, &consistent)))
 
 
