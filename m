@@ -1,168 +1,159 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:28:30 +0000 (UTC)
-Subject: dev-mornfall-activate - tests: collect all test results in files
-Message-ID: <20130604192830.365C960E46@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:28:50 +0000 (UTC)
+Subject: dev-mornfall-activate - Add and track an "ondisk" pointer to struct volume_group.
+Message-ID: <20130604192850.0CA0C6105A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=65a0650135bef9bae9ce3a168e9ab2a8d9b70673
-Commit:        65a0650135bef9bae9ce3a168e9ab2a8d9b70673
-Parent:        7c89cbf03a15fe30de520d50c214cd3878518e45
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon May 27 04:26:33 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Jun 2 00:50:09 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=448fa9732ad47bf059930f1cfbdae95be073b540
+Commit:        448fa9732ad47bf059930f1cfbdae95be073b540
+Parent:        140007a272f471dddb85d1014cee4a06db7266fa
+Author:        Petr Rockai <me@mornfall.net>
+AuthorDate:    Sun Mar 17 16:27:44 2013 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Tue Jun 4 18:17:15 2013 +0200
 
-tests: collect all test results in files
+Add and track an "ondisk" pointer to struct volume_group.
 
-Use files  for later processing with suffix .txt
-to avoid mime type confusion.
+This allows us to get the current on-disk version of the metadata whenever we
+have the current in-flight version, without a recourse to scanning or lvmcache.
 ---
- test/Makefile.in   |    1 +
- test/lib/harness.c |   53 ++++++++++++++++++++++++++++++++++++++-------------
- 2 files changed, 40 insertions(+), 14 deletions(-)
+ lib/metadata/lv.h       |    1 +
+ lib/metadata/metadata.c |   56 +++++++++++++++++++++++++++++++++++++++++++++++
+ lib/metadata/vg.c       |    1 +
+ lib/metadata/vg.h       |    3 ++
+ 4 files changed, 61 insertions(+), 0 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 938dc1d..1bd1dbd 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -122,6 +122,7 @@ CMDS = lvm $(shell cat $(top_builddir)/tools/.commands)
- 			ln -sf $(abs_top_srcdir)/test/$$f $$f; \
- 		done; \
- 	fi
-+	mkdir -p results
- 	touch $@
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index 8e771a1..b1cce51 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -90,4 +90,5 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
+ 		     enum activation_change activate);
+ char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
++struct logical_volume *lv_ondisk(struct logical_volume *lv);
+ #endif /* _LVM_LV_H */
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 62b5c3f..47eda27 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -831,6 +831,21 @@ int vgcreate_params_validate(struct cmd_context *cmd,
+ 	return 1;
+ }
  
- .lib-dir-stamp:
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index d610bf8..e80efbf 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -46,6 +46,8 @@ static int die = 0;
- static int verbose = 0; /* >1 with timestamps */
- static int interactive = 0; /* disable all redirections */
- 
-+static FILE *outfile = NULL;
++static int _vg_metadata_snapshot(struct volume_group *vg)
++{
++	struct dm_config_tree *cft;
++	if (vg->ondisk) /* we already have it */
++		return 1;
 +
- struct subst {
- 	const char *key;
- 	char *value;
-@@ -65,7 +67,7 @@ static void handler( int sig ) {
- 	die = sig;
- }
- 
--static int outline(char *buf, int start, int force) {
-+static int outline(FILE *out, char *buf, int start, int force) {
- 	char *from = buf + start;
- 	char *next = strchr(buf + start, '\n');
- 
-@@ -100,11 +102,11 @@ static int outline(char *buf, int start, int force) {
- 					}
- 				}
- 			}
--			fwrite(a, 1, b - a, stdout);
-+			fwrite(a, 1, b - a, out);
- 			a = b;
- 
- 			if ( idx >= 0 ) {
--				fprintf(stdout, "%s", subst[idx].key);
-+				fprintf(out, "%s", subst[idx].key);
- 				a += strlen(subst[idx].value);
- 			}
- 		} while (b < line + strlen(line));
-@@ -119,20 +121,18 @@ static void dump(void) {
- 
- 	while ( counter < readbuf_used && counter != counter_last ) {
- 		counter_last = counter;
--		counter = outline( readbuf, counter, 1 );
-+		counter = outline( stdout, readbuf, counter, 1 );
- 	}
- }
- 
--static void trickle(void) {
--	static int counter_last = -1, counter = 0;
--
--	if (counter_last > readbuf_used) {
--		counter_last = -1;
--		counter = 0;
-+static void trickle(FILE *out, int *last, int *counter) {
-+	if (*last > readbuf_used) {
-+		*last = -1;
-+		*counter = 0;
- 	}
--	while ( counter < readbuf_used && counter != counter_last ) {
--		counter_last = counter;
--		counter = outline( readbuf, counter, 1 );
-+	while ( *counter < readbuf_used && *counter != *last ) {
-+		*last = *counter;
-+		*counter = outline( out, readbuf, *counter, 1 );
- 	}
- }
- 
-@@ -203,6 +203,9 @@ static void drain(void) {
- 	int stamp = 0;
- 	int sz;
- 
-+	static int stdout_last = -1, stdout_counter = 0;
-+	static int outfile_last = -1, outfile_counter = 0;
++	cft = export_vg_to_config_tree(vg);
++	if (!cft)
++		return 0;
 +
- 	while ((sz = read(fds[1], buf, sizeof(buf) - 1)) > 0) {
- 		buf[sz] = '\0';
- 		bp = (verbose < 2) ? buf : _append_with_stamp(buf, stamp);
-@@ -216,7 +219,9 @@ static void drain(void) {
- 		readbuf[readbuf_used] = 0;
++	vg->ondisk = import_vg_from_config_tree(cft, vg->fid);
++	dm_config_destroy(cft);
++	return 1;
++}
++
+ /*
+  * Create a (struct volume_group) volume group handle from a struct volume_group pointer and a
+  * possible failure code or zero for success.
+@@ -839,6 +854,7 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
+ 					    struct volume_group *vg,
+ 					    uint32_t failure)
+ {
++
+ 	/* Never return a cached VG structure for a failure */
+ 	if (vg && vg->vginfo && failure != SUCCESS) {
+ 		release_vg(vg);
+@@ -848,6 +864,9 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
+ 	if (!vg && !(vg = alloc_vg("vg_make_handle", cmd, NULL)))
+ 		return_NULL;
  
- 		if (verbose)
--			trickle();
-+			trickle(stdout, &stdout_last, &stdout_counter);
-+		if (outfile)
-+			trickle(outfile, &outfile_last, &outfile_counter);
++	if (vg->fid && !_vg_metadata_snapshot(vg))
++		vg->read_status |= FAILED_ALLOCATION;
++
+ 	if (vg->read_status != failure)
+ 		vg->read_status = failure;
+ 
+@@ -2690,6 +2709,12 @@ int vg_commit(struct volume_group *vg)
+ 		 * The volume_group structure could be reused later.
+ 		 */
+ 		vg->old_name = NULL;
++
++		/* This *is* the original now that it's commited. */
++		release_vg(vg->ondisk);
++		vg->ondisk = NULL;
++		if (!_vg_metadata_snapshot(vg)) /* make a new one for future edits */
++			return_0;
  	}
- }
  
-@@ -307,6 +312,11 @@ static void run(int i, char *f) {
- 		buf[127] = 0;
- 		printf("Running %-50s ", buf);
- 		fflush(stdout);
-+		char outpath[512];
-+		sprintf(outpath, "results/%s.txt", f);
-+		while (strchr(outpath + 8, '/'))
-+			*strchr(outpath + 8, '/') = '_';
-+		outfile = fopen(outpath, "w");
- 		while ((w = waitpid(pid, &st, WNOHANG)) == 0) {
- 			drain();
- 			usleep(20000);
-@@ -328,6 +338,7 @@ static void run(int i, char *f) {
- 			failed(i, f, st);
- 		}
- 		clear();
-+		fclose(outfile);
+ 	/* If update failed, remove any cached precommitted metadata. */
+@@ -4523,3 +4548,34 @@ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
  	}
+ 	return dm_pool_end_object(mem);
  }
- 
-@@ -377,6 +388,20 @@ int main(int argc, char **argv) {
- 	       duration(start),
- 	       s.npassed, s.nwarned, s.nfailed, s.nknownfail, s.nskipped);
- 
-+	/* dump a list to results */
-+	FILE *list = fopen("results/list", "w");
-+	for (i = 1; i < argc; ++ i) {
-+		const char *result = "unknown";
-+		switch (s.status[i]) {
-+		case PASSED: result = "passed"; break;
-+		case FAILED: result = "failed"; break;
-+		case SKIPPED: result = "skipped"; break;
-+		case WARNED: result = "warnings"; break;
++
++struct logical_volume *lv_ondisk(struct logical_volume *lv)
++{
++	struct volume_group *vg;
++	struct lv_list *lvl;
++
++	if (!lv)
++		return NULL;
++
++	vg = lv->vg;
++
++	if (vg->ondisk)
++		vg = vg->ondisk;
++
++	/*
++	 * LVM1 snapshots are somehow broken in the ondisk copy of VG. Since
++	 * they are deprecated, we just bail here on LVM1 and take the slow
++	 * (re-read from disk or lvmetad) path.
++	 */
++	if (vg->fid && !strcmp(vg->fid->fmt->name, "lvm1"))
++		return NULL;
++
++	dm_list_iterate_items(lvl, &vg->lvs)
++		if (!strncmp(lvl->lv->lvid.s, lv->lvid.s, sizeof(lv->lvid))) {
++			log_error("Found original of LV %p at %p", lvl->lv, lv);
++			return lvl->lv;
 +		}
-+		fprintf(list, "%s %s\n", argv[i], result);
-+	}
-+	fclose(list);
 +
- 	/* print out a summary */
- 	if (s.nfailed || s.nskipped || s.nknownfail) {
- 		for (i = 1; i < argc; ++ i) {
++	log_error(INTERNAL_ERROR "LV %s/%s has vanished into thin air.", lv->vg->name, lv->name);
++	return NULL;
++}
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index a868df7..04c8ff0 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -87,6 +87,7 @@ void release_vg(struct volume_group *vg)
+ 	    !lvmcache_vginfo_holders_dec_and_test_for_zero(vg->vginfo))
+ 		return;
+ 
++	release_vg(vg->ondisk);
+ 	_free_vg(vg);
+ }
+ 
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index f876968..ec1728f 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -48,6 +48,9 @@ struct volume_group {
+ 	uint32_t cmd_missing_vgs;/* Flag marks missing VG */
+ 	uint32_t seqno;		/* Metadata sequence number */
+ 
++	struct volume_group *ondisk; /* the parsed on-disk copy of this VG;
++				      * NULL if this is the on-disk version */
++
+ 	alloc_policy_t alloc;
+ 	uint64_t status;
+ 
 
 
