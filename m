@@ -1,56 +1,40 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:27:42 +0000 (UTC)
-Subject: dev-mornfall-activate - libdm: compensate suspend counter for live table
-Message-ID: <20130604192742.368E261095@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:34 +0000 (UTC)
+Subject: dev-mornfall-activate - raid: test for target_pvs
+Message-ID: <20130604192434.5BD0E60E7C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e4dfa785d14643e1efd298af1040f461704b0a67
-Commit:        e4dfa785d14643e1efd298af1040f461704b0a67
-Parent:        b08c3464898f1c1e45fcac95258a495286e4dd47
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=24f8daa13d82869fbe088f7edf3c95c11660b186
+Commit:        24f8daa13d82869fbe088f7edf3c95c11660b186
+Parent:        9e24d563c6e281a582bf1a98673305ce88d6cd05
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 30 11:19:28 2013 +0200
+AuthorDate:    Sun Apr 21 12:53:04 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 17:35:23 2013 +0200
+CommitterDate: Sun Apr 21 23:07:00 2013 +0200
 
-libdm: compensate suspend counter for live table
+raid: test for target_pvs
 
-This patch may not be fully correct. It tries to solve
-the imbalanced suspend counter.
-
-The problem starts when some LV is created and fails in resume path.
-(i.e. resuming to large PV (enforced) over small loop devices)
-
-This fails in _resume_node() after dm_task_run(). And while
-existing device with empty table is left in inactive table,
-further calls are reporting this device is in suspend state.
-
-When later the lvm2 tries to rollback created device and deactivate it,
-it will end with internal error, when we try to decrement
-never incremented suspend counter.
-
-As an 'easy fix' for now update suspend counter only for live nodes.
-
-TODO: explore better fix.
+If target_pvs is NULL do not call lv_is_on_pvs()
 ---
- libdm/libdm-deptree.c |    2 +-
+ lib/metadata/raid_manip.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 2201b30..4482296 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -1598,7 +1598,7 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
- 				  info.minor);
- 			r = 0;
- 			continue;
--		} else if (info.suspended)
-+		} else if (info.suspended && info.live_table)
- 			dec_suspended();
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 38ea2c2..f9d3861 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -934,7 +934,7 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
+ 				  seg_metalv(seg, s)->name, seg_lv(seg, s)->name);
+ 		} else {
+ 			/* Conditions for second pass */
+-			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
++			if (!target_pvs || !lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
+ 			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
+ 				continue;
  
- 		if (child->callback &&
 
 
