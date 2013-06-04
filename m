@@ -1,44 +1,49 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:28:32 +0000 (UTC)
-Subject: dev-mornfall-activate - tests: do not expose duplicate PVs in vgimportclone.sh
-Message-ID: <20130604192832.4560E60E69@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:28:35 +0000 (UTC)
+Subject: dev-mornfall-activate - tests: clear write to /tmp
+Message-ID: <20130604192835.6788760E69@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8c6f3006e742b738545e7c8d89f0c12b7eb436ec
-Commit:        8c6f3006e742b738545e7c8d89f0c12b7eb436ec
-Parent:        65a0650135bef9bae9ce3a168e9ab2a8d9b70673
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon May 27 14:48:45 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20868482dd12ab2bc77ba57d6c159fb80ad56a94
+Commit:        20868482dd12ab2bc77ba57d6c159fb80ad56a94
+Parent:        8c6f3006e742b738545e7c8d89f0c12b7eb436ec
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Jun 2 00:27:00 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Jun 2 00:50:09 2013 +0200
 
-tests: do not expose duplicate PVs in vgimportclone.sh
+tests: clear write to /tmp
 
 ---
- test/shell/vgimportclone.sh |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ test/shell/lvresize-rounding.sh |    5 -----
+ 1 files changed, 0 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/vgimportclone.sh b/test/shell/vgimportclone.sh
-index 4b66f96..0c81585 100644
---- a/test/shell/vgimportclone.sh
-+++ b/test/shell/vgimportclone.sh
-@@ -21,8 +21,13 @@ dd if="$dev1" of="$dev2" bs=256K count=1
- aux notify_lvmetad "$dev2"
+diff --git a/test/shell/lvresize-rounding.sh b/test/shell/lvresize-rounding.sh
+index ad8d9c0..26dfb49 100644
+--- a/test/shell/lvresize-rounding.sh
++++ b/test/shell/lvresize-rounding.sh
+@@ -28,10 +28,6 @@ lvresize -l+64 -i3 -I64 $vg/$lv1
+ lvresize -l+64 -i3 -I128 $vg/$lv1
  
- # Verify pvs works on each device to give us vgname
-+aux hide_dev $dev2
- check pv_field "$dev1" vg_name $vg1
-+aux unhide_dev $dev2
-+
-+aux hide_dev $dev1
- check pv_field "$dev2" vg_name $vg1
-+aux unhide_dev $dev1
+ #lvcreate -l100%FREE -i3 -I64 --alloc anywhere $vg
+-
+-dmsetup table
+-
+-vgcfgbackup -f /tmp/vg $vg
+ vgremove -f $vg
  
- # Import the cloned PV to a new VG
- vgimportclone --basevgname $vg2 "$dev2"
+ # 15 extents
+@@ -52,7 +48,6 @@ check vg_field $vg vg_free_count 2
+ lvreduce -f -l50%LV $vg/$lv1
+ vgremove -f $vg
+ 
+-
+ vgcreate -s 4M $vg "$dev1" "$dev2" "$dev3"
+ 
+ # Expect to play with 15 extents
 
 
