@@ -1,110 +1,79 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:28:07 +0000 (UTC)
-Subject: dev-mornfall-activate - tests: move raid test to separate file
-Message-ID: <20130604192807.486366100E@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:55 +0000 (UTC)
+Subject: dev-mornfall-activate - cleanup: convert set of strncat into a single printf
+Message-ID: <20130604192455.589DB60F3D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e9e7421c8ed4d86fe32937881e5020986207d0b3
-Commit:        e9e7421c8ed4d86fe32937881e5020986207d0b3
-Parent:        274eae592fc0d1787e5794c8d4f6d17c8a595659
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4eb8db26ac9ddd679a32788e8d02ad1e8979e68d
+Commit:        4eb8db26ac9ddd679a32788e8d02ad1e8979e68d
+Parent:        4e1ac7faf132e83393dda628f72cdaecfc4bf9e8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 31 17:35:24 2013 +0200
+AuthorDate:    Fri Apr 19 21:24:51 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 31 21:42:32 2013 +0200
+CommitterDate: Sun Apr 21 23:14:05 2013 +0200
 
-tests: move raid test to separate file
+cleanup: convert set of strncat into a single printf
 
+Use single snprintf for better control of used bufsize,
+and also increased buffer to 128char to ensure all
+chars will always fit.
 ---
- test/shell/lvconvert-repair-raid.sh |   42 +++++++++++++++++++++++++++++++++++
- test/shell/lvconvert-repair.sh      |   26 ---------------------
- 2 files changed, 42 insertions(+), 26 deletions(-)
+ lib/config/config.c |   34 +++++++++++-----------------------
+ 1 files changed, 11 insertions(+), 23 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-raid.sh b/test/shell/lvconvert-repair-raid.sh
-new file mode 100644
-index 0000000..f087f32
---- /dev/null
-+++ b/test/shell/lvconvert-repair-raid.sh
-@@ -0,0 +1,42 @@
-+#!/bin/sh
-+# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+test -e LOCAL_CLVMD && skip
-+
-+aux lvmconf 'allocation/maximise_cling = 0'
-+aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
-+
-+aux prepare_vg 8
-+aux target_at_least dm-raid 1 1 0
-+
-+# RAID5 single replace
-+lvcreate --type raid5 -i 2 -l 2 -n $lv1 $vg "$dev1" "$dev2" "$dev3"
-+aux wait_for_sync $vg $lv1
-+aux disable_dev "$dev3"
-+lvconvert -y --repair $vg/$lv1
-+vgreduce --removemissing $vg
-+aux enable_dev "$dev3"
-+vgextend $vg "$dev3"
-+lvremove -ff $vg
-+
-+# RAID6 double replace
-+lvcreate --type raid5 -i 3 -l 2 -n $lv1 $vg \
-+    "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
-+aux wait_for_sync $vg $lv1
-+aux disable_dev "$dev4" "$dev5"
-+lvconvert -y --repair $vg/$lv1
-+vgreduce --removemissing $vg
-+aux enable_dev "$dev4"
-+aux enable_dev "$dev5"
-+vgextend $vg "$dev4" "$dev5"
-+vgremove -ff $vg
-diff --git a/test/shell/lvconvert-repair.sh b/test/shell/lvconvert-repair.sh
-index 51bc9de..6bc646a 100644
---- a/test/shell/lvconvert-repair.sh
-+++ b/test/shell/lvconvert-repair.sh
-@@ -111,30 +111,4 @@ lvconvert -y --repair $vg/mirror
- vgreduce --removemissing $vg
- aux enable_dev "$dev3"
- vgextend $vg "$dev3"
--lvremove -ff $vg
+diff --git a/lib/config/config.c b/lib/config/config.c
+index d420d83..8acb87d 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -337,34 +337,22 @@ int config_def_get_path(char *buf, size_t buf_size, int id)
+ 
+ static void _get_type_name(char *buf, size_t buf_size, cfg_def_type_t type)
+ {
+-	buf[0] = '\0';
 -
--if aux target_at_least dm-raid 1 1 0; then
--	# RAID5 single replace
--	lvcreate --type raid5 -i 2 -l 2 -n $lv1 $vg "$dev1" "$dev2" "$dev3"
--	aux wait_for_sync $vg $lv1
--	aux disable_dev "$dev3"
--	lvconvert -y --repair $vg/$lv1
--	vgreduce --removemissing $vg
--	aux enable_dev "$dev3"
--	vgextend $vg "$dev3"
--	lvremove -ff $vg
+-	if (type & CFG_TYPE_ARRAY) {
+-		if (type & ~CFG_TYPE_ARRAY)
+-			strncat(buf, " array with values of type:", buf_size);
+-		else {
+-			strncat(buf, " array", buf_size);
+-			return;
+-		}
+-	}
 -
--	# RAID6 double replace
--	lvcreate --type raid5 -i 3 -l 2 -n $lv1 $vg \
--	    "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
--	aux wait_for_sync $vg $lv1
--	aux disable_dev "$dev4" "$dev5"
--	lvconvert -y --repair $vg/$lv1
--	vgreduce --removemissing $vg
--	aux enable_dev "$dev4"
--	aux enable_dev "$dev5"
--	vgextend $vg "$dev4" "$dev5"
--	lvremove -ff $vg
--fi
--
- vgremove -ff $vg
+-	if (type & CFG_TYPE_SECTION)
+-		strncat(buf, " section", buf_size);
+-	if (type & CFG_TYPE_BOOL)
+-		strncat(buf, " boolean", buf_size);
+-	if (type & CFG_TYPE_INT)
+-		strncat(buf, " integer", buf_size);
+-	if (type & CFG_TYPE_FLOAT)
+-		strncat(buf, " float", buf_size);
+-	if (type & CFG_TYPE_STRING)
+-		strncat(buf, " string", buf_size);
++	(void) dm_snprintf(buf, buf_size, "%s%s%s%s%s%s",
++			   (type & CFG_TYPE_ARRAY) ?
++				((type & ~CFG_TYPE_ARRAY) ?
++				 " array with values of type:" : " array") : "",
++			   (type & CFG_TYPE_SECTION) ? " section" : "",
++			   (type & CFG_TYPE_BOOL) ?  " boolean" : "",
++			   (type & CFG_TYPE_INT) ? " integer" : "",
++			   (type & CFG_TYPE_FLOAT) ?  " float" : "",
++			   (type & CFG_TYPE_STRING) ? " string" : "");
+ }
+ 
+ static void _log_type_error(const char *path, cfg_def_type_t actual,
+ 			    cfg_def_type_t expected, int suppress_messages)
+ {
+-	static char actual_type_name[64];
+-	static char expected_type_name[64];
++	static char actual_type_name[128];
++	static char expected_type_name[128];
+ 
+ 	_get_type_name(actual_type_name, sizeof(actual_type_name), actual);
+ 	_get_type_name(expected_type_name, sizeof(expected_type_name), expected);
 
 
