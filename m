@@ -1,61 +1,108 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:25:05 +0000 (UTC)
-Subject: dev-mornfall-activate - test: singlenode minor cleanups
-Message-ID: <20130604192505.B79EF60D19@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:44 +0000 (UTC)
+Subject: dev-mornfall-activate - lv_manip: check remove_seg_from_segs_using_this_lv()
+Message-ID: <20130604192444.B714D61468@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=994c32272e7c36f45defda12848d3856590a0d1f
-Commit:        994c32272e7c36f45defda12848d3856590a0d1f
-Parent:        9cdcde494f2824dbf8e549638331ab65b1f56b3a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e7eae59da2ce859e99c62b578f9164b87a1f944
+Commit:        5e7eae59da2ce859e99c62b578f9164b87a1f944
+Parent:        8f1dd00c3634d111be9a42524ab50b2f31962530
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 18 18:01:52 2013 +0200
+AuthorDate:    Sun Apr 21 13:18:53 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:15:07 2013 +0200
+CommitterDate: Sun Apr 21 23:10:43 2013 +0200
 
-test: singlenode minor cleanups
+lv_manip: check remove_seg_from_segs_using_this_lv()
 
-Move unnecessary code out of locks.
+Add missing check for result of remove_seg_from_segs_using_this_lv().
+Failure is reported as internal error.
 ---
- daemons/clvmd/clvmd-singlenode.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/metadata/lv_manip.c   |    5 ++++-
+ lib/metadata/mirror.c     |    3 ++-
+ lib/metadata/raid_manip.c |    8 +++++---
+ lib/metadata/thin_manip.c |    3 ++-
+ 4 files changed, 13 insertions(+), 6 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
-index b968c5f..a79100f 100644
---- a/daemons/clvmd/clvmd-singlenode.c
-+++ b/daemons/clvmd/clvmd-singlenode.c
-@@ -218,8 +218,8 @@ maybe_retry:
- 		goto retry;
- 	}
- bad:
--	DEBUGLOG("Failed to lock resource %s\n", resource);
- 	pthread_mutex_unlock(&_lock_mutex);
-+	DEBUGLOG("Failed to lock resource %s\n", resource);
- 
- 	return 1; /* fail */
- }
-@@ -251,9 +251,9 @@ static int _unlock_resource(const char *resource, int lockid)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index a353932..7580464 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -246,6 +246,8 @@ int remove_seg_from_segs_using_this_lv(struct logical_volume *lv,
+ 		return 1;
  	}
  
- 	dm_hash_remove(_locks, resource);
--	dm_free(lck);
- 	pthread_cond_broadcast(&_lock_cond); /* wakeup waiters */
- 	pthread_mutex_unlock(&_lock_mutex);
-+	dm_free(lck);
- 
++	log_error(INTERNAL_ERROR "Segment %s:%u is not a user of %s.",
++                  seg->lv->name, seg->le, lv->name);
  	return 0;
  }
-@@ -312,6 +312,6 @@ struct cluster_ops *init_singlenode_cluster(void)
- {
- 	if (!_init_cluster())
- 		return &_cluster_singlenode_ops;
--	else
--		return NULL;
-+
-+	return NULL;
+ 
+@@ -514,7 +516,8 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
+ 				 seg->lv->name, seg->le, s,
+ 				 seg_lv(seg, s)->name, seg_le(seg, s));
+ 
+-		remove_seg_from_segs_using_this_lv(seg_lv(seg, s), seg);
++		if (!remove_seg_from_segs_using_this_lv(seg_lv(seg, s), seg))
++			return_0;
+ 		seg_lv(seg, s) = NULL;
+ 		seg_le(seg, s) = 0;
+ 		seg_type(seg, s) = AREA_UNASSIGNED;
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index fecab45..18d0d33 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -482,7 +482,8 @@ struct logical_volume *detach_mirror_log(struct lv_segment *mirrored_seg)
+ 	mirrored_seg->log_lv = NULL;
+ 	lv_set_visible(log_lv);
+ 	log_lv->status &= ~MIRROR_LOG;
+-	remove_seg_from_segs_using_this_lv(log_lv, mirrored_seg);
++	if (!remove_seg_from_segs_using_this_lv(log_lv, mirrored_seg))
++		return_0;
+ 
+ 	return log_lv;
  }
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index f9d3861..707db1f 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -195,7 +195,8 @@ static int _raid_remove_top_layer(struct logical_volume *lv,
+ 	/* Add last metadata area to removal_list */
+ 	lvl_array[0].lv = seg_metalv(seg, 0);
+ 	lv_set_visible(seg_metalv(seg, 0));
+-	remove_seg_from_segs_using_this_lv(seg_metalv(seg, 0), seg);
++	if (!remove_seg_from_segs_using_this_lv(seg_metalv(seg, 0), seg))
++		return_0;
+ 	seg_metatype(seg, 0) = AREA_UNASSIGNED;
+ 	dm_list_add(removal_list, &(lvl_array[0].list));
+ 
+@@ -835,8 +836,9 @@ static int _extract_image_components(struct lv_segment *seg, uint32_t idx,
+ 	lv_set_visible(meta_lv);
+ 
+ 	/* release removes data and meta areas */
+-	remove_seg_from_segs_using_this_lv(data_lv, seg);
+-	remove_seg_from_segs_using_this_lv(meta_lv, seg);
++	if (!remove_seg_from_segs_using_this_lv(data_lv, seg) ||
++	    !remove_seg_from_segs_using_this_lv(meta_lv, seg))
++		return_0;
+ 
+ 	seg_type(seg, idx) = AREA_UNASSIGNED;
+ 	seg_metatype(seg, idx) = AREA_UNASSIGNED;
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 10c8f43..1239af9 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -474,7 +474,8 @@ int extend_pool(struct logical_volume *pool_lv, const struct segment_type *segty
+ 		return_0;
+ 
+ 	/* Drop reference as attach_pool_data_lv() takes it again */
+-	remove_seg_from_segs_using_this_lv(data_lv, seg);
++	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
++		return_0;
+ 	if (!attach_pool_data_lv(seg, data_lv))
+ 		return_0;
+ 
 
 
