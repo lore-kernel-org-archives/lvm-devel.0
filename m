@@ -1,40 +1,87 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:34 +0000 (UTC)
-Subject: dev-mornfall-activate - raid: test for target_pvs
-Message-ID: <20130604192434.5BD0E60E7C@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:27:44 +0000 (UTC)
+Subject: dev-mornfall-activate - tests: drop testing of raids in cluster
+Message-ID: <20130604192744.4C1F761095@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=24f8daa13d82869fbe088f7edf3c95c11660b186
-Commit:        24f8daa13d82869fbe088f7edf3c95c11660b186
-Parent:        9e24d563c6e281a582bf1a98673305ce88d6cd05
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cd9350198e3178251a54c442183465e8b7719251
+Commit:        cd9350198e3178251a54c442183465e8b7719251
+Parent:        e4dfa785d14643e1efd298af1040f461704b0a67
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 12:53:04 2013 +0200
+AuthorDate:    Wed May 29 12:48:29 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:07:00 2013 +0200
+CommitterDate: Thu May 30 17:35:23 2013 +0200
 
-raid: test for target_pvs
+tests: drop testing of raids in cluster
 
-If target_pvs is NULL do not call lv_is_on_pvs()
+Since raid is not clustered yet - drop it from testing in cluster phase.
+(saving running some time)
 ---
- lib/metadata/raid_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-raid.sh   |    4 +++-
+ test/shell/lvconvert-raid10.sh |    4 +++-
+ test/shell/lvcreate-large.sh   |    2 +-
+ 3 files changed, 7 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 38ea2c2..f9d3861 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -934,7 +934,7 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
- 				  seg_metalv(seg, s)->name, seg_lv(seg, s)->name);
- 		} else {
- 			/* Conditions for second pass */
--			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
-+			if (!target_pvs || !lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
- 			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
- 				continue;
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 59c8bdb..61345da 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -11,6 +11,8 @@
  
+ . lib/test
+ 
++test -e LOCAL_CLVMD && skip
++
+ get_image_pvs() {
+ 	local d
+ 	local images
+@@ -26,7 +28,7 @@ aux target_at_least dm-raid 1 2 0 || skip
+ 
+ # 9 PVs needed for RAID10 testing (3-stripes/2-mirror - replacing 3 devs)
+ aux prepare_pvs 9 80
+-vgcreate -c n -s 256k $vg $(cat DEVICES)
++vgcreate -s 256k $vg $(cat DEVICES)
+ 
+ ###########################################
+ # RAID1 convert tests
+diff --git a/test/shell/lvconvert-raid10.sh b/test/shell/lvconvert-raid10.sh
+index 2e4381d..b2d4afd 100644
+--- a/test/shell/lvconvert-raid10.sh
++++ b/test/shell/lvconvert-raid10.sh
+@@ -11,6 +11,8 @@
+ 
+ . lib/test
+ 
++test -e LOCAL_CLVMD && skip
++
+ get_image_pvs() {
+ 	local d
+ 	local images
+@@ -28,7 +30,7 @@ aux target_at_least dm-raid 1 3 1 || skip
+ 
+ # 9 PVs needed for RAID10 testing (3-stripes/2-mirror - replacing 3 devs)
+ aux prepare_pvs 9 80
+-vgcreate -c n -s 256k $vg $(cat DEVICES)
++vgcreate -s 256k $vg $(cat DEVICES)
+ 
+ lvcreate --type raid10 -m 1 -i 3 -l 3 -n $lv1 $vg
+ aux wait_for_sync $vg $lv1
+diff --git a/test/shell/lvcreate-large.sh b/test/shell/lvcreate-large.sh
+index b61ccca..09e323a 100644
+--- a/test/shell/lvcreate-large.sh
++++ b/test/shell/lvcreate-large.sh
+@@ -23,7 +23,7 @@ lvcreate -s -l 100%FREE -n $lv $vg --virtualsize 1024T
+ aux lvmconf 'devices/filter = [ "a/dev\/mapper\/.*$/", "a/dev\/LVMTEST/", "r/.*/" ]'
+ 
+ pvcreate $DM_DEV_DIR/$vg/$lv
+-vgcreate -c n $vg1 $DM_DEV_DIR/$vg/$lv
++vgcreate $vg1 $DM_DEV_DIR/$vg/$lv
+ 
+ lvcreate -l 100%FREE -n $lv1 $vg1
+ check lv_field $vg1/$lv1 size "1024.00t"
 
 
