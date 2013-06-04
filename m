@@ -1,53 +1,60 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:48 +0000 (UTC)
-Subject: dev-mornfall-activate - cleanup: drop unused assignment
-Message-ID: <20130604192448.E280760F3D@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:26:39 +0000 (UTC)
+Subject: dev-mornfall-activate - ioctl: add DM_DATA_OUT_FLAG to dm-ioctl.h
+Message-ID: <20130604192639.A247160D78@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd4fdce16c82225f7b8fce0b5ce294d8f3d2e4d6
-Commit:        dd4fdce16c82225f7b8fce0b5ce294d8f3d2e4d6
-Parent:        1951798d7225dce35baa7689a308998f27379b6f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 21:09:28 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:14:04 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d96b854ac054aafc8a9981016faefb9f122fccbb
+Commit:        d96b854ac054aafc8a9981016faefb9f122fccbb
+Parent:        fca5acd072a9ab4899a76e421c714ca14df3e516
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri May 17 17:06:40 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri May 17 17:06:40 2013 +0100
 
-cleanup: drop unused assignment
+ioctl: add DM_DATA_OUT_FLAG to dm-ioctl.h
 
-Assigned values are unused.
 ---
- lib/activate/dev_manager.c |    2 +-
- lib/metadata/raid_manip.c  |    1 -
- 2 files changed, 1 insertions(+), 2 deletions(-)
+ libdm/misc/dm-ioctl.h |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 00c0126..150bb35 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1610,7 +1610,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	uint32_t s;
- 	struct seg_list *sl;
- 	struct dm_list *snh;
--	struct lv_segment *seg = first_seg(lv);
-+	struct lv_segment *seg;
- 	struct dm_tree_node *thin_node;
- 	const char *uuid;
+diff --git a/libdm/misc/dm-ioctl.h b/libdm/misc/dm-ioctl.h
+index 1cf66fe..dae2bcb 100644
+--- a/libdm/misc/dm-ioctl.h
++++ b/libdm/misc/dm-ioctl.h
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001 - 2003 Sistina Software (UK) Limited.
+- * Copyright (C) 2004 - 2012 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004 - 2013 Red Hat, Inc. All rights reserved.
+  *
+  * This file is released under the LGPL.
+  */
+@@ -269,9 +269,9 @@ enum {
+ #define DM_DEV_SET_GEOMETRY	_IOWR(DM_IOCTL, DM_DEV_SET_GEOMETRY_CMD, struct dm_ioctl)
  
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 707db1f..c0d38d8 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -403,7 +403,6 @@ static int _alloc_image_component(struct logical_volume *lv,
- 	}
+ #define DM_VERSION_MAJOR	4
+-#define DM_VERSION_MINOR	23
++#define DM_VERSION_MINOR	24
+ #define DM_VERSION_PATCHLEVEL	0
+-#define DM_VERSION_EXTRA	"-ioctl (2012-07-25)"
++#define DM_VERSION_EXTRA	"-ioctl (2013-01-15)"
  
- 	if (!ah) {
--		first_area = 0;
- 		log_error(INTERNAL_ERROR
- 			  "Stand-alone %s area allocation not implemented",
- 			  (type == RAID_META) ? "metadata" : "data");
+ /* Status bits */
+ #define DM_READONLY_FLAG	(1 << 0) /* In/Out */
+@@ -338,4 +338,9 @@ enum {
+  */
+ #define DM_SECURE_DATA_FLAG		(1 << 15) /* In */
+ 
++/*
++ * If set, a message generated output data.
++ */
++#define DM_DATA_OUT_FLAG		(1 << 16) /* Out */
++
+ #endif				/* _LINUX_DM_IOCTL_H */
 
 
