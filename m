@@ -1,108 +1,47 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:44 +0000 (UTC)
-Subject: dev-mornfall-activate - lv_manip: check remove_seg_from_segs_using_this_lv()
-Message-ID: <20130604192444.B714D61468@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:25:07 +0000 (UTC)
+Subject: dev-mornfall-activate - format1: add workaround for vg_set_fid
+Message-ID: <20130604192507.CB31160D19@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e7eae59da2ce859e99c62b578f9164b87a1f944
-Commit:        5e7eae59da2ce859e99c62b578f9164b87a1f944
-Parent:        8f1dd00c3634d111be9a42524ab50b2f31962530
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a12f92c494a60fe6e6c9e133aa879bd0d0da069a
+Commit:        a12f92c494a60fe6e6c9e133aa879bd0d0da069a
+Parent:        994c32272e7c36f45defda12848d3856590a0d1f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 13:18:53 2013 +0200
+AuthorDate:    Sun Apr 21 23:53:53 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:10:43 2013 +0200
+CommitterDate: Sun Apr 21 23:53:53 2013 +0200
 
-lv_manip: check remove_seg_from_segs_using_this_lv()
+format1: add workaround for vg_set_fid
 
-Add missing check for result of remove_seg_from_segs_using_this_lv().
-Failure is reported as internal error.
+Since we want to set fid just before return of vg,
+add this termporary workaround.
 ---
- lib/metadata/lv_manip.c   |    5 ++++-
- lib/metadata/mirror.c     |    3 ++-
- lib/metadata/raid_manip.c |    8 +++++---
- lib/metadata/thin_manip.c |    3 ++-
- 4 files changed, 13 insertions(+), 6 deletions(-)
+ lib/format1/format1.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index a353932..7580464 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -246,6 +246,8 @@ int remove_seg_from_segs_using_this_lv(struct logical_volume *lv,
- 		return 1;
- 	}
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index 2864227..115f8d1 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -217,8 +217,13 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
+ 	if (!import_extents(fid->fmt->cmd, vg, &pvs))
+ 		goto_bad;
  
-+	log_error(INTERNAL_ERROR "Segment %s:%u is not a user of %s.",
-+                  seg->lv->name, seg->le, lv->name);
- 	return 0;
- }
+-	if (!import_snapshots(vg->vgmem, vg, &pvs))
++	/* FIXME: workaround - temporary assignment of fid */
++	vg->fid = fid;
++	if (!import_snapshots(vg->vgmem, vg, &pvs)) {
++		vg->fid = NULL;
+ 		goto_bad;
++	}
++	vg->fid = NULL;
  
-@@ -514,7 +516,8 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
- 				 seg->lv->name, seg->le, s,
- 				 seg_lv(seg, s)->name, seg_le(seg, s));
- 
--		remove_seg_from_segs_using_this_lv(seg_lv(seg, s), seg);
-+		if (!remove_seg_from_segs_using_this_lv(seg_lv(seg, s), seg))
-+			return_0;
- 		seg_lv(seg, s) = NULL;
- 		seg_le(seg, s) = 0;
- 		seg_type(seg, s) = AREA_UNASSIGNED;
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index fecab45..18d0d33 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -482,7 +482,8 @@ struct logical_volume *detach_mirror_log(struct lv_segment *mirrored_seg)
- 	mirrored_seg->log_lv = NULL;
- 	lv_set_visible(log_lv);
- 	log_lv->status &= ~MIRROR_LOG;
--	remove_seg_from_segs_using_this_lv(log_lv, mirrored_seg);
-+	if (!remove_seg_from_segs_using_this_lv(log_lv, mirrored_seg))
-+		return_0;
- 
- 	return log_lv;
- }
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index f9d3861..707db1f 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -195,7 +195,8 @@ static int _raid_remove_top_layer(struct logical_volume *lv,
- 	/* Add last metadata area to removal_list */
- 	lvl_array[0].lv = seg_metalv(seg, 0);
- 	lv_set_visible(seg_metalv(seg, 0));
--	remove_seg_from_segs_using_this_lv(seg_metalv(seg, 0), seg);
-+	if (!remove_seg_from_segs_using_this_lv(seg_metalv(seg, 0), seg))
-+		return_0;
- 	seg_metatype(seg, 0) = AREA_UNASSIGNED;
- 	dm_list_add(removal_list, &(lvl_array[0].list));
- 
-@@ -835,8 +836,9 @@ static int _extract_image_components(struct lv_segment *seg, uint32_t idx,
- 	lv_set_visible(meta_lv);
- 
- 	/* release removes data and meta areas */
--	remove_seg_from_segs_using_this_lv(data_lv, seg);
--	remove_seg_from_segs_using_this_lv(meta_lv, seg);
-+	if (!remove_seg_from_segs_using_this_lv(data_lv, seg) ||
-+	    !remove_seg_from_segs_using_this_lv(meta_lv, seg))
-+		return_0;
- 
- 	seg_type(seg, idx) = AREA_UNASSIGNED;
- 	seg_metatype(seg, idx) = AREA_UNASSIGNED;
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 10c8f43..1239af9 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -474,7 +474,8 @@ int extend_pool(struct logical_volume *pool_lv, const struct segment_type *segty
- 		return_0;
- 
- 	/* Drop reference as attach_pool_data_lv() takes it again */
--	remove_seg_from_segs_using_this_lv(data_lv, seg);
-+	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
-+		return_0;
- 	if (!attach_pool_data_lv(seg, data_lv))
- 		return_0;
- 
+ 	/* Fix extents counts by adding missing PV if partial VG */
+ 	if ((vg->status & PARTIAL_VG) && !_fix_partial_vg(vg, &pvs))
 
 
