@@ -1,50 +1,52 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:17 +0000 (UTC)
-Subject: dev-mornfall-activate - dmeventd: check for msg.data nonnull
-Message-ID: <20130604192417.A399D6119A@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:21 +0000 (UTC)
+Subject: dev-mornfall-activate - dmeventd: prevent double free
+Message-ID: <20130604192421.D438C60E7C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45f396f2a075054f4e047abdef5eafffca72a281
-Commit:        45f396f2a075054f4e047abdef5eafffca72a281
-Parent:        ba3cee36300d56efcdcb0af883141b1b0a6129a1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8184a57c2b18d606fb533a87319768c90000e308
+Commit:        8184a57c2b18d606fb533a87319768c90000e308
+Parent:        5ea466673af377328a7ed50d6fb24e66a478b44b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 17:03:50 2013 +0200
+AuthorDate:    Fri Apr 19 20:49:57 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 22:56:59 2013 +0200
+CommitterDate: Sun Apr 21 23:02:36 2013 +0200
 
-dmeventd: check for msg.data nonnull
+dmeventd: prevent double free
 
-Ensure we will not use  msg.data as NULL for strchr.
+Since device.name is relased on more places, mark already
+released name with NULL.
 ---
- daemons/dmeventd/libdevmapper-event.c |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ WHATS_NEW_DM                |    1 +
+ daemons/dmeventd/dmeventd.c |    2 ++
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index 1f8fbef..f7b586e 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -815,13 +815,13 @@ int dm_event_get_version(struct dm_event_fifos *fifos, int *version) {
- 	p = msg.data;
- 	*version = 0;
- 
--	p = strchr(p, ' '); /* Message ID */
--        if (!p) return 0;
--	p = strchr(p + 1, ' '); /* HELLO */
--        if (!p) return 0;
--	p = strchr(p + 1, ' '); /* HELLO, once more */
--	if (p)
-+	if (!p || !(p = strchr(p, ' '))) /* Message ID */
-+		return 0;
-+	if (!(p = strchr(p + 1, ' '))) /* HELLO */
-+		return 0;
-+	if ((p = strchr(p + 1, ' '))) /* HELLO, once more */
- 		*version = atoi(p);
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 6e45a4c..afaf266 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.78 - 
+ ===================================
++  Prevent double free error after dmeventd call of _fill_device_data().
+   Update dmevent structure message_data to simplify/fix error path handling.
+   Validate passed params to dm_get_status_raid/thin/thin_pool(). 
+   Fix 'dmsetup splitname -o' to not fail if used without '-c' switch (1.02.68).
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 35a2b25..c3d9671 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -411,6 +411,8 @@ static int _fill_device_data(struct thread_status *ts)
+       fail:
+ 	dm_task_destroy(dmt);
+ 	dm_free(ts->device.name);
++	ts->device.name = NULL;
 +
- 	return 1;
+ 	return 0;
  }
  
 
