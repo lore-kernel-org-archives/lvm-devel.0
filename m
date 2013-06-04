@@ -1,53 +1,44 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:21 +0000 (UTC)
-Subject: dev-mornfall-activate - dmeventd: prevent double free
-Message-ID: <20130604192421.D438C60E7C@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:23 +0000 (UTC)
+Subject: dev-mornfall-activate - dmeventd: cleanup
+Message-ID: <20130604192423.E690060E7C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8184a57c2b18d606fb533a87319768c90000e308
-Commit:        8184a57c2b18d606fb533a87319768c90000e308
-Parent:        5ea466673af377328a7ed50d6fb24e66a478b44b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bee3f4b930dc38142b218d0e097388ffa36c586c
+Commit:        bee3f4b930dc38142b218d0e097388ffa36c586c
+Parent:        8184a57c2b18d606fb533a87319768c90000e308
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 20:49:57 2013 +0200
+AuthorDate:    Fri Apr 19 20:50:46 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:02:36 2013 +0200
+CommitterDate: Sun Apr 21 23:02:43 2013 +0200
 
-dmeventd: prevent double free
+dmeventd: cleanup
 
-Since device.name is relased on more places, mark already
-released name with NULL.
+Drop unneeded reset of data pointer to NULL, since this if() code path
+is executed when data is NULL.
 ---
- WHATS_NEW_DM                |    1 +
- daemons/dmeventd/dmeventd.c |    2 ++
- 2 files changed, 3 insertions(+), 0 deletions(-)
+ daemons/dmeventd/dmeventd.c |    4 +---
+ 1 files changed, 1 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 6e45a4c..afaf266 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.78 - 
- ===================================
-+  Prevent double free error after dmeventd call of _fill_device_data().
-   Update dmevent structure message_data to simplify/fix error path handling.
-   Validate passed params to dm_get_status_raid/thin/thin_pool(). 
-   Fix 'dmsetup splitname -o' to not fail if used without '-c' switch (1.02.68).
 diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 35a2b25..c3d9671 100644
+index c3d9671..95fb837 100644
 --- a/daemons/dmeventd/dmeventd.c
 +++ b/daemons/dmeventd/dmeventd.c
-@@ -411,6 +411,8 @@ static int _fill_device_data(struct thread_status *ts)
-       fail:
- 	dm_task_destroy(dmt);
- 	dm_free(ts->device.name);
-+	ts->device.name = NULL;
-+
- 	return 0;
- }
- 
+@@ -1454,10 +1454,8 @@ static int _do_process_request(struct dm_event_daemon_message *msg)
+ 						msg->cmd == DM_EVENT_CMD_DIE ? "DYING" : "HELLO",
+                                                 DM_EVENT_PROTOCOL_VERSION);
+ 			dm_free(answer);
+-		} else {
++		} else
+ 			msg->size = 0;
+-			msg->data = NULL;
+-		}
+ 	} else if (msg->cmd != DM_EVENT_CMD_ACTIVE && !_parse_message(&message_data)) {
+ 		stack;
+ 		ret = -EINVAL;
 
 
