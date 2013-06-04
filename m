@@ -1,53 +1,89 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:25:49 +0000 (UTC)
-Subject: dev-mornfall-activate - config: fix bitfield for section
-Message-ID: <20130604192549.A14736115D@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:46 +0000 (UTC)
+Subject: dev-mornfall-activate - vgread: fix fid transfer for lvm1 and pool format
+Message-ID: <20130604192446.CA62960F3D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f319a61e9c374bd3277deba90216f67fdcb505e9
-Commit:        f319a61e9c374bd3277deba90216f67fdcb505e9
-Parent:        2ac217d408470dcecb69b83d9cbf7a254747fa5b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1951798d7225dce35baa7689a308998f27379b6f
+Commit:        1951798d7225dce35baa7689a308998f27379b6f
+Parent:        5e7eae59da2ce859e99c62b578f9164b87a1f944
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 29 12:38:56 2013 +0200
+AuthorDate:    Sun Apr 21 21:36:08 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 3 15:42:44 2013 +0200
+CommitterDate: Sun Apr 21 23:13:57 2013 +0200
 
-config: fix bitfield for section
+vgread: fix fid transfer for lvm1 and pool format
 
-Since the cfg_def_type_t is used as bitfield in some tests,
-use bitshifting to create valid bit sequence.
+Assign fid as the last step before returning VG.
+Make the format reader for 'lvm1' and 'pool' equal to 'lvm2' format reader.
 
-(in release fix)
+It has caused memory corruption to lvmetad as it later calls
+destroy_instance() to allocated fid. This patch should fix problems
+with crashing test lvmetad-lvm1.sh.
 ---
- lib/config/config.h |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ WHATS_NEW                     |    1 +
+ lib/format1/format1.c         |    4 ++--
+ lib/format_pool/format_pool.c |    4 ++--
+ 3 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/lib/config/config.h b/lib/config/config.h
-index 7e40420..155d69a 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -34,12 +34,12 @@ struct cmd_context;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 5d4c7a7..c1324de 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix assignment order for vg fid for lvm1 and pool format.
+   Fix memleak in dmeventd thin plugin in device list obtaining err path.
+   Add explicit message about unsupported pvmove for thin/thinpool volumes.
+   Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index f47ed95..2864227 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -200,8 +200,6 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
+ 	if (dm_list_empty(&pvs))
+ 		goto_bad;
  
- /* configuration definition item type (for item's accepted types) */
- typedef enum {
--	CFG_TYPE_SECTION = 0,		/* section */
--	CFG_TYPE_ARRAY = 1,		/* setting */
--	CFG_TYPE_BOOL = 2,		/* setting */
--	CFG_TYPE_INT = 4,		/* setting */
--	CFG_TYPE_FLOAT = 8,		/* setting */
--	CFG_TYPE_STRING = 16		/* setting */
-+	CFG_TYPE_SECTION =	1 << 0,	/* section */
-+	CFG_TYPE_ARRAY =	1 << 1,	/* setting */
-+	CFG_TYPE_BOOL =		1 << 2,	/* setting */
-+	CFG_TYPE_INT =		1 << 3,	/* setting */
-+	CFG_TYPE_FLOAT =	1 << 4,	/* setting */
-+	CFG_TYPE_STRING =	1 << 5,	/* setting */
- } cfg_def_type_t;
+-	vg_set_fid(vg, fid);
+-
+ 	if (!_check_vgs(&pvs, vg))
+ 		goto_bad;
  
- /* configuration definition item value (for item's default value) */
+@@ -226,6 +224,8 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
+ 	if ((vg->status & PARTIAL_VG) && !_fix_partial_vg(vg, &pvs))
+ 		goto_bad;
+ 
++	vg_set_fid(vg, fid);
++
+ 	return vg;
+ 
+ bad:
+diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
+index c051968..0891524 100644
+--- a/lib/format_pool/format_pool.c
++++ b/lib/format_pool/format_pool.c
+@@ -122,8 +122,6 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
+ 	if (!read_pool_pds(fid->fmt, vg_name, vg->vgmem, &pds))
+ 		goto_bad;
+ 
+-	vg_set_fid(vg, fid);
+-
+ 	/* Setting pool seqno to 1 because the code always did this,
+ 	 * although we don't think it's needed. */
+ 	vg->seqno = 1;
+@@ -155,6 +153,8 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
+ 	if (!import_pool_segments(&vg->lvs, vg->vgmem, usp, sp_count))
+ 		goto_bad;
+ 
++	vg_set_fid(vg, fid);
++
+ 	return vg;
+ 
+ bad:
 
 
