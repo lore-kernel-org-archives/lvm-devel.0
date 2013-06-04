@@ -1,41 +1,41 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:28:23 +0000 (UTC)
-Subject: dev-mornfall-activate - tests: set up global_filter instead of just filter
-Message-ID: <20130604192823.EA4AA60F8B@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:36 +0000 (UTC)
+Subject: dev-mornfall-activate - thin: fix cut&paste bug
+Message-ID: <20130604192436.7333260E7C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=28160cb04a0f7c89854eccb5ed8431b33ecc9d2a
-Commit:        28160cb04a0f7c89854eccb5ed8431b33ecc9d2a
-Parent:        e4cb88009ac05654ffdb011e3a11fd80bfbe283e
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon May 27 00:53:03 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=78a42bac157edba2b68bdfd77ea5c3096845aceb
+Commit:        78a42bac157edba2b68bdfd77ea5c3096845aceb
+Parent:        24f8daa13d82869fbe088f7edf3c95c11660b186
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Apr 19 21:03:38 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Jun 2 00:50:09 2013 +0200
+CommitterDate: Sun Apr 21 23:07:00 2013 +0200
 
-tests: set up global_filter instead of just filter
+thin: fix cut&paste bug
 
-For testing setup global_filter.
+Use proper external_lv.
+(In release fix)
 ---
- test/lib/aux.sh |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ lib/display/display.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index d09e1b7..0894a66 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -475,7 +475,8 @@ lvmconf() {
-             cat > CONFIG_VALUES <<-EOF
- devices/dir = "$DM_DEV_DIR"
- devices/scan = "$DM_DEV_DIR"
--devices/filter = [ "a|$DM_DEV_DIR/mirror|", "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]
-+devices/filter = "a|.*|"
-+devices/global_filter = [ "a|$DM_DEV_DIR/mirror|", "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]
- devices/cache_dir = "$TESTDIR/etc"
- devices/sysfs_scan = 0
- devices/default_data_alignment = 1
+diff --git a/lib/display/display.c b/lib/display/display.c
+index c766674..26bc384 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -595,7 +595,7 @@ int lvdisplay_full(struct cmd_context *cmd,
+ 				  seg->origin->name);
+ 		if (seg->external_lv)
+ 			log_print("LV External origin name %s",
+-				  seg->origin->name);
++				  seg->external_lv->name);
+ 		if (inkernel)
+ 			thin_active = lv_thin_percent(lv, 0, &thin_percent);
+ 	} else if (lv_is_thin_pool(lv)) {
 
 
