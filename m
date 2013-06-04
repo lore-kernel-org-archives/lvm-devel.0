@@ -1,159 +1,119 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:28:50 +0000 (UTC)
-Subject: dev-mornfall-activate - Add and track an "ondisk" pointer to struct volume_group.
-Message-ID: <20130604192850.0CA0C6105A@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:26:16 +0000 (UTC)
+Subject: dev-mornfall-activate - Fix alignment of PV data area if detected alignment less than 1 MB
+Message-ID: <20130604192616.AF4A161084@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=448fa9732ad47bf059930f1cfbdae95be073b540
-Commit:        448fa9732ad47bf059930f1cfbdae95be073b540
-Parent:        140007a272f471dddb85d1014cee4a06db7266fa
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Sun Mar 17 16:27:44 2013 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Tue Jun 4 18:17:15 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8ad7865b421459553a05e220f992ba2d26bd60e6
+Commit:        8ad7865b421459553a05e220f992ba2d26bd60e6
+Parent:        6fc67f5509fda25a91536fbeeb7099f8327ff3d8
+Author:        Mike Snitzer <snitzer@redhat.com>
+AuthorDate:    Mon May 13 15:56:47 2013 -0400
+Committer:     Mike Snitzer <snitzer@redhat.com>
+CommitterDate: Mon May 13 15:56:47 2013 -0400
 
-Add and track an "ondisk" pointer to struct volume_group.
+Fix alignment of PV data area if detected alignment less than 1 MB
 
-This allows us to get the current on-disk version of the metadata whenever we
-have the current in-flight version, without a recourse to scanning or lvmcache.
+This fixes a long standing regression since LVM2 2.02.74 (commit 4efb1d9c,
+"Update heuristic used for default and detected data alignment.")
+
+The default PE alignment could be used (via MAX()) even if it was
+determined that the device's MD stripe width, or minimal_io_size or
+optimal_io_size were not factors of the default PE alignment (either 64K
+or the newer default of 1MB, etc).  This bug would manifest if the
+default PE alignment was larger than the overriding hint that the
+device provided (e.g. default of 1MB vs optimal_io_size of 768K).
+
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- lib/metadata/lv.h       |    1 +
- lib/metadata/metadata.c |   56 +++++++++++++++++++++++++++++++++++++++++++++++
- lib/metadata/vg.c       |    1 +
- lib/metadata/vg.h       |    3 ++
- 4 files changed, 61 insertions(+), 0 deletions(-)
+ WHATS_NEW                      |    1 +
+ lib/metadata/metadata.c        |    6 +++---
+ test/shell/topology-support.sh |   27 +++++++++++++++++++++++++++
+ 3 files changed, 31 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 8e771a1..b1cce51 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -90,4 +90,5 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
- 		     enum activation_change activate);
- char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv);
- const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
-+struct logical_volume *lv_ondisk(struct logical_volume *lv);
- #endif /* _LVM_LV_H */
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 11d3e6f..513210c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix alignment of PV data area if detected alignment less than 1 MB (2.02.74).
+   Fix memory resource leak in memlocking error path.
+   Fix premature DM version checking which caused useless mapper/control access.
+   Add "active" LV reporting field to show activation state.
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 62b5c3f..47eda27 100644
+index bde1cb0..357e849 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -831,6 +831,21 @@ int vgcreate_params_validate(struct cmd_context *cmd,
- 	return 1;
- }
- 
-+static int _vg_metadata_snapshot(struct volume_group *vg)
-+{
-+	struct dm_config_tree *cft;
-+	if (vg->ondisk) /* we already have it */
-+		return 1;
-+
-+	cft = export_vg_to_config_tree(vg);
-+	if (!cft)
-+		return 0;
-+
-+	vg->ondisk = import_vg_from_config_tree(cft, vg->fid);
-+	dm_config_destroy(cft);
-+	return 1;
-+}
-+
- /*
-  * Create a (struct volume_group) volume group handle from a struct volume_group pointer and a
-  * possible failure code or zero for success.
-@@ -839,6 +854,7 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
- 					    struct volume_group *vg,
- 					    uint32_t failure)
- {
-+
- 	/* Never return a cached VG structure for a failure */
- 	if (vg && vg->vginfo && failure != SUCCESS) {
- 		release_vg(vg);
-@@ -848,6 +864,9 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
- 	if (!vg && !(vg = alloc_vg("vg_make_handle", cmd, NULL)))
- 		return_NULL;
- 
-+	if (vg->fid && !_vg_metadata_snapshot(vg))
-+		vg->read_status |= FAILED_ALLOCATION;
-+
- 	if (vg->read_status != failure)
- 		vg->read_status = failure;
- 
-@@ -2690,6 +2709,12 @@ int vg_commit(struct volume_group *vg)
- 		 * The volume_group structure could be reused later.
- 		 */
- 		vg->old_name = NULL;
-+
-+		/* This *is* the original now that it's commited. */
-+		release_vg(vg->ondisk);
-+		vg->ondisk = NULL;
-+		if (!_vg_metadata_snapshot(vg)) /* make a new one for future edits */
-+			return_0;
+@@ -86,7 +86,7 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
+ 	if (find_config_tree_bool(pv->fmt->cmd, devices_md_chunk_alignment_CFG)) {
+ 		temp_pe_align = dev_md_stripe_width(pv->fmt->cmd->sysfs_dir, pv->dev);
+ 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
+-			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
++			pv->pe_align = temp_pe_align;
  	}
  
- 	/* If update failed, remove any cached precommitted metadata. */
-@@ -4523,3 +4548,34 @@ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
+ 	/*
+@@ -99,11 +99,11 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
+ 	if (find_config_tree_bool(pv->fmt->cmd, devices_data_alignment_detection_CFG)) {
+ 		temp_pe_align = dev_minimum_io_size(pv->fmt->cmd->sysfs_dir, pv->dev);
+ 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
+-			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
++			pv->pe_align = temp_pe_align;
+ 
+ 		temp_pe_align = dev_optimal_io_size(pv->fmt->cmd->sysfs_dir, pv->dev);
+ 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
+-			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
++			pv->pe_align = temp_pe_align;
  	}
- 	return dm_pool_end_object(mem);
+ 
+ out:
+diff --git a/test/shell/topology-support.sh b/test/shell/topology-support.sh
+index e952dc0..df73c6a 100644
+--- a/test/shell/topology-support.sh
++++ b/test/shell/topology-support.sh
+@@ -23,6 +23,16 @@ check_logical_block_size() {
+     fi
  }
-+
-+struct logical_volume *lv_ondisk(struct logical_volume *lv)
-+{
-+	struct volume_group *vg;
-+	struct lv_list *lvl;
-+
-+	if (!lv)
-+		return NULL;
-+
-+	vg = lv->vg;
-+
-+	if (vg->ondisk)
-+		vg = vg->ondisk;
-+
-+	/*
-+	 * LVM1 snapshots are somehow broken in the ondisk copy of VG. Since
-+	 * they are deprecated, we just bail here on LVM1 and take the slow
-+	 * (re-read from disk or lvmetad) path.
-+	 */
-+	if (vg->fid && !strcmp(vg->fid->fmt->name, "lvm1"))
-+		return NULL;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs)
-+		if (!strncmp(lvl->lv->lvid.s, lv->lvid.s, sizeof(lv->lvid))) {
-+			log_error("Found original of LV %p at %p", lvl->lv, lv);
-+			return lvl->lv;
-+		}
-+
-+	log_error(INTERNAL_ERROR "LV %s/%s has vanished into thin air.", lv->vg->name, lv->name);
-+	return NULL;
+ 
++check_optimal_io_size() {
++    local DEV_=$(cat SCSI_DEBUG_DEV)
++    # Verify optimal_io_size
++    SYSFS_OPTIMAL_IO_SIZE=$(echo /sys/block/$(basename $DEV_)/queue/optimal_io_size)
++    if [ -f "$SYSFS_OPTIMAL_IO_SIZE" ] ; then
++	ACTUAL_OPTIMAL_IO_SIZE=$(cat $SYSFS_OPTIMAL_IO_SIZE)
++	test $ACTUAL_OPTIMAL_IO_SIZE = $1
++    fi
 +}
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index a868df7..04c8ff0 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -87,6 +87,7 @@ void release_vg(struct volume_group *vg)
- 	    !lvmcache_vginfo_holders_dec_and_test_for_zero(vg->vginfo))
- 		return;
- 
-+	release_vg(vg->ondisk);
- 	_free_vg(vg);
- }
- 
-diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
-index f876968..ec1728f 100644
---- a/lib/metadata/vg.h
-+++ b/lib/metadata/vg.h
-@@ -48,6 +48,9 @@ struct volume_group {
- 	uint32_t cmd_missing_vgs;/* Flag marks missing VG */
- 	uint32_t seqno;		/* Metadata sequence number */
- 
-+	struct volume_group *ondisk; /* the parsed on-disk copy of this VG;
-+				      * NULL if this is the on-disk version */
 +
- 	alloc_policy_t alloc;
- 	uint64_t status;
- 
+ lvdev_() {
+     echo "$DM_DEV_DIR/$1/$2"
+ }
+@@ -103,3 +113,20 @@ aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
+ vgcreate -c n $vg $(cat DEVICES)
+ test_snapshot_mount
+ vgremove $vg
++
++aux cleanup_scsi_debug_dev
++
++# ---------------------------------------------
++# Create "enterprise-class" 512 drive w/ HW raid stripe_size = 768K
++# (logical_block_size=512, physical_block_size=512, alignment_offset=0):
++# - tests case where optimal_io_size=768k < default PE alignment=1MB
++LOGICAL_BLOCK_SIZE=512
++aux prepare_scsi_debug_dev $DEV_SIZE \
++    sector_size=$LOGICAL_BLOCK_SIZE opt_blks=1536
++check_logical_block_size $LOGICAL_BLOCK_SIZE
++check_optimal_io_size 786432
++
++aux prepare_pvs 1 $PER_DEV_SIZE
++check pv_field $(cat DEVICES) pe_start 768.00k
++
++aux cleanup_scsi_debug_dev
 
 
