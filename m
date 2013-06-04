@@ -1,119 +1,174 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:26:16 +0000 (UTC)
-Subject: dev-mornfall-activate - Fix alignment of PV data area if detected alignment less than 1 MB
-Message-ID: <20130604192616.AF4A161084@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:26:18 +0000 (UTC)
+Subject: dev-mornfall-activate - commands: accept --yes globally
+Message-ID: <20130604192618.C23D461084@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8ad7865b421459553a05e220f992ba2d26bd60e6
-Commit:        8ad7865b421459553a05e220f992ba2d26bd60e6
-Parent:        6fc67f5509fda25a91536fbeeb7099f8327ff3d8
-Author:        Mike Snitzer <snitzer@redhat.com>
-AuthorDate:    Mon May 13 15:56:47 2013 -0400
-Committer:     Mike Snitzer <snitzer@redhat.com>
-CommitterDate: Mon May 13 15:56:47 2013 -0400
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c6cf2ed7fd29d1860df511ac897367af646a6fb3
+Commit:        c6cf2ed7fd29d1860df511ac897367af646a6fb3
+Parent:        8ad7865b421459553a05e220f992ba2d26bd60e6
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue May 14 18:45:37 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue May 14 18:45:37 2013 +0100
 
-Fix alignment of PV data area if detected alignment less than 1 MB
+commands: accept --yes globally
 
-This fixes a long standing regression since LVM2 2.02.74 (commit 4efb1d9c,
-"Update heuristic used for default and detected data alignment.")
+Accept --yes on all commands, even ones that don't today have prompts,
+so that test scripts that don't care about interactive prompts no
+longer need to deal with them.
 
-The default PE alignment could be used (via MAX()) even if it was
-determined that the device's MD stripe width, or minimal_io_size or
-optimal_io_size were not factors of the default PE alignment (either 64K
-or the newer default of 1MB, etc).  This bug would manifest if the
-default PE alignment was larger than the overriding hint that the
-device provided (e.g. default of 1MB vs optimal_io_size of 768K).
-
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+But continue to mention --yes only in the command prototypes that
+actually use it.
 ---
- WHATS_NEW                      |    1 +
- lib/metadata/metadata.c        |    6 +++---
- test/shell/topology-support.sh |   27 +++++++++++++++++++++++++++
- 3 files changed, 31 insertions(+), 3 deletions(-)
+ WHATS_NEW          |    1 +
+ man/lvm.8.in       |    4 ++++
+ tools/commands.h   |   22 ++++++++++++----------
+ tools/lvmcmdline.c |    1 +
+ 4 files changed, 18 insertions(+), 10 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 11d3e6f..513210c 100644
+index 513210c..626a354 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Fix alignment of PV data area if detected alignment less than 1 MB (2.02.74).
++  Accept --yes in all commands so test scripts can be simpler.
+   Fix alignment of PV data area if detected alignment less than 1 MB (2.02.74).
    Fix memory resource leak in memlocking error path.
    Fix premature DM version checking which caused useless mapper/control access.
-   Add "active" LV reporting field to show activation state.
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index bde1cb0..357e849 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -86,7 +86,7 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
- 	if (find_config_tree_bool(pv->fmt->cmd, devices_md_chunk_alignment_CFG)) {
- 		temp_pe_align = dev_md_stripe_width(pv->fmt->cmd->sysfs_dir, pv->dev);
- 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
--			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
-+			pv->pe_align = temp_pe_align;
- 	}
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index d15e86b..37a60e4 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -171,6 +171,10 @@ Overrides config file setting.
+ Suppress output and log messages.
+ Overrides \fB\-d\fP and \fB\-v\fP.
+ .TP
++.BR \-\-yes
++Don't prompt for confirmation interactively but instead always assume the
++answer is 'yes'.  Take great care if you use this!
++.TP
+ .BR \-t ", " \-\-test
+ Run in test mode. Commands will not update metadata.
+ This is implemented by disabling all metadata writing but nevertheless
+diff --git a/tools/commands.h b/tools/commands.h
+index ace077f..8950243 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -94,10 +94,10 @@ xx(lvchange,
+    "\t[--sysinit]\n"
+    "\t[-t|--test]\n"
+    "\t[-v|--verbose]\n"
+-   "\t[-y|--yes]\n"
+    "\t[--version]\n"
+    "\t[--writebehind BehindCount\n"
+    "\t[--writemostly PhysicalVolume]\n"
++   "\t[-y|--yes]\n"
+    "\t[-Z|--zero {y|n}]\n"
+    "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
  
- 	/*
-@@ -99,11 +99,11 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
- 	if (find_config_tree_bool(pv->fmt->cmd, devices_data_alignment_detection_CFG)) {
- 		temp_pe_align = dev_minimum_io_size(pv->fmt->cmd->sysfs_dir, pv->dev);
- 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
--			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
-+			pv->pe_align = temp_pe_align;
+@@ -106,7 +106,7 @@ xx(lvchange,
+    major_ARG, minor_ARG, monitor_ARG, noudevsync_ARG, partial_ARG,
+    permission_ARG, persistent_ARG, poll_ARG, readahead_ARG, resync_ARG,
+    refresh_ARG, addtag_ARG, deltag_ARG, syncaction_ARG, sysinit_ARG, test_ARG,
+-   yes_ARG, writebehind_ARG, writemostly_ARG, zero_ARG)
++   writebehind_ARG, writemostly_ARG, zero_ARG)
  
- 		temp_pe_align = dev_optimal_io_size(pv->fmt->cmd->sysfs_dir, pv->dev);
- 		if (_alignment_overrides_default(temp_pe_align, default_pe_align))
--			pv->pe_align = MAX(pv->pe_align, temp_pe_align);
-+			pv->pe_align = temp_pe_align;
- 	}
+ xx(lvconvert,
+    "Change logical volume layout",
+@@ -174,7 +174,7 @@ xx(lvconvert,
+    trackchanges_ARG, type_ARG, stripes_long_ARG, stripesize_ARG, test_ARG,
+    chunksize_ARG, discards_ARG, poolmetadata_ARG, poolmetadatasize_ARG,
+    originname_ARG, thin_ARG, thinpool_ARG,
+-   use_policies_ARG, yes_ARG, force_ARG, zero_ARG)
++   use_policies_ARG, force_ARG, zero_ARG)
  
- out:
-diff --git a/test/shell/topology-support.sh b/test/shell/topology-support.sh
-index e952dc0..df73c6a 100644
---- a/test/shell/topology-support.sh
-+++ b/test/shell/topology-support.sh
-@@ -23,6 +23,16 @@ check_logical_block_size() {
-     fi
- }
+ xx(lvcreate,
+    "Create a logical volume",
+@@ -380,12 +380,12 @@ xx(lvreduce,
+    "\t[-r|--resizefs]\n"
+    "\t[-t|--test]\n"
+    "\t[-v|--verbose]\n"
+-   "\t[-y|--yes]\n"
+    "\t[--version]" "\n"
++   "\t[-y|--yes]\n"
+    "\tLogicalVolume[Path]\n",
  
-+check_optimal_io_size() {
-+    local DEV_=$(cat SCSI_DEBUG_DEV)
-+    # Verify optimal_io_size
-+    SYSFS_OPTIMAL_IO_SIZE=$(echo /sys/block/$(basename $DEV_)/queue/optimal_io_size)
-+    if [ -f "$SYSFS_OPTIMAL_IO_SIZE" ] ; then
-+	ACTUAL_OPTIMAL_IO_SIZE=$(cat $SYSFS_OPTIMAL_IO_SIZE)
-+	test $ACTUAL_OPTIMAL_IO_SIZE = $1
-+    fi
-+}
-+
- lvdev_() {
-     echo "$DM_DEV_DIR/$1/$2"
- }
-@@ -103,3 +113,20 @@ aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
- vgcreate -c n $vg $(cat DEVICES)
- test_snapshot_mount
- vgremove $vg
-+
-+aux cleanup_scsi_debug_dev
-+
-+# ---------------------------------------------
-+# Create "enterprise-class" 512 drive w/ HW raid stripe_size = 768K
-+# (logical_block_size=512, physical_block_size=512, alignment_offset=0):
-+# - tests case where optimal_io_size=768k < default PE alignment=1MB
-+LOGICAL_BLOCK_SIZE=512
-+aux prepare_scsi_debug_dev $DEV_SIZE \
-+    sector_size=$LOGICAL_BLOCK_SIZE opt_blks=1536
-+check_logical_block_size $LOGICAL_BLOCK_SIZE
-+check_optimal_io_size 786432
-+
-+aux prepare_pvs 1 $PER_DEV_SIZE
-+check pv_field $(cat DEVICES) pe_start 768.00k
-+
-+aux cleanup_scsi_debug_dev
+    autobackup_ARG, force_ARG,  extents_ARG, nofsck_ARG, noudevsync_ARG,
+-   resizefs_ARG, size_ARG, test_ARG, yes_ARG)
++   resizefs_ARG, size_ARG, test_ARG)
+ 
+ xx(lvremove,
+    "Remove logical volume(s) from the system",
+@@ -568,7 +568,7 @@ xx(pvcreate,
+    force_ARG, test_ARG, labelsector_ARG, metadatatype_ARG,
+    metadatacopies_ARG, metadatasize_ARG, metadataignore_ARG,
+    norestorefile_ARG, physicalvolumesize_ARG, pvmetadatacopies_ARG,
+-   restorefile_ARG, uuidstr_ARG, yes_ARG, zero_ARG)
++   restorefile_ARG, uuidstr_ARG, zero_ARG)
+ 
+ xx(pvdata,
+    "Display the on-disk metadata for physical volume(s)",
+@@ -658,11 +658,11 @@ xx(pvremove,
+    "\t[-h|-?|--help] " "\n"
+    "\t[-t|--test] " "\n"
+    "\t[-v|--verbose] " "\n"
+-   "\t[-y|--yes]" "\n"
+    "\t[--version] " "\n"
++   "\t[-y|--yes]" "\n"
+    "\tPhysicalVolume [PhysicalVolume...]\n",
+ 
+-   force_ARG, test_ARG, yes_ARG)
++   force_ARG, test_ARG)
+ 
+ xx(pvs,
+    "Display information about physical volumes",
+@@ -838,12 +838,13 @@ xx(vgcreate,
+    "\t[-t|--test] " "\n"
+    "\t[-v|--verbose]" "\n"
+    "\t[--version] " "\n"
++   "\t[-y|--yes]" "\n"
+    "\t[ PHYSICAL DEVICE OPTIONS ] " "\n"
+    "\tVolumeGroupName PhysicalDevicePath [PhysicalDevicePath...]\n",
+ 
+    addtag_ARG, alloc_ARG, autobackup_ARG, clustered_ARG, maxlogicalvolumes_ARG,
+    maxphysicalvolumes_ARG, metadatatype_ARG, physicalextentsize_ARG, test_ARG,
+-   force_ARG, yes_ARG, zero_ARG, labelsector_ARG, metadatasize_ARG,
++   force_ARG, zero_ARG, labelsector_ARG, metadatasize_ARG,
+    pvmetadatacopies_ARG, metadatacopies_ARG, vgmetadatacopies_ARG,
+    dataalignment_ARG, dataalignmentoffset_ARG)
+ 
+@@ -908,11 +909,12 @@ xx(vgextend,
+    "\t[-t|--test]\n"
+    "\t[-v|--verbose]\n"
+    "\t[--version]" "\n"
++   "\t[-y|--yes]\n"
+    "\t[ PHYSICAL DEVICE OPTIONS ] " "\n"
+    "\tVolumeGroupName PhysicalDevicePath [PhysicalDevicePath...]\n",
+ 
+    autobackup_ARG, test_ARG,
+-   force_ARG, yes_ARG, zero_ARG, labelsector_ARG, metadatatype_ARG,
++   force_ARG, zero_ARG, labelsector_ARG, metadatatype_ARG,
+    metadatasize_ARG, pvmetadatacopies_ARG, metadatacopies_ARG,
+    metadataignore_ARG, dataalignment_ARG, dataalignmentoffset_ARG,
+    restoremissing_ARG)
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index c03e9ef..0b64ed8 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -615,6 +615,7 @@ void lvm_register_commands(void)
+ 					    driverloaded_ARG, \
+ 					    debug_ARG, help_ARG, help2_ARG, \
+ 					    version_ARG, verbose_ARG, \
++					    yes_ARG, \
+ 					    quiet_ARG, config_ARG, -1);
+ #include "commands.h"
+ #undef xx
 
 
