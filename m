@@ -1,63 +1,50 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:25:39 +0000 (UTC)
-Subject: dev-mornfall-activate - dmeventd: return error if device is not found
-Message-ID: <20130604192539.3E8CC6141B@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:25:43 +0000 (UTC)
+Subject: dev-mornfall-activate - cleanup: use dm_list_iterate_items
+Message-ID: <20130604192543.67AF76146B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a5ad1ee8587daf1001e64775d3478f345e77e324
-Commit:        a5ad1ee8587daf1001e64775d3478f345e77e324
-Parent:        8d004b51274b2d7638673c4985c0c298d253ef0d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f39f5b86c3f94fe83744054012d6d8b33bb7d7a0
+Commit:        f39f5b86c3f94fe83744054012d6d8b33bb7d7a0
+Parent:        c1eb17ab07f457d92bff58ea489c670be7bed9ed
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 25 10:17:22 2013 +0200
+AuthorDate:    Thu Apr 25 11:46:17 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Apr 25 17:33:24 2013 +0200
 
-dmeventd: return error if device is not found
+cleanup: use dm_list_iterate_items
 
-Do not return 'ok' status if we have failed to found device.
-(Since it looks like the device is monitored)
 ---
- WHATS_NEW_DM                          |    1 +
- daemons/dmeventd/libdevmapper-event.c |    9 ++++++---
- 2 files changed, 7 insertions(+), 3 deletions(-)
+ lib/activate/activate.c |    6 ++----
+ 1 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index afaf266..39ebcb2 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.78 - 
- ===================================
-+  Report error for nonexisting devices in dmeventd communication.
-   Prevent double free error after dmeventd call of _fill_device_data().
-   Update dmevent structure message_data to simplify/fix error path handling.
-   Validate passed params to dm_get_status_raid/thin/thin_pool(). 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index f7b586e..c692a88 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -714,12 +714,15 @@ int dm_event_get_registered_device(struct dm_event_handler *dmevh, int next)
- 	char *reply_dso = NULL, *reply_uuid = NULL;
- 	enum dm_event_mask reply_mask = 0;
- 	struct dm_task *dmt = NULL;
--	struct dm_event_daemon_message msg = { 0, 0, NULL };
-+	struct dm_event_daemon_message msg = { 0 };
- 	struct dm_info info;
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 670b85c..05cfb66 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1410,7 +1410,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, struct logical_volume *lv,
+ #ifdef DMEVENTD
+ 	int i, pending = 0, monitored;
+ 	int r = 1;
+-	struct dm_list *tmp, *snh, *snht;
++	struct dm_list *snh, *snht;
+ 	struct lv_segment *seg;
+ 	struct lv_segment *log_seg;
+ 	int (*monitor_fn) (struct lv_segment *s, int e);
+@@ -1473,9 +1473,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, struct logical_volume *lv,
+ 		if (!monitor_dev_for_events(cmd, seg->log_lv, NULL, monitor))
+ 			r = 0;
  
- 	if (!(dmt = _get_device_info(dmevh))) {
--		stack;
--		return 0;
-+		log_debug("Device does not exists (uuid=%s, name=%s, %d:%d).",
-+			  dmevh->uuid, dmevh->dev_name,
-+			  dmevh->major, dmevh->minor);
-+		ret = -ENODEV;
-+		goto fail;
- 	}
- 
- 	uuid = dm_task_get_uuid(dmt);
+-	dm_list_iterate(tmp, &lv->segments) {
+-		seg = dm_list_item(tmp, struct lv_segment);
+-
++	dm_list_iterate_items(seg, &lv->segments) {
+ 		/* Recurse for AREA_LV */
+ 		for (s = 0; s < seg->area_count; s++) {
+ 			if (seg_type(seg, s) != AREA_LV)
 
 
