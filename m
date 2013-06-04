@@ -1,41 +1,40 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:36 +0000 (UTC)
-Subject: dev-mornfall-activate - thin: fix cut&paste bug
-Message-ID: <20130604192436.7333260E7C@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:57 +0000 (UTC)
+Subject: dev-mornfall-activate - cleanup: cast to len's type
+Message-ID: <20130604192457.6843E60F3D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=78a42bac157edba2b68bdfd77ea5c3096845aceb
-Commit:        78a42bac157edba2b68bdfd77ea5c3096845aceb
-Parent:        24f8daa13d82869fbe088f7edf3c95c11660b186
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d38af2857fe86a5e0916d67aee7597e5a0dea6c8
+Commit:        d38af2857fe86a5e0916d67aee7597e5a0dea6c8
+Parent:        4eb8db26ac9ddd679a32788e8d02ad1e8979e68d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 21:03:38 2013 +0200
+AuthorDate:    Sat Apr 20 20:55:10 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:07:00 2013 +0200
+CommitterDate: Sun Apr 21 23:14:05 2013 +0200
 
-thin: fix cut&paste bug
+cleanup: cast to len's type
 
-Use proper external_lv.
-(In release fix)
+Cleanup different signess gcc warning.
 ---
- lib/display/display.c |    2 +-
+ daemons/clvmd/clvmd.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index c766674..26bc384 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -595,7 +595,7 @@ int lvdisplay_full(struct cmd_context *cmd,
- 				  seg->origin->name);
- 		if (seg->external_lv)
- 			log_print("LV External origin name %s",
--				  seg->origin->name);
-+				  seg->external_lv->name);
- 		if (inkernel)
- 			thin_active = lv_thin_percent(lv, 0, &thin_percent);
- 	} else if (lv_is_thin_pool(lv)) {
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index a64bd54..a276cbc 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -1217,7 +1217,7 @@ static int read_from_local_sock(struct local_client *thisfd)
+ 			missing_len = 0;
+ 
+ 		/* We need at least sizeof(struct clvm_header) bytes in buffer */
+-		if (len < sizeof(struct clvm_header) || argslen < 0 ||
++		if (len < (int)sizeof(struct clvm_header) || argslen < 0 ||
+ 		    missing_len > MAX_MISSING_LEN) {
+ 			struct clvm_header reply = {
+ 				.cmd = CLVMD_CMD_REPLY,
 
 
