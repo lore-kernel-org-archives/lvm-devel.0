@@ -1,52 +1,99 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:53 +0000 (UTC)
-Subject: dev-mornfall-activate - cleanup: add some FIXMEs
-Message-ID: <20130604192453.4999660F3D@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:26:58 +0000 (UTC)
+Subject: dev-mornfall-activate - libdm: free mem pool on err path
+Message-ID: <20130604192658.5367E61265@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4e1ac7faf132e83393dda628f72cdaecfc4bf9e8
-Commit:        4e1ac7faf132e83393dda628f72cdaecfc4bf9e8
-Parent:        dfca5dac9ca3ed0ca186b9d79d6b2cacedc4ea37
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb587fd10034fa65ebba177022aba10e7a64aacd
+Commit:        cb587fd10034fa65ebba177022aba10e7a64aacd
+Parent:        4707ac7200ba559ad080e4349f660c0a7559610c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 21:16:08 2013 +0200
+AuthorDate:    Sun May 26 17:00:14 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:14:05 2013 +0200
+CommitterDate: Mon May 27 10:30:55 2013 +0200
 
-cleanup: add some FIXMEs
+libdm: free mem pool on err path
 
+Since we use get_status also in dmeventd, which may use one pool
+for a single device, in case it would be repeatedly returning error,
+it may not be freeing the pool and would cause slow but steady growth.
+To stay safe in the error path release any allocated memory.
 ---
- lib/activate/activate.c |    1 +
- lib/device/dev-io.c     |    2 ++
- 2 files changed, 3 insertions(+), 0 deletions(-)
+ libdm/libdm-deptree.c |   18 ++++++++++++------
+ 1 files changed, 12 insertions(+), 6 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index b3439ad..670b85c 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -794,6 +794,7 @@ int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health)
- 	int r;
- 	struct dev_manager *dm;
- 	struct dm_status_raid *status;
-+	/* FIXME: find a better way for this, it is fragile */
- 	static char *cached_dev_health = NULL;
- 	static const struct logical_volume *cached_lv = NULL;
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 56522f1..2201b30 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -2955,10 +2955,10 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
+ 		return_0;
  
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index 2846caf..bb50ae4 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -437,6 +437,8 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
- 		}
+ 	if (!(s->raid_type = dm_pool_zalloc(mem, p - params)))
+-		return_0; /* memory is freed went pool is destroyed */
++		goto_bad; /* memory is freed went pool is destroyed */
  
- 		dev_close_immediate(dev);
-+		// FIXME: dev with DEV_ALLOCED is released
-+		// but code is referencing it
+ 	if (!(s->dev_health = dm_pool_zalloc(mem, i + 1)))
+-		return_0;
++		goto_bad;
+ 
+ 	if (sscanf(params, "%s %d %s %" PRIu64 "/%" PRIu64,
+ 		   s->raid_type,
+@@ -2967,7 +2967,7 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
+ 		   &s->insync_regions,
+ 		   &s->total_regions) != 5) {
+ 		log_error("Failed to parse raid params: %s", params);
+-		return 0;
++		goto bad;
  	}
  
- 	if (critical_section())
+ 	*status = s;
+@@ -2986,19 +2986,23 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
+ 	pp = p;
+ 	if (!(p = strchr(p, ' '))) {
+ 		log_error(INTERNAL_ERROR "Bad RAID status received.");
+-		return 0;
++		goto bad;
+ 	}
+ 	p++;
+ 
+ 	if (!(s->sync_action = dm_pool_zalloc(mem, p - pp)))
+-		return_0;
++		goto_bad;
+ 
+ 	if (sscanf(pp, "%s %" PRIu64, s->sync_action, &s->mismatch_count) != 2) {
+ 		log_error("Failed to parse raid params: %s", params);
+-		return 0;
++		goto bad;
+ 	}
+ 
+ 	return 1;
++bad:
++	dm_pool_free(mem, s);
++
++	return 0;
+ }
+ 
+ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
+@@ -3428,6 +3432,7 @@ int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
+ 		   &s->total_metadata_blocks,
+ 		   &s->used_data_blocks,
+ 		   &s->total_data_blocks, &pos) < 5) {
++		dm_pool_free(mem, s);
+ 		log_error("Failed to parse thin pool params: %s.", params);
+ 		return 0;
+ 	}
+@@ -3468,6 +3473,7 @@ int dm_get_status_thin(struct dm_pool *mem, const char *params,
+ 	} else if (sscanf(params, "%" PRIu64 " %" PRIu64,
+ 		   &s->mapped_sectors,
+ 		   &s->highest_mapped_sector) != 2) {
++		dm_pool_free(mem, s);
+ 		log_error("Failed to parse thin params: %s.", params);
+ 		return 0;
+ 	}
 
 
