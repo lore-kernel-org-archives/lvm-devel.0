@@ -1,83 +1,42 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:25:20 +0000 (UTC)
-Subject: dev-mornfall-activate - test: new test new fail
-Message-ID: <20130604192520.48BB161021@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:25:24 +0000 (UTC)
+Subject: dev-mornfall-activate - test: do not break test if there is no .cache
+Message-ID: <20130604192524.6EE7B60D78@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c7c5a840c1aca9712134b8afee8abcba5cb8116f
-Commit:        c7c5a840c1aca9712134b8afee8abcba5cb8116f
-Parent:        68ef288901820b522e3765e5fbec972ea348e3b7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=23775c8fe8cdd82dee33cd397eeab5a84181380b
+Commit:        23775c8fe8cdd82dee33cd397eeab5a84181380b
+Parent:        67fc56f5ca1e05f78cedc5f729745e176447c6b2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 23 14:15:04 2013 +0200
+AuthorDate:    Tue Apr 23 14:36:27 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 23 14:15:04 2013 +0200
+CommitterDate: Tue Apr 23 14:36:27 2013 +0200
 
-test: new test new fail
+test: do not break test if there is no .cache
 
-Do not hide new features into old test files.
+When running test on read /dev, we obtain devices from udev,
+and there is no .cache file, so do not stop test if the file
+is missing.
 ---
- test/shell/lvchange-partial-raid10.sh |   29 +++++++++++++++++++++++++++++
- test/shell/lvchange-partial.sh        |   12 ------------
- 2 files changed, 29 insertions(+), 12 deletions(-)
+ test/shell/vgimportclone.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvchange-partial-raid10.sh b/test/shell/lvchange-partial-raid10.sh
-new file mode 100644
-index 0000000..64a2389
---- /dev/null
-+++ b/test/shell/lvchange-partial-raid10.sh
-@@ -0,0 +1,29 @@
-+#!/bin/bash
-+# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+aux target_at_least dm-raid 1 3 2 || skip
-+
-+aux prepare_vg 4
-+
-+# rhbz 889358
-+# Should be able to activate when RAID10
-+# has failed devs in different mirror sets.
-+lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
-+aux wait_for_sync $vg $lv1
-+lvchange -an $vg/$lv1
-+aux disable_dev "$dev1" "$dev3"
-+lvchange -ay $vg/$lv1 --partial
-+lvchange -an $vg/$lv1
-+
-+aux enable_dev "$dev1"
-+lvremove -ff $vg
-diff --git a/test/shell/lvchange-partial.sh b/test/shell/lvchange-partial.sh
-index bc9a514..891dd0a 100644
---- a/test/shell/lvchange-partial.sh
-+++ b/test/shell/lvchange-partial.sh
-@@ -66,15 +66,3 @@ not lvchange --resync --addtag foo $vg/$lv1
+diff --git a/test/shell/vgimportclone.sh b/test/shell/vgimportclone.sh
+index 0a476ec..60c833a 100644
+--- a/test/shell/vgimportclone.sh
++++ b/test/shell/vgimportclone.sh
+@@ -31,7 +31,7 @@ vgimportclone --basevgname $vg2 "$dev2"
+ # concerned, can only live on a single device. With the last pvscan, we told it
+ # that PV from $dev1 now lives on $dev2, but in fact this is not true anymore,
+ # since we wrote a different PV over $dev2.
+-rm $TESTDIR/etc/.cache
++rm -f $TESTDIR/etc/.cache
+ aux notify_lvmetad "$dev2"
+ aux notify_lvmetad "$dev1"
  
- aux enable_dev "$dev1"
- lvremove -ff $vg
--
--# rhbz 889358
--# Should be able to activate when RAID10
--# has failed devs in different mirror sets.
--if aux target_at_least dm-raid 1 3 2; then
--	lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
--	aux wait_for_sync $vg $lv1
--	lvchange -an $vg/$lv1
--	aux disable_dev "$dev1" "$dev3"
--	lvchange -ay $vg/$lv1 --partial
--	lvchange -an $vg/$lv1
--fi
 
 
