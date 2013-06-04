@@ -1,40 +1,41 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:25:22 +0000 (UTC)
-Subject: dev-mornfall-activate - test: fix filter
-Message-ID: <20130604192522.59CA361021@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:25:26 +0000 (UTC)
+Subject: dev-mornfall-activate - test: correct order
+Message-ID: <20130604192526.8435360D78@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=67fc56f5ca1e05f78cedc5f729745e176447c6b2
-Commit:        67fc56f5ca1e05f78cedc5f729745e176447c6b2
-Parent:        c7c5a840c1aca9712134b8afee8abcba5cb8116f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=320d7f3596f78972d5fa843b9d56510ff299a958
+Commit:        320d7f3596f78972d5fa843b9d56510ff299a958
+Parent:        23775c8fe8cdd82dee33cd397eeab5a84181380b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 23 14:28:27 2013 +0200
+AuthorDate:    Tue Apr 23 17:05:19 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 23 14:28:27 2013 +0200
+CommitterDate: Tue Apr 23 17:05:19 2013 +0200
 
-test: fix filter
+test: correct order
 
-Fix filter for use with real /dev
+Call notify after resume (like in enable_dev()).
 ---
- test/shell/mdata-strings.sh |    2 +-
+ test/lib/aux.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/mdata-strings.sh b/test/shell/mdata-strings.sh
-index 16e9360..95a630e 100644
---- a/test/shell/mdata-strings.sh
-+++ b/test/shell/mdata-strings.sh
-@@ -14,7 +14,7 @@
- . lib/test
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index d500b37..4339ef4 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -413,8 +413,8 @@ error_dev() {
+ 		dmsetup create -u "TEST-$name" "$name" "$name.errtable"
+ 	fi
+ 	# using device name (since device path does not exists yet with udev)
+-	notify_lvmetad "$dev"
+ 	dmsetup resume "$name"
++	notify_lvmetad "$dev"
+ 	finish_udev_transaction
+ }
  
- aux prepare_devs 2
--aux lvmconf 'devices/global_filter = [ "a|.*LVMTEST.*dev/mapper/.*pv[0-9_]*$|", "r|.*|" ]'
-+aux lvmconf 'devices/global_filter = [ "a|.*dev/mapper/.*LVMTEST.*pv[0-9_]*$|", "r|.*|" ]'
- 
- # for udev impossible to create
- pv_ugly="__\"!@#\$%^&*,()|@||'\\\"__pv1"
 
 
