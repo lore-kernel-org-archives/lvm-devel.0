@@ -1,99 +1,91 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:26:58 +0000 (UTC)
-Subject: dev-mornfall-activate - libdm: free mem pool on err path
-Message-ID: <20130604192658.5367E61265@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:27:00 +0000 (UTC)
+Subject: dev-mornfall-activate - snapshot: use dm_get_status_snapshot()
+Message-ID: <20130604192700.6785561265@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb587fd10034fa65ebba177022aba10e7a64aacd
-Commit:        cb587fd10034fa65ebba177022aba10e7a64aacd
-Parent:        4707ac7200ba559ad080e4349f660c0a7559610c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=06e8ff29ff59a1893312f5b2d5e818c8c62ee7b1
+Commit:        06e8ff29ff59a1893312f5b2d5e818c8c62ee7b1
+Parent:        cb587fd10034fa65ebba177022aba10e7a64aacd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun May 26 17:00:14 2013 +0200
+AuthorDate:    Sun May 26 17:04:14 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 27 10:30:55 2013 +0200
+CommitterDate: Mon May 27 10:32:02 2013 +0200
 
-libdm: free mem pool on err path
+snapshot: use dm_get_status_snapshot()
 
-Since we use get_status also in dmeventd, which may use one pool
-for a single device, in case it would be repeatedly returning error,
-it may not be freeing the pool and would cause slow but steady growth.
-To stay safe in the error path release any allocated memory.
+Replace code with libdm call to dm_get_status_snapshot().
 ---
- libdm/libdm-deptree.c |   18 ++++++++++++------
- 1 files changed, 12 insertions(+), 6 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/snapshot/snapshot.c |   36 +++++++++++++++---------------------
+ 2 files changed, 16 insertions(+), 21 deletions(-)
 
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 56522f1..2201b30 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -2955,10 +2955,10 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
- 		return_0;
- 
- 	if (!(s->raid_type = dm_pool_zalloc(mem, p - params)))
--		return_0; /* memory is freed went pool is destroyed */
-+		goto_bad; /* memory is freed went pool is destroyed */
- 
- 	if (!(s->dev_health = dm_pool_zalloc(mem, i + 1)))
--		return_0;
-+		goto_bad;
- 
- 	if (sscanf(params, "%s %d %s %" PRIu64 "/%" PRIu64,
- 		   s->raid_type,
-@@ -2967,7 +2967,7 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
- 		   &s->insync_regions,
- 		   &s->total_regions) != 5) {
- 		log_error("Failed to parse raid params: %s", params);
--		return 0;
-+		goto bad;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e63e000..734e86c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Use libdm dm_get_status_snapshot() to parse snapshot status.
+   Add detection of mounted fs also for vgchange deactivation.
+   Replace 'lv_is_active' with more correct/specific variants (e.g. *_locally).
+   Refuse to init a snapshot merge in lvconvert if there's no kernel support.
+diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
+index 2bab9d2..453d96a 100644
+--- a/lib/snapshot/snapshot.c
++++ b/lib/snapshot/snapshot.c
+@@ -117,32 +117,26 @@ static int _snap_target_percent(void **target_state __attribute__((unused)),
+ 				char *params, uint64_t *total_numerator,
+ 				uint64_t *total_denominator)
+ {
+-	uint64_t total_sectors, sectors_allocated, metadata_sectors;
+-	int r;
+-
+-	/*
+-	 * snapshot target's percent format:
+-	 * <= 1.7.0: <sectors_allocated>/<total_sectors>
+-	 * >= 1.8.0: <sectors_allocated>/<total_sectors> <metadata_sectors>
+-	 */
+-	r = sscanf(params, "%" PRIu64 "/%" PRIu64 " %" PRIu64,
+-		   &sectors_allocated, &total_sectors, &metadata_sectors);
+-	if (r == 2 || r == 3) {
+-		*total_numerator += sectors_allocated;
+-		*total_denominator += total_sectors;
+-		if (r == 3 && sectors_allocated == metadata_sectors)
++	struct dm_status_snapshot *s;
++
++	if (!dm_get_status_snapshot(mem, params, &s))
++		return_0;
++
++	if (s->invalid)
++		*percent = PERCENT_INVALID;
++	else if (s->merge_failed)
++		*percent = PERCENT_MERGE_FAILED;
++	else {
++		*total_numerator += s->used_sectors;
++		*total_denominator += s->total_sectors;
++		if (s->has_metadata_sectors &&
++		    s->used_sectors == s->metadata_sectors)
+ 			*percent = PERCENT_0;
+-		else if (sectors_allocated == total_sectors)
++		else if (s->used_sectors == s->total_sectors)
+ 			*percent = PERCENT_100;
+ 		else
+ 			*percent = make_percent(*total_numerator, *total_denominator);
  	}
- 
- 	*status = s;
-@@ -2986,19 +2986,23 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
- 	pp = p;
- 	if (!(p = strchr(p, ' '))) {
- 		log_error(INTERNAL_ERROR "Bad RAID status received.");
+-	else if (!strcmp(params, "Invalid"))
+-		*percent = PERCENT_INVALID;
+-	else if (!strcmp(params, "Merge failed"))
+-		*percent = PERCENT_MERGE_FAILED;
+-	else
 -		return 0;
-+		goto bad;
- 	}
- 	p++;
- 
- 	if (!(s->sync_action = dm_pool_zalloc(mem, p - pp)))
--		return_0;
-+		goto_bad;
- 
- 	if (sscanf(pp, "%s %" PRIu64, s->sync_action, &s->mismatch_count) != 2) {
- 		log_error("Failed to parse raid params: %s", params);
--		return 0;
-+		goto bad;
- 	}
  
  	return 1;
-+bad:
-+	dm_pool_free(mem, s);
-+
-+	return 0;
  }
- 
- int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
-@@ -3428,6 +3432,7 @@ int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
- 		   &s->total_metadata_blocks,
- 		   &s->used_data_blocks,
- 		   &s->total_data_blocks, &pos) < 5) {
-+		dm_pool_free(mem, s);
- 		log_error("Failed to parse thin pool params: %s.", params);
- 		return 0;
- 	}
-@@ -3468,6 +3473,7 @@ int dm_get_status_thin(struct dm_pool *mem, const char *params,
- 	} else if (sscanf(params, "%" PRIu64 " %" PRIu64,
- 		   &s->mapped_sectors,
- 		   &s->highest_mapped_sector) != 2) {
-+		dm_pool_free(mem, s);
- 		log_error("Failed to parse thin params: %s.", params);
- 		return 0;
- 	}
 
 
