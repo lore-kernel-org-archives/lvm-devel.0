@@ -1,78 +1,69 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:26 +0000 (UTC)
-Subject: dev-mornfall-activate - lvmetad: cleanup
-Message-ID: <20130604192426.0706160E7C@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:24:28 +0000 (UTC)
+Subject: dev-mornfall-activate - lvmetad: fix error paths
+Message-ID: <20130604192428.1A56560E7C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=377e06b0f8ea10c222a0d38472dbbb05fde1f2d3
-Commit:        377e06b0f8ea10c222a0d38472dbbb05fde1f2d3
-Parent:        bee3f4b930dc38142b218d0e097388ffa36c586c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f787b575b52fcbfa8327d083eae4f2baf296b1cf
+Commit:        f787b575b52fcbfa8327d083eae4f2baf296b1cf
+Parent:        377e06b0f8ea10c222a0d38472dbbb05fde1f2d3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 20:52:38 2013 +0200
+AuthorDate:    Fri Apr 19 21:19:54 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:02:43 2013 +0200
+CommitterDate: Sun Apr 21 23:04:53 2013 +0200
 
-lvmetad: cleanup
+lvmetad: fix error paths
 
-Move individual assignments to simplier structure setup.
+Also add missing goto out on error.
+Error path missed return NULL leading to double free of enc_value.
 ---
- daemons/lvmetad/lvmetad-core.c |   25 +++++++++++++------------
- 1 files changed, 13 insertions(+), 12 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/cache/lvmetad.c |    4 +++-
+ lib/config/config.c |    1 +
+ 3 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index bbad69c..4f7bf59 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -1168,23 +1168,24 @@ static void usage(char *prog, FILE *file)
- int main(int argc, char *argv[])
- {
- 	signed char opt;
--	daemon_state s = { .private = NULL };
- 	lvmetad_state ls;
- 	int _socket_override = 1;
-+	daemon_state s = {
-+		.daemon_fini = fini,
-+		.daemon_init = init,
-+		.handler = handler,
-+		.name = "lvmetad",
-+		.pidfile = LVMETAD_PIDFILE,
-+		.private = &ls,
-+		.protocol = "lvmetad",
-+		.protocol_version = 1,
-+		.socket_path = getenv("LVM_LVMETAD_SOCKET"),
-+	};
- 
--	s.name = "lvmetad";
--	s.private = &ls;
--	s.daemon_init = init;
--	s.daemon_fini = fini;
--	s.handler = handler;
--	s.socket_path = getenv("LVM_LVMETAD_SOCKET");
- 	if (!s.socket_path) {
- 		_socket_override = 0;
- 		s.socket_path = DEFAULT_RUN_DIR "/lvmetad.socket";
- 	}
--	s.pidfile = LVMETAD_PIDFILE;
--	s.protocol = "lvmetad";
--	s.protocol_version = 1;
- 	ls.log_config = "";
- 
- 	// use getopt_long
-@@ -1216,9 +1217,9 @@ int main(int argc, char *argv[])
- 		if (!_socket_override) {
- 			fprintf(stderr, "A socket path (-s) is required in foreground mode.");
- 			exit(2);
--		} else {
--			s.pidfile = NULL;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 95b6e13..819fea4 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
+   Fix clvmd _cluster_request() return code in memory fail path.
+   Add writemostly/writebehind support for RAID1
+   Add lv_change_activate() for common activation code in vg/lvchange.
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 4ea3dbd..348827d 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -343,8 +343,10 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
+ 		reply = _lvmetad_send("vg_lookup", "uuid = %s", uuid, NULL);
+ 		diag_name = uuid;
+ 	} else {
+-		if (!vgname)
++		if (!vgname) {
+ 			log_error(INTERNAL_ERROR "VG name required (VGID not available)");
++			goto out;
++		}
+ 		log_debug_lvmetad("Asking lvmetad for VG %s", vgname);
+ 		reply = _lvmetad_send("vg_lookup", "name = %s", vgname, NULL);
+ 		diag_name = vgname;
+diff --git a/lib/config/config.c b/lib/config/config.c
+index d1cf590..d420d83 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -967,6 +967,7 @@ static struct dm_config_value *_get_def_array_values(struct dm_config_tree *cft,
+ 		if (!(v = dm_config_create_value(cft))) {
+ 			log_error("Failed to create default config array value for %s.", def->name);
+ 			dm_free(enc_value);
++			return NULL;
  		}
-+
-+		s.pidfile = NULL;
- 	}
- 
- 	daemon_start(s);
+ 		if (oldv)
+ 			oldv->next = v;
 
 
