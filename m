@@ -1,92 +1,41 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:28:28 +0000 (UTC)
-Subject: dev-mornfall-activate - tests: run all the test flavours in a single batch
-Message-ID: <20130604192828.25C5E60E69@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:28:05 +0000 (UTC)
+Subject: dev-mornfall-activate - tests: skip if the system already uses tested minor
+Message-ID: <20130604192805.33F5D60E46@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c89cbf03a15fe30de520d50c214cd3878518e45
-Commit:        7c89cbf03a15fe30de520d50c214cd3878518e45
-Parent:        53fbf2bea3e992f1c21f5f77eacc687ce01143f5
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon May 27 03:12:03 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=274eae592fc0d1787e5794c8d4f6d17c8a595659
+Commit:        274eae592fc0d1787e5794c8d4f6d17c8a595659
+Parent:        1c83c159631dd9be40d47da168ce1c77423798b9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri May 31 12:48:37 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Jun 2 00:50:09 2013 +0200
+CommitterDate: Fri May 31 21:42:32 2013 +0200
 
-tests: run all the test flavours in a single batch
+tests: skip if the system already uses tested minor
 
-This means that a test failure in one flavour no longer prevents all the
-subsequent flavours from running. We also get an aggregate summary at
-the end of the entire batch, instead of summaries interspersed with
-progress output. Do not fail when flavour overrides are empty
 ---
- test/Makefile.in   |    8 +++++++-
- test/lib/harness.c |   11 ++++++++++-
- test/lib/test.sh   |    8 ++++++++
- 3 files changed, 25 insertions(+), 2 deletions(-)
+ test/shell/activate-minor.sh |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 5bbd1d6..938dc1d 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -66,7 +66,13 @@ help:
- 	@echo "  T			Run given test (regex)."
- 	@echo "  VERBOSE		Verbose output (1), timing (2)."
+diff --git a/test/shell/activate-minor.sh b/test/shell/activate-minor.sh
+index 5433f01..3726faa 100644
+--- a/test/shell/activate-minor.sh
++++ b/test/shell/activate-minor.sh
+@@ -11,6 +11,10 @@
  
--check: check_local check_cluster check_lvmetad
-+check: .tests-stamp
-+	VERBOSE=$(VEROSE) \
-+	cluster_LVM_TEST_LOCKING=3 \
-+	lvmetad_LVM_TEST_LVMETAD=1 \
-+	./lib/harness $(patsubst %,normal:%,$(RUN_BASE)) \
-+		      $(patsubst %,cluster:%,$(RUN_BASE)) \
-+		      $(patsubst %,lvmetad:%,$(RUN_BASE))
+ . lib/test
  
- check_cluster: .tests-stamp
- 	@echo Testing with locking_type 3
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index 929bfc8..d610bf8 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -286,7 +286,16 @@ static void run(int i, char *f) {
- 			close(fds[0]);
- 			close(fds[1]);
- 		}
--		execlp("bash", "bash", f, NULL);
-+		char flavour[512], script[512];
-+		if (strchr(f, ':')) {
-+			strcpy(flavour, f);
-+			*strchr(flavour, ':') = 0;
-+			setenv("LVM_TEST_FLAVOUR", flavour, 1);
-+			strcpy(script, strchr(f, ':') + 1);
-+		} else {
-+			strcpy(script, f);
-+		}
-+		execlp("bash", "bash", script, NULL);
- 		perror("execlp");
- 		fflush(stderr);
- 		_exit(202);
-diff --git a/test/lib/test.sh b/test/lib/test.sh
-index 3729749..9a56a0f 100644
---- a/test/lib/test.sh
-+++ b/test/lib/test.sh
-@@ -56,6 +56,14 @@ cd "$TESTDIR"
- 
- echo "$TESTNAME" >TESTNAME
- 
-+if test -n "$LVM_TEST_FLAVOUR"; then
-+	touch flavour_overrides
-+	env | grep ^$LVM_TEST_FLAVOUR | while read var; do
-+		(echo -n "export "; echo $var | sed -e s,^${LVM_TEST_FLAVOUR}_,,) >> flavour_overrides
-+	done
-+	. flavour_overrides
-+fi
++# Just skip this test if minor is already in use...
++dmsetup info | tee info
++egrep "^Major, minor: *[0-9]+, 123" info && skip
 +
- # Setting up symlink from $i to $TESTDIR/lib
- find "$abs_top_builddir/daemons/dmeventd/plugins/" -name '*.so' \
- 	-exec ln -s -t lib "{}" +
+ aux prepare_vg 2
+ lvcreate -a n --zero n -l 1 -n foo $vg
+ lvchange $vg/foo -My --major=255 --minor=123
 
 
