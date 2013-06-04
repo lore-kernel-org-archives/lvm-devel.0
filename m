@@ -1,73 +1,60 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:26:47 +0000 (UTC)
-Subject: dev-mornfall-activate - vgchange: check for mounted fs
-Message-ID: <20130604192647.ED3F960D78@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:26:50 +0000 (UTC)
+Subject: dev-mornfall-activate - lv_manip: use lv_is_active
+Message-ID: <20130604192650.0871360D78@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ada982e73872e45215e68e57b2b6b4168dc26f8
-Commit:        2ada982e73872e45215e68e57b2b6b4168dc26f8
-Parent:        810bc4f8c1f2f28bf78ac538486d63317ba9b079
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8cbacd2474b288a581274dba9b623ec2e9ac9d28
+Commit:        8cbacd2474b288a581274dba9b623ec2e9ac9d28
+Parent:        2ada982e73872e45215e68e57b2b6b4168dc26f8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 8 23:43:28 2012 +0100
+AuthorDate:    Thu May 16 23:12:39 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon May 20 16:47:33 2013 +0200
 
-vgchange: check for mounted fs
+lv_manip: use lv_is_active
 
-Check for mounted fs also for vgchange command, not just lvchange.
-
-NOTE: Code is using lv_info() just like lvs_in_vg_opened().
-It should be probably converted into  lv_is_active_locally().
+Updated reverted commit.
+The usage of lv_is_active() is needed here, so the
+(!lv_is_active_exclusive_locally) gives the correct
+report.
 ---
- WHATS_NEW        |    1 +
- tools/vgchange.c |   13 ++++++++++---
- 2 files changed, 11 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c |   12 +-----------
+ 1 files changed, 1 insertions(+), 11 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 2583e2d..e63e000 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Add detection of mounted fs also for vgchange deactivation.
-   Replace 'lv_is_active' with more correct/specific variants (e.g. *_locally).
-   Refuse to init a snapshot merge in lvconvert if there's no kernel support.
-   Fix exported symbols regex for non-GNU busybox sed.
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 5c0a6fc..71982f1 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -191,6 +191,8 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
- 		      activation_change_t activate)
- {
- 	int lv_open, active, monitored = 0, r = 1, do_activate = 1;
-+	const struct lv_list *lvl;
-+	struct lvinfo info;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index fadef6b..af000af 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4394,8 +4394,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 	struct logical_volume *pool_lv;
+ 	struct lv_list *lvl;
+ 	const char *thin_name = NULL;
+-	int origin_active = 0;
+-	struct lvinfo info;
  
- 	if ((activate == CHANGE_AN) || (activate == CHANGE_ALN))
- 		do_activate = 0;
-@@ -203,9 +205,14 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
+ 	if (new_lv_name && find_lv_in_vg(vg, new_lv_name)) {
+ 		log_error("Logical volume \"%s\" already exists in "
+@@ -4525,15 +4523,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 				log_warn("WARNING: See global/mirror_segtype_default in lvm.conf.");
+ 			}
  
- 	/* FIXME: Force argument to deactivate them? */
- 	if (!do_activate && (lv_open = lvs_in_vg_opened(vg))) {
--		log_error("Can't deactivate volume group \"%s\" with %d open "
--			  "logical volume(s)", vg->name, lv_open);
--		return 0;
-+		dm_list_iterate_items(lvl, &vg->lvs)
-+			if (lv_is_visible(lvl->lv) &&
-+			    lv_info(cmd, lvl->lv, 0, &info, 1, 0) &&
-+			    !lv_check_not_in_use(cmd, lvl->lv, &info)) {
-+				log_error("Can't deactivate volume group \"%s\" with %d open "
-+					  "logical volume(s)", vg->name, lv_open);
-+				return 0;
-+			}
- 	}
- 
- 	/* FIXME Move into library where clvmd can use it */
+-			if (!lv_info(cmd, org, 0, &info, 0, 0)) {
+-				log_error("Check for existence of active snapshot "
+-					  "origin '%s' failed.", org->name);
+-				return NULL;
+-			}
+-
+-			origin_active = info.exists;
+-
+-			if (vg_is_clustered(vg) &&
++			if (vg_is_clustered(vg) && lv_is_active(org) &&
+ 			    !lv_is_active_exclusive_locally(org)) {
+ 				log_error("%s must be active exclusively to"
+ 					  " create snapshot", org->name);
 
 
