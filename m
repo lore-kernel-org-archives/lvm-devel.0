@@ -1,73 +1,76 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:27:31 +0000 (UTC)
-Subject: dev-mornfall-activate - snapshot: require 3 chunks for creation
-Message-ID: <20130604192731.B8A3160DCA@fedorahosted.org>
+Date: Tue,  4 Jun 2013 19:27:35 +0000 (UTC)
+Subject: dev-mornfall-activate - lvcreate: reduce too large cow
+Message-ID: <20130604192735.E03B961095@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=59962d8d3e1c402da02f7bf1b09978f570fd09d5
-Commit:        59962d8d3e1c402da02f7bf1b09978f570fd09d5
-Parent:        39705ed20123d394f1f0d122704855ec783973da
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bd3ece0128926cc156b7fcb6409acc1a2afb16db
+Commit:        bd3ece0128926cc156b7fcb6409acc1a2afb16db
+Parent:        eb7e206a73a4fae5b93ffcdf96640675f7a72a73
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 29 12:39:33 2013 +0200
+AuthorDate:    Wed May 29 21:43:46 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 17:28:03 2013 +0200
+CommitterDate: Thu May 30 17:35:14 2013 +0200
 
-snapshot: require 3 chunks for creation
+lvcreate: reduce too large cow
 
-There is no point in creation of 2chunks snapshot,
-since the snapshot is invalidated immeditelly with the first write
-as there is no free chunk for COW blocks
-(2 chunks are used by the snap header and the 1st. metadata chunk).
-
-Enhance error message about the lowest usable size.
+Detect maximum usable size of snapshot COW device,
+and do not waste more space for such LV then needed.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   11 +++++++++--
- 2 files changed, 10 insertions(+), 2 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvcreate.c |   18 ++++++++++++++++++
+ 2 files changed, 19 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 1888c62..256adec 100644
+index c7eb82a..d757e2b 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  For creation of snapshot require size for at least 3 chunks.
++  Creation of snapshot takes at most 100% origin coverage.
+   Add cow_max_extents() to calc extents for 100% origin coverage.
+   For creation of snapshot require size for at least 3 chunks.
    Fix lvresize --use-policies of VALID but 100% full snapshot.
-   Do not accept size parameters bigger then 16EiB.
-   Fix release of PV's fid in free_pv_fid().
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index af000af..48a1515 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -47,6 +47,8 @@ typedef enum {
- #define A_CLING_BY_TAGS		0x08	/* Must match tags against existing segment */
- #define A_CAN_SPLIT		0x10
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 7580155..497c474 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -241,6 +241,7 @@ static int _update_extents_params(struct volume_group *vg,
+ 	struct logical_volume *origin = NULL;
+ 	uint32_t size_rest;
+ 	uint32_t stripesize_extents;
++	uint32_t extents;
  
-+#define SNAPSHOT_MIN_CHUNKS	3       /* Minimum number of chunks in snapshot */
+ 	if (lcp->size &&
+ 	    !(lp->extents = extents_from_size(vg->cmd, lcp->size,
+@@ -299,6 +300,23 @@ static int _update_extents_params(struct volume_group *vg,
+ 			break;
+ 	}
+ 
++	if (lp->snapshot && lp->origin) {
++		if (!origin && !(origin = find_lv(vg, lp->origin))) {
++			log_error("Couldn't find origin volume '%s'.",
++				  lp->origin);
++			return 0;
++		}
 +
- /*
-  * Constant parameters during a single allocation attempt.
-  */
-@@ -4543,8 +4545,13 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
- 		return NULL;
- 	}
- 
--	if (lp->snapshot && !seg_is_thin(lp) && ((uint64_t)lp->extents * vg->extent_size < 2 * lp->chunk_size)) {
--		log_error("Unable to create a snapshot smaller than 2 chunks.");
-+	if (lp->snapshot && !seg_is_thin(lp) &&
-+	    ((uint64_t)(lp->extents * vg->extent_size) < (SNAPSHOT_MIN_CHUNKS * lp->chunk_size))) {
-+		log_error("Unable to create a snapshot smaller than "
-+			  DM_TO_STRING(SNAPSHOT_MIN_CHUNKS) " chunks (%u extents, %s).",
-+			  (unsigned) (((uint64_t) SNAPSHOT_MIN_CHUNKS * lp->chunk_size +
-+				       vg->extent_size - 1) / vg->extent_size),
-+			  display_size(cmd, (uint64_t) SNAPSHOT_MIN_CHUNKS * lp->chunk_size));
- 		return NULL;
- 	}
++		extents = cow_max_extents(origin, lp->chunk_size);
++
++		if (extents < lp->extents) {
++				log_print_unless_silent("Reducing COW size %s down to maximum usable size %s.",
++						display_size(vg->cmd, (uint64_t) vg->extent_size * lp->extents),
++						display_size(vg->cmd, (uint64_t) vg->extent_size * extents));
++			lp->extents = extents;
++		}
++	}
++
+ 	if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
+ 		stripesize_extents = 1;
  
 
 
