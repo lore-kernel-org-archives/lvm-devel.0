@@ -1,42 +1,40 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:33 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - thin: lvcreate better support for AAY
-Message-ID: <20130605120133.A775A60E6D@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:05:42 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - filters: compile fix
+Message-ID: <20130605120542.B88DB60E50@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4ca6a4105db63344abe3e62eaa0cbcfcb23c47f9
-Commit:        4ca6a4105db63344abe3e62eaa0cbcfcb23c47f9
-Parent:        f787b575b52fcbfa8327d083eae4f2baf296b1cf
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a657a13b1c6e4570c15c14fd8acb910b106f5cf
+Commit:        4a657a13b1c6e4570c15c14fd8acb910b106f5cf
+Parent:        5467a3b2b70a2550eb84423a20873ad7d520907b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 12 11:51:46 2013 +0200
+AuthorDate:    Sun Jun 2 23:16:41 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:06:23 2013 +0200
+CommitterDate: Sun Jun 2 23:16:41 2013 +0200
 
-thin: lvcreate better support for AAY
+filters: compile fix
 
-Test rather for changes which are deactivating.
+Add missing cast in previous commit.
 ---
- lib/metadata/lv_manip.c |    4 +---
- 1 files changed, 1 insertions(+), 3 deletions(-)
+ lib/filters/filter-composite.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index fc316e8..a353932 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4773,9 +4773,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
- 				goto deactivate_and_revert_new_lv;
- 			}
- 		}
--		if (((lp->activate == CHANGE_AY) ||
--		     (lp->activate == CHANGE_AE) ||
--		     (lp->activate == CHANGE_ALY))) {
-+		if ((lp->activate != CHANGE_AN) && (lp->activate != CHANGE_ALN)) {
- 			/* At this point send message to kernel thin mda */
- 			pool_lv = lv_is_thin_pool(lv) ? lv : first_seg(lv)->pool_lv;
- 			if (!update_pool_lv(pool_lv, 1)) {
+diff --git a/lib/filters/filter-composite.c b/lib/filters/filter-composite.c
+index e183c00..bc37213 100644
+--- a/lib/filters/filter-composite.c
++++ b/lib/filters/filter-composite.c
+@@ -64,7 +64,7 @@ static void _wipe(struct dev_filter *f)
+ {
+ 	struct dev_filter **filters;
+ 
+-	for (filters = f->private; *filters; filters++)
++	for (filters = (struct dev_filter **) f->private; *filters; filters++)
+ 		if ((*filters)->wipe)
+ 			(*filters)->wipe(*filters);
+ }
 
 
