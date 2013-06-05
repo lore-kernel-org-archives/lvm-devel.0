@@ -1,76 +1,60 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:04:39 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - lvcreate: reduce too large cow
-Message-ID: <20130605120439.BE1136101E@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:04:41 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - lvresize: check for max snapshot size
+Message-ID: <20130605120441.D49AB6101E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bd3ece0128926cc156b7fcb6409acc1a2afb16db
-Commit:        bd3ece0128926cc156b7fcb6409acc1a2afb16db
-Parent:        eb7e206a73a4fae5b93ffcdf96640675f7a72a73
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3ced1bf694359a67162cccc7f0e3d94e50929f6e
+Commit:        3ced1bf694359a67162cccc7f0e3d94e50929f6e
+Parent:        bd3ece0128926cc156b7fcb6409acc1a2afb16db
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 29 21:43:46 2013 +0200
+AuthorDate:    Wed May 29 21:23:02 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 17:35:14 2013 +0200
+CommitterDate: Thu May 30 17:35:23 2013 +0200
 
-lvcreate: reduce too large cow
+lvresize: check for max snapshot size
 
-Detect maximum usable size of snapshot COW device,
-and do not waste more space for such LV then needed.
+As for lvcreate, lvresize also doesn't need to grow bigger then needed.
 ---
  WHATS_NEW        |    1 +
- tools/lvcreate.c |   18 ++++++++++++++++++
- 2 files changed, 19 insertions(+), 0 deletions(-)
+ tools/lvresize.c |   10 ++++++++++
+ 2 files changed, 11 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index c7eb82a..d757e2b 100644
+index d757e2b..7589f12 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Creation of snapshot takes at most 100% origin coverage.
++  Detect maximum usable size for snapshot for lvresize.
+   Creation of snapshot takes at most 100% origin coverage.
    Add cow_max_extents() to calc extents for 100% origin coverage.
    For creation of snapshot require size for at least 3 chunks.
-   Fix lvresize --use-policies of VALID but 100% full snapshot.
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 7580155..497c474 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -241,6 +241,7 @@ static int _update_extents_params(struct volume_group *vg,
- 	struct logical_volume *origin = NULL;
- 	uint32_t size_rest;
- 	uint32_t stripesize_extents;
-+	uint32_t extents;
- 
- 	if (lcp->size &&
- 	    !(lp->extents = extents_from_size(vg->cmd, lcp->size,
-@@ -299,6 +300,23 @@ static int _update_extents_params(struct volume_group *vg,
- 			break;
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index b1008ec..a32930e 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -527,6 +527,16 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 			return EINVALID_CMD_LINE;
+ 		}
+ 		lp->extents += lv->le_count;
++		if (lv_is_cow(lv)) {
++			extents_used = cow_max_extents(origin_from_cow(lv), find_cow(lv)->chunk_size);
++			if (extents_used < lp->extents) {
++				log_print_unless_silent("Reached maximum COW size %s.",
++							display_size(vg->cmd, (uint64_t) vg->extent_size * extents_used));
++				lp->extents = extents_used;
++				if (lp->extents == lv->le_count)
++					return ECMD_PROCESSED;
++			}
++		}
  	}
  
-+	if (lp->snapshot && lp->origin) {
-+		if (!origin && !(origin = find_lv(vg, lp->origin))) {
-+			log_error("Couldn't find origin volume '%s'.",
-+				  lp->origin);
-+			return 0;
-+		}
-+
-+		extents = cow_max_extents(origin, lp->chunk_size);
-+
-+		if (extents < lp->extents) {
-+				log_print_unless_silent("Reducing COW size %s down to maximum usable size %s.",
-+						display_size(vg->cmd, (uint64_t) vg->extent_size * lp->extents),
-+						display_size(vg->cmd, (uint64_t) vg->extent_size * extents));
-+			lp->extents = extents;
-+		}
-+	}
-+
- 	if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
- 		stripesize_extents = 1;
- 
+ 	if (lp->sign == SIGN_MINUS) {
 
 
