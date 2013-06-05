@@ -1,292 +1,601 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:05:53 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - lvmcache: Move DA/MDA/EA lists out of lvmcache_info, into label.
-Message-ID: <20130605120553.2C2AE60F90@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:05:55 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - lvmcache: Split off lock cache into a separate unit.
+Message-ID: <20130605120555.4369D60F90@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=57795df3652211a0eb05ad924837006327dde02c
-Commit:        57795df3652211a0eb05ad924837006327dde02c
-Parent:        0f49180ea7eb6d0464a9a85d58a56b4c7f9273b6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=94d9562bea6d0fa5bc7e919cb34090ffe6b45fd9
+Commit:        94d9562bea6d0fa5bc7e919cb34090ffe6b45fd9
+Parent:        57795df3652211a0eb05ad924837006327dde02c
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Feb 3 22:59:28 2013 +0100
+AuthorDate:    Mon Feb 18 15:31:50 2013 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Jun 5 12:37:34 2013 +0200
+CommitterDate: Wed Jun 5 12:37:36 2013 +0200
 
-lvmcache: Move DA/MDA/EA lists out of lvmcache_info, into label.
+lvmcache: Split off lock cache into a separate unit.
 
 ---
- lib/cache/lvmcache.c |   95 ++++++++++++++++++++++++-------------------------
- lib/label/label.h    |    3 ++
- 2 files changed, 50 insertions(+), 48 deletions(-)
+ include/.symlinks.in    |    1 +
+ lib/Makefile.in         |    1 +
+ lib/cache/lvmcache.c    |  162 ++++-------------------------------------------
+ lib/cache/lvmcache.h    |    7 +--
+ lib/locking/lockcache.c |  156 +++++++++++++++++++++++++++++++++++++++++++++
+ lib/locking/lockcache.h |   13 ++++
+ lib/locking/locking.c   |   12 +++-
+ lib/metadata/metadata.c |    5 +-
+ 8 files changed, 195 insertions(+), 162 deletions(-)
 
+diff --git a/include/.symlinks.in b/include/.symlinks.in
+index 1c883ae..043ce15 100644
+--- a/include/.symlinks.in
++++ b/include/.symlinks.in
+@@ -32,6 +32,7 @@
+ @top_srcdir@/lib/format_text/text_import.h
+ @top_srcdir@/lib/label/label.h
+ @top_srcdir@/lib/locking/locking.h
++ at top_srcdir@/lib/locking/lockcache.h
+ @top_srcdir@/lib/log/log.h
+ @top_srcdir@/lib/log/lvm-logging.h
+ @top_srcdir@/lib/metadata/lv.h
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 82f700b..8c1dca7 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -81,6 +81,7 @@ SOURCES =\
+ 	locking/file_locking.c \
+ 	locking/locking.c \
+ 	locking/no_locking.c \
++	locking/lockcache.c \
+ 	log/log.c \
+ 	metadata/lv.c \
+ 	metadata/lv_manip.c \
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 6f935db..b457470 100644
+index b457470..d4e6f03 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -36,14 +36,11 @@
- /* One per device */
- struct lvmcache_info {
- 	struct dm_list list;	/* Join VG members together */
--	struct dm_list mdas;	/* list head for metadata areas */
--	struct dm_list das;	/* list head for data areas */
--	struct dm_list bas;	/* list head for bootloader areas */
- 	struct lvmcache_vginfo *vginfo;	/* NULL == unknown */
--	struct label *label;
-+	struct label *label; /* move to PV */
- 	const struct format_type *fmt;
--	struct device *dev;
--	uint64_t device_size;	/* Bytes */
-+	struct device *dev; /* dup'd from PV */
-+	uint64_t device_size;	/* move to label */ /* Bytes */
- 	uint32_t status;
- };
+@@ -18,6 +18,7 @@
+ #include "toolcontext.h"
+ #include "dev-cache.h"
+ #include "locking.h"
++#include "lockcache.h"
+ #include "metadata.h"
+ #include "filter.h"
+ #include "filter-persistent.h"
+@@ -68,20 +69,14 @@ struct lvmcache_vginfo {
+ static struct dm_hash_table *_pvid_hash = NULL;
+ static struct dm_hash_table *_vgid_hash = NULL;
+ static struct dm_hash_table *_vgname_hash = NULL;
+-static struct dm_hash_table *_lock_hash = NULL;
+ static DM_LIST_INIT(_vginfos);
+ static int _scanning_in_progress = 0;
+ static int _has_scanned = 0;
+-static int _vgs_locked = 0;
+-static int _vg_global_lock_held = 0;	/* Global lock held when cache wiped? */
  
-@@ -1285,9 +1282,9 @@ static int _lvmcache_update_vgname(struct lvmcache_info *info,
- 			dm_list_iterate_items_safe(info2, info3, &primary_vginfo->infos) {
- 				_vginfo_detach_info(info2);
- 				_vginfo_attach_info(orphan_vginfo, info2);
--				if (info2->mdas.n)
-+				if (info2->label->mdas.n)
- 					sprintf(mdabuf, " with %u mdas",
--						dm_list_size(&info2->mdas));
-+						dm_list_size(&info2->label->mdas));
- 				else
- 					mdabuf[0] = '\0';
- 				log_debug_cache("lvmcache: %s: now in VG %s%s%s%s%s",
-@@ -1328,8 +1325,8 @@ static int _lvmcache_update_vgname(struct lvmcache_info *info,
- 	vginfo->fmt = fmt;
+ int lvmcache_init(void)
+ {
+-	/*
+-	 * FIXME add a proper lvmcache_locking_reset() that
+-	 * resets the cache so no previous locks are locked
+-	 */
+-	_vgs_locked = 0;
++	int vg_global_lock_held = lockcache_vgname_is_locked(VG_GLOBAL);
++	lockcache_destroy();
  
- 	if (info) {
--		if (info->mdas.n)
--			sprintf(mdabuf, " with %u mdas", dm_list_size(&info->mdas));
-+		if (info->label->mdas.n)
-+			sprintf(mdabuf, " with %u mdas", dm_list_size(&info->label->mdas));
- 		else
- 			mdabuf[0] = '\0';
- 		log_debug_cache("lvmcache: %s: now in VG %s%s%s%s%s",
-@@ -1405,7 +1402,7 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
+ 	dm_list_init(&_vginfos);
  
- 	/* If PV without mdas is already in a real VG, don't make it orphan */
- 	if (is_orphan_vg(vgname) && info->vginfo &&
--	    mdas_empty_or_ignored(&info->mdas) &&
-+	    mdas_empty_or_ignored(&info->label->mdas) &&
- 	    !is_orphan_vg(info->vginfo->vgname) && critical_section())
+@@ -94,18 +89,13 @@ int lvmcache_init(void)
+ 	if (!(_pvid_hash = dm_hash_create(128)))
+ 		return 0;
+ 
+-	if (!(_lock_hash = dm_hash_create(128)))
+-		return 0;
+-
+ 	/*
+ 	 * Reinitialising the cache clears the internal record of
+ 	 * which locks are held.  The global lock can be held during
+ 	 * this operation so its state must be restored afterwards.
+ 	 */
+-	if (_vg_global_lock_held) {
+-		lvmcache_lock_vgname(VG_GLOBAL, 0);
+-		_vg_global_lock_held = 0;
+-	}
++	if (vg_global_lock_held)
++		lockcache_lock_vgname(VG_GLOBAL, 0);
+ 
+ 	return 1;
+ }
+@@ -197,7 +187,7 @@ static void _update_cache_info_lock_state(struct lvmcache_info *info,
+ 	 * Cache becomes invalid whenever lock state changes unless
+ 	 * exclusive VG_GLOBAL is held (i.e. while scanning).
+ 	 */
+-	if (!lvmcache_vgname_is_locked(VG_GLOBAL) && (was_locked != locked)) {
++	if (!lockcache_vgname_is_locked(VG_GLOBAL) && (was_locked != locked)) {
+ 		info->status |= CACHE_INVALID;
+ 		*cached_vgmetadata_valid = 0;
+ 	}
+@@ -222,7 +212,7 @@ static void _update_cache_vginfo_lock_state(struct lvmcache_vginfo *vginfo,
+ 		_free_cached_vgmetadata(vginfo);
+ }
+ 
+-static void _update_cache_lock_state(const char *vgname, int locked)
++void lvmcache_update_lock_state(const char *vgname, int locked)
+ {
+ 	struct lvmcache_vginfo *vginfo;
+ 
+@@ -290,115 +280,10 @@ void lvmcache_drop_metadata(const char *vgname, int drop_precommitted)
+ 
+ 		/* Indicate that PVs could now be missing from the cache */
+ 		init_full_scan_done(0);
+-	} else if (!lvmcache_vgname_is_locked(VG_GLOBAL))
++	} else if (!lockcache_vgname_is_locked(VG_GLOBAL))
+ 		_drop_metadata(vgname, drop_precommitted);
+ }
+ 
+-/*
+- * Ensure vgname2 comes after vgname1 alphabetically.
+- * Orphan locks come last.
+- * VG_GLOBAL comes first.
+- */
+-static int _vgname_order_correct(const char *vgname1, const char *vgname2)
+-{
+-	if (is_global_vg(vgname1))
+-		return 1;
+-
+-	if (is_global_vg(vgname2))
+-		return 0;
+-
+-	if (is_orphan_vg(vgname1))
+-		return 0;
+-
+-	if (is_orphan_vg(vgname2))
+-		return 1;
+-
+-	if (strcmp(vgname1, vgname2) < 0)
+-		return 1;
+-
+-	return 0;
+-}
+-
+-/*
+- * Ensure VG locks are acquired in alphabetical order.
+- */
+-int lvmcache_verify_lock_order(const char *vgname)
+-{
+-	struct dm_hash_node *n;
+-	const char *vgname2;
+-
+-	if (!_lock_hash)
+-		return_0;
+-
+-	dm_hash_iterate(n, _lock_hash) {
+-		if (!dm_hash_get_data(_lock_hash, n))
+-			return_0;
+-
+-		if (!(vgname2 = dm_hash_get_key(_lock_hash, n))) {
+-			log_error(INTERNAL_ERROR "VG lock %s hits NULL.",
+-				 vgname);
+-			return 0;
+-		}
+-
+-		if (!_vgname_order_correct(vgname2, vgname)) {
+-			log_errno(EDEADLK, INTERNAL_ERROR "VG lock %s must "
+-				  "be requested before %s, not after.",
+-				  vgname, vgname2);
+-			return 0;
+-		}
+-	}
+-
+-	return 1;
+-}
+-
+-void lvmcache_lock_vgname(const char *vgname, int read_only __attribute__((unused)))
+-{
+-	if (!_lock_hash && !lvmcache_init()) {
+-		log_error("Internal cache initialisation failed");
+-		return;
+-	}
+-
+-	if (dm_hash_lookup(_lock_hash, vgname))
+-		log_error(INTERNAL_ERROR "Nested locking attempted on VG %s.",
+-			  vgname);
+-
+-	if (!dm_hash_insert(_lock_hash, vgname, (void *) 1))
+-		log_error("Cache locking failure for %s", vgname);
+-
+-	_update_cache_lock_state(vgname, 1);
+-
+-	if (strcmp(vgname, VG_GLOBAL))
+-		_vgs_locked++;
+-}
+-
+-int lvmcache_vgname_is_locked(const char *vgname)
+-{
+-	if (!_lock_hash)
+-		return 0;
+-
+-	return dm_hash_lookup(_lock_hash, is_orphan_vg(vgname) ? VG_ORPHANS : vgname) ? 1 : 0;
+-}
+-
+-void lvmcache_unlock_vgname(const char *vgname)
+-{
+-	if (!dm_hash_lookup(_lock_hash, vgname))
+-		log_error(INTERNAL_ERROR "Attempt to unlock unlocked VG %s.",
+-			  vgname);
+-
+-	_update_cache_lock_state(vgname, 0);
+-
+-	dm_hash_remove(_lock_hash, vgname);
+-
+-	/* FIXME Do this per-VG */
+-	if (strcmp(vgname, VG_GLOBAL) && !--_vgs_locked)
+-		dev_close_all();
+-}
+-
+-int lvmcache_vgs_locked(void)
+-{
+-	return _vgs_locked;
+-}
+-
+ static void _vginfo_attach_info(struct lvmcache_vginfo *vginfo,
+ 				struct lvmcache_info *info)
+ {
+@@ -551,7 +436,7 @@ static int _info_is_valid(struct lvmcache_info *info)
+ 	 * So if the VG appears to be unlocked here, it should be safe
+ 	 * to use the cached value.
+ 	 */
+-	if (info->vginfo && !lvmcache_vgname_is_locked(info->vginfo->vgname))
++	if (info->vginfo && !lockcache_vgname_is_locked(info->vginfo->vgname))
  		return 1;
  
-@@ -1536,6 +1533,8 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 				/* FIXME leaves info without label! */
- 				return_NULL;
- 			info->label->info = info;
-+			lvmcache_del_mdas(info);
-+			lvmcache_del_das(info);
- 		}
- 		label = info->label;
+ 	if (!(info->status & CACHE_LOCKED))
+@@ -1319,7 +1204,7 @@ static int _lvmcache_update_vgname(struct lvmcache_info *info,
+ 	else if (!_lvmcache_update_vgid(NULL, vginfo, vgid)) /* Orphans */
+ 		return_0;
+ 
+-	_update_cache_vginfo_lock_state(vginfo, lvmcache_vgname_is_locked(vgname));
++	_update_cache_vginfo_lock_state(vginfo, lockcache_vgname_is_locked(vgname));
+ 
+ 	/* FIXME Check consistency of list! */
+ 	vginfo->fmt = fmt;
+@@ -1377,7 +1262,7 @@ static int _lvmcache_update_vgstatus(struct lvmcache_info *info, uint32_t vgstat
+ 
+ int lvmcache_add_orphan_vginfo(const char *vgname, struct format_type *fmt)
+ {
+-	if (!_lock_hash && !lvmcache_init()) {
++	if (!_vgid_hash && !lvmcache_init()) {
+ 		log_error("Internal cache initialisation failed");
+ 		return 0;
  	}
-@@ -1652,7 +1651,7 @@ int lvmcache_pvid_is_locked(const char *pvid) {
+@@ -1582,22 +1467,6 @@ static void _lvmcache_destroy_vgnamelist(struct lvmcache_vginfo *vginfo)
+ 	} while ((vginfo = next));
+ }
+ 
+-static void _lvmcache_destroy_lockname(struct dm_hash_node *n)
+-{
+-	char *vgname;
+-
+-	if (!dm_hash_get_data(_lock_hash, n))
+-		return;
+-
+-	vgname = dm_hash_get_key(_lock_hash, n);
+-
+-	if (!strcmp(vgname, VG_GLOBAL))
+-		_vg_global_lock_held = 1;
+-	else
+-		log_error(INTERNAL_ERROR "Volume Group %s was not unlocked",
+-			  dm_hash_get_key(_lock_hash, n));
+-}
+-
+ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans)
+ {
+ 	struct dm_hash_node *n;
+@@ -1623,13 +1492,6 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans)
+ 		_vgname_hash = NULL;
+ 	}
+ 
+-	if (_lock_hash) {
+-		dm_hash_iterate(n, _lock_hash)
+-			_lvmcache_destroy_lockname(n);
+-		dm_hash_destroy(_lock_hash);
+-		_lock_hash = NULL;
+-	}
+-
+ 	if (!dm_list_empty(&_vginfos))
+ 		log_error(INTERNAL_ERROR "_vginfos list should be empty");
+ 	dm_list_init(&_vginfos);
+@@ -1645,7 +1507,7 @@ int lvmcache_pvid_is_locked(const char *pvid) {
+ 	if (!info || !info->vginfo)
+ 		return 0;
+ 
+-	return lvmcache_vgname_is_locked(info->vginfo->vgname);
++	return lockcache_vgname_is_locked(info->vginfo->vgname);
+ }
+ 
  int lvmcache_fid_add_mdas(struct lvmcache_info *info, struct format_instance *fid,
- 			  const char *id, int id_len)
- {
--	return fid_add_mdas(fid, &info->mdas, id, id_len);
-+	return fid_add_mdas(fid, &info->label->mdas, id, id_len);
- }
+diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
+index 119b411..3a31d20 100644
+--- a/lib/cache/lvmcache.h
++++ b/lib/cache/lvmcache.h
+@@ -60,10 +60,7 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
+ 				  const char *vgname, const char *vgid,
+ 				  uint32_t vgstatus, const char *hostname);
+ int lvmcache_update_vg(struct volume_group *vg, unsigned precommitted);
+-
+-void lvmcache_lock_vgname(const char *vgname, int read_only);
+-void lvmcache_unlock_vgname(const char *vgname);
+-int lvmcache_verify_lock_order(const char *vgname);
++void lvmcache_update_lock_state(const char *vgname, int locked);
  
- int lvmcache_fid_add_mdas_pv(struct lvmcache_info *info, struct format_instance *fid)
-@@ -1720,23 +1719,23 @@ int lvmcache_populate_pv_fields(struct lvmcache_info *info,
- 	memcpy(&pv->id, &info->dev->pvid, sizeof(pv->id));
+ /* Queries */
+ const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd, const char *vgname, const char *vgid, unsigned revalidate_labels);
+@@ -82,8 +79,6 @@ const char *lvmcache_pvid_from_devname(struct cmd_context *cmd,
+ 			      const char *dev_name);
+ char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid);
+ const char *lvmcache_vgname_from_info(struct lvmcache_info *info);
+-int lvmcache_vgs_locked(void);
+-int lvmcache_vgname_is_locked(const char *vgname);
  
- 	/* Currently only support exactly one data area */
--	if (dm_list_size(&info->das) != 1) {
-+	if (dm_list_size(&info->label->das) != 1) {
- 		log_error("Must be exactly one data area (found %d) on PV %s",
--			  dm_list_size(&info->das), dev_name(info->dev));
-+			  dm_list_size(&info->label->das), dev_name(info->dev));
- 		return 0;
+ void lvmcache_seed_infos_from_lvmetad(struct cmd_context *cmd);
+ 
+diff --git a/lib/locking/lockcache.c b/lib/locking/lockcache.c
+new file mode 100644
+index 0000000..cb1a4d9
+--- /dev/null
++++ b/lib/locking/lockcache.c
+@@ -0,0 +1,156 @@
++#include "lib.h"
++#include "lockcache.h"
++#include "device.h"
++#include "metadata-exported.h"
++
++static struct dm_hash_table *_lock_hash = NULL;
++static int _vgs_locked = 0;
++
++static void _lockcache_destroy_lockname(struct dm_hash_node *n)
++{
++	char *vgname;
++
++	if (!dm_hash_get_data(_lock_hash, n))
++		return;
++
++	vgname = dm_hash_get_key(_lock_hash, n);
++
++	if (strcmp(vgname, VG_GLOBAL))
++		log_error(INTERNAL_ERROR "Volume Group %s was not unlocked",
++			  dm_hash_get_key(_lock_hash, n));
++}
++
++static int _lockcache_init(void)
++{
++	if (_lock_hash)
++		return 1;
++
++	/*
++	 * FIXME add a proper lockcache_reset() that resets the cache so no
++	 * previous locks are locked
++	 */
++
++	_vgs_locked = 0;
++
++	if (!(_lock_hash = dm_hash_create(128)))
++		return 0;
++	return 1;
++
++}
++
++void lockcache_destroy(void) {
++	struct dm_hash_node *n;
++	if (_lock_hash) {
++		dm_hash_iterate(n, _lock_hash)
++			_lockcache_destroy_lockname(n);
++		dm_hash_destroy(_lock_hash);
++		_lock_hash = NULL;
++	}
++}
++
++int lockcache_vgname_is_locked(const char *vgname)
++{
++	if (!_lock_hash)
++		return 0;
++
++	return dm_hash_lookup(_lock_hash, is_orphan_vg(vgname) ? VG_ORPHANS : vgname) ? 1 : 0;
++}
++
++void lockcache_lock_vgname(const char *vgname, int read_only __attribute__((unused)))
++{
++	if (!_lockcache_init()) {
++		log_error("Internal cache initialisation failed");
++		return;
++	}
++
++	if (dm_hash_lookup(_lock_hash, vgname))
++		log_error(INTERNAL_ERROR "Nested locking attempted on VG %s.",
++			  vgname);
++
++	if (!dm_hash_insert(_lock_hash, vgname, (void *) 1))
++		log_error("Cache locking failure for %s", vgname);
++
++	if (strcmp(vgname, VG_GLOBAL))
++		_vgs_locked++;
++}
++
++
++void lockcache_unlock_vgname(const char *vgname)
++{
++	if (!_lockcache_init()) {
++		log_error("Internal cache initialisation failed");
++		return;
++	}
++
++	if (!dm_hash_lookup(_lock_hash, vgname))
++		log_error(INTERNAL_ERROR "Attempt to unlock unlocked VG %s.",
++			  vgname);
++
++	dm_hash_remove(_lock_hash, vgname);
++
++	/* FIXME Do this per-VG */
++	if (strcmp(vgname, VG_GLOBAL) && !--_vgs_locked)
++		dev_close_all();
++}
++
++int lockcache_vgs_locked(void)
++{
++	return _vgs_locked;
++}
++
++/*
++ * Ensure vgname2 comes after vgname1 alphabetically.
++ * Orphan locks come last.
++ * VG_GLOBAL comes first.
++ */
++static int _vgname_order_correct(const char *vgname1, const char *vgname2)
++{
++	if (is_global_vg(vgname1))
++		return 1;
++
++	if (is_global_vg(vgname2))
++		return 0;
++
++	if (is_orphan_vg(vgname1))
++		return 0;
++
++	if (is_orphan_vg(vgname2))
++		return 1;
++
++	if (strcmp(vgname1, vgname2) < 0)
++		return 1;
++
++	return 0;
++}
++
++/*
++ * Ensure VG locks are acquired in alphabetical order.
++ */
++int lockcache_verify_lock_order(const char *vgname)
++{
++	struct dm_hash_node *n;
++	const char *vgname2;
++
++	if (!_lockcache_init())
++		return_0;
++
++	dm_hash_iterate(n, _lock_hash) {
++		if (!dm_hash_get_data(_lock_hash, n))
++			return_0;
++
++		if (!(vgname2 = dm_hash_get_key(_lock_hash, n))) {
++			log_error(INTERNAL_ERROR "VG lock %s hits NULL.",
++				 vgname);
++			return 0;
++		}
++
++		if (!_vgname_order_correct(vgname2, vgname)) {
++			log_errno(EDEADLK, INTERNAL_ERROR "VG lock %s must "
++				  "be requested before %s, not after.",
++				  vgname, vgname2);
++			return 0;
++		}
++	}
++
++	return 1;
++}
+diff --git a/lib/locking/lockcache.h b/lib/locking/lockcache.h
+new file mode 100644
+index 0000000..80c10f7
+--- /dev/null
++++ b/lib/locking/lockcache.h
+@@ -0,0 +1,13 @@
++#ifndef _LVM_LOCKCACHE_H
++#define _LVM_LOCKCACHE_H
++
++#include "locking.h"
++
++int lockcache_vgname_is_locked(const char *vgname);
++void lockcache_lock_vgname(const char *vgname, int read_only);
++void lockcache_unlock_vgname(const char *vgname);
++int lockcache_vgs_locked(void);
++int lockcache_verify_lock_order(const char *vgname);
++void lockcache_destroy(void);
++
++#endif
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index 63f946f..70f15ab 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -22,6 +22,7 @@
+ #include "memlock.h"
+ #include "defaults.h"
+ #include "lvmcache.h"
++#include "lockcache.h"
+ 
+ #include <assert.h>
+ #include <signal.h>
+@@ -381,8 +382,10 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
+ 
+ 	if ((ret = _locking.lock_resource(cmd, resource, flags))) {
+ 		if (lck_scope == LCK_VG && !(flags & LCK_CACHE)) {
+-			if (lck_type != LCK_UNLOCK)
+-				lvmcache_lock_vgname(resource, lck_type == LCK_READ);
++			if (lck_type != LCK_UNLOCK) {
++				lockcache_lock_vgname(resource, lck_type == LCK_READ);
++				lvmcache_update_lock_state(resource, 1);
++			}
+ 			dev_reset_error_count(cmd);
+ 		}
+ 
+@@ -392,7 +395,8 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
+ 
+ 	/* If unlocking, always remove lock from lvmcache even if operation failed. */
+ 	if (lck_scope == LCK_VG && !(flags & LCK_CACHE) && lck_type == LCK_UNLOCK) {
+-		lvmcache_unlock_vgname(resource);
++		lockcache_unlock_vgname(resource);
++		lvmcache_update_lock_state(resource, 0);
+ 		if (!ret)
+ 			_update_vg_lock_count(resource, flags);
  	}
- 
--	/* Currently only support one bootloader area at most */
--	if (dm_list_size(&info->bas) > 1) {
--		log_error("Must be at most one bootloader area (found %d) on PV %s",
--			  dm_list_size(&info->bas), dev_name(info->dev));
-+	/* Currently only support one embedding area at most */
-+	if (dm_list_size(&info->label->bas) > 1) {
-+		log_error("Must be at most one embedding area (found %d) on PV %s",
-+			  dm_list_size(&info->label->bas), dev_name(info->dev));
- 		return 0;
- 	}
- 
--	dm_list_iterate_items(da, &info->das)
-+	dm_list_iterate_items(da, &info->label->das)
- 		pv->pe_start = da->disk_locn.offset >> SECTOR_SHIFT;
- 
--	dm_list_iterate_items(da, &info->bas) {
-+	dm_list_iterate_items(da, &info->label->bas) {
- 		pv->ba_start = da->disk_locn.offset >> SECTOR_SHIFT;
- 		pv->ba_size = da->disk_locn.size >> SECTOR_SHIFT;
- 	}
-@@ -1756,39 +1755,39 @@ int lvmcache_check_format(struct lvmcache_info *info, const struct format_type *
- 
- void lvmcache_del_mdas(struct lvmcache_info *info)
- {
--	if (info->mdas.n)
--		del_mdas(&info->mdas);
--	dm_list_init(&info->mdas);
-+	if (info->label->mdas.n)
-+		del_mdas(&info->label->mdas);
-+	dm_list_init(&info->label->mdas);
- }
- 
- void lvmcache_del_das(struct lvmcache_info *info)
- {
--	if (info->das.n)
--		del_das(&info->das);
--	dm_list_init(&info->das);
-+	if (info->label->das.n)
-+		del_das(&info->label->das);
-+	dm_list_init(&info->label->das);
- }
- 
- void lvmcache_del_bas(struct lvmcache_info *info)
- {
--	if (info->bas.n)
--		del_bas(&info->bas);
--	dm_list_init(&info->bas);
-+	if (info->label->bas.n)
-+		del_bas(&info->label->bas);
-+	dm_list_init(&info->label->bas);
- }
- 
- int lvmcache_add_mda(struct lvmcache_info *info, struct device *dev,
- 		     uint64_t start, uint64_t size, unsigned ignored)
- {
--	return add_mda(info->fmt, NULL, &info->mdas, dev, start, size, ignored);
-+	return add_mda(info->fmt, NULL, &info->label->mdas, dev, start, size, ignored);
- }
- 
- int lvmcache_add_da(struct lvmcache_info *info, uint64_t start, uint64_t size)
- {
--	return add_da(NULL, &info->das, start, size);
-+	return add_da(NULL, &info->label->das, start, size);
- }
- 
- int lvmcache_add_ba(struct lvmcache_info *info, uint64_t start, uint64_t size)
- {
--	return add_ba(NULL, &info->bas, start, size);
-+	return add_ba(NULL, &info->label->bas, start, size);
- }
- 
- void lvmcache_update_pv(struct lvmcache_info *info, struct physical_volume *pv,
-@@ -1801,15 +1800,15 @@ void lvmcache_update_pv(struct lvmcache_info *info, struct physical_volume *pv,
- int lvmcache_update_das(struct lvmcache_info *info, struct physical_volume *pv)
- {
- 	struct data_area_list *da;
--	if (info->das.n) {
-+	if (info->label->das.n) {
- 		if (!pv->pe_start)
--			dm_list_iterate_items(da, &info->das)
-+			dm_list_iterate_items(da, &info->label->das)
- 				pv->pe_start = da->disk_locn.offset >> SECTOR_SHIFT;
--		del_das(&info->das);
-+		del_das(&info->label->das);
- 	} else
--		dm_list_init(&info->das);
-+		dm_list_init(&info->label->das);
- 
--	if (!add_da(NULL, &info->das, pv->pe_start << SECTOR_SHIFT, 0 /*pv->size << SECTOR_SHIFT*/))
-+	if (!add_da(NULL, &info->label->das, pv->pe_start << SECTOR_SHIFT, 0 /*pv->size << SECTOR_SHIFT*/))
- 		return_0;
- 
- 	return 1;
-@@ -1818,17 +1817,17 @@ int lvmcache_update_das(struct lvmcache_info *info, struct physical_volume *pv)
- int lvmcache_update_bas(struct lvmcache_info *info, struct physical_volume *pv)
- {
- 	struct data_area_list *ba;
--	if (info->bas.n) {
-+	if (info->label->bas.n) {
- 		if (!pv->ba_start && !pv->ba_size)
--			dm_list_iterate_items(ba, &info->bas) {
-+			dm_list_iterate_items(ba, &info->label->bas) {
- 				pv->ba_start = ba->disk_locn.offset >> SECTOR_SHIFT;
- 				pv->ba_size = ba->disk_locn.size >> SECTOR_SHIFT;
- 			}
--		del_das(&info->bas);
-+		del_das(&info->label->bas);
- 	} else
--		dm_list_init(&info->bas);
-+		dm_list_init(&info->label->bas);
- 
--	if (!add_ba(NULL, &info->bas, pv->ba_start << SECTOR_SHIFT, pv->ba_size << SECTOR_SHIFT))
-+	if (!add_ba(NULL, &info->label->bas, pv->ba_start << SECTOR_SHIFT, pv->ba_size << SECTOR_SHIFT))
- 		return_0;
- 
- 	return 1;
-@@ -1852,7 +1851,7 @@ int lvmcache_foreach_mda(struct lvmcache_info *info,
- 			 void *baton)
- {
- 	struct metadata_area *mda;
--	dm_list_iterate_items(mda, &info->mdas) {
-+	dm_list_iterate_items(mda, &info->label->mdas) {
- 		if (!fun(mda, baton))
+@@ -436,7 +440,7 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags)
+ 		/* VG locks alphabetical, ORPHAN lock last */
+ 		if ((lck_type != LCK_UNLOCK) &&
+ 		    !(flags & LCK_CACHE) &&
+-		    !lvmcache_verify_lock_order(vol))
++		    !lockcache_verify_lock_order(vol))
  			return_0;
+ 
+ 		/* Lock VG to change on-disk metadata. */
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index aea593a..2fe795c 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -28,6 +28,7 @@
+ #include "activate.h"
+ #include "display.h"
+ #include "locking.h"
++#include "lockcache.h"
+ #include "archiver.h"
+ #include "defaults.h"
+ 
+@@ -2669,7 +2670,7 @@ int vg_commit(struct volume_group *vg)
+ {
+ 	int cache_updated = 0;
+ 
+-	if (!lvmcache_vgname_is_locked(vg->name)) {
++	if (!lockcache_vgname_is_locked(vg->name)) {
+ 		log_error(INTERNAL_ERROR "Attempt to write new VG metadata "
+ 			  "without locking %s", vg->name);
+ 		return cache_updated;
+@@ -3990,7 +3991,7 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
+ 		return NULL;
  	}
-@@ -1862,7 +1861,7 @@ int lvmcache_foreach_mda(struct lvmcache_info *info,
  
- unsigned lvmcache_mda_count(struct lvmcache_info *info)
- {
--	return dm_list_size(&info->mdas);
-+	return dm_list_size(&info->label->mdas);
- }
+-	already_locked = lvmcache_vgname_is_locked(vg_name);
++	already_locked = lockcache_vgname_is_locked(vg_name);
  
- int lvmcache_foreach_da(struct lvmcache_info *info,
-@@ -1870,7 +1869,7 @@ int lvmcache_foreach_da(struct lvmcache_info *info,
- 			void *baton)
- {
- 	struct data_area_list *da;
--	dm_list_iterate_items(da, &info->das) {
-+	dm_list_iterate_items(da, &info->label->das) {
- 		if (!fun(&da->disk_locn, baton))
- 			return_0;
- 	}
-@@ -1883,7 +1882,7 @@ int lvmcache_foreach_ba(struct lvmcache_info *info,
- 			 void *baton)
- {
- 	struct data_area_list *ba;
--	dm_list_iterate_items(ba, &info->bas) {
-+	dm_list_iterate_items(ba, &info->label->bas) {
- 		if (!fun(&ba->disk_locn, baton))
- 			return_0;
- 	}
-@@ -1943,12 +1942,12 @@ int lvmcache_vgid_is_cached(const char *vgid) {
-  * PV in question is or is not an orphan.
-  */
- int lvmcache_uncertain_ownership(struct lvmcache_info *info) {
--	return mdas_empty_or_ignored(&info->mdas);
-+	return mdas_empty_or_ignored(&info->label->mdas);
- }
- 
- uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info)
- {
--	return find_min_mda_size(&info->mdas);
-+	return find_min_mda_size(&info->label->mdas);
- }
- 
- const struct format_type *lvmcache_fmt(struct lvmcache_info *info) {
-diff --git a/lib/label/label.h b/lib/label/label.h
-index f3268bb..60dd176 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -43,6 +43,9 @@ struct label {
- 	uint64_t sector;
- 	struct labeller *labeller;
- 	void *info;
-+	struct dm_list mdas;	/* list head for metadata areas */
-+	struct dm_list das;	/* list head for data areas */
-+	struct dm_list bas;	/* list head for embedding areas */
- };
- 
- struct labeller;
+ 	if (!already_locked && !(misc_flags & READ_WITHOUT_LOCK) &&
+ 	    !lock_vol(cmd, vg_name, lock_flags)) {
 
 
