@@ -1,56 +1,53 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:04:25 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - fid: fix reset of PV fid
-Message-ID: <20130605120425.39E9460DE4@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:25 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - dmeventd: prevent double free
+Message-ID: <20130605120125.54E0B60E6D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2f1a571c9707d596d7716cec9488e54ba4c0c946
-Commit:        2f1a571c9707d596d7716cec9488e54ba4c0c946
-Parent:        55f42944bd76ffdf3f77331c491e7de24ed56a2f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8184a57c2b18d606fb533a87319768c90000e308
+Commit:        8184a57c2b18d606fb533a87319768c90000e308
+Parent:        5ea466673af377328a7ed50d6fb24e66a478b44b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 29 12:42:09 2013 +0200
+AuthorDate:    Fri Apr 19 20:49:57 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 16:52:39 2013 +0200
+CommitterDate: Sun Apr 21 23:02:36 2013 +0200
 
-fid: fix reset of PV fid
+dmeventd: prevent double free
 
-Avoid hitting memory corruption (double free) in code path,
-where PV FID has been already destroyed and the released pointer
-was left in PV structure and could have been tried to be released
-from there 2nd. time with final context destruction.
+Since device.name is relased on more places, mark already
+released name with NULL.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/metadata.c |    3 +--
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW_DM                |    1 +
+ daemons/dmeventd/dmeventd.c |    2 ++
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 40fd569..f5adc0b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 6e45a4c..afaf266 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.99 - 
+ Version 1.02.78 - 
  ===================================
-+  Fix release of PV's fid in free_pv_fid().
-   Skip monitoring of snapshots that are already bigger then origin.
-   Add lv_is_cow_covering_origin() to check if cow covers origin size.
-   Use libdm dm_get_status_snapshot() to parse snapshot status.
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 351d157..62b5c3f 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3402,8 +3402,7 @@ void free_pv_fid(struct physical_volume *pv)
- 	if (!pv)
- 		return;
- 
--	if (pv->fid)
--		pv->fid->fmt->ops->destroy_instance(pv->fid);
-+	pv_set_fid(pv, NULL);
++  Prevent double free error after dmeventd call of _fill_device_data().
+   Update dmevent structure message_data to simplify/fix error path handling.
+   Validate passed params to dm_get_status_raid/thin/thin_pool(). 
+   Fix 'dmsetup splitname -o' to not fail if used without '-c' switch (1.02.68).
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 35a2b25..c3d9671 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -411,6 +411,8 @@ static int _fill_device_data(struct thread_status *ts)
+       fail:
+ 	dm_task_destroy(dmt);
+ 	dm_free(ts->device.name);
++	ts->device.name = NULL;
++
+ 	return 0;
  }
  
- /* This is only called by lv_from_lvid, which is only called from
 
 
