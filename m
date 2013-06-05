@@ -1,37 +1,39 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:00:45 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - WHATS_NEW: Add WHATS_NEW entry for previous commit.
-Message-ID: <20130605120045.99E1C60D8C@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:00:47 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - lvmcache: keep sp_count unsigned
+Message-ID: <20130605120047.ACB6360D8C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=719e908bc010455fc14589d941b949c5f3c92806
-Commit:        719e908bc010455fc14589d941b949c5f3c92806
-Parent:        faeea370571b6525d9d95d2904aaacbdb9552e00
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Thu Apr 11 16:03:24 2013 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Thu Apr 11 16:03:24 2013 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4cce09dbdbf1fdb8e6ca985144fdeb181c3a480b
+Commit:        4cce09dbdbf1fdb8e6ca985144fdeb181c3a480b
+Parent:        719e908bc010455fc14589d941b949c5f3c92806
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Apr 11 13:46:47 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Apr 12 11:26:31 2013 +0200
 
-WHATS_NEW:  Add WHATS_NEW entry for previous commit.
+lvmcache: keep sp_count unsigned
 
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ lib/format_pool/disk_rep.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 43c39d6..11e838e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Revert change that allowed identical table reload for RAID.
-   New lvchange arg, '--syncaction' allows scrubbing of RAID LVs.
-   Improve RAID kernel status retrieval to include sync_action/mismatch_cnt.
-   Add external origin support for lvcreate.
+diff --git a/lib/format_pool/disk_rep.c b/lib/format_pool/disk_rep.c
+index c4afefe..899a48d 100644
+--- a/lib/format_pool/disk_rep.c
++++ b/lib/format_pool/disk_rep.c
+@@ -242,7 +242,7 @@ struct _read_pool_pv_baton {
+ 	struct dm_list *head;
+ 	const char *vgname;
+ 	uint32_t *sp_devs;
+-	int sp_count;
++	uint32_t sp_count;
+ 	int failed;
+ 	int empty;
+ };
 
 
