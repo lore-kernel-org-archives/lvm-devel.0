@@ -1,120 +1,58 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Mon, 10 Jun 2013 20:51:00 +0000 (UTC)
-Subject: master - Move export_vg_to_config_tree alongside export_vg_to_buffer.
-Message-ID: <20130610205100.85C2F60F90@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:42 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - thin: explicitly avoid pvmove operation
+Message-ID: <20130605120142.149DE6140D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c1e851e2084cbb09ed28199bc332aa3b1e99bbae
-Commit:        c1e851e2084cbb09ed28199bc332aa3b1e99bbae
-Parent:        c3b06ff55de5288a2ac4e351176c00404bc5a0fc
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Sun Mar 17 16:25:12 2013 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Mon Jun 10 15:55:55 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=17a691505467cd5a73059fe5ca22fe50dafd345a
+Commit:        17a691505467cd5a73059fe5ca22fe50dafd345a
+Parent:        78a42bac157edba2b68bdfd77ea5c3096845aceb
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Apr 21 08:49:17 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sun Apr 21 23:09:11 2013 +0200
 
-Move export_vg_to_config_tree alongside export_vg_to_buffer.
+thin: explicitly avoid pvmove operation
 
+So far we do not support pvmove for thin volumes
+and thin pools.
 ---
- lib/cache/lvmetad.c      |   24 ++----------------------
- lib/format_text/export.c |   20 ++++++++++++++++++++
- lib/metadata/metadata.h  |    2 +-
- 3 files changed, 23 insertions(+), 23 deletions(-)
+ WHATS_NEW      |    1 +
+ tools/pvmove.c |    7 +++++++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 7aa8641..6c8b10b 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -425,26 +425,6 @@ static int _fixup_ignored(struct metadata_area *mda, void *baton) {
- 	return 1;
- }
- 
--static struct dm_config_tree *_export_vg_to_config_tree(struct volume_group *vg)
--{
--	char *buf = NULL;
--	struct dm_config_tree *vgmeta;
--
--	if (!export_vg_to_buffer(vg, &buf)) {
--		log_error("Could not format VG metadata.");
--		return 0;
--	}
--
--	if (!(vgmeta = dm_config_from_string(buf))) {
--		log_error("Error parsing VG metadata.");
--		dm_free(buf);
--		return 0;
--	}
--
--	dm_free(buf);
--	return vgmeta;
--}
--
- int lvmetad_vg_update(struct volume_group *vg)
- {
- 	daemon_reply reply;
-@@ -462,7 +442,7 @@ int lvmetad_vg_update(struct volume_group *vg)
- 	if (!lvmetad_active() || test_mode())
- 		return 1; /* fake it */
- 
--	if (!(vgmeta = _export_vg_to_config_tree(vg)))
-+	if (!(vgmeta = export_vg_to_config_tree(vg)))
- 		return_0;
- 
- 	log_debug_lvmetad("Sending lvmetad updated metadata for VG %s (seqno %" PRIu32 ")", vg->name, vg->seqno);
-@@ -772,7 +752,7 @@ int lvmetad_pv_found(const struct id *pvid, struct device *dev, const struct for
- 		_extract_mdas(info, pvmeta, pvmeta->root);
- 
- 	if (vg) {
--		if (!(vgmeta = _export_vg_to_config_tree(vg))) {
-+		if (!(vgmeta = export_vg_to_config_tree(vg))) {
- 			dm_config_destroy(pvmeta);
- 			return_0;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 819fea4..b016b8e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Add explicit message about unsupported pvmove for thin/thinpool volumes.
+   Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
+   Fix clvmd _cluster_request() return code in memory fail path.
+   Add writemostly/writebehind support for RAID1
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index a733049..5c51c5f 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -248,6 +248,13 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 			log_print_unless_silent("Skipping mirror image LV %s", lv->name);
+ 			continue;
  		}
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 73b5a3a..b6aac45 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -841,5 +841,25 @@ size_t export_vg_to_buffer(struct volume_group *vg, char **buf)
- 	return text_vg_export_raw(vg, "", buf);
- }
- 
-+struct dm_config_tree *export_vg_to_config_tree(struct volume_group *vg)
-+{
-+	char *buf = NULL;
-+	struct dm_config_tree *vg_cft;
-+
-+	if (!export_vg_to_buffer(vg, &buf)) {
-+		log_error("Could not format metadata for VG %s.", vg->name);
-+		return_NULL;
-+	}
-+
-+	if (!(vg_cft = dm_config_from_string(buf))) {
-+		log_error("Error parsing metadata for VG %s.", vg->name);
-+		dm_free(buf);
-+		return_NULL;
-+	}
-+
-+	dm_free(buf);
-+	return vg_cft;
-+}
-+
- #undef outf
- #undef outnl
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 4f504ed..bf9bd55 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -437,7 +437,7 @@ void lv_calculate_readahead(const struct logical_volume *lv, uint32_t *read_ahea
-  * For internal metadata caching.
-  */
- size_t export_vg_to_buffer(struct volume_group *vg, char **buf);
--int export_vg_to_config_tree(struct volume_group *vg, struct dm_config_tree **cft);
-+struct dm_config_tree *export_vg_to_config_tree(struct volume_group *vg);
- struct volume_group *import_vg_from_buffer(const char *buf,
- 					   struct format_instance *fid);
- struct volume_group *import_vg_from_config_tree(const struct dm_config_tree *cft,
++		if (lv_is_thin_volume(lv) || lv_is_thin_pool(lv)) {
++			lv_skipped = 1;
++			log_print_unless_silent("Skipping thin%s LV %s",
++						lv_is_thin_pool(lv) ? "-pool" : "",
++						lv->name);
++			continue;
++		}
+ 		if (lv->status & LOCKED) {
+ 			lv_skipped = 1;
+ 			log_print_unless_silent("Skipping locked LV %s", lv->name);
 
 
