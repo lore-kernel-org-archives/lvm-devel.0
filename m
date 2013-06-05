@@ -1,63 +1,52 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:54 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - cleanup: explicit check for nonnull pointer
-Message-ID: <20130605120154.C3ECB613B0@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:56 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - cleanup: add some FIXMEs
+Message-ID: <20130605120156.D708B613B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dfca5dac9ca3ed0ca186b9d79d6b2cacedc4ea37
-Commit:        dfca5dac9ca3ed0ca186b9d79d6b2cacedc4ea37
-Parent:        dd4fdce16c82225f7b8fce0b5ce294d8f3d2e4d6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4e1ac7faf132e83393dda628f72cdaecfc4bf9e8
+Commit:        4e1ac7faf132e83393dda628f72cdaecfc4bf9e8
+Parent:        dfca5dac9ca3ed0ca186b9d79d6b2cacedc4ea37
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 21:10:19 2013 +0200
+AuthorDate:    Fri Apr 19 21:16:08 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Apr 21 23:14:05 2013 +0200
 
-cleanup: explicit check for nonnull pointer
+cleanup: add some FIXMEs
 
-Since execvp requires nonnull args - add explicit check.
 ---
- lib/misc/lvm-exec.c |    4 ++--
- tools/lvmcmdline.c  |    2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ lib/activate/activate.c |    1 +
+ lib/device/dev-io.c     |    2 ++
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/lib/misc/lvm-exec.c b/lib/misc/lvm-exec.c
-index 4b74a41..1b69635 100644
---- a/lib/misc/lvm-exec.c
-+++ b/lib/misc/lvm-exec.c
-@@ -54,7 +54,6 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
- 	int status;
- 	char buf[PATH_MAX * 2];
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index b3439ad..670b85c 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -794,6 +794,7 @@ int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health)
+ 	int r;
+ 	struct dev_manager *dm;
+ 	struct dm_status_raid *status;
++	/* FIXME: find a better way for this, it is fragile */
+ 	static char *cached_dev_health = NULL;
+ 	static const struct logical_volume *cached_lv = NULL;
  
--
- 	if (rstatus)
- 		*rstatus = -1;
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index 2846caf..bb50ae4 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -437,6 +437,8 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
+ 		}
  
-@@ -76,7 +75,8 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
- 		/* FIXME Fix effect of reset_locking on cache then include this */
- 		/* destroy_toolcontext(cmd); */
- 		/* FIXME Use execve directly */
--		execvp(argv[0], (char **) argv);
-+		if (argv[0])
-+			execvp(argv[0], (char **) argv);
- 		log_sys_error("execvp", argv[0]);
- 		_exit(errno);
+ 		dev_close_immediate(dev);
++		// FIXME: dev with DEV_ALLOCED is released
++		// but code is referencing it
  	}
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index c69d20d..60aa4d9 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1499,7 +1499,7 @@ int lvm2_main(int argc, char **argv)
- 		return -1;
  
- 	if (is_static() && strcmp(base, "lvm.static") &&
--	    path_exists(LVM_SHARED_PATH) &&
-+	    path_exists(LVM_SHARED_PATH) && argv &&
- 	    !getenv("LVM_DID_EXEC")) {
- 		if (setenv("LVM_DID_EXEC", base, 1))
- 			log_sys_error("setenv", "LVM_DID_EXEC");
+ 	if (critical_section())
 
 
