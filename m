@@ -1,95 +1,161 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:03:32 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - lvconvert: check for snapshot-merge support before merge init
-Message-ID: <20130605120332.DCFB460F76@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:03:28 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - activation: fix lv_is_active regressions
+Message-ID: <20130605120328.A10D360F76@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4777eb68728859a0b3651e29c628111ed7c99103
-Commit:        4777eb68728859a0b3651e29c628111ed7c99103
-Parent:        4f6c2951d6495ee335ab69da44ae2647cd341276
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu May 16 08:21:57 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu May 16 08:21:57 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f12d88f840474a75a58d1f7ae8d391ec5852b850
+Commit:        f12d88f840474a75a58d1f7ae8d391ec5852b850
+Parent:        2fbe1e6e00fc59f54ae11c19d51f2d7fc8425b16
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed May 15 02:13:31 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed May 15 02:13:31 2013 +0100
 
-lvconvert: check for snapshot-merge support before merge init
+activation: fix lv_is_active regressions
 
+Try to fix commit bf2741376d47411994d4065863acab8e405ff5c7.
+
+lv_is_active is not the same as lv_info(cmd, org, 0, &info, 0, 0).
+
+Introduce and use lv_is_active_locally.
 ---
- lib/metadata/metadata-exported.h |    2 +-
- lib/metadata/snapshot_manip.c    |   12 ++++++++++--
- tools/lvconvert.c                |    6 +++++-
- 3 files changed, 16 insertions(+), 4 deletions(-)
+ WHATS_NEW               |    2 +-
+ lib/activate/activate.c |   11 +++++++++++
+ lib/activate/activate.h |    1 +
+ lib/metadata/lv_manip.c |   12 +++++++++++-
+ lib/metadata/mirror.c   |    5 +++--
+ lib/report/report.c     |    2 +-
+ 6 files changed, 28 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index a4ffe26..c3cb116 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -734,7 +734,7 @@ struct logical_volume *origin_from_cow(const struct logical_volume *lv);
- void init_snapshot_seg(struct lv_segment *seg, struct logical_volume *origin,
- 		       struct logical_volume *cow, uint32_t chunk_size, int merge);
- 
--void init_snapshot_merge(struct lv_segment *cow_seg, struct logical_volume *origin);
-+int init_snapshot_merge(struct lv_segment *cow_seg, struct logical_volume *origin);
- 
- void clear_snapshot_merge(struct logical_volume *origin);
- 
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index 0c10104..11f60d8 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -19,6 +19,7 @@
- #include "toolcontext.h"
- #include "lv_alloc.h"
- #include "activate.h"
-+#include "segtype.h"
- 
- int lv_is_origin(const struct logical_volume *lv)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0c7db4b..aa1a1c0 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -115,7 +115,7 @@ Version 2.02.99 -
+   Support use of option --yes for lvchange --persistent.
+   Fix memory leak on error path for pvcreate with invalid uuid.
+   Implement ref-counting for parents in python lib.
+-  Use lv_is_active() instead of lv_info() call.
++  Add lv_is_active_locally and use instead of most local lv_info calls.
+   Reduce some log_error messages to log_warn where we don't fail.
+   Remove python liblvm object. systemdir can only be changed using env var now.
+   
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 05cfb66..1174ce2 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -274,6 +274,10 @@ int lv_is_active(const struct logical_volume *lv)
  {
-@@ -110,8 +111,8 @@ void init_snapshot_seg(struct lv_segment *seg, struct logical_volume *origin,
- 	dm_list_add(&origin->snapshot_segs, &seg->origin_list);
+ 	return 0;
+ }
++int lv_is_active_locally(const struct logical_volume *lv)
++{
++	return 0;
++}
+ int lv_is_active_but_not_locally(const struct logical_volume *lv)
+ {
+ 	return 0;
+@@ -1252,6 +1256,13 @@ int lv_is_active(const struct logical_volume *lv)
+ 	return _lv_is_active(lv, NULL, NULL);
  }
  
--void init_snapshot_merge(struct lv_segment *cow_seg,
--			 struct logical_volume *origin)
-+int init_snapshot_merge(struct lv_segment *cow_seg,
-+			struct logical_volume *origin)
++int lv_is_active_locally(const struct logical_volume *lv)
++{
++	int l;
++
++	return _lv_is_active(lv, &l, NULL) && l;
++}
++
+ int lv_is_active_but_not_locally(const struct logical_volume *lv)
  {
- 	/*
- 	 * Even though lv_is_visible(cow_seg->lv) returns 0,
-@@ -127,6 +128,13 @@ void init_snapshot_merge(struct lv_segment *cow_seg,
- 	cow_seg->status |= MERGING;
- 	origin->snapshot = cow_seg;
- 	origin->status |= MERGING;
-+
-+	if (cow_seg->segtype->ops->target_present &&
-+	    !cow_seg->segtype->ops->target_present(cow_seg->lv->vg->cmd,
-+				cow_seg, NULL))
-+		return 0;
-+
-+	return 1;
- }
+ 	int l;
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index f7c312f..e80115a 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -134,6 +134,7 @@ int lvs_in_vg_activated(const struct volume_group *vg);
+ int lvs_in_vg_opened(const struct volume_group *vg);
  
- void clear_snapshot_merge(struct logical_volume *origin)
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 7b4bb6e..17e39ae 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1832,7 +1832,11 @@ static int lvconvert_merge(struct cmd_context *cmd,
+ int lv_is_active(const struct logical_volume *lv);
++int lv_is_active_locally(const struct logical_volume *lv);
+ int lv_is_active_but_not_locally(const struct logical_volume *lv);
+ int lv_is_active_exclusive(const struct logical_volume *lv);
+ int lv_is_active_exclusive_locally(const struct logical_volume *lv);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 42e0fab..ae86472 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4394,6 +4394,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 	struct logical_volume *pool_lv;
+ 	struct lv_list *lvl;
+ 	const char *thin_name = NULL;
++	int origin_active = 0;
++	struct lvinfo info;
+ 
+ 	if (new_lv_name && find_lv_in_vg(vg, new_lv_name)) {
+ 		log_error("Logical volume \"%s\" already exists in "
+@@ -4523,7 +4525,15 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 				log_warn("WARNING: See global/mirror_segtype_default in lvm.conf.");
+ 			}
+ 
+-			if (vg_is_clustered(vg) && lv_is_active(org) &&
++			if (!lv_info(cmd, org, 0, &info, 0, 0)) {
++				log_error("Check for existence of active snapshot "
++					  "origin '%s' failed.", org->name);
++				return NULL;
++			}
++
++			origin_active = info.exists;
++
++			if (vg_is_clustered(vg) &&
+ 			    !lv_is_active_exclusive_locally(org)) {
+ 				log_error("%s must be active exclusively to"
+ 					  " create snapshot", org->name);
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index 18d0d33..b93d73c 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -298,12 +298,13 @@ static int _init_mirror_log(struct cmd_context *cmd,
+ 
+ 	/* If the LV is active, deactivate it first. */
+ 	if (lv_is_active(log_lv)) {
++		(void) deactivate_lv(cmd, log_lv);
+ 		/*
+ 		 * FIXME: workaround to fail early
+ 		 * Ensure that log is really deactivated because deactivate_lv
+ 		 * on cluster do not fail if there is log_lv with different UUID.
+ 		 */
+-		if (!deactivate_lv(cmd, log_lv)) {
++		if (lv_is_active(log_lv)) {
+ 			log_error("Aborting. Unable to deactivate mirror log.");
+ 			goto revert_new_lv;
  		}
+@@ -1707,7 +1708,7 @@ int remove_mirror_log(struct cmd_context *cmd,
  	}
  
--	init_snapshot_merge(cow_seg, origin);
-+	if (!init_snapshot_merge(cow_seg, origin)) {
-+		log_error("Can't initialize snapshot merge. "
-+			  "Missing support in kernel?");
-+		return_0;
-+	}
+ 	/* Had disk log, switch to core. */
+-	if (lv_is_active(lv)) {
++	if (lv_is_active_locally(lv)) {
+ 		if (!lv_mirror_percent(cmd, lv, 0, &sync_percent,
+ 				       NULL)) {
+ 			log_error("Unable to determine mirror sync status.");
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 27c9708..d661596 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -866,7 +866,7 @@ static int _snpercent_disp(struct dm_report *rh __attribute__((unused)), struct
+ 	}
  
- 	/* store vg on disk(s) */
- 	if (!vg_write(lv->vg))
+ 	if ((!lv_is_cow(lv) && !lv_is_merging_origin(lv)) ||
+-	    !lv_is_active(lv)) {
++	    !lv_is_active_locally(lv)) {
+ 		*sortval = UINT64_C(0);
+ 		dm_report_field_set_value(field, "", sortval);
+ 		return 1;
 
 
