@@ -1,42 +1,44 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:06 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - config_def_check: fix memory leak
-Message-ID: <20130605120106.857CC6140D@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:46 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - libdm: improve check in dm_split_lvm_name
+Message-ID: <20130605120146.41B53613B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ccb9eb861c3b65ffc1aac024425e2cc10950077
-Commit:        2ccb9eb861c3b65ffc1aac024425e2cc10950077
-Parent:        2e0740f7ef420c7b981bc67cb606d180701b8c1d
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Apr 16 10:42:03 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Apr 16 10:45:37 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8f1dd00c3634d111be9a42524ab50b2f31962530
+Commit:        8f1dd00c3634d111be9a42524ab50b2f31962530
+Parent:        a2b76a6f022920abd59072decfa7d3d76eeda913
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Apr 21 12:48:24 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sun Apr 21 23:10:43 2013 +0200
 
-config_def_check: fix memory leak
+libdm: improve check in dm_split_lvm_name
 
-There is no need to strdup a key when inserting into
-the hash table as the table allocates memory and copies
-the string.  This was causing memory to be lost.
+We support both type of call - with or without mem pool.
+So ensure we will not use NULL vgname also when mem is given.
 ---
- lib/config/config.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdm/libdm-string.c |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 009eb5f..2c77f30 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -577,7 +577,7 @@ int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_
- 				cmd->cft_def_hash = NULL;
- 				r = 0; goto out;
- 			}
--			dm_hash_insert(cmd->cft_def_hash, dm_strdup(vp), def);
-+			dm_hash_insert(cmd->cft_def_hash, vp, def);
- 		}
- 	}
+diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
+index 5ef6334..9d667bb 100644
+--- a/libdm/libdm-string.c
++++ b/libdm/libdm-string.c
+@@ -92,7 +92,10 @@ static char *_unquote(char *component)
+ int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
+ 		      char **vgname, char **lvname, char **layer)
+ {
+-	if (mem && !(*vgname = dm_pool_strdup(mem, dmname)))
++	if (mem)
++		*vgname = dm_pool_strdup(mem, dmname);
++
++	if (!*vgname)
+ 		return 0;
  
+ 	_unquote(*layer = _unquote(*lvname = _unquote(*vgname)));
 
 
