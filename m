@@ -1,50 +1,42 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:03:01 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - cleanup: improve previous patch
-Message-ID: <20130605120301.928DB60E47@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:03:03 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - cleanup: simplify
+Message-ID: <20130605120303.A7A1A61447@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=986a50e4a1c017cc655bbcce45ffa4444386678b
-Commit:        986a50e4a1c017cc655bbcce45ffa4444386678b
-Parent:        2d3700ba42e156aa8b6e2819736cab6866ea56ce
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=deb3c93a192c5ea03434ea11d33dff571462edc3
+Commit:        deb3c93a192c5ea03434ea11d33dff571462edc3
+Parent:        986a50e4a1c017cc655bbcce45ffa4444386678b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 29 13:50:26 2013 +0200
+AuthorDate:    Mon Apr 29 12:33:38 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri May 3 15:44:14 2013 +0200
 
-cleanup: improve previous patch
+cleanup: simplify
 
-Make the test earlier, before any dereference of 'argv' pointer.
+Use simplier sprintf.
 ---
- tools/lvmcmdline.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ tools/reporter.c |    4 +---
+ 1 files changed, 1 insertions(+), 3 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 60aa4d9..c03e9ef 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1487,6 +1487,9 @@ int lvm2_main(int argc, char **argv)
- 	int ret, alias = 0;
- 	struct cmd_context *cmd;
- 
-+	if (!argv)
-+		return -1;
-+
- 	base = last_path_component(argv[0]);
- 	if (strcmp(base, "lvm") && strcmp(base, "lvm.static") &&
- 	    strcmp(base, "initrd-lvm"))
-@@ -1499,7 +1502,7 @@ int lvm2_main(int argc, char **argv)
- 		return -1;
- 
- 	if (is_static() && strcmp(base, "lvm.static") &&
--	    path_exists(LVM_SHARED_PATH) && argv &&
-+	    path_exists(LVM_SHARED_PATH) &&
- 	    !getenv("LVM_DID_EXEC")) {
- 		if (setenv("LVM_DID_EXEC", base, 1))
- 			log_sys_error("setenv", "LVM_DID_EXEC");
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 3db8b83..2744fcd 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -301,9 +301,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 				log_error("options string allocation failed");
+ 				return ECMD_FAILED;
+ 			}
+-			strcpy(str, options);
+-			strcat(str, ",");
+-			strcat(str, opts + 1);
++			(void) sprintf(str, "%s,%s", options, opts + 1);
+ 			options = str;
+ 		} else
+ 			options = opts;
 
 
