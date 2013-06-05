@@ -1,40 +1,42 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:26 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - test: fix filter
-Message-ID: <20130605120226.1FC9460E15@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:28 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - test: do not break test if there is no .cache
+Message-ID: <20130605120228.32C0860E15@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=67fc56f5ca1e05f78cedc5f729745e176447c6b2
-Commit:        67fc56f5ca1e05f78cedc5f729745e176447c6b2
-Parent:        c7c5a840c1aca9712134b8afee8abcba5cb8116f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=23775c8fe8cdd82dee33cd397eeab5a84181380b
+Commit:        23775c8fe8cdd82dee33cd397eeab5a84181380b
+Parent:        67fc56f5ca1e05f78cedc5f729745e176447c6b2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 23 14:28:27 2013 +0200
+AuthorDate:    Tue Apr 23 14:36:27 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 23 14:28:27 2013 +0200
+CommitterDate: Tue Apr 23 14:36:27 2013 +0200
 
-test: fix filter
+test: do not break test if there is no .cache
 
-Fix filter for use with real /dev
+When running test on read /dev, we obtain devices from udev,
+and there is no .cache file, so do not stop test if the file
+is missing.
 ---
- test/shell/mdata-strings.sh |    2 +-
+ test/shell/vgimportclone.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/mdata-strings.sh b/test/shell/mdata-strings.sh
-index 16e9360..95a630e 100644
---- a/test/shell/mdata-strings.sh
-+++ b/test/shell/mdata-strings.sh
-@@ -14,7 +14,7 @@
- . lib/test
+diff --git a/test/shell/vgimportclone.sh b/test/shell/vgimportclone.sh
+index 0a476ec..60c833a 100644
+--- a/test/shell/vgimportclone.sh
++++ b/test/shell/vgimportclone.sh
+@@ -31,7 +31,7 @@ vgimportclone --basevgname $vg2 "$dev2"
+ # concerned, can only live on a single device. With the last pvscan, we told it
+ # that PV from $dev1 now lives on $dev2, but in fact this is not true anymore,
+ # since we wrote a different PV over $dev2.
+-rm $TESTDIR/etc/.cache
++rm -f $TESTDIR/etc/.cache
+ aux notify_lvmetad "$dev2"
+ aux notify_lvmetad "$dev1"
  
- aux prepare_devs 2
--aux lvmconf 'devices/global_filter = [ "a|.*LVMTEST.*dev/mapper/.*pv[0-9_]*$|", "r|.*|" ]'
-+aux lvmconf 'devices/global_filter = [ "a|.*dev/mapper/.*LVMTEST.*pv[0-9_]*$|", "r|.*|" ]'
- 
- # for udev impossible to create
- pv_ugly="__\"!@#\$%^&*,()|@||'\\\"__pv1"
 
 
