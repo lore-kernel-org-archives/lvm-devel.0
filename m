@@ -1,50 +1,63 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:03:18 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - thin: limited support for -l%FREE allocation
-Message-ID: <20130605120318.38F1E60F76@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:17 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - clvmd: avoid logging in signal handler
+Message-ID: <20130605120117.05BA1611B6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6fc67f5509fda25a91536fbeeb7099f8327ff3d8
-Commit:        6fc67f5509fda25a91536fbeeb7099f8327ff3d8
-Parent:        55fe07ad98315d9471a86affd0680749e349a0a6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5070ffbca7b16e4139b3da72bdff0c9add517351
+Commit:        5070ffbca7b16e4139b3da72bdff0c9add517351
+Parent:        61d0ae7019aa14d78678a36f1eeb43b29a113e80
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 13 13:03:04 2013 +0200
+AuthorDate:    Wed Apr 17 23:16:30 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 13 13:13:22 2013 +0200
+CommitterDate: Sun Apr 21 22:56:59 2013 +0200
 
-thin: limited support for -l%FREE allocation
+clvmd: avoid logging in signal handler
 
-This is just a temporary fix to support allocation of -l%FREE.
-
-The number of free extent serves to calculate estimated metadata
-size. This value is then substracted twice to keep some
-free space for recover.
+debuglog in the main thread.
 ---
- tools/lvcreate.c |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ daemons/clvmd/clvmd.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index df05cbb..7580155 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -321,6 +321,14 @@ static int _update_extents_params(struct volume_group *vg,
- 		if (!(lp->poolmetadataextents =
- 		      extents_from_size(vg->cmd, lp->poolmetadatasize, vg->extent_size)))
- 			return_0;
-+		if (lcp->percent == PERCENT_FREE) {
-+			if (lp->extents <= (2 * lp->poolmetadataextents)) {
-+				log_error("Not enough space for thin pool creation.");
-+				return 0;
-+			}
-+			/* FIXME: persistent hidden space in VG wanted */
-+			lp->extents -= (2 * lp->poolmetadataextents);
-+		}
- 	}
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index c649bbe..a64bd54 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -874,6 +874,7 @@ static void main_loop(int local_sock, int cmd_timeout)
+ 			int saved_errno = errno;
  
- 	return 1;
+ 			reread_config = 0;
++			DEBUGLOG("got SIGHUP\n");
+ 			if (clops->reread_config)
+ 				clops->reread_config();
+ 			errno = saved_errno;
+@@ -982,6 +983,8 @@ static void main_loop(int local_sock, int cmd_timeout)
+ 
+       closedown:
+ 	clops->cluster_closedown();
++	if (quit)
++		DEBUGLOG("SIGTERM received\n");
+ }
+ 
+ static __attribute__ ((noreturn)) void wait_for_child(int c_pipe, int timeout)
+@@ -2253,14 +2256,12 @@ static void sigusr2_handler(int sig)
+ 
+ static void sigterm_handler(int sig)
+ {
+-	DEBUGLOG("SIGTERM received\n");
+ 	quit = 1;
+ 	return;
+ }
+ 
+ static void sighup_handler(int sig)
+ {
+-        DEBUGLOG("got SIGHUP\n");
+ 	reread_config = 1;
+ }
+ 
 
 
