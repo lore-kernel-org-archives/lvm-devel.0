@@ -1,58 +1,60 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:00:56 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - dmsetup: check for strncpy
-Message-ID: <20130605120056.1A8766140D@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:00:58 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - CLEAN-UP: Better string checking to avoid substring matches
+Message-ID: <20130605120058.2CE346140D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=58734d2538854ef79e6605ba69c57723737d12c2
-Commit:        58734d2538854ef79e6605ba69c57723737d12c2
-Parent:        a81a2406f18c6ad0802a02892214f56b1bb99c13
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Feb 10 18:34:12 2012 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 12 11:30:47 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c363c74a251a5745e8ac6e274d1f7a1e32fa1843
+Commit:        c363c74a251a5745e8ac6e274d1f7a1e32fa1843
+Parent:        58734d2538854ef79e6605ba69c57723737d12c2
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri Apr 12 11:30:04 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Fri Apr 12 11:30:04 2013 -0500
 
-dmsetup: check for strncpy
+CLEAN-UP:  Better string checking to avoid substring matches
 
-Test whether device name fits into a given buffer.
+Commit 9fd7ac7d035f0b2f8dcc3cb19935eb181816bd76 introduced a way a
+method of avoiding reading from mirrors with a device failure.  If
+a device was found to be dead, the mapping table was checked for
+'handle_errors' or 'block_on_error'.  These strings were checked for
+in the table string via 'strstr', which could also match on strings
+like, 'no_handle_errors' or 'no_block_on_error'.  No such strings
+exist, but we don't want to have problems in the future if they do.
+So, we check for ' <string>{'\0'|' '}'.
 ---
- tools/dmsetup.c |   13 ++++++-------
- 1 files changed, 6 insertions(+), 7 deletions(-)
+ lib/activate/dev_manager.c |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index ce46d6c..8f6b340 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -3244,20 +3244,19 @@ static char *parse_loop_device_name(const char *dev, const char *dev_dir)
- 		    device[strlen(dev_dir)] != '/')
- 			goto error;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 8c06476..00c0126 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -239,7 +239,7 @@ static int _ignore_blocked_mirror_devices(struct device *dev,
+ 	dev_t log_dev;
+ 	char *images_health, *log_health;
+ 	uint64_t s,l;
+-	char *params, *target_type = NULL;
++	char *p, *params, *target_type = NULL;
+ 	void *next = NULL;
+ 	struct dm_task *dmt = NULL;
+ 	int r = 0;
+@@ -306,8 +306,10 @@ static int _ignore_blocked_mirror_devices(struct device *dev,
+ 			if (strcmp(target_type, "mirror"))
+ 				goto_out;
  
--		strncpy(buf, strrchr(device, '/') + 1, PATH_MAX - 1);
--		buf[PATH_MAX - 1] = '\0';
-+		if (!dm_strncpy(buf, strrchr(device, '/') + 1, PATH_MAX))
-+			goto error;
- 		dm_free(device);
--
- 	} else {
- 		/* check for device number */
--		if (!strncmp(dev, "loop", strlen("loop")))
--			strncpy(buf, dev, (size_t) PATH_MAX);
--		else
-+		if (strncmp(dev, "loop", sizeof("loop") - 1))
-+			goto error;
-+
-+		if (!dm_strncpy(buf, dev, PATH_MAX))
- 			goto error;
- 	}
- 
- 	return buf;
--
- error:
- 	dm_free(device);
- 	dm_free(buf);
+-			if (strstr(params, "block_on_error") ||
+-			    strstr(params, "handle_errors")) {
++			if (((p = strstr(params, " block_on_error")) &&
++			     (p[15] == '\0' || p[15] == ' ')) ||
++			    ((p = strstr(params, " handle_errors")) &&
++			     (p[14] == '\0' || p[14] == ' '))) {
+ 				log_debug_activation("%s: I/O blocked to mirror device",
+ 						     dev_name(dev));
+ 				goto out;
 
 
