@@ -1,89 +1,89 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:50 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - vgread: fix fid transfer for lvm1 and pool format
-Message-ID: <20130605120150.9D2EA613B0@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:08 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - udev: also autoactivate on coldplug
+Message-ID: <20130605120108.9AED76140D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1951798d7225dce35baa7689a308998f27379b6f
-Commit:        1951798d7225dce35baa7689a308998f27379b6f
-Parent:        5e7eae59da2ce859e99c62b578f9164b87a1f944
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 21:36:08 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:13:57 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=764195207d4773cf6f1674a2fb16e9a0acda304a
+Commit:        764195207d4773cf6f1674a2fb16e9a0acda304a
+Parent:        2ccb9eb861c3b65ffc1aac024425e2cc10950077
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Apr 19 12:17:53 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Apr 19 12:43:36 2013 +0200
 
-vgread: fix fid transfer for lvm1 and pool format
+udev: also autoactivate on coldplug
 
-Assign fid as the last step before returning VG.
-Make the format reader for 'lvm1' and 'pool' equal to 'lvm2' format reader.
+Commit 756bcabbfe297688ba240a880bc2b55265ad33f0 fixed autoactivation
+to not trigger on each uevent for a PV that appeared in the system
+most notably the events that are triggered artificially (udevadm
+trigger or as the result of the WATCH udev rule being applied that
+consequently generates CHANGE uevents). This fixed a situation in
+which VGs/LVs were activated when they should not.
 
-It has caused memory corruption to lvmetad as it later calls
-destroy_instance() to allocated fid. This patch should fix problems
-with crashing test lvmetad-lvm1.sh.
+BUT we still need to care about the coldplug used at boot to
+retrigger the ADD events - the "udevadm trigger --action=add"!
+
+For non-DM-based PVs, this is already covered as for these we
+run the autoactivation on ADD event only.
+
+However, for DM-based PVs, we still need to run the
+autoactivation even for the artificial ADD event, reusing
+the udev DB content from previous proper CHANGE event that
+came with the DM device activation.
+
+Simply, this patch fixes a situation in which we run extra
+"udevadm trigger --action=add" (or echo add > /sys/block/<dev>/uevent)
+for DM-based PVs (cryptsetup devices, multipath devices, any
+other DM devices...).
+
+Without this patch, while using lvmetad + autoactivation,
+any VG/LV that has a DM-based PV and for which we do not
+call the activation directly, the VG/LV is not activated.
+
+For example a VG with an LV with root FS on it which is directly
+activated in initrd and then missing activation of the rest
+of the LVs in the VG because of unhandled uevent retrigger on
+boot after switching to root FS (the "coldplug").
+
+(No WHATS_NEW here as this fixes the commit mentioned
+above and which was not released yet.)
 ---
- WHATS_NEW                     |    1 +
- lib/format1/format1.c         |    4 ++--
- lib/format_pool/format_pool.c |    4 ++--
- 3 files changed, 5 insertions(+), 4 deletions(-)
+ udev/10-dm.rules.in           |    5 ++++-
+ udev/69-dm-lvm-metad.rules.in |    1 +
+ 2 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5d4c7a7..c1324de 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Fix assignment order for vg fid for lvm1 and pool format.
-   Fix memleak in dmeventd thin plugin in device list obtaining err path.
-   Add explicit message about unsupported pvmove for thin/thinpool volumes.
-   Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index f47ed95..2864227 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -200,8 +200,6 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
- 	if (dm_list_empty(&pvs))
- 		goto_bad;
+diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
+index cfee145..512d156 100644
+--- a/udev/10-dm.rules.in
++++ b/udev/10-dm.rules.in
+@@ -77,7 +77,10 @@ LABEL="dm_flags_done"
+ # before (e.g. in initrd). If udev is used in initrd, we require the udev init
+ # script to not remove the existing udev database so we can reuse the information
+ # stored at the time of device activation in the initrd.
+-ACTION=="add", ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1", GOTO="dm_disable"
++ACTION!="add", GOTO="dm_no_coldplug"
++ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1", GOTO="dm_disable"
++ENV{DM_ACTIVATION}="1"
++LABEL="dm_no_coldplug"
  
--	vg_set_fid(vg, fid);
--
- 	if (!_check_vgs(&pvs, vg))
- 		goto_bad;
+ # "dm" sysfs subdirectory is available in newer versions of DM
+ # only (kernels >= 2.6.29). We have to check for its existence
+diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+index b16a27a..66c58b3 100644
+--- a/udev/69-dm-lvm-metad.rules.in
++++ b/udev/69-dm-lvm-metad.rules.in
+@@ -26,6 +26,7 @@ ACTION=="remove", GOTO="lvm_scan"
+ KERNEL!="dm-[0-9]*", ACTION!="add", GOTO="lvm_end"
  
-@@ -226,6 +224,8 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
- 	if ((vg->status & PARTIAL_VG) && !_fix_partial_vg(vg, &pvs))
- 		goto_bad;
+ # If the PV is a dm device, scan only after proper mapping activation (CHANGE event + DM_ACTIVATION=1)
++# or after a coldplug (event retrigger) with "add" event (ADD event + DM_ACTIVATION=1)
+ KERNEL=="dm-[0-9]*", ENV{DM_ACTIVATION}!="1", GOTO="lvm_end"
  
-+	vg_set_fid(vg, fid);
-+
- 	return vg;
- 
- bad:
-diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
-index c051968..0891524 100644
---- a/lib/format_pool/format_pool.c
-+++ b/lib/format_pool/format_pool.c
-@@ -122,8 +122,6 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
- 	if (!read_pool_pds(fid->fmt, vg_name, vg->vgmem, &pds))
- 		goto_bad;
- 
--	vg_set_fid(vg, fid);
--
- 	/* Setting pool seqno to 1 because the code always did this,
- 	 * although we don't think it's needed. */
- 	vg->seqno = 1;
-@@ -155,6 +153,8 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
- 	if (!import_pool_segments(&vg->lvs, vg->vgmem, usp, sp_count))
- 		goto_bad;
- 
-+	vg_set_fid(vg, fid);
-+
- 	return vg;
- 
- bad:
+ LABEL="lvm_scan"
 
 
