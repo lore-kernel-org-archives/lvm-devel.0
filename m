@@ -1,47 +1,56 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:11 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - format1: add workaround for vg_set_fid
-Message-ID: <20130605120211.6CE6F613B0@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:13 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - cleanup: drop zeroing of zallocated data
+Message-ID: <20130605120213.8AB1F60D1B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a12f92c494a60fe6e6c9e133aa879bd0d0da069a
-Commit:        a12f92c494a60fe6e6c9e133aa879bd0d0da069a
-Parent:        994c32272e7c36f45defda12848d3856590a0d1f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=35ab841ecff4a887e70b54b1afb01dd42a4e9cd6
+Commit:        35ab841ecff4a887e70b54b1afb01dd42a4e9cd6
+Parent:        a12f92c494a60fe6e6c9e133aa879bd0d0da069a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 23:53:53 2013 +0200
+AuthorDate:    Tue Apr 23 11:52:17 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:53:53 2013 +0200
+CommitterDate: Tue Apr 23 12:27:33 2013 +0200
 
-format1: add workaround for vg_set_fid
+cleanup: drop zeroing of zallocated data
 
-Since we want to set fid just before return of vg,
-add this termporary workaround.
 ---
- lib/format1/format1.c |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ lib/config/config.c  |    2 --
+ libdm/libdm-config.c |    4 +---
+ 2 files changed, 1 insertions(+), 5 deletions(-)
 
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index 2864227..115f8d1 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -217,8 +217,13 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
- 	if (!import_extents(fid->fmt->cmd, vg, &pvs))
- 		goto_bad;
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 8acb87d..ad02f5f 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -67,8 +67,6 @@ struct dm_config_tree *config_file_open(const char *filename, int keep_open)
+ 	cf = dm_pool_zalloc(cft->mem, sizeof(struct config_file));
+ 	if (!cf) goto fail;
  
--	if (!import_snapshots(vg->vgmem, vg, &pvs))
-+	/* FIXME: workaround - temporary assignment of fid */
-+	vg->fid = fid;
-+	if (!import_snapshots(vg->vgmem, vg, &pvs)) {
-+		vg->fid = NULL;
- 		goto_bad;
-+	}
-+	vg->fid = NULL;
+-	cf->timestamp = 0;
+-	cf->exists = 0;
+ 	cf->keep_open = keep_open;
+ 	dm_config_set_custom(cft, cf);
  
- 	/* Fix extents counts by adding missing PV if partial VG */
- 	if ((vg->status & PARTIAL_VG) && !_fix_partial_vg(vg, &pvs))
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index 368f9e3..dfd9174 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -105,10 +105,8 @@ struct dm_config_tree *dm_config_create(void)
+ 		dm_pool_destroy(mem);
+ 		return 0;
+ 	}
+-	cft->root = NULL;
+-	cft->cascade = NULL;
+-	cft->custom = NULL;
+ 	cft->mem = mem;
++
+ 	return cft;
+ }
+ 
 
 
