@@ -1,44 +1,45 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:19 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - config: check for hash success
-Message-ID: <20130605120119.1B35B60E6D@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:03:37 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - WHATS_NEW: bad day
+Message-ID: <20130605120337.10C876116D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba3cee36300d56efcdcb0af883141b1b0a6129a1
-Commit:        ba3cee36300d56efcdcb0af883141b1b0a6129a1
-Parent:        5070ffbca7b16e4139b3da72bdff0c9add517351
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 13:12:58 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 22:56:59 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b3b551a93ed4dc85fc92897ce356baba1ca13a11
+Commit:        b3b551a93ed4dc85fc92897ce356baba1ca13a11
+Parent:        cb0d817fb56792e7d763d97cdf53e7444c447fdf
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu May 16 11:02:18 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu May 16 11:02:38 2013 +0200
 
-config: check for hash success
+WHATS_NEW: bad day
 
-Hash insert may fail.
 ---
- lib/config/config.c |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ WHATS_NEW |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 2c77f30..d1cf590 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -577,7 +577,11 @@ int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_
- 				cmd->cft_def_hash = NULL;
- 				r = 0; goto out;
- 			}
--			dm_hash_insert(cmd->cft_def_hash, vp, def);
-+			if (!dm_hash_insert(cmd->cft_def_hash, vp, def)) {
-+				log_error("Failed to insert configuration to hash.");
-+				r = 0;
-+				goto out;
-+			}
- 		}
- 	}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 528e1c2..c00597e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Refuse to init a snapshot merge in lvconvert if there's no kernel support.
+   Fix exported symbols regex for non-GNU busybox sed.
+   Accept --yes in all commands so test scripts can be simpler.
+   Fix alignment of PV data area if detected alignment less than 1 MB (2.02.74).
+@@ -1368,7 +1369,6 @@ Version 2.02.58 - 14th January 2010
  
+ Version 2.02.57 - 12th January 2010
+ ===================================
+-  Refuse to init a snapshot merge in lvconvert if there's no kernel support.
+   Ensure exactly one process returns from poll_daemon(), never two.
+   Reset _vgs_locked in lvmcache_init() in child after forking.
+   Define {DM, LVM}_UDEV_DISABLE_CHECKING=1 environment variables during tests.
 
 
