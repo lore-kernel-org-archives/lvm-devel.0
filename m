@@ -1,156 +1,95 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:06:01 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - lvmcache: Drop the label->info link.
-Message-ID: <20130605120601.8550860F90@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:06:18 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - metadata: Nuke the exported "pv_read" function.
+Message-ID: <20130605120618.42D7C61057@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8e5d18afd3f182bcfc3025ef2aeecaa9b542cc19
-Commit:        8e5d18afd3f182bcfc3025ef2aeecaa9b542cc19
-Parent:        ec5f5564de0d0e84c1e2359cad06af2477fa4031
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f4d8d73ad316fceafd8246e0cf50af0b802da16f
+Commit:        f4d8d73ad316fceafd8246e0cf50af0b802da16f
+Parent:        021731199790cf90dbf9460c7cadb1ba23a00f28
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Feb 18 22:15:00 2013 +0100
+AuthorDate:    Tue Feb 19 10:57:45 2013 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Jun 5 12:37:36 2013 +0200
+CommitterDate: Wed Jun 5 12:37:37 2013 +0200
 
-lvmcache: Drop the label->info link.
+metadata: Nuke the exported "pv_read" function.
 
 ---
- lib/cache/lvmcache.c          |    7 ++-----
- lib/cache/lvmetad.c           |    2 +-
- lib/format_text/format-text.c |    2 +-
- lib/format_text/text_label.c  |   12 +++++++-----
- lib/label/label.h             |    1 -
- lib/metadata/metadata.c       |    4 ++--
- 6 files changed, 13 insertions(+), 15 deletions(-)
+ lib/metadata/metadata-exported.h |    3 ---
+ lib/metadata/metadata.c          |   36 ------------------------------------
+ 2 files changed, 0 insertions(+), 39 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 1c4da0f..f76e479 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -808,11 +808,10 @@ static struct device *_device_from_pvid(const struct id *pvid,
- 		}
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index cfa5ad8..aa42888 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -438,9 +438,6 @@ int vg_commit(struct volume_group *vg);
+ void vg_revert(struct volume_group *vg);
+ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name,
+ 				      const char *vgid, int warnings, int *consistent);
+-struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
+-				int warnings,
+-				int scan_label_only);
+ struct dm_list *get_pvs(struct cmd_context *cmd);
  
- 		if (label_read(info->label->dev, &label, UINT64_C(0))) {
--			info = (struct lvmcache_info *) label->info;
--			if (id_equal(pvid, (struct id *) &info->label->dev->pvid)) {
-+			if (id_equal(pvid, (struct id *) &label->dev->pvid)) {
- 				if (label_sector)
- 					*label_sector = label->sector;
--				return info->label->dev;
-+				return label->dev;
-                         }
- 		}
- 	}
-@@ -1357,7 +1356,6 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 			return NULL;
- 		}
- 
--		label->info = info;
- 		info->label = label;
- 		dm_list_init(&info->list);
- 		info->label->dev = dev;
-@@ -1418,7 +1416,6 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 			if (!(info->label = label_create(labeller)))
- 				/* FIXME leaves info without label! */
- 				return_NULL;
--			info->label->info = info;
- 			info->label->dev = dev;
- 			lvmcache_del_mdas(info);
- 			lvmcache_del_das(info);
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 7aa8641..069c0ae 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -897,7 +897,7 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
- 		return 1;
- 	}
- 
--	info = (struct lvmcache_info *) label->info;
-+	info = lvmcache_info_from_pvid(dev->pvid, 0);
- 
- 	baton.vg = NULL;
- 	baton.fid = lvmcache_fmt(info)->ops->create_instance(lvmcache_fmt(info),
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 1a16134..c8db5d0 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1455,7 +1455,7 @@ static int _text_pv_read(const struct format_type *fmt, const char *pv_name,
- 		struct label *label;
- 		if (!(label_read(dev, &label, UINT64_C(0))))
- 			return_0;
--		info = label->info;
-+		info = lvmcache_info_from_pvid(dev->pvid, 0);
- 	}
- 
- 	if (!info)
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 3408590..09a3302 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -99,7 +99,7 @@ static int _text_write(struct label *label, void *buf)
- 	strncpy((char *)lh->type, label->type, sizeof(label->type));
- 
- 	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
--	info = (struct lvmcache_info *) label->info;
-+	info = lvmcache_info_from_pvid(label->dev->pvid, 0);
- 	pvhdr->device_size_xl = xlate64(lvmcache_device_size(info));
- 	memcpy(pvhdr->pv_uuid, &lvmcache_device(info)->pvid, sizeof(struct id));
- 	if (!id_write_format((const struct id *)pvhdr->pv_uuid, buffer,
-@@ -439,11 +439,13 @@ out:
- static void _text_destroy_label(struct labeller *l __attribute__((unused)),
- 				struct label *label)
- {
--	struct lvmcache_info *info = (struct lvmcache_info *) label->info;
-+	struct lvmcache_info *info = lvmcache_info_from_pvid(label->dev->pvid, 0);
- 
--	lvmcache_del_mdas(info);
--	lvmcache_del_das(info);
--	lvmcache_del_bas(info);
-+	if (info) {
-+		lvmcache_del_mdas(info);
-+		lvmcache_del_das(info);
-+		lvmcache_del_bas(info);
-+	}
- }
- 
- static void _fmt_text_destroy(struct labeller *l)
-diff --git a/lib/label/label.h b/lib/label/label.h
-index 9a0e07e..c45928a 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -42,7 +42,6 @@ struct label {
- 	char type[8];
- 	uint64_t sector;
- 	struct labeller *labeller;
--	void *info;
- 	struct device *dev;
- 	struct dm_list mdas;	/* list head for metadata areas */
- 	struct dm_list das;	/* list head for data areas */
+ /*
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 2fe795c..31c9eba 100644
+index 7d161c5..e5bce1b 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -3616,7 +3616,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
- 					  pv_name);
- 			return NULL;
- 		}
--		info = (struct lvmcache_info *) label->info;
-+		info = lvmcache_info_from_pvid(label->dev->pvid, 0);
- 	}
+@@ -1318,20 +1318,6 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
+ 	if (!(pv = find_pv_by_name(cmd, name, 1)))
+ 		stack;
  
- 	fmt = lvmcache_fmt(info);
-@@ -3872,7 +3872,7 @@ int pv_analyze(struct cmd_context *cmd, const char *pv_name,
- 	/*
- 	 * Next, loop through metadata areas
- 	 */
--	info = label->info;
-+	info = lvmcache_info_from_pvid(label->dev->pvid, 0);
- 	lvmcache_foreach_mda(info, _analyze_mda, (void *)lvmcache_fmt(info));
+-	/*
+-	 * If a PV has no MDAs it may appear to be an orphan until the
+-	 * metadata is read off another PV in the same VG.  Detecting
+-	 * this means checking every VG by scanning every PV on the
+-	 * system.
+-	 */
+-	if (pv && is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use)) {
+-		free_pv_fid(pv);
+-		if (!scan_vgs_for_pvs(cmd, 0))
+-			return_0;
+-		if (!(pv = pv_read(cmd, name, 0, 0)))
+-			stack;
+-	}
+-
+ 	/* Allow partial & exported VGs to be destroyed. */
+ 	/* We must have -ff to overwrite a non orphan */
+ 	if (pv && !is_orphan(pv) && pp->force != DONT_PROMPT_OVERRIDE) {
+@@ -3582,28 +3568,6 @@ const char *find_vgname_from_pvname(struct cmd_context *cmd,
+ 	return find_vgname_from_pvid(cmd, pvid);
+ }
  
- 	return 1;
+-/**
+- * pv_read - read and return a handle to a physical volume
+- * @cmd: LVM command initiating the pv_read
+- * @pv_name: full device name of the PV, including the path
+- * @mdas: list of metadata areas of the PV
+- * @label_sector: sector number where the PV label is stored on @pv_name
+- * @warnings:
+- *
+- * Returns:
+- *   PV handle - valid pv_name and successful read of the PV, or
+- *   NULL - invalid parameter or error in reading the PV
+- *
+- * Note:
+- *   FIXME - liblvm todo - make into function that returns handle
+- */
+-struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
+-				int warnings,
+-				int scan_label_only)
+-{
+-	return _pv_read(cmd, cmd->mem, pv_name, NULL, warnings, scan_label_only);
+-}
+-
+ /* FIXME Use label functions instead of PV functions */
+ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 					struct dm_pool *pvmem,
 
 
