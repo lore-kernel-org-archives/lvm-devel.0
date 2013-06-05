@@ -1,157 +1,137 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:38 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - report: show dmeventd monitoring status
-Message-ID: <20130605120238.935C6613BE@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:40 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - report: show active state of LV
+Message-ID: <20130605120240.A9136613BE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8b18ab76d27f40094f281d5695a6bb82b65e1976
-Commit:        8b18ab76d27f40094f281d5695a6bb82b65e1976
-Parent:        3f7de58e96a2ba84bf2590465ee9f5f7929cb74d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8d004b51274b2d7638673c4985c0c298d253ef0d
+Commit:        8d004b51274b2d7638673c4985c0c298d253ef0d
+Parent:        8b18ab76d27f40094f281d5695a6bb82b65e1976
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 25 12:07:57 2013 +0200
+AuthorDate:    Thu Apr 25 12:12:05 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Apr 25 17:33:24 2013 +0200
 
-report: show dmeventd monitoring status
+report: show active state of LV
 
-Add new lvs segment field 'Monitor' showing 3 states:
+For non clustered VG - show  "active"/""
 
-"monitored" - LV is monitored by dmeventd.
+For clustered VG its more complex:
 
-"not monitored" - LV is currently not being monitored by dmeventd
-
-"" (empty) - LV does not support monitoring, or dmeventd support
-             is not compiled in.
+"local exclusive"
+"remote exclusive"
+"locally"
+"remotely"
 ---
  WHATS_NEW               |    1 +
- lib/metadata/lv.c       |   34 ++++++++++++++++++++++++++++++++++
+ lib/metadata/lv.c       |   19 +++++++++++++++++++
  lib/metadata/lv.h       |    1 +
  lib/report/columns.h    |    1 +
  lib/report/properties.c |    2 ++
  lib/report/report.c     |   14 ++++++++++++++
- 6 files changed, 53 insertions(+), 0 deletions(-)
+ 6 files changed, 38 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 27ebcec..a625dba 100644
+index a625dba..bad183c 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Add "monitor" segment reporting field to show dmevent monitoring status.
++  Add "active" LV reporting field to show activation state.
+   Add "monitor" segment reporting field to show dmevent monitoring status.
    Document lvextend --use-policies option in man.
    Fix creation and removal of clustered snapshot.
-   Fix clvmd caching of metadata when suspending inactive volumes.
 diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 6afa468..e515e02 100644
+index e515e02..3dbdb38 100644
 --- a/lib/metadata/lv.c
 +++ b/lib/metadata/lv.c
-@@ -128,6 +128,40 @@ char *lvseg_discards_dup(struct dm_pool *mem, const struct lv_segment *seg)
- 	return  dm_pool_strdup(mem, get_pool_discards_name(seg->discards));
+@@ -703,3 +703,22 @@ char *lv_host_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ {
+ 	return dm_pool_strdup(mem, lv->hostname ? : "");
  }
- 
-+#ifdef DMEVENTD
-+#  include "libdevmapper-event.h"
-+#endif
-+char *lvseg_monitor_dup(struct dm_pool *mem, const struct lv_segment *seg)
++
++char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv)
 +{
-+	const char *s = "";
++	const char *s;
 +
-+#ifdef DMEVENTD
-+	struct lvinfo info;
-+	int pending = 0, monitored;
-+	struct lv_segment *segm = (struct lv_segment *) seg;
++	if (!lv_is_active(lv))
++		s = ""; /* not active */
++	else if (!vg_is_clustered(lv->vg))
++		s = "active";
++	else if (lv_is_active_exclusive(lv))
++		/* exclusive cluster activation */
++		s = lv_is_active_exclusive_locally(lv) ?
++			"local exclusive" : "remote exclusive";
++	else /* locally active */
++		s = lv_is_active_but_not_locally(lv) ?
++		     "remotely" : "locally";
 +
-+	if (lv_is_cow(seg->lv) && !lv_is_merging_cow(seg->lv))
-+		segm = first_seg(seg->lv->snapshot->lv);
-+	else if (seg->log_lv)
-+		segm = first_seg(seg->log_lv);
-+
-+	// log_debug("Query LV:%s mon:%s segm:%s tgtm:%p  segmon:%d statusm:%d", seg->lv->name, segm->lv->name, segm->segtype->name, segm->segtype->ops->target_monitored, seg_monitored(segm), (int)(segm->status & PVMOVE));
-+	if (!segm->segtype->ops->target_monitored)
-+		/* Nothing to do, monitoring not supported */;
-+	else if (!seg_monitored(segm) || (segm->status & PVMOVE))
-+		s = "not monitored";
-+	else if (lv_info(seg->lv->vg->cmd, seg->lv, 1, &info, 0, 0) && info.exists) {
-+		monitored = segm->segtype->ops->
-+			target_monitored((struct lv_segment*)segm, &pending);
-+		if (pending)
-+			s = "pending";
-+		else
-+			s = (monitored) ? "monitored" : "not monitored";
-+	} // else log_debug("Not active");
-+#endif
 +	return dm_pool_strdup(mem, s);
 +}
-+
- uint64_t lvseg_chunksize(const struct lv_segment *seg)
- {
- 	uint64_t size;
 diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 03255fb..7652cd4 100644
+index 7652cd4..9450f8d 100644
 --- a/lib/metadata/lv.h
 +++ b/lib/metadata/lv.h
-@@ -76,6 +76,7 @@ uint64_t lvseg_size(const struct lv_segment *seg);
- uint64_t lvseg_chunksize(const struct lv_segment *seg);
- char *lvseg_segtype_dup(struct dm_pool *mem, const struct lv_segment *seg);
- char *lvseg_discards_dup(struct dm_pool *mem, const struct lv_segment *seg);
-+char *lvseg_monitor_dup(struct dm_pool *mem, const struct lv_segment *seg);
- char *lvseg_tags_dup(const struct lv_segment *seg);
- char *lvseg_devices(struct dm_pool *mem, const struct lv_segment *seg);
- char *lvseg_seg_pe_ranges(struct dm_pool *mem, const struct lv_segment *seg);
+@@ -85,4 +85,5 @@ char *lv_host_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ int lv_set_creation(struct logical_volume *lv,
+ 		    const char *hostname, uint64_t timestamp);
+ const char *lv_layer(const struct logical_volume *lv);
++char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ #endif /* _LVM_LV_H */
 diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 42858f1..07c9b7b 100644
+index 07c9b7b..e73d20d 100644
 --- a/lib/report/columns.h
 +++ b/lib/report/columns.h
-@@ -155,6 +155,7 @@ FIELD(SEGS, seg, NUM, "SSize", list, 5, segsize, seg_size, "Size of segment in c
- FIELD(SEGS, seg, STR, "Seg Tags", tags, 8, tags, seg_tags, "Tags, if any.", 0)
- FIELD(SEGS, seg, STR, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format.", 0)
- FIELD(SEGS, seg, STR, "Devices", list, 7, devices, devices, "Underlying devices used with starting extent numbers.", 0)
-+FIELD(SEGS, seg, STR, "Monitor", list, 7, segmonitor, monitor, "Dmeventd monitoring status of the segment.", 0)
- 
- FIELD(PVSEGS, pvseg, NUM, "Start", pe, 5, uint32, pvseg_start, "Physical Extent number of start of segment.", 0)
- FIELD(PVSEGS, pvseg, NUM, "SSize", len, 5, uint32, pvseg_size, "Number of extents in segment.", 0)
+@@ -82,6 +82,7 @@ FIELD(LVS, lv, NUM, "Cpy%Sync", lvid, 8, copypercent, copy_percent, "For RAID, m
+ FIELD(LVS, lv, NUM, "Cpy%Sync", lvid, 8, copypercent, sync_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
+ FIELD(LVS, lv, NUM, "Mismatches", lvid, 10, mismatch_count, mismatches, "For RAID, number of mismatches found or repaired.", 0)
+ FIELD(LVS, lv, STR, "SyncAction", lvid, 10, sync_action, syncaction, "For RAID, the current synchronization action being performed.", 0)
++FIELD(LVS, lv, STR, "Active", lvid, 6, lvactive, lv_active, "Active state of the LV.", 0)
+ FIELD(LVS, lv, NUM, "WBehind", lvid, 7, write_behind, writebehind, "For RAID1, the number of outstanding writes allowed to writemostly devices.", 0)
+ FIELD(LVS, lv, STR, "Move", lvid, 4, movepv, move_pv, "For pvmove, Source PV of temporary LV created by pvmove.", 0)
+ FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
 diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 71b3cb1..6f0d980 100644
+index 6f0d980..03ebc6f 100644
 --- a/lib/report/properties.c
 +++ b/lib/report/properties.c
-@@ -332,6 +332,8 @@ GET_LVSEG_STR_PROPERTY_FN(seg_pe_ranges,
- #define _seg_pe_ranges_set _not_implemented_set
- GET_LVSEG_STR_PROPERTY_FN(devices, lvseg_devices(lvseg->lv->vg->vgmem, lvseg))
- #define _devices_set _not_implemented_set
-+GET_LVSEG_STR_PROPERTY_FN(monitor, lvseg_monitor_dup(lvseg->lv->vg->vgmem, lvseg))
-+#define _monitor_set _not_implemented_set
+@@ -247,6 +247,8 @@ GET_LV_STR_PROPERTY_FN(lv_time, lv_time_dup(lv->vg->vgmem, lv))
+ #define _lv_time_set _not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_host, lv_host_dup(lv->vg->vgmem, lv))
+ #define _lv_host_set _not_implemented_set
++GET_LV_STR_PROPERTY_FN(lv_active, lv_active_dup(lv->vg->vgmem, lv))
++#define _lv_active_set _not_implemented_set
  
- 
- /* PVSEG */
+ /* VG */
+ GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt_dup(vg))
 diff --git a/lib/report/report.c b/lib/report/report.c
-index 8578ff7..9ef2687 100644
+index 9ef2687..27c9708 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -489,6 +489,20 @@ static int _vgsize_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return _size64_disp(rh, mem, field, &size, private);
+@@ -1151,6 +1151,20 @@ static int _lvhost_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return 1;
  }
  
-+static int _segmonitor_disp(struct dm_report *rh, struct dm_pool *mem,
-+			    struct dm_report_field *field,
-+			    const void *data, void *private)
++static int _lvactive_disp(struct dm_report *rh, struct dm_pool *mem,
++			     struct dm_report_field *field,
++			     const void *data, void *private)
 +{
-+	char *str;
++	char *repstr;
 +
-+	if (!(str = lvseg_monitor_dup(mem, (const struct lv_segment *)data)))
++	if (!(repstr = lv_active_dup(mem, (const struct logical_volume *) data)))
 +		return_0;
 +
-+	dm_report_field_set_value(field, str, NULL);
++	dm_report_field_set_value(field, repstr, NULL);
 +
 +	return 1;
 +}
 +
- static int _segstart_disp(struct dm_report *rh, struct dm_pool *mem,
- 			  struct dm_report_field *field,
- 			  const void *data, void *private)
+ /* Report object types */
+ 
+ /* necessary for displaying something for PVs not belonging to VG */
 
 
