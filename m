@@ -1,53 +1,63 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:52 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - cleanup: drop unused assignment
-Message-ID: <20130605120152.B0F43613B0@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:54 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - cleanup: explicit check for nonnull pointer
+Message-ID: <20130605120154.C3ECB613B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd4fdce16c82225f7b8fce0b5ce294d8f3d2e4d6
-Commit:        dd4fdce16c82225f7b8fce0b5ce294d8f3d2e4d6
-Parent:        1951798d7225dce35baa7689a308998f27379b6f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dfca5dac9ca3ed0ca186b9d79d6b2cacedc4ea37
+Commit:        dfca5dac9ca3ed0ca186b9d79d6b2cacedc4ea37
+Parent:        dd4fdce16c82225f7b8fce0b5ce294d8f3d2e4d6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 21:09:28 2013 +0200
+AuthorDate:    Fri Apr 19 21:10:19 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:14:04 2013 +0200
+CommitterDate: Sun Apr 21 23:14:05 2013 +0200
 
-cleanup: drop unused assignment
+cleanup: explicit check for nonnull pointer
 
-Assigned values are unused.
+Since execvp requires nonnull args - add explicit check.
 ---
- lib/activate/dev_manager.c |    2 +-
- lib/metadata/raid_manip.c  |    1 -
- 2 files changed, 1 insertions(+), 2 deletions(-)
+ lib/misc/lvm-exec.c |    4 ++--
+ tools/lvmcmdline.c  |    2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 00c0126..150bb35 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1610,7 +1610,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	uint32_t s;
- 	struct seg_list *sl;
- 	struct dm_list *snh;
--	struct lv_segment *seg = first_seg(lv);
-+	struct lv_segment *seg;
- 	struct dm_tree_node *thin_node;
- 	const char *uuid;
+diff --git a/lib/misc/lvm-exec.c b/lib/misc/lvm-exec.c
+index 4b74a41..1b69635 100644
+--- a/lib/misc/lvm-exec.c
++++ b/lib/misc/lvm-exec.c
+@@ -54,7 +54,6 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
+ 	int status;
+ 	char buf[PATH_MAX * 2];
  
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 707db1f..c0d38d8 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -403,7 +403,6 @@ static int _alloc_image_component(struct logical_volume *lv,
+-
+ 	if (rstatus)
+ 		*rstatus = -1;
+ 
+@@ -76,7 +75,8 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
+ 		/* FIXME Fix effect of reset_locking on cache then include this */
+ 		/* destroy_toolcontext(cmd); */
+ 		/* FIXME Use execve directly */
+-		execvp(argv[0], (char **) argv);
++		if (argv[0])
++			execvp(argv[0], (char **) argv);
+ 		log_sys_error("execvp", argv[0]);
+ 		_exit(errno);
  	}
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index c69d20d..60aa4d9 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1499,7 +1499,7 @@ int lvm2_main(int argc, char **argv)
+ 		return -1;
  
- 	if (!ah) {
--		first_area = 0;
- 		log_error(INTERNAL_ERROR
- 			  "Stand-alone %s area allocation not implemented",
- 			  (type == RAID_META) ? "metadata" : "data");
+ 	if (is_static() && strcmp(base, "lvm.static") &&
+-	    path_exists(LVM_SHARED_PATH) &&
++	    path_exists(LVM_SHARED_PATH) && argv &&
+ 	    !getenv("LVM_DID_EXEC")) {
+ 		if (setenv("LVM_DID_EXEC", base, 1))
+ 			log_sys_error("setenv", "LVM_DID_EXEC");
 
 
