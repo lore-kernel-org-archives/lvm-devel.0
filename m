@@ -1,121 +1,70 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:10 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - clmvd: fix responce status
-Message-ID: <20130605120110.B670360F33@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:17 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - config: merge timestamps
+Message-ID: <20130605120217.AFFCE60D1B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9d8d22224f5516f364bd66ce41aa506a39801a6
-Commit:        c9d8d22224f5516f364bd66ce41aa506a39801a6
-Parent:        764195207d4773cf6f1674a2fb16e9a0acda304a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45eeb70b02df0f196ccd851c23c42fc29d6efb39
+Commit:        45eeb70b02df0f196ccd851c23c42fc29d6efb39
+Parent:        2925023411ff9c7a32fa7660617c94a9d9dcd653
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 21:11:32 2013 +0200
+AuthorDate:    Tue Apr 23 12:24:17 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 22:54:42 2013 +0200
+CommitterDate: Tue Apr 23 12:31:16 2013 +0200
 
-clmvd: fix responce status
+config: merge timestamps
 
-Failing status code is expected to be 0.
-Also do not return '*response' as pointer which has been already free().
+Merging multiple config files together needs to know newest (highest)
+timestamp of merged files. Persistent cache file is being used
+only in case, the config file is older then .cache file.
 ---
- WHATS_NEW                     |    1 +
- daemons/clvmd/refresh_clvmd.c |   15 ++++++---------
- lib/locking/cluster_locking.c |   10 ++++------
- 3 files changed, 11 insertions(+), 15 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/config/config.c |   11 +++++++++++
+ 2 files changed, 12 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 76347e9..95b6e13 100644
+index c1324de..4139557 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Fix clvmd _cluster_request() return code in memory fail path.
-   Add writemostly/writebehind support for RAID1
-   Add lv_change_activate() for common activation code in vg/lvchange.
-   Revert change that allowed identical table reload for RAID.
-diff --git a/daemons/clvmd/refresh_clvmd.c b/daemons/clvmd/refresh_clvmd.c
-index 28b5625..42c3958 100644
---- a/daemons/clvmd/refresh_clvmd.c
-+++ b/daemons/clvmd/refresh_clvmd.c
-@@ -225,16 +225,14 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
- 	 * With an extra pair of INTs on the front to sanity
- 	 * check the pointer when we are given it back to free
- 	 */
--	*response = dm_malloc(sizeof(lvm_response_t) * num_responses +
--			    sizeof(int) * 2);
--	if (!*response) {
-+	*response = NULL;
-+	if (!(rarray = dm_malloc(sizeof(lvm_response_t) * num_responses +
-+				 sizeof(int) * 2))) {
- 		errno = ENOMEM;
- 		status = 0;
- 		goto out;
++  Find newest timestamp of merged config files.
+   Fix assignment order for vg fid for lvm1 and pool format.
+   Fix memleak in dmeventd thin plugin in device list obtaining err path.
+   Add explicit message about unsupported pvmove for thin/thinpool volumes.
+diff --git a/lib/config/config.c b/lib/config/config.c
+index e999fc6..0af57d5 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -768,6 +768,7 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
+ 	struct dm_config_node *root = cft->root;
+ 	struct dm_config_node *cn, *nextn, *oldn, *cn2;
+ 	const struct dm_config_node *tn;
++	struct config_file *cf, *cfn;
+ 
+ 	for (cn = newdata->root; cn; cn = nextn) {
+ 		nextn = cn->sib;
+@@ -797,6 +798,16 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
+ 		_merge_section(oldn, cn);
  	}
  
--	rarray = *response;
--
- 	/* Unpack the response into an lvm_response_t array */
- 	inptr = head->args;
- 	i = 0;
-@@ -251,9 +249,9 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
- 			int j;
- 			for (j = 0; j < i; j++)
- 				dm_free(rarray[i].response);
--			free(*response);
-+			dm_free(rarray);
- 			errno = ENOMEM;
--			status = -1;
-+			status = 0;
- 			goto out;
- 		}
- 
-@@ -266,8 +264,7 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
- 	*response = rarray;
- 
-       out:
--	if (retbuf)
--		dm_free(retbuf);
-+	dm_free(retbuf);
- 
- 	return status;
++	/*
++	 * Persistent filter loading is based on timestamp,
++	 * so we need to know the newest timestamp to make right decision
++	 * whether the .cache isn't older then any of configs
++	 */
++	if ((cf = dm_config_get_custom(cft)) &&
++	    (cfn = dm_config_get_custom(newdata)) &&
++	    cf->timestamp < cfn->timestamp)
++		cf->timestamp = cfn->timestamp;
++
+ 	return 1;
  }
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index 01a47b0..3169f0d 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -241,15 +241,13 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
- 	 * With an extra pair of INTs on the front to sanity
- 	 * check the pointer when we are given it back to free
- 	 */
--	*response = dm_malloc(sizeof(lvm_response_t) * num_responses);
--	if (!*response) {
-+	*response = NULL;
-+	if (!(rarray = dm_malloc(sizeof(lvm_response_t) * num_responses))) {
- 		errno = ENOMEM;
- 		status = 0;
- 		goto out;
- 	}
- 
--	rarray = *response;
--
- 	/* Unpack the response into an lvm_response_t array */
- 	inptr = head->args;
- 	i = 0;
-@@ -266,9 +264,9 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
- 			int j;
- 			for (j = 0; j < i; j++)
- 				dm_free(rarray[i].response);
--			free(*response);
-+			dm_free(rarray);
- 			errno = ENOMEM;
--			status = -1;
-+			status = 0;
- 			goto out;
- 		}
  
 
 
