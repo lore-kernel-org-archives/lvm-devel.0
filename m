@@ -1,41 +1,42 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:03 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - cleanup: add printf attribute
-Message-ID: <20130605120203.21642613B0@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:05 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - cleanup: use proper activation_change_t
+Message-ID: <20130605120205.32466613B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=855175fa261c2c5de0e030615e2f274344e2d129
-Commit:        855175fa261c2c5de0e030615e2f274344e2d129
-Parent:        d38af2857fe86a5e0916d67aee7597e5a0dea6c8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a751ad703c8082aaf96c53fc1e76bd8fc607235
+Commit:        5a751ad703c8082aaf96c53fc1e76bd8fc607235
+Parent:        855175fa261c2c5de0e030615e2f274344e2d129
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Apr 20 20:56:07 2013 +0200
+AuthorDate:    Sun Apr 21 12:49:58 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:14:05 2013 +0200
+CommitterDate: Sun Apr 21 23:14:57 2013 +0200
 
-cleanup: add printf attribute
+cleanup: use proper activation_change_t
 
-Add gcc attribute for printf for daemon_logf().
 ---
- libdaemon/server/daemon-server.h |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ tools/lvchange.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/libdaemon/server/daemon-server.h b/libdaemon/server/daemon-server.h
-index f184853..eb6df43 100644
---- a/libdaemon/server/daemon-server.h
-+++ b/libdaemon/server/daemon-server.h
-@@ -140,7 +140,8 @@ void daemon_log_cft(log_state *s, int type, const char *prefix,
- void daemon_log_multi(log_state *s, int type, const char *prefix, const char *message);
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 7b0a517..cc3e96b 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -212,9 +212,9 @@ static int lvchange_background_polling(struct cmd_context *cmd,
  
- /* Log a formatted message as "type". See also daemon-log.h. */
--void daemon_logf(log_state *s, int type, const char *format, ...);
-+void daemon_logf(log_state *s, int type, const char *format, ...)
-+	__attribute__ ((format(printf, 3, 4)));
+ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv)
+ {
+-	int activate;
++	activation_change_t activate;
  
- /*
-  * Configure log_state to send messages of type "type" to the log outlet
+-	activate = arg_uint_value(cmd, activate_ARG, 0);
++	activate = (activation_change_t) arg_uint_value(cmd, activate_ARG, CHANGE_AY);
+ 
+ 	if (lv_is_cow(lv) && !lv_is_virtual_origin(origin_from_cow(lv)))
+ 		lv = origin_from_cow(lv);
 
 
