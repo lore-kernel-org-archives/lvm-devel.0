@@ -1,59 +1,83 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:00 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - Revert "cleanup: simplify option matching function"
-Message-ID: <20130605120100.43B5A6140D@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:02 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - libdaemon: Print a diagnostic when we fail to lock the pidfile.
+Message-ID: <20130605120102.592F26140D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9495a3d807b890f7a639e5761b2b37ba495b5d9b
-Commit:        9495a3d807b890f7a639e5761b2b37ba495b5d9b
-Parent:        c363c74a251a5745e8ac6e274d1f7a1e32fa1843
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Apr 13 02:26:37 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Apr 13 02:26:37 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dce8d06af7e5a14a1507bea0e64e6cc27556cbc7
+Commit:        dce8d06af7e5a14a1507bea0e64e6cc27556cbc7
+Parent:        9495a3d807b890f7a639e5761b2b37ba495b5d9b
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Apr 15 09:43:30 2013 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Mon Apr 15 16:07:07 2013 +0200
 
-Revert "cleanup: simplify option matching function"
+libdaemon: Print a diagnostic when we fail to lock the pidfile.
 
-This reverts commit 0396ade38b88431d959ce02fac689306a2c47786.
-
-The original code also handled len==1, which the new code doesn't.
-Press <TAB> in the lvm shell to get a list of the possible
-flag completions for a single hyphen.
 ---
- tools/lvm.c |   17 ++++++++++++-----
- 1 files changed, 12 insertions(+), 5 deletions(-)
+ libdaemon/server/daemon-server.c |   18 +++++++++++++-----
+ 1 files changed, 13 insertions(+), 5 deletions(-)
 
-diff --git a/tools/lvm.c b/tools/lvm.c
-index 9b66516..ebce811 100644
---- a/tools/lvm.c
-+++ b/tools/lvm.c
-@@ -91,11 +91,18 @@ static char *_list_args(const char *text, int state)
- 		return NULL;
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 735a0ea..1db7ca7 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -52,6 +52,8 @@ static void _exit_handler(int sig __attribute__((unused)))
+ 	_shutdown_requested = 1;
+ }
  
- 	/* Short form arguments */
--	if (len == 2 && text[0] == '-') {
--		while (match_no < com->num_args)
--			if (text[1] == (_cmdline->arg_props +
--					com->valid_args[match_no++])->short_arg)
--				return strdup(text);
-+	if (len < 3) {
-+		while (match_no < com->num_args) {
-+			char s[3];
-+			char c;
-+			if (!(c = (_cmdline->arg_props +
-+				   com->valid_args[match_no++])->short_arg))
-+				continue;
++#define EXIT_ALREADYRUNNING 13
 +
-+			sprintf(s, "-%c", c);
-+			if (!strncmp(text, s, len))
-+				return strdup(s);
+ #ifdef linux
+ 
+ #include <stddef.h>
+@@ -261,7 +263,7 @@ static void remove_lockfile(const char *file)
+ 		perror("unlink failed");
+ }
+ 
+-static void _daemonise(void)
++static void _daemonise(daemon_state s)
+ {
+ 	int child_status;
+ 	int fd;
+@@ -296,8 +298,14 @@ static void _daemonise(void)
+ 		if (_shutdown_requested) /* Child has signaled it is ok - we can exit now */
+ 			exit(0);
+ 
+-		/* Problem with child.  Determine what it is by exit code */
+-		fprintf(stderr, "Child exited with code %d\n", WEXITSTATUS(child_status));
++		switch (WEXITSTATUS(child_status)) {
++		case EXIT_ALREADYRUNNING:
++			fprintf(stderr, "Failed to acquire lock on %s. Already running?\n", s.pidfile);
++			break;
++		default:
++			/* Problem with child.  Determine what it is by exit code */
++			fprintf(stderr, "Child exited with code %d\n", WEXITSTATUS(child_status));
 +		}
+ 		exit(WEXITSTATUS(child_status));
  	}
  
- 	/* Long form arguments */
+@@ -464,7 +472,7 @@ void daemon_start(daemon_state s)
+ #endif
+ 
+ 	if (!s.foreground)
+-		_daemonise();
++		_daemonise(s);
+ 
+ 	s.log = &_log;
+ 	s.log->name = s.name;
+@@ -481,7 +489,7 @@ void daemon_start(daemon_state s)
+ 		 * after this point.
+ 		 */
+ 		if (dm_create_lockfile(s.pidfile) == 0)
+-			exit(1);
++			exit(EXIT_ALREADYRUNNING);
+ 
+ 		(void) dm_prepare_selinux_context(NULL, 0);
+ 	}
 
 
