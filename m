@@ -1,81 +1,121 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:15 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - cleanup: improve messages
-Message-ID: <20130605120215.9D31060D1B@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:10 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - clmvd: fix responce status
+Message-ID: <20130605120110.B670360F33@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2925023411ff9c7a32fa7660617c94a9d9dcd653
-Commit:        2925023411ff9c7a32fa7660617c94a9d9dcd653
-Parent:        35ab841ecff4a887e70b54b1afb01dd42a4e9cd6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9d8d22224f5516f364bd66ce41aa506a39801a6
+Commit:        c9d8d22224f5516f364bd66ce41aa506a39801a6
+Parent:        764195207d4773cf6f1674a2fb16e9a0acda304a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 23 11:58:50 2013 +0200
+AuthorDate:    Fri Apr 19 21:11:32 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 23 12:27:33 2013 +0200
+CommitterDate: Sun Apr 21 22:54:42 2013 +0200
 
-cleanup: improve messages
+clmvd: fix responce status
 
-Add verbose message when we will not obtain devices from udev
-(i.e. testing is using different udev dir, and the log was
-giving misleading info about using udev)
-
-Add proper error message if zalloc from pull would have failed.
-
-Fix typo obolete -> obsolete
+Failing status code is expected to be 0.
+Also do not return '*response' as pointer which has been already free().
 ---
- lib/commands/toolcontext.c      |    3 +++
- lib/config/config.c             |    6 ++++--
- lib/filters/filter-persistent.c |    4 ++--
- 3 files changed, 9 insertions(+), 4 deletions(-)
+ WHATS_NEW                     |    1 +
+ daemons/clvmd/refresh_clvmd.c |   15 ++++++---------
+ lib/locking/cluster_locking.c |   10 ++++------
+ 3 files changed, 11 insertions(+), 15 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index c42a0bf..8f06285 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -777,6 +777,9 @@ static int _init_dev_cache(struct cmd_context *cmd)
- 					udev_dir_len != len;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 76347e9..95b6e13 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix clvmd _cluster_request() return code in memory fail path.
+   Add writemostly/writebehind support for RAID1
+   Add lv_change_activate() for common activation code in vg/lvchange.
+   Revert change that allowed identical table reload for RAID.
+diff --git a/daemons/clvmd/refresh_clvmd.c b/daemons/clvmd/refresh_clvmd.c
+index 28b5625..42c3958 100644
+--- a/daemons/clvmd/refresh_clvmd.c
++++ b/daemons/clvmd/refresh_clvmd.c
+@@ -225,16 +225,14 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
+ 	 * With an extra pair of INTs on the front to sanity
+ 	 * check the pointer when we are given it back to free
+ 	 */
+-	*response = dm_malloc(sizeof(lvm_response_t) * num_responses +
+-			    sizeof(int) * 2);
+-	if (!*response) {
++	*response = NULL;
++	if (!(rarray = dm_malloc(sizeof(lvm_response_t) * num_responses +
++				 sizeof(int) * 2))) {
+ 		errno = ENOMEM;
+ 		status = 0;
+ 		goto out;
+ 	}
  
- 			if (len_diff || strncmp(DM_UDEV_DEV_DIR, cv->v.str, len)) {
-+				log_very_verbose("Non standard udev dir %s, resetting "
-+						 "devices/obtain_device_list_from_udev.",
-+						 cv->v.str);
- 				device_list_from_udev = 0;
- 				init_obtain_device_list_from_udev(0);
- 			}
-diff --git a/lib/config/config.c b/lib/config/config.c
-index ad02f5f..e999fc6 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -64,8 +64,10 @@ struct dm_config_tree *config_file_open(const char *filename, int keep_open)
- 	if (!cft)
- 		return NULL;
+-	rarray = *response;
+-
+ 	/* Unpack the response into an lvm_response_t array */
+ 	inptr = head->args;
+ 	i = 0;
+@@ -251,9 +249,9 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
+ 			int j;
+ 			for (j = 0; j < i; j++)
+ 				dm_free(rarray[i].response);
+-			free(*response);
++			dm_free(rarray);
+ 			errno = ENOMEM;
+-			status = -1;
++			status = 0;
+ 			goto out;
+ 		}
  
--	cf = dm_pool_zalloc(cft->mem, sizeof(struct config_file));
--	if (!cf) goto fail;
-+	if (!(cf = dm_pool_zalloc(cft->mem, sizeof(struct config_file)))) {
-+		log_error("Failed to allocate condig tree.");
-+		goto fail;
-+	}
+@@ -266,8 +264,7 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
+ 	*response = rarray;
  
- 	cf->keep_open = keep_open;
- 	dm_config_set_custom(cft, cf);
-diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
-index bec396b..0d53fce 100644
---- a/lib/filters/filter-persistent.c
-+++ b/lib/filters/filter-persistent.c
-@@ -103,8 +103,8 @@ int persistent_filter_load(struct dev_filter *f, struct dm_config_tree **cft_out
+       out:
+-	if (retbuf)
+-		dm_free(retbuf);
++	dm_free(retbuf);
  
- 	if (obtain_device_list_from_udev()) {
- 		if (!stat(pf->file, &info)) {
--			log_very_verbose("Obtaining device list from "
--					 "udev. Removing obolete %s.",
-+			log_very_verbose("Obtaining device list from udev. "
-+					 "Removing obsolete %s.",
- 					 pf->file);
- 			if (unlink(pf->file) < 0 && errno != EROFS)
- 				log_sys_error("unlink", pf->file);
+ 	return status;
+ }
+diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
+index 01a47b0..3169f0d 100644
+--- a/lib/locking/cluster_locking.c
++++ b/lib/locking/cluster_locking.c
+@@ -241,15 +241,13 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
+ 	 * With an extra pair of INTs on the front to sanity
+ 	 * check the pointer when we are given it back to free
+ 	 */
+-	*response = dm_malloc(sizeof(lvm_response_t) * num_responses);
+-	if (!*response) {
++	*response = NULL;
++	if (!(rarray = dm_malloc(sizeof(lvm_response_t) * num_responses))) {
+ 		errno = ENOMEM;
+ 		status = 0;
+ 		goto out;
+ 	}
+ 
+-	rarray = *response;
+-
+ 	/* Unpack the response into an lvm_response_t array */
+ 	inptr = head->args;
+ 	i = 0;
+@@ -266,9 +264,9 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
+ 			int j;
+ 			for (j = 0; j < i; j++)
+ 				dm_free(rarray[i].response);
+-			free(*response);
++			dm_free(rarray);
+ 			errno = ENOMEM;
+-			status = -1;
++			status = 0;
+ 			goto out;
+ 		}
+ 
 
 
