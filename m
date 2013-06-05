@@ -1,89 +1,53 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:08 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - udev: also autoactivate on coldplug
-Message-ID: <20130605120108.9AED76140D@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:52 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - cleanup: drop unused assignment
+Message-ID: <20130605120152.B0F43613B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=764195207d4773cf6f1674a2fb16e9a0acda304a
-Commit:        764195207d4773cf6f1674a2fb16e9a0acda304a
-Parent:        2ccb9eb861c3b65ffc1aac024425e2cc10950077
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Apr 19 12:17:53 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Apr 19 12:43:36 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd4fdce16c82225f7b8fce0b5ce294d8f3d2e4d6
+Commit:        dd4fdce16c82225f7b8fce0b5ce294d8f3d2e4d6
+Parent:        1951798d7225dce35baa7689a308998f27379b6f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Apr 19 21:09:28 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sun Apr 21 23:14:04 2013 +0200
 
-udev: also autoactivate on coldplug
+cleanup: drop unused assignment
 
-Commit 756bcabbfe297688ba240a880bc2b55265ad33f0 fixed autoactivation
-to not trigger on each uevent for a PV that appeared in the system
-most notably the events that are triggered artificially (udevadm
-trigger or as the result of the WATCH udev rule being applied that
-consequently generates CHANGE uevents). This fixed a situation in
-which VGs/LVs were activated when they should not.
-
-BUT we still need to care about the coldplug used at boot to
-retrigger the ADD events - the "udevadm trigger --action=add"!
-
-For non-DM-based PVs, this is already covered as for these we
-run the autoactivation on ADD event only.
-
-However, for DM-based PVs, we still need to run the
-autoactivation even for the artificial ADD event, reusing
-the udev DB content from previous proper CHANGE event that
-came with the DM device activation.
-
-Simply, this patch fixes a situation in which we run extra
-"udevadm trigger --action=add" (or echo add > /sys/block/<dev>/uevent)
-for DM-based PVs (cryptsetup devices, multipath devices, any
-other DM devices...).
-
-Without this patch, while using lvmetad + autoactivation,
-any VG/LV that has a DM-based PV and for which we do not
-call the activation directly, the VG/LV is not activated.
-
-For example a VG with an LV with root FS on it which is directly
-activated in initrd and then missing activation of the rest
-of the LVs in the VG because of unhandled uevent retrigger on
-boot after switching to root FS (the "coldplug").
-
-(No WHATS_NEW here as this fixes the commit mentioned
-above and which was not released yet.)
+Assigned values are unused.
 ---
- udev/10-dm.rules.in           |    5 ++++-
- udev/69-dm-lvm-metad.rules.in |    1 +
- 2 files changed, 5 insertions(+), 1 deletions(-)
+ lib/activate/dev_manager.c |    2 +-
+ lib/metadata/raid_manip.c  |    1 -
+ 2 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
-index cfee145..512d156 100644
---- a/udev/10-dm.rules.in
-+++ b/udev/10-dm.rules.in
-@@ -77,7 +77,10 @@ LABEL="dm_flags_done"
- # before (e.g. in initrd). If udev is used in initrd, we require the udev init
- # script to not remove the existing udev database so we can reuse the information
- # stored at the time of device activation in the initrd.
--ACTION=="add", ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1", GOTO="dm_disable"
-+ACTION!="add", GOTO="dm_no_coldplug"
-+ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1", GOTO="dm_disable"
-+ENV{DM_ACTIVATION}="1"
-+LABEL="dm_no_coldplug"
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 00c0126..150bb35 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1610,7 +1610,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 	uint32_t s;
+ 	struct seg_list *sl;
+ 	struct dm_list *snh;
+-	struct lv_segment *seg = first_seg(lv);
++	struct lv_segment *seg;
+ 	struct dm_tree_node *thin_node;
+ 	const char *uuid;
  
- # "dm" sysfs subdirectory is available in newer versions of DM
- # only (kernels >= 2.6.29). We have to check for its existence
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index b16a27a..66c58b3 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -26,6 +26,7 @@ ACTION=="remove", GOTO="lvm_scan"
- KERNEL!="dm-[0-9]*", ACTION!="add", GOTO="lvm_end"
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 707db1f..c0d38d8 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -403,7 +403,6 @@ static int _alloc_image_component(struct logical_volume *lv,
+ 	}
  
- # If the PV is a dm device, scan only after proper mapping activation (CHANGE event + DM_ACTIVATION=1)
-+# or after a coldplug (event retrigger) with "add" event (ADD event + DM_ACTIVATION=1)
- KERNEL=="dm-[0-9]*", ENV{DM_ACTIVATION}!="1", GOTO="lvm_end"
- 
- LABEL="lvm_scan"
+ 	if (!ah) {
+-		first_area = 0;
+ 		log_error(INTERNAL_ERROR
+ 			  "Stand-alone %s area allocation not implemented",
+ 			  (type == RAID_META) ? "metadata" : "data");
 
 
