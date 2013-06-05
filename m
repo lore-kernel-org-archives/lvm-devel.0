@@ -1,82 +1,134 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:06:14 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - metadata: Avoid pv_read in find_pv_by_name.
-Message-ID: <20130605120614.1F73361057@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:06:09 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - test: Fix fallout from pv_read changes.
+Message-ID: <20130605120609.EAF5661057@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4db47137a42e3320d92e59795cb51c3a87987727
-Commit:        4db47137a42e3320d92e59795cb51c3a87987727
-Parent:        4e9bbccb33da4dd23b6707914188f7ae611ec698
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=93108125acda7092b227d6c64ae94d082d35a36b
+Commit:        93108125acda7092b227d6c64ae94d082d35a36b
+Parent:        d17cbf112bc6ada99e9ef1320bbfcb7114c153db
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Feb 19 02:32:25 2013 +0100
+AuthorDate:    Tue Feb 19 01:56:51 2013 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Wed Jun 5 12:37:37 2013 +0200
 
-metadata: Avoid pv_read in find_pv_by_name.
+test: Fix fallout from pv_read changes.
 
 ---
- lib/metadata/metadata.c |   34 ++++++++++++++++++++--------------
- 1 files changed, 20 insertions(+), 14 deletions(-)
+ test/shell/pv-duplicate.sh          |    2 +-
+ test/shell/pvcreate-operation-md.sh |   35 +++++++++++++++++++++--------------
+ 2 files changed, 22 insertions(+), 15 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 31c9eba..61dc1bd 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1309,7 +1309,7 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- 	/* FIXME Check partition type is LVM unless --force is given */
+diff --git a/test/shell/pv-duplicate.sh b/test/shell/pv-duplicate.sh
+index 6b9f309..40d1f68 100644
+--- a/test/shell/pv-duplicate.sh
++++ b/test/shell/pv-duplicate.sh
+@@ -21,5 +21,5 @@ vgcreate --metadatasize 128k $vg1 "$dev1"
+ dd if="$dev1" of="$dev2" bs=256K count=1
+ dd if="$dev1" of="$dev3" bs=256K count=1
  
- 	/* Is there a pv here already? */
--	if (!(pv = pv_read(cmd, name, 0, 0)))
-+	if (!(pv = find_pv_by_name(cmd, name, 1)))
- 		stack;
+-pvs "$dev1"
++pvs "$dev3"
+ vgs $vg1
+diff --git a/test/shell/pvcreate-operation-md.sh b/test/shell/pvcreate-operation-md.sh
+index 5e2a28d..9cad745 100644
+--- a/test/shell/pvcreate-operation-md.sh
++++ b/test/shell/pvcreate-operation-md.sh
+@@ -58,21 +58,24 @@ test -b "$mddev" && skip
+ mdadm --create --metadata=1.0 "$mddev" --auto=md --level 0 --raid-devices=2 --chunk 64 "$dev1" "$dev2"
+ trap 'cleanup_md_and_teardown' EXIT # cleanup this MD device at the end of the test
+ test -b "$mddev" || skip
++cp -LR "$mddev" "$DM_DEV_DIR" # so that LVM/DM can see the device
++lvmdev="$DM_DEV_DIR/md_lvm_test0"
  
- 	/*
-@@ -1805,23 +1805,29 @@ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
- 					const char *pv_name,
- 					int allow_orphan)
- {
--	struct physical_volume *pv;
-+	struct device *dev;
-+	struct pv_list *pvl;
-+	struct dm_list *pvslist;
-+	struct physical_volume *pv = NULL;
+ # Test alignment of PV on MD without any MD-aware or topology-aware detection
+ # - should treat $mddev just like any other block device
+ pv_align="1.00m"
+ pvcreate --metadatasize 128k \
+     --config 'devices {md_chunk_alignment=0 data_alignment_detection=0 data_alignment_offset_detection=0}' \
+-    "$mddev"
+-check pv_field "$mddev" pe_start $pv_align
++    "$lvmdev"
 +
-+	lvmcache_seed_infos_from_lvmetad(cmd);
++check pv_field "$lvmdev" pe_start $pv_align
  
--	if (!(pv = _pv_read(cmd, cmd->mem, pv_name, NULL, 1, 0))) {
-+	if (!(dev = dev_cache_get(pv_name, cmd->filter))) {
- 		log_error("Physical volume %s not found", pv_name);
--		goto bad;
-+		return_NULL;
- 	}
+ # Test md_chunk_alignment independent of topology-aware detection
+ pv_align="1.00m"
+ pvcreate --metadatasize 128k \
+     --config 'devices {data_alignment_detection=0 data_alignment_offset_detection=0}' \
+-    "$mddev"
+-check pv_field "$mddev" pe_start $pv_align
++    "$lvmdev"
++check pv_field "$lvmdev" pe_start $pv_align
  
--	if (is_orphan_vg(pv->vg_name) && !dm_list_size(&pv->fid->metadata_areas_in_use)) {
--		/* If a PV has no MDAs - need to search all VGs for it */
--		if (!scan_vgs_for_pvs(cmd, 1))
--			goto_bad;
--		free_pv_fid(pv);
--		if (!(pv = _pv_read(cmd, cmd->mem, pv_name, NULL, 1, 0))) {
--			log_error("Physical volume %s not found", pv_name);
--			goto bad;
--		}
--	}
-+	if (!(pvslist = get_pvs(cmd)))
-+		return_NULL;
-+
-+	dm_list_iterate_items(pvl, pvslist)
-+		if (pvl->pv->dev == dev)
-+			pv = pvl->pv;
-+		else
-+			free_pv_fid(pvl->pv);
-+
-+	if (!pv)
-+		log_error("Physical volume %s not found", pv_name);
  
- 	if (pv && !allow_orphan && is_orphan_vg(pv->vg_name)) {
- 		log_error("Physical volume %s not in a volume group", pv_name);
+ # Test newer topology-aware alignment detection
+@@ -81,8 +84,8 @@ if kernel_at_least 2 6 33 ; then
+     pv_align="1.00m"
+     # optimal_io_size=131072, minimum_io_size=65536
+     pvcreate --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    check pv_field "$lvmdev" pe_start $pv_align
+ fi
+ 
+ # partition MD array directly, depends on blkext in Linux >= 2.6.28
+@@ -91,9 +94,10 @@ if kernel_at_least 2 6 28 ; then
+     sfdisk "$mddev" <<EOF
+ ,,83
+ EOF
++    pvscan
+     # make sure partition on MD is _not_ removed
+     # - tests partition -> parent lookup via sysfs paths
+-    not pvcreate --metadatasize 128k "$mddev"
++    not pvcreate --metadatasize 128k "$lvmdev"
+ 
+     # verify alignment_offset is accounted for in pe_start
+     # - topology infrastructure is available in Linux >= 2.6.31
+@@ -109,6 +113,8 @@ EOF
+     # wait here for created device node on tmpfs
+     aux udev_wait "$mddev_p"
+     test -b "$mddev_p" || skip
++    cp -LR "$mddev_p" "$DM_DEV_DIR"
++    lvmdev_p="$DM_DEV_DIR/$base_mddev_p"
+ 
+     # Checking for 'alignment_offset' in sysfs implies Linux >= 2.6.31
+     # but reliable alignment_offset support requires kernel.org Linux >= 2.6.33
+@@ -120,9 +126,9 @@ EOF
+     if [ $alignment_offset -gt 0 ]; then
+         # default alignment is 1M, add alignment_offset
+ 	pv_align=$((1048576+$alignment_offset))B
+-	pvcreate --metadatasize 128k "$mddev_p"
+-	check pv_field "$mddev_p" pe_start $pv_align --units b
+-	pvremove "$mddev_p"
++	pvcreate --metadatasize 128k "$lvmdev_p"
++	check pv_field "$lvmdev_p" pe_start $pv_align --units b
++	pvremove "$lvmdev_p"
+     fi
+ fi
+ 
+@@ -140,12 +146,13 @@ if kernel_at_least 2 6 33 ; then
+     # optimal_io_size=2097152, minimum_io_size=1048576
+     pv_align="2.00m"
+     pvcreate --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    pvscan # Something is seriously broken.
++    check pv_field "$lvmdev" pe_start $pv_align
+ 
+     # now verify pe_start alignment override using --dataalignment
+     pv_align="192.00k"
+     pvcreate --dataalignment 64k --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    check pv_field "$lvmdev" pe_start $pv_align
+ fi
 
 
