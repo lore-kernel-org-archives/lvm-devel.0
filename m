@@ -1,216 +1,264 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:06:03 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - lvmcache: Drop a superfluous "fmt" pointer from lvmcache_info.
-Message-ID: <20130605120603.A382361057@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:06:24 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - lvmcache: Remove VG metadata caches (text, cfg, volume_group) for now.
+Message-ID: <20130605120624.7AECC60D3F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db59f5661cd425b1a0fc1c075ec1af19d25eb69f
-Commit:        db59f5661cd425b1a0fc1c075ec1af19d25eb69f
-Parent:        8e5d18afd3f182bcfc3025ef2aeecaa9b542cc19
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0c9eddbab5ceeee00a4ae393ac33099dd2a31b6b
+Commit:        0c9eddbab5ceeee00a4ae393ac33099dd2a31b6b
+Parent:        a2d9a818cfc469f928239cef7498c87b4afc43ae
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Feb 18 23:02:21 2013 +0100
+AuthorDate:    Mon Feb 4 20:06:41 2013 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Jun 5 12:37:36 2013 +0200
+CommitterDate: Wed Jun 5 12:37:37 2013 +0200
 
-lvmcache: Drop a superfluous "fmt" pointer from lvmcache_info.
+lvmcache: Remove VG metadata caches (text, cfg, volume_group) for now.
 
 ---
- lib/cache/lvmcache.c         |   24 ++++++++++++------------
- lib/format1/lvm1-label.c     |    2 +-
- lib/format_pool/pool_label.c |    2 +-
- lib/format_text/text_label.c |    4 ++--
- lib/label/label.c            |    5 +++++
- lib/label/label.h            |    3 ++-
- 6 files changed, 23 insertions(+), 17 deletions(-)
+ lib/cache/lvmcache.c |  156 +-------------------------------------------------
+ 1 files changed, 1 insertions(+), 155 deletions(-)
 
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index f76e479..8d50919 100644
+index 8d50919..f8c8a9e 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -39,7 +39,6 @@ struct lvmcache_info {
- 	struct dm_list list;	/* Join VG members together */
- 	struct lvmcache_vginfo *vginfo;	/* NULL == unknown */
- 	struct label *label; /* move to PV */
--	const struct format_type *fmt;
- 	uint64_t device_size;	/* move to label */ /* Bytes */
- 	uint32_t status;
+@@ -55,12 +55,7 @@ struct lvmcache_vginfo {
+ 	struct lvmcache_vginfo *next; /* Another VG with same name? */
+ 	char *creation_host;
+ 	size_t vgmetadata_size;
+-	char *vgmetadata;	/* Copy of VG metadata as format_text string */
+-	struct dm_config_tree *cft; /* Config tree created from vgmetadata */
+-				    /* Lifetime is directly tied to vgmetadata */
+-	struct volume_group *cached_vg;
+ 	unsigned holders;
+-	unsigned vg_use_count;	/* Counter of vg reusage */
+ 	unsigned precommitted;	/* Is vgmetadata live or precommitted? */
  };
-@@ -1277,7 +1276,7 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
- 	if (!vgname && !info->vginfo) {
- 		log_error(INTERNAL_ERROR "NULL vgname handed to cache");
- 		/* FIXME Remove this */
--		vgname = info->fmt->orphan_vg_name;
-+		vgname = label_fmt(info->label)->orphan_vg_name;
- 		vgid = vgname;
- 	}
  
-@@ -1296,7 +1295,7 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
- 		info->status &= ~CACHE_INVALID;
+@@ -111,27 +106,6 @@ void lvmcache_seed_infos_from_lvmetad(struct cmd_context *cmd)
+ 	_has_scanned = 1;
+ }
  
- 	if (!_lvmcache_update_vgname(info, vgname, vgid, vgstatus,
--				     creation_host, info->fmt) ||
-+				     creation_host, label_fmt(info->label)) ||
- 	    !_lvmcache_update_vgid(info, info->vginfo, vgid) ||
- 	    !_lvmcache_update_vgstatus(info, vgstatus, creation_host))
- 		return_0;
-@@ -1423,7 +1422,6 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 		label = info->label;
- 	}
- 
--	info->fmt = (const struct format_type *) labeller->private;
- 	info->status |= CACHE_INVALID;
- 
- 	if (!_lvmcache_update_pvid(info, pvid_s)) {
-@@ -1546,7 +1544,7 @@ static int _get_pv_if_in_vg(struct lvmcache_info *info,
- 		strcpy(vgname, info->vginfo->vgname);
- 		memcpy(vgid, info->vginfo->vgid, sizeof(vgid));
- 
--		if (get_pv_from_vg_by_id(info->fmt, vgname, vgid,
-+		if (get_pv_from_vg_by_id(label_fmt(info->label), vgname, vgid,
- 					 info->label->dev->pvid, pv))
- 			return 1;
- 	}
-@@ -1566,7 +1564,7 @@ int lvmcache_populate_pv_fields(struct lvmcache_info *info,
- 
- 	/* Perform full scan (just the first time) and try again */
- 	if (!scan_label_only && !critical_section() && !full_scan_done()) {
--		lvmcache_label_scan(info->fmt->cmd, 2);
-+		lvmcache_label_scan(label_fmt(info->label)->cmd, 2);
- 
- 		if (_get_pv_if_in_vg(info, pv))
- 			return 1;
-@@ -1574,7 +1572,7 @@ int lvmcache_populate_pv_fields(struct lvmcache_info *info,
- 
- 	/* Orphan */
- 	pv->dev = info->label->dev;
--	pv->fmt = info->fmt;
-+	pv->fmt = label_fmt(info->label);
- 	pv->size = info->device_size >> SECTOR_SHIFT;
- 	pv->vg_name = FMT_TEXT_ORPHAN_VG_NAME;
- 	memcpy(&pv->id, &info->label->dev->pvid, sizeof(pv->id));
-@@ -1606,9 +1604,9 @@ int lvmcache_populate_pv_fields(struct lvmcache_info *info,
- 
- int lvmcache_check_format(struct lvmcache_info *info, const struct format_type *fmt)
+-/* Volume Group metadata cache functions */
+-static void _free_cached_vgmetadata(struct lvmcache_vginfo *vginfo)
+-{
+-	if (!vginfo || !vginfo->vgmetadata)
+-		return;
+-
+-	dm_free(vginfo->vgmetadata);
+-
+-	vginfo->vgmetadata = NULL;
+-
+-	/* Release also cached config tree */
+-	if (vginfo->cft) {
+-		dm_config_destroy(vginfo->cft);
+-		vginfo->cft = NULL;
+-	}
+-
+-	log_debug_cache("Metadata cache: VG %s wiped.", vginfo->vgname);
+-
+-	release_vg(vginfo->cached_vg);
+-}
+-
+ /*
+  * Cache VG metadata against the vginfo with matching vgid.
+  */
+@@ -139,40 +113,18 @@ static void _store_metadata(struct volume_group *vg, unsigned precommitted)
  {
--	if (info->fmt != fmt) {
-+	if (label_fmt(info->label) != fmt) {
- 		log_error("PV %s is a different format (seqno %s)",
--			  dev_name(info->label->dev), info->fmt->name);
-+			  dev_name(info->label->dev), label_fmt(info->label)->name);
+ 	char uuid[64] __attribute__((aligned(8)));
+ 	struct lvmcache_vginfo *vginfo;
+-	char *data;
+-	size_t size;
+ 
+ 	if (!(vginfo = lvmcache_vginfo_from_vgid((const char *)&vg->id))) {
+ 		stack;
+ 		return;
+ 	}
+ 
+-	if (!(size = export_vg_to_buffer(vg, &data))) {
+-		stack;
+-		_free_cached_vgmetadata(vginfo);
+-		return;
+-	}
+-
+-	/* Avoid reparsing of the same data string */
+-	if (vginfo->vgmetadata && vginfo->vgmetadata_size == size &&
+-	    strcmp(vginfo->vgmetadata, data) == 0)
+-		dm_free(data);
+-	else {
+-		_free_cached_vgmetadata(vginfo);
+-		vginfo->vgmetadata_size = size;
+-		vginfo->vgmetadata = data;
+-	}
+-
+ 	vginfo->precommitted = precommitted;
+ 
+ 	if (!id_write_format((const struct id *)vginfo->vgid, uuid, sizeof(uuid))) {
+ 		stack;
+ 		return;
+ 	}
+-
+-	log_debug_cache("Metadata cache: VG %s (%s) stored (%" PRIsize_t " bytes%s).",
+-			vginfo->vgname, uuid, size,
+-			precommitted ? ", precommitted" : "");
+ }
+ 
+ static void _update_cache_info_lock_state(struct lvmcache_info *info,
+@@ -205,9 +157,6 @@ static void _update_cache_vginfo_lock_state(struct lvmcache_vginfo *vginfo,
+ 	dm_list_iterate_items(info, &vginfo->infos)
+ 		_update_cache_info_lock_state(info, locked,
+ 					      &cached_vgmetadata_valid);
+-
+-	if (!cached_vgmetadata_valid)
+-		_free_cached_vgmetadata(vginfo);
+ }
+ 
+ void lvmcache_update_lock_state(const char *vgname, int locked)
+@@ -234,16 +183,11 @@ static void _drop_metadata(const char *vgname, int drop_precommitted)
+ 	 * already invalidated the PV labels (before caching it)
+ 	 * and we must not do it again.
+ 	 */
+-	if (!drop_precommitted && vginfo->precommitted && !vginfo->vgmetadata)
+-		log_error(INTERNAL_ERROR "metadata commit (or revert) missing before "
+-			  "dropping metadata from cache.");
+ 
+ 	if (drop_precommitted || !vginfo->precommitted)
+ 		dm_list_iterate_items(info, &vginfo->infos)
+ 			info->status |= CACHE_INVALID;
+ 
+-	_free_cached_vgmetadata(vginfo);
+-
+ 	/* VG revert */
+ 	if (drop_precommitted)
+ 		vginfo->precommitted = 0;
+@@ -603,114 +547,18 @@ int lvmcache_label_scan(struct cmd_context *cmd, int full_scan)
+ struct volume_group *lvmcache_get_vg(struct cmd_context *cmd, const char *vgname,
+ 				     const char *vgid, unsigned precommitted)
+ {
+-	struct lvmcache_vginfo *vginfo;
+-	struct volume_group *vg = NULL;
+-	struct format_instance *fid;
+-	struct format_instance_ctx fic;
+-
+-	/*
+-	 * We currently do not store precommitted metadata in lvmetad at
+-	 * all. This means that any request for precommitted metadata is served
+-	 * using the classic scanning mechanics, and read from disk or from
+-	 * lvmcache.
+-	 */
+-	if (lvmetad_active() && !precommitted) {
+-		/* Still serve the locally cached VG if available */
+-		if (vgid && (vginfo = lvmcache_vginfo_from_vgid(vgid)) &&
+-		    vginfo->vgmetadata && (vg = vginfo->cached_vg))
+-			goto out;
++	if (lvmetad_active() && !precommitted)
+ 		return lvmetad_vg_lookup(cmd, vgname, vgid);
+-	}
+-
+-	if (!vgid || !(vginfo = lvmcache_vginfo_from_vgid(vgid)) || !vginfo->vgmetadata)
+-		return NULL;
+-
+-	if (!_vginfo_is_valid(vginfo))
+-		return NULL;
+-
+-	/*
+-	 * Don't return cached data if either:
+-	 * (i)  precommitted metadata is requested but we don't have it cached
+-	 *      - caller should read it off disk;
+-	 * (ii) live metadata is requested but we have precommitted metadata cached
+-	 *      and no devices are suspended so caller may read it off disk.
+-	 *
+-	 * If live metadata is requested but we have precommitted metadata cached
+-	 * and devices are suspended, we assume this precommitted metadata has
+-	 * already been preloaded and committed so it's OK to return it as live.
+-	 * Note that we do not clear the PRECOMMITTED flag.
+-	 */
+-	if ((precommitted && !vginfo->precommitted) ||
+-	    (!precommitted && vginfo->precommitted && !critical_section()))
+-		return NULL;
+-
+-	/* Use already-cached VG struct when available */
+-	if ((vg = vginfo->cached_vg))
+-		goto out;
+-
+-	fic.type = FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
+-	fic.context.vg_ref.vg_name = vginfo->vgname;
+-	fic.context.vg_ref.vg_id = vgid;
+-	if (!(fid = vginfo->fmt->ops->create_instance(vginfo->fmt, &fic)))
+-		return_NULL;
+-
+-	/* Build config tree from vgmetadata, if not yet cached */
+-	if (!vginfo->cft &&
+-	    !(vginfo->cft =
+-	      dm_config_from_string(vginfo->vgmetadata)))
+-		goto_bad;
+-
+-	if (!(vg = import_vg_from_config_tree(vginfo->cft, fid)))
+-		goto_bad;
+-
+-	/* Cache VG struct for reuse */
+-	vginfo->cached_vg = vg;
+-	vginfo->holders = 1;
+-	vginfo->vg_use_count = 0;
+-	vg->vginfo = vginfo;
+-
+-	if (!dm_pool_lock(vg->vgmem, detect_internal_vg_cache_corruption()))
+-		goto_bad;
+-
+-out:
+-	vginfo->holders++;
+-	vginfo->vg_use_count++;
+-	log_debug_cache("Using cached %smetadata for VG %s with %u holder(s).",
+-			vginfo->precommitted ? "pre-committed " : "",
+-			vginfo->vgname, vginfo->holders);
+-
+-	return vg;
+-
+-bad:
+-	_free_cached_vgmetadata(vginfo);
+ 	return NULL;
+ }
+ 
+-// #if 0
+ int lvmcache_vginfo_holders_dec_and_test_for_zero(struct lvmcache_vginfo *vginfo)
+ {
+-	log_debug_cache("VG %s decrementing %d holder(s) at %p.",
+-			vginfo->cached_vg->name, vginfo->holders, vginfo->cached_vg);
+-
+ 	if (--vginfo->holders)
  		return 0;
- 	}
+ 
+-	if (vginfo->vg_use_count > 1)
+-		log_debug_cache("VG %s reused %d times.",
+-				vginfo->cached_vg->name, vginfo->vg_use_count);
+-
+-	/* Debug perform crc check only when it's been used more then once */
+-	if (!dm_pool_unlock(vginfo->cached_vg->vgmem,
+-			    detect_internal_vg_cache_corruption() &&
+-			    (vginfo->vg_use_count > 1)))
+-		stack;
+-
+-	vginfo->cached_vg->vginfo = NULL;
+-	vginfo->cached_vg = NULL;
+-
  	return 1;
-@@ -1638,7 +1636,7 @@ void lvmcache_del_bas(struct lvmcache_info *info)
- int lvmcache_add_mda(struct lvmcache_info *info, struct device *dev,
- 		     uint64_t start, uint64_t size, unsigned ignored)
- {
--	return add_mda(info->fmt, NULL, &info->label->mdas, dev, start, size, ignored);
-+	return add_mda(label_fmt(info->label), NULL, &info->label->mdas, dev, start, size, ignored);
  }
+-// #endif
  
- int lvmcache_add_da(struct lvmcache_info *info, uint64_t start, uint64_t size)
-@@ -1655,7 +1653,9 @@ void lvmcache_update_pv(struct lvmcache_info *info, struct physical_volume *pv,
- 			const struct format_type *fmt)
- {
- 	info->device_size = pv->size << SECTOR_SHIFT;
--	info->fmt = fmt;
-+	if (label_fmt(info->label) != fmt)
-+		log_error(INTERNAL_ERROR "Unexpected format mismatch on %s: %s found while %s expected.",
-+			  dev_name(pv->dev), fmt->name, label_fmt(info->label)->name);
- }
+ struct dm_list *lvmcache_get_vgids(struct cmd_context *cmd,
+ 				   int include_internal)
+@@ -873,8 +721,6 @@ static int _free_vginfo(struct lvmcache_vginfo *vginfo)
+ 	struct lvmcache_vginfo *primary_vginfo, *vginfo2;
+ 	int r = 1;
  
- int lvmcache_update_das(struct lvmcache_info *info, struct physical_volume *pv)
-@@ -1812,5 +1812,5 @@ uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info)
- }
+-	_free_cached_vgmetadata(vginfo);
+-
+ 	vginfo2 = primary_vginfo = lvmcache_vginfo_from_vgname(vginfo->vgname, NULL);
  
- const struct format_type *lvmcache_fmt(struct lvmcache_info *info) {
--	return info->fmt;
-+	return label_fmt(info->label);
- }
-diff --git a/lib/format1/lvm1-label.c b/lib/format1/lvm1-label.c
-index 6138a05..c5f9f35 100644
---- a/lib/format1/lvm1-label.c
-+++ b/lib/format1/lvm1-label.c
-@@ -122,7 +122,7 @@ struct labeller *lvm1_labeller_create(struct format_type *fmt)
- 	}
- 
- 	l->ops = &_lvm1_ops;
--	l->private = (const void *) fmt;
-+	l->fmt = fmt;
- 
- 	return l;
- }
-diff --git a/lib/format_pool/pool_label.c b/lib/format_pool/pool_label.c
-index 7059b98..d453dd9 100644
---- a/lib/format_pool/pool_label.c
-+++ b/lib/format_pool/pool_label.c
-@@ -99,7 +99,7 @@ struct labeller *pool_labeller_create(struct format_type *fmt)
- 	}
- 
- 	l->ops = &_pool_ops;
--	l->private = (const void *) fmt;
-+	l->fmt = fmt;
- 
- 	return l;
- }
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 09a3302..812ec2c 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -316,7 +316,7 @@ struct _update_mda_baton {
- static int _update_mda(struct metadata_area *mda, void *baton)
- {
- 	struct _update_mda_baton *p = baton;
--	const struct format_type *fmt = p->label->labeller->private; // Oh dear.
-+	const struct format_type *fmt = label_fmt(p->label);
- 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
- 	struct mda_header *mdah;
- 	const char *vgname = NULL;
-@@ -473,7 +473,7 @@ struct labeller *text_labeller_create(const struct format_type *fmt)
- 	}
- 
- 	l->ops = &_text_ops;
--	l->private = (const void *) fmt;
-+	l->fmt = fmt;
- 
- 	return l;
- }
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 9c931f5..2acba14 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -392,3 +392,8 @@ struct label *label_create(struct labeller *labeller)
- 
- 	return label;
- }
-+
-+const struct format_type *label_fmt(struct label *label)
-+{
-+	return label->labeller->fmt;
-+}
-diff --git a/lib/label/label.h b/lib/label/label.h
-index c45928a..f8230db 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -90,7 +90,7 @@ struct label_ops {
- 
- struct labeller {
- 	struct label_ops *ops;
--	const void *private;
-+	const struct format_type *fmt;
- };
- 
- int label_init(void);
-@@ -107,5 +107,6 @@ int label_write(struct device *dev, struct label *label);
- int label_verify(struct device *dev);
- struct label *label_create(struct labeller *labeller);
- void label_destroy(struct label *label);
-+const struct format_type *label_fmt(struct label *label);
- 
- #endif
+ 	if (vginfo == primary_vginfo) {
 
 
