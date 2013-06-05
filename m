@@ -1,56 +1,81 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:13 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - cleanup: drop zeroing of zallocated data
-Message-ID: <20130605120213.8AB1F60D1B@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:15 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - cleanup: improve messages
+Message-ID: <20130605120215.9D31060D1B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=35ab841ecff4a887e70b54b1afb01dd42a4e9cd6
-Commit:        35ab841ecff4a887e70b54b1afb01dd42a4e9cd6
-Parent:        a12f92c494a60fe6e6c9e133aa879bd0d0da069a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2925023411ff9c7a32fa7660617c94a9d9dcd653
+Commit:        2925023411ff9c7a32fa7660617c94a9d9dcd653
+Parent:        35ab841ecff4a887e70b54b1afb01dd42a4e9cd6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 23 11:52:17 2013 +0200
+AuthorDate:    Tue Apr 23 11:58:50 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Apr 23 12:27:33 2013 +0200
 
-cleanup: drop zeroing of zallocated data
+cleanup: improve messages
 
+Add verbose message when we will not obtain devices from udev
+(i.e. testing is using different udev dir, and the log was
+giving misleading info about using udev)
+
+Add proper error message if zalloc from pull would have failed.
+
+Fix typo obolete -> obsolete
 ---
- lib/config/config.c  |    2 --
- libdm/libdm-config.c |    4 +---
- 2 files changed, 1 insertions(+), 5 deletions(-)
+ lib/commands/toolcontext.c      |    3 +++
+ lib/config/config.c             |    6 ++++--
+ lib/filters/filter-persistent.c |    4 ++--
+ 3 files changed, 9 insertions(+), 4 deletions(-)
 
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index c42a0bf..8f06285 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -777,6 +777,9 @@ static int _init_dev_cache(struct cmd_context *cmd)
+ 					udev_dir_len != len;
+ 
+ 			if (len_diff || strncmp(DM_UDEV_DEV_DIR, cv->v.str, len)) {
++				log_very_verbose("Non standard udev dir %s, resetting "
++						 "devices/obtain_device_list_from_udev.",
++						 cv->v.str);
+ 				device_list_from_udev = 0;
+ 				init_obtain_device_list_from_udev(0);
+ 			}
 diff --git a/lib/config/config.c b/lib/config/config.c
-index 8acb87d..ad02f5f 100644
+index ad02f5f..e999fc6 100644
 --- a/lib/config/config.c
 +++ b/lib/config/config.c
-@@ -67,8 +67,6 @@ struct dm_config_tree *config_file_open(const char *filename, int keep_open)
- 	cf = dm_pool_zalloc(cft->mem, sizeof(struct config_file));
- 	if (!cf) goto fail;
+@@ -64,8 +64,10 @@ struct dm_config_tree *config_file_open(const char *filename, int keep_open)
+ 	if (!cft)
+ 		return NULL;
  
--	cf->timestamp = 0;
--	cf->exists = 0;
+-	cf = dm_pool_zalloc(cft->mem, sizeof(struct config_file));
+-	if (!cf) goto fail;
++	if (!(cf = dm_pool_zalloc(cft->mem, sizeof(struct config_file)))) {
++		log_error("Failed to allocate condig tree.");
++		goto fail;
++	}
+ 
  	cf->keep_open = keep_open;
  	dm_config_set_custom(cft, cf);
+diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
+index bec396b..0d53fce 100644
+--- a/lib/filters/filter-persistent.c
++++ b/lib/filters/filter-persistent.c
+@@ -103,8 +103,8 @@ int persistent_filter_load(struct dev_filter *f, struct dm_config_tree **cft_out
  
-diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
-index 368f9e3..dfd9174 100644
---- a/libdm/libdm-config.c
-+++ b/libdm/libdm-config.c
-@@ -105,10 +105,8 @@ struct dm_config_tree *dm_config_create(void)
- 		dm_pool_destroy(mem);
- 		return 0;
- 	}
--	cft->root = NULL;
--	cft->cascade = NULL;
--	cft->custom = NULL;
- 	cft->mem = mem;
-+
- 	return cft;
- }
- 
+ 	if (obtain_device_list_from_udev()) {
+ 		if (!stat(pf->file, &info)) {
+-			log_very_verbose("Obtaining device list from "
+-					 "udev. Removing obolete %s.",
++			log_very_verbose("Obtaining device list from udev. "
++					 "Removing obsolete %s.",
+ 					 pf->file);
+ 			if (unlink(pf->file) < 0 && errno != EROFS)
+ 				log_sys_error("unlink", pf->file);
 
 
