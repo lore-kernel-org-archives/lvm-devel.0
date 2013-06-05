@@ -1,151 +1,214 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:23 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - dmeventd: convert union to struct members
-Message-ID: <20130605120123.3FB1360E6D@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:04:06 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - dmeventd: use dm_get_status_snapshot()
+Message-ID: <20130605120406.7481D611FC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ea466673af377328a7ed50d6fb24e66a478b44b
-Commit:        5ea466673af377328a7ed50d6fb24e66a478b44b
-Parent:        45f396f2a075054f4e047abdef5eafffca72a281
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e992cb253cb4c9bf027dd7852d4399d2b439621c
+Commit:        e992cb253cb4c9bf027dd7852d4399d2b439621c
+Parent:        06e8ff29ff59a1893312f5b2d5e818c8c62ee7b1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 20:44:20 2013 +0200
+AuthorDate:    Sun May 26 17:07:08 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:01:35 2013 +0200
+CommitterDate: Mon May 27 10:33:06 2013 +0200
 
-dmeventd: convert union to struct members
+dmeventd: use dm_get_status_snapshot()
 
-Sharing char* with field has a problem in error path,
-when we allocate event, but fail to allocate timeout string.
-Instead of creating complicated error paths to resolve
-it individually stop using unions, and let the resource
-to be released in a simple _free_message().
+Switch to use libdm dm_get_status_snapshot() function for
+reading status info.
+This fixes bug, where the code was using 32bit integers,
+while the snapshot target is able to return 64bit sizes.
+However this also means, someone is using >1TB snapshot
+cow devices, which is actually very bad idea anyway, since the
+perfomance and memory usage in this case is very bad.
 ---
- WHATS_NEW_DM                |    1 +
- daemons/dmeventd/dmeventd.c |   54 ++++++++++++++++---------------------------
- 2 files changed, 21 insertions(+), 34 deletions(-)
+ WHATS_NEW_DM                                       |    1 +
+ .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |   79 ++++++--------------
+ 2 files changed, 24 insertions(+), 56 deletions(-)
 
 diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index eff6bd6..6e45a4c 100644
+index 99e8269..6dcf9f8 100644
 --- a/WHATS_NEW_DM
 +++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
  Version 1.02.78 - 
  ===================================
-+  Update dmevent structure message_data to simplify/fix error path handling.
-   Validate passed params to dm_get_status_raid/thin/thin_pool(). 
-   Fix 'dmsetup splitname -o' to not fail if used without '-c' switch (1.02.68).
-   Add dm_config_write_{node_out/one_node_out} for enhanced config output.
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 06c0c92..35a2b25 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -167,14 +167,10 @@ struct message_data {
- 	char *id;
- 	char *dso_name;		/* Name of DSO. */
- 	char *device_uuid;	/* Mapped device path. */
--	union {
--		char *str;	/* Events string as fetched from message. */
--		enum dm_event_mask field;	/* Events bitfield. */
--	} events;
--	union {
--		char *str;
--		uint32_t secs;
--	} timeout;
-+	char *events_str;	/* Events string as fetched from message. */
-+	enum dm_event_mask events_field;	/* Events bitfield. */
-+	char *timeout_str;
-+	uint32_t timeout_secs;
- 	struct dm_event_daemon_message *msg;	/* Pointer to message buffer. */
++  Fix parsing of 64bit snapshot status in dmeventd snapshot plugin.
+   Add dm_get_status_snapshot() for parsing snapshot status.
+   Detecte mounted fs also via reading /proc/self/mountinfo.
+   Add dm_mountinfo_read() for parsing /proc/self/mountinfo.
+diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+index 205218a..ac33ef3 100644
+--- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
++++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+@@ -32,52 +32,13 @@
+ 
+ #define UMOUNT_COMMAND "/bin/umount"
+ 
+-struct snap_status {
+-	int invalid;
+-	int used;
+-	int max;
+-};
+-
+ struct dso_state {
++	struct dm_pool *mem;
+ 	int percent_check;
+-	int known_size;
++	uint64_t known_size;
+ 	char cmd_str[1024];
  };
  
-@@ -235,8 +231,8 @@ static struct thread_status *_alloc_thread_status(struct message_data *data,
- 	ret->device.name = NULL;
- 	ret->device.major = ret->device.minor = 0;
- 	ret->dso_data = dso_data;
--	ret->events = data->events.field;
--	ret->timeout = data->timeout.secs;
-+	ret->events = data->events_field;
-+	ret->timeout = data->timeout_secs;
- 	dm_list_init(&ret->timeout_list);
- 
- 	return ret;
-@@ -325,9 +321,9 @@ static void _free_message(struct message_data *message_data)
+-/* FIXME possibly reconcile this with target_percent when we gain
+-   access to regular LVM library here. */
+-static void _parse_snapshot_params(char *params, struct snap_status *status)
+-{
+-	char *p;
+-	/*
+-	 * xx/xx	-- fractions used/max
+-	 * Invalid	-- snapshot invalidated
+-	 * Unknown	-- status unknown
+-	 */
+-	status->used = status->max = 0;
+-
+-	if (!strncmp(params, "Invalid", 7)) {
+-		status->invalid = 1;
+-		return;
+-	}
+-
+-	/*
+-	 * When we return without setting non-zero max, the parent is
+-	 * responsible for reporting errors.
+-	 */
+-	if (!strncmp(params, "Unknown", 7))
+-		return;
+-
+-	if (!(p = strstr(params, "/")))
+-		return;
+-
+-	*p = '\0';
+-	p++;
+-
+-	status->used = atoi(params);
+-	status->max = atoi(p);
+-}
+-
+ static int _run(const char *cmd, ...)
  {
- 	dm_free(message_data->id);
- 	dm_free(message_data->dso_name);
--
- 	dm_free(message_data->device_uuid);
--
-+	dm_free(message_data->events_str);
-+	dm_free(message_data->timeout_str);
+         va_list ap;
+@@ -171,9 +132,9 @@ void process_event(struct dm_task *dmt,
+ 	uint64_t start, length;
+ 	char *target_type = NULL;
+ 	char *params;
+-	struct snap_status status = { 0 };
++	struct dm_status_snapshot *status = NULL;
+ 	const char *device = dm_task_get_name(dmt);
+-	int percent;
++	uint64_t percent;
+ 	struct dso_state *state = *private;
+ 
+ 	/* No longer monitoring, waiting for remove */
+@@ -186,34 +147,35 @@ void process_event(struct dm_task *dmt,
+ 	if (!target_type)
+ 		goto out;
+ 
+-	_parse_snapshot_params(params, &status);
++	if (!dm_get_status_snapshot(state->mem, params, &status))
++		goto out;
+ 
+-	if (status.invalid) {
++	if (status->invalid) {
+ 		struct dm_info info;
+ 		if (dm_task_get_info(dmt, &info)) {
+ 			dmeventd_lvm2_unlock();
+ 			_umount(device, info.major, info.minor);
+-                        return;
++			return;
+ 		} /* else; too bad, but this is best-effort thing... */
+ 	}
+ 
+ 	/* Snapshot size had changed. Clear the threshold. */
+-	if (state->known_size != status.max) {
++	if (state->known_size != status->total_sectors) {
+ 		state->percent_check = CHECK_MINIMUM;
+-		state->known_size = status.max;
++		state->known_size = status->total_sectors;
+ 	}
+ 
+ 	/*
+ 	 * If the snapshot has been invalidated or we failed to parse
+ 	 * the status string. Report the full status string to syslog.
+ 	 */
+-	if (status.invalid || !status.max) {
++	if (status->invalid || !status->total_sectors) {
+ 		syslog(LOG_ERR, "Snapshot %s changed state to: %s\n", device, params);
+ 		state->percent_check = 0;
+ 		goto out;
+ 	}
+ 
+-	percent = 100 * status.used / status.max;
++	percent = 100 * status->used_sectors / status->total_sectors;
+ 	if (percent >= state->percent_check) {
+ 		/* Usage has raised more than CHECK_STEP since the last
+ 		   time. Run actions. */
+@@ -227,6 +189,8 @@ void process_event(struct dm_task *dmt,
+ 	}
+ 
+ out:
++	if (status)
++		dm_pool_free(state->mem, status);
+ 	dmeventd_lvm2_unlock();
  }
  
- /* Parse a register message from the client. */
-@@ -347,25 +343,15 @@ static int _parse_message(struct message_data *message_data)
- 	if (_fetch_string(&message_data->id, &p, ' ') &&
- 	    _fetch_string(&message_data->dso_name, &p, ' ') &&
- 	    _fetch_string(&message_data->device_uuid, &p, ' ') &&
--	    _fetch_string(&message_data->events.str, &p, ' ') &&
--	    _fetch_string(&message_data->timeout.str, &p, ' ')) {
--		if (message_data->events.str) {
--			enum dm_event_mask i = atoi(message_data->events.str);
--
--			/*
--			 * Free string representaion of events.
--			 * Not needed an more.
--			 */
--			dm_free(message_data->events.str);
--			message_data->events.field = i;
--		}
--		if (message_data->timeout.str) {
--			uint32_t secs = atoi(message_data->timeout.str);
--			dm_free(message_data->timeout.str);
--			message_data->timeout.secs = secs ? secs :
--			    DM_EVENT_DEFAULT_TIMEOUT;
--		}
--
-+	    _fetch_string(&message_data->events_str, &p, ' ') &&
-+	    _fetch_string(&message_data->timeout_str, &p, ' ')) {
-+		if (message_data->events_str)
-+			message_data->events_field =
-+				atoi(message_data->events_str);
-+		if (message_data->timeout_str)
-+			message_data->timeout_secs =
-+				atoi(message_data->timeout_str)
-+				? : DM_EVENT_DEFAULT_TIMEOUT;
- 		ret = 1;
- 	}
+@@ -236,28 +200,31 @@ int register_device(const char *device,
+ 		    int minor __attribute__((unused)),
+ 		    void **private)
+ {
++	struct dm_pool *statemem = NULL;
+ 	struct dso_state *state;
  
-@@ -1025,7 +1011,7 @@ static int _register_for_event(struct message_data *message_data)
- 	}
+ 	if (!dmeventd_lvm2_init())
+ 		goto out;
  
- 	/* Or event # into events bitfield. */
--	thread->events |= message_data->events.field;
-+	thread->events |= message_data->events_field;
+-	if (!(state = dm_zalloc(sizeof(*state))))
++	if (!(statemem = dm_pool_create("snapshot_state", 512)) ||
++	    !(state = dm_pool_zalloc(statemem, sizeof(*state))))
+ 		goto bad;
  
-     outth:
- 	_unlock_mutex();
-@@ -1070,7 +1056,7 @@ static int _unregister_for_event(struct message_data *message_data)
- 		return 0;
- 	}
+-	if (!dmeventd_lvm2_command(dmeventd_lvm2_pool(),
+-                                   state->cmd_str, sizeof(state->cmd_str),
++	if (!dmeventd_lvm2_command(statemem, state->cmd_str,
++				   sizeof(state->cmd_str),
+ 				   "lvextend --use-policies", device))
+ 		goto bad;
  
--	thread->events &= ~message_data->events.field;
-+	thread->events &= ~message_data->events_field;
++	state->mem = statemem;
+ 	state->percent_check = CHECK_MINIMUM;
+-	state->known_size = 0;
+ 	*private = state;
  
- 	if (!(thread->events & DM_EVENT_TIMEOUT))
- 		_unregister_for_timeout(thread);
-@@ -1208,7 +1194,7 @@ static int _set_timeout(struct message_data *message_data)
+ 	syslog(LOG_INFO, "Monitoring snapshot %s\n", device);
  
- 	_lock_mutex();
- 	if ((thread = _lookup_thread_status(message_data)))
--		thread->timeout = message_data->timeout.secs;
-+		thread->timeout = message_data->timeout_secs;
- 	_unlock_mutex();
+ 	return 1;
+ bad:
+-	dm_free(state);
++	if (statemem)
++		dm_pool_destroy(statemem);
+ 	dmeventd_lvm2_exit();
+ out:
+ 	syslog(LOG_ERR, "Failed to monitor snapshot %s.\n", device);
+@@ -274,7 +241,7 @@ int unregister_device(const char *device,
+ 	struct dso_state *state = *private;
  
- 	return thread ? 0 : -ENODEV;
+ 	syslog(LOG_INFO, "No longer monitoring snapshot %s\n", device);
+-	dm_free(state);
++	dm_pool_destroy(state->mem);
+ 	dmeventd_lvm2_exit();
+ 
+ 	return 1;
 
 
