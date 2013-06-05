@@ -1,51 +1,98 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:01:21 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - dmeventd: check for msg.data nonnull
-Message-ID: <20130605120121.2A19B60E6D@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:03:47 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - libdm: improve detection of mounted fs
+Message-ID: <20130605120347.787AC6116D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45f396f2a075054f4e047abdef5eafffca72a281
-Commit:        45f396f2a075054f4e047abdef5eafffca72a281
-Parent:        ba3cee36300d56efcdcb0af883141b1b0a6129a1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7fab9a9dda12a0d40688de5a7b57f6d7234e0f2c
+Commit:        7fab9a9dda12a0d40688de5a7b57f6d7234e0f2c
+Parent:        1f30e5a0522a69aac0d246d2fb4e5ce2f6872cff
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 17:03:50 2013 +0200
+AuthorDate:    Thu May 16 11:55:51 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 22:56:59 2013 +0200
+CommitterDate: Mon May 20 16:47:31 2013 +0200
 
-dmeventd: check for msg.data nonnull
+libdm: improve detection of mounted fs
 
-Ensure we will not use  msg.data as NULL for strchr.
+To detect mounted device, use also /proc/self/mountinfo
+as so far the check was only able to detect ext4 mounted filesystem.
+
+TODO:
+Once proper testing for this feature is added, it may appear,
+mountinfo check is enough and covers all cases and sysfs check
+could be removed.
 ---
- daemons/dmeventd/libdevmapper-event.c |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ WHATS_NEW_DM         |    1 +
+ libdm/libdm-common.c |   38 ++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 39 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index 1f8fbef..f7b586e 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -815,13 +815,13 @@ int dm_event_get_version(struct dm_event_fifos *fifos, int *version) {
- 	p = msg.data;
- 	*version = 0;
- 
--	p = strchr(p, ' '); /* Message ID */
--        if (!p) return 0;
--	p = strchr(p + 1, ' '); /* HELLO */
--        if (!p) return 0;
--	p = strchr(p + 1, ' '); /* HELLO, once more */
--	if (p)
-+	if (!p || !(p = strchr(p, ' '))) /* Message ID */
-+		return 0;
-+	if (!(p = strchr(p + 1, ' '))) /* HELLO */
-+		return 0;
-+	if ((p = strchr(p + 1, ' '))) /* HELLO, once more */
- 		*version = atoi(p);
-+
- 	return 1;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 8bdbfab..9132e01 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.78 - 
+ ===================================
++  Detecte mounted fs also via reading /proc/self/mountinfo.
+   Add dm_mountinfo_read() for parsing /proc/self/mountinfo.
+   Report error for nonexisting devices in dmeventd communication.
+   Prevent double free error after dmeventd call of _fill_device_data().
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 9e8ca25..4b0ba08 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1842,10 +1842,48 @@ static int _mounted_fs_on_device(const char *kernel_dev_name)
+ 	return r;
  }
  
++struct mountinfo_s {
++	unsigned maj;
++	unsigned min;
++	int mounted;
++};
++
++static int _device_has_mounted_fs(char *buffer, unsigned major, unsigned minor,
++				  char *target, void *cb_data)
++{
++	struct mountinfo_s *data = cb_data;
++	char kernel_dev_name[PATH_MAX];
++
++	if ((major == data->maj) && (minor == data->min)) {
++		if (!dm_device_get_name(major, minor, 1, kernel_dev_name, PATH_MAX)) {
++			stack;
++			*kernel_dev_name = '\0';
++		}
++		log_verbose("Device %s (%u:%u) appears to be mounted on %s.",
++			    kernel_dev_name, major, minor, target);
++		data->mounted = 1;
++	}
++
++	return 1;
++}
++
+ int dm_device_has_mounted_fs(uint32_t major, uint32_t minor)
+ {
+ 	char kernel_dev_name[PATH_MAX];
++	struct mountinfo_s data = {
++		.maj = major,
++		.min = minor,
++	};
++
++	if (!dm_mountinfo_read(_device_has_mounted_fs, &data))
++		stack;
+ 
++	if (data.mounted)
++		return 1;
++	/*
++	 * TODO: Verify dm_mountinfo_read() is superset
++	 * and remove sysfs check (namespaces)
++	 */
+ 	/* Get kernel device name first */
+ 	if (!dm_device_get_name(major, minor, 1, kernel_dev_name, PATH_MAX))
+ 		return 0;
 
 
