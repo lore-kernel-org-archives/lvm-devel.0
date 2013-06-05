@@ -1,38 +1,37 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:00:37 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - test: Re-instate exec in lvm-wrapper, catching crashes inside not.
-Message-ID: <20130605120037.3BDD860D8C@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:00:45 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - WHATS_NEW: Add WHATS_NEW entry for previous commit.
+Message-ID: <20130605120045.99E1C60D8C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=91c9771fc3c97b0ff1169cf81f29918d3e3a501d
-Commit:        91c9771fc3c97b0ff1169cf81f29918d3e3a501d
-Parent:        cbcbb677313aa8a4116bcfd13ceccef05fb1f9a9
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Thu Apr 11 16:22:35 2013 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Apr 11 16:22:35 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=719e908bc010455fc14589d941b949c5f3c92806
+Commit:        719e908bc010455fc14589d941b949c5f3c92806
+Parent:        faeea370571b6525d9d95d2904aaacbdb9552e00
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Thu Apr 11 16:03:24 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Thu Apr 11 16:03:24 2013 -0500
 
-test: Re-instate exec in lvm-wrapper, catching crashes inside not.
+WHATS_NEW:  Add WHATS_NEW entry for previous commit.
 
 ---
- test/lib/lvm-wrapper.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/lvm-wrapper.sh b/test/lib/lvm-wrapper.sh
-index d3a2a36..c69e29a 100644
---- a/test/lib/lvm-wrapper.sh
-+++ b/test/lib/lvm-wrapper.sh
-@@ -28,5 +28,5 @@ if test -n "$LVM_VALGRIND"; then
- 	esac
- fi
- 
--$RUN_VALGRIND "$abs_top_builddir/tools/lvm" $CMD "$@" && \
--	rm -f debug.log # Remove log for successful command
-+# the exec is important, because otherwise fatal signals inside "not" go unnoticed
-+exec $RUN_VALGRIND "$abs_top_builddir/tools/lvm" $CMD "$@"
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 43c39d6..11e838e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Revert change that allowed identical table reload for RAID.
+   New lvchange arg, '--syncaction' allows scrubbing of RAID LVs.
+   Improve RAID kernel status retrieval to include sync_action/mismatch_cnt.
+   Add external origin support for lvcreate.
 
 
