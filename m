@@ -1,91 +1,151 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:04:04 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - snapshot: use dm_get_status_snapshot()
-Message-ID: <20130605120404.55A2C60F18@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:23 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - dmeventd: convert union to struct members
+Message-ID: <20130605120123.3FB1360E6D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=06e8ff29ff59a1893312f5b2d5e818c8c62ee7b1
-Commit:        06e8ff29ff59a1893312f5b2d5e818c8c62ee7b1
-Parent:        cb587fd10034fa65ebba177022aba10e7a64aacd
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ea466673af377328a7ed50d6fb24e66a478b44b
+Commit:        5ea466673af377328a7ed50d6fb24e66a478b44b
+Parent:        45f396f2a075054f4e047abdef5eafffca72a281
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun May 26 17:04:14 2013 +0200
+AuthorDate:    Fri Apr 19 20:44:20 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 27 10:32:02 2013 +0200
+CommitterDate: Sun Apr 21 23:01:35 2013 +0200
 
-snapshot: use dm_get_status_snapshot()
+dmeventd: convert union to struct members
 
-Replace code with libdm call to dm_get_status_snapshot().
+Sharing char* with field has a problem in error path,
+when we allocate event, but fail to allocate timeout string.
+Instead of creating complicated error paths to resolve
+it individually stop using unions, and let the resource
+to be released in a simple _free_message().
 ---
- WHATS_NEW               |    1 +
- lib/snapshot/snapshot.c |   36 +++++++++++++++---------------------
- 2 files changed, 16 insertions(+), 21 deletions(-)
+ WHATS_NEW_DM                |    1 +
+ daemons/dmeventd/dmeventd.c |   54 ++++++++++++++++---------------------------
+ 2 files changed, 21 insertions(+), 34 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e63e000..734e86c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index eff6bd6..6e45a4c 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.99 - 
+ Version 1.02.78 - 
  ===================================
-+  Use libdm dm_get_status_snapshot() to parse snapshot status.
-   Add detection of mounted fs also for vgchange deactivation.
-   Replace 'lv_is_active' with more correct/specific variants (e.g. *_locally).
-   Refuse to init a snapshot merge in lvconvert if there's no kernel support.
-diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
-index 2bab9d2..453d96a 100644
---- a/lib/snapshot/snapshot.c
-+++ b/lib/snapshot/snapshot.c
-@@ -117,32 +117,26 @@ static int _snap_target_percent(void **target_state __attribute__((unused)),
- 				char *params, uint64_t *total_numerator,
- 				uint64_t *total_denominator)
- {
--	uint64_t total_sectors, sectors_allocated, metadata_sectors;
--	int r;
--
--	/*
--	 * snapshot target's percent format:
--	 * <= 1.7.0: <sectors_allocated>/<total_sectors>
--	 * >= 1.8.0: <sectors_allocated>/<total_sectors> <metadata_sectors>
--	 */
--	r = sscanf(params, "%" PRIu64 "/%" PRIu64 " %" PRIu64,
--		   &sectors_allocated, &total_sectors, &metadata_sectors);
--	if (r == 2 || r == 3) {
--		*total_numerator += sectors_allocated;
--		*total_denominator += total_sectors;
--		if (r == 3 && sectors_allocated == metadata_sectors)
-+	struct dm_status_snapshot *s;
-+
-+	if (!dm_get_status_snapshot(mem, params, &s))
-+		return_0;
-+
-+	if (s->invalid)
-+		*percent = PERCENT_INVALID;
-+	else if (s->merge_failed)
-+		*percent = PERCENT_MERGE_FAILED;
-+	else {
-+		*total_numerator += s->used_sectors;
-+		*total_denominator += s->total_sectors;
-+		if (s->has_metadata_sectors &&
-+		    s->used_sectors == s->metadata_sectors)
- 			*percent = PERCENT_0;
--		else if (sectors_allocated == total_sectors)
-+		else if (s->used_sectors == s->total_sectors)
- 			*percent = PERCENT_100;
- 		else
- 			*percent = make_percent(*total_numerator, *total_denominator);
- 	}
--	else if (!strcmp(params, "Invalid"))
--		*percent = PERCENT_INVALID;
--	else if (!strcmp(params, "Merge failed"))
--		*percent = PERCENT_MERGE_FAILED;
--	else
--		return 0;
++  Update dmevent structure message_data to simplify/fix error path handling.
+   Validate passed params to dm_get_status_raid/thin/thin_pool(). 
+   Fix 'dmsetup splitname -o' to not fail if used without '-c' switch (1.02.68).
+   Add dm_config_write_{node_out/one_node_out} for enhanced config output.
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 06c0c92..35a2b25 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -167,14 +167,10 @@ struct message_data {
+ 	char *id;
+ 	char *dso_name;		/* Name of DSO. */
+ 	char *device_uuid;	/* Mapped device path. */
+-	union {
+-		char *str;	/* Events string as fetched from message. */
+-		enum dm_event_mask field;	/* Events bitfield. */
+-	} events;
+-	union {
+-		char *str;
+-		uint32_t secs;
+-	} timeout;
++	char *events_str;	/* Events string as fetched from message. */
++	enum dm_event_mask events_field;	/* Events bitfield. */
++	char *timeout_str;
++	uint32_t timeout_secs;
+ 	struct dm_event_daemon_message *msg;	/* Pointer to message buffer. */
+ };
  
- 	return 1;
+@@ -235,8 +231,8 @@ static struct thread_status *_alloc_thread_status(struct message_data *data,
+ 	ret->device.name = NULL;
+ 	ret->device.major = ret->device.minor = 0;
+ 	ret->dso_data = dso_data;
+-	ret->events = data->events.field;
+-	ret->timeout = data->timeout.secs;
++	ret->events = data->events_field;
++	ret->timeout = data->timeout_secs;
+ 	dm_list_init(&ret->timeout_list);
+ 
+ 	return ret;
+@@ -325,9 +321,9 @@ static void _free_message(struct message_data *message_data)
+ {
+ 	dm_free(message_data->id);
+ 	dm_free(message_data->dso_name);
+-
+ 	dm_free(message_data->device_uuid);
+-
++	dm_free(message_data->events_str);
++	dm_free(message_data->timeout_str);
  }
+ 
+ /* Parse a register message from the client. */
+@@ -347,25 +343,15 @@ static int _parse_message(struct message_data *message_data)
+ 	if (_fetch_string(&message_data->id, &p, ' ') &&
+ 	    _fetch_string(&message_data->dso_name, &p, ' ') &&
+ 	    _fetch_string(&message_data->device_uuid, &p, ' ') &&
+-	    _fetch_string(&message_data->events.str, &p, ' ') &&
+-	    _fetch_string(&message_data->timeout.str, &p, ' ')) {
+-		if (message_data->events.str) {
+-			enum dm_event_mask i = atoi(message_data->events.str);
+-
+-			/*
+-			 * Free string representaion of events.
+-			 * Not needed an more.
+-			 */
+-			dm_free(message_data->events.str);
+-			message_data->events.field = i;
+-		}
+-		if (message_data->timeout.str) {
+-			uint32_t secs = atoi(message_data->timeout.str);
+-			dm_free(message_data->timeout.str);
+-			message_data->timeout.secs = secs ? secs :
+-			    DM_EVENT_DEFAULT_TIMEOUT;
+-		}
+-
++	    _fetch_string(&message_data->events_str, &p, ' ') &&
++	    _fetch_string(&message_data->timeout_str, &p, ' ')) {
++		if (message_data->events_str)
++			message_data->events_field =
++				atoi(message_data->events_str);
++		if (message_data->timeout_str)
++			message_data->timeout_secs =
++				atoi(message_data->timeout_str)
++				? : DM_EVENT_DEFAULT_TIMEOUT;
+ 		ret = 1;
+ 	}
+ 
+@@ -1025,7 +1011,7 @@ static int _register_for_event(struct message_data *message_data)
+ 	}
+ 
+ 	/* Or event # into events bitfield. */
+-	thread->events |= message_data->events.field;
++	thread->events |= message_data->events_field;
+ 
+     outth:
+ 	_unlock_mutex();
+@@ -1070,7 +1056,7 @@ static int _unregister_for_event(struct message_data *message_data)
+ 		return 0;
+ 	}
+ 
+-	thread->events &= ~message_data->events.field;
++	thread->events &= ~message_data->events_field;
+ 
+ 	if (!(thread->events & DM_EVENT_TIMEOUT))
+ 		_unregister_for_timeout(thread);
+@@ -1208,7 +1194,7 @@ static int _set_timeout(struct message_data *message_data)
+ 
+ 	_lock_mutex();
+ 	if ((thread = _lookup_thread_status(message_data)))
+-		thread->timeout = message_data->timeout.secs;
++		thread->timeout = message_data->timeout_secs;
+ 	_unlock_mutex();
+ 
+ 	return thread ? 0 : -ENODEV;
 
 
