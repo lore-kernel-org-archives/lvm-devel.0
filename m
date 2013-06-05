@@ -1,92 +1,168 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:05:32 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - tests: run all the test flavours in a single batch
-Message-ID: <20130605120532.2FF976117A@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:05:34 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - tests: collect all test results in files
+Message-ID: <20130605120534.538DE6137B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c89cbf03a15fe30de520d50c214cd3878518e45
-Commit:        7c89cbf03a15fe30de520d50c214cd3878518e45
-Parent:        53fbf2bea3e992f1c21f5f77eacc687ce01143f5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=65a0650135bef9bae9ce3a168e9ab2a8d9b70673
+Commit:        65a0650135bef9bae9ce3a168e9ab2a8d9b70673
+Parent:        7c89cbf03a15fe30de520d50c214cd3878518e45
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon May 27 03:12:03 2013 +0200
+AuthorDate:    Mon May 27 04:26:33 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Jun 2 00:50:09 2013 +0200
 
-tests: run all the test flavours in a single batch
+tests: collect all test results in files
 
-This means that a test failure in one flavour no longer prevents all the
-subsequent flavours from running. We also get an aggregate summary at
-the end of the entire batch, instead of summaries interspersed with
-progress output. Do not fail when flavour overrides are empty
+Use files  for later processing with suffix .txt
+to avoid mime type confusion.
 ---
- test/Makefile.in   |    8 +++++++-
- test/lib/harness.c |   11 ++++++++++-
- test/lib/test.sh   |    8 ++++++++
- 3 files changed, 25 insertions(+), 2 deletions(-)
+ test/Makefile.in   |    1 +
+ test/lib/harness.c |   53 ++++++++++++++++++++++++++++++++++++++-------------
+ 2 files changed, 40 insertions(+), 14 deletions(-)
 
 diff --git a/test/Makefile.in b/test/Makefile.in
-index 5bbd1d6..938dc1d 100644
+index 938dc1d..1bd1dbd 100644
 --- a/test/Makefile.in
 +++ b/test/Makefile.in
-@@ -66,7 +66,13 @@ help:
- 	@echo "  T			Run given test (regex)."
- 	@echo "  VERBOSE		Verbose output (1), timing (2)."
+@@ -122,6 +122,7 @@ CMDS = lvm $(shell cat $(top_builddir)/tools/.commands)
+ 			ln -sf $(abs_top_srcdir)/test/$$f $$f; \
+ 		done; \
+ 	fi
++	mkdir -p results
+ 	touch $@
  
--check: check_local check_cluster check_lvmetad
-+check: .tests-stamp
-+	VERBOSE=$(VEROSE) \
-+	cluster_LVM_TEST_LOCKING=3 \
-+	lvmetad_LVM_TEST_LVMETAD=1 \
-+	./lib/harness $(patsubst %,normal:%,$(RUN_BASE)) \
-+		      $(patsubst %,cluster:%,$(RUN_BASE)) \
-+		      $(patsubst %,lvmetad:%,$(RUN_BASE))
- 
- check_cluster: .tests-stamp
- 	@echo Testing with locking_type 3
+ .lib-dir-stamp:
 diff --git a/test/lib/harness.c b/test/lib/harness.c
-index 929bfc8..d610bf8 100644
+index d610bf8..e80efbf 100644
 --- a/test/lib/harness.c
 +++ b/test/lib/harness.c
-@@ -286,7 +286,16 @@ static void run(int i, char *f) {
- 			close(fds[0]);
- 			close(fds[1]);
- 		}
--		execlp("bash", "bash", f, NULL);
-+		char flavour[512], script[512];
-+		if (strchr(f, ':')) {
-+			strcpy(flavour, f);
-+			*strchr(flavour, ':') = 0;
-+			setenv("LVM_TEST_FLAVOUR", flavour, 1);
-+			strcpy(script, strchr(f, ':') + 1);
-+		} else {
-+			strcpy(script, f);
-+		}
-+		execlp("bash", "bash", script, NULL);
- 		perror("execlp");
- 		fflush(stderr);
- 		_exit(202);
-diff --git a/test/lib/test.sh b/test/lib/test.sh
-index 3729749..9a56a0f 100644
---- a/test/lib/test.sh
-+++ b/test/lib/test.sh
-@@ -56,6 +56,14 @@ cd "$TESTDIR"
+@@ -46,6 +46,8 @@ static int die = 0;
+ static int verbose = 0; /* >1 with timestamps */
+ static int interactive = 0; /* disable all redirections */
  
- echo "$TESTNAME" >TESTNAME
- 
-+if test -n "$LVM_TEST_FLAVOUR"; then
-+	touch flavour_overrides
-+	env | grep ^$LVM_TEST_FLAVOUR | while read var; do
-+		(echo -n "export "; echo $var | sed -e s,^${LVM_TEST_FLAVOUR}_,,) >> flavour_overrides
-+	done
-+	. flavour_overrides
-+fi
++static FILE *outfile = NULL;
 +
- # Setting up symlink from $i to $TESTDIR/lib
- find "$abs_top_builddir/daemons/dmeventd/plugins/" -name '*.so' \
- 	-exec ln -s -t lib "{}" +
+ struct subst {
+ 	const char *key;
+ 	char *value;
+@@ -65,7 +67,7 @@ static void handler( int sig ) {
+ 	die = sig;
+ }
+ 
+-static int outline(char *buf, int start, int force) {
++static int outline(FILE *out, char *buf, int start, int force) {
+ 	char *from = buf + start;
+ 	char *next = strchr(buf + start, '\n');
+ 
+@@ -100,11 +102,11 @@ static int outline(char *buf, int start, int force) {
+ 					}
+ 				}
+ 			}
+-			fwrite(a, 1, b - a, stdout);
++			fwrite(a, 1, b - a, out);
+ 			a = b;
+ 
+ 			if ( idx >= 0 ) {
+-				fprintf(stdout, "%s", subst[idx].key);
++				fprintf(out, "%s", subst[idx].key);
+ 				a += strlen(subst[idx].value);
+ 			}
+ 		} while (b < line + strlen(line));
+@@ -119,20 +121,18 @@ static void dump(void) {
+ 
+ 	while ( counter < readbuf_used && counter != counter_last ) {
+ 		counter_last = counter;
+-		counter = outline( readbuf, counter, 1 );
++		counter = outline( stdout, readbuf, counter, 1 );
+ 	}
+ }
+ 
+-static void trickle(void) {
+-	static int counter_last = -1, counter = 0;
+-
+-	if (counter_last > readbuf_used) {
+-		counter_last = -1;
+-		counter = 0;
++static void trickle(FILE *out, int *last, int *counter) {
++	if (*last > readbuf_used) {
++		*last = -1;
++		*counter = 0;
+ 	}
+-	while ( counter < readbuf_used && counter != counter_last ) {
+-		counter_last = counter;
+-		counter = outline( readbuf, counter, 1 );
++	while ( *counter < readbuf_used && *counter != *last ) {
++		*last = *counter;
++		*counter = outline( out, readbuf, *counter, 1 );
+ 	}
+ }
+ 
+@@ -203,6 +203,9 @@ static void drain(void) {
+ 	int stamp = 0;
+ 	int sz;
+ 
++	static int stdout_last = -1, stdout_counter = 0;
++	static int outfile_last = -1, outfile_counter = 0;
++
+ 	while ((sz = read(fds[1], buf, sizeof(buf) - 1)) > 0) {
+ 		buf[sz] = '\0';
+ 		bp = (verbose < 2) ? buf : _append_with_stamp(buf, stamp);
+@@ -216,7 +219,9 @@ static void drain(void) {
+ 		readbuf[readbuf_used] = 0;
+ 
+ 		if (verbose)
+-			trickle();
++			trickle(stdout, &stdout_last, &stdout_counter);
++		if (outfile)
++			trickle(outfile, &outfile_last, &outfile_counter);
+ 	}
+ }
+ 
+@@ -307,6 +312,11 @@ static void run(int i, char *f) {
+ 		buf[127] = 0;
+ 		printf("Running %-50s ", buf);
+ 		fflush(stdout);
++		char outpath[512];
++		sprintf(outpath, "results/%s.txt", f);
++		while (strchr(outpath + 8, '/'))
++			*strchr(outpath + 8, '/') = '_';
++		outfile = fopen(outpath, "w");
+ 		while ((w = waitpid(pid, &st, WNOHANG)) == 0) {
+ 			drain();
+ 			usleep(20000);
+@@ -328,6 +338,7 @@ static void run(int i, char *f) {
+ 			failed(i, f, st);
+ 		}
+ 		clear();
++		fclose(outfile);
+ 	}
+ }
+ 
+@@ -377,6 +388,20 @@ int main(int argc, char **argv) {
+ 	       duration(start),
+ 	       s.npassed, s.nwarned, s.nfailed, s.nknownfail, s.nskipped);
+ 
++	/* dump a list to results */
++	FILE *list = fopen("results/list", "w");
++	for (i = 1; i < argc; ++ i) {
++		const char *result = "unknown";
++		switch (s.status[i]) {
++		case PASSED: result = "passed"; break;
++		case FAILED: result = "failed"; break;
++		case SKIPPED: result = "skipped"; break;
++		case WARNED: result = "warnings"; break;
++		}
++		fprintf(list, "%s %s\n", argv[i], result);
++	}
++	fclose(list);
++
+ 	/* print out a summary */
+ 	if (s.nfailed || s.nskipped || s.nknownfail) {
+ 		for (i = 1; i < argc; ++ i) {
 
 
