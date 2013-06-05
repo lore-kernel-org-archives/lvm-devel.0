@@ -1,39 +1,61 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:07 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - cleanup: drop unwanted ';'
-Message-ID: <20130605120207.4AEF3613B0@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:09 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - test: singlenode minor cleanups
+Message-ID: <20130605120209.5A324613B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9cdcde494f2824dbf8e549638331ab65b1f56b3a
-Commit:        9cdcde494f2824dbf8e549638331ab65b1f56b3a
-Parent:        5a751ad703c8082aaf96c53fc1e76bd8fc607235
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=994c32272e7c36f45defda12848d3856590a0d1f
+Commit:        994c32272e7c36f45defda12848d3856590a0d1f
+Parent:        9cdcde494f2824dbf8e549638331ab65b1f56b3a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 22:32:43 2013 +0200
+AuthorDate:    Thu Apr 18 18:01:52 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Apr 21 23:15:07 2013 +0200
 
-cleanup: drop unwanted ';'
+test: singlenode minor cleanups
 
+Move unnecessary code out of locks.
 ---
- daemons/clvmd/clvmd.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/clvmd/clvmd-singlenode.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.h b/daemons/clvmd/clvmd.h
-index 67ea41e..fb0589d 100644
---- a/daemons/clvmd/clvmd.h
-+++ b/daemons/clvmd/clvmd.h
-@@ -95,7 +95,7 @@ struct local_client {
- 	} bits;
- };
+diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
+index b968c5f..a79100f 100644
+--- a/daemons/clvmd/clvmd-singlenode.c
++++ b/daemons/clvmd/clvmd-singlenode.c
+@@ -218,8 +218,8 @@ maybe_retry:
+ 		goto retry;
+ 	}
+ bad:
+-	DEBUGLOG("Failed to lock resource %s\n", resource);
+ 	pthread_mutex_unlock(&_lock_mutex);
++	DEBUGLOG("Failed to lock resource %s\n", resource);
  
--#define DEBUGLOG(fmt, args...) debuglog(fmt, ## args);
-+#define DEBUGLOG(fmt, args...) debuglog(fmt, ## args)
+ 	return 1; /* fail */
+ }
+@@ -251,9 +251,9 @@ static int _unlock_resource(const char *resource, int lockid)
+ 	}
  
- #ifndef max
- #define max(a,b) ((a)>(b)?(a):(b))
+ 	dm_hash_remove(_locks, resource);
+-	dm_free(lck);
+ 	pthread_cond_broadcast(&_lock_cond); /* wakeup waiters */
+ 	pthread_mutex_unlock(&_lock_mutex);
++	dm_free(lck);
+ 
+ 	return 0;
+ }
+@@ -312,6 +312,6 @@ struct cluster_ops *init_singlenode_cluster(void)
+ {
+ 	if (!_init_cluster())
+ 		return &_cluster_singlenode_ops;
+-	else
+-		return NULL;
++
++	return NULL;
+ }
 
 
