@@ -1,57 +1,41 @@
-From: dongmao zhang <dmzhang@suse.com>
-Date: Fri,  7 Jun 2013 21:52:28 +0800
-Subject: [PATCH] if syslog has been opened, do not open it again
-Message-ID: <1370613148-10904-1-git-send-email-dmzhang@suse.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed,  5 Jun 2013 12:01:39 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - thin: fix cut&paste bug
+Message-ID: <20130605120139.F20AB61134@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-if log/syslog in /etc/lvm/lvm.conf were set, clvmd log
-would be like this:
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=78a42bac157edba2b68bdfd77ea5c3096845aceb
+Commit:        78a42bac157edba2b68bdfd77ea5c3096845aceb
+Parent:        24f8daa13d82869fbe088f7edf3c95c11660b186
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Apr 19 21:03:38 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sun Apr 21 23:07:00 2013 +0200
 
-Jun  8 04:22:42 linux-node02 clvmd[29044]: Cluster ready, doing some
-more initialisation
-Jun  8 04:22:42 linux-node02 clvmd[29044]: starting LVM thread
-Jun  8 04:22:42 linux-node02 lvm[29044]: Sub thread ready for work.
-Jun  8 04:22:42 linux-node02 lvm[29044]: LVM thread waiting for work
+thin: fix cut&paste bug
 
-Having lvm[pid] and clvmd[pid] is confusing. This is because
-the ident of syslog was overrided by create_toolcontext->init_syslog.
-
-So if syslog was opened as 'clvmd', it should not be opened as 'lvm'
-again. Just use the exsiting global flag _syslog(log.c) to prevent this
+Use proper external_lv.
+(In release fix)
 ---
- lib/log/log.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ lib/display/display.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index 06e053f..b0f5061 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -82,8 +82,10 @@ void init_log_while_suspended(int log_while_suspended)
- 
- void init_syslog(int facility)
- {
--	openlog("lvm", LOG_PID, facility);
--	_syslog = 1;
-+	if (!_syslog) {
-+		openlog("lvm", LOG_PID, facility);
-+		_syslog = 1;
-+	}
- }
- 
- int log_suppress(int suppress)
-@@ -353,6 +355,7 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
- 		return;
- 	}
- 
-+
- 	if (_log_to_file && (_log_while_suspended || !critical_section())) {
- 		fprintf(_log_file, "%s:%d %s%s", file, line, log_command_name(),
- 			_msg_prefix);
--- 
-1.7.3.4
+diff --git a/lib/display/display.c b/lib/display/display.c
+index c766674..26bc384 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -595,7 +595,7 @@ int lvdisplay_full(struct cmd_context *cmd,
+ 				  seg->origin->name);
+ 		if (seg->external_lv)
+ 			log_print("LV External origin name %s",
+-				  seg->origin->name);
++				  seg->external_lv->name);
+ 		if (inkernel)
+ 			thin_active = lv_thin_percent(lv, 0, &thin_percent);
+ 	} else if (lv_is_thin_pool(lv)) {
 
 
