@@ -1,159 +1,108 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:57 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - lv: add lv_active_change
-Message-ID: <20130605120257.6DA0C60E47@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:59 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - report: improve reporting of active state
+Message-ID: <20130605120259.7F1E160E47@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d2d71330c308230065dbc865e4552a9a62aad269
-Commit:        d2d71330c308230065dbc865e4552a9a62aad269
-Parent:        dacc340cc89e9be5cb88986a444466edb3a06e52
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2d3700ba42e156aa8b6e2819736cab6866ea56ce
+Commit:        2d3700ba42e156aa8b6e2819736cab6866ea56ce
+Parent:        d2d71330c308230065dbc865e4552a9a62aad269
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 29 14:04:38 2013 +0200
+AuthorDate:    Thu May 2 18:06:50 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 3 15:43:19 2013 +0200
+CommitterDate: Fri May 3 15:43:52 2013 +0200
 
-lv: add lv_active_change
+report: improve reporting of active state
 
-Make a separate /lib function for the change of activation state
-of the LV.
+For reporting stacked or joined devices properly in cluster,
+we need to report their activation state according the lock,
+which activated this device tree.
 
-(in release update)
+This is getting a bit complex - current code tries simple approach -
+
+For snapshot - return status for origin.
+For thin pool - return status of the first known active thin volume.
+For the rest of them - try to use dependency list of LVs and skip
+known execptions.  This should be able to recursively deduce top level
+device for given LV.
+
+(in release fix)
 ---
- lib/metadata/lv.c |   37 +++++++++++++++++++++++++++++++++++++
- lib/metadata/lv.h |    6 +++++-
- tools/toollib.c   |   37 ++++---------------------------------
- 3 files changed, 46 insertions(+), 34 deletions(-)
+ lib/metadata/lv.c |   40 +++++++++++++++++++++++++++++++++++++++-
+ lib/metadata/lv.h |    1 +
+ 2 files changed, 40 insertions(+), 1 deletions(-)
 
 diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 3dbdb38..41de7a5 100644
+index 41de7a5..283b8c4 100644
 --- a/lib/metadata/lv.c
 +++ b/lib/metadata/lv.c
-@@ -704,6 +704,43 @@ char *lv_host_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	return dm_pool_strdup(mem, lv->hostname ? : "");
- }
- 
-+int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
-+		     activation_change_t activate)
-+{
-+	if (activate == CHANGE_AN) {
-+		log_verbose("Deactivating logical volume \"%s\"", lv->name);
-+		if (!deactivate_lv(cmd, lv))
-+			return_0;
-+	} else if ((activate == CHANGE_AE) ||
-+		   lv_is_origin(lv) ||
-+		   lv_is_thin_type(lv)) {
-+		if (activate == CHANGE_ALN) {
-+			/* origin or thin, all others have _AE */
-+			/* other types of activation are implicitly exclusive */
-+			/* Note: the order of tests is mandatory */
-+			log_error("Cannot deactivate \"%s\" locally.", lv->name);
-+			return 0;
-+		}
-+		log_verbose("Activating logical volume \"%s\" exclusively.", lv->name);
-+		if (!activate_lv_excl(cmd, lv))
-+			return_0;
-+	} else if (activate == CHANGE_ALN) {
-+		log_verbose("Deactivating logical volume \"%s\" locally.", lv->name);
-+		if (!deactivate_lv_local(cmd, lv))
-+			return_0;
-+	} else if ((activate == CHANGE_ALY) || (activate == CHANGE_AAY)) {
-+		log_verbose("Activating logical volume \"%s\" locally.", lv->name);
-+		if (!activate_lv_local(cmd, lv))
-+			return_0;
-+	} else { /* CHANGE_AY */
-+		log_verbose("Activating logical volume \"%s\".", lv->name);
-+		if (!activate_lv(cmd, lv))
-+			return_0;
-+	}
-+
-+	return 1;
-+}
-+
- char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv)
+@@ -745,6 +745,12 @@ char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv)
  {
  	const char *s;
+ 
++	if (vg_is_clustered(lv->vg)) {
++		//const struct logical_volume *lvo = lv;
++		lv = lv_lock_holder(lv);
++		//log_debug("Holder for %s => %s.", lvo->name, lv->name);
++	}
++
+ 	if (!lv_is_active(lv))
+ 		s = ""; /* not active */
+ 	else if (!vg_is_clustered(lv->vg))
+@@ -755,7 +761,39 @@ char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ 			"local exclusive" : "remote exclusive";
+ 	else /* locally active */
+ 		s = lv_is_active_but_not_locally(lv) ?
+-		     "remotely" : "locally";
++			"remotely" : "locally";
+ 
+ 	return dm_pool_strdup(mem, s);
+ }
++
++/* For given LV find recursively the LV which holds lock for it */
++const struct logical_volume *lv_lock_holder(const struct logical_volume *lv)
++{
++	const struct seg_list *sl;
++
++	if (lv_is_cow(lv))
++		return lv_lock_holder(origin_from_cow(lv));
++
++	if (lv_is_thin_pool(lv))
++		/* Find any active LV from the pool */
++		dm_list_iterate_items(sl, &lv->segs_using_this_lv)
++			if (lv_is_active(sl->seg->lv)) {
++				log_debug("Thin volume \"%s\" is active.", sl->seg->lv->name);
++				return sl->seg->lv;
++			}
++
++	/* For other types, by default look for the first user */
++	dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
++		/* FIXME: complete this exception list */
++		if (lv_is_thin_volume(lv) &&
++		    lv_is_thin_volume(sl->seg->lv) &&
++		    first_seg(lv)->pool_lv == sl->seg->pool_lv)
++			continue; /* Skip thin snaphost */
++		if (lv_is_external_origin(lv) &&
++		    lv_is_thin_volume(sl->seg->lv))
++			continue; /* Skip external origin */
++		return lv_lock_holder(sl->seg->lv);
++	}
++
++	return lv;
++}
 diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 9450f8d..bac8bc2 100644
+index bac8bc2..ed0d745 100644
 --- a/lib/metadata/lv.h
 +++ b/lib/metadata/lv.h
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -20,6 +20,8 @@ struct volume_group;
- struct dm_list;
- struct lv_segment;
- struct replicator_device;
-+enum activation_change;
-+typedef enum activation_change activation_change_t;
- 
- struct logical_volume {
- 	union lvid lvid;
-@@ -85,5 +87,7 @@ char *lv_host_dup(struct dm_pool *mem, const struct logical_volume *lv);
- int lv_set_creation(struct logical_volume *lv,
- 		    const char *hostname, uint64_t timestamp);
- const char *lv_layer(const struct logical_volume *lv);
-+int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
-+		     activation_change_t activate);
+@@ -90,4 +90,5 @@ const char *lv_layer(const struct logical_volume *lv);
+ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
+ 		     activation_change_t activate);
  char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv);
++const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
  #endif /* _LVM_LV_H */
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 950ca33..e9be968 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1300,41 +1300,12 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
- 		       activation_change_t activate)
- {
--	if (activate == CHANGE_AN) {
--		log_verbose("Deactivating logical volume \"%s\"", lv->name);
--		if (!deactivate_lv(cmd, lv))
--			return_0;
--		return 1;
--	} else if ((activate == CHANGE_AE) ||
--		   lv_is_origin(lv) ||
--		   lv_is_thin_type(lv)) {
--		if (activate == CHANGE_ALN) {
--			/* origin or thin, all others have _AE */
--			/* other types of activation are implicitly exclusive */
--			/* Note: the order of tests is mandatory */
--			log_error("Cannot deactivate \"%s\" locally.", lv->name);
--			return 0;
--		}
--		log_verbose("Activating logical volume \"%s\" exclusively.", lv->name);
--		if (!activate_lv_excl(cmd, lv))
--			return_0;
--	} else if (activate == CHANGE_ALN) {
--		log_verbose("Deactivating logical volume \"%s\" locally.", lv->name);
--		if (!deactivate_lv_local(cmd, lv))
--			return_0;
--		return 1;
--	} else if ((activate == CHANGE_ALY) || (activate == CHANGE_AAY)) {
--		log_verbose("Activating logical volume \"%s\" locally.", lv->name);
--		if (!activate_lv_local(cmd, lv))
--			return_0;
--	} else { /* CHANGE_AY */
--		log_verbose("Activating logical volume \"%s\".", lv->name);
--		if (!activate_lv(cmd, lv))
--			return_0;
--	}
-+	if (!lv_active_change(cmd, lv, activate))
-+		return_0;
- 
--	/* CHANGE_AN/ALN is not getting here */
- 	if (background_polling() &&
-+	    (activate != CHANGE_AN) &&
-+	    (activate != CHANGE_ALN) &&
- 	    (lv->status & (PVMOVE|CONVERTING|MERGING)))
- 		lv_spawn_background_polling(cmd, lv);
- 
 
 
