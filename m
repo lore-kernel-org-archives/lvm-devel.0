@@ -1,57 +1,62 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:05:57 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - lvm1: Do not call into lvmcache from low-level code.
-Message-ID: <20130605120557.56E4160F90@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:35 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - raid: read segment only for known LV
+Message-ID: <20130605120135.BB91D60E6D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1650e1467ca35e3a4dfece81bcda2e2c23bf046b
-Commit:        1650e1467ca35e3a4dfece81bcda2e2c23bf046b
-Parent:        94d9562bea6d0fa5bc7e919cb34090ffe6b45fd9
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Feb 18 16:20:20 2013 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Jun 5 12:37:36 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9e24d563c6e281a582bf1a98673305ce88d6cd05
+Commit:        9e24d563c6e281a582bf1a98673305ce88d6cd05
+Parent:        4ca6a4105db63344abe3e62eaa0cbcfcb23c47f9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Apr 21 08:47:59 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sun Apr 21 23:07:00 2013 +0200
 
-lvm1: Do not call into lvmcache from low-level code.
+raid: read segment only for known LV
 
-This path is not performance-sensitive anyway (LVM1 is long deprecated) and
-disk-rep is very low-level code that has no business talking to lvmcache.
+Avoid reading first_seg() on unknown LV and find it only when needed.
 ---
- lib/format1/disk-rep.c |   18 ------------------
- 1 files changed, 0 insertions(+), 18 deletions(-)
+ tools/pvmove.c |   16 ++++++++--------
+ 1 files changed, 8 insertions(+), 8 deletions(-)
 
-diff --git a/lib/format1/disk-rep.c b/lib/format1/disk-rep.c
-index 19776e0..adc38ba 100644
---- a/lib/format1/disk-rep.c
-+++ b/lib/format1/disk-rep.c
-@@ -493,24 +493,6 @@ int read_pvs_in_vg(const struct format_type *fmt, const char *vg_name,
- 	baton.mem = mem;
- 	baton.vg_name = vg_name;
- 
--	/* Fast path if we already saw this VG and cached the list of PVs */
--	if (vg_name && (vginfo = lvmcache_vginfo_from_vgname(vg_name, NULL))) {
--
--		lvmcache_foreach_pv(vginfo, _read_pv_in_vg, &baton);
--
--		if (!baton.empty) {
--			/* Did we find the whole VG? */
--			if (!vg_name || is_orphan_vg(vg_name) ||
--			    (baton.data && *baton.data->pvd.vg_name &&
--			     dm_list_size(head) == baton.data->vgd.pv_cur))
--				return 1;
--
--			/* Failed */
--			dm_list_init(head);
--			/* vgcache_del(vg_name); */
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index 575f296..a733049 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -207,7 +207,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 	/* Find segments to be moved and set up mirrors */
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+ 		lv = lvl->lv;
+-		seg = first_seg(lv);
+ 		if (lv == lv_mirr)
+ 			continue;
+ 		if (lv_name) {
+@@ -220,14 +219,15 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 			log_print_unless_silent("Skipping snapshot-related LV %s", lv->name);
+ 			continue;
+ 		}
+-		if (seg_is_raid(seg)) {
+-			lv_skipped = 1;
+-			log_print_unless_silent("Skipping %s LV %s",
+-						seg->segtype->ops->name(seg),
+-						lv->name);
+-			continue;
 -		}
--	}
--
- 	if (!(iter = dev_iter_create(filter, 1))) {
- 		log_error("read_pvs_in_vg: dev_iter_create failed");
- 		return 0;
+ 		if (lv_is_raid_type(lv)) {
++			seg = first_seg(lv);
++			if (seg_is_raid(seg)) {
++				lv_skipped = 1;
++				log_print_unless_silent("Skipping %s LV %s",
++							seg->segtype->ops->name(seg),
++							lv->name);
++				continue;
++			}
+ 			lv_skipped = 1;
+ 			log_print_unless_silent("Skipping RAID sub-LV %s",
+ 						lv->name);
 
 
