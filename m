@@ -1,131 +1,157 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:02:36 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - man: lvextend --use-policies
-Message-ID: <20130605120236.8157D613BE@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:02:38 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - report: show dmeventd monitoring status
+Message-ID: <20130605120238.935C6613BE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3f7de58e96a2ba84bf2590465ee9f5f7929cb74d
-Commit:        3f7de58e96a2ba84bf2590465ee9f5f7929cb74d
-Parent:        f84f12a6a3edaac5220699dd9c6937139429d852
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8b18ab76d27f40094f281d5695a6bb82b65e1976
+Commit:        8b18ab76d27f40094f281d5695a6bb82b65e1976
+Parent:        3f7de58e96a2ba84bf2590465ee9f5f7929cb74d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 24 23:41:05 2013 +0200
+AuthorDate:    Thu Apr 25 12:07:57 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Apr 25 17:33:24 2013 +0200
 
-man: lvextend --use-policies
+report: show dmeventd monitoring status
 
-Add missing man info.
+Add new lvs segment field 'Monitor' showing 3 states:
+
+"monitored" - LV is monitored by dmeventd.
+
+"not monitored" - LV is currently not being monitored by dmeventd
+
+"" (empty) - LV does not support monitoring, or dmeventd support
+             is not compiled in.
 ---
- WHATS_NEW          |    1 +
- man/lvconvert.8.in |    2 +-
- man/lvextend.8.in  |   29 ++++++++++++++++++-----------
- 3 files changed, 20 insertions(+), 12 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv.c       |   34 ++++++++++++++++++++++++++++++++++
+ lib/metadata/lv.h       |    1 +
+ lib/report/columns.h    |    1 +
+ lib/report/properties.c |    2 ++
+ lib/report/report.c     |   14 ++++++++++++++
+ 6 files changed, 53 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 5c97eff..27ebcec 100644
+index 27ebcec..a625dba 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Document lvextend --use-policies option in man.
++  Add "monitor" segment reporting field to show dmevent monitoring status.
+   Document lvextend --use-policies option in man.
    Fix creation and removal of clustered snapshot.
    Fix clvmd caching of metadata when suspending inactive volumes.
-   Find newest timestamp of merged config files.
-diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
-index d22994e..d7300d8 100644
---- a/man/lvconvert.8.in
-+++ b/man/lvconvert.8.in
-@@ -284,7 +284,7 @@ Repair a mirror after suffering a disk failure. The mirror will be brought back
- into a consistent state.  By default, the original number of mirrors will be
- restored if possible.  Specify \fB\-y\fP on the command line to skip
- the prompts. Use \fB\-f\fP if you do not want any replacement.
--Additionally, you may use \fB\-\-use-policies\fP to use the device
-+Additionally, you may use \fB\-\-use\-policies\fP to use the device
- replacement policy specified in \fBlvm.conf\fP(5),
- viz. activation/mirror_log_fault_policy or
- activation/mirror_device_fault_policy.
-diff --git a/man/lvextend.8.in b/man/lvextend.8.in
-index ee62a2f..c51a9dc 100644
---- a/man/lvextend.8.in
-+++ b/man/lvextend.8.in
-@@ -9,7 +9,7 @@ lvextend \- extend the size of a logical volume
- .RI { y | n }]
- .RB [ \-d | \-\-debug ]
- .RB [ \-h | \-? | \-\-help ]
--.RB [ \-\-noudevsync]
-+.RB [ \-f | \-\-force ]
- .RB [ \-i | \-\-stripes
- .I Stripes
- .RB [ \-I | \-\-stripesize
-@@ -19,9 +19,10 @@ lvextend \- extend the size of a logical volume
- |
- .BR \-L | \-\-size
- .RI [ + ] LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]}
--.RB [ \-f | \-\-force ]
- .RB [ \-n | \-\-nofsck ]
-+.RB [ \-\-noudevsync]
- .RB [ \-r | \-\-resizefs ]
-+.RB [ \-\-use\-policies ]
- .RB [ \-t | \-\-test ]
- .RB [ \-v | \-\-verbose ]
- .I LogicalVolumePath
-@@ -37,12 +38,8 @@ volume use
- .SH OPTIONS
- See \fBlvm\fP(8) for common options.
- .TP
--.B \-\-noudevsync
--Disable udev synchronisation. The
--process will not wait for notification from udev.
--It will continue irrespective of any possible udev processing
--in the background.  You should only use this if udev is not running
--or has rules that ignore the devices LVM2 creates.
-+.BR \-f ", " \-\-force
-+Proceed with size extension without prompting.
- .TP
- .IR \fB\-l ", " \fB\-\-extents " [" + ] LogicalExtentsNumber [ % { VG | LV | PVS | FREE | ORIGIN }]
- Extend or set the logical volume size in units of logical extents.
-@@ -77,17 +74,26 @@ use a single value throughout.
- .br
- StripeSize must be 2^n (n = 2 to 9)
- .TP
--.BR \-f ", " \-\-force
--Proceed with size extension without prompting.
--.TP
- .BR \-n ", " \-\-nofsck
- Do not perform fsck before extending filesystem when filesystem
- requires it. You may need to use \fB\-\-force\fR to proceed with
- this option.
- .TP
-+.B \-\-noudevsync
-+Disable udev synchronisation. The
-+process will not wait for notification from udev.
-+It will continue irrespective of any possible udev processing
-+in the background.  You should only use this if udev is not running
-+or has rules that ignore the devices LVM2 creates.
-+.TP
- .BR \-r ", " \-\-resizefs
- Resize underlying filesystem together with the logical volume using
- \fBfsadm\fR(8).
-+.TP
-+.B \-\-use\-policies
-+Resizes the logical volume according to configured policy. See
-+\fBlvm.conf\fR(5) for some details.
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 6afa468..e515e02 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -128,6 +128,40 @@ char *lvseg_discards_dup(struct dm_pool *mem, const struct lv_segment *seg)
+ 	return  dm_pool_strdup(mem, get_pool_discards_name(seg->discards));
+ }
+ 
++#ifdef DMEVENTD
++#  include "libdevmapper-event.h"
++#endif
++char *lvseg_monitor_dup(struct dm_pool *mem, const struct lv_segment *seg)
++{
++	const char *s = "";
 +
- .SH Examples
- Extends the size of the logical volume "vg01/lvol10" by 54MiB on physical
- volume /dev/sdk3. This is only possible if /dev/sdk3 is a member of
-@@ -109,6 +115,7 @@ Extends a logical volume "vg01/lvol01" by 16MiB using physical extents
- .SH SEE ALSO
- .BR fsadm (8),
- .BR lvm (8),
-+.BR lvm.conf (5),
- .BR lvcreate (8),
- .BR lvconvert (8),
- .BR lvreduce (8),
++#ifdef DMEVENTD
++	struct lvinfo info;
++	int pending = 0, monitored;
++	struct lv_segment *segm = (struct lv_segment *) seg;
++
++	if (lv_is_cow(seg->lv) && !lv_is_merging_cow(seg->lv))
++		segm = first_seg(seg->lv->snapshot->lv);
++	else if (seg->log_lv)
++		segm = first_seg(seg->log_lv);
++
++	// log_debug("Query LV:%s mon:%s segm:%s tgtm:%p  segmon:%d statusm:%d", seg->lv->name, segm->lv->name, segm->segtype->name, segm->segtype->ops->target_monitored, seg_monitored(segm), (int)(segm->status & PVMOVE));
++	if (!segm->segtype->ops->target_monitored)
++		/* Nothing to do, monitoring not supported */;
++	else if (!seg_monitored(segm) || (segm->status & PVMOVE))
++		s = "not monitored";
++	else if (lv_info(seg->lv->vg->cmd, seg->lv, 1, &info, 0, 0) && info.exists) {
++		monitored = segm->segtype->ops->
++			target_monitored((struct lv_segment*)segm, &pending);
++		if (pending)
++			s = "pending";
++		else
++			s = (monitored) ? "monitored" : "not monitored";
++	} // else log_debug("Not active");
++#endif
++	return dm_pool_strdup(mem, s);
++}
++
+ uint64_t lvseg_chunksize(const struct lv_segment *seg)
+ {
+ 	uint64_t size;
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index 03255fb..7652cd4 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -76,6 +76,7 @@ uint64_t lvseg_size(const struct lv_segment *seg);
+ uint64_t lvseg_chunksize(const struct lv_segment *seg);
+ char *lvseg_segtype_dup(struct dm_pool *mem, const struct lv_segment *seg);
+ char *lvseg_discards_dup(struct dm_pool *mem, const struct lv_segment *seg);
++char *lvseg_monitor_dup(struct dm_pool *mem, const struct lv_segment *seg);
+ char *lvseg_tags_dup(const struct lv_segment *seg);
+ char *lvseg_devices(struct dm_pool *mem, const struct lv_segment *seg);
+ char *lvseg_seg_pe_ranges(struct dm_pool *mem, const struct lv_segment *seg);
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 42858f1..07c9b7b 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -155,6 +155,7 @@ FIELD(SEGS, seg, NUM, "SSize", list, 5, segsize, seg_size, "Size of segment in c
+ FIELD(SEGS, seg, STR, "Seg Tags", tags, 8, tags, seg_tags, "Tags, if any.", 0)
+ FIELD(SEGS, seg, STR, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format.", 0)
+ FIELD(SEGS, seg, STR, "Devices", list, 7, devices, devices, "Underlying devices used with starting extent numbers.", 0)
++FIELD(SEGS, seg, STR, "Monitor", list, 7, segmonitor, monitor, "Dmeventd monitoring status of the segment.", 0)
+ 
+ FIELD(PVSEGS, pvseg, NUM, "Start", pe, 5, uint32, pvseg_start, "Physical Extent number of start of segment.", 0)
+ FIELD(PVSEGS, pvseg, NUM, "SSize", len, 5, uint32, pvseg_size, "Number of extents in segment.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 71b3cb1..6f0d980 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -332,6 +332,8 @@ GET_LVSEG_STR_PROPERTY_FN(seg_pe_ranges,
+ #define _seg_pe_ranges_set _not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(devices, lvseg_devices(lvseg->lv->vg->vgmem, lvseg))
+ #define _devices_set _not_implemented_set
++GET_LVSEG_STR_PROPERTY_FN(monitor, lvseg_monitor_dup(lvseg->lv->vg->vgmem, lvseg))
++#define _monitor_set _not_implemented_set
+ 
+ 
+ /* PVSEG */
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 8578ff7..9ef2687 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -489,6 +489,20 @@ static int _vgsize_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _size64_disp(rh, mem, field, &size, private);
+ }
+ 
++static int _segmonitor_disp(struct dm_report *rh, struct dm_pool *mem,
++			    struct dm_report_field *field,
++			    const void *data, void *private)
++{
++	char *str;
++
++	if (!(str = lvseg_monitor_dup(mem, (const struct lv_segment *)data)))
++		return_0;
++
++	dm_report_field_set_value(field, str, NULL);
++
++	return 1;
++}
++
+ static int _segstart_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			  struct dm_report_field *field,
+ 			  const void *data, void *private)
 
 
