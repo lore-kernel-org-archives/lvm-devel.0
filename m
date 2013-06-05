@@ -1,47 +1,78 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  5 Jun 2013 12:05:00 +0000 (UTC)
-Subject: dev-mornfall-lvmcache - lvcreate: update snapshot test
-Message-ID: <20130605120500.AB9766134E@fedorahosted.org>
+Date: Wed,  5 Jun 2013 12:01:29 +0000 (UTC)
+Subject: dev-mornfall-lvmcache - lvmetad: cleanup
+Message-ID: <20130605120129.7F02860E6D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e01fbd9d8d310c0b0ddcf58782ac2b871185ddd9
-Commit:        e01fbd9d8d310c0b0ddcf58782ac2b871185ddd9
-Parent:        562c678ee23e76b675a8f4682bd6d2447d1d0de7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=377e06b0f8ea10c222a0d38472dbbb05fde1f2d3
+Commit:        377e06b0f8ea10c222a0d38472dbbb05fde1f2d3
+Parent:        bee3f4b930dc38142b218d0e097388ffa36c586c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 31 11:00:29 2013 +0200
+AuthorDate:    Fri Apr 19 20:52:38 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 31 21:30:44 2013 +0200
+CommitterDate: Sun Apr 21 23:02:43 2013 +0200
 
-lvcreate: update snapshot test
+lvmetad: cleanup
 
-With last commit, there has been missing test for valid setting
-of extents - there is no need to test max size when creating
-thin snapshots.
+Move individual assignments to simplier structure setup.
 ---
- tools/lvcreate.c |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |   25 +++++++++++++------------
+ 1 files changed, 13 insertions(+), 12 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index f56cdbd..7beaf6c 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -300,7 +300,12 @@ static int _update_extents_params(struct volume_group *vg,
- 			break;
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index bbad69c..4f7bf59 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -1168,23 +1168,24 @@ static void usage(char *prog, FILE *file)
+ int main(int argc, char *argv[])
+ {
+ 	signed char opt;
+-	daemon_state s = { .private = NULL };
+ 	lvmetad_state ls;
+ 	int _socket_override = 1;
++	daemon_state s = {
++		.daemon_fini = fini,
++		.daemon_init = init,
++		.handler = handler,
++		.name = "lvmetad",
++		.pidfile = LVMETAD_PIDFILE,
++		.private = &ls,
++		.protocol = "lvmetad",
++		.protocol_version = 1,
++		.socket_path = getenv("LVM_LVMETAD_SOCKET"),
++	};
+ 
+-	s.name = "lvmetad";
+-	s.private = &ls;
+-	s.daemon_init = init;
+-	s.daemon_fini = fini;
+-	s.handler = handler;
+-	s.socket_path = getenv("LVM_LVMETAD_SOCKET");
+ 	if (!s.socket_path) {
+ 		_socket_override = 0;
+ 		s.socket_path = DEFAULT_RUN_DIR "/lvmetad.socket";
+ 	}
+-	s.pidfile = LVMETAD_PIDFILE;
+-	s.protocol = "lvmetad";
+-	s.protocol_version = 1;
+ 	ls.log_config = "";
+ 
+ 	// use getopt_long
+@@ -1216,9 +1217,9 @@ int main(int argc, char *argv[])
+ 		if (!_socket_override) {
+ 			fprintf(stderr, "A socket path (-s) is required in foreground mode.");
+ 			exit(2);
+-		} else {
+-			s.pidfile = NULL;
+ 		}
++
++		s.pidfile = NULL;
  	}
  
--	if (lp->snapshot && lp->origin) {
-+	if (lp->snapshot && lp->origin && lp->extents) {
-+		if (!lp->chunk_size) {
-+			log_error(INTERNAL_ERROR "Missing snapshot chunk size.");
-+			return 0;
-+		}
-+
- 		if (!origin && !(origin = find_lv(vg, lp->origin))) {
- 			log_error("Couldn't find origin volume '%s'.",
- 				  lp->origin);
+ 	daemon_start(s);
 
 
