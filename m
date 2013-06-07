@@ -1,7 +1,7 @@
 From: dongmao zhang <dmzhang@suse.com>
-Date: Fri,  7 Jun 2013 21:45:36 +0800
+Date: Fri,  7 Jun 2013 21:52:28 +0800
 Subject: [PATCH] if syslog has been opened, do not open it again
-Message-ID: <1370612736-10826-1-git-send-email-dmzhang@suse.com>
+Message-ID: <1370613148-10904-1-git-send-email-dmzhang@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
