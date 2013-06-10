@@ -1,158 +1,104 @@
-From: Bastian Blank <waldi@debian.org>
-Date: Sat, 8 Jun 2013 11:56:57 +0200
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 10 Jun 2013 10:00:03 +0200
 Subject: [PATCH 3/3] udev: Use udev monitor
-In-Reply-To: <20130608094939.GA3065@mail.waldi.eu.org>
+In-Reply-To: <20130608095657.GC3132@mail.waldi.eu.org>
 References: <20130608094939.GA3065@mail.waldi.eu.org>
-Message-ID: <20130608095657.GC3132@mail.waldi.eu.org>
+	<20130608095657.GC3132@mail.waldi.eu.org>
+Message-ID: <51B58783.5060409@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- libdm/libdm-common.c |   93 +++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 92 insertions(+), 1 deletion(-)
+Hi Bastian,
 
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index d028029..fdabf80 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -26,6 +26,7 @@
- #include <dirent.h>
- 
- #ifdef UDEV_SYNC_SUPPORT
-+#  include <poll.h>
- #  include <libudev.h>
- #endif
- 
-@@ -64,7 +65,9 @@ static int _udev_disabled = 0;
- 
- #ifdef UDEV_SYNC_SUPPORT
- static struct udev *_udev;
-+static struct udev_monitor *_udev_monitor;
- static int _udev_running = -1;
-+static unsigned int _udev_monitor_inflight;
- static int _sync_with_udev = 1;
- static int _udev_checking = 1;
- #endif
-@@ -1992,6 +1995,55 @@ bad:
- 	return 0;
- }
- 
-+static struct udev_monitor *_get_udev_monitor(void)
-+{
-+	struct udev *udev = _get_udev();
-+
-+	if (!udev)
-+		return 0;
-+
-+	if (!_udev_monitor) {
-+		log_debug("Opening udev monitor");
-+
-+		_udev_monitor = udev_monitor_new_from_netlink(udev, "udev");
-+		if (!_udev_monitor)
-+			goto_bad;
-+
-+		udev_monitor_filter_add_match_subsystem_devtype(_udev_monitor, "block", "disk");
-+		udev_monitor_enable_receiving(_udev_monitor);
-+	}
-+
-+	return _udev_monitor;
-+
-+bad:
-+	log_error("Could not get udev monitor. Assuming udev is not running.");
-+	return 0;
-+}
-+
-+static void _close_udev_monitor(void)
-+{
-+	log_debug("Closing udev monitor");
-+	udev_monitor_unref(_udev_monitor);
-+	_udev_monitor = NULL;
-+}
-+
-+static void _push_udev_monitor_inflight(void)
-+{
-+	_udev_monitor_inflight++;
-+	if (_udev_monitor_inflight == 0)
-+		abort();
-+	_get_udev_monitor();
-+}
-+
-+static void _pop_udev_monitor_inflight(void)
-+{
-+	if (_udev_monitor_inflight == 0)
-+		abort();
-+	_udev_monitor_inflight--;
-+	if (_udev_monitor_inflight == 0)
-+		_close_udev_monitor();
-+}
-+
- static int _check_udev_is_running(void)
- {
- 	struct udev *udev;
-@@ -2166,6 +2218,7 @@ int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
- 
- 	dmt->event_nr |= ~DM_UDEV_FLAGS_MASK & *cookie;
- 	dmt->cookie_set = 1;
-+	_push_udev_monitor_inflight();
- 
- 	log_debug_activation("Udev cookie 0x%" PRIx32 " assigned to "
- 			     "%s task(%d) with flags%s%s%s%s%s%s%s (0x%" PRIx16 ")", *cookie, _task_type_disp(dmt->type), dmt->type, 
-@@ -2195,10 +2248,48 @@ int dm_udev_complete(uint32_t cookie)
- 
- static int _udev_wait(uint32_t cookie)
- {
-+	struct udev_monitor *monitor;
-+	struct pollfd p = { -1, POLLIN, 0 };
-+	int r = 0;
-+
- 	if (!cookie || !dm_udev_get_sync_support())
- 		return 1;
- 
--	return_0;
-+	cookie &= ~DM_UDEV_FLAGS_MASK;
-+	log_debug("Udev cookie 0x%" PRIx32 " expected", cookie);
-+
-+	monitor = _get_udev_monitor();
-+
-+	p.fd = udev_monitor_get_fd(monitor);
-+
-+	while (!r)
-+	{
-+		// TODO: timeout
-+		poll(&p, 1, -1);
-+
-+		struct udev_device *device = udev_monitor_receive_device(monitor);
-+		struct udev_list_entry *l;
-+
-+		udev_list_entry_foreach(l, udev_device_get_properties_list_entry(device))
-+		{
-+			if (strcmp("DM_COOKIE", udev_list_entry_get_name(l)) == 0)
-+			{
-+				const char *value = udev_list_entry_get_value(l);
-+				uint32_t cookie_current = strtol(value, NULL, 10) & ~DM_UDEV_FLAGS_MASK;
-+				log_debug("Udev cookie 0x%" PRIx32 " found", cookie_current);
-+
-+				if (cookie == cookie_current)
-+					r = 1;
-+				break;
-+			}
-+		}
-+
-+		udev_device_unref(device);
-+	}
-+
-+	_pop_udev_monitor_inflight();
-+
-+	return r;
- }
- 
- int dm_udev_wait(uint32_t cookie)
--- 
-I have never understood the female capacity to avoid a direct answer to
-any question.
-		-- Spock, "This Side of Paradise", stardate 3417.3
+On 08.06.2013 11:56, Bastian Blank wrote:
+> ---
+>  libdm/libdm-common.c |   93 +++++++++++++++++++++++++++++++++++++++++++++++++-
+>  1 file changed, 92 insertions(+), 1 deletion(-)
+
+> +static unsigned int _udev_monitor_inflight;
+
+The counter is a global variable - what if we have several cookies
+being processed? This needs to be wrapped and referenced by cookie id then.
+
+>  static int _udev_wait(uint32_t cookie)
+>  {
+> +	struct udev_monitor *monitor;
+> +	struct pollfd p = { -1, POLLIN, 0 };
+> +	int r = 0;
+> +
+>  	if (!cookie || !dm_udev_get_sync_support())
+>  		return 1;
+>  
+> -	return_0;
+> +	cookie &= ~DM_UDEV_FLAGS_MASK;
+> +	log_debug("Udev cookie 0x%" PRIx32 " expected", cookie);
+> +
+> +	monitor = _get_udev_monitor();
+> +
+> +	p.fd = udev_monitor_get_fd(monitor);
+> +
+> +	while (!r)
+> +	{
+> +		// TODO: timeout
+
+Yes, that would be nice in my opinion as well (once I wanted to add
+timeouts for semaphores even, but...). If providing a timeout, we need
+to take great care about numerous devices being processed under one
+cookie - so it needs to be a function of that number of devices (e.g.
+activating 1000 and more LVs under one cookie could really take a long
+time with udev - so we need to take care to not provide premature timeouts).
+
+Thing is, that if udev works correctly (with kernel, of course), we
+don't need timeouts. But udev kills its forked processes on timeout
+(which is normally 3 min I think). I've reported this to udev people and
+I asked them for a new rule that could provide a "cleanup" on timeout
+directly in udev rules, but they don't seem to change anything here. The
+problem here is that if this killing happens in udev on timeout, the
+udev db is incomplete and we can't detect this state easily.
+
+So the timeout on LVM side is just a workaround we could possibly
+provide until udev gets fixed in this area. But a complete solution here
+is on udev side imho.
+
+> +		poll(&p, 1, -1);
+> +
+> +		struct udev_device *device = udev_monitor_receive_device(monitor);
+> +		struct udev_list_entry *l;
+> +
+> +		udev_list_entry_foreach(l, udev_device_get_properties_list_entry(device))
+> +		{
+> +			if (strcmp("DM_COOKIE", udev_list_entry_get_name(l)) == 0)
+> +			{
+> +				const char *value = udev_list_entry_get_value(l);
+> +				uint32_t cookie_current = strtol(value, NULL, 10) & ~DM_UDEV_FLAGS_MASK;
+> +				log_debug("Udev cookie 0x%" PRIx32 " found", cookie_current);
+> +
+> +				if (cookie == cookie_current)
+> +					r = 1;
+
+This breaks with "success"...
+
+> +				break;
+> +			}
+> +		}
+> +
+> +		udev_device_unref(device);
+> +	}
+> +
+> +	_pop_udev_monitor_inflight();
+> +
+
+...pops just one value for one event...
+
+> +	return r;
+
+...but we could still have several devices under one cookie - e.g.
+processing several LVs at once (which is common in LVM code, for example
+activating the whole VG with several LVs). So this part needs fixing.
+
+Peter
 
 
