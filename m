@@ -1,156 +1,120 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Mon, 10 Jun 2013 20:51:02 +0000 (UTC)
-Subject: master - Add and track an "ondisk" pointer to struct volume_group.
-Message-ID: <20130610205102.A120D60F90@fedorahosted.org>
+Date: Mon, 10 Jun 2013 20:51:00 +0000 (UTC)
+Subject: master - Move export_vg_to_config_tree alongside export_vg_to_buffer.
+Message-ID: <20130610205100.85C2F60F90@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5d5f2306bd4635cdc7e97a6a875384a00c9be460
-Commit:        5d5f2306bd4635cdc7e97a6a875384a00c9be460
-Parent:        c1e851e2084cbb09ed28199bc332aa3b1e99bbae
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c1e851e2084cbb09ed28199bc332aa3b1e99bbae
+Commit:        c1e851e2084cbb09ed28199bc332aa3b1e99bbae
+Parent:        c3b06ff55de5288a2ac4e351176c00404bc5a0fc
 Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Sun Mar 17 16:27:44 2013 +0100
+AuthorDate:    Sun Mar 17 16:25:12 2013 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Mon Jun 10 17:26:29 2013 +0200
+CommitterDate: Mon Jun 10 15:55:55 2013 +0200
 
-Add and track an "ondisk" pointer to struct volume_group.
+Move export_vg_to_config_tree alongside export_vg_to_buffer.
 
-This allows us to get the current on-disk version of the metadata whenever we
-have the current in-flight version, without a recourse to scanning or lvmcache.
 ---
- lib/metadata/lv.h       |    1 +
- lib/metadata/metadata.c |   47 +++++++++++++++++++++++++++++++++++++++++++++++
- lib/metadata/vg.c       |    1 +
- lib/metadata/vg.h       |    9 +++++++++
- 4 files changed, 58 insertions(+), 0 deletions(-)
+ lib/cache/lvmetad.c      |   24 ++----------------------
+ lib/format_text/export.c |   20 ++++++++++++++++++++
+ lib/metadata/metadata.h  |    2 +-
+ 3 files changed, 23 insertions(+), 23 deletions(-)
 
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 8e771a1..b1cce51 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -90,4 +90,5 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
- 		     enum activation_change activate);
- char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv);
- const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
-+struct logical_volume *lv_ondisk(struct logical_volume *lv);
- #endif /* _LVM_LV_H */
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 62b5c3f..6cee8d5 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -831,6 +831,21 @@ int vgcreate_params_validate(struct cmd_context *cmd,
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 7aa8641..6c8b10b 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -425,26 +425,6 @@ static int _fixup_ignored(struct metadata_area *mda, void *baton) {
  	return 1;
  }
  
-+static int _vg_update_vg_ondisk(struct volume_group *vg)
-+{
-+	struct dm_config_tree *cft;
-+	if (vg->vg_ondisk) /* we already have it */
-+		return 1;
-+
-+	cft = export_vg_to_config_tree(vg);
-+	if (!cft)
-+		return 0;
-+
-+	vg->vg_ondisk = import_vg_from_config_tree(cft, vg->fid);
-+	dm_config_destroy(cft);
-+	return 1;
-+}
-+
- /*
-  * Create a (struct volume_group) volume group handle from a struct volume_group pointer and a
-  * possible failure code or zero for success.
-@@ -839,6 +854,7 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
- 					    struct volume_group *vg,
- 					    uint32_t failure)
+-static struct dm_config_tree *_export_vg_to_config_tree(struct volume_group *vg)
+-{
+-	char *buf = NULL;
+-	struct dm_config_tree *vgmeta;
+-
+-	if (!export_vg_to_buffer(vg, &buf)) {
+-		log_error("Could not format VG metadata.");
+-		return 0;
+-	}
+-
+-	if (!(vgmeta = dm_config_from_string(buf))) {
+-		log_error("Error parsing VG metadata.");
+-		dm_free(buf);
+-		return 0;
+-	}
+-
+-	dm_free(buf);
+-	return vgmeta;
+-}
+-
+ int lvmetad_vg_update(struct volume_group *vg)
  {
-+
- 	/* Never return a cached VG structure for a failure */
- 	if (vg && vg->vginfo && failure != SUCCESS) {
- 		release_vg(vg);
-@@ -848,6 +864,9 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
- 	if (!vg && !(vg = alloc_vg("vg_make_handle", cmd, NULL)))
- 		return_NULL;
+ 	daemon_reply reply;
+@@ -462,7 +442,7 @@ int lvmetad_vg_update(struct volume_group *vg)
+ 	if (!lvmetad_active() || test_mode())
+ 		return 1; /* fake it */
  
-+	if (vg->fid && !_vg_update_vg_ondisk(vg))
-+		vg->read_status |= FAILED_ALLOCATION;
-+
- 	if (vg->read_status != failure)
- 		vg->read_status = failure;
+-	if (!(vgmeta = _export_vg_to_config_tree(vg)))
++	if (!(vgmeta = export_vg_to_config_tree(vg)))
+ 		return_0;
  
-@@ -2690,6 +2709,12 @@ int vg_commit(struct volume_group *vg)
- 		 * The volume_group structure could be reused later.
- 		 */
- 		vg->old_name = NULL;
-+
-+		/* This *is* the original now that it's commited. */
-+		release_vg(vg->vg_ondisk);
-+		vg->vg_ondisk = NULL;
-+		if (!_vg_update_vg_ondisk(vg)) /* make a new one for future edits */
-+			return_0;
- 	}
+ 	log_debug_lvmetad("Sending lvmetad updated metadata for VG %s (seqno %" PRIu32 ")", vg->name, vg->seqno);
+@@ -772,7 +752,7 @@ int lvmetad_pv_found(const struct id *pvid, struct device *dev, const struct for
+ 		_extract_mdas(info, pvmeta, pvmeta->root);
  
- 	/* If update failed, remove any cached precommitted metadata. */
-@@ -4523,3 +4548,25 @@ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
- 	}
- 	return dm_pool_end_object(mem);
+ 	if (vg) {
+-		if (!(vgmeta = _export_vg_to_config_tree(vg))) {
++		if (!(vgmeta = export_vg_to_config_tree(vg))) {
+ 			dm_config_destroy(pvmeta);
+ 			return_0;
+ 		}
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 73b5a3a..b6aac45 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -841,5 +841,25 @@ size_t export_vg_to_buffer(struct volume_group *vg, char **buf)
+ 	return text_vg_export_raw(vg, "", buf);
  }
-+
-+struct logical_volume *lv_ondisk(struct logical_volume *lv)
+ 
++struct dm_config_tree *export_vg_to_config_tree(struct volume_group *vg)
 +{
-+	struct volume_group *vg;
-+	struct lv_list *lvl;
++	char *buf = NULL;
++	struct dm_config_tree *vg_cft;
 +
-+	if (!lv)
-+		return NULL;
++	if (!export_vg_to_buffer(vg, &buf)) {
++		log_error("Could not format metadata for VG %s.", vg->name);
++		return_NULL;
++	}
 +
-+	vg = lv->vg;
++	if (!(vg_cft = dm_config_from_string(buf))) {
++		log_error("Error parsing metadata for VG %s.", vg->name);
++		dm_free(buf);
++		return_NULL;
++	}
 +
-+	if (vg->vg_ondisk)
-+		vg = vg->vg_ondisk;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs)
-+		if (!strncmp(lvl->lv->lvid.s, lv->lvid.s, sizeof(lv->lvid)))
-+			return lvl->lv;
-+
-+	log_error(INTERNAL_ERROR "LV %s/%s (UUID %s) not found in ondisk metadata.",
-+		  lv->vg->name, lv->name, lv->lvid.s);
-+	return NULL;
++	dm_free(buf);
++	return vg_cft;
 +}
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index a868df7..50e8328 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -87,6 +87,7 @@ void release_vg(struct volume_group *vg)
- 	    !lvmcache_vginfo_holders_dec_and_test_for_zero(vg->vginfo))
- 		return;
- 
-+	release_vg(vg->vg_ondisk);
- 	_free_vg(vg);
- }
- 
-diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
-index f876968..0dc3ba7 100644
---- a/lib/metadata/vg.h
-+++ b/lib/metadata/vg.h
-@@ -48,6 +48,15 @@ struct volume_group {
- 	uint32_t cmd_missing_vgs;/* Flag marks missing VG */
- 	uint32_t seqno;		/* Metadata sequence number */
- 
-+	/*
-+	 * The parsed on-disk copy of this VG; is NULL if this is the on-disk
-+	 * version (i.e. vg_ondisk == NULL *implies* this is the on-disk copy,
-+	 * there is no guarantee that if this VG is the same as the on-disk one
-+	 * this will be NULL). The pointer is maintained by calls to
-+	 * _vg_update_vg_ondisk.
-+	 */
-+	struct volume_group *vg_ondisk;
 +
- 	alloc_policy_t alloc;
- 	uint64_t status;
- 
+ #undef outf
+ #undef outnl
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 4f504ed..bf9bd55 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -437,7 +437,7 @@ void lv_calculate_readahead(const struct logical_volume *lv, uint32_t *read_ahea
+  * For internal metadata caching.
+  */
+ size_t export_vg_to_buffer(struct volume_group *vg, char **buf);
+-int export_vg_to_config_tree(struct volume_group *vg, struct dm_config_tree **cft);
++struct dm_config_tree *export_vg_to_config_tree(struct volume_group *vg);
+ struct volume_group *import_vg_from_buffer(const char *buf,
+ 					   struct format_instance *fid);
+ struct volume_group *import_vg_from_config_tree(const struct dm_config_tree *cft,
 
 
