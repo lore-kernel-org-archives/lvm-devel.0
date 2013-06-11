@@ -1,44 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Jun 2013 22:16:19 +0000 (UTC)
-Subject: master - mirror: add missing error message
-Message-ID: <20130615221619.5EF5060D69@fedorahosted.org>
+Date: Tue, 11 Jun 2013 12:09:12 +0000 (UTC)
+Subject: master - thin: enable resize for thin pool metadata LV
+Message-ID: <20130611120912.9CC5860DC7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8fb5f63637ca47ecffdf84c721ff21315df8ef42
-Commit:        8fb5f63637ca47ecffdf84c721ff21315df8ef42
-Parent:        54e062265074766becc06d2fdb0020ade56cf95d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c888c925b8d561158c3cea6d4f5ea4e173848c00
+Commit:        c888c925b8d561158c3cea6d4f5ea4e173848c00
+Parent:        87aca628d6b477ec4f0b6dac7d4895b31253a6e1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jun 15 18:43:36 2013 +0200
+AuthorDate:    Tue Jun 11 13:11:54 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Jun 16 00:07:32 2013 +0200
+CommitterDate: Tue Jun 11 14:07:51 2013 +0200
 
-mirror: add missing error message
+thin: enable resize for thin pool metadata LV
 
-When a user has not proceeded with conversion,
-print the error message why the command has failed.
+Support 'clasic' way of resizing of metadata LV.
+Normally we disallow to work with internal 'invisible' devices.
+But in this case we can make an exception and if user has some
+special needs how to extend thin pool metadata LV - support it.
+
+After resize of metadata LV, the pool will be suspended and resumed,
+to be notified of this change.
 ---
- lib/metadata/mirror.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ tools/lvresize.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 6c6554e..4f36e0d 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -1726,8 +1726,10 @@ int remove_mirror_log(struct cmd_context *cmd,
- 				 "inactive mirror %s to core log. "
- 				 "Proceed? [y/n]: ", lv->name) == 'y')
- 		sync_percent = 0;
--	else
-+	else {
-+		log_error("Logical volume %s NOT converted.", lv->name);
- 		return 0;
-+	}
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index 6de3b3b..bb9a535 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -530,7 +530,8 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 			return ECMD_FAILED;
+ 	}
  
- 	if (sync_percent == PERCENT_100)
- 		init_mirror_in_sync(1);
+-	if (!lv_is_visible(lv)) {
++	if (!lv_is_visible(lv) &&
++	    !lv_is_thin_pool_metadata(lv)) {
+ 		log_error("Can't resize internal logical volume %s", lv->name);
+ 		return ECMD_FAILED;
+ 	}
 
 
