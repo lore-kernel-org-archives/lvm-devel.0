@@ -1,188 +1,67 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 19 Jun 2013 11:24:32 +0200
-Subject: [PATCH 2/9] toollib: Drop the bogus pv_read optimisation.
-In-Reply-To: <1371633879-8879-1-git-send-email-prockai@redhat.com>
-References: <1371633879-8879-1-git-send-email-prockai@redhat.com>
-Message-ID: <1371633879-8879-2-git-send-email-prockai@redhat.com>
-	(sfid-20130619_112441_121567_DBF18B26)
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 11 Jun 2013 12:09:16 +0000 (UTC)
+Subject: master - tests: lvresize thin
+Message-ID: <20130611120916.CBBCE613C4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The toollib code for processing PVs given on commandline tried to be smart and
-use pv_read, avoiding real metadata scanning. The premise of the optimisation
-was that if there is an active MDA on the PV, it can be reliably used to
-establish VG membership. This assumption is however wrong, since it's entirely
-possible that this particular MDA is simply out of date, and the PV is not
-actually in any VG. While this is a subtle and rare bug, it's still a bug. One
-way to trigger it would be to hotplug an old disk which at some point was a PV
-in an existing VG, having a seemingly valid MDA but with an old sequence
-number. All commands that use normal scanning realize that this PV does not
-belong into the VG anymore, but anything based on pv_read alone will believe it
-does.
----
- tools/toollib.c | 91 ++++++++++++++++++++++++++-------------------------------
- 1 file changed, 42 insertions(+), 49 deletions(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9ac0f58ea13dc068806ff1085e0ea06a7840d5fd
+Commit:        9ac0f58ea13dc068806ff1085e0ea06a7840d5fd
+Parent:        4937df4aed699a5e3bc3c860e897fa0e448cfc6b
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jun 11 13:35:18 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Jun 11 14:07:51 2013 +0200
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index b238a61..5ce40b4 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -646,6 +646,8 @@ int process_each_pv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- static int _process_all_devs(struct cmd_context *cmd, void *handle,
- 			     process_single_pv_fn_t process_single_pv)
- {
-+	struct pv_list *pvl;
-+	struct dm_list *pvslist;
- 	struct physical_volume *pv;
- 	struct physical_volume pv_dummy;
- 	struct dev_iter *iter;
-@@ -654,7 +656,8 @@ static int _process_all_devs(struct cmd_context *cmd, void *handle,
- 	int ret_max = ECMD_PROCESSED;
- 	int ret = 0;
- 
--	if (!scan_vgs_for_pvs(cmd, 1)) {
-+	lvmcache_seed_infos_from_lvmetad(cmd);
-+	if (!(pvslist = get_pvs(cmd))) {
- 		stack;
- 		return ECMD_FAILED;
- 	}
-@@ -664,14 +667,19 @@ static int _process_all_devs(struct cmd_context *cmd, void *handle,
- 		return ECMD_FAILED;
- 	}
- 
--	while ((dev = dev_iter_get(iter))) {
--		if (!(pv = pv_read(cmd, dev_name(dev), 0, 0))) {
--			memset(&pv_dummy, 0, sizeof(pv_dummy));
--			dm_list_init(&pv_dummy.tags);
--			dm_list_init(&pv_dummy.segments);
--			pv_dummy.dev = dev;
--			pv = &pv_dummy;
--		}
-+	while ((dev = dev_iter_get(iter)))
-+	{
-+		memset(&pv_dummy, 0, sizeof(pv_dummy));
-+		dm_list_init(&pv_dummy.tags);
-+		dm_list_init(&pv_dummy.segments);
-+		pv_dummy.dev = dev;
-+		pv = &pv_dummy;
+tests: lvresize thin
+
+---
+ test/shell/lvresize-thin-metadata.sh |   35 ++++++++++++++++++++++++++++++++++
+ 1 files changed, 35 insertions(+), 0 deletions(-)
+
+diff --git a/test/shell/lvresize-thin-metadata.sh b/test/shell/lvresize-thin-metadata.sh
+new file mode 100644
+index 0000000..10dbb4a
+--- /dev/null
++++ b/test/shell/lvresize-thin-metadata.sh
+@@ -0,0 +1,35 @@
++#!/bin/sh
++# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+		/* TODO use a device-indexed hash here */
-+		dm_list_iterate_items(pvl, pvslist)
-+			if (pvl->pv->dev == dev)
-+				pv = pvl->pv;
++. lib/test
 +
- 		ret = process_single_pv(cmd, NULL, pv, handle);
- 
- 		free_pv_fid(pv);
-@@ -704,11 +712,11 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 
- 	struct pv_list *pvl;
- 	struct physical_volume *pv;
--	struct dm_list *pvslist, *vgnames;
-+	struct dm_list *pvslist = NULL, *vgnames;
- 	struct dm_list tags;
- 	struct str_list *sll;
- 	char *at_sign, *tagname;
--	int scanned = 0;
-+	struct device *dev;
- 
- 	dm_list_init(&tags);
- 
-@@ -750,52 +758,34 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 				}
- 				pv = pvl->pv;
- 			} else {
--				if (!(pv = pv_read(cmd, argv[opt],
--						   1, scan_label_only))) {
--					log_error("Failed to read physical "
--						  "volume \"%s\"", argv[opt]);
-+				if (!pvslist) {
-+					lvmcache_seed_infos_from_lvmetad(cmd);
-+					if (!(pvslist = get_pvs(cmd)))
-+						goto bad;
-+				}
++aux have_thin 1 8 0 || skip
 +
-+				if (!(dev = dev_cache_get(argv[opt], cmd->filter))) {
-+					log_error("Failed to find device "
-+						  "\"%s\"", argv[opt]);
- 					ret_max = ECMD_FAILED;
- 					continue;
- 				}
- 
--				/*
--				 * If a PV has no MDAs it may appear to be an
--				 * orphan until the metadata is read off
--				 * another PV in the same VG.  Detecting this
--				 * means checking every VG by scanning every
--				 * PV on the system.
--				 */
--				if (!scanned && is_orphan(pv) &&
--				    !dm_list_size(&pv->fid->metadata_areas_in_use)) {
--					if (!scan_label_only &&
--					    !scan_vgs_for_pvs(cmd, 1)) {
--						stack;
--						ret_max = ECMD_FAILED;
--						continue;
--					}
--					scanned = 1;
--					free_pv_fid(pv);
--					if (!(pv = pv_read(cmd, argv[opt],
--							   1,
--							   scan_label_only))) {
--						log_error("Failed to read "
--							  "physical volume "
--							  "\"%s\"", argv[opt]);
--						ret_max = ECMD_FAILED;
--						continue;
--					}
-+				pv = NULL;
-+				dm_list_iterate_items(pvl, pvslist)
-+					if (pvl->pv->dev == dev)
-+						pv = pvl->pv;
++aux prepare_pvs 3
 +
-+				if (!pv) {
-+					log_error("Failed to find physical volume "
-+						  "\"%s\"", argv[opt]);
-+					ret_max = ECMD_FAILED;
-+					continue;
- 				}
- 			}
- 
- 			ret = process_single_pv(cmd, vg, pv, handle);
- 
--			/*
--			 * Free PV only if we called pv_read before,
--			 * otherwise the PV structure is part of the VG.
--			 */
--			if (!vg)
--				free_pv_fid(pv);
--
- 			if (ret > ret_max)
- 				ret_max = ret;
- 			if (sigint_caught())
-@@ -850,7 +840,6 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 			dm_list_iterate_items(pvl, pvslist) {
- 				ret = process_single_pv(cmd, NULL, pvl->pv,
- 						     handle);
--				free_pv_fid(pvl->pv);
- 				if (ret > ret_max)
- 					ret_max = ret;
- 				if (sigint_caught())
-@@ -859,6 +848,10 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 		}
- 	}
- out:
-+	if (pvslist)
-+		dm_list_iterate_items(pvl, pvslist)
-+			free_pv_fid(pvl->pv);
++vgcreate -s 1M $vg $(cat DEVICES)
 +
- 	if (lock_global)
- 		unlock_vg(cmd, VG_GLOBAL);
- 	return ret_max;
--- 
-1.8.2
++lvcreate -l1 -T $vg/pool
++
++# Confirm we have basic 2M metadata
++check lv_field $vg/pool_tmeta size "2.00m"
++
++lvresize --poolmetadata +2 $vg/pool
++
++# Test it's been resized to 4M
++check lv_field $vg/pool_tmeta size "4.00m"
++
++# TODO: Add more tests when kernel is fixed
++
++
++# TODO: Make a full metadata device and test dmeventd support
++
++vgremove -ff $vg
 
 
