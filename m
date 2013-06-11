@@ -1,116 +1,104 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Jun 2013 22:16:31 +0000 (UTC)
-Subject: master - cleanup: use simplier structure initialization
-Message-ID: <20130615221631.E43EC60D69@fedorahosted.org>
+Date: Tue, 11 Jun 2013 12:09:08 +0000 (UTC)
+Subject: master - thin: add helper functions
+Message-ID: <20130611120908.20E4C60DC7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e19410d935134794b7a206b5300e43be44c8a28
-Commit:        5e19410d935134794b7a206b5300e43be44c8a28
-Parent:        636c51ae3f0fda00b38851ead7f419bc834786a4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=72c3ae253e52b896795cc0769860c4fcd82ef244
+Commit:        72c3ae253e52b896795cc0769860c4fcd82ef244
+Parent:        55a3859632c861e8a3bd07a7c848fdb1901e0a05
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 14 22:00:44 2013 +0200
+AuthorDate:    Tue Jun 11 12:32:01 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Jun 16 00:07:33 2013 +0200
+CommitterDate: Tue Jun 11 14:03:30 2013 +0200
 
-cleanup: use simplier structure initialization
+thin: add helper functions
 
-And also use static struct for _out_spec.
+Add find_pool_lv() and pool_can_resize_metadata().
 ---
- daemons/dmeventd/dmeventd.c |    4 ++--
- lib/config/config.c         |   20 +++++++++++---------
- libdm/libdm-config.c        |   14 +++++++++-----
- 3 files changed, 22 insertions(+), 16 deletions(-)
+ WHATS_NEW                        |    1 +
+ lib/metadata/metadata-exported.h |    2 ++
+ lib/metadata/thin_manip.c        |   32 ++++++++++++++++++++++++++++++++
+ 3 files changed, 35 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 64e1683..50bd1df 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -1830,8 +1830,8 @@ static void _daemonize(void)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f85730c..084738d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Add helper functions find_pool_lv() and pool_can_resize_metadata().
+   Add detection for thin pool metadata resize kernel support.
+   Report lvs volume type 'e' with higher priority.
+   Report lvs volume type 'o' also for external origin volumes.
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index cfa5ad8..5fb5b6c 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -578,7 +578,9 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ 			   uint32_t extent_size);
  
- static void restart(void)
- {
--	struct dm_event_fifos fifos;
--	struct dm_event_daemon_message msg = { 0, 0, NULL };
-+	struct dm_event_fifos fifos = { 0 };
-+	struct dm_event_daemon_message msg = { 0 };
- 	int i, count = 0;
- 	char *message;
- 	int length;
-diff --git a/lib/config/config.c b/lib/config/config.c
-index cda9b83..7b6ac7b 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -879,16 +879,18 @@ int config_write(struct dm_config_tree *cft,
- 		 int withcomment, int withversion,
- 		 const char *file, int argc, char **argv)
- {
--	struct out_baton baton = {0, 0, 0};
-+	static const struct dm_config_node_out_spec _out_spec = {
-+		.prefix_fn = _out_prefix_fn,
-+		.line_fn = _out_line_fn,
-+		.suffix_fn = _out_suffix_fn
-+	};
- 	const struct dm_config_node *cn;
--	const struct dm_config_node_out_spec out_spec = {.prefix_fn = _out_prefix_fn,
--							 .line_fn = _out_line_fn,
--							 .suffix_fn = _out_suffix_fn};
-+	struct out_baton baton = {
-+		.withcomment = withcomment,
-+		.withversion = withversion
-+	};
- 	int r = 1;
++struct logical_volume *find_pool_lv(struct logical_volume *lv);
+ int pool_is_active(const struct logical_volume *pool_lv);
++int pool_can_resize_metadata(const struct logical_volume *pool_lv);
+ int update_pool_lv(struct logical_volume *lv, int activate);
+ int update_pool_params(struct cmd_context *cmd, unsigned attr, int passed_args,
+ 		       uint32_t data_extents, uint32_t extent_size,
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 1239af9..37b5d77 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -309,6 +309,28 @@ int pool_is_active(const struct logical_volume *lv)
+ 	return 0;
+ }
  
--	baton.withcomment = withcomment;
--	baton.withversion = withversion;
--
- 	if (!file) {
- 		baton.fp = stdout;
- 		file = "stdout";
-@@ -899,13 +901,13 @@ int config_write(struct dm_config_tree *cft,
- 
- 	log_verbose("Dumping configuration to %s", file);
- 	if (!argc) {
--		if (!dm_config_write_node_out(cft->root, &out_spec, &baton)) {
-+		if (!dm_config_write_node_out(cft->root, &_out_spec, &baton)) {
- 			log_error("Failure while writing to %s", file);
- 			r = 0;
- 		}
- 	} else while (argc--) {
- 		if ((cn = dm_config_find_node(cft->root, *argv))) {
--			if (!dm_config_write_one_node_out(cn, &out_spec, &baton)) {
-+			if (!dm_config_write_one_node_out(cn, &_out_spec, &baton)) {
- 				log_error("Failure while writing to %s", file);
- 				r = 0;
- 			}
-diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
-index dfd9174..3385e18 100644
---- a/libdm/libdm-config.c
-+++ b/libdm/libdm-config.c
-@@ -346,12 +346,16 @@ static int _write_node(const struct dm_config_node *cn, int only_one,
- 		       const struct dm_config_node_out_spec *out_spec,
- 		       void *baton)
- {
--	struct config_output out;
--	if (!(out.mem = dm_pool_create("config_output", 1024)))
-+	struct config_output out = {
-+		.mem = dm_pool_create("config_output", 1024),
-+		.putline = putline,
-+		.spec = out_spec,
-+		.baton = baton
-+	};
++int pool_can_resize_metadata(const struct logical_volume *lv)
++{
++	static unsigned attr = 0U;
++	struct lv_segment *seg;
 +
-+	if (!out.mem)
- 		return_0;
--	out.putline = putline;
--	out.spec = out_spec;
--	out.baton = baton;
++	if (!lv_is_thin_pool(lv)) {
++		log_error(INTERNAL_ERROR "LV %s is not thin pool.", lv->name);
++		return 0;
++	}
 +
- 	if (!_write_config(cn, only_one, &out, 0)) {
- 		dm_pool_destroy(out.mem);
- 		return_0;
++	seg = first_seg(lv);
++	if ((attr == 0U) && activation() && seg->segtype &&
++	    seg->segtype->ops->target_present &&
++	    !seg->segtype->ops->target_present(lv->vg->cmd, NULL, &attr)) {
++		log_error("%s: Required device-mapper target(s) not "
++			  "detected in your kernel", seg->segtype->name);
++		return 0;
++	}
++
++	return (attr & THIN_FEATURE_METADATA_RESIZE) ? 1 : 0;
++}
++
+ int pool_below_threshold(const struct lv_segment *pool_seg)
+ {
+ 	percent_t percent;
+@@ -352,6 +374,16 @@ struct lv_segment *find_pool_seg(const struct lv_segment *seg)
+ 	return pool_seg;
+ }
+ 
++struct logical_volume *find_pool_lv(struct logical_volume *lv)
++{
++	struct lv_segment *seg;
++
++	if (!(seg = find_pool_seg(first_seg(lv))))
++		return_NULL;
++
++	return seg->lv;
++}
++
+ /*
+  * Find a free device_id for given thin_pool segment.
+  *
 
 
