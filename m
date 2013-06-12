@@ -1,119 +1,221 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 12 Jun 2013 11:17:00 +0000 (UTC)
-Subject: master - filter-mpath: detect partitions of mpath components
-Message-ID: <20130612111700.1A01060FB5@fedorahosted.org>
+Date: Wed, 12 Jun 2013 11:17:02 +0000 (UTC)
+Subject: master - cleanup: remove old and unused code to detect partition types
+Message-ID: <20130612111702.296F360FAF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=966d4f36d7fb29734c6176e21a139375c431eeac
-Commit:        966d4f36d7fb29734c6176e21a139375c431eeac
-Parent:        65d0089c6477e6bc30ef64ce9fd79e8c855c4529
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8bade9bfeae9b4205472d70232676d70412eefa8
+Commit:        8bade9bfeae9b4205472d70232676d70412eefa8
+Parent:        966d4f36d7fb29734c6176e21a139375c431eeac
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 12 12:20:10 2013 +0200
+AuthorDate:    Wed Jun 12 12:46:46 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 12 13:13:38 2013 +0200
+CommitterDate: Wed Jun 12 13:14:49 2013 +0200
 
-filter-mpath: detect partitions of mpath components
+cleanup: remove old and unused code to detect partition types
 
-We use mpath filtering (enabled by devices/multipath_component_detection=1
-lvm.conf setting) to avoid a situation in which we could end up with
-duplicate PVs found. We need to filter out the mpath components and
-use only the top-level multipath mapping instead for PV scans.
-
-However, if the there are partitions on multipath components, we need
-to filter out these partitions. This patch fixes it so those
-partitions found on multipath components are filtered as well.
-
-For example, let's consider following configuration:
-The sda and sdb are mpath components, sda1 and sdb1 the partitions
-on these components, mpath-test the mpath mapping and mpath-test1
-the partition mapping - created automatically by kpartx right
-after mpath-test creation. The PV resides on top.
-
-       (LVM PV)
-          |
-      mpath-test1
-          |
-      mpath-test
-          |
-sda1 ---------- sdb1
-   \ |        |/
-    sda      sdb
-
-E.g. for sda1 and sdb1, the code will detect this and it skips
-the partition that belongs to the multipath component:
-  <snippet from the log>
-    #filters/filter-mpath.c:156         /dev/sda1: Device is a partition, using primary device /dev/sda for mpath component detection
-    130 #ioctl/libdm-iface.c:1724         dm status   (253:2) OF[16384](*1)
-    131 #filters/filter-mpath.c:196         /dev/sda1: Skipping mpath component device
-  </snippet from the log>
-
-Othewise, we'd see the same PV label on sda1/sdb1 and mpath-test1
-at the same time ending up with "Duplicate PV found...".
+This part of the code has not been used for ages, if ever.
+If needed anytime in future, we should use some library
+instead - libblkid?
 ---
- WHATS_NEW                  |    1 +
- lib/filters/filter-mpath.c |   30 ++++++++++++++++++++++++++++++
- 2 files changed, 31 insertions(+), 0 deletions(-)
+ lib/device/dev-type.c |  181 -------------------------------------------------
+ 1 files changed, 0 insertions(+), 181 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index aecf227..36ad365 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Also filter partitions on mpath components if multipath_component_detection=1.
-   Add lvresize support for online thin pool metadata volume resize.
-   Add helper functions find_pool_lv() and pool_can_resize_metadata().
-   Add detection for thin pool metadata resize kernel support.
-diff --git a/lib/filters/filter-mpath.c b/lib/filters/filter-mpath.c
-index 0e88e65..16e2105 100644
---- a/lib/filters/filter-mpath.c
-+++ b/lib/filters/filter-mpath.c
-@@ -123,11 +123,41 @@ static int dev_is_mpath(struct dev_filter *f, struct device *dev)
- 	const char *sysfs_dir = dm_sysfs_dir();
- 	int major = MAJOR(dev->dev);
- 	int minor = MINOR(dev->dev);
-+	dev_t primary_dev;
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 92120e8..b28fe75 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -428,187 +428,6 @@ out:
+ 	return ret;
+ }
  
- 	/* Limit this filter only to SCSI devices */
- 	if (!major_is_scsi_device(dt, MAJOR(dev->dev)))
- 		return 0;
+-#if 0
+-#include <sys/stat.h>
+-#include <sys/mman.h>
+-#include <stdio.h>
+-#include <unistd.h>
+-#include <fcntl.h>
+-#include <ctype.h>
+-
+-#include <errno.h>
+-#include <sys/ioctl.h>
+-#include <linux/fs.h>
+-#include <linux/major.h>
+-#include <linux/genhd.h>
+-
+-int _get_partition_type(struct dev_filter *filter, struct device *d);
+-
+-#define MINOR_PART(dev) (MINOR((dev)->dev) % max_partitions(MINOR((dev)->dev)))
+-
+-int is_extended_partition(struct device *d)
+-{
+-	return (MINOR_PART(d) > 4) ? 1 : 0;
+-}
+-
+-struct device *dev_primary(struct dev_mgr *dm, struct device *d)
+-{
+-	struct device *ret;
+-
+-	ret = dev_by_dev(dm, d->dev - MINOR_PART(dm, d));
+-	/* FIXME: Needs replacing with a 'refresh' */
+-	if (!ret) {
+-		init_dev_scan(dm);
+-		ret = dev_by_dev(dm, d->dev - MINOR_PART(dm, d));
+-	}
+-
+-	return ret;
+-
+-}
+-
+-int partition_type_is_lvm(struct dev_mgr *dm, struct device *d)
+-{
+-	int pt;
+-
+-	pt = _get_partition_type(dm, d);
+-
+-	if (!pt) {
+-		if (is_whole_disk(dm, d))
+-			/* FIXME: Overloaded pt=0 in error cases */
+-			return 1;
+-		else {
+-			log_error
+-			    ("%s: missing partition table "
+-			     "on partitioned device", d->name);
+-			return 0;
+-		}
+-	}
+-
+-	if (is_whole_disk(dm, d)) {
+-		log_error("%s: looks to possess partition table", d->name);
+-		return 0;
+-	}
+-
+-	/* check part type */
+-	if (pt != LVM_PARTITION && pt != LVM_NEW_PARTITION) {
+-		log_error("%s: invalid partition type 0x%x "
+-			  "(must be 0x%x)", d->name, pt, LVM_NEW_PARTITION);
+-		return 0;
+-	}
+-
+-	if (pt == LVM_PARTITION) {
+-		log_error
+-		    ("%s: old LVM partition type found - please change to 0x%x",
+-		     d->name, LVM_NEW_PARTITION);
+-		return 0;
+-	}
+-
+-	return 1;
+-}
+-
+-int _get_partition_type(struct dev_mgr *dm, struct device *d)
+-{
+-	int pv_handle = -1;
+-	struct device *primary;
+-	ssize_t read_ret;
+-	ssize_t bytes_read = 0;
+-	char *buffer;
+-	unsigned short *s_buffer;
+-	struct partition *part;
+-	loff_t offset = 0;
+-	loff_t extended_offset = 0;
+-	int part_sought;
+-	int part_found = 0;
+-	int first_partition = 1;
+-	int extended_partition = 0;
+-	int p;
+-
+-	if (!(primary = dev_primary(dm, d))) {
+-		log_error
+-		    ("Failed to find main device containing partition %s",
+-		     d->name);
+-		return 0;
+-	}
+-
+-	if (!(buffer = dm_malloc(SECTOR_SIZE))) {
+-		log_error("Failed to allocate partition table buffer");
+-		return 0;
+-	}
+-
+-	/* Get partition table */
+-	if ((pv_handle = open(primary->name, O_RDONLY)) < 0) {
+-		log_error("%s: open failed: %s", primary->name,
+-			  strerror(errno));
+-		return 0;
+-	}
+-
+-	s_buffer = (unsigned short *) buffer;
+-	part = (struct partition *) (buffer + 0x1be);
+-	part_sought = MINOR_PART(dm, d);
+-
+-	do {
+-		bytes_read = 0;
+-
+-		if (llseek(pv_handle, offset * SECTOR_SIZE, SEEK_SET) == -1) {
+-			log_error("%s: llseek failed: %s",
+-				  primary->name, strerror(errno));
+-			return 0;
+-		}
+-
+-		while ((bytes_read < SECTOR_SIZE) &&
+-		       (read_ret =
+-			read(pv_handle, buffer + bytes_read,
+-			     SECTOR_SIZE - bytes_read)) != -1)
+-			bytes_read += read_ret;
+-
+-		if (read_ret == -1) {
+-			log_error("%s: read failed: %s", primary->name,
+-				  strerror(errno));
+-			return 0;
+-		}
+-
+-		if (s_buffer[255] == 0xAA55) {
+-			if (is_whole_disk(dm, d))
+-				return -1;
+-		} else
+-			return 0;
+-
+-		extended_partition = 0;
+-
+-		/* Loop through primary partitions */
+-		for (p = 0; p < 4; p++) {
+-			if (part[p].sys_ind == DOS_EXTENDED_PARTITION ||
+-			    part[p].sys_ind == LINUX_EXTENDED_PARTITION
+-			    || part[p].sys_ind == WIN98_EXTENDED_PARTITION) {
+-				extended_partition = 1;
+-				offset = extended_offset + part[p].start_sect;
+-				if (extended_offset == 0)
+-					extended_offset = part[p].start_sect;
+-				if (first_partition == 1)
+-					part_found++;
+-			} else if (first_partition == 1) {
+-				if (p == part_sought) {
+-					if (part[p].sys_ind == 0) {
+-						/* missing primary? */
+-						return 0;
+-					}
+-				} else
+-					part_found++;
+-			} else if (!part[p].sys_ind)
+-				part_found++;
+-
+-			if (part_sought == part_found)
+-				return part[p].sys_ind;
+-
+-		}
+-		first_partition = 0;
+-	}
+-	while (extended_partition == 1);
+-
+-	return 0;
+-}
+-#endif
+-
+ #ifdef linux
  
-+	switch (dev_get_primary_dev(dt, dev, &primary_dev)) {
-+		case -1:
-+			/* Error. */
-+			log_error("Failed to get primary device for %d:%d.", major, minor);
-+			return 0;
-+		case 0:
-+			/* The dev is already a primary dev. Just continue with the dev. */
-+			break;
-+		case 1:
-+			/* The dev is partition. */
-+			name = dev_name(dev); /* name of original dev for log_debug msg */
-+
-+			/* Get primary dev from cache. */
-+			if (!(dev = dev_cache_get_by_devt(primary_dev, NULL))) {
-+				log_error("dev_is_mpath: failed to get device for %d:%d",
-+					  major, minor);
-+				return 0;
-+			}
-+
-+			major = (int) MAJOR(primary_dev);
-+			minor = (int) MINOR(primary_dev);
-+
-+			log_debug_devs("%s: Device is a partition, using primary "
-+				       "device %s for mpath component detection",
-+					name, dev_name(dev));
-+
-+			break;
-+	}
-+
- 	if (!(name = get_sysfs_name(dev)))
- 		return_0;
- 
+ static unsigned long _dev_topology_attribute(struct dev_types *dt,
 
 
