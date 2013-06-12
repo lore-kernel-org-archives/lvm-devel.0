@@ -1,110 +1,1040 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 28 Jun 2013 11:14:59 +0200
-Subject: Internal error: Pool read_vg crc mismatch only when running in test environment
-In-Reply-To: <51CB6FDE.8060700@redhat.com>
-References: <51C38DB6.7070507@redhat.com> <51C45AD9.2040703@redhat.com>
-	<51CA27AC.4040900@redhat.com> <51CA9D11.90007@redhat.com>
-	<51CB6FDE.8060700@redhat.com>
-Message-ID: <51CD5413.8010205@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 12 Jun 2013 11:16:53 +0000 (UTC)
+Subject: master - refactor: move lib/device/device.c -> lib/device/dev-type.c
+Message-ID: <20130612111653.D1D6E60F27@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 27.6.2013 00:49, Tony Asleson napsal(a):
-> On 06/26/2013 02:49 AM, Zdenek Kabelac wrote:
->> Dne 26.6.2013 01:28, Tony Asleson napsal(a):
->>> On 06/21/2013 08:53 AM, Zdenek Kabelac wrote:
->>>> Dne 21.6.2013 01:18, Tony Asleson napsal(a):
->>>>> Writing some new unit test cases for my latest liblvm patch set and at
->>>>> the moment I am running into a case where I can run the unit test case
->>>>> against real disk and it works, but if I run it in the test environment
->>>>> with loop back devices I am getting an abort with:
->>>>>
->>>>> "Internal error: Pool read_vg crc mismatch."
->>>>>
->>>>> Any ideas why this error isn't occurring on both?
->>>>>
->>>>
->>>> This happens - if you have requested 'read-only'  VG struct,
->>>> and you have modifed something in this vgmem pool
->>>> (either writing to struct, or just using vgmem pool for allocation)
->>>
->>> My original inquiry was for ideas why I see this on loop back devices
->>> and not actual devices.  This response doesn't seem to match what I am
->>> seeing.
->>
->> It's hard to give advice if I do not see the actual code.
->
-> Patch set was posted a while back.  Specifically the issue I am running
-> into has to do with the functionality to list all PVs (including orphan)
->
-> Specific patch is:
-> https://www.redhat.com/archives/lvm-devel/2013-May/msg00036.html
->
->>> The stack trace shows that we are getting this error during an
->>> lvm_vg_open.  I can re-create the error regardless if I open the vg
->>> struct as read-only or read-write.
->>>
->>>   From my initial debug it appears that if the vginfo->vg_use_count > 1
->>> (in this case 3) we pass 1 as the second parameter to dm_pool_unlock
->>> which is a crc check of the pool which it finds to be different.  At
->>> this point it would seem I am exacerbating some type of caching bug or
->>> that somewhere along the path I am inadvertently changing the contents
->>> of the vg struct pointer with my latest patches.
->>
->> There is internal debug support for this kind of problems which mprotects
->> vg structure, so any write access to locked vg structure crashes the
->> application and you may look at stack trace.
->>
->> But it needs some hand modification of make.tmpl file (no configure option)
->> Uncomment #DEFS += -DDEBUG_ENFORCE_POOL_LOCKING  and rebuild and retest
->> with
->> unlimited coredump size.
->
-> Thanks for the tip, this helped quite a bit!  I modified the code in the
-> above referenced patch to retain the vg pointer when retrieving the list
-> of PVs.  The liblvm library uses the vg->vgmem pool to allocate strings
-> to be returned to the user when getting information pertaining to a PV.
->   The problem is that the vg gets cached with a crc.  We then allocate
-> memory from the vgmem pool and later when we go to clear out the cache
-> entry we fail the crc check.  When I enable the
-> DEBUG_ENFORCE_POOL_LOCKING we fail after we retrieve a vg from the cache
-> and then I try to allocate something from the vgmem pool.
->
-> Your comment about opening the vg "r" vs. "w" still seems incorrect to
-> me, but if it is indeed correct then we have a problem with the library
-> that precedes any of my changes.  We use the vg->vgmem for many things
-> and if this argument is indeed true then all those allocations will be
-> causing the vg struct to change, thus causing crc errors if the user is
-> allowed to open the vg struct as read-only.  In my code review and
-> testing it appears that we aren't hitting this because when we call into
-> vg_open we don't have a vgid, so we fail early in lvmcache_get_vg and
-> thus we never add them to the cache and thus we never call dm_pool_lock
-> on them.
->
-> If you could point out the bit of code that actually determines that we
-> mprotect memory based on the user doing an vg open read only vs. read
-> write that would be most helpful.  I'm not seeing it at the moment and I
-> would like to understand this better.
->
-> Currently I am thinking about just backing out the change to retrieve
-> the pv list and use the cmd->mem for allocations instead of the
-> vg->vgmem.  Previously I brought up just putting such things on the heap
-> and letting the users of the library free them, but that was dismissed
-> because existing library users would then have memory leaks.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1778d34cefdfe30055ac4a7e82438e4484004491
+Commit:        1778d34cefdfe30055ac4a7e82438e4484004491
+Parent:        22b0f3573e222f7471c4e279e5703f2933cf6e9a
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Jun 12 11:53:55 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Jun 12 11:54:37 2013 +0200
 
+refactor: move lib/device/device.c -> lib/device/dev-type.c
 
-yeah there could be some design fault which is using mem pool from read-only
-volume group.  vg->vgmem  is only used for allocation of objects directly 
-related to VG  -  return of some copied buffers is not something which is 
-supposed touch this memory pool as well as creating PV lists
-(cmd mempool or just temporarily created new pool needs to be used here.)
+---
+ lib/Makefile.in       |    2 +-
+ lib/device/dev-type.c |  493 +++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/device/device.c   |  493 -------------------------------------------------
+ 3 files changed, 494 insertions(+), 494 deletions(-)
 
-If you hold only read lock, there should be no need to modify vg structure.
-
-Zdenek
-
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 82f700b..d789839 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -55,8 +55,8 @@ SOURCES =\
+ 	device/dev-io.c \
+ 	device/dev-md.c \
+ 	device/dev-swap.c \
++	device/dev-type.c \
+ 	device/dev-luks.c \
+-	device/device.c \
+ 	display/display.c \
+ 	error/errseg.c \
+ 	unknown/unknown.c \
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+new file mode 100644
+index 0000000..52eb4a6
+--- /dev/null
++++ b/lib/device/dev-type.c
+@@ -0,0 +1,493 @@
++/*
++ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
++ * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "lib.h"
++#include "lvm-types.h"
++#include "device.h"
++#include "metadata.h"
++#include "filter.h"
++#include "xlate.h"
++
++#include <libgen.h> /* dirname, basename */
++
++/* See linux/genhd.h and fs/partitions/msdos */
++
++#define PART_MAGIC 0xAA55
++#define PART_MAGIC_OFFSET UINT64_C(0x1FE)
++#define PART_OFFSET UINT64_C(0x1BE)
++
++struct partition {
++	uint8_t boot_ind;
++	uint8_t head;
++	uint8_t sector;
++	uint8_t cyl;
++	uint8_t sys_ind;	/* partition type */
++	uint8_t end_head;
++	uint8_t end_sector;
++	uint8_t end_cyl;
++	uint32_t start_sect;
++	uint32_t nr_sects;
++} __attribute__((packed));
++
++static int _is_partitionable(struct device *dev)
++{
++	int parts = max_partitions(MAJOR(dev->dev));
++
++	/* All MD devices are partitionable via blkext (as of 2.6.28) */
++	if (MAJOR(dev->dev) == md_major())
++		return 1;
++
++	if ((parts <= 1) || (MINOR(dev->dev) % parts))
++		return 0;
++
++	return 1;
++}
++
++static int _has_partition_table(struct device *dev)
++{
++	int ret = 0;
++	unsigned p;
++	struct {
++		uint8_t skip[PART_OFFSET];
++		struct partition part[4];
++		uint16_t magic;
++	} __attribute__((packed)) buf; /* sizeof() == SECTOR_SIZE */
++
++	if (!dev_read(dev, UINT64_C(0), sizeof(buf), &buf))
++		return_0;
++
++	/* FIXME Check for other types of partition table too */
++
++	/* Check for msdos partition table */
++	if (buf.magic == xlate16(PART_MAGIC)) {
++		for (p = 0; p < 4; ++p) {
++			/* Table is invalid if boot indicator not 0 or 0x80 */
++			if (buf.part[p].boot_ind & 0x7f) {
++				ret = 0;
++				break;
++			}
++			/* Must have@least one non-empty partition */
++			if (buf.part[p].nr_sects)
++				ret = 1;
++		}
++	}
++
++	return ret;
++}
++
++int is_partitioned_dev(struct device *dev)
++{
++	if (!_is_partitionable(dev))
++		return 0;
++
++	return _has_partition_table(dev);
++}
++
++#if 0
++#include <sys/stat.h>
++#include <sys/mman.h>
++#include <stdio.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <ctype.h>
++
++#include <errno.h>
++#include <sys/ioctl.h>
++#include <linux/fs.h>
++#include <linux/major.h>
++#include <linux/genhd.h>
++
++int _get_partition_type(struct dev_filter *filter, struct device *d);
++
++#define MINOR_PART(dev) (MINOR((dev)->dev) % max_partitions(MINOR((dev)->dev)))
++
++int is_extended_partition(struct device *d)
++{
++	return (MINOR_PART(d) > 4) ? 1 : 0;
++}
++
++struct device *dev_primary(struct dev_mgr *dm, struct device *d)
++{
++	struct device *ret;
++
++	ret = dev_by_dev(dm, d->dev - MINOR_PART(dm, d));
++	/* FIXME: Needs replacing with a 'refresh' */
++	if (!ret) {
++		init_dev_scan(dm);
++		ret = dev_by_dev(dm, d->dev - MINOR_PART(dm, d));
++	}
++
++	return ret;
++
++}
++
++int partition_type_is_lvm(struct dev_mgr *dm, struct device *d)
++{
++	int pt;
++
++	pt = _get_partition_type(dm, d);
++
++	if (!pt) {
++		if (is_whole_disk(dm, d))
++			/* FIXME: Overloaded pt=0 in error cases */
++			return 1;
++		else {
++			log_error
++			    ("%s: missing partition table "
++			     "on partitioned device", d->name);
++			return 0;
++		}
++	}
++
++	if (is_whole_disk(dm, d)) {
++		log_error("%s: looks to possess partition table", d->name);
++		return 0;
++	}
++
++	/* check part type */
++	if (pt != LVM_PARTITION && pt != LVM_NEW_PARTITION) {
++		log_error("%s: invalid partition type 0x%x "
++			  "(must be 0x%x)", d->name, pt, LVM_NEW_PARTITION);
++		return 0;
++	}
++
++	if (pt == LVM_PARTITION) {
++		log_error
++		    ("%s: old LVM partition type found - please change to 0x%x",
++		     d->name, LVM_NEW_PARTITION);
++		return 0;
++	}
++
++	return 1;
++}
++
++int _get_partition_type(struct dev_mgr *dm, struct device *d)
++{
++	int pv_handle = -1;
++	struct device *primary;
++	ssize_t read_ret;
++	ssize_t bytes_read = 0;
++	char *buffer;
++	unsigned short *s_buffer;
++	struct partition *part;
++	loff_t offset = 0;
++	loff_t extended_offset = 0;
++	int part_sought;
++	int part_found = 0;
++	int first_partition = 1;
++	int extended_partition = 0;
++	int p;
++
++	if (!(primary = dev_primary(dm, d))) {
++		log_error
++		    ("Failed to find main device containing partition %s",
++		     d->name);
++		return 0;
++	}
++
++	if (!(buffer = dm_malloc(SECTOR_SIZE))) {
++		log_error("Failed to allocate partition table buffer");
++		return 0;
++	}
++
++	/* Get partition table */
++	if ((pv_handle = open(primary->name, O_RDONLY)) < 0) {
++		log_error("%s: open failed: %s", primary->name,
++			  strerror(errno));
++		return 0;
++	}
++
++	s_buffer = (unsigned short *) buffer;
++	part = (struct partition *) (buffer + 0x1be);
++	part_sought = MINOR_PART(dm, d);
++
++	do {
++		bytes_read = 0;
++
++		if (llseek(pv_handle, offset * SECTOR_SIZE, SEEK_SET) == -1) {
++			log_error("%s: llseek failed: %s",
++				  primary->name, strerror(errno));
++			return 0;
++		}
++
++		while ((bytes_read < SECTOR_SIZE) &&
++		       (read_ret =
++			read(pv_handle, buffer + bytes_read,
++			     SECTOR_SIZE - bytes_read)) != -1)
++			bytes_read += read_ret;
++
++		if (read_ret == -1) {
++			log_error("%s: read failed: %s", primary->name,
++				  strerror(errno));
++			return 0;
++		}
++
++		if (s_buffer[255] == 0xAA55) {
++			if (is_whole_disk(dm, d))
++				return -1;
++		} else
++			return 0;
++
++		extended_partition = 0;
++
++		/* Loop through primary partitions */
++		for (p = 0; p < 4; p++) {
++			if (part[p].sys_ind == DOS_EXTENDED_PARTITION ||
++			    part[p].sys_ind == LINUX_EXTENDED_PARTITION
++			    || part[p].sys_ind == WIN98_EXTENDED_PARTITION) {
++				extended_partition = 1;
++				offset = extended_offset + part[p].start_sect;
++				if (extended_offset == 0)
++					extended_offset = part[p].start_sect;
++				if (first_partition == 1)
++					part_found++;
++			} else if (first_partition == 1) {
++				if (p == part_sought) {
++					if (part[p].sys_ind == 0) {
++						/* missing primary? */
++						return 0;
++					}
++				} else
++					part_found++;
++			} else if (!part[p].sys_ind)
++				part_found++;
++
++			if (part_sought == part_found)
++				return part[p].sys_ind;
++
++		}
++		first_partition = 0;
++	}
++	while (extended_partition == 1);
++
++	return 0;
++}
++#endif
++
++#ifdef linux
++
++int get_primary_dev(const struct device *dev, dev_t *result)
++{
++	const char *sysfs_dir = dm_sysfs_dir();
++	char path[PATH_MAX+1];
++	char temp_path[PATH_MAX+1];
++	char buffer[64];
++	struct stat info;
++	FILE *fp;
++	uint32_t pri_maj, pri_min;
++	int size, ret = 0;
++
++	/* check if dev is a partition */
++	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/partition",
++			sysfs_dir, (int)MAJOR(dev->dev), (int)MINOR(dev->dev)) < 0) {
++		log_error("dm_snprintf partition failed");
++		return ret;
++	}
++
++	if (stat(path, &info) == -1) {
++		if (errno != ENOENT)
++			log_sys_error("stat", path);
++		return ret;
++	}
++
++	/*
++	 * extract parent's path from the partition's symlink, e.g.:
++	 * - readlink /sys/dev/block/259:0 = ../../block/md0/md0p1
++	 * - dirname ../../block/md0/md0p1 = ../../block/md0
++	 * - basename ../../block/md0/md0  = md0
++	 * Parent's 'dev' sysfs attribute  = /sys/block/md0/dev
++	 */
++	if ((size = readlink(dirname(path), temp_path, PATH_MAX)) < 0) {
++		log_sys_error("readlink", path);
++		return ret;
++	}
++
++	temp_path[size] = '\0';
++
++	if (dm_snprintf(path, PATH_MAX, "%s/block/%s/dev",
++			sysfs_dir, basename(dirname(temp_path))) < 0) {
++		log_error("dm_snprintf dev failed");
++		return ret;
++	}
++
++	/* finally, parse 'dev' attribute and create corresponding dev_t */
++	if (stat(path, &info) == -1) {
++		if (errno == ENOENT)
++			log_error("sysfs file %s does not exist", path);
++		else
++			log_sys_error("stat", path);
++		return ret;
++	}
++
++	fp = fopen(path, "r");
++	if (!fp) {
++		log_sys_error("fopen", path);
++		return ret;
++	}
++
++	if (!fgets(buffer, sizeof(buffer), fp)) {
++		log_sys_error("fgets", path);
++		goto out;
++	}
++
++	if (sscanf(buffer, "%d:%d", &pri_maj, &pri_min) != 2) {
++		log_error("sysfs file %s not in expected MAJ:MIN format: %s",
++			  path, buffer);
++		goto out;
++	}
++	*result = MKDEV((dev_t)pri_maj, pri_min);
++	ret = 1;
++
++out:
++	if (fclose(fp))
++		log_sys_error("fclose", path);
++
++	return ret;
++}
++
++static unsigned long _dev_topology_attribute(const char *attribute, struct device *dev)
++{
++	const char *sysfs_dir = dm_sysfs_dir();
++	static const char sysfs_fmt_str[] = "%s/dev/block/%d:%d/%s";
++	char path[PATH_MAX+1], buffer[64];
++	FILE *fp;
++	struct stat info;
++	dev_t uninitialized_var(primary);
++	unsigned long result = 0UL;
++
++	if (!attribute || !*attribute)
++		return_0;
++
++	if (!sysfs_dir || !*sysfs_dir)
++		return_0;
++
++	if (dm_snprintf(path, PATH_MAX, sysfs_fmt_str, sysfs_dir,
++			(int)MAJOR(dev->dev), (int)MINOR(dev->dev),
++			attribute) < 0) {
++		log_error("dm_snprintf %s failed", attribute);
++		return 0;
++	}
++
++	/*
++	 * check if the desired sysfs attribute exists
++	 * - if not: either the kernel doesn't have topology support
++	 *   or the device could be a partition
++	 */
++	if (stat(path, &info) == -1) {
++		if (errno != ENOENT) {
++			log_sys_error("stat", path);
++			return 0;
++		}
++		if (!get_primary_dev(dev, &primary))
++			return 0;
++
++		/* get attribute from partition's primary device */
++		if (dm_snprintf(path, PATH_MAX, sysfs_fmt_str, sysfs_dir,
++				(int)MAJOR(primary), (int)MINOR(primary),
++				attribute) < 0) {
++			log_error("primary dm_snprintf %s failed", attribute);
++			return 0;
++		}
++		if (stat(path, &info) == -1) {
++			if (errno != ENOENT)
++				log_sys_error("stat", path);
++			return 0;
++		}
++	}
++
++	if (!(fp = fopen(path, "r"))) {
++		log_sys_error("fopen", path);
++		return 0;
++	}
++
++	if (!fgets(buffer, sizeof(buffer), fp)) {
++		log_sys_error("fgets", path);
++		goto out;
++	}
++
++	if (sscanf(buffer, "%lu", &result) != 1) {
++		log_error("sysfs file %s not in expected format: %s", path,
++			  buffer);
++		goto out;
++	}
++
++	log_very_verbose("Device %s %s is %lu bytes.",
++			 dev_name(dev), attribute, result);
++
++out:
++	if (fclose(fp))
++		log_sys_error("fclose", path);
++
++	return result >> SECTOR_SHIFT;
++}
++
++unsigned long dev_alignment_offset(struct device *dev)
++{
++	return _dev_topology_attribute("alignment_offset", dev);
++}
++
++unsigned long dev_minimum_io_size(struct device *dev)
++{
++	return _dev_topology_attribute("queue/minimum_io_size", dev);
++}
++
++unsigned long dev_optimal_io_size(struct device *dev)
++{
++	return _dev_topology_attribute("queue/optimal_io_size", dev);
++}
++
++unsigned long dev_discard_max_bytes(struct device *dev)
++{
++	return _dev_topology_attribute("queue/discard_max_bytes", dev);
++}
++
++unsigned long dev_discard_granularity(struct device *dev)
++{
++	return _dev_topology_attribute("queue/discard_granularity", dev);
++}
++
++#else
++
++int get_primary_dev(struct device *dev, dev_t *result)
++{
++	return 0;
++}
++
++unsigned long dev_alignment_offset(struct device *dev)
++{
++	return 0UL;
++}
++
++unsigned long dev_minimum_io_size(struct device *dev)
++{
++	return 0UL;
++}
++
++unsigned long dev_optimal_io_size(struct device *dev)
++{
++	return 0UL;
++}
++
++unsigned long dev_discard_max_bytes(struct device *dev)
++{
++	return 0UL;
++}
++
++unsigned long dev_discard_granularity(struct device *dev)
++{
++	return 0UL;
++}
++
++#endif
+diff --git a/lib/device/device.c b/lib/device/device.c
+deleted file mode 100644
+index 52eb4a6..0000000
+--- a/lib/device/device.c
++++ /dev/null
+@@ -1,493 +0,0 @@
+-/*
+- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+- */
+-
+-#include "lib.h"
+-#include "lvm-types.h"
+-#include "device.h"
+-#include "metadata.h"
+-#include "filter.h"
+-#include "xlate.h"
+-
+-#include <libgen.h> /* dirname, basename */
+-
+-/* See linux/genhd.h and fs/partitions/msdos */
+-
+-#define PART_MAGIC 0xAA55
+-#define PART_MAGIC_OFFSET UINT64_C(0x1FE)
+-#define PART_OFFSET UINT64_C(0x1BE)
+-
+-struct partition {
+-	uint8_t boot_ind;
+-	uint8_t head;
+-	uint8_t sector;
+-	uint8_t cyl;
+-	uint8_t sys_ind;	/* partition type */
+-	uint8_t end_head;
+-	uint8_t end_sector;
+-	uint8_t end_cyl;
+-	uint32_t start_sect;
+-	uint32_t nr_sects;
+-} __attribute__((packed));
+-
+-static int _is_partitionable(struct device *dev)
+-{
+-	int parts = max_partitions(MAJOR(dev->dev));
+-
+-	/* All MD devices are partitionable via blkext (as of 2.6.28) */
+-	if (MAJOR(dev->dev) == md_major())
+-		return 1;
+-
+-	if ((parts <= 1) || (MINOR(dev->dev) % parts))
+-		return 0;
+-
+-	return 1;
+-}
+-
+-static int _has_partition_table(struct device *dev)
+-{
+-	int ret = 0;
+-	unsigned p;
+-	struct {
+-		uint8_t skip[PART_OFFSET];
+-		struct partition part[4];
+-		uint16_t magic;
+-	} __attribute__((packed)) buf; /* sizeof() == SECTOR_SIZE */
+-
+-	if (!dev_read(dev, UINT64_C(0), sizeof(buf), &buf))
+-		return_0;
+-
+-	/* FIXME Check for other types of partition table too */
+-
+-	/* Check for msdos partition table */
+-	if (buf.magic == xlate16(PART_MAGIC)) {
+-		for (p = 0; p < 4; ++p) {
+-			/* Table is invalid if boot indicator not 0 or 0x80 */
+-			if (buf.part[p].boot_ind & 0x7f) {
+-				ret = 0;
+-				break;
+-			}
+-			/* Must have@least one non-empty partition */
+-			if (buf.part[p].nr_sects)
+-				ret = 1;
+-		}
+-	}
+-
+-	return ret;
+-}
+-
+-int is_partitioned_dev(struct device *dev)
+-{
+-	if (!_is_partitionable(dev))
+-		return 0;
+-
+-	return _has_partition_table(dev);
+-}
+-
+-#if 0
+-#include <sys/stat.h>
+-#include <sys/mman.h>
+-#include <stdio.h>
+-#include <unistd.h>
+-#include <fcntl.h>
+-#include <ctype.h>
+-
+-#include <errno.h>
+-#include <sys/ioctl.h>
+-#include <linux/fs.h>
+-#include <linux/major.h>
+-#include <linux/genhd.h>
+-
+-int _get_partition_type(struct dev_filter *filter, struct device *d);
+-
+-#define MINOR_PART(dev) (MINOR((dev)->dev) % max_partitions(MINOR((dev)->dev)))
+-
+-int is_extended_partition(struct device *d)
+-{
+-	return (MINOR_PART(d) > 4) ? 1 : 0;
+-}
+-
+-struct device *dev_primary(struct dev_mgr *dm, struct device *d)
+-{
+-	struct device *ret;
+-
+-	ret = dev_by_dev(dm, d->dev - MINOR_PART(dm, d));
+-	/* FIXME: Needs replacing with a 'refresh' */
+-	if (!ret) {
+-		init_dev_scan(dm);
+-		ret = dev_by_dev(dm, d->dev - MINOR_PART(dm, d));
+-	}
+-
+-	return ret;
+-
+-}
+-
+-int partition_type_is_lvm(struct dev_mgr *dm, struct device *d)
+-{
+-	int pt;
+-
+-	pt = _get_partition_type(dm, d);
+-
+-	if (!pt) {
+-		if (is_whole_disk(dm, d))
+-			/* FIXME: Overloaded pt=0 in error cases */
+-			return 1;
+-		else {
+-			log_error
+-			    ("%s: missing partition table "
+-			     "on partitioned device", d->name);
+-			return 0;
+-		}
+-	}
+-
+-	if (is_whole_disk(dm, d)) {
+-		log_error("%s: looks to possess partition table", d->name);
+-		return 0;
+-	}
+-
+-	/* check part type */
+-	if (pt != LVM_PARTITION && pt != LVM_NEW_PARTITION) {
+-		log_error("%s: invalid partition type 0x%x "
+-			  "(must be 0x%x)", d->name, pt, LVM_NEW_PARTITION);
+-		return 0;
+-	}
+-
+-	if (pt == LVM_PARTITION) {
+-		log_error
+-		    ("%s: old LVM partition type found - please change to 0x%x",
+-		     d->name, LVM_NEW_PARTITION);
+-		return 0;
+-	}
+-
+-	return 1;
+-}
+-
+-int _get_partition_type(struct dev_mgr *dm, struct device *d)
+-{
+-	int pv_handle = -1;
+-	struct device *primary;
+-	ssize_t read_ret;
+-	ssize_t bytes_read = 0;
+-	char *buffer;
+-	unsigned short *s_buffer;
+-	struct partition *part;
+-	loff_t offset = 0;
+-	loff_t extended_offset = 0;
+-	int part_sought;
+-	int part_found = 0;
+-	int first_partition = 1;
+-	int extended_partition = 0;
+-	int p;
+-
+-	if (!(primary = dev_primary(dm, d))) {
+-		log_error
+-		    ("Failed to find main device containing partition %s",
+-		     d->name);
+-		return 0;
+-	}
+-
+-	if (!(buffer = dm_malloc(SECTOR_SIZE))) {
+-		log_error("Failed to allocate partition table buffer");
+-		return 0;
+-	}
+-
+-	/* Get partition table */
+-	if ((pv_handle = open(primary->name, O_RDONLY)) < 0) {
+-		log_error("%s: open failed: %s", primary->name,
+-			  strerror(errno));
+-		return 0;
+-	}
+-
+-	s_buffer = (unsigned short *) buffer;
+-	part = (struct partition *) (buffer + 0x1be);
+-	part_sought = MINOR_PART(dm, d);
+-
+-	do {
+-		bytes_read = 0;
+-
+-		if (llseek(pv_handle, offset * SECTOR_SIZE, SEEK_SET) == -1) {
+-			log_error("%s: llseek failed: %s",
+-				  primary->name, strerror(errno));
+-			return 0;
+-		}
+-
+-		while ((bytes_read < SECTOR_SIZE) &&
+-		       (read_ret =
+-			read(pv_handle, buffer + bytes_read,
+-			     SECTOR_SIZE - bytes_read)) != -1)
+-			bytes_read += read_ret;
+-
+-		if (read_ret == -1) {
+-			log_error("%s: read failed: %s", primary->name,
+-				  strerror(errno));
+-			return 0;
+-		}
+-
+-		if (s_buffer[255] == 0xAA55) {
+-			if (is_whole_disk(dm, d))
+-				return -1;
+-		} else
+-			return 0;
+-
+-		extended_partition = 0;
+-
+-		/* Loop through primary partitions */
+-		for (p = 0; p < 4; p++) {
+-			if (part[p].sys_ind == DOS_EXTENDED_PARTITION ||
+-			    part[p].sys_ind == LINUX_EXTENDED_PARTITION
+-			    || part[p].sys_ind == WIN98_EXTENDED_PARTITION) {
+-				extended_partition = 1;
+-				offset = extended_offset + part[p].start_sect;
+-				if (extended_offset == 0)
+-					extended_offset = part[p].start_sect;
+-				if (first_partition == 1)
+-					part_found++;
+-			} else if (first_partition == 1) {
+-				if (p == part_sought) {
+-					if (part[p].sys_ind == 0) {
+-						/* missing primary? */
+-						return 0;
+-					}
+-				} else
+-					part_found++;
+-			} else if (!part[p].sys_ind)
+-				part_found++;
+-
+-			if (part_sought == part_found)
+-				return part[p].sys_ind;
+-
+-		}
+-		first_partition = 0;
+-	}
+-	while (extended_partition == 1);
+-
+-	return 0;
+-}
+-#endif
+-
+-#ifdef linux
+-
+-int get_primary_dev(const struct device *dev, dev_t *result)
+-{
+-	const char *sysfs_dir = dm_sysfs_dir();
+-	char path[PATH_MAX+1];
+-	char temp_path[PATH_MAX+1];
+-	char buffer[64];
+-	struct stat info;
+-	FILE *fp;
+-	uint32_t pri_maj, pri_min;
+-	int size, ret = 0;
+-
+-	/* check if dev is a partition */
+-	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/partition",
+-			sysfs_dir, (int)MAJOR(dev->dev), (int)MINOR(dev->dev)) < 0) {
+-		log_error("dm_snprintf partition failed");
+-		return ret;
+-	}
+-
+-	if (stat(path, &info) == -1) {
+-		if (errno != ENOENT)
+-			log_sys_error("stat", path);
+-		return ret;
+-	}
+-
+-	/*
+-	 * extract parent's path from the partition's symlink, e.g.:
+-	 * - readlink /sys/dev/block/259:0 = ../../block/md0/md0p1
+-	 * - dirname ../../block/md0/md0p1 = ../../block/md0
+-	 * - basename ../../block/md0/md0  = md0
+-	 * Parent's 'dev' sysfs attribute  = /sys/block/md0/dev
+-	 */
+-	if ((size = readlink(dirname(path), temp_path, PATH_MAX)) < 0) {
+-		log_sys_error("readlink", path);
+-		return ret;
+-	}
+-
+-	temp_path[size] = '\0';
+-
+-	if (dm_snprintf(path, PATH_MAX, "%s/block/%s/dev",
+-			sysfs_dir, basename(dirname(temp_path))) < 0) {
+-		log_error("dm_snprintf dev failed");
+-		return ret;
+-	}
+-
+-	/* finally, parse 'dev' attribute and create corresponding dev_t */
+-	if (stat(path, &info) == -1) {
+-		if (errno == ENOENT)
+-			log_error("sysfs file %s does not exist", path);
+-		else
+-			log_sys_error("stat", path);
+-		return ret;
+-	}
+-
+-	fp = fopen(path, "r");
+-	if (!fp) {
+-		log_sys_error("fopen", path);
+-		return ret;
+-	}
+-
+-	if (!fgets(buffer, sizeof(buffer), fp)) {
+-		log_sys_error("fgets", path);
+-		goto out;
+-	}
+-
+-	if (sscanf(buffer, "%d:%d", &pri_maj, &pri_min) != 2) {
+-		log_error("sysfs file %s not in expected MAJ:MIN format: %s",
+-			  path, buffer);
+-		goto out;
+-	}
+-	*result = MKDEV((dev_t)pri_maj, pri_min);
+-	ret = 1;
+-
+-out:
+-	if (fclose(fp))
+-		log_sys_error("fclose", path);
+-
+-	return ret;
+-}
+-
+-static unsigned long _dev_topology_attribute(const char *attribute, struct device *dev)
+-{
+-	const char *sysfs_dir = dm_sysfs_dir();
+-	static const char sysfs_fmt_str[] = "%s/dev/block/%d:%d/%s";
+-	char path[PATH_MAX+1], buffer[64];
+-	FILE *fp;
+-	struct stat info;
+-	dev_t uninitialized_var(primary);
+-	unsigned long result = 0UL;
+-
+-	if (!attribute || !*attribute)
+-		return_0;
+-
+-	if (!sysfs_dir || !*sysfs_dir)
+-		return_0;
+-
+-	if (dm_snprintf(path, PATH_MAX, sysfs_fmt_str, sysfs_dir,
+-			(int)MAJOR(dev->dev), (int)MINOR(dev->dev),
+-			attribute) < 0) {
+-		log_error("dm_snprintf %s failed", attribute);
+-		return 0;
+-	}
+-
+-	/*
+-	 * check if the desired sysfs attribute exists
+-	 * - if not: either the kernel doesn't have topology support
+-	 *   or the device could be a partition
+-	 */
+-	if (stat(path, &info) == -1) {
+-		if (errno != ENOENT) {
+-			log_sys_error("stat", path);
+-			return 0;
+-		}
+-		if (!get_primary_dev(dev, &primary))
+-			return 0;
+-
+-		/* get attribute from partition's primary device */
+-		if (dm_snprintf(path, PATH_MAX, sysfs_fmt_str, sysfs_dir,
+-				(int)MAJOR(primary), (int)MINOR(primary),
+-				attribute) < 0) {
+-			log_error("primary dm_snprintf %s failed", attribute);
+-			return 0;
+-		}
+-		if (stat(path, &info) == -1) {
+-			if (errno != ENOENT)
+-				log_sys_error("stat", path);
+-			return 0;
+-		}
+-	}
+-
+-	if (!(fp = fopen(path, "r"))) {
+-		log_sys_error("fopen", path);
+-		return 0;
+-	}
+-
+-	if (!fgets(buffer, sizeof(buffer), fp)) {
+-		log_sys_error("fgets", path);
+-		goto out;
+-	}
+-
+-	if (sscanf(buffer, "%lu", &result) != 1) {
+-		log_error("sysfs file %s not in expected format: %s", path,
+-			  buffer);
+-		goto out;
+-	}
+-
+-	log_very_verbose("Device %s %s is %lu bytes.",
+-			 dev_name(dev), attribute, result);
+-
+-out:
+-	if (fclose(fp))
+-		log_sys_error("fclose", path);
+-
+-	return result >> SECTOR_SHIFT;
+-}
+-
+-unsigned long dev_alignment_offset(struct device *dev)
+-{
+-	return _dev_topology_attribute("alignment_offset", dev);
+-}
+-
+-unsigned long dev_minimum_io_size(struct device *dev)
+-{
+-	return _dev_topology_attribute("queue/minimum_io_size", dev);
+-}
+-
+-unsigned long dev_optimal_io_size(struct device *dev)
+-{
+-	return _dev_topology_attribute("queue/optimal_io_size", dev);
+-}
+-
+-unsigned long dev_discard_max_bytes(struct device *dev)
+-{
+-	return _dev_topology_attribute("queue/discard_max_bytes", dev);
+-}
+-
+-unsigned long dev_discard_granularity(struct device *dev)
+-{
+-	return _dev_topology_attribute("queue/discard_granularity", dev);
+-}
+-
+-#else
+-
+-int get_primary_dev(struct device *dev, dev_t *result)
+-{
+-	return 0;
+-}
+-
+-unsigned long dev_alignment_offset(struct device *dev)
+-{
+-	return 0UL;
+-}
+-
+-unsigned long dev_minimum_io_size(struct device *dev)
+-{
+-	return 0UL;
+-}
+-
+-unsigned long dev_optimal_io_size(struct device *dev)
+-{
+-	return 0UL;
+-}
+-
+-unsigned long dev_discard_max_bytes(struct device *dev)
+-{
+-	return 0UL;
+-}
+-
+-unsigned long dev_discard_granularity(struct device *dev)
+-{
+-	return 0UL;
+-}
+-
+-#endif
 
 
