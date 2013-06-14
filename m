@@ -1,101 +1,126 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 13 Jun 2013 12:52:02 +0000 (UTC)
-Subject: master - tests: harness updates
-Message-ID: <20130613125202.B289361469@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 14 Jun 2013 08:04:47 +0000 (UTC)
+Subject: master - man: refine lvm.conf and man page documentation for autoactivation feature
+Message-ID: <20130614080447.68E5360BBA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa5d4bc7807c8ab84e65304e52532ee05ee4e172
-Commit:        fa5d4bc7807c8ab84e65304e52532ee05ee4e172
-Parent:        036d4f2982e8b1c34a7594307c6d2ae98cd36237
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 12 14:16:25 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 13 14:51:02 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dba53681a5d31c7f9510cf64637e2fbc707fb899
+Commit:        dba53681a5d31c7f9510cf64637e2fbc707fb899
+Parent:        fa5d4bc7807c8ab84e65304e52532ee05ee4e172
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Jun 14 09:36:56 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Jun 14 10:02:56 2013 +0200
 
-tests: harness updates
+man: refine lvm.conf and man page documentation for autoactivation feature
 
 ---
- test/lib/harness.c |   23 +++++++++++++++--------
- 1 files changed, 15 insertions(+), 8 deletions(-)
+ WHATS_NEW           |    1 +
+ doc/example.conf.in |   26 +++++++++++++++++++++++---
+ man/lvchange.8.in   |    5 +++--
+ man/pvscan.8.in     |    5 +++--
+ man/vgchange.8.in   |    5 +++--
+ 5 files changed, 33 insertions(+), 9 deletions(-)
 
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index 696d011..cea9a15 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -93,9 +93,11 @@ static int outline(FILE *out, char *buf, int start, int force) {
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 86b1f03..a061467 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Refine lvm.conf and man page documentation for autoactivation feature.
+   Add support for thin volumes in vgsplit.
+   Also filter partitions on mpath components if multipath_component_detection=1.
+   Add lvresize support for online thin pool metadata volume resize.
+diff --git a/doc/example.conf.in b/doc/example.conf.in
+index 9670b92..7800d15 100644
+--- a/doc/example.conf.in
++++ b/doc/example.conf.in
+@@ -646,9 +646,29 @@ activation {
+     # volume_list = [ "vg1", "vg2/lvol1", "@tag1", "@*" ]
  
- 	if (!strncmp(from, "@TESTDIR=", 9)) {
- 		subst[0].key = "@TESTDIR@";
-+		free(subst[0].value);
- 		subst[0].value = strndup(from + 9, next - from - 9 - 1);
- 	} else if (!strncmp(from, "@PREFIX=", 8)) {
- 		subst[1].key = "@PREFIX@";
-+		free(subst[1].value);
- 		subst[1].value = strndup(from + 8, next - from - 8 - 1);
- 	} else {
- 		char *line = strndup(from, next - from);
-@@ -150,6 +152,7 @@ static void trickle(FILE *out, int *last, int *counter) {
- 
- static void clear(void) {
- 	readbuf_used = 0;
-+	fullbuffer = 0;
- }
- 
- static int64_t _get_time_us(void)
-@@ -389,13 +392,14 @@ static void run(int i, char *f) {
- 				failed(i, f, st);
- 		} else
- 			failed(i, f, st);
--		clear();
-+
- 		if (outfile)
- 			fclose(outfile);
- 		if (fullbuffer)
- 			printf("\nTest was interrupted, output has got too large (>%u) (loop:%u)\n"
- 			       "Set LVM_TEST_UNLIMITED=1 for unlimited log.\n",
- 			       (unsigned) readbuf_sz, fullbuffer);
-+		clear();
- 	}
- }
- 
-@@ -433,16 +437,21 @@ int main(int argc, char **argv) {
- 	}
- 
- 	/* set up signal handlers */
--	for (i = 0; i <= 32; ++i) {
--		if (i == SIGCHLD || i == SIGWINCH || i == SIGURG)
--			continue;
--		signal(i, handler);
--	}
-+	for (i = 0; i <= 32; ++i)
-+		switch (i) {
-+		case SIGCHLD: case SIGWINCH: case SIGURG:
-+		case SIGKILL: case SIGSTOP: break;
-+		default: signal(i, handler);
-+		}
- 
- 	/* run the tests */
- 	for (i = 1; !die && i < argc; ++i)
- 		run(i, argv[i]);
- 
-+	free(subst[0].value);
-+	free(subst[1].value);
-+	free(readbuf);
-+
- 	printf("\n## %d tests %s : %d OK, %d warnings, %d failures, %d known failures; "
- 	       "%d skipped, %d interrupted\n",
- 	       s.nwarned + s.npassed + s.nfailed + s.nskipped + s.ninterrupted,
-@@ -490,7 +499,5 @@ int main(int argc, char **argv) {
- 		return (s.nfailed > 0) || (s.ninterrupted > 0) || die;
- 	}
- 
--	free(readbuf);
--
- 	return die;
- }
+     # If auto_activation_volume_list is defined, each LV that is to be
+-    # activated with the autoactivation option (--activate ay/-a ay)
+-    # is first checked against the list.  If it does not match, the LV
+-    # is not activated.  This list is checked as well as volume_list.
++    # activated with the autoactivation option (--activate ay/-a ay) is
++    # first checked against the list. There are two scenarios in which
++    # the autoactivation option is used:
++    #
++    #   - automatic activation of volumes based on incoming PVs. If all the
++    #     PVs making up a VG are present in the system, the autoactivation
++    #     is triggered. This requires lvmetad (global/use_lvmetad=1) and udev
++    #     to be running. In this case, "pvscan --cache -aay" is called
++    #     automatically without any user intervention while processing
++    #     udev events. Please, make sure you define auto_activation_list
++    #     properly so only the volumes you want and expect are autoactivated.
++    #
++    #   - direct activation on command line with the autoactivation option.
++    #     In this case, the user calls "vgchange --activate ay/-a ay" or
++    #     "lvchange --activate ay/-a ay" directly.
++    #
++    # If the VG/LV being processed does not match the list, the VG/LV is not
++    # activated. If auto_activation_volume_list is not set, then all volumes
++    # are activated by default.
++    #
++    # N.B. The "activation/volume_list" is still honoured in all cases so even
++    # if the VG/LV passes the auto_activation_volume_list, it still needs to
++    # pass the volume_list for it to be activated in the end.
+     #
+     #   "vgname" and "vgname/lvname" are matched exactly.
+     #   "@tag" matches any tag set in the LV or VG.
+diff --git a/man/lvchange.8.in b/man/lvchange.8.in
+index 2271d4c..d5041f3 100644
+--- a/man/lvchange.8.in
++++ b/man/lvchange.8.in
+@@ -65,8 +65,9 @@ libdevmapper to activate (\-ay) or deactivate (\-an) the
+ logical volumes. If autoactivation option is used (\-aay),
+ the logical volume is activated only if it matches an item in
+ the activation/auto_activation_volume_list set in lvm.conf.
+-Autoactivation is not yet supported for logical volumes that
+-are part of partial or clustered volume groups.
++If this list is not set, then all volumes are considered for
++autoactivation. The autoactivation is not yet supported for
++logical volumes that are part of partial or clustered volume groups.
+ .IP
+ If clustered locking is enabled, -aey will activate exclusively
+ on one node and -aly will activate only on the local node.
+diff --git a/man/pvscan.8.in b/man/pvscan.8.in
+index 1be3109..2246744 100644
+--- a/man/pvscan.8.in
++++ b/man/pvscan.8.in
+@@ -47,8 +47,9 @@ Show UUIDs (Uniform Unique Identifiers) in addition to device special names.
+ Together with the information already cached in lvmetad, automatically activate
+ any logical volumes that become activatable after the scan done on one or more devices.
+ The logical volume to autoactivate is matched against the
+-activation/auto_activation_volume_list set in lvm.conf. Autoactivation is not yet
+-supported on logical volumes that are part of partial or clustered volume groups.
++activation/auto_activation_volume_list set in lvm.conf. If this list is not set, then
++all volumes are considered for autoactivation. The autoactivation is not yet
++supported for logical volumes that are part of partial or clustered volume groups.
+ .TP
+ .BR \-\-cache " [" \-\-major " " \fImajor " " \-\-minor " " \fIminor " | " \fIDevicePath " ]..."
+ Scan one or more devices and instruct the lvmetad daemon to update its cached
+diff --git a/man/vgchange.8.in b/man/vgchange.8.in
+index 0f5fc58..bc4ef32 100644
+--- a/man/vgchange.8.in
++++ b/man/vgchange.8.in
+@@ -70,8 +70,9 @@ group for input/output.
+ In other words, makes the logical volumes known/unknown to the kernel.
+ If autoactivation option is used (\-aay), each logical volume in
+ the volume group is activated only if it matches an item in the
+-activation/auto_activation_volume_list set in lvm.conf.
+-Autoactivation is not yet supported for partial or clustered
++activation/auto_activation_volume_list set in lvm.conf. If this
++list is not set, then all volumes are considered for autoactivation.
++The autoactivation is not yet supported for partial or clustered
+ volume groups.
+ .IP
+ If clustered locking is enabled, add 'e' to activate/deactivate
 
 
