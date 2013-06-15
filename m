@@ -1,51 +1,65 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Jun 2013 22:16:27 +0000 (UTC)
-Subject: master - cleanup: move string in the use-place
-Message-ID: <20130615221627.AB28C60D69@fedorahosted.org>
+Date: Sat, 15 Jun 2013 22:16:29 +0000 (UTC)
+Subject: master - cleanup: use unrelated temporary variables
+Message-ID: <20130615221629.C2EFA60D69@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=450ac7be4297012d57880e39261eda726cb75eba
-Commit:        450ac7be4297012d57880e39261eda726cb75eba
-Parent:        17a3ddf89e4148b4fdfe32c2da22beff7b1ca465
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=636c51ae3f0fda00b38851ead7f419bc834786a4
+Commit:        636c51ae3f0fda00b38851ead7f419bc834786a4
+Parent:        450ac7be4297012d57880e39261eda726cb75eba
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 14 21:48:33 2013 +0200
+AuthorDate:    Fri Jun 14 21:49:12 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Jun 16 00:07:33 2013 +0200
 
-cleanup: move string in the use-place
+cleanup: use unrelated temporary variables
 
+use of tmp_rq2 is unrelated to tmp_rq - so use separate
+variable.
 ---
- tools/pvremove.c |    7 +++----
- 1 files changed, 3 insertions(+), 4 deletions(-)
+ daemons/cmirrord/cluster.c |   13 ++++++-------
+ 1 files changed, 6 insertions(+), 7 deletions(-)
 
-diff --git a/tools/pvremove.c b/tools/pvremove.c
-index cbbf6e2..2c8f5c6 100644
---- a/tools/pvremove.c
-+++ b/tools/pvremove.c
-@@ -15,9 +15,6 @@
+diff --git a/daemons/cmirrord/cluster.c b/daemons/cmirrord/cluster.c
+index 70c76c3..f19b2a9 100644
+--- a/daemons/cmirrord/cluster.c
++++ b/daemons/cmirrord/cluster.c
+@@ -1020,7 +1020,7 @@ static void cpg_message_callback(cpg_handle_t handle, const struct cpg_name *gna
+ 	int i_am_server;
+ 	int response = 0;
+ 	struct clog_request *rq = msg;
+-	struct clog_request *tmp_rq;
++	struct clog_request *tmp_rq, *tmp_rq2;
+ 	struct clog_cpg *match;
  
- #include "tools.h"
+ 	match = find_clog_cpg(handle);
+@@ -1151,18 +1151,17 @@ static void cpg_message_callback(cpg_handle_t handle, const struct cpg_name *gna
  
--const char _really_wipe[] =
--    "Really WIPE LABELS from physical volume \"%s\" of volume group \"%s\" [y/n]? ";
--
- /*
-  * Decide whether it is "safe" to wipe the labels on this device.
-  * 0 indicates we may not.
-@@ -74,7 +71,9 @@ static int pvremove_check(struct cmd_context *cmd, const char *name)
+ 		if (match->state == INVALID) {
+ 			LOG_DBG("Log not valid yet, storing request");
+-			tmp_rq = malloc(DM_ULOG_REQUEST_SIZE);
+-			if (!tmp_rq) {
++			if (!(tmp_rq2 = malloc(DM_ULOG_REQUEST_SIZE))) {
+ 				LOG_ERROR("cpg_message_callback:  Unable to"
+ 					  " allocate transfer structs");
+ 				r = -ENOMEM; /* FIXME: Better error #? */
+ 				goto out;
+ 			}
  
- 	/* prompt */
- 	if (!arg_count(cmd, yes_ARG) &&
--	    yes_no_prompt(_really_wipe, name, pv_vg_name(pv)) == 'n') {
-+	    yes_no_prompt("Really WIPE LABELS from physical volume \"%s\" "
-+			  "of volume group \"%s\" [y/n]? ",
-+			  name, pv_vg_name(pv)) == 'n') {
- 		log_error("%s: physical volume label not removed", name);
- 		goto bad;
- 	}
+-			memcpy(tmp_rq, rq, sizeof(*rq) + rq->u_rq.data_size);
+-			tmp_rq->pit_server = match->lowest_id;
+-			dm_list_init(&tmp_rq->u.list);
+-			dm_list_add(&match->startup_list, &tmp_rq->u.list);
++			memcpy(tmp_rq2, rq, sizeof(*rq) + rq->u_rq.data_size);
++			tmp_rq2->pit_server = match->lowest_id;
++			dm_list_init(&tmp_rq2->u.list);
++			dm_list_add(&match->startup_list, &tmp_rq2->u.list);
+ 			goto out;
+ 		}
+ 
 
 
