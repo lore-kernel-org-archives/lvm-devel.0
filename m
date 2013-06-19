@@ -1,134 +1,112 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 19 Jun 2013 11:24:36 +0200
-Subject: [PATCH 6/9] pvremove: Avoid using pv_read in favour of scanning.
-In-Reply-To: <1371633879-8879-1-git-send-email-prockai@redhat.com>
-References: <1371633879-8879-1-git-send-email-prockai@redhat.com>
-Message-ID: <1371633879-8879-6-git-send-email-prockai@redhat.com>
-	(sfid-20130619_112452_150007_6ED0FCA7)
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 19 Jun 2013 22:54:27 +0000 (UTC)
+Subject: master - RAID/MIRROR: Honor mirror_segtype_default when upconverting linear LVs
+Message-ID: <20130619225427.36BDC60F3E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- tools/pvremove.c | 69 ++++++++++++++++++++++++++++----------------------------
- 1 file changed, 35 insertions(+), 34 deletions(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a6d13308ec0baca9a5bd48f80d02e5c71a54287f
+Commit:        a6d13308ec0baca9a5bd48f80d02e5c71a54287f
+Parent:        4d2aa6a7aa6f8208bc27b7f0579e7d85562af2d0
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed Jun 19 17:50:10 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Jun 19 17:50:10 2013 -0500
 
-diff --git a/tools/pvremove.c b/tools/pvremove.c
-index 2c8f5c6..1d5fe18 100644
---- a/tools/pvremove.c
-+++ b/tools/pvremove.c
-@@ -21,52 +21,53 @@
-  */
- static int pvremove_check(struct cmd_context *cmd, const char *name)
- {
--	struct physical_volume *pv;
-+	struct device *dev;
-+	struct label *label;
-+	struct pv_list *pvl;
-+	struct dm_list *pvslist;
+RAID/MIRROR: Honor mirror_segtype_default when upconverting linear LVs
+
+If the user would upconvert a linear LV to a mirror without specifying
+the segment type ("--type mirror" vs "--type raid1"), the "mirror"
+segment type would be chosen without consulting the 'default_mirror_segtype'
+setting in lvm.conf.  This is now used as the basis for determining
+which should be used if left unspecified.
+---
+ WHATS_NEW                      |    2 ++
+ test/shell/lvconvert-mirror.sh |   12 ++++++++++--
+ test/shell/lvconvert-raid.sh   |   18 ++++++++++++++++++
+ tools/lvconvert.c              |    2 +-
+ 4 files changed, 31 insertions(+), 3 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 19bcf82..d527854 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.02.99 - 
+ ===================================
++  Use mirror_segtype_default if type not specified for linear->mirror upconvert.
++  Make upconvert from linear use mirror_segtype_default to determine segtype.
+   Fix use of too big chunks of memory when communication with lvmetad.
+   Fix vgcfgrestore crash when specified incorrect vg name.
+   Refine lvm.conf and man page documentation for autoactivation feature.
+diff --git a/test/shell/lvconvert-mirror.sh b/test/shell/lvconvert-mirror.sh
+index 420241a..e3c01fa 100644
+--- a/test/shell/lvconvert-mirror.sh
++++ b/test/shell/lvconvert-mirror.sh
+@@ -16,9 +16,17 @@ aux prepare_pvs 5 10
+ DEVRANGE="0-32"
+ vgcreate -s 32k $vg $(cat DEVICES)
+ 
+-# convert from linear to 2-way mirror
++# convert from linear to 2-way mirror ("mirror" default type)
+ lvcreate -aey -l2 -n $lv1 $vg "$dev1"
+-lvconvert -i1 -m+1 $vg/$lv1 "$dev2" "$dev3:0-1"
++lvconvert -i1 -m+1 $vg/$lv1 "$dev2" "$dev3:0-1" \
++	--config 'global { mirror_segtype_default = "mirror" }'
++check mirror $vg $lv1 "$dev3"
++lvremove -ff $vg
 +
-+	struct physical_volume *pv = NULL;
-+	int r = 0;
++# convert from linear to 2-way mirror (override "raid1" default type)
++lvcreate -aey -l2 -n $lv1 $vg "$dev1"
++lvconvert --type mirror -i1 -m+1 $vg/$lv1 "$dev2" "$dev3:0-1" \
++	--config 'global { mirror_segtype_default = "raid1" }'
+ check mirror $vg $lv1 "$dev3"
+ lvremove -ff $vg
  
- 	/* FIXME Check partition type is LVM unless --force is given */
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 61345da..8693cf3 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -136,6 +136,24 @@ lvconvert --merge $vg/${lv1}_rimage_2
+ lvremove -ff $vg
  
-+	if (!(dev = dev_cache_get(name, cmd->filter))) {
-+		log_error("Device %s not found", name);
-+		return 0;
-+	}
+ ###########################################
++# Linear to RAID1 conversion ("raid1" default segtype)
++###########################################
++lvcreate -l 2 -n $lv1 $vg
++lvconvert -m 1 $vg/$lv1 \
++	--config 'global { mirror_segtype_default = "raid1" }'
++lvs --noheadings -o attr $vg/$lv1 | grep '^r*'
++lvremove -ff $vg
 +
- 	/* Is there a pv here already? */
- 	/* If not, this is an error unless you used -f. */
--	if (!(pv = pv_read(cmd, name, 1, 0))) {
-+	if (!label_read(dev, &label, 0)) {
- 		if (arg_count(cmd, force_ARG))
- 			return 1;
--		log_error("Physical Volume %s not found", name);
-+		log_error("No PV label found on %s.", name);
- 		return 0;
- 	}
- 
--	/*
--	 * If a PV has no MDAs it may appear to be an
--	 * orphan until the metadata is read off
--	 * another PV in the same VG.  Detecting this
--	 * means checking every VG by scanning every
--	 * PV on the system.
--	 */
--	if (is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use) &&
--	    !dm_list_size(&pv->fid->metadata_areas_ignored)) {
--		if (!scan_vgs_for_pvs(cmd, 0)) {
--			log_error("Rescan for PVs without metadata areas "
--				  "failed.");
--			goto bad;
--		}
--		free_pv_fid(pv);
--		if (!(pv = pv_read(cmd, name, 1, 0))) {
--			log_error("Failed to read physical volume %s", name);
--			goto bad;
--		}
-+	lvmcache_seed_infos_from_lvmetad(cmd);
-+	if (!(pvslist = get_pvs(cmd)))
-+		return_0;
++###########################################
++# Linear to RAID1 conversion (override "mirror" default segtype)
++###########################################
++lvcreate -l 2 -n $lv1 $vg
++lvconvert --type raid1 -m 1 $vg/$lv1 \
++	--config 'global { mirror_segtype_default = "mirror" }'
++lvs --noheadings -o attr $vg/$lv1 | grep '^r*'
++lvremove -ff $vg
 +
-+	dm_list_iterate_items(pvl, pvslist)
-+		if (pvl->pv->dev == dev)
-+			pv = pvl->pv;
-+
-+	if (!pv) {
-+		log_error("Physical Volume %s not found through scanning.", name);
-+		goto out; /* better safe than sorry */
++###########################################
+ # Mirror to RAID1 conversion
+ ###########################################
+ for i in 1 2 3 ; do
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 46f996a..be6b55f 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -490,7 +490,7 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
+ 			return 0;
+ 		}
+ 
+-		lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, "mirror"));
++		lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, find_config_tree_str(cmd, global_mirror_segtype_default_CFG)));
+ 		if (!lp->segtype)
+ 			return_0;
  	}
- 
--	/* orphan ? */
- 	if (is_orphan(pv)) {
--		free_pv_fid(pv);
--		return 1;
-+		r = 1;
-+		goto out;
- 	}
- 
--	/* Allow partial & exported VGs to be destroyed. */
- 	/* we must have -ff to overwrite a non orphan */
- 	if (arg_count(cmd, force_ARG) < 2) {
- 		log_error("PV %s belongs to Volume Group %s so please use vgreduce first.", name, pv_vg_name(pv));
- 		log_error("(If you are certain you need pvremove, then confirm by using --force twice.)");
--		goto bad;
-+		goto out;
- 	}
- 
- 	/* prompt */
-@@ -75,7 +76,7 @@ static int pvremove_check(struct cmd_context *cmd, const char *name)
- 			  "of volume group \"%s\" [y/n]? ",
- 			  name, pv_vg_name(pv)) == 'n') {
- 		log_error("%s: physical volume label not removed", name);
--		goto bad;
-+		goto out;
- 	}
- 
- 	if (arg_count(cmd, force_ARG)) {
-@@ -86,12 +87,12 @@ static int pvremove_check(struct cmd_context *cmd, const char *name)
- 			  !is_orphan(pv) ? "\"" : "");
- 	}
- 
--	free_pv_fid(pv);
--	return 1;
--
--bad:
--	free_pv_fid(pv);
--	return 0;
-+	r = 1;
-+out:
-+	if (pvslist)
-+		dm_list_iterate_items(pvl, pvslist)
-+			free_pv_fid(pvl->pv);
-+	return r;
- }
- 
- static int pvremove_single(struct cmd_context *cmd, const char *pv_name,
--- 
-1.8.2
 
 
