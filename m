@@ -1,30 +1,39 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 21 Jun 2013 15:53:29 +0200
-Subject: Internal error: Pool read_vg crc mismatch only when running in test environment
-In-Reply-To: <51C38DB6.7070507@redhat.com>
-References: <51C38DB6.7070507@redhat.com>
-Message-ID: <51C45AD9.2040703@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Sun, 23 Jun 2013 10:40:12 +0000 (UTC)
+Subject: master - dev-type: dev_get_primary_dev: fix ret value if dev is a partition and we used sysfs
+Message-ID: <20130623104012.EC1DB60295@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 21.6.2013 01:18, Tony Asleson napsal(a):
-> Writing some new unit test cases for my latest liblvm patch set and at
-> the moment I am running into a case where I can run the unit test case
-> against real disk and it works, but if I run it in the test environment
-> with loop back devices I am getting an abort with:
->
-> "Internal error: Pool read_vg crc mismatch."
->
-> Any ideas why this error isn't occurring on both?
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9e8e7c235a14d8ada78b88d467f659b8e72554b
+Commit:        c9e8e7c235a14d8ada78b88d467f659b8e72554b
+Parent:        bdcfe8c6de26472562a8f907081e0eb94e038488
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Sun Jun 23 11:14:34 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Sun Jun 23 12:39:35 2013 +0200
 
-This happens - if you have requested 'read-only'  VG struct,
-and you have modifed something in this vgmem pool
-(either writing to struct, or just using vgmem pool for allocation)
+dev-type: dev_get_primary_dev: fix ret value if dev is a partition and we used sysfs
 
-Zdenek
+---
+ lib/device/dev-type.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index a8340b0..642ee27 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -434,7 +434,7 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
+ 		goto out;
+ 	}
+ 	*result = MKDEV((dev_t)major, minor);
+-	ret = 1;
++	ret = 2;
+ out:
+ 	if (fp && fclose(fp))
+ 		log_sys_error("fclose", path);
 
 
