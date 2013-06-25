@@ -1,177 +1,188 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 25 Jun 2013 13:56:04 +0200
-Subject: [PATCH 4/6] thin: lvchange spare lv manipulation
+Date: Tue, 25 Jun 2013 13:56:05 +0200
+Subject: [PATCH 5/6] thin: add spare lvcreate support
 In-Reply-To: <cover.1372161214.git.zkabelac@redhat.com>
 References: <cover.1372161214.git.zkabelac@redhat.com>
-Message-ID: <8bc501a78ec22479818786b5147b8afbdb4b9763.1372161214.git.zkabelac@redhat.com>
+Message-ID: <6c0b2af111b25a953cb44c88218006b1c726593b.1372161214.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Allow lvchange of spare flag for an LV.
+Add --spare option and create and hanle spare lv
+when thin pool is created.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/args.h     |  1 +
- tools/commands.h |  5 ++--
- tools/lvchange.c | 86 +++++++++++++++++++++++++++++++++++++++++++++++++++++++-
- 3 files changed, 89 insertions(+), 3 deletions(-)
+ lib/metadata/metadata-exported.h |  1 +
+ tools/commands.h                 | 10 +++--
+ tools/lvcreate.c                 | 83 +++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 88 insertions(+), 6 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 2fed97e..b8d0ad6 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -76,6 +76,7 @@ arg(poolmetadata_ARG, '\0', "poolmetadata", string_arg, 0)
- arg(poolmetadatasize_ARG, '\0', "poolmetadatasize", size_mb_arg, 0)
- arg(discards_ARG, '\0', "discards", discards_arg, 0)
- arg(force_long_ARG, '\0', "force", NULL, ARG_COUNTABLE)
-+arg(spare_ARG, '\0', "spare", yes_no_arg, 0)
- arg(stripes_long_ARG, '\0', "stripes", int_arg, 0)
- arg(sysinit_ARG, '\0', "sysinit", NULL, 0)
- arg(thinpool_ARG, '\0', "thinpool", string_arg, 0)
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 453b98b..a368dca 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -615,6 +615,7 @@ struct lvcreate_params {
+ 	int minor; /* all */
+ 	int log_count; /* mirror */
+ 	int nosync; /* mirror */
++	int spare; /* thin pool */
+ 	activation_change_t activate; /* non-snapshot, non-mirror */
+ 	thin_discards_t discards;     /* thin */
+ 
 diff --git a/tools/commands.h b/tools/commands.h
-index 2d99d5a..ca29b81 100644
+index ca29b81..d1cef36 100644
 --- a/tools/commands.h
 +++ b/tools/commands.h
-@@ -92,6 +92,7 @@ xx(lvchange,
-    "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
-    "\t[--refresh]\n"
-    "\t[--resync]\n"
-+   "\t[--spare {y|n}]\n"
-    "\t[--syncaction {check|repair}\n"
-    "\t[--sysinit]\n"
+@@ -208,6 +208,7 @@ xx(lvcreate,
+    "\t[-T|--thin  [-c|--chunksize  ChunkSize]\n"
+    "\t  [--discards {ignore|nopassdown|passdown}]\n"
+    "\t  [--poolmetadatasize MetadataSize[bBsSkKmMgG]]]\n"
++   "\t  [--spare {y|n}]\n"
+    "\t[--thinpool ThinPoolLogicalVolume{Name|Path}]\n"
     "\t[-t|--test]\n"
-@@ -106,8 +107,8 @@ xx(lvchange,
-    alloc_ARG, autobackup_ARG, activate_ARG, available_ARG, contiguous_ARG,
-    discards_ARG, force_ARG, ignorelockingfailure_ARG, ignoremonitoring_ARG,
-    major_ARG, minor_ARG, monitor_ARG, minrecoveryrate_ARG, maxrecoveryrate_ARG,
--   noudevsync_ARG, partial_ARG,
--   permission_ARG, persistent_ARG, poll_ARG, readahead_ARG, resync_ARG,
-+   noudevsync_ARG, partial_ARG, permission_ARG, persistent_ARG,
-+   poll_ARG, readahead_ARG, resync_ARG, spare_ARG,
-    refresh_ARG, addtag_ARG, deltag_ARG, syncaction_ARG, sysinit_ARG, test_ARG,
-    writebehind_ARG, writemostly_ARG, zero_ARG)
+    "\t[--type VolumeType]\n"
+@@ -251,10 +252,11 @@ xx(lvcreate,
+    chunksize_ARG, contiguous_ARG, corelog_ARG, discards_ARG, extents_ARG,
+    ignoremonitoring_ARG, major_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG,
+    monitor_ARG, minrecoveryrate_ARG, maxrecoveryrate_ARG, name_ARG, nosync_ARG,
+-   noudevsync_ARG, permission_ARG,
+-   persistent_ARG, readahead_ARG, regionsize_ARG, size_ARG, snapshot_ARG,
+-   stripes_ARG, stripesize_ARG, test_ARG, thin_ARG, thinpool_ARG, type_ARG,
+-   virtualoriginsize_ARG, poolmetadatasize_ARG, virtualsize_ARG, zero_ARG)
++   noudevsync_ARG, permission_ARG, persistent_ARG, poolmetadatasize_ARG,
++   readahead_ARG, regionsize_ARG,
++   size_ARG, snapshot_ARG, spare_ARG, stripes_ARG, stripesize_ARG,
++   test_ARG, thin_ARG, thinpool_ARG, type_ARG,
++   virtualoriginsize_ARG,virtualsize_ARG, zero_ARG)
  
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index c88d8ef..f7fcf44 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -101,6 +101,77 @@ out:
+ xx(lvdisplay,
+    "Display information about a logical volume",
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 80ca1bc..a149c64 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -887,6 +887,12 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+ 		return 0;
+ 	}
+ 
++	if (lp->create_thin_pool) {
++		lp->spare = arg_uint_value(cmd, spare_ARG, 1); /* TODO: lvm.conf default */
++	} else if (arg_count(cmd, spare_ARG)) {
++		log_error("--spare is only available with thin pool creation.");
++		return 0;
++	}
+ 	/*
+ 	 * Allocation parameters
+ 	 */
+@@ -945,6 +951,7 @@ static int _check_thin_parameters(struct volume_group *vg, struct lvcreate_param
+ 			contiguous_ARG,
+ 			discards_ARG,
+ 			poolmetadatasize_ARG,
++			spare_ARG,
+ 			stripes_ARG,
+ 			stripesize_ARG,
+ 			zero_ARG
+@@ -1043,6 +1050,71 @@ static int _validate_internal_thin_processing(const struct lvcreate_params *lp)
  	return r;
  }
  
-+static int lvchange_spare(struct cmd_context *cmd,
-+			  struct logical_volume *lv)
++/* Create spare LV */
++static int _handle_spare(struct volume_group *vg, uint32_t extents,
++			 struct dm_list *pvh)
 +{
-+	struct lv_list *lvl;
-+	uint64_t max_size = 0;
-+	unsigned spare = arg_uint_value(cmd, spare_ARG, 0);
++	struct logical_volume *lv = vg->spare;
++	uint32_t seg_mirrors;
++	struct lv_segment *seg;
++	struct lvcreate_params lp = {
++		.activate = CHANGE_ALY,
++		.alloc = ALLOC_INHERIT,
++		.extents = extents,
++		.lv_name = "spare_%d",
++		.major = -1,
++		.minor = -1,
++		.permission = LVM_READ | LVM_WRITE,
++		.pvh = pvh ? : &vg->pvs,
++		.read_ahead = DM_READ_AHEAD_AUTO,
++		.stripes = 1,
++		.vg_name = vg->name,
++		.zero = 1,
++	};
 +
-+	if (lv_is_active(lv)) {
-+		log_error("Cannot change spare for active logical volume \"%s\".",
-+			  lv->name);
++	dm_list_init(&lp.tags);
++
++	if (!(lp.segtype = get_segtype_from_string(vg->cmd, "striped")))
++		return_0;
++
++	/* vg_write & vg_commit with pool creation */
++	/* FIXME: resolve archive */
++	if (lv) {
++		seg = last_seg(lv);
++		seg_mirrors = lv_mirror_count(lv);
++
++		/* Check spare is big enough and preserve segtype */
++		if ((lv->le_count < extents) && seg &&
++		    !lv_extend(lv,
++			       seg->segtype,
++			       seg->area_count / seg_mirrors,
++			       seg->stripe_size,
++			       seg_mirrors,
++			       seg->region_size,
++			       extents - lv->le_count, NULL,
++			       pvh, lv->alloc))
++			return_0;
++
++		return 1;
++	}
++
++	/* FIXME: Maybe using silent mode ? */
++	if (!(lv = lv_create_single(vg, &lp)))
++		return_0;
++
++	/* no need to keep active */
++	if (!deactivate_lv(vg->cmd, lv)) {
++		log_error("Unable to deactivate spare LV. "
++			  "Manual intervention required.");
 +		return 0;
 +	}
 +
-+	if (spare) {
-+		if (lv_is_spare(lv)) {
-+			log_error("Logical volume \"%s\" is already spare volume.",
-+				  lv->name);
-+			return 0;
-+		}
++	lv->status |= SPARE_LV;
++	vg->spare = lv;
 +
-+		if (!(lv->status & LVM_WRITE)) {
-+			log_error("Cannot use read-only logical volume \"%s\" for spare.",
-+				  lv->name);
-+			return 0;
-+		}
-+
-+		if (!lv_is_visible(lv)) {
-+			log_error("Cannot use invisible logical volume \"%s\" for spare.",
-+				  lv->name);
-+			return 0;
-+		}
-+
-+		/* FIXME: validate size */
-+		dm_list_iterate_items(lvl, &lv->vg->lvs)
-+			if (lv_is_thin_pool_metadata(lvl->lv) &&
-+			    (max_size < lvl->lv->size))
-+				max_size = lvl->lv->size;
-+
-+		if (lv->size < max_size) {
-+			log_error("Logical volume \"%s\" must have@least %s for spare.",
-+				  lv->name, display_size(lv->vg->cmd, max_size));
-+			return 0;
-+		}
-+
-+		if (lv->vg->spare) {
-+			log_print_unless_silent("Replacing spare logical volume \"%s\".",
-+						lv->vg->spare->name);
-+			lv->vg->spare->status &= ~SPARE_LV;
-+		}
-+
-+		lv->vg->spare = lv;
-+		lv->status |= SPARE_LV;
-+	} else {
-+		if (!lv_is_spare(lv)) {
-+			log_error("Logical volume \"%s\" is not a spare volume.",
-+				  lv->name);
-+			return 0;
-+		}
-+
-+		lv->vg->spare = NULL;
-+		lv->status &= ~SPARE_LV;
-+	}
-+
-+	log_very_verbose("Updating spare logical volume \"%s\" on disk(s).", lv->name);
-+	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
-+		return_0;
-+
-+	backup(lv->vg);
 +	return 1;
 +}
 +
- static int lvchange_pool_update(struct cmd_context *cmd,
- 				struct logical_volume *lv)
+ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
  {
-@@ -930,7 +1001,9 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	    lv_is_virtual_origin(origin = origin_from_cow(lv)))
- 		lv = origin;
- 
--	if (!(lv_is_visible(lv)) && !lv_is_virtual_origin(lv)) {
-+	if (!lv_is_visible(lv) &&
-+	    !lv_is_spare(lv) &&
-+	    !lv_is_virtual_origin(lv)) {
- 		log_error("Unable to change internal LV %s directly",
- 			  lv->name);
- 		return ECMD_FAILED;
-@@ -997,6 +1070,16 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		}
+ 	int r = ECMD_PROCESSED;
+@@ -1090,9 +1162,16 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
+ 		goto_out;
  	}
  
-+	if (arg_count(cmd, spare_ARG)) {
-+		if (!archived && !archive(lv->vg)) {
-+			stack;
-+			return ECMD_FAILED;
-+		}
-+		archived = 1;
-+		doit += lvchange_spare(cmd, lv);
-+		docmds++;
-+	}
+-	if (lp.create_thin_pool)
++	if (lp.create_thin_pool) {
++		if (!lp.spare)
++			log_warn("WARNING: recovery without spare LV for "
++				 "pool %s is not automated.", lp.pool);
++		else if (!_handle_spare(vg, lp.poolmetadataextents, lp.pvh))
++			return_0;
 +
- 	if (arg_count(cmd, discards_ARG) ||
- 	    arg_count(cmd, zero_ARG)) {
- 		if (!archived && !archive(lv->vg)) {
-@@ -1120,6 +1203,7 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
- 		arg_count(cmd, contiguous_ARG) ||
- 		arg_count(cmd, permission_ARG) ||
- 		arg_count(cmd, readahead_ARG) ||
-+		arg_count(cmd, spare_ARG) ||
- 		arg_count(cmd, persistent_ARG) ||
- 		arg_count(cmd, addtag_ARG) ||
- 		arg_count(cmd, deltag_ARG);
+ 		log_verbose("Making thin pool %s in VG %s using segtype %s",
+ 			    lp.pool ? : "with generated name", lp.vg_name, lp.segtype->name);
++	}
+ 
+ 	if (lp.thin)
+ 		log_verbose("Making thin LV %s in pool %s in VG %s%s%s using segtype %s",
 -- 
 1.8.2.1
 
