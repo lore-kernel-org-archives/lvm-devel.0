@@ -1,41 +1,47 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 25 Jun 2013 21:06:22 +0000 (UTC)
-Subject: master - dmeventd: fix cleanup commit
-Message-ID: <20130625210622.2E9F0612C1@fedorahosted.org>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Tue, 25 Jun 2013 18:28:44 -0500
+Subject: Internal error: Pool read_vg crc mismatch only when running in test environment
+In-Reply-To: <51C45AD9.2040703@redhat.com>
+References: <51C38DB6.7070507@redhat.com> <51C45AD9.2040703@redhat.com>
+Message-ID: <51CA27AC.4040900@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9233e6d0bb5b3b21cc67fd0baae3fb4cb099bdcb
-Commit:        9233e6d0bb5b3b21cc67fd0baae3fb4cb099bdcb
-Parent:        939aeb7058e327686ff0e4f9e22b18893e0a7a3f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 25 23:05:06 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jun 25 23:05:06 2013 +0200
+On 06/21/2013 08:53 AM, Zdenek Kabelac wrote:
+> Dne 21.6.2013 01:18, Tony Asleson napsal(a):
+>> Writing some new unit test cases for my latest liblvm patch set and at
+>> the moment I am running into a case where I can run the unit test case
+>> against real disk and it works, but if I run it in the test environment
+>> with loop back devices I am getting an abort with:
+>>
+>> "Internal error: Pool read_vg crc mismatch."
+>>
+>> Any ideas why this error isn't occurring on both?
+>>
+> 
+> This happens - if you have requested 'read-only'  VG struct,
+> and you have modifed something in this vgmem pool
+> (either writing to struct, or just using vgmem pool for allocation)
 
-dmeventd: fix cleanup commit
+My original inquiry was for ideas why I see this on loop back devices
+and not actual devices.  This response doesn't seem to match what I am
+seeing.
 
-Fixing wrong rebase of cleanup commit.
-Put back call to outth.
----
- daemons/dmeventd/dmeventd.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+The stack trace shows that we are getting this error during an
+lvm_vg_open.  I can re-create the error regardless if I open the vg
+struct as read-only or read-write.
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index e9924f6..b912ead 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -988,7 +988,7 @@ static int _register_for_event(struct message_data *message_data)
- 	   almost as good as dead already... */
- 	if ((thread_new->events & DM_EVENT_TIMEOUT) &&
- 	    (ret = -_register_for_timeout(thread_new)))
--		goto out;
-+		goto outth;
- 
- 	if (!(thread = _lookup_thread_status(message_data))) {
- 		_unlock_mutex();
+>From my initial debug it appears that if the vginfo->vg_use_count > 1
+(in this case 3) we pass 1 as the second parameter to dm_pool_unlock
+which is a crc check of the pool which it finds to be different.  At
+this point it would seem I am exacerbating some type of caching bug or
+that somewhere along the path I am inadvertently changing the contents
+of the vg struct pointer with my latest patches.
+
+Regards,
+Tony
 
 
