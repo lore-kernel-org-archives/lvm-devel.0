@@ -1,50 +1,60 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 11 Jun 2013 12:57:17 +0000 (UTC)
-Subject: master - lvresize: fix pvh handling
-Message-ID: <20130611125717.AD87A60E5F@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 25 Jun 2013 13:56:03 +0200
+Subject: [PATCH 3/6] thin: removal of spare disables recovery
+In-Reply-To: <cover.1372161214.git.zkabelac@redhat.com>
+References: <cover.1372161214.git.zkabelac@redhat.com>
+Message-ID: <6844a5105bb7fc9494a28bfa1b7cf867b91b08de.1372161214.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6ff8b6d7548b218f678c45f768b8383038db1855
-Commit:        6ff8b6d7548b218f678c45f768b8383038db1855
-Parent:        861fd1108f4873f549c1e1b852243edcf03493d9
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 11 14:55:32 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jun 11 14:55:32 2013 +0200
+Warn user when removing spare LV.
 
-lvresize: fix pvh handling
-
-Fix bug in previous patch - if only PVs are specified -
-it's like if user would have specified size.
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/lvresize.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
 
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index bb9a535..3e2c281 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -458,7 +458,7 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
- 	uint32_t size_rest;
- 	uint32_t pv_extent_count;
- 	alloc_policy_t alloc;
--	struct logical_volume *lock_lv;
-+	struct logical_volume *lock_lv = NULL;
- 	struct lv_list *lvl;
- 	struct lv_segment *seg, *uninitialized_var(mirr_seg);
- 	uint32_t seg_extents;
-@@ -575,7 +575,7 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
- 		return ECMD_FAILED;
- 	}
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 8acca49..f0fad05 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3623,6 +3623,7 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
+ {
+ 	percent_t snap_percent;
+ 	struct dm_list *snh, *snht;
++	struct lv_list *lvl;
+ 	struct lvinfo info;
  
--	if (lp->sizeargs) { /* TODO: reindent or move to function */
-+	if (lp->sizeargs || (pvh != &vg->pvs)) { /* TODO: reindent or move to function */
+ 	if (lv_is_cow(lv)) {
+@@ -3681,6 +3682,24 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
+ 	    !_lv_remove_segs_using_this_lv(cmd, lv, force, level, "pool"))
+ 		return_0;
  
- 	switch(lp->percent) {
- 		case PERCENT_VG:
++	if (lv_is_thin_pool(lv) && lv->vg->spare) {
++		dm_list_iterate_items(lvl, &lv->vg->lvs)
++			if (lv_is_thin_pool(lvl->lv) && lvl->lv != lv)
++				break;
++
++		if ((!lv_is_thin_pool(lvl->lv) || lvl->lv == lv) &&
++		    !lv_remove_with_dependencies(cmd, lv->vg->spare, force, level + 1))
++			return_0;
++	}
++
++	if (lv_is_spare(lv) &&
++	    (force == PROMPT) &&
++	    (yes_no_prompt("Removal of spare logical volume \"%s\" disables thin pool recovery. "
++			   "Proceed? [y/n]: ", lv->name) == 'n')) {
++		log_error("Logical volume \"%s\" not removed.", lv->name);
++		return 0;
++	}
++
+ 	return lv_remove_single(cmd, lv, force);
+ }
+ 
+-- 
+1.8.2.1
 
 
