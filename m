@@ -1,52 +1,54 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 26 Jun 2013 14:55:33 +0000 (UTC)
-Subject: dev-peter-config-profiles - thin: check for creation of pool
-Message-ID: <20130626145533.9A04361131@fedorahosted.org>
+Date: Wed, 26 Jun 2013 14:55:35 +0000 (UTC)
+Subject: dev-peter-config-profiles - debug: add pointer to -DDEBUG_POOL compilation
+Message-ID: <20130626145535.ADC4F60D8D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a4d6f7939c83f2b60be7e892af7588693e651789
-Commit:        a4d6f7939c83f2b60be7e892af7588693e651789
-Parent:        d46588c2d7b051a69564bd862a5b2579c2cdb8f3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=939aeb7058e327686ff0e4f9e22b18893e0a7a3f
+Commit:        939aeb7058e327686ff0e4f9e22b18893e0a7a3f
+Parent:        a4d6f7939c83f2b60be7e892af7588693e651789
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 24 20:54:05 2013 +0200
+AuthorDate:    Thu Feb 18 16:38:32 2010 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Jun 25 13:47:39 2013 +0200
 
-thin: check for creation of pool
+debug: add pointer to -DDEBUG_POOL compilation
 
+Show 'at' pointer address with pool name.
+It's useful for debugging to be able to locate pointer address in the
+debug trace log. It's only available when compiled with extra debug
+compilation flag DEBUG_POOL in make.tmpl.
 ---
- tools/lvcreate.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ libdm/mm/pool-debug.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 43bb3d6..80ca1bc 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -393,12 +393,11 @@ static int _read_size_params(struct lvcreate_params *lp,
- 	if (seg_is_thin(lp) && (arg_count(cmd, size_ARG) || arg_count(cmd, extents_ARG)))
- 		lp->create_thin_pool = 1;
+diff --git a/libdm/mm/pool-debug.c b/libdm/mm/pool-debug.c
+index 3bd6cab..afaa39e 100644
+--- a/libdm/mm/pool-debug.c
++++ b/libdm/mm/pool-debug.c
+@@ -62,7 +62,7 @@ struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint)
+ 	mem->orig_pool = mem;
  
--	if (arg_count(cmd, poolmetadatasize_ARG) && !seg_is_thin(lp)) {
-+	if (!lp->create_thin_pool && arg_count(cmd, poolmetadatasize_ARG)) {
- 		log_error("--poolmetadatasize may only be specified when allocating the thin pool.");
- 		return 0;
- 	}
+ #ifdef DEBUG_POOL
+-	log_debug_mem("Created mempool %s", name);
++	log_debug_mem("Created mempool %s at %p", name, mem);
+ #endif
  
--	/* Size returned in kilobyte units; held in sectors */
- 	if (arg_count(cmd, virtualsize_ARG)) {
- 		if (seg_is_thin_pool(lp)) {
- 			log_error("Virtual size in incompatible with thin_pool segment type.");
-@@ -408,6 +407,7 @@ static int _read_size_params(struct lvcreate_params *lp,
- 			log_error("Negative virtual origin size is invalid");
- 			return 0;
- 		}
-+		/* Size returned in kilobyte units; held in sectors */
- 		lp->voriginsize = arg_uint64_value(cmd, virtualsize_ARG,
- 						   UINT64_C(0));
- 		if (!lp->voriginsize) {
+ 	dm_list_add(&_dm_pools, &mem->list);
+@@ -91,8 +91,8 @@ static void _free_blocks(struct dm_pool *p, struct block *b)
+ static void _pool_stats(struct dm_pool *p, const char *action)
+ {
+ #ifdef DEBUG_POOL
+-	log_debug_mem("%s mempool %s: %u/%u bytes, %u/%u blocks, "
+-		      "%u allocations)", action, p->name, p->stats.bytes,
++	log_debug_mem("%s mempool %s at %p: %u/%u bytes, %u/%u blocks, "
++		      "%u allocations)", action, p->name, p, p->stats.bytes,
+ 		      p->stats.maxbytes, p->stats.blocks_allocated,
+ 		      p->stats.blocks_max, p->stats.block_serialno);
+ #else
 
 
