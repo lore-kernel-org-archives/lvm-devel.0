@@ -1,86 +1,111 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 26 Jun 2013 14:56:00 +0000 (UTC)
-Subject: dev-peter-config-profiles - config: add profile arg to find_config_tree_int64
-Message-ID: <20130626145600.EDA0660DEE@fedorahosted.org>
+Date: Wed, 26 Jun 2013 14:56:07 +0000 (UTC)
+Subject: dev-peter-config-profiles - metadata: add support for storing profile name in metadata (during vgcreate/lvcreate)
+Message-ID: <20130626145607.4252D6159C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=01debc1f005b32798ea695fe1c9c078b4ba5d33b
-Commit:        01debc1f005b32798ea695fe1c9c078b4ba5d33b
-Parent:        754ac268a789dcc30ec1f5809e142f877ed2ea04
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1ef90eba33fb8b5d646e422c1fd43d6da990d63e
+Commit:        1ef90eba33fb8b5d646e422c1fd43d6da990d63e
+Parent:        00255dc6d473f20364960fff2acda69c50697e1d
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 25 12:31:24 2013 +0200
+AuthorDate:    Tue Jun 25 12:32:09 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Wed Jun 26 16:53:50 2013 +0200
 
-config: add profile arg to find_config_tree_int64
+metadata: add support for storing profile name in metadata (during vgcreate/lvcreate)
 
+If "vgcreate/lvcreate --profile <profile_name>" is used, the profile
+name is automatically stored in metadata for making it possible to
+load it automatically next time the VG/LV is used.
 ---
- lib/commands/toolcontext.c |    2 +-
- lib/config/config.c        |   14 ++++++++++++--
- lib/config/config.h        |    2 +-
- 3 files changed, 14 insertions(+), 4 deletions(-)
+ lib/format_text/export.c         |    7 +++++++
+ lib/format_text/format-text.c    |    2 +-
+ lib/metadata/lv_manip.c          |    3 +++
+ lib/metadata/metadata-exported.h |    1 +
+ tools/vgcreate.c                 |    3 +++
+ 5 files changed, 15 insertions(+), 1 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index e7623c4..f5e0541 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -401,7 +401,7 @@ static int _process_config(struct cmd_context *cmd)
- 
- 	cmd->metadata_read_only = find_config_tree_bool(cmd, global_metadata_read_only_CFG);
- 
--	pv_min_kb = find_config_tree_int64(cmd, devices_pv_min_size_CFG);
-+	pv_min_kb = find_config_tree_int64(cmd, devices_pv_min_size_CFG, NULL);
- 	if (pv_min_kb < PV_MIN_SIZE_KB) {
- 		log_warn("Ignoring too small pv_min_size %" PRId64 "KB, using default %dKB.",
- 			 pv_min_kb, PV_MIN_SIZE_KB);
-diff --git a/lib/config/config.c b/lib/config/config.c
-index aad0e91..fff883b 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -824,15 +824,25 @@ int find_config_tree_int(struct cmd_context *cmd, int id, struct profile *profil
- 	return i;
- }
- 
--int64_t find_config_tree_int64(struct cmd_context *cmd, int id)
-+int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *profile)
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	const char *path = cfg_def_get_path(item);
-+	int profile_applied = 0;
-+	int i64;
- 
- 	if (item->type != CFG_TYPE_INT)
- 		log_error(INTERNAL_ERROR "%s cfg tree element not declared as integer.", path);
- 
--	return dm_config_tree_find_int64(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_INT));
-+	if (profile && !cmd->profile_params->global_profile)
-+		profile_applied = override_config_tree_from_profile(cmd, profile);
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index b6aac45..73030e4 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -418,6 +418,10 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
+ 		outf(f, "allocation_policy = \"%s\"",
+ 		     get_alloc_string(vg->alloc));
+ 	}
 +
-+	i64 = dm_config_tree_find_int64(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_INT));
++	if (vg->profile)
++		outf(f, "profile = \"%s\"", vg->profile->name);
 +
-+	if (profile_applied)
-+		remove_config_tree_by_source(cmd, CONFIG_PROFILE);
+ 	outf(f, "metadata_copies = %u", vg->mda_copies);
+ 
+ 	return 1;
+@@ -623,6 +627,9 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
+ 		outf(f, "allocation_policy = \"%s\"",
+ 		     get_alloc_string(lv->alloc));
+ 
++	if (lv->profile)
++		outf(f, "profile = \"%s\"", lv->profile->name);
 +
-+	return i64;
- }
+ 	switch (lv->read_ahead) {
+ 	case DM_READ_AHEAD_NONE:
+ 		outfc(f, "# None", "read_ahead = -1");
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 1c940ed..3512ba6 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -2414,7 +2414,7 @@ struct format_type *create_text_format(struct cmd_context *cmd)
+ 	fmt->orphan_vg_name = ORPHAN_VG_NAME(FMT_TEXT_NAME);
+ 	fmt->features = FMT_SEGMENTS | FMT_MDAS | FMT_TAGS | FMT_PRECOMMIT |
+ 			FMT_UNLIMITED_VOLS | FMT_RESIZE_PV |
+-			FMT_UNLIMITED_STRIPESIZE | FMT_BAS;
++			FMT_UNLIMITED_STRIPESIZE | FMT_BAS | FMT_CONFIG_PROFILE;
  
- float find_config_tree_float(struct cmd_context *cmd, int id)
-diff --git a/lib/config/config.h b/lib/config/config.h
-index 95bae36..700075c 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -164,7 +164,7 @@ const struct dm_config_node *find_config_tree_node(struct cmd_context *cmd, int
- const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile *profile);
- const char *find_config_tree_str_allow_empty(struct cmd_context *cmd, int id, struct profile *profile);
- int find_config_tree_int(struct cmd_context *cmd, int id, struct profile *profile);
--int64_t find_config_tree_int64(struct cmd_context *cmd, int id);
-+int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *profile);
- float find_config_tree_float(struct cmd_context *cmd, int id);
- int find_config_tree_bool(struct cmd_context *cmd, int id);
+ 	if (!(mda_lists = dm_malloc(sizeof(struct mda_lists)))) {
+ 		log_error("Failed to allocate dir_list");
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index c9af654..76660ae 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4651,6 +4651,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 				   status, lp->alloc, vg)))
+ 		return_NULL;
  
++	if (vg->fid->fmt->features & FMT_CONFIG_PROFILE)
++		lv->profile = vg->cmd->profile_params->global_profile;
++
+ 	if (lp->read_ahead != lv->read_ahead) {
+ 		log_verbose("Setting read ahead sectors");
+ 		lv->read_ahead = lp->read_ahead;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 10aea9e..3c5bfcf 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -110,6 +110,7 @@
+ #define FMT_UNLIMITED_STRIPESIZE 0x00000100U	/* Unlimited stripe size? */
+ #define FMT_RESTRICTED_READAHEAD 0x00000200U	/* Readahead restricted to 2-120? */
+ #define FMT_BAS			0x000000400U	/* Supports bootloader areas? */
++#define FMT_CONFIG_PROFILE	0x000000800U	/* Supports configuration profiles? */
+ 
+ /* Mirror conversion type flags */
+ #define MIRROR_BY_SEG		0x00000001U	/* segment-by-segment mirror */
+diff --git a/tools/vgcreate.c b/tools/vgcreate.c
+index 9be9416..45f4c04 100644
+--- a/tools/vgcreate.c
++++ b/tools/vgcreate.c
+@@ -62,6 +62,9 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 	}
+ 
++	if (vg->fid->fmt->features & FMT_CONFIG_PROFILE)
++		vg->profile = vg->cmd->profile_params->global_profile;
++
+ 	if (!vg_set_extent_size(vg, vp_new.extent_size) ||
+ 	    !vg_set_max_lv(vg, vp_new.max_lv) ||
+ 	    !vg_set_max_pv(vg, vp_new.max_pv) ||
 
 
