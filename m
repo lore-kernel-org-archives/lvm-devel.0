@@ -1,54 +1,41 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 26 Jun 2013 14:55:35 +0000 (UTC)
-Subject: dev-peter-config-profiles - debug: add pointer to -DDEBUG_POOL compilation
-Message-ID: <20130626145535.ADC4F60D8D@fedorahosted.org>
+Date: Wed, 26 Jun 2013 14:55:37 +0000 (UTC)
+Subject: dev-peter-config-profiles - dmeventd: fix cleanup commit
+Message-ID: <20130626145537.C820C60D8D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=939aeb7058e327686ff0e4f9e22b18893e0a7a3f
-Commit:        939aeb7058e327686ff0e4f9e22b18893e0a7a3f
-Parent:        a4d6f7939c83f2b60be7e892af7588693e651789
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9233e6d0bb5b3b21cc67fd0baae3fb4cb099bdcb
+Commit:        9233e6d0bb5b3b21cc67fd0baae3fb4cb099bdcb
+Parent:        939aeb7058e327686ff0e4f9e22b18893e0a7a3f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Feb 18 16:38:32 2010 +0100
+AuthorDate:    Tue Jun 25 23:05:06 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jun 25 13:47:39 2013 +0200
+CommitterDate: Tue Jun 25 23:05:06 2013 +0200
 
-debug: add pointer to -DDEBUG_POOL compilation
+dmeventd: fix cleanup commit
 
-Show 'at' pointer address with pool name.
-It's useful for debugging to be able to locate pointer address in the
-debug trace log. It's only available when compiled with extra debug
-compilation flag DEBUG_POOL in make.tmpl.
+Fixing wrong rebase of cleanup commit.
+Put back call to outth.
 ---
- libdm/mm/pool-debug.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ daemons/dmeventd/dmeventd.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/mm/pool-debug.c b/libdm/mm/pool-debug.c
-index 3bd6cab..afaa39e 100644
---- a/libdm/mm/pool-debug.c
-+++ b/libdm/mm/pool-debug.c
-@@ -62,7 +62,7 @@ struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint)
- 	mem->orig_pool = mem;
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index e9924f6..b912ead 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -988,7 +988,7 @@ static int _register_for_event(struct message_data *message_data)
+ 	   almost as good as dead already... */
+ 	if ((thread_new->events & DM_EVENT_TIMEOUT) &&
+ 	    (ret = -_register_for_timeout(thread_new)))
+-		goto out;
++		goto outth;
  
- #ifdef DEBUG_POOL
--	log_debug_mem("Created mempool %s", name);
-+	log_debug_mem("Created mempool %s at %p", name, mem);
- #endif
- 
- 	dm_list_add(&_dm_pools, &mem->list);
-@@ -91,8 +91,8 @@ static void _free_blocks(struct dm_pool *p, struct block *b)
- static void _pool_stats(struct dm_pool *p, const char *action)
- {
- #ifdef DEBUG_POOL
--	log_debug_mem("%s mempool %s: %u/%u bytes, %u/%u blocks, "
--		      "%u allocations)", action, p->name, p->stats.bytes,
-+	log_debug_mem("%s mempool %s at %p: %u/%u bytes, %u/%u blocks, "
-+		      "%u allocations)", action, p->name, p, p->stats.bytes,
- 		      p->stats.maxbytes, p->stats.blocks_allocated,
- 		      p->stats.blocks_max, p->stats.block_serialno);
- #else
+ 	if (!(thread = _lookup_thread_status(message_data))) {
+ 		_unlock_mutex();
 
 
