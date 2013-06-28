@@ -1,179 +1,110 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 12 Jun 2013 11:16:51 +0000 (UTC)
-Subject: master - refactor: move lib/filters/device-types.h -> lib/device/device-types.h
-Message-ID: <20130612111651.BB15E60F27@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 28 Jun 2013 11:14:59 +0200
+Subject: Internal error: Pool read_vg crc mismatch only when running in test environment
+In-Reply-To: <51CB6FDE.8060700@redhat.com>
+References: <51C38DB6.7070507@redhat.com> <51C45AD9.2040703@redhat.com>
+	<51CA27AC.4040900@redhat.com> <51CA9D11.90007@redhat.com>
+	<51CB6FDE.8060700@redhat.com>
+Message-ID: <51CD5413.8010205@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22b0f3573e222f7471c4e279e5703f2933cf6e9a
-Commit:        22b0f3573e222f7471c4e279e5703f2933cf6e9a
-Parent:        657abb08e0e509e084d23d8b4dcf6248362cccd4
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 12 11:46:07 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 12 11:54:36 2013 +0200
+Dne 27.6.2013 00:49, Tony Asleson napsal(a):
+> On 06/26/2013 02:49 AM, Zdenek Kabelac wrote:
+>> Dne 26.6.2013 01:28, Tony Asleson napsal(a):
+>>> On 06/21/2013 08:53 AM, Zdenek Kabelac wrote:
+>>>> Dne 21.6.2013 01:18, Tony Asleson napsal(a):
+>>>>> Writing some new unit test cases for my latest liblvm patch set and at
+>>>>> the moment I am running into a case where I can run the unit test case
+>>>>> against real disk and it works, but if I run it in the test environment
+>>>>> with loop back devices I am getting an abort with:
+>>>>>
+>>>>> "Internal error: Pool read_vg crc mismatch."
+>>>>>
+>>>>> Any ideas why this error isn't occurring on both?
+>>>>>
+>>>>
+>>>> This happens - if you have requested 'read-only'  VG struct,
+>>>> and you have modifed something in this vgmem pool
+>>>> (either writing to struct, or just using vgmem pool for allocation)
+>>>
+>>> My original inquiry was for ideas why I see this on loop back devices
+>>> and not actual devices.  This response doesn't seem to match what I am
+>>> seeing.
+>>
+>> It's hard to give advice if I do not see the actual code.
+>
+> Patch set was posted a while back.  Specifically the issue I am running
+> into has to do with the functionality to list all PVs (including orphan)
+>
+> Specific patch is:
+> https://www.redhat.com/archives/lvm-devel/2013-May/msg00036.html
+>
+>>> The stack trace shows that we are getting this error during an
+>>> lvm_vg_open.  I can re-create the error regardless if I open the vg
+>>> struct as read-only or read-write.
+>>>
+>>>   From my initial debug it appears that if the vginfo->vg_use_count > 1
+>>> (in this case 3) we pass 1 as the second parameter to dm_pool_unlock
+>>> which is a crc check of the pool which it finds to be different.  At
+>>> this point it would seem I am exacerbating some type of caching bug or
+>>> that somewhere along the path I am inadvertently changing the contents
+>>> of the vg struct pointer with my latest patches.
+>>
+>> There is internal debug support for this kind of problems which mprotects
+>> vg structure, so any write access to locked vg structure crashes the
+>> application and you may look at stack trace.
+>>
+>> But it needs some hand modification of make.tmpl file (no configure option)
+>> Uncomment #DEFS += -DDEBUG_ENFORCE_POOL_LOCKING  and rebuild and retest
+>> with
+>> unlimited coredump size.
+>
+> Thanks for the tip, this helped quite a bit!  I modified the code in the
+> above referenced patch to retain the vg pointer when retrieving the list
+> of PVs.  The liblvm library uses the vg->vgmem pool to allocate strings
+> to be returned to the user when getting information pertaining to a PV.
+>   The problem is that the vg gets cached with a crc.  We then allocate
+> memory from the vgmem pool and later when we go to clear out the cache
+> entry we fail the crc check.  When I enable the
+> DEBUG_ENFORCE_POOL_LOCKING we fail after we retrieve a vg from the cache
+> and then I try to allocate something from the vgmem pool.
+>
+> Your comment about opening the vg "r" vs. "w" still seems incorrect to
+> me, but if it is indeed correct then we have a problem with the library
+> that precedes any of my changes.  We use the vg->vgmem for many things
+> and if this argument is indeed true then all those allocations will be
+> causing the vg struct to change, thus causing crc errors if the user is
+> allowed to open the vg struct as read-only.  In my code review and
+> testing it appears that we aren't hitting this because when we call into
+> vg_open we don't have a vgid, so we fail early in lvmcache_get_vg and
+> thus we never add them to the cache and thus we never call dm_pool_lock
+> on them.
+>
+> If you could point out the bit of code that actually determines that we
+> mprotect memory based on the user doing an vg open read only vs. read
+> write that would be most helpful.  I'm not seeing it at the moment and I
+> would like to understand this better.
+>
+> Currently I am thinking about just backing out the change to retrieve
+> the pv list and use the cmd->mem for allocations instead of the
+> vg->vgmem.  Previously I brought up just putting such things on the heap
+> and letting the users of the library free them, but that was dismissed
+> because existing library users would then have memory leaks.
 
-refactor: move lib/filters/device-types.h -> lib/device/device-types.h
 
----
- lib/device/device-types.h  |   63 ++++++++++++++++++++++++++++++++++++++++++++
- lib/filters/device-types.h |   63 --------------------------------------------
- lib/filters/filter.c       |    2 +-
- 3 files changed, 64 insertions(+), 64 deletions(-)
+yeah there could be some design fault which is using mem pool from read-only
+volume group.  vg->vgmem  is only used for allocation of objects directly 
+related to VG  -  return of some copied buffers is not something which is 
+supposed touch this memory pool as well as creating PV lists
+(cmd mempool or just temporarily created new pool needs to be used here.)
 
-diff --git a/lib/device/device-types.h b/lib/device/device-types.h
-new file mode 100644
-index 0000000..2e49f7f
---- /dev/null
-+++ b/lib/device/device-types.h
-@@ -0,0 +1,63 @@
-+/*
-+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-+ * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
-+typedef struct {
-+	const char name[15];
-+	const int8_t max_partitions;
-+} device_info_t;
-+
-+/*
-+ * Devices are only checked for partition tables if their minor number
-+ * is a multiple of the number corresponding to their type below
-+ * i.e. this gives the granularity of whole-device minor numbers.
-+ * Use 1 if the device is not partitionable.
-+ *
-+ * The list can be supplemented with devices/types in the config file.
-+ */
-+static const device_info_t _device_info[] = {
-+	{"ide", 64},		/* IDE disk */
-+	{"sd", 16},		/* SCSI disk */
-+	{"md", 1},		/* Multiple Disk driver (SoftRAID) */
-+	{"mdp", 1},		/* Partitionable MD */
-+	{"loop", 1},		/* Loop device */
-+	{"dasd", 4},		/* DASD disk (IBM S/390, zSeries) */
-+	{"dac960", 8},		/* DAC960 */
-+	{"nbd", 16},		/* Network Block Device */
-+	{"ida", 16},		/* Compaq SMART2 */
-+	{"cciss", 16},		/* Compaq CCISS array */
-+	{"ubd", 16},		/* User-mode virtual block device */
-+	{"ataraid", 16},	/* ATA Raid */
-+	{"drbd", 16},		/* Distributed Replicated Block Device */
-+	{"emcpower", 16},	/* EMC Powerpath */
-+	{"power2", 16},		/* EMC Powerpath */
-+	{"i2o_block", 16},	/* i2o Block Disk */
-+	{"iseries/vd", 8},	/* iSeries disks */
-+	{"gnbd", 1},		/* Network block device */
-+	{"ramdisk", 1},		/* RAM disk */
-+	{"aoe", 16},		/* ATA over Ethernet */
-+	{"device-mapper", 1},	/* Other mapped devices */
-+	{"xvd", 16},		/* Xen virtual block device */
-+	{"vdisk", 8},		/* SUN's LDOM virtual block device */
-+	{"ps3disk", 16},	/* PlayStation 3 internal disk */
-+	{"virtblk", 8},		/* VirtIO disk */
-+	{"mmc", 16},		/* MMC block device */
-+	{"blkext", 1},		/* Extended device partitions */
-+	{"fio", 16},		/* Fusion */
-+	{"mtip32xx", 16},	/* Micron PCIe SSDs */
-+	{"vtms", 16},		/* Violin Memory */
-+	{"skd", 16},		/* STEC */
-+	{"scm", 8},		/* Storage Class Memory (IBM S/390) */
-+	{"", 0}
-+};
-diff --git a/lib/filters/device-types.h b/lib/filters/device-types.h
-deleted file mode 100644
-index 2e49f7f..0000000
---- a/lib/filters/device-types.h
-+++ /dev/null
-@@ -1,63 +0,0 @@
--/*
-- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-- */
--
--typedef struct {
--	const char name[15];
--	const int8_t max_partitions;
--} device_info_t;
--
--/*
-- * Devices are only checked for partition tables if their minor number
-- * is a multiple of the number corresponding to their type below
-- * i.e. this gives the granularity of whole-device minor numbers.
-- * Use 1 if the device is not partitionable.
-- *
-- * The list can be supplemented with devices/types in the config file.
-- */
--static const device_info_t _device_info[] = {
--	{"ide", 64},		/* IDE disk */
--	{"sd", 16},		/* SCSI disk */
--	{"md", 1},		/* Multiple Disk driver (SoftRAID) */
--	{"mdp", 1},		/* Partitionable MD */
--	{"loop", 1},		/* Loop device */
--	{"dasd", 4},		/* DASD disk (IBM S/390, zSeries) */
--	{"dac960", 8},		/* DAC960 */
--	{"nbd", 16},		/* Network Block Device */
--	{"ida", 16},		/* Compaq SMART2 */
--	{"cciss", 16},		/* Compaq CCISS array */
--	{"ubd", 16},		/* User-mode virtual block device */
--	{"ataraid", 16},	/* ATA Raid */
--	{"drbd", 16},		/* Distributed Replicated Block Device */
--	{"emcpower", 16},	/* EMC Powerpath */
--	{"power2", 16},		/* EMC Powerpath */
--	{"i2o_block", 16},	/* i2o Block Disk */
--	{"iseries/vd", 8},	/* iSeries disks */
--	{"gnbd", 1},		/* Network block device */
--	{"ramdisk", 1},		/* RAM disk */
--	{"aoe", 16},		/* ATA over Ethernet */
--	{"device-mapper", 1},	/* Other mapped devices */
--	{"xvd", 16},		/* Xen virtual block device */
--	{"vdisk", 8},		/* SUN's LDOM virtual block device */
--	{"ps3disk", 16},	/* PlayStation 3 internal disk */
--	{"virtblk", 8},		/* VirtIO disk */
--	{"mmc", 16},		/* MMC block device */
--	{"blkext", 1},		/* Extended device partitions */
--	{"fio", 16},		/* Fusion */
--	{"mtip32xx", 16},	/* Micron PCIe SSDs */
--	{"vtms", 16},		/* Violin Memory */
--	{"skd", 16},		/* STEC */
--	{"scm", 8},		/* Storage Class Memory (IBM S/390) */
--	{"", 0}
--};
-diff --git a/lib/filters/filter.c b/lib/filters/filter.c
-index d3fdd6e..a86b398 100644
---- a/lib/filters/filter.c
-+++ b/lib/filters/filter.c
-@@ -27,7 +27,7 @@
- #include <fcntl.h>
- #include <limits.h>
- 
--#include "device-types.h"
-+#include "device/device-types.h"
- 
- #define NUMBER_OF_MAJORS 4096
- 
+If you hold only read lock, there should be no need to modify vg structure.
+
+Zdenek
+
 
 
