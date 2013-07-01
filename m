@@ -1,100 +1,180 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  1 Jul 2013 21:13:27 +0000 (UTC)
-Subject: master - archiver: do not archive vg more then once
-Message-ID: <20130701211327.BF63E610D3@fedorahosted.org>
+Date: Mon,  1 Jul 2013 21:13:29 +0000 (UTC)
+Subject: master - vg/lvchange: drop local archived handling
+Message-ID: <20130701211329.D68CD610D3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e30028004b45a962c525685824e25dad80b7fbcf
-Commit:        e30028004b45a962c525685824e25dad80b7fbcf
-Parent:        afea2bf5982f9a060766c1b67cbbc97ea4ecba2d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4d9ed81075729936666b151f981461f91e8f7437
+Commit:        4d9ed81075729936666b151f981461f91e8f7437
+Parent:        e30028004b45a962c525685824e25dad80b7fbcf
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Jun 30 18:01:19 2013 +0200
+AuthorDate:    Sun Jun 30 18:03:34 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 1 23:09:26 2013 +0200
+CommitterDate: Mon Jul 1 23:10:33 2013 +0200
 
-archiver: do not archive vg more then once
+vg/lvchange: drop local archived handling
 
-Do not keep multiple archives for the executed command.
-Reuse the ALLOCATABLE_PV from pv status for
-ARCHIVED_VG vg status. Mark VG with the bit with the
-first archivation.
+Drop code handling archived flag now handled implicitely.
 ---
- WHATS_NEW                        |    1 +
- lib/format_text/archiver.c       |    5 +++++
- lib/format_text/flags.c          |    1 +
- lib/metadata/metadata-exported.h |    3 +++
- 4 files changed, 10 insertions(+), 0 deletions(-)
+ tools/lvchange.c |   26 ++++++++------------------
+ tools/vgchange.c |    6 ++----
+ 2 files changed, 10 insertions(+), 22 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index c24f576..b501121 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Avoid creation of multiple archives for one command.
-   Use mirror_segtype_default if type not specified for linear->mirror upconvert.
-   Fix use of too big chunks of memory when communication with lvmetad.
-   Fix vgcfgrestore crash when specified incorrect vg name.
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index 8599e3b..c012c8f 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -110,6 +110,9 @@ static int __archive(struct volume_group *vg)
- 
- int archive(struct volume_group *vg)
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index c88d8ef..f4706d1 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -863,7 +863,6 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			   void *handle __attribute__((unused)))
  {
-+	if (vg_is_archived(vg))
-+		return 1; /* VG has been already archived */
-+
- 	if (!vg->cmd->archive_params->enabled || !vg->cmd->archive_params->dir)
- 		return 1;
+ 	int doit = 0, docmds = 0;
+-	int archived = 0;
+ 	struct logical_volume *origin;
+ 	char snaps_msg[128];
  
-@@ -134,6 +137,8 @@ int archive(struct volume_group *vg)
- 		return 0;
+@@ -955,40 +954,36 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_permission(cmd, lv);
+ 		docmds++;
  	}
  
-+	vg->status |= ARCHIVED_VG;
-+
- 	return 1;
- }
+ 	/* allocation policy change */
+ 	if (arg_count(cmd, contiguous_ARG) || arg_count(cmd, alloc_ARG)) {
+-		if (!archived && !archive(lv->vg)) {
++		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_alloc(cmd, lv);
+ 		docmds++;
+ 	}
  
-diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-index 28a7dc4..cbccdfd 100644
---- a/lib/format_text/flags.c
-+++ b/lib/format_text/flags.c
-@@ -38,6 +38,7 @@ static const struct flag _vg_flags[] = {
- 	{SHARED, "SHARED", STATUS_FLAG},
- 	{PARTIAL_VG, NULL, 0},
- 	{PRECOMMITTED, NULL, 0},
-+	{ARCHIVED_VG, NULL, 0},
- 	{0, NULL, 0}
- };
+ 	/* read ahead sector change */
+ 	if (arg_count(cmd, readahead_ARG)) {
+-		if (!archived && !archive(lv->vg)) {
++		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_readahead(cmd, lv);
+ 		docmds++;
+ 	}
  
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 6fa0c5b..98216d4 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -48,6 +48,7 @@
+ 	/* persistent device number change */
+ 	if (arg_count(cmd, persistent_ARG)) {
+-		if (!archived && !archive(lv->vg)) {
++		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_persistent(cmd, lv);
+ 		docmds++;
+ 		if (sigint_caught()) {
+@@ -999,44 +994,40 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
  
- /* May any free extents on this PV be used or must they be left free? */
- #define ALLOCATABLE_PV		UINT64_C(0x00000008)	/* PV */
-+#define ARCHIVED_VG		ALLOCATABLE_PV		/* VG, reuse same bit */
+ 	if (arg_count(cmd, discards_ARG) ||
+ 	    arg_count(cmd, zero_ARG)) {
+-		if (!archived && !archive(lv->vg)) {
++		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_pool_update(cmd, lv);
+ 		docmds++;
+ 	}
  
- //#define SPINDOWN_LV		UINT64_C(0x00000010)	/* LV */
- //#define BADBLOCK_ON		UINT64_C(0x00000020)	/* LV */
-@@ -140,6 +141,8 @@
- #define VGMETADATACOPIES_ALL UINT32_MAX
- #define VGMETADATACOPIES_UNMANAGED 0
+ 	/* add tag */
+ 	if (arg_count(cmd, addtag_ARG)) {
+-		if (!archived && !archive(lv->vg)) {
++		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_tag(cmd, lv, addtag_ARG);
+ 		docmds++;
+ 	}
  
-+#define vg_is_archived(vg)	(((vg)->status & ARCHIVED_VG) ? 1 : 0)
-+
- #define lv_is_external_origin(lv)	(((lv)->external_count > 0) ? 1 : 0)
- #define lv_is_thin_volume(lv)	((lv)->status & THIN_VOLUME ? 1 : 0)
- #define lv_is_thin_pool(lv)	((lv)->status & THIN_POOL ? 1 : 0)
+ 	/* del tag */
+ 	if (arg_count(cmd, deltag_ARG)) {
+-		if (!archived && !archive(lv->vg)) {
++		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_tag(cmd, lv, deltag_ARG);
+ 		docmds++;
+ 	}
+ 
+ 	/* change writemostly/writebehind */
+ 	if (arg_count(cmd, writemostly_ARG) || arg_count(cmd, writebehind_ARG)) {
+-		if (!archived && !archive(lv->vg)) {
++		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_writemostly(lv);
+ 		docmds++;
+ 	}
+@@ -1044,11 +1035,10 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	/* change [min|max]_recovery_rate */
+ 	if (arg_count(cmd, minrecoveryrate_ARG) ||
+ 	    arg_count(cmd, maxrecoveryrate_ARG)) {
+-		if (!archived && !archive(lv->vg)) {
++		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
+ 		}
+-		archived = 1;
+ 		doit += lvchange_recovery_rate(lv);
+ 		docmds++;
+ 	}
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 71982f1..e9093f5 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -425,7 +425,6 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 			   struct volume_group *vg,
+ 			   void *handle __attribute__((unused)))
+ {
+-	int archived = 0;
+ 	int i;
+ 
+ 	static struct {
+@@ -465,11 +464,10 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 
+ 	for (i = 0; _vgchange_args[i].arg >= 0; i++) {
+ 		if (arg_count(cmd, _vgchange_args[i].arg)) {
+-			if (!archived && !archive(vg)) {
++			if (!archive(vg)) {
+ 				stack;
+ 				return ECMD_FAILED;
+ 			}
+-			archived = 1;
+ 			if (!_vgchange_args[i].fn(cmd, vg)) {
+ 				stack;
+ 				return ECMD_FAILED;
+@@ -477,7 +475,7 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 		}
+ 	}
+ 
+-	if (archived) {
++	if (vg_is_archived(vg)) {
+ 		if (!vg_write(vg) || !vg_commit(vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
 
 
