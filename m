@@ -1,385 +1,1116 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  1 Jul 2013 21:13:34 +0000 (UTC)
-Subject: master - cleanup: stack usage
-Message-ID: <20130701211334.234ED60DDB@fedorahosted.org>
+Date: Mon,  1 Jul 2013 21:13:32 +0000 (UTC)
+Subject: master - cleanup: introduce return_ECMD_FAILED macro
+Message-ID: <20130701211332.04B5160DDB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47419d21acec64a4d23968f6991a1d976673859f
-Commit:        47419d21acec64a4d23968f6991a1d976673859f
-Parent:        b90450b8a082b349297eac23f50cf4ac2e0ed8f6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b90450b8a082b349297eac23f50cf4ac2e0ed8f6
+Commit:        b90450b8a082b349297eac23f50cf4ac2e0ed8f6
+Parent:        4d9ed81075729936666b151f981461f91e8f7437
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 1 11:27:11 2013 +0200
+AuthorDate:    Mon Jul 1 11:27:22 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 1 23:11:14 2013 +0200
+CommitterDate: Mon Jul 1 23:10:33 2013 +0200
 
-cleanup: stack usage
+cleanup: introduce return_ECMD_FAILED macro
 
-Shortening code with macros return_0, return_NULL.
-Add some missing stack prints in error paths.
+Use shortening macro for common code sequence
+stack;
+return ECMD_FAILED;
 ---
- daemons/dmeventd/libdevmapper-event.c |   12 ++++--------
- lib/locking/cluster_locking.c         |    3 +--
- libdm/libdm-deptree.c                 |   12 ++++--------
- libdm/regex/parse_rx.c                |   12 ++++--------
- libdm/regex/ttree.c                   |   12 ++++--------
- tools/lvconvert.c                     |   22 ++++++++--------------
- tools/lvmcmdline.c                    |    4 ++--
- tools/lvrename.c                      |   20 ++++++++------------
- tools/reporter.c                      |    2 +-
- tools/vgcfgbackup.c                   |    2 +-
- tools/vgchange.c                      |    6 ++----
- tools/vgsplit.c                       |    3 +--
- 12 files changed, 40 insertions(+), 70 deletions(-)
+ lib/log/log.h        |    1 +
+ tools/lvchange.c     |  122 ++++++++++++++++---------------------------------
+ tools/lvconvert.c    |   73 ++++++++++++------------------
+ tools/lvcreate.c     |    3 +-
+ tools/lvmcmdline.c   |    6 +--
+ tools/lvremove.c     |    6 +--
+ tools/lvrename.c     |    9 +---
+ tools/lvresize.c     |   58 ++++++++---------------
+ tools/pvmove.c       |    3 +-
+ tools/pvresize.c     |    8 +--
+ tools/pvscan.c       |    3 +-
+ tools/reporter.c     |   39 +++++-----------
+ tools/toollib.c      |    6 +--
+ tools/vgcfgbackup.c  |   18 +++-----
+ tools/vgcfgrestore.c |    7 +--
+ tools/vgchange.c     |   28 +++++-------
+ tools/vgck.c         |   12 ++---
+ tools/vgconvert.c    |   12 ++---
+ tools/vgextend.c     |    3 +-
+ tools/vgmerge.c      |   26 +++-------
+ tools/vgmknodes.c    |   18 +++-----
+ tools/vgremove.c     |   24 +++-------
+ tools/vgrename.c     |    6 +--
+ tools/vgsplit.c      |   27 ++++-------
+ 24 files changed, 180 insertions(+), 338 deletions(-)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index c692a88..72f0f92 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -614,10 +614,8 @@ int dm_event_register_handler(const struct dm_event_handler *dmevh)
- 	struct dm_task *dmt;
- 	struct dm_event_daemon_message msg = { 0, 0, NULL };
+diff --git a/lib/log/log.h b/lib/log/log.h
+index 2e1c515..064ba0a 100644
+--- a/lib/log/log.h
++++ b/lib/log/log.h
+@@ -109,6 +109,7 @@
  
--	if (!(dmt = _get_device_info(dmevh))) {
--		stack;
--		return 0;
+ #define return_0	do { stack; return 0; } while (0)
+ #define return_NULL	do { stack; return NULL; } while (0)
++#define return_ECMD_FAILED do { stack; return ECMD_FAILED; } while (0)
+ #define goto_out	do { stack; goto out; } while (0)
+ #define goto_bad	do { stack; goto bad; } while (0)
+ 
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index f4706d1..5fc3585 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -950,84 +950,66 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 
+ 	/* access permission change */
+ 	if (arg_count(cmd, permission_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_permission(cmd, lv);
+ 		docmds++;
+ 	}
+ 
+ 	/* allocation policy change */
+ 	if (arg_count(cmd, contiguous_ARG) || arg_count(cmd, alloc_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_alloc(cmd, lv);
+ 		docmds++;
+ 	}
+ 
+ 	/* read ahead sector change */
+ 	if (arg_count(cmd, readahead_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_readahead(cmd, lv);
+ 		docmds++;
+ 	}
+ 
+ 	/* persistent device number change */
+ 	if (arg_count(cmd, persistent_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_persistent(cmd, lv);
+ 		docmds++;
+-		if (sigint_caught()) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (sigint_caught())
++			return_ECMD_FAILED;
+ 	}
+ 
+ 	if (arg_count(cmd, discards_ARG) ||
+ 	    arg_count(cmd, zero_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_pool_update(cmd, lv);
+ 		docmds++;
+ 	}
+ 
+ 	/* add tag */
+ 	if (arg_count(cmd, addtag_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_tag(cmd, lv, addtag_ARG);
+ 		docmds++;
+ 	}
+ 
+ 	/* del tag */
+ 	if (arg_count(cmd, deltag_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_tag(cmd, lv, deltag_ARG);
+ 		docmds++;
+ 	}
+ 
+ 	/* change writemostly/writebehind */
+ 	if (arg_count(cmd, writemostly_ARG) || arg_count(cmd, writebehind_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_writemostly(lv);
+ 		docmds++;
+ 	}
+@@ -1035,10 +1017,8 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	/* change [min|max]_recovery_rate */
+ 	if (arg_count(cmd, minrecoveryrate_ARG) ||
+ 	    arg_count(cmd, maxrecoveryrate_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 		doit += lvchange_recovery_rate(lv);
+ 		docmds++;
+ 	}
+@@ -1046,55 +1026,33 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	if (doit)
+ 		log_print_unless_silent("Logical volume \"%s\" changed.", lv->name);
+ 
+-	if (arg_count(cmd, resync_ARG))
+-		if (!lvchange_resync(cmd, lv)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++	if (arg_count(cmd, resync_ARG) &&
++	    !lvchange_resync(cmd, lv))
++		return_ECMD_FAILED;
+ 
+-	if (arg_count(cmd, syncaction_ARG)) {
+-		if (!lv_raid_message(lv, arg_str_value(cmd, syncaction_ARG, NULL))) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
 -	}
-+	if (!(dmt = _get_device_info(dmevh)))
-+		return_0;
++	if (arg_count(cmd, syncaction_ARG) &&
++	    !lv_raid_message(lv, arg_str_value(cmd, syncaction_ARG, NULL)))
++		return_ECMD_FAILED;
  
- 	uuid = dm_task_get_uuid(dmt);
- 
-@@ -643,10 +641,8 @@ int dm_event_unregister_handler(const struct dm_event_handler *dmevh)
- 	struct dm_task *dmt;
- 	struct dm_event_daemon_message msg = { 0, 0, NULL };
- 
--	if (!(dmt = _get_device_info(dmevh))) {
--		stack;
--		return 0;
+ 	/* activation change */
+ 	if (arg_count(cmd, activate_ARG)) {
+-		if (!_lvchange_activate(cmd, lv)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
 -	}
-+	if (!(dmt = _get_device_info(dmevh)))
-+		return_0;
+-
+-	if (arg_count(cmd, refresh_ARG))
+-		if (!lvchange_refresh(cmd, lv)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
+-
+-	if (!arg_count(cmd, activate_ARG) &&
+-	    !arg_count(cmd, refresh_ARG) &&
+-	    arg_count(cmd, monitor_ARG)) {
+-		if (!lvchange_monitoring(cmd, lv)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
+-	}
++		if (!_lvchange_activate(cmd, lv))
++			return_ECMD_FAILED;
++	} else if (arg_count(cmd, refresh_ARG)) {
++		if (!lvchange_refresh(cmd, lv))
++			return_ECMD_FAILED;
++	} else {
++		if (arg_count(cmd, monitor_ARG) &&
++		    !lvchange_monitoring(cmd, lv))
++			return_ECMD_FAILED;
  
- 	uuid = dm_task_get_uuid(dmt);
+-	if (!arg_count(cmd, activate_ARG) &&
+-	    !arg_count(cmd, refresh_ARG) &&
+-	    arg_count(cmd, poll_ARG)) {
+-		if (!lvchange_background_polling(cmd, lv)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (arg_count(cmd, poll_ARG) &&
++		    !lvchange_background_polling(cmd, lv))
++			return_ECMD_FAILED;
+ 	}
  
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index 1350d18..89d7307 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -516,8 +516,7 @@ static int decode_lock_type(const char *response)
- 	else if (!strcmp(response, "PR"))
- 		return LCK_PREAD;
+-	if (doit != docmds) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (doit != docmds)
++		return_ECMD_FAILED;
  
--	stack;
--	return 0;
-+	return_0;
+ 	return ECMD_PROCESSED;
  }
- 
- #ifdef CLUSTER_LOCKING_INTERNAL
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index ba415b2..fae9445 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -672,10 +672,8 @@ static int _children_suspended(struct dm_tree_node *node,
- 		if (dlink->node->presuspend_node == node)
- 			continue;
- 
--		if (!(dinfo = dm_tree_node_get_info(dlink->node))) {
--			stack;	/* FIXME Is this normal? */
--			return 0;
--		}
-+		if (!(dinfo = dm_tree_node_get_info(dlink->node)))
-+			return_0;	/* FIXME Is this normal? */
- 
- 		if (!dinfo->suspended)
- 			return 0;
-@@ -920,10 +918,8 @@ static int _node_has_closed_parents(struct dm_tree_node *node,
- 		if (!_uuid_prefix_matches(uuid, uuid_prefix, uuid_prefix_len))
- 			continue;
- 
--		if (!(dinfo = dm_tree_node_get_info(dlink->node))) {
--			stack;	/* FIXME Is this normal? */
--			return 0;
--		}
-+		if (!(dinfo = dm_tree_node_get_info(dlink->node)))
-+			return_0;	/* FIXME Is this normal? */
- 
- 		/* Refresh open_count */
- 		if (!_info_by_dev(dinfo->major, dinfo->minor, 1, &info, NULL, NULL, NULL) ||
-diff --git a/libdm/regex/parse_rx.c b/libdm/regex/parse_rx.c
-index ea3922f..0ad033a 100644
---- a/libdm/regex/parse_rx.c
-+++ b/libdm/regex/parse_rx.c
-@@ -303,10 +303,8 @@ static struct rx_node *_term(struct parse_sp *ps)
- 
- 	switch (ps->type) {
- 	case 0:
--		if (!(n = _node(ps->mem, CHARSET, NULL, NULL))) {
--			stack;
--			return NULL;
--		}
-+		if (!(n = _node(ps->mem, CHARSET, NULL, NULL)))
-+			return_NULL;
- 
- 		dm_bit_copy(n->charset, ps->charset);
- 		_rx_get_token(ps);	/* match charset */
-@@ -354,10 +352,8 @@ static struct rx_node *_closure_term(struct parse_sp *ps)
- 			return l;
- 		}
- 
--		if (!n) {
--			stack;
--			return NULL;
--		}
-+		if (!n)
-+			return_NULL;
- 
- 		_rx_get_token(ps);
- 		l = n;
-diff --git a/libdm/regex/ttree.c b/libdm/regex/ttree.c
-index 00b371e..9c3cc65 100644
---- a/libdm/regex/ttree.c
-+++ b/libdm/regex/ttree.c
-@@ -87,10 +87,8 @@ int ttree_insert(struct ttree *tt, unsigned int *key, void *data)
- 		count++;
- 
- 		while (count--) {
--			if (!(*c = _tree_node(tt->mem, k))) {
--				stack;
--				return 0;
--			}
-+			if (!(*c = _tree_node(tt->mem, k)))
-+				return_0;
- 
- 			if (count) {
- 				k = *key++;
-@@ -107,10 +105,8 @@ struct ttree *ttree_create(struct dm_pool *mem, unsigned int klen)
- {
- 	struct ttree *tt;
- 
--	if (!(tt = dm_pool_zalloc(mem, sizeof(*tt)))) {
--		stack;
--		return NULL;
--	}
-+	if (!(tt = dm_pool_zalloc(mem, sizeof(*tt))))
-+		return_NULL;
- 
- 	tt->klen = klen;
- 	tt->mem = mem;
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index ac84aa6..650b1be 100644
+index be6b55f..ac84aa6 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -485,10 +485,8 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
+@@ -2303,10 +2303,9 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			log_error("Unable to merge invalidated snapshot LV \"%s\"", lv->name);
+ 			return ECMD_FAILED;
  		}
- 
- 		/* Default is never striped, regardless of existing LV configuration. */
--		if (!get_stripe_params(cmd, &lp->stripes, &lp->stripe_size)) {
+-		if (!archive(lv->vg)) {
 -			stack;
--			return 0;
+-			return ECMD_FAILED;
 -		}
-+		if (!get_stripe_params(cmd, &lp->stripes, &lp->stripe_size))
-+			return_0;
- 
- 		lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, find_config_tree_str(cmd, global_mirror_segtype_default_CFG)));
- 		if (!lp->segtype)
-@@ -1283,10 +1281,8 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
- 		 * linear-to-mirror conversion.
- 		 */
- 		if (!_lv_update_log_type(cmd, lp, lv,
--					 operable_pvs, new_log_count)) {
--			stack;
--			return 0;
--		}
-+					 operable_pvs, new_log_count))
-+			return_0;
- 
- 		/* Insert a temporary layer for syncing,
- 		 * only if the original lv is using disk log. */
-@@ -1314,8 +1310,8 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
- 					  "and dmsetup may be required.");
- 				return 0;
- 			}
--			stack;
--			return 0;
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
 +
-+			return_0;
+ 		if (!lvconvert_merge(cmd, lv, lp)) {
+ 			log_error("Unable to merge LV \"%s\" into its origin.", lv->name);
+ 			return ECMD_FAILED;
+@@ -2316,38 +2315,29 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			log_error("Unable to convert mirrored LV \"%s\" into a snapshot.", lv->name);
+ 			return ECMD_FAILED;
  		}
- 		if (seg->log_lv)
- 			lv->status |= CONVERTING;
-@@ -1356,10 +1352,8 @@ out:
- 	 */
- 	if ((lv->status & MIRRORED) && (old_log_count != new_log_count)) {
- 		if (!_lv_update_log_type(cmd, lp, lv,
--					 operable_pvs, new_log_count)) {
+-		if (!archive(lv->vg)) {
 -			stack;
--			return 0;
+-			return ECMD_FAILED;
 -		}
-+					 operable_pvs, new_log_count))
-+			return_0;
+-		if (!lvconvert_snapshot(cmd, lv, lp)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
++
++		if (!lvconvert_snapshot(cmd, lv, lp))
++			return_ECMD_FAILED;
++
+ 	} else if (arg_count(cmd, thinpool_ARG)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
+-		if (!_lvconvert_thinpool(cmd, lv, lp)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
++
++		if (!_lvconvert_thinpool(cmd, lv, lp))
++			return_ECMD_FAILED;
++
+ 	} else if (segtype_is_raid(lp->segtype) ||
+ 		   (lv->status & RAID) || lp->merge_mirror) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
+-		if (!lvconvert_raid(lv, lp)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 
+-		if (!(failed_pvs = _failed_pv_list(lv->vg))) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!lvconvert_raid(lv, lp))
++			return_ECMD_FAILED;
++
++		if (!(failed_pvs = _failed_pv_list(lv->vg)))
++			return_ECMD_FAILED;
+ 
+ 		/* If repairing and using policies, remove missing PVs from VG */
+ 		if (arg_count(cmd, repair_ARG) && arg_count(cmd, use_policies_ARG))
+@@ -2355,19 +2345,14 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	} else if (arg_count(cmd, mirrors_ARG) ||
+ 		   arg_count(cmd, splitmirrors_ARG) ||
+ 		   (lv->status & MIRRORED)) {
+-		if (!archive(lv->vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
+-		if (!_lvconvert_mirrors(cmd, lv, lp)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!archive(lv->vg))
++			return_ECMD_FAILED;
+ 
+-		if (!(failed_pvs = _failed_pv_list(lv->vg))) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!_lvconvert_mirrors(cmd, lv, lp))
++			return_ECMD_FAILED;
++
++		if (!(failed_pvs = _failed_pv_list(lv->vg)))
++			return_ECMD_FAILED;
+ 
+ 		/* If repairing and using policies, remove missing PVs from VG */
+ 		if (arg_count(cmd, repair_ARG) && arg_count(cmd, use_policies_ARG))
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 80ca1bc..69f8de0 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -1057,8 +1057,7 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0);
+ 	if (vg_read_error(vg)) {
+ 		release_vg(vg);
+-		stack;
+-		return ECMD_FAILED;
++		return_ECMD_FAILED;
  	}
  
- out_skip_log_convert:
+ 	if (lp.snapshot && lp.origin && !_determine_snapshot_type(vg, &lp)) {
 diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 9c50918..827b072 100644
+index 89ead2c..9c50918 100644
 --- a/tools/lvmcmdline.c
 +++ b/tools/lvmcmdline.c
-@@ -1123,7 +1123,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+@@ -1057,10 +1057,8 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	/* each command should start out with sigint flag cleared */
+ 	sigint_clear();
  
- 	if (!init_locking(locking_type, cmd, arg_count(cmd, sysinit_ARG))) {
- 		ret = ECMD_FAILED;
--		goto out;
-+		goto_out;
- 	}
+-	if (!(cmd->cmd_line = _copy_command_line(cmd, argc, argv))) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!(cmd->cmd_line = _copy_command_line(cmd, argc, argv)))
++		return_ECMD_FAILED;
  
- 	ret = cmd->command->fn(cmd, argc, argv);
-@@ -1539,7 +1539,7 @@ int lvm2_main(int argc, char **argv)
- 		}
- 		_exec_lvm1_command(argv);
- 		ret = ECMD_FAILED;
--		goto out;
-+		goto_out;
- 	}
- #ifdef READLINE_SUPPORT
- 	if (!alias && argc == 1) {
+ 	log_debug("Parsing: %s", cmd->cmd_line);
+ 
+diff --git a/tools/lvremove.c b/tools/lvremove.c
+index 54094b1..4f48746 100644
+--- a/tools/lvremove.c
++++ b/tools/lvremove.c
+@@ -26,10 +26,8 @@ static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
+         if (lv_is_cow(lv) && lv_is_virtual_origin(origin = origin_from_cow(lv)))
+                 lv = origin;
+ 
+-	if (!lv_remove_with_dependencies(cmd, lv, (force_t) arg_count(cmd, force_ARG), 0)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!lv_remove_with_dependencies(cmd, lv, (force_t) arg_count(cmd, force_ARG), 0))
++		return_ECMD_FAILED;
+ 
+ 	return ECMD_PROCESSED;
+ }
 diff --git a/tools/lvrename.c b/tools/lvrename.c
-index a2182e8..5b1f50b 100644
+index 3dc21dc..a2182e8 100644
 --- a/tools/lvrename.c
 +++ b/tools/lvrename.c
-@@ -16,7 +16,6 @@
- #include "tools.h"
- #include "lvm-types.h"
+@@ -85,10 +85,8 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 	}
  
--
- /*
-  * lvrename command implementation.
-  * Check arguments and call lv_rename() to execute the request.
-@@ -27,10 +26,9 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
- 	char *lv_name_old, *lv_name_new;
- 	const char *vg_name, *vg_name_new, *vg_name_old;
- 	char *st;
--	int r = ECMD_FAILED;
--
--	struct volume_group *vg = NULL;
-+	struct volume_group *vg;
- 	struct lv_list *lvl;
-+	int r = ECMD_FAILED;
- 
- 	if (argc == 3) {
- 		vg_name = skip_dev_dir(cmd, argv[0], NULL);
-@@ -90,7 +88,7 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
+-	if (!apply_lvname_restrictions(lv_name_new)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!apply_lvname_restrictions(lv_name_new))
++		return_ECMD_FAILED;
  
  	if (!validate_name(lv_name_new)) {
  		log_error("New logical volume name \"%s\" is invalid",
--		     lv_name_new);
-+			  lv_name_new);
- 		return EINVALID_CMD_LINE;
+@@ -105,8 +103,7 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
+ 	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+ 	if (vg_read_error(vg)) {
+ 		release_vg(vg);
+-		stack;
+-		return ECMD_FAILED;
++		return_ECMD_FAILED;
  	}
  
-@@ -109,32 +107,30 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
  	if (!(lvl = find_lv_in_vg(vg, lv_name_old))) {
- 		log_error("Existing logical volume \"%s\" not found in "
- 			  "volume group \"%s\"", lv_name_old, vg_name);
--		goto error;
-+		goto bad;
- 	}
- 
- 	if (lvl->lv->status & (RAID_IMAGE | RAID_META)) {
- 		log_error("Cannot rename a RAID %s directly",
- 			  (lvl->lv->status & RAID_IMAGE) ? "image" :
- 			  "metadata area");
--		r = ECMD_FAILED;
--		goto error;
-+		goto bad;
- 	}
- 
- 	if (lv_is_raid_with_tracking(lvl->lv)) {
- 		log_error("Cannot rename %s while it is tracking a split image",
- 			  lvl->lv->name);
--		r = ECMD_FAILED;
--		goto error;
-+		goto bad;
- 	}
- 
- 	if (!lv_rename(cmd, lvl->lv, lv_name_new))
--		goto error;
-+		goto_bad;
- 
- 	log_print_unless_silent("Renamed \"%s\" to \"%s\" in volume group \"%s\"",
- 				lv_name_old, lv_name_new, vg_name);
- 
- 	r = ECMD_PROCESSED;
--error:
-+bad:
- 	unlock_and_release_vg(cmd, vg, vg_name);
- 	return r;
- }
-diff --git a/tools/reporter.c b/tools/reporter.c
-index e8ecf98..6e78355 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -98,7 +98,7 @@ static int _pvsegs_sub_single(struct cmd_context *cmd,
- 	if (!report_object(handle, vg, seg ? seg->lv : &_free_logical_volume, pvseg->pv,
- 			   seg ? : &_free_lv_segment, pvseg)) {
- 		ret = ECMD_FAILED;
--                goto_out;
-+		goto_out;
- 	}
- 
-  out:
-diff --git a/tools/vgcfgbackup.c b/tools/vgcfgbackup.c
-index bee1b04..7cf19bc 100644
---- a/tools/vgcfgbackup.c
-+++ b/tools/vgcfgbackup.c
-@@ -65,7 +65,6 @@ static int vg_backup_single(struct cmd_context *cmd, const char *vg_name,
- 		if (vg_read_error(vg) == FAILED_INCONSISTENT) {
- 			log_error("No backup taken: specify filename with -f "
- 				  "to backup an inconsistent VG");
--			stack;
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index 9139228..1ba5a5c 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -533,7 +533,7 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
  			return ECMD_FAILED;
  		}
+ 		if (!_adjust_policy_params(cmd, lv, lp))
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
+ 	}
  
-@@ -76,6 +75,7 @@ static int vg_backup_single(struct cmd_context *cmd, const char *vg_name,
+ 	if (!lv_is_visible(lv) &&
+@@ -576,10 +576,8 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 	}
+ 
+ 	if (!(pvh = lp->argc ? create_pv_list(cmd->mem, vg, lp->argc,
+-						     lp->argv, 1) : &vg->pvs)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++						     lp->argv, 1) : &vg->pvs))
++		return_ECMD_FAILED;
+ 
+ 	if (lp->sizeargs) { /* TODO: reindent or move to function */
+ 
+@@ -891,10 +889,8 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 
+ 	/* Request confirmation before operations that are often mistakes. */
+ 	if ((lp->resizefs || (lp->resize == LV_REDUCE)) &&
+-	    !_request_confirmation(cmd, vg, lv, lp)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	    !_request_confirmation(cmd, vg, lv, lp))
++		return_ECMD_FAILED;
+ 
+ 	if (lp->resizefs) {
+ 		if (!lp->nofsck &&
+@@ -913,10 +909,8 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 		}
+ 	}
+ 
+-	if (!archive(vg)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!archive(vg))
++		return_ECMD_FAILED;
+ 
+ 	log_print_unless_silent("%sing logical volume %s to %s",
+ 				(lp->resize == LV_REDUCE) ? "Reduc" : "Extend",
+@@ -924,19 +918,15 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 				display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
+ 
+ 	if (lp->resize == LV_REDUCE) {
+-		if (!lv_reduce(lv, lv->le_count - lp->extents)) {
+-			stack;
++		if (!lv_reduce(lv, lv->le_count - lp->extents))
+ 			return ECMD_FAILED;
+-		}
+ 	} else if ((lp->extents > lv->le_count) && /* Ensure we extend */
+ 		   !lv_extend(lv, lp->segtype,
+ 			      lp->stripes, lp->stripe_size,
+ 			      lp->mirrors, first_seg(lv)->region_size,
+ 			      lp->extents - lv->le_count, NULL,
+-			      pvh, alloc)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++			      pvh, alloc))
++		return_ECMD_FAILED;
+ 
+ 	/* If thin metadata, must suspend thin pool */
+ 	if (lv_is_thin_pool_metadata(lv)) {
+@@ -952,10 +942,9 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 
+ 	if (lp->poolmetadatasize) {
+ metadata_resize:
+-		if (!(status = _lvresize_poolmetadata(cmd, vg, lp, lv, pvh, alloc))) {
+-			stack;
+-			return ECMD_FAILED;
+-		} else if ((status == 2) && !lp->sizeargs)
++		if (!(status = _lvresize_poolmetadata(cmd, vg, lp, lv, pvh, alloc)))
++			return_ECMD_FAILED;
++		else if ((status == 2) && !lp->sizeargs)
+ 			return ECMD_PROCESSED;
+ 		lock_lv = lv;
+ 	}
+@@ -964,10 +953,8 @@ metadata_resize:
+ 		return ECMD_PROCESSED; /* Nothing to do */
+ 
+ 	/* store vg on disk(s) */
+-	if (!vg_write(vg)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!vg_write(vg))
++		return_ECMD_FAILED;
+ 
+ 	if (!suspend_lv(cmd, lock_lv)) {
+ 		log_error("Failed to suspend %s", lock_lv->name);
+@@ -1005,18 +992,14 @@ metadata_resize:
+ 	 * FIXME: Activate only when thin volume is active
+ 	 */
+ 	if (lv_is_thin_pool(lv) &&
+-	    !update_pool_lv(lv, !lv_is_active(lv))) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	    !update_pool_lv(lv, !lv_is_active(lv)))
++		return_ECMD_FAILED;
+ 
+ 	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
+ 
+ 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
+-	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL))
++		return_ECMD_FAILED;
+ 
+ 	return ECMD_PROCESSED;
+ }
+@@ -1034,8 +1017,7 @@ int lvresize(struct cmd_context *cmd, int argc, char **argv)
+ 	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0);
+ 	if (vg_read_error(vg)) {
+ 		release_vg(vg);
+-		stack;
+-		return ECMD_FAILED;
++		return_ECMD_FAILED;
+ 	}
+ 
+ 	if (!(r = _lvresize(cmd, vg, &lp)))
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index cbfed3c..cb5c9ec 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -527,8 +527,7 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
+ 	vg = _get_vg(cmd, pv_vg_name(pv));
+ 	if (vg_read_error(vg)) {
+ 		release_vg(vg);
+-		stack;
+-		return ECMD_FAILED;
++		return_ECMD_FAILED;
+ 	}
+ 
+ 	exclusive = _pvmove_is_exclusive(cmd, vg);
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index 26959e8..251cf9a 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -142,11 +142,9 @@ static int _pvresize_single(struct cmd_context *cmd,
+ 
+ 	params->total++;
+ 
+-	if (!_pv_resize_single(cmd, vg, pv, params->new_size)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
+-	
++	if (!_pv_resize_single(cmd, vg, pv, params->new_size))
++		return_ECMD_FAILED;
++
+ 	params->done++;
+ 
+ 	return ECMD_PROCESSED;
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 12b9a2d..a194c68 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -304,8 +304,7 @@ int pvscan(struct cmd_context *cmd, int argc, char **argv)
+ 	log_verbose("Walking through all physical volumes");
+ 	if (!(pvslist = get_pvs(cmd))) {
+ 		unlock_vg(cmd, VG_GLOBAL);
+-		stack;
+-		return ECMD_FAILED;
++		return_ECMD_FAILED;
+ 	}
+ 
+ 	/* eliminate exported/new if required */
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 2744fcd..e8ecf98 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -20,10 +20,8 @@ static int _vgs_single(struct cmd_context *cmd __attribute__((unused)),
+ 		       const char *vg_name, struct volume_group *vg,
+ 		       void *handle)
+ {
+-	if (!report_object(handle, vg, NULL, NULL, NULL, NULL)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!report_object(handle, vg, NULL, NULL, NULL, NULL))
++		return_ECMD_FAILED;
+ 
+ 	check_current_backup(vg);
+ 
+@@ -33,10 +31,8 @@ static int _vgs_single(struct cmd_context *cmd __attribute__((unused)),
+ static int _lvs_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		       void *handle)
+ {
+-	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL))
++		return_ECMD_FAILED;
+ 
+ 	return ECMD_PROCESSED;
+ }
+@@ -44,10 +40,8 @@ static int _lvs_single(struct cmd_context *cmd, struct logical_volume *lv,
+ static int _segs_single(struct cmd_context *cmd __attribute__((unused)),
+ 			struct lv_segment *seg, void *handle)
+ {
+-	if (!report_object(handle, seg->lv->vg, seg->lv, NULL, seg, NULL)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!report_object(handle, seg->lv->vg, seg->lv, NULL, seg, NULL))
++		return_ECMD_FAILED;
+ 
+ 	return ECMD_PROCESSED;
+ }
+@@ -190,10 +184,8 @@ out:
+ static int _label_single(struct cmd_context *cmd, struct volume_group *vg,
+ 		       struct physical_volume *pv, void *handle)
+ {
+-	if (!report_object(handle, vg, NULL, pv, NULL, NULL)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!report_object(handle, vg, NULL, pv, NULL, NULL))
++		return_ECMD_FAILED;
+ 
+ 	return ECMD_PROCESSED;
+ }
+@@ -202,10 +194,8 @@ static int _pvs_in_vg(struct cmd_context *cmd, const char *vg_name,
+ 		      struct volume_group *vg,
+ 		      void *handle)
+ {
+-	if (vg_read_error(vg)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (vg_read_error(vg))
++		return_ECMD_FAILED;
+ 
+ 	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvs_single);
+ }
+@@ -214,10 +204,8 @@ static int _pvsegs_in_vg(struct cmd_context *cmd, const char *vg_name,
+ 			 struct volume_group *vg,
+ 			 void *handle)
+ {
+-	if (vg_read_error(vg)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (vg_read_error(vg))
++		return_ECMD_FAILED;
+ 
+ 	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvsegs_single);
+ }
+@@ -334,8 +322,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 					  columns_as_rows))) {
+ 		if (!strcasecmp(options, "help") || !strcmp(options, "?"))
+ 			return r;
+-		stack;
+-		return ECMD_FAILED;
++		return_ECMD_FAILED;
+ 	}
+ 
+ 	/* Ensure options selected are compatible */
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b238a61..5853800 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -321,10 +321,8 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 		vgname = strl->str;
+ 		dm_list_init(&cmd_vgs);
+ 		if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs,
+-					  vgname, NULL, flags))) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++					  vgname, NULL, flags)))
++			return_ECMD_FAILED;
+ 
+ 		if (!cmd_vg_read(cmd, &cmd_vgs)) {
+ 			free_cmd_vgs(&cmd_vgs);
+diff --git a/tools/vgcfgbackup.c b/tools/vgcfgbackup.c
+index 32948d8..bee1b04 100644
+--- a/tools/vgcfgbackup.c
++++ b/tools/vgcfgbackup.c
+@@ -56,15 +56,11 @@ static int vg_backup_single(struct cmd_context *cmd, const char *vg_name,
+ 
+ 	if (arg_count(cmd, file_ARG)) {
+ 		if (!(filename = _expand_filename(arg_value(cmd, file_ARG),
+-						  vg->name, last_filename))) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++						  vg->name, last_filename)))
++			return_ECMD_FAILED;
+ 
+-		if (!backup_to_file(filename, vg->cmd->cmd_line, vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!backup_to_file(filename, vg->cmd->cmd_line, vg))
++			return_ECMD_FAILED;
+ 	} else {
+ 		if (vg_read_error(vg) == FAILED_INCONSISTENT) {
+ 			log_error("No backup taken: specify filename with -f "
+@@ -75,10 +71,8 @@ static int vg_backup_single(struct cmd_context *cmd, const char *vg_name,
+ 
+ 		/* just use the normal backup code */
+ 		backup_enable(cmd, 1);	/* force a backup */
+-		if (!backup(vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!backup(vg))
++			return_ECMD_FAILED;
  	}
  
  	log_print_unless_silent("Volume group \"%s\" successfully backed up.", vg_name);
+diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
+index 618fa7e..36396c3 100644
+--- a/tools/vgcfgrestore.c
++++ b/tools/vgcfgrestore.c
+@@ -38,10 +38,9 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
+ 		if (!(arg_count(cmd,file_ARG) ?
+ 			    archive_display_file(cmd,
+ 				arg_str_value(cmd, file_ARG, "")) :
+-			    archive_display(cmd, vg_name))) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++			    archive_display(cmd, vg_name)))
++			return_ECMD_FAILED;
 +
+ 		return ECMD_PROCESSED;
+ 	}
+ 
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index e9093f5..28747f6 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -464,22 +464,16 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 
+ 	for (i = 0; _vgchange_args[i].arg >= 0; i++) {
+ 		if (arg_count(cmd, _vgchange_args[i].arg)) {
+-			if (!archive(vg)) {
+-				stack;
+-				return ECMD_FAILED;
+-			}
+-			if (!_vgchange_args[i].fn(cmd, vg)) {
+-				stack;
+-				return ECMD_FAILED;
+-			}
++			if (!archive(vg))
++				return_ECMD_FAILED;
++			if (!_vgchange_args[i].fn(cmd, vg))
++				return_ECMD_FAILED;
+ 		}
+ 	}
+ 
+ 	if (vg_is_archived(vg)) {
+-		if (!vg_write(vg) || !vg_commit(vg)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!vg_write(vg) || !vg_commit(vg))
++			return_ECMD_FAILED;
+ 
+ 		backup(vg);
+ 
+@@ -489,13 +483,13 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 	if (arg_count(cmd, activate_ARG)) {
+ 		if (!vgchange_activate(cmd, vg, (activation_change_t)
+ 				       arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
+ 	}
+ 
+ 	if (arg_count(cmd, refresh_ARG)) {
+ 		/* refreshes the visible LVs (which starts polling) */
+ 		if (!_vgchange_refresh(cmd, vg))
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
+ 	}
+ 
+ 	if (!arg_count(cmd, activate_ARG) &&
+@@ -503,13 +497,13 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 	    arg_count(cmd, monitor_ARG)) {
+ 		/* -ay* will have already done monitoring changes */
+ 		if (!_vgchange_monitoring(cmd, vg))
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
+ 	}
+ 
+ 	if (!arg_count(cmd, refresh_ARG) &&
+ 	    background_polling())
+ 		if (!_vgchange_background_polling(cmd, vg))
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
+ 
+         return ECMD_PROCESSED;
+ }
+diff --git a/tools/vgck.c b/tools/vgck.c
+index bdfee05..2a009db 100644
+--- a/tools/vgck.c
++++ b/tools/vgck.c
+@@ -21,15 +21,11 @@ static int vgck_single(struct cmd_context *cmd __attribute__((unused)),
+ 		       struct volume_group *vg,
+ 		       void *handle __attribute__((unused)))
+ {
+-	if (!vg_check_status(vg, EXPORTED_VG)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!vg_check_status(vg, EXPORTED_VG))
++		return_ECMD_FAILED;
+ 
+-	if (!vg_validate(vg)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!vg_validate(vg))
++		return_ECMD_FAILED;
+ 
+ 	if (vg_missing_pv_count(vg)) {
+ 		log_error("The volume group is missing %d physical volumes.",
+diff --git a/tools/vgconvert.c b/tools/vgconvert.c
+index b06fe34..3c984d7 100644
+--- a/tools/vgconvert.c
++++ b/tools/vgconvert.c
+@@ -30,10 +30,8 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
+ 	struct lvinfo info;
+ 	int active = 0;
+ 
+-	if (!vg_check_status(vg, LVM_WRITE | EXPORTED_VG)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!vg_check_status(vg, LVM_WRITE | EXPORTED_VG))
++		return_ECMD_FAILED;
+ 
+ 	if (vg->fid->fmt == cmd->fmt) {
+ 		log_error("Volume group \"%s\" already uses format %s",
+@@ -113,10 +111,8 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
+ 		}
+ 	}
+ 
+-	if (active) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (active)
++		return_ECMD_FAILED;
+ 
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		existing_pv = pvl->pv;
+diff --git a/tools/vgextend.c b/tools/vgextend.c
+index 1f482b4..0c00b7f 100644
+--- a/tools/vgextend.c
++++ b/tools/vgextend.c
+@@ -78,8 +78,7 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
+ 	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+ 	if (vg_read_error(vg)) {
+ 		release_vg(vg);
+-		stack;
+-		return ECMD_FAILED;
++		return_ECMD_FAILED;
+ 	}
+ 
+ 	if (!archive(vg))
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 2cecb05..fb3321d 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -46,29 +46,19 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 		lock_vg_from_first = 1;
+ 
+ 	if (lock_vg_from_first) {
+-		vg_from = _vgmerge_vg_read(cmd, vg_name_from);
+-		if (!vg_from) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
+-		vg_to = _vgmerge_vg_read(cmd, vg_name_to);
+-		if (!vg_to) {
+-			stack;
++		if (!(vg_from = _vgmerge_vg_read(cmd, vg_name_from)))
++			return_ECMD_FAILED;
++		if (!(vg_to = _vgmerge_vg_read(cmd, vg_name_to))) {
+ 			unlock_and_release_vg(cmd, vg_from, vg_name_from);
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
+ 		}
+ 	} else {
+-		vg_to = _vgmerge_vg_read(cmd, vg_name_to);
+-		if (!vg_to) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!(vg_to = _vgmerge_vg_read(cmd, vg_name_to)))
++			return_ECMD_FAILED;
+ 
+-		vg_from = _vgmerge_vg_read(cmd, vg_name_from);
+-		if (!vg_from) {
+-			stack;
++		if (!(vg_from = _vgmerge_vg_read(cmd, vg_name_from))) {
+ 			unlock_and_release_vg(cmd, vg_to, vg_name_to);
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
+ 		}
+ 	}
+ 
+diff --git a/tools/vgmknodes.c b/tools/vgmknodes.c
+index 0fd273f..9ba0677 100644
+--- a/tools/vgmknodes.c
++++ b/tools/vgmknodes.c
+@@ -19,25 +19,19 @@ static int _vgmknodes_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			     void *handle __attribute__((unused)))
+ {
+ 	if (arg_count(cmd, refresh_ARG) && lv_is_visible(lv))
+-		if (!lv_refresh(cmd, lv)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!lv_refresh(cmd, lv))
++			return_ECMD_FAILED;
+ 
+-	if (!lv_mknodes(cmd, lv)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!lv_mknodes(cmd, lv))
++		return_ECMD_FAILED;
+ 
  	return ECMD_PROCESSED;
  }
  
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 28747f6..6831597 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -246,10 +246,8 @@ static int _vgchange_refresh(struct cmd_context *cmd, struct volume_group *vg)
+ int vgmknodes(struct cmd_context *cmd, int argc, char **argv)
  {
- 	log_verbose("Refreshing volume group \"%s\"", vg->name);
- 
--	if (!vg_refresh_visible(cmd, vg)) {
+-	if (!lv_mknodes(cmd, NULL)) {
 -		stack;
--		return 0;
+-		return ECMD_FAILED;
 -	}
-+	if (!vg_refresh_visible(cmd, vg))
-+		return_0;
++	if (!lv_mknodes(cmd, NULL))
++		return_ECMD_FAILED;
  
- 	return 1;
+ 	return process_each_lv(cmd, argc, argv, LCK_VG_READ, NULL,
+ 			    &_vgmknodes_single);
+diff --git a/tools/vgremove.c b/tools/vgremove.c
+index 6804f2a..52bdd2b 100644
+--- a/tools/vgremove.c
++++ b/tools/vgremove.c
+@@ -22,10 +22,8 @@ static int vgremove_single(struct cmd_context *cmd, const char *vg_name,
+ 	unsigned lv_count, missing;
+ 	force_t force;
+ 
+-	if (!vg_check_status(vg, EXPORTED_VG)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!vg_check_status(vg, EXPORTED_VG))
++		return_ECMD_FAILED;
+ 
+ 	lv_count = vg_visible_lvs(vg);
+ 
+@@ -43,23 +41,17 @@ static int vgremove_single(struct cmd_context *cmd, const char *vg_name,
+ 				return ECMD_FAILED;
+ 			}
+ 		}
+-		if (!remove_lvs_in_vg(cmd, vg, force)) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
++		if (!remove_lvs_in_vg(cmd, vg, force))
++			return_ECMD_FAILED;
+ 	}
+ 
+-	if (!force && !vg_remove_check(vg)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!force && !vg_remove_check(vg))
++		return_ECMD_FAILED;
+ 
+ 	vg_remove_pvs(vg);
+ 
+-	if (!vg_remove(vg)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!vg_remove(vg))
++		return_ECMD_FAILED;
+ 
+ 	return ECMD_PROCESSED;
+ }
+diff --git a/tools/vgrename.c b/tools/vgrename.c
+index b476602..154a6f3 100644
+--- a/tools/vgrename.c
++++ b/tools/vgrename.c
+@@ -205,10 +205,8 @@ int vgrename(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	if (!vg_rename_path(cmd, argv[0], argv[1])) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	if (!vg_rename_path(cmd, argv[0], argv[1]))
++		return_ECMD_FAILED;
+ 
+ 	return ECMD_PROCESSED;
  }
 diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index a204b26..ed31a57 100644
+index 6beaf34..a204b26 100644
 --- a/tools/vgsplit.c
 +++ b/tools/vgsplit.c
-@@ -298,8 +298,7 @@ static struct volume_group *_vgsplit_to(struct cmd_context *cmd,
+@@ -384,11 +384,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 		lock_vg_from_first = 0;
  
- 		if (vg_read_error(vg_to)) {
- 			release_vg(vg_to);
+ 	if (lock_vg_from_first) {
+-		vg_from = _vgsplit_from(cmd, vg_name_from);
+-		if (!vg_from) {
 -			stack;
--			return NULL;
-+			return_NULL;
+-			return ECMD_FAILED;
+-		}
++		if (!(vg_from = _vgsplit_from(cmd, vg_name_from)))
++			return_ECMD_FAILED;
+ 		/*
+ 		 * Set metadata format of original VG.
+ 		 * NOTE: We must set the format before calling vg_create()
+@@ -396,23 +393,17 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 		 */
+ 		cmd->fmt = vg_from->fid->fmt;
+ 
+-		vg_to = _vgsplit_to(cmd, vg_name_to, &existing_vg);
+-		if (!vg_to) {
++		if (!(vg_to = _vgsplit_to(cmd, vg_name_to, &existing_vg))) {
+ 			unlock_and_release_vg(cmd, vg_from, vg_name_from);
+-			stack;
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
+ 		}
+ 	} else {
+-		vg_to = _vgsplit_to(cmd, vg_name_to, &existing_vg);
+-		if (!vg_to) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
+-		vg_from = _vgsplit_from(cmd, vg_name_from);
+-		if (!vg_from) {
++		if (!(vg_to = _vgsplit_to(cmd, vg_name_to, &existing_vg)))
++			return_ECMD_FAILED;
++
++		if (!(vg_from = _vgsplit_from(cmd, vg_name_from))) {
+ 			unlock_and_release_vg(cmd, vg_to, vg_name_to);
+-			stack;
+-			return ECMD_FAILED;
++			return_ECMD_FAILED;
  		}
  
- 	} else if (vg_read_error(vg_to) == SUCCESS) {
+ 		if (cmd->fmt != vg_from->fid->fmt) {
 
 
