@@ -1,86 +1,72 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  2 Jul 2013 13:32:45 +0000 (UTC)
-Subject: master - config: add profile arg to find_config_tree_int64
-Message-ID: <20130702133245.CAB8F60DA8@fedorahosted.org>
+Date: Tue,  2 Jul 2013 13:32:47 +0000 (UTC)
+Subject: master - config: add profile arg to find_config_tree_float
+Message-ID: <20130702133247.E072760DA8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dbea545ffbfa08c799c35b85417e42684bc550e2
-Commit:        dbea545ffbfa08c799c35b85417e42684bc550e2
-Parent:        50bf2c0db14400d80b08afabe917deee51f32ac8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aeffa4cb5bbb707d7d42eea6d2504a10ed0b798f
+Commit:        aeffa4cb5bbb707d7d42eea6d2504a10ed0b798f
+Parent:        dbea545ffbfa08c799c35b85417e42684bc550e2
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 25 12:31:24 2013 +0200
+AuthorDate:    Tue Jun 25 12:31:36 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Tue Jul 2 15:19:09 2013 +0200
 
-config: add profile arg to find_config_tree_int64
+config: add profile arg to find_config_tree_float
 
 ---
- lib/commands/toolcontext.c |    2 +-
- lib/config/config.c        |   14 ++++++++++++--
- lib/config/config.h        |    2 +-
- 3 files changed, 14 insertions(+), 4 deletions(-)
+ lib/config/config.c |   14 ++++++++++++--
+ lib/config/config.h |    2 +-
+ 2 files changed, 13 insertions(+), 3 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 8fce261..ead77e5 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -400,7 +400,7 @@ static int _process_config(struct cmd_context *cmd)
- 
- 	cmd->metadata_read_only = find_config_tree_bool(cmd, global_metadata_read_only_CFG);
- 
--	pv_min_kb = find_config_tree_int64(cmd, devices_pv_min_size_CFG);
-+	pv_min_kb = find_config_tree_int64(cmd, devices_pv_min_size_CFG, NULL);
- 	if (pv_min_kb < PV_MIN_SIZE_KB) {
- 		log_warn("Ignoring too small pv_min_size %" PRId64 "KB, using default %dKB.",
- 			 pv_min_kb, PV_MIN_SIZE_KB);
 diff --git a/lib/config/config.c b/lib/config/config.c
-index ae00461..f7194a7 100644
+index f7194a7..28229f4 100644
 --- a/lib/config/config.c
 +++ b/lib/config/config.c
-@@ -865,15 +865,25 @@ int find_config_tree_int(struct cmd_context *cmd, int id, struct profile *profil
- 	return i;
+@@ -886,15 +886,25 @@ int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *
+ 	return i64;
  }
  
--int64_t find_config_tree_int64(struct cmd_context *cmd, int id)
-+int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *profile)
+-float find_config_tree_float(struct cmd_context *cmd, int id)
++float find_config_tree_float(struct cmd_context *cmd, int id, struct profile *profile)
  {
  	cfg_def_item_t *item = cfg_def_get_item_p(id);
  	const char *path = cfg_def_get_path(item);
 +	int profile_applied = 0;
-+	int i64;
++	float f;
  
- 	if (item->type != CFG_TYPE_INT)
- 		log_error(INTERNAL_ERROR "%s cfg tree element not declared as integer.", path);
+ 	if (item->type != CFG_TYPE_FLOAT)
+ 		log_error(INTERNAL_ERROR "%s cfg tree element not declared as float.", path);
  
--	return dm_config_tree_find_int64(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_INT));
+-	return dm_config_tree_find_float(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_FLOAT));
 +	if (profile && !cmd->profile_params->global_profile)
 +		profile_applied = override_config_tree_from_profile(cmd, profile);
 +
-+	i64 = dm_config_tree_find_int64(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_INT));
++	f = dm_config_tree_find_float(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_FLOAT));
 +
 +	if (profile_applied)
 +		remove_config_tree_by_source(cmd, CONFIG_PROFILE);
 +
-+	return i64;
++	return f;
  }
  
- float find_config_tree_float(struct cmd_context *cmd, int id)
+ int find_config_tree_bool(struct cmd_context *cmd, int id)
 diff --git a/lib/config/config.h b/lib/config/config.h
-index a93cef9..cf94c03 100644
+index cf94c03..ece4613 100644
 --- a/lib/config/config.h
 +++ b/lib/config/config.h
-@@ -168,7 +168,7 @@ const struct dm_config_node *find_config_tree_node(struct cmd_context *cmd, int
- const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile *profile);
+@@ -169,7 +169,7 @@ const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile
  const char *find_config_tree_str_allow_empty(struct cmd_context *cmd, int id, struct profile *profile);
  int find_config_tree_int(struct cmd_context *cmd, int id, struct profile *profile);
--int64_t find_config_tree_int64(struct cmd_context *cmd, int id);
-+int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *profile);
- float find_config_tree_float(struct cmd_context *cmd, int id);
+ int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *profile);
+-float find_config_tree_float(struct cmd_context *cmd, int id);
++float find_config_tree_float(struct cmd_context *cmd, int id, struct profile *profile);
  int find_config_tree_bool(struct cmd_context *cmd, int id);
  
+ #endif
 
 
