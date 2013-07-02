@@ -1,413 +1,67 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue,  2 Jul 2013 19:26:13 +0000 (UTC)
-Subject: master - lvm2app: Implement lvm_pv_remove V2
-Message-ID: <20130702192613.1B79660F45@fedorahosted.org>
+Date: Tue,  2 Jul 2013 19:26:15 +0000 (UTC)
+Subject: master - python-lvm: Add bindings for lvm_pv_remove
+Message-ID: <20130702192615.2F38D60F45@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e33ac7b1ed962abb5ccb3d12a5401c84a188bf92
-Commit:        e33ac7b1ed962abb5ccb3d12a5401c84a188bf92
-Parent:        ef3ab801e8604d8f629badc1cac1d9190467033f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45a0f9e45be5999095c71382361f37f7c24d86d6
+Commit:        45a0f9e45be5999095c71382361f37f7c24d86d6
+Parent:        e33ac7b1ed962abb5ccb3d12a5401c84a188bf92
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Apr 2 16:10:18 2013 -0400
+AuthorDate:    Tue Apr 2 16:10:57 2013 -0400
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Tue Jul 2 14:24:34 2013 -0500
 
-lvm2app: Implement lvm_pv_remove V2
+python-lvm: Add bindings for lvm_pv_remove
 
-Code move and changes to support calling code from
-command line and from library interface.
-
-V2 Change lock_vol call
+Method off of base lvm namespace "pvRemove".
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/metadata/metadata.h |    4 ++
- lib/metadata/pv_manip.c |  130 +++++++++++++++++++++++++++++++++++++++++++++
- liblvm/lvm2app.h        |   16 +++++-
- liblvm/lvm_pv.c         |    8 +++
- tools/pvremove.c        |  133 +++--------------------------------------------
- 5 files changed, 163 insertions(+), 128 deletions(-)
+ python/liblvm.c |   20 ++++++++++++++++++++
+ 1 files changed, 20 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index bf9bd55..5c0a85b 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -341,6 +341,10 @@ int vg_validate(struct volume_group *vg);
- 
- int pv_write_orphan(struct cmd_context *cmd, struct physical_volume *pv);
- 
-+int pvremove_single(struct cmd_context *cmd, const char *pv_name,
-+			   void *handle __attribute__((unused)), unsigned force_count,
-+			   unsigned prompt);
-+
- /* Manipulate PV structures */
- int pv_add(struct volume_group *vg, struct physical_volume *pv);
- int pv_remove(struct volume_group *vg, struct physical_volume *pv);
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index 2f4f51e..30ccd97 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -19,6 +19,7 @@
- #include "toolcontext.h"
- #include "locking.h"
- #include "defaults.h"
-+#include "lvmetad.h"
- 
- static struct pv_segment *_alloc_pv_segment(struct dm_pool *mem,
- 					    struct physical_volume *pv,
-@@ -542,3 +543,132 @@ int pv_resize(struct physical_volume *pv,
- 
- 	return 1;
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 6491274..9c2e658 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -244,6 +244,25 @@ liblvm_lvm_list_pvs(void)
  }
-+
-+const char _really_wipe[] =
-+    "Really WIPE LABELS from physical volume \"%s\" of volume group \"%s\" [y/n]? ";
-+
-+/*
-+ * Decide whether it is "safe" to wipe the labels on this device.
-+ * 0 indicates we may not.
-+ */
-+static int pvremove_check(struct cmd_context *cmd, const char *name,
-+		unsigned force_count, unsigned prompt)
+ 
+ static PyObject *
++liblvm_lvm_pv_remove(PyObject *self, PyObject *arg)
 +{
-+	struct physical_volume *pv;
++	const char *pv_name;
++	LVM_VALID();
 +
-+	/* FIXME Check partition type is LVM unless --force is given */
++	if (!PyArg_ParseTuple(arg, "s", &pv_name))
++			return NULL;
 +
-+	/* Is there a pv here already? */
-+	/* If not, this is an error unless you used -f. */
-+	if (!(pv = pv_read(cmd, name, 1, 0))) {
-+		if (force_count)
-+			return 1;
-+		log_error("Physical Volume %s not found", name);
-+		return 0;
++	int rc = lvm_pv_remove(libh, pv_name);
++	if (0 != rc) {
++		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++		return NULL;
 +	}
 +
-+	/*
-+	 * If a PV has no MDAs it may appear to be an
-+	 * orphan until the metadata is read off
-+	 * another PV in the same VG.  Detecting this
-+	 * means checking every VG by scanning every
-+	 * PV on the system.
-+	 */
-+	if (is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use) &&
-+	    !dm_list_size(&pv->fid->metadata_areas_ignored)) {
-+		if (!scan_vgs_for_pvs(cmd, 0)) {
-+			log_error("Rescan for PVs without metadata areas "
-+				  "failed.");
-+			goto bad;
-+		}
-+		free_pv_fid(pv);
-+		if (!(pv = pv_read(cmd, name, 1, 0))) {
-+			log_error("Failed to read physical volume %s", name);
-+			goto bad;
-+		}
-+	}
-+
-+	/* orphan ? */
-+	if (is_orphan(pv)) {
-+		free_pv_fid(pv);
-+		return 1;
-+	}
-+
-+	/* Allow partial & exported VGs to be destroyed. */
-+	/* we must have -ff to overwrite a non orphan */
-+	if (force_count < 2) {
-+		log_error("PV %s belongs to Volume Group %s so please use vgreduce first.", name, pv_vg_name(pv));
-+		log_error("(If you are certain you need pvremove, then confirm by using --force twice.)");
-+		goto bad;
-+	}
-+
-+	/* prompt */
-+	if (!prompt &&
-+	    yes_no_prompt(_really_wipe, name, pv_vg_name(pv)) == 'n') {
-+		log_error("%s: physical volume label not removed", name);
-+		goto bad;
-+	}
-+
-+	if (force_count) {
-+		log_warn("WARNING: Wiping physical volume label from "
-+			  "%s%s%s%s", name,
-+			  !is_orphan(pv) ? " of volume group \"" : "",
-+			  !is_orphan(pv) ? pv_vg_name(pv) : "",
-+			  !is_orphan(pv) ? "\"" : "");
-+	}
-+
-+	free_pv_fid(pv);
-+	return 1;
-+
-+bad:
-+	free_pv_fid(pv);
-+	return 0;
++	Py_INCREF(Py_None);
++	return Py_None;
 +}
 +
-+int pvremove_single(struct cmd_context *cmd, const char *pv_name,
-+			   void *handle __attribute__((unused)), unsigned force_count,
-+			   unsigned prompt)
-+{
-+	struct device *dev;
-+	int ret = ECMD_FAILED;
-+
-+	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
-+		log_error("Can't get lock for orphan PVs");
-+		return ECMD_FAILED;
-+	}
-+
-+	if (!pvremove_check(cmd, pv_name, force_count, prompt))
-+		goto out;
-+
-+	if (!(dev = dev_cache_get(pv_name, cmd->filter))) {
-+		log_error("%s: Couldn't find device.  Check your filters?",
-+			  pv_name);
-+		goto out;
-+	}
-+
-+	if (!dev_test_excl(dev)) {
-+		/* FIXME Detect whether device-mapper is still using the device */
-+		log_error("Can't open %s exclusively - not removing. "
-+			  "Mounted filesystem?", dev_name(dev));
-+		goto out;
-+	}
-+
-+	/* Wipe existing label(s) */
-+	if (!label_remove(dev)) {
-+		log_error("Failed to wipe existing label(s) on %s", pv_name);
-+		goto out;
-+	}
-+
-+	if (!lvmetad_pv_gone_by_dev(dev, NULL))
-+		goto_out;
-+
-+	log_print_unless_silent("Labels on physical volume \"%s\" successfully wiped",
-+				pv_name);
-+
-+	ret = ECMD_PROCESSED;
-+
-+out:
-+	unlock_vg(cmd, VG_ORPHANS);
-+
-+	return ret;
-+}
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index f70e72c..695f5eb 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -553,14 +553,15 @@ struct dm_list *lvm_vg_list_lvs(vg_t vg);
-  * \return
-  * A list of lvm_pv_list structures containing pv handles for all physical
-  * volumes. If no PVs exist or a global lock was unable to be obtained a
-- * NULL is returned.
-+ * NULL is returned.  Do not attempt to remove one of the PVs until after the
-+ * call to lvm_list_pvs_free has been made.
-  */
- struct dm_list *lvm_list_pvs(lvm_t libh);
- 
- /**
-  * Free the resources used by acquiring the pvlist.  This should be called as
-  * soon as possible after processing the needed information from the pv list as
-- * a global locks are held.
-+ * a global lock is held.
-  *
-  * \param	pvlist
-  * PV list to be freed
-@@ -571,6 +572,17 @@ struct dm_list *lvm_list_pvs(lvm_t libh);
- int lvm_list_pvs_free(struct dm_list *pvlist);
- 
- /**
-+ *  Remove a physical volume.
-+ *  Note: You cannot remove a PV while iterating through the list of PVs as
-+ *  locks are held for the PV list.
-+ *  \param	libh	Library handle
-+ *  \param	pv_name	The physical volume name
-+ *  \return
-+ *  0 on success, else -1 with library errno and text set.
-+ */
-+int lvm_pv_remove(lvm_t libh, const char *pv_name);
-+
-+/**
-  * Return a list of PV handles for a given VG handle.
-  *
-  * \memberof vg_t
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index db6c39d..8f53352 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -75,6 +75,14 @@ struct lvm_list_wrapper
- 	struct dm_list vgslist;
- };
- 
-+int lvm_pv_remove(lvm_t libh, const char *pv_name)
-+{
-+	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	if ( 1 != pvremove_single(cmd, pv_name, NULL, 0, 0)) {
-+		return -1;
-+	}
-+	return 0;
-+}
- 
- struct dm_list *lvm_list_pvs(lvm_t libh)
++static PyObject *
+ liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
  {
-diff --git a/tools/pvremove.c b/tools/pvremove.c
-index 2c8f5c6..a99a9bd 100644
---- a/tools/pvremove.c
-+++ b/tools/pvremove.c
-@@ -14,146 +14,27 @@
-  */
- 
- #include "tools.h"
-+#include "metadata.h"
- 
--/*
-- * Decide whether it is "safe" to wipe the labels on this device.
-- * 0 indicates we may not.
-- */
--static int pvremove_check(struct cmd_context *cmd, const char *name)
--{
--	struct physical_volume *pv;
--
--	/* FIXME Check partition type is LVM unless --force is given */
--
--	/* Is there a pv here already? */
--	/* If not, this is an error unless you used -f. */
--	if (!(pv = pv_read(cmd, name, 1, 0))) {
--		if (arg_count(cmd, force_ARG))
--			return 1;
--		log_error("Physical Volume %s not found", name);
--		return 0;
--	}
--
--	/*
--	 * If a PV has no MDAs it may appear to be an
--	 * orphan until the metadata is read off
--	 * another PV in the same VG.  Detecting this
--	 * means checking every VG by scanning every
--	 * PV on the system.
--	 */
--	if (is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use) &&
--	    !dm_list_size(&pv->fid->metadata_areas_ignored)) {
--		if (!scan_vgs_for_pvs(cmd, 0)) {
--			log_error("Rescan for PVs without metadata areas "
--				  "failed.");
--			goto bad;
--		}
--		free_pv_fid(pv);
--		if (!(pv = pv_read(cmd, name, 1, 0))) {
--			log_error("Failed to read physical volume %s", name);
--			goto bad;
--		}
--	}
--
--	/* orphan ? */
--	if (is_orphan(pv)) {
--		free_pv_fid(pv);
--		return 1;
--	}
--
--	/* Allow partial & exported VGs to be destroyed. */
--	/* we must have -ff to overwrite a non orphan */
--	if (arg_count(cmd, force_ARG) < 2) {
--		log_error("PV %s belongs to Volume Group %s so please use vgreduce first.", name, pv_vg_name(pv));
--		log_error("(If you are certain you need pvremove, then confirm by using --force twice.)");
--		goto bad;
--	}
--
--	/* prompt */
--	if (!arg_count(cmd, yes_ARG) &&
--	    yes_no_prompt("Really WIPE LABELS from physical volume \"%s\" "
--			  "of volume group \"%s\" [y/n]? ",
--			  name, pv_vg_name(pv)) == 'n') {
--		log_error("%s: physical volume label not removed", name);
--		goto bad;
--	}
--
--	if (arg_count(cmd, force_ARG)) {
--		log_warn("WARNING: Wiping physical volume label from "
--			  "%s%s%s%s", name,
--			  !is_orphan(pv) ? " of volume group \"" : "",
--			  !is_orphan(pv) ? pv_vg_name(pv) : "",
--			  !is_orphan(pv) ? "\"" : "");
--	}
--
--	free_pv_fid(pv);
--	return 1;
--
--bad:
--	free_pv_fid(pv);
--	return 0;
--}
--
--static int pvremove_single(struct cmd_context *cmd, const char *pv_name,
--			   void *handle __attribute__((unused)))
--{
--	struct device *dev;
--	int ret = ECMD_FAILED;
--
--	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
--		log_error("Can't get lock for orphan PVs");
--		return ECMD_FAILED;
--	}
--
--	if (!pvremove_check(cmd, pv_name))
--		goto out;
--
--	if (!(dev = dev_cache_get(pv_name, cmd->filter))) {
--		log_error("%s: Couldn't find device.  Check your filters?",
--			  pv_name);
--		goto out;
--	}
--
--	if (!dev_test_excl(dev)) {
--		/* FIXME Detect whether device-mapper is still using the device */
--		log_error("Can't open %s exclusively - not removing. "
--			  "Mounted filesystem?", dev_name(dev));
--		goto out;
--	}
--
--	/* Wipe existing label(s) */
--	if (!label_remove(dev)) {
--		log_error("Failed to wipe existing label(s) on %s", pv_name);
--		goto out;
--	}
--
--	if (!lvmetad_pv_gone_by_dev(dev, NULL))
--		goto_out;
--
--	log_print_unless_silent("Labels on physical volume \"%s\" successfully wiped",
--				pv_name);
--
--	ret = ECMD_PROCESSED;
--
--out:
--	unlock_vg(cmd, VG_ORPHANS);
--
--	return ret;
--}
- 
- int pvremove(struct cmd_context *cmd, int argc, char **argv)
- {
- 	int i, r;
- 	int ret = ECMD_PROCESSED;
-+	unsigned force_count;
-+	unsigned prompt;
- 
- 	if (!argc) {
- 		log_error("Please enter a physical volume path");
- 		return EINVALID_CMD_LINE;
- 	}
- 
-+	force_count = arg_count(cmd, force_ARG);
-+	prompt = arg_count(cmd, yes_ARG);
-+
- 	for (i = 0; i < argc; i++) {
- 		dm_unescape_colons_and_at_signs(argv[i], NULL, NULL);
--		r = pvremove_single(cmd, argv[i], NULL);
-+		r = pvremove_single(cmd, argv[i], NULL, force_count, prompt);
- 		if (r > ret)
- 			ret = r;
- 	}
+ 	double converted;
+@@ -1664,6 +1683,7 @@ static PyMethodDef Liblvm_methods[] = {
+ 	{ "listVgNames",	(PyCFunction)liblvm_lvm_list_vg_names, METH_NOARGS },
+ 	{ "listVgUuids",	(PyCFunction)liblvm_lvm_list_vg_uuids, METH_NOARGS },
+ 	{ "listPvs",		(PyCFunction)liblvm_lvm_list_pvs, METH_NOARGS },
++	{ "pvRemove",		(PyCFunction)liblvm_lvm_pv_remove, METH_VARARGS },
+ 	{ "percentToFloat",	(PyCFunction)liblvm_lvm_percent_to_float, METH_VARARGS },
+ 	{ "vgNameFromPvid",	(PyCFunction)liblvm_lvm_vgname_from_pvid, METH_VARARGS },
+ 	{ "vgNameFromDevice",	(PyCFunction)liblvm_lvm_vgname_from_device, METH_VARARGS },
 
 
