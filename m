@@ -1,136 +1,192 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  2 Jul 2013 13:33:10 +0000 (UTC)
-Subject: master - profile: add default.profile and install it
-Message-ID: <20130702133310.F1DB460DA8@fedorahosted.org>
+Date: Tue,  2 Jul 2013 13:33:13 +0000 (UTC)
+Subject: master - report: add vg_profile and lv_profile to report the profile attached to VG/LV
+Message-ID: <20130702133313.0FF9E603F2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21554ab5fe958b09eed853f3bfefa61c4c130604
-Commit:        21554ab5fe958b09eed853f3bfefa61c4c130604
-Parent:        6d1ed2254ccfe2a34f1423ea2359cf6a554e8d9e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f6cfc9de497944b60a0b52e77ff532c489bce63
+Commit:        9f6cfc9de497944b60a0b52e77ff532c489bce63
+Parent:        21554ab5fe958b09eed853f3bfefa61c4c130604
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jun 28 14:08:04 2013 +0200
+AuthorDate:    Tue Jul 2 14:34:52 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jul 2 15:22:11 2013 +0200
+CommitterDate: Tue Jul 2 15:22:12 2013 +0200
 
-profile: add default.profile and install it
+report: add vg_profile and lv_profile to report the profile attached to VG/LV
 
-The default.profile contains all settings that are customizable
-by a profile. This default profile can be copied across to create
-new profiles.
+vgs -o vg_profile ...
+lvs -o lv_profile ...
 ---
- conf/Makefile.in        |   13 +++++++++++--
- conf/default.profile.in |   20 ++++++++++++++++++++
- configure               |    3 ++-
- configure.in            |    1 +
- make.tmpl.in            |    1 +
- 5 files changed, 35 insertions(+), 3 deletions(-)
+ lib/config/defaults.h   |    4 ++--
+ lib/metadata/lv.c       |    6 ++++++
+ lib/metadata/lv.h       |    1 +
+ lib/metadata/vg.c       |    6 ++++++
+ lib/metadata/vg.h       |    1 +
+ lib/report/columns.h    |    2 ++
+ lib/report/properties.c |    4 ++++
+ lib/report/report.c     |   26 ++++++++++++++++++++++++++
+ 8 files changed, 48 insertions(+), 2 deletions(-)
 
-diff --git a/conf/Makefile.in b/conf/Makefile.in
-index c63e3ce..c148ac2 100644
---- a/conf/Makefile.in
-+++ b/conf/Makefile.in
-@@ -18,14 +18,23 @@ top_builddir = @top_builddir@
- CONFSRC=example.conf
- CONFDEST=lvm.conf
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index b8d46f1..7ee89ec 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -163,8 +163,8 @@
+ #define DEFAULT_SEGS_COLS "lv_name,vg_name,lv_attr,stripes,segtype,seg_size"
+ #define DEFAULT_PVSEGS_COLS "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"
  
-+DEFAULT_PROFILE=default.profile
-+PROFILES=$(DEFAULT_PROFILE)
-+
- include $(top_builddir)/make.tmpl
+-#define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,metadata_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid"
+-#define DEFAULT_VGS_COLS_VERB "vg_name,vg_attr,vg_extent_size,pv_count,lv_count,snap_count,vg_size,vg_free,vg_uuid"
++#define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,metadata_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid,lv_profile"
++#define DEFAULT_VGS_COLS_VERB "vg_name,vg_attr,vg_extent_size,pv_count,lv_count,snap_count,vg_size,vg_free,vg_uuid,vg_profile"
+ #define DEFAULT_PVS_COLS_VERB "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,dev_size,pv_uuid"
+ #define DEFAULT_SEGS_COLS_VERB "lv_name,vg_name,lv_attr,seg_start,seg_size,stripes,segtype,stripesize,chunksize"
+ #define DEFAULT_PVSEGS_COLS_VERB "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size,lv_name,seg_start_pe,segtype,seg_pe_ranges"
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 93ae92d..475a514 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -785,6 +785,12 @@ char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ 	return dm_pool_strdup(mem, s);
+ }
  
--install_lvm2: $(CONFSRC)
-+install_conf: $(CONFSRC)
- 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
- 		echo "$(INSTALL_WDATA) -D $< $(confdir)/$(CONFDEST)"; \
- 		$(INSTALL_WDATA) -D $< $(confdir)/$(CONFDEST); \
- 	fi
- 
-+install_profiles: $(PROFILES)
-+	$(INSTALL) -d $(DEFAULT_PROFILE_DIR)
-+	$(INSTALL_DATA) $(PROFILES) $(DEFAULT_PROFILE_DIR)/
-+
-+install_lvm2: install_conf install_profiles
-+
- install: install_lvm2
- 
--DISTCLEAN_TARGETS += $(CONFSRC)
-+DISTCLEAN_TARGETS += $(CONFSRC) $(DEFAULT_PROFILE)
-diff --git a/conf/default.profile.in b/conf/default.profile.in
-new file mode 100644
-index 0000000..6a0b8f1
---- /dev/null
-+++ b/conf/default.profile.in
-@@ -0,0 +1,20 @@
-+# This is a default profile for the LVM2 system.
-+# It contains all configuration settings that are customizable by profiles.
-+#
-+# To create a new profile, select the settings you want to customize
-+# and put them in a new file named <profile_name>.profile. Then put this
-+# file in a directory as defined by config/profile_dir setting found in
-+# @DEFAULT_SYS_DIR@/lvm.conf file.
-+#
-+# Refer to 'man lvm.conf' for further information about profiles and file layout.
-+
-+allocation {
-+	thin_pool_chunk_size = 64
-+	thin_pool_discards = "passdown"
-+	thin_pool_zero = 1
++char *lv_profile_dup(struct dm_pool *mem, const struct logical_volume *lv)
++{
++	const char *profile_name = lv->profile ? lv->profile->name : "";
++	return dm_pool_strdup(mem, profile_name);
 +}
 +
-+activation {
-+	thin_pool_autoextend_threshold = 100
-+	thin_pool_autoextend_percent = 20
+ /* For given LV find recursively the LV which holds lock for it */
+ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv)
+ {
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index 6831f67..06f8c60 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -93,4 +93,5 @@ char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
+ struct logical_volume *lv_ondisk(struct logical_volume *lv);
+ struct profile *lv_config_profile(const struct logical_volume *lv);
++char *lv_profile_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ #endif /* _LVM_LV_H */
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index 50e8328..22099e2 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -267,6 +267,12 @@ int vg_set_mda_copies(struct volume_group *vg, uint32_t mda_copies)
+ 	return 1;
+ }
+ 
++char *vg_profile_dup(const struct volume_group *vg)
++{
++	const char *profile_name = vg->profile ? vg->profile->name : "";
++	return dm_pool_strdup(vg->vgmem, profile_name);
 +}
-diff --git a/configure b/configure
-index aeb2b46..212bd80 100755
---- a/configure
-+++ b/configure
-@@ -10810,7 +10810,7 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]' '{print $2}'`
++
+ static int _recalc_extents(uint32_t *extents, const char *desc1,
+ 			   const char *desc2, uint32_t old_size,
+ 			   uint32_t new_size)
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index f33fe11..8db04d3 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -155,6 +155,7 @@ uint32_t vg_mda_count(const struct volume_group *vg);
+ uint32_t vg_mda_used_count(const struct volume_group *vg);
+ uint32_t vg_mda_copies(const struct volume_group *vg);
+ int vg_set_mda_copies(struct volume_group *vg, uint32_t mda_copies);
++char *vg_profile_dup(const struct volume_group *vg);
  
+ /*
+  * Returns visible LV count - number of LVs from user perspective
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index c55a685..d13d19a 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -96,6 +96,7 @@ FIELD(LVS, lv, STR, "LV Tags", tags, 7, tags, lv_tags, "Tags, if any.", 0)
+ FIELD(LVS, lv, STR, "Time", lvid, 26, lvtime, lv_time, "Creation time of the LV, if known", 0)
+ FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
+ FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, modules, "Kernel device-mapper modules required for this LV.", 0)
++FIELD(LVS, lv, STR, "LProfile", lvid, 8, lvprofile, lv_profile, "Configuration profile attached to this LV", 0)
  
- ################################################################################
--ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile conf/Makefile conf/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/
- blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.socket scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
-+ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile conf/Makefile conf/example.conf conf/default.profile include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_
- init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.socket scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
+ FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
+ FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, pv_uuid, "Unique identifier.", 0)
+@@ -139,6 +140,7 @@ FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 8, vgmdasused, vg_mda_used_count, "Number o
+ FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, vg_mda_free, "Free metadata area space for this VG in current units.", 0)
+ FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, vg_mda_size, "Size of smallest metadata area for this VG in current units.", 0)
+ FIELD(VGS, vg, NUM, "#VMdaCps", cmd, 8, vgmdacopies, vg_mda_copies, "Target number of in use metadata areas in the VG.", 1)
++FIELD(VGS, vg, STR, "VProfile", cmd, 8, vgprofile, vg_profile, "Configuration profile attached to this VG", 0)
  
- cat >confcache <<\_ACEOF
- # This file is a shell script that caches the results of configure
-@@ -11515,6 +11515,7 @@ do
-     "daemons/lvmetad/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/lvmetad/Makefile" ;;
-     "conf/Makefile") CONFIG_FILES="$CONFIG_FILES conf/Makefile" ;;
-     "conf/example.conf") CONFIG_FILES="$CONFIG_FILES conf/example.conf" ;;
-+    "conf/default.profile") CONFIG_FILES="$CONFIG_FILES conf/default.profile" ;;
-     "include/.symlinks") CONFIG_FILES="$CONFIG_FILES include/.symlinks" ;;
-     "include/Makefile") CONFIG_FILES="$CONFIG_FILES include/Makefile" ;;
-     "lib/Makefile") CONFIG_FILES="$CONFIG_FILES lib/Makefile" ;;
-diff --git a/configure.in b/configure.in
-index 77a0503..6d417e3 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1642,6 +1642,7 @@ daemons/dmeventd/plugins/thin/Makefile
- daemons/lvmetad/Makefile
- conf/Makefile
- conf/example.conf
-+conf/default.profile
- include/.symlinks
- include/Makefile
- lib/Makefile
-diff --git a/make.tmpl.in b/make.tmpl.in
-index df7453d..ae62182 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -81,6 +81,7 @@ DEFAULT_SYS_DIR = @DEFAULT_SYS_DIR@
- DEFAULT_ARCHIVE_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_ARCHIVE_SUBDIR@
- DEFAULT_BACKUP_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_BACKUP_SUBDIR@
- DEFAULT_CACHE_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_CACHE_SUBDIR@
-+DEFAULT_PROFILE_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_PROFILE_SUBDIR@
- DEFAULT_LOCK_DIR = @DEFAULT_LOCK_DIR@
- DEFAULT_RUN_DIR = @DEFAULT_RUN_DIR@
+ FIELD(SEGS, seg, STR, "Type", list, 4, segtype, segtype, "Type of LV segment.", 0)
+ FIELD(SEGS, seg, NUM, "#Str", area_count, 4, uint32, stripes, "Number of stripes or mirror legs.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 884df2a..ad23e7c 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -261,6 +261,8 @@ GET_LV_STR_PROPERTY_FN(lv_host, lv_host_dup(lv->vg->vgmem, lv))
+ #define _lv_host_set _not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_active, lv_active_dup(lv->vg->vgmem, lv))
+ #define _lv_active_set _not_implemented_set
++GET_LV_STR_PROPERTY_FN(lv_profile, lv_profile_dup(lv->vg->vgmem, lv))
++#define _lv_profile_set _not_implemented_set
  
+ /* VG */
+ GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt_dup(vg))
+@@ -307,6 +309,8 @@ GET_VG_NUM_PROPERTY_FN(vg_mda_size, (SECTOR_SIZE * vg_mda_size(vg)))
+ #define _vg_mda_size_set _not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
+ SET_VG_NUM_PROPERTY_FN(vg_mda_copies, vg_set_mda_copies)
++GET_VG_STR_PROPERTY_FN(vg_profile, vg_profile_dup(vg))
++#define _vg_profile_set _not_implemented_set
+ 
+ /* LVSEG */
+ GET_LVSEG_STR_PROPERTY_FN(segtype, lvseg_segtype_dup(lvseg->lv->vg->vgmem, lvseg))
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 8ff4f28..8b5455b 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -111,6 +111,19 @@ static int _modules_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return 1;
+ }
+ 
++static int _lvprofile_disp(struct dm_report *rh, struct dm_pool *mem,
++			   struct dm_report_field *field,
++			   const void *data, void *private)
++{
++	const struct logical_volume *lv = (const struct logical_volume *) data;
++
++	if (lv->profile)
++		return dm_report_field_string(rh, field, &lv->profile->name);
++
++	dm_report_field_set_value(field, "", NULL);
++	return 1;
++}
++
+ static int _vgfmt_disp(struct dm_report *rh, struct dm_pool *mem,
+ 		       struct dm_report_field *field,
+ 		       const void *data, void *private)
+@@ -760,6 +773,19 @@ static int _vgmdacopies_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
+ 
++static int _vgprofile_disp(struct dm_report *rh, struct dm_pool *mem,
++			   struct dm_report_field *field,
++			   const void *data, void *private)
++{
++	const struct volume_group *vg = (const struct volume_group *) data;
++
++	if (vg->profile)
++		return dm_report_field_string(rh, field, &vg->profile->name);
++
++	dm_report_field_set_value(field, "", NULL);
++	return 1;
++}
++
+ static int _pvmdafree_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			   struct dm_report_field *field,
+ 			   const void *data, void *private)
 
 
