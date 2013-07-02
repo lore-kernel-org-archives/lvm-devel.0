@@ -1,119 +1,437 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  2 Jul 2013 13:32:56 +0000 (UTC)
-Subject: master - toolcontext: add a few comments for struct cmd_context and rename config_valid -> config_initialized
-Message-ID: <20130702133256.3C7E360DA8@fedorahosted.org>
+Date: Tue,  2 Jul 2013 13:32:58 +0000 (UTC)
+Subject: master - config: make it possible to run several instances of configuration check at once
+Message-ID: <20130702133258.5985A60DA8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8769033e078c79ee4167c5186d7407d1729fd8a4
-Commit:        8769033e078c79ee4167c5186d7407d1729fd8a4
-Parent:        0cd47947359d2ba093dc7da5e489cafb34b038d0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f1c292cc38f4ba2e8d9b7272bc1a1ce17bd729a5
+Commit:        f1c292cc38f4ba2e8d9b7272bc1a1ce17bd729a5
+Parent:        8769033e078c79ee4167c5186d7407d1729fd8a4
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 26 12:29:19 2013 +0200
+AuthorDate:    Wed Jun 26 14:53:57 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Tue Jul 2 15:22:11 2013 +0200
 
-toolcontext: add a few comments for struct cmd_context and rename config_valid -> config_initialized
+config: make it possible to run several instances of configuration check at once
 
-Just to make it more clear and also not to confuse
-config_valid with check against config definition
-(and its 'valid' flag within the config defintion tree).
+Before, the status of the configuration check (config_def_check fn call)
+was saved directly in global configuration definitinion array (as part
+of the cfg_def_item_t/flags)
+
+This patch introduces the "struct cft_check_handle" that defines
+configuration check parameters as well as separate place to store
+the status (status here means CFG_USED and CFG_VALID flags, formerly
+saved in cfg_def_item_t/flags). This struct can hold config check
+parameters as well as the status for each config tree separately,
+thus making it possible to run several instances of config_def_check
+without interference.
 ---
- daemons/clvmd/lvm-functions.c |    2 +-
- lib/commands/toolcontext.c    |    8 ++++----
- lib/commands/toolcontext.h    |   14 ++++++++------
- tools/lvmcmdline.c            |    2 +-
- 4 files changed, 14 insertions(+), 12 deletions(-)
+ lib/commands/toolcontext.c |   29 +++++++++++--
+ lib/commands/toolcontext.h |    2 +
+ lib/config/config.c        |  103 +++++++++++++++++++++----------------------
+ lib/config/config.h        |   21 +++++++--
+ tools/dumpconfig.c         |   36 ++++++++++++++-
+ 5 files changed, 127 insertions(+), 64 deletions(-)
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index 9d62675..5f1658d 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -508,7 +508,7 @@ int do_lock_lv(unsigned char command, unsigned char lock_flags, char *resource)
- 	DEBUGLOG("do_lock_lv: resource '%s', cmd = %s, flags = %s, critical_section = %d\n",
- 		 resource, decode_locking_cmd(command), decode_flags(lock_flags), critical_section());
- 
--	if (!cmd->config_valid || config_files_changed(cmd)) {
-+	if (!cmd->config_initialized || config_files_changed(cmd)) {
- 		/* Reinitialise various settings inc. logging, filters */
- 		if (do_refresh_cache()) {
- 			log_error("Updated config file invalid. Aborting.");
 diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 5f99b0b..b7e3d46 100644
+index b7e3d46..4919b93 100644
 --- a/lib/commands/toolcontext.c
 +++ b/lib/commands/toolcontext.c
-@@ -1507,9 +1507,9 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 	cmd->default_settings.cache_vgmetadata = 1;
- 	cmd->current_settings = cmd->default_settings;
+@@ -263,6 +263,29 @@ static int _check_disable_udev(const char *msg) {
+ 	return 0;
+ }
  
--	cmd->config_valid = 1;
-+	cmd->config_initialized = 1;
- out:
--	if (cmd->config_valid != 1) {
-+	if (!cmd->config_initialized) {
- 		destroy_toolcontext(cmd);
- 		cmd = NULL;
- 	}
-@@ -1624,7 +1624,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
- 	cft_cmdline = remove_config_tree_by_source(cmd, CONFIG_STRING);
- 	_destroy_config(cmd);
++static int _check_config(struct cmd_context *cmd)
++{
++	if (!find_config_tree_bool(cmd, config_checks_CFG, NULL))
++		return 1;
++
++	if (!cmd->cft_check_handle) {
++		if (!(cmd->cft_check_handle = dm_pool_zalloc(cmd->libmem, sizeof(*cmd->cft_check_handle)))) {
++			log_error("Configuration check handle allocation failed.");
++			return 0;
++		}
++	}
++
++	cmd->cft_check_handle->cft = cmd->cft;
++
++	if (!config_def_check(cmd, cmd->cft_check_handle) &&
++	    find_config_tree_bool(cmd, config_abort_on_errors_CFG, NULL)) {
++		log_error("LVM configuration invalid.");
++		return 0;
++	}
++
++	return 1;
++}
++
+ static int _process_config(struct cmd_context *cmd)
+ {
+ 	mode_t old_umask;
+@@ -275,10 +298,8 @@ static int _process_config(struct cmd_context *cmd)
+ 	int udev_disabled = 0;
+ 	char sysfs_dir[PATH_MAX];
  
--	cmd->config_valid = 0;
-+	cmd->config_initialized = 0;
+-	if (!config_def_check(cmd, 0, 0, 0) && find_config_tree_bool(cmd, config_abort_on_errors_CFG, NULL)) {
+-		log_error("LVM configuration invalid.");
+-		return 0;
+-	}
++	if (!_check_config(cmd))
++		return_0;
  
- 	cmd->hosttags = 0;
- 
-@@ -1681,7 +1681,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
- 	if (!_init_backup(cmd))
- 		return 0;
- 
--	cmd->config_valid = 1;
-+	cmd->config_initialized = 1;
- 
- 	reset_lvm_errno(1);
- 	return 1;
+ 	/* umask */
+ 	cmd->default_settings.umask = find_config_tree_int(cmd, global_umask_CFG, NULL);
 diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 7551245..42a4e54 100644
+index 42a4e54..2d90138 100644
 --- a/lib/commands/toolcontext.h
 +++ b/lib/commands/toolcontext.h
-@@ -98,14 +98,16 @@ struct cmd_context {
- 	struct dev_filter *lvmetad_filter;
- 	int dump_filter;	/* Dump filter when exiting? */
- 
--	struct dm_list config_files;
--	int config_valid;
--	struct dm_config_tree *cft;
-+	struct dm_list config_files; /* master lvm config + any existing tag configs */
-+	struct profile_params *profile_params; /* profile handling params including loaded profile configs */
-+	struct dm_config_tree *cft; /* the whole cascade: CONFIG_STRING -> CONFIG_PROFILE -> CONFIG_FILE/CONFIG_MERGED_FILES */
-+	int config_initialized; /* used to reinitialize config if previous init was not successful */
-+	struct dm_hash_table *cft_def_hash; /* config definition hash used for validity check (item type + item recognized) */
+@@ -102,7 +102,9 @@ struct cmd_context {
+ 	struct profile_params *profile_params; /* profile handling params including loaded profile configs */
+ 	struct dm_config_tree *cft; /* the whole cascade: CONFIG_STRING -> CONFIG_PROFILE -> CONFIG_FILE/CONFIG_MERGED_FILES */
+ 	int config_initialized; /* used to reinitialize config if previous init was not successful */
 +
-+	/* selected settings with original default/configured value which can be changed during cmd processing */
+ 	struct dm_hash_table *cft_def_hash; /* config definition hash used for validity check (item type + item recognized) */
++	struct cft_check_handle *cft_check_handle;
+ 
+ 	/* selected settings with original default/configured value which can be changed during cmd processing */
  	struct config_info default_settings;
-+	/* may contain changed values compared to default_settings */
- 	struct config_info current_settings;
--	struct dm_hash_table *cft_def_hash; /* cft definition hash used for validity check */
--
--	struct profile_params *profile_params;
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 6398eb0..2934b5a 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -584,12 +584,13 @@ static int _config_def_check_node_single_value(const char *rp, const struct dm_c
+ 	return 1;
+ }
  
- 	struct archive_params *archive_params;
- 	struct backup_params *backup_params;
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 6efa29a..3aa4206 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1080,7 +1080,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 			goto_out;
+-static int _config_def_check_node_value(const char *rp, const struct dm_config_value *v,
+-					const cfg_def_item_t *def, int suppress_messages)
++static int _config_def_check_node_value(struct cft_check_handle *handle,
++					const char *rp, const struct dm_config_value *v,
++					const cfg_def_item_t *def)
+ {
+ 	if (!v) {
+ 		if (def->type != CFG_TYPE_SECTION) {
+-			_log_type_error(rp, CFG_TYPE_SECTION, def->type, suppress_messages);
++			_log_type_error(rp, CFG_TYPE_SECTION, def->type, handle->suppress_messages);
+ 			return 0;
  		}
+ 		return 1;
+@@ -597,13 +598,13 @@ static int _config_def_check_node_value(const char *rp, const struct dm_config_v
  
--	if (arg_count(cmd, config_ARG) || !cmd->config_valid || config_files_changed(cmd)) {
-+	if (arg_count(cmd, config_ARG) || !cmd->config_initialized || config_files_changed(cmd)) {
- 		/* Reinitialise various settings inc. logging, filters */
- 		if (!refresh_toolcontext(cmd)) {
- 			old_cft = remove_config_tree_by_source(cmd, CONFIG_STRING);
+ 	if (v->next) {
+ 		if (!(def->type & CFG_TYPE_ARRAY)) {
+-			_log_type_error(rp, CFG_TYPE_ARRAY, def->type, suppress_messages);
++			_log_type_error(rp, CFG_TYPE_ARRAY, def->type, handle->suppress_messages);
+ 			return 0;
+ 		}
+ 	}
+ 
+ 	do {
+-		if (!_config_def_check_node_single_value(rp, v, def, suppress_messages))
++		if (!_config_def_check_node_single_value(rp, v, def, handle->suppress_messages))
+ 			return 0;
+ 		v = v->next;
+ 	} while (v);
+@@ -611,9 +612,10 @@ static int _config_def_check_node_value(const char *rp, const struct dm_config_v
+ 	return 1;
+ }
+ 
+-static int _config_def_check_node(const char *vp, char *pvp, char *rp, char *prp,
++static int _config_def_check_node(struct cft_check_handle *handle,
++				  const char *vp, char *pvp, char *rp, char *prp,
+ 				  size_t buf_size, struct dm_config_node *cn,
+-				  struct dm_hash_table *ht, int suppress_messages)
++				  struct dm_hash_table *ht)
+ {
+ 	cfg_def_item_t *def;
+ 	int sep = vp != pvp; /* don't use '/' separator for top-level node */
+@@ -628,7 +630,7 @@ static int _config_def_check_node(const char *vp, char *pvp, char *rp, char *prp
+ 	if (!(def = (cfg_def_item_t *) dm_hash_lookup(ht, vp))) {
+ 		/* If the node is not a section but a setting, fail now. */
+ 		if (cn->v) {
+-			log_warn_suppress(suppress_messages,
++			log_warn_suppress(handle->suppress_messages,
+ 				"Configuration setting \"%s\" unknown.", rp);
+ 			cn->id = -1;
+ 			return 0;
+@@ -639,38 +641,38 @@ static int _config_def_check_node(const char *vp, char *pvp, char *rp, char *prp
+ 		/* The real path without '#' is still stored in rp variable. */
+ 		pvp[sep] = '#', pvp[sep + 1] = '\0';
+ 		if (!(def = (cfg_def_item_t *) dm_hash_lookup(ht, vp))) {
+-			log_warn_suppress(suppress_messages,
++			log_warn_suppress(handle->suppress_messages,
+ 				"Configuration section \"%s\" unknown.", rp);
+ 			cn->id = -1;
+ 			return 0;
+ 		}
+ 	}
+ 
+-	def->flags |= CFG_USED;
++	handle->status[def->id] |= CFG_USED;
+ 	cn->id = def->id;
+ 
+-	if (!_config_def_check_node_value(rp, cn->v, def, suppress_messages))
+-	return 0;
++	if (!_config_def_check_node_value(handle, rp, cn->v, def))
++		return 0;
+ 
+-	def->flags |= CFG_VALID;
++	handle->status[def->id] |= CFG_VALID;
+ 	return 1;
+ }
+ 
+-static int _config_def_check_tree(const char *vp, char *pvp, char *rp, char *prp,
++static int _config_def_check_tree(struct cft_check_handle *handle,
++				  const char *vp, char *pvp, char *rp, char *prp,
+ 				  size_t buf_size, struct dm_config_node *root,
+-				  struct dm_hash_table *ht, int suppress_messages)
++				  struct dm_hash_table *ht)
+ {
+ 	struct dm_config_node *cn;
+ 	int valid, r = 1;
+ 	size_t len;
+ 
+ 	for (cn = root->child; cn; cn = cn->sib) {
+-		if ((valid = _config_def_check_node(vp, pvp, rp, prp, buf_size,
+-					cn, ht, suppress_messages)) && !cn->v) {
++		if ((valid = _config_def_check_node(handle, vp, pvp, rp, prp,
++					buf_size, cn, ht)) && !cn->v) {
+ 			len = strlen(rp);
+-			valid = _config_def_check_tree(vp, pvp + strlen(pvp),
+-					rp, prp + len, buf_size - len, cn, ht,
+-					suppress_messages);
++			valid = _config_def_check_tree(handle, vp, pvp + strlen(pvp),
++					rp, prp + len, buf_size - len, cn, ht);
+ 		}
+ 		if (!valid)
+ 			r = 0;
+@@ -679,7 +681,7 @@ static int _config_def_check_tree(const char *vp, char *pvp, char *rp, char *prp
+ 	return r;
+ }
+ 
+-int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_messages)
++int config_def_check(struct cmd_context *cmd, struct cft_check_handle *handle)
+ {
+ 	cfg_def_item_t *def;
+ 	struct dm_config_node *cn;
+@@ -695,28 +697,21 @@ int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_
+ 	 */
+ 
+ 	/*
+-	 * If the check has already been done and 'skip' is set,
++	 * If the check has already been done and 'skip_if_checked' is set,
+ 	 * skip the actual check and use last result if available.
+ 	 * If not available, we must do the check. The global status
+ 	 * is stored in root node.
+ 	 */
+-	def = cfg_def_get_item_p(root_CFG_SECTION);
+-	if (skip && (def->flags & CFG_USED))
+-		return def->flags & CFG_VALID;
+-
+-	/* Clear 'used' and 'valid' status flags. */
+-	for (id = 0; id < CFG_COUNT; id++) {
+-		def = cfg_def_get_item_p(id);
+-		def->flags &= ~(CFG_USED | CFG_VALID);
+-	}
++	if (handle->skip_if_checked && (handle->status[root_CFG_SECTION] & CFG_USED))
++		return handle->status[root_CFG_SECTION] & CFG_VALID;
+ 
+-	if (!force && !find_config_tree_bool(cmd, config_checks_CFG, NULL)) {
+-		if (cmd->cft_def_hash) {
+-			dm_hash_destroy(cmd->cft_def_hash);
+-			cmd->cft_def_hash = NULL;
+-		}
++	/* Nothing to do if checks are disabled and also not forced. */
++	if (!handle->force_check && !find_config_tree_bool(cmd, config_checks_CFG, NULL))
+ 		return 1;
+-	}
++
++	/* Clear 'used' and 'valid' status flags. */
++	for (id = 0; id < CFG_COUNT; id++)
++		handle->status[id] &= ~(CFG_USED | CFG_VALID);
+ 
+ 	/*
+ 	 * Create a hash of all possible configuration
+@@ -743,44 +738,46 @@ int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_
+ 		}
+ 	}
+ 
+-	cfg_def_get_item_p(root_CFG_SECTION)->flags |= CFG_USED;
++	/*
++	 * Mark this handle as used so next time we know that the check
++	 * has already been done and so we can just reuse the previous
++	 * status instead of running this whole check again.
++	 */
++	handle->status[root_CFG_SECTION] |= CFG_USED;
+ 
+ 	/*
+ 	 * Allow only sections as top-level elements.
+ 	 * Iterate top-level sections and dive deeper.
+ 	 * If any of subsequent checks fails, the whole check fails.
+ 	 */
+-	for (cn = cmd->cft->root; cn; cn = cn->sib) {
++	for (cn = handle->cft->root; cn; cn = cn->sib) {
+ 		if (!cn->v) {
+ 			/* top level node: vp=vp, rp=rp */
+-			if (!_config_def_check_node(vp, vp, rp, rp,
++			if (!_config_def_check_node(handle, vp, vp, rp, rp,
+ 						    CFG_PATH_MAX_LEN,
+-						    cn, cmd->cft_def_hash,
+-						    suppress_messages)) {
++						    cn, cmd->cft_def_hash)) {
+ 				r = 0; continue;
+ 			}
+ 			rplen = strlen(rp);
+-			if (!_config_def_check_tree(vp, vp + strlen(vp),
++			if (!_config_def_check_tree(handle,
++						    vp, vp + strlen(vp),
+ 						    rp, rp + rplen,
+ 						    CFG_PATH_MAX_LEN - rplen,
+-						    cn, cmd->cft_def_hash,
+-						    suppress_messages))
++						    cn, cmd->cft_def_hash))
+ 				r = 0;
+ 		} else {
+-			log_error_suppress(suppress_messages,
++			log_error_suppress(handle->suppress_messages,
+ 				"Configuration setting \"%s\" invalid. "
+ 				"It's not part of any section.", cn->key);
+ 			r = 0;
+ 		}
+ 	}
+ out:
+-	if (r) {
+-		cfg_def_get_item_p(root_CFG_SECTION)->flags |= CFG_VALID;
+-		def->flags |= CFG_VALID;
+-	} else {
+-		cfg_def_get_item_p(root_CFG_SECTION)->flags &= ~CFG_VALID;
+-		def->flags &= ~CFG_VALID;
+-	}
++	if (r)
++		handle->status[root_CFG_SECTION] |= CFG_VALID;
++	else
++		handle->status[root_CFG_SECTION] &= ~CFG_VALID;
++
+ 	return r;
+ }
+ 
+diff --git a/lib/config/config.h b/lib/config/config.h
+index fe4c31d..51c777a 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -80,10 +80,6 @@ typedef union {
+ #define CFG_ADVANCED		0x04
+ /* whether the configuraton item is not officially supported */
+ #define CFG_UNSUPPORTED		0x08
+-/* helper flag to mark the item as used in a config tree instance */
+-#define CFG_USED		0x10
+-/* helper flag to mark the item as valid in a config tree instance */
+-#define CFG_VALID		0x20
+ 
+ /* configuration definition item structure */
+ typedef struct cfg_def_item {
+@@ -114,6 +110,12 @@ struct config_def_tree_spec {
+ 	int ignoreunsupported;		/* do not include unsupported configs */
+ };
+ 
++
++/* flag to mark the item as used in a config tree instance during validation */
++#define CFG_USED		0x01
++/* flag to mark the item as valid in a config tree instance during validation */
++#define CFG_VALID		0x02
++
+ /*
+  * Register ID for each possible item in the configuration tree.
+  */
+@@ -131,8 +133,17 @@ struct profile *add_profile(struct cmd_context *cmd, const char *profile_name);
+ int load_profile(struct cmd_context *cmd, struct profile *profile);
+ int load_pending_profiles(struct cmd_context *cmd);
+ 
++/* configuration check handle for each instance of the validation check */
++struct cft_check_handle {
++	struct dm_config_tree *cft;	/* the tree for which the check is done */
++	unsigned force_check:1;		/* force check even if disabled by config/checks setting */
++	unsigned skip_if_checked:1;	/* skip the check if already done before - return last state */
++	unsigned suppress_messages:1;	/* suppress messages during the check if config item is found invalid */
++	uint8_t status[CFG_COUNT];	/* flags for each configuration item - the result of the check */
++};
++
+ int config_def_get_path(char *buf, size_t buf_size, int id);
+-int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_messages);
++int config_def_check(struct cmd_context *cmd, struct cft_check_handle *handle);
+ 
+ int override_config_tree_from_string(struct cmd_context *cmd, const char *config_settings);
+ int override_config_tree_from_profile(struct cmd_context *cmd, struct profile *profile);
+diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
+index 9ba451e..2d6cbe3 100644
+--- a/tools/dumpconfig.c
++++ b/tools/dumpconfig.c
+@@ -31,6 +31,22 @@ static int _get_vsn(struct cmd_context *cmd, unsigned int *major,
+ 	return 1;
+ }
+ 
++static struct cft_check_handle *_get_cft_check_handle(struct cmd_context *cmd)
++{
++	struct cft_check_handle *handle = cmd->cft_check_handle;
++
++	if (!handle) {
++		if (!(handle = dm_pool_zalloc(cmd->libmem, sizeof(*cmd->cft_check_handle)))) {
++			log_error("Configuration check handle allocation failed.");
++			return NULL;
++		}
++		handle->cft = cmd->cft;
++		cmd->cft_check_handle = handle;
++	}
++
++	return handle;
++}
++
+ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	const char *file = arg_str_value(cmd, file_ARG, NULL);
+@@ -38,6 +54,7 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
+ 	unsigned int major, minor, patchlevel;
+ 	struct config_def_tree_spec tree_spec = {0};
+ 	struct dm_config_tree *cft = cmd->cft;
++	struct cft_check_handle *cft_check_handle;
+ 	int r = ECMD_PROCESSED;
+ 
+ 	if (arg_count(cmd, configtype_ARG) && arg_count(cmd, validate_ARG)) {
+@@ -57,7 +74,14 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
+ 		tree_spec.ignoreunsupported = 1;
+ 
+ 	if (arg_count(cmd, validate_ARG)) {
+-		if (config_def_check(cmd, 1, 1, 0)) {
++		if (!(cft_check_handle = _get_cft_check_handle(cmd)))
++			return ECMD_FAILED;
++
++		cft_check_handle->force_check = 1;
++		cft_check_handle->skip_if_checked = 1;
++		cft_check_handle->suppress_messages = 0;
++
++		if (config_def_check(cmd, cft_check_handle)) {
+ 			log_print("LVM configuration valid.");
+ 			return ECMD_PROCESSED;
+ 		} else {
+@@ -72,7 +96,15 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
+ 			return EINVALID_CMD_LINE;
+ 		}
+ 		tree_spec.type = CFG_DEF_TREE_CURRENT;
+-		config_def_check(cmd, 1, 1, 1);
++
++		if (!(cft_check_handle = _get_cft_check_handle(cmd)))
++			return ECMD_FAILED;
++
++		cft_check_handle->force_check = 1;
++		cft_check_handle->skip_if_checked = 1;
++		cft_check_handle->suppress_messages = 1;
++
++		config_def_check(cmd, cft_check_handle);
+ 	}
+ 
+ 	else if (!strcmp(type, "default"))
 
 
