@@ -1,459 +1,395 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  2 Jul 2013 13:32:39 +0000 (UTC)
-Subject: master - config: add profile arg to find_config_tree_str
-Message-ID: <20130702133239.8D1D760DA8@fedorahosted.org>
+Date: Tue,  2 Jul 2013 13:32:43 +0000 (UTC)
+Subject: master - config: add profile arg to find_config_tree_int
+Message-ID: <20130702133243.B440660DA8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=06dd66af546dfc18a80b6ee574ce91e5d512d2f2
-Commit:        06dd66af546dfc18a80b6ee574ce91e5d512d2f2
-Parent:        eeb7b0f7faeced4dbaa664b4857275e7c7a9e2a8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=50bf2c0db14400d80b08afabe917deee51f32ac8
+Commit:        50bf2c0db14400d80b08afabe917deee51f32ac8
+Parent:        8ac4fcf8ffa4af3ee8d524add632f0f3139b929d
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 25 12:29:54 2013 +0200
+AuthorDate:    Tue Jun 25 12:30:34 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Tue Jul 2 15:19:09 2013 +0200
 
-config: add profile arg to find_config_tree_str
+config: add profile arg to find_config_tree_int
 
 ---
- daemons/clvmd/lvm-functions.c  |    2 +-
- lib/activate/activate.c        |    2 +-
- lib/commands/toolcontext.c     |   28 ++++++++++++++--------------
- lib/config/config.c            |   14 ++++++++++++--
- lib/config/config.h            |    2 +-
- lib/locking/external_locking.c |    2 +-
- lib/locking/file_locking.c     |    2 +-
- lib/mirror/mirrored.c          |    2 +-
- lib/misc/sharedlib.c           |    2 +-
- lib/raid/raid.c                |    2 +-
- lib/snapshot/snapshot.c        |    2 +-
- lib/thin/thin.c                |    2 +-
- tools/lvconvert.c              |   11 ++++++-----
- tools/lvcreate.c               |    4 ++--
- tools/reporter.c               |   32 ++++++++++++++++----------------
- tools/toollib.c                |    2 +-
- 16 files changed, 61 insertions(+), 50 deletions(-)
+ daemons/clvmd/lvm-functions.c |    2 +-
+ lib/commands/toolcontext.c    |   12 ++++++------
+ lib/config/config.c           |   14 ++++++++++++--
+ lib/config/config.h           |    2 +-
+ lib/format_text/format-text.c |    2 +-
+ lib/locking/locking.c         |    2 +-
+ lib/metadata/lv_manip.c       |    4 ++--
+ lib/metadata/metadata.c       |    2 +-
+ lib/metadata/thin_manip.c     |    2 +-
+ lib/mm/memlock.c              |    6 +++---
+ tools/lvcreate.c              |    2 +-
+ tools/lvm.c                   |    2 +-
+ tools/lvresize.c              |   10 +++++-----
+ tools/polldaemon.c            |    4 ++--
+ tools/pvscan.c                |    2 +-
+ tools/toollib.c               |   10 +++++-----
+ tools/vgconvert.c             |    4 ++--
+ 17 files changed, 46 insertions(+), 36 deletions(-)
 
 diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index c7f3488..5be9ee1 100644
+index 5be9ee1..9d62675 100644
 --- a/daemons/clvmd/lvm-functions.c
 +++ b/daemons/clvmd/lvm-functions.c
-@@ -811,7 +811,7 @@ static void check_config(void)
- 	if (locking_type == 2) { /* External library, check name */
- 		const char *libname;
+@@ -803,7 +803,7 @@ static void check_config(void)
+ {
+ 	int locking_type;
  
--		libname = find_config_tree_str(cmd, global_locking_library_CFG);
-+		libname = find_config_tree_str(cmd, global_locking_library_CFG, NULL);
- 		if (libname && strstr(libname, "liblvm2clusterlock.so"))
- 			return;
+-	locking_type = find_config_tree_int(cmd, global_locking_type_CFG);
++	locking_type = find_config_tree_int(cmd, global_locking_type_CFG, NULL);
  
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 5a4b111..2f1718b 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1286,7 +1286,7 @@ static struct dm_event_handler *_create_dm_event_handler(struct cmd_context *cmd
- 	if (!(dmevh = dm_event_handler_create()))
- 		return_NULL;
- 
--	if (dm_event_handler_set_dmeventd_path(dmevh, find_config_tree_str(cmd, dmeventd_executable_CFG)))
-+	if (dm_event_handler_set_dmeventd_path(dmevh, find_config_tree_str(cmd, dmeventd_executable_CFG, NULL)))
- 		goto_bad;
- 
- 	if (dm_event_handler_set_dso(dmevh, dso))
+ 	if (locking_type == 3) /* compiled-in cluster support */
+ 		return;
 diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 53cda72..c593f5e 100644
+index f5b8d48..8fce261 100644
 --- a/lib/commands/toolcontext.c
 +++ b/lib/commands/toolcontext.c
-@@ -217,7 +217,7 @@ static void _init_logging(struct cmd_context *cmd)
- 	if (find_config_tree_bool(cmd, log_overwrite_CFG))
- 		append = 0;
+@@ -182,7 +182,7 @@ static void _init_logging(struct cmd_context *cmd)
+ 		init_syslog(cmd->default_settings.syslog);
  
--	log_file = find_config_tree_str(cmd, log_file_CFG);
-+	log_file = find_config_tree_str(cmd, log_file_CFG, NULL);
+ 	/* Debug level for log file output */
+-	cmd->default_settings.debug = find_config_tree_int(cmd, log_level_CFG);
++	cmd->default_settings.debug = find_config_tree_int(cmd, log_level_CFG, NULL);
+ 	init_debug(cmd->default_settings.debug);
  
- 	if (log_file) {
- 		release_log_memory();
-@@ -225,7 +225,7 @@ static void _init_logging(struct cmd_context *cmd)
- 		init_log_file(log_file, append);
- 	}
- 
--	log_file = find_config_tree_str(cmd, log_activate_file_CFG);
-+	log_file = find_config_tree_str(cmd, log_activate_file_CFG, NULL);
- 	if (log_file)
- 		init_log_direct(log_file, append);
- 
-@@ -290,7 +290,7 @@ static int _process_config(struct cmd_context *cmd)
- 
- 	/* dev dir */
- 	if (dm_snprintf(cmd->dev_dir, sizeof(cmd->dev_dir), "%s/",
--			 find_config_tree_str(cmd, devices_dir_CFG)) < 0) {
-+			 find_config_tree_str(cmd, devices_dir_CFG, NULL)) < 0) {
- 		log_error("Device directory given in config file too long");
- 		return 0;
- 	}
-@@ -303,7 +303,7 @@ static int _process_config(struct cmd_context *cmd)
- 
- 	/* proc dir */
- 	if (dm_snprintf(cmd->proc_dir, sizeof(cmd->proc_dir), "%s",
--			 find_config_tree_str(cmd, global_proc_CFG)) < 0) {
-+			 find_config_tree_str(cmd, global_proc_CFG, NULL)) < 0) {
- 		log_error("Device directory given in config file too long");
- 		return 0;
- 	}
-@@ -324,13 +324,13 @@ static int _process_config(struct cmd_context *cmd)
- 	cmd->default_settings.suffix = find_config_tree_bool(cmd, global_suffix_CFG);
- 
- 	if (!(cmd->default_settings.unit_factor =
--	      units_to_bytes(find_config_tree_str(cmd, global_units_CFG),
-+	      units_to_bytes(find_config_tree_str(cmd, global_units_CFG, NULL),
- 			     &cmd->default_settings.unit_type))) {
- 		log_error("Invalid units specification");
- 		return 0;
- 	}
- 
--	read_ahead = find_config_tree_str(cmd, activation_readahead_CFG);
-+	read_ahead = find_config_tree_str(cmd, activation_readahead_CFG, NULL);
- 	if (!strcasecmp(read_ahead, "auto"))
- 		cmd->default_settings.read_ahead = DM_READ_AHEAD_AUTO;
- 	else if (!strcasecmp(read_ahead, "none"))
-@@ -369,7 +369,7 @@ static int _process_config(struct cmd_context *cmd)
- 
- 	cmd->use_linear_target = find_config_tree_bool(cmd, activation_use_linear_target_CFG);
- 
--	cmd->stripe_filler = find_config_tree_str(cmd, activation_missing_stripe_filler_CFG);
-+	cmd->stripe_filler = find_config_tree_str(cmd, activation_missing_stripe_filler_CFG, NULL);
- 
- 	/* FIXME Missing error code checks from the stats, not log_warn?, notify if setting overridden, delay message/check till it is actually used (eg consider if lvm shell - file could appear later after this check)? */
- 	if (!strcmp(cmd->stripe_filler, "/dev/ioerror") &&
-@@ -606,7 +606,7 @@ static int _init_profiles(struct cmd_context *cmd)
- 		return 0;
- 	}
- 
--	if (!(dir = find_config_tree_str(cmd, config_profile_dir_CFG))) {
-+	if (!(dir = find_config_tree_str(cmd, config_profile_dir_CFG, NULL))) {
- 		if (dm_snprintf(default_dir, sizeof(default_dir), "%s/%s",
- 				cmd->system_dir, DEFAULT_PROFILE_SUBDIR) == -1) {
- 			log_error("Couldn't create default profile path '%s/%s'.",
-@@ -890,8 +890,8 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
  	/*
- 	 * If 'cache_dir' or 'cache_file_prefix' is set, ignore 'cache'.
- 	 */
--	cache_dir = find_config_tree_str(cmd, devices_cache_dir_CFG);
--	cache_file_prefix = find_config_tree_str(cmd, devices_cache_file_prefix_CFG);
-+	cache_dir = find_config_tree_str(cmd, devices_cache_dir_CFG, NULL);
-+	cache_file_prefix = find_config_tree_str(cmd, devices_cache_file_prefix_CFG, NULL);
- 
- 	if (cache_dir || cache_file_prefix) {
- 		if (dm_snprintf(cache_file, sizeof(cache_file),
-@@ -903,7 +903,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
- 			log_error("Persistent cache filename too long.");
- 			goto bad;
- 		}
--	} else if (!(dev_cache = find_config_tree_str(cmd, devices_cache_CFG)) &&
-+	} else if (!(dev_cache = find_config_tree_str(cmd, devices_cache_CFG, NULL)) &&
- 		   (dm_snprintf(cache_file, sizeof(cache_file),
- 				"%s/%s/%s.cache",
- 				cmd->system_dir, DEFAULT_CACHE_SUBDIR,
-@@ -1044,7 +1044,7 @@ static int _init_formats(struct cmd_context *cmd)
- 
- 	cmd->fmt_backup = fmt;
- 
--	format = find_config_tree_str(cmd, global_format_CFG);
-+	format = find_config_tree_str(cmd, global_format_CFG, NULL);
- 
- 	dm_list_iterate_items(fmt, &cmd->formats) {
- 		if (!strcasecmp(fmt->name, format) ||
-@@ -1267,7 +1267,7 @@ static int _init_backup(struct cmd_context *cmd)
- 		return 0;
+@@ -281,7 +281,7 @@ static int _process_config(struct cmd_context *cmd)
  	}
  
--	if (!(dir = find_config_tree_str(cmd, backup_archive_dir_CFG)))
-+	if (!(dir = find_config_tree_str(cmd, backup_archive_dir_CFG, NULL)))
- 		dir = default_dir;
+ 	/* umask */
+-	cmd->default_settings.umask = find_config_tree_int(cmd, global_umask_CFG);
++	cmd->default_settings.umask = find_config_tree_int(cmd, global_umask_CFG, NULL);
  
- 	if (!archive_init(cmd, dir, days, min,
-@@ -1287,7 +1287,7 @@ static int _init_backup(struct cmd_context *cmd)
- 		return 0;
- 	}
+ 	if ((old_umask = umask((mode_t) cmd->default_settings.umask)) !=
+ 	    (mode_t) cmd->default_settings.umask)
+@@ -426,7 +426,7 @@ static int _process_config(struct cmd_context *cmd)
+ 	cn = find_config_tree_node(cmd, devices_global_filter_CFG, NULL);
+ 	lvmetad_set_token(cn ? cn->v : NULL);
  
--	if (!(dir = find_config_tree_str(cmd, backup_backup_dir_CFG)))
-+	if (!(dir = find_config_tree_str(cmd, backup_backup_dir_CFG, NULL)))
- 		dir = default_dir;
+-	if (find_config_tree_int(cmd, global_locking_type_CFG) == 3 &&
++	if (find_config_tree_int(cmd, global_locking_type_CFG, NULL) == 3 &&
+ 	    find_config_tree_bool(cmd, global_use_lvmetad_CFG)) {
+ 		log_warn("WARNING: configuration setting use_lvmetad overridden to 0 due to locking_type 3. "
+ 			 "Clustered environment not supported by lvmetad yet.");
+@@ -716,7 +716,7 @@ static int _init_dev_cache(struct cmd_context *cmd)
+ 	int device_list_from_udev;
  
- 	if (!backup_init(cmd, dir, cmd->default_settings.backup)) {
+ 	init_dev_disable_after_error_count(
+-		find_config_tree_int(cmd, devices_disable_after_error_count_CFG));
++		find_config_tree_int(cmd, devices_disable_after_error_count_CFG, NULL));
+ 
+ 	if (!dev_cache_init(cmd))
+ 		return_0;
+@@ -1255,9 +1255,9 @@ static int _init_backup(struct cmd_context *cmd)
+ 	cmd->default_settings.archive =
+ 	    find_config_tree_bool(cmd, backup_archive_CFG);
+ 
+-	days = (uint32_t) find_config_tree_int(cmd, backup_retain_days_CFG);
++	days = (uint32_t) find_config_tree_int(cmd, backup_retain_days_CFG, NULL);
+ 
+-	min = (uint32_t) find_config_tree_int(cmd, backup_retain_min_CFG);
++	min = (uint32_t) find_config_tree_int(cmd, backup_retain_min_CFG, NULL);
+ 
+ 	if (dm_snprintf
+ 	    (default_dir, sizeof(default_dir), "%s/%s", cmd->system_dir,
 diff --git a/lib/config/config.c b/lib/config/config.c
-index 8bb9be9..5267424 100644
+index 1576153..ae00461 100644
 --- a/lib/config/config.c
 +++ b/lib/config/config.c
-@@ -800,15 +800,25 @@ const struct dm_config_node *find_config_tree_node(struct cmd_context *cmd, int
- 	return cn;
+@@ -844,15 +844,25 @@ const char *find_config_tree_str_allow_empty(struct cmd_context *cmd, int id, st
+ 	return str;
  }
  
--const char *find_config_tree_str(struct cmd_context *cmd, int id)
-+const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile *profile)
+-int find_config_tree_int(struct cmd_context *cmd, int id)
++int find_config_tree_int(struct cmd_context *cmd, int id, struct profile *profile)
  {
  	cfg_def_item_t *item = cfg_def_get_item_p(id);
  	const char *path = cfg_def_get_path(item);
 +	int profile_applied = 0;
-+	const char *str;
++	int i;
  
- 	if (item->type != CFG_TYPE_STRING)
- 		log_error(INTERNAL_ERROR "%s cfg tree element not declared as string.", path);
+ 	if (item->type != CFG_TYPE_INT)
+ 		log_error(INTERNAL_ERROR "%s cfg tree element not declared as integer.", path);
  
--	return dm_config_tree_find_str(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_STRING));
+-	return dm_config_tree_find_int(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_INT));
 +	if (profile && !cmd->profile_params->global_profile)
 +		profile_applied = override_config_tree_from_profile(cmd, profile);
 +
-+	str = dm_config_tree_find_str(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_STRING));
++	i = dm_config_tree_find_int(cmd->cft, path, cfg_def_get_default_value(item, CFG_TYPE_INT));
 +
 +	if (profile_applied)
 +		remove_config_tree_by_source(cmd, CONFIG_PROFILE);
 +
-+	return str;
++	return i;
  }
  
- const char *find_config_tree_str_allow_empty(struct cmd_context *cmd, int id)
+ int64_t find_config_tree_int64(struct cmd_context *cmd, int id)
 diff --git a/lib/config/config.h b/lib/config/config.h
-index 6f3cabd..6c6089e 100644
+index 56ed4ea..a93cef9 100644
 --- a/lib/config/config.h
 +++ b/lib/config/config.h
-@@ -165,7 +165,7 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
-  * These versions check an override tree, if present, first.
-  */
+@@ -167,7 +167,7 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
  const struct dm_config_node *find_config_tree_node(struct cmd_context *cmd, int id, struct profile *profile);
--const char *find_config_tree_str(struct cmd_context *cmd, int id);
-+const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile *profile);
- const char *find_config_tree_str_allow_empty(struct cmd_context *cmd, int id);
- int find_config_tree_int(struct cmd_context *cmd, int id);
+ const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile *profile);
+ const char *find_config_tree_str_allow_empty(struct cmd_context *cmd, int id, struct profile *profile);
+-int find_config_tree_int(struct cmd_context *cmd, int id);
++int find_config_tree_int(struct cmd_context *cmd, int id, struct profile *profile);
  int64_t find_config_tree_int64(struct cmd_context *cmd, int id);
-diff --git a/lib/locking/external_locking.c b/lib/locking/external_locking.c
-index d5c39d7..8b63a29 100644
---- a/lib/locking/external_locking.c
-+++ b/lib/locking/external_locking.c
-@@ -80,7 +80,7 @@ int init_external_locking(struct locking_type *locking, struct cmd_context *cmd,
- 	locking->reset_locking = _reset_external_locking;
- 	locking->flags = 0;
+ float find_config_tree_float(struct cmd_context *cmd, int id);
+ int find_config_tree_bool(struct cmd_context *cmd, int id);
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 96c4f8b..a5b9b6c 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1478,7 +1478,7 @@ static int _text_pv_initialise(const struct format_type *fmt,
+ 	unsigned long adjustment, final_alignment = 0;
  
--	if (!(libname = find_config_tree_str(cmd, global_locking_library_CFG)))
-+	if (!(libname = find_config_tree_str(cmd, global_locking_library_CFG, NULL)))
- 		libname = DEFAULT_LOCKING_LIB;
+ 	if (!data_alignment)
+-		data_alignment = find_config_tree_int(pv->fmt->cmd, devices_data_alignment_CFG) * 2;
++		data_alignment = find_config_tree_int(pv->fmt->cmd, devices_data_alignment_CFG, NULL) * 2;
  
- 	if (!(_locking_lib = load_shared_library(cmd, libname, "locking", 1)))
-diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
-index 934bfe2..9cfd8eb 100644
---- a/lib/locking/file_locking.c
-+++ b/lib/locking/file_locking.c
-@@ -346,7 +346,7 @@ int init_file_locking(struct locking_type *locking, struct cmd_context *cmd,
- 	locking->flags = 0;
+ 	if (set_pe_align(pv, data_alignment) != data_alignment &&
+ 	    data_alignment) {
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index 044570f..7d9db60 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -225,7 +225,7 @@ int init_locking(int type, struct cmd_context *cmd, int suppress_messages)
+ 		suppress_messages = 1;
  
- 	/* Get lockfile directory from config file */
--	locking_dir = find_config_tree_str(cmd, global_locking_dir_CFG);
-+	locking_dir = find_config_tree_str(cmd, global_locking_dir_CFG, NULL);
- 	if (strlen(locking_dir) >= sizeof(_lock_dir)) {
- 		log_error("Path for locking_dir %s is invalid.", locking_dir);
- 		return 0;
-diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
-index 6ce929d..c3eb27b 100644
---- a/lib/mirror/mirrored.c
-+++ b/lib/mirror/mirrored.c
-@@ -540,7 +540,7 @@ static int _mirrored_target_present(struct cmd_context *cmd,
- #ifdef DMEVENTD
- static const char *_get_mirror_dso_path(struct cmd_context *cmd)
- {
--	return get_monitor_dso_path(cmd, find_config_tree_str(cmd, dmeventd_mirror_library_CFG));
-+	return get_monitor_dso_path(cmd, find_config_tree_str(cmd, dmeventd_mirror_library_CFG, NULL));
- }
+ 	if (type < 0)
+-		type = find_config_tree_int(cmd, global_locking_type_CFG);
++		type = find_config_tree_int(cmd, global_locking_type_CFG, NULL);
  
- /* FIXME Cache this */
-diff --git a/lib/misc/sharedlib.c b/lib/misc/sharedlib.c
-index b899781..fca079b 100644
---- a/lib/misc/sharedlib.c
-+++ b/lib/misc/sharedlib.c
-@@ -30,7 +30,7 @@ void get_shared_library_path(struct cmd_context *cmd, const char *libname,
- 	/* If libname doesn't begin with '/' then use lib_dir/libname,
- 	 * if present */
- 	if (libname[0] == '/' ||
--	    !(lib_dir = find_config_tree_str(cmd, global_library_dir_CFG)) ||
-+	    !(lib_dir = find_config_tree_str(cmd, global_library_dir_CFG, NULL)) ||
- 	    (dm_snprintf(path, path_len, "%s/%s", lib_dir,
- 			 libname) == -1) || stat(path, &info) == -1) {
- 		strncpy(path, libname, path_len - 1);
-diff --git a/lib/raid/raid.c b/lib/raid/raid.c
-index bc00691..6d627fe 100644
---- a/lib/raid/raid.c
-+++ b/lib/raid/raid.c
-@@ -343,7 +343,7 @@ static void _raid_destroy(struct segment_type *segtype)
- #ifdef DMEVENTD
- static const char *_get_raid_dso_path(struct cmd_context *cmd)
- {
--	const char *config_str = find_config_tree_str(cmd, dmeventd_raid_library_CFG);
-+	const char *config_str = find_config_tree_str(cmd, dmeventd_raid_library_CFG, NULL);
- 	return get_monitor_dso_path(cmd, config_str);
- }
+ 	_blocking_supported = find_config_tree_bool(cmd, global_wait_for_locks_CFG);
  
-diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
-index 453d96a..506d618 100644
---- a/lib/snapshot/snapshot.c
-+++ b/lib/snapshot/snapshot.c
-@@ -171,7 +171,7 @@ static int _snap_target_present(struct cmd_context *cmd,
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index ef7c75a..e74b6f1 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -182,8 +182,8 @@ int get_default_region_size(struct cmd_context *cmd)
+ 	 * 'mirror_region_size' is the old setting.  It is overridden
+ 	 * by the new setting, 'raid_region_size'.
+ 	 */
+-	mrs = 2 * find_config_tree_int(cmd, activation_mirror_region_size_CFG);
+-	rrs = 2 * find_config_tree_int(cmd, activation_raid_region_size_CFG);
++	mrs = 2 * find_config_tree_int(cmd, activation_mirror_region_size_CFG, NULL);
++	rrs = 2 * find_config_tree_int(cmd, activation_raid_region_size_CFG, NULL);
  
- static const char *_get_snapshot_dso_path(struct cmd_context *cmd)
- {
--	return get_monitor_dso_path(cmd, find_config_tree_str(cmd, dmeventd_snapshot_library_CFG));
-+	return get_monitor_dso_path(cmd, find_config_tree_str(cmd, dmeventd_snapshot_library_CFG, NULL));
- }
- 
- /* FIXME Cache this */
-diff --git a/lib/thin/thin.c b/lib/thin/thin.c
-index f4f785f..1867ef9 100644
---- a/lib/thin/thin.c
-+++ b/lib/thin/thin.c
-@@ -379,7 +379,7 @@ static int _thin_pool_target_percent(void **target_state __attribute__((unused))
- #  ifdef DMEVENTD
- static const char *_get_thin_dso_path(struct cmd_context *cmd)
- {
--	return get_monitor_dso_path(cmd, find_config_tree_str(cmd, dmeventd_thin_library_CFG));
-+	return get_monitor_dso_path(cmd, find_config_tree_str(cmd, dmeventd_thin_library_CFG, NULL));
- }
- 
- /* FIXME Cache this */
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 650b1be..ffdc3f4 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -488,7 +488,8 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 		if (!get_stripe_params(cmd, &lp->stripes, &lp->stripe_size))
- 			return_0;
- 
--		lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, find_config_tree_str(cmd, global_mirror_segtype_default_CFG)));
-+		lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG,
-+			find_config_tree_str(cmd, global_mirror_segtype_default_CFG, NULL)));
- 		if (!lp->segtype)
- 			return_0;
+ 	if (!mrs && !rrs)
+ 		return DEFAULT_RAID_REGION_SIZE * 2;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 8a98aa6..0dfb23b 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -65,7 +65,7 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
+ 		goto out;
  	}
-@@ -859,10 +860,10 @@ static void _lvconvert_mirrors_repair_ask(struct cmd_context *cmd,
- 	*replace_log = *replace_mirrors = 1;
  
- 	if (arg_count(cmd, use_policies_ARG)) {
--		leg_policy = find_config_tree_str(cmd, activation_mirror_image_fault_policy_CFG);
-+		leg_policy = find_config_tree_str(cmd, activation_mirror_image_fault_policy_CFG, NULL);
- 		if (!leg_policy)
--			leg_policy = find_config_tree_str(cmd, activation_mirror_device_fault_policy_CFG);
--		log_policy = find_config_tree_str(cmd, activation_mirror_log_fault_policy_CFG);
-+			leg_policy = find_config_tree_str(cmd, activation_mirror_device_fault_policy_CFG, NULL);
-+		log_policy = find_config_tree_str(cmd, activation_mirror_log_fault_policy_CFG, NULL);
- 		*replace_mirrors = strcmp(leg_policy, "remove");
- 		*replace_log = strcmp(log_policy, "remove");
- 		return;
-@@ -1585,7 +1586,7 @@ static void _lvconvert_raid_repair_ask(struct cmd_context *cmd, int *replace_dev
- 	*replace_dev = 1;
+-	default_pe_align = find_config_tree_int(pv->fmt->cmd, devices_default_data_alignment_CFG);
++	default_pe_align = find_config_tree_int(pv->fmt->cmd, devices_default_data_alignment_CFG, NULL);
  
- 	if (arg_count(cmd, use_policies_ARG)) {
--		dev_policy = find_config_tree_str(cmd, activation_raid_fault_policy_CFG);
-+		dev_policy = find_config_tree_str(cmd, activation_raid_fault_policy_CFG, NULL);
+ 	if (default_pe_align)
+ 		/* align on 1 MiB multiple */
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 7ddadcf..9fccc6f 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -335,7 +335,7 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
+ {
+ 	percent_t percent;
+ 	int threshold = PERCENT_1 *
+-		find_config_tree_int(pool_seg->lv->vg->cmd, activation_thin_pool_autoextend_threshold_CFG);
++		find_config_tree_int(pool_seg->lv->vg->cmd, activation_thin_pool_autoextend_threshold_CFG, NULL);
  
- 		if (!strcmp(dev_policy, "allocate") ||
- 		    !strcmp(dev_policy, "replace"))
+ 	/* Data */
+ 	if (!lv_thin_pool_percent(pool_seg->lv, 0, &percent))
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index d2cb61c..594687e 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -463,9 +463,9 @@ void memlock_init(struct cmd_context *cmd)
+ {
+ 	/* When threaded, caller already limited stack size so just use the default. */
+ 	_size_stack = 1024ULL * (cmd->threaded ? DEFAULT_RESERVED_STACK :
+-				 find_config_tree_int(cmd, activation_reserved_stack_CFG));
+-	_size_malloc_tmp = find_config_tree_int(cmd, activation_reserved_memory_CFG) * 1024ULL;
+-	_default_priority = find_config_tree_int(cmd, activation_process_priority_CFG);
++				 find_config_tree_int(cmd, activation_reserved_stack_CFG, NULL));
++	_size_malloc_tmp = find_config_tree_int(cmd, activation_reserved_memory_CFG, NULL) * 1024ULL;
++	_default_priority = find_config_tree_int(cmd, activation_process_priority_CFG, NULL);
+ }
+ 
+ void memlock_reset(void)
 diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 057ccd5..e49b9cb 100644
+index e49b9cb..dcd05d0 100644
 --- a/tools/lvcreate.c
 +++ b/tools/lvcreate.c
-@@ -724,9 +724,9 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	if (arg_count(cmd, mirrors_ARG))
- 		if (arg_uint_value(cmd, arg_count(cmd, stripes_long_ARG) ?
- 				   stripes_long_ARG : stripes_ARG, 1) > 1) {
--			segtype_str = find_config_tree_str(cmd, global_raid10_segtype_default_CFG);;
-+			segtype_str = find_config_tree_str(cmd, global_raid10_segtype_default_CFG, NULL);;
- 		} else {
--			segtype_str = find_config_tree_str(cmd, global_mirror_segtype_default_CFG);
-+			segtype_str = find_config_tree_str(cmd, global_mirror_segtype_default_CFG, NULL);
+@@ -542,7 +542,7 @@ static int _read_raid_params(struct lvcreate_params *lp,
  		}
- 	else if (arg_count(cmd, thin_ARG) || arg_count(cmd, thinpool_ARG))
- 		segtype_str = "thin";
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 6e78355..53a7883 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -225,7 +225,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	aligned = find_config_tree_bool(cmd, report_aligned_CFG);
- 	buffered = find_config_tree_bool(cmd, report_buffered_CFG);
- 	headings = find_config_tree_bool(cmd, report_headings_CFG);
--	separator = find_config_tree_str(cmd, report_separator_CFG);
-+	separator = find_config_tree_str(cmd, report_separator_CFG, NULL);
- 	field_prefixes = find_config_tree_bool(cmd, report_prefixes_CFG);
- 	quoted = find_config_tree_bool(cmd, report_quoted_CFG);
- 	columns_as_rows = find_config_tree_bool(cmd, report_colums_as_rows_CFG);
-@@ -236,40 +236,40 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 		/* No stripe argument was given - default to 2 */
+ 		lp->stripes = 2;
+-		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG) * 2;
++		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
+ 	}
  
- 	switch (report_type) {
- 	case LVS:
--		keys = find_config_tree_str(cmd, report_lvs_sort_CFG);
-+		keys = find_config_tree_str(cmd, report_lvs_sort_CFG, NULL);
- 		if (!arg_count(cmd, verbose_ARG))
--			options = find_config_tree_str(cmd, report_lvs_cols_CFG);
-+			options = find_config_tree_str(cmd, report_lvs_cols_CFG, NULL);
- 		else
--			options = find_config_tree_str(cmd, report_lvs_cols_verbose_CFG);
-+			options = find_config_tree_str(cmd, report_lvs_cols_verbose_CFG, NULL);
- 		break;
- 	case VGS:
--		keys = find_config_tree_str(cmd, report_vgs_sort_CFG);
-+		keys = find_config_tree_str(cmd, report_vgs_sort_CFG, NULL);
- 		if (!arg_count(cmd, verbose_ARG))
--			options = find_config_tree_str(cmd, report_vgs_cols_CFG);
-+			options = find_config_tree_str(cmd, report_vgs_cols_CFG, NULL);
- 		else
--			options = find_config_tree_str(cmd, report_vgs_cols_verbose_CFG);
-+			options = find_config_tree_str(cmd, report_vgs_cols_verbose_CFG, NULL);
- 		break;
- 	case LABEL:
- 	case PVS:
--		keys = find_config_tree_str(cmd, report_pvs_sort_CFG);
-+		keys = find_config_tree_str(cmd, report_pvs_sort_CFG, NULL);
- 		if (!arg_count(cmd, verbose_ARG))
--			options = find_config_tree_str(cmd, report_pvs_cols_CFG);
-+			options = find_config_tree_str(cmd, report_pvs_cols_CFG, NULL);
- 		else
--			options = find_config_tree_str(cmd, report_pvs_cols_verbose_CFG);
-+			options = find_config_tree_str(cmd, report_pvs_cols_verbose_CFG, NULL);
- 		break;
- 	case SEGS:
--		keys = find_config_tree_str(cmd, report_segs_sort_CFG);
-+		keys = find_config_tree_str(cmd, report_segs_sort_CFG, NULL);
- 		if (!arg_count(cmd, verbose_ARG))
--			options = find_config_tree_str(cmd, report_segs_cols_CFG);
-+			options = find_config_tree_str(cmd, report_segs_cols_CFG, NULL);
- 		else
--			options = find_config_tree_str(cmd, report_segs_cols_verbose_CFG);
-+			options = find_config_tree_str(cmd, report_segs_cols_verbose_CFG, NULL);
- 		break;
- 	case PVSEGS:
--		keys = find_config_tree_str(cmd, report_pvsegs_sort_CFG);
-+		keys = find_config_tree_str(cmd, report_pvsegs_sort_CFG, NULL);
- 		if (!arg_count(cmd, verbose_ARG))
--			options = find_config_tree_str(cmd, report_pvsegs_cols_CFG);
-+			options = find_config_tree_str(cmd, report_pvsegs_cols_CFG, NULL);
- 		else
--			options = find_config_tree_str(cmd, report_pvsegs_cols_verbose_CFG);
-+			options = find_config_tree_str(cmd, report_pvsegs_cols_verbose_CFG, NULL);
- 		break;
- 	default:
- 		log_error(INTERNAL_ERROR "Unknown report type.");
+ 	/*
+diff --git a/tools/lvm.c b/tools/lvm.c
+index ebce811..51e9293 100644
+--- a/tools/lvm.c
++++ b/tools/lvm.c
+@@ -165,7 +165,7 @@ static void _read_history(struct cmd_context *cmd)
+ 	if (read_history(hist_file))
+ 		log_very_verbose("Couldn't read history from %s.", hist_file);
+ 
+-	stifle_history(find_config_tree_int(cmd, shell_history_size_CFG));
++	stifle_history(find_config_tree_int(cmd, shell_history_size_CFG, NULL));
+ }
+ 
+ static void _write_history(void)
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index 1ba5a5c..bd29bc6 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -306,16 +306,16 @@ static int _adjust_policy_params(struct cmd_context *cmd,
+ 
+ 	if (lv_is_thin_pool(lv)) {
+ 		policy_threshold =
+-			find_config_tree_int(cmd, activation_thin_pool_autoextend_threshold_CFG) * PERCENT_1;
++			find_config_tree_int(cmd, activation_thin_pool_autoextend_threshold_CFG, NULL) * PERCENT_1;
+ 		policy_amount =
+-			find_config_tree_int(cmd, activation_thin_pool_autoextend_percent_CFG);
++			find_config_tree_int(cmd, activation_thin_pool_autoextend_percent_CFG, NULL);
+ 		if (!policy_amount && policy_threshold < PERCENT_100)
+                         return 0;
+ 	} else {
+ 		policy_threshold =
+-			find_config_tree_int(cmd, activation_snapshot_autoextend_threshold_CFG) * PERCENT_1;
++			find_config_tree_int(cmd, activation_snapshot_autoextend_threshold_CFG, NULL) * PERCENT_1;
+ 		policy_amount =
+-			find_config_tree_int(cmd, activation_snapshot_autoextend_percent_CFG);
++			find_config_tree_int(cmd, activation_snapshot_autoextend_percent_CFG, NULL);
+ 	}
+ 
+ 	if (policy_threshold >= PERCENT_100)
+@@ -754,7 +754,7 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 				lp->stripe_size = seg_stripesize;
+ 			} else {
+ 				lp->stripe_size =
+-					find_config_tree_int(cmd, metadata_stripesize_CFG) * 2;
++					find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
+ 				log_print_unless_silent("Using default stripesize %s",
+ 							display_size(cmd, (uint64_t) lp->stripe_size));
+ 			}
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 5724623..c139d2b 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -319,7 +319,7 @@ int poll_daemon(struct cmd_context *cmd, const char *name, const char *uuid,
+ 	if (interval_sign == SIGN_MINUS)
+ 		log_error("Argument to --interval cannot be negative");
+ 	parms.interval = arg_uint_value(cmd, interval_ARG,
+-					find_config_tree_int(cmd, activation_polling_interval_CFG));
++					find_config_tree_int(cmd, activation_polling_interval_CFG, NULL));
+ 	parms.wait_before_testing = (interval_sign == SIGN_PLUS);
+ 	parms.progress_display = 1;
+ 	parms.progress_title = progress_title;
+@@ -336,7 +336,7 @@ int poll_daemon(struct cmd_context *cmd, const char *name, const char *uuid,
+ 
+ 		/* FIXME Disabled multiple-copy wait_event */
+ 		if (!name)
+-			parms.interval = find_config_tree_int(cmd, activation_polling_interval_CFG);
++			parms.interval = find_config_tree_int(cmd, activation_polling_interval_CFG, NULL);
+ 	}
+ 
+ 	if (parms.background) {
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index a194c68..f4d104a 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -148,7 +148,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
+ 	 * and to prevent hangs in clustered environment.
+ 	 */
+ 	/* TODO: Remove this once lvmetad + cluster supported! */
+-	if (find_config_tree_int(cmd, global_locking_type_CFG) == 3 ||
++	if (find_config_tree_int(cmd, global_locking_type_CFG, NULL) == 3 ||
+ 	    !find_config_tree_bool(cmd, global_use_lvmetad_CFG)) {
+ 		log_debug_lvmetad("_pvscan_lvmetad: immediate return");
+ 		return ret;
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 5853800..f1ceecb 100644
+index f1ceecb..879e7f9 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -1559,7 +1559,7 @@ int get_pool_params(struct cmd_context *cmd, int *passed_args,
- 		log_very_verbose("Setting pool discards: %s",
- 				 get_pool_discards_name(*discards));
+@@ -1288,7 +1288,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
+ 		vp_new->vgmetadatacopies = arg_int_value(cmd, vgmetadatacopies_ARG,
+ 							DEFAULT_VGMETADATACOPIES);
  	} else {
--		dstr = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG);
-+		dstr = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, NULL);
- 		if (!get_pool_discards(dstr, discards))
- 			return_0;
+-		vp_new->vgmetadatacopies = find_config_tree_int(cmd, metadata_vgmetadatacopies_CFG);
++		vp_new->vgmetadatacopies = find_config_tree_int(cmd, metadata_vgmetadatacopies_CFG, NULL);
  	}
+ 
+ 	return 1;
+@@ -1503,11 +1503,11 @@ int pvcreate_params_validate(struct cmd_context *cmd,
+ 
+ 	pp->pvmetadatasize = arg_uint64_value(cmd, metadatasize_ARG, UINT64_C(0));
+ 	if (!pp->pvmetadatasize)
+-		pp->pvmetadatasize = find_config_tree_int(cmd, metadata_pvmetadatasize_CFG);
++		pp->pvmetadatasize = find_config_tree_int(cmd, metadata_pvmetadatasize_CFG, NULL);
+ 
+ 	pp->pvmetadatacopies = arg_int_value(cmd, pvmetadatacopies_ARG, -1);
+ 	if (pp->pvmetadatacopies < 0)
+-		pp->pvmetadatacopies = find_config_tree_int(cmd, metadata_pvmetadatacopies_CFG);
++		pp->pvmetadatacopies = find_config_tree_int(cmd, metadata_pvmetadatacopies_CFG, NULL);
+ 
+ 	pp->rp.ba_size = arg_uint64_value(cmd, bootloaderareasize_ARG, pp->rp.ba_size);
+ 
+@@ -1575,7 +1575,7 @@ int get_pool_params(struct cmd_context *cmd, int *passed_args,
+ 		log_very_verbose("Setting pool chunk size: %s",
+ 				 display_size(cmd, *chunk_size));
+ 	} else
+-		*chunk_size = find_config_tree_int(cmd, allocation_thin_pool_chunk_size_CFG) * 2;
++		*chunk_size = find_config_tree_int(cmd, allocation_thin_pool_chunk_size_CFG, NULL) * 2;
+ 
+ 	if ((*chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE) ||
+ 	    (*chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE)) {
+@@ -1653,7 +1653,7 @@ static int _validate_stripe_params(struct cmd_context *cmd, uint32_t *stripes,
+ 	}
+ 
+ 	if (*stripes > 1 && !*stripe_size) {
+-		*stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG) * 2;
++		*stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
+ 		log_print_unless_silent("Using default stripesize %s",
+ 			  display_size(cmd, (uint64_t) *stripe_size));
+ 	}
+diff --git a/tools/vgconvert.c b/tools/vgconvert.c
+index 3c984d7..fbb1b4e 100644
+--- a/tools/vgconvert.c
++++ b/tools/vgconvert.c
+@@ -49,12 +49,12 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
+ 						  UINT64_C(0));
+ 		if (!pvmetadatasize)
+ 			pvmetadatasize =
+-			    find_config_tree_int(cmd, metadata_pvmetadatasize_CFG);
++			    find_config_tree_int(cmd, metadata_pvmetadatasize_CFG, NULL);
+ 
+ 		pvmetadatacopies = arg_int_value(cmd, pvmetadatacopies_ARG, -1);
+ 		if (pvmetadatacopies < 0)
+ 			pvmetadatacopies =
+-			    find_config_tree_int(cmd, metadata_pvmetadatacopies_CFG);
++			    find_config_tree_int(cmd, metadata_pvmetadatacopies_CFG, NULL);
+ 	}
+ 
+ 	if (cmd->fmt->features & FMT_BAS) {
 
 
