@@ -1,53 +1,71 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue,  2 Jul 2013 19:26:29 +0000 (UTC)
-Subject: master - python-lvm: Add method to retrieve lv attr.
-Message-ID: <20130702192629.CE8C060FB8@fedorahosted.org>
+Date: Tue,  2 Jul 2013 19:26:31 +0000 (UTC)
+Subject: master - lvm2app: Add function to retrieve the origin.
+Message-ID: <20130702192631.E0A9C60FB8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9e0260c2e34f1b7150fb2fac3e780c3e75cd411e
-Commit:        9e0260c2e34f1b7150fb2fac3e780c3e75cd411e
-Parent:        952605a8ea3a7c9eabeb89bb3d644b8b04b4239b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a7f3dbf904f369338657785e845ebc8a6f479983
+Commit:        a7f3dbf904f369338657785e845ebc8a6f479983
+Parent:        9e0260c2e34f1b7150fb2fac3e780c3e75cd411e
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Apr 10 14:38:18 2013 -0400
+AuthorDate:    Thu Apr 11 16:48:40 2013 -0400
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Tue Jul 2 14:24:34 2013 -0500
 
-python-lvm: Add method to retrieve lv attr.
+lvm2app: Add function to retrieve the origin.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- python/liblvm.c |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ liblvm/lvm2app.h |   16 ++++++++++++++++
+ liblvm/lvm_lv.c  |    5 +++++
+ 2 files changed, 21 insertions(+), 0 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 4d35c94..381af62 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -1193,6 +1193,13 @@ liblvm_pv_dealloc(pvobject *self)
- 		}							\
- 	} while (0)
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 4a0844e..65dc340 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1232,6 +1232,22 @@ const char *lvm_lv_get_name(const lv_t lv);
+ const char *lvm_lv_get_attr(const lv_t lv);
  
-+static PyObject *
-+liblvm_lvm_lv_get_attr(lvobject *self)
-+{
-+	LV_VALID(self);
+ /**
++ * Get the origin of a snapshot.
++ *
++ * \memberof lv_t
++ *
++ * The memory allocated for the name is tied to the vg_t handle and will be
++ * released when lvm_vg_close() is called.
++ *
++ * \param   lv
++ * Logical volume handle.
++ *
++ * \return
++ * Null if the logical volume is not a snapshot, else origin name.
++ */
++const char *lvm_lv_get_origin(const lv_t lv);
 +
-+	return Py_BuildValue("s", lvm_lv_get_attr(self->lv));
++/**
+  * Get the current size in bytes of a logical volume.
+  *
+  * \memberof lv_t
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index 6226eac..9f59210 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -62,6 +62,11 @@ const char *lvm_lv_get_attr(const lv_t lv)
+ 	return lv_attr_dup(lv->vg->vgmem, lv);
+ }
+ 
++const char *lvm_lv_get_origin(const lv_t lv)
++{
++	return lv_origin_dup(lv->vg->vgmem, lv);
 +}
- 
- static PyObject *
- liblvm_lvm_lv_get_name(lvobject *self)
-@@ -1749,6 +1756,7 @@ static PyMethodDef liblvm_vg_methods[] = {
- 
- static PyMethodDef liblvm_lv_methods[] = {
- 	/* lv methods */
-+	{ "getAttr",		(PyCFunction)liblvm_lvm_lv_get_attr, METH_NOARGS },
- 	{ "getName",		(PyCFunction)liblvm_lvm_lv_get_name, METH_NOARGS },
- 	{ "getUuid",		(PyCFunction)liblvm_lvm_lv_get_uuid, METH_NOARGS },
- 	{ "activate",		(PyCFunction)liblvm_lvm_lv_activate, METH_NOARGS },
++
+ struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
+ {
+ 	return get_property(NULL, NULL, lv, NULL, NULL, NULL, name);
 
 
