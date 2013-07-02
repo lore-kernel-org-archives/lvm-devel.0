@@ -1,590 +1,413 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue,  2 Jul 2013 19:26:10 +0000 (UTC)
-Subject: master - lvm2app: Add function to retrieve list of PVs V3
-Message-ID: <20130702192610.F412560F45@fedorahosted.org>
+Date: Tue,  2 Jul 2013 19:26:13 +0000 (UTC)
+Subject: master - lvm2app: Implement lvm_pv_remove V2
+Message-ID: <20130702192613.1B79660F45@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ef3ab801e8604d8f629badc1cac1d9190467033f
-Commit:        ef3ab801e8604d8f629badc1cac1d9190467033f
-Parent:        49d7596581be013ec71a1da7897f861b721eaa19
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e33ac7b1ed962abb5ccb3d12a5401c84a188bf92
+Commit:        e33ac7b1ed962abb5ccb3d12a5401c84a188bf92
+Parent:        ef3ab801e8604d8f629badc1cac1d9190467033f
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Mar 19 17:37:04 2013 -0400
+AuthorDate:    Tue Apr 2 16:10:18 2013 -0400
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Jul 2 14:24:33 2013 -0500
+CommitterDate: Tue Jul 2 14:24:34 2013 -0500
 
-lvm2app: Add function to retrieve list of PVs V3
+lvm2app: Implement lvm_pv_remove V2
 
-As locks are held, you need to call the included function
-to release the memory and locks when done transversing the
-list of physical volumes.
+Code move and changes to support calling code from
+command line and from library interface.
 
-V2: Rebase fix
-V3: Prevent VGs from getting cached and then write protected.
+V2 Change lock_vol call
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/metadata/metadata-exported.h |   12 +++-
- lib/metadata/metadata.c          |   91 +++++++++++++++++------
- liblvm/lvm2app.h                 |   28 +++++++
- liblvm/lvm_pv.c                  |   79 ++++++++++++++++++++
- python/liblvm.c                  |  152 ++++++++++++++++++++++++++++++++++++--
- 5 files changed, 331 insertions(+), 31 deletions(-)
+ lib/metadata/metadata.h |    4 ++
+ lib/metadata/pv_manip.c |  130 +++++++++++++++++++++++++++++++++++++++++++++
+ liblvm/lvm2app.h        |   16 +++++-
+ liblvm/lvm_pv.c         |    8 +++
+ tools/pvremove.c        |  133 +++--------------------------------------------
+ 5 files changed, 163 insertions(+), 128 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index ee8f0c1..7743c47 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -403,6 +403,11 @@ struct lv_list {
- 	struct logical_volume *lv;
- };
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index bf9bd55..5c0a85b 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -341,6 +341,10 @@ int vg_validate(struct volume_group *vg);
  
-+struct vg_list {
-+	struct dm_list list;
-+	struct volume_group *vg;
-+};
+ int pv_write_orphan(struct cmd_context *cmd, struct physical_volume *pv);
+ 
++int pvremove_single(struct cmd_context *cmd, const char *pv_name,
++			   void *handle __attribute__((unused)), unsigned force_count,
++			   unsigned prompt);
 +
- #define PV_PE_START_CALC ((uint64_t) -1) /* Calculate pe_start value */
+ /* Manipulate PV structures */
+ int pv_add(struct volume_group *vg, struct physical_volume *pv);
+ int pv_remove(struct volume_group *vg, struct physical_volume *pv);
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index 2f4f51e..30ccd97 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -19,6 +19,7 @@
+ #include "toolcontext.h"
+ #include "locking.h"
+ #include "defaults.h"
++#include "lvmetad.h"
  
- struct pvcreate_restorable_params {
-@@ -493,7 +498,12 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_na
- struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
- 				int warnings,
- 				int scan_label_only);
--struct dm_list *get_pvs(struct cmd_context *cmd);
-+
-+#define get_pvs( cmd ) get_pvs_internal((cmd), NULL, NULL)
-+#define get_pvs_perserve_vg( cmd, pv_list, vg_list ) get_pvs_internal((cmd), (pv_list), (vg_list))
-+
-+struct dm_list *get_pvs_internal(struct cmd_context *cmd,
-+		struct dm_list *pvslist, struct dm_list *vgslist);
+ static struct pv_segment *_alloc_pv_segment(struct dm_pool *mem,
+ 					    struct physical_volume *pv,
+@@ -542,3 +543,132 @@ int pv_resize(struct physical_volume *pv,
  
- /*
-  * Add/remove LV to/from volume group
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index e12e1b0..0f71abc 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3692,7 +3692,8 @@ struct dm_list *get_vgids(struct cmd_context *cmd, int include_internal)
- 	return lvmcache_get_vgids(cmd, include_internal);
- }
- 
--static int _get_pvs(struct cmd_context *cmd, int warnings, struct dm_list **pvslist)
-+static int _get_pvs(struct cmd_context *cmd, int warnings,
-+		struct dm_list *pvslist, struct dm_list *vgslist)
- {
- 	struct str_list *strl;
- 	struct dm_list * uninitialized_var(results);
-@@ -3702,18 +3703,11 @@ static int _get_pvs(struct cmd_context *cmd, int warnings, struct dm_list **pvsl
- 	struct volume_group *vg;
- 	int consistent = 0;
- 	int old_pvmove;
-+	struct vg_list *vgl_item = NULL;
-+	int have_pv = 0;
- 
- 	lvmcache_label_scan(cmd, 0);
- 
--	if (pvslist) {
--		if (!(results = dm_pool_alloc(cmd->mem, sizeof(*results)))) {
--			log_error("PV list allocation failed");
--			return 0;
--		}
--
--		dm_list_init(results);
--	}
--
- 	/* Get list of VGs */
- 	if (!(vgids = get_vgids(cmd, 1))) {
- 		log_error("get_pvs: get_vgids failed");
-@@ -3733,7 +3727,15 @@ static int _get_pvs(struct cmd_context *cmd, int warnings, struct dm_list **pvsl
- 			stack;
- 			continue;
- 		}
--		if (!(vg = vg_read_internal(cmd, vgname, vgid, warnings, &consistent))) {
-+
-+		/* When we are retrieving a list to return toliblvm we need
-+		 * that list to contain VGs that are modifiable as we are using
-+		 * the vgmem pool in the vg to provide allocation for liblvm.
-+		 * This is a hack to prevent the vg from getting cached as the
-+		 * vgid will be NULL.  There is most definitely a better way
-+		 * to do this.
-+		 */
-+		if (!(vg = vg_read_internal(cmd, vgname, (!vgslist) ? vgid : NULL, warnings, &consistent))) {
- 			stack;
- 			continue;
- 		}
-@@ -3749,33 +3751,78 @@ static int _get_pvs(struct cmd_context *cmd, int warnings, struct dm_list **pvsl
- 					release_vg(vg);
- 					return 0;
- 				}
--				dm_list_add(results, &pvl_copy->list);
-+				/* If we are going to release the vg, don't store a pointer to
-+				 * it in the pv structure.
-+				 */
-+				if (!vgslist) {
-+					pvl_copy->pv->vg = NULL;
-+				}
-+				have_pv = 1;
-+				dm_list_add(pvslist, &pvl_copy->list);
- 			}
--		release_vg(vg);
-+
-+		/* In the case of the library we want to preserve the embedded volume
-+		 * group as subsequent calls to retrieve data about the pv require it.
-+		 */
-+		if (!vgslist || have_pv == 0) {
-+			release_vg(vg);
-+		} else {
-+			/* Add vg to list of vg objects that will be returned
-+			 */
-+			vgl_item = dm_pool_alloc(cmd->mem, sizeof(*vgl_item));
-+			if (!vgl_item) {
-+				log_error("VG list element allocation failed");
-+				return 0;
-+			}
-+			vgl_item->vg = vg;
-+			vg = NULL;
-+			dm_list_add(vgslist, &vgl_item->list);
-+		}
-+		have_pv = 0;
- 	}
- 	init_pvmove(old_pvmove);
- 
--	if (pvslist)
--		*pvslist = results;
--	else
-+	if (!pvslist) {
- 		dm_pool_free(cmd->mem, vgids);
--
-+	}
  	return 1;
  }
- 
--struct dm_list *get_pvs(struct cmd_context *cmd)
-+/* Retrieve a list of all physical volumes.
-+ * @param 	cmd			Command context
-+ * @param	pvslist		Set to NULL if you want memory for list created,
-+ * 						else valid memory
-+ * @param	vgslist		Set to NULL if you need the pv structures to contain
-+ * 						valid vg pointer.  This is the list of VGs
-+ * @returns NULL on errors, else pvslist which will equal passes in value if
-+ * 	supplied.
-+ */
-+struct dm_list *get_pvs_internal(struct cmd_context *cmd,
-+					struct dm_list *pvslist, struct dm_list *vgslist)
- {
--	struct dm_list *results;
-+	struct dm_list *results = pvslist;
- 
--	if (!_get_pvs(cmd, 1, &results))
--		return NULL;
-+	if (NULL == results) {
-+		if (!(results = dm_pool_alloc(cmd->mem, sizeof(*results)))) {
-+			log_error("PV list allocation failed");
-+			return 0;
-+		}
 +
-+		dm_list_init(results);
++const char _really_wipe[] =
++    "Really WIPE LABELS from physical volume \"%s\" of volume group \"%s\" [y/n]? ";
++
++/*
++ * Decide whether it is "safe" to wipe the labels on this device.
++ * 0 indicates we may not.
++ */
++static int pvremove_check(struct cmd_context *cmd, const char *name,
++		unsigned force_count, unsigned prompt)
++{
++	struct physical_volume *pv;
++
++	/* FIXME Check partition type is LVM unless --force is given */
++
++	/* Is there a pv here already? */
++	/* If not, this is an error unless you used -f. */
++	if (!(pv = pv_read(cmd, name, 1, 0))) {
++		if (force_count)
++			return 1;
++		log_error("Physical Volume %s not found", name);
++		return 0;
 +	}
- 
-+	if (!_get_pvs(cmd, 1, results, vgslist)) {
-+		if (NULL == pvslist) {
-+			dm_pool_free(cmd->mem, results);
++
++	/*
++	 * If a PV has no MDAs it may appear to be an
++	 * orphan until the metadata is read off
++	 * another PV in the same VG.  Detecting this
++	 * means checking every VG by scanning every
++	 * PV on the system.
++	 */
++	if (is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use) &&
++	    !dm_list_size(&pv->fid->metadata_areas_ignored)) {
++		if (!scan_vgs_for_pvs(cmd, 0)) {
++			log_error("Rescan for PVs without metadata areas "
++				  "failed.");
++			goto bad;
 +		}
-+		return NULL;
++		free_pv_fid(pv);
++		if (!(pv = pv_read(cmd, name, 1, 0))) {
++			log_error("Failed to read physical volume %s", name);
++			goto bad;
++		}
 +	}
- 	return results;
- }
- 
- int scan_vgs_for_pvs(struct cmd_context *cmd, int warnings)
- {
--	return _get_pvs(cmd, warnings, NULL);
-+	return _get_pvs(cmd, warnings, NULL, NULL);
- }
- 
- int pv_write(struct cmd_context *cmd __attribute__((unused)),
++
++	/* orphan ? */
++	if (is_orphan(pv)) {
++		free_pv_fid(pv);
++		return 1;
++	}
++
++	/* Allow partial & exported VGs to be destroyed. */
++	/* we must have -ff to overwrite a non orphan */
++	if (force_count < 2) {
++		log_error("PV %s belongs to Volume Group %s so please use vgreduce first.", name, pv_vg_name(pv));
++		log_error("(If you are certain you need pvremove, then confirm by using --force twice.)");
++		goto bad;
++	}
++
++	/* prompt */
++	if (!prompt &&
++	    yes_no_prompt(_really_wipe, name, pv_vg_name(pv)) == 'n') {
++		log_error("%s: physical volume label not removed", name);
++		goto bad;
++	}
++
++	if (force_count) {
++		log_warn("WARNING: Wiping physical volume label from "
++			  "%s%s%s%s", name,
++			  !is_orphan(pv) ? " of volume group \"" : "",
++			  !is_orphan(pv) ? pv_vg_name(pv) : "",
++			  !is_orphan(pv) ? "\"" : "");
++	}
++
++	free_pv_fid(pv);
++	return 1;
++
++bad:
++	free_pv_fid(pv);
++	return 0;
++}
++
++int pvremove_single(struct cmd_context *cmd, const char *pv_name,
++			   void *handle __attribute__((unused)), unsigned force_count,
++			   unsigned prompt)
++{
++	struct device *dev;
++	int ret = ECMD_FAILED;
++
++	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
++		log_error("Can't get lock for orphan PVs");
++		return ECMD_FAILED;
++	}
++
++	if (!pvremove_check(cmd, pv_name, force_count, prompt))
++		goto out;
++
++	if (!(dev = dev_cache_get(pv_name, cmd->filter))) {
++		log_error("%s: Couldn't find device.  Check your filters?",
++			  pv_name);
++		goto out;
++	}
++
++	if (!dev_test_excl(dev)) {
++		/* FIXME Detect whether device-mapper is still using the device */
++		log_error("Can't open %s exclusively - not removing. "
++			  "Mounted filesystem?", dev_name(dev));
++		goto out;
++	}
++
++	/* Wipe existing label(s) */
++	if (!label_remove(dev)) {
++		log_error("Failed to wipe existing label(s) on %s", pv_name);
++		goto out;
++	}
++
++	if (!lvmetad_pv_gone_by_dev(dev, NULL))
++		goto_out;
++
++	log_print_unless_silent("Labels on physical volume \"%s\" successfully wiped",
++				pv_name);
++
++	ret = ECMD_PROCESSED;
++
++out:
++	unlock_vg(cmd, VG_ORPHANS);
++
++	return ret;
++}
 diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 25778d1..f70e72c 100644
+index f70e72c..695f5eb 100644
 --- a/liblvm/lvm2app.h
 +++ b/liblvm/lvm2app.h
-@@ -543,6 +543,34 @@ vg_t lvm_vg_create(lvm_t libh, const char *vg_name);
- struct dm_list *lvm_vg_list_lvs(vg_t vg);
+@@ -553,14 +553,15 @@ struct dm_list *lvm_vg_list_lvs(vg_t vg);
+  * \return
+  * A list of lvm_pv_list structures containing pv handles for all physical
+  * volumes. If no PVs exist or a global lock was unable to be obtained a
+- * NULL is returned.
++ * NULL is returned.  Do not attempt to remove one of the PVs until after the
++ * call to lvm_list_pvs_free has been made.
+  */
+ struct dm_list *lvm_list_pvs(lvm_t libh);
  
  /**
-+ * Return a list of PV handles for all.
-+ *
-+ * \memberof lvm_t
-+ *
-+ * \param   libh
-+ * Library handle retrieved from lvm_init
-+ *
-+ * \return
-+ * A list of lvm_pv_list structures containing pv handles for all physical
-+ * volumes. If no PVs exist or a global lock was unable to be obtained a
-+ * NULL is returned.
+  * Free the resources used by acquiring the pvlist.  This should be called as
+  * soon as possible after processing the needed information from the pv list as
+- * a global locks are held.
++ * a global lock is held.
+  *
+  * \param	pvlist
+  * PV list to be freed
+@@ -571,6 +572,17 @@ struct dm_list *lvm_list_pvs(lvm_t libh);
+ int lvm_list_pvs_free(struct dm_list *pvlist);
+ 
+ /**
++ *  Remove a physical volume.
++ *  Note: You cannot remove a PV while iterating through the list of PVs as
++ *  locks are held for the PV list.
++ *  \param	libh	Library handle
++ *  \param	pv_name	The physical volume name
++ *  \return
++ *  0 on success, else -1 with library errno and text set.
 + */
-+struct dm_list *lvm_list_pvs(lvm_t libh);
-+
-+/**
-+ * Free the resources used by acquiring the pvlist.  This should be called as
-+ * soon as possible after processing the needed information from the pv list as
-+ * a global locks are held.
-+ *
-+ * \param	pvlist
-+ * PV list to be freed
-+ *
-+ * \return
-+ * 0 on success, else -1 with library errno and text set.
-+ */
-+int lvm_list_pvs_free(struct dm_list *pvlist);
++int lvm_pv_remove(lvm_t libh, const char *pv_name);
 +
 +/**
   * Return a list of PV handles for a given VG handle.
   *
   * \memberof vg_t
 diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index 18b1069..db6c39d 100644
+index db6c39d..8f53352 100644
 --- a/liblvm/lvm_pv.c
 +++ b/liblvm/lvm_pv.c
-@@ -12,11 +12,14 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+@@ -75,6 +75,14 @@ struct lvm_list_wrapper
+ 	struct dm_list vgslist;
+ };
+ 
++int lvm_pv_remove(lvm_t libh, const char *pv_name)
++{
++	struct cmd_context *cmd = (struct cmd_context *)libh;
++	if ( 1 != pvremove_single(cmd, pv_name, NULL, 0, 0)) {
++		return -1;
++	}
++	return 0;
++}
+ 
+ struct dm_list *lvm_list_pvs(lvm_t libh)
+ {
+diff --git a/tools/pvremove.c b/tools/pvremove.c
+index 2c8f5c6..a99a9bd 100644
+--- a/tools/pvremove.c
++++ b/tools/pvremove.c
+@@ -14,146 +14,27 @@
   */
  
-+#include <stddef.h>
- #include "lib.h"
- #include "metadata.h"
- #include "lvm-string.h"
- #include "lvm_misc.h"
- #include "lvm2app.h"
-+#include "locking.h"
-+#include "toolcontext.h"
+ #include "tools.h"
++#include "metadata.h"
  
- const char *lvm_pv_get_uuid(const pv_t pv)
- {
-@@ -60,6 +63,82 @@ struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
- 	return get_property(NULL, NULL, NULL, NULL, pvseg, NULL, name);
- }
- 
-+
-+#define address_of(p, t, m) ({                  \
-+	const typeof( ((t *)0)->m ) *__mptr = (p);    \
-+	(t *)( (char *)__mptr - offsetof(t,m) );})
-+
-+struct lvm_list_wrapper
-+{
-+	unsigned long magic;
-+	struct dm_list pvslist;
-+	struct dm_list vgslist;
-+};
-+
-+
-+struct dm_list *lvm_list_pvs(lvm_t libh)
-+{
-+	struct lvm_list_wrapper *rc = NULL;
-+	struct cmd_context *cmd = (struct cmd_context *)libh;
-+
-+
-+	rc = dm_pool_zalloc(cmd->mem, sizeof(*rc));
-+	if (!rc) {
-+		log_errno(ENOMEM, "Memory allocation fail for pv list.");
-+		return NULL;
-+	}
-+
-+	if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_WRITE, NULL)) {
-+		log_errno(ENOLCK, "Unable to obtain global lock.");
-+	} else {
-+		dm_list_init(&rc->pvslist);
-+		dm_list_init(&rc->vgslist);
-+		if( !get_pvs_perserve_vg(cmd, &rc->pvslist, &rc->vgslist) ) {
-+			dm_pool_free(cmd->mem, rc);
-+			return NULL;
-+		}
-+		rc->magic = 0xF005BA11;
-+	}
-+
-+	return &rc->pvslist;
-+}
-+
-+int lvm_list_pvs_free(struct dm_list *pvlist)
-+{
-+	int rc = 0;
-+	struct lvm_list_wrapper *to_delete = NULL;
-+	struct vg_list *vgl = NULL;
-+	struct vg_list *tmp_vgl = NULL;
-+	struct pv_list *pvl = NULL;
-+	struct pv_list *tmp_pvl = NULL;
-+	struct cmd_context *cmd = NULL;
-+
-+	if (pvlist ) {
-+		to_delete = address_of(pvlist, struct lvm_list_wrapper, pvslist);
-+		if (to_delete->magic == 0xF005BA11) {
-+
-+			dm_list_iterate_items(vgl, &to_delete->vgslist) {
-+				cmd = vgl->vg->cmd;
-+				release_vg(vgl->vg);
-+			}
-+
-+			dm_list_iterate_items(pvl, &to_delete->pvslist) {
-+				free_pv_fid(pvl->pv);
-+			}
-+
-+			unlock_vg(cmd, VG_GLOBAL);
-+		} else {
-+			log_errno(EINVAL, "Not a correct pvlist structure");
-+			rc = -1;
-+		}
-+
-+		to_delete->magic = 0xA5A5A5A5;
-+		dm_pool_free(cmd->mem, to_delete);
-+
-+	}
-+	return rc;
-+}
-+
- struct dm_list *lvm_pv_list_pvsegs(pv_t pv)
- {
- 	struct dm_list *list;
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 906825e..6491274 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -34,6 +34,11 @@ typedef struct {
- 
- typedef struct {
- 	PyObject_HEAD
-+	struct dm_list *pvslist;
-+} pvslistobject;
-+
-+typedef struct {
-+	PyObject_HEAD
- 	lv_t lv;		/* lv handle */
- 	vgobject *parent_vgobj;
- } lvobject;
-@@ -42,6 +47,7 @@ typedef struct {
- 	PyObject_HEAD
- 	pv_t pv;		/* pv handle */
- 	vgobject *parent_vgobj;
-+	pvslistobject *parent_pvslistobj;
- } pvobject;
- 
- typedef struct {
-@@ -58,6 +64,7 @@ typedef struct {
- 
- static PyTypeObject LibLVMvgType;
- static PyTypeObject LibLVMlvType;
-+static PyTypeObject LibLVMpvlistType;
- static PyTypeObject LibLVMpvType;
- static PyTypeObject LibLVMlvsegType;
- static PyTypeObject LibLVMpvsegType;
-@@ -153,6 +160,90 @@ liblvm_lvm_list_vg_uuids(void)
- }
- 
- static PyObject *
-+liblvm_lvm_pvlist_get(pvslistobject *pvsobj)
-+{
-+	struct lvm_pv_list *pvl;
-+	PyObject * pytuple;
-+	pvobject * pvobj;
-+	int i = 0;
-+
-+	/* unlike other LVM api calls, if there are no results, we get NULL */
-+	pvsobj->pvslist = lvm_list_pvs(libh);
-+
-+	if (!pvsobj->pvslist)
-+		return Py_BuildValue("()");
-+
-+	pytuple = PyTuple_New(dm_list_size(pvsobj->pvslist));
-+	if (!pytuple)
-+		return NULL;
-+
-+	dm_list_iterate_items(pvl, pvsobj->pvslist) {
-+		/* Create and initialize the object */
-+		pvobj = PyObject_New(pvobject, &LibLVMpvType);
-+		if (!pvobj) {
-+			Py_DECREF(pytuple);
-+			return NULL;
-+		}
-+
-+		/* We don't have a parent vg object to be concerned about */
-+		pvobj->parent_vgobj = NULL;
-+		pvobj->parent_pvslistobj = pvsobj;
-+		Py_INCREF(pvobj->parent_pvslistobj);
-+
-+		pvobj->pv = pvl->pv;
-+		PyTuple_SET_ITEM(pytuple, i, (PyObject *) pvobj);
-+		i++;
-+	}
-+
-+	return pytuple;
-+}
-+
-+static PyObject *
-+liblvm_lvm_pvlist_put(pvslistobject *self)
-+{
-+	int rc = 0;
-+	if (self->pvslist) {
-+		rc = lvm_list_pvs_free(self->pvslist);
-+
-+		if ( 0 != rc ) {
-+			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
-+			return NULL;
-+		}
-+
-+		self->pvslist = NULL;
-+		Py_INCREF(Py_None);
-+		return Py_None;
-+	}
-+	return NULL;
-+}
-+
-+static PyObject *
-+liblvm_pvlist_dealloc(pvslistobject *self)
-+{
-+	if (self->pvslist) {
-+		liblvm_lvm_pvlist_put(self);
-+	}
-+
-+	PyObject_Del(self);
-+	Py_INCREF(Py_None);
-+	return Py_None;
-+}
-+
-+static PyObject *
-+liblvm_lvm_list_pvs(void)
-+{
-+	pvslistobject *pvslistobj;
-+
-+	LVM_VALID();
-+
-+	if ((pvslistobj = PyObject_New(pvslistobject, &LibLVMpvlistType)) == NULL)
-+			return NULL;
-+
-+	pvslistobj->pvslist = NULL;
-+	return (PyObject *)pvslistobj;
-+}
-+
-+static PyObject *
- liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
- {
- 	double converted;
-@@ -360,6 +451,15 @@ liblvm_vg_dealloc(vgobject *self)
- 		}							\
- 	} while (0)
- 
-+#define PVSLIST_VALID(pvslistobject)			\
-+	do {										\
-+		LVM_VALID();							\
-+		if (!pvslistobject->pvslist) {			\
-+			PyErr_SetString(PyExc_UnboundLocalError, "PVS object invalid"); \
-+			return NULL;						\
-+		}										\
-+	} while (0)
-+
- static PyObject *
- liblvm_lvm_vg_close(vgobject *self)
- {
-@@ -1030,7 +1130,16 @@ liblvm_lvm_pv_from_uuid(vgobject *self, PyObject *arg)
- static void
- liblvm_pv_dealloc(pvobject *self)
- {
--	Py_DECREF(self->parent_vgobj);
-+	if (self->parent_vgobj) {
-+		Py_DECREF(self->parent_vgobj);
-+	}
-+
-+	if (self->parent_pvslistobj) {
-+		Py_DECREF(self->parent_pvslistobj);
-+	}
-+
-+	self->parent_vgobj = NULL;
-+	self->parent_pvslistobj = NULL;
- 	PyObject_Del(self);
- }
- 
-@@ -1337,19 +1446,23 @@ liblvm_lvm_lv_snapshot(lvobject *self, PyObject *args)
- 
- 	lvobj->parent_vgobj = self->parent_vgobj;
- 	Py_INCREF(lvobj->parent_vgobj);
+-/*
+- * Decide whether it is "safe" to wipe the labels on this device.
+- * 0 indicates we may not.
+- */
+-static int pvremove_check(struct cmd_context *cmd, const char *name)
+-{
+-	struct physical_volume *pv;
 -
- 	return (PyObject *)lvobj;
- }
+-	/* FIXME Check partition type is LVM unless --force is given */
+-
+-	/* Is there a pv here already? */
+-	/* If not, this is an error unless you used -f. */
+-	if (!(pv = pv_read(cmd, name, 1, 0))) {
+-		if (arg_count(cmd, force_ARG))
+-			return 1;
+-		log_error("Physical Volume %s not found", name);
+-		return 0;
+-	}
+-
+-	/*
+-	 * If a PV has no MDAs it may appear to be an
+-	 * orphan until the metadata is read off
+-	 * another PV in the same VG.  Detecting this
+-	 * means checking every VG by scanning every
+-	 * PV on the system.
+-	 */
+-	if (is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use) &&
+-	    !dm_list_size(&pv->fid->metadata_areas_ignored)) {
+-		if (!scan_vgs_for_pvs(cmd, 0)) {
+-			log_error("Rescan for PVs without metadata areas "
+-				  "failed.");
+-			goto bad;
+-		}
+-		free_pv_fid(pv);
+-		if (!(pv = pv_read(cmd, name, 1, 0))) {
+-			log_error("Failed to read physical volume %s", name);
+-			goto bad;
+-		}
+-	}
+-
+-	/* orphan ? */
+-	if (is_orphan(pv)) {
+-		free_pv_fid(pv);
+-		return 1;
+-	}
+-
+-	/* Allow partial & exported VGs to be destroyed. */
+-	/* we must have -ff to overwrite a non orphan */
+-	if (arg_count(cmd, force_ARG) < 2) {
+-		log_error("PV %s belongs to Volume Group %s so please use vgreduce first.", name, pv_vg_name(pv));
+-		log_error("(If you are certain you need pvremove, then confirm by using --force twice.)");
+-		goto bad;
+-	}
+-
+-	/* prompt */
+-	if (!arg_count(cmd, yes_ARG) &&
+-	    yes_no_prompt("Really WIPE LABELS from physical volume \"%s\" "
+-			  "of volume group \"%s\" [y/n]? ",
+-			  name, pv_vg_name(pv)) == 'n') {
+-		log_error("%s: physical volume label not removed", name);
+-		goto bad;
+-	}
+-
+-	if (arg_count(cmd, force_ARG)) {
+-		log_warn("WARNING: Wiping physical volume label from "
+-			  "%s%s%s%s", name,
+-			  !is_orphan(pv) ? " of volume group \"" : "",
+-			  !is_orphan(pv) ? pv_vg_name(pv) : "",
+-			  !is_orphan(pv) ? "\"" : "");
+-	}
+-
+-	free_pv_fid(pv);
+-	return 1;
+-
+-bad:
+-	free_pv_fid(pv);
+-	return 0;
+-}
+-
+-static int pvremove_single(struct cmd_context *cmd, const char *pv_name,
+-			   void *handle __attribute__((unused)))
+-{
+-	struct device *dev;
+-	int ret = ECMD_FAILED;
+-
+-	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
+-		log_error("Can't get lock for orphan PVs");
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!pvremove_check(cmd, pv_name))
+-		goto out;
+-
+-	if (!(dev = dev_cache_get(pv_name, cmd->filter))) {
+-		log_error("%s: Couldn't find device.  Check your filters?",
+-			  pv_name);
+-		goto out;
+-	}
+-
+-	if (!dev_test_excl(dev)) {
+-		/* FIXME Detect whether device-mapper is still using the device */
+-		log_error("Can't open %s exclusively - not removing. "
+-			  "Mounted filesystem?", dev_name(dev));
+-		goto out;
+-	}
+-
+-	/* Wipe existing label(s) */
+-	if (!label_remove(dev)) {
+-		log_error("Failed to wipe existing label(s) on %s", pv_name);
+-		goto out;
+-	}
+-
+-	if (!lvmetad_pv_gone_by_dev(dev, NULL))
+-		goto_out;
+-
+-	log_print_unless_silent("Labels on physical volume \"%s\" successfully wiped",
+-				pv_name);
+-
+-	ret = ECMD_PROCESSED;
+-
+-out:
+-	unlock_vg(cmd, VG_ORPHANS);
+-
+-	return ret;
+-}
  
- /* PV Methods */
+ int pvremove(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	int i, r;
+ 	int ret = ECMD_PROCESSED;
++	unsigned force_count;
++	unsigned prompt;
  
--#define PV_VALID(pvobject)						\
--	do {								\
--		VG_VALID(pvobject->parent_vgobj);			\
--		if (!pvobject->pv) {					\
-+#define PV_VALID(pvobject)								\
-+	do {												\
-+		if (pvobject->parent_vgobj) {					\
-+			VG_VALID(pvobject->parent_vgobj);			\
-+		}												\
-+		if (pvobject->parent_pvslistobj) {				\
-+			PVSLIST_VALID(pvobject->parent_pvslistobj);	\
-+		}												\
-+		if (!pvobject->pv) {							\
- 			PyErr_SetString(PyExc_UnboundLocalError, "PV object invalid"); \
--			return NULL;					\
--		}							\
-+			return NULL;								\
-+		}												\
- 	} while (0)
+ 	if (!argc) {
+ 		log_error("Please enter a physical volume path");
+ 		return EINVALID_CMD_LINE;
+ 	}
  
- static PyObject *
-@@ -1550,6 +1663,7 @@ static PyMethodDef Liblvm_methods[] = {
- 	{ "scan",		(PyCFunction)liblvm_lvm_scan, METH_NOARGS },
- 	{ "listVgNames",	(PyCFunction)liblvm_lvm_list_vg_names, METH_NOARGS },
- 	{ "listVgUuids",	(PyCFunction)liblvm_lvm_list_vg_uuids, METH_NOARGS },
-+	{ "listPvs",		(PyCFunction)liblvm_lvm_list_pvs, METH_NOARGS },
- 	{ "percentToFloat",	(PyCFunction)liblvm_lvm_percent_to_float, METH_VARARGS },
- 	{ "vgNameFromPvid",	(PyCFunction)liblvm_lvm_vgname_from_pvid, METH_VARARGS },
- 	{ "vgNameFromDevice",	(PyCFunction)liblvm_lvm_vgname_from_device, METH_VARARGS },
-@@ -1613,6 +1727,15 @@ static PyMethodDef liblvm_lv_methods[] = {
- 	{ NULL, NULL }		/* sentinel */
- };
- 
-+static PyMethodDef liblvm_pv_list_methods[] = {
-+	/* pv list methods */
-+	{ "__enter__", 	(PyCFunction)liblvm_lvm_pvlist_get, METH_VARARGS },
-+	{ "__exit__", 	(PyCFunction)liblvm_lvm_pvlist_put, METH_VARARGS },
-+	{ "open",		(PyCFunction)liblvm_lvm_pvlist_get, METH_VARARGS },
-+	{ "close",		(PyCFunction)liblvm_lvm_pvlist_put, METH_VARARGS },
-+	{ NULL, NULL }
-+};
++	force_count = arg_count(cmd, force_ARG);
++	prompt = arg_count(cmd, yes_ARG);
 +
- static PyMethodDef liblvm_pv_methods[] = {
- 	/* pv methods */
- 	{ "getName",		(PyCFunction)liblvm_lvm_pv_get_name, METH_NOARGS },
-@@ -1659,6 +1782,17 @@ static PyTypeObject LibLVMlvType = {
- 	.tp_methods = liblvm_lv_methods,
- };
- 
-+static PyTypeObject LibLVMpvlistType = {
-+	PyObject_HEAD_INIT(&PyType_Type)
-+		.tp_name = "liblvm.Liblvm_pvlist",
-+		.tp_basicsize = sizeof(pvslistobject),
-+		.tp_new = PyType_GenericNew,
-+		.tp_dealloc = (destructor)liblvm_pvlist_dealloc,
-+		.tp_flags = Py_TPFLAGS_DEFAULT,
-+		.tp_doc = "LVM Physical Volume list object",
-+		.tp_methods = liblvm_pv_list_methods,
-+};
-+
- static PyTypeObject LibLVMpvType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
- 	.tp_name = "liblvm.Liblvm_pv",
-@@ -1716,6 +1850,8 @@ initlvm(void)
- 		return;
- 	if (PyType_Ready(&LibLVMpvsegType) < 0)
- 		return;
-+	if (PyType_Ready(&LibLVMpvlistType) < 0)
-+			return;
- 
- 	m = Py_InitModule3("lvm", Liblvm_methods, "Liblvm module");
- 	if (m == NULL)
+ 	for (i = 0; i < argc; i++) {
+ 		dm_unescape_colons_and_at_signs(argv[i], NULL, NULL);
+-		r = pvremove_single(cmd, argv[i], NULL);
++		r = pvremove_single(cmd, argv[i], NULL, force_count, prompt);
+ 		if (r > ret)
+ 			ret = r;
+ 	}
 
 
