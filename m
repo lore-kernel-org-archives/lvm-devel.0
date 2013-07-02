@@ -1,117 +1,113 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  2 Jul 2013 13:32:33 +0000 (UTC)
-Subject: master - config: add override_config_tree_from_profile fn to add the profile to a configuration cascade
-Message-ID: <20130702133233.3A1E760DA8@fedorahosted.org>
+Date: Tue,  2 Jul 2013 13:32:35 +0000 (UTC)
+Subject: master - metadata: read VG/LV profile name from metadata if it exists and load it
+Message-ID: <20130702133235.618F360DA8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bfde83eb345621821332a8daeaa3aa6b82da69ea
-Commit:        bfde83eb345621821332a8daeaa3aa6b82da69ea
-Parent:        ebc236d085116e869b5873e2b5409674c2cd2a8d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c5e6bc393e2d6d8477b115b57697200265aaa595
+Commit:        c5e6bc393e2d6d8477b115b57697200265aaa595
+Parent:        bfde83eb345621821332a8daeaa3aa6b82da69ea
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 25 12:27:37 2013 +0200
+AuthorDate:    Tue Jun 25 12:28:36 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jul 2 15:19:08 2013 +0200
+CommitterDate: Tue Jul 2 15:19:09 2013 +0200
 
-config: add override_config_tree_from_profile fn to add the profile to a configuration cascade
+metadata: read VG/LV profile name from metadata if it exists and load it
 
-When placing the profile in a configuration cascade, this sequence is
-used exactly:
-
-CONFIG_STRING -> CONFIG_PROFILE -> CONFIG_FILE/MERGED_FILES
-
-So if the profile is used, it overloads the lvm.conf (and any
-existing tag configs). However, if "--config" is used to define
-a custom configuration on command line, this overloads even the
-profile config!
+This is per VG/LV profile loading on demand. The profile itself is saved
+in struct volume_group/logical_volume as "profile" field so we can
+reference it whenever needed.
 ---
- lib/config/config.c |   35 ++++++++++++++++++++++++++++++++++-
- lib/config/config.h |    1 +
- tools/lvmcmdline.c  |    4 ++++
- 3 files changed, 39 insertions(+), 1 deletions(-)
+ lib/format_text/import_vsn1.c |   28 ++++++++++++++++++++++++----
+ lib/metadata/lv.h             |    1 +
+ lib/metadata/vg.h             |    1 +
+ 3 files changed, 26 insertions(+), 4 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 5711ead..1a14a38 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -301,7 +301,7 @@ int override_config_tree_from_string(struct cmd_context *cmd,
- 
- 	/*
- 	 * Follow this sequence:
--	 * CONFIG_STRING -> CONFIG_FILE/CONFIG_MERGED_FILES
-+	 * CONFIG_STRING -> CONFIG_PROFILE -> CONFIG_FILE/CONFIG_MERGED_FILES
- 	 */
- 
- 	if (cs->type == CONFIG_STRING) {
-@@ -329,6 +329,39 @@ int override_config_tree_from_string(struct cmd_context *cmd,
- 	return 1;
- }
- 
-+int override_config_tree_from_profile(struct cmd_context *cmd,
-+				      struct profile *profile)
-+{
-+	struct dm_config_tree *cft = cmd->cft, *cft_string = NULL;
-+	struct config_source *cs = dm_config_get_custom(cft);
-+
-+	/*
-+	 * Follow this sequence:
-+	 * CONFIG_STRING -> CONFIG_PROFILE -> CONFIG_FILE/CONFIG_MERGED_FILES
-+	 */
-+
-+	if (!profile->cft && !load_profile(cmd, profile))
-+		return_0;
-+
-+	if (cs->type == CONFIG_STRING) {
-+		cft_string = cft;
-+		cft = cft->cascade;
-+		cs = dm_config_get_custom(cft);
-+		if (cs->type == CONFIG_PROFILE) {
-+			log_error(INTERNAL_ERROR "override_config_tree_from_profile: "
-+				  "config cascade already contains a profile config.");
-+			return 0;
-+		}
-+		dm_config_insert_cascaded_tree(cft_string, profile->cft);
-+	}
-+
-+	cmd->cft = dm_config_insert_cascaded_tree(profile->cft, cft);
-+
-+	cmd->cft = cft_string ? : profile->cft;
-+
-+	return 1;
-+}
-+
- int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
- 			off_t offset, size_t size, off_t offset2, size_t size2,
- 			checksum_fn_t checksum_fn, uint32_t checksum)
-diff --git a/lib/config/config.h b/lib/config/config.h
-index ef75580..0e4c0d5 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -135,6 +135,7 @@ int config_def_get_path(char *buf, size_t buf_size, int id);
- int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_messages);
- 
- int override_config_tree_from_string(struct cmd_context *cmd, const char *config_settings);
-+int override_config_tree_from_profile(struct cmd_context *cmd, struct profile *profile);
- struct dm_config_tree *remove_config_tree_by_source(struct cmd_context *cmd, config_source_t source);
- config_source_t config_get_source_type(struct dm_config_tree *cft);
- 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 1111df6..c50ea90 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1099,6 +1099,10 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 		log_debug("Setting global configuration profile \"%s\".", profile->name);
- 		/* This profile will override any VG/LV-based profile if present */
- 		cmd->profile_params->global_profile = profile;
-+		if (!override_config_tree_from_profile(cmd, profile)) {
-+			log_error("Failed to apply configuration profile.");
-+			return ECMD_FAILED;
-+		}
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 99dd52a..54a4a9c 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -525,7 +525,7 @@ static int _read_lvnames(struct format_instance *fid __attribute__((unused)),
+ {
+ 	struct dm_pool *mem = vg->vgmem;
+ 	struct logical_volume *lv;
+-	const char *lv_alloc;
++	const char *str;
+ 	const struct dm_config_value *cv;
+ 	const char *hostname;
+ 	uint64_t timestamp = 0;
+@@ -565,14 +565,25 @@ static int _read_lvnames(struct format_instance *fid __attribute__((unused)),
  	}
  
- 	if ((ret = _get_settings(cmd)))
+ 	lv->alloc = ALLOC_INHERIT;
+-	if (dm_config_get_str(lvn, "allocation_policy", &lv_alloc)) {
+-		lv->alloc = get_alloc_from_string(lv_alloc);
++	if (dm_config_get_str(lvn, "allocation_policy", &str)) {
++		lv->alloc = get_alloc_from_string(str);
+ 		if (lv->alloc == ALLOC_INVALID) {
+-			log_warn("WARNING: Ignoring unrecognised allocation policy %s for LV %s", lv_alloc, lv->name);
++			log_warn("WARNING: Ignoring unrecognised allocation policy %s for LV %s", str, lv->name);
+ 			lv->alloc = ALLOC_INHERIT;
+ 		}
+ 	}
+ 
++	if (dm_config_get_str(lvn, "profile", &str)) {
++		log_debug_metadata("Adding profile configuration %s for LV %s/%s.",
++				   str, vg->name, lv->name);
++		lv->profile = add_profile(vg->cmd, str);
++		if (!lv->profile) {
++			log_error("Failed to add configuration profile %s for LV %s/%s",
++				  str, vg->name, lv->name);
++			return 0;
++		}
++	}
++
+ 	if (!_read_int32(lvn, "read_ahead", &lv->read_ahead))
+ 		/* If not present, choice of auto or none is configurable */
+ 		lv->read_ahead = vg->cmd->default_settings.read_ahead;
+@@ -789,6 +800,15 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		}
+ 	}
+ 
++	if (dm_config_get_str(vgn, "profile", &str)) {
++		log_debug_metadata("Adding profile configuration %s for VG %s.", str, vg->name);
++		vg->profile = add_profile(vg->cmd, str);
++		if (!vg->profile) {
++			log_error("Failed to add configuration profile %s for VG %s", str, vg->name);
++			goto bad;
++		}
++	}
++
+ 	if (!_read_uint32(vgn, "metadata_copies", &vg->mda_copies)) {
+ 		vg->mda_copies = DEFAULT_VGMETADATACOPIES;
+ 	}
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index b1cce51..b123109 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -30,6 +30,7 @@ struct logical_volume {
+ 
+ 	uint64_t status;
+ 	alloc_policy_t alloc;
++	struct profile *profile;
+ 	uint32_t read_ahead;
+ 	int32_t major;
+ 	int32_t minor;
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index 0dc3ba7..f33fe11 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -58,6 +58,7 @@ struct volume_group {
+ 	struct volume_group *vg_ondisk;
+ 
+ 	alloc_policy_t alloc;
++	struct profile *profile;
+ 	uint64_t status;
+ 
+ 	struct id id;
 
 
