@@ -1,1859 +1,590 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue,  2 Jul 2013 19:26:06 +0000 (UTC)
-Subject: master - lvm2app: Move core lv re-size code (v6)
-Message-ID: <20130702192606.C04BD60D30@fedorahosted.org>
+Date: Tue,  2 Jul 2013 19:26:10 +0000 (UTC)
+Subject: master - lvm2app: Add function to retrieve list of PVs V3
+Message-ID: <20130702192610.F412560F45@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c43ce46ba796d92382b386bbeee933fc7479a9cd
-Commit:        c43ce46ba796d92382b386bbeee933fc7479a9cd
-Parent:        9d550cfc36ffb13fa0c70c077add7d8d8957180f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ef3ab801e8604d8f629badc1cac1d9190467033f
+Commit:        ef3ab801e8604d8f629badc1cac1d9190467033f
+Parent:        49d7596581be013ec71a1da7897f861b721eaa19
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Mar 13 18:00:29 2013 -0400
+AuthorDate:    Tue Mar 19 17:37:04 2013 -0400
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Tue Jul 2 14:24:33 2013 -0500
 
-lvm2app: Move core lv re-size code (v6)
+lvm2app: Add function to retrieve list of PVs V3
 
-Moved to allow use from command line and for library use.
+As locks are held, you need to call the included function
+to release the memory and locks when done transversing the
+list of physical volumes.
 
-v3,v4,v5,v6: rebase changes
+V2: Rebase fix
+V3: Prevent VGs from getting cached and then write protected.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/metadata/lv_manip.c          |  837 ++++++++++++++++++++++++++++++++++++
- lib/metadata/metadata-exported.h |   49 +++
- tools/lvresize.c                 |  879 +-------------------------------------
- 3 files changed, 887 insertions(+), 878 deletions(-)
+ lib/metadata/metadata-exported.h |   12 +++-
+ lib/metadata/metadata.c          |   91 +++++++++++++++++------
+ liblvm/lvm2app.h                 |   28 +++++++
+ liblvm/lvm_pv.c                  |   79 ++++++++++++++++++++
+ python/liblvm.c                  |  152 ++++++++++++++++++++++++++++++++++++--
+ 5 files changed, 331 insertions(+), 31 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 76660ae..38f5b45 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -27,6 +27,8 @@
- #include "activate.h"
- #include "str_list.h"
- #include "defaults.h"
-+#include "lvm-exec.h"
-+#include "errors.h"
- 
- typedef enum {
- 	PREFERRED,
-@@ -3177,6 +3179,841 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
- 	return lv_rename_update(cmd, lv, new_name, 1);
- }
- 
-+/*
-+ * Core lv resize code
-+ */
-+
-+#define SIZE_BUF 128
-+
-+static int _validate_stripesize(struct cmd_context *cmd,
-+				const struct volume_group *vg,
-+				struct lvresize_params *lp)
-+{
-+
-+	if ( lp->ac_stripesize_value > STRIPE_SIZE_LIMIT * 2) {
-+		log_error("Stripe size cannot be larger than %s",
-+			  display_size(cmd, (uint64_t) STRIPE_SIZE_LIMIT));
-+		return 0;
-+	}
-+
-+	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
-+		log_warn("Varied stripesize not supported. Ignoring.");
-+	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size * 2) {
-+		log_error("Reducing stripe size %s to maximum, "
-+			  "physical extent size %s",
-+			  display_size(cmd,lp->ac_stripesize_value),
-+			  display_size(cmd, (uint64_t) vg->extent_size));
-+		lp->stripe_size = vg->extent_size;
-+	} else
-+		lp->stripe_size = lp->ac_stripesize_value;
-+
-+	if (lp->stripe_size & (lp->stripe_size - 1)) {
-+		log_error("Stripe size must be power of 2");
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+static int _request_confirmation(struct cmd_context *cmd,
-+				 const struct volume_group *vg,
-+				 const struct logical_volume *lv,
-+				 const struct lvresize_params *lp)
-+{
-+	struct lvinfo info = { 0 };
-+
-+	if (!lv_info(cmd, lv, 0, &info, 1, 0) && driver_version(NULL, 0)) {
-+		log_error("lv_info failed: aborting");
-+		return 0;
-+	}
-+
-+	if (lp->resizefs) {
-+		if (!info.exists) {
-+			log_error("Logical volume %s must be activated "
-+				  "before resizing filesystem", lp->lv_name);
-+			return 0;
-+		}
-+		return 1;
-+	}
-+
-+	if (!info.exists)
-+		return 1;
-+
-+	log_warn("WARNING: Reducing active%s logical volume to %s",
-+		 info.open_count ? " and open" : "",
-+		 display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
-+
-+	log_warn("THIS MAY DESTROY YOUR DATA (filesystem etc.)");
-+
-+	if (!lp->ac_force) {
-+		if (yes_no_prompt("Do you really want to reduce %s? [y/n]: ",
-+				  lp->lv_name) == 'n') {
-+			log_error("Logical volume %s NOT reduced", lp->lv_name);
-+			return 0;
-+		}
-+		if (sigint_caught())
-+			return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+enum fsadm_cmd_e { FSADM_CMD_CHECK, FSADM_CMD_RESIZE };
-+#define FSADM_CMD "fsadm"
-+#define FSADM_CMD_MAX_ARGS 6
-+#define FSADM_CHECK_FAILS_FOR_MOUNTED 3 /* shell exist status code */
-+
-+/*
-+ * FSADM_CMD --dry-run --verbose --force check lv_path
-+ * FSADM_CMD --dry-run --verbose --force resize lv_path size
-+ */
-+static int _fsadm_cmd(struct cmd_context *cmd,
-+		      const struct volume_group *vg,
-+		      const struct lvresize_params *lp,
-+		      enum fsadm_cmd_e fcmd,
-+		      int *status)
-+{
-+	char lv_path[PATH_MAX];
-+	char size_buf[SIZE_BUF];
-+	const char *argv[FSADM_CMD_MAX_ARGS + 2];
-+	unsigned i = 0;
-+
-+	argv[i++] = FSADM_CMD;
-+
-+	if (test_mode())
-+		argv[i++] = "--dry-run";
-+
-+	if (verbose_level() >= _LOG_NOTICE)
-+		argv[i++] = "--verbose";
-+
-+	if (lp->ac_force)
-+		argv[i++] = "--force";
-+
-+	argv[i++] = (fcmd == FSADM_CMD_RESIZE) ? "resize" : "check";
-+
-+	if (status)
-+		*status = -1;
-+
-+	if (dm_snprintf(lv_path, PATH_MAX, "%s%s/%s", cmd->dev_dir, lp->vg_name,
-+			lp->lv_name) < 0) {
-+		log_error("Couldn't create LV path for %s", lp->lv_name);
-+		return 0;
-+	}
-+
-+	argv[i++] = lv_path;
-+
-+	if (fcmd == FSADM_CMD_RESIZE) {
-+		if (dm_snprintf(size_buf, SIZE_BUF, "%" PRIu64 "K",
-+				(uint64_t) lp->extents * vg->extent_size / 2) < 0) {
-+			log_error("Couldn't generate new LV size string");
-+			return 0;
-+		}
-+
-+		argv[i++] = size_buf;
-+	}
-+
-+	argv[i] = NULL;
-+
-+	return exec_cmd(cmd, argv, status, 1);
-+}
-+
-+static int _adjust_policy_params(struct cmd_context *cmd,
-+				 struct logical_volume *lv, struct lvresize_params *lp)
-+{
-+	percent_t percent;
-+	int policy_threshold, policy_amount;
-+
-+	if (lv_is_thin_pool(lv)) {
-+		policy_threshold =
-+			find_config_tree_int(cmd, activation_thin_pool_autoextend_threshold_CFG,
-+					     lv_config_profile(lv)) * PERCENT_1;
-+		policy_amount =
-+			find_config_tree_int(cmd, activation_thin_pool_autoextend_percent_CFG,
-+					     lv_config_profile(lv));
-+		if (!policy_amount && policy_threshold < PERCENT_100)
-+                        return 0;
-+	} else {
-+		policy_threshold =
-+			find_config_tree_int(cmd, activation_snapshot_autoextend_threshold_CFG, NULL) * PERCENT_1;
-+		policy_amount =
-+			find_config_tree_int(cmd, activation_snapshot_autoextend_percent_CFG, NULL);
-+	}
-+
-+	if (policy_threshold >= PERCENT_100)
-+		return 1; /* nothing to do */
-+
-+	if (lv_is_thin_pool(lv)) {
-+		if (!lv_thin_pool_percent(lv, 1, &percent))
-+			return_0;
-+		if ((PERCENT_0 < percent && percent <= PERCENT_100) &&
-+		    (percent > policy_threshold)) {
-+			if (!pool_can_resize_metadata(lv)) {
-+				log_error_once("Online metadata resize for %s/%s is not supported.",
-+					       lp->vg_name, lp->lv_name);
-+				return 0;
-+			}
-+			lp->poolmetadatasize = (first_seg(lv)->metadata_lv->size *
-+						policy_amount + 99) / 100;
-+			lp->poolmetadatasign = SIGN_PLUS;
-+		}
-+
-+		if (!lv_thin_pool_percent(lv, 0, &percent))
-+			return_0;
-+		if (!(PERCENT_0 < percent && percent <= PERCENT_100) ||
-+		    percent <= policy_threshold)
-+			return 1;
-+	} else {
-+		if (!lv_snapshot_percent(lv, &percent))
-+			return_0;
-+		if (!(PERCENT_0 < percent && percent <= PERCENT_100) || percent <= policy_threshold)
-+			return 1; /* nothing to do */
-+	}
-+
-+	lp->extents = policy_amount;
-+	lp->sizeargs = (lp->extents) ? 1 : 0;
-+
-+	return 1;
-+}
-+
-+static uint32_t lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
-+{
-+	uint32_t s;
-+	struct lv_segment *seg_mirr;
-+
-+	/* If segment mirrored, check if images are striped */
-+	if (seg_is_mirrored(seg))
-+		for (s = 0; s < seg->area_count; s++) {
-+			if (seg_type(seg, s) != AREA_LV)
-+				continue;
-+			seg_mirr = first_seg(seg_lv(seg, s));
-+
-+			if (seg_is_striped(seg_mirr)) {
-+				seg = seg_mirr;
-+				break;
-+			}
-+		}
-+
-+
-+	if (seg_is_striped(seg)) {
-+		*stripesize = seg->stripe_size;
-+		return seg->area_count;
-+	}
-+
-+	*stripesize = 0;
-+	return 0;
-+}
-+
-+static int _lvresize_poolmetadata(struct cmd_context *cmd, struct volume_group *vg,
-+				  struct lvresize_params *lp,
-+				  const struct logical_volume *pool_lv,
-+				  struct dm_list *pvh,
-+				  alloc_policy_t alloc)
-+{
-+	struct logical_volume *lv;
-+	struct lv_segment *mseg;
-+	uint32_t extents;
-+	uint32_t seg_mirrors;
-+
-+	if (!pool_can_resize_metadata(pool_lv)) {
-+		log_error("Support for online metadata resize not detected.");
-+		return 0;
-+	}
-+
-+	if (lp->poolmetadatasize % vg->extent_size) {
-+		lp->poolmetadatasize += vg->extent_size -
-+			(lp->poolmetadatasize % vg->extent_size);
-+		log_print_unless_silent("Rounding pool metadata size to boundary between physical extents: %s",
-+					display_size(cmd, lp->poolmetadatasize));
-+	}
-+
-+	if (!(extents = extents_from_size(vg->cmd, lp->poolmetadatasize,
-+					  vg->extent_size)))
-+		return_0;
-+
-+	lv = first_seg(pool_lv)->metadata_lv;
-+	if (lp->poolmetadatasign == SIGN_PLUS) {
-+		if (extents >= (MAX_EXTENT_COUNT - lv->le_count)) {
-+			log_error("Unable to extend %s by %u extents, exceeds limit (%u).",
-+				  lv->name, lv->le_count, MAX_EXTENT_COUNT);
-+			return 0;
-+		}
-+		extents += lv->le_count;
-+	}
-+
-+	if (extents * vg->extent_size > DM_THIN_MAX_METADATA_SIZE) {
-+		log_print_unless_silent("Rounding size to maximum supported size 16GiB "
-+					"for metadata volume %s.", lv->name);
-+		extents = (DM_THIN_MAX_METADATA_SIZE + vg->extent_size - 1) /
-+			vg->extent_size;
-+	}
-+
-+	if (extents == lv->le_count) {
-+		log_print_unless_silent("Metadata volume %s has already %s.",
-+					lv->name, display_size(cmd, lv->size));
-+		return 2;
-+	}
-+
-+	if (!lp->sizeargs && !archive(vg))
-+		return_0;
-+
-+	log_print_unless_silent("Extending logical volume %s to %s.",
-+				lv->name,
-+				display_size(cmd, (uint64_t) extents * vg->extent_size));
-+	mseg = last_seg(lv);
-+	seg_mirrors = lv_mirror_count(lv);
-+	if (!lv_extend(lv,
-+		       mseg->segtype,
-+		       mseg->area_count / seg_mirrors,
-+		       mseg->stripe_size,
-+		       seg_mirrors,
-+		       mseg->region_size,
-+		       extents - lv->le_count, NULL,
-+		       pvh, alloc))
-+		return_0;
-+
-+	return 1;
-+}
-+
-+int lv_resize(struct cmd_context *cmd, struct volume_group *vg,
-+		     struct lvresize_params *lp, struct dm_list *pvh)
-+{
-+	struct logical_volume *lv;
-+	uint32_t stripesize_extents;
-+	uint32_t seg_stripes = 0, seg_stripesize = 0, seg_size;
-+	uint32_t seg_mirrors = 0;
-+	uint32_t extents_used;
-+	uint32_t size_rest;
-+	uint32_t pv_extent_count;
-+	alloc_policy_t alloc;
-+	struct logical_volume *lock_lv = NULL;
-+	struct lv_list *lvl;
-+	struct lv_segment *seg, *uninitialized_var(mirr_seg);
-+	uint32_t seg_extents;
-+	uint32_t sz, str;
-+	int status;
-+
-+	/* does LV exist? */
-+	if (!(lvl = find_lv_in_vg(vg, lp->lv_name))) {
-+		log_error("Logical volume %s not found in volume group %s",
-+			  lp->lv_name, lp->vg_name);
-+		return ECMD_FAILED;
-+	}
-+
-+	lv = lvl->lv;
-+
-+	if (lv_is_external_origin(lv)) {
-+		/*
-+		 * Since external-origin can be activated read-only,
-+		 * there is no way to use extended areas.
-+		 */
-+		log_error("Cannot resize external origin \"%s\".", lv->name);
-+		return EINVALID_CMD_LINE;
-+	}
-+
-+	if (lv->status & (RAID_IMAGE | RAID_META)) {
-+		log_error("Cannot resize a RAID %s directly",
-+			  (lv->status & RAID_IMAGE) ? "image" :
-+			  "metadata area");
-+		return ECMD_FAILED;
-+	}
-+
-+	if (lv_is_raid_with_tracking(lv)) {
-+		log_error("Cannot resize %s while it is tracking a split image",
-+			  lv->name);
-+		return ECMD_FAILED;
-+	}
-+
-+	if (lp->ac_stripes) {
-+		if (vg->fid->fmt->features & FMT_SEGMENTS)
-+			lp->stripes = lp->ac_stripes_value;
-+		else
-+			log_warn("Varied striping not supported. Ignoring.");
-+	}
-+
-+	if (lp->ac_mirrors) {
-+		if (vg->fid->fmt->features & FMT_SEGMENTS)
-+			lp->mirrors = lp->ac_mirrors_value;
-+		else
-+			log_warn("Mirrors not supported. Ignoring.");
-+	}
-+
-+	if (lp->ac_stripesize &&
-+	    !_validate_stripesize(cmd, vg, lp))
-+		return EINVALID_CMD_LINE;
-+
-+	if (lp->ac_policy) {
-+		if (!lv_is_cow(lv) &&
-+		    !lv_is_thin_pool(lv)) {
-+			log_error("Policy-based resize is supported only for snapshot and thin pool volumes.");
-+			return ECMD_FAILED;
-+		}
-+		if (!_adjust_policy_params(cmd, lv, lp))
-+			return_ECMD_FAILED;
-+	}
-+
-+	if (!lv_is_visible(lv) &&
-+	    !lv_is_thin_pool_metadata(lv)) {
-+		log_error("Can't resize internal logical volume %s", lv->name);
-+		return ECMD_FAILED;
-+	}
-+
-+	if (lv->status & LOCKED) {
-+		log_error("Can't resize locked LV %s", lv->name);
-+		return ECMD_FAILED;
-+	}
-+
-+	if (lv->status & CONVERTING) {
-+		log_error("Can't resize %s while lvconvert in progress", lv->name);
-+		return ECMD_FAILED;
-+	}
-+
-+	alloc = (alloc_policy_t)(lp->ac_alloc)?lp->ac_alloc: lv->alloc;
-+
-+	/*
-+	 * First adjust to an exact multiple of extent size.
-+	 * When extending by a relative amount we round that amount up.
-+	 * When reducing by a relative amount we remove at most that amount.
-+	 * When changing to an absolute size, we round that size up.
-+	 */
-+	if (lp->size) {
-+		if (lp->size % vg->extent_size) {
-+			if (lp->sign == SIGN_MINUS)
-+				lp->size -= lp->size % vg->extent_size;
-+			else
-+				lp->size += vg->extent_size -
-+				    (lp->size % vg->extent_size);
-+
-+			log_print_unless_silent("Rounding size to boundary between physical extents: %s",
-+						display_size(cmd, lp->size));
-+		}
-+
-+		lp->extents = lp->size / vg->extent_size;
-+	}
-+
-+	if (lp->sizeargs) { /* TODO: reindent or move to function */
-+
-+	switch(lp->percent) {
-+		case PERCENT_VG:
-+			lp->extents = percent_of_extents(lp->extents, vg->extent_count,
-+							 (lp->sign != SIGN_MINUS));
-+			break;
-+		case PERCENT_FREE:
-+			lp->extents = percent_of_extents(lp->extents, vg->free_count,
-+							 (lp->sign != SIGN_MINUS));
-+			break;
-+		case PERCENT_LV:
-+			lp->extents = percent_of_extents(lp->extents, lv->le_count,
-+							 (lp->sign != SIGN_MINUS));
-+			break;
-+		case PERCENT_PVS:
-+			if (lp->argc) {
-+				pv_extent_count = pv_list_extents_free(pvh);
-+				lp->extents = percent_of_extents(lp->extents, pv_extent_count,
-+								 (lp->sign != SIGN_MINUS));
-+			} else
-+				lp->extents = percent_of_extents(lp->extents, vg->extent_count,
-+								 (lp->sign != SIGN_MINUS));
-+			break;
-+		case PERCENT_ORIGIN:
-+			if (!lv_is_cow(lv)) {
-+				log_error("Specified LV does not have an origin LV.");
-+				return EINVALID_CMD_LINE;
-+			}
-+			lp->extents = percent_of_extents(lp->extents, origin_from_cow(lv)->le_count,
-+							 (lp->sign != SIGN_MINUS));
-+			break;
-+		case PERCENT_NONE:
-+			break;
-+	}
-+
-+	if (lp->sign == SIGN_PLUS) {
-+		if (lp->extents >= (MAX_EXTENT_COUNT - lv->le_count)) {
-+			log_error("Unable to extend %s by %u extents, exceeds limit (%u).",
-+				  lp->lv_name, lv->le_count, MAX_EXTENT_COUNT);
-+			return EINVALID_CMD_LINE;
-+		}
-+		lp->extents += lv->le_count;
-+		if (lv_is_cow(lv)) {
-+			extents_used = cow_max_extents(origin_from_cow(lv), find_cow(lv)->chunk_size);
-+			if (extents_used < lp->extents) {
-+				log_print_unless_silent("Reached maximum COW size %s.",
-+							display_size(vg->cmd, (uint64_t) vg->extent_size * extents_used));
-+				lp->extents = extents_used;
-+				if (lp->extents == lv->le_count)
-+					return ECMD_PROCESSED;
-+			}
-+		}
-+	} else if (lp->sign == SIGN_MINUS) {
-+		if (lp->extents >= lv->le_count) {
-+			log_error("Unable to reduce %s below 1 extent",
-+				  lp->lv_name);
-+			return EINVALID_CMD_LINE;
-+		}
-+
-+		lp->extents = lv->le_count - lp->extents;
-+	}
-+
-+	if (!lp->extents) {
-+		log_error("New size of 0 not permitted");
-+		return EINVALID_CMD_LINE;
-+	}
-+
-+	if (lp->extents == lv->le_count) {
-+		/* A bit of hack - but still may resize metadata */
-+		if (lp->poolmetadatasize) {
-+			lp->sizeargs = 0;
-+			goto metadata_resize;
-+		}
-+		if (lp->ac_policy)
-+			return ECMD_PROCESSED; /* Nothing to do. */
-+		if (!lp->resizefs) {
-+			log_error("New size (%d extents) matches existing size "
-+				  "(%d extents)", lp->extents, lv->le_count);
-+			return EINVALID_CMD_LINE;
-+		}
-+		lp->resize = LV_EXTEND; /* lets pretend zero size extension */
-+	}
-+
-+	seg_size = lp->extents - lv->le_count;
-+
-+	/* Use segment type of last segment */
-+	lp->segtype = last_seg(lv)->segtype;
-+
-+	/* FIXME Support LVs with mixed segment types */
-+	if (lp->segtype != get_segtype_from_string(cmd, (lp->ac_type)?lp->ac_type:lp->segtype->name)) {
-+		log_error("VolumeType does not match (%s)", lp->segtype->name);
-+		return EINVALID_CMD_LINE;
-+	}
-+
-+	/* If extending, find mirrors of last segment */
-+	if ((lp->extents > lv->le_count)) {
-+		/*
-+		 * Has the user specified that they would like the additional
-+		 * extents of a mirror not to have an initial sync?
-+		 */
-+		if (seg_is_mirrored(first_seg(lv)) && lp->ac_no_sync)
-+			lv->status |= LV_NOTSYNCED;
-+
-+		dm_list_iterate_back_items(mirr_seg, &lv->segments) {
-+			if (seg_is_mirrored(mirr_seg))
-+				seg_mirrors = lv_mirror_count(mirr_seg->lv);
-+			else
-+				seg_mirrors = 0;
-+			break;
-+		}
-+
-+		if (!lp->ac_mirrors && seg_mirrors) {
-+			log_print_unless_silent("Extending %" PRIu32 " mirror images.",
-+						seg_mirrors);
-+			lp->mirrors = seg_mirrors;
-+		}
-+		if ((lp->ac_mirrors || seg_mirrors) &&
-+		    (lp->mirrors != seg_mirrors)) {
-+			log_error("Cannot vary number of mirrors in LV yet.");
-+			return EINVALID_CMD_LINE;
-+		}
-+
-+		if (seg_mirrors && !strcmp(mirr_seg->segtype->name, "raid10")) {
-+			lp->stripes = mirr_seg->area_count / seg_mirrors;
-+			lp->stripe_size = mirr_seg->stripe_size;
-+		}
-+	}
-+
-+	/* If extending, find stripes, stripesize & size of last segment */
-+	if ((lp->extents > lv->le_count) &&
-+	    !(lp->stripes == 1 || (lp->stripes > 1 && lp->stripe_size)) &&
-+	    strcmp(mirr_seg->segtype->name, "raid10")) {
-+		/* FIXME Don't assume mirror seg will always be AREA_LV */
-+		/* FIXME We will need to support resize for metadata LV as well,
-+		 *       and data LV could be any type (i.e. mirror)) */
-+		dm_list_iterate_items(seg, seg_mirrors ? &seg_lv(mirr_seg, 0)->segments :
-+				      lv_is_thin_pool(lv) ? &seg_lv(first_seg(lv), 0)->segments : &lv->segments) {
-+			/* Allow through "striped" and RAID 4/5/6/10 */
-+			if (!seg_is_striped(seg) &&
-+			    (!seg_is_raid(seg) || seg_is_mirrored(seg)) &&
-+			    strcmp(seg->segtype->name, "raid10"))
-+				continue;
-+
-+			sz = seg->stripe_size;
-+			str = seg->area_count - lp->segtype->parity_devs;
-+
-+			if ((seg_stripesize && seg_stripesize != sz &&
-+			     sz && !lp->stripe_size) ||
-+			    (seg_stripes && seg_stripes != str && !lp->stripes)) {
-+				log_error("Please specify number of "
-+					  "stripes (-i) and stripesize (-I)");
-+				return EINVALID_CMD_LINE;
-+			}
-+
-+			seg_stripesize = sz;
-+			seg_stripes = str;
-+		}
-+
-+		if (!lp->stripes)
-+			lp->stripes = seg_stripes;
-+		else if (seg_is_raid(first_seg(lv)) &&
-+			 (lp->stripes != seg_stripes)) {
-+			log_error("Unable to extend \"%s\" segment type with different number of stripes.", first_seg(lv)->segtype->ops->name(first_seg(lv)));
-+			return ECMD_FAILED;
-+		}
-+
-+		if (!lp->stripe_size && lp->stripes > 1) {
-+			if (seg_stripesize) {
-+				log_print_unless_silent("Using stripesize of last segment %s",
-+							display_size(cmd, (uint64_t) seg_stripesize));
-+				lp->stripe_size = seg_stripesize;
-+			} else {
-+				lp->stripe_size =
-+					find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
-+				log_print_unless_silent("Using default stripesize %s",
-+							display_size(cmd, (uint64_t) lp->stripe_size));
-+			}
-+		}
-+	}
-+
-+	/* If reducing, find stripes, stripesize & size of last segment */
-+	if (lp->extents < lv->le_count) {
-+		extents_used = 0;
-+
-+		if (lp->stripes || lp->stripe_size || lp->mirrors)
-+			log_error("Ignoring stripes, stripesize and mirrors "
-+				  "arguments when reducing");
-+
-+		dm_list_iterate_items(seg, &lv->segments) {
-+			seg_extents = seg->len;
-+
-+			/* Check for underlying stripe sizes */
-+			seg_stripes = lvseg_get_stripes(seg, &seg_stripesize);
-+
-+			if (seg_is_mirrored(seg))
-+				seg_mirrors = lv_mirror_count(seg->lv);
-+			else
-+				seg_mirrors = 0;
-+
-+			if (lp->extents <= extents_used + seg_extents)
-+				break;
-+
-+			extents_used += seg_extents;
-+		}
-+
-+		seg_size = lp->extents - extents_used;
-+		lp->stripe_size = seg_stripesize;
-+		lp->stripes = seg_stripes;
-+		lp->mirrors = seg_mirrors;
-+	}
-+
-+	if (lp->stripes > 1 && !lp->stripe_size) {
-+		log_error("Stripesize for striped segment should not be 0!");
-+		return EINVALID_CMD_LINE;
-+	}
-+
-+	if (lp->stripes > 1) {
-+		if (lp->stripe_size < STRIPE_SIZE_MIN) {
-+			log_error("Invalid stripe size %s",
-+				  display_size(cmd, (uint64_t) lp->stripe_size));
-+			return EINVALID_CMD_LINE;
-+		}
-+
-+		if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
-+			stripesize_extents = 1;
-+
-+		size_rest = seg_size % (lp->stripes * stripesize_extents);
-+		/* Round toward the original size. */
-+		if (size_rest &&
-+		    ((lp->extents < lv->le_count) ||
-+		     !lp->percent ||
-+		     (vg->free_count >= (lp->extents - lv->le_count - size_rest +
-+					 (lp->stripes * stripesize_extents))))) {
-+			log_print_unless_silent("Rounding size (%d extents) up to stripe "
-+						"boundary size for segment (%d extents)",
-+						lp->extents, lp->extents - size_rest +
-+						(lp->stripes * stripesize_extents));
-+			lp->extents = lp->extents - size_rest +
-+				      (lp->stripes * stripesize_extents);
-+		} else if (size_rest) {
-+			log_print_unless_silent("Rounding size (%d extents) down to stripe "
-+						"boundary size for segment (%d extents)",
-+						lp->extents, lp->extents - size_rest);
-+			lp->extents = lp->extents - size_rest;
-+		}
-+	}
-+
-+	if (lp->extents < lv->le_count) {
-+		if (lp->resize == LV_EXTEND) {
-+			log_error("New size given (%d extents) not larger "
-+				  "than existing size (%d extents)",
-+				  lp->extents, lv->le_count);
-+			return EINVALID_CMD_LINE;
-+		}
-+		lp->resize = LV_REDUCE;
-+	} else if (lp->extents > lv->le_count) {
-+		if (lp->resize == LV_REDUCE) {
-+			log_error("New size given (%d extents) not less than "
-+				  "existing size (%d extents)", lp->extents,
-+				  lv->le_count);
-+			return EINVALID_CMD_LINE;
-+		}
-+		lp->resize = LV_EXTEND;
-+	} else if (lp->extents == lv->le_count) {
-+		if (lp->ac_policy)
-+			return ECMD_PROCESSED; /* Nothing to do. */
-+		if (!lp->resizefs) {
-+			log_error("New size (%d extents) matches existing size "
-+				  "(%d extents)", lp->extents, lv->le_count);
-+			return EINVALID_CMD_LINE;
-+		}
-+		lp->resize = LV_EXTEND;
-+	}
-+
-+	if (lv_is_origin(lv)) {
-+		if (lp->resize == LV_REDUCE) {
-+			log_error("Snapshot origin volumes cannot be reduced "
-+				  "in size yet.");
-+			return ECMD_FAILED;
-+		}
-+
-+		if (lv_is_active(lv)) {
-+			log_error("Snapshot origin volumes can be resized "
-+				  "only while inactive: try lvchange -an");
-+			return ECMD_FAILED;
-+		}
-+	}
-+
-+	if (lv_is_thin_pool(lv)) {
-+		if (lp->resize == LV_REDUCE) {
-+			log_error("Thin pool volumes cannot be reduced in size yet.");
-+			return ECMD_FAILED;
-+		}
-+
-+		if (lp->resizefs) {
-+			log_warn("Thin pool volumes do not have filesystem.");
-+			lp->resizefs = 0;
-+		}
-+	} else if (lp->poolmetadatasize) {
-+		log_error("--poolmetadatasize can be used only with thin pools.");
-+		return ECMD_FAILED;
-+	}
-+
-+	if ((lp->resize == LV_REDUCE) && lp->argc)
-+		log_warn("Ignoring PVs on command line when reducing");
-+
-+	/* Request confirmation before operations that are often mistakes. */
-+	if ((lp->resizefs || (lp->resize == LV_REDUCE)) &&
-+	    !_request_confirmation(cmd, vg, lv, lp))
-+		return_ECMD_FAILED;
-+
-+	if (lp->resizefs) {
-+		if (!lp->nofsck &&
-+		    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_CHECK, &status)) {
-+			if (status != FSADM_CHECK_FAILS_FOR_MOUNTED) {
-+				log_error("Filesystem check failed.");
-+				return ECMD_FAILED;
-+			}
-+			/* some filesystems supports online resize */
-+		}
-+
-+		if ((lp->resize == LV_REDUCE) &&
-+		    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL)) {
-+			log_error("Filesystem resize failed.");
-+			return ECMD_FAILED;
-+		}
-+	}
-+
-+	if (!archive(vg))
-+		return_ECMD_FAILED;
-+
-+	log_print_unless_silent("%sing logical volume %s to %s",
-+				(lp->resize == LV_REDUCE) ? "Reduc" : "Extend",
-+				lv->name,
-+				display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
-+
-+	if (lp->resize == LV_REDUCE) {
-+		if (!lv_reduce(lv, lv->le_count - lp->extents))
-+			return ECMD_FAILED;
-+	} else if ((lp->extents > lv->le_count) && /* Ensure we extend */
-+		   !lv_extend(lv, lp->segtype,
-+			      lp->stripes, lp->stripe_size,
-+			      lp->mirrors, first_seg(lv)->region_size,
-+			      lp->extents - lv->le_count, NULL,
-+			      pvh, alloc))
-+		return_ECMD_FAILED;
-+
-+	/* If thin metadata, must suspend thin pool */
-+	if (lv_is_thin_pool_metadata(lv)) {
-+		if (!(lock_lv = find_pool_lv(lv)))
-+			return_0;
-+	/* If snapshot, must suspend all associated devices */
-+	} else if (lv_is_cow(lv))
-+		lock_lv = origin_from_cow(lv);
-+	else
-+		lock_lv = lv;
-+
-+	} /* lp->sizeargs */
-+
-+	if (lp->poolmetadatasize) {
-+metadata_resize:
-+		if (!(status = _lvresize_poolmetadata(cmd, vg, lp, lv, pvh, alloc)))
-+			return_ECMD_FAILED;
-+		else if ((status == 2) && !lp->sizeargs)
-+			return ECMD_PROCESSED;
-+		lock_lv = lv;
-+	}
-+
-+	if (!lock_lv)
-+		return ECMD_PROCESSED; /* Nothing to do */
-+
-+	/* store vg on disk(s) */
-+	if (!vg_write(vg))
-+		return_ECMD_FAILED;
-+
-+	if (!suspend_lv(cmd, lock_lv)) {
-+		log_error("Failed to suspend %s", lock_lv->name);
-+		vg_revert(vg);
-+		backup(vg);
-+		return ECMD_FAILED;
-+	}
-+
-+	if (!vg_commit(vg)) {
-+		stack;
-+		if (!resume_lv(cmd, lock_lv))
-+			stack;
-+		backup(vg);
-+		return ECMD_FAILED;
-+	}
-+
-+	if (!resume_lv(cmd, lock_lv)) {
-+		log_error("Problem reactivating %s", lock_lv->name);
-+		backup(vg);
-+		return ECMD_FAILED;
-+	}
-+
-+	if (lv_is_cow_covering_origin(lv))
-+		if (!monitor_dev_for_events(cmd, lv, 0, 0))
-+			stack;
-+
-+	backup(vg);
-+
-+	/*
-+	 * Update lvm pool metadata (drop messages) if the pool has been
-+	 * resumed and do a pool active/deactivate in other case.
-+	 *
-+	 * Note: Active thin pool can be waiting for resize.
-+	 *
-+	 * FIXME: Activate only when thin volume is active
-+	 */
-+	if (lv_is_thin_pool(lv) &&
-+	    !update_pool_lv(lv, !lv_is_active(lv)))
-+		return_ECMD_FAILED;
-+
-+	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
-+
-+	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
-+	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL))
-+		return_ECMD_FAILED;
-+
-+	return ECMD_PROCESSED;
-+}
-+
- char *generate_lv_name(struct volume_group *vg, const char *format,
- 		       char *buffer, size_t len)
- {
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 50d9d2c..f07e360 100644
+index ee8f0c1..7743c47 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -429,6 +429,52 @@ struct pvcreate_params {
- 	struct pvcreate_restorable_params rp;
+@@ -403,6 +403,11 @@ struct lv_list {
+ 	struct logical_volume *lv;
  };
  
-+struct lvresize_params {
-+	const char *vg_name;
-+	const char *lv_name;
-+
-+	uint32_t stripes;
-+	uint32_t stripe_size;
-+	uint32_t mirrors;
-+
-+	const struct segment_type *segtype;
-+
-+	/* size */
-+	uint32_t extents;
-+	uint64_t size;
-+	int sizeargs;
-+	sign_t sign;
-+	uint64_t poolmetadatasize;
-+	sign_t poolmetadatasign;
-+	percent_type_t percent;
-+
-+	enum {
-+		LV_ANY = 0,
-+		LV_REDUCE = 1,
-+		LV_EXTEND = 2
-+	} resize;
-+
-+	int resizefs;
-+	int nofsck;
-+
-+	int argc;
-+	char **argv;
-+
-+	/* Arg counts & values */
-+	unsigned ac_policy;
-+	unsigned ac_stripes;
-+	uint32_t ac_stripes_value;
-+	unsigned ac_mirrors;
-+	uint32_t ac_mirrors_value;
-+	unsigned ac_stripesize;
-+	uint64_t ac_stripesize_value;
-+	unsigned ac_alloc;
-+	unsigned ac_no_sync;
-+	unsigned ac_force;
-+
-+	const char *ac_type;
++struct vg_list {
++	struct dm_list list;
++	struct volume_group *vg;
 +};
 +
- struct physical_volume *pvcreate_single(struct cmd_context *cmd,
- 					const char *pv_name,
- 					struct pvcreate_params *pp,
-@@ -475,6 +521,9 @@ int vgs_are_compatible(struct cmd_context *cmd,
- 		       struct volume_group *vg_to);
- uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname);
+ #define PV_PE_START_CALC ((uint64_t) -1) /* Calculate pe_start value */
  
-+int lv_resize(struct cmd_context *cmd, struct volume_group *vg,
-+		     struct lvresize_params *lp, struct dm_list *pvh);
+ struct pvcreate_restorable_params {
+@@ -493,7 +498,12 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_na
+ struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
+ 				int warnings,
+ 				int scan_label_only);
+-struct dm_list *get_pvs(struct cmd_context *cmd);
 +
++#define get_pvs( cmd ) get_pvs_internal((cmd), NULL, NULL)
++#define get_pvs_perserve_vg( cmd, pv_list, vg_list ) get_pvs_internal((cmd), (pv_list), (vg_list))
++
++struct dm_list *get_pvs_internal(struct cmd_context *cmd,
++		struct dm_list *pvslist, struct dm_list *vgslist);
+ 
  /*
-  * Return a handle to VG metadata.
-  */
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index f08fa91..7c73341 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -15,186 +15,6 @@
+  * Add/remove LV to/from volume group
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index e12e1b0..0f71abc 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3692,7 +3692,8 @@ struct dm_list *get_vgids(struct cmd_context *cmd, int include_internal)
+ 	return lvmcache_get_vgids(cmd, include_internal);
+ }
  
- #include "tools.h"
- 
--#define SIZE_BUF 128
--
--struct lvresize_params {
--	const char *vg_name;
--	const char *lv_name;
--
--	uint32_t stripes;
--	uint32_t stripe_size;
--	uint32_t mirrors;
--
--	const struct segment_type *segtype;
--
--	/* size */
--	uint32_t extents;
--	uint64_t size;
--	int sizeargs;
--	sign_t sign;
--	uint64_t poolmetadatasize;
--	sign_t poolmetadatasign;
--	percent_type_t percent;
--
--	enum {
--		LV_ANY = 0,
--		LV_REDUCE = 1,
--		LV_EXTEND = 2
--	} resize;
--
--	int resizefs;
--	int nofsck;
--
--	int argc;
--	char **argv;
--
--	/* Arg counts & values */
--	unsigned ac_policy;
--	unsigned ac_stripes;
--	uint32_t ac_stripes_value;
--	unsigned ac_mirrors;
--	uint32_t ac_mirrors_value;
--	unsigned ac_stripesize;
--	uint64_t ac_stripesize_value;
--	unsigned ac_alloc;
--	unsigned ac_no_sync;
--	unsigned ac_force;
--
--	const char *ac_type;
--};
--
--static int _validate_stripesize(struct cmd_context *cmd,
--				const struct volume_group *vg,
--				struct lvresize_params *lp)
--{
--
--	if ( lp->ac_stripesize_value > STRIPE_SIZE_LIMIT * 2) {
--		log_error("Stripe size cannot be larger than %s",
--			  display_size(cmd, (uint64_t) STRIPE_SIZE_LIMIT));
--		return 0;
--	}
--
--	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
--		log_warn("Varied stripesize not supported. Ignoring.");
--	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size * 2) {
--		log_error("Reducing stripe size %s to maximum, "
--			  "physical extent size %s",
--			  display_size(cmd,lp->ac_stripesize_value),
--			  display_size(cmd, (uint64_t) vg->extent_size));
--		lp->stripe_size = vg->extent_size;
--	} else
--		lp->stripe_size = lp->ac_stripesize_value;
--
--	if (lp->stripe_size & (lp->stripe_size - 1)) {
--		log_error("Stripe size must be power of 2");
--		return 0;
--	}
--
--	return 1;
--}
--
--static int _request_confirmation(struct cmd_context *cmd,
--				 const struct volume_group *vg,
--				 const struct logical_volume *lv,
--				 const struct lvresize_params *lp)
--{
--	struct lvinfo info = { 0 };
--
--	if (!lv_info(cmd, lv, 0, &info, 1, 0) && driver_version(NULL, 0)) {
--		log_error("lv_info failed: aborting");
--		return 0;
--	}
--
--	if (lp->resizefs) {
--		if (!info.exists) {
--			log_error("Logical volume %s must be activated "
--				  "before resizing filesystem", lp->lv_name);
--			return 0;
--		}
--		return 1;
--	}
--
--	if (!info.exists)
--		return 1;
--
--	log_warn("WARNING: Reducing active%s logical volume to %s",
--		 info.open_count ? " and open" : "",
--		 display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
--
--	log_warn("THIS MAY DESTROY YOUR DATA (filesystem etc.)");
--
--	if (!lp->ac_force) {
--		if (yes_no_prompt("Do you really want to reduce %s? [y/n]: ",
--				  lp->lv_name) == 'n') {
--			log_error("Logical volume %s NOT reduced", lp->lv_name);
--			return 0;
--		}
--		if (sigint_caught())
--			return 0;
--	}
--
--	return 1;
--}
--
--enum fsadm_cmd_e { FSADM_CMD_CHECK, FSADM_CMD_RESIZE };
--#define FSADM_CMD "fsadm"
--#define FSADM_CMD_MAX_ARGS 6
--#define FSADM_CHECK_FAILS_FOR_MOUNTED 3 /* shell exist status code */
--
--/*
-- * FSADM_CMD --dry-run --verbose --force check lv_path
-- * FSADM_CMD --dry-run --verbose --force resize lv_path size
-- */
--static int _fsadm_cmd(struct cmd_context *cmd,
--		      const struct volume_group *vg,
--		      const struct lvresize_params *lp,
--		      enum fsadm_cmd_e fcmd,
--		      int *status)
--{
--	char lv_path[PATH_MAX];
--	char size_buf[SIZE_BUF];
--	const char *argv[FSADM_CMD_MAX_ARGS + 2];
--	unsigned i = 0;
--
--	argv[i++] = FSADM_CMD;
--
--	if (test_mode())
--		argv[i++] = "--dry-run";
--
--	if (verbose_level() >= _LOG_NOTICE)
--		argv[i++] = "--verbose";
--
--	if (lp->ac_force)
--		argv[i++] = "--force";
--
--	argv[i++] = (fcmd == FSADM_CMD_RESIZE) ? "resize" : "check";
--
--	if (status)
--		*status = -1;
--
--	if (dm_snprintf(lv_path, PATH_MAX, "%s%s/%s", cmd->dev_dir, lp->vg_name,
--			lp->lv_name) < 0) {
--		log_error("Couldn't create LV path for %s", lp->lv_name);
--		return 0;
--	}
--
--	argv[i++] = lv_path;
--
--	if (fcmd == FSADM_CMD_RESIZE) {
--		if (dm_snprintf(size_buf, SIZE_BUF, "%" PRIu64 "K",
--				(uint64_t) lp->extents * vg->extent_size / 2) < 0) {
--			log_error("Couldn't generate new LV size string");
--			return 0;
--		}
--
--		argv[i++] = size_buf;
--	}
--
--	argv[i] = NULL;
--
--	return exec_cmd(cmd, argv, status, 1);
--}
--
- static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
- 			    struct lvresize_params *lp)
+-static int _get_pvs(struct cmd_context *cmd, int warnings, struct dm_list **pvslist)
++static int _get_pvs(struct cmd_context *cmd, int warnings,
++		struct dm_list *pvslist, struct dm_list *vgslist)
  {
-@@ -344,703 +164,6 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
+ 	struct str_list *strl;
+ 	struct dm_list * uninitialized_var(results);
+@@ -3702,18 +3703,11 @@ static int _get_pvs(struct cmd_context *cmd, int warnings, struct dm_list **pvsl
+ 	struct volume_group *vg;
+ 	int consistent = 0;
+ 	int old_pvmove;
++	struct vg_list *vgl_item = NULL;
++	int have_pv = 0;
+ 
+ 	lvmcache_label_scan(cmd, 0);
+ 
+-	if (pvslist) {
+-		if (!(results = dm_pool_alloc(cmd->mem, sizeof(*results)))) {
+-			log_error("PV list allocation failed");
+-			return 0;
+-		}
+-
+-		dm_list_init(results);
+-	}
+-
+ 	/* Get list of VGs */
+ 	if (!(vgids = get_vgids(cmd, 1))) {
+ 		log_error("get_pvs: get_vgids failed");
+@@ -3733,7 +3727,15 @@ static int _get_pvs(struct cmd_context *cmd, int warnings, struct dm_list **pvsl
+ 			stack;
+ 			continue;
+ 		}
+-		if (!(vg = vg_read_internal(cmd, vgname, vgid, warnings, &consistent))) {
++
++		/* When we are retrieving a list to return toliblvm we need
++		 * that list to contain VGs that are modifiable as we are using
++		 * the vgmem pool in the vg to provide allocation for liblvm.
++		 * This is a hack to prevent the vg from getting cached as the
++		 * vgid will be NULL.  There is most definitely a better way
++		 * to do this.
++		 */
++		if (!(vg = vg_read_internal(cmd, vgname, (!vgslist) ? vgid : NULL, warnings, &consistent))) {
+ 			stack;
+ 			continue;
+ 		}
+@@ -3749,33 +3751,78 @@ static int _get_pvs(struct cmd_context *cmd, int warnings, struct dm_list **pvsl
+ 					release_vg(vg);
+ 					return 0;
+ 				}
+-				dm_list_add(results, &pvl_copy->list);
++				/* If we are going to release the vg, don't store a pointer to
++				 * it in the pv structure.
++				 */
++				if (!vgslist) {
++					pvl_copy->pv->vg = NULL;
++				}
++				have_pv = 1;
++				dm_list_add(pvslist, &pvl_copy->list);
+ 			}
+-		release_vg(vg);
++
++		/* In the case of the library we want to preserve the embedded volume
++		 * group as subsequent calls to retrieve data about the pv require it.
++		 */
++		if (!vgslist || have_pv == 0) {
++			release_vg(vg);
++		} else {
++			/* Add vg to list of vg objects that will be returned
++			 */
++			vgl_item = dm_pool_alloc(cmd->mem, sizeof(*vgl_item));
++			if (!vgl_item) {
++				log_error("VG list element allocation failed");
++				return 0;
++			}
++			vgl_item->vg = vg;
++			vg = NULL;
++			dm_list_add(vgslist, &vgl_item->list);
++		}
++		have_pv = 0;
+ 	}
+ 	init_pvmove(old_pvmove);
+ 
+-	if (pvslist)
+-		*pvslist = results;
+-	else
++	if (!pvslist) {
+ 		dm_pool_free(cmd->mem, vgids);
+-
++	}
  	return 1;
  }
  
--static int _adjust_policy_params(struct cmd_context *cmd,
--				 struct logical_volume *lv, struct lvresize_params *lp)
--{
--	percent_t percent;
--	int policy_threshold, policy_amount;
--
--	if (lv_is_thin_pool(lv)) {
--		policy_threshold =
--			find_config_tree_int(cmd, activation_thin_pool_autoextend_threshold_CFG,
--					     lv_config_profile(lv)) * PERCENT_1;
--		policy_amount =
--			find_config_tree_int(cmd, activation_thin_pool_autoextend_percent_CFG,
--					     lv_config_profile(lv));
--		if (!policy_amount && policy_threshold < PERCENT_100)
--                        return 0;
--	} else {
--		policy_threshold =
--			find_config_tree_int(cmd, activation_snapshot_autoextend_threshold_CFG, NULL) * PERCENT_1;
--		policy_amount =
--			find_config_tree_int(cmd, activation_snapshot_autoextend_percent_CFG, NULL);
--	}
--
--	if (policy_threshold >= PERCENT_100)
--		return 1; /* nothing to do */
--
--	if (lv_is_thin_pool(lv)) {
--		if (!lv_thin_pool_percent(lv, 1, &percent))
--			return_0;
--		if ((PERCENT_0 < percent && percent <= PERCENT_100) &&
--		    (percent > policy_threshold)) {
--			if (!pool_can_resize_metadata(lv)) {
--				log_error_once("Online metadata resize for %s/%s is not supported.",
--					       lp->vg_name, lp->lv_name);
--				return 0;
--			}
--			lp->poolmetadatasize = (first_seg(lv)->metadata_lv->size *
--						policy_amount + 99) / 100;
--			lp->poolmetadatasign = SIGN_PLUS;
--		}
--
--		if (!lv_thin_pool_percent(lv, 0, &percent))
--			return_0;
--		if (!(PERCENT_0 < percent && percent <= PERCENT_100) ||
--		    percent <= policy_threshold)
--			return 1;
--	} else {
--		if (!lv_snapshot_percent(lv, &percent))
--			return_0;
--		if (!(PERCENT_0 < percent && percent <= PERCENT_100) || percent <= policy_threshold)
--			return 1; /* nothing to do */
--	}
--
--	lp->extents = policy_amount;
--	lp->sizeargs = (lp->extents) ? 1 : 0;
--
--	return 1;
--}
--
--static uint32_t lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
--{
--	uint32_t s;
--	struct lv_segment *seg_mirr;
--
--	/* If segment mirrored, check if images are striped */
--	if (seg_is_mirrored(seg))
--		for (s = 0; s < seg->area_count; s++) {
--			if (seg_type(seg, s) != AREA_LV)
--				continue;
--			seg_mirr = first_seg(seg_lv(seg, s));
--
--			if (seg_is_striped(seg_mirr)) {
--				seg = seg_mirr;
--				break;
--			}
--		}
--
--
--	if (seg_is_striped(seg)) {
--		*stripesize = seg->stripe_size;
--		return seg->area_count;
--	}
--
--	*stripesize = 0;
--	return 0;
--}
--
--static int _lvresize_poolmetadata(struct cmd_context *cmd, struct volume_group *vg,
--				  struct lvresize_params *lp,
--				  const struct logical_volume *pool_lv,
--				  struct dm_list *pvh,
--				  alloc_policy_t alloc)
--{
--	struct logical_volume *lv;
--	struct lv_segment *mseg;
--	uint32_t extents;
--	uint32_t seg_mirrors;
--
--	if (!pool_can_resize_metadata(pool_lv)) {
--		log_error("Support for online metadata resize not detected.");
--		return 0;
--	}
--
--	if (lp->poolmetadatasize % vg->extent_size) {
--		lp->poolmetadatasize += vg->extent_size -
--			(lp->poolmetadatasize % vg->extent_size);
--		log_print_unless_silent("Rounding pool metadata size to boundary between physical extents: %s",
--					display_size(cmd, lp->poolmetadatasize));
--	}
--
--	if (!(extents = extents_from_size(vg->cmd, lp->poolmetadatasize,
--					  vg->extent_size)))
--		return_0;
--
--	lv = first_seg(pool_lv)->metadata_lv;
--	if (lp->poolmetadatasign == SIGN_PLUS) {
--		if (extents >= (MAX_EXTENT_COUNT - lv->le_count)) {
--			log_error("Unable to extend %s by %u extents, exceeds limit (%u).",
--				  lv->name, lv->le_count, MAX_EXTENT_COUNT);
--			return 0;
--		}
--		extents += lv->le_count;
--	}
--
--	if (extents * vg->extent_size > DM_THIN_MAX_METADATA_SIZE) {
--		log_print_unless_silent("Rounding size to maximum supported size 16GiB "
--					"for metadata volume %s.", lv->name);
--		extents = (DM_THIN_MAX_METADATA_SIZE + vg->extent_size - 1) /
--			vg->extent_size;
--	}
--
--	if (extents == lv->le_count) {
--		log_print_unless_silent("Metadata volume %s has already %s.",
--					lv->name, display_size(cmd, lv->size));
--		return 2;
--	}
--
--	if (!lp->sizeargs && !archive(vg))
--		return_0;
--
--	log_print_unless_silent("Extending logical volume %s to %s.",
--				lv->name,
--				display_size(cmd, (uint64_t) extents * vg->extent_size));
--	mseg = last_seg(lv);
--	seg_mirrors = lv_mirror_count(lv);
--	if (!lv_extend(lv,
--		       mseg->segtype,
--		       mseg->area_count / seg_mirrors,
--		       mseg->stripe_size,
--		       seg_mirrors,
--		       mseg->region_size,
--		       extents - lv->le_count, NULL,
--		       pvh, alloc))
--		return_0;
--
--	return 1;
--}
--
--static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
--		     struct lvresize_params *lp, struct dm_list *pvh)
--{
--	struct logical_volume *lv;
--	uint32_t stripesize_extents;
--	uint32_t seg_stripes = 0, seg_stripesize = 0, seg_size;
--	uint32_t seg_mirrors = 0;
--	uint32_t extents_used;
--	uint32_t size_rest;
--	uint32_t pv_extent_count;
--	alloc_policy_t alloc;
--	struct logical_volume *lock_lv = NULL;
--	struct lv_list *lvl;
--	struct lv_segment *seg, *uninitialized_var(mirr_seg);
--	uint32_t seg_extents;
--	uint32_t sz, str;
--	int status;
--
--	/* does LV exist? */
--	if (!(lvl = find_lv_in_vg(vg, lp->lv_name))) {
--		log_error("Logical volume %s not found in volume group %s",
--			  lp->lv_name, lp->vg_name);
--		return ECMD_FAILED;
--	}
--
--	lv = lvl->lv;
--
--	if (lv_is_external_origin(lv)) {
--		/*
--		 * Since external-origin can be activated read-only,
--		 * there is no way to use extended areas.
--		 */
--		log_error("Cannot resize external origin \"%s\".", lv->name);
--		return EINVALID_CMD_LINE;
--	}
--
--	if (lv->status & (RAID_IMAGE | RAID_META)) {
--		log_error("Cannot resize a RAID %s directly",
--			  (lv->status & RAID_IMAGE) ? "image" :
--			  "metadata area");
--		return ECMD_FAILED;
--	}
--
--	if (lv_is_raid_with_tracking(lv)) {
--		log_error("Cannot resize %s while it is tracking a split image",
--			  lv->name);
--		return ECMD_FAILED;
--	}
--
--	if (lp->ac_stripes) {
--		if (vg->fid->fmt->features & FMT_SEGMENTS)
--			lp->stripes = lp->ac_stripes_value;
--		else
--			log_warn("Varied striping not supported. Ignoring.");
--	}
--
--	if (lp->ac_mirrors) {
--		if (vg->fid->fmt->features & FMT_SEGMENTS)
--			lp->mirrors = lp->ac_mirrors_value;
--		else
--			log_warn("Mirrors not supported. Ignoring.");
--	}
--
--	if (lp->ac_stripesize &&
--	    !_validate_stripesize(cmd, vg, lp))
--		return EINVALID_CMD_LINE;
--
--	if (lp->ac_policy) {
--		if (!lv_is_cow(lv) &&
--		    !lv_is_thin_pool(lv)) {
--			log_error("Policy-based resize is supported only for snapshot and thin pool volumes.");
--			return ECMD_FAILED;
--		}
--		if (!_adjust_policy_params(cmd, lv, lp))
--			return_ECMD_FAILED;
--	}
--
--	if (!lv_is_visible(lv) &&
--	    !lv_is_thin_pool_metadata(lv)) {
--		log_error("Can't resize internal logical volume %s", lv->name);
--		return ECMD_FAILED;
--	}
--
--	if (lv->status & LOCKED) {
--		log_error("Can't resize locked LV %s", lv->name);
--		return ECMD_FAILED;
--	}
--
--	if (lv->status & CONVERTING) {
--		log_error("Can't resize %s while lvconvert in progress", lv->name);
--		return ECMD_FAILED;
--	}
--
--	alloc = (alloc_policy_t)(lp->ac_alloc)?lp->ac_alloc: lv->alloc;
--
--	/*
--	 * First adjust to an exact multiple of extent size.
--	 * When extending by a relative amount we round that amount up.
--	 * When reducing by a relative amount we remove at most that amount.
--	 * When changing to an absolute size, we round that size up.
--	 */
--	if (lp->size) {
--		if (lp->size % vg->extent_size) {
--			if (lp->sign == SIGN_MINUS)
--				lp->size -= lp->size % vg->extent_size;
--			else
--				lp->size += vg->extent_size -
--				    (lp->size % vg->extent_size);
--
--			log_print_unless_silent("Rounding size to boundary between physical extents: %s",
--						display_size(cmd, lp->size));
--		}
--
--		lp->extents = lp->size / vg->extent_size;
--	}
--
--	if (lp->sizeargs) { /* TODO: reindent or move to function */
--
--	switch(lp->percent) {
--		case PERCENT_VG:
--			lp->extents = percent_of_extents(lp->extents, vg->extent_count,
--							 (lp->sign != SIGN_MINUS));
--			break;
--		case PERCENT_FREE:
--			lp->extents = percent_of_extents(lp->extents, vg->free_count,
--							 (lp->sign != SIGN_MINUS));
--			break;
--		case PERCENT_LV:
--			lp->extents = percent_of_extents(lp->extents, lv->le_count,
--							 (lp->sign != SIGN_MINUS));
--			break;
--		case PERCENT_PVS:
--			if (lp->argc) {
--				pv_extent_count = pv_list_extents_free(pvh);
--				lp->extents = percent_of_extents(lp->extents, pv_extent_count,
--								 (lp->sign != SIGN_MINUS));
--			} else
--				lp->extents = percent_of_extents(lp->extents, vg->extent_count,
--								 (lp->sign != SIGN_MINUS));
--			break;
--		case PERCENT_ORIGIN:
--			if (!lv_is_cow(lv)) {
--				log_error("Specified LV does not have an origin LV.");
--				return EINVALID_CMD_LINE;
--			}
--			lp->extents = percent_of_extents(lp->extents, origin_from_cow(lv)->le_count,
--							 (lp->sign != SIGN_MINUS));
--			break;
--		case PERCENT_NONE:
--			break;
--	}
--
--	if (lp->sign == SIGN_PLUS) {
--		if (lp->extents >= (MAX_EXTENT_COUNT - lv->le_count)) {
--			log_error("Unable to extend %s by %u extents, exceeds limit (%u).",
--				  lp->lv_name, lv->le_count, MAX_EXTENT_COUNT);
--			return EINVALID_CMD_LINE;
--		}
--		lp->extents += lv->le_count;
--		if (lv_is_cow(lv)) {
--			extents_used = cow_max_extents(origin_from_cow(lv), find_cow(lv)->chunk_size);
--			if (extents_used < lp->extents) {
--				log_print_unless_silent("Reached maximum COW size %s.",
--							display_size(vg->cmd, (uint64_t) vg->extent_size * extents_used));
--				lp->extents = extents_used;
--				if (lp->extents == lv->le_count)
--					return ECMD_PROCESSED;
--			}
--		}
--	} else if (lp->sign == SIGN_MINUS) {
--		if (lp->extents >= lv->le_count) {
--			log_error("Unable to reduce %s below 1 extent",
--				  lp->lv_name);
--			return EINVALID_CMD_LINE;
--		}
--
--		lp->extents = lv->le_count - lp->extents;
--	}
--
--	if (!lp->extents) {
--		log_error("New size of 0 not permitted");
--		return EINVALID_CMD_LINE;
--	}
--
--	if (lp->extents == lv->le_count) {
--		/* A bit of hack - but still may resize metadata */
--		if (lp->poolmetadatasize) {
--			lp->sizeargs = 0;
--			goto metadata_resize;
--		}
--		if (lp->ac_policy)
--			return ECMD_PROCESSED; /* Nothing to do. */
--		if (!lp->resizefs) {
--			log_error("New size (%d extents) matches existing size "
--				  "(%d extents)", lp->extents, lv->le_count);
--			return EINVALID_CMD_LINE;
--		}
--		lp->resize = LV_EXTEND; /* lets pretend zero size extension */
--	}
--
--	seg_size = lp->extents - lv->le_count;
--
--	/* Use segment type of last segment */
--	lp->segtype = last_seg(lv)->segtype;
--
--	/* FIXME Support LVs with mixed segment types */
--	if (lp->segtype != get_segtype_from_string(cmd, (lp->ac_type)?lp->ac_type:lp->segtype->name)) {
--		log_error("VolumeType does not match (%s)", lp->segtype->name);
--		return EINVALID_CMD_LINE;
--	}
--
--	/* If extending, find mirrors of last segment */
--	if ((lp->extents > lv->le_count)) {
--		/*
--		 * Has the user specified that they would like the additional
--		 * extents of a mirror not to have an initial sync?
--		 */
--		if (seg_is_mirrored(first_seg(lv)) && lp->ac_no_sync)
--			lv->status |= LV_NOTSYNCED;
--
--		dm_list_iterate_back_items(mirr_seg, &lv->segments) {
--			if (seg_is_mirrored(mirr_seg))
--				seg_mirrors = lv_mirror_count(mirr_seg->lv);
--			else
--				seg_mirrors = 0;
--			break;
--		}
--
--		if (!lp->ac_mirrors && seg_mirrors) {
--			log_print_unless_silent("Extending %" PRIu32 " mirror images.",
--						seg_mirrors);
--			lp->mirrors = seg_mirrors;
--		}
--		if ((lp->ac_mirrors || seg_mirrors) &&
--		    (lp->mirrors != seg_mirrors)) {
--			log_error("Cannot vary number of mirrors in LV yet.");
--			return EINVALID_CMD_LINE;
--		}
--
--		if (seg_mirrors && !strcmp(mirr_seg->segtype->name, "raid10")) {
--			lp->stripes = mirr_seg->area_count / seg_mirrors;
--			lp->stripe_size = mirr_seg->stripe_size;
--		}
--	}
--
--	/* If extending, find stripes, stripesize & size of last segment */
--	if ((lp->extents > lv->le_count) &&
--	    !(lp->stripes == 1 || (lp->stripes > 1 && lp->stripe_size)) &&
--	    strcmp(mirr_seg->segtype->name, "raid10")) {
--		/* FIXME Don't assume mirror seg will always be AREA_LV */
--		/* FIXME We will need to support resize for metadata LV as well,
--		 *       and data LV could be any type (i.e. mirror)) */
--		dm_list_iterate_items(seg, seg_mirrors ? &seg_lv(mirr_seg, 0)->segments :
--				      lv_is_thin_pool(lv) ? &seg_lv(first_seg(lv), 0)->segments : &lv->segments) {
--			/* Allow through "striped" and RAID 4/5/6/10 */
--			if (!seg_is_striped(seg) &&
--			    (!seg_is_raid(seg) || seg_is_mirrored(seg)) &&
--			    strcmp(seg->segtype->name, "raid10"))
--				continue;
--
--			sz = seg->stripe_size;
--			str = seg->area_count - lp->segtype->parity_devs;
--
--			if ((seg_stripesize && seg_stripesize != sz &&
--			     sz && !lp->stripe_size) ||
--			    (seg_stripes && seg_stripes != str && !lp->stripes)) {
--				log_error("Please specify number of "
--					  "stripes (-i) and stripesize (-I)");
--				return EINVALID_CMD_LINE;
--			}
--
--			seg_stripesize = sz;
--			seg_stripes = str;
--		}
--
--		if (!lp->stripes)
--			lp->stripes = seg_stripes;
--		else if (seg_is_raid(first_seg(lv)) &&
--			 (lp->stripes != seg_stripes)) {
--			log_error("Unable to extend \"%s\" segment type with different number of stripes.", first_seg(lv)->segtype->ops->name(first_seg(lv)));
--			return ECMD_FAILED;
--		}
--
--		if (!lp->stripe_size && lp->stripes > 1) {
--			if (seg_stripesize) {
--				log_print_unless_silent("Using stripesize of last segment %s",
--							display_size(cmd, (uint64_t) seg_stripesize));
--				lp->stripe_size = seg_stripesize;
--			} else {
--				lp->stripe_size =
--					find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
--				log_print_unless_silent("Using default stripesize %s",
--							display_size(cmd, (uint64_t) lp->stripe_size));
--			}
--		}
--	}
--
--	/* If reducing, find stripes, stripesize & size of last segment */
--	if (lp->extents < lv->le_count) {
--		extents_used = 0;
--
--		if (lp->stripes || lp->stripe_size || lp->mirrors)
--			log_error("Ignoring stripes, stripesize and mirrors "
--				  "arguments when reducing");
--
--		dm_list_iterate_items(seg, &lv->segments) {
--			seg_extents = seg->len;
--
--			/* Check for underlying stripe sizes */
--			seg_stripes = lvseg_get_stripes(seg, &seg_stripesize);
--
--			if (seg_is_mirrored(seg))
--				seg_mirrors = lv_mirror_count(seg->lv);
--			else
--				seg_mirrors = 0;
--
--			if (lp->extents <= extents_used + seg_extents)
--				break;
--
--			extents_used += seg_extents;
--		}
--
--		seg_size = lp->extents - extents_used;
--		lp->stripe_size = seg_stripesize;
--		lp->stripes = seg_stripes;
--		lp->mirrors = seg_mirrors;
--	}
--
--	if (lp->stripes > 1 && !lp->stripe_size) {
--		log_error("Stripesize for striped segment should not be 0!");
--		return EINVALID_CMD_LINE;
--	}
--
--	if (lp->stripes > 1) {
--		if (lp->stripe_size < STRIPE_SIZE_MIN) {
--			log_error("Invalid stripe size %s",
--				  display_size(cmd, (uint64_t) lp->stripe_size));
--			return EINVALID_CMD_LINE;
--		}
--
--		if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
--			stripesize_extents = 1;
--
--		size_rest = seg_size % (lp->stripes * stripesize_extents);
--		/* Round toward the original size. */
--		if (size_rest &&
--		    ((lp->extents < lv->le_count) ||
--		     !lp->percent ||
--		     (vg->free_count >= (lp->extents - lv->le_count - size_rest +
--					 (lp->stripes * stripesize_extents))))) {
--			log_print_unless_silent("Rounding size (%d extents) up to stripe "
--						"boundary size for segment (%d extents)",
--						lp->extents, lp->extents - size_rest +
--						(lp->stripes * stripesize_extents));
--			lp->extents = lp->extents - size_rest +
--				      (lp->stripes * stripesize_extents);
--		} else if (size_rest) {
--			log_print_unless_silent("Rounding size (%d extents) down to stripe "
--						"boundary size for segment (%d extents)",
--						lp->extents, lp->extents - size_rest);
--			lp->extents = lp->extents - size_rest;
--		}
--	}
--
--	if (lp->extents < lv->le_count) {
--		if (lp->resize == LV_EXTEND) {
--			log_error("New size given (%d extents) not larger "
--				  "than existing size (%d extents)",
--				  lp->extents, lv->le_count);
--			return EINVALID_CMD_LINE;
--		}
--		lp->resize = LV_REDUCE;
--	} else if (lp->extents > lv->le_count) {
--		if (lp->resize == LV_REDUCE) {
--			log_error("New size given (%d extents) not less than "
--				  "existing size (%d extents)", lp->extents,
--				  lv->le_count);
--			return EINVALID_CMD_LINE;
--		}
--		lp->resize = LV_EXTEND;
--	} else if (lp->extents == lv->le_count) {
--		if (lp->ac_policy)
--			return ECMD_PROCESSED; /* Nothing to do. */
--		if (!lp->resizefs) {
--			log_error("New size (%d extents) matches existing size "
--				  "(%d extents)", lp->extents, lv->le_count);
--			return EINVALID_CMD_LINE;
--		}
--		lp->resize = LV_EXTEND;
--	}
--
--	if (lv_is_origin(lv)) {
--		if (lp->resize == LV_REDUCE) {
--			log_error("Snapshot origin volumes cannot be reduced "
--				  "in size yet.");
--			return ECMD_FAILED;
--		}
--
--		if (lv_is_active(lv)) {
--			log_error("Snapshot origin volumes can be resized "
--				  "only while inactive: try lvchange -an");
--			return ECMD_FAILED;
--		}
--	}
--
--	if (lv_is_thin_pool(lv)) {
--		if (lp->resize == LV_REDUCE) {
--			log_error("Thin pool volumes cannot be reduced in size yet.");
--			return ECMD_FAILED;
--		}
--
--		if (lp->resizefs) {
--			log_warn("Thin pool volumes do not have filesystem.");
--			lp->resizefs = 0;
--		}
--	} else if (lp->poolmetadatasize) {
--		log_error("--poolmetadatasize can be used only with thin pools.");
--		return ECMD_FAILED;
--	}
--
--	if ((lp->resize == LV_REDUCE) && lp->argc)
--		log_warn("Ignoring PVs on command line when reducing");
--
--	/* Request confirmation before operations that are often mistakes. */
--	if ((lp->resizefs || (lp->resize == LV_REDUCE)) &&
--	    !_request_confirmation(cmd, vg, lv, lp))
--		return_ECMD_FAILED;
--
--	if (lp->resizefs) {
--		if (!lp->nofsck &&
--		    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_CHECK, &status)) {
--			if (status != FSADM_CHECK_FAILS_FOR_MOUNTED) {
--				log_error("Filesystem check failed.");
--				return ECMD_FAILED;
--			}
--			/* some filesystems supports online resize */
--		}
--
--		if ((lp->resize == LV_REDUCE) &&
--		    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL)) {
--			log_error("Filesystem resize failed.");
--			return ECMD_FAILED;
--		}
--	}
--
--	if (!archive(vg))
--		return_ECMD_FAILED;
--
--	log_print_unless_silent("%sing logical volume %s to %s",
--				(lp->resize == LV_REDUCE) ? "Reduc" : "Extend",
--				lv->name,
--				display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
--
--	if (lp->resize == LV_REDUCE) {
--		if (!lv_reduce(lv, lv->le_count - lp->extents))
--			return ECMD_FAILED;
--	} else if ((lp->extents > lv->le_count) && /* Ensure we extend */
--		   !lv_extend(lv, lp->segtype,
--			      lp->stripes, lp->stripe_size,
--			      lp->mirrors, first_seg(lv)->region_size,
--			      lp->extents - lv->le_count, NULL,
--			      pvh, alloc))
--		return_ECMD_FAILED;
--
--	/* If thin metadata, must suspend thin pool */
--	if (lv_is_thin_pool_metadata(lv)) {
--		if (!(lock_lv = find_pool_lv(lv)))
--			return_0;
--	/* If snapshot, must suspend all associated devices */
--	} else if (lv_is_cow(lv))
--		lock_lv = origin_from_cow(lv);
--	else
--		lock_lv = lv;
--
--	} /* lp->sizeargs */
--
--	if (lp->poolmetadatasize) {
--metadata_resize:
--		if (!(status = _lvresize_poolmetadata(cmd, vg, lp, lv, pvh, alloc)))
--			return_ECMD_FAILED;
--		else if ((status == 2) && !lp->sizeargs)
--			return ECMD_PROCESSED;
--		lock_lv = lv;
--	}
--
--	if (!lock_lv)
--		return ECMD_PROCESSED; /* Nothing to do */
--
--	/* store vg on disk(s) */
--	if (!vg_write(vg))
--		return_ECMD_FAILED;
--
--	if (!suspend_lv(cmd, lock_lv)) {
--		log_error("Failed to suspend %s", lock_lv->name);
--		vg_revert(vg);
--		backup(vg);
--		return ECMD_FAILED;
--	}
--
--	if (!vg_commit(vg)) {
--		stack;
--		if (!resume_lv(cmd, lock_lv))
--			stack;
--		backup(vg);
--		return ECMD_FAILED;
--	}
--
--	if (!resume_lv(cmd, lock_lv)) {
--		log_error("Problem reactivating %s", lock_lv->name);
--		backup(vg);
--		return ECMD_FAILED;
--	}
--
--	if (lv_is_cow_covering_origin(lv))
--		if (!monitor_dev_for_events(cmd, lv, 0, 0))
--			stack;
--
--	backup(vg);
--
--	/*
--	 * Update lvm pool metadata (drop messages) if the pool has been
--	 * resumed and do a pool active/deactivate in other case.
--	 *
--	 * Note: Active thin pool can be waiting for resize.
--	 *
--	 * FIXME: Activate only when thin volume is active
--	 */
--	if (lv_is_thin_pool(lv) &&
--	    !update_pool_lv(lv, !lv_is_active(lv)))
--		return_ECMD_FAILED;
--
--	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
--
--	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
--	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL))
--		return_ECMD_FAILED;
--
--	return ECMD_PROCESSED;
--}
--
- int lvresize(struct cmd_context *cmd, int argc, char **argv)
+-struct dm_list *get_pvs(struct cmd_context *cmd)
++/* Retrieve a list of all physical volumes.
++ * @param 	cmd			Command context
++ * @param	pvslist		Set to NULL if you want memory for list created,
++ * 						else valid memory
++ * @param	vgslist		Set to NULL if you need the pv structures to contain
++ * 						valid vg pointer.  This is the list of VGs
++ * @returns NULL on errors, else pvslist which will equal passes in value if
++ * 	supplied.
++ */
++struct dm_list *get_pvs_internal(struct cmd_context *cmd,
++					struct dm_list *pvslist, struct dm_list *vgslist)
  {
- 	struct lvresize_params lp = { 0 };
-@@ -1064,7 +187,7 @@ int lvresize(struct cmd_context *cmd, int argc, char **argv)
- 		return_ECMD_FAILED;
- 	}
+-	struct dm_list *results;
++	struct dm_list *results = pvslist;
  
--	if (!(r = _lvresize(cmd, vg, &lp, pvh)))
-+	if (!(r = lv_resize(cmd, vg, &lp, pvh)))
- 		stack;
+-	if (!_get_pvs(cmd, 1, &results))
+-		return NULL;
++	if (NULL == results) {
++		if (!(results = dm_pool_alloc(cmd->mem, sizeof(*results)))) {
++			log_error("PV list allocation failed");
++			return 0;
++		}
++
++		dm_list_init(results);
++	}
  
- 	unlock_and_release_vg(cmd, vg, lp.vg_name);
++	if (!_get_pvs(cmd, 1, results, vgslist)) {
++		if (NULL == pvslist) {
++			dm_pool_free(cmd->mem, results);
++		}
++		return NULL;
++	}
+ 	return results;
+ }
+ 
+ int scan_vgs_for_pvs(struct cmd_context *cmd, int warnings)
+ {
+-	return _get_pvs(cmd, warnings, NULL);
++	return _get_pvs(cmd, warnings, NULL, NULL);
+ }
+ 
+ int pv_write(struct cmd_context *cmd __attribute__((unused)),
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 25778d1..f70e72c 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -543,6 +543,34 @@ vg_t lvm_vg_create(lvm_t libh, const char *vg_name);
+ struct dm_list *lvm_vg_list_lvs(vg_t vg);
+ 
+ /**
++ * Return a list of PV handles for all.
++ *
++ * \memberof lvm_t
++ *
++ * \param   libh
++ * Library handle retrieved from lvm_init
++ *
++ * \return
++ * A list of lvm_pv_list structures containing pv handles for all physical
++ * volumes. If no PVs exist or a global lock was unable to be obtained a
++ * NULL is returned.
++ */
++struct dm_list *lvm_list_pvs(lvm_t libh);
++
++/**
++ * Free the resources used by acquiring the pvlist.  This should be called as
++ * soon as possible after processing the needed information from the pv list as
++ * a global locks are held.
++ *
++ * \param	pvlist
++ * PV list to be freed
++ *
++ * \return
++ * 0 on success, else -1 with library errno and text set.
++ */
++int lvm_list_pvs_free(struct dm_list *pvlist);
++
++/**
+  * Return a list of PV handles for a given VG handle.
+  *
+  * \memberof vg_t
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index 18b1069..db6c39d 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -12,11 +12,14 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
+ 
++#include <stddef.h>
+ #include "lib.h"
+ #include "metadata.h"
+ #include "lvm-string.h"
+ #include "lvm_misc.h"
+ #include "lvm2app.h"
++#include "locking.h"
++#include "toolcontext.h"
+ 
+ const char *lvm_pv_get_uuid(const pv_t pv)
+ {
+@@ -60,6 +63,82 @@ struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
+ 	return get_property(NULL, NULL, NULL, NULL, pvseg, NULL, name);
+ }
+ 
++
++#define address_of(p, t, m) ({                  \
++	const typeof( ((t *)0)->m ) *__mptr = (p);    \
++	(t *)( (char *)__mptr - offsetof(t,m) );})
++
++struct lvm_list_wrapper
++{
++	unsigned long magic;
++	struct dm_list pvslist;
++	struct dm_list vgslist;
++};
++
++
++struct dm_list *lvm_list_pvs(lvm_t libh)
++{
++	struct lvm_list_wrapper *rc = NULL;
++	struct cmd_context *cmd = (struct cmd_context *)libh;
++
++
++	rc = dm_pool_zalloc(cmd->mem, sizeof(*rc));
++	if (!rc) {
++		log_errno(ENOMEM, "Memory allocation fail for pv list.");
++		return NULL;
++	}
++
++	if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_WRITE, NULL)) {
++		log_errno(ENOLCK, "Unable to obtain global lock.");
++	} else {
++		dm_list_init(&rc->pvslist);
++		dm_list_init(&rc->vgslist);
++		if( !get_pvs_perserve_vg(cmd, &rc->pvslist, &rc->vgslist) ) {
++			dm_pool_free(cmd->mem, rc);
++			return NULL;
++		}
++		rc->magic = 0xF005BA11;
++	}
++
++	return &rc->pvslist;
++}
++
++int lvm_list_pvs_free(struct dm_list *pvlist)
++{
++	int rc = 0;
++	struct lvm_list_wrapper *to_delete = NULL;
++	struct vg_list *vgl = NULL;
++	struct vg_list *tmp_vgl = NULL;
++	struct pv_list *pvl = NULL;
++	struct pv_list *tmp_pvl = NULL;
++	struct cmd_context *cmd = NULL;
++
++	if (pvlist ) {
++		to_delete = address_of(pvlist, struct lvm_list_wrapper, pvslist);
++		if (to_delete->magic == 0xF005BA11) {
++
++			dm_list_iterate_items(vgl, &to_delete->vgslist) {
++				cmd = vgl->vg->cmd;
++				release_vg(vgl->vg);
++			}
++
++			dm_list_iterate_items(pvl, &to_delete->pvslist) {
++				free_pv_fid(pvl->pv);
++			}
++
++			unlock_vg(cmd, VG_GLOBAL);
++		} else {
++			log_errno(EINVAL, "Not a correct pvlist structure");
++			rc = -1;
++		}
++
++		to_delete->magic = 0xA5A5A5A5;
++		dm_pool_free(cmd->mem, to_delete);
++
++	}
++	return rc;
++}
++
+ struct dm_list *lvm_pv_list_pvsegs(pv_t pv)
+ {
+ 	struct dm_list *list;
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 906825e..6491274 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -34,6 +34,11 @@ typedef struct {
+ 
+ typedef struct {
+ 	PyObject_HEAD
++	struct dm_list *pvslist;
++} pvslistobject;
++
++typedef struct {
++	PyObject_HEAD
+ 	lv_t lv;		/* lv handle */
+ 	vgobject *parent_vgobj;
+ } lvobject;
+@@ -42,6 +47,7 @@ typedef struct {
+ 	PyObject_HEAD
+ 	pv_t pv;		/* pv handle */
+ 	vgobject *parent_vgobj;
++	pvslistobject *parent_pvslistobj;
+ } pvobject;
+ 
+ typedef struct {
+@@ -58,6 +64,7 @@ typedef struct {
+ 
+ static PyTypeObject LibLVMvgType;
+ static PyTypeObject LibLVMlvType;
++static PyTypeObject LibLVMpvlistType;
+ static PyTypeObject LibLVMpvType;
+ static PyTypeObject LibLVMlvsegType;
+ static PyTypeObject LibLVMpvsegType;
+@@ -153,6 +160,90 @@ liblvm_lvm_list_vg_uuids(void)
+ }
+ 
+ static PyObject *
++liblvm_lvm_pvlist_get(pvslistobject *pvsobj)
++{
++	struct lvm_pv_list *pvl;
++	PyObject * pytuple;
++	pvobject * pvobj;
++	int i = 0;
++
++	/* unlike other LVM api calls, if there are no results, we get NULL */
++	pvsobj->pvslist = lvm_list_pvs(libh);
++
++	if (!pvsobj->pvslist)
++		return Py_BuildValue("()");
++
++	pytuple = PyTuple_New(dm_list_size(pvsobj->pvslist));
++	if (!pytuple)
++		return NULL;
++
++	dm_list_iterate_items(pvl, pvsobj->pvslist) {
++		/* Create and initialize the object */
++		pvobj = PyObject_New(pvobject, &LibLVMpvType);
++		if (!pvobj) {
++			Py_DECREF(pytuple);
++			return NULL;
++		}
++
++		/* We don't have a parent vg object to be concerned about */
++		pvobj->parent_vgobj = NULL;
++		pvobj->parent_pvslistobj = pvsobj;
++		Py_INCREF(pvobj->parent_pvslistobj);
++
++		pvobj->pv = pvl->pv;
++		PyTuple_SET_ITEM(pytuple, i, (PyObject *) pvobj);
++		i++;
++	}
++
++	return pytuple;
++}
++
++static PyObject *
++liblvm_lvm_pvlist_put(pvslistobject *self)
++{
++	int rc = 0;
++	if (self->pvslist) {
++		rc = lvm_list_pvs_free(self->pvslist);
++
++		if ( 0 != rc ) {
++			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++			return NULL;
++		}
++
++		self->pvslist = NULL;
++		Py_INCREF(Py_None);
++		return Py_None;
++	}
++	return NULL;
++}
++
++static PyObject *
++liblvm_pvlist_dealloc(pvslistobject *self)
++{
++	if (self->pvslist) {
++		liblvm_lvm_pvlist_put(self);
++	}
++
++	PyObject_Del(self);
++	Py_INCREF(Py_None);
++	return Py_None;
++}
++
++static PyObject *
++liblvm_lvm_list_pvs(void)
++{
++	pvslistobject *pvslistobj;
++
++	LVM_VALID();
++
++	if ((pvslistobj = PyObject_New(pvslistobject, &LibLVMpvlistType)) == NULL)
++			return NULL;
++
++	pvslistobj->pvslist = NULL;
++	return (PyObject *)pvslistobj;
++}
++
++static PyObject *
+ liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
+ {
+ 	double converted;
+@@ -360,6 +451,15 @@ liblvm_vg_dealloc(vgobject *self)
+ 		}							\
+ 	} while (0)
+ 
++#define PVSLIST_VALID(pvslistobject)			\
++	do {										\
++		LVM_VALID();							\
++		if (!pvslistobject->pvslist) {			\
++			PyErr_SetString(PyExc_UnboundLocalError, "PVS object invalid"); \
++			return NULL;						\
++		}										\
++	} while (0)
++
+ static PyObject *
+ liblvm_lvm_vg_close(vgobject *self)
+ {
+@@ -1030,7 +1130,16 @@ liblvm_lvm_pv_from_uuid(vgobject *self, PyObject *arg)
+ static void
+ liblvm_pv_dealloc(pvobject *self)
+ {
+-	Py_DECREF(self->parent_vgobj);
++	if (self->parent_vgobj) {
++		Py_DECREF(self->parent_vgobj);
++	}
++
++	if (self->parent_pvslistobj) {
++		Py_DECREF(self->parent_pvslistobj);
++	}
++
++	self->parent_vgobj = NULL;
++	self->parent_pvslistobj = NULL;
+ 	PyObject_Del(self);
+ }
+ 
+@@ -1337,19 +1446,23 @@ liblvm_lvm_lv_snapshot(lvobject *self, PyObject *args)
+ 
+ 	lvobj->parent_vgobj = self->parent_vgobj;
+ 	Py_INCREF(lvobj->parent_vgobj);
+-
+ 	return (PyObject *)lvobj;
+ }
+ 
+ /* PV Methods */
+ 
+-#define PV_VALID(pvobject)						\
+-	do {								\
+-		VG_VALID(pvobject->parent_vgobj);			\
+-		if (!pvobject->pv) {					\
++#define PV_VALID(pvobject)								\
++	do {												\
++		if (pvobject->parent_vgobj) {					\
++			VG_VALID(pvobject->parent_vgobj);			\
++		}												\
++		if (pvobject->parent_pvslistobj) {				\
++			PVSLIST_VALID(pvobject->parent_pvslistobj);	\
++		}												\
++		if (!pvobject->pv) {							\
+ 			PyErr_SetString(PyExc_UnboundLocalError, "PV object invalid"); \
+-			return NULL;					\
+-		}							\
++			return NULL;								\
++		}												\
+ 	} while (0)
+ 
+ static PyObject *
+@@ -1550,6 +1663,7 @@ static PyMethodDef Liblvm_methods[] = {
+ 	{ "scan",		(PyCFunction)liblvm_lvm_scan, METH_NOARGS },
+ 	{ "listVgNames",	(PyCFunction)liblvm_lvm_list_vg_names, METH_NOARGS },
+ 	{ "listVgUuids",	(PyCFunction)liblvm_lvm_list_vg_uuids, METH_NOARGS },
++	{ "listPvs",		(PyCFunction)liblvm_lvm_list_pvs, METH_NOARGS },
+ 	{ "percentToFloat",	(PyCFunction)liblvm_lvm_percent_to_float, METH_VARARGS },
+ 	{ "vgNameFromPvid",	(PyCFunction)liblvm_lvm_vgname_from_pvid, METH_VARARGS },
+ 	{ "vgNameFromDevice",	(PyCFunction)liblvm_lvm_vgname_from_device, METH_VARARGS },
+@@ -1613,6 +1727,15 @@ static PyMethodDef liblvm_lv_methods[] = {
+ 	{ NULL, NULL }		/* sentinel */
+ };
+ 
++static PyMethodDef liblvm_pv_list_methods[] = {
++	/* pv list methods */
++	{ "__enter__", 	(PyCFunction)liblvm_lvm_pvlist_get, METH_VARARGS },
++	{ "__exit__", 	(PyCFunction)liblvm_lvm_pvlist_put, METH_VARARGS },
++	{ "open",		(PyCFunction)liblvm_lvm_pvlist_get, METH_VARARGS },
++	{ "close",		(PyCFunction)liblvm_lvm_pvlist_put, METH_VARARGS },
++	{ NULL, NULL }
++};
++
+ static PyMethodDef liblvm_pv_methods[] = {
+ 	/* pv methods */
+ 	{ "getName",		(PyCFunction)liblvm_lvm_pv_get_name, METH_NOARGS },
+@@ -1659,6 +1782,17 @@ static PyTypeObject LibLVMlvType = {
+ 	.tp_methods = liblvm_lv_methods,
+ };
+ 
++static PyTypeObject LibLVMpvlistType = {
++	PyObject_HEAD_INIT(&PyType_Type)
++		.tp_name = "liblvm.Liblvm_pvlist",
++		.tp_basicsize = sizeof(pvslistobject),
++		.tp_new = PyType_GenericNew,
++		.tp_dealloc = (destructor)liblvm_pvlist_dealloc,
++		.tp_flags = Py_TPFLAGS_DEFAULT,
++		.tp_doc = "LVM Physical Volume list object",
++		.tp_methods = liblvm_pv_list_methods,
++};
++
+ static PyTypeObject LibLVMpvType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+ 	.tp_name = "liblvm.Liblvm_pv",
+@@ -1716,6 +1850,8 @@ initlvm(void)
+ 		return;
+ 	if (PyType_Ready(&LibLVMpvsegType) < 0)
+ 		return;
++	if (PyType_Ready(&LibLVMpvlistType) < 0)
++			return;
+ 
+ 	m = Py_InitModule3("lvm", Liblvm_methods, "Liblvm module");
+ 	if (m == NULL)
 
 
