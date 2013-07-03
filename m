@@ -1,92 +1,76 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  3 Jul 2013 12:48:57 +0000 (UTC)
-Subject: master - configure: fix install location of profile dir
-Message-ID: <20130703124857.54FDD60FAC@fedorahosted.org>
+Date: Wed,  3 Jul 2013 14:34:06 +0000 (UTC)
+Subject: master - configure: more tweaks
+Message-ID: <20130703143406.BC89560FB3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ffa11ed35688243a4546d4a35a97fc0339916651
-Commit:        ffa11ed35688243a4546d4a35a97fc0339916651
-Parent:        eeb164b50f9e5e5ce39f7851fced7c29e1fc0202
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21cd275b37cafa7605451aeeef3f1f7fae98447a
+Commit:        21cd275b37cafa7605451aeeef3f1f7fae98447a
+Parent:        6f335ffa35552ed9d002d8a6884c707b2942750c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 3 13:07:39 2013 +0200
+AuthorDate:    Wed Jul 3 16:32:23 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 3 14:44:51 2013 +0200
+CommitterDate: Wed Jul 3 16:33:29 2013 +0200
 
-configure: fix install location of profile dir
+configure: more tweaks
 
-Seems like we have a bit overcomplicated set of options
-for deducing individual install dirs.
-
-This patch fixes installation issues with DESTDIR,
-but the whole set of configure options should be simplified.
+We have to use  lvm_exec_prefix for proper values.
+DEFAULT vars needs to be already evaluated.
 ---
- conf/Makefile.in |    4 ++--
- configure        |    4 ++--
- configure.in     |    6 +++---
- 3 files changed, 7 insertions(+), 7 deletions(-)
+ conf/example.conf.in |    2 +-
+ configure            |    4 ++--
+ configure.in         |    2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/conf/Makefile.in b/conf/Makefile.in
-index c148ac2..f9947b1 100644
---- a/conf/Makefile.in
-+++ b/conf/Makefile.in
-@@ -30,8 +30,8 @@ install_conf: $(CONFSRC)
- 	fi
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 3bc8c3c..cb4d3e5 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -25,7 +25,7 @@ config {
+     abort_on_errors = 0
  
- install_profiles: $(PROFILES)
--	$(INSTALL) -d $(DEFAULT_PROFILE_DIR)
--	$(INSTALL_DATA) $(PROFILES) $(DEFAULT_PROFILE_DIR)/
-+	$(INSTALL_DIR) $(DESTDIR)$(DEFAULT_PROFILE_DIR)
-+	$(INSTALL_DATA) $(PROFILES) $(DESTDIR)$(DEFAULT_PROFILE_DIR)/
+     # Directory where LVM looks for configuration profiles.
+-    profile_dir = "@DEFAULT_SYS_DIR@/@DEFAULT_PROFILE_SUBDIR"
++    profile_dir = "@DEFAULT_SYS_DIR@/@DEFAULT_PROFILE_SUBDIR@"
+ }
  
- install_lvm2: install_conf install_profiles
- 
+ # This section allows you to configure which block devices should
 diff --git a/configure b/configure
-index 212bd80..aae8165 100755
+index aae8165..fbe92a5 100755
 --- a/configure
 +++ b/configure
-@@ -10066,7 +10066,7 @@ fi
- if test "${with_confdir+set}" = set; then :
-   withval=$with_confdir; CONFDIR=$withval
- else
--  CONFDIR="/etc"
-+  CONFDIR='${exec_prefix}/etc'
- fi
- 
- 
+@@ -1639,7 +1639,7 @@ Optional Packages:
+   --with-dmeventd-path=PATH
+                           dmeventd path [[EPREFIX/sbin/dmeventd]]
+   --with-default-system-dir=DIR
+-                          default LVM system directory [[/etc/lvm]]
++                          default LVM system directory [[EPREFIX/etc/lvm]]
+   --with-default-profile-subdir=SUBDIR
+                           default configuration profile subdir [[profile]]
+   --with-default-archive-subdir=SUBDIR
 @@ -10549,7 +10549,7 @@ fi
  if test "${with_default_system_dir+set}" = set; then :
    withval=$with_default_system_dir; DEFAULT_SYS_DIR=$withval
  else
--  DEFAULT_SYS_DIR="/etc/lvm"
-+  DEFAULT_SYS_DIR='${exec_prefix}/etc/lvm'
+-  DEFAULT_SYS_DIR='${exec_prefix}/etc/lvm'
++  DEFAULT_SYS_DIR="$lvm_exec_prefix/etc/lvm"
  fi
  
  
 diff --git a/configure.in b/configure.in
-index 6d417e3..1d62fee 100644
+index 1d62fee..fa31b18 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -1279,7 +1279,7 @@ fi
- AC_ARG_WITH(confdir,
- 	    AC_HELP_STRING([--with-confdir=DIR],
- 			   [configuration files in DIR [[/etc]]]),
--	    CONFDIR=$withval, CONFDIR="/etc")
-+	    CONFDIR=$withval, CONFDIR='${exec_prefix}/etc')
- 
- AC_ARG_WITH(staticdir,
- 	    AC_HELP_STRING([--with-staticdir=DIR],
-@@ -1416,8 +1416,8 @@ fi
- dnl -- various defaults
+@@ -1417,7 +1417,7 @@ dnl -- various defaults
  AC_ARG_WITH(default-system-dir,
  	    AC_HELP_STRING([--with-default-system-dir=DIR],
--			   [default LVM system directory [[/etc/lvm]]]),
--	    DEFAULT_SYS_DIR=$withval, DEFAULT_SYS_DIR="/etc/lvm")
-+			   [default LVM system directory [[EPREFIX/etc/lvm]]]),
-+	    DEFAULT_SYS_DIR=$withval, DEFAULT_SYS_DIR='${exec_prefix}/etc/lvm')
+ 			   [default LVM system directory [[EPREFIX/etc/lvm]]]),
+-	    DEFAULT_SYS_DIR=$withval, DEFAULT_SYS_DIR='${exec_prefix}/etc/lvm')
++	    DEFAULT_SYS_DIR=$withval, DEFAULT_SYS_DIR="$lvm_exec_prefix/etc/lvm")
  AC_DEFINE_UNQUOTED(DEFAULT_SYS_DIR, ["$DEFAULT_SYS_DIR"],
  		   [Path to LVM system directory.])
  
