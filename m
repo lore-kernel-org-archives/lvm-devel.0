@@ -1,42 +1,39 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  4 Jul 2013 12:03:43 +0000 (UTC)
-Subject: master - lvconvert: fix last commit
-Message-ID: <20130704120343.6414B61017@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu,  4 Jul 2013 12:51:47 +0000 (UTC)
+Subject: master - config: fix timestamp comparison during merge
+Message-ID: <20130704125147.A34E7613A2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a0ce432829d71da0c03647e249f4742cc98cea74
-Commit:        a0ce432829d71da0c03647e249f4742cc98cea74
-Parent:        969c87fa5b66859567a2d6de2b6700ee795d8e59
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 4 14:02:27 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 4 14:02:27 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1cb66fe16e0bc180a0be8e18d8b361b5b5842128
+Commit:        1cb66fe16e0bc180a0be8e18d8b361b5b5842128
+Parent:        a0ce432829d71da0c03647e249f4742cc98cea74
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Jul 4 14:51:37 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Jul 4 14:51:37 2013 +0200
 
-lvconvert: fix last commit
+config: fix timestamp comparison during merge
 
-Condition needs to check for passed in pool_metadata_lv_name
-which needs to be renamed to _tmeta, for !pool_metadata_lv_name
-it's already created with correct _tmeta name.
 ---
- tools/lvconvert.c |    2 +-
+ lib/config/config.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index fff0188..a0e6af7 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2203,7 +2203,7 @@ mda_write:
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 2994111..61e92cf 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -1055,7 +1055,7 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
+ 	 * whether the .cache isn't older then any of configs
+ 	 */
+ 	cs = dm_config_get_custom(cft);
+-	csn = dm_config_get_custom(cft);
++	csn = dm_config_get_custom(newdata);
  
- 	/* Rename deactivated metadata LV to have _tmeta suffix */
- 	/* Implicit checks if metadata_lv is visible */
--	if (!lp->pool_metadata_lv_name &&
-+	if (lp->pool_metadata_lv_name &&
- 	    !lv_rename_update(cmd, metadata_lv, metadata_name, 0))
- 		return_0;
- 
+ 	if (cs && csn && (cs->timestamp < csn->timestamp))
+ 		cs->timestamp = csn->timestamp;
 
 
