@@ -1,96 +1,187 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  4 Jul 2013 11:34:22 +0000 (UTC)
-Subject: master - configure: revert /etc changes
-Message-ID: <20130704113422.BFD3460EA7@fedorahosted.org>
+Date: Thu,  4 Jul 2013 11:34:24 +0000 (UTC)
+Subject: master - thin: move alloc_pool_metadata
+Message-ID: <20130704113424.DBB6460EA7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f88497079778b00fe5ed9a43d890af64d272c325
-Commit:        f88497079778b00fe5ed9a43d890af64d272c325
-Parent:        2c4f81634f2c53a0ca7a589dbba054ca0c2a4e75
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f88f5a1ca3b0c77a2c353460ff35d802bbb05a34
+Commit:        f88f5a1ca3b0c77a2c353460ff35d802bbb05a34
+Parent:        f88497079778b00fe5ed9a43d890af64d272c325
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 4 11:52:25 2013 +0200
+AuthorDate:    Thu Jul 4 11:04:05 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jul 4 13:33:41 2013 +0200
 
-configure: revert /etc changes
+thin: move alloc_pool_metadata
 
-The idea of using 'eprefix' unfortunatelly fails on /usr moved distros.
-But there is also default --sysconfdir which is normaly set to /etc.
-If unset it's PREFIX/etc.
-
-For now revert.
-
-FIXME: replace lvm vars with standard ones everyone is using.
+Move function from /tool to /lib to thin_manip.c
+Since lvm2api will need to move many things into /lib anyway.
 ---
- configure    |    6 +++---
- configure.in |    8 +++++---
- 2 files changed, 8 insertions(+), 6 deletions(-)
+ lib/metadata/metadata-exported.h |    5 ++++
+ lib/metadata/thin_manip.c        |   40 ++++++++++++++++++++++++++++++++++
+ tools/lvconvert.c                |    9 ++++---
+ tools/toollib.c                  |   44 --------------------------------------
+ tools/toollib.h                  |    5 ----
+ 5 files changed, 50 insertions(+), 53 deletions(-)
 
-diff --git a/configure b/configure
-index fbe92a5..12272d1 100755
---- a/configure
-+++ b/configure
-@@ -1639,7 +1639,7 @@ Optional Packages:
-   --with-dmeventd-path=PATH
-                           dmeventd path [[EPREFIX/sbin/dmeventd]]
-   --with-default-system-dir=DIR
--                          default LVM system directory [[EPREFIX/etc/lvm]]
-+                          default LVM system directory [[/etc/lvm]]
-   --with-default-profile-subdir=SUBDIR
-                           default configuration profile subdir [[profile]]
-   --with-default-archive-subdir=SUBDIR
-@@ -10066,7 +10066,7 @@ fi
- if test "${with_confdir+set}" = set; then :
-   withval=$with_confdir; CONFDIR=$withval
- else
--  CONFDIR='${exec_prefix}/etc'
-+  CONFDIR='/etc'
- fi
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 7b7ac3c..ee3ae66 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -657,6 +657,11 @@ int update_pool_params(struct cmd_context *cmd, unsigned attr, int passed_args,
+ 		       uint64_t *pool_metadata_size);
+ int get_pool_discards(const char *str, thin_discards_t *discards);
+ const char *get_pool_discards_name(thin_discards_t discards);
++struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
++					   const char *name, uint32_t read_ahead,
++					   uint32_t stripes, uint32_t stripe_size,
++					   uint64_t size, alloc_policy_t alloc,
++					   struct dm_list *pvh);
  
+ /*
+  * Activation options
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 4ff647a..f40fd74 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -681,3 +681,43 @@ const char *get_pool_discards_name(thin_discards_t discards)
  
-@@ -10549,7 +10549,7 @@ fi
- if test "${with_default_system_dir+set}" = set; then :
-   withval=$with_default_system_dir; DEFAULT_SYS_DIR=$withval
- else
--  DEFAULT_SYS_DIR="$lvm_exec_prefix/etc/lvm"
-+  DEFAULT_SYS_DIR="/etc/lvm"
- fi
+ 	return "unknown";
+ }
++
++struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
++					   const char *name, uint32_t read_ahead,
++					   uint32_t stripes, uint32_t stripe_size,
++					   uint64_t size, alloc_policy_t alloc,
++					   struct dm_list *pvh)
++{
++	struct logical_volume *metadata_lv;
++	/* FIXME: Make lvm2api usable */
++	struct lvcreate_params lvc = {
++		.activate = CHANGE_ALY,
++		.alloc = alloc,
++		.lv_name = name,
++		.major = -1,
++		.minor = -1,
++		.permission = LVM_READ | LVM_WRITE,
++		.pvh = pvh,
++		.read_ahead = read_ahead,
++		.stripe_size = stripe_size,
++		.stripes = stripes,
++		.vg_name = pool_lv->vg->name,
++		.zero = 1,
++	};
++
++	dm_list_init(&lvc.tags);
++
++	if (!(lvc.extents = extents_from_size(pool_lv->vg->cmd, size,
++					      pool_lv->vg->extent_size)))
++		return_0;
++
++	if (!(lvc.segtype = get_segtype_from_string(pool_lv->vg->cmd, "striped")))
++		return_0;
++
++	/* FIXME: allocate properly space for metadata_lv */
++
++	if (!(metadata_lv = lv_create_single(pool_lv->vg, &lvc)))
++		return_0;
++
++	return metadata_lv;
++}
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index ccc8420..c2041c0 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2145,10 +2145,11 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
+ 		if (!get_stripe_params(cmd, &lp->stripes, &lp->stripe_size))
+ 			return_0;
  
+-		if (!(metadata_lv = alloc_pool_metadata(pool_lv, lp->alloc, metadata_name,
+-							lp->pvh, lp->read_ahead,
+-							lp->stripes, lp->stripe_size,
+-							lp->poolmetadata_size)))
++		if (!(metadata_lv = alloc_pool_metadata(pool_lv, metadata_name,
++							lp->read_ahead,	lp->stripes,
++							lp->stripe_size,
++							lp->poolmetadata_size,
++							lp->alloc, lp->pvh)))
+ 			return_0;
+ 	}
  
-diff --git a/configure.in b/configure.in
-index fa31b18..97ddc1d 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1276,10 +1276,11 @@ if test x$INTL = xyes; then
- fi
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 1a6fbee..5db537f 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1601,50 +1601,6 @@ int get_pool_params(struct cmd_context *cmd,
+ 	return 1;
+ }
  
- ################################################################################
-+dnl -- FIXME: need to switch to regular option here  --sysconfdir
- AC_ARG_WITH(confdir,
- 	    AC_HELP_STRING([--with-confdir=DIR],
- 			   [configuration files in DIR [[/etc]]]),
--	    CONFDIR=$withval, CONFDIR='${exec_prefix}/etc')
-+	    CONFDIR=$withval, CONFDIR='/etc')
+-struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
+-					   alloc_policy_t alloc,
+-					   const char *name,
+-					   struct dm_list *pvh,
+-					   uint32_t read_ahead,
+-					   uint32_t stripes,
+-					   uint32_t stripe_size,
+-					   uint64_t size)
+-{
+-	struct logical_volume *metadata_lv;
+-	struct lvcreate_params lvc;
+-
+-	/* FIXME: Make lvm2api usable */
+-	memset(&lvc, 0, sizeof(lvc));
+-
+-	if (!(lvc.extents = extents_from_size(pool_lv->vg->cmd, size,
+-					      pool_lv->vg->extent_size)))
+-		return_0;
+-
+-	if (!(lvc.segtype = get_segtype_from_string(pool_lv->vg->cmd, "striped")))
+-		return_0;
+-
+-	dm_list_init(&lvc.tags);
+-
+-	/* FIXME: allocate properly space for metadata_lv */
+-	lvc.activate = CHANGE_ALY;
+-	lvc.alloc = alloc;
+-	lvc.lv_name = name;
+-	lvc.major = -1;
+-	lvc.minor = -1;
+-	lvc.permission = LVM_READ | LVM_WRITE;
+-	lvc.pvh = pvh;
+-	lvc.read_ahead = read_ahead;
+-	lvc.stripe_size = stripe_size;
+-	lvc.stripes = stripes;
+-	lvc.vg_name = pool_lv->vg->name;
+-	lvc.zero = 1;
+-
+-	if (!(metadata_lv = lv_create_single(pool_lv->vg, &lvc)))
+-		return_0;
+-
+-	return metadata_lv;
+-}
+-
+ /*
+  * Generic stripe parameter checks.
+  */
+diff --git a/tools/toollib.h b/tools/toollib.h
+index 32884db..cfcb934 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -122,11 +122,6 @@ int get_pool_params(struct cmd_context *cmd,
+ 		    uint64_t *pool_metadata_size,
+ 		    int *zero);
  
- AC_ARG_WITH(staticdir,
- 	    AC_HELP_STRING([--with-staticdir=DIR],
-@@ -1414,10 +1415,11 @@ fi
- 
- ################################################################################
- dnl -- various defaults
-+dnl -- FIXME: need to switch to regular option here  --sysconfdir
- AC_ARG_WITH(default-system-dir,
- 	    AC_HELP_STRING([--with-default-system-dir=DIR],
--			   [default LVM system directory [[EPREFIX/etc/lvm]]]),
--	    DEFAULT_SYS_DIR=$withval, DEFAULT_SYS_DIR="$lvm_exec_prefix/etc/lvm")
-+			   [default LVM system directory [[/etc/lvm]]]),
-+	    DEFAULT_SYS_DIR=$withval, DEFAULT_SYS_DIR="/etc/lvm")
- AC_DEFINE_UNQUOTED(DEFAULT_SYS_DIR, ["$DEFAULT_SYS_DIR"],
- 		   [Path to LVM system directory.])
+-struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
+-					   alloc_policy_t alloc, const char *name,
+-					   struct dm_list *pvh, uint32_t read_ahead,
+-					   uint32_t stripes, uint32_t stripe_size,
+-					   uint64_t size);
+ int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes,
+ 		      uint32_t *stripe_size);
  
 
 
