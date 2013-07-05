@@ -1,39 +1,44 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  5 Jul 2013 01:00:54 +0000 (UTC)
-Subject: master - locking: fix cluster lock_resource fn prototype
-Message-ID: <20130705010054.7245961514@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri,  5 Jul 2013 15:21:22 +0000 (UTC)
+Subject: master - cleanup: move declaration to front
+Message-ID: <20130705152122.AAD3B60CF9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21bc118d4db22259d45aef32aa77f78621ddf8c1
-Commit:        21bc118d4db22259d45aef32aa77f78621ddf8c1
-Parent:        1cb66fe16e0bc180a0be8e18d8b361b5b5842128
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jul 5 01:59:52 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jul 5 01:59:52 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7319bc04207ece28fa22224878ad6a3a0aacdbfa
+Commit:        7319bc04207ece28fa22224878ad6a3a0aacdbfa
+Parent:        21bc118d4db22259d45aef32aa77f78621ddf8c1
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jul 5 13:19:33 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jul 5 17:20:57 2013 +0200
 
-locking: fix cluster lock_resource fn prototype
+cleanup: move declaration to front
 
 ---
- lib/locking/cluster_locking.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/metadata.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index 89d7307..7cbb8f1 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -33,7 +33,7 @@
- #include <unistd.h>
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 2d3f5ec..deb967c 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -833,10 +833,12 @@ int vgcreate_params_validate(struct cmd_context *cmd,
+ static int _vg_update_vg_ondisk(struct volume_group *vg)
+ {
+ 	struct dm_config_tree *cft;
++	int pool_locked;
++
+ 	if (vg->vg_ondisk) /* we already have it */
+ 		return 1;
  
- #ifndef CLUSTER_LOCKING_INTERNAL
--int lock_resource(struct cmd_context *cmd, const char *resource, uint32_t flags);
-+int lock_resource(struct cmd_context *cmd, const char *resource, uint32_t flags, struct logical_volume *lv __attribute__((unused)));
- int query_resource(const char *resource, int *mode);
- void locking_end(void);
- int locking_init(int type, struct dm_config_tree *cf, uint32_t *flags);
+-	int pool_locked = dm_pool_locked(vg->vgmem);
++	pool_locked = dm_pool_locked(vg->vgmem);
+ 	if (pool_locked && !dm_pool_unlock(vg->vgmem, 0))
+ 		return_0;
+ 
 
 
