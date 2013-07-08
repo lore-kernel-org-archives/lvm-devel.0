@@ -1,96 +1,49 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 18 Jul 2013 16:26:56 +0000 (UTC)
-Subject: master - thin: add lvconvert pool metadata spare
-Message-ID: <20130718162656.7403561019@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon,  8 Jul 2013 17:15:52 +0200
+Subject: [PATCH 0/7] pool metadata spare
+Message-ID: <cover.1373296467.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aab53f46eedda64ca8cd73b25eaac9aea7894957
-Commit:        aab53f46eedda64ca8cd73b25eaac9aea7894957
-Parent:        307578495511e35398e0f9ef3f796641dfa5038e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 25 13:35:12 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 18 18:22:44 2013 +0200
+Updated patch set for spare devices.
+Using  _pmspare suffix instead of  lv flag.
 
-thin: add lvconvert pool metadata spare
 
-Support poolmetadataspare when convering volumes into thin pool.
-Same rules applied as with lvcreate.
----
- tools/commands.h  |    6 ++++--
- tools/lvconvert.c |   11 +++++++++++
- 2 files changed, 15 insertions(+), 2 deletions(-)
+Zdenek Kabelac (7):
+  thin: add pool metadata spare lv support
+  thin: report 'e' volume type pool metadata spare
+  thin: removal of spare disables recovery
+  thin: add lvchange spare lv manipulation
+  thin: add spare lvcreate support
+  thin: add lvconvert pool metadata spare
+  thin: add vgchange spare support
 
-diff --git a/tools/commands.h b/tools/commands.h
-index 3c9ed82..fc4f7ef 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -170,6 +170,7 @@ xx(lvconvert,
-    "\t[--poolmetadata ThinMetadataLogicalVolume[Path] |\n"
-    "\t [--poolmetadatasize size]\n"
-    "\t [-r|--readahead ReadAheadSectors|auto|none]\n"
-+   "\t [--poolmetadataspare {y|n}]\n"
-    "\t [--stripes Stripes [-I|--stripesize StripeSize]]]\n"
-    "\t[-T|--thin ExternalLogicalVolume[Path]\n"
-    "\t [--originname NewExternalOriginVolumeName]]\n"
-@@ -180,8 +181,9 @@ xx(lvconvert,
-    merge_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG, noudevsync_ARG,
-    readahead_ARG, regionsize_ARG, repair_ARG, replace_ARG, snapshot_ARG, splitmirrors_ARG,
-    trackchanges_ARG, type_ARG, stripes_long_ARG, stripesize_ARG, test_ARG,
--   chunksize_ARG, discards_ARG, poolmetadata_ARG, poolmetadatasize_ARG,
--   originname_ARG, thin_ARG, thinpool_ARG,
-+   chunksize_ARG, discards_ARG, originname_ARG,
-+   poolmetadata_ARG, poolmetadatasize_ARG, poolmetadataspare_ARG,
-+   thin_ARG, thinpool_ARG,
-    use_policies_ARG, force_ARG, zero_ARG)
- 
- xx(lvcreate,
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 5e7484e..97ef7e4 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -21,6 +21,7 @@ struct lvconvert_params {
- 	int snapshot;
- 	int merge;
- 	int merge_mirror;
-+	int poolmetadataspare;
- 	int thin;
- 	int yes;
- 	int zero;
-@@ -253,6 +254,9 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 	} else if (arg_count(cmd, discards_ARG)) {
- 		log_error("--discards is only valid with --thinpool.");
- 		return 0;
-+	} else if (arg_count(cmd, poolmetadataspare_ARG)) {
-+		log_error("--poolmetadataspare is only valid with --thinpool.");
-+		return 0;
- 	}
- 
- 	/*
-@@ -486,6 +490,9 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 			return_0;
- 	}
- 
-+	/* TODO: default in lvm.conf ? */
-+	lp->poolmetadataspare = arg_int_value(cmd, poolmetadataspare_ARG,
-+					      DEFAULT_POOL_METADATA_SPARE);
- 	lp->force = arg_count(cmd, force_ARG);
- 	lp->yes = arg_count(cmd, yes_ARG);
- 
-@@ -2158,6 +2165,10 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
-+	if (!handle_pool_metadata_spare(pool_lv->vg, metadata_lv->le_count,
-+					lp->pvh, lp->poolmetadataspare))
-+		return_0;
-+
- 	old_name = data_lv->name; /* Use for pool name */
- 	/*
- 	 * Since we wish to have underlaying devs to match _tdata
+ lib/config/defaults.h            |   1 +
+ lib/format_text/flags.c          |   1 +
+ lib/format_text/import_vsn1.c    |  12 +++
+ lib/metadata/lv.c                |   1 +
+ lib/metadata/lv_manip.c          |  26 ++++++
+ lib/metadata/metadata-exported.h |   7 ++
+ lib/metadata/metadata.c          |  21 +++++
+ lib/metadata/thin_manip.c        | 170 +++++++++++++++++++++++++++++++++++++++
+ lib/metadata/vg.h                |   2 +
+ lib/misc/lvm-string.c            |   1 +
+ man/lvchange.8.in                |   5 ++
+ man/lvcreate.8.in                |  11 ++-
+ man/lvs.8.in                     |   2 +-
+ man/vgchange.8.in                |   5 ++
+ tools/args.h                     |   1 +
+ tools/commands.h                 |  22 +++--
+ tools/lvchange.c                 |  79 +++++++++++++++++-
+ tools/lvconvert.c                |  11 +++
+ tools/lvcreate.c                 |  18 ++++-
+ tools/vgchange.c                 |  25 +++++-
+ 20 files changed, 407 insertions(+), 14 deletions(-)
+
+-- 
+1.8.3.1
 
 
