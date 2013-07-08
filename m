@@ -1,36 +1,34 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 23 Jul 2013 21:27:37 +0200
-Subject: master - lvm2app: lvm_vg_list_lvs filter hidden LVs
-In-Reply-To: <20130723190305.9850E60D4C@fedorahosted.org>
-References: <20130723190305.9850E60D4C@fedorahosted.org>
-Message-ID: <51EED929.6050006@redhat.com>
+Date: Mon,  8 Jul 2013 17:19:16 +0200
+Subject: [PATCH 4/4] cleanup: add comment
+In-Reply-To: <cover.1373296602.git.zkabelac@redhat.com>
+References: <cover.1373296602.git.zkabelac@redhat.com>
+Message-ID: <feb06c4334192bbf9a7adf6170dac650079b1768.1373296602.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 23.7.2013 21:03, tasleson napsal(a):
-> Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2b51476007aae91acfc121a7fd2ce04f3b08781
-> Commit:        a2b51476007aae91acfc121a7fd2ce04f3b08781
-> Parent:        31de670318c9794690601468def392cd7e4eb0fc
-> Author:        Tony Asleson <tasleson@redhat.com>
-> AuthorDate:    Tue Jul 23 14:57:53 2013 -0400
-> Committer:     Tony Asleson <tasleson@redhat.com>
-> CommitterDate: Tue Jul 23 14:01:20 2013 -0500
->
-> lvm2app: lvm_vg_list_lvs filter hidden LVs
->
-> The function lvm_vg_list_lvs was returning all logical
-> volumes, including *_tmeta and *_tdata.  Added check
-> to verify that LV is visible before including in list
-> of returned logical volumes.
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/display/display.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-I'm afraid you can't break API this way.
-If there is a need for filtered list - you need to filter
-list passed from this function - or add something like
-lvm_vg_list_visible_lvs.
-
-Zdenek
+diff --git a/lib/display/display.c b/lib/display/display.c
+index e2b0f76..3f7f360 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -928,7 +928,7 @@ char yes_no_prompt(const char *prompt, ...)
+ 		}
+ 
+ 		if ((c = getchar()) == EOF) {
+-			ret = 'n';
++			ret = 'n'; /* SIGINT */
+ 			break;
+ 		}
+ 
+-- 
+1.8.3.1
 
 
