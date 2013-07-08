@@ -1,61 +1,74 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  8 Jul 2013 12:04:05 +0000 (UTC)
-Subject: master - pvremove: stack trace
-Message-ID: <20130708120405.7145B6034E@fedorahosted.org>
+Date: Mon,  8 Jul 2013 12:04:07 +0000 (UTC)
+Subject: master - locking: unlock memory on error path
+Message-ID: <20130708120407.8BA606034E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=edf5cae6799549827d4031f472451bd96d2f0f47
-Commit:        edf5cae6799549827d4031f472451bd96d2f0f47
-Parent:        ccf3dd60f2a486f8ac1b9788ca6378b1dc88827d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=985251c8f385d2611dde44d1bf6824223f073749
+Commit:        985251c8f385d2611dde44d1bf6824223f073749
+Parent:        edf5cae6799549827d4031f472451bd96d2f0f47
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jul 6 14:15:42 2013 +0200
+AuthorDate:    Sat Jul 6 10:58:56 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 8 14:01:41 2013 +0200
+CommitterDate: Mon Jul 8 14:02:49 2013 +0200
 
-pvremove: stack trace
+locking: unlock memory on error path
 
-Stack trace error.
-Remove unused var.
+Unlock memory and unblock signals on error path.
 ---
- tools/pvremove.c |    8 +++++---
- 1 files changed, 5 insertions(+), 3 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/locking/locking.c |    8 ++++----
+ 2 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/tools/pvremove.c b/tools/pvremove.c
-index 45c675e..7048b97 100644
---- a/tools/pvremove.c
-+++ b/tools/pvremove.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -18,7 +18,7 @@
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e389a36..567441a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Relase memory and unblock signals in lock_vol error path.
+   Define LVM2_* command errors in lvm2cmd.h and use in dmeventd plugins.
+   Move errors.h to tools dir.
+   Add man page entries for profile configuration and related options.
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index 34e8bd9..9183ee6 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -368,18 +368,18 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
  
- int pvremove(struct cmd_context *cmd, int argc, char **argv)
- {
--	int i, r;
-+	int i;
- 	int ret = ECMD_PROCESSED;
- 	unsigned force_count;
- 	unsigned prompt;
-@@ -33,8 +33,10 @@ int pvremove(struct cmd_context *cmd, int argc, char **argv)
- 
- 	for (i = 0; i < argc; i++) {
- 		dm_unescape_colons_and_at_signs(argv[i], NULL, NULL);
--		if (!pvremove_single(cmd, argv[i], NULL, force_count, prompt))
-+		if (!pvremove_single(cmd, argv[i], NULL, force_count, prompt)) {
-+			stack;
- 			ret = ECMD_FAILED;
-+		}
+ 	if (!*resource) {
+ 		log_error(INTERNAL_ERROR "Use of P_orphans is deprecated.");
+-		return 0;
++		goto out;
  	}
  
- 	return ret;
+ 	if ((is_orphan_vg(resource) || is_global_vg(resource)) && (flags & LCK_CACHE)) {
+ 		log_error(INTERNAL_ERROR "P_%s referenced", resource);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (cmd->metadata_read_only && lck_type == LCK_WRITE &&
+ 	    strcmp(resource, VG_GLOBAL)) {
+ 		log_error("Operation prohibited while global/metadata_read_only is set.");
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if ((ret = _locking.lock_resource(cmd, resource, flags, lv))) {
+@@ -399,7 +399,7 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
+ 		if (!ret)
+ 			_update_vg_lock_count(resource, flags);
+ 	}
+-
++out:
+ 	_unlock_memory(cmd, lv_op);
+ 	_unblock_signals();
+ 
 
 
