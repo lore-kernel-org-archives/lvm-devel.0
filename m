@@ -1,82 +1,112 @@
-From: NeilBrown <neilb@suse.de>
-Date: Tue, 23 Jul 2013 12:42:39 +1000
-Subject: [PATCH] dmeventd: remove memory leak
-Message-ID: <20130723124239.430bdd40@notabene.brown>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon,  8 Jul 2013 17:19:15 +0200
+Subject: [PATCH 3/4] locking: support stacking
+In-Reply-To: <cover.1373296602.git.zkabelac@redhat.com>
+References: <cover.1373296602.git.zkabelac@redhat.com>
+Message-ID: <3ef48cd166c23785a654e1d88f7523583bf03fa1.1373296602.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Support 2 levels of nesting signal blocking.
 
-If e.g. a snapshot volume is repeatly added and removed, dmeventd will
-leake memory.
-
-This is because the 'timeout' thread is not detached and is never
-joined.  So the resources it uses are never freed.
-
-This patch changes _pthread_create_smallstack to set
-PTHREAD_CREATE_DETACHED if the pthread pointer passed is NULL, and
-changes _register_for_timeout to pass a NULL pointer rather than a
-pointer to an unused variable.
-
-Signed-off-by: NeilBrown <neilb@suse.de>
-
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
+ lib/locking/locking.c | 49 +++++++++++++++++++++++++------------------------
+ 1 file changed, 25 insertions(+), 24 deletions(-)
 
-Customer found this memory leak.  It can be easily seen by e.g.
-
-while true; do
-   lvcreate -n snaptest -L 900m -s /dev/vgtest/lvtest
-   sleep 1
-   lvremove -f /dev/vgtest/snaptest
-done
-
-and watching /proc/`pid-of dmeventd`/maps
-
-NeilBrown
-
- daemons/dmeventd/dmeventd.c |   12 +++++++++---
- 1 file changed, 9 insertions(+), 3 deletions(-)
-
---- LVM2.2.02.84.orig/daemons/dmeventd/dmeventd.c
-+++ LVM2.2.02.84/daemons/dmeventd/dmeventd.c
-@@ -256,12 +256,20 @@ static struct dso_data *_alloc_dso_data(
- /* Create a device monitoring thread. */
- static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *arg)
- {
-+	pthread_t tmp;
- 	pthread_attr_t attr;
- 	pthread_attr_init(&attr);
- 	/*
- 	 * We use a smaller stack since it gets preallocated in its entirety
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index 9183ee6..377d8a4 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -39,8 +39,11 @@ static int _blocking_supported = 0;
+ 
+ static volatile sig_atomic_t _sigint_caught = 0;
+ static volatile sig_atomic_t _handler_installed;
+-static struct sigaction _oldhandler;
+-static int _oldmasked;
++
++/* Support 2 level nesting, increase if needed more */
++#define MAX_SIGINTS 2
++static struct sigaction _oldhandler[MAX_SIGINTS];
++static int _oldmasked[MAX_SIGINTS];
+ 
+ typedef enum {
+         LV_NOOP,
+@@ -84,50 +87,48 @@ void sigint_allow(void)
+ 	 * Do not overwrite the backed-up handler data -
+ 	 * just increase nesting count.
  	 */
- 	pthread_attr_setstacksize(&attr, THREAD_STACK_SIZE);
-+	/*
-+	 * If no-one will be waiting, we need to detach.
-+	 */
-+	if (!t) {
-+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-+		t = &tmp;
-+	}
- 	return pthread_create(t, &attr, fun, arg);
+-	if (_handler_installed) {
+-		_handler_installed++;
++	if (++_handler_installed > MAX_SIGINTS)
+ 		return;
+-	}
+ 
+ 	/* Grab old sigaction for SIGINT: shall not fail. */
+-	sigaction(SIGINT, NULL, &handler);
++	if (sigaction(SIGINT, NULL, &handler))
++		log_sys_error("sigaction", "SIGINT");
+ 	handler.sa_flags &= ~SA_RESTART; /* Clear restart flag */
+ 	handler.sa_handler = _catch_sigint;
+ 
+-	_handler_installed = 1;
+-
+ 	/* Override the signal handler: shall not fail. */
+-	sigaction(SIGINT, &handler, &_oldhandler);
++	if (sigaction(SIGINT, &handler, &_oldhandler[_handler_installed - 1]))
++		log_sys_error("sigaction", "SIGINT");
+ 
+ 	/* Unmask SIGINT.  Remember to mask it again on restore. */
+-	sigprocmask(0, NULL, &sigs);
+-	if ((_oldmasked = sigismember(&sigs, SIGINT))) {
++	if (sigprocmask(0, NULL, &sigs))
++		log_sys_error("sigprocmask", "");
++
++	if ((_oldmasked[_handler_installed] = sigismember(&sigs, SIGINT))) {
+ 		sigdelset(&sigs, SIGINT);
+-		sigprocmask(SIG_SETMASK, &sigs, NULL);
++		if (sigprocmask(SIG_SETMASK, &sigs, NULL))
++			log_sys_error("sigprocmask", "SIG_SETMASK");
+ 	}
  }
  
-@@ -544,9 +552,7 @@ static int _register_for_timeout(struct
- 	}
+ void sigint_restore(void)
+ {
+-	if (!_handler_installed)
+-		return;
++	sigset_t sigs;
  
- 	if (!_timeout_running) {
--		pthread_t timeout_id;
+-	if (_handler_installed > 1) {
+-		_handler_installed--;
++	if (!_handler_installed ||
++	    _handler_installed-- > MAX_SIGINTS)
+ 		return;
+-	}
 -
--		if (!(ret = -_pthread_create_smallstack(&timeout_id, _timeout_thread, NULL)))
-+		if (!(ret = -_pthread_create_smallstack(NULL, _timeout_thread, NULL)))
- 			_timeout_running = 1;
+-	/* Nesting count went down to 0. */
+-	_handler_installed = 0;
+ 
+-	if (_oldmasked) {
+-		sigset_t sigs;
++	/* Nesting count went bellow 2. */
++	if (_oldmasked[_handler_installed]) {
+ 		sigprocmask(0, NULL, &sigs);
+ 		sigaddset(&sigs, SIGINT);
+-		sigprocmask(SIG_SETMASK, &sigs, NULL);
++		if (sigprocmask(SIG_SETMASK, &sigs, NULL))
++			log_sys_error("sigprocmask", "SIG_SETMASK");
  	}
  
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: signature.asc
-Type: application/pgp-signature
-Size: 828 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20130723/020f5a59/attachment.sig>
+-	sigaction(SIGINT, &_oldhandler, NULL);
++	if (sigaction(SIGINT, &_oldhandler[_handler_installed], NULL))
++		log_sys_error("sigaction", "SIGINT restore");
+ }
+ 
+ static void _block_signals(uint32_t flags __attribute__((unused)))
+-- 
+1.8.3.1
+
+
