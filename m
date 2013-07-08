@@ -1,39 +1,68 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 12 Jul 2013 20:25:26 +0000 (UTC)
-Subject: master - man: lvs lv_attr 's(k)ip activation'
-Message-ID: <20130712202526.A1C3C6137E@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon,  8 Jul 2013 17:15:55 +0200
+Subject: [PATCH 3/7] thin: removal of spare disables recovery
+In-Reply-To: <cover.1373296467.git.zkabelac@redhat.com>
+References: <cover.1373296467.git.zkabelac@redhat.com>
+Message-ID: <1dcf0ac23c95c529c396417c7d81a85b57aab9d2.1373296467.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bdd2246ce91d8b8c050ad7a2b52e32489262c4b3
-Commit:        bdd2246ce91d8b8c050ad7a2b52e32489262c4b3
-Parent:        9a44ba94a5ab54aaad9fdc6c2e1d1eb4587fd651
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jul 12 22:24:26 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Jul 12 22:24:26 2013 +0200
+Warn user when removing spare LV.
 
-man: lvs lv_attr 's(k)ip activation'
-
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- man/lvs.8.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
 
-diff --git a/man/lvs.8.in b/man/lvs.8.in
-index a020bf7..5df6b47 100644
---- a/man/lvs.8.in
-+++ b/man/lvs.8.in
-@@ -177,7 +177,7 @@ are found.  ("check" and "repair" of a RAID Logical Volume can be done via
- the 'lvchange' command.)  (w)ritemostly signifies the devices in a RAID 1
- logical volume that have been marked write-mostly.
- .IP 10 3
--(n)o activation: this volume is flagged to be skipped during activation.
-+s(k)ip activation: this volume is flagged to be skipped during activation.
- .RE
- .TP
- .BR \-O ", " \-\-sort
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 9d67e71..d86d070 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4521,7 +4521,9 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
+ {
+ 	percent_t snap_percent;
+ 	struct dm_list *snh, *snht;
++	struct lv_list *lvl;
+ 	struct lvinfo info;
++	int found;
+ 
+ 	if (lv_is_cow(lv)) {
+ 		/*
+@@ -4579,6 +4581,30 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
+ 	    !_lv_remove_segs_using_this_lv(cmd, lv, force, level, "pool"))
+ 		return_0;
+ 
++	if (lv_is_thin_pool(lv) && lv->vg->pool_metadata_spare_lv) {
++		found = 0;
++		/* When removing last thin pool, remove spare as well */
++		dm_list_iterate_items(lvl, &lv->vg->lvs)
++			if (lv_is_thin_pool(lvl->lv) && lvl->lv != lv) {
++				found = 1;
++				break;
++			}
++
++		if (!found &&
++		    !lv_remove_with_dependencies(cmd, lv->vg->pool_metadata_spare_lv,
++						 force, level + 1))
++			return_0;
++	}
++
++	if (lv_is_pool_metadata_spare(lv) &&
++	    (force == PROMPT) &&
++	    (yes_no_prompt("Removal of pool metadata spare logical volume \"%s\" "
++			   "disables automatic recovery attempts after damage "
++			   "to a thin pool. Proceed? [y/n]: ", lv->name) == 'n')) {
++		log_error("Logical volume \"%s\" not removed.", lv->name);
++		return 0;
++	}
++
+ 	return lv_remove_single(cmd, lv, force);
+ }
+ 
+-- 
+1.8.3.1
 
 
