@@ -1,184 +1,200 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon,  8 Jul 2013 14:06:27 +0000 (UTC)
-Subject: master - config: fix use of last config check status if creating CFG_DEF_TREE_MISSING tree
-Message-ID: <20130708140627.8A7C66073F@fedorahosted.org>
+Date: Mon,  8 Jul 2013 14:06:29 +0000 (UTC)
+Subject: master - config: make it possible to do a raw config tree merge
+Message-ID: <20130708140629.A624A6073F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=661406a417e3cbf2170ba7c3debd767d50e99cae
-Commit:        661406a417e3cbf2170ba7c3debd767d50e99cae
-Parent:        f5584d420356c8ca0b797952b07f5b5387957c17
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f1e289001286f978630f5e6423acca1af322ebd7
+Commit:        f1e289001286f978630f5e6423acca1af322ebd7
+Parent:        661406a417e3cbf2170ba7c3debd767d50e99cae
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jul 8 14:13:09 2013 +0200
+AuthorDate:    Mon Jul 8 14:31:44 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jul 8 15:57:49 2013 +0200
+CommitterDate: Mon Jul 8 15:59:25 2013 +0200
 
-config: fix use of last config check status if creating CFG_DEF_TREE_MISSING tree
+config: make it possible to do a raw config tree merge
 
-When CFG_DEF_TREE_MISSING is created, it needs to know the status
-of the check done on the tree used (the CFG_USED flag).
+Till now, we needed the config tree merge only for merging
+tag configs with lvm.conf. However, this type of merging
+did a few extra exceptions:
 
-This bug was introduced with f1c292cc38f4ba2e8d9b7272bc1a1ce17bd729a5
-"make it possible to run several instances of configuration check at
-once". This patch separated the CFG_USED and CFG_VALID flags in
-a separate 'status' field in struct cft_check_handle.
+  - leaving out the tags section
+  - merging values in activation/volume_list
+  - merging values in devices/filter
+  - merging values in devices/types
 
-However, when creating some trees, like CFG_DEF_TREE_MISSING,
-we need this status to do a comparison with full config definition
-to determine which items are missing and for which default values
-were used. Otherwise, all items would be considered missing.
+Any other config values were replaced by new values.
+However, we'd like to do a 'raw merge' as well, simply
+bypassing the exceptions listed above. This will help
+us to create a single tree representing the cascaded
+configs like CONFIG_STRING -> CONFIG_PROFILE -> ...
 
-So, pass this status in a new field called 'check_status' in
-struct config_def_tree_spec that defines how the (dumpconfig) tree
-should be constructed (and this struct is passed to
-config_def_create_tree fn then).
+The reason for this patch is that when trees are cascaded,
+the first value found while traversing the cascade is used,
+not making any exceptions like we do for tag configs.
 ---
- lib/config/config.c |   15 +++++++++++----
- lib/config/config.h |    1 +
- tools/dumpconfig.c  |   47 +++++++++++++++++++++++++++++++++--------------
- 3 files changed, 45 insertions(+), 18 deletions(-)
+ lib/commands/toolcontext.c |    2 +-
+ lib/config/config.c        |   69 +++++++++++++++++++++++++-------------------
+ lib/config/config.h        |   13 +++++++-
+ 3 files changed, 52 insertions(+), 32 deletions(-)
 
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 4919b93..2c4a698 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -659,7 +659,7 @@ static struct dm_config_tree *_merge_config_files(struct cmd_context *cmd, struc
+ 
+ 	dm_list_iterate_items(cfl, &cmd->config_files) {
+ 		/* Merge all config trees into cmd->cft using merge/tag rules */
+-		if (!merge_config_tree(cmd, cft, cfl->cft))
++		if (!merge_config_tree(cmd, cft, cfl->cft, CONFIG_MERGE_TYPE_TAGS))
+ 			return_0;
+ 	}
+ 
 diff --git a/lib/config/config.c b/lib/config/config.c
-index 61e92cf..26b2aa8 100644
+index 26b2aa8..4c1b415 100644
 --- a/lib/config/config.c
 +++ b/lib/config/config.c
-@@ -1336,8 +1336,10 @@ static struct dm_config_node *_add_def_node(struct dm_config_tree *cft,
- 	return cn;
- }
- 
--static int _should_skip_def_node(struct config_def_tree_spec *spec, int section_id, cfg_def_item_t *def)
-+static int _should_skip_def_node(struct config_def_tree_spec *spec, int section_id, int id)
+@@ -955,7 +955,8 @@ static void _insert_config_node(struct dm_config_node **cn1,
+  * Merge section cn2 into section cn1 (which has the same name)
+  * overwriting any existing cn1 nodes with matching names.
+  */
+-static void _merge_section(struct dm_config_node *cn1, struct dm_config_node *cn2)
++static void _merge_section(struct dm_config_node *cn1, struct dm_config_node *cn2,
++			   config_merge_t merge_type)
  {
-+	cfg_def_item_t *def = cfg_def_get_item_p(id);
-+
- 	if ((def->parent != section_id) ||
- 	    (spec->ignoreadvanced && def->flags & CFG_ADVANCED) ||
- 	    (spec->ignoreunsupported && def->flags & CFG_UNSUPPORTED))
-@@ -1345,7 +1347,12 @@ static int _should_skip_def_node(struct config_def_tree_spec *spec, int section_
+ 	struct dm_config_node *cn, *nextn, *oldn;
+ 	struct dm_config_value *cv;
+@@ -963,9 +964,11 @@ static void _merge_section(struct dm_config_node *cn1, struct dm_config_node *cn
+ 	for (cn = cn2->child; cn; cn = nextn) {
+ 		nextn = cn->sib;
  
- 	switch (spec->type) {
- 		case CFG_DEF_TREE_MISSING:
--			if ((def->flags & CFG_USED) ||
-+			if (!spec->check_status) {
-+				log_error_once(INTERNAL_ERROR "couldn't determine missing "
-+				       "config nodes - unknown status of last config check.");
-+				return 1;
-+			}
-+			if ((spec->check_status[id] & CFG_USED) ||
- 			    (def->flags & CFG_NAME_VARIABLE) ||
- 			    (def->since_version > spec->version))
- 				return 1;
-@@ -1374,13 +1381,13 @@ static struct dm_config_node *_add_def_section_subtree(struct dm_config_tree *cf
- 	int id;
+-		/* Skip "tags" */
+-		if (!strcmp(cn->key, "tags"))
+-			continue;
++		if (merge_type == CONFIG_MERGE_TYPE_TAGS) {
++			/* Skip "tags" */
++			if (!strcmp(cn->key, "tags"))
++				continue;
++		}
  
- 	for (id = 0; id < CFG_COUNT; id++) {
--		def = cfg_def_get_item_p(id);
--		if (_should_skip_def_node(spec, section_id, def))
-+		if (_should_skip_def_node(spec, section_id, id))
+ 		/* Subsection? */
+ 		if (!cn->v)
+@@ -976,15 +979,17 @@ static void _merge_section(struct dm_config_node *cn1, struct dm_config_node *cn
+ 			_insert_config_node(&cn1->child, cn);
  			continue;
+ 		}
+-		/* Merge certain value lists */
+-		if ((!strcmp(cn1->key, "activation") &&
+-		     !strcmp(cn->key, "volume_list")) ||
+-		    (!strcmp(cn1->key, "devices") &&
+-		     (!strcmp(cn->key, "filter") || !strcmp(cn->key, "types")))) {
+-			cv = cn->v;
+-			while (cv->next)
+-				cv = cv->next;
+-			cv->next = oldn->v;
++		if (merge_type == CONFIG_MERGE_TYPE_TAGS) {
++			/* Merge certain value lists */
++			if ((!strcmp(cn1->key, "activation") &&
++			     !strcmp(cn->key, "volume_list")) ||
++			    (!strcmp(cn1->key, "devices") &&
++			     (!strcmp(cn->key, "filter") || !strcmp(cn->key, "types")))) {
++				cv = cn->v;
++				while (cv->next)
++					cv = cv->next;
++				cv->next = oldn->v;
++			}
+ 		}
  
- 		if (!cn && !(cn = _add_def_node(cft, spec, parent, relay, cfg_def_get_item_p(section_id))))
- 				goto bad;
+ 		/* Replace values */
+@@ -1014,7 +1019,7 @@ static int _match_host_tags(struct dm_list *tags, const struct dm_config_node *t
  
-+		def = cfg_def_get_item_p(id);
- 		if ((tmp = def->type == CFG_TYPE_SECTION ? _add_def_section_subtree(cft, spec, cn, relay_sub, id)
- 							 : _add_def_node(cft, spec, cn, relay_sub, def)))
- 			relay_sub = tmp;
+ /* Destructively merge a new config tree into an existing one */
+ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
+-		      struct dm_config_tree *newdata)
++		      struct dm_config_tree *newdata, config_merge_t merge_type)
+ {
+ 	struct dm_config_node *root = cft->root;
+ 	struct dm_config_node *cn, *nextn, *oldn, *cn2;
+@@ -1023,30 +1028,34 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
+ 
+ 	for (cn = newdata->root; cn; cn = nextn) {
+ 		nextn = cn->sib;
+-		/* Ignore tags section */
+-		if (!strcmp(cn->key, "tags"))
+-			continue;
+-		/* If there's a tags node, skip if host tags don't match */
+-		if ((tn = dm_config_find_node(cn->child, "tags"))) {
+-			if (!_match_host_tags(&cmd->tags, tn))
++		if (merge_type == CONFIG_MERGE_TYPE_TAGS) {
++			/* Ignore tags section */
++			if (!strcmp(cn->key, "tags"))
+ 				continue;
++			/* If there's a tags node, skip if host tags don't match */
++			if ((tn = dm_config_find_node(cn->child, "tags"))) {
++				if (!_match_host_tags(&cmd->tags, tn))
++					continue;
++			}
+ 		}
+ 		if (!(oldn = dm_config_find_node(root, cn->key))) {
+ 			_insert_config_node(&cft->root, cn);
+-			/* Remove any "tags" nodes */
+-			for (cn2 = cn->child; cn2; cn2 = cn2->sib) {
+-				if (!strcmp(cn2->key, "tags")) {
+-					cn->child = cn2->sib;
+-					continue;
+-				}
+-				if (cn2->sib && !strcmp(cn2->sib->key, "tags")) {
+-					cn2->sib = cn2->sib->sib;
+-					continue;
++			if (merge_type == CONFIG_MERGE_TYPE_TAGS) {
++				/* Remove any "tags" nodes */
++				for (cn2 = cn->child; cn2; cn2 = cn2->sib) {
++					if (!strcmp(cn2->key, "tags")) {
++						cn->child = cn2->sib;
++						continue;
++					}
++					if (cn2->sib && !strcmp(cn2->sib->key, "tags")) {
++						cn2->sib = cn2->sib->sib;
++						continue;
++					}
+ 				}
+ 			}
+ 			continue;
+ 		}
+-		_merge_section(oldn, cn);
++		_merge_section(oldn, cn, merge_type);
+ 	}
+ 
+ 	/*
 diff --git a/lib/config/config.h b/lib/config/config.h
-index 5109a23..9f54af6 100644
+index 9f54af6..94fd1d9 100644
 --- a/lib/config/config.h
 +++ b/lib/config/config.h
-@@ -110,6 +110,7 @@ struct config_def_tree_spec {
- 	uint16_t version;		/* tree at this LVM2 version */
- 	int ignoreadvanced;		/* do not include advanced configs */
- 	int ignoreunsupported;		/* do not include unsupported configs */
-+	uint8_t *check_status;		/* status of last tree check (currently needed for CFG_DEF_TREE_MISSING only) */
- };
+@@ -173,8 +173,19 @@ int config_file_changed(struct dm_config_tree *cft);
+ int config_file_check(struct dm_config_tree *cft, const char **filename, struct stat *info);
  
  
-diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
-index ebee786..3839def 100644
---- a/tools/dumpconfig.c
-+++ b/tools/dumpconfig.c
-@@ -45,13 +45,30 @@ static struct cft_check_handle *_get_cft_check_handle(struct cmd_context *cmd)
- 	return handle;
- }
++typedef enum {
++	CONFIG_MERGE_TYPE_RAW,	/* always replace old config values with new config values when merging */
++	CONFIG_MERGE_TYPE_TAGS	/* apply some exceptions when merging tag configs:
++				     - skip tags section
++				     - do not replace, but merge values of these settings:
++					activation/volume_list
++					devices/filter
++					devices/types
++				 */
++} config_merge_t;
++
+ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
+-		      struct dm_config_tree *newdata);
++		      struct dm_config_tree *newdata, config_merge_t);
  
-+static int _do_def_check(struct cmd_context *cmd, struct cft_check_handle **cft_check_handle)
-+{
-+	struct cft_check_handle *handle;
-+
-+	if (!(handle = _get_cft_check_handle(cmd)))
-+		return 0;
-+
-+	handle->force_check = 1;
-+	handle->skip_if_checked = 1;
-+	handle->suppress_messages = 1;
-+
-+	config_def_check(cmd, handle);
-+	*cft_check_handle = handle;
-+
-+	return 1;
-+}
-+
- int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
- {
- 	const char *file = arg_str_value(cmd, file_ARG, NULL);
- 	const char *type = arg_str_value(cmd, configtype_ARG, "current");
- 	struct config_def_tree_spec tree_spec = {0};
- 	struct dm_config_tree *cft = NULL;
--	struct cft_check_handle *cft_check_handle;
-+	struct cft_check_handle *cft_check_handle = NULL;
- 	int r = ECMD_PROCESSED;
- 
- 	if (arg_count(cmd, configtype_ARG) && arg_count(cmd, validate_ARG)) {
-@@ -105,29 +122,31 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
- 
- 	if (!strcmp(type, "current")) {
- 		tree_spec.type = CFG_DEF_TREE_CURRENT;
--
--		if (!(cft_check_handle = _get_cft_check_handle(cmd)))
-+		if (!_do_def_check(cmd, &cft_check_handle))
- 			return ECMD_FAILED;
--
--		cft_check_handle->force_check = 1;
--		cft_check_handle->skip_if_checked = 1;
--		cft_check_handle->suppress_messages = 1;
--
--		config_def_check(cmd, cft_check_handle);
- 	}
--
--	else if (!strcmp(type, "default"))
--		tree_spec.type = CFG_DEF_TREE_DEFAULT;
--	else if (!strcmp(type, "missing"))
-+	else if (!strcmp(type, "missing")) {
- 		tree_spec.type = CFG_DEF_TREE_MISSING;
--	else if (!strcmp(type, "new"))
-+		if (!_do_def_check(cmd, &cft_check_handle))
-+			return ECMD_FAILED;
-+	}
-+	else if (!strcmp(type, "default")) {
-+		tree_spec.type = CFG_DEF_TREE_DEFAULT;
-+		/* default type does not require check status */
-+	}
-+	else if (!strcmp(type, "new")) {
- 		tree_spec.type = CFG_DEF_TREE_NEW;
-+		/* new type does not require check status */
-+	}
- 	else {
- 		log_error("Incorrect type of configuration specified. "
- 			  "Expected one of: current, default, missing, new.");
- 		return EINVALID_CMD_LINE;
- 	}
- 
-+	if (cft_check_handle)
-+		tree_spec.check_status = cft_check_handle->status;
-+
- 	if (tree_spec.type == CFG_DEF_TREE_CURRENT)
- 		cft = cmd->cft;
- 	else
+ /*
+  * These versions check an override tree, if present, first.
 
 
