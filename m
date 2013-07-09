@@ -1,91 +1,111 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  9 Jul 2013 02:08:17 +0000 (UTC)
-Subject: master - tools: remove metadata-exported.h
-Message-ID: <20130709020817.D300C60E3D@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue,  9 Jul 2013 08:01:07 +0000 (UTC)
+Subject: master - dumpconfig: add --type profilable
+Message-ID: <20130709080107.6D83961034@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f56a1819e90900487d6d58485dd658944922f251
-Commit:        f56a1819e90900487d6d58485dd658944922f251
-Parent:        9d5bdc91ca51737be82c463e05e5818a833a1fea
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jul 9 03:07:55 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jul 9 03:07:55 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=953a438e93a1adb0df7c7931cd6271b9d32acd7d
+Commit:        953a438e93a1adb0df7c7931cd6271b9d32acd7d
+Parent:        f56a1819e90900487d6d58485dd658944922f251
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jul 9 09:57:46 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Jul 9 10:00:47 2013 +0200
 
-tools: remove metadata-exported.h
+dumpconfig: add --type profilable
 
-metadata-exported.h is included by tools.h
+The --type profilable shows all config settings that
+are customizable by profiles:
+
+  raw/~ $ lvm dumpconfig --type profilable
+  allocation {
+	  thin_pool_zero=1
+	  thin_pool_discards="passdown"
+	  thin_pool_chunk_size=64
+  }
+  activation {
+	  thin_pool_autoextend_threshold=100
+	  thin_pool_autoextend_percent=20
+  }
 ---
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/metadata.h          |    1 -
- tools/pvcreate.c                 |    1 -
- tools/pvresize.c                 |    1 -
- tools/vgck.c                     |    1 -
- 5 files changed, 1 insertions(+), 4 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/config/config.c |    4 ++++
+ lib/config/config.h |    3 ++-
+ tools/commands.h    |    2 +-
+ tools/dumpconfig.c  |    4 ++++
+ 5 files changed, 12 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index ef192d3..a8e1a29 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -572,6 +572,7 @@ int pv_analyze(struct cmd_context *cmd, const char *pv_name,
- /* FIXME: move internal to library */
- uint32_t pv_list_extents_free(const struct dm_list *pvh);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 68b3b78..b3b846c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Add --type profilable to lvm dumpconfig to show profilable config settings.
+   Add --mergedconfig to lvm dumpconfig for merged --config/--profile/lvm.conf.
+   Relase memory and unblock signals in lock_vol error path.
+   Define LVM2_* command errors in lvm2cmd.h and use in dmeventd plugins.
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 4c1b415..7c4f8ba 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -1370,6 +1370,10 @@ static int _should_skip_def_node(struct config_def_tree_spec *spec, int section_
+ 			if (def->since_version != spec->version)
+ 				return 1;
+ 			break;
++		case CFG_DEF_TREE_PROFILABLE:
++			if (!(def->flags & CFG_PROFILABLE))
++				return 1;
++			break;
+ 		default:
+ 			if (def->since_version > spec->version)
+ 				return 1;
+diff --git a/lib/config/config.h b/lib/config/config.h
+index 94fd1d9..263da4f 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -101,7 +101,8 @@ typedef enum {
+ 	CFG_DEF_TREE_MISSING,		/* tree of nodes missing in current config using default values */
+ 	CFG_DEF_TREE_COMPLETE,		/* CURRENT + MISSING, the tree actually used within execution, not implemented yet */
+ 	CFG_DEF_TREE_DEFAULT,		/* tree of all possible config nodes with default values */
+-	CFG_DEF_TREE_NEW		/* tree of all new nodes that appeared in given version */
++	CFG_DEF_TREE_NEW,		/* tree of all new nodes that appeared in given version */
++	CFG_DEF_TREE_PROFILABLE		/* tree of all nodes that are customizable by profiles */
+ } cfg_def_tree_t;
  
-+int vg_validate(struct volume_group *vg);
- struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name);
- int vg_remove_mdas(struct volume_group *vg);
- int vg_remove_check(struct volume_group *vg);
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index d313198..c2a20cb 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -337,7 +337,6 @@ struct format_handler {
- unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignment);
- unsigned long set_pe_align_offset(struct physical_volume *pv,
- 				  unsigned long data_alignment_offset);
--int vg_validate(struct volume_group *vg);
- 
- int pv_write_orphan(struct cmd_context *cmd, struct physical_volume *pv);
- 
-diff --git a/tools/pvcreate.c b/tools/pvcreate.c
-index cbd1a59..958e353 100644
---- a/tools/pvcreate.c
-+++ b/tools/pvcreate.c
-@@ -14,7 +14,6 @@
-  */
- 
- #include "tools.h"
--#include "metadata-exported.h"
- 
- /*
-  * Intial sanity checking of recovery-related command-line arguments.
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index 8004700..faf3134 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -15,7 +15,6 @@
-  */
- 
- #include "tools.h"
--#include "metadata-exported.h"
- 
- struct pvresize_params {
- 	uint64_t new_size;
-diff --git a/tools/vgck.c b/tools/vgck.c
-index e9c26a6..eb0ecaf 100644
---- a/tools/vgck.c
-+++ b/tools/vgck.c
-@@ -14,7 +14,6 @@
-  */
- 
- #include "tools.h"
--#include "metadata-exported.h"
- 
- static int vgck_single(struct cmd_context *cmd __attribute__((unused)),
- 		       const char *vg_name,
+ /* configuration definition tree specification */
+diff --git a/tools/commands.h b/tools/commands.h
+index 3f43260..98746b0 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -33,7 +33,7 @@ xx(dumpconfig,
+    PERMITTED_READ_ONLY,
+    "dumpconfig\n"
+    "\t[-f|--file filename] \n"
+-   "\t[--type {current|default|missing|new} \n"
++   "\t[--type {current|default|missing|new|profilable} \n"
+    "\t[--withcomments] \n"
+    "\t[--withversions] \n"
+    "\t[--ignoreadvanced] \n"
+diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
+index 08f996a..da216f5 100644
+--- a/tools/dumpconfig.c
++++ b/tools/dumpconfig.c
+@@ -182,6 +182,10 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
+ 		tree_spec.type = CFG_DEF_TREE_NEW;
+ 		/* new type does not require check status */
+ 	}
++	else if (!strcmp(type, "profilable")) {
++		tree_spec.type = CFG_DEF_TREE_PROFILABLE;
++		/* profilable type does not require check status */
++	}
+ 	else {
+ 		log_error("Incorrect type of configuration specified. "
+ 			  "Expected one of: current, default, missing, new.");
 
 
