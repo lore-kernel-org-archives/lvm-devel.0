@@ -1,12 +1,22 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 12 Jul 2013 15:50:51 -0500
-Subject: [PATCH 1/2] lib/properties: Common code for handling properties.
-Message-ID: <1373662252-10721-1-git-send-email-tasleson@redhat.com>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Fri, 12 Jul 2013 21:52:49 +0000 (UTC)
+Subject: master - lib/properties: Common code for handling properties.
+Message-ID: <20130712215249.83A4B6155A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
+
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9775a19af1f2a93d5550f4ff5843e3ac8e556eb1
+Commit:        9775a19af1f2a93d5550f4ff5843e3ac8e556eb1
+Parent:        bdd2246ce91d8b8c050ad7a2b52e32489262c4b3
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Fri Jul 12 13:09:44 2013 -0400
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Fri Jul 12 16:52:16 2013 -0500
+
+lib/properties: Common code for handling properties.
 
 The common bits from lib/report/properties.[c|h] have
 been moved to lib/properties/prop_common.[c|h] to allow
@@ -15,16 +25,14 @@ polluting the report handling functionality.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- include/.symlinks.in         |   1 +
- lib/Makefile.in              |   3 +-
- lib/properties/prop_common.c |  92 ++++++++++++
- lib/properties/prop_common.h | 121 ++++++++++++++++
- lib/report/columns.h         |  43 +-----
- lib/report/properties.c      | 326 +++++++++++++++----------------------------
- lib/report/properties.h      |  17 +--
- 7 files changed, 328 insertions(+), 275 deletions(-)
- create mode 100644 lib/properties/prop_common.c
- create mode 100644 lib/properties/prop_common.h
+ include/.symlinks.in         |    1 +
+ lib/Makefile.in              |    3 +-
+ lib/properties/prop_common.c |   92 ++++++++++++
+ lib/properties/prop_common.h |  121 +++++++++++++++
+ lib/report/columns.h         |   43 +------
+ lib/report/properties.c      |  331 ++++++++++++++----------------------------
+ lib/report/properties.h      |   17 +--
+ 7 files changed, 329 insertions(+), 279 deletions(-)
 
 diff --git a/include/.symlinks.in b/include/.symlinks.in
 index 7fdc045..0fdcdb0 100644
@@ -60,7 +68,7 @@ index d789839..a58605c 100644
  	striped/striped.c \
 diff --git a/lib/properties/prop_common.c b/lib/properties/prop_common.c
 new file mode 100644
-index 0000000..f9a3720
+index 0000000..25888f9
 --- /dev/null
 +++ b/lib/properties/prop_common.c
 @@ -0,0 +1,92 @@
@@ -78,8 +86,8 @@ index 0000000..f9a3720
 + * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 + */
 +
++#include "lib.h"
 +#include "prop_common.h"
-+#include "lvm-logging.h"
 +
 +int prop_not_implemented_get(const void *obj, struct lvm_property_type *prop)
 +{
@@ -344,7 +352,7 @@ index d13d19a..4c0bca2 100644
  /* *INDENT-OFF* */
  FIELD(LVS, lv, STR, "LV UUID", lvid.id[1], 38, uuid, lv_uuid, "Unique identifier.", 0)
 diff --git a/lib/report/properties.c b/lib/report/properties.c
-index c7194c5..ef486a5 100644
+index c7194c5..a4832af 100644
 --- a/lib/report/properties.c
 +++ b/lib/report/properties.c
 @@ -1,5 +1,5 @@
@@ -354,7 +362,17 @@ index c7194c5..ef486a5 100644
   *
   * This file is part of LVM2.
   *
-@@ -21,14 +21,7 @@
+@@ -12,23 +12,13 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
+ 
+-#include <errno.h>
+-
+-#include "libdevmapper.h"
++#include "lib.h"
+ #include "properties.h"
+ #include "activate.h"
+-#include "lvm-logging.h"
  #include "lvm-types.h"
  #include "metadata.h"
  
@@ -370,7 +388,7 @@ index c7194c5..ef486a5 100644
  #define GET_VG_NUM_PROPERTY_FN(NAME, VALUE) \
  	GET_NUM_PROPERTY_FN(NAME, VALUE, volume_group, vg)
  #define GET_PV_NUM_PROPERTY_FN(NAME, VALUE) \
-@@ -40,14 +33,6 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+@@ -40,14 +30,6 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
  #define GET_PVSEG_NUM_PROPERTY_FN(NAME, VALUE) \
  	GET_NUM_PROPERTY_FN(NAME, VALUE, pv_segment, pvseg)
  
@@ -385,7 +403,7 @@ index c7194c5..ef486a5 100644
  #define SET_VG_NUM_PROPERTY_FN(NAME, SETFN) \
  	SET_NUM_PROPERTY_FN(NAME, SETFN, volume_group, vg)
  #define SET_PV_NUM_PROPERTY_FN(NAME, SETFN) \
-@@ -55,14 +40,6 @@ static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
+@@ -55,14 +37,6 @@ static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
  #define SET_LV_NUM_PROPERTY_FN(NAME, SETFN) \
  	SET_NUM_PROPERTY_FN(NAME, SETFN, logical_volume, lv)
  
@@ -400,7 +418,7 @@ index c7194c5..ef486a5 100644
  #define GET_VG_STR_PROPERTY_FN(NAME, VALUE) \
  	GET_STR_PROPERTY_FN(NAME, VALUE, volume_group, vg)
  #define GET_PV_STR_PROPERTY_FN(NAME, VALUE) \
-@@ -74,20 +51,6 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+@@ -74,20 +48,6 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
  #define GET_PVSEG_STR_PROPERTY_FN(NAME, VALUE) \
  	GET_STR_PROPERTY_FN(NAME, VALUE, pv_segment, pvseg)
  
@@ -421,7 +439,7 @@ index c7194c5..ef486a5 100644
  static percent_t _copy_percent(const struct logical_volume *lv)
  {
  	percent_t percent;
-@@ -164,338 +127,267 @@ static percent_t _metadata_percent(const struct logical_volume *lv)
+@@ -164,338 +124,267 @@ static percent_t _metadata_percent(const struct logical_volume *lv)
  
  /* PV */
  GET_PV_STR_PROPERTY_FN(pv_fmt, pv_fmt_dup(pv))
@@ -728,14 +746,14 @@ index c7194c5..ef486a5 100644
 +#define _pvseg_start_set prop_not_implemented_set
  GET_PVSEG_NUM_PROPERTY_FN(pvseg_size, (SECTOR_SIZE * pvseg->len))
 -#define _pvseg_size_set _not_implemented_set
+-
 +#define _pvseg_size_set prop_not_implemented_set
- 
  
 -#define STR DM_REPORT_FIELD_TYPE_STRING
 -#define NUM DM_REPORT_FIELD_TYPE_NUMBER
 -#define FIELD(type, strct, sorttype, head, field, width, fn, id, desc, settable) \
 -	{ type, #id, settable, sorttype == STR, sorttype == NUM, { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
--
+ 
  struct lvm_property_type _properties[] = {
  #include "columns.h"
 -	{ 0, "", 0, 0, 0, { .integer = 0 }, _not_implemented_get, _not_implemented_set },
@@ -844,7 +862,7 @@ index c7194c5..ef486a5 100644
  		    struct lvm_property_type *prop)
  {
 -	return _get_property(pv, prop, PVS | LABEL);
-+	return prop_get_property(_properties,pv, prop, PVS | LABEL);
++	return prop_get_property(_properties, pv, prop, PVS | LABEL);
  }
  
  int lv_set_property(struct logical_volume *lv,
@@ -900,7 +918,5 @@ index aefd3f5..4e8bf86 100644
  
  int lvseg_get_property(const struct lv_segment *lvseg,
  		       struct lvm_property_type *prop);
--- 
-1.8.1.4
 
 
