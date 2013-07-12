@@ -1,729 +1,905 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 12 Jul 2013 15:50:52 -0500
-Subject: [PATCH 2/2] lvm2app: Add thin and thin pool lv creation
-In-Reply-To: <1373662252-10721-1-git-send-email-tasleson@redhat.com>
-References: <1373662252-10721-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1373662252-10721-2-git-send-email-tasleson@redhat.com>
+Date: Fri, 12 Jul 2013 15:50:51 -0500
+Subject: [PATCH 1/2] lib/properties: Common code for handling properties.
+Message-ID: <1373662252-10721-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add thin and thin pool lv creation support to lvm library
-
-This is Mohan's thinp patch, re-worked to include suggestions
-from Zdenek and Mohan.
-
-Rework of commit 4d5de8322b3a6050def60542b167b46d97b2824d
-which uses refactored properties handling.
-
-Based on work done by M. Mohan Kumar <mohan@in.ibm.com>
+The common bits from lib/report/properties.[c|h] have
+been moved to lib/properties/prop_common.[c|h] to allow
+re-use of property handling functionality without
+polluting the report handling functionality.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/properties/prop_common.h |   9 ++
- liblvm/Makefile.in           |   3 +-
- liblvm/lvm2app.h             | 153 +++++++++++++++++++++-
- liblvm/lvm_lv.c              | 293 ++++++++++++++++++++++++++++++++++++++++++-
- liblvm/lvm_misc.c            |  24 +++-
- liblvm/lvm_misc.h            |   8 +-
- liblvm/lvm_pv.c              |   4 +-
- liblvm/lvm_vg.c              |   6 +-
- 8 files changed, 483 insertions(+), 17 deletions(-)
+ include/.symlinks.in         |   1 +
+ lib/Makefile.in              |   3 +-
+ lib/properties/prop_common.c |  92 ++++++++++++
+ lib/properties/prop_common.h | 121 ++++++++++++++++
+ lib/report/columns.h         |  43 +-----
+ lib/report/properties.c      | 326 +++++++++++++++----------------------------
+ lib/report/properties.h      |  17 +--
+ 7 files changed, 328 insertions(+), 275 deletions(-)
+ create mode 100644 lib/properties/prop_common.c
+ create mode 100644 lib/properties/prop_common.h
 
-diff --git a/lib/properties/prop_common.h b/lib/properties/prop_common.h
-index a39f2f1..6c89ad6 100644
---- a/lib/properties/prop_common.h
-+++ b/lib/properties/prop_common.h
-@@ -62,6 +62,15 @@ static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
- 	return 1; \
- }
- 
-+#define SET_NUM_PROPERTY(NAME, VALUE, TYPE, VAR)			\
-+static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
-+{ \
-+	struct TYPE *VAR = (struct TYPE *)obj; \
-+\
-+	VALUE = prop->value.integer;		\
-+	return 1; \
-+}
-+
- #define GET_STR_PROPERTY_FN(NAME, VALUE, TYPE, VAR)			\
- static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
- { \
-diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
-index 8ae4661..d0f8d1b 100644
---- a/liblvm/Makefile.in
-+++ b/liblvm/Makefile.in
+diff --git a/include/.symlinks.in b/include/.symlinks.in
+index 7fdc045..0fdcdb0 100644
+--- a/include/.symlinks.in
++++ b/include/.symlinks.in
+@@ -58,6 +58,7 @@
+ @top_srcdir@/lib/misc/lvm-wrappers.h
+ @top_srcdir@/lib/misc/lvm-percent.h
+ @top_srcdir@/lib/misc/sharedlib.h
++ at top_srcdir@/lib/properties/prop_common.h
+ @top_srcdir@/lib/report/properties.h
+ @top_srcdir@/lib/report/report.h
+ @top_srcdir@/lib/uuid/uuid.h
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index d789839..a58605c 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
 @@ -1,6 +1,6 @@
  #
  # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
--# Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
+-# Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
 +# Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
  #
  # This file is part of LVM2.
  #
-@@ -18,6 +18,7 @@ top_builddir = @top_builddir@
- 
- SOURCES =\
- 	lvm_misc.c \
-+	lvm_prop.c \
- 	lvm_base.c \
- 	lvm_lv.c \
- 	lvm_pv.c \
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 2775de6..cb6766c 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2008,2009,2010 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -97,6 +97,7 @@ struct volume_group;
- struct logical_volume;
- struct lv_segment;
- struct pv_segment;
-+struct lvm_lv_create_params;
- 
- /**
-  * \class lvm_t
-@@ -153,6 +154,14 @@ typedef struct lv_segment *lvseg_t;
- typedef struct pv_segment *pvseg_t;
- 
- /**
-+ * \class lv_create_params
+@@ -104,6 +104,7 @@ SOURCES =\
+ 	misc/lvm-wrappers.c \
+ 	misc/lvm-percent.c \
+ 	mm/memlock.c \
++	properties/prop_common.c \
+ 	report/properties.c \
+ 	report/report.c \
+ 	striped/striped.c \
+diff --git a/lib/properties/prop_common.c b/lib/properties/prop_common.c
+new file mode 100644
+index 0000000..f9a3720
+--- /dev/null
++++ b/lib/properties/prop_common.c
+@@ -0,0 +1,92 @@
++/*
++ * Copyright (C) 2013 Red Hat, Inc. All rights reserved.
 + *
-+ * This lv_create_params represents the plethora of available options when
-+ * creating a logical volume
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 + */
-+typedef struct lvm_lv_create_params *lv_create_params_t;
 +
-+/**
-  * Logical Volume object list.
-  *
-  * Lists of these structures are returned by lvm_vg_list_lvs().
-@@ -1480,6 +1489,148 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size);
-  */
- lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size);
- 
-+/**
-+ * Thin provisioning discard policies
-+ */
-+typedef enum {
-+	LVM_THIN_DISCARDS_IGNORE,
-+	LVM_THIN_DISCARDS_NO_PASSDOWN,
-+	LVM_THIN_DISCARDS_PASSDOWN,
-+} lvm_thin_discards_t;
++#include "prop_common.h"
++#include "lvm-logging.h"
 +
-+/**
-+ * Create a thinpool parameter passing object for the specified VG
-+ *
-+ * \param   vg
-+ * Volume Group handle.
-+ *
-+ * \param   pool_name
-+ * Name of the pool.
-+ *
-+ * \param   size
-+ * size of the pool
-+ *
-+ * \param   chunk_size
-+ * data block size of the pool
-+ * Default value is DEFAULT_THIN_POOL_CHUNK_SIZE * 2 when 0 passed as chunk_size
-+ * DM_THIN_MIN_DATA_BLOCK_SIZE < chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE
-+ *
-+ * \param meta_size
-+ * Size of thin pool's metadata logical volume. Allowed range is 2MB-16GB.
-+ * Default value (ie if 0) pool size / pool chunk size * 64
-+ *
-+ * \param discard
-+ * Thin discard policy
-+ * Note: THIN_DISCARDS_PASSDOWN is the default.
-+ *
-+ * \return
-+ * Valid lv_create_params pointer on success, else NULL on error.
-+ * Note: Memory is associated with the vg, it will get reclaimed when vg is
-+ * closed.
-+ *
-+ */
-+lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
-+		const char *pool_name, uint64_t size, uint32_t chunk_size,
-+		uint64_t meta_size, lvm_thin_discards_t discard);
-+
-+#define lvm_lv_params_create_thin_pool_default(vg, pool_name, size) \
-+			lvm_lv_params_create_thin_pool((vg), (pool_name), (size), 0, 0, \
-+			LVM_THIN_DISCARDS_PASSDOWN)
-+
-+/**
-+ * Creates the snapshot parameter passing object for the specified lv.
-+ *
-+ * \param	lv
-+ * The logical volume to snapshot
-+ *
-+ * \param	snap_name
-+ * Name of snapshot
-+ *
-+ * \param	max_snap_size
-+ * Used for old snap shots max size, set to zero for thinp
-+ *
-+ * \return
-+ * Valid lv_create_params pointer on success, else NULL on error.
-+ * Note: Memory is associated with the vg, it will get reclaimed when vg is
-+ * closed.
-+ */
-+lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
-+													const char *snap_name,
-+													uint64_t max_snap_size);
-+/**
-+ * Get the specific value of a lv create parameter by name
-+ *
-+ * \param	params		lv create parameters
-+ *
-+ * \param	name		name of parameter
-+ *
-+ * \return
-+ * lvm_property_value structure that will contain the current
-+ * value of the property.  Caller should check 'is_valid' flag before using
-+ * the value.  If 'is_valid' is not set, caller should check lvm_errno()
-+ * for specific error.
-+ */
-+struct lvm_property_value lvm_lv_params_get_property(
-+											const lv_create_params_t params,
-+											const char *name);
-+
-+
-+/**
-+ * Set the specific value of a lv create parameter by name
-+ *
-+ * Note that the property must be a 'settable' property, as evidenced '
-+ * by the 'is_settable' flag when querying the property.
-+ *
-+ * The memory allocated for a string property value is tied to the vg_t
-+ * handle associated with the lv_create_params_t and will be released when
-+ * lvm_vg_close() is called.
-+ *
-+ * \param	params		lv create parameters
-+ *
-+ * \param	name		name of parameter
-+ *
-+ * \param	prop		Property value to use for setting
-+ *
-+ * \return
-+ * 0 on success, -1 on error.
-+ */
-+int lvm_lv_params_set_property(lv_create_params_t params,
-+								const char *name,
-+								struct lvm_property_value *prop);
-+
-+/**
-+ * Create a thin LV creation parameters in a given VG & thin pool
-+ *
-+ * \param   vg
-+ * Volume Group handle.
-+ *
-+ * \param   pool_name
-+ * Name of the pool.
-+ *
-+ * \param lvname
-+ * Name of the LV to create
-+ *
-+ * \param   size
-+ * Size of logical volume
-+ *
-+ * \return
-+ * Valid lv_create_params pointer on success, else NULL on error.
-+ * Note: Memory is associated with the vg, it will get reclaimed when vg is
-+ * closed.
-+ *
-+ */
-+lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
-+									const char *lvname, uint64_t size);
-+/**
-+ * Create the actual logical volume.
-+ *
-+ * \param	params		The parameters object for lv creation
-+ *
-+ * \return
-+ * Valid lv pointer on success, else NULL on error.
-+ */
-+lv_t lvm_lv_create(lv_create_params_t params);
-+
- /************************** physical volume handling ************************/
- 
- /**
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 0590bd6..c28d997 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -21,9 +21,19 @@
- #include "activate.h"
- #include "lvm_misc.h"
- #include "lvm2app.h"
-+#include "lvm_prop.h"
- 
- /* FIXME Improve all the log messages to include context. Which VG/LV as a minimum? */
- 
-+struct lvm_lv_create_params
++int prop_not_implemented_get(const void *obj, struct lvm_property_type *prop)
 +{
-+	uint32_t magic;
-+	vg_t vg;
-+	struct lvcreate_params lvp;
++	log_errno(ENOSYS, "Function not implemented");
++
++	return 0;
++}
++
++int prop_not_implemented_set(void *obj, struct lvm_property_type *prop)
++{
++	log_errno(ENOSYS, "Function not implemented");
++
++	return 0;
++}
++
++int prop_get_property(struct lvm_property_type *p, const void *obj,
++		struct lvm_property_type *prop,
++		unsigned type)
++{
++	while (p->id[0]) {
++		if (!strcmp(p->id, prop->id))
++			break;
++		p++;
++	}
++	if (!p->id[0]) {
++		log_errno(EINVAL, "Invalid property name %s", prop->id);
++		return 0;
++	}
++	if (!(p->type & type)) {
++		log_errno(EINVAL, "Property name %s does not match type %d",
++			  prop->id, p->type);
++		return 0;
++	}
++
++	*prop = *p;
++	if (!p->get(obj, prop)) {
++		return 0;
++	}
++
++	return 1;
++}
++
++int prop_set_property(struct lvm_property_type *p, void *obj,
++		struct lvm_property_type *prop,
++		unsigned type)
++{
++	while (p->id[0]) {
++		if (!strcmp(p->id, prop->id))
++			break;
++		p++;
++	}
++	if (!p->id[0]) {
++		log_errno(EINVAL, "Invalid property name %s", prop->id);
++		return 0;
++	}
++	if (!p->is_settable) {
++		log_errno(EINVAL, "Unable to set read-only property %s",
++			  prop->id);
++		return 0;
++	}
++	if (!(p->type & type)) {
++		log_errno(EINVAL, "Property name %s does not match type %d",
++			  prop->id, p->type);
++		return 0;
++	}
++
++	if (p->is_string)
++		p->value.string = prop->value.string;
++	else
++		p->value.integer = prop->value.integer;
++	if (!p->set(obj, p)) {
++		return 0;
++	}
++
++	return 1;
++}
+diff --git a/lib/properties/prop_common.h b/lib/properties/prop_common.h
+new file mode 100644
+index 0000000..a39f2f1
+--- /dev/null
++++ b/lib/properties/prop_common.h
+@@ -0,0 +1,121 @@
++/*
++ * Copyright (C) 2013 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++#ifndef _LVM_PROP_COMMON_H
++#define _LVM_PROP_COMMON_H
++
++#include <stdint.h>
++
++/*
++ * Common code for getting and setting properties.
++ */
++
++struct lvm_property_type {
++	unsigned type;
++	const char *id;
++	unsigned is_settable:1;
++	unsigned is_string:1;
++	unsigned is_integer:1;
++	union {
++		const char *string;
++		uint64_t integer;
++	} value;
++	int (*get) (const void *obj, struct lvm_property_type *prop);
++	int (*set) (void *obj, struct lvm_property_type *prop);
 +};
 +
-+#define LV_CREATE_PARAMS_MAGIC 0xFEED0001
++int prop_not_implemented_get(const void *obj, struct lvm_property_type *prop);
++int prop_not_implemented_set(void *obj, struct lvm_property_type *prop);
 +
- static int _lv_check_handle(const lv_t lv, const int vg_writeable)
- {
- 	if (!lv || !lv->vg || vg_read_error(lv->vg))
-@@ -62,13 +72,13 @@ const char *lvm_lv_get_origin(const lv_t lv)
- 
- struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
- {
--	return get_property(NULL, NULL, lv, NULL, NULL, name);
-+	return get_property(NULL, NULL, lv, NULL, NULL, NULL, name);
- }
- 
- struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
- 						 const char *name)
- {
--	return get_property(NULL, NULL, NULL, lvseg, NULL, name);
-+	return get_property(NULL, NULL, NULL, lvseg, NULL, NULL, name);
- }
- 
- uint64_t lvm_lv_is_active(const lv_t lv)
-@@ -346,3 +356,280 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
- 	return 0;
- }
- 
-+lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name,
-+						uint64_t max_snap_size)
-+{
-+	struct lvm_lv_create_params *lvcp = NULL;
++int prop_get_property(struct lvm_property_type *p, const void *obj,
++		struct lvm_property_type *prop,
++		unsigned type);
++int prop_set_property(struct lvm_property_type *p, void *obj,
++		struct lvm_property_type *prop,
++		unsigned type);
 +
-+	lvcp = lvm_lv_params_create_snapshot(lv, snap_name, max_snap_size);
-+	if (lvcp) {
-+		return lvm_lv_create(lvcp);
-+	}
-+	return NULL;
++#define GET_NUM_PROPERTY_FN(NAME, VALUE, TYPE, VAR)			\
++static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
++{ \
++	const struct TYPE *VAR = (const struct TYPE *)obj; \
++\
++	prop->value.integer = VALUE; \
++	return 1; \
 +}
 +
-+/* Set defaults for thin pool specific LV parameters */
-+static void _lv_set_pool_params(struct lvcreate_params *lp,
-+				vg_t vg, const char *pool,
-+				uint64_t extents, uint64_t meta_size)
-+{
-+	_lv_set_default_params(lp, vg, NULL, extents);
-+
-+	lp->pool = pool;
-+
-+	lp->create_thin_pool = 1;
-+	lp->segtype = get_segtype_from_string(vg->cmd, "thin-pool");
-+	lp->stripes = 1;
-+
-+	if (!meta_size) {
-+		lp->poolmetadatasize = extents * vg->extent_size /
-+			(lp->chunk_size * (SECTOR_SIZE / 64));
-+		while ((lp->poolmetadatasize >
-+			(2 * DEFAULT_THIN_POOL_OPTIMAL_SIZE / SECTOR_SIZE)) &&
-+		       lp->chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE) {
-+			lp->chunk_size <<= 1;
-+			lp->poolmetadatasize >>= 1;
-+	         }
-+	} else
-+		lp->poolmetadatasize = meta_size;
-+
-+	if (lp->poolmetadatasize % vg->extent_size)
-+		lp->poolmetadatasize +=
-+			vg->extent_size - lp->poolmetadatasize % vg->extent_size;
-+
-+	lp->poolmetadataextents =
-+		extents_from_size(vg->cmd, lp->poolmetadatasize / SECTOR_SIZE,
-+						   vg->extent_size);
++#define SET_NUM_PROPERTY_FN(NAME, SETFN, TYPE, VAR)			\
++static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
++{ \
++	struct TYPE *VAR = (struct TYPE *)obj; \
++\
++	SETFN(VAR, prop->value.integer);		\
++	return 1; \
 +}
 +
-+lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
-+		const char *pool_name, uint64_t size, uint32_t chunk_size,
-+		uint64_t meta_size, lvm_thin_discards_t discard)
-+{
-+	uint64_t extents = 0;
-+	struct lvm_lv_create_params *lvcp = NULL;
-+
-+	if (meta_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
-+		log_error("Invalid metadata size");
-+		return NULL;
-+	}
-+
-+	if (meta_size &&
-+		meta_size < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE)) {
-+		log_error("Invalid metadata size");
-+		return NULL;
-+	}
-+
-+	if (vg_read_error(vg))
-+		return NULL;
-+
-+	if (!vg_check_write_mode(vg))
-+		return NULL;
-+
-+	if (pool_name == NULL || !strlen(pool_name)) {
-+		log_error("pool_name invalid");
-+		return NULL;
-+	}
-+
-+	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
-+					  vg->extent_size))) {
-+		log_error("Unable to create LV thin pool without size.");
-+		return NULL;
-+	}
-+
-+	lvcp = dm_pool_zalloc(vg->vgmem, sizeof (struct lvm_lv_create_params));
-+
-+	if (lvcp) {
-+		lvcp->vg = vg;
-+		lvcp->lvp.discards = discard;
-+
-+		if (chunk_size)
-+			lvcp->lvp.chunk_size = chunk_size;
-+		else
-+			lvcp->lvp.chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE * 2;
-+
-+		if (lvcp->lvp.chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE ||
-+				lvcp->lvp.chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE) {
-+			log_error("Invalid chunk_size");
-+			return NULL;
-+		}
-+
-+		_lv_set_pool_params(&lvcp->lvp, vg, pool_name, extents, meta_size);
-+
-+		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
-+	}
-+	return lvcp;
++#define GET_STR_PROPERTY_FN(NAME, VALUE, TYPE, VAR)			\
++static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
++{ \
++	const struct TYPE *VAR = (const struct TYPE *)obj; \
++\
++	prop->value.string = (char *)VALUE;	\
++	return 1; \
 +}
 +
-+/* Set defaults for thin LV specific parameters */
-+static void _lv_set_thin_params(struct lvcreate_params *lp,
-+				vg_t vg, const char *pool,
-+				const char *lvname,
-+				uint64_t extents)
-+{
-+	_lv_set_default_params(lp, vg, lvname, extents);
++/*
++ * The 'FIELD' macro arguments are defined as follows:
++ * 1. report_type.  An enum value that selects a specific
++ * struct dm_report_object_type in the _report_types array.  The value is
++ * used to select the containing base object address (see *obj_get*
++ * functions) for any data values of any field in the report.
++ * 2. Containing struct.  The structure that either contains the field data
++ * as a member or should be used to obtain the field data.  The containing
++ * struct should match the base object of the report_type.
++ * 3. Field type.  This must be either 'STR' or 'NUM'.
++ * 4. Report heading.  This is the field heading that is displayed by the
++ * reporting commands.
++ * 5. Data value pointer.  This argument is always a member of the
++ * containing struct.  It may point directly to the data value (for example,
++ * lv_uuid - see _uuid_disp()) or may be used to derive the data value (for
++ * example, seg_count - see _lvsegcount_disp()).  In the FIELD macro
++ * definition, it is used in an offset calculation to derive the offset to
++ * the data value from the containing struct base address.  Note that in some
++ * cases, the argument is the first member of the struct, in which case the
++ * data value pointer points to the start of the struct itself (for example,
++ * 'lvid' field of struct 'lv').
++ * 6. Minimum display width.  This is the minimum width used to display
++ * the field value, typically matching the width of the column heading.
++ * 7. Display function identifier.  Used to derive the full name of the
++ * function that displays this field.  Derivation is done by appending '_'
++ * then prepending this argument to '_disp'.  For example, if this argument
++ * is 'uuid', the display function is _uuid_disp().  Adding a new field may
++ * require defining a new display function (for example _myfieldname_disp()),
++ * or re-use of an existing one (for example, _uint32_disp()).
++ * 8. Unique format identifier / field id.  This name must be unique and is
++ * used to select fields via '-o' in the reporting commands (pvs/vgs/lvs).
++ * The string used to specify the field - the 'id' member of
++ * struct dm_report_field_type.
++ * 9. Description of field.  This is a brief (ideally <= 52 chars) description
++ * of the field used in the reporting commands.
++ * 10. Flags.
++ *     FIELD_MODIFIABLE.  A '_set' function exists to change the field's value.
++ *     The function name is derived in a similar way to item 7 above.
++ */
 +
-+	lp->thin = 1;
-+	lp->pool = pool;
-+	lp->segtype = get_segtype_from_string(vg->cmd, "thin");
++#define STR 1
++#define NUM 2
 +
-+	lp->voriginsize = extents * vg->extent_size;
-+	lp->voriginextents = extents_from_size(vg->cmd, lp->voriginsize,
-+						   vg->extent_size);
++#define FIELD_MODIFIABLE 0x00000001
++#define FIELD(type, strct, field_type, head, field, width, fn, id, desc, settable) \
++	{ type, #id, settable, field_type == STR, field_type == NUM, { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
 +
-+	lp->stripes = 1;
-+}
-+
-+lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
-+													const char *snap_name,
-+													uint64_t max_snap_size)
-+{
-+	uint64_t size = 0;
-+	uint64_t extents = 0;
-+	struct lvm_lv_create_params *lvcp = NULL;
-+
-+	if (vg_read_error(lv->vg)) {
-+		return NULL;
-+	}
-+
-+	if (!vg_check_write_mode(lv->vg))
-+			return NULL;
-+
-+	if (snap_name == NULL || !strlen(snap_name)) {
-+		log_error("snap_name invalid");
-+		return NULL;
-+	}
-+
-+	if (max_snap_size) {
-+		size = max_snap_size >> SECTOR_SHIFT;
-+		extents = extents_from_size(lv->vg->cmd, size, lv->vg->extent_size);
-+	}
-+
-+	if (!size && !lv_is_thin_volume(lv) ) {
-+		log_error("Origin is not thin, specify size of snapshot");
-+					return NULL;
-+	}
-+
-+	lvcp = dm_pool_zalloc(lv->vg->vgmem, sizeof (struct lvm_lv_create_params));
-+	if (lvcp) {
-+		lvcp->vg = lv->vg;
-+		_lv_set_default_params(&lvcp->lvp, lv->vg, snap_name, extents);
-+		lvcp->lvp.snapshot = 1;
-+
-+
-+		if (size) {
-+			lvcp->lvp.segtype = _get_segtype(lvcp->vg->cmd);
-+			lvcp->lvp.chunk_size = 8;
-+		} else {
-+			lvcp->lvp.segtype = get_segtype_from_string(lv->vg->cmd, "thin");
-+
-+			if (!lvcp->lvp.segtype) {
-+				log_error(INTERNAL_ERROR "Segtype thin not found.");
-+				return NULL;
-+			}
-+
-+			lvcp->lvp.pool = first_seg(lv)->pool_lv->name;
-+		}
-+
-+		lvcp->lvp.stripes = 1;
-+		lvcp->lvp.origin = lv->name;
-+
-+		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
-+	}
-+
-+	return lvcp;
-+}
-+
-+
-+lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
-+									const char *lvname, uint64_t size)
-+{
-+	struct lvm_lv_create_params *lvcp = NULL;
-+	uint64_t extents = 0;
-+
-+	/* precondition checks */
-+	if (vg_read_error(vg))
-+		return NULL;
-+
-+	if (!vg_check_write_mode(vg))
-+		return NULL;
-+
-+	if (pool_name == NULL || !strlen(pool_name)) {
-+		log_error("pool_name invalid");
-+		return NULL;
-+	}
-+
-+	if (lvname == NULL || !strlen(lvname)) {
-+		log_error("lvname invalid");
-+		return NULL;
-+	}
-+
-+	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
-+			vg->extent_size))) {
-+		log_error("Unable to create thin LV without size.");
-+		return NULL;
-+	}
-+
-+	lvcp = dm_pool_zalloc(vg->vgmem, sizeof (struct lvm_lv_create_params));
-+	if (lvcp) {
-+		lvcp->vg = vg;
-+		_lv_set_thin_params(&lvcp->lvp, vg, pool_name, lvname, extents);
-+		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
-+	}
-+
-+	return lvcp;
-+}
-+
-+struct lvm_property_value lvm_lv_params_get_property(
-+						const lv_create_params_t params,
-+						const char *name)
-+{
-+	struct lvm_property_value rc;
-+
-+	rc.is_valid = 0;
-+
-+	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
-+		rc = get_property(NULL, NULL, NULL, NULL, NULL, &params->lvp, name);
-+	} else {
-+		log_error("Invalid lv_create_params parameter");
-+	}
-+	return rc;
-+}
-+
-+int lvm_lv_params_set_property(lv_create_params_t params, const char *name,
-+								struct lvm_property_value *prop)
-+{
-+	int rc = -1;
-+
-+	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
-+		rc = set_property(NULL, NULL, NULL, &params->lvp, name, prop);
-+	} else {
-+		log_error("Invalid lv_create_params parameter");
-+	}
-+	return rc;
-+}
-+
-+lv_t lvm_lv_create(lv_create_params_t params)
-+{
-+	struct lv_list *lvl = NULL;
-+
-+	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
-+		if (!params->lvp.segtype) {
-+			log_error("segtype parameter is NULL");
-+			return_NULL;
-+		}
-+		if (!lv_create_single(params->vg, &params->lvp))
-+				return_NULL;
-+
-+		/*
-+		 * In some case we are making a thin pool so lv_name is not valid, but
-+		 * pool is.
-+		 */
-+		if (!(lvl = find_lv_in_vg(params->vg,
-+				(params->lvp.lv_name) ? params->lvp.lv_name : params->lvp.pool)))
-+			return_NULL;
-+		return (lv_t) lvl->lv;
-+	}
-+	log_error("Invalid lv_create_params parameter");
-+	return NULL;
-+}
-diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
-index 0a0ea12..c79af8f 100644
---- a/liblvm/lvm_misc.c
-+++ b/liblvm/lvm_misc.c
-@@ -1,5 +1,5 @@
++#endif
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index d13d19a..4c0bca2 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -1,6 +1,6 @@
  /*
-- * Copyright (C) 2008,2010 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
   *
   * This file is part of LVM2.
   *
-@@ -16,6 +16,7 @@
- #include "properties.h"
- #include "lvm_misc.h"
- #include "lvm2app.h"
-+#include "lvm_prop.h"
+@@ -17,47 +17,6 @@
+  * This file defines the fields (columns) for the reporting commands
+  * (pvs/vgs/lvs).
+  */
+-/*
+- * The 'FIELD' macro arguments are defined as follows:
+- * 1. report_type.  An enum value that selects a specific
+- * struct dm_report_object_type in the _report_types array.  The value is
+- * used to select the containing base object address (see *obj_get*
+- * functions) for any data values of any field in the report.
+- * 2. Containing struct.  The structure that either contains the field data
+- * as a member or should be used to obtain the field data.  The containing
+- * struct should match the base object of the report_type.
+- * 3. Field type.  This must be either 'STR' or 'NUM'.
+- * 4. Report heading.  This is the field heading that is displayed by the
+- * reporting commands.
+- * 5. Data value pointer.  This argument is always a member of the
+- * containing struct.  It may point directly to the data value (for example,
+- * lv_uuid - see _uuid_disp()) or may be used to derive the data value (for
+- * example, seg_count - see _lvsegcount_disp()).  In the FIELD macro
+- * definition, it is used in an offset calculation to derive the offset to
+- * the data value from the containing struct base address.  Note that in some
+- * cases, the argument is the first member of the struct, in which case the
+- * data value pointer points to the start of the struct itself (for example,
+- * 'lvid' field of struct 'lv').
+- * 6. Minimum display width.  This is the minimum width used to display
+- * the field value, typically matching the width of the column heading.
+- * 7. Display function identifier.  Used to derive the full name of the
+- * function that displays this field.  Derivation is done by appending '_'
+- * then prepending this argument to '_disp'.  For example, if this argument
+- * is 'uuid', the display function is _uuid_disp().  Adding a new field may
+- * require defining a new display function (for example _myfieldname_disp()),
+- * or re-use of an existing one (for example, _uint32_disp()).
+- * 8. Unique format identifier / field id.  This name must be unique and is
+- * used to select fields via '-o' in the reporting commands (pvs/vgs/lvs).
+- * The string used to specify the field - the 'id' member of
+- * struct dm_report_field_type.
+- * 9. Description of field.  This is a brief (ideally <= 52 chars) description
+- * of the field used in the reporting commands.
+- * 10. Flags.
+- *     FIELD_MODIFIABLE.  A '_set' function exists to change the field's value.
+- *     The function name is derived in a similar way to item 7 above.
+- */
+-
+-#define FIELD_MODIFIABLE 0x00000001
  
- struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list)
- {
-@@ -46,8 +47,11 @@ struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list)
- }
- 
- struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
--				       const lv_t lv, const lvseg_t lvseg,
--				       const pvseg_t pvseg, const char *name)
-+				       const lv_t lv,
-+				       const lvseg_t lvseg,
-+				       const pvseg_t pvseg,
-+				       const struct lvcreate_params *lvcp,
-+				       const char *name)
- {
- 	struct lvm_property_type prop;
- 	struct lvm_property_value v = { 0 };
-@@ -69,6 +73,9 @@ struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
- 	} else if (pvseg) {
- 		if (!pvseg_get_property(pvseg, &prop))
- 			return v;
-+	} else if (lvcp) {
-+		if (!lv_create_param_get_property(lvcp, &prop))
-+			return v;
- 	} else {
- 		log_errno(EINVAL, "Invalid NULL handle passed to library function.");
- 		return v;
-@@ -87,7 +94,9 @@ struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
- 
- 
- int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
--		 const char *name, struct lvm_property_value *v)
-+		struct lvcreate_params *lvcp,
-+		const char *name,
-+		struct lvm_property_value *v)
- {
- 	struct lvm_property_type prop;
- 
-@@ -111,6 +120,13 @@ int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
- 			v->is_valid = 0;
- 			return -1;
- 		}
-+	} else if (lvcp) {
-+		if (!lv_create_param_set_property(lvcp, &prop)) {
-+			v->is_valid = 0;
-+			return -1;
-+		}
-+	} else {
-+		return -1;
- 	}
- 	return 0;
- }
-diff --git a/liblvm/lvm_misc.h b/liblvm/lvm_misc.h
-index a0324b8..a84125a 100644
---- a/liblvm/lvm_misc.h
-+++ b/liblvm/lvm_misc.h
+ /* *INDENT-OFF* */
+ FIELD(LVS, lv, STR, "LV UUID", lvid.id[1], 38, uuid, lv_uuid, "Unique identifier.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index c7194c5..ef486a5 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
 @@ -1,5 +1,5 @@
  /*
-- * Copyright (C) 2008,2010 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- * Copyright (C) 2010-2012 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2010-2013 Red Hat, Inc. All rights reserved.
   *
   * This file is part of LVM2.
   *
-@@ -20,8 +20,10 @@
- struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
- struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
- 				       const lv_t lv, const lvseg_t lvseg,
--				       const pvseg_t pvseg, const char *name);
-+				       const pvseg_t pvseg, const struct lvcreate_params *lvcp,
-+				       const char *name);
- int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
--		 const char *name, struct lvm_property_value *value);
-+			struct lvcreate_params *lvcp, const char *name,
-+			struct lvm_property_value *value);
+@@ -21,14 +21,7 @@
+ #include "lvm-types.h"
+ #include "metadata.h"
  
- #endif
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index a2e7ef0..2bd0ac0 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -53,13 +53,13 @@ uint64_t lvm_pv_get_free(const pv_t pv)
+-#define GET_NUM_PROPERTY_FN(NAME, VALUE, TYPE, VAR)			\
+-static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+-{ \
+-	const struct TYPE *VAR = (const struct TYPE *)obj; \
+-\
+-	prop->value.integer = VALUE; \
+-	return 1; \
+-}
++
+ #define GET_VG_NUM_PROPERTY_FN(NAME, VALUE) \
+ 	GET_NUM_PROPERTY_FN(NAME, VALUE, volume_group, vg)
+ #define GET_PV_NUM_PROPERTY_FN(NAME, VALUE) \
+@@ -40,14 +33,6 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+ #define GET_PVSEG_NUM_PROPERTY_FN(NAME, VALUE) \
+ 	GET_NUM_PROPERTY_FN(NAME, VALUE, pv_segment, pvseg)
  
- struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name)
+-#define SET_NUM_PROPERTY_FN(NAME, SETFN, TYPE, VAR)			\
+-static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
+-{ \
+-	struct TYPE *VAR = (struct TYPE *)obj; \
+-\
+-	SETFN(VAR, prop->value.integer);		\
+-	return 1; \
+-}
+ #define SET_VG_NUM_PROPERTY_FN(NAME, SETFN) \
+ 	SET_NUM_PROPERTY_FN(NAME, SETFN, volume_group, vg)
+ #define SET_PV_NUM_PROPERTY_FN(NAME, SETFN) \
+@@ -55,14 +40,6 @@ static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
+ #define SET_LV_NUM_PROPERTY_FN(NAME, SETFN) \
+ 	SET_NUM_PROPERTY_FN(NAME, SETFN, logical_volume, lv)
+ 
+-#define GET_STR_PROPERTY_FN(NAME, VALUE, TYPE, VAR)			\
+-static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+-{ \
+-	const struct TYPE *VAR = (const struct TYPE *)obj; \
+-\
+-	prop->value.string = (char *)VALUE;	\
+-	return 1; \
+-}
+ #define GET_VG_STR_PROPERTY_FN(NAME, VALUE) \
+ 	GET_STR_PROPERTY_FN(NAME, VALUE, volume_group, vg)
+ #define GET_PV_STR_PROPERTY_FN(NAME, VALUE) \
+@@ -74,20 +51,6 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+ #define GET_PVSEG_STR_PROPERTY_FN(NAME, VALUE) \
+ 	GET_STR_PROPERTY_FN(NAME, VALUE, pv_segment, pvseg)
+ 
+-static int _not_implemented_get(const void *obj, struct lvm_property_type *prop)
+-{
+-	log_errno(ENOSYS, "Function not implemented");
+-
+-	return 0;
+-}
+-
+-static int _not_implemented_set(void *obj, struct lvm_property_type *prop)
+-{
+-	log_errno(ENOSYS, "Function not implemented");
+-
+-	return 0;
+-}
+-
+ static percent_t _copy_percent(const struct logical_volume *lv)
  {
--	return get_property(pv, NULL, NULL, NULL, NULL, name);
-+	return get_property(pv, NULL, NULL, NULL, NULL, NULL, name);
+ 	percent_t percent;
+@@ -164,338 +127,267 @@ static percent_t _metadata_percent(const struct logical_volume *lv)
+ 
+ /* PV */
+ GET_PV_STR_PROPERTY_FN(pv_fmt, pv_fmt_dup(pv))
+-#define _pv_fmt_set _not_implemented_set
++#define _pv_fmt_set prop_not_implemented_set
+ GET_PV_STR_PROPERTY_FN(pv_uuid, pv_uuid_dup(pv))
+-#define _pv_uuid_set _not_implemented_set
++#define _pv_uuid_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(dev_size, SECTOR_SIZE * pv_dev_size(pv))
+-#define _dev_size_set _not_implemented_set
++#define _dev_size_set prop_not_implemented_set
+ GET_PV_STR_PROPERTY_FN(pv_name, pv_name_dup(pv))
+-#define _pv_name_set _not_implemented_set
++#define _pv_name_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_mda_free, SECTOR_SIZE * pv_mda_free(pv))
+-#define _pv_mda_free_set _not_implemented_set
++#define _pv_mda_free_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_mda_size, SECTOR_SIZE * pv_mda_size(pv))
+-#define _pv_mda_size_set _not_implemented_set
++#define _pv_mda_size_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pe_start, SECTOR_SIZE * pv->pe_start)
+-#define _pe_start_set _not_implemented_set
++#define _pe_start_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_size, SECTOR_SIZE * pv_size_field(pv))
+-#define _pv_size_set _not_implemented_set
++#define _pv_size_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_free, SECTOR_SIZE * pv_free(pv))
+-#define _pv_free_set _not_implemented_set
++#define _pv_free_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_used, SECTOR_SIZE * pv_used(pv))
+-#define _pv_used_set _not_implemented_set
++#define _pv_used_set prop_not_implemented_set
+ GET_PV_STR_PROPERTY_FN(pv_attr, pv_attr_dup(pv->vg->vgmem, pv))
+-#define _pv_attr_set _not_implemented_set
++#define _pv_attr_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_pe_count, pv->pe_count)
+-#define _pv_pe_count_set _not_implemented_set
++#define _pv_pe_count_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_pe_alloc_count, pv->pe_alloc_count)
+-#define _pv_pe_alloc_count_set _not_implemented_set
++#define _pv_pe_alloc_count_set prop_not_implemented_set
+ GET_PV_STR_PROPERTY_FN(pv_tags, pv_tags_dup(pv))
+-#define _pv_tags_set _not_implemented_set
++#define _pv_tags_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_mda_count, pv_mda_count(pv))
+-#define _pv_mda_count_set _not_implemented_set
++#define _pv_mda_count_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
+-#define _pv_mda_used_count_set _not_implemented_set
++#define _pv_mda_used_count_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(ba_start, SECTOR_SIZE * pv->ba_start)
+-#define _ba_start_set _not_implemented_set
++#define _ba_start_set prop_not_implemented_set
+ GET_PV_NUM_PROPERTY_FN(ba_size, SECTOR_SIZE * pv->ba_size)
+-#define _ba_size_set _not_implemented_set
++#define _ba_size_set prop_not_implemented_set
+ 
+ /* LV */
+ GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
+-#define _lv_uuid_set _not_implemented_set
++#define _lv_uuid_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_name, lv_name_dup(lv->vg->vgmem, lv))
+-#define _lv_name_set _not_implemented_set
++#define _lv_name_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_path, lv_path_dup(lv->vg->vgmem, lv))
+-#define _lv_path_set _not_implemented_set
++#define _lv_path_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
+-#define _lv_attr_set _not_implemented_set
++#define _lv_attr_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(lv_major, lv->major)
+-#define _lv_major_set _not_implemented_set
++#define _lv_major_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(lv_minor, lv->minor)
+-#define _lv_minor_set _not_implemented_set
++#define _lv_minor_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(lv_read_ahead, lv->read_ahead * SECTOR_SIZE)
+-#define _lv_read_ahead_set _not_implemented_set
++#define _lv_read_ahead_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(lv_kernel_major, lv_kernel_major(lv))
+-#define _lv_kernel_major_set _not_implemented_set
++#define _lv_kernel_major_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(lv_kernel_minor, lv_kernel_minor(lv))
+-#define _lv_kernel_minor_set _not_implemented_set
++#define _lv_kernel_minor_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(lv_kernel_read_ahead, lv_kernel_read_ahead(lv) * SECTOR_SIZE)
+-#define _lv_kernel_read_ahead_set _not_implemented_set
++#define _lv_kernel_read_ahead_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
+-#define _lv_size_set _not_implemented_set
++#define _lv_size_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
+-#define _seg_count_set _not_implemented_set
++#define _seg_count_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(origin, lv_origin_dup(lv->vg->vgmem, lv))
+-#define _origin_set _not_implemented_set
++#define _origin_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(origin_size, (SECTOR_SIZE * lv_origin_size(lv)))
+-#define _origin_size_set _not_implemented_set
++#define _origin_size_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(snap_percent, _snap_percent(lv))
+-#define _snap_percent_set _not_implemented_set
++#define _snap_percent_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(copy_percent, _copy_percent(lv))
+-#define _copy_percent_set _not_implemented_set
++#define _copy_percent_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(sync_percent, _copy_percent(lv))
+-#define _sync_percent_set _not_implemented_set
++#define _sync_percent_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(mismatches, _mismatches(lv))
+-#define _mismatches_set _not_implemented_set
++#define _mismatches_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(writebehind, _writebehind(lv))
+-#define _writebehind_set _not_implemented_set
++#define _writebehind_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(minrecoveryrate, _minrecoveryrate(lv))
+-#define _minrecoveryrate_set _not_implemented_set
++#define _minrecoveryrate_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(maxrecoveryrate, _maxrecoveryrate(lv))
+-#define _maxrecoveryrate_set _not_implemented_set
++#define _maxrecoveryrate_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(syncaction, _sync_action(lv))
+-#define _syncaction_set _not_implemented_set
++#define _syncaction_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(move_pv, lv_move_pv_dup(lv->vg->vgmem, lv))
+-#define _move_pv_set _not_implemented_set
++#define _move_pv_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(convert_lv, lv_convert_lv_dup(lv->vg->vgmem, lv))
+-#define _convert_lv_set _not_implemented_set
++#define _convert_lv_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
+-#define _lv_tags_set _not_implemented_set
++#define _lv_tags_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(mirror_log, lv_mirror_log_dup(lv->vg->vgmem, lv))
+-#define _mirror_log_set _not_implemented_set
++#define _mirror_log_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(modules, lv_modules_dup(lv->vg->vgmem, lv))
+-#define _modules_set _not_implemented_set
++#define _modules_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(data_lv, lv_data_lv_dup(lv->vg->vgmem, lv))
+-#define _data_lv_set _not_implemented_set
++#define _data_lv_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(metadata_lv, lv_metadata_lv_dup(lv->vg->vgmem, lv))
+-#define _metadata_lv_set _not_implemented_set
++#define _metadata_lv_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(pool_lv, lv_pool_lv_dup(lv->vg->vgmem, lv))
+-#define _pool_lv_set _not_implemented_set
++#define _pool_lv_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(data_percent, _data_percent(lv))
+-#define _data_percent_set _not_implemented_set
++#define _data_percent_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(metadata_percent, _metadata_percent(lv))
+-#define _metadata_percent_set _not_implemented_set
++#define _metadata_percent_set prop_not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(lv_metadata_size, lv_metadata_size(lv) * SECTOR_SIZE)
+-#define _lv_metadata_size_set _not_implemented_set
++#define _lv_metadata_size_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_time, lv_time_dup(lv->vg->vgmem, lv))
+-#define _lv_time_set _not_implemented_set
++#define _lv_time_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_host, lv_host_dup(lv->vg->vgmem, lv))
+-#define _lv_host_set _not_implemented_set
++#define _lv_host_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_active, lv_active_dup(lv->vg->vgmem, lv))
+-#define _lv_active_set _not_implemented_set
++#define _lv_active_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_profile, lv_profile_dup(lv->vg->vgmem, lv))
+-#define _lv_profile_set _not_implemented_set
++#define _lv_profile_set prop_not_implemented_set
+ 
+ /* VG */
+ GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt_dup(vg))
+-#define _vg_fmt_set _not_implemented_set
++#define _vg_fmt_set prop_not_implemented_set
+ GET_VG_STR_PROPERTY_FN(vg_uuid, vg_uuid_dup(vg))
+-#define _vg_uuid_set _not_implemented_set
++#define _vg_uuid_set prop_not_implemented_set
+ GET_VG_STR_PROPERTY_FN(vg_name, vg_name_dup(vg))
+-#define _vg_name_set _not_implemented_set
++#define _vg_name_set prop_not_implemented_set
+ GET_VG_STR_PROPERTY_FN(vg_attr, vg_attr_dup(vg->vgmem, vg))
+-#define _vg_attr_set _not_implemented_set
++#define _vg_attr_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
+-#define _vg_size_set _not_implemented_set
++#define _vg_size_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_free, (SECTOR_SIZE * vg_free(vg)))
+-#define _vg_free_set _not_implemented_set
++#define _vg_free_set prop_not_implemented_set
+ GET_VG_STR_PROPERTY_FN(vg_sysid, vg_system_id_dup(vg))
+-#define _vg_sysid_set _not_implemented_set
++#define _vg_sysid_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_extent_size, (SECTOR_SIZE * vg->extent_size))
+-#define _vg_extent_size_set _not_implemented_set
++#define _vg_extent_size_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_extent_count, vg->extent_count)
+-#define _vg_extent_count_set _not_implemented_set
++#define _vg_extent_count_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_free_count, vg->free_count)
+-#define _vg_free_count_set _not_implemented_set
++#define _vg_free_count_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(max_lv, vg->max_lv)
+-#define _max_lv_set _not_implemented_set
++#define _max_lv_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(max_pv, vg->max_pv)
+-#define _max_pv_set _not_implemented_set
++#define _max_pv_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(pv_count, vg->pv_count)
+-#define _pv_count_set _not_implemented_set
++#define _pv_count_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(lv_count, (vg_visible_lvs(vg)))
+-#define _lv_count_set _not_implemented_set
++#define _lv_count_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(snap_count, (snapshot_count(vg)))
+-#define _snap_count_set _not_implemented_set
++#define _snap_count_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_seqno, vg->seqno)
+-#define _vg_seqno_set _not_implemented_set
++#define _vg_seqno_set prop_not_implemented_set
+ GET_VG_STR_PROPERTY_FN(vg_tags, vg_tags_dup(vg))
+-#define _vg_tags_set _not_implemented_set
++#define _vg_tags_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_mda_count, (vg_mda_count(vg)))
+-#define _vg_mda_count_set _not_implemented_set
++#define _vg_mda_count_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_mda_used_count, (vg_mda_used_count(vg)))
+-#define _vg_mda_used_count_set _not_implemented_set
++#define _vg_mda_used_count_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_mda_free, (SECTOR_SIZE * vg_mda_free(vg)))
+-#define _vg_mda_free_set _not_implemented_set
++#define _vg_mda_free_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_mda_size, (SECTOR_SIZE * vg_mda_size(vg)))
+-#define _vg_mda_size_set _not_implemented_set
++#define _vg_mda_size_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
+ SET_VG_NUM_PROPERTY_FN(vg_mda_copies, vg_set_mda_copies)
+ GET_VG_STR_PROPERTY_FN(vg_profile, vg_profile_dup(vg))
+-#define _vg_profile_set _not_implemented_set
++#define _vg_profile_set prop_not_implemented_set
+ 
+ /* LVSEG */
+ GET_LVSEG_STR_PROPERTY_FN(segtype, lvseg_segtype_dup(lvseg->lv->vg->vgmem, lvseg))
+-#define _segtype_set _not_implemented_set
++#define _segtype_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(stripes, lvseg->area_count)
+-#define _stripes_set _not_implemented_set
++#define _stripes_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(stripesize, (SECTOR_SIZE * lvseg->stripe_size))
+-#define _stripesize_set _not_implemented_set
++#define _stripesize_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(stripe_size, (SECTOR_SIZE * lvseg->stripe_size))
+-#define _stripe_size_set _not_implemented_set
++#define _stripe_size_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(regionsize, (SECTOR_SIZE * lvseg->region_size))
+-#define _regionsize_set _not_implemented_set
++#define _regionsize_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(region_size, (SECTOR_SIZE * lvseg->region_size))
+-#define _region_size_set _not_implemented_set
++#define _region_size_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(chunksize, (SECTOR_SIZE * lvseg_chunksize(lvseg)))
+-#define _chunksize_set _not_implemented_set
++#define _chunksize_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(chunk_size, (SECTOR_SIZE * lvseg_chunksize(lvseg)))
+-#define _chunk_size_set _not_implemented_set
++#define _chunk_size_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(thin_count, dm_list_size(&lvseg->lv->segs_using_this_lv))
+-#define _thin_count_set _not_implemented_set
++#define _thin_count_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(zero, lvseg->zero_new_blocks)
+-#define _zero_set _not_implemented_set
++#define _zero_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(transaction_id, lvseg->transaction_id)
+-#define _transaction_id_set _not_implemented_set
++#define _transaction_id_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(discards, lvseg_discards_dup(lvseg->lv->vg->vgmem, lvseg))
+-#define _discards_set _not_implemented_set
++#define _discards_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(seg_start, (SECTOR_SIZE * lvseg_start(lvseg)))
+-#define _seg_start_set _not_implemented_set
++#define _seg_start_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(seg_start_pe, lvseg->le)
+-#define _seg_start_pe_set _not_implemented_set
++#define _seg_start_pe_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(seg_size, (SECTOR_SIZE * lvseg_size(lvseg)))
+-#define _seg_size_set _not_implemented_set
++#define _seg_size_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(seg_tags, lvseg_tags_dup(lvseg))
+-#define _seg_tags_set _not_implemented_set
++#define _seg_tags_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(seg_pe_ranges,
+ 			  lvseg_seg_pe_ranges(lvseg->lv->vg->vgmem, lvseg))
+-#define _seg_pe_ranges_set _not_implemented_set
++#define _seg_pe_ranges_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(devices, lvseg_devices(lvseg->lv->vg->vgmem, lvseg))
+-#define _devices_set _not_implemented_set
++#define _devices_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(monitor, lvseg_monitor_dup(lvseg->lv->vg->vgmem, lvseg))
+-#define _monitor_set _not_implemented_set
++#define _monitor_set prop_not_implemented_set
+ 
+ /* PVSEG */
+ GET_PVSEG_NUM_PROPERTY_FN(pvseg_start, pvseg->pe)
+-#define _pvseg_start_set _not_implemented_set
++#define _pvseg_start_set prop_not_implemented_set
+ GET_PVSEG_NUM_PROPERTY_FN(pvseg_size, (SECTOR_SIZE * pvseg->len))
+-#define _pvseg_size_set _not_implemented_set
++#define _pvseg_size_set prop_not_implemented_set
+ 
+ 
+-#define STR DM_REPORT_FIELD_TYPE_STRING
+-#define NUM DM_REPORT_FIELD_TYPE_NUMBER
+-#define FIELD(type, strct, sorttype, head, field, width, fn, id, desc, settable) \
+-	{ type, #id, settable, sorttype == STR, sorttype == NUM, { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
+-
+ struct lvm_property_type _properties[] = {
+ #include "columns.h"
+-	{ 0, "", 0, 0, 0, { .integer = 0 }, _not_implemented_get, _not_implemented_set },
++	{ 0, "", 0, 0, 0, { .integer = 0 }, prop_not_implemented_get, prop_not_implemented_set },
+ };
+ 
+ #undef STR
+ #undef NUM
+ #undef FIELD
+ 
+-static int _get_property(const void *obj, struct lvm_property_type *prop,
+-			 unsigned type)
+-{
+-	struct lvm_property_type *p;
+-
+-	p = _properties;
+-	while (p->id[0]) {
+-		if (!strcmp(p->id, prop->id))
+-			break;
+-		p++;
+-	}
+-	if (!p->id[0]) {
+-		log_errno(EINVAL, "Invalid property name %s", prop->id);
+-		return 0;
+-	}
+-	if (!(p->type & type)) {
+-		log_errno(EINVAL, "Property name %s does not match type %d",
+-			  prop->id, p->type);
+-		return 0;
+-	}
+-
+-	*prop = *p;
+-	if (!p->get(obj, prop)) {
+-		return 0;
+-	}
+-
+-	return 1;
+-}
+-
+-static int _set_property(void *obj, struct lvm_property_type *prop,
+-			 unsigned type)
+-{
+-	struct lvm_property_type *p;
+-
+-	p = _properties;
+-	while (p->id[0]) {
+-		if (!strcmp(p->id, prop->id))
+-			break;
+-		p++;
+-	}
+-	if (!p->id[0]) {
+-		log_errno(EINVAL, "Invalid property name %s", prop->id);
+-		return 0;
+-	}
+-	if (!p->is_settable) {
+-		log_errno(EINVAL, "Unable to set read-only property %s",
+-			  prop->id);
+-		return 0;
+-	}
+-	if (!(p->type & type)) {
+-		log_errno(EINVAL, "Property name %s does not match type %d",
+-			  prop->id, p->type);
+-		return 0;
+-	}
+-
+-	if (p->is_string)
+-		p->value.string = prop->value.string;
+-	else
+-		p->value.integer = prop->value.integer;
+-	if (!p->set(obj, p)) {
+-		return 0;
+-	}
+-
+-	return 1;
+-}
+-
+ int lvseg_get_property(const struct lv_segment *lvseg,
+ 		       struct lvm_property_type *prop)
+ {
+-	return _get_property(lvseg, prop, SEGS);
++	return prop_get_property(_properties, lvseg, prop, SEGS);
  }
  
- struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
- 						 const char *name)
+ int lv_get_property(const struct logical_volume *lv,
+ 		    struct lvm_property_type *prop)
  {
--	return get_property(NULL, NULL, NULL, NULL, pvseg, name);
-+	return get_property(NULL, NULL, NULL, NULL, pvseg, NULL, name);
+-	return _get_property(lv, prop, LVS);
++	return prop_get_property(_properties, lv, prop, LVS);
  }
  
- struct lvm_list_wrapper
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index 35c7eea..c128ba7 100644
---- a/liblvm/lvm_vg.c
-+++ b/liblvm/lvm_vg.c
+ int vg_get_property(const struct volume_group *vg,
+ 		    struct lvm_property_type *prop)
+ {
+-	return _get_property(vg, prop, VGS);
++	return prop_get_property(_properties, vg, prop, VGS);
+ }
+ 
+ int pvseg_get_property(const struct pv_segment *pvseg,
+ 		       struct lvm_property_type *prop)
+ {
+-	return _get_property(pvseg, prop, PVSEGS);
++	return prop_get_property(_properties, pvseg, prop, PVSEGS);
+ }
+ 
+ int pv_get_property(const struct physical_volume *pv,
+ 		    struct lvm_property_type *prop)
+ {
+-	return _get_property(pv, prop, PVS | LABEL);
++	return prop_get_property(_properties,pv, prop, PVS | LABEL);
+ }
+ 
+ int lv_set_property(struct logical_volume *lv,
+ 		    struct lvm_property_type *prop)
+ {
+-	return _set_property(lv, prop, LVS);
++	return prop_set_property(_properties, lv, prop, LVS);
+ }
+ 
+ int vg_set_property(struct volume_group *vg,
+ 		    struct lvm_property_type *prop)
+ {
+-	return _set_property(vg, prop, VGS);
++	return prop_set_property(_properties, vg, prop, VGS);
+ }
+ 
+ int pv_set_property(struct physical_volume *pv,
+ 		    struct lvm_property_type *prop)
+ {
+-	return _set_property(pv, prop, PVS | LABEL);
++	return prop_set_property(_properties, pv, prop, PVS | LABEL);
+ }
+diff --git a/lib/report/properties.h b/lib/report/properties.h
+index aefd3f5..4e8bf86 100644
+--- a/lib/report/properties.h
++++ b/lib/report/properties.h
 @@ -1,5 +1,5 @@
  /*
-- * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2010-2013 Red Hat, Inc. All rights reserved.
   *
   * This file is part of LVM2.
   *
-@@ -340,7 +340,7 @@ const char *lvm_vg_get_name(const vg_t vg)
+@@ -18,20 +18,7 @@
+ #include "lvm-types.h"
+ #include "metadata.h"
+ #include "report.h"
+-
+-struct lvm_property_type {
+-	unsigned type;
+-	const char *id;
+-	unsigned is_settable:1;
+-	unsigned is_string:1;
+-	unsigned is_integer:1;
+-	union {
+-		const char *string;
+-		uint64_t integer;
+-	} value;
+-	int (*get) (const void *obj, struct lvm_property_type *prop);
+-	int (*set) (void *obj, struct lvm_property_type *prop);
+-};
++#include "prop_common.h"
  
- struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name)
- {
--	return get_property(NULL, vg, NULL, NULL, NULL, name);
-+	return get_property(NULL, vg, NULL, NULL, NULL, NULL, name);
- }
- 
- int lvm_vg_set_property(const vg_t vg, const char *name,
-@@ -357,7 +357,7 @@ int lvm_vg_set_property(const vg_t vg, const char *name,
- 				strlen(value->value.string) + 1);
- 	}
- 
--	return set_property(NULL, vg, NULL, name, value);
-+	return set_property(NULL, vg, NULL, NULL, name, value);
- }
- 
- struct dm_list *lvm_list_vg_names(lvm_t libh)
+ int lvseg_get_property(const struct lv_segment *lvseg,
+ 		       struct lvm_property_type *prop);
 -- 
 1.8.1.4
 
