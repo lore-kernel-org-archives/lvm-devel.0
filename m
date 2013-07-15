@@ -1,72 +1,70 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 15 Jul 2013 14:03:03 +0000 (UTC)
-Subject: master - thin: check and use layered origin lv
-Message-ID: <20130715140303.9391460FE8@fedorahosted.org>
+Date: Mon, 15 Jul 2013 14:03:05 +0000 (UTC)
+Subject: master - thin: lvcreate man examples
+Message-ID: <20130715140305.B22A360FE8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=97d36d5750924029c247265c8d700f993405668f
-Commit:        97d36d5750924029c247265c8d700f993405668f
-Parent:        925701d9f37e149a738aa4875f2933bee42ca8d0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e1e986f16d27e468a70dcbc2d2c2a249111d7725
+Commit:        e1e986f16d27e468a70dcbc2d2c2a249111d7725
+Parent:        97d36d5750924029c247265c8d700f993405668f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 15 11:47:10 2013 +0200
+AuthorDate:    Mon Jul 15 11:52:05 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 15 15:51:39 2013 +0200
+CommitterDate: Mon Jul 15 15:54:33 2013 +0200
 
-thin: check and use layered origin lv
+thin: lvcreate man examples
 
-Code needs to check if the layer origin device is suspended,
-It's valid to create  thinvolume snapshot of thinvolume which is also
-used as an old-style snapshot. In this case we need to check -real
-is suspended.
-
-When adding origin_only - add only layer thin volume.
-(in case it's also old-snapshot add only -real device)
+Add more examples to man page about thin volume snapshot creation
+and try to make the text more explicit about size specification.
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |    2 +-
- lib/thin/thin.c            |    2 +-
- 3 files changed, 3 insertions(+), 2 deletions(-)
+ man/lvcreate.8.in |   22 +++++++++++++++-------
+ 1 files changed, 15 insertions(+), 7 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index deb0338..008fdf7 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Properly use snapshot layer for origin which is also thin volume.
-   Avoid generating metadata backup when calling update_pool_lv().
-   Send thin messages also for active thin pool and inactive thin volume.
-   Add activation/auto_set_activation_skip to control activation skip flagging.
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 724742d..986e696 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1681,7 +1681,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 		return_0;
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index fd36e90..64319c1 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -312,11 +312,11 @@ Snapshots provide a 'frozen image' of the contents of the origin
+ while the origin can still be updated. They enable consistent
+ backups and online recovery of removed/overwritten data/files.
+ Thin snapshot is created when the origin is a thin volume and
+-the size is not specified. Thin snapshot shares same blocks within
++the size IS NOT specified. Thin snapshot shares same blocks within
+ the thin pool volume.
+-The snapshot with the specified size does not need the same amount of
+-storage the origin has. In a typical scenario, 15-20% might be enough.
+-In case the snapshot runs out of storage, use
++The non thin volume snapshot with the specified size does not need
++the same amount of storage the origin has. In a typical scenario,
++15-20% might be enough. In case the snapshot runs out of storage, use
+ .BR lvextend (8)
+ to grow it. Shrinking a snapshot is supported by
+ .BR lvreduce (8)
+@@ -453,10 +453,18 @@ build with 2 stripes 64KiB and chunk size 256KiB together with
+ .sp
+ .B lvcreate \-i 2 \-I 64 \-c 256 \-L100M \-T vg00/pool \-V 1T \-\-name thin_lv
  
- 	if (origin_only && lv_is_thin_volume(lv)) {
--		if (!_add_dev_to_dtree(dm, dtree, lv, NULL))
-+		if (!_add_dev_to_dtree(dm, dtree, lv, lv_layer(lv)))
- 			return_0;
- #if 0
- 		/* ? Use origin_only to avoid 'deep' thin pool suspend ? */
-diff --git a/lib/thin/thin.c b/lib/thin/thin.c
-index 1867ef9..9bc9e4d 100644
---- a/lib/thin/thin.c
-+++ b/lib/thin/thin.c
-@@ -298,7 +298,7 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
- 		case DM_THIN_MESSAGE_CREATE_THIN:
- 			origin = first_seg(lmsg->u.lv)->origin;
- 			/* Check if the origin is suspended */
--			if (origin && lv_info(cmd, origin, 0, &info, 0, 0) &&
-+			if (origin && lv_info(cmd, origin, 1, &info, 0, 0) &&
- 			    info.exists && !info.suspended) {
- 				/* Origin is not suspended, but the transaction may have been
- 				 * already transfered, so test for transaction_id and
+-Creates thin volume snapshot of read only inactive volume "vg00/origin"
+-that will use an existing thin pool "vg00/pool":
++Creates a thin snapshot volume "thinsnap" of thin volume "thinvol" that
++will share the same blocks within the thin pool.
++Note: the size MUST NOT be specified, otherwise the non-thin snapshot
++is created instead:
+ .sp
+-.B lvcreate -s --thinpool "vg00/pool"  origin
++.B lvcreate -s vg00/thinvol --name thinsnap
++
++Creates a thin snapshot volume of read-only inactive volume "origin"
++which then becomes the thin external origin for the thin snapshot volume
++in vg00 that will use an existing thin pool "vg00/pool":
++.sp
++.B lvcreate -s --thinpool vg00/pool  origin
+ 
+ .SH SEE ALSO
+ .BR lvm (8),
 
 
