@@ -1,222 +1,216 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 15 Jul 2013 14:03:11 +0000 (UTC)
-Subject: master - thin: improve external origin tree creation
-Message-ID: <20130715140311.EA9D460E80@fedorahosted.org>
+Date: Mon, 15 Jul 2013 14:03:14 +0000 (UTC)
+Subject: master - tests: more thin external origin tests
+Message-ID: <20130715140314.08D2460E80@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9a060948242e830555436678f5b15b84bca70b04
-Commit:        9a060948242e830555436678f5b15b84bca70b04
-Parent:        57be501aa3d723fcd41781e6c37579991a714751
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3498575b20c3dad46ba4e76fe8a9c3d95f75d1de
+Commit:        3498575b20c3dad46ba4e76fe8a9c3d95f75d1de
+Parent:        9a060948242e830555436678f5b15b84bca70b04
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jul 9 12:34:49 2013 +0200
+AuthorDate:    Mon Jul 15 14:46:52 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 15 16:00:06 2013 +0200
+CommitterDate: Mon Jul 15 16:01:28 2013 +0200
 
-thin: improve external origin tree creation
+tests: more thin external origin tests
 
-When tree for thin LVs was using external_lv, there has been
-far less optimal solution, that has tried to add certain
-existing dependencie only when new node was added.
-However this has lead to way to complex tree construction since
-many repeated checks have been made during such tree build.
-
-This patch move this detection to the proper _partial_tree generation
-code and uses for it new  'activation' flag, which is set when
-tree for ACTIVATION or PRELOAD is generated.
-
-It increases performance when thins with external origins are used.
-
-(in release update)
 ---
- lib/activate/dev_manager.c |  115 +++++++++++++++++++++++++++-----------------
- 1 files changed, 70 insertions(+), 45 deletions(-)
+ test/shell/lvconvert-thin-external.sh |   73 +++++++++++++++++++++-----------
+ test/shell/lvcreate-thin-external.sh  |   20 +++++-----
+ 2 files changed, 58 insertions(+), 35 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 6a2cc68..281041b 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -48,6 +48,8 @@ struct dev_manager {
- 	void *target_state;
- 	uint32_t pvmove_mirror_count;
- 	int flush_required;
-+	int activation;                 /* building activation tree */
-+	int skip_external_lv;
- 	unsigned track_pvmove_deps;
+diff --git a/test/shell/lvconvert-thin-external.sh b/test/shell/lvconvert-thin-external.sh
+index 1bcf0b6..9f53fcb 100644
+--- a/test/shell/lvconvert-thin-external.sh
++++ b/test/shell/lvconvert-thin-external.sh
+@@ -24,12 +24,32 @@ aux have_thin 1 5 0 || skip
  
- 	char *vg_name;
-@@ -1695,19 +1697,39 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- #endif
- 	}
+ aux prepare_pvs 2 64
  
-+	if (origin_only && dm->activation && !dm->skip_external_lv &&
-+	    lv_is_external_origin(lv)) {
-+		/* Find possible users of external origin lv */
-+		dm->skip_external_lv = 1; /* avoid recursion */
-+		dm_list_iterate_items(sl, &lv->segs_using_this_lv)
-+			/* Match only external_lv users */
-+			if ((sl->seg->external_lv == lv) &&
-+			    !_add_lv_to_dtree(dm, dtree, sl->seg->lv, 1))
-+				return_0;
-+		dm->skip_external_lv = 0;
-+	}
+-vgcreate $vg -s 64K $(cat DEVICES)
++vgcreate $vg --metadatasize 128K -s 64K $(cat DEVICES)
+ 
+-# create thin pool
+-lvcreate -L8M -T $vg/pool
++if test 0 -eq 1 ; then
++# FIXME: needs patch to allow inactive old-snap creation
++lvcreate -l10 -T $vg/pool
++lvcreate -an -pr --zero n -l10 --name $lv1 $vg
++lvcreate -s $vg/$lv1 --name $lv2 --thinpool $vg/pool
++vgchange -an $vg
++# oldstyle read-only inactive snapshot
++lvcreate -an -s $vg/$lv2 -l10 -p r --name $lv3
+ 
+-# create plain LV
++lvcreate -s $vg/$lv3 --name $lv4 --thinpool $vg/pool
++lvremove -ff $vg/$lv3
 +
- 	if (lv_is_thin_pool(lv)) {
-+		/*
-+		 * For both origin_only and !origin_only
-+		 * skips test for -tpool-real and tpool-cow
-+		 */
- 		if (!_add_dev_to_dtree(dm, dtree, lv, lv_layer(lv)))
- 			return_0;
--		/* Setup callback for deactivation based on partial tree */
--		if (!(uuid = build_dm_uuid(dm->mem, lv->lvid.s, lv_layer(lv))))
--			return_0;
--		if ((thin_node = dm_tree_find_node_by_uuid(dtree, uuid)) &&
--		    !_thin_pool_register_callback(dm, thin_node, lv))
--			return_0;
-+		if (!dm->activation) {
-+			/* Setup callback for non-activation partial tree */
-+			/* Activation gets own callback when needed */
-+			/* TODO: extend _cached_info() to return dnode */
-+			if (!(uuid = build_dm_uuid(dm->mem, lv->lvid.s, lv_layer(lv))))
-+				return_0;
-+			if ((thin_node = dm_tree_find_node_by_uuid(dtree, uuid)) &&
-+			    !_thin_pool_register_callback(dm, thin_node, lv))
-+				return_0;
-+		}
- 	}
- 
- 	/* Add any snapshots of this LV */
--	if (lv_is_origin(lv) && (lv_is_external_origin(lv) || !origin_only))
-+	if (!origin_only && lv_is_origin(lv))
- 		dm_list_iterate(snh, &lv->snapshot_segs)
- 			if (!_add_lv_to_dtree(dm, dtree, dm_list_struct_base(snh, struct lv_segment, origin_list)->cow, 0))
- 				return_0;
-@@ -1726,7 +1748,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 
- 	/* Add any LVs used by segments in this LV */
- 	dm_list_iterate_items(seg, &lv->segments) {
--		if (seg->external_lv &&
-+		if (seg->external_lv && !dm->skip_external_lv &&
- 		    !_add_lv_to_dtree(dm, dtree, seg->external_lv, 1)) /* stack */
- 			return_0;
- 		if (seg->log_lv &&
-@@ -1735,7 +1757,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 		if (seg->metadata_lv &&
- 		    !_add_lv_to_dtree(dm, dtree, seg->metadata_lv, 0))
- 			return_0;
--		if (seg->pool_lv &&
-+		if (seg->pool_lv && !dm->skip_external_lv &&
- 		    !_add_lv_to_dtree(dm, dtree, seg->pool_lv, 1)) /* stack */
- 			return_0;
- 
-@@ -2113,41 +2135,49 @@ static int _add_replicator_dev_target_to_dtree(struct dev_manager *dm,
- 	return 1;
- }
- 
--static int _add_active_externals_to_dtree(struct dev_manager *dm,
--					  struct dm_tree *dtree,
--					  struct lv_segment *seg,
--					  struct lv_activate_opts *laopts)
-+static int _add_new_external_lv_to_dtree(struct dev_manager *dm,
-+					 struct dm_tree *dtree,
-+					 struct logical_volume *external_lv,
-+					 struct lv_activate_opts *laopts)
- {
- 	struct seg_list *sl;
- 
--	/* Add any ACTIVE LVs using this external origin LV */
--	log_debug_activation("Adding active users of external lv %s",
--			     seg->external_lv->name);
--	dm_list_iterate_items(sl, &seg->external_lv->segs_using_this_lv) {
--		if (sl->seg->external_lv != seg->external_lv ||
--		    sl->seg == seg)
--			continue;
-+	/* Do not want to recursively add externals again */
-+	if (dm->skip_external_lv)
-+		return 1;
- 
--		/*
--		 * Find if the LV is active
--		 * These LVs are not scanned the generic partial dtree
--		 * since in most cases we do not want to work with them.
--		 * However when new EO user is added all users must be known.
--		 *
--		 * As EO could have been chained and passed to a new
--		 * volume, whole device needs to be tested, so the
--		 * removal of layered EO (-real) happens.
--		 */
--		if (!_add_lv_to_dtree(dm, dtree, sl->seg->lv, 0))
--			return_0;
-+	/*
-+	 * Any LV can have only 1 external origin, so we will
-+	 * process all LVs related to this LV, and we want to
-+	 * skip repeated invocation of external lv processing
-+	 */
-+	dm->skip_external_lv = 1;
++lvremove -ff $vg
++fi
 +
-+	log_debug_activation("Adding external origin lv %s and all active users.",
-+			     external_lv->name);
- 
--		/* Only layer check is needed here (also avoids loop) */
--		if (_cached_info(dm->mem, dtree, sl->seg->lv,
-+	if (!_add_new_lv_to_dtree(dm, dtree, external_lv, laopts,
-+				  lv_layer(external_lv)))
-+		return_0;
++#lvcreate -L20M --name orig $vg
++#lvconvert -T  --thinpool $vg/pool $vg/orig
++#lvcreate -s -aey -L10M $vg/orig
++#lvremove -f $vg
++#exit 0
 +
-+	/*
-+	 * Add all ACTIVE LVs using this external origin LV. This is
-+	 * needed because of conversion of thin which could have been
-+	 * also an old-snapshot to external origin.
-+	 */
-+	//if (lv_is_origin(external_lv))
-+	dm_list_iterate_items(sl, &external_lv->segs_using_this_lv)
-+		if ((sl->seg->external_lv == external_lv) &&
-+		    /* Add only active layered devices (also avoids loop) */
-+		    _cached_info(dm->mem, dtree, sl->seg->lv,
- 				 lv_layer(sl->seg->lv)) &&
- 		    !_add_new_lv_to_dtree(dm, dtree, sl->seg->lv,
- 					  laopts, lv_layer(sl->seg->lv)))
- 			return_0;
--	}
++lvcreate -l10 -T $vg/pool
 +
-+	log_debug_activation("Finished adding  external origin lv %s and all active users.",
-+			     external_lv->name);
-+	dm->skip_external_lv = 0;
++# create plain LV (will be used for external origin)
+ lvcreate -L8M -n $lv1 $vg
  
- 	return 1;
- }
-@@ -2182,16 +2212,9 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
- 	}
+ mkfs.ext2 $DM_DEV_DIR/$vg/$lv1
+@@ -44,14 +64,17 @@ dd if=/dev/zero of=mnt/test1 bs=1M count=1
+ lvconvert -T --originname extorg --thinpool $vg/pool $vg/$lv1
  
- 	/* Add external origin layer */
--	if (seg->external_lv) {
--		if (!_add_new_lv_to_dtree(dm, dtree, seg->external_lv, laopts,
--					  lv_layer(seg->external_lv)))
--			return_0;
+ check active $vg $lv1
++# FIXME  handling attr is ...
++get lv_field $vg/extorg attr | grep "^ori"
+ check inactive $vg extorg
+ 
+ touch mnt/test
+ umount mnt
+ 
++# check fs is without errors
+ fsck -n $DM_DEV_DIR/$vg/$lv1
+ 
+-lvchange -ay $vg/extorg
++lvchange -aey $vg/extorg
+ lvchange -an $vg/$lv1
+ 
+ check active $vg extorg
+@@ -60,43 +83,42 @@ check inactive $vg $lv1
+ # fsck in read-only mode
+ fsck -n $DM_DEV_DIR/$vg/extorg
+ 
+-#not lvresize -l+8 $vg/extorg
+-#not lvresize -l-4 $vg/extorg
+-#not lvchange -p rw $vg/extorg
++not lvresize -l+8 $vg/extorg
++not lvresize -l-4 $vg/extorg
++not lvchange -p rw $vg/extorg
+ 
+ #lvresize -L+8M $vg/$lv1
+ #lvresize -L-4M $vg/$lv1
+ #lvchange -p r $vg/$lv1
+ #lvchange -p rw $vg/$lv1
+ 
+-lvchange -ay $vg
++lvchange -aey $vg
+ 
+ lvs -a -o+origin_size,seg_size $vg
+-lvconvert --originname extorg1 --thinpool $vg/pool -T $vg/extorg
+ 
++# Chain external origins
++lvconvert --originname extorg1 --thinpool $vg/pool -T $vg/extorg
+ check inactive $vg extorg1
+ 
+-lvconvert --originname extorglv1 --thinpool $vg/pool -T $vg/extorg1
 -
--		if (!layer &&
--		    !_add_active_externals_to_dtree(dm, dtree, seg, laopts))
--			return_0;
--	}
+-lvs -a -o+origin_size,seg_size $vg
++lvconvert --originname extorg2 --thinpool $vg/pool -T $vg/extorg1
++check inactive $vg extorg1
++check inactive $vg extorg2
+ 
+ lvchange -an $vg/extorg
+-lvs -a -o+origin_size,seg_size $vg
+-check inactive $vg extorglv1
 -
-+	if (seg->external_lv &&
-+	    !_add_new_external_lv_to_dtree(dm, dtree, seg->external_lv, laopts))
-+		return_0;
- 	/* Add mirror log */
- 	if (seg->log_lv &&
- 	    !_add_new_lv_to_dtree(dm, dtree, seg->log_lv, laopts, NULL))
-@@ -2567,6 +2590,8 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
- 	char *dlid;
- 	int r = 0;
+ lvchange -ay $vg/extorg1
+-lvs -a -o+origin_size,seg_size $vg
  
-+	/* Some targets may build bigger tree for activation */
-+	dm->activation = ((action == PRELOAD) || (action == ACTIVATE));
- 	if (!(dtree = _create_partial_dtree(dm, lv, laopts->origin_only)))
- 		return_0;
+ lvcreate -l4 -s $vg/$lv1  -n $lv2
+ lvcreate -l8 -s $vg/extorg -n $lv3
+ lvcreate -l12 -s $vg/extorg1 -n $lv4
+-lvcreate -l16 -s $vg/extorglv1 -n $lv5
+-
+-lvs -a -o+origin_size,seg_size,segtype $vg
+-
++lvcreate -l16 -s $vg/extorg2 -n $lv5
++#vgchange -aey $vg
++#lvremove -f $vg/extorg2
++#exit 0
+ # Converting old-snapshot into external origin is not supported
+ not lvconvert -T --thinpool $vg/pool --originname lv5origin $vg/$lv4
  
++lvs -a -o +segtype $vg
++
+ check lv_field $vg/$lv1 segtype thin
+ check lv_field $vg/$lv2 segtype linear
+ check lv_field $vg/$lv3 segtype linear
+@@ -104,17 +126,18 @@ check lv_field $vg/$lv4 segtype linear
+ check lv_field $vg/$lv5 segtype linear
+ check lv_field $vg/extorg segtype thin
+ check lv_field $vg/extorg1 segtype thin
+-check lv_field $vg/extorglv1 segtype linear
++check lv_field $vg/extorg2 segtype linear
+ 
+ vgchange -ay $vg
+ 
+ lvs -a -o+origin_size,seg_size $vg
+ 
+-lvchange -an $vg/extorglv1
+-check inactive $vg extorglv1
++lvchange -an $vg/extorg2
++check inactive $vg extorg2
+ 
+ # Remove all volumes dependent on external origin
+-lvremove -f $vg/extorglv1
++lvs -a -o+origin_size,seg_size,segtype $vg
++lvremove -f $vg/extorg2
+ # Only pool is left
+ check vg_field $vg lv_count 1
+ 
+diff --git a/test/shell/lvcreate-thin-external.sh b/test/shell/lvcreate-thin-external.sh
+index fdc7528..c9aba6f 100644
+--- a/test/shell/lvcreate-thin-external.sh
++++ b/test/shell/lvcreate-thin-external.sh
+@@ -32,32 +32,32 @@ mkfs.ext2 $DM_DEV_DIR/$vg/$lv1
+ lvcreate -L4M -n $lv2 $vg
+ mkfs.ext2 $DM_DEV_DIR/$vg/$lv2
+ 
+-# Fail to create snapshot of rw LV
+-not lvcreate -s -K $vg/$lv2 --thinpool $vg/pool
++# Fail to create external origin snapshot of rw LV
++not lvcreate -s $vg/$lv2 --thinpool $vg/pool
+ 
+ lvchange -p r $vg/$lv2
+ 
+ # Fail to create snapshot of active r LV
+ # FIXME: kernel update needed
+-not lvcreate -s -K $vg/$lv2 --thinpool $vg/pool
++not lvcreate -s $vg/$lv2 --thinpool $vg/pool
+ 
+ # Deactivate LV we want to use as external origin
+ # once kernel will ensure read-only this condition may go away
+ lvchange -an $vg/$lv2
+ 
+-lvcreate -s -K $vg/$lv2 --thinpool $vg/pool
++lvcreate -s $vg/$lv2 --thinpool $vg/pool
+ 
+ # Fail with --thin and --snapshot
+-not lvcreate -s -K $vg/$lv5 --name $vg/$lv7 -T $vg/newpool
++not lvcreate -s $vg/$lv5 --name $vg/$lv7 -T $vg/newpool
+ 
+ # Fail to create already existing pool
+-not lvcreate -s -K $vg/$lv2 -L10 --thinpool $vg/pool
+-not lvcreate -s -K $vg/$lv2 --chunksize 64 --thinpool $vg/pool
+-not lvcreate -s -K $vg/$lv2 --zero y --thinpool $vg/pool
+-not lvcreate -s -K $vg/$lv2 --poolmetadata $vg/$lv1 --thinpool $vg/pool
++not lvcreate -s $vg/$lv2 -L10 --thinpool $vg/pool
++not lvcreate -s $vg/$lv2 --chunksize 64 --thinpool $vg/pool
++not lvcreate -s $vg/$lv2 --zero y --thinpool $vg/pool
++not lvcreate -s $vg/$lv2 --poolmetadata $vg/$lv1 --thinpool $vg/pool
+ 
+ # Fail with nonexistent pool
+-not lvcreate -s -K $vg/$lv2 --thinpool $vg/newpool
++not lvcreate -s $vg/$lv2 --thinpool $vg/newpool
+ 
+ # Create pool and snap
+ lvcreate -s -K $vg/$lv2 --name $vg/$lv3 -L20 --chunksize 128 --thinpool $vg/newpool
 
 
