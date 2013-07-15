@@ -1,45 +1,65 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 15 Jul 2013 14:40:52 +0000 (UTC)
-Subject: master - tests: one missed automatic name
-Message-ID: <20130715144052.C1DC960DEA@fedorahosted.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Mon, 15 Jul 2013 16:10:55 -0400 (EDT)
+Subject: number conversion in lvm
+In-Reply-To: <51E11494.2080505@redhat.com>
+References: <alpine.LRH.2.02.1307121904020.15166@file01.intranet.prod.int.rdu2.redhat.com>
+	<51E11494.2080505@redhat.com>
+Message-ID: <alpine.LRH.2.02.1307151556340.11390@file01.intranet.prod.int.rdu2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=63d09b75f8e9a8790124f1ee0e2349a94e7a718d
-Commit:        63d09b75f8e9a8790124f1ee0e2349a94e7a718d
-Parent:        255db4c4e4d8e505bb5cf10892640cffd40ebed2
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 15 16:38:55 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 15 16:38:55 2013 +0200
 
-tests: one missed automatic name
 
-Avoid depending on auto-names lvol%d.
----
- test/shell/lvcreate-thin.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+On Sat, 13 Jul 2013, Zdenek Kabelac wrote:
 
-diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
-index ed2631e..275c56f 100644
---- a/test/shell/lvcreate-thin.sh
-+++ b/test/shell/lvcreate-thin.sh
-@@ -140,11 +140,11 @@ lvcreate -K -s $vg/lv1 --name snap_lv1
- fsck -p $DM_DEV_DIR/$vg/snap_lv1
- lvcreate -s $vg/lv1 --name lv2
- lvcreate -s $vg/lv1 --name $vg/lv3
--lvcreate --type snapshot $vg/lv1
-+lvcreate --type snapshot $vg/lv1 --name lv6
- lvcreate --type snapshot $vg/lv1 --name lv4
- lvcreate --type snapshot $vg/lv1 --name $vg/lv5
- 
--check_lv_field_modules_ thin-pool lv1 snap_lv1 lv2 lv3 lvol1 lv4 lv5
-+check_lv_field_modules_ thin-pool lv1 snap_lv1 lv2 lv3 lv4 lv5 lv6
- check vg_field $vg lv_count 8
- lvremove -ff $vg
- 
+> Dne 13.7.2013 01:11, Mikulas Patocka napsal(a):
+> > Hi
+> > 
+> > I found some strange code in _get_int_arg in ./tools/lvmcmdline.c:
+> > 
+> > v = strtol(val, ptr, 10);
+> > 
+> > if (*ptr == val)
+> >          return 0;
+> > 
+> > av->i_value = (int32_t) v;
+> > av->ui_value = (uint32_t) v;
+> > av->i64_value = (int64_t) v;
+> > av->ui64_value = (uint64_t) v;
+> > 
+> > It is taking 32-bit long value and then casting it to 64 bits. Should
+> > there be strtoull instead of strtol?
+> 
+> It used to read only 32bit values.
+> For 64bit other functions are used - i.e.  _size_arg
+
+In tools/pvck.c there is "arg_uint64_value(cmd, labelsector_ARG,", but 
+labelsector_ARG is declared with "arg(labelsector_ARG, '\0', 
+"labelsector", int_arg, 0)", so there is loss of values that do not fit 
+into long type.
+
+> > BTW. how is that function supposed to handle integer overflow - it doesn't
+> > seem to do that.
+> > 
+> 
+> it returns  LONG_MIN/MAX for underflow/overflow - but assuming errno could
+> be checked for ERANGE and fail command for this case instead.
+> 
+> Zdenek
+
+The major problem is that the same function _get_int_arg parses both 
+32-bit and 64-bit arguments. It would be natural to return error on 
+integer overflow but you can't because you don't know if the caller will 
+use the 32-bit value or the 64-bit value.
+
+Another question is why there is av->i_value and av->ui_value when the 
+values are the same and not dependent on the sign? What if the value fits 
+into av->ui_value and doesn't fit into av->i_value - the overflow is never 
+detected. This argument parser just seems totally confusing.
+
+Mikulas
 
 
