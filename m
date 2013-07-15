@@ -1,281 +1,160 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon,  8 Jul 2013 17:15:57 +0200
-Subject: [PATCH 5/7] thin: add spare lvcreate support
-In-Reply-To: <cover.1373296467.git.zkabelac@redhat.com>
-References: <cover.1373296467.git.zkabelac@redhat.com>
-Message-ID: <9e3e633bc805a7766e40da9694662ba233ede439.1373296467.git.zkabelac@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 15 Jul 2013 14:03:16 +0000 (UTC)
+Subject: master - tests: thin lvol0 updates
+Message-ID: <20130715140316.1E78860E48@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add --poolmetadataspare option and creates and handles
-pool metadata spare lv when thin pool is created.
-With default setting 'y' it tries to ensure, spare has
-at least the size of created LV.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=255db4c4e4d8e505bb5cf10892640cffd40ebed2
+Commit:        255db4c4e4d8e505bb5cf10892640cffd40ebed2
+Parent:        3498575b20c3dad46ba4e76fe8a9c3d95f75d1de
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jul 15 13:37:07 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Jul 15 16:01:29 2013 +0200
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+tests: thin lvol0 updates
+
 ---
- lib/config/defaults.h            |  1 +
- lib/metadata/metadata-exported.h |  3 ++
- lib/metadata/thin_manip.c        | 99 ++++++++++++++++++++++++++++++++++++++++
- man/lvcreate.8.in                | 11 ++++-
- tools/commands.h                 | 10 ++--
- tools/lvcreate.c                 | 18 +++++++-
- 6 files changed, 135 insertions(+), 7 deletions(-)
+ test/shell/lvcreate-thin-snap.sh |    4 +-
+ test/shell/lvcreate-thin.sh      |   64 +++++++++++++++++++-------------------
+ 2 files changed, 34 insertions(+), 34 deletions(-)
 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 7ee89ec..3cd92a6 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -73,6 +73,7 @@
- #define DEFAULT_THIN_POOL_CHUNK_SIZE	    64	  /* KB */
- #define DEFAULT_THIN_POOL_DISCARDS "passdown"
- #define DEFAULT_THIN_POOL_ZERO 1
-+#define DEFAULT_POOL_METADATA_SPARE 1
- 
- #define DEFAULT_UMASK 0077
- 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 0250941..de69fd7 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -668,6 +668,8 @@ struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
- 					   struct dm_list *pvh);
- int vg_set_pool_metadata_spare(struct logical_volume *lv);
- int vg_remove_pool_metadata_spare(struct volume_group *vg);
-+int handle_pool_metadata_spare(struct volume_group *vg, uint32_t extents,
-+			       struct dm_list *pvh, int poolmetadataspare);
- 
- /*
-  * Activation options
-@@ -692,6 +694,7 @@ struct lvcreate_params {
- 	int minor; /* all */
- 	int log_count; /* mirror */
- 	int nosync; /* mirror */
-+	int poolmetadataspare; /* thin pool */
- 	activation_change_t activate; /* non-snapshot, non-mirror */
- 	thin_discards_t discards;     /* thin */
- 
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 721c1e2..72496d9 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -790,5 +790,104 @@ int vg_remove_pool_metadata_spare(struct volume_group *vg)
- 	if (!lv_rename_update(vg->cmd, lv, new_name, 0))
- 		return_0;
- 
-+	/* To display default warning */
-+	(void) handle_pool_metadata_spare(vg, 0, 0, 0);
-+
-+	return 1;
-+}
-+
-+static struct logical_volume *_alloc_pool_metadata_spare(struct volume_group *vg,
-+							 uint32_t extents,
-+							 struct dm_list *pvh)
-+{
-+	struct logical_volume *lv;
-+
-+	/* FIXME: Make lvm2api usable */
-+	struct lvcreate_params lp = {
-+		.activate = CHANGE_ALY,
-+		.alloc = ALLOC_INHERIT,
-+		.extents = extents,
-+		.major = -1,
-+		.minor = -1,
-+		.permission = LVM_READ | LVM_WRITE,
-+		.pvh = pvh ? : &vg->pvs,
-+		.read_ahead = DM_READ_AHEAD_AUTO,
-+		.stripes = 1,
-+		.vg_name = vg->name,
-+		.zero = 1,
-+	};
-+
-+	dm_list_init(&lp.tags);
-+
-+	if (!(lp.segtype = get_segtype_from_string(vg->cmd, "striped")))
-+		return_0;
-+
-+	/* FIXME: Maybe using silent mode ? */
-+	if (!(lv = lv_create_single(vg, &lp)))
-+		return_0;
-+
-+	/* Spare LV should not be active */
-+	if (!deactivate_lv_local(vg->cmd, lv)) {
-+		log_error("Unable to deactivate pool metadata spare LV. "
-+			  "Manual intervention required.");
-+		return 0;
-+	}
-+
-+	if (!vg_set_pool_metadata_spare(lv))
-+		return_0;
-+
-+	return lv;
-+}
-+
-+/*
-+ * Create/resize pool metadata spare LV
-+ * Caller does vg_write(), vg_commit() with pool creation
-+ * extents is 0, max size is determined
-+ */
-+int handle_pool_metadata_spare(struct volume_group *vg, uint32_t extents,
-+			       struct dm_list *pvh, int poolmetadataspare)
-+{
-+	struct logical_volume *lv = vg->pool_metadata_spare_lv;
-+	uint32_t seg_mirrors;
-+	struct lv_segment *seg;
-+	const struct lv_list *lvl;
-+
-+	if (!extents)
-+		/* Find maximal size of metadata LV */
-+		dm_list_iterate_items(lvl, &vg->lvs)
-+			if (lv_is_thin_pool_metadata(lvl->lv) &&
-+			    (lvl->lv->le_count > extents))
-+				extents = lvl->lv->le_count;
-+
-+	if (!poolmetadataspare) {
-+		/* TODO: Not showing when lvm.conf would define 'n' ? */
-+		if (DEFAULT_POOL_METADATA_SPARE && extents)
-+			/* Warn if there would be any user */
-+			log_warn("WARNING: recovery of pools without pool "
-+				 "metadata spare LV is not automated.");
-+		return 1;
-+	}
-+
-+	if (!lv) {
-+		if (!_alloc_pool_metadata_spare(vg, extents, pvh))
-+			return_0;
-+
-+		return 1;
-+	}
-+
-+	seg = last_seg(lv);
-+	seg_mirrors = lv_mirror_count(lv);
-+
-+	/* Check spare LV is big enough and preserve segtype */
-+	if ((lv->le_count < extents) && seg &&
-+	    !lv_extend(lv, seg->segtype,
-+		       seg->area_count / seg_mirrors,
-+		       seg->stripe_size,
-+		       seg_mirrors,
-+		       seg->region_size,
-+		       extents - lv->le_count, NULL,
-+		       pvh, lv->alloc))
-+		return_0;
-+
- 	return 1;
- }
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index ac5cf65..163b2f4 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -61,7 +61,9 @@ lvcreate \- create a logical volume in an existing volume group
- .RB [ \-\-discards
- .RI { ignore | nopassdown | passdown }]
- .RB [ \-\-poolmetadatasize
--.IR MetadataVolumeSize [ bBsSkKmMgG ]]]
-+.IR MetadataVolumeSize [ bBsSkKmMgG ]]
-+.RB [ \-\-poolmetadataspare
-+.RI { y | n }]]
- .RB [ \-\-thinpool
- .IR ThinPoolLogicalVolume { Name | Path }
- .RB [ \-s | \-\-snapshot
-@@ -277,6 +279,13 @@ Supported values are in range between 2MiB and 16GiB.
- Default value is  (Pool_LV_size / Pool_LV_chunk_size * 64b).
- Default unit is megabytes.
- .TP
-+.IR \fB\-\-poolmetadataspare " {"  y | n }
-+Controls creation and maintanence of pool metadata spare logical volume
-+that will be used for automated thin pool recovery.
-+Only one such volume is maintained within a volume group
-+with the size of the biggest thin metadata volume.
-+Default is \fIy\fPes.
-+.TP
- .IR \fB\-r ", " \fB\-\-readahead " {" ReadAheadSectors | auto | none }
- Sets read ahead sector count of this logical volume.
- For volume groups with metadata in lvm1 format, this must
-diff --git a/tools/commands.h b/tools/commands.h
-index 89d8764..3aec4bc 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -210,6 +210,7 @@ xx(lvcreate,
-    "\t[-T|--thin  [-c|--chunksize  ChunkSize]\n"
-    "\t  [--discards {ignore|nopassdown|passdown}]\n"
-    "\t  [--poolmetadatasize MetadataSize[bBsSkKmMgG]]]\n"
-+   "\t  [--poolmetadataspare {y|n}]\n"
-    "\t[--thinpool ThinPoolLogicalVolume{Name|Path}]\n"
-    "\t[-t|--test]\n"
-    "\t[--type VolumeType]\n"
-@@ -253,10 +254,11 @@ xx(lvcreate,
-    chunksize_ARG, contiguous_ARG, corelog_ARG, discards_ARG, extents_ARG,
-    ignoremonitoring_ARG, major_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG,
-    monitor_ARG, minrecoveryrate_ARG, maxrecoveryrate_ARG, name_ARG, nosync_ARG,
--   noudevsync_ARG, permission_ARG,
--   persistent_ARG, readahead_ARG, regionsize_ARG, size_ARG, snapshot_ARG,
--   stripes_ARG, stripesize_ARG, test_ARG, thin_ARG, thinpool_ARG, type_ARG,
--   virtualoriginsize_ARG, poolmetadatasize_ARG, virtualsize_ARG, zero_ARG)
-+   noudevsync_ARG, permission_ARG, persistent_ARG, poolmetadatasize_ARG,
-+   poolmetadataspare_ARG, readahead_ARG, regionsize_ARG,
-+   size_ARG, snapshot_ARG, stripes_ARG, stripesize_ARG,
-+   test_ARG, thin_ARG, thinpool_ARG, type_ARG,
-+   virtualoriginsize_ARG, virtualsize_ARG, zero_ARG)
- 
- xx(lvdisplay,
-    "Display information about a logical volume",
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 698d72f..caecc46 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
+diff --git a/test/shell/lvcreate-thin-snap.sh b/test/shell/lvcreate-thin-snap.sh
+index 6dd16d7..701bb08 100644
+--- a/test/shell/lvcreate-thin-snap.sh
++++ b/test/shell/lvcreate-thin-snap.sh
+@@ -35,9 +35,9 @@ vgcreate $vg -s 64K $(cat DEVICES)
+ lvcreate -L10M -V10M -T $vg/pool --name $lv1
+ mkfs.ext4 $DM_DEV_DIR/$vg/$lv1
+ # create thin snapshot of thin LV
+-lvcreate -K -s $vg/$lv1
++lvcreate -K -s $vg/$lv1 --name snap
+ # check snapshot filesystem was properly frozen before snapping
+-fsck -p $DM_DEV_DIR/$vg/lvol0
++fsck -p $DM_DEV_DIR/$vg/snap
+ lvcreate -K -s $vg/$lv1 --name $lv2
+ lvcreate -K -s $vg/$lv1 --name $vg/$lv3
+ lvcreate --type snapshot $vg/$lv1
+diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
+index 8daa923..ed2631e 100644
+--- a/test/shell/lvcreate-thin.sh
++++ b/test/shell/lvcreate-thin.sh
 @@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -887,6 +887,14 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 		return 0;
- 	}
+ #!/bin/sh
  
-+	if (lp->create_thin_pool) {
-+		/* TODO: add lvm.conf default y|n */
-+		lp->poolmetadataspare = arg_int_value(cmd, poolmetadataspare_ARG,
-+						      DEFAULT_POOL_METADATA_SPARE);
-+	} else if (arg_count(cmd, poolmetadataspare_ARG)) {
-+		log_error("--poolmetadataspare is only available with thin pool creation.");
-+		return 0;
-+	}
- 	/*
- 	 * Allocation parameters
- 	 */
-@@ -945,6 +953,7 @@ static int _check_thin_parameters(struct volume_group *vg, struct lvcreate_param
- 			contiguous_ARG,
- 			discards_ARG,
- 			poolmetadatasize_ARG,
-+			poolmetadataspare_ARG,
- 			stripes_ARG,
- 			stripesize_ARG,
- 			zero_ARG
-@@ -1079,9 +1088,14 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
- 	if (seg_is_thin(&lp) && !_validate_internal_thin_processing(&lp))
- 		goto_out;
+-# Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011-2013 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -55,7 +55,7 @@ lvcreate -l1 -T $vg
+ lvcreate -l1 --type thin $vg
+ lvcreate -l1 --type thin-pool $vg
  
--	if (lp.create_thin_pool)
-+	if (lp.create_thin_pool) {
-+		if (!handle_pool_metadata_spare(vg, lp.poolmetadataextents,
-+						lp.pvh, lp.poolmetadataspare))
-+			goto_out;
+-lvremove -ff $vg/lvol0 $vg/lvol1 $vg/lvol2
++lvremove -ff $vg
+ check vg_field $vg lv_count 0
+ 
+ 
+@@ -67,14 +67,14 @@ lvremove -ff $vg
+ 
+ 
+ # Create named pool and default thin LV
+-lvcreate -L4M -V2G -T $vg/pool1
+-lvcreate -L4M -V2G -T --thinpool $vg/pool2
+-lvcreate -L4M -V2G -T --thinpool pool3 $vg
+-lvcreate -L4M -V2G --type thin $vg/pool4
+-lvcreate -L4M -V2G --type thin --thinpool $vg/pool5
+-lvcreate -L4M -V2G --type thin --thinpool pool6 $vg
+-
+-check lv_exists $vg lvol0 lvol1 lvol2 lvol3 lvol4 lvol5
++lvcreate -L4M -V2G --name lvo1 -T $vg/pool1
++lvcreate -L4M -V2G --name lvo2 -T --thinpool $vg/pool2
++lvcreate -L4M -V2G --name lvo3 -T --thinpool pool3 $vg
++lvcreate -L4M -V2G --name lvo4 --type thin $vg/pool4
++lvcreate -L4M -V2G --name lvo5 --type thin --thinpool $vg/pool5
++lvcreate -L4M -V2G --name lvo6 --type thin --thinpool pool6 $vg
 +
- 		log_verbose("Making thin pool %s in VG %s using segtype %s",
- 			    lp.pool ? : "with generated name", lp.vg_name, lp.segtype->name);
-+	}
++check lv_exists $vg lvo1 lvo2 lvo3 lvo4 lvo5 lvo6
+ lvremove -ff $vg
  
- 	if (lp.thin)
- 		log_verbose("Making thin LV %s in pool %s in VG %s%s%s using segtype %s",
--- 
-1.8.3.1
+ 
+@@ -103,14 +103,14 @@ lvremove -ff $vg
+ 
+ # Create default thin LV in existing pool
+ lvcreate -L4M -T $vg/pool
+-lvcreate -V2G -T $vg/pool
+-lvcreate -V2G -T --thinpool $vg/pool
+-lvcreate -V2G -T --thinpool pool $vg
+-lvcreate -V2G --type thin $vg/pool
+-lvcreate -V2G --type thin --thinpool $vg/pool
+-lvcreate -V2G --type thin --thinpool pool $vg
++lvcreate -V2G --name lvo0 -T $vg/pool
++lvcreate -V2G --name lvo1 -T --thinpool $vg/pool
++lvcreate -V2G --name lvo2 -T --thinpool pool $vg
++lvcreate -V2G --name lvo3 --type thin $vg/pool
++lvcreate -V2G --name lvo4 --type thin --thinpool $vg/pool
++lvcreate -V2G --name lvo5 --type thin --thinpool pool $vg
+ 
+-check lv_exists $vg lvol0 lvol1 lvol2 lvol3 lvol4 lvol5
++check lv_exists $vg lvo0 lvo1 lvo2 lvo3 lvo4 lvo5
+ 
+ 
+ # Create named thin LV in existing pool
+@@ -136,27 +136,27 @@ check vg_field $vg lv_count 0
+ # Create thin snapshot of thinLV
+ lvcreate -L10M -V10M -T $vg/pool --name lv1
+ mkfs.ext4 $DM_DEV_DIR/$vg/lv1
+-lvcreate -s -K $vg/lv1
+-fsck -p $DM_DEV_DIR/$vg/lvol0
+-lvcreate -s -K $vg/lv1 --name lv2
+-lvcreate -s -K $vg/lv1 --name $vg/lv3
+-lvcreate --type snapshot -K $vg/lv1
+-lvcreate --type snapshot -K $vg/lv1 --name lv4
+-lvcreate --type snapshot -K $vg/lv1 --name $vg/lv5
+-
+-check_lv_field_modules_ thin-pool lv1 lvol0 lv2 lv3 lvol1 lv4 lv5
++lvcreate -K -s $vg/lv1 --name snap_lv1
++fsck -p $DM_DEV_DIR/$vg/snap_lv1
++lvcreate -s $vg/lv1 --name lv2
++lvcreate -s $vg/lv1 --name $vg/lv3
++lvcreate --type snapshot $vg/lv1
++lvcreate --type snapshot $vg/lv1 --name lv4
++lvcreate --type snapshot $vg/lv1 --name $vg/lv5
++
++check_lv_field_modules_ thin-pool lv1 snap_lv1 lv2 lv3 lvol1 lv4 lv5
+ check vg_field $vg lv_count 8
+ lvremove -ff $vg
+ 
+ 
+ # Normal Snapshots of thinLV
+ lvcreate -L4M -V2G -T $vg/pool --name lv1
+-lvcreate -s -K $vg/lv1 -l1
+-lvcreate -s -K $vg/lv1 -l1 --name lv2
+-lvcreate -s -K $vg/lv1 -l1 --name $vg/lv3
+-lvcreate -s -K lv1 -L4M --name $vg/lv4
++lvcreate -s $vg/lv1 -l1 --name snap_lv1
++lvcreate -s $vg/lv1 -l1 --name lv2
++lvcreate -s $vg/lv1 -l1 --name $vg/lv3
++lvcreate -s lv1 -L4M --name $vg/lv4
+ 
+-check_lv_field_modules_ snapshot lvol0 lv2 lv3 lv4
++check_lv_field_modules_ snapshot snap_lv1 lv2 lv3 lv4
+ check vg_field $vg lv_count 6
+ 
+ lvremove -ff $vg
+@@ -174,7 +174,7 @@ not lvcreate -L4M --chunksize 2G -T $vg/pool1
+ 
+ lvcreate -L4M -V2G --name lv1 -T $vg/pool1
+ # Origin name is not accepted
+-not lvcreate -s -K $vg/lv1 -L4M -V2G --name $vg/lv4
++not lvcreate -s $vg/lv1 -L4M -V2G --name $vg/lv4
+ 
+ # Check we cannot create mirror and thin or thinpool together
+ not lvcreate -T mirpool -L4M --alloc anywhere -m1 $vg
 
 
