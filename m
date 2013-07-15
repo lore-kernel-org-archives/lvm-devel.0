@@ -1,75 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 15 Jul 2013 14:02:59 +0000 (UTC)
-Subject: master - thin: send messages to active pool
-Message-ID: <20130715140259.6662F60FD0@fedorahosted.org>
+Date: Mon, 15 Jul 2013 14:03:01 +0000 (UTC)
+Subject: master - thin: write back when command successfully finished
+Message-ID: <20130715140301.80ABB60FE8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=42881c887777257de42acf695aa3da7693af33d5
-Commit:        42881c887777257de42acf695aa3da7693af33d5
-Parent:        5658ec2bdc9e5ea816a1dd227ffbb74d6cbfb8f5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=925701d9f37e149a738aa4875f2933bee42ca8d0
+Commit:        925701d9f37e149a738aa4875f2933bee42ca8d0
+Parent:        42881c887777257de42acf695aa3da7693af33d5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 15 11:27:57 2013 +0200
+AuthorDate:    Mon Jul 15 11:39:03 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 15 15:47:25 2013 +0200
+CommitterDate: Mon Jul 15 15:48:32 2013 +0200
 
-thin: send messages to active pool
+thin: write back when command successfully finished
 
-If the thin pool is known to be active, messages can be passed
-to the pool even when the created thin volume is not going to be
-activated.
-
-So we do not need to stack large list of message and validate
-and catch creation errors earlier in this case.
-
-Replace the test for valid activation combination with simpler list of
-deactivation combinations.
+Remove backup() call from update_pool_lv() as it's been there
+duplicated and preperly order backup() call after lvresize,
+so there is just one such call.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   11 +++++------
- 2 files changed, 6 insertions(+), 6 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/lv_manip.c   |    4 ++--
+ lib/metadata/thin_manip.c |    2 --
+ 3 files changed, 3 insertions(+), 4 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 1f1a984..4c662c1 100644
+index 4c662c1..deb0338 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Send thin messages also for active thin pool and inactive thin volume.
++  Avoid generating metadata backup when calling update_pool_lv().
+   Send thin messages also for active thin pool and inactive thin volume.
    Add activation/auto_set_activation_skip to control activation skip flagging.
    Add 's(k)ip activation' bit to lvs -o lv_attr to indicate skip flag attached.
-   Add --ignoreactivationskip to lvcreate/vgchange/lvchange to ignore skip flag.
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index fa63b78..87f30f7 100644
+index 87f30f7..5ec2bd0 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -5548,18 +5548,17 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
- 		}
- 	}
+@@ -4053,8 +4053,6 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 		if (!monitor_dev_for_events(cmd, lv, 0, 0))
+ 			stack;
  
--	if (seg_is_thin_volume(lp) &&
--	    ((lp->activate == CHANGE_AY) ||
--	     (lp->activate == CHANGE_AE) ||
--	     (lp->activate == CHANGE_ALY))) {
-+	if (seg_is_thin_volume(lp)) {
- 		/* Ensure all stacked messages are submitted */
- 		if (!(lvl = find_lv_in_vg(vg, lp->pool))) {
- 			log_error("Unable to find existing pool LV %s in VG %s.",
- 				  lp->pool, vg->name);
- 			return NULL;
- 		}
--		if (!update_pool_lv(lvl->lv, 1))
--			return_NULL;
-+		if (lv_is_active(lvl->lv) ||
-+		    ((lp->activate != CHANGE_AN) && (lp->activate != CHANGE_ALN)))
-+			if (!update_pool_lv(lvl->lv, 1))
-+				return_NULL;
- 	}
+-	backup(vg);
+-
+ 	/*
+ 	 * Update lvm pool metadata (drop messages) if the pool has been
+ 	 * resumed and do a pool active/deactivate in other case.
+@@ -4067,6 +4065,8 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 	    !update_pool_lv(lv, !lv_is_active(lv)))
+ 		return_0;
  
- 	if (vg_is_clustered(vg) && segtype_is_raid(lp->segtype)) {
++	backup(vg);
++
+ 	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
+ 
+ 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 5b1b440..4f6e2ec 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -558,8 +558,6 @@ int update_pool_lv(struct logical_volume *lv, int activate)
+ 	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	return 1;
+ }
+ 
 
 
