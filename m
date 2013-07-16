@@ -1,45 +1,43 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Mon, 15 Jul 2013 16:27:38 -0400 (EDT)
-Subject: number conversion in lvm
-In-Reply-To: <51E45A1E.2090105@redhat.com>
-References: <alpine.LRH.2.02.1307121904020.15166@file01.intranet.prod.int.rdu2.redhat.com>
-	<51E11494.2080505@redhat.com>
-	<alpine.LRH.2.02.1307151556340.11390@file01.intranet.prod.int.rdu2.redhat.com>
-	<51E45A1E.2090105@redhat.com>
-Message-ID: <alpine.LRH.2.02.1307151626060.11390@file01.intranet.prod.int.rdu2.redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 16 Jul 2013 13:18:47 +0000 (UTC)
+Subject: master - config_settings: add comment about possible types
+Message-ID: <20130716131847.1B9526107C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> > > > BTW. how is that function supposed to handle integer overflow - it
-> > > > doesn't
-> > > > seem to do that.
-> > > > 
-> > > 
-> > > it returns  LONG_MIN/MAX for underflow/overflow - but assuming errno could
-> > > be checked for ERANGE and fail command for this case instead.
-> > > 
-> > > Zdenek
-> > 
-> > The major problem is that the same function _get_int_arg parses both
-> > 32-bit and 64-bit arguments. It would be natural to return error on
-> > integer overflow but you can't because you don't know if the caller will
-> > use the 32-bit value or the 64-bit value.
-> > 
-> > Another question is why there is av->i_value and av->ui_value when the
-> > values are the same and not dependent on the sign? What if the value fits
-> 
-> There are separate function for checking sign and accepting signed ints
-> (int_arg_with_sign) - otherwise if SIGN_MINUS is detect - log error
-> is reported.
-> 
-> Zdenek
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b73fbf8f4a225262b2c1d42978aea015af941a50
+Commit:        b73fbf8f4a225262b2c1d42978aea015af941a50
+Parent:        63d09b75f8e9a8790124f1ee0e2349a94e7a718d
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jul 16 15:18:40 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Jul 16 15:18:40 2013 +0200
 
-Why are there two values av->i_value and av->ui_value if they have the 
-same value and the sign flag is stored separately in av->sign?
+config_settings: add comment about possible types
 
-Mikulas
+---
+ lib/config/config_settings.h |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
+
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 4d124c8..16a9437 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -32,7 +32,11 @@
+  * 				CFG_ADVANCED - this node belongs to advanced config set
+  * 				CFG_UNSUPPORTED - this node belongs to unsupported config set
+  * 				CFG_PROFILABLE - this node is customizable by a profile
+- * type:		allowed type for the value of simple configuation setting
++ * type:		allowed type for the value of simple configuation setting, one of:
++ * 				CFG_TYPE_BOOL
++ * 				CFG_TYPE_INT
++ * 				CFG_TYPE_FLOAT
++ * 				CFG_TYPE_STRING
+  * types:		allowed types for the values of array configuration setting
+  * 			(use logical "OR" to define more than one allowed type,
+  * 			 e.g. CFG_TYPE_STRING | CFG_TYPE_INT)
 
 
