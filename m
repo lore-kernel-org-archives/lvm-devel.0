@@ -1,43 +1,50 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 16 Jul 2013 13:18:47 +0000 (UTC)
-Subject: master - config_settings: add comment about possible types
-Message-ID: <20130716131847.1B9526107C@fedorahosted.org>
+Date: Wed, 17 Jul 2013 09:32:27 +0000 (UTC)
+Subject: master - profile: move profile assignment to common lv_create_empty fn
+Message-ID: <20130717093227.5818F611C5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b73fbf8f4a225262b2c1d42978aea015af941a50
-Commit:        b73fbf8f4a225262b2c1d42978aea015af941a50
-Parent:        63d09b75f8e9a8790124f1ee0e2349a94e7a718d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=73e7f6c45ffecc78b1ea4165596355479fb59fe2
+Commit:        73e7f6c45ffecc78b1ea4165596355479fb59fe2
+Parent:        b73fbf8f4a225262b2c1d42978aea015af941a50
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jul 16 15:18:40 2013 +0200
+AuthorDate:    Wed Jul 17 11:31:54 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jul 16 15:18:40 2013 +0200
+CommitterDate: Wed Jul 17 11:31:54 2013 +0200
 
-config_settings: add comment about possible types
+profile: move profile assignment to common lv_create_empty fn
 
 ---
- lib/config/config_settings.h |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 4d124c8..16a9437 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -32,7 +32,11 @@
-  * 				CFG_ADVANCED - this node belongs to advanced config set
-  * 				CFG_UNSUPPORTED - this node belongs to unsupported config set
-  * 				CFG_PROFILABLE - this node is customizable by a profile
-- * type:		allowed type for the value of simple configuation setting
-+ * type:		allowed type for the value of simple configuation setting, one of:
-+ * 				CFG_TYPE_BOOL
-+ * 				CFG_TYPE_INT
-+ * 				CFG_TYPE_FLOAT
-+ * 				CFG_TYPE_STRING
-  * types:		allowed types for the values of array configuration setting
-  * 			(use logical "OR" to define more than one allowed type,
-  * 			 e.g. CFG_TYPE_STRING | CFG_TYPE_INT)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 5ec2bd0..cb6a6c2 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4183,6 +4183,9 @@ struct logical_volume *lv_create_empty(const char *name,
+  
+ 	if (fi->fmt->ops->lv_setup && !fi->fmt->ops->lv_setup(fi, lv))
+ 		goto_bad;
++
++	if (vg->fid->fmt->features & FMT_CONFIG_PROFILE)
++		lv->profile = vg->cmd->profile_params->global_profile;
+  
+ 	return lv;
+ bad:
+@@ -5595,9 +5598,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 				   status, lp->alloc, vg)))
+ 		return_NULL;
+ 
+-	if (vg->fid->fmt->features & FMT_CONFIG_PROFILE)
+-		lv->profile = vg->cmd->profile_params->global_profile;
+-
+ 	if (lp->read_ahead != lv->read_ahead) {
+ 		log_verbose("Setting read ahead sectors");
+ 		lv->read_ahead = lp->read_ahead;
 
 
