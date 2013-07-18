@@ -1,55 +1,88 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 18 Jul 2013 16:26:50 +0000 (UTC)
-Subject: master - thin: report 'e' volume type pool metadata spare
-Message-ID: <20130718162650.3269660DE4@fedorahosted.org>
+Date: Thu, 18 Jul 2013 16:26:39 +0000 (UTC)
+Subject: master - thin: fix error path in creation path
+Message-ID: <20130718162639.8B95D60DE4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=915cc5a2faf67dd3438651b80414f2a054016749
-Commit:        915cc5a2faf67dd3438651b80414f2a054016749
-Parent:        460d0254ebc7df514081997a12238a88e8b203c6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7afa9cebcbce0232c0c889cb3f112f66d10a79b0
+Commit:        7afa9cebcbce0232c0c889cb3f112f66d10a79b0
+Parent:        1d3f7953bda1826fb5eb957ae6dcefc9285454a1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 17 19:42:52 2013 +0200
+AuthorDate:    Wed Jul 17 15:26:41 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 18 18:22:44 2013 +0200
+CommitterDate: Thu Jul 18 18:22:43 2013 +0200
 
-thin: report 'e' volume type pool metadata spare
+thin: fix error path in creation path
 
-Reuse m'e'tadata volume type for spar'e' volume as well.
-Essentially they are related and there is no big reason
-to introduce new flag.
+Remove some calls to revert_new_lv when no LV has been created/commited so far.
+When the pool update failed - then only revert is needed.
 ---
- lib/metadata/lv.c |    1 +
- man/lvs.8.in      |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |   20 +++++++-------------
+ 2 files changed, 8 insertions(+), 13 deletions(-)
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 4d3a259..db71cf0 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -547,6 +547,7 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	else if (lv_is_origin(lv) || lv_is_external_origin(lv))
- 		repstr[0] = (lv_is_merging_origin(lv)) ? 'O' : 'o';
- 	else if (lv_is_thin_pool_metadata(lv) ||
-+		 lv_is_pool_metadata_spare(lv) ||
- 		 (lv->status & RAID_META))
- 		repstr[0] = 'e';
- 	else if (lv->status & RAID)
-diff --git a/man/lvs.8.in b/man/lvs.8.in
-index 5df6b47..4da4370 100644
---- a/man/lvs.8.in
-+++ b/man/lvs.8.in
-@@ -135,7 +135,7 @@ Volume type: (m)irrored, (M)irrored without initial sync, (o)rigin,
- (s)napshot, merging (S)napshot, (p)vmove, (v)irtual,
- mirror or raid (i)mage, mirror or raid (I)mage out-of-sync, mirror (l)og device,
- under (c)onversion, thin (V)olume, (t)hin pool, (T)hin pool data, raid or
--thin pool m(e)tadata
-+thin pool m(e)tadata or pool metadata spare.
- .IP 2 3
- Permissions: (w)riteable, (r)ead-only, (R)ead-only activation of non-read-only
- volume
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 641fd53..7b2c2d0 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Correct thin creation error paths.
+   Use local activation for clearing snapshot COW device.
+   Add lvm2-activation-net systemd unit to activate LVs on net-attached storage.
+   Release memory allocated with _cached_info().
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index a5c0d73..2bfd65e 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5646,10 +5646,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 	} else if (seg_is_thin_volume(lp)) {
+ 		pool_lv = first_seg(lv)->pool_lv;
+ 		if (!(first_seg(lv)->device_id =
+-		      get_free_pool_device_id(first_seg(pool_lv)))) {
+-			stack;
+-			goto revert_new_lv;
+-		}
++		      get_free_pool_device_id(first_seg(pool_lv))))
++			return_NULL;
+ 		/*
+ 		 * Check if using 'external origin' or the 'normal' snapshot
+ 		 * within the same thin pool
+@@ -5663,17 +5661,13 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 				log_error("Cannot use active LV for the external origin.");
+ 				return 0; // We can't be sure device is read-only
+ 			}
+-			if (!attach_thin_external_origin(first_seg(lv), org)) {
+-				stack;
+-				goto revert_new_lv;
+-			}
++			if (!attach_thin_external_origin(first_seg(lv), org))
++				return_NULL;
+ 		}
+ 
+ 		if (!attach_pool_message(first_seg(pool_lv),
+-					 DM_THIN_MESSAGE_CREATE_THIN, lv, 0, 0)) {
+-			stack;
+-			goto revert_new_lv;
+-		}
++					 DM_THIN_MESSAGE_CREATE_THIN, lv, 0, 0))
++			return_NULL;
+ 	} else if (seg_is_raid(lp)) {
+ 		first_seg(lv)->min_recovery_rate = lp->min_recovery_rate;
+ 		first_seg(lv)->max_recovery_rate = lp->max_recovery_rate;
+@@ -5734,7 +5728,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 			/* At this point remove pool messages, snapshot is active */
+ 			if (!update_pool_lv(first_seg(org)->pool_lv, 0)) {
+ 				stack;
+-				goto deactivate_and_revert_new_lv;
++				goto revert_new_lv;
+ 			}
+ 		}
+ 		if ((lp->activate != CHANGE_AN) && (lp->activate != CHANGE_ALN)) {
 
 
