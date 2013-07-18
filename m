@@ -1,109 +1,87 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 18 Jul 2013 17:00:51 +0000 (UTC)
-Subject: master - display: fix units for sizes <1k
-Message-ID: <20130718170051.8356460DF4@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Thu, 18 Jul 2013 21:04:28 +0000 (UTC)
+Subject: master - python-lvm: Add call to close/re-open C lib.
+Message-ID: <20130718210428.091E3606F5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=357df34133fae754eb25cf3c3a784b1905fc9291
-Commit:        357df34133fae754eb25cf3c3a784b1905fc9291
-Parent:        ef3a1a0f8a7dc9656fa9269f08b36d1a9cb96d91
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jul 18 17:55:58 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jul 18 17:55:58 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1a005b40a4ce9cc1f54a564f8f74917935cb35c4
+Commit:        1a005b40a4ce9cc1f54a564f8f74917935cb35c4
+Parent:        357df34133fae754eb25cf3c3a784b1905fc9291
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Thu Jul 18 16:53:43 2013 -0400
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Jul 18 16:03:29 2013 -0500
 
-display: fix units for sizes <1k
+python-lvm: Add call to close/re-open C lib.
 
+As the library handle has a dm pool associated with
+it for long running processes it is required to close and
+re-open the library to free the dm pool.  Call added so
+python clients can reclaim memory, lvm.gc().
+
+Note: Any python objects on the heap become invalid at the
+time this call is made.  If referenced, a seg. fault could
+occur.  No simple way to make this safe with the current
+memory management in the C library.  Use with caution!
+
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- WHATS_NEW             |    1 +
- lib/display/display.c |   40 +++++++++++++++++++++-------------------
- 2 files changed, 22 insertions(+), 19 deletions(-)
+ python/liblvm.c |   25 +++++++++++++++++++++++--
+ 1 files changed, 23 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e87f781..9102613 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Use units B or b (never E) with no decimal places when displaying sizes < 1k.
-   Add support for poolmetadataspare LV, that will be used for pool recovery.
-   Improve activation order when creating thin pools in non-clustered VG.
-   List thin-pool and thin modules for thin volumes.
-diff --git a/lib/display/display.c b/lib/display/display.c
-index 3f7f360..bf4b642 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -176,9 +176,9 @@ alloc_policy_t get_alloc_from_string(const char *str)
+diff --git a/python/liblvm.c b/python/liblvm.c
+index cdeb4bf..8fa26ea 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -128,6 +128,24 @@ liblvm_library_get_version(void)
+ 	return Py_BuildValue("s", lvm_library_get_version());
+ }
  
- #define BASE_UNKNOWN 0
- #define BASE_SHARED 1
--#define BASE_1024 7
--#define BASE_1000 13
--#define BASE_SPECIAL 19
-+#define BASE_1024 8
-+#define BASE_1000 15
-+#define BASE_SPECIAL 21
- #define NUM_UNIT_PREFIXES 6
- #define NUM_SPECIAL 3
++const static char gc_doc[] = "Garbage collect the C library";
++
++static PyObject *
++liblvm_lvm_gc(void)
++{
++	LVM_VALID();
++
++	lvm_quit(libh);
++	libh = lvm_init(NULL);
++
++	if (!libh) {
++		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++				return NULL;
++	}
++	Py_INCREF(Py_None);
++	return Py_None;
++}
++
+ static PyObject *
+ liblvm_lvm_list_vg_names(void)
+ {
+@@ -1844,6 +1862,7 @@ liblvm_lvm_pvseg_get_property(pvsegobject *self, PyObject *args)
+ static PyMethodDef Liblvm_methods[] = {
+ 	/* LVM methods */
+ 	{ "getVersion",		(PyCFunction)liblvm_library_get_version, METH_NOARGS },
++	{ "gc",				(PyCFunction)liblvm_lvm_gc, METH_NOARGS, gc_doc },
+ 	{ "vgOpen",		(PyCFunction)liblvm_lvm_vg_open, METH_VARARGS },
+ 	{ "vgCreate",		(PyCFunction)liblvm_lvm_vg_create, METH_VARARGS },
+ 	{ "configFindBool",	(PyCFunction)liblvm_lvm_config_find_bool, METH_VARARGS },
+@@ -2024,8 +2043,10 @@ static PyTypeObject LibLVMpvsegType = {
+ static void
+ liblvm_cleanup(void)
+ {
+-	lvm_quit(libh);
+-	libh = NULL;
++	if (libh) {
++		lvm_quit(libh);
++		libh = NULL;
++	}
+ }
  
-@@ -203,27 +203,29 @@ static const char *_display_size(const struct cmd_context *cmd,
- 		{" Gigabyte", " GB", "G"},	/* [4] */
- 		{" Megabyte", " MB", "M"},	/* [5] */
- 		{" Kilobyte", " KB", "K"},	/* [6] */
-+		{" Byte    ", " B", "B"},	/* [7] */
- 
- 		/* BASE_1024 - Used if cmd->si_unit_consistency = 1 */
--		{" Exbibyte", " EiB", "e"},	/* [7] */
--		{" Pebibyte", " PiB", "p"},	/* [8] */
--		{" Tebibyte", " TiB", "t"},	/* [9] */
--		{" Gibibyte", " GiB", "g"},	/* [10] */
--		{" Mebibyte", " MiB", "m"},	/* [11] */
--		{" Kibibyte", " KiB", "k"},	/* [12] */
-+		{" Exbibyte", " EiB", "e"},	/* [8] */
-+		{" Pebibyte", " PiB", "p"},	/* [9] */
-+		{" Tebibyte", " TiB", "t"},	/* [10] */
-+		{" Gibibyte", " GiB", "g"},	/* [11] */
-+		{" Mebibyte", " MiB", "m"},	/* [12] */
-+		{" Kibibyte", " KiB", "k"},	/* [13] */
-+		{" Byte    ", " B", "b"},	/* [14] */
- 
- 		/* BASE_1000 - Used if cmd->si_unit_consistency = 1 */
--		{" Exabyte",  " EB", "E"},	/* [13] */
--		{" Petabyte", " PB", "P"},	/* [14] */
--		{" Terabyte", " TB", "T"},	/* [15] */
--		{" Gigabyte", " GB", "G"},	/* [16] */
--		{" Megabyte", " MB", "M"},	/* [17] */
--		{" Kilobyte", " kB", "K"},	/* [18] */
-+		{" Exabyte",  " EB", "E"},	/* [15] */
-+		{" Petabyte", " PB", "P"},	/* [16] */
-+		{" Terabyte", " TB", "T"},	/* [17] */
-+		{" Gigabyte", " GB", "G"},	/* [18] */
-+		{" Megabyte", " MB", "M"},	/* [19] */
-+		{" Kilobyte", " kB", "K"},	/* [20] */
- 
- 		/* BASE_SPECIAL */
--		{" Byte    ", " B ", "B"},	/* [19] */
--		{" Units   ", " Un", "U"},	/* [20] */
--		{" Sectors ", " Se", "S"},	/* [21] */
-+		{" Byte    ", " B ", "B"},	/* [21] (shared with BASE_1000) */
-+		{" Units   ", " Un", "U"},	/* [22] */
-+		{" Sectors ", " Se", "S"},	/* [23] */
- 	};
- 
- 	if (!(size_buf = dm_pool_alloc(cmd->mem, SIZE_BUF))) {
-@@ -302,7 +304,7 @@ static const char *_display_size(const struct cmd_context *cmd,
- 	}
- 
- 	/* FIXME Make precision configurable */
--	switch(toupper((int) cmd->current_settings.unit_type)) {
-+	switch (toupper(*size_str[base + s][SIZE_UNIT])) {
- 	case 'B':
- 	case 'S':
- 		precision = 0;
+ PyMODINIT_FUNC
 
 
