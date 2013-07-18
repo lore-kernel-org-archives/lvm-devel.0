@@ -1,92 +1,144 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon,  8 Jul 2013 17:15:58 +0200
-Subject: [PATCH 6/7] thin: add lvconvert pool metadata spare
-In-Reply-To: <cover.1373296467.git.zkabelac@redhat.com>
-References: <cover.1373296467.git.zkabelac@redhat.com>
-Message-ID: <ff74fa968e49f9f845e74cba6ee873b4cdf69768.1373296467.git.zkabelac@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 18 Jul 2013 16:26:37 +0000 (UTC)
+Subject: master - lv_manip: move some validation code before archiving
+Message-ID: <20130718162637.7543360E48@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Support poolmetadataspare when convering volumes into thin pool.
-Same rules applied as with lvcreate.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1d3f7953bda1826fb5eb957ae6dcefc9285454a1
+Commit:        1d3f7953bda1826fb5eb957ae6dcefc9285454a1
+Parent:        7b4b97b731053ab2780d5ffdce5fc1c3e0626c2a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jul 17 14:52:21 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jul 18 18:22:43 2013 +0200
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+lv_manip: move some validation code before archiving
+
+Make as much test we can, before actualy modifying metadata.
+Avoids also unnecessary archiving.
 ---
- tools/commands.h  |  6 ++++--
- tools/lvconvert.c | 11 +++++++++++
- 2 files changed, 15 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c |   65 ++++++++++++++++++++++++-----------------------
+ 1 files changed, 33 insertions(+), 32 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index 3aec4bc..cb4ef44 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -168,6 +168,7 @@ xx(lvconvert,
-    "\t[--poolmetadata ThinMetadataLogicalVolume[Path] |\n"
-    "\t [--poolmetadatasize size]\n"
-    "\t [-r|--readahead ReadAheadSectors|auto|none]\n"
-+   "\t [--poolmetadataspare {y|n}]\n"
-    "\t [--stripes Stripes [-I|--stripesize StripeSize]]]\n"
-    "\t[-T|--thin ExternalLogicalVolume[Path]\n"
-    "\t [--originname NewExternalOriginVolumeName]]\n"
-@@ -178,8 +179,9 @@ xx(lvconvert,
-    merge_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG, noudevsync_ARG,
-    readahead_ARG, regionsize_ARG, repair_ARG, replace_ARG, snapshot_ARG, splitmirrors_ARG,
-    trackchanges_ARG, type_ARG, stripes_long_ARG, stripesize_ARG, test_ARG,
--   chunksize_ARG, discards_ARG, poolmetadata_ARG, poolmetadatasize_ARG,
--   originname_ARG, thin_ARG, thinpool_ARG,
-+   chunksize_ARG, discards_ARG, originname_ARG,
-+   poolmetadata_ARG, poolmetadatasize_ARG, poolmetadataspare_ARG,
-+   thin_ARG, thinpool_ARG,
-    use_policies_ARG, force_ARG, zero_ARG)
- 
- xx(lvcreate,
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 3ea1987..7cbf3d4 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -22,6 +22,7 @@ struct lvconvert_params {
- 	int snapshot;
- 	int merge;
- 	int merge_mirror;
-+	int poolmetadataspare;
- 	int thin;
- 	int yes;
- 	int zero;
-@@ -254,6 +255,9 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 	} else if (arg_count(cmd, discards_ARG)) {
- 		log_error("--discards is only valid with --thinpool.");
- 		return 0;
-+	} else if (arg_count(cmd, poolmetadataspare_ARG)) {
-+		log_error("--poolmetadataspare is only valid with --thinpool.");
-+		return 0;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2e34a49..a5c0d73 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5355,6 +5355,21 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 		return NULL;
  	}
  
- 	/*
-@@ -487,6 +491,9 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 			return_0;
- 	}
- 
-+	/* TODO: default in lvm.conf ? */
-+	lp->poolmetadataspare = arg_int_value(cmd, poolmetadataspare_ARG,
-+					      DEFAULT_POOL_METADATA_SPARE);
- 	lp->force = arg_count(cmd, force_ARG);
- 	lp->yes = arg_count(cmd, yes_ARG);
- 
-@@ -2159,6 +2166,10 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
-+	if (!handle_pool_metadata_spare(pool_lv->vg, metadata_lv->le_count,
-+					lp->pvh, lp->poolmetadataspare))
-+		return_0;
++	if (vg_is_clustered(vg) && segtype_is_raid(lp->segtype)) {
++		/*
++		 * FIXME:
++		 * We could allow a RAID LV to be created as long as it
++		 * is activated exclusively.  Any subsequent activations
++		 * would have to be enforced as exclusive also.
++		 *
++		 * For now, we disallow the existence of RAID LVs in a
++		 * cluster VG
++		 */
++		log_error("Unable to create a %s logical volume in a cluster.",
++			  lp->segtype->name);
++		return NULL;
++	}
 +
- 	old_name = data_lv->name; /* Use for pool name */
- 	/*
- 	 * Since we wish to have underlaying devs to match _tdata
--- 
-1.8.3.1
+ 	if ((segtype_is_mirrored(lp->segtype) ||
+ 	     segtype_is_raid(lp->segtype) || segtype_is_thin(lp->segtype)) &&
+ 	    !(vg->fid->fmt->features & FMT_SEGMENTS)) {
+@@ -5540,9 +5555,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 	    !(lp->segtype = get_segtype_from_string(cmd, "striped")))
+ 		return_NULL;
+ 
+-	if (!archive(vg))
+-		return_NULL;
+-
+ 	if (!dm_list_empty(&lp->tags)) {
+ 		if (!(vg->fid->fmt->features & FMT_TAGS)) {
+ 			log_error("Volume group %s does not support tags",
+@@ -5551,6 +5563,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 		}
+ 	}
+ 
++	if (!archive(vg))
++		return_NULL;
++
+ 	if (seg_is_thin_volume(lp)) {
+ 		/* Ensure all stacked messages are submitted */
+ 		if (!(lvl = find_lv_in_vg(vg, lp->pool))) {
+@@ -5558,25 +5573,26 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 				  lp->pool, vg->name);
+ 			return NULL;
+ 		}
++
++		if (lv_is_active_locally(lvl->lv) &&
++		    !pool_below_threshold(first_seg(lvl->lv))) {
++			log_error("Cannot create thin volume. Pool \"%s/%s\" "
++				  "is filled over the autoextend threshold.",
++				  lvl->lv->vg->name, lvl->lv->name);
++			return NULL;
++		}
++
+ 		if (lv_is_active(lvl->lv) ||
+ 		    ((lp->activate != CHANGE_AN) && (lp->activate != CHANGE_ALN)))
+ 			if (!update_pool_lv(lvl->lv, 1))
+ 				return_NULL;
+-	}
+ 
+-	if (vg_is_clustered(vg) && segtype_is_raid(lp->segtype)) {
+-		/*
+-		 * FIXME:
+-		 * We could allow a RAID LV to be created as long as it
+-		 * is activated exclusively.  Any subsequent activations
+-		 * would have to be enforced as exclusive also.
+-		 *
+-		 * For now, we disallow the existence of RAID LVs in a
+-		 * cluster VG
+-		 */
+-		log_error("Unable to create a %s logical volume in a cluster.",
+-			  lp->segtype->name);
+-		return NULL;
++		/* For thin snapshot we must have matching pool */
++		if (org && lv_is_thin_volume(org) && (!lp->pool ||
++		    (strcmp(first_seg(org)->pool_lv->name, lp->pool) == 0)))
++			thin_name = org->name;
++		else
++			thin_name = lp->pool;
+ 	}
+ 
+ 	if (segtype_is_mirrored(lp->segtype) || segtype_is_raid(lp->segtype)) {
+@@ -5613,15 +5629,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 
+ 	dm_list_splice(&lv->tags, &lp->tags);
+ 
+-	if (seg_is_thin_volume(lp)) {
+-		/* For thin snapshot we must have matching pool */
+-		if (org && lv_is_thin_volume(org) && (!lp->pool ||
+-		    (strcmp(first_seg(org)->pool_lv->name, lp->pool) == 0)))
+-			thin_name = org->name;
+-		else
+-			thin_name = lp->pool;
+-	}
+-
+ 	if (!lv_extend(lv, lp->segtype,
+ 		       lp->stripes, lp->stripe_size,
+ 		       lp->mirrors,
+@@ -5714,12 +5721,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 	if (seg_is_thin(lp)) {
+ 		/* For snapshot, suspend active thin origin first */
+ 		if (org && lv_is_active(org) && lv_is_thin_volume(org)) {
+-			if (!pool_below_threshold(first_seg(first_seg(org)->pool_lv))) {
+-				log_error("Cannot create thin snapshot. Pool %s/%s is filled "
+-					  "over the autoextend threshold.",
+-					  org->vg->name, first_seg(org)->pool_lv->name);
+-				goto revert_new_lv;
+-			}
+ 			if (!suspend_lv_origin(cmd, org)) {
+ 				log_error("Failed to suspend thin snapshot origin %s/%s.",
+ 					  org->vg->name, org->name);
 
 
