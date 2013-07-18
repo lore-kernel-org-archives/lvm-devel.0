@@ -1,154 +1,102 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 17 Jul 2013 14:55:25 +0000 (UTC)
-Subject: master - systemd: generator: add lvm2-activation-net.service
-Message-ID: <20130717145525.9958E60EE1@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 18 Jul 2013 16:26:58 +0000 (UTC)
+Subject: master - thin: vgsplit and vgmerge spare support
+Message-ID: <20130718162658.8C18B61019@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8606bf316a683ebd14bb4cdf4eb1b3477a790b62
-Commit:        8606bf316a683ebd14bb4cdf4eb1b3477a790b62
-Parent:        73e7f6c45ffecc78b1ea4165596355479fb59fe2
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jul 17 16:21:18 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jul 17 16:54:52 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ef3a1a0f8a7dc9656fa9269f08b36d1a9cb96d91
+Commit:        ef3a1a0f8a7dc9656fa9269f08b36d1a9cb96d91
+Parent:        aab53f46eedda64ca8cd73b25eaac9aea7894957
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jul 9 12:01:25 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jul 18 18:22:44 2013 +0200
 
-systemd: generator: add lvm2-activation-net.service
+thin: vgsplit and vgmerge spare support
 
-The new lvm2-activation-net.service activates LVM volumes
-after network-attached devices are set up (iSCSI and FCoE)
-if lvmetad is disabled and hence the autoactivation is not
-used.
+When spliting a VG with spare, update to which VG it will belong.
+
+When merging and both VGs have spare, unmark the smaller one first.
 ---
- WHATS_NEW                                          |    1 +
- .../lvm2_activation_generator_systemd_red_hat.c    |   60 +++++++++++++-------
- 2 files changed, 41 insertions(+), 20 deletions(-)
+ tools/vgmerge.c |   30 ++++++++++++++++++++++++++++++
+ tools/vgsplit.c |    6 ++++++
+ 2 files changed, 36 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5763bdf..ae725bb 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Add lvm2-activation-net systemd unit to activate LVs on net-attached storage.
-   Release memory allocated with _cached_info().
-   Add whole log_lv and metadata_lv sub volumes when creating partial tree.
-   Properly use snapshot layer for origin which is also thin volume.
-diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
-index f3a01a2..5514522 100644
---- a/scripts/lvm2_activation_generator_systemd_red_hat.c
-+++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
-@@ -25,16 +25,27 @@
- #define KMSG_DEV_PATH        "/dev/kmsg"
- #define LVM_CONF_USE_LVMETAD "global/use_lvmetad"
- 
--#define DEFAULT_UNIT_DIR     "/tmp"
--#define UNIT_NAME_EARLY      "lvm2-activation-early.service"
--#define UNIT_NAME            "lvm2-activation.service"
--#define UNIT_TARGET          "local-fs.target"
-+#define DEFAULT_UNIT_DIR      "/tmp"
-+#define UNIT_TARGET_LOCAL_FS  "local-fs.target"
-+#define UNIT_TARGET_REMOTE_FS "remote-fs.target"
- 
- static char unit_path[PATH_MAX];
- static char target_path[PATH_MAX];
- static char message[PATH_MAX];
- static int kmsg_fd = -1;
- 
-+enum {
-+	UNIT_EARLY,
-+	UNIT_MAIN,
-+	UNIT_NET
-+};
-+
-+static const char *unit_names[] = {
-+	[UNIT_EARLY] = "lvm2-activation-early.service",
-+	[UNIT_MAIN] = "lvm2-activation.service",
-+	[UNIT_NET] = "lvm2-activation-net.service"
-+};
-+
- __attribute__ ((format(printf, 1, 2)))
- static void kmsg(const char *format, ...)
- {
-@@ -92,16 +103,17 @@ out:
- 	return r;
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index fb3321d..3782779 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -28,6 +28,29 @@ static struct volume_group *_vgmerge_vg_read(struct cmd_context *cmd,
+ 	return vg;
  }
  
--static int generate_unit(const char *dir, int early)
-+static int generate_unit(const char *dir, int unit)
- {
- 	FILE *f;
--	const char *unit = early ? UNIT_NAME_EARLY : UNIT_NAME;
-+	const char *unit_name = unit_names[unit];
-+	const char *target_name = unit == UNIT_NET ? UNIT_TARGET_REMOTE_FS : UNIT_TARGET_LOCAL_FS;
- 
--	if (dm_snprintf(unit_path, PATH_MAX, "%s/%s", dir, unit) < 0)
-+	if (dm_snprintf(unit_path, PATH_MAX, "%s/%s", dir, unit_name) < 0)
- 		return 0;
- 
- 	if (!(f = fopen(unit_path, "wxe"))) {
--		kmsg("LVM: Failed to create unit file %s: %m.\n", unit);
-+		kmsg("LVM: Failed to create unit file %s: %m.\n", unit_name);
- 		return 0;
- 	}
- 
-@@ -117,25 +129,31 @@ static int generate_unit(const char *dir, int early)
- 	      "SourcePath=/etc/lvm/lvm.conf\n"
- 	      "DefaultDependencies=no\n", f);
- 
--	if (early) {
--		fputs("After=systemd-udev-settle.service\n", f);
--		fputs("Before=cryptsetup.target\n", f);
--	} else
--		fputs("After=lvm2-activation-early.service cryptsetup.target\n", f);
-+	if (unit == UNIT_NET) {
-+		fputs("After=iscsi.service fcoe.service\n"
-+		      "Before=remote-fs.target shutdown.target\n", f);
-+	} else {
-+		if (unit == UNIT_EARLY) {
-+			fputs("After=systemd-udev-settle.service\n", f);
-+			fputs("Before=cryptsetup.target\n", f);
-+		} else
-+			fputs("After=lvm2-activation-early.service cryptsetup.target\n", f);
++/* Select bigger pool metadata spare volume */
++static int _vgmerge_select_pool_metadata_spare(struct cmd_context *cmd,
++					       struct volume_group *vg_to,
++					       struct volume_group *vg_from)
++{
++	struct volume_group *svg;
 +
-+		fputs("Before=local-fs.target shutdown.target\n"
-+		      "Wants=systemd-udev-settle.service\n\n", f);
++	if (!vg_to->pool_metadata_spare_lv ||
++	    !vg_from->pool_metadata_spare_lv)
++		return 1; /* no problem */
++
++	/* Drop smaller pool metadata spare */
++	svg = (vg_to->pool_metadata_spare_lv->le_count <
++	       vg_from->pool_metadata_spare_lv->le_count) ? vg_to : vg_from;
++	vg_remove_pool_metadata_spare(svg);
++
++	/* Re-test lv name compatibility */
++	if (!vgs_are_compatible(cmd, vg_from, vg_to))
++		return_0;
++
++	return 1;
++}
++
+ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 			   const char *vg_name_from)
+ {
+@@ -73,6 +96,9 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 	if (!drop_cached_metadata(vg_from))
+ 		stack;
+ 
++	if (!_vgmerge_select_pool_metadata_spare(cmd, vg_to, vg_from))
++		goto_bad;
++
+ 	/* Merge volume groups */
+ 	dm_list_iterate_items_safe(pvl, tpvl, &vg_from->pvs) {
+ 		del_pvl_from_vgs(vg_from, pvl);
+@@ -127,6 +153,10 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 		dm_list_move(&vg_to->fid->metadata_areas_ignored, mdah);
+ 	}
+ 
++	if (!vg_to->pool_metadata_spare_lv)
++		vg_to->pool_metadata_spare_lv =
++			vg_from->pool_metadata_spare_lv;
++
+ 	vg_to->extent_count += vg_from->extent_count;
+ 	vg_to->free_count += vg_from->free_count;
+ 
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index ed31a57..dfcb120 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -41,6 +41,12 @@ static int _move_one_lv(struct volume_group *vg_from,
+ 		return 0;
+ 	}
+ 
++	/* Moved pool metadata spare LV */
++	if (vg_from->pool_metadata_spare_lv == lv) {
++		vg_to->pool_metadata_spare_lv = lv;
++		vg_from->pool_metadata_spare_lv = NULL;
 +	}
++
+ 	return 1;
+ }
  
--	fputs("Before=local-fs.target shutdown.target\n"
--	      "Wants=systemd-udev-settle.service\n\n"
--	      "[Service]\n"
-+	fputs("[Service]\n"
- 	      "ExecStart=/usr/sbin/lvm vgchange -aay --sysinit\n"
- 	      "Type=oneshot\n", f);
- 
- 	if (fclose(f) < 0) {
--		kmsg("LVM: Failed to write unit file %s: %m.\n", unit);
-+		kmsg("LVM: Failed to write unit file %s: %m.\n", unit_name);
- 		return 0;
- 	}
- 
--	if (!register_unit_with_target(dir, unit, UNIT_TARGET)) {
--		kmsg("LVM: Failed to register unit %s with target %s.\n", unit, UNIT_TARGET);
-+	if (!register_unit_with_target(dir, unit_name, target_name)) {
-+		kmsg("LVM: Failed to register unit %s with target %s.\n", unit_name, target_name);
- 		return 0;
- 	}
- 
-@@ -162,7 +180,9 @@ int main(int argc, char *argv[])
- 
- 	dir = argc > 1 ? argv[1] : DEFAULT_UNIT_DIR;
- 
--	if (!generate_unit(dir, 1) || !generate_unit(dir, 0))
-+	if (!generate_unit(dir, UNIT_EARLY) ||
-+	    !generate_unit(dir, UNIT_MAIN) ||
-+	    !generate_unit(dir, UNIT_NET))
- 		r = EXIT_FAILURE;
- out:
- 	kmsg("LVM: Activation generator %s.\n", r ? "failed" : "successfully completed");
 
 
