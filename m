@@ -1,287 +1,152 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 19 Jul 2013 18:26:45 +0000 (UTC)
-Subject: master - commandline: add prefix aliases for raid options
-Message-ID: <20130719182645.EC22561292@fedorahosted.org>
+Date: Fri, 19 Jul 2013 19:38:25 +0000 (UTC)
+Subject: master - cmdline: support ARG_GROUPABLE in merge_synonym
+Message-ID: <20130719193825.505C160ECE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=90a09559ed689cbd62021ef0ff875913d43bc989
-Commit:        90a09559ed689cbd62021ef0ff875913d43bc989
-Parent:        4eea66019157abd992c8802564b675fd97420c01
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ccc29f17b61b60aa4c5b2286ed8b530234435d8a
+Commit:        ccc29f17b61b60aa4c5b2286ed8b530234435d8a
+Parent:        90a09559ed689cbd62021ef0ff875913d43bc989
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jul 19 19:24:54 2013 +0100
+AuthorDate:    Fri Jul 19 20:37:43 2013 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jul 19 19:24:54 2013 +0100
+CommitterDate: Fri Jul 19 20:37:43 2013 +0100
 
-commandline: add prefix aliases for raid options
+cmdline: support ARG_GROUPABLE in merge_synonym
 
-Accept --raidwritemostly as well as --writemostly etc.
 ---
- WHATS_NEW          |    5 ++-
- tools/args.h       |    7 +++-
- tools/commands.h   |   88 ++++++++++++++++++++++++++-------------------------
- tools/lvmcmdline.c |    7 +++-
- 4 files changed, 60 insertions(+), 47 deletions(-)
+ WHATS_NEW          |    1 +
+ tools/commands.h   |    2 +-
+ tools/lvchange.c   |   14 ++++++++------
+ tools/lvmcmdline.c |   42 ++++++++++++++++++++++++++++++------------
+ 4 files changed, 40 insertions(+), 19 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 46d7d23..83a593e 100644
+index 83a593e..1cce9c9 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -92,10 +92,11 @@ Version 2.02.99 -
-   Add explicit message about unsupported pvmove for thin/thinpool volumes.
-   Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
-   Fix clvmd _cluster_request() return code in memory fail path.
--  Add writemostly/writebehind support for RAID1
-+  Add lvcreate/lvchange --[raid]{min|max}recoveryrate for raid LVs.
-+  Add lvchange --[raid]writemostly/writebehind support for RAID1
-   Add lv_change_activate() for common activation code in vg/lvchange.
-   Revert change that allowed identical table reload for RAID.
--  New lvchange arg, '--syncaction' allows scrubbing of RAID LVs.
-+  Add lvchange --[raid]syncaction for scrubbing of RAID LVs.
-   Improve RAID kernel status retrieval to include sync_action/mismatch_cnt.
-   Add external origin support for lvcreate.
-   Improve lvcreate, lvconvert and lvm man pages.
-diff --git a/tools/args.h b/tools/args.h
-index bac507c..4b89ebd 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -87,11 +87,16 @@ arg(ignoreadvanced_ARG, '\0', "ignoreadvanced", NULL, 0)
- arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", NULL, 0)
- arg(atversion_ARG, '\0', "atversion", string_arg, 0)
- arg(validate_ARG, '\0', "validate", NULL, 0)
--arg(syncaction_ARG, '\0', "syncaction", string_arg, 0)
-+arg(syncaction_ARG, '\0', "syncaction", string_arg, 0)	/* FIXME Use custom validation fn */
-+arg(raidsyncaction_ARG, '\0', "raidsyncaction", string_arg, 0)
- arg(writemostly_ARG, '\0', "writemostly", string_arg, ARG_GROUPABLE)
-+arg(raidwritemostly_ARG, '\0', "raidwritemostly", string_arg, ARG_GROUPABLE)
- arg(writebehind_ARG, '\0', "writebehind", int_arg, 0)
-+arg(raidwritebehind_ARG, '\0', "raidwritebehind", int_arg, 0)
- arg(minrecoveryrate_ARG, '\0', "minrecoveryrate", size_kb_arg, 0)
-+arg(raidminrecoveryrate_ARG, '\0', "raidminrecoveryrate", size_kb_arg, 0)
- arg(maxrecoveryrate_ARG, '\0', "maxrecoveryrate", size_kb_arg, 0)
-+arg(raidmaxrecoveryrate_ARG, '\0', "raidmaxrecoveryrate", size_kb_arg, 0)
- arg(profile_ARG, '\0', "profile", string_arg, 0)
- arg(detachprofile_ARG, '\0', "detachprofile", NULL, 0)
- arg(mergedconfig_ARG, '\0', "mergedconfig", NULL, 0)
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Support ARG_GROUPABLE with merge_synonym (for --raidwritemostly).
+   Fix segfault when reporting raid_syncaction for older kernels.
+   Add LV reporting fields raid_mismatch_count, raid_sync_action, raid_write_behind.
+   Add LV reporting fields raid_min_recovery_rate, raid_max_recovery_rate.
 diff --git a/tools/commands.h b/tools/commands.h
-index fc4f7ef..1330c8d 100644
+index 1330c8d..841a6b6 100644
 --- a/tools/commands.h
 +++ b/tools/commands.h
-@@ -34,17 +34,17 @@ xx(dumpconfig,
-    "dumpconfig\n"
-    "\t[-f|--file filename] \n"
-    "\t[--type {current|default|missing|new|profilable} \n"
--   "\t[--withcomments] \n"
--   "\t[--withversions] \n"
-+   "\t[--atversion version]] \n"
-    "\t[--ignoreadvanced] \n"
-    "\t[--ignoreunsupported] \n"
-    "\t[--mergedconfig] \n"
--   "\t[--atversion version]] \n"
-    "\t[--validate]\n"
-+   "\t[--withcomments] \n"
-+   "\t[--withversions] \n"
-    "\t[ConfigurationNode...]\n",
--   file_ARG, configtype_ARG, withcomments_ARG, atversion_ARG,
--   withversions_ARG, ignoreadvanced_ARG, ignoreunsupported_ARG,
--   mergedconfig_ARG, validate_ARG)
-+   atversion_ARG, configtype_ARG, file_ARG, ignoreadvanced_ARG,
-+   ignoreunsupported_ARG, mergedconfig_ARG, validate_ARG,
-+   withcomments_ARG, withversions_ARG)
- 
- xx(formats,
-    "List available metadata formats",
-@@ -88,33 +88,35 @@ xx(lvchange,
-    "\t[--monitor {y|n}]\n"
-    "\t[--poll {y|n}]\n"
-    "\t[--noudevsync]\n"
--   "\t[--minrecoveryrate Rate]\n"
--   "\t[--maxrecoveryrate Rate]\n"
-    "\t[-M|--persistent y|n] [--major major] [--minor minor]\n"
-    "\t[-P|--partial] " "\n"
-    "\t[-p|--permission r|rw]\n"
-+   "\t[--profile ProfileName\n"
-+   "\t[--[raid]minrecoveryrate Rate]\n"
-+   "\t[--[raid]maxrecoveryrate Rate]\n"
-+   "\t[--[raid]syncaction {check|repair}\n"
-+   "\t[--[raid]writebehind IOCount]\n"
-+   "\t[--[raid]writemostly PhysicalVolume]\n"
+@@ -96,7 +96,7 @@ xx(lvchange,
+    "\t[--[raid]maxrecoveryrate Rate]\n"
+    "\t[--[raid]syncaction {check|repair}\n"
+    "\t[--[raid]writebehind IOCount]\n"
+-   "\t[--[raid]writemostly PhysicalVolume]\n"
++   "\t[--[raid]writemostly PhysicalVolume[:{t|n|y}]]\n"
     "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
     "\t[--refresh]\n"
     "\t[--resync]\n"
--   "\t[--syncaction {check|repair}\n"
-    "\t[--sysinit]\n"
-    "\t[-t|--test]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]\n"
--   "\t[--writebehind BehindCount]\n"
--   "\t[--writemostly PhysicalVolume]\n"
-    "\t[-y|--yes]\n"
-    "\t[-Z|--zero {y|n}]\n"
-    "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index b3207d0..3b40659 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -702,6 +702,7 @@ static int lvchange_writemostly(struct logical_volume *lv)
+ 	int s, pv_count, i = 0;
+ 	char **pv_names;
+ 	const char *tmp_str;
++	size_t tmp_str_len;
+ 	struct pv_list *pvl;
+ 	struct arg_value_group_list *group;
+ 	struct cmd_context *cmd = lv->vg->cmd;
+@@ -743,14 +744,15 @@ static int lvchange_writemostly(struct logical_volume *lv)
+ 			 * We allocate strlen + 3 to add our own ':{t|n|y}' if
+ 			 * not present plus the trailing '\0'.
+ 			 */
+-			if (!(pv_names[i] = dm_pool_zalloc(lv->vg->vgmem,
+-							   strlen(tmp_str) + 3)))
++			tmp_str_len = strlen(tmp_str);
++			if (!(pv_names[i] = dm_pool_zalloc(lv->vg->vgmem, tmp_str_len + 3)))
+ 				return_0;
  
--   alloc_ARG, autobackup_ARG, activate_ARG, available_ARG, contiguous_ARG,
--   discards_ARG, detachprofile_ARG, force_ARG, ignorelockingfailure_ARG,
--   ignoremonitoring_ARG, major_ARG, minor_ARG, monitor_ARG, minrecoveryrate_ARG,
--   maxrecoveryrate_ARG, noudevsync_ARG, partial_ARG, permission_ARG,
--   persistent_ARG, poll_ARG, readahead_ARG, resync_ARG, refresh_ARG,
--   setactivationskip_ARG, ignoreactivationskip_ARG, addtag_ARG,
--   deltag_ARG, syncaction_ARG, sysinit_ARG, test_ARG, writebehind_ARG,
--   writemostly_ARG, zero_ARG)
-+   addtag_ARG, alloc_ARG, autobackup_ARG, activate_ARG, available_ARG,
-+   contiguous_ARG, deltag_ARG, discards_ARG, detachprofile_ARG, force_ARG,
-+   ignorelockingfailure_ARG, ignoremonitoring_ARG, ignoreactivationskip_ARG,
-+   major_ARG, minor_ARG, monitor_ARG, minrecoveryrate_ARG, maxrecoveryrate_ARG,
-+   noudevsync_ARG, partial_ARG, permission_ARG, persistent_ARG, poll_ARG,
-+   profile_ARG, raidminrecoveryrate_ARG, raidmaxrecoveryrate_ARG,
-+   raidsyncaction_ARG, raidwritebehind_ARG, raidwritemostly_ARG, readahead_ARG,
-+   resync_ARG, refresh_ARG, setactivationskip_ARG, syncaction_ARG, sysinit_ARG,
-+   test_ARG, writebehind_ARG, writemostly_ARG, zero_ARG)
- 
- xx(lvconvert,
-    "Change logical volume layout",
-@@ -169,22 +171,21 @@ xx(lvconvert,
-    "\t[--discards {ignore|nopassdown|passdown}]\n"
-    "\t[--poolmetadata ThinMetadataLogicalVolume[Path] |\n"
-    "\t [--poolmetadatasize size]\n"
--   "\t [-r|--readahead ReadAheadSectors|auto|none]\n"
-    "\t [--poolmetadataspare {y|n}]\n"
-+   "\t [-r|--readahead ReadAheadSectors|auto|none]\n"
-    "\t [--stripes Stripes [-I|--stripesize StripeSize]]]\n"
-    "\t[-T|--thin ExternalLogicalVolume[Path]\n"
-    "\t [--originname NewExternalOriginVolumeName]]\n"
-    "\t[-Z|--zero {y|n}]\n"
-    "\t[-d|--debug] [-h|-?|--help] [-v|--verbose]\n",
- 
--   alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, interval_ARG,
--   merge_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG, noudevsync_ARG,
--   readahead_ARG, regionsize_ARG, repair_ARG, replace_ARG, snapshot_ARG, splitmirrors_ARG,
--   trackchanges_ARG, type_ARG, stripes_long_ARG, stripesize_ARG, test_ARG,
--   chunksize_ARG, discards_ARG, originname_ARG,
--   poolmetadata_ARG, poolmetadatasize_ARG, poolmetadataspare_ARG,
--   thin_ARG, thinpool_ARG,
--   use_policies_ARG, force_ARG, zero_ARG)
-+   alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, discards_ARG,
-+   force_ARG, interval_ARG, merge_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG,
-+   noudevsync_ARG, originname_ARG, poolmetadata_ARG, poolmetadatasize_ARG,
-+   poolmetadataspare_ARG, readahead_ARG, regionsize_ARG, repair_ARG,
-+   replace_ARG, snapshot_ARG, splitmirrors_ARG, stripes_long_ARG,
-+   stripesize_ARG, test_ARG, thin_ARG, thinpool_ARG, trackchanges_ARG,
-+   type_ARG, use_policies_ARG, zero_ARG)
- 
- xx(lvcreate,
-    "Create a logical volume",
-@@ -206,11 +207,11 @@ xx(lvcreate,
-    "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
-    "\t[-M|--persistent {y|n}] [--major major] [--minor minor]\n"
-    "\t[-m|--mirrors Mirrors [--nosync] [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
--   "\t[--minrecoveryrate Rate]\n"
--   "\t[--maxrecoveryrate Rate]\n"
-    "\t[-n|--name LogicalVolumeName]\n"
-    "\t[--noudevsync]\n"
-    "\t[-p|--permission {r|rw}]\n"
-+   "\t[--[raid]minrecoveryrate Rate]\n"
-+   "\t[--[raid]maxrecoveryrate Rate]\n"
-    "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
-    "\t[-R|--regionsize MirrorLogRegionSize]\n"
-    "\t[-T|--thin  [-c|--chunksize  ChunkSize]\n"
-@@ -241,7 +242,7 @@ xx(lvcreate,
-    "\t[--ignoremonitoring]\n"
-    "\t[--monitor {y|n}]\n"
-    "\t[-i|--stripes Stripes [-I|--stripesize StripeSize]]\n"
--   "\t[-k|--activationskip {y|n}]\n"
-+   "\t[-k|--setactivationskip {y|n}]\n"
-    "\t[-K|--ignoreactivationskip] \n"
-    "\t{-l|--extents LogicalExtentsNumber[%{VG|FREE|ORIGIN}] |\n"
-    "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
-@@ -260,14 +261,14 @@ xx(lvcreate,
- 
-    addtag_ARG, alloc_ARG, autobackup_ARG, activate_ARG, available_ARG,
-    chunksize_ARG, contiguous_ARG, corelog_ARG, discards_ARG, extents_ARG,
--   ignoremonitoring_ARG, major_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG,
--   monitor_ARG, minrecoveryrate_ARG, maxrecoveryrate_ARG, name_ARG, nosync_ARG,
--   noudevsync_ARG, ignoreactivationskip_ARG, setactivationskip_ARG,
--   poolmetadatasize_ARG, poolmetadataspare_ARG,
--   permission_ARG, persistent_ARG, readahead_ARG, regionsize_ARG, size_ARG,
--   snapshot_ARG, stripes_ARG, stripesize_ARG, test_ARG, thin_ARG, thinpool_ARG,
--   type_ARG, virtualoriginsize_ARG, virtualsize_ARG,
--   zero_ARG)
-+   ignoreactivationskip_ARG, ignoremonitoring_ARG, major_ARG, minor_ARG,
-+   mirrorlog_ARG, mirrors_ARG, monitor_ARG, minrecoveryrate_ARG,
-+   maxrecoveryrate_ARG, name_ARG, nosync_ARG, noudevsync_ARG,
-+   permission_ARG, persistent_ARG, poolmetadatasize_ARG, poolmetadataspare_ARG,
-+   raidminrecoveryrate_ARG, raidmaxrecoveryrate_ARG, readahead_ARG,
-+   regionsize_ARG, setactivationskip_ARG, size_ARG, snapshot_ARG, stripes_ARG,
-+   stripesize_ARG, test_ARG, thin_ARG, thinpool_ARG,
-+   type_ARG, virtualoriginsize_ARG, virtualsize_ARG, zero_ARG)
- 
- xx(lvdisplay,
-    "Display information about a logical volume",
-@@ -495,7 +496,7 @@ xx(lvs,
-    "\t[LogicalVolume[Path] [LogicalVolume[Path]...]]\n",
- 
-    aligned_ARG, all_ARG, ignorelockingfailure_ARG, nameprefixes_ARG,
--   noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG, 
-+   noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG,
-    rows_ARG, segments_ARG, separator_ARG, sort_ARG, trustcache_ARG,
-    unbuffered_ARG, units_ARG, unquoted_ARG)
- 
-@@ -575,8 +576,8 @@ xx(pvcreate,
-    "\t[--labelsector sector] " "\n"
-    "\t[-M|--metadatatype 1|2]" "\n"
-    "\t[--pvmetadatacopies #copies]" "\n"
--   "\t[--metadatasize MetadataSize[bBsSkKmMgGtTpPeE]]" "\n"
-    "\t[--bootloaderareasize BootLoaderAreaSize[bBsSkKmMgGtTpPeE]]" "\n"
-+   "\t[--metadatasize MetadataSize[bBsSkKmMgGtTpPeE]]" "\n"
-    "\t[--dataalignment Alignment[bBsSkKmMgGtTpPeE]]" "\n"
-    "\t[--dataalignmentoffset AlignmentOffset[bBsSkKmMgGtTpPeE]]" "\n"
-    "\t[--setphysicalvolumesize PhysicalVolumeSize[bBsSkKmMgGtTpPeE]" "\n"
-@@ -805,6 +806,7 @@ xx(vgchange,
-    "\t -l|--logicalvolume MaxLogicalVolumes |" "\n"
-    "\t -p|--maxphysicalvolumes MaxPhysicalVolumes |" "\n"
-    "\t -s|--physicalextentsize PhysicalExtentSize[bBsSkKmMgGtTpPeE] |" "\n"
-+   "\t[--profile ProfileName\n"
-    "\t --addtag Tag |\n"
-    "\t --deltag Tag}\n"
-    "\t[VolumeGroupName...]\n",
-@@ -813,7 +815,7 @@ xx(vgchange,
-    available_ARG, clustered_ARG, deltag_ARG, detachprofile_ARG,
-    ignoreactivationskip_ARG, ignorelockingfailure_ARG, ignoremonitoring_ARG,
-    logicalvolume_ARG, maxphysicalvolumes_ARG, monitor_ARG, noudevsync_ARG,
--   metadatacopies_ARG, vgmetadatacopies_ARG, partial_ARG,
-+   metadatacopies_ARG, vgmetadatacopies_ARG, partial_ARG, profile_ARG,
-    physicalextentsize_ARG, poll_ARG, refresh_ARG, resizeable_ARG,
-    resizable_ARG, sysinit_ARG, test_ARG, uuid_ARG)
- 
-@@ -1066,7 +1068,7 @@ xx(vgs,
-    "\t[VolumeGroupName [VolumeGroupName...]]\n",
- 
-    aligned_ARG, all_ARG, ignorelockingfailure_ARG, nameprefixes_ARG,
--   noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG, 
-+   noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG,
-    rows_ARG, separator_ARG, sort_ARG, trustcache_ARG, unbuffered_ARG, units_ARG,
-    unquoted_ARG)
- 
+-			if ((tmp_str[strlen(tmp_str) - 2] != ':') &&
+-			    ((tmp_str[strlen(tmp_str) - 1] != 't') ||
+-			     (tmp_str[strlen(tmp_str) - 1] != 'y') ||
+-			     (tmp_str[strlen(tmp_str) - 1] != 'n')))
++			if (tmp_str_len < 3 ||
++			    (tmp_str[tmp_str_len - 2] != ':') &&
++			    ((tmp_str[tmp_str_len - 1] != 't') ||
++			     (tmp_str[tmp_str_len - 1] != 'y') ||
++			     (tmp_str[tmp_str_len - 1] != 'n')))
+ 				/* Default to 'y' if no mode specified */
+ 				sprintf(pv_names[i], "%s:y", tmp_str);
+ 			else
 diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 3aa4206..66c4536 100644
+index 66c4536..a155d21 100644
 --- a/tools/lvmcmdline.c
 +++ b/tools/lvmcmdline.c
-@@ -920,7 +920,12 @@ static int _get_settings(struct cmd_context *cmd)
- 	    !_merge_synonym(cmd, allocation_ARG, allocatable_ARG) ||
- 	    !_merge_synonym(cmd, allocation_ARG, resizeable_ARG) ||
- 	    !_merge_synonym(cmd, virtualoriginsize_ARG, virtualsize_ARG) ||
--	    !_merge_synonym(cmd, available_ARG, activate_ARG))
-+	    !_merge_synonym(cmd, available_ARG, activate_ARG) ||
-+	    !_merge_synonym(cmd, raidsyncaction_ARG, syncaction_ARG) ||
-+	    !_merge_synonym(cmd, raidwritemostly_ARG, writemostly_ARG) ||
-+	    !_merge_synonym(cmd, raidminrecoveryrate_ARG, minrecoveryrate_ARG) ||
-+	    !_merge_synonym(cmd, raidmaxrecoveryrate_ARG, maxrecoveryrate_ARG) ||
-+	    !_merge_synonym(cmd, raidwritebehind_ARG, writebehind_ARG))
- 		return EINVALID_CMD_LINE;
+@@ -801,10 +801,24 @@ static int _process_command_line(struct cmd_context *cmd, int *argc,
+ 	return 1;
+ }
  
- 	if ((!strncmp(cmd->command->name, "pv", 2) &&
++static void _copy_arg_values(struct arg_values *av, int oldarg, int newarg)
++{
++	const struct arg_values *old = av + oldarg;
++	struct arg_values *new = av + newarg;
++
++	new->count = old->count;
++	new->value = old->value;
++	new->i_value = old->i_value;
++	new->ui_value = old->ui_value;
++	new->i64_value = old->i64_value;
++	new->ui64_value = old->ui64_value;
++	new->sign = old->sign;
++}
++
+ static int _merge_synonym(struct cmd_context *cmd, int oldarg, int newarg)
+ {
+-	const struct arg_values *old;
+-	struct arg_values *new;
++	struct arg_values *av;
++	struct arg_value_group_list *current_group;
+ 
+ 	if (arg_count(cmd, oldarg) && arg_count(cmd, newarg)) {
+ 		log_error("%s and %s are synonyms.  Please only supply one.",
+@@ -812,19 +826,23 @@ static int _merge_synonym(struct cmd_context *cmd, int oldarg, int newarg)
+ 		return 0;
+ 	}
+ 
+-	if (!arg_count(cmd, oldarg))
++	/* Not groupable? */
++	if (!(_cmdline.arg_props[oldarg].flags & ARG_GROUPABLE)) {
++		if (arg_count(cmd, oldarg))
++			_copy_arg_values(cmd->arg_values, oldarg, newarg);
+ 		return 1;
++	}
+ 
+-	old = cmd->arg_values + oldarg;
+-	new = cmd->arg_values + newarg;
++	if (arg_count(cmd, oldarg))
++		cmd->arg_values[newarg].count = cmd->arg_values[oldarg].count;
+ 
+-	new->count = old->count;
+-	new->value = old->value;
+-	new->i_value = old->i_value;
+-	new->ui_value = old->ui_value;
+-	new->i64_value = old->i64_value;
+-	new->ui64_value = old->ui64_value;
+-	new->sign = old->sign;
++	/* Groupable */
++	dm_list_iterate_items(current_group, &cmd->arg_value_groups) {
++		av = current_group->arg_values;
++		if (!grouped_arg_count(av, oldarg))
++			continue;
++		_copy_arg_values(av, oldarg, newarg);
++	}
+ 
+ 	return 1;
+ }
 
 
