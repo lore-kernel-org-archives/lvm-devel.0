@@ -1,50 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 22 Jul 2013 10:42:18 +0000 (UTC)
-Subject: master - cleanup: do not return stack content
-Message-ID: <20130722104218.53F1160DCC@fedorahosted.org>
+Date: Mon, 22 Jul 2013 10:42:20 +0000 (UTC)
+Subject: master - liblvm: check lvmetad cache return values
+Message-ID: <20130722104220.7179760DCC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dedec81d7b939650f390c0be5a23632b39d83012
-Commit:        dedec81d7b939650f390c0be5a23632b39d83012
-Parent:        aed4e9c703a81aec0a56dc7134ff336683ab5c1a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=baada4316dd2fcf0383ed7bcfa539c0429e17131
+Commit:        baada4316dd2fcf0383ed7bcfa539c0429e17131
+Parent:        dedec81d7b939650f390c0be5a23632b39d83012
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jul 19 17:29:37 2013 +0200
+AuthorDate:    Fri Jul 19 17:31:13 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 22 12:41:21 2013 +0200
 
-cleanup: do not return stack content
+liblvm: check lvmetad cache return values
 
-Return initialized struct in error path.
+Missing error path.
 ---
- liblvm/lvm_lv.c |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ liblvm/lvm_vg.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index f416195..7fc2392 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -593,15 +593,16 @@ struct lvm_property_value lvm_lv_params_get_property(
- 						const lv_create_params_t params,
- 						const char *name)
- {
--	struct lvm_property_value rc;
--
--	rc.is_valid = 0;
-+	struct lvm_property_value rc = {
-+		.is_valid = 0
-+	};
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index c128ba7..3f4968e 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -362,13 +362,17 @@ int lvm_vg_set_property(const vg_t vg, const char *name,
  
- 	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
- 		rc = get_property(NULL, NULL, NULL, NULL, NULL, &params->lvp, name);
- 	} else {
- 		log_error("Invalid lv_create_params parameter");
- 	}
+ struct dm_list *lvm_list_vg_names(lvm_t libh)
+ {
+-	lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh);
++	if (!lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh))
++		return NULL;
 +
- 	return rc;
+ 	return get_vgnames((struct cmd_context *)libh, 0);
+ }
+ 
+ struct dm_list *lvm_list_vg_uuids(lvm_t libh)
+ {
+-	lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh);
++	if (!lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh))
++		return NULL;
++
+ 	return get_vgids((struct cmd_context *)libh, 0);
  }
  
 
