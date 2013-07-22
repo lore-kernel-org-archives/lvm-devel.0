@@ -1,45 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 22 Jul 2013 10:42:22 +0000 (UTC)
-Subject: master - dumpconfig: check conf tree was created
-Message-ID: <20130722104222.829D060DCC@fedorahosted.org>
+Date: Mon, 22 Jul 2013 10:42:24 +0000 (UTC)
+Subject: master - python: make install to prefix dir
+Message-ID: <20130722104224.A765D60DCC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c394c2a624b24193ca769bff956ca2bd8d1e5c1b
-Commit:        c394c2a624b24193ca769bff956ca2bd8d1e5c1b
-Parent:        baada4316dd2fcf0383ed7bcfa539c0429e17131
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03efb7c2e121d68ba39691b796dae8c9606108d4
+Commit:        03efb7c2e121d68ba39691b796dae8c9606108d4
+Parent:        c394c2a624b24193ca769bff956ca2bd8d1e5c1b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jul 19 17:32:08 2013 +0200
+AuthorDate:    Fri Jul 19 20:48:41 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 22 12:41:21 2013 +0200
+CommitterDate: Mon Jul 22 12:41:22 2013 +0200
 
-dumpconfig: check conf tree was created
+python: make install to prefix dir
 
-Missing error path.
+Respect $prefix and avoid install to live system.
 ---
- tools/dumpconfig.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ python/Makefile.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
-index da216f5..0887297 100644
---- a/tools/dumpconfig.c
-+++ b/tools/dumpconfig.c
-@@ -196,8 +196,11 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
- 	if (cft_check_handle)
- 		tree_spec.check_status = cft_check_handle->status;
+diff --git a/python/Makefile.in b/python/Makefile.in
+index 1fead22..9f9046b 100644
+--- a/python/Makefile.in
++++ b/python/Makefile.in
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2011-2012 Red Hat, Inc.
++# Copyright (C) 2011-2013 Red Hat, Inc.
+ #
+ # This file is part of LVM2.
+ #
+@@ -27,7 +27,7 @@ liblvm_python.c:
+ include $(top_builddir)/make.tmpl
  
--	if (tree_spec.type != CFG_DEF_TREE_CURRENT)
--		cft = config_def_create_tree(&tree_spec);
-+	if ((tree_spec.type != CFG_DEF_TREE_CURRENT) &&
-+	    !(cft = config_def_create_tree(&tree_spec))) {
-+		r = ECMD_FAILED;
-+		goto_out;
-+	}
+ install_python_bindings: python_bindings
+-	$(PYTHON) setup.py install --skip-build --root $(rootdir)
++	$(PYTHON) setup.py install --skip-build --root $(DESTDIR)$(prefix)
  
- 	if (!config_write(cft, arg_count(cmd, withcomments_ARG),
- 			  arg_count(cmd, withversions_ARG),
+ install_lvm2: install_python_bindings
+ 
 
 
