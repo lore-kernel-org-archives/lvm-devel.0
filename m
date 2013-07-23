@@ -1,39 +1,51 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 23 Jul 2013 12:58:56 +0000 (UTC)
-Subject: master - cleanup: add explicit cast to proper enum type
-Message-ID: <20130723125856.084D060E1D@fedorahosted.org>
+Date: Tue, 23 Jul 2013 13:17:19 +0000 (UTC)
+Subject: master - snapshot: update merging fix
+Message-ID: <20130723131719.4CD1A613EB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e0856393c8a1c622871b07fb452fbbd7c0da537a
-Commit:        e0856393c8a1c622871b07fb452fbbd7c0da537a
-Parent:        9b1834f075daf0fb3f349356a31c1bfed421384a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=373f95a921223c1e4d36ae975ac685227369cf5b
+Commit:        373f95a921223c1e4d36ae975ac685227369cf5b
+Parent:        6311be29e40af21a53ef2a09a99867fc4460a73e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jul 23 10:46:07 2013 +0200
+AuthorDate:    Tue Jul 23 15:15:04 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jul 23 14:53:29 2013 +0200
+CommitterDate: Tue Jul 23 15:15:04 2013 +0200
 
-cleanup: add explicit cast to proper enum type
+snapshot: update merging fix
 
+Activation is needed only for clustered VG.
+For non-clustered VG skip activation, since deactivate_lv()
+is called without problems (no testing for lock presence).
+
+(updates f6ded62291682e40c7976d27e48915d9d1538940)
 ---
- liblvm/lvm_lv.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/snapshot_manip.c |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 7fc2392..46399e4 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -443,7 +443,7 @@ lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index ab28890..325a4e8 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -298,10 +298,12 @@ int vg_remove_snapshot(struct logical_volume *cow)
+ 		}
  
- 	if (lvcp) {
- 		lvcp->vg = vg;
--		lvcp->lvp.discards = discard;
-+		lvcp->lvp.discards = (thin_discards_t) discard;
- 
- 		if (chunk_size)
- 			lvcp->lvp.chunk_size = chunk_size;
+ 		/*
+-		 * For merged snapshot we activate cow so it can clean
+-		 * left table entries and deactivate_lv() follows shortly.
++		 * For merged snapshot and clustered VG activate cow LV so
++		 * the following call to deactivate_lv() can clean-up table
++		 * entries. For this clustered lock need to be held.
+ 		 */
+-		if (merging_snapshot && !activate_lv(cow->vg->cmd, cow)) {
++		if (vg_is_clustered(cow->vg) &&
++		    merging_snapshot && !activate_lv(cow->vg->cmd, cow)) {
+ 			log_error("Failed to activate %s.", cow->name);
+ 			return 0;
+ 		}
 
 
