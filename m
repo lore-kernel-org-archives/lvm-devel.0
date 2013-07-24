@@ -1,63 +1,42 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 24 Jul 2013 09:08:53 +0000 (UTC)
-Subject: master - systemd: udevadm settle for lvm2-activation-net.service
-Message-ID: <20130724090854.0278F610F3@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 24 Jul 2013 15:18:15 +0000 (UTC)
+Subject: master - python: make clean removes build dir
+Message-ID: <20130724151815.4E892612BB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a03609dee4770f2453b1f5cb851e2169c539b1e4
-Commit:        a03609dee4770f2453b1f5cb851e2169c539b1e4
-Parent:        cf09cf0cd398d97e41f406aee5fa6b07c23a563b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jul 24 11:06:28 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jul 24 11:06:38 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7dc21c1597fe57cf7401e074feb8c507cf66aabc
+Commit:        7dc21c1597fe57cf7401e074feb8c507cf66aabc
+Parent:        a03609dee4770f2453b1f5cb851e2169c539b1e4
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jul 24 13:57:49 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jul 24 17:14:10 2013 +0200
 
-systemd: udevadm settle for lvm2-activation-net.service
+python: make clean removes build dir
 
-In case lvmetad is not used, we need to wait for udev to complete
-after net-attached storage is initialized (after iscsi/fcoe service).
-N.B. This also requires the storage to be attached synchronously
-in the kernel itself.
+Cleanning compiled objects for clean: target.
 ---
- .../lvm2_activation_generator_systemd_red_hat.c    |   14 ++++++++------
- 1 files changed, 8 insertions(+), 6 deletions(-)
+ python/Makefile.in |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
-index d257479..17bc71a 100644
---- a/scripts/lvm2_activation_generator_systemd_red_hat.c
-+++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
-@@ -135,20 +135,22 @@ static int generate_unit(const char *dir, int unit)
+diff --git a/python/Makefile.in b/python/Makefile.in
+index 9f9046b..fd529b8 100644
+--- a/python/Makefile.in
++++ b/python/Makefile.in
+@@ -33,7 +33,9 @@ install_lvm2: install_python_bindings
  
- 	if (unit == UNIT_NET) {
- 		fputs("After=iscsi.service fcoe.service\n"
--		      "Before=remote-fs.target shutdown.target\n", f);
-+		      "Before=remote-fs.target shutdown.target\n\n"
-+		      "[Service]\n"
-+		      "ExecStartPre=/usr/bin/udevadm settle\n", f);
- 	} else {
- 		if (unit == UNIT_EARLY) {
--			fputs("After=systemd-udev-settle.service\n", f);
--			fputs("Before=cryptsetup.target\n", f);
-+			fputs("After=systemd-udev-settle.service\n"
-+			      "Before=cryptsetup.target\n", f);
- 		} else
- 			fputs("After=lvm2-activation-early.service cryptsetup.target\n", f);
+ install: install_lvm2
  
- 		fputs("Before=local-fs.target shutdown.target\n"
--		      "Wants=systemd-udev-settle.service\n\n", f);
-+		      "Wants=systemd-udev-settle.service\n\n"
-+		      "[Service]\n", f);
- 	}
++clean:
++	$(RM) -r build
++
+ CLEAN_TARGETS += .liblvm_built liblvm_python.c
  
--	fputs("[Service]\n"
--	      "ExecStart=/usr/sbin/lvm vgchange -aay --sysinit\n"
-+	fputs("ExecStart=/usr/sbin/lvm vgchange -aay --sysinit\n"
- 	      "Type=oneshot\n", f);
- 
- 	if (fclose(f) < 0) {
+-DISTCLEAN_DIRS += build
+ DISTCLEAN_TARGETS += setup.py
 
 
