@@ -1,61 +1,76 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Wed, 24 Jul 2013 22:57:02 +0000 (UTC)
-Subject: master - python-lvm: Change exception back to LibLVMerror
-Message-ID: <20130724225702.9000361604@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 24 Jul 2013 23:18:50 +0000 (UTC)
+Subject: master - release 2.02.99
+Message-ID: <20130724231850.33E15610FB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=929d5f3563d0ca0acbbb220e8c212f9441260d68
-Commit:        929d5f3563d0ca0acbbb220e8c212f9441260d68
-Parent:        d13e87b9efb07f6e40d9fb44b72387231d493fa2
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Jul 24 18:29:41 2013 -0400
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Jul 24 17:55:12 2013 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=76e617b1587b68b78f7ae5659e2293edcda630c3
+Commit:        76e617b1587b68b78f7ae5659e2293edcda630c3
+Parent:        929d5f3563d0ca0acbbb220e8c212f9441260d68
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Jul 24 23:59:03 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Jul 24 23:59:03 2013 +0100
 
-python-lvm: Change exception back to LibLVMerror
+release 2.02.99
 
-This is an API exposed name and shouldn't be changed
-to _LibLVMError.
+ 363 files changed, 19863 insertions(+), 9055 deletions(-)
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+This is a very large release - so expect bugs!
+
+Please treat this release like a release candidate.
+Changes to the external interfaces since 2.02.98 are not yet frozen.
+
+Updated releases will follow quickly (days not weeks) as any problems
+are handled.
 ---
- python/liblvm.c             |    2 +-
- test/api/python_lvm_unit.py |    6 +++---
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    4 ++--
+ WHATS_NEW_DM |    4 ++--
+ 4 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index d6a7b8d..ab32199 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -1957,7 +1957,7 @@ PyMODINIT_FUNC initlvm(void)
- 		Py_INCREF(_LibLVMError);
- 		Py_INCREF(_LibLVMError);
- 		PyModule_AddObject(m, "error", _LibLVMError);
--		PyModule_AddObject(m, "_LibLVMError", _LibLVMError);
-+		PyModule_AddObject(m, "LibLVMError", _LibLVMError);
- 	}
- 
- 	Py_AtExit(_liblvm_cleanup);
-diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
-index 6491413..7c1fdc3 100755
---- a/test/api/python_lvm_unit.py
-+++ b/test/api/python_lvm_unit.py
-@@ -46,9 +46,9 @@ class TestLvm(unittest.TestCase):
- 		for d in device_list:
- 			vg.extend(d)
- 
--		new_extent = 1024 * 1024 * 2
--		vg.setExtentSize(new_extent)
--		self.assertEqual(vg.getExtentSize(), new_extent)
-+		#new_extent = 1024 * 1024 * 2
-+		#vg.setExtentSize(new_extent)
-+		#self.assertEqual(vg.getExtentSize(), new_extent)
- 
- 		vg.createLvLinear('thick_lv', vg.getSize()/2)
- 		vg.close()
+diff --git a/VERSION b/VERSION
+index f8dcbdc..a3db87f 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.99(2)-git (2012-10-22)
++2.02.99(2)-git (2013-07-24)
+diff --git a/VERSION_DM b/VERSION_DM
+index 75d1302..748468a 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.78-git (2012-10-22)
++1.02.78-git (2013-07-24)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 587b53d..039ddec 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,5 @@
+-Version 2.02.99 - 
+-===================================
++Version 2.02.99 - 24th July 2013
++================================
+   Do not zero init 4KB of thin snapshot for non-zeroing thin pool (2.02.94).
+   Issue an error msg if lvconvert --type used incorrectly with other options.
+   Use LOG_DEBUG/ERR msg severity instead default for lvm2-activation-generator.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index b269f55..3009427 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.78 - 
+-===================================
++Version 1.02.78 - 24th July 2013
++================================
+   Process thin messages once to active thin pool target for dm_tree.
+   Optimize out setting the same value or read_ahead.
+   Add DM_ARRAY_SIZE public macro.
 
 
