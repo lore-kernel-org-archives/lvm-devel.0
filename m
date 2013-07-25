@@ -1,65 +1,51 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 24 Jul 2013 23:41:29 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20130724234129.2433C611B0@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 25 Jul 2013 11:17:27 +0200
+Subject: master - cleanup: lvm complient style
+In-Reply-To: <51F056EA.3010403@redhat.com>
+References: <20130722104212.0008361478@fedorahosted.org>
+	<51F056EA.3010403@redhat.com>
+Message-ID: <51F0ED27.70308@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=06dce7d5398cf44a4502ff730987e99bc8b3b78a
-Commit:        06dce7d5398cf44a4502ff730987e99bc8b3b78a
-Parent:        76e617b1587b68b78f7ae5659e2293edcda630c3
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jul 25 00:38:53 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jul 25 00:38:53 2013 +0100
+Dne 25.7.2013 00:36, Tony Asleson napsal(a):
+> On 07/22/2013 05:42 AM, Zdenek Kabelac wrote:
+>> Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d4ad728610db1751af1eab2c8c7d6130a3742394
+>> Commit:        d4ad728610db1751af1eab2c8c7d6130a3742394
+>> Parent:        05a70f2da306164f3c604c50d69e74090b0028bc
+>> Author:        Zdenek Kabelac <zkabelac@redhat.com>
+>> AuthorDate:    Fri Jul 19 15:33:26 2013 +0200
+>> Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+>> CommitterDate: Mon Jul 22 12:41:21 2013 +0200
+>>
+>> cleanup: lvm complient style
+>>
+>> drop unused assignments.
+>
+> ...
+>
+>>   		/* Each call to PyModule_AddObject decrefs it; compensate: */
+>> -		Py_INCREF(LibLVMError);
+>> -		Py_INCREF(LibLVMError);
+>> -		PyModule_AddObject(m, "error", LibLVMError);
+>> -		PyModule_AddObject(m, "LibLVMError", LibLVMError);
+>> +		Py_INCREF(_LibLVMError);
+>> +		Py_INCREF(_LibLVMError);
+>> +		PyModule_AddObject(m, "error", _LibLVMError);
+>> +		PyModule_AddObject(m, "_LibLVMError", _LibLVMError);
+>
+> This changed the visible exception from LibLVMError to _LibLVMError
+> which breaks existing python code.
+>
 
-post-release
+Ahhh my bad - find&replace - and I've missed  "" around.
+I'll commit fix.
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Zdenek
 
-diff --git a/VERSION b/VERSION
-index a3db87f..1716ee6 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.99(2)-git (2013-07-24)
-+2.02.100(2)-git (2013-07-24)
-diff --git a/VERSION_DM b/VERSION_DM
-index 748468a..067a488 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.78-git (2013-07-24)
-+1.02.79-git (2013-07-24)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 039ddec..3544f87 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.100 -
-+================================
-+
- Version 2.02.99 - 24th July 2013
- ================================
-   Do not zero init 4KB of thin snapshot for non-zeroing thin pool (2.02.94).
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 3009427..cd77bc6 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.79 -
-+================================
-+
- Version 1.02.78 - 24th July 2013
- ================================
-   Process thin messages once to active thin pool target for dm_tree.
+
 
 
