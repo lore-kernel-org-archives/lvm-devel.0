@@ -1,89 +1,143 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 26 Jul 2013 11:05:51 +0000 (UTC)
-Subject: master - filters: fix segfault on incorrect global_filter
-Message-ID: <20130726110551.C6F19612C7@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Fri, 26 Jul 2013 21:47:30 +0000 (UTC)
+Subject: master - python-lvm: Correct parsing arguments for integers
+Message-ID: <20130726214730.F002161023@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ecc9f74988f7e18a24741e3bf55753383cc904b6
-Commit:        ecc9f74988f7e18a24741e3bf55753383cc904b6
-Parent:        06dce7d5398cf44a4502ff730987e99bc8b3b78a
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jul 26 12:47:28 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Jul 26 13:04:53 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=46a1202a610e717f5c59db54417eeee022b21e83
+Commit:        46a1202a610e717f5c59db54417eeee022b21e83
+Parent:        ecc9f74988f7e18a24741e3bf55753383cc904b6
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Thu Jul 25 15:54:57 2013 -0400
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Fri Jul 26 10:24:01 2013 -0500
 
-filters: fix segfault on incorrect global_filter
+python-lvm: Correct parsing arguments for integers
 
-When using a global_filter and if this filter is incorrectly
-specified, we ended up with a segfault:
+There were a few places where the code was incorrectly
+using parse arguments for the supplied variable type &
+size.  Changing the variables to be declared exactly
+like python is expecting so if we build on an arch
+where the size of type is different than typically
+expected we will continue to match.  In addition the
+parse character needed to be corrected in a few spots
+too.
 
-  raw/~ $ pvs
-    Invalid filter pattern "r|/dev/sda".
-  Segmentation fault (core dumped)
-
-In the example above a closing '|' character is missing at the end
-of the regex. The segfault itself was caused by trying to destroy
-the same filter twice in _init_filters fn within the error path
-(the "bad" goto target):
-
-bad:
-        if (f3)
-                f3->destroy(f3);
-        if (f4)
-                f4->destroy(f4);
-
-Where f3 is the composite filter (sysfs + regex + type + md + mpath filter)
-and f4 is the persistent filter which encompasses this composite filter
-within persistent filter's 'real' field in 'struct pfilter'.
-
-So in the end, we need to destroy the persistent filter only as
-this will also destroy any 'real' filter attached to it.
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- WHATS_NEW                  |    1 +
- lib/commands/toolcontext.c |    7 +++----
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ python/liblvm.c |   30 +++++++++++++++---------------
+ 1 files changed, 15 insertions(+), 15 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 3544f87..3318454 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.100 -
- ================================
-+  Fix segfault if devices/global_filter is not specified correctly.
+diff --git a/python/liblvm.c b/python/liblvm.c
+index ab32199..a9de817 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -295,11 +295,11 @@ static PyObject *_liblvm_lvm_pv_remove(PyObject *self, PyObject *arg)
+ static PyObject *_liblvm_lvm_pv_create(PyObject *self, PyObject *arg)
+ {
+ 	const char *pv_name;
+-	uint64_t size;
++	unsigned long long size;
  
- Version 2.02.99 - 24th July 2013
- ================================
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index b284ce5..48fc489 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -940,8 +940,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
+ 	LVM_VALID();
  
- 	if (!(f4 = persistent_filter_create(cmd->dev_types, f3, dev_cache))) {
- 		log_verbose("Failed to create persistent device filter.");
--		f3->destroy(f3);
--		return_0;
-+		goto bad;
- 	}
+-	if (!PyArg_ParseTuple(arg, "sl", &pv_name, &size))
++	if (!PyArg_ParseTuple(arg, "sK", &pv_name, &size))
+ 		return NULL;
  
- 	/* Should we ever dump persistent filter state? */
-@@ -977,10 +976,10 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
+ 	if (lvm_pv_create(_libh, pv_name, size) == -1) {
+@@ -905,11 +905,11 @@ static PyObject *_liblvm_lvm_vg_get_max_lv(vgobject *self)
  
- 	return 1;
- bad:
--	if (f3)
--		f3->destroy(f3);
- 	if (f4)
- 		f4->destroy(f4);
-+	else if (f3)
-+		f3->destroy(f3);
- 	if (toplevel_components[0])
- 		toplevel_components[0]->destroy(toplevel_components[0]);
- 	return 0;
+ static PyObject *_liblvm_lvm_vg_set_extent_size(vgobject *self, PyObject *args)
+ {
+-	uint32_t new_size;
++	unsigned int new_size;
+ 
+ 	VG_VALID(self);
+ 
+-	if (!PyArg_ParseTuple(args, "l", &new_size))
++	if (!PyArg_ParseTuple(args, "I", &new_size))
+ 		return NULL;
+ 
+ 	if (lvm_vg_set_extent_size(self->vg, new_size) == -1) {
+@@ -985,12 +985,12 @@ static PyObject *_liblvm_lvm_vg_get_tags(vgobject *self)
+ static PyObject *_liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
+ {
+ 	const char *vgname;
+-	uint64_t size;
++	unsigned long long size;
+ 	lvobject *lvobj;
+ 
+ 	VG_VALID(self);
+ 
+-	if (!PyArg_ParseTuple(args, "sl", &vgname, &size))
++	if (!PyArg_ParseTuple(args, "sK", &vgname, &size))
+ 		return NULL;
+ 
+ 	if (!(lvobj = PyObject_New(lvobject, &_LibLVMlvType)))
+@@ -1013,10 +1013,10 @@ static PyObject *_liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
+ 
+ static PyObject *_liblvm_lvm_vg_create_lv_thinpool(vgobject *self, PyObject *args)
+ {
++	unsigned long long size = 0;
++	unsigned long long meta_size = 0;
+ 	const char *pool_name;
+-	uint64_t size = 0;
+-	uint32_t chunk_size = 0;
+-	uint64_t meta_size = 0;
++	unsigned long chunk_size = 0;
+ 	int skip_zero = 0;
+ 	lvm_thin_discards_t discard = LVM_THIN_DISCARDS_PASSDOWN;
+ 	lvobject *lvobj;
+@@ -1074,7 +1074,7 @@ static PyObject *_liblvm_lvm_vg_create_lv_thin(vgobject *self, PyObject *args)
+ {
+ 	const char *pool_name;
+ 	const char *lv_name;
+-	uint64_t size = 0;
++	unsigned long long size = 0;
+ 	lvobject *lvobj;
+ 	lv_create_params_t lvp = NULL;
+ 
+@@ -1455,11 +1455,11 @@ static PyObject *_liblvm_lvm_lv_rename(lvobject *self, PyObject *args)
+ 
+ static PyObject *_liblvm_lvm_lv_resize(lvobject *self, PyObject *args)
+ {
+-	uint64_t new_size;
++	unsigned long long new_size;
+ 
+ 	LV_VALID(self);
+ 
+-	if (!PyArg_ParseTuple(args, "l", &new_size))
++	if (!PyArg_ParseTuple(args, "K", &new_size))
+ 		return NULL;
+ 
+ 	if (lvm_lv_resize(self->lv, new_size) == -1) {
+@@ -1509,7 +1509,7 @@ static PyObject *_liblvm_lvm_lv_list_lvsegs(lvobject *self)
+ static PyObject *_liblvm_lvm_lv_snapshot(lvobject *self, PyObject *args)
+ {
+ 	const char *snap_name;
+-	uint64_t size = 0;
++	unsigned long long size = 0;
+ 	lvobject *lvobj;
+ 	lv_create_params_t lvp = NULL;
+ 
+@@ -1616,11 +1616,11 @@ static PyObject *_liblvm_lvm_pv_get_free(pvobject *self)
+ 
+ static PyObject *_liblvm_lvm_pv_resize(pvobject *self, PyObject *args)
+ {
+-	uint64_t new_size;
++	unsigned long long new_size;
+ 
+ 	PV_VALID(self);
+ 
+-	if (!PyArg_ParseTuple(args, "l", &new_size))
++	if (!PyArg_ParseTuple(args, "K", &new_size))
+ 		return NULL;
+ 
+ 	if (lvm_pv_resize(self->pv, new_size) == -1) {
 
 
