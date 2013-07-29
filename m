@@ -1,10 +1,10 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 29 Jul 2013 21:19:11 +0200
-Subject: [PATCH 07/20] metadata: Avoid pv_read in find_pv_by_name.
+Date: Mon, 29 Jul 2013 21:19:16 +0200
+Subject: [PATCH 12/20] metadata: Add lvmcache_info_mda_free as a companion to pv_mda_free.
 In-Reply-To: <1375125564-1188-1-git-send-email-prockai@redhat.com>
 References: <1375125564-1188-1-git-send-email-prockai@redhat.com>
-Message-ID: <1375125564-1188-7-git-send-email-prockai@redhat.com>
-	(sfid-20130729_211926_518716_8360CD41)
+Message-ID: <1375125564-1188-12-git-send-email-prockai@redhat.com>
+	(sfid-20130729_211928_884078_C4885E0B)
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,65 +12,60 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 ---
- lib/metadata/metadata.c | 34 ++++++++++++++++++++--------------
- 1 file changed, 20 insertions(+), 14 deletions(-)
+ lib/metadata/pv.c | 16 +++++++++++-----
+ lib/metadata/pv.h |  2 ++
+ 2 files changed, 13 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 632e78a..fb45b3c 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1330,7 +1330,7 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- 	/* FIXME Check partition type is LVM unless --force is given */
+diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
+index dad747c..5b08998 100644
+--- a/lib/metadata/pv.c
++++ b/lib/metadata/pv.c
+@@ -241,14 +241,11 @@ static int _pv_mda_free(struct metadata_area *mda, void *baton) {
+ 	return 1;
+ }
  
- 	/* Is there a pv here already? */
--	if (!(pv = pv_read(cmd, name, 0, 0)))
-+	if (!(pv = find_pv_by_name(cmd, name, 1)))
- 		stack;
- 
- 	/*
-@@ -1824,23 +1824,29 @@ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
- 					const char *pv_name,
- 					int allow_orphan)
+-uint64_t pv_mda_free(const struct physical_volume *pv)
++uint64_t lvmcache_info_mda_free(struct lvmcache_info *info)
  {
--	struct physical_volume *pv;
-+	struct device *dev;
-+	struct pv_list *pvl;
-+	struct dm_list *pvslist;
-+	struct physical_volume *pv = NULL;
-+
-+	lvmcache_seed_infos_from_lvmetad(cmd);
+-	struct lvmcache_info *info;
+ 	uint64_t freespace = UINT64_MAX;
+-	const char *pvid = (const char *)&pv->id.uuid;
  
--	if (!(pv = _pv_read(cmd, cmd->mem, pv_name, NULL, 1, 0))) {
-+	if (!(dev = dev_cache_get(pv_name, cmd->filter))) {
- 		log_error("Physical volume %s not found", pv_name);
--		goto bad;
-+		return_NULL;
- 	}
+-	if ((info = lvmcache_info_from_pvid(pvid, 0)))
+-		lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
++	lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
  
--	if (is_orphan_vg(pv->vg_name) && dm_list_empty(&pv->fid->metadata_areas_in_use)) {
--		/* If a PV has no MDAs - need to search all VGs for it */
--		if (!scan_vgs_for_pvs(cmd, 1))
--			goto_bad;
--		free_pv_fid(pv);
--		if (!(pv = _pv_read(cmd, cmd->mem, pv_name, NULL, 1, 0))) {
--			log_error("Physical volume %s not found", pv_name);
--			goto bad;
--		}
--	}
-+	if (!(pvslist = get_pvs(cmd)))
-+		return_NULL;
-+
-+	dm_list_iterate_items(pvl, pvslist)
-+		if (pvl->pv->dev == dev)
-+			pv = pvl->pv;
-+		else
-+			free_pv_fid(pvl->pv);
-+
-+	if (!pv)
-+		log_error("Physical volume %s not found", pv_name);
+ 	if (freespace == UINT64_MAX)
+ 		freespace = UINT64_C(0);
+@@ -256,6 +253,15 @@ uint64_t pv_mda_free(const struct physical_volume *pv)
+ 	return freespace;
+ }
  
- 	if (pv && !allow_orphan && is_orphan_vg(pv->vg_name)) {
- 		log_error("Physical volume %s not in a volume group", pv_name);
++uint64_t pv_mda_free(const struct physical_volume *pv)
++{
++	const char *pvid = (const char *)&pv->id.uuid;
++	struct lvmcache_info *info;
++	if ((info = lvmcache_info_from_pvid(pvid, 0)))
++		return lvmcache_info_mda_free(info);
++	return 0;
++}
++
+ uint64_t pv_used(const struct physical_volume *pv)
+ {
+ 	uint64_t used;
+diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
+index c018f38..ff708f8 100644
+--- a/lib/metadata/pv.h
++++ b/lib/metadata/pv.h
+@@ -85,6 +85,8 @@ uint64_t pv_ba_size(const struct physical_volume *pv);
+ uint32_t pv_pe_count(const struct physical_volume *pv);
+ uint32_t pv_pe_alloc_count(const struct physical_volume *pv);
+ uint64_t pv_mda_size(const struct physical_volume *pv);
++struct lvmcache_info;
++uint64_t lvmcache_info_mda_free(struct lvmcache_info *info);
+ uint64_t pv_mda_free(const struct physical_volume *pv);
+ uint64_t pv_used(const struct physical_volume *pv);
+ uint32_t pv_mda_count(const struct physical_volume *pv);
 -- 
 1.8.2
 
