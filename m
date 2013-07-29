@@ -1,111 +1,61 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  7 Aug 2012 20:30:21 +0000 (UTC)
-Subject: master - comments: misc updates
-Message-ID: <20120807203022.192893506@fedorahosted.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 29 Jul 2013 21:19:21 +0200
+Subject: [PATCH 17/20] report: Adapt _pvfmt_disp to label-based reporting.
+In-Reply-To: <1375125564-1188-1-git-send-email-prockai@redhat.com>
+References: <1375125564-1188-1-git-send-email-prockai@redhat.com>
+Message-ID: <1375125564-1188-17-git-send-email-prockai@redhat.com>
+	(sfid-20130729_212452_438751_D7A49E47)
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4dab0d3175a9bc6658611f06ba8b0c05b40e06bd
-Commit:        4dab0d3175a9bc6658611f06ba8b0c05b40e06bd
-Parent:        016997acaf8bc59e5b48e9b33ef2db0596e25063
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Aug 7 18:34:30 2012 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Aug 7 18:34:30 2012 +0100
-
-comments: misc updates
-
-Miscellaneous clarifications to comments.
 ---
- doc/example.conf.in   |    6 +++---
- lib/mm/memlock.c      |    1 +
- libdm/libdevmapper.h  |    6 +++---
- libdm/libdm-deptree.c |    8 ++++----
- 4 files changed, 11 insertions(+), 10 deletions(-)
+ lib/report/columns.h | 2 +-
+ lib/report/report.c  | 8 ++++----
+ 2 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/doc/example.conf.in b/doc/example.conf.in
-index a085014..576397b 100644
---- a/doc/example.conf.in
-+++ b/doc/example.conf.in
-@@ -86,9 +86,9 @@ devices {
-     # It is safe to delete the contents: the tools regenerate it.
-     # (The old setting 'cache' is still respected if neither of
-     # these new ones is present.)
--    # N.B. This type of caching is obsolete and existing .cache
--    # file is removed if the list of devices is obtained from
--    # udev by setting the obtain_device_list_from_udev to 1.
-+    # N.B. If obtain_device_list_from_udev is set to 1 the list of
-+    # devices is instead obtained from udev and any existing .cache
-+    # file is removed.
-     cache_dir = "@DEFAULT_SYS_DIR@/@DEFAULT_CACHE_SUBDIR@"
-     cache_file_prefix = ""
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 0da3e70..bbf4832 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -66,9 +66,9 @@ FIELD(LVS, lv, STR, "Time", lvid, 26, lvtime, lv_time, "Creation time of the LV,
+ FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
+ FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
  
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index dfc0d42..2240a1d 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -131,6 +131,7 @@ static void _allocate_memory(void)
- 	    ((_size_stack * 2) < limit.rlim_cur) &&
- 	    ((stack_mem = alloca(_size_stack))))
- 		_touch_memory(stack_mem, _size_stack);
-+	/* FIXME else warn user setting got ignored */
+-FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
+ FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, pv_uuid, "Unique identifier.", 0)
+ FIELD(LABEL, pv, NUM, "PMdaFree", id, 9, pvmdafree, pv_mda_free, "Free metadata area space on this device in current units.", 0)
++FIELD(LABEL, label, STR, "Fmt", type, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
+ FIELD(LABEL, label, NUM, "DevSize", dev, 7, devsize, dev_size, "Size of underlying device in current units.", 0)
+ FIELD(LABEL, label, STR, "PV", dev, 10, dev_name, pv_name, "Name.", 0)
+ FIELD(LABEL, pv, NUM, "PMdaSize", id, 9, pvmdasize, pv_mda_size, "Size of smallest metadata area on this device in current units.", 0)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 912bcde..e024d02 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -143,15 +143,15 @@ static int _pvfmt_disp(struct dm_report *rh, struct dm_pool *mem,
+ 		       struct dm_report_field *field,
+ 		       const void *data, void *private)
+ {
+-	const struct physical_volume *pv =
+-	    (const struct physical_volume *) data;
++	const struct label *l =
++	    (const struct label *) data;
  
- 	if ((temp_malloc_mem = malloc(_size_malloc_tmp)))
- 		_touch_memory(temp_malloc_mem, _size_malloc_tmp);
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 0786b38..28685b2 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -650,8 +650,8 @@ typedef enum {
- 	DM_THIN_MESSAGE_CREATE_THIN,		/* device_id */
- 	DM_THIN_MESSAGE_DELETE,			/* device_id */
- 	DM_THIN_MESSAGE_SET_TRANSACTION_ID,	/* current_id, new_id */
--	DM_THIN_MESSAGE_RESERVE_METADATA_SNAP,	/* 1.1 */
--	DM_THIN_MESSAGE_RELEASE_METADATA_SNAP,	/* 1.1 */
-+	DM_THIN_MESSAGE_RESERVE_METADATA_SNAP,	/* target version >= 1.1 */
-+	DM_THIN_MESSAGE_RELEASE_METADATA_SNAP,	/* target version >= 1.1 */
- } dm_thin_message_t;
+-	if (!pv->fmt) {
++	if (!l->labeller->fmt) {
+ 		dm_report_field_set_value(field, "", NULL);
+ 		return 1;
+ 	}
  
- int dm_tree_node_add_thin_pool_message(struct dm_tree_node *node,
-@@ -663,7 +663,7 @@ int dm_tree_node_add_thin_pool_message(struct dm_tree_node *node,
-  *   ignore      - Disable discard support
-  *   no_passdown - Don't pass discard down to underlaying data device,
-  *                 just remove the mapping
-- * Feature is available for 1.1
-+ * Feature is available since version 1.1 of the thin target.
-  */
- int dm_tree_node_set_thin_pool_discard(struct dm_tree_node *node,
- 				       unsigned ignore,
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index acd82ca..031ce5e 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -192,8 +192,8 @@ struct load_segment {
- 	uint64_t low_water_mark;	/* Thin_pool */
- 	uint32_t data_block_size;       /* Thin_pool */
- 	unsigned skip_block_zeroing;	/* Thin_pool */
--	unsigned ignore_discard;	/* Thin_pool 1.1 */
--	unsigned no_discard_passdown;	/* Thin_pool 1.1 */
-+	unsigned ignore_discard;	/* Thin_pool target vsn 1.1 */
-+	unsigned no_discard_passdown;	/* Thin_pool target vsn 1.1 */
- 	uint32_t device_id;		/* Thin */
+-	return _string_disp(rh, mem, field, &pv->fmt->name, private);
++	return _string_disp(rh, mem, field, &l->labeller->fmt->name, private);
+ }
  
- };
-@@ -1411,10 +1411,10 @@ static int _thin_pool_node_message(struct dm_tree_node *dnode, struct thin_messa
- 				m->u.m_set_transaction_id.current_id,
- 				m->u.m_set_transaction_id.new_id);
- 		break;
--	case DM_THIN_MESSAGE_RESERVE_METADATA_SNAP: /* 1.1 */
-+	case DM_THIN_MESSAGE_RESERVE_METADATA_SNAP: /* target vsn 1.1 */
- 		r = dm_snprintf(buf, sizeof(buf), "reserve_metadata_snap");
- 		break;
--	case DM_THIN_MESSAGE_RELEASE_METADATA_SNAP: /* 1.1 */
-+	case DM_THIN_MESSAGE_RELEASE_METADATA_SNAP: /* target vsn 1.1 */
- 		r = dm_snprintf(buf, sizeof(buf), "release_metadata_snap");
- 		break;
- 	default:
+ static int _lvkmaj_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
+-- 
+1.8.2
 
 
