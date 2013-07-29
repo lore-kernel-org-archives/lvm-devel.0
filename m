@@ -1,10 +1,10 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 29 Jul 2013 21:19:15 +0200
-Subject: [PATCH 11/20] toollib: Implement process_each_label.
+Date: Mon, 29 Jul 2013 21:19:12 +0200
+Subject: [PATCH 08/20] metadata: Fix handling of orphan PV linking & re-linking.
 In-Reply-To: <1375125564-1188-1-git-send-email-prockai@redhat.com>
 References: <1375125564-1188-1-git-send-email-prockai@redhat.com>
-Message-ID: <1375125564-1188-11-git-send-email-prockai@redhat.com>
-	(sfid-20130729_211928_279194_EE896BCC)
+Message-ID: <1375125564-1188-8-git-send-email-prockai@redhat.com>
+	(sfid-20130729_211927_667829_262B921D)
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,101 +12,72 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 ---
- tools/toollib.c | 59 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- tools/toollib.h |  6 ++++++
- 2 files changed, 65 insertions(+)
+ lib/metadata/metadata.c | 31 ++++++++++++++++++++++++++++---
+ 1 file changed, 28 insertions(+), 3 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 24d8cbf..e6785fb 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1703,3 +1703,62 @@ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
- 	return 1;
- }
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index fb45b3c..c41c738 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -269,6 +269,12 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
+ 	vg->extent_count += pv->pe_count;
+ 	vg->free_count += pv->pe_count;
  
-+int process_each_label(struct cmd_context *cmd, int argc, char **argv, void *handle,
-+		       process_single_label_fn_t process_single_label)
-+{
-+	struct label *label;
-+	struct dev_iter *iter;
-+	struct device *dev;
-+
-+	int ret_max = ECMD_PROCESSED;
-+	int ret = 0;
-+	int opt = 0;
-+
-+	if (argc) {
-+		for (; opt < argc; opt++) {
-+			if (!(dev = dev_cache_get(argv[opt], cmd->filter))) {
-+				log_error("Failed to find device "
-+					  "\"%s\"", argv[opt]);
-+				ret_max = ECMD_FAILED;
-+				continue;
-+			}
-+
-+			if (!label_read(dev, &label, 0))
-+				continue;
-+
-+			ret = process_single_label(cmd, label, handle);
-+
-+			if (ret > ret_max)
-+				ret_max = ret;
-+
-+			if (sigint_caught())
-+				break;
++	dm_list_iterate_items(pvl, &fid->fmt->orphan_vg->pvs)
++		if (pv == pvl->pv) { /* unlink from orphan */
++			dm_list_del(&pvl->list);
++			break;
 +		}
 +
-+		return ret_max;
-+	}
-+
-+	if (!(iter = dev_iter_create(cmd->filter, 1))) {
-+		log_error("dev_iter creation failed");
-+		return ECMD_FAILED;
-+	}
-+
-+	while ((dev = dev_iter_get(iter)))
-+	{
-+		if (!label_read(dev, &label, 0))
-+			continue;
-+
-+		log_error("processing %s", dev_name(dev));
-+		ret = process_single_label(cmd, label, handle);
-+
-+		if (ret > ret_max)
-+			ret_max = ret;
-+
-+		if (sigint_caught())
-+			break;
-+	}
-+
-+	dev_iter_destroy(iter);
-+
-+	return ret_max;
-+}
-diff --git a/tools/toollib.h b/tools/toollib.h
-index cfcb934..f43e0f8 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -34,6 +34,9 @@ typedef int (*process_single_pv_fn_t) (struct cmd_context *cmd,
- 				  struct volume_group *vg,
- 				  struct physical_volume *pv,
- 				  void *handle);
-+typedef int (*process_single_label_fn_t) (struct cmd_context *cmd,
-+					  struct label *label,
-+					  void *handle);
- typedef int (*process_single_lv_fn_t) (struct cmd_context *cmd,
- 				  struct logical_volume *lv,
- 				  void *handle);
-@@ -54,6 +57,9 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 		    int scan_label_only, void *handle,
- 		    process_single_pv_fn_t process_single_pv);
+ 	if (pv->status & UNLABELLED_PV) {
+ 		if (!(pvc = dm_pool_zalloc(mem, sizeof(*pvc)))) {
+ 			log_error("pv_to_create allocation for '%s' failed", pv_name);
+@@ -2810,8 +2816,10 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+ 	struct lvmcache_vginfo *vginfo;
+ 	struct volume_group *vg = NULL;
+ 	struct _vg_read_orphan_baton baton;
+-	struct pv_list *pvl;
++	struct pv_list *pvl, *pvl_;
++	struct pv_list head;
  
-+int process_each_label(struct cmd_context *cmd, int argc, char **argv,
-+		       void *handle, process_single_label_fn_t process_single_label);
++	dm_list_init(&head.list);
+ 	lvmcache_label_scan(cmd, 0);
+ 	lvmcache_seed_infos_from_lvmetad(cmd);
+ 
+@@ -2822,14 +2830,31 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+ 		return_NULL;
+ 
+ 	vg = fmt->orphan_vg;
+-	dm_list_iterate_items(pvl, &vg->pvs)
+-		pv_set_fid(pvl->pv, NULL);
++restart:
++	dm_list_iterate_items(pvl, &vg->pvs) {
++		if (pvl->pv->status & UNLABELLED_PV ) {
++			dm_list_del(&pvl->list);
++			dm_list_add(&head.list, &pvl->list);
++			goto restart;
++		} else
++			pv_set_fid(pvl->pv, NULL);
++	}
+ 	dm_list_init(&vg->pvs);
+ 	vg->pv_count = 0;
++	vg->extent_count = 0;
++	vg->free_count = 0;
+ 
+ 	baton.warnings = warnings;
+ 	baton.vg = vg;
+ 
++	while (!dm_list_empty(&head.list)) {
++		pvl = (struct pv_list *) dm_list_first(&head.list);
++		dm_list_del(&pvl->list);
++		add_pvl_to_vgs(vg, pvl);
++		vg->extent_count += pvl->pv->pe_count;
++		vg->free_count += pvl->pv->pe_count;
++	}
 +
- int process_each_segment_in_pv(struct cmd_context *cmd,
- 			       struct volume_group *vg,
- 			       struct physical_volume *pv,
+ 	if (!lvmcache_foreach_pv(vginfo, _vg_read_orphan_pv, &baton))
+ 		return_NULL;
+ 
 -- 
 1.8.2
 
