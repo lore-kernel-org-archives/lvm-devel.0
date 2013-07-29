@@ -1,10 +1,8 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 29 Jul 2013 21:19:08 +0200
-Subject: [PATCH 04/20] pvresize: Do not use pv_read (get the PV from orphan VG).
-In-Reply-To: <1375125564-1188-1-git-send-email-prockai@redhat.com>
-References: <1375125564-1188-1-git-send-email-prockai@redhat.com>
-Message-ID: <1375125564-1188-4-git-send-email-prockai@redhat.com>
-	(sfid-20130729_211925_780070_229A1FFD)
+Date: Mon, 29 Jul 2013 21:19:05 +0200
+Subject: [PATCH 01/20] metadata: Do not try to check vg_name of a NULL PV.
+Message-ID: <1375125564-1188-1-git-send-email-prockai@redhat.com>
+	(sfid-20130729_211924_665686_00E04731)
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,89 +10,22 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 ---
- lib/metadata/pv_manip.c | 51 +++++++++++++++++--------------------------------
- 1 file changed, 18 insertions(+), 33 deletions(-)
+ lib/metadata/metadata.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index fb29ef4..b7a4b43 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -549,9 +549,9 @@ static int pv_resize(struct physical_volume *pv,
- }
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 4ae7726..632e78a 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1842,7 +1842,7 @@ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
+ 		}
+ 	}
  
- int pv_resize_single(struct cmd_context *cmd,
--			     struct volume_group *vg,
--			     struct physical_volume *pv,
--			     const uint64_t new_size)
-+		     struct volume_group *vg,
-+		     struct physical_volume *pv,
-+		     const uint64_t new_size)
- {
- 	struct pv_list *pvl;
- 	uint64_t size = 0;
-@@ -561,38 +561,25 @@ int pv_resize_single(struct cmd_context *cmd,
- 	struct volume_group *old_vg = vg;
- 	int vg_needs_pv_write = 0;
- 
--	if (is_orphan_vg(vg_name)) {
--		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE, NULL)) {
--			log_error("Can't get lock for orphans");
--			return 0;
--		}
--
--		if (!(pv = pv_read(cmd, pv_name, 1, 0))) {
--			unlock_vg(cmd, vg_name);
--			log_error("Unable to read PV \"%s\"", pv_name);
--			return 0;
--		}
--	} else {
--		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
-+	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
- 
--		if (vg_read_error(vg)) {
--			release_vg(vg);
--			log_error("Unable to read volume group \"%s\".",
--				  vg_name);
--			return 0;
--		}
-+	if (vg_read_error(vg)) {
-+		release_vg(vg);
-+		log_error("Unable to read volume group \"%s\".",
-+			  vg_name);
-+		return 0;
-+	}
- 
--		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--			log_error("Unable to find \"%s\" in volume group \"%s\"",
--				  pv_name, vg->name);
--			goto out;
--		}
-+	if (!(pvl = find_pv_in_vg(vg, pv_name))) {
-+		log_error("Unable to find \"%s\" in volume group \"%s\"",
-+			  pv_name, vg->name);
-+		goto out;
-+	}
- 
--		pv = pvl->pv;
-+	pv = pvl->pv;
- 
--		if (!archive(vg))
--			goto out;
--	}
-+	if (!archive(vg))
-+		goto out;
- 
- 	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
- 		log_error("Physical volume %s format does not support resizing.",
-@@ -650,8 +637,6 @@ out:
- 		log_error("Use pvcreate and vgcfgrestore "
- 			  "to repair from archived metadata.");
- 	unlock_vg(cmd, vg_name);
--	if (is_orphan_vg(vg_name))
--		free_pv_fid(pv);
- 	if (!old_vg)
- 		release_vg(vg);
- 	return r;
+-	if (!allow_orphan && is_orphan_vg(pv->vg_name)) {
++	if (pv && !allow_orphan && is_orphan_vg(pv->vg_name)) {
+ 		log_error("Physical volume %s not in a volume group", pv_name);
+ 		goto bad;
+ 	}
 -- 
 1.8.2
 
