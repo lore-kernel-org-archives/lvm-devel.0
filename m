@@ -1,114 +1,129 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 29 Jul 2013 18:37:26 +0000 (UTC)
-Subject: master - alloc: fix lvextend when stripe number varies
-Message-ID: <20130729183726.3A6A1611E4@fedorahosted.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 29 Jul 2013 21:19:09 +0200
+Subject: [PATCH 05/20] test: Fix fallout from pv_read changes.
+In-Reply-To: <1375125564-1188-1-git-send-email-prockai@redhat.com>
+References: <1375125564-1188-1-git-send-email-prockai@redhat.com>
+Message-ID: <1375125564-1188-5-git-send-email-prockai@redhat.com>
+	(sfid-20130729_211925_948874_924F4506)
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b6bfddcd0a830d0c9312bc3ab906cb3d1b7a6dd9
-Commit:        b6bfddcd0a830d0c9312bc3ab906cb3d1b7a6dd9
-Parent:        9b28255aac9386db6d51cd1b501a9f39e81778a5
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Jul 29 19:35:45 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Jul 29 19:35:45 2013 +0100
-
-alloc: fix lvextend when stripe number varies
-
-The PREFERRED allocation mechanism requires the number of areas in the
-previous LV segment to match the number in the new segment being
-allocated.  If they do not match, the code may crash.
-  E.g. https://bugzilla.redhat.com/989347
-
-Introduce A_AREA_COUNT_MATCHES and when not set avoid referring
-to the previous segment with the contiguous and cling policies.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   21 ++++++++++++++++-----
- 2 files changed, 17 insertions(+), 5 deletions(-)
+ test/shell/pv-duplicate.sh          |  2 +-
+ test/shell/pvcreate-operation-md.sh | 35 +++++++++++++++++++++--------------
+ 2 files changed, 22 insertions(+), 15 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 3318454..21c1f6d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.100 -
- ================================
-+  Ignore previous LV seg with alloc contiguous & cling when num stripes varies.
-   Fix segfault if devices/global_filter is not specified correctly.
+diff --git a/test/shell/pv-duplicate.sh b/test/shell/pv-duplicate.sh
+index 6b9f309..40d1f68 100644
+--- a/test/shell/pv-duplicate.sh
++++ b/test/shell/pv-duplicate.sh
+@@ -21,5 +21,5 @@ vgcreate --metadatasize 128k $vg1 "$dev1"
+ dd if="$dev1" of="$dev2" bs=256K count=1
+ dd if="$dev1" of="$dev3" bs=256K count=1
  
- Version 2.02.99 - 24th July 2013
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 088c05d..24c66ef 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -47,6 +47,7 @@ typedef enum {
+-pvs "$dev1"
++pvs "$dev3"
+ vgs $vg1
+diff --git a/test/shell/pvcreate-operation-md.sh b/test/shell/pvcreate-operation-md.sh
+index 5e2a28d..9cad745 100644
+--- a/test/shell/pvcreate-operation-md.sh
++++ b/test/shell/pvcreate-operation-md.sh
+@@ -58,21 +58,24 @@ test -b "$mddev" && skip
+ mdadm --create --metadata=1.0 "$mddev" --auto=md --level 0 --raid-devices=2 --chunk 64 "$dev1" "$dev2"
+ trap 'cleanup_md_and_teardown' EXIT # cleanup this MD device at the end of the test
+ test -b "$mddev" || skip
++cp -LR "$mddev" "$DM_DEV_DIR" # so that LVM/DM can see the device
++lvmdev="$DM_DEV_DIR/md_lvm_test0"
  
- #define A_CLING_BY_TAGS		0x08	/* Must match tags against existing segment */
- #define A_CAN_SPLIT		0x10
-+#define A_AREA_COUNT_MATCHES	0x20	/* Existing lvseg has same number of areas as new segment */
- 
- #define SNAPSHOT_MIN_CHUNKS	3       /* Minimum number of chunks in snapshot */
- 
-@@ -1118,8 +1119,12 @@ static void _init_alloc_parms(struct alloc_handle *ah, struct alloc_parms *alloc
- 	alloc_parms->flags = 0;
- 	alloc_parms->extents_still_needed = extents_still_needed;
- 
-+	/* Only attempt contiguous/cling allocation to previous segment areas if the number of areas matches. */
-+	if (alloc_parms->prev_lvseg && (ah->area_count == prev_lvseg->area_count))
-+		alloc_parms->flags |= A_AREA_COUNT_MATCHES;
+ # Test alignment of PV on MD without any MD-aware or topology-aware detection
+ # - should treat $mddev just like any other block device
+ pv_align="1.00m"
+ pvcreate --metadatasize 128k \
+     --config 'devices {md_chunk_alignment=0 data_alignment_detection=0 data_alignment_offset_detection=0}' \
+-    "$mddev"
+-check pv_field "$mddev" pe_start $pv_align
++    "$lvmdev"
 +
- 	/* Are there any preceding segments we must follow on from? */
--	if (alloc_parms->prev_lvseg) {
-+	if (alloc_parms->prev_lvseg && (alloc_parms->flags & A_AREA_COUNT_MATCHES)) {
- 		if (alloc_parms->alloc == ALLOC_CONTIGUOUS)
- 			alloc_parms->flags |= A_CONTIGUOUS_TO_LVSEG;
- 		else if ((alloc_parms->alloc == ALLOC_CLING) || (alloc_parms->alloc == ALLOC_CLING_BY_TAGS))
-@@ -1721,7 +1726,8 @@ static area_use_t _check_pva(struct alloc_handle *ah, struct pv_area *pva, uint3
- 	/* If maximise_cling is set, perform several checks, otherwise perform exactly one. */
- 	if (!iteration_count && !log_iteration_count && alloc_parms->flags & (A_CONTIGUOUS_TO_LVSEG | A_CLING_TO_LVSEG | A_CLING_TO_ALLOCED)) {
- 		/* Contiguous? */
--		if (((alloc_parms->flags & A_CONTIGUOUS_TO_LVSEG) || (ah->maximise_cling && alloc_parms->prev_lvseg)) &&
-+		if (((alloc_parms->flags & A_CONTIGUOUS_TO_LVSEG) ||
-+		     (ah->maximise_cling && alloc_parms->prev_lvseg && (alloc_parms->flags & A_AREA_COUNT_MATCHES))) &&
- 		    _check_contiguous(ah->cmd, alloc_parms->prev_lvseg, pva, alloc_state))
- 			return PREFERRED;
++check pv_field "$lvmdev" pe_start $pv_align
  
-@@ -1730,7 +1736,8 @@ static area_use_t _check_pva(struct alloc_handle *ah, struct pv_area *pva, uint3
- 			return NEXT_AREA;
+ # Test md_chunk_alignment independent of topology-aware detection
+ pv_align="1.00m"
+ pvcreate --metadatasize 128k \
+     --config 'devices {data_alignment_detection=0 data_alignment_offset_detection=0}' \
+-    "$mddev"
+-check pv_field "$mddev" pe_start $pv_align
++    "$lvmdev"
++check pv_field "$lvmdev" pe_start $pv_align
  
- 		/* Cling to prev_lvseg? */
--		if (((alloc_parms->flags & A_CLING_TO_LVSEG) || (ah->maximise_cling && alloc_parms->prev_lvseg)) &&
-+		if (((alloc_parms->flags & A_CLING_TO_LVSEG) ||
-+		     (ah->maximise_cling && alloc_parms->prev_lvseg && (alloc_parms->flags & A_AREA_COUNT_MATCHES))) &&
- 		    _check_cling(ah, NULL, alloc_parms->prev_lvseg, pva, alloc_state))
- 			/* If this PV is suitable, use this first area */
- 			return PREFERRED;
-@@ -1744,7 +1751,7 @@ static area_use_t _check_pva(struct alloc_handle *ah, struct pv_area *pva, uint3
- 		if (!(alloc_parms->flags & A_CLING_BY_TAGS) || !ah->cling_tag_list_cn)
- 			return NEXT_PV;
  
--		if (alloc_parms->prev_lvseg) {
-+		if (alloc_parms->prev_lvseg && (alloc_parms->flags & A_AREA_COUNT_MATCHES)) {
- 			if (_check_cling(ah, ah->cling_tag_list_cn, alloc_parms->prev_lvseg, pva, alloc_state))
- 				return PREFERRED;
- 		} else if (_check_cling_to_alloced(ah, ah->cling_tag_list_cn, pva, alloc_state))
-@@ -1967,8 +1974,12 @@ static int _find_some_parallel_space(struct alloc_handle *ah, const struct alloc
- 			/* First area in each list is the largest */
- 			dm_list_iterate_items(pva, &pvm->areas) {
- 				/*
--				 * There are two types of allocations, which can't be mixed at present.
-+				 * There are two types of allocations, which can't be mixed at present:
-+				 *
- 				 * PREFERRED are stored immediately in a specific parallel slot.
-+				 *   This requires the number of slots to match, so if comparing with
-+				 *   prev_lvseg then A_AREA_COUNT_MATCHES must be set.
-+				 *
- 				 * USE_AREA are stored for later, then sorted and chosen from.
- 				 */
- 				switch(_check_pva(ah, pva, max_to_allocate, alloc_parms,
+ # Test newer topology-aware alignment detection
+@@ -81,8 +84,8 @@ if kernel_at_least 2 6 33 ; then
+     pv_align="1.00m"
+     # optimal_io_size=131072, minimum_io_size=65536
+     pvcreate --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    check pv_field "$lvmdev" pe_start $pv_align
+ fi
+ 
+ # partition MD array directly, depends on blkext in Linux >= 2.6.28
+@@ -91,9 +94,10 @@ if kernel_at_least 2 6 28 ; then
+     sfdisk "$mddev" <<EOF
+ ,,83
+ EOF
++    pvscan
+     # make sure partition on MD is _not_ removed
+     # - tests partition -> parent lookup via sysfs paths
+-    not pvcreate --metadatasize 128k "$mddev"
++    not pvcreate --metadatasize 128k "$lvmdev"
+ 
+     # verify alignment_offset is accounted for in pe_start
+     # - topology infrastructure is available in Linux >= 2.6.31
+@@ -109,6 +113,8 @@ EOF
+     # wait here for created device node on tmpfs
+     aux udev_wait "$mddev_p"
+     test -b "$mddev_p" || skip
++    cp -LR "$mddev_p" "$DM_DEV_DIR"
++    lvmdev_p="$DM_DEV_DIR/$base_mddev_p"
+ 
+     # Checking for 'alignment_offset' in sysfs implies Linux >= 2.6.31
+     # but reliable alignment_offset support requires kernel.org Linux >= 2.6.33
+@@ -120,9 +126,9 @@ EOF
+     if [ $alignment_offset -gt 0 ]; then
+         # default alignment is 1M, add alignment_offset
+ 	pv_align=$((1048576+$alignment_offset))B
+-	pvcreate --metadatasize 128k "$mddev_p"
+-	check pv_field "$mddev_p" pe_start $pv_align --units b
+-	pvremove "$mddev_p"
++	pvcreate --metadatasize 128k "$lvmdev_p"
++	check pv_field "$lvmdev_p" pe_start $pv_align --units b
++	pvremove "$lvmdev_p"
+     fi
+ fi
+ 
+@@ -140,12 +146,13 @@ if kernel_at_least 2 6 33 ; then
+     # optimal_io_size=2097152, minimum_io_size=1048576
+     pv_align="2.00m"
+     pvcreate --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    pvscan # Something is seriously broken.
++    check pv_field "$lvmdev" pe_start $pv_align
+ 
+     # now verify pe_start alignment override using --dataalignment
+     pv_align="192.00k"
+     pvcreate --dataalignment 64k --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    check pv_field "$lvmdev" pe_start $pv_align
+ fi
+-- 
+1.8.2
 
 
