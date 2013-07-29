@@ -1,67 +1,84 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  1 Aug 2012 13:51:35 +0000 (UTC)
-Subject: master - make: fix make in scripts dir for --disable-applib
-Message-ID: <20120801135135.4A14E2B36@fedorahosted.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 29 Jul 2013 21:19:24 +0200
+Subject: [PATCH 20/20] report: Make PV UUID into a "label" type field.
+In-Reply-To: <1375125564-1188-1-git-send-email-prockai@redhat.com>
+References: <1375125564-1188-1-git-send-email-prockai@redhat.com>
+Message-ID: <1375125564-1188-20-git-send-email-prockai@redhat.com>
+	(sfid-20130729_212452_270911_AC26B861)
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9952331d5d58a4cc2580eddec34defa9cfe141c9
-Commit:        9952331d5d58a4cc2580eddec34defa9cfe141c9
-Parent:        286f298bb79a43b61baab36582481df93e84137b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Aug 1 15:48:53 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Aug 1 15:48:53 2012 +0200
-
-make: fix make in scripts dir for --disable-applib
-
 ---
- scripts/Makefile.in |   19 ++++++++++++++-----
- 1 files changed, 14 insertions(+), 5 deletions(-)
+ lib/report/columns.h   |  2 +-
+ lib/report/report.c    | 14 ++++++++++++++
+ test/shell/listings.sh |  4 +++-
+ 3 files changed, 18 insertions(+), 2 deletions(-)
 
-diff --git a/scripts/Makefile.in b/scripts/Makefile.in
-index 2298f0c..df13c3d 100644
---- a/scripts/Makefile.in
-+++ b/scripts/Makefile.in
-@@ -15,14 +15,18 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 768920b..8cd0e22 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -66,8 +66,8 @@ FIELD(LVS, lv, STR, "Time", lvid, 26, lvtime, lv_time, "Creation time of the LV,
+ FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
+ FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
  
--SOURCES = lvm2_activation_generator_systemd_red_hat.c
--TARGETS = lvm2_activation_generator_systemd_red_hat
-+ifeq ("@APPLIB@", "yes")
-+	SOURCES = lvm2_activation_generator_systemd_red_hat.c
-+	TARGETS = lvm2_activation_generator_systemd_red_hat
-+endif
+-FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, pv_uuid, "Unique identifier.", 0)
+ FIELD(LABEL, label, STR, "Fmt", type, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
++FIELD(LABEL, label, STR, "PV UUID", type, 38, pvuuid, pv_uuid, "Unique identifier.", 0)
+ FIELD(LABEL, label, NUM, "DevSize", dev, 7, devsize, dev_size, "Size of underlying device in current units.", 0)
+ FIELD(LABEL, label, STR, "PV", dev, 10, dev_name, pv_name, "Name.", 0)
+ FIELD(LABEL, label, NUM, "PMdaFree", type, 9, pvmdafree, pv_mda_free, "Free metadata area space on this device in current units.", 0)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 909b245..07d4731 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -703,6 +703,20 @@ static int _uuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_po
+ 	return 1;
+ }
  
- include $(top_builddir)/make.tmpl
++static int _pvuuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
++		        struct dm_report_field *field,
++		        const void *data, void *private __attribute__((unused)))
++{
++	const struct label *label = (const struct label *) data;
++	char *repstr = NULL;
++
++	if (!(repstr = id_format_and_copy(mem, label->dev->pvid)))
++		return_0;
++
++	dm_report_field_set_value(field, repstr, NULL);
++	return 1;
++}
++
+ static int _pvmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			struct dm_report_field *field,
+ 			const void *data, void *private)
+diff --git a/test/shell/listings.sh b/test/shell/listings.sh
+index 8b9d082..af4d8a0 100644
+--- a/test/shell/listings.sh
++++ b/test/shell/listings.sh
+@@ -17,7 +17,7 @@
  
--DEPLIBS += $(top_builddir)/liblvm/liblvm2app.so $(top_builddir)/libdm/libdevmapper.so
--LDFLAGS += -L$(top_builddir)/liblvm
--LVMLIBS = @LVM2APP_LIB@ -ldevmapper
-+ifeq ("@APPLIB@", "yes")
-+	DEPLIBS += $(top_builddir)/liblvm/liblvm2app.so $(top_builddir)/libdm/libdevmapper.so
-+	LDFLAGS += -L$(top_builddir)/liblvm
-+	LVMLIBS = @LVM2APP_LIB@ -ldevmapper
-+endif
+ aux prepare_devs 5
  
- ifeq ("@DMEVENTD@", "yes")
- 	LVMLIBS += -ldevmapper-event
-@@ -76,7 +80,12 @@ lvm2_activation_generator_systemd_red_hat: $(OBJECTS) $(DEPLIBS)
+-pvcreate "$dev1"
++pvcreate --uuid BADBEE-BAAD-BAAD-BAAD-BAAD-BAAD-BADBEE --norestorefile "$dev1"
+ pvcreate --metadatacopies 0 "$dev2"
+ pvcreate --metadatacopies 0 "$dev3"
+ pvcreate "$dev4"
+@@ -31,6 +31,8 @@ test $(pvs --noheadings -o seg_all,pv_all,lv_all,vg_all $(cat DEVICES) | wc -l)
  
- install_systemd_generators:
- 	$(INSTALL_DIR) $(systemd_generator_dir)
-+ifeq ("@APPLIB@", "yes")
- 	$(INSTALL_PROGRAM) lvm2_activation_generator_systemd_red_hat $(systemd_generator_dir)/lvm2-activation-generator
-+else
-+	@echo "WARNING: LVM2 activation systemd generator not installed." \
-+	      "It requires the LVM2 application library to be built as well."
-+endif
+ vgcreate $vg $(cat DEVICES)
  
- install_systemd_units:
- 	$(INSTALL_DIR) $(systemd_unit_dir)
++check pv_field $dev1 pv_uuid BADBEE-BAAD-BAAD-BAAD-BAAD-BAAD-BADBEE
++
+ #COMM pvs and vgs report mda_count, mda_free (bz202886, bz247444)
+ pvs -o +pv_mda_count,pv_mda_free $(cat DEVICES)
+ for I in "$dev2" "$dev3" "$dev5"; do
+-- 
+1.8.2
 
 
