@@ -1,61 +1,88 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Aug 2012 12:43:12 +0000 (UTC)
-Subject: master - thin: discard
-Message-ID: <20120823124312.C2D39A0D9A@fedorahosted.org>
+From: Kevin Chadwick <ma1l1ists@yahoo.co.uk>
+Date: Tue, 30 Jul 2013 10:56:46 +0100
+Subject: Now I'm convinced about Linux
+In-Reply-To: <51F61D64.6070600@redhat.com>
+References: <999744.9869.bm@smtp104.mail.ir2.yahoo.com>
+	<51F61D64.6070600@redhat.com>
+Message-ID: <284284.73974.bm@smtp132.mail.ir2.yahoo.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=109b3bb49b31d5fa7f6d0dd23345d703ab866ad6
-Commit:        109b3bb49b31d5fa7f6d0dd23345d703ab866ad6
-Parent:        0de57b98bf0778684e8fac6d2d66ecf3fbc035ab
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 21 15:51:54 2012 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Aug 23 14:38:48 2012 +0200
+On Mon, 29 Jul 2013 09:44:36 +0200
+Peter Rajnoha wrote:
 
-thin: discard
+> On 07/26/2013 06:37 PM, Kevin Chadwick wrote:
+> > Having a simple problem today that last_rule would solve just fine and
+> > finding that I must edit extra files or manage a packages file is
+> 
+> You should not be pushed into editing udev rules unless you do something
+> (very) extra. If something does not work correctly as expected, you
+> should submit a bug report against the relevant distro/package.
+> 
+> What exactly is the nature of the problem that needs such a manual
+> intervention? Also, what udev rules are we talking about exactly?
+>
 
----
- tools/lvchange.c |    2 +-
- tools/lvcreate.c |    4 ++--
- 2 files changed, 3 insertions(+), 3 deletions(-)
+I have written a vendor and product specific rule which loads a key into
+truecrypt and then immediately unmounts the usb. Unfortunately later
+rules then remount the device. I want the rules to stop evaluation for
+just this device. GOTO seems to only apply to the current rules file
+(from the logs, the man page needs improving here) and would require
+creating another rules file in any case which should not be necessary.
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index a0c4a01..73a37fd 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -103,7 +103,7 @@ static int lvchange_pool_update(struct cmd_context *cmd,
- 	}
- 
- 	if (arg_count(cmd, discards_ARG)) {
--		discards = arg_uint_value(cmd, discards_ARG, 0);
-+		discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_IGNORE);
- 		if (discards != first_seg(lv)->discards) {
- 			if (((discards == THIN_DISCARDS_IGNORE) ||
- 			     (first_seg(lv)->discards == THIN_DISCARDS_IGNORE)) &&
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 769ac8c..2cb6ac0 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -797,7 +797,7 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 		return_0;
- 
- 	if (lp->create_thin_pool) {
--		lp->discards = arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_PASSDOWN);
-+		lp->discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_PASSDOWN);
- 	} else if (arg_count(cmd, discards_ARG)) {
- 		log_error("--discards is only available for thin pool creation.");
- 		return 0;
+I could edit the rules file which is doing the re-mounting but that is
+another packages rules file that I should not have to manage. Also if I
+know that there is no need to continue rule evaluation for a device
+then it is far cleaner to stop especially if it was an embedded system
+(it's not but these things should be thought about (properness, power
+to the user/dev)). The usual method is putting big fat warnings on and
+not crippling users, and also not updating the man pages in light of
+the online tutorials talking about last_rule. I hate to think of all the
+wasted devs and users time for this simple lack of consideration.
+OpenBSD man pages are brill and I'm sure this kind of problem wouldn't
+happen under their watch. I have never had to power up a web browser on
+OpenBSD atleast for anything simple.
+
+Perhaps there is a way but I cannot see it from the man pages.
+Google seems to say all rules files are processed as one but that
+seems not to be the case?
+
+> > quite convincing that they are right, especially the reason
+> > "Inconsistent behaviour" when that is exactly what I expect to be able
+> > to do on Unix and is so often made difficult just on Linux these days
+> > and it seems especially in code mainly managed by RedHat, though I do
+> > not a member of RedHat raising concerns about it.
+> > 
+> > I have tried creating /lib/udev/rules.d/zzz-arsewipingidiotfix.rules
+> > with LABEL="very_end"
+> > 
+> > but adding GOTO="very_end" to earlier udev rules
+> > (/etc/udev/rules.d/46-) is having no effect even after a udev restart?
+> > 
+> > Any ideas?
+> > 
+> 
+> Please, provide more information about the problem and if the problem
+> is related to LVM, then provide the LVM version as well please
+> Also, is this Fedora or RHEL or are you trying to use upstream
+> version directly?
+> 
+
+I'm not even sure this is the right list but you seemed to have
+committed the last_rule removal with concerns about Kays decision.
+
+Fedora was one of the first unix-like systems I ever used playing with
+selinux when first introduced on Fedora (3 I think) but I can't see me
+ever installing it again. (I installed it a year or two ago to try
+out systemd and I'm about as far from a systemd or polkit and so udisks
+fan as you can get, technically and practically)
+
+> Peter
+
+Thanks,
+	Kc
 
 
