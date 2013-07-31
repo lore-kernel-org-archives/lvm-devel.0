@@ -1,147 +1,99 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sat, 25 Aug 2012 23:28:54 +0000 (UTC)
-Subject: master - setvbuf: close and reopen stream before change
-Message-ID: <20120825232854.69C77A1503@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Wed, 31 Jul 2013 10:14:16 +0200
+Subject: Now I'm convinced about Linux
+In-Reply-To: <284284.73974.bm@smtp132.mail.ir2.yahoo.com>
+References: <999744.9869.bm@smtp104.mail.ir2.yahoo.com>
+	<51F61D64.6070600@redhat.com>
+	<284284.73974.bm@smtp132.mail.ir2.yahoo.com>
+Message-ID: <51F8C758.50002@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=92330ba9c8e21451f8406377ae4839f397f369a2
-Commit:        92330ba9c8e21451f8406377ae4839f397f369a2
-Parent:        3acc85caa8d313b8c21e4bef7f84601731e74b2b
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sun Aug 26 00:19:52 2012 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sun Aug 26 00:19:52 2012 +0100
+On 07/30/2013 11:56 AM, Kevin Chadwick wrote:
+> I have written a vendor and product specific rule which loads a key into
+> truecrypt and then immediately unmounts the usb. Unfortunately later
+> rules then remount the device. I want the rules to stop evaluation for
+> just this device. GOTO seems to only apply to the current rules file
+> (from the logs, the man page needs improving here) and would require
+> creating another rules file in any case which should not be necessary.
 
-setvbuf: close and reopen stream before change
+Yes, GOTO applies only to current rule file...
 
-Fix setvbuf code by closing and reopening stream before changing buffer.
+> 
+> I could edit the rules file which is doing the re-mounting but that is
+> another packages rules file that I should not have to manage. Also if I
+> know that there is no need to continue rule evaluation for a device
+> then it is far cleaner to stop especially if it was an embedded system
+> (it's not but these things should be thought about (properness, power
+> to the user/dev)). The usual method is putting big fat warnings on and
+> not crippling users, and also not updating the man pages in light of
+> the online tutorials talking about last_rule. I hate to think of all the
 
-But we need to review what this code is doing embedded inside a library
-function rather than the simpler original form being run independently
-at the top of main() by tools that need it.
----
- WHATS_NEW                  |    1 +
- lib/commands/toolcontext.c |   65 +++++++++++++++++++++++++++++++++++++++----
- 2 files changed, 60 insertions(+), 6 deletions(-)
+...I fully understand your concerns. We (LVM) were exactly in the
+same situation as we used the 'last_rule' option to skip all the udev
+processing that was not suitable as LVM also has some devices which
+should not be used for scanning etc. Unfortunately, it seems that at
+that time, we were one of the small group of users of this 'last_rule',
+so it was not a problem for udev to simply remove it...
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index acb158b..85f8663 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.98 -
- =================================
-+  Fix setvbuf code by closing and reopening stream before changing buffer.
-   Disable private buffering when using liblvm.
-   When private stdin/stdout buffering is not used always use silent mode.
-   Add log/silent to lvm.conf equivalent to -qq.
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 4230624..0ede104 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1245,6 +1245,37 @@ static void _init_globals(struct cmd_context *cmd)
- 	init_mirror_in_sync(0);
- }
- 
-+/*
-+ * Close and reopen stream on file descriptor fd.
-+ */
-+static int _reopen_stream(FILE *stream, int fd, const char *mode, const char *name, FILE **new_stream)
-+{
-+	int fd_copy, new_fd;
-+
-+	if ((fd_copy = dup(fd)) < 0) {
-+		log_sys_error("dup", name);
-+		return 0;
-+	}
-+
-+	if (fclose(stream))
-+		log_sys_error("fclose", name);
-+
-+	if ((new_fd = dup2(fd_copy, fd)) < 0)
-+		log_sys_error("dup2", name);
-+	else if (new_fd != fd)
-+		log_error("dup2(%d, %d) returned %d", fd_copy, fd, new_fd);
-+
-+	if (close(fd_copy) < 0)
-+		log_sys_error("close", name);
-+
-+	if (!(*new_stream = fdopen(fd, mode))) {
-+		log_sys_error("fdopen", name);
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
- /* Entry point */
- struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 				       const char *system_dir,
-@@ -1252,6 +1283,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 				       unsigned threaded)
- {
- 	struct cmd_context *cmd;
-+	FILE *new_stream;
- 
- #ifdef M_MMAP_MAX
- 	mallopt(M_MMAP_MAX, 0);
-@@ -1293,9 +1325,20 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 			log_error("Failed to allocate line buffer.");
- 			goto out;
- 		}
--		if ((setvbuf(stdin, cmd->linebuffer, _IOLBF, linebuffer_size) ||
--		     setvbuf(stdout, cmd->linebuffer + linebuffer_size,
--			     _IOLBF, linebuffer_size))) {
-+
-+		if (!_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream))
-+			goto_out;
-+		stdin = new_stream;
-+		if (setvbuf(stdin, cmd->linebuffer, _IOLBF, linebuffer_size)) {
-+			log_sys_error("setvbuf", "");
-+			goto out;
-+		}
-+
-+		if (!_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream))
-+			goto_out;
-+		stdout = new_stream;
-+		if (setvbuf(stdout, cmd->linebuffer + linebuffer_size,
-+			     _IOLBF, linebuffer_size)) {
- 			log_sys_error("setvbuf", "");
- 			goto out;
- 		}
-@@ -1546,6 +1589,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
- void destroy_toolcontext(struct cmd_context *cmd)
- {
- 	struct dm_config_tree *cft_cmdline;
-+	FILE *new_stream;
- 
- 	if (cmd->dump_filter)
- 		persistent_filter_dump(cmd->filter, 1);
-@@ -1570,9 +1614,18 @@ void destroy_toolcontext(struct cmd_context *cmd)
- 
- 	if (cmd->linebuffer) {
- 		/* Reset stream buffering to defaults */
--		setlinebuf(stdin);
--		fflush(stdout);
--		setlinebuf(stdout);
-+		if (_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream)) {
-+			stdin = new_stream;
-+			setlinebuf(stdin);
-+		} else
-+			cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
-+
-+		if (_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream)) {
-+			stdout = new_stream;
-+			setlinebuf(stdout);
-+		} else
-+			cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
-+
- 		dm_free(cmd->linebuffer);
- 	}
- 
+> wasted devs and users time for this simple lack of consideration.
+> OpenBSD man pages are brill and I'm sure this kind of problem wouldn't
+> happen under their watch. I have never had to power up a web browser on
+> OpenBSD atleast for anything simple.
+> 
+> Perhaps there is a way but I cannot see it from the man pages.
+> Google seems to say all rules files are processed as one but that
+> seems not to be the case?
+> 
+
+...well, GOTO applies only to current rule file (so yes, maybe the
+documentation should be clearer about this - but that needs to be reported
+for udev team).
+
+> I'm not even sure this is the right list but you seemed to have
+> committed the last_rule removal with concerns about Kays decision.
+> 
+
+(I suppose you mean this one: http://comments.gmane.org/gmane.linux.lvm.devel/2119)
+
+Nope, it wasn't me who wanted removal of that 'last_rule' from udev :)
+We used the 'last_rule' ourselves and I remember being angry about its
+removal too. Now, we need to set variables within rules which other rules
+check... and yes, I had to notify all the other maintainers that owned
+those other udev rules to check for these variables to make a skip
+(to be honest, I hate this solution, but there is nothing else I could
+do with what udev provides to prevent the rules from being scanned or
+processed by third-party rules - if I understand correctly, that's exactly
+what you're hitting now as well).
+
+> Fedora was one of the first unix-like systems I ever used playing with
+> selinux when first introduced on Fedora (3 I think) but I can't see me
+> ever installing it again. (I installed it a year or two ago to try
+> out systemd and I'm about as far from a systemd or polkit and so udisks
+> fan as you can get, technically and practically)
+> 
+
+Well, yes, some of these have their advantages and, surely, their disadvantages.
+As for udisks and from our LVM point of view, that's exactly the one which
+caused extra scans for devices which we didn't want to be scanned and so
+I had to negotiate the solution with its maintainer (you can spot some
+"DM_UDEV_DISABLE_..." flags being checked now in udisks rules - this is
+exactly to prevent that scanning we don't want to).
+
+And to be honest, we've spent quite some time to make all this udev integration
+working, to solve all bugs that appeared as a consequence etc.
+
+Thing with Fedora is that it tries to adopt the newest techniques available.
+Other distros might be more conservative here... The best in Linux world is
+that you can make a decision which distro fits your needs the best.
+
+Anyway, now I can imagine the source of your problems and yes, it's OK
+that you made your points. Though in this case, I need to redirect you
+to udev/systemd team as I can't help much here...
+
+Peter
 
 
