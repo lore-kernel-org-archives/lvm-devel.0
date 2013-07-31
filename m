@@ -1,56 +1,41 @@
-From: Christine Caulfield <ccaulfie@redhat.com>
-Date: Wed, 31 Jul 2013 09:33:23 +0100
-Subject: [PATCH RFC] clvmd: verify messages before processing
-In-Reply-To: <20130730194649.GA3707@redhat.com>
-References: <20130730194649.GA3707@redhat.com>
-Message-ID: <51F8CBD3.9090201@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 31 Jul 2013 13:36:24 +0000 (UTC)
+Subject: master - cleanup: use compile time strlen
+Message-ID: <20130731133624.8612B60319@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 30/07/13 20:46, David Teigland wrote:
-> Does this look like it would be useful?  More checks can be
-> added over time, but are there any that would be obvious to
-> add now?  I'm mainly trying to catch non-message data, and
-> not risk rejecting any proper messages.
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a722c5c8bcc902043ece29550a5d61ea7fdbef3
+Commit:        4a722c5c8bcc902043ece29550a5d61ea7fdbef3
+Parent:        ba1a8878d05e3753d9ae5a98e51afac71f078fc9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jul 25 14:18:18 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jul 31 15:24:45 2013 +0200
 
-Mostly an ACK but see comment below:
+cleanup: use compile time strlen
 
-> @@ -2189,10 +2286,22 @@ error:
->   void process_message(struct local_client *client, char *buf, int len,
->   		     const char *csid)
->   {
-> +	char nodename[max_cluster_member_name_len];
->   	struct clvm_header *inheader;
-> +	int rv;
->
->   	inheader = (struct clvm_header *) buf;
->   	ntoh_clvm(inheader);	/* Byteswap fields */
-> +
-> +	rv = verify_message(buf, len);
-> +	if (rv < 0) {
-> +		memset(nodename, 0, sizeof(nodename));
-> +		clops->name_from_csid(csid, nodename);
-> +		log_error("process_message from %s len %d bad verify\n", nodename, len);
-> +		dump_message(buf, len);
+Use sizeof instead of strlen().
+---
+ lib/log/log.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-Here you will probably have to return an error to the calling clvmd or 
-you will get delays when the caller times out. If that happens then the 
-'timed-out' message is less than helpful
-
-
-> +		return;
-> +	}
-> +
->   	if (inheader->cmd == CLVMD_CMD_REPLY)
->   		process_reply(inheader, len, csid);
->   	else
->
-
-
-Chrissie
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 06e053f..e0c1e73 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -196,8 +196,7 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 	level &= ~(_LOG_STDERR|_LOG_ONCE);
+ 
+ 	if (_abort_on_internal_errors &&
+-	    !strncmp(format, INTERNAL_ERROR,
+-		     strlen(INTERNAL_ERROR))) {
++	    !strncmp(format, INTERNAL_ERROR, sizeof(INTERNAL_ERROR) - 1)) {
+ 		fatal_internal_error = 1;
+ 		/* Internal errors triggering abort cannot be suppressed. */
+ 		_log_suppress = 0;
 
 
