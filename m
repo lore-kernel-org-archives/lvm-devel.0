@@ -1,46 +1,115 @@
-From: David Teigland <teigland@redhat.com>
-Date: Wed, 31 Jul 2013 11:31:11 -0400
-Subject: [PATCH RFC] clvmd: verify messages before processing
-In-Reply-To: <51F8CBD3.9090201@redhat.com>
-References: <20130730194649.GA3707@redhat.com>
- <51F8CBD3.9090201@redhat.com>
-Message-ID: <20130731153111.GB12539@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 31 Jul 2013 20:24:13 +0000 (UTC)
+Subject: master - dmeventd: Fix memory leak
+Message-ID: <20130731202413.D3ABA60FD7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Jul 31, 2013 at 09:33:23AM +0100, Christine Caulfield wrote:
-> >@@ -2189,10 +2286,22 @@ error:
-> >  void process_message(struct local_client *client, char *buf, int len,
-> >  		     const char *csid)
-> >  {
-> >+	char nodename[max_cluster_member_name_len];
-> >  	struct clvm_header *inheader;
-> >+	int rv;
-> >
-> >  	inheader = (struct clvm_header *) buf;
-> >  	ntoh_clvm(inheader);	/* Byteswap fields */
-> >+
-> >+	rv = verify_message(buf, len);
-> >+	if (rv < 0) {
-> >+		memset(nodename, 0, sizeof(nodename));
-> >+		clops->name_from_csid(csid, nodename);
-> >+		log_error("process_message from %s len %d bad verify\n", nodename, len);
-> >+		dump_message(buf, len);
-> 
-> Here you will probably have to return an error to the calling clvmd
-> or you will get delays when the caller times out. If that happens
-> then the 'timed-out' message is less than helpful
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ca54c4f0b27125bc385d55ea0b44853fc7744dd
+Commit:        5ca54c4f0b27125bc385d55ea0b44853fc7744dd
+Parent:        7db95d0d40c3608b7298cb19380430613fa9e532
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed Jul 31 15:23:13 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Jul 31 15:23:13 2013 -0500
 
-The thinking behind no reply was that if a command sends a bogus message,
-it doesn't deserve a reply, and even if it got one, may not handle it
-properly anyway.  So, if we're dealing with a bogus non-message, I think
-we're beyond the point where we can be helpful.  I'm mainly trying to just
-protect clvmd from faulty commands.  But, I looked at how feasible it
-would be, and I don't think it's worth the trouble -- we'd have to do the
-whole add_to_lvmqueue() thing, etc.
+dmeventd: Fix memory leak
 
+When creating a timeout thread for snapshots, the thread is not
+tracked and thus never joined.  This means that the exit status
+of the timeout thread is held indefinitely.  Saves a bit of
+memory to set PTHREAD_CREATE_DETACHED when creating this thread.
+
+I've also added pthread_attr_init|destroy to setup the creation
+pthread_attr_t.
+
+Reported-by: NeilBrown <neilb@suse.de>
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+---
+ WHATS_NEW                   |    1 +
+ daemons/dmeventd/dmeventd.c |   41 +++++++++++++++++++++++++++++++++--------
+ 2 files changed, 34 insertions(+), 8 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 69a8275..c76dc68 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.100 -
+ ================================
++  Create dmeventd timeout threads as "detached" so exit status is freed.
+   Add initial support thin pool lvconvert --repair.
+   Add --with-thin-repair and --with-thin-dump configure options.
+   Add lvm.conf thin_repair/dump_executable and thin_repair_options.
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 92c93d9..9c7a6c6 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -264,16 +264,44 @@ static struct dso_data *_alloc_dso_data(struct message_data *data)
+ 	return ret;
+ }
+ 
+-/* Create a device monitoring thread. */
++/*
++ * Create a device monitoring thread.
++ * N.B.  Error codes returned are positive.
++ */
+ static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *arg)
+ {
++	int r;
++	pthread_t tmp;
+ 	pthread_attr_t attr;
+ 	pthread_attr_init(&attr);
++
++	/*
++	 * From pthread_attr_init man page:
++	 * POSIX.1-2001 documents an ENOMEM error for pthread_attr_init(); on
++	 * Linux these functions always succeed (but portable and future-proof
++	 * applications should nevertheless handle a possible error return).
++	 */
++	if ((r = pthread_attr_init(&attr)) != 0)
++		return r;
++
+ 	/*
+ 	 * We use a smaller stack since it gets preallocated in its entirety
+ 	 */
+ 	pthread_attr_setstacksize(&attr, THREAD_STACK_SIZE);
+-	return pthread_create(t, &attr, fun, arg);
++
++	/*
++	 * If no-one will be waiting, we need to detach.
++	 */
++	if (!t) {
++		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
++		t = &tmp;
++	}
++
++	r = pthread_create(t, &attr, fun, arg);
++
++	pthread_attr_destroy(&attr);
++
++	return r;
+ }
+ 
+ static void _free_dso_data(struct dso_data *data)
+@@ -548,12 +576,9 @@ static int _register_for_timeout(struct thread_status *thread)
+ 			pthread_cond_signal(&_timeout_cond);
+ 	}
+ 
+-	if (!_timeout_running) {
+-		pthread_t timeout_id;
+-
+-		if (!(ret = _pthread_create_smallstack(&timeout_id, _timeout_thread, NULL)))
+-			_timeout_running = 1;
+-	}
++	if (!_timeout_running &&
++	    !(ret = _pthread_create_smallstack(NULL, _timeout_thread, NULL)))
++		_timeout_running = 1;
+ 
+ 	pthread_mutex_unlock(&_timeout_mutex);
+ 
 
 
