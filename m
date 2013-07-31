@@ -1,90 +1,66 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 29 Jul 2013 21:19:13 +0200
-Subject: [PATCH 09/20] metadata: Nuke the exported "pv_read" function.
-In-Reply-To: <1375125564-1188-1-git-send-email-prockai@redhat.com>
-References: <1375125564-1188-1-git-send-email-prockai@redhat.com>
-Message-ID: <1375125564-1188-9-git-send-email-prockai@redhat.com>
-	(sfid-20130729_211927_639446_862B9458)
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 31 Jul 2013 13:36:30 +0000 (UTC)
+Subject: master - thin: metadata resize needs 1.9 version
+Message-ID: <20130731133630.E607560319@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- lib/metadata/metadata-exported.h |  3 ---
- lib/metadata/metadata.c          | 36 ------------------------------------
- 2 files changed, 39 deletions(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ea605d1ec72960cf8076fb0260dd151a32750ff6
+Commit:        ea605d1ec72960cf8076fb0260dd151a32750ff6
+Parent:        7b58f104427911c4ef9a82a7726ccc62978e1cf5
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jul 25 14:35:08 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jul 31 15:29:27 2013 +0200
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 67dc7f7..c67b5fe 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -497,9 +497,6 @@ int vg_commit(struct volume_group *vg);
- void vg_revert(struct volume_group *vg);
- struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name,
- 				      const char *vgid, int warnings, int *consistent);
--struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
--				int warnings,
--				int scan_label_only);
+thin: metadata resize needs 1.9 version
+
+Version 1.8 is not yet fully usable for metadata resize.
+---
+ WHATS_NEW                            |    1 +
+ lib/thin/thin.c                      |    2 +-
+ test/shell/lvresize-thin-metadata.sh |    2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 21c1f6d..71228c9 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.100 -
+ ================================
++  Require 1.9 thin pool target version for online thin pool metadata resize.
+   Ignore previous LV seg with alloc contiguous & cling when num stripes varies.
+   Fix segfault if devices/global_filter is not specified correctly.
  
- #define get_pvs( cmd ) get_pvs_internal((cmd), NULL, NULL)
- #define get_pvs_perserve_vg( cmd, pv_list, vg_list ) get_pvs_internal((cmd), (pv_list), (vg_list))
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index c41c738..bebfb16 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1339,20 +1339,6 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- 	if (!(pv = find_pv_by_name(cmd, name, 1)))
- 		stack;
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index 863f051..d559219 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -584,7 +584,7 @@ static int _thin_target_present(struct cmd_context *cmd,
+ 		{ 1, 1, THIN_FEATURE_EXTERNAL_ORIGIN, "external_origin" },
+ 		{ 1, 4, THIN_FEATURE_BLOCK_SIZE, "block_size" },
+ 		{ 1, 5, THIN_FEATURE_DISCARDS_NON_POWER_2, "discards_non_power_2" },
+-		{ 1, 8, THIN_FEATURE_METADATA_RESIZE, "metadata_resize" },
++		{ 1, 9, THIN_FEATURE_METADATA_RESIZE, "metadata_resize" },
+ 	};
  
--	/*
--	 * If a PV has no MDAs it may appear to be an orphan until the
--	 * metadata is read off another PV in the same VG.  Detecting
--	 * this means checking every VG by scanning every PV on the
--	 * system.
--	 */
--	if (pv && is_orphan(pv) && dm_list_empty(&pv->fid->metadata_areas_in_use)) {
--		free_pv_fid(pv);
--		if (!scan_vgs_for_pvs(cmd, 0))
--			return_0;
--		if (!(pv = pv_read(cmd, name, 0, 0)))
--			stack;
--	}
--
- 	/* Allow partial & exported VGs to be destroyed. */
- 	/* We must have -ff to overwrite a non orphan */
- 	if (pv && !is_orphan(pv) && pp->force != DONT_PROMPT_OVERRIDE) {
-@@ -3628,28 +3614,6 @@ const char *find_vgname_from_pvname(struct cmd_context *cmd,
- 	return find_vgname_from_pvid(cmd, pvid);
- }
+ 	static const char _lvmconf[] = "global/thin_disabled_features";
+diff --git a/test/shell/lvresize-thin-metadata.sh b/test/shell/lvresize-thin-metadata.sh
+index d488a43..521b76c 100644
+--- a/test/shell/lvresize-thin-metadata.sh
++++ b/test/shell/lvresize-thin-metadata.sh
+@@ -11,7 +11,7 @@
  
--/**
-- * pv_read - read and return a handle to a physical volume
-- * @cmd: LVM command initiating the pv_read
-- * @pv_name: full device name of the PV, including the path
-- * @mdas: list of metadata areas of the PV
-- * @label_sector: sector number where the PV label is stored on @pv_name
-- * @warnings:
-- *
-- * Returns:
-- *   PV handle - valid pv_name and successful read of the PV, or
-- *   NULL - invalid parameter or error in reading the PV
-- *
-- * Note:
-- *   FIXME - liblvm todo - make into function that returns handle
-- */
--struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
--				int warnings,
--				int scan_label_only)
--{
--	return _pv_read(cmd, cmd->mem, pv_name, NULL, warnings, scan_label_only);
--}
--
- /* FIXME Use label functions instead of PV functions */
- static struct physical_volume *_pv_read(struct cmd_context *cmd,
- 					struct dm_pool *pvmem,
--- 
-1.8.2
+ . lib/test
+ 
+-aux have_thin 1 8 0 || skip
++aux have_thin 1 9 0 || skip
+ 
+ aux prepare_pvs 3
+ 
 
 
