@@ -1,90 +1,85 @@
-From: Brassow Jonathan <jbrassow@redhat.com>
-Date: Wed, 31 Jul 2013 15:28:46 -0500
-Subject: [PATCH] dmeventd: remove memory leak
-In-Reply-To: <20130723124239.430bdd40@notabene.brown>
-References: <20130723124239.430bdd40@notabene.brown>
-Message-ID: <9DEB5F6D-FE92-4C6B-84DE-79C9993470E1@redhat.com>
+From: Kevin Chadwick <ma1l1ists@yahoo.co.uk>
+Date: Wed, 31 Jul 2013 22:40:55 +0100
+Subject: Now I'm convinced about Linux
+In-Reply-To: <51F8C758.50002@redhat.com>
+References: <999744.9869.bm@smtp104.mail.ir2.yahoo.com>
+	<51F61D64.6070600@redhat.com>
+	<284284.73974.bm@smtp132.mail.ir2.yahoo.com>
+	<51F8C758.50002@redhat.com>
+Message-ID: <584795.97955.bm@smtp132.mail.ir2.yahoo.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I've checked this in with some modification (git commit ID 5ca54c4).  However, there still seems to be a memory leak somewhere.  I've tried using valgrind to find it, but ended up chasing some non-issues.  :(
+On Wed, 31 Jul 2013 10:14:16 +0200
+Peter Rajnoha wrote:
 
- brassow
+> Unfortunately, it seems that at
+> that time, we were one of the small group of users of this 'last_rule',
+> so it was not a problem for udev to simply remove it...
+> 
 
-On Jul 22, 2013, at 9:42 PM, NeilBrown wrote:
+Numbers to object should not matter here, it is simply plain and obvious
+to me that any developer should realise that this feature should
+exist, and obviously they did originally. That is what gets me the
+most, as I said warnings yes, power from the user, how terrible.
+
+
+> ...well, GOTO applies only to current rule file (so yes, maybe the
+> documentation should be clearer about this - but that needs to be reported
+> for udev team).
+> 
+
+Well I edited the rule of the package doing the remounting and
+backed it up (removed .rules) in case the package manager overwrites it
+but that's a very wrong fix.
+
+Also as long as RedHat now being a support company (primarily) doesn't
+have a better internal manual explaining all the events? etc. then that
+will keep the conspiracy theorists at bay ;-)
+
+> > I'm not even sure this is the right list but you seemed to have
+> > committed the last_rule removal with concerns about Kays decision.
+> > 
+> 
+> (I suppose you mean this one: http://comments.gmane.org/gmane.linux.lvm.devel/2119)
+> 
+
+Yeah I should have thought about the context of the list really.
+
 
 > 
-> If e.g. a snapshot volume is repeatly added and removed, dmeventd will
-> leake memory.
-> 
-> This is because the 'timeout' thread is not detached and is never
-> joined.  So the resources it uses are never freed.
-> 
-> This patch changes _pthread_create_smallstack to set
-> PTHREAD_CREATE_DETACHED if the pthread pointer passed is NULL, and
-> changes _register_for_timeout to pass a NULL pointer rather than a
-> pointer to an unused variable.
-> 
-> Signed-off-by: NeilBrown <neilb@suse.de>
-> 
-> ---
-> 
-> Customer found this memory leak.  It can be easily seen by e.g.
-> 
-> while true; do
->   lvcreate -n snaptest -L 900m -s /dev/vgtest/lvtest
->   sleep 1
->   lvremove -f /dev/vgtest/snaptest
-> done
-> 
-> and watching /proc/`pid-of dmeventd`/maps
-> 
-> NeilBrown
-> 
-> daemons/dmeventd/dmeventd.c |   12 +++++++++---
-> 1 file changed, 9 insertions(+), 3 deletions(-)
-> 
-> --- LVM2.2.02.84.orig/daemons/dmeventd/dmeventd.c
-> +++ LVM2.2.02.84/daemons/dmeventd/dmeventd.c
-> @@ -256,12 +256,20 @@ static struct dso_data *_alloc_dso_data(
-> /* Create a device monitoring thread. */
-> static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *arg)
-> {
-> +	pthread_t tmp;
-> 	pthread_attr_t attr;
-> 	pthread_attr_init(&attr);
-> 	/*
-> 	 * We use a smaller stack since it gets preallocated in its entirety
-> 	 */
-> 	pthread_attr_setstacksize(&attr, THREAD_STACK_SIZE);
-> +	/*
-> +	 * If no-one will be waiting, we need to detach.
-> +	 */
-> +	if (!t) {
-> +		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-> +		t = &tmp;
-> +	}
-> 	return pthread_create(t, &attr, fun, arg);
-> }
-> 
-> @@ -544,9 +552,7 @@ static int _register_for_timeout(struct
-> 	}
-> 
-> 	if (!_timeout_running) {
-> -		pthread_t timeout_id;
-> -
-> -		if (!(ret = -_pthread_create_smallstack(&timeout_id, _timeout_thread, NULL)))
-> +		if (!(ret = -_pthread_create_smallstack(NULL, _timeout_thread, NULL)))
-> 			_timeout_running = 1;
-> 	}
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+> Anyway, now I can imagine the source of your problems and yes, it's OK
+> that you made your points. Though in this case, I need to redirect you
+> to udev/systemd team as I can't help much here...
 
+I must say I was expecting some flame or remarks and I am sure I would
+get much nonsense about OpenBSD being of no consequence and perhaps dbus
+being the heart of any good OS ;-) and maybe even the removal of the
+GOTO rule out of spite if I were to post a copy of my last message to
+the udev/systemd lot (I won't call what happens there teamwork).
+
+Probably best If I make my post short and to the point, I haven't got
+enough minutes never mind hours to tell Lennart how wrong he is on so
+many things and argue about why he doesn't allow commenting and
+ignores so much on his myths about systemd page.
+
+You seem a real credit to RedHat. Perhaps RedHat should consider
+protecting it's brand by putting some of the smaller projects which get
+so much coverage shall we say under a seperate brand, perhaps
+Dpointyhat.
+
+   |
+  | |
+ | D |
+|_____|
+
+Cheap shot maybe but I always say what I think, where it's not cruel
+atleast.
+
+Regards,
+	Kc
 
 
