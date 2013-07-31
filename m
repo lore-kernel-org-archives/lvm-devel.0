@@ -1,66 +1,46 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 31 Jul 2013 13:59:23 +0000 (UTC)
-Subject: master - configure: autoreconf
-Message-ID: <20130731135923.9D2DD612B0@fedorahosted.org>
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 31 Jul 2013 11:31:11 -0400
+Subject: [PATCH RFC] clvmd: verify messages before processing
+In-Reply-To: <51F8CBD3.9090201@redhat.com>
+References: <20130730194649.GA3707@redhat.com>
+ <51F8CBD3.9090201@redhat.com>
+Message-ID: <20130731153111.GB12539@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7db95d0d40c3608b7298cb19380430613fa9e532
-Commit:        7db95d0d40c3608b7298cb19380430613fa9e532
-Parent:        de0cba0e2d588a327867f17015cecba516364591
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jul 31 15:59:05 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jul 31 15:59:05 2013 +0200
+On Wed, Jul 31, 2013 at 09:33:23AM +0100, Christine Caulfield wrote:
+> >@@ -2189,10 +2286,22 @@ error:
+> >  void process_message(struct local_client *client, char *buf, int len,
+> >  		     const char *csid)
+> >  {
+> >+	char nodename[max_cluster_member_name_len];
+> >  	struct clvm_header *inheader;
+> >+	int rv;
+> >
+> >  	inheader = (struct clvm_header *) buf;
+> >  	ntoh_clvm(inheader);	/* Byteswap fields */
+> >+
+> >+	rv = verify_message(buf, len);
+> >+	if (rv < 0) {
+> >+		memset(nodename, 0, sizeof(nodename));
+> >+		clops->name_from_csid(csid, nodename);
+> >+		log_error("process_message from %s len %d bad verify\n", nodename, len);
+> >+		dump_message(buf, len);
+> 
+> Here you will probably have to return an error to the calling clvmd
+> or you will get delays when the caller times out. If that happens
+> then the 'timed-out' message is less than helpful
 
-configure: autoreconf
+The thinking behind no reply was that if a command sends a bogus message,
+it doesn't deserve a reply, and even if it got one, may not handle it
+properly anyway.  So, if we're dealing with a bogus non-message, I think
+we're beyond the point where we can be helpful.  I'm mainly trying to just
+protect clvmd from faulty commands.  But, I looked at how feasible it
+would be, and I don't think it's worth the trouble -- we'd have to do the
+whole add_to_lvmqueue() thing, etc.
 
----
- configure |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
-
-diff --git a/configure b/configure
-index a9a2830..20a706a 100755
---- a/configure
-+++ b/configure
-@@ -7128,7 +7128,7 @@ fi
- set dummy thin_dump; ac_word=$2
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
- $as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_THIN_DUMP_CMD+:} false; then :
-+if test "${ac_cv_path_THIN_DUMP_CMD+set}" = set; then :
-   $as_echo_n "(cached) " >&6
- else
-   case $THIN_DUMP_CMD in
-@@ -7142,7 +7142,7 @@ do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-     for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-+  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
-     ac_cv_path_THIN_DUMP_CMD="$as_dir/$ac_word$ac_exec_ext"
-     $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-     break 2
-@@ -7180,7 +7180,7 @@ fi
- set dummy thin_repair; ac_word=$2
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
- $as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_THIN_REPAIR_CMD+:} false; then :
-+if test "${ac_cv_path_THIN_REPAIR_CMD+set}" = set; then :
-   $as_echo_n "(cached) " >&6
- else
-   case $THIN_REPAIR_CMD in
-@@ -7194,7 +7194,7 @@ do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-     for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-+  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
-     ac_cv_path_THIN_REPAIR_CMD="$as_dir/$ac_word$ac_exec_ext"
-     $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-     break 2
 
 
