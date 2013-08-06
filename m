@@ -1,187 +1,88 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  6 Aug 2013 14:23:10 +0000 (UTC)
-Subject: master - exec: pipe open
-Message-ID: <20130806142310.658BA60E80@fedorahosted.org>
+Date: Tue,  6 Aug 2013 14:23:12 +0000 (UTC)
+Subject: master - thin: use pipe_open instead of popen
+Message-ID: <20130806142312.7EE5A61268@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f6dd5a294b9beaf1d3ef68385eeeb8d55ec3a344
-Commit:        f6dd5a294b9beaf1d3ef68385eeeb8d55ec3a344
-Parent:        b6437a61806bdec29951eb80616db121c4ec4eff
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=139a62fc0bbe45318c7ca25cd8ee2dc990c95a9d
+Commit:        139a62fc0bbe45318c7ca25cd8ee2dc990c95a9d
+Parent:        f6dd5a294b9beaf1d3ef68385eeeb8d55ec3a344
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 6 14:27:37 2013 +0200
+AuthorDate:    Tue Aug 6 15:21:42 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 6 16:18:43 2013 +0200
+CommitterDate: Tue Aug 6 16:19:31 2013 +0200
 
-exec: pipe open
+thin: use pipe_open instead of popen
 
-Function replaces popen() system and avoids shell execution
-and argument parsing (no surprices).
+Use new function to directly exec command and read its output.
 ---
- WHATS_NEW           |    1 +
- lib/misc/lvm-exec.c |   99 +++++++++++++++++++++++++++++++++++++++++++++++++++
- lib/misc/lvm-exec.h |   30 +++++++++++++++
- 3 files changed, 130 insertions(+), 0 deletions(-)
+ tools/lvconvert.c |   24 +++++++++++++++---------
+ 1 files changed, 15 insertions(+), 9 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5baa00d..5284145 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.100 -
- ================================
-+  Add pipe_open/close() to replace less secure popen() glibc call.
-   Fix metadata area offset/size overflow if it's >= 4g and while using lvmetad.
-   Inherit and apply any profile attached to a VG if creating new thin pool.
-   Add initial support thin pool lvconvert --repair.
-diff --git a/lib/misc/lvm-exec.c b/lib/misc/lvm-exec.c
-index 2f0f5ca..4cecfa3 100644
---- a/lib/misc/lvm-exec.c
-+++ b/lib/misc/lvm-exec.c
-@@ -107,3 +107,102 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index f008954..5d796e7 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1968,6 +1968,7 @@ static int _lvconvert_thinpool_repair(struct cmd_context *cmd,
+ 	uint64_t trans_id;
+ 	struct logical_volume *pmslv;
+ 	struct logical_volume *mlv = first_seg(pool_lv)->metadata_lv;
++	struct pipe_data pdata;
+ 	FILE *f;
  
- 	return 1;
- }
+ 	if (!thin_repair[0]) {
+@@ -1975,11 +1976,17 @@ static int _lvconvert_thinpool_repair(struct cmd_context *cmd,
+ 		return 0; /* Checking disabled */
+ 	}
+ 
++	pmslv = pool_lv->vg->pool_metadata_spare_lv;
 +
-+static int _reopen_fd_to_null(int fd)
-+{
-+	int null_fd;
-+
-+	if ((null_fd = open("/dev/null", O_RDWR)) == -1) {
-+		log_sys_error("open", "/dev/null");
-+		return 0;
-+	}
-+
-+	if (close(fd)) {
-+		log_sys_error("close", "");
-+		return 0;
-+	}
-+
-+	if (dup2(null_fd, fd) == -1) {
-+		log_sys_error("dup2", "");
-+		return 0;
-+	}
-+
-+	if (close(null_fd)) {
-+		log_sys_error("dup2", "");
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
-+		int sync_needed, struct pipe_data *pdata)
-+{
-+	int pipefd[2];
-+	char buf[PATH_MAX * 2];
-+
-+	if (sync_needed)
-+		if (!sync_local_dev_names(cmd)) /* Flush ops and reset dm cookie */
+ 	/* Check we have pool metadata spare LV */
+ 	if (!handle_pool_metadata_spare(pool_lv->vg, 0, NULL, 1))
+ 		return_0;
+ 
+-	pmslv = pool_lv->vg->pool_metadata_spare_lv;
++	if (pmslv != pool_lv->vg->pool_metadata_spare_lv) {
++		if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
 +			return_0;
-+
-+	if (pipe(pipefd)) {
-+		log_sys_error("pipe", "");
-+		return 0;
++		pmslv = pool_lv->vg->pool_metadata_spare_lv;
 +	}
-+
-+	log_verbose("Piping:%s", _verbose_args(argv, buf, sizeof(buf)));
-+
-+	if ((pdata->pid = fork()) == -1) {
-+		log_sys_error("pipe", "");
-+		return 0;
-+	}
-+
-+	if (pdata->pid == 0) {
-+		/* Child -> writer, convert pipe[0] to STDOUT */
-+		if (!_reopen_fd_to_null(STDIN_FILENO))
-+			stack;
-+		else if (close(pipefd[0 /*read*/]))
-+			log_sys_error("close", "pipe[0]");
-+		else if (close(STDOUT_FILENO))
-+			log_sys_error("close", "STDOUT");
-+		else if (dup2(pipefd[1 /*write*/], STDOUT_FILENO) == -1)
-+			log_sys_error("dup2", "STDOUT");
-+		else if (close(pipefd[1]))
-+			log_sys_error("close", "pipe[1]");
-+		else if (argv[0]) {
-+			execvp(argv[0], (char **) argv);
-+			log_sys_error("execvp", argv[0]);
-+		}
-+		_exit(errno);
-+	}
-+
-+	/* Parent -> reader */
-+	if (close(pipefd[1 /*write*/])) {
-+		log_sys_error("close", "STDOUT");
-+		return NULL;
-+	}
-+
-+	if (!(pdata->fp = fdopen(pipefd[0 /*read*/],  "r"))) {
-+		log_sys_error("fdopen", "STDIN");
-+		if (close(pipefd[0]))
-+			log_sys_error("close", "STDIN");
-+		return NULL; /* FIXME: kill */
-+	}
-+
-+	return pdata->fp;
-+}
-+
-+int pipe_close(struct pipe_data *pdata)
-+{
-+	int status;
-+
-+	if (fclose(pdata->fp))
-+		log_sys_error("fclose", "STDIN");
-+
-+	if (waitpid(pdata->pid, &status, 0) != pdata->pid) {
-+		log_sys_error("waitpid", "");
-+		return 0;
-+	}
-+
-+	return (status == 0) ? 1 : 0;
-+}
-diff --git a/lib/misc/lvm-exec.h b/lib/misc/lvm-exec.h
-index 3ad4af1..c73d4c4 100644
---- a/lib/misc/lvm-exec.h
-+++ b/lib/misc/lvm-exec.h
-@@ -37,4 +37,34 @@ struct cmd_context;
- int exec_cmd(struct cmd_context *cmd, const char *const argv[],
- 	     int *rstatus, int sync_needed);
  
+ 	if (!(dm_name = dm_build_dm_name(cmd->mem, mlv->vg->name,
+ 					 mlv->name, NULL)) ||
+@@ -2050,13 +2057,12 @@ static int _lvconvert_thinpool_repair(struct cmd_context *cmd,
+ 	}
+ 
+ 	if (thin_dump[0]) {
+-		if (dm_snprintf(meta_path, sizeof(meta_path), "%s %s", thin_dump, pms_path) < 0) {
+-			log_error("Command cannot fit into buffer.");
+-			goto deactivate_mlv;
+-		}
++		argv[0] = thin_dump;
++		argv[1] = pms_path;
++		argv[2] = NULL;
+ 
+-		if (!(f = popen(meta_path, "r")))
+-			log_warn("WARNING: Cannot read output from %s.", meta_path);
++		if (!(f = pipe_open(cmd, argv, 0, &pdata)))
++			log_warn("WARNING: Cannot read output from %s %s.", thin_dump, pms_path);
+ 		else {
+ 			/*
+ 			 * Scan only the 1st. line for transation id.
+@@ -2073,8 +2079,8 @@ static int _lvconvert_thinpool_repair(struct cmd_context *cmd,
+ 					  first_seg(pool_lv)->transaction_id,
+ 					  pool_lv->vg->name, pool_lv->name, trans_id,
+ 					  pms_path);
+-			if (pclose(f))
+-				log_sys_error("popen", thin_dump);
 +
-+struct FILE;
-+struct pipe_data {
-+	FILE *fp;
-+	pid_t pid;
-+};
-+
-+/**
-+ * popen() like function to read-only output from executed command
-+ * without running shell.
-+ *
-+ * \param argv
-+ * Arguments for execvp.
-+ *
-+ * \param sync_needed
-+ * Bool specifying whether local devices needs to be synchronized
-+ * before executing command.
-+ * Note: You cannot synchronize devices within activation context.
-+ *
-+ * \param pdata
-+ * Arguments to store data needed for pclose_exec().
-+ *
-+ * \return
-+ * 1 (success) or 0 (failure).
-+ */
-+FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
-+		int sync_needed, struct pipe_data *pdata);
-+
-+int pipe_close(struct pipe_data *pdata);
-+
- #endif
++			(void) pipe_close(&pdata); /* killing pipe */
+ 		}
+ 	}
+ 
 
 
