@@ -1,70 +1,111 @@
-From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
-Date: Wed, 07 Aug 2013 11:21:44 +0200
-Subject: master - RAID: Make "raid1" the default mirror segment type
-In-Reply-To: <20130806191451.F216960F6C@fedorahosted.org>
-References: <20130806191451.F216960F6C@fedorahosted.org>
-Message-ID: <520211A8.3010901@gmail.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed,  7 Aug 2013 10:17:47 +0000 (UTC)
+Subject: master - tests: add profiles.sh test
+Message-ID: <20130807101747.7BBB5613A5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 6.8.2013 21:14, Jonathan Brassow napsal(a):
-> Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7e1083c985fd130b240c2471643350cc5c0f05cf
-> Commit:        7e1083c985fd130b240c2471643350cc5c0f05cf
-> Parent:        f74e8fe04471a44fe1ab0645e48c9cb06ef6fb4f
-> Author:        Jonathan Brassow <jbrassow@redhat.com>
-> AuthorDate:    Tue Aug 6 14:13:55 2013 -0500
-> Committer:     Jonathan Brassow <jbrassow@redhat.com>
-> CommitterDate: Tue Aug 6 14:13:55 2013 -0500
->
-> RAID: Make "raid1" the default mirror segment type
->
-> ---
->   WHATS_NEW             |    1 +
->   conf/example.conf.in  |    2 +-
->   lib/config/defaults.h |    2 +-
->   man/lvconvert.8.in    |    7 ++++++-
->   man/lvcreate.8.in     |   17 ++++++++++++-----
->   5 files changed, 21 insertions(+), 8 deletions(-)
->
-> diff --git a/WHATS_NEW b/WHATS_NEW
-> index fd7e39f..3590e64 100644
-> --- a/WHATS_NEW
-> +++ b/WHATS_NEW
-> @@ -1,5 +1,6 @@
->   Version 2.02.100 -
->   ================================
-> +  Make "raid1" the default mirror segment type.
->     Fix clogd descriptor leak when daemonizing.
->     Fix clvmd descriptor leak on restart.
->     Add pipe_open/close() to replace less secure popen() glibc call.
-> diff --git a/conf/example.conf.in b/conf/example.conf.in
-> index 0e313c8..c3ba2b9 100644
-> --- a/conf/example.conf.in
-> +++ b/conf/example.conf.in
-> @@ -512,7 +512,7 @@ global {
->       #
->       # Specify the '--type <mirror|raid1>' option to override this default
->       # setting.
-> -    mirror_segtype_default = "mirror"
-> +    mirror_segtype_default = "raid1"
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f50e8fb9b9030c86f3a65f61a4b7f43089a26c60
+Commit:        f50e8fb9b9030c86f3a65f61a4b7f43089a26c60
+Parent:        c13d1b11b2eb30c215a4233d6f641d0d1c62114b
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Aug 7 12:17:36 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Aug 7 12:17:36 2013 +0200
 
+tests: add profiles.sh test
 
-We need fallback here - since if the user doesn't have dm-raid -  then he 
-needs to manually configure defaults.
+---
+ test/shell/profiles.sh |   79 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 79 insertions(+), 0 deletions(-)
 
-As a result automated tests on systems without dm raid fails.
-
-Also we need to update all tests which were supposed to test mirrors,
-to really test mirrors - otherwise we are checking raid code twice
-(and even without checking  dm-raid version presence)
-
-Zdenek
-
-
-
+diff --git a/test/shell/profiles.sh b/test/shell/profiles.sh
+new file mode 100644
+index 0000000..654e04f
+--- /dev/null
++++ b/test/shell/profiles.sh
+@@ -0,0 +1,79 @@
++#!/bin/sh
++
++# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++#
++# test basic profile functionality
++#
++
++. lib/test
++
++MSG_FAILED_TO_APPLY_PROFILE="Failed to apply configuration profile"
++MSG_IGNORING_INVALID_PROFILE="Ignoring invalid configuration profile"
++MSG_NOT_PROFILABLE="not customizable by a profile"
++
++# fail if the profile requested by --profile cmdline option is not present
++not pvs --profile nonexistent 2>&1 | grep "$MSG_FAILED_TO_APPLY_PROFILE"
++
++# config/checks=1: warning message about setting not being profilable +
++#                  summary error message about invalid profile
++# config/checks=0: just summary error message about invalid profile
++aux profileconf invalid 'log/prefix=" "'
++
++aux lvmconf 'config/checks = 0'
++pvs --profile invalid 2>msg
++not grep "$MSG_NOT_PROFILABLE" msg
++grep "$MSG_IGNORING_INVALID_PROFILE" msg
++
++aux lvmconf 'config/checks = 1'
++pvs --profile invalid 2>msg
++grep "$MSG_NOT_PROFILABLE" msg
++grep "$MSG_IGNORING_INVALID_PROFILE" msg
++
++aux lvmconf 'allocation/thin_pool_zero = 1'
++
++# all profilable items listed here - should pass
++aux profileconf valid 'allocation/thin_pool_zero = 0' \
++                      'allocation/thin_pool_discards = "passdown"' \
++                      'allocation/thin_pool_chunk_size = 64'\
++                      'activation/thin_pool_autoextend_threshold = 100' \
++                      'activation/thin_pool_autoextend_percent = 20'
++
++aux profileconf extra 'allocation/thin_pool_chunk_size = 128'
++
++pvs --profile valid 2>msg
++not grep "$MSG_NOT_PROFILABLE" msg
++not grep "$MSG_IGNORING_INVALID_PROFILE" msg
++
++# attaching/detaching profiles to VG/LV
++aux prepare_pvs 1 8
++pvcreate "$dev1"
++vgcreate $vg1 "$dev1"
++check vg_field $vg1 vg_profile ""
++lvcreate -l 1 -n $lv1 $vg1
++check lv_field $vg1/$lv1 lv_profile ""
++vgchange --profile valid $vg1
++check vg_field $vg1 vg_profile valid
++check lv_field $vg1/$lv1 lv_profile ""
++lvchange --profile extra $vg1/$lv1
++check vg_field $vg1 vg_profile valid
++check lv_field $vg1/$lv1 lv_profile extra
++vgchange --detachprofile $vg1
++check vg_field $vg1 vg_profile ""
++check lv_field $vg1/$lv1 lv_profile extra
++lvchange --detachprofile $vg1/$lv1
++check vg_field $vg1 vg_profile ""
++check lv_field $vg1/$lv1 lv_profile ""
++
++# dumpconfig and merged lvm.conf + profile
++lvm dumpconfig &>out
++grep 'thin_pool_zero=1' out
++lvm dumpconfig --profile valid --mergedconfig >out
++grep 'thin_pool_zero=0' out
 
 
