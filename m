@@ -1,111 +1,32 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  7 Aug 2013 10:17:47 +0000 (UTC)
-Subject: master - tests: add profiles.sh test
-Message-ID: <20130807101747.7BBB5613A5@fedorahosted.org>
+From: Brassow Jonathan <jbrassow@redhat.com>
+Date: Wed, 7 Aug 2013 09:03:55 -0500
+Subject: master - RAID: Make "raid1" the default mirror segment type
+In-Reply-To: <520211A8.3010901@gmail.com>
+References: <20130806191451.F216960F6C@fedorahosted.org>
+	<520211A8.3010901@gmail.com>
+Message-ID: <A3DC30E4-972E-4577-B461-5BD04E42FDF9@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f50e8fb9b9030c86f3a65f61a4b7f43089a26c60
-Commit:        f50e8fb9b9030c86f3a65f61a4b7f43089a26c60
-Parent:        c13d1b11b2eb30c215a4233d6f641d0d1c62114b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Aug 7 12:17:36 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Aug 7 12:17:36 2013 +0200
 
-tests: add profiles.sh test
+On Aug 7, 2013, at 4:21 AM, Zdenek Kabelac wrote:
 
----
- test/shell/profiles.sh |   79 ++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 79 insertions(+), 0 deletions(-)
+> 
+> We need fallback here - since if the user doesn't have dm-raid -  then he needs to manually configure defaults.
+> 
+> As a result automated tests on systems without dm raid fails.
+> 
+> Also we need to update all tests which were supposed to test mirrors,
+> to really test mirrors - otherwise we are checking raid code twice
+> (and even without checking  dm-raid version presence)
 
-diff --git a/test/shell/profiles.sh b/test/shell/profiles.sh
-new file mode 100644
-index 0000000..654e04f
---- /dev/null
-+++ b/test/shell/profiles.sh
-@@ -0,0 +1,79 @@
-+#!/bin/sh
-+
-+# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+#
-+# test basic profile functionality
-+#
-+
-+. lib/test
-+
-+MSG_FAILED_TO_APPLY_PROFILE="Failed to apply configuration profile"
-+MSG_IGNORING_INVALID_PROFILE="Ignoring invalid configuration profile"
-+MSG_NOT_PROFILABLE="not customizable by a profile"
-+
-+# fail if the profile requested by --profile cmdline option is not present
-+not pvs --profile nonexistent 2>&1 | grep "$MSG_FAILED_TO_APPLY_PROFILE"
-+
-+# config/checks=1: warning message about setting not being profilable +
-+#                  summary error message about invalid profile
-+# config/checks=0: just summary error message about invalid profile
-+aux profileconf invalid 'log/prefix=" "'
-+
-+aux lvmconf 'config/checks = 0'
-+pvs --profile invalid 2>msg
-+not grep "$MSG_NOT_PROFILABLE" msg
-+grep "$MSG_IGNORING_INVALID_PROFILE" msg
-+
-+aux lvmconf 'config/checks = 1'
-+pvs --profile invalid 2>msg
-+grep "$MSG_NOT_PROFILABLE" msg
-+grep "$MSG_IGNORING_INVALID_PROFILE" msg
-+
-+aux lvmconf 'allocation/thin_pool_zero = 1'
-+
-+# all profilable items listed here - should pass
-+aux profileconf valid 'allocation/thin_pool_zero = 0' \
-+                      'allocation/thin_pool_discards = "passdown"' \
-+                      'allocation/thin_pool_chunk_size = 64'\
-+                      'activation/thin_pool_autoextend_threshold = 100' \
-+                      'activation/thin_pool_autoextend_percent = 20'
-+
-+aux profileconf extra 'allocation/thin_pool_chunk_size = 128'
-+
-+pvs --profile valid 2>msg
-+not grep "$MSG_NOT_PROFILABLE" msg
-+not grep "$MSG_IGNORING_INVALID_PROFILE" msg
-+
-+# attaching/detaching profiles to VG/LV
-+aux prepare_pvs 1 8
-+pvcreate "$dev1"
-+vgcreate $vg1 "$dev1"
-+check vg_field $vg1 vg_profile ""
-+lvcreate -l 1 -n $lv1 $vg1
-+check lv_field $vg1/$lv1 lv_profile ""
-+vgchange --profile valid $vg1
-+check vg_field $vg1 vg_profile valid
-+check lv_field $vg1/$lv1 lv_profile ""
-+lvchange --profile extra $vg1/$lv1
-+check vg_field $vg1 vg_profile valid
-+check lv_field $vg1/$lv1 lv_profile extra
-+vgchange --detachprofile $vg1
-+check vg_field $vg1 vg_profile ""
-+check lv_field $vg1/$lv1 lv_profile extra
-+lvchange --detachprofile $vg1/$lv1
-+check vg_field $vg1 vg_profile ""
-+check lv_field $vg1/$lv1 lv_profile ""
-+
-+# dumpconfig and merged lvm.conf + profile
-+lvm dumpconfig &>out
-+grep 'thin_pool_zero=1' out
-+lvm dumpconfig --profile valid --mergedconfig >out
-+grep 'thin_pool_zero=0' out
+I'll fix-up all the mirror tests today.
+
+Not sure about what to do regarding a user on an old system with fresh LVM.  The commands should complain about not having RAID kernel support.  Do we overwrite their current lvm.conf when installing?  I don't think so...
+
+ brassow
 
 
