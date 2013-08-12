@@ -1,68 +1,94 @@
 From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Mon, 12 Aug 2013 17:44:04 +0000 (UTC)
-Subject: master - RAID: Fix bug making lvchange unable to change recovery rate for RAID
-Message-ID: <20130812174404.8E43860F0E@fedorahosted.org>
+Date: Mon, 12 Aug 2013 18:57:34 +0000 (UTC)
+Subject: master - Mirror: Fix inability to remove VG's cluster flag if it contains a mirror
+Message-ID: <20130812185734.EE7B460DE7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bb457adbb6d625a5f942faf8498bb5ee87645ec3
-Commit:        bb457adbb6d625a5f942faf8498bb5ee87645ec3
-Parent:        28760275e69f16d43b8cb1a31dd5b5e14ff232b6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=abc89422af75fa9e20d24285d1366e4631cb8748
+Commit:        abc89422af75fa9e20d24285d1366e4631cb8748
+Parent:        bb457adbb6d625a5f942faf8498bb5ee87645ec3
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Mon Aug 12 12:40:52 2013 -0500
+AuthorDate:    Mon Aug 12 13:56:47 2013 -0500
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Mon Aug 12 12:43:47 2013 -0500
+CommitterDate: Mon Aug 12 13:56:47 2013 -0500
 
-RAID: Fix bug making lvchange unable to change recovery rate for RAID
+Mirror: Fix inability to remove VG's cluster flag if it contains a mirror
 
-Commit ID 8615234c0fa331852a11e1bf595bf1d4b858f4bc failed to include
-the actual code changes that were made to fix the bug.  Instead, all
-tests went in to validate the bug fix.  This patch adds the missing
-code changes.
+According to bug 995193, if a volume group
+	1) contains a mirror
+	2) is clustered
+	3) 'locking_type' = 0 is used
+then it is not possible to remove the 'c'luster flag from the VG.  This
+is due to the way _lv_is_active behaves.
+
+We shouldn't allow the cluster flag to be flipped unless the mirrors in
+the cluster are not active.  This is because different kernel modules
+are used depending on whether a mirror is cluster or not.  When we
+attempt to see if the mirror is active, we first check locally.  If it
+is not, then we attempt to check for remotely active instances if the VG
+is clustered.  Since the no_lock locking type is LCK_CLUSTERED, but does
+not implement 'query_resource', remote_lock_held will always return an
+error in this case.  An error from remove_lock_held is treated as though
+the lock _is_ held (i.e. the LV is active remotely).  This blocks the
+cluster flag from changing.
+
+The solution is to implement 'query_resource' for the no_lock type.  It
+will report a message and return 1.  This will allow _lv_is_active to
+function properly.  The LV would be considered not active remotely and
+the VG can change its flag.
 ---
- tools/lvchange.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ WHATS_NEW                |    1 +
+ lib/locking/no_locking.c |    9 +++++++++
+ 2 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 4973406..525022f 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -823,7 +823,7 @@ static int lvchange_recovery_rate(struct logical_volume *lv)
- 	struct cmd_context *cmd = lv->vg->cmd;
- 	struct lv_segment *raid_seg = first_seg(lv);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 44a1437..68d4679 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.100 -
+ ================================
++  Fix inability to remove a VG's cluster flag if it contains a mirror.
+   Suppress arg: prefix in log_sys_error macro when arg is empty string.
+   Fix bug making lvchange unable to change recovery rate for RAID.
+   Prohibit conversion of thin pool to external origin.
+diff --git a/lib/locking/no_locking.c b/lib/locking/no_locking.c
+index b1b235c..5f3f0b6 100644
+--- a/lib/locking/no_locking.c
++++ b/lib/locking/no_locking.c
+@@ -66,6 +66,13 @@ static int _no_lock_resource(struct cmd_context *cmd, const char *resource,
+ 	return 1;
+ }
  
--	if (strcmp(raid_seg->segtype->name, "raid1")) {
-+	if (!seg_is_raid(raid_seg)) {
- 		log_error("Unable to change the recovery rate of non-RAID"
- 			  " logical volume.");
- 		return 0;
-@@ -831,10 +831,10 @@ static int lvchange_recovery_rate(struct logical_volume *lv)
- 
- 	if (arg_count(cmd, minrecoveryrate_ARG))
- 		raid_seg->min_recovery_rate =
--			arg_uint_value(cmd, minrecoveryrate_ARG, 0);
-+			arg_uint_value(cmd, minrecoveryrate_ARG, 0) / 2;
- 	if (arg_count(cmd, maxrecoveryrate_ARG))
- 		raid_seg->max_recovery_rate =
--			arg_uint_value(cmd, maxrecoveryrate_ARG, 0);
-+			arg_uint_value(cmd, maxrecoveryrate_ARG, 0) / 2;
- 
- 	if (raid_seg->max_recovery_rate &&
- 	    (raid_seg->max_recovery_rate < raid_seg->min_recovery_rate)) {
-@@ -1145,9 +1145,9 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
- 	int update_partial_unsafe =
- 		arg_count(cmd, alloc_ARG) ||
- 		arg_count(cmd, discards_ARG) ||
-+		arg_count(cmd, minrecoveryrate_ARG) ||
-+		arg_count(cmd, maxrecoveryrate_ARG) ||
- 		arg_count(cmd, resync_ARG) ||
--		arg_count(cmd, raidminrecoveryrate_ARG) ||
--		arg_count(cmd, raidmaxrecoveryrate_ARG) ||
- 		arg_count(cmd, syncaction_ARG) ||
- 		arg_count(cmd, writebehind_ARG) ||
- 		arg_count(cmd, writemostly_ARG) ||
++static int _no_query_resource(const char *resource, int *mode)
++{
++	log_very_verbose("Locking is disabled: Treating lock %s as not held.",
++			 resource);
++	return 1;
++}
++
+ static int _readonly_lock_resource(struct cmd_context *cmd,
+ 				   const char *resource,
+ 				   uint32_t flags, struct logical_volume *lv)
+@@ -86,6 +93,7 @@ int init_no_locking(struct locking_type *locking, struct cmd_context *cmd __attr
+ 		    int suppress_messages)
+ {
+ 	locking->lock_resource = _no_lock_resource;
++	locking->query_resource = _no_query_resource;
+ 	locking->reset_locking = _no_reset_locking;
+ 	locking->fin_locking = _no_fin_locking;
+ 	locking->flags = LCK_CLUSTERED;
+@@ -97,6 +105,7 @@ int init_readonly_locking(struct locking_type *locking, struct cmd_context *cmd
+ 			  int suppress_messages)
+ {
+ 	locking->lock_resource = _readonly_lock_resource;
++	locking->query_resource = _no_query_resource;
+ 	locking->reset_locking = _no_reset_locking;
+ 	locking->fin_locking = _no_fin_locking;
+ 	locking->flags = 0;
 
 
