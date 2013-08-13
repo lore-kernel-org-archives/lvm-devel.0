@@ -1,40 +1,28 @@
-From: Oliver Rath <rath@mglug.de>
-Date: Tue, 13 Aug 2013 20:00:08 +0200
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Tue, 13 Aug 2013 19:36:04 +0100
 Subject: Are there race conditions between pvcreate and vgcreate?
-Message-ID: <520A7428.9000805@mglug.de>
+In-Reply-To: <520A7350.3080005@mglug.de>
+References: <520A7350.3080005@mglug.de>
+Message-ID: <20130813183604.GB29268@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi List,
+On Tue, Aug 13, 2013 at 07:56:32PM +0200, Oliver Rath wrote:
+> i have a strange problem:
+ 
+When you see anything strange, add -vvvv to all your commands
+and record the output, or configure lvm.conf to write it all
+to syslog, if you have things running in parallel and need
+to see how they overlap.
 
-i have a strange problem:
+> vgcreate myvg /dev/sda5 /dev/sdb1
 
-Sometimes a script runs into a failure "device /dev/sdb1 not found or
-ignored by filtering" , but the devices are created just before
+vgcreate will perform pvcreate itself if necessary.
+Try without the pvcreates?
 
-i.e.
-
-pvcreate /dev/sda5 (1,4TB)
-pvcreate /dev/sdb1 (2 TB)
-
-..
-
-vgcreate myvg /dev/sda5 /dev/sdb1
-
-Are there any race conditions? If there are, exist any robust solution
-for this? Im using lvm2-tools 2.02.99 + --with-thin=internal
---with-replicators=insternal
-
-Tfh!
-
-Oliver
-
---
-lvm-devel mailing list
-lvm-devel at redhat.com
-https://www.redhat.com/mailman/listinfo/lvm-devel
+Alasdair
 
 
