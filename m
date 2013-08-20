@@ -1,39 +1,57 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 19 Aug 2013 06:32:13 +0000 (UTC)
-Subject: master - dumpconfig: also mention profilable type if giving hint about known types
-Message-ID: <20130819063213.1AE8D61358@fedorahosted.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Tue, 20 Aug 2013 15:20:14 +0900
+Subject: [PATCH] configure: Set PTHREAD_LIBS when lvmetad is enabled
+Message-ID: <52130A9E.9040001@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=99fd710cfd8beb88eb860e16007209d0acb1c440
-Commit:        99fd710cfd8beb88eb860e16007209d0acb1c440
-Parent:        d8b781e8ab9be0e54fa68834398bc42ce9465ba0
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Aug 19 08:32:03 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Aug 19 08:32:03 2013 +0200
+I hit a build error like this when I enabled lvmetad without dmeventd/clvmd:
 
-dumpconfig: also mention profilable type if giving hint about known types
+cc  -fPIC  -O2  -O2 -L../../libdm -L../../lib -L../../libdaemon/client -L../../libdaemon/server -o lvmetad lvmetad-core.o \
+-ldl -ldaemonserver -llvm-internal -ldaemonclient -ludev   -ldl -ldevmapper   -rdynamic
+/usr/bin/ld: lvmetad-core.o: undefined reference to symbol 'pthread_mutexattr_settype@@GLIBC_2.2.5'
+/usr/bin/ld: note: 'pthread_mutexattr_settype@@GLIBC_2.2.5' is defined in DSO /lib64/libpthread.so.0 so try adding it to the linker command line
+/lib64/libpthread.so.0: could not read symbols: Invalid operation
+collect2: error: ld returned 1 exit status
+make[2]: *** [lvmetad] Error 1
+make[2]: Leaving directory `/work/lvm2/daemons/lvmetad'
+make[1]: *** [lvmetad] Error 2
+make[1]: Leaving directory `/work/lvm2/daemons'
+make: *** [daemons] Error 2
+
+Attached is a trivial patch to fix this.
 
 ---
- tools/dumpconfig.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Jun'ichi Nomura, NEC Corporation
 
-diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
-index 0887297..18fba34 100644
---- a/tools/dumpconfig.c
-+++ b/tools/dumpconfig.c
-@@ -188,7 +188,7 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 	else {
- 		log_error("Incorrect type of configuration specified. "
--			  "Expected one of: current, default, missing, new.");
-+			  "Expected one of: current, default, missing, new, profilable.");
- 		r = EINVALID_CMD_LINE;
- 		goto out;
- 	}
+diff --git a/configure b/configure
+index 20a706a..070f6c1 100755
+--- a/configure
++++ b/configure
+@@ -9668,7 +9668,7 @@ if [ \( "x$LVM1" = xshared -o "x$POOL" = xshared -o "x$CLUSTER" = xshared \
+ fi
+ 
+ ################################################################################
+-if [ "$DMEVENTD" = yes -o "$CLVMD" != none ] ; then
++if [ "$DMEVENTD" = yes -o "$CLVMD" != none -o "$LVMETAD" = yes ] ; then
+ 	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for pthread_mutex_lock in -lpthread" >&5
+ $as_echo_n "checking for pthread_mutex_lock in -lpthread... " >&6; }
+ if test "${ac_cv_lib_pthread_pthread_mutex_lock+set}" = set; then :
+diff --git a/configure.in b/configure.in
+index 611ab37..d32d8cd 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1181,7 +1181,7 @@ Features cannot be 'shared' when building statically
+ fi
+ 
+ ################################################################################
+-if [[ "$DMEVENTD" = yes -o "$CLVMD" != none ]] ; then
++if [[ "$DMEVENTD" = yes -o "$CLVMD" != none -o "$LVMETAD" = yes ]] ; then
+ 	AC_CHECK_LIB([pthread], [pthread_mutex_lock],
+ 		[PTHREAD_LIBS="-lpthread"], hard_bailout)
+ fi
 
 
