@@ -1,62 +1,79 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 21 Aug 2013 12:22:07 +0000 (UTC)
-Subject: master - filter-mpath: remove superfluous error message about mpath major not equal to dm major
-Message-ID: <20130821122207.2FFAD60E76@fedorahosted.org>
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 21 Aug 2013 18:55:42 -0400
+Subject: [PATCH] test: add process-each-duplicate-vgnames
+Message-ID: <20130821225542.GA23463@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c8daa15270e0e1085776bd227331863e7cf408ae
-Commit:        c8daa15270e0e1085776bd227331863e7cf408ae
-Parent:        f0be9ac9047a30bb2befe6a8d9130f466d37d9fd
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Aug 21 14:07:01 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Aug 21 14:07:01 2013 +0200
-
-filter-mpath: remove superfluous error message about mpath major not equal to dm major
-
-This is a regression caused by commit 3bd90488545a4ad5374b4e0f1daba6cf16ae6ae8.
-The error message added with that commit "mpath major %d is not dm major %d" is
-superfluous.
-
-When scanning for mpath components, we're looking for a parent device.
-But this parent device is not necessarily an mpath device (so the dm device)
-if it exists - it can be any other device layered on top (e.g. an MD RAID device).
+Test that vgs shows both vgs when two vgs
+exist with the same name but different uuids.
 ---
- WHATS_NEW                  |    1 +
- lib/filters/filter-mpath.c |    5 +----
- 2 files changed, 2 insertions(+), 4 deletions(-)
+ test/shell/process-each-duplicate-vgnames.sh | 52 ++++++++++++++++++++++++++++
+ 1 file changed, 52 insertions(+)
+ create mode 100644 test/shell/process-each-duplicate-vgnames.sh
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 0d58e66..6c0514f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.101 - 
- ===================================
-+  Remove "mpath major is not dm major" msg for mpath component scan (2.02.94).
-   Prevent cluster mirror logs from being corrupted by redundant checkpoints.
-   Fix ignored lvmetad update on loop device configuration (2.02.99).
-   Use LVM_PATH instead of hardcoded value in lvm2 activation systemd generator.
-diff --git a/lib/filters/filter-mpath.c b/lib/filters/filter-mpath.c
-index 1db2264..a9881fd 100644
---- a/lib/filters/filter-mpath.c
-+++ b/lib/filters/filter-mpath.c
-@@ -181,11 +181,8 @@ static int dev_is_mpath(struct dev_filter *f, struct device *dev)
- 	if (!get_sysfs_get_major_minor(sysfs_dir, parent_name, &major, &minor))
- 		return_0;
- 
--	if (major != dt->device_mapper_major) {
--		log_error("mpath major %d is not dm major %d.", major,
--			  dt->device_mapper_major);
-+	if (major != dt->device_mapper_major)
- 		return 0;
--	}
- 
- 	return lvm_dm_prefix_check(major, minor, MPATH_PREFIX);
- }
+diff --git a/test/shell/process-each-duplicate-vgnames.sh b/test/shell/process-each-duplicate-vgnames.sh
+new file mode 100644
+index 0000000..8be8168
+--- /dev/null
++++ b/test/shell/process-each-duplicate-vgnames.sh
+@@ -0,0 +1,52 @@
++#!/bin/sh
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++
++test_description='Test vgs with duplicate vg names'
++
++. lib/test
++
++aux prepare_devs 2
++
++pvcreate $dev1
++pvcreate $dev2
++
++aux disable_dev $dev1
++aux disable_dev $dev2
++
++aux enable_dev $dev1
++vgcreate $vg1 $dev1
++UUID1=$(vgs --noheading -o vg_uuid $vg1)
++aux disable_dev $dev1
++
++aux enable_dev $dev2
++vgcreate $vg1 $dev2
++UUID2=$(vgs --noheading -o vg_uuid $vg1)
++aux disable_dev $dev2
++
++aux enable_dev $dev1
++aux enable_dev $dev2
++
++vgs >err
++grep $UUID1 err
++grep $UUID2 err
++
++# should we specify and test which should be displayed?
++# vgs --noheading -o vg_uuid $vg1 >err
++# grep $UUID1 err
++
++aux disable_dev $dev2
++vgs >err
++grep $UUID1 err
++not grep $UUID2 err
++aux enable_dev $dev2
++
++aux disable_dev $dev1
++vgs >err
++grep $UUID2 err
++not grep $UUID1 err
++aux enable_dev $dev1
++
+-- 
+1.8.3.1
 
 
