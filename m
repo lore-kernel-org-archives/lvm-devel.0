@@ -1,132 +1,199 @@
-From: David Teigland <teigland@redhat.com>
-Date: Thu, 22 Aug 2013 18:43:45 -0400
-Subject: [PATCH] test: add vg-name-from-env
-Message-ID: <20130822224345.GA2401@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Fri, 23 Aug 2013 13:41:42 +0000 (UTC)
+Subject: master - Misc: Make get_pv_list_for_lv() available to more than just RAID
+Message-ID: <20130823134142.725C460520@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-vg name should come from env var LVM_VG_NAME
-for commands that take vg name and lv name,
-but vg name is not specified on command line.
----
- test/shell/vg-name-from-env.sh | 104 +++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 104 insertions(+)
- create mode 100644 test/shell/vg-name-from-env.sh
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f1e3640df31d0593e47ed82f3bb2f7e976b6569c
+Commit:        f1e3640df31d0593e47ed82f3bb2f7e976b6569c
+Parent:        be9f4c77c93f347131f46a128013b0f4af8e5b32
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri Aug 23 08:40:13 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Fri Aug 23 08:40:13 2013 -0500
 
-diff --git a/test/shell/vg-name-from-env.sh b/test/shell/vg-name-from-env.sh
-new file mode 100644
-index 0000000..c8e8c76
---- /dev/null
-+++ b/test/shell/vg-name-from-env.sh
-@@ -0,0 +1,104 @@
-+#!/bin/sh
-+# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
+Misc: Make get_pv_list_for_lv() available to more than just RAID
+
+The function 'get_pv_list_for_lv' will assemble all the PVs that are
+used by the specified LV.  It uses 'for_each_sub_lv' to traverse all
+of the sub-lvs which may compose it.
+---
+ lib/metadata/lv_manip.c          |   74 ++++++++++++++++++++++++++++++++++++++
+ lib/metadata/metadata-exported.h |    2 +
+ lib/metadata/raid_manip.c        |   45 ++---------------------
+ 3 files changed, 80 insertions(+), 41 deletions(-)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 24c66ef..ef64d12 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -161,6 +161,80 @@ int lv_is_on_pvs(struct logical_volume *lv, struct dm_list *pvs)
+ 	return 0;
+ }
+ 
++struct dm_list_and_mempool {
++	struct dm_list *list;
++	struct dm_pool *mem;
++};
++static int _get_pv_list_for_lv(struct cmd_context *cmd,
++			       struct logical_volume *lv, void *data)
++{
++	int dup_found;
++	uint32_t s;
++	struct pv_list *pvl;
++	struct lv_segment *seg;
++	struct dm_list *pvs = ((struct dm_list_and_mempool *)data)->list;
++	struct dm_pool *mem = ((struct dm_list_and_mempool *)data)->mem;
 +
-+test_description='Test the vg name for an lv from env var'
++	dm_list_iterate_items(seg, &lv->segments) {
++		for (s = 0; s < seg->area_count; s++) {
++			dup_found = 0;
 +
-+. lib/test
++			if (seg_type(seg, s) != AREA_PV)
++				continue;
 +
-+aux prepare_devs 2
++			/* do not add duplicates */
++			dm_list_iterate_items(pvl, pvs)
++				if (pvl->pv == seg_pv(seg, s))
++					dup_found = 1;
 +
-+pvcreate $dev1
-+pvcreate $dev2
++			if (dup_found)
++				continue;
 +
-+vgcreate $vg1 $dev1
-+vgcreate $vg2 $dev2
++			if (!(pvl = dm_pool_zalloc(mem, sizeof(*pvl)))) {
++				log_error("Failed to allocate memory");
++				return 0;
++			}
 +
-+export LVM_VG_NAME=$vg1
++			pvl->pv = seg_pv(seg, s);
++			log_debug_metadata("  %s/%s uses %s", lv->vg->name,
++					   lv->name, pv_dev_name(pvl->pv));
 +
-+# should use env
-+lvcreate -n $lv1 -l 2
-+lvcreate -n $lv3 -l 2
++			dm_list_add(pvs, &pvl->list);
++		}
++	}
 +
-+lvcreate -n $lv2 -l 2 $vg2
-+lvcreate -n $lv4 -l 2 $vg2
++	return 1;
++}
 +
-+lvs >err
-+grep $lv1 err
-+grep $lv3 err
-+grep $lv2 err
-+grep $lv4 err
++/*
++ * get_pv_list_for_lv
++ * @mem - mempool to allocate the list from.
++ * @lv
++ * @pvs - The list to add pv_list items to.
++ *
++ * 'pvs' is filled with 'pv_list' items for PVs that compose the LV.
++ * If the 'pvs' list already has items in it, duplicates will not be
++ * added.  So, it is safe to repeatedly call this function for different
++ * LVs and build up a list of PVs for them all.
++ *
++ * Memory to create the list is obtained from the mempool provided.
++ *
++ * Returns: 1 on success, 0 on error
++ */
++int get_pv_list_for_lv(struct dm_pool *mem,
++		       struct logical_volume *lv, struct dm_list *pvs)
++{
++	struct dm_list_and_mempool context = { pvs, mem };
 +
-+not lvs $vg1 >err
-+not grep $lv1 err
-+not grep $lv3 err
-+not grep $lv2 err
-+not grep $lv4 err
++	log_debug_metadata("Generating list of PVs that %s/%s uses:",
++			   lv->vg->name, lv->name);
 +
-+not lvs $vg2 >err
-+not grep $lv1 err
-+not grep $lv3 err
-+not grep $lv2 err
-+not grep $lv4 err
++	if (!_get_pv_list_for_lv(lv->vg->cmd, lv, &context))
++		return_0;
 +
-+lvs $lv1 >err
-+grep $lv1 err
-+not grep $lv3 err
-+not grep $lv2 err
-+not grep $lv4 err
++	return for_each_sub_lv(lv->vg->cmd, lv, &_get_pv_list_for_lv, &context);
++}
 +
-+lvs $lv1 $lv3 >err
-+grep $lv1 err
-+grep $lv3 err
-+not grep $lv2 err
-+not grep $lv4 err
-+
-+# should use env and fail to fine lv4 in vg1
-+not lvs $lv4 >err
-+not grep $lv1 err
-+not grep $lv3 err
-+not grep $lv2 err
-+not grep $lv4 err
-+
-+lvs $vg2/$lv4 >err
-+not grep $lv1 err
-+not grep $lv3 err
-+not grep $lv2 err
-+grep $lv4 err
-+
-+lvs $vg2/$lv2 $vg2/$lv4 >err
-+not grep $lv1 err
-+not grep $lv3 err
-+grep $lv2 err
-+grep $lv4 err
-+
-+# should use env
-+lvchange -an $lv3
-+lvremove $lv3
-+not lvremove $lv4
-+
-+lvs >err
-+grep $lv1 err
-+not grep $lv3 err
-+grep $lv2 err
-+grep $lv4 err
-+
-+# should use env
-+lvcreate -n $lv3 -l 2
-+lvchange --addtag foo $lv3
-+lvchange -an $lv3
-+
-+# lvremove by tag should apply to all vgs, not env vg
-+lvchange --addtag foo $vg2/$lv4
-+lvchange -an $vg2/$lv4
-+lvremove @foo
-+
-+lvs >err
-+grep $lv1 err
-+not grep $lv3 err
-+grep $lv2 err
-+not grep $lv4 err
-+
--- 
-1.8.3.1
+ /*
+  * get_default_region_size
+  * @cmd
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index d214fd2..0df710c 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -828,6 +828,8 @@ const char *find_vgname_from_pvid(struct cmd_context *cmd,
+ 
+ int lv_is_on_pv(struct logical_volume *lv, struct physical_volume *pv);
+ int lv_is_on_pvs(struct logical_volume *lv, struct dm_list *pvs);
++int get_pv_list_for_lv(struct dm_pool *mem,
++		       struct logical_volume *lv, struct dm_list *pvs);
+ 
+ 
+ /* Find LV segment containing given LE */
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 05f509a..47c2788 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -93,45 +93,6 @@ static int _activate_sublv_preserving_excl(struct logical_volume *top_lv,
+ 	return 1;
+ }
+ 
+-static int _get_pv_list_for_lv(struct logical_volume *lv, struct dm_list *pvs)
+-{
+-	uint32_t s;
+-	struct pv_list *pvl;
+-	struct lv_segment *seg = first_seg(lv);
+-
+-	if (!seg_is_linear(seg)) {
+-		log_error(INTERNAL_ERROR
+-			  "_get_pv_list_for_lv only handles linear volumes");
+-		return 0;
+-	}
+-
+-	log_debug_metadata("Getting list of PVs that %s/%s is on:",
+-			   lv->vg->name, lv->name);
+-
+-	dm_list_iterate_items(seg, &lv->segments) {
+-		for (s = 0; s < seg->area_count; s++) {
+-			if (seg_type(seg, s) != AREA_PV) {
+-				log_error(INTERNAL_ERROR
+-					  "Linear seg_type should be AREA_PV");
+-				return 0;
+-			}
+-
+-			if (!(pvl = dm_pool_zalloc(lv->vg->cmd->mem,
+-						   sizeof(*pvl)))) {
+-				log_error("Failed to allocate memory");
+-				return 0;
+-			}
+-
+-			pvl->pv = seg_pv(seg, s);
+-			log_debug_metadata("  %s/%s is on %s", lv->vg->name, lv->name,
+-					   pv_dev_name(pvl->pv));
+-			dm_list_add(pvs, &pvl->list);
+-		}
+-	}
+-
+-	return 1;
+-}
+-
+ /*
+  * _raid_in_sync
+  * @lv
+@@ -528,7 +489,8 @@ static int _alloc_rmeta_for_lv(struct logical_volume *data_lv,
+ 	if ((p = strstr(base_name, "_mimage_")))
+ 		*p = '\0';
+ 
+-	if (!_get_pv_list_for_lv(data_lv, &allocatable_pvs)) {
++	if (!get_pv_list_for_lv(data_lv->vg->cmd->mem,
++				data_lv, &allocatable_pvs)) {
+ 		log_error("Failed to build list of PVs for %s/%s",
+ 			  data_lv->vg->name, data_lv->name);
+ 		return 0;
+@@ -1147,7 +1109,8 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
+ 			/* Ensure we only split the tracking image */
+ 			dm_list_init(&tracking_pvs);
+ 			splittable_pvs = &tracking_pvs;
+-			if (!_get_pv_list_for_lv(tracking, splittable_pvs))
++			if (!get_pv_list_for_lv(tracking->vg->cmd->mem,
++						tracking, splittable_pvs))
+ 				return_0;
+ 		}
+ 	}
 
 
