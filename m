@@ -1,97 +1,59 @@
-From: David Teigland <teigland@redhat.com>
-Date: Fri, 23 Aug 2013 16:55:09 -0400
-Subject: [PATCH] polldaemon: remove unused code
-Message-ID: <20130823205509.GA20443@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 26 Aug 2013 12:55:40 +0000 (UTC)
+Subject: master - thin: support lvchange for data and metadata
+Message-ID: <20130826125540.7533060E7A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-poll_daemon is called with a non-null "name" arg in both places
-it's used (pvmove and lvconvert.)
----
- tools/polldaemon.c | 59 ++++--------------------------------------------------
- 1 file changed, 4 insertions(+), 55 deletions(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6b416f837f4ee71ca5705cb40fad22b26b0c664a
+Commit:        6b416f837f4ee71ca5705cb40fad22b26b0c664a
+Parent:        7d6a125e97085ea140c582a0b6c1ef2ca4cb0f93
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Aug 10 01:13:27 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Aug 26 14:55:22 2013 +0200
 
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index c139d2b..fad7681 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -252,51 +252,6 @@ static int _wait_for_single_lv(struct cmd_context *cmd, const char *name, const
- 	return 1;
- }
+thin: support lvchange for data and metadata
+
+Support lvchange operation on stacked thin pool data and metadata
+volumes.
+---
+ WHATS_NEW        |    1 +
+ tools/lvchange.c |    8 +++++++-
+ 2 files changed, 8 insertions(+), 1 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 3ea8786..bf13023 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.101 - 
+ ===================================
++  Support most of lvchange operations on stacked thin pool meta/data LVs.
+   Add ability to pvmove RAID, mirror, and thin volumes.
+   Make lvm2-activation-generator silent unless it's in error state.
+   Remove "mpath major is not dm major" msg for mpath component scan (2.02.94).
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 525022f..34e230c 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -982,7 +982,13 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	    lv_is_virtual_origin(origin = origin_from_cow(lv)))
+ 		lv = origin;
  
--static int _poll_vg(struct cmd_context *cmd, const char *vgname,
--		    struct volume_group *vg, void *handle)
--{
--	struct daemon_parms *parms = (struct daemon_parms *) handle;
--	struct lv_list *lvl;
--	struct logical_volume *lv;
--	const char *name;
--	int finished;
--
--	if (!parms) {
--		log_error(INTERNAL_ERROR "Handle is undefined.");
--		return ECMD_FAILED;
--	}
--
--	dm_list_iterate_items(lvl, &vg->lvs) {
--		lv = lvl->lv;
--		if (!(lv->status & parms->lv_type))
--			continue;
--		name = parms->poll_fns->get_copy_name_from_lv(lv);
--		if (!name && !parms->aborting)
--			continue;
--
--		/* FIXME Need to do the activation from _set_up_pvmove here
--		 *       if it's not running and we're not aborting */
--		if (_check_lv_status(cmd, vg, lv, name, parms, &finished) &&
--		    !finished)
--			parms->outstanding_count++;
--	}
--
--	return ECMD_PROCESSED;
--
--}
--
--static void _poll_for_all_vgs(struct cmd_context *cmd,
--			      struct daemon_parms *parms)
--{
--	while (1) {
--		parms->outstanding_count = 0;
--		process_each_vg(cmd, 0, NULL, READ_FOR_UPDATE, parms, _poll_vg);
--		if (!parms->outstanding_count)
--			break;
--		sleep(parms->interval);
--	}
--}
--
- /*
-  * Only allow *one* return from poll_daemon() (the parent).
-  * If there is a child it must exit (ignoring the memory leak messages).
-@@ -349,16 +304,10 @@ int poll_daemon(struct cmd_context *cmd, const char *name, const char *uuid,
- 		/*       fork one daemon per copy? */
- 	}
- 
--	/*
--	 * Process one specific task or all incomplete tasks?
--	 */
--	if (name) {
--		if (!_wait_for_single_lv(cmd, name, uuid, &parms)) {
--			stack;
--			ret = ECMD_FAILED;
--		}
--	} else
--		_poll_for_all_vgs(cmd, &parms);
-+	if (!_wait_for_single_lv(cmd, name, uuid, &parms)) {
-+		stack;
-+		ret = ECMD_FAILED;
-+	}
- 
- 	if (parms.background && daemon_mode == 1) {
- 		/*
--- 
-1.8.3.1
+-	if (!(lv_is_visible(lv)) && !lv_is_virtual_origin(lv)) {
++	if ((lv_is_thin_pool_data(lv) || lv_is_thin_pool_metadata(lv)) &&
++	    !arg_count(cmd, activate_ARG) &&
++	    !arg_count(cmd, permission_ARG) &&
++	    !arg_count(cmd, setactivationskip_ARG))
++	    /* Rest can be changed for stacked thin pool meta/data volumes */
++	    ;
++	else if (!(lv_is_visible(lv)) && !lv_is_virtual_origin(lv)) {
+ 		log_error("Unable to change internal LV %s directly",
+ 			  lv->name);
+ 		return ECMD_FAILED;
 
 
