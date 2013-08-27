@@ -1,340 +1,74 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Mon, 26 Aug 2013 21:41:20 +0000 (UTC)
-Subject: master - test: pvmove tests for all the different segment types.
-Message-ID: <20130826214120.F07BC61019@fedorahosted.org>
+From: Dongmao Zhang <dmzhang@suse.com>
+Date: Tue, 27 Aug 2013 18:00:05 +0800
+Subject: LVM2 test script failed, is it a read_ahead bug?
+Message-ID: <521C78A5.5000108@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0799e81ee08a76c877d774b2f7df75ad3ec29897
-Commit:        0799e81ee08a76c877d774b2f7df75ad3ec29897
-Parent:        2ef48b91ed74f732b6150a9492da624d204b331d
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Mon Aug 26 16:38:54 2013 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Mon Aug 26 16:38:54 2013 -0500
+Dear mail-list,
+    I met this in running the test case for lvm:
+sh shell/read-ahead.sh FAILED:
 
-test: pvmove tests for all the different segment types.
+#COMM "read ahead is properly inherited from underlying PV"
+blockdev --setra 768 "$dev1"
+#read-ahead.sh:34+ blockdev --setra 768 @TESTDIR@/dev/mapper/@PREFIX at pv1
+vgscan
+#read-ahead.sh:35+ vgscan
+  Reading all physical volumes.  This may take a while...
+  Found volume group "@PREFIX at vg" using metadata type lvm2
+  WARNING: This metadata update is NOT backed up
+lvcreate -n $lv -L4m $vg "$dev1"
+#read-ahead.sh:36+ lvcreate -n LV -L4m @PREFIX at vg
+@TESTDIR@/dev/mapper/@PREFIX at pv1
+  WARNING: This metadata update is NOT backed up
+  WARNING: This metadata update is NOT backed up
+  Logical volume "LV" created
+test $(blockdev --getra $DM_DEV_DIR/$vg/$lv) -eq 768
+blockdev --getra $DM_DEV_DIR/$vg/$lv
+##read-ahead.sh:37+ blockdev --getra @TESTDIR@/dev/@PREFIX at vg/LV
+#read-ahead.sh:37+ test 1024 -eq 768
 
-Test moving linear, mirror, snapshot, RAID1,5,10, thinpool, thin
-and thin on RAID.  Perform the moves along with a dummy LV and
-also without the dummy LV by specifying a logical volume name as
-an argument to pvmove.
----
- test/shell/pvmove-all-segtypes.sh |  304 +++++++++++++++++++++++++++++++++++++
- 1 files changed, 304 insertions(+), 0 deletions(-)
+The read_ahead of underlying device was set to 768. After creating the
+logical volume device, lvm found the auto read ahead was 1024 which is
+bigger than 768. So lvm selected the bigger number(1024) to the
+read_ahead of logical volume.
 
-diff --git a/test/shell/pvmove-all-segtypes.sh b/test/shell/pvmove-all-segtypes.sh
-new file mode 100644
-index 0000000..13b8fba
---- /dev/null
-+++ b/test/shell/pvmove-all-segtypes.sh
-@@ -0,0 +1,304 @@
-+#!/bin/sh
-+# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description="ensure pvmove works with all segment types"
-+
-+. lib/test
-+
-+which mkfs.ext2 || skip
-+which md5sum || skip
-+
-+# ---------------------------------------------------------------------
-+# Utilities
-+lvdev_() {
-+	echo "$DM_DEV_DIR/$1/$2"
-+}
-+
-+# lv_is_on_pvs <VG> <LV> <PV1> <PV2> ...
-+lv_is_on_pvs() {
-+	local vg=$1
-+	local lv_list=( $2 )
-+	local new_lv_list=()
-+	local run_again=true
-+
-+	shift 2
-+
-+	while $run_again; do
-+		run_again=false
-+		for tmplv in ${lv_list[*]}; do
-+			if [[ $(lvs -a --noheadings -o attr $vg/$tmplv) =~ ^[[:space:]]*r.* ]] ||
-+			   [[ $(lvs -a --noheadings -o attr $vg/$tmplv) =~ ^[[:space:]]*R.* ]]; then
-+				# Expand RAID
-+				echo "$tmplv is a RAID LV"
-+				new_lv_list=( ${new_lv_list[*]} `lvs -a --noheadings -o name | grep ${tmplv}_r` )
-+				run_again=true
-+			elif [[ $(lvs -a --noheadings -o attr $vg/$tmplv) =~ ^[[:space:]]*m.* ]] ||
-+			     [[ $(lvs -a --noheadings -o attr $vg/$tmplv) =~ ^[[:space:]]*M.* ]]; then
-+				# Expand Mirror
-+				echo "$tmplv is a mirror LV"
-+				new_lv_list=( ${new_lv_list[*]} `lvs -a --noheadings -o devices $vg/$tmplv | sed s/,/' '/g` )
-+				new_lv_list=( ${new_lv_list[*]} `lvs -a --noheadings -o mirror_log $vg/$tmplv | sed s/,/' '/g` )
-+				run_again=true
-+			elif [[ $(lvs -a --noheadings -o attr $vg/$tmplv) =~ ^[[:space:]]*t.* ]]; then
-+				# Expand Thin Pool
-+				echo "$tmplv is a thin-pool LV"
-+				new_lv_list=( ${new_lv_list[*]} `lvs -a --noheadings -o data_lv,metadata_lv $vg/$tmplv | sed s/,/' '/g` )
-+				run_again=true
-+			elif [[ $(lvs -a --noheadings -o attr $vg/$tmplv) =~ ^[[:space:]]*V.* ]]; then
-+				# Expand Thin-LV
-+				echo "$tmplv is a thin-LV"
-+				new_lv_list=( ${new_lv_list[*]} `lvs -a --noheadings -o pool_lv $vg/$tmplv | sed s/,/' '/g` )
-+				run_again=true
-+			elif [[ $(lvs -a --noheadings -o attr $vg/$tmplv) =~ ^[[:space:]]*e.* ]] &&
-+			     lvs -a --noheadings -o devices $vg/$tmplv | grep $tmplv; then
-+				# Expand Thin Pool Meta, which is also RAID
-+				echo "$tmplv is a thinpool (RAID) metadata"
-+				new_lv_list=( ${new_lv_list[*]} `lvs -a --noheadings -o name | grep ${tmplv}_r` )
-+				run_again=true
-+			else
-+				new_lv_list=( ${new_lv_list[*]} $tmplv )
-+			fi
-+		done
-+		printf "\nOld LV list: ${lv_list[*]}\n\n"
-+
-+		lv_list=()
-+		for tmplv in ${new_lv_list[*]}; do
-+			lv_list=( ${lv_list[*]} $(echo $tmplv | sed s/\(.*\)/''/ | sed s/\\[/''/ | sed s/]/''/) )
-+		done
-+		printf "\nExpanded LV list: ${lv_list[*]}\n\n"
-+
-+		new_lv_list=()
-+	done
-+
-+	[ -e out-$$ ] && rm out-$$
-+	for tmplv in ${lv_list[*]}; do
-+		lvs -a -odevices --noheadings $vg/$tmplv | sed 's/,/\n/g' >> out-$$
-+	done
-+
-+	#is on all specified devs
-+	for d in $*; do
-+		if ! grep "$d(" out-$$; then
-+			cat out-$$
-+			false
-+		fi
-+	done
-+
-+	#isn't on any other dev (we are set -e remember)
-+	cat out-$$
-+	[ -e tmp-$$ ] && rm tmp-$$
-+	for d in $*; do
-+		echo "Removing $d"
-+		! grep -v "$d(" out-$$ >> tmp-$$
-+		mv tmp-$$ out-$$
-+		cat out-$$
-+	done
-+	# out-$$ must be empty - no additional devs allowed
-+	[ ! -s out-$$ ]
-+
-+	rm out-$$
-+	return 0
-+}
-+
-+save_dev_sum_() {
-+  mkfs.ext2 $1 > /dev/null && md5sum $1 > md5.$(basename $1)
-+}
-+
-+check_dev_sum_() {
-+  md5sum -c md5.$(basename $1)
-+}
-+# ---------------------------------------------------------------------
-+
-+aux prepare_vg 5 30
-+
-+# Each of the following tests does:
-+# 1) Create two LVs - one linear and one other segment type
-+#    The two LVs will share a PV.
-+# 2) Move both LVs together
-+# 3) Move only the second LV by name
-+
-+printf "##\n# Testing pvmove of linear LV\n##\n"
-+lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -l 2 -n $lv1 $vg "$dev1"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+lv_is_on_pvs $vg $lv1 "$dev1"
-+save_dev_sum_ $(lvdev_ $vg $lv1)
-+pvmove "$dev1" "$dev5"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+lv_is_on_pvs $vg $lv1 "$dev5"
-+check_dev_sum_ $(lvdev_ $vg $lv1)
-+pvmove -n $lv1 "$dev5" "$dev4"
-+lv_is_on_pvs $vg $lv1 "$dev4"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+check_dev_sum_ $(lvdev_ $vg $lv1)
-+lvremove -ff $vg
-+
-+printf "##\n# Testing pvmove of stripe LV\n##\n"
-+lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -l 4 -i 2 -n $lv1 $vg "$dev1" "$dev2"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+lv_is_on_pvs $vg $lv1 "$dev1" "$dev2"
-+save_dev_sum_ $(lvdev_ $vg $lv1)
-+pvmove "$dev1" "$dev5"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+lv_is_on_pvs $vg $lv1 "$dev2" "$dev5"
-+check_dev_sum_ $(lvdev_ $vg $lv1)
-+pvmove -n $lv1 "$dev5" "$dev4"
-+lv_is_on_pvs $vg $lv1 "$dev2" "$dev4"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+check_dev_sum_ $(lvdev_ $vg $lv1)
-+lvremove -ff $vg
-+
-+printf "##\n# Testing pvmove of mirror LV\n##\n"
-+lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -l 2 --type mirror -m 1 -n $lv1 $vg "$dev1" "$dev2"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+lv_is_on_pvs $vg $lv1 "$dev1" "$dev2"
-+save_dev_sum_ $(lvdev_ $vg $lv1)
-+pvmove "$dev1" "$dev5"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+lv_is_on_pvs $vg $lv1 "$dev2" "$dev5"
-+check_dev_sum_ $(lvdev_ $vg $lv1)
-+pvmove -n $lv1 "$dev5" "$dev4"
-+lv_is_on_pvs $vg $lv1 "$dev2" "$dev4"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+check_dev_sum_ $(lvdev_ $vg $lv1)
-+lvremove -ff $vg
-+
-+# Dummy LV and snap share dev1, while origin is on dev2
-+printf "##\n# Testing pvmove of snapshot LV\n##\n"
-+lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -l 2 -n $lv1 $vg "$dev2"
-+lvcreate -s $vg/$lv1 -l 2 -n snap "$dev1"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+lv_is_on_pvs $vg snap "$dev1"
-+save_dev_sum_ $(lvdev_ $vg snap)
-+pvmove "$dev1" "$dev5"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+lv_is_on_pvs $vg snap "$dev5"
-+check_dev_sum_ $(lvdev_ $vg snap)
-+pvmove -n snap "$dev5" "$dev4"
-+lv_is_on_pvs $vg snap "$dev4"
-+lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+check_dev_sum_ $(lvdev_ $vg snap)
-+lvremove -ff $vg
-+
-+##
-+# RAID
-+##
-+if aux target_at_least dm-raid 1 3 5; then
-+	printf "##\n# Testing pvmove of RAID1 LV\n##\n"
-+	lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+	lvcreate -l 2 --type raid1 -m 1 -n $lv1 $vg "$dev1" "$dev2"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+	lv_is_on_pvs $vg $lv1 "$dev1" "$dev2"
-+	save_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove "$dev1" "$dev5"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	lv_is_on_pvs $vg $lv1 "$dev2" "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove -n $lv1 "$dev5" "$dev4"
-+	lv_is_on_pvs $vg $lv1 "$dev2" "$dev4"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	lvremove -ff $vg
-+
-+	printf "##\n# Testing pvmove of RAID10 LV\n##\n"
-+	lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+	lvcreate -l 4 --type raid10 -i 2 -m 1 -n $lv1 $vg \
-+			"$dev1" "$dev2" "$dev3" "$dev4"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+	lv_is_on_pvs $vg $lv1 "$dev1" "$dev2" "$dev3" "$dev4"
-+	save_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove "$dev1" "$dev5"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	lv_is_on_pvs $vg $lv1 "$dev2" "$dev3" "$dev4" "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove -n $lv1 "$dev5" "$dev1"
-+	lv_is_on_pvs $vg $lv1 "$dev1" "$dev2" "$dev3" "$dev4"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	lvremove -ff $vg
-+
-+	printf "##\n# Testing pvmove of RAID5 LV\n##\n"
-+	lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+	lvcreate -l 4 --type raid5 -i 2 -n $lv1 $vg \
-+			"$dev1" "$dev2" "$dev3"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+	lv_is_on_pvs $vg $lv1 "$dev1" "$dev2" "$dev3"
-+	save_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove "$dev1" "$dev5"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	lv_is_on_pvs $vg $lv1 "$dev2" "$dev3" "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove -n $lv1 "$dev5" "$dev4"
-+	lv_is_on_pvs $vg $lv1 "$dev2" "$dev3" "$dev4"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	lvremove -ff $vg
-+fi
-+
-+##
-+# Thin
-+##
-+if aux target_at_least dm-thin-pool 1 8 0; then
-+
-+	printf "##\n# Testing pvmove of thin-pool LV\n##\n"
-+	lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+	lvcreate -T $vg/$lv1 -l 4 "$dev1"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+	lv_is_on_pvs $vg $lv1 "$dev1"
-+	save_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove "$dev1" "$dev5"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	lv_is_on_pvs $vg $lv1 "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove -n $lv1 "$dev5" "$dev4"
-+	lv_is_on_pvs $vg $lv1 "$dev4"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	lvremove -ff $vg
-+
-+	printf "##\n# Testing pvmove of thin LV\n##\n"
-+	lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+	lvcreate -T $vg/${lv1}_pool -l 4 -V 8 -n $lv1 "$dev1"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+	lv_is_on_pvs $vg $lv1 "$dev1"
-+	save_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove "$dev1" "$dev5"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	lv_is_on_pvs $vg $lv1 "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove -n $lv1 "$dev5" "$dev4"
-+	lv_is_on_pvs $vg $lv1 "$dev4"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	lvremove -ff $vg
-+
-+	printf "##\n# Testing pvmove of thin LV on RAID\n##\n"
-+	lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+	lvcreate --type raid1 -m 1 -l 4 -n ${lv1}_raid1_pool $vg "$dev1" "$dev2"
-+	lvcreate --type raid1 -m 1 -l 4 -n ${lv1}_raid1_meta $vg "$dev1" "$dev2"
-+	lvconvert --thinpool $vg/${lv1}_raid1_pool \
-+		--poolmetadata ${lv1}_raid1_meta
-+	lvcreate -T $vg/${lv1}_raid1_pool -V 8 -n $lv1
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev1"
-+	lv_is_on_pvs $vg $lv1 "$dev1" "$dev2"
-+	save_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove "$dev1" "$dev5"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	lv_is_on_pvs $vg $lv1 "$dev2" "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	pvmove -n $lv1 "$dev5" "$dev4"
-+	lv_is_on_pvs $vg $lv1 "$dev2" "$dev4"
-+	lv_is_on_pvs $vg ${lv1}_foo "$dev5"
-+	check_dev_sum_ $(lvdev_ $vg $lv1)
-+	lvremove -ff $vg
-+fi
+However I think we should use the minimal read_ahead in underlying
+device and auto-detected kernel parameter. if so, this behavior could be
+consistent with the test script.
+
+I suggest use:
+
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 9043352..b9000f9 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1225,7 +1225,7 @@ static int _set_dev_node_read_ahead(const char
+*dev_name,
+                if (!get_dev_node_read_ahead(dev_name, major, minor,
+&current_read_ahead))
+                        return_0;
+
+-               if (current_read_ahead >= read_ahead) {
++               if (current_read_ahead <= read_ahead) {
+                        log_debug_activation("%s: retaining kernel read
+ahead of %" PRIu32
+                                  " (requested %" PRIu32 ")",
+                                  dev_name, current_read_ahead, read_ahead);
+
+If I am wrong, please correct me:)
+
+thank you
+
+
+
+
+
+
+
+
 
 
