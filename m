@@ -1,45 +1,36 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 27 Aug 2013 12:42:32 +0200
-Subject: LVM2 test script failed, is it a read_ahead bug?
-In-Reply-To: <521C78A5.5000108@suse.com>
-References: <521C78A5.5000108@suse.com>
-Message-ID: <521C8298.9060709@redhat.com>
+From: Oliver Rath <rath@mglug.de>
+Date: Tue, 27 Aug 2013 15:03:05 +0200
+Subject: thinpool-block-device exists twice after renaming
+Message-ID: <521CA389.504@mglug.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 27.8.2013 12:00, Dongmao Zhang napsal(a):
-> Dear mail-list,
->      I met this in running the test case for lvm:
-> sh shell/read-ahead.sh FAILED:
->
+Hi list,
 
->
-> -               if (current_read_ahead >= read_ahead) {
-> +               if (current_read_ahead <= read_ahead) {
->                          log_debug_activation("%s: retaining kernel read
-> ahead of %" PRIu32
->                                    " (requested %" PRIu32 ")",
->                                    dev_name, current_read_ahead, read_ahead);
->
-> If I am wrong, please correct me:)
->
+Im using here lvm2 (2.02.99) with Ubuntu 12.04 wiht LTS-Kernel-Stack
+(3.8er Kernel).
 
+I ecreated a volume group an in this volume group a thinpool. Then i
+created thinpool devices from this pool. So far, so fine
 
-Basic rules for 'auto'mated read_ahead setting is simple: never set smaller 
-value then the one which has been already set by kernel when device has been 
-initialized.
+The thinpool devices are links in /dev/myvg/tp-device-1 ->
+/dev/mapper/myvg-tp-device-1.
 
-If you need any specific more 'clever' value - simply use direct value for
-lvcreate/lvchange --readahead.
+These were also links to /dev/dm-X devices.
 
-There is no thing like 'minimal' RA estimation in lvm2.
+NOW i rename a tp-device. The result is en error "cannot rename ..", BUT
+in /dev/myvg/ the links are renamed and pointing - which looks strange
+to me - to block-devices in /dev/mapper/ instead of links.
 
-It's quite tricky to estimate the ideal RA for devices and it mostly depends
-on the type of use.
+These block-devices have the same maior/minor-ids at hte /dev/dm-X
+devices, so now the renamed block-device exists twice.
 
-Zdenek
+Any ideas to solve this?
+
+Regards
+Oliver
 
 
