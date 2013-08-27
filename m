@@ -1,9 +1,9 @@
 From: Oliver Rath <rath@mglug.de>
-Date: Tue, 27 Aug 2013 15:32:53 +0200
+Date: Tue, 27 Aug 2013 15:35:20 +0200
 Subject: example [was Re: thinpool-block-device exists twice after renaming]
 In-Reply-To: <521CA389.504@mglug.de>
 References: <521CA389.504@mglug.de>
-Message-ID: <521CAA85.5040003@mglug.de>
+Message-ID: <521CAB18.8020205@mglug.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -20,7 +20,7 @@ asterix:lvm2# lvrename /dev/myvg/renametest renametest2
   Unable to rename device node from 'myvg-renametest' to 'dmivg-renametest2'
 asterix:lvm2# ls -l /dev/myvg/renametest2
 lrwxrwxrwx 1 root root 29 Aug 27 15:24 /dev/myvg/renametest2 ->
-/dev/mapper/dmivg-renametest2
+/dev/mapper/myvg-renametest2
 asterix:lvm2# ls -l /dev/mapper/myvg-renametest2
 brw------- 1 root root 252, 26 Aug 27 15:24 /dev/mapper/myvg-renametest2
 asterix:lvm2# ls -l /dev/dm-26
@@ -62,5 +62,10 @@ Am 27.08.2013 15:03, schrieb Oliver Rath:
 > lvm-devel at redhat.com
 > https://www.redhat.com/mailman/listinfo/lvm-devel
 > 
+
+--
+lvm-devel mailing list
+lvm-devel at redhat.com
+https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
