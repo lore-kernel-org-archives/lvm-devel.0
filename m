@@ -1,143 +1,71 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 28 Aug 2013 12:53:51 +0000 (UTC)
-Subject: master - TEST: Add a timeout to the harness, killing tests after 2 minutes.
-Message-ID: <20130828125351.6A90760FCD@fedorahosted.org>
+Date: Wed, 28 Aug 2013 12:53:59 +0000 (UTC)
+Subject: master - test: Add a new "check_full" target, which also tests with real /dev.
+Message-ID: <20130828125359.C6FCD60FCD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9a1da7b262e6284422bedfb565ff46d2ac203027
-Commit:        9a1da7b262e6284422bedfb565ff46d2ac203027
-Parent:        e72b2d047dd64fca941cc6853c72dfe6b8e52399
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=64fe17dc94ce3b7cc547c9fc544c34460d99d5b3
+Commit:        64fe17dc94ce3b7cc547c9fc544c34460d99d5b3
+Parent:        b516a72b117eeee627f469369fadf56caf3041a7
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Jul 23 11:42:34 2013 +0200
+AuthorDate:    Fri Aug 23 10:09:23 2013 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Wed Aug 28 14:53:23 2013 +0200
 
-TEST: Add a timeout to the harness, killing tests after 2 minutes.
+test: Add a new "check_full" target, which also tests with real /dev.
 
+The original "check" target stays confined to a local device directory, while
+check_full does 6 flavours, 3 with a local device directory and 3 with the
+global /dev directory (the latter are prefixed with "s" for
+"system"). I.e.: normal, cluster, lvmetad, snormal, scluster, slvmetad.
 ---
- test/lib/harness.c |   50 +++++++++++++++++++++++++++++++++++++++-----------
- 1 files changed, 39 insertions(+), 11 deletions(-)
+ Makefile.in      |    2 +-
+ test/Makefile.in |   16 ++++++++++++++++
+ 2 files changed, 17 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index cea9a15..043ca9b 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -71,11 +71,12 @@ enum {
- 	WARNED,
- 	KNOWNFAIL,
- 	INTERRUPTED,
-+	TIMEOUT,
- };
+diff --git a/Makefile.in b/Makefile.in
+index 2ee20e5..81002ea 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -94,7 +94,7 @@ all: cscope.out
+ endif
+ DISTCLEAN_TARGETS += cscope.out
  
- static void handler( int sig ) {
- 	signal( sig, SIG_DFL );
--	kill( pid, sig );
-+	kill( -pid, sig );
- 	die = sig;
- }
+-check check_cluster check_local check_lvmetad unit: all
++check check_full check_cluster check_local check_lvmetad unit: all
+ 	$(MAKE) -C test $(@)
  
-@@ -169,7 +170,7 @@ static void _append_buf(const char *buf, size_t len)
- 		if ((readbuf_sz >= MAX_LOG_SIZE) &&
- 		    !getenv("LVM_TEST_UNLIMITED")) {
- 			if (fullbuffer++ ==  0)
--				kill(pid, SIGINT);
-+				kill(-pid, SIGINT);
- 			return;
- 		}
- 		readbuf_sz = readbuf_sz ? 2 * readbuf_sz : 4096;
-@@ -293,6 +294,17 @@ static void interrupted(int i, char *f) {
- 	}
- }
+ install_system_dirs:
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 89092d0..b663e7a 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -77,6 +77,22 @@ check: .tests-stamp
+ 		      $(patsubst %,cluster:%,$(RUN_BASE)) \
+ 		      $(patsubst %,lvmetad:%,$(RUN_BASE))
  
-+static void timeout(int i, char *f) {
-+	++ s.ninterrupted;
-+	s.status[i] = TIMEOUT;
-+	printf("timeout.\n");
-+	if (!verbose && readbuf) {
-+		printf("-- Timed out %s ------------------------------------\n", f);
-+		dump();
-+		printf("\n-- Timed out %s (end) ------------------------------\n", f);
-+	}
-+}
++check_full: .tests-stamp
++	VERBOSE=$(VEROSE) \
++	cluster_LVM_TEST_LOCKING=3 \
++	scluster_LVM_TEST_LOCKING=3 \
++	lvmetad_LVM_TEST_LVMETAD=1 \
++	slvmetad_LVM_TEST_LVMETAD=1 \
++	snormal_LVM_TEST_DEVDIR=/dev \
++	scluster_LVM_TEST_DEVDIR=/dev \
++	slvmetad_LVM_TEST_DEVDIR=/dev \
++	./lib/harness $(patsubst %,normal:%,$(RUN_BASE)) \
++		      $(patsubst %,cluster:%,$(RUN_BASE)) \
++		      $(patsubst %,lvmetad:%,$(RUN_BASE)) \
++		      $(patsubst %,snormal:%,$(RUN_BASE)) \
++		      $(patsubst %,scluster:%,$(RUN_BASE)) \
++		      $(patsubst %,slvmetad:%,$(RUN_BASE))
 +
- static void skipped(int i, char *f) {
- 	++ s.nskipped;
- 	s.status[i] = SKIPPED;
-@@ -341,6 +353,7 @@ static void run(int i, char *f) {
- 		} else {
- 			strcpy(script, f);
- 		}
-+		setpgid(0, 0);
- 		execlp("bash", "bash", "-noprofile", "-norc", script, NULL);
- 		perror("execlp");
- 		fflush(stderr);
-@@ -351,8 +364,9 @@ static void run(int i, char *f) {
- 		char buf[128];
- 		char outpath[PATH_MAX];
- 		char *c = outpath + strlen(results) + 1;
--		struct timeval timeout;
-+		struct timeval selectwait;
- 		fd_set master_set, copy_set;
-+		int runaway = 0;
- 
- 		snprintf(buf, sizeof(buf), "%s ...", f);
- 		printf("Running %-60s ", buf);
-@@ -366,13 +380,24 @@ static void run(int i, char *f) {
- 		FD_ZERO(&master_set);
- 		FD_SET(fds[1], &master_set);
- 		while ((w = wait4(pid, &st, WNOHANG, &usage)) == 0) {
--			if (fullbuffer && fullbuffer++ == 8000)
--				/* Output doesn't won't to stop... */
--				kill(pid, SIGKILL);
-+			if ((fullbuffer && fullbuffer++ == 8000) ||
-+			    time(NULL) - start > 120) // a 2 minute timeout
-+			{
-+				kill(-pid, SIGINT);
-+				sleep(5); /* wait a bit for a reaction */
-+				if ((w = waitpid(pid, &st, WNOHANG)) == 0) {
-+					kill(-pid, SIGKILL);
-+					w = waitpid(pid, &st, NULL);
-+				}
-+				drain();
-+				runaway = 1;
-+				break;
-+			}
-+
- 			memcpy(&copy_set, &master_set, sizeof(master_set));
--			timeout.tv_sec = 0;
--			timeout.tv_usec = 500000;
--			if (select(fds[1] + 1, &copy_set, NULL, NULL, &timeout) <= 0)
-+			selectwait.tv_sec = 0;
-+			selectwait.tv_usec = 500000;
-+			if (select(fds[1] + 1, &copy_set, NULL, NULL, &selectwait) <= 0)
- 				continue;
- 			drain();
- 		}
-@@ -381,9 +406,11 @@ static void run(int i, char *f) {
- 			exit(206);
- 		}
- 		drain();
--		if (fullbuffer || (die == 2))
-+		if (die == 2)
- 			interrupted(i, f);
--		else if (WIFEXITED(st)) {
-+		else if (runaway) {
-+			timeout(i, f);
-+		} else if (WIFEXITED(st)) {
- 			if (WEXITSTATUS(st) == 0)
- 				passed(i, f, start, &usage);
- 			else if (WEXITSTATUS(st) == 200)
-@@ -467,6 +494,7 @@ int main(int argc, char **argv) {
- 			case FAILED: result = "failed"; break;
- 			case SKIPPED: result = "skipped"; break;
- 			case WARNED: result = "warnings"; break;
-+			case TIMEOUT: result = "timeout"; break;
- 			case INTERRUPTED: result = "interrupted"; break;
- 			default: result = "unknown"; break;
- 			}
+ check_cluster: .tests-stamp
+ 	@echo Testing with locking_type 3
+ 	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=3 ./lib/harness $(RUN_BASE)
 
 
