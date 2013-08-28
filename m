@@ -1,47 +1,38 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 28 Aug 2013 11:31:01 +0200
-Subject: lvm-git doesnt set links
-In-Reply-To: <521DC0DB.2050309@redhat.com>
-References: <521CD4A6.1050802@mglug.de> <521DC0DB.2050309@redhat.com>
-Message-ID: <521DC355.9080303@redhat.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 28 Aug 2013 12:53:55 +0000 (UTC)
+Subject: master - test: Remove a redundant drain() from the timeout path.
+Message-ID: <20130828125355.9BAC260FCD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 08/28/2013 11:20 AM, Zdenek Kabelac wrote:
-> Dne 27.8.2013 18:32, Oliver Rath napsal(a):
->> Hi list,
->>
->> the actual git-snapshot from today seems a bit broken:
->>
->> If i generate a snapshot from an existing thinpool-device, the device is
->> created (visible by lvdisplay), but no softlink will be created, nor in
->> /dev/myvg/ neither in /dev/mapper.
->>
->> Same config like in last mail today.
->>
->> What happened?
->>
-> 
-> By default  thin snapshots are no longer created as active devices.
-> 
-> If you want to create active snapshot -  add option '-K'
-> (lvcreate -K -s)
-> 
-> 
-> You could lvchange this activation behavior.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d07cf851e5e9f501a034ac69d9f544e7426ec82c
+Commit:        d07cf851e5e9f501a034ac69d9f544e7426ec82c
+Parent:        c1217e6881f6d679c0589078c00350f00c6bee10
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Aug 5 21:12:39 2013 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Aug 28 14:53:23 2013 +0200
 
-...also there's the activation/auto_set_activation_skip
-setting in lvm.conf to enable or disable this automatic
-skipping of certain LVs on activation (there's a short
-comment above that setting that explains it). This setting
-is enabled by default.
+test: Remove a redundant drain() from the timeout path.
 
-See also lvcreate/vgchange/lvchange man pages and the documentation
-for "-K/--ignoreactivationskip" and "-k/--setactivationskip {y|n}" options.
+---
+ test/lib/harness.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-Peter
+diff --git a/test/lib/harness.c b/test/lib/harness.c
+index 586c5d3..af30c44 100644
+--- a/test/lib/harness.c
++++ b/test/lib/harness.c
+@@ -390,7 +390,6 @@ static void run(int i, char *f) {
+ 					kill(-pid, SIGKILL);
+ 					w = pid; // waitpid(pid, &st, NULL);
+ 				}
+-				drain();
+ 				runaway = 1;
+ 				break;
+ 			}
 
 
