@@ -1,63 +1,105 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 28 Aug 2013 21:58:16 +0000 (UTC)
-Subject: master - activation: Fix segfault with inactive pvmove LV.
-Message-ID: <20130828215816.34F9260790@fedorahosted.org>
+Date: Wed, 28 Aug 2013 22:58:00 +0000 (UTC)
+Subject: master - toolcontext: Only reopen stdin if readable.
+Message-ID: <20130828225800.3550B60E5D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0f987949b8a0bbbbe7f06694f59f710a73814da
-Commit:        c0f987949b8a0bbbbe7f06694f59f710a73814da
-Parent:        0acd7173d14195aeb724c1048a8cbf64a2fd2aa7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=78647da1c66106e3e8f310cd37742d196e195c96
+Commit:        78647da1c66106e3e8f310cd37742d196e195c96
+Parent:        c0f987949b8a0bbbbe7f06694f59f710a73814da
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Aug 28 22:56:23 2013 +0100
+AuthorDate:    Wed Aug 28 23:55:14 2013 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Aug 28 22:56:23 2013 +0100
+CommitterDate: Wed Aug 28 23:55:14 2013 +0100
 
-activation: Fix segfault with inactive pvmove LV.
+toolcontext: Only reopen stdin if readable.
 
-Set flag to avoid recursion back through an inactive pvmove LV when
-populating deptree.
+Don't fail when running lvm commands under versions of nohup that set
+up stdin as O_WRONLY!
 ---
- WHATS_NEW                  |    3 ++-
- lib/activate/dev_manager.c |    8 +++++---
- 2 files changed, 7 insertions(+), 4 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/commands/toolcontext.c |   19 +++++++++++++++----
+ 2 files changed, 16 insertions(+), 4 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index d974b0a..71e9fa8 100644
+index 71e9fa8..c56be6d 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,6 +1,7 @@
+@@ -1,5 +1,6 @@
  Version 2.02.101 - 
  ===================================
--  Require exactly 3 arguments for lvm2-activation-generator, remove defaults.
-+  Avoid unlimited recursion when creating dtree containing inactive pvmove LV.
-+  Require exactly 3 arguments for lvm2-activation-generator. Remove defaults.
++  Don't assume stdin file descriptor is readable.
+   Avoid unlimited recursion when creating dtree containing inactive pvmove LV.
+   Require exactly 3 arguments for lvm2-activation-generator. Remove defaults.
    Disable pvmove of merging or converting logical volumes.
-   Enable pvmove of snapshots and snapshot origins.
-   Fix inability to specify LV name when pvmove'ing a RAID, mirror, or thin-LV.
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 294606c..11be421 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1763,11 +1763,13 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 				return_0;
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 702a2d8..4f53f0e 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1372,6 +1372,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ {
+ 	struct cmd_context *cmd;
+ 	FILE *new_stream;
++	int flags;
  
- 	/* Add any LVs referencing a PVMOVE LV unless told not to. */
--	if (dm->track_pvmove_deps && lv->status & PVMOVE)
-+	if (dm->track_pvmove_deps && lv->status & PVMOVE) {
-+		dm->track_pvmove_deps = 0;
- 		dm_list_iterate_items(sl, &lv->segs_using_this_lv)
--			if (!_cached_info(dm->mem, dtree, sl->seg->lv, 0) &&
--			    !_add_lv_to_dtree(dm, dtree, sl->seg->lv, origin_only))
-+			if (!_add_lv_to_dtree(dm, dtree, sl->seg->lv, origin_only))
- 				return_0;
-+		dm->track_pvmove_deps = 1;
-+	}
+ #ifdef M_MMAP_MAX
+ 	mallopt(M_MMAP_MAX, 0);
+@@ -1415,7 +1416,10 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 			goto out;
+ 		}
  
- 	/* Adding LV head of replicator adds all other related devs */
- 	if (lv_is_replicator_dev(lv) &&
+-		if (is_valid_fd(STDIN_FILENO)) {
++		/* nohup might set stdin O_WRONLY ! */
++		if (is_valid_fd(STDIN_FILENO) &&
++		    ((flags = fcntl(STDIN_FILENO, F_GETFL)) > 0) &&
++		    (flags & O_ACCMODE) != O_WRONLY) {
+ 			if (!_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream))
+ 				goto_out;
+ 			stdin = new_stream;
+@@ -1425,7 +1429,9 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 			}
+ 		}
+ 
+-		if (is_valid_fd(STDOUT_FILENO)) {
++		if (is_valid_fd(STDOUT_FILENO) &&
++		    ((flags = fcntl(STDOUT_FILENO, F_GETFL)) > 0) &&
++		    (flags & O_ACCMODE) != O_RDONLY) {
+ 			if (!_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream))
+ 				goto_out;
+ 			stdout = new_stream;
+@@ -1709,6 +1715,7 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ {
+ 	struct dm_config_tree *cft_cmdline;
+ 	FILE *new_stream;
++	int flags;
+ 
+ 	if (cmd->dump_filter && cmd->filter && cmd->filter->dump &&
+ 	    !cmd->filter->dump(cmd->filter, 1))
+@@ -1741,7 +1748,9 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ #ifndef VALGRIND_POOL
+ 	if (cmd->linebuffer) {
+ 		/* Reset stream buffering to defaults */
+-		if (is_valid_fd(STDIN_FILENO)) {
++		if (is_valid_fd(STDIN_FILENO) &&
++		    ((flags = fcntl(STDIN_FILENO, F_GETFL)) > 0) &&
++		    (flags & O_ACCMODE) != O_WRONLY) {
+ 			if (_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream)) {
+ 				stdin = new_stream;
+ 				setlinebuf(stdin);
+@@ -1749,7 +1758,9 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ 				cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
+ 		}
+ 
+-		if (is_valid_fd(STDOUT_FILENO)) {
++		if (is_valid_fd(STDOUT_FILENO) &&
++		    ((flags = fcntl(STDOUT_FILENO, F_GETFL)) > 0) &&
++		    (flags & O_ACCMODE) != O_RDONLY) {
+ 			if (_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream)) {
+ 				stdout = new_stream;
+ 				setlinebuf(stdout);
 
 
