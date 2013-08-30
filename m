@@ -1,9 +1,9 @@
 From: Oliver Rath <rath@mglug.de>
-Date: Fri, 30 Aug 2013 15:37:38 +0200
-Subject: "semop failed" while lvrename execution
+Date: Fri, 30 Aug 2013 15:38:31 +0200
+Subject: SLOVED [was "semop failed" while lvrename execution]
 In-Reply-To: <52209E3B.8070006@redhat.com>
 References: <52209D20.8090701@mglug.de> <52209E3B.8070006@redhat.com>
-Message-ID: <5220A022.70102@mglug.de>
+Message-ID: <5220A057.3010609@mglug.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -52,5 +52,10 @@ Am 30.08.2013 15:29, schrieb Zdenek Kabelac:
 > lvm-devel mailing list
 > lvm-devel at redhat.com
 > https://www.redhat.com/mailman/listinfo/lvm-devel
+
+--
+lvm-devel mailing list
+lvm-devel at redhat.com
+https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
