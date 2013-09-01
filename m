@@ -1,71 +1,89 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  1 Sep 2013 20:41:22 +0000 (UTC)
-Subject: master - tests: add delay_dev
-Message-ID: <20130901204122.C7E9860EB3@fedorahosted.org>
+Date: Sun,  1 Sep 2013 20:41:24 +0000 (UTC)
+Subject: master - tests: test pvmove behavior after restart
+Message-ID: <20130901204124.D829060EB3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7cc36a93f6b4a9648f430e32973ea882e3c0e7c7
-Commit:        7cc36a93f6b4a9648f430e32973ea882e3c0e7c7
-Parent:        350cf7968c77d090b49fc41761221da930d60538
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=039585bb0d0cccb4c30c1f3fafe007e24ad101b6
+Commit:        039585bb0d0cccb4c30c1f3fafe007e24ad101b6
+Parent:        7cc36a93f6b4a9648f430e32973ea882e3c0e7c7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 30 14:50:58 2013 +0200
+AuthorDate:    Fri Aug 30 14:53:57 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Aug 31 21:40:51 2013 +0200
 
-tests: add delay_dev
+tests: test pvmove behavior after restart
 
-Function to create slower responsive device.
+Simulate crash of the system and restarted pvmove after next VG
+activation.
 
-Useful for testing things which needs to happen something during on
-going operation - with  'delayed' device - much smaller sizes of devices
-are needed and its much more deterministic (though still not optimal)
+Test is catching regression introduced in 2.02.99 for partial tree
+creation changes.
 ---
- test/lib/aux.sh |   29 +++++++++++++++++++++++++++++
- 1 files changed, 29 insertions(+), 0 deletions(-)
+ test/shell/pvmove-restart.sh |   52 ++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 52 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 36de6e5..c9bb1fb 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -342,6 +342,35 @@ prepare_devs() {
- 	echo "ok"
- }
- 
-+# Replace linear PV device with its 'delayed' version
-+# Could be used to more deterministicaly hit some problems.
-+# Parameters: {device path} [read delay ms] [write delay ms]
-+# Original device is restored when both delay params are 0 (or missing).
-+# i.e.  delay_dev "$dev1" 0 200
-+delay_dev() {
-+	target_at_least dm-delay 1 2 0 || skip
-+	local name=$(echo "$1" | sed -e 's,.*/,,')
-+	local read_ms=${2:-0}
-+	local write_ms=${3:-0}
-+	local pos
-+	local size
-+	local type
-+	local pvdev
-+	local offset
+diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
+new file mode 100644
+index 0000000..c8da45e
+--- /dev/null
++++ b/test/shell/pvmove-restart.sh
+@@ -0,0 +1,52 @@
++#!/bin/sh
++# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+	read pos size type pvdev offset < "$name.table"
++# Check pvmove behavior when it's progress and machine is rebooted
 +
-+	init_udev_transaction
-+	if test $read_ms -ne 0 -o $write_ms -ne 0 ; then
-+		echo "0 $size delay $pvdev $offset $read_ms $pvdev $offset $write_ms" | \
-+			dmsetup load "$name"
-+	else
-+		dmsetup load "$name" "$name.table"
-+	fi
-+	dmsetup resume "$name"
-+	finish_udev_transaction
-+}
++. lib/test
 +
- disable_dev() {
- 	local dev
- 
++aux prepare_pvs 3 60
++
++vgcreate -s 128k $vg "$dev1" "$dev2" "$dev3"
++
++# Create multisegment LV
++lvcreate -an -Zn -l5 -n $lv1 $vg "$dev1"
++lvextend -l+10 $vg/$lv1 "$dev2"
++lvextend -l+5 $vg/$lv1 "$dev1"
++lvextend -l+10 $vg/$lv1 "$dev2"
++
++# Slowdown writes
++aux delay_dev "$dev3" 0 100
++
++lvs -o+devices $vg
++
++pvmove -i0 -n $vg/$lv1 "$dev1" "$dev3" &
++PVMOVE=$!
++# Let's wait a bit till pvmove starts and kill it
++sleep 1
++kill -9 $PVMOVE
++
++# Simulate reboot - forcibly remove related devices
++dmsetup remove $vg-$lv1
++dmsetup remove $vg-pvmove0
++
++# Only PVs should be left in table...
++dmsetup table
++
++# Restart pvmove
++vgchange -ay $vg
++
++pvmove --abort
++
++# Restore delayed device back
++aux delay_dev "$dev3"
++
++lvs -a -o+devices $vg
 
 
