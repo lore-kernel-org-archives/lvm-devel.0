@@ -1,89 +1,96 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  1 Sep 2013 20:41:24 +0000 (UTC)
-Subject: master - tests: test pvmove behavior after restart
-Message-ID: <20130901204124.D829060EB3@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon,  2 Sep 2013 11:54:15 +0000 (UTC)
+Subject: master - revert: commit 82d83a01ce2cac77fec2e9b763061fbfb5f01ce8
+Message-ID: <20130902115415.E6189614F5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=039585bb0d0cccb4c30c1f3fafe007e24ad101b6
-Commit:        039585bb0d0cccb4c30c1f3fafe007e24ad101b6
-Parent:        7cc36a93f6b4a9648f430e32973ea882e3c0e7c7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 30 14:53:57 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Aug 31 21:40:51 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=44c1a02c1805ec4487af1bc3057fcd8e40f8a375
+Commit:        44c1a02c1805ec4487af1bc3057fcd8e40f8a375
+Parent:        039585bb0d0cccb4c30c1f3fafe007e24ad101b6
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Sep 2 13:46:49 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Sep 2 13:53:27 2013 +0200
 
-tests: test pvmove behavior after restart
+revert: commit 82d83a01ce2cac77fec2e9b763061fbfb5f01ce8
 
-Simulate crash of the system and restarted pvmove after next VG
-activation.
-
-Test is catching regression introduced in 2.02.99 for partial tree
-creation changes.
+The commit 82d83a01ce2cac77fec2e9b763061fbfb5f01ce8
+"autoactivation: refresh existing VG before autoactivation"
+causes problems (dangling udev_sync cookies, slow processing
+of the pvscan --cache --major --minor call from udev rules)
+when the autoactivation handler is run in parallel on
+several PVs that belong to the same VG. Revert this patch
+until the exact source of the problem is found and then
+properly fixed and handled.
 ---
- test/shell/pvmove-restart.sh |   52 ++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 52 insertions(+), 0 deletions(-)
+ WHATS_NEW      |    1 -
+ tools/pvscan.c |   20 +++++++-------------
+ 2 files changed, 7 insertions(+), 14 deletions(-)
 
-diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
-new file mode 100644
-index 0000000..c8da45e
---- /dev/null
-+++ b/test/shell/pvmove-restart.sh
-@@ -0,0 +1,52 @@
-+#!/bin/sh
-+# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# Check pvmove behavior when it's progress and machine is rebooted
-+
-+. lib/test
-+
-+aux prepare_pvs 3 60
-+
-+vgcreate -s 128k $vg "$dev1" "$dev2" "$dev3"
-+
-+# Create multisegment LV
-+lvcreate -an -Zn -l5 -n $lv1 $vg "$dev1"
-+lvextend -l+10 $vg/$lv1 "$dev2"
-+lvextend -l+5 $vg/$lv1 "$dev1"
-+lvextend -l+10 $vg/$lv1 "$dev2"
-+
-+# Slowdown writes
-+aux delay_dev "$dev3" 0 100
-+
-+lvs -o+devices $vg
-+
-+pvmove -i0 -n $vg/$lv1 "$dev1" "$dev3" &
-+PVMOVE=$!
-+# Let's wait a bit till pvmove starts and kill it
-+sleep 1
-+kill -9 $PVMOVE
-+
-+# Simulate reboot - forcibly remove related devices
-+dmsetup remove $vg-$lv1
-+dmsetup remove $vg-pvmove0
-+
-+# Only PVs should be left in table...
-+dmsetup table
-+
-+# Restart pvmove
-+vgchange -ay $vg
-+
-+pvmove --abort
-+
-+# Restore delayed device back
-+aux delay_dev "$dev3"
-+
-+lvs -a -o+devices $vg
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c56be6d..f1a9933 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -14,7 +14,6 @@ Version 2.02.101 -
+   Prevent cluster mirror logs from being corrupted by redundant checkpoints.
+   Fix ignored lvmetad update on loop device configuration (2.02.99).
+   Use LVM_PATH instead of hardcoded value in lvm2 activation systemd generator.
+-  Refresh existing VG before autoactivation (event retrigger/device reappeared).
+   Fix vgck to notice on-disk corruption even if lvmetad is used.
+   Move mpath device filter before partitioned filter (which opens devices).
+   Split partitioned filter out of lvm_type filter.
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 3f16b05..96bbf6b 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -98,7 +98,6 @@ static int _auto_activation_handler(struct cmd_context *cmd,
+ 	struct volume_group *vg;
+ 	int consistent = 0;
+ 	struct id vgid_raw;
+-	int r = 0;
+ 
+ 	/* TODO: add support for partial and clustered VGs */
+ 	if (partial)
+@@ -107,29 +106,24 @@ static int _auto_activation_handler(struct cmd_context *cmd,
+ 	if (!id_read_format(&vgid_raw, vgid))
+ 		return_0;
+ 
+-	/* NB. This is safe because we know lvmetad is running and we won't hit disk. */
++	/* NB. This is safe because we know lvmetad is running and we won't hit
++	 * disk. */
+ 	if (!(vg = vg_read_internal(cmd, NULL, (const char *) &vgid_raw, 0, &consistent)))
+ 	    return 1;
+ 
+ 	if (vg_is_clustered(vg)) {
+-		r = 1; goto out;
+-	}
+-
+-	if (!vg_refresh_visible(vg->cmd, vg)) {
+-		log_error("%s: refresh before autoactivation failed.", vg->name);
+-		goto out;
++		release_vg(vg);
++		return 1;
+ 	}
+ 
+ 	if (!vgchange_activate(vg->cmd, vg, activate)) {
+ 		log_error("%s: autoactivation failed.", vg->name);
+-		goto out;
++		release_vg(vg);
++		return 0;
+ 	}
+ 
+-	r = 1;
+-
+-out:
+ 	release_vg(vg);
+-	return r;
++	return 1;
+ }
+ 
+ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
 
 
