@@ -1,38 +1,39 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Tue,  3 Sep 2013 15:55:20 +0000 (UTC)
-Subject: master - TEST: pvmove-all-segtypes.sh should not be run in a cluster
-Message-ID: <20130903155520.8A25560F58@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Tue,  3 Sep 2013 18:06:35 +0000 (UTC)
+Subject: master - test: Fix a spurious failure in skip_if_mirror_recovery_broken.
+Message-ID: <20130903180635.8B52361053@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=848e8026d68e53dae078ed99fb5f3a47db3def2a
-Commit:        848e8026d68e53dae078ed99fb5f3a47db3def2a
-Parent:        3b51f298bb505e5184b715032872e5cd1ce2d544
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Sep 3 10:51:21 2013 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Sep 3 10:54:42 2013 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7918217c754555fc685851e7d80f86a8f6c8abcb
+Commit:        7918217c754555fc685851e7d80f86a8f6c8abcb
+Parent:        848e8026d68e53dae078ed99fb5f3a47db3def2a
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Tue Sep 3 20:05:22 2013 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Tue Sep 3 20:06:24 2013 +0200
 
-TEST: pvmove-all-segtypes.sh should not be run in a cluster
+test: Fix a spurious failure in skip_if_mirror_recovery_broken.
 
 ---
- test/shell/pvmove-all-segtypes.sh |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/pvmove-all-segtypes.sh b/test/shell/pvmove-all-segtypes.sh
-index 13b8fba..8ea9d39 100644
---- a/test/shell/pvmove-all-segtypes.sh
-+++ b/test/shell/pvmove-all-segtypes.sh
-@@ -15,6 +15,7 @@ test_description="ensure pvmove works with all segment types"
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index bca709a..286fb96 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -605,7 +605,7 @@ api() {
+ }
  
- which mkfs.ext2 || skip
- which md5sum || skip
-+test -e LOCAL_CLVMD && skip
+ skip_if_mirror_recovery_broken() {
+-        test `uname -r` = 3.3.4-5.fc17.i686 && skip
++        if test `uname -r` = 3.3.4-5.fc17.i686; then skip; fi
+ }
  
- # ---------------------------------------------------------------------
- # Utilities
+ udev_wait() {
 
 
