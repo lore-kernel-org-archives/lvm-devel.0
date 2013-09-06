@@ -1,61 +1,63 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  6 Sep 2013 00:53:21 +0000 (UTC)
-Subject: master - logging: Write Completed message before resetting.
-Message-ID: <20130906005321.B9456610D1@fedorahosted.org>
+Date: Fri,  6 Sep 2013 00:53:23 +0000 (UTC)
+Subject: master - toollib: tweak background forking
+Message-ID: <20130906005323.CF0EE610D1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=96880102a3b792cadbfc97e44c09c5714a96ca9e
-Commit:        96880102a3b792cadbfc97e44c09c5714a96ca9e
-Parent:        5face2010dfb4e9fef43b867b4736a90abe51c00
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10a5838a600bbadfe9e20f686f86ffcd9d0c473e
+Commit:        10a5838a600bbadfe9e20f686f86ffcd9d0c473e
+Parent:        96880102a3b792cadbfc97e44c09c5714a96ca9e
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Sep 6 01:47:41 2013 +0100
+AuthorDate:    Fri Sep 6 01:49:43 2013 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Sep 6 01:47:41 2013 +0100
+CommitterDate: Fri Sep 6 01:49:43 2013 +0100
 
-logging: Write Completed message before resetting.
+toollib: tweak background forking
 
+Log what is forked and replace #if 1 with DEBUG_CHILD.
 ---
- WHATS_NEW          |    1 +
- tools/lvmcmdline.c |    7 +++----
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ tools/toollib.c |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index abfe0e1..212f4bb 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.101 - 
- ===================================
-+  Write Completed debug message before reinstating log defaults after command.
-   Skip pvmove of RAID, thin, snapshot, origin, or mirror LVs in a cluster.
-   Refresh existing VG before autoactivation (event retrigger/device reappeared).
-   Use pvscan -b in udev rules to avoid a deadlock on udev process count limit.
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index c7917ea..116e963 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1190,15 +1190,14 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 			stack;
- 	}
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 50c43d9..5868ac0 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -44,7 +44,7 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
+ 		.sa_flags = SA_NOCLDSTOP,
+ 	};
  
--	/* FIXME Move this? */
--	cmd->current_settings = cmd->default_settings;
--	_apply_settings(cmd);
--
- 	if (ret == EINVALID_CMD_LINE && !_cmdline.interactive)
- 		_short_usage(cmd->command->name);
+-	log_verbose("Forking background process");
++	log_verbose("Forking background process: %s", cmd->cmd_line);
  
- 	log_debug("Completed: %s", cmd->cmd_line);
+ 	sigaction(SIGCHLD, &act, NULL);
  
-+	cmd->current_settings = cmd->default_settings;
-+	_apply_settings(cmd);
+@@ -65,8 +65,10 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
+ 		log_error("Background process failed to setsid: %s",
+ 			  strerror(errno));
+ 
+-	/* For poll debugging it's best to disable for compilation */
+-#if 1
++/* Set this to avoid discarding output from background process */
++/* #define DEBUG_CHILD /* */
 +
- 	/*
- 	 * free off any memory the command used.
- 	 */
++#ifndef DEBUG_CHILD
+ 	if ((null_fd = open(devnull, O_RDWR)) == -1) {
+ 		log_sys_error("open", devnull);
+ 		_exit(ECMD_FAILED);
+@@ -84,7 +86,8 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
+ 		(void) close(null_fd);
+ 
+ 	init_verbose(VERBOSE_BASE_LEVEL);
+-#endif
++#endif	/* DEBUG_CHILD */
++
+ 	strncpy(*cmd->argv, "(lvm2)", strlen(*cmd->argv));
+ 
+ 	if (!skip_lvm) {
 
 
