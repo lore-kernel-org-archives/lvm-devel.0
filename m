@@ -1,63 +1,38 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  6 Sep 2013 00:53:23 +0000 (UTC)
-Subject: master - toollib: tweak background forking
-Message-ID: <20130906005323.CF0EE610D1@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Fri,  6 Sep 2013 14:50:52 +0000 (UTC)
+Subject: master - test: Add the 64b fc17 kernel to the mirror recovery blacklist.
+Message-ID: <20130906145052.9C34760188@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10a5838a600bbadfe9e20f686f86ffcd9d0c473e
-Commit:        10a5838a600bbadfe9e20f686f86ffcd9d0c473e
-Parent:        96880102a3b792cadbfc97e44c09c5714a96ca9e
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Sep 6 01:49:43 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Sep 6 01:49:43 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fe6b19a6a3deb707243a5728842fff17e52258e0
+Commit:        fe6b19a6a3deb707243a5728842fff17e52258e0
+Parent:        10a5838a600bbadfe9e20f686f86ffcd9d0c473e
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Fri Sep 6 16:35:49 2013 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Fri Sep 6 16:50:05 2013 +0200
 
-toollib: tweak background forking
+test: Add the 64b fc17 kernel to the mirror recovery blacklist.
 
-Log what is forked and replace #if 1 with DEBUG_CHILD.
 ---
- tools/toollib.c |   11 +++++++----
- 1 files changed, 7 insertions(+), 4 deletions(-)
+ test/lib/aux.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 50c43d9..5868ac0 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -44,7 +44,7 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
- 		.sa_flags = SA_NOCLDSTOP,
- 	};
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 286fb96..5ff0b0c 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -606,6 +606,7 @@ api() {
  
--	log_verbose("Forking background process");
-+	log_verbose("Forking background process: %s", cmd->cmd_line);
+ skip_if_mirror_recovery_broken() {
+         if test `uname -r` = 3.3.4-5.fc17.i686; then skip; fi
++        if test `uname -r` = 3.3.4-5.fc17.x86_64; then skip; fi
+ }
  
- 	sigaction(SIGCHLD, &act, NULL);
- 
-@@ -65,8 +65,10 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
- 		log_error("Background process failed to setsid: %s",
- 			  strerror(errno));
- 
--	/* For poll debugging it's best to disable for compilation */
--#if 1
-+/* Set this to avoid discarding output from background process */
-+/* #define DEBUG_CHILD /* */
-+
-+#ifndef DEBUG_CHILD
- 	if ((null_fd = open(devnull, O_RDWR)) == -1) {
- 		log_sys_error("open", devnull);
- 		_exit(ECMD_FAILED);
-@@ -84,7 +86,8 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
- 		(void) close(null_fd);
- 
- 	init_verbose(VERBOSE_BASE_LEVEL);
--#endif
-+#endif	/* DEBUG_CHILD */
-+
- 	strncpy(*cmd->argv, "(lvm2)", strlen(*cmd->argv));
- 
- 	if (!skip_lvm) {
+ udev_wait() {
 
 
