@@ -1,40 +1,41 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Sep 2013 10:21:54 +0000 (UTC)
-Subject: master - cleanup: drop within comment gcc warning
-Message-ID: <20130909102154.CE29060DD9@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon,  9 Sep 2013 11:49:24 +0000 (UTC)
+Subject: master - udev: also inform lvmetad about lost LVM1 PV label
+Message-ID: <20130909114924.06AE46120F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d89b514e06eb3431052d3dee4758103bf5f08963
-Commit:        d89b514e06eb3431052d3dee4758103bf5f08963
-Parent:        ac2de55d69605d058bbc7622638331549a0ba5c8
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 9 12:15:48 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 9 12:17:11 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f2fc2471cd39effccd549d73c2fc9c0e6419f94
+Commit:        9f2fc2471cd39effccd549d73c2fc9c0e6419f94
+Parent:        d89b514e06eb3431052d3dee4758103bf5f08963
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Sep 9 13:47:25 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Sep 9 13:48:27 2013 +0200
 
-cleanup: drop within comment gcc warning
+udev: also inform lvmetad about lost LVM1 PV label
 
-toollib.c:69:24: warning: "/*" within comment
+Addendum to 4d3b5724e0b51782000a45027de00e0fed1c9833
+which covered only LVM2 PV labels.
 ---
- tools/toollib.c |    2 +-
+ udev/69-dm-lvm-metad.rules.in |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 5868ac0..bccebb6 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -66,7 +66,7 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
- 			  strerror(errno));
+diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+index 6162e26..b4be582 100644
+--- a/udev/69-dm-lvm-metad.rules.in
++++ b/udev/69-dm-lvm-metad.rules.in
+@@ -18,7 +18,7 @@ SUBSYSTEM!="block", GOTO="lvm_end"
+ (LVM_EXEC_RULE)
  
- /* Set this to avoid discarding output from background process */
--/* #define DEBUG_CHILD /* */
-+/* #define DEBUG_CHILD */
+ # If the PV label got lost, inform lvmetad about it.
+-ENV{DM_ID_FS_TYPE_OLD}=="LVM2_member", ENV{DM_ID_FS_TYPE}!="LVM2_member", GOTO="lvm_scan"
++ENV{DM_ID_FS_TYPE_OLD}=="LVM2_member|LVM1_member", ENV{DM_ID_FS_TYPE}!="LVM2_member|LVM1_member", GOTO="lvm_scan"
  
- #ifndef DEBUG_CHILD
- 	if ((null_fd = open(devnull, O_RDWR)) == -1) {
+ # Only process devices already marked as a PV - this requires blkid to be called before.
+ ENV{ID_FS_TYPE}!="LVM2_member|LVM1_member", GOTO="lvm_end"
 
 
