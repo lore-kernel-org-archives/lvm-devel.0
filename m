@@ -1,105 +1,106 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 12 Sep 2013 11:33:14 +0000 (UTC)
-Subject: master - tests: extend harness with output of /var/log/messages
-Message-ID: <20130912113314.71C5B60FB3@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 12 Sep 2013 11:49:09 +0000 (UTC)
+Subject: master - udev: keep DM_ACTIVATION and DM_UDEV_PRIMARY_SOURCE_FLAG meaning as before commit 8d1d835
+Message-ID: <20130912114909.9BC2161059@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4d544004863b3d443fbeca11d264a324275958bd
-Commit:        4d544004863b3d443fbeca11d264a324275958bd
-Parent:        4dc16684679fb4bb9e8dbc2424e3760055788da2
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 12 13:30:12 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Sep 12 13:30:12 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6940e24aeeff3d6c5c8da259b74afd908b4716f2
+Commit:        6940e24aeeff3d6c5c8da259b74afd908b4716f2
+Parent:        4d544004863b3d443fbeca11d264a324275958bd
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Sep 12 13:46:20 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Sep 12 13:49:02 2013 +0200
 
-tests: extend harness with output of /var/log/messages
+udev: keep DM_ACTIVATION and DM_UDEV_PRIMARY_SOURCE_FLAG meaning as before commit 8d1d835
 
-Add a very simple hack for embeding /var/log/messages into
-the tests output - it's not ideal since it sometimes breaks lines,
-but still gives valuable info.
+The DM_ACTIVATION and DM_UDEV_PRIMARY_SOURCE_FLAG needs to be kept the
+way it was for backward compatibility (e.g. the old rules are still
+in initramfs). This way the check in whether the device should be
+scanned in 69-dm-lvmetad.rules is even easier.
 ---
- test/lib/harness.c |   24 ++++++++++++++++++++----
- 1 files changed, 20 insertions(+), 4 deletions(-)
+ udev/10-dm.rules.in           |   18 ++++++++++--------
+ udev/69-dm-lvm-metad.rules.in |    3 +--
+ 2 files changed, 11 insertions(+), 10 deletions(-)
 
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index 415093d..0036502 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -219,7 +219,8 @@ static const char *_append_with_stamp(const char *buf, int stamp)
- 	return bb;
- }
+diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
+index f495103..bc9681f 100644
+--- a/udev/10-dm.rules.in
++++ b/udev/10-dm.rules.in
+@@ -45,13 +45,14 @@ ENV{DISK_RO}=="1", GOTO="dm_disable"
+ # in libdevmapper so we need to detect this and try to behave correctly.
+ # For such spurious events, regenerate all flags from current udev database content
+ # (this information would normally be inaccessible for spurious ADD and CHANGE events).
+-ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", ENV{DM_ACTIVATED}="1", GOTO="dm_flags_done"
++ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", ENV{DM_ACTIVATION}="1", GOTO="dm_flags_done"
+ IMPORT{db}="DM_UDEV_DISABLE_DM_RULES_FLAG"
+ IMPORT{db}="DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG"
+ IMPORT{db}="DM_UDEV_DISABLE_DISK_RULES_FLAG"
+ IMPORT{db}="DM_UDEV_DISABLE_OTHER_RULES_FLAG"
+ IMPORT{db}="DM_UDEV_LOW_PRIORITY_FLAG"
+ IMPORT{db}="DM_UDEV_DISABLE_LIBRARY_FALLBACK_FLAG"
++IMPORT{db}="DM_UDEV_PRIMARY_SOURCE_FLAG"
+ IMPORT{db}="DM_UDEV_FLAG7"
+ IMPORT{db}="DM_SUBSYSTEM_UDEV_FLAG0"
+ IMPORT{db}="DM_SUBSYSTEM_UDEV_FLAG1"
+@@ -62,7 +63,6 @@ IMPORT{db}="DM_SUBSYSTEM_UDEV_FLAG5"
+ IMPORT{db}="DM_SUBSYSTEM_UDEV_FLAG6"
+ IMPORT{db}="DM_SUBSYSTEM_UDEV_FLAG7"
+ IMPORT{db}="DM_UDEV_RULES_VSN"
+-IMPORT{db}="DM_ACTIVATED"
+ LABEL="dm_flags_done"
  
--static void drain(void) {
-+static void drain(int fd)
-+{
- 	char buf[4096];
- 	const char *bp;
- 	int stamp = 0;
-@@ -228,7 +229,7 @@ static void drain(void) {
- 	static int stdout_last = -1, stdout_counter = 0;
- 	static int outfile_last = -1, outfile_counter = 0;
+ # Normally, we operate on "change" events. But when coldplugging, there's an
+@@ -77,24 +77,26 @@ LABEL="dm_flags_done"
+ # before (e.g. in initrd). If udev is used in initrd, we require the udev init
+ # script to not remove the existing udev database so we can reuse the information
+ # stored at the time of device activation in the initrd.
+-# The DM_ACTIVATED variable indicates that the device has already been activated.
+-ACTION=="add", ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_ACTIVATED}!="1", GOTO="dm_disable"
++ACTION!="add", GOTO="dm_no_coldplug"
++ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1", GOTO="dm_disable"
++ENV{DM_ACTIVATION}="1"
++LABEL="dm_no_coldplug"
  
--	while ((sz = read(fds[1], buf, sizeof(buf) - 1)) > 0) {
-+	while ((sz = read(fd, buf, sizeof(buf) - 1)) > 0) {
- 		if (fullbuffer)
- 			continue;
- 		buf[sz] = '\0';
-@@ -368,6 +369,8 @@ static void run(int i, char *f) {
- 		fd_set set;
- 		int runaway = 0;
- 		int no_write = 0;
-+		FILE *varlogmsg;
-+		int fd_vlm = -1;
+ # Putting it together, following table is used to recognize genuine and spurious events.
+ # N.B. Spurious events are generated based on use of the WATCH udev
+ # rule or by triggering an event manually by "udevadm trigger" call
+ # or by "echo <event_name> > /sys/block/dm-X/uevent".
+ #
+-#        EVENT              DM_UDEV_PRIMARY_SOURCE_FLAG   DM_ACTIVATED
+-# ====================================================================
++#        EVENT              DM_UDEV_PRIMARY_SOURCE_FLAG   DM_ACTIVATION
++# ======================================================================
+ # add event (genuine)                  0                        0
+ # change event (genuine)               1                        1
+ # add event (spurious)
+ #   |_ dev still not active            0                        0
+-#   \_ dev already active              0                        1
++#   \_ dev already active              1                        1
+ # change event (spurious)
+ #   |_ dev still not active            0                        0
+-#   \_ dev already active              0                        1
++#   \_ dev already active              1                        0
  
- 		snprintf(buf, sizeof(buf), "%s ...", f);
- 		printf("Running %-60s ", buf);
-@@ -378,6 +381,13 @@ static void run(int i, char *f) {
- 		if (!(outfile = fopen(outpath, "w")))
- 			perror("fopen");
+ # "dm" sysfs subdirectory is available in newer versions of DM
+ # only (kernels >= 2.6.29). We have to check for its existence
+diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+index f2d2f1b..6363a79 100644
+--- a/udev/69-dm-lvm-metad.rules.in
++++ b/udev/69-dm-lvm-metad.rules.in
+@@ -39,8 +39,7 @@ ACTION=="remove", GOTO="lvm_scan"
  
-+		/* Mix in kernel log message */
-+		if (!(varlogmsg = fopen("/var/log/messages", "r")))
-+			perror("fopen");
-+		else if (((fd_vlm = fileno(varlogmsg)) >= 0) &&
-+			 fseek(varlogmsg, 0L, SEEK_END))
-+			perror("fseek");
-+
- 		while ((w = wait4(pid, &st, WNOHANG, &usage)) == 0) {
- 			if ((fullbuffer && fullbuffer++ == 8000) ||
- 			    (no_write > 180 * 2)) /* a 3 minute timeout */
-@@ -401,14 +411,18 @@ static void run(int i, char *f) {
- 				no_write++;
- 				continue;
- 			}
--			drain();
-+			drain(fds[1]);
- 			no_write = 0;
-+			if (fd_vlm >= 0)
-+				drain(fd_vlm);
- 		}
- 		if (w != pid) {
- 			perror("waitpid");
- 			exit(206);
- 		}
--		drain();
-+		drain(fds[1]);
-+		if (fd_vlm >= 0)
-+			drain(fd_vlm);
- 		if (die == 2)
- 			interrupted(i, f);
- 		else if (runaway) {
-@@ -423,6 +437,8 @@ static void run(int i, char *f) {
- 		} else
- 			failed(i, f, st);
+ # DM device:
+ KERNEL!="dm-[0-9]*", GOTO="next"
+-ACTION=="add", ENV{DM_ACTIVATED}=="1", GOTO="lvm_scan"
+-ACTION=="change", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="lvm_scan"
++ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", ENV{DM_ACTIVATION}=="1", GOTO="lvm_scan"
+ GOTO="lvm_end"
  
-+		if (varlogmsg)
-+			fclose(varlogmsg);
- 		if (outfile)
- 			fclose(outfile);
- 		if (fullbuffer)
+ # MD device:
 
 
