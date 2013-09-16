@@ -1,71 +1,73 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 16 Sep 2013 14:29:40 +0000 (UTC)
-Subject: master - doc: add a note about device filtering while lvmetad is used
-Message-ID: <20130916142940.700B660E91@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 16 Sep 2013 15:59:37 +0000 (UTC)
+Subject: master - filters: Add bcache.
+Message-ID: <20130916155937.D9EA560DD5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10bc19ec1070d16d7367285856ebba7f99cf1996
-Commit:        10bc19ec1070d16d7367285856ebba7f99cf1996
-Parent:        61427af377891b011089b14154fe0c1d2845fd21
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Sep 16 16:28:28 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Sep 16 16:29:33 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=97ba18f4cbedbdf7933d30d719cf997bb06e7214
+Commit:        97ba18f4cbedbdf7933d30d719cf997bb06e7214
+Parent:        10bc19ec1070d16d7367285856ebba7f99cf1996
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Sep 16 16:56:55 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Sep 16 16:56:55 2013 +0100
 
-doc: add a note about device filtering while lvmetad is used
+filters: Add bcache.
 
+N.B. Using bcache devices as PVs is still experimental.
+Problems should be reported to the appropriate mailing lists.
 ---
- conf/example.conf.in |   12 ++++++++++++
- man/pvscan.8.in      |    3 ++-
- 2 files changed, 14 insertions(+), 1 deletions(-)
+ WHATS_NEW                 |    8 +++-----
+ lib/device/device-types.h |    1 +
+ 2 files changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index b99f010..fb96079 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -80,6 +80,8 @@ devices {
-     # the cache file gets regenerated (see below).
-     # If it doesn't do what you expect, check the output of 'vgscan -vvvv'.
- 
-+    # If lvmetad is used, then see "A note about device filtering while
-+    # lvmetad is used" comment that is attached to global/use_lvmetad setting.
- 
-     # By default we accept every block device:
-     filter = [ "a/.*/" ]
-@@ -559,6 +561,16 @@ global {
-     # that appear in the system. Once the VG is complete (all the PVs are
-     # present), it is auto-activated. The activation/auto_activation_volume_list
-     # setting controls which volumes are auto-activated (all by default).
-+    #
-+    # A note about device filtering while lvmetad is used:
-+    # When lvmetad is updated (either automatically based on udev events
-+    # or directly by pvscan --cache <device> call), the devices/filter
-+    # is ignored and all devices are scanned by default. The lvmetad always
-+    # keeps unfiltered information which is then provided to LVM commands
-+    # and then each LVM command does the filtering based on devices/filter
-+    # setting itself.
-+    # To prevent scanning devices completely, even when using lvmetad,
-+    # the devices/global_filter must be used.
-     use_lvmetad = 0
- 
-     # Full path of the utility called to check that a thin metadata device
-diff --git a/man/pvscan.8.in b/man/pvscan.8.in
-index 78ee3e2..211c82b 100644
---- a/man/pvscan.8.in
-+++ b/man/pvscan.8.in
-@@ -59,7 +59,8 @@ Run the command in the background.
- Scan one or more devices and instruct the lvmetad daemon to update its cached
- state accordingly.  Called internally by udev rules.
- All devices listed explicitly are processed \fBregardless\fP of any device
--filters set in lvm.conf.
-+filters set using \fBdevices/filter\fP configuration setting. To filter
-+devices even in this case, the \fBdevices/global_filter\fP must be used.
- .SH SEE ALSO
- .BR lvm (8),
- .BR pvcreate (8),
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1c4925b..d51f08c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.101 - 
+ ===================================
++  Recognise bcache block devices in filter (experimental).
+   Run lvm2-activation-net after lvm2-activation service to prevent parallel run.
+   Add man page entries for lvmdump's -u and -l options.
+   Fix lvm2app segfault while using lvm_list_pvs_free fn if there are no PVs.
+@@ -14,19 +15,16 @@ Version 2.02.101 -
+   Fix dmeventd unmonitoring of thin pools.
+   Fix lvresize for stacked thin pool volumes (i.e. mirrors).
+   Write Completed debug message before reinstating log defaults after command.
+-  Skip pvmove of RAID, thin, snapshot, origin, or mirror LVs in a cluster.
+   Refresh existing VG before autoactivation (event retrigger/device reappeared).
+   Use pvscan -b in udev rules to avoid a deadlock on udev process count limit.
+   Add pvscan -b/--background for the command to be processed in the background.
+   Don't assume stdin file descriptor is readable.
+   Avoid unlimited recursion when creating dtree containing inactive pvmove LV.
+   Require exactly 3 arguments for lvm2-activation-generator. Remove defaults.
+-  Disable pvmove of merging or converting logical volumes.
+-  Enable pvmove of snapshots and snapshot origins.
+-  Fix inability to specify LV name when pvmove'ing a RAID, mirror, or thin-LV.
+   Inform lvmetad about any lost PV label to make it in sync with system state.
+   Support most of lvchange operations on stacked thin pool meta/data LVs.
+-  Add ability to pvmove RAID, mirror, and thin volumes.
++  Enable non-clustered pvmove of snapshots and snapshot origins.
++  Add ability to pvmove non-clustered RAID, mirror, and thin volumes.
+   Make lvm2-activation-generator silent unless it's in error state.
+   Remove "mpath major is not dm major" msg for mpath component scan (2.02.94).
+   Prevent cluster mirror logs from being corrupted by redundant checkpoints.
+diff --git a/lib/device/device-types.h b/lib/device/device-types.h
+index 48ae32a..d25c2f0 100644
+--- a/lib/device/device-types.h
++++ b/lib/device/device-types.h
+@@ -60,5 +60,6 @@ static const dev_known_type_t _dev_known_types[] = {
+ 	{"vtms", 16, "Violin Memory"},
+ 	{"skd", 16, "STEC"},
+ 	{"scm", 8, "Storage Class Memory (IBM S/390)"},
++	{"bcache", 1, "bcache block device cache"},
+ 	{"", 0, ""}
+ };
 
 
