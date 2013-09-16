@@ -1,102 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 16 Sep 2013 09:23:14 +0000 (UTC)
-Subject: master - tests: update check and get
-Message-ID: <20130916092314.3164A60E77@fedorahosted.org>
+Date: Mon, 16 Sep 2013 09:23:16 +0000 (UTC)
+Subject: master - tests: use check for raid test
+Message-ID: <20130916092316.4BB0C6101B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9df27c42794652cc663e04c5c751daa549e73194
-Commit:        9df27c42794652cc663e04c5c751daa549e73194
-Parent:        51d3667cb559e77cd43556851922cb5bef0fc9ae
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47b7cc6850091aac9d32070ad3c3a727bae5f188
+Commit:        47b7cc6850091aac9d32070ad3c3a727bae5f188
+Parent:        9df27c42794652cc663e04c5c751daa549e73194
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 16 11:12:37 2013 +0200
+AuthorDate:    Mon Sep 16 11:15:38 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 16 11:22:04 2013 +0200
 
-tests: update check and get
+tests: use check for raid test
 
-Update usage of "" around shell vars.
-trim needs to trim both sides now.
-trim also removes debug.log since it's only called when lvm command
-has finished properly (so if something fails afterward, there
-is no missleading debug trace in the log)
+Use test-suite built-in check command for this test
+(creates better logs, and reduces amount of valgrind-ed commands)
 ---
- test/lib/check.sh |    4 ++--
- test/lib/get.sh   |   19 +++++++++++--------
- 2 files changed, 13 insertions(+), 10 deletions(-)
+ test/shell/lvcreate-raid.sh   |    8 ++++----
+ test/shell/lvcreate-raid10.sh |    5 ++---
+ 2 files changed, 6 insertions(+), 7 deletions(-)
 
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index ecb0721..d3678a9 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -236,13 +236,13 @@ pv_field() {
- }
+diff --git a/test/shell/lvcreate-raid.sh b/test/shell/lvcreate-raid.sh
+index ee56b9c..214b162 100644
+--- a/test/shell/lvcreate-raid.sh
++++ b/test/shell/lvcreate-raid.sh
+@@ -42,8 +42,8 @@ lvremove -ff $vg
+ lvcreate --type raid1 -m 2 -l 2 \
+ 	--minrecoveryrate 50 --maxrecoveryrate 100 \
+ 	-n $lv1 $vg
+-[ `lvs --noheadings -o raid_min_recovery_rate $vg/$lv1` -eq 50 ]
+-[ `lvs --noheadings -o raid_max_recovery_rate $vg/$lv1` -eq 100 ]
++check lv_field $vg/$lv1 raid_min_recovery_rate 50
++check lv_field $vg/$lv1 raid_max_recovery_rate 100
+ aux wait_for_sync $vg $lv1
+ lvremove -ff $vg
  
- vg_field() {
--	local actual=$(get vg_field $1 "$2" "${@:4}")
-+	local actual=$(get vg_field "$1" "$2" "${@:4}")
- 	test "$actual" = "$3" || \
- 		die "vg_field: vg=$1, field=\"$2\", actual=\"$actual\", expected=\"$3\""
- }
+@@ -65,8 +65,8 @@ for i in raid4 \
+ 	lvcreate --type $i -l 3 -i 3 \
+ 		--minrecoveryrate 50 --maxrecoveryrate 100 \
+ 		-n $lv1 $vg
+-	[ `lvs --noheadings -o raid_min_recovery_rate $vg/$lv1` -eq 50 ]
+-	[ `lvs --noheadings -o raid_max_recovery_rate $vg/$lv1` -eq 100 ]
++	check lv_field $vg/$lv1 raid_min_recovery_rate 50
++	check lv_field $vg/$lv1 raid_max_recovery_rate 100
+ 	aux wait_for_sync $vg $lv1
+ 	lvremove -ff $vg
+ done
+diff --git a/test/shell/lvcreate-raid10.sh b/test/shell/lvcreate-raid10.sh
+index 933097a..143e869 100644
+--- a/test/shell/lvcreate-raid10.sh
++++ b/test/shell/lvcreate-raid10.sh
+@@ -36,15 +36,14 @@ lvremove -ff $vg/$lv1
+ lvcreate --type raid10 -m 1 -i 2 -l 2 \
+ 	--minrecoveryrate 50 --maxrecoveryrate 100 \
+ 	-n $lv1 $vg
+-[ `lvs --noheadings -o raid_min_recovery_rate $vg/$lv1` -eq 50 ]
+-[ `lvs --noheadings -o raid_max_recovery_rate $vg/$lv1` -eq 100 ]
++check lv_field $vg/$lv1 raid_min_recovery_rate 50
++check lv_field $vg/$lv1 raid_max_recovery_rate 100
+ aux wait_for_sync $vg $lv1
  
- lv_field() {
--	local actual=$(get lv_field $1 "$2" "${@:4}")
-+	local actual=$(get lv_field "$1" "$2" "${@:4}")
- 	test "$actual" = "$3" || \
- 		die "lv_field: lv=$lv, field=\"$2\", actual=\"$actual\", expected=\"$3\""
- }
-diff --git a/test/lib/get.sh b/test/lib/get.sh
-index 4197f47..7d7c3d2 100644
---- a/test/lib/get.sh
-+++ b/test/lib/get.sh
-@@ -1,5 +1,5 @@
- #!/bin/sh
--# Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2011-2013 Red Hat, Inc. All rights reserved.
+ # 2-way mirror, 3-stripes
+ lvcreate --type raid10 -m 1 -i 3 -l 3 -n $lv2 $vg
+ aux wait_for_sync $vg $lv2
+ 
+-
+ lvremove -ff $vg
+ 
  #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -18,28 +18,31 @@
- #
- #  get lv_devices LV     [lvs params]
- 
-+test -z "$BASH" || set -e -o pipefail
- 
--# trims only leading prefix, we should not need trim trailing spaces
-+# trims only leading prefix and suffix
- trim_() {
--	#local var=${var%"${var##*[! ]}"}  # remove trailing space characters
--	echo ${1#"${1%%[! ]*}"} # remove leading space characters
-+	rm -f debug.log             # drop log, command was ok
-+	local var=${1%${1##*[! ]}}  # remove trailing space characters
-+	echo "${var#${var%%[! ]*}}" # remove leading space characters
- }
- 
- pv_field() {
--	trim_ "$(pvs --noheadings -o $2 ${@:3} $1)"
-+	trim_ "$(pvs --config 'log{prefix=""}' --noheadings -o $2 ${@:3} $1)"
- }
- 
- vg_field() {
--	trim_ "$(vgs --noheadings -o $2 ${@:3} $1)"
-+	trim_ "$(vgs --config 'log{prefix=""}' --noheadings -o $2 ${@:3} $1)"
- }
- 
- lv_field() {
--	trim_ "$(lvs --noheadings -o $2 ${@:3} $1)"
-+	trim_ "$(lvs --config 'log{prefix=""}' --noheadings -o $2 ${@:3} $1)"
- }
- 
- lv_devices() {
--	lv_field $1 devices -a "${@:2}" | sed 's/([^)]*)//g; s/,/ /g'
-+	lv_field "$1" devices -a "${@:2}" | sed 's/([^)]*)//g; s/,/\n/g'
- }
- 
-+#set -x
- unset LVM_VALGRIND
- "$@"
 
 
