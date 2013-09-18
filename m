@@ -1,54 +1,68 @@
-From: Gabriel de Perthuis <g2p.code@gmail.com>
-Date: Thu, 26 Sep 2013 09:33:44 +0200
-Subject: [PATCH] pvcreate: Create a bootloader embedding area by default
-Message-ID: <1380180824-17931-1-git-send-email-g2p.code@gmail.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 18 Sep 2013 00:26:32 +0000 (UTC)
+Subject: master - tools: Avoid overflow in _get_int_arg.
+Message-ID: <20130918002632.1184F6119B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Default to 1M, to match the amount available to the bootloader on a
-partition table with modern alignment constraints.
----
- lib/config/defaults.h   | 1 +
- lib/metadata/metadata.c | 2 +-
- 2 files changed, 2 insertions(+), 1 deletion(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6e912d949b5f68dbf522c4ddb48b93461bdacfdd
+Commit:        6e912d949b5f68dbf522c4ddb48b93461bdacfdd
+Parent:        a0ca2c11ee69b51a99644955cb4daa8ca50c8034
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Sep 18 01:16:48 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Sep 18 01:16:48 2013 +0100
 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index d200331..2f5d17d 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -103,10 +103,11 @@
- #define DEFAULT_MAX_LV 0
- #define DEFAULT_ALLOC_POLICY ALLOC_NORMAL
- #define DEFAULT_MIRROR_LOGS_REQUIRE_SEPARATE_PVS 0
- #define DEFAULT_MAXIMISE_CLING 1
- #define DEFAULT_CLUSTERED 0
-+#define DEFAULT_BOOTLOADERAREASIZE 2048 /* sectors */
+tools: Avoid overflow in _get_int_arg.
+
+Use strtoull instead of strtol so that argument size is not cut
+to 31 bytes on machines with 32-bit long.
+
+(Mikulas)
+---
+ WHATS_NEW          |    1 +
+ tools/lvmcmdline.c |    7 ++++---
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index df893ae..0b53a9e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.101 - 
+ ===================================
++  Use strtoull instead of strtol in _get_int_arg.
+   Add devtypes report command to display built-in recognised block device types.
+   Fix CC Makefile override which had reverted to using built-in value. (2.02.75)
+   Recognise bcache block devices in filter (experimental).
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 116e963..e004f61 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -241,7 +241,7 @@ int metadatatype_arg(struct cmd_context *cmd, struct arg_values *av)
+ static int _get_int_arg(struct arg_values *av, char **ptr)
+ {
+ 	char *val;
+-	long v;
++	unsigned long long v;
  
- #define DEFAULT_MSG_PREFIX "  "
- #define DEFAULT_CMD_NAME 0
- #define DEFAULT_OVERWRITE 0
+ 	av->percent = PERCENT_NONE;
  
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 1e34f83..c351741 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1435,11 +1435,11 @@ void pvcreate_params_set_defaults(struct pvcreate_params *pp)
- 	pp->yes = 0;
- 	pp->metadataignore = DEFAULT_PVMETADATAIGNORE;
- 	pp->rp.restorefile = 0;
- 	pp->rp.idp = 0;
- 	pp->rp.ba_start = 0;
--	pp->rp.ba_size = 0;
-+	pp->rp.ba_size = DEFAULT_BOOTLOADERAREASIZE;
- 	pp->rp.pe_start = PV_PE_START_CALC;
- 	pp->rp.extent_count = 0;
- 	pp->rp.extent_size = 0;
- }
+@@ -262,9 +262,10 @@ static int _get_int_arg(struct arg_values *av, char **ptr)
+ 	if (!isdigit(*val))
+ 		return 0;
  
--- 
-1.8.4.25.g05e4ae6
+-	v = strtol(val, ptr, 10);
++	errno = 0;
++	v = strtoull(val, ptr, 10);
+ 
+-	if (*ptr == val)
++	if (*ptr == val || errno)
+ 		return 0;
+ 
+ 	av->i_value = (int32_t) v;
 
 
