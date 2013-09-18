@@ -1,90 +1,69 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 27 Sep 2013 14:10:21 -0500
-Subject: [PATCH 01/12] python-lvm: Correct names
-In-Reply-To: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
-References: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1380309032-12736-2-git-send-email-tasleson@redhat.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 18 Sep 2013 00:26:34 +0000 (UTC)
+Subject: master - dmsetup: Detect invalid sector supplied to message.
+Message-ID: <20130918002634.277B66119B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The existing names do not follow accepted guidelines.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=68f841fcda29ee0af177b0299b52842afcf1bae2
+Commit:        68f841fcda29ee0af177b0299b52842afcf1bae2
+Parent:        6e912d949b5f68dbf522c4ddb48b93461bdacfdd
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Sep 18 01:24:19 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Sep 18 01:24:19 2013 +0100
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+dmsetup: Detect invalid sector supplied to message.
+
+atoll doesn't check for errors, so invalid sector numbers were silently
+accepted in the "dmsetup message" command.
+
+(Mikulas)
 ---
- python/liblvm.c | 14 +++++++-------
- 1 file changed, 7 insertions(+), 7 deletions(-)
+ WHATS_NEW_DM    |    1 +
+ tools/dmsetup.c |    9 ++++++++-
+ 2 files changed, 9 insertions(+), 1 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index a9de817..42a327e 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -1846,7 +1846,7 @@ static PyMethodDef _liblvm_pvseg_methods[] = {
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 252f105..51c771c 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.80 - 
+ ==================================
++  Detect invalid sector supplied to 'dmsetup message'.
+   Free any previously-set string if a dm_task_set_* function is called again.
+   Do not allow passing empty new name for dmsetup rename.
+   Display any output returned by 'dmsetup message'.
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 01f49c3..517e8aa 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -771,6 +771,8 @@ static int _message(CMD_ARGS)
+ 	struct dm_task *dmt;
+ 	char *str;
+ 	const char *response;
++	uint64_t sector;
++	char *endptr;
  
- static PyTypeObject _LibLVMvgType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_vg",
-+	.tp_name = "lvm.Liblvm_vg",
- 	.tp_basicsize = sizeof(vgobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)liblvm_vg_dealloc,
-@@ -1857,7 +1857,7 @@ static PyTypeObject _LibLVMvgType = {
+ 	if (!(dmt = dm_task_create(DM_DEVICE_TARGET_MSG)))
+ 		return 0;
+@@ -785,7 +787,12 @@ static int _message(CMD_ARGS)
+ 		argv++;
+ 	}
  
- static PyTypeObject _LibLVMlvType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_lv",
-+	.tp_name = "lvm.Liblvm_lv",
- 	.tp_basicsize = sizeof(lvobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)liblvm_lv_dealloc,
-@@ -1868,7 +1868,7 @@ static PyTypeObject _LibLVMlvType = {
+-	if (!dm_task_set_sector(dmt, (uint64_t) atoll(argv[1])))
++	sector = strtoull(argv[1], &endptr, 10);
++	if (*endptr || endptr == argv[1]) {
++		err("invalid sector");
++		goto out;
++	}
++	if (!dm_task_set_sector(dmt, sector))
+ 		goto out;
  
- static PyTypeObject _LibLVMpvlistType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pvlist",
-+	.tp_name = "lvm.Liblvm_pvlist",
- 	.tp_basicsize = sizeof(pvslistobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pvlist_dealloc,
-@@ -1879,7 +1879,7 @@ static PyTypeObject _LibLVMpvlistType = {
- 
- static PyTypeObject _LibLVMpvType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pv",
-+	.tp_name = "lvm.Liblvm_pv",
- 	.tp_basicsize = sizeof(pvobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pv_dealloc,
-@@ -1890,7 +1890,7 @@ static PyTypeObject _LibLVMpvType = {
- 
- static PyTypeObject _LibLVMlvsegType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_lvseg",
-+	.tp_name = "lvm.Liblvm_lvseg",
- 	.tp_basicsize = sizeof(lvsegobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_lvseg_dealloc,
-@@ -1901,7 +1901,7 @@ static PyTypeObject _LibLVMlvsegType = {
- 
- static PyTypeObject _LibLVMpvsegType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pvseg",
-+	.tp_name = "lvm.Liblvm_pvseg",
- 	.tp_basicsize = sizeof(pvsegobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pvseg_dealloc,
-@@ -1952,7 +1952,7 @@ PyMODINIT_FUNC initlvm(void)
- 				    LVM_THIN_DISCARDS_PASSDOWN) < 0)
- 		return;
- 
--	if ((_LibLVMError = PyErr_NewException("Liblvm._LibLVMError", NULL, NULL))) {
-+	if ((_LibLVMError = PyErr_NewException("lvm.LibLVMError", NULL, NULL))) {
- 		/* Each call to PyModule_AddObject decrefs it; compensate: */
- 		Py_INCREF(_LibLVMError);
- 		Py_INCREF(_LibLVMError);
--- 
-1.8.2.1
+ 	argc -= 2;
 
 
