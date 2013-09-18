@@ -1,51 +1,45 @@
-From: Alexander Tsoy <alexander@tsoy.me>
-Date: Mon, 30 Sep 2013 22:18:59 +0400
-Subject: lvmetad activation problem with MD devices
-In-Reply-To: <20130930203615.59bfd346@work.puleglot>
-References: <20130930203615.59bfd346@work.puleglot>
-Message-ID: <20130930221859.45328e01@work.puleglot>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 18 Sep 2013 08:38:13 +0000 (UTC)
+Subject: master - vgcfgrestore: Remove the VG from lvmetad before overwriting it.
+Message-ID: <20130918083813.5E81960E7A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-? Mon, 30 Sep 2013 20:36:15 +0400
-Alexander Tsoy <alexander@tsoy.me> ?????:
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a6af611ae127de202be9e172099c6efe9ed41d7e
+Commit:        a6af611ae127de202be9e172099c6efe9ed41d7e
+Parent:        c2dd0a832a8f06471f86e8244884c4dc902cc9f7
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Wed Sep 18 10:34:38 2013 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Sep 18 10:37:29 2013 +0200
 
-> Hello.
-> 
-> Commit 8d1d83504dcf9c86ad42d34d3bd0b201d7bab8f6 introduced the
-> following problem. If MD device is assembled in initramfs and some LVs
-> on it are not activated, then those LVs still not activated during
-> system boot.
-> 
-> This, for example, breaks setups where initramfs is generated with
-> dracut and LVs selectively activated using "rd.lvm.lv" kernel cmdline
-> option.
-> 
+vgcfgrestore: Remove the VG from lvmetad before overwriting it.
 
-Just an example.
+---
+ tools/vgcfgrestore.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-Setup:
-md0 -> vg00 -> { lv00, lv01, lv02, lv03 }
-md1 -> vg01 -> { lv04, lv05 }
-
-Dracut options passed to the kernel cmdline:
-rd.md.uuid=<UUID_of_md0> rd.lvm.lv=vg00/lv00 rd.lvm.lv=vg00/lv01
-
-What happens in initramfs:
-- md0 is assembled
-- vg00/lv00 and vg00/lv01 are activated
-
-What happens during system boot:
-- md1 is assembled
-- vg01/lv04 and vg01/lv05 are activated
-
-
-vg00/lv02 and vg00/lv03 are not activated.
-
--- 
-Alexander Tsoy
+diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
+index 36396c3..f560836 100644
+--- a/tools/vgcfgrestore.c
++++ b/tools/vgcfgrestore.c
+@@ -57,6 +57,14 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 	}
+ 
++	if (lvmetad_active()) {
++		struct volume_group *vg = lvmetad_vg_lookup(cmd, vg_name, NULL);
++		if (vg) {
++			lvmetad_vg_remove(vg);
++			release_vg(vg);
++		}
++	}
++
+ 	cmd->handles_unknown_segments = 1;
+ 
+ 	if (!(arg_count(cmd, file_ARG) ?
 
 
