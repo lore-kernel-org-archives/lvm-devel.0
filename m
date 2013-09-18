@@ -1,107 +1,50 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 27 Sep 2013 14:10:27 -0500
-Subject: [PATCH 07/12] python-lvm: Add addl. PV create arguments
-In-Reply-To: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
-References: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1380309032-12736-8-git-send-email-tasleson@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 18 Sep 2013 04:07:00 +0000 (UTC)
+Subject: master - man: lvs man page was not accurate on the volume health bit of lv_attr
+Message-ID: <20130918040700.95FE2606B5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Added overloaded PV create arguments with defaults for PV
-creation.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c2dd0a832a8f06471f86e8244884c4dc902cc9f7
+Commit:        c2dd0a832a8f06471f86e8244884c4dc902cc9f7
+Parent:        68f841fcda29ee0af177b0299b52842afcf1bae2
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Sep 17 23:03:57 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Sep 17 23:03:57 2013 -0500
 
-Addresses bug: https://bugzilla.redhat.com/show_bug.cgi?id=880395
+man: lvs man page was not accurate on the volume health bit of lv_attr
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+The 'm'ismatches flag only shows after a "check" scrubbing operation -
+not after a "check" or "repair" as indicated by the man page.
 ---
- python/liblvm.c | 51 +++++++++++++++++++++++++++++++++++++++++++++------
- 1 file changed, 45 insertions(+), 6 deletions(-)
+ man/lvs.8.in |   11 +++++------
+ 1 files changed, 5 insertions(+), 6 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 36b64e4..033de82 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -23,6 +23,7 @@
- 
- #include <Python.h>
- #include "lvm2app.h"
-+#include "defaults.h"
- 
- static lvm_t _libh;
- 
-@@ -317,24 +318,62 @@ static PyObject *_liblvm_lvm_pv_remove(PyObject *self, PyObject *arg)
- 	return Py_None;
- }
- 
-+static int _set_pv_numeric_prop(pv_create_params_t pv_params, const char *name,
-+								unsigned long long value)
-+{
-+	struct lvm_property_value prop_value;
-+	prop_value.is_integer = 1;
-+	prop_value.value.integer = value;
-+
-+	return lvm_pv_params_set_property(pv_params, name, &prop_value);
-+}
-+
-+#define SET_PV_PROP(params, name, value) \
-+	do { \
-+		if (_set_pv_numeric_prop(params, name, value) == -1) \
-+			goto error; \
-+	} while(0)\
-+
- static PyObject *_liblvm_lvm_pv_create(PyObject *self, PyObject *arg)
- {
- 	const char *pv_name;
--	unsigned long long size;
-+	unsigned long long size = 0;
-+	unsigned long long pvmetadatacopies = DEFAULT_PVMETADATACOPIES;
-+	unsigned long long pvmetadatasize = DEFAULT_PVMETADATASIZE;
-+	unsigned long long data_alignment = 0;
-+	unsigned long long data_alignment_offset = 0;
-+	unsigned long long zero = 1;
-+	pv_create_params_t pv_params = NULL;
- 
- 	LVM_VALID(NULL);
- 
--	if (!PyArg_ParseTuple(arg, "sK", &pv_name, &size))
-+	if (!PyArg_ParseTuple(arg, "s|KKKKKK", &pv_name, &size, &pvmetadatacopies,
-+							&pvmetadatasize, &data_alignment,
-+							&data_alignment_offset, &zero))
- 		return NULL;
- 
--	if (lvm_pv_create(_libh, pv_name, size) == -1) {
--		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
--		return NULL;
-+	pv_params = lvm_pv_params_create(_libh, pv_name);
-+	if (!pv_params) {
-+		goto error;
- 	}
- 
--	Py_INCREF(Py_None);
-+	SET_PV_PROP(pv_params, "size", size);
-+	SET_PV_PROP(pv_params, "pvmetadatacopies", pvmetadatacopies);
-+	SET_PV_PROP(pv_params, "pvmetadatasize", pvmetadatasize);
-+	SET_PV_PROP(pv_params, "data_alignment", data_alignment);
-+	SET_PV_PROP(pv_params, "data_alignment_offset", data_alignment_offset);
-+	SET_PV_PROP(pv_params, "zero", zero);
-+
-+	if (lvm_pv_create_adv(pv_params)) {
-+		goto error;
-+	}
- 
-+	Py_INCREF(Py_None);
- 	return Py_None;
-+
-+error:
-+	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
-+	return NULL;
- }
- 
- static PyObject *_liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
--- 
-1.8.2.1
+diff --git a/man/lvs.8.in b/man/lvs.8.in
+index 8f97dc2..32cb788 100644
+--- a/man/lvs.8.in
++++ b/man/lvs.8.in
+@@ -173,12 +173,11 @@ more of the Physical Volumes this RAID Logical Volume uses had suffered a
+ write error.  The write error could be due to a temporary failure of that
+ Physical Volume or an indication that it is failing.  The device should be
+ refreshed or replaced.  (m)ismatches signifies that the RAID logical volume
+-has portions of the array that are not coherent or that the array has
+-recently repaired inconsistencies.  An additional "check" after a "repair"
+-of a RAID logical volume will clear this flag if no additional discrepancies
+-are found.  ("check" and "repair" of a RAID Logical Volume can be done via
+-the 'lvchange' command.)  (w)ritemostly signifies the devices in a RAID 1
+-logical volume that have been marked write-mostly.
++has portions of the array that are not coherent.  Inconsistencies are
++detected by initiating a "check" on a RAID logical volume.  (The scrubbing
++operations, "check" and "repair", can be performed on a RAID logical
++volume via the 'lvchange' command.)  (w)ritemostly signifies the devices in
++a RAID 1 logical volume that have been marked write-mostly.
+ .IP 10 3
+ s(k)ip activation: this volume is flagged to be skipped during activation.
+ .RE
 
 
