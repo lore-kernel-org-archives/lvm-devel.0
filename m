@@ -1,36 +1,45 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 19 Sep 2013 10:15:42 +0200
-Subject: [PATCH] libdm: fix races with udev
-In-Reply-To: <alpine.LRH.2.02.1309161523010.9077@file01.intranet.prod.int.rdu2.redhat.com>
-References: <alpine.LRH.2.02.1309161523010.9077@file01.intranet.prod.int.rdu2.redhat.com>
-Message-ID: <523AB2AE.3020103@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Fri, 20 Sep 2013 03:34:32 +0000 (UTC)
+Subject: master - RAID: Don't allow syncaction changes on non-RAID LVs
+Message-ID: <20130920033432.D21F56036E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 09/16/2013 09:23 PM, Mikulas Patocka wrote:
-> libdm: fix races with udev
-> 
-> On newer systems (Debian 6 and newer), udev manages nodes in /dev/mapper
-> directory. It creates, deletes and renames the nodes according to the
-> state of the kernel driver.
-> 
-> dmsetup tries to manage nodes in /dev/mapper too, so it can race with
-> udev. dmsetup checks if the node was created/deleted/renamed with the stat
-> syscall, and skips the operation if it was. However, if udev
-> creates/deletes/renames the node after the stat syscall and before the
-> mknod/unlink/rename syscall, dmsetup reports an error.
-> 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2c41c8b88610bff6a3352b93f6b5c70a3744c817
+Commit:        2c41c8b88610bff6a3352b93f6b5c70a3744c817
+Parent:        25bed9968155f43ef0b8832383ef711e7ae1685d
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Thu Sep 19 22:33:01 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Thu Sep 19 22:33:01 2013 -0500
 
-These checks are performed after udev is synchronized (the dm_udev_wait call)
-and after the udev processing is complete, so we normally shouldn't get into this
-problem unless there is some bug in certain version of lvm2/udev rules.
+RAID: Don't allow syncaction changes on non-RAID LVs
 
-Is this reproducible with upstream code as well or was that with some older version only
-that is currently in Debian?
+Don't allow syncaction or other RAID-type messages on non-RAID
+logical volumes.
+---
+ lib/activate/activate.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-Peter
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index e5033c6..7b535c6 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -896,6 +896,12 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
+ 	struct dev_manager *dm;
+ 	struct dm_status_raid *status;
+ 
++	if (!seg_is_raid(first_seg(lv))) {
++		log_error("%s/%s must be a RAID logical volume to"
++			  " perform this action.", lv->vg->name, lv->name);
++		return 0;
++	}
++
+ 	if (!lv_is_active_locally(lv)) {
+ 		log_error("Unable to send message to an inactive logical volume.");
+ 		return 0;
 
 
