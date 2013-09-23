@@ -1,60 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 23 Sep 2013 10:16:19 +0000 (UTC)
-Subject: master - cleanup: drop unused report parameter
-Message-ID: <20130923101619.9022D606F6@fedorahosted.org>
+Date: Mon, 23 Sep 2013 10:16:23 +0000 (UTC)
+Subject: master - raid: add lv_is_raid()
+Message-ID: <20130923101623.B92B8606F6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b33b618fc8e83a033d91814facd0312c84597372
-Commit:        b33b618fc8e83a033d91814facd0312c84597372
-Parent:        9b4bfca219b47679da846a1750631fc440426143
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b29adbbc4da6f016735929ce6a944639254a6c49
+Commit:        b29adbbc4da6f016735929ce6a944639254a6c49
+Parent:        a94e28ae019b94aa48dbaf1db83cc30bfdee0f4f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 23 11:01:46 2013 +0200
+AuthorDate:    Wed Sep 18 17:22:14 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 23 11:35:15 2013 +0200
 
-cleanup: drop unused report parameter
+raid: add lv_is_raid()
 
-Do not pass unused dm_report pointer.
+More readable then status bit flag masking...
 ---
- lib/report/report.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/metadata/metadata-exported.h |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 95525d8..540181a 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1035,8 +1035,8 @@ static int _raidmaxrecoveryrate_disp(struct dm_report *rh __attribute__((unused)
- 				      &first_seg(lv)->max_recovery_rate);
- }
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index f20dfd0..3920385 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -158,6 +158,7 @@
  
--static int _dtpercent_disp(int metadata, struct dm_report *rh,
--			   struct dm_pool *mem,
-+/* Called only with lv_is_thin_pool/volume */
-+static int _dtpercent_disp(int metadata, struct dm_pool *mem,
- 			   struct dm_report_field *field,
- 			   const void *data, void *private)
- {
-@@ -1091,7 +1091,7 @@ static int _datapercent_disp(struct dm_report *rh, struct dm_pool *mem,
- 		return _snpercent_disp(rh, mem, field, data, private);
+ #define lv_is_thin_type(lv)	((lv)->status & (THIN_POOL | THIN_VOLUME | THIN_POOL_DATA | THIN_POOL_METADATA) ? 1 : 0)
+ #define lv_is_mirror_type(lv)	((lv)->status & (MIRROR_LOG | MIRROR_IMAGE | MIRRORED | PVMOVE) ? 1 : 0)
++#define lv_is_raid(lv)		(((lv)->status & (RAID)) ? 1 : 0)
+ #define lv_is_raid_type(lv)	(((lv)->status & (RAID | RAID_IMAGE | RAID_META)) ? 1 : 0)
  
- 	if (lv_is_thin_pool(lv) || lv_is_thin_volume(lv))
--		return _dtpercent_disp(0, rh, mem, field, data, private);
-+		return _dtpercent_disp(0, mem, field, data, private);
- 
- 	dm_report_field_set_value(field, "", NULL);
- 
-@@ -1105,7 +1105,7 @@ static int _metadatapercent_disp(struct dm_report *rh, struct dm_pool *mem,
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 
- 	if (lv_is_thin_pool(lv))
--		return _dtpercent_disp(1, rh, mem, field, data, private);
-+		return _dtpercent_disp(1, mem, field, data, private);
- 
- 	dm_report_field_set_value(field, "", NULL);
- 
+ #define lv_is_virtual(lv)	(((lv)->status & VIRTUAL) ? 1 : 0)
 
 
