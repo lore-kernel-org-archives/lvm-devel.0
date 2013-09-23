@@ -1,85 +1,59 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Mon, 23 Sep 2013 14:07:09 -0400 (EDT)
-Subject: [PATCH] libdm: fix races with udev
-In-Reply-To: <523AB2AE.3020103@redhat.com>
-References: <alpine.LRH.2.02.1309161523010.9077@file01.intranet.prod.int.rdu2.redhat.com>
-	<523AB2AE.3020103@redhat.com>
-Message-ID: <alpine.LRH.2.02.1309231404270.4637@file01.intranet.prod.int.rdu2.redhat.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 23 Sep 2013 19:00:15 +0000 (UTC)
+Subject: master - pvmove: clean exit on failed pvmove restart
+Message-ID: <20130923190015.A4EBA60E21@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b2535d0c971afc665a268cbe55b6d23262e21e2b
+Commit:        b2535d0c971afc665a268cbe55b6d23262e21e2b
+Parent:        229e0752f1651463c21e65d8f9641ff9d1c26dfd
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Sep 23 19:53:18 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Sep 23 19:53:18 2013 +0100
 
+pvmove: clean exit on failed pvmove restart
 
-On Thu, 19 Sep 2013, Peter Rajnoha wrote:
+At present, before the pvmove command can be used to restart pvmove
+polling, the LVs concerned need to be activated e.g. with lvchange
+-ay.
+---
+ WHATS_NEW          |    1 +
+ tools/polldaemon.c |    7 ++++++-
+ 2 files changed, 7 insertions(+), 1 deletions(-)
 
-> On 09/16/2013 09:23 PM, Mikulas Patocka wrote:
-> > libdm: fix races with udev
-> > 
-> > On newer systems (Debian 6 and newer), udev manages nodes in /dev/mapper
-> > directory. It creates, deletes and renames the nodes according to the
-> > state of the kernel driver.
-> > 
-> > dmsetup tries to manage nodes in /dev/mapper too, so it can race with
-> > udev. dmsetup checks if the node was created/deleted/renamed with the stat
-> > syscall, and skips the operation if it was. However, if udev
-> > creates/deletes/renames the node after the stat syscall and before the
-> > mknod/unlink/rename syscall, dmsetup reports an error.
-> > 
-> 
-> These checks are performed after udev is synchronized (the dm_udev_wait call)
-> and after the udev processing is complete, so we normally shouldn't get into this
-> problem unless there is some bug in certain version of lvm2/udev rules.
-> 
-> Is this reproducible with upstream code as well or was that with some older version only
-> that is currently in Debian?
-> 
-> Peter
-
-This race condition can be easily provoked with this patch. Apply it and 
-try dmsetup create/remove/rename.
-
-One Debian 6, races in all three operations create/remove/rename can be 
-provoked.
-
-On Debian Sid and on RHEL 6, only races in create/rename can be provoked. 
-Race in remove doesn't happen.
-
-Mikulas
-
-
-Index: LVM2.2.02.102/libdm/libdm-common.c
-===================================================================
---- LVM2.2.02.102.orig/libdm/libdm-common.c	2013-09-23 16:51:29.000000000 +0200
-+++ LVM2.2.02.102/libdm/libdm-common.c	2013-09-23 19:10:32.028514000 +0200
-@@ -964,6 +964,8 @@
- 		log_warn("%s not set up by udev: Falling back to direct "
- 			 "node creation.", path);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ff0303a..8c1a343 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.103 - 
+ ======================================
++  Exit cleanly with message when pvmove cannot restart because LV is inactive.
  
-+	fprintf(stderr, "sleeping 1\n"); sleep(3);
-+
- 	(void) dm_prepare_selinux_context(path, S_IFBLK);
- 	old_mask = umask(0);
- 	if (mknod(path, S_IFBLK | mode, dev) < 0) {
-@@ -998,6 +1000,8 @@
- 		log_warn("Node %s was not removed by udev. "
- 			 "Falling back to direct node removal.", path);
+ Version 2.02.102 - 23rd September 2013
+ ======================================
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 0b00e93..7eeea2c 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -201,7 +201,12 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
+ 			continue;
  
-+	fprintf(stderr, "sleeping 2\n"); sleep(3);
+ 		/* FIXME Need to do the activation from _set_up_pvmove here
+-		 *       if it's not running and we're not aborting */
++		 *       if it's not running and we're not aborting. */
++		if (!lv_is_active(lv)) {
++			log_print_unless_silent("%s: Skipping inactive LV. Try lvchange or vgchange.", name);
++			continue;
++		}
 +
- 	if (unlink(path) < 0) {
- 		log_error("Unable to unlink device node for '%s'", dev_name);
- 		return 0;
-@@ -1054,6 +1058,8 @@
- 			 "Falling back to direct node rename.",
- 			 oldpath, newpath);
- 
-+	fprintf(stderr, "sleeping 3\n"); sleep(3);
-+
- 	if (rename(oldpath, newpath) < 0) {
- 		log_error("Unable to rename device node from '%s' to '%s'",
- 			  old_name, new_name);
+ 		if (_check_lv_status(cmd, vg, lv, name, parms, &finished) &&
+ 		    !finished)
+ 			parms->outstanding_count++;
 
 
