@@ -1,102 +1,73 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 23 Sep 2013 20:53:57 +0000 (UTC)
-Subject: master - lvs: Add seg_size_pe field.
-Message-ID: <20130923205357.B9EB5605CC@fedorahosted.org>
+Date: Mon, 23 Sep 2013 20:55:51 +0000 (UTC)
+Subject: v2_02_102 annotated tag has been created
+Message-ID: <20130923205551.439EC615EB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=11dc6a03c4cdd10bc4065c7d7a8585373455f947
-Commit:        11dc6a03c4cdd10bc4065c7d7a8585373455f947
-Parent:        8de47abcd231fecde7c0627ff5085f8efef12583
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3a62a93f562f32e1c314e6d7a43eca51d51db4e5
+Commit:        3a62a93f562f32e1c314e6d7a43eca51d51db4e5
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Sep 23 21:50:14 2013 +0100
+AuthorDate:    2013-09-23 14:50 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Sep 23 21:50:14 2013 +0100
+CommitterDate: 2013-09-23 14:50 +0000
 
-lvs: Add seg_size_pe field.
+annotated tag: v2_02_102 has been created
+	    at 3a62a93f562f32e1c314e6d7a43eca51d51db4e5 (tag)
+       tagging c8057aec36a3d00789b59e06a9ed9eeee7151ded (commit)
+      replaces v2_02_101
 
-Requested
-https://www.redhat.com/archives/linux-lvm/2013-July/msg00112.html
----
- WHATS_NEW               |    1 +
- lib/report/columns.h    |    1 +
- lib/report/properties.c |    2 ++
- lib/report/report.c     |   11 +++++++++++
- man/lvs.8.in            |    1 +
- 5 files changed, 16 insertions(+), 0 deletions(-)
+Release 2.02.102
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4ffbe4f..efd83e6 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.103 - 
- ======================================
-+  Add seg_size_pe field to reports.
-   Support start+length notation with command line PE ranges.
-   Exit cleanly with message when pvmove cannot restart because LV is inactive.
- 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 9bb99d3..6df9771 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -125,6 +125,7 @@ FIELD(SEGS, seg, NUM, "TransId", list, 4, transactionid, transaction_id, "For th
- FIELD(SEGS, seg, NUM, "Start", list, 5, segstart, seg_start, "Offset within the LV to the start of the segment in current units.", 0)
- FIELD(SEGS, seg, NUM, "Start", list, 5, segstartpe, seg_start_pe, "Offset within the LV to the start of the segment in physical extents.", 0)
- FIELD(SEGS, seg, NUM, "SSize", list, 5, segsize, seg_size, "Size of segment in current units.", 0)
-+FIELD(SEGS, seg, NUM, "SSize", list, 5, segsizepe, seg_size_pe, "Size of segment in physical extents.", 0)
- FIELD(SEGS, seg, STR, "Seg Tags", tags, 8, tags, seg_tags, "Tags, if any.", 0)
- FIELD(SEGS, seg, STR, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format.", 0)
- FIELD(SEGS, seg, STR, "Devices", list, 7, devices, devices, "Underlying devices used with starting extent numbers.", 0)
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 62a1a35..56200f0 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -315,6 +315,8 @@ GET_LVSEG_NUM_PROPERTY_FN(seg_start_pe, lvseg->le)
- #define _seg_start_pe_set prop_not_implemented_set
- GET_LVSEG_NUM_PROPERTY_FN(seg_size, (SECTOR_SIZE * lvseg_size(lvseg)))
- #define _seg_size_set prop_not_implemented_set
-+GET_LVSEG_NUM_PROPERTY_FN(seg_size_pe, lvseg->len)
-+#define _seg_size_pe_set prop_not_implemented_set
- GET_LVSEG_STR_PROPERTY_FN(seg_tags, lvseg_tags_dup(lvseg))
- #define _seg_tags_set prop_not_implemented_set
- GET_LVSEG_STR_PROPERTY_FN(seg_pe_ranges,
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 540181a..46edf56 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -560,6 +560,17 @@ static int _segsize_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return _size64_disp(rh, mem, field, &size, private);
- }
- 
-+static int _segsizepe_disp(struct dm_report *rh,
-+			   struct dm_pool *mem __attribute__((unused)),
-+			   struct dm_report_field *field,
-+			   const void *data,
-+			   void *private __attribute__((unused)))
-+{
-+	const struct lv_segment *seg = (const struct lv_segment *) data;
-+
-+	return dm_report_field_uint32(rh, field, &seg->len);
-+}
-+
- static int _chunksize_disp(struct dm_report *rh, struct dm_pool *mem,
- 			   struct dm_report_field *field,
- 			   const void *data, void *private)
-diff --git a/man/lvs.8.in b/man/lvs.8.in
-index 32cb788..85f7d33 100644
---- a/man/lvs.8.in
-+++ b/man/lvs.8.in
-@@ -113,6 +113,7 @@ segtype,
- seg_count,
- seg_pe_ranges,
- seg_size,
-+seg_size_pe,
- seg_start,
- seg_start_pe,
- seg_tags,
+ 18 files changed, 137 insertions(+), 203 deletions(-)
+
+Essential fix for clvmd+corosync handling of cluster node failures.
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.11 (GNU/Linux)
+
+iQIcBAABAgAGBQJSQFUzAAoJEK2W1qbAHj1nMaMP/0pwsnaGZ9J1wM7Q38VAV1W8
+b+WI6kNO0TQTYpm0jCVtvtxYqJWPxm2F1UDcurnqZoHGAmAVP8WdSkySRt485NG7
+FNWaA5Zi/kFcD2QE9ILR3KY3JUdjBKX4S5gCG6bZ215+p6OCE2AM6sD03bB5IUI6
+BaxeQ4BHDtWD6u069z93eTi49rJtiyPQLPvO+5MQvysF0bROYX4UEicos5vgnnW0
+ZvSJa6+Z2AeAbL+YY35AO3C7PJ/dBBShxJTSoDgiKH7CJnXDyPq5qFYLS9sjoZpG
+9aLj94keP5ZuPGO2L++QeXU9LHKLcBE1fXvlS/Y4137/IvW2lNtj7C74+NhCkc3p
+fcmucOrS09PML8CWseJYrYokdShAXH83wN4gby2OSlh+CbjwMiTsmmrgAytWO/Tk
+NdySvoEAnRDOoWWzhdNhw5VkDiI/RKt6D267dsCB+PUFZcMuf7Ht4V5lXXwwywg2
+AUZumWvyklI8qkL1KwnUnBUBoD7VZLUTS4YsBWoBUlJBEGAdRBwUVseusI461GYJ
+MokvNXsG9+OwdWaKFEUiszO2fmELX7ErVeUSywxhR+s9pi4obLakVnRARY6hcJlK
+YaMkPRpL5gDOGUWg5DKmUL/B4Z4mERicCmwSR7w0ElGNHHcBEiypfvBJAtYaGT5J
+ZHgmIFoQXLArA8VADtMu
+=QE5J
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (1):
+      release 2.02.102
+
+Christine Caulfield (1):
+      clvmd: Fix node up/down handing in corosync module
+
+Jonathan Brassow (1):
+      test: Blacklist fedora-19 kernel for RAID4/5/6 dev replace tests
+
+Zdenek Kabelac (15):
+      cleanup: monitoring more readable
+      cleanup: skip call of detect...
+      cleanup: release all memory in error path
+      cleanup: shorter code
+      cleanup: add log_error error path messages
+      cleanup: drop unused report parameter
+      dmeventd: simplify fifos init
+      raid: add lv_is_raid()
+      lvinfo: allow to use lv_info with NULL info
+      activation: use improved lv_info
+      Makefile: add missing deps
+      tests: hide expected error message
+      tests: fix typo VEROSE->VERBOSE in Makefile.in
+      tests: drop pointeless test
+      tests: drop extra loop
 
 
