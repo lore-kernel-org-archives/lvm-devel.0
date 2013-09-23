@@ -1,81 +1,127 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 23 Sep 2013 10:16:21 +0000 (UTC)
-Subject: master - dmeventd: simplify fifos init
-Message-ID: <20130923101621.A537E606F6@fedorahosted.org>
+Date: Mon, 23 Sep 2013 10:16:27 +0000 (UTC)
+Subject: master - activation: use improved lv_info
+Message-ID: <20130923101627.E266661326@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a94e28ae019b94aa48dbaf1db83cc30bfdee0f4f
-Commit:        a94e28ae019b94aa48dbaf1db83cc30bfdee0f4f
-Parent:        b33b618fc8e83a033d91814facd0312c84597372
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1fdead8d97376c757af01b55d7556e3411255124
+Commit:        1fdead8d97376c757af01b55d7556e3411255124
+Parent:        3b604e5c8e505138fc86e009375fd33160ab84ff
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 5 13:14:19 2013 +0200
+AuthorDate:    Thu Sep 19 22:18:16 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 23 11:35:15 2013 +0200
+CommitterDate: Mon Sep 23 12:13:08 2013 +0200
 
-dmeventd: simplify fifos init
+activation: use improved lv_info
 
-Simplier code.
+Call lv_info() with info == NULL to query for local active presence.
 ---
- daemons/dmeventd/dmeventd.c |   22 ++++++----------------
- 1 files changed, 6 insertions(+), 16 deletions(-)
+ lib/activate/activate.c |   29 +++++++----------------------
+ 1 files changed, 7 insertions(+), 22 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 9c7a6c6..3754714 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -1247,16 +1247,6 @@ static int _get_timeout(struct message_data *message_data)
- 	return thread ? 0 : -ENODEV;
- }
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index e4d9b49..c9d2c1a 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -738,7 +738,7 @@ int lv_snapshot_percent(const struct logical_volume *lv, percent_t *percent)
+ 	int r;
+ 	struct dev_manager *dm;
  
--/* Initialize a fifos structure with path names. */
--static void _init_fifos(struct dm_event_fifos *fifos)
--{
--	fifos->client = -1;
--	fifos->server = -1;
--
--	fifos->client_path = DM_EVENT_FIFO_CLIENT;
--	fifos->server_path = DM_EVENT_FIFO_SERVER;
--}
--
- /* Open fifos used for client communication. */
- static int _open_fifos(struct dm_event_fifos *fifos)
+-	if (!activation())
++	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0))
+ 		return 0;
+ 
+ 	log_debug_activation("Checking snapshot percent for LV %s/%s", lv->vg->name, lv->name);
+@@ -760,7 +760,6 @@ int lv_mirror_percent(struct cmd_context *cmd, const struct logical_volume *lv,
  {
-@@ -1706,8 +1696,6 @@ static int _systemd_handover(struct dm_event_fifos *fifos)
- 	unsigned long env_pid, env_listen_fds;
- 	int r = 0;
+ 	int r;
+ 	struct dev_manager *dm;
+-	struct lvinfo info;
  
--	memset(fifos, 0, sizeof(*fifos));
+ 	/* If mirrored LV is temporarily shrinked to 1 area (= linear),
+ 	 * it should be considered in-sync. */
+@@ -769,16 +768,11 @@ int lv_mirror_percent(struct cmd_context *cmd, const struct logical_volume *lv,
+ 		return 1;
+ 	}
+ 
+-	if (!activation())
++	if (!lv_info(cmd, lv, 0, NULL, 0, 0))
+ 		return 0;
+ 
+ 	log_debug_activation("Checking mirror percent for LV %s/%s", lv->vg->name, lv->name);
+ 
+-	if (!lv_info(cmd, lv, 0, &info, 0, 0))
+-		return_0;
 -
- 	/* SD_ACTIVATION must be set! */
- 	if (!(e = getenv(SD_ACTIVATION_ENV_VAR_NAME)) || strcmp(e, "1"))
- 		goto out;
-@@ -1929,7 +1917,12 @@ static void usage(char *prog, FILE *file)
- int main(int argc, char *argv[])
- {
- 	signed char opt;
--	struct dm_event_fifos fifos;
-+	struct dm_event_fifos fifos = {
-+		.client = -1,
-+		.server = -1,
-+		.client_path = DM_EVENT_FIFO_CLIENT,
-+		.server_path = DM_EVENT_FIFO_SERVER
-+	};
- 	int nothreads;
- 	//struct sys_log logdata = {DAEMON_NAME, LOG_DAEMON};
+-	if (!info.exists)
+-		return 0;
  
-@@ -2005,9 +1998,6 @@ int main(int argc, char *argv[])
- 	//multilog_init_verbose(std_syslog, _LOG_DEBUG);
- 	//multilog_async(1);
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
+ 		return_0;
+@@ -804,15 +798,12 @@ int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health)
  
--	if (!_systemd_activation)
--		_init_fifos(&fifos);
+ 	*dev_health = NULL;
+ 
+-	if (!activation())
+-		return_0;
++	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0))
++		return 0;
+ 
+ 	log_debug_activation("Checking raid device health for LV %s/%s",
+ 			     lv->vg->name, lv->name);
+ 
+-	if (!lv_is_active_locally(lv))
+-		return 0;
 -
- 	pthread_mutex_init(&_global_mutex, NULL);
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
+ 		return_0;
  
- 	if (!_systemd_activation && !_open_fifos(&fifos))
+@@ -835,15 +826,12 @@ int lv_raid_mismatch_count(const struct logical_volume *lv, uint64_t *cnt)
+ 
+ 	*cnt = 0;
+ 
+-	if (!activation())
++	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0))
+ 		return 0;
+ 
+ 	log_debug_activation("Checking raid mismatch count for LV %s/%s",
+ 			     lv->vg->name, lv->name);
+ 
+-	if (!lv_is_active_locally(lv))
+-		return_0;
+-
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
+ 		return_0;
+ 
+@@ -866,15 +854,12 @@ int lv_raid_sync_action(const struct logical_volume *lv, char **sync_action)
+ 
+ 	*sync_action = NULL;
+ 
+-	if (!activation())
++	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0))
+ 		return 0;
+ 
+ 	log_debug_activation("Checking raid sync_action for LV %s/%s",
+ 			     lv->vg->name, lv->name);
+ 
+-	if (!lv_is_active_locally(lv))
+-		return_0;
+-
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
+ 		return_0;
+ 
+@@ -906,7 +891,7 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
+ 		return 0;
+ 	}
+ 
+-	if (!lv_is_active_locally(lv)) {
++	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0)) {
+ 		log_error("Unable to send message to an inactive logical volume.");
+ 		return 0;
+ 	}
 
 
