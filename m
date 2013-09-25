@@ -1,160 +1,63 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 24 Sep 2013 12:06:56 +0000 (UTC)
-Subject: master - lvmconf: use_lvmetad=0 on --enable-cluster, reset to default on --disable-cluster
-Message-ID: <20130924120656.98A6260E4F@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 25 Sep 2013 02:32:19 +0000 (UTC)
+Subject: master - RAID: Fix broken allocation policies for parity RAID types
+Message-ID: <20130925023219.150E860FE1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6553f86818404cd34fa3600dc976ed25fcf6d65a
-Commit:        6553f86818404cd34fa3600dc976ed25fcf6d65a
-Parent:        f050278a35ec0049fa333ce82abfc2bf6a231c62
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Sep 24 14:03:42 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Sep 24 14:03:42 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ded7314ae00629da8d21d925c3fa091cce2a939
+Commit:        5ded7314ae00629da8d21d925c3fa091cce2a939
+Parent:        6553f86818404cd34fa3600dc976ed25fcf6d65a
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Sep 24 21:32:10 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Sep 24 21:32:10 2013 -0500
 
-lvmconf: use_lvmetad=0 on --enable-cluster, reset to default on --disable-cluster
+RAID: Fix broken allocation policies for parity RAID types
 
-lvmetad is not yet supported in clustered environment so
-disable it automatically if using lvmconf --enable-cluster
-and reset it to default value if using lvmconf --disable-cluster.
+A previous commit (b6bfddcd0a830d0c9312bc3ab906cb3d1b7a6dd9) which
+was designed to prevent segfaults during lvextend when trying to
+extend striped logical volumes forgot to include calculations for
+RAID4/5/6 parity devices.  This was causing the 'contiguous' and
+'cling_by_tags' allocation policies to fail for RAID 4/5/6.
 
-Also, add a few comments in lvm.conf about locking_type vs. use_lvmetad
-if setting it for clustered environment.
+The solution is to remember that while we can compare
+	ah->area_count == prev_lvseg->area_count
+for non-RAID, we should compare
+	(ah->area_count + ah->parity_count) == prev_lvseg->area_count
+for a general solution.
 ---
- WHATS_NEW            |    1 +
- conf/example.conf.in |    8 ++++++++
- man/lvmconf.8.in     |    4 +++-
- scripts/lvmconf.sh   |   19 ++++++++++++++++++-
- 4 files changed, 30 insertions(+), 2 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index ac2a84e..1aebdf4 100644
+index 1aebdf4..8a50122 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.103 - 
  ======================================
-+  Set use_lvmetad=0 on lvmconf --enable-cluster, reset to default on --disable-cluster.
++  Fix contiguous & cling allocation policies for parity RAID.  (2.02.100)
+   Set use_lvmetad=0 on lvmconf --enable-cluster, reset to default on --disable-cluster.
    Don't install separate command symlink in binary directory for 'lvm devtypes'.
    Add seg_size_pe field to reports.
-   Support start+length notation with command line PE ranges.
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index fb96079..6adcecf 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -432,6 +432,10 @@ global {
-     # Type 3 uses built-in clustered locking.
-     # Type 4 uses read-only locking which forbids any operations that might 
-     # change metadata.
-+    # N.B. Don't use lvmetad with locking type 3 as lvmetad is not yet
-+    # supported in clustered environment. If use_lvmetad=1 and locking_type=3
-+    # is set at the same time, LVM always issues a warning message about this
-+    # and then it automatically disables lvmetad use.
-     locking_type = 1
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index a145c41..c16288e 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1200,7 +1200,8 @@ static void _init_alloc_parms(struct alloc_handle *ah, struct alloc_parms *alloc
+ 	alloc_parms->extents_still_needed = extents_still_needed;
  
-     # Set to 0 to fail when a lock request cannot be satisfied immediately.
-@@ -571,6 +575,10 @@ global {
-     # setting itself.
-     # To prevent scanning devices completely, even when using lvmetad,
-     # the devices/global_filter must be used.
-+    # N.B. Don't use lvmetad with locking type 3 as lvmetad is not yet
-+    # supported in clustered environment. If use_lvmetad=1 and locking_type=3
-+    # is set at the same time, LVM always issues a warning message about this
-+    # and then it automatically disables lvmetad use.
-     use_lvmetad = 0
+ 	/* Only attempt contiguous/cling allocation to previous segment areas if the number of areas matches. */
+-	if (alloc_parms->prev_lvseg && (ah->area_count == prev_lvseg->area_count))
++	if (alloc_parms->prev_lvseg &&
++	    ((ah->area_count + ah->parity_count) == prev_lvseg->area_count))
+ 		alloc_parms->flags |= A_AREA_COUNT_MATCHES;
  
-     # Full path of the utility called to check that a thin metadata device
-diff --git a/man/lvmconf.8.in b/man/lvmconf.8.in
-index 0722e22..2c822ee 100644
---- a/man/lvmconf.8.in
-+++ b/man/lvmconf.8.in
-@@ -22,10 +22,12 @@ an lvm configuration file. See \fBlvm.conf\fP(5).
- .SH "OPTIONS"
- .TP
- .BR \-\-disable-cluster
--Set \fBlocking_type\fR to the default non-clustered type.
-+Set \fBlocking_type\fR to the default non-clustered type. Also reset
-+lvmetad use to its default.
- .TP
- .BR \-\-enable-cluster
- Set \fBlocking_type\fR to the default clustered type on this system.
-+Also disable lvmetad use as it is not yet supported in clustered environment.
- .TP
- .BR \-\-file " <" \fIconfigfile >
- Apply the changes to \fIconfigfile\fP instead of the default
-diff --git a/scripts/lvmconf.sh b/scripts/lvmconf.sh
-index 5a8e9e8..bfe518e 100644
---- a/scripts/lvmconf.sh
-+++ b/scripts/lvmconf.sh
-@@ -16,6 +16,8 @@
- # Edit an lvm.conf file to adjust various properties
- #
- 
-+DEFAULT_USE_LVMETAD=0
-+
- function usage
- {
-     echo "usage: $0 <command>"
-@@ -37,10 +39,12 @@ function parse_args
-         case $1 in
-             --enable-cluster)
-                 LOCKING_TYPE=3
-+                USE_LVMETAD=0
-                 shift
-                 ;;
-             --disable-cluster)
-                 LOCKING_TYPE=1
-+                USE_LVMETAD=$DEFAULT_USE_LVMETAD
-                 shift
-                 ;;
-             --lockinglibdir)
-@@ -129,6 +133,7 @@ TMPFILE=/etc/lvm/.lvmconf-tmp.tmp
- have_type=1
- have_dir=1
- have_library=1
-+have_use_lvmetad=1
- have_global=1
- 
- grep -q '^[[:blank:]]*locking_type[[:blank:]]*=' $CONFIGFILE
-@@ -140,8 +145,11 @@ have_dir=$?
- grep -q '^[[:blank:]]*locking_library[[:blank:]]*=' $CONFIGFILE
- have_library=$?
- 
-+grep -q '^[[:blank:]]*use_lvmetad[[:blank:]]*=' $CONFIGFILE
-+have_use_lvmetad=$?
-+
- # Those options are in section "global {" so we must have one if any are present.
--if [ "$have_type" = "0" -o "$have_dir" = "0" -o "$have_library" = "0" ]
-+if [ "$have_type" = "0" -o "$have_dir" = "0" -o "$have_library" = "0" -o "$have_use_lvmetad" = "0" ]
- then
- 
-     # See if we can find it...
-@@ -174,6 +182,8 @@ global {
-     # Enable locking for cluster LVM
-     locking_type = $LOCKING_TYPE
-     library_dir = "$LOCKINGLIBDIR"
-+    # Disable lvmetad in cluster
-+    use_lvmetad = 0
- EOF
-         if [ $? != 0 ]
-         then
-@@ -233,6 +243,13 @@ else
-         fi
-     fi
- 
-+    if [ "$have_use_lvmetad" = "0" ]
-+    then
-+        SEDCMD="${SEDCMD}\ns'^[[:blank:]]*use_lvmetad[[:blank:]]*=.*'\ \ \ \ use_lvmetad = $USE_LVMETAD'g"
-+    else
-+        SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ use_lvmetad = $USE_LVMETAD"
-+    fi
-+
-     echo -e $SEDCMD > $SCRIPTFILE
-     sed  <$CONFIGFILE >$TMPFILE -f $SCRIPTFILE
-     if [ $? != 0 ]
+ 	/* Are there any preceding segments we must follow on from? */
 
 
