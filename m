@@ -1,80 +1,65 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 18 Sep 2013 00:26:29 +0000 (UTC)
-Subject: master - libdm: avoid leak if dm_task_set_* fn called again
-Message-ID: <20130918002629.F289D6119B@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 25 Sep 2013 14:08:33 +0000 (UTC)
+Subject: master - profile: add thin-performance.profile
+Message-ID: <20130925140833.CF2D760F43@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a0ca2c11ee69b51a99644955cb4daa8ca50c8034
-Commit:        a0ca2c11ee69b51a99644955cb4daa8ca50c8034
-Parent:        a3a5f58c21edba308dd8ced15860e52b5b902890
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Sep 18 01:13:06 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Sep 18 01:13:06 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd796d6a9485287973e61c427ee45694965203a0
+Commit:        dd796d6a9485287973e61c427ee45694965203a0
+Parent:        78cba8eb3fa262c2c4e1a5c5a3db3e4e0d7e6900
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Sep 25 16:02:38 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Sep 25 16:07:35 2013 +0200
 
-libdm: avoid leak if dm_task_set_* fn called again
+profile: add thin-performance.profile
 
-(Mikulas)
+Define a "performance" profile for thin pools which is exactly:
+  - allocation/thin_pool_zero = 0
+  - thin_pool_chunk_size_calculation = "performance"
 ---
- WHATS_NEW_DM              |    1 +
- libdm/ioctl/libdm-iface.c |    3 +++
- libdm/libdm-common.c      |    1 +
- 3 files changed, 5 insertions(+), 0 deletions(-)
+ WHATS_NEW                     |    1 +
+ conf/Makefile.in              |    2 +-
+ conf/thin-performance.profile |    4 ++++
+ 3 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index f5d7dc2..252f105 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 04906f0..14ae12e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.80 - 
- ==================================
-+  Free any previously-set string if a dm_task_set_* function is called again.
-   Do not allow passing empty new name for dmsetup rename.
-   Display any output returned by 'dmsetup message'.
-   Add dm_task_get_message_response to libdevmapper.
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index b0a2228..c530bb7 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -785,6 +785,7 @@ int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid)
- 		newuuid = mangled_uuid;
- 	}
+ Version 2.02.103 - 
+ ======================================
++  Add thin-performance configuration profile.
+   Add lvm.conf allocation/thin_pool_chunk_size_calculation option.
+   Fix contiguous & cling allocation policies for parity RAID.  (2.02.100)
+   Set use_lvmetad=0 on lvmconf --enable-cluster, reset to default on --disable-cluster.
+diff --git a/conf/Makefile.in b/conf/Makefile.in
+index f9947b1..8b5238a 100644
+--- a/conf/Makefile.in
++++ b/conf/Makefile.in
+@@ -19,7 +19,7 @@ CONFSRC=example.conf
+ CONFDEST=lvm.conf
  
-+	dm_free(dmt->newname);
- 	if (!(dmt->newname = dm_strdup(newuuid))) {
- 		log_error("dm_task_set_newuuid: strdup(%s) failed", newuuid);
- 		return 0;
-@@ -796,6 +797,7 @@ int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid)
+ DEFAULT_PROFILE=default.profile
+-PROFILES=$(DEFAULT_PROFILE)
++PROFILES=$(DEFAULT_PROFILE) thin-performance.profile
  
- int dm_task_set_message(struct dm_task *dmt, const char *message)
- {
-+	dm_free(dmt->message);
- 	if (!(dmt->message = dm_strdup(message))) {
- 		log_error("dm_task_set_message: strdup failed");
- 		return 0;
-@@ -814,6 +816,7 @@ int dm_task_set_sector(struct dm_task *dmt, uint64_t sector)
- int dm_task_set_geometry(struct dm_task *dmt, const char *cylinders, const char *heads,
- 			 const char *sectors, const char *start)
- {
-+	dm_free(dmt->geometry);
- 	if (dm_asprintf(&(dmt->geometry), "%s %s %s %s",
- 			cylinders, heads, sectors, start) < 0) {
- 		log_error("dm_task_set_geometry: sprintf failed");
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index c0669cb..b66911c 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -720,6 +720,7 @@ int dm_task_set_newname(struct dm_task *dmt, const char *newname)
- 		newname = mangled_name;
- 	}
+ include $(top_builddir)/make.tmpl
  
-+	dm_free(dmt->newname);
- 	if (!(dmt->newname = dm_strdup(newname))) {
- 		log_error("dm_task_set_newname: strdup(%s) failed", newname);
- 		return 0;
+diff --git a/conf/thin-performance.profile b/conf/thin-performance.profile
+new file mode 100644
+index 0000000..fbd46aa
+--- /dev/null
++++ b/conf/thin-performance.profile
+@@ -0,0 +1,4 @@
++allocation {
++	thin_pool_chunk_size_calculation = "performance"
++	thin_pool_zero = 0
++}
 
 
