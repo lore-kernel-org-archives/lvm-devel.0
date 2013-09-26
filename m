@@ -1,42 +1,32 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Thu, 26 Sep 2013 03:37:51 +0000 (UTC)
-Subject: master - WHATS_NEW: description for previous commit
-Message-ID: <20130926033751.33BBB60FBD@fedorahosted.org>
+From: dongmao zhang <dmzhang@suse.com>
+Date: Thu, 26 Sep 2013 18:53:27 +0800
+Subject: [PATCH 0/4] LVM/cmirrord support write improvement.
+Message-ID: <cover.1380191958.git.dmzhang@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d6516d2f7900aa233c2a96e171b355bec7e54395
-Commit:        d6516d2f7900aa233c2a96e171b355bec7e54395
-Parent:        098896fb2905cd02d02b7271be489e32d86c073d
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Wed Sep 25 22:35:52 2013 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Wed Sep 25 22:35:52 2013 -0500
+These patches work with dm-log-userspace enhancement.
+LVM, device-mapper and cmirrord begin to support
+merging mark/flush request and delaying the clear
+request. This would increase the write throughput
+of cluster raid1 based on my own test.
 
-WHATS_NEW: description for previous commit
+dongmao zhang (4):
+  cmirrord add support_delay_clear option
+  cmirrord create new function _clog_flush
+  add support_delay_flush to device-mapper
+  cluster LVM use flag DM_SUPPORT_DELAY_FLUSH
 
-commit 098896fb2905cd02d02b7271be489e32d86c073d failed to include
-description of what was fixed.
+ daemons/cmirrord/functions.c |   60 ++++++++++++++++++++++++++++++++---------
+ lib/mirror/mirrored.c        |    4 +++
+ libdm/libdevmapper.h         |    3 ++
+ libdm/libdm-deptree.c        |    8 +++++
+ 4 files changed, 62 insertions(+), 13 deletions(-)
 
-"Conversion from linear to mirror or RAID1 now honors
- mirror_segtype_default."
----
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
-
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 14ae12e..7750d2e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.103 - 
- ======================================
-+  Conversion from linear to mirror or RAID1 now honors mirror_segtype_default.
-   Add thin-performance configuration profile.
-   Add lvm.conf allocation/thin_pool_chunk_size_calculation option.
-   Fix contiguous & cling allocation policies for parity RAID.  (2.02.100)
+-- 
+1.7.3.4
 
 
