@@ -1,75 +1,89 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 27 Sep 2013 14:10:20 -0500
-Subject: [PATCH 00/12] RFC & code review for lvm2app & python-lvm fixes
-Message-ID: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
+Date: Fri, 27 Sep 2013 14:10:21 -0500
+Subject: [PATCH 01/12] python-lvm: Correct names
+In-Reply-To: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
+References: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1380309032-12736-2-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch set address the following bugs:
+The existing names do not follow accepted guidelines.
 
-- Set PV metadata size and count
-  https://bugzilla.redhat.com/show_bug.cgi?id=880395
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ python/liblvm.c | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
 
-- lvm2app lvm_vg_reduce() can delete a volume group
-  https://bugzilla.redhat.com/show_bug.cgi?id=989174
-
-- RFE: export a Python name-validation function
-  https://bugzilla.redhat.com/show_bug.cgi?id=883689
-
-In addition the following is included:
-
-- Environmental variable LVM2APP_DEBUG if exists will cause the library to
-  dump debug messages to stderr
-- lvm2app -> lvm_errmsg will clear the error buffer so library users won't get
-  stacked messages collecting for the entire run or until the buffer hits max.
-  size.
-- python-lvm was cleaned up to adhere to the expected namespace and includes
-  a change to prevent segfaulting if a user call gc and then references an
-  object with a stale library handle.
-
-
-Tony Asleson (12):
-  python-lvm: Correct names
-  python-lvm: Robustness improvements.
-  vgreduce: Move _vgreduce_single functionality
-  metadata.c: Call refactored vgreduce_single
-  python-lvm: Test case change for vg.reduce
-  lvm2app: Add ability to create PV with args
-  python-lvm: Add addl. PV create arguments
-  python-lvm: Update and enable unit test case
-  lvm2app: Add VG/LV name validation
-  python-lvm: VG/LV name validation.
-  lvm2app: Reset buffer after retrieving error message
-  lvm2app: Add LVM2APP_DEBUG env variable for debug
-
- lib/log/log.c                    |  18 +++
- lib/log/log.h                    |   2 +
- lib/log/lvm-logging.h            |   1 +
- lib/metadata/metadata-exported.h |   5 +
- lib/metadata/metadata.c          |  67 ++++----
- lib/metadata/vg.c                |  93 +++++++++++
- lib/misc/lvm-string.c            |  68 ++++++--
- lib/misc/lvm-string.h            |   1 +
- liblvm/lvm2app.h                 |  96 ++++++++++++
- liblvm/lvm_base.c                |  24 ++-
- liblvm/lvm_lv.c                  |   8 +-
- liblvm/lvm_misc.c                |  10 ++
- liblvm/lvm_misc.h                |   9 +-
- liblvm/lvm_prop.c                |  31 ++++
- liblvm/lvm_prop.h                |  14 ++
- liblvm/lvm_prop_fields.h         |   7 +
- liblvm/lvm_pv.c                  | 136 ++++++++++++++--
- liblvm/lvm_vg.c                  |  25 ++-
- python/liblvm.c                  | 329 +++++++++++++++++++++++----------------
- test/api/pytest.sh               |   4 -
- test/api/python_lvm_unit.py      | 101 +++++++++++-
- tools/toollib.c                  |   6 -
- tools/vgreduce.c                 |  81 +---------
- 23 files changed, 848 insertions(+), 288 deletions(-)
-
+diff --git a/python/liblvm.c b/python/liblvm.c
+index a9de817..42a327e 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -1846,7 +1846,7 @@ static PyMethodDef _liblvm_pvseg_methods[] = {
+ 
+ static PyTypeObject _LibLVMvgType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_vg",
++	.tp_name = "lvm.Liblvm_vg",
+ 	.tp_basicsize = sizeof(vgobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)liblvm_vg_dealloc,
+@@ -1857,7 +1857,7 @@ static PyTypeObject _LibLVMvgType = {
+ 
+ static PyTypeObject _LibLVMlvType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_lv",
++	.tp_name = "lvm.Liblvm_lv",
+ 	.tp_basicsize = sizeof(lvobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)liblvm_lv_dealloc,
+@@ -1868,7 +1868,7 @@ static PyTypeObject _LibLVMlvType = {
+ 
+ static PyTypeObject _LibLVMpvlistType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_pvlist",
++	.tp_name = "lvm.Liblvm_pvlist",
+ 	.tp_basicsize = sizeof(pvslistobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)_liblvm_pvlist_dealloc,
+@@ -1879,7 +1879,7 @@ static PyTypeObject _LibLVMpvlistType = {
+ 
+ static PyTypeObject _LibLVMpvType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_pv",
++	.tp_name = "lvm.Liblvm_pv",
+ 	.tp_basicsize = sizeof(pvobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)_liblvm_pv_dealloc,
+@@ -1890,7 +1890,7 @@ static PyTypeObject _LibLVMpvType = {
+ 
+ static PyTypeObject _LibLVMlvsegType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_lvseg",
++	.tp_name = "lvm.Liblvm_lvseg",
+ 	.tp_basicsize = sizeof(lvsegobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)_liblvm_lvseg_dealloc,
+@@ -1901,7 +1901,7 @@ static PyTypeObject _LibLVMlvsegType = {
+ 
+ static PyTypeObject _LibLVMpvsegType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_pvseg",
++	.tp_name = "lvm.Liblvm_pvseg",
+ 	.tp_basicsize = sizeof(pvsegobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)_liblvm_pvseg_dealloc,
+@@ -1952,7 +1952,7 @@ PyMODINIT_FUNC initlvm(void)
+ 				    LVM_THIN_DISCARDS_PASSDOWN) < 0)
+ 		return;
+ 
+-	if ((_LibLVMError = PyErr_NewException("Liblvm._LibLVMError", NULL, NULL))) {
++	if ((_LibLVMError = PyErr_NewException("lvm.LibLVMError", NULL, NULL))) {
+ 		/* Each call to PyModule_AddObject decrefs it; compensate: */
+ 		Py_INCREF(_LibLVMError);
+ 		Py_INCREF(_LibLVMError);
 -- 
 1.8.2.1
 
