@@ -1,152 +1,104 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 27 Sep 2013 14:10:28 -0500
-Subject: [PATCH 08/12] python-lvm: Update and enable unit test case
+Date: Fri, 27 Sep 2013 14:10:31 -0500
+Subject: [PATCH 11/12] lvm2app: Reset buffer after retrieving error message
 In-Reply-To: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
 References: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1380309032-12736-9-git-send-email-tasleson@redhat.com>
+Message-ID: <1380309032-12736-12-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Added tests for lvm.pvCreate and enable the test suite.
+The error buffer will stack error messages which is fine.  However,
+once you retrieve the error messages it doesn't make sense to keep
+appending for each additional error message when running in the
+context of a library call.
+
+This patch clears and resets the buffer after the user retrieves
+the error message.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- test/api/pytest.sh          |  4 --
- test/api/python_lvm_unit.py | 99 +++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 99 insertions(+), 4 deletions(-)
+ lib/log/log.c         | 7 +++++++
+ lib/log/lvm-logging.h | 1 +
+ liblvm/lvm_base.c     | 9 ++++++++-
+ python/liblvm.c       | 5 ++++-
+ 4 files changed, 20 insertions(+), 2 deletions(-)
 
-diff --git a/test/api/pytest.sh b/test/api/pytest.sh
-index 791c9dc..67e224c 100644
---- a/test/api/pytest.sh
-+++ b/test/api/pytest.sh
-@@ -27,8 +27,4 @@ export PYTHONPATH=`dirname $python_lib`:$PYTHONPATH
- #Setup which devices the unit test can use.
- export PY_UNIT_PVS=$(cat DEVICES)
+diff --git a/lib/log/log.c b/lib/log/log.c
+index e0c1e73..25f2264 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -170,6 +170,13 @@ const char *stored_errmsg(void)
+ 	return _lvm_errmsg ? : "";
+ }
  
--
--#We will skip until we can ensure it is correct.
--skip
--
- python_lvm_unit.py -v -f
-diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
-index eab9575..6c13149 100755
---- a/test/api/python_lvm_unit.py
-+++ b/test/api/python_lvm_unit.py
-@@ -27,6 +27,17 @@ import os
- # production system.  Therefore it is strongly advised that this unit test
- # not be run on a system that contains data of value.
++const char *stored_errmsg_and_clear(void)
++{
++	const char *rc = strdup(stored_errmsg());
++	reset_lvm_errno(1);
++	return rc;
++}
++
+ static struct dm_hash_table *_duplicated = NULL;
  
-+fh = None
-+
-+
-+def l(txt):
-+	if os.environ.get('PY_UNIT_LOG') is not None:
-+		global fh
-+		if fh is None:
-+			fh = open('/tmp/lvm_py_unit_test_' + rs(10), "a")
-+		fh.write(txt + "\n")
-+		fh.flush()
-+
+ void reset_log_duplicated(void) {
+diff --git a/lib/log/lvm-logging.h b/lib/log/lvm-logging.h
+index 52cd895..2f0d843 100644
+--- a/lib/log/lvm-logging.h
++++ b/lib/log/lvm-logging.h
+@@ -55,6 +55,7 @@ int error_message_produced(void);
+ void reset_lvm_errno(int store_errmsg);
+ int stored_errno(void);
+ const char *stored_errmsg(void);
++const char *stored_errmsg_and_clear(void);
  
- def rs(l=10):
- 	"""
-@@ -693,5 +704,93 @@ class TestLvm(unittest.TestCase):
- 			self._testTags(vg)
- 			vg.close()
+ /* Suppress messages to stdout/stderr (1) or everywhere (2) */
+ /* Returns previous setting */
+diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
+index 139cc97..891cdab 100644
+--- a/liblvm/lvm_base.c
++++ b/liblvm/lvm_base.c
+@@ -115,7 +115,14 @@ int lvm_errno(lvm_t libh)
  
-+	def testListing(self):
-+
-+		env = os.environ
-+
-+		for k, v in env.items():
-+			l("%s:%s" % (k, v))
-+
-+		with lvm.listPvs() as pvs:
-+			for p in pvs:
-+				l('pv= %s' % p.getName())
-+
-+		l('Checking for VG')
-+		for v in lvm.listVgNames():
-+			l('vg= %s' % v)
-+
-+	def testPVemptylisting(self):
-+		#We had a bug where we would seg. fault if we had no PVs.
-+
-+		l('testPVemptylisting entry')
-+
-+		device_names = self._get_pv_device_names()
-+
-+		for d in device_names:
-+			l("Removing %s" % d)
-+			lvm.pvRemove(d)
-+
-+		count = 0
-+
-+		with lvm.listPvs() as pvs:
-+			for p in pvs:
-+				count += 1
-+				l('pv= %s' % p.getName())
-+
-+		self.assertTrue(count == 0)
-+
-+		for d in device_names:
-+			lvm.pvCreate(d)
-+
-+	def testPVCreate(self):
-+		size = [0, 1024*1024*4]
-+		pvmeta_copies = [0, 1, 2]
-+		pvmeta_size = [0, 255, 512, 1024]
-+		data_alignment = [0, 2048, 4096]
-+		data_alignment_offset = [1, 1, 1]
-+		zero = [0, 1]
-+
-+		device_names = self._get_pv_device_names()
-+
-+		for d in device_names:
-+			lvm.pvRemove(d)
-+
-+		d = device_names[0]
-+
-+		#Test some error cases
-+		self.assertRaises(TypeError, lvm.pvCreate, None)
-+		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, '')
-+		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, d, 4)
-+		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, d, 0, 4)
-+		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, d, 0, 0, 0, 2**34)
-+		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, d, 0, 0, 0, 4096,
-+						  2**34)
-+
-+		#Try a number of combinations and permutations
-+		for s in size:
-+			lvm.pvCreate(d, s)
-+			lvm.pvRemove(d)
-+			for copies in pvmeta_copies:
-+				lvm.pvCreate(d, s, copies)
-+				lvm.pvRemove(d)
-+				for pv_size in pvmeta_size:
-+					lvm.pvCreate(d, s, copies, pv_size)
-+					lvm.pvRemove(d)
-+					for align in data_alignment:
-+						lvm.pvCreate(d, s, copies, pv_size, align)
-+						lvm.pvRemove(d)
-+						for align_offset in data_alignment_offset:
-+							lvm.pvCreate(d, s, copies, pv_size, align,
-+										 align * align_offset)
-+							lvm.pvRemove(d)
-+							for z in zero:
-+								lvm.pvCreate(d, s, copies, pv_size, align,
-+											 align * align_offset, z)
-+								lvm.pvRemove(d)
-+
-+		#Restore
-+		for d in device_names:
-+			lvm.pvCreate(d)
-+
- if __name__ == "__main__":
- 	unittest.main()
+ const char *lvm_errmsg(lvm_t libh)
+ {
+-	return stored_errmsg();
++	const char *rc = NULL;
++	struct cmd_context *cmd = (struct cmd_context *)libh;
++	const char *msg = stored_errmsg_and_clear();
++	if (msg) {
++		rc = dm_pool_strdup(cmd->mem, msg);
++		free((void *)msg);
++	}
++	return rc;
+ }
+ 
+ const char *lvm_vgname_from_pvid(lvm_t libh, const char *pvid)
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 330ef14..6abd5ff 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -141,6 +141,7 @@ static lvobject *_create_py_lv(vgobject *parent, lv_t lv)
+ static PyObject *_liblvm_get_last_error(void)
+ {
+ 	PyObject *info;
++	const char *msg = NULL;
+ 
+ 	LVM_VALID(NULL);
+ 
+@@ -148,7 +149,9 @@ static PyObject *_liblvm_get_last_error(void)
+ 		return NULL;
+ 
+ 	PyTuple_SetItem(info, 0, PyInt_FromLong((long) lvm_errno(_libh)));
+-	PyTuple_SetItem(info, 1, PyString_FromString(lvm_errmsg(_libh)));
++	msg = lvm_errmsg(_libh);
++	PyTuple_SetItem(info, 1, ((msg) ? PyString_FromString(msg) :
++			PyString_FromString("Memory error while retrieving error message")));
+ 
+ 	return info;
+ }
 -- 
 1.8.2.1
 
