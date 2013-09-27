@@ -1,104 +1,95 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 27 Sep 2013 14:10:31 -0500
-Subject: [PATCH 11/12] lvm2app: Reset buffer after retrieving error message
+Date: Fri, 27 Sep 2013 14:10:30 -0500
+Subject: [PATCH 10/12] python-lvm: VG/LV name validation.
 In-Reply-To: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
 References: <1380309032-12736-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1380309032-12736-12-git-send-email-tasleson@redhat.com>
+Message-ID: <1380309032-12736-11-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The error buffer will stack error messages which is fine.  However,
-once you retrieve the error messages it doesn't make sense to keep
-appending for each additional error message when running in the
-context of a library call.
-
-This patch clears and resets the buffer after the user retrieves
-the error message.
+Python portion of
+https://bugzilla.redhat.com/show_bug.cgi?id=883689
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/log/log.c         | 7 +++++++
- lib/log/lvm-logging.h | 1 +
- liblvm/lvm_base.c     | 9 ++++++++-
- python/liblvm.c       | 5 ++++-
- 4 files changed, 20 insertions(+), 2 deletions(-)
+ python/liblvm.c | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index e0c1e73..25f2264 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -170,6 +170,13 @@ const char *stored_errmsg(void)
- 	return _lvm_errmsg ? : "";
- }
- 
-+const char *stored_errmsg_and_clear(void)
-+{
-+	const char *rc = strdup(stored_errmsg());
-+	reset_lvm_errno(1);
-+	return rc;
-+}
-+
- static struct dm_hash_table *_duplicated = NULL;
- 
- void reset_log_duplicated(void) {
-diff --git a/lib/log/lvm-logging.h b/lib/log/lvm-logging.h
-index 52cd895..2f0d843 100644
---- a/lib/log/lvm-logging.h
-+++ b/lib/log/lvm-logging.h
-@@ -55,6 +55,7 @@ int error_message_produced(void);
- void reset_lvm_errno(int store_errmsg);
- int stored_errno(void);
- const char *stored_errmsg(void);
-+const char *stored_errmsg_and_clear(void);
- 
- /* Suppress messages to stdout/stderr (1) or everywhere (2) */
- /* Returns previous setting */
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index 139cc97..891cdab 100644
---- a/liblvm/lvm_base.c
-+++ b/liblvm/lvm_base.c
-@@ -115,7 +115,14 @@ int lvm_errno(lvm_t libh)
- 
- const char *lvm_errmsg(lvm_t libh)
- {
--	return stored_errmsg();
-+	const char *rc = NULL;
-+	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	const char *msg = stored_errmsg_and_clear();
-+	if (msg) {
-+		rc = dm_pool_strdup(cmd->mem, msg);
-+		free((void *)msg);
-+	}
-+	return rc;
- }
- 
- const char *lvm_vgname_from_pvid(lvm_t libh, const char *pvid)
 diff --git a/python/liblvm.c b/python/liblvm.c
-index 330ef14..6abd5ff 100644
+index 033de82..330ef14 100644
 --- a/python/liblvm.c
 +++ b/python/liblvm.c
-@@ -141,6 +141,7 @@ static lvobject *_create_py_lv(vgobject *parent, lv_t lv)
- static PyObject *_liblvm_get_last_error(void)
- {
- 	PyObject *info;
-+	const char *msg = NULL;
- 
- 	LVM_VALID(NULL);
- 
-@@ -148,7 +149,9 @@ static PyObject *_liblvm_get_last_error(void)
- 		return NULL;
- 
- 	PyTuple_SetItem(info, 0, PyInt_FromLong((long) lvm_errno(_libh)));
--	PyTuple_SetItem(info, 1, PyString_FromString(lvm_errmsg(_libh)));
-+	msg = lvm_errmsg(_libh);
-+	PyTuple_SetItem(info, 1, ((msg) ? PyString_FromString(msg) :
-+			PyString_FromString("Memory error while retrieving error message")));
- 
- 	return info;
+@@ -391,6 +391,25 @@ static PyObject *_liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
+ 	return Py_BuildValue("d", converted);
  }
+ 
++static PyObject *_liblvm_lvm_vg_name_validate(PyObject *self, PyObject *arg)
++{
++	const char *name;
++
++	LVM_VALID(NULL);
++
++	if (!PyArg_ParseTuple(arg, "s", &name))
++		return NULL;
++
++	if (lvm_vg_name_validate(_libh, name) < 0) {
++		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
++		return NULL;
++	}
++
++	Py_INCREF(Py_None);
++
++	return Py_None;
++}
++
+ static PyObject *_liblvm_lvm_vgname_from_pvid(PyObject *self, PyObject *arg)
+ {
+ 	const char *pvid;
+@@ -1213,6 +1232,25 @@ static PyObject *_liblvm_lvm_lv_from_uuid(vgobject *self, PyObject *arg)
+ 	return _liblvm_lvm_lv_from_N(self, arg, lvm_lv_from_uuid);
+ }
+ 
++static PyObject *_liblvm_lvm_lv_name_validate(vgobject *self, PyObject *args)
++{
++	const char *name;
++
++	VG_VALID(self);
++
++	if (!PyArg_ParseTuple(args, "s", &name))
++		return NULL;
++
++	if (lvm_lv_name_validate(self->vg, name) < 0) {
++		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
++		return NULL;
++	}
++
++	Py_INCREF(Py_None);
++
++	return Py_None;
++}
++
+ static PyObject *_liblvm_lvm_pv_from_N(vgobject *self, PyObject *arg, pv_fetch_by_N method)
+ {
+ 	const char *id;
+@@ -1771,6 +1809,7 @@ static PyMethodDef _Liblvm_methods[] = {
+ 	{ "pvCreate",		(PyCFunction)_liblvm_lvm_pv_create, METH_VARARGS },
+ 	{ "pvRemove",		(PyCFunction)_liblvm_lvm_pv_remove, METH_VARARGS },
+ 	{ "percentToFloat",	(PyCFunction)_liblvm_lvm_percent_to_float, METH_VARARGS },
++	{ "vgNameValidate",	(PyCFunction)_liblvm_lvm_vg_name_validate, METH_VARARGS },
+ 	{ "vgNameFromPvid",	(PyCFunction)_liblvm_lvm_vgname_from_pvid, METH_VARARGS },
+ 	{ "vgNameFromDevice",	(PyCFunction)_liblvm_lvm_vgname_from_device, METH_VARARGS },
+ 	{ NULL, NULL }		/* sentinel */
+@@ -1805,6 +1844,7 @@ static PyMethodDef _liblvm_vg_methods[] = {
+ 	{ "listPVs",		(PyCFunction)_liblvm_lvm_vg_list_pvs, METH_NOARGS },
+ 	{ "lvFromName", 	(PyCFunction)_liblvm_lvm_lv_from_name, METH_VARARGS },
+ 	{ "lvFromUuid", 	(PyCFunction)_liblvm_lvm_lv_from_uuid, METH_VARARGS },
++	{ "lvNameValidate",	(PyCFunction)_liblvm_lvm_lv_name_validate, METH_VARARGS },
+ 	{ "pvFromName", 	(PyCFunction)_liblvm_lvm_pv_from_name, METH_VARARGS },
+ 	{ "pvFromUuid", 	(PyCFunction)_liblvm_lvm_pv_from_uuid, METH_VARARGS },
+ 	{ "getTags",		(PyCFunction)_liblvm_lvm_vg_get_tags, METH_NOARGS },
 -- 
 1.8.2.1
 
