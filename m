@@ -1,174 +1,642 @@
-From: M. Mohan Kumar <mohan@in.ibm.com>
-Date: Tue,  1 Oct 2013 23:54:42 +0530
-Subject: [RFC PATCH] lvm2app: List snapshot LV information for a given origin LV
-Message-ID: <1380651882-11757-1-git-send-email-mohan@in.ibm.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue,  1 Oct 2013 20:26:13 +0000 (UTC)
+Subject: master - cmdline: Add --ignoreskippedcluster.
+Message-ID: <20131001202613.EC8B360EF3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: "M. Mohan Kumar" <mohan@in.ibm.com>
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=baf95bbff70bdd1474b678f37b840025295903ae
+Commit:        baf95bbff70bdd1474b678f37b840025295903ae
+Parent:        23ce3352d7e6ad122b3b173ffb739848bec6a7bd
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Oct 1 21:20:10 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Oct 1 21:20:10 2013 +0100
 
-Similar to origin property list snapshot information for a given LV.
-Also this feature extended to lvs command.
+cmdline: Add --ignoreskippedcluster.
 
-lvs -oname,snapshot displays name of the LV and snapshot LV name if any.
+Accept --ignoreskippedcluster with pvs, vgs, lvs, pvdisplay, vgdisplay,
+lvdisplay, vgchange and lvchange to avoid the 'Skipping clustered
+VG' errors when requesting information about a clustered VG
+without using clustered locking and still exit with success.
 
-lvm2app enhanced to support the property "lv_snapshot", the call
-lvm_lv_get_property(lv, "lv_snapshot") returns list of snapshot for
-given lv 'lv'.
-
-Signed-off-by: M. Mohan Kumar <mohan@in.ibm.com>
+The messages can still be seen with -v.
 ---
-For Block Device xlator work, its better to support providing list of
-snapshots for a given origin LV. This feature will be exploited by BD
-xlator to list out snapshots for a given origin LV.
+ WHATS_NEW                  |    3 +-
+ lib/commands/toolcontext.c |    1 +
+ lib/commands/toolcontext.h |    1 +
+ lib/metadata/metadata.c    |   10 ++++++-
+ man/lvchange.8.in          |    1 +
+ man/lvdisplay.8.in         |    2 +
+ man/lvm.8.in               |    5 ++++
+ man/lvs.8.in               |    1 +
+ man/pvdisplay.8.in         |    1 +
+ man/pvs.8.in               |    1 +
+ man/vgchange.8.in          |    1 +
+ man/vgdisplay.8.in         |    2 +
+ man/vgs.8.in               |    1 +
+ tools/args.h               |    1 +
+ tools/commands.h           |   40 +++++++++++++++++++++++----------
+ tools/lvmcmdline.c         |    2 +
+ tools/pvdisplay.c          |    7 ++---
+ tools/reporter.c           |   22 ++++++++++++-----
+ tools/toollib.c            |   53 +++++++++++++++++++++++++++++--------------
+ tools/toollib.h            |    2 +
+ 20 files changed, 114 insertions(+), 43 deletions(-)
 
- lib/metadata/lv.c       |  5 +++++
- lib/metadata/lv.h       |  1 +
- lib/metadata/metadata.c | 26 ++++++++++++++++++++++++++
- lib/metadata/metadata.h |  1 +
- lib/report/columns.h    |  1 +
- lib/report/properties.c |  2 ++
- lib/report/report.c     | 16 ++++++++++++++++
- 7 files changed, 52 insertions(+)
-
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index db71cf0..216fd99 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -378,6 +378,11 @@ char *lv_tags_dup(const struct logical_volume *lv)
- 	return tags_format_and_copy(lv->vg->vgmem, &lv->tags);
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b813eb6..cfcd8c9 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,12 +1,13 @@
+ Version 2.02.103 - 
+ ======================================
++  Add --ignoreskippedcluster for exit status success when clustered VGs skipped.
+   Fix 3min udev timeout so that it is applied for all LVM volumes.
+   Fix RAID calculation for sufficient allocatable space.
+   Conversion from linear to mirror or RAID1 now honors mirror_segtype_default.
+   Add thin-performance configuration profile.
+   Add lvm.conf allocation/thin_pool_chunk_size_calculation option.
+   Fix contiguous & cling allocation policies for parity RAID.  (2.02.100)
+-  Set use_lvmetad=0 on lvmconf --enable-cluster, reset to default on --disable-cluster.
++  Have lvmconf --enable/disable-cluster reset/set use_lvmetad.
+   Don't install separate command symlink in binary directory for 'lvm devtypes'.
+   Add seg_size_pe field to reports.
+   Support start+length notation with command line PE ranges.
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 4f53f0e..2732094 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1396,6 +1396,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 	cmd->handles_missing_pvs = 0;
+ 	cmd->handles_unknown_segments = 0;
+ 	cmd->independent_metadata_areas = 0;
++	cmd->ignore_clustered_vgs = 0;
+ 	cmd->hosttags = 0;
+ 	dm_list_init(&cmd->arg_value_groups);
+ 	dm_list_init(&cmd->formats);
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index cd91605..74b1177 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -90,6 +90,7 @@ struct cmd_context {
+ 	unsigned auto_set_activation_skip:1;
+ 	unsigned si_unit_consistency:1;
+ 	unsigned metadata_read_only:1;
++	unsigned ignore_clustered_vgs:1;
+ 	unsigned threaded:1;		/* Set if running within a thread e.g. clvmd */
  
-+char *lv_snapshot_dup(const struct logical_volume *lv)
-+{
-+	return list_snapshot(lv->vg->vgmem, &lv->snapshot_segs);
-+}
-+
- uint64_t lv_size(const struct logical_volume *lv)
- {
- 	return lv->size;
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 06f8c60..0da81ef 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -94,4 +94,5 @@ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
- struct logical_volume *lv_ondisk(struct logical_volume *lv);
- struct profile *lv_config_profile(const struct logical_volume *lv);
- char *lv_profile_dup(struct dm_pool *mem, const struct logical_volume *lv);
-+char *lv_snapshot_dup(const struct logical_volume *lv);
- #endif /* _LVM_LV_H */
+ 	unsigned independent_metadata_areas:1;	/* Active formats have MDAs outside PVs */
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 4ae7726..7753def 100644
+index 1e34f83..4ffd502 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -4629,6 +4629,32 @@ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
- 	return dm_pool_end_object(mem);
- }
+@@ -4005,7 +4005,10 @@ static uint32_t _vg_bad_status_bits(const struct volume_group *vg,
  
-+char *list_snapshot(struct dm_pool *mem, const struct dm_list *snap)
-+{
-+	struct str_list *sl;
-+	char *c = NULL;
-+	struct lv_segment *snap_seg;
+ 	if ((status & CLUSTERED) &&
+ 	    (vg_is_clustered(vg)) && !locking_is_clustered()) {
+-		log_error("Skipping clustered volume group %s", vg->name);
++		if (!vg->cmd->ignore_clustered_vgs)
++			log_error("Skipping clustered volume group %s", vg->name);
++		else
++			log_verbose("Skipping clustered volume group %s", vg->name);
+ 		/* Return because other flags are considered undefined. */
+ 		return FAILED_CLUSTERED;
+ 	}
+@@ -4123,7 +4126,10 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
+ 	}
+ 
+ 	if (vg_is_clustered(vg) && !locking_is_clustered()) {
+-		log_error("Skipping clustered volume group %s", vg->name);
++		if (!cmd->ignore_clustered_vgs)
++			log_error("Skipping clustered volume group %s", vg->name);
++		else
++			log_verbose("Skipping clustered volume group %s", vg->name);
+ 		failure |= FAILED_CLUSTERED;
+ 		goto bad;
+ 	}
+diff --git a/man/lvchange.8.in b/man/lvchange.8.in
+index ea8a6ef..49337e4 100644
+--- a/man/lvchange.8.in
++++ b/man/lvchange.8.in
+@@ -27,6 +27,7 @@ lvchange \- change attributes of a logical volume
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
+ .RB [ \-\-ignoremonitoring ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-monitor
+ .RI { y | n }]
+ .RB [ \-\-poll
+diff --git a/man/lvdisplay.8.in b/man/lvdisplay.8.in
+index 84f21d3..49654bc 100644
+--- a/man/lvdisplay.8.in
++++ b/man/lvdisplay.8.in
+@@ -8,6 +8,7 @@ lvdisplay \- display attributes of a logical volume
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-maps ]
+ .RB [ \-\-nosuffix ]
+ .RB [ \-P | \-\-partial ]
+@@ -26,6 +27,7 @@ lvdisplay \- display attributes of a logical volume
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-noheadings ]
+ .RB [ \-\-nosuffix ]
+ .RB [ \-o | \-\-options
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index da471ab..13e66d0 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -216,6 +216,11 @@ This lets you proceed with read-only metadata operations such as
+ One use for this is in a system init script if the lock directory
+ is mounted read-only when the script runs.
+ .TP
++.B \-\-ignoreskippedcluster
++Use to avoid exiting with an non-zero status code if the command is run
++without clustered locking and some clustered Volume Groups have to be
++skipped over.
++.TP
+ .B \-\-addtag \fITag
+ Add the tag \fITag\fP to a PV, VG or LV.
+ Supply this argument multiple times to add more than one tag at once.
+diff --git a/man/lvs.8.in b/man/lvs.8.in
+index 85f7d33..8427aca 100644
+--- a/man/lvs.8.in
++++ b/man/lvs.8.in
+@@ -8,6 +8,7 @@ lvs \- report information about logical volumes
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-nameprefixes ]
+ .RB [ \-\-noheadings ]
+ .RB [ \-\-nosuffix ]
+diff --git a/man/pvdisplay.8.in b/man/pvdisplay.8.in
+index 6a8a0d0..03c12c4 100644
+--- a/man/pvdisplay.8.in
++++ b/man/pvdisplay.8.in
+@@ -7,6 +7,7 @@ pvdisplay \- display attributes of a physical volume
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-maps ]
+ .RB [ \-\-nosuffix ]
+ .RB [ \-s | \-\-short ]
+diff --git a/man/pvs.8.in b/man/pvs.8.in
+index d1f6e8b..67e395b 100644
+--- a/man/pvs.8.in
++++ b/man/pvs.8.in
+@@ -8,6 +8,7 @@ pvs \- report information about physical volumes
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-nameprefixes ]
+ .RB [ \-\-noheadings ]
+ .RB [ \-\-nosuffix ]
+diff --git a/man/vgchange.8.in b/man/vgchange.8.in
+index 97042b1..e687587 100644
+--- a/man/vgchange.8.in
++++ b/man/vgchange.8.in
+@@ -29,6 +29,7 @@ vgchange \- change attributes of a volume group
+ .RB [ \-h | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
+ .RB [ \-\-ignoremonitoring ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-sysinit ]
+ .RB [ \-\-noudevsync ]
+ .RB [ \-l | \-\-logicalvolume
+diff --git a/man/vgdisplay.8.in b/man/vgdisplay.8.in
+index 70c1fa7..9016a45 100644
+--- a/man/vgdisplay.8.in
++++ b/man/vgdisplay.8.in
+@@ -10,6 +10,7 @@ vgdisplay \- display attributes of volume groups
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-nosuffix ]
+ .RB [ \-P | \-\-partial ]
+ .RB [ \-\-units
+@@ -26,6 +27,7 @@ vgdisplay \- display attributes of volume groups
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-noheadings ]
+ .RB [ \-\-nosuffix ]
+ .RB [ \-o|\-\-options
+diff --git a/man/vgs.8.in b/man/vgs.8.in
+index 381e3a9..eae60fa 100644
+--- a/man/vgs.8.in
++++ b/man/vgs.8.in
+@@ -8,6 +8,7 @@ vgs \- report information about volume groups
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-ignorelockingfailure ]
++.RB [ \-\-ignoreskippedcluster ]
+ .RB [ \-\-nameprefixes ]
+ .RB [ \-\-noheadings ]
+ .RB [ \-\-nosuffix ]
+diff --git a/tools/args.h b/tools/args.h
+index c5e4d14..27b97eb 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -100,6 +100,7 @@ arg(raidmaxrecoveryrate_ARG, '\0', "raidmaxrecoveryrate", size_kb_arg, 0)
+ arg(profile_ARG, '\0', "profile", string_arg, 0)
+ arg(detachprofile_ARG, '\0', "detachprofile", NULL, 0)
+ arg(mergedconfig_ARG, '\0', "mergedconfig", NULL, 0)
++arg(ignoreskippedcluster_ARG, '\0', "ignoreskippedcluster", NULL, 0)
+ 
+ /* Allow some variations */
+ arg(resizable_ARG, '\0', "resizable", yes_no_arg, 0)
+diff --git a/tools/commands.h b/tools/commands.h
+index a0cd5d7..c299276 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -107,6 +107,7 @@ xx(lvchange,
+    "\t[--discards {ignore|nopassdown|passdown}]\n"
+    "\t[--ignorelockingfailure]\n"
+    "\t[--ignoremonitoring]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[-k|--setactivationskip {y|n}]\n"
+    "\t[-K|--ignoreactivationskip] \n"
+    "\t[--monitor {y|n}]\n"
+@@ -135,6 +136,7 @@ xx(lvchange,
+    addtag_ARG, alloc_ARG, autobackup_ARG, activate_ARG, available_ARG,
+    contiguous_ARG, deltag_ARG, discards_ARG, detachprofile_ARG, force_ARG,
+    ignorelockingfailure_ARG, ignoremonitoring_ARG, ignoreactivationskip_ARG,
++   ignoreskippedcluster_ARG,
+    major_ARG, minor_ARG, monitor_ARG, minrecoveryrate_ARG, maxrecoveryrate_ARG,
+    noudevsync_ARG, partial_ARG, permission_ARG, persistent_ARG, poll_ARG,
+    profile_ARG, raidminrecoveryrate_ARG, raidmaxrecoveryrate_ARG,
+@@ -303,6 +305,7 @@ xx(lvdisplay,
+    "\t[-d|--debug]\n"
+    "\t[-h|--help]\n"
+    "\t[--ignorelockingfailure]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[-m|--maps]\n"
+    "\t[--nosuffix]\n"
+    "\t[-P|--partial] " "\n"
+@@ -317,6 +320,7 @@ xx(lvdisplay,
+    "\t[-d|--debug]\n"
+    "\t[-h|--help]\n"
+    "\t[--ignorelockingfailure]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[--noheadings]\n"
+    "\t[--nosuffix]\n"
+    "\t[-o|--options [+]Field[,Field]]\n"
+@@ -330,8 +334,8 @@ xx(lvdisplay,
+    "\t[--version]" "\n"
+    "\t[LogicalVolume[Path] [LogicalVolume[Path]...]]\n",
+ 
+-    aligned_ARG, all_ARG, colon_ARG, columns_ARG,
+-    ignorelockingfailure_ARG, maps_ARG, noheadings_ARG, nosuffix_ARG,
++    aligned_ARG, all_ARG, colon_ARG, columns_ARG, ignorelockingfailure_ARG, 
++    ignoreskippedcluster_ARG, maps_ARG, noheadings_ARG, nosuffix_ARG,
+     options_ARG, sort_ARG, partial_ARG, segments_ARG, separator_ARG,
+     unbuffered_ARG, units_ARG)
+ 
+@@ -502,6 +506,7 @@ xx(lvs,
+    "\t[-d|--debug]\n"
+    "\t[-h|--help]\n"
+    "\t[--ignorelockingfailure]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[--nameprefixes]\n"
+    "\t[--noheadings]\n"
+    "\t[--nosuffix]\n"
+@@ -519,7 +524,8 @@ xx(lvs,
+    "\t[--version]" "\n"
+    "\t[LogicalVolume[Path] [LogicalVolume[Path]...]]\n",
+ 
+-   aligned_ARG, all_ARG, ignorelockingfailure_ARG, nameprefixes_ARG,
++   aligned_ARG, all_ARG, ignorelockingfailure_ARG, ignoreskippedcluster_ARG,
++   nameprefixes_ARG,
+    noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG,
+    rows_ARG, segments_ARG, separator_ARG, sort_ARG, trustcache_ARG,
+    unbuffered_ARG, units_ARG, unquoted_ARG)
+@@ -646,6 +652,7 @@ xx(pvdisplay,
+    "\t[-d|--debug]\n"
+    "\t[-h|--help]\n"
+    "\t[--ignorelockingfailure]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[-m|--maps]\n"
+    "\t[--nosuffix]\n"
+    "\t[-s|--short]\n"
+@@ -660,6 +667,7 @@ xx(pvdisplay,
+    "\t[-d|--debug]\n"
+    "\t[-h|--help]\n"
+    "\t[--ignorelockingfailure]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[--noheadings]\n"
+    "\t[--nosuffix]\n"
+    "\t[-o|--options [+]Field[,Field]]\n"
+@@ -672,8 +680,8 @@ xx(pvdisplay,
+    "\t[PhysicalVolumePath [PhysicalVolumePath...]]\n",
+ 
+    aligned_ARG, all_ARG, colon_ARG, columns_ARG, ignorelockingfailure_ARG,
+-   maps_ARG, noheadings_ARG, nosuffix_ARG, options_ARG, separator_ARG,
+-   short_ARG, sort_ARG, unbuffered_ARG, units_ARG)
++   ignoreskippedcluster_ARG, maps_ARG, noheadings_ARG, nosuffix_ARG,
++   options_ARG, separator_ARG, short_ARG, sort_ARG, unbuffered_ARG, units_ARG)
+ 
+ xx(pvmove,
+    "Move extents from one physical volume to another",
+@@ -722,6 +730,7 @@ xx(pvs,
+    "\t[-d|--debug]" "\n"
+    "\t[-h|-?|--help] " "\n"
+    "\t[--ignorelockingfailure]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[--nameprefixes]\n"
+    "\t[--noheadings]\n"
+    "\t[--nosuffix]\n"
+@@ -739,10 +748,10 @@ xx(pvs,
+    "\t[--version]\n"
+    "\t[PhysicalVolume [PhysicalVolume...]]\n",
+ 
+-   aligned_ARG, all_ARG, ignorelockingfailure_ARG, nameprefixes_ARG,
+-   noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG,
+-   rows_ARG, segments_ARG, separator_ARG, sort_ARG, trustcache_ARG,
+-   unbuffered_ARG, units_ARG, unquoted_ARG)
++   aligned_ARG, all_ARG, ignorelockingfailure_ARG, ignoreskippedcluster_ARG,
++   nameprefixes_ARG, noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG,
++   partial_ARG, rows_ARG, segments_ARG, separator_ARG, sort_ARG,
++   trustcache_ARG, unbuffered_ARG, units_ARG, unquoted_ARG)
+ 
+ xx(pvscan,
+    "List all physical volumes",
+@@ -813,6 +822,7 @@ xx(vgchange,
+    "\t[-h|--help] " "\n"
+    "\t[--ignorelockingfailure]\n"
+    "\t[--ignoremonitoring]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[-K|--ignoreactivationskip] \n"
+    "\t[--monitor {y|n}]\n"
+    "\t[--[vg]metadatacopies #copies] " "\n"
+@@ -838,6 +848,7 @@ xx(vgchange,
+    addtag_ARG, alloc_ARG, allocation_ARG, autobackup_ARG, activate_ARG,
+    available_ARG, clustered_ARG, deltag_ARG, detachprofile_ARG,
+    ignoreactivationskip_ARG, ignorelockingfailure_ARG, ignoremonitoring_ARG,
++   ignoreskippedcluster_ARG,
+    logicalvolume_ARG, maxphysicalvolumes_ARG, monitor_ARG, noudevsync_ARG,
+    metadatacopies_ARG, vgmetadatacopies_ARG, partial_ARG, profile_ARG,
+    physicalextentsize_ARG, poll_ARG, refresh_ARG, resizeable_ARG,
+@@ -910,6 +921,7 @@ xx(vgdisplay,
+    "\t[-d|--debug] " "\n"
+    "\t[-h|--help] " "\n"
+    "\t[--ignorelockingfailure]" "\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[--nosuffix]\n"
+    "\t[-P|--partial] " "\n"
+    "\t[--units hHbBsSkKmMgGtTpPeE]\n"
+@@ -921,6 +933,7 @@ xx(vgdisplay,
+    "\t[-d|--debug] " "\n"
+    "\t[-h|--help] " "\n"
+    "\t[--ignorelockingfailure]" "\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[--noheadings]\n"
+    "\t[--nosuffix]\n"
+    "\t[-o|--options [+]Field[,Field]]\n"
+@@ -934,8 +947,9 @@ xx(vgdisplay,
+    "\t[VolumeGroupName [VolumeGroupName...]]\n",
+ 
+    activevolumegroups_ARG, aligned_ARG, colon_ARG, columns_ARG,
+-   ignorelockingfailure_ARG, noheadings_ARG, nosuffix_ARG, options_ARG,
+-   partial_ARG, short_ARG, separator_ARG, sort_ARG, unbuffered_ARG, units_ARG)
++   ignorelockingfailure_ARG, ignoreskippedcluster_ARG, noheadings_ARG,
++   nosuffix_ARG, options_ARG, partial_ARG, short_ARG, separator_ARG,
++   sort_ARG, unbuffered_ARG, units_ARG)
+ 
+ xx(vgexport,
+    "Unregister volume group(s) from the system",
+@@ -1075,6 +1089,7 @@ xx(vgs,
+    "\t[-d|--debug]\n"
+    "\t[-h|--help]\n"
+    "\t[--ignorelockingfailure]\n"
++   "\t[--ignoreskippedcluster]\n"
+    "\t[--nameprefixes]\n"
+    "\t[--noheadings]\n"
+    "\t[--nosuffix]\n"
+@@ -1091,7 +1106,8 @@ xx(vgs,
+    "\t[--version]\n"
+    "\t[VolumeGroupName [VolumeGroupName...]]\n",
+ 
+-   aligned_ARG, all_ARG, ignorelockingfailure_ARG, nameprefixes_ARG,
++   aligned_ARG, all_ARG, ignorelockingfailure_ARG, ignoreskippedcluster_ARG,
++   nameprefixes_ARG,
+    noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG,
+    rows_ARG, separator_ARG, sort_ARG, trustcache_ARG, unbuffered_ARG, units_ARG,
+    unquoted_ARG)
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index e004f61..6fe4670 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -906,6 +906,8 @@ static int _get_settings(struct cmd_context *cmd)
+ 	else
+ 		init_ignorelockingfailure(0);
+ 
++	cmd->ignore_clustered_vgs = arg_count(cmd, ignoreskippedcluster_ARG) ? 1 : 0;
 +
-+	if (!dm_pool_begin_object(mem, 256)) {
-+		log_error("dm_pool_begin_object failed");
-+		return NULL;
-+	}
-+	dm_list_iterate_items_gen(snap_seg, snap, origin_list) {
-+		if (!dm_pool_grow_object(mem, snap_seg->cow->name,
-+					 strlen(snap_seg->cow->name)) ||
-+		    (!dm_pool_grow_object(mem, ",", 1))) {
-+			log_error("dm_pool_grow_object failed");
-+			return NULL;
-+		}
-+	}
-+
-+	if (!dm_pool_grow_object(mem, "\0", 1)) {
-+		log_error("dm_pool_grow_object failed");
-+		return NULL;
-+	}
-+	return dm_pool_end_object(mem);
-+}
-+
- struct logical_volume *lv_ondisk(struct logical_volume *lv)
+ 	if (!arg_count(cmd, sysinit_ARG))
+ 		lvmetad_connect_or_warn();
+ 
+diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
+index c6cd412..35fb75b 100644
+--- a/tools/pvdisplay.c
++++ b/tools/pvdisplay.c
+@@ -30,11 +30,10 @@ static int _pvdisplay_single(struct cmd_context *cmd,
+ 	if (!is_orphan(pv) && !vg) {
+ 		vg_name = pv_vg_name(pv);
+ 		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
+-		if (vg_read_error(vg)) {
+-			log_error("Skipping volume group %s", vg_name);
++		if (ignore_vg(vg, vg_name, 0, &ret)) {
+ 			release_vg(vg);
+-			/* FIXME If CLUSTERED should return ECMD_PROCESSED here */
+-			return ECMD_FAILED;
++			stack;
++			return ret;
+ 		}
+ 
+ 	 	/*
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 44a9aa8..a967f60 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -145,10 +145,10 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
+ 		vg_name = pv_vg_name(pv);
+ 
+ 		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
+-		if (vg_read_error(vg)) {
+-			log_error("Skipping volume group %s", vg_name);
++		if (ignore_vg(vg, vg_name, 0, &ret)) {
+ 			release_vg(vg);
+-			return ECMD_FAILED;
++			stack;
++			return ret;
+ 		}
+ 
+ 		/*
+@@ -205,8 +205,12 @@ static int _pvs_in_vg(struct cmd_context *cmd, const char *vg_name,
+ 		      struct volume_group *vg,
+ 		      void *handle)
  {
- 	struct volume_group *vg;
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 2408c23..e998534 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -485,6 +485,7 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
+-	if (vg_read_error(vg))
+-		return_ECMD_FAILED;
++	int ret = ECMD_PROCESSED;
++
++	if (ignore_vg(vg, vg_name, 0, &ret)) {
++		stack;
++		return ret;
++	}
  
- uint64_t find_min_mda_size(struct dm_list *mdas);
- char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags);
-+char *list_snapshot(struct dm_pool *mem, const struct dm_list *tags);
+ 	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvs_single);
+ }
+@@ -215,8 +219,12 @@ static int _pvsegs_in_vg(struct cmd_context *cmd, const char *vg_name,
+ 			 struct volume_group *vg,
+ 			 void *handle)
+ {
+-	if (vg_read_error(vg))
+-		return_ECMD_FAILED;
++	int ret = ECMD_PROCESSED;
++
++	if (ignore_vg(vg, vg_name, 0, &ret)) {
++		stack;
++		return ret;
++	}
  
- void check_reappeared_pv(struct volume_group *correct_vg,
- 			 struct physical_volume *pv);
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 9bb99d3..da09ddb 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -65,6 +65,7 @@ FIELD(LVS, lv, STR, "LProfile", lvid, 8, lvprofile, lv_profile, "Configuration p
- FIELD(LVS, lv, STR, "Time", lvid, 26, lvtime, lv_time, "Creation time of the LV, if known", 0)
- FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
- FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
-+FIELD(LVS, lv, STR, "snapshot", lvid, 8, snapshot, lv_snapshot, "Snapshots for this LV.", 0)
- 
- FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
- FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, pv_uuid, "Unique identifier.", 0)
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 3eeb78a..2481c69 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -235,6 +235,8 @@ GET_LV_STR_PROPERTY_FN(lv_active, lv_active_dup(lv->vg->vgmem, lv))
- #define _lv_active_set prop_not_implemented_set
- GET_LV_STR_PROPERTY_FN(lv_profile, lv_profile_dup(lv->vg->vgmem, lv))
- #define _lv_profile_set prop_not_implemented_set
-+GET_LV_STR_PROPERTY_FN(lv_snapshot, lv_snapshot_dup(lv))
-+#define _lv_snapshot_set prop_not_implemented_set
- 
- /* VG */
- GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt_dup(vg))
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 77332a2..2070a55 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -97,6 +97,21 @@ static int _tags_disp(struct dm_report *rh __attribute__((unused)), struct dm_po
- 	return 1;
+ 	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvsegs_single);
+ }
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 9b3e842..bc8b33c 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -156,6 +156,29 @@ const char *skip_dev_dir(struct cmd_context *cmd, const char *vg_name,
  }
  
-+static int _snapshot_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
-+		      struct dm_report_field *field,
-+		      const void *data, void *private __attribute__((unused)))
+ /*
++ * Returns 1 if VG should be ignored.
++ */
++int ignore_vg(struct volume_group *vg, const char *vg_name, int allow_inconsistent, int *ret)
 +{
-+	const struct logical_volume *lv = (const struct logical_volume *) data;
-+	char *tags_str;
++	uint32_t read_error = vg_read_error(vg);
 +
-+	if (!(tags_str = list_snapshot(mem, &lv->snapshot_segs)))
++	if (!read_error)
 +		return 0;
 +
-+	dm_report_field_set_value(field, tags_str, NULL);
++	if ((read_error == FAILED_INCONSISTENT) && allow_inconsistent)
++		return 0;
++
++	if (read_error == FAILED_CLUSTERED && vg->cmd->ignore_clustered_vgs)
++		log_verbose("Skipping volume group %s", vg_name);
++	else {
++		log_error("Skipping volume group %s", vg_name);
++		*ret = ECMD_FAILED;
++	}
 +
 +	return 1;
 +}
 +
- static int _modules_disp(struct dm_report *rh, struct dm_pool *mem,
- 			 struct dm_report_field *field,
- 			 const void *data, void *private)
-@@ -124,6 +139,7 @@ static int _lvprofile_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return 1;
- }
++/*
+  * Metadata iteration functions
+  */
+ int process_each_lv_in_vg(struct cmd_context *cmd,
+@@ -404,12 +427,10 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 			return_ECMD_FAILED;
  
+ 		if (!cmd_vg_read(cmd, &cmd_vgs)) {
+-			free_cmd_vgs(&cmd_vgs);
+-			if (ret_max < ECMD_FAILED) {
+-				log_error("Skipping volume group %s", vgname);
+-				ret_max = ECMD_FAILED;
+-			} else
++			if (ignore_vg(cvl_vg->vg, vgname, 0, &ret_max))
+ 				stack;
 +
- static int _vgfmt_disp(struct dm_report *rh, struct dm_pool *mem,
- 		       struct dm_report_field *field,
- 		       const void *data, void *private)
--- 
-1.7.11.7
++			free_cmd_vgs(&cmd_vgs);
+ 			continue;
+ 		}
+ 
+@@ -489,10 +510,10 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
+ 		vg_name = pv_vg_name(pv);
+ 
+ 		vg = vg_read(cmd, vg_name, NULL, 0);
+-		if (vg_read_error(vg)) {
++		if (ignore_vg(vg, vg_name, 0, &ret)) {
+ 			release_vg(vg);
+-			log_error("Skipping volume group %s", vg_name);
+-			return ECMD_FAILED;
++			stack;
++			return ret;
+ 		}
+ 
+ 		/*
+@@ -561,13 +582,13 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
+ {
+ 	struct dm_list cmd_vgs;
+ 	struct cmd_vg *cvl_vg;
+-	int ret = 0;
++	int ret = ECMD_PROCESSED;
+ 
+ 	log_verbose("Finding volume group \"%s\"", vg_name);
+ 
+ 	dm_list_init(&cmd_vgs);
+ 	if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs, vg_name, vgid, flags)))
+-		return_0;
++		return_ECMD_FAILED;
+ 
+ 	for (;;) {
+ 		if (sigint_caught()) {
+@@ -575,15 +596,14 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
+ 			stack;
+ 			break;
+ 		}
+-		if (!cmd_vg_read(cmd, &cmd_vgs))
++
++		if (!cmd_vg_read(cmd, &cmd_vgs)) {
+ 			/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
+-			if (vg_read_error(cvl_vg->vg) &&
+-			    (!((flags & READ_ALLOW_INCONSISTENT) &&
+-			       (vg_read_error(cvl_vg->vg) == FAILED_INCONSISTENT)))) {
+-				ret = ECMD_FAILED;
++			if (ignore_vg(cvl_vg->vg, vg_name, flags & READ_ALLOW_INCONSISTENT, &ret)) {
+ 				stack;
+ 				break;
+ 			}
++		}
+ 
+ 		if (!dm_list_empty(tags) &&
+ 		    /* Only process if a tag matches or it's on arg_vgnames */
+@@ -889,8 +909,7 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
+ 					goto_out;
+ 				}
+ 				vg = vg_read(cmd, sll->str, NULL, flags);
+-				if (vg_read_error(vg)) {
+-					ret_max = ECMD_FAILED;
++				if (ignore_vg(vg, sll->str, 0, &ret_max)) {
+ 					release_vg(vg);
+ 					stack;
+ 					continue;
+diff --git a/tools/toollib.h b/tools/toollib.h
+index d831b95..aa6f699 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -25,6 +25,8 @@ int autobackup_init(const char *backup_dir, int keep_days, int keep_number,
+ 		    int autobackup);
+ int autobackup(struct volume_group *vg);
+ 
++int ignore_vg(struct volume_group *vg, const char *vg_name, int allow_inconsistent, int *ret);
++
+ struct volume_group *recover_vg(struct cmd_context *cmd, const char *vgname,
+ 				uint32_t lock_type);
+ 
 
 
