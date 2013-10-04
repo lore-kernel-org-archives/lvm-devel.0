@@ -1,39 +1,44 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  4 Oct 2013 10:36:44 +0000 (UTC)
-Subject: master - WHATS_NEW: renamed thin_pool_chunk_size_calculation -> policy
-Message-ID: <20131004103644.2D56661345@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Fri,  4 Oct 2013 12:34:10 +0000 (UTC)
+Subject: master - lvmetad: Fix vgname->vgid hash updates w/ duplicate VG names.
+Message-ID: <20131004123410.46CF46132C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a7ff7aee4f49015db03536bbaee13b9795d63e6c
-Commit:        a7ff7aee4f49015db03536bbaee13b9795d63e6c
-Parent:        8cf0810d57a0c47173c4775a08dd728c452f8eb8
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Oct 4 12:36:32 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Oct 4 12:36:32 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0d03503a453f91cee09fb3a1664d2136d58ac751
+Commit:        0d03503a453f91cee09fb3a1664d2136d58ac751
+Parent:        a7ff7aee4f49015db03536bbaee13b9795d63e6c
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Fri Oct 4 14:30:00 2013 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Fri Oct 4 14:31:45 2013 +0200
 
-WHATS_NEW: renamed thin_pool_chunk_size_calculation -> policy
+lvmetad: Fix vgname->vgid hash updates w/ duplicate VG names.
 
 ---
- WHATS_NEW |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index cfcd8c9..0b71786 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -5,7 +5,7 @@ Version 2.02.103 -
-   Fix RAID calculation for sufficient allocatable space.
-   Conversion from linear to mirror or RAID1 now honors mirror_segtype_default.
-   Add thin-performance configuration profile.
--  Add lvm.conf allocation/thin_pool_chunk_size_calculation option.
-+  Add lvm.conf allocation/thin_pool_chunk_size_policy option.
-   Fix contiguous & cling allocation policies for parity RAID.  (2.02.100)
-   Have lvmconf --enable/disable-cluster reset/set use_lvmetad.
-   Don't install separate command symlink in binary directory for 'lvm devtypes'.
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index 4f7bf59..e1ec5a8 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -753,8 +753,11 @@ static int update_metadata(lvmetad_state *s, const char *name, const char *_vgid
+ 		  dm_hash_insert(s->vgid_to_vgname, vgid, cfgname) &&
+ 		  dm_hash_insert(s->vgname_to_vgid, name, (void*) vgid)) ? 1 : 0;
+ 
+-	if (retval && oldname && strcmp(name, oldname))
+-		dm_hash_remove(s->vgname_to_vgid, oldname);
++	if (retval && oldname && strcmp(name, oldname)) {
++		const char *vgid_prev = dm_hash_lookup(s->vgname_to_vgid, oldname);
++		if (vgid_prev && !strcmp(vgid_prev, vgid))
++			dm_hash_remove(s->vgname_to_vgid, oldname);
++	}
+ 
+ 	if (haveseq >= 0 && haveseq < seq)
+ 		dm_config_destroy(old);
 
 
