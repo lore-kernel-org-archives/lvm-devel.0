@@ -1,65 +1,56 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  4 Oct 2013 13:42:08 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20131004134208.E665E6138C@fedorahosted.org>
+Date: Mon,  7 Oct 2013 22:53:49 +0000 (UTC)
+Subject: master - lvchange: improve discards when pool active error
+Message-ID: <20131007225349.43847612BC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=761b5245193be548698495f2b2d2c089a5a72975
-Commit:        761b5245193be548698495f2b2d2c089a5a72975
-Parent:        04d9a526843dcb93fc0110e6e9dfbb12143a3930
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4806f38d703c2d7cd01e0adc49505ccb7d010a17
+Commit:        4806f38d703c2d7cd01e0adc49505ccb7d010a17
+Parent:        761b5245193be548698495f2b2d2c089a5a72975
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Oct 4 14:41:32 2013 +0100
+AuthorDate:    Mon Oct 7 23:50:09 2013 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Oct 4 14:41:32 2013 +0100
+CommitterDate: Mon Oct 7 23:50:09 2013 +0100
 
-post-release
+lvchange: improve discards when pool active error
 
+Existing message deemed misleading:
+  Cannot change discards state for active pool volume
+
+https://bugzilla.redhat.com/show_bug.cgi?id=994315
 ---
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvchange.c |    3 +--
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index f4bbdb9..8e798d0 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.103(2)-git (2013-10-04)
-+2.02.104(2)-git (2013-10-04)
-diff --git a/VERSION_DM b/VERSION_DM
-index f4e8c0b..0e6eddb 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.82-git (2013-10-04)
-+1.02.83-git (2013-10-04)
 diff --git a/WHATS_NEW b/WHATS_NEW
-index d69e74e..ef2181d 100644
+index ef2181d..5b35890 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.104
-+===================================
-+
+@@ -1,5 +1,6 @@
+ Version 2.02.104
+ ===================================
++  Improve message when unable to change discards setting on active thin pool.
+ 
  Version 2.02.103 - 4th October 2013
  ===================================
-   Ensure vgid matches before removing vgname entry from lvmetad cache.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 9dfd9bf..6287fb4 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.83
-+==================================
-+
- Version 1.02.82 - 4th October 2013
- ==================================
-   Define symbolic names for subsystem udev flags in libdevmapper for easier use.
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 1d4f0a5..6ae9720 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -120,8 +120,7 @@ static int lvchange_pool_update(struct cmd_context *cmd,
+ 			if (((discards == THIN_DISCARDS_IGNORE) ||
+ 			     (first_seg(lv)->discards == THIN_DISCARDS_IGNORE)) &&
+ 			    pool_is_active(lv))
+-				log_error("Cannot change discards state for active "
+-					  "pool volume \"%s\".", lv->name);
++				log_error("Cannot change support for discards while pool volume \"%s\" is active.", lv->name);
+ 			else {
+ 				first_seg(lv)->discards = discards;
+ 				update++;
 
 
