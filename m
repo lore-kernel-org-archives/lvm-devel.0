@@ -1,108 +1,64 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  8 Oct 2013 11:44:01 +0000 (UTC)
-Subject: master - udev: add support for "NOSCAN" flag
-Message-ID: <20131008114401.913F661439@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue,  8 Oct 2013 14:20:31 +0000 (UTC)
+Subject: master - tests: reappering device
+Message-ID: <20131008142032.0305060E64@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2f5ddfbadea5dae6b2fc236d4f243bd88d955aa8
-Commit:        2f5ddfbadea5dae6b2fc236d4f243bd88d955aa8
-Parent:        ce7489ed228da22c2a355d0b403a1e5dc6d8c0e0
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 8 13:33:28 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Oct 8 13:43:14 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ee969e8514d7d7310990308a242b210e55a9113
+Commit:        2ee969e8514d7d7310990308a242b210e55a9113
+Parent:        2f5ddfbadea5dae6b2fc236d4f243bd88d955aa8
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Oct 8 16:19:14 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Oct 8 16:19:14 2013 +0200
 
-udev: add support for "NOSCAN" flag
+tests: reappering device
 
-Recognize DM_SUBSYSTEM_UDEV_FLAG0 which for LVM is the "LVM_NOSCAN"
-flag that causes the scanning to be skipped (mainly blkid) and
-also directs all the foreign rules to be skipped as well.
-
-Important thing here is that the "watch" udev rules is still set
-as well as the /dev/disk/by-id content created (which does not
-require any scanning to be done). Also, the flag is dropped on
-any subsequent event and scanning done...
+Simulation of problem for:
+https://bugzilla.redhat.com/show_bug.cgi?id=995440
 ---
- WHATS_NEW                     |    1 +
- udev/11-dm-lvm.rules.in       |   15 +++++++++++++++
- udev/13-dm-disk.rules.in      |    3 ++-
- udev/69-dm-lvm-metad.rules.in |    2 ++
- 4 files changed, 20 insertions(+), 1 deletions(-)
+ test/shell/lvmcache-exercise.sh |   17 +++++++++++++++--
+ 1 files changed, 15 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 098f348..7450f04 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.104
- ===================================
-+  Recognize new flag to skip udev scanning in udev rules and act appropriately.
-   Add support for flagging an LV to skip udev scanning during activation.
-   Improve message when unable to change discards setting on active thin pool.
-   Run full scan before vgrename operation to avoid any cache name collision.
-diff --git a/udev/11-dm-lvm.rules.in b/udev/11-dm-lvm.rules.in
-index f21d0aa..5032280 100644
---- a/udev/11-dm-lvm.rules.in
-+++ b/udev/11-dm-lvm.rules.in
-@@ -20,6 +20,21 @@ ENV{DM_UUID}!="LVM-?*", GOTO="lvm_end"
- # Use DM name and split it up into its VG/LV/layer constituents.
- IMPORT{program}="(DM_EXEC)/dmsetup splitname --nameprefixes --noheadings --rows $env{DM_NAME}"
- 
-+# DM_SUBSYSTEM_UDEV_FLAG0 is the 'NOSCAN' flag for LVM subsystem.
-+# This flag is used to temporarily disable selected rules to prevent any
-+# processing or scanning done on the LVM volume before LVM has any chance
-+# to zero any stale metadata found within the LV data area. Such stale
-+# metadata could cause false claim of the LV device, keeping it open etc.
-+#
-+# If the NOSCAN flag is present, backup selected existing flags used to
-+# disable rules, then set them firmly so those selected rules are surely skipped.
-+# Restore these flags once the NOSCAN flag is dropped (which is normally any
-+# uevent that follows for this LV, even an artificially generated one).
-+ENV{DM_SUBSYSTEM_UDEV_FLAG0}=="1", ENV{DM_NOSCAN}="1", ENV{DM_DISABLE_OTHER_RULES_FLAG_OLD}="$env{DM_UDEV_DISABLE_OTHER_RULES_FLAG}", ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}="1"
-+ENV{DM_SUBSYSTEM_UDEV_FLAG0}!="1", IMPORT{db}="DM_NOSCAN", IMPORT{db}="DM_DISABLE_OTHER_RULES_FLAG_OLD"
-+ENV{DM_SUBSYSTEM_UDEV_FLAG0}!="1", ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}="$env{DM_DISABLE_OTHER_RULES_FLAG_OLD}", \
-+				   ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG_OLD}="", ENV{DM_NOSCAN}=""
-+
- ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
- 
- OPTIONS+="event_timeout=180"
-diff --git a/udev/13-dm-disk.rules.in b/udev/13-dm-disk.rules.in
-index 1920260..4b64dd6 100644
---- a/udev/13-dm-disk.rules.in
-+++ b/udev/13-dm-disk.rules.in
-@@ -18,6 +18,7 @@ SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
- ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
- 
- ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
-+ENV{DM_NOSCAN}=="1", GOTO="dm_watch"
- 
- (BLKID_RULE)
- ENV{DM_UDEV_LOW_PRIORITY_FLAG}=="1", OPTIONS="link_priority=-100"
-@@ -32,7 +33,7 @@ ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk
- # (like creating a filesystem, changing filesystem label etc.).
+diff --git a/test/shell/lvmcache-exercise.sh b/test/shell/lvmcache-exercise.sh
+index b1e2b92..5ea6381 100644
+--- a/test/shell/lvmcache-exercise.sh
++++ b/test/shell/lvmcache-exercise.sh
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
  #
- # But let's use this until we have something better...
--
-+LABEL="dm_watch"
- OPTIONS+="watch"
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -14,10 +14,23 @@
+ aux prepare_pvs 5
  
- LABEL="dm_end"
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index ba43396..3303f4d 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -17,6 +17,8 @@
- SUBSYSTEM!="block", GOTO="lvm_end"
- (LVM_EXEC_RULE)
+ vgcreate $vg1 "$dev1"
+-vgcreate $vg2 "$dev3"
++vgcreate $vg2 "$dev3" "$dev4" "$dev5"
  
-+ENV{DM_NOSCAN}=="1", GOTO="lvm_end"
+ aux disable_dev "$dev1"
+ pvscan
+ vgcreate $vg1 "$dev2"
+ aux enable_dev "$dev1"
+ pvs
 +
- # If the PV label got lost, inform lvmetad immediately.
- # Detect the lost PV label by comparing previous ID_FS_TYPE value with current one.
- ENV{.ID_FS_TYPE_NEW}="$env{ID_FS_TYPE}"
++# reappearing device (rhbz 995440)
++lvcreate -aey -m2 --type mirror -l4 --alloc anywhere --corelog -n $lv1 $vg2
++
++aux disable_dev "$dev3"
++lvconvert --yes --repair $vg2/$lv1
++aux enable_dev "$dev3"
++
++# here it should fix any reappeared devices
++lvconvert --yes --repair $vg2/$lv1
++
++lvs -a $vg2 -o+devices 2>&1 | tee out
++not grep reappeared out
 
 
