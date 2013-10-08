@@ -1,50 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  8 Oct 2013 11:42:37 +0000 (UTC)
-Subject: master - tests: vgrename duplicate rename
-Message-ID: <20131008114237.9DCDE60F40@fedorahosted.org>
+Date: Tue,  8 Oct 2013 11:42:39 +0000 (UTC)
+Subject: master - tests: lvconvert more thin extorg conversions
+Message-ID: <20131008114239.AC93060F40@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7edf61186b6afdcc7ab8b44072818995cef3702b
-Commit:        7edf61186b6afdcc7ab8b44072818995cef3702b
-Parent:        92bafade6051f95d49b35a53c77d0fc25a1fb7ec
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=273373bf53b34817481ef2c395c84a7cdf4f1998
+Commit:        273373bf53b34817481ef2c395c84a7cdf4f1998
+Parent:        7edf61186b6afdcc7ab8b44072818995cef3702b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 8 11:16:00 2013 +0200
+AuthorDate:    Tue Oct 8 13:30:21 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 8 13:42:09 2013 +0200
+CommitterDate: Tue Oct 8 13:42:10 2013 +0200
 
-tests: vgrename duplicate rename
+tests: lvconvert more thin extorg conversions
 
-Test for rename of duplicated vgname (with different UUID)
+Add test for conversion of pool and thin lv at the same time.
 ---
- test/shell/vgrename-usage.sh |   15 +++++++++++++++
- 1 files changed, 15 insertions(+), 0 deletions(-)
+ test/shell/lvconvert-thin-external.sh |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/vgrename-usage.sh b/test/shell/vgrename-usage.sh
-index 2b8ac5a..59576ac 100644
---- a/test/shell/vgrename-usage.sh
-+++ b/test/shell/vgrename-usage.sh
-@@ -38,3 +38,18 @@ vgcreate $vg1 "$dev1"
- vgcreate $vg2 "$dev2"
- not vgrename $vg1 $vg2
- vgremove $vg1 $vg2
+diff --git a/test/shell/lvconvert-thin-external.sh b/test/shell/lvconvert-thin-external.sh
+index a700b37..d9d4d19 100644
+--- a/test/shell/lvconvert-thin-external.sh
++++ b/test/shell/lvconvert-thin-external.sh
+@@ -144,5 +144,13 @@ lvs -a -o+origin_size,seg_size,segtype $vg
+ lvremove -f $vg/extorg2
+ # Only pool is left
+ check vg_field $vg lv_count 1
++lvremove -ff $vg
 +
-+# vgrename duplicate name
-+vgcreate $vg1 "$dev1"
-+aux disable_dev "$dev1"
-+vgcreate $vg1 "$dev2"
-+UUID=$(vgs --noheading -o vg_uuid $vg1)
-+aux enable_dev "$dev1"
-+
-+not vgrename $vg1 $vg2
-+vgrename $UUID $vg2
-+not vgrename $UUID $vg1
-+
-+vgs
-+
-+vgremove $vg1 $vg2
++# Test conversion to the pool and thin external at the same time (rhbz #1003461)
++lvcreate -l50 -n pool $vg
++lvcreate -l100 -n thin $vg
++lvconvert --thin --thinpool $vg/pool $vg/thin --originname thin-origin
++check lv_field $vg/thin segtype thin
++check lv_field $vg/thin-origin segtype linear
+ 
+ vgremove -ff $vg
 
 
