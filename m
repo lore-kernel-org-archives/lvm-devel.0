@@ -1,40 +1,59 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  9 Oct 2013 22:36:35 +0000 (UTC)
-Subject: master - lvmetad: Fix a possible deadlock in pv_clear_all.
-Message-ID: <20131009223635.9DC6C610C2@fedorahosted.org>
+Date: Wed,  9 Oct 2013 22:36:37 +0000 (UTC)
+Subject: master - libdaemon: Fix a subtle race in worker thread creation.
+Message-ID: <20131009223637.AD144610C2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb613d4c101d7e9f51d70d55c1c71a471e6588ab
-Commit:        cb613d4c101d7e9f51d70d55c1c71a471e6588ab
-Parent:        b5aad86710be57833879ac0e8609021828949682
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7d299ecbb3a56f1633f17f746f864c02cd344c85
+Commit:        7d299ecbb3a56f1633f17f746f864c02cd344c85
+Parent:        cb613d4c101d7e9f51d70d55c1c71a471e6588ab
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Oct 9 22:19:51 2013 +0200
+AuthorDate:    Wed Oct 9 22:20:36 2013 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Oct 10 00:34:35 2013 +0200
 
-lvmetad: Fix a possible deadlock in pv_clear_all.
+libdaemon: Fix a subtle race in worker thread creation.
 
 ---
- daemons/lvmetad/lvmetad-core.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdaemon/server/daemon-server.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index ed44def..5a841e0 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -829,8 +829,8 @@ static response pv_clear_all(lvmetad_state *s, request r)
- 	DEBUGLOG(s, "pv_clear_all");
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index df2c852..b114b9f 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -381,6 +381,7 @@ static void *client_thread(void *baton)
+ 	request req;
+ 	response res;
  
- 	lock_pvid_to_pvmeta(s);
--	lock_vgid_to_metadata(s);
- 	lock_pvid_to_vgid(s);
-+	lock_vgid_to_metadata(s);
++	b->client.thread_id = pthread_self();
+ 	buffer_init(&req.buffer);
  
- 	destroy_metadata_hashes(s);
- 	create_metadata_hashes(s);
+ 	while (1) {
+@@ -431,6 +432,7 @@ static int handle_connect(daemon_state s)
+ 	struct sockaddr_un sockaddr;
+ 	client_handle client = { .thread_id = 0 };
+ 	socklen_t sl = sizeof(sockaddr);
++	pthread_t tid;
+ 
+ 	client.socket_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
+ 	if (client.socket_fd < 0)
+@@ -446,10 +448,10 @@ static int handle_connect(daemon_state s)
+ 	baton->s = s;
+ 	baton->client = client;
+ 
+-	if (pthread_create(&baton->client.thread_id, NULL, client_thread, baton))
++	if (pthread_create(&tid, NULL, client_thread, baton))
+ 		return 0;
+ 
+-	pthread_detach(baton->client.thread_id);
++	pthread_detach(tid);
+ 
+ 	return 1;
+ }
 
 
