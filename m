@@ -1,53 +1,41 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 10 Oct 2013 07:09:41 +0000 (UTC)
-Subject: master - cleanup: WHATS_NEW + compiler warning about discarding const
-Message-ID: <20131010070941.6058560755@fedorahosted.org>
+Date: Thu, 10 Oct 2013 11:37:45 +0000 (UTC)
+Subject: master - metadata: properly register LV_NOSCAN flag
+Message-ID: <20131010113745.ABA0D60D19@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=304159c99ab59c61543cac747e47a1ff59d2dbb6
-Commit:        304159c99ab59c61543cac747e47a1ff59d2dbb6
-Parent:        7d299ecbb3a56f1633f17f746f864c02cd344c85
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=029b8fbe767e63f1d0a4f6c81a0095af46e9a000
+Commit:        029b8fbe767e63f1d0a4f6c81a0095af46e9a000
+Parent:        304159c99ab59c61543cac747e47a1ff59d2dbb6
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Oct 10 09:07:42 2013 +0200
+AuthorDate:    Thu Oct 10 13:24:32 2013 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Oct 10 09:09:16 2013 +0200
+CommitterDate: Thu Oct 10 13:24:32 2013 +0200
 
-cleanup: WHATS_NEW + compiler warning about discarding const
+metadata: properly register LV_NOSCAN flag
 
+Addendum to commit ce7489e which introduced a new *internal* LV_NOSCAN
+flag and so it needs to be marked that way properly otherwise it
+ends up unrecognized and improperly handled during metadata export.
 ---
- WHATS_NEW                      |    3 +++
- daemons/lvmetad/lvmetad-core.c |    2 +-
- 2 files changed, 4 insertions(+), 1 deletions(-)
+ lib/format_text/flags.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a87a906..d0ed2ce 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,8 @@
- Version 2.02.104
- ===================================
-+  Fix possible race during daemon worker thread creation (lvmetad).
-+  Fix possible deadlock while clearing lvmetad cache for full rescan.
-+  Fix possible race while creating/destroying memory pools.
-   Recognise NVM Express devices in filter.
-   Fix failing metadata repair when lvmetad is used.
-   Fix incorrect memory handling when reading messages from lvmetad.
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 5a841e0..285c8cc 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -796,7 +796,7 @@ static response pv_gone(lvmetad_state *s, request r)
- 
- 	pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, pvid);
- 	pvid_old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device));
--	const char *vgid = dm_hash_lookup(s->pvid_to_vgid, pvid);
-+	char *vgid = dm_hash_lookup(s->pvid_to_vgid, pvid);
- 
- 	if (vgid && !(vgid = dm_strdup(vgid))) {
- 		unlock_pvid_to_pvmeta(s);
+diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
+index 5077576..6801d6c 100644
+--- a/lib/format_text/flags.c
++++ b/lib/format_text/flags.c
+@@ -61,6 +61,7 @@ static const struct flag _lv_flags[] = {
+ 	{LV_REBUILD, "REBUILD", STATUS_FLAG},
+ 	{LV_WRITEMOSTLY, "WRITEMOSTLY", STATUS_FLAG},
+ 	{LV_ACTIVATION_SKIP, "ACTIVATION_SKIP", COMPATIBLE_FLAG},
++	{LV_NOSCAN, NULL, 0},
+ 	{POOL_METADATA_SPARE, NULL, 0},
+ 	{RAID, NULL, 0},
+ 	{RAID_META, NULL, 0},
 
 
