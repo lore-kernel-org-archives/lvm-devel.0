@@ -1,61 +1,54 @@
 From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Mon, 14 Oct 2013 15:50:39 +0000 (UTC)
-Subject: master - RAID: Report RAID images split with tracking as out-of-sync ("I").
-Message-ID: <20131014155039.A64FF60D8C@fedorahosted.org>
+Date: Mon, 14 Oct 2013 20:16:20 +0000 (UTC)
+Subject: master - RAID: Better error message when attempting scrubbing op on thinpool LV
+Message-ID: <20131014201620.6CEA160E81@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f58b26b6338b2939e6a88174ac2dc185b345118b
-Commit:        f58b26b6338b2939e6a88174ac2dc185b345118b
-Parent:        0f55d7ccccb2c274f31760d1c97286ee03e24e4c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d97583cfd395e5e31888558361ae9467cea60260
+Commit:        d97583cfd395e5e31888558361ae9467cea60260
+Parent:        f58b26b6338b2939e6a88174ac2dc185b345118b
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Mon Oct 14 10:48:44 2013 -0500
+AuthorDate:    Mon Oct 14 15:14:16 2013 -0500
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Mon Oct 14 10:48:44 2013 -0500
+CommitterDate: Mon Oct 14 15:14:16 2013 -0500
 
-RAID: Report RAID images split with tracking as out-of-sync ("I").
+RAID: Better error message when attempting scrubbing op on thinpool LV
 
-Split image should have an out-of-sync attr ('I') - always.  Even if
-the RAID LV has not been written to since the LV was split off, it is
-still not part of the group that makes up the RAID and is therefore
-"out-of-sync".
+Component LVs of a thinpool can be RAID LVs.  Users who attempt a
+scrubbing operation directly on a thinpool will be prompted to
+specify the sub-LV they wish the operation to be performed on.  If
+neither of the sub-LVs are RAID, then a message telling them that
+the operation can only be performed on a RAID LV will be given.
 ---
- WHATS_NEW         |    1 +
- lib/metadata/lv.c |    8 +++++++-
- 2 files changed, 8 insertions(+), 1 deletions(-)
+ lib/activate/activate.c |   12 ++++++++++++
+ 1 files changed, 12 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 887a256..04be5f1 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.104
- ===================================
-+  Report RAID images split with tracking as out-of-sync ("I").
-   Improve parsing of snapshot lv segment.
-   Add workaround for deactivation problem of opened virtual snapshot.
-   Disable unsupported merge for virtual snapshot.
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index e3fda18..e59bd8e 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -565,7 +565,13 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	else if (lv->status & MIRROR_IMAGE)
- 		repstr[0] = (_lv_mimage_in_sync(lv)) ? 'i' : 'I';
- 	else if (lv->status & RAID_IMAGE)
--		repstr[0] = (_lv_raid_image_in_sync(lv)) ? 'i' : 'I';
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 7621f44..6948060 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -888,6 +888,18 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
+ 	struct dm_status_raid *status;
+ 
+ 	if (!seg_is_raid(first_seg(lv))) {
 +		/*
-+		 * Visible RAID_IMAGES are sub-LVs that have been exposed for
-+		 * top-level use by being split from the RAID array with
-+		 * '--splitmirrors 1 --trackchanges'.  They always report 'I'.
++		 * Make it easier for user to know what to do when
++		 * they are using thinpool.
 +		 */
-+		repstr[0] = (!lv_is_visible(lv) && _lv_raid_image_in_sync(lv)) ?
-+			'i' : 'I';
- 	else if (lv->status & MIRROR_LOG)
- 		repstr[0] = 'l';
- 	else if (lv_is_cow(lv))
++		if (lv_is_thin_pool(lv) &&
++		    (lv_is_raid(seg_lv(first_seg(lv), 0)) ||
++		     lv_is_raid(first_seg(lv)->metadata_lv))) {
++			log_error("Thinpool data or metadata volume"
++				  " must be specified. (e.g. \"%s/%s_tdata\")",
++				  lv->vg->name, lv->name);
++			return 0;
++		}
+ 		log_error("%s/%s must be a RAID logical volume to"
+ 			  " perform this action.", lv->vg->name, lv->name);
+ 		return 0;
 
 
