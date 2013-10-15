@@ -1,54 +1,143 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Mon, 14 Oct 2013 20:16:20 +0000 (UTC)
-Subject: master - RAID: Better error message when attempting scrubbing op on thinpool LV
-Message-ID: <20131014201620.6CEA160E81@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 15 Oct 2013 11:19:57 +0000 (UTC)
+Subject: master - activation: check for open count with a timeout before removal/deactivation of an LV
+Message-ID: <20131015111957.AE7406002B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d97583cfd395e5e31888558361ae9467cea60260
-Commit:        d97583cfd395e5e31888558361ae9467cea60260
-Parent:        f58b26b6338b2939e6a88174ac2dc185b345118b
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Mon Oct 14 15:14:16 2013 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Mon Oct 14 15:14:16 2013 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48df36b8c531a43da8602b50759c9e841e1d9f44
+Commit:        48df36b8c531a43da8602b50759c9e841e1d9f44
+Parent:        d97583cfd395e5e31888558361ae9467cea60260
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Oct 15 12:44:42 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Oct 15 12:44:42 2013 +0200
 
-RAID: Better error message when attempting scrubbing op on thinpool LV
+activation: check for open count with a timeout before removal/deactivation of an LV
 
-Component LVs of a thinpool can be RAID LVs.  Users who attempt a
-scrubbing operation directly on a thinpool will be prompted to
-specify the sub-LV they wish the operation to be performed on.  If
-neither of the sub-LVs are RAID, then a message telling them that
-the operation can only be performed on a RAID LV will be given.
+This patch reinstates the lv_info call to check for open count of
+the LV we're removing/deactivating - this was changed with commit 125712b
+some time ago and we relied on the ioctl retry logic deeper in the libdm
+while calling the exact 'remove' ioctl.
+
+However, there are still some situations in which it's still required to
+check for open count before we do any 'remove' actions - this mainly
+applies to LVs which consist of several sub LVs, like it is for
+virtual snapshot devices.
+
+The commit 1146691 fixed the issue with ordering of actions during
+virtual snapshot removal while the snapshot is still open. But
+the check for the open status of the snapshot is still prone to
+marking the snapshot as in use with an immediate exit even though
+this could be a temporary asynchronous open only, most notably
+because of udev and its WATCH udev rule with accompanying scans
+for the event which is asynchronous. The situation where this crops
+up most often is when we're closing the LV that was open for read-write
+and then calling lvremove immediately.
+
+This patch reinstates the original lv_info call for the open status
+of the LV in the lv_check_not_in_use fn that gets called before
+we do any LV removal/deactivation. In addition to original logic,
+this patch adds its own retry loop with a delay (25x0.2 seconds)
+besides the existing ioctl retry loop.
 ---
- lib/activate/activate.c |   12 ++++++++++++
- 1 files changed, 12 insertions(+), 0 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/activate/activate.c |   51 ++++++++++++++++++++++++++++++----------------
+ 2 files changed, 34 insertions(+), 18 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 04be5f1..f5f0256 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.104
+ ===================================
++  Check for open count with a timeout before removal/deactivation of an LV.
+   Report RAID images split with tracking as out-of-sync ("I").
+   Improve parsing of snapshot lv segment.
+   Add workaround for deactivation problem of opened virtual snapshot.
 diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 7621f44..6948060 100644
+index 6948060..131a093 100644
 --- a/lib/activate/activate.c
 +++ b/lib/activate/activate.c
-@@ -888,6 +888,18 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
- 	struct dm_status_raid *status;
+@@ -251,8 +251,8 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
+ {
+ 	return 0;
+ }
+-int lv_check_not_in_use(struct cmd_context *cmd __attribute__((unused)),
+-			struct logical_volume *lv, struct lvinfo *info)
++int lv_check_not_in_use(struct cmd_context *cmd, struct logical_volume *lv,
++			struct lvinfo *info)
+ {
+         return 0;
+ }
+@@ -676,33 +676,48 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
+ 	return r;
+ }
  
- 	if (!seg_is_raid(first_seg(lv))) {
-+		/*
-+		 * Make it easier for user to know what to do when
-+		 * they are using thinpool.
-+		 */
-+		if (lv_is_thin_pool(lv) &&
-+		    (lv_is_raid(seg_lv(first_seg(lv), 0)) ||
-+		     lv_is_raid(first_seg(lv)->metadata_lv))) {
-+			log_error("Thinpool data or metadata volume"
-+				  " must be specified. (e.g. \"%s/%s_tdata\")",
+-int lv_check_not_in_use(struct cmd_context *cmd __attribute__((unused)),
+-			struct logical_volume *lv, struct lvinfo *info)
++#define OPEN_COUNT_CHECK_RETRIES 25
++#define OPEN_COUNT_CHECK_USLEEP_DELAY 200000
++
++int lv_check_not_in_use(struct cmd_context *cmd, struct logical_volume *lv,
++			struct lvinfo *info)
+ {
++	unsigned int open_count_check_retries;
++
+ 	if (!info->exists)
+ 		return 1;
+ 
+ 	/* If sysfs is not used, use open_count information only. */
+-	if (!*dm_sysfs_dir()) {
+-		if (info->open_count) {
+-			log_error("Logical volume %s/%s in use.",
++	if (dm_sysfs_dir()) {
++		if (dm_device_has_holders(info->major, info->minor)) {
++			log_error("Logical volume %s/%s is used by another device.",
+ 				  lv->vg->name, lv->name);
+ 			return 0;
+ 		}
+ 
+-		return 1;
+-	}
+-
+-	if (dm_device_has_holders(info->major, info->minor)) {
+-		log_error("Logical volume %s/%s is used by another device.",
+-			  lv->vg->name, lv->name);
+-		return 0;
++		if (dm_device_has_mounted_fs(info->major, info->minor)) {
++			log_error("Logical volume %s/%s contains a filesystem in use.",
 +				  lv->vg->name, lv->name);
 +			return 0;
 +		}
- 		log_error("%s/%s must be a RAID logical volume to"
- 			  " perform this action.", lv->vg->name, lv->name);
- 		return 0;
+ 	}
+ 
+-	if (dm_device_has_mounted_fs(info->major, info->minor)) {
+-		log_error("Logical volume %s/%s contains a filesystem in use.",
+-			  lv->vg->name, lv->name);
+-		return 0;
++	open_count_check_retries = retry_deactivation() ? OPEN_COUNT_CHECK_RETRIES : 1;
++	while (open_count_check_retries--) {
++		if (info->open_count > 0) {
++			if (open_count_check_retries) {
++				usleep(OPEN_COUNT_CHECK_USLEEP_DELAY);
++				log_debug_activation("Retrying open_count check for %s/%s.",
++						     lv->vg->name, lv->name);
++				if (!lv_info(cmd, lv, 0, info, 1, 0))
++					return -1;
++				continue;
++			}
++			log_error("Logical volume %s/%s in use.",
++				  lv->vg->name, lv->name);
++			return 0;
++		} else
++			break;
+ 	}
+ 
+ 	return 1;
 
 
