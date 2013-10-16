@@ -1,39 +1,39 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 16 Oct 2013 10:48:14 +0000 (UTC)
-Subject: master - thin: missed check for thin_pool in last update
-Message-ID: <20131016104814.3EE8F610A1@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 16 Oct 2013 13:08:02 +0000 (UTC)
+Subject: master - coverity: assigned variable not used and reassigned later
+Message-ID: <20131016130802.E903960DB6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd3a2f13f1680228fe9ddd5fa1b1c5900cf8dc96
-Commit:        dd3a2f13f1680228fe9ddd5fa1b1c5900cf8dc96
-Parent:        73971e1e7b1164f4f7c677afc17aabbd09e11252
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 16 12:47:30 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Oct 16 12:47:30 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ee878bc52c18dca928682d5f282e8e4ed54bcc2e
+Commit:        ee878bc52c18dca928682d5f282e8e4ed54bcc2e
+Parent:        dd3a2f13f1680228fe9ddd5fa1b1c5900cf8dc96
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Oct 16 15:06:43 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Oct 16 15:06:43 2013 +0200
 
-thin: missed check for thin_pool in last update
+coverity: assigned variable not used and reassigned later
 
 ---
- tools/lvconvert.c |    2 +-
+ lib/metadata/lv_manip.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index eaac565..a6c1187 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2327,7 +2327,7 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 		return 0;
- 	}
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 8f09af7..383bab1 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -89,7 +89,7 @@ static int _lv_is_on_pv(struct cmd_context *cmd,
+ 	struct physical_volume *pv2;
+ 	struct lv_segment *seg;
  
--	if (pool_is_active(pool_lv)) {
-+	if (lv_is_thin_pool(pool_lv) && pool_is_active(pool_lv)) {
- 		/* If any thin volume is also active - abort here */
- 		log_error("Cannot convert pool %s/%s with active thin volumes.",
- 			  pool_lv->vg->name, pool_lv->name);
+-	if (!lv || !(seg = first_seg(lv)))
++	if (!lv || !(first_seg(lv)))
+ 		return_0;
+ 
+ 	/*
 
 
