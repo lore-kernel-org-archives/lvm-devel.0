@@ -1,40 +1,24 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Fri, 18 Oct 2013 14:34:21 +0000 (UTC)
-Subject: master - TEST: Test was trying to kill 2 devices in RAID5 instead of RAID6
-Message-ID: <20131018143421.699B960DD5@fedorahosted.org>
+From: Nir Soffer <nsoffer@redhat.com>
+Date: Thu, 17 Oct 2013 14:21:54 -0400 (EDT)
+Subject: [PATCH] Fix return value of persistent_filters_dump if rename failed
+In-Reply-To: <654944611.5014340.1382034030200.JavaMail.root@redhat.com>
+Message-ID: <1197179055.5014720.1382034114736.JavaMail.root@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7763607f3617188906dae9e9ae218e9099f5e6e9
-Commit:        7763607f3617188906dae9e9ae218e9099f5e6e9
-Parent:        546db1c4be55d47d41082a345e15a35055223154
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Fri Oct 18 09:33:37 2013 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Fri Oct 18 09:33:37 2013 -0500
+Hi all,
 
-TEST: Test was trying to kill 2 devices in RAID5 instead of RAID6
+Please review attached patch.
 
-Segment type being used for test should have been 'raid6'.
----
- test/shell/lvconvert-repair-raid.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/test/shell/lvconvert-repair-raid.sh b/test/shell/lvconvert-repair-raid.sh
-index 84e247d..71c84c1 100644
---- a/test/shell/lvconvert-repair-raid.sh
-+++ b/test/shell/lvconvert-repair-raid.sh
-@@ -29,7 +29,7 @@ vgextend $vg "$dev3"
- lvremove -ff $vg
- 
- # RAID6 double replace
--lvcreate --type raid5 -i 3 -l 2 -n $lv1 $vg \
-+lvcreate --type raid6 -i 3 -l 2 -n $lv1 $vg \
-     "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
- aux wait_for_sync $vg $lv1
- aux disable_dev "$dev4" "$dev5"
-
-
+Regards,
+Nir
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 0001-Fix-return-value-of-persistent_filters_dump-if-renam.patch
+Type: text/x-patch
+Size: 852 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20131017/49d25bb4/attachment.bin>
