@@ -1,40 +1,44 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 16 Oct 2013 13:10:11 +0000 (UTC)
-Subject: master - tests: correct LVM_TEST_THIN_CHECK_CMD
-Message-ID: <20131016131011.C525760E48@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 17 Oct 2013 08:17:22 +0000 (UTC)
+Subject: master - coverity: sscanf should use "%u" instead of "%i"
+Message-ID: <20131017081722.DB5FF6174A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9b13cb86878677e2b35e29fef054d9de7e24f320
-Commit:        9b13cb86878677e2b35e29fef054d9de7e24f320
-Parent:        ee878bc52c18dca928682d5f282e8e4ed54bcc2e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 16 15:05:12 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Oct 16 15:10:03 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3924a041ba3798c228749de1fc5491fd5411103b
+Commit:        3924a041ba3798c228749de1fc5491fd5411103b
+Parent:        9b13cb86878677e2b35e29fef054d9de7e24f320
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Oct 17 10:11:53 2013 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Oct 17 10:17:16 2013 +0200
 
-tests: correct LVM_TEST_THIN_CHECK_CMD
+coverity: sscanf should use "%u" instead of "%i"
 
-missed to use proper shell variable
+The "age" variable is unsigned:
+
+  unsigned age = 0;
+  ...
+  if (argc == 2 && (sscanf(argv[1], "%i", &age) != 1))
 ---
- test/shell/lvconvert-repair-thin.sh |    2 +-
+ tools/dmsetup.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-thin.sh b/test/shell/lvconvert-repair-thin.sh
-index f7687d4..225dcc8 100644
---- a/test/shell/lvconvert-repair-thin.sh
-+++ b/test/shell/lvconvert-repair-thin.sh
-@@ -76,7 +76,7 @@ should not $LVM_TEST_THIN_DUMP_CMD $DM_DEV_DIR/$vg/repair | tee dump
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 517e8aa..a0ee23e 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -1147,7 +1147,7 @@ static int _udevcomplete_all(CMD_ARGS)
+ 	unsigned age = 0;
+ 	time_t t;
  
- should $LVM_TEST_THIN_REPAIR_CMD -i $DM_DEV_DIR/$vg/repair -o $DM_DEV_DIR/$vg/fixed
- 
--should $THIN_CHECK $DM_DEV_DIR/$vg/fixed
-+should $LVM_TEST_THIN_CHECK_CMD $DM_DEV_DIR/$vg/fixed
- 
- # Swap repaired metadata back
- lvconvert -y -f --poolmetadata $vg/fixed --thinpool $vg/pool
+-	if (argc == 2 && (sscanf(argv[1], "%i", &age) != 1)) {
++	if (argc == 2 && (sscanf(argv[1], "%u", &age) != 1)) {
+ 		log_error("Failed to read age_in_minutes parameter.");
+ 		return 0;
+ 	}
 
 
