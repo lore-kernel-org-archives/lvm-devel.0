@@ -1,42 +1,37 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 17 Oct 2013 20:58:11 +0000 (UTC)
-Subject: master - tests: drop settle for old systems
-Message-ID: <20131017205811.A3C5960FF0@fedorahosted.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Thu, 17 Oct 2013 20:31:55 -0400 (EDT)
+Subject: [PATCH] libdm: Fix memory corruption if dm_asprintf fails.
+Message-ID: <alpine.LRH.2.02.1310172030470.5268@file01.intranet.prod.int.rdu2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f406ce252c40a29c06dba4bebe92b570207df93
-Commit:        9f406ce252c40a29c06dba4bebe92b570207df93
-Parent:        7f4452a41e55a60678cadda99ae1a383a367a9e5
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 17 22:54:12 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Oct 17 22:54:12 2013 +0200
+I found this bug when reading through my lvm changes.
 
-tests: drop settle for old systems
+We must set the variable dmt->geometry to NULL after freeing it.
 
-Reverts previously added udevsettle call.
+dm_asprintf may fail, on failure it may not set dmt->geometry, thus
+dmt->geometry would be pointing to a free string.
 
-Seems to be unrelated, while udev on old system may take over 10
-minutes, to finish it's very slow and CPU intensive work, it doesn't
-interact directly with created device, only access /dev/mapper/control
-node via dmsetup, so the device is ocasionaly blocked by something else.
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+
 ---
- test/lib/utils.sh |    2 --
- 1 files changed, 0 insertions(+), 2 deletions(-)
+ libdm/ioctl/libdm-iface.c |    1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index c3bd533..0f58b25 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -214,5 +214,3 @@ case "$PATH" in
- esac
- 
- test -z "$PREFIX" || prepare_test_vars
--
--test ! -e /sbin/udevsettle || if pidof udevd >/dev/null; then /sbin/udevsettle ; fi
+Index: lvm2-copy/libdm/ioctl/libdm-iface.c
+===================================================================
+--- lvm2-copy.orig/libdm/ioctl/libdm-iface.c	2013-10-18 02:26:07.000000000 +0200
++++ lvm2-copy/libdm/ioctl/libdm-iface.c	2013-10-18 02:26:16.000000000 +0200
+@@ -817,6 +817,7 @@ int dm_task_set_geometry(struct dm_task
+ 			 const char *sectors, const char *start)
+ {
+ 	dm_free(dmt->geometry);
++	dmt->geometry = NULL;
+ 	if (dm_asprintf(&(dmt->geometry), "%s %s %s %s",
+ 			cylinders, heads, sectors, start) < 0) {
+ 		log_error("dm_task_set_geometry: sprintf failed");
 
 
