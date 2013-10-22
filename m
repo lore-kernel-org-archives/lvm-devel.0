@@ -1,103 +1,50 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 22 Oct 2013 12:22:57 +0000 (UTC)
-Subject: master - udev+systemd: refine lvm2-pvscan@.service to better track device existence
-Message-ID: <20131022122257.2967A6108F@fedorahosted.org>
+From: Brassow Jonathan <jbrassow@redhat.com>
+Date: Tue, 22 Oct 2013 08:00:55 -0500
+Subject: [PATCH]: Mirror: Fix hangs and lock-ups caused by attempting label reads of mirrors
+In-Reply-To: <52664873.1060005@redhat.com>
+References: <1382394852.4860.4.camel@f16> <52664873.1060005@redhat.com>
+Message-ID: <01414C5C-7B2B-40EE-9A11-072F00268B85@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3fee6610286f83737d193c9047e24e8d7c85d1ce
-Commit:        3fee6610286f83737d193c9047e24e8d7c85d1ce
-Parent:        0a48137d39c51163ee29608c8c7ccbeecb4a7815
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 22 14:03:53 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Oct 22 14:22:40 2013 +0200
 
-udev+systemd: refine lvm2-pvscan at .service to better track device existence
+On Oct 22, 2013, at 4:42 AM, Zdenek Kabelac wrote:
 
-When using ENV{SYSTEMD_WANTS}=lvm2-pvscan at ... to instantiate a service
-for lvmetad scan when the new PV appears in the system, the service
-is started and executed. However, to track device removal, we need
-to bind it (the "BindsTo" systemd directive) to a certain .device
-systemd unit.
+> Dne 22.10.2013 00:34, Jonathan Brassow napsal(a):
+>> agk,
+>> 
+>> The patch below is designed to address bug 1009700:
+>> https://bugzilla.redhat.com/show_bug.cgi?id=1009700
+>> It is the simplest way with the most flexibility for users that I could
+>> think of to handle the problem outside of doing the asynchronous label
+>> reads.
+>> 
+> 
+> 
+> I believe the patch needs to go in different direction.
+> 
+> See the bug  https://bugzilla.redhat.com/show_bug.cgi?id=905028
+> 
+> Lvm2 should be smarter in it's scanning code and
+> must avoid reading device it know it may block.
+> 
+> There are very similar problems i.e. with thin pools, so
+> it's not practical to put in various hacks for individual
+> targets.
+> 
+> The fix must be in the filter to skip known dm devices.
 
-In default systemd setup, the device is tracked by it's name and
-sysfs path (there's normally a sysfs path .device systemd unit for
-a device and then the device name .device unit as an alias for it).
-Neither of these two is useful for lvmetad update as we need to bind
-it to device's <major>:<minor> pair.
+Yes, I've thought about that already.  One idea for a solution I had was to avoid reading DM devices that have UUID that indicate it is part of the VG being operated on.  That was a non-starter because at the point of the problem, we do not yet know the VGs UUID and therefore cannot use it as a filter.
 
-The /dev/block/<major>:<minor> is the essential symlink under /dev
-that exists for each block device (created by default udev rules
-provided by udev directly). So let's use this as an alias for
-the device's .device unit as well by means of "ENV{SYSTEMD_ALIAS}"
-declaration within udev rules which systemd understands (this will
-create a new alias "dev-block-<major>:<minor>.device".
+As far as avoiding devices that are blocked, we already do that for mirrors - which is the problem I am trying to solve.  It is called lib/activate/dev_manager.c:'ignore_blocked_mirror_devices'.  In the header of the patch provided, I describe why this is not sufficient to solve the problem entirely.  To clean-up the code, we could put this function (and the whole of 'device_is_usable') into a filter of its own.  Again though, this doesn't solve the problem.
 
-Then we can easily bind the "dev-block-<major>:<minor>" device
-systemd unit with instantiated lvm2-pvscan@<major>:<minor>.service.
-So once the device is removed from the systemd, the
-lvm-pvscan@<major>:<minor>.service executes it's ExecStop action
-(which in turn notifies lvmetad about the device being gone).
+I like what you are saying.  I've been down that road.  This is why I've presented the solution as I have.
 
-This completes the udev-systemd-lvmetad interaction then.
----
- WHATS_NEW                                       |    1 +
- scripts/lvm2_pvscan_systemd_red_hat at .service.in |   11 +++++++----
- udev/Makefile.in                                |    4 +++-
- 3 files changed, 11 insertions(+), 5 deletions(-)
+ brassow
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index df81923..2d7792b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.104
- ===================================
-+  Add dev-block-<major>:<minor>.device systemd alias for complete PV tracking.
-   Use major:minor as short form of --major and --minor arg for pvscan --cache.
-   Remove 2>/dev/null from three lvm commands executed by vgimportclone.
-   Add configure --enable-udev-systemd-background-jobs.
-diff --git a/scripts/lvm2_pvscan_systemd_red_hat at .service.in b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-index 9d91b5e..07ea5ca 100644
---- a/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-+++ b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-@@ -1,11 +1,14 @@
- [Unit]
--Description=LVM2 PV scan on %I
-+Description=LVM2 PV scan on device %i
- Documentation=man:pvscan(8)
- DefaultDependencies=no
--After=lvm2-lvmetad.socket %i.device
-+BindsTo=dev-block-%i.device
-+After=lvm2-lvmetad.socket
- Before=shutdown.target
- Conflicts=shutdown.target
- 
- [Service]
--Type=simple
--ExecStart=@sbindir@/pvscan --cache --activate ay %I
-+Type=oneshot
-+RemainAfterExit=yes
-+ExecStart=@sbindir@/pvscan --cache --activate ay /dev/block/%i
-+ExecStop=/usr/sbin/pvscan --cache %i
-diff --git a/udev/Makefile.in b/udev/Makefile.in
-index fdf43df..8f0dc8a 100644
---- a/udev/Makefile.in
-+++ b/udev/Makefile.in
-@@ -47,7 +47,9 @@ BLKID_RULE=IMPORT{program}=\"${SBIN}\/blkid -o udev -p \$$tempnode\"
- endif
- 
- ifeq ("@UDEV_SYSTEMD_BACKGROUND_JOBS@", "yes")
--PVSCAN_RULE=ENV{SYSTEMD_WANTS}=\"lvm2-pvscan@\$$devnode.service\"
-+PVSCAN_RULE="ENV{SYSTEMD_ALIAS}=\"/dev/block/$$major:$$minor\" \
-+	     ENV{ID_MODEL}=\"LVM PV $$env{ID_FS_UUID_ENC} on /dev/$$name\" \
-+	     ENV{SYSTEMD_WANTS}=\"lvm2-pvscan@\$$devnode.service\""
- else
- PVSCAN_RULE=RUN\+\=\"$(LVM_EXEC)/lvm pvscan --background --cache --activate ay --major \$$major --minor \$$minor\", ENV{LVM_SCANNED}=\"1\"
- endif
+
 
 
