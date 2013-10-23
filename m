@@ -1,364 +1,240 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 23 Oct 2013 12:10:12 +0000 (UTC)
-Subject: master - activation: flag temporary LVs internally
-Message-ID: <20131023121012.726A260F7F@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 23 Oct 2013 14:24:17 +0000 (UTC)
+Subject: master - Mirror: Fix hangs and lock-ups caused by attempting label reads of mirrors
+Message-ID: <20131023142417.70D2560E27@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=039bdad732cd6c0d96b5b8c2c6c7beb528cf338a
-Commit:        039bdad732cd6c0d96b5b8c2c6c7beb528cf338a
-Parent:        1dd6626696b100c8cf176921917418bb8d7f8055
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Oct 23 14:06:39 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Oct 23 14:09:37 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d5896f0afd28096c3dc04a9c7e9627b387f145fb
+Commit:        d5896f0afd28096c3dc04a9c7e9627b387f145fb
+Parent:        039bdad732cd6c0d96b5b8c2c6c7beb528cf338a
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Oct 22 19:14:33 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Oct 22 19:14:33 2013 -0500
 
-activation: flag temporary LVs internally
+Mirror: Fix hangs and lock-ups caused by attempting label reads of mirrors
 
-Add LV_TEMPORARY flag for LVs with limited existence during command
-execution. Such LVs are temporary in way that they need to be activated,
-some action done and then removed immediately. Such LVs are just like
-any normal LV - the only difference is that they are removed during
-LVM command execution. This is also the case for LVs representing
-future pool metadata spare LVs which we need to initialize by using
-the usual LV before they are declared as pool metadata spare.
+There is a problem with the way mirrors have been designed to handle
+failures that is resulting in stuck LVM processes and hung I/O.  When
+mirrors encounter a write failure, they block I/O and notify userspace
+to reconfigure the mirror to remove failed devices.  This process is
+open to a couple races:
+1) Any LVM process other than the one that is meant to deal with the
+mirror failure can attempt to read the mirror, fail, and block other
+LVM commands (including the repair command) from proceeding due to
+holding a lock on the volume group.
+2) If there are multiple mirrors that suffer a failure in the same
+volume group, a repair can block while attempting to read the LVM
+label from one mirror while trying to repair the other.
 
-We can optimize some other parts like udev to do a better job if
-it knows that the LV is temporary and any processing on it is just
-useless.
+Mitigation of these races has been attempted by disallowing label reading
+of mirrors that are either suspended or are indicated as blocking by
+the kernel.  While this has closed the window of opportunity for hitting
+the above problems considerably, it hasn't closed it completely.  This is
+because it is still possible to start an LVM command, read the status of
+the mirror as healthy, and then perform the read for the label at the
+moment after a the failure is discovered by the kernel.
 
-This flag is orthogonal to LV_NOSCAN flag introduced recently
-as LV_NOSCAN flag is primarily used to mark an LV for the scanning
-to be avoided before the zeroing of the device happens. The LV_TEMPORARY
-flag makes a difference between a full-fledged LV visible in the system
-and the LV just used as a temporary overlay for some action that needs to
-be done on underlying PVs.
+I can see two solutions to this problem:
+1) Allow users to configure whether mirrors can be candidates for LVM
+labels (i.e. whether PVs can be created on mirror LVs).  If the user
+chooses to allow label scanning of mirror LVs, it will be at the expense
+of a possible hang in I/O or LVM processes.
+2) Instrument a way to allow asynchronous label reading - allowing
+blocked label reads to be ignored while continuing to process the LVM
+command.  This would action would allow LVM commands to continue even
+though they would have otherwise blocked trying to read a mirror.  They
+can then release their lock and allow a repair command to commence.  In
+the event of #2 above, the repair command already in progress can continue
+and repair the failed mirror.
 
-For example: lvcreate --thinpool POOL --zero n -L 1G vg
-
-- first, the usual LV is created to do a clean up for pool metadata
-  spare. The LV is activated, zeroed, deactivated.
-
-- between "activated" and "zeroed" stage, the LV_NOSCAN flag is used
-  to avoid any scanning in udev
-
-- betwen "zeroed" and "deactivated" stage, we need to avoid the WATCH
-  udev rule, but since the LV is just a usual LV, we can't make a
-  difference. The LV_TEMPORARY internal LV flag helps here. If we
-  create the LV with this flag, the DM_UDEV_DISABLE_DISK_RULES
-  and DM_UDEV_DISABLE_OTHER_RULES flag are set (just like as it is
-  with "invisible" and non-top-level LVs) - udev is directed to
-  skip WATCH rule use.
-
-- if the LV_TEMPORARY flag was not used, there would normally be
-  a WATCH event generated once the LV is closed after "zeroed"
-  stage. This will make problems with immediated deactivation that
-  follows.
+This patch brings solution #1.  If solution #2 is developed later on, the
+configuration option created in #1 can be negated - allowing mirrors to
+be scanned for labels by default once again.
 ---
- WHATS_NEW                        |    1 +
- daemons/clvmd/lvm-functions.c    |    2 +-
- lib/activate/activate.c          |   21 +++++++++++++--------
- lib/activate/activate.h          |   20 ++++++++++++++++----
- lib/activate/dev_manager.c       |   18 +++++++++++-------
- lib/format_text/flags.c          |    1 +
- lib/locking/file_locking.c       |    6 ++++--
- lib/locking/no_locking.c         |    6 ++++--
- lib/metadata/lv_manip.c          |    3 +++
- lib/metadata/metadata-exported.h |    8 +++++++-
- lib/metadata/thin_manip.c        |    1 +
- 11 files changed, 62 insertions(+), 25 deletions(-)
+ WHATS_NEW                    |    1 +
+ conf/example.conf.in         |   29 +++++++++++++++++++++++++++++
+ lib/activate/dev_manager.c   |   16 +++++++++++-----
+ lib/commands/toolcontext.c   |    1 +
+ lib/config/config_settings.h |    1 +
+ lib/config/defaults.h        |    1 +
+ lib/misc/lvm-globals.c       |   11 +++++++++++
+ lib/misc/lvm-globals.h       |    2 ++
+ 8 files changed, 57 insertions(+), 5 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 7cfa87c..49f37a4 100644
+index 49f37a4..7106867 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.104
  ===================================
-+  Add internal flag for temporary LVs to properly direct udev to not interfere.
++  Add ignore_lvm_mirrors to config file to read/ignore labels on mirrors.
+   Add internal flag for temporary LVs to properly direct udev to not interfere.
    Fix endless loop in blkdeactivate <device>... if unable to umount/deactivate.
    Add dev-block-<major>:<minor>.device systemd alias for complete PV tracking.
-   Use major:minor as short form of --major and --minor arg for pvscan --cache.
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index f544218..b15732f 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -401,7 +401,7 @@ static int do_activate_lv(char *resource, unsigned char command, unsigned char l
- 	}
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index ae571b6..03e1c45 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -186,6 +186,35 @@ devices {
+     # in recovery situations.
+     ignore_suspended_devices = 0
  
- 	/* Now activate it */
--	if (!lv_activate(cmd, resource, exclusive, 0, NULL))
-+	if (!lv_activate(cmd, resource, exclusive, 0, 0, NULL))
- 		goto error;
- 
- 	return 0;
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 131a093..006681e 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -338,12 +338,12 @@ int lv_activation_filter(struct cmd_context *cmd, const char *lvid_s,
- 	return 1;
- }
- int lv_activate(struct cmd_context *cmd, const char *lvid_s, int exclusive, int noscan,
--		struct logical_volume *lv)
-+		int temporary, struct logical_volume *lv)
- {
- 	return 1;
- }
- int lv_activate_with_filter(struct cmd_context *cmd, const char *lvid_s, int exclusive,
--			    int noscan, struct logical_volume *lv)
-+			    int noscan, int temporary, struct logical_volume *lv)
- {
- 	return 1;
- }
-@@ -2055,10 +2055,11 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 	if (filter)
- 		laopts->read_only = _passes_readonly_filter(cmd, lv);
- 
--	log_debug_activation("Activating %s/%s%s%s%s.", lv->vg->name, lv->name,
-+	log_debug_activation("Activating %s/%s%s%s%s%s.", lv->vg->name, lv->name,
- 			     laopts->exclusive ? " exclusively" : "",
- 			     laopts->read_only ? " read-only" : "",
--			     laopts->noscan ? " noscan" : "");
-+			     laopts->noscan ? " noscan" : "",
-+			     laopts->temporary ? " temporary" : "");
- 
- 	if (!lv_info(cmd, lv, 0, &info, 0, 0))
- 		goto_out;
-@@ -2096,9 +2097,11 @@ out:
- 
- /* Activate LV */
- int lv_activate(struct cmd_context *cmd, const char *lvid_s, int exclusive,
--		int noscan, struct logical_volume *lv)
-+		int noscan, int temporary, struct logical_volume *lv)
- {
--	struct lv_activate_opts laopts = { .exclusive = exclusive, .noscan = noscan };
-+	struct lv_activate_opts laopts = { .exclusive = exclusive,
-+					   .noscan = noscan,
-+					   .temporary = temporary };
- 
- 	if (!_lv_activate(cmd, lvid_s, &laopts, 0, lv))
- 		return_0;
-@@ -2108,9 +2111,11 @@ int lv_activate(struct cmd_context *cmd, const char *lvid_s, int exclusive,
- 
- /* Activate LV only if it passes filter */
- int lv_activate_with_filter(struct cmd_context *cmd, const char *lvid_s, int exclusive,
--			    int noscan, struct logical_volume *lv)
-+			    int noscan, int temporary, struct logical_volume *lv)
- {
--	struct lv_activate_opts laopts = { .exclusive = exclusive, .noscan = noscan  };
-+	struct lv_activate_opts laopts = { .exclusive = exclusive,
-+					   .noscan = noscan,
-+					   .temporary = temporary };
- 
- 	if (!_lv_activate(cmd, lvid_s, &laopts, 1, lv))
- 		return_0;
-diff --git a/lib/activate/activate.h b/lib/activate/activate.h
-index 4eac320..df888cd 100644
---- a/lib/activate/activate.h
-+++ b/lib/activate/activate.h
-@@ -38,7 +38,18 @@ struct lv_activate_opts {
- 	int skip_in_use;
- 	unsigned revert;
- 	unsigned read_only;
--	unsigned noscan;
-+	unsigned noscan;	/* Mark this LV to avoid its scanning. This also
-+				   directs udev to use proper udev flag to avoid
-+				   any scanning in udev. This udev flag is automatically
-+				   dropped in udev db on any spurious event that follows. */
-+	unsigned temporary;	/* Mark this LV as temporary. It means, the LV
-+				 * is created, used and deactivated within single
-+				 * LVM command execution. Such LVs are mostly helper
-+				 * LVs to do some action or cleanup before the proper
-+				 * LV is created. This also directs udev to use proper
-+				 * set of flags to avoid any scanning in udev. These udev
-+				 * flags are persistent in udev db for any spurious event
-+				 * that follows. */
- };
- 
- /* target attribute flags */
-@@ -81,9 +92,10 @@ int lv_suspend_if_active(struct cmd_context *cmd, const char *lvid_s, unsigned o
- int lv_resume(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only, struct logical_volume *lv);
- int lv_resume_if_active(struct cmd_context *cmd, const char *lvid_s,
- 			unsigned origin_only, unsigned exclusive, unsigned revert, struct logical_volume *lv);
--int lv_activate(struct cmd_context *cmd, const char *lvid_s, int exclusive, int noscan, struct logical_volume *lv);
--int lv_activate_with_filter(struct cmd_context *cmd, const char *lvid_s,
--			    int exclusive, int noscan, struct logical_volume *lv);
-+int lv_activate(struct cmd_context *cmd, const char *lvid_s, int exclusive,
-+		int noscan, int temporary, struct logical_volume *lv);
-+int lv_activate_with_filter(struct cmd_context *cmd, const char *lvid_s, int exclusive,
-+			    int noscan, int temporary, struct logical_volume *lv);
- int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, struct logical_volume *lv);
- 
- int lv_mknodes(struct cmd_context *cmd, const struct logical_volume *lv);
++    # ignore_lvm_mirrors:  Introduced in version 2.02.104
++    # This setting determines whether logical volumes of "mirror" segment
++    # type are scanned for LVM labels.  This affects the ability of
++    # mirrors to be used as physical volumes.  If 'ignore_lvm_mirrors'
++    # is set to '1', it becomes impossible to create volume groups on top
++    # of mirror logical volumes - i.e. to stack volume groups on mirrors.
++    #
++    # Allowing mirror logical volumes to be scanned (setting the value to '0')
++    # can potentially cause LVM processes and I/O to the mirror to become
++    # blocked.  This is due to the way that the "mirror" segment type handles
++    # failures.  In order for the hang to manifest itself, an LVM command must
++    # be run just after a failure and before the automatic LVM repair process
++    # takes place OR there must be failures in multiple mirrors in the same
++    # volume group at the same time with write failures occurring moments
++    # before a scan of the mirror's labels.
++    #
++    # Note that these scanning limitations do not apply to the LVM RAID
++    # types, like "raid1".  The RAID segment types handle failures in a
++    # different way and are not subject to possible process or I/O blocking.
++    #
++    # It is encouraged that users set 'ignore_lvm_mirrors' to 1 if they
++    # are using the "mirror" segment type.  Users that require volume group
++    # stacking on mirrored logical volumes should consider using the "raid1"
++    # segment type.  The "raid1" segment type is not available for
++    # active/active clustered volume groups.
++    #
++    # Set to 1 to disallow stacking and thereby avoid a possible deadlock.
++    ignore_lvm_mirrors = 1
++
+     # During each LVM operation errors received from each device are counted.
+     # If the counter of a particular device exceeds the limit set here, no
+     # further I/O is sent to that device for the remainder of the respective
 diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 0f5a04c..0b911f2 100644
+index 0b911f2..f8027d4 100644
 --- a/lib/activate/dev_manager.c
 +++ b/lib/activate/dev_manager.c
-@@ -1400,7 +1400,7 @@ static int _check_udev_fallback(struct cmd_context *cmd)
- #endif /* UDEV_SYNC_SUPPORT */
+@@ -397,11 +397,17 @@ static int _device_is_usable(struct device *dev, int check_lv_names)
+ 		next = dm_get_next_target(dmt, next, &start, &length,
+ 					  &target_type, &params);
  
- static uint16_t _get_udev_flags(struct dev_manager *dm, struct logical_volume *lv,
--				const char *layer, uint16_t flags)
-+				const char *layer, int noscan, int temporary)
- {
- 	uint16_t udev_flags = 0;
+-		if (target_type && !strcmp(target_type, "mirror") &&
+-		    !_ignore_blocked_mirror_devices(dev, start, length, params)) {
+-			log_debug_activation("%s: Mirror device %s not usable.",
+-					     dev_name(dev), name);
+-			goto out;
++		if (target_type && !strcmp(target_type, "mirror")) {
++			if (ignore_lvm_mirrors()) {
++				log_debug_activation("%s: Scanning mirror devices is disabled.", dev_name(dev));
++				goto out;
++			}
++			if (!_ignore_blocked_mirror_devices(dev, start,
++							    length, params)) {
++				log_debug_activation("%s: Mirror device %s not usable.",
++						     dev_name(dev), name);
++				goto out;
++			}
+ 		}
  
-@@ -1449,9 +1449,14 @@ static uint16_t _get_udev_flags(struct dev_manager *dm, struct logical_volume *l
- 			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
+ 		/*
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 2732094..3ed359d 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -905,6 +905,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
+ 		goto_bad;
+ 
+ 	init_ignore_suspended_devices(find_config_tree_bool(cmd, devices_ignore_suspended_devices_CFG, NULL));
++	init_ignore_lvm_mirrors(find_config_tree_bool(cmd, devices_ignore_lvm_mirrors_CFG, NULL));
  
  	/*
--	 * Firmly set requested flags.
-+	 * LVM subsystem specific flags.
- 	 */
--	udev_flags |= flags;
-+	if (noscan)
-+		udev_flags |= DM_SUBSYSTEM_UDEV_FLAG0;
-+
-+	if (temporary)
-+		udev_flags |= DM_UDEV_DISABLE_DISK_RULES_FLAG |
-+			      DM_UDEV_DISABLE_OTHER_RULES_FLAG;
- 
- 	return udev_flags;
+ 	 * If 'cache_dir' or 'cache_file_prefix' is set, ignore 'cache'.
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index c935920..7fdf763 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -96,6 +96,7 @@ cfg(devices_data_alignment_detection_CFG, "data_alignment_detection", devices_CF
+ cfg(devices_data_alignment_CFG, "data_alignment", devices_CFG_SECTION, 0, CFG_TYPE_INT, 0, vsn(2, 2, 45), NULL)
+ cfg(devices_data_alignment_offset_detection_CFG, "data_alignment_offset_detection", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION, vsn(2, 2, 50), NULL)
+ cfg(devices_ignore_suspended_devices_CFG, "ignore_suspended_devices", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_IGNORE_SUSPENDED_DEVICES, vsn(1, 2, 19), NULL)
++cfg(devices_ignore_lvm_mirrors_CFG, "ignore_lvm_mirrors", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_IGNORE_LVM_MIRRORS, vsn(2, 2, 104), NULL)
+ cfg(devices_disable_after_error_count_CFG, "disable_after_error_count", devices_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_DISABLE_AFTER_ERROR_COUNT, vsn(2, 2, 75), NULL)
+ cfg(devices_require_restorefile_with_uuid_CFG, "require_restorefile_with_uuid", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_REQUIRE_RESTOREFILE_WITH_UUID, vsn(2, 2, 73), NULL)
+ cfg(devices_pv_min_size_CFG, "pv_min_size", devices_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_PV_MIN_SIZE_KB, vsn(2, 2, 85), NULL)
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index bd7a40a..141b7ae 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -33,6 +33,7 @@
+ #define DEFAULT_SYSFS_SCAN 1
+ #define DEFAULT_MD_COMPONENT_DETECTION 1
+ #define DEFAULT_MD_CHUNK_ALIGNMENT 1
++#define DEFAULT_IGNORE_LVM_MIRRORS 1
+ #define DEFAULT_MULTIPATH_COMPONENT_DETECTION 1
+ #define DEFAULT_IGNORE_SUSPENDED_DEVICES 1
+ #define DEFAULT_DISABLE_AFTER_ERROR_COUNT 0
+diff --git a/lib/misc/lvm-globals.c b/lib/misc/lvm-globals.c
+index 3c5d545..ee192b0 100644
+--- a/lib/misc/lvm-globals.c
++++ b/lib/misc/lvm-globals.c
+@@ -40,6 +40,7 @@ static int _mirror_in_sync = 0;
+ static int _dmeventd_monitor = DEFAULT_DMEVENTD_MONITOR;
+ static int _background_polling = DEFAULT_BACKGROUND_POLLING;
+ static int _ignore_suspended_devices = 0;
++static int _ignore_lvm_mirrors = DEFAULT_IGNORE_LVM_MIRRORS;
+ static int _error_message_produced = 0;
+ static unsigned _is_static = 0;
+ static int _udev_checking = 1;
+@@ -123,6 +124,11 @@ void init_ignore_suspended_devices(int ignore)
+ 	_ignore_suspended_devices = ignore;
  }
-@@ -1499,7 +1504,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	}
  
- 	if (info.exists && !dm_tree_add_dev_with_udev_flags(dtree, info.major, info.minor,
--							_get_udev_flags(dm, lv, layer, 0))) {
-+							_get_udev_flags(dm, lv, layer, 0, 0))) {
- 		log_error("Failed to add device (%" PRIu32 ":%" PRIu32") to dtree",
- 			  info.major, info.minor);
- 		return 0;
-@@ -2340,7 +2345,7 @@ static int _set_udev_flags_for_children(struct dev_manager *dm,
- 		}
- 
- 		dm_tree_node_set_udev_flags(child,
--					    _get_udev_flags(dm, lvl->lv, NULL, 0));
-+					    _get_udev_flags(dm, lvl->lv, NULL, 0, 0));
- 	}
- 
- 	return 1;
-@@ -2417,8 +2422,7 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 					     read_only_lv(lv, laopts),
- 					     ((lv->vg->status & PRECOMMITTED) | laopts->revert) ? 1 : 0,
- 					     lvlayer,
--					     _get_udev_flags(dm, lv, layer,
--						laopts->noscan ? LVM_UDEV_NOSCAN_FLAG : 0))))
-+					     _get_udev_flags(dm, lv, layer, laopts->noscan, laopts->temporary))))
- 		return_0;
- 
- 	/* Store existing name so we can do rename later */
-diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-index a27b791..e31429e 100644
---- a/lib/format_text/flags.c
-+++ b/lib/format_text/flags.c
-@@ -62,6 +62,7 @@ static const struct flag _lv_flags[] = {
- 	{LV_WRITEMOSTLY, "WRITEMOSTLY", STATUS_FLAG},
- 	{LV_ACTIVATION_SKIP, "ACTIVATION_SKIP", COMPATIBLE_FLAG},
- 	{LV_NOSCAN, NULL, 0},
-+	{LV_TEMPORARY, NULL, 0},
- 	{POOL_METADATA_SPARE, NULL, 0},
- 	{RAID, NULL, 0},
- 	{RAID_META, NULL, 0},
-diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
-index b6b2b10..ab3dabd 100644
---- a/lib/locking/file_locking.c
-+++ b/lib/locking/file_locking.c
-@@ -305,7 +305,8 @@ static int _file_lock_resource(struct cmd_context *cmd, const char *resource,
- 			break;
- 		case LCK_READ:
- 			log_very_verbose("Locking LV %s (R)", resource);
--			if (!lv_activate_with_filter(cmd, resource, 0, lv->status & LV_NOSCAN ? 1 : 0, lv_ondisk(lv)))
-+			if (!lv_activate_with_filter(cmd, resource, 0, lv->status & LV_NOSCAN ? 1 : 0,
-+						     lv->status & LV_TEMPORARY ? 1 : 0, lv_ondisk(lv)))
- 				return 0;
- 			break;
- 		case LCK_PREAD:
-@@ -318,7 +319,8 @@ static int _file_lock_resource(struct cmd_context *cmd, const char *resource,
- 			break;
- 		case LCK_EXCL:
- 			log_very_verbose("Locking LV %s (EX)", resource);
--			if (!lv_activate_with_filter(cmd, resource, 1, lv->status & LV_NOSCAN ? 1 : 0, lv_ondisk(lv)))
-+			if (!lv_activate_with_filter(cmd, resource, 1, lv->status & LV_NOSCAN ? 1 : 0,
-+						     lv->status & LV_TEMPORARY ? 1 : 0, lv_ondisk(lv)))
- 				return 0;
- 			break;
- 		default:
-diff --git a/lib/locking/no_locking.c b/lib/locking/no_locking.c
-index 4772706..dac2f80 100644
---- a/lib/locking/no_locking.c
-+++ b/lib/locking/no_locking.c
-@@ -48,11 +48,13 @@ static int _no_lock_resource(struct cmd_context *cmd, const char *resource,
- 		case LCK_UNLOCK:
- 			return lv_resume_if_active(cmd, resource, (flags & LCK_ORIGIN_ONLY) ? 1: 0, 0, (flags & LCK_REVERT) ? 1 : 0, lv_ondisk(lv));
- 		case LCK_READ:
--			return lv_activate_with_filter(cmd, resource, 0, lv->status & LV_NOSCAN ? 1 : 0, lv_ondisk(lv));
-+			return lv_activate_with_filter(cmd, resource, 0, lv->status & LV_NOSCAN ? 1 : 0,
-+						       lv->status & LV_TEMPORARY ? 1 : 0, lv_ondisk(lv));
- 		case LCK_WRITE:
- 			return lv_suspend_if_active(cmd, resource, (flags & LCK_ORIGIN_ONLY) ? 1 : 0, 0, lv_ondisk(lv), lv);
- 		case LCK_EXCL:
--			return lv_activate_with_filter(cmd, resource, 1, lv->status & LV_NOSCAN ? 1 : 0, lv_ondisk(lv));
-+			return lv_activate_with_filter(cmd, resource, 1, lv->status & LV_NOSCAN ? 1 : 0,
-+						       lv->status & LV_TEMPORARY ? 1 : 0, lv_ondisk(lv));
- 		default:
- 			break;
- 		}
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 383bab1..88fceb2 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5987,6 +5987,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 	if (lp->zero)
- 		lv->status |= LV_NOSCAN;
- 
-+	if (lp->temporary)
-+		lv->status |= LV_TEMPORARY;
++void init_ignore_lvm_mirrors(int scan)
++{
++	_ignore_lvm_mirrors = scan;
++}
 +
- 	if (lv_is_thin_pool(lv)) {
- 		if (is_change_activating(lp->activate)) {
- 			if (vg_is_clustered(lv->vg)) {
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 1e9543a..c00e4e5 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -102,7 +102,12 @@
- #define LV_WRITEMOSTLY		UINT64_C(0x0000020000000000)	/* LV (RAID1) */
+ void init_cmd_name(int status)
+ {
+ 	_log_cmd_name = status;
+@@ -259,6 +265,11 @@ int ignore_suspended_devices(void)
+ 	return _ignore_suspended_devices;
+ }
  
- #define LV_ACTIVATION_SKIP	UINT64_C(0x0000040000000000)	/* LV */
--#define LV_NOSCAN		UINT64_C(0x0000080000000000)	/* LV */
-+#define LV_NOSCAN		UINT64_C(0x0000080000000000)	/* LV - internal use only - the LV
-+									should not be scanned */
-+#define LV_TEMPORARY		UINT64_C(0x0000100000000000)	/* LV - internal use only - the LV
-+								        is supposed to be created and
-+									removed during single LVM
-+									command execution. */
- 
- /* Format features flags */
- #define FMT_SEGMENTS		0x00000001U	/* Arbitrary segment params? */
-@@ -721,6 +726,7 @@ struct lvcreate_params {
- 	int log_count; /* mirror */
- 	int nosync; /* mirror */
- 	int poolmetadataspare; /* thin pool */
-+	int temporary; /* temporary LV */
- #define ACTIVATION_SKIP_SET		0x01 /* request to set LV activation skip flag state */
- #define ACTIVATION_SKIP_SET_ENABLED	0x02 /* set the LV activation skip flag state to 'enabled' */
- #define ACTIVATION_SKIP_IGNORE		0x04 /* request to ignore LV activation skip flag (if any) */
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index a6e0fc2..bd5b117 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -809,6 +809,7 @@ static struct logical_volume *_alloc_pool_metadata_spare(struct volume_group *vg
- 		.stripes = 1,
- 		.vg_name = vg->name,
- 		.zero = 1,
-+		.temporary = 1,
- 	};
- 
- 	dm_list_init(&lp.tags);
++int ignore_lvm_mirrors(void)
++{
++	return _ignore_lvm_mirrors;
++}
++
+ void init_debug(int level)
+ {
+ 	_debug_level = level;
+diff --git a/lib/misc/lvm-globals.h b/lib/misc/lvm-globals.h
+index f590fd6..4af713b 100644
+--- a/lib/misc/lvm-globals.h
++++ b/lib/misc/lvm-globals.h
+@@ -38,6 +38,7 @@ void init_mirror_in_sync(int in_sync);
+ void init_dmeventd_monitor(int reg);
+ void init_background_polling(int polling);
+ void init_ignore_suspended_devices(int ignore);
++void init_ignore_lvm_mirrors(int scan);
+ void init_error_message_produced(int produced);
+ void init_is_static(unsigned value);
+ void init_udev_checking(int checking);
+@@ -66,6 +67,7 @@ int security_level(void);
+ int mirror_in_sync(void);
+ int background_polling(void);
+ int ignore_suspended_devices(void);
++int ignore_lvm_mirrors(void);
+ const char *log_command_name(void);
+ unsigned is_static(void);
+ int udev_checking(void);
 
 
