@@ -1,113 +1,74 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 24 Oct 2013 22:47:59 +0000 (UTC)
-Subject: master - configure: detect compiler flag
-Message-ID: <20131024224759.4CAF260D36@fedorahosted.org>
+Date: Thu, 24 Oct 2013 23:01:22 +0000 (UTC)
+Subject: master - configure: check more compile flags
+Message-ID: <20131024230122.E33E460F8B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d95751cb0b750ea698d665bd8ad8086fe9ee6945
-Commit:        d95751cb0b750ea698d665bd8ad8086fe9ee6945
-Parent:        772fa460d1ef7dede99478e30de756136ea0c7aa
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7943a13141a8379f7697ee9d8764e088a4f127c3
+Commit:        7943a13141a8379f7697ee9d8764e088a4f127c3
+Parent:        d95751cb0b750ea698d665bd8ad8086fe9ee6945
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 24 21:40:25 2013 +0200
+AuthorDate:    Fri Oct 25 01:00:10 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 25 00:41:36 2013 +0200
+CommitterDate: Fri Oct 25 01:00:10 2013 +0200
 
-configure: detect compiler flag
+configure: check more compile flags
 
-Use m4 macro AC_TRY_CCFLAG to detect presence of some compiler
-option.
-Use it to detect -Wjump-misses-init.
+Check for clobbered (and put few others into same league)
 ---
- acinclude.m4 |   39 +++++++++++++++++++++++++++++++++++++++
- aclocal.m4   |    1 +
- configure    |   42 ++++++++++++++++++++++++++++++++++++++++++
- configure.in |    4 ++++
- make.tmpl.in |    6 +++++-
- 5 files changed, 91 insertions(+), 1 deletions(-)
+ acinclude.m4 |    1 -
+ configure    |   41 +++++++++++++++++++++++++++++++++++++++--
+ configure.in |    2 ++
+ make.tmpl.in |   12 ++++++++----
+ 4 files changed, 49 insertions(+), 7 deletions(-)
 
 diff --git a/acinclude.m4 b/acinclude.m4
-new file mode 100644
-index 0000000..333abb5
---- /dev/null
+index 333abb5..bf9fe09 100644
+--- a/acinclude.m4
 +++ b/acinclude.m4
-@@ -0,0 +1,39 @@
-+dnl AC_GCC_VERSION
-+dnl check for compiler version
-+dnl sets COMPILER_VERSION and GCC_VERSION
-+
-+AC_DEFUN([AC_CC_VERSION],
-+[
-+    AC_MSG_CHECKING([C compiler version])
-+    COMPILER_VERSION=`$CC -v 2>&1 | grep version`
-+    case "$COMPILER_VERSION" in
-+        *gcc*)
-+	   dnl Ok, how to turn $3 into the real $3
-+	   GCC_VERSION=`echo $COMPILER_VERSION | \
-+	   sed -e 's/[[^ ]]*\ [[^ ]]*\ \([[^ ]]*\)\ .*/\1/'` ;;
-+	*) GCC_VERSION=unknown ;;
-+    esac
-+    AC_MSG_RESULT($GCC_VERSION)
-+])
-+
-+dnl AC_TRY_CCFLAG([CCFLAG], [VAR], [ACTION-IF-WORKS], [ACTION-IF-FAILS])
-+dnl check if $CC supports a given flag
-+
-+AC_DEFUN([AC_TRY_CCFLAG],
-+[
-+    AC_REQUIRE([AC_PROG_CC])
-+    ac_save_CFLAGS=$CFLAGS
-+    CFLAGS=$1
-+    AC_MSG_RESULT([KOUKEJ $name])
-+    AC_CACHE_CHECK([whether $CC accepts $1 flag], [ac_cv_flag_$2],
-+	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM()],
-+			   [AS_VAR_SET([ac_cv_flag_$2], [yes])],
-+			   [AS_VAR_SET([ac_cv_flag_$2], [no])])])
-+    CFLAGS=$ac_save_CFLAGS
-+    $2=AS_VAR_GET([ac_cv_flag_$2])
-+    if test "$2" = yes; then
-+        ifelse([$3], [], [:], [$3])
-+    else
-+        ifelse([$4], [], [:], [$4])
-+    fi
-+])
-diff --git a/aclocal.m4 b/aclocal.m4
-index 263b50e..165d9bc 100644
---- a/aclocal.m4
-+++ b/aclocal.m4
-@@ -169,3 +169,4 @@ else
- fi[]dnl
- ])# PKG_CHECK_MODULES
- 
-+m4_include([acinclude.m4])
+@@ -24,7 +24,6 @@ AC_DEFUN([AC_TRY_CCFLAG],
+     AC_REQUIRE([AC_PROG_CC])
+     ac_save_CFLAGS=$CFLAGS
+     CFLAGS=$1
+-    AC_MSG_RESULT([KOUKEJ $name])
+     AC_CACHE_CHECK([whether $CC accepts $1 flag], [ac_cv_flag_$2],
+ 	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM()],
+ 			   [AS_VAR_SET([ac_cv_flag_$2], [yes])],
 diff --git a/configure b/configure
-index 002a7d2..48dfdc6 100755
+index 48dfdc6..9418d53 100755
 --- a/configure
 +++ b/configure
 @@ -708,6 +708,7 @@ CUNIT_CFLAGS
  GENPNG
  GENHTML
  LCOV
-+HAVE_WJUMP
++HAVE_WCLOBBERED
+ HAVE_WJUMP
  SACKPT_LIBS
  SACKPT_CFLAGS
- DLM_LIBS
-@@ -8677,6 +8678,47 @@ else
- 	CSCOPE_CMD=
- fi
+@@ -8682,8 +8683,6 @@ fi
+ 
+     ac_save_CFLAGS=$CFLAGS
+     CFLAGS=-Wjump-misses-init
+-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: KOUKEJ $name" >&5
+-$as_echo "KOUKEJ $name" >&6; }
+     { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC accepts -Wjump-misses-init flag" >&5
+ $as_echo_n "checking whether $CC accepts -Wjump-misses-init flag... " >&6; }
+ if test "${ac_cv_flag_HAVE_WJUMP+set}" = set; then :
+@@ -8719,6 +8718,44 @@ $as_echo "$ac_cv_flag_HAVE_WJUMP" >&6; }
+ 
+ 
  
 +
-+
 +    ac_save_CFLAGS=$CFLAGS
-+    CFLAGS=-Wjump-misses-init
-+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: KOUKEJ $name" >&5
-+$as_echo "KOUKEJ $name" >&6; }
-+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC accepts -Wjump-misses-init flag" >&5
-+$as_echo_n "checking whether $CC accepts -Wjump-misses-init flag... " >&6; }
-+if test "${ac_cv_flag_HAVE_WJUMP+set}" = set; then :
++    CFLAGS=-Wclobbered
++    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC accepts -Wclobbered flag" >&5
++$as_echo_n "checking whether $CC accepts -Wclobbered flag... " >&6; }
++if test "${ac_cv_flag_HAVE_WCLOBBERED+set}" = set; then :
 +  $as_echo_n "(cached) " >&6
 +else
 +  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
@@ -122,17 +83,17 @@ index 002a7d2..48dfdc6 100755
 +}
 +_ACEOF
 +if ac_fn_c_try_compile "$LINENO"; then :
-+  ac_cv_flag_HAVE_WJUMP=yes
++  ac_cv_flag_HAVE_WCLOBBERED=yes
 +else
-+  ac_cv_flag_HAVE_WJUMP=no
++  ac_cv_flag_HAVE_WCLOBBERED=no
 +fi
 +rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 +fi
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_flag_HAVE_WJUMP" >&5
-+$as_echo "$ac_cv_flag_HAVE_WJUMP" >&6; }
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_flag_HAVE_WCLOBBERED" >&5
++$as_echo "$ac_cv_flag_HAVE_WCLOBBERED" >&6; }
 +    CFLAGS=$ac_save_CFLAGS
-+    HAVE_WJUMP=$ac_cv_flag_HAVE_WJUMP
-+    if test "HAVE_WJUMP" = yes; then
++    HAVE_WCLOBBERED=$ac_cv_flag_HAVE_WCLOBBERED
++    if test "HAVE_WCLOBBERED" = yes; then
 +        :
 +    else
 +        :
@@ -144,34 +105,42 @@ index 002a7d2..48dfdc6 100755
  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for C optimisation flag" >&5
  $as_echo_n "checking for C optimisation flag... " >&6; }
 diff --git a/configure.in b/configure.in
-index 07b0afc..3a25fef 100644
+index 3a25fef..cd80274 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -835,6 +835,10 @@ else
- 	CSCOPE_CMD=
- fi
+@@ -838,6 +838,8 @@ fi
+ dnl -- Check if compiler supports -Wjump-misses-init
+ AC_TRY_CCFLAG([-Wjump-misses-init], [HAVE_WJUMP], [], [])
+ AC_SUBST(HAVE_WJUMP)
++AC_TRY_CCFLAG([-Wclobbered], [HAVE_WCLOBBERED], [], [])
++AC_SUBST(HAVE_WCLOBBERED)
  
-+dnl -- Check if compiler supports -Wjump-misses-init
-+AC_TRY_CCFLAG([-Wjump-misses-init], [HAVE_WJUMP], [], [])
-+AC_SUBST(HAVE_WJUMP)
-+
  ################################################################################
  dnl -- Override optimisation
- AC_MSG_CHECKING(for C optimisation flag)
 diff --git a/make.tmpl.in b/make.tmpl.in
-index 788eb1d..08560a8 100644
+index 08560a8..3eea85e 100644
 --- a/make.tmpl.in
 +++ b/make.tmpl.in
-@@ -138,9 +138,13 @@ WFLAGS += -Wall -Wundef -Wshadow -Wcast-align -Wwrite-strings \
-  -Wpointer-arith -Wclobbered -Wempty-body -Wignored-qualifiers \
-  -Wmissing-parameter-type -Wold-style-declaration -Woverride-init \
-  -Wtype-limits -Wuninitialized -Wmissing-include-dirs -Wsync-nand \
-- -Wfloat-equal -Wjump-misses-init -Wlogical-op -Wstrict-prototypes \
-+ -Wfloat-equal -Wlogical-op -Wstrict-prototypes \
+@@ -135,16 +135,20 @@ INSTALL_SCRIPT = $(INSTALL) -p $(M_INSTALL_PROGRAM)
+ WFLAGS += -Wall -Wundef -Wshadow -Wcast-align -Wwrite-strings \
+  -Wmissing-prototypes -Wmissing-declarations -Wnested-externs \
+  -Winline -Wmissing-noreturn -Wformat-security -Wredundant-decls \
+- -Wpointer-arith -Wclobbered -Wempty-body -Wignored-qualifiers \
+- -Wmissing-parameter-type -Wold-style-declaration -Woverride-init \
+- -Wtype-limits -Wuninitialized -Wmissing-include-dirs -Wsync-nand \
+- -Wfloat-equal -Wlogical-op -Wstrict-prototypes \
++ -Wpointer-arith -Wuninitialized -Wmissing-include-dirs \
++ -Wfloat-equal -Wstrict-prototypes \
   -Wold-style-definition -Wmissing-format-attribute
  
-+ifeq ("@HAVE_WJUMP@", "yes")
-+WFLAGS += -Wjump-misses-init
+ ifeq ("@HAVE_WJUMP@", "yes")
+ WFLAGS += -Wjump-misses-init
+ endif
+ 
++ifeq ("@HAVE_WCLOBBERED@", "yes")
++WFLAGS += -Wclobbered -Wempty-body -Wignored-qualifiers \
++ -Wmissing-parameter-type -Wold-style-declaration -Woverride-init \
++ -Wtype-limits -Wsync-nand -Wlogical-op
 +endif
 +
  #WFLAGS += -W -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers
