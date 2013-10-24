@@ -1,87 +1,62 @@
-From: Brassow Jonathan <jbrassow@redhat.com>
-Date: Thu, 24 Oct 2013 10:48:23 -0500
-Subject: Fwd: [linux-lvm] LVM2.2.02.103/tools/lvchange.c:779: bad if test ?
-In-Reply-To: <526909C4.3080504@redhat.com>
-References: <DUB118-W973F5E6250AE338D1B00D9C030@phx.gbl>
-	<526909C4.3080504@redhat.com>
-Message-ID: <B9375F18-5422-44A3-A271-C0CC92FB6E75@redhat.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 24 Oct 2013 16:11:16 +0000 (UTC)
+Subject: master - build: Use additional gcc warning flags.
+Message-ID: <20131024161116.4F8C96106D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-yup.  We could just get rid of the checks for t, y, and n.  The important one is the check for ':'.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9c23d414802ed07c7638ce13d33dba3a629e887
+Commit:        c9c23d414802ed07c7638ce13d33dba3a629e887
+Parent:        d5896f0afd28096c3dc04a9c7e9627b387f145fb
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Oct 24 17:10:24 2013 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Oct 24 17:10:24 2013 +0100
 
-Basically, we are asking if the user has supplied a mode (i.e. ':{n|y|t}).  If not, then the meaning is the same as ':y' which we then append.
+build: Use additional gcc warning flags.
 
-Later code checks if the last character is a proper y, n, or t; and errors if it is not.
+---
+ WHATS_NEW    |    3 ++-
+ make.tmpl.in |   12 +++++++++---
+ 2 files changed, 11 insertions(+), 4 deletions(-)
 
-The reason this logic hasn't caused any problems is because we only care about the ':' anyway - the rest is useless.
-
- brassow
-
-On Oct 24, 2013, at 6:51 AM, Marian Csontos wrote:
-
-> And the && is wrong as well.
-> So || instead of && and inside braces &&s instead of ||s.
-> 
-> Now it matches anything /[^:].$/ but I believe it was intended to be /[^:].$|:[tyn]$/ which is wrong too but in fact should be /[^:].$/ so it is in fact weirdly written correct implementation. =8-O
-> 
-> I wonder, is it possible to have the PV matching /:[^tyn]$/?
-> In such case it is, then /:[tyn]$/ should be valid as well, shold not it?
-> 
-> I suggest:
-> 
-> if /[^:]./:
->    - add default
-> else if /:[^tyn]$/
->    - should be internal error
->    - recovery: last character should be _replaced_ by default
-> else # /:[tyn]/
->    - NOP
-> 
-> -- Martian
-> 
-> -------- Original Message --------
-> Subject: [linux-lvm] LVM2.2.02.103/tools/lvchange.c:779: bad if test ?
-> Date: Wed, 23 Oct 2013 20:26:04 +0000
-> From: David Binderman <dcb314@hotmail.com>
-> Reply-To: LVM general discussion and development <linux-lvm@redhat.com>
-> To: linux-lvm at redhat.com <linux-lvm@redhat.com>
-> 
-> Hello there,
-> 
-> I just compiled LVM2.2.02.103 with the extra Linux gcc compiler
-> flag -Wlogical-op
-> 
-> It said
-> 
-> lvchange.c:779:10: warning: logical 'or' of collectively exhaustive tests is always true [-Wlogical-op]
-> 
-> Source code is
-> 
->                 ((tmp_str[tmp_str_len - 1] != 't') ||
->                  (tmp_str[tmp_str_len - 1] != 'y') ||
->                  (tmp_str[tmp_str_len - 1] != 'n'))))
-> 
-> Suggest swap || for &&
-> 
-> Regards
-> 
-> David Binderman 		 	   		
-> 
-> _______________________________________________
-> linux-lvm mailing list
-> linux-lvm at redhat.com
-> https://www.redhat.com/mailman/listinfo/linux-lvm
-> read the LVM HOW-TO at http://tldp.org/HOWTO/LVM-HOWTO/
-> 
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
-
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 7106867..cb3488b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+-Version 2.02.104
++Version 2.02.104 -
+ ===================================
++  Use additional gcc warning flags by default.
+   Add ignore_lvm_mirrors to config file to read/ignore labels on mirrors.
+   Add internal flag for temporary LVs to properly direct udev to not interfere.
+   Fix endless loop in blkdeactivate <device>... if unable to umount/deactivate.
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 3218758..788eb1d 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -135,9 +135,15 @@ INSTALL_SCRIPT = $(INSTALL) -p $(M_INSTALL_PROGRAM)
+ WFLAGS += -Wall -Wundef -Wshadow -Wcast-align -Wwrite-strings \
+  -Wmissing-prototypes -Wmissing-declarations -Wnested-externs \
+  -Winline -Wmissing-noreturn -Wformat-security -Wredundant-decls \
+- -Wpointer-arith
+-
+-#WFLAGS += -W -Wconversion -Wbad-function-cast -Wcast-qual
++ -Wpointer-arith -Wclobbered -Wempty-body -Wignored-qualifiers \
++ -Wmissing-parameter-type -Wold-style-declaration -Woverride-init \
++ -Wtype-limits -Wuninitialized -Wmissing-include-dirs -Wsync-nand \
++ -Wfloat-equal -Wjump-misses-init -Wlogical-op -Wstrict-prototypes \
++ -Wold-style-definition -Wmissing-format-attribute
++
++#WFLAGS += -W -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers
++#WFLAGS += -Wsign-compare -Wunused-parameter -Wmissing-field-initializers 
++#WFLAGS += -Wconversion -Wbad-function-cast -Wcast-qual -Waggregate-return -Wpacked
+ #WFLAGS += -pedantic -std=gnu99
+ #DEFS += -DDEBUG_CRC32
+ 
 
 
