@@ -1,62 +1,47 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 24 Oct 2013 16:11:16 +0000 (UTC)
-Subject: master - build: Use additional gcc warning flags.
-Message-ID: <20131024161116.4F8C96106D@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Thu, 24 Oct 2013 17:55:15 +0000 (UTC)
+Subject: master - clean-up: Remove redundant faulty logic
+Message-ID: <20131024175515.1306361065@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9c23d414802ed07c7638ce13d33dba3a629e887
-Commit:        c9c23d414802ed07c7638ce13d33dba3a629e887
-Parent:        d5896f0afd28096c3dc04a9c7e9627b387f145fb
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Oct 24 17:10:24 2013 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Oct 24 17:10:24 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=772fa460d1ef7dede99478e30de756136ea0c7aa
+Commit:        772fa460d1ef7dede99478e30de756136ea0c7aa
+Parent:        4c0db84948ad616930e217f20768a4285ca67c5a
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed Oct 23 22:44:04 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Oct 23 22:44:04 2013 -0500
 
-build: Use additional gcc warning flags.
+clean-up: Remove redundant faulty logic
 
+Remove conditional that boils down to "if yes or no, then do".  The
+previous condition in the statement is sufficient and the extra
+(always true) condition is unnecessary.
 ---
- WHATS_NEW    |    3 ++-
- make.tmpl.in |   12 +++++++++---
- 2 files changed, 11 insertions(+), 4 deletions(-)
+ tools/lvchange.c |    7 ++-----
+ 1 files changed, 2 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 7106867..cb3488b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
--Version 2.02.104
-+Version 2.02.104 -
- ===================================
-+  Use additional gcc warning flags by default.
-   Add ignore_lvm_mirrors to config file to read/ignore labels on mirrors.
-   Add internal flag for temporary LVs to properly direct udev to not interfere.
-   Fix endless loop in blkdeactivate <device>... if unable to umount/deactivate.
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 3218758..788eb1d 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -135,9 +135,15 @@ INSTALL_SCRIPT = $(INSTALL) -p $(M_INSTALL_PROGRAM)
- WFLAGS += -Wall -Wundef -Wshadow -Wcast-align -Wwrite-strings \
-  -Wmissing-prototypes -Wmissing-declarations -Wnested-externs \
-  -Winline -Wmissing-noreturn -Wformat-security -Wredundant-decls \
-- -Wpointer-arith
--
--#WFLAGS += -W -Wconversion -Wbad-function-cast -Wcast-qual
-+ -Wpointer-arith -Wclobbered -Wempty-body -Wignored-qualifiers \
-+ -Wmissing-parameter-type -Wold-style-declaration -Woverride-init \
-+ -Wtype-limits -Wuninitialized -Wmissing-include-dirs -Wsync-nand \
-+ -Wfloat-equal -Wjump-misses-init -Wlogical-op -Wstrict-prototypes \
-+ -Wold-style-definition -Wmissing-format-attribute
-+
-+#WFLAGS += -W -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers
-+#WFLAGS += -Wsign-compare -Wunused-parameter -Wmissing-field-initializers 
-+#WFLAGS += -Wconversion -Wbad-function-cast -Wcast-qual -Waggregate-return -Wpacked
- #WFLAGS += -pedantic -std=gnu99
- #DEFS += -DDEBUG_CRC32
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 6ae9720..1931c03 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -772,11 +772,8 @@ static int lvchange_writemostly(struct logical_volume *lv)
+ 			if (!(pv_names[i] = dm_pool_zalloc(lv->vg->vgmem, tmp_str_len + 3)))
+ 				return_0;
  
+-			if (tmp_str_len < 3 ||
+-			    ((tmp_str[tmp_str_len - 2] != ':') &&
+-			     ((tmp_str[tmp_str_len - 1] != 't') ||
+-			      (tmp_str[tmp_str_len - 1] != 'y') ||
+-			      (tmp_str[tmp_str_len - 1] != 'n'))))
++			if ((tmp_str_len < 3) ||
++			    (tmp_str[tmp_str_len - 2] != ':'))
+ 				/* Default to 'y' if no mode specified */
+ 				sprintf(pv_names[i], "%s:y", tmp_str);
+ 			else
 
 
