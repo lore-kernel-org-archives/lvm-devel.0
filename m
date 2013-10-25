@@ -1,43 +1,70 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 24 Oct 2013 16:19:05 +0000 (UTC)
-Subject: master - clvmd: fix verify message rejection of REMOTE flag
-Message-ID: <20131024161905.CD6D160C27@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 25 Oct 2013 08:45:03 +0000 (UTC)
+Subject: master - tests: fix old-style gcc warning
+Message-ID: <20131025084503.AE6E76005D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4c0db84948ad616930e217f20768a4285ca67c5a
-Commit:        4c0db84948ad616930e217f20768a4285ca67c5a
-Parent:        c9c23d414802ed07c7638ce13d33dba3a629e887
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 24 11:10:09 2013 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Oct 24 11:18:22 2013 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d4e5140b5284cac151d06615328dc8af21dc15c7
+Commit:        d4e5140b5284cac151d06615328dc8af21dc15c7
+Parent:        7943a13141a8379f7697ee9d8764e088a4f127c3
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Oct 25 10:37:30 2013 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Oct 25 10:37:30 2013 +0200
 
-clvmd: fix verify message rejection of REMOTE flag
+tests: fix old-style gcc warning
 
-This fixes a bug in commit 19baf842 where verify_message
-was rejecting the CLVMD_FLAG_REMOTE flag.  It was missed
-since the patch was ported from an lvm version where that
-flag does not exist.
 ---
- daemons/clvmd/clvmd.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/api/vglist.c |   15 ++++++++-------
+ 1 files changed, 8 insertions(+), 7 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index bed8e68..d57c0fd 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -1124,7 +1124,7 @@ static int verify_message(char *buf, int len)
+diff --git a/test/api/vglist.c b/test/api/vglist.c
+index 0a882dc..3d23369 100644
+--- a/test/api/vglist.c
++++ b/test/api/vglist.c
+@@ -22,7 +22,7 @@
+ lvm_t handle;
+ vg_t vg;
  
- 	/* TODO: we may be able to narrow len/flags/clientid/arglen checks based on cmd */
+-static void start() {
++static void start(void) {
+ 	handle = lvm_init(NULL);
+ 	if (!handle) {
+ 		fprintf(stderr, "Unable to lvm_init\n");
+@@ -43,15 +43,16 @@ static void done(int ok) {
  
--	if (h->flags & ~(CLVMD_FLAG_LOCAL | CLVMD_FLAG_SYSTEMLV | CLVMD_FLAG_NODEERRS)) {
-+	if (h->flags & ~(CLVMD_FLAG_LOCAL | CLVMD_FLAG_SYSTEMLV | CLVMD_FLAG_NODEERRS | CLVMD_FLAG_REMOTE)) {
- 		log_error("verify_message bad flags %x", h->flags);
- 		return -1;
- 	}
+ int main(int argc, char *argv[])
+ {
+-	if (argc != 3)
+-		abort();
+-
+ 	lvm_str_list_t *str;
+-
+ 	int i = 0;
++	struct dm_list *vgnames;
++        struct dm_list *vgids;
++
++	if (argc != 3)
++		abort();
+ 
+ 	start();
+-	struct dm_list *vgnames = lvm_list_vg_names(handle);
++	vgnames = lvm_list_vg_names(handle);
+ 	dm_list_iterate_items(str, vgnames) {
+ 		assert(++i <= 1);
+ 		assert(!strcmp(str->str, argv[1]));
+@@ -61,7 +62,7 @@ int main(int argc, char *argv[])
+ 
+ 	i = 0;
+ 	start();
+-	struct dm_list *vgids = lvm_list_vg_uuids(handle);
++	vgids = lvm_list_vg_uuids(handle);
+ 	dm_list_iterate_items(str, vgids) {
+ 		assert(++i <= 1);
+ 		assert(!strcmp(str->str, argv[2]));
 
 
