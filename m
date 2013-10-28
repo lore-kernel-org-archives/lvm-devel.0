@@ -1,33 +1,84 @@
 From: dongmao zhang <dmzhang@suse.com>
-Date: Mon, 28 Oct 2013 18:17:32 +0800
-Subject: [PATCH 0/2] cmirror patch to improve cluster raid1 performance[v3]
-In-Reply-To: <yes>
+Date: Mon, 28 Oct 2013 18:17:33 +0800
+Subject: [PATCH 1/2] add integrated_flush support to device-mapper
+In-Reply-To: <cover.1382955203.git.dmzhang@suse.com>
 References: <yes>
-Message-ID: <cover.1382955203.git.dmzhang@suse.com>
+ <cover.1382955203.git.dmzhang@suse.com>
+Message-ID: <a69579c2d3e666c37ad71aa93ae8c734b0d8a5e3.1382955203.git.dmzhang@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-These patches work with dm-log-userspace enhancement.
-LVM, device-mapper and cmirrord begin to support
-merging mark/flush request(if DM_INTEGRATED_FLUSH is set)
-This would increase the write throughput of cluster raid1 
-based on my own test.
+---
+ lib/mirror/mirrored.c |    4 ++++
+ libdm/libdevmapper.h  |    3 +++
+ libdm/libdm-deptree.c |    8 ++++++++
+ 3 files changed, 15 insertions(+), 0 deletions(-)
 
-
-dongmao zhang (2):
-  add integrated_flush support to device-mapper
-  cmirrord support DM_INTEGRATED_FLUSH
-
- daemons/cmirrord/functions.c |   62 +++++++++++++++++++++++++++++++++---------
- daemons/cmirrord/local.c     |    9 +++++-
- lib/mirror/mirrored.c        |    4 +++
- libdm/libdevmapper.h         |    3 ++
- libdm/libdm-deptree.c        |    8 +++++
- 5 files changed, 72 insertions(+), 14 deletions(-)
-
+diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
+index c3eb27b..572f87e 100644
+--- a/lib/mirror/mirrored.c
++++ b/lib/mirror/mirrored.c
+@@ -378,6 +378,10 @@ static int _add_log(struct dm_pool *mem, struct lv_segment *seg,
+ 	if (_block_on_error_available && !(seg->status & PVMOVE))
+ 		log_flags |= DM_BLOCK_ON_ERROR;
+ 
++	/*clustered log support delay flush*/
++	if(clustered)
++		log_flags |= DM_INTEGRATED_FLUSH;
++
+ 	return dm_tree_node_add_mirror_target_log(node, region_size, clustered, log_dlid, area_count, log_flags);
+ }
+ 
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index b287eef..e88a318 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -667,6 +667,9 @@ int dm_tree_node_add_mirror_target(struct dm_tree_node *node,
+ #define DM_BLOCK_ON_ERROR	0x00000004	/* On error, suspend I/O */
+ #define DM_CORELOG		0x00000008	/* In-memory log */
+ 
++/*for cluster raid1, use integrated flush to improve performance*/
++#define DM_INTEGRATED_FLUSH		0x00000010
++
+ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
+ 					  uint32_t region_size,
+ 					  unsigned clustered,
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 752a44b..0a93028 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -2054,6 +2054,7 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
+ 				     char *params, size_t paramsize)
+ {
+ 	int block_on_error = 0;
++	int integrated_flush = 0;
+ 	int handle_errors = 0;
+ 	int dm_log_userspace = 0;
+ 	struct utsname uts;
+@@ -2107,6 +2108,9 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
+ 		 */
+ 		if (KERNEL_VERSION(kmaj, kmin, krel) >= KERNEL_VERSION(2, 6, 31))
+ 			dm_log_userspace = 1;
++
++		if(seg->flags & DM_INTEGRATED_FLUSH)
++			integrated_flush = 1;
+ 	}
+ 
+ 	/* Region size */
+@@ -2164,6 +2168,10 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
+ 	if (block_on_error)
+ 		EMIT_PARAMS(pos, " block_on_error");
+ 
++	if (dm_log_userspace && DM_INTEGRATED_FLUSH)
++		EMIT_PARAMS(pos, " integrated_flush");
++
++
+ 	EMIT_PARAMS(pos, " %u ", seg->mirror_area_count);
+ 
+ 	if (_emit_areas_line(dmt, seg, params, paramsize, &pos) <= 0)
 -- 
 1.7.3.4
 
