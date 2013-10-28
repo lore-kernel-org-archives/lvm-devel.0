@@ -1,226 +1,183 @@
-From: dongmao zhang <dmzhang@suse.com>
-Date: Mon, 28 Oct 2013 18:17:34 +0800
-Subject: [PATCH 2/2] cmirrord support DM_INTEGRATED_FLUSH
-In-Reply-To: <a69579c2d3e666c37ad71aa93ae8c734b0d8a5e3.1382955203.git.dmzhang@suse.com>
-References: <yes> <cover.1382955203.git.dmzhang@suse.com>
-	<a69579c2d3e666c37ad71aa93ae8c734b0d8a5e3.1382955203.git.dmzhang@suse.com>
-Message-ID: <42b711853e0839337b31c87dda42482d2a84e103.1382955203.git.dmzhang@suse.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Mon, 28 Oct 2013 11:09:38 -0500
+Subject: [RFC PATCH] lvm2app: List snapshot LV information for a given origin LV
+In-Reply-To: <1380651882-11757-1-git-send-email-mohan@in.ibm.com>
+References: <1380651882-11757-1-git-send-email-mohan@in.ibm.com>
+Message-ID: <526E8C42.20603@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-if integrated_flush is set. cmirrord will check the payload
-of FLUSH request.
----
- daemons/cmirrord/functions.c |   62 +++++++++++++++++++++++++++++++++---------
- daemons/cmirrord/local.c     |    9 +++++-
- lib/mirror/mirrored.c        |    2 +-
- 3 files changed, 58 insertions(+), 15 deletions(-)
+Hi Mohan,
 
-diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
-index f6e0918..c534136 100644
---- a/daemons/cmirrord/functions.c
-+++ b/daemons/cmirrord/functions.c
-@@ -75,6 +75,7 @@ struct log_c {
-                 FORCESYNC,      /* Force a sync to happen */
-         } sync;
- 
-+	uint32_t integrated_flush;
- 	uint32_t state;         /* current operational state of the log */
- 
- 	struct dm_list mark_list;
-@@ -362,7 +363,7 @@ static int find_disk_path(char *major_minor_str, char *path_rtn, int *unlink_pat
- 	// return r ? -errno : 0;
- }
- 
--static int _clog_ctr(char *uuid, uint64_t luid,
-+static int _clog_ctr(char *uuid, uint64_t luid, uint32_t version,
- 		     int argc, char **argv, uint64_t device_size)
- {
- 	int i;
-@@ -373,6 +374,7 @@ static int _clog_ctr(char *uuid, uint64_t luid,
- 	struct log_c *lc = NULL;
- 	enum sync log_sync = DEFAULTSYNC;
- 	uint32_t block_on_error = 0;
-+	uint32_t integrated_flush = 0;
- 
- 	int disk_log;
- 	char disk_path[128];
-@@ -431,6 +433,8 @@ static int _clog_ctr(char *uuid, uint64_t luid,
- 			log_sync = NOSYNC;
- 		else if (!strcmp(argv[i], "block_on_error"))
- 			block_on_error = 1;
-+		else if (!strcmp(argv[i], "integrated_flush") && version > 2)
-+			integrated_flush = 1;
- 	}
- 
- 	lc = dm_zalloc(sizeof(*lc));
-@@ -451,6 +455,7 @@ static int _clog_ctr(char *uuid, uint64_t luid,
- 	lc->log_dev_failed = 0;
- 	strncpy(lc->uuid, uuid, DM_UUID_LEN);
- 	lc->luid = luid;
-+	lc->integrated_flush = integrated_flush;
- 
- 	if (get_log(lc->uuid, lc->luid) ||
- 	    get_pending_log(lc->uuid, lc->luid)) {
-@@ -552,6 +557,8 @@ static int clog_ctr(struct dm_ulog_request *rq)
- 	char *dev_size_str;
- 	uint64_t device_size;
- 
-+	struct log_c *tmplc = NULL;
-+
- 	/* Sanity checks */
- 	if (!rq->data_size) {
- 		LOG_ERROR("Received constructor request with no data");
-@@ -594,14 +601,17 @@ static int clog_ctr(struct dm_ulog_request *rq)
- 		return -EINVAL;
- 	}
- 
--	r = _clog_ctr(rq->uuid, rq->luid, argc - 1, argv + 1, device_size);
-+	r = _clog_ctr(rq->uuid, rq->luid, rq->version, argc - 1, argv + 1, device_size);
- 
- 	/* We join the CPG when we resume */
- 
- 	/* No returning data */
--	if ((rq->version > 1) && !strcmp(argv[0], "clustered-disk"))
--		rq->data_size = sprintf(rq->data, "%s", argv[1]) + 1;
--	else
-+	if ((rq->version > 1) && !strcmp(argv[0], "clustered-disk")) {
-+		rq->data_size = sprintf(rq->data, "%s", argv[1]);
-+		tmplc = get_pending_log(rq->uuid, rq->luid);
-+		if (tmplc && tmplc->integrated_flush)
-+			rq->data_size += sprintf(rq->data + rq->data_size, " %s", "integrated_flush") + 1;
-+	} else
- 		rq->data_size = 0;
- 
- 	if (r) {
-@@ -1027,14 +1037,17 @@ static int clog_in_sync(struct dm_ulog_request *rq)
- }
- 
- /*
-- * clog_flush
-- * @rq
-+ * _clog_flush
-+ * @lc
-+ * @server
-+ *
-+ * real flush
-  *
-+ * Returns: 0 on success, -EXXX on error
-  */
--static int clog_flush(struct dm_ulog_request *rq, int server)
-+static int _clog_flush(struct log_c *lc, int server)
- {
- 	int r = 0;
--	struct log_c *lc = get_log(rq->uuid, rq->luid);
- 
- 	if (!lc)
- 		return -EINVAL;
-@@ -1047,10 +1060,10 @@ static int clog_flush(struct dm_ulog_request *rq, int server)
- 	 * if we are the server.
- 	 */
- 	if (server && (lc->disk_fd >= 0)) {
--		r = rq->error = write_log(lc);
-+		r = write_log(lc);
- 		if (r)
- 			LOG_ERROR("[%s] Error writing to disk log",
--				  SHORT_UUID(lc->uuid));
-+				SHORT_UUID(lc->uuid));
- 		else 
- 			LOG_DBG("[%s] Disk log written", SHORT_UUID(lc->uuid));
- 	}
-@@ -1058,6 +1071,21 @@ static int clog_flush(struct dm_ulog_request *rq, int server)
- 	lc->touched = 0;
- 
- 	return r;
-+}
-+
-+
-+/*
-+ * clog_flush
-+ * @rq
-+ *
-+ */
-+static int clog_flush(struct dm_ulog_request *rq, int server)
-+{
-+	int r = 0;
-+	struct log_c *lc = get_log(rq->uuid, rq->luid);
-+
-+	r = rq->error = _clog_flush(lc, server);
-+	return r;
- 
- }
- 
-@@ -1113,7 +1141,7 @@ static int mark_region(struct log_c *lc, uint64_t region, uint32_t who)
-  *
-  * Returns: 0 on success, -EXXX on failure
-  */
--static int clog_mark_region(struct dm_ulog_request *rq, uint32_t originator)
-+static int clog_mark_region(struct dm_ulog_request *rq, uint32_t originator, int server)
- {
- 	int r;
- 	int count;
-@@ -1139,6 +1167,14 @@ static int clog_mark_region(struct dm_ulog_request *rq, uint32_t originator)
- 
- 	rq->data_size = 0;
- 
-+	/* 
-+	 * if kernel support integrate flush, after marking region, 
-+	 * cmirrord should execute clog_flush automatically.
-+	 */
-+
-+	if(lc->integrated_flush)
-+		return _clog_flush(lc, server);
-+
- 	return 0;
- }
- 
-@@ -1676,7 +1712,7 @@ int do_request(struct clog_request *rq, int server)
- 		r = clog_flush(&rq->u_rq, server);
- 		break;
- 	case DM_ULOG_MARK_REGION:
--		r = clog_mark_region(&rq->u_rq, rq->originator);
-+		r = clog_mark_region(&rq->u_rq, rq->originator, server);
- 		break;
- 	case DM_ULOG_CLEAR_REGION:
- 		r = clog_clear_region(&rq->u_rq, rq->originator);
-diff --git a/daemons/cmirrord/local.c b/daemons/cmirrord/local.c
-index 500f6dc..8b52556 100644
---- a/daemons/cmirrord/local.c
-+++ b/daemons/cmirrord/local.c
-@@ -267,8 +267,15 @@ static int do_local_work(void *data __attribute__((unused)))
- 			break;
- 		}
- 		/* ELSE, fall through */
--	case DM_ULOG_IS_CLEAN:
- 	case DM_ULOG_FLUSH:
-+		/*
-+		 * if it has payload, it must be a integrated flush.
-+		 * change the request_type to MARK_REGION. the clog_mark_region
-+		 * will flush automatically in the futhure
-+		 */
-+		if (rq->u_rq.data_size > 0)
-+			rq->u_rq.request_type = DM_ULOG_MARK_REGION;
-+	case DM_ULOG_IS_CLEAN:
- 	case DM_ULOG_MARK_REGION:
- 	case DM_ULOG_GET_RESYNC_WORK:
- 	case DM_ULOG_SET_REGION_SYNC:
-diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
-index 572f87e..4015116 100644
---- a/lib/mirror/mirrored.c
-+++ b/lib/mirror/mirrored.c
-@@ -378,7 +378,7 @@ static int _add_log(struct dm_pool *mem, struct lv_segment *seg,
- 	if (_block_on_error_available && !(seg->status & PVMOVE))
- 		log_flags |= DM_BLOCK_ON_ERROR;
- 
--	/*clustered log support delay flush*/
-+	/*clustered log support integrated flush*/
- 	if(clustered)
- 		log_flags |= DM_INTEGRATED_FLUSH;
- 
--- 
-1.7.3.4
+Please rebase your patch and I will take a look at it.
+
+Thanks,
+Tony
+
+On 10/01/2013 01:24 PM, M. Mohan Kumar wrote:
+> From: "M. Mohan Kumar" <mohan@in.ibm.com>
+> 
+> Similar to origin property list snapshot information for a given LV.
+> Also this feature extended to lvs command.
+> 
+> lvs -oname,snapshot displays name of the LV and snapshot LV name if any.
+> 
+> lvm2app enhanced to support the property "lv_snapshot", the call
+> lvm_lv_get_property(lv, "lv_snapshot") returns list of snapshot for
+> given lv 'lv'.
+> 
+> Signed-off-by: M. Mohan Kumar <mohan@in.ibm.com>
+> ---
+> For Block Device xlator work, its better to support providing list of
+> snapshots for a given origin LV. This feature will be exploited by BD
+> xlator to list out snapshots for a given origin LV.
+> 
+>  lib/metadata/lv.c       |  5 +++++
+>  lib/metadata/lv.h       |  1 +
+>  lib/metadata/metadata.c | 26 ++++++++++++++++++++++++++
+>  lib/metadata/metadata.h |  1 +
+>  lib/report/columns.h    |  1 +
+>  lib/report/properties.c |  2 ++
+>  lib/report/report.c     | 16 ++++++++++++++++
+>  7 files changed, 52 insertions(+)
+> 
+> diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+> index db71cf0..216fd99 100644
+> --- a/lib/metadata/lv.c
+> +++ b/lib/metadata/lv.c
+> @@ -378,6 +378,11 @@ char *lv_tags_dup(const struct logical_volume *lv)
+>  	return tags_format_and_copy(lv->vg->vgmem, &lv->tags);
+>  }
+>  
+> +char *lv_snapshot_dup(const struct logical_volume *lv)
+> +{
+> +	return list_snapshot(lv->vg->vgmem, &lv->snapshot_segs);
+> +}
+> +
+>  uint64_t lv_size(const struct logical_volume *lv)
+>  {
+>  	return lv->size;
+> diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+> index 06f8c60..0da81ef 100644
+> --- a/lib/metadata/lv.h
+> +++ b/lib/metadata/lv.h
+> @@ -94,4 +94,5 @@ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
+>  struct logical_volume *lv_ondisk(struct logical_volume *lv);
+>  struct profile *lv_config_profile(const struct logical_volume *lv);
+>  char *lv_profile_dup(struct dm_pool *mem, const struct logical_volume *lv);
+> +char *lv_snapshot_dup(const struct logical_volume *lv);
+>  #endif /* _LVM_LV_H */
+> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+> index 4ae7726..7753def 100644
+> --- a/lib/metadata/metadata.c
+> +++ b/lib/metadata/metadata.c
+> @@ -4629,6 +4629,32 @@ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
+>  	return dm_pool_end_object(mem);
+>  }
+>  
+> +char *list_snapshot(struct dm_pool *mem, const struct dm_list *snap)
+> +{
+> +	struct str_list *sl;
+> +	char *c = NULL;
+> +	struct lv_segment *snap_seg;
+> +
+> +	if (!dm_pool_begin_object(mem, 256)) {
+> +		log_error("dm_pool_begin_object failed");
+> +		return NULL;
+> +	}
+> +	dm_list_iterate_items_gen(snap_seg, snap, origin_list) {
+> +		if (!dm_pool_grow_object(mem, snap_seg->cow->name,
+> +					 strlen(snap_seg->cow->name)) ||
+> +		    (!dm_pool_grow_object(mem, ",", 1))) {
+> +			log_error("dm_pool_grow_object failed");
+> +			return NULL;
+> +		}
+> +	}
+> +
+> +	if (!dm_pool_grow_object(mem, "\0", 1)) {
+> +		log_error("dm_pool_grow_object failed");
+> +		return NULL;
+> +	}
+> +	return dm_pool_end_object(mem);
+> +}
+> +
+>  struct logical_volume *lv_ondisk(struct logical_volume *lv)
+>  {
+>  	struct volume_group *vg;
+> diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+> index 2408c23..e998534 100644
+> --- a/lib/metadata/metadata.h
+> +++ b/lib/metadata/metadata.h
+> @@ -485,6 +485,7 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
+>  
+>  uint64_t find_min_mda_size(struct dm_list *mdas);
+>  char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags);
+> +char *list_snapshot(struct dm_pool *mem, const struct dm_list *tags);
+>  
+>  void check_reappeared_pv(struct volume_group *correct_vg,
+>  			 struct physical_volume *pv);
+> diff --git a/lib/report/columns.h b/lib/report/columns.h
+> index 9bb99d3..da09ddb 100644
+> --- a/lib/report/columns.h
+> +++ b/lib/report/columns.h
+> @@ -65,6 +65,7 @@ FIELD(LVS, lv, STR, "LProfile", lvid, 8, lvprofile, lv_profile, "Configuration p
+>  FIELD(LVS, lv, STR, "Time", lvid, 26, lvtime, lv_time, "Creation time of the LV, if known", 0)
+>  FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
+>  FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
+> +FIELD(LVS, lv, STR, "snapshot", lvid, 8, snapshot, lv_snapshot, "Snapshots for this LV.", 0)
+>  
+>  FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
+>  FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, pv_uuid, "Unique identifier.", 0)
+> diff --git a/lib/report/properties.c b/lib/report/properties.c
+> index 3eeb78a..2481c69 100644
+> --- a/lib/report/properties.c
+> +++ b/lib/report/properties.c
+> @@ -235,6 +235,8 @@ GET_LV_STR_PROPERTY_FN(lv_active, lv_active_dup(lv->vg->vgmem, lv))
+>  #define _lv_active_set prop_not_implemented_set
+>  GET_LV_STR_PROPERTY_FN(lv_profile, lv_profile_dup(lv->vg->vgmem, lv))
+>  #define _lv_profile_set prop_not_implemented_set
+> +GET_LV_STR_PROPERTY_FN(lv_snapshot, lv_snapshot_dup(lv))
+> +#define _lv_snapshot_set prop_not_implemented_set
+>  
+>  /* VG */
+>  GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt_dup(vg))
+> diff --git a/lib/report/report.c b/lib/report/report.c
+> index 77332a2..2070a55 100644
+> --- a/lib/report/report.c
+> +++ b/lib/report/report.c
+> @@ -97,6 +97,21 @@ static int _tags_disp(struct dm_report *rh __attribute__((unused)), struct dm_po
+>  	return 1;
+>  }
+>  
+> +static int _snapshot_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
+> +		      struct dm_report_field *field,
+> +		      const void *data, void *private __attribute__((unused)))
+> +{
+> +	const struct logical_volume *lv = (const struct logical_volume *) data;
+> +	char *tags_str;
+> +
+> +	if (!(tags_str = list_snapshot(mem, &lv->snapshot_segs)))
+> +		return 0;
+> +
+> +	dm_report_field_set_value(field, tags_str, NULL);
+> +
+> +	return 1;
+> +}
+> +
+>  static int _modules_disp(struct dm_report *rh, struct dm_pool *mem,
+>  			 struct dm_report_field *field,
+>  			 const void *data, void *private)
+> @@ -124,6 +139,7 @@ static int _lvprofile_disp(struct dm_report *rh, struct dm_pool *mem,
+>  	return 1;
+>  }
+>  
+> +
+>  static int _vgfmt_disp(struct dm_report *rh, struct dm_pool *mem,
+>  		       struct dm_report_field *field,
+>  		       const void *data, void *private)
+> 
 
 
