@@ -1,65 +1,68 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 29 Oct 2013 12:34:44 +0000 (UTC)
-Subject: master - udev: proper reset of DM_UDEV_DISABLE_OTHER_RULES_FLAG and honour this flag in lvmetad rules
-Message-ID: <20131029123444.19D0660FCB@fedorahosted.org>
+Date: Tue, 29 Oct 2013 12:34:46 +0000 (UTC)
+Subject: master - lvconvert: use LV_TEMPORARY when necessary during lvconvert to thin pool
+Message-ID: <20131029123446.2FB74613AE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9d0621267d644d21d3c1ad3a5268af0ef3d7eb9a
-Commit:        9d0621267d644d21d3c1ad3a5268af0ef3d7eb9a
-Parent:        f3a6f7073b4ca71dcc0360daa66a845490b76893
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f1a42aa8ec4c6d693b57832a8575ee68b9e71b12
+Commit:        f1a42aa8ec4c6d693b57832a8575ee68b9e71b12
+Parent:        9d0621267d644d21d3c1ad3a5268af0ef3d7eb9a
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 29 13:15:45 2013 +0100
+AuthorDate:    Tue Oct 29 13:18:14 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Oct 29 13:31:00 2013 +0100
+CommitterDate: Tue Oct 29 13:33:35 2013 +0100
 
-udev: proper reset of DM_UDEV_DISABLE_OTHER_RULES_FLAG and honour this flag in lvmetad rules
+lvconvert: use LV_TEMPORARY when necessary during lvconvert to thin pool
 
-Reset the DM_UDEV_OTHER_RULES_FLAG to original value right at the
-time of dropping the DM_NOSCAN flag.
-
-When DM_NOSCAN is set, the DM_UDEV_DISABLE_OTHER_RULES_FLAG is also set
-to avoid udev processing in "other/foreign" rules. If the noscan flag
-is dropped, the DM_UDEV_DISABLE_OTHER_RULES_FLAG should be reset to
-its original value.
-
-Also, lvmetad should respect the DM_UDEV_DISABLE_OTHER_RULES_FLAG
-because if the volume is set with this flag it:
-  - definitely is not a top-level device (so makes no sense for lvmetad scanning)
-  - is not supposed to be scanned further (for any stacking on top of
-    it, including LVM stacking itself and any autoactivation of stacked LVs)
+This is an addition to original patch for lvcreate - commit 039bdad.
+The same principle applies to lvconvert where there are several steps
+during which we need to wipe the existing LV that's being converted
+to thin pool, making sure there's no other interference from outside (udev).
 ---
- udev/11-dm-lvm.rules.in       |    2 +-
- udev/69-dm-lvm-metad.rules.in |    1 +
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ tools/lvconvert.c |   20 ++++++++++++--------
+ 1 files changed, 12 insertions(+), 8 deletions(-)
 
-diff --git a/udev/11-dm-lvm.rules.in b/udev/11-dm-lvm.rules.in
-index 5032280..9ca0375 100644
---- a/udev/11-dm-lvm.rules.in
-+++ b/udev/11-dm-lvm.rules.in
-@@ -32,7 +32,7 @@ IMPORT{program}="(DM_EXEC)/dmsetup splitname --nameprefixes --noheadings --rows
- # uevent that follows for this LV, even an artificially generated one).
- ENV{DM_SUBSYSTEM_UDEV_FLAG0}=="1", ENV{DM_NOSCAN}="1", ENV{DM_DISABLE_OTHER_RULES_FLAG_OLD}="$env{DM_UDEV_DISABLE_OTHER_RULES_FLAG}", ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}="1"
- ENV{DM_SUBSYSTEM_UDEV_FLAG0}!="1", IMPORT{db}="DM_NOSCAN", IMPORT{db}="DM_DISABLE_OTHER_RULES_FLAG_OLD"
--ENV{DM_SUBSYSTEM_UDEV_FLAG0}!="1", ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}="$env{DM_DISABLE_OTHER_RULES_FLAG_OLD}", \
-+ENV{DM_SUBSYSTEM_UDEV_FLAG0}!="1", ENV{DM_NOSCAN}=="1", ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}="$env{DM_DISABLE_OTHER_RULES_FLAG_OLD}", \
- 				   ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG_OLD}="", ENV{DM_NOSCAN}=""
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index a6c1187..92a2022 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2435,14 +2435,8 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
+ 			goto mda_write;
+ 		}
  
- ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index 3e303b1..34441ab 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -18,6 +18,7 @@ SUBSYSTEM!="block", GOTO="lvm_end"
- (LVM_EXEC_RULE)
+-		metadata_lv->status |= LV_NOSCAN;
+-		if (!lv_is_active(metadata_lv) &&
+-		    !activate_lv_local(cmd, metadata_lv)) {
+-			log_error("Aborting. Failed to activate thin metadata lv.");
+-			return 0;
+-		}
+-		if (!set_lv(cmd, metadata_lv, UINT64_C(0), 0)) {
+-			log_error("Aborting. Failed to wipe thin metadata lv.");
++		if (!deactivate_lv(cmd, metadata_lv)) {
++			log_error("Aborting. Failed to deactivate thin metadata lv.");
+ 			return 0;
+ 		}
  
- ENV{DM_NOSCAN}=="1", GOTO="lvm_end"
-+ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="lvm_end"
+@@ -2462,6 +2456,16 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
+ 					&lp->thin_chunk_size_calc_policy, &lp->chunk_size,
+ 					&lp->discards, &lp->poolmetadata_size, &lp->zero))
+ 			return_0;
++
++		metadata_lv->status |= LV_TEMPORARY;
++		if (!activate_lv_local(cmd, metadata_lv)) {
++			log_error("Aborting. Failed to activate thin metadata lv.");
++			return 0;
++		}
++		if (!set_lv(cmd, metadata_lv, UINT64_C(0), 0)) {
++			log_error("Aborting. Failed to wipe thin metadata lv.");
++			return 0;
++		}
+ 	}
  
- # If the PV label got lost, inform lvmetad immediately.
- # Detect the lost PV label by comparing previous ID_FS_TYPE value with current one.
+ 	if (!deactivate_lv(cmd, metadata_lv)) {
 
 
