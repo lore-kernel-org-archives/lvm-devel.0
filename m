@@ -1,39 +1,39 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 29 Oct 2013 12:52:05 +0000 (UTC)
-Subject: master - WHATS_NEW: commit 9d06212
-Message-ID: <20131029125205.E01A961141@fedorahosted.org>
+Date: Tue, 29 Oct 2013 12:55:29 +0000 (UTC)
+Subject: master - udev: no need to check DM_NOSCAN in lvmetad rules
+Message-ID: <20131029125529.125B66105B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db05a0cf6fde3be23ea1123a76477576923af8cc
-Commit:        db05a0cf6fde3be23ea1123a76477576923af8cc
-Parent:        f1a42aa8ec4c6d693b57832a8575ee68b9e71b12
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=264b5c2b1252fae5918307326c2db07752b59001
+Commit:        264b5c2b1252fae5918307326c2db07752b59001
+Parent:        db05a0cf6fde3be23ea1123a76477576923af8cc
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 29 13:49:55 2013 +0100
+AuthorDate:    Tue Oct 29 13:54:14 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Oct 29 13:49:55 2013 +0100
+CommitterDate: Tue Oct 29 13:54:14 2013 +0100
 
-WHATS_NEW: commit 9d06212
+udev: no need to check DM_NOSCAN in lvmetad rules
 
-Other changes in previous commits 9d06212 and f1a42aa are changes
-in the code that was not yet released as part of upcoming v104.
+It's covered by general DM_UDEV_DISABLE_OTHER_RULES_FLAG.
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ udev/69-dm-lvm-metad.rules.in |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 63f97da..b8c1f15 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.104 -
- ===================================
-+  Respect DM_UDEV_DISABLE_OTHER_RULES_FLAG in lvmetad udev rules.
-   Fix clvmd message verification to not reject REMOTE flag. (2.02.100)
-   Compare equality of double values with DBL_EPSILON predefined constant.
-   Use additional gcc warning flags by default.
+diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+index 34441ab..949c897 100644
+--- a/udev/69-dm-lvm-metad.rules.in
++++ b/udev/69-dm-lvm-metad.rules.in
+@@ -17,7 +17,6 @@
+ SUBSYSTEM!="block", GOTO="lvm_end"
+ (LVM_EXEC_RULE)
+ 
+-ENV{DM_NOSCAN}=="1", GOTO="lvm_end"
+ ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="lvm_end"
+ 
+ # If the PV label got lost, inform lvmetad immediately.
 
 
