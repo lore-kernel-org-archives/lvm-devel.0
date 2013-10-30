@@ -1,39 +1,49 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 29 Oct 2013 12:55:29 +0000 (UTC)
-Subject: master - udev: no need to check DM_NOSCAN in lvmetad rules
-Message-ID: <20131029125529.125B66105B@fedorahosted.org>
+From: Oliver Rath <rath@mglug.de>
+Date: Wed, 30 Oct 2013 01:03:00 +0100
+Subject: indirection level for links for thinpools and thin volumes differ in ubuntu 12.04.3
+Message-ID: <52704CB4.7050604@mglug.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=264b5c2b1252fae5918307326c2db07752b59001
-Commit:        264b5c2b1252fae5918307326c2db07752b59001
-Parent:        db05a0cf6fde3be23ea1123a76477576923af8cc
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 29 13:54:14 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Oct 29 13:54:14 2013 +0100
+Hi list,
 
-udev: no need to check DM_NOSCAN in lvmetad rules
+Im not sure, if this is wanted:
 
-It's covered by general DM_UDEV_DISABLE_OTHER_RULES_FLAG.
----
- udev/69-dm-lvm-metad.rules.in |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+If I create a thinpool-device, it is a link from /dev/<vg>/thinpoolname
+to /dev/mapper/<vg>-thinpoolname, which is a link to /dev/dm-XX. .
 
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index 34441ab..949c897 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -17,7 +17,6 @@
- SUBSYSTEM!="block", GOTO="lvm_end"
- (LVM_EXEC_RULE)
- 
--ENV{DM_NOSCAN}=="1", GOTO="lvm_end"
- ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="lvm_end"
- 
- # If the PV label got lost, inform lvmetad immediately.
+But if I create a thinpool-volume from this device, the link to
+/dev/dmi-XX is created directly:
+
+Furthermore, the udev-rule for the thinpool-device creation seems to be
+broken:
+
+root at dmicrash:lvm2# lvcreate  --size 20G --thinpool dmivg/testpoollink
+  Logical volume "testpoollink" created
+  The link /dev/dmivg/testpoollink should have been created by udev but
+it was not found. Falling back to direct link creation.
+root at dmicrash:lvm2# ls -l /dev/dmivg/testpoollink
+lrwxrwxrwx 1 root root 30 Okt 30 00:53 /dev/dmivg/testpoollink ->
+/dev/mapper/dmivg-testpoollink
+root at dmicrash:lvm2# ls -l /dev/mapper/dmivg-testpoollink
+lrwxrwxrwx 1 root root 7 Okt 30 00:53 /dev/mapper/dmivg-testpoollink ->
+../dm-7
+root at dmicrash:lvm2# lvcreate  -V 2G --name testthinlink --thinpool
+dmivg/testpoollink
+  Logical volume "testthinlink" created
+root at dmicrash:lvm2# ls -l /dev/dmivg/testthinlink
+lrwxrwxrwx 1 root root 8 Okt 30 00:54 /dev/dmivg/testthinlink -> ../dm-11
+
+This is tested on a Ubuntu 12.04.3 with the lvm-sources from today,
+compiled with
+
+./configure --with-thin=internal --with-replicators=internal
+--enable-udev_sync --enable-udev_rules
+
+Regards,
+Oliver
 
 
