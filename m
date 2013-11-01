@@ -1,63 +1,81 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  1 Nov 2013 12:05:46 +0000 (UTC)
-Subject: master - locking: activate_lv_excl return correct error code
-Message-ID: <20131101120546.BCFAE61028@fedorahosted.org>
+Date: Fri,  1 Nov 2013 12:05:48 +0000 (UTC)
+Subject: master - activation: _lv_activate is ok when filtered.
+Message-ID: <20131101120548.DB7C461028@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1bde9f68cea61c7ee085588f2595ed52277da084
-Commit:        1bde9f68cea61c7ee085588f2595ed52277da084
-Parent:        de7531d384b1b505801ac232da45b9ffe58f061b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c3e674ad3010d21dc2cbde27b7634f7ea4fe67e3
+Commit:        c3e674ad3010d21dc2cbde27b7634f7ea4fe67e3
+Parent:        1bde9f68cea61c7ee085588f2595ed52277da084
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 1 10:26:43 2013 +0100
+AuthorDate:    Fri Nov 1 10:28:42 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 1 13:02:13 2013 +0100
+CommitterDate: Fri Nov 1 13:02:36 2013 +0100
 
-locking: activate_lv_excl return correct error code
+activation: _lv_activate is ok when filtered.
 
-Correct return code of activate_lv_excl().
+If the volume_list filters out volume from activation,
+it is still success result for this function.
+Change the error message back to verbose level.
 
-Function is not supposed to return activation state of
-activated volume, but return code of the operation.
-Since i.e. when activation filter is allowing to activate
-volume on current system, it is still success even though
-no volume is activated.
+Detect if the volume is active localy before zeroing,
+so we report error a bit later for cases, where volume
+could not be activated because it doesn't pass through volume
+list  (but user still could create volume when he disables
+zeroing)
 ---
- WHATS_NEW             |    1 +
- lib/locking/locking.c |    6 +++---
- 2 files changed, 4 insertions(+), 3 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/activate/activate.c |    5 +++--
+ lib/metadata/lv_manip.c |    6 ++++++
+ 3 files changed, 10 insertions(+), 2 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index b8a9bf7..2bf95d2 100644
+index 2bf95d2..ff8da1d 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.104 -
  ===================================
-+  Return proper error state for remote exclusive activation.
++  Return success when LV cannot be activated because of volume_list filter.
+   Return proper error state for remote exclusive activation.
    Fix missing lvmetad scan for PVs found on MD partitions.
    Respect DM_UDEV_DISABLE_OTHER_RULES_FLAG in lvmetad udev rules.
-   Fix clvmd message verification to not reject REMOTE flag. (2.02.100)
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 9183ee6..9433e40 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -559,10 +559,10 @@ int activate_lv_excl(struct cmd_context *cmd, struct logical_volume *lv)
- 		return 1;
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 006681e..7e6a5ac 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -2029,8 +2029,9 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 		goto out;
  
- 	/* FIXME Deal with error return codes. */
--	if (activate_lv_excl_remote(cmd, lv))
--		stack;
-+	if (!activate_lv_excl_remote(cmd, lv))
-+		return_0;
+ 	if (filter && !_passes_activation_filter(cmd, lv)) {
+-		log_error("Not activating %s/%s since it does not pass "
+-			  "activation filter.", lv->vg->name, lv->name);
++		log_verbose("Not activating %s/%s since it does not pass "
++			    "activation filter.", lv->vg->name, lv->name);
++		r = 1;
+ 		goto out;
+ 	}
  
--	return lv_is_active_exclusive(lv);
-+	return 1;
- }
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 88fceb2..020b365 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5381,6 +5381,12 @@ int set_lv(struct cmd_context *cmd, struct logical_volume *lv,
+ 	struct device *dev;
+ 	char *name;
  
- /* Lock a list of LVs */
++	if (!lv_is_active_locally(lv)) {
++		log_error("Volume \"%s/%s\" is not active locally.",
++			  lv->vg->name, lv->name);
++		return 0;
++	}
++
+ 	/*
+ 	 * FIXME:
+ 	 * <clausen> also, more than 4k
 
 
