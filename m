@@ -1,39 +1,50 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  6 Nov 2013 12:30:12 +0000 (UTC)
-Subject: master - profile: add thin_pool_chunk_size_policy to default.profile
-Message-ID: <20131106123012.2738E61373@fedorahosted.org>
+Date: Wed,  6 Nov 2013 13:56:35 +0000 (UTC)
+Subject: master - corosync: fix some gcc warnings
+Message-ID: <20131106135635.6EF5F60D90@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc144a3fc5389db11c3c34c9c240a763cc850cc7
-Commit:        fc144a3fc5389db11c3c34c9c240a763cc850cc7
-Parent:        14b852609b20e57c3b2dede0641d31155232b946
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b6b5299d1e1f6bdddb9bda30c4f37aaccbe3df44
+Commit:        b6b5299d1e1f6bdddb9bda30c4f37aaccbe3df44
+Parent:        fc144a3fc5389db11c3c34c9c240a763cc850cc7
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 6 13:29:25 2013 +0100
+AuthorDate:    Wed Nov 6 14:55:18 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 6 13:29:25 2013 +0100
+CommitterDate: Wed Nov 6 14:55:18 2013 +0100
 
-profile: add thin_pool_chunk_size_policy to default.profile
+corosync: fix some gcc warnings
 
-By default, thin_pool_chunk_size_policy is set to "generic".
+warning: function declaration isn't a prototype [-Wstrict-prototypes]
+warning: old-style function definition [-Wold-style-definition]
 ---
- conf/default.profile.in |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ daemons/clvmd/clvmd-corosync.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/conf/default.profile.in b/conf/default.profile.in
-index 6a0b8f1..29049ef 100644
---- a/conf/default.profile.in
-+++ b/conf/default.profile.in
-@@ -9,6 +9,7 @@
- # Refer to 'man lvm.conf' for further information about profiles and file layout.
+diff --git a/daemons/clvmd/clvmd-corosync.c b/daemons/clvmd/clvmd-corosync.c
+index 9092c8a..e68cb73 100644
+--- a/daemons/clvmd/clvmd-corosync.c
++++ b/daemons/clvmd/clvmd-corosync.c
+@@ -388,7 +388,7 @@ static int _name_from_csid(const char *csid, char *name)
+ 	return 0;
+ }
  
- allocation {
-+	thin_pool_chunk_size_policy = "generic"
- 	thin_pool_chunk_size = 64
- 	thin_pool_discards = "passdown"
- 	thin_pool_zero = 1
+-static int _get_num_nodes()
++static int _get_num_nodes(void)
+ {
+ 	DEBUGLOG("num_nodes = %d\n", num_nodes);
+ 	return num_nodes;
+@@ -505,7 +505,7 @@ static int _unlock_resource(const char *resource, int lockid)
+ 	return 0;
+ }
+ 
+-static int _is_quorate()
++static int _is_quorate(void)
+ {
+ 	int quorate;
+ 	if (quorum_getquorate(quorum_handle, &quorate) == CS_OK)
 
 
