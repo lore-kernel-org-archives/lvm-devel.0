@@ -1,50 +1,59 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  6 Nov 2013 13:56:35 +0000 (UTC)
-Subject: master - corosync: fix some gcc warnings
-Message-ID: <20131106135635.6EF5F60D90@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Fri,  8 Nov 2013 15:56:58 +0000 (UTC)
+Subject: master - mirror: Handle failures in tmp mirror used when up-converting.
+Message-ID: <20131108155658.42F8F60F39@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b6b5299d1e1f6bdddb9bda30c4f37aaccbe3df44
-Commit:        b6b5299d1e1f6bdddb9bda30c4f37aaccbe3df44
-Parent:        fc144a3fc5389db11c3c34c9c240a763cc850cc7
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 6 14:55:18 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 6 14:55:18 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7de533ad12972f5a9c5bf2d2b477d8320f7e4a8e
+Commit:        7de533ad12972f5a9c5bf2d2b477d8320f7e4a8e
+Parent:        b6b5299d1e1f6bdddb9bda30c4f37aaccbe3df44
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri Nov 8 09:52:00 2013 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Fri Nov 8 09:52:00 2013 -0600
 
-corosync: fix some gcc warnings
+mirror: Handle failures in tmp mirror used when up-converting.
 
-warning: function declaration isn't a prototype [-Wstrict-prototypes]
-warning: old-style function definition [-Wold-style-definition]
+Failures in the temporary mirror used when up-converting cause dmeventd
+to issue 'lvconvert --repair' on the sub-LV, <lv_name>_mimagetmp_?.  The
+'lvconvert' command refuses to deal with this sub-LV outright - it
+expects to be given the name of the top-level LV.  So, just like we do
+with mirrored logs, we strip-off the portion of the name that is not
+the top-level LV and issue the command on the top-level LV instead.
 ---
- daemons/clvmd/clvmd-corosync.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW                                    |    1 +
+ daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-corosync.c b/daemons/clvmd/clvmd-corosync.c
-index 9092c8a..e68cb73 100644
---- a/daemons/clvmd/clvmd-corosync.c
-+++ b/daemons/clvmd/clvmd-corosync.c
-@@ -388,7 +388,7 @@ static int _name_from_csid(const char *csid, char *name)
- 	return 0;
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f0a764b..5eb4abe 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.104 -
+ ===================================
++  Handle failures in temporary mirror used when adding images to mirrors.
+   Fix and improve logic for implicitely exclusive activations.
+   Return success when LV cannot be activated because of volume_list filter.
+   Return proper error state for remote exclusive activation.
+diff --git a/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c b/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
+index 5d5a46b..6d2c3de 100644
+--- a/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
++++ b/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
+@@ -159,8 +159,8 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
+ 	}
  
--static int _get_num_nodes()
-+static int _get_num_nodes(void)
- {
- 	DEBUGLOG("num_nodes = %d\n", num_nodes);
- 	return num_nodes;
-@@ -505,7 +505,7 @@ static int _unlock_resource(const char *resource, int lockid)
- 	return 0;
- }
+ 	/* strip off the mirror component designations */
+-	layer = strstr(lv, "_mlog");
+-	if (layer)
++	if ((layer = strstr(lv, "_mimagetmp")) ||
++	    (layer = strstr(lv, "_mlog")))
+ 		*layer = '\0';
  
--static int _is_quorate()
-+static int _is_quorate(void)
- {
- 	int quorate;
- 	if (quorum_getquorate(quorum_handle, &quorate) == CS_OK)
+ 	r = dm_snprintf(buffer, size, "%s %s/%s", cmd, vg, lv);
 
 
