@@ -1,264 +1,101 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Thu, 14 Nov 2013 08:43:06 -0600
-Subject: [PATCH 09/13] lvm2app: Add VG/LV name validation
+Date: Thu, 14 Nov 2013 08:43:09 -0600
+Subject: [PATCH 12/13] lvm2app: Add LVM2APP_DEBUG env variable for debug
 In-Reply-To: <1384440190-5759-1-git-send-email-tasleson@redhat.com>
 References: <1384440190-5759-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1384440190-5759-10-git-send-email-tasleson@redhat.com>
+Message-ID: <1384440190-5759-13-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-C library portion for
-https://bugzilla.redhat.com/show_bug.cgi?id=883689
+This patch allows a user to define the LVM2APP_DEBUG
+environmental variable and log debug messages to stderr
+for bug reports.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/metadata/metadata-exported.h |  1 +
- lib/metadata/metadata.c          |  4 +--
- lib/misc/lvm-string.c            | 68 ++++++++++++++++++++++++++++++++--------
- lib/misc/lvm-string.h            |  1 +
- liblvm/lvm2app.h                 | 32 +++++++++++++++++++
- liblvm/lvm_base.c                |  1 +
- liblvm/lvm_vg.c                  | 21 +++++++++++++
- 7 files changed, 113 insertions(+), 15 deletions(-)
+ lib/log/log.c     | 11 +++++++++++
+ lib/log/log.h     |  2 ++
+ liblvm/lvm_base.c | 14 +++++++++++---
+ 3 files changed, 24 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 6d056a9..0f3cfce 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -584,6 +584,7 @@ int pv_analyze(struct cmd_context *cmd, const char *pv_name,
- /* FIXME: move internal to library */
- uint32_t pv_list_extents_free(const struct dm_list *pvh);
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 25f2264..1de7a3e 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -34,6 +34,7 @@ static int _log_suppress = 0;
+ static char _msg_prefix[30] = "  ";
+ static int _already_logging = 0;
+ static int _abort_on_internal_errors = 0;
++static int _force_to_std_error = 0;
  
-+int validate_new_vg_name(struct cmd_context *cmd, const char *vg_name);
- int vg_validate(struct volume_group *vg);
- struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name);
- int vg_remove_mdas(struct volume_group *vg);
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5bb385d..a2ff54a 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -429,11 +429,11 @@ int move_pvs_used_by_lv(struct volume_group *vg_from,
- 	return 1;
- }
+ static lvm2_log_fn_t _lvm2_log_fn = NULL;
  
--static int validate_new_vg_name(struct cmd_context *cmd, const char *vg_name)
-+int validate_new_vg_name(struct cmd_context *cmd, const char *vg_name)
- {
- 	static char vg_path[PATH_MAX];
+@@ -44,6 +45,11 @@ static size_t _lvm_errmsg_size = 0;
+ static size_t _lvm_errmsg_len = 0;
+ #define MAX_ERRMSG_LEN (512 * 1024)  /* Max size of error buffer 512KB */
  
--	if (!validate_name(vg_name)) {
-+	if (!validate_name_detailed(vg_name)) {
- 		log_error("New volume group name \"%s\" is invalid.",
- 			  vg_name);
- 		return 0;
-diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
-index 8aa1f6c..4351dfc 100644
---- a/lib/misc/lvm-string.c
-+++ b/lib/misc/lvm-string.c
-@@ -63,35 +63,40 @@ int validate_tag(const char *n)
- 	return 1;
- }
- 
--/*
-- * Device layer names are all of the form <vg>-<lv>-<layer>, any
-- * other hyphens that appear in these names are quoted with yet
-- * another hyphen.  The top layer of any device has no layer
-- * name.  eg, vg0-lvol0.
-- */
--int validate_name(const char *n)
-+static int _validate_name(const char *n)
- {
- 	register char c;
- 	register int len = 0;
- 
- 	if (!n || !*n)
--		return 0;
-+		return -1;
- 
- 	/* Hyphen used as VG-LV separator - ambiguity if LV starts with it */
- 	if (*n == '-')
--		return 0;
-+		return -2;
- 
- 	if ((*n == '.') && (!n[1] || (n[1] == '.' && !n[2]))) /* ".", ".." */
--		return 0;
-+		return -3;
- 
- 	while ((len++, c = *n++))
- 		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+')
--			return 0;
-+			return -4;
- 
- 	if (len > NAME_LEN)
--		return 0;
-+		return -5;
- 
--	return 1;
-+	return 0;
++void init_force_stderr(int yes_no)
++{
++	_force_to_std_error = yes_no;
 +}
 +
-+/*
-+ * Device layer names are all of the form <vg>-<lv>-<layer>, any
-+ * other hyphens that appear in these names are quoted with yet
-+ * another hyphen.  The top layer of any device has no layer
-+ * name.  eg, vg0-lvol0.
-+ */
-+int validate_name(const char *n)
-+{
-+	return (_validate_name(n) < 0 ? 0 : 1);
- }
+ void init_log_fn(lvm2_log_fn_t log_fn)
+ {
+ 	if (log_fn)
+@@ -202,6 +208,11 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
  
- int apply_lvname_restrictions(const char *name)
-@@ -136,6 +141,43 @@ int apply_lvname_restrictions(const char *name)
- 	return 1;
- }
+ 	level &= ~(_LOG_STDERR|_LOG_ONCE);
  
-+/*
-+ * Validates name and adds additional information to error messages.
-+ */
-+int validate_name_detailed(const char *name)
-+{
-+	int rc = 0;
-+
-+	rc = _validate_name(name);
-+
-+	if (rc) {
-+		switch(rc) {
-+		case -1:
-+			log_error("Name is zero length");
-+			break;
-+		case -2:
-+			log_error("Name cannot start with hyphen");
-+			break;
-+		case -3:
-+			log_error("Name starts with . or .. and has no "
-+						"following character(s)");
-+			break;
-+		case -4:
-+			log_error("Name contains invalid character, valid set includes: "
-+					"[a-zA-Z0-9.-_+]");
-+			break;
-+		case -5:
-+			log_error("Name length exceeds maximum limit of %d", NAME_LEN);
-+			break;
-+		default:
-+			log_error("Unknown error %d on name validation", rc);
-+			break;
-+		}
++	/* lvm2app debug will be outputting everything to STDERR */
++	if (_force_to_std_error) {
++		use_stderr = 1;
 +	}
 +
-+	return (rc < 0) ? 0: 1;
-+}
+ 	if (_abort_on_internal_errors &&
+ 	    !strncmp(format, INTERNAL_ERROR, sizeof(INTERNAL_ERROR) - 1)) {
+ 		fatal_internal_error = 1;
+diff --git a/lib/log/log.h b/lib/log/log.h
+index 99e7623..6059663 100644
+--- a/lib/log/log.h
++++ b/lib/log/log.h
+@@ -107,6 +107,8 @@
+ #define log_sys_debug(x, y) \
+ 		log_debug("%s: %s failed: %s", y, x, strerror(errno))
+ 
++void init_force_stderr(int yes_no);
 +
- int is_reserved_lvname(const char *name)
- {
- 	int rc, old_suppress;
-diff --git a/lib/misc/lvm-string.h b/lib/misc/lvm-string.h
-index 6be048d..1e2ecc5 100644
---- a/lib/misc/lvm-string.h
-+++ b/lib/misc/lvm-string.h
-@@ -31,6 +31,7 @@ char *build_dm_uuid(struct dm_pool *mem, const char *lvid,
- 		    const char *layer);
- 
- int validate_name(const char *n);
-+int validate_name_detailed(const char *n);
- int validate_tag(const char *n);
- 
- int apply_lvname_restrictions(const char *name);
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index afc6793..0940b6f 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -510,6 +510,21 @@ vg_t lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
- 		  uint32_t flags);
- 
- /**
-+ * Validate a name to be used for new VG construction.
-+ *
-+ * This function checks that the name has no invalid characters,
-+ * the length doesn't exceed maximum and that the VG name isn't already in use
-+ * and that the name adheres to any other limitations.
-+ *
-+ * \param libh
-+ * Valid library handle
-+ *
-+ * \param name
-+ * Name to validate for new VG create.
-+ */
-+int lvm_vg_name_validate(lvm_t libh, const char *vg_name);
-+
-+/**
-  * Create a VG with default parameters.
-  *
-  * \memberof lvm_t
-@@ -1554,6 +1569,23 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size);
- lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size);
- 
- /**
-+ * Validate a name to be used for LV creation.
-+ *
-+ * Validates that the name does not contain any invalid characters, max length
-+ * and that the LV name doesn't already exist for this VG.
-+ *
-+ * Note: You can have the same LV name in different VGs, thus the reason this
-+ * function requires that you specify a VG to check against.
-+ *
-+ * \param lv
-+ * Volume group handle.
-+ *
-+ * \param name
-+ * Name to validate
-+ */
-+int lvm_lv_name_validate(const vg_t vg, const char *lv_name);
-+
-+/**
-  * Thin provisioning discard policies
-  */
- typedef enum {
+ #define return_0	do { stack; return 0; } while (0)
+ #define return_NULL	do { stack; return NULL; } while (0)
+ #define return_ECMD_FAILED do { stack; return ECMD_FAILED; } while (0)
 diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index b7603e3..139cc97 100644
+index 891cdab..f7a71df 100644
 --- a/liblvm/lvm_base.c
 +++ b/liblvm/lvm_base.c
-@@ -18,6 +18,7 @@
- #include "lvm-version.h"
- #include "metadata-exported.h"
- #include "lvm2app.h"
-+#include "lvm-string.h"
+@@ -68,10 +68,18 @@ lvm_t lvm_init(const char *system_dir)
+ 	cmd->cmd_line = "liblvm";
  
- const char *lvm_library_get_version(void)
- {
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index 214f459..ee7aa18 100644
---- a/liblvm/lvm_vg.c
-+++ b/liblvm/lvm_vg.c
-@@ -385,3 +385,24 @@ int lvm_scan(lvm_t libh)
- 		return -1;
- 	return 0;
- }
-+
-+int lvm_lv_name_validate(const vg_t vg, const char *name)
-+{
-+	if (validate_name_detailed(name) && apply_lvname_restrictions(name)) {
-+		if (!find_lv_in_vg(vg, name)) {
-+			return 0;
-+		} else {
-+			log_errno(EINVAL, "LV name exists in VG");
-+		}
+ 	/*
+-	 * Turn off writing to stdout/stderr.
+-	 * FIXME Fix lib/ to support a non-interactive mode instead.
++	 * If a user defines LVM2APP_DEBUG we will log at a high level to stderr
+ 	 */
+-	log_suppress(1);
++	if (getenv("LVM2APP_DEBUG")) {
++		init_verbose(_LOG_DEBUG);
++		init_force_stderr(1);
++	} else {
++		/*
++		 * Turn off writing to stdout/stderr.
++		 * FIXME Fix lib/ to support a non-interactive mode instead.
++		 */
++		log_suppress(1);
 +	}
-+	return -1;
-+}
-+
-+int lvm_vg_name_validate(lvm_t libh, const char *name)
-+{
-+	struct cmd_context *cmd = (struct cmd_context *)libh;
-+
-+	if (validate_new_vg_name(cmd, name))
-+		return 0;
-+	return -1;
-+}
+ 
+ 	return (lvm_t) cmd;
+ }
 -- 
 1.8.2.1
 
