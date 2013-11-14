@@ -1,86 +1,89 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Thu, 14 Nov 2013 08:42:57 -0600
-Subject: [PATCH 00/13] liblvm patch series for review
-Message-ID: <1384440190-5759-1-git-send-email-tasleson@redhat.com>
+Date: Thu, 14 Nov 2013 08:42:58 -0600
+Subject: [PATCH 01/13] python-lvm: Correct names
+In-Reply-To: <1384440190-5759-1-git-send-email-tasleson@redhat.com>
+References: <1384440190-5759-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1384440190-5759-2-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch contains a number of library updates for review.  Main points of
-interest include:
+The existing names do not follow accepted guidelines.
 
-* Name corrections for python bindings, so that the names actually match how
-  you reference class name spaces in python.
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ python/liblvm.c | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
 
-* Add checks so if a user recycles the library handle
-  any left over references to old libraries are caught.
-
-* Re-factor vg reduce to have one code path, addresses:
-  https://bugzilla.redhat.com/show_bug.cgi?id=989174
-
-* Add ability to create PV with arguments to configure:
-  - size
-  - pvmetadatacopies
-  - pvmetadatasize
-  - data_alignment
-  - data_alignment_offset
-  - zero
-
-* Update unit tests and _enable_ them.
-
-* Add VG/LV name validation function ref. bug: 
-  https://bugzilla.redhat.com/show_bug.cgi?id=883689
-
-* Reset buffer after retrieving error message in library.
-
-* Add LVM2APP_DEBUG env variable for debug messages to stderr.
-
-* Remove the forward struct declaration.  This isn't needed for
-  implementing opaque data pointers.
-
-
-Tony Asleson (13):
-  python-lvm: Correct names
-  python-lvm: Robustness improvements.
-  vgreduce: Move _vgreduce_single functionality
-  metadata.c: Call refactored vgreduce_single
-  python-lvm: Test case change for vg.reduce
-  lvm2app: Add ability to create PV with args
-  python-lvm: Add addl. PV create arguments
-  python-lvm: Update and enable unit test case
-  lvm2app: Add VG/LV name validation
-  python-lvm: VG/LV name validation.
-  lvm2app: Reset buffer after retrieving error message
-  lvm2app: Add LVM2APP_DEBUG env variable for debug
-  lvm2app: Remove forward declarations.
-
- lib/log/log.c                    |  18 +++
- lib/log/log.h                    |   2 +
- lib/log/lvm-logging.h            |   1 +
- lib/metadata/metadata-exported.h |   5 +
- lib/metadata/metadata.c          |  67 ++++----
- lib/metadata/vg.c                |  93 +++++++++++
- lib/misc/lvm-string.c            |  68 ++++++--
- lib/misc/lvm-string.h            |   1 +
- liblvm/lvm2app.h                 | 117 ++++++++++++--
- liblvm/lvm_base.c                |  24 ++-
- liblvm/lvm_lv.c                  |   8 +-
- liblvm/lvm_misc.c                |  10 ++
- liblvm/lvm_misc.h                |   9 +-
- liblvm/lvm_prop.c                |  31 ++++
- liblvm/lvm_prop.h                |  14 ++
- liblvm/lvm_prop_fields.h         |   7 +
- liblvm/lvm_pv.c                  | 136 ++++++++++++++--
- liblvm/lvm_vg.c                  |  25 ++-
- python/liblvm.c                  | 329 +++++++++++++++++++++++----------------
- test/api/pytest.sh               |   4 -
- test/api/python_lvm_unit.py      | 101 +++++++++++-
- tools/toollib.c                  |   6 -
- tools/vgreduce.c                 |  81 +---------
- 23 files changed, 855 insertions(+), 302 deletions(-)
-
+diff --git a/python/liblvm.c b/python/liblvm.c
+index a9de817..42a327e 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -1846,7 +1846,7 @@ static PyMethodDef _liblvm_pvseg_methods[] = {
+ 
+ static PyTypeObject _LibLVMvgType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_vg",
++	.tp_name = "lvm.Liblvm_vg",
+ 	.tp_basicsize = sizeof(vgobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)liblvm_vg_dealloc,
+@@ -1857,7 +1857,7 @@ static PyTypeObject _LibLVMvgType = {
+ 
+ static PyTypeObject _LibLVMlvType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_lv",
++	.tp_name = "lvm.Liblvm_lv",
+ 	.tp_basicsize = sizeof(lvobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)liblvm_lv_dealloc,
+@@ -1868,7 +1868,7 @@ static PyTypeObject _LibLVMlvType = {
+ 
+ static PyTypeObject _LibLVMpvlistType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_pvlist",
++	.tp_name = "lvm.Liblvm_pvlist",
+ 	.tp_basicsize = sizeof(pvslistobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)_liblvm_pvlist_dealloc,
+@@ -1879,7 +1879,7 @@ static PyTypeObject _LibLVMpvlistType = {
+ 
+ static PyTypeObject _LibLVMpvType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_pv",
++	.tp_name = "lvm.Liblvm_pv",
+ 	.tp_basicsize = sizeof(pvobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)_liblvm_pv_dealloc,
+@@ -1890,7 +1890,7 @@ static PyTypeObject _LibLVMpvType = {
+ 
+ static PyTypeObject _LibLVMlvsegType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_lvseg",
++	.tp_name = "lvm.Liblvm_lvseg",
+ 	.tp_basicsize = sizeof(lvsegobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)_liblvm_lvseg_dealloc,
+@@ -1901,7 +1901,7 @@ static PyTypeObject _LibLVMlvsegType = {
+ 
+ static PyTypeObject _LibLVMpvsegType = {
+ 	PyObject_HEAD_INIT(&PyType_Type)
+-	.tp_name = "liblvm.Liblvm_pvseg",
++	.tp_name = "lvm.Liblvm_pvseg",
+ 	.tp_basicsize = sizeof(pvsegobject),
+ 	.tp_new = PyType_GenericNew,
+ 	.tp_dealloc = (destructor)_liblvm_pvseg_dealloc,
+@@ -1952,7 +1952,7 @@ PyMODINIT_FUNC initlvm(void)
+ 				    LVM_THIN_DISCARDS_PASSDOWN) < 0)
+ 		return;
+ 
+-	if ((_LibLVMError = PyErr_NewException("Liblvm._LibLVMError", NULL, NULL))) {
++	if ((_LibLVMError = PyErr_NewException("lvm.LibLVMError", NULL, NULL))) {
+ 		/* Each call to PyModule_AddObject decrefs it; compensate: */
+ 		Py_INCREF(_LibLVMError);
+ 		Py_INCREF(_LibLVMError);
 -- 
 1.8.2.1
 
