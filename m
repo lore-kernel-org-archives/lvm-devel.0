@@ -1,89 +1,106 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Thu, 14 Nov 2013 08:42:58 -0600
-Subject: [PATCH 01/13] python-lvm: Correct names
+Date: Thu, 14 Nov 2013 08:43:04 -0600
+Subject: [PATCH 07/13] python-lvm: Add addl. PV create arguments
 In-Reply-To: <1384440190-5759-1-git-send-email-tasleson@redhat.com>
 References: <1384440190-5759-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1384440190-5759-2-git-send-email-tasleson@redhat.com>
+Message-ID: <1384440190-5759-8-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The existing names do not follow accepted guidelines.
+Added overloaded PV create arguments with defaults for PV
+creation.
+
+Addresses bug: https://bugzilla.redhat.com/show_bug.cgi?id=880395
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- python/liblvm.c | 14 +++++++-------
- 1 file changed, 7 insertions(+), 7 deletions(-)
+ python/liblvm.c | 51 +++++++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 45 insertions(+), 6 deletions(-)
 
 diff --git a/python/liblvm.c b/python/liblvm.c
-index a9de817..42a327e 100644
+index 36b64e4..033de82 100644
 --- a/python/liblvm.c
 +++ b/python/liblvm.c
-@@ -1846,7 +1846,7 @@ static PyMethodDef _liblvm_pvseg_methods[] = {
+@@ -23,6 +23,7 @@
  
- static PyTypeObject _LibLVMvgType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_vg",
-+	.tp_name = "lvm.Liblvm_vg",
- 	.tp_basicsize = sizeof(vgobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)liblvm_vg_dealloc,
-@@ -1857,7 +1857,7 @@ static PyTypeObject _LibLVMvgType = {
+ #include <Python.h>
+ #include "lvm2app.h"
++#include "defaults.h"
  
- static PyTypeObject _LibLVMlvType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_lv",
-+	.tp_name = "lvm.Liblvm_lv",
- 	.tp_basicsize = sizeof(lvobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)liblvm_lv_dealloc,
-@@ -1868,7 +1868,7 @@ static PyTypeObject _LibLVMlvType = {
+ static lvm_t _libh;
  
- static PyTypeObject _LibLVMpvlistType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pvlist",
-+	.tp_name = "lvm.Liblvm_pvlist",
- 	.tp_basicsize = sizeof(pvslistobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pvlist_dealloc,
-@@ -1879,7 +1879,7 @@ static PyTypeObject _LibLVMpvlistType = {
+@@ -317,24 +318,62 @@ static PyObject *_liblvm_lvm_pv_remove(PyObject *self, PyObject *arg)
+ 	return Py_None;
+ }
  
- static PyTypeObject _LibLVMpvType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pv",
-+	.tp_name = "lvm.Liblvm_pv",
- 	.tp_basicsize = sizeof(pvobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pv_dealloc,
-@@ -1890,7 +1890,7 @@ static PyTypeObject _LibLVMpvType = {
++static int _set_pv_numeric_prop(pv_create_params_t pv_params, const char *name,
++								unsigned long long value)
++{
++	struct lvm_property_value prop_value;
++	prop_value.is_integer = 1;
++	prop_value.value.integer = value;
++
++	return lvm_pv_params_set_property(pv_params, name, &prop_value);
++}
++
++#define SET_PV_PROP(params, name, value) \
++	do { \
++		if (_set_pv_numeric_prop(params, name, value) == -1) \
++			goto error; \
++	} while(0)\
++
+ static PyObject *_liblvm_lvm_pv_create(PyObject *self, PyObject *arg)
+ {
+ 	const char *pv_name;
+-	unsigned long long size;
++	unsigned long long size = 0;
++	unsigned long long pvmetadatacopies = DEFAULT_PVMETADATACOPIES;
++	unsigned long long pvmetadatasize = DEFAULT_PVMETADATASIZE;
++	unsigned long long data_alignment = 0;
++	unsigned long long data_alignment_offset = 0;
++	unsigned long long zero = 1;
++	pv_create_params_t pv_params = NULL;
  
- static PyTypeObject _LibLVMlvsegType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_lvseg",
-+	.tp_name = "lvm.Liblvm_lvseg",
- 	.tp_basicsize = sizeof(lvsegobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_lvseg_dealloc,
-@@ -1901,7 +1901,7 @@ static PyTypeObject _LibLVMlvsegType = {
+ 	LVM_VALID(NULL);
  
- static PyTypeObject _LibLVMpvsegType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pvseg",
-+	.tp_name = "lvm.Liblvm_pvseg",
- 	.tp_basicsize = sizeof(pvsegobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pvseg_dealloc,
-@@ -1952,7 +1952,7 @@ PyMODINIT_FUNC initlvm(void)
- 				    LVM_THIN_DISCARDS_PASSDOWN) < 0)
- 		return;
+-	if (!PyArg_ParseTuple(arg, "sK", &pv_name, &size))
++	if (!PyArg_ParseTuple(arg, "s|KKKKKK", &pv_name, &size, &pvmetadatacopies,
++							&pvmetadatasize, &data_alignment,
++							&data_alignment_offset, &zero))
+ 		return NULL;
  
--	if ((_LibLVMError = PyErr_NewException("Liblvm._LibLVMError", NULL, NULL))) {
-+	if ((_LibLVMError = PyErr_NewException("lvm.LibLVMError", NULL, NULL))) {
- 		/* Each call to PyModule_AddObject decrefs it; compensate: */
- 		Py_INCREF(_LibLVMError);
- 		Py_INCREF(_LibLVMError);
+-	if (lvm_pv_create(_libh, pv_name, size) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
++	pv_params = lvm_pv_params_create(_libh, pv_name);
++	if (!pv_params) {
++		goto error;
+ 	}
+ 
+-	Py_INCREF(Py_None);
++	SET_PV_PROP(pv_params, "size", size);
++	SET_PV_PROP(pv_params, "pvmetadatacopies", pvmetadatacopies);
++	SET_PV_PROP(pv_params, "pvmetadatasize", pvmetadatasize);
++	SET_PV_PROP(pv_params, "data_alignment", data_alignment);
++	SET_PV_PROP(pv_params, "data_alignment_offset", data_alignment_offset);
++	SET_PV_PROP(pv_params, "zero", zero);
++
++	if (lvm_pv_create_adv(pv_params)) {
++		goto error;
++	}
+ 
++	Py_INCREF(Py_None);
+ 	return Py_None;
++
++error:
++	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
++	return NULL;
+ }
+ 
+ static PyObject *_liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
 -- 
 1.8.2.1
 
