@@ -1,208 +1,223 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Nov 2013 11:39:32 +0000 (UTC)
-Subject: master - report: use _field_set_percent
-Message-ID: <20131115113932.DD5186135C@fedorahosted.org>
+Date: Fri, 15 Nov 2013 11:39:30 +0000 (UTC)
+Subject: master - report: fix dereference of string as uint64_t
+Message-ID: <20131115113930.C81E96135C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6ca832ceafe4ca599e059464faf2ef5760a29b23
-Commit:        6ca832ceafe4ca599e059464faf2ef5760a29b23
-Parent:        36d7c639d14e121e839b2117dcf744097e6ebfde
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=36d7c639d14e121e839b2117dcf744097e6ebfde
+Commit:        36d7c639d14e121e839b2117dcf744097e6ebfde
+Parent:        9eb81b1bf74411bba6cc950a4ebe0a44856c0e74
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 23 11:03:02 2013 +0200
+AuthorDate:    Mon Sep 23 10:18:10 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 15 11:05:03 2013 +0100
+CommitterDate: Fri Nov 15 11:05:02 2013 +0100
 
-report: use _field_set_percent
+report: fix dereference of string as uint64_t
 
-Use common routine for displaying percentage.
+Fix buggy usage of "" (empty string) as a numerical string
+value used for sorting.
+
+On intel 64b platform this was typically resolve
+as 0xffffff0000000000 - which is already 'close' to
+UINT64_MAX which is used for _minusone64.
+
+On other platforms it might have been giving
+different numbers depends on aligment of strings.
+
+Use proper &_minusone64 for sorting value when the reported
+value is NUM.
+
+Note: each numerical value needs to be thought about if it needs
+default value &_zero64 or &_minusone64 since for cases, were
+value of zero is valid, sorting should not be mixing entries
+together.
 ---
- lib/report/report.c |  131 ++++++++++-----------------------------------------
- 1 files changed, 25 insertions(+), 106 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/report/report.c |   84 ++++++++++++++++++--------------------------------
+ 2 files changed, 31 insertions(+), 54 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b190ca4..fb3b21a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Fix reporting of empty numerical values.
+   Simplify reporting code.
+ 
+ Version 2.02.104 - 13th November 2013
 diff --git a/lib/report/report.c b/lib/report/report.c
-index 5caebb2..1565aec 100644
+index 697d642..5caebb2 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -34,6 +34,7 @@ struct lvm_report_object {
- 	struct pv_segment *pvseg;
- };
- 
-+static const uint64_t _hundred64 = UINT64_C(100);
- static const uint64_t _minusone64 = UINT64_C(-1);
- static const int32_t _minusone32 = INT32_C(-1);
- static const uint64_t _zero64 = UINT64_C(0);
-@@ -851,56 +852,23 @@ static int _snpercent_disp(struct dm_report *rh __attribute__((unused)), struct
+@@ -591,13 +591,10 @@ static int _thinzero_disp(struct dm_report *rh, struct dm_pool *mem,
  {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	percent_t snap_percent;
--	uint64_t *sortval;
--	char *repstr;
--
--	/* Suppress snapshot percentage if not using driver */
--	if (!activation()) {
+ 	const struct lv_segment *seg = (const struct lv_segment *) data;
+ 
+-	/* Suppress thin count if not thin pool */
+-	if (!seg_is_thin_pool(seg)) {
 -		dm_report_field_set_value(field, "", NULL);
 -		return 1;
 -	}
--
--	if (!(sortval = dm_pool_alloc(mem, sizeof(uint64_t)))) {
--		log_error("dm_pool_alloc failed");
--		return 0;
--	}
++	if (seg_is_thin_pool(seg))
++		return _uint32_disp(rh, mem, field, &seg->zero_new_blocks, private);
  
--	if ((!lv_is_cow(lv) && !lv_is_merging_origin(lv)) ||
--	    !lv_is_active_locally(lv)) {
--		*sortval = UINT64_C(0);
--		dm_report_field_set_value(field, "", sortval);
+-	return _uint32_disp(rh, mem, field, &seg->zero_new_blocks, private);
++	return _field_set_value(field, "", &_minusone64);
+ }
+ 
+ static int _transactionid_disp(struct dm_report *rh, struct dm_pool *mem,
+@@ -606,13 +603,10 @@ static int _transactionid_disp(struct dm_report *rh, struct dm_pool *mem,
+ {
+ 	const struct lv_segment *seg = (const struct lv_segment *) data;
+ 
+-	/* Suppress thin count if not thin pool */
+-	if (!seg_is_thin_pool(seg)) {
+-		dm_report_field_set_value(field, "", NULL);
 -		return 1;
 -	}
-+	if ((lv_is_cow(lv) || lv_is_merging_origin(lv)) &&
-+	    lv_snapshot_percent(lv, &snap_percent)) {
-+		if ((snap_percent != PERCENT_INVALID) &&
-+		    (snap_percent != PERCENT_MERGE_FAILED))
-+			return _field_set_percent(field, mem, snap_percent);
++	if (seg_is_thin_pool(seg))
++		return dm_report_field_uint64(rh, field, &seg->transaction_id);
  
--	if (!lv_snapshot_percent(lv, &snap_percent) ||
--	    (snap_percent == PERCENT_INVALID) || (snap_percent == PERCENT_MERGE_FAILED)) {
--		if (!lv_is_merging_origin(lv)) {
--			*sortval = UINT64_C(100);
--			dm_report_field_set_value(field, "100.00", sortval);
--		} else {
--			/* onactivate merge that hasn't started yet would
--			 * otherwise display incorrect snap% in origin
--			 */
--			*sortval = UINT64_C(0);
--			dm_report_field_set_value(field, "", sortval);
--		}
+-	return  dm_report_field_uint64(rh, field, &seg->transaction_id);
++	return _field_set_value(field, "", &_minusone64);
+ }
+ 
+ static int _discards_disp(struct dm_report *rh, struct dm_pool *mem,
+@@ -980,13 +974,10 @@ static int _raidmismatchcount_disp(struct dm_report *rh __attribute__((unused)),
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+ 	uint64_t mismatch_count;
+ 
+-	if (!(lv->status & RAID) ||
+-	    !lv_raid_mismatch_count(lv, &mismatch_count)) {
+-		dm_report_field_set_value(field, "", NULL);
 -		return 1;
 -	}
-+		if (!lv_is_merging_origin(lv))
-+			return _field_set_value(field, "100.00", &_hundred64);
++	if (lv_is_raid(lv) && lv_raid_mismatch_count(lv, &mismatch_count))
++		return dm_report_field_uint64(rh, field, &mismatch_count);
  
--	if (!(repstr = dm_pool_zalloc(mem, 8))) {
--		log_error("dm_pool_alloc failed");
--		return 0;
-+		/*
-+		 * on activate merge that hasn't started yet would
-+		 * otherwise display incorrect snap% in origin
-+		 */
- 	}
+-	return dm_report_field_uint64(rh, field, &mismatch_count);
++	return _field_set_value(field, "", &_minusone64);
+ }
  
--	if (dm_snprintf(repstr, 7, "%.2f", percent_to_float(snap_percent)) < 0) {
--		log_error("snapshot percentage too large");
--		return 0;
+ static int _raidwritebehind_disp(struct dm_report *rh __attribute__((unused)),
+@@ -997,12 +988,10 @@ static int _raidwritebehind_disp(struct dm_report *rh __attribute__((unused)),
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+ 
+-	if (!lv_is_raid_type(lv) || !first_seg(lv)->writebehind) {
+-		dm_report_field_set_value(field, "", NULL);
+-		return 1;
 -	}
--
--	*sortval = (uint64_t)(snap_percent * 1000.f);
--	dm_report_field_set_value(field, repstr, sortval);
++	if (lv_is_raid_type(lv) && first_seg(lv)->writebehind)
++		return dm_report_field_uint32(rh, field, &first_seg(lv)->writebehind);
+ 
+-	return dm_report_field_uint32(rh, field, &first_seg(lv)->writebehind);
++	return _field_set_value(field, "", &_minusone64);
+ }
+ 
+ static int _raidminrecoveryrate_disp(struct dm_report *rh __attribute__((unused)),
+@@ -1013,13 +1002,11 @@ static int _raidminrecoveryrate_disp(struct dm_report *rh __attribute__((unused)
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+ 
+-	if (!lv_is_raid_type(lv) || !first_seg(lv)->min_recovery_rate) {
+-		dm_report_field_set_value(field, "", NULL);
+-		return 1;
+-	}
++	if (lv_is_raid_type(lv) && first_seg(lv)->min_recovery_rate)
++		return dm_report_field_uint32(rh, field,
++					      &first_seg(lv)->min_recovery_rate);
+ 
+-	return dm_report_field_uint32(rh, field,
+-				      &first_seg(lv)->min_recovery_rate);
++	return _field_set_value(field, "", &_minusone64);
+ }
+ 
+ static int _raidmaxrecoveryrate_disp(struct dm_report *rh __attribute__((unused)),
+@@ -1030,13 +1017,11 @@ static int _raidmaxrecoveryrate_disp(struct dm_report *rh __attribute__((unused)
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+ 
+-	if (!lv_is_raid_type(lv) || !first_seg(lv)->max_recovery_rate) {
+-		dm_report_field_set_value(field, "", NULL);
+-		return 1;
+-	}
++	if (lv_is_raid_type(lv) && first_seg(lv)->max_recovery_rate)
++		return dm_report_field_uint32(rh, field,
++					      &first_seg(lv)->max_recovery_rate);
+ 
+-	return dm_report_field_uint32(rh, field,
+-				      &first_seg(lv)->max_recovery_rate);
++	return _field_set_value(field, "", &_minusone64);
+ }
+ 
+ /* Called only with lv_is_thin_pool/volume */
+@@ -1097,9 +1082,7 @@ static int _datapercent_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	if (lv_is_thin_pool(lv) || lv_is_thin_volume(lv))
+ 		return _dtpercent_disp(0, mem, field, data, private);
+ 
+-	dm_report_field_set_value(field, "", NULL);
 -
 -	return 1;
 +	return _field_set_value(field, "", &_minusone64);
  }
  
- static int _copypercent_disp(struct dm_report *rh __attribute__((unused)),
-@@ -910,44 +878,17 @@ static int _copypercent_disp(struct dm_report *rh __attribute__((unused)),
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	percent_t percent;
--	uint64_t *sortval;
--	char *repstr;
--
--	if (!(sortval = dm_pool_alloc(mem, sizeof(uint64_t)))) {
--		log_error("dm_pool_alloc failed");
--		return 0;
--	}
--
--	if (lv->status & RAID) {
--		if (!lv_raid_percent(lv, &percent) ||
--		    (percent == PERCENT_INVALID))
--			goto no_copypercent;
--	} else if ((!(lv->status & PVMOVE) && !(lv->status & MIRRORED)) ||
--		   !lv_mirror_percent(lv->vg->cmd, lv, 0, &percent, NULL) ||
--		   (percent == PERCENT_INVALID))
--		goto no_copypercent;
+ static int _metadatapercent_disp(struct dm_report *rh, struct dm_pool *mem,
+@@ -1111,9 +1094,7 @@ static int _metadatapercent_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	if (lv_is_thin_pool(lv))
+ 		return _dtpercent_disp(1, mem, field, data, private);
  
--	percent = copy_percent(lv);
-+	if (((lv_is_raid(lv) && lv_raid_percent(lv, &percent)) ||
- 
--	if (!(repstr = dm_pool_zalloc(mem, 8))) {
--		log_error("dm_pool_alloc failed");
--		return 0;
-+	    ((lv->status & (PVMOVE | MIRRORED)) &&
-+	     lv_mirror_percent(lv->vg->cmd, lv, 0, &percent, NULL))) &&
-+	    (percent != PERCENT_INVALID)) {
-+		percent = copy_percent(lv);
-+		return _field_set_percent(field, mem, percent);
- 	}
- 
--	if (dm_snprintf(repstr, 7, "%.2f", percent_to_float(percent)) < 0) {
--		log_error("copy percentage too large");
--		return 0;
--	}
+-	dm_report_field_set_value(field, "", NULL);
 -
--	*sortval = (uint64_t)(percent * 1000.f);
--	dm_report_field_set_value(field, repstr, sortval);
--
--	return 1;
--
--no_copypercent:
--	*sortval = UINT64_C(0);
--	dm_report_field_set_value(field, "", sortval);
 -	return 1;
 +	return _field_set_value(field, "", &_minusone64);
  }
  
- static int _raidsyncaction_disp(struct dm_report *rh __attribute__((unused)),
-@@ -1030,21 +971,12 @@ static int _dtpercent_disp(int metadata, struct dm_pool *mem,
- 			   const void *data, void *private)
- {
+ static int _lvmetadatasize_disp(struct dm_report *rh, struct dm_pool *mem,
+@@ -1123,14 +1104,12 @@ static int _lvmetadatasize_disp(struct dm_report *rh, struct dm_pool *mem,
  	const struct logical_volume *lv = (const struct logical_volume *) data;
--	struct lvinfo info;
- 	percent_t percent;
--	uint64_t *sortval;
--	char *repstr;
+ 	uint64_t size;
  
--	/* Suppress data percent if not thin pool/volume or not using driver */
--	if (!lv_info(lv->vg->cmd, lv, 1, &info, 0, 0) || !info.exists) {
+-	if (!lv_is_thin_pool(lv)) {
 -		dm_report_field_set_value(field, "", NULL);
 -		return 1;
--	}
--
--	if (!(sortval = dm_pool_zalloc(mem, sizeof(uint64_t)))) {
--		log_error("Failed to allocate sortval.");
--		return 0;
--	}
-+	/* Suppress data percent if not using driver */
-+	/* cannot use lv_is_active_locally - need to check for layer -tpool */
-+	if (!lv_info(lv->vg->cmd, lv, 1, NULL, 0, 0))
-+		return _field_set_value(field, "",  &_minusone64);
- 
- 	if (lv_is_thin_pool(lv)) {
- 		if (!lv_thin_pool_percent(lv, metadata, &percent))
-@@ -1054,20 +986,7 @@ static int _dtpercent_disp(int metadata, struct dm_pool *mem,
- 			return_0;
++	if (lv_is_thin_pool(lv)) {
++		size = lv_metadata_size(lv);
++		return _size64_disp(rh, mem, field, &size, private);
  	}
  
--	if (!(repstr = dm_pool_alloc(mem, 8))) {
--		log_error("Failed to allocate report buffer.");
--		return 0;
--	}
+-	size = lv_metadata_size(lv);
 -
--	if (dm_snprintf(repstr, 8, "%.2f", percent_to_float(percent)) < 0) {
--		log_error("Data percentage too large.");
--		return 0;
--	}
--
--	*sortval = (uint64_t)(percent * 1000.f);
--	dm_report_field_set_value(field, repstr, sortval);
--
--	return 1;
-+	return _field_set_percent(field, mem, percent);
+-	return _size64_disp(rh, mem, field, &size, private);
++	return _field_set_value(field, "", &_minusone64);
  }
  
- static int _datapercent_disp(struct dm_report *rh, struct dm_pool *mem,
+ static int _thincount_disp(struct dm_report *rh, struct dm_pool *mem,
+@@ -1140,15 +1119,12 @@ static int _thincount_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	const struct lv_segment *seg = (const struct lv_segment *) data;
+ 	uint32_t count;
+ 
+-	/* Suppress thin count if not thin pool */
+-	if (!seg_is_thin_pool(seg)) {
+-		dm_report_field_set_value(field, "", NULL);
+-		return 1;
++	if (seg_is_thin_pool(seg)) {
++		count = dm_list_size(&seg->lv->segs_using_this_lv);
++		return _uint32_disp(rh, mem, field, &count, private);
+ 	}
+ 
+-	count = dm_list_size(&seg->lv->segs_using_this_lv);
+-
+-	return _uint32_disp(rh, mem, field, &count, private);
++	return _field_set_value(field, "", &_minusone64);
+ }
+ 
+ static int _lvtime_disp(struct dm_report *rh, struct dm_pool *mem,
 
 
