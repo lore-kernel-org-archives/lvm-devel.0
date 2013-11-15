@@ -1,58 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Nov 2013 11:39:37 +0000 (UTC)
-Subject: master - libdm: catch wrongly reported values
-Message-ID: <20131115113937.193186135C@fedorahosted.org>
+Date: Fri, 15 Nov 2013 11:39:39 +0000 (UTC)
+Subject: master - cleanup: do not pass uninitialized space to selinux.
+Message-ID: <20131115113939.348536135C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eb4b03768f3ae751518b77b69882539e0c864a90
-Commit:        eb4b03768f3ae751518b77b69882539e0c864a90
-Parent:        37b7c6707952b0cca2c583f2a48f997c94576a70
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3cb9041764005c3a8f59b0b5ede3808b660d001a
+Commit:        3cb9041764005c3a8f59b0b5ede3808b660d001a
+Parent:        eb4b03768f3ae751518b77b69882539e0c864a90
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 15 12:16:50 2013 +0100
+AuthorDate:    Tue Sep 24 14:47:32 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 15 12:38:37 2013 +0100
 
-libdm: catch wrongly reported values
+cleanup: do not pass uninitialized space to selinux.
 
-Add internal error warning when string value is used
-as sort value for numerical field.
-
-Using log_warn since the function itself does not return error,
-so we do not confuse log_error() checker.
+Just like with dm_prepare_selinux_context rather initialize to NULL.
 ---
- WHATS_NEW_DM         |    1 +
- libdm/libdm-report.c |    4 ++++
- 2 files changed, 5 insertions(+), 0 deletions(-)
+ libdm/libdm-common.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index e3953e4..24d53af 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.84 -
- ====================================
-+  Catch invalid use of string sort values when reporting numerical fields.
- 
- Version 1.02.83 - 13th November 2013
- ====================================
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 0984416..7e8484e 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -240,6 +240,10 @@ void dm_report_field_set_value(struct dm_report_field *field, const void *value,
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index febcd0e..5ec5769 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -899,7 +899,7 @@ int dm_prepare_selinux_context(const char *path, mode_t mode)
+ int dm_set_selinux_context(const char *path, mode_t mode)
  {
- 	field->report_string = (const char *) value;
- 	field->sort_value = sortvalue ? : value;
-+
-+	if ((field->sort_value == value) &&
-+	    (field->props->flags & DM_REPORT_FIELD_TYPE_NUMBER))
-+		log_warn(INTERNAL_ERROR "Using string as sort value for numerical field.");
- }
+ #ifdef HAVE_SELINUX
+-	security_context_t scontext;
++	security_context_t scontext = NULL;
  
- /*
+ 	if (is_selinux_enabled() <= 0)
+ 		return 1;
 
 
