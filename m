@@ -1,61 +1,59 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Nov 2013 11:39:45 +0000 (UTC)
-Subject: master - tests: used -n for fsck
-Message-ID: <20131115113945.8AB10611A2@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 15 Nov 2013 16:00:03 +0100
+Subject: [PATCH 0/6] Wiping for newly created LVs, support for blkid_wiping (configurable)
+Message-ID: <528636F3.9010905@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=803f8ca7146c548c271c04d432a3c68726a0d37d
-Commit:        803f8ca7146c548c271c04d432a3c68726a0d37d
-Parent:        3716e9535455c5fb012511f820d0525e4aa48bc8
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 11 17:19:26 2013 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 15 12:38:37 2013 +0100
+This patchset reuses existing signature recognition and wiping
+that is already used during pvcreate. This refactor makes it possible
+to use it for lvcreate and it's also bound to a new -W/--wipesignatures {y/n}
+option for lvcreate.
 
-tests: used -n for fsck
+The aim here is to wipe those signatures before any event-based scanning
+happens. If those signatures are not properly wiped, we could possibly end
+up with unwanted activation or mount of some old block device subsystem or
+filesystem that just fits the newly created LV data area and which is then
+recognized after event-based scans.
 
----
- test/shell/lvcreate-thin-snap.sh |    4 ++--
- test/shell/lvcreate-thin.sh      |    2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+Also, this patchset adds a new configure option --enable-blkid_wiping
+with which we link with libblkid to reuse the "wipefs" functionality
+(that is much richer in signature/filesystem recognition).
 
-diff --git a/test/shell/lvcreate-thin-snap.sh b/test/shell/lvcreate-thin-snap.sh
-index a223469..b7511e7 100644
---- a/test/shell/lvcreate-thin-snap.sh
-+++ b/test/shell/lvcreate-thin-snap.sh
-@@ -37,7 +37,7 @@ mkfs.ext4 $DM_DEV_DIR/$vg/$lv1
- # create thin snapshot of thin LV
- lvcreate -K -s $vg/$lv1 --name snap
- # check snapshot filesystem was properly frozen before snapping
--fsck -p $DM_DEV_DIR/$vg/snap
-+fsck -n $DM_DEV_DIR/$vg/snap
- lvcreate -K -s $vg/$lv1 --name $lv2
- lvcreate -K -s $vg/$lv1 --name $vg/$lv3
- lvcreate --type snapshot $vg/$lv1
-@@ -59,6 +59,6 @@ lvremove -ff $vg
- lvcreate -L10M --zero n -T $vg/pool -V10M --name $lv1
- mkfs.ext4 $DM_DEV_DIR/$vg/$lv1
- lvcreate -K -s $vg/$lv1 --name snap
--fsck -p $DM_DEV_DIR/$vg/snap
-+fsck -n $DM_DEV_DIR/$vg/snap
- 
- vgremove -ff $vg
-diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
-index d2e3022..98ab7eb 100644
---- a/test/shell/lvcreate-thin.sh
-+++ b/test/shell/lvcreate-thin.sh
-@@ -138,7 +138,7 @@ check vg_field $vg lv_count 0
- lvcreate -L10M -V10M -T $vg/pool --name lv1
- mkfs.ext4 $DM_DEV_DIR/$vg/lv1
- lvcreate -K -s $vg/lv1 --name snap_lv1
--fsck -p $DM_DEV_DIR/$vg/snap_lv1
-+fsck -n $DM_DEV_DIR/$vg/snap_lv1
- lvcreate -s $vg/lv1 --name lv2
- lvcreate -s $vg/lv1 --name $vg/lv3
- lvcreate --type snapshot $vg/lv1 --name lv6
+Peter Rajnoha (6):
+  device: add wipe_known_sbs wrapper fn
+  lvcreate: recognize --wipesignatures arg
+  lv_manip: rename set_lv -> wipe_lv and include signature wiping capability
+  man: lvcreate -W/--wipesignatures {y/n}
+  configure: add --enable-blkid_wiping
+  wiping: add support for blkid wiping
+
+ configure                        | 126 ++++++++++++++++++++++++++++++++++
+ configure.in                     |  21 ++++++
+ lib/device/dev-type.c            | 143 +++++++++++++++++++++++++++++++++++++++
+ lib/device/dev-type.h            |   4 ++
+ lib/metadata/lv_manip.c          |  98 +++++++++++++++++++--------
+ lib/metadata/metadata-exported.h |  19 +++++-
+ lib/metadata/metadata.c          |  46 ++-----------
+ lib/metadata/mirror.c            |  18 +++--
+ lib/metadata/raid_manip.c        |  11 ++-
+ lib/metadata/thin_manip.c        |  12 +++-
+ lib/misc/configure.h.in          |   3 +
+ liblvm/lvm_lv.c                  |   1 +
+ make.tmpl.in                     |   5 +-
+ man/lvcreate.8.in                |  14 +++-
+ tools/Makefile.in                |   2 +-
+ tools/args.h                     |   1 +
+ tools/commands.h                 |   4 +-
+ tools/lvchange.c                 |  13 +++-
+ tools/lvconvert.c                |  27 +++++++-
+ tools/lvcreate.c                 |  15 ++--
+ 20 files changed, 488 insertions(+), 95 deletions(-)
+
+-- 
+1.8.4.2
 
 
