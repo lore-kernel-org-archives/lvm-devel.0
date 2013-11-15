@@ -1,223 +1,117 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Nov 2013 11:39:30 +0000 (UTC)
-Subject: master - report: fix dereference of string as uint64_t
-Message-ID: <20131115113930.C81E96135C@fedorahosted.org>
+Date: Fri, 15 Nov 2013 11:39:34 +0000 (UTC)
+Subject: master - thin: report thin device id
+Message-ID: <20131115113934.F12306135C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=36d7c639d14e121e839b2117dcf744097e6ebfde
-Commit:        36d7c639d14e121e839b2117dcf744097e6ebfde
-Parent:        9eb81b1bf74411bba6cc950a4ebe0a44856c0e74
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=37b7c6707952b0cca2c583f2a48f997c94576a70
+Commit:        37b7c6707952b0cca2c583f2a48f997c94576a70
+Parent:        6ca832ceafe4ca599e059464faf2ef5760a29b23
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 23 10:18:10 2013 +0200
+AuthorDate:    Mon Nov 11 10:05:45 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 15 11:05:02 2013 +0100
+CommitterDate: Fri Nov 15 12:38:37 2013 +0100
 
-report: fix dereference of string as uint64_t
+thin: report thin device id
 
-Fix buggy usage of "" (empty string) as a numerical string
-value used for sorting.
-
-On intel 64b platform this was typically resolve
-as 0xffffff0000000000 - which is already 'close' to
-UINT64_MAX which is used for _minusone64.
-
-On other platforms it might have been giving
-different numbers depends on aligment of strings.
-
-Use proper &_minusone64 for sorting value when the reported
-value is NUM.
-
-Note: each numerical value needs to be thought about if it needs
-default value &_zero64 or &_minusone64 since for cases, were
-value of zero is valid, sorting should not be mixing entries
-together.
+Support   lvs -o+thin_id  to report thin device id.
+This device_id is connection between kernel and lvm2 user space thin
+metadata.
 ---
- WHATS_NEW           |    1 +
- lib/report/report.c |   84 ++++++++++++++++++--------------------------------
- 2 files changed, 31 insertions(+), 54 deletions(-)
+ WHATS_NEW                   |    1 +
+ lib/display/display.c       |    1 +
+ lib/report/columns.h        |    1 +
+ lib/report/properties.c     |    2 ++
+ lib/report/report.c         |   12 ++++++++++++
+ test/shell/lvcreate-thin.sh |    1 +
+ 6 files changed, 18 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index b190ca4..fb3b21a 100644
+index fb3b21a..0a4909a 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.105 -
  =====================================
-+  Fix reporting of empty numerical values.
++  Add reporting of thin_id device id for thin volumes.
+   Fix reporting of empty numerical values.
    Simplify reporting code.
  
- Version 2.02.104 - 13th November 2013
+diff --git a/lib/display/display.c b/lib/display/display.c
+index d3b4d6e..be56f12 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -600,6 +600,7 @@ int lvdisplay_full(struct cmd_context *cmd,
+ 	if (lv_is_thin_volume(lv)) {
+ 		seg = first_seg(lv);
+ 		log_print("LV Pool name           %s", seg->pool_lv->name);
++		log_print("LV Thin device ID      %u", seg->device_id);
+ 		if (seg->origin)
+ 			log_print("LV Thin origin name    %s",
+ 				  seg->origin->name);
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 6df9771..88a0266 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -122,6 +122,7 @@ FIELD(SEGS, seg, NUM, "#Thins", list, 4, thincount, thin_count, "For thin pools,
+ FIELD(SEGS, seg, STR, "Discards", list, 8, discards, discards, "For thin pools, how discards are handled.", 0)
+ FIELD(SEGS, seg, NUM, "Zero", list, 4, thinzero, zero, "For thin pools, if zeroing is enabled.", 0)
+ FIELD(SEGS, seg, NUM, "TransId", list, 4, transactionid, transaction_id, "For thin pools, the transaction id.", 0)
++FIELD(SEGS, seg, NUM, "ThId", list, 4, thinid, thin_id, "For thin volume, the thin device id.", 0)
+ FIELD(SEGS, seg, NUM, "Start", list, 5, segstart, seg_start, "Offset within the LV to the start of the segment in current units.", 0)
+ FIELD(SEGS, seg, NUM, "Start", list, 5, segstartpe, seg_start_pe, "Offset within the LV to the start of the segment in physical extents.", 0)
+ FIELD(SEGS, seg, NUM, "SSize", list, 5, segsize, seg_size, "Size of segment in current units.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 56200f0..8c48de1 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -307,6 +307,8 @@ GET_LVSEG_NUM_PROPERTY_FN(zero, lvseg->zero_new_blocks)
+ #define _zero_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(transaction_id, lvseg->transaction_id)
+ #define _transaction_id_set prop_not_implemented_set
++GET_LVSEG_NUM_PROPERTY_FN(thin_id, lvseg->device_id)
++#define _thin_id_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(discards, lvseg_discards_dup(lvseg->lv->vg->vgmem, lvseg))
+ #define _discards_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(seg_start, (SECTOR_SIZE * lvseg_start(lvseg)))
 diff --git a/lib/report/report.c b/lib/report/report.c
-index 697d642..5caebb2 100644
+index 1565aec..c780ca4 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -591,13 +591,10 @@ static int _thinzero_disp(struct dm_report *rh, struct dm_pool *mem,
- {
- 	const struct lv_segment *seg = (const struct lv_segment *) data;
- 
--	/* Suppress thin count if not thin pool */
--	if (!seg_is_thin_pool(seg)) {
--		dm_report_field_set_value(field, "", NULL);
--		return 1;
--	}
-+	if (seg_is_thin_pool(seg))
-+		return _uint32_disp(rh, mem, field, &seg->zero_new_blocks, private);
- 
--	return _uint32_disp(rh, mem, field, &seg->zero_new_blocks, private);
-+	return _field_set_value(field, "", &_minusone64);
+@@ -610,6 +610,18 @@ static int _transactionid_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _field_set_value(field, "", &_minusone64);
  }
  
- static int _transactionid_disp(struct dm_report *rh, struct dm_pool *mem,
-@@ -606,13 +603,10 @@ static int _transactionid_disp(struct dm_report *rh, struct dm_pool *mem,
- {
- 	const struct lv_segment *seg = (const struct lv_segment *) data;
- 
--	/* Suppress thin count if not thin pool */
--	if (!seg_is_thin_pool(seg)) {
--		dm_report_field_set_value(field, "", NULL);
--		return 1;
--	}
-+	if (seg_is_thin_pool(seg))
-+		return dm_report_field_uint64(rh, field, &seg->transaction_id);
- 
--	return  dm_report_field_uint64(rh, field, &seg->transaction_id);
++static int _thinid_disp(struct dm_report *rh, struct dm_pool *mem,
++			struct dm_report_field *field,
++			const void *data, void *private)
++{
++	const struct lv_segment *seg = (const struct lv_segment *) data;
++
++	if (seg_is_thin_volume(seg))
++		return dm_report_field_uint32(rh, field, &seg->device_id);
++
 +	return _field_set_value(field, "", &_minusone64);
- }
- 
++}
++
  static int _discards_disp(struct dm_report *rh, struct dm_pool *mem,
-@@ -980,13 +974,10 @@ static int _raidmismatchcount_disp(struct dm_report *rh __attribute__((unused)),
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	uint64_t mismatch_count;
+ 			  struct dm_report_field *field,
+ 			  const void *data, void *private)
+diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
+index 743da3b..d2e3022 100644
+--- a/test/shell/lvcreate-thin.sh
++++ b/test/shell/lvcreate-thin.sh
+@@ -129,6 +129,7 @@ lvcreate -V2G --type thin --thinpool pool --name $vg/lv12 $vg
  
--	if (!(lv->status & RAID) ||
--	    !lv_raid_mismatch_count(lv, &mismatch_count)) {
--		dm_report_field_set_value(field, "", NULL);
--		return 1;
--	}
-+	if (lv_is_raid(lv) && lv_raid_mismatch_count(lv, &mismatch_count))
-+		return dm_report_field_uint64(rh, field, &mismatch_count);
+ check lv_exists $vg lv1 lv2 lv3 lv4 lv5 lv6 lv7 lv8 lv9 lv10 lv11 lv12
+ check vg_field $vg lv_count 19
++check lv_field $vg/lv1 thin_id 7
  
--	return dm_report_field_uint64(rh, field, &mismatch_count);
-+	return _field_set_value(field, "", &_minusone64);
- }
- 
- static int _raidwritebehind_disp(struct dm_report *rh __attribute__((unused)),
-@@ -997,12 +988,10 @@ static int _raidwritebehind_disp(struct dm_report *rh __attribute__((unused)),
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 
--	if (!lv_is_raid_type(lv) || !first_seg(lv)->writebehind) {
--		dm_report_field_set_value(field, "", NULL);
--		return 1;
--	}
-+	if (lv_is_raid_type(lv) && first_seg(lv)->writebehind)
-+		return dm_report_field_uint32(rh, field, &first_seg(lv)->writebehind);
- 
--	return dm_report_field_uint32(rh, field, &first_seg(lv)->writebehind);
-+	return _field_set_value(field, "", &_minusone64);
- }
- 
- static int _raidminrecoveryrate_disp(struct dm_report *rh __attribute__((unused)),
-@@ -1013,13 +1002,11 @@ static int _raidminrecoveryrate_disp(struct dm_report *rh __attribute__((unused)
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 
--	if (!lv_is_raid_type(lv) || !first_seg(lv)->min_recovery_rate) {
--		dm_report_field_set_value(field, "", NULL);
--		return 1;
--	}
-+	if (lv_is_raid_type(lv) && first_seg(lv)->min_recovery_rate)
-+		return dm_report_field_uint32(rh, field,
-+					      &first_seg(lv)->min_recovery_rate);
- 
--	return dm_report_field_uint32(rh, field,
--				      &first_seg(lv)->min_recovery_rate);
-+	return _field_set_value(field, "", &_minusone64);
- }
- 
- static int _raidmaxrecoveryrate_disp(struct dm_report *rh __attribute__((unused)),
-@@ -1030,13 +1017,11 @@ static int _raidmaxrecoveryrate_disp(struct dm_report *rh __attribute__((unused)
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 
--	if (!lv_is_raid_type(lv) || !first_seg(lv)->max_recovery_rate) {
--		dm_report_field_set_value(field, "", NULL);
--		return 1;
--	}
-+	if (lv_is_raid_type(lv) && first_seg(lv)->max_recovery_rate)
-+		return dm_report_field_uint32(rh, field,
-+					      &first_seg(lv)->max_recovery_rate);
- 
--	return dm_report_field_uint32(rh, field,
--				      &first_seg(lv)->max_recovery_rate);
-+	return _field_set_value(field, "", &_minusone64);
- }
- 
- /* Called only with lv_is_thin_pool/volume */
-@@ -1097,9 +1082,7 @@ static int _datapercent_disp(struct dm_report *rh, struct dm_pool *mem,
- 	if (lv_is_thin_pool(lv) || lv_is_thin_volume(lv))
- 		return _dtpercent_disp(0, mem, field, data, private);
- 
--	dm_report_field_set_value(field, "", NULL);
--
--	return 1;
-+	return _field_set_value(field, "", &_minusone64);
- }
- 
- static int _metadatapercent_disp(struct dm_report *rh, struct dm_pool *mem,
-@@ -1111,9 +1094,7 @@ static int _metadatapercent_disp(struct dm_report *rh, struct dm_pool *mem,
- 	if (lv_is_thin_pool(lv))
- 		return _dtpercent_disp(1, mem, field, data, private);
- 
--	dm_report_field_set_value(field, "", NULL);
--
--	return 1;
-+	return _field_set_value(field, "", &_minusone64);
- }
- 
- static int _lvmetadatasize_disp(struct dm_report *rh, struct dm_pool *mem,
-@@ -1123,14 +1104,12 @@ static int _lvmetadatasize_disp(struct dm_report *rh, struct dm_pool *mem,
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	uint64_t size;
- 
--	if (!lv_is_thin_pool(lv)) {
--		dm_report_field_set_value(field, "", NULL);
--		return 1;
-+	if (lv_is_thin_pool(lv)) {
-+		size = lv_metadata_size(lv);
-+		return _size64_disp(rh, mem, field, &size, private);
- 	}
- 
--	size = lv_metadata_size(lv);
--
--	return _size64_disp(rh, mem, field, &size, private);
-+	return _field_set_value(field, "", &_minusone64);
- }
- 
- static int _thincount_disp(struct dm_report *rh, struct dm_pool *mem,
-@@ -1140,15 +1119,12 @@ static int _thincount_disp(struct dm_report *rh, struct dm_pool *mem,
- 	const struct lv_segment *seg = (const struct lv_segment *) data;
- 	uint32_t count;
- 
--	/* Suppress thin count if not thin pool */
--	if (!seg_is_thin_pool(seg)) {
--		dm_report_field_set_value(field, "", NULL);
--		return 1;
-+	if (seg_is_thin_pool(seg)) {
-+		count = dm_list_size(&seg->lv->segs_using_this_lv);
-+		return _uint32_disp(rh, mem, field, &count, private);
- 	}
- 
--	count = dm_list_size(&seg->lv->segs_using_this_lv);
--
--	return _uint32_disp(rh, mem, field, &count, private);
-+	return _field_set_value(field, "", &_minusone64);
- }
- 
- static int _lvtime_disp(struct dm_report *rh, struct dm_pool *mem,
+ lvremove -ff $vg
+ check vg_field $vg lv_count 0
 
 
