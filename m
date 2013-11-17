@@ -1,106 +1,134 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun, 17 Nov 2013 22:26:33 +0000 (UTC)
-Subject: master - pvresize: Do not use pv_read (get the PV from orphan VG).
-Message-ID: <20131117222633.80A7B60DF3@fedorahosted.org>
+Date: Sun, 17 Nov 2013 22:26:35 +0000 (UTC)
+Subject: master - test: Fix fallout from pv_read changes.
+Message-ID: <20131117222635.A78D360DF3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=603b45e0ed1032875f587eda3391c47b6652303c
-Commit:        603b45e0ed1032875f587eda3391c47b6652303c
-Parent:        0a59305c44e992831d66da50f5058f154a795d3a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc02f241789824877d604ca40a56ab6487d7212a
+Commit:        fc02f241789824877d604ca40a56ab6487d7212a
+Parent:        603b45e0ed1032875f587eda3391c47b6652303c
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Feb 19 01:54:34 2013 +0100
+AuthorDate:    Tue Feb 19 01:56:51 2013 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Sun Nov 17 21:41:27 2013 +0100
 
-pvresize: Do not use pv_read (get the PV from orphan VG).
+test: Fix fallout from pv_read changes.
 
 ---
- lib/metadata/pv_manip.c |   51 ++++++++++++++++------------------------------
- 1 files changed, 18 insertions(+), 33 deletions(-)
+ test/shell/pv-duplicate.sh          |    2 +-
+ test/shell/pvcreate-operation-md.sh |   35 +++++++++++++++++++++--------------
+ 2 files changed, 22 insertions(+), 15 deletions(-)
 
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index fb29ef4..b7a4b43 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -549,9 +549,9 @@ static int pv_resize(struct physical_volume *pv,
- }
+diff --git a/test/shell/pv-duplicate.sh b/test/shell/pv-duplicate.sh
+index 6b9f309..40d1f68 100644
+--- a/test/shell/pv-duplicate.sh
++++ b/test/shell/pv-duplicate.sh
+@@ -21,5 +21,5 @@ vgcreate --metadatasize 128k $vg1 "$dev1"
+ dd if="$dev1" of="$dev2" bs=256K count=1
+ dd if="$dev1" of="$dev3" bs=256K count=1
  
- int pv_resize_single(struct cmd_context *cmd,
--			     struct volume_group *vg,
--			     struct physical_volume *pv,
--			     const uint64_t new_size)
-+		     struct volume_group *vg,
-+		     struct physical_volume *pv,
-+		     const uint64_t new_size)
- {
- 	struct pv_list *pvl;
- 	uint64_t size = 0;
-@@ -561,38 +561,25 @@ int pv_resize_single(struct cmd_context *cmd,
- 	struct volume_group *old_vg = vg;
- 	int vg_needs_pv_write = 0;
+-pvs "$dev1"
++pvs "$dev3"
+ vgs $vg1
+diff --git a/test/shell/pvcreate-operation-md.sh b/test/shell/pvcreate-operation-md.sh
+index 5e2a28d..9cad745 100644
+--- a/test/shell/pvcreate-operation-md.sh
++++ b/test/shell/pvcreate-operation-md.sh
+@@ -58,21 +58,24 @@ test -b "$mddev" && skip
+ mdadm --create --metadata=1.0 "$mddev" --auto=md --level 0 --raid-devices=2 --chunk 64 "$dev1" "$dev2"
+ trap 'cleanup_md_and_teardown' EXIT # cleanup this MD device at the end of the test
+ test -b "$mddev" || skip
++cp -LR "$mddev" "$DM_DEV_DIR" # so that LVM/DM can see the device
++lvmdev="$DM_DEV_DIR/md_lvm_test0"
  
--	if (is_orphan_vg(vg_name)) {
--		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE, NULL)) {
--			log_error("Can't get lock for orphans");
--			return 0;
--		}
--
--		if (!(pv = pv_read(cmd, pv_name, 1, 0))) {
--			unlock_vg(cmd, vg_name);
--			log_error("Unable to read PV \"%s\"", pv_name);
--			return 0;
--		}
--	} else {
--		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
-+	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+ # Test alignment of PV on MD without any MD-aware or topology-aware detection
+ # - should treat $mddev just like any other block device
+ pv_align="1.00m"
+ pvcreate --metadatasize 128k \
+     --config 'devices {md_chunk_alignment=0 data_alignment_detection=0 data_alignment_offset_detection=0}' \
+-    "$mddev"
+-check pv_field "$mddev" pe_start $pv_align
++    "$lvmdev"
++
++check pv_field "$lvmdev" pe_start $pv_align
  
--		if (vg_read_error(vg)) {
--			release_vg(vg);
--			log_error("Unable to read volume group \"%s\".",
--				  vg_name);
--			return 0;
--		}
-+	if (vg_read_error(vg)) {
-+		release_vg(vg);
-+		log_error("Unable to read volume group \"%s\".",
-+			  vg_name);
-+		return 0;
-+	}
+ # Test md_chunk_alignment independent of topology-aware detection
+ pv_align="1.00m"
+ pvcreate --metadatasize 128k \
+     --config 'devices {data_alignment_detection=0 data_alignment_offset_detection=0}' \
+-    "$mddev"
+-check pv_field "$mddev" pe_start $pv_align
++    "$lvmdev"
++check pv_field "$lvmdev" pe_start $pv_align
  
--		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--			log_error("Unable to find \"%s\" in volume group \"%s\"",
--				  pv_name, vg->name);
--			goto out;
--		}
-+	if (!(pvl = find_pv_in_vg(vg, pv_name))) {
-+		log_error("Unable to find \"%s\" in volume group \"%s\"",
-+			  pv_name, vg->name);
-+		goto out;
-+	}
  
--		pv = pvl->pv;
-+	pv = pvl->pv;
+ # Test newer topology-aware alignment detection
+@@ -81,8 +84,8 @@ if kernel_at_least 2 6 33 ; then
+     pv_align="1.00m"
+     # optimal_io_size=131072, minimum_io_size=65536
+     pvcreate --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    check pv_field "$lvmdev" pe_start $pv_align
+ fi
  
--		if (!archive(vg))
--			goto out;
--	}
-+	if (!archive(vg))
-+		goto out;
+ # partition MD array directly, depends on blkext in Linux >= 2.6.28
+@@ -91,9 +94,10 @@ if kernel_at_least 2 6 28 ; then
+     sfdisk "$mddev" <<EOF
+ ,,83
+ EOF
++    pvscan
+     # make sure partition on MD is _not_ removed
+     # - tests partition -> parent lookup via sysfs paths
+-    not pvcreate --metadatasize 128k "$mddev"
++    not pvcreate --metadatasize 128k "$lvmdev"
  
- 	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
- 		log_error("Physical volume %s format does not support resizing.",
-@@ -650,8 +637,6 @@ out:
- 		log_error("Use pvcreate and vgcfgrestore "
- 			  "to repair from archived metadata.");
- 	unlock_vg(cmd, vg_name);
--	if (is_orphan_vg(vg_name))
--		free_pv_fid(pv);
- 	if (!old_vg)
- 		release_vg(vg);
- 	return r;
+     # verify alignment_offset is accounted for in pe_start
+     # - topology infrastructure is available in Linux >= 2.6.31
+@@ -109,6 +113,8 @@ EOF
+     # wait here for created device node on tmpfs
+     aux udev_wait "$mddev_p"
+     test -b "$mddev_p" || skip
++    cp -LR "$mddev_p" "$DM_DEV_DIR"
++    lvmdev_p="$DM_DEV_DIR/$base_mddev_p"
+ 
+     # Checking for 'alignment_offset' in sysfs implies Linux >= 2.6.31
+     # but reliable alignment_offset support requires kernel.org Linux >= 2.6.33
+@@ -120,9 +126,9 @@ EOF
+     if [ $alignment_offset -gt 0 ]; then
+         # default alignment is 1M, add alignment_offset
+ 	pv_align=$((1048576+$alignment_offset))B
+-	pvcreate --metadatasize 128k "$mddev_p"
+-	check pv_field "$mddev_p" pe_start $pv_align --units b
+-	pvremove "$mddev_p"
++	pvcreate --metadatasize 128k "$lvmdev_p"
++	check pv_field "$lvmdev_p" pe_start $pv_align --units b
++	pvremove "$lvmdev_p"
+     fi
+ fi
+ 
+@@ -140,12 +146,13 @@ if kernel_at_least 2 6 33 ; then
+     # optimal_io_size=2097152, minimum_io_size=1048576
+     pv_align="2.00m"
+     pvcreate --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    pvscan # Something is seriously broken.
++    check pv_field "$lvmdev" pe_start $pv_align
+ 
+     # now verify pe_start alignment override using --dataalignment
+     pv_align="192.00k"
+     pvcreate --dataalignment 64k --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' "$mddev"
+-    check pv_field "$mddev" pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$lvmdev"
++    check pv_field "$lvmdev" pe_start $pv_align
+ fi
 
 
