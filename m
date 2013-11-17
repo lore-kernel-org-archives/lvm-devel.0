@@ -1,77 +1,56 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun, 17 Nov 2013 22:26:50 +0000 (UTC)
-Subject: master - metadata: Add lvmcache_info_mda_free as a companion to pv_mda_free.
-Message-ID: <20131117222650.583106103A@fedorahosted.org>
+Date: Sun, 17 Nov 2013 22:26:52 +0000 (UTC)
+Subject: master - metadata: Add a pv_label accessor (go from a PV to its label).
+Message-ID: <20131117222652.6C6536103A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2034e9a99337ac16ee415f7f2398e0b8e976716
-Commit:        a2034e9a99337ac16ee415f7f2398e0b8e976716
-Parent:        1ef2c3c4ee325dd9ce607b62c1720d782021d399
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dc3a0711454938e1a6264b7e3bf24a6dd1ac7e9f
+Commit:        dc3a0711454938e1a6264b7e3bf24a6dd1ac7e9f
+Parent:        a2034e9a99337ac16ee415f7f2398e0b8e976716
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Jul 29 18:52:28 2013 +0200
+AuthorDate:    Mon Jul 29 18:54:59 2013 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Sun Nov 17 21:41:27 2013 +0100
 
-metadata: Add lvmcache_info_mda_free as a companion to pv_mda_free.
+metadata: Add a pv_label accessor (go from a PV to its label).
 
 ---
- lib/metadata/pv.c |   16 +++++++++++-----
- lib/metadata/pv.h |    2 ++
- 2 files changed, 13 insertions(+), 5 deletions(-)
+ lib/metadata/pv.c |   10 ++++++++++
+ lib/metadata/pv.h |    1 +
+ 2 files changed, 11 insertions(+), 0 deletions(-)
 
 diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
-index dad747c..5b08998 100644
+index 5b08998..0288f07 100644
 --- a/lib/metadata/pv.c
 +++ b/lib/metadata/pv.c
-@@ -241,14 +241,11 @@ static int _pv_mda_free(struct metadata_area *mda, void *baton) {
+@@ -350,3 +350,13 @@ unsigned pv_mda_set_ignored(const struct physical_volume *pv, unsigned mda_ignor
  	return 1;
  }
  
--uint64_t pv_mda_free(const struct physical_volume *pv)
-+uint64_t lvmcache_info_mda_free(struct lvmcache_info *info)
- {
--	struct lvmcache_info *info;
- 	uint64_t freespace = UINT64_MAX;
--	const char *pvid = (const char *)&pv->id.uuid;
- 
--	if ((info = lvmcache_info_from_pvid(pvid, 0)))
--		lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
-+	lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
- 
- 	if (freespace == UINT64_MAX)
- 		freespace = UINT64_C(0);
-@@ -256,6 +253,15 @@ uint64_t pv_mda_free(const struct physical_volume *pv)
- 	return freespace;
- }
- 
-+uint64_t pv_mda_free(const struct physical_volume *pv)
++struct label *pv_label(const struct physical_volume *pv)
 +{
-+	const char *pvid = (const char *)&pv->id.uuid;
-+	struct lvmcache_info *info;
-+	if ((info = lvmcache_info_from_pvid(pvid, 0)))
-+		return lvmcache_info_mda_free(info);
-+	return 0;
++	struct lvmcache_info *info =
++		lvmcache_info_from_pvid((const char *)&pv->id.uuid, 0);
++	if (!info) {
++		log_error(INTERNAL_ERROR "PV %s unexpectedly not in cache.", dev_name(pv->dev));
++		return NULL;
++	}
++	return lvmcache_get_label(info);
 +}
-+
- uint64_t pv_used(const struct physical_volume *pv)
- {
- 	uint64_t used;
 diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
-index c018f38..ff708f8 100644
+index ff708f8..8fd3061 100644
 --- a/lib/metadata/pv.h
 +++ b/lib/metadata/pv.h
-@@ -85,6 +85,8 @@ uint64_t pv_ba_size(const struct physical_volume *pv);
- uint32_t pv_pe_count(const struct physical_volume *pv);
- uint32_t pv_pe_alloc_count(const struct physical_volume *pv);
- uint64_t pv_mda_size(const struct physical_volume *pv);
-+struct lvmcache_info;
-+uint64_t lvmcache_info_mda_free(struct lvmcache_info *info);
- uint64_t pv_mda_free(const struct physical_volume *pv);
- uint64_t pv_used(const struct physical_volume *pv);
- uint32_t pv_mda_count(const struct physical_volume *pv);
+@@ -95,5 +95,6 @@ unsigned pv_mda_set_ignored(const struct physical_volume *pv, unsigned ignored);
+ int is_orphan(const struct physical_volume *pv);
+ int is_missing_pv(const struct physical_volume *pv);
+ int is_pv(const struct physical_volume *pv);
++struct label *pv_label(const struct physical_volume *pv);
+ 
+ #endif /* _LVM_PV_H */
 
 
