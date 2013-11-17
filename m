@@ -1,117 +1,77 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun, 17 Nov 2013 22:26:48 +0000 (UTC)
-Subject: master - toollib: Implement process_each_label.
-Message-ID: <20131117222648.432FF6103A@fedorahosted.org>
+Date: Sun, 17 Nov 2013 22:26:50 +0000 (UTC)
+Subject: master - metadata: Add lvmcache_info_mda_free as a companion to pv_mda_free.
+Message-ID: <20131117222650.583106103A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1ef2c3c4ee325dd9ce607b62c1720d782021d399
-Commit:        1ef2c3c4ee325dd9ce607b62c1720d782021d399
-Parent:        9b91977f4ec21a2080daaa2e261fbdecbe8fbd2c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2034e9a99337ac16ee415f7f2398e0b8e976716
+Commit:        a2034e9a99337ac16ee415f7f2398e0b8e976716
+Parent:        1ef2c3c4ee325dd9ce607b62c1720d782021d399
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Jul 29 18:51:27 2013 +0200
+AuthorDate:    Mon Jul 29 18:52:28 2013 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Sun Nov 17 21:41:27 2013 +0100
 
-toollib: Implement process_each_label.
+metadata: Add lvmcache_info_mda_free as a companion to pv_mda_free.
 
 ---
- tools/toollib.c |   58 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- tools/toollib.h |    6 +++++
- 2 files changed, 64 insertions(+), 0 deletions(-)
+ lib/metadata/pv.c |   16 +++++++++++-----
+ lib/metadata/pv.h |    2 ++
+ 2 files changed, 13 insertions(+), 5 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 127dd66..529088c 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1801,3 +1801,61 @@ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
+diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
+index dad747c..5b08998 100644
+--- a/lib/metadata/pv.c
++++ b/lib/metadata/pv.c
+@@ -241,14 +241,11 @@ static int _pv_mda_free(struct metadata_area *mda, void *baton) {
  	return 1;
  }
  
-+int process_each_label(struct cmd_context *cmd, int argc, char **argv, void *handle,
-+		       process_single_label_fn_t process_single_label)
-+{
-+	struct label *label;
-+	struct dev_iter *iter;
-+	struct device *dev;
-+
-+	int ret_max = ECMD_PROCESSED;
-+	int ret = 0;
-+	int opt = 0;
-+
-+	if (argc) {
-+		for (; opt < argc; opt++) {
-+			if (!(dev = dev_cache_get(argv[opt], cmd->filter))) {
-+				log_error("Failed to find device "
-+					  "\"%s\"", argv[opt]);
-+				ret_max = ECMD_FAILED;
-+				continue;
-+			}
-+
-+			if (!label_read(dev, &label, 0))
-+				continue;
-+
-+			ret = process_single_label(cmd, label, handle);
-+
-+			if (ret > ret_max)
-+				ret_max = ret;
-+
-+			if (sigint_caught())
-+				break;
-+		}
-+
-+		return ret_max;
-+	}
-+
-+	if (!(iter = dev_iter_create(cmd->filter, 1))) {
-+		log_error("dev_iter creation failed");
-+		return ECMD_FAILED;
-+	}
-+
-+	while ((dev = dev_iter_get(iter)))
-+	{
-+		if (!label_read(dev, &label, 0))
-+			continue;
-+
-+		ret = process_single_label(cmd, label, handle);
-+
-+		if (ret > ret_max)
-+			ret_max = ret;
-+
-+		if (sigint_caught())
-+			break;
-+	}
-+
-+	dev_iter_destroy(iter);
-+
-+	return ret_max;
-+}
-diff --git a/tools/toollib.h b/tools/toollib.h
-index aa6f699..d809123 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -38,6 +38,9 @@ typedef int (*process_single_pv_fn_t) (struct cmd_context *cmd,
- 				  struct volume_group *vg,
- 				  struct physical_volume *pv,
- 				  void *handle);
-+typedef int (*process_single_label_fn_t) (struct cmd_context *cmd,
-+					  struct label *label,
-+					  void *handle);
- typedef int (*process_single_lv_fn_t) (struct cmd_context *cmd,
- 				  struct logical_volume *lv,
- 				  void *handle);
-@@ -58,6 +61,9 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 		    int scan_label_only, void *handle,
- 		    process_single_pv_fn_t process_single_pv);
+-uint64_t pv_mda_free(const struct physical_volume *pv)
++uint64_t lvmcache_info_mda_free(struct lvmcache_info *info)
+ {
+-	struct lvmcache_info *info;
+ 	uint64_t freespace = UINT64_MAX;
+-	const char *pvid = (const char *)&pv->id.uuid;
  
-+int process_each_label(struct cmd_context *cmd, int argc, char **argv,
-+		       void *handle, process_single_label_fn_t process_single_label);
+-	if ((info = lvmcache_info_from_pvid(pvid, 0)))
+-		lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
++	lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
+ 
+ 	if (freespace == UINT64_MAX)
+ 		freespace = UINT64_C(0);
+@@ -256,6 +253,15 @@ uint64_t pv_mda_free(const struct physical_volume *pv)
+ 	return freespace;
+ }
+ 
++uint64_t pv_mda_free(const struct physical_volume *pv)
++{
++	const char *pvid = (const char *)&pv->id.uuid;
++	struct lvmcache_info *info;
++	if ((info = lvmcache_info_from_pvid(pvid, 0)))
++		return lvmcache_info_mda_free(info);
++	return 0;
++}
 +
- int process_each_segment_in_pv(struct cmd_context *cmd,
- 			       struct volume_group *vg,
- 			       struct physical_volume *pv,
+ uint64_t pv_used(const struct physical_volume *pv)
+ {
+ 	uint64_t used;
+diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
+index c018f38..ff708f8 100644
+--- a/lib/metadata/pv.h
++++ b/lib/metadata/pv.h
+@@ -85,6 +85,8 @@ uint64_t pv_ba_size(const struct physical_volume *pv);
+ uint32_t pv_pe_count(const struct physical_volume *pv);
+ uint32_t pv_pe_alloc_count(const struct physical_volume *pv);
+ uint64_t pv_mda_size(const struct physical_volume *pv);
++struct lvmcache_info;
++uint64_t lvmcache_info_mda_free(struct lvmcache_info *info);
+ uint64_t pv_mda_free(const struct physical_volume *pv);
+ uint64_t pv_used(const struct physical_volume *pv);
+ uint32_t pv_mda_count(const struct physical_volume *pv);
 
 
