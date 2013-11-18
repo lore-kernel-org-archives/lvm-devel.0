@@ -1,64 +1,37 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun, 17 Nov 2013 22:27:23 +0000 (UTC)
-Subject: master - report: Print UUIDs for missing PVs when possible.
-Message-ID: <20131117222723.A5D2E60DF0@fedorahosted.org>
+Date: Mon, 18 Nov 2013 17:01:45 +0000 (UTC)
+Subject: master - test: Force label-based reporting in pv-duplicate.sh.
+Message-ID: <20131118170145.D023560E54@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ae337d472eb973bbde80d641da9567acfa7874ff
-Commit:        ae337d472eb973bbde80d641da9567acfa7874ff
-Parent:        ecc296311ff2a251aa254353b0a0fb3ee97be97c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b8a6b8f467fadd5334fdb0c4a149753916e097db
+Commit:        b8a6b8f467fadd5334fdb0c4a149753916e097db
+Parent:        ae337d472eb973bbde80d641da9567acfa7874ff
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Nov 17 22:36:13 2013 +0100
+AuthorDate:    Mon Nov 18 17:53:06 2013 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Sun Nov 17 22:36:13 2013 +0100
+CommitterDate: Mon Nov 18 17:53:06 2013 +0100
 
-report: Print UUIDs for missing PVs when possible.
+test: Force label-based reporting in pv-duplicate.sh.
 
 ---
- test/shell/listings.sh |    3 +++
- tools/reporter.c       |    8 +++++++-
- 2 files changed, 10 insertions(+), 1 deletions(-)
+ test/shell/pv-duplicate.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/listings.sh b/test/shell/listings.sh
-index 0d4c83f..e5a3954 100644
---- a/test/shell/listings.sh
-+++ b/test/shell/listings.sh
-@@ -69,3 +69,6 @@ vgs -o pv_name,vg_name $vg
- pvdisplay $(cat DEVICES) >out
- pvdisplay --maps $(cat DEVICES) >out2
- not diff out out2
-+
-+aux disable_dev $dev1
-+pvs -o +pv_uuid | grep BADBEE-BAAD-BAAD-BAAD-BAAD-BAAD-BADBEE
-diff --git a/tools/reporter.c b/tools/reporter.c
-index fb01686..dccd785 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -142,6 +142,7 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- 	char uuid[64] __attribute__((aligned(8)));
- 	struct label *label;
- 	struct label _dummy_label = { 0 };
-+	struct device _dummy_device = { 0 };
+diff --git a/test/shell/pv-duplicate.sh b/test/shell/pv-duplicate.sh
+index 40d1f68..f315d86 100644
+--- a/test/shell/pv-duplicate.sh
++++ b/test/shell/pv-duplicate.sh
+@@ -21,5 +21,5 @@ vgcreate --metadatasize 128k $vg1 "$dev1"
+ dd if="$dev1" of="$dev2" bs=256K count=1
+ dd if="$dev1" of="$dev3" bs=256K count=1
  
- 	if (is_pv(pv) && !is_orphan(pv) && !vg) {
- 		vg_name = pv_vg_name(pv);
-@@ -182,7 +183,12 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- 	/* FIXME workaround for pv_label going through cache; remove once struct
- 	 * physical_volume gains a proper "label" pointer */
- 	if (!(label = pv_label(pv))) {
--		_dummy_label.dev = pv->dev;
-+		if (pv->dev)
-+			_dummy_label.dev = pv->dev;
-+		else {
-+			_dummy_label.dev = &_dummy_device;
-+			memcpy(_dummy_device.pvid, &pv->id, ID_LEN);
-+		}
- 		label = &_dummy_label;
- 	}
- 
+-pvs "$dev3"
++pvs "$dev3" -o pv_uuid
+ vgs $vg1
 
 
