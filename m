@@ -1,96 +1,182 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue, 19 Nov 2013 20:56:24 +0000 (UTC)
-Subject: master - python-lvm: Correct names
-Message-ID: <20131119205624.C413560F74@fedorahosted.org>
+Date: Tue, 19 Nov 2013 20:56:31 +0000 (UTC)
+Subject: master - metadata.c: Call refactored vgreduce_single
+Message-ID: <20131119205631.1BB6460CFD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1f744733a15fe56404dbd0c4d8e1aab339fef774
-Commit:        1f744733a15fe56404dbd0c4d8e1aab339fef774
-Parent:        b0b061cdbc4856cf6f5b43bd9ae835e678440890
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5074dcc896681494309c59830803b54a84429fd0
+Commit:        5074dcc896681494309c59830803b54a84429fd0
+Parent:        fe474e1452866476b7f17175d92417d6d827ae4c
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Jul 31 12:56:41 2013 -0400
+AuthorDate:    Tue Sep 3 18:07:43 2013 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Nov 19 14:40:25 2013 -0600
+CommitterDate: Tue Nov 19 14:40:30 2013 -0600
 
-python-lvm: Correct names
+metadata.c: Call refactored vgreduce_single
 
-The existing names do not follow accepted guidelines.
+Replace the code with the refactored vgreduce_single instead
+of calling its own implementation.
+
+Corrects bug: https://bugzilla.redhat.com/show_bug.cgi?id=989174
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- python/liblvm.c |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/metadata.c          |   35 ++++++-----------------------------
+ lib/metadata/vg.c                |   37 ++++++++++++++++++++++---------------
+ tools/vgreduce.c                 |    2 +-
+ 4 files changed, 30 insertions(+), 46 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index a9de817..42a327e 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -1846,7 +1846,7 @@ static PyMethodDef _liblvm_pvseg_methods[] = {
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index cac5b3c..7429241 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -594,7 +594,7 @@ int vg_extend(struct volume_group *vg, int pv_count, const char *const *pv_names
+ int vg_reduce(struct volume_group *vg, const char *pv_name);
  
- static PyTypeObject _LibLVMvgType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_vg",
-+	.tp_name = "lvm.Liblvm_vg",
- 	.tp_basicsize = sizeof(vgobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)liblvm_vg_dealloc,
-@@ -1857,7 +1857,7 @@ static PyTypeObject _LibLVMvgType = {
+ int vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
+-			    struct physical_volume *pv);
++			    struct physical_volume *pv, int commit);
  
- static PyTypeObject _LibLVMlvType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_lv",
-+	.tp_name = "lvm.Liblvm_lv",
- 	.tp_basicsize = sizeof(lvobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)liblvm_lv_dealloc,
-@@ -1868,7 +1868,7 @@ static PyTypeObject _LibLVMlvType = {
+ int vg_change_tag(struct volume_group *vg, const char *tag, int add_tag);
+ int vg_split_mdas(struct cmd_context *cmd, struct volume_group *vg_from,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 398def6..7177ff0 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -691,50 +691,27 @@ int vg_extend(struct volume_group *vg, int pv_count, const char *const *pv_names
+ 	return 1;
+ }
  
- static PyTypeObject _LibLVMpvlistType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pvlist",
-+	.tp_name = "lvm.Liblvm_pvlist",
- 	.tp_basicsize = sizeof(pvslistobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pvlist_dealloc,
-@@ -1879,7 +1879,7 @@ static PyTypeObject _LibLVMpvlistType = {
+-/* FIXME: use this inside vgreduce_single? */
+ int vg_reduce(struct volume_group *vg, const char *pv_name)
+ {
+ 	struct physical_volume *pv;
+ 	struct pv_list *pvl;
  
- static PyTypeObject _LibLVMpvType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pv",
-+	.tp_name = "lvm.Liblvm_pv",
- 	.tp_basicsize = sizeof(pvobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pv_dealloc,
-@@ -1890,7 +1890,7 @@ static PyTypeObject _LibLVMpvType = {
+-	if (_vg_bad_status_bits(vg, RESIZEABLE_VG))
+-		return 0;
+-
+-	if (!archive(vg))
+-		goto bad;
+-
+-	/* remove each pv */
+ 	if (!(pvl = find_pv_in_vg(vg, pv_name))) {
+ 		log_error("Physical volume %s not in volume group %s.",
+ 			  pv_name, vg->name);
+-		goto bad;
++		return 0;
+ 	}
  
- static PyTypeObject _LibLVMlvsegType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_lvseg",
-+	.tp_name = "lvm.Liblvm_lvseg",
- 	.tp_basicsize = sizeof(lvsegobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_lvseg_dealloc,
-@@ -1901,7 +1901,7 @@ static PyTypeObject _LibLVMlvsegType = {
+ 	pv = pvl->pv;
  
- static PyTypeObject _LibLVMpvsegType = {
- 	PyObject_HEAD_INIT(&PyType_Type)
--	.tp_name = "liblvm.Liblvm_pvseg",
-+	.tp_name = "lvm.Liblvm_pvseg",
- 	.tp_basicsize = sizeof(pvsegobject),
- 	.tp_new = PyType_GenericNew,
- 	.tp_dealloc = (destructor)_liblvm_pvseg_dealloc,
-@@ -1952,7 +1952,7 @@ PyMODINIT_FUNC initlvm(void)
- 				    LVM_THIN_DISCARDS_PASSDOWN) < 0)
- 		return;
+-	if (pv_pe_alloc_count(pv)) {
+-		log_error("Physical volume %s still in use.",
+-			  pv_name);
+-		goto bad;
+-	}
+-
+-	if (!dev_get_size(pv_dev(pv), &pv->size)) {
+-		log_error("%s: Couldn't get size.", pv_name);
+-		goto bad;
++	if (vgreduce_single(vg->cmd, vg, pv, 0)) {
++		dm_list_add(&vg->removed_pvs, &pvl->list);
++		return 1;
+ 	}
  
--	if ((_LibLVMError = PyErr_NewException("Liblvm._LibLVMError", NULL, NULL))) {
-+	if ((_LibLVMError = PyErr_NewException("lvm.LibLVMError", NULL, NULL))) {
- 		/* Each call to PyModule_AddObject decrefs it; compensate: */
- 		Py_INCREF(_LibLVMError);
- 		Py_INCREF(_LibLVMError);
+-	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
+-	vg->extent_count -= pv_pe_count(pv);
+-	del_pvl_from_vgs(vg, pvl);
+-
+-	/* add pv to the remove_pvs list */
+-	dm_list_add(&vg->removed_pvs, &pvl->list);
+-
+-	return 1;
+-
+-      bad:
+ 	log_error("Unable to remove physical volume '%s' from "
+-		  "volume group '%s'.", pv_name, vg->name);
++				"volume group '%s'.", pv_name, vg->name);
++
+ 	return 0;
+ }
+ 
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index 20b4b4d..877371e 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -576,7 +576,7 @@ char *vg_attr_dup(struct dm_pool *mem, const struct volume_group *vg)
+ }
+ 
+ int vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
+-			    struct physical_volume *pv)
++			    struct physical_volume *pv, int commit)
+ {
+ 	struct pv_list *pvl;
+ 	struct volume_group *orphan_vg = NULL;
+@@ -637,25 +637,32 @@ int vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
+ 		goto bad;
+ 	}
+ 
+-	if (!vg_write(vg) || !vg_commit(vg)) {
+-		log_error("Removal of physical volume \"%s\" from "
+-			  "\"%s\" failed", name, vg->name);
+-		goto bad;
+-	}
++	/*
++	 * Only write out the needed changes if so requested by caller.
++	 */
++	if (commit) {
++		if (!vg_write(vg) || !vg_commit(vg)) {
++			log_error("Removal of physical volume \"%s\" from "
++				  "\"%s\" failed", name, vg->name);
++			goto bad;
++		}
+ 
+-	if (!pv_write(cmd, pv, 0)) {
+-		log_error("Failed to clear metadata from physical "
+-			  "volume \"%s\" "
+-			  "after removal from \"%s\"", name, vg->name);
+-		goto bad;
+-	}
++		if (!pv_write(cmd, pv, 0)) {
++			log_error("Failed to clear metadata from physical "
++				  "volume \"%s\" "
++				  "after removal from \"%s\"", name, vg->name);
++			goto bad;
++		}
+ 
+-	backup(vg);
++		backup(vg);
+ 
+-	log_print_unless_silent("Removed \"%s\" from volume group \"%s\"", name, vg->name);
++		log_print_unless_silent("Removed \"%s\" from volume group \"%s\"",
++				name, vg->name);
++	}
+ 	r = 1;
+ bad:
+-	if (pvl)
++	/* If we are committing here or we had an error then we will free fid */
++	if (pvl && (commit || r != 1))
+ 		free_pv_fid(pvl->pv);
+ 	unlock_and_release_vg(cmd, orphan_vg, VG_ORPHANS);
+ 	return r;
+diff --git a/tools/vgreduce.c b/tools/vgreduce.c
+index 534a4fb..0ade4fa 100644
+--- a/tools/vgreduce.c
++++ b/tools/vgreduce.c
+@@ -125,7 +125,7 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
+ 			    struct physical_volume *pv,
+ 			    void *handle __attribute__((unused)))
+ {
+-	int r = vgreduce_single(cmd, vg, pv);
++	int r = vgreduce_single(cmd, vg, pv, 1);
+ 
+ 	if (!r)
+ 		return ECMD_FAILED;
 
 
