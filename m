@@ -1,39 +1,40 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 22 Nov 2013 20:09:30 +0000 (UTC)
-Subject: master - cleanup: use const format
-Message-ID: <20131122200930.2718060E20@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Tue, 19 Nov 2013 20:56:54 +0000 (UTC)
+Subject: master - liblvm/python API: Additions & fixes
+Message-ID: <20131119205654.4485560F74@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b8f72c0f2c41fa76bdd3f4c0d73cf31dc9ce9b88
-Commit:        b8f72c0f2c41fa76bdd3f4c0d73cf31dc9ce9b88
-Parent:        62db5c1e48467ef846432652dd1058eb85c0bcbd
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 22 20:43:30 2013 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 22 21:00:56 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c8abb29df2e8cc22c43f67117486e4e717110dd
+Commit:        7c8abb29df2e8cc22c43f67117486e4e717110dd
+Parent:        5588a56391dd3ef61d284ea64bcb6da591a3136c
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Tue Nov 19 14:54:18 2013 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Tue Nov 19 14:54:18 2013 -0600
 
-cleanup: use const format
+liblvm/python API: Additions & fixes
 
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/label/label.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/lib/label/label.h b/lib/label/label.h
-index 103e799..253e1e8 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -88,7 +88,7 @@ struct label_ops {
- 
- struct labeller {
- 	struct label_ops *ops;
--	struct format_type *fmt;
-+	const struct format_type *fmt;
- };
- 
- int label_init(void);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index bd18c6f..e47f0e5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,8 @@
+ Version 2.02.105 -
+ =====================================
++  liblvm/python API Add ability to validate VG/LV names.
++  liblvm/python API Add ability to create PV with arguments.
++  liblvm/python API Fail VG reduce when insufficient metadata copies
+   Fix install of conf subdir when not building in srcdir.
+   Add reporting of thin_id device id for thin volumes.
+   Fix reporting of empty numerical values.
 
 
