@@ -1,39 +1,56 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 27 Nov 2013 07:53:59 +0000 (UTC)
-Subject: master - activation: change log_error to log_warn if refresh before autoactivation fails
-Message-ID: <20131127075359.9BB6160DBA@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 22 Nov 2013 18:18:20 +0000 (UTC)
+Subject: master - toollib: Avoid undefined ignore_vg parameter.
+Message-ID: <20131122181820.A749B60C46@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=120df5561088f4a5277716117339d9212b666214
-Commit:        120df5561088f4a5277716117339d9212b666214
-Parent:        d6e67b850365864bba91619a40503ff0b0392e2c
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 27 08:53:26 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 27 08:53:26 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4c1f281b43175e69a73fcc59a9142fd374e8b70c
+Commit:        4c1f281b43175e69a73fcc59a9142fd374e8b70c
+Parent:        7c8abb29df2e8cc22c43f67117486e4e717110dd
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Nov 22 18:11:04 2013 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Nov 22 18:11:04 2013 +0000
 
-activation: change log_error to log_warn if refresh before autoactivation fails
+toollib: Avoid undefined ignore_vg parameter.
 
+Fix process_each_segment_in_pv to always set ret before calling ignore_vg().
 ---
- tools/pvscan.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW       |    1 +
+ tools/toollib.c |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 981a9c2..4f99f45 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -148,7 +148,7 @@ static int _auto_activation_handler(struct cmd_context *cmd,
- 	}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e47f0e5..647c810 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Fix undef value if skipped clustered VG ignored for toollib PV seg. (2.02.103)
+   liblvm/python API Add ability to validate VG/LV names.
+   liblvm/python API Add ability to create PV with arguments.
+   liblvm/python API Fail VG reduce when insufficient metadata copies
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b3bfd1d..90a7cb8 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -510,10 +510,10 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
+ 		vg_name = pv_vg_name(pv);
  
- 	if (!refresh_done)
--		log_error("%s: refresh before autoactivation failed.", vg->name);
-+		log_warn("%s: refresh before autoactivation failed.", vg->name);
+ 		vg = vg_read(cmd, vg_name, NULL, 0);
+-		if (ignore_vg(vg, vg_name, 0, &ret)) {
++		if (ignore_vg(vg, vg_name, 0, &ret_max)) {
+ 			release_vg(vg);
+ 			stack;
+-			return ret;
++			return ret_max;
+ 		}
  
- 	if (!vgchange_activate(vg->cmd, vg, activate)) {
- 		log_error("%s: autoactivation failed.", vg->name);
+ 		/*
 
 
