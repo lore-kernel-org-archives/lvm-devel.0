@@ -1,39 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 22 Nov 2013 20:09:25 +0000 (UTC)
-Subject: master - cleanup: drop unused header
-Message-ID: <20131122200925.F1D0D61097@fedorahosted.org>
+Date: Fri, 22 Nov 2013 20:09:28 +0000 (UTC)
+Subject: master - cleanup: make gcc happier with initializers
+Message-ID: <20131122200928.1379A60E20@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6ebbf1982892a819dc14045a8dca0ad512cebdf8
-Commit:        6ebbf1982892a819dc14045a8dca0ad512cebdf8
-Parent:        07d766d270f764e3a8300fee79ac559d18f21e66
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=62db5c1e48467ef846432652dd1058eb85c0bcbd
+Commit:        62db5c1e48467ef846432652dd1058eb85c0bcbd
+Parent:        6ebbf1982892a819dc14045a8dca0ad512cebdf8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 22 10:04:13 2013 +0100
+AuthorDate:    Fri Nov 22 20:42:03 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 22 21:00:56 2013 +0100
 
-cleanup: drop unused header
+cleanup: make gcc happier with initializers
 
-Header is not used here.
+Whole struct will be set to 0, just
+if the first member is array, gcc gives warning
+we should initialized this element as array,
+so pick any later simple type.
 ---
- liblvm/lvm_base.c |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ tools/reporter.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index d694173..80a4894 100644
---- a/liblvm/lvm_base.c
-+++ b/liblvm/lvm_base.c
-@@ -18,7 +18,6 @@
- #include "lvm-version.h"
- #include "metadata-exported.h"
- #include "lvm2app.h"
--#include "lvm-string.h"
+diff --git a/tools/reporter.c b/tools/reporter.c
+index dccd785..bf181e7 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -141,8 +141,8 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
+ 	struct volume_group *old_vg = vg;
+ 	char uuid[64] __attribute__((aligned(8)));
+ 	struct label *label;
+-	struct label _dummy_label = { 0 };
+-	struct device _dummy_device = { 0 };
++	struct label _dummy_label = { .dev = 0 };
++	struct device _dummy_device = { .dev = 0 };
  
- const char *lvm_library_get_version(void)
- {
+ 	if (is_pv(pv) && !is_orphan(pv) && !vg) {
+ 		vg_name = pv_vg_name(pv);
 
 
