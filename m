@@ -1,72 +1,57 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 27 Nov 2013 14:52:42 +0000 (UTC)
-Subject: master - man: lvcreate -W/--wipesignatures
-Message-ID: <20131127145242.1C74660279@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 22 Nov 2013 20:08:52 +0000 (UTC)
+Subject: master - report: detect dev_get_size failure
+Message-ID: <20131122200852.99FDB60EE0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5968f07fd5ccb2b7d4e407cd8fec86b0b1f80f3a
-Commit:        5968f07fd5ccb2b7d4e407cd8fec86b0b1f80f3a
-Parent:        eaa23d32732c9bc3dd4f948781b5764cf21d84ba
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 27 15:20:12 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 27 15:49:15 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a50a297f6e75d650abe9fe084b499a7968cc59ee
+Commit:        a50a297f6e75d650abe9fe084b499a7968cc59ee
+Parent:        08d6d81cc24a3c3b780fe25ed49aefc9a9b61586
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Nov 22 13:21:52 2013 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Nov 22 20:54:16 2013 +0100
 
-man: lvcreate -W/--wipesignatures
+report: detect dev_get_size failure
 
+Since dev_get_size() may fail, detect this failure.
 ---
- man/lvcreate.8.in |   21 +++++++++++++++++++--
- 1 files changed, 19 insertions(+), 2 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/report/report.c |    7 +++++--
+ 2 files changed, 6 insertions(+), 2 deletions(-)
 
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index 4a29720..a34c4ae 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -75,6 +75,7 @@ lvcreate \- create a logical volume in an existing volume group
- .RB [ \-\-type
- .IR SegmentType ]
- .RB [ \-v | \-\-verbose ]
-+.RB [ \-W | \-\-wipesignatures ]
- .RB [ \-Z | \-\-zero
- .RI { y | n }]
- .IR VolumeGroup { Name | Path }[/ ThinPoolLogicalVolumeName ]
-@@ -135,8 +136,9 @@ If autoactivation option is used (\fB\-a\fIay\fR), the logical volume is
- activated only if it matches an item in the
- .B activation/auto_activation_volume_list
- set in \fBlvm.conf\fP(5).
--For autoactivated logical volumes, \fB\-\-zero\fP \fIn\fP is always assumed
--and it can't be overridden. If the clustered locking is enabled,
-+For autoactivated logical volumes, \fB\-\-zero\fP \fIn\fP and
-+\fB\-\-wipesignatures\fP \fIn\fP is always assumed and it can't
-+be overridden. If the clustered locking is enabled,
- \fB\-a\fIey\fR will activate exclusively on one node and
- .IR \fB\-a { a | l } y
- will activate only on the local node.
-@@ -399,6 +401,21 @@ requested size using the zero target.  A suffix of _vorigin is used for
- this device. Note: using sparse snapshots is not efficient for larger
- device sizes (GiB), thin provisioning should be used for this case.
- .TP
-+.BR \-W ", " \-\-wipesignatures " {" \fIy | \fIn }
-+Controls wiping of detected signatures on newly created Logical Volume.
-+If this option is not specified, then by default signature wiping is done
-+each time the zeroing (\fB\-Z\fP/\fB\-\-zero\fP) is done. This default behaviour
-+can be controlled by \fBallocation/wipe_signatures_on_new_logical_volumes_when_zeroing\fP
-+setting found in \fBlvm.conf\fP(5).
-+.br
-+If blkid wiping is used (\fBallocation/use_blkid_wiping setting\fP in \fBlvm.conf\fP(5))
-+and LVM2 is compiled with blkid wiping support, then \fBblkid\fP(8) library is used
-+to detect the signatures (use \fBblkid -k\fP command to list the signatures that are recognized).
-+Otherwise, native LVM2 code is used to detect signatures (MD RAID, swap and LUKS
-+signatures are detected only in this case).
-+.br
-+Logical Volume is not wiped if the read only flag is set.
-+.TP
- .BR \-Z ", " \-\-zero " {" \fIy | \fIn }
- Controls zeroing of the first KiB of data in the new logical volume.
- .br
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b7a1e84..99f9067 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Check for failure of dev_get_size() when reporting device size.
+   Drop extra unneeded '/' when scanning sysfs directory.
+   Fix undef value if skipped clustered VG ignored for toollib PV seg. (2.02.103)
+   liblvm/python API Add ability to validate VG/LV names.
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 9cb2298..20eab4f 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -693,8 +693,11 @@ static int _devsize_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			 struct dm_report_field *field,
+ 			 const void *data, void *private)
+ {
+-	uint64_t size = 0;
+-	dev_get_size(*(const struct device **) data, &size);
++	uint64_t size;
++
++	if (!dev_get_size(*(const struct device **) data, &size))
++		return_0;
++
+ 	return _size64_disp(rh, mem, field, &size, private);
+ }
+ 
 
 
