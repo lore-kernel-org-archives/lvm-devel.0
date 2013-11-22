@@ -1,52 +1,116 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 28 Nov 2013 11:48:55 +0000 (UTC)
-Subject: master - cleanup: fold test into printf arg
-Message-ID: <20131128114855.4366B60F37@fedorahosted.org>
+Date: Fri, 22 Nov 2013 20:08:56 +0000 (UTC)
+Subject: master - snapshot: revert and move check to lvconvert
+Message-ID: <20131122200856.BBEC760EE0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bfcf3edcc69243cfcef6e73e8bbcba0e60366802
-Commit:        bfcf3edcc69243cfcef6e73e8bbcba0e60366802
-Parent:        8c96afd361686647e10f3bf70c03dea62b82bc01
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6d196410fc071cfe15638bbde0b3ac8bbbf4be53
+Commit:        6d196410fc071cfe15638bbde0b3ac8bbbf4be53
+Parent:        3d3b8bfd1c7cc22383580b2723415ddcf9fbe7d7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Nov 24 18:59:46 2013 +0100
+AuthorDate:    Fri Nov 22 14:52:35 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 28 12:45:52 2013 +0100
+CommitterDate: Fri Nov 22 20:57:30 2013 +0100
 
-cleanup: fold test into printf arg
+snapshot: revert and move check to lvconvert
 
-When arg is folded, compiler is able to check all args.
-(better for security)
+Revert 4777eb68728859a0b3651e29c628111ed7c99103 which put
+target_present check into init_snapshot_merge(). However
+this function is also used when parsing metadata. So we would
+get this present test performed even when target is not really
+needed. So move this target_present test directly into lvconvert.
 ---
- lib/metadata/metadata.c |    6 ++----
- 1 files changed, 2 insertions(+), 4 deletions(-)
+ WHATS_NEW                        |    1 +
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/snapshot_manip.c    |   12 ++----------
+ tools/lvconvert.c                |    8 ++++++--
+ 4 files changed, 10 insertions(+), 13 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5c87ab6..60be61e 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -43,9 +43,6 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
- static uint32_t _vg_bad_status_bits(const struct volume_group *vg,
- 				    uint64_t status);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 41251b8..119463b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Move test for target present from init_snapshot_merge() to lvconvert.
+   Check for failure of lvmcache_add_mda() when writing pv.
+   Check for failure of dev_get_size() when reporting device size.
+   Drop extra unneeded '/' when scanning sysfs directory.
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index ed1ec8d..33c534f 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -880,7 +880,7 @@ struct logical_volume *origin_from_cow(const struct logical_volume *lv);
+ void init_snapshot_seg(struct lv_segment *seg, struct logical_volume *origin,
+ 		       struct logical_volume *cow, uint32_t chunk_size, int merge);
  
--const char _really_init[] =
--    "Really INITIALIZE physical volume \"%s\" of volume group \"%s\" [y/n]? ";
--
- static int _alignment_overrides_default(unsigned long data_alignment,
- 					unsigned long default_pe_align)
+-int init_snapshot_merge(struct lv_segment *snap_seg, struct logical_volume *origin);
++void init_snapshot_merge(struct lv_segment *snap_seg, struct logical_volume *origin);
+ 
+ void clear_snapshot_merge(struct logical_volume *origin);
+ 
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index fc1273e..c491918 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -19,7 +19,6 @@
+ #include "toolcontext.h"
+ #include "lv_alloc.h"
+ #include "activate.h"
+-#include "segtype.h"
+ 
+ int lv_is_origin(const struct logical_volume *lv)
  {
-@@ -1294,7 +1291,8 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
+@@ -152,8 +151,8 @@ void init_snapshot_seg(struct lv_segment *seg, struct logical_volume *origin,
+ 	dm_list_add(&origin->snapshot_segs, &seg->origin_list);
+ }
  
- 	/* prompt */
- 	if (pv && !is_orphan(pv) && !pp->yes &&
--	    yes_no_prompt(_really_init, name, pv_vg_name(pv)) == 'n') {
-+	    yes_no_prompt("Really INITIALIZE physical volume \"%s\" of volume group \"%s\" [y/n]? ",
-+			  name, pv_vg_name(pv)) == 'n') {
- 		log_error("%s: physical volume not initialized", name);
- 		goto bad;
+-int init_snapshot_merge(struct lv_segment *snap_seg,
+-			struct logical_volume *origin)
++void init_snapshot_merge(struct lv_segment *snap_seg,
++			 struct logical_volume *origin)
+ {
+ 	/*
+ 	 * Even though lv_is_visible(snap_seg->lv) returns 0,
+@@ -169,13 +168,6 @@ int init_snapshot_merge(struct lv_segment *snap_seg,
+ 	snap_seg->status |= MERGING;
+ 	origin->snapshot = snap_seg;
+ 	origin->status |= MERGING;
+-
+-	if (snap_seg->segtype->ops->target_present &&
+-	    !snap_seg->segtype->ops->target_present(snap_seg->lv->vg->cmd,
+-						    snap_seg, NULL))
+-		return 0;
+-
+-	return 1;
+ }
+ 
+ void clear_snapshot_merge(struct logical_volume *origin)
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 92a2022..6a7281b 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1919,10 +1919,14 @@ static int lvconvert_merge(struct cmd_context *cmd,
+ 		}
  	}
+ 
+-	if (!init_snapshot_merge(snap_seg, origin)) {
++	init_snapshot_merge(snap_seg, origin);
++
++	if (snap_seg->segtype->ops->target_present &&
++	    !snap_seg->segtype->ops->target_present(snap_seg->lv->vg->cmd,
++						    snap_seg, NULL)) {
+ 		log_error("Can't initialize snapshot merge. "
+ 			  "Missing support in kernel?");
+-		return_0;
++		return 0;
+ 	}
+ 
+ 	/* store vg on disk(s) */
 
 
