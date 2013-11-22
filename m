@@ -1,128 +1,109 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Fri, 29 Nov 2013 18:15:33 -0500 (EST)
-Subject: [LVM2 PATCH v2] incorrect calculation of snapshot space (fwd)
-Message-ID: <alpine.LRH.2.02.1311291814060.16583@file01.intranet.prod.int.rdu2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 22 Nov 2013 20:09:02 +0000 (UTC)
+Subject: master - dmeventd: move format text to printf
+Message-ID: <20131122200902.EEBC061133@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6fa95d17ee85ffd77d4dc90b23cdd024f65c279c
+Commit:        6fa95d17ee85ffd77d4dc90b23cdd024f65c279c
+Parent:        069fa6c49d85f677320ccb1965ef2e59b6829303
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Nov 22 12:54:59 2013 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Nov 22 21:00:51 2013 +0100
 
-This is the patch for incorrect calculation of snapshot space in lvm2. 
-This is the updated that checks target driver version.
+dmeventd: move format text to printf
 
-We need to get this into RHEL6.5 z-stream as soon as possible because this 
-bug is a regression introduced in RHEL6.5.
-
-I created this bug for the issue: 
-https://bugzilla.redhat.com/show_bug.cgi?id=1035871
-
-The bug can be tested with this script:
-#!/bin/sh
-VG=vg1
-lvremove -f $VG/origin
-set -e
-lvcreate -L 2143289344b -n origin $VG
-lvcreate -n snap -c 8k -L 2304M -s $VG/origin
-dd if=/dev/zero of=/dev/$VG/snap bs=1M count=2044 oflag=direct
-
-
-The bug happens when these two conditions are met
-* origin size is divisible by (chunk_size/16) - so that the last metadata 
-  area is filled completely
-* the miscalculated snapshot metadata size is divisible by extent size - 
-  so that there is no padding to extent boundary which would otherwise 
-  save us
-
-Mikulas
+Instead of passing argument with format string to printf(),
+put the string as arg directly.
+Also move there remains args to make the code shorter.
 ---
- lib/metadata/snapshot_manip.c |   52 +++++++++++++++++++++++++++++++++---------
- 1 file changed, 41 insertions(+), 11 deletions(-)
+ WHATS_NEW_DM                          |    1 +
+ daemons/dmeventd/dmeventd.c           |   12 +++++-------
+ daemons/dmeventd/libdevmapper-event.c |   16 ++++++++--------
+ 3 files changed, 14 insertions(+), 15 deletions(-)
 
-Index: LVM2.2.02.104/lib/metadata/snapshot_manip.c
-===================================================================
---- LVM2.2.02.104.orig/lib/metadata/snapshot_manip.c	2013-11-28 19:11:00.000000000 +0100
-+++ LVM2.2.02.104/lib/metadata/snapshot_manip.c	2013-11-30 00:08:29.000000000 +0100
-@@ -31,7 +31,35 @@ int lv_is_cow(const struct logical_volum
- 	return (!lv_is_origin(lv) && lv->snapshot) ? 1 : 0;
- }
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 24d53af..564419f 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.84 -
+ ====================================
++  Move printf format string directly into dm_asprintf args list.
+   Catch invalid use of string sort values when reporting numerical fields.
  
--static uint64_t _cow_max_size(uint64_t origin_size, uint32_t chunk_size)
-+/*
-+ * Some kernels have a bug that they may leak space in the snapshot on crash.
-+ * If the kernel is buggy, we add some extra space.
-+ */
-+static uint64_t _cow_extra_chunks(struct cmd_context *cmd, uint64_t n_chunks)
-+{
-+	static int space_leak_bug_fixed = -1;
-+	if (space_leak_bug_fixed < 0) {
-+		uint32_t maj, min, patchlevel;
-+		if (!target_version("snapshot", &maj, &min, &patchlevel) &&
-+		    (!module_present(cmd, "snapshot") ||
-+		     !target_version("snapshot", &maj, &min, &patchlevel))) {
-+			space_leak_bug_fixed = 0;
-+			goto x;
-+		}
-+		space_leak_bug_fixed =
-+			(maj > 1 ||
-+			(maj == 1 && (min >= 12 ||
-+				     (min == 10 && patchlevel >= 2))));
-+x:;
-+	}
-+
-+	if (space_leak_bug_fixed)
-+		return 0;
-+
-+	return (n_chunks + 63) / 64;
-+}
-+
-+static uint64_t _cow_max_size(struct cmd_context *cmd, uint64_t origin_size, uint32_t chunk_size)
+ Version 1.02.83 - 13th November 2013
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index bdaf552..e9fc59b 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1110,20 +1110,18 @@ static int _unregister_for_event(struct message_data *message_data)
+ static int _registered_device(struct message_data *message_data,
+ 			     struct thread_status *thread)
  {
- 	/* Snapshot disk layout:
- 	 *    COW is divided into chunks
-@@ -40,21 +68,23 @@ static uint64_t _cow_max_size(uint64_t o
- 	 *        3rd. chunk is the 1st. data chunk
+-	struct dm_event_daemon_message *msg = message_data->msg;
+-
+-	const char *fmt = "%s %s %s %u";
+-	const char *id = message_data->id;
+-	const char *dso = thread->dso_data->dso_name;
+-	const char *dev = thread->device.uuid;
+ 	int r;
++	struct dm_event_daemon_message *msg = message_data->msg;
+ 	unsigned events = ((thread->status == DM_THREAD_RUNNING) &&
+ 			   thread->events) ? thread->events :
+ 			    thread->events | DM_EVENT_REGISTRATION_PENDING;
+ 
+ 	dm_free(msg->data);
+ 
+-	if ((r = dm_asprintf(&(msg->data), fmt, id, dso, dev, events)) < 0) {
++	if ((r = dm_asprintf(&(msg->data), "%s %s %s %u",
++			     message_data->id,
++			     thread->dso_data->dso_name,
++			     thread->device.uuid, events)) < 0) {
+ 		msg->size = 0;
+ 		return -ENOMEM;
+ 	}
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 72f0f92..92e9c1d 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -345,9 +345,6 @@ int daemon_talk(struct dm_event_fifos *fifos,
+ 		const char *dso_name, const char *dev_name,
+ 		enum dm_event_mask evmask, uint32_t timeout)
+ {
+-	const char *dso = dso_name ? dso_name : "-";
+-	const char *dev = dev_name ? dev_name : "-";
+-	const char *fmt = "%d:%d %s %s %u %" PRIu32;
+ 	int msg_size;
+ 	memset(msg, 0, sizeof(*msg));
+ 
+@@ -355,14 +352,17 @@ int daemon_talk(struct dm_event_fifos *fifos,
+ 	 * Set command and pack the arguments
+ 	 * into ASCII message string.
  	 */
+-	msg->cmd = cmd;
+-	if (cmd == DM_EVENT_CMD_HELLO)
+-		fmt = "%d:%d HELLO";
+-	if ((msg_size = dm_asprintf(&(msg->data), fmt, getpid(), _sequence_nr,
+-				    dso, dev, evmask, timeout)) < 0) {
++	if ((msg_size =
++	     ((cmd == DM_EVENT_CMD_HELLO) ?
++	      dm_asprintf(&(msg->data), "%d:%d HELLO", getpid(), _sequence_nr) :
++	      dm_asprintf(&(msg->data), "%d:%d %s %s %u %" PRIu32,
++			  getpid(), _sequence_nr,
++			  dso_name ? : "-", dev_name ? : "-", evmask, timeout)))
++	    < 0) {
+ 		log_error("_daemon_talk: message allocation failed");
+ 		return -ENOMEM;
+ 	}
++	msg->cmd = cmd;
+ 	msg->size = msg_size;
  
--	/* Size of metadata for snapshot in sectors */
--	uint64_t mdata_size = ((origin_size + chunk_size - 1) / chunk_size * 16 + 511) >> SECTOR_SHIFT;
-+	uint64_t origin_chunks = (origin_size + chunk_size - 1) / chunk_size;
-+
-+	uint64_t chunks_per_metadata_area = (uint64_t)chunk_size << (SECTOR_SHIFT - 4);
- 
--	/* Sum all chunks - header + metadata size + origin size (aligned on chunk boundary) */
--	uint64_t size = chunk_size +
--		((mdata_size + chunk_size - 1) & ~(uint64_t)(chunk_size - 1)) +
--		((origin_size + chunk_size - 1) & ~(uint64_t)(chunk_size - 1));
-+	/*
-+	 * Note: if origin_chunks is divisible by chunks_per_metadata_area, we
-+	 * need one extra metadata chunk as a terminator.
-+	 */
-+	uint64_t metadata_chunks = (origin_chunks + chunks_per_metadata_area) / chunks_per_metadata_area;
- 
--	/* Does not overflow since size is in sectors (9 bits) */
--	return size;
-+	uint64_t n_chunks = 1 + origin_chunks + metadata_chunks;
-+	return (n_chunks + _cow_extra_chunks(cmd, n_chunks)) * chunk_size;
- }
- 
- uint32_t cow_max_extents(const struct logical_volume *origin, uint32_t chunk_size)
- {
--	uint64_t size = _cow_max_size(origin->size, chunk_size);
-+	uint64_t size = _cow_max_size(origin->vg->cmd, origin->size, chunk_size);
- 	uint32_t extent_size = origin->vg->extent_size;
- 	uint64_t max_size = (uint64_t) MAX_EXTENT_COUNT * extent_size;
- 
-@@ -70,7 +100,7 @@ uint32_t cow_max_extents(const struct lo
- int lv_is_cow_covering_origin(const struct logical_volume *lv)
- {
- 	return lv_is_cow(lv) &&
--		(lv->size >= _cow_max_size(origin_from_cow(lv)->size, find_snapshot(lv)->chunk_size));
-+		(lv->size >= _cow_max_size(lv->vg->cmd, origin_from_cow(lv)->size, find_snapshot(lv)->chunk_size));
- }
- 
- int lv_is_visible(const struct logical_volume *lv)
+ 	/*
 
 
