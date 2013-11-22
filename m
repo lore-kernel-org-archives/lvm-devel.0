@@ -1,160 +1,163 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 27 Nov 2013 14:52:31 +0000 (UTC)
-Subject: master - lvcreate: recognize --wipesignatures arg
-Message-ID: <20131127145231.B0EE061046@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 22 Nov 2013 20:08:50 +0000 (UTC)
+Subject: master - filters: drop extra slash from sysfs path
+Message-ID: <20131122200850.8421560EE0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=169b4c15864330e3fe47efee7b0def06581b8f08
-Commit:        169b4c15864330e3fe47efee7b0def06581b8f08
-Parent:        5b7e543cae5be52e1dcd79c7f6876acc89138cf1
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 6 16:05:50 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 27 15:48:15 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08d6d81cc24a3c3b780fe25ed49aefc9a9b61586
+Commit:        08d6d81cc24a3c3b780fe25ed49aefc9a9b61586
+Parent:        4c1f281b43175e69a73fcc59a9142fd374e8b70c
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Nov 21 17:50:12 2013 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Nov 22 20:53:31 2013 +0100
 
-lvcreate: recognize --wipesignatures arg
+filters: drop extra slash from sysfs path
 
-Recognize the new --wipesignatures arg in lvcreate that is supposed
-to wipe known signatures if found on newly created LV.
+Sysfs filter was using '/sys//class/block' with double '//' inside.
+Remove this extra '/'.
+Also simplify code around and use loop to try those paths.
 ---
- WHATS_NEW                        |    1 +
- lib/metadata/metadata-exported.h |    1 +
- liblvm/lvm_lv.c                  |    1 +
- tools/args.h                     |    1 +
- tools/commands.h                 |    4 +++-
- tools/lvcreate.c                 |   28 +++++++++++++++++++++++-----
- 6 files changed, 30 insertions(+), 6 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/filters/filter-sysfs.c |  109 +++++++++++++++++++++----------------------
+ 2 files changed, 54 insertions(+), 56 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index af489d6..b4d683d 100644
+index 647c810..b7a1e84 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.105 -
  =====================================
-+  Add -W/--wipesignatures lvcreate option to support wiping on new LVs.
-   Add allocation/wipe_signatures_on_new_logical_volumes_when_zeroing to lvm.conf.
-   Do not fail the whole autoactivation if the VG refresh done before fails.
-   Do not connect to lvmetad on vg/lvchange --sysinit -aay and socket absent.
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 33c534f..69a0e90 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -723,6 +723,7 @@ struct lvcreate_params {
- 	int thin; /* thin */
- 	int create_thin_pool; /* thin */
- 	int zero; /* all */
-+	int wipe_signatures; /* all */
- 	int major; /* all */
- 	int minor; /* all */
- 	int log_count; /* mirror */
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 938a16b..f5c3ab9 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -129,6 +129,7 @@ static void _lv_set_default_params(struct lvcreate_params *lp,
- 				   uint64_t extents)
++  Drop extra unneeded '/' when scanning sysfs directory.
+   Fix undef value if skipped clustered VG ignored for toollib PV seg. (2.02.103)
+   liblvm/python API Add ability to validate VG/LV names.
+   liblvm/python API Add ability to create PV with arguments.
+diff --git a/lib/filters/filter-sysfs.c b/lib/filters/filter-sysfs.c
+index af3ed07..ff94810 100644
+--- a/lib/filters/filter-sysfs.c
++++ b/lib/filters/filter-sysfs.c
+@@ -23,64 +23,61 @@ static int _locate_sysfs_blocks(const char *sysfs_dir, char *path, size_t len,
+ 				unsigned *sysfs_depth)
  {
- 	lp->zero = 1;
-+	lp->wipe_signatures = 0;
- 	lp->major = -1;
- 	lp->minor = -1;
- 	lp->activate = CHANGE_AY;
-diff --git a/tools/args.h b/tools/args.h
-index 27b97eb..8ca73a3 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -176,6 +176,7 @@ arg(uuidlist_ARG, 'U', "uuidlist", NULL, 0)
- arg(verbose_ARG, 'v', "verbose", NULL, ARG_COUNTABLE)
- arg(volumegroup_ARG, 'V', "volumegroup", NULL, 0)
- arg(virtualsize_ARG, 'V', "virtualsize", size_mb_arg, 0)
-+arg(wipesignatures_ARG, 'W', "wipesignatures", yes_no_arg, 0)
- arg(allocatable_ARG, 'x', "allocatable", yes_no_arg, 0)
- arg(resizeable_ARG, 'x', "resizeable", yes_no_arg, 0)
- arg(yes_ARG, 'y', "yes", NULL, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index c299276..c54e812 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -248,6 +248,7 @@ xx(lvcreate,
-    "\t[-t|--test]\n"
-    "\t[--type VolumeType]\n"
-    "\t[-v|--verbose]\n"
-+   "\t[-W|--wipesignatures {y|n}]\n"
-    "\t[-Z|--zero {y|n}]\n"
-    "\t[--version]\n"
-    "\tVolumeGroupName [PhysicalVolumePath...]\n\n"
-@@ -294,7 +295,8 @@ xx(lvcreate,
-    raidminrecoveryrate_ARG, raidmaxrecoveryrate_ARG, readahead_ARG,
-    regionsize_ARG, setactivationskip_ARG, size_ARG, snapshot_ARG, stripes_ARG,
-    stripesize_ARG, test_ARG, thin_ARG, thinpool_ARG,
--   type_ARG, virtualoriginsize_ARG, virtualsize_ARG, zero_ARG)
-+   type_ARG, virtualoriginsize_ARG, virtualsize_ARG,
-+   wipesignatures_ARG, zero_ARG)
- 
- xx(lvdisplay,
-    "Display information about a logical volume",
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 4850872..83c12a7 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -614,8 +614,8 @@ static int _read_activation_params(struct lvcreate_params *lp, struct cmd_contex
- 			return 0;
- 		}
- 	} else if (lp->activate == CHANGE_AAY) {
--		if (arg_count(cmd, zero_ARG)) {
--			log_error("-Z is incompatible with --activate a");
-+		if (arg_count(cmd, zero_ARG) || arg_count(cmd, wipesignatures_ARG)) {
-+			log_error("-Z and -W is incompatible with --activate a");
- 			return 0;
- 		}
- 		lp->zero = 0;
-@@ -644,9 +644,11 @@ static int _read_activation_params(struct lvcreate_params *lp, struct cmd_contex
- 	lp->permission = arg_uint_value(cmd, permission_ARG,
- 					LVM_READ | LVM_WRITE);
- 
--	/* Must not zero read only volume */
--	if (!(lp->permission & LVM_WRITE))
-+	/* Must not zero/wipe read only volume */
-+	if (!(lp->permission & LVM_WRITE)) {
- 		lp->zero = 0;
-+		lp->wipe_signatures = 0;
-+	}
- 
- 	if (arg_count(cmd, major_ARG) > 1) {
- 		log_error("Option -j/--major may not be repeated.");
-@@ -867,11 +869,27 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	}
- 
- 	/*
--	 * Should we zero the lv.
-+	 * Should we zero/wipe signatures on the lv.
- 	 */
- 	lp->zero = strcmp(arg_str_value(cmd, zero_ARG,
- 		(lp->segtype->flags & SEG_CANNOT_BE_ZEROED) ? "n" : "y"), "n");
- 
-+	if (arg_count(cmd, wipesignatures_ARG)) {
-+		/* If -W/--wipesignatures is given on command line directly, respect it. */
-+		lp->wipe_signatures = strcmp(arg_str_value(cmd, wipesignatures_ARG,
-+			(lp->segtype->flags & SEG_CANNOT_BE_ZEROED) ? "n" : "y"), "n");
-+	} else {
+ 	struct stat info;
+-
+-	/*
+-	 * unified classification directory for all kernel subsystems
+-	 *
+-	 * /sys/subsystem/block/devices
+-	 * |-- sda -> ../../../devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda
+-	 * |-- sda1 -> ../../../devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda/sda1
+-	 *  `-- sr0 -> ../../../devices/pci0000:00/0000:00:1f.2/host1/target1:0:0/1:0:0:0/block/sr0
+-	 *
+-	 */
+-	if (dm_snprintf(path, len, "%s/%s", sysfs_dir,
+-			"subsystem/block/devices") >= 0) {
+-		if (!stat(path, &info)) {
+-			*sysfs_depth = 0;
+-			return 1;
+-		}
+-	}
+-
+-	/*
+-	 * block subsystem as a class
+-	 *
+-	 * /sys/class/block
+-	 * |-- sda -> ../../devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda
+-	 * |-- sda1 -> ../../devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda/sda1
+-	 *  `-- sr0 -> ../../devices/pci0000:00/0000:00:1f.2/host1/target1:0:0/1:0:0:0/block/sr0
+-	 *
+-	 */
+-	if (dm_snprintf(path, len, "%s/%s", sysfs_dir, "class/block") >= 0) {
+-		if (!stat(path, &info)) {
+-			*sysfs_depth = 0;
++	unsigned i;
++	static const struct dir_class {
++		const char path[32];
++		int depth;
++	} classes[] = {
 +		/*
-+		 * If -W/--wipesignatures is not given on command line,
-+		 * look at the allocation/wipe_signatures_on_new_logical_volumes_when_zeroing
-+		 * to decide what should be done exactly.
++		 * unified classification directory for all kernel subsystems
++		 *
++		 * /sys/subsystem/block/devices
++		 * |-- sda -> ../../../devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda
++		 * |-- sda1 -> ../../../devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda/sda1
++		 *  `-- sr0 -> ../../../devices/pci0000:00/0000:00:1f.2/host1/target1:0:0/1:0:0:0/block/sr0
++		 *
 +		 */
-+		if (find_config_tree_bool(cmd, allocation_wipe_signatures_on_new_logical_volumes_when_zeroing_CFG, NULL))
-+			lp->wipe_signatures = lp->zero;
-+		else
-+			lp->wipe_signatures = 0;
-+	}
++		{ "subsystem/block/devices", 0 },
 +
- 	if (!_lvcreate_name_params(lp, cmd, &argc, &argv) ||
- 	    !_read_size_params(lp, lcp, cmd) ||
- 	    !get_stripe_params(cmd, &lp->stripes, &lp->stripe_size) ||
++		/*
++		 * block subsystem as a class
++		 *
++		 * /sys/class/block
++		 * |-- sda -> ../../devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda
++		 * |-- sda1 -> ../../devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda/sda1
++		 *  `-- sr0 -> ../../devices/pci0000:00/0000:00:1f.2/host1/target1:0:0/1:0:0:0/block/sr0
++		 *
++		 */
++		{ "class/block", 0 },
++
++		/*
++		 * old block subsystem layout with nested directories
++		 *
++		 * /sys/block/
++		 * |-- sda
++		 * |   |-- capability
++		 * |   |-- dev
++		 * ...
++		 * |   |-- sda1
++		 * |   |   |-- dev
++		 * ...
++		 * |
++		 * `-- sr0
++		 *     |-- capability
++		 *     |-- dev
++		 * ...
++		 *
++		 */
++
++		{ "block", 1 }
++	};
++
++	for (i = 0; i < DM_ARRAY_SIZE(classes); ++i)
++		if ((dm_snprintf(path, len, "%s%s", sysfs_dir, classes[i].path) >= 0) &&
++		    (stat(path, &info) == 0)) {
++			*sysfs_depth = classes[i].depth;
+ 			return 1;
+ 		}
+-	}
+-
+-	/*
+-	 * old block subsystem layout with nested directories
+-	 *
+-	 * /sys/block/
+-	 * |-- sda
+-	 * |   |-- capability
+-	 * |   |-- dev
+-	 * ...
+-	 * |   |-- sda1
+-	 * |   |   |-- dev
+-	 * ...
+-	 * |
+-	 * `-- sr0
+-	 *     |-- capability
+-	 *     |-- dev
+-	 * ...
+-	 *
+-	 */
+-	if (dm_snprintf(path, len, "%s/%s", sysfs_dir, "block") >= 0) {
+-		if (!stat(path, &info)) {
+-			*sysfs_depth = 1;
+-			return 1;
+-		}
+-	}
+ 
+ 	return 0;
+ }
 
 
