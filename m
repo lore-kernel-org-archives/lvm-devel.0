@@ -1,40 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 22 Nov 2013 20:09:15 +0000 (UTC)
-Subject: master - dmeventd: drop duplicated code
-Message-ID: <20131122200915.853DB61133@fedorahosted.org>
+Date: Fri, 22 Nov 2013 20:09:17 +0000 (UTC)
+Subject: master - cleanup: use trigraph
+Message-ID: <20131122200917.9928961133@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=879ea38c53f81ab22225fb368e8787144517d963
-Commit:        879ea38c53f81ab22225fb368e8787144517d963
-Parent:        1ff53bb7b682a13e32d986e53a40eeb8fb5e47c4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=19cc92230cd855d08e0a8787687c8dba9cd8d627
+Commit:        19cc92230cd855d08e0a8787687c8dba9cd8d627
+Parent:        879ea38c53f81ab22225fb368e8787144517d963
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 22 10:01:52 2013 +0100
+AuthorDate:    Fri Nov 22 13:15:47 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 22 21:00:55 2013 +0100
 
-dmeventd: drop duplicated code
+cleanup: use trigraph
 
-Do not call pthread_attr_init() twice.
-The second call has all proper tests.
+Shorter code...
 ---
- daemons/dmeventd/dmeventd.c |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |    6 ++----
+ 1 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index e9fc59b..189d1b6 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -273,7 +273,6 @@ static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *
- 	int r;
- 	pthread_t tmp;
- 	pthread_attr_t attr;
--	pthread_attr_init(&attr);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index e22aaa2..491accd 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3822,10 +3822,8 @@ static int _lvresize_adjust_extents(struct cmd_context *cmd, struct logical_volu
+ 			lv->status |= LV_NOTSYNCED;
  
- 	/*
- 	 * From pthread_attr_init man page:
+ 		dm_list_iterate_back_items(mirr_seg, &lv->segments) {
+-			if (seg_is_mirrored(mirr_seg))
+-				seg_mirrors = lv_mirror_count(mirr_seg->lv);
+-			else
+-				seg_mirrors = 0;
++			seg_mirrors = seg_is_mirrored(mirr_seg) ?
++				lv_mirror_count(mirr_seg->lv) : 0;
+ 			break;
+ 		}
+ 
 
 
