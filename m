@@ -1,113 +1,96 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Tue, 19 Nov 2013 20:56:37 +0000 (UTC)
-Subject: master - python-lvm: Add addl. PV create arguments
-Message-ID: <20131119205637.677A460EA1@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 22 Nov 2013 20:09:05 +0000 (UTC)
+Subject: master - dev-type: use text format as direct arg for printf
+Message-ID: <20131122200905.1EF1F61133@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=531d85a0ee3854e49f9b81658dd6d7c60bb4de86
-Commit:        531d85a0ee3854e49f9b81658dd6d7c60bb4de86
-Parent:        04304ba7356c90568dcf32f0772a2023f4684656
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Sep 10 18:05:28 2013 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Nov 19 14:40:36 2013 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d079c81ab49648fc5506490e34e16244c20fa45f
+Commit:        d079c81ab49648fc5506490e34e16244c20fa45f
+Parent:        6fa95d17ee85ffd77d4dc90b23cdd024f65c279c
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Nov 22 12:57:35 2013 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Nov 22 21:00:54 2013 +0100
 
-python-lvm: Add addl. PV create arguments
+dev-type: use text format as direct arg for printf
 
-Added overloaded PV create arguments with defaults for PV
-creation.
+Put common printf() case into a function and use
+the string with text format as direct arg to make
+the compile time validation of args easier and
+code shorter.
 
-Addresses bug: https://bugzilla.redhat.com/show_bug.cgi?id=880395
-
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+Switch log_error() to log_warn(), since 'return 0'
+doesn't cause any failure here.
 ---
- python/liblvm.c |   51 +++++++++++++++++++++++++++++++++++++++++++++------
- 1 files changed, 45 insertions(+), 6 deletions(-)
+ lib/device/dev-type.c |   33 +++++++++++++++++++--------------
+ 1 files changed, 19 insertions(+), 14 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 36b64e4..033de82 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -23,6 +23,7 @@
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index a98cf45..f3f29b2 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -445,13 +445,25 @@ out:
  
- #include <Python.h>
- #include "lvm2app.h"
-+#include "defaults.h"
+ #ifdef __linux__
  
- static lvm_t _libh;
- 
-@@ -317,24 +318,62 @@ static PyObject *_liblvm_lvm_pv_remove(PyObject *self, PyObject *arg)
- 	return Py_None;
- }
- 
-+static int _set_pv_numeric_prop(pv_create_params_t pv_params, const char *name,
-+								unsigned long long value)
++static int _snprintf_attr(char *buf, size_t buf_size, const char *sysfs_dir,
++			 const char *attribute, dev_t dev)
 +{
-+	struct lvm_property_value prop_value;
-+	prop_value.is_integer = 1;
-+	prop_value.value.integer = value;
++	if (dm_snprintf(buf, buf_size, "%s/dev/block/%d:%d/%s", sysfs_dir,
++			(int)MAJOR(dev), (int)MINOR(dev),
++			attribute) < 0) {
++		log_warn("dm_snprintf %s failed.", attribute);
++		return 0;
++	}
 +
-+	return lvm_pv_params_set_property(pv_params, name, &prop_value);
++	return 1;
 +}
 +
-+#define SET_PV_PROP(params, name, value) \
-+	do { \
-+		if (_set_pv_numeric_prop(params, name, value) == -1) \
-+			goto error; \
-+	} while(0)\
-+
- static PyObject *_liblvm_lvm_pv_create(PyObject *self, PyObject *arg)
+ static unsigned long _dev_topology_attribute(struct dev_types *dt,
+ 					     const char *attribute,
+ 					     struct device *dev)
  {
- 	const char *pv_name;
--	unsigned long long size;
-+	unsigned long long size = 0;
-+	unsigned long long pvmetadatacopies = DEFAULT_PVMETADATACOPIES;
-+	unsigned long long pvmetadatasize = DEFAULT_PVMETADATASIZE;
-+	unsigned long long data_alignment = 0;
-+	unsigned long long data_alignment_offset = 0;
-+	unsigned long long zero = 1;
-+	pv_create_params_t pv_params = NULL;
+ 	const char *sysfs_dir = dm_sysfs_dir();
+-	static const char sysfs_fmt_str[] = "%s/dev/block/%d:%d/%s";
+-	char path[PATH_MAX+1], buffer[64];
++	char path[PATH_MAX], buffer[64];
+ 	FILE *fp;
+ 	struct stat info;
+ 	dev_t uninitialized_var(primary);
+@@ -463,12 +475,8 @@ static unsigned long _dev_topology_attribute(struct dev_types *dt,
+ 	if (!sysfs_dir || !*sysfs_dir)
+ 		return_0;
  
- 	LVM_VALID(NULL);
+-	if (dm_snprintf(path, PATH_MAX, sysfs_fmt_str, sysfs_dir,
+-			(int)MAJOR(dev->dev), (int)MINOR(dev->dev),
+-			attribute) < 0) {
+-		log_error("dm_snprintf %s failed", attribute);
+-		return 0;
+-	}
++	if (!_snprintf_attr(path, sizeof(path), sysfs_dir, attribute, dev->dev))
++                return_0;
  
--	if (!PyArg_ParseTuple(arg, "sK", &pv_name, &size))
-+	if (!PyArg_ParseTuple(arg, "s|KKKKKK", &pv_name, &size, &pvmetadatacopies,
-+							&pvmetadatasize, &data_alignment,
-+							&data_alignment_offset, &zero))
- 		return NULL;
+ 	/*
+ 	 * check if the desired sysfs attribute exists
+@@ -484,12 +492,9 @@ static unsigned long _dev_topology_attribute(struct dev_types *dt,
+ 			return 0;
  
--	if (lvm_pv_create(_libh, pv_name, size) == -1) {
--		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
--		return NULL;
-+	pv_params = lvm_pv_params_create(_libh, pv_name);
-+	if (!pv_params) {
-+		goto error;
- 	}
- 
--	Py_INCREF(Py_None);
-+	SET_PV_PROP(pv_params, "size", size);
-+	SET_PV_PROP(pv_params, "pvmetadatacopies", pvmetadatacopies);
-+	SET_PV_PROP(pv_params, "pvmetadatasize", pvmetadatasize);
-+	SET_PV_PROP(pv_params, "data_alignment", data_alignment);
-+	SET_PV_PROP(pv_params, "data_alignment_offset", data_alignment_offset);
-+	SET_PV_PROP(pv_params, "zero", zero);
+ 		/* get attribute from partition's primary device */
+-		if (dm_snprintf(path, PATH_MAX, sysfs_fmt_str, sysfs_dir,
+-				(int)MAJOR(primary), (int)MINOR(primary),
+-				attribute) < 0) {
+-			log_error("primary dm_snprintf %s failed", attribute);
+-			return 0;
+-		}
++		if (!_snprintf_attr(path, sizeof(path), sysfs_dir, attribute, primary))
++			return_0;
 +
-+	if (lvm_pv_create_adv(pv_params)) {
-+		goto error;
-+	}
- 
-+	Py_INCREF(Py_None);
- 	return Py_None;
-+
-+error:
-+	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
-+	return NULL;
- }
- 
- static PyObject *_liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
+ 		if (stat(path, &info) == -1) {
+ 			if (errno != ENOENT)
+ 				log_sys_error("stat", path);
 
 
