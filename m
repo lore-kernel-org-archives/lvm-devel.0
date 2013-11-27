@@ -1,56 +1,46 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 22 Nov 2013 18:18:20 +0000 (UTC)
-Subject: master - toollib: Avoid undefined ignore_vg parameter.
-Message-ID: <20131122181820.A749B60C46@fedorahosted.org>
+From: dongmao zhang <dmzhang@suse.com>
+Date: Wed, 27 Nov 2013 16:56:44 +0800
+Subject: [PATCH] clvmd: closedown the cluster after finishing of lvm_thread
+Message-ID: <1385542604-11708-1-git-send-email-dmzhang@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4c1f281b43175e69a73fcc59a9142fd374e8b70c
-Commit:        4c1f281b43175e69a73fcc59a9142fd374e8b70c
-Parent:        7c8abb29df2e8cc22c43f67117486e4e717110dd
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Nov 22 18:11:04 2013 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Nov 22 18:11:04 2013 +0000
+when lvm_thread is processing remote request, the clvmd
+received a SIG_TERM, it will free cluster resource before
+the realwork of lvm_thread is done. If freeing the cluster
+resource happens before send_message, it would cause the
+remote command hangs forever.
 
-toollib: Avoid undefined ignore_vg parameter.
-
-Fix process_each_segment_in_pv to always set ret before calling ignore_vg().
+this patch move closedown after the closing the working thread.
 ---
- WHATS_NEW       |    1 +
- tools/toollib.c |    4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ daemons/clvmd/clvmd.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e47f0e5..647c810 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.105 -
- =====================================
-+  Fix undef value if skipped clustered VG ignored for toollib PV seg. (2.02.103)
-   liblvm/python API Add ability to validate VG/LV names.
-   liblvm/python API Add ability to create PV with arguments.
-   liblvm/python API Fail VG reduce when insufficient metadata copies
-diff --git a/tools/toollib.c b/tools/toollib.c
-index b3bfd1d..90a7cb8 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -510,10 +510,10 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
- 		vg_name = pv_vg_name(pv);
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index d57c0fd..b2f7dd5 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -621,6 +621,8 @@ int main(int argc, char *argv[])
+ 	if ((errno = pthread_join(lvm_thread, NULL)))
+ 		log_sys_error("pthread_join", "");
  
- 		vg = vg_read(cmd, vg_name, NULL, 0);
--		if (ignore_vg(vg, vg_name, 0, &ret)) {
-+		if (ignore_vg(vg, vg_name, 0, &ret_max)) {
- 			release_vg(vg);
- 			stack;
--			return ret;
-+			return ret_max;
- 		}
++	clops->cluster_closedown();
++
+ 	close_local_sock(local_sock);
+ 	destroy_lvm();
  
- 		/*
+@@ -979,7 +981,6 @@ static void main_loop(int local_sock, int cmd_timeout)
+ 	}
+ 
+       closedown:
+-	clops->cluster_closedown();
+ 	if (quit)
+ 		DEBUGLOG("SIGTERM received\n");
+ }
+-- 
+1.7.3.4
 
 
