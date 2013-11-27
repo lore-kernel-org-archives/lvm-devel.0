@@ -1,37 +1,39 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 27 Nov 2013 07:33:39 +0000 (UTC)
-Subject: master - WHATS_NEW: commit 729b104
-Message-ID: <20131127073339.7D6BA602D6@fedorahosted.org>
+Date: Wed, 27 Nov 2013 07:53:59 +0000 (UTC)
+Subject: master - activation: change log_error to log_warn if refresh before autoactivation fails
+Message-ID: <20131127075359.9BB6160DBA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d6e67b850365864bba91619a40503ff0b0392e2c
-Commit:        d6e67b850365864bba91619a40503ff0b0392e2c
-Parent:        729b104413e11412866a549ef8a6702f56c4acd1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=120df5561088f4a5277716117339d9212b666214
+Commit:        120df5561088f4a5277716117339d9212b666214
+Parent:        d6e67b850365864bba91619a40503ff0b0392e2c
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 27 08:33:02 2013 +0100
+AuthorDate:    Wed Nov 27 08:53:26 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 27 08:33:02 2013 +0100
+CommitterDate: Wed Nov 27 08:53:26 2013 +0100
 
-WHATS_NEW: commit 729b104
+activation: change log_error to log_warn if refresh before autoactivation fails
 
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ tools/pvscan.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4148754..7718b6f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.105 -
- =====================================
-+  Do not fail the whole autoactivation if the VG refresh done before fails.
-   Do not connect to lvmetad on vg/lvchange --sysinit -aay and socket absent.
-   Use lv_check_not_in_use() when testing device in use before merging.
-   Move test for target present from init_snapshot_merge() to lvconvert.
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 981a9c2..4f99f45 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -148,7 +148,7 @@ static int _auto_activation_handler(struct cmd_context *cmd,
+ 	}
+ 
+ 	if (!refresh_done)
+-		log_error("%s: refresh before autoactivation failed.", vg->name);
++		log_warn("%s: refresh before autoactivation failed.", vg->name);
+ 
+ 	if (!vgchange_activate(vg->cmd, vg, activate)) {
+ 		log_error("%s: autoactivation failed.", vg->name);
 
 
