@@ -1,253 +1,160 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 27 Nov 2013 14:52:27 +0000 (UTC)
-Subject: master - device: cleanup signature wiping functions
-Message-ID: <20131127145227.8583660FC8@fedorahosted.org>
+Date: Wed, 27 Nov 2013 14:52:31 +0000 (UTC)
+Subject: master - lvcreate: recognize --wipesignatures arg
+Message-ID: <20131127145231.B0EE061046@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03c941a4caf411f21045670e205ccdd975be27c7
-Commit:        03c941a4caf411f21045670e205ccdd975be27c7
-Parent:        120df5561088f4a5277716117339d9212b666214
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=169b4c15864330e3fe47efee7b0def06581b8f08
+Commit:        169b4c15864330e3fe47efee7b0def06581b8f08
+Parent:        5b7e543cae5be52e1dcd79c7f6876acc89138cf1
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 6 15:09:29 2013 +0100
+AuthorDate:    Wed Nov 6 16:05:50 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 27 12:56:58 2013 +0100
+CommitterDate: Wed Nov 27 15:48:15 2013 +0100
 
-device: cleanup signature wiping functions
+lvcreate: recognize --wipesignatures arg
 
-The wipe_known_signatures fn now wraps the _wipe_signature fn that is called
-for each known signature (currently md, swap and luks). This patch makes the
-code more readable, not repeating the same sequence when used anywhere in the
-code. We're going to reuse this code later...
+Recognize the new --wipesignatures arg in lvcreate that is supposed
+to wipe known signatures if found on newly created LV.
 ---
- lib/device/dev-luks.c   |    5 +++--
- lib/device/dev-md.c     |    6 +++---
- lib/device/dev-swap.c   |    7 +++----
- lib/device/dev-type.c   |   42 ++++++++++++++++++++++++++++++++++++++++++
- lib/device/dev-type.h   |    4 ++++
- lib/metadata/metadata.c |   46 ++++------------------------------------------
- 6 files changed, 59 insertions(+), 51 deletions(-)
+ WHATS_NEW                        |    1 +
+ lib/metadata/metadata-exported.h |    1 +
+ liblvm/lvm_lv.c                  |    1 +
+ tools/args.h                     |    1 +
+ tools/commands.h                 |    4 +++-
+ tools/lvcreate.c                 |   28 +++++++++++++++++++++++-----
+ 6 files changed, 30 insertions(+), 6 deletions(-)
 
-diff --git a/lib/device/dev-luks.c b/lib/device/dev-luks.c
-index 2671d62..572fd1d 100644
---- a/lib/device/dev-luks.c
-+++ b/lib/device/dev-luks.c
-@@ -18,7 +18,7 @@
- #define LUKS_SIGNATURE "LUKS\xba\xbe"
- #define LUKS_SIGNATURE_SIZE 6
- 
--int dev_is_luks(struct device *dev, uint64_t *signature)
-+int dev_is_luks(struct device *dev, uint64_t *offset_found)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index af489d6..b4d683d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Add -W/--wipesignatures lvcreate option to support wiping on new LVs.
+   Add allocation/wipe_signatures_on_new_logical_volumes_when_zeroing to lvm.conf.
+   Do not fail the whole autoactivation if the VG refresh done before fails.
+   Do not connect to lvmetad on vg/lvchange --sysinit -aay and socket absent.
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 33c534f..69a0e90 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -723,6 +723,7 @@ struct lvcreate_params {
+ 	int thin; /* thin */
+ 	int create_thin_pool; /* thin */
+ 	int zero; /* all */
++	int wipe_signatures; /* all */
+ 	int major; /* all */
+ 	int minor; /* all */
+ 	int log_count; /* mirror */
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index 938a16b..f5c3ab9 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -129,6 +129,7 @@ static void _lv_set_default_params(struct lvcreate_params *lp,
+ 				   uint64_t extents)
  {
- 	char buf[LUKS_SIGNATURE_SIZE];
- 	int ret = -1;
-@@ -28,7 +28,8 @@ int dev_is_luks(struct device *dev, uint64_t *signature)
- 		return -1;
- 	}
+ 	lp->zero = 1;
++	lp->wipe_signatures = 0;
+ 	lp->major = -1;
+ 	lp->minor = -1;
+ 	lp->activate = CHANGE_AY;
+diff --git a/tools/args.h b/tools/args.h
+index 27b97eb..8ca73a3 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -176,6 +176,7 @@ arg(uuidlist_ARG, 'U', "uuidlist", NULL, 0)
+ arg(verbose_ARG, 'v', "verbose", NULL, ARG_COUNTABLE)
+ arg(volumegroup_ARG, 'V', "volumegroup", NULL, 0)
+ arg(virtualsize_ARG, 'V', "virtualsize", size_mb_arg, 0)
++arg(wipesignatures_ARG, 'W', "wipesignatures", yes_no_arg, 0)
+ arg(allocatable_ARG, 'x', "allocatable", yes_no_arg, 0)
+ arg(resizeable_ARG, 'x', "resizeable", yes_no_arg, 0)
+ arg(yes_ARG, 'y', "yes", NULL, 0)
+diff --git a/tools/commands.h b/tools/commands.h
+index c299276..c54e812 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -248,6 +248,7 @@ xx(lvcreate,
+    "\t[-t|--test]\n"
+    "\t[--type VolumeType]\n"
+    "\t[-v|--verbose]\n"
++   "\t[-W|--wipesignatures {y|n}]\n"
+    "\t[-Z|--zero {y|n}]\n"
+    "\t[--version]\n"
+    "\tVolumeGroupName [PhysicalVolumePath...]\n\n"
+@@ -294,7 +295,8 @@ xx(lvcreate,
+    raidminrecoveryrate_ARG, raidmaxrecoveryrate_ARG, readahead_ARG,
+    regionsize_ARG, setactivationskip_ARG, size_ARG, snapshot_ARG, stripes_ARG,
+    stripesize_ARG, test_ARG, thin_ARG, thinpool_ARG,
+-   type_ARG, virtualoriginsize_ARG, virtualsize_ARG, zero_ARG)
++   type_ARG, virtualoriginsize_ARG, virtualsize_ARG,
++   wipesignatures_ARG, zero_ARG)
  
--	*signature = 0;
-+	if (offset_found)
-+		*offset_found = 0;
- 
- 	if (!dev_read(dev, 0, LUKS_SIGNATURE_SIZE, buf))
- 		goto_out;
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 9af8074..d6a7609 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -81,7 +81,7 @@ static uint64_t _v1_sb_offset(uint64_t size, md_minor_version_t minor_version)
- /*
-  * Returns -1 on error
-  */
--int dev_is_md(struct device *dev, uint64_t *sb)
-+int dev_is_md(struct device *dev, uint64_t *offset_found)
- {
- 	int ret = 1;
- 	md_minor_version_t minor;
-@@ -120,8 +120,8 @@ out:
- 	if (!dev_close(dev))
- 		stack;
- 
--	if (ret && sb)
--		*sb = sb_offset;
-+	if (ret && offset_found)
-+		*offset_found = sb_offset;
- 
- 	return ret;
- }
-diff --git a/lib/device/dev-swap.c b/lib/device/dev-swap.c
-index cc44008..f506eda 100644
---- a/lib/device/dev-swap.c
-+++ b/lib/device/dev-swap.c
-@@ -36,7 +36,7 @@ _swap_detect_signature(const char *buf)
- 	return 0;
- }
- 
--int dev_is_swap(struct device *dev, uint64_t *signature)
-+int dev_is_swap(struct device *dev, uint64_t *offset_found)
- {
- 	char buf[10];
- 	uint64_t size;
-@@ -53,8 +53,6 @@ int dev_is_swap(struct device *dev, uint64_t *signature)
- 		return -1;
- 	}
- 
--	*signature = 0;
--
- 	for (page = 0x1000; page <= MAX_PAGESIZE; page <<= 1) {
- 		/*
- 		 * skip 32k pagesize since this does not seem to be supported
-@@ -69,7 +67,8 @@ int dev_is_swap(struct device *dev, uint64_t *signature)
- 			break;
+ xx(lvdisplay,
+    "Display information about a logical volume",
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 4850872..83c12a7 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -614,8 +614,8 @@ static int _read_activation_params(struct lvcreate_params *lp, struct cmd_contex
+ 			return 0;
  		}
- 		if (_swap_detect_signature(buf)) {
--			*signature = page - SIGNATURE_SIZE;
-+			if (offset_found)
-+				*offset_found = page - SIGNATURE_SIZE;
- 			ret = 1;
- 			break;
+ 	} else if (lp->activate == CHANGE_AAY) {
+-		if (arg_count(cmd, zero_ARG)) {
+-			log_error("-Z is incompatible with --activate a");
++		if (arg_count(cmd, zero_ARG) || arg_count(cmd, wipesignatures_ARG)) {
++			log_error("-Z and -W is incompatible with --activate a");
+ 			return 0;
  		}
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index f3f29b2..e42349d 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -443,6 +443,48 @@ out:
- 	return ret;
- }
+ 		lp->zero = 0;
+@@ -644,9 +644,11 @@ static int _read_activation_params(struct lvcreate_params *lp, struct cmd_contex
+ 	lp->permission = arg_uint_value(cmd, permission_ARG,
+ 					LVM_READ | LVM_WRITE);
  
-+static int _wipe_signature(struct device *dev, const char *type, const char *name,
-+			   int wipe_len, int yes, force_t force,
-+			   int (*signature_detection_fn)(struct device *dev, uint64_t *offset_found))
-+{
-+	int wipe;
-+	uint64_t offset_found;
-+
-+	wipe = signature_detection_fn(dev, &offset_found);
-+	if (wipe == -1) {
-+		log_error("Fatal error while trying to detect %s on %s.",
-+			  type, name);
-+		return 0;
+-	/* Must not zero read only volume */
+-	if (!(lp->permission & LVM_WRITE))
++	/* Must not zero/wipe read only volume */
++	if (!(lp->permission & LVM_WRITE)) {
+ 		lp->zero = 0;
++		lp->wipe_signatures = 0;
 +	}
-+
-+	if (wipe == 0)
-+		return 1;
-+
-+	/* Specifying --yes => do not ask. */
-+	if (!yes && (force == PROMPT) &&
-+	    yes_no_prompt("WARNING: %s detected on %s. Wipe it? [y/n] ",
-+			  type, name) != 'y')
-+		return_0;
-+
-+	log_print_unless_silent("Wiping %s on %s.", type, name);
-+	if (!dev_set(dev, offset_found, wipe_len, 0)) {
-+		log_error("Failed to wipe %s on %s.", type, name);
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+int wipe_known_signatures(struct device *dev, const char *name, int yes, force_t force)
-+{
-+	if (!_wipe_signature(dev, "software RAID md superblock", name, 4, yes, force, dev_is_md) ||
-+	    !_wipe_signature(dev, "swap signature", name, 10, yes, force, dev_is_swap) ||
-+	    !_wipe_signature(dev, "LUKS signature", name, 8, yes, force, dev_is_luks))
-+		return 0;
-+
-+	return 1;
-+}
-+
- #ifdef __linux__
  
- static int _snprintf_attr(char *buf, size_t buf_size, const char *sysfs_dir,
-diff --git a/lib/device/dev-type.h b/lib/device/dev-type.h
-index 2fa32db..895a172 100644
---- a/lib/device/dev-type.h
-+++ b/lib/device/dev-type.h
-@@ -16,6 +16,7 @@
- #define _LVM_DEV_TYPE_H
- 
- #include "device.h"
-+#include "display.h"
- 
- #define NUMBER_OF_MAJORS 4096
- 
-@@ -58,6 +59,9 @@ int dev_is_md(struct device *dev, uint64_t *sb);
- int dev_is_swap(struct device *dev, uint64_t *signature);
- int dev_is_luks(struct device *dev, uint64_t *signature);
- 
-+/* Signature wiping. */
-+int wipe_known_signatures(struct device *dev, const char *name, int yes, force_t force);
-+
- /* Type-specific device properties */
- unsigned long dev_md_stripe_width(struct dev_types *dt, struct device *dev);
- 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index c71ec30..f0230f1 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1268,40 +1268,6 @@ int vg_split_mdas(struct cmd_context *cmd __attribute__((unused)),
- 	return 1;
- }
- 
--static int _wipe_sb(struct device *dev, const char *type, const char *name,
--		    int wipe_len, struct pvcreate_params *pp,
--		    int (*func)(struct device *dev, uint64_t *signature))
--{
--	int wipe;
--	uint64_t superblock;
--
--	wipe = func(dev, &superblock);
--	if (wipe == -1) {
--		log_error("Fatal error while trying to detect %s on %s.",
--			  type, name);
--		return 0;
--	}
--
--	if (wipe == 0)
--		return 1;
--
--	/* Specifying --yes => do not ask. */
--	if (!pp->yes && (pp->force == PROMPT) &&
--	    yes_no_prompt("WARNING: %s detected on %s. Wipe it? [y/n] ",
--			  type, name) != 'y') {
--		log_error("Aborting pvcreate on %s.", name);
--		return 0;
--	}
--
--	log_print_unless_silent("Wiping %s on %s.", type, name);
--	if (!dev_set(dev, superblock, wipe_len, 0)) {
--		log_error("Failed to wipe %s on %s.", type, name);
--		return 0;
--	}
--
--	return 1;
--}
--
- /*
-  * See if we may pvcreate on this device.
-  * 0 indicates we may not.
-@@ -1364,14 +1330,10 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- 		goto bad;
+ 	if (arg_count(cmd, major_ARG) > 1) {
+ 		log_error("Option -j/--major may not be repeated.");
+@@ -867,11 +869,27 @@ static int _lvcreate_params(struct lvcreate_params *lp,
  	}
  
--	if (!_wipe_sb(dev, "software RAID md superblock", name, 4, pp, dev_is_md))
--		goto_bad;
--
--	if (!_wipe_sb(dev, "swap signature", name, 10, pp, dev_is_swap))
--		goto_bad;
--
--	if (!_wipe_sb(dev, "LUKS signature", name, 8, pp, dev_is_luks))
--		goto_bad;
-+	if (!wipe_known_signatures(dev, name, pp->yes, pp->force)) {
-+		log_error("Aborting pvcreate on %s.", name);
-+		goto bad;
-+	}
+ 	/*
+-	 * Should we zero the lv.
++	 * Should we zero/wipe signatures on the lv.
+ 	 */
+ 	lp->zero = strcmp(arg_str_value(cmd, zero_ARG,
+ 		(lp->segtype->flags & SEG_CANNOT_BE_ZEROED) ? "n" : "y"), "n");
  
- 	if (sigint_caught())
- 		goto_bad;
++	if (arg_count(cmd, wipesignatures_ARG)) {
++		/* If -W/--wipesignatures is given on command line directly, respect it. */
++		lp->wipe_signatures = strcmp(arg_str_value(cmd, wipesignatures_ARG,
++			(lp->segtype->flags & SEG_CANNOT_BE_ZEROED) ? "n" : "y"), "n");
++	} else {
++		/*
++		 * If -W/--wipesignatures is not given on command line,
++		 * look at the allocation/wipe_signatures_on_new_logical_volumes_when_zeroing
++		 * to decide what should be done exactly.
++		 */
++		if (find_config_tree_bool(cmd, allocation_wipe_signatures_on_new_logical_volumes_when_zeroing_CFG, NULL))
++			lp->wipe_signatures = lp->zero;
++		else
++			lp->wipe_signatures = 0;
++	}
++
+ 	if (!_lvcreate_name_params(lp, cmd, &argc, &argv) ||
+ 	    !_read_size_params(lp, lcp, cmd) ||
+ 	    !get_stripe_params(cmd, &lp->stripes, &lp->stripe_size) ||
 
 
