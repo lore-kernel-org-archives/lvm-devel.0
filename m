@@ -1,148 +1,106 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 28 Nov 2013 11:48:40 +0000 (UTC)
-Subject: master - snapshot: drop find_merging_snapshot
-Message-ID: <20131128114840.B8A0160F37@fedorahosted.org>
+Date: Thu, 28 Nov 2013 11:48:47 +0000 (UTC)
+Subject: master - dmeventd: simplify error path
+Message-ID: <20131128114847.0082760F37@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=79991aa7699587b40946d029787b38ae67405336
-Commit:        79991aa7699587b40946d029787b38ae67405336
-Parent:        01c438a96c82bf31ccda0721707fc90afa01a07e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b3679590dfb9839196c36ac74b86377ae2a10f8e
+Commit:        b3679590dfb9839196c36ac74b86377ae2a10f8e
+Parent:        6dae2373034ce3fc11f226c963d81a670043191a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 28 11:39:38 2013 +0100
+AuthorDate:    Mon Nov 25 14:24:25 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 28 12:42:43 2013 +0100
+CommitterDate: Thu Nov 28 12:45:02 2013 +0100
 
-snapshot: drop find_merging_snapshot
+dmeventd: simplify error path
 
-Drop find_merging_snapshot() function. Use find_snapshot()
-called after check for lv_is_merging_origin() which
-is the commonly used code path - so we avoid duplicated
-tests and potential risk of derefering NULL point
-in unhandled error path.
+Use common 'bad:' label for exit error path where
+fifo is closed before exit().
 ---
- lib/activate/dev_manager.c       |   12 ++++++------
- lib/metadata/metadata-exported.h |    2 --
- lib/metadata/snapshot_manip.c    |   11 ++---------
- tools/lvconvert.c                |    9 +++++----
- 4 files changed, 13 insertions(+), 21 deletions(-)
+ WHATS_NEW_DM                |    1 +
+ daemons/dmeventd/dmeventd.c |   21 ++++++++++++---------
+ 2 files changed, 13 insertions(+), 9 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index f8027d4..e53273d 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -2047,9 +2047,9 @@ static int _add_snapshot_merge_target_to_dtree(struct dev_manager *dm,
- 					       struct logical_volume *lv)
- {
- 	const char *origin_dlid, *cow_dlid, *merge_dlid;
--	struct lv_segment *merging_snap_seg;
-+	struct lv_segment *merging_snap_seg = find_snapshot(lv);
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 564419f..1f1cde1 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.84 -
+ ====================================
++  Close fifos before exiting in dmeventd restart() error path.
+   Move printf format string directly into dm_asprintf args list.
+   Catch invalid use of string sort values when reporting numerical fields.
  
--	if (!(merging_snap_seg = find_merging_snapshot(lv))) {
-+	if (!lv_is_merging_origin(lv)) {
- 		log_error(INTERNAL_ERROR "LV %s is not merging snapshot.", lv->name);
- 		return 0;
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 301c5f5..f2d6671 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1848,20 +1848,18 @@ static void restart(void)
+ 
+ 	if (!dm_event_get_version(&fifos, &version)) {
+ 		fprintf(stderr, "WARNING: Could not communicate with existing dmeventd.\n");
+-		fini_fifos(&fifos);
+-		exit(EXIT_FAILURE);
++		goto bad;
  	}
-@@ -2374,7 +2374,8 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
  
- 	/* FIXME Seek a simpler way to lay out the snapshot-merge tree. */
+ 	if (version < 1) {
+ 		fprintf(stderr, "WARNING: The running dmeventd instance is too old.\n"
+ 			        "Protocol version %d (required: 1). Action cancelled.\n",
+ 			        version);
+-		exit(EXIT_FAILURE);
++		goto bad;
+ 	}
  
--	if (lv_is_origin(lv) && lv_is_merging_origin(lv) && !layer) {
-+	if (!layer && lv_is_merging_origin(lv)) {
-+		seg = find_snapshot(lv);
- 		/*
- 		 * Clear merge attributes if merge isn't currently possible:
- 		 * either origin or merging snapshot are open
-@@ -2385,8 +2386,7 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 		/* An activating merging origin won't have a node in the tree yet */
- 		if (((dinfo = _cached_info(dm->mem, dtree, lv, NULL)) &&
- 		     dinfo->open_count) ||
--		    ((dinfo = _cached_info(dm->mem, dtree,
--					   find_merging_snapshot(lv)->cow, NULL)) &&
-+		    ((dinfo = _cached_info(dm->mem, dtree, seg->cow, NULL)) &&
- 		     dinfo->open_count)) {
- 			/* FIXME Is there anything simpler to check for instead? */
- 			if (!lv_has_target_type(dm->mem, lv, NULL, "snapshot-merge"))
-@@ -2445,7 +2445,7 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 			return_0;
- 		if (!laopts->no_merging && lv_is_merging_origin(lv)) {
- 			if (!_add_new_lv_to_dtree(dm, dtree,
--			     find_merging_snapshot(lv)->cow, laopts, "cow"))
-+			     find_snapshot(lv)->cow, laopts, "cow"))
- 				return_0;
- 			/*
- 			 * Must also add "real" LV for use when
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 41bd1a7..c274649 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -882,8 +882,6 @@ int lv_is_visible(const struct logical_volume *lv);
+-	if (daemon_talk(&fifos, &msg, DM_EVENT_CMD_GET_STATUS, "-", "-", 0, 0)) {
+-		exit(EXIT_FAILURE);
+-	}
++	if (daemon_talk(&fifos, &msg, DM_EVENT_CMD_GET_STATUS, "-", "-", 0, 0))
++		goto bad;
  
- int pv_is_in_vg(struct volume_group *vg, struct physical_volume *pv);
+ 	message = msg.data;
+ 	message = strchr(message, ' ');
+@@ -1876,13 +1874,13 @@ static void restart(void)
  
--struct lv_segment *find_merging_snapshot(const struct logical_volume *origin);
--
- /* Given a cow LV, return return the snapshot lv_segment that uses it */
- struct lv_segment *find_snapshot(const struct logical_volume *lv);
+ 	if (!(_initial_registrations = dm_malloc(sizeof(char*) * (count + 1)))) {
+ 		fprintf(stderr, "Memory allocation registration failed.\n");
+-		exit(EXIT_FAILURE);
++		goto bad;
+ 	}
  
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index 3e90f3e..e9a6d87 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -100,14 +100,6 @@ int lv_is_merging_origin(const struct logical_volume *origin)
- 	return (origin->status & MERGING) ? 1 : 0;
+ 	for (i = 0; i < count; ++i) {
+ 		if (!(_initial_registrations[i] = dm_strdup(message))) {
+ 			fprintf(stderr, "Memory allocation for message failed.\n");
+-			exit(EXIT_FAILURE);
++			goto bad;
+ 		}
+ 		message += strlen(message) + 1;
+ 	}
+@@ -1890,7 +1888,7 @@ static void restart(void)
+ 
+ 	if (daemon_talk(&fifos, &msg, DM_EVENT_CMD_DIE, "-", "-", 0, 0)) {
+ 		fprintf(stderr, "Old dmeventd refused to die.\n");
+-		exit(EXIT_FAILURE);
++		goto bad;
+ 	}
+ 
+ 	/*
+@@ -1904,6 +1902,11 @@ static void restart(void)
+ 	}
+ 
+ 	fini_fifos(&fifos);
++
++	return;
++bad:
++	fini_fifos(&fifos);
++	exit(EXIT_FAILURE);
  }
  
--struct lv_segment *find_merging_snapshot(const struct logical_volume *origin)
--{
--	if (!lv_is_merging_origin(origin))
--		return NULL;
--
--	return find_snapshot(origin);
--}
--
- int lv_is_merging_cow(const struct logical_volume *snapshot)
- {
- 	/* checks lv_segment's status to see if cow is merging */
-@@ -233,7 +225,8 @@ int vg_remove_snapshot(struct logical_volume *cow)
- 	dm_list_del(&cow->snapshot->origin_list);
- 	origin->origin_count--;
- 
--	if (find_merging_snapshot(origin) == find_snapshot(cow)) {
-+	if (lv_is_merging_origin(origin) &&
-+	    (find_snapshot(origin) == find_snapshot(cow))) {
- 		clear_snapshot_merge(origin);
- 		/*
- 		 * preload origin IFF "snapshot-merge" target is active
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 31eb232..051463b 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -650,8 +650,9 @@ static int _finish_lvconvert_merge(struct cmd_context *cmd,
- 				   struct logical_volume *lv,
- 				   struct dm_list *lvs_changed __attribute__((unused)))
- {
--	struct lv_segment *snap_seg = find_merging_snapshot(lv);
--	if (!snap_seg) {
-+	struct lv_segment *snap_seg = find_snapshot(lv);
-+
-+	if (!lv_is_merging_origin(lv)) {
- 		log_error("Logical volume %s has no merging snapshot.", lv->name);
- 		return 0;
- 	}
-@@ -1899,8 +1900,8 @@ static int lvconvert_merge(struct cmd_context *cmd,
- 		return 0;
- 	}
- 	if (lv_is_merging_origin(origin)) {
--		log_error("Snapshot %s is already merging into the origin",
--			  find_merging_snapshot(origin)->cow->name);
-+		log_error("Snapshot %s is already merging into the origin.",
-+			  find_snapshot(origin)->cow->name);
- 		return 0;
- 	}
- 	if (lv_is_virtual_origin(origin)) {
+ static void usage(char *prog, FILE *file)
 
 
