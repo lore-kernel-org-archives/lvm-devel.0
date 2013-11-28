@@ -1,42 +1,56 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 28 Nov 2013 13:12:39 +0000 (UTC)
-Subject: master - tests: wipe fs signature manually in pvcreate-operation test
-Message-ID: <20131128131239.6209860994@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 28 Nov 2013 14:57:59 +0100
+Subject: [PATCH] clvmd: closedown the cluster after finishing of lvm_thread
+In-Reply-To: <1385542604-11708-1-git-send-email-dmzhang@suse.com>
+References: <1385542604-11708-1-git-send-email-dmzhang@suse.com>
+Message-ID: <52974BE7.1080206@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08bab406b5bcae92df340209c1a0902e68aa1a28
-Commit:        08bab406b5bcae92df340209c1a0902e68aa1a28
-Parent:        c24b558c8c3e8f877e7cf216369e3415be8dbc6f
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Nov 28 14:10:55 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Nov 28 14:10:55 2013 +0100
+Dne 27.11.2013 09:56, dongmao zhang napsal(a):
+> when lvm_thread is processing remote request, the clvmd
+> received a SIG_TERM, it will free cluster resource before
+> the realwork of lvm_thread is done. If freeing the cluster
+> resource happens before send_message, it would cause the
+> remote command hangs forever.
+>
+> this patch move closedown after the closing the working thread.
+> ---
+>   daemons/clvmd/clvmd.c |    3 ++-
+>   1 files changed, 2 insertions(+), 1 deletions(-)
+>
+> diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+> index d57c0fd..b2f7dd5 100644
+> --- a/daemons/clvmd/clvmd.c
+> +++ b/daemons/clvmd/clvmd.c
+> @@ -621,6 +621,8 @@ int main(int argc, char *argv[])
+>   	if ((errno = pthread_join(lvm_thread, NULL)))
+>   		log_sys_error("pthread_join", "");
+>
+> +	clops->cluster_closedown();
+> +
+>   	close_local_sock(local_sock);
+>   	destroy_lvm();
+>
+> @@ -979,7 +981,6 @@ static void main_loop(int local_sock, int cmd_timeout)
+>   	}
+>
+>         closedown:
+> -	clops->cluster_closedown();
+>   	if (quit)
+>   		DEBUGLOG("SIGTERM received\n");
+>   }
 
-tests: wipe fs signature manually in pvcreate-operation test
 
-So that the next pvcreate that is called does not issue any
-warnings/prompts about existing signature (when blkid wiping is used).
----
- test/shell/pvcreate-operation.sh |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+It's not clear to me how this  code move helps to anything.
 
-diff --git a/test/shell/pvcreate-operation.sh b/test/shell/pvcreate-operation.sh
-index ddcf94c..b885ed2 100644
---- a/test/shell/pvcreate-operation.sh
-+++ b/test/shell/pvcreate-operation.sh
-@@ -23,6 +23,9 @@ do
- 		not pvcreate -M$mdatype "$dev1" 2>err
- 		grep "Can't open "$dev1" exclusively.  Mounted filesystem?" err
- 		umount "$dev1"
-+		# wipe the filesystem signature for next
-+		# pvcreate to not issue any prompts
-+		dd if=/dev/zero of=$dev1 bs=1K count=2
- 	fi
- 
- # pvcreate (lvm$mdatype) succeeds when run repeatedly (pv not in a vg) (bz178216)
+You just moved call of  clops->cluster_closedown(); after joining thread?
+
+In which code path this patch is changing something ?
+
+Zdenek
 
 
