@@ -1,51 +1,107 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 28 Nov 2013 19:17:05 +0000 (UTC)
-Subject: master - lvmetad: Add newline to missing socket error mesg
-Message-ID: <20131128191705.55DF3602F0@fedorahosted.org>
+From: dongmao zhang <dmzhang@suse.com>
+Date: Fri, 29 Nov 2013 14:06:39 +0800
+Subject: [PATCH] clvmd: closedown the cluster after finishing of lvm_thread
+In-Reply-To: <52974BE7.1080206@redhat.com>
+References: <1385542604-11708-1-git-send-email-dmzhang@suse.com>
+	<52974BE7.1080206@redhat.com>
+Message-ID: <52982EEF.3020104@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b3074560eb36d0b1c8ec61f50e71b0b27dbda982
-Commit:        b3074560eb36d0b1c8ec61f50e71b0b27dbda982
-Parent:        3f8083107ea901f9c58ef38ad9bb8084825a2f88
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Nov 28 19:16:25 2013 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Nov 28 19:16:25 2013 +0000
+? 2013?11?28? 21:57, Zdenek Kabelac ??:
+> Dne 27.11.2013 09:56, dongmao zhang napsal(a):
+>> when lvm_thread is processing remote request, the clvmd
+>> received a SIG_TERM, it will free cluster resource before
+>> the realwork of lvm_thread is done. If freeing the cluster
+>> resource happens before send_message, it would cause the
+>> remote command hangs forever.
+>>
+>> this patch move closedown after the closing the working thread.
+>> ---
+>> daemons/clvmd/clvmd.c | 3 ++-
+>> 1 files changed, 2 insertions(+), 1 deletions(-)
+>>
+>> diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+>> index d57c0fd..b2f7dd5 100644
+>> --- a/daemons/clvmd/clvmd.c
+>> +++ b/daemons/clvmd/clvmd.c
+>> @@ -621,6 +621,8 @@ int main(int argc, char *argv[])
+>> if ((errno = pthread_join(lvm_thread, NULL)))
+>> log_sys_error("pthread_join", "");
+>>
+>> + clops->cluster_closedown();
+>> +
+>> close_local_sock(local_sock);
+>> destroy_lvm();
+>>
+>> @@ -979,7 +981,6 @@ static void main_loop(int local_sock, int 
+>> cmd_timeout)
+>> }
+>>
+>> closedown:
+>> - clops->cluster_closedown();
+>> if (quit)
+>> DEBUGLOG("SIGTERM received\n");
+>> }
+>
+>
+> It's not clear to me how this code move helps to anything.
+>
+> You just moved call of clops->cluster_closedown(); after joining thread?
+>
+> In which code path this patch is changing something ?
+>
+> Zdenek
+>
+>
 
-lvmetad: Add newline to missing socket error mesg
+hi Zdenek,
+thank you for you reply. The main idea is that the lvm_thread_fn is 
+using cluster resources(such as using cpg_handler in send_message), we 
+could not free cluster resource until lvm_thread_fn finishs.
 
----
- WHATS_NEW                      |    1 +
- daemons/lvmetad/lvmetad-core.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+The 'lvm_thread_fn' thread is doing 'process_work_item' in which it will 
+send reply message(cluster_send_message) back
+to remote nodes. The cluster_send_message is using the cluster resource. 
+So it means we can not free the cluster resource before lvm_thread_fn 
+really is finished. The cluster_closedown in the main thread could 
+possibly happen before lvm_thread_fn thread calls send_message.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index cd63144..6aac94a 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.105 -
- =====================================
-+  Append missing newline to lvmetad missing socket path error message.
-   Check for non-zero aligment in _text_pv_add_metadata_area() to not div by 0.
-   Add allocation/use_blkid_wiping to lvm.conf to enable blkid wiping.
-   Add configure --enable-blkid_wiping to use libblkid to detect signatures.
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 7e64d9d..71254f4 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -1242,7 +1242,7 @@ int main(int argc, char *argv[])
- 
- 	if (s.foreground) {
- 		if (!_socket_override) {
--			fprintf(stderr, "A socket path (-s) is required in foreground mode.");
-+			fprintf(stderr, "A socket path (-s) is required in foreground mode.\n");
- 			exit(2);
- 		}
- 
+If so, it could cause a sending message failure, moreover, the remote 
+node can not get the response, it has to wait a timeout to finish.
+
+I met a bug like this: two nodes with VG resource.
+1. NodeA runs 'rcopenais stop'
+2. NodeB runs 'vgscan'
+
+in some time, vgscan could hang for a while waiting all cluster nodes' 
+response.
+Because unfortunately clvmd on NodeA can not send back message because 
+cluster_closedown happens before send_message.
+
+
+Dongmao Zhang
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
