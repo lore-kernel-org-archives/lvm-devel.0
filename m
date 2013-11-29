@@ -1,107 +1,201 @@
-From: dongmao zhang <dmzhang@suse.com>
-Date: Fri, 29 Nov 2013 14:06:39 +0800
-Subject: [PATCH] clvmd: closedown the cluster after finishing of lvm_thread
-In-Reply-To: <52974BE7.1080206@redhat.com>
-References: <1385542604-11708-1-git-send-email-dmzhang@suse.com>
-	<52974BE7.1080206@redhat.com>
-Message-ID: <52982EEF.3020104@suse.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 29 Nov 2013 14:28:48 +0000 (UTC)
+Subject: master - configure: enable blkid_wiping by default if the blkid library is present
+Message-ID: <20131129142848.B9FA861144@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-? 2013?11?28? 21:57, Zdenek Kabelac ??:
-> Dne 27.11.2013 09:56, dongmao zhang napsal(a):
->> when lvm_thread is processing remote request, the clvmd
->> received a SIG_TERM, it will free cluster resource before
->> the realwork of lvm_thread is done. If freeing the cluster
->> resource happens before send_message, it would cause the
->> remote command hangs forever.
->>
->> this patch move closedown after the closing the working thread.
->> ---
->> daemons/clvmd/clvmd.c | 3 ++-
->> 1 files changed, 2 insertions(+), 1 deletions(-)
->>
->> diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
->> index d57c0fd..b2f7dd5 100644
->> --- a/daemons/clvmd/clvmd.c
->> +++ b/daemons/clvmd/clvmd.c
->> @@ -621,6 +621,8 @@ int main(int argc, char *argv[])
->> if ((errno = pthread_join(lvm_thread, NULL)))
->> log_sys_error("pthread_join", "");
->>
->> + clops->cluster_closedown();
->> +
->> close_local_sock(local_sock);
->> destroy_lvm();
->>
->> @@ -979,7 +981,6 @@ static void main_loop(int local_sock, int 
->> cmd_timeout)
->> }
->>
->> closedown:
->> - clops->cluster_closedown();
->> if (quit)
->> DEBUGLOG("SIGTERM received\n");
->> }
->
->
-> It's not clear to me how this code move helps to anything.
->
-> You just moved call of clops->cluster_closedown(); after joining thread?
->
-> In which code path this patch is changing something ?
->
-> Zdenek
->
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=75628f341ad38b68aae33eae0b5700be2a6e5769
+Commit:        75628f341ad38b68aae33eae0b5700be2a6e5769
+Parent:        b3074560eb36d0b1c8ec61f50e71b0b27dbda982
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Nov 29 15:27:56 2013 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Nov 29 15:27:56 2013 +0100
 
-hi Zdenek,
-thank you for you reply. The main idea is that the lvm_thread_fn is 
-using cluster resources(such as using cpg_handler in send_message), we 
-could not free cluster resource until lvm_thread_fn finishs.
+configure: enable blkid_wiping by default if the blkid library is present
 
-The 'lvm_thread_fn' thread is doing 'process_work_item' in which it will 
-send reply message(cluster_send_message) back
-to remote nodes. The cluster_send_message is using the cluster resource. 
-So it means we can not free the cluster resource before lvm_thread_fn 
-really is finished. The cluster_closedown in the main thread could 
-possibly happen before lvm_thread_fn thread calls send_message.
+---
+ WHATS_NEW               |    3 +-
+ configure               |   53 ++++++++++++++++++++--------------------------
+ configure.in            |   29 +++++++++++++++++--------
+ lib/misc/configure.h.in |    2 +-
+ 4 files changed, 46 insertions(+), 41 deletions(-)
 
-If so, it could cause a sending message failure, moreover, the remote 
-node can not get the response, it has to wait a timeout to finish.
-
-I met a bug like this: two nodes with VG resource.
-1. NodeA runs 'rcopenais stop'
-2. NodeB runs 'vgscan'
-
-in some time, vgscan could hang for a while waiting all cluster nodes' 
-response.
-Because unfortunately clvmd on NodeA can not send back message because 
-cluster_closedown happens before send_message.
-
-
-Dongmao Zhang
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 6aac94a..0101b49 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -3,7 +3,8 @@ Version 2.02.105 -
+   Append missing newline to lvmetad missing socket path error message.
+   Check for non-zero aligment in _text_pv_add_metadata_area() to not div by 0.
+   Add allocation/use_blkid_wiping to lvm.conf to enable blkid wiping.
+-  Add configure --enable-blkid_wiping to use libblkid to detect signatures.
++  Enable blkid_wiping by default if the blkid library is present.
++  Add configure --disable-blkid_wiping to disable libblkid signature detection.
+   Add -W/--wipesignatures lvcreate option to support wiping on new LVs.
+   Add allocation/wipe_signatures_on_new_logical_volumes_when_zeroing to lvm.conf.
+   Do not fail the whole autoactivation if the VG refresh done before fails.
+diff --git a/configure b/configure
+index 8247ddd..5d81dac 100755
+--- a/configure
++++ b/configure
+@@ -1563,7 +1563,8 @@ Optional Features:
+   --enable-valgrind-pool  enable valgrind awareness of pools
+   --disable-devmapper     disable LVM2 device-mapper interaction
+   --enable-lvmetad        enable the LVM Metadata Daemon
+-  --enable-blkid_wiping   use wiping functionality provided by libblkid
++  --disable-blkid_wiping  disable libblkid detection of signatures when wiping
++                          and use native code instead
+   --enable-udev-systemd-background-jobs
+                           enable udev-systemd protocol to instantiate a
+                           service for background job
+@@ -9185,20 +9186,19 @@ _ACEOF
+ fi
+ 
+ ################################################################################
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use blkid wiping functionality" >&5
+-$as_echo_n "checking whether to use blkid wiping functionality... " >&6; }
+-# Check whether --enable-blkid-wiping was given.
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable libblkid detection of signatures when wiping" >&5
++$as_echo_n "checking whether to enable libblkid detection of signatures when wiping... " >&6; }
++# Check whether --enable-blkid_wiping was given.
+ if test "${enable_blkid_wiping+set}" = set; then :
+   enableval=$enable_blkid_wiping; BLKID_WIPING=$enableval
+ else
+-  BLKID_WIPING=no
++  BLKID_WIPING=maybe
+ fi
+ 
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: $BLKID_WIPING" >&5
+ $as_echo "$BLKID_WIPING" >&6; }
+ 
+-
+-if test x$BLKID_WIPING = xyes; then
++if test x$BLKID_WIPING != xno; then
+ 		if test x$PKGCONFIG_INIT != x1; then
+ 		pkg_config_init
+ 	fi
+@@ -9259,43 +9259,36 @@ fi
+ 	# Put the nasty error message in config.log where it belongs
+ 	echo "$BLKID_PKG_ERRORS" >&5
+ 
+-	as_fn_error $? "Package requirements (blkid >= 2.22) were not met:
+-
+-$BLKID_PKG_ERRORS
+-
+-Consider adjusting the PKG_CONFIG_PATH environment variable if you
+-installed software in a non-standard prefix.
+-
+-Alternatively, you may set the environment variables BLKID_CFLAGS
+-and BLKID_LIBS to avoid the need to call pkg-config.
+-See the pkg-config man page for more details." "$LINENO" 5
++	if test x$BLKID_WIPING = xmaybe; then
++					BLKID_WIPING=no
++				 else
++					as_fn_error $? "bailing out... blkid library >= 2.22 is required" "$LINENO" 5
++				 fi
+ 
+ elif test $pkg_failed = untried; then
+      	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+ $as_echo "no" >&6; }
+-	{ { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+-$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+-is in your PATH or set the PKG_CONFIG environment variable to the full
+-path to pkg-config.
+-
+-Alternatively, you may set the environment variables BLKID_CFLAGS
+-and BLKID_LIBS to avoid the need to call pkg-config.
+-See the pkg-config man page for more details.
+-
+-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+-See \`config.log' for more details" "$LINENO" 5; }
++	if test x$BLKID_WIPING = xmaybe; then
++					BLKID_WIPING=no
++				 else
++					as_fn_error $? "bailing out... blkid library >= 2.22 is required" "$LINENO" 5
++				 fi
+ 
+ else
+ 	BLKID_CFLAGS=$pkg_cv_BLKID_CFLAGS
+ 	BLKID_LIBS=$pkg_cv_BLKID_LIBS
+         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+ $as_echo "yes" >&6; }
+-	BLKID_PC="blkid"
++	if test x$BLKID_WIPING = xmaybe; then
++					BLKID_WIPING=yes
++				 fi
+ fi
++	if test x$BLKID_WIPING = xyes; then
++		BLKID_PC="blkid"
+ 
+ $as_echo "#define BLKID_WIPING_SUPPORT 1" >>confdefs.h
+ 
++	fi
+ fi
+ 
+ ################################################################################
+diff --git a/configure.in b/configure.in
+index ff9bf81..b4a407a 100644
+--- a/configure.in
++++ b/configure.in
+@@ -947,21 +947,32 @@ fi
+ 
+ ################################################################################
+ dnl -- Enable blkid wiping functionality
+-AC_MSG_CHECKING(whether to use blkid wiping functionality)
+-AC_ARG_ENABLE(blkid-wiping,
+-	      AC_HELP_STRING([--enable-blkid_wiping],
+-			     [use wiping functionality provided by libblkid]),
+-	      BLKID_WIPING=$enableval, BLKID_WIPING=no)
++AC_MSG_CHECKING(whether to enable libblkid detection of signatures when wiping)
++AC_ARG_ENABLE(blkid_wiping,
++	      AC_HELP_STRING([--disable-blkid_wiping],
++			     [disable libblkid detection of signatures when wiping and use native code instead]),
++	      BLKID_WIPING=$enableval, BLKID_WIPING=maybe)
+ AC_MSG_RESULT($BLKID_WIPING)
+ 
+-
+-if test x$BLKID_WIPING = xyes; then
++if test x$BLKID_WIPING != xno; then
+ 	dnl -- init pkgconfig if required
+ 	if test x$PKGCONFIG_INIT != x1; then
+ 		pkg_config_init
+ 	fi
+-	PKG_CHECK_MODULES(BLKID, blkid >= 2.22, [BLKID_PC="blkid"])
+-	AC_DEFINE([BLKID_WIPING_SUPPORT], 1, [Define to 1 to use wiping functionality provided by libblkid.])
++	PKG_CHECK_MODULES(BLKID, blkid >= 2.22,
++				[if test x$BLKID_WIPING = xmaybe; then
++					BLKID_WIPING=yes
++				 fi],
++				[if test x$BLKID_WIPING = xmaybe; then
++					BLKID_WIPING=no
++				 else
++					AC_MSG_ERROR([bailing out... blkid library >= 2.22 is required])
++				 fi
++				])
++	if test x$BLKID_WIPING = xyes; then
++		BLKID_PC="blkid"
++		AC_DEFINE([BLKID_WIPING_SUPPORT], 1, [Define to 1 to use libblkid detection of signatures when wiping.])
++	fi
+ fi
+ 
+ ################################################################################
+diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
+index 51db42e..4e9ffd1 100644
+--- a/lib/misc/configure.h.in
++++ b/lib/misc/configure.h.in
+@@ -1,6 +1,6 @@
+ /* lib/misc/configure.h.in.  Generated from configure.in by autoheader.  */
+ 
+-/* Define to 1 to use wiping functionality provided by libblkid. */
++/* Define to 1 to use libblkid detection of signatures when wiping. */
+ #undef BLKID_WIPING_SUPPORT
+ 
+ /* Define to 1 if the `closedir' function returns void instead of `int'. */
 
 
