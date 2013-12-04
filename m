@@ -1,72 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  4 Dec 2013 16:10:46 +0000 (UTC)
-Subject: master - tests: update pvmove-test
-Message-ID: <20131204161046.62E6E60EE5@fedorahosted.org>
+Date: Wed,  4 Dec 2013 18:53:11 +0000 (UTC)
+Subject: master - tests: reuse timeout code for too long debug.log
+Message-ID: <20131204185311.56C746066D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c144305d3e6b68bc9f85641a5038013fdc07b5a2
-Commit:        c144305d3e6b68bc9f85641a5038013fdc07b5a2
-Parent:        7c6b14b74f88a58a9589922a3fa7be18334f3936
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e06cfd74373ae7928ef2a340b00e9bc3da8753ca
+Commit:        e06cfd74373ae7928ef2a340b00e9bc3da8753ca
+Parent:        c144305d3e6b68bc9f85641a5038013fdc07b5a2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Dec 4 17:05:44 2013 +0100
+AuthorDate:    Wed Dec 4 19:48:29 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Dec 4 17:10:31 2013 +0100
+CommitterDate: Wed Dec 4 19:48:29 2013 +0100
 
-tests: update pvmove-test
+tests: reuse timeout code for too long debug.log
 
-Do not lock test when trying to grab cluster lock.
-There seems to be still something weird in this test
-so it still needs some inspection.
+Jump to the same code used for timeout when no output
+is made for long time.
+
+Increase the allowed debug.log size to 32MB.
 ---
- test/shell/pvmove-restart.sh |   23 ++++++++++++++++++++++-
- 1 files changed, 22 insertions(+), 1 deletions(-)
+ test/lib/harness.c |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
-index c8da45e..e1d5381 100644
---- a/test/shell/pvmove-restart.sh
-+++ b/test/shell/pvmove-restart.sh
-@@ -33,16 +33,37 @@ PVMOVE=$!
- # Let's wait a bit till pvmove starts and kill it
- sleep 1
- kill -9 $PVMOVE
-+wait
+diff --git a/test/lib/harness.c b/test/lib/harness.c
+index 47a331d..bcc6b97 100644
+--- a/test/lib/harness.c
++++ b/test/lib/harness.c
+@@ -401,6 +401,7 @@ static void run(int i, char *f) {
+ 			    (no_write > 180 * 2)) /* a 3 minute timeout */
+ 			{
+ 				system("echo t > /proc/sysrq-trigger");
++			timeout:
+ 				kill(pid, SIGINT);
+ 				sleep(5); /* wait a bit for a reaction */
+ 				if ((w = waitpid(pid, &st, WNOHANG)) == 0) {
+@@ -418,10 +419,10 @@ static void run(int i, char *f) {
+ 			if (select(fds[0] + 1, &set, NULL, NULL, &selectwait) <= 0) {
+ 				/* Still checking debug log size if it's not growing too much */
+ 				if (testdirdebug[0] && (stat(testdirdebug, &statbuf) == 0) &&
+-				    statbuf.st_size > 8 * 1024 * 1024) { /* 8MB command log size */
+-					fprintf(stderr, "Killing test since debug.log has gone wild (size %ld)\n",
+-						statbuf.st_size);
+-					kill(-pid, SIGINT);
++				    statbuf.st_size > 32 * 1024 * 1024) { /* 32MB command log size */
++					printf("Killing test since debug.log has gone wild (size %ld)\n",
++					       statbuf.st_size);
++					goto timeout;
+ 				}
  
- # Simulate reboot - forcibly remove related devices
- dmsetup remove $vg-$lv1
- dmsetup remove $vg-pvmove0
- 
-+if test -e LOCAL_CLVMD ; then
-+	# giveup all clvmd locks (faster then restarting clvmd)
-+	# no deactivation happen, nodes are already removed
-+	vgchange -an $vg
-+	# Restart clvmd
-+	#kill $(cat LOCAL_CLVMD)
-+	#while test -e "/var/run/clvmd.pid"; do echo -n .; sleep .1; done # wait for the pid removal
-+	#aux prepare_clvmd
-+fi
-+
-+if test -e LOCAL_LVMETAD ; then
-+	# Restart lvmetad
-+	kill $(cat LOCAL_LVMETAD)
-+	aux prepare_lvmetad
-+fi
-+
- # Only PVs should be left in table...
- dmsetup table
- 
- # Restart pvmove
--vgchange -ay $vg
-+# use exclusive activation to have usable pvmove without cmirrord
-+#vgchange -vvvv -ay $vg
-+vgchange -aey $vg
-+dmsetup table
-+#pvmove
- 
- pvmove --abort
- 
+ 				no_write++;
 
 
