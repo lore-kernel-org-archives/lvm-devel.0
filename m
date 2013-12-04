@@ -1,60 +1,40 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  4 Dec 2013 12:30:21 +0000 (UTC)
-Subject: master - make: support per-object defines
-Message-ID: <20131204123021.B03796030C@fedorahosted.org>
+Date: Wed,  4 Dec 2013 13:28:49 +0000 (UTC)
+Subject: master - make: CFLAGS, not CLDFLAGS
+Message-ID: <20131204132849.545D060A9E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc37d4fb0dfc47c49b8acdc773a4ad67d59b51b8
-Commit:        fc37d4fb0dfc47c49b8acdc773a4ad67d59b51b8
-Parent:        6c6bcc00e401262db3b906259674a3231a119603
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Dec 4 12:35:02 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=37853cc7a9e60036134034718f22ec688917146b
+Commit:        37853cc7a9e60036134034718f22ec688917146b
+Parent:        a65ab773b4ddb06e87d678d3b2f4d0ca3e5b9fd0
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Dec 4 14:28:40 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Dec 4 13:30:08 2013 +0100
+CommitterDate: Wed Dec 4 14:28:40 2013 +0100
 
-make: support per-object defines
+make: CFLAGS, not CLDFLAGS
 
-In the case we have a dir with multiple objects and for
-an individual object file we need special define -
-allow to define it without adding extra rules.
-
-To ensure dmeventd.o compilation will use EXTRA_FLAGS:
-CFLAGS_dmeventd.o += $(EXTRA_FLAGS)
-
-Then it's better to use:
-dmeventd.o: CFLAGS += $(EXTRA_FLAGS)
 ---
- WHATS_NEW    |    1 +
- make.tmpl.in |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/lvmetad/Makefile.in |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 9155ddf..d512ab5 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.105 -
- =====================================
-+  Support per-object compilation cflags via CFLAGS_object.o.
-   Automatically detect support for compiler/linker options to use RELRO and PIE.
-   Add --splitsnapshot to lvconvert to separate out cow LV.
-   Reinstate origin reload to complete lvconvert -s with active LVs. (2.02.98)
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 35a47be..944be9b 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -345,7 +345,7 @@ endif
- $(TARGETS): $(OBJECTS)
+diff --git a/daemons/lvmetad/Makefile.in b/daemons/lvmetad/Makefile.in
+index f08198a..67a557f 100644
+--- a/daemons/lvmetad/Makefile.in
++++ b/daemons/lvmetad/Makefile.in
+@@ -34,7 +34,8 @@ LVMLIBS = -ldaemonserver $(LVMINTERNAL_LIBS) -ldevmapper
+ LIBS += $(PTHREAD_LIBS)
  
- %.o: %.c
--	$(CC) -c $(INCLUDES) $(DEFS) $(WFLAGS) $(CFLAGS) $< -o $@
-+	$(CC) -c $(INCLUDES) $(DEFS) $(WFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
+ LDFLAGS += -L$(top_builddir)/libdaemon/server $(DAEMON_LDFLAGS)
+-CLDFLAGS += -L$(top_builddir)/libdaemon/server $(DAEMON_CFLAGS)
++CLDFLAGS += -L$(top_builddir)/libdaemon/server
++CFLAGS += $(DAEMON_CFLAGS)
  
- %.pot: %.c Makefile
- 	$(CC) -E $(INCLUDES) -include $(top_srcdir)/include/pogen.h \
+ lvmetad: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
 
 
