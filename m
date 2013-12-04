@@ -1,60 +1,80 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  4 Dec 2013 13:31:48 +0000 (UTC)
-Subject: master - thin: merge display
-Message-ID: <20131204133148.0F82760FFB@fedorahosted.org>
+Date: Wed,  4 Dec 2013 13:31:50 +0000 (UTC)
+Subject: master - thin: activation of merging thin snapshot
+Message-ID: <20131204133150.22FB460FFB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ff112eee181748dbf827d91a7ebf0c0f1d7878a0
-Commit:        ff112eee181748dbf827d91a7ebf0c0f1d7878a0
-Parent:        1200b7e7c2be18fcd2644817a5e57c6182800ee0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=971ab733b74e0ffecc3f9f60af48628cd3fba1db
+Commit:        971ab733b74e0ffecc3f9f60af48628cd3fba1db
+Parent:        ff112eee181748dbf827d91a7ebf0c0f1d7878a0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 29 15:54:51 2013 +0100
+AuthorDate:    Fri Nov 29 21:25:58 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Dec 4 14:30:26 2013 +0100
 
-thin: merge display
+thin: activation of merging thin snapshot
 
+For merging thin snapshot we have to do couple extra
+checks before we allow this operation.
+
+We pretend  thin-snapshot and thin-origin
+are tied together and we have to properly
+maintain locking.
 ---
- lib/display/display.c |    6 ++++++
- lib/metadata/lv.c     |    3 ++-
- 2 files changed, 8 insertions(+), 1 deletions(-)
+ tools/toollib.c |   30 +++++++++++++++++++++++++++++-
+ 1 files changed, 29 insertions(+), 1 deletions(-)
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index 2fd37a2..1babffc 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -607,8 +607,14 @@ int lvdisplay_full(struct cmd_context *cmd,
- 		if (seg->external_lv)
- 			log_print("LV External origin name %s",
- 				  seg->external_lv->name);
-+		if (seg->merge_lv)
-+			log_print("LV merging to          %s",
-+				  seg->merge_lv->name);
- 		if (inkernel)
- 			thin_active = lv_thin_percent(lv, 0, &thin_percent);
-+		if (lv_is_merging_origin(lv))
-+			log_print("LV merged with         %s",
-+				  find_snapshot(lv)->lv->name);
- 	} else if (lv_is_thin_pool(lv)) {
- 		if (inkernel) {
- 			thin_data_active = lv_thin_pool_percent(lv, 0, &thin_data_percent);
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index c1f6271..3e1458c 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -555,7 +555,8 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	else if (lv->status & MIRRORED)
- 		repstr[0] = (lv->status & LV_NOTSYNCED) ? 'M' : 'm';
- 	else if (lv_is_thin_volume(lv))
--		repstr[0] = 'V';
-+		repstr[0] = lv_is_merging_origin(lv) ?
-+			'O' : (lv_is_merging_thin_snapshot(lv) ? 'S' : 'V');
- 	else if (lv->status & VIRTUAL)
- 		repstr[0] = 'v';
- 	else if (lv_is_thin_pool(lv))
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 183d832..65a7089 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1403,6 +1403,34 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
+ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
+ 		       activation_change_t activate)
+ {
++	int r = 1;
++
++	if (lv_is_merging_origin(lv)) {
++		/*
++		 * For merging origin, its snapshot must be inactive.
++		 * If it's still active and cannot be deactivated
++		 * activation or deactivation of origin fails!
++		 *
++		 * When origin is deactivated and merging snapshot is thin
++		 * it allows to deactivate origin, but still report error,
++		 * since the thin snapshot remains active.
++		 *
++		 * User could retry to deactivate it with another
++		 * deactivation of origin, which is the only visible LV
++		 */
++		if (!deactivate_lv(cmd, find_snapshot(lv)->lv)) {
++			if ((activate != CHANGE_AN) && (activate != CHANGE_ALN)) {
++				log_error("Refusing to activate merging \"%s\" while snapshot \"%s\" is still active.",
++					  lv->name, find_snapshot(lv)->lv->name);
++				return 0;
++			}
++
++			log_error("Cannot fully deactivate merging origin \"%s\" while snapshot \"%s\" is still active.",
++				  lv->name, find_snapshot(lv)->lv->name);
++			r = 0; /* and continue to deactivate origin... */
++		}
++	}
++
+ 	if (!lv_active_change(cmd, lv, activate))
+ 		return_0;
+ 
+@@ -1412,7 +1440,7 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
+ 	    (lv->status & (PVMOVE|CONVERTING|MERGING)))
+ 		lv_spawn_background_polling(cmd, lv);
+ 
+-	return 1;
++	return r;
+ }
+ 
+ int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
 
 
