@@ -1,88 +1,102 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  4 Dec 2013 16:10:42 +0000 (UTC)
-Subject: master - vgchange: move detection of remote exlusivness
-Message-ID: <20131204161042.2533760EE5@fedorahosted.org>
+Date: Wed,  4 Dec 2013 16:10:44 +0000 (UTC)
+Subject: master - tests: monitor debug.log size
+Message-ID: <20131204161044.488F360EE5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=598c82fc077c8a3edfbdb664b41efd89d05b5a10
-Commit:        598c82fc077c8a3edfbdb664b41efd89d05b5a10
-Parent:        28939dba09fcd36cd0e4e470e73b172f19dd45e8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c6b14b74f88a58a9589922a3fa7be18334f3936
+Commit:        7c6b14b74f88a58a9589922a3fa7be18334f3936
+Parent:        598c82fc077c8a3edfbdb664b41efd89d05b5a10
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 28 23:22:03 2013 +0100
+AuthorDate:    Wed Dec 4 17:01:59 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Dec 4 17:09:51 2013 +0100
+CommitterDate: Wed Dec 4 17:10:31 2013 +0100
 
-vgchange: move detection of remote exlusivness
+tests: monitor debug.log size
 
-Since activation takes only read-lock, there could be
-multiple activation running in parallel.
-
-So instead of checking before taking any real lock,
-let the locking resolve the problem and just
-detect if the reason for failure has been remote
-exlusive activation.
-
-It should be also faster, since each activation does
-not need to do explicit lock query.
+Show testing directory from test and monitor it in
+harness - so when it gets too big - kill test.
 ---
- WHATS_NEW        |    1 +
- tools/vgchange.c |   22 +++++++++++-----------
- 2 files changed, 12 insertions(+), 11 deletions(-)
+ test/lib/harness.c |   15 +++++++++++++++
+ test/lib/test.sh   |    1 +
+ 2 files changed, 16 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5d41700..60571ff 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.105 -
- =====================================
-+  Test for remote exclusive activation after activation fails.
-   Support lvconvert --merge for thin snapshots.
-   Add support to read thin device id from table line entry.
-   Drop extra test for origin when testing merging origin in lv_refresh().
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index b50b444..f9811d2 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -121,16 +121,6 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 		    ((lv->status & PVMOVE) ))
- 			continue;
+diff --git a/test/lib/harness.c b/test/lib/harness.c
+index dca0198..47a331d 100644
+--- a/test/lib/harness.c
++++ b/test/lib/harness.c
+@@ -21,6 +21,7 @@
+ #include <sys/resource.h> /* rusage */
+ #include <sys/select.h>
+ #include <sys/socket.h>
++#include <sys/stat.h>
+ #include <sys/time.h>
+ #include <sys/types.h>
+ #include <sys/wait.h>
+@@ -55,6 +56,7 @@ static const char *results;
+ static unsigned fullbuffer = 0;
  
--		/*
--		 * If the LV is active exclusive remotely,
--		 * then ignore it here
--		 */
--		if (lv_is_active_exclusive_remotely(lv)) {
--			log_verbose("%s/%s is exclusively active on"
--				    " a remote node", vg->name, lv->name);
--			continue;
--		}
--
- 		if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG), 0)) {
- 			log_verbose("ACTIVATION_SKIP flag set for LV %s/%s, skipping activation.",
- 				    lv->vg->name, lv->name);
-@@ -144,7 +134,17 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 		expected_count++;
+ static FILE *outfile = NULL;
++char testdirdebug[PATH_MAX];
  
- 		if (!lv_change_activate(cmd, lv, activate)) {
--			stack;
-+			if (!lv_is_active_exclusive_remotely(lv))
-+				stack;
-+			else {
-+				/*
-+				 * If the LV is active exclusive remotely,
-+				 * then ignore it here
-+				 */
-+				log_verbose("%s/%s is exclusively active on"
-+					    " a remote node", vg->name, lv->name);
-+				expected_count--; /* not accounted */
-+			}
- 			continue;
- 		}
+ struct subst {
+ 	const char *key;
+@@ -100,6 +102,9 @@ static int outline(FILE *out, char *buf, int start, int force) {
+ 		subst[1].key = "@PREFIX@";
+ 		free(subst[1].value);
+ 		subst[1].value = strndup(from + 8, next - from - 8 - 1);
++	} else if (!testdirdebug[0] && !strncmp(from, "RUNTESTDIR=", 11)) {
++		from[strlen(from) - 1] = '\0'; /* Cut \n */
++		snprintf(testdirdebug, sizeof(testdirdebug), "%s/debug.log", from + 11);
+ 	} else {
+ 		char *line = strndup(from, next - from);
+ 		char *a = line, *b;
+@@ -366,6 +371,7 @@ static void run(int i, char *f) {
+ 		char outpath[PATH_MAX];
+ 		char *c = outpath + strlen(results) + 1;
+ 		struct timeval selectwait;
++		struct stat statbuf;
+ 		fd_set set;
+ 		int runaway = 0;
+ 		int no_write = 0;
+@@ -373,6 +379,7 @@ static void run(int i, char *f) {
+ 		int fd_vlm = -1;
  
+ 		//close(fds[1]);
++		testdirdebug[0] = '\0'; /* Capture RUNTESTDIR */
+ 		snprintf(buf, sizeof(buf), "%s ...", f);
+ 		printf("Running %-60s ", buf);
+ 		fflush(stdout);
+@@ -409,6 +416,14 @@ static void run(int i, char *f) {
+ 			selectwait.tv_sec = 0;
+ 			selectwait.tv_usec = 500000; /* timeout 0.5s */
+ 			if (select(fds[0] + 1, &set, NULL, NULL, &selectwait) <= 0) {
++				/* Still checking debug log size if it's not growing too much */
++				if (testdirdebug[0] && (stat(testdirdebug, &statbuf) == 0) &&
++				    statbuf.st_size > 8 * 1024 * 1024) { /* 8MB command log size */
++					fprintf(stderr, "Killing test since debug.log has gone wild (size %ld)\n",
++						statbuf.st_size);
++					kill(-pid, SIGINT);
++				}
++
+ 				no_write++;
+ 				continue;
+ 			}
+diff --git a/test/lib/test.sh b/test/lib/test.sh
+index 265d61d..9e25e26 100644
+--- a/test/lib/test.sh
++++ b/test/lib/test.sh
+@@ -39,6 +39,7 @@ test -n "$BASH" && trap 'set +vx; STACKTRACE; set -vx' ERR
+ trap 'aux teardown' EXIT # don't forget to clean up
+ 
+ cd "$TESTDIR"
++echo "RUNTESTDIR=$TESTDIR"
+ 
+ if test -n "$LVM_TEST_FLAVOUR"; then
+ 	touch flavour_overrides
 
 
