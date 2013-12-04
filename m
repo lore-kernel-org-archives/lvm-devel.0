@@ -1,100 +1,57 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  3 Dec 2013 13:43:54 +0000 (UTC)
-Subject: master - vgdisplay: select only active volumes groups if -A option is used
-Message-ID: <20131203134354.D51D960F2C@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed,  4 Dec 2013 02:05:24 +0000 (UTC)
+Subject: master - lvconvert: Fix reload after snapshot conversion.
+Message-ID: <20131204020524.78A7B60D90@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6232cac86cea332efb1e538fc8cd1922dc35bd01
-Commit:        6232cac86cea332efb1e538fc8cd1922dc35bd01
-Parent:        c35394959758ec17389529f95a33bf7f5b15c56b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Dec 3 14:41:25 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Dec 3 14:43:00 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ff769ecfe7cdd704ee1e11aa9b6b7a92f932a0c1
+Commit:        ff769ecfe7cdd704ee1e11aa9b6b7a92f932a0c1
+Parent:        6232cac86cea332efb1e538fc8cd1922dc35bd01
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Dec 4 02:04:29 2013 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Dec 4 02:04:29 2013 +0000
 
-vgdisplay: select only active volumes groups if -A option is used
+lvconvert: Fix reload after snapshot conversion.
 
-Where "active" means "at least one LV is active in the volume group".
+At the end of lvconvert --snapshot with an active origin, the origin
+gets reloaded.
+
+Commit 57c0f72b1d0349382c226c2b5614489b59db99e8 ("lvconvert: use
+_reload_lv on more places") accidentally replaced this with a snapshot
+LV reload (which does nothing because only the origin is active).
 ---
- WHATS_NEW              |    1 +
- man/vgdisplay.8.in     |    3 ++-
- test/shell/covercmd.sh |   22 ++++++++++++++++++++++
- tools/vgdisplay.c      |    4 +++-
- 4 files changed, 28 insertions(+), 2 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 043b7ef..c91acff 100644
+index c91acff..c96acce 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.105 -
  =====================================
-+  Select only active volume groups if vgdisplay -A is used.
++  Reinstate origin reload to complete lvconvert -s with active LVs. (2.02.98)
+   Select only active volume groups if vgdisplay -A is used.
    Add -p and LVM_LVMETAD_PID env var to lvmetad to change pid file.
    Allow lvmetad to reuse stale socket.
-   Only unlink lvmetad socket on error if created by the same process.
-diff --git a/man/vgdisplay.8.in b/man/vgdisplay.8.in
-index 9016a45..4dada16 100644
---- a/man/vgdisplay.8.in
-+++ b/man/vgdisplay.8.in
-@@ -57,7 +57,8 @@ See \fBlvm\fP(8) for common options and \fBvgs\fP(8) for options given with
- \fB\-\-columns\fP.
- .TP
- .BR \-A ", " \-\-activevolumegroups
--Only select the active volume groups.
-+Only select the active volume groups. The volume group is considered active
-+if at least one of its logical volumes is active.
- .TP
- .BR \-c ", " \-\-colon
- Generate colon separated output for easier parsing in scripts or programs.
-diff --git a/test/shell/covercmd.sh b/test/shell/covercmd.sh
-index 04074c1..59500d6 100644
---- a/test/shell/covercmd.sh
-+++ b/test/shell/covercmd.sh
-@@ -100,3 +100,25 @@ not lvmchange
- not lvrename $vg
- not lvrename $vg-xxx
- not lvrename $vg  $vg/$lv-rename $vg/$lv
-+
-+#test vgdisplay -A to select only active VGs
-+# all LVs active - VG considered active
-+pvcreate -f $dev1 $dev2 $dev3
-+
-+vgcreate $vg1 $dev1
-+lvcreate -l1 $vg1
-+lvcreate -l1 $vg1
-+
-+# at least one LV active - VG considered active
-+vgcreate $vg2 $dev2
-+lvcreate -l1 $vg2
-+lvcreate -l1 $vg2
-+
-+# no LVs active - VG considered inactive
-+vgcreate $vg3 $dev3
-+lvcreate -l1 -an -Zn $vg3
-+lvcreate -l1 -an -Zn $vg3
-+
-+vgdisplay -s -A | grep $vg1
-+vgdisplay -s -A | grep $vg2
-+vgdisplay -s -A | not grep $vg3
-diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
-index afc92fe..81ffbd9 100644
---- a/tools/vgdisplay.c
-+++ b/tools/vgdisplay.c
-@@ -19,7 +19,9 @@ static int vgdisplay_single(struct cmd_context *cmd, const char *vg_name,
- 			    struct volume_group *vg,
- 			    void *handle __attribute__((unused)))
- {
--	/* FIXME Do the active check here if activevolumegroups_ARG ? */
-+	if (arg_count(cmd, activevolumegroups_ARG) && !lvs_in_vg_activated(vg))
-+		return ECMD_PROCESSED;
-+
- 	vg_check_status(vg, EXPORTED_VG);
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 6f81356..b040e33 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1864,7 +1864,7 @@ static int lvconvert_snapshot(struct cmd_context *cmd,
+ 	}
  
- 	if (arg_count(cmd, colon_ARG)) {
+ 	/* store vg on disk(s) */
+-	if (!_reload_lv(cmd, lv->vg, lv))
++	if (!_reload_lv(cmd, lv->vg, org))
+ 		return_0;
+ 
+ 	log_print_unless_silent("Logical volume %s converted to snapshot.", lv->name);
 
 
