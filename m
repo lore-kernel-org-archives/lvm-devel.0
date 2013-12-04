@@ -1,57 +1,43 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  4 Dec 2013 18:53:11 +0000 (UTC)
-Subject: master - tests: reuse timeout code for too long debug.log
-Message-ID: <20131204185311.56C746066D@fedorahosted.org>
+Date: Wed,  4 Dec 2013 18:53:13 +0000 (UTC)
+Subject: master - tests: replace built-in popen
+Message-ID: <20131204185313.7318A6066D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e06cfd74373ae7928ef2a340b00e9bc3da8753ca
-Commit:        e06cfd74373ae7928ef2a340b00e9bc3da8753ca
-Parent:        c144305d3e6b68bc9f85641a5038013fdc07b5a2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d9461ae89bd725c24448ce84c7e5c7ea9cb7e29e
+Commit:        d9461ae89bd725c24448ce84c7e5c7ea9cb7e29e
+Parent:        e06cfd74373ae7928ef2a340b00e9bc3da8753ca
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Dec 4 19:48:29 2013 +0100
+AuthorDate:    Wed Dec 4 19:50:53 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Dec 4 19:48:29 2013 +0100
+CommitterDate: Wed Dec 4 19:50:53 2013 +0100
 
-tests: reuse timeout code for too long debug.log
+tests: replace built-in popen
 
-Jump to the same code used for timeout when no output
-is made for long time.
-
-Increase the allowed debug.log size to 32MB.
+It seems some older bashes have problems to properly execute
+both pipes - so replace this code with separate temporary files.
 ---
- test/lib/harness.c |    9 +++++----
- 1 files changed, 5 insertions(+), 4 deletions(-)
+ test/lib/check.sh |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index 47a331d..bcc6b97 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -401,6 +401,7 @@ static void run(int i, char *f) {
- 			    (no_write > 180 * 2)) /* a 3 minute timeout */
- 			{
- 				system("echo t > /proc/sysrq-trigger");
-+			timeout:
- 				kill(pid, SIGINT);
- 				sleep(5); /* wait a bit for a reaction */
- 				if ((w = waitpid(pid, &st, WNOHANG)) == 0) {
-@@ -418,10 +419,10 @@ static void run(int i, char *f) {
- 			if (select(fds[0] + 1, &set, NULL, NULL, &selectwait) <= 0) {
- 				/* Still checking debug log size if it's not growing too much */
- 				if (testdirdebug[0] && (stat(testdirdebug, &statbuf) == 0) &&
--				    statbuf.st_size > 8 * 1024 * 1024) { /* 8MB command log size */
--					fprintf(stderr, "Killing test since debug.log has gone wild (size %ld)\n",
--						statbuf.st_size);
--					kill(-pid, SIGINT);
-+				    statbuf.st_size > 32 * 1024 * 1024) { /* 32MB command log size */
-+					printf("Killing test since debug.log has gone wild (size %ld)\n",
-+					       statbuf.st_size);
-+					goto timeout;
- 				}
+diff --git a/test/lib/check.sh b/test/lib/check.sh
+index 4847de1..84604e3 100644
+--- a/test/lib/check.sh
++++ b/test/lib/check.sh
+@@ -65,7 +65,9 @@ lv_on_diff_() {
+ 	local diff_e
  
- 				no_write++;
+ 	# Find diff between 2 shell arrays, print them as stdin files
+-	diff_e=$(diff <(printf "%s\n" "${expect[@]}" | sort | uniq ) <(printf "%s\n" "${devs[@]}") ) ||
++	printf "%s\n" "${expect[@]}" | sort | uniq >_lv_on_diff1
++	printf "%s\n" "${devs[@]}" >_lv_on_diff2
++	diff_e=$(diff _lv_on_diff1 _lv_on_diff2) ||
+ 		die "LV $2/$3 $(lv_err_list_ "^>" "${diff_e}" found)$(lv_err_list_ "^<" "${diff_e}" "not found")."
+ }
+ 
 
 
