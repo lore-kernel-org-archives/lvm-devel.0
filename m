@@ -1,49 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  4 Dec 2013 13:31:31 +0000 (UTC)
-Subject: master - cleanup: swap condition logic
-Message-ID: <20131204133131.4E52360EB3@fedorahosted.org>
+Date: Wed,  4 Dec 2013 13:31:33 +0000 (UTC)
+Subject: master - cleanup: size is already 64bit value
+Message-ID: <20131204133133.675A960EB3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=51783676fb8036832a08094fa34fd9458ee13711
-Commit:        51783676fb8036832a08094fa34fd9458ee13711
-Parent:        6d7a76ccbfcfe6579333a58c61a51d556ba8507f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=993831bdb15657b1fc6b9985cdaca9e3ccc1cfbc
+Commit:        993831bdb15657b1fc6b9985cdaca9e3ccc1cfbc
+Parent:        51783676fb8036832a08094fa34fd9458ee13711
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 29 20:29:38 2013 +0100
+AuthorDate:    Fri Nov 9 13:18:43 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Dec 4 14:30:25 2013 +0100
 
-cleanup: swap condition logic
+cleanup: size is already 64bit value
 
-Use easier to follow logic of code.
-When checking for merging origin, do a merging.
+Cast is not needed.
 ---
- tools/lvconvert.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/metadata/metadata.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 273f56a..84479fe 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -780,12 +780,12 @@ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 61816e2..5f2addd 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -987,7 +987,7 @@ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ 		return 0;
+ 	}
  
- 	memcpy(uuid, &lv->lvid, sizeof(lv->lvid));
- 
--	if (!lv_is_merging_origin(lv))
--		return poll_daemon(cmd, lv_full_name, uuid, background, 0,
--				   &_lvconvert_mirror_fns, "Converted");
--	else
-+	if (lv_is_merging_origin(lv))
- 		return poll_daemon(cmd, lv_full_name, uuid, background, 0,
- 				   &_lvconvert_merge_fns, "Merged");
-+
-+	return poll_daemon(cmd, lv_full_name, uuid, background, 0,
-+			   &_lvconvert_mirror_fns, "Converted");
+-	return (uint64_t) size / extent_size;
++	return size / extent_size;
  }
  
- static int _insert_lvconvert_layer(struct cmd_context *cmd,
+ /*
 
 
