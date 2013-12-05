@@ -1,65 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 Dec 2013 11:41:13 +0000 (UTC)
-Subject: master - lv_remove_single: update parameter name
-Message-ID: <20131205114113.5609B60D5E@fedorahosted.org>
+Date: Thu,  5 Dec 2013 11:41:15 +0000 (UTC)
+Subject: master - tests: do not run lvmetad tests without lvmetad
+Message-ID: <20131205114115.7C25C60D5E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6f0300de9653063222c536b7cb04784d94787dd0
-Commit:        6f0300de9653063222c536b7cb04784d94787dd0
-Parent:        aa75698a1779c426914fde81bd57a016397017f3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c7b733cd6cbc69e4a681b17ca4e89eb9fcd6d31f
+Commit:        c7b733cd6cbc69e4a681b17ca4e89eb9fcd6d31f
+Parent:        6f0300de9653063222c536b7cb04784d94787dd0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 5 12:39:02 2013 +0100
+AuthorDate:    Thu Dec 5 12:31:49 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Dec 5 12:40:47 2013 +0100
 
-lv_remove_single: update parameter name
+tests: do not run lvmetad tests without lvmetad
 
-Since we have already a meaning for 'silent'
-replace its name with more explanator suppress_remove_message
-(updates recent commit).
+Skip tests when lvmetad is not compiled.
 ---
- lib/metadata/lv_manip.c          |    4 ++--
- lib/metadata/metadata-exported.h |    2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ test/Makefile.in |   13 ++++++++++---
+ 1 files changed, 10 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 9806758..62ca245 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4494,7 +4494,7 @@ void lv_set_hidden(struct logical_volume *lv)
- }
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 943a4ce..96c4fdb 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -42,6 +42,11 @@ comma = ,
+ RUN = $(shell find $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | sort)
+ RUN_BASE = $(subst $(srcdir)/,,$(RUN))
  
- int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
--		     force_t force, int silent)
-+		     force_t force, int suppress_remove_message)
- {
- 	struct volume_group *vg;
- 	struct lvinfo info;
-@@ -4651,7 +4651,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
++ifeq ("@BUILD_LVMETAD@", "yes")
++LVMETAD_RUN_BASE = $(RUN_BASE)
++endif
++
++
+ # Shell quote;
+ SHELL_PATH_SQ = $(subst ','\'',$(SHELL_PATH))
  
- 	backup(vg);
+@@ -83,7 +88,7 @@ check: .tests-stamp
+ 	lvmetad_LVM_TEST_LVMETAD=1 \
+ 	./lib/harness $(patsubst %,normal:%,$(RUN_BASE)) \
+ 		      $(patsubst %,cluster:%,$(RUN_BASE)) \
+-		      $(patsubst %,lvmetad:%,$(RUN_BASE))
++		      $(patsubst %,lvmetad:%,$(LVMETAD_RUN_BASE))
  
--	if (!silent && visible)
-+	if (!suppress_remove_message && visible)
- 		log_print_unless_silent("Logical volume \"%s\" successfully removed", lv->name);
+ check_full: .tests-stamp
+ 	VERBOSE=$(VERBOSE) \
+@@ -96,10 +101,10 @@ check_full: .tests-stamp
+ 	slvmetad_LVM_TEST_DEVDIR=/dev \
+ 	./lib/harness $(patsubst %,normal:%,$(RUN_BASE)) \
+ 		      $(patsubst %,cluster:%,$(RUN_BASE)) \
+-		      $(patsubst %,lvmetad:%,$(RUN_BASE)) \
++		      $(patsubst %,lvmetad:%,$(LVMETAD_RUN_BASE)) \
+ 		      $(patsubst %,snormal:%,$(RUN_BASE)) \
+ 		      $(patsubst %,scluster:%,$(RUN_BASE)) \
+-		      $(patsubst %,slvmetad:%,$(RUN_BASE))
++		      $(patsubst %,slvmetad:%,$(LVMETAD_RUN_BASE))
  
- 	return 1;
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 9798197..9d547bb 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -658,7 +658,7 @@ int lv_extend(struct logical_volume *lv,
- int lv_remove(struct logical_volume *lv);
+ check_cluster: .tests-stamp
+ 	@echo Testing with locking_type 3
+@@ -109,9 +114,11 @@ check_local: .tests-stamp
+ 	@echo Testing with locking_type 1
+ 	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=1 ./lib/harness $(RUN_BASE)
  
- int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
--		     force_t force, int silent);
-+		     force_t force, int suppress_remove_message);
++ifeq ("@BUILD_LVMETAD@", "yes")
+ check_lvmetad: .tests-stamp
+ 	@echo Testing with lvmetad on
+ 	VERBOSE=$(VERBOSE) LVM_TEST_LVMETAD=1 ./lib/harness $(RUN_BASE)
++endif
  
- int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *lv,
- 				force_t force, unsigned level);
+ lib/should: lib/not
+ 	ln -sf not lib/should
 
 
