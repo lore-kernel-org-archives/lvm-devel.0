@@ -1,54 +1,51 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  5 Dec 2013 13:19:17 +0000 (UTC)
-Subject: master - compile/link: EXTRA_EXEC_CFLAGS must be applied for *.o
-Message-ID: <20131205131917.8DAAB60D6C@fedorahosted.org>
+Date: Thu,  5 Dec 2013 15:40:54 +0000 (UTC)
+Subject: master - lvmdump: follow symbolic links in /etc/lvm
+Message-ID: <20131205154054.2EA0E60DE2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a344466e26cf7611c84c2548999dc67080e28347
-Commit:        a344466e26cf7611c84c2548999dc67080e28347
-Parent:        481edce41f54a392b663991c4e29c9eed05f90b5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=73a109d434ffb894cda9c7fc6720d1166a9d5bca
+Commit:        73a109d434ffb894cda9c7fc6720d1166a9d5bca
+Parent:        a344466e26cf7611c84c2548999dc67080e28347
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Dec 5 14:19:10 2013 +0100
+AuthorDate:    Thu Dec 5 16:36:45 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Dec 5 14:19:10 2013 +0100
+CommitterDate: Thu Dec 5 16:36:45 2013 +0100
 
-compile/link: EXTRA_EXEC_CFLAGS must be applied for *.o
+lvmdump: follow symbolic links in /etc/lvm
 
 ---
- tools/Makefile.in |    8 ++++++--
- 1 files changed, 6 insertions(+), 2 deletions(-)
+ scripts/lvmdump.sh |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 34df48b..f18d3ea 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -121,8 +121,10 @@ LIBS += $(UDEV_LIBS) $(BLKID_LIBS)
+diff --git a/scripts/lvmdump.sh b/scripts/lvmdump.sh
+index 641d109..6d9fe6d 100755
+--- a/scripts/lvmdump.sh
++++ b/scripts/lvmdump.sh
+@@ -204,7 +204,8 @@ myecho "Gathering console messages..."
+ log "$TAIL -n 75 /var/log/messages >> \"$dir/messages\" 2>> \"$log\""
  
- device-mapper: $(TARGETS_DM)
+ myecho "Gathering /etc/lvm info..."
+-log "$CP -a /etc/lvm \"$dir/lvm\" 2>> \"$log\""
++log "$LS -laR /etc/lvm >> \"$dir/etc_lvm_listing\" 2>> \"$log\""
++log "$CP -RL --preserve=all /etc/lvm \"$dir/lvm\" 2>> \"$log\""
  
-+CFLAGS_dmsetup.o += $(EXTRA_EXEC_CFLAGS)
-+
- dmsetup: dmsetup.o $(top_builddir)/libdm/libdevmapper.$(LIB_SUFFIX)
--	$(CC) $(CFLAGS) $(EXTRA_EXEC_CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) -L$(top_builddir)/libdm \
-+	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) -L$(top_builddir)/libdm \
- 	      -o $@ dmsetup.o -ldevmapper $(LIBS)
+ myecho "Gathering /dev listing..."
+ log "$LS -laR /dev >> \"$dir/dev_listing\" 2>> \"$log\""
+@@ -241,8 +242,8 @@ if (( $udev )); then
+ 	log "$UDEVADM info --export-db >> \"$udev_dir/db\" 2>> \"$log\""
+ 	log "$CP -a /etc/udev/udev.conf \"$udev_dir/conf\" 2>> \"$log\""
+ 	log "$LS -la /lib/udev >> \"$udev_dir/lib_dir\" 2>> \"$log\""
+-	log "$CP -aR /etc/udev/rules.d \"$udev_dir/rules_etc\" 2>> \"$log\""
+-	log "$CP -aR /lib/udev/rules.d \"$udev_dir/rules_lib\" 2>> \"$log\""
++	log "$CP -RL --preserve=all /etc/udev/rules.d \"$udev_dir/rules_etc\" 2>> \"$log\""
++	log "$CP -RL --preserve=all /lib/udev/rules.d \"$udev_dir/rules_lib\" 2>> \"$log\""
+ fi
  
- dmsetup.static: dmsetup.o $(interfacebuilddir)/libdevmapper.a
-@@ -131,8 +133,10 @@ dmsetup.static: dmsetup.o $(interfacebuilddir)/libdevmapper.a
- 
- all: device-mapper
- 
-+CFLAGS_lvm.o += $(EXTRA_EXEC_CFLAGS)
-+
- lvm: $(OBJECTS) lvm.o $(top_builddir)/lib/liblvm-internal.a
--	$(CC) $(CFLAGS) $(EXTRA_EXEC_CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $(OBJECTS) lvm.o \
-+	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $(OBJECTS) lvm.o \
- 		$(LVMLIBS) $(READLINE_LIBS) $(LIBS) -rdynamic
- 
- ifeq ("@BUILD_LVMETAD@", "yes")
+ if (( $lvmetad )); then
 
 
