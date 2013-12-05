@@ -1,80 +1,162 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun,  1 Dec 2013 21:16:03 +0000 (UTC)
-Subject: master - libdm-config: Allow quoted section (and key) names.
-Message-ID: <20131201211603.3610360FCA@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu,  5 Dec 2013 13:06:00 +0000 (UTC)
+Subject: master - compile/link: use RELRO/PIE compiler/linker options for executables
+Message-ID: <20131205130600.379E960319@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c35394959758ec17389529f95a33bf7f5b15c56b
-Commit:        c35394959758ec17389529f95a33bf7f5b15c56b
-Parent:        2e82a070f3c9224da5c9f383d47e75a1715586cf
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Dec 1 20:02:28 2013 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Sun Dec 1 20:57:42 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=481edce41f54a392b663991c4e29c9eed05f90b5
+Commit:        481edce41f54a392b663991c4e29c9eed05f90b5
+Parent:        b494881e685da3ada4a42a17a33d4fe67f3ca784
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Dec 5 14:03:10 2013 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Dec 5 14:03:10 2013 +0100
 
-libdm-config: Allow quoted section (and key) names.
+compile/link: use RELRO/PIE compiler/linker options for executables
 
 ---
- libdm/libdm-config.c |   22 +++++++++++++++++++---
- 1 files changed, 19 insertions(+), 3 deletions(-)
+ WHATS_NEW                    |    2 +-
+ daemons/clvmd/Makefile.in    |    4 ++--
+ daemons/cmirrord/Makefile.in |    4 ++--
+ daemons/dmeventd/Makefile.in |    4 ++--
+ daemons/lvmetad/Makefile.in  |    4 ++--
+ make.tmpl.in                 |    4 ++--
+ scripts/Makefile.in          |    4 +++-
+ tools/Makefile.in            |    4 ++--
+ 8 files changed, 16 insertions(+), 14 deletions(-)
 
-diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
-index 3385e18..fbee007 100644
---- a/libdm/libdm-config.c
-+++ b/libdm/libdm-config.c
-@@ -287,6 +287,7 @@ static int _write_config(const struct dm_config_node *n, int only_one,
- 	char space[MAX_INDENT + 1];
- 	int l = (level < MAX_INDENT) ? level : MAX_INDENT;
- 	int i;
-+	char *escaped_key = NULL;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2e1f59a..72a61e3 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -8,7 +8,7 @@ Version 2.02.105 -
+   Extend lv_remove_single() to not print info about removed LV.
+   Replace open_count check with lv_check_not_in_use() for snapshot open test.
+   Add error messages with LV names for failing lv refresh.
+-  Compile/link daemons with RELRO and PIE options to harden daemon security.
++  Compile/link executables with new RELRO and PIE options (non-static builds).
+   Support per-object compilation cflags via CFLAGS_object.o.
+   Automatically detect support for compiler/linker options to use RELRO and PIE.
+   Add --splitsnapshot to lvconvert to separate out cow LV.
+diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
+index 4677048..0da95a7 100644
+--- a/daemons/clvmd/Makefile.in
++++ b/daemons/clvmd/Makefile.in
+@@ -88,8 +88,8 @@ LVMLIBS += -ldevmapper
+ LIBS += $(PTHREAD_LIBS)
  
- 	if (!n)
- 		return 1;
-@@ -301,7 +302,14 @@ static int _write_config(const struct dm_config_node *n, int only_one,
+ DEFS += -D_REENTRANT
+-CFLAGS += -fno-strict-aliasing $(DAEMON_CFLAGS)
+-LDFLAGS += $(DAEMON_LDFLAGS)
++CFLAGS += -fno-strict-aliasing $(EXTRA_EXEC_CFLAGS)
++LDFLAGS += $(EXTRA_EXEC_LDFLAGS)
  
- 		if (!_line_start(out))
- 			return_0;
--		line_append("%s%s", space, n->key);
-+		if (strchr(n->key, '#') || strchr(n->key, '"') || strchr(n->key, '!')) {
-+			escaped_key = alloca(dm_escaped_len(n->key) + 2);
-+			*escaped_key = '"';
-+			dm_escape_double_quotes(escaped_key + 1, n->key);
-+			strcat(escaped_key, "\"");
-+		}
-+		line_append("%s%s", space, escaped_key ? escaped_key : n->key);
-+		escaped_key = NULL;
- 		if (!n->v) {
- 			/* it's a sub section */
- 			line_append(" {");
-@@ -433,15 +441,23 @@ static struct dm_config_node *_section(struct parser *p)
- {
- 	/* IDENTIFIER SECTION_B_CHAR VALUE* SECTION_E_CHAR */
- 	struct dm_config_node *root, *n, *l = NULL;
-+	char *token;
- 	if (!(root = _create_node(p->mem))) {
- 		log_error("Failed to allocate section node");
- 		return NULL;
- 	}
+ INSTALL_TARGETS = \
+ 	install_clvmd
+diff --git a/daemons/cmirrord/Makefile.in b/daemons/cmirrord/Makefile.in
+index df7c2a8..d368793 100644
+--- a/daemons/cmirrord/Makefile.in
++++ b/daemons/cmirrord/Makefile.in
+@@ -28,8 +28,8 @@ include $(top_builddir)/make.tmpl
  
--	if (!(root->key = _dup_tok(p)))
-+	if (!(root->key = token = _dup_tok(p)))
- 		return_NULL;
+ LIBS += -ldevmapper
+ LMLIBS += $(CPG_LIBS) $(SACKPT_LIBS)
+-CFLAGS += $(CPG_CFLAGS) $(SACKPT_CFLAGS) $(DAEMON_CFLAGS)
+-LDFLAGS += $(DAEMON_LDFLAGS)
++CFLAGS += $(CPG_CFLAGS) $(SACKPT_CFLAGS) $(EXTRA_EXEC_CFLAGS)
++LDFLAGS += $(EXTRA_EXEC_LDFLAGS)
  
--	match(TOK_IDENTIFIER);
-+	if (p->t == TOK_STRING_ESCAPED) {
-+		token ++; /* OK as the token is pool-allocated */
-+		token[strlen(token) - 1] = 0;
-+		dm_unescape_double_quotes(token);
-+		root->key = token;
-+		match(TOK_STRING_ESCAPED);
-+	} else
-+		match(TOK_IDENTIFIER);
+ cmirrord: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
+diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
+index fcc5c9e..47bfb67 100644
+--- a/daemons/dmeventd/Makefile.in
++++ b/daemons/dmeventd/Makefile.in
+@@ -59,10 +59,10 @@ device-mapper: $(TARGETS)
+ LIBS += -ldevmapper
+ LVMLIBS += -ldevmapper-event $(PTHREAD_LIBS)
  
- 	if (p->t == TOK_SECTION_B) {
- 		match(TOK_SECTION_B);
+-CFLAGS_dmeventd.o += $(DAEMON_CFLAGS)
++CFLAGS_dmeventd.o += $(EXTRA_EXEC_CFLAGS)
+ 
+ dmeventd: $(LIB_SHARED) dmeventd.o
+-	$(CC) $(CFLAGS) $(LDFLAGS) $(DAEMON_LDFLAGS) $(ELDFLAGS) -L. -o $@ dmeventd.o \
++	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -L. -o $@ dmeventd.o \
+ 	$(DL_LIBS) $(LVMLIBS) $(LIBS) -rdynamic
+ 
+ dmeventd.static: $(LIB_STATIC) dmeventd.o $(interfacebuilddir)/libdevmapper.a
+diff --git a/daemons/lvmetad/Makefile.in b/daemons/lvmetad/Makefile.in
+index 67a557f..0a174bb 100644
+--- a/daemons/lvmetad/Makefile.in
++++ b/daemons/lvmetad/Makefile.in
+@@ -33,9 +33,9 @@ LVMLIBS = -ldaemonserver $(LVMINTERNAL_LIBS) -ldevmapper
+ 
+ LIBS += $(PTHREAD_LIBS)
+ 
+-LDFLAGS += -L$(top_builddir)/libdaemon/server $(DAEMON_LDFLAGS)
++LDFLAGS += -L$(top_builddir)/libdaemon/server $(EXTRA_EXEC_LDFLAGS)
+ CLDFLAGS += -L$(top_builddir)/libdaemon/server
+-CFLAGS += $(DAEMON_CFLAGS)
++CFLAGS += $(EXTRA_EXEC_CFLAGS)
+ 
+ lvmetad: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 5f72182..65b1da0 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -153,8 +153,8 @@ endif
+ ifneq ("@STATIC_LINK@", "yes")
+ ifeq ("@HAVE_PIE@", "yes")
+ ifeq ("@HAVE_FULL_RELRO@", "yes")
+-  DAEMON_CFLAGS += -fPIE -DPIE
+-  DAEMON_LDFLAGS += -Wl,-z,relro,-z,now -pie
++  EXTRA_EXEC_CFLAGS += -fPIE -DPIE
++  EXTRA_EXEC_LDFLAGS += -Wl,-z,relro,-z,now -pie
+ endif
+ endif
+ endif
+diff --git a/scripts/Makefile.in b/scripts/Makefile.in
+index 3616afa..ed587ca 100644
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -82,8 +82,10 @@ ifeq ("@BLKDEACTIVATE@", "yes")
+ 	$(INSTALL_SCRIPT) blk_availability_init_red_hat $(initdir)/blk-availability
+ endif
+ 
++CFLAGS_lvm2_activation_generator_systemd_red_hat.o += $(EXTRA_EXEC_CFLAGS)
++
+ lvm2_activation_generator_systemd_red_hat: $(OBJECTS) $(DEPLIBS)
+-	$(CC) -o $@ $(OBJECTS) $(LDFLAGS) $(LVMLIBS)
++	$(CC) -o $@ $(OBJECTS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(LVMLIBS)
+ 
+ install_systemd_generators:
+ 	$(INSTALL_DIR) $(systemd_generator_dir)
+diff --git a/tools/Makefile.in b/tools/Makefile.in
+index f8e4934..34df48b 100644
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -122,7 +122,7 @@ LIBS += $(UDEV_LIBS) $(BLKID_LIBS)
+ device-mapper: $(TARGETS_DM)
+ 
+ dmsetup: dmsetup.o $(top_builddir)/libdm/libdevmapper.$(LIB_SUFFIX)
+-	$(CC) $(CFLAGS) $(LDFLAGS) -L$(top_builddir)/libdm \
++	$(CC) $(CFLAGS) $(EXTRA_EXEC_CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) -L$(top_builddir)/libdm \
+ 	      -o $@ dmsetup.o -ldevmapper $(LIBS)
+ 
+ dmsetup.static: dmsetup.o $(interfacebuilddir)/libdevmapper.a
+@@ -132,7 +132,7 @@ dmsetup.static: dmsetup.o $(interfacebuilddir)/libdevmapper.a
+ all: device-mapper
+ 
+ lvm: $(OBJECTS) lvm.o $(top_builddir)/lib/liblvm-internal.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) -o $@ $(OBJECTS) lvm.o \
++	$(CC) $(CFLAGS) $(EXTRA_EXEC_CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $(OBJECTS) lvm.o \
+ 		$(LVMLIBS) $(READLINE_LIBS) $(LIBS) -rdynamic
+ 
+ ifeq ("@BUILD_LVMETAD@", "yes")
 
 
