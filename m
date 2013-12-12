@@ -1,146 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 12 Dec 2013 12:43:36 +0000 (UTC)
-Subject: master - thin: enable build of thin provisioning by default
-Message-ID: <20131212124336.C68EC6024C@fedorahosted.org>
+Date: Thu, 12 Dec 2013 12:43:38 +0000 (UTC)
+Subject: master - dmeventd: drop taking timeout mutex
+Message-ID: <20131212124338.EBA8E6024C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10a13dc03cd4da2df3518f7a94014f167ec13d47
-Commit:        10a13dc03cd4da2df3518f7a94014f167ec13d47
-Parent:        9fcbe3c6f074443248922b61441bb2b37253a59c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4fc97980b6e0f31c04d0325cd7ac4e84cdc58cc6
+Commit:        4fc97980b6e0f31c04d0325cd7ac4e84cdc58cc6
+Parent:        10a13dc03cd4da2df3518f7a94014f167ec13d47
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 12 13:07:59 2013 +0100
+AuthorDate:    Sun Jun 30 16:06:39 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 12 13:31:23 2013 +0100
+CommitterDate: Thu Dec 12 13:32:49 2013 +0100
 
-thin: enable build of thin provisioning by default
+dmeventd: drop taking timeout mutex
 
-Use internal type by default for thin provisioning.
-If user is not interested in thin provisiong and doesn't
-have thin provisining supporting tools installed,
-configure will just print warning at the end of configure
-process about limited support.
+Taking _timeout_mutex is not needed when registering and unregistering.
+Global mutex is already being hold for this case.
 ---
- WHATS_NEW    |    1 +
- configure.in |   65 ++++++++++++++++++++++++++++++++++++---------------------
- 2 files changed, 42 insertions(+), 24 deletions(-)
+ WHATS_NEW_DM                |    1 +
+ daemons/dmeventd/dmeventd.c |    9 ++++-----
+ 2 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4b469d4..704d0be 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index b737a3e..97c3c43 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.105 -
- =====================================
-+  Enable support for thin provisioning for default configuration.
-   Improve process_each_lv_in_vg() tag processing.
-   Reodered and simplified logging code.
-   Fix SYSTEMD_READY assignment for foreign devices in lvmetad udev rules.
-diff --git a/configure.in b/configure.in
-index 851d3f7..cf297e8 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1,6 +1,6 @@
- ###############################################################################
- ## Copyright (C) 2000-2004 Sistina Software, Inc. All rights reserved.
--## Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
-+## Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
- ##
- ## This copyrighted material is made available to anyone wishing to use,
- ## modify, copy, or redistribute it subject to the terms and conditions
-@@ -409,8 +409,21 @@ AC_MSG_CHECKING(whether to include thin provisioning)
- AC_ARG_WITH(thin,
- 	    AC_HELP_STRING([--with-thin=TYPE],
- 			   [thin provisioning support: internal/shared/none
--			    [[TYPE=none]]]),
--	    THIN=$withval, THIN=none)
-+			    [[TYPE=internal]]]),
-+	    THIN=$withval, THIN=internal)
-+AC_ARG_WITH(thin-check,
-+	    AC_HELP_STRING([--with-thin-check=PATH],
-+			   [thin_check tool: [[thin_check]]]),
-+			   THIN_CHECK_CMD=$withval, THIN_CHECK_CMD="thin_check")
-+AC_ARG_WITH(thin-dump,
-+	    AC_HELP_STRING([--with-thin-dump=PATH],
-+			   [thin_dump tool: [[thin_dump]]]),
-+			   THIN_DUMP_CMD=$withval, THIN_DUMP_CMD="thin_dump")
-+AC_ARG_WITH(thin-repair,
-+	    AC_HELP_STRING([--with-thin-repair=PATH],
-+			   [thin_repair tool: [[thin_repair]]]),
-+			   THIN_REPAIR_CMD=$withval, THIN_REPAIR_CMD="thin_repair")
-+
- AC_MSG_RESULT($THIN)
+ Version 1.02.84 -
+ ====================================
++  Drop taking timeout mutex for un/registering dmeventd monitor.
+   Allow section names in config file data to be quoted strings.
+   Close fifos before exiting in dmeventd restart() error path.
+   Move printf format string directly into dm_asprintf args list.
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index f2d6671..47a341e 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -751,10 +751,8 @@ static void _monitor_unregister(void *arg)
+ 			return;
+ 		}
+ 	thread->status = DM_THREAD_DONE;
+-	pthread_mutex_lock(&_timeout_mutex);
+ 	UNLINK_THREAD(thread);
+ 	LINK(thread, &_thread_registry_unused);
+-	pthread_mutex_unlock(&_timeout_mutex);
+ 	_unlock_mutex();
+ }
  
- case "$THIN" in
-@@ -420,34 +433,36 @@ case "$THIN" in
-   *) AC_MSG_ERROR([--with-thin parameter invalid ($THIN)]) ;;
- esac
+@@ -1083,17 +1081,18 @@ static int _unregister_for_event(struct message_data *message_data)
  
-+# Test if necessary thin tools are available
-+# if not - use plain defaults and warn user
- case "$THIN" in
-   internal|shared)
--	AC_ARG_WITH(thin-check,
--		AC_HELP_STRING([--with-thin-check=PATH],
--			       [thin_check tool: [[autodetect]]]),
--			       THIN_CHECK_CMD=$withval, THIN_CHECK_CMD="autodetect")
- 	# Empty means a config way to ignore thin checking
--	if test "$THIN_CHECK_CMD" = "autodetect"; then
--		AC_PATH_PROG(THIN_CHECK_CMD, thin_check)
--		test -z "$THIN_CHECK_CMD" && AC_MSG_ERROR(thin_check not found in path $PATH)
-+	if test "$THIN_CHECK_CMD" = "thin_check"; then
-+		AC_PATH_TOOL(THIN_CHECK_CMD, thin_check, thin_check)
-+		test "$THIN_CHECK_CMD" = "thin_check" && {
-+			AC_MSG_WARN([thin_check not found in path $PATH])
-+			THIN_CHECK_CMD=thin_check
-+			THIN_CONFIGURE_WARN=y
-+		}
- 	fi
--	AC_ARG_WITH(thin-dump,
--		AC_HELP_STRING([--with-thin-dump=PATH],
--			       [thin_dump tool: [[autodetect]]]),
--			       THIN_DUMP_CMD=$withval, THIN_DUMP_CMD="autodetect")
- 	# Empty means a config way to ignore thin checking
--	if test "$THIN_DUMP_CMD" = "autodetect"; then
--		AC_PATH_PROG(THIN_DUMP_CMD, thin_dump)
--		test -z "$THIN_DUMP_CMD" && AC_MSG_ERROR(thin_dump not found in path $PATH)
-+	if test "$THIN_DUMP_CMD" = "thin_dump"; then
-+		AC_PATH_TOOL(THIN_DUMP_CMD, thin_dump, thin_dump)
-+		test "$THIN_DUMP_CMD" = "thin_dump" && {
-+			AC_MSG_WARN(thin_dump not found in path $PATH)
-+			THIN_DUMP_CMD=thin_dump
-+			THIN_CONFIGURE_WARN=y
-+		}
- 	fi
--	AC_ARG_WITH(thin-repair,
--		AC_HELP_STRING([--with-thin-repair=PATH],
--			       [thin_repair tool: [[autodetect]]]),
--			       THIN_REPAIR_CMD=$withval, THIN_REPAIR_CMD="autodetect")
- 	# Empty means a config way to ignore thin checking
--	if test "$THIN_REPAIR_CMD" = "autodetect"; then
--		AC_PATH_PROG(THIN_REPAIR_CMD, thin_repair)
--		test -z "$THIN_REPAIR_CMD" && AC_MSG_ERROR(thin_repair not found in path $PATH)
-+	if test "$THIN_REPAIR_CMD" = "thin_repair"; then
-+		AC_PATH_TOOL(THIN_REPAIR_CMD, thin_repair)
-+		test -z "$THIN_REPAIR_CMD" && {
-+			AC_MSG_WARN(thin_repair not found in path $PATH)
-+			THIN_REPAIR_CMD=thin_repair
-+			THIN_CONFIGURE_WARN=y
-+		}
- 	fi
- 	;;
- esac
-@@ -1774,6 +1789,8 @@ unit-tests/mm/Makefile
- ])
- AC_OUTPUT
+ 	thread->events &= ~message_data->events_field;
  
-+test -n "$THIN_CONFIGURE_WARN" && AC_MSG_WARN([Support for thin provisioning is limited since some thin provisioning tools are missing!])
-+
- if test x$ODIRECT != xyes; then
-   AC_MSG_WARN(Warning: O_DIRECT disabled: low-memory pvmove may lock up)
- fi
+-	if (!(thread->events & DM_EVENT_TIMEOUT))
++	if (!(thread->events & DM_EVENT_TIMEOUT)) {
++		_unlock_mutex();
+ 		_unregister_for_timeout(thread);
++		_lock_mutex();
++	}
+ 	/*
+ 	 * In case there's no events to monitor on this device ->
+ 	 * unlink and terminate its monitoring thread.
+ 	 */
+ 	if (!thread->events) {
+-		pthread_mutex_lock(&_timeout_mutex);
+ 		UNLINK_THREAD(thread);
+ 		LINK(thread, &_thread_registry_unused);
+-		pthread_mutex_unlock(&_timeout_mutex);
+ 	}
+ 	_unlock_mutex();
+ 
 
 
