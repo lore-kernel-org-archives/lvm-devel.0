@@ -1,241 +1,151 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 12 Dec 2013 12:43:28 +0000 (UTC)
-Subject: master - cleanup: self compilable headers
-Message-ID: <20131212124328.7BDCF6038F@fedorahosted.org>
+Date: Thu, 12 Dec 2013 12:43:26 +0000 (UTC)
+Subject: master - cleanup: simplify logging code
+Message-ID: <20131212124326.66FF06038F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=30a81e59894ed6c1fdb4a3bb0823b58de1e431cc
-Commit:        30a81e59894ed6c1fdb4a3bb0823b58de1e431cc
-Parent:        b53e9ba66a53e68fdad7700bcccb9d38e24e39d6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b53e9ba66a53e68fdad7700bcccb9d38e24e39d6
+Commit:        b53e9ba66a53e68fdad7700bcccb9d38e24e39d6
+Parent:        877418b1a2edfba6903314797ab3676ec7f2385a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 25 23:26:33 2012 +0100
+AuthorDate:    Mon Mar 26 13:50:44 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 12 13:28:19 2013 +0100
+CommitterDate: Thu Dec 12 13:27:59 2013 +0100
 
-cleanup: self compilable headers
+cleanup: simplify logging code
 
+Condense code for logging.
 ---
- daemons/clvmd/clvm.h                  |    1 +
- daemons/dmeventd/libdevmapper-event.h |    1 +
- lib/datastruct/lvm-types.h            |    2 ++
- lib/datastruct/str_list.h             |    3 +++
- lib/device/device.h                   |    1 +
- lib/format_text/text_import.h         |    3 +++
- lib/metadata/lv.h                     |    4 ++--
- lib/metadata/lv_alloc.h               |    2 ++
- lib/metadata/pv.h                     |    4 +++-
- lib/metadata/pv_alloc.h               |    9 +++++++++
- lib/metadata/vg.h                     |    6 +++---
- lib/misc/crc.h                        |    2 ++
- lib/uuid/uuid.h                       |    5 +++++
- libdm/misc/dm-log-userspace.h         |    2 ++
- 14 files changed, 39 insertions(+), 6 deletions(-)
+ WHATS_NEW     |    1 +
+ lib/log/log.c |   83 ++++++++++++++++----------------------------------------
+ 2 files changed, 25 insertions(+), 59 deletions(-)
 
-diff --git a/daemons/clvmd/clvm.h b/daemons/clvmd/clvm.h
-index 8e24f15..716af40 100644
---- a/daemons/clvmd/clvm.h
-+++ b/daemons/clvmd/clvm.h
-@@ -23,6 +23,7 @@
- #define _CLVM_H
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e985922..0d6a9df 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Reodered and simplified logging code.
+   Fix SYSTEMD_READY assignment for foreign devices in lvmetad udev rules.
+   Disable online thin pool metadata resize for 1.9 kernel thin target.
+   Shortened code for initialization of raid segment types.
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 1af9616..194fdd3 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -199,6 +199,8 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 	int log_once = level & _LOG_ONCE;
+ 	int fatal_internal_error = 0;
+ 	size_t msglen;
++	const char *indent_spaces = "";
++	FILE *stream;
  
- #include "configure.h"
-+#include <inttypes.h>
+ 	level &= ~(_LOG_STDERR|_LOG_ONCE);
  
- struct clvm_header {
- 	uint8_t  cmd;	        /* See below */
-diff --git a/daemons/dmeventd/libdevmapper-event.h b/daemons/dmeventd/libdevmapper-event.h
-index 7ce3f39..9c1cc6f 100644
---- a/daemons/dmeventd/libdevmapper-event.h
-+++ b/daemons/dmeventd/libdevmapper-event.h
-@@ -48,6 +48,7 @@ enum dm_event_mask {
- #define DM_EVENT_ALL_ERRORS DM_EVENT_ERROR_MASK
- #define DM_EVENT_PROTOCOL_VERSION 1
+@@ -278,76 +280,39 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 	}
  
-+struct dm_task;
- struct dm_event_handler;
- 
- struct dm_event_handler *dm_event_handler_create(void);
-diff --git a/lib/datastruct/lvm-types.h b/lib/datastruct/lvm-types.h
-index 5358850..e96009d 100644
---- a/lib/datastruct/lvm-types.h
-+++ b/lib/datastruct/lvm-types.h
-@@ -19,6 +19,8 @@
- #include <sys/types.h>
- #include <inttypes.h>
- 
-+#include "libdevmapper.h"
+       log_it:
+-	if (!_log_suppress) {
+-		if (verbose_level() > _LOG_DEBUG)
+-			(void) dm_snprintf(locn, sizeof(locn), "#%s:%d ",
++	if ((verbose_level() >= level) && !_log_suppress) {
++		if (verbose_level() > _LOG_DEBUG) {
++			(void) dm_snprintf(buf, sizeof(buf), "#%s:%d ",
+ 					   file, line);
+-		else
+-			locn[0] = '\0';
++		} else
++			buf[0] = '\0';
 +
- /* Define some portable printing types */
- #define PRIsize_t "zu"
- #define PRIptrdiff_t "td"
-diff --git a/lib/datastruct/str_list.h b/lib/datastruct/str_list.h
-index 42f47da..82141e1 100644
---- a/lib/datastruct/str_list.h
-+++ b/lib/datastruct/str_list.h
-@@ -16,6 +16,9 @@
- #ifndef _LVM_STR_LIST_H
- #define _LVM_STR_LIST_H
++		if (_indent)
++			switch (level) {
++			case _LOG_NOTICE: indent_spaces = "  "; break;
++			case _LOG_INFO:   indent_spaces = "    "; break;
++			case _LOG_DEBUG:  indent_spaces = "      "; break;
++			default: /* nothing to do */;
++			}
  
-+struct dm_list;
-+struct dm_pool;
-+
- struct dm_list *str_list_create(struct dm_pool *mem);
- int str_list_add(struct dm_pool *mem, struct dm_list *sll, const char *str);
- void str_list_del(struct dm_list *sll, const char *str);
-diff --git a/lib/device/device.h b/lib/device/device.h
-index 1d6304d..e42f664 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -17,6 +17,7 @@
- #define _LVM_DEVICE_H
- 
- #include "uuid.h"
-+#include "lvm-types.h"
- 
- #include <fcntl.h>
- 
-diff --git a/lib/format_text/text_import.h b/lib/format_text/text_import.h
-index faebc07..1308a15 100644
---- a/lib/format_text/text_import.h
-+++ b/lib/format_text/text_import.h
-@@ -16,6 +16,9 @@
- #ifndef _LVM_TEXT_IMPORT_H
- #define _LVM_TEXT_IMPORT_H
- 
-+#include <inttypes.h>
-+
-+struct dm_hash_table;
- struct lv_segment;
- struct dm_config_node;
- 
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 06f8c60..51920b0 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -15,9 +15,9 @@
- #ifndef _LVM_LV_H
- #define _LVM_LV_H
- 
-+#include "vg.h"
-+
- union lvid;
--struct volume_group;
--struct dm_list;
- struct lv_segment;
- struct replicator_device;
- enum activation_change;
-diff --git a/lib/metadata/lv_alloc.h b/lib/metadata/lv_alloc.h
-index 9f8e0e3..acfebca 100644
---- a/lib/metadata/lv_alloc.h
-+++ b/lib/metadata/lv_alloc.h
-@@ -16,6 +16,8 @@
- #ifndef _LVM_LV_ALLOC_H
- #define _LVM_LV_ALLOC_H
- 
-+#include "metadata-exported.h"
-+
- struct lv_segment *alloc_lv_segment(const struct segment_type *segtype,
- 				    struct logical_volume *lv,
- 				    uint32_t le, uint32_t len,
-diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
-index 8fd3061..2d436cb 100644
---- a/lib/metadata/pv.h
-+++ b/lib/metadata/pv.h
-@@ -15,7 +15,9 @@
- #ifndef _LVM_PV_H
- #define _LVM_PV_H
- 
--struct id;
-+#include "uuid.h"
-+#include "libdevmapper.h"
-+
- struct device;
- struct format_type;
- struct volume_group;
-diff --git a/lib/metadata/pv_alloc.h b/lib/metadata/pv_alloc.h
-index 2318473..929302e 100644
---- a/lib/metadata/pv_alloc.h
-+++ b/lib/metadata/pv_alloc.h
-@@ -14,6 +14,15 @@
- 
- #ifndef _LVM_PV_ALLOC_H
- 
-+#include <inttypes.h>
-+
-+struct dm_list;
-+struct dm_pool;
-+struct lv_segment;
-+struct physical_volume;
-+struct pv_segment;
-+struct volume_group;
-+
- int alloc_pv_segment_whole_pv(struct dm_pool *mem, struct physical_volume *pv);
- int peg_dup(struct dm_pool *mem, struct dm_list *peg_new, struct dm_list *peg_old);
- struct pv_segment *assign_peg_to_lvseg(struct physical_volume *pv, uint32_t pe,
-diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
-index 5cc5f6d..43d27bf 100644
---- a/lib/metadata/vg.h
-+++ b/lib/metadata/vg.h
-@@ -15,11 +15,11 @@
- #ifndef _LVM_VG_H
- #define _LVM_VG_H
- 
-+#include "uuid.h"
-+#include "libdevmapper.h"
-+
- struct cmd_context;
--struct dm_pool;
- struct format_instance;
--struct dm_list;
--struct id;
- struct logical_volume;
- 
- typedef enum {
-diff --git a/lib/misc/crc.h b/lib/misc/crc.h
-index 2910bc5..007c610 100644
---- a/lib/misc/crc.h
-+++ b/lib/misc/crc.h
-@@ -16,6 +16,8 @@
- #ifndef _LVM_CRC_H
- #define _LVM_CRC_H
- 
-+#include <inttypes.h>
-+
- #define INITIAL_CRC 0xf597a6cf
- 
- uint32_t calc_crc(uint32_t initial, const uint8_t *buf, uint32_t size);
-diff --git a/lib/uuid/uuid.h b/lib/uuid/uuid.h
-index 5c8382d..60bec65 100644
---- a/lib/uuid/uuid.h
-+++ b/lib/uuid/uuid.h
-@@ -19,6 +19,11 @@
- #define ID_LEN 32
- #define ID_LEN_S "32"
- 
-+#include <inttypes.h>
-+#include <sys/types.h>
-+
-+struct dm_pool;
-+
- struct id {
- 	int8_t uuid[ID_LEN];
- };
-diff --git a/libdm/misc/dm-log-userspace.h b/libdm/misc/dm-log-userspace.h
-index 3317938..6418300 100644
---- a/libdm/misc/dm-log-userspace.h
-+++ b/libdm/misc/dm-log-userspace.h
-@@ -7,6 +7,8 @@
- #ifndef __DM_LOG_USERSPACE_H__
- #define __DM_LOG_USERSPACE_H__
- 
-+#include <inttypes.h>
-+
- #include "dm-ioctl.h" /* For DM_UUID_LEN */
- 
- /*
+ 		va_start(ap, format);
+ 		switch (level) {
+ 		case _LOG_DEBUG:
+-			if (!strcmp("<backtrace>", format) &&
+-			    verbose_level() <= _LOG_DEBUG)
++			if ((verbose_level() == level) &&
++			    (strcmp("<backtrace>", format) == 0))
+ 				break;
+ 			if (verbose_level() < _LOG_DEBUG)
+ 				break;
+ 			if (!debug_class_is_logged(dm_errno_or_class))
+ 				break;
+-			fprintf(stderr, "%s%s%s", locn, log_command_name(),
+-				_msg_prefix);
+-			if (_indent)
+-				fprintf(stderr, "      ");
+-			vfprintf(stderr, trformat, ap);
+-			fputc('\n', stderr);
+-			break;
+-
+-		case _LOG_INFO:
+-			if (verbose_level() >= _LOG_INFO) {
+-				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+-					_msg_prefix);
+-				if (_indent)
+-					fprintf(stderr, "    ");
+-				vfprintf(stderr, trformat, ap);
+-				fputc('\n', stderr);
+-			}
+-			break;
+-		case _LOG_NOTICE:
+-			if (verbose_level() >= _LOG_NOTICE) {
+-				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+-					_msg_prefix);
+-				if (_indent)
+-					fprintf(stderr, "  ");
+-				vfprintf(stderr, trformat, ap);
+-				fputc('\n', stderr);
+-			}
+-			break;
+-		case _LOG_WARN:
+-			if (verbose_level() >= _LOG_WARN) {
+-				fprintf(use_stderr ? stderr : stdout, "%s%s",
+-					log_command_name(), _msg_prefix);
+-				vfprintf(use_stderr ? stderr : stdout, trformat, ap);
+-				fputc('\n', use_stderr ? stderr : stdout);
+-			}
+-			break;
+-		case _LOG_ERR:
+-			if (verbose_level() >= _LOG_ERR) {
+-				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+-					_msg_prefix);
+-				vfprintf(stderr, trformat, ap);
+-				fputc('\n', stderr);
+-			}
+-			break;
+-		case _LOG_FATAL:
++			/* fall through */
+ 		default:
+-			if (verbose_level() >= _LOG_FATAL) {
+-				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+-					_msg_prefix);
+-				vfprintf(stderr, trformat, ap);
+-				fputc('\n', stderr);
+-			}
+-			break;
++			/* Typically only log_warn goes to stdout */
++			stream = (use_stderr || (level != _LOG_WARN)) ? stderr : stdout;
++			fprintf(stream, "%s%s%s%s", buf, log_command_name(),
++				_msg_prefix, indent_spaces);
++			vfprintf(stream, trformat, ap);
++			fputc('\n', stream);
+ 		}
+ 		va_end(ap);
+ 	}
 
 
