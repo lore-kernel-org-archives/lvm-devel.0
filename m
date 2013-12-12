@@ -1,1554 +1,371 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Fri, 20 Dec 2013 19:36:51 +0000 (UTC)
-Subject: master - liblvm: Save off and restore umask values
-Message-ID: <20131220193651.DC0EF60E0C@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 12 Dec 2013 14:03:24 +0000 (UTC)
+Subject: master - device: add physical block size info and make sure VG extent size >= PV's phys. block size
+Message-ID: <20131212140324.E19C360E5A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eaeb33abd4887c668aa88703b6e8981da6f44791
-Commit:        eaeb33abd4887c668aa88703b6e8981da6f44791
-Parent:        f270bbd442b3c36115ea490ec838cf29277a46d2
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Dec 17 16:51:11 2013 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Dec 20 13:36:22 2013 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=32080c4ff748e4afbeacf9dbc4a98bfea658a392
+Commit:        32080c4ff748e4afbeacf9dbc4a98bfea658a392
+Parent:        3eed0aa7dca9c1895bbf80e1585debf9bddac5a8
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Dec 12 11:26:35 2013 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Dec 12 15:02:36 2013 +0100
 
-liblvm: Save off and restore umask values
+device: add physical block size info and make sure VG extent size >= PV's phys. block size
 
-lvm has a default umask value in the config file that defaults
-to 0077 which lvm changes to during normal operation.  This
-causes a problem when the code is used as a library with
-liblvm as it is changing the umask for the process.  This
-patch saves off the current umask, sets to what is specified
-in the config file and restores it what it was on library
-function call exit.
-
-The user is now free to change the umask in their application at
-anytime including between library calls.
-
-This fix address BZ:
-https://bugzilla.redhat.com/show_bug.cgi?id=1012113
-
-Tested by setting umask to 0777 and running the python unit
-test and verifying that umask is still same value as expected
-at the test completion and with a successful run.
-
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- liblvm/lvm_base.c |   68 +++++++++++--
- liblvm/lvm_lv.c   |  246 ++++++++++++++++++++++++++++++++++++++-------
- liblvm/lvm_misc.c |   25 +++++
- liblvm/lvm_misc.h |   12 ++
- liblvm/lvm_pv.c   |  150 +++++++++++++++++++++++-----
- liblvm/lvm_vg.c   |  292 +++++++++++++++++++++++++++++++++++++++--------------
- 6 files changed, 647 insertions(+), 146 deletions(-)
+ WHATS_NEW                        |    1 +
+ lib/device/dev-cache.c           |    1 +
+ lib/device/dev-io.c              |   65 +++++++++++++++++---------------------
+ lib/device/device.h              |    3 +-
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |   56 +++++++++++++++++++++++++++++---
+ lib/metadata/metadata.h          |    3 ++
+ man/vgchange.8.in                |    6 ++-
+ man/vgcreate.8.in                |    6 ++-
+ tools/vgchange.c                 |    6 +++
+ 10 files changed, 101 insertions(+), 47 deletions(-)
 
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index 80a4894..2a373ba 100644
---- a/liblvm/lvm_base.c
-+++ b/liblvm/lvm_base.c
-@@ -18,13 +18,14 @@
- #include "lvm-version.h"
- #include "metadata-exported.h"
- #include "lvm2app.h"
-+#include "lvm_misc.h"
- 
- const char *lvm_library_get_version(void)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 78657dd..1679131 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Make sure VG extent size is always greater or equal to PV phys. block size.
+   Optimize double call of stat() for cached devices.
+   Enable support for thin provisioning for default configuration.
+   Improve process_each_lv_in_vg() tag processing.
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 5d26d41..87d2f58 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -56,6 +56,7 @@ static int _insert(const char *path, const struct stat *info,
+ /* Setup non-zero members of passed zeroed 'struct device' */
+ static void _dev_init(struct device *dev, int max_error_count)
  {
- 	return LVM_VERSION;
- }
- 
--lvm_t lvm_init(const char *system_dir)
-+static lvm_t _lvm_init(const char *system_dir)
- {
- 	struct cmd_context *cmd;
- 
-@@ -75,18 +76,34 @@ lvm_t lvm_init(const char *system_dir)
- 	return (lvm_t) cmd;
- }
- 
-+
-+lvm_t lvm_init(const char *system_dir)
-+{
-+	lvm_t h = NULL;
-+	struct saved_env e = store_user_env(NULL);
-+	h = _lvm_init(system_dir);
-+	restore_user_env(&e);
-+	return h;
-+}
-+
- void lvm_quit(lvm_t libh)
- {
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
- 	destroy_toolcontext((struct cmd_context *)libh);
- 	udev_fin_library_context();
-+	restore_user_env(&e);
- }
- 
- int lvm_config_reload(lvm_t libh)
- {
-+	int rc = 0;
-+
- 	/* FIXME: re-init locking needed here? */
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
- 	if (!refresh_toolcontext((struct cmd_context *)libh))
--		return -1;
--	return 0;
-+		rc = -1;
-+	restore_user_env(&e);
-+	return rc;
- }
++	dev->phys_block_size = -1;
+ 	dev->block_size = -1;
+ 	dev->fd = -1;
+ 	dev->read_ahead = -1;
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index 1d35a8f..45700e5 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -123,23 +123,44 @@ static int _io(struct device_area *where, char *buffer, int should_write)
+  *---------------------------------------------------------------*/
  
  /*
-@@ -94,54 +111,83 @@ int lvm_config_reload(lvm_t libh)
+- * Get the sector size from an _open_ device.
++ * Get the physical and logical block size for a device.
   */
- int lvm_config_override(lvm_t libh, const char *config_settings)
+-static int _get_block_size(struct device *dev, unsigned int *size)
++int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, unsigned int *block_size)
  {
-+	int rc = 0;
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
+ 	const char *name = dev_name(dev);
++	int needs_open;
++	int r = 1;
 +
- 	if (!override_config_tree_from_string(cmd, config_settings))
--		return -1;
--	return 0;
-+		rc = -1;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- int lvm_config_find_bool(lvm_t libh, const char *config_path, int fail)
- {
-+	int rc = 0;
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
- 
--	return dm_config_tree_find_bool(cmd->cft, config_path, fail);
-+	rc = dm_config_tree_find_bool(cmd->cft, config_path, fail);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- int lvm_errno(lvm_t libh)
- {
--	return stored_errno();
-+	int rc;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
-+	rc = stored_errno();
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_errmsg(lvm_t libh)
- {
- 	const char *rc = NULL;
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
++	needs_open = (!dev->open_count && (dev->phys_block_size == -1 || dev->block_size == -1));
 +
- 	const char *msg = stored_errmsg_with_clear();
- 	if (msg) {
- 		rc = dm_pool_strdup(cmd->mem, msg);
- 		free((void *)msg);
- 	}
++	if (needs_open && !dev_open_readonly(dev))
++		return_0;
 +
-+	restore_user_env(&e);
- 	return rc;
- }
- 
- const char *lvm_vgname_from_pvid(lvm_t libh, const char *pvid)
- {
-+	const char *rc = NULL;
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
- 	struct id id;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
- 
--	if (!id_read_format(&id, pvid)) {
-+	if (id_read_format(&id, pvid)) {
-+		rc = find_vgname_from_pvid(cmd, (char *)id.uuid);
-+	} else {
- 		log_error(INTERNAL_ERROR "Unable to convert uuid");
--		return NULL;
- 	}
--	return find_vgname_from_pvid(cmd, (char *)id.uuid);
-+
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_vgname_from_device(lvm_t libh, const char *device)
- {
-+	const char *rc = NULL;
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
--	return find_vgname_from_pvname(cmd, device);
-+	struct saved_env e = store_user_env(cmd);
-+	rc = find_vgname_from_pvname(cmd, device);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
-+/*
-+ * No context to work with, so no ability to save off and restore env is not
-+ * available and is not needed.
-+ */
- float lvm_percent_to_float(percent_t v)
- {
- 	return percent_to_float(v);
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index b451c83..3b0e18d 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -45,60 +45,99 @@ static int _lv_check_handle(const lv_t lv, const int vg_writeable)
- /* FIXME: have lib/report/report.c _disp function call lv_size()? */
- uint64_t lvm_lv_get_size(const lv_t lv)
- {
--	return SECTOR_SIZE * lv_size(lv);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = SECTOR_SIZE * lv_size(lv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_lv_get_uuid(const lv_t lv)
- {
--	return lv_uuid_dup(lv);
-+	const char *rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = lv_uuid_dup(lv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_lv_get_name(const lv_t lv)
- {
--	return dm_pool_strndup(lv->vg->vgmem, (const char *)lv->name,
-+	const char *rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = dm_pool_strndup(lv->vg->vgmem, (const char *)lv->name,
- 			       NAME_LEN+1);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_lv_get_attr(const lv_t lv)
- {
--	return lv_attr_dup(lv->vg->vgmem, lv);
-+	const char *rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = lv_attr_dup(lv->vg->vgmem, lv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_lv_get_origin(const lv_t lv)
- {
--	return lv_origin_dup(lv->vg->vgmem, lv);
-+	const char *rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = lv_origin_dup(lv->vg->vgmem, lv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
- {
--	return get_property(NULL, NULL, lv, NULL, NULL, NULL, NULL, name);
-+	struct lvm_property_value rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = get_property(NULL, NULL, lv, NULL, NULL, NULL, NULL, name);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
- 						 const char *name)
- {
--	return get_property(NULL, NULL, NULL, lvseg, NULL, NULL, NULL, name);
-+	struct lvm_property_value rc;
-+	struct saved_env e = store_user_env(lvseg->lv->vg->cmd);
-+	rc = get_property(NULL, NULL, NULL, lvseg, NULL, NULL, NULL, name);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_lv_is_active(const lv_t lv)
- {
-+	uint64_t rc = 0;
- 	struct lvinfo info;
-+
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+
- 	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) &&
- 	    info.exists && info.live_table)
--		return 1;
--	return 0;
-+		rc = 1;
-+
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_lv_is_suspended(const lv_t lv)
- {
-+	uint64_t rc = 0;
- 	struct lvinfo info;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+
- 	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) &&
- 	    info.exists && info.suspended)
--		return 1;
--	return 0;
-+		rc = 1;
-+
-+	restore_user_env(&e);
-+	return rc;
- }
- 
--int lvm_lv_add_tag(lv_t lv, const char *tag)
-+static int _lvm_lv_add_tag(lv_t lv, const char *tag)
- {
- 	if (_lv_check_handle(lv, 1))
- 		return -1;
-@@ -107,8 +146,17 @@ int lvm_lv_add_tag(lv_t lv, const char *tag)
- 	return 0;
- }
- 
-+int lvm_lv_add_tag(lv_t lv, const char *tag)
-+{
-+	int rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = _lvm_lv_add_tag(lv, tag);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- 
--int lvm_lv_remove_tag(lv_t lv, const char *tag)
-+static int _lvm_lv_remove_tag(lv_t lv, const char *tag)
- {
- 	if (_lv_check_handle(lv, 1))
- 		return -1;
-@@ -117,10 +165,23 @@ int lvm_lv_remove_tag(lv_t lv, const char *tag)
- 	return 0;
- }
- 
-+int lvm_lv_remove_tag(lv_t lv, const char *tag)
-+{
-+	int rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = _lvm_lv_remove_tag(lv, tag);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- 
- struct dm_list *lvm_lv_get_tags(const lv_t lv)
- {
--	return tag_list_copy(lv->vg->vgmem, &lv->tags);
-+	struct dm_list *rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = tag_list_copy(lv->vg->vgmem, &lv->tags);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- /* Set defaults for non-segment specific LV parameters */
-@@ -171,7 +232,7 @@ static int _lv_set_default_linear_params(struct cmd_context *cmd,
-  * lvm_vg_write.  However, this appears to be non-trivial change until
-  * lv_create_single is refactored by segtype.
-  */
--lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
-+static lv_t _lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
- {
- 	struct lvcreate_params lp = { 0 };
- 	uint64_t extents;
-@@ -196,11 +257,20 @@ lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
- 	return (lv_t) lv;
- }
- 
-+lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
-+{
-+	lv_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_vg_create_lv_linear(vg, name, size);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- /*
-  * FIXME: This function should probably not commit to disk but require calling
-  * lvm_vg_write.
-  */
--int lvm_vg_remove_lv(lv_t lv)
-+static int _lvm_vg_remove_lv(lv_t lv)
- {
- 	if (!lv || !lv->vg || vg_read_error(lv->vg))
- 		return -1;
-@@ -211,7 +281,16 @@ int lvm_vg_remove_lv(lv_t lv)
- 	return 0;
- }
- 
--int lvm_lv_activate(lv_t lv)
-+int lvm_vg_remove_lv(lv_t lv)
-+{
-+	int rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = _lvm_vg_remove_lv(lv);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
-+static int _lvm_lv_activate(lv_t lv)
- {
- 	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
- 		return -1;
-@@ -248,7 +327,16 @@ int lvm_lv_activate(lv_t lv)
- 	return 0;
- }
- 
--int lvm_lv_deactivate(lv_t lv)
-+int lvm_lv_activate(lv_t lv)
-+{
-+	int rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = _lvm_lv_activate(lv);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
-+static int _lvm_lv_deactivate(lv_t lv)
- {
- 	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
- 		return -1;
-@@ -261,7 +349,16 @@ int lvm_lv_deactivate(lv_t lv)
- 	return 0;
- }
- 
--struct dm_list *lvm_lv_list_lvsegs(lv_t lv)
-+int lvm_lv_deactivate(lv_t lv)
-+{
-+	int rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = _lvm_lv_deactivate(lv);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
-+static struct dm_list *_lvm_lv_list_lvsegs(lv_t lv)
- {
- 	struct dm_list *list;
- 	lvseg_list_t *lvseg;
-@@ -288,18 +385,32 @@ struct dm_list *lvm_lv_list_lvsegs(lv_t lv)
- 	return list;
- }
- 
-+struct dm_list *lvm_lv_list_lvsegs(lv_t lv)
-+{
-+	struct dm_list *rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = _lvm_lv_list_lvsegs(lv);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- lv_t lvm_lv_from_name(vg_t vg, const char *name)
- {
-+	lv_t rc = NULL;
- 	struct lv_list *lvl;
- 
-+	struct saved_env e = store_user_env(vg->cmd);
- 	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (!strcmp(name, lvl->lv->name))
--			return lvl->lv;
-+		if (!strcmp(name, lvl->lv->name)) {
-+			rc = lvl->lv;
-+			break;
++	if (dev->phys_block_size == -1) {
++		if (ioctl(dev_fd(dev), BLKPBSZGET, &dev->phys_block_size) < 0) {
++			log_sys_error("ioctl BLKPBSZGET", name);
++			r = 0;
++			goto out;
 +		}
- 	}
--	return NULL;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
--lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid)
-+static lv_t _lvm_lv_from_uuid(vg_t vg, const char *uuid)
- {
- 	struct lv_list *lvl;
- 	struct id id;
-@@ -322,19 +433,33 @@ lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid)
- 	return NULL;
- }
- 
-+lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid)
-+{
-+	lv_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_lv_from_uuid(vg, uuid);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- int lvm_lv_rename(lv_t lv, const char *new_name)
- {
-+	int rc = 0;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
- 	if (!lv_rename(lv->vg->cmd, lv, new_name)) {
- 		/* FIXME Improve msg */
- 		log_error("LV rename failed.");
--		return -1;
-+		rc = -1;
- 	}
--	return 0;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- int lvm_lv_resize(const lv_t lv, uint64_t new_size)
- {
-+	int rc = 0;
- 	struct lvresize_params lp = { 0 };
-+	struct saved_env e = { 0 };
- 
- 	lp.vg_name = lv->vg->name;
- 	lp.lv_name = lv->name;
-@@ -345,27 +470,32 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
- 	lp.ac_force = 1;	/* Assume the user has a good backup? */
- 	lp.sizeargs = 1;
- 
-+	e = store_user_env(lv->vg->cmd);
-+
- 	if (!lv_resize_prepare(lv->vg->cmd, lv, &lp, &lv->vg->pvs) ||
- 	    !lv_resize(lv->vg->cmd, lv, &lp, &lv->vg->pvs)) {
- 		/* FIXME Improve msg */
- 		log_error("LV resize failed.");
- 		/* FIXME Define consistent symbolic return codes */
--		return -1;
-+		rc = -1;
- 	}
--
--	return 0;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name,
- 						uint64_t max_snap_size)
- {
-+	lv_t rc = NULL;
- 	struct lvm_lv_create_params *lvcp = NULL;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
- 
- 	lvcp = lvm_lv_params_create_snapshot(lv, snap_name, max_snap_size);
- 	if (lvcp) {
--		return lvm_lv_create(lvcp);
-+		rc = lvm_lv_create(lvcp);
- 	}
--	return NULL;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- /* Set defaults for thin pool specific LV parameters */
-@@ -405,7 +535,7 @@ static int _lv_set_pool_params(struct lvcreate_params *lp,
- 	return 1;
- }
- 
--lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
-+static lv_create_params_t _lvm_lv_params_create_thin_pool(vg_t vg,
- 		const char *pool_name, uint64_t size, uint32_t chunk_size,
- 		uint64_t meta_size, lvm_thin_discards_t discard)
- {
-@@ -465,6 +595,18 @@ lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
- 	return lvcp;
- }
- 
-+lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
-+		const char *pool_name, uint64_t size, uint32_t chunk_size,
-+		uint64_t meta_size, lvm_thin_discards_t discard)
-+{
-+	lv_create_params_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_lv_params_create_thin_pool(vg, pool_name, size, chunk_size,
-+										meta_size, discard);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- /* Set defaults for thin LV specific parameters */
- static int _lv_set_thin_params(struct lvcreate_params *lp,
- 				vg_t vg, const char *pool,
-@@ -487,7 +629,7 @@ static int _lv_set_thin_params(struct lvcreate_params *lp,
- 	return 1;
- }
- 
--lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
-+static lv_create_params_t _lvm_lv_params_create_snapshot(const lv_t lv,
- 						 const char *snap_name,
- 						 uint64_t max_snap_size)
- {
-@@ -548,8 +690,19 @@ lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
- 	return lvcp;
- }
- 
-+lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
-+						 const char *snap_name,
-+						 uint64_t max_snap_size)
-+{
-+	lv_create_params_t rc;
-+	struct saved_env e = store_user_env(lv->vg->cmd);
-+	rc = _lvm_lv_params_create_snapshot(lv, snap_name, max_snap_size);
-+	restore_user_env(&e);
-+	return rc;
-+}
- 
--lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
-+static lv_create_params_t _lvm_lv_params_create_thin(const vg_t vg,
-+									const char *pool_name,
- 									const char *lvname, uint64_t size)
- {
- 	struct lvm_lv_create_params *lvcp = NULL;
-@@ -590,6 +743,16 @@ lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_nam
- 	return lvcp;
- }
- 
-+lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
-+									const char *lvname, uint64_t size)
-+{
-+	lv_create_params_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_lv_params_create_thin(vg, pool_name, lvname, size);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- struct lvm_property_value lvm_lv_params_get_property(
- 						const lv_create_params_t params,
- 						const char *name)
-@@ -597,13 +760,14 @@ struct lvm_property_value lvm_lv_params_get_property(
- 	struct lvm_property_value rc = {
- 		.is_valid = 0
- 	};
-+	struct saved_env e = store_user_env(params->vg->cmd);
- 
- 	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
- 		rc = get_property(NULL, NULL, NULL, NULL, NULL, &params->lvp, NULL, name);
- 	} else {
- 		log_error("Invalid lv_create_params parameter");
- 	}
--
-+	restore_user_env(&e);
- 	return rc;
- }
- 
-@@ -611,16 +775,19 @@ int lvm_lv_params_set_property(lv_create_params_t params, const char *name,
- 								struct lvm_property_value *prop)
- {
- 	int rc = -1;
-+	struct saved_env e = store_user_env(params->vg->cmd);
- 
- 	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
- 		rc = set_property(NULL, NULL, NULL, &params->lvp, NULL, name, prop);
- 	} else {
- 		log_error("Invalid lv_create_params parameter");
- 	}
-+
-+	restore_user_env(&e);
- 	return rc;
- }
- 
--lv_t lvm_lv_create(lv_create_params_t params)
-+static lv_t _lvm_lv_create(lv_create_params_t params)
- {
- 	struct lv_list *lvl = NULL;
- 
-@@ -644,3 +811,12 @@ lv_t lvm_lv_create(lv_create_params_t params)
- 	log_error("Invalid lv_create_params parameter");
- 	return NULL;
- }
-+
-+lv_t lvm_lv_create(lv_create_params_t params)
-+{
-+	lv_t rc;
-+	struct saved_env e = store_user_env(params->vg->cmd);
-+	rc = _lvm_lv_create(params);
-+	restore_user_env(&e);
-+	return rc;
-+}
-diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
-index ba77010..d9b4323 100644
---- a/liblvm/lvm_misc.c
-+++ b/liblvm/lvm_misc.c
-@@ -140,3 +140,28 @@ int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
- 	}
- 	return 0;
- }
-+
-+/*
-+ * Store anything that may need to be restored back to the user on library
-+ * call exit.  Currently the only thing we are preserving is the users umask.
-+ */
-+struct saved_env store_user_env(struct cmd_context *cmd)
-+{
-+	struct saved_env env = {0};
-+
-+	if (cmd) {
-+		env.user_umask = umask(cmd->default_settings.umask);
-+	} else {
-+		env.user_umask = umask(0);
-+		umask(env.user_umask);
++		log_debug_devs("%s: physical block size is %u bytes", name, dev->phys_block_size);
 +	}
-+
-+	return env;
-+}
-+
-+void restore_user_env(const struct saved_env *env)
-+{
-+	if (env) {
-+		umask(env->user_umask);
-+	}
-+}
-diff --git a/liblvm/lvm_misc.h b/liblvm/lvm_misc.h
-index b187021..4678338 100644
---- a/liblvm/lvm_misc.h
-+++ b/liblvm/lvm_misc.h
-@@ -17,6 +17,18 @@
- #include "libdevmapper.h"
- #include "lvm2app.h"
- #include "metadata-exported.h"
-+#include "toolcontext.h"
-+
-+#include <sys/types.h>
-+#include <sys/stat.h>
-+
-+struct saved_env
-+{
-+	mode_t user_umask;
-+};
-+
-+struct saved_env store_user_env(struct cmd_context *cmd);
-+void restore_user_env(const struct saved_env *env);
  
- struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
- struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index d540a6c..163ea4f 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -20,6 +20,7 @@
- #include "lvm2app.h"
- #include "locking.h"
- #include "toolcontext.h"
-+#include "lvm_misc.h"
- 
- struct lvm_pv_create_params
- {
-@@ -33,43 +34,75 @@ struct lvm_pv_create_params
- 
- const char *lvm_pv_get_uuid(const pv_t pv)
- {
--	return pv_uuid_dup(pv);
-+	const char *rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = pv_uuid_dup(pv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_pv_get_name(const pv_t pv)
- {
--	return dm_pool_strndup(pv->vg->vgmem, pv_dev_name(pv), NAME_LEN);
-+	const char *rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = dm_pool_strndup(pv->vg->vgmem, pv_dev_name(pv), NAME_LEN);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_pv_get_mda_count(const pv_t pv)
- {
--	return (uint64_t) pv_mda_count(pv);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = (uint64_t) pv_mda_count(pv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_pv_get_dev_size(const pv_t pv)
- {
--	return SECTOR_SIZE * pv_dev_size(pv);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = SECTOR_SIZE * pv_dev_size(pv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_pv_get_size(const pv_t pv)
- {
--	return SECTOR_SIZE * pv_size_field(pv);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = SECTOR_SIZE * pv_size_field(pv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_pv_get_free(const pv_t pv)
- {
--	return SECTOR_SIZE * pv_free(pv);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = SECTOR_SIZE * pv_free(pv);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name)
- {
--	return get_property(pv, NULL, NULL, NULL, NULL, NULL, NULL, name);
-+	struct lvm_property_value rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = get_property(pv, NULL, NULL, NULL, NULL, NULL, NULL, name);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
- 						 const char *name)
- {
--	return get_property(NULL, NULL, NULL, NULL, pvseg, NULL, NULL, name);
-+	struct lvm_property_value rc;
-+	struct saved_env e = store_user_env(pvseg->pv->vg->cmd);
-+	rc = get_property(NULL, NULL, NULL, NULL, pvseg, NULL, NULL, name);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- struct lvm_list_wrapper
-@@ -82,17 +115,20 @@ struct lvm_list_wrapper
- 
- int lvm_pv_remove(lvm_t libh, const char *pv_name)
- {
-+	int rc = 0;
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	struct saved_env e = store_user_env(cmd);
- 
- 	if (!pvremove_single(cmd, pv_name, NULL, 0, 0))
--		return -1;
-+		rc = -1;
- 
--	return 0;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
--#define PV_LIST_MAGIC 0xF005BA11
-+#define PV_LIST_MAGIC 4026907153
- 
--struct dm_list *lvm_list_pvs(lvm_t libh)
-+static struct dm_list *_lvm_list_pvs(lvm_t libh)
- {
- 	struct lvm_list_wrapper *rc = NULL;
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
-@@ -127,11 +163,21 @@ struct dm_list *lvm_list_pvs(lvm_t libh)
- 	return &rc->pvslist;
- }
- 
-+struct dm_list *lvm_list_pvs(lvm_t libh)
-+{
-+	struct dm_list *rc;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
-+	rc = _lvm_list_pvs(libh);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- int lvm_list_pvs_free(struct dm_list *pvlist)
- {
- 	struct lvm_list_wrapper *to_delete;
- 	struct vg_list *vgl;
- 	struct pv_list *pvl;
-+	struct saved_env e;
- 
- 	if (pvlist) {
- 		to_delete = dm_list_struct_base(pvlist, struct lvm_list_wrapper, pvslist);
-@@ -140,6 +186,12 @@ int lvm_list_pvs_free(struct dm_list *pvlist)
- 			return -1;
+ 	if (dev->block_size == -1) {
+ 		if (ioctl(dev_fd(dev), BLKBSZGET, &dev->block_size) < 0) {
+ 			log_sys_error("ioctl BLKBSZGET", name);
+-			return 0;
++			r = 0;
++			goto out;
  		}
- 
-+		/*
-+		 * Need to ensure that pointer is valid before we can use reference to
-+		 * cmd.
-+		 */
-+		e = store_user_env(to_delete->cmd);
-+
- 		dm_list_iterate_items(vgl, &to_delete->vgslist) {
- 			release_vg(vgl->vg);
- 		}
-@@ -149,12 +201,14 @@ int lvm_list_pvs_free(struct dm_list *pvlist)
- 
- 		unlock_vg(to_delete->cmd, VG_GLOBAL);
- 		to_delete->magic = 0xA5A5A5A5;
-+
-+		restore_user_env(&e);
+ 		log_debug_devs("%s: block size is %u bytes", name, dev->block_size);
  	}
  
- 	return 0;
- }
+-	*size = (unsigned int) dev->block_size;
++	*physical_block_size = (unsigned int) dev->phys_block_size;
++	*block_size = (unsigned int) dev->block_size;
++out:
++	if (needs_open)
++		dev_close(dev);
  
--struct dm_list *lvm_pv_list_pvsegs(pv_t pv)
-+static struct dm_list *_lvm_pv_list_pvsegs(pv_t pv)
- {
- 	struct dm_list *list;
- 	pvseg_list_t *pvseg;
-@@ -183,18 +237,32 @@ struct dm_list *lvm_pv_list_pvsegs(pv_t pv)
- 	return list;
- }
- 
-+struct dm_list *lvm_pv_list_pvsegs(pv_t pv)
-+{
-+	struct dm_list *rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = _lvm_pv_list_pvsegs(pv);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- pv_t lvm_pv_from_name(vg_t vg, const char *name)
- {
-+	pv_t rc = NULL;
- 	struct pv_list *pvl;
-+	struct saved_env e = store_user_env(vg->cmd);
- 
- 	dm_list_iterate_items(pvl, &vg->pvs)
--		if (!strcmp(name, pv_dev_name(pvl->pv)))
--			return pvl->pv;
-+		if (!strcmp(name, pv_dev_name(pvl->pv))) {
-+			rc = pvl->pv;
-+			break;
-+		}
- 
--	return NULL;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
--pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
-+static pv_t _lvm_pv_from_uuid(vg_t vg, const char *uuid)
- {
- 	struct pv_list *pvl;
- 	struct id id;
-@@ -216,7 +284,16 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
- 	return NULL;
- }
- 
--int lvm_pv_resize(const pv_t pv, uint64_t new_size)
-+pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
-+{
-+	pv_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_pv_from_uuid(vg, uuid);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
-+static int _lvm_pv_resize(const pv_t pv, uint64_t new_size)
- {
- 	uint64_t size = new_size >> SECTOR_SHIFT;
- 
-@@ -236,6 +313,15 @@ int lvm_pv_resize(const pv_t pv, uint64_t new_size)
- 	return 0;
- }
- 
-+int lvm_pv_resize(const pv_t pv, uint64_t new_size)
-+{
-+	int rc;
-+	struct saved_env e = store_user_env(pv->vg->cmd);
-+	rc = _lvm_pv_resize(pv, new_size);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- /*
-  * Common internal code to create a parameter passing object
-  */
-@@ -280,7 +366,11 @@ static struct lvm_pv_create_params *_lvm_pv_params_create(
- 
- pv_create_params_t lvm_pv_params_create(lvm_t libh, const char *pv_name)
- {
--	return _lvm_pv_params_create(libh, pv_name, NULL);
-+	pv_create_params_t rc;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
-+	rc = _lvm_pv_params_create(libh, pv_name, NULL);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- struct lvm_property_value lvm_pv_params_get_property(
-@@ -290,10 +380,13 @@ struct lvm_property_value lvm_pv_params_get_property(
- 	struct lvm_property_value rc = {
- 		.is_valid = 0
- 	};
-+	struct saved_env e;
- 
- 	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
-+		e = store_user_env((struct cmd_context *)(params->libh));
- 		rc = get_property(NULL, NULL, NULL, NULL, NULL, NULL, &params->pv_p,
- 							name);
-+		restore_user_env(&e);
- 	} else {
- 		log_error("Invalid pv_create_params parameter");
- 	}
-@@ -305,9 +398,12 @@ int lvm_pv_params_set_property(pv_create_params_t params, const char *name,
- 								struct lvm_property_value *prop)
- {
- 	int rc = -1;
-+	struct saved_env e;
- 
- 	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
-+		e = store_user_env((struct cmd_context *)(params->libh));
- 		rc = set_property(NULL, NULL, NULL, NULL, &params->pv_p, name, prop);
-+		restore_user_env(&e);
- 	} else {
- 		log_error("Invalid pv_create_params parameter");
- 	}
-@@ -334,21 +430,27 @@ static int _pv_create(pv_create_params_t params)
- int lvm_pv_create(lvm_t libh, const char *pv_name, uint64_t size)
- {
- 	struct lvm_pv_create_params pp;
-+	int rc = -1;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
- 
--	if (!_lvm_pv_params_create(libh, pv_name, &pp))
--		return -1;
--
--	pp.pv_p.size = size;
-+	if (_lvm_pv_params_create(libh, pv_name, &pp)) {
-+		pp.pv_p.size = size;
-+		rc = _pv_create(&pp);
-+	}
- 
--	return _pv_create(&pp);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- int lvm_pv_create_adv(pv_create_params_t params)
- {
- 	int rc = -1;
-+	struct saved_env e;
- 
- 	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
-+		e = store_user_env((struct cmd_context *)(params->libh));
- 		rc = _pv_create(params);
-+		restore_user_env(&e);
- 	} else {
- 		log_error("Invalid pv_create_params parameter");
- 	}
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index d3c8ae2..76c5c63 100644
---- a/liblvm/lvm_vg.c
-+++ b/liblvm/lvm_vg.c
-@@ -25,47 +25,49 @@
- 
- int lvm_vg_add_tag(vg_t vg, const char *tag)
- {
--	if (vg_read_error(vg))
--		return -1;
--
--	if (!vg_check_write_mode(vg))
--		return -1;
-+	int rc = -1;
-+	struct saved_env e = store_user_env(vg->cmd);
- 
--	if (!vg_change_tag(vg, tag, 1))
--		return -1;
--	return 0;
-+	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
-+		vg_change_tag(vg, tag, 1))
-+		rc = 0;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- 
- int lvm_vg_remove_tag(vg_t vg, const char *tag)
- {
--	if (vg_read_error(vg))
--		return -1;
--
--	if (!vg_check_write_mode(vg))
--		return -1;
-+	int rc = -1;
-+	struct saved_env e = store_user_env(vg->cmd);
- 
--	if (!vg_change_tag(vg, tag, 0))
--		return -1;
--	return 0;
-+	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
-+		vg_change_tag(vg, tag, 0))
-+		rc = 0;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- 
- vg_t lvm_vg_create(lvm_t libh, const char *vg_name)
- {
--	struct volume_group *vg;
-+	struct volume_group *vg = NULL;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
- 
- 	vg = vg_create((struct cmd_context *)libh, vg_name);
- 	/* FIXME: error handling is still TBD */
- 	if (vg_read_error(vg)) {
- 		release_vg(vg);
--		return NULL;
-+		vg = NULL;
-+	} else {
-+		vg->open_mode = 'w';
- 	}
--	vg->open_mode = 'w';
-+
-+	restore_user_env(&e);
- 	return (vg_t) vg;
- }
- 
--int lvm_vg_extend(vg_t vg, const char *device)
-+static int _lvm_vg_extend(vg_t vg, const char *device)
- {
- 	struct pvcreate_params pp;
- 
-@@ -93,31 +95,41 @@ int lvm_vg_extend(vg_t vg, const char *device)
- 	return 0;
- }
- 
-+int lvm_vg_extend(vg_t vg, const char *device)
-+{
-+	int rc = 0;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_vg_extend(vg, device);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- int lvm_vg_reduce(vg_t vg, const char *device)
- {
--	if (vg_read_error(vg))
--		return -1;
--	if (!vg_check_write_mode(vg))
--		return -1;
-+	int rc = -1;
-+	struct saved_env e = store_user_env(vg->cmd);
- 
--	if (!vg_reduce(vg, device))
--		return -1;
--	return 0;
-+	if (!vg_read_error(vg) && vg_check_write_mode(vg) && vg_reduce(vg, device))
-+		rc = 0;
-+
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- int lvm_vg_set_extent_size(vg_t vg, uint32_t new_size)
- {
--	if (vg_read_error(vg))
--		return -1;
--	if (!vg_check_write_mode(vg))
--		return -1;
-+	int rc = -1;
-+	struct saved_env e = store_user_env(vg->cmd);
- 
--	if (!vg_set_extent_size(vg, new_size / SECTOR_SIZE))
--		return -1;
--	return 0;
-+	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
-+		vg_set_extent_size(vg, new_size / SECTOR_SIZE))
-+		rc = 0;
-+
-+	restore_user_env(&e);
-+	return rc;
- }
- 
--int lvm_vg_write(vg_t vg)
-+static int _lvm_vg_write(vg_t vg)
- {
- 	struct pv_list *pvl;
- 
-@@ -159,31 +171,41 @@ int lvm_vg_write(vg_t vg)
- 	return 0;
- }
- 
-+int lvm_vg_write(vg_t vg)
-+{
-+	int rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_vg_write(vg);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- int lvm_vg_close(vg_t vg)
- {
-+	struct saved_env e = store_user_env(vg->cmd);
- 	if (vg_read_error(vg) == FAILED_LOCKING)
- 		release_vg(vg);
- 	else
- 		unlock_and_release_vg(vg->cmd, vg, vg->name);
-+	restore_user_env(&e);
- 	return 0;
- }
- 
- int lvm_vg_remove(vg_t vg)
- {
--	if (vg_read_error(vg))
--		return -1;
--	if (!vg_check_write_mode(vg))
--		return -1;
-+	int rc = -1;
-+	struct saved_env e = store_user_env(vg->cmd);
- 
--	if (!vg_remove_check(vg))
--		return -1;
--
--	vg_remove_pvs(vg);
-+	if (!vg_read_error(vg) && vg_check_write_mode(vg) && vg_remove_check(vg)) {
-+		vg_remove_pvs(vg);
-+		rc = 0;
-+	}
- 
--	return 0;
-+	restore_user_env(&e);
-+	return rc;
- }
- 
--vg_t lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
-+static vg_t _lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
- 		  uint32_t flags)
- {
- 	uint32_t internal_flags = 0;
-@@ -208,7 +230,17 @@ vg_t lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
- 	return (vg_t) vg;
- }
- 
--struct dm_list *lvm_vg_list_pvs(vg_t vg)
-+vg_t lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
-+		  uint32_t flags)
-+{
-+	vg_t rc;
-+	struct saved_env e = store_user_env((struct cmd_context*)libh);
-+	rc = _lvm_vg_open(libh, vgname, mode, flags);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
-+static struct dm_list *_lvm_vg_list_pvs(vg_t vg)
- {
- 	struct dm_list *list;
- 	pv_list_t *pvs;
-@@ -235,7 +267,16 @@ struct dm_list *lvm_vg_list_pvs(vg_t vg)
- 	return list;
- }
- 
--struct dm_list *lvm_vg_list_lvs(vg_t vg)
-+struct dm_list *lvm_vg_list_pvs(vg_t vg)
-+{
-+	struct dm_list *rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_vg_list_pvs(vg);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
-+static struct dm_list *_lvm_vg_list_lvs(vg_t vg)
- {
- 	struct dm_list *list;
- 	lv_list_t *lvs;
-@@ -262,86 +303,159 @@ struct dm_list *lvm_vg_list_lvs(vg_t vg)
- 	return list;
- }
- 
-+struct dm_list *lvm_vg_list_lvs(vg_t vg)
-+{
-+	struct dm_list *rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = _lvm_vg_list_lvs(vg);
-+	restore_user_env(&e);
-+	return rc;
-+}
-+
- struct dm_list *lvm_vg_get_tags(const vg_t vg)
- {
--	return tag_list_copy(vg->vgmem, &vg->tags);
-+	struct dm_list *rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = tag_list_copy(vg->vgmem, &vg->tags);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_get_seqno(const vg_t vg)
- {
--	return vg_seqno(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_seqno(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_is_clustered(const vg_t vg)
- {
--	return vg_is_clustered(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_is_clustered(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_is_exported(const vg_t vg)
- {
--	return vg_is_exported(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_is_exported(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_is_partial(const vg_t vg)
- {
--	return (vg_missing_pv_count(vg) != 0);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = (vg_missing_pv_count(vg) != 0);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- /* FIXME: invalid handle? return INTMAX? */
- uint64_t lvm_vg_get_size(const vg_t vg)
- {
--	return SECTOR_SIZE * vg_size(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = SECTOR_SIZE * vg_size(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_get_free_size(const vg_t vg)
- {
--	return SECTOR_SIZE * vg_free(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = SECTOR_SIZE * vg_free(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_get_extent_size(const vg_t vg)
- {
--	return SECTOR_SIZE * vg_extent_size(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = SECTOR_SIZE * vg_extent_size(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_get_extent_count(const vg_t vg)
- {
--	return vg_extent_count(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_extent_count(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_get_free_extent_count(const vg_t vg)
- {
--	return vg_free_count(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_free_count(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_get_pv_count(const vg_t vg)
- {
--	return vg_pv_count(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_pv_count(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_get_max_pv(const vg_t vg)
- {
--	return vg_max_pv(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_max_pv(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- uint64_t lvm_vg_get_max_lv(const vg_t vg)
- {
--	return vg_max_lv(vg);
-+	uint64_t rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_max_lv(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_vg_get_uuid(const vg_t vg)
- {
--	return vg_uuid_dup(vg);
-+	const char *rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = vg_uuid_dup(vg);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- const char *lvm_vg_get_name(const vg_t vg)
- {
--	return dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
-+	const char *rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- 
- struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name)
- {
--	return get_property(NULL, vg, NULL, NULL, NULL, NULL, NULL, name);
-+	struct lvm_property_value rc;
-+	struct saved_env e = store_user_env(vg->cmd);
-+	rc = get_property(NULL, vg, NULL, NULL, NULL, NULL, NULL, name);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- int lvm_vg_set_property(const vg_t vg, const char *name,
-@@ -352,29 +466,41 @@ int lvm_vg_set_property(const vg_t vg, const char *name,
- 	 * that worst case we have two copies which will get freed when the vg gets
- 	 * released.
- 	 */
-+	int rc;
-+	struct saved_env e = store_user_env(vg->cmd);
- 
- 	if (value->is_valid && value->is_string && value->value.string) {
- 		value->value.string = dm_pool_strndup(vg->vgmem, value->value.string,
- 				strlen(value->value.string) + 1);
- 	}
- 
--	return set_property(NULL, vg, NULL, NULL, NULL, name, value);
-+	rc = set_property(NULL, vg, NULL, NULL, NULL, name, value);
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- struct dm_list *lvm_list_vg_names(lvm_t libh)
- {
--	if (!lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh))
--		return NULL;
-+	struct dm_list *rc = NULL;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
- 
--	return get_vgnames((struct cmd_context *)libh, 0);
-+	if (lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh)) {
-+		rc = get_vgnames((struct cmd_context *)libh, 0);
-+	}
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- struct dm_list *lvm_list_vg_uuids(lvm_t libh)
- {
--	if (!lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh))
--		return NULL;
-+	struct dm_list *rc = NULL;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
- 
--	return get_vgids((struct cmd_context *)libh, 0);
-+	if (lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh)) {
-+		rc = get_vgids((struct cmd_context *)libh, 0);
-+	}
-+	restore_user_env(&e);
-+	return rc;
+-	return 1;
++	return r;
  }
  
  /*
-@@ -382,21 +508,29 @@ struct dm_list *lvm_list_vg_uuids(lvm_t libh)
-  */
- int lvm_scan(lvm_t libh)
+@@ -168,13 +189,14 @@ static int _aligned_io(struct device_area *where, char *buffer,
+ 		       int should_write)
  {
-+	int rc = 0;
-+	struct saved_env e = store_user_env((struct cmd_context *)libh);
-+
- 	if (!lvmcache_label_scan((struct cmd_context *)libh, 2))
--		return -1;
--	return 0;
-+		rc = -1;
-+
-+	restore_user_env(&e);
-+	return rc;
+ 	char *bounce, *bounce_buf;
++	unsigned int physical_block_size = 0;
+ 	unsigned int block_size = 0;
+ 	uintptr_t mask;
+ 	struct device_area widened;
+ 	int r = 0;
+ 
+ 	if (!(where->dev->flags & DEV_REGULAR) &&
+-	    !_get_block_size(where->dev, &block_size))
++	    !dev_get_block_size(where->dev, &physical_block_size, &block_size))
+ 		return_0;
+ 
+ 	if (!block_size)
+@@ -370,36 +392,6 @@ int dev_discard_blocks(struct device *dev, uint64_t offset_bytes, uint64_t size_
+ 	return _dev_discard_blocks(dev, offset_bytes, size_bytes);
  }
  
- int lvm_lv_name_validate(const vg_t vg, const char *name)
- {
-+	int rc = -1;
- 	name_error_t name_error;
- 
-+	struct saved_env e = store_user_env(vg->cmd);
-+
- 	name_error = validate_name_detailed(name);
- 
- 	if (NAME_VALID == name_error) {
- 		if (apply_lvname_restrictions(name)) {
- 			if (!find_lv_in_vg(vg, name)) {
--				return 0;
-+				rc = 0;
- 			} else {
- 				log_errno(EINVAL, "LV name exists in VG");
- 			}
-@@ -404,14 +538,20 @@ int lvm_lv_name_validate(const vg_t vg, const char *name)
- 	} else {
- 		display_name_error(name_error);
- 	}
--	return -1;
-+
-+	restore_user_env(&e);
-+	return rc;
- }
- 
- int lvm_vg_name_validate(lvm_t libh, const char *name)
- {
-+	int rc = -1;
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	struct saved_env e = store_user_env(cmd);
- 
- 	if (validate_new_vg_name(cmd, name))
+-/* FIXME Unused
+-int dev_get_sectsize(struct device *dev, uint32_t *size)
+-{
+-	int fd;
+-	int s;
+-	const char *name = dev_name(dev);
+-
+-	if ((fd = open(name, O_RDONLY)) < 0) {
+-		log_sys_error("open", name);
 -		return 0;
--	return -1;
-+		rc = 0;
-+
-+	restore_user_env(&e);
-+	return rc;
+-	}
+-
+-	if (ioctl(fd, BLKSSZGET, &s) < 0) {
+-		log_sys_error("ioctl BLKSSZGET", name);
+-		if (close(fd))
+-			log_sys_error("close", name);
+-		return 0;
+-	}
+-
+-	if (close(fd))
+-		log_sys_error("close", name);
+-
+-	*size = (uint32_t) s;
+-
+-	log_very_verbose("%s: sector size is %" PRIu32 " bytes", name, *size);
+-
+-	return 1;
+-}
+-*/
+-
+ void dev_flush(struct device *dev)
+ {
+ 	if (!(dev->flags & DEV_REGULAR) && ioctl(dev->fd, BLKFLSBUF, 0) >= 0)
+@@ -571,6 +563,7 @@ static void _close(struct device *dev)
+ 	if (close(dev->fd))
+ 		log_sys_error("close", dev_name(dev));
+ 	dev->fd = -1;
++	dev->phys_block_size = -1;
+ 	dev->block_size = -1;
+ 	dm_list_del(&dev->open_list);
+ 
+diff --git a/lib/device/device.h b/lib/device/device.h
+index e42f664..35d7505 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -42,6 +42,7 @@ struct device {
+ 	int open_count;
+ 	int error_count;
+ 	int max_error_count;
++	int phys_block_size;
+ 	int block_size;
+ 	int read_ahead;
+ 	uint32_t flags;
+@@ -66,8 +67,8 @@ struct device_area {
+ /*
+  * All io should use these routines.
+  */
++int dev_get_block_size(struct device *dev, unsigned int *phys_block_size, unsigned int *block_size);
+ int dev_get_size(const struct device *dev, uint64_t *size);
+-int dev_get_sectsize(struct device *dev, uint32_t *size);
+ int dev_get_read_ahead(struct device *dev, uint32_t *read_ahead);
+ int dev_discard_blocks(struct device *dev, uint64_t offset_bytes, uint64_t size_bytes);
+ 
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 9d547bb..1cce72c 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -903,6 +903,7 @@ int vg_remove_snapshot(struct logical_volume *cow);
+ 
+ int vg_check_status(const struct volume_group *vg, uint64_t status);
+ 
++int vg_check_pv_dev_block_sizes(const struct volume_group *vg);
+ 
+ /*
+  * Check if the VG reached maximal LVs count (if set)
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 5f2addd..84d3200 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -619,6 +619,40 @@ int vg_remove(struct volume_group *vg)
+ 	return ret;
  }
+ 
++int check_dev_block_size_for_vg(struct device *dev, const struct volume_group *vg,
++				unsigned int *max_phys_block_size_found)
++{
++	unsigned int phys_block_size, block_size;
++
++	if (!(dev_get_block_size(dev, &phys_block_size, &block_size)))
++		return_0;
++
++	if (phys_block_size > *max_phys_block_size_found)
++		*max_phys_block_size_found = phys_block_size;
++
++	if (phys_block_size >> SECTOR_SHIFT > vg->extent_size) {
++		log_error("Physical extent size used for volume group %s "
++			  "is less than physical block size that %s uses.",
++			   vg->name, dev_name(dev));
++		return 0;
++	}
++
++	return 1;
++}
++
++int vg_check_pv_dev_block_sizes(const struct volume_group *vg)
++{
++	struct pv_list *pvl;
++	unsigned int max_phys_block_size_found = 0;
++
++	dm_list_iterate_items(pvl, &vg->pvs) {
++		if (!check_dev_block_size_for_vg(pvl->pv->dev, vg, &max_phys_block_size_found))
++			return 0;
++	}
++
++	return 1;
++}
++
+ /*
+  * Extend a VG by a single PV / device path
+  *
+@@ -626,10 +660,12 @@ int vg_remove(struct volume_group *vg)
+  * - vg: handle of volume group to extend by 'pv_name'
+  * - pv_name: device path of PV to add to VG
+  * - pp: parameters to pass to implicit pvcreate; if NULL, do not pvcreate
++ * - max_phys_block_size: largest physical block size found amongst PVs in a VG
+  *
+  */
+ static int vg_extend_single_pv(struct volume_group *vg, char *pv_name,
+-			       struct pvcreate_params *pp)
++			       struct pvcreate_params *pp,
++			       unsigned int *max_phys_block_size)
+ {
+ 	struct physical_volume *pv;
+ 
+@@ -643,11 +679,18 @@ static int vg_extend_single_pv(struct volume_group *vg, char *pv_name,
+ 		if (!(pv = pvcreate_vol(vg->cmd, pv_name, pp, 0)))
+ 			return_0;
+ 	}
+-	if (!add_pv_to_vg(vg, pv_name, pv, pp)) {
+-		free_pv_fid(pv);
+-		return_0;
+-	}
++
++	if (!(check_dev_block_size_for_vg(pv->dev, (const struct volume_group *) vg,
++					  max_phys_block_size)))
++		goto_bad;
++
++	if (!add_pv_to_vg(vg, pv_name, pv, pp))
++		goto_bad;
++
+ 	return 1;
++bad:
++	free_pv_fid(pv);
++	return 0;
+ }
+ 
+ /*
+@@ -665,6 +708,7 @@ int vg_extend(struct volume_group *vg, int pv_count, const char *const *pv_names
+ {
+ 	int i;
+ 	char *pv_name;
++	unsigned int max_phys_block_size = 0;
+ 
+ 	if (_vg_bad_status_bits(vg, RESIZEABLE_VG))
+ 		return_0;
+@@ -676,7 +720,7 @@ int vg_extend(struct volume_group *vg, int pv_count, const char *const *pv_names
+ 			return 0;
+ 		}
+ 		dm_unescape_colons_and_at_signs(pv_name, NULL, NULL);
+-		if (!vg_extend_single_pv(vg, pv_name, pp)) {
++		if (!vg_extend_single_pv(vg, pv_name, pp, &max_phys_block_size)) {
+ 			log_error("Unable to add physical volume '%s' to "
+ 				  "volume group '%s'.", pv_name, vg->name);
+ 			dm_free(pv_name);
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 0ab63f2..fef4b3f 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -347,6 +347,9 @@ int pvremove_single(struct cmd_context *cmd, const char *pv_name,
+ struct physical_volume *pvcreate_vol(struct cmd_context *cmd, const char *pv_name,
+                                      struct pvcreate_params *pp, int write_now);
+ 
++int check_dev_block_size_for_vg(struct device *dev, const struct volume_group *vg,
++				unsigned int *max_phys_block_size_found);
++
+ /* Manipulate PV structures */
+ int pv_add(struct volume_group *vg, struct physical_volume *pv);
+ int pv_remove(struct volume_group *vg, struct physical_volume *pv);
+diff --git a/man/vgchange.8.in b/man/vgchange.8.in
+index e687587..823d134 100644
+--- a/man/vgchange.8.in
++++ b/man/vgchange.8.in
+@@ -183,8 +183,10 @@ minimize metadata read and write overhead.
+ .BR \-s ", " \-\-physicalextentsize " " \fIPhysicalExtentSize [ \fIBbBsSkKmMgGtTpPeE ]
+ Changes the physical extent size on physical volumes of this volume group.
+ A size suffix (k for kilobytes up to t for terabytes) is optional, megabytes
+-is the default if no suffix is present.
+-The default is 4 MiB and it must be at least 1 KiB and a power of 2.
++is the default if no suffix is present. The value must be at least 1 sector
++for LVM2 format (where the sector size is the largest sector size of the
++PVs currently used in the VG) or 8KiB for LVM1 format and it must be a
++power of 2. The default is 4 MiB.
+ 
+ Before increasing the physical extent size, you might need to use lvresize,
+ pvresize and/or pvmove so that everything fits.  For example, every
+diff --git a/man/vgcreate.8.in b/man/vgcreate.8.in
+index 577fee2..e62df9e 100644
+--- a/man/vgcreate.8.in
++++ b/man/vgcreate.8.in
+@@ -94,8 +94,10 @@ The default value is \fIunmanaged\fP.
+ .BR \-s ", " \-\-physicalextentsize " " \fIPhysicalExtentSize [ \fIbBsSkKmMgGtTpPeE ]
+ Sets the physical extent size on physical volumes of this volume group.
+ A size suffix (k for kilobytes up to t for terabytes) is optional, megabytes
+-is the default if no suffix is present.
+-The default is 4 MiB and it must be at least 1 KiB and a power of 2.
++is the default if no suffix is present. The value must be at least 1 sector
++for LVM2 format (where the sector size is the largest sector size of the
++PVs currently used in the VG) or 8KiB for LVM1 format and it must be a
++power of 2. The default is 4 MiB.
+ 
+ Once this value has been set, it is difficult to change it without recreating
+ the volume group which would involve backing up and restoring data on any
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index f9811d2..af4b002 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -368,6 +368,12 @@ static int _vgchange_pesize(struct cmd_context *cmd, struct volume_group *vg)
+ 	if (!vg_set_extent_size(vg, extent_size))
+ 		return_0;
+ 
++	if (!vg_check_pv_dev_block_sizes(vg)) {
++		log_error("Failed to change physical extent size for VG %s.",
++			   vg->name);
++		return 0;
++	}
++
+ 	return 1;
+ }
+ 
 
 
