@@ -1,68 +1,95 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 13 Dec 2013 15:53:35 +0000 (UTC)
-Subject: master - config: fix metadata/disk_areas config setting registration
-Message-ID: <20131213155335.29079610C3@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 12 Dec 2013 13:31:05 +0000 (UTC)
+Subject: master - configure: update recent change
+Message-ID: <20131212133105.C323460F9D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d443bfac216a3eedcd752d532f6f90a339681b44
-Commit:        d443bfac216a3eedcd752d532f6f90a339681b44
-Parent:        32080c4ff748e4afbeacf9dbc4a98bfea658a392
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Dec 13 16:43:01 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Dec 13 16:52:51 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b424b6398be64aec6a5772bb847f78b1941a0fe1
+Commit:        b424b6398be64aec6a5772bb847f78b1941a0fe1
+Parent:        fd0068a66ee8f8ad03ac0c86b9ab3f6a8a368ac9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Dec 12 14:29:15 2013 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Dec 12 14:29:15 2013 +0100
 
-config: fix metadata/disk_areas config setting registration
+configure: update recent change
 
-The metadata/disk_areas setting was incorrectly registered as
-"string" configuration option but it's a section where each area
-is defined in its own subsection with "start_sector", "size" and "id"
-setting.
-
-This setting is not officialy supported, it's undocumented and it's
-used solely for debugging.
-
-Note: At this moment, it does not seem to be working with lvmetad!
+Full path needs to be supplied.
+Keep on using 'autodetect' keyword as default argument.
 ---
- lib/config/config_settings.h  |    7 ++++++-
- lib/format_text/format-text.c |    3 ++-
- 2 files changed, 8 insertions(+), 2 deletions(-)
+ configure.in |   32 ++++++++++++++++----------------
+ 1 files changed, 16 insertions(+), 16 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 0e0e469..1546b3f 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -205,7 +205,12 @@ cfg(metadata_pvmetadatasize_CFG, "pvmetadatasize", metadata_CFG_SECTION, CFG_ADV
- cfg(metadata_pvmetadataignore_CFG, "pvmetadataignore", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_BOOL, DEFAULT_PVMETADATAIGNORE, vsn(2, 2, 69), NULL)
- cfg(metadata_stripesize_CFG, "stripesize", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_INT, DEFAULT_STRIPESIZE, vsn(1, 0, 0), NULL)
- cfg_array(metadata_dirs_CFG, "dirs", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL)
--cfg(metadata_disk_areas_CFG, "disk_areas", metadata_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_ADVANCED | CFG_UNSUPPORTED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL)
-+
-+cfg_section(metadata_disk_areas_CFG_SUBSECTION, "disk_areas", metadata_CFG_SECTION, CFG_ADVANCED | CFG_UNSUPPORTED, vsn(1, 0, 0), NULL)
-+cfg_section(disk_area_CFG_SUBSECTION, "disk_area", metadata_disk_areas_CFG_SUBSECTION, CFG_NAME_VARIABLE | CFG_ADVANCED | CFG_UNSUPPORTED, vsn(1, 0, 0), NULL)
-+cfg(disk_area_start_sector_CFG, "start_sector", disk_area_CFG_SUBSECTION, CFG_ADVANCED | CFG_UNSUPPORTED, CFG_TYPE_INT, 0, vsn(1, 0, 0), NULL)
-+cfg(disk_area_size_CFG, "size", disk_area_CFG_SUBSECTION, CFG_ADVANCED | CFG_UNSUPPORTED, CFG_TYPE_INT, 0, vsn(1, 0, 0), NULL)
-+cfg(disk_area_id_CFG, "id", disk_area_CFG_SUBSECTION, CFG_ADVANCED | CFG_UNSUPPORTED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL)
+diff --git a/configure.in b/configure.in
+index cf297e8..3e0e508 100644
+--- a/configure.in
++++ b/configure.in
+@@ -413,16 +413,16 @@ AC_ARG_WITH(thin,
+ 	    THIN=$withval, THIN=internal)
+ AC_ARG_WITH(thin-check,
+ 	    AC_HELP_STRING([--with-thin-check=PATH],
+-			   [thin_check tool: [[thin_check]]]),
+-			   THIN_CHECK_CMD=$withval, THIN_CHECK_CMD="thin_check")
++			   [thin_check tool: [[autodetect]]]),
++			   THIN_CHECK_CMD=$withval, THIN_CHECK_CMD="autodetect")
+ AC_ARG_WITH(thin-dump,
+ 	    AC_HELP_STRING([--with-thin-dump=PATH],
+-			   [thin_dump tool: [[thin_dump]]]),
+-			   THIN_DUMP_CMD=$withval, THIN_DUMP_CMD="thin_dump")
++			   [thin_dump tool: [[autodetect]]]),
++			   THIN_DUMP_CMD=$withval, THIN_DUMP_CMD="autodetect")
+ AC_ARG_WITH(thin-repair,
+ 	    AC_HELP_STRING([--with-thin-repair=PATH],
+-			   [thin_repair tool: [[thin_repair]]]),
+-			   THIN_REPAIR_CMD=$withval, THIN_REPAIR_CMD="thin_repair")
++			   [thin_repair tool: [[autodetect]]]),
++			   THIN_REPAIR_CMD=$withval, THIN_REPAIR_CMD="autodetect")
  
- cfg(report_aligned_CFG, "aligned", report_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_REP_ALIGNED, vsn(1, 0, 0), NULL)
- cfg(report_buffered_CFG, "buffered", report_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_REP_BUFFERED, vsn(1, 0, 0), NULL)
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index eb5c9e9..22d772f 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -2458,7 +2458,8 @@ struct format_type *create_text_format(struct cmd_context *cmd)
+ AC_MSG_RESULT($THIN)
+ 
+@@ -438,29 +438,29 @@ esac
+ case "$THIN" in
+   internal|shared)
+ 	# Empty means a config way to ignore thin checking
+-	if test "$THIN_CHECK_CMD" = "thin_check"; then
+-		AC_PATH_TOOL(THIN_CHECK_CMD, thin_check, thin_check)
+-		test "$THIN_CHECK_CMD" = "thin_check" && {
++	if test "$THIN_CHECK_CMD" = "autodetect"; then
++		AC_PATH_TOOL(THIN_CHECK_CMD, thin_check)
++		test -z "$THIN_CHECK_CMD" && {
+ 			AC_MSG_WARN([thin_check not found in path $PATH])
+-			THIN_CHECK_CMD=thin_check
++			THIN_CHECK_CMD=/usr/sbin/thin_check
+ 			THIN_CONFIGURE_WARN=y
  		}
- 	}
- 
--	if ((cn = find_config_tree_node(cmd, metadata_disk_areas_CFG, NULL))) {
-+	if ((cn = find_config_tree_node(cmd, metadata_disk_areas_CFG_SUBSECTION, NULL))) {
-+		/* FIXME: disk_areas do not work with lvmetad - the "id" can't be found. */
- 		for (cn = cn->child; cn; cn = cn->sib) {
- 			if (!_get_config_disk_area(cmd, cn, &mda_lists->raws))
- 				goto_bad;
+ 	fi
+ 	# Empty means a config way to ignore thin checking
+-	if test "$THIN_DUMP_CMD" = "thin_dump"; then
+-		AC_PATH_TOOL(THIN_DUMP_CMD, thin_dump, thin_dump)
+-		test "$THIN_DUMP_CMD" = "thin_dump" && {
++	if test "$THIN_DUMP_CMD" = "autodetect"; then
++		AC_PATH_TOOL(THIN_DUMP_CMD, thin_dump)
++		test -z "$THIN_DUMP_CMD" && {
+ 			AC_MSG_WARN(thin_dump not found in path $PATH)
+-			THIN_DUMP_CMD=thin_dump
++			THIN_DUMP_CMD=/usr/sbin/thin_dump
+ 			THIN_CONFIGURE_WARN=y
+ 		}
+ 	fi
+ 	# Empty means a config way to ignore thin checking
+-	if test "$THIN_REPAIR_CMD" = "thin_repair"; then
++	if test "$THIN_REPAIR_CMD" = "autodetect"; then
+ 		AC_PATH_TOOL(THIN_REPAIR_CMD, thin_repair)
+ 		test -z "$THIN_REPAIR_CMD" && {
+ 			AC_MSG_WARN(thin_repair not found in path $PATH)
+-			THIN_REPAIR_CMD=thin_repair
++			THIN_REPAIR_CMD=/usr/sbin/thin_repair
+ 			THIN_CONFIGURE_WARN=y
+ 		}
+ 	fi
 
 
