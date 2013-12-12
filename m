@@ -1,174 +1,359 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 12 Dec 2013 12:43:45 +0000 (UTC)
-Subject: master - dev-cache: skip double stat() call on each _insert
-Message-ID: <20131212124345.3B7506024C@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 12 Dec 2013 12:45:56 +0000 (UTC)
+Subject: master - autoreconf: latest changes
+Message-ID: <20131212124556.8E58260355@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c0e44d5a2e82aa160d48e83992e7ca342bc4bdf
-Commit:        6c0e44d5a2e82aa160d48e83992e7ca342bc4bdf
-Parent:        7c5feaed3be5c26f5782e4e891ba99862f1e968f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 25 10:01:37 2011 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 12 13:42:28 2013 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aefab64e690cb5fbbd28a07d27a4f510d8aca32b
+Commit:        aefab64e690cb5fbbd28a07d27a4f510d8aca32b
+Parent:        6c0e44d5a2e82aa160d48e83992e7ca342bc4bdf
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Dec 12 13:45:48 2013 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Dec 12 13:45:48 2013 +0100
 
-dev-cache: skip double stat() call on each _insert
+autoreconf: latest changes
 
-When the device is inserted in dev_name_confirmed() stat() is
-called twice as _insert() has it's own stat() call.
-
-Extend _insert() parameter with struct stat* - which could be used
-if it has been just obtained.  When NULL is passed code is
-doing its own stat() call as before.
 ---
- WHATS_NEW              |    1 +
- lib/device/dev-cache.c |   49 ++++++++++++++++++++++++++++++-----------------
- 2 files changed, 32 insertions(+), 18 deletions(-)
+ configure |  265 +++++++++++++++++++++++++++++++++++++++++++++++++++++--------
+ 1 files changed, 230 insertions(+), 35 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 704d0be..78657dd 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.105 -
- =====================================
-+  Optimize double call of stat() for cached devices.
-   Enable support for thin provisioning for default configuration.
-   Improve process_each_lv_in_vg() tag processing.
-   Reodered and simplified logging code.
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index bbdde92..fabdcbb 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -50,7 +50,8 @@ static struct {
- #define _free(x) dm_pool_free(_cache.mem, (x))
- #define _strdup(x) dm_pool_strdup(_cache.mem, (x))
+diff --git a/configure b/configure
+index ff7185d..f48c89b 100755
+--- a/configure
++++ b/configure
+@@ -1618,10 +1618,10 @@ Optional Packages:
+   --with-replicators=TYPE replicator support: internal/shared/none
+                           [[TYPE=none]]
+   --with-thin=TYPE        thin provisioning support: internal/shared/none
+-                          [[TYPE=none]]
+-  --with-thin-check=PATH  thin_check tool: [[autodetect]]
+-  --with-thin-dump=PATH   thin_dump tool: [[autodetect]]
+-  --with-thin-repair=PATH thin_repair tool: [[autodetect]]
++                          [[TYPE=internal]]
++  --with-thin-check=PATH  thin_check tool: [[thin_check]]
++  --with-thin-dump=PATH   thin_dump tool: [[thin_dump]]
++  --with-thin-repair=PATH thin_repair tool: [[thin_repair]]
+   --with-ocfdir=DIR       install OCF files in DIR
+                           [[PREFIX/lib/ocf/resource.d/lvm2]]
+   --with-default-pid-dir=PID_DIR
+@@ -7146,9 +7146,34 @@ $as_echo_n "checking whether to include thin provisioning... " >&6; }
+ if test "${with_thin+set}" = set; then :
+   withval=$with_thin; THIN=$withval
+ else
+-  THIN=none
++  THIN=internal
+ fi
  
--static int _insert(const char *path, int rec, int check_with_udev_db);
-+static int _insert(const char *path, const struct stat *info,
-+		   int rec, int check_with_udev_db);
- 
- /* Setup non-zero members of passed zeroed 'struct device' */
- static void _dev_init(struct device *dev, int max_error_count)
-@@ -442,7 +443,7 @@ static int _insert_dir(const char *dir)
- 				return_0;
- 
- 			_collapse_slashes(path);
--			r &= _insert(path, 1, 0);
-+			r &= _insert(path, NULL, 1, 0);
- 			dm_free(path);
- 
- 			free(dirent[n]);
-@@ -528,14 +529,14 @@ static int _insert_udev_dir(struct udev *udev, const char *dir)
- 			log_very_verbose("udev failed to return a device node for entry %s.",
- 					 entry_name);
- 		else
--			r &= _insert(node_name, 0, 0);
-+			r &= _insert(node_name, NULL, 0, 0);
- 
- 		udev_list_entry_foreach(symlink_entry, udev_device_get_devlinks_list_entry(device)) {
- 			if (!(symlink_name = udev_list_entry_get_name(symlink_entry)))
- 				log_very_verbose("udev failed to return a symlink name for entry %s.",
- 						 entry_name);
- 			else
--				r &= _insert(symlink_name, 0, 0);
-+				r &= _insert(symlink_name, NULL, 0, 0);
- 		}
- 
- 		udev_device_unref(device);
-@@ -589,28 +590,33 @@ static void _insert_dirs(struct dm_list *dirs)
- 
- #endif	/* UDEV_SYNC_SUPPORT */
- 
--static int _insert(const char *path, int rec, int check_with_udev_db)
-+static int _insert(const char *path, const struct stat *info,
-+		   int rec, int check_with_udev_db)
- {
--	struct stat info;
-+	struct stat tinfo;
-+	int r = 0;
- 
--	if (stat(path, &info) < 0) {
--		log_sys_very_verbose("stat", path);
--		return 0;
-+	if (!info) {
-+		if (stat(path, &tinfo) < 0) {
-+			log_sys_very_verbose("stat", path);
-+			return 0;
-+		}
-+		info = &tinfo;
- 	}
- 
--	if (check_with_udev_db && !_device_in_udev_db(info.st_rdev)) {
-+	if (check_with_udev_db && !_device_in_udev_db(info->st_rdev)) {
- 		log_very_verbose("%s: Not in udev db", path);
- 		return 0;
- 	}
- 
--	if (S_ISDIR(info.st_mode)) {	/* add a directory */
-+	if (S_ISDIR(info->st_mode)) {	/* add a directory */
- 		/* check it's not a symbolic link */
--		if (lstat(path, &info) < 0) {
-+		if (lstat(path, &tinfo) < 0) {
- 			log_sys_very_verbose("lstat", path);
- 			return 0;
- 		}
- 
--		if (S_ISLNK(info.st_mode)) {
-+		if (S_ISLNK(tinfo.st_mode)) {
- 			log_debug_devs("%s: Symbolic link to directory", path);
- 			return 1;
- 		}
-@@ -618,12 +624,12 @@ static int _insert(const char *path, int rec, int check_with_udev_db)
- 		if (rec && !_insert_dir(path))
- 			return_0;
- 	} else {		/* add a device */
--		if (!S_ISBLK(info.st_mode)) {
-+		if (!S_ISBLK(info->st_mode)) {
- 			log_debug_devs("%s: Not a block device", path);
- 			return 1;
- 		}
- 
--		if (!_insert_dev(path, info.st_rdev))
-+		if (!_insert_dev(path, info->st_rdev))
- 			return_0;
- 	}
- 
-@@ -881,7 +887,7 @@ const char *dev_name_confirmed(struct device *dev, int quiet)
- 		if (dm_list_size(&dev->aliases) > 1) {
- 			dm_list_del(dev->aliases.n);
- 			if (!r)
--				_insert(name, 0, obtain_device_list_from_udev());
-+				_insert(name, &buf, 0, obtain_device_list_from_udev());
- 			continue;
- 		}
- 
-@@ -903,13 +909,20 @@ struct device *dev_cache_get(const char *name, struct dev_filter *f)
- 		return d;
- 
- 	/* If the entry's wrong, remove it */
--	if (d && (stat(name, &buf) || (buf.st_rdev != d->dev))) {
-+	if (stat(name, &buf) < 0) {
-+		if (d)
-+			dm_hash_remove(_cache.names, name);
-+		log_sys_very_verbose("stat", name);
-+		return NULL;
-+	}
 +
-+	if (d && (buf.st_rdev != d->dev)) {
- 		dm_hash_remove(_cache.names, name);
- 		d = NULL;
- 	}
++# Check whether --with-thin-check was given.
++if test "${with_thin_check+set}" = set; then :
++  withval=$with_thin_check; THIN_CHECK_CMD=$withval
++else
++  THIN_CHECK_CMD="thin_check"
++fi
++
++
++# Check whether --with-thin-dump was given.
++if test "${with_thin_dump+set}" = set; then :
++  withval=$with_thin_dump; THIN_DUMP_CMD=$withval
++else
++  THIN_DUMP_CMD="thin_dump"
++fi
++
++
++# Check whether --with-thin-repair was given.
++if test "${with_thin_repair+set}" = set; then :
++  withval=$with_thin_repair; THIN_REPAIR_CMD=$withval
++else
++  THIN_REPAIR_CMD="thin_repair"
++fi
++
++
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: $THIN" >&5
+ $as_echo "$THIN" >&6; }
  
- 	if (!d) {
--		_insert(name, 0, obtain_device_list_from_udev());
-+		_insert(name, &buf, 0, obtain_device_list_from_udev());
- 		d = (struct device *) dm_hash_lookup(_cache.names, name);
- 		if (!d) {
- 			_full_scan(0);
+@@ -7160,20 +7185,15 @@ $as_echo "#define THIN_INTERNAL 1" >>confdefs.h
+   *) as_fn_error $? "--with-thin parameter invalid ($THIN)" "$LINENO" 5 ;;
+ esac
+ 
++# Test if necessary thin tools are available
++# if not - use plain defaults and warn user
+ case "$THIN" in
+   internal|shared)
+-
+-# Check whether --with-thin-check was given.
+-if test "${with_thin_check+set}" = set; then :
+-  withval=$with_thin_check; THIN_CHECK_CMD=$withval
+-else
+-  THIN_CHECK_CMD="autodetect"
+-fi
+-
+ 	# Empty means a config way to ignore thin checking
+-	if test "$THIN_CHECK_CMD" = "autodetect"; then
+-		# Extract the first word of "thin_check", so it can be a program name with args.
+-set dummy thin_check; ac_word=$2
++	if test "$THIN_CHECK_CMD" = "thin_check"; then
++		if test -n "$ac_tool_prefix"; then
++  # Extract the first word of "${ac_tool_prefix}thin_check", so it can be a program name with args.
++set dummy ${ac_tool_prefix}thin_check; ac_word=$2
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+ $as_echo_n "checking for $ac_word... " >&6; }
+ if test "${ac_cv_path_THIN_CHECK_CMD+set}" = set; then :
+@@ -7212,20 +7232,75 @@ $as_echo "no" >&6; }
+ fi
+ 
+ 
+-		test -z "$THIN_CHECK_CMD" && as_fn_error $? "thin_check not found in path $PATH" "$LINENO" 5
+-	fi
++fi
++if test -z "$ac_cv_path_THIN_CHECK_CMD"; then
++  ac_pt_THIN_CHECK_CMD=$THIN_CHECK_CMD
++  # Extract the first word of "thin_check", so it can be a program name with args.
++set dummy thin_check; ac_word=$2
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
++$as_echo_n "checking for $ac_word... " >&6; }
++if test "${ac_cv_path_ac_pt_THIN_CHECK_CMD+set}" = set; then :
++  $as_echo_n "(cached) " >&6
++else
++  case $ac_pt_THIN_CHECK_CMD in
++  [\\/]* | ?:[\\/]*)
++  ac_cv_path_ac_pt_THIN_CHECK_CMD="$ac_pt_THIN_CHECK_CMD" # Let the user override the test with a path.
++  ;;
++  *)
++  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
++for as_dir in $PATH
++do
++  IFS=$as_save_IFS
++  test -z "$as_dir" && as_dir=.
++    for ac_exec_ext in '' $ac_executable_extensions; do
++  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
++    ac_cv_path_ac_pt_THIN_CHECK_CMD="$as_dir/$ac_word$ac_exec_ext"
++    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
++    break 2
++  fi
++done
++  done
++IFS=$as_save_IFS
+ 
+-# Check whether --with-thin-dump was given.
+-if test "${with_thin_dump+set}" = set; then :
+-  withval=$with_thin_dump; THIN_DUMP_CMD=$withval
++  ;;
++esac
++fi
++ac_pt_THIN_CHECK_CMD=$ac_cv_path_ac_pt_THIN_CHECK_CMD
++if test -n "$ac_pt_THIN_CHECK_CMD"; then
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_THIN_CHECK_CMD" >&5
++$as_echo "$ac_pt_THIN_CHECK_CMD" >&6; }
+ else
+-  THIN_DUMP_CMD="autodetect"
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++fi
++
++  if test "x$ac_pt_THIN_CHECK_CMD" = x; then
++    THIN_CHECK_CMD="thin_check"
++  else
++    case $cross_compiling:$ac_tool_warned in
++yes:)
++{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
++$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
++ac_tool_warned=yes ;;
++esac
++    THIN_CHECK_CMD=$ac_pt_THIN_CHECK_CMD
++  fi
++else
++  THIN_CHECK_CMD="$ac_cv_path_THIN_CHECK_CMD"
+ fi
+ 
++		test "$THIN_CHECK_CMD" = "thin_check" && {
++			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: thin_check not found in path $PATH" >&5
++$as_echo "$as_me: WARNING: thin_check not found in path $PATH" >&2;}
++			THIN_CHECK_CMD=thin_check
++			THIN_CONFIGURE_WARN=y
++		}
++	fi
+ 	# Empty means a config way to ignore thin checking
+-	if test "$THIN_DUMP_CMD" = "autodetect"; then
+-		# Extract the first word of "thin_dump", so it can be a program name with args.
+-set dummy thin_dump; ac_word=$2
++	if test "$THIN_DUMP_CMD" = "thin_dump"; then
++		if test -n "$ac_tool_prefix"; then
++  # Extract the first word of "${ac_tool_prefix}thin_dump", so it can be a program name with args.
++set dummy ${ac_tool_prefix}thin_dump; ac_word=$2
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+ $as_echo_n "checking for $ac_word... " >&6; }
+ if test "${ac_cv_path_THIN_DUMP_CMD+set}" = set; then :
+@@ -7264,20 +7339,75 @@ $as_echo "no" >&6; }
+ fi
+ 
+ 
+-		test -z "$THIN_DUMP_CMD" && as_fn_error $? "thin_dump not found in path $PATH" "$LINENO" 5
+-	fi
++fi
++if test -z "$ac_cv_path_THIN_DUMP_CMD"; then
++  ac_pt_THIN_DUMP_CMD=$THIN_DUMP_CMD
++  # Extract the first word of "thin_dump", so it can be a program name with args.
++set dummy thin_dump; ac_word=$2
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
++$as_echo_n "checking for $ac_word... " >&6; }
++if test "${ac_cv_path_ac_pt_THIN_DUMP_CMD+set}" = set; then :
++  $as_echo_n "(cached) " >&6
++else
++  case $ac_pt_THIN_DUMP_CMD in
++  [\\/]* | ?:[\\/]*)
++  ac_cv_path_ac_pt_THIN_DUMP_CMD="$ac_pt_THIN_DUMP_CMD" # Let the user override the test with a path.
++  ;;
++  *)
++  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
++for as_dir in $PATH
++do
++  IFS=$as_save_IFS
++  test -z "$as_dir" && as_dir=.
++    for ac_exec_ext in '' $ac_executable_extensions; do
++  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
++    ac_cv_path_ac_pt_THIN_DUMP_CMD="$as_dir/$ac_word$ac_exec_ext"
++    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
++    break 2
++  fi
++done
++  done
++IFS=$as_save_IFS
+ 
+-# Check whether --with-thin-repair was given.
+-if test "${with_thin_repair+set}" = set; then :
+-  withval=$with_thin_repair; THIN_REPAIR_CMD=$withval
++  ;;
++esac
++fi
++ac_pt_THIN_DUMP_CMD=$ac_cv_path_ac_pt_THIN_DUMP_CMD
++if test -n "$ac_pt_THIN_DUMP_CMD"; then
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_THIN_DUMP_CMD" >&5
++$as_echo "$ac_pt_THIN_DUMP_CMD" >&6; }
++else
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++fi
++
++  if test "x$ac_pt_THIN_DUMP_CMD" = x; then
++    THIN_DUMP_CMD="thin_dump"
++  else
++    case $cross_compiling:$ac_tool_warned in
++yes:)
++{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
++$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
++ac_tool_warned=yes ;;
++esac
++    THIN_DUMP_CMD=$ac_pt_THIN_DUMP_CMD
++  fi
+ else
+-  THIN_REPAIR_CMD="autodetect"
++  THIN_DUMP_CMD="$ac_cv_path_THIN_DUMP_CMD"
+ fi
+ 
++		test "$THIN_DUMP_CMD" = "thin_dump" && {
++			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: thin_dump not found in path $PATH" >&5
++$as_echo "$as_me: WARNING: thin_dump not found in path $PATH" >&2;}
++			THIN_DUMP_CMD=thin_dump
++			THIN_CONFIGURE_WARN=y
++		}
++	fi
+ 	# Empty means a config way to ignore thin checking
+-	if test "$THIN_REPAIR_CMD" = "autodetect"; then
+-		# Extract the first word of "thin_repair", so it can be a program name with args.
+-set dummy thin_repair; ac_word=$2
++	if test "$THIN_REPAIR_CMD" = "thin_repair"; then
++		if test -n "$ac_tool_prefix"; then
++  # Extract the first word of "${ac_tool_prefix}thin_repair", so it can be a program name with args.
++set dummy ${ac_tool_prefix}thin_repair; ac_word=$2
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+ $as_echo_n "checking for $ac_word... " >&6; }
+ if test "${ac_cv_path_THIN_REPAIR_CMD+set}" = set; then :
+@@ -7316,7 +7446,69 @@ $as_echo "no" >&6; }
+ fi
+ 
+ 
+-		test -z "$THIN_REPAIR_CMD" && as_fn_error $? "thin_repair not found in path $PATH" "$LINENO" 5
++fi
++if test -z "$ac_cv_path_THIN_REPAIR_CMD"; then
++  ac_pt_THIN_REPAIR_CMD=$THIN_REPAIR_CMD
++  # Extract the first word of "thin_repair", so it can be a program name with args.
++set dummy thin_repair; ac_word=$2
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
++$as_echo_n "checking for $ac_word... " >&6; }
++if test "${ac_cv_path_ac_pt_THIN_REPAIR_CMD+set}" = set; then :
++  $as_echo_n "(cached) " >&6
++else
++  case $ac_pt_THIN_REPAIR_CMD in
++  [\\/]* | ?:[\\/]*)
++  ac_cv_path_ac_pt_THIN_REPAIR_CMD="$ac_pt_THIN_REPAIR_CMD" # Let the user override the test with a path.
++  ;;
++  *)
++  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
++for as_dir in $PATH
++do
++  IFS=$as_save_IFS
++  test -z "$as_dir" && as_dir=.
++    for ac_exec_ext in '' $ac_executable_extensions; do
++  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
++    ac_cv_path_ac_pt_THIN_REPAIR_CMD="$as_dir/$ac_word$ac_exec_ext"
++    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
++    break 2
++  fi
++done
++  done
++IFS=$as_save_IFS
++
++  ;;
++esac
++fi
++ac_pt_THIN_REPAIR_CMD=$ac_cv_path_ac_pt_THIN_REPAIR_CMD
++if test -n "$ac_pt_THIN_REPAIR_CMD"; then
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_THIN_REPAIR_CMD" >&5
++$as_echo "$ac_pt_THIN_REPAIR_CMD" >&6; }
++else
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++fi
++
++  if test "x$ac_pt_THIN_REPAIR_CMD" = x; then
++    THIN_REPAIR_CMD=""
++  else
++    case $cross_compiling:$ac_tool_warned in
++yes:)
++{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
++$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
++ac_tool_warned=yes ;;
++esac
++    THIN_REPAIR_CMD=$ac_pt_THIN_REPAIR_CMD
++  fi
++else
++  THIN_REPAIR_CMD="$ac_cv_path_THIN_REPAIR_CMD"
++fi
++
++		test -z "$THIN_REPAIR_CMD" && {
++			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: thin_repair not found in path $PATH" >&5
++$as_echo "$as_me: WARNING: thin_repair not found in path $PATH" >&2;}
++			THIN_REPAIR_CMD=thin_repair
++			THIN_CONFIGURE_WARN=y
++		}
+ 	fi
+ 	;;
+ esac
+@@ -12574,6 +12766,9 @@ $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
+ fi
+ 
+ 
++test -n "$THIN_CONFIGURE_WARN" && { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Support for thin provisioning is limited since some thin provisioning tools are missing!" >&5
++$as_echo "$as_me: WARNING: Support for thin provisioning is limited since some thin provisioning tools are missing!" >&2;}
++
+ if test x$ODIRECT != xyes; then
+   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Warning: O_DIRECT disabled: low-memory pvmove may lock up" >&5
+ $as_echo "$as_me: WARNING: Warning: O_DIRECT disabled: low-memory pvmove may lock up" >&2;}
 
 
