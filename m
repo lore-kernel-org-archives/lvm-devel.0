@@ -1,42 +1,53 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed,  4 May 2016 17:12:18 +0000 (UTC)
-Subject: master - pvcreate: improve debug message
-Message-ID: <20160504171218.65E1960E9D@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Sun, 15 Dec 2013 16:19:15 +0000 (UTC)
+Subject: master - pvscan --cache: Error out on pool-format VGs for now.
+Message-ID: <20131215161915.C6FC761097@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c1e6011644abd00dac7f71baf330f69bd076381
-Commit:        7c1e6011644abd00dac7f71baf330f69bd076381
-Parent:        1df6769acabd99fe062ebac1c8290da1ef1020f7
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed May 4 12:11:13 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 4 12:11:13 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bd3edb2566189e1e3e016933e397a58a90bc81ea
+Commit:        bd3edb2566189e1e3e016933e397a58a90bc81ea
+Parent:        97fbbbc150cdaea359370912a7b5a9a546490e98
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Sun Dec 15 16:31:35 2013 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Sun Dec 15 16:44:47 2013 +0100
 
-pvcreate: improve debug message
+pvscan --cache: Error out on pool-format VGs for now.
 
-state what the printed UUID is.
 ---
- tools/toollib.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/cache/lvmetad.c |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index c86900a..f1fe5b1 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3818,8 +3818,8 @@ static int _pvcreate_check_single(struct cmd_context *cmd,
- 	if (!found)
- 		return 1;
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 1ead9f8..a2ebefb 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -20,6 +20,8 @@
+ #include "lvmcache.h"
+ #include "lvmetad-client.h"
+ #include "format-text.h" // TODO for disk_locn, used as a DA representation
++#include "format_pool.h" // for FMT_POOL_NAME
++#include "format1.h" // for FMT_LVM1_NAME
+ #include "crc.h"
  
--	log_debug("Checking device %s for pvcreate %.32s.",
--		  pv_dev_name(pv), pv->dev->pvid[0] ? pv->dev->pvid : "");
-+	log_debug("Checking pvcreate arg %s which has existing PVID: %.32s.",
-+		  pv_dev_name(pv), pv->dev->pvid[0] ? pv->dev->pvid : "<none>");
+ static daemon_handle _lvmetad;
+@@ -904,6 +906,13 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
  
- 	/*
- 	 * This test will fail if the device belongs to an MD array.
+ 	lvmcache_foreach_mda(info, _lvmetad_pvscan_single, &baton);
+ 
++	if (lvmcache_fmt(info) == get_format_by_name(cmd, FMT_POOL_NAME)) {
++		log_error("WARNING: Ignoring old GFS pool metadata on device %s "
++			  "when using lvmetad", dev_name(dev));
++		lvmcache_fmt(info)->ops->destroy_instance(baton.fid);
++		return 0;
++	}
++
+ 	/* LVM1 VGs have no MDAs. */
+ 	if (!baton.vg && lvmcache_fmt(info) == get_format_by_name(cmd, "lvm1"))
+ 		baton.vg = ((struct metadata_area *) dm_list_first(&baton.fid->metadata_areas_in_use))->
 
 
