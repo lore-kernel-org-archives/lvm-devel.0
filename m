@@ -1,73 +1,71 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 23 May 2016 17:05:15 +0000 (UTC)
-Subject: master - test: lvmetad-pvscan-filter
-Message-ID: <20160523170515.2E73460D7B@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 17 Dec 2013 13:09:10 +0000 (UTC)
+Subject: master - tree_action: destroy devices from failing activation
+Message-ID: <20131217130910.068BB6004F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d3efd7ab80f200148f8c133521320642aa9d221
-Commit:        3d3efd7ab80f200148f8c133521320642aa9d221
-Parent:        9b640c36841e2790731d54a5830dcea8203f9e80
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 5 15:16:38 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon May 23 12:00:25 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=24639be558a9d4561a34f2b76485b227aed8e9c3
+Commit:        24639be558a9d4561a34f2b76485b227aed8e9c3
+Parent:        94137b72edf232a0e82758c1669f1f60f2df3c50
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Dec 17 13:49:03 2013 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Dec 17 14:08:54 2013 +0100
 
-test: lvmetad-pvscan-filter
+tree_action: destroy devices from failing activation
 
-update for pvscan changes
+When activation fails - we may leak large tree of partially loaded
+devices in the dm table (i.e. failure in snapshot activation)
+
+The best we can do here is try to deactivate whole device and
+remove as much inactive table entries as we can.
 ---
- test/shell/lvmetad-pvscan-filter.sh |   30 ++++++++++++++++++++++++------
- 1 files changed, 24 insertions(+), 6 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/activate/dev_manager.c |   10 ++++++++--
+ 2 files changed, 9 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvmetad-pvscan-filter.sh b/test/shell/lvmetad-pvscan-filter.sh
-index 91bb930..cb3fcdc 100644
---- a/test/shell/lvmetad-pvscan-filter.sh
-+++ b/test/shell/lvmetad-pvscan-filter.sh
-@@ -22,17 +22,35 @@ min=$(($(stat -L --printf=0x%T "$dev2")))
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a7522f9..59820b2 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Try to remove any unusable devices from dm table when activation fails.
+   Dependency scan counts with snapshots and external origins.
+   Make sure VG extent size is always greater or equal to PV phys. block size.
+   Optimize double call of stat() for cached devices.
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 7b0b6e2..a4147d3 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -2754,15 +2754,21 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 			goto_out;
  
- # Filter out device, pvscan should trigger
- # clearing of the device from lvmetad cache.
--aux hide_dev "$dev2"
--pvscan --cache "$dev2" 2>&1 | grep "not found"
-+
-+# We can't use aux hide_dev here because that
-+# changes the global_filter which triggers a
-+# token mismatch rescan by subsequent pvscan
-+# commands instead of the single-dev scans
-+# that are testing here.
-+
-+mv "$dev2" "$dev2-HIDDEN"
-+
-+pvscan --cache "$dev2" 2>&1 | tee out || true
-+grep "not found" out
-+
- # pvscan with --major/--minor does not fail: lvmetad needs to
- # be notified about device removal on REMOVE uevent, hence
- # this should not fail so udev does not grab a "failed" state
- # incorrectly. We notify device addition and removal with
- # exactly the same command "pvscan --cache" - in case of removal,
- # this is detected by nonexistence of the device itself.
--pvscan --cache --major $maj --minor $min 2>&1 | grep "not found"
--aux unhide_dev "$dev2"
+ 		/* Preload any devices required before any suspensions */
+-		if (!dm_tree_preload_children(root, dlid, DLID_SIZE))
++		if (!dm_tree_preload_children(root, dlid, DLID_SIZE)) {
++		bad:
++			if (!dm_tree_deactivate_children(root, dlid, DLID_SIZE))
++				stack;
++			if (!_remove_lv_symlinks(dm, root))
++				log_warn("Failed to remove all device symlinks associated with %s.", lv->name);
+ 			goto_out;
++		}
  
--pvscan --cache "$dev2" 2>&1 | not grep "not found"
--pvscan --cache --major $maj --minor $min 2>&1 | not grep "not found"
-+pvscan --cache --major $maj --minor $min 2>&1 | tee out || true
-+grep "not found" out
-+
-+# aux unhide_dev "$dev2"
-+mv "$dev2-HIDDEN" "$dev2"
-+
-+pvscan --cache "$dev2" 2>&1 | tee out || true
-+not grep "not found" out
-+
-+pvscan --cache --major $maj --minor $min 2>&1 | tee out || true
-+not grep "not found" out
-+
- pvs | grep "$dev2"
+ 		if (dm_tree_node_size_changed(root))
+ 			dm->flush_required = 1;
+ 
+ 		if (action == ACTIVATE) {
+ 			if (!dm_tree_activate_children(root, dlid, DLID_SIZE))
+-				goto_out;
++				goto_bad;
+ 			if (!_create_lv_symlinks(dm, root))
+ 				log_warn("Failed to create symlinks for %s.", lv->name);
+ 		}
 
 
