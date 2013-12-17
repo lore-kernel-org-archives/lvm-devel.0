@@ -1,196 +1,45 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 18 Dec 2013 08:28:03 +0100
-Subject: [PATCH] Try to convert existing lock on volume reactivation for clustered volume groups.
-In-Reply-To: <52B110EF.6070304@activecloud.com>
-References: <52A14E1A.3030509@activecloud.com>
-	<52A18F2B.5070607@redhat.com>	<52A1DB94.1020001@activecloud.com>
-	<52A1DFDE.8050706@redhat.com>	<52A29120.2000203@activecloud.com>
-	<52B110EF.6070304@activecloud.com>
-Message-ID: <52B14E83.8040303@redhat.com>
+From: Ville Skyttä <ville.skytta@iki.fi>
+Date: Tue, 17 Dec 2013 20:26:10 +0200
+Subject: [PATCH 1/2] Man page syntax fixes.
+Message-ID: <1387304771-19004-1-git-send-email-ville.skytta@iki.fi>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 18.12.2013 04:05, Raman Shishniou napsal(a):
-> Hello,
->
-> Is something wrong with this patch?
+---
+ man/dmsetup.8.in | 2 +-
+ man/lvm.8.in     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-I believe the patch is fine. I just need to extend the patch for other 
-supported clvmd modes and enhance singlenode to be able to test it works and 
-I'm currently busy with fixing other discovered bugs.
-
-Zdenek
-
-
-
->
-> On 12/07/2013 06:08 AM, Raman Shishniou wrote:
->> lvchange/vgchange should set LCK_CONVERT flag in lock_lv_vol() for
->> activated clustered volumes to try to convert shared lock to exclusive,
->> and vice versa. It makes possible to create snapshot of opened volume
->> in case of other cluster nodes deactivate it and drop exclusiveness
->> after all snapshots are deleted.
->>
->> Signed-off-by: Raman Shishniou <rommer@activecloud.com>
->> ---
->>   WHATS_NEW                     |    1 +
->>   daemons/clvmd/lvm-functions.c |    4 ++--
->>   lib/locking/cluster_locking.c |    3 +++
->>   lib/locking/locking.c         |    9 +++++++--
->>   lib/locking/locking.h         |   10 ++++++----
->>   lib/metadata/lv.c             |   18 ++++++++++++++----
->>   6 files changed, 33 insertions(+), 12 deletions(-)
->>
->> diff --git a/WHATS_NEW b/WHATS_NEW
->> index 72a61e3..1a53423 100644
->> --- a/WHATS_NEW
->> +++ b/WHATS_NEW
->> @@ -1,5 +1,6 @@
->>   Version 2.02.105 -
->>   =====================================
->> +  Add support to convert exclusive/shared lock on active clustered volume.
->>     Return success when inserting dirs and links into device cache.
->>     Test for remote exclusive activation after activation fails.
->>     Support lvconvert --merge for thin snapshots.
->> diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
->> index b15732f..451d286 100644
->> --- a/daemons/clvmd/lvm-functions.c
->> +++ b/daemons/clvmd/lvm-functions.c
->> @@ -137,7 +137,7 @@ static const char *decode_flags(unsigned char flags)
->>                  flags & LCK_DMEVENTD_MONITOR_MODE ? "DMEVENTD_MONITOR|" : "",
->>                  flags & LCK_ORIGIN_ONLY_MODE ? "ORIGIN_ONLY|" : "",
->>                  flags & LCK_TEST_MODE ? "TEST|" : "",
->> -               flags & LCK_CONVERT ? "CONVERT|" : "",
->> +               flags & LCK_CONVERT_MODE ? "CONVERT|" : "",
->>                  flags & LCK_DMEVENTD_MONITOR_IGNORE ? "DMEVENTD_MONITOR_IGNORE|" : "");
->>
->>          if (len > 1)
->> @@ -374,7 +374,7 @@ static int do_activate_lv(char *resource, unsigned char command, unsigned char l
->>           * of exclusive lock to shared one during activation.
->>           */
->>          if (command & LCK_CLUSTER_VG) {
->> -               status = hold_lock(resource, mode, LCKF_NOQUEUE | (lock_flags & LCK_CONVERT ? LCKF_CONVERT:0));
->> +               status = hold_lock(resource, mode, LCKF_NOQUEUE | (lock_flags & LCK_CONVERT_MODE ? LCKF_CONVERT:0));
->>                  if (status) {
->>                          /* Return an LVM-sensible error for this.
->>                           * Forcing EIO makes the upper level return this text
->> diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
->> index 7cbb8f1..c94f92b 100644
->> --- a/lib/locking/cluster_locking.c
->> +++ b/lib/locking/cluster_locking.c
->> @@ -328,6 +328,9 @@ static int _lock_for_cluster(struct cmd_context *cmd, unsigned char clvmd_cmd,
->>          if (flags & LCK_REVERT)
->>                  args[1] |= LCK_REVERT_MODE;
->>
->> +       if (flags & LCK_CONVERT)
->> +               args[1] |= LCK_CONVERT_MODE;
->> +
->>          if (mirror_in_sync())
->>                  args[1] |= LCK_MIRROR_NOSYNC_MODE;
->>
->> diff --git a/lib/locking/locking.c b/lib/locking/locking.c
->> index 9433e40..831388e 100644
->> --- a/lib/locking/locking.c
->> +++ b/lib/locking/locking.c
->> @@ -552,8 +552,13 @@ int activate_lv_excl(struct cmd_context *cmd, struct logical_volume *lv)
->>          if (lv_is_active_exclusive_locally(lv))
->>                  return 1;
->>
->> -       if (!activate_lv_excl_local(cmd, lv))
->> -               return_0;
->> +       if (lv_is_active_locally(lv)) {
->> +               if (!activate_lv_excl_local_convert(cmd, lv))
->> +                       return_0;
->> +       } else {
->> +               if (!activate_lv_excl_local(cmd, lv))
->> +                       return_0;
->> +       }
->>
->>          if (lv_is_active_exclusive(lv))
->>                  return 1;
->> diff --git a/lib/locking/locking.h b/lib/locking/locking.h
->> index aa42138..cfc7f38 100644
->> --- a/lib/locking/locking.h
->> +++ b/lib/locking/locking.h
->> @@ -103,6 +103,7 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
->>   #define LCK_CACHE      0x00000100U     /* Operation on cache only using P_ lock */
->>   #define LCK_ORIGIN_ONLY        0x00000200U     /* Operation should bypass any snapshots */
->>   #define LCK_REVERT     0x00000400U     /* Revert any incomplete change */
->> +#define LCK_CONVERT    0x00001000U     /* Try lock conversion */
->>
->>   /*
->>    * Additional lock bits for cluster communication via args[1]
->> @@ -110,10 +111,7 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
->>   #define LCK_PARTIAL_MODE               0x01    /* Partial activation? */
->>   #define LCK_MIRROR_NOSYNC_MODE         0x02    /* Mirrors don't require sync */
->>   #define LCK_DMEVENTD_MONITOR_MODE      0x04    /* Register with dmeventd */
->> -
->> -/* Not yet used. */
->> -#define LCK_CONVERT                    0x08    /* Convert existing lock */
->> -
->> +#define LCK_CONVERT_MODE               0x08    /* Convert existing lock */
->>   #define LCK_TEST_MODE                  0x10    /* Test mode: No activation */
->>   #define LCK_ORIGIN_ONLY_MODE           0x20    /* Same as above */
->>   #define LCK_DMEVENTD_MONITOR_IGNORE     0x40   /* Whether to ignore dmeventd */
->> @@ -183,6 +181,8 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
->>   #define activate_lv(cmd, lv)   lock_lv_vol(cmd, lv, LCK_LV_ACTIVATE | LCK_HOLD)
->>   #define activate_lv_excl_local(cmd, lv)        \
->>                                  lock_lv_vol(cmd, lv, LCK_LV_EXCLUSIVE | LCK_HOLD | LCK_LOCAL)
->> +#define activate_lv_excl_local_convert(cmd, lv)        \
->> +                               lock_lv_vol(cmd, lv, LCK_LV_EXCLUSIVE | LCK_HOLD | LCK_LOCAL | LCK_CONVERT)
->>   #define activate_lv_excl_remote(cmd, lv)       \
->>                                  lock_lv_vol(cmd, lv, LCK_LV_EXCLUSIVE | LCK_HOLD | LCK_REMOTE)
->>
->> @@ -191,6 +191,8 @@ int activate_lv_excl(struct cmd_context *cmd, struct logical_volume *lv);
->>
->>   #define activate_lv_local(cmd, lv)     \
->>          lock_lv_vol(cmd, lv, LCK_LV_ACTIVATE | LCK_HOLD | LCK_LOCAL)
->> +#define activate_lv_local_convert(cmd, lv)     \
->> +       lock_lv_vol(cmd, lv, LCK_LV_ACTIVATE | LCK_HOLD | LCK_LOCAL | LCK_CONVERT)
->>   #define deactivate_lv_local(cmd, lv)   \
->>          lock_lv_vol(cmd, lv, LCK_LV_DEACTIVATE | LCK_LOCAL)
->>   #define drop_cached_metadata(vg)       \
->> diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
->> index 3e1458c..2cec240 100644
->> --- a/lib/metadata/lv.c
->> +++ b/lib/metadata/lv.c
->> @@ -773,13 +773,23 @@ deactivate:
->>                  if (_lv_is_exclusive(lv)) {
->>                          log_verbose("Activating logical volume \"%s\" exclusively locally.",
->>                                      lv->name);
->> -                       if (!activate_lv_excl_local(cmd, lv))
->> -                               return_0;
->> +                       if (vg_is_clustered(lv->vg) && lv_is_active_locally(lv)) {
->> +                               if (!activate_lv_excl_local_convert(cmd, lv))
->> +                                       return_0;
->> +                       } else {
->> +                               if (!activate_lv_excl_local(cmd, lv))
->> +                                       return_0;
->> +                       }
->>                  } else {
->>                          log_verbose("Activating logical volume \"%s\" locally.",
->>                                      lv->name);
->> -                       if (!activate_lv_local(cmd, lv))
->> -                               return_0;
->> +                       if (vg_is_clustered(lv->vg) && lv_is_active_locally(lv)) {
->> +                               if (!activate_lv_local_convert(cmd, lv))
->> +                                       return_0;
->> +                       } else {
->> +                               if (!activate_lv_local(cmd, lv))
->> +                                       return_0;
->> +                       }
->>                  }
->>                  break;
->>          case CHANGE_AE:
->>
->
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
->
+diff --git a/man/dmsetup.8.in b/man/dmsetup.8.in
+index 93621a5..599c843 100644
+--- a/man/dmsetup.8.in
++++ b/man/dmsetup.8.in
+@@ -484,7 +484,7 @@ Default subsystem is LVM.
+ .B status
+ .RB [ \-\-target
+ .IR target_type ]
+-.RB [ \-\-\noflush ]
++.RB [ \-\-noflush ]
+ .RI [ device_name ]
+ .br
+ Outputs status information for each of the device's targets.
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 13e66d0..02a8c0d 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -46,7 +46,7 @@ being created in the filesystem for them.
+ \fBdumpconfig\fP \(em Display the configuration information after
+ loading \fBlvm.conf\fP(5) and any other configuration files.
+ .TP
+-\fBdevtypes\fP \(dm Display the recognised built-in block device types.
++\fBdevtypes\fP \(em Display the recognised built-in block device types.
+ .TP
+ \fBformats\fP \(em Display recognised metadata formats.
+ .TP
+-- 
+1.8.3.1
 
 
