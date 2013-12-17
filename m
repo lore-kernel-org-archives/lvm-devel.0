@@ -1,39 +1,74 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 12 Dec 2013 13:31:03 +0000 (UTC)
-Subject: master - cleanup: remove unused variable
-Message-ID: <20131212133103.A60E360F9D@fedorahosted.org>
+Date: Tue, 17 Dec 2013 14:21:36 +0000 (UTC)
+Subject: master - Revert "tree_action: destroy devices from failing activation"
+Message-ID: <20131217142136.0FCBC61322@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fd0068a66ee8f8ad03ac0c86b9ab3f6a8a368ac9
-Commit:        fd0068a66ee8f8ad03ac0c86b9ab3f6a8a368ac9
-Parent:        aefab64e690cb5fbbd28a07d27a4f510d8aca32b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c3d82d717ccd4d4801f5d84787bb12e0189eb1af
+Commit:        c3d82d717ccd4d4801f5d84787bb12e0189eb1af
+Parent:        3652083f38ca21276c8467f54eeaa8f1365ec6fe
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 12 13:59:39 2013 +0100
+AuthorDate:    Tue Dec 17 15:17:44 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 12 13:59:39 2013 +0100
+CommitterDate: Tue Dec 17 15:21:28 2013 +0100
 
-cleanup: remove unused variable
+Revert "tree_action: destroy devices from failing activation"
 
-Recent commit made this variable unused
+This reverts commit 24639be558a9d4561a34f2b76485b227aed8e9c3.
+
+Ok - seems we could be here a bit too active - and we
+may remove devices which are unsuable for reasons we are not
+aware of - thus taking down whole device could be way to big hammer.
+
+So we still need some solution to recover from failing preload
+and activation - but it needs more tunning.
 ---
- lib/device/dev-cache.c |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ WHATS_NEW                  |    1 -
+ lib/activate/dev_manager.c |   10 ++--------
+ 2 files changed, 2 insertions(+), 9 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index fabdcbb..5d26d41 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -594,7 +594,6 @@ static int _insert(const char *path, const struct stat *info,
- 		   int rec, int check_with_udev_db)
- {
- 	struct stat tinfo;
--	int r = 0;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 59820b2..a7522f9 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,5 @@
+ Version 2.02.105 -
+ =====================================
+-  Try to remove any unusable devices from dm table when activation fails.
+   Dependency scan counts with snapshots and external origins.
+   Make sure VG extent size is always greater or equal to PV phys. block size.
+   Optimize double call of stat() for cached devices.
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index a4147d3..7b0b6e2 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -2754,21 +2754,15 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 			goto_out;
  
- 	if (!info) {
- 		if (stat(path, &tinfo) < 0) {
+ 		/* Preload any devices required before any suspensions */
+-		if (!dm_tree_preload_children(root, dlid, DLID_SIZE)) {
+-		bad:
+-			if (!dm_tree_deactivate_children(root, dlid, DLID_SIZE))
+-				stack;
+-			if (!_remove_lv_symlinks(dm, root))
+-				log_warn("Failed to remove all device symlinks associated with %s.", lv->name);
++		if (!dm_tree_preload_children(root, dlid, DLID_SIZE))
+ 			goto_out;
+-		}
+ 
+ 		if (dm_tree_node_size_changed(root))
+ 			dm->flush_required = 1;
+ 
+ 		if (action == ACTIVATE) {
+ 			if (!dm_tree_activate_children(root, dlid, DLID_SIZE))
+-				goto_bad;
++				goto_out;
+ 			if (!_create_lv_symlinks(dm, root))
+ 				log_warn("Failed to create symlinks for %s.", lv->name);
+ 		}
 
 
