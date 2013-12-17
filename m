@@ -1,40 +1,66 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  6 May 2016 15:21:31 +0000 (UTC)
-Subject: master - cleanup: drop tracing
-Message-ID: <20160506152131.6935760F6C@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Tue, 17 Dec 2013 10:07:58 +0000 (UTC)
+Subject: dev-dct-process-v5 - test: Turn check_full into check_system complementary with normal check.
+Message-ID: <20131217100758.5120160A36@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2842a645fdb66ce1f90cad1fd206912eef365059
-Commit:        2842a645fdb66ce1f90cad1fd206912eef365059
-Parent:        db606591c0b8aa173661377be066be7bd78c5351
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 6 13:59:13 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 6 16:48:16 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c418f942050674b97094e1ab9f38585b93daac29
+Commit:        c418f942050674b97094e1ab9f38585b93daac29
+Parent:        6d144dc1c6fe251d58c5f25947d3bf8a861f3559
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Sun Dec 15 17:26:28 2013 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Tue Dec 17 11:07:21 2013 +0100
 
-cleanup: drop tracing
+test: Turn check_full into check_system complementary with normal check.
 
-When activation is disabled, avoid tracing it in cache target.
 ---
- lib/cache_segtype/cache.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ Makefile.in      |    2 +-
+ test/Makefile.in |    9 ++-------
+ 2 files changed, 3 insertions(+), 8 deletions(-)
 
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index 0cbb993..9d56f32 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -230,7 +230,7 @@ static int _target_present(struct cmd_context *cmd,
- 	const char *str;
+diff --git a/Makefile.in b/Makefile.in
+index e1178ee..ce61957 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -91,7 +91,7 @@ all: cscope.out
+ endif
+ DISTCLEAN_TARGETS += cscope.out
  
- 	if (!activation())
--		return_0;
-+		return 0;
+-check check_full check_cluster check_local check_lvmetad unit: all
++check check_system check_cluster check_local check_lvmetad unit: all
+ 	$(MAKE) -C test $(@)
  
- 	if (!_cache_checked) {
- 		_cache_checked = 1;
+ install_system_dirs:
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 96c4fdb..5c9f5d5 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -90,19 +90,14 @@ check: .tests-stamp
+ 		      $(patsubst %,cluster:%,$(RUN_BASE)) \
+ 		      $(patsubst %,lvmetad:%,$(LVMETAD_RUN_BASE))
+ 
+-check_full: .tests-stamp
++check_system: .tests-stamp
+ 	VERBOSE=$(VERBOSE) \
+-	cluster_LVM_TEST_LOCKING=3 \
+ 	scluster_LVM_TEST_LOCKING=3 \
+-	lvmetad_LVM_TEST_LVMETAD=1 \
+ 	slvmetad_LVM_TEST_LVMETAD=1 \
+ 	snormal_LVM_TEST_DEVDIR=/dev \
+ 	scluster_LVM_TEST_DEVDIR=/dev \
+ 	slvmetad_LVM_TEST_DEVDIR=/dev \
+-	./lib/harness $(patsubst %,normal:%,$(RUN_BASE)) \
+-		      $(patsubst %,cluster:%,$(RUN_BASE)) \
+-		      $(patsubst %,lvmetad:%,$(LVMETAD_RUN_BASE)) \
+-		      $(patsubst %,snormal:%,$(RUN_BASE)) \
++	./lib/harness $(patsubst %,snormal:%,$(RUN_BASE)) \
+ 		      $(patsubst %,scluster:%,$(RUN_BASE)) \
+ 		      $(patsubst %,slvmetad:%,$(LVMETAD_RUN_BASE))
+ 
 
 
