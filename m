@@ -1,83 +1,59 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 19 May 2016 16:41:31 +0000 (UTC)
-Subject: master - libdm: trace missing settings
-Message-ID: <20160519164131.EBCDE602F5@fedorahosted.org>
+Date: Tue, 17 Dec 2013 13:09:05 +0000 (UTC)
+Subject: master - cleanup: skip double assign
+Message-ID: <20131217130905.D63996004F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8fd886f735125de4b3e32fc0a188af0192a0d173
-Commit:        8fd886f735125de4b3e32fc0a188af0192a0d173
-Parent:        e8ba5c9bd4f8a1ff5d67b597c10eea3d176b27e1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=760714829bfd6f3cc6e0f23f029baf4cc9ed441d
+Commit:        760714829bfd6f3cc6e0f23f029baf4cc9ed441d
+Parent:        904a02335ffe831dfedc32d074f5b659189aaa76
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 18 15:23:08 2016 +0200
+AuthorDate:    Tue Dec 17 13:57:13 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 19 18:27:34 2016 +0200
+CommitterDate: Tue Dec 17 14:08:54 2013 +0100
 
-libdm: trace missing settings
+cleanup: skip double assign
 
-These settings have been missed in very verbose log.
+Assing NULL to type only in defaut: switch.
+Debug print '--'  for  unlocked and unused resource (-1)
 ---
- WHATS_NEW_DM         |    1 +
- libdm/libdm-config.c |   15 ++++++++++++---
- 2 files changed, 13 insertions(+), 3 deletions(-)
+ daemons/clvmd/lvm-functions.c |   15 ++++++++-------
+ 1 files changed, 8 insertions(+), 7 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index d446997..165cb90 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -12,6 +12,7 @@ Version 1.02.124 - 30th April 2016
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index b15732f..fb3a95c 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -483,18 +483,19 @@ static int do_deactivate_lv(char *resource, unsigned char command, unsigned char
+ const char *do_lock_query(char *resource)
+ {
+ 	int mode;
+-	const char *type = NULL;
++	const char *type;
  
- Version 1.02.123 - 23rd April 2016
- ==================================
-+  Trace more settings in very verbose mode for libdm-config.
-   Do not strip LVM- when debug reporting not found uuid.
+ 	mode = get_current_lock(resource);
+ 	switch (mode) {
+-		case LCK_NULL: type = "NL"; break;
+-		case LCK_READ: type = "CR"; break;
+-		case LCK_PREAD:type = "PR"; break;
+-		case LCK_WRITE:type = "PW"; break;
+-		case LCK_EXCL: type = "EX"; break;
++	case LCK_NULL: type = "NL"; break;
++	case LCK_READ: type = "CR"; break;
++	case LCK_PREAD:type = "PR"; break;
++	case LCK_WRITE:type = "PW"; break;
++	case LCK_EXCL: type = "EX"; break;
++	default: type = NULL;
+ 	}
  
- Version 1.02.122 - 9th April 2016
-diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
-index dcb7c3f..86955c5 100644
---- a/libdm/libdm-config.c
-+++ b/libdm/libdm-config.c
-@@ -1154,8 +1154,11 @@ int dm_config_get_uint32(const struct dm_config_node *cn, const char *path,
- 	if (!n || !n->v || n->v->type != DM_CFG_INT)
- 		return 0;
+-	DEBUGLOG("do_lock_query: resource '%s', mode %i (%s)\n", resource, mode, type ?: "?");
++	DEBUGLOG("do_lock_query: resource '%s', mode %i (%s)\n", resource, mode, type ?: "--");
  
--	if (result)
-+	if (result) {
-+		log_very_verbose("Setting %s to %u", path, (uint32_t) n->v->v.i);
- 		*result = n->v->v.i;
-+	}
-+
- 	return 1;
+ 	return type;
  }
- 
-@@ -1169,8 +1172,11 @@ int dm_config_get_uint64(const struct dm_config_node *cn, const char *path,
- 	if (!n || !n->v || n->v->type != DM_CFG_INT)
- 		return 0;
- 
--	if (result)
-+	if (result) {
-+		log_very_verbose("Setting %s to " FMTu64 , path, (uint64_t) n->v->v.i);
- 		*result = (uint64_t) n->v->v.i;
-+	}
-+
- 	return 1;
- }
- 
-@@ -1184,8 +1190,11 @@ int dm_config_get_str(const struct dm_config_node *cn, const char *path,
- 	if (!n || !n->v || n->v->type != DM_CFG_STRING)
- 		return 0;
- 
--	if (result)
-+	if (result) {
-+		log_very_verbose("Setting %s to %s", path, n->v->v.str);
- 		*result = n->v->v.str;
-+	}
-+
- 	return 1;
- }
- 
 
 
