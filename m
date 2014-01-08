@@ -1,52 +1,39 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Oct 2011 21:24:28 -0000
-Subject: LVM2/test t-mdata-strings.sh
-Message-ID: <20111023212428.22137.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed,  8 Jan 2014 11:05:44 +0000 (UTC)
+Subject: master - liblvm: mark constant as unsigned
+Message-ID: <20140108110544.A79396119F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-23 21:24:27
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5f246bf768ae194fa19e71e596f99ca02547c55c
+Commit:        5f246bf768ae194fa19e71e596f99ca02547c55c
+Parent:        4417cd288b69479ade4f4ab98adfc4d5eb7f483b
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jan 8 12:04:41 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jan 8 12:04:41 2014 +0100
 
-Modified files:
-	test           : t-mdata-strings.sh 
+liblvm: mark constant as unsigned
 
-Log message:
-	Test with -F flag
-	
-	grep need -F to check what we really want to test.
-	Add better test for existing device.
-	
-	Currently this test DOES NOT work with real /dev handle via udev
-	since our tool does not see such device listet through udev.
-	
-	FIXME: We might be able to see it at least through dmsetup table and
-	use for lvm.
+---
+ liblvm/lvm_pv.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mdata-strings.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-
---- LVM2/test/t-mdata-strings.sh	2011/10/23 15:39:08	1.7
-+++ LVM2/test/t-mdata-strings.sh	2011/10/23 21:24:27	1.8
-@@ -23,11 +23,14 @@
- dmsetup rename "$name" "$PREFIX$pv_ugly"
- dev1=$(dirname "$dev1")/$PREFIX$pv_ugly
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index 163ea4f..64b01d5 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -126,7 +126,7 @@ int lvm_pv_remove(lvm_t libh, const char *pv_name)
+ 	return rc;
+ }
  
-+dmsetup table | grep -F "$pv_ugly"
-+
- # 'pvcreate, vgcreate on filename with backslashed chars' 
- created=$dev1
- # when used with real udev without fallback, it will fail here
- pvcreate "$dev1" || created=$dev2
--pvs | should grep $dev1
-+pvdisplay | should grep -F "$pv_ugly"
-+should check pv_field "$dev1" pv_name "$dev1"
- vgcreate $vg "$created"
- # 'no parse errors and VG really exists' 
- vgs 2>err
+-#define PV_LIST_MAGIC 4026907153
++#define PV_LIST_MAGIC 4026907153U
+ 
+ static struct dm_list *_lvm_list_pvs(lvm_t libh)
+ {
 
 
