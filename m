@@ -1,135 +1,56 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed,  8 Jan 2014 16:14:49 +0000 (UTC)
-Subject: master - test: Use klogctl in the harness instead of reading /var/log/messages.
-Message-ID: <20140108161449.AB53760E0F@fedorahosted.org>
+Date: Wed,  8 Jan 2014 16:14:51 +0000 (UTC)
+Subject: master - test: Time out the entire testsuite after an hour.
+Message-ID: <20140108161451.BF89160E0F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=af8580d756d3d4ed56a00d377fd6bfb18d5bed41
-Commit:        af8580d756d3d4ed56a00d377fd6bfb18d5bed41
-Parent:        1937715d2ccdd46122da862c6d7c1ef0ed7d1230
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d52c4154c5e9d300cbee96231f0b95fa416453bf
+Commit:        d52c4154c5e9d300cbee96231f0b95fa416453bf
+Parent:        af8580d756d3d4ed56a00d377fd6bfb18d5bed41
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Dec 15 21:10:57 2013 +0100
+AuthorDate:    Mon Dec 16 11:47:09 2013 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Wed Jan 8 17:11:32 2014 +0100
 
-test: Use klogctl in the harness instead of reading /var/log/messages.
+test: Time out the entire testsuite after an hour.
 
 ---
- test/lib/harness.c |   45 +++++++++++++++++++++++++++------------------
- 1 files changed, 27 insertions(+), 18 deletions(-)
+ test/lib/harness.c |   10 +++++++++-
+ 1 files changed, 9 insertions(+), 1 deletions(-)
 
 diff --git a/test/lib/harness.c b/test/lib/harness.c
-index f27fbeb..19859a0 100644
+index 19859a0..9613543 100644
 --- a/test/lib/harness.c
 +++ b/test/lib/harness.c
-@@ -25,6 +25,7 @@
- #include <sys/time.h>
- #include <sys/types.h>
- #include <sys/wait.h>
-+#include <sys/klog.h>
- #include <time.h>
- #include <unistd.h>
- #include <stdint.h>
-@@ -260,6 +261,23 @@ static void drain(int fd, size_t size_limit)
- 	}
- }
+@@ -59,6 +59,8 @@ static const char *results;
+ static unsigned fullbuffer = 0;
+ static int unlimited = 0;
  
-+#define SYSLOG_ACTION_READ_CLEAR     4
-+#define SYSLOG_ACTION_CLEAR          5
++static time_t harness_start;
 +
-+static void clear_dmesg(void)
-+{
-+	klogctl(SYSLOG_ACTION_CLEAR, 0, 0);
-+}
-+
-+static void drain_dmesg(void)
-+{
-+	char buf[16392 + 1];
-+	size_t sz = klogctl(SYSLOG_ACTION_READ_CLEAR, buf, sizeof(buf) - 1);
-+	buf[sz] = 0;
-+	_append_buf(buf, sz);
-+}
-+
-+
- static const char *duration(time_t start, const struct rusage *usage)
- {
- 	static char buf[100];
-@@ -345,6 +363,7 @@ static void run(int i, char *f) {
- 	struct rusage usage;
- 	char flavour[512], script[512];
+ static FILE *outfile = NULL;
+ char testdirdebug[PATH_MAX];
  
-+	clear_dmesg();
- 	pid = fork();
- 	if (pid < 0) {
- 		perror("Fork failed.");
-@@ -382,8 +401,7 @@ static void run(int i, char *f) {
- 		int runaway = 0;
- 		int no_write = 0;
- 		int collect_debug = 0;
--		FILE *varlogmsg;
--		int fd_vlm = -1;
-+		int fd_debuglog = -1;
- 
- 		//close(fds[1]);
- 		testdirdebug[0] = '\0'; /* Capture RUNTESTDIR */
-@@ -396,13 +414,6 @@ static void run(int i, char *f) {
- 		if (!(outfile = fopen(outpath, "w")))
- 			perror("fopen");
- 
--		/* Mix in kernel log message */
--		if (!(varlogmsg = fopen("/var/log/messages", "r")))
--			perror("fopen");
--		else if (((fd_vlm = fileno(varlogmsg)) >= 0) &&
--			 fseek(varlogmsg, 0L, SEEK_END))
--			perror("fseek");
--
- 		while ((w = wait4(pid, &st, WNOHANG, &usage)) == 0) {
- 			if ((fullbuffer && fullbuffer++ == 8000) ||
- 			    (no_write > 180 * 2)) /* a 3 minute timeout */
-@@ -446,24 +457,22 @@ static void run(int i, char *f) {
- 			}
- 			drain(fds[0], INT32_MAX);
- 			no_write = 0;
--			if (fd_vlm >= 0)
--				drain(fd_vlm, INT32_MAX);
-+			drain_dmesg();
+@@ -544,9 +546,15 @@ int main(int argc, char **argv) {
+ 		default: signal(i, handler);
  		}
- 		if (w != pid) {
- 			perror("waitpid");
- 			exit(206);
- 		}
- 		drain(fds[0], INT32_MAX);
--		if (fd_vlm >= 0)
--			drain(fd_vlm, INT32_MAX);
-+		drain_dmesg();
- 		if (die == 2)
- 			interrupted(i, f);
- 		else if (runaway) {
- 			if (collect_debug &&
--			    (fd_vlm = open(testdirdebug, O_RDONLY)) != -1) {
-+			    (fd_debuglog = open(testdirdebug, O_RDONLY)) != -1) {
- 				/* Normally read only first 4MB */
--				drain(fd_vlm, unlimited ? INT32_MAX : 4 * 1024 * 1024);
--				close(fd_vlm);
-+				drain(fd_debuglog, unlimited ? INT32_MAX : 4 * 1024 * 1024);
-+				close(fd_debuglog);
- 			}
- 			timeout(i, f);
- 		} else if (WIFEXITED(st)) {
-@@ -476,8 +485,8 @@ static void run(int i, char *f) {
- 		} else
- 			failed(i, f, st);
  
--		if (varlogmsg)
--			fclose(varlogmsg);
-+		if (fd_debuglog >= 0)
-+			close(fd_debuglog);
- 		if (outfile)
- 			fclose(outfile);
- 		if (fullbuffer)
++	harness_start = time(NULL);
+ 	/* run the tests */
+-	for (i = 1; !die && i < argc; ++i)
++	for (i = 1; !die && i < argc; ++i) {
+ 		run(i, argv[i]);
++		if ( time(NULL) - harness_start > 3600 ) {
++			printf("an hour passed, giving up...\n");
++			break;
++		}
++	}
+ 
+ 	free(subst[0].value);
+ 	free(subst[1].value);
 
 
