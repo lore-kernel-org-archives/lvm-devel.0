@@ -1,55 +1,38 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 24 Oct 2011 10:24:40 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
-Message-ID: <20111024102440.13376.qmail@sourceware.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Mon, 13 Jan 2014 10:57:11 +0000 (UTC)
+Subject: master - reporter: Set labeller on dummy labels (fixes missing fmt field).
+Message-ID: <20140113105711.42A2660D93@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-24 10:24:40
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c445f3c2c1553ff1e9f97c2302344736e7f35e8
+Commit:        9c445f3c2c1553ff1e9f97c2302344736e7f35e8
+Parent:        d61c9eb52f05de5da706b79b9596143fab628b8e
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Jan 13 11:45:38 2014 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Mon Jan 13 11:45:38 2014 +0100
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : metadata.c 
+reporter: Set labeller on dummy labels (fixes missing fmt field).
 
-Log message:
-	Don't print char type[8] as a plain string
-	
-	pvck prints 'extra' character from the label since there is no '\0'
-	after the struct label entry and just uint64_t follows directly.
-	So avoid it by limiting 8 chars to be printed.
-	
-	https://www.redhat.com/archives/lvm-devel/2011-January/msg00109.html
-	
-	Signed-off-by: Paul Bolle <pebolle tiscali nl>
+---
+ tools/reporter.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2170&r2=1.2171
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.469&r2=1.470
-
---- LVM2/WHATS_NEW	2011/10/23 16:05:45	1.2170
-+++ LVM2/WHATS_NEW	2011/10/24 10:24:39	1.2171
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Don't print char type[8] as a plain string in pvck PV type.
-   Use vg memory pool implicitely for vg read.
-   Always use vg memory pool for allocated lv segment.
-   Remove extra 4kB buffer allocated on stack in print_log().
---- LVM2/lib/metadata/metadata.c	2011/10/11 09:09:00	1.469
-+++ LVM2/lib/metadata/metadata.c	2011/10/24 10:24:40	1.470
-@@ -3794,7 +3794,7 @@
- 		return 0;
- 	}
- 
--	log_print("Found label on %s, sector %"PRIu64", type=%s",
-+	log_print("Found label on %s, sector %"PRIu64", type=%.8s",
- 		  pv_name, label->sector, label->type);
- 
- 	/*
+diff --git a/tools/reporter.c b/tools/reporter.c
+index bf181e7..a36fcb3 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -183,6 +183,7 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
+ 	/* FIXME workaround for pv_label going through cache; remove once struct
+ 	 * physical_volume gains a proper "label" pointer */
+ 	if (!(label = pv_label(pv))) {
++		_dummy_label.labeller = pv->fmt->labeller;
+ 		if (pv->dev)
+ 			_dummy_label.dev = pv->dev;
+ 		else {
 
 
