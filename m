@@ -1,129 +1,120 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 14 Jan 2014 03:48:41 +0000 (UTC)
-Subject: master - lvmcache: Invalidate cached VG if PV is orphaned.
-Message-ID: <20140114034841.E58B560623@fedorahosted.org>
+Date: Tue, 14 Jan 2014 03:48:44 +0000 (UTC)
+Subject: master - pvs: fix segfaults with orphans
+Message-ID: <20140114034844.0C5E3610BA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4c2b4c37e72b74553125664364efcda0e0758bf7
-Commit:        4c2b4c37e72b74553125664364efcda0e0758bf7
-Parent:        9c445f3c2c1553ff1e9f97c2302344736e7f35e8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a450eab6a9fef7793066864ff58857d827b903f
+Commit:        5a450eab6a9fef7793066864ff58857d827b903f
+Parent:        4c2b4c37e72b74553125664364efcda0e0758bf7
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jan 14 02:57:03 2014 +0000
+AuthorDate:    Tue Jan 14 03:17:27 2014 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jan 14 02:57:03 2014 +0000
+CommitterDate: Tue Jan 14 03:17:27 2014 +0000
 
-lvmcache: Invalidate cached VG if PV is orphaned.
+pvs: fix segfaults with orphans
 
-If a PV in an existing VG becomes orphaned (with 'pvcreate -ff', for
-example) the VG struct cached against its vginfo must be invalidated.
-This is because the struct device it references no longer contains
-the PV label so becomes incorrect.
+Several fields used to display 0 if undefined.  Recent changes
+to the way the fields are reported threw away some tests for
+valid pointers, leading to segfaults with 'pvs -o all'.
 
-This triggers the error:
-  Internal error: PV $dev unexpectedly not in cache.
-when the PV from the cached VG metadata is subsequently looked up
-in the cache.
-
-Bug introduced in 2.02.87 by commit 7ad0d47c3c93053c07c45161dbdbc0798ac7e2f6
-("Cache and share generated VG structs").
-
-Before:
-
-lvm> pvs
-  PV         VG   Fmt  Attr PSize  PFree
-  /dev/loop3 vg12 lvm2 a--  28.00m 28.00m
-  /dev/loop4 vg12 lvm2 a--  28.00m 28.00m
-lvm> pvcreate -ff /dev/loop3
-Really INITIALIZE physical volume "/dev/loop3" of volume group "vg12" [y/n]? y
-  WARNING: Forcing physical volume creation on /dev/loop3 of volume group "vg12"
-  Physical volume "/dev/loop3" successfully created
-lvm> pvs
-  Internal error: PV /dev/loop3 unexpectedly not in cache.
-  PV         VG   Fmt  Attr PSize  PFree
-  /dev/loop3 vg12 lvm2 a--  28.00m 28.00m
-  /dev/loop3      lvm2 a--  32.00m 32.00m
-  /dev/loop4 vg12 lvm2 a--  28.00m 28.00m
-
-After:
-lvm> pvs
-  PV         VG   Fmt  Attr PSize  PFree
-  /dev/loop3 vg12 lvm2 a--  28.00m 28.00m
-  /dev/loop4 vg12 lvm2 a--  28.00m 28.00m
-lvm> pvcreate -ff /dev/loop3
-Really INITIALIZE physical volume "/dev/loop3" of volume group "vg12" [y/n]? y
-  WARNING: Forcing physical volume creation on /dev/loop3 of volume group "vg12"
-  Physical volume "/dev/loop3" successfully created
-lvm> pvs
-  PV             VG   Fmt  Attr PSize  PFree
-  /dev/loop3          lvm2 a--  32.00m 32.00m
-  /dev/loop4     vg12 lvm2 a--  28.00m 28.00m
-  unknown device vg12 lvm2 a-m  28.00m 28.00m
+Reinstate the original behaviour.
 ---
- WHATS_NEW            |    2 ++
- lib/cache/lvmcache.c |   12 +++++++++++-
- 2 files changed, 13 insertions(+), 1 deletions(-)
+ lib/cache/lvmcache.c |    3 +++
+ lib/metadata/pv.c    |    3 ++-
+ lib/report/report.c  |    8 +++-----
+ tools/reporter.c     |   16 +++++++++-------
+ 4 files changed, 17 insertions(+), 13 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1dac25e..12845ab 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.02.105 -
- =====================================
-+  Invalidate cached VG struct after a PV in it gets orphaned. (2.02.87)
-+  Mark pool format metadata as FMT_OBSOLETE.
-   Use major:minor in lvm2-pvscan at .service for proper global_filter application.
-   Syntax and spelling fixes in some man pages.
-   Dependency scan counts with snapshots and external origins.
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 770a1b3..6719e99 100644
+index 6719e99..ec8699b 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -64,6 +64,7 @@ struct lvmcache_vginfo {
- 	unsigned holders;
- 	unsigned vg_use_count;	/* Counter of vg reusage */
- 	unsigned precommitted;	/* Is vgmetadata live or precommitted? */
-+	unsigned cached_vg_invalidated;	/* Signal to regenerate cached_vg */
- };
+@@ -1958,6 +1958,9 @@ int lvmcache_uncertain_ownership(struct lvmcache_info *info) {
  
- static struct dm_hash_table *_pvid_hash = NULL;
-@@ -763,9 +764,11 @@ struct volume_group *lvmcache_get_vg(struct cmd_context *cmd, const char *vgname
- 		return NULL;
- 
- 	/* Use already-cached VG struct when available */
--	if ((vg = vginfo->cached_vg))
-+	if ((vg = vginfo->cached_vg) && !vginfo->cached_vg_invalidated)
- 		goto out;
- 
-+	release_vg(vginfo->cached_vg);
+ uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info)
+ {
++	if (!info)
++		return UINT64_C(0);
 +
- 	fic.type = FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
- 	fic.context.vg_ref.vg_name = vginfo->vgname;
- 	fic.context.vg_ref.vg_id = vgid;
-@@ -785,6 +788,7 @@ struct volume_group *lvmcache_get_vg(struct cmd_context *cmd, const char *vgname
- 	vginfo->cached_vg = vg;
- 	vginfo->holders = 1;
- 	vginfo->vg_use_count = 0;
-+	vginfo->cached_vg_invalidated = 0;
- 	vg->vginfo = vginfo;
+ 	return find_min_mda_size(&info->mdas);
+ }
  
- 	if (!dm_pool_lock(vg->vgmem, detect_internal_vg_cache_corruption()))
-@@ -1407,6 +1411,12 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
- 	    !is_orphan_vg(info->vginfo->vgname) && critical_section())
- 		return 1;
+diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
+index 349048e..6f5fca4 100644
+--- a/lib/metadata/pv.c
++++ b/lib/metadata/pv.c
+@@ -245,7 +245,8 @@ uint64_t lvmcache_info_mda_free(struct lvmcache_info *info)
+ {
+ 	uint64_t freespace = UINT64_MAX;
  
-+	/* If making a PV into an orphan, any cached VG metadata may become
-+	 * invalid, incorrectly still referencing device structs.
-+	 * (Example: pvcreate -ff) */
-+	if (is_orphan_vg(vgname) && info->vginfo && !is_orphan_vg(info->vginfo->vgname))
-+		info->vginfo->cached_vg_invalidated = 1;
+-	lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
++	if (info)
++		lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
+ 
+ 	if (freespace == UINT64_MAX)
+ 		freespace = UINT64_C(0);
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 3626769..bd4b725 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -693,13 +693,11 @@ static int _devsize_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			 struct dm_report_field *field,
+ 			 const void *data, void *private)
+ {
++	const struct device *dev = *(const struct device * const *) data;
+ 	uint64_t size;
+ 
+-	if (!data)
+-		return _field_set_value(field, "", NULL);
+-
+-	if (!dev_get_size(*(const struct device **) data, &size))
+-		return_0;
++	if (!dev || !dev->dev || !dev_get_size(dev, &size))
++		size = _zero64;
+ 
+ 	return _size64_disp(rh, mem, field, &size, private);
+ }
+diff --git a/tools/reporter.c b/tools/reporter.c
+index a36fcb3..602f173 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -141,8 +141,8 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
+ 	struct volume_group *old_vg = vg;
+ 	char uuid[64] __attribute__((aligned(8)));
+ 	struct label *label;
+-	struct label _dummy_label = { .dev = 0 };
+-	struct device _dummy_device = { .dev = 0 };
++	struct label dummy_label = { .dev = 0 };
++	struct device dummy_device = { .dev = 0 };
+ 
+ 	if (is_pv(pv) && !is_orphan(pv) && !vg) {
+ 		vg_name = pv_vg_name(pv);
+@@ -183,14 +183,16 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
+ 	/* FIXME workaround for pv_label going through cache; remove once struct
+ 	 * physical_volume gains a proper "label" pointer */
+ 	if (!(label = pv_label(pv))) {
+-		_dummy_label.labeller = pv->fmt->labeller;
++		if (pv->fmt)
++			dummy_label.labeller = pv->fmt->labeller;
 +
- 	/* If moving PV from orphan to real VG, always mark it valid */
- 	if (!is_orphan_vg(vgname))
- 		info->status &= ~CACHE_INVALID;
+ 		if (pv->dev)
+-			_dummy_label.dev = pv->dev;
++			dummy_label.dev = pv->dev;
+ 		else {
+-			_dummy_label.dev = &_dummy_device;
+-			memcpy(_dummy_device.pvid, &pv->id, ID_LEN);
++			dummy_label.dev = &dummy_device;
++			memcpy(dummy_device.pvid, &pv->id, ID_LEN);
+ 		}
+-		label = &_dummy_label;
++		label = &dummy_label;
+ 	}
+ 
+ 	if (!report_object(handle, vg, NULL, pv, NULL, NULL, label)) {
 
 
