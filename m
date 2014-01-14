@@ -1,74 +1,57 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 14 Jan 2014 03:48:46 +0000 (UTC)
-Subject: master - format1: Mark obsolete and do not use with lvmetad.
-Message-ID: <20140114034846.221EB610BA@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 14 Jan 2014 17:00:52 +0000 (UTC)
+Subject: master - udev: do not drop SYSTEMD_READY for non-activating events
+Message-ID: <20140114170052.27AAA61229@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3813cd7a3c3e763c346405664fba97edf7110d13
-Commit:        3813cd7a3c3e763c346405664fba97edf7110d13
-Parent:        5a450eab6a9fef7793066864ff58857d827b903f
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jan 14 03:27:45 2014 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jan 14 03:27:45 2014 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b662f3c8dd52f489a8f5b5eeb69bc37ea40ff768
+Commit:        b662f3c8dd52f489a8f5b5eeb69bc37ea40ff768
+Parent:        3813cd7a3c3e763c346405664fba97edf7110d13
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jan 14 17:49:39 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Jan 14 17:59:56 2014 +0100
 
-format1: Mark obsolete and do not use with lvmetad.
+udev: do not drop SYSTEMD_READY for non-activating events
 
-DO NOT USE LVMETAD IF YOU HAVE ANY LVM1-FORMATTED PVS.
+Do not drop device's flag to report readiness for systemd
+processing if there's any event that follows the activatiion
+event itself. Otherwise, systemd would lost track of this device
+on any other event that follows the activating event (IOW, we
+need to make SYSTEMD_READY variable change level-based, not edge-based).
 
-You may continue to use it without lvmetad, but do please schedule
-an upgrade to the lvm2 format (with 'vgconvert').
+This patch applies for MD and loop devices used as PVs.
 
-Sending the original LVM1 formatted metadata to lvmetad is breaking
-assumptions made by the code, so I am marking the format as obsolete for
-now and no longer sending it to lvmetad.
-
-This means that if you are using lvmetad, lvm1 volumes will usually
-appear invisible - though not always: it depends on exactly what
-sequence of commands you run!
-
-The current situation is not satisfactory.
-
-We'll either fix lvmetad and reenable this or we'll fix the code to
-issue appropriate warning messages when lvm1 PVs are encountered
-to avoid accidents.
-
-(The latest unfixed problem is that lvmetad assumes metadata sequence
-numbers exist and always increase - but the lvm1 format does not define
-or store any sequence number, confusing both the daemon and client
-when default values get passed to-and-fro.)
+(intra-release fix for commit 4c267c7286145165dfe078f77d18d194a21a2e1c)
 ---
- WHATS_NEW             |    1 +
- lib/format1/format1.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ udev/69-dm-lvm-metad.rules.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 12845ab..834cf0f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.105 -
- =====================================
-+  Mark lvm1 format metadata as FMT_OBSOLETE. Do not use it with lvmetad.
-   Invalidate cached VG struct after a PV in it gets orphaned. (2.02.87)
-   Mark pool format metadata as FMT_OBSOLETE.
-   Use major:minor in lvm2-pvscan at .service for proper global_filter application.
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index 509167a..16746e3 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -603,7 +603,7 @@ struct format_type *init_format(struct cmd_context *cmd)
- 	fmt->alias = NULL;
- 	fmt->orphan_vg_name = FMT_LVM1_ORPHAN_VG_NAME;
- 	fmt->features = FMT_RESTRICTED_LVIDS | FMT_ORPHAN_ALLOCATABLE |
--			FMT_RESTRICTED_READAHEAD;
-+			FMT_RESTRICTED_READAHEAD | FMT_OBSOLETE;
- 	fmt->private = NULL;
+diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+index d0b7b2a..e8304b5 100644
+--- a/udev/69-dm-lvm-metad.rules.in
++++ b/udev/69-dm-lvm-metad.rules.in
+@@ -54,7 +54,7 @@ IMPORT{db}="LVM_MD_PV_ACTIVATED"
+ ACTION=="add", ENV{LVM_MD_PV_ACTIVATED}=="1", GOTO="lvm_scan"
+ ACTION=="change", ENV{LVM_MD_PV_ACTIVATED}!="1", TEST=="md/array_state", ENV{LVM_MD_PV_ACTIVATED}="1", GOTO="lvm_scan"
+ ACTION=="add", KERNEL=="md[0-9]*p[0-9]*", GOTO="lvm_scan"
+-ENV{SYSTEMD_READY}="0"
++ENV{LVM_MD_PV_ACTIVATED}!="1", ENV{SYSTEMD_READY}="0"
+ GOTO="lvm_end"
  
- 	dm_list_init(&fmt->mda_ops);
+ # Loop device:
+@@ -62,7 +62,7 @@ LABEL="next"
+ KERNEL!="loop[0-9]*", GOTO="next"
+ ACTION=="add", ENV{LVM_LOOP_PV_ACTIVATED}=="1", GOTO="lvm_scan"
+ ACTION=="change", ENV{LVM_LOOP_PV_ACTIVATED}!="1", TEST=="loop/backing_file", ENV{LVM_LOOP_PV_ACTIVATED}="1", GOTO="lvm_scan"
+-ENV{SYSTEMD_READY}="0"
++ENV{LVM_LOOP_PV_ACTIVATED}!="1", ENV{SYSTEMD_READY}="0"
+ GOTO="lvm_end"
+ 
+ # If the PV is not a special device listed above, scan only after device addition (ADD event)
 
 
