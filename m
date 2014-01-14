@@ -1,120 +1,74 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 14 Jan 2014 03:48:44 +0000 (UTC)
-Subject: master - pvs: fix segfaults with orphans
-Message-ID: <20140114034844.0C5E3610BA@fedorahosted.org>
+Date: Tue, 14 Jan 2014 03:48:46 +0000 (UTC)
+Subject: master - format1: Mark obsolete and do not use with lvmetad.
+Message-ID: <20140114034846.221EB610BA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a450eab6a9fef7793066864ff58857d827b903f
-Commit:        5a450eab6a9fef7793066864ff58857d827b903f
-Parent:        4c2b4c37e72b74553125664364efcda0e0758bf7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3813cd7a3c3e763c346405664fba97edf7110d13
+Commit:        3813cd7a3c3e763c346405664fba97edf7110d13
+Parent:        5a450eab6a9fef7793066864ff58857d827b903f
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jan 14 03:17:27 2014 +0000
+AuthorDate:    Tue Jan 14 03:27:45 2014 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jan 14 03:17:27 2014 +0000
+CommitterDate: Tue Jan 14 03:27:45 2014 +0000
 
-pvs: fix segfaults with orphans
+format1: Mark obsolete and do not use with lvmetad.
 
-Several fields used to display 0 if undefined.  Recent changes
-to the way the fields are reported threw away some tests for
-valid pointers, leading to segfaults with 'pvs -o all'.
+DO NOT USE LVMETAD IF YOU HAVE ANY LVM1-FORMATTED PVS.
 
-Reinstate the original behaviour.
+You may continue to use it without lvmetad, but do please schedule
+an upgrade to the lvm2 format (with 'vgconvert').
+
+Sending the original LVM1 formatted metadata to lvmetad is breaking
+assumptions made by the code, so I am marking the format as obsolete for
+now and no longer sending it to lvmetad.
+
+This means that if you are using lvmetad, lvm1 volumes will usually
+appear invisible - though not always: it depends on exactly what
+sequence of commands you run!
+
+The current situation is not satisfactory.
+
+We'll either fix lvmetad and reenable this or we'll fix the code to
+issue appropriate warning messages when lvm1 PVs are encountered
+to avoid accidents.
+
+(The latest unfixed problem is that lvmetad assumes metadata sequence
+numbers exist and always increase - but the lvm1 format does not define
+or store any sequence number, confusing both the daemon and client
+when default values get passed to-and-fro.)
 ---
- lib/cache/lvmcache.c |    3 +++
- lib/metadata/pv.c    |    3 ++-
- lib/report/report.c  |    8 +++-----
- tools/reporter.c     |   16 +++++++++-------
- 4 files changed, 17 insertions(+), 13 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/format1/format1.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 6719e99..ec8699b 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1958,6 +1958,9 @@ int lvmcache_uncertain_ownership(struct lvmcache_info *info) {
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 12845ab..834cf0f 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.105 -
+ =====================================
++  Mark lvm1 format metadata as FMT_OBSOLETE. Do not use it with lvmetad.
+   Invalidate cached VG struct after a PV in it gets orphaned. (2.02.87)
+   Mark pool format metadata as FMT_OBSOLETE.
+   Use major:minor in lvm2-pvscan at .service for proper global_filter application.
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index 509167a..16746e3 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -603,7 +603,7 @@ struct format_type *init_format(struct cmd_context *cmd)
+ 	fmt->alias = NULL;
+ 	fmt->orphan_vg_name = FMT_LVM1_ORPHAN_VG_NAME;
+ 	fmt->features = FMT_RESTRICTED_LVIDS | FMT_ORPHAN_ALLOCATABLE |
+-			FMT_RESTRICTED_READAHEAD;
++			FMT_RESTRICTED_READAHEAD | FMT_OBSOLETE;
+ 	fmt->private = NULL;
  
- uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info)
- {
-+	if (!info)
-+		return UINT64_C(0);
-+
- 	return find_min_mda_size(&info->mdas);
- }
- 
-diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
-index 349048e..6f5fca4 100644
---- a/lib/metadata/pv.c
-+++ b/lib/metadata/pv.c
-@@ -245,7 +245,8 @@ uint64_t lvmcache_info_mda_free(struct lvmcache_info *info)
- {
- 	uint64_t freespace = UINT64_MAX;
- 
--	lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
-+	if (info)
-+		lvmcache_foreach_mda(info, _pv_mda_free, &freespace);
- 
- 	if (freespace == UINT64_MAX)
- 		freespace = UINT64_C(0);
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 3626769..bd4b725 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -693,13 +693,11 @@ static int _devsize_disp(struct dm_report *rh, struct dm_pool *mem,
- 			 struct dm_report_field *field,
- 			 const void *data, void *private)
- {
-+	const struct device *dev = *(const struct device * const *) data;
- 	uint64_t size;
- 
--	if (!data)
--		return _field_set_value(field, "", NULL);
--
--	if (!dev_get_size(*(const struct device **) data, &size))
--		return_0;
-+	if (!dev || !dev->dev || !dev_get_size(dev, &size))
-+		size = _zero64;
- 
- 	return _size64_disp(rh, mem, field, &size, private);
- }
-diff --git a/tools/reporter.c b/tools/reporter.c
-index a36fcb3..602f173 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -141,8 +141,8 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- 	struct volume_group *old_vg = vg;
- 	char uuid[64] __attribute__((aligned(8)));
- 	struct label *label;
--	struct label _dummy_label = { .dev = 0 };
--	struct device _dummy_device = { .dev = 0 };
-+	struct label dummy_label = { .dev = 0 };
-+	struct device dummy_device = { .dev = 0 };
- 
- 	if (is_pv(pv) && !is_orphan(pv) && !vg) {
- 		vg_name = pv_vg_name(pv);
-@@ -183,14 +183,16 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- 	/* FIXME workaround for pv_label going through cache; remove once struct
- 	 * physical_volume gains a proper "label" pointer */
- 	if (!(label = pv_label(pv))) {
--		_dummy_label.labeller = pv->fmt->labeller;
-+		if (pv->fmt)
-+			dummy_label.labeller = pv->fmt->labeller;
-+
- 		if (pv->dev)
--			_dummy_label.dev = pv->dev;
-+			dummy_label.dev = pv->dev;
- 		else {
--			_dummy_label.dev = &_dummy_device;
--			memcpy(_dummy_device.pvid, &pv->id, ID_LEN);
-+			dummy_label.dev = &dummy_device;
-+			memcpy(dummy_device.pvid, &pv->id, ID_LEN);
- 		}
--		label = &_dummy_label;
-+		label = &dummy_label;
- 	}
- 
- 	if (!report_object(handle, vg, NULL, pv, NULL, NULL, label)) {
+ 	dm_list_init(&fmt->mda_ops);
 
 
