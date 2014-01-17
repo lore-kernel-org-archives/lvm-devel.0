@@ -1,39 +1,37 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 22 Oct 2011 16:47:23 -0000
-Subject: LVM2/tools vgchange.c
-Message-ID: <20111022164723.9519.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 17 Jan 2014 10:02:56 +0000 (UTC)
+Subject: master - libdm: WHATSNEW
+Message-ID: <20140117100256.9062660CFF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-22 16:47:23
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5f9035363684953d66c076f0f874d12d0576b4b2
+Commit:        5f9035363684953d66c076f0f874d12d0576b4b2
+Parent:        0638d1d82e349c332ea2e7e6be96f4b1f4fc5c2e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jan 17 11:02:29 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jan 17 11:02:29 2014 +0100
 
-Modified files:
-	tools          : vgchange.c 
+libdm: WHATSNEW
 
-Log message:
-	Ensure thin LVs take an exclusive activation
+---
+ WHATS_NEW_DM |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.123&r2=1.124
-
---- LVM2/tools/vgchange.c	2011/09/14 18:20:04	1.123
-+++ LVM2/tools/vgchange.c	2011/10/22 16:47:23	1.124
-@@ -145,7 +145,10 @@
- 				stack;
- 				continue;
- 			}
--		} else if (lv_is_origin(lv) || (activate == CHANGE_AE)) {
-+		} else if (lv_is_origin(lv) ||
-+			   lv_is_thin_pool(lv) ||
-+			   lv_is_thin_volume(lv) ||
-+			   (activate == CHANGE_AE)) {
- 			if (!activate_lv_excl(cmd, lv)) {
- 				stack;
- 				continue;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index effd0cc..af82096 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.84 -
+ ====================================
++  Deactive already actived nodes when node's preload callback fails.
+   Avoid busy looping on CPU when dmeventd reads event DM_WAIT_RETRY.
+   Ensure global mutex is being hold when working with dmeventd thread.
+   Drop taking timeout mutex for un/registering dmeventd monitor.
 
 
