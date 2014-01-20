@@ -1,85 +1,84 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 20 Jan 2014 11:03:24 +0000 (UTC)
-Subject: master - tests: update testing for xfs
-Message-ID: <20140120110324.14F0461159@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 20 Jan 2014 11:39:59 +0000 (UTC)
+Subject: master - thin: fix thin LV flagging for udev to skip scanning
+Message-ID: <20140120113959.A9E7D60DA7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=79768b2e9c01f6a56d6e2fef7d3bd82f9ce3c2c1
-Commit:        79768b2e9c01f6a56d6e2fef7d3bd82f9ce3c2c1
-Parent:        59336a2a0626eba91dc3bc76ff6297e0c70e7e9e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 20 12:02:33 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jan 20 12:02:33 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=91b26b63b408b7d7b4f79f0754d190783874e4cc
+Commit:        91b26b63b408b7d7b4f79f0754d190783874e4cc
+Parent:        79768b2e9c01f6a56d6e2fef7d3bd82f9ce3c2c1
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Jan 20 12:38:21 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Jan 20 12:38:21 2014 +0100
 
-tests: update testing for xfs
+thin: fix thin LV flagging for udev to skip scanning
 
+Only flag thin LV for no scanning in udev if this LV is about
+to be wiped. This happens only in case the thin LV's pool was not
+created with zeroing of the new blocks enabled.
 ---
- WHATS_NEW           |    1 +
- test/shell/fsadm.sh |   17 ++++++++++++-----
- 2 files changed, 13 insertions(+), 5 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |   18 ++++++++++++++----
+ 2 files changed, 15 insertions(+), 4 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 834cf0f..6f7abe6 100644
+index 6f7abe6..284c92e 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.105 -
  =====================================
-+  Replace use of xfs_check with xfs_reparir in fsadm. 
++  Fix thin LV flagging for udev to skip scanning only if the LV is wiped
+   Replace use of xfs_check with xfs_reparir in fsadm. 
    Mark lvm1 format metadata as FMT_OBSOLETE. Do not use it with lvmetad.
    Invalidate cached VG struct after a PV in it gets orphaned. (2.02.87)
-   Mark pool format metadata as FMT_OBSOLETE.
-diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
-index 4e624db..8d4b37d 100644
---- a/test/shell/fsadm.sh
-+++ b/test/shell/fsadm.sh
-@@ -1,5 +1,5 @@
- #!/bin/sh
--# Copyright (C) 2008-2012 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2008-2014 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -24,7 +24,9 @@ check_reiserfs=
- which mkfs.ext3 || check_ext3=${check_ext3:-mkfs.ext3}
- which fsck.ext3 || check_ext3=${check_ext3:-fsck.ext3}
- which mkfs.xfs || check_xfs=${check_xfs:-mkfs.xfs}
--which xfs_check || check_xfs=${check_xfs:-xfs_check}
-+which xfs_check || {
-+	which xfs_repair || check_xfs=${check_xfs:-xfs_repair}
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 62ca245..f45c89f 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5634,6 +5634,18 @@ out:
+ 	return 1;
+ }
+ 
++static int _should_wipe_lv(struct lvcreate_params *lp, struct logical_volume *lv) {
++	int r = lp->zero | lp->wipe_signatures;
++
++	if (!seg_is_thin(lp))
++		return r;
++
++	if (lv_is_thin_volume(lv))
++		return r && !lp->snapshot && !first_seg(first_seg(lv)->pool_lv)->zero_new_blocks;
++
++	return 0;
 +}
- which mkfs.reiserfs || check_reiserfs=${check_reiserfs:-mkfs.reiserfs}
- which reiserfsck || check_reiserfs=${check_reiserfs:-reiserfsck}
++
+ /* Thin notes:
+  * If lp->thin OR lp->activate is AY*, activate the pool if not already active.
+  * If lp->thin, create thin LV within the pool - as a snapshot if lp->snapshot.
+@@ -6029,7 +6041,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 	}
  
-@@ -54,7 +56,11 @@ fscheck_ext3()
+ 	/* Do not scan this LV until properly zeroed/wiped. */
+-	if (lp->zero | lp->wipe_signatures)
++	if (_should_wipe_lv(lp, lv))
+ 		lv->status |= LV_NOSCAN;
  
- fscheck_xfs()
- {
--	xfs_check "$dev_vg_lv"
-+	if which xfs_repair ; then
-+		xfs_repair -n "$dev_vg_lv"
-+	else
-+		xfs_check "$dev_vg_lv"
-+	fi
- }
+ 	if (lp->temporary)
+@@ -6110,9 +6122,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 			log_verbose("Signature wiping on \"%s/%s\" not requested", lv->vg->name, lv->name);
+ 	}
  
- fscheck_reiserfs()
-@@ -67,8 +73,9 @@ check_missing()
- 	eval local t=$\check_$1
- 	test -z "$t" && return 0
- 	test "$t" = skip && return 1
--	# trick for warning test
--	echo "WARNING: fsadm test skipped $1 tests, $t tool is missing"
-+	# trick to get test listed with warning
-+	echo "WARNING: fsadm test skipped $1 tests, $t tool is missing."
-+	should false;
- 	return 1
- }
- 
+-	if ((!seg_is_thin(lp) ||
+-	    (lv_is_thin_volume(lv) && !lp->snapshot &&
+-	     !first_seg(first_seg(lv)->pool_lv)->zero_new_blocks))) {
++	if (_should_wipe_lv(lp, lv)) {
+ 		if (!wipe_lv(lv, (struct wipe_params)
+ 			     {
+ 				     .do_zero = lp->zero,
 
 
