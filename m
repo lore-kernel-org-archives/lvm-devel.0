@@ -1,86 +1,319 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 22 Jan 2014 15:32:15 +0000 (UTC)
-Subject: master - wiping: issue error if libblkid detects signature and fails to return offset/length
-Message-ID: <20140122153215.88EFA61673@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 22 Jan 2014 16:11:51 +0000 (UTC)
+Subject: master - Misc: Move some thin pool functions to a new file
+Message-ID: <20140122161151.8CDF76167B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2b9d25133e3dfa0f95f838a75a682e5195110684
-Commit:        2b9d25133e3dfa0f95f838a75a682e5195110684
-Parent:        cb595a5a13134cd3c12559e5e3b69f4ecf667c18
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jan 22 16:26:49 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jan 22 16:29:52 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5590448c320eb76789110546cdea47dd1d7a97b3
+Commit:        5590448c320eb76789110546cdea47dd1d7a97b3
+Parent:        2b9d25133e3dfa0f95f838a75a682e5195110684
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed Jan 22 10:11:29 2014 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Jan 22 10:11:29 2014 -0600
 
-wiping: issue error if libblkid detects signature and fails to return offset/length
+Misc: Move some thin pool functions to a new file
 
-We need both offset and length when trying to wipe detected signatures.
-The libblkid can fail so it's good to have an error message issued for
-this state instead of being silent (libblkid does not issue any error
-messages here). We just issued "stack" here before but that was not
-quite useful if some error occurs...
+Functions that handle set-up, tear-down and creation of thin pool
+volumes will be more generally applicable when more targets exist
+that make use of device-mapper's persistent data format.  One of
+these targets is the dm-cache target.  I've selected some functions
+that will be useful for the cache segment type to be moved, since
+they will no longer be thin pool specific but are more broadly
+useful to any segment type that makes use of a 'pool' LV.
 ---
- WHATS_NEW             |    1 +
- lib/device/dev-type.c |   24 ++++++++++++++++++------
- 2 files changed, 19 insertions(+), 6 deletions(-)
+ lib/Makefile.in           |    1 +
+ lib/metadata/thin_manip.c |  241 ---------------------------------------------
+ 2 files changed, 1 insertions(+), 241 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index bbf736e..73f716c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.106 - 
- ====================================
-+  Issue error if libbblkid detects signature and fails to return offset/length.
-   Update autoconf config.guess/sub to 2014-01-01.
-   Online thin pool metadata resize requires 1.10 kernel thin pool target.
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 8fdc194..c3ace5f 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -88,6 +88,7 @@ SOURCES =\
+ 	metadata/merge.c \
+ 	metadata/metadata.c \
+ 	metadata/mirror.c \
++	metadata/pool_manip.c \
+ 	metadata/pv.c \
+ 	metadata/pv_manip.c \
+ 	metadata/pv_map.c \
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index e12a8ad..00647cc 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -21,15 +21,6 @@
+ #include "defaults.h"
+ #include "display.h"
  
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 78b093c..e67169b 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -452,6 +452,8 @@ out:
- static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 		       int exclude_lvm_member, int yes, force_t force)
+-int attach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume *metadata_lv)
+-{
+-	pool_seg->metadata_lv = metadata_lv;
+-	metadata_lv->status |= THIN_POOL_METADATA;
+-	lv_set_hidden(metadata_lv);
+-
+-	return add_seg_to_segs_using_this_lv(metadata_lv, pool_seg);
+-}
+-
+ int detach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume **metadata_lv)
  {
-+	static const char* msg_failed_offset = "Failed to get offset of the %s signature on %s.";
-+	static const char* msg_failed_length = "Failed to get length of the %s signature on %s.";
- 	const char *offset = NULL, *type = NULL, *magic = NULL,
- 		   *usage = NULL, *label = NULL, *uuid = NULL;
- 	loff_t offset_value;
-@@ -461,13 +463,23 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 		if (exclude_lvm_member &&
- 		    (!strcmp(type, "LVM1_member") || !strcmp(type, "LVM2_member")))
- 			return 1;
--		if (!blkid_probe_lookup_value(probe, "SBMAGIC_OFFSET", &offset, NULL) &&
--		     blkid_probe_lookup_value(probe, "SBMAGIC", &magic, &len))
+ 	struct logical_volume *lv = pool_seg->metadata_lv;
+@@ -48,117 +39,6 @@ int detach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume *
+ 	return 1;
+ }
+ 
+-int attach_pool_data_lv(struct lv_segment *pool_seg, struct logical_volume *pool_data_lv)
+-{
+-	if (!set_lv_segment_area_lv(pool_seg, 0, pool_data_lv, 0, THIN_POOL_DATA))
+-		return_0;
+-
+-	pool_seg->lv->status |= THIN_POOL;
+-	lv_set_hidden(pool_data_lv);
+-
+-	return 1;
+-}
+-
+-int attach_pool_lv(struct lv_segment *seg, struct logical_volume *pool_lv,
+-		   struct logical_volume *origin, struct logical_volume *merge_lv)
+-{
+-	seg->pool_lv = pool_lv;
+-	seg->lv->status |= THIN_VOLUME;
+-	seg->origin = origin;
+-
+-	if (origin && !add_seg_to_segs_using_this_lv(origin, seg))
+-		return_0;
+-
+-	if (!add_seg_to_segs_using_this_lv(pool_lv, seg))
+-		return_0;
+-
+-	if (merge_lv) {
+-		if (origin != merge_lv) {
+-			if (!add_seg_to_segs_using_this_lv(merge_lv, seg))
+-				return_0;
+-		}
+-
+-		init_snapshot_merge(seg, merge_lv);
+-	}
+-
+-	return 1;
+-}
+-
+-int detach_pool_lv(struct lv_segment *seg)
+-{
+-	struct lv_thin_message *tmsg, *tmp;
+-	struct seg_list *sl, *tsl;
+-	int no_update = 0;
+-
+-	if (!seg->pool_lv || !lv_is_thin_pool(seg->pool_lv)) {
+-		log_error(INTERNAL_ERROR "Cannot detach pool from non-thin LV %s",
+-			  seg->lv->name);
+-		return 0;
+-	}
+-
+-	/* Drop any message referencing removed segment */
+-	dm_list_iterate_items_safe(tmsg, tmp, &(first_seg(seg->pool_lv)->thin_messages)) {
+-		switch (tmsg->type) {
+-		case DM_THIN_MESSAGE_CREATE_SNAP:
+-		case DM_THIN_MESSAGE_CREATE_THIN:
+-			if (tmsg->u.lv == seg->lv) {
+-				log_debug_metadata("Discarding message for LV %s.",
+-						   tmsg->u.lv->name);
+-				dm_list_del(&tmsg->list);
+-				no_update = 1; /* Replacing existing */
+-			}
+-			break;
+-		case DM_THIN_MESSAGE_DELETE:
+-			if (tmsg->u.delete_id == seg->device_id) {
+-				log_error(INTERNAL_ERROR "Trying to delete %u again.",
+-					  tmsg->u.delete_id);
+-				return 0;
+-			}
+-			break;
+-		default:
+-			log_error(INTERNAL_ERROR "Unsupported message type %u.", tmsg->type);
+-			break;
+-		}
+-	}
+-
+-	if (!detach_thin_external_origin(seg))
+-		return_0;
+-
+-	if (!attach_pool_message(first_seg(seg->pool_lv),
+-				 DM_THIN_MESSAGE_DELETE,
+-				 NULL, seg->device_id, no_update))
+-		return_0;
+-
+-	if (!remove_seg_from_segs_using_this_lv(seg->pool_lv, seg))
+-		return_0;
+-
+-	if (seg->origin &&
+-	    !remove_seg_from_segs_using_this_lv(seg->origin, seg))
+-		return_0;
+-
+-	/* If thin origin, remove it from related thin snapshots */
+-	/*
+-	 * TODO: map removal of origin as snapshot lvconvert --merge?
+-	 * i.e. rename thin snapshot to origin thin origin
+-	 */
+-	dm_list_iterate_items_safe(sl, tsl, &seg->lv->segs_using_this_lv) {
+-		if (!seg_is_thin_volume(sl->seg) ||
+-		    (seg->lv != sl->seg->origin))
+-			continue;
+-
+-		if (!remove_seg_from_segs_using_this_lv(seg->lv, sl->seg))
 -			return_0;
-+		if (blkid_probe_lookup_value(probe, "SBMAGIC_OFFSET", &offset, NULL)) {
-+			log_error(msg_failed_offset, type, name);
-+			return 0;
-+		}
-+		if (blkid_probe_lookup_value(probe, "SBMAGIC", &magic, &len)) {
-+			log_error(msg_failed_length, type, name);
-+			return 0;
-+		}
- 	} else if (!blkid_probe_lookup_value(probe, "PTTYPE", &type, NULL)) {
--		if (!blkid_probe_lookup_value(probe, "PTMAGIC_OFFSET", &offset, NULL) &&
--		     blkid_probe_lookup_value(probe, "PTMAGIC", &magic, &len))
+-		/* Thin snapshot is now regular thin volume */
+-		sl->seg->origin = NULL;
+-	}
+-
+-	seg->lv->status &= ~THIN_VOLUME;
+-	seg->pool_lv = NULL;
+-	seg->origin = NULL;
+-
+-	return 1;
+-}
+-
+ int attach_pool_message(struct lv_segment *pool_seg, dm_thin_message_t type,
+ 			struct logical_volume *lv, uint32_t delete_id,
+ 			int no_update)
+@@ -372,26 +252,6 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
+ 	return 1;
+ }
+ 
+-struct lv_segment *find_pool_seg(const struct lv_segment *seg)
+-{
+-	struct lv_segment *pool_seg;
+-
+-	pool_seg = get_only_segment_using_this_lv(seg->lv);
+-
+-	if (!pool_seg) {
+-		log_error("Failed to find pool_seg for %s", seg->lv->name);
+-		return NULL;
+-	}
+-
+-	if (!seg_is_thin_pool(pool_seg)) {
+-		log_error("%s on %s is not a pool segment",
+-			  pool_seg->lv->name, seg->lv->name);
+-		return NULL;
+-	}
+-
+-	return pool_seg;
+-}
+-
+ struct logical_volume *find_pool_lv(const struct logical_volume *lv)
+ {
+ 	struct lv_segment *seg;
+@@ -443,107 +303,6 @@ uint32_t get_free_pool_device_id(struct lv_segment *thin_pool_seg)
+ 	return max_id;
+ }
+ 
+-int create_pool(struct logical_volume *pool_lv, const struct segment_type *segtype,
+-		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size)
+-{
+-	const struct segment_type *striped;
+-	struct logical_volume *meta_lv, *data_lv;
+-	struct lv_segment *seg;
+-	char name[NAME_LEN];
+-
+-	if (pool_lv->le_count) {
+-		/* FIXME move code for manipulation from lv_manip.c */
+-		log_error(INTERNAL_ERROR "Pool %s has already extents.", pool_lv->name);
+-		return 0;
+-	}
+-
+-	/* LV is not yet a pool, so it's extension from lvcreate */
+-	if (!(striped = get_segtype_from_string(pool_lv->vg->cmd, "striped")))
+-		return_0;
+-
+-	if (activation() && segtype->ops->target_present &&
+-	    !segtype->ops->target_present(pool_lv->vg->cmd, NULL, NULL)) {
+-		log_error("%s: Required device-mapper target(s) not "
+-			  "detected in your kernel.", segtype->name);
+-		return 0;
+-	}
+-
+-	/* Metadata segment */
+-	if (!lv_add_segment(ah, stripes, 1, pool_lv, striped, 1, 0, 0))
+-		return_0;
+-
+-	if (!activation())
+-		log_warn("WARNING: Pool %s is created without initialization.", pool_lv->name);
+-	else {
+-		if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
 -			return_0;
-+		if (blkid_probe_lookup_value(probe, "PTMAGIC_OFFSET", &offset, NULL)) {
-+			log_error(msg_failed_offset, type, name);
-+			return 0;
-+		}
-+		if (blkid_probe_lookup_value(probe, "PTMAGIC", &magic, &len)) {
-+			log_error(msg_failed_length, type, name);
-+			return 0;
-+		}
- 		usage = "partition table";
- 	} else
- 		return_0;
+-
+-		/*
+-		 * If killed here, only the VISIBLE striped pool LV is left
+-		 * and user could easily remove it.
+-		 *
+-		 * FIXME: implement lazy clearing when activation is disabled
+-		 */
+-		/* pool_lv is a new LV so the VG lock protects us */
+-		if (!activate_lv_local(pool_lv->vg->cmd, pool_lv) ||
+-		    /* Clear 4KB of metadata device for new thin-pool. */
+-		    !wipe_lv(pool_lv, (struct wipe_params) { .do_zero = 1 })) {
+-			log_error("Aborting. Failed to wipe pool metadata %s.",
+-				  pool_lv->name);
+-			goto bad;
+-		}
+-	}
+-
+-	if (dm_snprintf(name, sizeof(name), "%s_tmeta", pool_lv->name) < 0) {
+-		log_error("Name is too long to be a pool name.");
+-		goto bad;
+-	}
+-
+-	if (!(meta_lv = lv_create_empty(name, NULL, LVM_READ | LVM_WRITE,
+-					ALLOC_INHERIT, pool_lv->vg)))
+-		goto_bad;
+-
+-	if (!move_lv_segments(meta_lv, pool_lv, 0, 0))
+-		goto_bad;
+-
+-	/* Pool data segment */
+-	if (!lv_add_segment(ah, 0, stripes, pool_lv, striped, stripe_size, 0, 0))
+-		goto_bad;
+-
+-	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
+-					    pool_lv->status, "_tdata")))
+-		goto_bad;
+-
+-	seg = first_seg(pool_lv);
+-	/* Drop reference as attach_pool_data_lv() takes it again */
+-	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
+-		goto_bad;
+-
+-	if (!attach_pool_data_lv(seg, data_lv))
+-		goto_bad;
+-
+-	if (!attach_pool_metadata_lv(seg, meta_lv))
+-		goto_bad;
+-
+-	seg->segtype = segtype; /* Set as thin_pool segment */
+-
+-	return 1;
+-
+-bad:
+-	if (activation()) {
+-		if (deactivate_lv_local(pool_lv->vg->cmd, pool_lv)) {
+-			log_error("Aborting. Could not deactivate pool %s.",
+-				  pool_lv->name);
+-			return 0;
+-		}
+-		if (!lv_remove(pool_lv) || !vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
+-			log_error("Manual intervention may be required to remove "
+-				  "abandoned LV(s) before retrying.");
+-	}
+-
+-	return 0;
+-}
+-
+ int update_pool_lv(struct logical_volume *lv, int activate)
+ {
+ 	int monitored;
 
 
