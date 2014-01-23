@@ -1,339 +1,100 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Jan 2014 08:58:01 +0000 (UTC)
-Subject: master - missed pool_manip.c
-Message-ID: <20140123085801.417EC6111E@fedorahosted.org>
+Date: Thu, 23 Jan 2014 13:23:42 +0000 (UTC)
+Subject: master - thin: rename function
+Message-ID: <20140123132342.6905C6062C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1d7b2715e51b399dd275a832f488cd712b044844
-Commit:        1d7b2715e51b399dd275a832f488cd712b044844
-Parent:        998af1a4fbf82cb9d5a2ba0c3c547ede39466a28
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2dae78b722cff63eb6e11aa6cedad1ee3545871b
+Commit:        2dae78b722cff63eb6e11aa6cedad1ee3545871b
+Parent:        1d7b2715e51b399dd275a832f488cd712b044844
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 23 09:56:17 2014 +0100
+AuthorDate:    Thu Jan 23 11:47:10 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jan 23 09:57:22 2014 +0100
+CommitterDate: Thu Jan 23 14:19:17 2014 +0100
 
-missed pool_manip.c
+thin: rename function
 
-Seems like this file is missing from the thin_manip move.
-Make the tree compilable again.
+Rename pool_can_resize_metadata() to more reusable
+thin_pool_feature_supported() which could be queried
+for mutiple different features.
 ---
- lib/metadata/pool_manip.c |  305 +++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 305 insertions(+), 0 deletions(-)
+ WHATS_NEW                        |    1 +
+ lib/metadata/lv_manip.c          |    4 ++--
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/thin_manip.c        |    4 ++--
+ 4 files changed, 6 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-new file mode 100644
-index 0000000..a36c0c7
---- /dev/null
-+++ b/lib/metadata/pool_manip.c
-@@ -0,0 +1,305 @@
-+/*
-+ * Copyright (C) 2013-2014 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
-+/*
-+ * This file holds common pool functions.
-+ */
-+
-+#include "lib.h"
-+#include "activate.h"
-+#include "locking.h"
-+#include "metadata.h"
-+#include "segtype.h"
-+#include "lv_alloc.h"
-+#include "defaults.h"
-+#include "display.h"
-+
-+int attach_pool_metadata_lv(struct lv_segment *pool_seg,
-+			    struct logical_volume *metadata_lv)
-+{
-+	if (!seg_is_thin_pool(pool_seg)) {
-+		log_error(INTERNAL_ERROR
-+			  "Unable to attach pool metadata LV to %s segtype.",
-+			  pool_seg->segtype->ops->name(pool_seg));
-+		return 0;
-+	}
-+	pool_seg->metadata_lv = metadata_lv;
-+	metadata_lv->status |= THIN_POOL_METADATA;
-+	lv_set_hidden(metadata_lv);
-+
-+	return add_seg_to_segs_using_this_lv(metadata_lv, pool_seg);
-+}
-+
-+int attach_pool_data_lv(struct lv_segment *pool_seg,
-+			struct logical_volume *pool_data_lv)
-+{
-+	if (!seg_is_thin_pool(pool_seg)) {
-+		log_error(INTERNAL_ERROR
-+			  "Unale to attach pool data LV to %s segtype.",
-+			  pool_seg->segtype->ops->name(pool_seg));
-+		return 0;
-+	}
-+
-+	if (!set_lv_segment_area_lv(pool_seg, 0, pool_data_lv,
-+				    0, THIN_POOL_DATA))
-+		return_0;
-+
-+	pool_seg->lv->status |= THIN_POOL;
-+	lv_set_hidden(pool_data_lv);
-+
-+	return 1;
-+}
-+
-+int attach_pool_lv(struct lv_segment *seg,
-+		   struct logical_volume *pool_lv,
-+		   struct logical_volume *origin,
-+		   struct logical_volume *merge_lv)
-+{
-+	if (!seg_is_thin_volume(seg)) {
-+		log_error(INTERNAL_ERROR "Unable to attach pool to %s/%s"
-+			  " that is thin volume.",
-+			  pool_lv->vg->name, seg->lv->name);
-+		return 0;
-+	}
-+
-+	seg->pool_lv = pool_lv;
-+	seg->origin = origin;
-+	seg->lv->status |= THIN_VOLUME;
-+
-+	if (origin && !add_seg_to_segs_using_this_lv(origin, seg))
-+		return_0;
-+
-+	if (!add_seg_to_segs_using_this_lv(pool_lv, seg))
-+		return_0;
-+
-+	if (merge_lv) {
-+		if (origin != merge_lv) {
-+			if (!add_seg_to_segs_using_this_lv(merge_lv, seg))
-+				return_0;
-+		}
-+
-+		init_snapshot_merge(seg, merge_lv);
-+	}
-+
-+	return 1;
-+}
-+
-+int detach_pool_lv(struct lv_segment *seg)
-+{
-+	struct lv_thin_message *tmsg, *tmp;
-+	struct seg_list *sl, *tsl;
-+	int no_update = 0;
-+
-+	if (!seg->pool_lv) {
-+		log_error(INTERNAL_ERROR
-+			  "No pool associated with %s LV, %s.",
-+			  seg->segtype->ops->name(seg), seg->lv->name);
-+		return 0;
-+	}
-+
-+	if (!lv_is_thin_pool(seg->pool_lv)) {
-+		log_error(INTERNAL_ERROR
-+			  "Cannot detach pool from LV %s.",
-+			  seg->lv->name);
-+		return 0;
-+	}
-+
-+	/* Drop any message referencing removed segment */
-+	dm_list_iterate_items_safe(tmsg, tmp, &(first_seg(seg->pool_lv)->thin_messages)) {
-+		switch (tmsg->type) {
-+		case DM_THIN_MESSAGE_CREATE_SNAP:
-+		case DM_THIN_MESSAGE_CREATE_THIN:
-+			if (tmsg->u.lv == seg->lv) {
-+				log_debug_metadata("Discarding message for LV %s.",
-+						   tmsg->u.lv->name);
-+				dm_list_del(&tmsg->list);
-+				no_update = 1; /* Replacing existing */
-+			}
-+			break;
-+		case DM_THIN_MESSAGE_DELETE:
-+			if (tmsg->u.delete_id == seg->device_id) {
-+				log_error(INTERNAL_ERROR "Trying to delete %u again.",
-+					  tmsg->u.delete_id);
-+				return 0;
-+			}
-+			break;
-+		default:
-+			log_error(INTERNAL_ERROR "Unsupported message type %u.", tmsg->type);
-+			break;
-+		}
-+	}
-+
-+	if (!detach_thin_external_origin(seg))
-+		return_0;
-+
-+	if (!attach_pool_message(first_seg(seg->pool_lv),
-+				 DM_THIN_MESSAGE_DELETE,
-+				 NULL, seg->device_id, no_update))
-+		return_0;
-+
-+	if (!remove_seg_from_segs_using_this_lv(seg->pool_lv, seg))
-+		return_0;
-+
-+	if (seg->origin &&
-+	    !remove_seg_from_segs_using_this_lv(seg->origin, seg))
-+		return_0;
-+
-+	/* If thin origin, remove it from related thin snapshots */
-+	/*
-+	 * TODO: map removal of origin as snapshot lvconvert --merge?
-+	 * i.e. rename thin snapshot to origin thin origin
-+	 */
-+	dm_list_iterate_items_safe(sl, tsl, &seg->lv->segs_using_this_lv) {
-+		if (!seg_is_thin_volume(sl->seg) ||
-+		    (seg->lv != sl->seg->origin))
-+			continue;
-+
-+		if (!remove_seg_from_segs_using_this_lv(seg->lv, sl->seg))
-+			return_0;
-+		/* Thin snapshot is now regular thin volume */
-+		sl->seg->origin = NULL;
-+	}
-+
-+	seg->lv->status &= ~THIN_VOLUME;
-+	seg->pool_lv = NULL;
-+	seg->origin = NULL;
-+
-+	return 1;
-+}
-+
-+struct lv_segment *find_pool_seg(const struct lv_segment *seg)
-+{
-+	struct lv_segment *pool_seg;
-+
-+	pool_seg = get_only_segment_using_this_lv(seg->lv);
-+
-+	if (!pool_seg) {
-+		log_error("Failed to find pool_seg for %s", seg->lv->name);
-+		return NULL;
-+	}
-+
-+	if (!seg_is_thin_pool(pool_seg)) {
-+		log_error("%s on %s is not a pool segment.",
-+			  pool_seg->lv->name, seg->lv->name);
-+		return NULL;
-+	}
-+
-+	return pool_seg;
-+}
-+
-+int create_pool(struct logical_volume *pool_lv,
-+		const struct segment_type *segtype,
-+		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size)
-+{
-+	const struct segment_type *striped;
-+	struct logical_volume *meta_lv, *data_lv;
-+	struct lv_segment *seg;
-+	char name[NAME_LEN];
-+
-+	if (pool_lv->le_count) {
-+		log_error(INTERNAL_ERROR "Pool %s has already extents.",
-+			  pool_lv->name);
-+		return 0;
-+	}
-+
-+	/* LV is not yet a pool, so it's extension from lvcreate */
-+	if (!(striped = get_segtype_from_string(pool_lv->vg->cmd, "striped")))
-+		return_0;
-+
-+	if (activation() && segtype->ops->target_present &&
-+	    !segtype->ops->target_present(pool_lv->vg->cmd, NULL, NULL)) {
-+		log_error("%s: Required device-mapper target(s) not "
-+			  "detected in your kernel.", segtype->name);
-+		return 0;
-+	}
-+
-+	/* Metadata segment */
-+	if (!lv_add_segment(ah, stripes, 1, pool_lv, striped, 1, 0, 0))
-+		return_0;
-+
-+	if (!activation())
-+		log_warn("WARNING: Pool %s is created without initialization.",
-+			 pool_lv->name);
-+	else {
-+		if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
-+			return_0;
-+
-+		/*
-+		 * If killed here, only the VISIBLE striped pool LV is left
-+		 * and user could easily remove it.
-+		 *
-+		 * FIXME: implement lazy clearing when activation is disabled
-+		 */
-+		/* pool_lv is a new LV so the VG lock protects us */
-+		if (!activate_lv_local(pool_lv->vg->cmd, pool_lv) ||
-+		    /* Clear 4KB of metadata device for new thin-pool. */
-+		    !wipe_lv(pool_lv, (struct wipe_params) { .do_zero = 1 })) {
-+			log_error("Aborting. Failed to wipe pool metadata %s.",
-+				  pool_lv->name);
-+			goto bad;
-+		}
-+	}
-+
-+	if (dm_snprintf(name, sizeof(name), "%s_%s", pool_lv->name,
-+			"tmeta") < 0) {
-+		log_error("Name is too long to be a pool name.");
-+		goto bad;
-+	}
-+
-+	if (!(meta_lv = lv_create_empty(name, NULL, LVM_READ | LVM_WRITE,
-+					ALLOC_INHERIT, pool_lv->vg)))
-+		goto_bad;
-+
-+	if (!move_lv_segments(meta_lv, pool_lv, 0, 0))
-+		goto_bad;
-+
-+	/* Pool data segment */
-+	if (!lv_add_segment(ah, 0, stripes, pool_lv, striped, stripe_size, 0, 0))
-+		goto_bad;
-+
-+	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
-+					    pool_lv->status,
-+					    "_tdata")))
-+		goto_bad;
-+
-+	seg = first_seg(pool_lv);
-+	/* Drop reference as attach_pool_data_lv() takes it again */
-+	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
-+		goto_bad;
-+
-+	seg->segtype = segtype; /* Set as thin_pool segment */
-+
-+	if (!attach_pool_data_lv(seg, data_lv))
-+		goto_bad;
-+
-+	if (!attach_pool_metadata_lv(seg, meta_lv))
-+		goto_bad;
-+
-+	return 1;
-+
-+bad:
-+	if (activation()) {
-+		if (deactivate_lv_local(pool_lv->vg->cmd, pool_lv)) {
-+			log_error("Aborting. Could not deactivate pool %s.",
-+				  pool_lv->name);
-+			return 0;
-+		}
-+		if (!lv_remove(pool_lv) ||
-+		    !vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
-+			log_error("Manual intervention may be required to "
-+				  "remove abandoned LV(s) before retrying.");
-+	}
-+
-+	return 0;
-+}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 73f716c..e491ed8 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.106 - 
+ ====================================
++  Rename internal pool_can_resize_metadata() to thin_pool_feature_supported().
+   Issue error if libbblkid detects signature and fails to return offset/length.
+   Update autoconf config.guess/sub to 2014-01-01.
+   Online thin pool metadata resize requires 1.10 kernel thin pool target.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 07ee764..6333ef6 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3469,7 +3469,7 @@ static int _adjust_policy_params(struct cmd_context *cmd,
+ 			return_0;
+ 		if ((PERCENT_0 < percent && percent <= PERCENT_100) &&
+ 		    (percent > policy_threshold)) {
+-			if (!pool_can_resize_metadata(lv)) {
++			if (!thin_pool_feature_supported(lv, THIN_FEATURE_METADATA_RESIZE)) {
+ 				log_error_once("Online metadata resize for %s/%s is not supported.",
+ 					       lp->vg_name, lp->lv_name);
+ 				return 0;
+@@ -3535,7 +3535,7 @@ static int _lvresize_poolmetadata_prepare(struct cmd_context *cmd,
+ 
+ 	lp->poolmetadataextents = 0;
+ 
+-	if (!pool_can_resize_metadata(pool_lv)) {
++	if (!thin_pool_feature_supported(pool_lv, THIN_FEATURE_METADATA_RESIZE)) {
+ 		log_error("Support for online metadata resize not detected.");
+ 		return 0;
+ 	}
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 52a1c4c..6e7987d 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -674,7 +674,7 @@ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ 
+ struct logical_volume *find_pool_lv(const struct logical_volume *lv);
+ int pool_is_active(const struct logical_volume *pool_lv);
+-int pool_can_resize_metadata(const struct logical_volume *pool_lv);
++int thin_pool_feature_supported(const struct logical_volume *pool_lv, int feature);
+ int update_pool_lv(struct logical_volume *lv, int activate);
+ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profile,
+ 				  int passed_args, int *chunk_size_calc_method,
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 00647cc..92c4177 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -206,7 +206,7 @@ int pool_is_active(const struct logical_volume *lv)
+ 	return 0;
+ }
+ 
+-int pool_can_resize_metadata(const struct logical_volume *lv)
++int thin_pool_feature_supported(const struct logical_volume *lv, int feature)
+ {
+ 	static unsigned attr = 0U;
+ 	struct lv_segment *seg;
+@@ -225,7 +225,7 @@ int pool_can_resize_metadata(const struct logical_volume *lv)
+ 		return 0;
+ 	}
+ 
+-	return (attr & THIN_FEATURE_METADATA_RESIZE) ? 1 : 0;
++	return (attr & feature) ? 1 : 0;
+ }
+ 
+ int pool_below_threshold(const struct lv_segment *pool_seg)
 
 
