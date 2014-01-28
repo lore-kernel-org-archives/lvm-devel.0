@@ -1,92 +1,82 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 28 Jan 2014 09:41:09 +0000 (UTC)
-Subject: master - thin: disable extension of reduced thin with etx.origin
-Message-ID: <20140128094109.75F0C616A5@fedorahosted.org>
+Date: Tue, 28 Jan 2014 12:25:25 +0000 (UTC)
+Subject: master - thin: more validation of thin name
+Message-ID: <20140128122525.EDE4A60E05@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0bd436dcb45849aff2e953432e5b40e55e0f712
-Commit:        c0bd436dcb45849aff2e953432e5b40e55e0f712
-Parent:        7786443530915505e17fcc42f0c750cb81cdc522
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e9d9852c55cbc2c509c293691287fa5443868926
+Commit:        e9d9852c55cbc2c509c293691287fa5443868926
+Parent:        bc5f40ee1c7c409c17f85a55f6a8b2606067e76e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jan 28 10:24:50 2014 +0100
+AuthorDate:    Tue Jan 28 13:21:39 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jan 28 10:40:08 2014 +0100
+CommitterDate: Tue Jan 28 13:21:39 2014 +0100
 
-thin: disable extension of reduced thin with etx.origin
+thin: more validation of thin name
 
-Since we are currently incapable of providing zeroes for
-reextended thin volume area, let's disable extension of
-such already reduce thin volumes.
+Avoid starting conversion of the LV to the thin pool and thin volume
+at the same time.  Since this is mostly a user mistake, do not try
+to just convert to one of those type, since we cannot assume if the
+user wanted LV to become thin volume or thin pool.
 
-(in-release change)
+Before the fix tool reported pretty strange internal error:
+Internal error: Referenced LV lvol1_tdata not listed in VG mvg.
+
+Fixed output:
+lvconvert --thinpool lvol0 -T mvg/lvol0
+Can't use same LV mvg/lvol0 for thin pool and thin volume.
 ---
- lib/metadata/lv_manip.c                     |   28 +++++++++++++++++++-------
- test/shell/lvresize-thin-external-origin.sh |    6 ++--
- 2 files changed, 23 insertions(+), 11 deletions(-)
+ WHATS_NEW                             |    1 +
+ test/shell/lvconvert-thin-external.sh |    4 ++++
+ tools/lvconvert.c                     |    6 ++++++
+ 3 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index c875b69..2e240fc 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2452,14 +2452,6 @@ int lv_add_virtual_segment(struct logical_volume *lv, uint64_t status,
- 	lv->le_count += extents;
- 	lv->size += (uint64_t) extents *lv->vg->extent_size;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ca56623..3a4c7ec 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.106 - 
+ ====================================
++  Avoid trying to convert single to thin pool and volume at the same time.
+   Add support for partitions on ZFS zvol.
+   Fix unwanted drop of hold flocks on forked children.
+   Respect LVM_LVMETAD_PIDFILE env var for lvm command.
+diff --git a/test/shell/lvconvert-thin-external.sh b/test/shell/lvconvert-thin-external.sh
+index d9d4d19..53758fc 100644
+--- a/test/shell/lvconvert-thin-external.sh
++++ b/test/shell/lvconvert-thin-external.sh
+@@ -56,6 +56,10 @@ lvremove -f $vg/pool1
+ # create plain LV (will be used for external origin)
+ lvcreate -L8M -n $lv1 $vg
  
--	/* Validate thin target supports bigger size of thin volume then external origin */
--	if (lv_is_thin_volume(lv) && first_seg(lv)->external_lv &&
--	    first_seg(lv)->external_lv->size < lv->size &&
--	    !thin_pool_feature_supported(first_seg(lv)->pool_lv, THIN_FEATURE_EXTERNAL_ORIGIN_EXTEND)) {
--		log_error("Thin target does not support external origin smaller then thin volume.");
--		return 0;
--	}
--
- 	return 1;
- }
- 
-@@ -4036,6 +4028,26 @@ static int _lvresize_check_type(struct cmd_context *cmd, const struct logical_vo
- 		}
++# Can't convert same LV to the thin pool and thin volume
++not lvconvert --thinpool $vg/$lv1 -T $vg/$lv1
++check lv_field $vg/$lv1 segtype linear
++
+ mkfs.ext2 $DM_DEV_DIR/$vg/$lv1
+ mkdir mnt
+ mount $DM_DEV_DIR/$vg/$lv1 mnt
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 87eb643..ffbf768 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2582,6 +2582,12 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
  	}
  
-+	if (lv_is_thin_volume(lv) && first_seg(lv)->external_lv &&
-+	    (lp->resize == LV_EXTEND)) {
-+		/*
-+		 * TODO: currently we do not support extension of already reduced thin volume.
-+		 * But it might be possible to create combined mapping of some part of
-+		 * the external origin followed by zero target.
-+		 */
-+		if (first_seg(lv)->external_lv->size > lv->size) {
-+			log_error("Extension of reduced thin volume with external origin is unsupported.");
+ 	if (lp->thin) {
++		if (strcmp(pool_lv->name, lp->pool_data_lv_name) == 0) {
++			log_error("Can't use same LV %s/%s for thin pool and thin volume.",
++				  pool_lv->vg->name, pool_lv->name);
 +			return 0;
 +		}
 +
-+		/* Validate thin target supports bigger size of thin volume then external origin */
-+		if (first_seg(lv)->external_lv->size <= lv->size &&
-+		    !thin_pool_feature_supported(first_seg(lv)->pool_lv, THIN_FEATURE_EXTERNAL_ORIGIN_EXTEND)) {
-+			log_error("Thin target does not support external origin smaller then thin volume.");
-+			return 0;
-+		}
-+	}
-+
- 	return 1;
- }
- 
-diff --git a/test/shell/lvresize-thin-external-origin.sh b/test/shell/lvresize-thin-external-origin.sh
-index d9739c0..3499196 100644
---- a/test/shell/lvresize-thin-external-origin.sh
-+++ b/test/shell/lvresize-thin-external-origin.sh
-@@ -37,6 +37,6 @@ not lvresize -L+10 $vg/$lv1
- # But reduction works
- lvresize -L-5 -f $vg/$lv1
- not lvresize -L+15 -y $vg/$lv1
--# We may size again back up to the size of external origin
--# TODO: hmm do we really want this???
--lvresize -L+5 -f $vg/$lv1
-+# Try to resize again back up to the size of external origin
-+# But for now we do not support zeroing for rexetended areas.
-+not lvresize -L+5 -f $vg/$lv1
+ 		external_lv = pool_lv;
+ 		if (!(pool_lv = find_lv(external_lv->vg, lp->pool_data_lv_name))) {
+ 			log_error("Can't find pool LV %s/%s.",
 
 
