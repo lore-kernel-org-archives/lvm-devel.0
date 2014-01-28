@@ -1,53 +1,58 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 28 Jan 2014 09:41:07 +0000 (UTC)
-Subject: master - devices: support zvol
-Message-ID: <20140128094107.5C590616A5@fedorahosted.org>
+Date: Tue, 28 Jan 2014 09:41:11 +0000 (UTC)
+Subject: master - tests: check for mkfs
+Message-ID: <20140128094111.8A633610D6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7786443530915505e17fcc42f0c750cb81cdc522
-Commit:        7786443530915505e17fcc42f0c750cb81cdc522
-Parent:        df181cc51e32fb54dac6652574e303e93b51b8bd
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bc5f40ee1c7c409c17f85a55f6a8b2606067e76e
+Commit:        bc5f40ee1c7c409c17f85a55f6a8b2606067e76e
+Parent:        c0bd436dcb45849aff2e953432e5b40e55e0f712
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 27 13:13:32 2014 +0100
+AuthorDate:    Tue Jan 28 09:54:22 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jan 28 10:33:29 2014 +0100
+CommitterDate: Tue Jan 28 10:40:08 2014 +0100
 
-devices: support zvol
+tests: check for mkfs
 
-Support partitions on ZFS zvol.
-Requested via https://bugzilla.redhat.com/show_bug.cgi?id=913597
-
-Author: hakimian at aha.com
+Test mkfs.ext3 presence for test.
+Test also on singlenode cluster.
+Speed up a bit slowed down device.
 ---
- WHATS_NEW                 |    1 +
- lib/device/device-types.h |    1 +
- 2 files changed, 2 insertions(+), 0 deletions(-)
+ test/shell/lock-parallel.sh |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f56ad20..ca56623 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.106 - 
- ====================================
-+  Add support for partitions on ZFS zvol.
-   Fix unwanted drop of hold flocks on forked children.
-   Respect LVM_LVMETAD_PIDFILE env var for lvm command.
-   Avoid exposing temporary devices when initializing thin pool volume.
-diff --git a/lib/device/device-types.h b/lib/device/device-types.h
-index d716878..666f7b6 100644
---- a/lib/device/device-types.h
-+++ b/lib/device/device-types.h
-@@ -62,5 +62,6 @@ static const dev_known_type_t _dev_known_types[] = {
- 	{"scm", 8, "Storage Class Memory (IBM S/390)"},
- 	{"bcache", 1, "bcache block device cache"},
- 	{"nvme", 64, "NVM Express"},
-+	{"zvol", 16, "ZFS Zvols"},
- 	{"", 0, ""}
- };
+diff --git a/test/shell/lock-parallel.sh b/test/shell/lock-parallel.sh
+index f8e72c3..4820129 100644
+--- a/test/shell/lock-parallel.sh
++++ b/test/shell/lock-parallel.sh
+@@ -14,19 +14,20 @@
+ 
+ . lib/test
+ 
++which mkfs.ext3 || skip
++
+ aux prepare_vg
+-test -e LOCAL_CLVMD && skip
+ 
+ lvcreate -L10 -n $lv1 $vg
+ lvcreate -l1 -n $lv2 $vg
+-mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mkfs.ext3 "$DM_DEV_DIR/$vg/$lv1"
+ 
+ # Slowdown PV for resized LV
+-aux delay_dev "$dev1" 40 40
++aux delay_dev "$dev1" 20 20
+ 
+ lvresize -L-5 -r $vg/$lv1 &
+ 
+-# Let's wait till resize start
++# Let's wait till resize starts
+ sleep 2
+ 
+ lvremove -f $vg/$lv2
 
 
