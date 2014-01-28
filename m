@@ -1,156 +1,156 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Tue, 28 Jan 2014 08:16:08 -0600
-Subject: [LVM PATCH 2/3] cache: Allocation code changes to support cache pool
+Date: Tue, 28 Jan 2014 08:16:09 -0600
+Subject: [LVM PATCH 3/3] cache/pool: Make the fns in pool_manip.c work with cache pools
 In-Reply-To: <1390918569-22041-1-git-send-email-jbrassow@redhat.com>
 References: <1390918569-22041-1-git-send-email-jbrassow@redhat.com>
-Message-ID: <1390918569-22041-3-git-send-email-jbrassow@redhat.com>
+Message-ID: <1390918569-22041-4-git-send-email-jbrassow@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Cache pools require a data and metadata area (like thin pools).  Unlike
-thin pool, if 'cache_pool_metadata_require_separate_pvs' is not set to
-'1', the metadata and data area will be allocated from the same device.
-It is also done in a manner similar to RAID, where a single chunk of
-space is allocated and then split to form the metadata and data device -
-ensuring that they are together.
+The functions in pool_manip.c are specific to thin pools.  It's
+now time to make them more generic and able to handle cache pools
+as well.
 
 ---
- conf/example.conf.in         |    4 ++++
- lib/config/config_settings.h |    1 +
- lib/config/defaults.h        |    2 ++
- lib/metadata/lv_manip.c      |   39 ++++++++++++++++++++++++++++++++-------
- 4 files changed, 39 insertions(+), 7 deletions(-)
+ lib/metadata/pool_manip.c |   44 +++++++++++++++++++++++++++++---------------
+ 1 files changed, 29 insertions(+), 15 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 0f73cf3..7b98b4b 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -301,6 +301,10 @@ allocation {
-     # until version 2.02.85.
-     mirror_logs_require_separate_pvs = 0
+diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
+index 18dfad5..afb77d6 100644
+--- a/lib/metadata/pool_manip.c
++++ b/lib/metadata/pool_manip.c
+@@ -28,14 +28,15 @@
+ int attach_pool_metadata_lv(struct lv_segment *pool_seg,
+ 			    struct logical_volume *metadata_lv)
+ {
+-	if (!seg_is_thin_pool(pool_seg)) {
++	if (!seg_is_thin_pool(pool_seg) && !seg_is_cache_pool(pool_seg)) {
+ 		log_error(INTERNAL_ERROR
+ 			  "Unable to attach pool metadata LV to %s segtype.",
+ 			  pool_seg->segtype->ops->name(pool_seg));
+ 		return 0;
+ 	}
+ 	pool_seg->metadata_lv = metadata_lv;
+-	metadata_lv->status |= THIN_POOL_METADATA;
++	metadata_lv->status |= seg_is_thin_pool(pool_seg) ?
++		THIN_POOL_METADATA : CACHE_POOL_METADATA;
+ 	lv_set_hidden(metadata_lv);
  
-+    # Set to 1 to guarantee that cache_pool metadata will always be
-+    # placed on  different PVs from the cache_pool data.
-+    cache_pool_metadata_require_separate_pvs = 0
+ 	return add_seg_to_segs_using_this_lv(metadata_lv, pool_seg);
+@@ -44,7 +45,7 @@ int attach_pool_metadata_lv(struct lv_segment *pool_seg,
+ int attach_pool_data_lv(struct lv_segment *pool_seg,
+ 			struct logical_volume *pool_data_lv)
+ {
+-	if (!seg_is_thin_pool(pool_seg)) {
++	if (!seg_is_thin_pool(pool_seg) && !seg_is_cache_pool(pool_seg)) {
+ 		log_error(INTERNAL_ERROR
+ 			  "Unable to attach pool data LV to %s segtype.",
+ 			  pool_seg->segtype->ops->name(pool_seg));
+@@ -52,10 +53,12 @@ int attach_pool_data_lv(struct lv_segment *pool_seg,
+ 	}
+ 
+ 	if (!set_lv_segment_area_lv(pool_seg, 0, pool_data_lv,
+-				    0, THIN_POOL_DATA))
++				    0, seg_is_thin_pool(pool_seg) ?
++				    THIN_POOL_DATA : CACHE_POOL_DATA))
+ 		return_0;
+ 
+-	pool_seg->lv->status |= THIN_POOL;
++	pool_seg->lv->status |= seg_is_thin_pool(pool_seg) ?
++		THIN_POOL : CACHE_POOL;
+ 	lv_set_hidden(pool_data_lv);
+ 
+ 	return 1;
+@@ -66,16 +69,16 @@ int attach_pool_lv(struct lv_segment *seg,
+ 		   struct logical_volume *origin,
+ 		   struct logical_volume *merge_lv)
+ {
+-	if (!seg_is_thin_volume(seg)) {
++	if (!seg_is_thin_volume(seg) && !seg_is_cache(seg)) {
+ 		log_error(INTERNAL_ERROR "Unable to attach pool to %s/%s"
+-			  " that is thin volume.",
++			  " that is not cache or thin volume.",
+ 			  pool_lv->vg->name, seg->lv->name);
+ 		return 0;
+ 	}
+ 
+ 	seg->pool_lv = pool_lv;
+ 	seg->origin = origin;
+-	seg->lv->status |= THIN_VOLUME;
++	seg->lv->status |= seg_is_cache(seg) ? CACHE : THIN_VOLUME;
+ 
+ 	if (origin && !add_seg_to_segs_using_this_lv(origin, seg))
+ 		return_0;
+@@ -108,6 +111,13 @@ int detach_pool_lv(struct lv_segment *seg)
+ 		return 0;
+ 	}
+ 
++	if (seg_is_cache(seg)) {
++		if (!remove_seg_from_segs_using_this_lv(seg->pool_lv, seg))
++			return_0;
++		seg->pool_lv = NULL;
++		return 1;
++	}
 +
-     # Set to 1 to guarantee that thin pool metadata will always
-     # be placed on different PVs from the pool data.
-     thin_pool_metadata_require_separate_pvs = 0
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 1546b3f..2c6953b 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -107,6 +107,7 @@ cfg(allocation_maximise_cling_CFG, "maximise_cling", allocation_CFG_SECTION, 0,
- cfg(allocation_use_blkid_wiping_CFG, "use_blkid_wiping", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL)
- cfg(allocation_wipe_signatures_when_zeroing_new_lvs_CFG, "wipe_signatures_when_zeroing_new_lvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL)
- cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_MIRROR_LOGS_REQUIRE_SEPARATE_PVS, vsn(2, 2, 85), NULL)
-+cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
- cfg(allocation_thin_pool_metadata_require_separate_pvs_CFG, "thin_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
- cfg(allocation_thin_pool_zero_CFG, "thin_pool_zero", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_ZERO, vsn(2, 2, 99), NULL)
- cfg(allocation_thin_pool_discards_CFG, "thin_pool_discards", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_STRING, DEFAULT_THIN_POOL_DISCARDS, vsn(2, 2, 99), NULL)
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 141b7ae..a388e13 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -79,6 +79,8 @@
- #define DEFAULT_THIN_POOL_ZERO 1
- #define DEFAULT_POOL_METADATA_SPARE 1
+ 	if (!lv_is_thin_pool(seg->pool_lv)) {
+ 		log_error(INTERNAL_ERROR
+ 			  "Cannot detach pool from LV %s.",
+@@ -189,9 +199,11 @@ struct lv_segment *find_pool_seg(const struct lv_segment *seg)
+ 		return NULL;
+ 	}
  
-+#define DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
-+
- #define DEFAULT_UMASK 0077
+-	if (!seg_is_thin_pool(pool_seg)) {
+-		log_error("%s on %s is not a pool segment.",
+-			  pool_seg->lv->name, seg->lv->name);
++	if ((lv_is_thin_type(seg->lv) && !seg_is_thin_pool(pool_seg)) &&
++	    !seg_is_cache_pool(pool_seg)) {
++		log_error("%s on %s is not a %s pool segment",
++			  pool_seg->lv->name, seg->lv->name,
++			  lv_is_thin_type(seg->lv) ? "thin" : "cache");
+ 		return NULL;
+ 	}
  
- #ifdef LVM1_FALLBACK
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 2e240fc..653391f 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -924,6 +924,9 @@ struct alloc_handle {
- 	 * that is new_extents + log_len and then split that between two
- 	 * allocated areas when found.  'alloc_and_split_meta' indicates
- 	 * that this is the desired dynamic.
-+	 *
-+	 * This same idea is used by cache LVs to get the metadata device
-+	 * and data device allocated together.
- 	 */
- 	unsigned alloc_and_split_meta;
+@@ -208,7 +220,7 @@ int create_pool(struct logical_volume *pool_lv,
+ 	char name[NAME_LEN];
  
-@@ -1115,6 +1118,7 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
- 	 * a correct area_multiple.
- 	 */
- 	ah->area_multiple = _calc_area_multiple(segtype, area_count + parity_count, stripes);
-+	//FIXME: s/mirror_logs_separate/metadata_separate/ so it can be used by otehrs?
- 	ah->mirror_logs_separate = find_config_tree_bool(cmd, allocation_mirror_logs_require_separate_pvs_CFG, NULL);
+ 	if (pool_lv->le_count) {
+-		log_error(INTERNAL_ERROR "Pool %s has already extents.",
++		log_error(INTERNAL_ERROR "Pool %s already has extents.",
+ 			  pool_lv->name);
+ 		return 0;
+ 	}
+@@ -259,7 +271,8 @@ int create_pool(struct logical_volume *pool_lv,
+ 	}
  
- 	if (segtype_is_raid(segtype)) {
-@@ -1137,12 +1141,30 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
- 			ah->log_len = 0;
- 		}
- 	} else if (segtype_is_thin_pool(segtype)) {
--		ah->log_area_count = metadata_area_count;
--		/* thin_pool uses region_size to pass metadata size in extents */
-+		/*
-+		 * thin_pool uses ah->region_size to
-+		 * pass metadata size in extents
-+		 */
- 		ah->log_len = ah->region_size;
-+		ah->log_area_count = metadata_area_count;
- 		ah->region_size = 0;
- 		ah->mirror_logs_separate =
- 			find_config_tree_bool(cmd, allocation_thin_pool_metadata_require_separate_pvs_CFG, NULL);
-+	} else if (segtype_is_cache_pool(segtype)) {
-+		/*
-+		 * Like thin_pool, cache_pool uses ah->region_size to
-+		 * pass metadata size in extents
-+		 */
-+		ah->log_len = ah->region_size;
-+		/* use metadata_area_count, not log_area_count */
-+		ah->metadata_area_count = metadata_area_count;
-+		ah->region_size = 0;
-+		ah->mirror_logs_separate =
-+			find_config_tree_bool(cmd, allocation_cache_pool_metadata_require_separate_pvs_CFG, NULL);
-+		if (!ah->mirror_logs_separate) {
-+			ah->alloc_and_split_meta = 1;
-+			ah->new_extents += ah->log_len;
-+		}
- 	} else {
- 		ah->log_area_count = metadata_area_count;
- 		ah->log_len = !metadata_area_count ? 0 :
-@@ -1956,14 +1978,15 @@ static void _report_needed_allocation_space(struct alloc_handle *ah,
- 	uint32_t parallel_areas_count, parallel_area_size;
- 	uint32_t metadata_count, metadata_size;
+ 	if (dm_snprintf(name, sizeof(name), "%s_%s", pool_lv->name,
+-			"tmeta") < 0) {
++			(segtype_is_cache_pool(segtype)) ?
++			"cmeta" : "tmeta") < 0) {
+ 		log_error("Name is too long to be a pool name.");
+ 		goto bad;
+ 	}
+@@ -277,7 +290,8 @@ int create_pool(struct logical_volume *pool_lv,
  
--	parallel_area_size = (ah->new_extents - alloc_state->allocated) / ah->area_multiple -
--		      ((ah->alloc_and_split_meta) ? ah->log_len : 0);
-+	parallel_area_size = ah->new_extents - alloc_state->allocated;
-+	parallel_area_size /= ah->area_multiple;
-+	parallel_area_size -= (ah->alloc_and_split_meta) ? ah->log_len : 0;
+ 	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
+ 					    pool_lv->status,
+-					    "_tdata")))
++					    (segtype_is_cache_pool(segtype)) ?
++					    "_cdata" : "_tdata")))
+ 		goto_bad;
  
- 	parallel_areas_count = ah->area_count + ah->parity_count;
+ 	seg = first_seg(pool_lv);
+@@ -285,7 +299,7 @@ int create_pool(struct logical_volume *pool_lv,
+ 	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
+ 		goto_bad;
  
- 	metadata_size = ah->log_len;
- 	if (ah->alloc_and_split_meta) {
--		metadata_type = "RAID metadata area";
-+		metadata_type = "metadata area";
- 		metadata_count = parallel_areas_count;
- 	} else {
- 		metadata_type = "mirror log";
-@@ -1975,8 +1998,10 @@ static void _report_needed_allocation_space(struct alloc_handle *ah,
- 	log_debug_alloc("  %" PRIu32 " (%" PRIu32 " data/%" PRIu32
- 			" parity) parallel areas of %" PRIu32 " extents each",
- 			parallel_areas_count, ah->area_count, ah->parity_count, parallel_area_size);
--	log_debug_alloc("  %" PRIu32 " %ss of %" PRIu32 " extents each",
--			metadata_count, metadata_type, metadata_size);
-+	log_debug_alloc("  %" PRIu32 " %s%s of %" PRIu32 " extents each",
-+			metadata_count, metadata_type,
-+			(metadata_count == 1) ? "" : "s",
-+			metadata_size);
- }
- /*
-  * Returns 1 regardless of whether any space was found, except on error.
+-	seg->segtype = segtype; /* Set as thin_pool segment */
++	seg->segtype = segtype; /* Set as thin_pool or cache_pool segment */
+ 
+ 	if (!attach_pool_data_lv(seg, data_lv))
+ 		goto_bad;
 -- 
 1.7.7.6
 
