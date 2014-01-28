@@ -1,343 +1,156 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Tue, 28 Jan 2014 08:16:07 -0600
-Subject: [LVM PATCH 1/3] cache: New fns for gathering info on cache devices
+Date: Tue, 28 Jan 2014 08:16:08 -0600
+Subject: [LVM PATCH 2/3] cache: Allocation code changes to support cache pool
 In-Reply-To: <1390918569-22041-1-git-send-email-jbrassow@redhat.com>
 References: <1390918569-22041-1-git-send-email-jbrassow@redhat.com>
-Message-ID: <1390918569-22041-2-git-send-email-jbrassow@redhat.com>
+Message-ID: <1390918569-22041-3-git-send-email-jbrassow@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Building on the new DM function that parses DM cache status, we
-introduce the following LVM level functions to aquire information
-about cache devices:
-- lv_cache_block_info: retrieves information on the cache's block/chunk usage
-- lv_cache_policy_info: retrieves information on the cache's policy
+Cache pools require a data and metadata area (like thin pools).  Unlike
+thin pool, if 'cache_pool_metadata_require_separate_pvs' is not set to
+'1', the metadata and data area will be allocated from the same device.
+It is also done in a manner similar to RAID, where a single chunk of
+space is allocated and then split to form the metadata and data device -
+ensuring that they are together.
 
 ---
- lib/activate/activate.c          |  168 ++++++++++++++++++++++++++++++++++++++
- lib/activate/activate.h          |    6 ++
- lib/activate/dev_manager.c       |   51 +++++++++++-
- lib/activate/dev_manager.h       |    3 +
- lib/metadata/metadata-exported.h |   11 +++
- 5 files changed, 238 insertions(+), 1 deletions(-)
+ conf/example.conf.in         |    4 ++++
+ lib/config/config_settings.h |    1 +
+ lib/config/defaults.h        |    2 ++
+ lib/metadata/lv_manip.c      |   39 ++++++++++++++++++++++++++++++++-------
+ 4 files changed, 39 insertions(+), 7 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 4c8c16d..4599064 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -285,6 +285,18 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
- {
- 	return 0;
- }
-+int lv_cache_block_info(const struct logical_volume *lv,
-+			uint32_t *chunk_size, uint64_t *dirty_count,
-+			uint64_t *used_count, uint64_t *total_count)
-+{
-+	return 0;
-+}
-+int lv_cache_policy_info(const struct logical_volume *lv,
-+			 char **policy_name, int *policy_argc,
-+			 char ***policy_argv)
-+{
-+	return 0;
-+}
- int lv_thin_pool_percent(const struct logical_volume *lv, int metadata,
- 			 percent_t *percent)
- {
-@@ -969,6 +981,162 @@ out:
- 	return r;
- }
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 0f73cf3..7b98b4b 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -301,6 +301,10 @@ allocation {
+     # until version 2.02.85.
+     mirror_logs_require_separate_pvs = 0
  
-+int lv_cache_block_info(struct logical_volume *lv,
-+			uint32_t *chunk_size, uint64_t *dirty_count,
-+			uint64_t *used_count, uint64_t *total_count)
-+{
-+	struct lv_segment *cache_seg;
-+	struct logical_volume *cache_lv;
-+	struct dev_manager *dm;
-+	struct dm_status_cache *status;
++    # Set to 1 to guarantee that cache_pool metadata will always be
++    # placed on  different PVs from the cache_pool data.
++    cache_pool_metadata_require_separate_pvs = 0
 +
-+	/* The user is free to choose which args they are interested in */
-+	if (chunk_size)
-+		*chunk_size = 0;
-+	if (dirty_count)
-+		*dirty_count = 0;
-+	if (used_count)
-+		*used_count = 0;
-+	if (total_count)
-+		*total_count = 0;
+     # Set to 1 to guarantee that thin pool metadata will always
+     # be placed on different PVs from the pool data.
+     thin_pool_metadata_require_separate_pvs = 0
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 1546b3f..2c6953b 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -107,6 +107,7 @@ cfg(allocation_maximise_cling_CFG, "maximise_cling", allocation_CFG_SECTION, 0,
+ cfg(allocation_use_blkid_wiping_CFG, "use_blkid_wiping", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL)
+ cfg(allocation_wipe_signatures_when_zeroing_new_lvs_CFG, "wipe_signatures_when_zeroing_new_lvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL)
+ cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_MIRROR_LOGS_REQUIRE_SEPARATE_PVS, vsn(2, 2, 85), NULL)
++cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
+ cfg(allocation_thin_pool_metadata_require_separate_pvs_CFG, "thin_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
+ cfg(allocation_thin_pool_zero_CFG, "thin_pool_zero", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_ZERO, vsn(2, 2, 99), NULL)
+ cfg(allocation_thin_pool_discards_CFG, "thin_pool_discards", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_STRING, DEFAULT_THIN_POOL_DISCARDS, vsn(2, 2, 99), NULL)
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 141b7ae..a388e13 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -79,6 +79,8 @@
+ #define DEFAULT_THIN_POOL_ZERO 1
+ #define DEFAULT_POOL_METADATA_SPARE 1
+ 
++#define DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
 +
-+	if (lv_is_cache(lv))
-+		cache_lv = lv;
-+	else if (lv_is_cache_pool(lv)) {
-+		if (dm_list_empty(&lv->segs_using_this_lv)) {
-+			//FIXME: Ok to return value not sourced from kernel?
-+			//       This could be valuable - esp for 'lvs' output
-+			log_error(INTERNAL_ERROR "Unable to get block info"
-+				  " of unlinked cache_pool, %s", lv->name);
-+			//FIXME: ... because we could do this:
-+			if (chunk_size)
-+				*chunk_size = first_seg(lv)->chunk_size;
-+			/* Unlinked cache_pools have 0 dirty & used blocks */
-+			if (total_count) {
-+				*total_count = lv->size; /* in sectors */
-+				*total_count /= first_seg(lv)->chunk_size;
-+			}
-+
-+			return 1;
+ #define DEFAULT_UMASK 0077
+ 
+ #ifdef LVM1_FALLBACK
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2e240fc..653391f 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -924,6 +924,9 @@ struct alloc_handle {
+ 	 * that is new_extents + log_len and then split that between two
+ 	 * allocated areas when found.  'alloc_and_split_meta' indicates
+ 	 * that this is the desired dynamic.
++	 *
++	 * This same idea is used by cache LVs to get the metadata device
++	 * and data device allocated together.
+ 	 */
+ 	unsigned alloc_and_split_meta;
+ 
+@@ -1115,6 +1118,7 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
+ 	 * a correct area_multiple.
+ 	 */
+ 	ah->area_multiple = _calc_area_multiple(segtype, area_count + parity_count, stripes);
++	//FIXME: s/mirror_logs_separate/metadata_separate/ so it can be used by otehrs?
+ 	ah->mirror_logs_separate = find_config_tree_bool(cmd, allocation_mirror_logs_require_separate_pvs_CFG, NULL);
+ 
+ 	if (segtype_is_raid(segtype)) {
+@@ -1137,12 +1141,30 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
+ 			ah->log_len = 0;
+ 		}
+ 	} else if (segtype_is_thin_pool(segtype)) {
+-		ah->log_area_count = metadata_area_count;
+-		/* thin_pool uses region_size to pass metadata size in extents */
++		/*
++		 * thin_pool uses ah->region_size to
++		 * pass metadata size in extents
++		 */
+ 		ah->log_len = ah->region_size;
++		ah->log_area_count = metadata_area_count;
+ 		ah->region_size = 0;
+ 		ah->mirror_logs_separate =
+ 			find_config_tree_bool(cmd, allocation_thin_pool_metadata_require_separate_pvs_CFG, NULL);
++	} else if (segtype_is_cache_pool(segtype)) {
++		/*
++		 * Like thin_pool, cache_pool uses ah->region_size to
++		 * pass metadata size in extents
++		 */
++		ah->log_len = ah->region_size;
++		/* use metadata_area_count, not log_area_count */
++		ah->metadata_area_count = metadata_area_count;
++		ah->region_size = 0;
++		ah->mirror_logs_separate =
++			find_config_tree_bool(cmd, allocation_cache_pool_metadata_require_separate_pvs_CFG, NULL);
++		if (!ah->mirror_logs_separate) {
++			ah->alloc_and_split_meta = 1;
++			ah->new_extents += ah->log_len;
 +		}
-+		if (!(cache_seg = get_only_segment_using_this_lv(lv)))
-+			return_0;
-+		cache_lv = cache_seg->lv;
-+	} else {
-+		log_error(INTERNAL_ERROR
-+			  "Unable to get block info of non-cache LV, %s",
-+			  lv->name);
-+		return 0;
-+	}
-+
-+	if (!lv_info(cache_lv->vg->cmd, cache_lv, 0, NULL, 0, 0))
-+		return_0;
-+
-+	log_debug_activation("Checking cache block info for LV %s/%s",
-+			     cache_lv->vg->name, cache_lv->name);
-+
-+	if (!(dm = dev_manager_create(cache_lv->vg->cmd, cache_lv->vg->name, 1)))
-+		return_0;
-+
-+	if (!dev_manager_cache_status(dm, cache_lv, &status)) {
-+		dev_manager_destroy(dm);
-+		return_0;
-+	}
-+
-+	if (chunk_size)
-+		*chunk_size = status->block_size;
-+	if (dirty_count)
-+		*dirty_count = status->dirty_blocks;
-+	if (used_count)
-+		*used_count = status->used_blocks;
-+	if (total_count)
-+		*total_count = status->total_blocks;
-+
-+	dev_manager_destroy(dm);
-+
-+	return 1;
-+}
-+
-+int lv_cache_policy_info(struct logical_volume *lv,
-+			 char **policy_name, int *policy_argc,
-+			 char ***policy_argv)
-+{
-+	int i;
-+	struct lv_segment *cache_seg;
-+	struct logical_volume *cache_lv;
-+	struct dev_manager *dm;
-+	struct dm_status_cache *status;
-+	struct dm_pool *mem = lv->vg->vgmem;  //FIXME: best mempool to use?
-+
-+	/* The user is free to choose which args they are interested in */
-+	if (policy_name)
-+		*policy_name = NULL;
-+	if (policy_argc)
-+		*policy_argc = 0;
-+	if (policy_argv)
-+		*policy_argv = NULL;
-+
-+	if (lv_is_cache(lv))
-+		cache_lv = lv;
-+	else if (lv_is_cache_pool(lv)) {
-+		if (dm_list_empty(&lv->segs_using_this_lv)) {
-+			//FIXME: Ok to return value not sourced from kernel?
-+			log_error(INTERNAL_ERROR "Unable to get policy info"
-+				  " of unlinked cache_pool, %s", lv->name);
-+			//FIXME: ... because we could do this:
-+			if (policy_name)
-+				*policy_name = first_seg(lv)->policy_name;
-+			if (policy_argc)
-+				*policy_argc = first_seg(lv)->policy_argc;
-+			if (policy_argv)
-+				*policy_argv = first_seg(lv)->policy_argv;
-+
-+			return 1;
-+		}
-+		if (!(cache_seg = get_only_segment_using_this_lv(lv)))
-+			return_0;
-+		cache_lv = cache_seg->lv;
-+	} else {
-+		log_error(INTERNAL_ERROR
-+			  "Unable to get policy info of non-cache LV, %s",
-+			  lv->name);
-+		return 0;
-+	}
-+
-+	if (!lv_info(cache_lv->vg->cmd, cache_lv, 0, NULL, 0, 0))
-+		return_0;
-+
-+	log_debug_activation("Checking cache policy for LV %s/%s",
-+			     cache_lv->vg->name, cache_lv->name);
-+
-+	if (!(dm = dev_manager_create(cache_lv->vg->cmd, cache_lv->vg->name, 1)))
-+		return_0;
-+
-+	if (!dev_manager_cache_status(dm, cache_lv, &status)) {
-+		dev_manager_destroy(dm);
-+		return_0;
-+	}
-+
-+	if (policy_name &&
-+	    !(*policy_name = dm_pool_strdup(mem, status->policy_name)))
-+		return_0;
-+	if (policy_argc)
-+		*policy_argc = status->policy_argc;
-+	if (policy_argv) {
-+		if (!(*policy_argv =
-+		      dm_pool_zalloc(mem, sizeof(char *) * *policy_argc)))
-+			return_0;
-+		for (i = 0; i < *policy_argc; i++)
-+			if (!((*policy_argv)[i] =
-+			      dm_pool_strdup(mem, status->policy_argv[i])))
-+				return_0;
-+	}
-+
-+	dev_manager_destroy(dm);
-+
-+	return 1;
-+}
-+
- /*
-  * Returns data or metadata percent usage, depends on metadata 0/1.
-  * Returns 1 if percent set, else 0 on failure.
-diff --git a/lib/activate/activate.h b/lib/activate/activate.h
-index f748a04..3da83ea 100644
---- a/lib/activate/activate.h
-+++ b/lib/activate/activate.h
-@@ -135,6 +135,12 @@ int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health);
- int lv_raid_mismatch_count(const struct logical_volume *lv, uint64_t *cnt);
- int lv_raid_sync_action(const struct logical_volume *lv, char **sync_action);
- int lv_raid_message(const struct logical_volume *lv, const char *msg);
-+int lv_cache_block_info(struct logical_volume *lv,
-+			uint32_t *chunk_size, uint64_t *dirty_count,
-+			uint64_t *used_count, uint64_t *total_count);
-+int lv_cache_policy_info(struct logical_volume *lv,
-+			 char **policy_name, int *policy_argc,
-+			 char ***policy_argv);
- int lv_thin_pool_percent(const struct logical_volume *lv, int metadata,
- 			 percent_t *percent);
- int lv_thin_percent(const struct logical_volume *lv, int mapped,
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 7b0b6e2..b48ca99 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -1160,6 +1160,55 @@ out:
- 	return r;
+ 	} else {
+ 		ah->log_area_count = metadata_area_count;
+ 		ah->log_len = !metadata_area_count ? 0 :
+@@ -1956,14 +1978,15 @@ static void _report_needed_allocation_space(struct alloc_handle *ah,
+ 	uint32_t parallel_areas_count, parallel_area_size;
+ 	uint32_t metadata_count, metadata_size;
+ 
+-	parallel_area_size = (ah->new_extents - alloc_state->allocated) / ah->area_multiple -
+-		      ((ah->alloc_and_split_meta) ? ah->log_len : 0);
++	parallel_area_size = ah->new_extents - alloc_state->allocated;
++	parallel_area_size /= ah->area_multiple;
++	parallel_area_size -= (ah->alloc_and_split_meta) ? ah->log_len : 0;
+ 
+ 	parallel_areas_count = ah->area_count + ah->parity_count;
+ 
+ 	metadata_size = ah->log_len;
+ 	if (ah->alloc_and_split_meta) {
+-		metadata_type = "RAID metadata area";
++		metadata_type = "metadata area";
+ 		metadata_count = parallel_areas_count;
+ 	} else {
+ 		metadata_type = "mirror log";
+@@ -1975,8 +1998,10 @@ static void _report_needed_allocation_space(struct alloc_handle *ah,
+ 	log_debug_alloc("  %" PRIu32 " (%" PRIu32 " data/%" PRIu32
+ 			" parity) parallel areas of %" PRIu32 " extents each",
+ 			parallel_areas_count, ah->area_count, ah->parity_count, parallel_area_size);
+-	log_debug_alloc("  %" PRIu32 " %ss of %" PRIu32 " extents each",
+-			metadata_count, metadata_type, metadata_size);
++	log_debug_alloc("  %" PRIu32 " %s%s of %" PRIu32 " extents each",
++			metadata_count, metadata_type,
++			(metadata_count == 1) ? "" : "s",
++			metadata_size);
  }
- 
-+int dev_manager_cache_status(struct dev_manager *dm,
-+			     const struct logical_volume *lv,
-+			     struct dm_status_cache **status)
-+{
-+	int r = 0;
-+	const char *dlid;
-+	struct dm_task *dmt;
-+	struct dm_info info;
-+	uint64_t start, length;
-+	char *type = NULL;
-+	char *params = NULL;
-+	const char *layer = lv_layer(lv);
-+
-+	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer)))
-+		return_0;
-+
-+	log_debug_activation("Getting cache device status for %s.", lv->name);
-+
-+	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0)))
-+		return_0;
-+
-+	if (!dm_task_no_open_count(dmt))
-+		log_error("Failed to disable open_count.");
-+
-+	if (!dm_task_run(dmt))
-+		goto_out;
-+
-+	if (!dm_task_get_info(dmt, &info) || !info.exists)
-+		goto_out;
-+
-+	dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
-+
-+	if (!type || strcmp(type, "cache")) {
-+		log_debug("Expected cache segment type but got %s instead",
-+			  type ? type : "NULL");
-+		goto out;
-+	}
-+
-+	if (!dm_get_status_cache(dm->mem, params, status))
-+		goto_out;
-+
-+	r = 1;
-+out:
-+	dm_task_destroy(dmt);
-+
-+	return r;
-+}
-+
-+//FIXME: Can we get rid of this crap below?
- #if 0
- 	log_very_verbose("%s %s", sus ? "Suspending" : "Resuming", name);
- 
-diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
-index 032766e..446b349 100644
---- a/lib/activate/dev_manager.h
-+++ b/lib/activate/dev_manager.h
-@@ -60,6 +60,9 @@ int dev_manager_raid_status(struct dev_manager *dm,
- int dev_manager_raid_message(struct dev_manager *dm,
- 			     const struct logical_volume *lv,
- 			     const char *msg);
-+int dev_manager_cache_status(struct dev_manager *dm,
-+			     const struct logical_volume *lv,
-+			     struct dm_status_cache **status);
- int dev_manager_thin_pool_status(struct dev_manager *dm,
- 				 const struct logical_volume *lv,
- 				 struct dm_status_thin_pool **status,
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index bdf5c9d..95feb1f 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -110,6 +110,11 @@
- 									this flag dropped during single
- 									LVM command execution. */
- 
-+#define CACHE_POOL		UINT64_C(0x0000200000000000)    /* LV */
-+#define CACHE_POOL_DATA		UINT64_C(0x0000400000000000)    /* LV */
-+#define CACHE_POOL_METADATA	UINT64_C(0x0000800000000000)    /* LV */
-+#define CACHE			UINT64_C(0x0001000000000000)    /* LV */
-+
- /* Format features flags */
- #define FMT_SEGMENTS		0x00000001U	/* Arbitrary segment params? */
- #define FMT_MDAS		0x00000002U	/* Proper metadata areas? */
-@@ -169,6 +174,12 @@
- #define lv_is_raid(lv)		(((lv)->status & (RAID)) ? 1 : 0)
- #define lv_is_raid_type(lv)	(((lv)->status & (RAID | RAID_IMAGE | RAID_META)) ? 1 : 0)
- 
-+#define lv_is_cache(lv)		(((lv)->status & (CACHE)) ? 1 : 0)
-+#define lv_is_cache_pool(lv)	(((lv)->status & (CACHE_POOL)) ? 1 : 0)
-+#define lv_is_cache_pool_data(lv)	(((lv)->status & (CACHE_POOL_DATA)) ? 1 : 0)
-+#define lv_is_cache_pool_metadata(lv)	(((lv)->status & (CACHE_POOL_METADATA)) ? 1 : 0)
-+#define lv_is_cache_type(lv)	(((lv)->status & (CACHE | CACHE_POOL | CACHE_POOL_DATA | CACHE_POOL_METADATA)) ? 1 : 0)
-+
- #define lv_is_virtual(lv)	(((lv)->status & VIRTUAL) ? 1 : 0)
- #define lv_is_pool_metadata_spare(lv)	(((lv)->status & POOL_METADATA_SPARE) ? 1 : 0)
- 
+ /*
+  * Returns 1 regardless of whether any space was found, except on error.
 -- 
 1.7.7.6
 
