@@ -1,80 +1,48 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 29 Jan 2014 08:01:07 +0000 (UTC)
-Subject: master - cleanup: fix cut&paste and move initialization
-Message-ID: <20140129080107.64C02616A4@fedorahosted.org>
+Date: Wed, 29 Jan 2014 13:59:47 +0000 (UTC)
+Subject: master - thin:drop stack trace when pool is above threshold
+Message-ID: <20140129135947.DEAB160F65@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a1e1d0d398ad5ca32092047738ce6f7624837e9
-Commit:        5a1e1d0d398ad5ca32092047738ce6f7624837e9
-Parent:        e9d9852c55cbc2c509c293691287fa5443868926
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8074d8056acd419fd38d53b32db5373df76d825f
+Commit:        8074d8056acd419fd38d53b32db5373df76d825f
+Parent:        5a1e1d0d398ad5ca32092047738ce6f7624837e9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 29 08:58:50 2014 +0100
+AuthorDate:    Wed Jan 29 14:26:06 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jan 29 09:00:16 2014 +0100
+CommitterDate: Wed Jan 29 14:26:06 2014 +0100
 
-cleanup: fix cut&paste and move initialization
+thin:drop stack trace when pool is above threshold
 
-Use C initializers and fix cut&paste core_arg error.
-
-(in release fix)
+Since this path is expected, do not log_debug stacktrace.
 ---
- lib/cache_segtype/cache.c |   27 ++++++++++++---------------
- 1 files changed, 12 insertions(+), 15 deletions(-)
+ lib/metadata/thin_manip.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index c12ac2f..bfc84c3 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -343,19 +343,24 @@ static int _cache_add_target_line(struct dev_manager *dm,
- 				 struct dm_tree_node *node, uint64_t len,
- 				 uint32_t *pvmove_mirror_count __attribute__((unused)))
- {
--	struct lv_segment *cache_pool_seg;
- 	struct logical_volume *data, *metadata, *origin;
--	struct dm_tree_node_cache_params params;
-+	struct lv_segment *cache_pool_seg = first_seg(seg->pool_lv);
-+	struct dm_tree_node_cache_params params = {
-+		.chunk_size = cache_pool_seg->chunk_size,
-+
-+		/* Cache features, core args, and policy are stored in the cache_pool */
-+		.feature_flags = cache_pool_seg->feature_flags,
-+		.core_argc = cache_pool_seg->core_argc,
-+		.core_argv = cache_pool_seg->core_argv,
-+		.policy_name = cache_pool_seg->policy_name,
-+		.policy_argc = cache_pool_seg->policy_argc,
-+		.policy_argv = cache_pool_seg->policy_argv
-+	};
- 
--	cache_pool_seg = first_seg(seg->pool_lv);
- 	data = seg_lv(cache_pool_seg, 0);
- 	metadata = cache_pool_seg->metadata_lv;
- 	origin = seg_lv(seg, 0);
- 
--	memset(&params, 0, sizeof(params));
--
--	params.chunk_size = cache_pool_seg->chunk_size;
--
- 	if (!(params.data_uuid = build_dm_uuid(mem, data->lvid.s, NULL)))
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index b26723b..1abc2f1 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -240,14 +240,14 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
  		return_0;
  
-@@ -365,14 +370,6 @@ static int _cache_add_target_line(struct dev_manager *dm,
- 	if (!(params.origin_uuid = build_dm_uuid(mem, origin->lvid.s, NULL)))
+ 	if (percent >= threshold)
+-		return_0;
++		return 0;
+ 
+ 	/* Metadata */
+ 	if (!lv_thin_pool_percent(pool_seg->lv, 1, &percent))
  		return_0;
  
--	/* Cache features, core args, and policy are stored in the cache_pool */
--	params.feature_flags = cache_pool_seg->feature_flags;
--	params.policy_argc = cache_pool_seg->core_argc;
--	params.policy_argv = cache_pool_seg->core_argv;
--	params.policy_name = cache_pool_seg->policy_name;
--	params.policy_argc = cache_pool_seg->policy_argc;
--	params.policy_argv = cache_pool_seg->policy_argv;
--
- 	if (!dm_tree_node_add_cache_target(node, len, &params))
- 		return_0;
+ 	if (percent >= threshold)
+-		return_0;
++		return 0;
  
+ 	return 1;
+ }
 
 
