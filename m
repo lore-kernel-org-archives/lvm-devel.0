@@ -1,102 +1,162 @@
 From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Wed, 29 Jan 2014 17:16:50 +0000 (UTC)
-Subject: master - cache/misc: Revert commit 94377dfd
-Message-ID: <20140129171650.C744360FD6@fedorahosted.org>
+Date: Wed, 29 Jan 2014 18:13:03 +0000 (UTC)
+Subject: master - cache: Allocation code changes necessary to support cache_pool
+Message-ID: <20140129181303.0B76460FC1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d9bec60a233ab3d6a4ac7450771940db9c0d48cf
-Commit:        d9bec60a233ab3d6a4ac7450771940db9c0d48cf
-Parent:        42fa0e6dd14a105d17ca329f73e27f1daa64e9f3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=70fd2139e17568e757fd66f5ebfcea2b1bb9d3f1
+Commit:        70fd2139e17568e757fd66f5ebfcea2b1bb9d3f1
+Parent:        75b8ea195cb3783ebe6ed7f95907e8a647a85a74
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Jan 28 11:26:05 2014 -0600
+AuthorDate:    Tue Jan 28 12:25:02 2014 -0600
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Jan 28 11:26:05 2014 -0600
+CommitterDate: Tue Jan 28 12:25:02 2014 -0600
 
-cache/misc: Revert commit 94377dfd
+cache:  Allocation code changes necessary to support cache_pool
 
-I am reverting the commit below - removing the new 'dm_config_get_int'
-function and simply calling 'dm_config_get_uint32' while casting the
-'int *' pointer parameter.
-
-Commit being reverted:
-commit 94377dfd5ee7bbbdeb8836eeeea2198bc32c07f5
-Author: Jonathan Brassow <jbrassow@redhat.com>
-Date:   Mon Jan 27 05:26:19 2014 -0600
-
-    Misc: New function for reading lvm config file fields
-
-    Introduce 'dm_config_get_int', which will be used by the upcoming
-    cachepool segment type.
+Cache pools require a data and metadata area (like thin pools).  Unlike
+thin pool, if 'cache_pool_metadata_require_separate_pvs' is not set to
+'1', the metadata and data area will be allocated from the same device.
+It is also done in a manner similar to RAID, where a single chunk of
+space is allocated and then split to form the metadata and data device -
+ensuring that they are together.
 ---
- lib/cache_segtype/cache.c |    6 ++++--
- libdm/libdevmapper.h      |    1 -
- libdm/libdm-config.c      |   14 --------------
- 3 files changed, 4 insertions(+), 17 deletions(-)
+ conf/example.conf.in         |    4 ++++
+ lib/config/config_settings.h |    1 +
+ lib/config/defaults.h        |    2 ++
+ lib/metadata/lv_manip.c      |   39 ++++++++++++++++++++++++++++++++-------
+ 4 files changed, 39 insertions(+), 7 deletions(-)
 
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index bfc84c3..3e74495 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -97,7 +97,8 @@ static int _cache_pool_text_import(struct lv_segment *seg,
- 		if (!dm_config_has_node(sn, "core_argv"))
- 			return SEG_LOG_ERROR("not all core arguments defined in");
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 0f73cf3..7b98b4b 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -301,6 +301,10 @@ allocation {
+     # until version 2.02.85.
+     mirror_logs_require_separate_pvs = 0
  
--		if (!dm_config_get_int(sn, "core_argc", &seg->core_argc))
-+		if (!dm_config_get_uint32(sn, "core_argc",
-+					  (uint32_t *)&seg->core_argc))
- 			return SEG_LOG_ERROR("Unable to read core_argc in");
++    # Set to 1 to guarantee that cache_pool metadata will always be
++    # placed on  different PVs from the cache_pool data.
++    cache_pool_metadata_require_separate_pvs = 0
++
+     # Set to 1 to guarantee that thin pool metadata will always
+     # be placed on different PVs from the pool data.
+     thin_pool_metadata_require_separate_pvs = 0
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 1546b3f..2c6953b 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -107,6 +107,7 @@ cfg(allocation_maximise_cling_CFG, "maximise_cling", allocation_CFG_SECTION, 0,
+ cfg(allocation_use_blkid_wiping_CFG, "use_blkid_wiping", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL)
+ cfg(allocation_wipe_signatures_when_zeroing_new_lvs_CFG, "wipe_signatures_when_zeroing_new_lvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL)
+ cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_MIRROR_LOGS_REQUIRE_SEPARATE_PVS, vsn(2, 2, 85), NULL)
++cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
+ cfg(allocation_thin_pool_metadata_require_separate_pvs_CFG, "thin_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
+ cfg(allocation_thin_pool_zero_CFG, "thin_pool_zero", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_ZERO, vsn(2, 2, 99), NULL)
+ cfg(allocation_thin_pool_discards_CFG, "thin_pool_discards", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_STRING, DEFAULT_THIN_POOL_DISCARDS, vsn(2, 2, 99), NULL)
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 141b7ae..a388e13 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -79,6 +79,8 @@
+ #define DEFAULT_THIN_POOL_ZERO 1
+ #define DEFAULT_POOL_METADATA_SPARE 1
  
- 		str = dm_config_find_str(sn, "core_argv", NULL);
-@@ -135,7 +136,8 @@ static int _cache_pool_text_import(struct lv_segment *seg,
- 			return SEG_LOG_ERROR("policy_name must be a string in");
- 		seg->policy_name = dm_pool_strdup(mem, str);
++#define DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
++
+ #define DEFAULT_UMASK 0077
  
--		if (!dm_config_get_int(sn, "policy_argc", &seg->policy_argc))
-+		if (!dm_config_get_uint32(sn, "policy_argc",
-+					  (uint32_t *)&seg->policy_argc))
- 			return SEG_LOG_ERROR("Unable to read policy_argc in");
+ #ifdef LVM1_FALLBACK
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index a2831cf..bd1e57c 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -924,6 +924,9 @@ struct alloc_handle {
+ 	 * that is new_extents + log_len and then split that between two
+ 	 * allocated areas when found.  'alloc_and_split_meta' indicates
+ 	 * that this is the desired dynamic.
++	 *
++	 * This same idea is used by cache LVs to get the metadata device
++	 * and data device allocated together.
+ 	 */
+ 	unsigned alloc_and_split_meta;
  
- 		str = dm_config_find_str(sn, "policy_argv", NULL);
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 670c5e09..131bd3f 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1720,7 +1720,6 @@ int dm_config_tree_find_bool(const struct dm_config_tree *cft, const char *path,
- int dm_config_find_bool(const struct dm_config_node *cn, const char *path, int fail);
- int dm_config_value_is_bool(const struct dm_config_value *v);
+@@ -1115,6 +1118,7 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
+ 	 * a correct area_multiple.
+ 	 */
+ 	ah->area_multiple = _calc_area_multiple(segtype, area_count + parity_count, stripes);
++	//FIXME: s/mirror_logs_separate/metadata_separate/ so it can be used by otehrs?
+ 	ah->mirror_logs_separate = find_config_tree_bool(cmd, allocation_mirror_logs_require_separate_pvs_CFG, NULL);
  
--int dm_config_get_int(const struct dm_config_node *cn, const char *path, int *result);
- int dm_config_get_uint32(const struct dm_config_node *cn, const char *path, uint32_t *result);
- int dm_config_get_uint64(const struct dm_config_node *cn, const char *path, uint64_t *result);
- int dm_config_get_str(const struct dm_config_node *cn, const char *path, const char **result);
-diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
-index 3297621..ea1af2f 100644
---- a/libdm/libdm-config.c
-+++ b/libdm/libdm-config.c
-@@ -1047,20 +1047,6 @@ int dm_config_tree_find_bool(const struct dm_config_tree *cft, const char *path,
+ 	if (segtype_is_raid(segtype)) {
+@@ -1137,12 +1141,30 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
+ 			ah->log_len = 0;
+ 		}
+ 	} else if (segtype_is_thin_pool(segtype)) {
+-		ah->log_area_count = metadata_area_count;
+-		/* thin_pool uses region_size to pass metadata size in extents */
++		/*
++		 * thin_pool uses ah->region_size to
++		 * pass metadata size in extents
++		 */
+ 		ah->log_len = ah->region_size;
++		ah->log_area_count = metadata_area_count;
+ 		ah->region_size = 0;
+ 		ah->mirror_logs_separate =
+ 			find_config_tree_bool(cmd, allocation_thin_pool_metadata_require_separate_pvs_CFG, NULL);
++	} else if (segtype_is_cache_pool(segtype)) {
++		/*
++		 * Like thin_pool, cache_pool uses ah->region_size to
++		 * pass metadata size in extents
++		 */
++		ah->log_len = ah->region_size;
++		/* use metadata_area_count, not log_area_count */
++		ah->metadata_area_count = metadata_area_count;
++		ah->region_size = 0;
++		ah->mirror_logs_separate =
++			find_config_tree_bool(cmd, allocation_cache_pool_metadata_require_separate_pvs_CFG, NULL);
++		if (!ah->mirror_logs_separate) {
++			ah->alloc_and_split_meta = 1;
++			ah->new_extents += ah->log_len;
++		}
+ 	} else {
+ 		ah->log_area_count = metadata_area_count;
+ 		ah->log_len = !metadata_area_count ? 0 :
+@@ -1956,14 +1978,15 @@ static void _report_needed_allocation_space(struct alloc_handle *ah,
+ 	uint32_t parallel_areas_count, parallel_area_size;
+ 	uint32_t metadata_count, metadata_size;
  
- /************************************/
+-	parallel_area_size = (ah->new_extents - alloc_state->allocated) / ah->area_multiple -
+-		      ((ah->alloc_and_split_meta) ? ah->log_len : 0);
++	parallel_area_size = ah->new_extents - alloc_state->allocated;
++	parallel_area_size /= ah->area_multiple;
++	parallel_area_size -= (ah->alloc_and_split_meta) ? ah->log_len : 0;
  
--int dm_config_get_int(const struct dm_config_node *cn, const char *path,
--		      int *result)
--{
--	const struct dm_config_node *n;
--
--	n = _find_config_node(cn, path);
--
--	if (!n || !n->v || n->v->type != DM_CFG_INT)
--		return 0;
--
--	if (result)
--		*result = n->v->v.i;
--	return 1;
--}
+ 	parallel_areas_count = ah->area_count + ah->parity_count;
  
- int dm_config_get_uint32(const struct dm_config_node *cn, const char *path,
- 			 uint32_t *result)
+ 	metadata_size = ah->log_len;
+ 	if (ah->alloc_and_split_meta) {
+-		metadata_type = "RAID metadata area";
++		metadata_type = "metadata area";
+ 		metadata_count = parallel_areas_count;
+ 	} else {
+ 		metadata_type = "mirror log";
+@@ -1975,8 +1998,10 @@ static void _report_needed_allocation_space(struct alloc_handle *ah,
+ 	log_debug_alloc("  %" PRIu32 " (%" PRIu32 " data/%" PRIu32
+ 			" parity) parallel areas of %" PRIu32 " extents each",
+ 			parallel_areas_count, ah->area_count, ah->parity_count, parallel_area_size);
+-	log_debug_alloc("  %" PRIu32 " %ss of %" PRIu32 " extents each",
+-			metadata_count, metadata_type, metadata_size);
++	log_debug_alloc("  %" PRIu32 " %s%s of %" PRIu32 " extents each",
++			metadata_count, metadata_type,
++			(metadata_count == 1) ? "" : "s",
++			metadata_size);
+ }
+ /*
+  * Returns 1 regardless of whether any space was found, except on error.
 
 
