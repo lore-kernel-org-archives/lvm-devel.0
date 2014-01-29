@@ -1,154 +1,162 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun,  8 Aug 2010 10:57:30 +0200
-Subject: [PATCH 18/25] Replicator: read site_params
-In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
-References: <cover.1281256234.git.zkabelac@redhat.com>
-Message-ID: <51fde0b716a8e57c78d9cd1c2a065d2b9e6b6440.1281256235.git.zkabelac@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 29 Jan 2014 18:13:05 +0000 (UTC)
+Subject: master - cache/pool: Make the fns in pool_manip.c work with cache pools
+Message-ID: <20140129181305.2679260FC1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Common function for parsing replicator site parameters.
-It's used by lvcreate and lvchange commands.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e833d84e67f62b9be4f5900381f6e32c4ecf66ca
+Commit:        e833d84e67f62b9be4f5900381f6e32c4ecf66ca
+Parent:        70fd2139e17568e757fd66f5ebfcea2b1bb9d3f1
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Jan 28 12:25:07 2014 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Jan 28 12:25:07 2014 -0600
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+cache/pool: Make the fns in pool_manip.c work with cache pools
+
+The functions in pool_manip.c are specific to thin pools.  It's
+now time to make them more generic and able to handle cache pools
+as well.
 ---
- tools/toollib.c |  103 ++++++++++++++++++++++++++++++++++++++++++++++++++++++-
- tools/toollib.h |    3 ++
- 2 files changed, 105 insertions(+), 1 deletions(-)
+ lib/metadata/pool_manip.c |   44 +++++++++++++++++++++++++++++---------------
+ 1 files changed, 29 insertions(+), 15 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index bdb52d5..6205c2f 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -1551,3 +1551,104 @@ int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes, uint32_t *stri
- 	return _validate_stripe_params(cmd, stripes, stripe_size);
- }
+diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
+index 18dfad5..afb77d6 100644
+--- a/lib/metadata/pool_manip.c
++++ b/lib/metadata/pool_manip.c
+@@ -28,14 +28,15 @@
+ int attach_pool_metadata_lv(struct lv_segment *pool_seg,
+ 			    struct logical_volume *metadata_lv)
+ {
+-	if (!seg_is_thin_pool(pool_seg)) {
++	if (!seg_is_thin_pool(pool_seg) && !seg_is_cache_pool(pool_seg)) {
+ 		log_error(INTERNAL_ERROR
+ 			  "Unable to attach pool metadata LV to %s segtype.",
+ 			  pool_seg->segtype->ops->name(pool_seg));
+ 		return 0;
+ 	}
+ 	pool_seg->metadata_lv = metadata_lv;
+-	metadata_lv->status |= THIN_POOL_METADATA;
++	metadata_lv->status |= seg_is_thin_pool(pool_seg) ?
++		THIN_POOL_METADATA : CACHE_POOL_METADATA;
+ 	lv_set_hidden(metadata_lv);
  
-+/**
-+ * Parse parameters for replicator site
-+ *
-+ * \param cmd
-+ * \param rsite
-+ * \param changed
-+ */
-+int get_replicator_site_params(struct cmd_context *cmd,
-+			       struct replicator_site *rsite,
-+			       int *changed)
-+{
-+	struct replicator_site nrsite;
-+
-+	if (((arg_count(cmd, fallbehindios_ARG) > 0) +
-+	     (arg_count(cmd, fallbehindsize_ARG) > 0) +
-+	     (arg_count(cmd, fallbehindtimeout_ARG) > 0)) > 1) {
-+		log_error("Only one asynchronous parameter can be used.");
-+		return 0;
-+	}
-+
-+	if (arg_count(cmd, fallbehindios_ARG)) {
-+		nrsite.fall_behind_ios =
-+			arg_uint_value(cmd, fallbehindios_ARG,
-+				       DEFAULT_REPLICATOR_FALL_BEHIND_IOS);
-+
-+		if (rsite->fall_behind_ios != nrsite.fall_behind_ios) {
-+			rsite->fall_behind_ios = nrsite.fall_behind_ios;
-+			rsite->fall_behind_size = 0;
-+			rsite->fall_behind_timeout = 0;
-+			(*changed)++;
-+		}
-+	} else if (arg_count(cmd, fallbehindsize_ARG)) {
-+		nrsite.fall_behind_size =
-+			arg_uint64_value(cmd, fallbehindsize_ARG,
-+					 DEFAULT_REPLICATOR_FALL_BEHIND_SIZE);
-+
-+		if (rsite->fall_behind_size != nrsite.fall_behind_size) {
-+			rsite->fall_behind_ios = 0;
-+			rsite->fall_behind_size = nrsite.fall_behind_size;
-+			rsite->fall_behind_timeout = 0;
-+			(*changed)++;
-+		}
-+	} else if (arg_count(cmd, fallbehindtimeout_ARG)) {
-+		nrsite.fall_behind_timeout =
-+			arg_uint_value(cmd, fallbehindtimeout_ARG,
-+				       DEFAULT_REPLICATOR_FALL_BEHIND_TIMEOUT);
-+
-+		if (rsite->fall_behind_timeout != nrsite.fall_behind_timeout) {
-+			rsite->fall_behind_ios = 0;
-+			rsite->fall_behind_size = 0;
-+			rsite->fall_behind_timeout = nrsite.fall_behind_timeout;
-+			(*changed)++;
-+		}
-+	}
-+
-+	nrsite.policy = NUM_DM_REPLICATOR_POLICIES;
-+	if (arg_count(cmd, sitepolicy_ARG)) {
-+		nrsite.policy = arg_uint_value(cmd, sitepolicy_ARG,
-+						DEFAULT_REPLICATOR_SITE_POLICY);
-+		if ((nrsite.policy == DM_REPLICATOR_SYNC) &&
-+		    !arg_count(cmd, fallbehindios_ARG) &&
-+		    !arg_count(cmd, fallbehindsize_ARG) &&
-+		    !arg_count(cmd, fallbehindtimeout_ARG) &&
-+		    (rsite->fall_behind_ios ||
-+		     rsite->fall_behind_size ||
-+		     rsite->fall_behind_timeout)) {
-+			rsite->fall_behind_ios = 0;
-+			rsite->fall_behind_size = 0;
-+			rsite->fall_behind_timeout = 0;
-+			(*changed)++;
-+			log_debug("Clearing asynchronous parameters synchronous site.");
-+		}
-+	}
-+
-+	if (rsite->fall_behind_ios ||
-+	    rsite->fall_behind_size ||
-+	    rsite->fall_behind_timeout) {
-+		if (nrsite.policy == DM_REPLICATOR_SYNC) {
-+			log_error("For synchronous site policy all asynchronous "
-+				  "parameters must be deleted.");
-+			return 0;
-+		} else if (nrsite.policy == NUM_DM_REPLICATOR_POLICIES)
-+			nrsite.policy = (rsite->policy == DM_REPLICATOR_SYNC) ?
-+				DEFAULT_REPLICATOR_SITE_POLICY : rsite->policy;
-+	} else {
-+		if (nrsite.policy != NUM_DM_REPLICATOR_POLICIES &&
-+		    nrsite.policy != DM_REPLICATOR_SYNC) {
-+			log_error("For asynchronous site policy an asynchronous "
-+				  "non-zero parameter must be specified.");
-+			return 0;
-+		}
-+		nrsite.policy = DM_REPLICATOR_SYNC;
-+	}
-+
-+	if (rsite->policy != nrsite.policy) {
-+		rsite->policy = nrsite.policy;
-+		(*changed)++;
-+	}
-+
-+	return 1;
-+}
-diff --git a/tools/toollib.h b/tools/toollib.h
-index 71e516f..47f1d4d 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -115,4 +115,7 @@ int get_activation_monitoring_mode(struct cmd_context *cmd,
- int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes,
- 		      uint32_t *stripe_size);
+ 	return add_seg_to_segs_using_this_lv(metadata_lv, pool_seg);
+@@ -44,7 +45,7 @@ int attach_pool_metadata_lv(struct lv_segment *pool_seg,
+ int attach_pool_data_lv(struct lv_segment *pool_seg,
+ 			struct logical_volume *pool_data_lv)
+ {
+-	if (!seg_is_thin_pool(pool_seg)) {
++	if (!seg_is_thin_pool(pool_seg) && !seg_is_cache_pool(pool_seg)) {
+ 		log_error(INTERNAL_ERROR
+ 			  "Unable to attach pool data LV to %s segtype.",
+ 			  pool_seg->segtype->ops->name(pool_seg));
+@@ -52,10 +53,12 @@ int attach_pool_data_lv(struct lv_segment *pool_seg,
+ 	}
  
-+int get_replicator_site_params(struct cmd_context *cmd,
-+			       struct replicator_site *rsite,
-+			       int *changed);
- #endif
--- 
-1.7.2.1
+ 	if (!set_lv_segment_area_lv(pool_seg, 0, pool_data_lv,
+-				    0, THIN_POOL_DATA))
++				    0, seg_is_thin_pool(pool_seg) ?
++				    THIN_POOL_DATA : CACHE_POOL_DATA))
+ 		return_0;
+ 
+-	pool_seg->lv->status |= THIN_POOL;
++	pool_seg->lv->status |= seg_is_thin_pool(pool_seg) ?
++		THIN_POOL : CACHE_POOL;
+ 	lv_set_hidden(pool_data_lv);
+ 
+ 	return 1;
+@@ -66,16 +69,16 @@ int attach_pool_lv(struct lv_segment *seg,
+ 		   struct logical_volume *origin,
+ 		   struct logical_volume *merge_lv)
+ {
+-	if (!seg_is_thin_volume(seg)) {
++	if (!seg_is_thin_volume(seg) && !seg_is_cache(seg)) {
+ 		log_error(INTERNAL_ERROR "Unable to attach pool to %s/%s"
+-			  " that is thin volume.",
++			  " that is not cache or thin volume.",
+ 			  pool_lv->vg->name, seg->lv->name);
+ 		return 0;
+ 	}
+ 
+ 	seg->pool_lv = pool_lv;
+ 	seg->origin = origin;
+-	seg->lv->status |= THIN_VOLUME;
++	seg->lv->status |= seg_is_cache(seg) ? CACHE : THIN_VOLUME;
+ 
+ 	if (origin && !add_seg_to_segs_using_this_lv(origin, seg))
+ 		return_0;
+@@ -108,6 +111,13 @@ int detach_pool_lv(struct lv_segment *seg)
+ 		return 0;
+ 	}
+ 
++	if (seg_is_cache(seg)) {
++		if (!remove_seg_from_segs_using_this_lv(seg->pool_lv, seg))
++			return_0;
++		seg->pool_lv = NULL;
++		return 1;
++	}
++
+ 	if (!lv_is_thin_pool(seg->pool_lv)) {
+ 		log_error(INTERNAL_ERROR
+ 			  "Cannot detach pool from LV %s.",
+@@ -189,9 +199,11 @@ struct lv_segment *find_pool_seg(const struct lv_segment *seg)
+ 		return NULL;
+ 	}
+ 
+-	if (!seg_is_thin_pool(pool_seg)) {
+-		log_error("%s on %s is not a pool segment.",
+-			  pool_seg->lv->name, seg->lv->name);
++	if ((lv_is_thin_type(seg->lv) && !seg_is_thin_pool(pool_seg)) &&
++	    !seg_is_cache_pool(pool_seg)) {
++		log_error("%s on %s is not a %s pool segment",
++			  pool_seg->lv->name, seg->lv->name,
++			  lv_is_thin_type(seg->lv) ? "thin" : "cache");
+ 		return NULL;
+ 	}
+ 
+@@ -208,7 +220,7 @@ int create_pool(struct logical_volume *pool_lv,
+ 	char name[NAME_LEN];
+ 
+ 	if (pool_lv->le_count) {
+-		log_error(INTERNAL_ERROR "Pool %s has already extents.",
++		log_error(INTERNAL_ERROR "Pool %s already has extents.",
+ 			  pool_lv->name);
+ 		return 0;
+ 	}
+@@ -259,7 +271,8 @@ int create_pool(struct logical_volume *pool_lv,
+ 	}
+ 
+ 	if (dm_snprintf(name, sizeof(name), "%s_%s", pool_lv->name,
+-			"tmeta") < 0) {
++			(segtype_is_cache_pool(segtype)) ?
++			"cmeta" : "tmeta") < 0) {
+ 		log_error("Name is too long to be a pool name.");
+ 		goto bad;
+ 	}
+@@ -277,7 +290,8 @@ int create_pool(struct logical_volume *pool_lv,
+ 
+ 	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
+ 					    pool_lv->status,
+-					    "_tdata")))
++					    (segtype_is_cache_pool(segtype)) ?
++					    "_cdata" : "_tdata")))
+ 		goto_bad;
+ 
+ 	seg = first_seg(pool_lv);
+@@ -285,7 +299,7 @@ int create_pool(struct logical_volume *pool_lv,
+ 	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
+ 		goto_bad;
+ 
+-	seg->segtype = segtype; /* Set as thin_pool segment */
++	seg->segtype = segtype; /* Set as thin_pool or cache_pool segment */
+ 
+ 	if (!attach_pool_data_lv(seg, data_lv))
+ 		goto_bad;
 
 
