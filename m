@@ -1,162 +1,223 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Wed, 29 Jan 2014 18:13:03 +0000 (UTC)
-Subject: master - cache: Allocation code changes necessary to support cache_pool
-Message-ID: <20140129181303.0B76460FC1@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 30 Jan 2014 12:06:41 +0000 (UTC)
+Subject: master - tools: Add internal hosttags command.
+Message-ID: <20140130120641.EF5B4611E5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=70fd2139e17568e757fd66f5ebfcea2b1bb9d3f1
-Commit:        70fd2139e17568e757fd66f5ebfcea2b1bb9d3f1
-Parent:        75b8ea195cb3783ebe6ed7f95907e8a647a85a74
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Jan 28 12:25:02 2014 -0600
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Jan 28 12:25:02 2014 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7a9e7a57e37d6fbab2dcd3c03192fd092811756f
+Commit:        7a9e7a57e37d6fbab2dcd3c03192fd092811756f
+Parent:        e833d84e67f62b9be4f5900381f6e32c4ecf66ca
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Jan 30 12:06:15 2014 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Jan 30 12:06:15 2014 +0000
 
-cache:  Allocation code changes necessary to support cache_pool
+tools: Add internal hosttags command.
 
-Cache pools require a data and metadata area (like thin pools).  Unlike
-thin pool, if 'cache_pool_metadata_require_separate_pvs' is not set to
-'1', the metadata and data area will be allocated from the same device.
-It is also done in a manner similar to RAID, where a single chunk of
-space is allocated and then split to form the metadata and data device -
-ensuring that they are together.
----
- conf/example.conf.in         |    4 ++++
- lib/config/config_settings.h |    1 +
- lib/config/defaults.h        |    2 ++
- lib/metadata/lv_manip.c      |   39 ++++++++++++++++++++++++++++++++-------
- 4 files changed, 39 insertions(+), 7 deletions(-)
-
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 0f73cf3..7b98b4b 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -301,6 +301,10 @@ allocation {
-     # until version 2.02.85.
-     mirror_logs_require_separate_pvs = 0
- 
-+    # Set to 1 to guarantee that cache_pool metadata will always be
-+    # placed on  different PVs from the cache_pool data.
-+    cache_pool_metadata_require_separate_pvs = 0
-+
-     # Set to 1 to guarantee that thin pool metadata will always
-     # be placed on different PVs from the pool data.
-     thin_pool_metadata_require_separate_pvs = 0
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 1546b3f..2c6953b 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -107,6 +107,7 @@ cfg(allocation_maximise_cling_CFG, "maximise_cling", allocation_CFG_SECTION, 0,
- cfg(allocation_use_blkid_wiping_CFG, "use_blkid_wiping", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL)
- cfg(allocation_wipe_signatures_when_zeroing_new_lvs_CFG, "wipe_signatures_when_zeroing_new_lvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL)
- cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_MIRROR_LOGS_REQUIRE_SEPARATE_PVS, vsn(2, 2, 85), NULL)
-+cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
- cfg(allocation_thin_pool_metadata_require_separate_pvs_CFG, "thin_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
- cfg(allocation_thin_pool_zero_CFG, "thin_pool_zero", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_ZERO, vsn(2, 2, 99), NULL)
- cfg(allocation_thin_pool_discards_CFG, "thin_pool_discards", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_STRING, DEFAULT_THIN_POOL_DISCARDS, vsn(2, 2, 99), NULL)
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 141b7ae..a388e13 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -79,6 +79,8 @@
- #define DEFAULT_THIN_POOL_ZERO 1
- #define DEFAULT_POOL_METADATA_SPARE 1
- 
-+#define DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
-+
- #define DEFAULT_UMASK 0077
- 
- #ifdef LVM1_FALLBACK
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index a2831cf..bd1e57c 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -924,6 +924,9 @@ struct alloc_handle {
- 	 * that is new_extents + log_len and then split that between two
- 	 * allocated areas when found.  'alloc_and_split_meta' indicates
- 	 * that this is the desired dynamic.
-+	 *
-+	 * This same idea is used by cache LVs to get the metadata device
-+	 * and data device allocated together.
- 	 */
- 	unsigned alloc_and_split_meta;
- 
-@@ -1115,6 +1118,7 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
- 	 * a correct area_multiple.
- 	 */
- 	ah->area_multiple = _calc_area_multiple(segtype, area_count + parity_count, stripes);
-+	//FIXME: s/mirror_logs_separate/metadata_separate/ so it can be used by otehrs?
- 	ah->mirror_logs_separate = find_config_tree_bool(cmd, allocation_mirror_logs_require_separate_pvs_CFG, NULL);
- 
- 	if (segtype_is_raid(segtype)) {
-@@ -1137,12 +1141,30 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
- 			ah->log_len = 0;
- 		}
- 	} else if (segtype_is_thin_pool(segtype)) {
--		ah->log_area_count = metadata_area_count;
--		/* thin_pool uses region_size to pass metadata size in extents */
-+		/*
-+		 * thin_pool uses ah->region_size to
-+		 * pass metadata size in extents
-+		 */
- 		ah->log_len = ah->region_size;
-+		ah->log_area_count = metadata_area_count;
- 		ah->region_size = 0;
- 		ah->mirror_logs_separate =
- 			find_config_tree_bool(cmd, allocation_thin_pool_metadata_require_separate_pvs_CFG, NULL);
-+	} else if (segtype_is_cache_pool(segtype)) {
-+		/*
-+		 * Like thin_pool, cache_pool uses ah->region_size to
-+		 * pass metadata size in extents
-+		 */
-+		ah->log_len = ah->region_size;
-+		/* use metadata_area_count, not log_area_count */
-+		ah->metadata_area_count = metadata_area_count;
-+		ah->region_size = 0;
-+		ah->mirror_logs_separate =
-+			find_config_tree_bool(cmd, allocation_cache_pool_metadata_require_separate_pvs_CFG, NULL);
-+		if (!ah->mirror_logs_separate) {
-+			ah->alloc_and_split_meta = 1;
-+			ah->new_extents += ah->log_len;
-+		}
- 	} else {
- 		ah->log_area_count = metadata_area_count;
- 		ah->log_len = !metadata_area_count ? 0 :
-@@ -1956,14 +1978,15 @@ static void _report_needed_allocation_space(struct alloc_handle *ah,
- 	uint32_t parallel_areas_count, parallel_area_size;
- 	uint32_t metadata_count, metadata_size;
- 
--	parallel_area_size = (ah->new_extents - alloc_state->allocated) / ah->area_multiple -
--		      ((ah->alloc_and_split_meta) ? ah->log_len : 0);
-+	parallel_area_size = ah->new_extents - alloc_state->allocated;
-+	parallel_area_size /= ah->area_multiple;
-+	parallel_area_size -= (ah->alloc_and_split_meta) ? ah->log_len : 0;
- 
- 	parallel_areas_count = ah->area_count + ah->parity_count;
- 
- 	metadata_size = ah->log_len;
- 	if (ah->alloc_and_split_meta) {
--		metadata_type = "RAID metadata area";
-+		metadata_type = "metadata area";
- 		metadata_count = parallel_areas_count;
- 	} else {
- 		metadata_type = "mirror log";
-@@ -1975,8 +1998,10 @@ static void _report_needed_allocation_space(struct alloc_handle *ah,
- 	log_debug_alloc("  %" PRIu32 " (%" PRIu32 " data/%" PRIu32
- 			" parity) parallel areas of %" PRIu32 " extents each",
- 			parallel_areas_count, ah->area_count, ah->parity_count, parallel_area_size);
--	log_debug_alloc("  %" PRIu32 " %ss of %" PRIu32 " extents each",
--			metadata_count, metadata_type, metadata_size);
-+	log_debug_alloc("  %" PRIu32 " %s%s of %" PRIu32 " extents each",
-+			metadata_count, metadata_type,
-+			(metadata_count == 1) ? "" : "s",
-+			metadata_size);
+diff --git a/lib/display/display.c b/lib/display/display.c
+index 1babffc..9f52f0b 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -912,6 +912,15 @@ void display_formats(const struct cmd_context *cmd)
+ 	}
  }
- /*
-  * Returns 1 regardless of whether any space was found, except on error.
+
++void display_hosttags(const struct cmd_context *cmd)
++{
++	const struct str_list *sl;
++
++	dm_list_iterate_items(sl, &cmd->tags) {
++		log_print("%s", sl->str);
++	}
++}
++
+ void display_segtypes(const struct cmd_context *cmd)
+ {
+ 	const struct segment_type *segtype;
+diff --git a/lib/display/display.h b/lib/display/display.h
+index 077fff4..cfac354 100644
+--- a/lib/display/display.h
++++ b/lib/display/display.h
+@@ -52,6 +52,7 @@ void vgdisplay_colons(const struct volume_group *vg);
+ void vgdisplay_short(const struct volume_group *vg);
+
+ void display_formats(const struct cmd_context *cmd);
++void display_hosttags(const struct cmd_context *cmd);
+ void display_segtypes(const struct cmd_context *cmd);
+
+ void display_name_error(name_error_t name_error);
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index c377b35..34f6764 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -52,6 +52,8 @@ loading \fBlvm.conf\fP(5) and any other configuration files.
+ .TP
+ \fBhelp\fP \(em Display the help text.
+ .TP
++\fBhosttags\fP \(em Display any tags defined on this host.
++.TP
+ \fBpvdata\fP \(em Not implemented in LVM2.
+ .TP
+ \fBsegtypes\fP \(em Display recognised Logical Volume segment types.
+diff --git a/tools/Makefile.in b/tools/Makefile.in
+index f18d3ea..32f5844 100644
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -19,6 +19,7 @@ top_builddir = @top_builddir@
+ SOURCES =\
+ 	dumpconfig.c \
+ 	formats.c \
++	hosttags.c \
+ 	lvchange.c \
+ 	lvconvert.c \
+ 	lvcreate.c \
+@@ -166,7 +167,7 @@ liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION): liblvm2cmd.$(LIB_SUFFIX)
+
+ .commands: $(srcdir)/commands.h $(srcdir)/cmdnames.h Makefile
+ 	$(CC) -E -P $(srcdir)/cmdnames.h 2> /dev/null | \
+-		egrep -v '^ *(|#.*|devtypes|dumpconfig|formats|help|pvdata|segtypes|version) *$$' > .commands
++		egrep -v '^ *(|#.*|devtypes|dumpconfig|formats|help|hosttags|pvdata|segtypes|version) *$$' > .commands
+
+ ifneq ("$(CFLOW_CMD)", "")
+ CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES))
+diff --git a/tools/commands.h b/tools/commands.h
+index 938898b..08aae9a 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -80,6 +80,11 @@ xx(help,
+    PERMITTED_READ_ONLY,
+    "help <command>" "\n")
+
++xx(hosttags,
++   "List tags defined on this host",
++   PERMITTED_READ_ONLY,
++   "hosttags\n")
++
+ /*********
+ xx(lvactivate,
+    "Activate logical volume on given partition(s)",
+diff --git a/tools/hosttags.c b/tools/hosttags.c
+new file mode 100644
+index 0000000..09ff8d0
+--- /dev/null
++++ b/tools/hosttags.c
+@@ -0,0 +1,23 @@
++/*
++ * Copyright (C) 2014 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "tools.h"
++
++int hosttags(struct cmd_context *cmd, int argc __attribute__((unused)),
++	     char **argv __attribute__((unused)))
++{
++	display_hosttags(cmd);
++
++	return ECMD_PROCESSED;
++}
+---
+ lib/display/display.c |    9 +++++++++
+ lib/display/display.h |    1 +
+ man/lvm.8.in          |    2 ++
+ tools/Makefile.in     |    3 ++-
+ tools/commands.h      |    5 +++++
+ 5 files changed, 19 insertions(+), 1 deletions(-)
+
+diff --git a/lib/display/display.c b/lib/display/display.c
+index 1babffc..9f52f0b 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -912,6 +912,15 @@ void display_formats(const struct cmd_context *cmd)
+ 	}
+ }
+ 
++void display_hosttags(const struct cmd_context *cmd)
++{
++	const struct str_list *sl;
++
++	dm_list_iterate_items(sl, &cmd->tags) {
++		log_print("%s", sl->str);
++	}
++}
++
+ void display_segtypes(const struct cmd_context *cmd)
+ {
+ 	const struct segment_type *segtype;
+diff --git a/lib/display/display.h b/lib/display/display.h
+index 077fff4..cfac354 100644
+--- a/lib/display/display.h
++++ b/lib/display/display.h
+@@ -52,6 +52,7 @@ void vgdisplay_colons(const struct volume_group *vg);
+ void vgdisplay_short(const struct volume_group *vg);
+ 
+ void display_formats(const struct cmd_context *cmd);
++void display_hosttags(const struct cmd_context *cmd);
+ void display_segtypes(const struct cmd_context *cmd);
+ 
+ void display_name_error(name_error_t name_error);
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index c377b35..34f6764 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -52,6 +52,8 @@ loading \fBlvm.conf\fP(5) and any other configuration files.
+ .TP
+ \fBhelp\fP \(em Display the help text.
+ .TP
++\fBhosttags\fP \(em Display any tags defined on this host.
++.TP
+ \fBpvdata\fP \(em Not implemented in LVM2.
+ .TP
+ \fBsegtypes\fP \(em Display recognised Logical Volume segment types.
+diff --git a/tools/Makefile.in b/tools/Makefile.in
+index f18d3ea..32f5844 100644
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -19,6 +19,7 @@ top_builddir = @top_builddir@
+ SOURCES =\
+ 	dumpconfig.c \
+ 	formats.c \
++	hosttags.c \
+ 	lvchange.c \
+ 	lvconvert.c \
+ 	lvcreate.c \
+@@ -166,7 +167,7 @@ liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION): liblvm2cmd.$(LIB_SUFFIX)
+ 
+ .commands: $(srcdir)/commands.h $(srcdir)/cmdnames.h Makefile
+ 	$(CC) -E -P $(srcdir)/cmdnames.h 2> /dev/null | \
+-		egrep -v '^ *(|#.*|devtypes|dumpconfig|formats|help|pvdata|segtypes|version) *$$' > .commands
++		egrep -v '^ *(|#.*|devtypes|dumpconfig|formats|help|hosttags|pvdata|segtypes|version) *$$' > .commands
+ 
+ ifneq ("$(CFLOW_CMD)", "")
+ CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES))
+diff --git a/tools/commands.h b/tools/commands.h
+index 938898b..08aae9a 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -80,6 +80,11 @@ xx(help,
+    PERMITTED_READ_ONLY,
+    "help <command>" "\n")
+ 
++xx(hosttags,
++   "List tags defined on this host",
++   PERMITTED_READ_ONLY,
++   "hosttags\n")
++
+ /*********
+ xx(lvactivate,
+    "Activate logical volume on given partition(s)",
 
 
