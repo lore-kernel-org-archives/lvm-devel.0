@@ -1,311 +1,76 @@
 From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Tue,  4 Feb 2014 14:01:11 +0000 (UTC)
-Subject: master - cache: Add functions that create/remove cache LVs
-Message-ID: <20140204140111.B107F6063F@fedorahosted.org>
+Date: Tue,  4 Feb 2014 14:21:42 +0000 (UTC)
+Subject: master - misc: rename variables [min|max]_chunk to [min|max]_chunk_size
+Message-ID: <20140204142142.23E6B603AC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b94a3ee9f644e6be6f2f70dacefef0f606e2eaa5
-Commit:        b94a3ee9f644e6be6f2f70dacefef0f606e2eaa5
-Parent:        ef6c5795a0b0502b5ef984233fbeb73a9d81f2d0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=afe2ba657bfa20fa755e71a039ee9cb9027adb1b
+Commit:        afe2ba657bfa20fa755e71a039ee9cb9027adb1b
+Parent:        b94a3ee9f644e6be6f2f70dacefef0f606e2eaa5
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Feb 4 07:59:58 2014 -0600
+AuthorDate:    Tue Feb 4 08:20:10 2014 -0600
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Feb 4 07:59:58 2014 -0600
+CommitterDate: Tue Feb 4 08:20:10 2014 -0600
 
-cache: Add functions that create/remove cache LVs
+misc: rename variables [min|max]_chunk to [min|max]_chunk_size
 
-A cache LV - from LVM's perpective - is a user accessible device that
-links the cachepool LV and the origin LV.  The following functions
-were added to facilitate the creation and removal of this top-level
-LV:
-1) 'lv_cache_create' - takes a cachepool and an origin device and links
-   them into a new top-level LV of 'cache' segment type.  No allocation
-   is necessary in this function, as the sub-LVs contain all of the
-   necessary allocated space.  Only the top-level layer needs to be
-   created.
-
-2) 'lv_cache_remove' - this function removes the top-level LV of a
-   cache LV - promoting the cachepool and origin sub-LVs to top-level
-   devices and leaving them exposed to the user.  That is, the
-   cachepool is unlinked and free to be used with another origin to
-   form a new cache LV; and the origin is no longer cached.
-   (Currently, if the cache needs to be flushed, it is done in this
-   function and the function waits for it to complete before proceeding.
-   This will be taken out in a future patch in favor of polling.)
+better variable names.
 ---
- lib/Makefile.in                  |    1 +
- lib/metadata/cache_manip.c       |  219 ++++++++++++++++++++++++++++++++++++++
- lib/metadata/metadata-exported.h |    9 ++-
- 3 files changed, 227 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c |   15 ++++++++-------
+ 1 files changed, 8 insertions(+), 7 deletions(-)
 
-diff --git a/lib/Makefile.in b/lib/Makefile.in
-index 3808269..968ad00 100644
---- a/lib/Makefile.in
-+++ b/lib/Makefile.in
-@@ -87,6 +87,7 @@ SOURCES =\
- 	locking/locking.c \
- 	locking/no_locking.c \
- 	log/log.c \
-+	metadata/cache_manip.c \
- 	metadata/lv.c \
- 	metadata/lv_manip.c \
- 	metadata/merge.c \
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-new file mode 100644
-index 0000000..2456171
---- /dev/null
-+++ b/lib/metadata/cache_manip.c
-@@ -0,0 +1,219 @@
-+/*
-+ * Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
-+#include "lib.h"
-+#include "metadata.h"
-+#include "locking.h"
-+#include "pv_map.h"
-+#include "lvm-string.h"
-+#include "toolcontext.h"
-+#include "lv_alloc.h"
-+#include "pv_alloc.h"
-+#include "display.h"
-+#include "segtype.h"
-+#include "archiver.h"
-+#include "activate.h"
-+#include "str_list.h"
-+#include "defaults.h"
-+#include "lvm-exec.h"
-+
-+/*
-+ * lv_cache_create
-+ * @pool
-+ * @origin
-+ *
-+ * Given a cache_pool and an origin, link the two and create a
-+ * cached LV.
-+ *
-+ * Returns: cache LV on success, NULL on failure
-+ */
-+struct logical_volume *lv_cache_create(struct logical_volume *pool,
-+				       struct logical_volume *origin)
-+{
-+	const struct segment_type *segtype;
-+	struct cmd_context *cmd = pool->vg->cmd;
-+	struct logical_volume *cache_lv;
-+	struct lv_segment *seg;
-+
-+	if (!lv_is_cache_pool(pool)) {
-+		log_error(INTERNAL_ERROR
-+			  "%s is not a cache_pool LV", pool->name);
-+		return NULL;
-+	}
-+
-+	if (lv_is_cache_type(origin)) {
-+		/*
-+		 * FIXME: We can layer caches, insert_layer_for_lv() would
-+		 * have to do a better job renaming the LVs in the stack
-+		 * first so that there isn't a name collision with <name>_corig.
-+		 * The origin under the origin would become *_corig_corig
-+		 * before renaming the origin above to *_corig.
-+		 */
-+		log_error(INTERNAL_ERROR
-+			  "The origin, %s, cannot be of cache type",
-+			  origin->name);
-+		return NULL;
-+	}
-+
-+	if (!(segtype = get_segtype_from_string(cmd, "cache")))
-+		return_NULL;
-+
-+	cache_lv = origin;
-+	if (!(origin = insert_layer_for_lv(cmd, cache_lv, CACHE, "_corig")))
-+		return_NULL;
-+
-+	seg = first_seg(cache_lv);
-+	seg->segtype = segtype;
-+
-+	if (!attach_pool_lv(seg, pool, NULL, NULL))
-+		return_0;
-+
-+	return cache_lv;
-+}
-+
-+/*
-+ * lv_cache_remove
-+ * @cache_lv
-+ *
-+ * Given a cache LV, remove the cache layer.  This will unlink
-+ * the origin and cache_pool, remove the cache LV layer, and promote
-+ * the origin to a usable non-cached LV of the same name as the
-+ * given cache_lv.
-+ *
-+ * Returns: 1 on success, 0 on failure
-+ */
-+int lv_cache_remove(struct logical_volume *cache_lv)
-+{
-+	struct cmd_context *cmd = cache_lv->vg->cmd;
-+	char *policy_name;
-+	uint64_t dirty_blocks;
-+	struct segment_type *segtype;
-+	struct lv_segment *cache_seg = first_seg(cache_lv);
-+	struct logical_volume *origin_lv;
-+	struct logical_volume *cache_pool_lv;
-+
-+	if (!lv_is_cache(cache_lv))
-+		return_0;
-+
-+	/*
-+	 * FIXME:
-+	 * Before the link can be broken, we must ensure that the
-+	 * cache has been flushed.  This may already be the case
-+	 * if the cache mode is writethrough (or the cleaner
-+	 * policy is in place from a previous half-finished attempt
-+	 * to remove the cache_pool).  It could take a long time to
-+	 * flush the cache - it should probably be done in the background.
-+	 *
-+	 * Also, if we do perform the flush in the background and we
-+	 * happen to also be removing the cache/origin LV, then we
-+	 * could check if the cleaner policy is in place and simply
-+	 * remove the cache_pool then without waiting for the flush to
-+	 * complete.
-+	 */
-+	if (!lv_cache_policy_info(cache_lv, &policy_name, NULL, NULL))
-+		return_0;
-+
-+	if (strcmp(policy_name, "cleaner")) {
-+		/* We must swap in the cleaner to flush the cache */
-+		log_error("Flushing cache for %s", cache_lv->name);
-+
-+		/*
-+		 * Is there are clean way to free the memory for the name
-+		 * and argv when changing the policy?
-+		 */
-+		cache_seg->policy_name = (char *)"cleaner";
-+		cache_seg->policy_argc = 0;
-+		cache_seg->policy_argv = NULL;
-+
-+		/* update the kernel to put the cleaner policy in place */
-+		if (!vg_write(cache_lv->vg))
-+			return_0;
-+		if (!suspend_lv(cmd, cache_lv))
-+			return_0;
-+		if (!vg_commit(cache_lv->vg))
-+			return_0;
-+		if (!resume_lv(cmd, cache_lv))
-+			return_0;
-+	}
-+
-+	//FIXME: use polling to do this...
-+	do {
-+		if (!lv_cache_block_info(cache_lv, NULL,
-+					 &dirty_blocks, NULL, NULL))
-+			return_0;
-+		log_error("%" PRIu64 " blocks must still be flushed.",
-+			  dirty_blocks);
-+		if (dirty_blocks)
-+			sleep(5);
-+	} while (dirty_blocks);
-+
-+	cache_pool_lv = first_seg(cache_lv)->pool_lv;
-+	if (!detach_pool_lv(first_seg(cache_lv)))
-+		return_0;
-+
-+	origin_lv = seg_lv(first_seg(cache_lv), 0);
-+	lv_set_visible(origin_lv);
-+
-+//FIXME: We should be able to use 'remove_layer_from_lv', but
-+//       there is a call to 'lv_empty' in there that recursively
-+//       deletes everything down the tree - including the origin_lv
-+//       that we are trying to preserve!
-+//	if (!remove_layer_from_lv(cache_lv, origin_lv))
-+//		return_0;
-+
-+	if (!remove_seg_from_segs_using_this_lv(origin_lv, first_seg(cache_lv)))
-+		return_0;
-+	if (!move_lv_segments(cache_lv, origin_lv, 0, 0))
-+		return_0;
-+
-+	cache_lv->status &= ~CACHE;
-+
-+	segtype = get_segtype_from_string(cmd, "error");
-+	if (!lv_add_virtual_segment(origin_lv, 0,
-+				    cache_lv->le_count, segtype, NULL))
-+		return_0;
-+
-+	if (!vg_write(cache_lv->vg))
-+		return_0;
-+
-+	/*
-+	 * suspend_lv on this cache LV will suspend all of the components:
-+	 * - the top-level cache LV
-+	 * - the origin
-+	 * - the cache_pool and all of its sub-LVs
-+	 */
-+	if (!suspend_lv(cmd, cache_lv))
-+		return_0;
-+
-+	if (!vg_commit(cache_lv->vg))
-+		return_0;
-+
-+	/*
-+	 * resume_lv on this (former) cache LV will resume all
-+	 * but the cache_pool LV.  It must be resumed seperately.
-+	 */
-+	if (!resume_lv(cmd, cache_lv))
-+		return_0;
-+	if (!resume_lv(cmd, cache_pool_lv))
-+		return_0;
-+
-+	if (!activate_lv(cmd, origin_lv))
-+		return_0;
-+	if (!deactivate_lv(cmd, origin_lv))
-+		return_0;
-+	if (!lv_remove(origin_lv))
-+		return_0;
-+
-+	return 1;
-+}
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 97f05fc..d8eef2d 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -1016,9 +1016,14 @@ int lv_raid_reshape(struct logical_volume *lv,
- int lv_raid_replace(struct logical_volume *lv, struct dm_list *remove_pvs,
- 		    struct dm_list *allocate_pvs);
- int lv_raid_remove_missing(struct logical_volume *lv);
--
- /* --  metadata/raid_manip.c */
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index e95b7e5..6139daa 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5638,7 +5638,7 @@ static int _recalculate_pool_chunk_size_with_dev_hints(struct lvcreate_params *l
+ 	unsigned long previous_hint = 0, hint = 0;
+ 	uint32_t chunk_size = lp->chunk_size;
+ 	uint32_t default_chunk_size;
+-	uint32_t min_chunk, max_chunk;
++	uint32_t min_chunk_size, max_chunk_size;
  
-+/* ++  metadata/cache_manip.c */
-+struct logical_volume *lv_cache_create(struct logical_volume *pool,
-+				       struct logical_volume *origin);
-+int lv_cache_remove(struct logical_volume *cache_lv);
-+/* --  metadata/cache_manip.c */
-+
- struct cmd_vg *cmd_vg_add(struct dm_pool *mem, struct dm_list *cmd_vgs,
- 			  const char *vg_name, const char *vgid,
- 			  uint32_t flags);
+ 	if (lp->passed_args & PASS_ARG_CHUNK_SIZE)
+ 		goto out;
+@@ -5647,8 +5647,8 @@ static int _recalculate_pool_chunk_size_with_dev_hints(struct lvcreate_params *l
+ 		if (find_config_tree_int(cmd, allocation_thin_pool_chunk_size_CFG, NULL))
+ 			goto out;
+ 
+-		min_chunk = DM_THIN_MIN_DATA_BLOCK_SIZE;
+-		max_chunk = DM_THIN_MAX_DATA_BLOCK_SIZE;
++		min_chunk_size = DM_THIN_MIN_DATA_BLOCK_SIZE;
++		max_chunk_size = DM_THIN_MAX_DATA_BLOCK_SIZE;
+ 		if (lp->thin_chunk_size_calc_policy == THIN_CHUNK_SIZE_CALC_METHOD_PERFORMANCE)
+ 			default_chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE_PERFORMANCE*2;
+ 		else
+@@ -5656,8 +5656,8 @@ static int _recalculate_pool_chunk_size_with_dev_hints(struct lvcreate_params *l
+ 	} else if (seg_is_cache_pool(lp)) {
+ 		if (find_config_tree_int(cmd, allocation_cache_pool_chunk_size_CFG, NULL))
+ 			goto out;
+-		min_chunk = DM_CACHE_MIN_DATA_BLOCK_SIZE;
+-		max_chunk = DM_CACHE_MAX_DATA_BLOCK_SIZE;
++		min_chunk_size = DM_CACHE_MIN_DATA_BLOCK_SIZE;
++		max_chunk_size = DM_CACHE_MAX_DATA_BLOCK_SIZE;
+ 		default_chunk_size = DEFAULT_CACHE_POOL_CHUNK_SIZE*2;
+ 	} else {
+ 		log_error(INTERNAL_ERROR "%s is not a thin pool or cache pool",
+@@ -5687,10 +5687,11 @@ static int _recalculate_pool_chunk_size_with_dev_hints(struct lvcreate_params *l
+ 		goto out;
+ 	}
+ 
+-	if ((hint < min_chunk) || (hint > max_chunk)) {
++	if ((hint < min_chunk_size) || (hint > max_chunk_size)) {
+ 		log_debug_alloc("Calculated chunk size value of %ld sectors for"
+ 				" thin pool %s is out of allowed range (%d-%d).",
+-				hint, pool_lv->name, min_chunk, max_chunk);
++				hint, pool_lv->name,
++				min_chunk_size, max_chunk_size);
+ 	} else
+ 		chunk_size = (hint >= default_chunk_size) ?
+ 			hint : default_chunk_size;
 
 
