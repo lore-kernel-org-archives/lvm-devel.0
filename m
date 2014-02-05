@@ -1,49 +1,37 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 05 Feb 2014 10:35:06 +0100
-Subject: cache support
-In-Reply-To: <096101cf2214$d241ed60$76c5c820$@acm.org>
-References: <096101cf2214$d241ed60$76c5c820$@acm.org>
-Message-ID: <52F205CA.1090807@redhat.com>
+From: Oliver Rath <rath@mglug.de>
+Date: Wed, 05 Feb 2014 10:44:50 +0100
+Subject: naming problem on cached devices
+Message-ID: <52F20812.8010305@mglug.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 5.2.2014 02:51, Paul B. Henson napsal(a):
-> So I was browsing through the last month or so of list archives and
-> reviewing the cache support under development, and had a question regarding
-> use cases. Unless I am misunderstanding, it looks like the support being
-> built so far addresses the use case of taking two lv's (a large slow origin
-> lv and a small fast cache lv) and combining them into a third lv.
->
-> Is there any intention to support a use case where you can attach a cache to
-> the underlying pv, and have every single lv created on that pv cached? On a
-> virtualization server I'm working on, I have an md raid1 of two 256G SSD's,
-> and an md raid10 of four 2TB hard drives. What I'd like to do is create a
-> cache device consisting of those two raid devices, and create a pv/vg on top
-> of that. I know that is possible with the raw underlying dm-cache
-> implementation, but it didn't look like the initial code dropped in lvm so
-> far would support something like that?
+Hi list,
+
+i have a little problem here using (not only happen on lvm ;-) ) cached
+devices:
+
+I.e. i have a ssd named /dev/ssd and a standard disk /dev/sda1 to be
+cached. If I now create i.e. a device /dev/mapper/cache0 (done by
+dmsetup at the mom) and create there a pv, this pv exists twice (at ssd
+and sda). If I then create a vg based on ssd, this vg exists twice, too.
+This happens i.e. for flashcache device, too.
+
+Is there a mechanism to avoid this doubling in an easy way? I know, you
+can blind out devices with a filter argument in lvm.conf, but maybe
+there are better possibilities.
+
+There is another interesting case: If i want to cache an *existing* pv,
+is it possiblie to change the *name* of this pv in a vg in a dynamic
+way? I.e. if the vg "myvg" consists on /dev/sdc1, if now i create a
+cache-device /dev/mapper/sdc1_cached, how can i transfer this name into
+myvg instead of the original sdc1? Or is this the wrong question?
+
+Tfh!
+Oliver
 
 
-Well - there is work in progress in upstream git - but it's highly 
-'experimental' and its user-space API can change any minute - so it's only 
-useful for playing - but not for any real use yet.
-
-The device stacking is getting quite complex.
-
-Side note - lvm2 now supports it's own metadata format for md raid1 - this 
-should allow better handling of device stack (it's using same kernel driver as 
-mdraid) - use just a single command to active everything in proper order.
-
-Current version of dm-cache supports  only  1:1 mapping - so one large cache 
-shared by multiple LVs is not supported. You will need to prepare smaller 
-individual cache pools for each of your LV.
-
-lvm2 side is designed to allow to play with more different cache targets in 
-future.
-
-Zdenek
 
 
