@@ -1,52 +1,55 @@
 From: Paul B. Henson <henson@acm.org>
-Date: Wed, 5 Feb 2014 12:12:06 -0800
+Date: Wed, 5 Feb 2014 12:20:11 -0800
 Subject: cache support
-In-Reply-To: <52F1E9DC.60809@mglug.de>
-References: <096101cf2214$d241ed60$76c5c820$@acm.org> <52F1E9DC.60809@mglug.de>
-Message-ID: <0a3601cf22ae$8cdd4900$a697db00$@acm.org>
+In-Reply-To: <52F205CA.1090807@redhat.com>
+References: <096101cf2214$d241ed60$76c5c820$@acm.org>
+	<52F205CA.1090807@redhat.com>
+Message-ID: <0a3901cf22af$ae01d2d0$0a057870$@acm.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> From: Oliver Rath
-> Sent: Tuesday, February 04, 2014 11:36 PM
+> From: Zdenek Kabelac
+> Sent: Wednesday, February 05, 2014 1:35 AM
 >
-> you can create a cache-device with dm-cache, i.e. /dev/mapper/cache0,
-> which consists your underlying disks cached by your ssd.
+> Well - there is work in progress in upstream git - but it's highly
+> 'experimental' and its user-space API can change any minute - so it's only
+> useful for playing - but not for any real use yet.
 
-I investigated that, although I never prototyped it. Using dm-cache directly
-involves size calculations and an annoying number of messy manual
-operations, I was hoping lvm would hide most of that from the user level and
-make it easier to do :).
+Agreed :). I'm just looking to try and make sure that as it stabilizes my
+desired use case fits in the picture ;).
 
-> cache0, getting the right name for this. As result you get the disk ids
-> twice, so you have to filter the ids by lvm.conf.
-> 
-> @list: Is there a solution for this "doubling" case?
+> Side note - lvm2 now supports it's own metadata format for md raid1 - this
+> should allow better handling of device stack (it's using same kernel
+driver as
+> mdraid) - use just a single command to active everything in proper order.
 
-I've deployed lvm on mdraid in the past, specifically on mirrors using the
-older metadata format such that each half of the mirror appears to be a pv
-on its own. I never fiddled with filters, but somehow lvm figured out that
-it should use the /dev/md device for the pv and not the raw /dev/sd
-components.
+I've read somewhat about the integration of mdraid and lvm, but not enough
+to fully understand it or be comfortable about switching from classic mdraid
+to lvm integrated mdraid.
 
-> Alternativly you can use bcache, which needs a "superblock" on both
+> Current version of dm-cache supports  only  1:1 mapping - so one large
+cache
+> shared by multiple LVs is not supported. You will need to prepare smaller
+> individual cache pools for each of your LV.
 
-I looked at bcache, which is relatively easy to use and does match my use
-case. However, after hanging out on the mailing list for a while, the
-developers didn't seem to reliably respond to postings of crashes or data
-corruption or other issues, which made me somewhat leery of deployment in
-production. On the device mapper mailing list, the developers seem to
-respond to pretty much every question or problem report about dm-cache,
-which gives one a little bit more of a warm fuzzy ;).
+I'm not sure what you mean here; I confirmed on the device mapper mailing
+list that using dm-cache directly would support my desired stacking of
+placing a PV on top of a dm-cache device that is sitting on top of a raw SSD
+raid1 md cache device and a raw HD raid10 origin device, effectively using
+the single cache device to cache all of the LV's created on the PV. I don't
+really want to split up the cache device into bits and pieces for each
+individual LV, that doesn't seem very efficient; I'd rather have the entire
+cache device available for which ever LV's happen to be hot at a given time.
 
-> enhanceIO (not in standard kernel yet), which caches your device
+So it's really just a question of whether or not lvm is going to support a
+user-friendly layer on top of dm-cache for this type of stacking, or if
+somebody will be stuck using dm-cache directly if they want to implement
+something like this.
 
-I took a look at that too, but I'd really prefer something in the mainline
-kernel for production deployment.
+Thanks.
 
-Thanks much.
 
 
