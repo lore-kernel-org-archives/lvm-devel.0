@@ -1,44 +1,59 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Mon, 10 Feb 2014 13:53:21 +0000 (UTC)
-Subject: master - libdevmapper-event: Print a deprecation warning for non-default plugins.
-Message-ID: <20140210135321.D029C60643@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 10 Feb 2014 15:20:58 +0000 (UTC)
+Subject: master - systemd: cleanup for lvmetad systemd unit
+Message-ID: <20140210152058.E8B4D60DB7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=38457e1be9c3363126eadc3e04ae8b8780832668
-Commit:        38457e1be9c3363126eadc3e04ae8b8780832668
-Parent:        ed166a3b1d3290ad887d8f83c24a8d8877713d3c
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Mon Feb 10 14:51:14 2014 +0100
-Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Mon Feb 10 14:52:59 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ffa623c53d94a75e40067a2d186ac65a64abb890
+Commit:        ffa623c53d94a75e40067a2d186ac65a64abb890
+Parent:        38457e1be9c3363126eadc3e04ae8b8780832668
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Feb 10 16:18:48 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Feb 10 16:20:45 2014 +0100
 
-libdevmapper-event: Print a deprecation warning for non-default plugins.
+systemd: cleanup for lvmetad systemd unit
 
+No need to fork lvmetad when running under systemd.
+Also, the "lvmetad -R" support has been removed in lvm2 v2.02.98
+so remove the ExecReload line that called it on "systemctl reload".
 ---
- daemons/dmeventd/libdevmapper-event.c |    7 +++++++
- 1 files changed, 7 insertions(+), 0 deletions(-)
+ WHATS_NEW                                       |    2 ++
+ scripts/lvm2_lvmetad_systemd_red_hat.service.in |    5 ++---
+ 2 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index 1b5273d..db9200f 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -619,6 +619,13 @@ int dm_event_register_handler(const struct dm_event_handler *dmevh)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 043feae..c4a3dcb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.02.106 - 
+ ====================================
++  Remove ExecReload from lvmetad systemd unit: lvmetad -R undefined. (2.02.98)
++  Do not fork lvmetad if running under systemd.
+   Wipe DM_snapshot_cow signature without prompt in new LVs with blkid wiping.
+   Avoid exposing temporary devices when initializing raid metadata volumes.
+   Add internal tags command to display any tags defined on the host.
+diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.service.in b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
+index 0150726..8f4c60d 100644
+--- a/scripts/lvm2_lvmetad_systemd_red_hat.service.in
++++ b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
+@@ -7,10 +7,9 @@ DefaultDependencies=no
+ Conflicts=shutdown.target
  
- 	uuid = dm_task_get_uuid(dmt);
- 
-+	if (!strstr(dmevh->dso, "libdevmapper-event-lvm2thin.so") &&
-+	    !strstr(dmevh->dso, "libdevmapper-event-lvm2snapshot.so") &&
-+	    !strstr(dmevh->dso, "libdevmapper-event-lvm2mirror.so") &&
-+	    !strstr(dmevh->dso, "libdevmapper-event-lvm2raid.so"))
-+		log_warn("WARNING: %s: dmeventd plugins are deprecated", dmevh->dso);
-+
-+
- 	if ((err = _do_event(DM_EVENT_CMD_REGISTER_FOR_EVENT, dmevh->dmeventd_path, &msg,
- 			     dmevh->dso, uuid, dmevh->mask, dmevh->timeout)) < 0) {
- 		log_error("%s: event registration failed: %s",
+ [Service]
+-Type=forking
++Type=simple
+ NonBlocking=true
+-ExecStart=@sbindir@/lvmetad
+-ExecReload=@sbindir@/lvmetad -R
++ExecStart=@sbindir@/lvmetad -f
+ Environment=SD_ACTIVATION=1
+ Restart=on-abort
+ PIDFile=@LVMETAD_PIDFILE@
 
 
