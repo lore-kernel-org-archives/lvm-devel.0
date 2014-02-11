@@ -1,83 +1,74 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 11 Feb 2014 18:01:36 +0000 (UTC)
-Subject: master - cleanup: fix some lvm.conf typos
-Message-ID: <20140211180136.4FE1F60FC3@fedorahosted.org>
+Date: Tue, 11 Feb 2014 18:01:23 +0000 (UTC)
+Subject: master - lvm2app: access params after its checked
+Message-ID: <20140211180123.87FFD60D1C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=108ae0edc6a6c4bb771fa7931fc1e709793ddadf
-Commit:        108ae0edc6a6c4bb771fa7931fc1e709793ddadf
-Parent:        9d69585b82d8bc2305f7ac197ef22751f9821a5f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c1faa4048a7421c14456cb1761548f7907bfbf53
+Commit:        c1faa4048a7421c14456cb1761548f7907bfbf53
+Parent:        38e457c4788d0d2e51bf46edbd82b4683d33ac8f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 11 18:05:39 2014 +0100
+AuthorDate:    Sun Feb 9 21:36:02 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 11 19:00:06 2014 +0100
+CommitterDate: Tue Feb 11 18:50:37 2014 +0100
 
-cleanup: fix some lvm.conf typos
+lvm2app: access params after its checked
 
+Since params is checked for NULL, move code that dereferences
+params after its check.
 ---
- conf/example.conf.in |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ liblvm/lvm_lv.c |   19 ++++++++-----------
+ 1 files changed, 8 insertions(+), 11 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 08ce877..1572750 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -336,14 +336,14 @@ allocation {
-     # thin_pool_chunk_size_policy = "generic"
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index 9f3a9c6..d89e8ae 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -757,17 +757,15 @@ struct lvm_property_value lvm_lv_params_get_property(
+ 						const lv_create_params_t params,
+ 						const char *name)
+ {
+-	struct lvm_property_value rc = {
+-		.is_valid = 0
+-	};
+-	struct saved_env e = store_user_env(params->vg->cmd);
++	struct lvm_property_value rc = { .is_valid = 0 };
  
-     # Specify the minimal chunk size (in KB) for thin pool volumes.
--    # Use of the larger chunk size may improve perfomance for plain
-+    # Use of the larger chunk size may improve performance for plain
-     # thin volumes, however using them for snapshot volumes is less efficient,
-     # as it consumes more space and takes extra time for copying.
-     # When unset, lvm tries to estimate chunk size starting from 64KB
-     # Supported values are in range from 64 to 1048576.
-     # thin_pool_chunk_size = 64
+ 	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
++		struct saved_env e = store_user_env(params->vg->cmd);
+ 		rc = get_property(NULL, NULL, NULL, NULL, NULL, &params->lvp, NULL, name);
+-	} else {
++		restore_user_env(&e);
++	} else
+ 		log_error("Invalid lv_create_params parameter");
+-	}
+-	restore_user_env(&e);
++
+ 	return rc;
+ }
  
--    # Specify discards behavior of the thin pool volume.
-+    # Specify discards behaviour of the thin pool volume.
-     # Select one of  "ignore", "nopassdown", "passdown"
-     # thin_pool_discards = "passdown"
+@@ -775,15 +773,14 @@ int lvm_lv_params_set_property(lv_create_params_t params, const char *name,
+ 								struct lvm_property_value *prop)
+ {
+ 	int rc = -1;
+-	struct saved_env e = store_user_env(params->vg->cmd);
  
-@@ -423,7 +423,7 @@ log {
- # Configuration of metadata backups and archiving.  In LVM2 when we
- # talk about a 'backup' we mean making a copy of the metadata for the
- # *current* system.  The 'archive' contains old metadata configurations.
--# Backups are stored in a human readeable text format.
-+# Backups are stored in a human readable text format.
- backup {
+ 	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
++		struct saved_env e = store_user_env(params->vg->cmd);
+ 		rc = set_property(NULL, NULL, NULL, &params->lvp, NULL, name, prop);
+-	} else {
++		restore_user_env(&e);
++	} else
+ 		log_error("Invalid lv_create_params parameter");
+-	}
  
-     # Should we maintain a backup of the current metadata configuration ?
-@@ -614,7 +614,7 @@ global {
-     # "mirror" - LVM will layer the 'mirror' and 'stripe' segment types.  It
-     #            will do this by creating a mirror on top of striped sub-LVs;
-     #            effectively creating a RAID 0+1 array.  This is suboptimal
--    #            in terms of providing redunancy and performance.  Changing to
-+    #            in terms of providing redundancy and performance. Changing to
-     #            this setting is not advised.
-     # Specify the '--type <raid10|mirror>' option to override this default
-     # setting.
-@@ -678,7 +678,7 @@ global {
-     # Array of string options passed with thin_check command. By default,
-     # option "-q" is for quiet output.
-     # With thin_check version 2.1 or newer you can add "--ignore-non-fatal-errors"
--    # to let it pass through ignoreable errors and fix them later.
-+    # to let it pass through ignorable errors and fix them later.
-     #
-     # thin_check_options = [ "-q" ]
+-	restore_user_env(&e);
+ 	return rc;
+ }
  
-@@ -838,7 +838,7 @@ activation {
-     # auto_set_activation_skip = 1
- 
-     # For RAID or 'mirror' segment types, 'raid_region_size' is the
--    # size (in kiB) of each:
-+    # size (in KiB) of each:
-     # - synchronization operation when initializing
-     # - each copy operation when performing a 'pvmove' (using 'mirror' segtype)
-     # This setting has replaced 'mirror_region_size' since version 2.02.99
 
 
