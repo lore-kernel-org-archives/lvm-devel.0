@@ -1,39 +1,30 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Tue, 11 Feb 2014 19:49:02 +0000 (UTC)
-Subject: master - cache: lv_cache_create returns LV ptr, so return NULL not 0 on error
-Message-ID: <20140211194902.8A8FB6133C@fedorahosted.org>
+From: Paul B. Henson <henson@acm.org>
+Date: Tue, 11 Feb 2014 13:04:08 -0800
+Subject: cache support
+In-Reply-To: <A2CE00CC-6439-4A2E-A694-8E3B2656867B@redhat.com>
+References: <096101cf2214$d241ed60$76c5c820$@acm.org>	<52F205CA.1090807@redhat.com>	<0a3901cf22af$ae01d2d0$0a057870$@acm.org>	<52F2AD44.8030006@redhat.com>	<0a7b01cf22db$da3f56c0$8ebe0440$@acm.org>
+	<A2CE00CC-6439-4A2E-A694-8E3B2656867B@redhat.com>
+Message-ID: <0fff01cf276c$d059c8d0$710d5a70$@acm.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48aef76ec5e4eecfce4d0926ab60317bac763eb5
-Commit:        48aef76ec5e4eecfce4d0926ab60317bac763eb5
-Parent:        d68e5d5ab9a27fd2dcc70097e0764d335a6e1b90
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Feb 11 13:47:26 2014 -0600
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Feb 11 13:47:26 2014 -0600
+> From: Brassow Jonathan
+> Sent: Tuesday, February 11, 2014 9:24 AM
+>
+> What do you think about caching a thin pool?  Then you would get the
+> benefit of caching for all of your LVs and you would get all the benefits
+of
+> thin and thin snapshots.
 
-cache: lv_cache_create returns LV ptr, so return NULL not 0 on error
-
----
- lib/metadata/cache_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index a3a3608..f7518b0 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -129,7 +129,7 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool,
- 	seg->segtype = segtype;
- 
- 	if (!attach_pool_lv(seg, pool, NULL, NULL))
--		return_0;
-+		return_NULL;
- 
- 	return cache_lv;
- }
+Hmm, I'm not that familiar with thin allocation in lvm. Basically, I would
+allocate the entire PV as a thin LV, attach my entire cache to that, and
+then create all of my production LV's with thin allocation out of the single
+thin LV? Interesting thought. I have sufficient storage for at least the
+midterm, my perhaps flawed understanding is that going with thin LV's
+introduces an extra layer of complexity and inefficiency versus regular
+allocation?
 
 
