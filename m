@@ -1,52 +1,39 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 11 Feb 2014 18:01:29 +0000 (UTC)
-Subject: master - cleanup: condition reodering
-Message-ID: <20140211180129.D369460FC3@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Tue, 11 Feb 2014 19:49:02 +0000 (UTC)
+Subject: master - cache: lv_cache_create returns LV ptr, so return NULL not 0 on error
+Message-ID: <20140211194902.8A8FB6133C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f86e18bfeb8f047ac3fdc2b7a95e2f80a0bcdbfb
-Commit:        f86e18bfeb8f047ac3fdc2b7a95e2f80a0bcdbfb
-Parent:        bcd6b643be0aaef1df06a4df482a8e528d3cd36a
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 11 13:42:32 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 11 19:00:06 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48aef76ec5e4eecfce4d0926ab60317bac763eb5
+Commit:        48aef76ec5e4eecfce4d0926ab60317bac763eb5
+Parent:        d68e5d5ab9a27fd2dcc70097e0764d335a6e1b90
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Feb 11 13:47:26 2014 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Feb 11 13:47:26 2014 -0600
 
-cleanup: condition reodering
+cache: lv_cache_create returns LV ptr, so return NULL not 0 on error
 
-Check SEG_CANNOT_BE_ZEROED before even calling arg_str_value which
-is not needed in this case.
-
-Set it to 1 or 0 and not just result of strcmp call.
 ---
- tools/lvcreate.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/metadata/cache_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 638a868..bf719fe 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -1003,13 +1003,13 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	/*
- 	 * Should we zero/wipe signatures on the lv.
- 	 */
--	lp->zero = strcmp(arg_str_value(cmd, zero_ARG,
--		(lp->segtype->flags & SEG_CANNOT_BE_ZEROED) ? "n" : "y"), "n");
-+	lp->zero = (!(lp->segtype->flags & SEG_CANNOT_BE_ZEROED) &&
-+		    (strcmp(arg_str_value(cmd, zero_ARG, "y"), "y") == 0)) ? 1 : 0;
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index a3a3608..f7518b0 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -129,7 +129,7 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool,
+ 	seg->segtype = segtype;
  
- 	if (arg_count(cmd, wipesignatures_ARG)) {
- 		/* If -W/--wipesignatures is given on command line directly, respect it. */
--		lp->wipe_signatures = strcmp(arg_str_value(cmd, wipesignatures_ARG,
--			(lp->segtype->flags & SEG_CANNOT_BE_ZEROED) ? "n" : "y"), "n");
-+		lp->wipe_signatures =(!(lp->segtype->flags & SEG_CANNOT_BE_ZEROED) &&
-+				      (strcmp(arg_str_value(cmd, wipesignatures_ARG, "y"), "y") == 0)) ? 1 : 0;
- 	} else {
- 		/*
- 		 * If -W/--wipesignatures is not given on command line,
+ 	if (!attach_pool_lv(seg, pool, NULL, NULL))
+-		return_0;
++		return_NULL;
+ 
+ 	return cache_lv;
+ }
 
 
