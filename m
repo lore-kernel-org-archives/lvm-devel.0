@@ -1,42 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 11 Feb 2014 18:01:25 +0000 (UTC)
-Subject: master - man: use some existing indentifier
-Message-ID: <20140211180125.9BDC560FC3@fedorahosted.org>
+Date: Tue, 11 Feb 2014 18:01:38 +0000 (UTC)
+Subject: master - tests: remove debug.log in enable_dev
+Message-ID: <20140211180138.A24C560FC3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=40a9c443a925ff2fbc7c12972c3cfa726b880580
-Commit:        40a9c443a925ff2fbc7c12972c3cfa726b880580
-Parent:        c1faa4048a7421c14456cb1761548f7907bfbf53
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4ed831e7ef4cc82c84731294f0189620ff5439c5
+Commit:        4ed831e7ef4cc82c84731294f0189620ff5439c5
+Parent:        108ae0edc6a6c4bb771fa7931fc1e709793ddadf
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 11 18:04:05 2014 +0100
+AuthorDate:    Tue Feb 11 13:42:03 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 11 18:55:54 2014 +0100
+CommitterDate: Tue Feb 11 19:00:06 2014 +0100
 
-man: use some existing indentifier
+tests: remove debug.log in enable_dev
 
-Avoid confusing user, since some may get impression there is
-such variable (max_archives) in the config file.
-Pick rather something existing.
+In aux functions we may drop debug log from
+last running lvm command - so we do not
+get debug log from properly executed command,
+when we fail here.
 ---
- man/lvm.conf.5.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/lib/aux.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
-index 2786df2..73fcf47 100644
---- a/man/lvm.conf.5.in
-+++ b/man/lvm.conf.5.in
-@@ -102,7 +102,7 @@ e.g.	backup {
- .br
- An assignment associates a type with an identifier.
- .br
--e.g.	max_archives = 42
-+e.g.	level = 7
- .br
- .TP
- .BR array " =  '" [ "' ( " type " '" , "')* " type " '" ] "' | '" [ "' '" ] '
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 3c02d40..9420528 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -393,6 +393,7 @@ disable_dev() {
+ enable_dev() {
+ 	local dev
+ 
++	rm -f debug.log
+ 	init_udev_transaction
+ 	for dev in "$@"; do
+ 		local name=$(echo "$dev" | sed -e 's,.*/,,')
 
 
