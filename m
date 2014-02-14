@@ -1,71 +1,85 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 14 Feb 2014 13:52:04 +0000 (UTC)
-Subject: master - systemd: do not use default dependencies for clvmd/cmirrord units
-Message-ID: <20140214135204.986E960BD5@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Fri, 14 Feb 2014 22:04:39 +0000 (UTC)
+Subject: master - cache: Fix cache LV not being instantiated in kernel
+Message-ID: <20140214220439.D1F0E6016A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=554159d519ba5c523d506785d61d10374456a020
-Commit:        554159d519ba5c523d506785d61d10374456a020
-Parent:        4210219a8bba1aee6a16d16f4c158fa46395b9dd
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Feb 14 14:37:19 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Feb 14 14:37:19 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa4812bf7b336cf1a301ec7218f905894422e61e
+Commit:        fa4812bf7b336cf1a301ec7218f905894422e61e
+Parent:        554159d519ba5c523d506785d61d10374456a020
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri Feb 14 16:03:23 2014 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Fri Feb 14 16:04:31 2014 -0600
 
-systemd: do not use default dependencies for clvmd/cmirrord units
+cache: Fix cache LV not being instantiated in kernel
 
-Do not use default dependencies that systemd adds to the units
-so we have better control of when the service is started/stopped
-and we don't end up with unexpected behaviour.
+When an origin exists and the 'lvcreate' command is used to create
+a cache pool + cache LV, the table is loaded into the kernel but
+never instantiated (suspend/resume was never called).  A user running
+LVM commands would never know that the kernel did not have the
+proper state unless they also ran the dmsetup 'table/status' command.
+The solution is to suspend/resume the cache LV to make the loaded
+tables become active.
 ---
- ...2_cluster_activation_systemd_red_hat.service.in |    3 ++-
- scripts/lvm2_clvmd_systemd_red_hat.service.in      |    2 ++
- scripts/lvm2_cmirrord_systemd_red_hat.service.in   |    2 ++
- 3 files changed, 6 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c      |   20 +++++++++++++++++++-
+ test/shell/lvcreate-cache.sh |    2 ++
+ 2 files changed, 21 insertions(+), 1 deletions(-)
 
-diff --git a/scripts/lvm2_cluster_activation_systemd_red_hat.service.in b/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
-index 03ed9d2..970e93a 100644
---- a/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
-+++ b/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
-@@ -3,7 +3,8 @@ Description=Clustered LVM volumes activation service
- Requires=lvm2-clvmd.service
- After=lvm2-clvmd.service lvm2-cmirrord.service
- OnFailure=lvm2-clvmd.service
--DefaultDependencies=false
-+DefaultDependencies=no
-+Conflicts=shutdown.target
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index d38dd7c..6b4c9a8 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6282,7 +6282,25 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 	if (lp->temporary)
+ 		lv->status |= LV_TEMPORARY;
  
- [Service]
- Type=simple
-diff --git a/scripts/lvm2_clvmd_systemd_red_hat.service.in b/scripts/lvm2_clvmd_systemd_red_hat.service.in
-index c10bdc4..2978d21 100644
---- a/scripts/lvm2_clvmd_systemd_red_hat.service.in
-+++ b/scripts/lvm2_clvmd_systemd_red_hat.service.in
-@@ -7,6 +7,8 @@ Requires=network.target dlm.service corosync.service
- RefuseManualStart=true
- RefuseManualStop=true
- StopWhenUnneeded=true
-+DefaultDependencies=no
-+Conflicts=shutdown.target
+-	if (lv_is_thin_pool(lv) || lv_is_cache_pool(lv)) {
++	if (lv_is_cache_type(lv)) {
++		if (!lv_is_active(lv)) {
++			if (!activate_lv_excl(cmd, lv)) {
++				log_error("Failed to activate pool %s.",
++					  lv->name);
++				goto deactivate_and_revert_new_lv;
++			}
++		} else {
++			if (!suspend_lv(cmd, lv)) {
++				log_error("Failed to suspend pool %s.",
++					  lv->name);
++				goto deactivate_and_revert_new_lv;
++			}
++			if (!resume_lv(cmd, lv)) {
++				log_error("Failed to resume pool %s.", lv->name);
++				goto deactivate_and_revert_new_lv;
++			}
++		}
++	} else if (lv_is_thin_pool(lv)) {
+ 		if (is_change_activating(lp->activate)) {
+ 			if (vg_is_clustered(lv->vg)) {
+ 				if (!activate_lv_excl(cmd, lv)) {
+diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
+index 39f95c1..01e6f51 100644
+--- a/test/shell/lvcreate-cache.sh
++++ b/test/shell/lvcreate-cache.sh
+@@ -48,6 +48,7 @@ lvremove -ff $vg
+ # Create cache_pool, then origin with cache, then remove all
+ lvcreate --type cache_pool -l 1 -n ${lv}_cache_pool $vg
+ lvcreate --type cache -l 2 $vg/${lv}_cache_pool -n $lv1
++dmsetup table ${vg}-$lv1 | grep cache  # ensure it is loaded in kernel
+ lvremove -ff $vg
  
- [Service]
- Type=forking
-diff --git a/scripts/lvm2_cmirrord_systemd_red_hat.service.in b/scripts/lvm2_cmirrord_systemd_red_hat.service.in
-index 4ca3eea..16d38ce 100644
---- a/scripts/lvm2_cmirrord_systemd_red_hat.service.in
-+++ b/scripts/lvm2_cmirrord_systemd_red_hat.service.in
-@@ -4,6 +4,8 @@ Documentation=man:cmirrord(8)
- Requires=corosync.service
- After=corosync.service
- Before=remote-fs.target
-+DefaultDependencies=no
-+Conflicts=shutdown.target
+ # Create cache_pool, then origin with cache, then remove cache_pool/cache
+@@ -75,6 +76,7 @@ lvremove -ff $vg/${lv}_cache_pool
+ # Create origin, then cache_pool and cache
+ lvcreate -l 2 -n $lv1 $vg
+ lvcreate --type cache -l 1 $vg/$lv1
++dmsetup table ${vg}-$lv1 | grep cache  # ensure it is loaded in kernel
+ lvremove -ff $vg
  
- [Service]
- Type=forking
+ # Shorthand CLI (origin exists, create cache_pool and cache)
 
 
