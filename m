@@ -1,59 +1,71 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 14 Feb 2014 11:04:18 +0000 (UTC)
-Subject: master - systemd: Use --ignoreskippedcluster in generated activation systemd units
-Message-ID: <20140214110418.96ADC608F5@fedorahosted.org>
+Date: Fri, 14 Feb 2014 13:52:04 +0000 (UTC)
+Subject: master - systemd: do not use default dependencies for clvmd/cmirrord units
+Message-ID: <20140214135204.986E960BD5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4210219a8bba1aee6a16d16f4c158fa46395b9dd
-Commit:        4210219a8bba1aee6a16d16f4c158fa46395b9dd
-Parent:        94d8779ae241a2742ed43acc7bb0f98b7b2da25c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=554159d519ba5c523d506785d61d10374456a020
+Commit:        554159d519ba5c523d506785d61d10374456a020
+Parent:        4210219a8bba1aee6a16d16f4c158fa46395b9dd
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Feb 14 11:59:12 2014 +0100
+AuthorDate:    Fri Feb 14 14:37:19 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Feb 14 11:59:12 2014 +0100
+CommitterDate: Fri Feb 14 14:37:19 2014 +0100
 
-systemd:  Use --ignoreskippedcluster in generated activation systemd units
+systemd: do not use default dependencies for clvmd/cmirrord units
 
-When the activation units are generated if use_lvmetad=0 (no
-autoactivation), use --ignoreskippedcluster option for vgchange calls
-since the cluster with cLVM is set up by separate units.
-
-This avoids a situation in which the generated activation units are
-improperly in failed state just because of the vgchange return value
-when clustered VGs are encountered while the activation of non-clustered
-VGs does proceed normally.
+Do not use default dependencies that systemd adds to the units
+so we have better control of when the service is started/stopped
+and we don't end up with unexpected behaviour.
 ---
- WHATS_NEW                                          |    1 +
- .../lvm2_activation_generator_systemd_red_hat.c    |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ ...2_cluster_activation_systemd_red_hat.service.in |    3 ++-
+ scripts/lvm2_clvmd_systemd_red_hat.service.in      |    2 ++
+ scripts/lvm2_cmirrord_systemd_red_hat.service.in   |    2 ++
+ 3 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 01fa616..e2a33b5 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.106 - 
- ====================================
-+  Use --ignoreskippedcluster in activation systemd units if use_lvmetad=0.
-   Allow approximate allocation when specifying size in percentage terms.
-   Add basic LVM support for cache[pool] segment types.
-   Use local exclusive activation for creation of raid in cluster.
-diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
-index f2e2e49..07a2563 100644
---- a/scripts/lvm2_activation_generator_systemd_red_hat.c
-+++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
-@@ -150,7 +150,7 @@ static int generate_unit(const char *dir, int unit)
- 		      "[Service]\n", f);
- 	}
+diff --git a/scripts/lvm2_cluster_activation_systemd_red_hat.service.in b/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
+index 03ed9d2..970e93a 100644
+--- a/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
++++ b/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
+@@ -3,7 +3,8 @@ Description=Clustered LVM volumes activation service
+ Requires=lvm2-clvmd.service
+ After=lvm2-clvmd.service lvm2-cmirrord.service
+ OnFailure=lvm2-clvmd.service
+-DefaultDependencies=false
++DefaultDependencies=no
++Conflicts=shutdown.target
  
--	fputs("ExecStart=" LVM_PATH " vgchange -aay --sysinit\n"
-+	fputs("ExecStart=" LVM_PATH " vgchange -aay --sysinit --ignoreskippedcluster\n"
- 	      "Type=oneshot\n", f);
+ [Service]
+ Type=simple
+diff --git a/scripts/lvm2_clvmd_systemd_red_hat.service.in b/scripts/lvm2_clvmd_systemd_red_hat.service.in
+index c10bdc4..2978d21 100644
+--- a/scripts/lvm2_clvmd_systemd_red_hat.service.in
++++ b/scripts/lvm2_clvmd_systemd_red_hat.service.in
+@@ -7,6 +7,8 @@ Requires=network.target dlm.service corosync.service
+ RefuseManualStart=true
+ RefuseManualStop=true
+ StopWhenUnneeded=true
++DefaultDependencies=no
++Conflicts=shutdown.target
  
- 	if (fclose(f) < 0) {
+ [Service]
+ Type=forking
+diff --git a/scripts/lvm2_cmirrord_systemd_red_hat.service.in b/scripts/lvm2_cmirrord_systemd_red_hat.service.in
+index 4ca3eea..16d38ce 100644
+--- a/scripts/lvm2_cmirrord_systemd_red_hat.service.in
++++ b/scripts/lvm2_cmirrord_systemd_red_hat.service.in
+@@ -4,6 +4,8 @@ Documentation=man:cmirrord(8)
+ Requires=corosync.service
+ After=corosync.service
+ Before=remote-fs.target
++DefaultDependencies=no
++Conflicts=shutdown.target
+ 
+ [Service]
+ Type=forking
 
 
