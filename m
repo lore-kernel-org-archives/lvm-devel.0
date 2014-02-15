@@ -1,53 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Feb 2014 10:38:55 +0000 (UTC)
-Subject: master - activation: drop test r/w vg state for activing LV
-Message-ID: <20140215103855.07FFD60E70@fedorahosted.org>
+Date: Sat, 15 Feb 2014 10:38:57 +0000 (UTC)
+Subject: master - libdm: use 64bit type for raid index
+Message-ID: <20140215103857.218F460E70@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f0f4248333a6dfa017d84dfd7bb298a3321a6ec2
-Commit:        f0f4248333a6dfa017d84dfd7bb298a3321a6ec2
-Parent:        fa4812bf7b336cf1a301ec7218f905894422e61e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7ec8e691c40e0b42a328366e3201cf4264108434
+Commit:        7ec8e691c40e0b42a328366e3201cf4264108434
+Parent:        f0f4248333a6dfa017d84dfd7bb298a3321a6ec2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Feb 13 14:42:29 2014 +0100
+AuthorDate:    Fri Feb 14 21:13:41 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Feb 15 11:34:54 2014 +0100
+CommitterDate: Sat Feb 15 11:36:37 2014 +0100
 
-activation: drop test r/w vg state for activing LV
+libdm: use 64bit type for raid index
 
-VG status read/write is meant to influence only VG metadata.
-It's not related to the read/write status of the LV itself.
+Used properly signed 64bit constant for shifting.
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e2a33b5..17b79ba 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 827e994..3d7c734 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.106 - 
- ====================================
-+  Do not use VG read/write state for LV read/write state.
-   Use --ignoreskippedcluster in activation systemd units if use_lvmetad=0.
-   Allow approximate allocation when specifying size in percentage terms.
-   Add basic LVM support for cache[pool] segment types.
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 9a10e74..fe36149 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -63,7 +63,7 @@ struct lv_layer {
+ Version 1.02.85 - 
+ ===================================
++  Use correctly signed 64b constant when working with raid volumes.
+   Exit dmeventd with pidfile cleanup instead of raising SIGKILL on DIE request.
+   Add new DM_EVENT_GET_PARAMETERS request to dmeventd protocol.
+   Do not use systemd's reload for dmeventd restart, use dmeventd -R instead.
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 32d53be..72c30a2 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -2243,11 +2243,11 @@ static int _raid_emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 		EMIT_PARAMS(pos, " region_size %u", seg->region_size);
  
- int read_only_lv(struct logical_volume *lv, struct lv_activate_opts *laopts)
- {
--	return (laopts->read_only || !(lv->vg->status & LVM_WRITE) || !(lv->status & LVM_WRITE));
-+	return (laopts->read_only || !(lv->status & LVM_WRITE));
- }
+ 	for (i = 0; i < (seg->area_count / 2); i++)
+-		if (seg->rebuilds & (1 << i))
++		if (seg->rebuilds & (1ULL << i))
+ 			EMIT_PARAMS(pos, " rebuild %u", i);
  
- /*
+ 	for (i = 0; i < (seg->area_count / 2); i++)
+-		if (seg->writemostly & (1 << i))
++		if (seg->writemostly & (1ULL << i))
+ 			EMIT_PARAMS(pos, " write_mostly %u", i);
+ 
+ 	if (seg->writebehind)
 
 
