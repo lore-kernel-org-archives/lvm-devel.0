@@ -1,41 +1,46 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 17 Feb 2014 21:26:40 +0000 (UTC)
-Subject: master - tests: add short delay
-Message-ID: <20140217212640.5468460C84@fedorahosted.org>
+Date: Mon, 17 Feb 2014 21:26:42 +0000 (UTC)
+Subject: master - tests: on older system use mirror type
+Message-ID: <20140217212642.66C9E60520@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8eedb18c73f81de8682649afd21c996883c33e76
-Commit:        8eedb18c73f81de8682649afd21c996883c33e76
-Parent:        9974136b907962438079e4c634541f97d1f9fd61
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=37cf2019063aa34cddf88ae3e2ee0f974f97b105
+Commit:        37cf2019063aa34cddf88ae3e2ee0f974f97b105
+Parent:        8eedb18c73f81de8682649afd21c996883c33e76
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 15 13:02:41 2014 +0100
+AuthorDate:    Sat Feb 15 13:28:16 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 17 22:25:53 2014 +0100
 
-tests: add short delay
+tests: on older system use mirror type
 
-Give some extra delay so the file will be opened.
 ---
- test/shell/snapshot-usage.sh |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ test/shell/lvchange-partial.sh |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
-index 9e6a14f..14a87c0 100644
---- a/test/shell/snapshot-usage.sh
-+++ b/test/shell/snapshot-usage.sh
-@@ -55,6 +55,9 @@ trap 'cleanup_tail' EXIT
- sleep 30 < $DM_DEV_DIR/$vg1/$lv1 &
- SLEEP_PID=$!
+diff --git a/test/shell/lvchange-partial.sh b/test/shell/lvchange-partial.sh
+index 891dd0a..4e508a9 100644
+--- a/test/shell/lvchange-partial.sh
++++ b/test/shell/lvchange-partial.sh
+@@ -11,11 +11,13 @@
  
-+# give some short time to lock file above
-+sleep 0.1
+ . lib/test
+ 
+-aux target_at_least dm-raid 1 1 0 || skip
+ 
+ aux prepare_vg 4
+ 
+-lvcreate --type raid1 -m 1 -l 2 -n $lv1 $vg
++TYPE=raid1
++aux target_at_least dm-raid 1 1 0 || TYPE=mirror
 +
- # Opened virtual snapshot device is not removable
- # it should retry device removal for a few seconds
- not lvremove -f $vg1/$lv1
++lvcreate --type $TYPE -m 1 -l 2 -n $lv1 $vg
+ lvchange -an $vg/$lv1
+ aux disable_dev "$dev1"
+ 
 
 
