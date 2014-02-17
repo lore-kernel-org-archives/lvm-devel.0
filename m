@@ -1,39 +1,32 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 17 Feb 2014 21:26:46 +0000 (UTC)
-Subject: master - tests: drop more debug.log
-Message-ID: <20140217212646.98D4B60520@fedorahosted.org>
+From: Paul B. Henson <henson@acm.org>
+Date: Mon, 17 Feb 2014 14:12:10 -0800
+Subject: cache support
+In-Reply-To: <0C83CD55-18B6-4407-9A42-72F9D6C5683D@redhat.com>
+References: <096101cf2214$d241ed60$76c5c820$@acm.org>	<52F205CA.1090807@redhat.com>	<0a3901cf22af$ae01d2d0$0a057870$@acm.org>	<52F2AD44.8030006@redhat.com>	<0a7b01cf22db$da3f56c0$8ebe0440$@acm.org>	<A2CE00CC-6439-4A2E-A694-8E3B2656867B@redhat.com>	<0fff01cf276c$d059c8d0$710d5a70$@acm.org>
+	<0C83CD55-18B6-4407-9A42-72F9D6C5683D@redhat.com>
+Message-ID: <185501cf2c2d$53f02030$fbd06090$@acm.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0be6caba6e4251200eb888a2686ddf9af8065d6c
-Commit:        0be6caba6e4251200eb888a2686ddf9af8065d6c
-Parent:        18cac1654045a8eebc09ba418f2f8b4f6ebd9556
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 15 20:40:57 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 17 22:25:53 2014 +0100
+> From: Brassow Jonathan
+> Sent: Wednesday, February 12, 2014 9:40 AM
+> 
+> I'll let others weigh-in on the overhead of introducing thin-provisioning.
+> However, my experience is that the overhead is very small and the benefit
+is
+> very large.
+[...]
+> You now have a very fast thin pool from which you will create thin volumes
+> and snapshots.  Everything is cached with low overhead.
 
-tests: drop more debug.log
+Hmm, interesting; this would allow me to work within the confines of the
+intended lvm cache support yet achieve my goal of using a single cache
+device for all of my LV's. That does seem preferable to trying to manage
+dm-cache manually with dmsetup.
 
-Avoid login result from last lvm command when target_at_least fails.
----
- test/lib/aux.sh |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
-
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 9420528..7587c4b 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -691,6 +691,7 @@ can_use_16T()
- # i.e.   dm_target_at_least  dm-thin-pool  1 0
- target_at_least()
- {
-+	rm -f debug.log
- 	case "$1" in
- 	  dm-*) modprobe "$1" || true ;;
- 	esac
+Thanks.
 
 
