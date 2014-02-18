@@ -1,83 +1,88 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 18 Feb 2014 20:28:21 +0000 (UTC)
-Subject: master - tests: check locking is not lost during thin_check
-Message-ID: <20140218202821.0E8F760CFC@fedorahosted.org>
+Date: Tue, 18 Feb 2014 20:28:23 +0000 (UTC)
+Subject: master - cleanup: move verbose message to lv_activation_skip
+Message-ID: <20140218202823.26E88602B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fdcd95a3b3dd92ed219571467fdc235e1a6cb0b6
-Commit:        fdcd95a3b3dd92ed219571467fdc235e1a6cb0b6
-Parent:        417e52c13a8156b11c25c411d44bda8b32bf87e4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fb519c35bbfae24a26346faf2b90d2a4189e8562
+Commit:        fb519c35bbfae24a26346faf2b90d2a4189e8562
+Parent:        fdcd95a3b3dd92ed219571467fdc235e1a6cb0b6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 18 14:58:41 2014 +0100
+AuthorDate:    Tue Feb 18 20:49:32 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 18 14:58:41 2014 +0100
+CommitterDate: Tue Feb 18 20:49:32 2014 +0100
 
-tests: check locking is not lost during thin_check
+cleanup: move verbose message to lv_activation_skip
 
+Simplify code and put verbose message into a single place.
 ---
- test/shell/thin-vglock.sh |   51 +++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 51 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |   12 ++++++------
+ tools/lvchange.c        |    5 +----
+ tools/vgchange.c        |    5 +----
+ 3 files changed, 8 insertions(+), 14 deletions(-)
 
-diff --git a/test/shell/thin-vglock.sh b/test/shell/thin-vglock.sh
-new file mode 100644
-index 0000000..083fcd8
---- /dev/null
-+++ b/test/shell/thin-vglock.sh
-@@ -0,0 +1,51 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# Test locking works and doesn't update metadata
-+# RHBZ: https://bugzilla.redhat.com/show_bug.cgi?id=1063542
-+
-+. lib/test
-+
-+MKFS=mkfs.ext2
-+which $MKFS || skip
-+
-+aux have_thin 1 0 0 || skip
-+aux prepare_vg
-+
-+lvcreate -L10 -T -V5 -n $lv1 $vg/pool
-+lvcreate -an -V10 -T $vg/pool
-+
-+$MKFS "$DM_DEV_DIR/$vg/$lv1"
-+mkdir mnt
-+mount "$DM_DEV_DIR/$vg/$lv1" mnt
-+
-+lvcreate -s -n snap $vg/$lv1
-+check lv_field $vg/snap thin_id "3"
-+
-+lvconvert --merge $vg/snap
-+
-+umount mnt
-+vgchange -an $vg
-+
-+# Check reboot case
-+vgchange -ay --sysinit $vg
-+# Metadata are still not updated (--poll n)
-+check lv_field $vg/$lv1 thin_id "1"
-+check lv_field $vg/pool transaction_id "3"
-+
-+# Check the metadata are updated after refresh
-+vgchange --refresh $vg
-+check lv_field $vg/$lv1 thin_id "3"
-+check lv_field $vg/pool transaction_id "4"
-+
-+#lvs -a -o+transaction_id,thin_id $vg
-+
-+vgremove -f $vg
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 6b4c9a8..c2cc590 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5675,14 +5675,14 @@ void lv_set_activation_skip(struct logical_volume *lv, int override_default,
+ int lv_activation_skip(struct logical_volume *lv, activation_change_t activate,
+ 		      int override_lv_skip_flag, int skip)
+ {
+-	/* Do not skip deactivation! */
+-	if ((activate == CHANGE_AN) || (activate == CHANGE_ALN))
++	if (!(lv->status & LV_ACTIVATION_SKIP) ||
++	    !is_change_activating(activate) || /* Do not skip deactivation */
++	    (override_lv_skip_flag && !skip))
+ 		return 0;
+ 
+-	if (override_lv_skip_flag)
+-		return skip;
+-
+-	return (lv->status & LV_ACTIVATION_SKIP) ? 1 : 0;
++	log_verbose("ACTIVATON_SKIP flag set for LV %s/%s, skipping activation.",
++		    lv->vg->name, lv->name);
++	return 1;
+ }
+ 
+ /* Greatest common divisor */
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index a0e350f..5b6da56 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -215,11 +215,8 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
+ 
+ 	activate = (activation_change_t) arg_uint_value(cmd, activate_ARG, CHANGE_AY);
+ 
+-	if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG), 0)) {
+-		log_verbose("ACTIVATON_SKIP flag set for LV %s/%s, skipping activation.",
+-			    lv->vg->name, lv->name);
++	if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG), 0))
+ 		return 1;
+-	}
+ 
+ 	if (lv_is_cow(lv) && !lv_is_virtual_origin(origin_from_cow(lv)))
+ 		lv = origin_from_cow(lv);
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index af4b002..d862ec2 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -121,11 +121,8 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 		    ((lv->status & PVMOVE) ))
+ 			continue;
+ 
+-		if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG), 0)) {
+-			log_verbose("ACTIVATION_SKIP flag set for LV %s/%s, skipping activation.",
+-				    lv->vg->name, lv->name);
++		if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG), 0))
+ 			continue;
+-		}
+ 
+ 		if ((activate == CHANGE_AAY) &&
+ 		    !lv_passes_auto_activation_filter(cmd, lv))
 
 
