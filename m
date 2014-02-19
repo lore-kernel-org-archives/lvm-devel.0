@@ -1,52 +1,76 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 19 Feb 2014 16:43:43 +0000 (UTC)
-Subject: master - format-text: Avoid a label_scan while in a critical_section().
-Message-ID: <20140219164343.9BB4760DAC@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 19 Feb 2014 22:36:34 +0000 (UTC)
+Subject: master - tests: add small test for clustered conversion of mirror
+Message-ID: <20140219223634.9F6CC60DB7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b391ae88e5ed3720a8b5a87312e0cd907a94fcc2
-Commit:        b391ae88e5ed3720a8b5a87312e0cd907a94fcc2
-Parent:        00ce01e52d7fe3a8512d2c5fbe155186638172fd
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Tue Feb 18 17:52:05 2014 +0100
-Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Wed Feb 19 17:43:30 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e83682ccf1862289ed2f3bcbe03cfa1c190e1e0
+Commit:        5e83682ccf1862289ed2f3bcbe03cfa1c190e1e0
+Parent:        b391ae88e5ed3720a8b5a87312e0cd907a94fcc2
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Feb 19 23:30:49 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Feb 19 23:34:07 2014 +0100
 
-format-text: Avoid a label_scan while in a critical_section().
+tests: add small test for clustered conversion of mirror
 
+Test currently fails with make check_cluster - so uses 'should'
+
+CLVMD[4f435880]: Feb 19 23:27:36 Send local reply
+format_text/archiver.c:230   WARNING: This metadata update is NOT backed up
+metadata/mirror.c:1105   Failed to initialize log device
+metadata/mirror.c:1145         <backtrace>
+lvconvert.c:1547         <backtrace>
+lvconvert.c:3084         <backtrace>
 ---
- lib/format_text/format-text.c |   15 +++++++++++++--
- 1 files changed, 13 insertions(+), 2 deletions(-)
+ test/shell/lvconvert-mirror-updown.sh |   36 +++++++++++++++++++++++++++++++++
+ 1 files changed, 36 insertions(+), 0 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 6e309a3..6cedc99 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1912,8 +1912,19 @@ static int _create_vg_text_instance(struct format_instance *fid,
- 		}
- 
- 		if (type & FMT_INSTANCE_MDAS) {
--			/* Scan PVs in VG for any further MDAs */
--			lvmcache_label_scan(fid->fmt->cmd, 0);
-+			/*
-+			 * TODO in theory, this function should be never reached
-+			 * while in critical_section(), because lvmcache's
-+			 * cached_vg should be valid. However, this assumption
-+			 * sometimes fails (possibly due to inconsistent
-+			 * (precommit) metadata and/or missing devices), and
-+			 * calling lvmcache_label_scan inside the critical
-+			 * section may be fatal (i.e. deadlock).
-+			 */
-+			if (!critical_section())
-+				/* Scan PVs in VG for any further MDAs */
-+				lvmcache_label_scan(fid->fmt->cmd, 0);
+diff --git a/test/shell/lvconvert-mirror-updown.sh b/test/shell/lvconvert-mirror-updown.sh
+new file mode 100644
+index 0000000..3b30738
+--- /dev/null
++++ b/test/shell/lvconvert-mirror-updown.sh
+@@ -0,0 +1,36 @@
++#!/bin/sh
++# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
- 			if (!(vginfo = lvmcache_vginfo_from_vgname(vg_name, vg_id)))
- 				goto_out;
- 			if (!lvmcache_fid_add_mdas_vg(vginfo, fid))
++# Demonstrate problem when upconverting and cutting leg in clvmd
++
++. lib/test
++
++aux prepare_pvs 3
++
++vgcreate -s 64k $vg $(cat DEVICES)
++
++lvcreate -aey -l10 --type mirror -m1 -n $lv1 $vg "$dev1" "$dev2"
++
++# Slow down device so we are able to start next conversion in parallel
++aux delay_dev "$dev3" 0 200
++
++lvconvert -m+1 -b $vg/$lv1 "$dev3"
++
++# To fix - wait helps here....
++#lvconvert $vg/$lv1
++
++lvs -a $vg
++#
++# It fails so use 'should' and -vvvv for now
++#
++should lvconvert -vvvv -m-1 $vg/$lv1 "$dev2"
++
++vgremove -f $vg
 
 
