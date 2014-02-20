@@ -1,36 +1,40 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 20 Feb 2014 10:23:06 +0100
-Subject: Deadlock on "systemctl daemon-reload" when using socket based lvmetad activation.
-In-Reply-To: <5305BE74.6080101@redhat.com>
-References: <20140220001412.41fe5ee5@opensuse.site>
-	<5305BE74.6080101@redhat.com>
-Message-ID: <5305C97A.7000002@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 20 Feb 2014 14:06:22 +0000 (UTC)
+Subject: master - coverity: check dm_strncpy return value in dmeventd/_get_parameters
+Message-ID: <20140220140622.268D160E34@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 02/20/2014 09:36 AM, Peter Rajnoha wrote:
-> On 02/19/2014 09:14 PM, Andrey Borzenkov wrote:
->> Details are in https://bugzilla.novell.com/show_bug.cgi?id=862076#c44
->> and following comment.
->>
->> Always starting lvmetad really defeats the idea of socket activation
->> (do not start process until needed) and does not fully eliminate the
->> problem (consider lvmetad crashing in the wrong moment).
->>
-> 
-> I agree. I'm not even counting much that anybody uses lvmetad by
-> enabling the lvm2-lvmetad.service itself (though possible) - this was
-> primarily designed to be socket-based activated. The socket-based
-> activation should just work under all circumstances. I'll fix that...
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bbe4aca7c42ee3b1e620fb673a739b4b0f777144
+Commit:        bbe4aca7c42ee3b1e620fb673a739b4b0f777144
+Parent:        08116a4962bef2a36549c5496b3230862d3c93ca
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Feb 20 15:06:13 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Feb 20 15:06:13 2014 +0100
 
-Actually, this should be already fixed in lvm2 v2.02.99 with this commit:
+coverity: check dm_strncpy return value in dmeventd/_get_parameters
 
-https://git.fedorahosted.org/cgit/lvm2.git/commit/?id=983f0b46f2de85b8de0e2d7f8afbdf53f132a87a
+---
+ daemons/dmeventd/dmeventd.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
--- 
-Peter
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 1d979fa..4a17fb2 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -531,7 +531,8 @@ static int _get_parameters(struct message_data *message_data) {
+ 	msg->size = strlen(buf) + 1;
+ 	if (!(msg->data = dm_malloc(msg->size)))
+ 		goto_out;
+-	dm_strncpy(msg->data, buf, msg->size);
++	if (!dm_strncpy(msg->data, buf, msg->size))
++		goto_out;
+ 	r = 0;
+ out:
+ 	return r;
 
 
