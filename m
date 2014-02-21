@@ -1,40 +1,36 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 20 Feb 2014 14:06:22 +0000 (UTC)
-Subject: master - coverity: check dm_strncpy return value in dmeventd/_get_parameters
-Message-ID: <20140220140622.268D160E34@fedorahosted.org>
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Fri, 21 Feb 2014 11:32:53 +0100
+Subject: [PATCH] logging: Promote command line to info
+Message-ID: <1392978773-26463-1-git-send-email-mcsontos@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bbe4aca7c42ee3b1e620fb673a739b4b0f777144
-Commit:        bbe4aca7c42ee3b1e620fb673a739b4b0f777144
-Parent:        08116a4962bef2a36549c5496b3230862d3c93ca
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Feb 20 15:06:13 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Feb 20 15:06:13 2014 +0100
+Amount of information in debug is so high it is difficult to understand
+when testing.
 
-coverity: check dm_strncpy return value in dmeventd/_get_parameters
-
+OTOH having command line in syslog increases log readability while not
+using debug.
 ---
- daemons/dmeventd/dmeventd.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ tools/lvmcmdline.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 1d979fa..4a17fb2 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -531,7 +531,8 @@ static int _get_parameters(struct message_data *message_data) {
- 	msg->size = strlen(buf) + 1;
- 	if (!(msg->data = dm_malloc(msg->size)))
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 6fe4670..c692a63 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1147,7 +1147,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
  		goto_out;
--	dm_strncpy(msg->data, buf, msg->size);
-+	if (!dm_strncpy(msg->data, buf, msg->size))
-+		goto_out;
- 	r = 0;
- out:
- 	return r;
+ 	init_dmeventd_monitor(monitoring);
+ 
+-	log_debug("Processing: %s", cmd->cmd_line);
++	log_info("Processing: %s", cmd->cmd_line);
+ 
+ #ifdef O_DIRECT_SUPPORT
+ 	log_debug("O_DIRECT will be used");
+-- 
+1.7.12.1
 
 
