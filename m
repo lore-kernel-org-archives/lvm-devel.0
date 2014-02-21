@@ -1,68 +1,66 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 21 Feb 2014 13:26:19 +0100
-Subject: [PATCH] Enhance stripe size validation
-In-Reply-To: <1392961943-1904-1-git-send-email-wangsl.fnst@cn.fujitsu.com>
-References: <1392961943-1904-1-git-send-email-wangsl.fnst@cn.fujitsu.com>
-Message-ID: <530745EB.9040503@redhat.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Fri, 21 Feb 2014 19:16:51 +0000 (UTC)
+Subject: master - test: Only try raid10 on dm-raid versions that support it.
+Message-ID: <20140221191651.7730860E25@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 21.2.2014 06:52, Wang Shilong napsal(a):
-> From: Zhiqing Zhang <zhangzq.fnst@cn.fujitsu.com>
->
-> While stripe size is twice the physical extent size, the original code will not
-> reduce stripe size to maximum(physical extent size).
->
-> Signed-off-by: Zhiqing Zhang <zhangzq.fnst@cn.fujitsu.com>
-> ---
->   lib/metadata/lv_manip.c |    2 +-
->   man/lvresize.8.in       |    4 +++-
->   2 files changed, 4 insertions(+), 2 deletions(-)
->
-> diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-> index 2b1cdcc..14ad884 100644
-> --- a/lib/metadata/lv_manip.c
-> +++ b/lib/metadata/lv_manip.c
-> @@ -3394,7 +3394,7 @@ static int _validate_stripesize(struct cmd_context *cmd,
->
->   	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
->   		log_warn("Varied stripesize not supported. Ignoring.");
-> -	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size * 2) {
-> +	else if (lp->ac_stripesize_value >= (uint64_t) vg->extent_size * 2) {
->   		log_error("Reducing stripe size %s to maximum, "
->   			  "physical extent size %s",
->   			  display_size(cmd,lp->ac_stripesize_value),
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=294671fa629fb1d2e3580a411cc3ada3acce6626
+Commit:        294671fa629fb1d2e3580a411cc3ada3acce6626
+Parent:        84d02542bd1e52e2f8721a56b0d98d23c478205e
+Author:        Petr Rockai <me@mornfall.net>
+AuthorDate:    Fri Feb 21 19:46:31 2014 +0100
+Committer:     Petr Rockai <me@mornfall.net>
+CommitterDate: Fri Feb 21 19:47:06 2014 +0100
 
-I assume the condition should have been:
+test: Only try raid10 on dm-raid versions that support it.
 
-(lp->ac_stripesize_value > (uint64_t) vg->extent_size)
+---
+ test/shell/lvcreate-raid.sh |   17 ++++++++++++-----
+ 1 files changed, 12 insertions(+), 5 deletions(-)
 
-
-Let me check  what is in sectors and what has wrong units...
-
-
-Zdenek
-
-
-
-> diff --git a/man/lvresize.8.in b/man/lvresize.8.in
-> index 3606762..f746307 100644
-> --- a/man/lvresize.8.in
-> +++ b/man/lvresize.8.in
-> @@ -88,7 +88,9 @@ Defaults to whatever the last segment of the Logical Volume uses.
->   Not applicable to LVs using the original metadata LVM format, which
->   must use a single value throughout.
->   .br
-> -StripeSize must be 2^n (n = 2 to 9).
-> +StripeSize must be 2^n (n = 2 to 9) for metadata in LVM1 format.
-> +For metadata in LVM2 format, the stripe size may be a larger
-> +power of 2 but must not exceed the physical extent size.
->   .TP
->   .B \-\-noudevsync
->   Disable udev synchronisation. The
->
+diff --git a/test/shell/lvcreate-raid.sh b/test/shell/lvcreate-raid.sh
+index 3f467f5..6587f23 100644
+--- a/test/shell/lvcreate-raid.sh
++++ b/test/shell/lvcreate-raid.sh
+@@ -170,7 +170,9 @@ lvremove -ff $vg
+ not lvcreate --type raid1 -l1 $vg $dev1
+ not lvcreate --type raid5 -l2 $vg $dev1 $dev2
+ not lvcreate --type raid6 -l3 $vg $dev1 $dev2 $dev3 $dev4
+-not lvcreate --type raid10 -l2 $vg $dev1 $dev2 $dev3
++if aux target_at_least dm-raid 1 4 1; then
++    not lvcreate --type raid10 -l2 $vg $dev1 $dev2 $dev3
++fi
+ 
+ # Implicit count comes from #PVs given (always 2 for mirror though)
+ lvcreate --type raid1 -l1 -n raid1 $vg $dev1 $dev2
+@@ -179,8 +181,10 @@ lvcreate --type raid5 -l2 -n raid5 $vg $dev1 $dev2 $dev3
+ lv_devices $vg raid5 3
+ lvcreate --type raid6 -l3 -n raid6 $vg $dev1 $dev2 $dev3 $dev4 $dev5
+ lv_devices $vg raid6 5
+-lvcreate --type raid10 -l2 -n raid10 $vg $dev1 $dev2 $dev3 $dev4
+-lv_devices $vg raid10 4
++if aux target_at_least dm-raid 1 4 1; then
++    lvcreate --type raid10 -l2 -n raid10 $vg $dev1 $dev2 $dev3 $dev4
++    lv_devices $vg raid10 4
++fi
+ lvremove -ff $vg
+ 
+ # Implicit count comes from total #PVs in VG (always 2 for mirror though)
+@@ -190,6 +194,9 @@ lvcreate --type raid5 -l2 -n raid5 $vg
+ lv_devices $vg raid5 6
+ lvcreate --type raid6 -l3 -n raid6 $vg
+ lv_devices $vg raid6 6
+-lvcreate --type raid10 -l2 -n raid10 $vg
+-lv_devices $vg raid10 6
++
++if aux target_at_least dm-raid 1 4 1; then
++    lvcreate --type raid10 -l2 -n raid10 $vg
++    lv_devices $vg raid10 6
++fi
+ lvremove -ff $vg
 
 
