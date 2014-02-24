@@ -1,146 +1,68 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 24 Feb 2014 20:17:08 +0000 (UTC)
-Subject: master - raid: use feature attributes for raid10
-Message-ID: <20140224201708.4C134612CA@fedorahosted.org>
+Date: Mon, 24 Feb 2014 20:17:06 +0000 (UTC)
+Subject: master - thin: cleanup target_present call
+Message-ID: <20140224201706.3862B60D5B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=95fe823eba5432bc395847076fbf187889c55cb1
-Commit:        95fe823eba5432bc395847076fbf187889c55cb1
-Parent:        23c069d16f40adb9c59caa686904bb3f23ab6fca
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=23c069d16f40adb9c59caa686904bb3f23ab6fca
+Commit:        23c069d16f40adb9c59caa686904bb3f23ab6fca
+Parent:        8c878438f5a75310d09a1ee035d9caf8e2b9e50b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 24 13:15:40 2014 +0100
+AuthorDate:    Mon Feb 24 13:13:20 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 24 21:10:13 2014 +0100
+CommitterDate: Mon Feb 24 21:09:29 2014 +0100
 
-raid: use feature attributes for raid10
+thin: cleanup target_present call
 
-Test raid10 availability as a target feature (instead of doing
-it in all the places where raid10 should be checked).
-
-TODO: activation needs runtime validation - so metadata with raid10
-are skipped from activation in user-friendly way in lvm2.
+Mark 'seg' as unused attribute.
+Pass seg as NULL (as it is unused) in this function.
 ---
- WHATS_NEW               |    1 +
- lib/activate/activate.h |    5 +++++
- lib/raid/raid.c         |   36 +++++++++++++++++++++++++++++++++---
- tools/lvcreate.c        |   19 ++++++++-----------
- 4 files changed, 47 insertions(+), 14 deletions(-)
+ lib/thin/thin.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 05f5042..29d1554 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.106 - 
- ====================================
-+  Enhance raid code with feature flags, for now checks for raid10.
-   Move parsing of VG metadata from vg_commit() back to vg_write() (2.02.99)
-   Avoid a PV label scan while in a critical section.
-   Remove (always 0) skip argument from lv_activation_skip().
-diff --git a/lib/activate/activate.h b/lib/activate/activate.h
-index 3da83ea..c3cf3d9 100644
---- a/lib/activate/activate.h
-+++ b/lib/activate/activate.h
-@@ -67,6 +67,11 @@ enum {
- 	THIN_FEATURE_EXTERNAL_ORIGIN_EXTEND	= (1 << 6),
- };
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index 92767a8..7c989f8 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -215,7 +215,7 @@ static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter
  
-+/* raid target attribute flags */
-+enum {
-+	RAID_FEATURE_RAID10			= (1 << 0), /* version 1.3 */
-+};
-+
- void set_activation(int activation);
- int activation(void);
+ #ifdef DEVMAPPER_SUPPORT
+ static int _thin_target_present(struct cmd_context *cmd,
+-				const struct lv_segment *seg,
++				const struct lv_segment *seg __attribute__((unused)),
+ 				unsigned *attributes);
  
-diff --git a/lib/raid/raid.c b/lib/raid/raid.c
-index 9f7bbd1..e592573 100644
---- a/lib/raid/raid.c
-+++ b/lib/raid/raid.c
-@@ -326,15 +326,45 @@ static int _raid_target_percent(void **target_state,
+ static int _thin_pool_modules_needed(struct dm_pool *mem,
+@@ -262,7 +262,7 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
+ 	uint64_t transaction_id = 0;
+ 	unsigned attr;
  
- static int _raid_target_present(struct cmd_context *cmd,
- 				const struct lv_segment *seg __attribute__((unused)),
--				unsigned *attributes __attribute__((unused)))
-+				unsigned *attributes)
- {
-+	/* List of features with their kernel target version */
-+	static const struct feature {
-+		uint32_t maj;
-+		uint32_t min;
-+		unsigned raid_feature;
-+		const char *feature;
-+	} const _features[] = {
-+		{ 1, 3, RAID_FEATURE_RAID10, "raid10" },
-+	};
-+
- 	static int _raid_checked = 0;
- 	static int _raid_present = 0;
-+	static int _raid_attrs = 0;
-+	uint32_t maj, min, patchlevel;
-+	unsigned i;
+-	if (!_thin_target_present(cmd, seg, &attr))
++	if (!_thin_target_present(cmd, NULL, &attr))
+ 		return_0;
  
--	if (!_raid_checked)
-+	if (!_raid_checked) {
- 		_raid_present = target_present(cmd, "raid", 1);
- 
--	_raid_checked = 1;
-+		if (!target_version("raid", &maj, &min, &patchlevel)) {
-+			log_error("Cannot read target version of RAID kernel module.");
-+			return 0;
-+		}
-+
-+		for (i = 0; i < sizeof(_features)/sizeof(*_features); i++)
-+			if ((maj > _features[i].maj) ||
-+			    (maj == _features[i].maj && min >= _features[i].min))
-+				_raid_attrs |= _features[i].raid_feature;
-+			else
-+				log_very_verbose("Target raid does not support %s.",
-+						 _features[i].feature);
-+
-+		_raid_checked = 1;
-+	}
-+
-+	if (attributes)
-+		*attributes = _raid_attrs;
- 
- 	return _raid_present;
+ 	if (!seg->metadata_lv) {
+@@ -566,7 +566,7 @@ static int _thin_add_target_line(struct dev_manager *dm,
+ 			return_0;
+ 		if (seg->external_lv->size < seg->lv->size) {
+ 			/* Validate target supports smaller external origin */
+-			if (!_thin_target_present(cmd, first_seg(seg->pool_lv), &attr) ||
++			if (!_thin_target_present(cmd, NULL, &attr) ||
+ 			    !(attr & THIN_FEATURE_EXTERNAL_ORIGIN_EXTEND)) {
+ 				log_error("Thin target does not support smaller size of external origin LV %s.",
+ 					  seg->external_lv->name);
+@@ -617,7 +617,7 @@ static int _thin_target_percent(void **target_state __attribute__((unused)),
  }
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index c56cc7c..6da0d61 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -977,19 +977,16 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 		}
- 	}
  
--	if (activation() && lp->segtype->ops->target_present &&
--	    !lp->segtype->ops->target_present(cmd, NULL, &lp->target_attr)) {
--		log_error("%s: Required device-mapper target(s) not "
--			  "detected in your kernel", lp->segtype->name);
--		return 0;
--	} else if (!strcmp(lp->segtype->name, "raid10")) {
--		uint32_t maj, min, patchlevel;
--		if (!target_version("raid", &maj, &min, &patchlevel)) {
--			log_error("Failed to determine version of RAID kernel module");
-+	if (activation() && lp->segtype->ops->target_present) {
-+		if (!lp->segtype->ops->target_present(cmd, NULL, &lp->target_attr)) {
-+			log_error("%s: Required device-mapper target(s) not detected in your kernel.",
-+				  lp->segtype->name);
- 			return 0;
- 		}
--		if ((maj != 1) || (min < 3)) {
--			log_error("RAID module does not support RAID10");
-+
-+		if ((strcmp(lp->segtype->name, "raid10") == 0) &&
-+		    !(lp->target_attr & RAID_FEATURE_RAID10)) {
-+			log_error("RAID module does not support RAID10.");
- 			return 0;
- 		}
- 	}
+ static int _thin_target_present(struct cmd_context *cmd,
+-				const struct lv_segment *seg,
++				const struct lv_segment *seg __attribute__((unused)),
+ 				unsigned *attributes)
+ {
+ 	/* List of features with their kernel target version */
 
 
