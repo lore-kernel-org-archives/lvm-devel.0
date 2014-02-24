@@ -1,56 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 24 Feb 2014 20:17:14 +0000 (UTC)
-Subject: master - cleanup: spelling
-Message-ID: <20140224201714.989FF60FC0@fedorahosted.org>
+Date: Mon, 24 Feb 2014 20:17:16 +0000 (UTC)
+Subject: master - cleanup: extend struct init usage
+Message-ID: <20140224201716.ACBB760FC0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0118d6aa48c5d69b7b5f264f6f93ddb51a4379ad
-Commit:        0118d6aa48c5d69b7b5f264f6f93ddb51a4379ad
-Parent:        710c0df68a74c8da03eba62b43ae9080dd4a6ffe
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=408e276a615faf22e829cea385738dce02edae26
+Commit:        408e276a615faf22e829cea385738dce02edae26
+Parent:        0118d6aa48c5d69b7b5f264f6f93ddb51a4379ad
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 22 00:23:59 2014 +0100
+AuthorDate:    Sat Feb 22 20:28:30 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 24 21:13:35 2014 +0100
 
-cleanup: spelling
+cleanup: extend struct init usage
 
 ---
- lib/cache/lvmcache.c |    4 ++--
- tools/lvcreate.c     |    2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |   17 +++++------------
+ 1 files changed, 5 insertions(+), 12 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index ec8699b..d40bdce 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -264,9 +264,9 @@ static void _drop_metadata(const char *vgname, int drop_precommitted)
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index eefbf1d..ab0573f 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -1189,7 +1189,7 @@ static int fini(daemon_state *s)
+ 	return 1;
  }
  
- /*
-- * Remote node uses this to upgrade precommited metadata to commited state
-+ * Remote node uses this to upgrade precommitted metadata to commited state
-  * when receives vg_commit notification.
-- * (Note that devices can be suspended here, if so, precommited metadata are already read.)
-+ * (Note that devices can be suspended here, if so, precommitted metadata are already read.)
-  */
- void lvmcache_commit_metadata(const char *vgname)
+-static void usage(char *prog, FILE *file)
++static void usage(const char *prog, FILE *file)
  {
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 6da0d61..19df387 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -683,7 +683,7 @@ static int _read_raid_params(struct lvcreate_params *lp,
+ 	fprintf(file, "Usage:\n"
+ 		"%s [-V] [-h] [-f] [-l {all|wire|debug}] [-s path]\n\n"
+@@ -1204,27 +1204,19 @@ static void usage(char *prog, FILE *file)
+ int main(int argc, char *argv[])
+ {
+ 	signed char opt;
+-	lvmetad_state ls;
++	lvmetad_state ls = { .log_config = "" };
+ 	daemon_state s = {
+ 		.daemon_fini = fini,
+ 		.daemon_init = init,
+ 		.handler = handler,
+ 		.name = "lvmetad",
+-		.pidfile = getenv("LVM_LVMETAD_PIDFILE"),
++		.pidfile = getenv("LVM_LVMETAD_PIDFILE") ? : LVMETAD_PIDFILE,
+ 		.private = &ls,
+ 		.protocol = "lvmetad",
+ 		.protocol_version = 1,
+-		.socket_path = getenv("LVM_LVMETAD_SOCKET"),
++		.socket_path = getenv("LVM_LVMETAD_SOCKET") ? : LVMETAD_SOCKET,
+ 	};
  
- 	if (lp->max_recovery_rate &&
- 	    (lp->max_recovery_rate < lp->min_recovery_rate)) {
--		log_error("Minumum recovery rate cannot be higher than maximum.");
-+		log_error("Minimum recovery rate cannot be higher than maximum.");
- 		return 0;
+-	if (!s.pidfile)
+-		s.pidfile = LVMETAD_PIDFILE;
+-
+-	if (!s.socket_path)
+-		s.socket_path = LVMETAD_SOCKET;
+-
+-	ls.log_config = "";
+-
+ 	// use getopt_long
+ 	while ((opt = getopt(argc, argv, "?fhVl:p:s:")) != EOF) {
+ 		switch (opt) {
+@@ -1253,5 +1245,6 @@ int main(int argc, char *argv[])
  	}
- 	return 1;
+ 
+ 	daemon_start(s);
++
+ 	return 0;
+ }
 
 
