@@ -1,79 +1,119 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 24 Feb 2014 20:16:57 +0000 (UTC)
-Subject: master - libdm: proper traversion of revert list
-Message-ID: <20140224201657.C37CD611FD@fedorahosted.org>
+Date: Mon, 24 Feb 2014 20:16:59 +0000 (UTC)
+Subject: master - libdm: hardening transaction_id validation
+Message-ID: <20140224201659.DDDD160D5B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6116333ccc4969e69bfd10aa0fe64238dc7f4dab
-Commit:        6116333ccc4969e69bfd10aa0fe64238dc7f4dab
-Parent:        1911c61639164296d953eef6f1476a040648d5ec
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c7b7cb60e4de1aff7f9ea9e3a8116f851ef3089c
+Commit:        c7b7cb60e4de1aff7f9ea9e3a8116f851ef3089c
+Parent:        6116333ccc4969e69bfd10aa0fe64238dc7f4dab
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 24 09:36:38 2014 +0100
+AuthorDate:    Mon Feb 24 10:19:50 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 24 21:01:59 2014 +0100
+CommitterDate: Mon Feb 24 21:04:50 2014 +0100
 
-libdm: proper traversion of revert list
+libdm: hardening transaction_id validation
 
-Deactivation of top level node has to happen,
-before traversing subtree.
+Improve testing of transation_id to not allow other difference
+then either kernel TID is equal or is lower by oned and there
+are queued messages for transaction.
 
-Swap list logic and rather append new nodes to the head
-and then use normal iteration.
+Mark messages as submitted if the transaction_id is already matching.
 
-(in-release update)
+Do not try to deactivate node on failure here and leave it on
+proper error path of the caller.
 ---
- libdm/libdm-deptree.c |   16 +++++++++++-----
- 1 files changed, 11 insertions(+), 5 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |   35 ++++++++++++++++-------------------
+ 2 files changed, 17 insertions(+), 19 deletions(-)
 
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 072d21e..c29cb39 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.85 - 
+ ===================================
++  Transaction_id could be lower by one only when messages are prepared.
+   Do not call callback when preload fails.
+   Wrap is_selinux_enabled() to be called just once.
+   Use correctly signed 64b constant when working with raid volumes.
 diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 7fcc7ed..764074d 100644
+index 764074d..56ddd1a 100644
 --- a/libdm/libdm-deptree.c
 +++ b/libdm/libdm-deptree.c
-@@ -2625,13 +2625,16 @@ out:
- 	return r;
- }
+@@ -1486,6 +1486,7 @@ static int _node_send_messages(struct dm_tree_node *dnode,
+ 	struct thin_message *tmsg;
+ 	uint64_t trans_id;
+ 	const char *uuid;
++	int have_messages;
  
-+/*
-+ * Currently try to deactivate only nodes created during preload.
-+ * New node is always attached to the front of activated_list
-+ */
- static int _dm_tree_revert_activated(struct dm_tree_node *parent)
- {
- 	struct dm_tree_node *child;
- 
--	dm_list_iterate_back_items_gen(child, &parent->activated, activated_list) {
--		_dm_tree_revert_activated(child);
--		log_debug("Reverting preloaded %s.", child->name);
-+	dm_list_iterate_items_gen(child, &parent->activated, activated_list) {
-+		log_debug_activation("Reverting %s.", child->name);
- 		if (!_deactivate_node(child->name, child->info.major, child->info.minor,
- 				      &child->dtree->cookie, child->udev_flags, 0)) {
- 			log_error("Unable to deactivate %s (%" PRIu32
-@@ -2639,6 +2642,8 @@ static int _dm_tree_revert_activated(struct dm_tree_node *parent)
- 				  child->info.minor);
- 			return 0;
- 		}
-+		if (!_dm_tree_revert_activated(child))
-+			return_0;
+ 	if (!dnode->info.exists || (dm_list_size(&dnode->props.segs) != 1))
+ 		return 1;
+@@ -1503,32 +1504,31 @@ static int _node_send_messages(struct dm_tree_node *dnode,
  	}
  
- 	return 1;
-@@ -2708,9 +2713,10 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 			continue;
- 		}
+ 	if (!_thin_pool_status_transaction_id(dnode, &trans_id))
+-		goto_bad;
++		return_0;
  
--		if (!child->info.live_table)
-+		if (!child->info.live_table) {
- 			/* Collect newly introduced devices for revert */
--			dm_list_add(&dnode->activated, &child->activated_list);
-+			dm_list_add_h(&dnode->activated, &child->activated_list);
-+		}
++	have_messages = !dm_list_empty(&seg->thin_messages) ? 1 : 0;
+ 	if (trans_id == seg->transaction_id) {
+-		if (!dm_list_empty(&seg->thin_messages))
++		dnode->props.send_messages = 0; /* messages already committed */
++		if (have_messages)
+ 			log_debug_activation("Thin pool transaction_id matches %" PRIu64
+ 					     ", skipping messages.", trans_id);
+-		return 1; /* In sync - skip messages */
++		return 1;
+ 	}
  
- 		/* Update cached info */
- 		child->info = newinfo;
+-	if (trans_id != (seg->transaction_id - 1)) {
++	/* Error if there are no stacked messages or id mismatches */
++	if (trans_id != (seg->transaction_id - have_messages)) {
+ 		log_error("Thin pool transaction_id=%" PRIu64 ", while expected: %" PRIu64 ".",
+-			  trans_id, seg->transaction_id - 1);
+-		goto bad; /* Nothing to send */
++			  trans_id, seg->transaction_id - have_messages);
++		return 0;
+ 	}
+ 
+ 	dm_list_iterate_items(tmsg, &seg->thin_messages)
+ 		if (!(_thin_pool_node_message(dnode, tmsg)))
+-			goto_bad;
++			return_0;
+ 
+-	return 1;
+-bad:
+-	/* Try to deactivate */
+-	if (!(dm_tree_deactivate_children(dnode, uuid_prefix, uuid_prefix_len)))
+-		log_error("Failed to deactivate %s", dnode->name);
++	dnode->props.send_messages = 0; /* messages posted */
+ 
+-	return 0;
++	return 1;
+ }
+ 
+ /*
+@@ -1864,12 +1864,9 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 	 * resume should continue further, just whole command
+ 	 * has to report failure.
+ 	 */
+-	if (r && dnode->props.send_messages) {
+-		if (!(r = _node_send_messages(dnode, uuid_prefix, uuid_prefix_len)))
+-			stack;
+-		else
+-			dnode->props.send_messages = 0; /* messages posted */
+-	}
++	if (r && dnode->props.send_messages &&
++	    !(r = _node_send_messages(dnode, uuid_prefix, uuid_prefix_len)))
++		stack;
+ 
+ 	return r;
+ }
 
 
