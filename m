@@ -1,48 +1,90 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 25 Feb 2014 08:44:56 +0000 (UTC)
-Subject: master - cleanup: keep pv_count unsigned
-Message-ID: <20140225084456.A953361268@fedorahosted.org>
+From: Zhang Zhiqing <zhangzq.fnst@cn.fujitsu.com>
+Date: Tue, 25 Feb 2014 17:53:55 +0800
+Subject: [PATCH] Enhance stripe size validation
+In-Reply-To: <530745EB.9040503@redhat.com>
+References: <1392961943-1904-1-git-send-email-wangsl.fnst@cn.fujitsu.com>
+	<530745EB.9040503@redhat.com>
+Message-ID: <000201cf320f$822206c0$86661440$@cn.fujitsu.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1b566a2152f5b7fcf55f2c148a5fe52d7370666e
-Commit:        1b566a2152f5b7fcf55f2c148a5fe52d7370666e
-Parent:        e7d189baf741d8f27c66cb53ea15f78dcc29efec
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 25 09:43:04 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 25 09:43:04 2014 +0100
+In this condition,  (lp->ac_stripesize_value >= (uint64_t) vg->extent_size * 2) equals to (lp->ac_stripesize_value > (uint64_t) vg->extent_size). But the latter is concise, so I'll revise it.
 
-cleanup: keep pv_count unsigned
+Thanks,
+Zhiqing, Zhang
 
----
- tools/lvcreate.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+-----Original Message-----
+From: lvm-devel-bounces@redhat.com [mailto:lvm-devel-bounces at redhat.com] On Behalf Of Zdenek Kabelac
+Sent: Friday, February 21, 2014 8:26 PM
+To: LVM2 development
+Cc: zhangzq.fnst at cn.fujitsu.com
+Subject: Re: [lvm-devel] [PATCH] Enhance stripe size validation
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 7a734f2..dc473f8 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -21,7 +21,7 @@ struct lvcreate_cmdline_params {
- 	percent_type_t percent;
- 	uint64_t size;
- 	char **pvs;
--	int pv_count;
-+	uint32_t pv_count;
- };
- 
- static int _set_vg_name(struct lvcreate_params *lp, const char *vg_name)
-@@ -1181,7 +1181,7 @@ static int _check_raid_parameters(struct volume_group *vg,
- 				  struct lvcreate_params *lp,
- 				  struct lvcreate_cmdline_params *lcp)
- {
--	int devs = lcp->pv_count ? lcp->pv_count : dm_list_size(&vg->pvs);
-+	unsigned devs = lcp->pv_count ? : dm_list_size(&vg->pvs);
- 	struct cmd_context *cmd = vg->cmd;
- 
- 	/*
+Dne 21.2.2014 06:52, Wang Shilong napsal(a):
+> From: Zhiqing Zhang <zhangzq.fnst@cn.fujitsu.com>
+>
+> While stripe size is twice the physical extent size, the original code 
+> will not reduce stripe size to maximum(physical extent size).
+>
+> Signed-off-by: Zhiqing Zhang <zhangzq.fnst@cn.fujitsu.com>
+> ---
+>   lib/metadata/lv_manip.c |    2 +-
+>   man/lvresize.8.in       |    4 +++-
+>   2 files changed, 4 insertions(+), 2 deletions(-)
+>
+> diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c index 
+> 2b1cdcc..14ad884 100644
+> --- a/lib/metadata/lv_manip.c
+> +++ b/lib/metadata/lv_manip.c
+> @@ -3394,7 +3394,7 @@ static int _validate_stripesize(struct 
+> cmd_context *cmd,
+>
+>   	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
+>   		log_warn("Varied stripesize not supported. Ignoring.");
+> -	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size * 2) {
+> +	else if (lp->ac_stripesize_value >= (uint64_t) vg->extent_size * 2) 
+> +{
+>   		log_error("Reducing stripe size %s to maximum, "
+>   			  "physical extent size %s",
+>   			  display_size(cmd,lp->ac_stripesize_value),
+
+I assume the condition should have been:
+
+(lp->ac_stripesize_value > (uint64_t) vg->extent_size)
+
+
+Let me check  what is in sectors and what has wrong units...
+
+
+Zdenek
+
+
+
+> diff --git a/man/lvresize.8.in b/man/lvresize.8.in index 
+> 3606762..f746307 100644
+> --- a/man/lvresize.8.in
+> +++ b/man/lvresize.8.in
+> @@ -88,7 +88,9 @@ Defaults to whatever the last segment of the Logical Volume uses.
+>   Not applicable to LVs using the original metadata LVM format, which
+>   must use a single value throughout.
+>   .br
+> -StripeSize must be 2^n (n = 2 to 9).
+> +StripeSize must be 2^n (n = 2 to 9) for metadata in LVM1 format.
+> +For metadata in LVM2 format, the stripe size may be a larger power of 
+> +2 but must not exceed the physical extent size.
+>   .TP
+>   .B \-\-noudevsync
+>   Disable udev synchronisation. The
+>
+
+--
+lvm-devel mailing list
+lvm-devel at redhat.com
+https://www.redhat.com/mailman/listinfo/lvm-devel
+
+
 
 
