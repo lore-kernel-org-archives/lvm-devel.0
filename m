@@ -1,50 +1,82 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Fri, 28 Feb 2014 10:26:22 +0000 (UTC)
-Subject: master - spec: Add a copyright header and an explanatory notice.
-Message-ID: <20140228102622.A83AC60FF2@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 25 Feb 2014 23:23:19 +0000 (UTC)
+Subject: master - snapshot: zero cow header for read-only snapshot
+Message-ID: <20140225232319.146AF61016@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=421ca4cd143d3d3935567a76dbed1b19d7c397ce
-Commit:        421ca4cd143d3d3935567a76dbed1b19d7c397ce
-Parent:        658f8976a3d755aaccbbcc161b4464da9b48f9c6
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Thu Feb 27 23:22:33 2014 +0100
-Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Fri Feb 28 11:23:52 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2b044452e30accf9ee026fc62ccea219bb4c7be4
+Commit:        2b044452e30accf9ee026fc62ccea219bb4c7be4
+Parent:        3bb9eda97c6ef2fb6848322e36b2b44a688ed37c
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Feb 26 00:17:11 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Feb 26 00:22:46 2014 +0100
 
-spec: Add a copyright header and an explanatory notice.
+snapshot: zero cow header for read-only snapshot
 
+When read-only snapshot was created, tool was skipping header
+initialization of cow device.  If it happened device has been
+already containing header from some previous snapshot, it's
+been 'reused' for a newly created snapshot instead of being cleared.
 ---
- spec/lvm2.spec |   16 ++++++++++++++++
- 1 files changed, 16 insertions(+), 0 deletions(-)
+ WHATS_NEW                    |    1 +
+ test/shell/snapshot-usage.sh |   11 +++++++++++
+ tools/lvcreate.c             |    8 ++++++--
+ 3 files changed, 18 insertions(+), 2 deletions(-)
 
-diff --git a/spec/lvm2.spec b/spec/lvm2.spec
-index f339367..89b37e7 100644
---- a/spec/lvm2.spec
-+++ b/spec/lvm2.spec
-@@ -1,3 +1,19 @@
-+# Copyright (C) 2013-2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# NB. This specfile is a work in progress. It is currently used by the
-+# continuous integration system driven by nix and hydra to create and test RPMs
-+# on Fedora, CentOS and RHEL systems. It is not yet ready for deployment of LVM
-+# on those systems.
-+
-+# A macro to pull in an include file from an appropriate location.
- %define import() %include %(test -e %{S:%1} && echo %{S:%1} || echo %{_sourcedir}/%1)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index dd0821e..05218ee 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.106 - 
+ ====================================
++  Zero snapshot COW header when creating read-only snapshot.
+   Comment out config lines in dumpconfig output without default values defined.
+   Improve detection of clustered mirror support.
+   Enhance raid code with feature flags, for now checks for raid10.
+diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
+index fb88ae1..62a70e0 100644
+--- a/test/shell/snapshot-usage.sh
++++ b/test/shell/snapshot-usage.sh
+@@ -131,4 +131,15 @@ vgremove -ff $vg1
  
- %import source.inc
+ fi
+ 
++lvremove -f $vg
++
++# Check snapshot really deletes COW header for read-only snapshot
++aux lvmconf "allocation/wipe_signatures_when_zeroing_new_lvs = 1"
++lvcreate -L10 -n $lv1 $vg
++lvcreate -s -L10 -n snap $vg/$lv1
++# Populate snapshot with some filesystem signatures
++mkfs.ext4 "$DM_DEV_DIR/$vg/snap"
++lvremove -f $vg/snap
++lvcreate -s -pr -l12 -n snap $vg/$lv1
++
+ vgremove -ff $vg
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index dc473f8..ad00327 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -769,8 +769,12 @@ static int _read_activation_params(struct lvcreate_params *lp,
+ 	lp->permission = arg_uint_value(cmd, permission_ARG,
+ 					LVM_READ | LVM_WRITE);
+ 
+-	/* Must not zero/wipe read only volume */
+-	if (!(lp->permission & LVM_WRITE)) {
++	if (lp->snapshot) {
++		/* Snapshot has to zero COW header */
++		lp->zero = 1;
++		lp->wipe_signatures = 0;
++	} else if (!(lp->permission & LVM_WRITE)) {
++		/* Must not zero/wipe read only volume */
+ 		lp->zero = 0;
+ 		lp->wipe_signatures = 0;
+ 	}
 
 
