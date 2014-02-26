@@ -1,51 +1,64 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 4 Apr 2008 15:41:21 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
-Message-ID: <20080404154121.25753.qmail@sourceware.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 26 Feb 2014 14:13:26 +0000 (UTC)
+Subject: master - lvmetad: Make token_mismatch handling more robust in the clients.
+Message-ID: <20140226141326.97A6560DF3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-04-04 15:41:20
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1769eddde7dcdd16716d646e14487cc1df6a3efc
+Commit:        1769eddde7dcdd16716d646e14487cc1df6a3efc
+Parent:        4143b284f8871b57b416eeab795489fcc66ed017
+Author:        Petr Rockai <me@mornfall.net>
+AuthorDate:    Wed Feb 26 15:11:00 2014 +0100
+Committer:     Petr Rockai <me@mornfall.net>
+CommitterDate: Wed Feb 26 15:11:00 2014 +0100
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : metadata.c 
+lvmetad: Make token_mismatch handling more robust in the clients.
 
-Log message:
-	Add check to vg_commit() to ensure lock is held before writing new VG metadata.
+---
+ lib/cache/lvmetad.c |   27 +++++++++++++++++++++------
+ 1 files changed, 21 insertions(+), 6 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.824&r2=1.825
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.164&r2=1.165
-
---- LVM2/WHATS_NEW	2008/04/04 11:59:29	1.824
-+++ LVM2/WHATS_NEW	2008/04/04 15:41:20	1.825
-@@ -1,5 +1,6 @@
- Version 2.02.34 -
- ===================================
-+  Add check to vg_commit() ensuring VG lock held before writing new VG metadata.
-   Add validation of LV name to pvmove -n.
-   Make clvmd refresh the context correctly when lvm.conf is updated.
-   Add some basic internal VG lock validation.
---- LVM2/lib/metadata/metadata.c	2008/04/01 22:40:12	1.164
-+++ LVM2/lib/metadata/metadata.c	2008/04/04 15:41:20	1.165
-@@ -1316,6 +1316,12 @@
- 	int cache_updated = 0;
- 	int failed = 0;
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 61361ed..c994874 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -159,12 +159,27 @@ retry:
+ 	daemon_request_destroy(req);
  
-+	if (!vgname_is_locked(vg->name)) {
-+		log_error("Internal error: Attempt to write new VG metadata "
-+			  "without locking %s", vg->name);
-+		return cache_updated;
-+	}
-+
- 	/* Commit to each copy of the metadata area */
- 	list_iterate_items(mda, &vg->fid->metadata_areas) {
- 		failed = 0;
+ 	if (!repl.error && !strcmp(daemon_reply_str(repl, "response", ""), "token_mismatch") &&
+-	    try < 2 && !test_mode()) {
+-		if (lvmetad_pvscan_all_devs(_lvmetad_cmd, NULL)) {
+-			++ try;
+-			daemon_reply_destroy(repl);
+-			goto retry;
+-		}
++	    try < 60 && !test_mode()) {
++		/*
++		 * If another process is trying to scan, they might have the
++		 * same future token id and it's better to wait and avoid doing
++		 * the work multiple times. For the case the future token is
++		 * different, the wait is randomized so that multiple waiting
++		 * processes do not start scanning all@once.
++		 *
++		 * If the token is mismatched because of global_filter changes,
++		 * we re-scan immediately, but if we lose the potential race for
++		 * the update, we back off for a short while (0.2-2 seconds) and
++		 * try again.
++		 */
++		if (!strcmp(daemon_reply_str(repl, "expected", ""), "update in progress") || try % 5)
++			usleep( 50000 + random() % 450000 ); /* 0.05 - 0.5s */
++		else
++			/* If the re-scan fails here, we try again later. */
++			lvmetad_pvscan_all_devs(_lvmetad_cmd, NULL);
++		++ try;
++		daemon_reply_destroy(repl);
++		goto retry;
+ 	}
+ 
+ 	return repl;
 
 
