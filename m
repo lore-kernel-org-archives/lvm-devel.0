@@ -1,47 +1,52 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Fri, 28 Feb 2014 15:24:35 +0000 (UTC)
-Subject: master - format-text: Fix _raw_read_mda_header (missing close, open r/o).
-Message-ID: <20140228152435.472D760EFA@fedorahosted.org>
+From: Zhang Zhiqing <zhangzq.fnst@cn.fujitsu.com>
+Date: Wed, 26 Feb 2014 10:14:18 +0800
+Subject: [PATCH v2] Enhance stripe size validation
+Message-ID: <1393380858-5096-1-git-send-email-zhangzq.fnst@cn.fujitsu.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e5bec37e9cec455f20656858ba510b69010676d
-Commit:        3e5bec37e9cec455f20656858ba510b69010676d
-Parent:        c69d37d1260aac04b8964ca92af489a2de0e9d77
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Fri Feb 28 16:21:09 2014 +0100
-Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Fri Feb 28 16:21:09 2014 +0100
+From: Zhiqing Zhang <zhangzq.fnst@cn.fujitsu.com>
 
-format-text: Fix _raw_read_mda_header (missing close, open r/o).
+While stripe size is twice the physical extent size, the original code will not reduce stripe size to maximum(physical extent size).
 
+Signed-off-by: Zhiqing Zhang <zhangzq.fnst@cn.fujitsu.com>
 ---
- lib/format_text/format-text.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |    2 +-
+ man/lvresize.8.in       |    4 +++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 0d6483a..e0b2786 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -318,12 +318,15 @@ static void _xlate_mdah(struct mda_header *mdah)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2b1cdcc..c791b6d 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3394,7 +3394,7 @@ static int _validate_stripesize(struct cmd_context *cmd,
  
- static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev_area)
- {
--	if (!dev_open(dev_area->dev))
-+	if (!dev_open_readonly(dev_area->dev))
- 		return_0;
- 
- 	if (!dev_read(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, mdah))
- 		return_0;
- 
-+	if (!dev_close(dev_area->dev))
-+		return_0;
-+
- 	if (mdah->checksum_xl != xlate32(calc_crc(INITIAL_CRC, (uint8_t *)mdah->magic,
- 						  MDA_HEADER_SIZE -
- 						  sizeof(mdah->checksum_xl)))) {
+ 	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
+ 		log_warn("Varied stripesize not supported. Ignoring.");
+-	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size * 2) {
++	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size) {
+ 		log_error("Reducing stripe size %s to maximum, "
+ 			  "physical extent size %s",
+ 			  display_size(cmd,lp->ac_stripesize_value),
+diff --git a/man/lvresize.8.in b/man/lvresize.8.in
+index 3606762..f746307 100644
+--- a/man/lvresize.8.in
++++ b/man/lvresize.8.in
+@@ -88,7 +88,9 @@ Defaults to whatever the last segment of the Logical Volume uses.
+ Not applicable to LVs using the original metadata LVM format, which
+ must use a single value throughout.
+ .br
+-StripeSize must be 2^n (n = 2 to 9).
++StripeSize must be 2^n (n = 2 to 9) for metadata in LVM1 format.
++For metadata in LVM2 format, the stripe size may be a larger
++power of 2 but must not exceed the physical extent size.
+ .TP
+ .B \-\-noudevsync
+ Disable udev synchronisation. The
+-- 
+1.7.1
 
 
