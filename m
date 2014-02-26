@@ -1,144 +1,118 @@
-From: dongmao zhang <dmzhang@suse.com>
-Date: Wed, 26 Feb 2014 19:20:00 +0800
-Subject: [PATCH] decrease expected_replies when remote node is down [V2]
-Message-ID: <1393413600-14942-1-git-send-email-dmzhang@suse.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 26 Feb 2014 12:26:33 +0000 (UTC)
+Subject: master - lvresize: fix stripe size validation
+Message-ID: <20140226122633.8B63461128@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-dear list,
-I think the last patch is broken, because 
-it has line:thisfd->bits.localsock.finished = 0
-which may cause pre_post_thread ends.
-This is the revised patch. So any comments?
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=014ba37cb19c9172b1b81af3f31897939f72b1d2
+Commit:        014ba37cb19c9172b1b81af3f31897939f72b1d2
+Parent:        b5e03c88b8b31db9a4b27c2e1a50441f99e0da48
+Author:        Zhiqing Zhang <zhangzq.fnst@cn.fujitsu.com>
+AuthorDate:    Wed Feb 26 10:14:18 2014 +0800
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Feb 26 13:25:50 2014 +0100
 
->when clvmd is waiting for remote node's relies, but
->the remote node could be possiblly closed at the same
->time. This could result in a request timeout in mainloop.
->The default timeout is 60 seconds. This is still too large.
->
->https://bugzilla.novell.com/show_bug.cgi?id=837538
->https://bugzilla.novell.com/show_bug.cgi?id=862633
->clvmd users usually meet this when they call LVM command(like vgscan)
->in one node, while other nodes's clvmd is closing.
->
->My solution to this is to decrement in-flight request's
->expected_replies. The command could finish much faster in this
->situation.
+lvresize: fix stripe size validation
+
+While stripe size is twice the physical extent size,
+the original code will not reduce stripe size to maximum
+(physical extent size).
+
+Signed-off-by: Zhiqing Zhang <zhangzq.fnst@cn.fujitsu.com>
 ---
- daemons/clvmd/clvmd-corosync.c |    7 ++++-
- daemons/clvmd/clvmd.c          |   52 +++++++++++++++++++++++++++++++++++++++-
- daemons/clvmd/clvmd.h          |    2 +
- 3 files changed, 59 insertions(+), 2 deletions(-)
+ WHATS_NEW                    |    1 +
+ lib/metadata/lv_manip.c      |   11 ++++++-----
+ man/lvresize.8.in            |    4 +++-
+ test/shell/lvresize-usage.sh |    9 +++++++--
+ 4 files changed, 17 insertions(+), 8 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-corosync.c b/daemons/clvmd/clvmd-corosync.c
-index e68cb73..8e642ca 100644
---- a/daemons/clvmd/clvmd-corosync.c
-+++ b/daemons/clvmd/clvmd-corosync.c
-@@ -251,11 +251,16 @@ static void corosync_cpg_confchg_callback(cpg_handle_t handle,
- 		ninfo = dm_hash_lookup_binary(node_hash,
- 					      (char *)&left_list[i].nodeid,
- 					      COROSYNC_CSID_LEN);
--		if (ninfo)
-+		if (ninfo) {
- 			ninfo->state = NODE_DOWN;
-+			char name[MAX_CLUSTER_MEMBER_NAME_LEN];
-+			sprintf(name, "%x", ninfo->nodeid);
-+			decrease_inflight_expected_reply(name);
-+		}
- 	}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 05218ee..9a3da75 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.106 - 
+ ====================================
++  Do not allow stripe size to be bigger then extent size for lvresize.
+   Zero snapshot COW header when creating read-only snapshot.
+   Comment out config lines in dumpconfig output without default values defined.
+   Improve detection of clustered mirror support.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 9dd8f0e..57ce2d9 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3406,6 +3406,7 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
  
- 	num_nodes = member_list_entries;
-+
- }
+ #define SIZE_BUF 128
  
- static int _init_cluster(void)
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index fc8cf6e..bd056f2 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -1697,6 +1697,56 @@ static void process_remote_command(struct clvm_header *msg, int msglen, int fd,
- 	free(replyargs);
- }
++/* TODO: unify stripe size validation across source code */
+ static int _validate_stripesize(struct cmd_context *cmd,
+ 				const struct volume_group *vg,
+ 				struct lvresize_params *lp)
+@@ -3419,11 +3420,11 @@ static int _validate_stripesize(struct cmd_context *cmd,
  
-+void decrease_inflight_expected_reply(char *nodename)
-+{
-+	struct local_client * thisfd;
-+	struct node_reply *reply;
-+
-+	DEBUGLOG("remote node %s down", nodename);
-+
-+	for (thisfd = &local_client_head; thisfd != NULL;
-+	     thisfd = thisfd->next) {
-+		/* in-flight request */
-+		if (thisfd->type == LOCAL_SOCK
-+		    && thisfd->bits.localsock.sent_out
-+		    && thisfd->bits.localsock.in_progress
-+		    && ! thisfd->bits.localsock.finished
-+		    && thisfd->bits.localsock.expected_replies >
-+		    thisfd->bits.localsock.num_replies) {
-+
-+			pthread_mutex_lock(&thisfd->bits.localsock.reply_mutex);
-+
-+			reply = thisfd->bits.localsock.replies;
-+			while (reply && strcmp(reply->node, nodename) != 0) {
-+				reply = reply->next;
-+			}
-+			/* if the remote down server has replies,do not decrease the expected_replies */
-+			if (reply)
-+				continue;
-+
-+			thisfd->bits.localsock.expected_replies--;
-+			DEBUGLOG
-+			    ("remote node down, decrement the expected replies to (%ld),num_replies(%ld)",
-+			     thisfd->bits.localsock.expected_replies,
-+			     thisfd->bits.localsock.num_replies)
-+
-+			if (thisfd->bits.localsock.expected_replies <= thisfd->bits.localsock.num_replies) {
-+				/* tell pre_and_post thread to finish */
-+				if (thisfd->bits.localsock.threadid) {
-+					thisfd->bits.localsock.all_success = 0;
-+					pthread_mutex_lock(&thisfd->bits.localsock.mutex);
-+					thisfd->bits.localsock.state = POST_COMMAND;
-+					pthread_cond_signal(&thisfd->bits.localsock.cond);
-+					pthread_mutex_unlock(&thisfd->bits.localsock.mutex);
-+				}
-+			}
-+			pthread_mutex_unlock(&thisfd->bits.localsock.reply_mutex);
-+
-+		}
-+	}
-+
-+}
-+
- /* Add a reply to a command to the list of replies for this client.
-    If we have got a full set then send them to the waiting client down the local
-    socket */
-@@ -1738,7 +1788,7 @@ static void add_reply_to_list(struct local_client *client, int status,
- 		 client->bits.localsock.expected_replies);
+ 	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
+ 		log_warn("Varied stripesize not supported. Ignoring.");
+-	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size * 2) {
+-		log_error("Reducing stripe size %s to maximum, "
+-			  "physical extent size %s",
+-			  display_size(cmd,lp->ac_stripesize_value),
+-			  display_size(cmd, (uint64_t) vg->extent_size));
++	else if (lp->ac_stripesize_value > vg->extent_size) {
++		log_print_unless_silent("Reducing stripe size %s to maximum, "
++					"physical extent size %s",
++					display_size(cmd, lp->ac_stripesize_value),
++					display_size(cmd, vg->extent_size));
+ 		lp->stripe_size = vg->extent_size;
+ 	} else
+ 		lp->stripe_size = lp->ac_stripesize_value;
+diff --git a/man/lvresize.8.in b/man/lvresize.8.in
+index 14fc7ba..75d20a0 100644
+--- a/man/lvresize.8.in
++++ b/man/lvresize.8.in
+@@ -95,7 +95,9 @@ Defaults to whatever the last segment of the Logical Volume uses.
+ Not applicable to LVs using the original metadata LVM format, which
+ must use a single value throughout.
+ .br
+-StripeSize must be 2^n (n = 2 to 9).
++StripeSize must be 2^n (n = 2 to 9) for metadata in LVM1 format.
++For metadata in LVM2 format, the stripe size may be a larger
++power of 2 but must not exceed the physical extent size.
+ .TP
+ .B \-\-noudevsync
+ Disable udev synchronisation. The
+diff --git a/test/shell/lvresize-usage.sh b/test/shell/lvresize-usage.sh
+index 51ef221..84431ed 100644
+--- a/test/shell/lvresize-usage.sh
++++ b/test/shell/lvresize-usage.sh
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2007-2008 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2007-2014 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -11,7 +11,7 @@
  
- 	/* If we have the whole lot then do the post-process */
--	if (++client->bits.localsock.num_replies ==
-+	if (++client->bits.localsock.num_replies >=
- 	    client->bits.localsock.expected_replies) {
- 		/* Post-process the command */
- 		if (client->bits.localsock.threadid) {
-diff --git a/daemons/clvmd/clvmd.h b/daemons/clvmd/clvmd.h
-index 0f837dd..52e4e61 100644
---- a/daemons/clvmd/clvmd.h
-+++ b/daemons/clvmd/clvmd.h
-@@ -112,6 +112,8 @@ extern int do_post_command(struct local_client *client);
- extern void cmd_client_cleanup(struct local_client *client);
- extern int add_client(struct local_client *new_client);
+ . lib/test
  
+-aux prepare_vg 2
++aux prepare_vg 2 80
+ 
+ lvcreate -L 10M -n lv -i2 $vg
+ lvresize -l +4 $vg/lv
+@@ -19,3 +19,8 @@ lvremove -ff $vg
+ 
+ lvcreate -L 64M -n $lv -i2 $vg
+ not lvresize -v -l +4 xxx/$lv
 +
-+extern void decrease_inflight_expected_reply();
- extern void clvmd_cluster_init_completed(void);
- extern void process_message(struct local_client *client, char *buf,
- 			    int len, const char *csid);
--- 
-1.7.3.4
++# Check stripe size is reduced to extent size when it's bigger
++ESIZE=$(get vg_field $vg vg_extent_size --units b)
++lvextend -L+64m -i 2 -I$(( ${ESIZE%%B} * 2 ))B $vg/$lv 2>&1 | tee err
++grep "Reducing stripe size" err
 
 
