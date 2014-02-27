@@ -1,50 +1,48 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 27 Feb 2014 13:55:38 +0000 (UTC)
-Subject: master - tests: quote dev
-Message-ID: <20140227135538.E034160FA4@fedorahosted.org>
+Date: Thu, 27 Feb 2014 13:55:41 +0000 (UTC)
+Subject: master - tests: remove extra vgremove
+Message-ID: <20140227135541.381BC60FA4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c23cd12023bd18a83ae0f284e69f3b6689d79b37
-Commit:        c23cd12023bd18a83ae0f284e69f3b6689d79b37
-Parent:        f4afd07700986b368c7ea8543f04f8e2dfc02a8c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a7dc422bde933d2c397f14334d74ae0abacbaccf
+Commit:        a7dc422bde933d2c397f14334d74ae0abacbaccf
+Parent:        c23cd12023bd18a83ae0f284e69f3b6689d79b37
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Feb 27 14:49:49 2014 +0100
+AuthorDate:    Thu Feb 27 14:53:33 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Feb 27 14:49:49 2014 +0100
+CommitterDate: Thu Feb 27 14:53:33 2014 +0100
 
-tests: quote dev
+tests: remove extra vgremove
 
+These vgremove calls were not correct.
 ---
- test/shell/vgck.sh |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ test/shell/lvconvert-repair-thin.sh |    2 --
+ test/shell/lvmetad-warning.sh       |    2 +-
+ 2 files changed, 1 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/vgck.sh b/test/shell/vgck.sh
-index 0dec605..40af20a 100644
---- a/test/shell/vgck.sh
-+++ b/test/shell/vgck.sh
-@@ -14,7 +14,7 @@
- aux prepare_vg 3
- lvcreate -n blabla -L 1 $vg
+diff --git a/test/shell/lvconvert-repair-thin.sh b/test/shell/lvconvert-repair-thin.sh
+index 37a24ff..b80b855 100644
+--- a/test/shell/lvconvert-repair-thin.sh
++++ b/test/shell/lvconvert-repair-thin.sh
+@@ -114,5 +114,3 @@ should vgremove -ff  $vg
+ # Let's do a final forced cleanup
+ pvremove --yes -ff "$dev3"
+ pvremove --yes -ff "$dev4"
+-
+-vgremove -ff $vg
+diff --git a/test/shell/lvmetad-warning.sh b/test/shell/lvmetad-warning.sh
+index 6953165..3fc4cf5 100644
+--- a/test/shell/lvmetad-warning.sh
++++ b/test/shell/lvmetad-warning.sh
+@@ -26,4 +26,4 @@ aux prepare_lvmetad
+ lvchange -ay $vg1 2>&1 | not grep "Failed to connect"
+ lvchange -ay $vg1 --sysinit 2>&1 | not grep "Failed to connect"
  
--dd if=/dev/urandom bs=512 seek=2 count=32 of=$dev2
-+dd if=/dev/urandom bs=512 seek=2 count=32 of="$dev2"
- 
- # TODO: aux lvmconf "global/locking_type = 4"
- 
-@@ -26,7 +26,9 @@ else
-     grep "Inconsistent metadata found for VG $vg" vgscan.out
- fi
- 
--dd if=/dev/urandom bs=512 seek=2 count=32 of=$dev2
-+dd if=/dev/urandom bs=512 seek=2 count=32 of="$dev2"
-+aux notify_lvmetad "$dev2"
-+
- vgck $vg 2>&1 | tee vgck.out
- grep Incorrect vgck.out
- 
+-vgremove -ff $vg
++vgremove -ff $vg1
 
 
