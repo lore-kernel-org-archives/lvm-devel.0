@@ -1,45 +1,41 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Fri, 28 Feb 2014 22:43:27 +0000 (UTC)
-Subject: master - test: Downgrade lvmetad-lvm1 failure to a warning.
-Message-ID: <20140228224327.8F15D60FF7@fedorahosted.org>
+Date: Fri, 28 Feb 2014 22:43:29 +0000 (UTC)
+Subject: master - test: Fix stat calls in lvmetad-pvscan-filter.
+Message-ID: <20140228224329.A21A860FF7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1bb29bb402c24b7c0230e36b618ac5ce9c0ce822
-Commit:        1bb29bb402c24b7c0230e36b618ac5ce9c0ce822
-Parent:        6733ac86d717df0bc8de5ea0ae59f9d017f9e208
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=daa897fe90d59c823af6c4b29c5b75fec5ad0be9
+Commit:        daa897fe90d59c823af6c4b29c5b75fec5ad0be9
+Parent:        1bb29bb402c24b7c0230e36b618ac5ce9c0ce822
 Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Fri Feb 28 23:33:17 2014 +0100
+AuthorDate:    Fri Feb 28 23:33:30 2014 +0100
 Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Fri Feb 28 23:33:17 2014 +0100
+CommitterDate: Fri Feb 28 23:33:30 2014 +0100
 
-test: Downgrade lvmetad-lvm1 failure to a warning.
+test: Fix stat calls in lvmetad-pvscan-filter.
 
 ---
- test/shell/lvmetad-lvm1.sh |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ test/shell/lvmetad-pvscan-filter.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvmetad-lvm1.sh b/test/shell/lvmetad-lvm1.sh
-index 528eec2..043750e 100644
---- a/test/shell/lvmetad-lvm1.sh
-+++ b/test/shell/lvmetad-lvm1.sh
-@@ -14,9 +14,9 @@
- test -e LOCAL_LVMETAD || skip
- aux prepare_devs 2
- pvcreate --metadatatype 1 $dev1
--vgscan --cache
--pvs | grep $dev1
-+should vgscan --cache
-+pvs | should grep $dev1
- vgcreate --metadatatype 1 $vg1 $dev1
--vgscan --cache
--vgs | grep $vg1
--pvs | grep $dev1
-+should vgscan --cache
-+vgs | should grep $vg1
-+pvs | should grep $dev1
+diff --git a/test/shell/lvmetad-pvscan-filter.sh b/test/shell/lvmetad-pvscan-filter.sh
+index 5aed532..6ece577 100644
+--- a/test/shell/lvmetad-pvscan-filter.sh
++++ b/test/shell/lvmetad-pvscan-filter.sh
+@@ -15,8 +15,8 @@ test -e LOCAL_LVMETAD || skip
+ 
+ aux prepare_pvs 2
+ 
+-maj=$(($(stat --printf=0x%t "$dev2")))
+-min=$(($(stat --printf=0x%T "$dev2")))
++maj=$(($(stat -L --printf=0x%t "$dev2")))
++min=$(($(stat -L --printf=0x%T "$dev2")))
+ 
+ aux hide_dev $dev2
+ not pvscan --cache $dev2 2>&1 | grep "not found"
 
 
