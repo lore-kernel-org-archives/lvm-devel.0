@@ -1,39 +1,38 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Fri, 28 Feb 2014 10:25:45 +0000 (UTC)
-Subject: master - NIX: Try harder to set dmesg levels.
-Message-ID: <20140228102545.256B560F97@fedorahosted.org>
+Date: Fri, 28 Feb 2014 10:25:47 +0000 (UTC)
+Subject: master - NIX: Skip autoconf, as we include ./configure in git.
+Message-ID: <20140228102547.3C89160F97@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2b953df0f97eba540c750f9dd8abe9337210da2d
-Commit:        2b953df0f97eba540c750f9dd8abe9337210da2d
-Parent:        fe4d473c5b93ff4f05b623ad841ce23be1357462
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7cb3e7d016613ba20e3e86d2e36182cf5f6debac
+Commit:        7cb3e7d016613ba20e3e86d2e36182cf5f6debac
+Parent:        2b953df0f97eba540c750f9dd8abe9337210da2d
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Sep 3 15:48:34 2013 +0200
+AuthorDate:    Fri Nov 15 19:11:15 2013 +0100
 Committer:     Petr Rockai <me@mornfall.net>
 CommitterDate: Fri Feb 28 11:23:51 2014 +0100
 
-NIX: Try harder to set dmesg levels.
+NIX: Skip autoconf, as we include ./configure in git.
 
 ---
- release.nix |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ release.nix |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
 diff --git a/release.nix b/release.nix
-index e1785c1..318ece7 100644
+index 318ece7..24db140 100644
 --- a/release.nix
 +++ b/release.nix
-@@ -168,7 +168,7 @@ let
-          echo "%define check_commands \\";
-          echo "make lcov-reset \\";
-          echo "dmsetup targets\\";
--         echo "dmesg --console-level debug || true\\";
-+         echo "dmesg --console-level debug || dmesg 8 || true\\";
-          echo "(/usr/lib/systemd/systemd-udevd || /usr/lib/udev/udevd || find / -name \*udevd) & \\";
-          echo "make check_full T=${T} || touch \$out/nix-support/failed \\"
- 	 echo "cp -R test/results /tmp/test-results \\"
+@@ -156,6 +156,7 @@ let
+                          then ".pre${toString lvm2Src.revCount}"
+                          else "";
+       src = lvm2Src;
++      autoconfPhase = ":";
+       distPhase = ''
+         set -x
+         make distclean
 
 
