@@ -1,39 +1,52 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Fri, 28 Feb 2014 10:26:16 +0000 (UTC)
-Subject: master - NIX: On RHEL<=6 and FC<=16, udevd is /sbin/udevd.
-Message-ID: <20140228102616.77A1A60F3B@fedorahosted.org>
+Date: Fri, 28 Feb 2014 10:26:18 +0000 (UTC)
+Subject: master - spec: Package the new clvmd/cmirrord systemd units.
+Message-ID: <20140228102618.8622E60F3B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9770c03ce0e7a955a6c6a4f7921ccdaf9c3bb1f0
-Commit:        9770c03ce0e7a955a6c6a4f7921ccdaf9c3bb1f0
-Parent:        2c99601267072a6d9b8e418f860b7b6726eb9561
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Thu Jan 23 22:12:00 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=244b80d948052c07b6f252c40146bae4a866362c
+Commit:        244b80d948052c07b6f252c40146bae4a866362c
+Parent:        9770c03ce0e7a955a6c6a4f7921ccdaf9c3bb1f0
+Author:        Petr Rockai <me@mornfall.net>
+AuthorDate:    Thu Feb 20 09:49:45 2014 +0100
 Committer:     Petr Rockai <me@mornfall.net>
 CommitterDate: Fri Feb 28 11:23:52 2014 +0100
 
-NIX: On RHEL<=6 and FC<=16, udevd is /sbin/udevd.
+spec: Package the new clvmd/cmirrord systemd units.
 
 ---
- release.nix |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ spec/packages.inc |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/release.nix b/release.nix
-index 0973bc2..9a688dd 100644
---- a/release.nix
-+++ b/release.nix
-@@ -25,7 +25,7 @@ let
-       cd `cat /tmp/build-location`
-       mv test/results/list test/results/list-rpm
-       rpm -Uvh /tmp/rpmout/RPMS/*/*.rpm # */
--      (/usr/lib/systemd/systemd-udevd || /usr/lib/udev/udevd || find / -name \*udevd) &
-+      (/usr/lib/systemd/systemd-udevd || /usr/lib/udev/udevd || /sbin/udevd || find / -xdev -name \*udevd) &
-       make check_system QUIET=1 T=${T} || touch $out/nix-support/failed
-       mv test/results/list test/results/list-system
-       cat test/results/list-* > test/results/list
+diff --git a/spec/packages.inc b/spec/packages.inc
+index 4c00617..d7502de 100644
+--- a/spec/packages.inc
++++ b/spec/packages.inc
+@@ -259,6 +259,11 @@ fi
+ %attr(755,root,root) /usr/sbin/clvmd
+ %{_mandir}/man8/clvmd.8.gz
+ %{_sysconfdir}/rc.d/init.d/clvmd
++%if %{enable_systemd}
++  %{_unitdir}/lvm2-clvmd.service
++  %{_unitdir}/lvm2-cluster-activation.service
++  %{_unitdir}/../lvm2-cluster-activation
++%endif
+ 
+ %endif
+ 
+@@ -291,6 +296,9 @@ fi
+ %attr(755,root,root) /usr/sbin/cmirrord
+ %{_mandir}/man8/cmirrord.8.gz
+ %{_sysconfdir}/rc.d/init.d/cmirrord
++%if %{enable_systemd}
++  %{_unitdir}/lvm2-cmirrord.service
++%endif
+ 
+ %endif
+ 
 
 
