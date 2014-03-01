@@ -1,149 +1,181 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat,  1 Mar 2014 13:24:44 +0000 (UTC)
-Subject: master - lvmetad: move memalloc/free out of lock
-Message-ID: <20140301132444.9DC7F60C85@fedorahosted.org>
+Date: Sat,  1 Mar 2014 13:24:46 +0000 (UTC)
+Subject: master - lvmetad: more reuse precommit buffer
+Message-ID: <20140301132446.B6C4B60C85@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bda98c4b8dcd17d27c582fe6e2bc2d3c2742d4d7
-Commit:        bda98c4b8dcd17d27c582fe6e2bc2d3c2742d4d7
-Parent:        d8513da9be5c061a85ab35d7d35ad937e8130490
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=090e81281fbf88bf27ee6930dfaf03cd48aade88
+Commit:        090e81281fbf88bf27ee6930dfaf03cd48aade88
+Parent:        bda98c4b8dcd17d27c582fe6e2bc2d3c2742d4d7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 1 11:38:41 2014 +0100
+AuthorDate:    Fri Feb 28 22:40:00 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Mar 1 14:08:58 2014 +0100
 
-lvmetad: move memalloc/free out of lock
+lvmetad: more reuse precommit buffer
 
-Small code move to lower locking time and make memory
-allocation and free outside of lock.
-
-Drop duplicate test of NULL pointer before calling dm_free.
+This patch moves more allocation to vg_write
+(as started in 8c878438f5a75310d09a1ee035d9caf8e2b9e50b)
+TODO: relocate also communication.
+(in-release update)
 ---
- daemons/lvmetad/lvmetad-core.c |   56 ++++++++++++++++++---------------------
- 1 files changed, 26 insertions(+), 30 deletions(-)
+ lib/cache/lvmetad.c     |   10 +++++-----
+ lib/metadata/metadata.c |   38 +++++++++++++++++++++++++++-----------
+ lib/metadata/vg.c       |    2 ++
+ lib/metadata/vg.h       |    3 ++-
+ 4 files changed, 36 insertions(+), 17 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index bf0892b..f1fb749 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -344,8 +344,8 @@ static response pv_lookup(lvmetad_state *s, request r)
- 		pvid = dm_hash_lookup_binary(s->device_to_pvid, &devt, sizeof(devt));
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index c994874..600fc19 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -468,7 +468,6 @@ int lvmetad_vg_update(struct volume_group *vg)
+ 	struct pv_list *pvl;
+ 	struct lvmcache_info *info;
+ 	struct _fixup_baton baton;
+-	struct dm_config_tree *vgmeta;
  
- 	if (!pvid) {
--		WARN(s, "pv_lookup: could not find device %" PRIu64, devt);
- 		unlock_pvid_to_pvmeta(s);
-+		WARN(s, "pv_lookup: could not find device %" PRIu64, devt);
- 		dm_config_destroy(res.cft);
- 		return reply_unknown("device not found");
- 	}
-@@ -809,30 +809,28 @@ static response pv_gone(lvmetad_state *s, request r)
- 	pvid_old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device));
- 	vgid = dm_hash_lookup(s->pvid_to_vgid, pvid);
+ 	if (!vg)
+ 		return 0;
+@@ -476,13 +475,14 @@ int lvmetad_vg_update(struct volume_group *vg)
+ 	if (!lvmetad_active() || test_mode())
+ 		return 1; /* fake it */
  
--	if (vgid && !(vgid = dm_strdup(vgid))) {
--		unlock_pvid_to_pvmeta(s);
--		return reply_fail("out of memory");
--	}
+-	if (!(vgmeta = export_vg_to_config_tree(vg)))
+-		return_0;
++	if (!vg->cft_precommitted) {
++		log_error(INTERNAL_ERROR "VG update without precommited");
++		return 0;
++	}
+ 
+ 	log_debug_lvmetad("Sending lvmetad updated metadata for VG %s (seqno %" PRIu32 ")", vg->name, vg->seqno);
+ 	reply = _lvmetad_send("vg_update", "vgname = %s", vg->name,
+-			      "metadata = %t", vgmeta, NULL);
+-	dm_config_destroy(vgmeta);
++			      "metadata = %t", vg->cft_precommitted, NULL);
+ 
+ 	if (!_lvmetad_handle_reply(reply, "update VG", vg->name, NULL)) {
+ 		daemon_reply_destroy(reply);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 8643b75..278b519 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -864,20 +864,24 @@ int vgcreate_params_validate(struct cmd_context *cmd,
+  */
+ static int _vg_update_vg_precommitted(struct volume_group *vg)
+ {
+-	struct dm_config_tree *cft;
 -
- 	dm_hash_remove_binary(s->device_to_pvid, &device, sizeof(device));
- 	dm_hash_remove(s->pvid_to_pvmeta, pvid);
- 	unlock_pvid_to_pvmeta(s);
+ 	release_vg(vg->vg_precommitted);
+ 	vg->vg_precommitted = NULL;
  
-+	dm_free(pvid_old);
-+
- 	if (vgid) {
-+		if (!(vgid = dm_strdup(vgid)))
-+			return reply_fail("out of memory");
-+
- 		lock_vg(s, vgid);
- 		vg_remove_if_missing(s, vgid, 1);
- 		unlock_vg(s, vgid);
- 		dm_free(vgid);
- 	}
+-	if (!(cft = export_vg_to_config_tree(vg)))
+-		return_0;
++	if (vg->cft_precommitted) {
++		dm_config_destroy(vg->cft_precommitted);
++		vg->cft_precommitted = NULL;
++	}
  
--	if (pvid_old)
--		dm_free(pvid_old);
--
--	if (pvmeta) {
--		dm_config_destroy(pvmeta);
--		return daemon_reply_simple("OK", NULL);
--	} else
-+	if (!pvmeta)
- 		return reply_unknown("PVID does not exist");
-+
-+	dm_config_destroy(pvmeta);
-+
-+	return daemon_reply_simple("OK", NULL);
+-	if (!(vg->vg_precommitted = import_vg_from_config_tree(cft, vg->fid)))
+-		stack;
++	if (!(vg->cft_precommitted = export_vg_to_config_tree(vg)))
++		return_0;
+ 
+-	dm_config_destroy(cft);
++	if (!(vg->vg_precommitted = import_vg_from_config_tree(vg->cft_precommitted, vg->fid))) {
++		dm_config_destroy(vg->cft_precommitted);
++		vg->cft_precommitted = NULL;
++		return_0;
++	}
+ 
+-	return vg->vg_precommitted ? 1 : 0;
++	return 1;
  }
  
- static response pv_clear_all(lvmetad_state *s, request r)
-@@ -876,6 +874,13 @@ static response pv_found(lvmetad_state *s, request r)
- 	if (!dm_config_get_uint64(pvmeta, "pvmeta/device", &device))
- 		return reply_fail("need PV device number");
+ static int _vg_update_vg_ondisk(struct volume_group *vg)
+@@ -893,6 +897,10 @@ static int _vg_update_vg_ondisk(struct volume_group *vg)
  
-+	if (!(cft = dm_config_create()) ||
-+	    (!(pvid_dup = dm_strdup(pvid)))) {
-+		if (cft)
-+			dm_config_destroy(cft);
-+		return reply_fail("out of memory");
+ 	vg->vg_ondisk = vg->vg_precommitted;
+ 	vg->vg_precommitted = NULL;
++	if (vg->cft_precommitted) {
++		dm_config_destroy(vg->cft_precommitted);
++		vg->cft_precommitted = NULL;
 +	}
-+
- 	lock_pvid_to_pvmeta(s);
  
- 	if ((old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device)))) {
-@@ -890,21 +895,8 @@ static response pv_found(lvmetad_state *s, request r)
- 	DEBUGLOG(s, "pv_found %s, vgid = %s, device = %" PRIu64 " (previously %" PRIu64 "), old = %s",
- 		 pvid, vgid, device, device_old_pvid, old);
- 
--	dm_free(old);
--
--	if (!(cft = dm_config_create()) ||
--	    !(cft->root = dm_config_clone_node(cft, pvmeta, 0))) {
--		unlock_pvid_to_pvmeta(s);
--		if (cft)
--			dm_config_destroy(cft);
--		return reply_fail("out of memory");
--	}
--
--	if (!(pvid_dup = dm_strdup(pvid))) {
--		unlock_pvid_to_pvmeta(s);
--		dm_config_destroy(cft);
--		return reply_fail("out of memory");
--	}
-+	if (!(cft->root = dm_config_clone_node(cft, pvmeta, 0)))
-+                goto out_of_mem;
- 
- 	if (pvmeta_old_pvid && device != device_old_pvid) {
- 		DEBUGLOG(s, "pv %s no longer on device %" PRIu64, pvid, device_old_pvid);
-@@ -915,19 +907,23 @@ static response pv_found(lvmetad_state *s, request r)
- 	if (!dm_hash_insert(s->pvid_to_pvmeta, pvid, cft) ||
- 	    !dm_hash_insert_binary(s->device_to_pvid, &device, sizeof(device), (void*)pvid_dup)) {
- 		dm_hash_remove(s->pvid_to_pvmeta, pvid);
-+out_of_mem:
- 		unlock_pvid_to_pvmeta(s);
- 		dm_config_destroy(cft);
- 		dm_free(pvid_dup);
-+		dm_free(old);
- 		return reply_fail("out of memory");
+ 	return 1;
+ }
+@@ -2695,6 +2703,9 @@ int vg_write(struct volume_group *vg)
+ 		}
  	}
  
-+	unlock_pvid_to_pvmeta(s);
++	if (!_vg_update_vg_precommitted(vg)) /* prepare precommited */
++		return_0;
 +
-+	dm_free(old);
-+
- 	if (pvmeta_old_pvid)
- 		dm_config_destroy(pvmeta_old_pvid);
- 	if (pvmeta_old_dev && pvmeta_old_dev != pvmeta_old_pvid)
- 		dm_config_destroy(pvmeta_old_dev);
+ 	/*
+ 	 * If precommit is not supported, changes take effect immediately.
+ 	 * FIXME Replace with a more-accurate FMT_COMMIT flag.
+@@ -2702,9 +2713,6 @@ int vg_write(struct volume_group *vg)
+ 	if (!(vg->fid->fmt->features & FMT_PRECOMMIT) && !lvmetad_vg_update(vg))
+ 		return_0;
  
--	unlock_pvid_to_pvmeta(s);
+-	if (!_vg_update_vg_precommitted(vg)) /* prepare precommited */
+-		return_0;
 -
- 	if (metadata) {
- 		if (!vgid)
- 			return reply_fail("need VG UUID");
+ 	return 1;
+ }
+ 
+@@ -2773,6 +2781,10 @@ int vg_commit(struct volume_group *vg)
+ 		release_vg(vg->vg_ondisk);
+ 		vg->vg_ondisk = vg->vg_precommitted;
+ 		vg->vg_precommitted = NULL;
++		if (vg->cft_precommitted) {
++			dm_config_destroy(vg->cft_precommitted);
++			vg->cft_precommitted = NULL;
++		}
+ 	}
+ 
+ 	/* If update failed, remove any cached precommitted metadata. */
+@@ -2791,6 +2803,10 @@ void vg_revert(struct volume_group *vg)
+ 
+ 	release_vg(vg->vg_precommitted);  /* VG is no longer needed */
+ 	vg->vg_precommitted = NULL;
++	if (vg->cft_precommitted) {
++		dm_config_destroy(vg->cft_precommitted);
++		vg->cft_precommitted = NULL;
++	}
+ 
+ 	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use) {
+ 		if (mda->ops->vg_revert &&
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index 8f23d56..8ebec99 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -90,6 +90,8 @@ void release_vg(struct volume_group *vg)
+ 
+ 	release_vg(vg->vg_ondisk);
+ 	release_vg(vg->vg_precommitted);
++	if (vg->cft_precommitted)
++		dm_config_destroy(vg->cft_precommitted);
+ 	_free_vg(vg);
+ }
+ 
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index 028471b..b3b7e93 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -57,7 +57,8 @@ struct volume_group {
+ 	 * _vg_update_vg_ondisk.
+ 	 */
+ 	struct volume_group *vg_ondisk;
+-	struct volume_group *vg_precommitted; /* Parsed from precommitted */
++	struct dm_config_tree *cft_precommitted; /* Precommitted metadata */
++	struct volume_group *vg_precommitted; /* Parsed from cft */
+ 
+ 	alloc_policy_t alloc;
+ 	struct profile *profile;
 
 
