@@ -1,68 +1,62 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Thu, 13 Mar 2014 23:40:53 +0000 (UTC)
-Subject: master - man: Fix man page containing BUILDROOT
-Message-ID: <20140313234053.644E060F80@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Sun,  2 Mar 2014 20:56:05 +0000 (UTC)
+Subject: master - tests: detect nc or socat
+Message-ID: <20140302205605.0CC786022B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a31ab7c1716b60d80cbc1b58fa08b7ef9f1b8183
-Commit:        a31ab7c1716b60d80cbc1b58fa08b7ef9f1b8183
-Parent:        2189d66a2758e4be67a32a7d9d24a9df55c31c4c
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri Mar 14 00:36:19 2014 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri Mar 14 00:36:19 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6df716332c25a49ca41f9d68e10afca68dc5dd62
+Commit:        6df716332c25a49ca41f9d68e10afca68dc5dd62
+Parent:        6c377f5b3c36cc0514210821b3d0b72c10d2a819
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Mar 2 21:48:28 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sun Mar 2 21:48:28 2014 +0100
 
-man: Fix man page containing BUILDROOT
+tests: detect nc or socat
 
-This breaks brew/koji as DESTDIR should not be contained in any file and
-results in message like:
-
-    + /usr/lib/rpm/check-buildroot
-    /builddir/build/BUILDROOT/lvm2-2.02.106-0.311.el7.x86_64/usr/share/man/man8/lvm2-activation-generator.8:.B /builddir/build/BUILDROOT/lvm2-2.02.106-0.311.el7.x86_64/usr/lib/systemd/system-generators/lvm2-activation-generator
-    Found '/builddir/build/BUILDROOT/lvm2-2.02.106-0.311.el7.x86_64' in installed files; aborting
-    error: Bad exit status from /var/tmp/rpm-tmp.UfX2SX (%install)
+Since shell is not in -o pipefail mode here,
+we need to generate separate failure ahead of tee.
 ---
- make.tmpl.in    |    3 ++-
- man/Makefile.in |    2 +-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ test/lib/aux.sh |   23 ++++++++++++++---------
+ 1 files changed, 14 insertions(+), 9 deletions(-)
 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index b1a6b8f..cb5b826 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -85,7 +85,7 @@ udevdir = $(DESTDIR)@udevdir@
- pkgconfigdir = $(usrlibdir)/pkgconfig
- initdir = $(DESTDIR)$(sysconfdir)/rc.d/init.d
- systemd_unit_dir = $(DESTDIR)@systemdsystemunitdir@
--systemd_generator_dir = $(DESTDIR)@systemdutildir@/system-generators
-+systemd_generator_dir = $(DESTDIR)$(SYSTEMD_GENERATOR_DIR)
- systemd_dir = $(DESTDIR)@systemdutildir@
- tmpfiles_dir = $(DESTDIR)@tmpfilesdir@
- ocf_scriptdir = $(DESTDIR)@OCFDIR@
-@@ -94,6 +94,7 @@ pyexecdir = $(DESTDIR)$(prefix)
- USRLIB_RELPATH = $(shell echo $(abspath $(usrlibdir) $(libdir)) | \
-   $(AWK) -f $(top_srcdir)/scripts/relpath.awk)
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 67e046d..f450e63 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -87,15 +87,20 @@ prepare_lvmetad() {
+ }
  
-+SYSTEMD_GENERATOR_DIR = @systemdutildir@/system-generators
- DEFAULT_SYS_DIR = @DEFAULT_SYS_DIR@
- DEFAULT_ARCHIVE_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_ARCHIVE_SUBDIR@
- DEFAULT_BACKUP_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_BACKUP_SUBDIR@
-diff --git a/man/Makefile.in b/man/Makefile.in
-index ce3b1ee..40145f1 100644
---- a/man/Makefile.in
-+++ b/man/Makefile.in
-@@ -87,7 +87,7 @@ $(MAN5) $(MAN8) $(MAN8DM) $(MAN8CLUSTER):	Makefile
- %: %.in
- 	@case "$@" in \
- 	  */*) ;; \
--	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;s+#DEFAULT_RUN_DIR#+ at DEFAULT_RUN_DIR@+;s+#SYSTEMD_GENERATOR_DIR#+$(systemd_generator_dir)+;" $< > $@ ;; \
-+	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;s+#DEFAULT_RUN_DIR#+ at DEFAULT_RUN_DIR@+;s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+;" $< > $@ ;; \
- 	esac
+ lvmetad_talk() {
+-    if type -p socat >& /dev/null; then
+-	socat "unix-connect:$TESTDIR/lvmetad.socket" -
+-    elif echo | nc -U "$TESTDIR/lvmetad.socket"; then
+-	nc -U "$TESTDIR/lvmetad.socket"
+-    else
+-	echo "WARNING: Neither socat nor nc -U seems to be available." 1>&2
+-	echo "# failed to contact lvmetad"
+-	exit 1
+-    fi | tee -a lvmetad-talk.txt
++	local use=nc
++	if type -p socat >& /dev/null; then
++		use=socat
++	elif echo | not nc -U "$TESTDIR/lvmetad.socket" ; then
++		echo "WARNING: Neither socat nor nc -U seems to be available." 1>&2
++		echo "# failed to contact lvmetad"
++		return 1
++	fi
++
++	if test "$use" = nc ; then
++		nc -U "$TESTDIR/lvmetad.socket"
++	else
++		socat "unix-connect:$TESTDIR/lvmetad.socket" -
++	fi | tee -a lvmetad-talk.new
+ }
  
- install_man5: $(MAN5)
+ lvmetad_dump() {
 
 
