@@ -1,183 +1,145 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  2 Mar 2014 20:56:00 +0000 (UTC)
-Subject: master - tests: split raid test
-Message-ID: <20140302205600.D7343611B2@fedorahosted.org>
+Date: Sun,  2 Mar 2014 20:56:02 +0000 (UTC)
+Subject: master - tests: restore usage of reading kmsg
+Message-ID: <20140302205602.ECC4A611B2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=33d69162e4b45e7926d4c0e4a425fedb4246088e
-Commit:        33d69162e4b45e7926d4c0e4a425fedb4246088e
-Parent:        3ff10f5e61df721ea06dc23575932df2d0215c50
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c377f5b3c36cc0514210821b3d0b72c10d2a819
+Commit:        6c377f5b3c36cc0514210821b3d0b72c10d2a819
+Parent:        33d69162e4b45e7926d4c0e4a425fedb4246088e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Mar 2 19:46:17 2014 +0100
+AuthorDate:    Sun Mar 2 21:30:26 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Mar 2 21:27:26 2014 +0100
+CommitterDate: Sun Mar 2 21:30:26 2014 +0100
 
-tests: split raid test
+tests: restore usage of reading kmsg
 
-Use separate test file for raid456
-Change test for broken kernel which has broken raid456 support.
+Basically reverts commit af8580d756d3d4ed56a00d377fd6bfb18d5bed41.
+"test: Use klogctl in the harness instead of reading /var/log/messages."
+
+Problem is - this interface clears dmesg buffer
+(just like call of dmesg -c)
+Thus after running lvm2 test suitedmesg is empty - while all the
+messages are usually logged in the journal/message, it's still not nice to
+clear dmesg buffer.
+
+It's not a pure revert, but switch to use /proc/kmsg directly instead of
+reading /var/log/messages.
 ---
- test/lib/aux.sh                 |    7 ++--
- test/shell/lvconvert-raid.sh    |   40 +-----------------------
- test/shell/lvconvert-raid456.sh |   66 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 71 insertions(+), 42 deletions(-)
+ test/lib/harness.c |   45 +++++++++++++++++++++------------------------
+ 1 files changed, 21 insertions(+), 24 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index eae01ee..67e046d 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -637,7 +637,7 @@ skip_if_mirror_recovery_broken() {
-         if test `uname -r` = 3.3.4-5.fc17.x86_64; then skip; fi
+diff --git a/test/lib/harness.c b/test/lib/harness.c
+index ded86f0..5258c04 100644
+--- a/test/lib/harness.c
++++ b/test/lib/harness.c
+@@ -25,7 +25,6 @@
+ #include <sys/time.h>
+ #include <sys/types.h>
+ #include <sys/wait.h>
+-#include <sys/klog.h>
+ #include <time.h>
+ #include <unistd.h>
+ #include <stdint.h>
+@@ -263,23 +262,6 @@ static void drain(int fd, size_t size_limit)
+ 	}
  }
  
--skip_if_raid456_replace_broken() {
-+raid456_replace_works() {
- # The way kmem_cache aliasing is done in the kernel is broken.
- # It causes RAID 4/5/6 tests to fail.
- #
-@@ -666,8 +666,9 @@ skip_if_raid456_replace_broken() {
- # old instance to be preserved and causes a colision (and thus failure) in
- # kmem_cache_create().  I see this regularly in testing the following
- # kernels:
--        if test `uname -r` = 3.10.11-200.fc19.i686; then skip; fi
--        if test `uname -r` = 3.10.11-200.fc19.x86_64; then skip; fi
-+	case $(uname -r) in
-+	  3.10.11-200.fc19.i686|3.10.11-200.fc19.x86_64) return 1 ;;
-+	esac
- }
+-#define SYSLOG_ACTION_READ_CLEAR     4
+-#define SYSLOG_ACTION_CLEAR          5
+-
+-static void clear_dmesg(void)
+-{
+-	klogctl(SYSLOG_ACTION_CLEAR, 0, 0);
+-}
+-
+-static void drain_dmesg(void)
+-{
+-	char buf[16392 + 1];
+-	size_t sz = klogctl(SYSLOG_ACTION_READ_CLEAR, buf, sizeof(buf) - 1);
+-	buf[sz] = 0;
+-	_append_buf(buf, sz);
+-}
+-
+-
+ static const char *duration(time_t start, const struct rusage *usage)
+ {
+ 	static char buf[100];
+@@ -365,7 +347,6 @@ static void run(int i, char *f) {
+ 	struct rusage usage;
+ 	char flavour[512], script[512];
  
- udev_wait() {
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index a2a7792..2c6a41a 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -24,8 +24,7 @@ get_image_pvs() {
- ########################################################
- aux target_at_least dm-raid 1 2 0 || skip
+-	clear_dmesg();
+ 	pid = fork();
+ 	if (pid < 0) {
+ 		perror("Fork failed.");
+@@ -404,11 +385,13 @@ static void run(int i, char *f) {
+ 		int no_write = 0;
+ 		int collect_debug = 0;
+ 		int fd_debuglog = -1;
++		int fd_kmsg = -1;
++		FILE *kmsg;
  
--# 9 PVs needed for RAID10 testing (3-stripes/2-mirror - replacing 3 devs)
--aux prepare_pvs 9 80
-+aux prepare_pvs 5
- vgcreate -s 256k $vg $(cat DEVICES)
+ 		//close(fds[1]);
+ 		testdirdebug[0] = '\0'; /* Capture RUNTESTDIR */
+ 		snprintf(buf, sizeof(buf), "%s ...", f);
+-		printf("Running %-60s ", buf);
++		printf("Running %-60s%c", buf, verbose ? '\n' : ' ');
+ 		fflush(stdout);
+ 		snprintf(outpath, sizeof(outpath), "%s/%s.txt", results, f);
+ 		while ((c = strchr(c, '/')))
+@@ -416,6 +399,18 @@ static void run(int i, char *f) {
+ 		if (!(outfile = fopen(outpath, "w")))
+ 			perror("fopen");
  
- ###########################################
-@@ -203,41 +202,4 @@ for i in {1..3}; do
- 	lvremove -ff $vg
- done
++		/* Mix-in kernel log message */
++		if (!(kmsg = fopen("/proc/kmsg", "r")))
++			perror("fopen kmsg");
++		else if ((fd_kmsg = fileno(kmsg)) >= 0) {
++			if ((fcntl(fd_kmsg, F_SETFL, O_NONBLOCK ) == -1)) {
++				perror("fcntl kmsg");
++				fclose(kmsg);
++				kmsg = NULL;
++			} else if (fseek(kmsg, 0L, SEEK_END))
++				perror("fseek kmsg");
++		}
++
+ 		while ((w = wait4(pid, &st, WNOHANG, &usage)) == 0) {
+ 			if ((fullbuffer && fullbuffer++ == 8000) ||
+ 			    (no_write > 180 * 2)) /* a 3 minute timeout */
+@@ -459,14 +454,16 @@ static void run(int i, char *f) {
+ 			}
+ 			drain(fds[0], INT32_MAX);
+ 			no_write = 0;
+-			drain_dmesg();
++			if (fd_kmsg >= 0)
++				drain(fd_kmsg, INT32_MAX);
+ 		}
+ 		if (w != pid) {
+ 			perror("waitpid");
+ 			exit(206);
+ 		}
+ 		drain(fds[0], INT32_MAX);
+-		drain_dmesg();
++		if (fd_kmsg >= 0)
++			drain(fd_kmsg, INT32_MAX);
+ 		if (die == 2)
+ 			interrupted(i, f);
+ 		else if (runaway) {
+@@ -487,8 +484,8 @@ static void run(int i, char *f) {
+ 		} else
+ 			failed(i, f, st);
  
--aux skip_if_raid456_replace_broken
--
--# RAID 4/5/6 (can replace up to 'parity' devices)
--for i in 4 5 6; do
--	lvcreate --type raid$i -i 3 -l 3 -n $lv1 $vg
--
--	if [ $i -eq 6 ]; then
--		dev_cnt=5
--		limit=2
--	else
--		dev_cnt=4
--		limit=1
--	fi
--
--	for j in {1..3}; do
--	for o in $(seq 0 $i); do
--		replace=""
--
--		devices=( $(get_image_pvs $vg $lv1) )
--
--		for k in $(seq $j); do
--			index=$((($k + $o) % $dev_cnt))
--			replace="$replace --replace ${devices[$index]}"
--		done
--		aux wait_for_sync $vg $lv1
--
--		if [ $j -gt $limit ]; then
--			not lvconvert $replace $vg/$lv1
--		else
--			lvconvert $replace $vg/$lv1
--		fi
--	done
--	done
--
--	lvremove -ff $vg
--done
--
- vgremove -ff $vg
-diff --git a/test/shell/lvconvert-raid456.sh b/test/shell/lvconvert-raid456.sh
-new file mode 100644
-index 0000000..bf9a823
---- /dev/null
-+++ b/test/shell/lvconvert-raid456.sh
-@@ -0,0 +1,66 @@
-+#!/bin/sh
-+# Copyright (C) 2013-2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+get_image_pvs() {
-+	local d
-+	local images
-+
-+	images=`dmsetup ls | grep ${1}-${2}_.image_.* | cut -f1 | sed -e s:-:/:`
-+	lvs --noheadings -a -o devices $images | sed s/\(.\)//
-+}
-+
-+########################################################
-+# MAIN
-+########################################################
-+aux raid456_replace_works || skip
-+aux target_at_least dm-raid 1 2 0 || skip
-+
-+aux prepare_pvs 6
-+vgcreate -s 256k $vg $(cat DEVICES)
-+
-+# RAID 4/5/6 (can replace up to 'parity' devices)
-+for i in 4 5 6; do
-+	lvcreate --type raid$i -i 3 -l 3 -n $lv1 $vg
-+
-+	if [ $i -eq 6 ]; then
-+		dev_cnt=5
-+		limit=2
-+	else
-+		dev_cnt=4
-+		limit=1
-+	fi
-+
-+	for j in {1..3}; do
-+	for o in $(seq 0 $i); do
-+		replace=""
-+
-+		devices=( $(get_image_pvs $vg $lv1) )
-+
-+		for k in $(seq $j); do
-+			index=$((($k + $o) % $dev_cnt))
-+			replace="$replace --replace ${devices[$index]}"
-+		done
-+		aux wait_for_sync $vg $lv1
-+
-+		if [ $j -gt $limit ]; then
-+			not lvconvert $replace $vg/$lv1
-+		else
-+			lvconvert $replace $vg/$lv1
-+		fi
-+	done
-+	done
-+
-+	lvremove -ff $vg
-+done
-+
-+vgremove -ff $vg
+-		if (fd_debuglog >= 0)
+-			close(fd_debuglog);
++		if (kmsg)
++			fclose(kmsg);
+ 		if (outfile)
+ 			fclose(outfile);
+ 		if (fullbuffer)
 
 
