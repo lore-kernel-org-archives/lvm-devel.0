@@ -1,132 +1,210 @@
-From: Paul B. Henson <henson@acm.org>
-Date: Tue, 11 Mar 2014 16:54:37 -0700
-Subject: cache support
-In-Reply-To: <0C83CD55-18B6-4407-9A42-72F9D6C5683D@redhat.com>
-References: <096101cf2214$d241ed60$76c5c820$@acm.org>	<52F205CA.1090807@redhat.com>	<0a3901cf22af$ae01d2d0$0a057870$@acm.org>	<52F2AD44.8030006@redhat.com>	<0a7b01cf22db$da3f56c0$8ebe0440$@acm.org>	<A2CE00CC-6439-4A2E-A694-8E3B2656867B@redhat.com>	<0fff01cf276c$d059c8d0$710d5a70$@acm.org>
-	<0C83CD55-18B6-4407-9A42-72F9D6C5683D@redhat.com>
-Message-ID: <0b4501cf3d85$44b76c90$ce2645b0$@acm.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  3 Mar 2014 18:32:55 +0000 (UTC)
+Subject: master - tests: speedup kmsg processing
+Message-ID: <20140303183255.D11866075C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> From: Brassow Jonathan
-> Sent: Wednesday, February 12, 2014 9:40 AM
->
-> I'll let others weigh-in on the overhead of introducing thin-provisioning.
-> However, my experience is that the overhead is very small and the benefit
-is
-> very large.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=719261a33a34ff177767324089b6daa128c5c2f0
+Commit:        719261a33a34ff177767324089b6daa128c5c2f0
+Parent:        52007a9191e67b9b6d83fcf8332aceaa4e0f5e48
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Mar 3 19:08:22 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Mar 3 19:30:47 2014 +0100
 
-So I think I'd like to try out your recommendation of using thin
-provisioning to allow dm-cache to cache all of my lv's, and was wondering if
-you guys had any rough idea on when you might release a version of  lvm2
-with support for cache devices? The box in question is pseudo-production,
-and while I think I'm willing to risk a freshly released new feature, I
-don't think I want to go quite so far as to run git head on it ;).
+tests: speedup kmsg processing
 
-The intention is to allow insertion of a cache device live with no
-disruption in service, right? So theoretically I could get the thin
-provisioned pool all set up now and start using it, and then when the
-version with cache support is released, transparently slip in the cache
-device?
+Since there could be multiple readers of kmsg (test & journald) it needs
+to be fast, to capture things like sysrq trace.
 
-Is there a recommended kernel version for thin provisioning? Right now I'm
-running 3.12, but I thought I saw a bug recently fly by involving thinpool
-metadata corruption that's going to be fixed in 3.14, would it be better to
-wait for a stable release of 3.14?
+But to capture whole output it would need to prioritize reading of kmsg,
+thus we would first log kernel messages and followed by command output.
 
->From reading mailing list archives, if your metadata volume runs out of
-space, your entire thin pool is corrupted? And historically you were unable
-to resize or extend your metadata volume? I see a number of mentions of that
-ability coming soon, but didn't see anything actually announcing it was
-available. At this point, is the size of the metadata volume still fixed as
-of initial creation? 
+As a trade-off always log command output first and use large drain
+buffer so is captures most of messages, but occasionaly miss some
+lines.
+---
+ test/lib/harness.c |   92 +++++++++++++++++++++++++++-------------------------
+ 1 files changed, 48 insertions(+), 44 deletions(-)
 
-The intended size of my thinpool is going to be about 3.64TB:
-
-/dev/md3   vg_vz lvm2 a--    3.64t  3.61t
-
-Based on the recommendation below of 1/1000 of that for metadata, that would
-be about 3.75GB. This pool is going to have *lots* of snapshots, there are
-going to be a set of filesystems for a template vm, each of which will be
-snapshot'd/cloned when a new vm is created, and then all of those will have
-snapshots for backups. Given that, would 3.75GB for the metadata volume be
-sufficient, or would it be better to crank it up a little?
-
-Given /dev/md3 is my "slow" device (raid10 of 4 x 2TB), and /dev/md2 is my
-"fast" device (raid1 of 2 x 256G SSD), plugging into your example gives me:
-
-# vgcreate vg_vz /dev/md3 /dev/md2
-# lvcreate -l 953800 -n thinpool vg_vz /dev/md3
-# lvcreate -L 3.75G -n thinpool_metadata /dev/md2
-# lvconvert --thinpool vg_vz/thinpool --poolmetadata thinpool_metadata
-
-At this point, I would have a thinpool ready to use, and can work with it
-until a version of lvm2 is released with cache support, at which point I
-could run:
-
-# lvcreate --type cache_pool -l 100%PVS  -n cachepool vg /dev/md2
-# lvconvert --type cache --cachepool vg/cachepool vg/thinpool
-
-To transparently add the cache device to my existing thinpool?
-
-Thanks much.
-
-> I imagine the steps being something like this:
-> # Create your VG with slow and fast block devices
-> 1~> vgcreate vg /dev/slow_sd[abcdef]1 /dev/fast_sd[abcde]1
-> 
-> # Create data portion of your thin pool using all your slow devices
-> 2~> lvcreate -l <all slow dev extents> -n thinpool vg
-/dev/slow_sd[abcdef]1
-> 
-> # Create the metadata portion of your thin pool
-> #  use fast devs to keep overhead down
-> #  use raid1 to provide redunancy
-> 3~> lvcreate --type raid1 -l <1/1000th size of data LV> -n
-thinpool_metadata
-> vg /dev/fast_sd[ab]1
-> 
-> # Create cache pool LV that will be used to cache the data portion of the
-thin
-> pool
-> #  You can use 'writethrough' mode to speed up reads, but still have
-writes
-> hit the slow dev
-> #  or you can create the data&metadata areas of the cachepool separate
-> using raid and then
-> #  convert those into a cache pool... lots of options here to improve
-> redundancy.  I'm working
-> #  on man page changes/additions to make this clear and simple.  For now,
-> we'll just create
-> #  a cachepool simple LV.
-> 4~> lvcreate --type cache_pool -L <desired cache size> -n cachepool vg
-> /dev/fast_sd[abcdef]1
-> 
-> # Use the cache pool to create a cached LV of the thin pool data device
-> 5~> lvconvert --type cache --cachepool vg/cachepool vg/thinpool
-> 
-> # The data portion of your 'thinpool' LV is now cached.
-> # Make the thinpool using the cached data LV 'thinpool' and the fast
-> metadata LV 'thinpool_metadata'
-> 6~> lvconvert --thinpool vg/thinpool --poolmetadata thinpool_metadata
-> 
-> You now have a very fast thin pool from which you will create thin volumes
-> and snapshots.  Everything is cached with low overhead.
-> 
-> 7~> lvcreate -T vg/thinpool -n my_lv1 -V 200G
-> 8~> lvcreate -T vg/thinpool -n my_lv2 -V 200G
-> ...
-> 
->  brassow
-> 
-> N.B.  Note that you must specify '--with-cache=internal' when configuring
-> LVM - cache is off by default until it is no longer considered
-experimental.
-> You should be using dm-cache kernel module version 1.3.0+.  Support for
-> 'lvconvert --type cache[-pool]' was only just added this morning.
-
+diff --git a/test/lib/harness.c b/test/lib/harness.c
+index 5258c04..a9fff9f 100644
+--- a/test/lib/harness.c
++++ b/test/lib/harness.c
+@@ -180,7 +180,7 @@ static void _append_buf(const char *buf, size_t len)
+ 				kill(-pid, SIGINT);
+ 			return;
+ 		}
+-		readbuf_sz = readbuf_sz ? 2 * readbuf_sz : 16384;
++		readbuf_sz = 2 * (readbuf_used + len + readbuf_sz);
+ 		readbuf = realloc(readbuf, readbuf_sz);
+ 	}
+ 
+@@ -226,19 +226,17 @@ static const char *_append_with_stamp(const char *buf, int stamp)
+ 	return bb;
+ }
+ 
+-static void drain(int fd, size_t size_limit)
++static int drain(int fd)
+ {
+-	char buf[4096 + 1];
++	char buf[2 * 1024 * 1024 + 1]; /* try to capture large sysrq trace */
+ 	const char *bp;
+ 	int stamp = 0;
+-	int sz, total_sz = 0;
++	int sz;
+ 
+ 	static int stdout_last = -1, stdout_counter = 0;
+ 	static int outfile_last = -1, outfile_counter = 0;
+ 
+-	while ((sz = read(fd, buf, sizeof(buf) - 1)) > 0) {
+-		if (fullbuffer)
+-			continue;
++	if ((sz = read(fd, buf, sizeof(buf) - 1)) > 0) {
+ 		buf[sz] = '\0';
+ 		bp = (verbose < 2) ? buf : _append_with_stamp(buf, stamp);
+ 		if (sz > (bp - buf)) {
+@@ -253,13 +251,32 @@ static void drain(int fd, size_t size_limit)
+ 			trickle(stdout, &stdout_last, &stdout_counter);
+ 		if (outfile)
+ 			trickle(outfile, &outfile_last, &outfile_counter);
+-
+-		total_sz += sz;
+-		if (total_sz > size_limit) {
+-			printf("\n...Trimmed output...\n");
+-			break;
+-		}
+ 	}
++
++	return sz;
++}
++
++static int drain_fds(int fd1, int fd2, long timeout)
++{
++	int ret;
++	fd_set set;
++	struct timeval selectwait = { .tv_usec = timeout };
++
++	FD_ZERO(&set);
++	FD_SET(fd1, &set);
++	if (fd2 >= 0)
++		FD_SET(fd2, &set);
++
++	if ((ret = select(fd2 > fd1 ? fd2 + 1 : fd1 + 1, &set, NULL, NULL, &selectwait)) <= 0)
++		return ret;
++
++	if (FD_ISSET(fd1, &set) && drain(fd1) > 0)
++		return fd1 + 1;
++
++	if (fd2 >= 0 && FD_ISSET(fd2, &set) && drain(fd2) > 0)
++		return fd2 + 1;
++
++	return -1;
+ }
+ 
+ static const char *duration(time_t start, const struct rusage *usage)
+@@ -378,15 +395,13 @@ static void run(int i, char *f) {
+ 		char buf[128];
+ 		char outpath[PATH_MAX];
+ 		char *c = outpath + strlen(results) + 1;
+-		struct timeval selectwait;
+ 		struct stat statbuf;
+-		fd_set set;
+ 		int runaway = 0;
+ 		int no_write = 0;
+ 		int collect_debug = 0;
+ 		int fd_debuglog = -1;
+-		int fd_kmsg = -1;
+-		FILE *kmsg;
++		int fd_kmsg;
++		int ret;
+ 
+ 		//close(fds[1]);
+ 		testdirdebug[0] = '\0'; /* Capture RUNTESTDIR */
+@@ -400,16 +415,10 @@ static void run(int i, char *f) {
+ 			perror("fopen");
+ 
+ 		/* Mix-in kernel log message */
+-		if (!(kmsg = fopen("/proc/kmsg", "r")))
+-			perror("fopen kmsg");
+-		else if ((fd_kmsg = fileno(kmsg)) >= 0) {
+-			if ((fcntl(fd_kmsg, F_SETFL, O_NONBLOCK ) == -1)) {
+-				perror("fcntl kmsg");
+-				fclose(kmsg);
+-				kmsg = NULL;
+-			} else if (fseek(kmsg, 0L, SEEK_END))
+-				perror("fseek kmsg");
+-		}
++		if ((fd_kmsg = open("/proc/kmsg", O_RDONLY | O_NONBLOCK)) < 0)
++			perror("open kmsg");
++		else if (lseek(fd_kmsg, 0L, SEEK_END) == (off_t) -1)
++			perror("lseek kmsg");
+ 
+ 		while ((w = wait4(pid, &st, WNOHANG, &usage)) == 0) {
+ 			if ((fullbuffer && fullbuffer++ == 8000) ||
+@@ -435,11 +444,7 @@ static void run(int i, char *f) {
+ 				break;
+ 			}
+ 
+-			FD_ZERO(&set);
+-			FD_SET(fds[0], &set);
+-			selectwait.tv_sec = 0;
+-			selectwait.tv_usec = 500000; /* timeout 0.5s */
+-			if (select(fds[0] + 1, &set, NULL, NULL, &selectwait) <= 0) {
++			if ((ret = drain_fds(fds[0], fd_kmsg, 500000)) <= 0) {
+ 				/* Still checking debug log size if it's not growing too much */
+ 				if (!unlimited && testdirdebug[0] &&
+ 				    (stat(testdirdebug, &statbuf) == 0) &&
+@@ -451,26 +456,25 @@ static void run(int i, char *f) {
+ 
+ 				no_write++;
+ 				continue;
+-			}
+-			drain(fds[0], INT32_MAX);
+-			no_write = 0;
+-			if (fd_kmsg >= 0)
+-				drain(fd_kmsg, INT32_MAX);
++			} else if (ret == (fds[0] + 1))
++				no_write = 0;
+ 		}
+ 		if (w != pid) {
+ 			perror("waitpid");
+ 			exit(206);
+ 		}
+-		drain(fds[0], INT32_MAX);
+-		if (fd_kmsg >= 0)
+-			drain(fd_kmsg, INT32_MAX);
++
++		while (!fullbuffer && (drain_fds(fds[0], fd_kmsg, 0) > 0))
++			/* read out what was left */;
++
+ 		if (die == 2)
+ 			interrupted(i, f);
+ 		else if (runaway) {
+ 			if (collect_debug &&
+ 			    (fd_debuglog = open(testdirdebug, O_RDONLY)) != -1) {
+-				/* Normally read only first 4MB */
+-				drain(fd_debuglog, unlimited ? INT32_MAX : 4 * 1024 * 1024);
++				runaway = unlimited ? INT32_MAX : 4 * 1024 * 1024;
++				while (!fullbuffer && runaway > 0 && (ret = drain(fd_debuglog)) > 0)
++					runaway -= ret;
+ 				close(fd_debuglog);
+ 			}
+ 			timeout(i, f);
+@@ -484,8 +488,8 @@ static void run(int i, char *f) {
+ 		} else
+ 			failed(i, f, st);
+ 
+-		if (kmsg)
+-			fclose(kmsg);
++		if (fd_kmsg >= 0)
++			close(fd_kmsg);
+ 		if (outfile)
+ 			fclose(outfile);
+ 		if (fullbuffer)
 
 
