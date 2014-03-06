@@ -1,105 +1,81 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  6 Mar 2014 11:21:03 +0000 (UTC)
-Subject: master - config: runtime default for config/profile_dir
-Message-ID: <20140306112103.ED7D66114B@fedorahosted.org>
+Date: Thu,  6 Mar 2014 11:21:06 +0000 (UTC)
+Subject: master - config: runtime default for activation/mirror_image_fault_policy
+Message-ID: <20140306112106.10F2E6114B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=11039589d36b54f8ddb7fe2b0d59dd2610a7e2f4
-Commit:        11039589d36b54f8ddb7fe2b0d59dd2610a7e2f4
-Parent:        0da1e5d9f8bdb2e4d385faf7c0f4604e63100acc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eecf191d3e95526c6638c668a20472c9c3620967
+Commit:        eecf191d3e95526c6638c668a20472c9c3620967
+Parent:        11039589d36b54f8ddb7fe2b0d59dd2610a7e2f4
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Mar 3 13:30:13 2014 +0100
+AuthorDate:    Mon Mar 3 13:37:35 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Mar 6 11:16:04 2014 +0100
+CommitterDate: Thu Mar 6 11:16:23 2014 +0100
 
-config: runtime default for config/profile_dir
+config: runtime default for activation/mirror_image_fault_policy
 
-The config/profile_dir default value takes LVM_SYSTEM_DIR into consideraton.
+The activation/mirror_image_fault_policy default value copies the
+value (or default one) used for activation/mirror_device_fault_policy.
 ---
- lib/commands/toolcontext.c   |   12 ++----------
- lib/config/config.c          |   13 +++++++++++++
+ lib/config/config.c          |    5 +++++
  lib/config/config.h          |    1 +
  lib/config/config_settings.h |    2 +-
- 4 files changed, 17 insertions(+), 11 deletions(-)
+ tools/lvconvert.c            |    2 --
+ 4 files changed, 7 insertions(+), 3 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index ce4349d..7282592 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -613,7 +613,6 @@ static int _init_tag_configs(struct cmd_context *cmd)
- 
- static int _init_profiles(struct cmd_context *cmd)
- {
--	static char default_dir[PATH_MAX];
- 	const char *dir;
- 	struct profile_params *pp;
- 
-@@ -622,15 +621,8 @@ static int _init_profiles(struct cmd_context *cmd)
- 		return 0;
- 	}
- 
--	if (!(dir = find_config_tree_str(cmd, config_profile_dir_CFG, NULL))) {
--		if (dm_snprintf(default_dir, sizeof(default_dir), "%s/%s",
--				cmd->system_dir, DEFAULT_PROFILE_SUBDIR) == -1) {
--			log_error("Couldn't create default profile path '%s/%s'.",
--				  cmd->system_dir, DEFAULT_PROFILE_SUBDIR);
--			return 0;
--		}
--		dir = default_dir;
--	}
-+	if (!(dir = find_config_tree_str(cmd, config_profile_dir_CFG, NULL)))
-+		return_0;
- 
- 	pp->dir = dm_pool_strdup(cmd->libmem, dir);
- 	dm_list_init(&pp->profiles_to_load);
 diff --git a/lib/config/config.c b/lib/config/config.c
-index 75b90fb..f3e105d 100644
+index f3e105d..a7cb5b2 100644
 --- a/lib/config/config.c
 +++ b/lib/config/config.c
-@@ -1674,3 +1674,16 @@ const char *get_default_backup_archive_dir_CFG(struct cmd_context *cmd, struct p
+@@ -1687,3 +1687,8 @@ const char *get_default_config_profile_dir_CFG(struct cmd_context *cmd, struct p
  
  	return dm_pool_strdup(cmd->mem, buf);
  }
 +
-+const char *get_default_config_profile_dir_CFG(struct cmd_context *cmd, struct profile *profile)
++const char *get_default_activation_mirror_image_fault_policy_CFG(struct cmd_context *cmd, struct profile *profile)
 +{
-+	static char buf[PATH_MAX];
-+
-+	if (dm_snprintf(buf, sizeof(buf), "%s/%s", cmd->system_dir, DEFAULT_PROFILE_SUBDIR) == -1) {
-+		log_error("Couldn't create default profile path '%s/%s'.",
-+			  cmd->system_dir, DEFAULT_PROFILE_SUBDIR);
-+		return NULL;
-+	}
-+
-+	return dm_pool_strdup(cmd->mem, buf);
++	return find_config_tree_str(cmd, activation_mirror_device_fault_policy_CFG, profile);
 +}
 diff --git a/lib/config/config.h b/lib/config/config.h
-index a042c60..f380e26 100644
+index f380e26..4d762fe 100644
 --- a/lib/config/config.h
 +++ b/lib/config/config.h
-@@ -234,5 +234,6 @@ const char *get_default_devices_cache_dir_CFG(struct cmd_context *cmd, struct pr
- const char *get_default_devices_cache_CFG(struct cmd_context *cmd, struct profile *profile);
+@@ -235,5 +235,6 @@ const char *get_default_devices_cache_CFG(struct cmd_context *cmd, struct profil
  const char *get_default_backup_backup_dir_CFG(struct cmd_context *cmd, struct profile *profile);
  const char *get_default_backup_archive_dir_CFG(struct cmd_context *cmd, struct profile *profile);
-+const char *get_default_config_profile_dir_CFG(struct cmd_context *cmd, struct profile *profile);
+ const char *get_default_config_profile_dir_CFG(struct cmd_context *cmd, struct profile *profile);
++const char *get_default_activation_mirror_image_fault_policy_CFG(struct cmd_context *cmd, struct profile *profile);
  
  #endif
 diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index d6ccf0e..081d612 100644
+index 081d612..04f2498 100644
 --- a/lib/config/config_settings.h
 +++ b/lib/config/config_settings.h
-@@ -83,7 +83,7 @@ cfg_section(tags_CFG_SECTION, "tags", root_CFG_SECTION, 0, vsn(1, 0, 18), NULL)
+@@ -202,7 +202,7 @@ cfg(activation_readahead_CFG, "readahead", activation_CFG_SECTION, 0, CFG_TYPE_S
+ cfg(activation_raid_fault_policy_CFG, "raid_fault_policy", activation_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_RAID_FAULT_POLICY, vsn(2, 2, 89), NULL)
+ cfg(activation_mirror_device_fault_policy_CFG, "mirror_device_fault_policy", activation_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_MIRROR_DEVICE_FAULT_POLICY, vsn(1, 2, 10), NULL)
+ cfg(activation_mirror_log_fault_policy_CFG, "mirror_log_fault_policy", activation_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_MIRROR_LOG_FAULT_POLICY, vsn(1, 2, 18), NULL)
+-cfg(activation_mirror_image_fault_policy_CFG, "mirror_image_fault_policy", activation_CFG_SECTION, 0, CFG_TYPE_STRING, NULL, vsn(2, 2, 57), NULL)
++cfg_runtime(activation_mirror_image_fault_policy_CFG, "mirror_image_fault_policy", activation_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(2, 2, 57), NULL)
+ cfg(activation_snapshot_autoextend_threshold_CFG, "snapshot_autoextend_threshold", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_SNAPSHOT_AUTOEXTEND_THRESHOLD, vsn(2, 2, 75), NULL)
+ cfg(activation_snapshot_autoextend_percent_CFG, "snapshot_autoextend_percent", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_SNAPSHOT_AUTOEXTEND_PERCENT, vsn(2, 2, 75), NULL)
+ cfg(activation_thin_pool_autoextend_threshold_CFG, "thin_pool_autoextend_threshold", activation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_INT, DEFAULT_THIN_POOL_AUTOEXTEND_THRESHOLD, vsn(2, 2, 89), NULL)
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 09a64c7..c8cc506 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1063,8 +1063,6 @@ static void _lvconvert_mirrors_repair_ask(struct cmd_context *cmd,
  
- cfg(config_checks_CFG, "checks", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 99), "Configuration tree check on each LVM command execution.")
- cfg(config_abort_on_errors_CFG, "abort_on_errors", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 0, vsn(2,2,99), "Abort LVM command execution if configuration is invalid.")
--cfg(config_profile_dir_CFG, "profile_dir", config_CFG_SECTION, 0, CFG_TYPE_STRING, 0, vsn(2, 2, 99), "Directory with configuration profiles.")
-+cfg_runtime(config_profile_dir_CFG, "profile_dir", config_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(2, 2, 99), "Directory with configuration profiles.")
- 
- cfg(devices_dir_CFG, "dir", devices_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_DEV_DIR, vsn(1, 0, 0), NULL)
- cfg_array(devices_scan_CFG, "scan", devices_CFG_SECTION, 0, CFG_TYPE_STRING, "#S/dev", vsn(1, 0, 0), NULL)
+ 	if (arg_count(cmd, use_policies_ARG)) {
+ 		leg_policy = find_config_tree_str(cmd, activation_mirror_image_fault_policy_CFG, NULL);
+-		if (!leg_policy)
+-			leg_policy = find_config_tree_str(cmd, activation_mirror_device_fault_policy_CFG, NULL);
+ 		log_policy = find_config_tree_str(cmd, activation_mirror_log_fault_policy_CFG, NULL);
+ 		*replace_mirrors = strcmp(leg_policy, "remove");
+ 		*replace_log = strcmp(log_policy, "remove");
 
 
