@@ -1,71 +1,93 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  6 Mar 2014 16:31:09 +0000 (UTC)
-Subject: master - readline: switch to new-style readline typedef
-Message-ID: <20140306163109.E4DA960DF1@fedorahosted.org>
+Date: Thu,  6 Mar 2014 16:31:12 +0000 (UTC)
+Subject: master - makefiles: use BLKID/UDEV_CFLAGS properly
+Message-ID: <20140306163112.0917660DF1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=216c57eed72fee52e99bb5d014c9de535e631f58
-Commit:        216c57eed72fee52e99bb5d014c9de535e631f58
-Parent:        061acd177f4572f75107bac6a2f7379a55ceec93
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7a595d7388d2dfdb4253ef9425c812491c8e7af5
+Commit:        7a595d7388d2dfdb4253ef9425c812491c8e7af5
+Parent:        216c57eed72fee52e99bb5d014c9de535e631f58
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 6 16:04:19 2014 +0100
+AuthorDate:    Thu Mar 6 16:03:08 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 6 17:28:40 2014 +0100
+CommitterDate: Thu Mar 6 17:30:06 2014 +0100
 
-readline: switch to new-style readline typedef
+makefiles: use BLKID/UDEV_CFLAGS properly
 
-Based on patch:
-https://www.redhat.com/archives/lvm-devel/2014-March/msg00015.html
-
-The CPPFunction typedef (among others) have been deprecated in favour of
-specific prototyped typedefs since readline 4.2 (circa 2001).
-It's been working since because compatibility typedefs have been in
-place until they where removed in the recent readline 6.3 release.
-Switch to the new style to avoid build breakage.
-
-But also add full backward compatibility with define.
-
-Signed-off-by: Gustavo Zacarias <gustavo zacarias com ar>
+blkid.h needs BLKID_CFLAGS
+Do not add UDEV_CFLAGS everywhere and use it only when needed.
 ---
- WHATS_NEW   |    1 +
- tools/lvm.c |    3 ++-
- 2 files changed, 3 insertions(+), 1 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/Makefile.in       |    2 ++
+ lib/device/dev-type.c |    2 +-
+ make.tmpl.in          |    6 ++++--
+ 4 files changed, 8 insertions(+), 3 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index cfdc488..6e04327 100644
+index 6e04327..f72587a 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.106 - 
  ====================================
-+  Use correct rl_completion_func_t typedef for new readline.
++  Use BLKID_CFLAGS when compiling with blkid support.
+   Use correct rl_completion_func_t typedef for new readline.
    Make lvm 'dumpconfig --type default' complete for it to be consumed by lvm.
    Run pvscan --cache via systemd-run in udev if the PV label is detected lost.
-   Fix memleak when lvmetad discovers PV to appear on another device.
-diff --git a/tools/lvm.c b/tools/lvm.c
-index 51e9293..f9ab438 100644
---- a/tools/lvm.c
-+++ b/tools/lvm.c
-@@ -27,6 +27,7 @@ int main(int argc, char **argv)
- #  include <readline/history.h>
- #  ifndef HAVE_RL_COMPLETION_MATCHES
- #    define rl_completion_matches(a, b) completion_matches((char *)a, b)
-+#    define rl_completion_func_t CPPFunction
- #  endif
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 968ad00..c3d4598 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -217,6 +217,8 @@ CFLOW_LIST_TARGET = $(LIB_NAME).cflow
  
- static struct cmdline_context *_cmdline;
-@@ -185,7 +186,7 @@ int lvm_shell(struct cmd_context *cmd, struct cmdline_context *cmdline)
- 	char *input = NULL, *args[MAX_ARGS], **argv;
+ include $(top_builddir)/make.tmpl
  
- 	rl_readline_name = "lvm";
--	rl_attempted_completion_function = (CPPFunction *) _completion;
-+	rl_attempted_completion_function = (rl_completion_func_t *) _completion;
++CFLAGS += $(BLKID_CFLAGS) $(UDEV_CFLAGS)
++
+ $(SUBDIRS): $(LIB_STATIC)
  
- 	_read_history(cmd);
+ DISTCLEAN_TARGETS += misc/configure.h misc/lvm-version.h
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 81100ad..193e9bd 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -22,7 +22,7 @@
+ #include <ctype.h>
  
+ #ifdef BLKID_WIPING_SUPPORT
+-#include <blkid/blkid.h>
++#include <blkid.h>
+ #endif
+ 
+ #include "device-types.h"
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 7d7d701..b1a6b8f 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -46,7 +46,7 @@ LIBS = @LIBS@
+ STATIC_LIBS = $(SELINUX_LIBS) $(UDEV_LIBS) $(BLKID_LIBS)
+ DEFS += @DEFS@
+ # FIXME set this only where it's needed, not globally?
+-CFLAGS += @CFLAGS@ @UDEV_CFLAGS@
++CFLAGS += @CFLAGS@
+ CLDFLAGS += @CLDFLAGS@
+ ELDFLAGS += @ELDFLAGS@
+ LDDEPS += @LDDEPS@
+@@ -57,8 +57,10 @@ DL_LIBS = @DL_LIBS@
+ PTHREAD_LIBS = @PTHREAD_LIBS@
+ READLINE_LIBS = @READLINE_LIBS@
+ SELINUX_LIBS = @SELINUX_LIBS@
++UDEV_CFLAGS = @UDEV_CFLAGS@
+ UDEV_LIBS = @UDEV_LIBS@
+-BLKID_LIBS=@BLKID_LIBS@
++BLKID_CFLAGS = @BLKID_CFLAGS@
++BLKID_LIBS = @BLKID_LIBS@
+ TESTING = @TESTING@
+ 
+ # Setup directory variables
 
 
