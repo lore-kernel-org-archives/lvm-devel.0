@@ -1,57 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 10 Mar 2014 11:27:27 +0000 (UTC)
-Subject: master - tests: skip valgrind testing when assigned to 0
-Message-ID: <20140310112727.BA09660F97@fedorahosted.org>
+Date: Mon, 10 Mar 2014 11:27:29 +0000 (UTC)
+Subject: master - tests: workaround bash bug
+Message-ID: <20140310112729.D1AFB60F97@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4eed2c8142dc50e1d359881027aa38a4e4ef2149
-Commit:        4eed2c8142dc50e1d359881027aa38a4e4ef2149
-Parent:        41e1b12e036ef2079586c4c567eae060c2635062
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6cc75d149710aa0ffbdfe58e4abc92572cbed07a
+Commit:        6cc75d149710aa0ffbdfe58e4abc92572cbed07a
+Parent:        4eed2c8142dc50e1d359881027aa38a4e4ef2149
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 8 22:53:23 2014 +0100
+AuthorDate:    Sat Mar 8 23:07:50 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 10 12:24:10 2014 +0100
 
-tests: skip valgrind testing when assigned to 0
+tests: workaround bash bug
 
-When LVM_VALGRIND_CLVMD/LVMETAD is set to 0  skip testing.
-(Proviosly any value caused to run valgrind testing,
-so now '0' skips testing))
+Seems new bash4.3 is somewhat buggy
+https://bugzilla.redhat.com/show_bug.cgi?id=1074202
+
+Put in cheap workaround for now.
 ---
- test/lib/aux.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ test/lib/check.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index b2d73a6..1426390 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -39,12 +39,12 @@ prepare_clvmd() {
+diff --git a/test/lib/check.sh b/test/lib/check.sh
+index 9c55338..20ad6c3 100644
+--- a/test/lib/check.sh
++++ b/test/lib/check.sh
+@@ -60,13 +60,13 @@ lv_err_list_() {
+ }
  
- #	lvmconf "activation/monitoring = 1"
- 	local run_valgrind=
--	test -z "$LVM_VALGRIND_CLVMD" || run_valgrind="run_valgrind"
-+	test "${LVM_VALGRIND_CLVMD:-0}" -eq 0 || run_valgrind="run_valgrind"
- 	$run_valgrind lib/clvmd -Isinglenode -d 1 -f &
- 	local local_clvmd=$!
- 	sleep .3
- 	# extra sleep for slow valgrind
--	test -z "$LVM_VALGRIND_CLVMD" || sleep 7
-+	test -z "$run_valgrind" || sleep 7
- 	# check that it is really running now
- 	ps $local_clvmd || die
- 	echo $local_clvmd > LOCAL_CLVMD
-@@ -77,7 +77,7 @@ prepare_lvmetad() {
- 	lvmconf "devices/md_component_detection = 0"
+ lv_on_diff_() {
+-	declare -a devs=("${!1}") # pass in shell array
++	declare -a xdevs=("${!1}") # pass in shell array
+ 	local expect=( "${@:4}" ) # make an array starting from 4th args...
+ 	local diff_e
  
- 	local run_valgrind=
--	test -z "$LVM_VALGRIND_LVMETAD" || run_valgrind="run_valgrind"
-+	test "${LVM_VALGRIND_LVMETAD:-0}" -eq 0 || run_valgrind="run_valgrind"
- 
- 	echo "preparing lvmetad..."
- 	$run_valgrind lvmetad -f "$@" -s "$TESTDIR/lvmetad.socket" -l wire,debug &
+ 	# Find diff between 2 shell arrays, print them as stdin files
+ 	printf "%s\n" "${expect[@]}" | sort | uniq >_lv_on_diff1
+-	printf "%s\n" "${devs[@]}" >_lv_on_diff2
++	printf "%s\n" "${xdevs[@]}" >_lv_on_diff2
+ 	diff_e=$(diff _lv_on_diff1 _lv_on_diff2) ||
+ 		die "LV $2/$3 $(lv_err_list_ "^>" "${diff_e}" found)$(lv_err_list_ "^<" "${diff_e}" "not found")."
+ }
 
 
