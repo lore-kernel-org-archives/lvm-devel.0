@@ -1,140 +1,105 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 10 Mar 2014 11:27:02 +0000 (UTC)
-Subject: master - cleanup: clvmd reindent lock_vg code
-Message-ID: <20140310112702.AA2DF60CD3@fedorahosted.org>
+Date: Mon, 10 Mar 2014 11:27:04 +0000 (UTC)
+Subject: master - cleanup: clvmd rewrite send_message
+Message-ID: <20140310112704.B9CFD603FB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cbca815dc44e805d6e4cc138c28af73f1e47432a
-Commit:        cbca815dc44e805d6e4cc138c28af73f1e47432a
-Parent:        7a6c0e2425432cf6aa690709a985f6208f930ef6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d23404081b264c7bfdd0668ee72fd3aa692c935
+Commit:        3d23404081b264c7bfdd0668ee72fd3aa692c935
+Parent:        cbca815dc44e805d6e4cc138c28af73f1e47432a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 7 20:24:46 2014 +0100
+AuthorDate:    Sat Mar 8 23:14:46 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 10 12:24:09 2014 +0100
 
-cleanup: clvmd reindent lock_vg code
+cleanup: clvmd rewrite send_message
 
-Code had wrong indent level, improve readability.
+Improve readability of code and make it clear what it tries
+to achieve.
 ---
- daemons/clvmd/clvmd-command.c |  102 +++++++++++++++++++---------------------
- 1 files changed, 48 insertions(+), 54 deletions(-)
+ daemons/clvmd/clvmd.c |   57 +++++++++++++++++-------------------------------
+ 1 files changed, 20 insertions(+), 37 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
-index 5d93f38..1ed1513 100644
---- a/daemons/clvmd/clvmd-command.c
-+++ b/daemons/clvmd/clvmd-command.c
-@@ -188,60 +188,54 @@ int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
- 
- static int lock_vg(struct local_client *client)
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index e8375a8..c7ad2da 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -2024,8 +2024,8 @@ static void send_version_message(void)
+ static int send_message(void *buf, int msglen, const char *csid, int fd,
+ 			const char *errtext)
  {
--    struct dm_hash_table *lock_hash;
--    struct clvm_header *header =
--	(struct clvm_header *) client->bits.localsock.cmd;
--    unsigned char lock_cmd;
--    int lock_mode;
--    char *args = header->node + strlen(header->node) + 1;
--    int lkid;
--    int status = 0;
--    char *lockname;
+-	int len = 0;
+-	int saved_errno = 0;
++	int len;
++	int ptr;
+ 	struct timespec delay;
+ 	struct timespec remtime;
+ 
+@@ -2035,43 +2035,26 @@ static int send_message(void *buf, int msglen, const char *csid, int fd,
+ 	if (csid == NULL || !ISLOCAL_CSID(csid)) {
+ 		hton_clvm((struct clvm_header *) buf);
+ 		return clops->cluster_send_message(buf, msglen, csid, errtext);
+-	} else {
+-		int ptr = 0;
 -
--    /* Keep a track of VG locks in our own hash table. In current
--       practice there should only ever be more than two VGs locked
--       if a user tries to merge lots of them at once */
--    if (client->bits.localsock.private) {
--	lock_hash = (struct dm_hash_table *)client->bits.localsock.private;
--    }
--    else {
--	lock_hash = dm_hash_create(3);
--	if (!lock_hash)
--	    return ENOMEM;
--	client->bits.localsock.private = (void *)lock_hash;
--    }
+-		/* Make sure it all goes */
+-		do {
+-			if (retry_cnt > MAX_RETRIES)
+-			{
+-				errno = saved_errno;
+-				log_error("%s", errtext);
+-				errno = saved_errno;
+-				break;
+-			}
 -
--    lock_cmd = args[0] & (LCK_NONBLOCK | LCK_HOLD | LCK_SCOPE_MASK | LCK_TYPE_MASK);
--    lock_mode = ((int)lock_cmd & LCK_TYPE_MASK);
--    /* lock_flags = args[1]; */
--    lockname = &args[2];
--    DEBUGLOG("doing PRE command LOCK_VG '%s' at %x (client=%p)\n", lockname, lock_cmd, client);
+-			len = write(fd, (char*)buf + ptr, msglen - ptr);
 -
--    if (lock_mode == LCK_UNLOCK) {
+-			if (len <= 0) {
+-				if (errno == EINTR)
+-					continue;
+-				if (errno == EAGAIN ||
+-				    errno == EIO ||
+-				    errno == ENOSPC) {
+-					saved_errno = errno;
+-					retry_cnt++;
 -
--	lkid = (int)(long)dm_hash_lookup(lock_hash, lockname);
--	if (lkid == 0)
--	    return EINVAL;
--
--	status = sync_unlock(lockname, lkid);
--	if (status)
--	    status = errno;
--	else
--	    dm_hash_remove(lock_hash, lockname);
--    }
--    else {
--	/* Read locks need to be PR; other modes get passed through */
--	if (lock_mode == LCK_READ)
--	    lock_mode = LCK_PREAD;
--	status = sync_lock(lockname, lock_mode, (lock_cmd & LCK_NONBLOCK) ? LCKF_NOQUEUE : 0, &lkid);
--	if (status)
--	    status = errno;
--	else
--	    if (!dm_hash_insert(lock_hash, lockname, (void *)(long)lkid))
--                    return ENOMEM;
--    }
--
--    return status;
-+	struct dm_hash_table *lock_hash;
-+	struct clvm_header *header =
-+		(struct clvm_header *) client->bits.localsock.cmd;
-+	unsigned char lock_cmd;
-+	int lock_mode;
-+	char *args = header->node + strlen(header->node) + 1;
-+	int lkid;
-+	int status;
-+	char *lockname;
-+
-+	/*
-+	 * Keep a track of VG locks in our own hash table. In current
-+	 * practice there should only ever be more than two VGs locked
-+	 * if a user tries to merge lots of them at once
-+	 */
-+	if (!client->bits.localsock.private) {
-+		if (!(lock_hash = dm_hash_create(3)))
-+			return ENOMEM;
-+		client->bits.localsock.private = (void *) lock_hash;
-+	} else
-+		lock_hash = (struct dm_hash_table *) client->bits.localsock.private;
-+
-+	lock_cmd = args[0] & (LCK_NONBLOCK | LCK_HOLD | LCK_SCOPE_MASK | LCK_TYPE_MASK);
-+	lock_mode = ((int) lock_cmd & LCK_TYPE_MASK);
-+	/* lock_flags = args[1]; */
-+	lockname = &args[2];
-+	DEBUGLOG("doing PRE command LOCK_VG '%s' at %x (client=%p)\n", lockname, lock_cmd, client);
-+
-+	if (lock_mode == LCK_UNLOCK) {
-+		if (!(lkid = (int) (long) dm_hash_lookup(lock_hash, lockname)))
-+			return EINVAL;
-+
-+		if ((status = sync_unlock(lockname, lkid)))
-+			status = errno;
-+		else
-+			dm_hash_remove(lock_hash, lockname);
-+	} else {
-+		/* Read locks need to be PR; other modes get passed through */
-+		if (lock_mode == LCK_READ)
-+			lock_mode = LCK_PREAD;
-+
-+		if ((status = sync_lock(lockname, lock_mode, (lock_cmd & LCK_NONBLOCK) ? LCKF_NOQUEUE : 0, &lkid)))
-+			status = errno;
-+		else if (!dm_hash_insert(lock_hash, lockname, (void *) (long) lkid))
-+			return ENOMEM;
+-					delay.tv_sec = 0;
+-					delay.tv_nsec = 100000;
+-					remtime.tv_sec = 0;
+-					remtime.tv_nsec = 0;
+-					(void) nanosleep (&delay, &remtime);
 +	}
-+
-+	return status;
+ 
+-					continue;
+-				}
+-				log_error("%s", errtext);
+-				break;
++	/* Make sure it all goes */
++	for (ptr = 0; ptr < msglen;) {
++		if ((len = write(fd, (char*)buf + ptr, msglen - ptr)) <= 0) {
++			if (errno == EINTR)
++				continue;
++			if ((errno == EAGAIN || errno == EIO || errno == ENOSPC) &&
++			    ++retry_cnt < MAX_RETRIES) {
++				delay.tv_sec = 0;
++				delay.tv_nsec = 100000;
++				remtime.tv_sec = 0;
++				remtime.tv_nsec = 0;
++				(void) nanosleep (&delay, &remtime);
++				continue;
+ 			}
+-			ptr += len;
+-		} while (ptr < msglen);
++			log_error("%s", errtext);
++			break;
++		}
++		ptr += len;
+ 	}
+ 	return len;
  }
- 
- 
 
 
