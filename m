@@ -1,70 +1,75 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  4 Mar 2014 15:27:51 +0000 (UTC)
-Subject: master - tests: check readability of /dev/kmsg
-Message-ID: <20140304152751.9115C61338@fedorahosted.org>
+Date: Mon, 10 Mar 2014 11:27:23 +0000 (UTC)
+Subject: master - tests: improve wait for open
+Message-ID: <20140310112723.940F2603FB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b47bdb4dca6eda577206aa76b83697524111d046
-Commit:        b47bdb4dca6eda577206aa76b83697524111d046
-Parent:        30810de1b07a145de8a7629bebcfd0d2e48622a5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d913fcbd4616279829fd495e6384b661b897c6df
+Commit:        d913fcbd4616279829fd495e6384b661b897c6df
+Parent:        fa23234e71ce8c5270e5b45bb55556d563383dfc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 4 16:22:11 2014 +0100
+AuthorDate:    Fri Mar 7 19:26:37 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 4 16:27:00 2014 +0100
+CommitterDate: Mon Mar 10 12:24:10 2014 +0100
 
-tests: check readability of /dev/kmsg
+tests: improve wait for open
 
-Looks like there are systems with /dev/kmsg device,
-which is however not readable
-
-Fix check for result value of klogctl and use only positive value.
+Add loop to detect open device from 'sleep <'
 ---
- test/lib/harness.c |   19 ++++++++++++++-----
- 1 files changed, 14 insertions(+), 5 deletions(-)
+ test/shell/snapshot-usage.sh |   16 +++++++++++++---
+ 1 files changed, 13 insertions(+), 3 deletions(-)
 
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index 8b2c3b6..d02e9de 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -292,9 +292,11 @@ static void clear_dmesg(void)
- static void drain_dmesg(void)
- {
- 	char buf[1024 * 1024 + 1];
--	size_t sz = klogctl(SYSLOG_ACTION_READ_CLEAR, buf, sizeof(buf) - 1);
--	buf[sz] = 0;
--	_append_buf(buf, sz);
-+	int sz = klogctl(SYSLOG_ACTION_READ_CLEAR, buf, sizeof(buf) - 1);
-+	if (sz > 0) {
-+		buf[sz] = 0;
-+		_append_buf(buf, sz);
-+	}
+diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
+index 991c18a..13be4ee 100644
+--- a/test/shell/snapshot-usage.sh
++++ b/test/shell/snapshot-usage.sh
+@@ -20,6 +20,16 @@ fill() {
+ 	dd if=/dev/zero of="$DM_DEV_DIR/$vg1/lvol0" bs=$1 count=1
  }
  
- static const char *duration(time_t start, const struct rusage *usage)
-@@ -437,11 +439,18 @@ static void run(int i, char *f) {
- 		if ((fd_kmsg = open("/dev/kmsg", O_RDONLY | O_NONBLOCK)) < 0) {
- 			if (errno != ENOENT) /* Older kernels (<3.5) do not support /dev/kmsg */
- 				perror("open /dev/kmsg");
--			else if ((clobber_dmesg = strcmp(getenv("LVM_TEST_CAN_CLOBBER_DMESG") ? : "0", "0")))
--				clear_dmesg();
-+		} else if (read(fd_kmsg, NULL, 0) == -1) {
-+			/* There is /dev/kmsg, but unreadable -> ignore it (RHEL6?) */
-+			perror("read /dev/kmsg");
-+			close(fd_kmsg);
-+			fd_kmsg = -1;
- 		} else if (lseek(fd_kmsg, 0L, SEEK_END) == (off_t) -1)
- 			perror("lseek /dev/kmsg");
- 
-+		if ((fd_kmsg < 0) &&
-+		    (clobber_dmesg = strcmp(getenv("LVM_TEST_CAN_CLOBBER_DMESG") ? : "0", "0")))
-+			clear_dmesg();
++# give some short time to lock file above
++wait_for_open_() {
++	for i in $(seq 1 50) ; do
++		test $(dmsetup info --noheadings -c -o open $1) -ne 0 && return
++		sleep 0.1
++	done
 +
- 		while ((w = wait4(pid, &st, WNOHANG, &usage)) == 0) {
- 			if ((fullbuffer && fullbuffer++ == 8000) ||
- 			    (no_write > 180 * 2)) /* a 3 minute timeout */
++	die "$1 expected to be openned, but it's not!"
++}
++
+ cleanup_tail()
+ {
+ 	test -z "$SLEEP_PID" || kill $SLEEP_PID
+@@ -52,6 +62,7 @@ if aux target_at_least dm-snapshot 1 10 0 ; then
+ 	fi
+ fi
+ 
++# Automatically activates exclusively in cluster
+ lvcreate -s -l 100%FREE -n $lv $vg --virtualsize $TSIZE
+ 
+ aux extend_filter_LVMTEST
+@@ -77,8 +88,7 @@ trap 'cleanup_tail' EXIT
+ sleep 120 < "$DM_DEV_DIR/$vg1/$lv1" &
+ SLEEP_PID=$!
+ 
+-# give some short time to lock file above
+-sleep 0.1
++wait_for_open_ "$vg1-$lv1"
+ 
+ # Opened virtual snapshot device is not removable
+ # it should retry device removal for a few seconds
+@@ -173,7 +183,7 @@ lvcreate -s -l100%FREE -n $lv2 $vg1/$lv1
+ check lv_field $vg1/$lv2 size "7.50p"
+ lvremove -ff $vg1
+ 
+-lvcreate -aey -V15E -l1 -n $lv1 -s $vg1
++lvcreate -V15E -l1 -n $lv1 -s $vg1
+ check lv_field $vg1/$lv1 origin_size "15.00e"
+ 
+ vgremove -ff $vg1
 
 
