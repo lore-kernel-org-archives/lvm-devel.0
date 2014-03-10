@@ -1,75 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 10 Mar 2014 11:27:23 +0000 (UTC)
-Subject: master - tests: improve wait for open
-Message-ID: <20140310112723.940F2603FB@fedorahosted.org>
+Date: Mon, 10 Mar 2014 11:27:27 +0000 (UTC)
+Subject: master - tests: skip valgrind testing when assigned to 0
+Message-ID: <20140310112727.BA09660F97@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d913fcbd4616279829fd495e6384b661b897c6df
-Commit:        d913fcbd4616279829fd495e6384b661b897c6df
-Parent:        fa23234e71ce8c5270e5b45bb55556d563383dfc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4eed2c8142dc50e1d359881027aa38a4e4ef2149
+Commit:        4eed2c8142dc50e1d359881027aa38a4e4ef2149
+Parent:        41e1b12e036ef2079586c4c567eae060c2635062
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 7 19:26:37 2014 +0100
+AuthorDate:    Sat Mar 8 22:53:23 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 10 12:24:10 2014 +0100
 
-tests: improve wait for open
+tests: skip valgrind testing when assigned to 0
 
-Add loop to detect open device from 'sleep <'
+When LVM_VALGRIND_CLVMD/LVMETAD is set to 0  skip testing.
+(Proviosly any value caused to run valgrind testing,
+so now '0' skips testing))
 ---
- test/shell/snapshot-usage.sh |   16 +++++++++++++---
- 1 files changed, 13 insertions(+), 3 deletions(-)
+ test/lib/aux.sh |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
-index 991c18a..13be4ee 100644
---- a/test/shell/snapshot-usage.sh
-+++ b/test/shell/snapshot-usage.sh
-@@ -20,6 +20,16 @@ fill() {
- 	dd if=/dev/zero of="$DM_DEV_DIR/$vg1/lvol0" bs=$1 count=1
- }
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index b2d73a6..1426390 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -39,12 +39,12 @@ prepare_clvmd() {
  
-+# give some short time to lock file above
-+wait_for_open_() {
-+	for i in $(seq 1 50) ; do
-+		test $(dmsetup info --noheadings -c -o open $1) -ne 0 && return
-+		sleep 0.1
-+	done
-+
-+	die "$1 expected to be openned, but it's not!"
-+}
-+
- cleanup_tail()
- {
- 	test -z "$SLEEP_PID" || kill $SLEEP_PID
-@@ -52,6 +62,7 @@ if aux target_at_least dm-snapshot 1 10 0 ; then
- 	fi
- fi
+ #	lvmconf "activation/monitoring = 1"
+ 	local run_valgrind=
+-	test -z "$LVM_VALGRIND_CLVMD" || run_valgrind="run_valgrind"
++	test "${LVM_VALGRIND_CLVMD:-0}" -eq 0 || run_valgrind="run_valgrind"
+ 	$run_valgrind lib/clvmd -Isinglenode -d 1 -f &
+ 	local local_clvmd=$!
+ 	sleep .3
+ 	# extra sleep for slow valgrind
+-	test -z "$LVM_VALGRIND_CLVMD" || sleep 7
++	test -z "$run_valgrind" || sleep 7
+ 	# check that it is really running now
+ 	ps $local_clvmd || die
+ 	echo $local_clvmd > LOCAL_CLVMD
+@@ -77,7 +77,7 @@ prepare_lvmetad() {
+ 	lvmconf "devices/md_component_detection = 0"
  
-+# Automatically activates exclusively in cluster
- lvcreate -s -l 100%FREE -n $lv $vg --virtualsize $TSIZE
+ 	local run_valgrind=
+-	test -z "$LVM_VALGRIND_LVMETAD" || run_valgrind="run_valgrind"
++	test "${LVM_VALGRIND_LVMETAD:-0}" -eq 0 || run_valgrind="run_valgrind"
  
- aux extend_filter_LVMTEST
-@@ -77,8 +88,7 @@ trap 'cleanup_tail' EXIT
- sleep 120 < "$DM_DEV_DIR/$vg1/$lv1" &
- SLEEP_PID=$!
- 
--# give some short time to lock file above
--sleep 0.1
-+wait_for_open_ "$vg1-$lv1"
- 
- # Opened virtual snapshot device is not removable
- # it should retry device removal for a few seconds
-@@ -173,7 +183,7 @@ lvcreate -s -l100%FREE -n $lv2 $vg1/$lv1
- check lv_field $vg1/$lv2 size "7.50p"
- lvremove -ff $vg1
- 
--lvcreate -aey -V15E -l1 -n $lv1 -s $vg1
-+lvcreate -V15E -l1 -n $lv1 -s $vg1
- check lv_field $vg1/$lv1 origin_size "15.00e"
- 
- vgremove -ff $vg1
+ 	echo "preparing lvmetad..."
+ 	$run_valgrind lvmetad -f "$@" -s "$TESTDIR/lvmetad.socket" -l wire,debug &
 
 
