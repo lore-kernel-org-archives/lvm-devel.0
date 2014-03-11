@@ -1,57 +1,60 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 11 Mar 2014 23:34:16 +0000 (UTC)
-Subject: master - thin: fix pool_has_message return for NULL params
-Message-ID: <20140311233416.CE2AA60EDF@fedorahosted.org>
+Date: Tue, 11 Mar 2014 23:34:18 +0000 (UTC)
+Subject: master - thin: do not check of empty pool with messages
+Message-ID: <20140311233418.E2A6F60EDF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1850a6e454ebbb54aae80a0ad4d5482ecdffcd28
-Commit:        1850a6e454ebbb54aae80a0ad4d5482ecdffcd28
-Parent:        7574b3bc80c8b2db5f4a9da9e7de00c0a3239e26
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4d64e91efde5335eeae6f2e0fcdf4992b054644a
+Commit:        4d64e91efde5335eeae6f2e0fcdf4992b054644a
+Parent:        1850a6e454ebbb54aae80a0ad4d5482ecdffcd28
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 11 22:50:23 2014 +0100
+AuthorDate:    Tue Mar 11 22:54:33 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 12 00:13:21 2014 +0100
+CommitterDate: Wed Mar 12 00:15:22 2014 +0100
 
-thin: fix pool_has_message return for NULL params
+thin: do not check of empty pool with messages
 
-When pool_has_message() is queried with NULL lv and 0 device_id
-it should just return 'true' when there is any message queued.
-So it needs to return negative value dm_list_empty().
+The empty pool is also the pool which has yet queued list of messages
+and transaction_id == 1.
 
-Since there is no user for this code path in code currently,
-this bug has not been triggered.
+Problem is exposed when pool is created inactive.
+
+lvcreate -L10 -T vg/pool -an
+lvcreate -V10 -T vg/pool
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/thin_manip.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/activate/dev_manager.c |    4 +++-
+ 2 files changed, 4 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 7d6f4d6..0fd0657 100644
+index 0fd0657..7814826 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.106 - 
  ====================================
-+  Fix return value in pool_has_message() when quering for any message.
++  Do not try to check empty pool with scheduled messages.
+   Fix return value in pool_has_message() when quering for any message.
    Cleanup all client resources on clvmd exit.
    Use dm_zalloc to clear members of clvmd client struct.
-   Use BLKID_CFLAGS when compiling with blkid support.
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 2e49019..78231a2 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -160,7 +160,7 @@ int pool_has_message(const struct lv_segment *seg,
- 	}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 6b5f8c2..006588c 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1790,7 +1790,9 @@ static int _thin_pool_register_callback(struct dev_manager *dm,
+ 	struct thin_cb_data *data;
  
- 	if (!lv && !device_id)
--		return dm_list_empty(&seg->thin_messages);
-+		return !dm_list_empty(&seg->thin_messages);
+ 	/* Skip metadata testing for unused pool. */
+-	if (!first_seg(lv)->transaction_id)
++	if (!first_seg(lv)->transaction_id ||
++	    ((first_seg(lv)->transaction_id == 1) &&
++	     pool_has_message(first_seg(lv), NULL, 0)))
+ 		return 1;
  
- 	dm_list_iterate_items(tmsg, &seg->thin_messages) {
- 		switch (tmsg->type) {
+ 	if (!(data = dm_pool_alloc(dm->mem, sizeof(*data)))) {
 
 
