@@ -1,40 +1,61 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 13 Mar 2014 12:20:41 +0000 (UTC)
-Subject: master - man: install lvm2-activation-generator man page only on make install_systemd_generators
-Message-ID: <20140313122041.89DE760F8C@fedorahosted.org>
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Fri, 14 Mar 2014 00:27:36 +0100
+Subject: master - man: add man page for lvm2-activation-generator
+In-Reply-To: <20140313120309.6E56060DF2@fedorahosted.org>
+References: <20140313120309.6E56060DF2@fedorahosted.org>
+Message-ID: <53223EE8.6070201@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2189d66a2758e4be67a32a7d9d24a9df55c31c4c
-Commit:        2189d66a2758e4be67a32a7d9d24a9df55c31c4c
-Parent:        031666ef66bf7b17ded4afcaa9bb97587fca0749
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Mar 13 13:17:58 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Mar 13 13:20:28 2014 +0100
+Hi Peter, this breaks RPM builds, see bellow...
 
-man: install lvm2-activation-generator man page only on make install_systemd_generators
+On 03/13/2014 01:03 PM, Peter Rajnoha wrote:
+> Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=031666ef66bf7b17ded4afcaa9bb97587fca0749
+> Commit:        031666ef66bf7b17ded4afcaa9bb97587fca0749
+> Parent:        c0f1eb5f0f8f0a790d1d9e6d9d3e1323c85e4144
+> Author:        Peter Rajnoha <prajnoha@redhat.com>
+> AuthorDate:    Thu Mar 13 13:01:06 2014 +0100
+> Committer:     Peter Rajnoha <prajnoha@redhat.com>
+> CommitterDate: Thu Mar 13 13:01:06 2014 +0100
+>
+> man: add man page for lvm2-activation-generator
+>
+> ---
+>   Makefile.in                                        |    1 +
+>   WHATS_NEW                                          |    1 +
+>   man/Makefile.in                                    |   11 +++-
+>   man/lvm2-activation-generator.8.in                 |   55 ++++++++++++++++++++
+>   .../lvm2_activation_generator_systemd_red_hat.c    |    2 +-
+>   5 files changed, 67 insertions(+), 3 deletions(-)
+>
+...
 
----
- man/Makefile.in |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+> diff --git a/man/lvm2-activation-generator.8.in b/man/lvm2-activation-generator.8.in
+> new file mode 100644
+> index 0000000..bd47397
+> --- /dev/null
+> +++ b/man/lvm2-activation-generator.8.in
+> @@ -0,0 +1,55 @@
+> +.TH "LVM2-ACTIVATION-GENERATOR" "8" "LVM TOOLS #VERSION#" "Red Hat, Inc" "\""
+> +.SH "NAME"
+> +lvm2-activation-generator \- generator for systemd units to activate LVM2 volumes on boot
+> +.SH SYNOPSIS
+> +.B #SYSTEMD_GENERATOR_DIR#/lvm2-activation-generator
 
-diff --git a/man/Makefile.in b/man/Makefile.in
-index 12a0560..ce3b1ee 100644
---- a/man/Makefile.in
-+++ b/man/Makefile.in
-@@ -48,8 +48,7 @@ MAN8=lvchange.8 lvconvert.8 lvcreate.8 lvdisplay.8 lvextend.8 lvm.8 \
- 	pvresize.8 pvs.8 pvscan.8 vgcfgbackup.8 vgcfgrestore.8 vgchange.8 \
- 	vgck.8 vgcreate.8 vgconvert.8 vgdisplay.8 vgexport.8 vgextend.8 \
- 	vgimport.8 vgimportclone.8 vgmerge.8 vgmknodes.8 vgreduce.8 vgremove.8 \
--	vgrename.8 vgs.8 vgscan.8 vgsplit.8 lvm2-activation-generator.8 \
--	$(FSADMMAN) $(BLKDEACTIVATEMAN) $(LVMETAD)
-+	vgrename.8 vgs.8 vgscan.8 vgsplit.8 $(FSADMMAN) $(BLKDEACTIVATEMAN) $(LVMETAD)
- 
- ifneq ("@CLVMD@", "none")
-   MAN8CLUSTER=clvmd.8
+        ^ SYSTEMD_GENERATOR_DIR includes DESTDIR. brew fails with:
+
++ /usr/lib/rpm/check-buildroot
+/builddir/build/BUILDROOT/lvm2-2.02.106-0.311.el7.x86_64/usr/share/man/man8/lvm2-activation-generator.8:.B 
+/builddir/build/BUILDROOT/lvm2-2.02.106-0.311.el7.x86_64/usr/lib/systemd/system-generators/lvm2-activation-generator
+Found '/builddir/build/BUILDROOT/lvm2-2.02.106-0.311.el7.x86_64' in 
+installed files; aborting
+error: Bad exit status from /var/tmp/rpm-tmp.UfX2SX (%install)
+
+Toook me a while to understand what the message means as I got confused 
+by the .B part...
+
 
 
