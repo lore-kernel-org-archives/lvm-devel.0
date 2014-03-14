@@ -1,57 +1,40 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Fri, 14 Mar 2014 09:10:29 +0000 (UTC)
-Subject: master - lvmetad: Fix pvmeta_old_{pvid, dev} logic when they are the same.
-Message-ID: <20140314091029.E077B60E51@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 14 Mar 2014 09:42:09 +0000 (UTC)
+Subject: master - tests: quick update of location of pid file
+Message-ID: <20140314094209.1027D612B5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=551b6b799867860fc6a437be5298bc74b814ab19
-Commit:        551b6b799867860fc6a437be5298bc74b814ab19
-Parent:        67c539f346a8259a4100ab10196486f8793fecce
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Fri Mar 14 10:06:27 2014 +0100
-Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Fri Mar 14 10:09:16 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=900cb6717b9d06e2b40049e4da2b25e8b98375a7
+Commit:        900cb6717b9d06e2b40049e4da2b25e8b98375a7
+Parent:        551b6b799867860fc6a437be5298bc74b814ab19
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Mar 14 10:40:48 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Mar 14 10:40:48 2014 +0100
 
-lvmetad: Fix pvmeta_old_{pvid,dev} logic when they are the same.
+tests: quick update of location of pid file
 
+Until better fix is put in - replace with /run.
 ---
- daemons/lvmetad/lvmetad-core.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 1b093cc..1858ee2 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -883,22 +883,22 @@ static response pv_found(lvmetad_state *s, request r)
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index c3adb56..7d13e8d 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -68,7 +68,7 @@ prepare_dmeventd() {
+ 	echo $! > LOCAL_DMEVENTD
  
- 	lock_pvid_to_pvmeta(s);
+ 	# FIXME wait for pipe in /var/run instead
+-	while ! test -e "/var/run/dmeventd.pid"; do echo -n .; sleep .2; done # wait for the socket
++	while ! test -e "/run/dmeventd.pid"; do echo -n .; sleep .2; done # wait for the socket
+ 	echo ok
+ }
  
-+	if ((pvmeta_old_pvid = dm_hash_lookup(s->pvid_to_pvmeta, pvid)))
-+		dm_config_get_uint64(pvmeta_old_pvid->root, "pvmeta/device", &device_old_pvid);
-+
- 	if ((old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device)))) {
- 		pvmeta_old_dev = dm_hash_lookup(s->pvid_to_pvmeta, old);
- 		dm_hash_remove(s->pvid_to_pvmeta, old);
- 		vgid_old = dm_hash_lookup(s->pvid_to_vgid, old);
- 	}
- 
--	if ((pvmeta_old_pvid = dm_hash_lookup(s->pvid_to_pvmeta, pvid)))
--		dm_config_get_uint64(pvmeta_old_pvid->root, "pvmeta/device", &device_old_pvid);
--
- 	DEBUGLOG(s, "pv_found %s, vgid = %s, device = %" PRIu64 " (previously %" PRIu64 "), old = %s",
- 		 pvid, vgid, device, device_old_pvid, old);
- 
- 	if (!(cft->root = dm_config_clone_node(cft, pvmeta, 0)))
-                 goto out_of_mem;
- 
--	if (pvmeta_old_pvid && compare_config(pvmeta_old_pvid->root, cft->root))
-+	if (!pvmeta_old_pvid || compare_config(pvmeta_old_pvid->root, cft->root))
- 		changed |= 1;
- 
- 	if (pvmeta_old_pvid && device != device_old_pvid) {
 
 
