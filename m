@@ -1,67 +1,109 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 17 Mar 2014 13:33:09 +0000 (UTC)
-Subject: master - lvconvert: disallow usage of origin for snapshot
-Message-ID: <20140317133309.C54E160F27@fedorahosted.org>
+Date: Mon, 17 Mar 2014 13:33:11 +0000 (UTC)
+Subject: master - snapshot: wrap min_chunk test into a lib function
+Message-ID: <20140317133311.E885C60EAF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f3b9ee37e9b9672929737dedcd52b46f57d93d23
-Commit:        f3b9ee37e9b9672929737dedcd52b46f57d93d23
-Parent:        455f23586f0125fb2763c0f2f48e79bc08d9e2c0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3a82490ee1cf7aec5b2d6648f9bc74d9791eca8e
+Commit:        3a82490ee1cf7aec5b2d6648f9bc74d9791eca8e
+Parent:        f3b9ee37e9b9672929737dedcd52b46f57d93d23
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 17 09:41:36 2014 +0100
+AuthorDate:    Mon Mar 17 13:04:14 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 17 14:31:42 2014 +0100
+CommitterDate: Mon Mar 17 14:31:43 2014 +0100
 
-lvconvert: disallow usage of origin for snapshot
+snapshot: wrap min_chunk test into a lib function
 
-Usage of origin as a snapshot 'COW' volume is unsupported.
+Create a separate function to validation snapshot min chunk value
+and relocate code into snapshot_manip file.
 
-Without this test lvm2 is able to generate this ugly internal error message.
-
-To test this:
-
-lvcreate -L1 -n lv1 vg
-lvcreate -L1 -n lv2 -s vg/lv1
-lvcreate -L1 -n lv3 vg
-lvconvert -s vg/lv3 vg/lv1
-
-Internal error: LVs (5) != visible LVs (1) + snapshots (1) + internal LVs (0) in VG vg
+This function will be shared with lvconvert then.
 ---
- WHATS_NEW         |    1 +
- tools/lvconvert.c |    6 ++++++
- 2 files changed, 7 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c          |   13 ++-----------
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/snapshot_manip.c    |   16 ++++++++++++++++
+ 3 files changed, 19 insertions(+), 11 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 2d91981..c3c8aff 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.106 - 
- ====================================
-+  Disallow lvconvert of origin to snapshot COW volume.
-   Make report settings profilable.
-   Add existing report settings to lvm.conf.
-   Use VG read lock during 'pvscan --cache -aay' autoactivation.
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index c8cc506..1b9d9f7 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2038,6 +2038,12 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
- {
- 	struct logical_volume *org;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 9246920..6e4ba71 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -49,8 +49,6 @@ typedef enum {
+ #define A_CAN_SPLIT		0x10
+ #define A_AREA_COUNT_MATCHES	0x20	/* Existing lvseg has same number of areas as new segment */
  
-+	if (lv_is_origin(lv)) {
-+		/* Unsupported stack */
-+		log_error("Unable to convert origin \"%s\" into a snapshot.", lv->name);
-+		return 0;
-+	}
+-#define SNAPSHOT_MIN_CHUNKS	3       /* Minimum number of chunks in snapshot */
+-
+ /*
+  * Constant parameters during a single allocation attempt.
+  */
+@@ -6054,15 +6052,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 	}
+ 
+ 	if (lp->snapshot && !seg_is_thin(lp) &&
+-	    (((uint64_t)lp->extents * vg->extent_size) <
+-	     (SNAPSHOT_MIN_CHUNKS * lp->chunk_size))) {
+-		log_error("Unable to create a snapshot smaller than "
+-			  DM_TO_STRING(SNAPSHOT_MIN_CHUNKS) " chunks (%u extents, %s).",
+-			  (unsigned) (((uint64_t) SNAPSHOT_MIN_CHUNKS * lp->chunk_size +
+-				       vg->extent_size - 1) / vg->extent_size),
+-			  display_size(cmd, (uint64_t) SNAPSHOT_MIN_CHUNKS * lp->chunk_size));
+-		return NULL;
+-	}
++	    !cow_has_min_chunks(vg, lp->extents, lp->chunk_size))
++                return NULL;
+ 
+ 	if (!seg_is_virtual(lp) &&
+ 	    vg->free_count < lp->extents && !lp->approx_alloc) {
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 87e6046..347e080 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -903,6 +903,7 @@ int lv_is_cow(const struct logical_volume *lv);
+ int lv_is_merging_origin(const struct logical_volume *origin);
+ int lv_is_merging_cow(const struct logical_volume *snapshot);
+ uint32_t cow_max_extents(const struct logical_volume *origin, uint32_t chunk_size);
++int cow_has_min_chunks(const struct volume_group *vg, uint32_t cow_extents, uint32_t chunk_size);
+ int lv_is_cow_covering_origin(const struct logical_volume *lv);
+ 
+ /* Test if given LV is visible from user's perspective */
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index 8fcab0c..a0a3e3c 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -21,6 +21,8 @@
+ #include "lv_alloc.h"
+ #include "activate.h"
+ 
++#define SNAPSHOT_MIN_CHUNKS	3       /* Minimum number of chunks in snapshot */
 +
- 	if (!(org = find_lv(lv->vg, lp->origin))) {
- 		log_error("Couldn't find origin volume '%s'.", lp->origin);
- 		return 0;
+ int lv_is_origin(const struct logical_volume *lv)
+ {
+ 	return lv->origin_count ? 1 : 0;
+@@ -88,6 +90,20 @@ uint32_t cow_max_extents(const struct logical_volume *origin, uint32_t chunk_siz
+ 	return (uint32_t) (size / extent_size);
+ }
+ 
++int cow_has_min_chunks(const struct volume_group *vg, uint32_t cow_extents, uint32_t chunk_size)
++{
++	if (((uint64_t)vg->extent_size * cow_extents) >= (SNAPSHOT_MIN_CHUNKS * chunk_size))
++		return 1;
++
++	log_error("Snapshot volume cannot be smaller than " DM_TO_STRING(SNAPSHOT_MIN_CHUNKS)
++		  " chunks (%u extents, %s).", (unsigned)
++		  (((uint64_t) SNAPSHOT_MIN_CHUNKS * chunk_size +
++		    vg->extent_size - 1) / vg->extent_size),
++		  display_size(vg->cmd, (uint64_t) SNAPSHOT_MIN_CHUNKS * chunk_size));
++
++	return 0;
++}
++
+ int lv_is_cow_covering_origin(const struct logical_volume *lv)
+ {
+ 	return lv_is_cow(lv) &&
 
 
