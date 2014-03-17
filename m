@@ -1,47 +1,121 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 14 Mar 2014 14:58:02 +0000 (UTC)
-Subject: master - cleanup: use 'define' for systemd runtime unit file directory
-Message-ID: <20140314145802.9F89E60F43@fedorahosted.org>
+Date: Mon, 17 Mar 2014 10:55:52 +0000 (UTC)
+Subject: master - tests: fix name-mangling test
+Message-ID: <20140317105552.601D761068@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b16235de96a18c9e9e619bebe506d41f80fff834
-Commit:        b16235de96a18c9e9e619bebe506d41f80fff834
-Parent:        ada47c164ae56b586fae7500be2d6aa66f5323b1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=12eb284eecc631096e31384537289a3376617580
+Commit:        12eb284eecc631096e31384537289a3376617580
+Parent:        b16235de96a18c9e9e619bebe506d41f80fff834
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Mar 14 15:57:28 2014 +0100
+AuthorDate:    Mon Mar 17 11:51:30 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Mar 14 15:57:44 2014 +0100
+CommitterDate: Mon Mar 17 11:51:30 2014 +0100
 
-cleanup: use 'define' for systemd runtime unit file directory
+tests: fix name-mangling test
 
+We need to use "--verifyudev" for dmsetup mangle command used in
+the name-mangling test since without the --verifyudev, we'd end up
+with the failed rename.
+
+Also, add direct check for the dev nodes - node with old name must
+be gone and node with new name must be present. Before, we checked
+just the output of the command.
+
+One bug popped up here when renaming with udev and libdevmapper
+fallback checking the udev when target mangle mode is "none"
+(fixme added in the libdevmapper's node rename code).
 ---
- daemons/dmeventd/dmeventd.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ libdm/libdm-common.c        |   18 ++++++++++++++++++
+ test/shell/name-mangling.sh |   29 ++++++++++++++++++++++++++---
+ 2 files changed, 44 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 6206058..f4f09b8 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -55,6 +55,7 @@
- #  define OOM_SCORE_ADJ_MIN (-1000)
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 2ec66e7..72fa508 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1073,6 +1073,24 @@ static int _rename_dev_node(const char *old_name, const char *new_name,
+ 			 oldpath, newpath);
  
- /* Systemd on-demand activation support */
-+#  define SD_RUNTIME_UNIT_FILE_DIR DEFAULT_DM_RUN_DIR "/systemd/system/"
- #  define SD_ACTIVATION_ENV_VAR_NAME "SD_ACTIVATION"
- #  define SD_LISTEN_PID_ENV_VAR_NAME "LISTEN_PID"
- #  define SD_LISTEN_FDS_ENV_VAR_NAME "LISTEN_FDS"
-@@ -1997,7 +1998,7 @@ static void restart(void)
- 	if (version < 2) {
- 		/* This check is copied from sd-daemon.c. */
- 		struct stat st;
--		if (!lstat("/run/systemd/system/", &st) && !!S_ISDIR(st.st_mode))
-+		if (!lstat(SD_RUNTIME_UNIT_FILE_DIR, &st) && !!S_ISDIR(st.st_mode))
- 			_systemd_activation = 1;
- 	}
- #endif
+ 	/* udev may already have renamed the node. Ignore ENOENT. */
++	/* FIXME: when renaming to target mangling mode "none" with udev
++	 * while there are some blacklisted characters in the node name,
++	 * udev will remove the old_node, but fails to properly rename
++	 * to new_node. The libdevmapper code tries to call
++	 * rename(old_node,new_node), but that won't do anything
++	 * since the old node is already removed by udev.
++	 * For example renaming 'a\x20b' to 'a b':
++	 *   - udev removes 'a\x20b'
++	 *   - udev creates 'a' and 'b' (since it considers the ' ' as a delimiter
++	 *   - libdevmapper checks udev has done the rename properly
++	 *   - libdevmapper calls stat(new_node) and it does not see it
++	 *   - libdevmapper calls rename(old_node,new_node)
++	 *   - the rename is a NOP since the old_node does not exist anymore
++	 *
++	 * However, this situation is very rare - why would anyone need
++	 * to rename to an unsupported mode??? So a fix for this would be
++	 * just for completeness.
++	 */
+ 	if (rename(oldpath, newpath) < 0 && errno != ENOENT) {
+ 		log_error("Unable to rename device node from '%s' to '%s'",
+ 			  old_name, new_name);
+diff --git a/test/shell/name-mangling.sh b/test/shell/name-mangling.sh
+index 2f07523..cf218fe 100644
+--- a/test/shell/name-mangling.sh
++++ b/test/shell/name-mangling.sh
+@@ -129,7 +129,7 @@ function check_mangle_cmd()
+ 
+ 	create_dm_dev none "$dm_name"
+ 
+-	dmsetup mangle --manglename $mode "${PREFIX}$dm_name" 1>out 2>err || true;
++	dmsetup mangle --manglename $mode --verifyudev "${PREFIX}$dm_name" 1>out 2>err || true;
+ 
+ 	if [ "$expected" = "OK" ]; then
+ 		grep "$CORRECT_FORM_STR" out || r=1
+@@ -139,7 +139,30 @@ function check_mangle_cmd()
+ 		grep "$FAIL_MULTI_STR" err || r=1
+ 	else
+ 		rename_expected=1
+-		grep -F "$RENAMING_STR ${PREFIX}$expected" out || r=1
++		if grep -F "$RENAMING_STR ${PREFIX}$expected" out; then
++			# Check the old node is really renamed.
++			test -b "$DM_DEV_DIR/mapper/${PREFIX}$dm_name" && r=1
++			# FIXME: when renaming to mode=none with udev, udev will
++			#        remove the old_node, but fails to properly rename
++			#        to new_node. The libdevmapper code tries to call
++			#        rename(old_node,new_node), but that won't do anything
++			#        since the old node is already removed by udev.
++			#        For example renaming 'a\x20b' to 'a b':
++			#          - udev removes 'a\x20b'
++			#          - udev creates 'a' and 'b' (since it considers the ' ' as a delimiter)
++			#          - libdevmapper checks udev has done the rename properly
++			#          - libdevmapper calls stat(new_node) and it does not see it
++			#          - libdevmapper calls rename(old_node,new_node)
++			#          - the rename is a NOP since the old_node does not exist anymore
++			#
++			# Remove this condition once the problem is fixed in libdevmapper.
++			#
++			if [ "$mode" != "none" ]; then
++				test -b "$DM_DEV_DIR/mapper/${PREFIX}$expected" || r=1
++			fi
++		else
++			r=1
++		fi
+ 	fi
+ 
+ 	if [ $r = 0 -a $rename_expected = 1 ]; then
+@@ -149,7 +172,7 @@ function check_mangle_cmd()
+ 		# failed to rename to expected or renamed when it should not - find the new name
+ 		new_name=$(sed -e "s/.*: $RENAMING_STR //g" out)
+ 		# try to remove any of the form - falling back to less probable error scenario
+-		aux dmsetup remove --verifyudev --manglename none "$new_name" || \
++		remove_dm_dev none "$new_name" || \
+ 		remove_dm_dev none "$dm_name" || remove_dm_dev none "$expected"
+ 	else
+ 		# successfuly done nothing
 
 
