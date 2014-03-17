@@ -1,81 +1,71 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 19 Mar 2014 00:02:21 +0000 (UTC)
-Subject: master - cleanup: indent
-Message-ID: <20140319000221.016EC60FD8@fedorahosted.org>
+Date: Mon, 17 Mar 2014 15:34:12 +0000 (UTC)
+Subject: master - tests: quotes for LVM_TEST vars
+Message-ID: <20140317153412.E8B2E60E59@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b6eb2ac10ab509a74f83b9333ff195b63d64d8ef
-Commit:        b6eb2ac10ab509a74f83b9333ff195b63d64d8ef
-Parent:        852a2b98be2c83a3ddb31396f49854a3d14cf6ed
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=19fd6040c246b73dcdf8f522231e32e5889d4238
+Commit:        19fd6040c246b73dcdf8f522231e32e5889d4238
+Parent:        e3d208f7c2aa3964ae76a7fc108bf63957ef4bd6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 19 00:24:09 2014 +0100
+AuthorDate:    Mon Mar 17 16:32:29 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 19 00:58:02 2014 +0100
+CommitterDate: Mon Mar 17 16:32:29 2014 +0100
 
-cleanup: indent
+tests: quotes for LVM_TEST vars
 
 ---
- lib/metadata/metadata.c |    4 ++--
- tools/pvdisplay.c       |   16 ++++++++--------
- 2 files changed, 10 insertions(+), 10 deletions(-)
+ test/lib/aux.sh   |    6 +++---
+ test/lib/utils.sh |    2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index c79f223..279043b 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4157,7 +4157,7 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
- 			       uint64_t status_flags, uint32_t misc_flags)
- {
- 	struct volume_group *vg = NULL;
-- 	int consistent = 1;
-+	int consistent = 1;
- 	int consistent_in;
- 	uint32_t failure = 0;
- 	int already_locked;
-@@ -4279,7 +4279,7 @@ bad:
-  * *consistent = 1.
-  */
- struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name,
--	      const char *vgid, uint32_t flags)
-+			     const char *vgid, uint32_t flags)
- {
- 	uint64_t status = UINT64_C(0);
- 	uint32_t lock_flags = LCK_VG_READ;
-diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
-index 198267c..34ec3d5 100644
---- a/tools/pvdisplay.c
-+++ b/tools/pvdisplay.c
-@@ -36,18 +36,18 @@ static int _pvdisplay_single(struct cmd_context *cmd,
- 			return ret;
- 		}
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 12e8e04..65eb1e7 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -180,7 +180,7 @@ teardown_devs() {
+ 	# NOTE: SCSI_DEBUG_DEV test must come before the LOOP test because
+ 	# prepare_scsi_debug_dev() also sets LOOP to short-circuit prepare_loop()
+ 	if test -f SCSI_DEBUG_DEV; then
+-		test ${LVM_TEST_PARALLEL:-0} -eq 1 || modprobe -r scsi_debug
++		test "${LVM_TEST_PARALLEL:-0}" -eq 1 || modprobe -r scsi_debug
+ 	else
+ 		test ! -f LOOP || losetup -d $(cat LOOP) || true
+ 		test ! -f LOOPFILE || rm -f $(cat LOOPFILE)
+@@ -189,7 +189,7 @@ teardown_devs() {
+ 	rm -f LOOP
  
--	 	/*
-+		/*
- 		 * Replace possibly incomplete PV structure with new one
- 		 * allocated in vg_read_internal() path.
- 		 */
--		 if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--			 log_error("Unable to find \"%s\" in volume group \"%s\"",
--				   pv_name, vg->name);
--			 ret = ECMD_FAILED;
--			 goto out;
--		 }
--
--		 pv = pvl->pv;
-+		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
-+			log_error("Unable to find \"%s\" in volume group \"%s\"",
-+				  pv_name, vg->name);
-+			ret = ECMD_FAILED;
-+			goto out;
-+		}
-+
-+		pv = pvl->pv;
+ 	# Attempt to remove any loop devices that failed to get torn down if earlier tests aborted
+-	test ${LVM_TEST_PARALLEL:-0} -eq 1 -o -z "$COMMON_PREFIX" || {
++	test "${LVM_TEST_PARALLEL:-0}" -eq 1 -o -z "$COMMON_PREFIX" || {
+ 		teardown_devs_prefixed "$COMMON_PREFIX" 1
+ 		local stray_loops=( $(losetup -a | grep "$COMMON_PREFIX" | cut -d: -f1) )
+ 		test ${#stray_loops[@]} -eq 0 || {
+@@ -239,7 +239,7 @@ teardown() {
+ 
+ 	echo "ok"
+ 
+-	test ${LVM_TEST_PARALLEL:-0} -eq 1 -o -n "$RUNNING_DMEVENTD" || not pgrep dmeventd #&>/dev/null
++	test "${LVM_TEST_PARALLEL:-0}" -eq 1 -o -n "$RUNNING_DMEVENTD" || not pgrep dmeventd #&>/dev/null
+ }
+ 
+ prepare_loop() {
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index 819a0eb..b2e82aa 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -110,7 +110,7 @@ STACKTRACE() {
+ 		i=$(($i + 1))
+ 	done
+ 
+-	test ${LVM_TEST_PARALLEL:-0} -eq 1 -o -n "$RUNNING_DMEVENTD" -o -f LOCAL_DMEVENTD || {
++	test "${LVM_TEST_PARALLEL:-0}" -eq 1 -o -n "$RUNNING_DMEVENTD" -o -f LOCAL_DMEVENTD || {
+ 		pgrep dmeventd &>/dev/null && \
+ 			die "** During test dmeventd has been started!"
  	}
- 
- 	if (is_orphan(pv))
 
 
