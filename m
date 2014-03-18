@@ -1,74 +1,52 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 18 Mar 2014 10:36:48 +0100
-Subject: [PATCH 1/2] Fix pvdisplay to refer to sectors, not KB
-In-Reply-To: <53280DAE.3020103@suse.de>
-References: <1395131042-5015-1-git-send-email-hare@suse.de>	<1395131042-5015-2-git-send-email-hare@suse.de>	<53280A97.4030307@redhat.com>
-	<53280DAE.3020103@suse.de>
-Message-ID: <532813B0.8080609@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 18 Mar 2014 09:31:58 +0000 (UTC)
+Subject: master - tests: use check lv_tree_on
+Message-ID: <20140318093158.9132960DDE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 18.3.2014 10:11, Hannes Reinecke napsal(a):
-> On 03/18/2014 09:57 AM, Zdenek Kabelac wrote:
->> Dne 18.3.2014 09:24, Hannes Reinecke napsal(a):
->>> From: Thomas Fehr <fehr@suse.de>
->>>
->>> The size is displayed in sectors, not kilobytes.
->>>
->>> Signed-off-by: Thomas Fehr <fehr@suse.de>
->>> Acked-by: Hannes Reinecke <hare@suse.de>
->>> ---
->>>    man/pvdisplay.8.in | 2 +-
->>>    1 file changed, 1 insertion(+), 1 deletion(-)
->>>
->>> diff --git a/man/pvdisplay.8.in b/man/pvdisplay.8.in
->>> index 03c12c4..13c26b5 100644
->>> --- a/man/pvdisplay.8.in
->>> +++ b/man/pvdisplay.8.in
->>> @@ -65,7 +65,7 @@ The values are:
->>>
->>>    * physical volume device name
->>>    * volume group name
->>> -* physical volume size in kilobytes
->>> +* physical volume size in sectors
->>>    * internal physical volume number (obsolete)
->>>    * physical volume status
->>>    * physical volume (not) allocatable
->>
->> Hi
->>
->> Against which version of lvm2 is this patch ?
->>
->> Since my upstream pvdisplay shows  size in  'human readable' format
->> i.e.:
->> (So definitely not in sector - unless used with option  '--units s')
->>
->> --- Physical volume ---
->> PV Name               /dev/loop0
->> VG Name               vg
->> PV Size               976,56 GiB / not usable 0
->> Allocatable           yes
->> PE Size               32,00 KiB
->> Total PE              31999968
->> Free PE               31999872
->> Allocated PE          96
->> PV UUID               5DOVI6-ioCm-LJvd-JbwQ-qJc3-FWO4-yQCjGY
->>
-> Did I mention that these patches are ancient?
-> (Originally developed in 2007 ...)
->
-> I'm just doing house-keeping for our lvm2 package at the moment.
-> So I'm not at all surprised this patch is obsolete.
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aed36c12f8ceb55d3290519215adecc03d54978e
+Commit:        aed36c12f8ceb55d3290519215adecc03d54978e
+Parent:        81166a84be44409ab326eb1c4760cb32a9aee0fe
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Mar 18 10:26:42 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 18 10:28:09 2014 +0100
 
-Ahh - and I've missed it's for section  '-c, --colon'  and I guess it
-still applies for those printed values - since the size is there in sectors  - 
-though people are most probably using 'pvs'.
+tests: use check lv_tree_on
 
-Zdenek
+Use internal /lib function.
+Reduce extent size for test to create smaller devices.
+---
+ test/shell/lvresize-raid.sh |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
+diff --git a/test/shell/lvresize-raid.sh b/test/shell/lvresize-raid.sh
+index 6908635..9b9218d 100644
+--- a/test/shell/lvresize-raid.sh
++++ b/test/shell/lvresize-raid.sh
+@@ -13,7 +13,9 @@
+ 
+ aux target_at_least dm-raid 1 1 0 || skip
+ 
+-aux prepare_vg 6 80
++aux prepare_pvs 6 80
++
++vgcreate -s 256K $vg $(cat DEVICES)
+ 
+ for deactivate in true false; do
+ 
+@@ -50,6 +52,6 @@ done
+ # Ensure extend is contiguous
+ lvcreate --type raid4 -l 2 -i 2 -n $lv1 $vg $dev4 $dev5 $dev6
+ lvextend -l +2 --alloc contiguous $vg/$lv1
+-not $(lvs -a -o devices $vg | egrep "$dev1|$dev2|$dev3")
+-lvremove -ff $vg
++check lv_tree_on $vg $lv1 "$dev4" "$dev5" "$dev6"
+ 
++vgremove -f $vg
 
 
