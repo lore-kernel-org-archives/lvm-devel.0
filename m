@@ -1,87 +1,59 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 25 Mar 2014 10:23:32 +0000 (UTC)
-Subject: master - clvmd: hardening leak on exit
-Message-ID: <20140325102332.C246760F9D@fedorahosted.org>
+From: Hannes Reinecke <hare@suse.de>
+Date: Tue, 18 Mar 2014 09:24:02 +0100
+Subject: [PATCH 2/2] Handle duplicate PVs on drbd
+In-Reply-To: <1395131042-5015-1-git-send-email-hare@suse.de>
+References: <1395131042-5015-1-git-send-email-hare@suse.de>
+Message-ID: <1395131042-5015-3-git-send-email-hare@suse.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b522312678abaccd16b51299994e032d96a79267
-Commit:        b522312678abaccd16b51299994e032d96a79267
-Parent:        68d13b2517b49f53e395ea7754c6b8cf0b57dc0e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 25 10:50:36 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 25 11:22:57 2014 +0100
+From: Xinwei Hu <xwhu@suse.de>
 
-clvmd: hardening leak on exit
+If lvm finds a duplicate PV where one device is a drbd device
+it should prefer the drbd device.
 
-Operate with lvm_thread_exit while holding lvm_thread_mutex.
-Don't leave unfinished work in the lvm thread queue
-and always finish all queued tasks before exit,
-so no cmd struct is left in the list.
-
-(in-release fix)
+Signed-off-by: Xinwei Hu <xwhu@suse.de>
+Acked-by: Hannes Reinecke <hare@suse.de>
 ---
- daemons/clvmd/clvmd.c |   23 +++++++++++++++--------
- 1 files changed, 15 insertions(+), 8 deletions(-)
+ lib/cache/lvmcache.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 4648450..bc98ccb 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -2020,11 +2020,8 @@ static void *lvm_thread_fn(void *arg)
- 	/* Now wait for some actual work */
- 	pthread_mutex_lock(&lvm_thread_mutex);
- 
--	while (!lvm_thread_exit)
--		if (dm_list_empty(&lvm_cmd_head)) {
--			DEBUGLOG("LVM thread waiting for work\n");
--			pthread_cond_wait(&lvm_thread_cond, &lvm_thread_mutex);
--		} else {
-+	for (;;) {
-+		while (!dm_list_empty(&lvm_cmd_head)) {
- 			cmd = dm_list_item(dm_list_first(&lvm_cmd_head),
- 					   struct lvm_thread_cmd);
- 			dm_list_del(&cmd->list);
-@@ -2037,6 +2034,13 @@ static void *lvm_thread_fn(void *arg)
- 			pthread_mutex_lock(&lvm_thread_mutex);
- 		}
- 
-+		if  (lvm_thread_exit)
-+			break;
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index d40bdce..ebc619b 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1503,6 +1503,14 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
+ 						 dev_subsystem_name(dt, existing->dev),
+ 						 dev_name(existing->dev));
+ 				return NULL;
++			} else if (MAJOR(existing->dev->dev) == dt->drbd_major &&
++					MAJOR(dev->dev) != dt->drbd_major) {
++				log_very_verbose("Ignoring duplicate PV %s on "
++						"%s - using drbd %s",
++						pvid, dev_name(dev),
++						dev_name(existing->dev));
++				return NULL;
 +
-+		DEBUGLOG("LVM thread waiting for work\n");
-+		pthread_cond_wait(&lvm_thread_cond, &lvm_thread_mutex);
-+	}
-+
- 	pthread_mutex_unlock(&lvm_thread_mutex);
- 	DEBUGLOG("LVM thread exits\n");
- 
-@@ -2051,9 +2055,6 @@ static int add_to_lvmqueue(struct local_client *client, struct clvm_header *msg,
- {
- 	struct lvm_thread_cmd *cmd;
- 
--	if (lvm_thread_exit)
--		return -1; /* We are about to exit */
--
- 	if (!(cmd = dm_malloc(sizeof(*cmd))))
- 		return ENOMEM;
- 
-@@ -2081,6 +2082,12 @@ static int add_to_lvmqueue(struct local_client *client, struct clvm_header *msg,
- 	DEBUGLOG("add_to_lvmqueue: cmd=%p. client=%p, msg=%p, len=%d, csid=%p, xid=%d\n",
- 		 cmd, client, msg, msglen, csid, cmd->xid);
- 	pthread_mutex_lock(&lvm_thread_mutex);
-+	if (lvm_thread_exit) {
-+		pthread_mutex_unlock(&lvm_thread_mutex);
-+		dm_free(cmd->msg);
-+		dm_free(cmd);
-+		return -1; /* We are about to exit */
-+	}
- 	dm_list_add(&lvm_cmd_head, &cmd->list);
- 	pthread_cond_signal(&lvm_thread_cond);
- 	pthread_mutex_unlock(&lvm_thread_mutex);
+ 			} else if (dm_is_dm_major(MAJOR(existing->dev->dev)) &&
+ 				   !dm_is_dm_major(MAJOR(dev->dev))) {
+ 				log_very_verbose("Ignoring duplicate PV %s on "
+@@ -1523,6 +1531,12 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
+ 						 "using dm %s", pvid,
+ 						 dev_name(existing->dev),
+ 						 dev_name(dev));
++			else if (MAJOR(existing->dev->dev) != dt->drbd_major &&
++					MAJOR(dev->dev) == dt->drbd_major)
++				log_very_verbose("Duplicate PV %s on %s - "
++						"using drbd %s", pvid,
++						dev_name(existing->dev),
++						dev_name(dev));
+ 			/* FIXME If both dm, check dependencies */
+ 			//else if (dm_is_dm_major(MAJOR(existing->dev->dev)) &&
+ 				 //dm_is_dm_major(MAJOR(dev->dev)))
+-- 
+1.8.1.4
 
 
