@@ -1,57 +1,43 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 21 Mar 2014 21:31:44 +0000 (UTC)
-Subject: master - clvmd: drop unused local_sock parameter
-Message-ID: <20140321213144.5525B610FC@fedorahosted.org>
+From: Paul B. Henson <henson@acm.org>
+Date: Mon, 17 Mar 2014 18:07:50 -0700
+Subject: cache support
+In-Reply-To: <7A62EBEE-E031-469E-902B-FA507CADD9DA@redhat.com>
+References: <096101cf2214$d241ed60$76c5c820$@acm.org>	<52F205CA.1090807@redhat.com>	<0a3901cf22af$ae01d2d0$0a057870$@acm.org>	<52F2AD44.8030006@redhat.com>	<0a7b01cf22db$da3f56c0$8ebe0440$@acm.org>	<A2CE00CC-6439-4A2E-A694-8E3B2656867B@redhat.com>	<0fff01cf276c$d059c8d0$710d5a70$@acm.org>	<0C83CD55-18B6-4407-9A42-72F9D6C5683D@redhat.com>	<0b4501cf3d85$44b76c90$ce2645b0$@acm.org>
+	<7A62EBEE-E031-469E-902B-FA507CADD9DA@redhat.com>
+Message-ID: <0f9a01cf4246$7db93f30$792bbd90$@acm.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=73978f8d7dd638806f514a7914884a204afd95c1
-Commit:        73978f8d7dd638806f514a7914884a204afd95c1
-Parent:        37396e2fe5c451c466f93f852a3559da023fc98c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 21 11:34:25 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 21 22:29:24 2014 +0100
+> From: Brassow Jonathan
+> Sent: Monday, March 17, 2014 8:56 AM
+>
+> Yes, that is basically the idea.  However, converting the thinpool is a
+little
+> more tricky.  You already are using the fast device for the thinpool
+metadata
+> device (which seems awfully large from your example).  When you cache the
+> thinpool, I think you just want to cache the data section.
+> # lvconvert --type cache --cachepool vg/cachepool vg/thinpool_tdata
 
-clvmd: drop unused local_sock parameter
+Ah right; in your original example you had connected the cache to the
+thinpool data lv before creating the actual thinpool, when I tried to
+convert that to adding the cache after the fact I didn't take that into
+consideration.
 
----
- daemons/clvmd/clvmd.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+In your original example, it said to size the metadata device to
+approximately 1/1000 of the data lv size, so for a 4 TB data lv that would
+actually be almost 4 GB? The estimation utility says about 2.4 GB:
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index c3268a7..572c5b7 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -132,7 +132,7 @@ static int open_local_sock(void);
- static void close_local_sock(int local_socket);
- static int check_local_clvmd(void);
- static struct local_client *find_client(int clientid);
--static void main_loop(int local_sock, int cmd_timeout);
-+static void main_loop(int cmd_timeout);
- static void be_daemon(int start_timeout);
- static int check_all_clvmds_running(struct local_client *client);
- static int local_rendezvous_callback(struct local_client *thisfd, char *buf,
-@@ -615,7 +615,7 @@ int main(int argc, char *argv[])
- 	signal(SIGINT, sigterm_handler);
- 
- 	/* Do some work */
--	main_loop(local_sock, cmd_timeout);
-+	main_loop(cmd_timeout);
- 
- 	pthread_mutex_lock(&lvm_thread_mutex);
- 	lvm_thread_exit = 1;
-@@ -820,7 +820,7 @@ static void request_timed_out(struct local_client *client)
- }
- 
- /* This is where the real work happens */
--static void main_loop(int local_sock, int cmd_timeout)
-+static void main_loop(int cmd_timeout)
- {
- 	sigset_t ss;
- 
+# thin_metadata_size -b 64k -s 4t -m 100000 -u g
+thin_metadata_size - 2.41 gigabytes estimated metadata area size
+
+Evidently online metadata pool resize is supported now, so I guess I don't
+have to extremely overestimate from the start, as long as I keep an eye on
+it I can always top it off before it runs out.
+
+Thanks.
 
 
