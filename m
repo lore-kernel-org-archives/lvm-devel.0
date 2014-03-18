@@ -1,55 +1,76 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 18 Mar 2014 10:10:32 +0100
-Subject: [PATCH 2/2] Handle duplicate PVs on drbd
-In-Reply-To: <1395131042-5015-3-git-send-email-hare@suse.de>
-References: <1395131042-5015-1-git-send-email-hare@suse.de>
-	<1395131042-5015-3-git-send-email-hare@suse.de>
-Message-ID: <53280D88.6000707@redhat.com>
+From: Hannes Reinecke <hare@suse.de>
+Date: Tue, 18 Mar 2014 10:11:10 +0100
+Subject: [PATCH 1/2] Fix pvdisplay to refer to sectors, not KB
+In-Reply-To: <53280A97.4030307@redhat.com>
+References: <1395131042-5015-1-git-send-email-hare@suse.de>	<1395131042-5015-2-git-send-email-hare@suse.de>
+	<53280A97.4030307@redhat.com>
+Message-ID: <53280DAE.3020103@suse.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 18.3.2014 09:24, Hannes Reinecke napsal(a):
-> From: Xinwei Hu <xwhu@suse.de>
->
-> If lvm finds a duplicate PV where one device is a drbd device
-> it should prefer the drbd device.
->
-> Signed-off-by: Xinwei Hu <xwhu@suse.de>
-> Acked-by: Hannes Reinecke <hare@suse.de>
-> ---
->   lib/cache/lvmcache.c | 14 ++++++++++++++
->   1 file changed, 14 insertions(+)
->
-> diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-> index d40bdce..ebc619b 100644
-> --- a/lib/cache/lvmcache.c
-> +++ b/lib/cache/lvmcache.c
-> @@ -1503,6 +1503,14 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
->   						 dev_subsystem_name(dt, existing->dev),
->   						 dev_name(existing->dev));
->   				return NULL;
-> +			} else if (MAJOR(existing->dev->dev) == dt->drbd_major &&
-> +					MAJOR(dev->dev) != dt->drbd_major) {
-> +				log_very_verbose("Ignoring duplicate PV %s on "
-> +						"%s - using drbd %s",
-> +						pvid, dev_name(dev),
-> +						dev_name(existing->dev));
-> +				return NULL;
-> +
+On 03/18/2014 09:57 AM, Zdenek Kabelac wrote:
+> Dne 18.3.2014 09:24, Hannes Reinecke napsal(a):
+>> From: Thomas Fehr <fehr@suse.de>
+>>
+>> The size is displayed in sectors, not kilobytes.
+>>
+>> Signed-off-by: Thomas Fehr <fehr@suse.de>
+>> Acked-by: Hannes Reinecke <hare@suse.de>
+>> ---
+>>   man/pvdisplay.8.in | 2 +-
+>>   1 file changed, 1 insertion(+), 1 deletion(-)
+>>
+>> diff --git a/man/pvdisplay.8.in b/man/pvdisplay.8.in
+>> index 03c12c4..13c26b5 100644
+>> --- a/man/pvdisplay.8.in
+>> +++ b/man/pvdisplay.8.in
+>> @@ -65,7 +65,7 @@ The values are:
+>>
+>>   * physical volume device name
+>>   * volume group name
+>> -* physical volume size in kilobytes
+>> +* physical volume size in sectors
+>>   * internal physical volume number (obsolete)
+>>   * physical volume status
+>>   * physical volume (not) allocatable
+> 
+> Hi
+> 
+> Against which version of lvm2 is this patch ?
+> 
+> Since my upstream pvdisplay shows  size in  'human readable' format
+> i.e.:
+> (So definitely not in sector - unless used with option  '--units s')
+> 
+> --- Physical volume ---
+> PV Name               /dev/loop0
+> VG Name               vg
+> PV Size               976,56 GiB / not usable 0
+> Allocatable           yes
+> PE Size               32,00 KiB
+> Total PE              31999968
+> Free PE               31999872
+> Allocated PE          96
+> PV UUID               5DOVI6-ioCm-LJvd-JbwQ-qJc3-FWO4-yQCjGY
+> 
+Did I mention that these patches are ancient?
+(Originally developed in 2007 ...)
 
-Hi
+I'm just doing house-keeping for our lvm2 package at the moment.
+So I'm not at all surprised this patch is obsolete.
 
-I assume there is maybe wrong order of tests in functions:
+Thanks for the info; please disregard this patch.
 
-dev_subsystem_part_major() &  dev_subsystem_name()  (in lib/device/dev-type.c)
+Cheers,
 
-Could you check if reordering tests would solve it ?
-(I'm not familiar with drbd usage, however there is already code to handle 
-this case - but maybe it's not working for all cases ?)
-
-Zdenek
+Hannes
+-- 
+Dr. Hannes Reinecke		      zSeries & Storage
+hare at suse.de			      +49 911 74053 688
+SUSE LINUX Products GmbH, Maxfeldstr. 5, 90409 N?rnberg
+GF: J. Hawn, J. Guild, F. Imend?rffer, HRB 16746 (AG N?rnberg)
 
 
