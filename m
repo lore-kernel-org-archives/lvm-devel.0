@@ -1,86 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 18 Mar 2014 09:31:54 +0000 (UTC)
-Subject: master - lvmcache: add mode debug prints
-Message-ID: <20140318093154.61FF160DDE@fedorahosted.org>
+Date: Tue, 18 Mar 2014 09:31:56 +0000 (UTC)
+Subject: master - tests: more fedora kernels unusable for testing raid456
+Message-ID: <20140318093156.7DA4260DDE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=599a05f658326e8b683923e3255b3e05ccd54bb3
-Commit:        599a05f658326e8b683923e3255b3e05ccd54bb3
-Parent:        21b3c983fddac7e1365b4929dc02ddf04cf817bc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=81166a84be44409ab326eb1c4760cb32a9aee0fe
+Commit:        81166a84be44409ab326eb1c4760cb32a9aee0fe
+Parent:        599a05f658326e8b683923e3255b3e05ccd54bb3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 18 10:24:32 2014 +0100
+AuthorDate:    Mon Mar 17 18:38:59 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 18 10:28:08 2014 +0100
 
-lvmcache: add mode debug prints
+tests: more fedora kernels unusable for testing raid456
 
-Decorate NULL returns with debug_cache output so the
-debug log doesn't contain spurios <bactrace> line without
-any reason for it.
-
-Add internal errors when cache is misused.
 ---
- lib/cache/lvmcache.c |   20 ++++++++++++++++----
- 1 files changed, 16 insertions(+), 4 deletions(-)
+ test/lib/aux.sh |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index d40bdce..f414aed 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -429,11 +429,15 @@ struct lvmcache_vginfo *lvmcache_vginfo_from_vgname(const char *vgname, const ch
- 	if (!vgname)
- 		return lvmcache_vginfo_from_vgid(vgid);
- 
--	if (!_vgname_hash)
-+	if (!_vgname_hash) {
-+		log_debug_cache(INTERNAL_ERROR "Internal cache is no yet initialized.");
- 		return NULL;
-+	}
- 
--	if (!(vginfo = dm_hash_lookup(_vgname_hash, vgname)))
-+	if (!(vginfo = dm_hash_lookup(_vgname_hash, vgname))) {
-+		log_debug_cache("Metadata cache has no info for vgname: \"%s\"", vgname);
- 		return NULL;
-+	}
- 
- 	if (vgid)
- 		do
-@@ -441,6 +445,10 @@ struct lvmcache_vginfo *lvmcache_vginfo_from_vgname(const char *vgname, const ch
- 				return vginfo;
- 		while ((vginfo = vginfo->next));
- 
-+	if  (!vginfo)
-+		log_debug_cache("Metadata cache has not found vgname \"%s\" with vgid \"%s\"",
-+				vgname, vgid);
-+
- 	return vginfo;
- }
- 
-@@ -514,15 +522,19 @@ struct lvmcache_vginfo *lvmcache_vginfo_from_vgid(const char *vgid)
- 	struct lvmcache_vginfo *vginfo;
- 	char id[ID_LEN + 1] __attribute__((aligned(8)));
- 
--	if (!_vgid_hash || !vgid)
-+	if (!_vgid_hash || !vgid) {
-+		log_debug_cache(INTERNAL_ERROR "Internal cache cannot lookup vgid.");
- 		return NULL;
-+	}
- 
- 	/* vgid not necessarily NULL-terminated */
- 	strncpy(&id[0], vgid, ID_LEN);
- 	id[ID_LEN] = '\0';
- 
--	if (!(vginfo = dm_hash_lookup(_vgid_hash, id)))
-+	if (!(vginfo = dm_hash_lookup(_vgid_hash, id))) {
-+		log_debug_cache("Metadata cache has no info for vgid \"%s\"", id);
- 		return NULL;
-+	}
- 
- 	return vginfo;
- }
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 63896d1..42ac0a5 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -682,6 +682,8 @@ raid456_replace_works() {
+ # so we need to put here exlusion for kernes which do trace SLUB
+ #
+ 	case $(uname -r) in
++	  3.6.*.fc18.i686*|3.6.*.fc18.x86_64) return 1 ;;
++	  3.9.*.fc19.i686*|3.9.*.fc19.x86_64) return 1 ;;
+ 	  3.1[0123].*.fc18.i686*|3.1[0123].*.fc18.x86_64) return 1 ;;
+ 	  3.1[0123].*.fc19.i686*|3.1[0123].*.fc19.x86_64) return 1 ;;
+ 	  3.13.*.fc20.i686*|3.13.*.fc20.x86_64) return 1 ;;
 
 
