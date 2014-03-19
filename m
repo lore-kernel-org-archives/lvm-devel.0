@@ -1,46 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 17 Mar 2014 15:34:10 +0000 (UTC)
-Subject: master - tests: put vars in quotes
-Message-ID: <20140317153410.CFEE760E59@fedorahosted.org>
+Date: Wed, 19 Mar 2014 00:02:00 +0000 (UTC)
+Subject: master - archiver: drop unneeded backup check
+Message-ID: <20140319000200.09FEE61095@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e3d208f7c2aa3964ae76a7fc108bf63957ef4bd6
-Commit:        e3d208f7c2aa3964ae76a7fc108bf63957ef4bd6
-Parent:        c1ce2cc86cb1a9bba16b62119829e1e1ddc0ff87
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08018a5345c98b91ce43eb55f4110485df9eb3aa
+Commit:        08018a5345c98b91ce43eb55f4110485df9eb3aa
+Parent:        25f5e2da8d6b447d26395e610e55192d2d8a16b4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 17 16:30:52 2014 +0100
+AuthorDate:    Wed Mar 19 00:20:39 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 17 16:30:52 2014 +0100
+CommitterDate: Wed Mar 19 00:45:41 2014 +0100
 
-tests: put vars in quotes
+archiver: drop unneeded backup check
 
-This shell var has space in middle
+When the backup is disabled, avoid testing backup presence.
+This only leads to errors being logged in debug trace and the missing
+backup can't be fixed, since it's disabled.
 ---
- test/shell/snapshot-usage.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/format_text/archiver.c |    5 +++++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
-index a50eeb2..095fddb 100644
---- a/test/shell/snapshot-usage.sh
-+++ b/test/shell/snapshot-usage.sh
-@@ -80,12 +80,12 @@ vgcreate -s 1K $vg1 "$DM_DEV_DIR/$vg/$lv"
- lvcreate -V50 -L10 -n $lv1 -s $vg1
- CHECK_ACTIVE="active"
- test ! -e LOCAL_CLVMD || CHECK_ACTIVE="local exclusive"
--check lv_field $vg1/$lv1 lv_active ${CHECK_ACTIVE}
-+check lv_field $vg1/$lv1 lv_active "$CHECK_ACTIVE"
- lvchange -an $vg1
+diff --git a/WHATS_NEW b/WHATS_NEW
+index de96f8a..e2c196a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.106 - 
+ ====================================
++  Do not check for backups when when its creation is disabled.
+   Don't allow --mergedconfig without --type current in dumpconfig. Fix memleak.
+   Make global/lvdisplay_shows_full_device_path lvm.conf setting profilable.
+   Make global/{units|si_unit_consistency|suffix} lvm.conf setting profilable.
+diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
+index 31d17ef..2667bdb 100644
+--- a/lib/format_text/archiver.c
++++ b/lib/format_text/archiver.c
+@@ -487,6 +487,11 @@ void check_current_backup(struct volume_group *vg)
+ 	struct volume_group *vg_backup;
+ 	int old_suppress;
  
- # On cluster snapshot gets exclusive activation
- lvchange -ay $vg1
--check lv_field $vg1/$lv1 lv_active ${CHECK_ACTIVE}
-+check lv_field $vg1/$lv1 lv_active "$CHECK_ACTIVE"
++	if (!vg->cmd->backup_params->enabled || !vg->cmd->backup_params->dir) {
++		log_debug("Skipping check for current backup, since backup is disabled.");
++		return;
++	}
++
+ 	if (vg_is_exported(vg))
+ 		return;
  
- # Test removal of opened (bug unmounted) snapshot (device busy) for a while
- sleep 120 < "$DM_DEV_DIR/$vg1/$lv1" &
 
 
