@@ -1,43 +1,44 @@
-From: Paul B. Henson <henson@acm.org>
-Date: Mon, 17 Mar 2014 18:07:50 -0700
-Subject: cache support
-In-Reply-To: <7A62EBEE-E031-469E-902B-FA507CADD9DA@redhat.com>
-References: <096101cf2214$d241ed60$76c5c820$@acm.org>	<52F205CA.1090807@redhat.com>	<0a3901cf22af$ae01d2d0$0a057870$@acm.org>	<52F2AD44.8030006@redhat.com>	<0a7b01cf22db$da3f56c0$8ebe0440$@acm.org>	<A2CE00CC-6439-4A2E-A694-8E3B2656867B@redhat.com>	<0fff01cf276c$d059c8d0$710d5a70$@acm.org>	<0C83CD55-18B6-4407-9A42-72F9D6C5683D@redhat.com>	<0b4501cf3d85$44b76c90$ce2645b0$@acm.org>
-	<7A62EBEE-E031-469E-902B-FA507CADD9DA@redhat.com>
-Message-ID: <0f9a01cf4246$7db93f30$792bbd90$@acm.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 21 Mar 2014 21:31:46 +0000 (UTC)
+Subject: master - clvmd: drop dead code
+Message-ID: <20140321213146.6FCE3610FC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> From: Brassow Jonathan
-> Sent: Monday, March 17, 2014 8:56 AM
->
-> Yes, that is basically the idea.  However, converting the thinpool is a
-little
-> more tricky.  You already are using the fast device for the thinpool
-metadata
-> device (which seems awfully large from your example).  When you cache the
-> thinpool, I think you just want to cache the data section.
-> # lvconvert --type cache --cachepool vg/cachepool vg/thinpool_tdata
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7041c8bf51844c314fd4ed3b5f20779959524320
+Commit:        7041c8bf51844c314fd4ed3b5f20779959524320
+Parent:        73978f8d7dd638806f514a7914884a204afd95c1
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Mar 21 16:50:45 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Mar 21 22:29:24 2014 +0100
 
-Ah right; in your original example you had connected the cache to the
-thinpool data lv before creating the actual thinpool, when I tried to
-convert that to adding the cache after the fact I didn't take that into
-consideration.
+clvmd: drop dead code
 
-In your original example, it said to size the metadata device to
-approximately 1/1000 of the data lv size, so for a 4 TB data lv that would
-actually be almost 4 GB? The estimation utility says about 2.4 GB:
+Since pipe_client has been already reset to NULL,
+remove this dead code.
+---
+ daemons/clvmd/clvmd.c |    5 -----
+ 1 files changed, 0 insertions(+), 5 deletions(-)
 
-# thin_metadata_size -b 64k -s 4t -m 100000 -u g
-thin_metadata_size - 2.41 gigabytes estimated metadata area size
-
-Evidently online metadata pool resize is supported now, so I guess I don't
-have to extremely overestimate from the start, as long as I keep an eye on
-it I can always top it off before it runs out.
-
-Thanks.
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 572c5b7..dd3548f 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -1223,11 +1223,6 @@ static int cleanup_zombie(struct local_client *thisfd)
+ 	/* Free the command buffer */
+ 	dm_free(thisfd->bits.localsock.cmd);
+ 
+-	/* Clear out the cross-link */
+-	if (thisfd->bits.localsock.pipe_client != NULL)
+-		thisfd->bits.localsock.pipe_client->bits.pipe.client =
+-		    NULL;
+-
+ 	safe_close(&(thisfd->fd));
+ 	thisfd->bits.localsock.cleanup_needed = 0;
+ 	return 0;
 
 
