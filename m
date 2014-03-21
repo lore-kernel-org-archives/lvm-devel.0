@@ -1,54 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 21 Mar 2014 21:31:25 +0000 (UTC)
-Subject: master - activate: report release with critical section
-Message-ID: <20140321213125.83A0560FB4@fedorahosted.org>
+Date: Fri, 21 Mar 2014 21:31:27 +0000 (UTC)
+Subject: master - memlock: drop locked mem in critical section
+Message-ID: <20140321213127.A15CD611DB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0ca16c694668ded9b33c22dc54316dd4bd77151b
-Commit:        0ca16c694668ded9b33c22dc54316dd4bd77151b
-Parent:        e5382c063d2549d3a28b3182218b7978e0c22442
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=486b15d36ce672f78a35143ce6bb12c48552fbf8
+Commit:        486b15d36ce672f78a35143ce6bb12c48552fbf8
+Parent:        0ca16c694668ded9b33c22dc54316dd4bd77151b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 20 10:31:21 2014 +0100
+AuthorDate:    Thu Mar 20 13:53:39 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Mar 21 22:29:22 2014 +0100
 
-activate: report release with critical section
+memlock: drop locked mem in critical section
 
-This function is typically called for cmd context refresh or destroy.
-On the non-clustered case we already unlocked all messages,
-however when i.e. 'clvmd' gets break signal it may have
-still couple messages queued.
+When daemon releases memory and it is still in critical
+section, issue an error message and drop memory.
 
-For now just report an error.
+We cannot do anything better for now and we at least
+release allocated resource.
+
+FIXME:
+
+This code is triggered when i.e. clvmd is killed while
+some LVs are suspend - in this case suspended devices leak,
+so if this happens during i.e. clvmd upgrade we have
+unresolved problem - even locked rootfs...
 ---
- lib/activate/activate.c |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ lib/mm/memlock.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 565634f..9d404e5 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2348,11 +2348,16 @@ int pv_uses_vg(struct physical_volume *pv,
- 
- void activation_release(void)
- {
--	dev_manager_release();
-+	if (critical_section())
-+		/* May leak stacked operation */
-+		log_error("Releasing activation in critical section.");
-+
-+	fs_unlock(); /* Implicit dev_manager_release(); */
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index f32424a2..a83c3ed 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -456,6 +456,11 @@ void memlock_dec_daemon(struct cmd_context *cmd)
+ 		log_error(INTERNAL_ERROR "_memlock_count_daemon has dropped below 0.");
+ 	--_memlock_count_daemon;
+ 	log_debug_mem("memlock_count_daemon dec to %d", _memlock_count_daemon);
++	if (!_memlock_count_daemon && _critical_section && _mem_locked) {
++		log_error("Unlocking daemon memory in critical section.");
++		_unlock_mem(cmd);
++		_mem_locked = 0;
++	}
+ 	_unlock_mem_if_possible(cmd);
  }
  
- void activation_exit(void)
- {
-+	activation_release();
- 	dev_manager_exit();
- }
- #endif
 
 
