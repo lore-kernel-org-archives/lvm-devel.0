@@ -1,54 +1,65 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 21 Mar 2014 21:31:27 +0000 (UTC)
-Subject: master - memlock: drop locked mem in critical section
-Message-ID: <20140321213127.A15CD611DB@fedorahosted.org>
+Date: Fri, 21 Mar 2014 21:31:29 +0000 (UTC)
+Subject: master - clvmd: fix clean memory on exit
+Message-ID: <20140321213129.BC91160919@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=486b15d36ce672f78a35143ce6bb12c48552fbf8
-Commit:        486b15d36ce672f78a35143ce6bb12c48552fbf8
-Parent:        0ca16c694668ded9b33c22dc54316dd4bd77151b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5bea2b5c8208db7c0277d7bd8672a4db26fbf6d6
+Commit:        5bea2b5c8208db7c0277d7bd8672a4db26fbf6d6
+Parent:        486b15d36ce672f78a35143ce6bb12c48552fbf8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 20 13:53:39 2014 +0100
+AuthorDate:    Fri Mar 21 17:07:57 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Mar 21 22:29:22 2014 +0100
 
-memlock: drop locked mem in critical section
+clvmd: fix clean memory on exit
 
-When daemon releases memory and it is still in critical
-section, issue an error message and drop memory.
+Properly clean 'client' structure only for LOCAL_SOCK type.
+(Fixes bug from commit 460c19df621d35260caceec7f598da1566263cd4)
+(in release fix)
 
-We cannot do anything better for now and we at least
-release allocated resource.
+Also cleanup-up associated pthreads by using cleanup_zombie() function.
+Since this function may change the list, restart scanning always from
+the list header.
 
-FIXME:
-
-This code is triggered when i.e. clvmd is killed while
-some LVs are suspend - in this case suspended devices leak,
-so if this happens during i.e. clvmd upgrade we have
-unresolved problem - even locked rootfs...
+Note: couple following patches are necessary to make this working properly.
 ---
- lib/mm/memlock.c |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ daemons/clvmd/clvmd.c |   19 +++++++------------
+ 1 files changed, 7 insertions(+), 12 deletions(-)
 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index f32424a2..a83c3ed 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -456,6 +456,11 @@ void memlock_dec_daemon(struct cmd_context *cmd)
- 		log_error(INTERNAL_ERROR "_memlock_count_daemon has dropped below 0.");
- 	--_memlock_count_daemon;
- 	log_debug_mem("memlock_count_daemon dec to %d", _memlock_count_daemon);
-+	if (!_memlock_count_daemon && _critical_section && _mem_locked) {
-+		log_error("Unlocking daemon memory in critical section.");
-+		_unlock_mem(cmd);
-+		_mem_locked = 0;
-+	}
- 	_unlock_mem_if_possible(cmd);
- }
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index ddebc15..00945da 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -625,18 +625,13 @@ int main(int argc, char *argv[])
+ 	close_local_sock(local_sock);
+ 	destroy_lvm();
+ 
+-	for (newfd = local_client_head.next; newfd != NULL;) {
+-		delfd = newfd;
+-		newfd = newfd->next;
+-		if (delfd->fd == local_sock)
+-			delfd->fd = -1;
+-		/*
+-		 * FIXME:
+-		 * needs cleanup code from read_from_local_sock() for now
+-		 * break of 'clvmd' may access already free memory here.
+-		 */
+-		safe_close(&(delfd->fd));
+-		cmd_client_cleanup(delfd);
++	while ((delfd = local_client_head.next)) {
++		local_client_head.next = delfd->next;
++		/* Failing cleanup_zombie leaks... */
++		if (delfd->type == LOCAL_SOCK && !cleanup_zombie(delfd))
++			cmd_client_cleanup(delfd); /* calls sync_unlock */
++		if (delfd->fd != local_sock)
++			safe_close(&(delfd->fd));
+ 		dm_free(delfd);
+ 	}
  
 
 
