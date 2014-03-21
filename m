@@ -1,44 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 21 Mar 2014 21:31:46 +0000 (UTC)
-Subject: master - clvmd: drop dead code
-Message-ID: <20140321213146.6FCE3610FC@fedorahosted.org>
+Date: Fri, 21 Mar 2014 21:31:48 +0000 (UTC)
+Subject: master - singlenode: reset pointer when hash is destroyed
+Message-ID: <20140321213148.7F1B960F05@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7041c8bf51844c314fd4ed3b5f20779959524320
-Commit:        7041c8bf51844c314fd4ed3b5f20779959524320
-Parent:        73978f8d7dd638806f514a7914884a204afd95c1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=46ae028cd34597cfd54048edd99cb0f27ac542eb
+Commit:        46ae028cd34597cfd54048edd99cb0f27ac542eb
+Parent:        7041c8bf51844c314fd4ed3b5f20779959524320
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 21 16:50:45 2014 +0100
+AuthorDate:    Wed Mar 19 23:34:11 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 21 22:29:24 2014 +0100
+CommitterDate: Fri Mar 21 22:29:25 2014 +0100
 
-clvmd: drop dead code
+singlenode: reset pointer when hash is destroyed
 
-Since pipe_client has been already reset to NULL,
-remove this dead code.
+Just keep pointer consistent.
 ---
- daemons/clvmd/clvmd.c |    5 -----
- 1 files changed, 0 insertions(+), 5 deletions(-)
+ daemons/clvmd/clvmd-singlenode.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 572c5b7..dd3548f 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -1223,11 +1223,6 @@ static int cleanup_zombie(struct local_client *thisfd)
- 	/* Free the command buffer */
- 	dm_free(thisfd->bits.localsock.cmd);
+diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
+index cad9acb..a3a1960 100644
+--- a/daemons/clvmd/clvmd-singlenode.c
++++ b/daemons/clvmd/clvmd-singlenode.c
+@@ -109,6 +109,7 @@ static int _init_cluster(void)
+ 	r = init_comms();
+ 	if (r) {
+ 		dm_hash_destroy(_locks);
++		_locks = NULL;
+ 		return r;
+ 	}
  
--	/* Clear out the cross-link */
--	if (thisfd->bits.localsock.pipe_client != NULL)
--		thisfd->bits.localsock.pipe_client->bits.pipe.client =
--		    NULL;
--
- 	safe_close(&(thisfd->fd));
- 	thisfd->bits.localsock.cleanup_needed = 0;
- 	return 0;
 
 
