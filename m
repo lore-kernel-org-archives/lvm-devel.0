@@ -1,39 +1,67 @@
-From: Hannes Reinecke <hare@suse.de>
-Date: Tue, 18 Mar 2014 09:24:01 +0100
-Subject: [PATCH 1/2] Fix pvdisplay to refer to sectors, not KB
-In-Reply-To: <1395131042-5015-1-git-send-email-hare@suse.de>
-References: <1395131042-5015-1-git-send-email-hare@suse.de>
-Message-ID: <1395131042-5015-2-git-send-email-hare@suse.de>
+From: Mitsuhiro Tanino <mtanino@redhat.com>
+Date: Mon, 24 Mar 2014 17:16:41 -0400
+Subject: Nested logical volume snapshot on shared storage
+Message-ID: <5330A0B9.5000105@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Thomas Fehr <fehr@suse.de>
+Hi
 
-The size is displayed in sectors, not kilobytes.
+I would like to know latest activity of nested logical volume snapshot.
+In my understanding, nested LV snapshot is only supported when we use LVM thin volume.
+Referring the document, thin volume are not supported across the nodes in a cluster
+or shared with several servers. Therefore, there is no feature to provide nested
+LV snapshot across several nodes.
 
-Signed-off-by: Thomas Fehr <fehr@suse.de>
-Acked-by: Hannes Reinecke <hare@suse.de>
----
- man/pvdisplay.8.in | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Logical_Volume_Manager_Administration/thinprovisioned_volumes.html
 
-diff --git a/man/pvdisplay.8.in b/man/pvdisplay.8.in
-index 03c12c4..13c26b5 100644
---- a/man/pvdisplay.8.in
-+++ b/man/pvdisplay.8.in
-@@ -65,7 +65,7 @@ The values are:
- 
- * physical volume device name
- * volume group name
--* physical volume size in kilobytes
-+* physical volume size in sectors
- * internal physical volume number (obsolete)
- * physical volume status
- * physical volume (not) allocatable
+I think nested logical volume snapshot is very useful feature for cloud environment.
+For example,
+If user create a new VM from LV snapshot, the VM can boot quickly because LVM snapshot
+is ablle to create rapidly and also it can save disk usage.
+And if nested LV snapshot is supported, user can retrieve a VM which is created by
+LV snapshot to former state after applying some configurations. Nested snapshot
+is already supported by qcow2.
+
+Following figure is shown above example.
+I would appreciate if anyone let me know an activity of nested snapshot.
+
+---------
+* Mgmt node(serv01): Manage. volume creation using snapshot, volume deletion
+                      snapshot creation using nested LVM snapshot, snapshot deletion
+* HV node1(srv02)  : Attach a snapshot to a VM and run KVM guest.
+* HV node2(srv03)  : Same as HV node1.
+  
+  thX: thin volume including KVM guest boot image.
+  snX: snapshot from thin volume.
+
++---------------+  +---------------+  +---------------+
+|     srv01     |  |     srv02     |  |     srv03     |
+|   Mgmt node   |  |    HV node1   |  |    HV node2   |
+|               |  |       +---+   |  |         +---+ |
+|               |  |       |VM1|   |  |         |VM2| |
+|               |  |       +-+-+   |  |         +-+-+ |
+|               |  |         |     |  |             | |
++---+---+---+---+  +---+---+-+-+---+  +---+---+---+-+-+
+|th1|th2|sn1|sn2|  |th1|th2|sn1|sn2|  |th1|th2|sn1|sn2|
++---------------+  +---------------+  +---------------+
+|   dm-thin01   |  |   dm-thin01   |  |   dm-thin01   |
++---------------+  +---------------+  +---------------+
+|     vg01      |  |     vg01      |  |     vg01      |
++---------------+  +---------------+  +---------------+
+       |FC1               |FC2               |FC3
+       |                  |                  |
+------+------------------+--------+---------+----------
+                                   |
+                           +-------+--------+
+                           | A Logical Unit |
+                           +----------------+
+
 -- 
-1.8.1.4
+Regards,
+Mitsuhiro Tanino
 
 
