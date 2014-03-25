@@ -1,63 +1,53 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 25 Mar 2014 10:23:51 +0000 (UTC)
-Subject: master - tests: relocate vgimport test
-Message-ID: <20140325102351.8FF4B60F9D@fedorahosted.org>
+Date: Tue, 25 Mar 2014 23:06:39 +0000 (UTC)
+Subject: master - tests: check forced backup
+Message-ID: <20140325230639.C64A961055@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db04d3e6d29dde331a88eec2cec5249ee7c211f0
-Commit:        db04d3e6d29dde331a88eec2cec5249ee7c211f0
-Parent:        13258d6e96a43fa88b41e21befd31836f21b59dd
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4b30863e857aa5a671485227c9b7a7e3a6d1e277
+Commit:        4b30863e857aa5a671485227c9b7a7e3a6d1e277
+Parent:        4adbb85c372b1030b67749f7f208132a2cc06a7f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 24 09:58:29 2014 +0100
+AuthorDate:    Tue Mar 25 23:55:04 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 25 11:22:59 2014 +0100
+CommitterDate: Wed Mar 26 00:05:46 2014 +0100
 
-tests: relocate vgimport test
+tests: check forced backup
 
-It seem like a better-fit here.
 ---
- test/shell/covercmd.sh      |    7 -------
- test/shell/vgimportclone.sh |    6 ++++++
- 2 files changed, 6 insertions(+), 7 deletions(-)
+ test/shell/vgcfgbackup-usage.sh |   11 +++++++++++
+ 1 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/covercmd.sh b/test/shell/covercmd.sh
-index ffa48f0..f1bdca9 100644
---- a/test/shell/covercmd.sh
-+++ b/test/shell/covercmd.sh
-@@ -64,13 +64,6 @@ for i in h b s k m g t p e H B S K M G T P E; do
- done
- fi
+diff --git a/test/shell/vgcfgbackup-usage.sh b/test/shell/vgcfgbackup-usage.sh
+index 314ecdd..3d955b5 100644
+--- a/test/shell/vgcfgbackup-usage.sh
++++ b/test/shell/vgcfgbackup-usage.sh
+@@ -13,11 +13,22 @@
  
--
--# test vgexport vgimport tools
--vgchange -an $vg
--vgexport $vg
--vgimport $vg
--vgchange -ay $vg
--
- # "-persistent y --major 254 --minor 20"
- # "-persistent n"
- # test various lvm utils
-diff --git a/test/shell/vgimportclone.sh b/test/shell/vgimportclone.sh
-index f2977c9..923638e 100644
---- a/test/shell/vgimportclone.sh
-+++ b/test/shell/vgimportclone.sh
-@@ -16,6 +16,12 @@ aux prepare_devs 2
- vgcreate --metadatasize 128k $vg1 "$dev1"
- lvcreate -l100%FREE -n $lv1 $vg1
+ aux prepare_pvs 4
  
-+# Test plain vgexport vgimport tools
-+vgchange -an $vg1
-+vgexport $vg1
-+vgimport $vg1
-+vgchange -ay $vg1
++# No automatic backup
++aux lvmconf "backup/backup = 0"
 +
- # Clone the LUN
- dd if="$dev1" of="$dev2" bs=256K count=1
- aux notify_lvmetad "$dev2"
+ # vgcfgbackup handles similar VG names (bz458941)
+ vg1=${PREFIX}vg00
+ vg2=${PREFIX}vg01
+ vgcreate $vg1 "$dev1"
+ vgcreate $vg2 "$dev2"
++
++# Enforces system backup
++test ! -e etc/backup/$vg1
++test ! -e etc/backup/$vg2
++vgcfgbackup
++test -e etc/backup/$vg1
++test -e etc/backup/$vg2
++
+ vgcfgbackup -f bak-%s >out
+ grep "Volume group \"$vg1\" successfully backed up." out
+ grep "Volume group \"$vg2\" successfully backed up." out
 
 
