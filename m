@@ -1,76 +1,126 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 30 Mar 2014 21:46:10 +0000 (UTC)
-Subject: master - tests: add more pvdisplay tests
-Message-ID: <20140330214610.8AB8D602D1@fedorahosted.org>
+Date: Tue, 25 Mar 2014 10:23:59 +0000 (UTC)
+Subject: master - tests: update
+Message-ID: <20140325102359.E796D60F9D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8f9150c241f80b2fd69d2e416340707759e79ac8
-Commit:        8f9150c241f80b2fd69d2e416340707759e79ac8
-Parent:        1216aa7826428dfa5f83af4bd29c7741de7a1a23
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3c9204a75a31324f661a3a2d7d9ad5494b0c3e35
+Commit:        3c9204a75a31324f661a3a2d7d9ad5494b0c3e35
+Parent:        36d87eddcf280e9c394e10ac5860ed4d84eaf4a2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Mar 30 23:15:16 2014 +0200
+AuthorDate:    Mon Mar 24 23:13:35 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Mar 30 23:45:00 2014 +0200
+CommitterDate: Tue Mar 25 11:23:00 2014 +0100
 
-tests: add more pvdisplay tests
+tests: update
 
 ---
- test/shell/listings.sh |   26 +++++++++++++++++++++++++-
- 1 files changed, 25 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-repair-policy.sh |   41 +++++++++++++++++----------------
+ 1 files changed, 21 insertions(+), 20 deletions(-)
 
-diff --git a/test/shell/listings.sh b/test/shell/listings.sh
-index 0d69957..414b146 100644
---- a/test/shell/listings.sh
-+++ b/test/shell/listings.sh
-@@ -25,6 +25,7 @@ pvcreate --metadatacopies 0 "$dev5"
+diff --git a/test/shell/lvconvert-repair-policy.sh b/test/shell/lvconvert-repair-policy.sh
+index f3fe139..cefb0ea 100644
+--- a/test/shell/lvconvert-repair-policy.sh
++++ b/test/shell/lvconvert-repair-policy.sh
+@@ -18,15 +18,15 @@ aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
+ # Clean-up and create a 2-way mirror, where the the
+ # leg devices are always on $dev[12] and the log
+ # is always on $dev3.  ($dev4 behaves as a spare)
+-cleanup() {
++cleanup_() {
+ 	vgreduce --removemissing $vg
+ 	for d in "$@"; do aux enable_dev "$d"; done
+ 	for d in "$@"; do vgextend $vg "$d"; done
+ 	lvremove -ff $vg/mirror
+-	lvcreate -aey --type mirror -m 1 --ignoremonitoring -l 2 -n mirror $vg "$dev1" "$dev2" "$dev3":0
++	lvcreate -aey --type mirror -m 1 --ignoremonitoring -l 2 -n mirror $vg "$dev1" "$dev2" "$dev3:0"
+ }
  
- #COMM bz195276 -- pvs doesn't show PVs until a VG is created
- test $(pvs --noheadings $(cat DEVICES) | wc -l) -eq 5
-+pvdisplay
+-repair() {
++repair_() {
+ 	lvconvert --repair --use-policies --config "$1" $vg/mirror
+ }
  
- #COMM pvs with segment attributes works even for orphans
- test $(pvs --noheadings -o seg_all,pv_all,lv_all,vg_all $(cat DEVICES) | wc -l) -eq 5
-@@ -122,13 +123,36 @@ invalid lvdisplay --separator : $vg
- invalid lvdisplay --sort size $vg
- invalid lvdisplay --unbuffered $vg
+@@ -36,58 +36,59 @@ lvchange -a n $vg/mirror
+ # Fail a leg of a mirror.
+ aux disable_dev "$dev1"
+ lvchange --partial -aey $vg/mirror
+-repair 'activation { mirror_image_fault_policy = "remove" }'
++repair_ 'activation { mirror_image_fault_policy = "remove" }'
+ check linear $vg mirror
+-cleanup "$dev1"
++cleanup_ "$dev1"
  
--
- invalid vgdisplay -C -A
- invalid vgdisplay -C -c
- invalid vgdisplay -C -s
- invalid vgdisplay -c -s
- invalid vgdisplay -A $vg1
+ # Fail a leg of a mirror.
+ # Expected result: Mirror (leg replaced, should retain log)
+ aux disable_dev "$dev1"
+-repair 'activation { mirror_image_fault_policy = "replace" mirror_log_fault_policy = "remove" }'
++repair_ 'activation { mirror_image_fault_policy = "replace" mirror_log_fault_policy = "remove" }'
+ check mirror $vg mirror
+ check active $vg mirror_mlog
+-cleanup "$dev1"
++cleanup_ "$dev1"
  
-+invalid pvdisplay -C -A
-+invalid pvdisplay -C -c
-+invalid pvdisplay -C -m
-+invalid pvdisplay -C -s
-+invalid pvdisplay -c -m
-+invalid pvdisplay -c -s
-+invalid pvdisplay --alianed
-+invalid pvdisplay --all
-+invalid pvdisplay --noheadings
-+invalid pvdisplay --options
-+invalid pvdisplay --separator :
-+invalid pvdisplay --sort size
-+invalid pvdisplay --unbuffered
-+invalid pvdisplay -A $vg1
-+
-+# Check exported VG listing
-+vgchange -an $vg
-+vgexport -a
-+pvdisplay --noheadings -C -o attr,name | tee out
-+not grep -v "ax-" out
-+vgimport -a
-+pvdisplay --noheadings -C -o attr,name | tee out
-+grep -v "ax-" out
-+
+ # Fail a leg of a mirror.
+ # Expected result: Mirror (leg replaced)
+ aux disable_dev "$dev1"
+-repair 'activation { mirror_image_fault_policy = "replace" }'
++repair_ 'activation { mirror_image_fault_policy = "replace" }'
+ check mirror $vg mirror
+ check active $vg mirror_mlog
+-cleanup "$dev1"
++cleanup_ "$dev1"
+ 
+ # Fail a leg of a mirror (use old name for policy specification)
+ # Expected result: Mirror (leg replaced)
+ aux disable_dev "$dev1"
+-repair 'activation { mirror_image_fault_policy = "replace" }'
++repair_ 'activation { mirror_image_fault_policy = "replace" }'
+ check mirror $vg mirror
+ check active $vg mirror_mlog
+-cleanup "$dev1"
++not pvdisplay $vg
++cleanup_ "$dev1"
+ 
+ # Fail a leg of a mirror w/ no available spare
+ # Expected result: linear
+ #                  (or 2-way with leg/log overlap if alloc anywhere)
+ aux disable_dev "$dev2" "$dev4"
+-repair 'activation { mirror_image_fault_policy = "replace" }'
++repair_ 'activation { mirror_image_fault_policy = "replace" }'
+ check mirror $vg mirror
+-not check lv_exists $vg mirror_mlog
+-cleanup "$dev2" "$dev4"
++check lv_not_exists $vg mirror_mlog
++cleanup_ "$dev2" "$dev4"
+ 
+ # Fail the log device of a mirror w/ no available spare
+ # Expected result: mirror w/ corelog
+ aux disable_dev "$dev3" "$dev4"
+-repair 'activation { mirror_image_fault_policy = "replace" }' $vg/mirror
++repair_ 'activation { mirror_image_fault_policy = "replace" }' $vg/mirror
+ check mirror $vg mirror
+-not check lv_exists $vg mirror_mlog
+-cleanup "$dev3" "$dev4"
++check lv_not_exists $vg mirror_mlog
++cleanup_ "$dev3" "$dev4"
+ 
+ # Fail the log device with a remove policy
+ # Expected result: mirror w/ corelog
+ lvchange -aey $vg/mirror
+ aux disable_dev "$dev3" "$dev4"
+-repair 'activation { mirror_log_fault_policy = "remove" }'
++repair_ 'activation { mirror_log_fault_policy = "remove" }'
+ check mirror $vg mirror core
+-not check lv_exists $vg mirror_mlog
+-cleanup "$dev3" "$dev4"
++check lv_not_exists $vg mirror_mlog
++cleanup_ "$dev3" "$dev4"
+ 
  vgremove -ff $vg
- 
- #test vgdisplay -A to select only active VGs
 
 
