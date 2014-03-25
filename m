@@ -1,59 +1,40 @@
-From: Hannes Reinecke <hare@suse.de>
-Date: Tue, 18 Mar 2014 09:24:02 +0100
-Subject: [PATCH 2/2] Handle duplicate PVs on drbd
-In-Reply-To: <1395131042-5015-1-git-send-email-hare@suse.de>
-References: <1395131042-5015-1-git-send-email-hare@suse.de>
-Message-ID: <1395131042-5015-3-git-send-email-hare@suse.de>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 25 Mar 2014 10:23:55 +0000 (UTC)
+Subject: master - tests: argless pvremove
+Message-ID: <20140325102355.B878360F9D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Xinwei Hu <xwhu@suse.de>
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db1d4ba4ac267d32ef0c8c96d0e1785863d40f0a
+Commit:        db1d4ba4ac267d32ef0c8c96d0e1785863d40f0a
+Parent:        04861b9bed41a2e907fca6f71acbf4c39cfebfd5
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Mar 24 10:01:25 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 25 11:23:00 2014 +0100
 
-If lvm finds a duplicate PV where one device is a drbd device
-it should prefer the drbd device.
+tests: argless pvremove
 
-Signed-off-by: Xinwei Hu <xwhu@suse.de>
-Acked-by: Hannes Reinecke <hare@suse.de>
 ---
- lib/cache/lvmcache.c | 14 ++++++++++++++
- 1 file changed, 14 insertions(+)
+ test/shell/pvremove-usage.sh |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index d40bdce..ebc619b 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1503,6 +1503,14 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 						 dev_subsystem_name(dt, existing->dev),
- 						 dev_name(existing->dev));
- 				return NULL;
-+			} else if (MAJOR(existing->dev->dev) == dt->drbd_major &&
-+					MAJOR(dev->dev) != dt->drbd_major) {
-+				log_very_verbose("Ignoring duplicate PV %s on "
-+						"%s - using drbd %s",
-+						pvid, dev_name(dev),
-+						dev_name(existing->dev));
-+				return NULL;
+diff --git a/test/shell/pvremove-usage.sh b/test/shell/pvremove-usage.sh
+index 4f7b35f..52f04b8 100644
+--- a/test/shell/pvremove-usage.sh
++++ b/test/shell/pvremove-usage.sh
+@@ -15,6 +15,9 @@ aux prepare_devs 3
+ pvcreate "$dev1"
+ pvcreate --metadatacopies 0 "$dev2"
+ pvcreate --metadatacopies 2 "$dev3"
 +
- 			} else if (dm_is_dm_major(MAJOR(existing->dev->dev)) &&
- 				   !dm_is_dm_major(MAJOR(dev->dev))) {
- 				log_very_verbose("Ignoring duplicate PV %s on "
-@@ -1523,6 +1531,12 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 						 "using dm %s", pvid,
- 						 dev_name(existing->dev),
- 						 dev_name(dev));
-+			else if (MAJOR(existing->dev->dev) != dt->drbd_major &&
-+					MAJOR(dev->dev) == dt->drbd_major)
-+				log_very_verbose("Duplicate PV %s on %s - "
-+						"using drbd %s", pvid,
-+						dev_name(existing->dev),
-+						dev_name(dev));
- 			/* FIXME If both dm, check dependencies */
- 			//else if (dm_is_dm_major(MAJOR(existing->dev->dev)) &&
- 				 //dm_is_dm_major(MAJOR(dev->dev)))
--- 
-1.8.1.4
++# Fails without give argument
++not pvremove
+ pvremove "$dev2"
+ 
+ # failing, but still removing everything what can be removed
 
 
