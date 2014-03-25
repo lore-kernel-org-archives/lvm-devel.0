@@ -1,42 +1,52 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 25 Mar 2014 10:23:43 +0000 (UTC)
-Subject: master - cleanup: use trigraph
-Message-ID: <20140325102343.3BEAC60F9D@fedorahosted.org>
+Date: Tue, 25 Mar 2014 10:53:18 +0000 (UTC)
+Subject: master - pvresize: fail exit code for negative size
+Message-ID: <20140325105318.29C38612AA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a6f05e42085c0d3e8bc4b5352b57ab9b4434e02
-Commit:        4a6f05e42085c0d3e8bc4b5352b57ab9b4434e02
-Parent:        db71739f429f9bd12c93c6686292399f007ce4a9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0738f0ad7289cca4121aace1540e479648a1abe2
+Commit:        0738f0ad7289cca4121aace1540e479648a1abe2
+Parent:        8471fb01d885aab5c46b61602352ca90814f8a8e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 24 10:01:44 2014 +0100
+AuthorDate:    Tue Mar 25 11:52:03 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 25 11:22:58 2014 +0100
+CommitterDate: Tue Mar 25 11:52:03 2014 +0100
 
-cleanup: use trigraph
+pvresize: fail exit code for negative size
 
+Pvresize with negative value retuns invalid cmd line exit code.
 ---
- lib/activate/activate.c |    5 +----
- 1 files changed, 1 insertions(+), 4 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/pvresize.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 9d404e5..ff13fe4 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -45,10 +45,7 @@ int lvm1_present(struct cmd_context *cmd)
- 		return 0;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a1eb7ed..6926901 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.106 - 
+ ====================================
++  Return failure when specifying negative size for pvresize.
+   Fix memory corruption in cmd context refresh if clvmd leaks opened device.
+   Reinitialise lvmcache properly on fork to fix premature polldaemon exit.
+   Add 'lvm dumpconfig --type diff' to show differences from defaults.
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index faf3134..1bb8a15 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -52,7 +52,7 @@ int pvresize(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	if (arg_sign_value(cmd, physicalvolumesize_ARG, SIGN_NONE) == SIGN_MINUS) {
+ 		log_error("Physical volume size may not be negative");
+-		return 0;
++		return EINVALID_CMD_LINE;
  	}
  
--	if (path_exists(path))
--		return 1;
--	else
--		return 0;
-+	return (path_exists(path)) ? 1 : 0;
- }
- 
- int list_segment_modules(struct dm_pool *mem, const struct lv_segment *seg,
+ 	params.new_size = arg_uint64_value(cmd, physicalvolumesize_ARG,
 
 
