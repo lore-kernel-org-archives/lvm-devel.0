@@ -1,67 +1,52 @@
-From: Mitsuhiro Tanino <mtanino@redhat.com>
-Date: Mon, 24 Mar 2014 17:16:41 -0400
-Subject: Nested logical volume snapshot on shared storage
-Message-ID: <5330A0B9.5000105@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 25 Mar 2014 10:00:50 +0000 (UTC)
+Subject: master - libdaemon: fix misleading "WARNING: Ignoring unsupported value for expected." when communicating with daemon
+Message-ID: <20140325100050.B533B60E70@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c84face8ceec82123a5d4ecc309ab9bb7fbbfddf
+Commit:        c84face8ceec82123a5d4ecc309ab9bb7fbbfddf
+Parent:        9446978e642c8f580386aa0279910553ab540fad
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Mar 24 16:47:08 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Mar 24 16:47:08 2014 +0100
 
-I would like to know latest activity of nested logical volume snapshot.
-In my understanding, nested LV snapshot is only supported when we use LVM thin volume.
-Referring the document, thin volume are not supported across the nodes in a cluster
-or shared with several servers. Therefore, there is no feature to provide nested
-LV snapshot across several nodes.
+libdaemon: fix misleading  "WARNING: Ignoring unsupported value for expected." when communicating with daemon
 
-https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Logical_Volume_Manager_Administration/thinprovisioned_volumes.html
+When we're trying to search for certain tree node
+in daemon's reply, we default to a blank string ""
+if the node is not found. This happens during lvmetad
+initialization.
 
-I think nested logical volume snapshot is very useful feature for cloud environment.
-For example,
-If user create a new VM from LV snapshot, the VM can boot quickly because LVM snapshot
-is ablle to create rapidly and also it can save disk usage.
-And if nested LV snapshot is supported, user can retrieve a VM which is created by
-LV snapshot to former state after applying some configurations. Nested snapshot
-is already supported by qcow2.
+However, when the default blank string is used, we
+can't use dm_config_find_str at the same time - the
+dm_config_find_str_allow_empty should be used instead.
+Otherwise a a warning message:
 
-Following figure is shown above example.
-I would appreciate if anyone let me know an activity of nested snapshot.
+  "WARNING: Ignoring unsupported value for ..."
 
----------
-* Mgmt node(serv01): Manage. volume creation using snapshot, volume deletion
-                      snapshot creation using nested LVM snapshot, snapshot deletion
-* HV node1(srv02)  : Attach a snapshot to a VM and run KVM guest.
-* HV node2(srv03)  : Same as HV node1.
-  
-  thX: thin volume including KVM guest boot image.
-  snX: snapshot from thin volume.
+is issued.
+---
+ libdaemon/client/daemon-client.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-+---------------+  +---------------+  +---------------+
-|     srv01     |  |     srv02     |  |     srv03     |
-|   Mgmt node   |  |    HV node1   |  |    HV node2   |
-|               |  |       +---+   |  |         +---+ |
-|               |  |       |VM1|   |  |         |VM2| |
-|               |  |       +-+-+   |  |         +-+-+ |
-|               |  |         |     |  |             | |
-+---+---+---+---+  +---+---+-+-+---+  +---+---+---+-+-+
-|th1|th2|sn1|sn2|  |th1|th2|sn1|sn2|  |th1|th2|sn1|sn2|
-+---------------+  +---------------+  +---------------+
-|   dm-thin01   |  |   dm-thin01   |  |   dm-thin01   |
-+---------------+  +---------------+  +---------------+
-|     vg01      |  |     vg01      |  |     vg01      |
-+---------------+  +---------------+  +---------------+
-       |FC1               |FC2               |FC3
-       |                  |                  |
-------+------------------+--------+---------+----------
-                                   |
-                           +-------+--------+
-                           | A Logical Unit |
-                           +----------------+
-
--- 
-Regards,
-Mitsuhiro Tanino
+diff --git a/libdaemon/client/daemon-client.h b/libdaemon/client/daemon-client.h
+index 6ba65e6..8a44f8b 100644
+--- a/libdaemon/client/daemon-client.h
++++ b/libdaemon/client/daemon-client.h
+@@ -102,7 +102,7 @@ static inline int64_t daemon_reply_int(daemon_reply r, const char *path, int64_t
+ }
+ 
+ static inline const char *daemon_reply_str(daemon_reply r, const char *path, const char *def) {
+-	return dm_config_find_str(r.cft->root, path, def);
++	return dm_config_find_str_allow_empty(r.cft->root, path, def);
+ }
+ 
+ 
 
 
