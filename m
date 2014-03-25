@@ -1,68 +1,63 @@
-From: Lidong Zhong <lzhong@suse.com>
-Date: Mon,  8 Jun 2015 15:48:30 +0800
-Subject: [RFC 4/6] Write the device number into metadata
-In-Reply-To: <1433749712-11837-1-git-send-email-lzhong@suse.com>
-References: <1433749712-11837-1-git-send-email-lzhong@suse.com>
-Message-ID: <1433749712-11837-5-git-send-email-lzhong@suse.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 25 Mar 2014 10:23:51 +0000 (UTC)
+Subject: master - tests: relocate vgimport test
+Message-ID: <20140325102351.8FF4B60F9D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Here we try to write the missing device's major/minor number into
-metadata. Fix me if there is other good idea. Otherwise we have to do
-the same changes to other kinds metadata format.
----
- lib/format_text/export.c      | 4 ++++
- lib/format_text/import_vsn1.c | 5 +++++
- lib/metadata/pv.h             | 1 +
- 3 files changed, 10 insertions(+)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db04d3e6d29dde331a88eec2cec5249ee7c211f0
+Commit:        db04d3e6d29dde331a88eec2cec5249ee7c211f0
+Parent:        13258d6e96a43fa88b41e21befd31836f21b59dd
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Mar 24 09:58:29 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 25 11:22:59 2014 +0100
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 018772e..be7f06d 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -504,6 +504,10 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
+tests: relocate vgimport test
+
+It seem like a better-fit here.
+---
+ test/shell/covercmd.sh      |    7 -------
+ test/shell/vgimportclone.sh |    6 ++++++
+ 2 files changed, 6 insertions(+), 7 deletions(-)
+
+diff --git a/test/shell/covercmd.sh b/test/shell/covercmd.sh
+index ffa48f0..f1bdca9 100644
+--- a/test/shell/covercmd.sh
++++ b/test/shell/covercmd.sh
+@@ -64,13 +64,6 @@ for i in h b s k m g t p e H B S K M G T P E; do
+ done
+ fi
  
- 		outhint(f, "device = \"%s\"",
- 			dm_escape_double_quotes(buffer, pv_dev_name(pv)));
-+		if (pv_dev(pv))
-+			outhint(f, "dev_t = %u", pv_dev(pv)->dev);
-+		else
-+			outhint(f, "dev_t = %u", pv->old_dev);
- 		outnl(f);
+-
+-# test vgexport vgimport tools
+-vgchange -an $vg
+-vgexport $vg
+-vgimport $vg
+-vgchange -ay $vg
+-
+ # "-persistent y --major 254 --minor 20"
+ # "-persistent n"
+ # test various lvm utils
+diff --git a/test/shell/vgimportclone.sh b/test/shell/vgimportclone.sh
+index f2977c9..923638e 100644
+--- a/test/shell/vgimportclone.sh
++++ b/test/shell/vgimportclone.sh
+@@ -16,6 +16,12 @@ aux prepare_devs 2
+ vgcreate --metadatasize 128k $vg1 "$dev1"
+ lvcreate -l100%FREE -n $lv1 $vg1
  
- 		if (!_print_flag_config(f, pv->status, PV_FLAGS))
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index 2d62905..f33c01e 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -228,6 +228,11 @@ static int _read_pv(struct format_instance *fid,
- 		log_info("Recovering a previously MISSING PV %s with no MDAs.",
- 			 pv_dev_name(pv));
- 	}
-+	if ((pv->status & MISSING_PV) && dm_config_has_node(pvn, "dev_t") &&
-+			!_read_uint32(pvn, "dev_t", &pv->old_dev)) {
-+		log_error("Couldn't read dev_t for physical volume when it's missing.");
-+		return 0;
-+	}
- 
- 	/* Late addition */
- 	if (dm_config_has_node(pvn, "dev_size") &&
-diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
-index 2d436cb..cdd0674 100644
---- a/lib/metadata/pv.h
-+++ b/lib/metadata/pv.h
-@@ -26,6 +26,7 @@ struct physical_volume {
- 	struct id id;
- 	struct id old_id;		/* Set during pvchange -u. */
- 	struct device *dev;
-+	dev_t old_dev;          /*Only meaningfull when pv is missing*/
- 	const struct format_type *fmt;
- 	struct format_instance *fid;
- 
--- 
-1.8.1.4
++# Test plain vgexport vgimport tools
++vgchange -an $vg1
++vgexport $vg1
++vgimport $vg1
++vgchange -ay $vg1
++
+ # Clone the LUN
+ dd if="$dev1" of="$dev2" bs=256K count=1
+ aux notify_lvmetad "$dev2"
 
 
