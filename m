@@ -1,67 +1,69 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 27 Mar 2014 12:15:15 +0000 (UTC)
-Subject: master - lvrename: fix exit code
-Message-ID: <20140327121515.7C8FD6196E@fedorahosted.org>
+Date: Thu, 27 Mar 2014 12:15:17 +0000 (UTC)
+Subject: master - lv_rename: validate renamed sublv
+Message-ID: <20140327121517.9737C6196E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=28e4bf0b6dae2cad6bb996c0c87d41b256f59517
-Commit:        28e4bf0b6dae2cad6bb996c0c87d41b256f59517
-Parent:        80fe100afa3bb2cbbc81bb4517a762159f0ebe65
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22579b4451b00b50ad7e6acacf9265fa41620449
+Commit:        22579b4451b00b50ad7e6acacf9265fa41620449
+Parent:        28e4bf0b6dae2cad6bb996c0c87d41b256f59517
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 27 12:24:35 2014 +0100
+AuthorDate:    Thu Mar 27 10:35:51 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 27 13:04:55 2014 +0100
+CommitterDate: Thu Mar 27 13:06:23 2014 +0100
 
-lvrename: fix exit code
+lv_rename: validate renamed sublv
 
-Return invalid cmd line (3) when error is detect on cmd line input.
-Cmd failed (5) is used when command processing fails.
+Use proper vgmem memory pool for allocation of LV name in the vg
+and check if new renamed LV is a valid name.
+
+TODO: validation should really use also VG name, othewise we are not
+able to tell "vgname-lvname" will be valid.
 ---
- WHATS_NEW        |    1 +
- tools/lvrename.c |   10 ++++++----
- 2 files changed, 7 insertions(+), 4 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    8 +++++++-
+ 2 files changed, 8 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index a9289b5..007fb75 100644
+index 007fb75..71b074a 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.106 - 
  ====================================
-+  When lvrename fails on argument parsing return invalid cmd line error (5->3).
++  Validate name for renamed sub LVs.
+   When lvrename fails on argument parsing return invalid cmd line error (5->3).
    Fix exit code regression in failing pvchange command (2.02.66).
    Include 'lvm dumpconfig --type missing' and '--type diff' output to lvmdump.
-   Return failure when specifying negative size for pvresize.
-diff --git a/tools/lvrename.c b/tools/lvrename.c
-index 5b1f50b..dd66ba4 100644
---- a/tools/lvrename.c
-+++ b/tools/lvrename.c
-@@ -75,16 +75,18 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
- 	if (strlen(lv_name_new) > maxlen) {
- 		log_error("New logical volume path exceeds maximum length "
- 			  "of %" PRIsize_t "!", maxlen);
--		return ECMD_FAILED;
-+		return EINVALID_CMD_LINE;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 6e4ba71..ae0bef2 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3225,7 +3225,7 @@ static int _rename_sub_lv(struct cmd_context *cmd,
+ 	 *	a new name for main LV is "lvol1"
+ 	 */
+ 	len = strlen(lv_name_new) + strlen(suffix) + 1;
+-	new_name = dm_pool_alloc(cmd->mem, len);
++	new_name = dm_pool_alloc(lv->vg->vgmem, len);
+ 	if (!new_name) {
+ 		log_error("Failed to allocate space for new name");
+ 		return 0;
+@@ -3235,6 +3235,12 @@ static int _rename_sub_lv(struct cmd_context *cmd,
+ 		return 0;
  	}
  
- 	if (!*lv_name_new) {
- 		log_error("New logical volume name may not be blank");
--		return ECMD_FAILED;
-+		return EINVALID_CMD_LINE;
- 	}
- 
--	if (!apply_lvname_restrictions(lv_name_new))
--		return_ECMD_FAILED;
-+	if (!apply_lvname_restrictions(lv_name_new)) {
-+		stack;
-+		return EINVALID_CMD_LINE;
++	if (!validate_name(new_name)) {              *
++		log_error("Cannot rename \"%s\". New logical volume name \"%s\" is invalid.",
++			  lv->name, new_name);
++		return 0;
 +	}
- 
- 	if (!validate_name(lv_name_new)) {
- 		log_error("New logical volume name \"%s\" is invalid",
++
+ 	/* Rename it */
+ 	return _rename_single_lv(lv, new_name);
+ }
 
 
