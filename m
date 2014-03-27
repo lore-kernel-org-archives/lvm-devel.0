@@ -1,74 +1,67 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 27 Mar 2014 12:15:13 +0000 (UTC)
-Subject: master - pvchange: fix exit code regression
-Message-ID: <20140327121513.5F2AB6196E@fedorahosted.org>
+Date: Thu, 27 Mar 2014 12:15:15 +0000 (UTC)
+Subject: master - lvrename: fix exit code
+Message-ID: <20140327121515.7C8FD6196E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=80fe100afa3bb2cbbc81bb4517a762159f0ebe65
-Commit:        80fe100afa3bb2cbbc81bb4517a762159f0ebe65
-Parent:        2a93eba68e518fff7f0c16406b5a9e802d732e1d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=28e4bf0b6dae2cad6bb996c0c87d41b256f59517
+Commit:        28e4bf0b6dae2cad6bb996c0c87d41b256f59517
+Parent:        80fe100afa3bb2cbbc81bb4517a762159f0ebe65
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 27 11:27:42 2014 +0100
+AuthorDate:    Thu Mar 27 12:24:35 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 27 13:01:51 2014 +0100
+CommitterDate: Thu Mar 27 13:04:55 2014 +0100
 
-pvchange: fix exit code regression
+lvrename: fix exit code
 
-Commit 1a832398a7caa96faab2ccbac773cc4047c8f9c1 moved
-some code from _pvchange_single() to main pvchange() and
-introduced exit code regression as return codes have not
-been properly changed, thus pvchange command exited
-with '0' exit code, even though it has reported error.
-Also there is a missing vg unlock in error path.
-
-Fix it by counting the total number of expected calls before
-checking for pvname and also unlock and relase vg when
-pv is not found.
+Return invalid cmd line (3) when error is detect on cmd line input.
+Cmd failed (5) is used when command processing fails.
 ---
  WHATS_NEW        |    1 +
- tools/pvchange.c |    3 ++-
- 2 files changed, 3 insertions(+), 1 deletions(-)
+ tools/lvrename.c |   10 ++++++----
+ 2 files changed, 7 insertions(+), 4 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index e6fa1d7..a9289b5 100644
+index a9289b5..007fb75 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.106 - 
  ====================================
-+  Fix exit code regression in failing pvchange command (2.02.66).
++  When lvrename fails on argument parsing return invalid cmd line error (5->3).
+   Fix exit code regression in failing pvchange command (2.02.66).
    Include 'lvm dumpconfig --type missing' and '--type diff' output to lvmdump.
    Return failure when specifying negative size for pvresize.
-   Fix memory corruption in cmd context refresh if clvmd leaks opened device.
-diff --git a/tools/pvchange.c b/tools/pvchange.c
-index d2a3d9b..5c05db6 100644
---- a/tools/pvchange.c
-+++ b/tools/pvchange.c
-@@ -184,6 +184,7 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
- 	if (argc) {
- 		log_verbose("Using physical volume(s) on command line");
- 		for (; opt < argc; opt++) {
-+			total++;
- 			pv_name = argv[opt];
- 			dm_unescape_colons_and_at_signs(pv_name, NULL, NULL);
- 			vg_name = find_vgname_from_pvname(cmd, pv_name);
-@@ -200,12 +201,12 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
- 			}
- 			pvl = find_pv_in_vg(vg, pv_name);
- 			if (!pvl || !pvl->pv) {
-+				unlock_and_release_vg(cmd, vg, vg_name);
- 				log_error("Unable to find %s in %s",
- 					  pv_name, vg_name);
- 				continue;
- 			}
+diff --git a/tools/lvrename.c b/tools/lvrename.c
+index 5b1f50b..dd66ba4 100644
+--- a/tools/lvrename.c
++++ b/tools/lvrename.c
+@@ -75,16 +75,18 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
+ 	if (strlen(lv_name_new) > maxlen) {
+ 		log_error("New logical volume path exceeds maximum length "
+ 			  "of %" PRIsize_t "!", maxlen);
+-		return ECMD_FAILED;
++		return EINVALID_CMD_LINE;
+ 	}
  
--			total++;
- 			done += _pvchange_single(cmd, vg,
- 						 pvl->pv, NULL);
- 			unlock_and_release_vg(cmd, vg, vg_name);
+ 	if (!*lv_name_new) {
+ 		log_error("New logical volume name may not be blank");
+-		return ECMD_FAILED;
++		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	if (!apply_lvname_restrictions(lv_name_new))
+-		return_ECMD_FAILED;
++	if (!apply_lvname_restrictions(lv_name_new)) {
++		stack;
++		return EINVALID_CMD_LINE;
++	}
+ 
+ 	if (!validate_name(lv_name_new)) {
+ 		log_error("New logical volume name \"%s\" is invalid",
 
 
