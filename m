@@ -1,52 +1,53 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 30 Mar 2014 21:46:02 +0000 (UTC)
-Subject: master - cleanup: vgexport drops pv pointer
-Message-ID: <20140330214602.4122E602D1@fedorahosted.org>
+Date: Sun, 30 Mar 2014 21:46:04 +0000 (UTC)
+Subject: master - cleanup: pvdisplay indent
+Message-ID: <20140330214604.53023602D1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d7b63340793b32e24f9e695c29d97014339fb3ec
-Commit:        d7b63340793b32e24f9e695c29d97014339fb3ec
-Parent:        31d68b7124519b4ed6b9ba1960cb021962f2a3dd
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cc82dc7b23902c900ac59c35566bd63d65902155
+Commit:        cc82dc7b23902c900ac59c35566bd63d65902155
+Parent:        d7b63340793b32e24f9e695c29d97014339fb3ec
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Mar 30 22:40:02 2014 +0200
+AuthorDate:    Sun Mar 30 23:10:42 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Mar 30 23:44:59 2014 +0200
 
-cleanup: vgexport drops pv pointer
+cleanup: pvdisplay indent
 
-PV pointer is not really needed.
+Reindent else path, since other branch already exits with return.
 ---
- tools/vgexport.c |    7 ++-----
- 1 files changed, 2 insertions(+), 5 deletions(-)
+ tools/pvdisplay.c |   15 +++++++++------
+ 1 files changed, 9 insertions(+), 6 deletions(-)
 
-diff --git a/tools/vgexport.c b/tools/vgexport.c
-index ad658f8..d9f8efa 100644
---- a/tools/vgexport.c
-+++ b/tools/vgexport.c
-@@ -21,7 +21,6 @@ static int vgexport_single(struct cmd_context *cmd __attribute__((unused)),
- 			   void *handle __attribute__((unused)))
- {
- 	struct pv_list *pvl;
--	struct physical_volume *pv;
- 
- 	if (lvs_in_vg_activated(vg)) {
- 		log_error("Volume group \"%s\" has active logical volumes",
-@@ -34,10 +33,8 @@ static int vgexport_single(struct cmd_context *cmd __attribute__((unused)),
- 
- 	vg->status |= EXPORTED_VG;
- 
--	dm_list_iterate_items(pvl, &vg->pvs) {
--		pv = pvl->pv;
--		pv->status |= EXPORTED_VG;
--	}
-+	dm_list_iterate_items(pvl, &vg->pvs)
-+		pvl->pv->status |= EXPORTED_VG;
- 
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		goto_bad;
+diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
+index b85635e..3de7969 100644
+--- a/tools/pvdisplay.c
++++ b/tools/pvdisplay.c
+@@ -98,12 +98,15 @@ int pvdisplay(struct cmd_context *cmd, int argc, char **argv)
+ 			return EINVALID_CMD_LINE;
+ 		}
+ 		return pvs(cmd, argc, argv);
+-	} else if (arg_count(cmd, aligned_ARG) ||
+-		   arg_count(cmd, all_ARG) ||
+-		   arg_count(cmd, noheadings_ARG) ||
+-		   arg_count(cmd, options_ARG) ||
+-		   arg_count(cmd, separator_ARG) ||
+-		   arg_count(cmd, sort_ARG) || arg_count(cmd, unbuffered_ARG)) {
++	}
++
++	if (arg_count(cmd, aligned_ARG) ||
++	    arg_count(cmd, all_ARG) ||
++	    arg_count(cmd, noheadings_ARG) ||
++	    arg_count(cmd, options_ARG) ||
++	    arg_count(cmd, separator_ARG) ||
++	    arg_count(cmd, sort_ARG) ||
++	    arg_count(cmd, unbuffered_ARG)) {
+ 		log_error("Incompatible options selected");
+ 		return EINVALID_CMD_LINE;
+ 	}
 
 
