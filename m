@@ -1,171 +1,58 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 31 Mar 2014 14:10:20 +0200
-Subject: [PATCH] decrease expected_replies when remote node is down [V2]
-In-Reply-To: <53391F19.8080605@suse.com>
-References: <1393413600-14942-1-git-send-email-dmzhang@suse.com>
-	<53391F19.8080605@suse.com>
-Message-ID: <53395B2C.4000306@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 31 Mar 2014 13:59:33 +0000 (UTC)
+Subject: master - config: fix compile error in config-settings.h if using --disable-dmeventd
+Message-ID: <20140331135933.BDE28612B8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 31.3.2014 09:54, Dongmao Zhang napsal(a):
-> dear list,
-> 
-> how about this patch?
-> 
-> any comments there?
-> 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=68bb639a08330c7f06558e51ecab48d6a4ca2854
+Commit:        68bb639a08330c7f06558e51ecab48d6a4ca2854
+Parent:        367e4551a1f1ef81f4ed3cc0200247a571af78e8
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Mar 31 15:57:30 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Mar 31 15:57:42 2014 +0200
 
+config: fix compile error in config-settings.h if using --disable-dmeventd
 
-Yep - looks like there is a problem but the proposed patch seems to use
-unprotected local_client_head list.
+  config/config_settings.h:257:102: error: 'DMEVENTD_PATH' undeclared here (not in a function)
+---
+ lib/config/config_settings.h |    2 +-
+ lib/config/defaults.h        |    6 ++++++
+ 2 files changed, 7 insertions(+), 1 deletions(-)
 
-Let me think about possibilities we have here.
-
-Zdenek
-
-
-> 
-> ? 2014?02?26? 19:20, dongmao zhang ??:
->> dear list,
->> I think the last patch is broken, because
->> it has line:thisfd->bits.localsock.finished = 0
->> which may cause pre_post_thread ends.
->> This is the revised patch. So any comments?
->>
->>> when clvmd is waiting for remote node's relies, but
->>> the remote node could be possiblly closed at the same
->>> time. This could result in a request timeout in mainloop.
->>> The default timeout is 60 seconds. This is still too large.
->>>
->>> https://bugzilla.novell.com/show_bug.cgi?id=837538
->>> https://bugzilla.novell.com/show_bug.cgi?id=862633
->>> clvmd users usually meet this when they call LVM command(like vgscan)
->>> in one node, while other nodes's clvmd is closing.
->>>
->>> My solution to this is to decrement in-flight request's
->>> expected_replies. The command could finish much faster in this
->>> situation.
->> ---
->>    daemons/clvmd/clvmd-corosync.c |    7 ++++-
->>    daemons/clvmd/clvmd.c          |   52 +++++++++++++++++++++++++++++++++++++++-
->>    daemons/clvmd/clvmd.h          |    2 +
->>    3 files changed, 59 insertions(+), 2 deletions(-)
->>
->> diff --git a/daemons/clvmd/clvmd-corosync.c b/daemons/clvmd/clvmd-corosync.c
->> index e68cb73..8e642ca 100644
->> --- a/daemons/clvmd/clvmd-corosync.c
->> +++ b/daemons/clvmd/clvmd-corosync.c
->> @@ -251,11 +251,16 @@ static void corosync_cpg_confchg_callback(cpg_handle_t handle,
->>    		ninfo = dm_hash_lookup_binary(node_hash,
->>    					      (char *)&left_list[i].nodeid,
->>    					      COROSYNC_CSID_LEN);
->> -		if (ninfo)
->> +		if (ninfo) {
->>    			ninfo->state = NODE_DOWN;
->> +			char name[MAX_CLUSTER_MEMBER_NAME_LEN];
->> +			sprintf(name, "%x", ninfo->nodeid);
->> +			decrease_inflight_expected_reply(name);
->> +		}
->>    	}
->>    
->>    	num_nodes = member_list_entries;
->> +
->>    }
->>    
->>    static int _init_cluster(void)
->> diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
->> index fc8cf6e..bd056f2 100644
->> --- a/daemons/clvmd/clvmd.c
->> +++ b/daemons/clvmd/clvmd.c
->> @@ -1697,6 +1697,56 @@ static void process_remote_command(struct clvm_header *msg, int msglen, int fd,
->>    	free(replyargs);
->>    }
->>    
->> +void decrease_inflight_expected_reply(char *nodename)
->> +{
->> +	struct local_client * thisfd;
->> +	struct node_reply *reply;
->> +
->> +	DEBUGLOG("remote node %s down", nodename);
->> +
->> +	for (thisfd = &local_client_head; thisfd != NULL;
->> +	     thisfd = thisfd->next) {
->> +		/* in-flight request */
->> +		if (thisfd->type == LOCAL_SOCK
->> +		    && thisfd->bits.localsock.sent_out
->> +		    && thisfd->bits.localsock.in_progress
->> +		    && ! thisfd->bits.localsock.finished
->> +		    && thisfd->bits.localsock.expected_replies >
->> +		    thisfd->bits.localsock.num_replies) {
->> +
->> +			pthread_mutex_lock(&thisfd->bits.localsock.reply_mutex);
->> +
->> +			reply = thisfd->bits.localsock.replies;
->> +			while (reply && strcmp(reply->node, nodename) != 0) {
->> +				reply = reply->next;
->> +			}
->> +			/* if the remote down server has replies,do not decrease the expected_replies */
->> +			if (reply)
->> +				continue;
->> +
->> +			thisfd->bits.localsock.expected_replies--;
->> +			DEBUGLOG
->> +			    ("remote node down, decrement the expected replies to (%ld),num_replies(%ld)",
->> +			     thisfd->bits.localsock.expected_replies,
->> +			     thisfd->bits.localsock.num_replies)
->> +
->> +			if (thisfd->bits.localsock.expected_replies <= thisfd->bits.localsock.num_replies) {
->> +				/* tell pre_and_post thread to finish */
->> +				if (thisfd->bits.localsock.threadid) {
->> +					thisfd->bits.localsock.all_success = 0;
->> +					pthread_mutex_lock(&thisfd->bits.localsock.mutex);
->> +					thisfd->bits.localsock.state = POST_COMMAND;
->> +					pthread_cond_signal(&thisfd->bits.localsock.cond);
->> +					pthread_mutex_unlock(&thisfd->bits.localsock.mutex);
->> +				}
->> +			}
->> +			pthread_mutex_unlock(&thisfd->bits.localsock.reply_mutex);
->> +
->> +		}
->> +	}
->> +
->> +}
->> +
->>    /* Add a reply to a command to the list of replies for this client.
->>       If we have got a full set then send them to the waiting client down the local
->>       socket */
->> @@ -1738,7 +1788,7 @@ static void add_reply_to_list(struct local_client *client, int status,
->>    		 client->bits.localsock.expected_replies);
->>    
->>    	/* If we have the whole lot then do the post-process */
->> -	if (++client->bits.localsock.num_replies ==
->> +	if (++client->bits.localsock.num_replies >=
->>    	    client->bits.localsock.expected_replies) {
->>    		/* Post-process the command */
->>    		if (client->bits.localsock.threadid) {
->> diff --git a/daemons/clvmd/clvmd.h b/daemons/clvmd/clvmd.h
->> index 0f837dd..52e4e61 100644
->> --- a/daemons/clvmd/clvmd.h
->> +++ b/daemons/clvmd/clvmd.h
->> @@ -112,6 +112,8 @@ extern int do_post_command(struct local_client *client);
->>    extern void cmd_client_cleanup(struct local_client *client);
->>    extern int add_client(struct local_client *new_client);
->>    
->> +
->> +extern void decrease_inflight_expected_reply();
->>    extern void clvmd_cluster_init_completed(void);
->>    extern void process_message(struct local_client *client, char *buf,
->>    			    int len, const char *csid);
->>
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
-> 
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index dce77b9..932ba2e 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -254,7 +254,7 @@ cfg(dmeventd_mirror_library_CFG, "mirror_library", dmeventd_CFG_SECTION, 0, CFG_
+ cfg(dmeventd_raid_library_CFG, "raid_library", dmeventd_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_DMEVENTD_RAID_LIB, vsn(2, 2, 87), NULL)
+ cfg(dmeventd_snapshot_library_CFG, "snapshot_library", dmeventd_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_DMEVENTD_SNAPSHOT_LIB, vsn(1, 2, 26), NULL)
+ cfg(dmeventd_thin_library_CFG, "thin_library", dmeventd_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_DMEVENTD_THIN_LIB, vsn(2, 2, 89), NULL)
+-cfg(dmeventd_executable_CFG, "executable", dmeventd_CFG_SECTION, 0, CFG_TYPE_STRING, DMEVENTD_PATH, vsn(2, 2, 73), NULL)
++cfg(dmeventd_executable_CFG, "executable", dmeventd_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_DMEVENTD_PATH, vsn(2, 2, 73), NULL)
+ 
+ cfg(tags_hosttags_CFG, "hosttags", tags_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_HOSTTAGS, vsn(1, 0, 18), NULL)
+ 
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 6820def..94b11c0 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -66,6 +66,12 @@
+ #define DEFAULT_DMEVENTD_MONITOR 1
+ #define DEFAULT_BACKGROUND_POLLING 1
+ 
++#ifndef DMEVENTD_PATH
++#define DEFAULT_DMEVENTD_PATH ""
++#else
++#define DEFAULT_DMEVENTD_PATH DMEVENTD_PATH
++#endif
++
+ #define DEFAULT_THIN_CHECK_OPTIONS "-q"
+ #define DEFAULT_THIN_REPAIR_OPTIONS ""
+ #define DEFAULT_THIN_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
 
 
