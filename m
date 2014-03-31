@@ -1,154 +1,56 @@
-From: Dongmao Zhang <dmzhang@suse.com>
-Date: Mon, 31 Mar 2014 15:54:01 +0800
-Subject: [PATCH] decrease expected_replies when remote node is down [V2]
-In-Reply-To: <1393413600-14942-1-git-send-email-dmzhang@suse.com>
-References: <1393413600-14942-1-git-send-email-dmzhang@suse.com>
-Message-ID: <53391F19.8080605@suse.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 31 Mar 2014 10:06:36 +0000 (UTC)
+Subject: master - lvdiplay: prohibit use of -c and -m
+Message-ID: <20140331100636.5937960AC5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-dear list,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=caa429da2e58ad65ecfc8836f5f64c54395a8793
+Commit:        caa429da2e58ad65ecfc8836f5f64c54395a8793
+Parent:        8f9150c241f80b2fd69d2e416340707759e79ac8
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Mar 31 10:04:24 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Mar 31 12:00:45 2014 +0200
 
-how about this patch?
+lvdiplay: prohibit use of -c and -m
 
-any comments there?
+It's unclear why we should prohibit use of -v output.
+So reenable (like with other 'display' tools)
+But -c -m is really unsupported - return invalid cmd.
+---
+ WHATS_NEW         |    1 +
+ tools/lvdisplay.c |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-
-
-? 2014?02?26? 19:20, dongmao zhang ??:
-> dear list,
-> I think the last patch is broken, because
-> it has line:thisfd->bits.localsock.finished = 0
-> which may cause pre_post_thread ends.
-> This is the revised patch. So any comments?
-> 
->> when clvmd is waiting for remote node's relies, but
->> the remote node could be possiblly closed at the same
->> time. This could result in a request timeout in mainloop.
->> The default timeout is 60 seconds. This is still too large.
->>
->> https://bugzilla.novell.com/show_bug.cgi?id=837538
->> https://bugzilla.novell.com/show_bug.cgi?id=862633
->> clvmd users usually meet this when they call LVM command(like vgscan)
->> in one node, while other nodes's clvmd is closing.
->>
->> My solution to this is to decrement in-flight request's
->> expected_replies. The command could finish much faster in this
->> situation.
-> ---
->   daemons/clvmd/clvmd-corosync.c |    7 ++++-
->   daemons/clvmd/clvmd.c          |   52 +++++++++++++++++++++++++++++++++++++++-
->   daemons/clvmd/clvmd.h          |    2 +
->   3 files changed, 59 insertions(+), 2 deletions(-)
-> 
-> diff --git a/daemons/clvmd/clvmd-corosync.c b/daemons/clvmd/clvmd-corosync.c
-> index e68cb73..8e642ca 100644
-> --- a/daemons/clvmd/clvmd-corosync.c
-> +++ b/daemons/clvmd/clvmd-corosync.c
-> @@ -251,11 +251,16 @@ static void corosync_cpg_confchg_callback(cpg_handle_t handle,
->   		ninfo = dm_hash_lookup_binary(node_hash,
->   					      (char *)&left_list[i].nodeid,
->   					      COROSYNC_CSID_LEN);
-> -		if (ninfo)
-> +		if (ninfo) {
->   			ninfo->state = NODE_DOWN;
-> +			char name[MAX_CLUSTER_MEMBER_NAME_LEN];
-> +			sprintf(name, "%x", ninfo->nodeid);
-> +			decrease_inflight_expected_reply(name);
-> +		}
->   	}
->   
->   	num_nodes = member_list_entries;
-> +
->   }
->   
->   static int _init_cluster(void)
-> diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-> index fc8cf6e..bd056f2 100644
-> --- a/daemons/clvmd/clvmd.c
-> +++ b/daemons/clvmd/clvmd.c
-> @@ -1697,6 +1697,56 @@ static void process_remote_command(struct clvm_header *msg, int msglen, int fd,
->   	free(replyargs);
->   }
->   
-> +void decrease_inflight_expected_reply(char *nodename)
-> +{
-> +	struct local_client * thisfd;
-> +	struct node_reply *reply;
-> +
-> +	DEBUGLOG("remote node %s down", nodename);
-> +
-> +	for (thisfd = &local_client_head; thisfd != NULL;
-> +	     thisfd = thisfd->next) {
-> +		/* in-flight request */
-> +		if (thisfd->type == LOCAL_SOCK
-> +		    && thisfd->bits.localsock.sent_out
-> +		    && thisfd->bits.localsock.in_progress
-> +		    && ! thisfd->bits.localsock.finished
-> +		    && thisfd->bits.localsock.expected_replies >
-> +		    thisfd->bits.localsock.num_replies) {
-> +
-> +			pthread_mutex_lock(&thisfd->bits.localsock.reply_mutex);
-> +
-> +			reply = thisfd->bits.localsock.replies;
-> +			while (reply && strcmp(reply->node, nodename) != 0) {
-> +				reply = reply->next;
-> +			}
-> +			/* if the remote down server has replies,do not decrease the expected_replies */
-> +			if (reply)
-> +				continue;
-> +
-> +			thisfd->bits.localsock.expected_replies--;
-> +			DEBUGLOG
-> +			    ("remote node down, decrement the expected replies to (%ld),num_replies(%ld)",
-> +			     thisfd->bits.localsock.expected_replies,
-> +			     thisfd->bits.localsock.num_replies)
-> +
-> +			if (thisfd->bits.localsock.expected_replies <= thisfd->bits.localsock.num_replies) {
-> +				/* tell pre_and_post thread to finish */
-> +				if (thisfd->bits.localsock.threadid) {
-> +					thisfd->bits.localsock.all_success = 0;
-> +					pthread_mutex_lock(&thisfd->bits.localsock.mutex);
-> +					thisfd->bits.localsock.state = POST_COMMAND;
-> +					pthread_cond_signal(&thisfd->bits.localsock.cond);
-> +					pthread_mutex_unlock(&thisfd->bits.localsock.mutex);
-> +				}
-> +			}
-> +			pthread_mutex_unlock(&thisfd->bits.localsock.reply_mutex);
-> +
-> +		}
-> +	}
-> +
-> +}
-> +
->   /* Add a reply to a command to the list of replies for this client.
->      If we have got a full set then send them to the waiting client down the local
->      socket */
-> @@ -1738,7 +1788,7 @@ static void add_reply_to_list(struct local_client *client, int status,
->   		 client->bits.localsock.expected_replies);
->   
->   	/* If we have the whole lot then do the post-process */
-> -	if (++client->bits.localsock.num_replies ==
-> +	if (++client->bits.localsock.num_replies >=
->   	    client->bits.localsock.expected_replies) {
->   		/* Post-process the command */
->   		if (client->bits.localsock.threadid) {
-> diff --git a/daemons/clvmd/clvmd.h b/daemons/clvmd/clvmd.h
-> index 0f837dd..52e4e61 100644
-> --- a/daemons/clvmd/clvmd.h
-> +++ b/daemons/clvmd/clvmd.h
-> @@ -112,6 +112,8 @@ extern int do_post_command(struct local_client *client);
->   extern void cmd_client_cleanup(struct local_client *client);
->   extern int add_client(struct local_client *new_client);
->   
-> +
-> +extern void decrease_inflight_expected_reply();
->   extern void clvmd_cluster_init_completed(void);
->   extern void process_message(struct local_client *client, char *buf,
->   			    int len, const char *csid);
-> 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0decc72..b5ee541 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.106 - 
+ ====================================
++  Add explict error message when using lvdisplay -c -m.
+   Update man pages for pv/vg/lvdisplay.
+   Report error when running pvscan with free argument (i.e. PV name).
+   Fix error message for pvdisplay -c -m and add new for pvdisplay -c -s.
+diff --git a/tools/lvdisplay.c b/tools/lvdisplay.c
+index f5531cb..246e43b 100644
+--- a/tools/lvdisplay.c
++++ b/tools/lvdisplay.c
+@@ -49,8 +49,8 @@ int lvdisplay(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	if (arg_count(cmd, colon_ARG) && arg_count(cmd, verbose_ARG)) {
+-		log_error("Options -v and -c are incompatible");
++	if (arg_count(cmd, colon_ARG) && arg_count(cmd, maps_ARG)) {
++		log_error("Options -c and -m are incompatible.");
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
 
 
