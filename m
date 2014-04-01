@@ -1,90 +1,61 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Wed, 30 Nov 2016 21:58:29 +0000 (UTC)
-Subject: master - lvchange: allow a transiently failed RaidLV to be refreshed
-Message-ID: <20161130215829.E6D9660F91@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue,  1 Apr 2014 09:19:53 +0000 (UTC)
+Subject: master - man: add a note about --profile when using dumpconfig --mergedconfig
+Message-ID: <20140401091953.D06BD60564@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0b8bf73a63d8dbd9fa32a32c7d47a277d4fb8eb1
-Commit:        0b8bf73a63d8dbd9fa32a32c7d47a277d4fb8eb1
-Parent:        58f4d98af11eaf21df00aaaf987ca6a92039db7f
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Nov 30 22:56:37 2016 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Nov 30 22:57:54 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=13009adbf266b5e72eeb882286b43948b15cd49b
+Commit:        13009adbf266b5e72eeb882286b43948b15cd49b
+Parent:        68bb639a08330c7f06558e51ecab48d6a4ca2854
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Apr 1 11:19:38 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Apr 1 11:19:38 2014 +0200
 
-lvchange: allow a transiently failed RaidLV to be refreshed
+man: add a note about --profile when using dumpconfig --mergedconfig
 
-In case any SubLV of a RaidLV transiently fails, it needs
-two "lvchange --refresh RaidLV" runs to get it to fully
-operational mode again.  Reason being, that lvm reloads all
-targets for the RaidLV tree but doesn't resume the SubLVs
-until after the whole tree has been reloaded in the first
-refresh run.  Thus the live mapping table of the SubLVs
-still point to an "error" mapping and the dm-raid target
-can't retrieve any superblock from the MetaLV(s) in processing
-the constructor during this preload thus not discovering the
-again accessible SubLVs.  In the second run, the SubLV targets
-map proper (meta)data, hence the constructor discovers those
-fine now.
-
-Solve by resuming the SubLVs of the RaidLV before
-preloading the respective top-level RaidLV target.
-
-Resolves: rhbz1399844
 ---
- lib/metadata/lv_manip.c |   29 ++++++++++++++++++++++++++++-
- 1 files changed, 28 insertions(+), 1 deletions(-)
+ man/lvm-dumpconfig.8.in |   10 ++++++----
+ man/lvm.conf.5.in       |    2 +-
+ 2 files changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 10c0446..120217f 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1382,7 +1382,7 @@ int replace_lv_with_error_segment(struct logical_volume *lv)
- 	return 1;
- }
+diff --git a/man/lvm-dumpconfig.8.in b/man/lvm-dumpconfig.8.in
+index 7448992..e9fe84e 100644
+--- a/man/lvm-dumpconfig.8.in
++++ b/man/lvm-dumpconfig.8.in
+@@ -80,10 +80,12 @@ complete and they are not meant to be used in production.
+ .TP
+ .B \-\-mergedconfig
+ When the dumpconfig command is run with the \fB\-\-config\fP option
+-(a common option that is recognized by all LVM tools, see also
+-\fBlvm\fP(8)), merge this configuration with current configuration
+-used (see \fB\-\-type current\fP above). Otherwise, only the
+-configuration specified within \fB\-\-config\fP option is dumped.
++and/or \fB\-\-profile\fP option (common options that are recognized
++by all LVM tools, see also \fBlvm\fP(8)), merge the \fB\-\-config\fP
++and/or \fB\-\-profile\fP config with current configuration used
++(see \fB\-\-type current\fP above). Otherwise, only the configuration
++specified within \fB\-\-config\fP or \fB\-\-profile\fP option is dumped
++(see also \fBlvm.conf\fP(5) for more info about \fBconfig cascade\fP).
  
--int lv_refresh_suspend_resume(const struct logical_volume *lv)
-+static int _lv_refresh_suspend_resume(const struct logical_volume *lv)
- {
- 	struct cmd_context *cmd = lv->vg->cmd;
- 	int r = 1;
-@@ -1407,6 +1407,33 @@ int lv_refresh_suspend_resume(const struct logical_volume *lv)
- 	return r;
- }
- 
-+int lv_refresh_suspend_resume(const struct logical_volume *lv)
-+{
-+	/*
-+	 * FIXME:
-+	 *
-+	 * in case of RAID, refresh the SubLVs before
-+	 * refreshing the top-level one in order to cope
-+	 * with transient failures of SubLVs.
-+	 */
-+	if (lv_is_raid(lv)) {
-+		uint32_t s;
-+		struct lv_segment *seg = first_seg(lv);
-+
-+		for (s = 0; s < seg->area_count; s++) {
-+			if (seg_type(seg, s) == AREA_LV &&
-+			    !_lv_refresh_suspend_resume(seg_lv(seg, s)))
-+				return 0;
-+			if (seg->meta_areas &&
-+			    seg_metatype(seg, s) == AREA_LV &&
-+			    !_lv_refresh_suspend_resume(seg_metalv(seg, s)))
-+				return 0;
-+		}
-+	}
-+
-+	return _lv_refresh_suspend_resume(lv);
-+}
-+
- /*
-  * Remove given number of extents from LV.
-  */
+ .TP
+ .B \-\-validate
+diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
+index 099c5a7..1bed3d9 100644
+--- a/man/lvm.conf.5.in
++++ b/man/lvm.conf.5.in
+@@ -67,7 +67,7 @@ exactly the same format as used in any LVM configuration file.
+ .LP
+ When several configuration methods are used at the same time
+ and when LVM looks for the value of a particular setting, it traverses
+-this cascade from left to right:
++this \fBconfig cascade\fP from left to right:
+ \fBdirect config override on command line\fP -> \fBprofile config\fP -> \fBtag config\fP -> \fBlvm.conf\fP.
+ No part of this cascade is compulsory. If there's no setting value found at
+ the end of the cascade, a default value is used for that setting.
 
 
