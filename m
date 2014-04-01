@@ -1,46 +1,48 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  1 Apr 2014 18:56:11 +0000 (UTC)
-Subject: master - cleanup: just rename for interal function
-Message-ID: <20140401185611.A566C60CB7@fedorahosted.org>
+Date: Tue,  1 Apr 2014 18:56:13 +0000 (UTC)
+Subject: master - debug: add internal error for passed LV
+Message-ID: <20140401185613.B8D9D60CB7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1eaef2b705f82969e0a463f122ddda569676ce13
-Commit:        1eaef2b705f82969e0a463f122ddda569676ce13
-Parent:        9cb053339e5e001c57a2565f25b499ffb02d7f8a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dc5a3c9964229a5b7a23c7ceb76523d662ddbc27
+Commit:        dc5a3c9964229a5b7a23c7ceb76523d662ddbc27
+Parent:        1eaef2b705f82969e0a463f122ddda569676ce13
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 1 20:08:08 2014 +0200
+AuthorDate:    Tue Apr 1 20:11:50 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Apr 1 20:54:09 2014 +0200
 
-cleanup: just rename for interal function
+debug: add internal error for passed LV
 
+TODO: in fact we should parameter LV.
 ---
- tools/lvchange.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 982e620..bddc079 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -933,7 +933,7 @@ static int lvchange_activation_skip(struct logical_volume *lv)
- }
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 5d2cdb9..740eef0 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5202,10 +5202,15 @@ int remove_layer_from_lv(struct logical_volume *lv,
  
+ 	if (!(parent_seg = get_only_segment_using_this_lv(layer_lv))) {
+ 		log_error("Failed to find layer %s in %s",
+-		layer_lv->name, lv->name);
++			  layer_lv->name, lv->name);
+ 		return 0;
+ 	}
+ 	parent = parent_seg->lv;
++	if (parent != lv) {
++		log_error(INTERNAL_ERROR "Wrong layer %s in %s",
++			  layer_lv->name, lv->name);
++		return 0;
++	}
  
--static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
-+static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			   void *handle __attribute__((unused)))
- {
- 	int doit = 0, docmds = 0;
-@@ -1270,5 +1270,5 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
- 
- 	return process_each_lv(cmd, argc, argv,
- 			       update ? READ_FOR_UPDATE : 0, NULL,
--			       &lvchange_single);
-+			       &_lvchange_single);
- }
+ 	/*
+ 	 * Before removal, the layer should be cleaned up,
 
 
