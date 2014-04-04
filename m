@@ -1,109 +1,109 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  4 Apr 2014 00:40:04 +0000 (UTC)
-Subject: master - dev-cache: Improve open device check messages.
-Message-ID: <20140404004004.5ACB260CE6@fedorahosted.org>
+Date: Fri,  4 Apr 2014 00:50:50 +0000 (UTC)
+Subject: master - lvmetad: Update retry logic vars and comments.
+Message-ID: <20140404005050.4DEF9608F0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3f0f5587864e8bb0457089d1cca50b2231b421de
-Commit:        3f0f5587864e8bb0457089d1cca50b2231b421de
-Parent:        c16c1a9f7071ab91e0f14f42d172adfe0db1e9cf
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b38a3d8c85a5ce96ccbac4e5be859d53a2ec4c35
+Commit:        b38a3d8c85a5ce96ccbac4e5be859d53a2ec4c35
+Parent:        d36f721bb984c16bd20733325be0d9fc73706709
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Apr 4 01:39:42 2014 +0100
+AuthorDate:    Fri Apr 4 01:46:53 2014 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Apr 4 01:39:42 2014 +0100
+CommitterDate: Fri Apr 4 01:46:53 2014 +0100
 
-dev-cache: Improve open device check messages.
+lvmetad: Update retry logic vars and comments.
 
+Avoid using variables with same name as functions.
+Use lvm_even_rand for random numbers.
 ---
- lib/device/dev-cache.c |   22 ++++++++++++++--------
- lib/device/dev-cache.h |    5 ++++-
- 2 files changed, 18 insertions(+), 9 deletions(-)
+ lib/cache/lvmetad.c |   53 ++++++++++++++++++++++++++++----------------------
+ 1 files changed, 30 insertions(+), 23 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index b16ace4..f76e527 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -763,26 +763,32 @@ int dev_cache_init(struct cmd_context *cmd)
- 	return 0;
- }
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 697660f..0dd2c81 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -22,6 +22,9 @@
+ #include "format-text.h" // TODO for disk_locn, used as a DA representation
+ #include "crc.h"
  
-+/*
-+ * Returns number of devices still open.
-+ */
- static int _check_for_open_devices(int close_immediate)
- {
- 	struct device *dev;
- 	struct dm_hash_node *n;
--	int r = 0;
-+	int num_open = 0;
++#define SCAN_TIMEOUT_SECONDS	80
++#define MAX_RESCANS		10	/* Maximum number of times to scan all PVs and retry if the daemon returns a token mismatch error */
++
+ static daemon_handle _lvmetad;
+ static int _lvmetad_use = 0;
+ static int _lvmetad_connected = 0;
+@@ -141,8 +144,10 @@ static daemon_reply _lvmetad_send(const char *id, ...)
+ 	va_list ap;
+ 	daemon_reply repl;
+ 	daemon_request req;
+-	int try = 0;
+-	int time = 0, wait, sleep = 1;
++	unsigned num_rescans = 0;
++	unsigned total_usecs_waited = 0;
++	unsigned max_remaining_sleep_times = 1;
++	unsigned wait_usecs;
  
- 	dm_hash_iterate(n, _cache.names) {
- 		dev = (struct device *) dm_hash_get_data(_cache.names, n);
- 		if (dev->fd >= 0) {
--			log_error("Device '%s' has been left open (%d).",
-+			log_error("Device '%s' has been left open (%d remaining references).",
- 				  dev_name(dev), dev->open_count);
--			r++;
-+			num_open++;
- 			if (close_immediate)
- 				dev_close_immediate(dev);
+ retry:
+ 	req = daemon_request_make(id);
+@@ -158,30 +163,32 @@ retry:
+ 
+ 	daemon_request_destroy(req);
+ 
++	/*
++	 * If another process is trying to scan, it might have the
++	 * same future token id and it's better to wait and avoid doing
++	 * the work multiple times. For the case where the future token is
++	 * different, the wait is randomized so that multiple waiting
++	 * processes do not start scanning all at once.
++	 *
++	 * If the token is mismatched because of global_filter changes,
++	 * we re-scan immediately, but if we lose the potential race for
++	 * the update, we back off for a short while (0.05-0.5 seconds) and
++	 * try again.
++	 */
+ 	if (!repl.error && !strcmp(daemon_reply_str(repl, "response", ""), "token_mismatch") &&
+-	    try < 10 && time < 80000000 && !test_mode()) {
+-		/*
+-		 * If another process is trying to scan, they might have the
+-		 * same future token id and it's better to wait and avoid doing
+-		 * the work multiple times. For the case the future token is
+-		 * different, the wait is randomized so that multiple waiting
+-		 * processes do not start scanning all@once.
+-		 *
+-		 * If the token is mismatched because of global_filter changes,
+-		 * we re-scan immediately, but if we lose the potential race for
+-		 * the update, we back off for a short while (0.2-2 seconds) and
+-		 * try again.
+-		 */
+-		if (!strcmp(daemon_reply_str(repl, "expected", ""), "update in progress") || sleep) {
+-			wait = 50000 + random() % 450000; /* 0.05 - 0.5s */
+-			time += wait;
+-			usleep( wait );
+-			-- sleep;
++	    num_rescans < MAX_RESCANS && total_usecs_waited < (SCAN_TIMEOUT_SECONDS * 1000000) && !test_mode()) {
++		if (!strcmp(daemon_reply_str(repl, "expected", ""), "update in progress") ||
++		    max_remaining_sleep_times) {
++			wait_usecs = 50000 + lvm_even_rand(&_lvmetad_cmd->rand_seed, 450000); /* between 0.05s and 0.5s */
++			(void) usleep(wait_usecs);
++			total_usecs_waited += wait_usecs;
++			if (max_remaining_sleep_times)
++				max_remaining_sleep_times--;	/* Sleep once before rescanning the first time, then 5 times each time after that. */
+ 		} else {
+ 			/* If the re-scan fails here, we try again later. */
+-			lvmetad_pvscan_all_devs(_lvmetad_cmd, NULL);
+-			++ try;
+-			sleep = 5;
++			(void) lvmetad_pvscan_all_devs(_lvmetad_cmd, NULL);
++			num_rescans++;
++			max_remaining_sleep_times = 5;
  		}
- 	}
- 
--	return r;
-+	return num_open;
- }
- 
-+/*
-+ * Returns number of devices left open.
-+ */
- int dev_cache_check_for_open_devices(void)
- {
- 	return _check_for_open_devices(0);
-@@ -790,11 +796,11 @@ int dev_cache_check_for_open_devices(void)
- 
- int dev_cache_exit(void)
- {
--	int cnt = 0;
-+	int num_open = 0;
- 
- 	if (_cache.names)
--		if ((cnt = _check_for_open_devices(1)) > 0)
--			log_error(INTERNAL_ERROR "%d device(s) have been closed.", cnt);
-+		if ((num_open = _check_for_open_devices(1)) > 0)
-+			log_error(INTERNAL_ERROR "%d device(s) were left open and have been closed.", num_open);
- 
- 	if (_cache.preferred_names_matcher)
- 		_cache.preferred_names_matcher = NULL;
-@@ -814,7 +820,7 @@ int dev_cache_exit(void)
- 	dm_list_init(&_cache.dirs);
- 	dm_list_init(&_cache.files);
- 
--	return (cnt == 0);
-+	return (!num_open);
- }
- 
- int dev_cache_add_dir(const char *path)
-diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
-index c18d5f6..fcc69a5 100644
---- a/lib/device/dev-cache.h
-+++ b/lib/device/dev-cache.h
-@@ -36,8 +36,11 @@ struct dev_filter {
-  */
- struct cmd_context;
- int dev_cache_init(struct cmd_context *cmd);
--int dev_cache_check_for_open_devices(void);
- int dev_cache_exit(void);
-+/*
-+ * Returns number of open devices.
-+ */
-+int dev_cache_check_for_open_devices(void);
- 
- /* Trigger(1) or avoid(0) a scan */
- void dev_cache_scan(int do_scan);
+ 		daemon_reply_destroy(repl);
+ 		goto retry;
 
 
