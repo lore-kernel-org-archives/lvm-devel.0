@@ -1,88 +1,77 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Wed, 30 Nov 2016 21:59:42 +0000 (UTC)
-Subject: master - lvmdbusd: Emit signal on Job completion
-Message-ID: <20161130215942.4EAC660DE9@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  4 Apr 2014 11:33:37 +0000 (UTC)
+Subject: master - tools: don't require --major to be specified when using -My option on kernels > 2.4
+Message-ID: <20140404113337.3760060EE5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=53ef4967192ce8bfe5eaebf8104a1f7cbf8ab020
-Commit:        53ef4967192ce8bfe5eaebf8104a1f7cbf8ab020
-Parent:        1d520909534e1a4e1adf2513a5061adfe631d6af
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Nov 30 13:39:48 2016 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Nov 30 15:59:06 2016 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a7c930b18da8f8179312e395c49f72080edd687e
+Commit:        a7c930b18da8f8179312e395c49f72080edd687e
+Parent:        4d0c3ed0f89ed25707c0a16049dfb9da647ed842
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Apr 4 13:29:39 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Apr 4 13:29:39 2014 +0200
 
-lvmdbusd: Emit signal on Job completion
+tools: don't require --major to be specified when using -My option on kernels > 2.4
 
-Added a properties changed signal on the job dbus object so that client
-can wait for a signal that the job is complete instead of polling or
-blocking on the wait method.
+Since kernel > 2.4 have dynamically assigned major numbers.
+
+[0] raw/~ $ lvcreate -l1 -My --minor 10 vg
+  Logical volume "lvol0" created
+
+[0] raw/~ $ lvcreate -l1 -My --major 254 --minor 11 vg
+  Ignoring supplied major number - kernel assigns major numbers dynamically. Using major number 253 instead.
+  Logical volume "lvol1" created
+
+[0] raw/~ $ lvs --profile out -o+major,minor
+  lvol0 vg     -wima-----    4.00 253  10
+  lvol1 vg     -wima-----    4.00 253  11
 ---
- daemons/lvmdbusd/job.py     |    8 +++++++-
- daemons/lvmdbusd/request.py |    1 -
- daemons/lvmdbusd/utils.py   |    5 +++++
- 3 files changed, 12 insertions(+), 2 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvcreate.c |   16 ++++++++++++----
+ 2 files changed, 13 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/lvmdbusd/job.py b/daemons/lvmdbusd/job.py
-index ec6d6b6..609b747 100644
---- a/daemons/lvmdbusd/job.py
-+++ b/daemons/lvmdbusd/job.py
-@@ -8,7 +8,7 @@
- # along with this program. If not, see <http://www.gnu.org/licenses/>.
- 
- from .automatedproperties import AutomatedProperties
--from .utils import job_obj_path_generate, mt_async_result
-+from .utils import job_obj_path_generate, mt_async_result, mt_run_no_wait
- from . import cfg
- from .cfg import JOB_INTERFACE
- import dbus
-@@ -180,9 +180,15 @@ class Job(AutomatedProperties):
- 	def Complete(self):
- 		return dbus.Boolean(self.state.Complete)
- 
-+	@staticmethod
-+	def _signal_complete(obj):
-+		obj.PropertiesChanged(
-+			JOB_INTERFACE, dict(Complete=dbus.Boolean(obj.state.Complete)), [])
-+
- 	@Complete.setter
- 	def Complete(self, value):
- 		self.state.Complete = value
-+		mt_run_no_wait(Job._signal_complete, self)
- 
- 	@property
- 	def GetError(self):
-diff --git a/daemons/lvmdbusd/request.py b/daemons/lvmdbusd/request.py
-index ca45e8c..a2c2ac9 100644
---- a/daemons/lvmdbusd/request.py
-+++ b/daemons/lvmdbusd/request.py
-@@ -126,7 +126,6 @@ class RequestEntry(object):
- 						mt_async_result(self.cb_error, error_exception)
- 			else:
- 				# We have a job and it's complete, indicate that it's done.
--				# TODO: We need to signal the job is done too.
- 				self._job.Complete = True
- 				self._job = None
- 
-diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
-index abee659..b95f80a 100644
---- a/daemons/lvmdbusd/utils.py
-+++ b/daemons/lvmdbusd/utils.py
-@@ -515,6 +515,11 @@ def mt_async_result(call_back, results):
- 	GLib.idle_add(_async_result, call_back, results)
- 
- 
-+# Take the supplied function and run it on the main thread and not wait for
-+# a result!
-+def mt_run_no_wait(function, param):
-+	GLib.idle_add(function, param)
-+
- # Run the supplied function and arguments on the main thread and wait for them
- # to complete while allowing the ability to get the return value too.
- #
+diff --git a/WHATS_NEW b/WHATS_NEW
+index dd3b42f..1888cfd 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.106 - 
+ ====================================
++  Don't require --major to be specified when using -My option on kernels > 2.4.
+   Add configure --disable-thin_check_needs_check to support old thin_check.
+   Use thin_check --clear-needs-check-flag by default.
+   Export lvm_even_rand() for controlled provision of random numbers.
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index ad00327..c612465 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -804,10 +804,18 @@ static int _read_activation_params(struct lvcreate_params *lp,
+ 					  "--minor when using -My");
+ 				return 0;
+ 			}
+-			if (lp->major == -1) {
+-				log_error("Please specify major number with "
+-					  "--major when using -My");
+-				return 0;
++			if (!strncmp(cmd->kernel_vsn, "2.4.", 4)) {
++				if (lp->major == -1) {
++					log_error("Please specify major number with "
++						  "--major when using -My");
++					return 0;
++				}
++			} else {
++				if (lp->major >= 0)
++					log_warn("Ignoring supplied major number - kernel assigns "
++						 "major numbers dynamically. Using major number %d instead.",
++						  cmd->dev_types->device_mapper_major);
++				lp->major = cmd->dev_types->device_mapper_major;
+ 			}
+ 			if (!major_minor_valid(cmd, vg->fid->fmt, lp->major, lp->minor))
+ 				return 0;
 
 
