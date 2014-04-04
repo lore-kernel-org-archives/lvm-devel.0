@@ -1,109 +1,89 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  4 Apr 2014 00:50:50 +0000 (UTC)
-Subject: master - lvmetad: Update retry logic vars and comments.
-Message-ID: <20140404005050.4DEF9608F0@fedorahosted.org>
+Date: Fri,  4 Apr 2014 01:23:33 +0000 (UTC)
+Subject: master - thin: Support thin_check --clear-needs-check-flag.
+Message-ID: <20140404012333.25D0B6109F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b38a3d8c85a5ce96ccbac4e5be859d53a2ec4c35
-Commit:        b38a3d8c85a5ce96ccbac4e5be859d53a2ec4c35
-Parent:        d36f721bb984c16bd20733325be0d9fc73706709
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cc72f340d757af537f239689944c934bf9b8fd62
+Commit:        cc72f340d757af537f239689944c934bf9b8fd62
+Parent:        b38a3d8c85a5ce96ccbac4e5be859d53a2ec4c35
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Apr 4 01:46:53 2014 +0100
+AuthorDate:    Fri Apr 4 02:22:40 2014 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Apr 4 01:46:53 2014 +0100
+CommitterDate: Fri Apr 4 02:22:40 2014 +0100
 
-lvmetad: Update retry logic vars and comments.
+thin: Support thin_check --clear-needs-check-flag.
 
-Avoid using variables with same name as functions.
-Use lvm_even_rand for random numbers.
+Update thin provisioning tools to version 0.3.2 or later!
 ---
- lib/cache/lvmetad.c |   53 ++++++++++++++++++++++++++++----------------------
- 1 files changed, 30 insertions(+), 23 deletions(-)
+ WHATS_NEW             |    2 ++
+ configure.in          |   12 ++++++++++++
+ lib/config/defaults.h |   11 ++++++++---
+ 3 files changed, 22 insertions(+), 3 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 697660f..0dd2c81 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -22,6 +22,9 @@
- #include "format-text.h" // TODO for disk_locn, used as a DA representation
- #include "crc.h"
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b5e96fd..dd3b42f 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.02.106 - 
+ ====================================
++  Add configure --disable-thin_check_needs_check to support old thin_check.
++  Use thin_check --clear-needs-check-flag by default.
+   Export lvm_even_rand() for controlled provision of random numbers.
+   Add lvmthin man page to section 7.
+   Extend internal validation of lv names size is less then 128 chars.
+diff --git a/configure.in b/configure.in
+index 88edb29..d8cbe5c 100644
+--- a/configure.in
++++ b/configure.in
+@@ -476,6 +476,18 @@ AC_DEFINE_UNQUOTED([THIN_DUMP_CMD], ["$THIN_DUMP_CMD"],
+ AC_DEFINE_UNQUOTED([THIN_REPAIR_CMD], ["$THIN_REPAIR_CMD"],
+ 		   [The path to 'thin_repair', if available.])
  
-+#define SCAN_TIMEOUT_SECONDS	80
-+#define MAX_RESCANS		10	/* Maximum number of times to scan all PVs and retry if the daemon returns a token mismatch error */
++dnl -- thin_check needs-check flag
++AC_MSG_CHECKING(whether thin_check supports the needs-check flag)
++AC_ARG_ENABLE(thin_check_needs_check,
++	      AC_HELP_STRING([--disable-thin_check_needs_check],
++			     [required if thin_check version is < 0.3.0]),
++	      THIN_CHECK_NEEDS_CHECK=$enableval, THIN_CHECK_NEEDS_CHECK=yes)
++AC_MSG_RESULT($THIN_CHECK_NEEDS_CHECK)
 +
- static daemon_handle _lvmetad;
- static int _lvmetad_use = 0;
- static int _lvmetad_connected = 0;
-@@ -141,8 +144,10 @@ static daemon_reply _lvmetad_send(const char *id, ...)
- 	va_list ap;
- 	daemon_reply repl;
- 	daemon_request req;
--	int try = 0;
--	int time = 0, wait, sleep = 1;
-+	unsigned num_rescans = 0;
-+	unsigned total_usecs_waited = 0;
-+	unsigned max_remaining_sleep_times = 1;
-+	unsigned wait_usecs;
++if test x$THIN_CHECK_NEEDS_CHECK = xyes; then
++	AC_DEFINE([THIN_CHECK_NEEDS_CHECK], 1, [Define to 1 if the external 'thin_check' tool requires the --clear-needs-check-flag option])
++fi
++
+ ################################################################################
+ dnl -- cache inclusion type
+ AC_MSG_CHECKING(whether to include cache)
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 94b11c0..2268e0b 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -67,12 +67,17 @@
+ #define DEFAULT_BACKGROUND_POLLING 1
  
- retry:
- 	req = daemon_request_make(id);
-@@ -158,30 +163,32 @@ retry:
+ #ifndef DMEVENTD_PATH
+-#define DEFAULT_DMEVENTD_PATH ""
++#  define DEFAULT_DMEVENTD_PATH ""
+ #else
+-#define DEFAULT_DMEVENTD_PATH DMEVENTD_PATH
++#  define DEFAULT_DMEVENTD_PATH DMEVENTD_PATH
++#endif
++
++#ifdef THIN_CHECK_NEEDS_CHECK
++#  define DEFAULT_THIN_CHECK_OPTIONS "-q --clear-needs-check-flag"
++#else
++#  define DEFAULT_THIN_CHECK_OPTIONS "-q"
+ #endif
  
- 	daemon_request_destroy(req);
- 
-+	/*
-+	 * If another process is trying to scan, it might have the
-+	 * same future token id and it's better to wait and avoid doing
-+	 * the work multiple times. For the case where the future token is
-+	 * different, the wait is randomized so that multiple waiting
-+	 * processes do not start scanning all at once.
-+	 *
-+	 * If the token is mismatched because of global_filter changes,
-+	 * we re-scan immediately, but if we lose the potential race for
-+	 * the update, we back off for a short while (0.05-0.5 seconds) and
-+	 * try again.
-+	 */
- 	if (!repl.error && !strcmp(daemon_reply_str(repl, "response", ""), "token_mismatch") &&
--	    try < 10 && time < 80000000 && !test_mode()) {
--		/*
--		 * If another process is trying to scan, they might have the
--		 * same future token id and it's better to wait and avoid doing
--		 * the work multiple times. For the case the future token is
--		 * different, the wait is randomized so that multiple waiting
--		 * processes do not start scanning all@once.
--		 *
--		 * If the token is mismatched because of global_filter changes,
--		 * we re-scan immediately, but if we lose the potential race for
--		 * the update, we back off for a short while (0.2-2 seconds) and
--		 * try again.
--		 */
--		if (!strcmp(daemon_reply_str(repl, "expected", ""), "update in progress") || sleep) {
--			wait = 50000 + random() % 450000; /* 0.05 - 0.5s */
--			time += wait;
--			usleep( wait );
--			-- sleep;
-+	    num_rescans < MAX_RESCANS && total_usecs_waited < (SCAN_TIMEOUT_SECONDS * 1000000) && !test_mode()) {
-+		if (!strcmp(daemon_reply_str(repl, "expected", ""), "update in progress") ||
-+		    max_remaining_sleep_times) {
-+			wait_usecs = 50000 + lvm_even_rand(&_lvmetad_cmd->rand_seed, 450000); /* between 0.05s and 0.5s */
-+			(void) usleep(wait_usecs);
-+			total_usecs_waited += wait_usecs;
-+			if (max_remaining_sleep_times)
-+				max_remaining_sleep_times--;	/* Sleep once before rescanning the first time, then 5 times each time after that. */
- 		} else {
- 			/* If the re-scan fails here, we try again later. */
--			lvmetad_pvscan_all_devs(_lvmetad_cmd, NULL);
--			++ try;
--			sleep = 5;
-+			(void) lvmetad_pvscan_all_devs(_lvmetad_cmd, NULL);
-+			num_rescans++;
-+			max_remaining_sleep_times = 5;
- 		}
- 		daemon_reply_destroy(repl);
- 		goto retry;
+-#define DEFAULT_THIN_CHECK_OPTIONS "-q"
+ #define DEFAULT_THIN_REPAIR_OPTIONS ""
+ #define DEFAULT_THIN_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
+ #define DEFAULT_THIN_POOL_MAX_METADATA_SIZE (16 * 1024 * 1024)  /* KB */
 
 
