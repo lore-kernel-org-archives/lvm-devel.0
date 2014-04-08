@@ -1,41 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  8 Apr 2014 09:02:45 +0000 (UTC)
-Subject: master - log: skip repeated hashing when logging once
-Message-ID: <20140408090245.1889260268@fedorahosted.org>
+Date: Tue,  8 Apr 2014 09:02:47 +0000 (UTC)
+Subject: master - lvm-string: add cdata/cmeta as reserved name
+Message-ID: <20140408090247.3333A60268@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=700b4bfc9428d7440c018c0a5e9d9dcc3cc4cea1
-Commit:        700b4bfc9428d7440c018c0a5e9d9dcc3cc4cea1
-Parent:        96cf9dc0170d8a807ecac3956a80c3f51cfe48c0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2868d897da186d0f65856936543e25bcd5057440
+Commit:        2868d897da186d0f65856936543e25bcd5057440
+Parent:        700b4bfc9428d7440c018c0a5e9d9dcc3cc4cea1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 7 17:51:42 2014 +0200
+AuthorDate:    Mon Apr 7 21:36:59 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Apr 8 11:00:14 2014 +0200
 
-log: skip repeated hashing when logging once
+lvm-string: add cdata/cmeta as reserved name
 
-When a message is already found in the hash, no need to hash it again.
 ---
- lib/log/log.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ lib/misc/lvm-string.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index 194fdd3..a3c0139 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -268,7 +268,8 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
- 		if (_duplicated) {
- 			if (dm_hash_lookup(_duplicated, message))
- 				level = _LOG_NOTICE;
--			(void) dm_hash_insert(_duplicated, message, (void*)1);
-+			else
-+				(void) dm_hash_insert(_duplicated, message, (void*)1);
- 		}
- 	}
+diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
+index b96b5cc..a74fd58 100644
+--- a/lib/misc/lvm-string.c
++++ b/lib/misc/lvm-string.c
+@@ -109,6 +109,8 @@ int apply_lvname_restrictions(const char *name)
+ 	};
  
+ 	static const char * const _reserved_strings[] = {
++		"_cdata",
++		"_cmeta",
+ 		"_mlog",
+ 		"_mimage",
+ 		"_pmspare",
 
 
