@@ -1,107 +1,152 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 10 Apr 2014 11:55:13 +0000 (UTC)
-Subject: master - pvcreate: fix ignored --dataalignment/dataalignment offset for pvcreate --restorefile
-Message-ID: <20140410115513.CF8AF60D76@fedorahosted.org>
+Date: Thu, 10 Apr 2014 12:21:47 +0000 (UTC)
+Subject: master - tests: add separate test file for bootloader area support and enhance tests
+Message-ID: <20140410122147.E671A609F7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c79556f4f836118516a2f1a15056f81e3fc52f6
-Commit:        6c79556f4f836118516a2f1a15056f81e3fc52f6
-Parent:        b45d2768a858cc65a6770eed4db99f8b82b6353b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05eb6a167e312679ec8d730f7736023168e77da0
+Commit:        05eb6a167e312679ec8d730f7736023168e77da0
+Parent:        6c79556f4f836118516a2f1a15056f81e3fc52f6
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Apr 10 13:43:46 2014 +0200
+AuthorDate:    Thu Apr 10 14:18:59 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Apr 10 13:43:46 2014 +0200
+CommitterDate: Thu Apr 10 14:18:59 2014 +0200
 
-pvcreate: fix ignored --dataalignment/dataalignment offset for pvcreate --restorefile
+tests: add separate test file for bootloader area support and enhance tests
 
-There were two bugs before when using pvcreate --restorefile together
-with data alignment and its offset specified:
-
-  - the --dataalignment was always ignored due to missing braces in the
-    code when validating the divisibility of supplied --dataalignment
-    argument with pe_start which we're just restoring:
-
-	if (pp->rp.pe_start % pp->data_alignment)
-		log_warn("WARNING: Ignoring data alignment %" PRIu64
-			 " incompatible with --restorefile value (%"
-			 PRIu64").", pp->data_alignment, pp->rp.pe_start);
-        pp->data_alignment = 0
-
-    The pp->data_alignment should be zeroed only if the pe_start is not
-    divisible with data_alignment.
-
-  - the check for compatibility of restored pe_start was incorrect too
-    since it did not properly count with the dataalignmentoffset that
-    could be supplied together with dataalignment
-
-The proper formula is:
-
-  X * dataalignment + dataalignmentoffset == pe_start
-
-So it should be:
-
-  if ((pp->rp.pe_start % pp->data_alignment) != pp->data_alignment_offset) {
-	...ignore supplied dataalignment and dataalignment offset...
-  }
+Enahnce bootloader area test to check whether restoring values from
+backup works correctly.
 ---
- WHATS_NEW       |    1 +
- tools/toollib.c |   22 +++++++++-------------
- 2 files changed, 10 insertions(+), 13 deletions(-)
+ lib/format_text/format-text.c         |    6 ++--
+ test/shell/pvcreate-bootloaderarea.sh |   59 +++++++++++++++++++++++++++++++++
+ test/shell/pvcreate-usage.sh          |   22 ------------
+ 3 files changed, 62 insertions(+), 25 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ebb0f09..5023ba2 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.106 - 
- ====================================
-+  Fix ignored --dataalignment/dataalignment offset for pvcreate --restorefile.
-   Fix lost information about bootloader area when using lvmetad.
-   Don't require --major to be specified when using -My option on kernels > 2.4.
-   Add configure --disable-thin_check_needs_check to support old thin_check.
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 6b68f55..052c141 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1580,14 +1580,6 @@ int pvcreate_params_validate(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	if (pp->data_alignment && pp->rp.pe_start != PV_PE_START_CALC) {
--		if (pp->rp.pe_start % pp->data_alignment)
--			log_warn("WARNING: Ignoring data alignment %" PRIu64
--				 " incompatible with --restorefile value (%"
--				 PRIu64").", pp->data_alignment, pp->rp.pe_start);
--		pp->data_alignment = 0;
--	}
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 071d2b3..9b894fa 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1536,11 +1536,11 @@ static int _text_pv_initialise(const struct format_type *fmt,
+ 		/*
+ 		 * Calculate new PE start and bootloader area start value.
+ 		 * Make sure both are properly aligned!
+-		 * If PE start can't be aligned because EA is taking
++		 * If PE start can't be aligned because BA is taking
+ 		 * the whole space, make PE start equal to the PV size
+ 		 * which effectively disables DA - it will have zero size.
+ 		 * This needs to be done as we can't have a PV without any DA.
+-		 * But we still want to support a PV with EA only!
++		 * But we still want to support a PV with BA only!
+ 		 */
+ 		if (rp->ba_size) {
+ 			pv->ba_start = final_alignment;
+@@ -1556,7 +1556,7 @@ static int _text_pv_initialise(const struct format_type *fmt,
+ 		/*
+ 		 * Try to keep the value of PE start set to a firm value if
+ 		 * requested. This is useful when restoring existing PE start
+-		 * value (e.g. backups). Also, if creating an EA, try to place
++		 * value (e.g. backups). Also, if creating a BA, try to place
+ 		 * it in between the final alignment and existing PE start
+ 		 * if possible.
+ 		 */
+diff --git a/test/shell/pvcreate-bootloaderarea.sh b/test/shell/pvcreate-bootloaderarea.sh
+new file mode 100644
+index 0000000..0fa6022
+--- /dev/null
++++ b/test/shell/pvcreate-bootloaderarea.sh
+@@ -0,0 +1,59 @@
++#!/bin/sh
++# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++test_description='Test pvcreate bootloader area support'
++
++. lib/test
++
++aux prepare_devs 1
++aux lvmconf 'global/suffix=0'
++aux lvmconf 'global/units="b"'
++
++#COMM 'pvcreate sets/aligns bootloader area correctly'
++pvcreate --dataalignment 262144b --bootloaderareasize 614400b "$dev1"
++# ba_start must be aligned based on dataalignment
++# pe_start starts at next dataalignment multiple
++# ba_size is the whole space in between ba_start and pe_start
++check pv_field "$dev1" ba_start "262144"
++check pv_field "$dev1" ba_size "786432"
++check pv_field "$dev1" pe_start "1048576"
++
++#COMM 'pvcreate with booloader area size - test corner cases'
++dev_size=$(pvs -o pv_size --noheadings $dev1)
++pv_size=$[dev_size - 1048576] # device size - 1m pe_start = area for data
++
++# try to use the whole data area for bootloader area, remaining data area is zero then (pe_start = pv_size)
++pvcreate --bootloaderareasize ${pv_size}b --dataalignment 1048576b "$dev1"
++check pv_field "$dev1" pe_start $dev_size
++check pv_field "$dev1" ba_start 1048576
++check pv_field "$dev1" ba_size $pv_size
++
++# try to use the whole data area for bootloader area only and add one more byte - this must error out
++not pvcreate --bootloaderareasize $[pv_size + 1] --dataalignment 1048576b "$dev1" 2>err
++grep "Bootloader area with data-aligned start must not exceed device size" err
++
++# restoring the PV should also restore the bootloader area correctly
++pvremove -ff "$dev1"
++pvcreate --dataalignment 256k --bootloaderareasize 600k "$dev1"
++vgcreate $vg "$dev1"
++vgcfgbackup -f $TESTDIR/vg_with_ba_backup $vg
++pv_uuid=$(get pv_field "$dev1" pv_uuid)
++vgremove -ff $vg
++pvremove -ff "$dev1"
++pvcreate --dataalignment 256k --restorefile $TESTDIR/vg_with_ba_backup --uuid "$pv_uuid" "$dev1"
++check pv_field "$dev1" ba_start "262144"
++check pv_field "$dev1" ba_size "786432"
++check pv_field "$dev1" pe_start "1048576"
++
++# error out when restoring the PV and trying to use overlapping bootloader area
++pvremove -ff "$dev1"
++not pvcreate --restorefile $TESTDIR/vg_with_ba_backup --uuid "$pv_uuid" --bootloaderareasize 1m "$dev1" 2>err
++grep "Bootloader area would overlap data area" err
+diff --git a/test/shell/pvcreate-usage.sh b/test/shell/pvcreate-usage.sh
+index 378f8b5..251746d 100644
+--- a/test/shell/pvcreate-usage.sh
++++ b/test/shell/pvcreate-usage.sh
+@@ -187,25 +187,3 @@ for ignore in y n; do
+ done
+ done
+ done
 -
- 	if (arg_sign_value(cmd, dataalignmentoffset_ARG, SIGN_NONE) == SIGN_MINUS) {
- 		log_error("Physical volume data alignment offset may not be negative");
- 		return 0;
-@@ -1599,11 +1591,15 @@ int pvcreate_params_validate(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	if (pp->data_alignment_offset && pp->rp.pe_start != PV_PE_START_CALC) {
--		log_warn("WARNING: Ignoring data alignment offset %" PRIu64
--			 " incompatible with --restorefile value (%"
--			 PRIu64").", pp->data_alignment_offset, pp->rp.pe_start);
--		pp->data_alignment_offset = 0;
-+	if ((pp->data_alignment + pp->data_alignment_offset) &&
-+	    (pp->rp.pe_start != PV_PE_START_CALC)) {
-+		if ((pp->rp.pe_start % pp->data_alignment) != pp->data_alignment_offset) {
-+			log_warn("WARNING: Ignoring data alignment %" PRIu64
-+				 " incompatible with restored pe_start value %" PRIu64").",
-+				 pp->data_alignment + pp->data_alignment_offset, pp->rp.pe_start);
-+			pp->data_alignment = 0;
-+			pp->data_alignment_offset = 0;
-+		}
- 	}
- 
- 	if (arg_sign_value(cmd, metadatasize_ARG, SIGN_NONE) == SIGN_MINUS) {
+-#COMM 'pvcreate sets/aligns bootloader area correctly'
+-pvcreate --dataalignment 256k --bootloaderareasize 600k "$dev1"
+-# ba_start must be aligned based on dataalignment
+-# pe_start starts at next dataalignment multiple
+-# ba_size is the whole space in between ba_start and pe_start
+-check pv_field "$dev1" ba_start "256.00k"
+-check pv_field "$dev1" ba_size "768.00k"
+-check pv_field "$dev1" pe_start "1.00m"
+-
+-aux lvmconf 'global/suffix=0'
+-aux lvmconf 'global/units="b"'
+-#COMM 'pvcreate with booloader area size - test corner cases
+-dev_size=$(pvs -o pv_size --noheadings $dev1)
+-pv_size=$[dev_size - 1048576] # device size - 1m pe_start = area for data
+-# try to use the whole data area for bootloader area
+-pvcreate --bootloaderareasize ${pv_size}b --dataalignment 1048576b "$dev1"
+-check pv_field "$dev1" pe_start $dev_size
+-check pv_field "$dev1" ba_start 1048576
+-check pv_field "$dev1" ba_size ${pv_size}
+-not pvcreate --bootloaderareasize $[pv_size + 1] --dataalignment 1048576b "$dev1" 2>err
+-grep "Bootloader area with data-aligned start must not exceed device size" err
 
 
