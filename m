@@ -1,59 +1,74 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 14 Apr 2014 11:06:20 +0000 (UTC)
-Subject: master - clvmd: use thread-safe ctime_r when debugging
-Message-ID: <20140414110620.3F35060CDC@fedorahosted.org>
+Date: Mon, 14 Apr 2014 11:06:22 +0000 (UTC)
+Subject: master - cleanup: clvmd reindent local_pipe_callback
+Message-ID: <20140414110622.7C33D60CDC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eccc50d86199921e8f2e0cf349db96e517b2625d
-Commit:        eccc50d86199921e8f2e0cf349db96e517b2625d
-Parent:        639983b6b7ac3257fc305624f22325fd3f6f0261
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e2f194952a218562b198c47e78f7337572cfb29e
+Commit:        e2f194952a218562b198c47e78f7337572cfb29e
+Parent:        eccc50d86199921e8f2e0cf349db96e517b2625d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 9 07:51:36 2014 +0200
+AuthorDate:    Thu Apr 10 22:10:37 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 14 13:02:25 2014 +0200
+CommitterDate: Mon Apr 14 13:02:27 2014 +0200
 
-clvmd: use thread-safe ctime_r when debugging
+cleanup: clvmd reindent local_pipe_callback
 
-Use thread friendly version of ctime
-TODO:should be probably replaced with strftime()
+Move !node_up check in front and reindent
+rest of the function to the left.
 ---
- WHATS_NEW             |    1 +
- daemons/clvmd/clvmd.c |    3 ++-
- 2 files changed, 3 insertions(+), 1 deletions(-)
+ daemons/clvmd/clvmd.c |   31 ++++++++++++++++---------------
+ 1 files changed, 16 insertions(+), 15 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index efc296d..61723e5 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.107 - 
- ==================================
-+  Use thread-safe ctime_r() for clvmd debug logging.
-   Skip adding replies to already finished reply thread.
-   Use mutex to check number of replies in request_timed_out() in clvmd.
-   Drop usage of extra reply_mutex for localsock in clvmd.
 diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index ee6e301..b1fe396 100644
+index b1fe396..3e92490 100644
 --- a/daemons/clvmd/clvmd.c
 +++ b/daemons/clvmd/clvmd.c
-@@ -212,12 +212,13 @@ void debuglog(const char *fmt, ...)
- 	time_t P;
- 	va_list ap;
- 	static int syslog_init = 0;
-+	char buf_ctime[64];
+@@ -779,25 +779,26 @@ static int local_pipe_callback(struct local_client *thisfd, char *buf,
+ static void timedout_callback(struct local_client *client, const char *csid,
+ 			      int node_up)
+ {
+-	if (node_up) {
+-		struct node_reply *reply;
+-		char nodename[max_cluster_member_name_len];
++	struct node_reply *reply;
++	char nodename[max_cluster_member_name_len];
  
- 	switch (clvmd_get_debug()) {
- 	case DEBUG_STDERR:
- 		va_start(ap,fmt);
- 		time(&P);
--		fprintf(stderr, "CLVMD[%x]: %.15s ", (int)pthread_self(), ctime(&P)+4 );
-+		fprintf(stderr, "CLVMD[%x]: %.15s ", (int)pthread_self(), ctime_r(&P, buf_ctime) + 4);
- 		vfprintf(stderr, fmt, ap);
- 		va_end(ap);
- 		break;
+-		clops->name_from_csid(csid, nodename);
+-		DEBUGLOG("Checking for a reply from %s\n", nodename);
+-		pthread_mutex_lock(&client->bits.localsock.mutex);
++	if (!node_up)
++		return;
+ 
+-		reply = client->bits.localsock.replies;
+-		while (reply && strcmp(reply->node, nodename) != 0)
+-			reply = reply->next;
++	clops->name_from_csid(csid, nodename);
++	DEBUGLOG("Checking for a reply from %s\n", nodename);
++	pthread_mutex_lock(&client->bits.localsock.mutex);
+ 
+-		pthread_mutex_unlock(&client->bits.localsock.mutex);
++	reply = client->bits.localsock.replies;
++	while (reply && strcmp(reply->node, nodename) != 0)
++		reply = reply->next;
+ 
+-		if (!reply) {
+-			DEBUGLOG("Node %s timed-out\n", nodename);
+-			add_reply_to_list(client, ETIMEDOUT, csid,
+-					  "Command timed out", 18);
+-		}
++	pthread_mutex_unlock(&client->bits.localsock.mutex);
++
++	if (!reply) {
++		DEBUGLOG("Node %s timed-out\n", nodename);
++		add_reply_to_list(client, ETIMEDOUT, csid,
++				  "Command timed out", 18);
+ 	}
+ }
+ 
 
 
