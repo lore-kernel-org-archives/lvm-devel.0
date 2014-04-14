@@ -1,75 +1,59 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 14 Apr 2014 11:06:26 +0000 (UTC)
-Subject: master - cleanup: corrent indent level
-Message-ID: <20140414110626.A59D160CDC@fedorahosted.org>
+Date: Mon, 14 Apr 2014 11:06:28 +0000 (UTC)
+Subject: master - tests: implement lv_attr_bit
+Message-ID: <20140414110628.B8CD760CDC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1d803ee9806bc3838a515619bec211b9233d803e
-Commit:        1d803ee9806bc3838a515619bec211b9233d803e
-Parent:        d896abc705d8aedd1d74c6fc01985fc88e7e44ed
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4d48577ab9fce971512a5c7b2faf3bfdf683f512
+Commit:        4d48577ab9fce971512a5c7b2faf3bfdf683f512
+Parent:        1d803ee9806bc3838a515619bec211b9233d803e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 14 11:20:20 2014 +0200
+AuthorDate:    Thu Apr 10 22:07:45 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Apr 14 13:02:28 2014 +0200
 
-cleanup: corrent indent level
+tests: implement lv_attr_bit
 
+Add easy check function for cheking lv_attr bits
 ---
- lib/mm/memlock.c |   34 +++++++++++++++++-----------------
- 1 files changed, 17 insertions(+), 17 deletions(-)
+ test/lib/check.sh |   21 ++++++++++++++++++++-
+ 1 files changed, 20 insertions(+), 1 deletions(-)
 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index 153ae17..5382b69 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -82,27 +82,27 @@ static int _default_priority;
+diff --git a/test/lib/check.sh b/test/lib/check.sh
+index 20ad6c3..9c80d9a 100644
+--- a/test/lib/check.sh
++++ b/test/lib/check.sh
+@@ -285,7 +285,26 @@ vg_field() {
+ lv_field() {
+ 	local actual=$(get lv_field "$1" "$2" "${@:4}")
+ 	test "$actual" = "$3" || \
+-		die "lv_field: lv=$lv, field=\"$2\", actual=\"$actual\", expected=\"$3\""
++		die "lv_field: lv=$1, field=\"$2\", actual=\"$actual\", expected=\"$3\""
++}
++
++lv_attr_bit() {
++	local actual=$(get lv_field "$2" lv_attr "${@:4}")
++	local offset=$1
++	case "$offset" in
++	  type) offset=0 ;;
++	  perm*) offset=1 ;;
++	  alloc*) offset=2 ;;
++	  fixed*) offset=3 ;;
++	  state) offset=4 ;;
++	  open) offset=5 ;;
++	  target) offset=6 ;;
++	  zero) offset=7 ;;
++	  health) offset=8 ;;
++	  skip) offset=9 ;;
++	esac
++	test "${actual:$offset:1}" = "$3" || \
++		die "lv_attr_bit: lv=$2, ${offset} bit of \"$actual\" is \"${actual:$offset:1}\", but expected \"$3\""
+ }
  
- /* list of maps, that are unconditionaly ignored */
- static const char * const _ignore_maps[] = {
--    "[vdso]",
--    "[vsyscall]",
--    "[vectors]",
-+	"[vdso]",
-+	"[vsyscall]",
-+	"[vectors]",
- };
- 
- /* default blacklist for maps */
- static const char * const _blacklist_maps[] = {
--    "locale/locale-archive",
--    "/LC_MESSAGES/",
--    "gconv/gconv-modules.cache",
--    "/libblkid.so.",	/* not using lzma during mlock (selinux) */
--    "/liblzma.so.",	/* not using lzma during mlock (selinux) */
--    "/libncurses.so.",	/* not using ncurses during mlock */
--    "/libpcre.so.",	/* not using pcre during mlock (selinux) */
--    "/libreadline.so.",	/* not using readline during mlock */
--    "/libselinux.so.",	/* not using selinux during mlock */
--    "/libsepol.so.",	/* not using sepol during mlock */
--    "/libtinfo.so.",	/* not using tinfo during mlock */
--    "/libuuid.so.",	/* not using uuid during mlock (blkid) */
--    "/libdl-",		/* not using dlopen,dlsym during mlock */
--    /* "/libdevmapper-event.so" */
-+	"locale/locale-archive",
-+	"/LC_MESSAGES/",
-+	"gconv/gconv-modules.cache",
-+	"/libblkid.so.",	/* not using lzma during mlock (selinux) */
-+	"/liblzma.so.",	/* not using lzma during mlock (selinux) */
-+	"/libncurses.so.",	/* not using ncurses during mlock */
-+	"/libpcre.so.",	/* not using pcre during mlock (selinux) */
-+	"/libreadline.so.",	/* not using readline during mlock */
-+	"/libselinux.so.",	/* not using selinux during mlock */
-+	"/libsepol.so.",	/* not using sepol during mlock */
-+	"/libtinfo.so.",	/* not using tinfo during mlock */
-+	"/libuuid.so.",	/* not using uuid during mlock (blkid) */
-+	"/libdl-",		/* not using dlopen,dlsym during mlock */
-+	/* "/libdevmapper-event.so" */
- };
- 
- typedef enum { LVM_MLOCK, LVM_MUNLOCK } lvmlock_t;
+ compare_fields() {
 
 
