@@ -1,159 +1,148 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 15 Apr 2014 00:14:43 +0000 (UTC)
-Subject: master - alloc: Introduce A_POSITIONAL_FILL.
-Message-ID: <20140415001443.4ECC5610A7@fedorahosted.org>
+Date: Tue, 15 Apr 2014 01:43:34 +0000 (UTC)
+Subject: master - alloc: Correct existing use of positional fill.
+Message-ID: <20140415014334.6559760CE0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1bf4c3a1fabb6864564fdc42437db424bcfa06f4
-Commit:        1bf4c3a1fabb6864564fdc42437db424bcfa06f4
-Parent:        c9a8264b8be4ab09fb2082cd2a424419cc80c63a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=898059251442a89fc039cd49486771b6816df475
+Commit:        898059251442a89fc039cd49486771b6816df475
+Parent:        1bf4c3a1fabb6864564fdc42437db424bcfa06f4
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Apr 15 01:13:47 2014 +0100
+AuthorDate:    Tue Apr 15 02:34:35 2014 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Apr 15 01:13:47 2014 +0100
+CommitterDate: Tue Apr 15 02:34:35 2014 +0100
 
-alloc: Introduce A_POSITIONAL_FILL.
+alloc: Correct existing use of positional fill.
 
-Set A_POSITIONAL_FILL if the array of areas is being filled
-positionally (with a slot corresponding to each 'leg') rather
-than sequentially (with all suitable areas found, to be sorted
-and selected from).
+Perform two allocation attempts with cling if maximise_cling is set,
+first with then without positional fill.
+
+Avoid segfaults from confusion between positional and sorted sequential
+allocation when number of stripes varies as reported here:
+https://www.redhat.com/archives/linux-lvm/2014-March/msg00001.html
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   32 +++++++++++++++++++++++---------
- 2 files changed, 24 insertions(+), 9 deletions(-)
+ lib/metadata/lv_manip.c |   44 +++++++++++++++++++++++++++-----------------
+ 1 files changed, 27 insertions(+), 17 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 61723e5..f3da48c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.107 - 
- ==================================
-+  Refactor allocation code to make A_POSITIONAL_FILL explicit.
-   Use thread-safe ctime_r() for clvmd debug logging.
-   Skip adding replies to already finished reply thread.
-   Use mutex to check number of replies in request_timed_out() in clvmd.
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 0e65847..46431a9 100644
+index 46431a9..85f7a39 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -49,6 +49,8 @@ typedef enum {
- #define A_CAN_SPLIT		0x10
- #define A_AREA_COUNT_MATCHES	0x20	/* Existing lvseg has same number of areas as new segment */
- 
-+#define A_POSITIONAL_FILL	0x40	/* Slots are positional and filled using PREFERRED */
-+
- /*
-  * Constant parameters during a single allocation attempt.
-  */
-@@ -1280,6 +1282,7 @@ static void _init_alloc_parms(struct alloc_handle *ah,
- 	/* Are there any preceding segments we must follow on from? */
+@@ -1276,18 +1276,18 @@ static void _init_alloc_parms(struct alloc_handle *ah,
+ 	 * areas if the number of areas matches.
+ 	 */
  	if (alloc_parms->prev_lvseg &&
- 	    (alloc_parms->flags & A_AREA_COUNT_MATCHES)) {
-+		alloc_parms->flags |= A_POSITIONAL_FILL;
- 		if (alloc_parms->alloc == ALLOC_CONTIGUOUS)
+-	    ((ah->area_count + ah->parity_count) == prev_lvseg->area_count))
++	    ((ah->area_count + ah->parity_count) == prev_lvseg->area_count)) {
+ 		alloc_parms->flags |= A_AREA_COUNT_MATCHES;
+ 
+-	/* Are there any preceding segments we must follow on from? */
+-	if (alloc_parms->prev_lvseg &&
+-	    (alloc_parms->flags & A_AREA_COUNT_MATCHES)) {
+-		alloc_parms->flags |= A_POSITIONAL_FILL;
+-		if (alloc_parms->alloc == ALLOC_CONTIGUOUS)
++		/* Are there any preceding segments we must follow on from? */
++		if (alloc_parms->alloc == ALLOC_CONTIGUOUS) {
  			alloc_parms->flags |= A_CONTIGUOUS_TO_LVSEG;
- 		else if ((alloc_parms->alloc == ALLOC_CLING) ||
-@@ -1291,8 +1294,10 @@ static void _init_alloc_parms(struct alloc_handle *ah,
- 		 * allocation must use the same PVs (or else fail).
- 		 */
- 		if ((alloc_parms->alloc == ALLOC_CLING) ||
--		    (alloc_parms->alloc == ALLOC_CLING_BY_TAGS))
-+		    (alloc_parms->alloc == ALLOC_CLING_BY_TAGS)) {
- 			alloc_parms->flags |= A_CLING_TO_ALLOCED;
+-		else if ((alloc_parms->alloc == ALLOC_CLING) ||
+-			 (alloc_parms->alloc == ALLOC_CLING_BY_TAGS))
++			alloc_parms->flags |= A_POSITIONAL_FILL;
++		} else if ((alloc_parms->alloc == ALLOC_CLING) ||
++			   (alloc_parms->alloc == ALLOC_CLING_BY_TAGS)) {
+ 			alloc_parms->flags |= A_CLING_TO_LVSEG;
 +			alloc_parms->flags |= A_POSITIONAL_FILL;
 +		}
+ 	} else
+ 		/*
+ 		 * A cling allocation that follows a successful contiguous
+@@ -1916,7 +1916,7 @@ static area_use_t _check_pva(struct alloc_handle *ah, struct pv_area *pva, uint3
+ 	if (!iteration_count && !log_iteration_count && alloc_parms->flags & (A_CONTIGUOUS_TO_LVSEG | A_CLING_TO_LVSEG | A_CLING_TO_ALLOCED)) {
+ 		/* Contiguous? */
+ 		if (((alloc_parms->flags & A_CONTIGUOUS_TO_LVSEG) ||
+-		     (ah->maximise_cling && alloc_parms->prev_lvseg && (alloc_parms->flags & A_AREA_COUNT_MATCHES))) &&
++		     (ah->maximise_cling && (alloc_parms->flags & A_AREA_COUNT_MATCHES))) &&
+ 		    _check_contiguous(ah->cmd, alloc_parms->prev_lvseg, pva, alloc_state))
+ 			goto found;
  
- 	if (alloc_parms->alloc == ALLOC_CLING_BY_TAGS)
- 		alloc_parms->flags |= A_CLING_BY_TAGS;
-@@ -1751,21 +1756,23 @@ static int _is_condition(struct cmd_context *cmd __attribute__((unused)),
- 			 void *data)
- {
- 	struct pv_match *pvmatch = data;
-+	int positional = pvmatch->alloc_state->alloc_parms->flags & A_POSITIONAL_FILL;
+@@ -1926,7 +1926,7 @@ static area_use_t _check_pva(struct alloc_handle *ah, struct pv_area *pva, uint3
  
--	if (pvmatch->alloc_state->areas[s].pva)
-+	if (positional && pvmatch->alloc_state->areas[s].pva)
- 		return 1;	/* Area already assigned */
+ 		/* Cling to prev_lvseg? */
+ 		if (((alloc_parms->flags & A_CLING_TO_LVSEG) ||
+-		     (ah->maximise_cling && alloc_parms->prev_lvseg && (alloc_parms->flags & A_AREA_COUNT_MATCHES))) &&
++		     (ah->maximise_cling && (alloc_parms->flags & A_AREA_COUNT_MATCHES))) &&
+ 		    _check_cling(ah, NULL, alloc_parms->prev_lvseg, pva, alloc_state))
+ 			/* If this PV is suitable, use this first area */
+ 			goto found;
+@@ -1940,7 +1940,7 @@ static area_use_t _check_pva(struct alloc_handle *ah, struct pv_area *pva, uint3
+ 		if (!(alloc_parms->flags & A_CLING_BY_TAGS) || !ah->cling_tag_list_cn)
+ 			return NEXT_PV;
  
- 	if (!pvmatch->condition(pvmatch, pvseg, pvmatch->pva))
- 		return 1;	/* Continue */
+-		if (alloc_parms->prev_lvseg && (alloc_parms->flags & A_AREA_COUNT_MATCHES)) {
++		if ((alloc_parms->flags & A_AREA_COUNT_MATCHES)) {
+ 			if (_check_cling(ah, ah->cling_tag_list_cn, alloc_parms->prev_lvseg, pva, alloc_state))
+ 				goto found;
+ 		} else if (_check_cling_to_alloced(ah, ah->cling_tag_list_cn, pva, alloc_state))
+@@ -2078,10 +2078,11 @@ static int _find_some_parallel_space(struct alloc_handle *ah,
  
--	if (s >= pvmatch->alloc_state->areas_size)
-+	if (positional && (s >= pvmatch->alloc_state->areas_size))
- 		return 1;
- 
- 	/*
- 	 * Only used for cling and contiguous policies (which only make one allocation per PV)
- 	 * so it's safe to say all the available space is used.
- 	 */
--	_reserve_required_area(pvmatch->alloc_state, pvmatch->pva, pvmatch->pva->count, s, 0);
-+	if (positional)
-+		_reserve_required_area(pvmatch->alloc_state, pvmatch->pva, pvmatch->pva->count, s, 0);
- 
- 	return 2;	/* Finished */
- }
-@@ -1845,6 +1852,7 @@ static int _check_cling_to_alloced(struct alloc_handle *ah, const struct dm_conf
- {
- 	unsigned s;
- 	struct alloced_area *aa;
-+	int positional = alloc_state->alloc_parms->flags & A_POSITIONAL_FILL;
- 
- 	/*
- 	 * Ignore log areas.  They are always allocated whole as part of the
-@@ -1854,12 +1862,13 @@ static int _check_cling_to_alloced(struct alloc_handle *ah, const struct dm_conf
- 		return 0;
- 
- 	for (s = 0; s < ah->area_count; s++) {
--		if (alloc_state->areas[s].pva)
-+		if (positional && alloc_state->areas[s].pva)
- 			continue;	/* Area already assigned */
- 		dm_list_iterate_items(aa, &ah->alloced_areas[s]) {
- 			if ((!cling_tag_list_cn && (pva->map->pv == aa[0].pv)) ||
- 			    (cling_tag_list_cn && _pvs_have_matching_tag(cling_tag_list_cn, pva->map->pv, aa[0].pv))) {
--				_reserve_required_area(alloc_state, pva, pva->count, s, 0);
-+				if (positional)
-+					_reserve_required_area(alloc_state, pva, pva->count, s, 0);
- 				return 1;
- 			}
- 		}
-@@ -1949,10 +1958,11 @@ static area_use_t _check_pva(struct alloc_handle *ah, struct pv_area *pva, uint3
- 	     (already_found_one && alloc_parms->alloc != ALLOC_ANYWHERE)))
- 		return NEXT_PV;
- 
--	return USE_AREA;
+ 	/* ix_offset holds the number of parallel allocations that must be contiguous/cling */
+ 	/* At most one of A_CONTIGUOUS_TO_LVSEG, A_CLING_TO_LVSEG or A_CLING_TO_ALLOCED may be set */
+-	if (alloc_parms->flags & (A_CONTIGUOUS_TO_LVSEG | A_CLING_TO_LVSEG))
++	if (!(alloc_parms->flags & A_POSITIONAL_FILL))
++		ix_offset = 0;
++	else if (alloc_parms->flags & (A_CONTIGUOUS_TO_LVSEG | A_CLING_TO_LVSEG))
+ 		ix_offset = _stripes_per_mimage(alloc_parms->prev_lvseg) * alloc_parms->prev_lvseg->area_count;
 -
- found:
--	return PREFERRED;
-+	if (alloc_parms->flags & A_POSITIONAL_FILL)
-+		return PREFERRED;
-+
-+	return USE_AREA;
- }
+-	if (alloc_parms->flags & A_CLING_TO_ALLOCED)
++	else if (alloc_parms->flags & A_CLING_TO_ALLOCED)
+ 		ix_offset = ah->area_count;
  
- /*
-@@ -2078,6 +2088,9 @@ static int _find_some_parallel_space(struct alloc_handle *ah,
- 		log_debug_alloc("Cling_to_allocated is %sset",
+ 	if (alloc_parms->alloc == ALLOC_NORMAL || (alloc_parms->flags & A_CLING_TO_ALLOCED))
+@@ -2089,7 +2090,9 @@ static int _find_some_parallel_space(struct alloc_handle *ah,
  				alloc_parms->flags & A_CLING_TO_ALLOCED ? "" : "not ");
  
-+	if (alloc_parms->flags & A_POSITIONAL_FILL)
-+		log_debug_alloc("Preferred areas are filled positionally.");
-+
+ 	if (alloc_parms->flags & A_POSITIONAL_FILL)
+-		log_debug_alloc("Preferred areas are filled positionally.");
++		log_debug_alloc("%u preferred area(s) to be filled positionally.", ix_offset);
++	else
++		log_debug_alloc("Areas to be sorted and filled sequentially.");
+ 
  	_clear_areas(alloc_state);
  	_reset_unreserved(pvms);
+@@ -2217,7 +2220,8 @@ static int _find_some_parallel_space(struct alloc_handle *ah,
+ 		  (ix + preferred_count >= devices_needed) &&
+ 		  (ix + preferred_count < devices_needed + alloc_state->log_area_count_still_needed) && !log_iteration_count++));
  
-@@ -2146,6 +2159,7 @@ static int _find_some_parallel_space(struct alloc_handle *ah,
- 				 * There are two types of allocations, which can't be mixed at present:
- 				 *
- 				 * PREFERRED are stored immediately in a specific parallel slot.
-+				 *   This is only used if the A_POSITIONAL_FILL flag is set.
- 				 *   This requires the number of slots to match, so if comparing with
- 				 *   prev_lvseg then A_AREA_COUNT_MATCHES must be set.
- 				 *
+-	if (preferred_count < ix_offset && !(alloc_parms->flags & A_CLING_TO_ALLOCED))
++	/* Non-zero ix means at least one USE_AREA was returned */
++	if (preferred_count < ix_offset && !(alloc_parms->flags & A_CLING_TO_ALLOCED) && !ix)
+ 		return 1;
+ 
+ 	if (ix + preferred_count < devices_needed + alloc_state->log_area_count_still_needed)
+@@ -2339,6 +2343,9 @@ static int _find_max_parallel_space_for_one_policy(struct alloc_handle *ah, stru
+ 			return_0;
+ 
+ 		/*
++		 * For ALLOC_CLING, if the number of areas matches and maximise_cling is
++		 * set we allow two passes, first with A_POSITIONAL_FILL then without.
++		 *
+ 		 * If we didn't allocate anything this time with ALLOC_NORMAL and had
+ 		 * A_CLING_TO_ALLOCED set, try again without it.
+ 		 *
+@@ -2347,7 +2354,10 @@ static int _find_max_parallel_space_for_one_policy(struct alloc_handle *ah, stru
+ 		 * remain on the same disks where possible.
+ 		 */
+ 		if (old_allocated == alloc_state->allocated) {
+-			if ((alloc_parms->alloc == ALLOC_NORMAL) && (alloc_parms->flags & A_CLING_TO_ALLOCED))
++			if (ah->maximise_cling && ((alloc_parms->alloc == ALLOC_CLING) || (alloc_parms->alloc == ALLOC_CLING_BY_TAGS)) &&
++			    (alloc_parms->flags & A_CLING_TO_LVSEG) && (alloc_parms->flags & A_POSITIONAL_FILL))
++				alloc_parms->flags &= ~A_POSITIONAL_FILL;
++			else if ((alloc_parms->alloc == ALLOC_NORMAL) && (alloc_parms->flags & A_CLING_TO_ALLOCED))
+ 				alloc_parms->flags &= ~A_CLING_TO_ALLOCED;
+ 			else
+ 				break;	/* Give up */
 
 
