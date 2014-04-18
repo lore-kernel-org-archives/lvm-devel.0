@@ -1,60 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:55:48 +0000 (UTC)
-Subject: master - cleanup: dmeventd simplify restart message parsing
-Message-ID: <20140418145548.41B7E61056@fedorahosted.org>
+Date: Fri, 18 Apr 2014 14:55:08 +0000 (UTC)
+Subject: master - makefiles: compile files on make
+Message-ID: <20140418145508.979E160758@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7a1777302ff21bbc7cd81a1141f9c88c8fac2511
-Commit:        7a1777302ff21bbc7cd81a1141f9c88c8fac2511
-Parent:        1f701c7bf6dfd9893f7ebf18cb572de4fd3fcdde
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2b748e3118988222560392fa795e093cd2ce0af4
+Commit:        2b748e3118988222560392fa795e093cd2ce0af4
+Parent:        1af05a7a166a470d1b9d86f88fdc64c2d984124b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 18 15:17:57 2014 +0200
+AuthorDate:    Thu Apr 17 10:07:17 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 18 16:53:29 2014 +0200
+CommitterDate: Fri Apr 18 16:38:49 2014 +0200
 
-cleanup: dmeventd simplify restart message parsing
+makefiles: compile files on make
 
-Since we already check every characted in the message,
-skip extra callback to strlen, and do the implicit
-message length checking.
+Make install should install already compiled/generated files.
 ---
- daemons/dmeventd/dmeventd.c |    9 ++-------
- 1 files changed, 2 insertions(+), 7 deletions(-)
+ udev/Makefile.in |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 7decbcb..dcde7b1 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -1918,7 +1918,6 @@ static void restart(void)
- 	struct dm_event_daemon_message msg = { 0 };
- 	int i, count = 0;
- 	char *message;
--	int length;
- 	int version;
- 	const char *e;
+diff --git a/udev/Makefile.in b/udev/Makefile.in
+index a2e2571..390069b 100644
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -58,6 +58,8 @@ endif
+ %_install: %.rules
+ 	$(INSTALL_DATA) -D $< $(udevdir)/$(<F)
  
-@@ -1943,16 +1942,12 @@ static void restart(void)
- 	if (daemon_talk(&fifos, &msg, DM_EVENT_CMD_GET_STATUS, "-", "-", 0, 0))
- 		goto bad;
++all: $(DM_RULES) $(LVM_RULES)
++CLEAN_TARGETS = $(DM_RULES) $(LVM_RULES)
+ install_device-mapper: $(DM_RULES:.rules=_install)
+ install_lvm2: $(LVM_RULES:.rules=_install)
  
--	message = msg.data;
--	message = strchr(message, ' ');
--	++ message;
--	length = strlen(msg.data);
--	for (i = 0; i < length; ++i) {
-+	message = strchr(msg.data, ' ') + 1;
-+	for (i = 0; msg.data[i]; ++i)
- 		if (msg.data[i] == ';') {
- 			msg.data[i] = 0;
- 			++count;
- 		}
--	}
- 
- 	if (!(_initial_registrations = dm_malloc(sizeof(char*) * (count + 1)))) {
- 		fprintf(stderr, "Memory allocation registration failed.\n");
 
 
