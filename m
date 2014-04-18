@@ -1,84 +1,60 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 16 Apr 2014 09:39:45 +0000 (UTC)
-Subject: master - configure: use configure's --enable-udev-systemd-background-jobs by default
-Message-ID: <20140416093945.60EED61193@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 18 Apr 2014 01:48:01 +0000 (UTC)
+Subject: master - pvscan: Use lvmetad_used().
+Message-ID: <20140418014801.A2BF260EE6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=702180b30c83183722d36500d05da20966759ecf
-Commit:        702180b30c83183722d36500d05da20966759ecf
-Parent:        18caa562fe35b2617f5c2d04c2252b2b8fdfd08c
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Apr 16 11:33:44 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Apr 16 11:33:44 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e8a3ba18659404b4ebded504a37623eeae8cc830
+Commit:        e8a3ba18659404b4ebded504a37623eeae8cc830
+Parent:        702180b30c83183722d36500d05da20966759ecf
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Apr 18 02:13:46 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Apr 18 02:13:46 2014 +0100
 
-configure: use configure's --enable-udev-systemd-background-jobs by default
+pvscan: Use lvmetad_used().
 
-This should be the preferred way of configuring lvm2 for udev/systemd
-since otherwise one can end up with the processes run from udev (the
-pvscan we run for lvmetad update on events) to be killed prematurely
-and this can end up with LVM volumes not activated in the end.
+Config variables that are processed during setup prior to calling into
+particular tools must not be accessed directly afterwards in case the
+values already got overridden.
+
+_process_config() already used the tests I'm removing here to call
+lvmetad_set_active() and set up lvmetad_used().
 ---
- WHATS_NEW    |    1 +
- configure    |    6 +++---
- configure.in |    6 +++---
- 3 files changed, 7 insertions(+), 6 deletions(-)
+ WHATS_NEW      |    1 +
+ tools/pvscan.c |    5 ++---
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index c2cb3be..3efba96 100644
+index 3efba96..53db07b 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.107 - 
  ==================================
-+  Configure --enable-udev-systemd-background-jobs if not disabled explicitly.
++  Use lvmetad_used() in pvscan instead of config_tree.
+   Configure --enable-udev-systemd-background-jobs if not disabled explicitly.
    Add lvmdump -s to collect system info and context (currently systemd only).
    Refactor allocation code to make A_POSITIONAL_FILL explicit.
-   Use thread-safe ctime_r() for clvmd debug logging.
-diff --git a/configure b/configure
-index 9b5c2e7..2032e15 100755
---- a/configure
-+++ b/configure
-@@ -1599,8 +1599,8 @@ Optional Features:
-   --enable-lvmetad        enable the LVM Metadata Daemon
-   --disable-blkid_wiping  disable libblkid detection of signatures when wiping
-                           and use native code instead
--  --enable-udev-systemd-background-jobs
--                          enable udev-systemd protocol to instantiate a
-+  --disable-udev-systemd-background-jobs
-+                          disable udev-systemd protocol to instantiate a
-                           service for background job
-   --enable-udev_sync      enable synchronisation with udev processing
-   --enable-udev_rules     install rule files needed for udev synchronisation
-@@ -9689,7 +9689,7 @@ $as_echo_n "checking whether to use udev-systemd protocol for jobs in background
- if test "${enable_udev_systemd_background_jobs+set}" = set; then :
-   enableval=$enable_udev_systemd_background_jobs; UDEV_SYSTEMD_BACKGROUND_JOBS=$enableval
- else
--  UDEV_SYSTEMD_BACKGROUND_JOBS=no
-+  UDEV_SYSTEMD_BACKGROUND_JOBS=yes
- fi
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index dff2bb0..4121c7b 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -201,9 +201,8 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
+ 	 * and to prevent hangs in clustered environment.
+ 	 */
+ 	/* TODO: Remove this once lvmetad + cluster supported! */
+-	if (find_config_tree_int(cmd, global_locking_type_CFG, NULL) == 3 ||
+-	    !find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
+-		log_debug_lvmetad("_pvscan_lvmetad: immediate return");
++	if (!lvmetad_used()) {
++		log_verbose("Ignoring pvscan --cache command because lvmetad is not in use.");
+ 		return ret;
+ 	}
  
- { $as_echo "$as_me:${as_lineno-$LINENO}: result: $UDEV_SYSTEMD_BACKGROUND_JOBS" >&5
-diff --git a/configure.in b/configure.in
-index 6b84e47..f3c3570 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1048,9 +1048,9 @@ fi
- dnl -- Enable udev-systemd protocol to instantiate a service for background jobs
- AC_MSG_CHECKING(whether to use udev-systemd protocol for jobs in background)
- AC_ARG_ENABLE(udev-systemd-background-jobs,
--	      AC_HELP_STRING([--enable-udev-systemd-background-jobs],
--			     [enable udev-systemd protocol to instantiate a service for background job]),
--	      UDEV_SYSTEMD_BACKGROUND_JOBS=$enableval, UDEV_SYSTEMD_BACKGROUND_JOBS=no)
-+	      AC_HELP_STRING([--disable-udev-systemd-background-jobs],
-+			     [disable udev-systemd protocol to instantiate a service for background job]),
-+	      UDEV_SYSTEMD_BACKGROUND_JOBS=$enableval, UDEV_SYSTEMD_BACKGROUND_JOBS=yes)
- AC_MSG_RESULT($UDEV_SYSTEMD_BACKGROUND_JOBS)
- 
- ################################################################################
 
 
