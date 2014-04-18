@@ -1,60 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:55:00 +0000 (UTC)
-Subject: master - dmeventd: check for list size within lock
-Message-ID: <20140418145500.4C09A60758@fedorahosted.org>
+Date: Fri, 18 Apr 2014 14:55:02 +0000 (UTC)
+Subject: master - devmapper-event: always initialize timeout
+Message-ID: <20140418145502.5E63760758@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08e7de986cf2b4f8a05d6f1a7e996e4f298bfd1a
-Commit:        08e7de986cf2b4f8a05d6f1a7e996e4f298bfd1a
-Parent:        0e05e1cf6cb9323cc48ff38adc781f22a3c7d172
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db0045dfc9403f1276682831ecbd4b83e2f72ebc
+Commit:        db0045dfc9403f1276682831ecbd4b83e2f72ebc
+Parent:        08e7de986cf2b4f8a05d6f1a7e996e4f298bfd1a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 18 13:29:38 2014 +0200
+AuthorDate:    Fri Apr 18 11:31:59 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 18 16:38:48 2014 +0200
 
-dmeventd: check for list size within lock
+devmapper-event: always initialize timeout
 
-Move check for _thread_registry list size behind mutex.
-Use alloca() instead of buffer[count] (they are the same anyway)
+Before calling select, always set all struct members of timeout.
 ---
- daemons/dmeventd/dmeventd.c |   17 +++++++----------
- 1 files changed, 7 insertions(+), 10 deletions(-)
+ daemons/dmeventd/libdevmapper-event.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index af7a2e4..906f731 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -464,20 +464,17 @@ static int _get_status(struct message_data *message_data)
- {
- 	struct dm_event_daemon_message *msg = message_data->msg;
- 	struct thread_status *thread;
--	int i, j;
--	int ret = -1;
--	int count = dm_list_size(&_thread_registry);
-+	int i = 0, j;
-+	int ret = -ENOMEM;
-+	int count;
- 	int size = 0, current;
--	char *buffers[count];
-+	size_t len;
-+	char **buffers;
- 	char *message;
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index b6e2f0d..b8a0b90 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -291,7 +291,6 @@ static int _daemon_write(struct dm_event_fifos *fifos,
+ 	uint32_t *header = alloca(size);
+ 	char *buf = (char *)header;
+ 	char drainbuf[128];
+-	struct timeval tval = { 0, 0 };
  
--	dm_free(msg->data);
--
--	for (i = 0; i < count; ++i)
--		buffers[i] = NULL;
--
--	i = 0;
- 	_lock_mutex();
-+	count = dm_list_size(&_thread_registry);
-+	buffers = alloca(sizeof(char*) * count);
- 	dm_list_iterate_items(thread, &_thread_registry) {
- 		if ((current = dm_asprintf(buffers + i, "0:%d %s %s %u %" PRIu32 ";",
- 					   i, thread->dso_data->dso_name,
+ 	header[0] = htonl(msg->cmd);
+ 	header[1] = htonl(msg->size);
+@@ -299,9 +298,9 @@ static int _daemon_write(struct dm_event_fifos *fifos,
+ 
+ 	/* drain the answer fifo */
+ 	while (1) {
++		struct timeval tval = { .tv_usec = 100 };
+ 		FD_ZERO(&fds);
+ 		FD_SET(fifos->server, &fds);
+-		tval.tv_usec = 100;
+ 		ret = select(fifos->server + 1, &fds, NULL, NULL, &tval);
+ 		if ((ret < 0) && (errno != EINTR)) {
+ 			log_error("Unable to talk to event daemon");
 
 
