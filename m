@@ -1,55 +1,60 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:54:58 +0000 (UTC)
-Subject: master - asprintf: fix test for error result
-Message-ID: <20140418145458.3BB0060758@fedorahosted.org>
+Date: Fri, 18 Apr 2014 14:55:00 +0000 (UTC)
+Subject: master - dmeventd: check for list size within lock
+Message-ID: <20140418145500.4C09A60758@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0e05e1cf6cb9323cc48ff38adc781f22a3c7d172
-Commit:        0e05e1cf6cb9323cc48ff38adc781f22a3c7d172
-Parent:        0b6d6bfb772f8320866e938ecba9894dc2d1cd7e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08e7de986cf2b4f8a05d6f1a7e996e4f298bfd1a
+Commit:        08e7de986cf2b4f8a05d6f1a7e996e4f298bfd1a
+Parent:        0e05e1cf6cb9323cc48ff38adc781f22a3c7d172
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 17 10:05:56 2014 +0200
+AuthorDate:    Fri Apr 18 13:29:38 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 18 16:38:47 2014 +0200
+CommitterDate: Fri Apr 18 16:38:48 2014 +0200
 
-asprintf: fix test for error result
+dmeventd: check for list size within lock
 
-On error this function returns -1. Since the functions however
-do not propagate error upward, it's rather cleanup change.
+Move check for _thread_registry list size behind mutex.
+Use alloca() instead of buffer[count] (they are the same anyway)
 ---
- lib/cache/lvmetad.c |    2 +-
- tools/pvscan.c      |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/dmeventd/dmeventd.c |   17 +++++++----------
+ 1 files changed, 7 insertions(+), 10 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index c1eb4aa..d0c4a4d 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -124,7 +124,7 @@ void lvmetad_set_token(const struct dm_config_value *filter)
- 		filter = filter->next;
- 	}
- 
--	if (!dm_asprintf(&_lvmetad_token, "filter:%u", ft))
-+	if (dm_asprintf(&_lvmetad_token, "filter:%u", ft) < 0)
- 		log_warn("WARNING: Failed to set lvmetad token. Out of memory?");
- }
- 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 4121c7b..ac43295 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -166,7 +166,7 @@ static int _clear_dev_from_lvmetad_cache(dev_t devno, int32_t major, int32_t min
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index af7a2e4..906f731 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -464,20 +464,17 @@ static int _get_status(struct message_data *message_data)
  {
- 	char *buf;
+ 	struct dm_event_daemon_message *msg = message_data->msg;
+ 	struct thread_status *thread;
+-	int i, j;
+-	int ret = -1;
+-	int count = dm_list_size(&_thread_registry);
++	int i = 0, j;
++	int ret = -ENOMEM;
++	int count;
+ 	int size = 0, current;
+-	char *buffers[count];
++	size_t len;
++	char **buffers;
+ 	char *message;
  
--	if (!dm_asprintf(&buf, "%" PRIi32 ":%" PRIi32, major, minor))
-+	if (dm_asprintf(&buf, "%" PRIi32 ":%" PRIi32, major, minor) < 0)
- 		stack;
- 	if (!lvmetad_pv_gone(devno, buf ? : "", handler)) {
- 		dm_free(buf);
+-	dm_free(msg->data);
+-
+-	for (i = 0; i < count; ++i)
+-		buffers[i] = NULL;
+-
+-	i = 0;
+ 	_lock_mutex();
++	count = dm_list_size(&_thread_registry);
++	buffers = alloca(sizeof(char*) * count);
+ 	dm_list_iterate_items(thread, &_thread_registry) {
+ 		if ((current = dm_asprintf(buffers + i, "0:%d %s %s %u %" PRIu32 ";",
+ 					   i, thread->dso_data->dso_name,
 
 
