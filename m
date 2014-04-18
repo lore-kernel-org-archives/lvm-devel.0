@@ -1,111 +1,70 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Fri, 25 Apr 2014 03:11:25 -0600
-Subject: clvmd coredump issue
-In-Reply-To: <5358C694.4060807@redhat.com>
-References: <535926B2020000A000005EB1@soto.provo.novell.com>
-	<5358C694.4060807@redhat.com>
-Message-ID: <535A973D020000A000005FE1@soto.provo.novell.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 18 Apr 2014 14:55:37 +0000 (UTC)
+Subject: master - cleanup: dmeventd improve _get_status
+Message-ID: <20140418145537.D67DB60E56@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi, Zdenek
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dc21bbfabd92a982712b4dafb7c3d7ede99f815f
+Commit:        dc21bbfabd92a982712b4dafb7c3d7ede99f815f
+Parent:        0503af846607121e8f8019e6d0b2a98c204c2b72
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Apr 18 14:26:36 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Apr 18 16:51:54 2014 +0200
 
-Thank you very much for the reply. It really helps.
+cleanup: dmeventd improve _get_status
 
->>> On 4/24/2014 at 04:08 PM, in message <5358C694.4060807@redhat.com>, Zdenek
-Kabelac <zkabelac@redhat.com> wrote: 
-> Dne 24.4.2014 08:58, Liuhua Wang napsal(a):
-> > Hi, list
-> >
-> > I have encountered a coredump when start clvmd on ppc64 as followed:
-> >
-> > #p $pc
-> > $1 = (void (*)()) 0x10070c18
-> > #bt
-> > #0  0x0000000010070c18 in _allocate_memory () at mm/memlock.c:130
-> > #1  0x0000000010070d38 in _lock_mem (cmd=<optimized out>) at mm/memlock.c:310
-> > #2  _lock_mem_if_needed (cmd=0x10104f40) at mm/memlock.c:387
-> > #3  0x0000000010011358 in init_clvm (excl_uuid=<optimized out>) at
-> > lvm-functions.c:919
-> > #4  0x000000001000f47c in lvm_thread_fn (arg=0xfffcaf4e530) at clvmd.c:2020
-> > #5  0x00000fff9df6c67c in .start_thread () from 
-> /lib64/power6/libpthread.so.0
-> > #6  0x00000fff9de7643c in .__clone () from /lib64/power6/libc.so.6
-> >
-> >
-> > When the followed four lines are commented then the problem is ok.
-> > I suppose the problem is probably because of alloca.
-> >
-> > static void _allocate_memory(void)
-> > {
-> > 	void *stack_mem, *temp_malloc_mem;
-> > 	struct rlimit limit;
-> >
-> > 	/* Check if we could preallocate requested stack */
-> > -	if ((getrlimit (RLIMIT_STACK, &limit) == 0) &&
-> > -	    ((_size_stack * 2) < limit.rlim_cur) &&
-> > -         ((stack_mem = alloca(_size_stack))))
-> > -	   _touch_memory(stack_mem, _size_stack);
-> > 	/* FIXME else warn user setting got ignored */
-> >
-> > 	if ((temp_malloc_mem = malloc(_size_malloc_tmp)))
-> > 		_touch_memory(temp_malloc_mem, _size_malloc_tmp);
-> >
-> > 	if ((_malloc_mem = malloc(_size_malloc)))
-> > 		_touch_memory(_malloc_mem, _size_malloc);
-> >
-> > 	free(temp_malloc_mem);
-> > }
-> >
-> > My questions are:
-> > 1. Can we delete the four lines, since it is just PREallocate?
-> > 2. What is the purpose of _touch_memory()
-> > 3. why do first malloc temp_malloc_mem but then free it?
-> >
-> > Any information is very appreciated.
-> 
-> The memory use in lvm2 has deeper logic.
-> 
-> The idea behind preallocation and touching memory is - to preallocate memory 
-> pages and enforce their physical allocation for stack & heap - before the 
-> memory is mlock()-ed into RAM.
-> 
-> Since the suspend may free i.e. swap device - all the code parts which run in 
-> 
-> suspend needs to be locked in RAM.
-> 
-> Now back to powerpc issue - check why it's crashing -  is the rlim_cur  wrong?
-> Stack size is too big ?
-> 
-I displayed the values in the coredump as followed:
- #p limit
-  $1 = {rlim_cur = 8388608, rlim_max = 18446744073709551615}
- #p _size_stack
-  $2 = 65536
- #p stack_mem
-  $3 = <optimized out>
+Use directly dm_asprintf() to allocate buffer with message,
+and properly detect failing on replacement of snprintf()
+which also returns -1 on error.
+---
+ daemons/dmeventd/dmeventd.c |   26 ++++++++++----------------
+ 1 files changed, 10 insertions(+), 16 deletions(-)
 
-It seems that should not fail since we alloca the much smaller space from
-a bigger stack. There would be probable that the stack size of the thread
-will get much smaller? (I cannot prove it because I don't have ppc64 machine now)
-
-Best regards,
-Melody
-> Code will not be removed it needs to be fixed for powerpc.
-> 
-> Zdenek
-> 
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com 
-> https://www.redhat.com/mailman/listinfo/lvm-devel 
-> 
-> 
-
-
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 8dac207..e13afd2 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -503,26 +503,20 @@ static int _get_status(struct message_data *message_data)
+ 
+ static int _get_parameters(struct message_data *message_data) {
+ 	struct dm_event_daemon_message *msg = message_data->msg;
+-	char buf[128];
+-	int r = -1;
++	int size;
+ 
+ 	dm_free(msg->data);
++	if ((size = dm_asprintf(&msg->data, "%s pid=%d daemon=%s exec_method=%s",
++				message_data->id, getpid(),
++				_foreground ? "no" : "yes",
++				_systemd_activation ? "systemd" : "direct")) < 0) {
++		stack;
++		return -ENOMEM;
++	}
+ 
+-	if (!(dm_snprintf(buf, sizeof(buf), "%s pid=%d daemon=%s exec_method=%s",
+-			  message_data->id,
+-			  getpid(),
+-			  _foreground ? "no" : "yes",
+-			  _systemd_activation ? "systemd" : "direct")))
+-		goto_out;
++	msg->size = (uint32_t) size;
+ 
+-	msg->size = strlen(buf) + 1;
+-	if (!(msg->data = dm_malloc(msg->size)))
+-		goto_out;
+-	if (!dm_strncpy(msg->data, buf, msg->size))
+-		goto_out;
+-	r = 0;
+-out:
+-	return r;
++	return 0;
+ }
+ 
+ /* Cleanup at exit. */
 
 
