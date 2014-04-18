@@ -1,64 +1,54 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Thu, 24 Apr 2014 00:58:58 -0600
-Subject: clvmd coredump issue
-Message-ID: <535926B2020000A000005EB1@soto.provo.novell.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 18 Apr 2014 14:55:35 +0000 (UTC)
+Subject: master - cleanup: dmeventd simplify buffer write loop
+Message-ID: <20140418145535.B781260E56@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi, list
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0503af846607121e8f8019e6d0b2a98c204c2b72
+Commit:        0503af846607121e8f8019e6d0b2a98c204c2b72
+Parent:        13d05211d006a63035afea44fa8a4b1222130cd5
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Apr 18 14:43:13 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Apr 18 16:50:55 2014 +0200
 
-I have encountered a coredump when start clvmd on ppc64 as followed:
+cleanup: dmeventd simplify buffer write loop
 
-#p $pc
-$1 = (void (*)()) 0x10070c18
-#bt
-#0  0x0000000010070c18 in _allocate_memory () at mm/memlock.c:130
-#1  0x0000000010070d38 in _lock_mem (cmd=<optimized out>) at mm/memlock.c:310
-#2  _lock_mem_if_needed (cmd=0x10104f40) at mm/memlock.c:387
-#3  0x0000000010011358 in init_clvm (excl_uuid=<optimized out>) at
-lvm-functions.c:919
-#4  0x000000001000f47c in lvm_thread_fn (arg=0xfffcaf4e530) at clvmd.c:2020
-#5  0x00000fff9df6c67c in .start_thread () from /lib64/power6/libpthread.so.0
-#6  0x00000fff9de7643c in .__clone () from /lib64/power6/libc.so.6
+---
+ daemons/dmeventd/dmeventd.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
-
-When the followed four lines are commented then the problem is ok.
-I suppose the problem is probably because of alloca.
-
-static void _allocate_memory(void)
-{
-	void *stack_mem, *temp_malloc_mem;
-	struct rlimit limit;
-
-	/* Check if we could preallocate requested stack */
--	if ((getrlimit (RLIMIT_STACK, &limit) == 0) &&
--	    ((_size_stack * 2) < limit.rlim_cur) &&
--         ((stack_mem = alloca(_size_stack))))
--	   _touch_memory(stack_mem, _size_stack);
-	/* FIXME else warn user setting got ignored */
-
-	if ((temp_malloc_mem = malloc(_size_malloc_tmp)))
-		_touch_memory(temp_malloc_mem, _size_malloc_tmp);
-
-	if ((_malloc_mem = malloc(_size_malloc)))
-		_touch_memory(_malloc_mem, _size_malloc);
-
-	free(temp_malloc_mem);
-} 
-
-My questions are:
-1. Can we delete the four lines, since it is just PREallocate?
-2. What is the purpose of _touch_memory()
-3. why do first malloc temp_malloc_mem but then free it?
-
-Any information is very appreciated.
-
-Best regards,
-Melody 
-
-
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 81da166..8dac207 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1417,17 +1417,17 @@ static int _client_write(struct dm_event_fifos *fifos,
+ 	if (msg->data)
+ 		memcpy(buf + 2 * sizeof(uint32_t), msg->data, msg->size);
+ 
+-	errno = 0;
+-	while (bytes < size && errno != EIO) {
++	while (bytes < size) {
+ 		do {
+ 			/* Watch client write FIFO to be ready for output. */
+ 			FD_ZERO(&fds);
+ 			FD_SET(fifos->server, &fds);
+-		} while (select(fifos->server + 1, NULL, &fds, NULL, NULL) !=
+-			 1);
++		} while (select(fifos->server + 1, NULL, &fds, NULL, NULL) != 1);
+ 
+-		ret = write(fifos->server, buf + bytes, size - bytes);
+-		bytes += ret > 0 ? ret : 0;
++		if ((ret = write(fifos->server, buf + bytes, size - bytes)) > 0)
++			bytes += ret;
++		else if (errno == EIO)
++			break;
+ 	}
+ 
+ 	return bytes == size;
 
 
