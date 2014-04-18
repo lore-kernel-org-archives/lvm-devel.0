@@ -1,159 +1,183 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:55:10 +0000 (UTC)
-Subject: master - makefiles: drop linking of deamon libs to plugins
-Message-ID: <20140418145510.AB85460758@fedorahosted.org>
+Date: Fri, 18 Apr 2014 14:55:14 +0000 (UTC)
+Subject: master - libdaemon: header cleanup
+Message-ID: <20140418145514.DF90060F54@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=07274f3dd4bd0aafb5dbf501906534c0668b1802
-Commit:        07274f3dd4bd0aafb5dbf501906534c0668b1802
-Parent:        2b748e3118988222560392fa795e093cd2ce0af4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b7741f0a831ef9dfd4fda19abba6ca8e91baa378
+Commit:        b7741f0a831ef9dfd4fda19abba6ca8e91baa378
+Parent:        e552824dc046b90f201de8041730f2dbf6969aa0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 17 14:12:02 2014 +0200
+AuthorDate:    Thu Apr 17 10:40:35 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 18 16:38:49 2014 +0200
 
-makefiles: drop linking of deamon libs to plugins
+libdaemon: header cleanup
 
-Daemon lib is linked into lvm2cmd library.
+Ensure  daemon-io.h is used as a generic header included
+with configure defines before other headers.
+(In future all lvm2 libraries should settle on a single lib.h header)
+Rename couple defines to better match header file names.
 ---
- daemons/dmeventd/plugins/lvm2/Makefile.in     |    4 ++--
- daemons/dmeventd/plugins/mirror/Makefile.in   |    8 ++++----
- daemons/dmeventd/plugins/raid/Makefile.in     |    6 +++---
- daemons/dmeventd/plugins/snapshot/Makefile.in |    8 ++++----
- daemons/dmeventd/plugins/thin/Makefile.in     |    6 +++---
- 5 files changed, 16 insertions(+), 16 deletions(-)
+ libdaemon/client/config-util.c   |    7 +++----
+ libdaemon/client/config-util.h   |    3 +--
+ libdaemon/client/daemon-client.c |    2 --
+ libdaemon/client/daemon-client.h |    4 ++--
+ libdaemon/client/daemon-io.c     |    6 +++---
+ libdaemon/client/daemon-io.h     |    6 +++---
+ libdaemon/server/daemon-server.c |    1 -
+ libdaemon/server/daemon-server.h |    4 ++--
+ 8 files changed, 14 insertions(+), 19 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/lvm2/Makefile.in b/daemons/dmeventd/plugins/lvm2/Makefile.in
-index fcb2a0a..a7b9a2e 100644
---- a/daemons/dmeventd/plugins/lvm2/Makefile.in
-+++ b/daemons/dmeventd/plugins/lvm2/Makefile.in
-@@ -1,5 +1,5 @@
- #
--# Copyright (C) 2010-2011 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2010-2014 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -24,7 +24,7 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
+index d40e94c..e5f4e22 100644
+--- a/libdaemon/client/config-util.c
++++ b/libdaemon/client/config-util.c
+@@ -12,15 +12,14 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
  
- include $(top_builddir)/make.tmpl
++#include "daemon-io.h"
++#include "dm-logging.h"
++
+ #include <errno.h>
+ #include <stdio.h>
+ #include <string.h>
+ #include <unistd.h>
  
--LIBS += @LVM2CMD_LIB@ -ldevmapper $(PTHREAD_LIBS) $(DAEMON_LIBS)
-+LIBS += @LVM2CMD_LIB@ -ldevmapper $(PTHREAD_LIBS)
+-#include "dm-logging.h"
+-#include "config-util.h"
+-#include "libdevmapper.h"
+-
+ int buffer_append_vf(struct buffer *buf, va_list ap)
+ {
+ 	char *append;
+diff --git a/libdaemon/client/config-util.h b/libdaemon/client/config-util.h
+index f03bcab..47fab6b 100644
+--- a/libdaemon/client/config-util.h
++++ b/libdaemon/client/config-util.h
+@@ -15,7 +15,6 @@
+ #ifndef _LVM_DAEMON_CONFIG_UTIL_H
+ #define _LVM_DAEMON_CONFIG_UTIL_H
  
- install_lvm2: install_lib_shared
+-#include "configure.h"
+ #include "libdevmapper.h"
  
-diff --git a/daemons/dmeventd/plugins/mirror/Makefile.in b/daemons/dmeventd/plugins/mirror/Makefile.in
-index 85b33c9..4a2870a 100644
---- a/daemons/dmeventd/plugins/mirror/Makefile.in
-+++ b/daemons/dmeventd/plugins/mirror/Makefile.in
-@@ -1,6 +1,6 @@
- #
- # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
--# Copyright (C) 2004-2005, 2008-2011 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2004-2005, 2008-2014 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -16,8 +16,8 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
+ #include <stdarg.h>
+@@ -64,4 +63,4 @@ struct dm_config_node *config_make_nodes(struct dm_config_tree *cft,
+ 					 struct dm_config_node *pre_sib,
+ 					 ...);
  
--INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
--CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
-+INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
-+CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+-#endif /* _LVM_DAEMON_SHARED_H */
++#endif /* _LVM_DAEMON_CONFIG_UTIL_H */
+diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
+index a821cf3..a11b604 100644
+--- a/libdaemon/client/daemon-client.c
++++ b/libdaemon/client/daemon-client.c
+@@ -13,7 +13,6 @@
+  */
  
- SOURCES = dmeventd_mirror.c
+ #include "daemon-io.h"
+-#include "config-util.h"
+ #include "daemon-client.h"
+ #include "dm-logging.h"
  
-@@ -30,7 +30,7 @@ CFLOW_LIST_TARGET = $(LIB_NAME).cflow
+@@ -208,4 +207,3 @@ void daemon_request_destroy(daemon_request r) {
+ 		dm_config_destroy(r.cft);
+ 	buffer_destroy(&r.buffer);
+ }
+-
+diff --git a/libdaemon/client/daemon-client.h b/libdaemon/client/daemon-client.h
+index 8a44f8b..ae3be91 100644
+--- a/libdaemon/client/daemon-client.h
++++ b/libdaemon/client/daemon-client.h
+@@ -12,8 +12,8 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
  
- include $(top_builddir)/make.tmpl
+-#ifndef _LVM_DAEMON_COMMON_CLIENT_H
+-#define _LVM_DAEMON_COMMON_CLIENT_H
++#ifndef _LVM_DAEMON_CLIENT_H
++#define _LVM_DAEMON_CLIENT_H
  
--LIBS += -ldevmapper-event-lvm2 -ldevmapper $(DAEMON_LIBS)
-+LIBS += -ldevmapper-event-lvm2 -ldevmapper
+ #include "libdevmapper.h"
+ #include "config-util.h"
+diff --git a/libdaemon/client/daemon-io.c b/libdaemon/client/daemon-io.c
+index e2c5180..6d81ed8 100644
+--- a/libdaemon/client/daemon-io.c
++++ b/libdaemon/client/daemon-io.c
+@@ -12,14 +12,14 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
  
- install_lvm2: install_dm_plugin
++#include "daemon-io.h"
++#include "libdevmapper.h"
++
+ #include <errno.h>
+ #include <stdio.h>
+ #include <string.h>
+ #include <unistd.h>
  
-diff --git a/daemons/dmeventd/plugins/raid/Makefile.in b/daemons/dmeventd/plugins/raid/Makefile.in
-index a6b7788..47582ae 100644
---- a/daemons/dmeventd/plugins/raid/Makefile.in
-+++ b/daemons/dmeventd/plugins/raid/Makefile.in
-@@ -1,5 +1,5 @@
- #
--# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2011-2014 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -15,8 +15,8 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
+-#include "daemon-io.h"
+-#include "libdevmapper.h"
+-
+ /*
+  * Read a single message from a (socket) filedescriptor. Messages are delimited
+  * by blank lines. This call will block until all of a message is received. The
+diff --git a/libdaemon/client/daemon-io.h b/libdaemon/client/daemon-io.h
+index 52aaa9c..b48acca 100644
+--- a/libdaemon/client/daemon-io.h
++++ b/libdaemon/client/daemon-io.h
+@@ -16,16 +16,16 @@
+ #define _LVM_DAEMON_IO_H
  
--INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
--CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
-+INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
-+CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+ #include "configure.h"
+-#include "config-util.h"
+-#include "libdevmapper.h"
  
- SOURCES = dmeventd_raid.c
+ #define _REENTRANT
+ #define _GNU_SOURCE
+ #define _FILE_OFFSET_BITS 64
  
-diff --git a/daemons/dmeventd/plugins/snapshot/Makefile.in b/daemons/dmeventd/plugins/snapshot/Makefile.in
-index a4cff15..b766f16 100644
---- a/daemons/dmeventd/plugins/snapshot/Makefile.in
-+++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
-@@ -1,6 +1,6 @@
- #
- # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
--# Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
- #
- # This file is part of the LVM2.
- #
-@@ -16,8 +16,8 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
++#include "config-util.h"
++
+ /* TODO function names */
  
--INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
--CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
-+INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
-+CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+ int buffer_read(int fd, struct buffer *buffer);
+ int buffer_write(int fd, const struct buffer *buffer);
  
- SOURCES = dmeventd_snapshot.c
+-#endif /* _LVM_DAEMON_SHARED_H */
++#endif /* _LVM_DAEMON_IO_H */
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 914b803..919f7df 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -11,7 +11,6 @@
+  */
  
-@@ -26,7 +26,7 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+ #include "daemon-io.h"
+-#include "config-util.h"
+ #include "daemon-server.h"
+ #include "daemon-log.h"
  
- include $(top_builddir)/make.tmpl
+diff --git a/libdaemon/server/daemon-server.h b/libdaemon/server/daemon-server.h
+index eb6df43..ad41372 100644
+--- a/libdaemon/server/daemon-server.h
++++ b/libdaemon/server/daemon-server.h
+@@ -12,8 +12,8 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
  
--LIBS += -ldevmapper-event-lvm2 -ldevmapper $(DAEMON_LIBS)
-+LIBS += -ldevmapper-event-lvm2 -ldevmapper
+-#ifndef _LVM_DAEMON_COMMON_SERVER_H
+-#define _LVM_DAEMON_COMMON_SERVER_H
++#ifndef _LVM_DAEMON_SERVER_H
++#define _LVM_DAEMON_SERVER_H
  
- install_lvm2: install_dm_plugin
- 
-diff --git a/daemons/dmeventd/plugins/thin/Makefile.in b/daemons/dmeventd/plugins/thin/Makefile.in
-index e964ab5..cfd473a 100644
---- a/daemons/dmeventd/plugins/thin/Makefile.in
-+++ b/daemons/dmeventd/plugins/thin/Makefile.in
-@@ -1,5 +1,5 @@
- #
--# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2011-2014 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -15,8 +15,8 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
- 
--INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
--CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
-+INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
-+CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
- 
- SOURCES = dmeventd_thin.c
+ #include "daemon-client.h"
  
 
 
