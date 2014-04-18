@@ -1,75 +1,159 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:55:06 +0000 (UTC)
-Subject: master - makefiles: clear targets in with make clean
-Message-ID: <20140418145506.7F05060758@fedorahosted.org>
+Date: Fri, 18 Apr 2014 14:55:10 +0000 (UTC)
+Subject: master - makefiles: drop linking of deamon libs to plugins
+Message-ID: <20140418145510.AB85460758@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1af05a7a166a470d1b9d86f88fdc64c2d984124b
-Commit:        1af05a7a166a470d1b9d86f88fdc64c2d984124b
-Parent:        4955dae4be6ca42f3428ca4f71ba86c3d0fb89b4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=07274f3dd4bd0aafb5dbf501906534c0668b1802
+Commit:        07274f3dd4bd0aafb5dbf501906534c0668b1802
+Parent:        2b748e3118988222560392fa795e093cd2ce0af4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 17 10:01:05 2014 +0200
+AuthorDate:    Thu Apr 17 14:12:02 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 18 16:38:48 2014 +0200
+CommitterDate: Fri Apr 18 16:38:49 2014 +0200
 
-makefiles: clear targets in with make clean
+makefiles: drop linking of deamon libs to plugins
 
-Make clean usually cleans all compiled files.
-Make distclean cleans configure generated files
+Daemon lib is linked into lvm2cmd library.
 ---
- scripts/Makefile.in |   32 ++++++++++++++++++++------------
- 1 files changed, 20 insertions(+), 12 deletions(-)
+ daemons/dmeventd/plugins/lvm2/Makefile.in     |    4 ++--
+ daemons/dmeventd/plugins/mirror/Makefile.in   |    8 ++++----
+ daemons/dmeventd/plugins/raid/Makefile.in     |    6 +++---
+ daemons/dmeventd/plugins/snapshot/Makefile.in |    8 ++++----
+ daemons/dmeventd/plugins/thin/Makefile.in     |    6 +++---
+ 5 files changed, 16 insertions(+), 16 deletions(-)
 
-diff --git a/scripts/Makefile.in b/scripts/Makefile.in
-index 8fdb5f7..ed77900 100644
---- a/scripts/Makefile.in
-+++ b/scripts/Makefile.in
-@@ -29,6 +29,7 @@ ifeq ("@APPLIB@", "yes")
- endif
+diff --git a/daemons/dmeventd/plugins/lvm2/Makefile.in b/daemons/dmeventd/plugins/lvm2/Makefile.in
+index fcb2a0a..a7b9a2e 100644
+--- a/daemons/dmeventd/plugins/lvm2/Makefile.in
++++ b/daemons/dmeventd/plugins/lvm2/Makefile.in
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2010-2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2010-2014 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -24,7 +24,7 @@ LIB_VERSION = $(LIB_VERSION_LVM)
  
- ifeq ("@DMEVENTD@", "yes")
-+	DEPLIBS += $(top_builddir)/daemons/dmeventd/libdevmapper-event.so
- 	LVMLIBS += -ldevmapper-event
- endif
+ include $(top_builddir)/make.tmpl
  
-@@ -124,15 +125,22 @@ install_tmpfiles_configuration:
- 	$(INSTALL_DIR) $(tmpfiles_dir)
- 	$(INSTALL_DATA) lvm2_tmpfiles_red_hat.conf $(tmpfiles_dir)/lvm2.conf
+-LIBS += @LVM2CMD_LIB@ -ldevmapper $(PTHREAD_LIBS) $(DAEMON_LIBS)
++LIBS += @LVM2CMD_LIB@ -ldevmapper $(PTHREAD_LIBS)
  
--DISTCLEAN_TARGETS += clvmd_init_red_hat cmirrord_init_red_hat \
--		     lvm2_monitoring_init_red_hat lvm2_lvmetad_init_red_hat \
--		     dm_event_systemd_red_hat.socket dm_event_systemd_red_hat.service \
--		     lvm2_monitoring_systemd_red_hat.service \
--		     lvm2_lvmetad_systemd_red_hat.socket lvm2_lvmetad_systemd_red_hat.service \
--		     lvm2_pvscan_systemd_red_hat at .service \
--		     lvm2_tmpfiles_red_hat.conf blk_availability_init_red_hat \
--		     blk_availability_systemd_red_hat.service \
--		     blkdeactivate.sh lvm2_clvmd_systemd_red_hat.service \
--		     lvm2_cmirrord_systemd_red_hat.service \
--		     lvm2_cluster_activation_systemd_red_hat.service \
--		     lvm2_cluster_activation_red_hat.sh
-+CLEAN_TARGETS += \
-+	blkdeactivate.sh \
-+	blk_availability_init_red_hat \
-+	blk_availability_systemd_red_hat.service \
-+	clvmd_init_red_hat \
-+	cmirrord_init_red_hat \
-+	dm_event_systemd_red_hat.service \
-+	dm_event_systemd_red_hat.socket \
-+	lvm2_cluster_activation_red_hat.sh \
-+	lvm2_cluster_activation_systemd_red_hat.service \
-+	lvm2_clvmd_systemd_red_hat.service \
-+	lvm2_cmirrord_systemd_red_hat.service \
-+	lvm2_lvmetad_init_red_hat \
-+	lvm2_lvmetad_systemd_red_hat.service \
-+	lvm2_lvmetad_systemd_red_hat.socket \
-+	lvm2_monitoring_init_red_hat \
-+	lvm2_monitoring_systemd_red_hat.service \
-+	lvm2_pvscan_systemd_red_hat at .service \
-+	lvm2_tmpfiles_red_hat.conf
+ install_lvm2: install_lib_shared
+ 
+diff --git a/daemons/dmeventd/plugins/mirror/Makefile.in b/daemons/dmeventd/plugins/mirror/Makefile.in
+index 85b33c9..4a2870a 100644
+--- a/daemons/dmeventd/plugins/mirror/Makefile.in
++++ b/daemons/dmeventd/plugins/mirror/Makefile.in
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2005, 2008-2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2005, 2008-2014 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -16,8 +16,8 @@ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ 
+-INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
+-CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
++INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
++CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+ 
+ SOURCES = dmeventd_mirror.c
+ 
+@@ -30,7 +30,7 @@ CFLOW_LIST_TARGET = $(LIB_NAME).cflow
+ 
+ include $(top_builddir)/make.tmpl
+ 
+-LIBS += -ldevmapper-event-lvm2 -ldevmapper $(DAEMON_LIBS)
++LIBS += -ldevmapper-event-lvm2 -ldevmapper
+ 
+ install_lvm2: install_dm_plugin
+ 
+diff --git a/daemons/dmeventd/plugins/raid/Makefile.in b/daemons/dmeventd/plugins/raid/Makefile.in
+index a6b7788..47582ae 100644
+--- a/daemons/dmeventd/plugins/raid/Makefile.in
++++ b/daemons/dmeventd/plugins/raid/Makefile.in
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011-2014 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -15,8 +15,8 @@ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ 
+-INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
+-CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
++INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
++CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+ 
+ SOURCES = dmeventd_raid.c
+ 
+diff --git a/daemons/dmeventd/plugins/snapshot/Makefile.in b/daemons/dmeventd/plugins/snapshot/Makefile.in
+index a4cff15..b766f16 100644
+--- a/daemons/dmeventd/plugins/snapshot/Makefile.in
++++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of the LVM2.
+ #
+@@ -16,8 +16,8 @@ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ 
+-INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
+-CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
++INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
++CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+ 
+ SOURCES = dmeventd_snapshot.c
+ 
+@@ -26,7 +26,7 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ include $(top_builddir)/make.tmpl
+ 
+-LIBS += -ldevmapper-event-lvm2 -ldevmapper $(DAEMON_LIBS)
++LIBS += -ldevmapper-event-lvm2 -ldevmapper
+ 
+ install_lvm2: install_dm_plugin
+ 
+diff --git a/daemons/dmeventd/plugins/thin/Makefile.in b/daemons/dmeventd/plugins/thin/Makefile.in
+index e964ab5..cfd473a 100644
+--- a/daemons/dmeventd/plugins/thin/Makefile.in
++++ b/daemons/dmeventd/plugins/thin/Makefile.in
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011-2014 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -15,8 +15,8 @@ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ 
+-INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
+-CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
++INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
++CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+ 
+ SOURCES = dmeventd_thin.c
+ 
 
 
