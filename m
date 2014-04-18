@@ -1,183 +1,146 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:55:14 +0000 (UTC)
-Subject: master - libdaemon: header cleanup
-Message-ID: <20140418145514.DF90060F54@fedorahosted.org>
+Date: Fri, 18 Apr 2014 14:55:17 +0000 (UTC)
+Subject: master - cleanup: include stdarg.h where needed.
+Message-ID: <20140418145517.01E6A60F54@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b7741f0a831ef9dfd4fda19abba6ca8e91baa378
-Commit:        b7741f0a831ef9dfd4fda19abba6ca8e91baa378
-Parent:        e552824dc046b90f201de8041730f2dbf6969aa0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=589983a257cd2f92489f41d2d7ec62784bf357e7
+Commit:        589983a257cd2f92489f41d2d7ec62784bf357e7
+Parent:        b7741f0a831ef9dfd4fda19abba6ca8e91baa378
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 17 10:40:35 2014 +0200
+AuthorDate:    Tue Apr 15 13:27:47 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 18 16:38:49 2014 +0200
+CommitterDate: Fri Apr 18 16:38:50 2014 +0200
 
-libdaemon: header cleanup
+cleanup: include stdarg.h where needed.
 
-Ensure  daemon-io.h is used as a generic header included
-with configure defines before other headers.
-(In future all lvm2 libraries should settle on a single lib.h header)
-Rename couple defines to better match header file names.
+Avoid dependency on implicit inclusion of stdarg.h with
+libdevmapper.h.
 ---
- libdaemon/client/config-util.c   |    7 +++----
- libdaemon/client/config-util.h   |    3 +--
- libdaemon/client/daemon-client.c |    2 --
- libdaemon/client/daemon-client.h |    4 ++--
- libdaemon/client/daemon-io.c     |    6 +++---
- libdaemon/client/daemon-io.h     |    6 +++---
- libdaemon/server/daemon-server.c |    1 -
- libdaemon/server/daemon-server.h |    4 ++--
- 8 files changed, 14 insertions(+), 19 deletions(-)
+ daemons/clvmd/clvmd.c                              |    9 +++++----
+ daemons/dmeventd/dmeventd.c                        |    1 +
+ .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |    1 +
+ daemons/dmeventd/plugins/thin/dmeventd_thin.c      |    1 +
+ lib/display/display.c                              |    1 +
+ lib/misc/lvm-string.c                              |    1 +
+ libdm/libdm-config.c                               |    1 +
+ libdm/libdm-string.c                               |    1 +
+ 8 files changed, 12 insertions(+), 4 deletions(-)
 
-diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
-index d40e94c..e5f4e22 100644
---- a/libdaemon/client/config-util.c
-+++ b/libdaemon/client/config-util.c
-@@ -12,15 +12,14 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 3e92490..9b865f6 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -19,10 +19,6 @@
  
-+#include "daemon-io.h"
-+#include "dm-logging.h"
-+
- #include <errno.h>
- #include <stdio.h>
- #include <string.h>
- #include <unistd.h>
+ #include "clvmd-common.h"
  
--#include "dm-logging.h"
--#include "config-util.h"
--#include "libdevmapper.h"
+-#include <pthread.h>
+-#include <getopt.h>
+-#include <ctype.h>
 -
- int buffer_append_vf(struct buffer *buf, va_list ap)
- {
- 	char *append;
-diff --git a/libdaemon/client/config-util.h b/libdaemon/client/config-util.h
-index f03bcab..47fab6b 100644
---- a/libdaemon/client/config-util.h
-+++ b/libdaemon/client/config-util.h
-@@ -15,7 +15,6 @@
- #ifndef _LVM_DAEMON_CONFIG_UTIL_H
- #define _LVM_DAEMON_CONFIG_UTIL_H
+ #include "clvmd-comms.h"
+ #include "clvm.h"
+ #include "clvmd.h"
+@@ -34,6 +30,11 @@
+ #include <corosync/confdb.h>
+ #endif
  
--#include "configure.h"
- #include "libdevmapper.h"
- 
- #include <stdarg.h>
-@@ -64,4 +63,4 @@ struct dm_config_node *config_make_nodes(struct dm_config_tree *cft,
- 					 struct dm_config_node *pre_sib,
- 					 ...);
- 
--#endif /* _LVM_DAEMON_SHARED_H */
-+#endif /* _LVM_DAEMON_CONFIG_UTIL_H */
-diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
-index a821cf3..a11b604 100644
---- a/libdaemon/client/daemon-client.c
-+++ b/libdaemon/client/daemon-client.c
-@@ -13,7 +13,6 @@
-  */
- 
- #include "daemon-io.h"
--#include "config-util.h"
- #include "daemon-client.h"
++#include <pthread.h>
++#include <getopt.h>
++#include <ctype.h>
++#include <stdarg.h>
++
+ #include <fcntl.h>
+ #include <netinet/in.h>
+ #include <signal.h>
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 906f731..32610ec 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -26,6 +26,7 @@
+ //#include "libmultilog.h"
  #include "dm-logging.h"
  
-@@ -208,4 +207,3 @@ void daemon_request_destroy(daemon_request r) {
- 		dm_config_destroy(r.cft);
- 	buffer_destroy(&r.buffer);
- }
--
-diff --git a/libdaemon/client/daemon-client.h b/libdaemon/client/daemon-client.h
-index 8a44f8b..ae3be91 100644
---- a/libdaemon/client/daemon-client.h
-+++ b/libdaemon/client/daemon-client.h
-@@ -12,8 +12,8 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- 
--#ifndef _LVM_DAEMON_COMMON_CLIENT_H
--#define _LVM_DAEMON_COMMON_CLIENT_H
-+#ifndef _LVM_DAEMON_CLIENT_H
-+#define _LVM_DAEMON_CLIENT_H
- 
- #include "libdevmapper.h"
- #include "config-util.h"
-diff --git a/libdaemon/client/daemon-io.c b/libdaemon/client/daemon-io.c
-index e2c5180..6d81ed8 100644
---- a/libdaemon/client/daemon-io.c
-+++ b/libdaemon/client/daemon-io.c
-@@ -12,14 +12,14 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- 
-+#include "daemon-io.h"
-+#include "libdevmapper.h"
-+
++#include <stdarg.h>
+ #include <dlfcn.h>
  #include <errno.h>
- #include <stdio.h>
- #include <string.h>
+ #include <pthread.h>
+diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+index c4b69e2..bbee93a 100644
+--- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
++++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+@@ -20,6 +20,7 @@
+ 
+ #include <sys/wait.h>
+ #include <syslog.h> /* FIXME Replace syslog with multilog */
++#include <stdarg.h>
+ /* FIXME Missing openlog? */
+ 
+ /* First warning when snapshot is 80% full. */
+diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
+index b700b8d..f0d3f24 100644
+--- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
++++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
+@@ -20,6 +20,7 @@
+ 
+ #include <sys/wait.h>
+ #include <syslog.h> /* FIXME Replace syslog with multilog */
++#include <stdarg.h>
+ /* FIXME Missing openlog? */
+ 
+ /* First warning when thin is 80% full. */
+diff --git a/lib/display/display.c b/lib/display/display.c
+index 3bcf439..b7fbf1a 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -22,6 +22,7 @@
+ #include "defaults.h"
+ #include <math.h>  /* fabs() */
+ #include <float.h> /* DBL_EPSILON */
++#include <stdarg.h>
+ 
+ #define SIZE_BUF 128
+ 
+diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
+index 5377528..cdee02b 100644
+--- a/lib/misc/lvm-string.c
++++ b/lib/misc/lvm-string.c
+@@ -18,6 +18,7 @@
+ #include "metadata-exported.h"
+ 
+ #include <ctype.h>
++#include <stdarg.h>
+ 
+ int emit_to_buffer(char **buffer, size_t *size, const char *fmt, ...)
+ {
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index ea1af2f..f8d6b1b 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -20,6 +20,7 @@
  #include <unistd.h>
+ #include <fcntl.h>
+ #include <ctype.h>
++#include <stdarg.h>
  
--#include "daemon-io.h"
--#include "libdevmapper.h"
--
+ #define SECTION_B_CHAR '{'
+ #define SECTION_E_CHAR '}'
+diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
+index 9d667bb..64a9792 100644
+--- a/libdm/libdm-string.c
++++ b/libdm/libdm-string.c
+@@ -15,6 +15,7 @@
+ #include "dmlib.h"
+ 
+ #include <ctype.h>
++#include <stdarg.h>
+ 
  /*
-  * Read a single message from a (socket) filedescriptor. Messages are delimited
-  * by blank lines. This call will block until all of a message is received. The
-diff --git a/libdaemon/client/daemon-io.h b/libdaemon/client/daemon-io.h
-index 52aaa9c..b48acca 100644
---- a/libdaemon/client/daemon-io.h
-+++ b/libdaemon/client/daemon-io.h
-@@ -16,16 +16,16 @@
- #define _LVM_DAEMON_IO_H
- 
- #include "configure.h"
--#include "config-util.h"
--#include "libdevmapper.h"
- 
- #define _REENTRANT
- #define _GNU_SOURCE
- #define _FILE_OFFSET_BITS 64
- 
-+#include "config-util.h"
-+
- /* TODO function names */
- 
- int buffer_read(int fd, struct buffer *buffer);
- int buffer_write(int fd, const struct buffer *buffer);
- 
--#endif /* _LVM_DAEMON_SHARED_H */
-+#endif /* _LVM_DAEMON_IO_H */
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 914b803..919f7df 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -11,7 +11,6 @@
-  */
- 
- #include "daemon-io.h"
--#include "config-util.h"
- #include "daemon-server.h"
- #include "daemon-log.h"
- 
-diff --git a/libdaemon/server/daemon-server.h b/libdaemon/server/daemon-server.h
-index eb6df43..ad41372 100644
---- a/libdaemon/server/daemon-server.h
-+++ b/libdaemon/server/daemon-server.h
-@@ -12,8 +12,8 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- 
--#ifndef _LVM_DAEMON_COMMON_SERVER_H
--#define _LVM_DAEMON_COMMON_SERVER_H
-+#ifndef _LVM_DAEMON_SERVER_H
-+#define _LVM_DAEMON_SERVER_H
- 
- #include "daemon-client.h"
- 
+  * consume characters while they match the predicate function.
 
 
