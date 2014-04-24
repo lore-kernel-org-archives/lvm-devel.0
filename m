@@ -1,57 +1,64 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 26 Sep 2012 17:55:35 +0000 (UTC)
-Subject: master - dev-cache: Make it possible to pass in a NULL filter.
-Message-ID: <20120926175535.55E73A33AB@fedorahosted.org>
+From: Liuhua Wang <lwang@suse.com>
+Date: Thu, 24 Apr 2014 00:58:58 -0600
+Subject: clvmd coredump issue
+Message-ID: <535926B2020000A000005EB1@soto.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=72d82e21d44c48a3823156afa900eb071b3eb144
-Commit:        72d82e21d44c48a3823156afa900eb071b3eb144
-Parent:        012d273ede86f0e3e894b0e907f7f623c3dda7e0
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sat Aug 18 22:03:46 2012 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Sep 26 12:23:34 2012 +0200
+Hi, list
 
-dev-cache: Make it possible to pass in a NULL filter.
+I have encountered a coredump when start clvmd on ppc64 as followed:
 
----
- lib/device/dev-cache.c |    8 +++++---
- 1 files changed, 5 insertions(+), 3 deletions(-)
+#p $pc
+$1 = (void (*)()) 0x10070c18
+#bt
+#0  0x0000000010070c18 in _allocate_memory () at mm/memlock.c:130
+#1  0x0000000010070d38 in _lock_mem (cmd=<optimized out>) at mm/memlock.c:310
+#2  _lock_mem_if_needed (cmd=0x10104f40) at mm/memlock.c:387
+#3  0x0000000010011358 in init_clvm (excl_uuid=<optimized out>) at
+lvm-functions.c:919
+#4  0x000000001000f47c in lvm_thread_fn (arg=0xfffcaf4e530) at clvmd.c:2020
+#5  0x00000fff9df6c67c in .start_thread () from /lib64/power6/libpthread.so.0
+#6  0x00000fff9de7643c in .__clone () from /lib64/power6/libc.so.6
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index c92e11e..1da9a77 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -971,21 +971,23 @@ struct dev_iter *dev_iter_create(struct dev_filter *f, int dev_scan)
- 
- 	if (dev_scan && !trust_cache()) {
- 		/* Flag gets reset between each command */
--		if (!full_scan_done())
-+		if (!full_scan_done() && f)
- 			persistent_filter_wipe(f); /* Calls _full_scan(1) */
- 	} else
- 		_full_scan(0);
- 
- 	di->current = btree_first(_cache.devices);
- 	di->filter = f;
--	di->filter->use_count++;
-+	if (di->filter)
-+		di->filter->use_count++;
- 
- 	return di;
- }
- 
- void dev_iter_destroy(struct dev_iter *iter)
- {
--	iter->filter->use_count--;
-+	if (iter->filter)
-+		iter->filter->use_count--;
- 	dm_free(iter);
- }
- 
+
+When the followed four lines are commented then the problem is ok.
+I suppose the problem is probably because of alloca.
+
+static void _allocate_memory(void)
+{
+	void *stack_mem, *temp_malloc_mem;
+	struct rlimit limit;
+
+	/* Check if we could preallocate requested stack */
+-	if ((getrlimit (RLIMIT_STACK, &limit) == 0) &&
+-	    ((_size_stack * 2) < limit.rlim_cur) &&
+-         ((stack_mem = alloca(_size_stack))))
+-	   _touch_memory(stack_mem, _size_stack);
+	/* FIXME else warn user setting got ignored */
+
+	if ((temp_malloc_mem = malloc(_size_malloc_tmp)))
+		_touch_memory(temp_malloc_mem, _size_malloc_tmp);
+
+	if ((_malloc_mem = malloc(_size_malloc)))
+		_touch_memory(_malloc_mem, _size_malloc);
+
+	free(temp_malloc_mem);
+} 
+
+My questions are:
+1. Can we delete the four lines, since it is just PREallocate?
+2. What is the purpose of _touch_memory()
+3. why do first malloc temp_malloc_mem but then free it?
+
+Any information is very appreciated.
+
+Best regards,
+Melody 
+
+
 
 
