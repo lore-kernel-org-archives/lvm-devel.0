@@ -1,38 +1,32 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu, 24 Apr 2014 19:35:51 +0000 (UTC)
-Subject: master - NIX: Fix failure mode for "make check".
-Message-ID: <20140424193551.B87E760308@fedorahosted.org>
+From: Brassow Jonathan <jbrassow@redhat.com>
+Date: Thu, 24 Apr 2014 15:15:26 -0500
+Subject: [POC PATCH] All or nothing pvmove.
+In-Reply-To: <1398364838.26048.2.camel@f16>
+References: <1398364838.26048.2.camel@f16>
+Message-ID: <C9975A81-A7E6-4A17-A09E-2E2AB6DFA7E3@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=448af9ff0ba04bfaeb45c15819f577fef089fd95
-Commit:        448af9ff0ba04bfaeb45c15819f577fef089fd95
-Parent:        9676ee9ba9414c64bf9b519479f69be99e9a1dc7
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Thu Apr 24 21:03:58 2014 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Apr 24 21:35:31 2014 +0200
 
-NIX: Fix failure mode for "make check".
+On Apr 24, 2014, at 1:40 PM, Jonathan Brassow wrote:
 
----
- nix/default.nix |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+> The attached patch is only a proof-of-concept that shows how we might go
+> about using 'nosync' mirrors for COMPLETE segments.  It does not yet
+> handle important topics, including:
+> - machine failure:  If there are outstanding writes to COMPLETE segments,
+>  we cannot simply use 'nosync' when restarting the pvmove.  This would
+>  lead to loss of data.  We could either use a log/bitmap with the mirror
+>  and not use 'nosync', or we could write a flag to the pvmove segment in
+>  the metadata that tells us whether the VG was shutdown cleanly or not.
+>  If cleanly, we can safely use 'nosync' on COMPLETE segments; otherwise,
+>  we cannot.
 
-diff --git a/nix/default.nix b/nix/default.nix
-index 81e9d30..faf179a 100644
---- a/nix/default.nix
-+++ b/nix/default.nix
-@@ -204,6 +204,7 @@ let
-          echo "%define check_commands \\";
-          echo "make lcov-reset \\";
-          echo "dmsetup targets\\";
-+         echo "mkdir -p \$out/nix-support \\";
-          echo "make check QUIET=1 T=${T} || touch \$out/nix-support/failed \\"
- 	 echo "pwd > /tmp/build-location \\"
- 	 echo "touch rpm-no-clean") >> source.inc
+A slightly less desirable but still functionally correct solution might simply be that the sync needs to start from the beginning when a pvmove is activated.  This would be quick to implement, but we would want to move on to another solution at some point.  In the meantime, users who choose the all-or-nothing approach would need to know that if the pvmove volume needed to be reactivated, it would be forced to start from the beginning.  If they should choose the one-by-one approach (i.e. the current method), any completed segments would not need to be re-copied.
+
+ brassow
+
 
 
