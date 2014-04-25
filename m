@@ -1,83 +1,111 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 24 Apr 2014 21:45:29 +0000 (UTC)
-Subject: master - test: configurable write timeout
-Message-ID: <20140424214529.BD07660C8E@fedorahosted.org>
+From: Liuhua Wang <lwang@suse.com>
+Date: Fri, 25 Apr 2014 03:11:25 -0600
+Subject: clvmd coredump issue
+In-Reply-To: <5358C694.4060807@redhat.com>
+References: <535926B2020000A000005EB1@soto.provo.novell.com>
+	<5358C694.4060807@redhat.com>
+Message-ID: <535A973D020000A000005FE1@soto.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0ee9d59b48b7b5eb844f6857977641e7a95f7ccb
-Commit:        0ee9d59b48b7b5eb844f6857977641e7a95f7ccb
-Parent:        448af9ff0ba04bfaeb45c15819f577fef089fd95
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Apr 24 22:44:22 2014 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Apr 24 22:44:22 2014 +0100
+Hi, Zdenek
 
-test: configurable write timeout
+Thank you very much for the reply. It really helps.
 
-Hard-coded 3 minutes is far too short when investigating problems.
----
- test/lib/harness.c |   12 +++++++++---
- 1 files changed, 9 insertions(+), 3 deletions(-)
+>>> On 4/24/2014 at 04:08 PM, in message <5358C694.4060807@redhat.com>, Zdenek
+Kabelac <zkabelac@redhat.com> wrote: 
+> Dne 24.4.2014 08:58, Liuhua Wang napsal(a):
+> > Hi, list
+> >
+> > I have encountered a coredump when start clvmd on ppc64 as followed:
+> >
+> > #p $pc
+> > $1 = (void (*)()) 0x10070c18
+> > #bt
+> > #0  0x0000000010070c18 in _allocate_memory () at mm/memlock.c:130
+> > #1  0x0000000010070d38 in _lock_mem (cmd=<optimized out>) at mm/memlock.c:310
+> > #2  _lock_mem_if_needed (cmd=0x10104f40) at mm/memlock.c:387
+> > #3  0x0000000010011358 in init_clvm (excl_uuid=<optimized out>) at
+> > lvm-functions.c:919
+> > #4  0x000000001000f47c in lvm_thread_fn (arg=0xfffcaf4e530) at clvmd.c:2020
+> > #5  0x00000fff9df6c67c in .start_thread () from 
+> /lib64/power6/libpthread.so.0
+> > #6  0x00000fff9de7643c in .__clone () from /lib64/power6/libc.so.6
+> >
+> >
+> > When the followed four lines are commented then the problem is ok.
+> > I suppose the problem is probably because of alloca.
+> >
+> > static void _allocate_memory(void)
+> > {
+> > 	void *stack_mem, *temp_malloc_mem;
+> > 	struct rlimit limit;
+> >
+> > 	/* Check if we could preallocate requested stack */
+> > -	if ((getrlimit (RLIMIT_STACK, &limit) == 0) &&
+> > -	    ((_size_stack * 2) < limit.rlim_cur) &&
+> > -         ((stack_mem = alloca(_size_stack))))
+> > -	   _touch_memory(stack_mem, _size_stack);
+> > 	/* FIXME else warn user setting got ignored */
+> >
+> > 	if ((temp_malloc_mem = malloc(_size_malloc_tmp)))
+> > 		_touch_memory(temp_malloc_mem, _size_malloc_tmp);
+> >
+> > 	if ((_malloc_mem = malloc(_size_malloc)))
+> > 		_touch_memory(_malloc_mem, _size_malloc);
+> >
+> > 	free(temp_malloc_mem);
+> > }
+> >
+> > My questions are:
+> > 1. Can we delete the four lines, since it is just PREallocate?
+> > 2. What is the purpose of _touch_memory()
+> > 3. why do first malloc temp_malloc_mem but then free it?
+> >
+> > Any information is very appreciated.
+> 
+> The memory use in lvm2 has deeper logic.
+> 
+> The idea behind preallocation and touching memory is - to preallocate memory 
+> pages and enforce their physical allocation for stack & heap - before the 
+> memory is mlock()-ed into RAM.
+> 
+> Since the suspend may free i.e. swap device - all the code parts which run in 
+> 
+> suspend needs to be locked in RAM.
+> 
+> Now back to powerpc issue - check why it's crashing -  is the rlim_cur  wrong?
+> Stack size is too big ?
+> 
+I displayed the values in the coredump as followed:
+ #p limit
+  $1 = {rlim_cur = 8388608, rlim_max = 18446744073709551615}
+ #p _size_stack
+  $2 = 65536
+ #p stack_mem
+  $3 = <optimized out>
 
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index 7ee45c8..d7e51ee 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -36,6 +36,7 @@ static int fds[2];
- 
- #define MAX 1024
- #define MAX_LOG_SIZE (32*1024*1024) /* Default max size of test log */
-+#define WRITE_TIMEOUT (180 * 2)	/* 3 minutes */
- 
- struct stats {
- 	int nfailed;
-@@ -59,6 +60,7 @@ static int quiet = 0;
- static const char *results;
- static unsigned fullbuffer = 0;
- static int unlimited = 0;
-+static int write_timeout = WRITE_TIMEOUT;
- 
- static time_t harness_start;
- 
-@@ -433,13 +435,13 @@ static void run(int i, char *f) {
- 			struct timeval selectwait = { .tv_usec = 500000 }; /* 0.5s */
- 
- 			if ((fullbuffer && fullbuffer++ == 8000) ||
--			    (no_write > 180 * 2)) /* a 3 minute timeout */
-+			    (write_timeout > 0 && no_write > write_timeout)) 
- 			{
- 			timeout:
- 				kill(pid, SIGINT);
- 				sleep(5); /* wait a bit for a reaction */
- 				if ((w = waitpid(pid, &st, WNOHANG)) == 0) {
--					if (no_write > 180 * 2)
-+					if (write_timeout > 0 && no_write > write_timeout)
- 						/*
- 						 * Kernel traces needed, when stuck for
- 						 * too long in userspace without producing
-@@ -533,7 +535,8 @@ int main(int argc, char **argv) {
- 	const char *result;
- 	const char *be_verbose = getenv("VERBOSE"),
- 		   *be_interactive = getenv("INTERACTIVE"),
--		   *be_quiet = getenv("QUIET");;
-+		   *be_quiet = getenv("QUIET"),
-+		   *be_write_timeout = getenv("WRITE_TIMEOUT");
- 	time_t start = time(NULL);
- 	int i;
- 	FILE *list;
-@@ -552,6 +555,9 @@ int main(int argc, char **argv) {
- 	if (be_quiet)
- 		quiet = atoi(be_quiet);
- 
-+	if (be_write_timeout)
-+		write_timeout = atoi(be_write_timeout) * 2;
-+
- 	results = getenv("LVM_TEST_RESULTS") ? : "results";
- 	unlimited = getenv("LVM_TEST_UNLIMITED") ? 1 : 0;
- 	(void) snprintf(results_list, sizeof(results_list), "%s/list", results);
+It seems that should not fail since we alloca the much smaller space from
+a bigger stack. There would be probable that the stack size of the thread
+will get much smaller? (I cannot prove it because I don't have ppc64 machine now)
+
+Best regards,
+Melody
+> Code will not be removed it needs to be fixed for powerpc.
+> 
+> Zdenek
+> 
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com 
+> https://www.redhat.com/mailman/listinfo/lvm-devel 
+> 
+> 
+
+
 
 
