@@ -1,42 +1,56 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 28 Apr 2014 10:12:53 +0000 (UTC)
-Subject: master - cleanup: _move_pv is static
-Message-ID: <20140428101253.86F6E61391@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 28 Apr 2014 10:43:39 +0000 (UTC)
+Subject: master - display: use Virtual for virtual LV
+Message-ID: <20140428104339.1B51D60D59@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5b28cbd7c2cd8413c189fff1286a579174ca082a
-Commit:        5b28cbd7c2cd8413c189fff1286a579174ca082a
-Parent:        4360fdf89c7f38c5de0d3e6d612f67ee915cba15
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Apr 28 12:11:44 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Apr 28 12:11:44 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6168b8d70935004e38bc2f1ac9d57cc0bf6df10
+Commit:        e6168b8d70935004e38bc2f1ac9d57cc0bf6df10
+Parent:        5b28cbd7c2cd8413c189fff1286a579174ca082a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Apr 28 11:19:51 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Apr 28 12:37:50 2014 +0200
 
-cleanup: _move_pv is static
+display: use Virtual for virtual LV
 
-metadata/metadata.c:363:5: warning: no previous prototype for '_move_pv' [-Wmissing-prototypes]
+Emphesize virtual extents for virtual LVs and for
+those use  'Virtual extents' instead of 'Logical extents',
+so it's immeditatelly visible, which extents do have
+straighforward physical backend.
 ---
- lib/metadata/metadata.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/display/display.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index edc55ef..e2abba7 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -360,8 +360,8 @@ out:
- 	return r;
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 3f879c9..cd649da 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.107 - 
+ ==================================
++  Display virtual extents for virtual LVs in 'lvdisplay --maps'.
+   Make vgsplit fail cleanly when not all PVs are specified for RAID 4/5/6.
+   Make vgsplit work on mirrors with logs that share PVs with images.
+   Use devices/ignore_suspended_devices=0 by default if not defined in lvm.conf.
+diff --git a/lib/display/display.c b/lib/display/display.c
+index c93b2b3..a34d947 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -661,7 +661,8 @@ int lvdisplay_segments(const struct logical_volume *lv)
+ 	log_print("--- Segments ---");
  
--int _move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
--	     const char *pv_name, int enforce_pv_from_source)
-+static int _move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
-+		    const char *pv_name, int enforce_pv_from_source)
- {
- 	struct physical_volume *pv;
- 	struct pv_list *pvl;
+ 	dm_list_iterate_items(seg, &lv->segments) {
+-		log_print("Logical extent %u to %u:",
++		log_print("%s extents %u to %u:",
++			  lv_is_virtual(lv) ? "Virtual" : "Logical",
+ 			  seg->le, seg->le + seg->len - 1);
+ 
+ 		log_print("  Type\t\t%s", seg->segtype->ops->name(seg));
 
 
