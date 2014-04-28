@@ -1,87 +1,52 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 28 Apr 2014 10:43:49 +0000 (UTC)
-Subject: master - cleanup: put all tests within switch
-Message-ID: <20140428104349.B48A860FE8@fedorahosted.org>
+Date: Mon, 28 Apr 2014 10:43:51 +0000 (UTC)
+Subject: master - tests: improve coverage
+Message-ID: <20140428104351.C823660269@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d8214cb1546f942cc7cbcfb4849b4549132d74a0
-Commit:        d8214cb1546f942cc7cbcfb4849b4549132d74a0
-Parent:        d1aba7ccf6d1bc5f3bc1fa1b5fe70eec64f8c633
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=26989e0cd7fab4768f46803cd25bfc7499ab488e
+Commit:        26989e0cd7fab4768f46803cd25bfc7499ab488e
+Parent:        d8214cb1546f942cc7cbcfb4849b4549132d74a0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 28 10:17:30 2014 +0200
+AuthorDate:    Mon Apr 28 11:57:42 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 28 12:42:56 2014 +0200
+CommitterDate: Mon Apr 28 12:42:57 2014 +0200
 
-cleanup: put all tests within switch
+tests: improve coverage
 
-No reason to check for VALID in extra if.
+Test more code paths for lvscan & lvdisplay
 ---
- lib/display/display.c |   49 +++++++++++++++++++++++++------------------------
- 1 files changed, 25 insertions(+), 24 deletions(-)
+ test/shell/listings.sh |   11 ++++++++++-
+ 1 files changed, 10 insertions(+), 1 deletions(-)
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index 36274b6..b83bb59 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -840,30 +840,31 @@ void display_tags(const struct cmd_context *cmd)
+diff --git a/test/shell/listings.sh b/test/shell/listings.sh
+index d46ee7f..7d9c37e 100644
+--- a/test/shell/listings.sh
++++ b/test/shell/listings.sh
+@@ -61,10 +61,19 @@ dmsetup ls | grep "$PREFIX" | grep -v "LVMTEST.*pv."
+ lvremove -f $vg/$lv2
  
- void display_name_error(name_error_t name_error)
- {
--	if (name_error != NAME_VALID) {
--		switch(name_error) {
--		case NAME_INVALID_EMPTY:
--			log_error("Name is zero length");
--			break;
--		case NAME_INVALID_HYPEN:
--			log_error("Name cannot start with hyphen");
--			break;
--		case NAME_INVALID_DOTS:
--			log_error("Name starts with . or .. and has no "
--						"following character(s)");
--			break;
--		case NAME_INVALID_CHARSET:
--			log_error("Name contains invalid character, valid set includes: "
--					"[a-zA-Z0-9.-_+]");
--			break;
--		case NAME_INVALID_LENGTH:
--			/* Report that name length -1 to accommodate nul*/
--			log_error("Name length exceeds maximum limit of %d", (NAME_LEN -1));
--			break;
--		default:
--			log_error("Unknown error %d on name validation", name_error);
--			break;
--		}
-+	switch(name_error) {
-+	case NAME_VALID:
-+		/* Valid name */
-+		break;
-+	case NAME_INVALID_EMPTY:
-+		log_error("Name is zero length.");
-+		break;
-+	case NAME_INVALID_HYPEN:
-+		log_error("Name cannot start with hyphen.");
-+		break;
-+	case NAME_INVALID_DOTS:
-+		log_error("Name starts with . or .. and has no "
-+			  "following character(s).");
-+		break;
-+	case NAME_INVALID_CHARSET:
-+		log_error("Name contains invalid character, valid set includes: "
-+			  "[a-zA-Z0-9.-_+].");
-+		break;
-+	case NAME_INVALID_LENGTH:
-+		/* Report that name length - 1 to accommodate nul*/
-+		log_error("Name length exceeds maximum limit of %d.", (NAME_LEN - 1));
-+		break;
-+	default:
-+		log_error(INTERNAL_ERROR "Unknown error %d on name validation.", name_error);
-+		break;
- 	}
- }
+ #COMM lvs -a displays mirror legs and log
+-lvcreate -aey -l4 --type mirror -m2 -n $lv3 $vg
++lvcreate -aey -l2 --type mirror -m2 -n $lv3 $vg
+ test $(lvs --noheadings $vg | wc -l) -eq 2
+ test $(lvs -a --noheadings $vg | wc -l) -eq 6
+ dmsetup ls|grep "$PREFIX"|grep -v "LVMTEST.*pv."
++lvcreate -l2 -s $vg/$lv3
++lvcreate -l1 -s -n inval $vg/$lv3
++lvcreate -l4 -I4 -i2 -n stripe $vg
++lvcreate -T $vg/pool -I4 -i2 -l5 -V1P -n thin
++# Invalidate snapshot
++not dd if=/dev/zero of="$DM_DEV_DIR/$vg/inval" bs=4K
++invalid lvscan "$dev1"
++lvdisplay --maps
++not lvscan --all
  
+ #COMM vgs with options from pvs still treats arguments as VGs (bz193543)
+ vgs -o pv_name,vg_name $vg
 
 
