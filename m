@@ -1,52 +1,51 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 28 Apr 2014 10:43:51 +0000 (UTC)
-Subject: master - tests: improve coverage
-Message-ID: <20140428104351.C823660269@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 29 Apr 2014 07:16:49 +0000 (UTC)
+Subject: master - pvremove: Catch CTRL-c during prompts.
+Message-ID: <20140429071649.7704260B65@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=26989e0cd7fab4768f46803cd25bfc7499ab488e
-Commit:        26989e0cd7fab4768f46803cd25bfc7499ab488e
-Parent:        d8214cb1546f942cc7cbcfb4849b4549132d74a0
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 28 11:57:42 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 28 12:42:57 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b1f765d72aa56dab547a819447371b5315e78455
+Commit:        b1f765d72aa56dab547a819447371b5315e78455
+Parent:        26989e0cd7fab4768f46803cd25bfc7499ab488e
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Apr 29 08:16:28 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Apr 29 08:16:28 2014 +0100
 
-tests: improve coverage
+pvremove: Catch CTRL-c during prompts.
 
-Test more code paths for lvscan & lvdisplay
 ---
- test/shell/listings.sh |   11 ++++++++++-
- 1 files changed, 10 insertions(+), 1 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/pvremove.c |    2 ++
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/listings.sh b/test/shell/listings.sh
-index d46ee7f..7d9c37e 100644
---- a/test/shell/listings.sh
-+++ b/test/shell/listings.sh
-@@ -61,10 +61,19 @@ dmsetup ls | grep "$PREFIX" | grep -v "LVMTEST.*pv."
- lvremove -f $vg/$lv2
+diff --git a/WHATS_NEW b/WHATS_NEW
+index fad66bf..bb5b4c3 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.107 - 
+ ==================================
++  Catch CTRL-c during pvremove prompts.
+   Show correct availability status for snapshot origin in lvscan.
+   Move segment thin pool/volume info into segment display 'lvdisplay --maps'.
+   Display thin pool usage even when just thin volume is available.
+diff --git a/tools/pvremove.c b/tools/pvremove.c
+index 7048b97..dfd6007 100644
+--- a/tools/pvremove.c
++++ b/tools/pvremove.c
+@@ -37,6 +37,8 @@ int pvremove(struct cmd_context *cmd, int argc, char **argv)
+ 			stack;
+ 			ret = ECMD_FAILED;
+ 		}
++		if (sigint_caught())
++			return_ECMD_FAILED;
+ 	}
  
- #COMM lvs -a displays mirror legs and log
--lvcreate -aey -l4 --type mirror -m2 -n $lv3 $vg
-+lvcreate -aey -l2 --type mirror -m2 -n $lv3 $vg
- test $(lvs --noheadings $vg | wc -l) -eq 2
- test $(lvs -a --noheadings $vg | wc -l) -eq 6
- dmsetup ls|grep "$PREFIX"|grep -v "LVMTEST.*pv."
-+lvcreate -l2 -s $vg/$lv3
-+lvcreate -l1 -s -n inval $vg/$lv3
-+lvcreate -l4 -I4 -i2 -n stripe $vg
-+lvcreate -T $vg/pool -I4 -i2 -l5 -V1P -n thin
-+# Invalidate snapshot
-+not dd if=/dev/zero of="$DM_DEV_DIR/$vg/inval" bs=4K
-+invalid lvscan "$dev1"
-+lvdisplay --maps
-+not lvscan --all
- 
- #COMM vgs with options from pvs still treats arguments as VGs (bz193543)
- vgs -o pv_name,vg_name $vg
+ 	return ret;
 
 
