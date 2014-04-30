@@ -1,80 +1,55 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:55:42 +0000 (UTC)
-Subject: master - cleanup: dmeventd improve _clien_write code
-Message-ID: <20140418145542.07C9D61056@fedorahosted.org>
+Date: Wed, 30 Apr 2014 08:27:50 +0000 (UTC)
+Subject: master - display: check for dmeventd support
+Message-ID: <20140430082750.C230A60EB6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0927605ec3214349f69d849f72d138696231f3e7
-Commit:        0927605ec3214349f69d849f72d138696231f3e7
-Parent:        3febd2c9d47eb2af60a576a07c4042331930c2c1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=517b0026481d29d31524e472efbdc99e945c9c12
+Commit:        517b0026481d29d31524e472efbdc99e945c9c12
+Parent:        b1f765d72aa56dab547a819447371b5315e78455
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 18 14:42:39 2014 +0200
+AuthorDate:    Wed Apr 30 10:13:35 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 18 16:52:35 2014 +0200
+CommitterDate: Wed Apr 30 10:26:26 2014 +0200
 
-cleanup: dmeventd improve _clien_write code
+display: check for dmeventd support
 
-Switch to allocate buffer from heap, since it might be potentially
-bigger when extremaly large set of volumes would be monitored.
-In case of allocation failure send ENOMEM message.
-Also implicitelly ignore msg->size when msg->data is NULL.
+When quering for dmeventd monitoring status, check first
+if lvm2 is configured to monitor to avoid unwanted start
+of dmeventd process for answering monitoring status.
 ---
- daemons/dmeventd/dmeventd.c |   26 +++++++++++++++++++-------
- 1 files changed, 19 insertions(+), 7 deletions(-)
+ WHATS_NEW         |    1 +
+ lib/metadata/lv.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index f8b5470..b4080db 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -1397,18 +1397,27 @@ static int _client_read(struct dm_event_fifos *fifos,
- static int _client_write(struct dm_event_fifos *fifos,
- 			struct dm_event_daemon_message *msg)
- {
-+	uint32_t temp[2];
- 	unsigned bytes = 0;
- 	int ret = 0;
- 	fd_set fds;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index bb5b4c3..456f132 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.107 - 
+ ==================================
++  Don't start dmeventd checking seg_monitor and monitoring is disabled.
+   Catch CTRL-c during pvremove prompts.
+   Show correct availability status for snapshot origin in lvscan.
+   Move segment thin pool/volume info into segment display 'lvdisplay --maps'.
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 8445d16..0225704 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -146,7 +146,8 @@ char *lvseg_monitor_dup(struct dm_pool *mem, const struct lv_segment *seg)
+ 		segm = first_seg(seg->log_lv);
  
--	size_t size = 2 * sizeof(uint32_t) + msg->size;
--	uint32_t *header = alloca(size);
-+	size_t size = 2 * sizeof(uint32_t) + ((msg->data) ? msg->size : 0);
-+	uint32_t *header = dm_malloc(size);
- 	char *buf = (char *)header;
- 
--	header[0] = htonl(msg->cmd);
--	header[1] = htonl(msg->size);
--	if (msg->data)
--		memcpy(buf + 2 * sizeof(uint32_t), msg->data, msg->size);
-+	if (!header) {
-+		/* Reply with ENOMEM message */
-+		header = temp;
-+		size = sizeof(temp);
-+		header[0] = htonl(-ENOMEM);
-+		header[1] = 0;
-+	} else {
-+		header[0] = htonl(msg->cmd);
-+		header[1] = htonl((msg->data) ? msg->size : 0);
-+		if (msg->data)
-+			memcpy(buf + 2 * sizeof(uint32_t), msg->data, msg->size);
-+	}
- 
- 	while (bytes < size) {
- 		do {
-@@ -1423,7 +1432,10 @@ static int _client_write(struct dm_event_fifos *fifos,
- 			break;
- 	}
- 
--	return bytes == size;
-+	if (header != temp)
-+		dm_free(header);
-+
-+	return (bytes == size);
- }
- 
- /*
+ 	// log_debug("Query LV:%s mon:%s segm:%s tgtm:%p  segmon:%d statusm:%d", seg->lv->name, segm->lv->name, segm->segtype->name, segm->segtype->ops->target_monitored, seg_monitored(segm), (int)(segm->status & PVMOVE));
+-	if (!segm->segtype->ops->target_monitored)
++	if ((dmeventd_monitor_mode() != 1) ||
++	    !segm->segtype->ops->target_monitored)
+ 		/* Nothing to do, monitoring not supported */;
+ 	else if (lv_is_cow_covering_origin(seg->lv))
+ 		/* Nothing to do, snapshot already covers origin */;
 
 
