@@ -1,77 +1,44 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 30 Apr 2014 10:30:18 +0000 (UTC)
-Subject: dev-prajnoha-selout - selout: make regex selection to work without quotes and recognize regex op before equal op
-Message-ID: <20140430103018.75FD160F51@fedorahosted.org>
+Date: Wed, 30 Apr 2014 12:59:53 +0000 (UTC)
+Subject: master - systemd: make sysinit.target to pull in lvm2-lvmetad.socket, not sockets.target
+Message-ID: <20140430125954.0101D6053F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f36abf589827adda359acfe8b4dff80301afa6ed
-Commit:        f36abf589827adda359acfe8b4dff80301afa6ed
-Parent:        61570324d975b1fbf3fad1da10c792f7992f7044
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=81b096af34283cf91205b0e63f598ca92d625051
+Commit:        81b096af34283cf91205b0e63f598ca92d625051
+Parent:        4e559103d51e02c0d64d9cf88cee11d762feb65e
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Apr 30 12:29:48 2014 +0200
+AuthorDate:    Wed Apr 30 14:52:10 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Apr 30 12:29:48 2014 +0200
+CommitterDate: Wed Apr 30 14:52:10 2014 +0200
 
-selout: make regex selection to work without quotes and recognize regex op before equal op
+systemd: make sysinit.target to pull in lvm2-lvmetad.socket, not sockets.target
 
+The sysinit.target is ordered even before sockets.target and there
+may be situations in which the lvmetad is needed early, for example
+in rescue.target to activate some LVs on which mountpoints reside.
+Also, like in the case of rescue.target, the sockets.target is not
+pulled in (unless some other service pulls it in explicitly).
+
+See also: https://bugzilla.redhat.com/show_bug.cgi?id=1087586#c26
+for the summary of the problem.
 ---
- libdm/libdm-report.c |   22 +++++++++++++++-------
- 1 files changed, 15 insertions(+), 7 deletions(-)
+ scripts/lvm2_lvmetad_systemd_red_hat.socket.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index ac0be67..f5fea50 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -87,15 +87,20 @@ struct op_def {
- #define FLD_CMP_LT	0x00008000
- #define FLD_CMP_REGEX	0x00010000
+diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
+index 9a46f50..071fd64 100644
+--- a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
++++ b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
+@@ -8,4 +8,4 @@ ListenStream=@DEFAULT_RUN_DIR@/lvmetad.socket
+ SocketMode=0600
  
-+/*
-+ * When defining operators, always define longer one before
-+ * shorter one if one is a prefix of another!
-+ * (e.g. =~ comes before =)
-+ */
- static struct op_def _op_cmp[] = {
-+	{ "=~", FLD_CMP_REGEX, "Matching regular expression" },
-+	{ "!~", FLD_CMP_REGEX|FLD_CMP_NOT, "Not matching regular expression" },
- 	{ "=", FLD_CMP_EQUAL, "Equal to" },
- 	{ "!=", FLD_CMP_NOT|FLD_CMP_EQUAL, "Not equal" },
- 	{ ">=", FLD_CMP_GT|FLD_CMP_EQUAL, "Greater than or equal to" },
- 	{ ">", FLD_CMP_GT, "Greater than" },
- 	{ "<=", FLD_CMP_LT|FLD_CMP_EQUAL, "Lesser than or equal to" },
- 	{ "<", FLD_CMP_LT, "Lesser than" },
--	{ "=~", FLD_CMP_REGEX, "Matching regular expression" },
--	{ "!~", FLD_CMP_REGEX|FLD_CMP_NOT, "Not matching regular expression" },
- 	{ NULL, 0, NULL }
- };
- 
-@@ -1141,15 +1146,18 @@ static const char *_tok_regex(const char *s,
- 		case '(': c = ')'; break;
- 		case '{': c = '}'; break;
- 		case '[': c = ']'; break;
--		default:  c = *s;
-+		default:  c = 0;
- 	}
- 
- 	s = _tok_string(s + 1, begin, end, c);
--	if (!*s) {
--		log_error("Missing end quote of regex");
--		return NULL;
-+	if ((c = *s)) {
-+		if (c && (c != ')') && (c != '}') && (c != ']'))
-+		{
-+			log_error("Missing end quote of regex");
-+			return NULL;
-+		}
-+		s++;
- 	}
--	s++;
- 
- 	*flags |= DM_REPORT_FIELD_TYPE_STRING;
- 
+ [Install]
+-WantedBy=sockets.target
++WantedBy=sysinit.target
 
 
