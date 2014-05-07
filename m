@@ -1,72 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  7 May 2014 12:18:58 +0000 (UTC)
-Subject: master - coverity: check for profile
-Message-ID: <20140507121858.B603F607BC@fedorahosted.org>
+Date: Wed,  7 May 2014 12:19:00 +0000 (UTC)
+Subject: master - coverity: error for undefined origin
+Message-ID: <20140507121900.CCCFC607BC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a8042f33d0ee7f71952d65f2cc408775fa440c8a
-Commit:        a8042f33d0ee7f71952d65f2cc408775fa440c8a
-Parent:        48a8cf28f751156471a3fc65650fc600cd24833c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d11617864a6434c3775e1fbc8c55af6d3ae5dc57
+Commit:        d11617864a6434c3775e1fbc8c55af6d3ae5dc57
+Parent:        a8042f33d0ee7f71952d65f2cc408775fa440c8a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 7 10:52:00 2014 +0200
+AuthorDate:    Wed May 7 11:14:22 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 7 14:15:52 2014 +0200
+CommitterDate: Wed May 7 14:16:18 2014 +0200
 
-coverity: check for profile
+coverity: error for undefined origin
 
-Ensure str is not NULL for analyzer.
+If we would have been missing origin here, it would
+be an internal error - since these values are validated
+earlier.
 ---
- lib/config/config.c       |    5 ++++-
- lib/metadata/thin_manip.c |   10 ++++++++--
- 2 files changed, 12 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c |    4 ++++
+ tools/lvcreate.c        |    5 ++++-
+ 2 files changed, 8 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index a751d3e..1a9f636 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1766,7 +1766,10 @@ int get_default_allocation_thin_pool_chunk_size_CFG(struct cmd_context *cmd, str
- 	const char *str;
- 	uint32_t chunk_size;
- 
--	str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile);
-+	if (!(str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile))) {
-+		log_error(INTERNAL_ERROR "Cannot find profile.");
-+		return 0;
-+	}
- 
- 	if (!strcasecmp(str, "generic"))
- 		chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE;
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 78231a2..c1c90b4 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -375,7 +375,10 @@ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profi
- 
- 	if (!(passed_args & PASS_ARG_CHUNK_SIZE)) {
- 		if (!(*chunk_size = find_config_tree_int(cmd, allocation_thin_pool_chunk_size_CFG, profile) * 2)) {
--			str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile);
-+			if (!(str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile))) {
-+				log_error(INTERNAL_ERROR "Could not find profile.");
-+				return 0;
-+			}
- 			if (!strcasecmp(str, "generic"))
- 				*chunk_size_calc_method = THIN_CHUNK_SIZE_CALC_METHOD_GENERIC;
- 			else if (!strcasecmp(str, "performance"))
-@@ -397,7 +400,10 @@ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profi
- 	}
- 
- 	if (!(passed_args & PASS_ARG_DISCARDS)) {
--		str = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, profile);
-+		if (!(str = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, profile))) {
-+			log_error(INTERNAL_ERROR "Could not find profile.");
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 6817831..b47e2d2 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5993,6 +5993,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 							    "cache-pool")))
+ 			return_0;
+ 	} else if (seg_is_thin(lp) && lp->snapshot) {
++		if (!lp->origin) {
++			log_error(INTERNAL_ERROR "Origin LV is not defined.");
 +			return 0;
 +		}
- 		if (!get_pool_discards(str, discards))
- 			return_0;
+ 		if (!(org = find_lv(vg, lp->origin))) {
+ 			log_error("Couldn't find origin volume '%s'.",
+ 				  lp->origin);
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 6a9264a..0e009b1 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -304,7 +304,10 @@ static int _determine_cache_argument(struct volume_group *vg,
+ 			  lp->segtype->name);
+ 		return 0;
  	}
+-
++	if (!lp->origin) {
++		log_error(INTERNAL_ERROR "Origin LV is not defined.");
++		return 0;
++	}
+ 	if (!(lvl = find_lv_in_vg(vg, lp->origin))) {
+ 		log_error("LV %s not found in Volume group %s.",
+ 			  lp->origin, vg->name);
 
 
