@@ -1,39 +1,40 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  6 May 2014 12:39:32 +0000 (UTC)
-Subject: master - cleanup: fix compiler warning
-Message-ID: <20140506123932.378E860E04@fedorahosted.org>
+Date: Wed,  7 May 2014 10:15:23 +0000 (UTC)
+Subject: master - make: fix commit 1756bf6
+Message-ID: <20140507101523.CDD7660302@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1899783aa646cfc7f4851de7231f4f2db65b6986
-Commit:        1899783aa646cfc7f4851de7231f4f2db65b6986
-Parent:        8b49d61d8337cedddf65c35fb4de83cb01b1cdf4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9d64573da135b489e1b3079612e77363526ca44d
+Commit:        9d64573da135b489e1b3079612e77363526ca44d
+Parent:        1899783aa646cfc7f4851de7231f4f2db65b6986
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue May 6 14:38:38 2014 +0200
+AuthorDate:    Wed May 7 12:13:36 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue May 6 14:38:38 2014 +0200
+CommitterDate: Wed May 7 12:13:36 2014 +0200
 
-cleanup: fix compiler warning
+make: fix commit 1756bf6
 
-locking/file_locking.c:162:2: warning: implicit declaration of function ???init_signals???
+"DIST_TARGET" should be "DISTCLEAN_TARGET"
 ---
- lib/locking/file_locking.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ scripts/Makefile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
-index 37fa0eb..d3794db 100644
---- a/lib/locking/file_locking.c
-+++ b/lib/locking/file_locking.c
-@@ -23,6 +23,7 @@
- #include "lvm-string.h"
- #include "lvm-flock.h"
- #include "lvmcache.h"
-+#include "lvm-signal.h"
+diff --git a/scripts/Makefile.in b/scripts/Makefile.in
+index c2842a4..2c92033 100644
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -125,7 +125,7 @@ install_tmpfiles_configuration:
+ 	$(INSTALL_DIR) $(tmpfiles_dir)
+ 	$(INSTALL_DATA) lvm2_tmpfiles_red_hat.conf $(tmpfiles_dir)/lvm2.conf
  
- #include <limits.h>
- #include <unistd.h>
+-DIST_TARGETS += \
++DISTCLEAN_TARGETS += \
+ 	blkdeactivate.sh \
+ 	blk_availability_init_red_hat \
+ 	blk_availability_systemd_red_hat.service \
 
 
