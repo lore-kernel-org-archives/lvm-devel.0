@@ -1,61 +1,46 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  7 May 2014 12:19:00 +0000 (UTC)
-Subject: master - coverity: error for undefined origin
-Message-ID: <20140507121900.CCCFC607BC@fedorahosted.org>
+Date: Wed,  7 May 2014 12:19:02 +0000 (UTC)
+Subject: master - coverity: ignore ret val
+Message-ID: <20140507121902.EFF5A607BC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d11617864a6434c3775e1fbc8c55af6d3ae5dc57
-Commit:        d11617864a6434c3775e1fbc8c55af6d3ae5dc57
-Parent:        a8042f33d0ee7f71952d65f2cc408775fa440c8a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bcd6deea18673cedfa833fc40399949955e7f834
+Commit:        bcd6deea18673cedfa833fc40399949955e7f834
+Parent:        d11617864a6434c3775e1fbc8c55af6d3ae5dc57
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 7 11:14:22 2014 +0200
+AuthorDate:    Wed May 7 11:22:14 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 7 14:16:18 2014 +0200
+CommitterDate: Wed May 7 14:17:12 2014 +0200
 
-coverity: error for undefined origin
+coverity: ignore ret val
 
-If we would have been missing origin here, it would
-be an internal error - since these values are validated
-earlier.
+Since we intentionaly do not want to check them,
+cast result values to void.
 ---
- lib/metadata/lv_manip.c |    4 ++++
- tools/lvcreate.c        |    5 ++++-
- 2 files changed, 8 insertions(+), 1 deletions(-)
+ lib/device/dev-type.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 6817831..b47e2d2 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5993,6 +5993,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 							    "cache-pool")))
- 			return_0;
- 	} else if (seg_is_thin(lp) && lp->snapshot) {
-+		if (!lp->origin) {
-+			log_error(INTERNAL_ERROR "Origin LV is not defined.");
-+			return 0;
-+		}
- 		if (!(org = find_lv(vg, lp->origin))) {
- 			log_error("Couldn't find origin volume '%s'.",
- 				  lp->origin);
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 6a9264a..0e009b1 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -304,7 +304,10 @@ static int _determine_cache_argument(struct volume_group *vg,
- 			  lp->segtype->name);
- 		return 0;
- 	}
--
-+	if (!lp->origin) {
-+		log_error(INTERNAL_ERROR "Origin LV is not defined.");
-+		return 0;
-+	}
- 	if (!(lvl = find_lv_in_vg(vg, lp->origin))) {
- 		log_error("LV %s not found in Volume group %s.",
- 			  lp->origin, vg->name);
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 193e9bd..9d610d4 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -495,9 +495,10 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
+ 	offset_value = strtoll(offset, NULL, 10);
+ 
+ 	if (!usage)
+-		blkid_probe_lookup_value(probe, "USAGE", &usage, NULL);
+-	blkid_probe_lookup_value(probe, "LABEL", &label, NULL);
+-	blkid_probe_lookup_value(probe, "UUID", &uuid, NULL);
++		(void) blkid_probe_lookup_value(probe, "USAGE", &usage, NULL);
++	(void) blkid_probe_lookup_value(probe, "LABEL", &label, NULL);
++	(void) blkid_probe_lookup_value(probe, "UUID", &uuid, NULL);
++	/* Return values ignored here, in the worst case we print NULL */
+ 
+ 	log_verbose("Found existing signature on %s at offset %s: LABEL=\"%s\" "
+ 		    "UUID=\"%s\" TYPE=\"%s\" USAGE=\"%s\"",
 
 
