@@ -1,68 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  7 May 2014 12:19:09 +0000 (UTC)
-Subject: master - cleanup: missed conversion to dm_malloc/free usage
-Message-ID: <20140507121909.47850607BC@fedorahosted.org>
+Date: Wed,  7 May 2014 12:19:07 +0000 (UTC)
+Subject: master - cleanup: cosmetics.
+Message-ID: <20140507121907.38312607BC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9bccaf7ae40ca0d17e5d1b65f7c7aaf2d78eb2b9
-Commit:        9bccaf7ae40ca0d17e5d1b65f7c7aaf2d78eb2b9
-Parent:        d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
+Commit:        d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
+Parent:        d88fab8d3a64cb492c808a50d247686febedc9e3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 7 11:54:12 2014 +0200
+AuthorDate:    Wed May 7 11:44:33 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed May 7 14:17:46 2014 +0200
 
-cleanup: missed conversion to dm_malloc/free usage
+cleanup: cosmetics.
 
-Few missed unconverted dm_malloc/free calls.
+Initialized attrs so analyzers are less confused
+(since currently our method calls should always initialize attrs on
+return).
 ---
- daemons/clvmd/lvm-functions.c |    9 ++++-----
- 1 files changed, 4 insertions(+), 5 deletions(-)
+ lib/metadata/snapshot_manip.c |    2 +-
+ libdm/libdm-common.c          |    3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index e36e206..9fd71e8 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -236,7 +236,7 @@ void destroy_lvhash(void)
- 		if ((status = sync_unlock(resource, lvi->lock_id)))
- 			DEBUGLOG("unlock_all. unlock failed(%d): %s\n",
- 				 status,  strerror(errno));
--		free(lvi);
-+		dm_free(lvi);
- 	}
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index a0a3e3c..5df0f98 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -41,7 +41,7 @@ int lv_is_cow(const struct logical_volume *lv)
+ static uint64_t _cow_extra_chunks(struct cmd_context *cmd, uint64_t n_chunks)
+ {
+ 	const struct segment_type *segtype;
+-	unsigned attrs;
++	unsigned attrs = 0;
  
- 	dm_hash_destroy(lv_hash);
-@@ -286,8 +286,7 @@ static int hold_lock(char *resource, int mode, int flags)
- 				 strerror(errno));
- 		errno = saved_errno;
- 	} else {
--		lvi = malloc(sizeof(struct lv_info));
--		if (!lvi) {
-+		if (!(lvi = dm_malloc(sizeof(struct lv_info)))) {
- 			errno = ENOMEM;
- 			return -1;
+ 	if (activation() &&
+ 	    (segtype = get_segtype_from_string(cmd, "snapshot")) &&
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index f404c63..bb793e3 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1907,7 +1907,8 @@ static int _device_has_mounted_fs(char *buffer, unsigned major, unsigned minor,
+ 	char kernel_dev_name[PATH_MAX];
+ 
+ 	if ((major == data->maj) && (minor == data->min)) {
+-		if (!dm_device_get_name(major, minor, 1, kernel_dev_name, PATH_MAX)) {
++		if (!dm_device_get_name(major, minor, 1, kernel_dev_name,
++					sizeof(kernel_dev_name))) {
+ 			stack;
+ 			*kernel_dev_name = '\0';
  		}
-@@ -296,7 +295,7 @@ static int hold_lock(char *resource, int mode, int flags)
- 		status = sync_lock(resource, mode, flags & ~LCKF_CONVERT, &lvi->lock_id);
- 		saved_errno = errno;
- 		if (status) {
--			free(lvi);
-+			dm_free(lvi);
- 			DEBUGLOG("hold_lock. lock at %d failed: %s\n", mode,
- 				 strerror(errno));
- 		} else
-@@ -326,7 +325,7 @@ static int hold_unlock(char *resource)
- 	saved_errno = errno;
- 	if (!status) {
- 		remove_info(resource);
--		free(lvi);
-+		dm_free(lvi);
- 	} else {
- 		DEBUGLOG("hold_unlock. unlock failed(%d): %s\n", status,
- 			 strerror(errno));
 
 
