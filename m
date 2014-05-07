@@ -1,100 +1,62 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  7 May 2014 12:19:15 +0000 (UTC)
-Subject: master - cleanup: use enum return codes
-Message-ID: <20140507121915.8F6D26030E@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Wed, 7 May 2014 08:33:42 -0400 (EDT)
+Subject: master - coverity: check for profile
+In-Reply-To: <20140507121858.B603F607BC@fedorahosted.org>
+References: <20140507121858.B603F607BC@fedorahosted.org>
+Message-ID: <1880427768.1808643.1399466022604.JavaMail.zimbra@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e416d84e1093655786b09450154779ee7896f11d
-Commit:        e416d84e1093655786b09450154779ee7896f11d
-Parent:        2cc02c570e489426568e57ad0b8fdbd9eedccf87
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 7 13:52:01 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 7 14:17:46 2014 +0200
+On 05/07/2014 02:19 PM, Zdenek Kabelac wrote:> -	str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile);
+> +	if (!(str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile))) {
+> +		log_error(INTERNAL_ERROR "Cannot find profile.");
+> +		return 0;
+> +	}
+>  
+>  	if (!strcasecmp(str, "generic"))
+>  		chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE;
+> diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+> index 78231a2..c1c90b4 100644
+> --- a/lib/metadata/thin_manip.c
+> +++ b/lib/metadata/thin_manip.c
+> @@ -375,7 +375,10 @@ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profi
+>  
+>  	if (!(passed_args & PASS_ARG_CHUNK_SIZE)) {
+>  		if (!(*chunk_size = find_config_tree_int(cmd, allocation_thin_pool_chunk_size_CFG, profile) * 2)) {
+> -			str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile);
+> +			if (!(str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile))) {
+> +				log_error(INTERNAL_ERROR "Could not find profile.");
+> +				return 0;
+> +			}
+>  			if (!strcasecmp(str, "generic"))
+>  				*chunk_size_calc_method = THIN_CHUNK_SIZE_CALC_METHOD_GENERIC;
+>  			else if (!strcasecmp(str, "performance"))
+> @@ -397,7 +400,10 @@ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profi
+>  	}
+>  
+>  	if (!(passed_args & PASS_ARG_DISCARDS)) {
+> -		str = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, profile);
+> +		if (!(str = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, profile))) {
+> +			log_error(INTERNAL_ERROR "Could not find profile.");
+> +			return 0;
+> +		}
 
-cleanup: use enum return codes
 
----
- lib/misc/lvm-string.c |   16 ++++++++--------
- lib/misc/lvm-string.h |   12 ++++++++----
- 2 files changed, 16 insertions(+), 12 deletions(-)
+Well, the message is not quite correct since it's not just about profile.
+The actual sequence here when looking for the config value is:
+ 1 - --config
+ 2 - --profile
+ 3 - profile directly attached to VG/LV
+ 4 - lvm.conf (including tag configs)
+ 5 - default
 
-diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
-index cdee02b..be6298b 100644
---- a/lib/misc/lvm-string.c
-+++ b/lib/misc/lvm-string.c
-@@ -65,29 +65,29 @@ int validate_tag(const char *n)
- 	return 1;
- }
- 
--static int _validate_name(const char *n)
-+static name_error_t _validate_name(const char *n)
- {
- 	register char c;
- 	register int len = 0;
- 
- 	if (!n || !*n)
--		return -1;
-+		return NAME_INVALID_EMPTY;
- 
- 	/* Hyphen used as VG-LV separator - ambiguity if LV starts with it */
- 	if (*n == '-')
--		return -2;
-+		return NAME_INVALID_HYPEN;
- 
- 	if ((*n == '.') && (!n[1] || (n[1] == '.' && !n[2]))) /* ".", ".." */
--		return -3;
-+		return NAME_INVALID_DOTS;
- 
- 	while ((len++, c = *n++))
- 		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+')
--			return -4;
-+			return NAME_INVALID_CHARSET;
- 
- 	if (len > NAME_LEN)
--		return -5;
-+		return NAME_INVALID_LENGTH;
- 
--	return 0;
-+	return NAME_VALID;
- }
- 
- /*
-@@ -98,7 +98,7 @@ static int _validate_name(const char *n)
-  */
- int validate_name(const char *n)
- {
--	return (_validate_name(n) < 0 ? 0 : 1);
-+	return (_validate_name(n) == NAME_VALID) ? 1 : 0;
- }
- 
- static const char *_lvname_has_reserved_prefix(const char *lvname)
-diff --git a/lib/misc/lvm-string.h b/lib/misc/lvm-string.h
-index a4f112f..6a13e9e 100644
---- a/lib/misc/lvm-string.h
-+++ b/lib/misc/lvm-string.h
-@@ -25,10 +25,14 @@ struct dm_pool;
- struct pool;
- struct logical_volume;
- 
--typedef enum name_error { NAME_VALID = 0, NAME_INVALID_EMPTY = -1,
--					NAME_INVALID_HYPEN = -2, NAME_INVALID_DOTS = -3,
--					NAME_INVALID_CHARSET = -4, NAME_INVALID_LENGTH = -5}
--					name_error_t;
-+typedef enum name_error {
-+	NAME_VALID = 0,
-+	NAME_INVALID_EMPTY = -1,
-+	NAME_INVALID_HYPEN = -2,
-+	NAME_INVALID_DOTS = -3,
-+	NAME_INVALID_CHARSET = -4,
-+	NAME_INVALID_LENGTH = -5
-+} name_error_t;
- 
- int emit_to_buffer(char **buffer, size_t *size, const char *fmt, ...)
-   __attribute__ ((format(printf, 3, 4)));
+(And default is always defined for thin_pool_chunk_size_policy and thin_pool_discards.
+So actually, the error path there is never hit in real...)
+
+-- 
+Peter
 
 
