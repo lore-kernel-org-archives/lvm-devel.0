@@ -1,46 +1,96 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  7 May 2014 12:19:02 +0000 (UTC)
-Subject: master - coverity: ignore ret val
-Message-ID: <20140507121902.EFF5A607BC@fedorahosted.org>
+Date: Wed,  7 May 2014 12:19:05 +0000 (UTC)
+Subject: master - cleanup: drop uneeded headers
+Message-ID: <20140507121905.25FD5607BC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bcd6deea18673cedfa833fc40399949955e7f834
-Commit:        bcd6deea18673cedfa833fc40399949955e7f834
-Parent:        d11617864a6434c3775e1fbc8c55af6d3ae5dc57
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d88fab8d3a64cb492c808a50d247686febedc9e3
+Commit:        d88fab8d3a64cb492c808a50d247686febedc9e3
+Parent:        bcd6deea18673cedfa833fc40399949955e7f834
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 7 11:22:14 2014 +0200
+AuthorDate:    Wed May 7 10:50:06 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 7 14:17:12 2014 +0200
+CommitterDate: Wed May 7 14:17:45 2014 +0200
 
-coverity: ignore ret val
+cleanup: drop uneeded headers
 
-Since we intentionaly do not want to check them,
-cast result values to void.
 ---
- lib/device/dev-type.c |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ daemons/clvmd/clvmd-singlenode.c |    1 -
+ lib/locking/external_locking.c   |    1 -
+ lib/locking/file_locking.c       |    2 --
+ lib/metadata/cache_manip.c       |    6 ------
+ 4 files changed, 0 insertions(+), 10 deletions(-)
 
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 193e9bd..9d610d4 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -495,9 +495,10 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 	offset_value = strtoll(offset, NULL, 10);
+diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
+index e65ab28..e6d2b0d 100644
+--- a/daemons/clvmd/clvmd-singlenode.c
++++ b/daemons/clvmd/clvmd-singlenode.c
+@@ -19,7 +19,6 @@
+ #include "locking.h"
+ #include "clvm.h"
+ #include "clvmd-comms.h"
+-#include "lvm-functions.h"
+ #include "clvmd.h"
  
- 	if (!usage)
--		blkid_probe_lookup_value(probe, "USAGE", &usage, NULL);
--	blkid_probe_lookup_value(probe, "LABEL", &label, NULL);
--	blkid_probe_lookup_value(probe, "UUID", &uuid, NULL);
-+		(void) blkid_probe_lookup_value(probe, "USAGE", &usage, NULL);
-+	(void) blkid_probe_lookup_value(probe, "LABEL", &label, NULL);
-+	(void) blkid_probe_lookup_value(probe, "UUID", &uuid, NULL);
-+	/* Return values ignored here, in the worst case we print NULL */
+ #include <sys/un.h>
+diff --git a/lib/locking/external_locking.c b/lib/locking/external_locking.c
+index 1e669bb..bc597ff 100644
+--- a/lib/locking/external_locking.c
++++ b/lib/locking/external_locking.c
+@@ -19,7 +19,6 @@
+ #include "sharedlib.h"
+ #include "toolcontext.h"
+ #include "activate.h"
+-#include "locking.h"
  
- 	log_verbose("Found existing signature on %s at offset %s: LABEL=\"%s\" "
- 		    "UUID=\"%s\" TYPE=\"%s\" USAGE=\"%s\"",
+ static void *_locking_lib = NULL;
+ static void (*_reset_fn) (void) = NULL;
+diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
+index d79d7a9..10431ab 100644
+--- a/lib/locking/file_locking.c
++++ b/lib/locking/file_locking.c
+@@ -19,7 +19,6 @@
+ #include "activate.h"
+ #include "config.h"
+ #include "defaults.h"
+-#include "lvm-file.h"
+ #include "lvm-string.h"
+ #include "lvm-flock.h"
+ #include "lvmcache.h"
+@@ -28,7 +27,6 @@
+ #include <limits.h>
+ #include <unistd.h>
+ #include <sys/stat.h>
+-#include <sys/file.h>
+ #include <fcntl.h>
+ #include <signal.h>
+ 
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index deae6f2..6a0f0f6 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -15,18 +15,12 @@
+ #include "lib.h"
+ #include "metadata.h"
+ #include "locking.h"
+-#include "pv_map.h"
+ #include "lvm-string.h"
+ #include "toolcontext.h"
+-#include "lv_alloc.h"
+-#include "pv_alloc.h"
+ #include "display.h"
+ #include "segtype.h"
+-#include "archiver.h"
+ #include "activate.h"
+-#include "str_list.h"
+ #include "defaults.h"
+-#include "lvm-exec.h"
+ 
+ int update_cache_pool_params(struct volume_group *vg, unsigned attr,
+ 			     int passed_args,
 
 
