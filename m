@@ -1,57 +1,52 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  7 May 2014 12:19:07 +0000 (UTC)
-Subject: master - cleanup: cosmetics.
-Message-ID: <20140507121907.38312607BC@fedorahosted.org>
+Date: Wed,  7 May 2014 12:19:11 +0000 (UTC)
+Subject: master - clenaup: drop unused assigns
+Message-ID: <20140507121911.5D7CD6030E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
-Commit:        d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
-Parent:        d88fab8d3a64cb492c808a50d247686febedc9e3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9845f8c7674892d7760526b36e45c6425bd1950f
+Commit:        9845f8c7674892d7760526b36e45c6425bd1950f
+Parent:        9bccaf7ae40ca0d17e5d1b65f7c7aaf2d78eb2b9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 7 11:44:33 2014 +0200
+AuthorDate:    Wed May 7 11:58:43 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed May 7 14:17:46 2014 +0200
 
-cleanup: cosmetics.
+clenaup: drop unused assigns
 
-Initialized attrs so analyzers are less confused
-(since currently our method calls should always initialize attrs on
-return).
 ---
- lib/metadata/snapshot_manip.c |    2 +-
- libdm/libdm-common.c          |    3 ++-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ lib/metadata/cache_manip.c |    2 +-
+ tools/lvcreate.c           |    1 -
+ 2 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index a0a3e3c..5df0f98 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -41,7 +41,7 @@ int lv_is_cow(const struct logical_volume *lv)
- static uint64_t _cow_extra_chunks(struct cmd_context *cmd, uint64_t n_chunks)
- {
- 	const struct segment_type *segtype;
--	unsigned attrs;
-+	unsigned attrs = 0;
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 6a0f0f6..0e2569c 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -123,7 +123,7 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool,
+ 		return_NULL;
  
- 	if (activation() &&
- 	    (segtype = get_segtype_from_string(cmd, "snapshot")) &&
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index f404c63..bb793e3 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -1907,7 +1907,8 @@ static int _device_has_mounted_fs(char *buffer, unsigned major, unsigned minor,
- 	char kernel_dev_name[PATH_MAX];
+ 	cache_lv = origin;
+-	if (!(origin = insert_layer_for_lv(cmd, cache_lv, CACHE, "_corig")))
++	if (!insert_layer_for_lv(cmd, cache_lv, CACHE, "_corig"))
+ 		return_NULL;
  
- 	if ((major == data->maj) && (minor == data->min)) {
--		if (!dm_device_get_name(major, minor, 1, kernel_dev_name, PATH_MAX)) {
-+		if (!dm_device_get_name(major, minor, 1, kernel_dev_name,
-+					sizeof(kernel_dev_name))) {
- 			stack;
- 			*kernel_dev_name = '\0';
- 		}
+ 	seg = first_seg(cache_lv);
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 0e009b1..2156265 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -323,7 +323,6 @@ static int _determine_cache_argument(struct volume_group *vg,
+ 		lp->poolmetadataspare = arg_int_value(vg->cmd,
+ 						      poolmetadataspare_ARG,
+ 						      DEFAULT_POOL_METADATA_SPARE);
+-		lp->origin = lp->origin;
+ 	}
+ 
+ 	return 1;
 
 
