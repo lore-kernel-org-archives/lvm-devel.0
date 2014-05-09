@@ -1,64 +1,68 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Fri, 30 May 2014 22:29:25 +0000 (UTC)
-Subject: master - test: use direct I/O when injecting bad data into RAID images
-Message-ID: <20140530222925.4B51F60F81@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  9 May 2014 06:56:39 +0000 (UTC)
+Subject: dev-prajnoha-selout - cleanup: missed conversion to dm_malloc/free usage
+Message-ID: <20140509065639.64F1260774@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4454a580dfd966d0cd132a2fd7d0cbb0df7e46a6
-Commit:        4454a580dfd966d0cd132a2fd7d0cbb0df7e46a6
-Parent:        03621692774e33357acc11ad23d4c8d1faffe971
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Fri May 30 17:26:10 2014 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Fri May 30 17:26:10 2014 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9bccaf7ae40ca0d17e5d1b65f7c7aaf2d78eb2b9
+Commit:        9bccaf7ae40ca0d17e5d1b65f7c7aaf2d78eb2b9
+Parent:        d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 7 11:54:12 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed May 7 14:17:46 2014 +0200
 
-test: use direct I/O when injecting bad data into RAID images
+cleanup: missed conversion to dm_malloc/free usage
 
-When directly corrupting RAID images for the purpose of testing,
-we must use direct I/O (or a 'sync' after the 'dd') to ensure that
-the writes are not caught in the buffer cache in a way that is not
-reachable by the top-level RAID device.
+Few missed unconverted dm_malloc/free calls.
 ---
- test/shell/lvchange-syncaction-raid.sh |   16 +++++-----------
- 1 files changed, 5 insertions(+), 11 deletions(-)
+ daemons/clvmd/lvm-functions.c |    9 ++++-----
+ 1 files changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvchange-syncaction-raid.sh b/test/shell/lvchange-syncaction-raid.sh
-index a27b885..b5fdfb4 100644
---- a/test/shell/lvchange-syncaction-raid.sh
-+++ b/test/shell/lvchange-syncaction-raid.sh
-@@ -13,7 +13,10 @@
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index e36e206..9fd71e8 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -236,7 +236,7 @@ void destroy_lvhash(void)
+ 		if ((status = sync_unlock(resource, lvi->lock_id)))
+ 			DEBUGLOG("unlock_all. unlock failed(%d): %s\n",
+ 				 status,  strerror(errno));
+-		free(lvi);
++		dm_free(lvi);
+ 	}
  
- . lib/test
- 
--aux have_raid 1 5 0 || skip
-+# Proper mismatch count 1.5.2+ upstream, 1.3.5 < x < 1.4.0 in RHEL6
-+aux have_raid 1 3 5 &&
-+  ! aux have_raid 1 4 0 ||
-+  aux have_raid 1 5 2 || skip
- aux prepare_vg 3
- 
- lvcreate -n $lv1 $vg -l1 --type raid1
-@@ -22,16 +25,7 @@ START=$(get pv_field "$dev2" pe_start --units 1k)
- METASIZE=$(get lv_field $vg/${lv1}_rmeta_1 size -a --units 1k)
- SEEK=$((${START%\.00k} + ${METASIZE%\.00k}))
- # Overwrite some portion of  _rimage_1
--dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK
--
--lvchange --syncaction check $vg/$lv1
--
--# hmmm it's still in 'dd' buffer and not on real disk ??
--# anyway skip over with 'should'
--should check lv_field $vg/$lv1 raid_mismatch_count "128"
--
--# Ensure it's all on disk now
--sync
-+dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK oflag=direct
- 
- lvchange --syncaction check $vg/$lv1
- check lv_field $vg/$lv1 raid_mismatch_count "128"
+ 	dm_hash_destroy(lv_hash);
+@@ -286,8 +286,7 @@ static int hold_lock(char *resource, int mode, int flags)
+ 				 strerror(errno));
+ 		errno = saved_errno;
+ 	} else {
+-		lvi = malloc(sizeof(struct lv_info));
+-		if (!lvi) {
++		if (!(lvi = dm_malloc(sizeof(struct lv_info)))) {
+ 			errno = ENOMEM;
+ 			return -1;
+ 		}
+@@ -296,7 +295,7 @@ static int hold_lock(char *resource, int mode, int flags)
+ 		status = sync_lock(resource, mode, flags & ~LCKF_CONVERT, &lvi->lock_id);
+ 		saved_errno = errno;
+ 		if (status) {
+-			free(lvi);
++			dm_free(lvi);
+ 			DEBUGLOG("hold_lock. lock at %d failed: %s\n", mode,
+ 				 strerror(errno));
+ 		} else
+@@ -326,7 +325,7 @@ static int hold_unlock(char *resource)
+ 	saved_errno = errno;
+ 	if (!status) {
+ 		remove_info(resource);
+-		free(lvi);
++		dm_free(lvi);
+ 	} else {
+ 		DEBUGLOG("hold_unlock. unlock failed(%d): %s\n", status,
+ 			 strerror(errno));
 
 
