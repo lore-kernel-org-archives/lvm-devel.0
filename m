@@ -1,38 +1,43 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  9 May 2014 06:56:05 +0000 (UTC)
-Subject: dev-prajnoha-selout - systemd: use lvm binary insetad of command symlink in lvm2-pvscan.service
-Message-ID: <20140509065605.AFF5961483@fedorahosted.org>
+Date: Fri,  9 May 2014 06:56:43 +0000 (UTC)
+Subject: dev-prajnoha-selout - cleanup: constify pointers
+Message-ID: <20140509065643.BEB1360C5A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=239ba5bb04deccee83aa603efee11a9670f6f3fe
-Commit:        239ba5bb04deccee83aa603efee11a9670f6f3fe
-Parent:        81b096af34283cf91205b0e63f598ca92d625051
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Apr 30 15:21:25 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Apr 30 15:21:25 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2cc02c570e489426568e57ad0b8fdbd9eedccf87
+Commit:        2cc02c570e489426568e57ad0b8fdbd9eedccf87
+Parent:        9845f8c7674892d7760526b36e45c6425bd1950f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 7 13:09:59 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed May 7 14:17:46 2014 +0200
 
-systemd: use lvm binary insetad of command symlink in lvm2-pvscan.service
+cleanup: constify pointers
 
 ---
- scripts/lvm2_pvscan_systemd_red_hat at .service.in |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/device/dev-type.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/scripts/lvm2_pvscan_systemd_red_hat at .service.in b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-index cdbbe40..7d3b291 100644
---- a/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-+++ b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-@@ -11,5 +11,5 @@ Conflicts=shutdown.target
- [Service]
- Type=oneshot
- RemainAfterExit=yes
--ExecStart=@sbindir@/pvscan --cache --activate ay %i
--ExecStop=@sbindir@/pvscan --cache %i
-+ExecStart=@sbindir@/lvm pvscan --cache --activate ay %i
-+ExecStop=@sbindir@/lvm pvscan --cache %i
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 9d610d4..e0cae45 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -460,9 +460,9 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
+ 		       uint32_t types_to_exclude, uint32_t types_no_prompt,
+ 		       int yes, force_t force)
+ {
+-	static const char _msg_failed_offset[] = "Failed to get offset of the %s signature on %s.";
+-	static const char _msg_failed_length[] = "Failed to get length of the %s signature on %s.";
+-	static const char _msg_wiping[] = "Wiping %s signature on %s.";
++	static const char const _msg_failed_offset[] = "Failed to get offset of the %s signature on %s.";
++	static const char const _msg_failed_length[] = "Failed to get length of the %s signature on %s.";
++	static const char const _msg_wiping[] = "Wiping %s signature on %s.";
+ 	const char *offset = NULL, *type = NULL, *magic = NULL,
+ 		   *usage = NULL, *label = NULL, *uuid = NULL;
+ 	loff_t offset_value;
 
 
