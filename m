@@ -1,77 +1,103 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  9 May 2014 06:57:06 +0000 (UTC)
-Subject: dev-prajnoha-selout - selout: make regex selection to work without quotes and recognize regex op before equal op
-Message-ID: <20140509065706.D446D60DED@fedorahosted.org>
+Date: Fri,  9 May 2014 06:56:12 +0000 (UTC)
+Subject: dev-prajnoha-selout - signals: Add init_signals.
+Message-ID: <20140509065612.0AE1560774@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c08ea56c7b454a176ae50efff335f5799b08fc32
-Commit:        c08ea56c7b454a176ae50efff335f5799b08fc32
-Parent:        f97385a31e1ded0e4a198fc40ddb9e40da383445
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Apr 30 12:29:48 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri May 9 08:51:00 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=09064cc2db00a5da593aa9be61572aa643e4b035
+Commit:        09064cc2db00a5da593aa9be61572aa643e4b035
+Parent:        2eed136f0f5d9eaa65d421b2b93b6405fd7c6f08
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu May 1 20:31:19 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu May 1 20:31:19 2014 +0100
 
-selout: make regex selection to work without quotes and recognize regex op before equal op
+signals: Add init_signals.
 
 ---
- libdm/libdm-report.c |   22 +++++++++++++++-------
- 1 files changed, 15 insertions(+), 7 deletions(-)
+ lib/locking/file_locking.c |   17 ++---------------
+ lib/misc/lvm-signal.c      |   17 +++++++++++++++++
+ lib/misc/lvm-signal.h      |    1 +
+ 3 files changed, 20 insertions(+), 15 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 47f4d4f..aceb310 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -87,15 +87,20 @@ struct op_def {
- #define FLD_CMP_LT	0x00008000
- #define FLD_CMP_REGEX	0x00010000
+diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
+index 2f6716d..37fa0eb 100644
+--- a/lib/locking/file_locking.c
++++ b/lib/locking/file_locking.c
+@@ -33,10 +33,6 @@
  
-+/*
-+ * When defining operators, always define longer one before
-+ * shorter one if one is a prefix of another!
-+ * (e.g. =~ comes before =)
-+ */
- static struct op_def _op_cmp[] = {
-+	{ "=~", FLD_CMP_REGEX, "Matching regular expression" },
-+	{ "!~", FLD_CMP_REGEX|FLD_CMP_NOT, "Not matching regular expression" },
- 	{ "=", FLD_CMP_EQUAL, "Equal to" },
- 	{ "!=", FLD_CMP_NOT|FLD_CMP_EQUAL, "Not equal" },
- 	{ ">=", FLD_CMP_GT|FLD_CMP_EQUAL, "Greater than or equal to" },
- 	{ ">", FLD_CMP_GT, "Greater than" },
- 	{ "<=", FLD_CMP_LT|FLD_CMP_EQUAL, "Lesser than or equal to" },
- 	{ "<", FLD_CMP_LT, "Lesser than" },
--	{ "=~", FLD_CMP_REGEX, "Matching regular expression" },
--	{ "!~", FLD_CMP_REGEX|FLD_CMP_NOT, "Not matching regular expression" },
- 	{ NULL, 0, NULL }
- };
+ static char _lock_dir[PATH_MAX];
  
-@@ -1145,15 +1150,18 @@ static const char *_tok_regex(const struct dm_report_field_type *ft,
- 		case '(': c = ')'; break;
- 		case '{': c = '}'; break;
- 		case '[': c = ']'; break;
--		default:  c = *s;
-+		default:  c = 0;
- 	}
+-static sig_t _oldhandler;
+-static sigset_t _fullsigset, _intsigset;
+-static volatile sig_atomic_t _handler_installed;
+-
+ static void _fin_file_locking(void)
+ {
+ 	release_flocks(1);
+@@ -163,17 +159,8 @@ int init_file_locking(struct locking_type *locking, struct cmd_context *cmd,
+ 	if ((access(_lock_dir, R_OK | W_OK | X_OK) == -1) && (errno == EROFS))
+ 		return 0;
  
- 	s = _tok_string(s + 1, begin, end, c);
--	if (!*s) {
--		log_error("Missing end quote of regex for field %s", ft->id);
--		return NULL;
-+	if ((c = *s)) {
-+		if (c && (c != ')') && (c != '}') && (c != ']'))
-+		{
-+			log_error("Missing end quote of regex for field %s", ft->id);
-+			return NULL;
-+		}
-+		s++;
- 	}
--	s++;
+-	if (sigfillset(&_intsigset) || sigfillset(&_fullsigset)) {
+-		log_sys_error_suppress(suppress_messages, "sigfillset",
+-				       "init_file_locking");
+-		return 0;
+-	}
+-
+-	if (sigdelset(&_intsigset, SIGINT)) {
+-		log_sys_error_suppress(suppress_messages, "sigdelset",
+-				       "init_file_locking");
+-		return 0;
+-	}
++	if (!init_signals(suppress_messages))
++		return_0;
  
- 	*flags |= DM_REPORT_FIELD_TYPE_STRING;
+ 	return 1;
+ }
+diff --git a/lib/misc/lvm-signal.c b/lib/misc/lvm-signal.c
+index f2d6d3b..690733b 100644
+--- a/lib/misc/lvm-signal.c
++++ b/lib/misc/lvm-signal.c
+@@ -62,6 +62,23 @@ void install_ctrl_c_handler(void)
+ 	siginterrupt(SIGINT, 1);
+ }
  
++int init_signals(int suppress_messages)
++{
++	if (sigfillset(&_intsigset) || sigfillset(&_fullsigset)) {
++		log_sys_error_suppress(suppress_messages, "sigfillset",
++				       "init_signals");
++		return 0;
++	}
++
++	if (sigdelset(&_intsigset, SIGINT)) {
++		log_sys_error_suppress(suppress_messages, "sigdelset",
++				       "init_signals");
++		return 0;
++	}
++
++	return 1;
++}
++
+ static void _catch_sigint(int unused __attribute__((unused)))
+ {
+ 	_sigint_caught = 1;
+diff --git a/lib/misc/lvm-signal.h b/lib/misc/lvm-signal.h
+index f2e6141..3fb55f3 100644
+--- a/lib/misc/lvm-signal.h
++++ b/lib/misc/lvm-signal.h
+@@ -18,6 +18,7 @@
+ 
+ void remove_ctrl_c_handler(void);
+ void install_ctrl_c_handler(void);
++int init_signals(int suppress_messages);
+ 
+ void sigint_allow(void);
+ int sigint_caught(void);
 
 
