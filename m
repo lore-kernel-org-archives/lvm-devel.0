@@ -1,62 +1,44 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 7 May 2014 08:33:42 -0400 (EDT)
-Subject: master - coverity: check for profile
-In-Reply-To: <20140507121858.B603F607BC@fedorahosted.org>
-References: <20140507121858.B603F607BC@fedorahosted.org>
-Message-ID: <1880427768.1808643.1399466022604.JavaMail.zimbra@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  9 May 2014 06:56:03 +0000 (UTC)
+Subject: dev-prajnoha-selout - systemd: make sysinit.target to pull in lvm2-lvmetad.socket, not sockets.target
+Message-ID: <20140509065603.984AD61483@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 05/07/2014 02:19 PM, Zdenek Kabelac wrote:> -	str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile);
-> +	if (!(str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile))) {
-> +		log_error(INTERNAL_ERROR "Cannot find profile.");
-> +		return 0;
-> +	}
->  
->  	if (!strcasecmp(str, "generic"))
->  		chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE;
-> diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-> index 78231a2..c1c90b4 100644
-> --- a/lib/metadata/thin_manip.c
-> +++ b/lib/metadata/thin_manip.c
-> @@ -375,7 +375,10 @@ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profi
->  
->  	if (!(passed_args & PASS_ARG_CHUNK_SIZE)) {
->  		if (!(*chunk_size = find_config_tree_int(cmd, allocation_thin_pool_chunk_size_CFG, profile) * 2)) {
-> -			str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile);
-> +			if (!(str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile))) {
-> +				log_error(INTERNAL_ERROR "Could not find profile.");
-> +				return 0;
-> +			}
->  			if (!strcasecmp(str, "generic"))
->  				*chunk_size_calc_method = THIN_CHUNK_SIZE_CALC_METHOD_GENERIC;
->  			else if (!strcasecmp(str, "performance"))
-> @@ -397,7 +400,10 @@ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profi
->  	}
->  
->  	if (!(passed_args & PASS_ARG_DISCARDS)) {
-> -		str = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, profile);
-> +		if (!(str = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, profile))) {
-> +			log_error(INTERNAL_ERROR "Could not find profile.");
-> +			return 0;
-> +		}
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=81b096af34283cf91205b0e63f598ca92d625051
+Commit:        81b096af34283cf91205b0e63f598ca92d625051
+Parent:        4e559103d51e02c0d64d9cf88cee11d762feb65e
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Apr 30 14:52:10 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Apr 30 14:52:10 2014 +0200
 
+systemd: make sysinit.target to pull in lvm2-lvmetad.socket, not sockets.target
 
-Well, the message is not quite correct since it's not just about profile.
-The actual sequence here when looking for the config value is:
- 1 - --config
- 2 - --profile
- 3 - profile directly attached to VG/LV
- 4 - lvm.conf (including tag configs)
- 5 - default
+The sysinit.target is ordered even before sockets.target and there
+may be situations in which the lvmetad is needed early, for example
+in rescue.target to activate some LVs on which mountpoints reside.
+Also, like in the case of rescue.target, the sockets.target is not
+pulled in (unless some other service pulls it in explicitly).
 
-(And default is always defined for thin_pool_chunk_size_policy and thin_pool_discards.
-So actually, the error path there is never hit in real...)
+See also: https://bugzilla.redhat.com/show_bug.cgi?id=1087586#c26
+for the summary of the problem.
+---
+ scripts/lvm2_lvmetad_systemd_red_hat.socket.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
--- 
-Peter
+diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
+index 9a46f50..071fd64 100644
+--- a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
++++ b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
+@@ -8,4 +8,4 @@ ListenStream=@DEFAULT_RUN_DIR@/lvmetad.socket
+ SocketMode=0600
+ 
+ [Install]
+-WantedBy=sockets.target
++WantedBy=sysinit.target
 
 
