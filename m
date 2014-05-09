@@ -1,51 +1,96 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 26 May 2014 21:32:24 +0000 (UTC)
-Subject: master - cleanup: internal error for impossible path
-Message-ID: <20140526213224.EB6FB60DC8@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  9 May 2014 06:56:35 +0000 (UTC)
+Subject: dev-prajnoha-selout - cleanup: drop uneeded headers
+Message-ID: <20140509065635.2C4C060774@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=49521f4e563fe0a19e70413f740e831f5fd16e16
-Commit:        49521f4e563fe0a19e70413f740e831f5fd16e16
-Parent:        965592340d04f02096b800107591290c1ad44443
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d88fab8d3a64cb492c808a50d247686febedc9e3
+Commit:        d88fab8d3a64cb492c808a50d247686febedc9e3
+Parent:        bcd6deea18673cedfa833fc40399949955e7f834
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 23 23:53:04 2014 +0200
+AuthorDate:    Wed May 7 10:50:06 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 26 22:57:28 2014 +0200
+CommitterDate: Wed May 7 14:17:45 2014 +0200
 
-cleanup: internal error for impossible path
+cleanup: drop uneeded headers
 
-Add 'default' path for impossible execution code path.
 ---
- lib/device/dev-md.c |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ daemons/clvmd/clvmd-singlenode.c |    1 -
+ lib/locking/external_locking.c   |    1 -
+ lib/locking/file_locking.c       |    2 --
+ lib/metadata/cache_manip.c       |    6 ------
+ 4 files changed, 0 insertions(+), 10 deletions(-)
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index d6a7609..91cc322 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -60,7 +60,7 @@ typedef enum {
+diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
+index e65ab28..e6d2b0d 100644
+--- a/daemons/clvmd/clvmd-singlenode.c
++++ b/daemons/clvmd/clvmd-singlenode.c
+@@ -19,7 +19,6 @@
+ #include "locking.h"
+ #include "clvm.h"
+ #include "clvmd-comms.h"
+-#include "lvm-functions.h"
+ #include "clvmd.h"
  
- static uint64_t _v1_sb_offset(uint64_t size, md_minor_version_t minor_version)
- {
--	uint64_t uninitialized_var(sb_offset);
-+	uint64_t sb_offset;
+ #include <sys/un.h>
+diff --git a/lib/locking/external_locking.c b/lib/locking/external_locking.c
+index 1e669bb..bc597ff 100644
+--- a/lib/locking/external_locking.c
++++ b/lib/locking/external_locking.c
+@@ -19,7 +19,6 @@
+ #include "sharedlib.h"
+ #include "toolcontext.h"
+ #include "activate.h"
+-#include "locking.h"
  
- 	switch(minor_version) {
- 	case MD_MINOR_V0:
-@@ -72,6 +72,10 @@ static uint64_t _v1_sb_offset(uint64_t size, md_minor_version_t minor_version)
- 	case MD_MINOR_V2:
- 		sb_offset = 4 * 2;
- 		break;
-+	default:
-+		log_warn(INTERNAL_ERROR "WARNING: Unknown minor version %d.",
-+			 minor_version);
-+		return 0;
- 	}
- 	sb_offset <<= SECTOR_SHIFT;
+ static void *_locking_lib = NULL;
+ static void (*_reset_fn) (void) = NULL;
+diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
+index d79d7a9..10431ab 100644
+--- a/lib/locking/file_locking.c
++++ b/lib/locking/file_locking.c
+@@ -19,7 +19,6 @@
+ #include "activate.h"
+ #include "config.h"
+ #include "defaults.h"
+-#include "lvm-file.h"
+ #include "lvm-string.h"
+ #include "lvm-flock.h"
+ #include "lvmcache.h"
+@@ -28,7 +27,6 @@
+ #include <limits.h>
+ #include <unistd.h>
+ #include <sys/stat.h>
+-#include <sys/file.h>
+ #include <fcntl.h>
+ #include <signal.h>
  
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index deae6f2..6a0f0f6 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -15,18 +15,12 @@
+ #include "lib.h"
+ #include "metadata.h"
+ #include "locking.h"
+-#include "pv_map.h"
+ #include "lvm-string.h"
+ #include "toolcontext.h"
+-#include "lv_alloc.h"
+-#include "pv_alloc.h"
+ #include "display.h"
+ #include "segtype.h"
+-#include "archiver.h"
+ #include "activate.h"
+-#include "str_list.h"
+ #include "defaults.h"
+-#include "lvm-exec.h"
+ 
+ int update_cache_pool_params(struct volume_group *vg, unsigned attr,
+ 			     int passed_args,
 
 
