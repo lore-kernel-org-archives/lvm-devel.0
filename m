@@ -1,68 +1,52 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  9 May 2014 06:56:39 +0000 (UTC)
-Subject: dev-prajnoha-selout - cleanup: missed conversion to dm_malloc/free usage
-Message-ID: <20140509065639.64F1260774@fedorahosted.org>
+Date: Fri,  9 May 2014 06:56:41 +0000 (UTC)
+Subject: dev-prajnoha-selout - clenaup: drop unused assigns
+Message-ID: <20140509065641.9B53560C5A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9bccaf7ae40ca0d17e5d1b65f7c7aaf2d78eb2b9
-Commit:        9bccaf7ae40ca0d17e5d1b65f7c7aaf2d78eb2b9
-Parent:        d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9845f8c7674892d7760526b36e45c6425bd1950f
+Commit:        9845f8c7674892d7760526b36e45c6425bd1950f
+Parent:        9bccaf7ae40ca0d17e5d1b65f7c7aaf2d78eb2b9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 7 11:54:12 2014 +0200
+AuthorDate:    Wed May 7 11:58:43 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed May 7 14:17:46 2014 +0200
 
-cleanup: missed conversion to dm_malloc/free usage
+clenaup: drop unused assigns
 
-Few missed unconverted dm_malloc/free calls.
 ---
- daemons/clvmd/lvm-functions.c |    9 ++++-----
- 1 files changed, 4 insertions(+), 5 deletions(-)
+ lib/metadata/cache_manip.c |    2 +-
+ tools/lvcreate.c           |    1 -
+ 2 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index e36e206..9fd71e8 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -236,7 +236,7 @@ void destroy_lvhash(void)
- 		if ((status = sync_unlock(resource, lvi->lock_id)))
- 			DEBUGLOG("unlock_all. unlock failed(%d): %s\n",
- 				 status,  strerror(errno));
--		free(lvi);
-+		dm_free(lvi);
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 6a0f0f6..0e2569c 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -123,7 +123,7 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool,
+ 		return_NULL;
+ 
+ 	cache_lv = origin;
+-	if (!(origin = insert_layer_for_lv(cmd, cache_lv, CACHE, "_corig")))
++	if (!insert_layer_for_lv(cmd, cache_lv, CACHE, "_corig"))
+ 		return_NULL;
+ 
+ 	seg = first_seg(cache_lv);
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 0e009b1..2156265 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -323,7 +323,6 @@ static int _determine_cache_argument(struct volume_group *vg,
+ 		lp->poolmetadataspare = arg_int_value(vg->cmd,
+ 						      poolmetadataspare_ARG,
+ 						      DEFAULT_POOL_METADATA_SPARE);
+-		lp->origin = lp->origin;
  	}
  
- 	dm_hash_destroy(lv_hash);
-@@ -286,8 +286,7 @@ static int hold_lock(char *resource, int mode, int flags)
- 				 strerror(errno));
- 		errno = saved_errno;
- 	} else {
--		lvi = malloc(sizeof(struct lv_info));
--		if (!lvi) {
-+		if (!(lvi = dm_malloc(sizeof(struct lv_info)))) {
- 			errno = ENOMEM;
- 			return -1;
- 		}
-@@ -296,7 +295,7 @@ static int hold_lock(char *resource, int mode, int flags)
- 		status = sync_lock(resource, mode, flags & ~LCKF_CONVERT, &lvi->lock_id);
- 		saved_errno = errno;
- 		if (status) {
--			free(lvi);
-+			dm_free(lvi);
- 			DEBUGLOG("hold_lock. lock at %d failed: %s\n", mode,
- 				 strerror(errno));
- 		} else
-@@ -326,7 +325,7 @@ static int hold_unlock(char *resource)
- 	saved_errno = errno;
- 	if (!status) {
- 		remove_info(resource);
--		free(lvi);
-+		dm_free(lvi);
- 	} else {
- 		DEBUGLOG("hold_unlock. unlock failed(%d): %s\n", status,
- 			 strerror(errno));
+ 	return 1;
 
 
