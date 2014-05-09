@@ -1,96 +1,57 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 28 May 2014 13:36:02 +0000 (UTC)
-Subject: master - tests: raid syncaction activation race
-Message-ID: <20140528133602.7D12760D38@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  9 May 2014 06:56:37 +0000 (UTC)
+Subject: dev-prajnoha-selout - cleanup: cosmetics.
+Message-ID: <20140509065637.47ABF60774@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba3e6e7c323a48b64720f7a182d5c8eca0a5613c
-Commit:        ba3e6e7c323a48b64720f7a182d5c8eca0a5613c
-Parent:        a67774c1fa315e248504a51804cef9f9bc709b2e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
+Commit:        d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
+Parent:        d88fab8d3a64cb492c808a50d247686febedc9e3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 28 15:23:46 2014 +0200
+AuthorDate:    Wed May 7 11:44:33 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 28 15:33:41 2014 +0200
+CommitterDate: Wed May 7 14:17:46 2014 +0200
 
-tests: raid syncaction activation race
+cleanup: cosmetics.
 
-Demonstrace problem of syncaction being called right after activation.
+Initialized attrs so analyzers are less confused
+(since currently our method calls should always initialize attrs on
+return).
 ---
- test/shell/lvchange-syncaction-raid.sh |   63 ++++++++++++++++++++++++++++++++
- 1 files changed, 63 insertions(+), 0 deletions(-)
+ lib/metadata/snapshot_manip.c |    2 +-
+ libdm/libdm-common.c          |    3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvchange-syncaction-raid.sh b/test/shell/lvchange-syncaction-raid.sh
-new file mode 100644
-index 0000000..a27b885
---- /dev/null
-+++ b/test/shell/lvchange-syncaction-raid.sh
-@@ -0,0 +1,63 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# test activation race for raid's --syncaction check
-+
-+. lib/test
-+
-+aux have_raid 1 5 0 || skip
-+aux prepare_vg 3
-+
-+lvcreate -n $lv1 $vg -l1 --type raid1
-+
-+START=$(get pv_field "$dev2" pe_start --units 1k)
-+METASIZE=$(get lv_field $vg/${lv1}_rmeta_1 size -a --units 1k)
-+SEEK=$((${START%\.00k} + ${METASIZE%\.00k}))
-+# Overwrite some portion of  _rimage_1
-+dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK
-+
-+lvchange --syncaction check $vg/$lv1
-+
-+# hmmm it's still in 'dd' buffer and not on real disk ??
-+# anyway skip over with 'should'
-+should check lv_field $vg/$lv1 raid_mismatch_count "128"
-+
-+# Ensure it's all on disk now
-+sync
-+
-+lvchange --syncaction check $vg/$lv1
-+check lv_field $vg/$lv1 raid_mismatch_count "128"
-+
-+# Let's deactivate
-+lvchange -an $vg/$lv1
-+
-+# Slow down write by 100ms
-+aux delay_dev "$dev2" 0 100
-+lvchange -ay $vg/$lv1
-+# noone has it open and target is read & running
-+dmsetup info -c
-+
-+#sleep 10 < "$DM_DEV_DIR/$vg/$lv1" &
-+# "check" should find discrepancies but not change them
-+# 'lvs' should show results
-+
-+# FIXME
-+# this looks like some race with 'write' during activation
-+# and syncaction...
-+# For now it fails with:
-+# device-mapper: message ioctl on  failed: Device or resource busy
-+#
-+lvchange --syncaction check $vg/$lv1
-+
-+aux enable_dev "$dev2"
-+lvs -o+raid_mismatch_count -a $vg
-+
-+vgremove -ff $vg
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index a0a3e3c..5df0f98 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -41,7 +41,7 @@ int lv_is_cow(const struct logical_volume *lv)
+ static uint64_t _cow_extra_chunks(struct cmd_context *cmd, uint64_t n_chunks)
+ {
+ 	const struct segment_type *segtype;
+-	unsigned attrs;
++	unsigned attrs = 0;
+ 
+ 	if (activation() &&
+ 	    (segtype = get_segtype_from_string(cmd, "snapshot")) &&
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index f404c63..bb793e3 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1907,7 +1907,8 @@ static int _device_has_mounted_fs(char *buffer, unsigned major, unsigned minor,
+ 	char kernel_dev_name[PATH_MAX];
+ 
+ 	if ((major == data->maj) && (minor == data->min)) {
+-		if (!dm_device_get_name(major, minor, 1, kernel_dev_name, PATH_MAX)) {
++		if (!dm_device_get_name(major, minor, 1, kernel_dev_name,
++					sizeof(kernel_dev_name))) {
+ 			stack;
+ 			*kernel_dev_name = '\0';
+ 		}
 
 
