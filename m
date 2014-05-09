@@ -1,480 +1,250 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  9 May 2014 06:56:09 +0000 (UTC)
-Subject: dev-prajnoha-selout - signals: Move sigint handling out to lvm-signal.
-Message-ID: <20140509065609.E801B60774@fedorahosted.org>
+Date: Fri,  9 May 2014 06:56:52 +0000 (UTC)
+Subject: dev-prajnoha-selout - selout: add supporting infrastucture for token parsing in report selections
+Message-ID: <20140509065652.2D56B60F95@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2eed136f0f5d9eaa65d421b2b93b6405fd7c6f08
-Commit:        2eed136f0f5d9eaa65d421b2b93b6405fd7c6f08
-Parent:        29a3fbf067e1685ae7e202959a414e4b13f547c7
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu May 1 20:07:17 2014 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu May 1 20:07:17 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=55a278edb71f3fbe9b2c77e5106cea14e66e1b39
+Commit:        55a278edb71f3fbe9b2c77e5106cea14e66e1b39
+Parent:        6ab77a026b93fb1e10a1c10a5ae3d4ff527cf0d9
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Apr 28 11:56:48 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri May 9 08:51:00 2014 +0200
 
-signals: Move sigint handling out to lvm-signal.
+selout: add supporting infrastucture for token parsing in report selections
 
 ---
- WHATS_NEW               |    1 +
- lib/cache/lvmetad.c     |    1 +
- lib/display/display.c   |    2 +
- lib/locking/locking.c   |  134 +++-------------------------------------------
- lib/locking/locking.h   |    6 --
- lib/metadata/lv_manip.c |    1 +
- lib/metadata/metadata.c |    1 +
- lib/misc/lvm-flock.h    |    6 +-
- lib/misc/lvm-signal.c   |  123 +++++++++++++++++++++++++++++++++++++++++++
- lib/misc/lvm-signal.h   |   12 ++++-
- tools/tools.h           |    1 +
- 11 files changed, 153 insertions(+), 135 deletions(-)
+ libdm/libdm-report.c |  213 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 213 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 456f132..37225fe 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.107 - 
- ==================================
-+  Separate signal handling and flock code out into lib/misc.
-   Don't start dmeventd checking seg_monitor and monitoring is disabled.
-   Catch CTRL-c during pvremove prompts.
-   Show correct availability status for snapshot origin in lvscan.
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index d0c4a4d..3470c66 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -21,6 +21,7 @@
- #include "lvmetad-client.h"
- #include "format-text.h" // TODO for disk_locn, used as a DA representation
- #include "crc.h"
-+#include "lvm-signal.h"
- 
- #define SCAN_TIMEOUT_SECONDS	80
- #define MAX_RESCANS		10	/* Maximum number of times to scan all PVs and retry if the daemon returns a token mismatch error */
-diff --git a/lib/display/display.c b/lib/display/display.c
-index b83bb59..b808f25 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -20,6 +20,8 @@
- #include "toolcontext.h"
- #include "segtype.h"
- #include "defaults.h"
-+#include "lvm-signal.h"
-+
- #include <stdarg.h>
- 
- #define SIZE_BUF 128
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index b5250c1..673713a 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -22,148 +22,25 @@
- #include "memlock.h"
- #include "defaults.h"
- #include "lvmcache.h"
-+#include "lvm-signal.h"
- 
- #include <assert.h>
--#include <signal.h>
- #include <sys/stat.h>
- #include <limits.h>
- #include <unistd.h>
- 
- static struct locking_type _locking;
--static sigset_t _oldset;
- 
- static int _vg_lock_count = 0;		/* Number of locks held */
- static int _vg_write_lock_held = 0;	/* VG write lock held? */
--static int _signals_blocked = 0;
- static int _blocking_supported = 0;
- 
--static volatile sig_atomic_t _sigint_caught = 0;
--static volatile sig_atomic_t _handler_installed;
--static struct sigaction _oldhandler;
--static int _oldmasked;
--
- typedef enum {
-         LV_NOOP,
-         LV_SUSPEND,
-         LV_RESUME
- } lv_operation_t;
- 
--static void _catch_sigint(int unused __attribute__((unused)))
--{
--	_sigint_caught = 1;
--}
--
--int sigint_caught(void) {
--	if (_sigint_caught)
--		log_error("Interrupted...");
--
--	return _sigint_caught;
--}
--
--void sigint_clear(void)
--{
--	_sigint_caught = 0;
--}
--
--/*
-- * Temporarily allow keyboard interrupts to be intercepted and noted;
-- * saves interrupt handler state for sigint_restore().  Users should
-- * use the sigint_caught() predicate to check whether interrupt was
-- * requested and act appropriately.  Interrupt flags are never
-- * cleared automatically by this code, but the tools clear the flag
-- * before running each command in lvm_run_command().  All other places
-- * where the flag needs to be cleared need to call sigint_clear().
-- */
--
--void sigint_allow(void)
--{
--	struct sigaction handler;
--	sigset_t sigs;
--
--	/*
--	 * Do not overwrite the backed-up handler data -
--	 * just increase nesting count.
--	 */
--	if (_handler_installed) {
--		_handler_installed++;
--		return;
--	}
--
--	/* Grab old sigaction for SIGINT: shall not fail. */
--	sigaction(SIGINT, NULL, &handler);
--	handler.sa_flags &= ~SA_RESTART; /* Clear restart flag */
--	handler.sa_handler = _catch_sigint;
--
--	_handler_installed = 1;
--
--	/* Override the signal handler: shall not fail. */
--	sigaction(SIGINT, &handler, &_oldhandler);
--
--	/* Unmask SIGINT.  Remember to mask it again on restore. */
--	sigprocmask(0, NULL, &sigs);
--	if ((_oldmasked = sigismember(&sigs, SIGINT))) {
--		sigdelset(&sigs, SIGINT);
--		sigprocmask(SIG_SETMASK, &sigs, NULL);
--	}
--}
--
--void sigint_restore(void)
--{
--	if (!_handler_installed)
--		return;
--
--	if (_handler_installed > 1) {
--		_handler_installed--;
--		return;
--	}
--
--	/* Nesting count went down to 0. */
--	_handler_installed = 0;
--
--	if (_oldmasked) {
--		sigset_t sigs;
--		sigprocmask(0, NULL, &sigs);
--		sigaddset(&sigs, SIGINT);
--		sigprocmask(SIG_SETMASK, &sigs, NULL);
--	}
--
--	sigaction(SIGINT, &_oldhandler, NULL);
--}
--
--static void _block_signals(uint32_t flags __attribute__((unused)))
--{
--	sigset_t set;
--
--	if (_signals_blocked)
--		return;
--
--	if (sigfillset(&set)) {
--		log_sys_error("sigfillset", "_block_signals");
--		return;
--	}
--
--	if (sigprocmask(SIG_SETMASK, &set, &_oldset)) {
--		log_sys_error("sigprocmask", "_block_signals");
--		return;
--	}
--
--	_signals_blocked = 1;
--}
--
--static void _unblock_signals(void)
--{
--	/* Don't unblock signals while any locks are held */
--	if (!_signals_blocked || _vg_lock_count)
--		return;
--
--	if (sigprocmask(SIG_SETMASK, &_oldset, NULL)) {
--		log_sys_error("sigprocmask", "_block_signals");
--		return;
--	}
--
--	_signals_blocked = 0;
--}
--
- static void _lock_memory(struct cmd_context *cmd, lv_operation_t lv_op)
- {
- 	if (!(_locking.flags & LCK_PRE_MEMLOCK))
-@@ -182,6 +59,13 @@ static void _unlock_memory(struct cmd_context *cmd, lv_operation_t lv_op)
- 		critical_section_dec(cmd, "unlocking on resume");
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 9cd9028..150022b 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -837,6 +837,219 @@ int dm_report_object(struct dm_report *rh, void *object)
  }
  
-+static void _unblock_signals(void)
+ /*
++ * Selection parsing
++ */
++static const char * _skip_space(const char *s)
 +{
-+	/* Don't unblock signals while any locks are held */
-+	if (!_vg_lock_count)
-+		unblock_signals();
++	while (*s && isspace(*s))
++		s++;
++	return s;
 +}
 +
- void reset_locking(void)
- {
- 	int was_locked = _vg_lock_count;
-@@ -366,7 +250,7 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
- 	uint32_t lck_scope = flags & LCK_SCOPE_MASK;
- 	int ret = 0;
- 
--	_block_signals(flags);
-+	block_signals(flags);
- 	_lock_memory(cmd, lv_op);
- 
- 	assert(resource);
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index aa42138..0945aa0 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -213,10 +213,4 @@ int resume_lvs(struct cmd_context *cmd, struct dm_list *lvs);
- int revert_lvs(struct cmd_context *cmd, struct dm_list *lvs);
- int activate_lvs(struct cmd_context *cmd, struct dm_list *lvs, unsigned exclusive);
- 
--/* Interrupt handling */
--void sigint_clear(void);
--void sigint_allow(void);
--void sigint_restore(void);
--int sigint_caught(void);
--
- #endif
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 85f7a39..6817831 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -28,6 +28,7 @@
- #include "str_list.h"
- #include "defaults.h"
- #include "lvm-exec.h"
-+#include "lvm-signal.h"
- 
- typedef enum {
- 	PREFERRED,
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index e2abba7..4791c10 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -19,6 +19,7 @@
- #include "toolcontext.h"
- #include "lvm-string.h"
- #include "lvm-file.h"
-+#include "lvm-signal.h"
- #include "lvmcache.h"
- #include "lvmetad.h"
- #include "memlock.h"
-diff --git a/lib/misc/lvm-flock.h b/lib/misc/lvm-flock.h
-index 5e8aefd..3fed73e 100644
---- a/lib/misc/lvm-flock.h
-+++ b/lib/misc/lvm-flock.h
-@@ -12,11 +12,11 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- 
--#ifndef _LVM_SIGNAL_H
--#  define _LVM_SIGNAL_H
-+#ifndef _LVM_FLOCK_H
-+#define _LVM_FLOCK_H
- 
- void init_flock(struct cmd_context *cmd);
- int lock_file(const char *file, uint32_t flags);
- void release_flocks(int unlock);
- 
--#endif /* _LVM_SIGNAL_H */
-+#endif /* _LVM_FLOCK_H */
-diff --git a/lib/misc/lvm-signal.c b/lib/misc/lvm-signal.c
-index 927e839..f2d6d3b 100644
---- a/lib/misc/lvm-signal.c
-+++ b/lib/misc/lvm-signal.c
-@@ -22,6 +22,13 @@ static sig_t _oldhandler;
- static sigset_t _fullsigset, _intsigset;
- static volatile sig_atomic_t _handler_installed;
- 
-+static sigset_t _oldset;
-+static int _signals_blocked = 0;
-+static volatile sig_atomic_t _sigint_caught = 0;
-+static volatile sig_atomic_t _handler_installed2;
-+static struct sigaction _oldhandler2;
-+static int _oldmasked;
-+
- void remove_ctrl_c_handler(void)
- {
- 	siginterrupt(SIGINT, 0);
-@@ -54,3 +61,119 @@ void install_ctrl_c_handler(void)
- 	sigprocmask(SIG_SETMASK, &_intsigset, NULL);
- 	siginterrupt(SIGINT, 1);
- }
-+
-+static void _catch_sigint(int unused __attribute__((unused)))
++static int _tok_op(struct op_def *t, const char *s, const char **end,
++		   uint32_t expect)
 +{
-+	_sigint_caught = 1;
++	size_t len;
++
++	s = _skip_space(s);
++
++	for (; t->string; t++) {
++		if (expect && !(t->flags & expect))
++			continue;
++
++		len = strlen(t->string);
++		if (!strncmp(s, t->string, len)) {
++			*end = s + len;
++			return t->flags;
++		}
++	}
++
++	*end = s;
++	return 0;
 +}
 +
-+int sigint_caught(void) {
-+	if (_sigint_caught)
-+		log_error("Interrupted...");
-+
-+	return _sigint_caught;
++static int _tok_op_log(const char *s, const char **end, uint32_t expect)
++{
++	return _tok_op(_op_log, s, end, expect);
 +}
 +
-+void sigint_clear(void)
++static int _tok_op_cmp(const char *s, const char **end)
 +{
-+	_sigint_caught = 0;
++	return _tok_op(_op_cmp, s, end, 0);
 +}
 +
 +/*
-+ * Temporarily allow keyboard interrupts to be intercepted and noted;
-+ * saves interrupt handler state for sigint_restore().  Users should
-+ * use the sigint_caught() predicate to check whether interrupt was
-+ * requested and act appropriately.  Interrupt flags are never
-+ * cleared automatically by this code, but the tools clear the flag
-+ * before running each command in lvm_run_command().  All other places
-+ * where the flag needs to be cleared need to call sigint_clear().
++ * Other tokens (FIELD, VALUE, STRING, NUMBER, REGEX)
++ *     FIELD := <strings of alphabet, number and '_'>
++ *     VALUE := NUMBER | STRING
++ *     REGEX := <strings quoted by any character>
++ *     NUMBER := <strings of [0-9]> (because sort_value is unsigned)
++ *     STRING := <strings quoted by '"' or '\''>
++ *
++ * _tok_* functions
++ *
++ *   Input:
++ *     s             - a pointer to the parsed string
++ *   Output:
++ *     begin         - a pointer to the beginning of the token
++ *     end           - a pointer to the end of the token + 1
++ *                     or undefined if return value is NULL
++ *     is_float      - set if the number is a floating point number
++ *     return value  - a starting point of the next parsing
++ *                     NULL if s doesn't match with token type
++ *                     (the parsing should be terminated)
 + */
++static const char *_tok_number(const char *s,
++				const char **begin, const char **end)
 +
-+void sigint_allow(void)
 +{
-+	struct sigaction handler;
-+	sigset_t sigs;
++	int is_float = 0;
 +
-+	/*
-+	 * Do not overwrite the backed-up handler data -
-+	 * just increase nesting count.
-+	 */
-+	if (_handler_installed2) {
-+		_handler_installed2++;
-+		return;
-+	}
++	*begin = s;
++	while (*s && ((!is_float && *s=='.' && (is_float=1)) || isdigit(*s)))
++		s++;
++	*end = s;
 +
-+	/* Grab old sigaction for SIGINT: shall not fail. */
-+	sigaction(SIGINT, NULL, &handler);
-+	handler.sa_flags &= ~SA_RESTART; /* Clear restart flag */
-+	handler.sa_handler = _catch_sigint;
-+
-+	_handler_installed2 = 1;
-+
-+	/* Override the signal handler: shall not fail. */
-+	sigaction(SIGINT, &handler, &_oldhandler2);
-+
-+	/* Unmask SIGINT.  Remember to mask it again on restore. */
-+	sigprocmask(0, NULL, &sigs);
-+	if ((_oldmasked = sigismember(&sigs, SIGINT))) {
-+		sigdelset(&sigs, SIGINT);
-+		sigprocmask(SIG_SETMASK, &sigs, NULL);
-+	}
++	return s;
 +}
 +
-+void sigint_restore(void)
++static const char *_tok_string(const char *s,
++			       const char **begin, const char **end,
++			       const char endchar)
 +{
-+	if (!_handler_installed2)
-+		return;
++	*begin = s;
 +
-+	if (_handler_installed2 > 1) {
-+		_handler_installed2--;
-+		return;
-+	}
++	if (endchar)
++		while (*s && *s != endchar)
++			s++;
++	else
++		/*
++		 * If endchar not defined then endchar is AND/OR operator or
++		 * '(' or space char. This is in case the string is not quoted.
++		 */
++		while (*s) {
++			if (!strncmp(s, SEL_AND_TOK, strlen(SEL_AND_TOK)) ||
++			    !strncmp(s, SEL_OR_TOK, strlen(SEL_OR_TOK)) ||
++			    !strncmp(s, SEL_PE_TOK, strlen(SEL_PE_TOK)) ||
++			    (*s == ' '))
++				break;
++			s++;
++		}
 +
-+	/* Nesting count went down to 0. */
-+	_handler_installed2 = 0;
-+
-+	if (_oldmasked) {
-+		sigset_t sigs;
-+		sigprocmask(0, NULL, &sigs);
-+		sigaddset(&sigs, SIGINT);
-+		sigprocmask(SIG_SETMASK, &sigs, NULL);
-+	}
-+
-+	sigaction(SIGINT, &_oldhandler2, NULL);
++	*end = s;
++	return s;
 +}
 +
-+void block_signals(uint32_t flags __attribute__((unused)))
++static const char *_tok_regex(const struct dm_report_field_type *ft,
++			      const char *s, const char **begin,
++			      const char **end, uint32_t *flags)
 +{
-+	sigset_t set;
++	char c;
 +
-+	if (_signals_blocked)
-+		return;
++	s = _skip_space(s);
 +
-+	if (sigfillset(&set)) {
-+		log_sys_error("sigfillset", "_block_signals");
-+		return;
++	if (!*s) {
++		log_error("Regular expression expected for field %s", ft->id);
++		return NULL;
 +	}
 +
-+	if (sigprocmask(SIG_SETMASK, &set, &_oldset)) {
-+		log_sys_error("sigprocmask", "_block_signals");
-+		return;
++	switch (*s) {
++		case '(': c = ')'; break;
++		case '{': c = '}'; break;
++		case '[': c = ']'; break;
++		default:  c = *s;
 +	}
 +
-+	_signals_blocked = 1;
++	s = _tok_string(s + 1, begin, end, c);
++	if (!*s) {
++		log_error("Missing end quote of regex for field %s", ft->id);
++		return NULL;
++	}
++	s++;
++
++	*flags |= DM_REPORT_FIELD_TYPE_STRING;
++
++	return s;
 +}
 +
-+void unblock_signals(void)
++static const char *_tok_value(const struct dm_report_field_type *ft,
++			      const char *s, const char **begin,
++			      const char **end, uint64_t *factor,
++			      uint32_t *flags)
 +{
-+	/* Don't unblock signals while any locks are held */
-+	if (!_signals_blocked)
-+		return;
++	int expected_type = ft->flags & DM_REPORT_FIELD_TYPE_MASK;
++	char *tmp;
++	char c;
 +
-+	if (sigprocmask(SIG_SETMASK, &_oldset, NULL)) {
-+		log_sys_error("sigprocmask", "_block_signals");
-+		return;
++	s = _skip_space(s);
++
++	switch (expected_type) {
++
++		case DM_REPORT_FIELD_TYPE_STRING:
++			if (*s == '"' || *s == '\'') {
++				c = *s;
++				s++;
++			} else
++				c = 0;
++			s = _tok_string(s, begin, end, c);
++			if (c && !*s) {
++				log_error("Failed to parse string value "
++					  "for field %s.", ft->id);
++				return NULL;
++			}
++			if (c)
++				s++;
++			*flags |= DM_REPORT_FIELD_TYPE_STRING;
++			break;
++
++		case DM_REPORT_FIELD_TYPE_NUMBER:
++		case DM_REPORT_FIELD_TYPE_SIZE:
++			s = _tok_number(s, begin, end);
++			if (*begin == *end) {
++				log_error("Failed to parse numeric value "
++					  "for field %s.", ft->id);
++				return NULL;
++			}
++			*factor = dm_units_to_factor(s, &c, 0, &tmp);
++
++			if (expected_type == DM_REPORT_FIELD_TYPE_NUMBER) {
++				if (factor) {
++					log_error("Found size unit specifier but "
++						  "only numeric value expected for "
++						  "field %s.",ft->id);
++					return NULL;
++				}
++				*flags |= DM_REPORT_FIELD_TYPE_NUMBER;
++			} else {
++				s = (const char *) tmp;
++				*flags |= DM_REPORT_FIELD_TYPE_SIZE;
++			}
 +	}
 +
-+	_signals_blocked = 0;
++	return s;
 +}
-diff --git a/lib/misc/lvm-signal.h b/lib/misc/lvm-signal.h
-index ce9d2e9..f2e6141 100644
---- a/lib/misc/lvm-signal.h
-+++ b/lib/misc/lvm-signal.h
-@@ -14,7 +14,17 @@
++
++static const char *_tok_field_name(const char *s,
++				    const char **begin, const char **end)
++{
++	char c;
++	s = _skip_space(s);
++
++	*begin = s;
++	while ((c = *s) &&
++	       (isalnum(c) || c == '_' || c == '-'))
++		s++;
++	*end = s;
++
++	if (*begin == *end)
++		return NULL;
++
++	return s;
++}
++
++
++
++/*
+  * Print row of headings
   */
- 
- #ifndef _LVM_SIGNAL_H
--#  define _LVM_SIGNAL_H
-+#define _LVM_SIGNAL_H
-+
- void remove_ctrl_c_handler(void);
- void install_ctrl_c_handler(void);
-+
-+void sigint_allow(void);
-+int sigint_caught(void);
-+void sigint_restore(void);
-+void sigint_clear(void);
-+
-+void block_signals(uint32_t flags);
-+void unblock_signals(void);
-+
- #endif
-diff --git a/tools/tools.h b/tools/tools.h
-index a2bfe0d..11111cb 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -40,6 +40,7 @@
- #include "locking.h"
- #include "lvm-exec.h"
- #include "lvm-file.h"
-+#include "lvm-signal.h"
- #include "lvm-string.h"
- #include "segtype.h"
- #include "str_list.h"
+ static int _report_headings(struct dm_report *rh)
 
 
