@@ -1,66 +1,131 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 20 May 2014 19:53:49 +0000 (UTC)
-Subject: master - cleanup: unneeded initialization
-Message-ID: <20140520195349.1AF2760190@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  9 May 2014 06:56:24 +0000 (UTC)
+Subject: dev-prajnoha-selout - signals: better nesting support
+Message-ID: <20140509065624.A16FF60774@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2941cffd2c6bf67ea2b47696e0ad111f07cf921d
-Commit:        2941cffd2c6bf67ea2b47696e0ad111f07cf921d
-Parent:        65b3fe9b058862c09994b98c246faaf7e0c0e0aa
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e585a6bbcf8416f5eeb6b57e0b02ca5e52f23f96
+Commit:        e585a6bbcf8416f5eeb6b57e0b02ca5e52f23f96
+Parent:        31ac200a374e101ddfb60fbef0591efee58b478a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 20 20:10:29 2014 +0200
+AuthorDate:    Fri May 2 17:30:27 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue May 20 21:50:28 2014 +0200
+CommitterDate: Wed May 7 14:09:33 2014 +0200
 
-cleanup: unneeded initialization
+signals: better nesting support
 
-Move or drop initialization where it is not needed.
+Support upto 3 levels os nesting signal blocking.
+As of today - code blocks signals immediatelly when it opens
+VG in read-write mode - this however makes current prompt usage
+then partially unusable since user may not 'break' command
+during prompt (something most user would expect).
+
+Until a better fix for prompting is implemented, put in support
+for signal nesting - thus when prompt enables signal acceptance,
+make it possible to really break command at this point.
 ---
- tools/lvconvert.c |   11 +++++------
- 1 files changed, 5 insertions(+), 6 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/misc/lvm-signal.c |   35 ++++++++++++++---------------------
+ 2 files changed, 15 insertions(+), 21 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 2200ba2..03cd42d 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1054,13 +1054,10 @@ static void _lvconvert_mirrors_repair_ask(struct cmd_context *cmd,
- 					  int failed_log, int failed_mirrors,
- 					  int *replace_log, int *replace_mirrors)
- {
--	const char *leg_policy = NULL, *log_policy = NULL;
--
-+	const char *leg_policy, *log_policy;
- 	int force = arg_count(cmd, force_ARG);
- 	int yes = arg_count(cmd, yes_ARG);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1cb97d9..f0c36cb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.107 - 
+ ==================================
++  Better support for nesting of blocking signals.
+   Use only sigaction handler and drop duplicate signal handler.
+   Separate signal handling and flock code out into lib/misc.
+   Don't start dmeventd checking seg_monitor and monitoring is disabled.
+diff --git a/lib/misc/lvm-signal.c b/lib/misc/lvm-signal.c
+index 8aeb192..d5dac6f 100644
+--- a/lib/misc/lvm-signal.c
++++ b/lib/misc/lvm-signal.c
+@@ -21,9 +21,12 @@
+ static sigset_t _oldset;
+ static int _signals_blocked = 0;
+ static volatile sig_atomic_t _sigint_caught = 0;
+-static volatile sig_atomic_t _handler_installed2;
+-static struct sigaction _oldhandler2;
+-static int _oldmasked;
++static volatile sig_atomic_t _handler_installed;
++
++/* Support 3 level nesting, increase if needed more */
++#define MAX_SIGINTS 3
++static struct sigaction _oldhandler[MAX_SIGINTS];
++static int _oldmasked[MAX_SIGINTS];
  
--	*replace_log = *replace_mirrors = 1;
--
- 	if (arg_count(cmd, use_policies_ARG)) {
- 		leg_policy = find_config_tree_str(cmd, activation_mirror_image_fault_policy_CFG, NULL);
- 		log_policy = find_config_tree_str(cmd, activation_mirror_log_fault_policy_CFG, NULL);
-@@ -1074,6 +1071,8 @@ static void _lvconvert_mirrors_repair_ask(struct cmd_context *cmd,
+ static void _catch_sigint(int unused __attribute__((unused)))
+ {
+@@ -61,10 +64,8 @@ void sigint_allow(void)
+ 	 * Do not overwrite the backed-up handler data -
+ 	 * just increase nesting count.
+ 	 */
+-	if (_handler_installed2) {
+-		_handler_installed2++;
++	if (++_handler_installed >= MAX_SIGINTS)
  		return;
+-	}
+ 
+ 	/* Grab old sigaction for SIGINT: shall not fail. */
+ 	if (sigaction(SIGINT, NULL, &handler))
+@@ -73,17 +74,15 @@ void sigint_allow(void)
+ 	handler.sa_flags &= ~SA_RESTART; /* Clear restart flag */
+ 	handler.sa_handler = _catch_sigint;
+ 
+-	_handler_installed2 = 1;
+-
+ 	/* Override the signal handler: shall not fail. */
+-	if (sigaction(SIGINT, &handler, &_oldhandler2))
++	if (sigaction(SIGINT, &handler, &_oldhandler[_handler_installed  - 1]))
+ 		log_sys_debug("sigaction", "SIGINT");
+ 
+ 	/* Unmask SIGINT.  Remember to mask it again on restore. */
+ 	if (sigprocmask(0, NULL, &sigs))
+ 		log_sys_debug("sigprocmask", "");
+ 
+-	if ((_oldmasked = sigismember(&sigs, SIGINT))) {
++	if ((_oldmasked[_handler_installed] = sigismember(&sigs, SIGINT))) {
+ 		sigdelset(&sigs, SIGINT);
+ 		if (sigprocmask(SIG_SETMASK, &sigs, NULL))
+ 			log_sys_debug("sigprocmask", "SIG_SETMASK");
+@@ -92,18 +91,12 @@ void sigint_allow(void)
+ 
+ void sigint_restore(void)
+ {
+-	if (!_handler_installed2)
++	if (!_handler_installed ||
++	    --_handler_installed >= MAX_SIGINTS)
+ 		return;
+ 
+-	if (_handler_installed2 > 1) {
+-		_handler_installed2--;
+-		return;
+-	}
+-
+-	/* Nesting count went down to 0. */
+-	_handler_installed2 = 0;
+-
+-	if (_oldmasked) {
++	/* Nesting count went bellow MAX_SIGINTS. */
++	if (_oldmasked[_handler_installed]) {
+ 		sigset_t sigs;
+ 		sigprocmask(0, NULL, &sigs);
+ 		sigaddset(&sigs, SIGINT);
+@@ -111,7 +104,7 @@ void sigint_restore(void)
+ 			log_sys_debug("sigprocmask", "SIG_SETMASK");
  	}
  
-+	*replace_log = *replace_mirrors = 1;
-+
- 	if (yes)
- 		return;
+-	if (sigaction(SIGINT, &_oldhandler2, NULL))
++	if (sigaction(SIGINT, &_oldhandler[_handler_installed], NULL))
+ 		log_sys_debug("sigaction", "SIGINT restore");
+ }
  
-@@ -1616,8 +1615,8 @@ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
- 				     struct logical_volume *lv,
- 				     struct lvconvert_params *lp)
- {
--	int failed_logs = 0;
--	int failed_mimages = 0;
-+	int failed_logs;
-+	int failed_mimages;
- 	int replace_logs = 0;
- 	int replace_mimages = 0;
- 	uint32_t log_count;
 
 
