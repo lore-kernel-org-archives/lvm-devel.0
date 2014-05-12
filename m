@@ -1,43 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 12 May 2014 14:25:46 +0000 (UTC)
-Subject: master - coverity: catch unwanted path
-Message-ID: <20140512142546.8A2F26030C@fedorahosted.org>
+Date: Mon, 12 May 2014 14:25:48 +0000 (UTC)
+Subject: master - conf: document new thin_check option
+Message-ID: <20140512142548.A94116030C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8b95c82fed667b4095b1358ac5697fd43cd61e11
-Commit:        8b95c82fed667b4095b1358ac5697fd43cd61e11
-Parent:        2e1192f6914ddbe1cf560a02158bdb58584efa26
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=90c44f5371b85edb05d4c4ebbd9e0254971d13f4
+Commit:        90c44f5371b85edb05d4c4ebbd9e0254971d13f4
+Parent:        8b95c82fed667b4095b1358ac5697fd43cd61e11
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 9 17:10:51 2014 +0200
+AuthorDate:    Mon May 12 14:12:55 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 12 16:24:39 2014 +0200
+CommitterDate: Mon May 12 16:24:40 2014 +0200
 
-coverity: catch unwanted path
+conf: document new thin_check option
 
-We validate this path already earlier.
 ---
- lib/metadata/lv_manip.c |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ conf/example.conf.in |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index b47e2d2..2005826 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6140,6 +6140,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index d5ddb1c..bc1758d 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -693,8 +693,10 @@ global {
+     # option "-q" is for quiet output.
+     # With thin_check version 2.1 or newer you can add "--ignore-non-fatal-errors"
+     # to let it pass through ignorable errors and fix them later.
++    # With thin_check version 3.2 or newer you should add
++    # "--clear-needs-check-flag".
+     #
+-    # thin_check_options = [ "-q" ]
++    # thin_check_options = [ "-q", "--clear-needs-check-flag" ]
  
- 	if (seg_is_thin_volume(lp)) {
- 		/* Ensure all stacked messages are submitted */
-+		if (!lp->pool) {
-+			log_error(INTERNAL_ERROR "Undefined pool for thin volume segment.");
-+			return NULL;
-+		}
-+
- 		if (!(lvl = find_lv_in_vg(vg, lp->pool))) {
- 			log_error("Unable to find existing pool LV %s in VG %s.",
- 				  lp->pool, vg->name);
+     # Full path of the utility called to repair a thin metadata device
+     # is in a state that allows it to be used.
 
 
