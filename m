@@ -1,102 +1,189 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 12 May 2014 14:25:42 +0000 (UTC)
-Subject: master - configure: drop siginterrupt
-Message-ID: <20140512142542.564D061391@fedorahosted.org>
+Date: Mon, 12 May 2014 14:25:44 +0000 (UTC)
+Subject: master - configure: improve needs_check thin_check test
+Message-ID: <20140512142544.75FC361391@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5b787a24f024d2589583fc356f343bb981c169e2
-Commit:        5b787a24f024d2589583fc356f343bb981c169e2
-Parent:        e416d84e1093655786b09450154779ee7896f11d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2e1192f6914ddbe1cf560a02158bdb58584efa26
+Commit:        2e1192f6914ddbe1cf560a02158bdb58584efa26
+Parent:        5b787a24f024d2589583fc356f343bb981c169e2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jul 6 11:22:29 2013 +0200
+AuthorDate:    Mon May 12 14:51:23 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon May 12 16:24:39 2014 +0200
 
-configure: drop siginterrupt
+configure: improve needs_check thin_check test
 
-Not used anymore
+Improve testing for needs_check - when old tools are installed,
+issue proper warning from configure, but stop sending needs_check
+flag to the old tool.
 ---
- configure               |   11 -----------
- configure.in            |    1 -
- lib/misc/configure.h.in |    3 ---
- lib/misc/lvm-wrappers.h |   15 ---------------
- 4 files changed, 0 insertions(+), 30 deletions(-)
+ configure    |   55 +++++++++++++++++++++++++++----------------------------
+ configure.in |   43 +++++++++++++++++++++----------------------
+ 2 files changed, 48 insertions(+), 50 deletions(-)
 
 diff --git a/configure b/configure
-index de93e77..44eab6f 100755
+index 44eab6f..dd5ec64 100755
 --- a/configure
 +++ b/configure
-@@ -5563,17 +5563,6 @@ else
- fi
- done
+@@ -7208,8 +7208,6 @@ $as_echo "#define THIN_INTERNAL 1" >>confdefs.h
+   *) as_fn_error $? "--with-thin parameter invalid ($THIN)" "$LINENO" 5 ;;
+ esac
  
--for ac_func in siginterrupt
--do :
--  ac_fn_c_check_func "$LINENO" "siginterrupt" "ac_cv_func_siginterrupt"
--if test "x$ac_cv_func_siginterrupt" = xyes; then :
--  cat >>confdefs.h <<_ACEOF
--#define HAVE_SIGINTERRUPT 1
--_ACEOF
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether thin_check supports the needs-check flag" >&5
+-$as_echo_n "checking whether thin_check supports the needs-check flag... " >&6; }
+ # Check whether --enable-thin_check_needs_check was given.
+ if test "${enable_thin_check_needs_check+set}" = set; then :
+   enableval=$enable_thin_check_needs_check; THIN_CHECK_NEEDS_CHECK=$enableval
+@@ -7217,14 +7215,6 @@ else
+   THIN_CHECK_NEEDS_CHECK=yes
+ fi
+ 
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $THIN_CHECK_NEEDS_CHECK" >&5
+-$as_echo "$THIN_CHECK_NEEDS_CHECK" >&6; }
+-
+-if test x$THIN_CHECK_NEEDS_CHECK = xyes; then
+-
+-$as_echo "#define THIN_CHECK_NEEDS_CHECK 1" >>confdefs.h
 -
 -fi
--done
+ 
+ # Test if necessary thin tools are available
+ # if not - use plain defaults and warn user
+@@ -7335,24 +7325,23 @@ fi
+ $as_echo "$as_me: WARNING: thin_check not found in path $PATH" >&2;}
+ 			THIN_CHECK_CMD=/usr/sbin/thin_check
+ 			THIN_CONFIGURE_WARN=y
+-		else
+-			if test x$THIN_CHECK_NEEDS_CHECK = xyes; then
+-				THIN_CHECK_VSN=`"$THIN_CHECK_CMD" -V 2>/dev/null`
+-				THIN_CHECK_VSN_MAJOR=`echo "$THIN_CHECK_VSN" | $AWK -F '.' '{print $1}'`
+-				THIN_CHECK_VSN_MINOR=`echo "$THIN_CHECK_VSN" | $AWK -F '.' '{print $2}'`
 -
- # The Ultrix 4.2 mips builtin alloca declared by alloca.h only works
- # for constant arguments.  Useless!
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for working alloca.h" >&5
+-				if test -z "$THIN_CHECK_VSN_MAJOR" -o -z "$THIN_CHECK_VSN_MINOR" ; then
+-					{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Found thin_check version \"$THIN_CHECK_VSN\"" >&5
+-$as_echo "$as_me: WARNING: Found thin_check version \"$THIN_CHECK_VSN\"" >&2;}
+-					THIN_CHECK_VERSION_WARN=y
+-				else
+-					if test "$THIN_CHECK_VSN_MAJOR" -eq 0 -a "$THIN_CHECK_VSN_MINOR" -lt 3 ; then
+-						{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Found thin_check version \"$THIN_CHECK_VSN\"" >&5
+-$as_echo "$as_me: WARNING: Found thin_check version \"$THIN_CHECK_VSN\"" >&2;}
+-						THIN_CHECK_VERSION_WARN=y
+-					fi
+-				fi
+-			fi
++		fi
++	fi
++	if test "$THIN_CHECK_NEEDS_CHECK" = yes; then
++		THIN_CHECK_VSN=`"$THIN_CHECK_CMD" -V 2>/dev/null`
++		THIN_CHECK_VSN_MAJOR=`echo "$THIN_CHECK_VSN" | $AWK -F '.' '{print $1}'`
++		THIN_CHECK_VSN_MINOR=`echo "$THIN_CHECK_VSN" | $AWK -F '.' '{print $2}'`
++
++		if test -z "$THIN_CHECK_VSN_MAJOR" -o -z "$THIN_CHECK_VSN_MINOR"; then
++			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $THIN_CHECK_CMD: Bad version \"$THIN_CHECK_VSN\" found" >&5
++$as_echo "$as_me: WARNING: $THIN_CHECK_CMD: Bad version \"$THIN_CHECK_VSN\" found" >&2;}
++			THIN_CHECK_VERSION_WARN=y
++			THIN_CHECK_NEEDS_CHECK=no
++		elif test "$THIN_CHECK_VSN_MAJOR" -eq 0 -a "$THIN_CHECK_VSN_MINOR" -lt 3; then
++			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $THIN_CHECK_CMD: Old version \"$THIN_CHECK_VSN\" found" >&5
++$as_echo "$as_me: WARNING: $THIN_CHECK_CMD: Old version \"$THIN_CHECK_VSN\" found" >&2;}
++			THIN_CHECK_VERSION_WARN=y
++			THIN_CHECK_NEEDS_CHECK=no
+ 		fi
+ 	fi
+ 	# Empty means a config way to ignore thin checking
+@@ -7572,6 +7561,16 @@ $as_echo "$as_me: WARNING: thin_repair not found in path $PATH" >&2;}
+ 	;;
+ esac
+ 
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether thin_check supports the needs-check flag" >&5
++$as_echo_n "checking whether thin_check supports the needs-check flag... " >&6; }
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $THIN_CHECK_NEEDS_CHECK" >&5
++$as_echo "$THIN_CHECK_NEEDS_CHECK" >&6; }
++if test "$THIN_CHECK_NEEDS_CHECK" = yes; then
++
++$as_echo "#define THIN_CHECK_NEEDS_CHECK 1" >>confdefs.h
++
++fi
++
+ 
+ cat >>confdefs.h <<_ACEOF
+ #define THIN_CHECK_CMD "$THIN_CHECK_CMD"
 diff --git a/configure.in b/configure.in
-index e3ddde1..09ca1b5 100644
+index 09ca1b5..3a8e5d9 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -134,7 +134,6 @@ AC_CHECK_FUNCS([ftruncate gethostname getpagesize \
-   gettimeofday memset mkdir mkfifo rmdir munmap nl_langinfo setenv setlocale \
-   strcasecmp strchr strcspn strspn strdup strncasecmp strerror strrchr \
-   strstr strtol strtoul uname], , [AC_MSG_ERROR(bailing out)])
--AC_CHECK_FUNCS(siginterrupt)
- AC_FUNC_ALLOCA
- AC_FUNC_CLOSEDIR_VOID
- AC_FUNC_CHOWN
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index 507aae1..ead131c 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -288,9 +288,6 @@
- /* Define to 1 if you have the `setlocale' function. */
- #undef HAVE_SETLOCALE
+@@ -433,16 +433,10 @@ case "$THIN" in
+ esac
  
--/* Define to 1 if you have the `siginterrupt' function. */
--#undef HAVE_SIGINTERRUPT
+ dnl -- thin_check needs-check flag
+-AC_MSG_CHECKING(whether thin_check supports the needs-check flag)
+ AC_ARG_ENABLE(thin_check_needs_check,
+ 	      AC_HELP_STRING([--disable-thin_check_needs_check],
+ 			     [required if thin_check version is < 0.3.0]),
+ 	      THIN_CHECK_NEEDS_CHECK=$enableval, THIN_CHECK_NEEDS_CHECK=yes)
+-AC_MSG_RESULT($THIN_CHECK_NEEDS_CHECK)
 -
- /* Define to 1 if you have the <signal.h> header file. */
- #undef HAVE_SIGNAL_H
+-if test x$THIN_CHECK_NEEDS_CHECK = xyes; then
+-	AC_DEFINE([THIN_CHECK_NEEDS_CHECK], 1, [Define to 1 if the external 'thin_check' tool requires the --clear-needs-check-flag option])
+-fi
  
-diff --git a/lib/misc/lvm-wrappers.h b/lib/misc/lvm-wrappers.h
-index 9368e25..137cbdb 100644
---- a/lib/misc/lvm-wrappers.h
-+++ b/lib/misc/lvm-wrappers.h
-@@ -37,19 +37,4 @@ int read_urandom(void *buf, size_t len);
-  */
- unsigned lvm_even_rand(unsigned *seed, unsigned max);
- 
--#  ifndef HAVE_SIGINTERRUPT
--#    define siginterrupt(sig, flag) \
--	do { \
--		int ret; \
--		struct sigaction act; \
--		(void) sigaction(sig, NULL, &act); \
--		if (flag) \
--			act.sa_flags &= SA_RESTART; \
--		else \
--			act.sa_flags |= SA_RESTART; \
--		ret = sigaction(sig, &act, NULL); \
--		return ret; \
--	while (0)
--#  endif
+ # Test if necessary thin tools are available
+ # if not - use plain defaults and warn user
+@@ -455,22 +449,21 @@ case "$THIN" in
+ 			AC_MSG_WARN([thin_check not found in path $PATH])
+ 			THIN_CHECK_CMD=/usr/sbin/thin_check
+ 			THIN_CONFIGURE_WARN=y
+-		else
+-			if test x$THIN_CHECK_NEEDS_CHECK = xyes; then
+-				THIN_CHECK_VSN=`"$THIN_CHECK_CMD" -V 2>/dev/null`
+-				THIN_CHECK_VSN_MAJOR=`echo "$THIN_CHECK_VSN" | $AWK -F '.' '{print $1}'`
+-				THIN_CHECK_VSN_MINOR=`echo "$THIN_CHECK_VSN" | $AWK -F '.' '{print $2}'`
 -
- #endif
+-				if test -z "$THIN_CHECK_VSN_MAJOR" -o -z "$THIN_CHECK_VSN_MINOR" ; then
+-					AC_MSG_WARN(Found thin_check version "$THIN_CHECK_VSN")
+-					THIN_CHECK_VERSION_WARN=y 
+-				else
+-					if test "$THIN_CHECK_VSN_MAJOR" -eq 0 -a "$THIN_CHECK_VSN_MINOR" -lt 3 ; then
+-						AC_MSG_WARN(Found thin_check version "$THIN_CHECK_VSN")
+-						THIN_CHECK_VERSION_WARN=y
+-					fi
+-				fi
+-			fi
++		fi
++	fi
++	if test "$THIN_CHECK_NEEDS_CHECK" = yes; then
++		THIN_CHECK_VSN=`"$THIN_CHECK_CMD" -V 2>/dev/null`
++		THIN_CHECK_VSN_MAJOR=`echo "$THIN_CHECK_VSN" | $AWK -F '.' '{print $1}'`
++		THIN_CHECK_VSN_MINOR=`echo "$THIN_CHECK_VSN" | $AWK -F '.' '{print $2}'`
++
++		if test -z "$THIN_CHECK_VSN_MAJOR" -o -z "$THIN_CHECK_VSN_MINOR"; then
++			AC_MSG_WARN([$THIN_CHECK_CMD: Bad version "$THIN_CHECK_VSN" found])
++			THIN_CHECK_VERSION_WARN=y
++			THIN_CHECK_NEEDS_CHECK=no
++		elif test "$THIN_CHECK_VSN_MAJOR" -eq 0 -a "$THIN_CHECK_VSN_MINOR" -lt 3; then
++			AC_MSG_WARN([$THIN_CHECK_CMD: Old version "$THIN_CHECK_VSN" found])
++			THIN_CHECK_VERSION_WARN=y
++			THIN_CHECK_NEEDS_CHECK=no
+ 		fi
+ 	fi
+ 	# Empty means a config way to ignore thin checking
+@@ -494,6 +487,12 @@ case "$THIN" in
+ 	;;
+ esac
+ 
++AC_MSG_CHECKING([whether thin_check supports the needs-check flag])
++AC_MSG_RESULT([$THIN_CHECK_NEEDS_CHECK])
++if test "$THIN_CHECK_NEEDS_CHECK" = yes; then
++	AC_DEFINE([THIN_CHECK_NEEDS_CHECK], 1, [Define to 1 if the external 'thin_check' tool requires the --clear-needs-check-flag option])
++fi
++
+ AC_DEFINE_UNQUOTED([THIN_CHECK_CMD], ["$THIN_CHECK_CMD"],
+ 		   [The path to 'thin_check', if available.])
+ 
 
 
