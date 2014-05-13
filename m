@@ -1,63 +1,40 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 May 2014 09:04:37 +0000 (UTC)
-Subject: master - cleanup: improve error message
-Message-ID: <20140513090437.5A4FE60FFA@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 13 May 2014 10:26:38 +0000 (UTC)
+Subject: master - man: Fix man7 dir dependency.
+Message-ID: <20140513102638.7BEC9612BC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=85cf5a23d265c10af7e69b5f85e06e75105d8f14
-Commit:        85cf5a23d265c10af7e69b5f85e06e75105d8f14
-Parent:        7b766b064837110a09d448376ea61af174260ae7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 13 10:33:17 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue May 13 10:33:17 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=422b3b0fb53d83bc3ffbd35f7d7505a1938cb24c
+Commit:        422b3b0fb53d83bc3ffbd35f7d7505a1938cb24c
+Parent:        85cf5a23d265c10af7e69b5f85e06e75105d8f14
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue May 13 11:18:13 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue May 13 11:18:13 2014 +0100
 
-cleanup: improve error message
+man: Fix man7 dir dependency.
 
-Update impossile to happen error message.
+https://bugs.gentoo.org/510202
 ---
- lib/config/config.c       |    2 +-
- lib/metadata/thin_manip.c |    4 ++--
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ man/Makefile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 1a9f636..04f917d 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1767,7 +1767,7 @@ int get_default_allocation_thin_pool_chunk_size_CFG(struct cmd_context *cmd, str
- 	uint32_t chunk_size;
+diff --git a/man/Makefile.in b/man/Makefile.in
+index af108cf..c6a27d0 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -103,7 +103,7 @@ install_man5: $(MAN5)
+ 	$(INSTALL) -d $(MAN5DIR)
+ 	$(INSTALL_DATA) $(MAN5) $(MAN5DIR)/
  
- 	if (!(str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile))) {
--		log_error(INTERNAL_ERROR "Cannot find profile.");
-+		log_error(INTERNAL_ERROR "Cannot find configuration.");
- 		return 0;
- 	}
+-install_man7: $(MAN8)
++install_man7: $(MAN7)
+ 	$(INSTALL) -d $(MAN7DIR)
+ 	$(INSTALL_DATA) $(MAN7) $(MAN7DIR)/
  
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index c1c90b4..cccd244 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -376,7 +376,7 @@ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profi
- 	if (!(passed_args & PASS_ARG_CHUNK_SIZE)) {
- 		if (!(*chunk_size = find_config_tree_int(cmd, allocation_thin_pool_chunk_size_CFG, profile) * 2)) {
- 			if (!(str = find_config_tree_str(cmd, allocation_thin_pool_chunk_size_policy_CFG, profile))) {
--				log_error(INTERNAL_ERROR "Could not find profile.");
-+				log_error(INTERNAL_ERROR "Could not find configuration.");
- 				return 0;
- 			}
- 			if (!strcasecmp(str, "generic"))
-@@ -401,7 +401,7 @@ int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profi
- 
- 	if (!(passed_args & PASS_ARG_DISCARDS)) {
- 		if (!(str = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, profile))) {
--			log_error(INTERNAL_ERROR "Could not find profile.");
-+			log_error(INTERNAL_ERROR "Could not find configuration.");
- 			return 0;
- 		}
- 		if (!get_pool_discards(str, discards))
 
 
