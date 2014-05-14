@@ -1,64 +1,87 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 14 May 2014 15:26:06 +0000 (UTC)
-Subject: master - allocation: Fix alloc anywhere with parity.
-Message-ID: <20140514152606.CEAF260CD4@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 14 May 2014 20:15:47 +0000 (UTC)
+Subject: master - man: more lvmthin discard references
+Message-ID: <20140514201547.806106036A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3b989e317fecf115ce9a2b89f777e4feec2461ec
-Commit:        3b989e317fecf115ce9a2b89f777e4feec2461ec
-Parent:        422b3b0fb53d83bc3ffbd35f7d7505a1938cb24c
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed May 14 16:25:43 2014 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed May 14 16:25:43 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=044b7968005a23e52a78c26eb56a7f74a973312f
+Commit:        044b7968005a23e52a78c26eb56a7f74a973312f
+Parent:        3b989e317fecf115ce9a2b89f777e4feec2461ec
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed May 14 09:44:09 2014 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed May 14 15:15:35 2014 -0500
 
-allocation: Fix alloc anywhere with parity.
+man: more lvmthin discard references
 
-Take account of parity areas with alloc anywhere in
-_calc_required_extents.  Extents beyond area_count were treated
-incorrectly as mirror logs.
+and some fixes from Tom.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |    5 ++---
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ man/lvmthin.7.in |   21 +++++++++++++--------
+ 1 files changed, 13 insertions(+), 8 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 88ae713..8bcf687 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.107 - 
- ==================================
-+  Take account of parity areas with alloc anywhere in _calc_required_extents.
-   Use proper uint64 casting for calculation of cache metadata size.
-   Better support for nesting of blocking signals.
-   Use only sigaction handler and drop duplicate signal handler.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 2005826..fa08c39 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1432,8 +1432,7 @@ static int _alloc_parallel_area(struct alloc_handle *ah, uint32_t max_to_allocat
- 	struct alloced_area *aa;
- 	struct pv_area *pva;
+diff --git a/man/lvmthin.7.in b/man/lvmthin.7.in
+index 55b1562..5a4ee87 100644
+--- a/man/lvmthin.7.in
++++ b/man/lvmthin.7.in
+@@ -23,10 +23,10 @@ that will hold blocks for thin LVs, and a metadata LV that will hold
+ metadata.  The metadata tracks which data blocks belong to each thin LV.
  
--	total_area_count = ah->area_count + alloc_state->log_area_count_still_needed;
--	total_area_count += ah->parity_count;
-+	total_area_count = ah->area_count + ah->parity_count + alloc_state->log_area_count_still_needed;
- 	if (!total_area_count) {
- 		log_warn(INTERNAL_ERROR "_alloc_parallel_area called without any allocation to do.");
- 		return 1;
-@@ -1980,7 +1979,7 @@ static uint32_t _calc_required_extents(struct alloc_handle *ah, struct pv_area *
- 	 * reduce amount we're looking for.
- 	 */
- 	if (alloc == ALLOC_ANYWHERE) {
--		if (ix_pva >= ah->area_count)
-+		if (ix_pva >= ah->area_count + ah->parity_count)
- 			required = ah->log_len;
- 	} else if (required < ah->log_len)
- 		required = ah->log_len;
+ Snapshots of thin LVs are efficient because the data blocks common to a
+-thin LV and its snapshot are shared.  Snapshots may be taken of thin LVs
+-or of other thin snapshots.  Blocks common to recursive snapshots are also
+-shared in the thin pool.  There is no limit to or degradation from
+-sequences of snapshots.
++thin LV and any of its snapshots are shared.  Snapshots may be taken of
++thin LVs or of other thin snapshots.  Blocks common to recursive snapshots
++are also shared in the thin pool.  There is no limit to or degradation
++from sequences of snapshots.
+ 
+ As thin LVs or snapshot LVs are written to, they consume data blocks in
+ the thin pool.  As free data blocks in the pool decrease, more free blocks
+@@ -620,6 +620,9 @@ pool0           vg   twi-a-tz--  10.00g               47.01  21.03
+ thin1           vg   Vwi-aotz-- 100.00g pool0          2.70       
+ .fi
+ 
++The "Discard" section covers an option for automatically freeing data
++space in a thin pool.
++
+ 
+ .SS Automatically extend thin pool LV
+ 
+@@ -691,7 +694,7 @@ extended.  (Disabling dmeventd is not recommended.)
+ writes to thin LVs in the pool.  (This can be addressed by tuning the
+ thin_pool_autoextend_threshold and thin_pool_autoextend_percent.)
+ 
+-4. The VG does have enough free blocks to extend the thin pool.
++4. The VG does not have enough free blocks to extend the thin pool.
+ 
+ The response to data space exhaustion is to extend the thin pool.  This is
+ described in the section "Manually manage free data space of thin pool
+@@ -768,8 +771,10 @@ controls the default zeroing mode used when creating a thin pool.
+ 
+ \&
+ 
+-The discard behavior of a thin pool LV determines how discard requests
+-are handled.  Possible discard behaviors:
++The discard behavior of a thin pool LV determines how discard requests are
++handled.  Enabling discard under a file system may adversely affect the
++file system performance (see the section on fstrim for an alternative.)
++Possible discard behaviors:
+ 
+ ignore: Ignore any discards that are received.
+ 
+@@ -933,7 +938,7 @@ and combines the two into a thin pool LV.
+ lvcreate -L LargeSize --thinpool VG/ThinPoolLV
+ 
+ Example
+-# lvcreate -l1 --thinpool vg/pool0
++# lvcreate -L8M --thinpool vg/pool0
+ 
+ # lvs vg/pool0
+ LV    VG  Attr       LSize Pool Origin Data%
 
 
