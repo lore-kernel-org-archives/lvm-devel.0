@@ -1,118 +1,132 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 15 May 2014 09:03:15 +0000 (UTC)
-Subject: master - report: export DM_REPORT_FIELD_RESERVED_NAME_{HELP, HELP_ALT} and show help on '<lvm_command> -O help'
-Message-ID: <20140515090315.530D960B36@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 15 May 2014 10:14:17 +0000 (UTC)
+Subject: master - man:misc updates
+Message-ID: <20140515101417.86E9660DC4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c86131233011c9fb81190bcb40d5d4ac54a533d
-Commit:        7c86131233011c9fb81190bcb40d5d4ac54a533d
-Parent:        5684cfcb1c13129b70ddaf1ee4df95e08bc551a9
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu May 15 10:58:05 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu May 15 10:58:14 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=309201a53bcbbd4967f380214e688c520b957fdf
+Commit:        309201a53bcbbd4967f380214e688c520b957fdf
+Parent:        7c86131233011c9fb81190bcb40d5d4ac54a533d
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu May 15 10:25:15 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 15 12:08:35 2014 +0200
 
-report: export DM_REPORT_FIELD_RESERVED_NAME_{HELP,HELP_ALT} and show help on '<lvm_command> -O help'
+man:misc updates
 
-Share DM_REPORT_FIELD_RESERVED_NAME_{HELP,HELP_ALT} between libdm and
-any libdm user to handle reserved field names, in this case the virtual
-field name to show help instead of failing on unrecognized field.
-The libdm user also needs to check the field name so it can fire
-proper code in this case (cleanup, exit etc.).
 ---
- WHATS_NEW            |    1 +
- WHATS_NEW_DM         |    2 ++
- libdm/libdevmapper.h |    4 ++++
- libdm/libdm-report.c |   11 ++++++++---
- tools/reporter.c     |    5 ++++-
- 5 files changed, 19 insertions(+), 4 deletions(-)
+ man/lvchange.8.in  |    6 +++++-
+ man/lvconvert.8.in |   35 ++++++++++++++++++++++-------------
+ 2 files changed, 27 insertions(+), 14 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index c5cbf37..090e914 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.107 - 
- ==================================
-+  Make reporting commands show help about possible sort keys on '-O help'.
-   Add metadata_percent to lvs_cols.
-   Take account of parity areas with alloc anywhere in _calc_required_extents.
-   Use proper uint64 casting for calculation of cache metadata size.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index c81d354..6304ff6 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,7 @@
- Version 1.02.88 - 
- =================================
-+  Also recognize 'help'/'?' as reserved sort key name to show help.
-+  Export recognized DM_REPORT_FIELD_RESERVED_NAME_{HELP,HELP_ALT} to show help.
-   Add dm_units_to_factor for size unit parsing.
-   Increase bitset size for minors for thin dmeventd plugin.
+diff --git a/man/lvchange.8.in b/man/lvchange.8.in
+index 5de75e0..b138c3d 100644
+--- a/man/lvchange.8.in
++++ b/man/lvchange.8.in
+@@ -181,7 +181,7 @@ the number of I/Os to the drive to a minimum.  The default behavior is to
+ set the write-mostly attribute for the specified physical volume in the
+ logical volume.  It is possible to also remove the write-mostly flag by
+ appending a ":n" to the physical volume or to toggle the value by specifying
+-":t".  The \fI--writemostly\fP argument can be specified more than one time
++":t".  The \fB--writemostly\fP argument can be specified more than one time
+ in a single command; making it possible to toggle the write-mostly attributes
+ for all the physical volumes in a logical volume at once.
+ .TP
+@@ -237,6 +237,10 @@ manually without a clustered lock manager.
+ Set zeroing mode for thin pool. Note: already provisioned blocks from pool
+ in non-zero mode are not cleared in unwritten parts when setting zero to
+ \fIy\fP.
++.SH ENVIRONMENT VARIABLES
++.TP
++.B LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES
++Suppress locking failure messages.
+ .SH Examples
+ Changes the permission on volume lvol1 in volume group vg00 to be read-only:
+ .sp
+diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
+index fe6525b..8c3479f 100644
+--- a/man/lvconvert.8.in
++++ b/man/lvconvert.8.in
+@@ -162,15 +162,17 @@ Exactly one of
+ .BR \-\-replace ,
+ .BR \-\-splitsnapshot ,
+ .BR \-\-snapshot ,
+-.BR \-\-splitmirrors
+-or
++.BR \-\-splitmirrors ,
++.BR \-\-thin ,
+ .BR \-\-thinpool
++or
++.BR \-\-type
+ arguments is required.
+ .TP
+ .BR \-b ", " \-\-background
+ Run the daemon in the background.
+ .TP
+-.BR \-\-cachepool " " \fCachePoolLV
++.BR \-\-cachepool " " \fICachePoolLV
+ This argument is necessary when converting a logical volume to a cache LV.
+ For more information on cache pool LVs and cache LVs, see \fBlvm\fP(8).
+ .TP
+@@ -204,9 +206,15 @@ A mirror is divided into regions of this size (in MB), and the mirror log
+ uses this granularity to track which regions are in sync.
+ .TP
+ .B \-\-type \fISegmentType
+-Used to convert a logical volume to another segment type, like cache-pool,
+-cache, raid1, or thin-pool.  When converting a logical volume to a cache LV,
+-the \-\-cachepool argument is required.
++Used to convert a logical volume to another segment type, like
++.IR cache-pool ,
++.IR cache ,
++.IR raid1 ,
++or
++.IR thin-pool .
++When converting a logical volume to a cache LV, the
++.B \-\-cachepool
++argument is required.
+ .TP
+ .BR \-i ", " \-\-interval " " \fISeconds
+ Report progress as a percentage at regular intervals.
+@@ -246,8 +254,9 @@ The inverse of \-\-snapshot.
+ .TP
+ .B \-s, \-\-snapshot
+ Recreates a snapshot from constituent logical volumes (or copies of them) after
+-having been separated using \-\-splitsnapshot.  For this to work correctly, no
+-changes may be made to the contents of either volume after the split.
++having been separated using \fB\-\-splitsnapshot\fP.
++For this to work correctly, no changes may be made to the contents
++of either volume after the split.
+ .TP
+ .BR \-c ", " \-\-chunksize " " \fIChunkSize [ \fIbBsSkKmMgG ]
+ Gives the size of chunk for snapshot and thin pool logical volumes.
+@@ -328,9 +337,9 @@ Default unit is megabytes.
+ .TP
+ .IR \fB\-r ", " \fB\-\-readahead " {" ReadAheadSectors | auto | none }
+ Sets read ahead sector count of thin pool metadata logical volume.
+-The default value is "auto" which allows the kernel to choose
++The default value is "\fIauto\fP" which allows the kernel to choose
+ a suitable value automatically.
+-"None" is equivalent to specifying zero.
++"\fINone\fP" is equivalent to specifying zero.
+ .TP
+ .B \-\-repair
+ Repair a mirror after suffering a disk failure or try to fix thin pool metadata.
+@@ -380,9 +389,9 @@ The volume cannot be further modified as long as it is used as an
+ external origin volume for unprovisioned areas of any thin logical volume.
+ .TP
+ .IR \fB\-\-thinpool " " ThinPoolLogicalVolume { Name | Path }
+-Changes logical volume into a thin pool volume. The volume
+-will store the pool's data.
+-Thin pool metadata logical volume can be specified with the option
++Switches logical volume into a thin pool's data volume.
++Content of converted volume is lost.
++Thin pool's metadata logical volume can be specified with the option
+ \fB\-\-poolmetadata\fP or allocated with \fB\-\-poolmetadatasize\fP.
  
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 8ffa145..d63b135 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1601,6 +1601,10 @@ struct dm_report_field;
- #define DM_REPORT_FIELD_TYPE_ID_LEN 32
- #define DM_REPORT_FIELD_TYPE_HEADING_LEN 32
- 
-+/* Reserved field names for special purposes. */
-+#define DM_REPORT_FIELD_RESERVED_NAME_HELP "help"  /* shows help */
-+#define DM_REPORT_FIELD_RESERVED_NAME_HELP_ALT "?" /* shows help */
-+
- struct dm_report;
- struct dm_report_field_type {
- 	uint32_t type;		/* object type id */
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 7e8484e..f3395a7 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -529,7 +529,8 @@ static int _parse_fields(struct dm_report *rh, const char *format,
- 		if (!_field_match(rh, ws, (size_t) (we - ws), report_type_only)) {
- 			_display_fields(rh);
- 			log_warn(" ");
--			if (strcasecmp(ws, "help") && strcmp(ws, "?"))
-+			if (strcasecmp(ws, DM_REPORT_FIELD_RESERVED_NAME_HELP) &&
-+			    strcmp(ws, DM_REPORT_FIELD_RESERVED_NAME_HELP_ALT))
- 				log_error("Unrecognised field: %.*s",
- 					  (int) (we - ws), ws);
- 			return 0;
-@@ -556,8 +557,12 @@ static int _parse_keys(struct dm_report *rh, const char *keys,
- 		while (*we && *we != ',')
- 			we++;
- 		if (!_key_match(rh, ws, (size_t) (we - ws), report_type_only)) {
--			log_error("dm_report: Unrecognised field: %.*s",
--				  (int) (we - ws), ws);
-+			_display_fields(rh);
-+			log_warn(" ");
-+			if (strcasecmp(ws, DM_REPORT_FIELD_RESERVED_NAME_HELP) &&
-+			    strcmp(ws, DM_REPORT_FIELD_RESERVED_NAME_HELP_ALT))
-+				log_error("dm_report: Unrecognised field: %.*s",
-+					  (int) (we - ws), ws);
- 			return 0;
- 		}
- 	}
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 2591fd5..b4a0c0b 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -370,7 +370,10 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 					  separator, aligned, buffered,
- 					  headings, field_prefixes, quoted,
- 					  columns_as_rows))) {
--		if (!strcasecmp(options, "help") || !strcmp(options, "?"))
-+		if ( (!strcasecmp(options, DM_REPORT_FIELD_RESERVED_NAME_HELP) ||
-+		      !strcmp(options, DM_REPORT_FIELD_RESERVED_NAME_HELP_ALT)) ||
-+		     (!strcasecmp(keys, DM_REPORT_FIELD_RESERVED_NAME_HELP) ||
-+		      !strcmp(keys, DM_REPORT_FIELD_RESERVED_NAME_HELP_ALT)) )
- 			return r;
- 		return_ECMD_FAILED;
- 	}
+ .SH Examples
 
 
