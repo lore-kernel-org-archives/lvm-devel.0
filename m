@@ -1,181 +1,65 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 14 May 2014 20:15:49 +0000 (UTC)
-Subject: master - man: lvmthin cover snapshot merge and xfs
-Message-ID: <20140514201549.B7BE36036A@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 15 May 2014 07:32:53 +0000 (UTC)
+Subject: master - report: Add metadata_percent to lvs_cols.
+Message-ID: <20140515073253.AF2AD60EE7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=42d7409da2761198781e067b81a4dca86ba27ee9
-Commit:        42d7409da2761198781e067b81a4dca86ba27ee9
-Parent:        044b7968005a23e52a78c26eb56a7f74a973312f
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed May 14 14:05:21 2014 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 14 15:15:35 2014 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5684cfcb1c13129b70ddaf1ee4df95e08bc551a9
+Commit:        5684cfcb1c13129b70ddaf1ee4df95e08bc551a9
+Parent:        42d7409da2761198781e067b81a4dca86ba27ee9
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu May 15 08:32:27 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu May 15 08:32:27 2014 +0100
 
-man: lvmthin cover snapshot merge and xfs
+report: Add metadata_percent to lvs_cols.
 
-also fix a couple inconsistent example values.
 ---
- man/lvmthin.7.in |  115 ++++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 files changed, 112 insertions(+), 3 deletions(-)
+ WHATS_NEW             |    1 +
+ conf/example.conf.in  |    2 +-
+ lib/config/defaults.h |    2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/man/lvmthin.7.in b/man/lvmthin.7.in
-index 5a4ee87..030745b 100644
---- a/man/lvmthin.7.in
-+++ b/man/lvmthin.7.in
-@@ -104,7 +104,7 @@ The primary method for using lvm thin provisioning:
-    lvcreate -n ThinDataLV -L LargeSize VG
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 8bcf687..c5cbf37 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.107 - 
+ ==================================
++  Add metadata_percent to lvs_cols.
+   Take account of parity areas with alloc anywhere in _calc_required_extents.
+   Use proper uint64 casting for calculation of cache metadata size.
+   Better support for nesting of blocking signals.
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index bc1758d..935d3e7 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -1040,7 +1040,7 @@ activation {
  
-    Example
--   # lvcreate -n pool0 -L 100G vg
-+   # lvcreate -n pool0 -L 10G vg
+     # Comma separated list of columns to report for 'lvs' command.
+     # See 'lvs -o help' for the list of possible fields.
+-    # lvs_cols="lv_name,vg_name,lv_attr,lv_size,pool_lv,origin,data_percent,move_pv,mirror_log,copy_percent,convert_lv"
++    # lvs_cols="lv_name,vg_name,lv_attr,lv_size,pool_lv,origin,data_percent,metadata_percent,move_pv,mirror_log,copy_percent,convert_lv"
  
- 2. create ThinMetaLV
+     # Comma separated list of columns to report for 'lvs' command in verbose mode.
+     # See 'lvs -o help' for the list of possible fields.
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 137b4c8..4200dc8 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -180,7 +180,7 @@
+ #define DEFAULT_REP_QUOTED 1
+ #define DEFAULT_REP_SEPARATOR " "
  
-@@ -251,6 +251,10 @@ Single step thin pool LV creation
- .br
- Single step thin pool LV and thin LV creation
- .br
-+Merge thin snapshots
-+.br
-+XFS on snapshots
-+.br
- 
- \&
- 
-@@ -269,7 +273,7 @@ lvcreate -n ThinMetaLV -L SmallSize VG SmallPV
- lvconvert --thinpool VG/ThinDataLV --poolmetadata VG/ThinMetaLV
- 
- Example
--# lvcreate -n pool0 -L 100G vg /dev/sdA
-+# lvcreate -n pool0 -L 10G vg /dev/sdA
- # lvcreate -n pool0meta -L 1G vg /dev/sdB
- # lvconvert --thinpool vg/pool0 --poolmetadata vg/pool0meta
- .fi
-@@ -293,7 +297,7 @@ lvcreate --type raid1 -m 1 -n ThinDataLV -L LargeSize VG PVC PVD
- lvconvert --thinpool VG/ThinDataLV --poolmetadata VG/ThinMetaLV
- 
- Example
--# lvcreate --type raid1 -m 1 -n pool0 -L 100G vg /dev/sdA /dev/sdB
-+# lvcreate --type raid1 -m 1 -n pool0 -L 10G vg /dev/sdA /dev/sdB
- # lvcreate --type raid1 -m 1 -n pool0meta -L 1G vg /dev/sdC /dev/sdD
- # lvconvert --thinpool vg/pool0 --poolmetadata vg/pool0meta
- .fi
-@@ -981,6 +985,111 @@ pool0           vg          twi-a-tz--   8.00m
- thin1           vg          Vwi-a-tz--   2.00g pool0
- .fi
- 
-+
-+.SS Merge thin snapshots
-+
-+\&
-+
-+A thin snapshot can be merged into its origin thin LV using the lvconvert
-+--merge command.  The result of a snapshot merge is that the origin thin
-+LV takes the content of the snapshot LV, and the snapshot LV is removed.
-+Any content that was unique to the origin thin LV is lost after the merge.
-+
-+Because a merge changes the content of an LV, it cannot be done while the
-+LVs are open, e.g. mounted.  If a merge is initiated while the LVs are open,
-+the effect of the merge is delayed until the origin thin LV is next
-+activated.
-+
-+.nf
-+lvconvert --merge VG/SnapLV
-+
-+Example
-+# lvs vg
-+LV      VG Attr       LSize   Pool  Origin
-+pool0   vg twi-a-tz--  10.00g
-+thin1   vg Vwi-a-tz-- 100.00g pool0
-+thin1s1 vg Vwi-a-tz-k 100.00g pool0 thin1
-+
-+# lvconvert --merge vg/thin1s1
-+
-+# lvs vg
-+LV      VG Attr       LSize   Pool  Origin
-+pool0   vg twi-a-tz--  10.00g
-+thin1   vg Vwi-a-tz-- 100.00g pool0
-+.fi
-+
-+.nf
-+Example
-+
-+Delayed merging of open LVs.
-+
-+# lvs vg
-+LV      VG Attr       LSize   Pool  Origin
-+pool0   vg twi-a-tz--  10.00g
-+thin1   vg Vwi-aotz-- 100.00g pool0
-+thin1s1 vg Vwi-aotz-k 100.00g pool0 thin1
-+
-+# df
-+/dev/mapper/vg-thin1            100G   33M  100G   1% /mnt/X
-+/dev/mapper/vg-thin1s1          100G   33M  100G   1% /mnt/Xs
-+
-+# ls /mnt/X
-+file1 file2 file3
-+# ls /mnt/Xs
-+file3 file4 file5
-+
-+# lvconvert --merge vg/thin1s1
-+Logical volume vg/thin1s1 contains a filesystem in use.
-+Delaying merge since snapshot is open.
-+Merging of thin snapshot thin1s1 will occur on next activation.
-+
-+# umount /mnt/X
-+# umount /mnt/Xs
-+
-+# lvs -a vg
-+LV              VG   Attr       LSize   Pool  Origin
-+pool0           vg   twi-a-tz--  10.00g
-+[pool0_tdata]   vg   Twi-ao----  10.00g
-+[pool0_tmeta]   vg   ewi-ao----   1.00g
-+thin1           vg   Owi-a-tz-- 100.00g pool0
-+[thin1s1]       vg   Swi-a-tz-k 100.00g pool0 thin1
-+
-+# lvchange -an vg/thin1
-+# lvchange -ay vg/thin1
-+
-+# mount /dev/vg/thin1 /mnt/X
-+
-+# ls /mnt/X
-+file3 file4 file5 
-+.fi
-+
-+
-+.SS XFS on snapshots
-+
-+\&
-+
-+Mounting an XFS file system on a new snapshot LV requires attention to the
-+file system's log state and uuid.  On the snapshot LV, the xfs log will
-+contain a dummy transaction, and the xfs uuid will match the uuid from the
-+file system on the origin LV.
-+
-+If the snapshot LV is writable, mounting will recover the log to clear the
-+dummy transaction, but will require skipping the uuid check:
-+
-+mount /dev/VG/SnapLV /mnt -o nouuid
-+
-+Or, the uuid can be changed on disk before mounting:
-+
-+xfs_admin -U generate /dev/VG/SnapLV
-+.br
-+mount /dev/VG/SnapLV /mnt
-+
-+If the snapshot LV is readonly, the log recovery and uuid check need to be
-+skipped while mounting readonly:
-+
-+mount /dev/VG/SnapLV /mnt -o ro,nouuid,norecovery
-+
-+
- .SH SEE ALSO
- .BR lvm (8),
- .BR lvm.conf (5),
+-#define DEFAULT_LVS_COLS "lv_name,vg_name,lv_attr,lv_size,pool_lv,origin,data_percent,move_pv,mirror_log,copy_percent,convert_lv"
++#define DEFAULT_LVS_COLS "lv_name,vg_name,lv_attr,lv_size,pool_lv,origin,data_percent,metadata_percent,move_pv,mirror_log,copy_percent,convert_lv"
+ #define DEFAULT_VGS_COLS "vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free"
+ #define DEFAULT_PVS_COLS "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free"
+ #define DEFAULT_SEGS_COLS "lv_name,vg_name,lv_attr,stripes,segtype,seg_size"
 
 
