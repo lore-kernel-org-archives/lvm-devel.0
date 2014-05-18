@@ -1,45 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 18 May 2014 18:10:54 +0000 (UTC)
-Subject: master - debug: backtrace error path
-Message-ID: <20140518181054.853D36026C@fedorahosted.org>
+Date: Sun, 18 May 2014 18:10:56 +0000 (UTC)
+Subject: master - cleanup: device extent_size first
+Message-ID: <20140518181056.A25716026C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=58777756e8453188d9d0aeb906bb74666e5bbecc
-Commit:        58777756e8453188d9d0aeb906bb74666e5bbecc
-Parent:        b73a78675576c562b8bf510d16dab8a35bf4cb02
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=91284bd9b913f74a0071082d542c3c09d11524f2
+Commit:        91284bd9b913f74a0071082d542c3c09d11524f2
+Parent:        58777756e8453188d9d0aeb906bb74666e5bbecc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun May 18 20:07:24 2014 +0200
+AuthorDate:    Sun May 18 20:08:07 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun May 18 20:07:24 2014 +0200
+CommitterDate: Sun May 18 20:08:07 2014 +0200
 
-debug: backtrace error path
+cleanup: device extent_size first
 
-Add backtrace for 'n' answer.
 ---
- lib/metadata/lv_manip.c |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index fa08c39..6a24873 100644
+index 6a24873..0eaa719 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -3166,9 +3166,10 @@ int lv_extend(struct logical_volume *lv,
- 				/* FIXME Support --force */
- 				if (yes_no_prompt("Do full resync of extended "
- 						  "portion of %s/%s?  [y/n]: ",
--						  lv->vg->name, lv->name) == 'y')
--					goto out;
--				r = 0;
-+						  lv->vg->name, lv->name) == 'n') {
-+					r = 0;
-+					goto_out;
-+				}
- 				goto out;
- 			}
+@@ -3560,7 +3560,7 @@ static int _fsadm_cmd(struct cmd_context *cmd,
  
+ 	if (fcmd == FSADM_CMD_RESIZE) {
+ 		if (dm_snprintf(size_buf, SIZE_BUF, "%" PRIu64 "K",
+-				(uint64_t) lp->extents * vg->extent_size / 2) < 0) {
++				(uint64_t) lp->extents * (vg->extent_size / 2)) < 0) {
+ 			log_error("Couldn't generate new LV size string");
+ 			return 0;
+ 		}
 
 
