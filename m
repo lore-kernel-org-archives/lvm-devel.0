@@ -1,203 +1,90 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 20 May 2014 14:28:56 +0000 (UTC)
-Subject: master - tests: update profiles.sh test for latest changes
-Message-ID: <20140520142856.3CEE36011B@fedorahosted.org>
+Date: Tue, 20 May 2014 14:28:49 +0000 (UTC)
+Subject: master - config: add CFG_PROFILABLE_METADATA flag
+Message-ID: <20140520142849.B7E676011B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=83f468be4e8ff6189523eae7de8a087ab42021be
-Commit:        83f468be4e8ff6189523eae7de8a087ab42021be
-Parent:        9c937e7d54221a783d294768efbaad12473a0265
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c5fbd2c59f1248b1315aae71dee032878d8476f8
+Commit:        c5fbd2c59f1248b1315aae71dee032878d8476f8
+Parent:        22cab9c481c853cb58aef4b5836f74b3ddfd586c
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue May 20 14:50:42 2014 +0200
+AuthorDate:    Mon May 19 16:29:50 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue May 20 16:27:09 2014 +0200
+CommitterDate: Mon May 19 16:31:15 2014 +0200
 
-tests: update profiles.sh test for latest changes
+config: add CFG_PROFILABLE_METADATA flag
 
+Mark profilable settings with a separate CFG_PROFILABLE_METADATA
+flag where the profile can be attached to VG/LV. This makes it possible
+to differentiate global command-profilable settings (CFG_PROFILABLE flag)
+and contextual metadata-profilable (per VG/LV) settings (CFG_PROFILABLE_METADATA flag).
 ---
- test/shell/profiles.sh |  130 +++++++++++++++++++++++++++---------------------
- 1 files changed, 73 insertions(+), 57 deletions(-)
+ lib/config/config.h          |    8 ++++++--
+ lib/config/config_settings.h |   13 +++++++------
+ 2 files changed, 13 insertions(+), 8 deletions(-)
 
-diff --git a/test/shell/profiles.sh b/test/shell/profiles.sh
-index bae13d6..49b8b9c 100644
---- a/test/shell/profiles.sh
-+++ b/test/shell/profiles.sh
-@@ -15,12 +15,16 @@
+diff --git a/lib/config/config.h b/lib/config/config.h
+index df5841c..f06fb68 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -97,10 +97,14 @@ typedef union {
+ #define CFG_UNSUPPORTED		0x08
+ /* whether the configuration item is customizable by a profile */
+ #define CFG_PROFILABLE		0x10
++/* whether the configuration item is customizable by a profile */
++/* and whether it can be attached to VG/LV metadata at the same time
++ * The CFG_PROFILABLE_METADATA flag incorporates CFG_PROFILABLE flag!!! */
++#define CFG_PROFILABLE_METADATA 0x30
+ /* whether the default value is undefned */
+-#define CFG_DEFAULT_UNDEFINED	0x20
++#define CFG_DEFAULT_UNDEFINED	0x40
+ /* whether the defualt value is calculated during run time */
+-#define CFG_DEFAULT_RUN_TIME	0x40
++#define CFG_DEFAULT_RUN_TIME	0x80
  
- . lib/test
+ /* configuration definition item structure */
+ typedef struct cfg_def_item {
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 3792238..d277e0e 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -41,6 +41,7 @@
+  * 				CFG_ADVANCED - this node belongs to advanced config set
+  * 				CFG_UNSUPPORTED - this node belongs to unsupported config set
+  * 				CFG_PROFILABLE - this node is customizable by a profile
++ * 				CFG_PROFILABLE_METADATA - profilable and attachable to VG/LV metadata
+  * 				CFG_DEFAULT_UNDEFINED - node's default value is undefined
+  * type:		allowed type for the value of simple configuation setting, one of:
+  * 				CFG_TYPE_BOOL
+@@ -121,10 +122,10 @@ cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separa
+ cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 106), NULL)
+ cfg_runtime(allocation_cache_pool_chunk_size_CFG, "cache_pool_chunk_size", allocation_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_INT, vsn(2, 2, 106), NULL)
+ cfg(allocation_thin_pool_metadata_require_separate_pvs_CFG, "thin_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 89), NULL)
+-cfg(allocation_thin_pool_zero_CFG, "thin_pool_zero", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_ZERO, vsn(2, 2, 99), NULL)
+-cfg(allocation_thin_pool_discards_CFG, "thin_pool_discards", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_STRING, DEFAULT_THIN_POOL_DISCARDS, vsn(2, 2, 99), NULL)
+-cfg(allocation_thin_pool_chunk_size_policy_CFG, "thin_pool_chunk_size_policy", allocation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_STRING, DEFAULT_THIN_POOL_CHUNK_SIZE_POLICY, vsn(2, 2, 101), NULL)
+-cfg_runtime(allocation_thin_pool_chunk_size_CFG, "thin_pool_chunk_size", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_UNDEFINED, CFG_TYPE_INT, vsn(2, 2, 99), NULL)
++cfg(allocation_thin_pool_zero_CFG, "thin_pool_zero", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA, CFG_TYPE_BOOL, DEFAULT_THIN_POOL_ZERO, vsn(2, 2, 99), NULL)
++cfg(allocation_thin_pool_discards_CFG, "thin_pool_discards", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA, CFG_TYPE_STRING, DEFAULT_THIN_POOL_DISCARDS, vsn(2, 2, 99), NULL)
++cfg(allocation_thin_pool_chunk_size_policy_CFG, "thin_pool_chunk_size_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA, CFG_TYPE_STRING, DEFAULT_THIN_POOL_CHUNK_SIZE_POLICY, vsn(2, 2, 101), NULL)
++cfg_runtime(allocation_thin_pool_chunk_size_CFG, "thin_pool_chunk_size", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_UNDEFINED, CFG_TYPE_INT, vsn(2, 2, 99), NULL)
  
--MSG_FAILED_TO_APPLY_PROFILE="Failed to apply configuration profile"
--MSG_IGNORING_INVALID_PROFILE="Ignoring invalid configuration profile"
-+MSG_FAILED_TO_APPLY_CMD_PROFILE="Failed to apply command profile"
-+MSG_IGNORING_INVALID_CMD_PROFILE="Ignoring invalid command profile"
-+MSG_FAILED_TO_APPLY_MDA_PROFILE="Failed to apply metadata profile"
-+MSG_IGNORING_INVALID_MDA_PROFILE="Ignoring invalid metadata profile"
- MSG_NOT_PROFILABLE="not customizable by a profile"
-+MSG_CMD_PROFILABLE_ONLY="customizable by command profile only, not metadata profile"
-+MSG_MDA_PROFILABLE_ONLY="customizable by metadata profile only, not command profile"
  
- # fail if the profile requested by --profile cmdline option is not present
--not pvs --profile nonexistent 2>&1 | grep "$MSG_FAILED_TO_APPLY_PROFILE"
-+not pvs --profile nonexistent 2>&1 | grep "$MSG_FAILED_TO_APPLY_CMD_PROFILE"
- 
- # config/checks=1: warning message about setting not being profilable +
- #                  summary error message about invalid profile
-@@ -28,58 +32,68 @@ not pvs --profile nonexistent 2>&1 | grep "$MSG_FAILED_TO_APPLY_PROFILE"
- aux profileconf invalid 'log/prefix=" "'
- 
- aux lvmconf 'config/checks = 0'
--pvs --profile invalid 2>msg
-+not pvs --profile invalid 2>msg
- not grep "$MSG_NOT_PROFILABLE" msg
--grep "$MSG_IGNORING_INVALID_PROFILE" msg
-+grep "$MSG_IGNORING_INVALID_CMD_PROFILE" msg
-+grep "$MSG_FAILED_TO_APPLY_CMD_PROFILE" msg
- 
- aux lvmconf 'config/checks = 1'
--pvs --profile invalid 2>msg
-+not pvs --profile invalid 2>msg
- grep "$MSG_NOT_PROFILABLE" msg
--grep "$MSG_IGNORING_INVALID_PROFILE" msg
-+grep "$MSG_IGNORING_INVALID_CMD_PROFILE" msg
-+grep "$MSG_FAILED_TO_APPLY_CMD_PROFILE" msg
- 
- aux lvmconf 'allocation/thin_pool_zero = 1'
- 
- # all profilable items listed here - should pass
--aux profileconf valid 'allocation/thin_pool_zero = 0' \
--                      'allocation/thin_pool_discards = "passdown"' \
--                      'allocation/thin_pool_chunk_size = 64'\
--                      'activation/thin_pool_autoextend_threshold = 100' \
--                      'activation/thin_pool_autoextend_percent = 20' \
--                      'global/units = "h"' \
--                      'global/si_unit_consistency = 1' \
--                      'global/suffix = 1' \
--                      'global/lvdisplay_shows_full_device_path = 0' \
--                      'report/aligned = 1' \
--                      'report/buffered = 1' \
--                      'report/headings = 1' \
--                      'report/separator = " "' \
--                      'report/prefixes = 0' \
--                      'report/quoted = 1' \
--                      'report/colums_as_rows = 0' \
--                      'report/devtypes_sort = "devtype_name"' \
--                      'report/devtypes_cols = "devtype_name,devtype_max_partitions,devtype_description"' \
--                      'report/devtypes_cols_verbose = "devtype_name,devtype_max_partitions,devtype_description"' \
--                      'report/lvs_sort = "vg_name,lv_name"' \
--                      'report/lvs_cols = "lv_name,vg_name,lv_attr,lv_size,pool_lv,origin,data_percent,move_pv,mirror_log,copy_percent,convert_lv"' \
--                      'report/lvs_cols_verbose = "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,metadata_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid,lv_profile"' \
--                      'report/vgs_sort = "vg_name"' \
--                      'report/vgs_cols = "vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free"' \
--                      'report/vgs_cols_verbose = "vg_name,vg_attr,vg_extent_size,pv_count,lv_count,snap_count,vg_size,vg_free,vg_uuid,vg_profile"' \
--                      'report/pvs_sort = "pv_name"' \
--                      'report/pvs_cols = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free"' \
--                      'report/pvs_cols_verbose = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,dev_size,pv_uuid"' \
--                      'report/segs_sort = "vg_name,lv_name,seg_start"' \
--                      'report/segs_cols = "lv_name,vg_name,lv_attr,stripes,segtype,seg_size"' \
--                      'report/segs_cols_verbose = "lv_name,vg_name,lv_attr,seg_start,seg_size,stripes,segtype,stripesize,chunksize"' \
--                      'report/pvsegs_sort = "pv_name,pvseg_start"' \
--                      'report/pvsegs_cols = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"' \
--                      'report/pvsegs_cols_verbose = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size,lv_name,seg_start_pe,segtype,seg_pe_ranges"'
--
--aux profileconf extra 'allocation/thin_pool_chunk_size = 128'
--
--pvs --profile valid 2>msg
-+aux profileconf valid_cmd_profile 'global/units = "h"' \
-+				  'global/si_unit_consistency = 1' \
-+				  'global/suffix = 1' \
-+				  'global/lvdisplay_shows_full_device_path = 0' \
-+                                  'report/aligned = 1' \
-+                                  'report/buffered = 1' \
-+                                  'report/headings = 1' \
-+                                  'report/separator = " "' \
-+                                  'report/prefixes = 0' \
-+                                  'report/quoted = 1' \
-+                                  'report/colums_as_rows = 0' \
-+                                  'report/devtypes_sort = "devtype_name"' \
-+                                  'report/devtypes_cols = "devtype_name,devtype_max_partitions,devtype_description"' \
-+                                  'report/devtypes_cols_verbose = "devtype_name,devtype_max_partitions,devtype_description"' \
-+                                  'report/lvs_sort = "vg_name,lv_name"' \
-+                                  'report/lvs_cols = "lv_name,vg_name,lv_attr,lv_size,pool_lv,origin,data_percent,move_pv,mirror_log,copy_percent,convert_lv"' \
-+                                  'report/lvs_cols_verbose = "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,metadata_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid,lv_profile"' \
-+                                  'report/vgs_sort = "vg_name"' \
-+                                  'report/vgs_cols = "vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free"' \
-+                                  'report/vgs_cols_verbose = "vg_name,vg_attr,vg_extent_size,pv_count,lv_count,snap_count,vg_size,vg_free,vg_uuid,vg_profile"' \
-+                                  'report/pvs_sort = "pv_name"' \
-+                                  'report/pvs_cols = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free"' \
-+                                  'report/pvs_cols_verbose = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,dev_size,pv_uuid"' \
-+                                  'report/segs_sort = "vg_name,lv_name,seg_start"' \
-+                                  'report/segs_cols = "lv_name,vg_name,lv_attr,stripes,segtype,seg_size"' \
-+                                  'report/segs_cols_verbose = "lv_name,vg_name,lv_attr,seg_start,seg_size,stripes,segtype,stripesize,chunksize"' \
-+                                  'report/pvsegs_sort = "pv_name,pvseg_start"' \
-+                                  'report/pvsegs_cols = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"' \
-+                                  'report/pvsegs_cols_verbose = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size,lv_name,seg_start_pe,segtype,seg_pe_ranges"'
-+
-+aux profileconf valid_mda_profile 'allocation/thin_pool_zero = 0' \
-+				  'allocation/thin_pool_discards = "passdown"' \
-+				  'allocation/thin_pool_chunk_size = 64'\
-+				  'activation/thin_pool_autoextend_threshold = 100' \
-+				  'activation/thin_pool_autoextend_percent = 20' \
-+
-+
-+aux profileconf extra_mda_profile 'allocation/thin_pool_chunk_size = 128'
-+
-+pvs --profile valid_cmd_profile 2>msg
- not grep "$MSG_NOT_PROFILABLE" msg
--not grep "$MSG_IGNORING_INVALID_PROFILE" msg
-+not grep "$MSG_IGNORING_INVALID_CMD_PROFILE" msg
-+not grep "$MSG_IGNORING_INVALID_MDA_PROFILE" msg
-+
-+not pvs --profile valid_mda_profile 2>msg
-+grep "$MSG_MDA_PROFILABLE_ONLY" msg
-+grep "$MSG_IGNORING_INVALID_CMD_PROFILE" msg
-+not grep "$MSG_IGNORING_INVALID_MDA_PROFILE" msg
- 
- # attaching/detaching profiles to VG/LV
- aux prepare_pvs 1 8
-@@ -88,27 +102,29 @@ vgcreate $vg1 "$dev1"
- check vg_field $vg1 vg_profile ""
- lvcreate -l 1 -n $lv1 $vg1
- check lv_field $vg1/$lv1 lv_profile ""
--vgchange --profile valid $vg1
--check vg_field $vg1 vg_profile valid
-+vgchange --profile valid_mda_profile $vg1
-+check vg_field $vg1 vg_profile valid_mda_profile
- check lv_field $vg1/$lv1 lv_profile ""
--lvchange --profile extra $vg1/$lv1
--check vg_field $vg1 vg_profile valid
--check lv_field $vg1/$lv1 lv_profile extra
-+lvchange --profile extra_mda_profile $vg1/$lv1
-+check vg_field $vg1 vg_profile valid_mda_profile
-+check lv_field $vg1/$lv1 lv_profile extra_mda_profile
- vgchange --detachprofile $vg1
- check vg_field $vg1 vg_profile ""
--check lv_field $vg1/$lv1 lv_profile extra
-+check lv_field $vg1/$lv1 lv_profile extra_mda_profile
- lvchange --detachprofile $vg1/$lv1
- check vg_field $vg1 vg_profile ""
- check lv_field $vg1/$lv1 lv_profile ""
- 
- # dumpconfig and merged lvm.conf + profile
-+aux lvmconf 'global/units="m"'
-+aux profileconf extra_cmd_profile 'global/units="h"'
- lvm dumpconfig &>out
--grep 'thin_pool_zero=1' out
--lvm dumpconfig --profile valid --mergedconfig >out
--grep 'thin_pool_zero=0' out
-+grep 'units="m"' out
-+lvm dumpconfig --profile extra_cmd_profile --mergedconfig >out
-+grep 'units="h"' out
- 
- # dumpconfig --profilable output must be usable as a profile
--lvm dumpconfig --type profilable --file etc/profile/generated.profile
-+lvm dumpconfig --type profilable-command --file etc/profile/generated.profile
- pvs --profile generated &> msg
- not grep "$MSG_NOT_PROFILABLE" msg
--not grep "$MSG_IGNORING_INVALID_PROFILE" msg
-+not grep "$MSG_IGNORING_INVALID_CMD_PROFILE" msg
+ cfg(log_verbose_CFG, "verbose", log_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_VERBOSE, vsn(1, 0, 0), NULL)
+@@ -204,8 +205,8 @@ cfg(activation_mirror_log_fault_policy_CFG, "mirror_log_fault_policy", activatio
+ cfg_runtime(activation_mirror_image_fault_policy_CFG, "mirror_image_fault_policy", activation_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(2, 2, 57), NULL)
+ cfg(activation_snapshot_autoextend_threshold_CFG, "snapshot_autoextend_threshold", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_SNAPSHOT_AUTOEXTEND_THRESHOLD, vsn(2, 2, 75), NULL)
+ cfg(activation_snapshot_autoextend_percent_CFG, "snapshot_autoextend_percent", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_SNAPSHOT_AUTOEXTEND_PERCENT, vsn(2, 2, 75), NULL)
+-cfg(activation_thin_pool_autoextend_threshold_CFG, "thin_pool_autoextend_threshold", activation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_INT, DEFAULT_THIN_POOL_AUTOEXTEND_THRESHOLD, vsn(2, 2, 89), NULL)
+-cfg(activation_thin_pool_autoextend_percent_CFG, "thin_pool_autoextend_percent", activation_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_INT, DEFAULT_THIN_POOL_AUTOEXTEND_PERCENT, vsn(2, 2, 89), NULL)
++cfg(activation_thin_pool_autoextend_threshold_CFG, "thin_pool_autoextend_threshold", activation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA, CFG_TYPE_INT, DEFAULT_THIN_POOL_AUTOEXTEND_THRESHOLD, vsn(2, 2, 89), NULL)
++cfg(activation_thin_pool_autoextend_percent_CFG, "thin_pool_autoextend_percent", activation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA, CFG_TYPE_INT, DEFAULT_THIN_POOL_AUTOEXTEND_PERCENT, vsn(2, 2, 89), NULL)
+ cfg_array(activation_mlock_filter_CFG, "mlock_filter", activation_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 62), NULL)
+ cfg(activation_use_mlockall_CFG, "use_mlockall", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_MLOCKALL, vsn(2, 2, 62), NULL)
+ cfg(activation_monitoring_CFG, "monitoring", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_DMEVENTD_MONITOR, vsn(2, 2, 63), NULL)
 
 
