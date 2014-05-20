@@ -1,64 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 20 May 2014 20:53:16 +0000 (UTC)
-Subject: master - tests: lvconvert needs --yes
-Message-ID: <20140520205316.A5163601FB@fedorahosted.org>
+Date: Tue, 20 May 2014 20:53:18 +0000 (UTC)
+Subject: master - tests: checking mirror_remove_missing
+Message-ID: <20140520205318.C75D7601FB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f919a255b7875db0049eb71e10a2638842541415
-Commit:        f919a255b7875db0049eb71e10a2638842541415
-Parent:        e538354e281c7b00667b3385878b4c32693359b5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b57b4db88940566cb7df9368eb5520ebab1634a2
+Commit:        b57b4db88940566cb7df9368eb5520ebab1634a2
+Parent:        f919a255b7875db0049eb71e10a2638842541415
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 20 22:50:33 2014 +0200
+AuthorDate:    Tue May 20 22:50:52 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue May 20 22:50:33 2014 +0200
+CommitterDate: Tue May 20 22:50:52 2014 +0200
 
-tests: lvconvert needs --yes
+tests: checking mirror_remove_missing
 
+FIXME:
+
+Seems like conversion of log is not supported in clustered VG
+and needs to be fixed.
 ---
- test/shell/pvmove-cache-segtypes.sh |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ test/shell/lvconvert-repair-replace.sh |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/pvmove-cache-segtypes.sh b/test/shell/pvmove-cache-segtypes.sh
-index db3bde5..c9f2078 100644
---- a/test/shell/pvmove-cache-segtypes.sh
-+++ b/test/shell/pvmove-cache-segtypes.sh
-@@ -110,7 +110,7 @@ lvremove -ff $vg
- lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
- lvcreate --type raid1 -L 2M -n meta $vg "$dev1" "$dev2"
- lvcreate --type raid1 -L 4M -n ${lv1}_pool $vg "$dev1" "$dev2"
--lvconvert --type cache-pool $vg/${lv1}_pool --poolmetadata $vg/meta
-+lvconvert --yes --type cache-pool $vg/${lv1}_pool --poolmetadata $vg/meta
- lvcreate --type cache -n $lv1 -L 8M $vg/${lv1}_pool "$dev5"
+diff --git a/test/shell/lvconvert-repair-replace.sh b/test/shell/lvconvert-repair-replace.sh
+index 53c0938..c02d2ac 100644
+--- a/test/shell/lvconvert-repair-replace.sh
++++ b/test/shell/lvconvert-repair-replace.sh
+@@ -51,10 +51,15 @@ check mirror $vg 2way
+ aux enable_dev "$dev1" "$dev2"
+ vgremove -ff $vg
  
- check lv_tree_on $vg ${lv1}_foo "$dev1"
-@@ -142,7 +142,7 @@ lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
- # RAID for cachepool
- lvcreate --type raid1 -m 1 -L 2M -n meta $vg "$dev1" "$dev2"
- lvcreate --type raid1 -m 1 -L 4M -n cachepool $vg "$dev1" "$dev2"
--lvconvert --type cache-pool $vg/cachepool --poolmetadata $vg/meta
-+lvconvert --yes --type cache-pool $vg/cachepool --poolmetadata $vg/meta
- # RAID for thin pool data LV
- lvcreate --type raid1 -m 1 -L 8 -n thinpool $vg "$dev3" "$dev4"
- # Convert thin pool data to a cached LV
-@@ -150,7 +150,7 @@ lvconvert --type cache $vg/thinpool --cachepool $vg/cachepool
- # Create simple thin pool meta
- lvcreate -L 2M -n meta $vg "$dev1"
- # Use thin pool data LV to build a thin pool
--lvconvert --thinpool $vg/thinpool --poolmetadata $vg/meta
-+lvconvert --yes --thinpool $vg/thinpool --poolmetadata $vg/meta
- # Create a thin lv for fun
- lvcreate -T $vg/thinpool -V 20 -n thin_lv
++# FIXME  - exclusive activation for mirrors should work here
++# conversion of inactive cluster logs is also unsupported
++test -e LOCAL_CLVMD && exit 0
++
++
+ # Test repair of inactive mirror with log failure
+ #  Replacement should fail, but convert should succeed (switch to corelog)
+ vgcreate $vg "$dev1" "$dev2" "$dev3" "$dev4"
+-lvcreate -aey --type mirror -m 2 --ignoremonitoring --nosync -l 2 -n mirror2 $vg "$dev1" "$dev2" "$dev3" "$dev4":0
++lvcreate -aey --type mirror -m 2 --ignoremonitoring -l 2 -n mirror2 $vg "$dev1" "$dev2" "$dev3" "$dev4":0
+ vgchange -a n $vg
+ pvremove -ff -y "$dev4"
+ lvconvert -y --repair $vg/mirror2
+@@ -62,9 +67,6 @@ check mirror $vg mirror2
+ vgs $vg
+ vgremove -ff $vg
  
-@@ -174,4 +174,4 @@ check lv_tree_on $vg thinpool "$dev3" "$dev4" "$dev5" # Move non-cache tmeta
- #check lv_tree_on $vg $vg/thinpool "$dev3" "$dev4"
- #check dev_md5sum $vg/thin_lv
- 
--lvremove -ff $vg
-\ No newline at end of file
-+lvremove -ff $vg
+-# FIXME  - exclusive activation for mirrors should work here
+-test -e LOCAL_CLVMD && exit 0
+-
+ if kernel_at_least 3 0 0; then
+ 	# 2-way, mirrored log
+ 	# Double log failure, full replace
 
 
