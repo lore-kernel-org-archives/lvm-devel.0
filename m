@@ -1,61 +1,52 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 20 May 2014 20:53:18 +0000 (UTC)
-Subject: master - tests: checking mirror_remove_missing
-Message-ID: <20140520205318.C75D7601FB@fedorahosted.org>
+From: dongmao zhang <dmzhang@suse.com>
+Date: Wed, 21 May 2014 15:21:46 +0800
+Subject: [PATCH] Mark the generated service file avaliable to be accessed
+Message-ID: <1400656906-14751-1-git-send-email-dmzhang@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b57b4db88940566cb7df9368eb5520ebab1634a2
-Commit:        b57b4db88940566cb7df9368eb5520ebab1634a2
-Parent:        f919a255b7875db0049eb71e10a2638842541415
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 20 22:50:52 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue May 20 22:50:52 2014 +0200
+'journalctl -b' reports this:
+May 17 08:21:00 test systemd[1]: Configuration file
+/run/systemd/generator/lvm2-activation-early.service is marked
+world-inaccessible. This has no effect as configuration data is
+accessible via
+APIs without restrictions. Proceeding anyway.
 
-tests: checking mirror_remove_missing
-
-FIXME:
-
-Seems like conversion of log is not supported in clustered VG
-and needs to be fixed.
+So, set the mask to 022 for all the generators
 ---
- test/shell/lvconvert-repair-replace.sh |   10 ++++++----
- 1 files changed, 6 insertions(+), 4 deletions(-)
+ scripts/lvm2_activation_generator_systemd_red_hat.c | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/test/shell/lvconvert-repair-replace.sh b/test/shell/lvconvert-repair-replace.sh
-index 53c0938..c02d2ac 100644
---- a/test/shell/lvconvert-repair-replace.sh
-+++ b/test/shell/lvconvert-repair-replace.sh
-@@ -51,10 +51,15 @@ check mirror $vg 2way
- aux enable_dev "$dev1" "$dev2"
- vgremove -ff $vg
+diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
+index e39f901..6a003f5 100644
+--- a/scripts/lvm2_activation_generator_systemd_red_hat.c
++++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
+@@ -170,6 +170,7 @@ int main(int argc, char *argv[])
+ {
+ 	const char *dir;
+ 	int r = EXIT_SUCCESS;
++	mode_t old_mask;
  
-+# FIXME  - exclusive activation for mirrors should work here
-+# conversion of inactive cluster logs is also unsupported
-+test -e LOCAL_CLVMD && exit 0
-+
-+
- # Test repair of inactive mirror with log failure
- #  Replacement should fail, but convert should succeed (switch to corelog)
- vgcreate $vg "$dev1" "$dev2" "$dev3" "$dev4"
--lvcreate -aey --type mirror -m 2 --ignoremonitoring --nosync -l 2 -n mirror2 $vg "$dev1" "$dev2" "$dev3" "$dev4":0
-+lvcreate -aey --type mirror -m 2 --ignoremonitoring -l 2 -n mirror2 $vg "$dev1" "$dev2" "$dev3" "$dev4":0
- vgchange -a n $vg
- pvremove -ff -y "$dev4"
- lvconvert -y --repair $vg/mirror2
-@@ -62,9 +67,6 @@ check mirror $vg mirror2
- vgs $vg
- vgremove -ff $vg
+ 	kmsg_fd = open(KMSG_DEV_PATH, O_WRONLY|O_NOCTTY);
  
--# FIXME  - exclusive activation for mirrors should work here
--test -e LOCAL_CLVMD && exit 0
--
- if kernel_at_least 3 0 0; then
- 	# 2-way, mirrored log
- 	# Double log failure, full replace
+@@ -184,10 +185,13 @@ int main(int argc, char *argv[])
+ 
+ 	dir = argv[1];
+ 
++	/* mark lvm2-activation.*.service as world-accessible */
++	old_mask = umask(0022);
+ 	if (!generate_unit(dir, UNIT_EARLY) ||
+ 	    !generate_unit(dir, UNIT_MAIN) ||
+ 	    !generate_unit(dir, UNIT_NET))
+ 		r = EXIT_FAILURE;
++	umask(old_mask);
+ out:
+ 	if (r)
+ 		kmsg(LOG_ERR, "LVM: Activation generator failed.\n");
+-- 
+1.8.4.5
 
 
