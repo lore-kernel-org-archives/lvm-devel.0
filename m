@@ -1,52 +1,39 @@
-From: dongmao zhang <dmzhang@suse.com>
-Date: Wed, 21 May 2014 15:21:46 +0800
-Subject: [PATCH] Mark the generated service file avaliable to be accessed
-Message-ID: <1400656906-14751-1-git-send-email-dmzhang@suse.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 21 May 2014 07:45:42 +0000 (UTC)
+Subject: master - systemd: install lvm2-cluster-activation script as executable
+Message-ID: <20140521074542.2CA6460756@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-'journalctl -b' reports this:
-May 17 08:21:00 test systemd[1]: Configuration file
-/run/systemd/generator/lvm2-activation-early.service is marked
-world-inaccessible. This has no effect as configuration data is
-accessible via
-APIs without restrictions. Proceeding anyway.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7d7c1f2025e73e729e53ddb9e09ce8097b532797
+Commit:        7d7c1f2025e73e729e53ddb9e09ce8097b532797
+Parent:        b57b4db88940566cb7df9368eb5520ebab1634a2
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed May 21 09:45:29 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed May 21 09:45:29 2014 +0200
 
-So, set the mask to 022 for all the generators
+systemd: install lvm2-cluster-activation script as executable
+
 ---
- scripts/lvm2_activation_generator_systemd_red_hat.c | 4 ++++
- 1 file changed, 4 insertions(+)
+ scripts/Makefile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
-index e39f901..6a003f5 100644
---- a/scripts/lvm2_activation_generator_systemd_red_hat.c
-+++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
-@@ -170,6 +170,7 @@ int main(int argc, char *argv[])
- {
- 	const char *dir;
- 	int r = EXIT_SUCCESS;
-+	mode_t old_mask;
- 
- 	kmsg_fd = open(KMSG_DEV_PATH, O_WRONLY|O_NOCTTY);
- 
-@@ -184,10 +185,13 @@ int main(int argc, char *argv[])
- 
- 	dir = argv[1];
- 
-+	/* mark lvm2-activation.*.service as world-accessible */
-+	old_mask = umask(0022);
- 	if (!generate_unit(dir, UNIT_EARLY) ||
- 	    !generate_unit(dir, UNIT_MAIN) ||
- 	    !generate_unit(dir, UNIT_NET))
- 		r = EXIT_FAILURE;
-+	umask(old_mask);
- out:
- 	if (r)
- 		kmsg(LOG_ERR, "LVM: Activation generator failed.\n");
--- 
-1.8.4.5
+diff --git a/scripts/Makefile.in b/scripts/Makefile.in
+index 2c92033..19fd5d8 100644
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -115,7 +115,7 @@ endif
+ ifneq ("@CLVMD@", "none")
+ 	$(INSTALL_DATA) lvm2_clvmd_systemd_red_hat.service $(systemd_unit_dir)/lvm2-clvmd.service
+ 	$(INSTALL_DATA) lvm2_cluster_activation_systemd_red_hat.service $(systemd_unit_dir)/lvm2-cluster-activation.service
+-	$(INSTALL_DATA) lvm2_cluster_activation_red_hat.sh $(systemd_dir)/lvm2-cluster-activation
++	$(INSTALL_SCRIPT) lvm2_cluster_activation_red_hat.sh $(systemd_dir)/lvm2-cluster-activation
+ endif
+ ifeq ("@BUILD_CMIRRORD@", "yes")
+ 	$(INSTALL_DATA) lvm2_cmirrord_systemd_red_hat.service $(systemd_unit_dir)/lvm2-cmirrord.service
 
 
