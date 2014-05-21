@@ -1,55 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 21 May 2014 22:56:07 +0000 (UTC)
-Subject: master - tests: more vgcfgrestore testing
-Message-ID: <20140521225607.D957460F34@fedorahosted.org>
+Date: Wed, 21 May 2014 22:56:10 +0000 (UTC)
+Subject: master - tests: more pvchange tests
+Message-ID: <20140521225610.008B460DF8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=79f466524377f08ff4a736f159eac44f9923f4f1
-Commit:        79f466524377f08ff4a736f159eac44f9923f4f1
-Parent:        a4ac21aded0eec0e93ce0026cb77cd377d8713ef
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=37b4dc777590ed0e6771833dce4c0727dfc72465
+Commit:        37b4dc777590ed0e6771833dce4c0727dfc72465
+Parent:        79f466524377f08ff4a736f159eac44f9923f4f1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 21 23:12:00 2014 +0200
+AuthorDate:    Wed May 21 23:13:19 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 21 23:14:41 2014 +0200
+CommitterDate: Wed May 21 23:14:42 2014 +0200
 
-tests: more vgcfgrestore testing
+tests: more pvchange tests
 
-Check '-l' and archiving.
 ---
- test/shell/vgcfgbackup-usage.sh |   12 +++++++++++-
- 1 files changed, 11 insertions(+), 1 deletions(-)
+ test/shell/pvchange-usage.sh |   15 ++++++++++++---
+ 1 files changed, 12 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/vgcfgbackup-usage.sh b/test/shell/vgcfgbackup-usage.sh
-index 193bb9d..bc09b5b 100644
---- a/test/shell/vgcfgbackup-usage.sh
-+++ b/test/shell/vgcfgbackup-usage.sh
-@@ -31,12 +31,22 @@ vgcfgbackup
- test -e etc/backup/$vg1
- test -e etc/backup/$vg2
+diff --git a/test/shell/pvchange-usage.sh b/test/shell/pvchange-usage.sh
+index 00489bd..71388de 100644
+--- a/test/shell/pvchange-usage.sh
++++ b/test/shell/pvchange-usage.sh
+@@ -77,7 +77,11 @@ check pvlv_counts $vg1 2 0 0
  
-+aux lvmconf "backup/archive = 1"
-+
- vgcfgbackup -f "bak-%s" >out
- grep "Volume group \"$vg1\" successfully backed up." out
- grep "Volume group \"$vg2\" successfully backed up." out
- # increase seqno
- lvcreate -an -Zn -l1 $vg1
--vgcfgrestore -f "bak-$vg1" $vg1
-+
-+invalid vgcfgrestore -f "bak-$vg1" $vg1-inv at lid
-+invalid vgcfgrestore -f "bak-$vg1" $vg1 $vg2
-+
-+vgcfgrestore -l $vg1 | tee out
-+test $(grep Description out | wc -l) -eq 2
-+
-+vgcfgrestore -l -f "bak-$vg1" $vg1
-+
- vgremove -ff $vg1 $vg2
+ # some args are needed
+ invalid pvchange
+-
++# some PV needed
++invalid pvchange --addtag tag
++invalid pvchange --deltag tag
++# some --all & PV can go together
++invalid pvchange -a "$dev1" --addtag tag
+ # '-a' needs more params
+ invalid pvchange -a
+ # '-a' is searching for devs, so specifying device is invalid
+@@ -91,6 +95,11 @@ not pvchange -u "$dev1"
  
- # vgcfgbackup correctly stores metadata with missing PVs
+ vgremove -f $vg1
+ 
+-# "pvchange reject --addtag to lvm1 pv"
++# cannot change PV tag to PV that is not in VG"
++fail pvchange "$dev1" --addtag test
++fail pvchange "$dev1" --deltag test
++
++# cannot add PV tag to lvm1 format
+ pvcreate -M1 "$dev1"
+-not pvchange "$dev1" --addtag test
++vgcreate -M1 $vg1 "$dev1"
++fail pvchange "$dev1" --addtag test
 
 
