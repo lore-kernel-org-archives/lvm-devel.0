@@ -1,47 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 21 May 2014 15:00:43 +0000 (UTC)
-Subject: master - tests: restore disable_dev behavior
-Message-ID: <20140521150043.D2D726053A@fedorahosted.org>
+Date: Wed, 21 May 2014 22:56:01 +0000 (UTC)
+Subject: master - vgcfgrestore: return invalid cmd line
+Message-ID: <20140521225601.837FE609E4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c4953df1b5b2e2e509f6f89598a733d5d580f2b
-Commit:        9c4953df1b5b2e2e509f6f89598a733d5d580f2b
-Parent:        8db67d2aff7757d022f7d339451aeb93b0374311
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3ac7d2deb4270504dbae369b0b1bf14cb25a1b38
+Commit:        3ac7d2deb4270504dbae369b0b1bf14cb25a1b38
+Parent:        9c4953df1b5b2e2e509f6f89598a733d5d580f2b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 21 16:59:38 2014 +0200
+AuthorDate:    Wed May 21 23:11:15 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 21 16:59:38 2014 +0200
+CommitterDate: Wed May 21 23:14:41 2014 +0200
 
-tests: restore disable_dev behavior
+vgcfgrestore: return invalid cmd line
 
-Notify needs to go  with major:minor before device disappears.
+When error is detected on command line options, return '3'.
 ---
- test/lib/aux.sh |    7 +------
- 1 files changed, 1 insertions(+), 6 deletions(-)
+ tools/vgcfgrestore.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index e422fa0..01bc1ea 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -413,14 +413,9 @@ disable_dev() {
- 		min=$(($(stat -L --printf=0x%T "$dev")))
- 		echo "Disabling device $dev ($maj:$min)"
- 		dmsetup remove -f "$dev" 2>/dev/null || true
--	done
--	finish_udev_transaction
--
--	for dev in "$@"; do
--		maj=$(($(stat -L --printf=0x%t "$dev")))
--		min=$(($(stat -L --printf=0x%T "$dev")))
- 		notify_lvmetad --major "$maj" --minor "$min"
- 	done
-+	finish_udev_transaction
- }
+diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
+index 36396c3..07c5c20 100644
+--- a/tools/vgcfgrestore.c
++++ b/tools/vgcfgrestore.c
+@@ -23,11 +23,11 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
+ 		vg_name = skip_dev_dir(cmd, argv[0], NULL);
+ 		if (!validate_name(vg_name)) {
+ 			log_error("Volume group name \"%s\" is invalid", vg_name);
+-			return ECMD_FAILED;
++			return EINVALID_CMD_LINE;
+ 		}
+ 	} else if (!(arg_count(cmd, list_ARG) && arg_count(cmd, file_ARG))) {
+ 		log_error("Please specify a *single* volume group to restore.");
+-		return ECMD_FAILED;
++		return EINVALID_CMD_LINE;
+ 	}
  
- enable_dev() {
+ 	/*
 
 
