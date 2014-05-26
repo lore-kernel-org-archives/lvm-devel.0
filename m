@@ -1,91 +1,63 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 26 May 2014 21:32:20 +0000 (UTC)
-Subject: master - dmsetup: add warning
-Message-ID: <20140526213220.BF35F60DC8@fedorahosted.org>
+Date: Mon, 26 May 2014 21:32:22 +0000 (UTC)
+Subject: master - man: cleanup dmsetup
+Message-ID: <20140526213222.D62CF60DC8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3cb2658fb7ff0bba45e66e79bce8812c819dff52
-Commit:        3cb2658fb7ff0bba45e66e79bce8812c819dff52
-Parent:        6e9105c7bb7f4a1beb34579303670e4510c7d2e6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=965592340d04f02096b800107591290c1ad44443
+Commit:        965592340d04f02096b800107591290c1ad44443
+Parent:        3cb2658fb7ff0bba45e66e79bce8812c819dff52
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 26 22:51:04 2014 +0200
+AuthorDate:    Mon May 26 22:55:31 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 26 22:56:30 2014 +0200
+CommitterDate: Mon May 26 22:57:20 2014 +0200
 
-dmsetup: add warning
+man: cleanup dmsetup
 
-Warn when --udevcookie/DM_UDEV_COOKIE is used with 'dmsetup remove --force'.
-
-When command is doing multiple ioctl operations on a single device,
-it may invoke udev activity, that is colliding with further ioctl commands.
-The result of such operation becomes unpredictable.
-Use of --retry could partially help...
+Add few bold texts.
 ---
- WHATS_NEW_DM     |    1 +
- man/dmsetup.8.in |    6 ++++++
- tools/dmsetup.c  |   10 +++++++++-
- 3 files changed, 16 insertions(+), 1 deletions(-)
+ man/dmsetup.8.in |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 6304ff6..8e221c1 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.88 - 
- =================================
-+  Warn user about incorrect use of cookie with 'dmsetup remove --force'.
-   Also recognize 'help'/'?' as reserved sort key name to show help.
-   Export recognized DM_REPORT_FIELD_RESERVED_NAME_{HELP,HELP_ALT} to show help.
-   Add dm_units_to_factor for size unit parsing.
 diff --git a/man/dmsetup.8.in b/man/dmsetup.8.in
-index 599c843..ae84489 100644
+index ae84489..9a738fb 100644
 --- a/man/dmsetup.8.in
 +++ b/man/dmsetup.8.in
-@@ -243,6 +243,9 @@ Specify a one-line table directly on the command line.
- .TP
- .B \-\-udevcookie \fIcookie
- Use cookie for udev synchronisation.
-+Note: Same cookie should be used for same type of operations i.e. creation of
-+multiple different devices. It's not adviced to combine different
-+operations on the single device.
- .TP
- .BR \-u | \-\-uuid
- Specify the uuid.
-@@ -429,6 +432,9 @@ process to be killed. If an attempt to remove a device fails,
+@@ -426,11 +426,11 @@ that contain a version of device-mapper prior to 4.8.0.
+ In this case the device will be deleted when its open_count
+ drops to zero.  From version 4.8.0 onwards, if a device can't
+ be removed because an uninterruptible process is waiting for
+-I/O to return from it, adding \-\-force will replace the table
++I/O to return from it, adding \fB\-\-force\fP will replace the table
+ with one that fails all I/O, which might allow the
+ process to be killed. If an attempt to remove a device fails,
  perhaps because a process run from a quick udev rule
- temporarily opened the device, the \-\-retry option will cause
+-temporarily opened the device, the \-\-retry option will cause
++temporarily opened the device, the \fB\-\-retry\fP option will cause
  the operation to be retried for a few seconds before failing.
-+Do NOT combine \fB\-\-force\fP and \fB\-\-udevcookie\fP,
-+as udev may start to process udev rules in the middle of error target
-+replacement and result in nondeterministic result.
+ Do NOT combine \fB\-\-force\fP and \fB\-\-udevcookie\fP,
+ as udev may start to process udev rules in the middle of error target
+@@ -443,7 +443,7 @@ replacement and result in nondeterministic result.
+ Attempts to remove all device definitions i.e. reset the driver.
+ Use with care!  From version 4.8.0 onwards, if devices can't
+ be removed because uninterruptible processes are waiting for
+-I/O to return from them, adding \-\-force will replace the table
++I/O to return from them, adding \fB\-\-force\fP will replace the table
+ with one that fails all I/O, which might allow the
+ process to be killed.  This also runs \fBmknodes\fP afterwards.
  .br
- .HP
- .B remove_all
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 4433571..f84d1a8 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -1498,8 +1498,16 @@ error:
- 
- static int _remove(CMD_ARGS)
- {
--	if (_switches[FORCE_ARG] && argc > 1)
-+	if (_switches[FORCE_ARG] && argc > 1) {
-+		/*
-+		 * 'remove --force' option is doing 2 operations on the same device
-+		 * this is not compatible with the use of --udevcookie/DM_UDEV_COOKIE.
-+		 * Udevd collision could be partially avoided with --retry.
-+		 */
-+		if (_udev_cookie)
-+			log_warn("WARNING: Use of cookie and --force is not compatible.");
- 		(void) _error_device(cmd, argc, argv, NULL, 0);
-+	}
- 
- 	return _simple(DM_DEVICE_REMOVE, argc > 1 ? argv[1] : NULL, 0, 0);
- }
+@@ -494,7 +494,7 @@ Default subsystem is LVM.
+ .RI [ device_name ]
+ .br
+ Outputs status information for each of the device's targets.
+-With \-\-target, only information relating to the specified target type
++With \fB\-\-target\fP, only information relating to the specified target type
+ any is displayed.  With \fB\-\-noflush\fP, the thin target (from version 1.3.0)
+ doesn't commit any outstanding changes to disk before reporting its statistics.
+ .br
 
 
