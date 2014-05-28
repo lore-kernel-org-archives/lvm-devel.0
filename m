@@ -1,57 +1,60 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  9 May 2014 06:56:37 +0000 (UTC)
-Subject: dev-prajnoha-selout - cleanup: cosmetics.
-Message-ID: <20140509065637.47ABF60774@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 28 May 2014 13:36:04 +0000 (UTC)
+Subject: master - tests: dd needs to hit disk
+Message-ID: <20140528133604.9932D6061F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
-Commit:        d3e68c8a71c3bc36135d73cd8028cec56eca5cb2
-Parent:        d88fab8d3a64cb492c808a50d247686febedc9e3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=171a668e81d9c647677465f042775722a35c5a6e
+Commit:        171a668e81d9c647677465f042775722a35c5a6e
+Parent:        ba3e6e7c323a48b64720f7a182d5c8eca0a5613c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 7 11:44:33 2014 +0200
+AuthorDate:    Wed May 28 15:24:41 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 7 14:17:46 2014 +0200
+CommitterDate: Wed May 28 15:33:41 2014 +0200
 
-cleanup: cosmetics.
+tests: dd needs to hit disk
 
-Initialized attrs so analyzers are less confused
-(since currently our method calls should always initialize attrs on
-return).
+Unsure if this is feature or bug of syncaction,
+but it needs to be present physically on the media
+and it ignores content of buffer cache...
+
+(maybe lvchange should implicitely fsync all disks
+that are members of raid array before starting test??)
 ---
- lib/metadata/snapshot_manip.c |    2 +-
- libdm/libdm-common.c          |    3 ++-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ test/shell/lvchange-raid.sh |   17 +----------------
+ 1 files changed, 1 insertions(+), 16 deletions(-)
 
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index a0a3e3c..5df0f98 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -41,7 +41,7 @@ int lv_is_cow(const struct logical_volume *lv)
- static uint64_t _cow_extra_chunks(struct cmd_context *cmd, uint64_t n_chunks)
- {
- 	const struct segment_type *segtype;
--	unsigned attrs;
-+	unsigned attrs = 0;
+diff --git a/test/shell/lvchange-raid.sh b/test/shell/lvchange-raid.sh
+index 209e094..a229154 100644
+--- a/test/shell/lvchange-raid.sh
++++ b/test/shell/lvchange-raid.sh
+@@ -157,22 +157,7 @@ run_syncaction_check() {
  
- 	if (activation() &&
- 	    (segtype = get_segtype_from_string(cmd, "snapshot")) &&
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index f404c63..bb793e3 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -1907,7 +1907,8 @@ static int _device_has_mounted_fs(char *buffer, unsigned major, unsigned minor,
- 	char kernel_dev_name[PATH_MAX];
+ 	# Overwrite the last half of one of the PVs with crap
+ 	dd if=/dev/urandom of="$device" bs=1k count=$size seek=$seek
+-
+-	if [ -n "$THIN_POSTFIX" ]; then
+-		#
+-		# Seems to work fine on real devices,
+-		# but can't make the system notice the bad blocks
+-		# in the testsuite - especially when thin is layered
+-		# on top of RAID.  In other cases, I can deactivate
+-		# and reactivate and it works.  Here, even that doesn't
+-		# work.
+-		return 0
+-		lvchange -an $vg/$2
+-		lvchange -ay $vg/$2
+-	else
+-		lvchange -an $vg/$lv
+-		lvchange -ay $vg/$lv
+-	fi
++	sync
  
- 	if ((major == data->maj) && (minor == data->min)) {
--		if (!dm_device_get_name(major, minor, 1, kernel_dev_name, PATH_MAX)) {
-+		if (!dm_device_get_name(major, minor, 1, kernel_dev_name,
-+					sizeof(kernel_dev_name))) {
- 			stack;
- 			*kernel_dev_name = '\0';
- 		}
+ 	# "check" should find discrepancies but not change them
+ 	# 'lvs' should show results
 
 
