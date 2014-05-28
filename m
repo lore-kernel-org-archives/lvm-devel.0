@@ -1,51 +1,94 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 28 May 2014 13:36:06 +0000 (UTC)
-Subject: master - revert: restore original timeout
-Message-ID: <20140528133606.B035D6061F@fedorahosted.org>
+Date: Wed, 28 May 2014 13:41:44 +0000 (UTC)
+Subject: master - tests: rename test
+Message-ID: <20140528134144.D804A611BA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2adaef82722ec71620a6d02c6c973d3472d705ae
-Commit:        2adaef82722ec71620a6d02c6c973d3472d705ae
-Parent:        171a668e81d9c647677465f042775722a35c5a6e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8212dac849e5a820c579c06a1b2805e7934a8d8b
+Commit:        8212dac849e5a820c579c06a1b2805e7934a8d8b
+Parent:        2adaef82722ec71620a6d02c6c973d3472d705ae
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 28 15:27:14 2014 +0200
+AuthorDate:    Wed May 28 15:41:06 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 28 15:33:41 2014 +0200
+CommitterDate: Wed May 28 15:41:06 2014 +0200
 
-revert: restore original timeout
+tests: rename test
 
-Accidently it's been commited - but it has also shown,
-that on heavy loaded systems (like our test machine could be)
-slightly bigger timeouts which waits longer for udev rules
-processing does help and avoids occasional refuse of deactivation
-because device is still being open.
-(i.e. lvcreate...; lvchange -an...)
-
-Unsure how we could now synchronize for this. On very slow(/loaded)
-system 5 second timeout is simply not enough.
-
-TODO: introduce at least lvm.conf configurable setting to
-allow longer 'retry' loops.
 ---
- lib/activate/activate.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/lvmetad-same-uuid.sh |   27 ---------------------------
+ test/shell/pv-duplicate-uuid.sh |   28 ++++++++++++++++++++++++++++
+ 2 files changed, 28 insertions(+), 27 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 7ad3654..41d74c7 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -726,7 +726,7 @@ int lv_check_not_in_use(struct cmd_context *cmd, struct logical_volume *lv,
- 			return 0;
- 		}
- 
--		usleep(OPEN_COUNT_CHECK_USLEEP_DELAY * 4);
-+		usleep(OPEN_COUNT_CHECK_USLEEP_DELAY);
- 		log_debug_activation("Retrying open_count check for %s/%s.",
- 				     lv->vg->name, lv->name);
- 		if (!lv_info(cmd, lv, 0, info, 1, 0)) {
+diff --git a/test/shell/lvmetad-same-uuid.sh b/test/shell/lvmetad-same-uuid.sh
+deleted file mode 100644
+index 34cc8eb..0000000
+--- a/test/shell/lvmetad-same-uuid.sh
++++ /dev/null
+@@ -1,27 +0,0 @@
+-#!/bin/sh
+-# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+-
+-. lib/test
+-
+-aux prepare_devs 3
+-
+-pvcreate "$dev1"
+-UUID1=$(get pv_field "$dev1" uuid)
+-pvcreate --config "devices{filter=[\"a|$dev2|\",\"r|.*|\"]}" -u "$UUID1" --norestorefile "$dev2"
+-pvcreate --config "devices{filter=[\"a|$dev3|\",\"r|.*|\"]}" -u "$UUID1" --norestorefile "$dev3"
+-
+-pvs -o+uuid |& tee out
+-COUNT=$(should grep --count "Found duplicate" out)
+-
+-# FIXME  lvmetad is not able to serve properly this case
+-should [ "$COUNT" -eq 2 ]
+-
+-pvs -o+uuid --config "devices{filter=[\"a|$dev2|\",\"r|.*|\"]}"
+diff --git a/test/shell/pv-duplicate-uuid.sh b/test/shell/pv-duplicate-uuid.sh
+new file mode 100644
+index 0000000..cc5f56b
+--- /dev/null
++++ b/test/shell/pv-duplicate-uuid.sh
+@@ -0,0 +1,28 @@
++#!/bin/sh
++# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++# Test 'Found duplicate' is shown
++. lib/test
++
++aux prepare_devs 3
++
++pvcreate "$dev1"
++UUID1=$(get pv_field "$dev1" uuid)
++pvcreate --config "devices{filter=[\"a|$dev2|\",\"r|.*|\"]}" -u "$UUID1" --norestorefile "$dev2"
++pvcreate --config "devices{filter=[\"a|$dev3|\",\"r|.*|\"]}" -u "$UUID1" --norestorefile "$dev3"
++
++pvs -o+uuid |& tee out
++COUNT=$(should grep --count "Found duplicate" out)
++
++# FIXME  lvmetad is not able to serve properly this case
++should [ "$COUNT" -eq 2 ]
++
++pvs -o+uuid --config "devices{filter=[\"a|$dev2|\",\"r|.*|\"]}"
 
 
