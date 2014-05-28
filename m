@@ -1,94 +1,139 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 28 May 2014 13:41:44 +0000 (UTC)
-Subject: master - tests: rename test
-Message-ID: <20140528134144.D804A611BA@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 28 May 2014 15:17:22 +0000 (UTC)
+Subject: master - activation: Remove empty DM device when table fails to load.
+Message-ID: <20140528151722.E009E60E66@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8212dac849e5a820c579c06a1b2805e7934a8d8b
-Commit:        8212dac849e5a820c579c06a1b2805e7934a8d8b
-Parent:        2adaef82722ec71620a6d02c6c973d3472d705ae
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 28 15:41:06 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 28 15:41:06 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=442820aae3648e1846417d1248fa36030eba4bd8
+Commit:        442820aae3648e1846417d1248fa36030eba4bd8
+Parent:        8212dac849e5a820c579c06a1b2805e7934a8d8b
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed May 28 10:17:15 2014 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed May 28 10:17:15 2014 -0500
 
-tests: rename test
+activation:  Remove empty DM device when table fails to load.
 
+As part of better error handling, remove DM devices that have been
+sucessfully created but failed to load a table.  This can happen
+when pvmove'ing in a cluster and the cluster mirror daemon is not
+running on a remote node - the mapping table failing to load as a
+result.  In this case, any revert would work on other nodes running
+cmirrord because the DM devices on those nodes did succeed in loading.
+However, because no table was able to load on the non-cmirrord nodes,
+there is no table present that points to what needs to be reverted.
+This causes the empty DM device to remain on the system without being
+present in any LVM representation.
+
+This patch should only be considered a partial fix to the overall
+problem.  This is because only the device which failed to load a
+table is removed.  Any LVs that may have been loaded as requirements
+to the DM device that failed to load may be left in place.  Complete
+clean-up will require tracking those devices which have been created
+as dependencies and removing them along with the device that failed
+to load a table.
 ---
- test/shell/lvmetad-same-uuid.sh |   27 ---------------------------
- test/shell/pv-duplicate-uuid.sh |   28 ++++++++++++++++++++++++++++
- 2 files changed, 28 insertions(+), 27 deletions(-)
+ libdm/libdm-deptree.c |   59 ++++++++++++++++++++++++++++++++++++++++++++-----
+ 1 files changed, 53 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvmetad-same-uuid.sh b/test/shell/lvmetad-same-uuid.sh
-deleted file mode 100644
-index 34cc8eb..0000000
---- a/test/shell/lvmetad-same-uuid.sh
-+++ /dev/null
-@@ -1,27 +0,0 @@
--#!/bin/sh
--# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 0a53755..f34c40f 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -1920,15 +1920,50 @@ static int _create_node(struct dm_tree_node *dnode)
+ 	if (!dm_task_no_open_count(dmt))
+ 		log_error("Failed to disable open_count");
+ 
+-	if ((r = dm_task_run(dmt)))
+-		r = dm_task_get_info(dmt, &dnode->info);
 -
--. lib/test
--
--aux prepare_devs 3
--
--pvcreate "$dev1"
--UUID1=$(get pv_field "$dev1" uuid)
--pvcreate --config "devices{filter=[\"a|$dev2|\",\"r|.*|\"]}" -u "$UUID1" --norestorefile "$dev2"
--pvcreate --config "devices{filter=[\"a|$dev3|\",\"r|.*|\"]}" -u "$UUID1" --norestorefile "$dev3"
--
--pvs -o+uuid |& tee out
--COUNT=$(should grep --count "Found duplicate" out)
--
--# FIXME  lvmetad is not able to serve properly this case
--should [ "$COUNT" -eq 2 ]
--
--pvs -o+uuid --config "devices{filter=[\"a|$dev2|\",\"r|.*|\"]}"
-diff --git a/test/shell/pv-duplicate-uuid.sh b/test/shell/pv-duplicate-uuid.sh
-new file mode 100644
-index 0000000..cc5f56b
---- /dev/null
-+++ b/test/shell/pv-duplicate-uuid.sh
-@@ -0,0 +1,28 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++	if ((r = dm_task_run(dmt))) {
++		if (!(r = dm_task_get_info(dmt, &dnode->info)))
++			/*
++			 * This should not be possible to occur.  However,
++			 * we print an error message anyway for the more
++			 * absurd cases (e.g. memory corruption) so there
++			 * is never any question as to which one failed.
++			 */
++			log_error(INTERNAL_ERROR
++				  "Unable to get DM task info for %s.",
++				  dnode->name);
++	}
+ out:
+ 	dm_task_destroy(dmt);
+ 
+ 	return r;
+ }
+ 
++/*
++ * _remove_node
++ *
++ * This function is only used to remove a DM device that has failed
++ * to load any table.
++ */
++static int _remove_node(struct dm_tree_node *dnode)
++{
++	if (!dnode->info.exists)
++		return 1;
 +
-+# Test 'Found duplicate' is shown
-+. lib/test
++	if (dnode->info.live_table || dnode->info.inactive_table) {
++		log_error(INTERNAL_ERROR
++			  "_remove_node called on device with loaded table(s).");
++		return 0;
++	}
 +
-+aux prepare_devs 3
-+
-+pvcreate "$dev1"
-+UUID1=$(get pv_field "$dev1" uuid)
-+pvcreate --config "devices{filter=[\"a|$dev2|\",\"r|.*|\"]}" -u "$UUID1" --norestorefile "$dev2"
-+pvcreate --config "devices{filter=[\"a|$dev3|\",\"r|.*|\"]}" -u "$UUID1" --norestorefile "$dev3"
-+
-+pvs -o+uuid |& tee out
-+COUNT=$(should grep --count "Found duplicate" out)
-+
-+# FIXME  lvmetad is not able to serve properly this case
-+should [ "$COUNT" -eq 2 ]
-+
-+pvs -o+uuid --config "devices{filter=[\"a|$dev2|\",\"r|.*|\"]}"
++	if (!_deactivate_node(dnode->name, dnode->info.major, dnode->info.minor,
++			      &dnode->dtree->cookie, dnode->udev_flags, 0)) {
++		log_error("Failed to clean-up device with no table: %s %u:%u",
++			  dnode->name ? dnode->name : "",
++			  dnode->info.major, dnode->info.minor);
++		return 0;
++	}
++	return 1;
++}
+ 
+ static int _build_dev_string(char *devbuf, size_t bufsize, struct dm_tree_node *node)
+ {
+@@ -2662,7 +2697,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 			     const char *uuid_prefix,
+ 			     size_t uuid_prefix_len)
+ {
+-	int r = 1;
++	int r = 1, node_created = 0;
+ 	void *handle = NULL;
+ 	struct dm_tree_node *child;
+ 	struct dm_info newinfo;
+@@ -2684,13 +2719,25 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 				return_0;
+ 
+ 		/* FIXME Cope if name exists with no uuid? */
+-		if (!child->info.exists && !_create_node(child))
++		if (!child->info.exists && !(node_created = _create_node(child)))
+ 			return_0;
+ 
+ 		if (!child->info.inactive_table &&
+ 		    child->props.segment_count &&
+-		    !_load_node(child))
++		    !_load_node(child)) {
++			/*
++			 * If the table load does not succeed, we remove the
++			 * device in the kernel that would otherwise have an
++			 * empty table.  This makes the create + load of the
++			 * device atomic.  However, if other dependencies have
++			 * already been created and loaded; this code is
++			 * insufficient to remove those - only the node
++			 * encountering the table load failure is removed.
++			 */
++			if (node_created && !_remove_node(child))
++				return_0;
+ 			return_0;
++		}
+ 
+ 		/* Propagate device size change change */
+ 		if (child->props.size_changed)
 
 
