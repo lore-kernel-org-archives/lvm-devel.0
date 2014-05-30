@@ -1,42 +1,64 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 30 May 2014 15:25:46 +0000 (UTC)
-Subject: master - report: fix report field type for lv_kernel_major/minor
-Message-ID: <20140530152546.EBB9B60FFA@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Fri, 30 May 2014 22:29:25 +0000 (UTC)
+Subject: master - test: use direct I/O when injecting bad data into RAID images
+Message-ID: <20140530222925.4B51F60F81@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03621692774e33357acc11ad23d4c8d1faffe971
-Commit:        03621692774e33357acc11ad23d4c8d1faffe971
-Parent:        442820aae3648e1846417d1248fa36030eba4bd8
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri May 30 17:23:54 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri May 30 17:24:07 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4454a580dfd966d0cd132a2fd7d0cbb0df7e46a6
+Commit:        4454a580dfd966d0cd132a2fd7d0cbb0df7e46a6
+Parent:        03621692774e33357acc11ad23d4c8d1faffe971
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri May 30 17:26:10 2014 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Fri May 30 17:26:10 2014 -0500
 
-report: fix report field type for lv_kernel_major/minor
+test: use direct I/O when injecting bad data into RAID images
 
-Should be defined as numeric field, not string field.
+When directly corrupting RAID images for the purpose of testing,
+we must use direct I/O (or a 'sync' after the 'dd') to ensure that
+the writes are not caught in the buffer cache in a way that is not
+reachable by the top-level RAID device.
 ---
- lib/report/columns.h |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/lvchange-syncaction-raid.sh |   16 +++++-----------
+ 1 files changed, 5 insertions(+), 11 deletions(-)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 93b5575..7c36d10 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -36,8 +36,8 @@ FIELD(LVS, lv, STR, "Active", lvid, 6, lvactive, lv_active, "Active state of the
- FIELD(LVS, lv, NUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
- FIELD(LVS, lv, NUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
- FIELD(LVS, lv, NUM, "Rahead", lvid, 6, lvreadahead, lv_read_ahead, "Read ahead setting in current units.", 0)
--FIELD(LVS, lv, STR, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
--FIELD(LVS, lv, STR, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
-+FIELD(LVS, lv, NUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
-+FIELD(LVS, lv, NUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
- FIELD(LVS, lv, NUM, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
- FIELD(LVS, lv, NUM, "LSize", size, 5, size64, lv_size, "Size of LV in current units.", 0)
- FIELD(LVS, lv, NUM, "MSize", lvid, 6, lvmetadatasize, lv_metadata_size, "For thin pools, the size of the LV that holds the metadata.", 0)
+diff --git a/test/shell/lvchange-syncaction-raid.sh b/test/shell/lvchange-syncaction-raid.sh
+index a27b885..b5fdfb4 100644
+--- a/test/shell/lvchange-syncaction-raid.sh
++++ b/test/shell/lvchange-syncaction-raid.sh
+@@ -13,7 +13,10 @@
+ 
+ . lib/test
+ 
+-aux have_raid 1 5 0 || skip
++# Proper mismatch count 1.5.2+ upstream, 1.3.5 < x < 1.4.0 in RHEL6
++aux have_raid 1 3 5 &&
++  ! aux have_raid 1 4 0 ||
++  aux have_raid 1 5 2 || skip
+ aux prepare_vg 3
+ 
+ lvcreate -n $lv1 $vg -l1 --type raid1
+@@ -22,16 +25,7 @@ START=$(get pv_field "$dev2" pe_start --units 1k)
+ METASIZE=$(get lv_field $vg/${lv1}_rmeta_1 size -a --units 1k)
+ SEEK=$((${START%\.00k} + ${METASIZE%\.00k}))
+ # Overwrite some portion of  _rimage_1
+-dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK
+-
+-lvchange --syncaction check $vg/$lv1
+-
+-# hmmm it's still in 'dd' buffer and not on real disk ??
+-# anyway skip over with 'should'
+-should check lv_field $vg/$lv1 raid_mismatch_count "128"
+-
+-# Ensure it's all on disk now
+-sync
++dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK oflag=direct
+ 
+ lvchange --syncaction check $vg/$lv1
+ check lv_field $vg/$lv1 raid_mismatch_count "128"
 
 
