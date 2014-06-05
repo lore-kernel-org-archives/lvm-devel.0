@@ -1,51 +1,63 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 Jun 2014 16:04:32 +0000 (UTC)
-Subject: master - configure: do not exit with error code
-Message-ID: <20140605160432.AE3736024A@fedorahosted.org>
+Date: Thu,  5 Jun 2014 21:09:29 +0000 (UTC)
+Subject: master - tests: adapt test for newline delimit
+Message-ID: <20140605210929.295C460B42@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=46b0cd10fe2405f281651fcfea5f536573fa7cbc
-Commit:        46b0cd10fe2405f281651fcfea5f536573fa7cbc
-Parent:        c4e0c6127247c421e40d9d387ba89d8cd9899f5f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eb7ca96b5901d3bf70f0ba193bee55fc616b1805
+Commit:        eb7ca96b5901d3bf70f0ba193bee55fc616b1805
+Parent:        46b0cd10fe2405f281651fcfea5f536573fa7cbc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 5 18:02:40 2014 +0200
+AuthorDate:    Thu Jun 5 23:05:52 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 5 18:02:40 2014 +0200
+CommitterDate: Thu Jun 5 23:05:52 2014 +0200
 
-configure: do not exit with error code
+tests: adapt test for newline delimit
 
-Since the test is the last command make a test in a form it will be
-after its finished 0.
-(regression from last configure cleanup)
+content of DEVICES is now delimited by newlines
 ---
- configure    |    2 +-
- configure.in |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ test/api/python_lvm_unit.py  |    2 +-
+ test/shell/lvconvert-thin.sh |    4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/configure b/configure
-index bedccca..034ee12 100755
---- a/configure
-+++ b/configure
-@@ -13453,5 +13453,5 @@ $as_echo "$as_me: WARNING: Support for thin provisioning is limited since some t
- test -n "$THIN_CHECK_VERSION_WARN" && { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning" >&5
- $as_echo "$as_me: WARNING: You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning" >&2;}
+diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
+index 8208d91..39a6779 100755
+--- a/test/api/python_lvm_unit.py
++++ b/test/api/python_lvm_unit.py
+@@ -51,7 +51,7 @@ def rs(rand_len=10):
+ def _get_allowed_devices():
+ 	rc = os.environ.get('PY_UNIT_PVS')
+ 	if rc is not None:
+-		rc = rc.split(' ')
++		rc = rc.splitlines()
+ 		rc.sort()
+ 	return rc
  
--test "$ODIRECT" != yes && { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&5
-+test "$ODIRECT" = yes || { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&5
- $as_echo "$as_me: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&2;}
-diff --git a/configure.in b/configure.in
-index a1dfee5..12404ba 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1762,4 +1762,4 @@ test -n "$THIN_CONFIGURE_WARN" && AC_MSG_WARN([Support for thin provisioning is
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index 8c3b903..a7bbe9f 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -27,7 +27,7 @@ aux have_thin 1 0 0 || skip
+ aux prepare_pvs 4 64
  
- test -n "$THIN_CHECK_VERSION_WARN" && AC_MSG_WARN([You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning])
+ # build one large PV
+-vgcreate $vg1 $(cut -d ' ' -f -3 DEVICES)
++vgcreate $vg1 $(head -n 3 DEVICES)
+ # 32bit linux kernels are fragille with device size >= 16T
+ # maybe  uname -m    [ x86_64 | i686 ]
+ TSIZE=64T
+@@ -36,7 +36,7 @@ lvcreate -s -l 100%FREE -n $lv $vg1 --virtualsize $TSIZE
+ aux extend_filter_LVMTEST
  
--test "$ODIRECT" != yes && AC_MSG_WARN([O_DIRECT disabled: low-memory pvmove may lock up])
-+test "$ODIRECT" = yes || AC_MSG_WARN([O_DIRECT disabled: low-memory pvmove may lock up])
+ pvcreate "$DM_DEV_DIR/$vg1/$lv"
+-vgcreate $vg -s 64K $(cut -d ' ' -f 4 DEVICES) "$DM_DEV_DIR/$vg1/$lv"
++vgcreate $vg -s 64K $(tail -n+4 DEVICES) "$DM_DEV_DIR/$vg1/$lv"
+ 
+ # create mirrored LVs for data and metadata volumes
+ lvcreate -aey -L10M --type mirror -m1 --mirrorlog core -n $lv1 $vg
 
 
