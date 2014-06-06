@@ -1,83 +1,42 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  6 Jun 2014 08:32:36 +0000 (UTC)
-Subject: master - configure: update libcpg test
-Message-ID: <20140606083236.4905460DAC@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  6 Jun 2014 12:02:49 +0000 (UTC)
+Subject: dev-prajnoha-report-select - report: fix report field type for lv_kernel_major/minor
+Message-ID: <20140606120249.4EEE760F1C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f115a4a53fe6c3a3121e200c7f8796fb086c0c6e
-Commit:        f115a4a53fe6c3a3121e200c7f8796fb086c0c6e
-Parent:        14f482077dadd33e35a33cbd57bc80a884992794
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 6 10:29:47 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 6 10:31:45 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03621692774e33357acc11ad23d4c8d1faffe971
+Commit:        03621692774e33357acc11ad23d4c8d1faffe971
+Parent:        442820aae3648e1846417d1248fa36030eba4bd8
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri May 30 17:23:54 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri May 30 17:24:07 2014 +0200
 
-configure: update libcpg test
+report: fix report field type for lv_kernel_major/minor
 
-PKG_CHECK_MODULES needs old-way if;then;fi.
+Should be defined as numeric field, not string field.
 ---
- configure    |    4 +++-
- configure.in |    8 +++++---
- 2 files changed, 8 insertions(+), 4 deletions(-)
+ lib/report/columns.h |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/configure b/configure
-index 034ee12..dec82de 100755
---- a/configure
-+++ b/configure
-@@ -9149,7 +9149,8 @@ $as_echo "yes" >&6; }
- 	HAVE_SACKPT=yes
- fi
- 
--	test "$HAVE_CPG" != yes &&
-+	if test "$HAVE_CPG" != yes; then
-+
- pkg_failed=no
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for CPG" >&5
- $as_echo_n "checking for CPG... " >&6; }
-@@ -9240,6 +9241,7 @@ else
- $as_echo "yes" >&6; }
- 
- fi
-+	fi
- fi
- 
- ################################################################################
-diff --git a/configure.in b/configure.in
-index 12404ba..d92e03e 100644
---- a/configure.in
-+++ b/configure.in
-@@ -847,7 +847,9 @@ if [[ "$BUILD_CMIRRORD" = yes ]]; then
- 		[AC_MSG_RESULT([no libSaCkpt, compiling without it])
- 		AC_DEFINE([CMIRROR_HAS_CHECKPOINT], 0, [Define to 0 to exclude libSaCkpt.])])
- 
--	test "$HAVE_CPG" != yes && PKG_CHECK_MODULES(CPG, libcpg)
-+	if test "$HAVE_CPG" != yes; then
-+		PKG_CHECK_MODULES(CPG, libcpg)
-+	fi
- fi
- 
- ################################################################################
-@@ -911,7 +913,7 @@ fi
- dnl -- Enable testing
- AC_MSG_CHECKING(whether to enable unit testing)
- AC_ARG_ENABLE(testing,
--              AC_HELP_STRING([--enable-testing],
-+	      AC_HELP_STRING([--enable-testing],
- 			     [enable testing targets in the makefile]),
- 	      TESTING=$enableval, TESTING=no)
- AC_MSG_RESULT($TESTING)
-@@ -925,7 +927,7 @@ fi
- dnl -- Enable valgrind awareness of memory pools
- AC_MSG_CHECKING(whether to enable valgrind awareness of pools)
- AC_ARG_ENABLE(valgrind_pool,
--              AC_HELP_STRING([--enable-valgrind-pool],
-+	      AC_HELP_STRING([--enable-valgrind-pool],
- 			     [enable valgrind awareness of pools]),
- 	      VALGRIND_POOL=$enableval, VALGRIND_POOL=no)
- AC_MSG_RESULT($VALGRIND_POOL)
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 93b5575..7c36d10 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -36,8 +36,8 @@ FIELD(LVS, lv, STR, "Active", lvid, 6, lvactive, lv_active, "Active state of the
+ FIELD(LVS, lv, NUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
+ FIELD(LVS, lv, NUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
+ FIELD(LVS, lv, NUM, "Rahead", lvid, 6, lvreadahead, lv_read_ahead, "Read ahead setting in current units.", 0)
+-FIELD(LVS, lv, STR, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
+-FIELD(LVS, lv, STR, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
++FIELD(LVS, lv, NUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
++FIELD(LVS, lv, NUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
+ FIELD(LVS, lv, NUM, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
+ FIELD(LVS, lv, NUM, "LSize", size, 5, size64, lv_size, "Size of LV in current units.", 0)
+ FIELD(LVS, lv, NUM, "MSize", lvid, 6, lvmetadatasize, lv_metadata_size, "For thin pools, the size of the LV that holds the metadata.", 0)
 
 
