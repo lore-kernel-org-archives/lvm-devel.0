@@ -1,64 +1,50 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Fri, 06 Jun 2014 01:26:47 -0600
-Subject: [PATCH] clvmd: fix _allocate_memory to avoid segfault on ppc64.
-In-Reply-To: <539167C2.2060604@redhat.com>
-References: <1402037364-7417-1-git-send-email-lwang@suse.com>
-	<539167C2.2060604@redhat.com>
-Message-ID: <5391DDB7020000A000008149@soto.provo.novell.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  6 Jun 2014 08:23:42 +0000 (UTC)
+Subject: master - cleanup: commit c0f9c79 to work also with for non-clustered configuration
+Message-ID: <20140606082342.904E760EB8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=291e55557ee4061a042d6d59b04aa09e6f503386
+Commit:        291e55557ee4061a042d6d59b04aa09e6f503386
+Parent:        c0f9c79ae8e1df16d23f3eb608fb4bf5455ec841
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Jun 6 10:17:26 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Jun 6 10:17:26 2014 +0200
 
->>> On 6/6/2014 at 03:03 PM, in message <539167C2.2060604@redhat.com>, Zdenek
-Kabelac <zkabelac@redhat.com> wrote: 
-> Dne 6.6.2014 08:49, Liuhua Wang napsal(a):
-> > From: lhwang <lwang@suse.com>
-> >
-> > Under some LIBPTHREAD_VERSION, for example 2.11, when allocates 64K
-> > and thread stacksize is 128K, starting clvmd causes a segfault.
-> >
-> > Signed-off-by: Liuhua Wang <lwang@suse.com>
-> 
-> Do you have any stack backtrace for this situation.
-> 
-> It'd be rather serious problem in clvmd code path to allocate even 32K on 
-> stack.
-> 
-> Thanks
-> 
-> Zdenek
-> 
+cleanup: commit c0f9c79 to work also with for non-clustered configuration
 
-version: 2.02.98-0.25.4 
+---
+ tools/vgchange.c |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-from the core file:
-
-#p $pc
-$1 = (void (*)()) 0x10070c18
-#bt
-#0  0x0000000010070c18 in _allocate_memory () at mm/memlock.c:130
-#1  0x0000000010070d38 in _lock_mem (cmd=<optimized out>) at mm/memlock.c:310
-#2  _lock_mem_if_needed (cmd=0x10104f40) at mm/memlock.c:387
-#3  0x0000000010011358 in init_clvm (excl_uuid=<optimized out>) at
-lvm-functions.c:919
-#4  0x000000001000f47c in lvm_thread_fn (arg=0xfffcaf4e530) at clvmd.c:2020
-#5  0x00000fff9df6c67c in .start_thread () from /lib64/power6/libpthread.so.0
-#6  0x00000fff9de7643c in .__clone () from /lib64/power6/libc.so.6
-
-
-Thanks for your reply.
-
-Best regards
-Liuhua
-
-
-
-
-> 
-
-
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 958919c..fef1301 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -304,6 +304,7 @@ static int _vgchange_clustered(struct cmd_context *cmd,
+ 			       struct volume_group *vg)
+ {
+ 	int clustered = !strcmp(arg_str_value(cmd, clustered_ARG, "n"), "y");
++	int clvmd_daemon_running = 0;
+ 
+ 	if (clustered && (vg_is_clustered(vg))) {
+ 		log_error("Volume group \"%s\" is already clustered",
+@@ -318,7 +319,10 @@ static int _vgchange_clustered(struct cmd_context *cmd,
+ 	}
+ 
+ 	if (clustered && !arg_count(cmd, yes_ARG)) {
+-		if (!dm_daemon_is_running(CLVMD_PIDFILE)) {
++#ifdef CLVMD_PIDFILE
++		clvmd_daemon_running = dm_daemon_is_running(CLVMD_PIDFILE);
++#endif
++		if (!clvmd_daemon_running) {
+ 			if (yes_no_prompt("LVM cluster daemon (clvmd) is not"
+ 					  " running.\n"
+ 					  "Make volume group \"%s\" clustered"
 
 
