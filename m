@@ -1,149 +1,320 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  6 Jun 2014 12:03:37 +0000 (UTC)
-Subject: dev-prajnoha-report-select - report: select: add structs for report selection
-Message-ID: <20140606120337.8D8A860180@fedorahosted.org>
+Date: Fri,  6 Jun 2014 12:03:39 +0000 (UTC)
+Subject: dev-prajnoha-report-select - report: select: add supporting infrastucture for token parsing in report selections
+Message-ID: <20140606120339.A336B60180@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e9c2000026b9babbca378bdaf6407ea76f20fb8
-Commit:        5e9c2000026b9babbca378bdaf6407ea76f20fb8
-Parent:        026b9eefe76fe581b6e256b8aebea8742b0da103
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d99e8214a2f0a1d2756bb72a18502d093633a512
+Commit:        d99e8214a2f0a1d2756bb72a18502d093633a512
+Parent:        5e9c2000026b9babbca378bdaf6407ea76f20fb8
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu May 29 09:37:41 2014 +0200
+AuthorDate:    Thu May 29 09:37:54 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Fri Jun 6 11:11:20 2014 +0200
 
-report: select: add structs for report selection
+report: select: add supporting infrastucture for token parsing in report selections
 
 This is rebased and edited version of the original design and
 patch proposed by Jun'ichi Nomura:
   http://www.redhat.com/archives/dm-devel/2007-April/msg00025.html
 
-This patch defines operators and structures that will be used
-to store the report selection against which the actual values
-reported will be checked.
-
-  Selection operands
-  ------------------
-    fields              - reporting fields
-    numbers	        - integer or floating point, non-negative
-    strings	        - characters quoted by ' or " or unquoted
-    regular expression  - characters quoted by ' or " or unquoted
-
-  Selection operators
-  -------------------
-    Comparison operators:
-        =~  - Matching regular expression
-        !~  - Not matching regular expression
-         =  - Equal to
-        !=  - Not equal
-        >=  - Greater than or equal to
-         >  - Greater than
-        <=  - Lesser than or equal to
-         <  - Lesser than
-
-    Logical and grouping operators:
-        &&  - Logical conjunction
-         ,  - Logical conjunction (alternative)
-        ||  - Logical disjunction
-         /  - Logical disjunction (alternative)
-         !  - Logical negation
-         (  - Left parenthesis
-         )  - Right parenthesis
+Add support for parsing numbers, strings (quoted or unquoted), regexes
+and operators amogst these operands in selection condition supplied.
 ---
- libdm/libdm-report.c |   77 ++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 77 insertions(+), 0 deletions(-)
+ libdm/libdm-report.c |  277 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 277 insertions(+), 0 deletions(-)
 
 diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 384648e..9bab350 100644
+index 9bab350..64ec3b0 100644
 --- a/libdm/libdm-report.c
 +++ b/libdm/libdm-report.c
-@@ -68,6 +68,83 @@ struct field_properties {
- };
+@@ -844,6 +844,283 @@ int dm_report_object(struct dm_report *rh, void *object)
+ }
  
  /*
-+ * Report selection
++ * Selection parsing
 + */
-+struct op_def {
-+	const char *string;
-+	uint32_t flags;
-+	const char *desc;
-+};
-+
-+#define FLD_CMP_MASK	0x000FF000
-+#define FLD_CMP_EQUAL	0x00001000
-+#define FLD_CMP_NOT	0x00002000
-+#define FLD_CMP_GT	0x00004000
-+#define FLD_CMP_LT	0x00008000
-+#define FLD_CMP_REGEX	0x00010000
-+#define FLD_CMP_NUMBER  0x00020000
 +
 +/*
-+ * When defining operators, always define longer one before
-+ * shorter one if one is a prefix of another!
-+ * (e.g. =~ comes before =)
-+*/
-+static struct op_def _op_cmp[] = {
-+	{ "=~", FLD_CMP_REGEX, "Matching regular expression" },
-+	{ "!~", FLD_CMP_REGEX|FLD_CMP_NOT, "Not matching regular expression" },
-+	{ "=", FLD_CMP_EQUAL, "Equal to" },
-+	{ "!=", FLD_CMP_NOT|FLD_CMP_EQUAL, "Not equal" },
-+	{ ">=", FLD_CMP_NUMBER|FLD_CMP_GT|FLD_CMP_EQUAL, "Greater than or equal to" },
-+	{ ">", FLD_CMP_NUMBER|FLD_CMP_GT, "Greater than" },
-+	{ "<=", FLD_CMP_NUMBER|FLD_CMP_LT|FLD_CMP_EQUAL, "Lesser than or equal to" },
-+	{ "<", FLD_CMP_NUMBER|FLD_CMP_LT, "Lesser than" },
-+	{ NULL, 0, NULL }
-+};
++ * Other tokens (FIELD, VALUE, STRING, NUMBER, REGEX)
++ *     FIELD := <strings of alphabet, number and '_'>
++ *     VALUE := NUMBER | STRING
++ *     REGEX := <strings quoted by '"', '\'', '(', '{', '[' or unquoted>
++ *     NUMBER := <strings of [0-9]> (because sort_value is unsigned)
++ *     STRING := <strings quoted by '"', '\'' or unquoted>
++ */
 +
-+#define SEL_MASK		0x000000FF
-+#define SEL_ITEM		0x00000001
-+#define SEL_AND 		0x00000002
-+#define SEL_OR			0x00000004
++static const char * _skip_space(const char *s)
++{
++	while (*s && isspace(*s))
++		s++;
++	return s;
++}
 +
-+#define SEL_MODIFIER_MASK	0x00000F00
-+#define SEL_MODIFIER_NOT	0x00000100
++static int _tok_op(struct op_def *t, const char *s, const char **end,
++		   uint32_t expect)
++{
++	size_t len;
 +
-+#define SEL_PRECEDENCE_MASK	0x0000F000
-+#define SEL_PRECEDENCE_PS	0x00001000
-+#define SEL_PRECEDENCE_PE	0x00002000
++	s = _skip_space(s);
 +
-+static struct op_def _op_log[] = {
-+        { "&&", SEL_AND, "Logical conjunction" },
-+	{ ",", SEL_AND, "Logical conjunction (alternative)" },
-+        { "||", SEL_OR, "Logical disjunction" },
-+	{ "/", SEL_OR, "Logical disjunction (alternative)" },
-+        { "!", SEL_MODIFIER_NOT, "Logical negation" },
-+        { "(", SEL_PRECEDENCE_PS, "Left parenthesis" },
-+        { ")", SEL_PRECEDENCE_PE, "Right parenthesis" },
-+        { NULL,  0, NULL},
-+};
++	for (; t->string; t++) {
++		if (expect && !(t->flags & expect))
++			continue;
 +
-+struct field_selection {
-+	struct field_properties *fp;
-+	uint32_t flags;
-+	union {
-+		const char *s;
-+		uint64_t i;
-+		double d;
-+		struct dm_regex *r;
-+	} v;
-+};
++		len = strlen(t->string);
++		if (!strncmp(s, t->string, len)) {
++			if (end)
++				*end = s + len;
++			return t->flags;
++		}
++	}
 +
-+struct selection_node {
-+	struct dm_list list;
-+	uint32_t type;
-+	union {
-+		struct field_selection *item;
-+		struct dm_list set;
-+	} selection;
-+};
++	if (end)
++		*end = s;
++	return 0;
++}
++
++static inline int _tok_op_log(const char *s, const char **end, uint32_t expect)
++{
++	return _tok_op(_op_log, s, end, expect);
++}
++
++static inline int _tok_op_cmp(const char *s, const char **end)
++{
++	return _tok_op(_op_cmp, s, end, 0);
++}
++
++ /*
++  *
++  * Input:
++  *   s             - a pointer to the parsed string
++  * Output:
++  *   begin         - a pointer to the beginning of the token
++  *   end           - a pointer to the end of the token + 1
++  *                   or undefined if return value is NULL
++  *   return value  - a starting point of the next parsing or
++  *                   NULL if 's' doesn't match with token type
++  *                   (the parsing should be terminated)
++  */
++static const char *_tok_value_number(const char *s,
++				     const char **begin, const char **end)
++
++{
++	int is_float = 0;
++
++	*begin = s;
++	while (*s && ((!is_float && *s=='.' && (is_float=1)) || isdigit(*s)))
++		s++;
++	*end = s;
++
++	if (*begin == *end)
++		return NULL;
++
++	return s;
++}
 +
 +/*
-  * Report data field
++ * Input:
++ *   s               - a pointer to the parsed string
++ *   endchar         - terminating character
++ *   end_op_flags    - terminating operator flags (see _op_log)
++ *                     (if endchar is non-zero then endflags is ignored)
++ * Output:
++ *   begin           - a pointer to the beginning of the token
++ *   end             - a pointer to the end of the token + 1
++ *   end_op_flag_hit - the flag from endflags hit during parsing
++ *   return value    - a starting point of the next parsing
++ */
++static const char *_tok_value_string(const char *s,
++				     const char **begin, const char **end,
++				     const char endchar, uint32_t end_op_flags,
++				     uint32_t *end_op_flag_hit)
++{
++	uint32_t flag_hit = 0;
++
++	*begin = s;
++
++	/*
++	 * If endchar is defined, scan the string till
++	 * the endchar or the end of string is hit.
++	 * This is in case the string is quoted and we
++	 * know exact character that is the stopper.
++	 */
++	if (endchar) {
++		while (*s && *s != endchar)
++			s++;
++		if (*s != endchar) {
++			log_error("Missing end quote.");
++			return NULL;
++		}
++		*end = s;
++		s++;
++	} else {
++		/*
++		 * If endchar is not defined then endchar is/are the
++		 * operator/s as defined by 'endflags' arg or space char.
++		 * This is in case the string is not quoted and
++		 * we don't know which character is the exact stopper.
++		 */
++		while (*s) {
++			if ((flag_hit = _tok_op(_op_log, s, NULL, end_op_flags)) || *s == ' ')
++				break;
++			s++;
++		}
++		*end = s;
++		/*
++		 * If we hit one of the strings as defined by 'endflags'
++		 * and if 'endflag_hit' arg is provided, save the exact
++		 * string flag that was hit.
++		 */
++		if (end_op_flag_hit)
++			*end_op_flag_hit = flag_hit;
++	}
++
++	return s;
++}
++
++/*
++ * Input:
++ *   ft              - field type for which the value is parsed
++ *   s               - a pointer to the parsed string
++ * Output:
++ *   begin           - a pointer to the beginning of the token
++ *   end             - a pointer to the end of the token + 1
++ *   flags           - parsing flags
++ */
++static const char *_tok_value_regex(const struct dm_report_field_type *ft,
++				    const char *s, const char **begin,
++				    const char **end, uint32_t *flags)
++{
++	char c;
++
++	s = _skip_space(s);
++
++	if (!*s) {
++		log_error("Regular expression expected for selection field %s", ft->id);
++		return NULL;
++	}
++
++	switch (*s) {
++		case '(': c = ')'; break;
++		case '{': c = '}'; break;
++		case '[': c = ']'; break;
++		case '"':
++		case '\'': c = *s; break;
++		default:  c = 0;
++	}
++
++	if (!(s = _tok_value_string(c ? s + 1 : s, begin, end, c, SEL_AND | SEL_OR | SEL_PRECEDENCE_PE, NULL))) {
++		log_error("Failed to parse regex value for selection field %s.", ft->id);
++		return NULL;
++	}
++
++	*flags |= DM_REPORT_FIELD_TYPE_STRING;
++	return s;
++}
++
++/*
++ * Input:
++ *   ft              - field type for which the value is parsed
++ *   s               - a pointer to the parsed string
++ *   mem             - memory pool to allocate from
++ * Output:
++ *   begin           - a pointer to the beginning of the token
++ *   end             - a pointer to the end of the token + 1
++ *   flags           - parsing flags
++ *   custom          - custom data specific to token type
++ *                     (e.g. size unit factor)
++ */
++static const char *_tok_value(const struct dm_report_field_type *ft,
++			      const char *s, const char **begin,
++			      const char **end, uint32_t *flags,
++			      struct dm_pool *mem, void *custom)
++{
++	int expected_type = ft->flags & DM_REPORT_FIELD_TYPE_MASK;
++	uint64_t *factor;
++	const char *tmp;
++	char c = 0;
++
++	s = _skip_space(s);
++
++	switch (expected_type) {
++
++		case DM_REPORT_FIELD_TYPE_STRING:
++			if (*s == '"' || *s == '\'') {
++				c = *s;
++				s++;
++			}
++			if (!(s = _tok_value_string(s, begin, end, c, SEL_AND | SEL_OR | SEL_PRECEDENCE_PE, NULL))) {
++				log_error("Failed to parse string value "
++					  "for selection field %s.", ft->id);
++				return NULL;
++			}
++			*flags |= DM_REPORT_FIELD_TYPE_STRING;
++			break;
++
++		case DM_REPORT_FIELD_TYPE_NUMBER:
++		case DM_REPORT_FIELD_TYPE_SIZE:
++			if (!(s = _tok_value_number(s, begin, end))) {
++				log_error("Failed to parse numeric value "
++					  "for selection field %s.", ft->id);
++				return NULL;
++			}
++			factor = (uint64_t *) custom;
++			*factor = dm_units_to_factor(s, &c, 0, &tmp);
++
++			if (expected_type == DM_REPORT_FIELD_TYPE_NUMBER) {
++				if (*factor) {
++					log_error("Found size unit specifier but "
++						  "only numeric value expected for "
++						  "selection field %s.",ft->id);
++					return NULL;
++				}
++				*flags |= DM_REPORT_FIELD_TYPE_NUMBER;
++			} else {
++				s = tmp;
++				*flags |= DM_REPORT_FIELD_TYPE_SIZE;
++			}
++	}
++
++	return s;
++}
++
++/*
++ * Input:
++ *   s               - a pointer to the parsed string
++ * Output:
++ *   begin           - a pointer to the beginning of the token
++ *   end             - a pointer to the end of the token + 1
++ */
++static const char *_tok_field_name(const char *s,
++				    const char **begin, const char **end)
++{
++	char c;
++	s = _skip_space(s);
++
++	*begin = s;
++	while ((c = *s) &&
++	       (isalnum(c) || c == '_' || c == '-'))
++		s++;
++	*end = s;
++
++	if (*begin == *end)
++		return NULL;
++
++	return s;
++}
++
++
++
++/*
+  * Print row of headings
   */
- struct dm_report_field {
+ static int _report_headings(struct dm_report *rh)
 
 
