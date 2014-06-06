@@ -1,521 +1,214 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  6 Jun 2014 12:03:41 +0000 (UTC)
-Subject: dev-prajnoha-report-select - report: select: add dm_report_init_with_selection to libdm
-Message-ID: <20140606120341.B71E560180@fedorahosted.org>
+Date: Fri,  6 Jun 2014 12:03:43 +0000 (UTC)
+Subject: dev-prajnoha-report-select - report: select add _check_selection fn to support checking fields against given selections
+Message-ID: <20140606120343.C9E9760180@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=710d2c246255c7e2d292f952d20d1bbaf5cc63b9
-Commit:        710d2c246255c7e2d292f952d20d1bbaf5cc63b9
-Parent:        d99e8214a2f0a1d2756bb72a18502d093633a512
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5c3a72eb7ec90a8bc945ec04477208d8c1d2f528
+Commit:        5c3a72eb7ec90a8bc945ec04477208d8c1d2f528
+Parent:        710d2c246255c7e2d292f952d20d1bbaf5cc63b9
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu May 29 09:38:08 2014 +0200
+AuthorDate:    Thu May 29 09:38:22 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Fri Jun 6 11:11:20 2014 +0200
 
-report: select: add dm_report_init_with_selection to libdm
+report: select add _check_selection fn to support checking fields against given selections
 
-This is rebased and edited version of the original design and
+This is rebased and edited versions of the original design and
 patch proposed by Jun'ichi Nomura:
   http://www.redhat.com/archives/dm-devel/2007-April/msg00025.html
 
-The dm_report_init_with_selection is the same as dm_report_init
-but it contains an additional argument to set the selection
-in the form of a string that contains field names to check against and
-selection operators. The selection string is parsend and a selection
-tree is composed for use in the checks against individual fields when
-the report is processed. The parsed selection tree is stored in dm_report
-structure as "selection_root".
+The _check_selection implements the actual field checking against the
+selection tree.
 ---
- libdm/libdevmapper.h |   11 ++
- libdm/libdm-report.c |  427 ++++++++++++++++++++++++++++++++++++++++++++++++-
- 2 files changed, 429 insertions(+), 9 deletions(-)
+ libdm/libdm-report.c |  157 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 156 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 3a51e14..319b07c 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1641,7 +1641,18 @@ struct dm_report *dm_report_init(uint32_t *report_types,
- 				 uint32_t output_flags,
- 				 const char *sort_keys,
- 				 void *private_data);
-+struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
-+						const struct dm_report_object_type *types,
-+						const struct dm_report_field_type *fields,
-+						const char *output_fields,
-+						const char *output_separator,
-+						uint32_t output_flags,
-+						const char *sort_keys,
-+						const char *selection,
-+						void *private_data);
- int dm_report_object(struct dm_report *rh, void *object);
-+int dm_report_set_output_selection(struct dm_report *rh, uint32_t *report_types,
-+				   const char *selection);
- int dm_report_output(struct dm_report *rh);
- void dm_report_free(struct dm_report *rh);
- 
 diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 64ec3b0..f85ccad 100644
+index f85ccad..5c33ef5 100644
 --- a/libdm/libdm-report.c
 +++ b/libdm/libdm-report.c
-@@ -48,6 +48,8 @@ struct dm_report {
+@@ -16,6 +16,8 @@
+ #include "dmlib.h"
  
- 	/* To store caller private data */
- 	void *private;
-+
-+	struct selection_node *selection_root;
- };
+ #include <ctype.h>
++#include <math.h>  /* fabs() */
++#include <float.h> /* DBL_EPSILON */
  
  /*
-@@ -490,6 +492,23 @@ static int _add_all_fields(struct dm_report *rh, uint32_t type)
- 	return 1;
+  * Internal flags
+@@ -791,6 +793,158 @@ static void *_report_get_field_data(struct dm_report *rh,
+ 	return (void *)(ret + rh->fields[fp->field_num].offset);
  }
  
-+static int _get_field(struct dm_report *rh, const char *field, size_t flen, uint32_t *f_ret)
++static inline int _cmp_field_int(const char *field_id, uint64_t a, uint64_t b, uint32_t flags)
 +{
-+	uint32_t f;
-+
-+	if (!flen)
-+		return 0;
-+
-+	for (f = 0; rh->fields[f].report_fn; f++) {
-+		if (_is_same_field(rh->fields[f].id, field, flen, rh->field_prefix)) {
-+			*f_ret = f;
-+			return 1;
-+		}
++	switch(flags & FLD_CMP_MASK) {
++		case FLD_CMP_EQUAL:
++			return a == b;
++		case FLD_CMP_NOT|FLD_CMP_EQUAL:
++			return a != b;
++		case FLD_CMP_NUMBER|FLD_CMP_GT:
++			return a > b;
++		case FLD_CMP_NUMBER|FLD_CMP_GT|FLD_CMP_EQUAL:
++			return a >= b;
++		case FLD_CMP_NUMBER|FLD_CMP_LT:
++			return a < b;
++		case FLD_CMP_NUMBER|FLD_CMP_LT|FLD_CMP_EQUAL:
++			return a <= b;
++		default:
++			log_error(INTERNAL_ERROR "_cmp_field_int: unsupported number "
++				  "comparison type for field %s", field_id);
 +	}
 +
 +	return 0;
 +}
 +
- static int _field_match(struct dm_report *rh, const char *field, size_t flen,
- 			unsigned report_type_only)
- {
-@@ -498,15 +517,13 @@ static int _field_match(struct dm_report *rh, const char *field, size_t flen,
- 	if (!flen)
- 		return 0;
- 
--	for (f = 0; rh->fields[f].report_fn; f++)
--		if (_is_same_field(rh->fields[f].id, field, flen,
--				   rh->field_prefix)) {
--			if (report_type_only) {
--				rh->report_types |= rh->fields[f].type;
--				return 1;
--			} else
--				return _add_field(rh, f, 0) ? 1 : 0;
--		}
-+	if ((_get_field(rh, field, flen, &f))) {
-+		if (report_type_only) {
-+			rh->report_types |= rh->fields[f].type;
-+			return 1;
-+		} else
-+			return _add_field(rh, f, 0) ? 1 : 0;
-+	}
- 
- 	if ((type = _all_match(rh, field, flen))) {
- 		if (report_type_only) {
-@@ -1118,7 +1135,399 @@ static const char *_tok_field_name(const char *s,
- 	return s;
- }
- 
-+static struct field_selection *_create_field_selection(struct dm_report *rh,
-+						       uint32_t field_num,
-+						       const char *v,
-+						       size_t len,
-+						       uint32_t flags,
-+						       void *custom)
++static int _close_enough(double d1, double d2)
 +{
-+	static const char *_out_of_range_msg = "Field selection value %s out of supported range for field %s.";
-+	struct field_properties *fp, *found = NULL;
-+	struct field_selection *fs;
-+	const char *field_id;
-+	uint64_t factor;
-+	char *s;
++	return fabs(d1 - d2) < DBL_EPSILON;
++}
 +
-+	dm_list_iterate_items(fp, &rh->field_props) {
-+		if (fp->field_num == field_num) {
-+			found = fp;
-+			break;
-+		}
++static inline int _cmp_field_double(const char *field_id, double a, double b, uint32_t flags)
++{
++	switch(flags & FLD_CMP_MASK) {
++		case FLD_CMP_EQUAL:
++			return _close_enough(a, b);
++		case FLD_CMP_NOT|FLD_CMP_EQUAL:
++			return !_close_enough(a, b);
++		case FLD_CMP_NUMBER|FLD_CMP_GT:
++			return (a > b) && !_close_enough(a, b);
++		case FLD_CMP_NUMBER|FLD_CMP_GT|FLD_CMP_EQUAL:
++			return (a > b) || _close_enough(a, b);
++		case FLD_CMP_NUMBER|FLD_CMP_LT:
++			return (a < b) && !_close_enough(a, b);
++		case FLD_CMP_NUMBER|FLD_CMP_LT|FLD_CMP_EQUAL:
++			return a < b || _close_enough(a, b);
++		default:
++			log_error(INTERNAL_ERROR "_cmp_field_double: unsupported number "
++				  "comparison type for selection field %s", field_id);
 +	}
 +
-+	/* The field is neither used in display options nor sort keys. */
-+	if (!found) {
-+		if (!(found = _add_field(rh, field_num, FLD_HIDDEN)))
-+			return NULL;
-+		rh->report_types |= rh->fields[field_num].type;
++	return 0;
++}
++
++static inline int _cmp_field_string(const char *field_id, const char *a, const char *b, uint32_t flags)
++{
++	switch (flags & FLD_CMP_MASK) {
++		case FLD_CMP_EQUAL:
++			return !strcmp(a, b);
++		case FLD_CMP_NOT|FLD_CMP_EQUAL:
++			return strcmp(a, b);
++		default:
++			log_error(INTERNAL_ERROR "_cmp_field_string: unsupported string "
++				  "comparison type for selection field %s", field_id);
 +	}
 +
-+	field_id = rh->fields[found->field_num].id;
++	return 0;
++}
 +
-+	if (!(found->flags & flags & DM_REPORT_FIELD_TYPE_MASK)) {
-+		log_error("dm_report: incompatible comparison "
-+			  "type for selection field %s", field_id);
-+		return NULL;
++static inline int _cmp_field_regex(const char *s, struct dm_regex *r, uint32_t flags)
++{
++	return (dm_regex_match(r, s) >= 0) ^ (flags & FLD_CMP_NOT);
++}
++
++static int _compare_selection_field(struct dm_report *rh,
++				    struct dm_report_field *f,
++				    struct field_selection *fs)
++{
++	const char *field_id = rh->fields[f->props->field_num].id;
++	int r = 0;
++
++	if (!f->sort_value) {
++		log_error("_compare_selection_field: field without value :%d",
++			  f->props->field_num);
++		return 0;
 +	}
 +
-+	/* set up selection */
-+	if (!(fs = dm_pool_zalloc(rh->mem, sizeof(struct field_selection)))) {
-+		log_error("dm_report: struct field_selection "
-+			  "allocation failed for selection field %s", field_id);
-+		return NULL;
-+	}
-+	fs->fp = found;
-+	fs->flags = flags;
-+
-+	/* store comparison operand */
-+	if (flags & FLD_CMP_REGEX) {
-+		/* REGEX */
-+		if (!(s = dm_malloc(len + 1))) {
-+			log_error("dm_report: dm_malloc failed to store "
-+				  "regex value for selection field %s", field_id);
-+			goto error;
-+		}
-+		memcpy(s, v, len);
-+		s[len] = '\0';
-+
-+		fs->v.r = dm_regex_create(rh->mem, (const char **) &s, 1);
-+		dm_free(s);
-+		if (!fs->v.r) {
-+			log_error("dm_report: failed to create regex "
-+				  "matcher for selection field %s", field_id);
-+			goto error;
-+		}
-+	} else {
-+		/* STRING, NUMBER or SIZE */
-+		if (!(s = dm_pool_alloc(rh->mem, len + 1))) {
-+			log_error("dm_report: dm_pool_alloc failed to store "
-+				  "value for selection field %s", field_id);
-+			goto error;
-+		}
-+		memcpy(s, v, len);
-+		s[len] = '\0';
-+
-+		switch (flags & DM_REPORT_FIELD_TYPE_MASK) {
-+			case DM_REPORT_FIELD_TYPE_STRING:
-+				fs->v.s = s;
-+				break;
++	if (fs->flags & FLD_CMP_REGEX)
++		r = _cmp_field_regex((const char *) f->sort_value, fs->v.r, fs->flags);
++	else {
++		switch(f->props->flags & DM_REPORT_FIELD_TYPE_MASK) {
 +			case DM_REPORT_FIELD_TYPE_NUMBER:
-+				if (((fs->v.i = strtoull(s, NULL, 10)) == ULLONG_MAX) &&
-+				    (errno == ERANGE)) {
-+					log_error(_out_of_range_msg, s, field_id);
-+					goto error;
-+				}
-+				dm_pool_free(rh->mem, s);
++				r = _cmp_field_int(field_id, *(const uint64_t *) f->sort_value, fs->v.i, fs->flags);
 +				break;
 +			case DM_REPORT_FIELD_TYPE_SIZE:
-+				fs->v.d = strtod(s, NULL);
-+				if (errno == ERANGE) {
-+					log_error(_out_of_range_msg, s, field_id);
-+					goto error;
-+				}
-+				if (custom && (factor = *((uint64_t *)custom)))
-+					fs->v.d *= factor;
-+				fs->v.d /= 512; /* store size in sectors! */
-+				dm_pool_free(rh->mem, s);
++				r = _cmp_field_double(field_id, *(const uint64_t *) f->sort_value, fs->v.d, fs->flags);
++				break;
++			case DM_REPORT_FIELD_TYPE_STRING:
++				r = _cmp_field_string(field_id, (const char *) f->sort_value, fs->v.s, fs->flags);
 +				break;
 +			default:
-+				log_error(INTERNAL_ERROR "_create_field_selection: "
-+					  "unknown type of selection field %s", field_id);
-+				goto error;
++				log_error(INTERNAL_ERROR "_compare_selection_field: unknown field type for field %s", field_id);
 +		}
 +	}
 +
-+	return fs;
-+error:
-+	dm_pool_free(rh->mem, fs);
-+	return NULL;
++	log_verbose("%s field %s with value '%s'.", r ? "Selecting" : "Not selecting", field_id, f->report_string);
++
++	return r;
 +}
 +
-+static struct selection_node *_alloc_selection_node(struct dm_pool *mem, uint32_t type)
++static int _check_selection(struct dm_report *rh, struct selection_node *sn,
++			    struct dm_list *fields)
 +{
-+	struct selection_node *sn;
++	int r;
++	struct selection_node *iter_n;
++	struct dm_report_field *f;
 +
-+	if (!(sn = dm_pool_zalloc(mem, sizeof(struct selection_node)))) {
-+		log_error("dm_report: struct selection_node allocation failed");
-+		return NULL;
++	switch (sn->type & SEL_MASK) {
++		case SEL_ITEM:
++			r = 1;
++			dm_list_iterate_items(f, fields) {
++				if (sn->selection.item->fp != f->props)
++					continue;
++				if (!_compare_selection_field(rh, f, sn->selection.item))
++					r = 0;
++			}
++			break;
++		case SEL_OR:
++			r = 0;
++			dm_list_iterate_items(iter_n, &sn->selection.set)
++				if ((r |= _check_selection(rh, iter_n, fields)))
++					break;
++			break;
++		case SEL_AND:
++			r = 1;
++			dm_list_iterate_items(iter_n, &sn->selection.set)
++				if (!(r &= _check_selection(rh, iter_n, fields)))
++					break;
++			break;
++		default:
++			log_error("Unsupported selection type");
++			return 0;
 +	}
 +
-+	dm_list_init(&sn->list);
-+	sn->type = type;
-+	if (!(type & SEL_ITEM))
-+		dm_list_init(&sn->selection.set);
-+
-+	return sn;
++	return (sn->type & SEL_MODIFIER_NOT) ? !r : r;
 +}
 +
-+static char _sel_syntax_error_at_msg[] = "Selection syntax error at '%s'.";
-+
-+/*
-+ * Selection parser
-+ *
-+ * _parse_* functions
-+ *
-+ *   Input:
-+ *     s             - a pointer to the parsed string
-+ *   Output:
-+ *     next          - a pointer used for next _parse_*'s input,
-+ *                     next == s if return value is NULL
-+ *     return value  - a filter node pointer,
-+ *                     NULL if s doesn't match
-+ */
-+
-+/*
-+ * SELECTION := FIELD_NAME OP_CMP STRING |
-+ *              FIELD_NAME OP_CMP NUMBER  |
-+ *              FIELD_NAME OP_REGEX REGEX
-+ */
-+static struct selection_node *_parse_selection(struct dm_report *rh,
-+					       const char *s,
-+					       const char **next)
++static int _check_report_selection(struct dm_report *rh, struct dm_list *fields)
 +{
-+	struct field_selection *fs;
-+	struct selection_node *sn;
-+	const char *ws, *we; /* field name */
-+	const char *vs, *ve; /* value */
-+	const char *last;
-+	uint32_t flags, field_num;
-+	const struct dm_report_field_type *ft;
-+	uint64_t factor;
-+	void *custom;
-+	char *tmp;
-+	char c;
++	if (!rh->selection_root)
++		return 1;
 +
-+	/* field name */
-+	if (!(last = _tok_field_name(s, &ws, &we))) {
-+		log_error("Expecting field name");
-+		goto bad;
-+	}
-+
-+	/* check if the field with given name exists */
-+	if (!_get_field(rh, ws, (size_t) (we - ws), &field_num)) {
-+		c = we[0];
-+		tmp = (char *) we;
-+		tmp[0] = '\0';
-+		log_error("Unrecognised selection field: %s", ws);
-+		tmp[0] = c;
-+		goto bad;
-+	}
-+
-+	ft = &rh->fields[field_num];
-+
-+	/* comparison operator */
-+	if (!(flags = _tok_op_cmp(we, &last))) {
-+		log_error("Unrecognised comparison operator: %s", we);
-+		goto bad;
-+	}
-+	if (!last) {
-+		log_error("Missing value after operator");
-+		goto bad;
-+	}
-+
-+	/* some operators can compare only numeric fields */
-+	if ((flags & FLD_CMP_NUMBER) &&
-+	    (ft->flags != DM_REPORT_FIELD_TYPE_NUMBER) &&
-+	    (ft->flags != DM_REPORT_FIELD_TYPE_SIZE)) {
-+		log_error("Operator can be used only with numeric or size fields: %s", ws);
-+		goto bad;
-+	}
-+
-+	/* comparison value */
-+	if (flags & FLD_CMP_REGEX) {
-+		if (!(last = _tok_value_regex(ft, last, &vs, &ve, &flags)))
-+			goto_bad;
-+	} else {
-+		if (ft->flags == DM_REPORT_FIELD_TYPE_SIZE)
-+			custom = &factor;
-+		else
-+			custom = NULL;
-+		if (!(last = _tok_value(ft, last, &vs, &ve, &flags, rh->mem, custom)))
-+			goto_bad;
-+	}
-+
-+	*next = _skip_space(last);
-+
-+	/* create selection */
-+	if (!(fs = _create_field_selection(rh, field_num, vs, (size_t) (ve - vs), flags, custom)))
-+		return_NULL;
-+
-+	/* create selection node */
-+	if (!(sn = _alloc_selection_node(rh->mem, SEL_ITEM)))
-+		return_NULL;
-+
-+	/* add selection to selection node */
-+	sn->selection.item = fs;
-+
-+	return sn;
-+bad:
-+	log_error(_sel_syntax_error_at_msg, s);
-+	*next = s;
-+	return NULL;
++	return _check_selection(rh, rh->selection_root, fields);
 +}
 +
-+static struct selection_node *_parse_or_ex(struct dm_report *rh,
-+					   const char *s,
-+					   const char **next,
-+					   struct selection_node *or_sn);
- 
-+static struct selection_node *_parse_ex(struct dm_report *rh,
-+					const char *s,
-+					const char **next)
-+{
-+	static const char _ps_expected_msg[] = "Syntax error: left parenthesis expected at \'%s\'";
-+	static const char _pe_expected_msg[] = "Syntax error: right parenthesis expected at \'%s\'";
-+	struct selection_node *sn = NULL;
-+	uint32_t t;
-+	const char *tmp;
-+
-+	t = _tok_op_log(s, next, SEL_MODIFIER_NOT | SEL_PRECEDENCE_PS);
-+	if (t == SEL_MODIFIER_NOT) {
-+		/* '!' '(' EXPRESSION ')' */
-+		if (!_tok_op_log(*next, &tmp, SEL_PRECEDENCE_PS)) {
-+			log_error(_ps_expected_msg, *next);
-+			goto error;
-+		}
-+		if (!(sn = _parse_or_ex(rh, tmp, next, NULL)))
-+			goto error;
-+		sn->type |= SEL_MODIFIER_NOT;
-+		if (!_tok_op_log(*next, &tmp, SEL_PRECEDENCE_PE)) {
-+			log_error(_pe_expected_msg, *next);
-+			goto error;
-+		}
-+		*next = tmp;
-+	} else if (t == SEL_PRECEDENCE_PS) {
-+		/* '(' EXPRESSION ')' */
-+		if (!(sn = _parse_or_ex(rh, *next, &tmp, NULL)))
-+			goto error;
-+		if (!_tok_op_log(tmp, next, SEL_PRECEDENCE_PE)) {
-+			log_error(_pe_expected_msg, *next);
-+			goto error;
-+		}
-+	} else if ((s = _skip_space(s))) {
-+		/* SELECTION */
-+		sn = _parse_selection(rh, s, next);
-+	} else {
-+		sn = NULL;
-+		*next = s;
-+	}
-+
-+	return sn;
-+error:
-+	*next = s;
-+	return NULL;
-+}
-+
-+/* AND_EXPRESSION := EX (AND_OP AND_EXPRSSION) */
-+static struct selection_node *_parse_and_ex(struct dm_report *rh,
-+					    const char *s,
-+					    const char **next,
-+					    struct selection_node *and_sn)
-+{
-+	struct selection_node *n;
-+	const char *tmp;
-+
-+	n = _parse_ex(rh, s, next);
-+	if (!n)
-+		goto error;
-+
-+	if (!_tok_op_log(*next, &tmp, SEL_AND)) {
-+		if (!and_sn)
-+			return n;
-+		dm_list_add(&and_sn->selection.set, &n->list);
-+		return and_sn;
-+	}
-+
-+	if (!and_sn) {
-+		if (!(and_sn = _alloc_selection_node(rh->mem, SEL_AND)))
-+			goto error;
-+	}
-+	dm_list_add(&and_sn->selection.set, &n->list);
-+
-+	return _parse_and_ex(rh, tmp, next, and_sn);
-+error:
-+	*next = s;
-+	return NULL;
-+}
-+
-+/* OR_EXPRESSION := AND_EXPRESSION (OR_OP OR_EXPRESSION) */
-+static struct selection_node *_parse_or_ex(struct dm_report *rh,
-+					   const char *s,
-+					   const char **next,
-+					   struct selection_node *or_sn)
-+{
-+	struct selection_node *n;
-+	const char *tmp;
-+
-+	n = _parse_and_ex(rh, s, next, NULL);
-+	if (!n)
-+		goto error;
-+
-+	if (!_tok_op_log(*next, &tmp, SEL_OR)) {
-+		if (!or_sn)
-+			return n;
-+		dm_list_add(&or_sn->selection.set, &n->list);
-+		return or_sn;
-+	}
-+
-+	if (!or_sn) {
-+		if (!(or_sn = _alloc_selection_node(rh->mem, SEL_OR)))
-+			goto error;
-+	}
-+	dm_list_add(&or_sn->selection.set, &n->list);
-+
-+	return _parse_or_ex(rh, tmp, next, or_sn);
-+error:
-+	*next = s;
-+	return NULL;
-+}
-+
-+struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
-+						const struct dm_report_object_type *types,
-+						const struct dm_report_field_type *fields,
-+						const char *output_fields,
-+						const char *output_separator,
-+						uint32_t output_flags,
-+						const char *sort_keys,
-+						const char *selection,
-+						void *private_data)
-+{
-+	struct dm_report *rh;
-+	struct selection_node *root = NULL;
-+	const char *fin, *next;
-+
-+	if (!(rh = dm_report_init(report_types, types, fields, output_fields,
-+			output_separator, output_flags, sort_keys, private_data)))
-+		return NULL;
-+
-+	if (!selection || !selection[0]) {
-+		rh->selection_root = NULL;
-+		return rh;
-+	}
-+
-+	if (!(root = _alloc_selection_node(rh->mem, SEL_OR)))
-+		return_0;
-+
-+	if (!_parse_or_ex(rh, selection, &fin, root))
-+		goto error;
-+
-+	next = _skip_space(fin);
-+	if (*next) {
-+		log_error("Expecting logical operator");
-+		log_error(_sel_syntax_error_at_msg, next);
-+		goto error;
-+	}
-+
-+	if (report_types)
-+		*report_types = rh->report_types;
-+
-+	rh->selection_root = root;
-+	return rh;
-+error:	
-+	dm_report_free(rh);
-+	return NULL;
-+}
- 
- /*
-  * Print row of headings
+ int dm_report_object(struct dm_report *rh, void *object)
+ {
+ 	struct field_properties *fp;
+@@ -1339,7 +1493,8 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
+ 		if (!(last = _tok_value_regex(ft, last, &vs, &ve, &flags)))
+ 			goto_bad;
+ 	} else {
+-		if (ft->flags == DM_REPORT_FIELD_TYPE_SIZE)
++		if (ft->flags == DM_REPORT_FIELD_TYPE_SIZE ||
++		    ft->flags == DM_REPORT_FIELD_TYPE_NUMBER)
+ 			custom = &factor;
+ 		else
+ 			custom = NULL;
 
 
