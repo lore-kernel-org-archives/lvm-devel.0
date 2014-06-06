@@ -1,56 +1,38 @@
 From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Fri,  6 Jun 2014 03:27:41 +0000 (UTC)
-Subject: master - vgchange: Prompt when setting VG cluster attr if cluster is not setup
-Message-ID: <20140606032741.BC53160F5F@fedorahosted.org>
+Date: Fri,  6 Jun 2014 03:31:33 +0000 (UTC)
+Subject: master - WHATS_NEW: For commit 9399b743 (prompt for VG cluster attr change)
+Message-ID: <20140606033133.615536011B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9399b74356f9d0c2fbbac824908b15d63c3935cd
-Commit:        9399b74356f9d0c2fbbac824908b15d63c3935cd
-Parent:        de12310c457964e76e6558cbe079901a34ce4ef4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1f2aedb1903d1422b7093f6afbdd81d912c969b6
+Commit:        1f2aedb1903d1422b7093f6afbdd81d912c969b6
+Parent:        9399b74356f9d0c2fbbac824908b15d63c3935cd
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Thu Jun 5 22:27:40 2014 -0500
+AuthorDate:    Thu Jun 5 22:29:16 2014 -0500
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Thu Jun 5 22:27:40 2014 -0500
+CommitterDate: Thu Jun 5 22:30:50 2014 -0500
 
-vgchange: Prompt when setting VG cluster attr if cluster is not setup
+WHATS_NEW:  For commit 9399b743 (prompt for VG cluster attr change)
 
-If clvmd is not running or the locking type is not clustered and someone
-attempts to set the cluster attribute on a volume group, prompt them to
-see if they are sure.  (Only prompt for one though.  If neither are true,
-simply ask them once.)
+Minor change, but put a comment in WHATS_NEW anyway.
 ---
- tools/vgchange.c |   15 +++++++++++++++
- 1 files changed, 15 insertions(+), 0 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 05e7aea..478a8ca 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -317,6 +317,21 @@ static int _vgchange_clustered(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
-+	if (clustered) {
-+		if (!dm_daemon_is_running(CLVMD_PIDFILE)) {
-+			if (yes_no_prompt("LVM cluster daemon (clvmd) is not"
-+					  " running.\n"
-+					  "Make volume group \"%s\" clustered"
-+					  " anyway? [y/n]: ", vg->name) == 'n')
-+				return 0;
-+
-+		} else if (!locking_is_clustered() &&
-+			   (yes_no_prompt("LVM locking type is not clustered.\n"
-+					  "Make volume group \"%s\" clustered"
-+					  " anyway? [y/n]: ", vg->name) == 'n'))
-+			return 0;
-+	}
-+
- 	if (!vg_set_clustered(vg, clustered))
- 		return_0;
- 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a2b8af7..65cac33 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.107 - 
+ ==================================
++  Prompt when setting the VG cluster attr if the cluster is not setup.
+   Allow --yes to skip prompt in vgextend (worked only with -f).
+   Don't use name mangling for LVM - it never uses dm names with wrong char set.
+   Remove default.profile and add {command,metadata}_profile_template.profile.
 
 
