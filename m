@@ -1,48 +1,56 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 Jun 2014 21:09:33 +0000 (UTC)
-Subject: master - tests: disable python failing test
-Message-ID: <20140605210933.5EDB160B42@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Fri,  6 Jun 2014 03:27:41 +0000 (UTC)
+Subject: master - vgchange: Prompt when setting VG cluster attr if cluster is not setup
+Message-ID: <20140606032741.BC53160F5F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=de12310c457964e76e6558cbe079901a34ce4ef4
-Commit:        de12310c457964e76e6558cbe079901a34ce4ef4
-Parent:        7b8133e0b2cf43ef8221ce14eb140bda7490ab15
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 5 23:07:23 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 5 23:07:23 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9399b74356f9d0c2fbbac824908b15d63c3935cd
+Commit:        9399b74356f9d0c2fbbac824908b15d63c3935cd
+Parent:        de12310c457964e76e6558cbe079901a34ce4ef4
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Thu Jun 5 22:27:40 2014 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Thu Jun 5 22:27:40 2014 -0500
 
-tests: disable python failing test
+vgchange: Prompt when setting VG cluster attr if cluster is not setup
 
-Aborts and needs fixes...
+If clvmd is not running or the locking type is not clustered and someone
+attempts to set the cluster attribute on a volume group, prompt them to
+see if they are sure.  (Only prompt for one though.  If neither are true,
+simply ask them once.)
 ---
- test/api/python_lvm_unit.py |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ tools/vgchange.c |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
 
-diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
-index 39a6779..ab2e86f 100755
---- a/test/api/python_lvm_unit.py
-+++ b/test/api/python_lvm_unit.py
-@@ -379,12 +379,12 @@ class TestLvm(unittest.TestCase):
- 		TestLvm._create_thick_lv(device_names[2:4], thick_lv)
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 05e7aea..478a8ca 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -317,6 +317,21 @@ static int _vgchange_clustered(struct cmd_context *cmd,
+ 		return 0;
+ 	}
  
- 		lv, vg = TestLvm._get_lv(None, thick_lv)
--		lv.snapshot('thick_snap_shot', 1024*1024)
-+# FIXME		lv.snapshot('thick_snap_shot', 1024*1024)
- 		vg.close()
++	if (clustered) {
++		if (!dm_daemon_is_running(CLVMD_PIDFILE)) {
++			if (yes_no_prompt("LVM cluster daemon (clvmd) is not"
++					  " running.\n"
++					  "Make volume group \"%s\" clustered"
++					  " anyway? [y/n]: ", vg->name) == 'n')
++				return 0;
++
++		} else if (!locking_is_clustered() &&
++			   (yes_no_prompt("LVM locking type is not clustered.\n"
++					  "Make volume group \"%s\" clustered"
++					  " anyway? [y/n]: ", vg->name) == 'n'))
++			return 0;
++	}
++
+ 	if (!vg_set_clustered(vg, clustered))
+ 		return_0;
  
--		thick_ss, vg = TestLvm._get_lv(None, 'thick_snap_shot')
--		self.assertTrue(thick_ss is not None)
--		vg.close()
-+# FIXME		thick_ss, vg = TestLvm._get_lv(None, 'thick_snap_shot')
-+# FIXME		self.assertTrue(thick_ss is not None)
-+# FIXME		vg.close()
- 
- 		thin_lv, vg = TestLvm._get_lv(None, thin_lv)
- 		thin_lv.snapshot('thin_snap_shot')
 
 
