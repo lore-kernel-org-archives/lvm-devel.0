@@ -1,64 +1,124 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  6 Jun 2014 12:02:51 +0000 (UTC)
-Subject: dev-prajnoha-report-select - test: use direct I/O when injecting bad data into RAID images
-Message-ID: <20140606120251.6A9B660F1C@fedorahosted.org>
+Date: Fri,  6 Jun 2014 12:02:53 +0000 (UTC)
+Subject: dev-prajnoha-report-select - man: document DM_DEFAULT_NAME_MANGLING_MODE
+Message-ID: <20140606120253.816CA60F1C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4454a580dfd966d0cd132a2fd7d0cbb0df7e46a6
-Commit:        4454a580dfd966d0cd132a2fd7d0cbb0df7e46a6
-Parent:        03621692774e33357acc11ad23d4c8d1faffe971
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Fri May 30 17:26:10 2014 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Fri May 30 17:26:10 2014 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=93c2614e566c1aafae178c34838da21caf8ea16a
+Commit:        93c2614e566c1aafae178c34838da21caf8ea16a
+Parent:        4454a580dfd966d0cd132a2fd7d0cbb0df7e46a6
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jun 5 17:26:53 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jun 5 17:47:21 2014 +0200
 
-test: use direct I/O when injecting bad data into RAID images
+man: document DM_DEFAULT_NAME_MANGLING_MODE
 
-When directly corrupting RAID images for the purpose of testing,
-we must use direct I/O (or a 'sync' after the 'dd') to ensure that
-the writes are not caught in the buffer cache in a way that is not
-reachable by the top-level RAID device.
+Document DM_DEFAULT_NAME_MANGLING_MODE environmental variable.
+(its default setting is build time configurable)
 ---
- test/shell/lvchange-syncaction-raid.sh |   16 +++++-----------
- 1 files changed, 5 insertions(+), 11 deletions(-)
+ WHATS_NEW_DM     |    1 +
+ configure.in     |    3 ++-
+ make.tmpl.in     |    3 ++-
+ man/Makefile.in  |    2 +-
+ man/dmsetup.8.in |    9 ++++++++-
+ 5 files changed, 14 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/lvchange-syncaction-raid.sh b/test/shell/lvchange-syncaction-raid.sh
-index a27b885..b5fdfb4 100644
---- a/test/shell/lvchange-syncaction-raid.sh
-+++ b/test/shell/lvchange-syncaction-raid.sh
-@@ -13,7 +13,10 @@
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 8e221c1..976f927 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.88 - 
+ =================================
++  Document env var 'DM_DEFAULT_NAME_MANGLING_MODE' in dmsetup man page.
+   Warn user about incorrect use of cookie with 'dmsetup remove --force'.
+   Also recognize 'help'/'?' as reserved sort key name to show help.
+   Export recognized DM_REPORT_FIELD_RESERVED_NAME_{HELP,HELP_ALT} to show help.
+diff --git a/configure.in b/configure.in
+index 16e63c0..807ad32 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1,6 +1,6 @@
+ ###############################################################################
+ ## Copyright (C) 2000-2004 Sistina Software, Inc. All rights reserved.
+-## Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
++## Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+ ##
+ ## This copyrighted material is made available to anyone wishing to use,
+ ## modify, copy, or redistribute it subject to the terms and conditions
+@@ -1725,6 +1725,7 @@ AC_SUBST(LVM_PATCHLEVEL)
+ AC_SUBST(LVM_PATH)
+ AC_SUBST(LVM_RELEASE)
+ AC_SUBST(LVM_RELEASE_DATE)
++AC_SUBST(MANGLING)
+ AC_SUBST(MIRRORS)
+ AC_SUBST(MSGFMT)
+ AC_SUBST(OCF)
+diff --git a/make.tmpl.in b/make.tmpl.in
+index cb5b826..5a3694a 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -1,7 +1,7 @@
+ # @configure_input@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -102,6 +102,7 @@ DEFAULT_CACHE_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_CACHE_SUBDIR@
+ DEFAULT_PROFILE_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_PROFILE_SUBDIR@
+ DEFAULT_LOCK_DIR = @DEFAULT_LOCK_DIR@
+ DEFAULT_RUN_DIR = @DEFAULT_RUN_DIR@
++DEFAULT_MANGLING = @MANGLING@
  
- . lib/test
+ # Setup vpath search paths for some suffixes
+ vpath %.c $(srcdir)
+diff --git a/man/Makefile.in b/man/Makefile.in
+index 15f0252..5a11ae2 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -99,7 +99,7 @@ $(MAN5) $(MAN7) $(MAN8) $(MAN8DM) $(MAN8CLUSTER):	Makefile
+ %: %.in
+ 	@case "$@" in \
+ 	  */*) ;; \
+-	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;s+#DEFAULT_RUN_DIR#+ at DEFAULT_RUN_DIR@+;s+#DEFAULT_PID_DIR#+ at DEFAULT_PID_DIR@+;s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+;" $< > $@ ;; \
++	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;s+#DEFAULT_RUN_DIR#+ at DEFAULT_RUN_DIR@+;s+#DEFAULT_PID_DIR#+ at DEFAULT_PID_DIR@+;s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+;s+#DEFAULT_MANGLING#+$(DEFAULT_MANGLING)+;" $< > $@ ;; \
+ 	esac
  
--aux have_raid 1 5 0 || skip
-+# Proper mismatch count 1.5.2+ upstream, 1.3.5 < x < 1.4.0 in RHEL6
-+aux have_raid 1 3 5 &&
-+  ! aux have_raid 1 4 0 ||
-+  aux have_raid 1 5 2 || skip
- aux prepare_vg 3
+ install_man5: $(MAN5)
+diff --git a/man/dmsetup.8.in b/man/dmsetup.8.in
+index 9a738fb..1b17580 100644
+--- a/man/dmsetup.8.in
++++ b/man/dmsetup.8.in
+@@ -202,6 +202,9 @@ mangled, error on mixed; this is used by default).
+ Character whitelist: 0-9, A-Z, a-z, #+-.:=@_. This whitelist is
+ also supported by udev. Any character not on a whitelist is replaced
+ with its hex value (two digits) prefixed by \\x.
++Mangling mode could be also set through
++.B DM_DEFAULT_NAME_MANGLING_MODE
++environment variable.
+ .TP
+ .BR \-j | \-\-major\ \fImajor
+ Specify the major number.
+@@ -712,7 +715,11 @@ Defaults to "/dev" and must be an absolute path.
+ .TP
+ .B DM_UDEV_COOKIE
+ A cookie to use for all relevant commands to synchronize with udev processing.
+-It is an alternative to using \-\-udevcookie option.
++It is an alternative to using \fB\-\-udevcookie\fP option.
++.TP
++.B DM_DEFAULT_NAME_MANGLING_MODE
++A default mangling mode. Defaults to "#DEFAULT_MANGLING#"
++and it is an alternative to using \fB\-\-manglename\fP option.
  
- lvcreate -n $lv1 $vg -l1 --type raid1
-@@ -22,16 +25,7 @@ START=$(get pv_field "$dev2" pe_start --units 1k)
- METASIZE=$(get lv_field $vg/${lv1}_rmeta_1 size -a --units 1k)
- SEEK=$((${START%\.00k} + ${METASIZE%\.00k}))
- # Overwrite some portion of  _rimage_1
--dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK
--
--lvchange --syncaction check $vg/$lv1
--
--# hmmm it's still in 'dd' buffer and not on real disk ??
--# anyway skip over with 'should'
--should check lv_field $vg/$lv1 raid_mismatch_count "128"
--
--# Ensure it's all on disk now
--sync
-+dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK oflag=direct
- 
- lvchange --syncaction check $vg/$lv1
- check lv_field $vg/$lv1 raid_mismatch_count "128"
+ .SH AUTHORS
+ Original version: Joe Thornber (thornber at redhat.com)
 
 
