@@ -1,50 +1,38 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  6 Jun 2014 12:03:29 +0000 (UTC)
-Subject: dev-prajnoha-report-select - cleanup: commit c0f9c79 to work also with for non-clustered configuration
-Message-ID: <20140606120329.4921B60CFF@fedorahosted.org>
+Date: Fri,  6 Jun 2014 12:03:31 +0000 (UTC)
+Subject: dev-prajnoha-report-select - cleanup: default.profile is not used (and it was split in two and renamed anyway)
+Message-ID: <20140606120331.5C20E609E5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=291e55557ee4061a042d6d59b04aa09e6f503386
-Commit:        291e55557ee4061a042d6d59b04aa09e6f503386
-Parent:        c0f9c79ae8e1df16d23f3eb608fb4bf5455ec841
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=14f482077dadd33e35a33cbd57bc80a884992794
+Commit:        14f482077dadd33e35a33cbd57bc80a884992794
+Parent:        291e55557ee4061a042d6d59b04aa09e6f503386
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jun 6 10:17:26 2014 +0200
+AuthorDate:    Fri Jun 6 10:24:50 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Jun 6 10:17:26 2014 +0200
+CommitterDate: Fri Jun 6 10:24:50 2014 +0200
 
-cleanup: commit c0f9c79 to work also with for non-clustered configuration
+cleanup: default.profile is not used (and it was split in two and renamed anyway)
 
 ---
- tools/vgchange.c |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ test/Makefile.in |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 958919c..fef1301 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -304,6 +304,7 @@ static int _vgchange_clustered(struct cmd_context *cmd,
- 			       struct volume_group *vg)
- {
- 	int clustered = !strcmp(arg_str_value(cmd, clustered_ARG, "n"), "y");
-+	int clvmd_daemon_running = 0;
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 370d9bd..5ac045f 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -181,7 +181,6 @@ CMDS = lvm $(shell cat $(top_builddir)/tools/.commands)
+ 	ln -fs $(abs_top_builddir)/daemons/lvmetad/lvmetad lib/lvmetad
+ 	ln -fs $(abs_top_srcdir)/scripts/vgimportclone.sh lib/vgimportclone
+ 	ln -fs $(abs_top_srcdir)/scripts/fsadm.sh lib/fsadm
+-	ln -fs $(abs_top_builddir)/conf/default.profile lib/default.profile
+ 	ln -fs $(abs_top_srcdir)/conf/thin-performance.profile lib/thin-performance.profile
+ 	touch $@
  
- 	if (clustered && (vg_is_clustered(vg))) {
- 		log_error("Volume group \"%s\" is already clustered",
-@@ -318,7 +319,10 @@ static int _vgchange_clustered(struct cmd_context *cmd,
- 	}
- 
- 	if (clustered && !arg_count(cmd, yes_ARG)) {
--		if (!dm_daemon_is_running(CLVMD_PIDFILE)) {
-+#ifdef CLVMD_PIDFILE
-+		clvmd_daemon_running = dm_daemon_is_running(CLVMD_PIDFILE);
-+#endif
-+		if (!clvmd_daemon_running) {
- 			if (yes_no_prompt("LVM cluster daemon (clvmd) is not"
- 					  " running.\n"
- 					  "Make volume group \"%s\" clustered"
 
 
