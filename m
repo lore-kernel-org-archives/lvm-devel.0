@@ -1,41 +1,58 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 12 Jun 2014 09:56:48 +0000 (UTC)
-Subject: master - test: pvs bz1108394
-Message-ID: <20140612095648.32AA560E45@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Sun,  8 Jun 2014 19:58:33 +0000 (UTC)
+Subject: master - lvm1: Fail vg_write graciously when devices are missing.
+Message-ID: <20140608195833.4F4F960FD4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf4d5ead0210aa12dfd73fed2061d4d9febce827
-Commit:        cf4d5ead0210aa12dfd73fed2061d4d9febce827
-Parent:        eb316fec33e3866b92357a8aab1dd7a3c4b86075
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 12 11:31:21 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 12 11:56:06 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b3bdd410927a3d9b1b17de94a05b1621a79bdb31
+Commit:        b3bdd410927a3d9b1b17de94a05b1621a79bdb31
+Parent:        60443d6a5d17c9f3ba935263a5e14a8548aab509
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Sun Jun 8 21:52:54 2014 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Sun Jun 8 21:57:18 2014 +0200
 
-test: pvs bz1108394
+lvm1: Fail vg_write graciously when devices are missing.
 
 ---
- test/shell/pvremove-usage.sh |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ lib/format1/disk-rep.c     |    3 +++
+ test/shell/lvmetad-lvm1.sh |    9 +++++++++
+ 2 files changed, 12 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/pvremove-usage.sh b/test/shell/pvremove-usage.sh
-index 3ebfd15..52d26a6 100644
---- a/test/shell/pvremove-usage.sh
-+++ b/test/shell/pvremove-usage.sh
-@@ -23,6 +23,10 @@ pvremove "$dev2"
- # failing, but still removing everything what can be removed
- # is somewhat odd as default, what do we have -f for?
- pvs | not grep "$dev2"
-+pvs -a | grep "$dev2"
-+# bz1108394 no crash on nonPV label listing
-+pvs -a -o+devices
-+
- pvcreate  --metadatacopies 0 "$dev2"
+diff --git a/lib/format1/disk-rep.c b/lib/format1/disk-rep.c
+index f42d344..32e9f5e 100644
+--- a/lib/format1/disk-rep.c
++++ b/lib/format1/disk-rep.c
+@@ -727,6 +727,9 @@ static int _write_all_pvd(const struct format_type *fmt, struct disk_list *data,
+ {
+ 	int r;
  
- # check pvremove refuses to remove pv in a vg
++	if (!data->dev)
++		return_0;
++
+ 	if (!dev_open(data->dev))
+ 		return_0;
+ 
+diff --git a/test/shell/lvmetad-lvm1.sh b/test/shell/lvmetad-lvm1.sh
+index 814134c..d41e078 100644
+--- a/test/shell/lvmetad-lvm1.sh
++++ b/test/shell/lvmetad-lvm1.sh
+@@ -20,3 +20,12 @@ vgcreate --metadatatype 1 $vg1 "$dev1"
+ should vgscan --cache
+ vgs | should grep $vg1
+ pvs | should grep "$dev1"
++
++# check for RHBZ 1080189 -- SEGV in lvremove/vgremove
++pvcreate -ff -y --metadatatype 1 "$dev1" "$dev2"
++vgcreate --metadatatype 1 $vg1 "$dev1" "$dev2"
++lvcreate -l1 $vg1
++pvremove -ff -y $dev2
++vgchange -an $vg1
++not lvremove $vg1
++not vgremove $vg1
 
 
