@@ -1,115 +1,218 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  6 Jun 2014 12:23:14 +0000 (UTC)
-Subject: master - cleanup: move the "daemon is running" checks to lvm-wrappers
-Message-ID: <20140606122314.DDB006019A@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Mon,  9 Jun 2014 00:35:30 +0000 (UTC)
+Subject: master - libdaemon: Keep track of client threads, wait before shutdown.
+Message-ID: <20140609003530.C438360DC3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=943f3aec3d20169045ec2d2f4a07d87827cb95d8
-Commit:        943f3aec3d20169045ec2d2f4a07d87827cb95d8
-Parent:        f115a4a53fe6c3a3121e200c7f8796fb086c0c6e
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jun 6 14:21:09 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Jun 6 14:21:09 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=488f3085279e24af21e870d5a74d0953094552f7
+Commit:        488f3085279e24af21e870d5a74d0953094552f7
+Parent:        4bb1efe2fbcbd5702836e2c97e9aa3a1eed88847
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Jun 9 01:50:57 2014 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Mon Jun 9 01:50:57 2014 +0200
 
-cleanup: move the "daemon is running" checks to lvm-wrappers
+libdaemon: Keep track of client threads, wait before shutdown.
 
-And use ifdefs there, not exposing it in the tool code itself.
-Later in the future, we should probably make the PIDFILE and
-daemon checking code available also in case the daemon itself
-is not built.
 ---
- lib/mirror/mirrored.c   |    2 +-
- lib/misc/lvm-wrappers.c |   24 ++++++++++++++++++++++++
- lib/misc/lvm-wrappers.h |    4 ++++
- tools/vgchange.c        |    6 +-----
- 4 files changed, 30 insertions(+), 6 deletions(-)
+ libdaemon/server/daemon-server.c |   67 +++++++++++++++++++++++--------------
+ libdaemon/server/daemon-server.h |   10 ++++++
+ 2 files changed, 52 insertions(+), 25 deletions(-)
 
-diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
-index e3f768f..5040011 100644
---- a/lib/mirror/mirrored.c
-+++ b/lib/mirror/mirrored.c
-@@ -497,7 +497,7 @@ static int _mirrored_target_present(struct cmd_context *cmd,
- 		 * otherwise, the kernel module will fail to make
- 		 * contact.
- 		 */
--		if (dm_daemon_is_running(CMIRRORD_PIDFILE)) {
-+		if (cmirrord_is_running()) {
- 			struct utsname uts;
- 			unsigned kmaj, kmin, krel;
- 			/*
-diff --git a/lib/misc/lvm-wrappers.c b/lib/misc/lvm-wrappers.c
-index 5604ce7..4e3ff33 100644
---- a/lib/misc/lvm-wrappers.c
-+++ b/lib/misc/lvm-wrappers.c
-@@ -139,3 +139,27 @@ unsigned lvm_even_rand(unsigned *seed, unsigned max)
- 
- 	return ret;
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 919f7df..0ea3f69 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -395,11 +395,6 @@ end:
+ 	return res;
  }
-+
-+#ifdef CLVMD_PIDFILE
-+inline int clvmd_is_running(void)
-+{
-+	return dm_daemon_is_running(CLVMD_PIDFILE);
-+}
-+#else
-+inline int clvmd_is_running(void)
-+{
-+	return 0;
-+}
-+#endif
-+
-+#ifdef CMIRRORD_PIDFILE
-+inline int cmirrord_is_running(void)
-+{
-+	return dm_daemon_is_running(CMIRRORD_PIDFILE);
-+}
-+#else
-+inline int cmirrord_is_running(void)
-+{
-+	return 0;
-+}
-+#endif
-diff --git a/lib/misc/lvm-wrappers.h b/lib/misc/lvm-wrappers.h
-index 137cbdb..fbf28b8 100644
---- a/lib/misc/lvm-wrappers.h
-+++ b/lib/misc/lvm-wrappers.h
-@@ -37,4 +37,8 @@ int read_urandom(void *buf, size_t len);
-  */
- unsigned lvm_even_rand(unsigned *seed, unsigned max);
  
-+inline int clvmd_is_running(void);
-+inline int cmirrord_is_running(void);
-+
-+
- #endif
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index fef1301..2556af2 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -304,7 +304,6 @@ static int _vgchange_clustered(struct cmd_context *cmd,
- 			       struct volume_group *vg)
+-struct thread_baton {
+-	daemon_state s;
+-	client_handle client;
+-};
+-
+ static response builtin_handler(daemon_state s, client_handle h, request r)
  {
- 	int clustered = !strcmp(arg_str_value(cmd, clustered_ARG, "n"), "y");
--	int clvmd_daemon_running = 0;
+ 	const char *rq = daemon_request_str(r, "request", "NONE");
+@@ -414,17 +409,16 @@ static response builtin_handler(daemon_state s, client_handle h, request r)
+ 	return res;
+ }
  
- 	if (clustered && (vg_is_clustered(vg))) {
- 		log_error("Volume group \"%s\" is already clustered",
-@@ -319,10 +318,7 @@ static int _vgchange_clustered(struct cmd_context *cmd,
+-static void *client_thread(void *baton)
++static void *client_thread(void *state)
+ {
+-	struct thread_baton *b = baton;
++	thread_state *ts = state;
+ 	request req;
+ 	response res;
+ 
+-	b->client.thread_id = pthread_self();
+ 	buffer_init(&req.buffer);
+ 
+ 	while (1) {
+-		if (!buffer_read(b->client.socket_fd, &req.buffer))
++		if (!buffer_read(ts->client.socket_fd, &req.buffer))
+ 			goto fail;
+ 
+ 		req.cft = dm_config_from_string(req.buffer.mem);
+@@ -432,12 +426,12 @@ static void *client_thread(void *baton)
+ 		if (!req.cft)
+ 			fprintf(stderr, "error parsing request:\n %s\n", req.buffer.mem);
+ 		else
+-			daemon_log_cft(b->s.log, DAEMON_LOG_WIRE, "<- ", req.cft->root);
++			daemon_log_cft(ts->s.log, DAEMON_LOG_WIRE, "<- ", req.cft->root);
+ 
+-		res = builtin_handler(b->s, b->client, req);
++		res = builtin_handler(ts->s, ts->client, req);
+ 
+ 		if (res.error == EPROTO) /* Not a builtin, delegate to the custom handler. */
+-			res = b->s.handler(b->s, b->client, req);
++			res = ts->s.handler(ts->s, ts->client, req);
+ 
+ 		if (!res.buffer.mem) {
+ 			if (!dm_config_write_node(res.cft->root, buffer_line, &res.buffer))
+@@ -451,54 +445,72 @@ static void *client_thread(void *baton)
+ 			dm_config_destroy(req.cft);
+ 		buffer_destroy(&req.buffer);
+ 
+-		daemon_log_multi(b->s.log, DAEMON_LOG_WIRE, "-> ", res.buffer.mem);
+-		buffer_write(b->client.socket_fd, &res.buffer);
++		daemon_log_multi(ts->s.log, DAEMON_LOG_WIRE, "-> ", res.buffer.mem);
++		buffer_write(ts->client.socket_fd, &res.buffer);
+ 
+ 		buffer_destroy(&res.buffer);
+ 	}
+ fail:
+ 	/* TODO what should we really do here? */
+-	if (close(b->client.socket_fd))
++	if (close(ts->client.socket_fd))
+ 		perror("close");
+ 	buffer_destroy(&req.buffer);
+-	dm_free(baton);
++	ts->active = 0;
+ 	return NULL;
+ }
+ 
+ static int handle_connect(daemon_state s)
+ {
+-	struct thread_baton *baton;
++	thread_state *ts;
+ 	struct sockaddr_un sockaddr;
+ 	client_handle client = { .thread_id = 0 };
+ 	socklen_t sl = sizeof(sockaddr);
+-	pthread_t tid;
+ 
+ 	client.socket_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
+ 	if (client.socket_fd < 0)
+ 		return 0;
+ 
+-	if (!(baton = dm_malloc(sizeof(struct thread_baton)))) {
++	if (!(ts = dm_malloc(sizeof(thread_state)))) {
+ 		if (close(client.socket_fd))
+ 			perror("close");
+-		ERROR(&s, "Failed to allocate thread baton");
++		ERROR(&s, "Failed to allocate thread state");
+ 		return 0;
  	}
  
- 	if (clustered && !arg_count(cmd, yes_ARG)) {
--#ifdef CLVMD_PIDFILE
--		clvmd_daemon_running = dm_daemon_is_running(CLVMD_PIDFILE);
--#endif
--		if (!clvmd_daemon_running) {
-+		if (!clvmd_is_running()) {
- 			if (yes_no_prompt("LVM cluster daemon (clvmd) is not"
- 					  " running.\n"
- 					  "Make volume group \"%s\" clustered"
+-	baton->s = s;
+-	baton->client = client;
++	ts->next = s.threads->next;
++	s.threads->next = ts;
+ 
+-	if (pthread_create(&tid, NULL, client_thread, baton))
+-		return 0;
++	ts->active = 1;
++	ts->s = s;
++	ts->client = client;
+ 
+-	pthread_detach(tid);
++	if (pthread_create(&ts->client.thread_id, NULL, client_thread, ts))
++		return 0;
+ 
+ 	return 1;
+ }
+ 
++static void reap(daemon_state s, int wait)
++{
++	thread_state *last = s.threads, *ts = last->next;
++	void *rv;
++
++	while (ts) {
++		if (wait || !ts->active) {
++			pthread_join(ts->client.thread_id, &rv);
++			last->next = ts->next;
++			dm_free(ts);
++		} else
++			last = ts;
++		ts = last->next;
++	}
++}
++
+ void daemon_start(daemon_state s)
+ {
+ 	int failed = 0;
+ 	log_state _log = { { 0 } };
++	thread_state _threads = { .next = NULL };
+ 
+ 	/*
+ 	 * Switch to C locale to avoid reading large locale-archive file used by
+@@ -517,6 +529,7 @@ void daemon_start(daemon_state s)
+ 
+ 	s.log = &_log;
+ 	s.log->name = s.name;
++	s.threads = &_threads;
+ 
+ 	/* Log important things to syslog by default. */
+ 	daemon_log_enable(s.log, DAEMON_LOG_OUTLET_SYSLOG, DAEMON_LOG_FATAL, 1);
+@@ -572,8 +585,12 @@ void daemon_start(daemon_state s)
+ 		if (FD_ISSET(s.socket_fd, &in))
+ 			if (!_shutdown_requested && !handle_connect(s))
+ 				ERROR(&s, "Failed to handle a client connection.");
++		reap(s, 0);
+ 	}
+ 
++	INFO(&s, "%s waiting for client threads to finish", s.name);
++	reap(s, 1);
++
+ 	/* If activated by systemd, do not unlink the socket - systemd takes care of that! */
+ 	if (!_systemd_activation && s.socket_fd >= 0)
+ 		if (unlink(s.socket_path))
+diff --git a/libdaemon/server/daemon-server.h b/libdaemon/server/daemon-server.h
+index ad41372..a7673d4 100644
+--- a/libdaemon/server/daemon-server.h
++++ b/libdaemon/server/daemon-server.h
+@@ -70,6 +70,8 @@ typedef struct {
+ 	const char *name;
+ } log_state;
+ 
++struct thread_state;
++
+ typedef struct daemon_state {
+ 	/*
+ 	 * The maximal stack size for individual daemon threads. This is
+@@ -95,9 +97,17 @@ typedef struct daemon_state {
+ 	int socket_fd;
+ 
+ 	log_state *log;
++	struct thread_state *threads;
+ 	void *private; /* the global daemon state */
+ } daemon_state;
+ 
++typedef struct thread_state {
++	daemon_state s;
++	client_handle client;
++	struct thread_state *next;
++	volatile int active;
++} thread_state;
++
+ /*
+  * Start serving the requests. This does all the daemonisation, socket setup
+  * work and so on. This function takes over the process, and upon failure, it
 
 
