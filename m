@@ -1,109 +1,123 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun,  8 Jun 2014 19:12:03 +0000 (UTC)
-Subject: master - test: Make it possible to enable/disable devices silently.
-Message-ID: <20140608191203.9F0A061200@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 11 Jun 2014 09:07:41 +0000 (UTC)
+Subject: master - tests: some more renames lib/test -> lib/inittest
+Message-ID: <20140611090741.4BADF60D47@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eda4c3a41d7ca1642ee779af69cb862ba8332e66
-Commit:        eda4c3a41d7ca1642ee779af69cb862ba8332e66
-Parent:        dba6dec661c6a0193d9d713c6fd0b9b008c0f26a
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon May 26 14:37:45 2014 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Sun Jun 8 21:10:47 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6766cdc8a1a0fb2cd041f629d8c2b6adbaca0ff0
+Commit:        6766cdc8a1a0fb2cd041f629d8c2b6adbaca0ff0
+Parent:        5c5177c37c88cc0e7d5fbd5b82647ce562dad32f
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Jun 11 11:07:32 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Jun 11 11:07:32 2014 +0200
 
-test: Make it possible to enable/disable devices silently.
+tests: some more renames lib/test -> lib/inittest
 
 ---
- test/lib/aux.sh |   40 ++++++++++++++++++++++++++++++++++++----
- 1 files changed, 36 insertions(+), 4 deletions(-)
+ test/api/lvtest.sh       |    2 +-
+ test/api/pe_start.sh     |    2 +-
+ test/api/percent.sh      |    2 +-
+ test/api/pytest.sh       |    2 +-
+ test/api/thin_percent.sh |    2 +-
+ test/api/vglist.sh       |    2 +-
+ test/api/vgtest.sh       |    2 +-
+ 7 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 445bf26..3ececaf 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -406,19 +406,50 @@ delay_dev() {
+diff --git a/test/api/lvtest.sh b/test/api/lvtest.sh
+index 0b7684a..5fe6f57 100644
+--- a/test/api/lvtest.sh
++++ b/test/api/lvtest.sh
+@@ -11,7 +11,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  
- disable_dev() {
- 	local dev
-+	local silent
-+	local error
-+	local notify
-+
-+	while test -n "$1"; do
-+	    if test "$1" = "--silent"; then
-+		silent=1
-+		shift
-+	    elif test "$1" = "--error"; then
-+		error=1
-+		shift
-+	    else
-+		break
-+	    fi
-+	done
+-. lib/test
++. lib/inittest
  
- 	udev_wait
- 	for dev in "$@"; do
- 		maj=$(($(stat -L --printf=0x%t "$dev")))
- 		min=$(($(stat -L --printf=0x%T "$dev")))
- 		echo "Disabling device $dev ($maj:$min)"
--		dmsetup remove -f "$dev" 2>/dev/null || true
--		notify_lvmetad --major "$maj" --minor "$min"
-+		notify="$notify $maj:$min"
-+		if test -n "$error"; then
-+		    echo 0 10000000 error | dmsetup load $dev
-+		    dmsetup resume $dev
-+		else
-+		    dmsetup remove -f "$dev" 2>/dev/null || true
-+		fi
-+	done
-+
-+	test -n "$silent" || for num in $notify; do
-+		notify_lvmetad --major $(echo $num | sed -e "s,:.*,,") \
-+		               --minor $(echo $num | sed -e "s,.*:,,")
- 	done
- }
+ aux prepare_vg 1
  
- enable_dev() {
- 	local dev
-+	local silent
-+
-+	if test "$1" = "--silent"; then
-+	    silent=1
-+	    shift
-+	fi
+diff --git a/test/api/pe_start.sh b/test/api/pe_start.sh
+index 20ba8ec..2fc118f 100644
+--- a/test/api/pe_start.sh
++++ b/test/api/pe_start.sh
+@@ -11,7 +11,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  
- 	rm -f debug.log
- 	init_udev_transaction
-@@ -431,7 +462,7 @@ enable_dev() {
- 	done
- 	finish_udev_transaction
+-. lib/test
++. lib/inittest
  
--	for dev in "$@"; do
-+	test -n "$silent" || for dev in "$@"; do
- 		notify_lvmetad "$dev"
- 	done
- }
-@@ -450,6 +481,7 @@ error_dev() {
- 	local type
- 	local pvdev
- 	local offset
-+	local silent
+ aux prepare_devs 2
  
- 	read pos size type pvdev offset < $name.table
+diff --git a/test/api/percent.sh b/test/api/percent.sh
+index 097cad8..a503ca3 100644
+--- a/test/api/percent.sh
++++ b/test/api/percent.sh
+@@ -11,7 +11,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  
-@@ -480,7 +512,7 @@ error_dev() {
- 	# using device name (since device path does not exists yet with udev)
- 	dmsetup resume "$name"
- 	finish_udev_transaction
--	notify_lvmetad "$dev"
-+	test -n "$silent" || notify_lvmetad "$dev"
- }
+-. lib/test
++. lib/inittest
  
- backup_dev() {
+ kernel_at_least 2 6 33 || skip
+ 
+diff --git a/test/api/pytest.sh b/test/api/pytest.sh
+index 8359c01..7b6085f 100644
+--- a/test/api/pytest.sh
++++ b/test/api/pytest.sh
+@@ -11,7 +11,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+ 
+-. lib/test
++. lib/inittest
+ 
+ #
+ # TODO:
+diff --git a/test/api/thin_percent.sh b/test/api/thin_percent.sh
+index 50ad8f6..5335655 100644
+--- a/test/api/thin_percent.sh
++++ b/test/api/thin_percent.sh
+@@ -11,7 +11,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+ 
+-. lib/test
++. lib/inittest
+ 
+ aux have_thin 1 0 0 || skip
+ 
+diff --git a/test/api/vglist.sh b/test/api/vglist.sh
+index 275c9d2..421705b 100644
+--- a/test/api/vglist.sh
++++ b/test/api/vglist.sh
+@@ -9,7 +9,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 
+-. lib/test
++. lib/inittest
+ 
+ aux prepare_vg 2
+ aux apitest vglist $vg `get vg_field $vg vg_uuid | sed -e s,-,,g`
+diff --git a/test/api/vgtest.sh b/test/api/vgtest.sh
+index 6c0be4e..72255fe 100644
+--- a/test/api/vgtest.sh
++++ b/test/api/vgtest.sh
+@@ -13,7 +13,7 @@
+ # tests lvm2app library
+ #
+ 
+-. lib/test
++. lib/inittest
+ 
+ aux prepare_pvs 2
+ 
 
 
