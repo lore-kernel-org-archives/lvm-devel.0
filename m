@@ -1,123 +1,100 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 11 Jun 2014 09:07:41 +0000 (UTC)
-Subject: master - tests: some more renames lib/test -> lib/inittest
-Message-ID: <20140611090741.4BADF60D47@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 11 Jun 2014 09:11:32 +0000 (UTC)
+Subject: master - man: advertise lvmcache, lvmthin
+Message-ID: <20140611091132.6099060F96@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6766cdc8a1a0fb2cd041f629d8c2b6adbaca0ff0
-Commit:        6766cdc8a1a0fb2cd041f629d8c2b6adbaca0ff0
-Parent:        5c5177c37c88cc0e7d5fbd5b82647ce562dad32f
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 11 11:07:32 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 11 11:07:32 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d2b60c6e351df63b5bfc82cd27ac23dd8ffe89a9
+Commit:        d2b60c6e351df63b5bfc82cd27ac23dd8ffe89a9
+Parent:        6766cdc8a1a0fb2cd041f629d8c2b6adbaca0ff0
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jun 10 11:05:51 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jun 11 11:10:54 2014 +0200
 
-tests: some more renames lib/test -> lib/inittest
+man: advertise  lvmcache, lvmthin
 
+Add references to new man pages so they get known.
 ---
- test/api/lvtest.sh       |    2 +-
- test/api/pe_start.sh     |    2 +-
- test/api/percent.sh      |    2 +-
- test/api/pytest.sh       |    2 +-
- test/api/thin_percent.sh |    2 +-
- test/api/vglist.sh       |    2 +-
- test/api/vgtest.sh       |    2 +-
- 7 files changed, 7 insertions(+), 7 deletions(-)
+ man/lvchange.8.in  |    2 ++
+ man/lvconvert.8.in |    5 +++++
+ man/lvcreate.8.in  |    4 ++++
+ 3 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/test/api/lvtest.sh b/test/api/lvtest.sh
-index 0b7684a..5fe6f57 100644
---- a/test/api/lvtest.sh
-+++ b/test/api/lvtest.sh
-@@ -11,7 +11,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+diff --git a/man/lvchange.8.in b/man/lvchange.8.in
+index 09f54e6..27f81aa 100644
+--- a/man/lvchange.8.in
++++ b/man/lvchange.8.in
+@@ -256,5 +256,7 @@ Changes the permission on volume lvol1 in volume group vg00 to be read-only:
+ .B lvchange -pr vg00/lvol1
+ .SH SEE ALSO
+ .BR lvm (8),
++.BR lvmcache (7),
++.BR lvmthin (7),
+ .BR lvcreate (8),
+ .BR vgchange (8)
+diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
+index 2833f20..44a3dbe 100644
+--- a/man/lvconvert.8.in
++++ b/man/lvconvert.8.in
+@@ -235,6 +235,8 @@ or
+ When converting a logical volume to a cache LV, the
+ .B \-\-cachepool
+ argument is required.
++See \fBlvmcache\fP(7) for more info about caching support
++and \fBlvmthin\fP(7) for thin provisioning support.
+ .TP
+ .BR \-i ", " \-\-interval " " \fISeconds
+ Report progress as a percentage at regular intervals.
+@@ -413,6 +415,7 @@ Switches logical volume into a thin pool's data volume.
+ Content of converted volume is lost.
+ Thin pool's metadata logical volume can be specified with the option
+ \fB\-\-poolmetadata\fP or allocated with \fB\-\-poolmetadatasize\fP.
++See \fBlvmthin\fP(7) for more info about thin provisioning support.
  
--. lib/test
-+. lib/inittest
+ .SH Examples
+ Converts the linear logical volume "vg00/lvol1" to a two-way mirror
+@@ -528,6 +531,8 @@ cache pool LV.
+ .SH SEE ALSO
+ .BR lvm (8),
+ .BR lvm.conf (5),
++.BR lvmcache (7),
++.BR lvmthin (7),
+ .BR lvdisplay (8),
+ .BR lvextend (8),
+ .BR lvreduce (8),
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index ee50587..164ca27 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -403,6 +403,7 @@ Specifying the optional argument \fB\-\-virtualsize\fP will cause
+ the creation of the thin logical volume from given thin pool volume.
+ Specifying both arguments will cause the creation of both
+ thin pool and thin volume using this pool.
++See \fBlvmthin\fP(7) for more info about thin provisioning support.
+ Requires device mapper kernel driver for thin provisioning
+ from kernel 3.2 or newer.
+ .TP
+@@ -430,6 +431,7 @@ as is the case with
+ .IR raid10
+ or
+ .IR zero .
++See \fBlvmcache\fP(7) for more info about caching support.
+ Note that the cache segment type requires a dm-cache kernel module version
+ 1.3.0 or greater.
  
- aux prepare_vg 1
- 
-diff --git a/test/api/pe_start.sh b/test/api/pe_start.sh
-index 20ba8ec..2fc118f 100644
---- a/test/api/pe_start.sh
-+++ b/test/api/pe_start.sh
-@@ -11,7 +11,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
- 
--. lib/test
-+. lib/inittest
- 
- aux prepare_devs 2
- 
-diff --git a/test/api/percent.sh b/test/api/percent.sh
-index 097cad8..a503ca3 100644
---- a/test/api/percent.sh
-+++ b/test/api/percent.sh
-@@ -11,7 +11,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
- 
--. lib/test
-+. lib/inittest
- 
- kernel_at_least 2 6 33 || skip
- 
-diff --git a/test/api/pytest.sh b/test/api/pytest.sh
-index 8359c01..7b6085f 100644
---- a/test/api/pytest.sh
-+++ b/test/api/pytest.sh
-@@ -11,7 +11,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
- 
--. lib/test
-+. lib/inittest
- 
- #
- # TODO:
-diff --git a/test/api/thin_percent.sh b/test/api/thin_percent.sh
-index 50ad8f6..5335655 100644
---- a/test/api/thin_percent.sh
-+++ b/test/api/thin_percent.sh
-@@ -11,7 +11,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
- 
--. lib/test
-+. lib/inittest
- 
- aux have_thin 1 0 0 || skip
- 
-diff --git a/test/api/vglist.sh b/test/api/vglist.sh
-index 275c9d2..421705b 100644
---- a/test/api/vglist.sh
-+++ b/test/api/vglist.sh
-@@ -9,7 +9,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- 
--. lib/test
-+. lib/inittest
- 
- aux prepare_vg 2
- aux apitest vglist $vg `get vg_field $vg vg_uuid | sed -e s,-,,g`
-diff --git a/test/api/vgtest.sh b/test/api/vgtest.sh
-index 6c0be4e..72255fe 100644
---- a/test/api/vgtest.sh
-+++ b/test/api/vgtest.sh
-@@ -13,7 +13,7 @@
- # tests lvm2app library
- #
- 
--. lib/test
-+. lib/inittest
- 
- aux prepare_pvs 2
- 
+@@ -568,6 +570,8 @@ volume (i.e. the origin LV), creating a cache LV.
+ .SH SEE ALSO
+ .BR lvm (8),
+ .BR lvm.conf (5),
++.BR lvmcache (7),
++.BR lvmthin (7),
+ .BR lvconvert (8),
+ .BR lvchange (8),
+ .BR lvextend (8),
 
 
