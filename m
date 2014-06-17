@@ -1,202 +1,342 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 17 Jun 2014 14:34:19 +0000 (UTC)
-Subject: master - report: select: add dm_report_field_string_list to libdm
-Message-ID: <20140617143419.E7F2660C4F@fedorahosted.org>
+Date: Tue, 17 Jun 2014 14:34:24 +0000 (UTC)
+Subject: master - report: select: add support for processing string lists in selection
+Message-ID: <20140617143424.87BC860C4E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=76467bdcfd297ffbe2c088b6340ecc7d17d56742
-Commit:        76467bdcfd297ffbe2c088b6340ecc7d17d56742
-Parent:        5abdb52fdc66316d3e7d54085d4e79160024b95e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8faa4ded9cd12005df9ba71a2c3464eb7b69de71
+Commit:        8faa4ded9cd12005df9ba71a2c3464eb7b69de71
+Parent:        a6694cfc299111127e6f6f261ba1b99b3a3f9a19
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu May 29 09:41:18 2014 +0200
+AuthorDate:    Thu May 29 09:41:50 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Tue Jun 17 16:27:20 2014 +0200
 
-report: select: add dm_report_field_string_list to libdm
+report: select: add support for processing string lists in selection
 
-Add a separate dm_report_field_string_list fn to libdevmapper to
-support reporting string lists. Before, the code used libdevmappers's
-dm_report_field_string fn which required formatting the list to a
-single string. This functionality is now moved to libdevmapper
-and the code that needs to report the string list just needs
-to pass the list itself and libdevmapper will take care of this.
-This also enhances code reuse.
+Selection list items are enclosed in '[' and ']' (if there's only
+one item, the '[' and ']' can be omitted). Each element of the list
+is a string (either quoted or unquoted, like the usual string operand
+used in selection) and each element is delimited either by conjunction
+(meaining "match all") or disjunction operator (meaning "match any").
 
-The dm_report_field_string_list also accepts an argument to define
-custom delimiter to use. If not defined, a default "," (comma) is
-used as item delimiter in the string list reported.
+For example, if "," is the conjuction operator and "/" is the
+disjunction operator then:
 
-The dm_report_field_string_list automatically sorts the items in
-the list before formatting it to a final string. It also encodes
-the position and length within the final string where each element
-can be found. This can be used to support checking against each
-list item reported since since when formatted as a single string
-for the actual report, we would lose this information otherwise
-(we don't want to copy each item, the position and length within
-the final string is enough for us to get the original items back).
+  lv_tags=[a,b,c]
 
-When such lists are checked against the selection tree, we can check
-each item individually this way and we can support operators like
-"match any" and "match all".
+...will match all fields where tags contain *all* a, b and c.
+
+  lv_tags=[a/b/c]
+
+...will match all fields where tags contain *any* of a, b, or c.
+
+Mixing operators within the list is not supported:
+
+  lv_tags=[a,b/c]
+
+...will give an error.
+
+The order in which items are defined in the selection do not matter.
+
+This patch enhances the selection parsing functionality to recognize
+such lists.
 ---
- libdm/libdevmapper.h |    2 +
- libdm/libdm-report.c |  127 ++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 129 insertions(+), 0 deletions(-)
+ libdm/libdm-report.c |  204 ++++++++++++++++++++++++++++++++++++++++++++++++--
+ 1 files changed, 198 insertions(+), 6 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index f3e2b92..e007b9b 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1676,6 +1676,8 @@ int dm_report_set_output_field_name_prefix(struct dm_report *rh,
-  */
- int dm_report_field_string(struct dm_report *rh, struct dm_report_field *field,
- 			   const char *const *data);
-+int dm_report_field_string_list(struct dm_report *rh, struct dm_report_field *field,
-+				const struct dm_list *data, const char *delimiter);
- int dm_report_field_int32(struct dm_report *rh, struct dm_report_field *field,
- 			  const int32_t *data);
- int dm_report_field_uint32(struct dm_report *rh, struct dm_report_field *field,
 diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 93cba9f..0feef17 100644
+index e61d2c9..64e0e8e 100644
 --- a/libdm/libdm-report.c
 +++ b/libdm/libdm-report.c
-@@ -204,6 +204,133 @@ int dm_report_field_string(struct dm_report *rh,
- 	return 1;
+@@ -123,6 +123,10 @@ static struct op_def _op_cmp[] = {
+ #define SEL_PRECEDENCE_PS	0x00001000
+ #define SEL_PRECEDENCE_PE	0x00002000
+ 
++#define SEL_LIST_MASK		0x000F0000
++#define SEL_LIST_LS		0x00010000
++#define SEL_LIST_LE		0x00020000
++
+ static struct op_def _op_log[] = {
+         { "&&", SEL_AND, "All fields must match" },
+ 	{ ",", SEL_AND, "All fields must match" },
+@@ -131,9 +135,16 @@ static struct op_def _op_log[] = {
+         { "!", SEL_MODIFIER_NOT, "Logical negation" },
+         { "(", SEL_PRECEDENCE_PS, "Left parenthesis" },
+         { ")", SEL_PRECEDENCE_PE, "Right parenthesis" },
++        { "[", SEL_LIST_LS, "List start" },
++        { "]", SEL_LIST_LE, "List end"},
+         { NULL,  0, NULL},
+ };
+ 
++struct selection_str_list {
++	unsigned type;			/* either SEL_AND or SEL_OR */
++	struct dm_list *list;
++};
++
+ struct field_selection {
+ 	struct field_properties *fp;
+ 	uint32_t flags;
+@@ -142,6 +153,7 @@ struct field_selection {
+ 		uint64_t i;
+ 		double d;
+ 		struct dm_regex *r;
++		struct selection_str_list *l;
+ 	} v;
+ };
+ 
+@@ -1349,6 +1361,171 @@ static const char *_tok_value_regex(const struct dm_report_field_type *ft,
+ 	return s;
  }
  
-+static int _str_cmp(const void *a, const void *b)
++static int _str_list_item_cmp(const void *a, const void *b)
 +{
-+	const char **str_a = (const char **) a;
-+	const char **str_b = (const char **) b;
++	const struct dm_str_list **item_a = (const struct dm_str_list **) a;
++	const struct dm_str_list **item_b = (const struct dm_str_list **) b;
 +
-+	return strcmp(*str_a, *str_b);
++	return strcmp((*item_a)->str, (*item_b)->str);
 +}
 +
-+struct str_list_sort_value_item {
-+	unsigned pos;
-+	size_t len;
-+};
-+
-+struct str_list_sort_value {
-+	const char *value;
-+	struct str_list_sort_value_item *items;
-+};
-+
-+int dm_report_field_string_list(struct dm_report *rh,
-+				struct dm_report_field *field,
-+				const struct dm_list *data,
-+				const char *delimiter)
++static int _add_item_to_string_list(struct dm_pool *mem, const char *begin,
++				    const char *end, struct dm_list *list)
 +{
-+	static const char _string_list_grow_object_failed_msg[] = "dm_report_field_string_list: dm_pool_grow_object_failed";
-+	struct str_list_sort_value *sort_value = NULL;
-+	unsigned int list_size, pos, i;
-+	const char **arr = NULL;
-+	struct dm_str_list *sl;
-+	size_t delimiter_len, len;
-+	void *object;
-+	int r = 0;
++	struct dm_str_list *item;
 +
-+	if (!(sort_value = dm_pool_zalloc(rh->mem, sizeof(struct str_list_sort_value)))) {
-+		log_error("dm_report_field_string_list: dm_pool_zalloc failed for sort_value");
++	if (begin == end)
++		return_0;
++
++	if (!(item = dm_pool_zalloc(mem, sizeof(*item))) ||
++	    !(item->str = dm_pool_strndup(mem, begin, end - begin))) {
++		log_error("_add_item_to_string_list: memory allocation failed for string list item");
 +		return 0;
 +	}
++	dm_list_add(list, &item->list);
 +
-+	list_size = dm_list_size(data);
-+
-+	/*
-+	 * Sort value stores the pointer to the report_string and then
-+	 * position and length for each list element withing the report_string.
-+	 * The first element stores number of elements in 'len' (therefore
-+	 * list_size + 1 is used below for the extra element).
-+	 */
-+	if (!(sort_value->items = dm_pool_zalloc(rh->mem, (list_size + 1) * sizeof(struct str_list_sort_value_item)))) {
-+		log_error("dm_report_fiel_string_list: dm_pool_zalloc failed for sort value items");
-+		goto out;
-+	}
-+	sort_value->items[0].len = list_size;
-+
-+	/* zero items */
-+	if (!list_size) {
-+		sort_value->value = field->report_string = "";
-+		sort_value->items[1].pos = 0;
-+		sort_value->items[1].len = 0;
-+		field->sort_value = sort_value;
-+		return 1;
-+	}
-+
-+	/* one item */
-+	if (list_size == 1) {
-+		sl = (struct dm_str_list *) dm_list_first(data);
-+		if (!(sort_value->value = field->report_string = dm_pool_strdup(rh->mem, sl->str))) {
-+			log_error("dm_report_field_string_list: dm_pool_strdup failed");
-+			goto out;
-+		}
-+		sort_value->items[1].pos = 0;
-+		sort_value->items[1].len = strlen(sl->str);
-+		field->sort_value = sort_value;
-+		return 1;
-+	}
-+
-+	/* more than one item - sort the list */
-+	if (!(arr = dm_malloc(sizeof(char *) * list_size))) {
-+		log_error("dm_report_field_string_list: dm_malloc failed");
-+		goto out;
-+	}
-+	i = 0;
-+	dm_list_iterate_items(sl, data)
-+		arr[i++] = sl->str;
-+	qsort(arr, i, sizeof(char *), _str_cmp);
-+
-+	if (!(dm_pool_begin_object(rh->mem, 256))) {
-+		log_error(_string_list_grow_object_failed_msg);
-+		goto out;
-+	}
-+
-+	if (!delimiter)
-+		delimiter = ",";
-+	delimiter_len = strlen(delimiter);
-+
-+	/* start from 1 - the item 0 stores the list size! */
-+	for (i = 1, pos = 0; i <= list_size; i++) {
-+		len = strlen(arr[i-1]);
-+		if (!dm_pool_grow_object(rh->mem, arr[i-1], len) ||
-+		    (i != list_size && !dm_pool_grow_object(rh->mem, delimiter, delimiter_len))) {
-+			log_error(_string_list_grow_object_failed_msg);
-+			goto out;
-+		}
-+		/*
-+		 * save position and length of the string
-+		 * element in report_string for sort_value
-+		 */
-+		sort_value->items[i].pos = pos;
-+		sort_value->items[i].len = len;
-+		pos = i == list_size ? pos+len : pos+len+1;
-+	}
-+
-+	if (!dm_pool_grow_object(rh->mem, "\0", 1)) {
-+		log_error(_string_list_grow_object_failed_msg);
-+		goto out;
-+	}
-+
-+	object = dm_pool_end_object(rh->mem);
-+	sort_value->value = object;
-+	field->sort_value = sort_value;
-+	field->report_string = object;
-+	r = 1;
-+out:
-+	if (!r && sort_value)
-+		dm_pool_free(rh->mem, sort_value);
-+	if (arr)
-+		dm_free(arr);
-+	return r;
++	return 1;
 +}
 +
- int dm_report_field_int(struct dm_report *rh,
- 			struct dm_report_field *field, const int *data)
++static char _get_and_skip_quote_char(char const **s)
++{
++	char c = 0;
++
++	if (**s == '"' || **s == '\'') {
++		c = **s;
++		(*s)++;
++	}
++
++	return c;
++}
++
++/*
++ * Input:
++ *   ft              - field type for which the value is parsed
++ *   mem             - memory pool to allocate from
++ *   s               - a pointer to the parsed string
++ * Output:
++ *   begin           - a pointer to the beginning of the token (whole list)
++ *   end             - a pointer to the end of the token + 1 (whole list)
++ *   sel_str_list    - the list of strings parsed
++ */
++static const char *_tok_value_string_list(const struct dm_report_field_type *ft,
++					  struct dm_pool *mem, const char *s,
++					  const char **begin, const char **end,
++					  struct selection_str_list **sel_str_list)
++{
++	static const char _str_list_item_parsing_failed[] = "Failed to parse string list value "
++							    "for selection field %s.";
++	struct selection_str_list *ssl = NULL;
++	struct dm_str_list *item;
++	const char *begin_item, *end_item, *tmp;
++	uint32_t end_op_flags, end_op_flag_hit;
++	struct dm_str_list **arr;
++	size_t list_size;
++	unsigned int i;
++	int list_end;
++	char c;
++
++	if (!(ssl = dm_pool_alloc(mem, sizeof(*ssl))) ||
++	    !(ssl->list = dm_pool_alloc(mem, sizeof(*ssl->list)))) {
++		log_error("_tok_value_string_list: memory allocation failed for selection list");
++		goto bad;
++	}
++	dm_list_init(ssl->list);
++	ssl->type = 0;
++	*begin = s;
++
++	if (!_tok_op_log(s, &tmp, SEL_LIST_LS)) {
++		/* Only one item - SEL_LIST_LS and SEL_LIST_LE not used */
++		c = _get_and_skip_quote_char(&s);
++		if (!(s = _tok_value_string(s, &begin_item, &end_item, c, SEL_AND | SEL_OR | SEL_PRECEDENCE_PE, NULL))) {
++			log_error(_str_list_item_parsing_failed, ft->id);
++			goto bad;
++		}
++		if (!_add_item_to_string_list(mem, begin_item, end_item, ssl->list))
++			goto_bad;
++		ssl->type = SEL_OR;
++		goto out;
++	}
++
++	/* More than one item - items enclosed in SEL_LIST_LS and SEL_LIST_LE.
++	 * Each element is terminated by AND or OR operator or 'list end'.
++	 * The first operator hit is then the one allowed for the whole list,
++	 * no mixing allowed!
++	 */
++	end_op_flags = SEL_LIST_LE | SEL_AND | SEL_OR;
++	s++;
++	while (*s) {
++		s = _skip_space(s);
++		c = _get_and_skip_quote_char(&s);
++		if (!(s = _tok_value_string(s, &begin_item, &end_item, c, end_op_flags, NULL))) {
++			log_error(_str_list_item_parsing_failed, ft->id);
++			goto bad;
++		}
++		s = _skip_space(s);
++
++		if (!(end_op_flag_hit = _tok_op_log(s, &tmp, end_op_flags))) {
++			log_error("Invalid operator in selection list.");
++			goto bad;
++		}
++
++		list_end = end_op_flag_hit == SEL_LIST_LE;
++
++		if (ssl->type) {
++			if (!list_end && !(ssl->type & end_op_flag_hit)) {
++				log_error("Only one type of logical operator allowed "
++					  "in selection list at a time.");
++				goto bad;
++			}
++		} else
++			ssl->type = list_end ? SEL_OR : end_op_flag_hit;
++
++		if (!_add_item_to_string_list(mem, begin_item, end_item, ssl->list))
++			goto_bad;
++
++		s = tmp;
++
++		if (list_end)
++			break;
++	}
++
++	if (end_op_flag_hit != SEL_LIST_LE) {
++		log_error("Missing list end for selection field %s", ft->id);
++		goto bad;
++	}
++
++	/* Sort the list. */
++	if (!(list_size = dm_list_size(ssl->list))) {
++		log_error(INTERNAL_ERROR "_tok_value_string_list: list has no items");
++		goto bad;
++	} else if (list_size == 1)
++		goto out;
++	if (!(arr = dm_malloc(sizeof(item) * list_size))) {
++		log_error("_tok_value_string_list: memory allocation failed for sort array");
++		goto bad;
++	}
++
++	i = 0;
++	dm_list_iterate_items(item, ssl->list)
++		arr[i++] = item;
++	qsort(arr, list_size, sizeof(item), _str_list_item_cmp);
++	dm_list_init(ssl->list);
++	for (i = 0; i < list_size; i++)
++		dm_list_add(ssl->list, &arr[i]->list);
++
++	dm_free(arr);
++out:
++	*end = s;
++	*sel_str_list = ssl;
++	return s;
++bad:
++	*end = s;
++	if (ssl)
++		dm_pool_free(mem, ssl);
++	*sel_str_list = NULL;
++	return s;
++}
++
+ /*
+  * Input:
+  *   ft              - field type for which the value is parsed
+@@ -1367,19 +1544,17 @@ static const char *_tok_value(const struct dm_report_field_type *ft,
+ 			      struct dm_pool *mem, void *custom)
  {
+ 	int expected_type = ft->flags & DM_REPORT_FIELD_TYPE_MASK;
++	struct selection_str_list **str_list;
+ 	uint64_t *factor;
+ 	const char *tmp;
+-	char c = 0;
++	char c;
+ 
+ 	s = _skip_space(s);
+ 
+ 	switch (expected_type) {
+ 
+ 		case DM_REPORT_FIELD_TYPE_STRING:
+-			if (*s == '"' || *s == '\'') {
+-				c = *s;
+-				s++;
+-			}
++			c = _get_and_skip_quote_char(&s);
+ 			if (!(s = _tok_value_string(s, begin, end, c, SEL_AND | SEL_OR | SEL_PRECEDENCE_PE, NULL))) {
+ 				log_error("Failed to parse string value "
+ 					  "for selection field %s.", ft->id);
+@@ -1388,6 +1563,17 @@ static const char *_tok_value(const struct dm_report_field_type *ft,
+ 			*flags |= DM_REPORT_FIELD_TYPE_STRING;
+ 			break;
+ 
++		case DM_REPORT_FIELD_TYPE_STRING_LIST:
++			str_list = (struct selection_str_list **) custom;
++			s = _tok_value_string_list(ft, mem, s, begin, end, str_list);
++			if (!(*str_list)) {
++				log_error("Failed to parse string list value "
++					  "for selection field %s.", ft->id);
++				return NULL;
++			}
++			*flags |= DM_REPORT_FIELD_TYPE_STRING_LIST;
++			break;
++
+ 		case DM_REPORT_FIELD_TYPE_NUMBER:
+ 		case DM_REPORT_FIELD_TYPE_SIZE:
+ 			if (!(s = _tok_value_number(s, begin, end))) {
+@@ -1511,7 +1697,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 			goto error;
+ 		}
+ 	} else {
+-		/* STRING, NUMBER or SIZE */
++		/* STRING, NUMBER, SIZE or STRING_LIST */
+ 		if (!(s = dm_pool_alloc(rh->mem, len + 1))) {
+ 			log_error("dm_report: dm_pool_alloc failed to store "
+ 				  "value for selection field %s", field_id);
+@@ -1543,6 +1729,9 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 				fs->v.d /= 512; /* store size in sectors! */
+ 				dm_pool_free(rh->mem, s);
+ 				break;
++			case DM_REPORT_FIELD_TYPE_STRING_LIST:
++				fs->v.l = *(struct selection_str_list **)custom;
++				break;
+ 			default:
+ 				log_error(INTERNAL_ERROR "_create_field_selection: "
+ 					  "unknown type of selection field %s", field_id);
+@@ -1605,6 +1794,7 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
+ 	const char *last;
+ 	uint32_t flags, field_num;
+ 	const struct dm_report_field_type *ft;
++	struct selection_str_list *str_list;
+ 	uint64_t factor;
+ 	void *custom;
+ 	char *tmp;
+@@ -1654,6 +1844,8 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
+ 		if (ft->flags == DM_REPORT_FIELD_TYPE_SIZE ||
+ 		    ft->flags == DM_REPORT_FIELD_TYPE_NUMBER)
+ 			custom = &factor;
++		else if (ft->flags == DM_REPORT_FIELD_TYPE_STRING_LIST)
++			custom = &str_list;
+ 		else
+ 			custom = NULL;
+ 		if (!(last = _tok_value(ft, last, &vs, &ve, &flags, rh->mem, custom)))
 
 
