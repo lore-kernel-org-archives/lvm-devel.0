@@ -1,45 +1,41 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 17 Jun 2014 16:35:18 +0000 (UTC)
-Subject: master - tests: update lvcreate-thin for latest changes
-Message-ID: <20140617163518.B9CE560D68@fedorahosted.org>
+Date: Tue, 17 Jun 2014 16:35:20 +0000 (UTC)
+Subject: master - test: fix report_select test to work in cluster
+Message-ID: <20140617163520.CC39160D68@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ef43a50926d0590910798dd366f6b8da548b05a3
-Commit:        ef43a50926d0590910798dd366f6b8da548b05a3
-Parent:        d09590c4b601f261d164fd253c7f2b9864cbf7ab
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b16f5633ab199dedfd25f08562f686a6fb4aba9d
+Commit:        b16f5633ab199dedfd25f08562f686a6fb4aba9d
+Parent:        ef43a50926d0590910798dd366f6b8da548b05a3
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 17 18:19:59 2014 +0200
+AuthorDate:    Tue Jun 17 18:28:27 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jun 17 18:20:08 2014 +0200
+CommitterDate: Tue Jun 17 18:34:46 2014 +0200
 
-tests: update lvcreate-thin for latest changes
+test: fix report_select test to work in cluster
 
-With recent changes introduced with the report selection support,
-the content of lv_modules field is of string list type (before
-it was just string type).
-
-String list elements are always ordered now so update lvcreate-thin
-test to expect the elements to be ordered.
+The snapshot LV is used to check selection of percent values.
+The orig volume must be activated exclusively in cluster.
 ---
- test/shell/lvcreate-thin.sh |    2 +-
+ test/shell/report-select.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
-index 9712652..215bfac 100644
---- a/test/shell/lvcreate-thin.sh
-+++ b/test/shell/lvcreate-thin.sh
-@@ -146,7 +146,7 @@ lvcreate --type snapshot $vg/lv1 --name lv4
- lvcreate --type snapshot $vg/lv1 --name $vg/lv5
+diff --git a/test/shell/report-select.sh b/test/shell/report-select.sh
+index 13d18fc..8df1d27 100644
+--- a/test/shell/report-select.sh
++++ b/test/shell/report-select.sh
+@@ -32,7 +32,7 @@ lvcreate --addtag 'lv_tag2.-+/=!:&#' --addtag "lv_tag1" -L8m -n "vol1" $vg1
+ lvcreate --addtag "lv_tag1" -L4m -n "vol2" $vg1
+ lvcreate --readahead 512 --addtag "lv_tag1" -L16m -n "abc" $vg2
+ lvcreate --readahead 512 -My --minor 254 -L4m -n "xyz" $vg3
+-lvcreate -L4m -n "orig" $vg3
++lvcreate -L4m -aey -n "orig" $vg3
+ lvcreate -L4m -s "$vg3/orig" -n "snap"
  
- lvdisplay --maps $vg
--check_lv_field_modules_ thin-pool,thin lv1 snap_lv1 lv2 lv3 lv4 lv5 lv6
-+check_lv_field_modules_ thin,thin-pool lv1 snap_lv1 lv2 lv3 lv4 lv5 lv6
- check vg_field $vg lv_count 8
- 
- lvremove -ff $vg
+ OUT_LOG_FILE="out"
 
 
