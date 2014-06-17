@@ -1,244 +1,254 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 17 Jun 2014 14:34:39 +0000 (UTC)
-Subject: master - tests: select: add test for report selection feature
-Message-ID: <20140617143439.45F6A60C4E@fedorahosted.org>
+Date: Tue, 17 Jun 2014 14:34:45 +0000 (UTC)
+Subject: master - report: select: add man pages for report selection feature
+Message-ID: <20140617143445.8974560C4E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0d8e94ce2e6f48c47194c4844d4f59ccd7806959
-Commit:        0d8e94ce2e6f48c47194c4844d4f59ccd7806959
-Parent:        51a86dc2f8cdfe3de9f0876548731ede1f6a4f24
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=94316dfe9d61a7b46c88458e4a8232667fde192a
+Commit:        94316dfe9d61a7b46c88458e4a8232667fde192a
+Parent:        40e0f444955690d4c5a5c5da8320a65e23a50553
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 10 09:20:58 2014 +0200
+AuthorDate:    Mon Jun 16 16:23:55 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Tue Jun 17 16:27:21 2014 +0200
 
-tests: select: add test for report selection feature
+report: select: add man pages for report selection feature
 
 ---
- test/shell/report-select.sh |  212 +++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 212 insertions(+), 0 deletions(-)
+ man/lvdisplay.8.in |    2 +
+ man/lvm.8.in       |   69 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ man/lvs.8.in       |   14 ++++++++++
+ man/pvdisplay.8.in |    2 +
+ man/pvs.8.in       |   14 ++++++++++
+ man/vgdisplay.8.in |    2 +
+ man/vgs.8.in       |   14 ++++++++++
+ 7 files changed, 117 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/report-select.sh b/test/shell/report-select.sh
-new file mode 100644
-index 0000000..13d18fc
---- /dev/null
-+++ b/test/shell/report-select.sh
-@@ -0,0 +1,212 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/man/lvdisplay.8.in b/man/lvdisplay.8.in
+index 5593752..1283d58 100644
+--- a/man/lvdisplay.8.in
++++ b/man/lvdisplay.8.in
+@@ -40,6 +40,8 @@ lvdisplay \(em display attributes of a logical volume
+ .RI [ + | \- ] Key1 [ , [ + | \- ] Key2 ...]]
+ .RB [ \-P | \-\-partial ]
+ .RB [ \-\-segments ]
++.RB [ \-S | \-\-select
++.IR Selection ]
+ .RB [ \-\-separator
+ .IR Separator ]
+ .RB [ \-\-unbuffered ]
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 5449e20..0a5c69c 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -207,6 +207,13 @@ changed with this option. To insert a replacement Physical Volume
+ of the same or large size use \fBpvcreate \-u\fP to set the uuid to
+ match the original followed by \fBvgcfgrestore\fP(8).
+ .TP
++.BR \-S ", " \-\-select " " \fISelection
++For reporting commands, display only rows that match selection criteria.
++All rows are displayed with the additional "selected" column (\fB-o selected\fP)
++showing 1 if the row matches the Selection and 0 otherwise.
++See \fBSELECTION CRITERIA\fP section of this man page for more
++information about the way the selection criteria are constructed.
++.TP
+ .BR \-M ", " \-\-metadatatype " " \fIType
+ Specifies which type of on-disk metadata to use, such as \fIlvm1\fP
+ or \fIlvm2\fP, which can be abbreviated to \fI1\fP or \fI2\fP respectively.
+@@ -419,6 +426,68 @@ volume types are an example of this.  Other logical volume types may
+ require more than one command to create.  The cache (\fBlvmcache\fP(7))
+ and thin provisioning (\fBlvmthin\fP(7)) types are examples of this.
+ 
++.SH SELECTION CRITERIA
++.LP
++The selection criteria are a set of \fBstatements\fP combined by \fBlogical
++and grouping operators\fP. The \fBstatement\fP consists of \fBcolumn\fP
++name for which a set of valid \fBvalues\fP is defined using
++\fBcomparison operators\fP. For complete list of column names (fields)
++that can be used in selection, see the output of \fB<lvm reporting command> -S help\fP.
++.LP
++\fBComparison operators\fP (cmp_op):
++.IP
++\fB=~\fP \(em Matching regular expression.
++.IP
++\fB!~\fP \(em Not matching regular expression.
++.IP
++\fB=\fP  \(em Equal to.
++.IP
++\fB!=\fP \(em Not equal to.
++.IP
++\fB>=\fP \(em Greater than or equal to.
++.IP
++\fB>\fP  \(em Greater than
++.IP
++\fB<=\fP \(em Less than or equal to.
++.IP
++\fB<\fP  \(em Less than.
++.LP
++\fBBinary logical operators\fP (cmp_log):
++.IP
++\fB&&\fP \(em All fields must match
++.IP
++\fB,\fP  \(em All fields must match
++.IP
++\fB||\fP \(em At least one field must match
++.IP
++\fB#\fP  \(em At least one field must match
++.LP
++\fBUnary logical operators\fP:
++.IP
++\fB!\fP  \(em Logical negation
++.LP
++\fBGrouping operators\fP:
++.IP
++\fB(\fP  \(em Left parenthesis
++.IP
++\fB)\fP  \(em Right parenthesis
++.IP
++\fB[\fP  \(em List start
++.IP
++\fB]\fP  \(em List end
++.LP
++\fBInformal grammar specification\fP:
++.IP
++.BR STATEMENT " = " column " cmp_op " VALUE " | " STATEMENT " log_op " STATEMENT " | " (STATEMENT) " | " !(STATEMENT)
++.IP
++.BR VALUE " = " [VALUE " log_op " VALUE]
++.br
++For list-based types: string list. The log_op must always be of one type within the whole list value.
++.IP
++.BR VALUE " = " value
++.br
++For scalar types: number (integer), size (floating point number with size unit suffix), percent (floating point number with or without % suffix), string.
 +
-+. lib/inittest
-+
-+aux prepare_pvs 6 16
-+
-+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-+# MAKE SURE ALL PV, VG AND LV NAMES CREATED IN
-+# THIS TEST ARE UNIQUE - THIS SIMPLIFIES TESTING
-+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-+
-+# create $VGS with assorted tags
-+vgcreate $vg1 --vgmetadatacopies 2 --addtag "vg_tag3" --addtag "vg_tag2" -s 4m $dev1 $dev2 $dev3
-+vgcreate $vg2 --addtag "vg_tag2" -s 4m $dev4 $dev5
-+vgcreate $vg3 --addtag "vg_tag1" -s 4m $dev6
-+
-+# add PV assorted tags
-+pvchange --addtag "pv_tag3" --addtag "pv_tag1" --addtag "pv_tag2" $dev1
-+pvchange --addtag "pv_tag1" --addtag "pv_tag4" $dev6
-+
-+# create $LVS with assorted tags and various sizes
-+lvcreate --addtag 'lv_tag2.-+/=!:&#' --addtag "lv_tag1" -L8m -n "vol1" $vg1
-+lvcreate --addtag "lv_tag1" -L4m -n "vol2" $vg1
-+lvcreate --readahead 512 --addtag "lv_tag1" -L16m -n "abc" $vg2
-+lvcreate --readahead 512 -My --minor 254 -L4m -n "xyz" $vg3
-+lvcreate -L4m -n "orig" $vg3
-+lvcreate -L4m -s "$vg3/orig" -n "snap"
-+
-+OUT_LOG_FILE="out"
-+ERR_LOG_FILE="err"
-+
-+function result()
-+{
-+	local items_found
-+
-+	test -f $OUT_LOG_FILE || {
-+		echo "  >>> Missing log file to check!"
-+		return 1
-+	}
-+
-+	# there shouldn't be any selection syntax error
-+	grep "Selection syntax error at" $ERR_LOG_FILE > /dev/null && {
-+		echo "  >>> Selection syntax error hit!"
-+		return 1
-+	}
-+
-+	items_found=$(wc -l $OUT_LOG_FILE | cut -f 1 -d " ")
-+
-+	# the number of lines on output must match
-+	test $items_found -eq $# || {
-+		echo "  >>> NUMBER OF ITEMS EXPECTED: $# ($@)"
-+		echo "  >>> NUMBER OF ITEMS FOUND: $items_found ($(cat $OUT_LOG_FILE))"
-+		return 1
-+	}
-+
-+	# the names selected must be correct
-+	# each pv, vg and lv name is unique so just check
-+	# the presence of the names given as arg
-+	for name in $1; do
-+		grep $name $OUT_LOG_FILE > /dev/null || {
-+			echo "  >>> $name not found in the output log"
-+			return 1
-+		}
-+	done
-+
-+	rm -f $OUT_LOG_FILE
-+	rm -f $ERR_LOG_FILE
-+}
-+
-+function pvs_sel()
-+{
-+	pvs 1>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o pv_name --select "$1" && result $2
-+}
-+
-+function vgs_sel()
-+{
-+	vgs &>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o vg_name --select "$1" && result $2
-+}
-+
-+function lvs_sel()
-+{
-+	lvs &>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o lv_name --select "$1" && result $2
-+}
-+
-+##########################
-+# STRING FIELD SELECTION #
-+##########################
-+#$LVS 'lv_name="vol1"' && result vol1
-+lvs_sel 'lv_name="vol1"' "vol1"
-+#$LVS 'lv_name!="vol1"' && result vol2 abc xyz
-+lvs_sel 'lv_name!="vol1"' "vol2 abc xyz orig snap"
-+# check string values are accepted without quotes too
-+lvs_sel 'lv_name=vol1' "vol1"
-+# check single quotes are also accepted instead of double quotes
-+lvs_sel "lv_name='vol1'" "vol1"
-+
-+###############################
-+# STRING LIST FIELD SELECTION #
-+###############################
-+pvs_sel 'tags=["pv_tag1"]' "$dev1 $dev2"
-+# for one item, no need to use []
-+pvs_sel 'tags="pv_tag1"' "$dev1 $dev2"
-+# no match
-+pvs_sel 'tags=["pv_tag1" && "pv_tag2"]'
-+pvs_sel 'tags=["pv_tag1" && "pv_tag2" && "pv_tag3"]' "$dev1"
-+# check the order has no effect on selection result
-+pvs_sel 'tags=["pv_tag3" && "pv_tag2" && "pv_tag1"]' "$dev1"
-+pvs_sel 'tags=["pv_tag4" || "pv_tag3"]' "$dev1 $dev6"
-+pvs_sel 'tags!=["pv_tag1"]' "$dev2 $dev3 $dev4 $dev5"
-+# check mixture of && and || - this is not allowed
-+not pvs_sel 'tags=["pv_tag1" && "pv_tag2" || "pv_tag3"]'
-+
-+##########################
-+# NUMBER FIELD SELECTION #
-+##########################
-+vgs_sel 'pv_count=3' "$vg1"
-+vgs_sel 'pv_count!=3' "$vg3 $vg2"
-+vgs_sel 'pv_count<2' "$vg3"
-+vgs_sel 'pv_count<=2' "$vg3 $vg2"
-+vgs_sel 'pv_count>2' "$vg1"
-+vgs_sel 'pv_count>=2' "$vg1 $vg2"
-+
-+########################
-+# SIZE FIELD SELECTION #
-+########################
-+# check size units are accepted as well as floating point numbers for sizes
-+lvs_sel 'size=8388608b' "vol1"
-+lvs_sel 'size=8192k' "vol1"
-+lvs_sel 'size=8m' "vol1"
-+lvs_sel 'size=8.00m' "vol1"
-+lvs_sel 'size=0.0078125g' "vol1"
-+lvs_sel 'size=0.00000762939453125t' "vol1"
-+lvs_sel 'size=0.000000007450580596923828125p' "vol1"
-+lvs_sel 'size=0.0000000000072759576141834259033203125e' "vol1"
-+
-+lvs_sel 'size>8m' "abc"
-+lvs_sel 'size>=8m' "abc vol1"
-+lvs_sel 'size<8m' "vol2 xyz orig snap"
-+lvs_sel 'size<=8m' "vol2 xyz vol1 orig snap"
-+
-+###########################
-+# PERCENT FIELD SELECTION #
-+###########################
-+lvs_sel 'snap_percent=0' "snap"
-+dd if=/dev/zero of=$DM_DEV_DIR/$vg3/snap bs=1M count=1
-+lvs_sel 'snap_percent<50' "snap"
-+lvs_sel 'snap_percent>50'
-+dd if=/dev/zero of=$DM_DEV_DIR/$vg3/snap bs=1M count=4
-+lvs_sel 'snap_percent=100' "snap"
-+# % char is accepted as suffix for percent values
-+lvs_sel 'snap_percent=100%' "snap"
-+# percent values over 100% are not accepted
-+not lvs_sel 'snap_percent=101%'
-+
-+#########################
-+# REGEX FIELD SELECTION #
-+#########################
-+lvs_sel 'lv_name=~"^vol[12]"' "vol1 vol2"
-+lvs_sel 'lv_name!~"^vol[12]"' "abc xyz orig snap"
-+# check regex is accepted without quotes too
-+lvs_sel 'lv_name=~^vol[12]' "vol1 vol2"
-+
-+###########
-+# GENERIC #
-+###########
-+# check prefix works for selection too
-+lvs_sel 'lv_name="vol1"' "vol1"
-+lvs_sel 'name="vol1"' "vol1"
-+
-+# check reserved values are accepted for certain fields as well as usual values
-+vgs_sel 'vg_mda_copies=unmanaged' "$vg2 $vg3"
-+vgs_sel 'vg_mda_copies=2' "$vg1"
-+
-+lvs_sel 'lv_read_ahead=auto' "vol1 vol2 orig snap"
-+lvs_sel 'lv_read_ahead=256k' "abc xyz"
-+
-+lvs_sel 'lv_minor=-1' "vol1 vol2 abc orig snap"
-+lvs_sel 'lv_minor=undefined' "vol1 vol2 abc orig snap"
-+lvs_sel 'lv_minor=undef' "vol1 vol2 abc orig snap"
-+lvs_sel 'lv_minor=unknown' "vol1 vol2 abc orig snap"
-+lvs_sel 'lv_minor=254' "xyz"
-+
-+# if size unit not spefied, the 'm' (MiB) unit is used by default
-+lvs_sel 'lv_size=8' "vol1"
-+
-+# no need to use quotes for the whole selection string if it does not clash with shell
-+lvs_sel name=vol1 vol1
-+
-+##########################################
-+# FORMING MORE COMPLEX SELECTION CLAUSES #
-+##########################################
-+# AND clause
-+lvs_sel 'lv_tags=lv_tag1 && lv_size=4m' "vol2"
-+# OR clause
-+lvs_sel 'lv_name=vol1 || lv_name=vol2' "vol1 vol2"
-+# grouping by using ( )
-+lvs_sel '(lv_name=vol1 || lv_name=vol2) || vg_tags=vg_tag1' "vol1 vol2 abc orig snap"
-+lvs_sel '(lv_name=vol1 && lv_size=100m) || vg_tags=vg_tag1' "xyz orig snap"
-+lvs_sel '(lv_name=vol1 || lv_name=vol2) && vg_tags=vg_tag1'
-+lvs_sel '(lv_name=vol1 || lv_name=vol2) && lv_size < 8m' "vol2"
-+lvs_sel '(lv_name=vol1 && lv_size=8m) && vg_tags=vg_tag2' "vol1"
-+# negation of clause grouped by ( )
-+lvs_sel '!(lv_name=vol1 || lv_name=vol2)' "abc xyz orig snap"
+ .SH DIAGNOSTICS
+ All tools return a status code of zero on success or non-zero on failure.
+ .SH FILES
+diff --git a/man/lvs.8.in b/man/lvs.8.in
+index 2467306..371aaf6 100644
+--- a/man/lvs.8.in
++++ b/man/lvs.8.in
+@@ -20,6 +20,8 @@ lvs \(em report information about logical volumes
+ .RI [ + | \- ] Key1 [,[ + | \- ] Key2 [,...]]]
+ .RB [ \-P | \-\-partial ]
+ .RB [ \-\-rows ]
++.RB [ \-S | \-\-select
++.IR Selection ]
+ .RB [ \-\-separator
+ .IR Separator ]
+ .RB [ \-\-segments ]
+@@ -195,6 +197,18 @@ selection. Precede any column with '\fI\-\fP' for a reverse sort on that column.
+ .B \-\-rows
+ Output columns as rows.
+ .TP
++.BR  \-S ", " \-\-select " " \fISelection
++Display only rows that match selection criteria. All rows are displayed with
++the additional "selected" column (\fB-o selected\fP) showing 1 if the row
++matches the Selection and 0 otherwise. The selection criteria are defined
++by specifying column names and their valid values (that can include reserved
++values) while making use of supported comparison operators. See \fBlvm\fP(8)
++and \fB\-S\fP, \fB\-\-select\fP description for more detailed information
++about constructing the selection criteria. As a quick help and to see full
++list of columns names that can be used in selection including the list of
++reserved values and the set of supported selection operators, check the
++output of \fBlvs -S help\fP command.
++.TP
+ .B \-\-segments
+ Use default columns that emphasize segment information.
+ .TP
+diff --git a/man/pvdisplay.8.in b/man/pvdisplay.8.in
+index aab65ca..0399c1e 100644
+--- a/man/pvdisplay.8.in
++++ b/man/pvdisplay.8.in
+@@ -39,6 +39,8 @@ pvdisplay \- display attributes of a physical volume
+ .RB [ \-O | \-\-sort
+ .RI [ + | \- ] Key1 [ , [ + | \- ] Key2 ...
+ .RI ]]
++.RB [ \-S | \-\-select
++.IR Selection ]
+ .RB [ \-\-separator
+ .IR Separator ]
+ .RB [ \-\-unbuffered ]
+diff --git a/man/pvs.8.in b/man/pvs.8.in
+index ed57980..ea32d78 100644
+--- a/man/pvs.8.in
++++ b/man/pvs.8.in
+@@ -21,6 +21,8 @@ pvs \(em report information about physical volumes
+ .RB [ \-P | \-\-partial ]
+ .RB [ \-\-rows ]
+ .RB [ \-\-segments ]
++.RB [ \-S | \-\-select
++.IR Selection ]
+ .RB [ \-\-separator
+ .IR Separator ]
+ .RB [ \-\-unbuffered ]
+@@ -79,6 +81,18 @@ Produces one line of output for each contiguous allocation of space on each
+ Physical Volume, showing the start (pvseg_start) and length (pvseg_size) in
+ units of physical extents.
+ .TP
++.BR  \-S ", " \-\-select " " \fISelection
++Display only rows that match selection criteria. All rows are displayed with
++the additional "selected" column (\fB-o selected\fP) showing 1 if the row
++matches the Selection and 0 otherwise. The selection criteria are defined
++by specifying column names and their valid values (that can include reserved
++values) while making use of supported comparison operators. See \fBlvm\fP(8)
++and \fB\-S\fP, \fB\-\-select\fP description for more detailed information
++about constructing the selection criteria. As a quick help and to see full
++list of columns names that can be used in selection including the list of
++reserved values and the set of supported selection operators, check the
++output of \fBpvs -S help\fP command.
++.TP
+ .BR \-O ", " \-\-sort
+ Comma-separated ordered list of columns to sort by.  Replaces the default
+ selection. Precede any column with '\fI\-\fP' for a reverse sort on that
+diff --git a/man/vgdisplay.8.in b/man/vgdisplay.8.in
+index d1ea89a..97cb314 100644
+--- a/man/vgdisplay.8.in
++++ b/man/vgdisplay.8.in
+@@ -39,6 +39,8 @@ vgdisplay \(em display attributes of volume groups
+ .RB [ \-O | \-\-sort
+ .RI [ + | \- ] Key1 [ , [ + | \- ] Key2 ...]]
+ .RB [ \-P | \-\-partial ]
++.RB [ \-S | \-\-select
++.IR Selection ]
+ .RB [ \-\-separator
+ .IR Separator ]
+ .RB [ \-\-unbuffered ]
+diff --git a/man/vgs.8.in b/man/vgs.8.in
+index b389ea2..2f71d26 100644
+--- a/man/vgs.8.in
++++ b/man/vgs.8.in
+@@ -20,6 +20,8 @@ vgs \(em report information about volume groups
+ .RI [ + | \- ] Key1 [ , [ + | \- ] Key2 ...]]
+ .RB [ \-P | \-\-partial ]
+ .RB [ \-\-rows ]
++.RB [ \-S | \-\-select
++.IR Selection ]
+ .RB [ \-\-separator
+ .IR Separator ]
+ .RB [ \-\-unbuffered ]
+@@ -96,6 +98,18 @@ column.
+ .B \-\-rows
+ Output columns as rows.
+ .TP
++.BR  \-S ", " \-\-select " " \fISelection
++Display only rows that match selection criteria. All rows are displayed with
++the additional "selected" column (\fB-o selected\fP) showing 1 if the row
++matches the Selection and 0 otherwise. The selection criteria are defined
++by specifying column names and their valid values (that can include reserved
++values) while making use of supported comparison operators. See \fBlvm\fP(8)
++and \fB\-S\fP, \fB\-\-select\fP description for more detailed information
++about constructing the selection criteria. As a quick help and to see full
++list of columns names that can be used in selection including the list of
++reserved values and the set of supported selection operators, check the
++output of \fBvgs -S help\fP command.
++.TP
+ .B \-\-separator \fISeparator
+ String to use to separate each column.  Useful if grepping the output.
+ .TP
 
 
