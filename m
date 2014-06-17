@@ -1,342 +1,117 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 17 Jun 2014 14:34:24 +0000 (UTC)
-Subject: master - report: select: add support for processing string lists in selection
-Message-ID: <20140617143424.87BC860C4E@fedorahosted.org>
+Date: Tue, 17 Jun 2014 14:34:26 +0000 (UTC)
+Subject: master - report: select: add support for comparing string lists with selection defined
+Message-ID: <20140617143426.A8AC260C4E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8faa4ded9cd12005df9ba71a2c3464eb7b69de71
-Commit:        8faa4ded9cd12005df9ba71a2c3464eb7b69de71
-Parent:        a6694cfc299111127e6f6f261ba1b99b3a3f9a19
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03a3f6078de3790a6fca3db8deb4bd204df611f1
+Commit:        03a3f6078de3790a6fca3db8deb4bd204df611f1
+Parent:        8faa4ded9cd12005df9ba71a2c3464eb7b69de71
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu May 29 09:41:50 2014 +0200
+AuthorDate:    Thu May 29 09:42:02 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Tue Jun 17 16:27:20 2014 +0200
 
-report: select: add support for processing string lists in selection
+report: select: add support for comparing string lists with selection defined
 
-Selection list items are enclosed in '[' and ']' (if there's only
-one item, the '[' and ']' can be omitted). Each element of the list
-is a string (either quoted or unquoted, like the usual string operand
-used in selection) and each element is delimited either by conjunction
-(meaining "match all") or disjunction operator (meaning "match any").
-
-For example, if "," is the conjuction operator and "/" is the
-disjunction operator then:
-
-  lv_tags=[a,b,c]
-
-...will match all fields where tags contain *all* a, b and c.
-
-  lv_tags=[a/b/c]
-
-...will match all fields where tags contain *any* of a, b, or c.
-
-Mixing operators within the list is not supported:
-
-  lv_tags=[a,b/c]
-
-...will give an error.
-
-The order in which items are defined in the selection do not matter.
-
-This patch enhances the selection parsing functionality to recognize
-such lists.
 ---
- libdm/libdm-report.c |  204 ++++++++++++++++++++++++++++++++++++++++++++++++--
- 1 files changed, 198 insertions(+), 6 deletions(-)
+ libdm/libdm-report.c |   73 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 73 insertions(+), 0 deletions(-)
 
 diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index e61d2c9..64e0e8e 100644
+index 64e0e8e..380c4dc 100644
 --- a/libdm/libdm-report.c
 +++ b/libdm/libdm-report.c
-@@ -123,6 +123,10 @@ static struct op_def _op_cmp[] = {
- #define SEL_PRECEDENCE_PS	0x00001000
- #define SEL_PRECEDENCE_PE	0x00002000
- 
-+#define SEL_LIST_MASK		0x000F0000
-+#define SEL_LIST_LS		0x00010000
-+#define SEL_LIST_LE		0x00020000
-+
- static struct op_def _op_log[] = {
-         { "&&", SEL_AND, "All fields must match" },
- 	{ ",", SEL_AND, "All fields must match" },
-@@ -131,9 +135,16 @@ static struct op_def _op_log[] = {
-         { "!", SEL_MODIFIER_NOT, "Logical negation" },
-         { "(", SEL_PRECEDENCE_PS, "Left parenthesis" },
-         { ")", SEL_PRECEDENCE_PE, "Right parenthesis" },
-+        { "[", SEL_LIST_LS, "List start" },
-+        { "]", SEL_LIST_LE, "List end"},
-         { NULL,  0, NULL},
- };
- 
-+struct selection_str_list {
-+	unsigned type;			/* either SEL_AND or SEL_OR */
-+	struct dm_list *list;
-+};
-+
- struct field_selection {
- 	struct field_properties *fp;
- 	uint32_t flags;
-@@ -142,6 +153,7 @@ struct field_selection {
- 		uint64_t i;
- 		double d;
- 		struct dm_regex *r;
-+		struct selection_str_list *l;
- 	} v;
- };
- 
-@@ -1349,6 +1361,171 @@ static const char *_tok_value_regex(const struct dm_report_field_type *ft,
- 	return s;
+@@ -1004,6 +1004,75 @@ static int _cmp_field_string(const char *field_id, const char *a, const char *b,
+ 	return 0;
  }
  
-+static int _str_list_item_cmp(const void *a, const void *b)
++/* Matches if all items from selection string list match. */
++static int _cmp_field_string_list_all(const struct str_list_sort_value *val,
++				      const struct selection_str_list *sel)
 +{
-+	const struct dm_str_list **item_a = (const struct dm_str_list **) a;
-+	const struct dm_str_list **item_b = (const struct dm_str_list **) b;
++	struct dm_str_list *sel_item;
++	unsigned int i = 1;
 +
-+	return strcmp((*item_a)->str, (*item_b)->str);
-+}
-+
-+static int _add_item_to_string_list(struct dm_pool *mem, const char *begin,
-+				    const char *end, struct dm_list *list)
-+{
-+	struct dm_str_list *item;
-+
-+	if (begin == end)
-+		return_0;
-+
-+	if (!(item = dm_pool_zalloc(mem, sizeof(*item))) ||
-+	    !(item->str = dm_pool_strndup(mem, begin, end - begin))) {
-+		log_error("_add_item_to_string_list: memory allocation failed for string list item");
++	/* if item count differs, it's clear the lists do not match */
++	if (val->items[0].len != dm_list_size(sel->list))
 +		return 0;
++
++	/* both lists are sorted so they either match 1:1 or not */
++	dm_list_iterate_items(sel_item, sel->list) {
++		if (strncmp(sel_item->str, val->value + val->items[i].pos, val->items[i].len))
++			return 0;
++		i++;
 +	}
-+	dm_list_add(list, &item->list);
 +
 +	return 1;
 +}
 +
-+static char _get_and_skip_quote_char(char const **s)
++/* Matches if any item from selection string list matches. */
++static int _cmp_field_string_list_any(const struct str_list_sort_value *val,
++				      const struct selection_str_list *sel)
 +{
-+	char c = 0;
-+
-+	if (**s == '"' || **s == '\'') {
-+		c = **s;
-+		(*s)++;
-+	}
-+
-+	return c;
-+}
-+
-+/*
-+ * Input:
-+ *   ft              - field type for which the value is parsed
-+ *   mem             - memory pool to allocate from
-+ *   s               - a pointer to the parsed string
-+ * Output:
-+ *   begin           - a pointer to the beginning of the token (whole list)
-+ *   end             - a pointer to the end of the token + 1 (whole list)
-+ *   sel_str_list    - the list of strings parsed
-+ */
-+static const char *_tok_value_string_list(const struct dm_report_field_type *ft,
-+					  struct dm_pool *mem, const char *s,
-+					  const char **begin, const char **end,
-+					  struct selection_str_list **sel_str_list)
-+{
-+	static const char _str_list_item_parsing_failed[] = "Failed to parse string list value "
-+							    "for selection field %s.";
-+	struct selection_str_list *ssl = NULL;
-+	struct dm_str_list *item;
-+	const char *begin_item, *end_item, *tmp;
-+	uint32_t end_op_flags, end_op_flag_hit;
-+	struct dm_str_list **arr;
-+	size_t list_size;
++	struct dm_str_list *sel_item;
 +	unsigned int i;
-+	int list_end;
-+	char c;
 +
-+	if (!(ssl = dm_pool_alloc(mem, sizeof(*ssl))) ||
-+	    !(ssl->list = dm_pool_alloc(mem, sizeof(*ssl->list)))) {
-+		log_error("_tok_value_string_list: memory allocation failed for selection list");
-+		goto bad;
-+	}
-+	dm_list_init(ssl->list);
-+	ssl->type = 0;
-+	*begin = s;
++	/* if value has no items and selection has at least one, it's clear there's no match */
++	if ((val->items[0].len == 0) && dm_list_size(sel->list))
++		return 0;
 +
-+	if (!_tok_op_log(s, &tmp, SEL_LIST_LS)) {
-+		/* Only one item - SEL_LIST_LS and SEL_LIST_LE not used */
-+		c = _get_and_skip_quote_char(&s);
-+		if (!(s = _tok_value_string(s, &begin_item, &end_item, c, SEL_AND | SEL_OR | SEL_PRECEDENCE_PE, NULL))) {
-+			log_error(_str_list_item_parsing_failed, ft->id);
-+			goto bad;
++	dm_list_iterate_items(sel_item, sel->list) {
++		/*
++		 * TODO: Optimize this so we don't need to compare the whole lists' content.
++		 *       Make use of the fact that the lists are sorted!
++		 */
++		for (i = 1; i <= val->items[0].len; i++) {
++			if (!strncmp(sel_item->str, val->value + val->items[i].pos, val->items[i].len))
++				return 1;
 +		}
-+		if (!_add_item_to_string_list(mem, begin_item, end_item, ssl->list))
-+			goto_bad;
-+		ssl->type = SEL_OR;
-+		goto out;
 +	}
 +
-+	/* More than one item - items enclosed in SEL_LIST_LS and SEL_LIST_LE.
-+	 * Each element is terminated by AND or OR operator or 'list end'.
-+	 * The first operator hit is then the one allowed for the whole list,
-+	 * no mixing allowed!
-+	 */
-+	end_op_flags = SEL_LIST_LE | SEL_AND | SEL_OR;
-+	s++;
-+	while (*s) {
-+		s = _skip_space(s);
-+		c = _get_and_skip_quote_char(&s);
-+		if (!(s = _tok_value_string(s, &begin_item, &end_item, c, end_op_flags, NULL))) {
-+			log_error(_str_list_item_parsing_failed, ft->id);
-+			goto bad;
-+		}
-+		s = _skip_space(s);
-+
-+		if (!(end_op_flag_hit = _tok_op_log(s, &tmp, end_op_flags))) {
-+			log_error("Invalid operator in selection list.");
-+			goto bad;
-+		}
-+
-+		list_end = end_op_flag_hit == SEL_LIST_LE;
-+
-+		if (ssl->type) {
-+			if (!list_end && !(ssl->type & end_op_flag_hit)) {
-+				log_error("Only one type of logical operator allowed "
-+					  "in selection list at a time.");
-+				goto bad;
-+			}
-+		} else
-+			ssl->type = list_end ? SEL_OR : end_op_flag_hit;
-+
-+		if (!_add_item_to_string_list(mem, begin_item, end_item, ssl->list))
-+			goto_bad;
-+
-+		s = tmp;
-+
-+		if (list_end)
-+			break;
-+	}
-+
-+	if (end_op_flag_hit != SEL_LIST_LE) {
-+		log_error("Missing list end for selection field %s", ft->id);
-+		goto bad;
-+	}
-+
-+	/* Sort the list. */
-+	if (!(list_size = dm_list_size(ssl->list))) {
-+		log_error(INTERNAL_ERROR "_tok_value_string_list: list has no items");
-+		goto bad;
-+	} else if (list_size == 1)
-+		goto out;
-+	if (!(arr = dm_malloc(sizeof(item) * list_size))) {
-+		log_error("_tok_value_string_list: memory allocation failed for sort array");
-+		goto bad;
-+	}
-+
-+	i = 0;
-+	dm_list_iterate_items(item, ssl->list)
-+		arr[i++] = item;
-+	qsort(arr, list_size, sizeof(item), _str_list_item_cmp);
-+	dm_list_init(ssl->list);
-+	for (i = 0; i < list_size; i++)
-+		dm_list_add(ssl->list, &arr[i]->list);
-+
-+	dm_free(arr);
-+out:
-+	*end = s;
-+	*sel_str_list = ssl;
-+	return s;
-+bad:
-+	*end = s;
-+	if (ssl)
-+		dm_pool_free(mem, ssl);
-+	*sel_str_list = NULL;
-+	return s;
++	return 0;
 +}
 +
- /*
-  * Input:
-  *   ft              - field type for which the value is parsed
-@@ -1367,19 +1544,17 @@ static const char *_tok_value(const struct dm_report_field_type *ft,
- 			      struct dm_pool *mem, void *custom)
- {
- 	int expected_type = ft->flags & DM_REPORT_FIELD_TYPE_MASK;
-+	struct selection_str_list **str_list;
- 	uint64_t *factor;
- 	const char *tmp;
--	char c = 0;
-+	char c;
- 
- 	s = _skip_space(s);
- 
- 	switch (expected_type) {
- 
- 		case DM_REPORT_FIELD_TYPE_STRING:
--			if (*s == '"' || *s == '\'') {
--				c = *s;
--				s++;
--			}
-+			c = _get_and_skip_quote_char(&s);
- 			if (!(s = _tok_value_string(s, begin, end, c, SEL_AND | SEL_OR | SEL_PRECEDENCE_PE, NULL))) {
- 				log_error("Failed to parse string value "
- 					  "for selection field %s.", ft->id);
-@@ -1388,6 +1563,17 @@ static const char *_tok_value(const struct dm_report_field_type *ft,
- 			*flags |= DM_REPORT_FIELD_TYPE_STRING;
- 			break;
- 
-+		case DM_REPORT_FIELD_TYPE_STRING_LIST:
-+			str_list = (struct selection_str_list **) custom;
-+			s = _tok_value_string_list(ft, mem, s, begin, end, str_list);
-+			if (!(*str_list)) {
-+				log_error("Failed to parse string list value "
-+					  "for selection field %s.", ft->id);
-+				return NULL;
-+			}
-+			*flags |= DM_REPORT_FIELD_TYPE_STRING_LIST;
-+			break;
++static int _cmp_field_string_list(const char *field_id,
++				  const struct str_list_sort_value *value,
++				  const struct selection_str_list *selection, uint32_t flags)
++{
++	int r;
 +
- 		case DM_REPORT_FIELD_TYPE_NUMBER:
- 		case DM_REPORT_FIELD_TYPE_SIZE:
- 			if (!(s = _tok_value_number(s, begin, end))) {
-@@ -1511,7 +1697,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
- 			goto error;
- 		}
- 	} else {
--		/* STRING, NUMBER or SIZE */
-+		/* STRING, NUMBER, SIZE or STRING_LIST */
- 		if (!(s = dm_pool_alloc(rh->mem, len + 1))) {
- 			log_error("dm_report: dm_pool_alloc failed to store "
- 				  "value for selection field %s", field_id);
-@@ -1543,6 +1729,9 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
- 				fs->v.d /= 512; /* store size in sectors! */
- 				dm_pool_free(rh->mem, s);
++	switch (selection->type & SEL_MASK) {
++		case SEL_AND:
++			r = _cmp_field_string_list_all(value, selection);
++			break;
++		case SEL_OR:
++			r = _cmp_field_string_list_any(value, selection);
++			break;
++		default:
++			log_error(INTERNAL_ERROR "_cmp_field_string_list: unsupported string "
++				  "list type found, expecting either AND or OR list for "
++				  "selection field %s", field_id);
++			return 0;
++	}
++
++	return flags & FLD_CMP_NOT ? !r : r;
++}
++
+ static int _cmp_field_regex(const char *s, struct dm_regex *r, uint32_t flags)
+ {
+ 	int match = dm_regex_match(r, s) >= 0;
+@@ -1036,6 +1105,10 @@ static int _compare_selection_field(struct dm_report *rh,
+ 			case DM_REPORT_FIELD_TYPE_STRING:
+ 				r = _cmp_field_string(field_id, (const char *) f->sort_value, fs->v.s, fs->flags);
  				break;
 +			case DM_REPORT_FIELD_TYPE_STRING_LIST:
-+				fs->v.l = *(struct selection_str_list **)custom;
++				r = _cmp_field_string_list(field_id, (const struct str_list_sort_value *) f->sort_value,
++							   fs->v.l, fs->flags);
 +				break;
  			default:
- 				log_error(INTERNAL_ERROR "_create_field_selection: "
- 					  "unknown type of selection field %s", field_id);
-@@ -1605,6 +1794,7 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
- 	const char *last;
- 	uint32_t flags, field_num;
- 	const struct dm_report_field_type *ft;
-+	struct selection_str_list *str_list;
- 	uint64_t factor;
- 	void *custom;
- 	char *tmp;
-@@ -1654,6 +1844,8 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
- 		if (ft->flags == DM_REPORT_FIELD_TYPE_SIZE ||
- 		    ft->flags == DM_REPORT_FIELD_TYPE_NUMBER)
- 			custom = &factor;
-+		else if (ft->flags == DM_REPORT_FIELD_TYPE_STRING_LIST)
-+			custom = &str_list;
- 		else
- 			custom = NULL;
- 		if (!(last = _tok_value(ft, last, &vs, &ve, &flags, rh->mem, custom)))
+ 				log_error(INTERNAL_ERROR "_compare_selection_field: unknown field type for field %s", field_id);
+ 		}
 
 
