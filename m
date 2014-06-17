@@ -1,36 +1,44 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun,  8 Jun 2014 20:11:59 +0000 (UTC)
-Subject: master - test: Try harder to vgremove in lvmetad-lvm1.sh.
-Message-ID: <20140608201159.9AE5360C26@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 17 Jun 2014 13:24:29 +0000 (UTC)
+Subject: master - snapshot: check it's still snapshot
+Message-ID: <20140617132429.670A46090E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=150165591f36e0ba16d9dfdca70c569b3ae03a83
-Commit:        150165591f36e0ba16d9dfdca70c569b3ae03a83
-Parent:        b3bdd410927a3d9b1b17de94a05b1621a79bdb31
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Jun 8 22:01:02 2014 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Sun Jun 8 22:01:02 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=435c82f8f6312758e1d198d4cb0a2158b7a51bac
+Commit:        435c82f8f6312758e1d198d4cb0a2158b7a51bac
+Parent:        a20de8af208725ff2054209aa7ff7f41cc770db6
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jun 16 13:38:35 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Jun 17 13:36:07 2014 +0200
 
-test: Try harder to vgremove in lvmetad-lvm1.sh.
+snapshot: check it's still snapshot
 
+While polling for snapshot, detect first the snapshot still
+exits.  It's valid to have multiple polling threads watching
+for the same thing and just 1 can 'win' the finish part.
+All others should nicely 'fail'.
 ---
- test/shell/lvmetad-lvm1.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/lvconvert.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvmetad-lvm1.sh b/test/shell/lvmetad-lvm1.sh
-index d41e078..dcff55b 100644
---- a/test/shell/lvmetad-lvm1.sh
-+++ b/test/shell/lvmetad-lvm1.sh
-@@ -28,4 +28,4 @@ lvcreate -l1 $vg1
- pvremove -ff -y $dev2
- vgchange -an $vg1
- not lvremove $vg1
--not vgremove $vg1
-+not vgremove -ff -y $vg1
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 82ce360..731d4c8 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -801,7 +801,8 @@ static progress_t _poll_merge_progress(struct cmd_context *cmd,
+ {
+ 	percent_t percent = PERCENT_0;
+ 
+-	if (!lv_snapshot_percent(lv, &percent)) {
++	if (!lv_is_merging_origin(lv) ||
++	    !lv_snapshot_percent(lv, &percent)) {
+ 		log_error("%s: Failed query for merging percentage. Aborting merge.", lv->name);
+ 		return PROGRESS_CHECK_FAILED;
+ 	} else if (percent == PERCENT_INVALID) {
 
 
