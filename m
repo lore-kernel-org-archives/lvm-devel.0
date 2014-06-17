@@ -1,42 +1,55 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 17 Jun 2014 13:24:31 +0000 (UTC)
-Subject: master - snapshot: check snapshot exists
-Message-ID: <20140617132431.815B661207@fedorahosted.org>
+Date: Tue, 17 Jun 2014 13:24:41 +0000 (UTC)
+Subject: master - cleanup: we already know max device name size
+Message-ID: <20140617132441.F19F961207@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c46d4a745dc8c5cb4cfc0c94863e555387e9af75
-Commit:        c46d4a745dc8c5cb4cfc0c94863e555387e9af75
-Parent:        435c82f8f6312758e1d198d4cb0a2158b7a51bac
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0558b1a0869f9a68d78e80140500874756c70e4d
+Commit:        0558b1a0869f9a68d78e80140500874756c70e4d
+Parent:        7aef45f9bb8620e194d086ebeeaca0312e8aee04
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 16 12:41:30 2014 +0200
+AuthorDate:    Mon Jun 16 12:39:32 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jun 17 13:36:07 2014 +0200
+CommitterDate: Tue Jun 17 13:43:04 2014 +0200
 
-snapshot: check snapshot exists
+cleanup: we already know max device name size
 
-Return 0 if the LV is not even snapshot.
+Use NAME_LEN constant to simplify creation of device name.
+Since the max size should be already tested in validation,
+throw INTERNAL_ERROR if the size of vg/lv is bigger then NAME_LEN.
 ---
- lib/metadata/snapshot_manip.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ tools/lvconvert.c |   14 ++++++--------
+ 1 files changed, 6 insertions(+), 8 deletions(-)
 
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index 5df0f98..278edc8 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -141,8 +141,9 @@ int lv_is_merging_origin(const struct logical_volume *origin)
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 731d4c8..75eb565 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -884,15 +884,13 @@ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv,
+ 	 *   the polldaemon, lvconvert, pvmove code that a comprehensive
+ 	 *   audit/rework is needed
+ 	 */
+-	int len = strlen(lv->vg->name) + strlen(lv->name) + 2;
+-	char *uuid = alloca(sizeof(lv->lvid));
+-	char *lv_full_name = alloca(len);
++	char uuid[sizeof(lv->lvid)];
++	char lv_full_name[NAME_LEN];
  
- int lv_is_merging_cow(const struct logical_volume *snapshot)
- {
-+	struct lv_segment *snap_seg = find_snapshot(snapshot);
- 	/* checks lv_segment's status to see if cow is merging */
--	return (find_snapshot(snapshot)->status & MERGING) ? 1 : 0;
-+	return (snap_seg && (snap_seg->status & MERGING)) ? 1 : 0;
- }
+-	if (!uuid || !lv_full_name)
+-		return_0;
+-
+-	if (dm_snprintf(lv_full_name, len, "%s/%s", lv->vg->name, lv->name) < 0)
+-		return_0;
++	if (dm_snprintf(lv_full_name, sizeof(lv_full_name), "%s/%s", lv->vg->name, lv->name) < 0) {
++		log_error(INTERNAL_ERROR "Name \"%s/%s\" is too long.", lv->vg->name, lv->name);
++		return 0;
++	}
  
- struct lv_segment *find_snapshot(const struct logical_volume *lv)
+ 	memcpy(uuid, &lv->lvid, sizeof(lv->lvid));
+ 
 
 
