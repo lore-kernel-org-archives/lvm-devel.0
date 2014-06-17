@@ -1,54 +1,41 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Mon, 16 Jun 2014 23:57:18 +0000 (UTC)
-Subject: master - poll_daemon: Cleanly exit polling if the LV is no longer active
-Message-ID: <20140616235718.4046D612DF@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 17 Jun 2014 13:24:33 +0000 (UTC)
+Subject: master - snapshot: do not spawn when origin is not active
+Message-ID: <20140617132433.97DDD61207@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a20de8af208725ff2054209aa7ff7f41cc770db6
-Commit:        a20de8af208725ff2054209aa7ff7f41cc770db6
-Parent:        962a40b98134417f27e89709625ba2ec662204c2
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Mon Jun 16 18:56:32 2014 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Mon Jun 16 18:56:32 2014 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=15e7066fe3ea7ca9129b68e3b39e9667348a02cc
+Commit:        15e7066fe3ea7ca9129b68e3b39e9667348a02cc
+Parent:        c46d4a745dc8c5cb4cfc0c94863e555387e9af75
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jun 16 12:43:22 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Jun 17 13:36:07 2014 +0200
 
-poll_daemon:  Cleanly exit polling if the LV is no longer active
+snapshot: do not spawn when origin is not active
 
-If the we are polling an LV due to some sort of conversion and it
-becomes inactive, a rather worrisome message is produced, e.g.:
-"  ABORTING: Mirror percentage check failed."
-
-We can cleanly exit if we do a simple check to see if the LV is
-active before performing the check.  This eliminates the scary
-message.
+Since the code is not doing anything when origin is not active,
+avoid spawning polling thread.
 ---
- tools/polldaemon.c |   10 ++++++++++
- 1 files changed, 10 insertions(+), 0 deletions(-)
+ tools/toollib.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index be8a5a3..0765930 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -152,6 +152,16 @@ static int _wait_for_single_lv(struct cmd_context *cmd, const char *name, const
- 			return 0;
- 		}
+diff --git a/tools/toollib.c b/tools/toollib.c
+index add20e3..c619d9b 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1455,7 +1455,7 @@ int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
+ 	 * - fortunately: polldaemon will immediately shutdown if the
+ 	 *   origin doesn't have a status with a snapshot percentage
+ 	 */
+-	if (background_polling() && lv_is_merging_origin(lv))
++	if (background_polling() && lv_is_merging_origin(lv) && lv_is_active_locally(lv))
+ 		lv_spawn_background_polling(cmd, lv);
  
-+		/*
-+		 * If the LV is not active locally, the kernel cannot be
-+		 * queried for its status.  We must exit in this case.
-+		 */
-+		if (!lv_is_active_locally(lv)) {
-+			log_print_unless_silent("%s: Interrupted: No longer active.", name);
-+			unlock_and_release_vg(cmd, vg, vg->name);
-+			return 1;
-+		}
-+
- 		if (!_check_lv_status(cmd, vg, lv, name, parms, &finished)) {
- 			unlock_and_release_vg(cmd, vg, vg->name);
- 			return_0;
+ 	return 1;
 
 
