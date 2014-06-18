@@ -1,80 +1,72 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 18 Jun 2014 12:44:45 +0000 (UTC)
-Subject: master - compilation: fix warnings: build_dm_uuid now accepts whole struct logical_volume, not lvid
-Message-ID: <20140618124445.736C2602BE@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 18 Jun 2014 13:00:40 +0000 (UTC)
+Subject: master - lvconvert: print warning when not convert thinpool
+Message-ID: <20140618130040.B34B9610B3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21964f47d5e30d925cd8e80b6402f1a2c69ad673
-Commit:        21964f47d5e30d925cd8e80b6402f1a2c69ad673
-Parent:        fc6e2a703b604ea5c69f7ea2e00a871c70514b73
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 18 14:43:13 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 18 14:43:13 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6a4cc9c316ce7c86e664c4dea2192433ff9bab4
+Commit:        e6a4cc9c316ce7c86e664c4dea2192433ff9bab4
+Parent:        21964f47d5e30d925cd8e80b6402f1a2c69ad673
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jun 18 14:18:13 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jun 18 15:00:18 2014 +0200
 
-compilation: fix warnings: build_dm_uuid now accepts whole struct logical_volume, not lvid
+lvconvert: print warning when not convert thinpool
 
-replicator/replicator.c:338:2: warning: passing argument 2 of 'build_dm_uuid' from incompatible pointer type [enabled by default]
-replicator/replicator.c:629:3: warning: passing argument 2 of 'build_dm_uuid' from incompatible pointer type [enabled by default]
-replicator/replicator.c:644:6: warning: passing argument 2 of 'build_dm_uuid' from incompatible pointer type [enabled by default]
-replicator/replicator.c:668:7: warning: passing argument 2 of 'build_dm_uuid' from incompatible pointer type [enabled by default]
-replicator/replicator.c:677:4: warning: passing argument 2 of 'build_dm_uuid' from incompatible pointer type [enabled by default]
+Warning about destruction should not be printed,
+When we are converting already existing pool
+(improving original in-release commit bbf4b2c1c9d)
 ---
- lib/replicator/replicator.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ tools/lvconvert.c |   32 +++++++++++++++++---------------
+ 1 files changed, 17 insertions(+), 15 deletions(-)
 
-diff --git a/lib/replicator/replicator.c b/lib/replicator/replicator.c
-index 6a116d2..2e3632a 100644
---- a/lib/replicator/replicator.c
-+++ b/lib/replicator/replicator.c
-@@ -335,7 +335,7 @@ static int _replicator_add_target_line(struct dev_manager *dm,
- 	if (!seg->rlog_lv)
- 		return_0;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index e857a70..a2e02d4 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2708,22 +2708,24 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ 		return 0;
+ 	}
  
--	if (!(rlog_dlid = build_dm_uuid(mem, seg->rlog_lv->lvid.s, NULL)))
-+	if (!(rlog_dlid = build_dm_uuid(mem, seg->rlog_lv, NULL)))
- 		return_0;
+-	if (lv_is_thin_pool(pool_lv) && pool_is_active(pool_lv)) {
++	if (lv_is_thin_pool(pool_lv)) {
++		if (pool_is_active(pool_lv)) {
+ 		/* If any thin volume is also active - abort here */
+-		log_error("Cannot convert pool %s/%s with active thin volumes.",
+-			  pool_lv->vg->name, pool_lv->name);
+-		return 0;
+-	}
+-
+-	log_warn("WARNING: Converting \"%s/%s\" logical volume to pool's data volume.",
+-		 pool_lv->vg->name, pool_lv->name);
+-	log_warn("THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)");
++			log_error("Cannot convert pool %s/%s with active thin volumes.",
++				  pool_lv->vg->name, pool_lv->name);
++			return 0;
++		}
++	} else {
++		log_warn("WARNING: Converting \"%s/%s\" logical volume to pool's data volume.",
++			 pool_lv->vg->name, pool_lv->name);
++		log_warn("THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)");
  
- 	dm_list_iterate_items(rsite, &seg->lv->rsites) {
-@@ -626,7 +626,7 @@ static int _replicator_dev_add_target_line(struct dev_manager *dm,
- 					      cmd->use_linear_target,
- 					      seg->lv->vg->name, seg->lv->name))
- 			return_0;
--		if (!(rdev_dlid = build_dm_uuid(mem, seg->lv->rdevice->lv->lvid.s, NULL)))
-+		if (!(rdev_dlid = build_dm_uuid(mem, seg->lv->rdevice->lv, NULL)))
- 			return_0;
- 		return dm_tree_node_add_target_area(node, NULL, rdev_dlid, 0);
- 	} else if (seg->lv->rdevice->rsite->site_index) {
-@@ -641,7 +641,7 @@ static int _replicator_dev_add_target_line(struct dev_manager *dm,
- 	 * must be present in dm_tree
- 	 */
- 	if (!seg_is_replicator_dev(seg) ||
--	    !(replicator_dlid = build_dm_uuid(mem, seg->replicator->lvid.s, NULL)))
-+	    !(replicator_dlid = build_dm_uuid(mem, seg->replicator, NULL)))
- 		return_0;
+-	if (!lp->yes &&
+-	    yes_no_prompt("Do you really want to convert \"%s/%s\"? [y/n]: ",
+-			  pool_lv->vg->name, pool_lv->name) == 'n') {
+-		log_error("Conversion aborted.");
+-		return 0;
++		if (!lp->yes &&
++		    yes_no_prompt("Do you really want to convert \"%s/%s\"? [y/n]: ",
++				  pool_lv->vg->name, pool_lv->name) == 'n') {
++			log_error("Conversion aborted.");
++			return 0;
++		}
+ 	}
  
- 	/* Select remote devices with the same device index */
-@@ -665,7 +665,7 @@ static int _replicator_dev_add_target_line(struct dev_manager *dm,
- 		}
- 
- 		if (!rdev->lv ||
--		    !(rdev_dlid = build_dm_uuid(mem, rdev->lv->lvid.s, NULL)))
-+		    !(rdev_dlid = build_dm_uuid(mem, rdev->lv, NULL)))
- 			return_0;
- 
- 		slog_dlid = NULL;
-@@ -674,7 +674,7 @@ static int _replicator_dev_add_target_line(struct dev_manager *dm,
- 		if (rdev->slog) {
- 			slog_flags = DM_NOSYNC;
- 			slog_size = (uint32_t) rdev->slog->size;
--			if (!(slog_dlid = build_dm_uuid(mem, rdev->slog->lvid.s, NULL)))
-+			if (!(slog_dlid = build_dm_uuid(mem, rdev->slog, NULL)))
- 				return_0;
- 		} else if (rdev->slog_name &&
- 			   sscanf(rdev->slog_name, "%" PRIu32, &slog_size) == 1) {
+ 	if ((dm_snprintf(metadata_name, sizeof(metadata_name), "%s%s",
 
 
