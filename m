@@ -1,72 +1,99 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 18 Jun 2014 13:00:40 +0000 (UTC)
-Subject: master - lvconvert: print warning when not convert thinpool
-Message-ID: <20140618130040.B34B9610B3@fedorahosted.org>
+Date: Wed, 18 Jun 2014 13:00:42 +0000 (UTC)
+Subject: master - cleanup: use insert_layer_for_lv implicit rename
+Message-ID: <20140618130042.CD64A610B3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6a4cc9c316ce7c86e664c4dea2192433ff9bab4
-Commit:        e6a4cc9c316ce7c86e664c4dea2192433ff9bab4
-Parent:        21964f47d5e30d925cd8e80b6402f1a2c69ad673
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=597de5c807c4d5bdd7070359cb62222f454ec1f0
+Commit:        597de5c807c4d5bdd7070359cb62222f454ec1f0
+Parent:        e6a4cc9c316ce7c86e664c4dea2192433ff9bab4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 18 14:18:13 2014 +0200
+AuthorDate:    Wed Jun 18 14:58:09 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jun 18 15:00:18 2014 +0200
 
-lvconvert: print warning when not convert thinpool
+cleanup: use insert_layer_for_lv implicit rename
 
-Warning about destruction should not be printed,
-When we are converting already existing pool
-(improving original in-release commit bbf4b2c1c9d)
+There is implicit rename for certain layered device.
+Do it now for _tdata, _cdata and _corig.
+
+TODO: use better API here...
 ---
- tools/lvconvert.c |   32 +++++++++++++++++---------------
- 1 files changed, 17 insertions(+), 15 deletions(-)
+ lib/metadata/cache_manip.c |   17 -----------------
+ lib/metadata/lv_manip.c    |   15 +++++++++------
+ 2 files changed, 9 insertions(+), 23 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index e857a70..a2e02d4 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2708,22 +2708,24 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 		return 0;
- 	}
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 456bc86..6a0f0f6 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -91,8 +91,6 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool,
+ 	struct cmd_context *cmd = pool->vg->cmd;
+ 	struct logical_volume *cache_lv;
+ 	struct lv_segment *seg;
+-	int origin_name_len = strlen(origin->name);
+-	char origin_name[origin_name_len + 7]; /* + "_corig" and NULL */
  
--	if (lv_is_thin_pool(pool_lv) && pool_is_active(pool_lv)) {
-+	if (lv_is_thin_pool(pool_lv)) {
-+		if (pool_is_active(pool_lv)) {
- 		/* If any thin volume is also active - abort here */
--		log_error("Cannot convert pool %s/%s with active thin volumes.",
--			  pool_lv->vg->name, pool_lv->name);
--		return 0;
+ 	if (!lv_is_cache_pool(pool)) {
+ 		log_error(INTERNAL_ERROR
+@@ -124,21 +122,6 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool,
+ 	if (!(segtype = get_segtype_from_string(cmd, "cache")))
+ 		return_NULL;
+ 
+-	/*
+-	 * insert_layer_for_lv does not rename the sub-LVs when adding
+-	 * the suffix.  So, we rename everything here and then change
+-	 * only the top-level LV back before adding the layer.
+-	 */
+-	sprintf(origin_name, "%s_corig", origin->name);
+-	if (!lv_rename_update(cmd, origin, origin_name, 0)) {
+-		log_error("Failed to rename origin LV, %s", origin->name);
+-		return NULL;
 -	}
 -
--	log_warn("WARNING: Converting \"%s/%s\" logical volume to pool's data volume.",
--		 pool_lv->vg->name, pool_lv->name);
--	log_warn("THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)");
-+			log_error("Cannot convert pool %s/%s with active thin volumes.",
-+				  pool_lv->vg->name, pool_lv->name);
-+			return 0;
+-	origin_name[origin_name_len] = '\0';
+-	if (!(origin->name = dm_pool_strdup(origin->vg->vgmem, origin_name)))
+-		return_0;
+-
+ 	cache_lv = origin;
+ 	if (!(origin = insert_layer_for_lv(cmd, cache_lv, CACHE, "_corig")))
+ 		return_NULL;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index b05f6cc..44f94f4 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5384,6 +5384,7 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
+ 					   uint64_t status,
+ 					   const char *layer_suffix)
+ {
++	static char _suffixes[][8] = { "_tdata", "_cdata", "_corig" };
+ 	int r;
+ 	char *name;
+ 	size_t len;
+@@ -5493,12 +5494,14 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
+ 	 *   currently supported only for thin data layer
+ 	 *   FIXME: without strcmp it breaks mirrors....
+ 	 */
+-	if (strcmp(layer_suffix, "_tdata") == 0) {
+-		lv_names.old = lv_where->name;
+-		lv_names.new = layer_lv->name;
+-		if (!for_each_sub_lv(layer_lv, _rename_cb, (void *) &lv_names))
+-			return 0;
+-	}
++	for (r = 0; r < DM_ARRAY_SIZE(_suffixes); ++r)
++		if (strcmp(layer_suffix, _suffixes[r]) == 0) {
++			lv_names.old = lv_where->name;
++			lv_names.new = layer_lv->name;
++			if (!for_each_sub_lv(layer_lv, _rename_cb, (void *) &lv_names))
++				return 0;
++			break;
 +		}
-+	} else {
-+		log_warn("WARNING: Converting \"%s/%s\" logical volume to pool's data volume.",
-+			 pool_lv->vg->name, pool_lv->name);
-+		log_warn("THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)");
  
--	if (!lp->yes &&
--	    yes_no_prompt("Do you really want to convert \"%s/%s\"? [y/n]: ",
--			  pool_lv->vg->name, pool_lv->name) == 'n') {
--		log_error("Conversion aborted.");
--		return 0;
-+		if (!lp->yes &&
-+		    yes_no_prompt("Do you really want to convert \"%s/%s\"? [y/n]: ",
-+				  pool_lv->vg->name, pool_lv->name) == 'n') {
-+			log_error("Conversion aborted.");
-+			return 0;
-+		}
- 	}
- 
- 	if ((dm_snprintf(metadata_name, sizeof(metadata_name), "%s%s",
+ 	return layer_lv;
+ }
 
 
