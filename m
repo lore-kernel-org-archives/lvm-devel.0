@@ -1,72 +1,128 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 18 Jun 2014 11:30:48 +0000 (UTC)
-Subject: master - cleanup: gcc warnings and report-select test vs snap_percent 0%
-Message-ID: <20140618113048.A36B260E13@fedorahosted.org>
+Date: Wed, 18 Jun 2014 11:49:12 +0000 (UTC)
+Subject: master - man: add man page entry for dmsetup info -c -S/--select + minor cleanups
+Message-ID: <20140618114912.1619561038@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0548a82e630dc0bf24943ec49a15b86834268b57
-Commit:        0548a82e630dc0bf24943ec49a15b86834268b57
-Parent:        ca1abe70ff6f6efc6bd49c648aa3e6b8fab184fd
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc6e2a703b604ea5c69f7ea2e00a871c70514b73
+Commit:        fc6e2a703b604ea5c69f7ea2e00a871c70514b73
+Parent:        0548a82e630dc0bf24943ec49a15b86834268b57
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 18 13:26:47 2014 +0200
+AuthorDate:    Wed Jun 18 13:48:27 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 18 13:26:47 2014 +0200
+CommitterDate: Wed Jun 18 13:48:27 2014 +0200
 
-cleanup: gcc warnings and report-select test vs snap_percent 0%
+man: add man page entry for dmsetup info -c -S/--select + minor cleanups
 
-Fix gcc warnings:
-libdm-report.c:1952:5: warning: "end_op_flag_hit" may be used uninitialized in this function [-Wmaybe-uninitialized]
-libdm-report.c:2232:28: warning: "custom" may be used uninitialized in this function [-Wmaybe-uninitialized]
-
-And snap_percent is not 0% in dm < 1.10.0 so
-don't test comparison with 0% here.
 ---
- libdm/libdm-report.c        |    4 ++--
- test/shell/report-select.sh |    6 +++++-
- 2 files changed, 7 insertions(+), 3 deletions(-)
+ man/dmsetup.8.in |   12 ++++++++++++
+ man/lvs.8.in     |    8 ++++----
+ man/pvs.8.in     |    8 ++++----
+ man/vgs.8.in     |    8 ++++----
+ 4 files changed, 24 insertions(+), 12 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 79b3687..867bf44 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -1879,7 +1879,7 @@ static const char *_tok_value_string_list(const struct dm_report_field_type *ft,
- 	struct selection_str_list *ssl = NULL;
- 	struct dm_str_list *item;
- 	const char *begin_item, *end_item, *tmp;
--	uint32_t end_op_flags, end_op_flag_hit;
-+	uint32_t end_op_flags, end_op_flag_hit = 0;
- 	struct dm_str_list **arr;
- 	size_t list_size;
- 	unsigned int i;
-@@ -2400,7 +2400,7 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
- 	struct selection_str_list *str_list;
- 	const struct dm_report_reserved_value *reserved;
- 	uint64_t factor;
--	void *custom;
-+	void *custom = NULL;
- 	char *tmp;
- 	char c;
- 
-diff --git a/test/shell/report-select.sh b/test/shell/report-select.sh
-index 8df1d27..8181cd2 100644
---- a/test/shell/report-select.sh
-+++ b/test/shell/report-select.sh
-@@ -150,7 +150,11 @@ lvs_sel 'size<=8m' "vol2 xyz vol1 orig snap"
- ###########################
- # PERCENT FIELD SELECTION #
- ###########################
--lvs_sel 'snap_percent=0' "snap"
-+if aux target_at_least dm-snapshot 1 10 0; then
-+	# Test zero percent only if snapshot can be zero.
-+	# Before 1.10.0, the snap percent included metadata size.
-+	lvs_sel 'snap_percent=0' "snap"
-+fi
- dd if=/dev/zero of=$DM_DEV_DIR/$vg3/snap bs=1M count=1
- lvs_sel 'snap_percent<50' "snap"
- lvs_sel 'snap_percent>50'
+diff --git a/man/dmsetup.8.in b/man/dmsetup.8.in
+index 10c63ab..b545dcf 100644
+--- a/man/dmsetup.8.in
++++ b/man/dmsetup.8.in
+@@ -40,6 +40,8 @@ dmsetup \(em low level logical volume management
+ .IR fields ]
+ .RB [ \-O | \-\-sort
+ .IR sort_fields ]
++.RB [ \-S | \-\-select
++.IR Selection ]
+ .RI [ device_name ]
+ .RE
+ .br
+@@ -244,6 +246,16 @@ The value \fInone\fP is equivalent to specifying zero.
+ .BR \-r | \-\-readonly
+ Set the table being loaded read-only.
+ .TP
++.BR \-S | \-\-select \ \fISelection
++Display only rows that match Selection criteria. All rows are displayed
++with the additional "selected" column (-o selected) showing 1 if the row
++matches the Selection and 0 otherwise. The Selection criteria are defined
++by specifying column names and their valid values while making use of
++supported comparison operators. As a quick help and to see full list of
++column names that can be used in Selection and the set of supported
++selection operators, check the output of \fBdmsetup info -c -S help\fP
++command.
++.TP
+ .IR \fB\-\-table \ < table >
+ Specify a one-line table directly on the command line.
+ .TP
+diff --git a/man/lvs.8.in b/man/lvs.8.in
+index 371aaf6..1afd63d 100644
+--- a/man/lvs.8.in
++++ b/man/lvs.8.in
+@@ -198,14 +198,14 @@ selection. Precede any column with '\fI\-\fP' for a reverse sort on that column.
+ Output columns as rows.
+ .TP
+ .BR  \-S ", " \-\-select " " \fISelection
+-Display only rows that match selection criteria. All rows are displayed with
++Display only rows that match Selection criteria. All rows are displayed with
+ the additional "selected" column (\fB-o selected\fP) showing 1 if the row
+-matches the Selection and 0 otherwise. The selection criteria are defined
++matches the Selection and 0 otherwise. The Selection criteria are defined
+ by specifying column names and their valid values (that can include reserved
+ values) while making use of supported comparison operators. See \fBlvm\fP(8)
+ and \fB\-S\fP, \fB\-\-select\fP description for more detailed information
+-about constructing the selection criteria. As a quick help and to see full
+-list of columns names that can be used in selection including the list of
++about constructing the Selection criteria. As a quick help and to see full
++list of column names that can be used in Selection including the list of
+ reserved values and the set of supported selection operators, check the
+ output of \fBlvs -S help\fP command.
+ .TP
+diff --git a/man/pvs.8.in b/man/pvs.8.in
+index ea32d78..ccd84a5 100644
+--- a/man/pvs.8.in
++++ b/man/pvs.8.in
+@@ -82,14 +82,14 @@ Physical Volume, showing the start (pvseg_start) and length (pvseg_size) in
+ units of physical extents.
+ .TP
+ .BR  \-S ", " \-\-select " " \fISelection
+-Display only rows that match selection criteria. All rows are displayed with
++Display only rows that match Selection criteria. All rows are displayed with
+ the additional "selected" column (\fB-o selected\fP) showing 1 if the row
+-matches the Selection and 0 otherwise. The selection criteria are defined
++matches the Selection and 0 otherwise. The Selection criteria are defined
+ by specifying column names and their valid values (that can include reserved
+ values) while making use of supported comparison operators. See \fBlvm\fP(8)
+ and \fB\-S\fP, \fB\-\-select\fP description for more detailed information
+-about constructing the selection criteria. As a quick help and to see full
+-list of columns names that can be used in selection including the list of
++about constructing the Selection criteria. As a quick help and to see full
++list of column names that can be used in Selection including the list of
+ reserved values and the set of supported selection operators, check the
+ output of \fBpvs -S help\fP command.
+ .TP
+diff --git a/man/vgs.8.in b/man/vgs.8.in
+index 2f71d26..2d4946f 100644
+--- a/man/vgs.8.in
++++ b/man/vgs.8.in
+@@ -99,14 +99,14 @@ column.
+ Output columns as rows.
+ .TP
+ .BR  \-S ", " \-\-select " " \fISelection
+-Display only rows that match selection criteria. All rows are displayed with
++Display only rows that match Selection criteria. All rows are displayed with
+ the additional "selected" column (\fB-o selected\fP) showing 1 if the row
+-matches the Selection and 0 otherwise. The selection criteria are defined
++matches the Selection and 0 otherwise. The Selection criteria are defined
+ by specifying column names and their valid values (that can include reserved
+ values) while making use of supported comparison operators. See \fBlvm\fP(8)
+ and \fB\-S\fP, \fB\-\-select\fP description for more detailed information
+-about constructing the selection criteria. As a quick help and to see full
+-list of columns names that can be used in selection including the list of
++about constructing the Selection criteria. As a quick help and to see full
++list of column names that can be used in Selection including the list of
+ reserved values and the set of supported selection operators, check the
+ output of \fBvgs -S help\fP command.
+ .TP
 
 
