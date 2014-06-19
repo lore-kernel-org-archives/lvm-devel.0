@@ -1,64 +1,68 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 19 Jun 2014 10:04:19 +0000 (UTC)
-Subject: master - lvchange: better --refresh of raid and mirrors
-Message-ID: <20140619100419.1691B606D1@fedorahosted.org>
+Date: Thu, 19 Jun 2014 10:04:21 +0000 (UTC)
+Subject: master - cleanup: more readable
+Message-ID: <20140619100421.30714606D1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aa3e41309368c1504943b8a116f5a3646777e2a0
-Commit:        aa3e41309368c1504943b8a116f5a3646777e2a0
-Parent:        57faf97e6fe9a8d7be859db2edb1ba2ad855113d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00af0d13c91d24952ec0542b5fe8323835d59051
+Commit:        00af0d13c91d24952ec0542b5fe8323835d59051
+Parent:        aa3e41309368c1504943b8a116f5a3646777e2a0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 19 11:58:28 2014 +0200
+AuthorDate:    Thu Jun 19 11:30:57 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 19 12:01:34 2014 +0200
+CommitterDate: Thu Jun 19 12:02:48 2014 +0200
 
-lvchange: better --refresh of raid and mirrors
+cleanup: more readable
 
-Use lv_check_not_in_use() to detect openned device.
-Plain info.open_count is not good enough for udev random
-device openning.
+Older gcc complained a bit about uninitialized vars
+so reorder code for better readability.
 ---
- WHATS_NEW        |    1 +
- tools/lvchange.c |    5 +----
- 2 files changed, 2 insertions(+), 4 deletions(-)
+ lib/commands/toolcontext.c |   23 +++++++++--------------
+ 1 files changed, 9 insertions(+), 14 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5d59845..f7d2b96 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.107 - 
- ==================================
-+  Fix open_count test for lvchange --refresh or mirrors and raids.
-   Update pvs,vgs,lvs and lvm man page for selection support.
-   Add -S/--select to lvm devtypes for report selection.
-   Add -S/--select to pvs,vgs,lvs and {pv,vg,lv}display -C for report selection.
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 48e48d4..9bd6a88 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -347,7 +347,7 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index cc08747..326bfe0 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -629,26 +629,21 @@ static int _init_tag_configs(struct cmd_context *cmd)
+ static int _init_profiles(struct cmd_context *cmd)
+ {
+ 	const char *dir;
+-	struct profile_params *pp;
+-	int initialized = cmd->profile_params != NULL;
+-
+-	if (!initialized && !(pp = dm_pool_zalloc(cmd->libmem, sizeof(*pp)))) {
+-		log_error("profile_params alloc failed");
+-		return 0;
+-	}
+ 
+ 	if (!(dir = find_config_tree_str(cmd, config_profile_dir_CFG, NULL)))
+ 		return_0;
+ 
+-	if (initialized) {
+-		dm_strncpy(cmd->profile_params->dir, dir, sizeof(pp->dir));
+-	} else {
+-		dm_strncpy(pp->dir, dir, sizeof(pp->dir));
+-		dm_list_init(&pp->profiles_to_load);
+-		dm_list_init(&pp->profiles);
+-		cmd->profile_params = pp;
++	if (!cmd->profile_params) {
++		if (!(cmd->profile_params = dm_pool_zalloc(cmd->libmem, sizeof(*cmd->profile_params)))) {
++			log_error("profile_params alloc failed");
++			return 0;
++		}
++		dm_list_init(&cmd->profile_params->profiles_to_load);
++		dm_list_init(&cmd->profile_params->profiles);
  	}
  
- 	if (lv_info(cmd, lv, 0, &info, 1, 0)) {
--		if (info.open_count) {
-+		if (!lv_check_not_in_use(cmd, lv, &info)) {
- 			log_error("Can't resync open logical volume \"%s\"",
- 				  lv->name);
- 			return 0;
-@@ -363,9 +363,6 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
- 				return 0;
- 			}
++	dm_strncpy(cmd->profile_params->dir, dir, sizeof(cmd->profile_params->dir));
++
+ 	return 1;
+ }
  
--			if (sigint_caught())
--				return_0;
--
- 			active = 1;
- 			if (lv_is_active_exclusive_locally(lv))
- 				exclusive = 1;
 
 
