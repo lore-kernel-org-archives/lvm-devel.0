@@ -1,50 +1,67 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 19 Jun 2014 14:17:57 +0000 (UTC)
-Subject: master - report: display explicit fields first, then implicit fields in field help
-Message-ID: <20140619141757.E421860D98@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Thu, 19 Jun 2014 15:56:30 +0000 (UTC)
+Subject: master - pvmove: Clean-up iterator.
+Message-ID: <20140619155630.3D8AD60CCF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f16da6ef23c75b966f94a27b45ca57bacaa13d20
-Commit:        f16da6ef23c75b966f94a27b45ca57bacaa13d20
-Parent:        a40bc36b2e360ad357820e6de2f5ec9fa64a6772
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jun 19 15:54:22 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jun 19 16:14:53 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3964a1a89f52584878c09cf93bc971b96c0d3de1
+Commit:        3964a1a89f52584878c09cf93bc971b96c0d3de1
+Parent:        f16da6ef23c75b966f94a27b45ca57bacaa13d20
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Thu Jun 19 10:52:09 2014 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Thu Jun 19 10:52:09 2014 -0500
 
-report: display explicit fields first, then implicit fields in field help
+pvmove: Clean-up iterator.
 
-It's better to have implicit fields at the very end of the output
-so users can see them without scrolling back if the list of fields
-is long (the "help" is also an implicit field now so it should be
-easily visible).
+In 'find_pvmove_lv', separate the code that searches the atomic
+pvmove LVs from the code that searches the normal pvmove LVs.  This
+cleans up the segment iterator code a bit.
 ---
- libdm/libdm-report.c |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ lib/metadata/mirror.c |   23 +++++++++++++++++++----
+ 1 files changed, 19 insertions(+), 4 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 012dca4..fd03052 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -653,11 +653,12 @@ static void _display_fields(struct dm_report *rh, int display_all_fields_item,
- 	if ((tmp = _get_longest_field_id_len(rh->fields)) > id_len)
- 		id_len = tmp;
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index ca0c2a1..484b1f1 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1559,14 +1559,29 @@ struct logical_volume *find_pvmove_lv(struct volume_group *vg,
+ 		if (!(lv->status & lv_type))
+ 			continue;
  
--	_display_fields_more(rh, _implicit_report_fields, id_len,
--			     display_all_fields_item, display_field_types);
--	log_warn(" ");
- 	_display_fields_more(rh, rh->fields, id_len, display_all_fields_item,
- 			     display_field_types);
-+	log_warn(" ");
-+	_display_fields_more(rh, _implicit_report_fields, id_len,
-+			     display_all_fields_item, display_field_types);
+-		/* Check segment origins point to pvname */
++		/*
++		 * If this is an atomic pvmove, the first
++		 * segment will be a mirror containing
++		 * mimages (i.e. AREA_LVs)
++		 */
++		if (seg_type(first_seg(lv), 0) == AREA_LV) {
++			seg = first_seg(lv);            /* the mirror segment */
++			seg = first_seg(seg_lv(seg, 0)); /* mimage_0 segment0 */
++			if (seg_dev(seg, 0) != dev)
++				continue;
++			return lv;
++		}
 +
- }
- 
- /*
++		/*
++		 * If this is a normal pvmove, check all the segments'
++		 * first areas for the requested device
++		 */
+ 		dm_list_iterate_items(seg, &lv->segments) {
+-			if (seg_type(seg, 0) == AREA_LV) /* Atomic pvmove */
+-				seg = first_seg(seg_lv(seg, 0));
+-			if (seg_type(seg, 0) != AREA_PV) /* Segment pvmove */
++			if (seg_type(seg, 0) != AREA_PV)
+ 				continue;
+ 			if (seg_dev(seg, 0) != dev)
+ 				continue;
++
+ 			return lv;
+ 		}
+ 	}
 
 
