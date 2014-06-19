@@ -1,61 +1,64 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Wed, 18 Jun 2014 20:41:43 +0000 (UTC)
-Subject: master - test: Clean-up pvmove-basic for atomic pvmove test
-Message-ID: <20140618204143.C0DC66033B@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 19 Jun 2014 10:04:19 +0000 (UTC)
+Subject: master - lvchange: better --refresh of raid and mirrors
+Message-ID: <20140619100419.1691B606D1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=57faf97e6fe9a8d7be859db2edb1ba2ad855113d
-Commit:        57faf97e6fe9a8d7be859db2edb1ba2ad855113d
-Parent:        e96a4856e678d84054e6c11532628e55830f2fc4
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Wed Jun 18 15:40:06 2014 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Wed Jun 18 15:40:06 2014 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aa3e41309368c1504943b8a116f5a3646777e2a0
+Commit:        aa3e41309368c1504943b8a116f5a3646777e2a0
+Parent:        57faf97e6fe9a8d7be859db2edb1ba2ad855113d
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jun 19 11:58:28 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jun 19 12:01:34 2014 +0200
 
-test: Clean-up pvmove-basic for atomic pvmove test
+lvchange: better --refresh of raid and mirrors
 
-The way I was testing for the existence of pvmove mimages was
-incorrect for rhel5.  This patch makes it more generic/universal.
+Use lv_check_not_in_use() to detect openned device.
+Plain info.open_count is not good enough for udev random
+device openning.
 ---
- test/shell/pvmove-basic.sh |    9 +++------
- 1 files changed, 3 insertions(+), 6 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvchange.c |    5 +----
+ 2 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/pvmove-basic.sh b/test/shell/pvmove-basic.sh
-index bdfb79a..c326dc3 100644
---- a/test/shell/pvmove-basic.sh
-+++ b/test/shell/pvmove-basic.sh
-@@ -71,7 +71,7 @@ check_and_cleanup_lvs_() {
- 	vgchange -an $vg
- 	lvremove -ff $vg
- 	(dm_table | not grep $vg) || \
--	      die "ERROR: lvremove did leave some some mappings in DM behind!"
-+	      die "ERROR: lvremove did leave some mappings in DM behind!"
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 5d59845..f7d2b96 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.107 - 
+ ==================================
++  Fix open_count test for lvchange --refresh or mirrors and raids.
+   Update pvs,vgs,lvs and lvm man page for selection support.
+   Add -S/--select to lvm devtypes for report selection.
+   Add -S/--select to pvs,vgs,lvs and {pv,vg,lv}display -C for report selection.
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 48e48d4..9bd6a88 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -347,7 +347,7 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 	}
  
- # ---------------------------------------------------------------------
-@@ -346,16 +346,13 @@ pvmove $mode "$dev1"
- #COMM "pvmove fails activating mirror, properly restores state before pvmove"
- dmsetup create $vg-pvmove0 --notable
- not pvmove $mode -i 1 "$dev2"
--echo BARF
--dmsetup ls
- dmsetup info --noheadings -c -o suspended $vg-$lv1
- test $(dmsetup info --noheadings -c -o suspended $vg-$lv1) = "Active"
--if [ -e /dev/mapper/$vg-pvmove0_mimage_0 ]; then
--        dmsetup remove $vg-pvmove0 /dev/mapper/$vg-pvmove0_mimage*
-+if dmsetup info $vg-pvmove0_mimage_0 > /dev/null; then
-+        dmsetup remove $vg-pvmove0 $vg-pvmove0_mimage_0 $vg-pvmove0_mimage_1
- else
-         dmsetup remove $vg-pvmove0
- fi
--dmsetup ls
+ 	if (lv_info(cmd, lv, 0, &info, 1, 0)) {
+-		if (info.open_count) {
++		if (!lv_check_not_in_use(cmd, lv, &info)) {
+ 			log_error("Can't resync open logical volume \"%s\"",
+ 				  lv->name);
+ 			return 0;
+@@ -363,9 +363,6 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 				return 0;
+ 			}
  
- lvremove -ff $vg
- done
-\ No newline at end of file
+-			if (sigint_caught())
+-				return_0;
+-
+ 			active = 1;
+ 			if (lv_is_active_exclusive_locally(lv))
+ 				exclusive = 1;
 
 
