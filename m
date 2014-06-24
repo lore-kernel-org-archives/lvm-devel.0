@@ -1,108 +1,196 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 20 Jun 2014 23:27:59 -0500
-Subject: [PATCH] Add persistent log for 'pvmove --atomic'
-Message-ID: <1403324879.5118.3.camel@f16>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 24 Jun 2014 12:59:04 +0000 (UTC)
+Subject: master - coverity: fix issues reported by coverity
+Message-ID: <20140624125904.97E36606F9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3208396ce5ef1c754e8e164f84dbc97727ddb5a4
+Commit:        3208396ce5ef1c754e8e164f84dbc97727ddb5a4
+Parent:        29ca0573baa0172ae9e1b137c51c39446baa9ee9
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jun 24 14:58:53 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Jun 24 14:58:53 2014 +0200
 
-Please be aware that in order to get around udev rules that prevent LVs
-beginning with "pvmove*" from creating FS accessible links, I
-temporarily rename the log device in order to wipe it of signatures and
-initialize the log.  The name is currently "visible_pvmove_log".
+coverity: fix issues reported by coverity
 
- brassow
+---
+ daemons/clvmd/clvmd-cman.c       |   10 +++++-----
+ lib/commands/toolcontext.c       |    5 ++++-
+ lib/config/config.c              |    3 +--
+ lib/metadata/metadata.c          |    2 +-
+ lib/metadata/raid_manip.c        |    2 +-
+ libdaemon/server/daemon-server.c |    3 ++-
+ libdm/libdm-report.c             |   12 ++++++------
+ 7 files changed, 20 insertions(+), 17 deletions(-)
 
-pvmove: Add persistent log to atomic pvmove
-
-A persistent log allows atomic pvmoves to track their progress.  If a
-deactivation happens for any reason, the move will pick-up where it
-left off the last time.  The log is added after the pvmove mirror is
-constructed but before the move begins.  If the creation of the log
-fails for any reason (no space, metadata write failure, activation
-failure, etc) the log is removed if necessary, a warning is printed,
-and the pvmove proceeds.  The pvmove is fine to proceed without a
-persistent log and the warning reminds the user that progress is not
-tracked and that deactivation would result in starting over.  A
-'pvmove --abort' at any point (whether the log was created or not)
-cleans up the pvmove and restores the LVs to their former state.
-
-Index: lvm2/lib/metadata/lv_manip.c
-===================================================================
---- lvm2.orig/lib/metadata/lv_manip.c
-+++ lvm2/lib/metadata/lv_manip.c
-@@ -2806,8 +2806,6 @@ int lv_add_segmented_mirror_image(struct
- 	}
- 	lv->status |= MIRRORED;
- 
--	/* FIXME: add log */
--
- 	if (lv->vg->fid->fmt->ops->lv_setup &&
- 	    !lv->vg->fid->fmt->ops->lv_setup(lv->vg->fid, lv))
- 		return_0;
-Index: lvm2/lib/metadata/mirror.c
-===================================================================
---- lvm2.orig/lib/metadata/mirror.c
-+++ lvm2/lib/metadata/mirror.c
-@@ -284,6 +284,7 @@ static int _init_mirror_log(struct cmd_c
- 	struct dm_str_list *sl;
- 	uint64_t orig_status = log_lv->status;
- 	int was_active = 0;
-+	const char *log_name = log_lv->name;
- 
- 	if (test_mode()) {
- 		log_verbose("Test mode: Skipping mirror log initialisation.");
-@@ -314,6 +315,14 @@ static int _init_mirror_log(struct cmd_c
- 	/* Temporary make it visible for set_lv() */
- 	lv_set_visible(log_lv);
- 
-+	/*
-+	 * If this is a pvmove log, there are udev rules that prevent it
-+	 * from becoming visible by name.  Therefore, we change the name
-+	 * for the short duration we need in order to wipe the log.
-+	 */
-+	if (!strncmp(log_lv->name, "pvmove", 6))
-+		log_lv->name = "visible_pvmove_log";
-+
- 	/* Temporary tag mirror log for activation */
- 	dm_list_iterate_items(sl, tagsl)
- 		if (!str_list_add(cmd->mem, &log_lv->tags, sl->str)) {
-@@ -360,6 +369,7 @@ static int _init_mirror_log(struct cmd_c
- 	}
- 
- 	lv_set_hidden(log_lv);
-+	log_lv->name = log_name;
- 
- 	if (was_active && !activate_lv(cmd, log_lv))
- 		return_0;
-@@ -1693,6 +1703,9 @@ static int _add_mirrors_that_preserve_se
- 	if (!(segtype = get_segtype_from_string(cmd, "mirror")))
- 		return_0;
- 
-+	if (!region_size)
-+		region_size = get_default_region_size(lv->vg->cmd);
-+
- 	adjusted_region_size = adjusted_mirror_region_size(lv->vg->extent_size,
- 							   lv->le_count,
- 							   region_size);
-@@ -1720,6 +1733,13 @@ static int _add_mirrors_that_preserve_se
- 		r = 0;
- 	}
- 	alloc_destroy(ah);
-+
-+	if ((flags & MIRROR_BY_SEGMENTED_LV) &&
-+	    !add_mirror_log(cmd, lv, 1, first_seg(lv)->region_size,
-+			    allocatable_pvs, alloc)) {
-+		log_error("Failed to create persistent log\n");
-+		log_error("Progress of pvmove will not be saved if deactivated.");
-+	}
- 	return r;
+diff --git a/daemons/clvmd/clvmd-cman.c b/daemons/clvmd/clvmd-cman.c
+index e41d0cf..9efa92d 100644
+--- a/daemons/clvmd/clvmd-cman.c
++++ b/daemons/clvmd/clvmd-cman.c
+@@ -110,12 +110,12 @@ static void _cluster_init_completed(void)
+ 	clvmd_cluster_init_completed();
  }
  
-
+-static int _get_main_cluster_fd()
++static int _get_main_cluster_fd(void)
+ {
+ 	return cman_get_fd(c_handle);
+ }
+ 
+-static int _get_num_nodes()
++static int _get_num_nodes(void)
+ {
+ 	int i;
+ 	int nnodes = 0;
+@@ -243,7 +243,7 @@ static void _add_up_node(const char *csid)
+ 	DEBUGLOG("Added new node %d to updown list\n", nodeid);
+ }
+ 
+-static void _cluster_closedown()
++static void _cluster_closedown(void)
+ {
+ 	dlm_release_lockspace(LOCKSPACE_NAME, lockspace, 1);
+ 	cman_finish(c_handle);
+@@ -282,7 +282,7 @@ static void count_clvmds_running(void)
+ }
+ 
+ /* Get a list of active cluster members */
+-static void get_members()
++static void get_members(void)
+ {
+ 	int retnodes;
+ 	int status;
+@@ -380,7 +380,7 @@ static int nodeid_from_csid(const char *csid)
+ 	return nodeid;
+ }
+ 
+-static int _is_quorate()
++static int _is_quorate(void)
+ {
+ 	return cman_is_quorate(c_handle);
+ }
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 326bfe0..18fa12d 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -642,7 +642,10 @@ static int _init_profiles(struct cmd_context *cmd)
+ 		dm_list_init(&cmd->profile_params->profiles);
+ 	}
+ 
+-	dm_strncpy(cmd->profile_params->dir, dir, sizeof(cmd->profile_params->dir));
++	if (!(dm_strncpy(cmd->profile_params->dir, dir, sizeof(cmd->profile_params->dir)))) {
++		log_error("_init_profiles: dm_strncpy failed");
++		return 0;
++	}
+ 
+ 	return 1;
+ }
+diff --git a/lib/config/config.c b/lib/config/config.c
+index ecb674e..2ed3db6 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -334,7 +334,7 @@ struct dm_config_tree *remove_config_tree_by_source(struct cmd_context *cmd,
+ struct cft_check_handle *get_config_tree_check_handle(struct cmd_context *cmd,
+ 						      struct dm_config_tree *cft)
+ {
+-	struct config_source *cs = dm_config_get_custom(cft);
++	struct config_source *cs;
+ 
+ 	if (!(cs = dm_config_get_custom(cft)))
+ 		return NULL;
+@@ -438,7 +438,6 @@ static int _override_config_tree_from_metadata_profile(struct cmd_context *cmd,
+ 	if (cs->type == CONFIG_PROFILE_COMMAND) {
+ 		cft_previous = cft;
+ 		cft = cft->cascade;
+-		cs = dm_config_get_custom(cft);
+ 	}
+ 
+ 	cs = dm_config_get_custom(cft);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 5c0a474..599ebb6 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -370,7 +370,7 @@ static int _move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+ 	/* FIXME: handle tags */
+ 	if (!(pvl = find_pv_in_vg(vg_from, pv_name))) {
+ 		if (!enforce_pv_from_source &&
+-		    (pvl = find_pv_in_vg(vg_to, pv_name)))
++		    find_pv_in_vg(vg_to, pv_name))
+ 			/*
+ 			 * PV has already been moved.  This can happen if an
+ 			 * LV is being moved that has multiple sub-LVs on the
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 4c13b66..cdfbc84 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -865,7 +865,7 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
+ 			    (first_seg(seg_metalv(seg, s))->segtype != error_segtype))
+ 				continue;
+ 
+-			if (target_pvs && !dm_list_empty(target_pvs) &&
++			if (!dm_list_empty(target_pvs) &&
+ 			    (target_pvs != &lv->vg->pvs)) {
+ 				/*
+ 				 * User has supplied a list of PVs, but we
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 8ed3cce..3b390a3 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -497,7 +497,8 @@ static void reap(daemon_state s, int waiting)
+ 
+ 	while (ts) {
+ 		if (waiting || !ts->active) {
+-			pthread_join(ts->client.thread_id, &rv);
++			if ((errno = pthread_join(ts->client.thread_id, &rv)))
++				ERROR(&s, "pthread_join failed: %s", strerror(errno));
+ 			last->next = ts->next;
+ 			dm_free(ts);
+ 		} else
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 957a4c9..180bb9b 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -1050,14 +1050,14 @@ struct dm_report *dm_report_init(uint32_t *report_types,
+ 	struct dm_report *rh;
+ 	const struct dm_report_object_type *type;
+ 
++	if (_contains_reserved_report_type(types))
++		return_NULL;
++
+ 	if (!(rh = dm_zalloc(sizeof(*rh)))) {
+ 		log_error("dm_report_init: dm_malloc failed");
+-		return 0;
++		return NULL;
+ 	}
+ 
+-	if (_contains_reserved_report_type(types))
+-		return_0;
+-
+ 	/*
+ 	 * rh->report_types is updated in _parse_fields() and _parse_keys()
+ 	 * to contain all types corresponding to the fields specified by
+@@ -1432,7 +1432,7 @@ int dm_report_object(struct dm_report *rh, void *object)
+ 
+ 	if (!rh) {
+ 		log_error(INTERNAL_ERROR "dm_report handler is NULL.");
+-		goto out;
++		return 0;
+ 	}
+ 
+ 	if (rh->flags & RH_ALREADY_REPORTED)
+@@ -1440,7 +1440,7 @@ int dm_report_object(struct dm_report *rh, void *object)
+ 
+ 	if (!(row = dm_pool_zalloc(rh->mem, sizeof(*row)))) {
+ 		log_error("dm_report_object: struct row allocation failed");
+-		goto out;
++		return 0;
+ 	}
+ 
+ 	row->rh = rh;
 
 
