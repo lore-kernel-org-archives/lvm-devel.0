@@ -1,102 +1,61 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 25 Jun 2014 14:24:39 +0000 (UTC)
-Subject: master - filters: always reevaluate filter before creating a PV
-Message-ID: <20140625142439.7F70060991@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 25 Jun 2014 16:19:26 +0000 (UTC)
+Subject: master - test: Test addition to show incorrect allocator behavior
+Message-ID: <20140625161926.DFA6A6111F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e80884cd080cad7e10be4588e3493b9000649426
-Commit:        e80884cd080cad7e10be4588e3493b9000649426
-Parent:        e329c3146d91aba94f77a6d5da149e31b20ce60b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 25 16:19:27 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 25 16:24:28 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1f1675b059d65768524398791b2e505b7dfe2497
+Commit:        1f1675b059d65768524398791b2e505b7dfe2497
+Parent:        e80884cd080cad7e10be4588e3493b9000649426
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Sat Jun 21 15:33:52 2014 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Sat Jun 21 15:33:52 2014 -0500
 
-filters: always reevaluate filter before creating a PV
+test:  Test addition to show incorrect allocator behavior
 
-...to avoid using cached value (persistent filter) and therefore
-not noticing any change made after last scan/filtering - the state
-of the device may have changed, for example new signatures added.
-
-$ lvm dumpconfig --type diff
-allocation {
-	use_blkid_wiping=0
-}
-devices {
-	obtain_device_list_from_udev=0
-}
-
-$ cat /etc/lvm/cache/.cache | grep sda
-
-$ vgscan
-  Reading all physical volumes.  This may take a while...
-  Found volume group "fedora" using metadata type lvm2
-
-$ cat /etc/lvm/cache/.cache | grep sda
-		"/dev/sda",
-
-$ parted /dev/sda mklabel gpt
-Information: You may need to update /etc/fstab.
-
-$ parted /dev/sda print
-Model: QEMU QEMU HARDDISK (scsi)
-Disk /dev/sda: 134MB
-Sector size (logical/physical): 512B/512B
-Partition Table: gpt
-Disk Flags:
-
-Number  Start  End  Size  File system  Name  Flags
-
-$ cat /etc/lvm/cache/.cache | grep sda
-		"/dev/sda",
-
-====
-
-Before this patch:
-$ pvcreate /dev/sda
-  Physical volume "/dev/sda" successfully created
-
-With this patch applied:
-$ pvcreate /dev/sda
-  Physical volume /dev/sda not found
-  Device /dev/sda not found (or ignored by filtering).
+If a RAID LV has images that are spread across more than one PV
+and you allocate a new image that requires more than one PV,
+parallel_areas is only honored for one segment.  This commit
+adds a test for this condition.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/metadata.c |    7 +++++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+ test/shell/lvconvert-raid.sh |   22 ++++++++++++++++++++++
+ 1 files changed, 22 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 9db42d2..3ab7046 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.108 -
- =================================
-+  Always reevaluate filters just before creating PV.
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 6f17303..8bd56ec 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -202,4 +202,26 @@ for i in {1..3}; do
+ 	lvremove -ff $vg
+ done
  
- Version 2.02.107 - 23rd June 2014
- =================================
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 599ebb6..0a6e9e9 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1337,6 +1337,13 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- 
- 	/* FIXME Check partition type is LVM unless --force is given */
- 
-+	/*
-+	 * Make sure we don't overwrite any existing signature
-+	 * that may have been created after last time we did filtering.
-+	 */
-+	if (cmd->filter->wipe)
-+		cmd->filter->wipe(cmd->filter);
++# Setup 2-way RAID1 LV to spread across 4 devices.
++# For each image:
++#  - metadata LV + 1 image extent (2 total extents) on one PV
++#  - 2 image extents on the other PV
++# Then attempt allocation of another image from 2 extents on
++# a 5th PV and the remainder of the rest of already used PVs.
++#
++# This should fail because there is insufficient space on the
++# non-parallel PV (i.e. there is not enough space for the image
++# if it doesn't share a PV with another image).
++lvcreate --type raid1 -m 1 -l 3 -n $lv1 $vg \
++    "$dev1:0-1" "$dev2:0-1" "$dev3:0-1" "$dev4:0-1"
++aux wait_for_sync $vg $lv1
++# Should not be enough non-overlapping space.
++not lvconvert -m +1 $vg/$lv1 \
++    "$dev5:0-1" "$dev1" "$dev2" "$dev3" "$dev4"
++# Should work due to '--alloc anywhere'
++lvconvert -m +1 --alloc anywhere $vg/$lv1 \
++    "$dev5:0-1" "$dev1" "$dev2" "$dev3" "$dev4"
++lvremove -ff $vg
 +
- 	/* Is there a pv here already? */
- 	pv = find_pv_by_name(cmd, name, 1, 1);
- 
++
+ vgremove -ff $vg
 
 
