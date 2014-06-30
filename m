@@ -1,72 +1,65 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 30 Jun 2014 10:25:19 +0000 (UTC)
-Subject: master - cleanup: more lv_is_ functions
-Message-ID: <20140630102519.A2175611C9@fedorahosted.org>
+Date: Mon, 30 Jun 2014 10:25:17 +0000 (UTC)
+Subject: master - thin: do not create reserved LVs
+Message-ID: <20140630102517.84012611C9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ada6852162c2dc2ee0f92220c29fe5f0959f510
-Commit:        2ada6852162c2dc2ee0f92220c29fe5f0959f510
-Parent:        6da14a82c665dd8be0039548a54a87f182508cd9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6da14a82c665dd8be0039548a54a87f182508cd9
+Commit:        6da14a82c665dd8be0039548a54a87f182508cd9
+Parent:        eadcea2dae8c56e96b694cb388999865d2678e22
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 27 00:02:58 2014 +0200
+AuthorDate:    Mon Jun 30 11:33:23 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jun 30 12:16:08 2014 +0200
+CommitterDate: Mon Jun 30 12:16:05 2014 +0200
 
-cleanup: more lv_is_ functions
+thin: do not create reserved LVs
 
+When creating pool's metadata - create initial LV for clearing with some
+generic name and after the volume is create & cleared - rename it to
+reserved name '_tmeta/_cmeta'.
+
+We should not expose  'reserved' names for public LVs.
 ---
- lib/metadata/metadata-exported.h |   26 +++++++++++++++-----------
- 1 files changed, 15 insertions(+), 11 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/thin_manip.c |    4 +++-
+ 2 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index a7d30b3..eece882 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -163,17 +163,21 @@
- #define vg_is_archived(vg)	(((vg)->status & ARCHIVED_VG) ? 1 : 0)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b8b2951..838eb41 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.108 -
+ =================================
++  Do not use reserved _[tc]meta volumes for temporary LVs.
+   Leave backup pool metadata with _meta%d suffix instead of reserved _tmeta%d.
+   Allow RAID repair to reuse PVs from same image that suffered a failure.
+   New RAID images now avoid allocation on any PVs in the same parent RAID LV.
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 8520440..1000680 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -552,7 +552,6 @@ struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
+ 	struct lvcreate_params lvc = {
+ 		.activate = CHANGE_ALY,
+ 		.alloc = alloc,
+-		.lv_name = name,
+ 		.major = -1,
+ 		.minor = -1,
+ 		.permission = LVM_READ | LVM_WRITE,
+@@ -578,6 +577,9 @@ struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
+ 	if (!(metadata_lv = lv_create_single(pool_lv->vg, &lvc)))
+ 		return_0;
  
- #define lv_is_external_origin(lv)	(((lv)->external_count > 0) ? 1 : 0)
--#define lv_is_thin_volume(lv)	((lv)->status & THIN_VOLUME ? 1 : 0)
--#define lv_is_thin_pool(lv)	((lv)->status & THIN_POOL ? 1 : 0)
-+#define lv_is_thin_volume(lv)	(((lv)->status & (THIN_VOLUME)) ? 1 : 0)
-+#define lv_is_thin_pool(lv)	(((lv)->status & (THIN_POOL)) ? 1 : 0)
- #define lv_is_used_thin_pool(lv)	(lv_is_thin_pool(lv) && !dm_list_empty(&(lv)->segs_using_this_lv))
--#define lv_is_thin_pool_data(lv)	((lv)->status & THIN_POOL_DATA ? 1 : 0)
--#define lv_is_thin_pool_metadata(lv)	((lv)->status & THIN_POOL_METADATA ? 1 : 0)
--#define lv_is_mirrored(lv)	((lv)->status & MIRRORED ? 1 : 0)
--#define lv_is_rlog(lv)		((lv)->status & REPLICATOR_LOG ? 1 : 0)
--
--#define lv_is_thin_type(lv)	((lv)->status & (THIN_POOL | THIN_VOLUME | THIN_POOL_DATA | THIN_POOL_METADATA) ? 1 : 0)
--#define lv_is_mirror_type(lv)	((lv)->status & (MIRROR_LOG | MIRROR_IMAGE | MIRRORED | PVMOVE) ? 1 : 0)
-+#define lv_is_thin_pool_data(lv)	(((lv)->status & (THIN_POOL_DATA)) ? 1 : 0)
-+#define lv_is_thin_pool_metadata(lv)	(((lv)->status & (THIN_POOL_METADATA)) ? 1 : 0)
-+#define lv_is_mirrored(lv)	(((lv)->status & (MIRRORED)) ? 1 : 0)
-+#define lv_is_rlog(lv)		(((lv)->status & (REPLICATOR_LOG)) ? 1 : 0)
++	if (!lv_rename_update(pool_lv->vg->cmd, metadata_lv, name, 0))
++		return_0;
 +
-+#define lv_is_thin_type(lv)	(((lv)->status & (THIN_POOL | THIN_VOLUME | THIN_POOL_DATA | THIN_POOL_METADATA)) ? 1 : 0)
-+#define lv_is_mirror_type(lv)	(((lv)->status & (MIRROR_LOG | MIRROR_IMAGE | MIRRORED | PVMOVE)) ? 1 : 0)
-+#define lv_is_mirror_image(lv)	(((lv)->status & (MIRROR_IMAGE)) ? 1 : 0)
-+#define lv_is_mirror_log(lv)	(((lv)->status & (MIRROR_LOG)) ? 1 : 0)
- #define lv_is_raid(lv)		(((lv)->status & (RAID)) ? 1 : 0)
-+#define lv_is_raid_image(lv)	(((lv)->status & (RAID_IMAGE)) ? 1 : 0)
-+#define lv_is_raid_metadata(lv)	(((lv)->status & (RAID_META)) ? 1 : 0)
- #define lv_is_raid_type(lv)	(((lv)->status & (RAID | RAID_IMAGE | RAID_META)) ? 1 : 0)
+ 	return metadata_lv;
+ }
  
- #define lv_is_cache(lv)		(((lv)->status & (CACHE)) ? 1 : 0)
-@@ -182,8 +186,8 @@
- #define lv_is_cache_pool_metadata(lv)	(((lv)->status & (CACHE_POOL_METADATA)) ? 1 : 0)
- #define lv_is_cache_type(lv)	(((lv)->status & (CACHE | CACHE_POOL | CACHE_POOL_DATA | CACHE_POOL_METADATA)) ? 1 : 0)
- 
--#define lv_is_virtual(lv)	(((lv)->status & VIRTUAL) ? 1 : 0)
--#define lv_is_pool_metadata_spare(lv)	(((lv)->status & POOL_METADATA_SPARE) ? 1 : 0)
-+#define lv_is_virtual(lv)	(((lv)->status & (VIRTUAL)) ? 1 : 0)
-+#define lv_is_pool_metadata_spare(lv)	(((lv)->status & (POOL_METADATA_SPARE)) ? 1 : 0)
- 
- /* Ordered list - see lv_manip.c */
- typedef enum {
 
 
