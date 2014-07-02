@@ -1,38 +1,52 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  2 Jul 2014 13:12:20 +0000 (UTC)
-Subject: master - tests: ensure data hits cow
-Message-ID: <20140702131220.4978C61006@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed,  2 Jul 2014 13:57:20 +0000 (UTC)
+Subject: master - report: Exclude hidden devices from lv_path field.
+Message-ID: <20140702135720.D214B60285@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c6811dd51218e88467d91a1b2b309bbfed5eaf0e
-Commit:        c6811dd51218e88467d91a1b2b309bbfed5eaf0e
-Parent:        39bd6bb89e364e72808870e2ad88ddf79b591a3f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 2 15:02:56 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 2 15:10:10 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5bfa2ec21d79b090276676076917808207ad4dd1
+Commit:        5bfa2ec21d79b090276676076917808207ad4dd1
+Parent:        c6811dd51218e88467d91a1b2b309bbfed5eaf0e
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Jul 2 14:57:00 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Jul 2 14:57:00 2014 +0100
 
-tests: ensure data hits cow
+report: Exclude hidden devices from lv_path field.
 
 ---
- test/shell/lvextend-snapshot-dmeventd.sh |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ WHATS_NEW         |    1 +
+ lib/metadata/lv.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvextend-snapshot-dmeventd.sh b/test/shell/lvextend-snapshot-dmeventd.sh
-index af8a927..3d9ce1f 100644
---- a/test/shell/lvextend-snapshot-dmeventd.sh
-+++ b/test/shell/lvextend-snapshot-dmeventd.sh
-@@ -17,6 +17,7 @@ extend() {
+diff --git a/WHATS_NEW b/WHATS_NEW
+index dfbb4e3..c55b3fb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.108 -
+ =================================
++  Change lv_path field to suppress devices that never appear in /dev/vg.
+   Postpone thin pool lvconvert prompts (2.02.107).
+   Require --yes option to skip prompt to lvconvert thin pool chunksize.
+   Support lvremove -ff to remove thin volumes from broken thin pools.
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index f1d93a9..55395ce 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -370,7 +370,8 @@ char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ 	char *repstr;
+ 	size_t len;
  
- write_() {
- 	dd if=/dev/zero of="$DM_DEV_DIR/$vg/snap" bs=1k count=$2 seek=$1
-+	sync
- }
+-	if (!*lv->vg->name)
++	/* Only for visible devices that get a link from /dev/vg */
++	if (!*lv->vg->name || !lv_is_visible(lv) || lv_is_thin_pool(lv))
+ 		return dm_pool_strdup(mem, "");
  
- percent_() {
+ 	len = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) +
 
 
