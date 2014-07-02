@@ -1,47 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  2 Jul 2014 08:48:54 +0000 (UTC)
-Subject: master - cleanup: a bit better error message
-Message-ID: <20140702084854.9233460BAB@fedorahosted.org>
+Date: Wed,  2 Jul 2014 08:48:56 +0000 (UTC)
+Subject: master - cleanup: use unsigned type for command
+Message-ID: <20140702084856.A19F860BAB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=57f8b33d5de8c93ee48f4d1caa69ac3fd45d05d0
-Commit:        57f8b33d5de8c93ee48f4d1caa69ac3fd45d05d0
-Parent:        165cfab7db386942162f819d247ce64ab5436119
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=52ab15b2d0803fee480c404a458f3b568507a53a
+Commit:        52ab15b2d0803fee480c404a458f3b568507a53a
+Parent:        57f8b33d5de8c93ee48f4d1caa69ac3fd45d05d0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 2 09:50:04 2014 +0200
+AuthorDate:    Wed Jul 2 10:27:13 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jul 2 10:45:43 2014 +0200
 
-cleanup: a bit better error message
+cleanup: use unsigned type for command
 
+Keep command unsigned (as _IOWR() produces them).
 ---
- tools/lvconvert.c |    7 +++----
- 1 files changed, 3 insertions(+), 4 deletions(-)
+ libdm/ioctl/libdm-targets.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 085fdcd..4f29416 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2759,13 +2759,12 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 			return 0;
- 		}
- 		if (metadata_lv == pool_lv) {
--			log_error("Can't use same LV for thin pool data and metadata LV %s.",
--				  lp->pool_metadata_lv_name);
-+			log_error("Can't use same LV for thin pool data and metadata LV %s/%s.",
-+				  metadata_lv->vg->name, metadata_lv->name);
- 			return 0;
- 		}
- 		if (lv_is_thin_type(metadata_lv)) {
--			log_error("Can't use thin pool logical volume %s/%s "
--				  "for thin pool metadata.",
-+			log_error("Can't use thin type LV %s/%s for thin pool metadata.",
- 				  metadata_lv->vg->name, metadata_lv->name);
- 			return 0;
- 		}
+diff --git a/libdm/ioctl/libdm-targets.h b/libdm/ioctl/libdm-targets.h
+index 8fc8738..54223c7 100644
+--- a/libdm/ioctl/libdm-targets.h
++++ b/libdm/ioctl/libdm-targets.h
+@@ -74,7 +74,7 @@ struct dm_task {
+ 
+ struct cmd_data {
+ 	const char *name;
+-	const int cmd;
++	const unsigned cmd;
+ 	const int version[3];
+ };
+ 
 
 
