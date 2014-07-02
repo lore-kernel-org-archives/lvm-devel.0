@@ -1,62 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  2 Jul 2014 08:48:46 +0000 (UTC)
-Subject: master - display: add display_lvname
-Message-ID: <20140702084846.3F8E061054@fedorahosted.org>
+Date: Wed,  2 Jul 2014 08:48:48 +0000 (UTC)
+Subject: master - cleanup: libdm simplier error comparation
+Message-ID: <20140702084848.4E16D61054@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e21d0eb90e9a842ca5fd4d09c076f5fb894ba6ca
-Commit:        e21d0eb90e9a842ca5fd4d09c076f5fb894ba6ca
-Parent:        6f6900d457afdf8533968f6cd639d4b14779ad51
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=748af97afc30d65a9b89d877fdbd2e12ea8fb8e3
+Commit:        748af97afc30d65a9b89d877fdbd2e12ea8fb8e3
+Parent:        e21d0eb90e9a842ca5fd4d09c076f5fb894ba6ca
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 2 00:01:46 2014 +0200
+AuthorDate:    Wed Jul 2 00:00:31 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jul 2 10:45:42 2014 +0200
 
-display: add display_lvname
+cleanup: libdm simplier error comparation
 
-Add simple function to print vg/lv name.
-Useful i.e. in error messages.
+When testing return value from snprintf
+use simplier form '>=' instead of  '+1 >'.
 ---
- lib/display/display.c |    9 +++++++++
- lib/display/display.h |    2 ++
- 2 files changed, 11 insertions(+), 0 deletions(-)
+ libdm/libdm-string.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index 9780f10..fd785ed 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -93,6 +93,15 @@ const char *get_percent_string(percent_type_t def)
- 	return _percent_types[def];
- }
+diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
+index 8ad479c..bc41b70 100644
+--- a/libdm/libdm-string.c
++++ b/libdm/libdm-string.c
+@@ -122,7 +122,7 @@ int dm_snprintf(char *buf, size_t bufsize, const char *format, ...)
+ 	n = vsnprintf(buf, bufsize, format, ap);
+ 	va_end(ap);
  
-+const char *display_lvname(const struct logical_volume *lv)
-+{
-+	char buf[NAME_LEN * 2 + 2];
-+
-+	(void) snprintf(buf, sizeof(buf), "%s/%s", lv->vg->name, lv->name);
-+
-+	return dm_pool_strdup(lv->vg->cmd->mem, buf) ? : lv->name; /* at least LV name... */
-+}
-+
- #define BASE_UNKNOWN 0
- #define BASE_SHARED 1
- #define BASE_1024 8
-diff --git a/lib/display/display.h b/lib/display/display.h
-index d5c0efa..cc5654b 100644
---- a/lib/display/display.h
-+++ b/lib/display/display.h
-@@ -22,6 +22,8 @@
+-	if (n < 0 || ((unsigned) n + 1 > bufsize))
++	if (n < 0 || ((unsigned) n >= bufsize))
+ 		return -1;
  
- #include <stdint.h>
- 
-+const char *display_lvname(const struct logical_volume *lv);
-+
- /* Specify size in KB */
- const char *display_size(const struct cmd_context *cmd, uint64_t size);
- const char *display_size_long(const struct cmd_context *cmd, uint64_t size);
+ 	return n;
 
 
