@@ -1,58 +1,62 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  2 Jul 2014 08:48:44 +0000 (UTC)
-Subject: master - fsadm: avoid using -a in test
-Message-ID: <20140702084844.2A8B861054@fedorahosted.org>
+Date: Wed,  2 Jul 2014 08:48:46 +0000 (UTC)
+Subject: master - display: add display_lvname
+Message-ID: <20140702084846.3F8E061054@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6f6900d457afdf8533968f6cd639d4b14779ad51
-Commit:        6f6900d457afdf8533968f6cd639d4b14779ad51
-Parent:        7bdf4719e8327a74262e47adfe78ad81a26ff4c0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e21d0eb90e9a842ca5fd4d09c076f5fb894ba6ca
+Commit:        e21d0eb90e9a842ca5fd4d09c076f5fb894ba6ca
+Parent:        6f6900d457afdf8533968f6cd639d4b14779ad51
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 30 20:03:05 2014 +0200
+AuthorDate:    Wed Jul 2 00:01:46 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 2 10:45:41 2014 +0200
+CommitterDate: Wed Jul 2 10:45:42 2014 +0200
 
-fsadm: avoid using -a in test
+display: add display_lvname
 
+Add simple function to print vg/lv name.
+Useful i.e. in error messages.
 ---
- scripts/fsadm.sh |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ lib/display/display.c |    9 +++++++++
+ lib/display/display.h |    2 ++
+ 2 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index e6fe7ce..f4ea796 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -276,7 +276,7 @@ try_umount() {
+diff --git a/lib/display/display.c b/lib/display/display.c
+index 9780f10..fd785ed 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -93,6 +93,15 @@ const char *get_percent_string(percent_type_t def)
+ 	return _percent_types[def];
  }
  
- validate_parsing() {
--	test -n "$BLOCKSIZE" -a -n "$BLOCKCOUNT" || error "Cannot parse $1 output"
-+	test -n "$BLOCKSIZE" && test -n "$BLOCKCOUNT" || error "Cannot parse $1 output"
- }
- ####################################
- # Resize ext2/ext3/ext4 filesystem
-@@ -459,12 +459,12 @@ trap "cleanup 2" 2
- test -n "$FSADM_RUNNING" && exit 0
++const char *display_lvname(const struct logical_volume *lv)
++{
++	char buf[NAME_LEN * 2 + 2];
++
++	(void) snprintf(buf, sizeof(buf), "%s/%s", lv->vg->name, lv->name);
++
++	return dm_pool_strdup(lv->vg->cmd->mem, buf) ? : lv->name; /* at least LV name... */
++}
++
+ #define BASE_UNKNOWN 0
+ #define BASE_SHARED 1
+ #define BASE_1024 8
+diff --git a/lib/display/display.h b/lib/display/display.h
+index d5c0efa..cc5654b 100644
+--- a/lib/display/display.h
++++ b/lib/display/display.h
+@@ -22,6 +22,8 @@
  
- # test some prerequisities
--test -n "$TUNE_EXT" -a -n "$RESIZE_EXT" -a -n "$TUNE_REISER" -a -n "$RESIZE_REISER" \
--  -a -n "$TUNE_XFS" -a -n "$RESIZE_XFS" -a -n "$MOUNT" -a -n "$UMOUNT" -a -n "$MKDIR" \
--  -a -n "$RMDIR" -a -n "$BLOCKDEV" -a -n "$BLKID" -a -n "$GREP" -a -n "$READLINK" \
--  -a -n "$DATE" -a -n "$FSCK" -a -n "$XFS_CHECK" -a -n "$XFS_REPAIR" \
--  -a -n "$LVM" \
--  || error "Required command definitions in the script are missing!"
-+for i in "$TUNE_EXT" "$RESIZE_EXT" "$TUNE_REISER" "$RESIZE_REISER" \
-+	"$TUNE_XFS" "$RESIZE_XFS" "$MOUNT" "$UMOUNT" "$MKDIR" \
-+	"$RMDIR" "$BLOCKDEV" "$BLKID" "$GREP" "$READLINK" \
-+	"$DATE" "$FSCK" "$XFS_CHECK" "$XFS_REPAIR" "$LVM" ; do
-+	test -n "$i" || error "Required command definitions in the script are missing!"
-+done
+ #include <stdint.h>
  
- "$LVM" version >"$NULL" 2>&1 || error "Could not run lvm binary \"$LVM\""
- $("$READLINK" -e / >"$NULL" 2>&1) || READLINK_E="-f"
++const char *display_lvname(const struct logical_volume *lv);
++
+ /* Specify size in KB */
+ const char *display_size(const struct cmd_context *cmd, uint64_t size);
+ const char *display_size_long(const struct cmd_context *cmd, uint64_t size);
 
 
