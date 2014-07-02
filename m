@@ -1,40 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  2 Jul 2014 08:48:52 +0000 (UTC)
-Subject: master - cleanup: verbose in human readable size
-Message-ID: <20140702084852.7C5DA61054@fedorahosted.org>
+Date: Wed,  2 Jul 2014 08:48:54 +0000 (UTC)
+Subject: master - cleanup: a bit better error message
+Message-ID: <20140702084854.9233460BAB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=165cfab7db386942162f819d247ce64ab5436119
-Commit:        165cfab7db386942162f819d247ce64ab5436119
-Parent:        6b3a49876eb36b5b97e7fbd7935208f0d85607e0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=57f8b33d5de8c93ee48f4d1caa69ac3fd45d05d0
+Commit:        57f8b33d5de8c93ee48f4d1caa69ac3fd45d05d0
+Parent:        165cfab7db386942162f819d247ce64ab5436119
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jul 1 11:03:31 2014 +0200
+AuthorDate:    Wed Jul 2 09:50:04 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 2 10:45:42 2014 +0200
+CommitterDate: Wed Jul 2 10:45:43 2014 +0200
 
-cleanup: verbose in human readable size
+cleanup: a bit better error message
 
-Use normal size like we use everywhere else.
 ---
- tools/lvconvert.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/lvconvert.c |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index a6187a0..085fdcd 100644
+index 085fdcd..4f29416 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -446,7 +446,7 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 				  "range 4K to 512K");
+@@ -2759,13 +2759,12 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
  			return 0;
  		}
--		log_verbose("Setting chunksize to %d sectors.", lp->chunk_size);
-+		log_verbose("Setting chunk size to %s.", display_size(cmd, lp->chunk_size));
- 
- 		if (!(lp->segtype = get_segtype_from_string(cmd, "snapshot")))
- 			return_0;
+ 		if (metadata_lv == pool_lv) {
+-			log_error("Can't use same LV for thin pool data and metadata LV %s.",
+-				  lp->pool_metadata_lv_name);
++			log_error("Can't use same LV for thin pool data and metadata LV %s/%s.",
++				  metadata_lv->vg->name, metadata_lv->name);
+ 			return 0;
+ 		}
+ 		if (lv_is_thin_type(metadata_lv)) {
+-			log_error("Can't use thin pool logical volume %s/%s "
+-				  "for thin pool metadata.",
++			log_error("Can't use thin type LV %s/%s for thin pool metadata.",
+ 				  metadata_lv->vg->name, metadata_lv->name);
+ 			return 0;
+ 		}
 
 
