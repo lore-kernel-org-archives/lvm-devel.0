@@ -1,67 +1,78 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 21 May 2008 14:10:12 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvchange.c
-Message-ID: <20080521141012.15733.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed,  2 Jul 2014 08:48:40 +0000 (UTC)
+Subject: master - thin: fix chunk_size conversion prompt skip
+Message-ID: <20140702084840.00ECD61054@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-05-21 14:10:11
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3af761ba167236a2d66f8687ade5db6311498d06
+Commit:        3af761ba167236a2d66f8687ade5db6311498d06
+Parent:        93a80018ae8e2f3f56e56b42237779661c9040b3
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jul 1 11:04:14 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jul 2 10:43:56 2014 +0200
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : lvchange.c 
+thin: fix chunk_size conversion prompt skip
 
-Log message:
-	Temporarily disable dmeventd mirror monitoring during lvchange --resync.
+Use --force only enables prompting for dangerous operation.
+User has to add --yes to skip this prompt.
+---
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |   27 +++++++++++++++++++--------
+ 2 files changed, 20 insertions(+), 8 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.875&r2=1.876
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
-
---- LVM2/WHATS_NEW	2008/05/19 19:49:56	1.875
-+++ LVM2/WHATS_NEW	2008/05/21 14:10:11	1.876
-@@ -6,6 +6,7 @@
- 
- Version 2.02.37 - 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 230bdf0..8934d6f 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.108 -
  =================================
-+  Temporarily disable dmeventd mirror monitoring during lvchange --resync.
-   Refactor some vginfo manipulation code.
-   Add assertions to trap deprecated P_ and V_ lock usage.
-   Add missing mutex around clvmd lvmcache_drop_metadata library call.
---- LVM2/tools/lvchange.c	2008/04/10 17:09:32	1.90
-+++ LVM2/tools/lvchange.c	2008/05/21 14:10:11	1.91
-@@ -178,6 +178,7 @@
- 			      struct logical_volume *lv)
- {
- 	int active = 0;
-+	int monitored;
- 	struct lvinfo info;
- 	struct logical_volume *log_lv;
++  Require --yes option to skip prompt to lvconvert thin pool chunksize.
+   Support lvremove -ff to remove thin volumes from broken thin pools.
+   Require --yes to skip raid repair prompt.
+   Change makefile %.d generation to handle filename changes without make clean.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index d80fa60..be2c916 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2805,14 +2805,25 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
  
-@@ -221,6 +222,10 @@
- 		}
- 	}
- 
-+	/* Activate exclusively to ensure no nodes still have LV active */
-+	monitored = dmeventd_monitor_mode();
-+	init_dmeventd_monitor(0);
-+
- 	if (vg_is_clustered(lv->vg) && !activate_lv_excl(cmd, lv)) {
- 		log_error("Can't get exclusive access to clustered volume %s",
- 			  lv->name);
-@@ -232,6 +237,8 @@
- 		return 0;
- 	}
- 
-+	init_dmeventd_monitor(monitored);
-+
- 	log_lv = first_seg(lv)->log_lv;
- 
- 	log_very_verbose("Starting resync of %s%s%s mirror \"%s\"",
+ 			if (!arg_count(cmd, chunksize_ARG))
+ 				lp->chunk_size = seg->chunk_size;
+-			else if ((lp->chunk_size != seg->chunk_size) &&
+-				 !lp->force &&
+-				 yes_no_prompt("Do you really want to change chunk size %s to %s for %s/%s "
+-					       "pool volume? [y/n]: ", display_size(cmd, seg->chunk_size),
+-					       display_size(cmd, lp->chunk_size),
+-					       pool_lv->vg->name, pool_lv->name) == 'n') {
+-				log_error("Conversion aborted.");
+-				return 0;
++			else if (lp->chunk_size != seg->chunk_size) {
++				if (lp->force == PROMPT) {
++					log_error("Chunk size can be only changed with --force. Conversion aborted.");
++					return 0;
++				}
++				/* Ok, user has likely some serious reason for this */
++				if (!lp->yes &&
++				    yes_no_prompt("Do you really want to change chunk size %s to %s "
++						  "for %s/%s pool volume? [y/n]: ",
++						  display_size(cmd, seg->chunk_size),
++						  display_size(cmd, lp->chunk_size),
++						  pool_lv->vg->name, pool_lv->name) == 'n') {
++					log_error("Conversion aborted.");
++					return 0;
++				}
++				log_warn("WARNING: Changing chunk size %s to %s for %s/%s pool volume.",
++					 display_size(cmd, seg->chunk_size),
++					 display_size(cmd, lp->chunk_size),
++					 pool_lv->vg->name, pool_lv->name);
+ 			}
+ 			if (!arg_count(cmd, discards_ARG))
+ 				lp->discards = seg->discards;
 
 
