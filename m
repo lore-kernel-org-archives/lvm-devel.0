@@ -1,40 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  2 Jul 2014 08:48:56 +0000 (UTC)
-Subject: master - cleanup: use unsigned type for command
-Message-ID: <20140702084856.A19F860BAB@fedorahosted.org>
+Date: Wed,  2 Jul 2014 08:48:58 +0000 (UTC)
+Subject: master - cleanup: add braces for if()
+Message-ID: <20140702084858.B47EC60BAB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=52ab15b2d0803fee480c404a458f3b568507a53a
-Commit:        52ab15b2d0803fee480c404a458f3b568507a53a
-Parent:        57f8b33d5de8c93ee48f4d1caa69ac3fd45d05d0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d1dcbe085370ba194b6598bb9440550edb7f184f
+Commit:        d1dcbe085370ba194b6598bb9440550edb7f184f
+Parent:        52ab15b2d0803fee480c404a458f3b568507a53a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 2 10:27:13 2014 +0200
+AuthorDate:    Wed Jul 2 10:28:39 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jul 2 10:45:43 2014 +0200
 
-cleanup: use unsigned type for command
+cleanup: add braces for if()
 
-Keep command unsigned (as _IOWR() produces them).
 ---
- libdm/ioctl/libdm-targets.h |    2 +-
+ libdm/regex/parse_rx.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/ioctl/libdm-targets.h b/libdm/ioctl/libdm-targets.h
-index 8fc8738..54223c7 100644
---- a/libdm/ioctl/libdm-targets.h
-+++ b/libdm/ioctl/libdm-targets.h
-@@ -74,7 +74,7 @@ struct dm_task {
- 
- struct cmd_data {
- 	const char *name;
--	const int cmd;
-+	const unsigned cmd;
- 	const int version[3];
- };
- 
+diff --git a/libdm/regex/parse_rx.c b/libdm/regex/parse_rx.c
+index 0ad033a..bc0e619 100644
+--- a/libdm/regex/parse_rx.c
++++ b/libdm/regex/parse_rx.c
+@@ -67,7 +67,7 @@ static void _regex_print(struct rx_node *rx, int depth, unsigned show_nodes)
+ 			printf("[");
+ 		for (i = 0; i < 256; i++)
+ 			if (dm_bit(rx->charset, i)) {
+-				if isprint(i)
++				if (isprint(i))
+ 					printf("%c", (char) i);
+ 				else if (i == HAT_CHAR)
+ 					printf("^");
 
 
