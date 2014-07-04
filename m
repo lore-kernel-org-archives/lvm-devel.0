@@ -1,60 +1,94 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  4 Jul 2014 10:32:06 +0000 (UTC)
-Subject: master - dev-type: print aborting log_error
-Message-ID: <20140704103206.2B5F860C22@fedorahosted.org>
+Date: Fri,  4 Jul 2014 10:32:08 +0000 (UTC)
+Subject: master - cleanup: drop unneeded initialization
+Message-ID: <20140704103208.3FD2260C22@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1f72f8ed40a6cf72d424118cbb57d8a5961cc891
-Commit:        1f72f8ed40a6cf72d424118cbb57d8a5961cc891
-Parent:        a94abc0fdd33b31cd292d9b9a61ddceb7b72208f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86e116450ec32243f10abbe9b093bdeaab6e0f76
+Commit:        86e116450ec32243f10abbe9b093bdeaab6e0f76
+Parent:        1f72f8ed40a6cf72d424118cbb57d8a5961cc891
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 3 12:15:19 2014 +0200
+AuthorDate:    Thu Jul 3 21:30:27 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Jul 4 12:31:17 2014 +0200
 
-dev-type: print aborting log_error
+cleanup: drop unneeded initialization
 
-When wiping is aborted print immediate log_error message
-(log_error comes 1st.)
+Code assigns this variable right after clearing.
 ---
- lib/device/dev-type.c |   14 +++++++++-----
- 1 files changed, 9 insertions(+), 5 deletions(-)
+ lib/config/config.c |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 0d91017..902b7d1 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -507,8 +507,10 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 	if (!_type_in_flag_list(type, types_no_prompt)) {
- 		if (!yes && (force == PROMPT) &&
- 		    yes_no_prompt("WARNING: %s signature detected on %s at offset %s. "
--				  "Wipe it? [y/n] ", type, name, offset) != 'y')
--			return_0;
-+				  "Wipe it? [y/n]: ", type, name, offset) == 'n') {
-+			log_error("Aborted wiping of %s.", type);
-+			return 0;
-+		}
- 		log_print_unless_silent(_msg_wiping, type, name);
- 	} else
- 		log_verbose(_msg_wiping, type, name);
-@@ -591,9 +593,11 @@ static int _wipe_signature(struct device *dev, const char *type, const char *nam
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 2ed3db6..8148a18 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -1142,7 +1142,7 @@ const struct dm_config_node *find_config_tree_node(struct cmd_context *cmd, int
+ {
+ 	cfg_def_item_t *item = cfg_def_get_item_p(id);
+ 	char path[CFG_PATH_MAX_LEN];
+-	int profile_applied = 0;
++	int profile_applied;
+ 	const struct dm_config_node *cn;
  
- 	/* Specifying --yes => do not ask. */
- 	if (!yes && (force == PROMPT) &&
--	    yes_no_prompt("WARNING: %s detected on %s. Wipe it? [y/n] ",
--			  type, name) != 'y')
--		return_0;
-+	    yes_no_prompt("WARNING: %s detected on %s. Wipe it? [y/n]: ",
-+			  type, name) == 'n') {
-+		log_error("Aborted wiping of %s.", type);
-+		return 0;
-+	}
+ 	profile_applied = _apply_local_profile(cmd, profile);
+@@ -1160,7 +1160,7 @@ const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile
+ {
+ 	cfg_def_item_t *item = cfg_def_get_item_p(id);
+ 	char path[CFG_PATH_MAX_LEN];
+-	int profile_applied = 0;
++	int profile_applied;
+ 	const char *str;
  
- 	log_print_unless_silent("Wiping %s on %s.", type, name);
- 	if (!dev_set(dev, offset_found, wipe_len, 0)) {
+ 	profile_applied = _apply_local_profile(cmd, profile);
+@@ -1181,7 +1181,7 @@ const char *find_config_tree_str_allow_empty(struct cmd_context *cmd, int id, st
+ {
+ 	cfg_def_item_t *item = cfg_def_get_item_p(id);
+ 	char path[CFG_PATH_MAX_LEN];
+-	int profile_applied = 0;
++	int profile_applied;
+ 	const char *str;
+ 
+ 	profile_applied = _apply_local_profile(cmd, profile);
+@@ -1204,7 +1204,7 @@ int find_config_tree_int(struct cmd_context *cmd, int id, struct profile *profil
+ {
+ 	cfg_def_item_t *item = cfg_def_get_item_p(id);
+ 	char path[CFG_PATH_MAX_LEN];
+-	int profile_applied = 0;
++	int profile_applied;
+ 	int i;
+ 
+ 	profile_applied = _apply_local_profile(cmd, profile);
+@@ -1225,7 +1225,7 @@ int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *
+ {
+ 	cfg_def_item_t *item = cfg_def_get_item_p(id);
+ 	char path[CFG_PATH_MAX_LEN];
+-	int profile_applied = 0;
++	int profile_applied;
+ 	int i64;
+ 
+ 	profile_applied = _apply_local_profile(cmd, profile);
+@@ -1246,7 +1246,7 @@ float find_config_tree_float(struct cmd_context *cmd, int id, struct profile *pr
+ {
+ 	cfg_def_item_t *item = cfg_def_get_item_p(id);
+ 	char path[CFG_PATH_MAX_LEN];
+-	int profile_applied = 0;
++	int profile_applied;
+ 	float f;
+ 
+ 	profile_applied = _apply_local_profile(cmd, profile);
+@@ -1267,7 +1267,7 @@ int find_config_tree_bool(struct cmd_context *cmd, int id, struct profile *profi
+ {
+ 	cfg_def_item_t *item = cfg_def_get_item_p(id);
+ 	char path[CFG_PATH_MAX_LEN];
+-	int profile_applied = 0;
++	int profile_applied;
+ 	int b;
+ 
+ 	profile_applied = _apply_local_profile(cmd, profile);
 
 
