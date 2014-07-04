@@ -1,94 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  4 Jul 2014 10:32:08 +0000 (UTC)
-Subject: master - cleanup: drop unneeded initialization
-Message-ID: <20140704103208.3FD2260C22@fedorahosted.org>
+Date: Fri,  4 Jul 2014 10:32:10 +0000 (UTC)
+Subject: master - cleanup: just safely copy string
+Message-ID: <20140704103210.532A160DC5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86e116450ec32243f10abbe9b093bdeaab6e0f76
-Commit:        86e116450ec32243f10abbe9b093bdeaab6e0f76
-Parent:        1f72f8ed40a6cf72d424118cbb57d8a5961cc891
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9d2c445d0ac10bf54d39d9aa6e8695c469456489
+Commit:        9d2c445d0ac10bf54d39d9aa6e8695c469456489
+Parent:        86e116450ec32243f10abbe9b093bdeaab6e0f76
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 3 21:30:27 2014 +0200
+AuthorDate:    Thu Jul 3 21:31:15 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Jul 4 12:31:17 2014 +0200
 
-cleanup: drop unneeded initialization
+cleanup: just safely copy string
 
-Code assigns this variable right after clearing.
+Keep analyzers happier and use constrained strcpy.
 ---
- lib/config/config.c |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ lib/cache/lvmcache.c        |    2 +-
+ lib/format1/import-export.c |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 2ed3db6..8148a18 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1142,7 +1142,7 @@ const struct dm_config_node *find_config_tree_node(struct cmd_context *cmd, int
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	char path[CFG_PATH_MAX_LEN];
--	int profile_applied = 0;
-+	int profile_applied;
- 	const struct dm_config_node *cn;
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 3244205..41bac8b 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1707,7 +1707,7 @@ static int _get_pv_if_in_vg(struct lvmcache_info *info,
+ 		 * lvmcache_label_scan() and drop cached
+ 		 * vginfo so make a local copy of string.
+ 		 */
+-		strcpy(vgname, info->vginfo->vgname);
++		(void) dm_strncpy(vgname, info->vginfo->vgname, sizeof(vgname));
+ 		memcpy(vgid, info->vginfo->vgid, sizeof(vgid));
  
- 	profile_applied = _apply_local_profile(cmd, profile);
-@@ -1160,7 +1160,7 @@ const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	char path[CFG_PATH_MAX_LEN];
--	int profile_applied = 0;
-+	int profile_applied;
- 	const char *str;
+ 		if (get_pv_from_vg_by_id(info->fmt, vgname, vgid,
+diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
+index 5ef19ef..8aa4d33 100644
+--- a/lib/format1/import-export.c
++++ b/lib/format1/import-export.c
+@@ -347,7 +347,7 @@ static void _export_lv(struct lv_disk *lvd, struct volume_group *vg,
+ 	snprintf((char *)lvd->lv_name, sizeof(lvd->lv_name), "%s%s/%s",
+ 		 dev_dir, vg->name, lv->name);
  
- 	profile_applied = _apply_local_profile(cmd, profile);
-@@ -1181,7 +1181,7 @@ const char *find_config_tree_str_allow_empty(struct cmd_context *cmd, int id, st
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	char path[CFG_PATH_MAX_LEN];
--	int profile_applied = 0;
-+	int profile_applied;
- 	const char *str;
+-	strcpy((char *)lvd->vg_name, vg->name);
++	(void) dm_strncpy((char *)lvd->vg_name, vg->name, sizeof(lvd->vg_name));
  
- 	profile_applied = _apply_local_profile(cmd, profile);
-@@ -1204,7 +1204,7 @@ int find_config_tree_int(struct cmd_context *cmd, int id, struct profile *profil
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	char path[CFG_PATH_MAX_LEN];
--	int profile_applied = 0;
-+	int profile_applied;
- 	int i;
- 
- 	profile_applied = _apply_local_profile(cmd, profile);
-@@ -1225,7 +1225,7 @@ int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	char path[CFG_PATH_MAX_LEN];
--	int profile_applied = 0;
-+	int profile_applied;
- 	int i64;
- 
- 	profile_applied = _apply_local_profile(cmd, profile);
-@@ -1246,7 +1246,7 @@ float find_config_tree_float(struct cmd_context *cmd, int id, struct profile *pr
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	char path[CFG_PATH_MAX_LEN];
--	int profile_applied = 0;
-+	int profile_applied;
- 	float f;
- 
- 	profile_applied = _apply_local_profile(cmd, profile);
-@@ -1267,7 +1267,7 @@ int find_config_tree_bool(struct cmd_context *cmd, int id, struct profile *profi
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	char path[CFG_PATH_MAX_LEN];
--	int profile_applied = 0;
-+	int profile_applied;
- 	int b;
- 
- 	profile_applied = _apply_local_profile(cmd, profile);
+ 	if (lv->status & LVM_READ)
+ 		lvd->lv_access |= LV_READ;
 
 
