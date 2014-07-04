@@ -1,149 +1,103 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 30 May 2008 15:27:45 -0000
-Subject: LVM2 ./WHATS_NEW lib/log/log.c lib/log/log.h t ...
-Message-ID: <20080530152745.21888.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  4 Jul 2014 14:00:18 +0000 (UTC)
+Subject: master - refactor: use new LVSINFO report type for lv_kernel_{major, minor, read_ahead} field
+Message-ID: <20140704140018.98FEB60ED6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-05-30 15:27:44
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4b9b1f23199edb7e02230481a5e53ac1fa548384
+Commit:        4b9b1f23199edb7e02230481a5e53ac1fa548384
+Parent:        ecb2be5d1642aa0142d216f9e52f64fd3e8c3fc8
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Jul 2 14:31:39 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Jul 4 15:40:17 2014 +0200
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/log        : log.c log.h 
-	tools          : lvm.c lvmcmdline.c 
+refactor: use new LVSINFO report type for lv_kernel_{major,minor,read_ahead} field
 
-Log message:
-	In script-processing mode, stop if any command fails.
-	Warn if command exits with non-zero status code without a prior log_error.
+---
+ lib/report/columns.h |    7 ++++---
+ lib/report/report.c  |   21 +++++++++------------
+ 2 files changed, 13 insertions(+), 15 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.877&r2=1.878
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.h.diff?cvsroot=lvm2&r1=1.38&r2=1.39
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvm.c.diff?cvsroot=lvm2&r1=1.105&r2=1.106
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.63&r2=1.64
-
---- LVM2/WHATS_NEW	2008/05/28 22:27:47	1.877
-+++ LVM2/WHATS_NEW	2008/05/30 15:27:44	1.878
-@@ -1,5 +1,7 @@
- Version 2.02.38 - 
- =================================
-+  In script-processing mode, stop if any command fails.
-+  Warn if command exits with non-zero status code without a prior log_error.
-   Make clvmd-cman use a hash rather than an array for node updown info.
-   Check lv_count in vg_validate.
-   Add --prefixes to reporting tools for field name prefix output format.
---- LVM2/lib/log/log.c	2008/04/07 13:53:26	1.43
-+++ LVM2/lib/log/log.c	2008/05/30 15:27:44	1.44
-@@ -51,6 +51,7 @@
- static int _mirror_in_sync = 0;
- static int _dmeventd_monitor = DEFAULT_DMEVENTD_MONITOR;
- static int _ignore_suspended_devices = 0;
-+static int _error_message_produced = 0;
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 8d42387..96c30d4 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -39,9 +39,6 @@ FIELD(LVS, lv, STR, "Active", lvid, 6, lvactive, lv_active, "Active state of the
+ FIELD(LVS, lv, NUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
+ FIELD(LVS, lv, NUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
+ FIELD(LVS, lv, SIZ, "Rahead", lvid, 6, lvreadahead, lv_read_ahead, "Read ahead setting in current units.", 0)
+-FIELD(LVS, lv, NUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
+-FIELD(LVS, lv, NUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
+-FIELD(LVS, lv, SIZ, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
+ FIELD(LVS, lv, SIZ, "LSize", size, 5, size64, lv_size, "Size of LV in current units.", 0)
+ FIELD(LVS, lv, SIZ, "MSize", lvid, 6, lvmetadatasize, lv_metadata_size, "For thin pools, the size of the LV that holds the metadata.", 0)
+ FIELD(LVS, lv, NUM, "#Seg", lvid, 4, lvsegcount, seg_count, "Number of segments in LV.", 0)
+@@ -69,6 +66,10 @@ FIELD(LVS, lv, STR, "Time", lvid, 26, lvtime, lv_time, "Creation time of the LV,
+ FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
+ FIELD(LVS, lv, STR_LIST, "Modules", lvid, 7, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
  
- static lvm2_log_fn_t _lvm2_log_fn = NULL;
++FIELD(LVSINFO, lv, NUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
++FIELD(LVSINFO, lv, NUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
++FIELD(LVSINFO, lv, SIZ, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
++
+ FIELD(LABEL, label, STR, "Fmt", type, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
+ FIELD(LABEL, label, STR, "PV UUID", type, 38, pvuuid, pv_uuid, "Unique identifier.", 0)
+ FIELD(LABEL, label, SIZ, "DevSize", dev, 7, devsize, dev_size, "Size of underlying device in current units.", 0)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index eb4c5ac..27d2de7 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -195,11 +195,10 @@ static int _lvkmaj_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+ 			struct dm_report_field *field,
+ 			const void *data, void *private __attribute__((unused)))
+ {
+-	const struct logical_volume *lv = (const struct logical_volume *) data;
+-	int major;
++	const struct lv_with_info *lvi = (const struct lv_with_info *) data;
  
-@@ -238,6 +239,16 @@
- 	_indent = indent;
+-	if ((major = lv_kernel_major(lv)) >= 0)
+-		return dm_report_field_int(rh, field, &major);
++	if (lvi->info && lvi->info->exists && lvi->info->major >= 0)
++		return dm_report_field_int(rh, field, &lvi->info->major);
+ 
+ 	return dm_report_field_int32(rh, field, &_reserved_number_undef_32);
+ }
+@@ -208,11 +207,10 @@ static int _lvkmin_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+ 			struct dm_report_field *field,
+ 			const void *data, void *private __attribute__((unused)))
+ {
+-	const struct logical_volume *lv = (const struct logical_volume *) data;
+-	int minor;
++	const struct lv_with_info *lvi = (const struct lv_with_info *) data;
+ 
+-	if ((minor = lv_kernel_minor(lv)) >= 0)
+-		return dm_report_field_int(rh, field, &minor);
++	if (lvi->info && lvi->info->exists && lvi->info->minor >= 0)
++		return dm_report_field_int(rh, field, &lvi->info->minor);
+ 
+ 	return dm_report_field_int32(rh, field, &_reserved_number_undef_32);
+ }
+@@ -549,13 +547,12 @@ static int _lvkreadahead_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			      const void *data,
+ 			      void *private)
+ {
+-	const struct logical_volume *lv = (const struct logical_volume *) data;
+-	uint32_t read_ahead = lv_kernel_read_ahead(lv);
++	const struct lv_with_info *lvi = (const struct lv_with_info *) data;
+ 
+-	if (read_ahead == UINT32_MAX)
++	if (!lvi->info || !lvi->info->exists)
+ 		return dm_report_field_int32(rh, field, &_reserved_number_undef_32);
+ 
+-	return _size32_disp(rh, mem, field, &read_ahead, private);
++	return _size32_disp(rh, mem, field, &lvi->info->read_ahead, private);
  }
  
-+void init_error_message_produced(int error_message_produced)
-+{
-+	_error_message_produced = error_message_produced;
-+}
-+
-+int error_message_produced(void)
-+{
-+	return _error_message_produced;
-+}
-+
- int test_mode()
- {
- 	return _test;
-@@ -322,6 +333,9 @@
- 	if (_log_suppress == 2)
- 		return;
- 
-+	if (level <= _LOG_ERR)
-+		_error_message_produced = 1;
-+
- 	trformat = _(format);
- 
- 	if (_lvm2_log_fn) {
---- LVM2/lib/log/log.h	2007/08/20 20:55:26	1.38
-+++ LVM2/lib/log/log.h	2008/05/30 15:27:44	1.39
-@@ -79,6 +79,7 @@
- void init_mirror_in_sync(int in_sync);
- void init_dmeventd_monitor(int reg);
- void init_ignore_suspended_devices(int ignore);
-+void init_error_message_produced(int error_message_produced);
- 
- void set_cmd_name(const char *cmd_name);
- 
-@@ -94,6 +95,7 @@
- int security_level(void);
- int mirror_in_sync(void);
- int ignore_suspended_devices(void);
-+int error_message_produced(void);
- 
- #define DMEVENTD_MONITOR_IGNORE -1
- int dmeventd_monitor_mode(void);
---- LVM2/tools/lvm.c	2008/01/31 12:19:36	1.105
-+++ LVM2/tools/lvm.c	2008/05/30 15:27:44	1.106
-@@ -236,6 +236,10 @@
- 			log_error("No such command '%s'.  Try 'help'.",
- 				  argv[0]);
- 
-+                if (ret && !error_message_produced()) {
-+			log_debug("Internal error: Failed command did not use log_error");
-+			log_error("Command failed with status code %d.", ret);
-+		}
- 		_write_history();
- 	}
- 
---- LVM2/tools/lvmcmdline.c	2008/04/08 12:49:21	1.63
-+++ LVM2/tools/lvmcmdline.c	2008/05/30 15:27:44	1.64
-@@ -875,6 +875,8 @@
- 	int ret = 0;
- 	int locking_type;
- 
-+	init_error_message_produced(0);
-+
- 	/* each command should start out with sigint flag cleared */
- 	sigint_clear();
- 
-@@ -1096,7 +1098,14 @@
- 			continue;
- 		if (!strcmp(argv[0], "quit") || !strcmp(argv[0], "exit"))
- 			break;
--		lvm_run_command(cmd, argc, argv);
-+		ret = lvm_run_command(cmd, argc, argv);
-+		if (ret) {
-+			if (!error_message_produced()) {
-+				log_debug("Internal error: Failed command did not use log_error");
-+				log_error("Command failed with status code %d.", ret);
-+			}
-+			break;
-+		}
- 	}
- 
- 	if (fclose(script))
-@@ -1218,6 +1227,11 @@
- 	if (ret == ENO_SUCH_CMD)
- 		log_error("No such command.  Try 'help'.");
- 
-+	if (ret && !error_message_produced()) {
-+		log_debug("Internal error: Failed command did not use log_error");
-+		log_error("Command failed with status code %d.", ret);
-+	}
-+
-       out:
- 	lvm_fin(cmd);
- 	if (ret == ECMD_PROCESSED)
+ static int _vgsize_disp(struct dm_report *rh, struct dm_pool *mem,
 
 
