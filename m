@@ -1,76 +1,80 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon,  7 Jul 2014 15:02:22 +0000 (UTC)
-Subject: master - lv_manip: pool-metadata-spare is just a spare LV, not tightly bound to thin or cache
-Message-ID: <20140707150222.D534C60CDD@fedorahosted.org>
+Date: Tue,  8 Jul 2014 08:29:00 +0000 (UTC)
+Subject: master - conf: comment out devices/preferred_names and filter setting
+Message-ID: <20140708082900.422296017F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f6001465efe064611920b30f5b913c1d09004ded
-Commit:        f6001465efe064611920b30f5b913c1d09004ded
-Parent:        4b65d7ec72869ba7e70a1c93567ef0f271ed395e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f76879ba440aa93f2e237335fe2cca6951a636bf
+Commit:        f76879ba440aa93f2e237335fe2cca6951a636bf
+Parent:        f6001465efe064611920b30f5b913c1d09004ded
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jul 7 17:02:06 2014 +0200
+AuthorDate:    Tue Jul 8 10:22:59 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jul 7 17:02:06 2014 +0200
+CommitterDate: Tue Jul 8 10:22:59 2014 +0200
 
-lv_manip: pool-metadata-spare is just a spare LV, not tightly bound to thin or cache
+conf: comment out devices/preferred_names and filter setting
 
+This avoids creating void matchers which have no effect anyway and
+they just use resources. Also, it makes lvm dumpconfig --type diff
+to mark these settings properly as not being different from defaults
+(where by default, devices/preferred_names as well as devices/filter
+are void).
+
+Also, add a few comments about builtin rules used to select device
+alias in case preferred_names is not defined or it doesn't match
+any of device aliases.
 ---
- lib/metadata/lv_manip.c |   10 +++-------
- 1 files changed, 3 insertions(+), 7 deletions(-)
+ conf/example.conf.in |   23 +++++++++++++++++++++--
+ 1 files changed, 21 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index fc98b2a..c55b31f 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -94,12 +94,11 @@ typedef enum {
- 	LV_TYPE_THIN_POOL,
- 	LV_TYPE_THIN_POOL_DATA,
- 	LV_TYPE_THIN_POOL_METADATA,
--	LV_TYPE_THIN_POOL_METADATA_SPARE,
- 	LV_TYPE_CACHE,
- 	LV_TYPE_CACHE_POOL,
- 	LV_TYPE_CACHE_POOL_DATA,
- 	LV_TYPE_CACHE_POOL_METADATA,
--	LV_TYPE_CACHE_POOL_METADATA_SPARE,
-+	LV_TYPE_POOL_METADATA_SPARE,
- 	LV_TYPE_VIRTUAL,
- 	LV_TYPE_RAID,
- 	LV_TYPE_RAID_IMAGE,
-@@ -122,12 +121,11 @@ static const char *_lv_type_names[] = {
- 	[LV_TYPE_THIN_POOL] =                   "thin-pool",
- 	[LV_TYPE_THIN_POOL_DATA] =              "thin-pool-data",
- 	[LV_TYPE_THIN_POOL_METADATA] =          "thin-pool-metadata",
--	[LV_TYPE_THIN_POOL_METADATA_SPARE] =    "thin-pool-metadata-spare",
- 	[LV_TYPE_CACHE] =                       "cache",
- 	[LV_TYPE_CACHE_POOL] =                  "cache-pool",
- 	[LV_TYPE_CACHE_POOL_DATA] =             "cache-pool-data",
- 	[LV_TYPE_CACHE_POOL_METADATA] =         "cache-pool-metadata",
--	[LV_TYPE_CACHE_POOL_METADATA_SPARE] =   "cache-pool-metadata-spare",
-+	[LV_TYPE_POOL_METADATA_SPARE] =         "pool-metadata-spare",
- 	[LV_TYPE_VIRTUAL] =                     "virtual",
- 	[LV_TYPE_RAID] =                        "raid",
- 	[LV_TYPE_RAID_IMAGE] =                  "raid-image",
-@@ -161,7 +159,7 @@ static lv_type_t _get_lv_type(const struct logical_volume *lv)
- 	else if (lv_is_thin_pool_metadata(lv))
- 		type = LV_TYPE_THIN_POOL_METADATA;
- 	else if (lv_is_pool_metadata_spare(lv))
--		type = LV_TYPE_THIN_POOL_METADATA_SPARE;
-+		type = LV_TYPE_POOL_METADATA_SPARE;
- 	else if (lv_is_cache(lv))
- 		type = LV_TYPE_CACHE;
- 	else if (lv_is_cache_pool(lv))
-@@ -170,8 +168,6 @@ static lv_type_t _get_lv_type(const struct logical_volume *lv)
- 		type = LV_TYPE_CACHE_POOL_DATA;
- 	else if (lv_is_cache_pool_metadata(lv))
- 		type = LV_TYPE_CACHE_POOL_METADATA;
--	else if (lv_is_pool_metadata_spare(lv))
--		type = LV_TYPE_CACHE_POOL_METADATA_SPARE;
- 	else if (lv_is_virtual(lv))
- 		type = LV_TYPE_VIRTUAL;
- 	else if (lv_is_raid(lv))
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 162770a..e1afbb6 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -53,11 +53,30 @@ devices {
+     # same block device and the tools need to display a name for device,
+     # all the pathnames are matched against each item in the following
+     # list of regular expressions in turn and the first match is used.
+-    preferred_names = [ ]
++
++    # By default no preferred names are defined.
++    # preferred_names = [ ]
+ 
+     # Try to avoid using undescriptive /dev/dm-N names, if present.
+     # preferred_names = [ "^/dev/mpath/", "^/dev/mapper/mpath", "^/dev/[hs]d" ]
+ 
++    # In case no prefererred name matches or if preferred_names are not
++    # defined at all, builtin rules are used to determine the preference.
++    #
++    # The first builtin rule checks path prefixes and it gives preference
++    # based on this ordering (where "dev" depends on devices/dev setting):
++    #   /dev/mapper > /dev/disk > /dev/dm-* > /dev/block
++    #
++    # If the ordering above cannot be applied, the path with fewer slashes
++    # gets preference then.
++    #
++    # If the number of slashes is the same, a symlink gets preference.
++    #
++    # Finally, if all the rules mentioned above are not applicable,
++    # lexicographical order is used over paths and the smallest one
++    # of all gets preference.
++
++
+     # A filter that tells LVM2 to only use a restricted set of devices.
+     # The filter consists of an array of regular expressions.  These
+     # expressions can be delimited by a character of your choice, and
+@@ -84,7 +103,7 @@ devices {
+     # lvmetad is used" comment that is attached to global/use_lvmetad setting.
+ 
+     # By default we accept every block device:
+-    filter = [ "a/.*/" ]
++    # filter = [ "a/.*/" ]
+ 
+     # Exclude the cdrom drive
+     # filter = [ "r|/dev/cdrom|" ]
 
 
