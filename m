@@ -1,102 +1,153 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  9 Jul 2014 13:57:49 +0000 (UTC)
-Subject: master - report: 'whether' -> 'set if' in field description
-Message-ID: <20140709135749.A7A40600EC@fedorahosted.org>
+Date: Wed,  9 Jul 2014 13:57:51 +0000 (UTC)
+Subject: master - report: add lv_active_{locally, remotely, exclusively} LV reporting fields
+Message-ID: <20140709135751.BFB14600EC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b6ac8819f694d0b28fc592e89f01a8cf8e4f1802
-Commit:        b6ac8819f694d0b28fc592e89f01a8cf8e4f1802
-Parent:        ccab185aa7accd348409b9c0261bc3200570710d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bccc2bef33af081264bbc356e37efe89ef78b796
+Commit:        bccc2bef33af081264bbc356e37efe89ef78b796
+Parent:        b6ac8819f694d0b28fc592e89f01a8cf8e4f1802
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jul 9 13:41:25 2014 +0200
+AuthorDate:    Wed Jul 9 14:28:50 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Wed Jul 9 15:57:05 2014 +0200
 
-report: 'whether' -> 'set if' in field description
+report: add lv_active_{locally,remotely,exclusively} LV reporting fields
 
+lv_active_{locally,remotely,exclusively} display the original
+"lv_active" field in a more separate way so that we can create
+selection criteria in a binary-based form (yes/no).
 ---
- lib/report/columns.h |   40 ++++++++++++++++++++--------------------
- 1 files changed, 20 insertions(+), 20 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/report/columns.h    |    3 ++
+ lib/report/properties.c |    6 +++++
+ lib/report/report.c     |   54 +++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 64 insertions(+), 0 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d4649e4..21668f2 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.108 -
+ =================================
++  Add separate lv_active_{locally,remotely,exclusively} LV reporting fields.
+   Recognize "auto"/"unmanaged" values in selection for appropriate fields only.
+   Add report/binary_values_as_numeric lvm.conf option for binary values as 0/1.
+   Add --binary arg to pvs,vgs,lvs and {pv,vg,lv}display -C for 0/1 on reports.
 diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 21ca585..5013834 100644
+index 5013834..3d3d76e 100644
 --- a/lib/report/columns.h
 +++ b/lib/report/columns.h
-@@ -40,18 +40,18 @@ FIELD(LVS, lv, STR, "DMPath", lvid, 6, lvdmpath, lv_dm_path, "Internal device-ma
- FIELD(LVS, lv, STR, "Parent", lvid, 6, lvparent, lv_parent, "For LVs that are components of another LV, the parent LV.", 0)
- FIELD(LVS, lv, STR, "Attr", lvid, 4, lvstatus, lv_attr, "Various attributes - see man page.", 0)
- FIELD(LVS, lv, STR, "Type", lvid, 10, lvvolumetype, lv_volume_type, "LV volume type.", 0)
--FIELD(LVS, lv, BIN, "InitImgSync", lvid, 10, lvinitialimagesync, lv_initial_image_sync, "Whether mirror/RAID images underwent initial resynchronization.", 0)
--FIELD(LVS, lv, BIN, "ImgSynced", lvid, 10, lvimagesynced, lv_image_synced, "Whether mirror/RAID image is synchronized.", 0)
--FIELD(LVS, lv, BIN, "Merging", lvid, 10, lvmerging, lv_merging, "Whether snapshot LV is being merged to origin.", 0)
--FIELD(LVS, lv, BIN, "Converting", lvid, 10, lvconverting, lv_converting, "Whether LV is being converted.", 0)
-+FIELD(LVS, lv, BIN, "InitImgSync", lvid, 10, lvinitialimagesync, lv_initial_image_sync, "Set if mirror/RAID images underwent initial resynchronization.", 0)
-+FIELD(LVS, lv, BIN, "ImgSynced", lvid, 10, lvimagesynced, lv_image_synced, "Set if mirror/RAID image is synchronized.", 0)
-+FIELD(LVS, lv, BIN, "Merging", lvid, 10, lvmerging, lv_merging, "Set if snapshot LV is being merged to origin.", 0)
-+FIELD(LVS, lv, BIN, "Converting", lvid, 10, lvconverting, lv_converting, "Set if LV is being converted.", 0)
- FIELD(LVS, lv, STR, "AllocPol", lvid, 10, lvallocationpolicy, lv_allocation_policy, "LV allocation policy.", 0)
--FIELD(LVS, lv, BIN, "AllocLock", lvid, 10, lvallocationlocked, lv_allocation_locked, "Whether LV is locked against allocation changes.", 0)
--FIELD(LVS, lv, BIN, "FixMin", lvid, 10, lvfixedminor, lv_fixed_minor, "Whether LV has fixed minor number assigned.", 0)
--FIELD(LVS, lv, BIN, "MergeFailed", lvid, 15, lvmergefailed, lv_merge_failed, "Whether snapshot merge failed.", 0)
--FIELD(LVS, lv, BIN, "SnapInvalid", lvid, 15, lvsnapshotinvalid, lv_snapshot_invalid, "Whether snapshot LV is invalid.", 0)
-+FIELD(LVS, lv, BIN, "AllocLock", lvid, 10, lvallocationlocked, lv_allocation_locked, "Set if LV is locked against allocation changes.", 0)
-+FIELD(LVS, lv, BIN, "FixMin", lvid, 10, lvfixedminor, lv_fixed_minor, "Set if LV has fixed minor number assigned.", 0)
-+FIELD(LVS, lv, BIN, "MergeFailed", lvid, 15, lvmergefailed, lv_merge_failed, "Set if snapshot merge failed.", 0)
-+FIELD(LVS, lv, BIN, "SnapInvalid", lvid, 15, lvsnapshotinvalid, lv_snapshot_invalid, "Set if snapshot LV is invalid.", 0)
- FIELD(LVS, lv, STR, "TargetType", lvid, 10, lvtargettype, lv_target_type, "Kernel target type the LV is related to.", 0)
+@@ -53,6 +53,9 @@ FIELD(LVS, lv, STR, "TargetType", lvid, 10, lvtargettype, lv_target_type, "Kerne
  FIELD(LVS, lv, STR, "Health", lvid, 15, lvhealthstatus, lv_health_status, "LV health status.", 0)
--FIELD(LVS, lv, BIN, "SkipAct", lvid, 15, lvskipactivation, lv_skip_activation, "Whether LV is skipped on activation.", 0)
-+FIELD(LVS, lv, BIN, "SkipAct", lvid, 15, lvskipactivation, lv_skip_activation, "Set if LV is skipped on activation.", 0)
+ FIELD(LVS, lv, BIN, "SkipAct", lvid, 15, lvskipactivation, lv_skip_activation, "Set if LV is skipped on activation.", 0)
  FIELD(LVS, lv, STR, "Active", lvid, 6, lvactive, lv_active, "Active state of the LV.", 0)
++FIELD(LVS, lv, BIN, "ActiveLoc", lvid, 10, lvactivelocally, lv_active_locally, "Set if the LV is active locally.", 0)
++FIELD(LVS, lv, BIN, "ActiveRem", lvid, 10, lvactiveremotely, lv_active_remotely, "Set if the LV is active remotely.", 0)
++FIELD(LVS, lv, BIN, "ActiveExcl", lvid, 10, lvactiveexclusively, lv_active_exclusively, "Set if the LV is active exclusively.", 0)
  FIELD(LVS, lv, NUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
  FIELD(LVS, lv, NUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
-@@ -87,10 +87,10 @@ FIELD(LVSINFO, lv, NUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently ass
- FIELD(LVSINFO, lv, NUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
- FIELD(LVSINFO, lv, SIZ, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
- FIELD(LVSINFO, lv, STR, "LPerms", lvid, 8, lvpermissions, lv_permissions, "LV permissions.", 0)
--FIELD(LVSINFO, lv, BIN, "Suspended", lvid, 10, lvsuspended, lv_suspended, "Whether LV is suspended.", 0)
--FIELD(LVSINFO, lv, BIN, "LiveTable", lvid, 20, lvlivetable, lv_live_table, "Whether LV has live table present.", 0)
--FIELD(LVSINFO, lv, BIN, "InactiveTable", lvid, 20, lvinactivetable, lv_inactive_table, "Whether LV has inactive table present.", 0)
--FIELD(LVSINFO, lv, BIN, "DevOpen", lvid, 10, lvdeviceopen, lv_device_open, "Whether LV device is open.", 0)
-+FIELD(LVSINFO, lv, BIN, "Suspended", lvid, 10, lvsuspended, lv_suspended, "Set if LV is suspended.", 0)
-+FIELD(LVSINFO, lv, BIN, "LiveTable", lvid, 20, lvlivetable, lv_live_table, "Set if LV has live table present.", 0)
-+FIELD(LVSINFO, lv, BIN, "InactiveTable", lvid, 20, lvinactivetable, lv_inactive_table, "Set if LV has inactive table present.", 0)
-+FIELD(LVSINFO, lv, BIN, "DevOpen", lvid, 10, lvdeviceopen, lv_device_open, "Set if LV device is open.", 0)
+ FIELD(LVS, lv, SIZ, "Rahead", lvid, 6, lvreadahead, lv_read_ahead, "Read ahead setting in current units.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 8fb1e92..b4e183f 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -196,6 +196,12 @@ GET_PV_NUM_PROPERTY_FN(pv_ba_size, SECTOR_SIZE * pv->ba_size)
+ #define _lv_allocation_policy_get prop_not_implemented_get
+ #define _lv_allocation_locked_set prop_not_implemented_set
+ #define _lv_allocation_locked_get prop_not_implemented_get
++#define _lv_active_locally_set prop_not_implemented_set
++#define _lv_active_locally_get prop_not_implemented_get
++#define _lv_active_remotely_set prop_not_implemented_set
++#define _lv_active_remotely_get prop_not_implemented_get
++#define _lv_active_exclusively_set prop_not_implemented_set
++#define _lv_active_exclusively_get prop_not_implemented_get
+ #define _lv_fixed_minor_set prop_not_implemented_set
+ #define _lv_fixed_minor_get prop_not_implemented_get
+ #define _lv_merge_failed_set prop_not_implemented_set
+diff --git a/lib/report/report.c b/lib/report/report.c
+index adcd2be..d28c767 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -101,6 +101,9 @@ FIELD_RESERVED_VALUE(lv_merging, lv_merging, _one64, "merging")
+ FIELD_RESERVED_VALUE(lv_converting, lv_converting, _one64, "converting")
+ FIELD_RESERVED_VALUE(lv_allocation_locked, lv_allocation_locked, _one64, "allocation locked", "locked")
+ FIELD_RESERVED_VALUE(lv_fixed_minor, lv_fixed_minor, _one64, "fixed minor", "fixed")
++FIELD_RESERVED_VALUE(lv_active_locally, lv_active_locally, _one64, "active locally", "active", "locally")
++FIELD_RESERVED_VALUE(lv_active_remotely, lv_active_remotely, _one64, "active remotely", "active", "remotely")
++FIELD_RESERVED_VALUE(lv_active_exclusively, lv_active_exclusively, _one64, "active exclusively", "active", "exclusively")
+ FIELD_RESERVED_VALUE(lv_merge_failed, lv_merge_failed, _one64, "merge failed", "failed")
+ FIELD_RESERVED_VALUE(lv_snapshot_invalid, lv_snapshot_invalid, _one64, "snapsot invalid", "invalid")
+ FIELD_RESERVED_VALUE(lv_suspended, lv_suspended, _one64, "suspended")
+@@ -139,6 +142,9 @@ static const struct dm_report_reserved_value _report_reserved_values[] = {
+ 	FIELD_RESERVED_VALUE_REG(lv_converting, "lv_converting reserved values")
+ 	FIELD_RESERVED_VALUE_REG(lv_allocation_locked, "lv_allocation_locked reserved values")
+ 	FIELD_RESERVED_VALUE_REG(lv_fixed_minor, "lv_fixed_minor reserved values")
++	FIELD_RESERVED_VALUE_REG(lv_active_locally, "lv_active_locally reserved values")
++	FIELD_RESERVED_VALUE_REG(lv_active_remotely, "lv_active_remotelly reserved values")
++	FIELD_RESERVED_VALUE_REG(lv_active_exclusively, "lv_active_exclusively reserved values")
+ 	FIELD_RESERVED_VALUE_REG(lv_merge_failed, "lv_merge_failed reserved values")
+ 	FIELD_RESERVED_VALUE_REG(lv_snapshot_invalid, "lv_snapshot_invalid reserved values")
+ 	FIELD_RESERVED_VALUE_REG(lv_suspended, "lv_suspended reserved values")
+@@ -1471,6 +1477,54 @@ static int _lvfixedminor_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _binary_disp(rh, mem, field, fixed_minor, FIRST_NAME(lv_fixed_minor), private);
+ }
  
- FIELD(LABEL, label, STR, "Fmt", type, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
- FIELD(LABEL, label, STR, "PV UUID", type, 38, pvuuid, pv_uuid, "Unique identifier.", 0)
-@@ -104,9 +104,9 @@ FIELD(PVS, pv, SIZ, "PSize", id, 5, pvsize, pv_size, "Size of PV in current unit
- FIELD(PVS, pv, SIZ, "PFree", id, 5, pvfree, pv_free, "Total amount of unallocated space in current units.", 0)
- FIELD(PVS, pv, SIZ, "Used", id, 4, pvused, pv_used, "Total amount of allocated space in current units.", 0)
- FIELD(PVS, pv, STR, "Attr", id, 4, pvstatus, pv_attr, "Various attributes - see man page.", 0)
--FIELD(PVS, pv, BIN, "Allocatable", id, 10, pvallocatable, pv_allocatable, "Whether this device can be used for allocation.", 0)
--FIELD(PVS, pv, BIN, "Exported", id, 10, pvexported, pv_exported, "Whether this device is exported.", 0)
--FIELD(PVS, pv, BIN, "Missing", id, 10, pvmissing, pv_missing, "Whether this device is missing in system.", 0)
-+FIELD(PVS, pv, BIN, "Allocatable", id, 10, pvallocatable, pv_allocatable, "Set if this device can be used for allocation.", 0)
-+FIELD(PVS, pv, BIN, "Exported", id, 10, pvexported, pv_exported, "Set if this device is exported.", 0)
-+FIELD(PVS, pv, BIN, "Missing", id, 10, pvmissing, pv_missing, "Set if this device is missing in system.", 0)
- FIELD(PVS, pv, NUM, "PE", pe_count, 3, uint32, pv_pe_count, "Total number of Physical Extents.", 0)
- FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 5, uint32, pv_pe_alloc_count, "Total number of allocated Physical Extents.", 0)
- FIELD(PVS, pv, STR_LIST, "PV Tags", tags, 7, tags, pv_tags, "Tags, if any.", 0)
-@@ -120,11 +120,11 @@ FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, vg_uuid, "Unique identifier.", 0)
- FIELD(VGS, vg, STR, "VG", name, 4, string, vg_name, "Name.", 0)
- FIELD(VGS, vg, STR, "Attr", cmd, 5, vgstatus, vg_attr, "Various attributes - see man page.", 0)
- FIELD(VGS, vg, STR, "VPerms", cmd, 10, vgpermissions, vg_permissions, "VG permissions.", 0)
--FIELD(VGS, vg, BIN, "Extendable", cmd, 10, vgextendable, vg_extendable, "Whether VG is extendable.", 0)
--FIELD(VGS, vg, BIN, "Exported", cmd, 10, vgexported, vg_exported, "Whether VG is exported.", 0)
--FIELD(VGS, vg, BIN, "Partial", cmd, 10, vgpartial, vg_partial, "Whether VG is partial.", 0)
-+FIELD(VGS, vg, BIN, "Extendable", cmd, 10, vgextendable, vg_extendable, "Set if VG is extendable.", 0)
-+FIELD(VGS, vg, BIN, "Exported", cmd, 10, vgexported, vg_exported, "Set if VG is exported.", 0)
-+FIELD(VGS, vg, BIN, "Partial", cmd, 10, vgpartial, vg_partial, "Set if VG is partial.", 0)
- FIELD(VGS, vg, STR, "AllocPol", cmd, 10, vgallocationpolicy, vg_allocation_policy, "VG allocation policy.", 0)
--FIELD(VGS, vg, BIN, "Clustered", cmd, 10, vgclustered, vg_clustered, "Whether VG is clustered.", 0)
-+FIELD(VGS, vg, BIN, "Clustered", cmd, 10, vgclustered, vg_clustered, "Set if VG is clustered.", 0)
- FIELD(VGS, vg, SIZ, "VSize", cmd, 5, vgsize, vg_size, "Total size of VG in current units.", 0)
- FIELD(VGS, vg, NUM, "VFree", cmd, 5, vgfree, vg_free, "Total amount of free space in current units.", 0)
- FIELD(VGS, vg, STR, "SYS ID", system_id, 6, string, vg_sysid, "System ID indicating when and where it was created.", 0)
++static int _lvactivelocally_disp(struct dm_report *rh, struct dm_pool *mem,
++				 struct dm_report_field *field,
++				 const void *data, void *private)
++{
++	const struct logical_volume *lv = (const struct logical_volume *) data;
++	int active_locally;
++
++	if (vg_is_clustered(lv->vg)) {
++		lv = lv_lock_holder(lv);
++		active_locally = lv_is_active_locally(lv);
++	} else
++		active_locally = lv_is_active(lv);
++
++	return _binary_disp(rh, mem, field, active_locally, FIRST_NAME(lv_active_locally), private);
++}
++
++static int _lvactiveremotely_disp(struct dm_report *rh, struct dm_pool *mem,
++				  struct dm_report_field *field,
++				  const void *data, void *private)
++{
++	const struct logical_volume *lv = (const struct logical_volume *) data;
++	int active_remotely;
++
++	if (vg_is_clustered(lv->vg)) {
++		lv = lv_lock_holder(lv);
++		active_remotely = lv_is_active_but_not_locally(lv);
++	} else
++		active_remotely = 0;
++
++	return _binary_disp(rh, mem, field, active_remotely, FIRST_NAME(lv_active_remotely), private);
++}
++
++static int _lvactiveexclusively_disp(struct dm_report *rh, struct dm_pool *mem,
++				     struct dm_report_field *field,
++				     const void *data, void *private)
++{
++	const struct logical_volume *lv = (const struct logical_volume *) data;
++	int active_exclusively;
++
++	if (vg_is_clustered(lv->vg)) {
++		lv = lv_lock_holder(lv);
++		active_exclusively = lv_is_active_exclusive(lv);
++	} else
++		active_exclusively = lv_is_active(lv);
++
++	return _binary_disp(rh, mem, field, active_exclusively, FIRST_NAME(lv_active_exclusively), private);
++}
++
+ static int _lvmergefailed_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			       struct dm_report_field *field,
+ 			       const void *data, void *private)
 
 
