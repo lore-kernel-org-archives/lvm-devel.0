@@ -1,82 +1,67 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 10 Jul 2014 13:25:36 +0000 (UTC)
-Subject: master - report: report LV's zero field as binary field
-Message-ID: <20140710132536.E1D1C60ED8@fedorahosted.org>
+Date: Thu, 10 Jul 2014 13:30:39 +0000 (UTC)
+Subject: master - tests: LV's zero field now reported as binary field
+Message-ID: <20140710133039.3415961042@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e2448bb0dcfa63b2a8fae24b989393a821917120
-Commit:        e2448bb0dcfa63b2a8fae24b989393a821917120
-Parent:        e31ec38d8e657d5f6d6efca6eade083357675276
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1e5ec893c7d9cf243a6ecb17ed6320d37e9a147c
+Commit:        1e5ec893c7d9cf243a6ecb17ed6320d37e9a147c
+Parent:        e2448bb0dcfa63b2a8fae24b989393a821917120
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jul 10 15:23:56 2014 +0200
+AuthorDate:    Thu Jul 10 15:30:28 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jul 10 15:25:01 2014 +0200
+CommitterDate: Thu Jul 10 15:30:28 2014 +0200
 
-report: report LV's zero field as binary field
+tests: LV's zero field now reported as binary field
 
-Like other binary fields we already have:
-
-$ lvs -o name,zero vg/lvx vg/pool vg/pool1
-  LV    Zero
-  lvx   unknown
-  pool
-  pool1    zero
-
-$ lvs -o name,zero vg/lvx vg/pool vg/pool1 --binary
-  LV    Zero
-  lvx     -1
-  pool     0
-  pool1    1
 ---
- lib/report/columns.h |    2 +-
- lib/report/report.c  |    4 ++--
- lib/report/values.h  |    1 +
- 3 files changed, 4 insertions(+), 3 deletions(-)
+ test/shell/profiles-thin.sh |    6 +++---
+ test/shell/thin-defaults.sh |    2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 3d3d76e..dd5aa9e 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -158,7 +158,7 @@ FIELD(SEGS, seg, SIZ, "Chunk", list, 5, chunksize, chunksize, "For snapshots, th
- FIELD(SEGS, seg, SIZ, "Chunk", list, 5, chunksize, chunk_size, "For snapshots, the unit of data used when tracking changes.", 0)
- FIELD(SEGS, seg, NUM, "#Thins", list, 4, thincount, thin_count, "For thin pools, the number of thin volumes in this pool.", 0)
- FIELD(SEGS, seg, STR, "Discards", list, 8, discards, discards, "For thin pools, how discards are handled.", 0)
--FIELD(SEGS, seg, NUM, "Zero", list, 4, thinzero, zero, "For thin pools, if zeroing is enabled.", 0)
-+FIELD(SEGS, seg, BIN, "Zero", list, 4, thinzero, zero, "For thin pools, if zeroing is enabled.", 0)
- FIELD(SEGS, seg, NUM, "TransId", list, 4, transactionid, transaction_id, "For thin pools, the transaction id.", 0)
- FIELD(SEGS, seg, NUM, "ThId", list, 4, thinid, thin_id, "For thin volume, the thin device id.", 0)
- FIELD(SEGS, seg, NUM, "Start", list, 5, segstart, seg_start, "Offset within the LV to the start of the segment in current units.", 0)
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 63b1647..5931021 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1594,9 +1594,9 @@ static int _thinzero_disp(struct dm_report *rh, struct dm_pool *mem,
- 	const struct lv_segment *seg = (const struct lv_segment *) data;
+diff --git a/test/shell/profiles-thin.sh b/test/shell/profiles-thin.sh
+index 704ef2d..3519985 100644
+--- a/test/shell/profiles-thin.sh
++++ b/test/shell/profiles-thin.sh
+@@ -34,7 +34,7 @@ vgcreate $vg "$dev1"
+ lvcreate -L8m -T $vg/pool_generic
+ check lv_field $vg/pool_generic profile ""
+ check lv_field $vg/pool_generic chunk_size 64.00k
+-check lv_field $vg/pool_generic zero 1
++check lv_field $vg/pool_generic zero "zero"
  
- 	if (seg_is_thin_pool(seg))
--		return _uint32_disp(rh, mem, field, &seg->zero_new_blocks, private);
-+		return _binary_disp(rh, mem, field, seg->zero_new_blocks, FIRST_NAME(zero_y), private);
+ # If "thin-performance" profile is used, the "performance"
+ # policy is used to calculate chunk size which is 512KiB
+@@ -44,7 +44,7 @@ check lv_field $vg/pool_generic zero 1
+ lvcreate --profile thin-performance -L8m -T $vg/pool_performance
+ check lv_field $vg/pool_performance profile "thin-performance"
+ check lv_field $vg/pool_performance chunk_size 1.00m
+-check lv_field $vg/pool_performance zero 0
++check lv_field $vg/pool_performance zero ""
  
--	return _field_set_value(field, "", &RESERVED(number_undef_64));
-+	return _binary_undef_disp(rh, mem, field, private);
- }
+ vgremove -ff $vg
  
- static int _lvhealthstatus_disp(struct dm_report *rh, struct dm_pool *mem,
-diff --git a/lib/report/values.h b/lib/report/values.h
-index d8de665..7425bc6 100644
---- a/lib/report/values.h
-+++ b/lib/report/values.h
-@@ -75,6 +75,7 @@ FIELD_RESERVED_BINARY_VALUE(lv_live_table, lv_live_table, "", "live table presen
- FIELD_RESERVED_BINARY_VALUE(lv_inactive_table, lv_inactive_table, "", "inactive table present", "inactive table", "inactive")
- FIELD_RESERVED_BINARY_VALUE(lv_device_open, lv_device_open, "", "open")
- FIELD_RESERVED_BINARY_VALUE(lv_skip_activation, lv_skip_activation, "", "skip activation", "skip")
-+FIELD_RESERVED_BINARY_VALUE(zero, zero, "", "zero")
- FIELD_RESERVED_VALUE(lv_permissions, lv_permissions_rw, "", FIRST_NAME(lv_permissions_rw), "writeable", "rw", "read-write")
- FIELD_RESERVED_VALUE(lv_permissions, lv_permissions_r, "", FIRST_NAME(lv_permissions_r), "", "read-only", "r", "ro")
- FIELD_RESERVED_VALUE(lv_permissions, lv_permissions_r_override, "", FIRST_NAME(lv_permissions_r_override), "", "read-only-override", "ro-override", "r-override", "R")
+@@ -56,4 +56,4 @@ lvcreate -L8m -T $vg/pool_performance_inherited
+ check vg_field $vg profile "thin-performance"
+ check lv_field $vg/pool_performance_inherited profile ""
+ check lv_field $vg/pool_performance_inherited chunk_size 1.00m
+-check lv_field $vg/pool_performance_inherited zero 0
++check lv_field $vg/pool_performance_inherited zero ""
+diff --git a/test/shell/thin-defaults.sh b/test/shell/thin-defaults.sh
+index 4f873cc..3a681a1 100644
+--- a/test/shell/thin-defaults.sh
++++ b/test/shell/thin-defaults.sh
+@@ -30,6 +30,6 @@ lvcreate -T -L8M $vg/pool1
+ 
+ check lv_field $vg/pool1 chunksize "128.00k"
+ check lv_field $vg/pool1 discards "ignore"
+-check lv_field $vg/pool1 zero 0
++check lv_field $vg/pool1 zero ""
+ 
+ vgremove -f $vg
 
 
