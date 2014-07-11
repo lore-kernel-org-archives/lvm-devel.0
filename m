@@ -1,120 +1,164 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Jul 2014 11:34:39 +0000 (UTC)
-Subject: master - cleanup: shift detection of chunksize sign
-Message-ID: <20140711113439.42E8D6056E@fedorahosted.org>
+Date: Fri, 11 Jul 2014 11:34:43 +0000 (UTC)
+Subject: master - lvconvert: update help
+Message-ID: <20140711113443.7558960701@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fe3ea94e5846f48baf3b00d0f6b913f585b4404e
-Commit:        fe3ea94e5846f48baf3b00d0f6b913f585b4404e
-Parent:        9955204e0d9d8d50c19564d475ece03995a6e837
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b2988a917af8ca16814b067c1d73f899e871e1d4
+Commit:        b2988a917af8ca16814b067c1d73f899e871e1d4
+Parent:        970989655ff5cd9ca960bf3113b7bfdf6f575d78
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 7 22:40:36 2014 +0200
+AuthorDate:    Mon Jul 7 22:54:33 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Jul 11 13:32:22 2014 +0200
 
-cleanup: shift detection of chunksize sign
+lvconvert: update help
 
-Sign should be checked prior opening of VG.
-Since get_pool_params() needs profiles,
-we need to move check for sign earlier.
+Extend help for lvconvert.
+Use COMMON_OPTS for some common options.
 ---
- tools/lvconvert.c |   15 +++++++++++----
- tools/lvcreate.c  |   12 +++++++-----
- tools/toollib.c   |    4 ----
- 3 files changed, 18 insertions(+), 13 deletions(-)
+ tools/commands.h |   68 ++++++++++++++++++-----------------------------------
+ 1 files changed, 23 insertions(+), 45 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 95ca245..8c960f9 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -447,10 +447,12 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 			return 0;
- 		}
+diff --git a/tools/commands.h b/tools/commands.h
+index 5fae835..1f9d03c 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -47,7 +47,6 @@ xx(devtypes,
+    "\t[--separator Separator]\n"
+    "\t[--unbuffered]\n"
+    "\t[--unquoted]\n"
+-   "\t[-v|--verbose]\n"
+    "\t[--version]" "\n",
  
--		if (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS) {
--			log_error("Negative chunk size is invalid");
-+		if (arg_count(cmd, chunksize_ARG) &&
-+		    (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS)) {
-+			log_error("Negative chunk size is invalid.");
- 			return 0;
- 		}
+    aligned_ARG, binary_ARG, nameprefixes_ARG,
+@@ -154,6 +153,10 @@ xx(lvchange,
+    refresh_ARG, setactivationskip_ARG, syncaction_ARG, sysinit_ARG, test_ARG,
+    writebehind_ARG, writemostly_ARG, zero_ARG)
+ 
++#define COMMON_OPTS \
++	"\t[--commandprofile ProfileName] [-d|--debug] [-h|-?|--help]\n" \
++	"\t[--noudevsync] [-t|--test] [-v|--verbose] [--version] [-y|--yes]\n"
 +
- 		lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
- 		if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
- 		    (lp->chunk_size & (lp->chunk_size - 1))) {
-@@ -540,10 +542,15 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 		lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, cache_pool ? "cache-pool" : "thin-pool"));
- 		if (!lp->segtype)
- 			return_0;
-+
-+		if (arg_count(cmd, chunksize_ARG) &&
-+		    (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS)) {
-+			log_error("Negative chunk size is invalid.");
-+			return 0;
-+		}
- 	} else { /* Mirrors (and some RAID functions) */
- 		if (arg_count(cmd, chunksize_ARG)) {
--			log_error("--chunksize is only available with "
--				  "snapshots or thin pools.");
-+			log_error("--chunksize is only available with snapshots or pools.");
- 			return 0;
- 		}
+ xx(lvconvert,
+    "Change logical volume layout",
+    0,
+@@ -165,88 +168,64 @@ xx(lvconvert,
+    "\t[-R|--regionsize MirrorLogRegionSize]\n"
+    "\t[--alloc AllocationPolicy]\n"
+    "\t[-b|--background]\n"
+-   "\t[--commandprofile ProfileName]\n"
+-   "\t[-d|--debug]\n"
+    "\t[-f|--force]\n"
+-   "\t[-h|-?|--help]\n"
+    "\t[-i|--interval seconds]\n"
+    "\t[--stripes Stripes [-I|--stripesize StripeSize]]\n"
+-   "\t[--noudevsync]\n"
+-   "\t[-v|--verbose]\n"
+-   "\t[-y|--yes]\n"
+-   "\t[--version]" "\n"
++   COMMON_OPTS
+    "\tLogicalVolume[Path] [PhysicalVolume[Path]...]\n\n"
  
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 47459ec..8e45cc1 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -1033,6 +1033,12 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 			lp->wipe_signatures = 0;
- 	}
+    "lvconvert "
+    "[--splitmirrors Images --trackchanges]\n"
+-   "[--splitmirrors Images --name SplitLogicalVolumeName]\n"
+-   "\t[--commandprofile ProfileName]\n"
++   "\t[--splitmirrors Images --name SplitLogicalVolumeName]\n"
++   COMMON_OPTS
+    "\tLogicalVolume[Path] [SplittablePhysicalVolume[Path]...]\n\n"
  
-+	if (arg_count(cmd, chunksize_ARG) &&
-+	    (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS)) {
-+		log_error("Negative chunk size is invalid.");
-+		return 0;
-+	}
-+
- 	if (!_lvcreate_name_params(lp, cmd, &argc, &argv) ||
- 	    !_read_size_params(lp, lcp, cmd) ||
- 	    !get_stripe_params(cmd, &lp->stripes, &lp->stripe_size) ||
-@@ -1047,10 +1053,6 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 		return_0;
+    "lvconvert "
+    "--splitsnapshot\n"
+-   "\t[--commandprofile ProfileName]\n"
+-   "\t[-d|--debug]\n"
+-   "\t[-h|-?|--help]\n"
+-   "\t[--noudevsync]\n"
+-   "\t[-v|--verbose]\n"
+-   "\t[--version]" "\n"
++   COMMON_OPTS
+    "\tSnapshotLogicalVolume[Path]\n\n"
+    
+    "lvconvert "
+-   "[-s|--snapshot]\n"
++   "[--type snapshot|-s|--snapshot]\n"
+    "\t[-c|--chunksize]\n"
+-   "\t[--commandprofile ProfileName]\n"
+-   "\t[-d|--debug]\n"
+-   "\t[-h|-?|--help]\n"
+-   "\t[--noudevsync]\n"
+-   "\t[-v|--verbose]\n"
+    "\t[-Z|--zero {y|n}]\n"
+-   "\t[--version]" "\n"
++   COMMON_OPTS
+    "\tOriginalLogicalVolume[Path] SnapshotLogicalVolume[Path]\n\n"
  
- 	if (lp->snapshot && (lp->extents || lcp->size)) {
--		if (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS) {
--			log_error("Negative chunk size is invalid.");
--			return 0;
--		}
- 		lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
- 		if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
- 		    (lp->chunk_size & (lp->chunk_size - 1))) {
-@@ -1063,7 +1065,7 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 		if (!(lp->segtype = get_segtype_from_string(cmd, "snapshot")))
- 			return_0;
- 	} else if (!lp->create_pool && arg_count(cmd, chunksize_ARG)) {
--		log_error("--chunksize is only available with snapshots and thin pools.");
-+		log_error("--chunksize is only available with snapshots and pools.");
- 		return 0;
- 	}
+    "lvconvert "
+    "--merge\n"
+    "\t[-b|--background]\n"
+    "\t[-i|--interval seconds]\n"
+-   "\t[--commandprofile ProfileName]\n"
+-   "\t[-d|--debug]\n"
+-   "\t[-h|-?|--help]\n"
+-   "\t[-v|--verbose]\n"
++   COMMON_OPTS
+    "\tLogicalVolume[Path]\n\n"
  
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 7cd6e60..b4e02d6 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1688,10 +1688,6 @@ int get_pool_params(struct cmd_context *cmd,
- 	}
+    "lvconvert "
+-   "--thinpool ThinPoolLogicalVolume[Path]\n"
++   "[--type thin[-pool]|-T|--thin]\n"
++   "\t[--thinpool ThinPoolLogicalVolume[Path]]\n"
+    "\t[--chunksize size]\n"
+    "\t[--discards {ignore|nopassdown|passdown}]\n"
++   "\t[--poolmetadataspare {y|n}]\n"
+    "\t[--poolmetadata ThinMetadataLogicalVolume[Path] |\n"
+    "\t [--poolmetadatasize size]\n"
+-   "\t [--poolmetadataspare {y|n}]\n"
+    "\t [-r|--readahead ReadAheadSectors|auto|none]\n"
+    "\t [--stripes Stripes [-I|--stripesize StripeSize]]]\n"
+-   "\t[-T|--thin ExternalLogicalVolume[Path]\n"
+-   "\t [--originname NewExternalOriginVolumeName]]\n"
++   "\t[--originname NewExternalOriginVolumeName]]\n"
+    "\t[-Z|--zero {y|n}]\n"
+-   "\t[--commandprofile ProfileName]\n"
+-   "\t[-d|--debug] [-h|-?|--help] [-v|--verbose]\n\n"
++   COMMON_OPTS
++   "\t[ExternalOrigin|ThinDataPool]LogicalVolume[Path]\n\n"
  
- 	if (arg_count(cmd, chunksize_ARG)) {
--		if (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS) {
--			log_error("Negative chunk size is invalid.");
--			return 0;
--		}
- 		*passed_args |= PASS_ARG_CHUNK_SIZE;
- 		*chunk_size = arg_uint_value(cmd, chunksize_ARG, cache_pool ?
- 					     DM_CACHE_MIN_DATA_BLOCK_SIZE :
+    "lvconvert "
+-   "--type cache-pool\n"
++   "[--type cache[-pool]|--cache]\n"
++   "\t[--cachepool CacheDataLogicalVolume[Path]]\n"
+    "\t[--cachemode CacheMode]\n"
+    "\t[--chunksize size]\n"
++   "\t[--poolmetadataspare {y|n}]]\n"
+    "\t[--poolmetadata CacheMetadataLogicalVolume[Path] |\n"
+    "\t [--poolmetadatasize size]\n"
+-   "\t [--poolmetadataspare {y|n}]]\n"
+-   "\t[--commandprofile ProfileName]\n"
+-   "\tCacheDataLogicalVolume[Path]\n\n"
++   COMMON_OPTS
++   "\t[Cache|CacheDataPool]LogicalVolume[Path]\n\n",
+ 
+-   "lvconvert "
+-   "--type cache\n"
+-   "\t--cachepool CachePoolLogicalVolume[Path]\n"
+-   "\t[--commandprofile ProfileName]\n"
+-   "\tLogicalVolume[Path]\n\n",
+-
+-   alloc_ARG, background_ARG, cachemode_ARG, cachepool_ARG, chunksize_ARG,
++   alloc_ARG, background_ARG, cache_ARG, cachemode_ARG, cachepool_ARG, chunksize_ARG,
+    corelog_ARG, discards_ARG, force_ARG, interval_ARG, merge_ARG, mirrorlog_ARG,
+    mirrors_ARG, name_ARG, noudevsync_ARG, originname_ARG, poolmetadata_ARG,
+    poolmetadatasize_ARG, poolmetadataspare_ARG, readahead_ARG, regionsize_ARG,
+@@ -1278,4 +1257,3 @@ xx(version,
+    "Display software and driver version information",
+    PERMITTED_READ_ONLY,
+    "version\n" )
+-
 
 
