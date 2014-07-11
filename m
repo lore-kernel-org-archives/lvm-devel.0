@@ -1,207 +1,115 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 21 Jul 2014 20:53:44 +0000 (UTC)
-Subject: master - man: lvmcache updates
-Message-ID: <20140721205344.C93C460A39@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 11 Jul 2014 11:34:13 +0000 (UTC)
+Subject: master - lvconvert: snapshot prompts to confirm conversion
+Message-ID: <20140711113413.999B06022E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fe5b282a4a51bcc2780da9ef7ab298d97c45f3db
-Commit:        fe5b282a4a51bcc2780da9ef7ab298d97c45f3db
-Parent:        1fe487043dadf189b08b9862f45d21438f197cf2
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jul 21 15:41:42 2014 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jul 21 15:41:42 2014 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=56c5ad7b194f5b991ae3835abca1c951450f34df
+Commit:        56c5ad7b194f5b991ae3835abca1c951450f34df
+Parent:        64828d877edbf1907557d76e44eb86d00f7a1f3a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jul 7 22:33:31 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jul 11 12:49:55 2014 +0200
 
-man: lvmcache updates
+lvconvert: snapshot prompts to confirm conversion
 
-- use the lvconvert --cachepool syntax to match the lvmthin style
-- rewrite removal information
-- very minor formatting adjustments
+Since the type passed LV is changed and content of data detroyed,
+query user with prompt to confirm this operation.
+Also add a proper wiping of header.
+
+Using '--yes' will skip this prompt:
+
+lvconvert -s --yes vg/lv vg/lvcow
 ---
- man/lvmcache.7.in |  101 +++++++++++++++++++++++++++++++---------------------
- 1 files changed, 60 insertions(+), 41 deletions(-)
+ WHATS_NEW                        |    1 +
+ test/shell/lvconvert-snapshot.sh |    4 +++-
+ tools/lvconvert.c                |   30 +++++++++++++++++++++++++-----
+ 3 files changed, 29 insertions(+), 6 deletions(-)
 
-diff --git a/man/lvmcache.7.in b/man/lvmcache.7.in
-index 87fb9f4..4b21a8a 100644
---- a/man/lvmcache.7.in
-+++ b/man/lvmcache.7.in
-@@ -18,7 +18,7 @@ on the origin LV or on the cache data LV).  Users should be familiar with
- these LVs if they wish to create the best and most robust cached
- logical volumes.
+diff --git a/WHATS_NEW b/WHATS_NEW
+index dcaaf23..7891d76 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.108 -
+ =================================
++  Prompt for confirmation before change LV into a snapshot exception store.
+   Return proper error codes for some failing lvconvert funtions.
+   Add initial code to use cache tools (cache_check|dump|repair|restore).
+   Add "degraded" activation mode and make it the default.
+diff --git a/test/shell/lvconvert-snapshot.sh b/test/shell/lvconvert-snapshot.sh
+index f59bb7b..3d81573 100644
+--- a/test/shell/lvconvert-snapshot.sh
++++ b/test/shell/lvconvert-snapshot.sh
+@@ -25,6 +25,7 @@ lvcreate -L1 -s -n $lv3 $vg/$lv2
  
--.SS Cache Terms
-+.SH Cache Terms
- .nf
- origin LV           OriginLV      large slow LV
- cache data LV       CacheDataLV   small fast LV for cache pool data
-@@ -27,7 +27,7 @@ cache pool LV       CachePoolLV   CacheDataLV + CacheMetaLV
- cache LV            CacheLV       OriginLV + CachePoolLV
- .fi
+ lvcreate -l1 -n $lv4 $vg
+ lvcreate -L1 -n $lv5 $vg
++lvcreate -L1 -n $lv6 $vg
  
--.SS Cache Steps
-+.SH Cache Steps
- The steps to create a logical volume of \fIcache\fP type are as follows:
- .TP
- 0.
-@@ -63,34 +63,43 @@ They provide the most options and have the ability to create the
- most robust logical volumes.  The examples below illustrate how these
- steps might be used in practice.
+ not lvconvert -s $vg/$lv1 $vg/not_exist
  
--.SS Cache Commands
--.nf
-+.SH Cache Commands
+@@ -52,6 +53,7 @@ not lvconvert -s $vg/$lv2 $vg/$lv4 2>&1 | tee err
+ grep "smaller" err
+ 
+ # This should pass
+-lvconvert -s $vg/$lv2 $vg/$lv5
++lvconvert --yes -s $vg/$lv2 $vg/$lv5
++lvconvert --yes --type snapshot $vg/$lv2 $vg/$lv6
+ 
+ vgremove -f $vg
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 62a9d4e..264b86c 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2063,11 +2063,14 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
+-	if (!lp->zero || !(lv->status & LVM_WRITE))
+-		log_warn("WARNING: \"%s\" not zeroed", lv->name);
+-	else if (!wipe_lv(lv, (struct wipe_params) { .do_zero = 1 })) {
+-		log_error("Aborting. Failed to wipe snapshot "
+-			  "exception store.");
++	log_warn("WARNING: Converting logical volume %s to snapshot exception store.",
++		 display_lvname(lv));
++	log_warn("THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)");
 +
- 0. create OriginLV
--lvcreate \-L LargeSize \-n OriginLV VG SlowPVs
-+.br
-+.B lvcreate \-L LargeSize \-n OriginLV VG SlowPVs
++	if (!lp->yes &&
++	    yes_no_prompt("Do you really want to convert %s? [y/n]: ",
++			  display_lvname(lv)) == 'n') {
++		log_error("Conversion aborted.");
+ 		return 0;
+ 	}
  
- 1. create CacheDataLV
--lvcreate \-L CacheSize \-n CacheDataLV VG FastPVs
-+.br
-+.B lvcreate \-L CacheSize \-n CacheDataLV VG FastPVs
+@@ -2076,6 +2079,23 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
+ 		return 0;
+ 	}
  
- 2. create CacheMetaLV
--lvcreate \-L MetaSize \-n CacheMetaLV VG FastPVs
-+.br
-+.B lvcreate \-L MetaSize \-n CacheMetaLV VG FastPVs
- 
- 3. create CachePoolLV
--lvconvert \-\-type cache-pool \-\-poolmetadata VG/CacheMetaLV VG/CacheDataLV
-+.br
-+.B lvconvert \-\-cachepool VG/CacheDataLV \-\-poolmetadata VG/CacheMetaLV
-+.br
- CachePoolLV takes the name of CacheDataLV.
-+.br
- CacheDataLV is renamed CachePoolLV_cdata and becomes hidden.
-+.br
- CacheMetaLV is renamed CachePoolLV_cmeta and becomes hidden.
- 
- 4. create CacheLV
--lvconvert \-\-type cache \-\-cachepool VG/CachePoolLV VG/OriginLV
-+.br
-+.B lvconvert \-\-type cache \-\-cachepool VG/CachePoolLV VG/OriginLV
-+.br
- CacheLV takes the name of OriginLV.
-+.br
- OriginLV is renamed OriginLV_corig and becomes hidden.
--.fi
- 
--.SS Cache Examples
- 
--.B Example 1:
--Creating a simple cache LV.
--.br
-+.SH Cache Examples
++	if (!lp->zero || !(lv->status & LVM_WRITE))
++		log_warn("WARNING: \"%s\" not zeroed", lv->name);
++	else {
++		lv->status |= LV_TEMPORARY;
++		if (!activate_lv_local(cmd, lv) ||
++		    !wipe_lv(lv, (struct wipe_params) { .do_zero = 1 })) {
++			log_error("Aborting. Failed to wipe snapshot exception store.");
++			return 0;
++		}
++		lv->status &= ~LV_TEMPORARY;
++		/* Deactivates cleared metadata LV */
++		if (!deactivate_lv_local(lv->vg->cmd, lv)) {
++			log_error("Failed to deactivate zeroed snapshot exception store.");
++			return 0;
++		}
++	}
 +
-+.SS Example 1
-+Create a simple cache LV.
+ 	if (!archive(lv->vg))
+ 		return_0;
  
- .nf
- 0. Create the origin LV
-@@ -103,15 +112,14 @@ Creating a simple cache LV.
- # lvcreate \-L 8M \-n lvx_cache_meta vg /dev/fast_dev
- 
- 3. Create a cache pool LV, combining cache data LV and cache metadata LV
--# lvconvert \-\-type cache-pool \-\-poolmetadata vg/lvx_cache_meta \\
--	vg/lvx_cache
-+# lvconvert \-\-cachepool vg/lvx_cache \-\-poolmetadata vg/lvx_cache_meta
- 
- 4. Create a cached LV by combining the cache pool LV and origin LV
- # lvconvert \-\-type cache \-\-cachepool vg/lvx_cache vg/lvx
- .fi
- 
--.B Example 2:
--Creating a cache LV with a fault tolerant cache pool LV.
-+.SS Example 2
-+Create a cache LV with a fault tolerant cache pool LV.
- 
- Users who are concerned about the possibility of failures in their fast devices
- that could lead to data loss might consider making their cache pool sub-LVs
-@@ -131,15 +139,14 @@ redundant.  Example 2 illustrates how to do that.  Note that only steps
- 	/dev/fast1 /dev/fast2
- 
- 3. Create a cache pool LV combining cache data LV and cache metadata LV
--# lvconvert \-\-type cache-pool \-\-poolmetadata vg/lvx_cache_meta \\
--	vg/lvx_cache
-+# lvconvert \-\-cachepool vg/lvx_cache \-\-poolmetadata vg/lvx_cache_meta
- 
- 4. Create a cached LV by combining the cache pool LV and origin LV
- # lvconvert \-\-type cache \-\-cachepool vg/lvx_cache vg/lvx
- .fi
- 
--.B Example 3:
--Creating a simple cache LV with \fIwritethough\fP caching.
-+.SS Example 3
-+Create a simple cache LV with \fIwritethough\fP caching.
- 
- Some users wish to ensure that any data written will be stored both in the
- cache pool LV and on the origin LV.  The loss of a device associated with
-@@ -160,30 +167,42 @@ in this case.
- # lvcreate \-L 8M \-n lvx_cache_meta vg /dev/fast
- 
- 3. Create a cache pool LV specifying cache mode "writethrough"
--# lvconvert \-\-type cache-pool \-\-poolmetadata vg/lvx_cache_meta \\
--	\-\-cachemode writethrough vg/lvx_cache
-+# lvconvert \-\-cachepool vg/lvx_cache \-\-poolmetadata vg/lvx_cache_meta \\
-+	\-\-cachemode writethrough
- 
- 4. Create a cache LV by combining the cache pool LV and origin LV
- # lvconvert \-\-type cache \-\-cachepool vg/lvx_cache vg/lvx
- .fi
- 
--.SS Removing Cache Logical Volumes
--If you wish to remove all logical volumes associated with a cache
--LV, you must remove both top-level, user-visible devices.
--The cache metadata LV and cache data LV cannot be removed
--directly.  If only the cache pool LV is specfied for removal, any cached
--blocks not yet on the origin LV will be flush, the cache pool LV will be
--removed, and the now un-cached origin LV will remain.  If the user
--specifies a cache LV for removal, then the origin LV is
--removed and only the cache pool LV will remain.  The cache pool LV can then
--be used to create another cache LV with a different origin LV if desired.
--
--When users intend to remove all logical volumes associated with a
--cache LV, it is generally better to start with the origin LV and then
--remove the cache pool LV.  If the operations are performed in the
--reverse order, the user will have to wait for the contents of the
--cache pool LV to be flushed before the origin LV is removed.  This
--could take some time.
-+.SH Cache Removal
-+
-+.SS Removing a cache pool LV without removing an associated origin LV
-+
-+This writes back data from the cache pool to the origin LV, then removes
-+the cache pool LV, leaving the un-cached origin LV.  (If the origin LV
-+will also be removed, the data flushing can be avoided; see "Removing
-+both" below.)
-+
-+.B lvremove VG/CachePoolLV
-+
-+.SS Removing both an origin LV and its associated cache pool LV
-+
-+This removes the cache LV, which includes removing both the origin LV and
-+its associated cache pool LV.  Data blocks from the cache pool are not
-+written back to the origin LV.
-+
-+.B lvremove VG/CacheLV
-+
-+./" .SS Separating a cache pool LV from an origin LV
-+./" This writes back data from the cache pool to the origin LV, then removes
-+./" the association between the cache pool LV and the origin LV.
-+./" .br
-+./" Not yet implemented.
-+
-+./" .SS Removing an origin LV without removing an associated cache pool LV
-+./" Separate the cache pool LV from the origin LV, then remove the origin LV.
-+./" .br
-+./" Not yet implemented.
- 
- .SH SEE ALSO
- .BR lvm.conf (5),
 
 
