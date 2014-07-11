@@ -1,279 +1,297 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Jul 2014 11:34:05 +0000 (UTC)
-Subject: master - cache: add tool support
-Message-ID: <20140711113405.18B2560B37@fedorahosted.org>
+Date: Fri, 11 Jul 2014 11:34:24 +0000 (UTC)
+Subject: master - pool: callback handle cache
+Message-ID: <20140711113424.594EB60F72@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f9d80c9d31d7113ab8bc08baf6bba96a7449261f
-Commit:        f9d80c9d31d7113ab8bc08baf6bba96a7449261f
-Parent:        5c3d8940136f39a017ab434651789647161350b1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0c1ada88eef8e112515f5415dc4dd89b4191214
+Commit:        c0c1ada88eef8e112515f5415dc4dd89b4191214
+Parent:        120bd2d6b13fb7a297ff6cfc9fe59c0b241ab46f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jul 4 16:31:29 2014 +0200
+AuthorDate:    Wed Jul 9 17:24:34 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jul 11 12:47:35 2014 +0200
+CommitterDate: Fri Jul 11 12:57:45 2014 +0200
 
-cache: add tool support
+pool: callback handle cache
 
-Introducing cache tool support.
+Extend the callback functionality to handle also cache pools.
+
+cache_check is now executed on cachepool metadata when
+it's activated and deactivated.
 ---
- WHATS_NEW                    |    1 +
- conf/example.conf.in         |   30 ++++++++++++++
- configure.in                 |   89 +++++++++++++++++++++++++++++++++++++++---
- lib/config/config_settings.h |    5 ++
- lib/config/defaults.h        |    2 +
- lib/misc/configure.h.in      |   12 ++++++
- 6 files changed, 133 insertions(+), 6 deletions(-)
+ lib/activate/dev_manager.c |  172 +++++++++++++++++++++++++++++---------------
+ 1 files changed, 114 insertions(+), 58 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 29a0aa3..77cc2d7 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.108 -
- =================================
-+  Add initial code to use cache tools (cache_check|dump|repair|restore).
-   Add "degraded" activation mode and make it the default.
-   Add separate lv_active_{locally,remotely,exclusively} LV reporting fields.
-   Recognize "auto"/"unmanaged" values in selection for appropriate fields only.
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 91768fb..2930054 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -744,6 +744,36 @@ global {
-     #   external_origin_extend
-     #
-     # thin_disabled_features = [ "discards", "block_size" ]
-+
-+    # Full path of the utility called to check that a cache metadata device
-+    # is in a state that allows it to be used.
-+    # Each time a cached LV needs to be used or after it is deactivated
-+    # this utility is executed. The activation will only proceed if the utility
-+    # has an exit status of 0.
-+    # Set to "" to skip this check.  (Not recommended.)
-+    # The cache tools are available as part of the device-mapper-persistent-data
-+    # package from https://github.com/jthornber/thin-provisioning-tools.
-+    #
-+    # cache_check_executable = "@CACHE_CHECK_CMD@"
-+
-+    # Array of string options passed with cache_check command. By default,
-+    # option "-q" is for quiet output.
-+    #
-+    # cache_check_options = [ "-q" ]
-+
-+    # Full path of the utility called to repair a cache metadata device.
-+    # Each time a cache metadata needs repair this utility is executed.
-+    # See cache_check_executable how to obtain binaries.
-+    #
-+    # cache_repair_executable = "@CACHE_REPAIR_CMD@"
-+
-+    # Array of extra string options passed with cache_repair command.
-+    # cache_repair_options = [ "" ]
-+
-+    # Full path of the utility called to dump cache metadata content.
-+    # See cache_check_executable how to obtain binaries.
-+    #
-+    # cache_dump_executable = "@CACHE_DUMP_CMD@"
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 0305bb4..d5fe620 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1703,114 +1703,153 @@ static int _add_partial_replicator_to_dtree(struct dev_manager *dm,
+ 	return 1;
  }
  
- activation {
-diff --git a/configure.in b/configure.in
-index d92e03e..1b8c338 100644
---- a/configure.in
-+++ b/configure.in
-@@ -447,7 +447,7 @@ case "$THIN" in
- 			THIN_CHECK_NEEDS_CHECK=no
- 		fi
- 	fi
--	# Empty means a config way to ignore thin checking
-+	# Empty means a config way to ignore thin dumping
- 	if test "$THIN_DUMP_CMD" = "autodetect"; then
- 		AC_PATH_TOOL(THIN_DUMP_CMD, thin_dump)
- 		test -z "$THIN_DUMP_CMD" && {
-@@ -456,7 +456,7 @@ case "$THIN" in
- 			THIN_CONFIGURE_WARN=y
+-struct thin_cb_data {
+-	const struct logical_volume *pool_lv;
++struct pool_cb_data {
+ 	struct dev_manager *dm;
++	const struct logical_volume *pool_lv;
++
++	int skip_zero;  /* to skip zeroed device header (check first 64B) */
++	int exec;       /* which binary to call */
++	int opts;
++	const char *defaults;
++	const char *global;
+ };
+ 
+-static int _thin_pool_callback(struct dm_tree_node *node,
+-			       dm_node_callback_t type, void *cb_data)
++static int _pool_callback(struct dm_tree_node *node,
++			  dm_node_callback_t type, void *cb_data)
+ {
+-	int ret, status;
+-	const struct thin_cb_data *data = cb_data;
+-	const char *dmdir = dm_dir();
++	int ret, status, fd;
++	char *split;
+ 	const struct dm_config_node *cn;
+ 	const struct dm_config_value *cv;
+-	const char *thin_check =
+-		find_config_tree_str_allow_empty(data->pool_lv->vg->cmd, global_thin_check_executable_CFG, NULL);
+-	const struct logical_volume *mlv = first_seg(data->pool_lv)->metadata_lv;
+-	size_t len = strlen(dmdir) + 2 * (strlen(mlv->vg->name) + strlen(mlv->name)) + 3;
+-	char meta_path[len];
++	const struct pool_cb_data *data = cb_data;
++	const struct logical_volume *pool_lv = data->pool_lv;
++	const struct logical_volume *mlv = first_seg(pool_lv)->metadata_lv;
++	long buf[64 / sizeof(long)]; /* buffer for short disk header (64B) */
+ 	int args = 0;
+-	const char *argv[19]; /* Max supported 15 args */
+-	char *split, *dm_name;
++	const char *argv[19] = { /* Max supported 15 args */
++		find_config_tree_str_allow_empty(pool_lv->vg->cmd, data->exec, NULL) /* argv[0] */
++	};
+ 
+-	if (!thin_check[0])
++	if (!*argv[0])
+ 		return 1; /* Checking disabled */
+ 
+-	if (!(dm_name = dm_build_dm_name(data->dm->mem, mlv->vg->name,
+-					 mlv->name, NULL)) ||
+-	    (dm_snprintf(meta_path, len, "%s/%s", dmdir, dm_name) < 0)) {
+-		log_error("Failed to build thin metadata path.");
+-		return 0;
+-	}
+-
+-	if ((cn = find_config_tree_node(mlv->vg->cmd, global_thin_check_options_CFG, NULL))) {
++	if ((cn = find_config_tree_node(mlv->vg->cmd, data->opts, NULL))) {
+ 		for (cv = cn->v; cv && args < 16; cv = cv->next) {
+ 			if (cv->type != DM_CFG_STRING) {
+ 				log_error("Invalid string in config file: "
+-					  "global/thin_check_options");
++					  "global/%s_check_options",
++					  data->global);
+ 				return 0;
+ 			}
+ 			argv[++args] = cv->v.str;
  		}
- 	fi
--	# Empty means a config way to ignore thin checking
-+	# Empty means a config way to ignore thin repairing
- 	if test "$THIN_REPAIR_CMD" = "autodetect"; then
- 		AC_PATH_TOOL(THIN_REPAIR_CMD, thin_repair)
- 		test -z "$THIN_REPAIR_CMD" && {
-@@ -465,7 +465,7 @@ case "$THIN" in
- 			THIN_CONFIGURE_WARN=y
+ 	} else {
+ 		/* Use default options (no support for options with spaces) */
+-		if (!(split = dm_pool_strdup(data->dm->mem, DEFAULT_THIN_CHECK_OPTIONS))) {
+-			log_error("Failed to duplicate thin check string.");
++		if (!(split = dm_pool_strdup(data->dm->mem, data->defaults))) {
++			log_error("Failed to duplicate defaults.");
+ 			return 0;
  		}
- 	fi
--	# Empty means a config way to ignore thin checking
-+	# Empty means a config way to ignore thin restoring
- 	if test "$THIN_RESTORE_CMD" = "autodetect"; then
- 		AC_PATH_TOOL(THIN_RESTORE_CMD, thin_restore)
- 		test -z "$THIN_RESTORE_CMD" && {
-@@ -500,9 +500,24 @@ dnl -- cache inclusion type
- AC_MSG_CHECKING(whether to include cache)
- AC_ARG_WITH(cache,
- 	    AC_HELP_STRING([--with-cache=TYPE],
--			   [cache support: internal/shared/none
--			    [[TYPE=none]]]),
--	    CACHE=$withval, CACHE=none)
-+			   [cache support: internal/shared/none [[TYPE=none]]]),
-+			   CACHE=$withval, CACHE="none")
-+AC_ARG_WITH(cache-check,
-+	    AC_HELP_STRING([--with-cache-check=PATH],
-+			   [cache_check tool: [[autodetect]]]),
-+			   CACHE_CHECK_CMD=$withval, CACHE_CHECK_CMD="autodetect")
-+AC_ARG_WITH(cache-dump,
-+	    AC_HELP_STRING([--with-cache-dump=PATH],
-+			   [cache_dump tool: [[autodetect]]]),
-+			   CACHE_DUMP_CMD=$withval, CACHE_DUMP_CMD="autodetect")
-+AC_ARG_WITH(cache-repair,
-+	    AC_HELP_STRING([--with-cache-repair=PATH],
-+			   [cache_repair tool: [[autodetect]]]),
-+			   CACHE_REPAIR_CMD=$withval, CACHE_REPAIR_CMD="autodetect")
-+AC_ARG_WITH(cache-restore,
-+	    AC_HELP_STRING([--with-cache-restore=PATH],
-+			   [cache_restore tool: [[autodetect]]]),
-+			   CACHE_RESTORE_CMD=$withval, CACHE_RESTORE_CMD="autodetect")
- AC_MSG_RESULT($CACHE)
+ 		args = dm_split_words(split, 16, 0, (char**) argv + 1);
+ 	}
  
- case "$CACHE" in
-@@ -511,6 +526,62 @@ case "$CACHE" in
-  *) AC_MSG_ERROR([--with-cache parameter invalid]) ;;
- esac
+ 	if (args == 16) {
+-		log_error("Too many options for thin check command.");
++		log_error("Too many options for %s command.", argv[0]);
+ 		return 0;
+ 	}
  
-+# Test if necessary cache tools are available
-+# if not - use plain defaults and warn user
-+case "$CACHE" in
-+  internal|shared)
-+	# Empty means a config way to ignore cache checking
-+	if test "$CACHE_CHECK_CMD" = "autodetect"; then
-+		AC_PATH_TOOL(CACHE_CHECK_CMD, cache_check)
-+		if test -z "$CACHE_CHECK_CMD"; then
-+			AC_MSG_WARN([cache_check not found in path $PATH])
-+			CACHE_CHECK_CMD=/usr/sbin/cache_check
-+			CACHE_CONFIGURE_WARN=y
-+		fi
-+	fi
-+	# Empty means a config way to ignore cache dumping
-+	if test "$CACHE_DUMP_CMD" = "autodetect"; then
-+		AC_PATH_TOOL(CACHE_DUMP_CMD, cache_dump)
-+		test -z "$CACHE_DUMP_CMD" && {
-+			AC_MSG_WARN(cache_dump not found in path $PATH)
-+			CACHE_DUMP_CMD=/usr/sbin/cache_dump
-+			CACHE_CONFIGURE_WARN=y
+-	argv[0] = thin_check;
+-	argv[++args] = meta_path;
+-	argv[++args] = NULL;
++	if (!(argv[++args] = lv_dmpath_dup(data->dm->mem, mlv))) {
++		log_error("Failed to build pool metadata path.");
++		return 0;
++	}
+ 
+-	if (!(ret = exec_cmd(data->pool_lv->vg->cmd, (const char * const *)argv,
++	if (data->skip_zero) {
++		if ((fd = open(argv[args], O_RDONLY)) < 0) {
++			log_sys_error("open", argv[args]);
++			return 0;
 +		}
-+	fi
-+	# Empty means a config way to ignore cache repairing
-+	if test "$CACHE_REPAIR_CMD" = "autodetect"; then
-+		AC_PATH_TOOL(CACHE_REPAIR_CMD, cache_repair)
-+		test -z "$CACHE_REPAIR_CMD" && {
-+			AC_MSG_WARN(cache_repair not found in path $PATH)
-+			CACHE_REPAIR_CMD=/usr/sbin/cache_repair
-+			CACHE_CONFIGURE_WARN=y
++		/* let's assume there is no problem to read 64 bytes */
++		if (read(fd, buf, sizeof(buf)) < sizeof(buf)) {
++			log_sys_error("read", argv[args]);
++			return 0;
 +		}
-+	fi
-+	# Empty means a config way to ignore cache restoring
-+	if test "$CACHE_RESTORE_CMD" = "autodetect"; then
-+		AC_PATH_TOOL(CACHE_RESTORE_CMD, cache_restore)
-+		test -z "$CACHE_RESTORE_CMD" && {
-+			AC_MSG_WARN(cache_restore not found in path $PATH)
-+			CACHE_RESTORE_CMD=/usr/sbin/cache_restore
-+			CACHE_CONFIGURE_WARN=y
++		for (ret = 0; ret < DM_ARRAY_SIZE(buf); ++ret)
++			if (buf[ret])
++				break;
++
++		if (close(fd))
++			log_sys_error("close", argv[args]);
++
++		if (ret == DM_ARRAY_SIZE(buf)) {
++			log_debug("%s skipped, detect empty disk header on %s.",
++				  argv[0], argv[args]);
++			return 1;
 +		}
-+	fi
-+	;;
-+esac
++	}
 +
-+AC_DEFINE_UNQUOTED([CACHE_CHECK_CMD], ["$CACHE_CHECK_CMD"],
-+		   [The path to 'cache_check', if available.])
-+
-+AC_DEFINE_UNQUOTED([CACHE_DUMP_CMD], ["$CACHE_DUMP_CMD"],
-+		   [The path to 'cache_dump', if available.])
-+
-+AC_DEFINE_UNQUOTED([CACHE_REPAIR_CMD], ["$CACHE_REPAIR_CMD"],
-+		   [The path to 'cache_repair', if available.])
-+
-+AC_DEFINE_UNQUOTED([CACHE_RESTORE_CMD], ["$CACHE_RESTORE_CMD"],
-+		   [The path to 'cache_restore', if available.])
-+
-+
- ################################################################################
- dnl -- Disable readline
- AC_MSG_CHECKING(whether to enable readline)
-@@ -1660,6 +1731,10 @@ AC_SUBST(THIN_CHECK_CMD)
- AC_SUBST(THIN_DUMP_CMD)
- AC_SUBST(THIN_REPAIR_CMD)
- AC_SUBST(THIN_RESTORE_CMD)
-+AC_SUBST(CACHE_CHECK_CMD)
-+AC_SUBST(CACHE_DUMP_CMD)
-+AC_SUBST(CACHE_REPAIR_CMD)
-+AC_SUBST(CACHE_RESTORE_CMD)
- AC_SUBST(UDEV_PC)
- AC_SUBST(UDEV_RULES)
- AC_SUBST(UDEV_SYNC)
-@@ -1764,4 +1839,6 @@ test -n "$THIN_CONFIGURE_WARN" && AC_MSG_WARN([Support for thin provisioning is
++	if (!(ret = exec_cmd(pool_lv->vg->cmd, (const char * const *)argv,
+ 			     &status, 0))) {
+ 		switch (type) {
+ 		case DM_NODE_CALLBACK_PRELOADED:
+-			log_err_once("Check of thin pool %s/%s failed (status:%d). "
+-				     "Manual repair required (thin_dump --repair %s)!",
+-				     data->pool_lv->vg->name, data->pool_lv->name,
+-				     status, meta_path);
++			log_err_once("Check of pool %s failed (status:%d). "
++				     "Manual repair required!",
++				     display_lvname(pool_lv), status);
+ 			break;
+ 		default:
+-			log_warn("WARNING: Integrity check of metadata for thin pool "
+-				 "%s/%s failed.",
+-				 data->pool_lv->vg->name, data->pool_lv->name);
++			log_warn("WARNING: Integrity check of metadata for pool "
++				 "%s failed.", display_lvname(pool_lv));
+ 		}
+ 		/*
+ 		 * FIXME: What should we do here??
+ 		 *
+ 		 * Maybe mark the node, so it's not activating
+-		 * as thin_pool but as error/linear and let the
++		 * as pool but as error/linear and let the
+ 		 * dm tree resolve the issue.
+ 		 */
+ 	}
  
- test -n "$THIN_CHECK_VERSION_WARN" && AC_MSG_WARN([You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning])
+-	dm_pool_free(data->dm->mem, dm_name);
+-
+ 	return ret;
+ }
  
-+test -n "$CACHE_CONFIGURE_WARN" && AC_MSG_WARN([Support for cache is limited since some cache tools are missing!])
+-static int _thin_pool_register_callback(struct dev_manager *dm,
+-					struct dm_tree_node *node,
+-					const struct logical_volume *lv)
++static int _pool_register_callback(struct dev_manager *dm,
++				   struct dm_tree_node *node,
++				   const struct logical_volume *lv)
+ {
+-	struct thin_cb_data *data;
++	struct pool_cb_data *data;
+ 
+-	/* Skip metadata testing for unused pool. */
+-	if (!first_seg(lv)->transaction_id ||
+-	    ((first_seg(lv)->transaction_id == 1) &&
+-	     pool_has_message(first_seg(lv), NULL, 0)))
++	/* Skip metadata testing for unused thin pool. */
++	if (lv_is_thin_pool(lv) &&
++	    (!first_seg(lv)->transaction_id ||
++	     ((first_seg(lv)->transaction_id == 1) &&
++	      pool_has_message(first_seg(lv), NULL, 0))))
+ 		return 1;
+ 
+-	if (!(data = dm_pool_alloc(dm->mem, sizeof(*data)))) {
++	if (!(data = dm_pool_zalloc(dm->mem, sizeof(*data)))) {
+ 		log_error("Failed to allocated path for callback.");
+ 		return 0;
+ 	}
+ 
+ 	data->dm = dm;
+-	data->pool_lv = lv;
+ 
+-	dm_tree_node_set_callback(node, _thin_pool_callback, data);
++	if (lv_is_thin_pool(lv)) {
++		data->pool_lv = lv;
++		data->skip_zero = 1;
++		data->exec = global_thin_check_executable_CFG;
++		data->opts = global_thin_check_options_CFG;
++		data->defaults = DEFAULT_THIN_CHECK_OPTIONS;
++		data->global = "thin";
++	} else if (lv_is_cache(lv)) { /* cache pool */
++		data->pool_lv = first_seg(lv)->pool_lv;
++		data->skip_zero = dm->activation;
++		data->exec = global_cache_check_executable_CFG;
++		data->opts = global_cache_check_options_CFG;
++		data->defaults = DEFAULT_CACHE_CHECK_OPTIONS;
++		data->global = "cache";
++	} else {
++		log_error(INTERNAL_ERROR "Registering unsupported pool callback.");
++		return 0;
++	}
 +
- test "$ODIRECT" = yes || AC_MSG_WARN([O_DIRECT disabled: low-memory pvmove may lock up])
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 455eb4f..c6be2e3 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -182,6 +182,11 @@ cfg_array(global_thin_disabled_features_CFG, "thin_disabled_features", global_CF
- cfg(global_thin_dump_executable_CFG, "thin_dump_executable", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, THIN_DUMP_CMD, vsn(2, 2, 100), NULL)
- cfg(global_thin_repair_executable_CFG, "thin_repair_executable", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, THIN_REPAIR_CMD, vsn(2, 2, 100), NULL)
- cfg_array(global_thin_repair_options_CFG, "thin_repair_options", global_CFG_SECTION, 0, CFG_TYPE_STRING, "#S" DEFAULT_THIN_REPAIR_OPTIONS, vsn(2, 2, 100), NULL)
-+cfg(global_cache_check_executable_CFG, "cache_check_executable", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, CACHE_CHECK_CMD, vsn(2, 2, 108), NULL)
-+cfg_array(global_cache_check_options_CFG, "cache_check_options", global_CFG_SECTION, 0, CFG_TYPE_STRING, "#S" DEFAULT_CACHE_CHECK_OPTIONS, vsn(2, 2, 108), NULL)
-+cfg(global_cache_dump_executable_CFG, "cache_dump_executable", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, CACHE_DUMP_CMD, vsn(2, 2, 108), NULL)
-+cfg(global_cache_repair_executable_CFG, "cache_repair_executable", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, CACHE_REPAIR_CMD, vsn(2, 2, 108), NULL)
-+cfg_array(global_cache_repair_options_CFG, "cache_repair_options", global_CFG_SECTION, 0, CFG_TYPE_STRING, "#S" DEFAULT_CACHE_REPAIR_OPTIONS, vsn(2, 2, 108), NULL)
++	dm_tree_node_set_callback(node, _pool_callback, data);
  
- cfg(activation_checks_CFG, "checks", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ACTIVATION_CHECKS, vsn(2, 2, 86), NULL)
- cfg(activation_udev_sync_CFG, "udev_sync", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_UDEV_SYNC, vsn(2, 2, 51), NULL)
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 815d6a3..05187b0 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -90,6 +90,8 @@
- #define DEFAULT_THIN_POOL_ZERO 1
- #define DEFAULT_POOL_METADATA_SPARE 1 /* thin + cache */
+ 	return 1;
+ }
+@@ -1825,7 +1864,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 	struct seg_list *sl;
+ 	struct dm_list *snh;
+ 	struct lv_segment *seg;
+-	struct dm_tree_node *thin_node;
++	struct dm_tree_node *node;
+ 	const char *uuid;
  
-+#define DEFAULT_CACHE_CHECK_OPTIONS "-q"
-+#define DEFAULT_CACHE_REPAIR_OPTIONS ""
- #define DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
- #define DEFAULT_CACHE_POOL_CHUNK_SIZE 64 /* KB */
- #define DEFAULT_CACHE_POOL_MIN_METADATA_SIZE 2048  /* KB */
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index c618ff4..f137f14 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -3,9 +3,21 @@
- /* Define to 1 to use libblkid detection of signatures when wiping. */
- #undef BLKID_WIPING_SUPPORT
+ 	if (lv_is_cache_pool(lv)) {
+@@ -1857,8 +1896,8 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		/* FIXME Implement dm_tree_node_skip_childrens optimisation */
+ 		if (!(uuid = build_dm_uuid(dm->mem, lv, lv_layer(lv))))
+ 			return_0;
+-		if ((thin_node = dm_tree_find_node_by_uuid(dtree, uuid)))
+-			dm_tree_node_skip_childrens(thin_node, 1);
++		if ((node = dm_tree_find_node_by_uuid(dtree, uuid)))
++			dm_tree_node_skip_childrens(node, 1);
+ #endif
+ 	}
  
-+/* The path to 'cache_check', if available. */
-+#undef CACHE_CHECK_CMD
+@@ -1887,8 +1926,21 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 			/* TODO: extend _cached_info() to return dnode */
+ 			if (!(uuid = build_dm_uuid(dm->mem, lv, lv_layer(lv))))
+ 				return_0;
+-			if ((thin_node = dm_tree_find_node_by_uuid(dtree, uuid)) &&
+-			    !_thin_pool_register_callback(dm, thin_node, lv))
++			if ((node = dm_tree_find_node_by_uuid(dtree, uuid)) &&
++			    !_pool_register_callback(dm, node, lv))
++				return_0;
++		}
++	}
 +
-+/* The path to 'cache_dump', if available. */
-+#undef CACHE_DUMP_CMD
-+
- /* Define to 1 to include built-in support for cache. */
- #undef CACHE_INTERNAL
++	if (!origin_only && lv_is_cache(lv)) {
++		if (!dm->activation) {
++			/* Setup callback for non-activation partial tree */
++			/* Activation gets own callback when needed */
++			/* TODO: extend _cached_info() to return dnode */
++			if (!(uuid = build_dm_uuid(dm->mem, lv, lv_layer(lv))))
++				return_0;
++			if ((node = dm_tree_find_node_by_uuid(dtree, uuid)) &&
++			    !_pool_register_callback(dm, node, lv))
+ 				return_0;
+ 		}
+ 	}
+@@ -2633,7 +2685,11 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
  
-+/* The path to 'cache_repair', if available. */
-+#undef CACHE_REPAIR_CMD
+ 	/* Setup thin pool callback */
+ 	if (lv_is_thin_pool(lv) && layer &&
+-	    !_thin_pool_register_callback(dm, dnode, lv))
++	    !_pool_register_callback(dm, dnode, lv))
++		return_0;
 +
-+/* The path to 'cache_restore', if available. */
-+#undef CACHE_RESTORE_CMD
-+
- /* Define to 1 if the `closedir' function returns void instead of `int'. */
- #undef CLOSEDIR_VOID
++	if (lv_is_cache(lv) &&
++	    !_pool_register_callback(dm, dnode, lv))
+ 		return_0;
  
+ 	if (read_ahead == DM_READ_AHEAD_AUTO) {
 
 
