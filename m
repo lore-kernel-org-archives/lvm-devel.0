@@ -1,108 +1,69 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Jul 2014 11:34:26 +0000 (UTC)
-Subject: master - tools: arg_is_any_set and arg_is_only_set
-Message-ID: <20140711113426.7166C60D06@fedorahosted.org>
+Date: Fri, 11 Jul 2014 11:34:28 +0000 (UTC)
+Subject: master - lvconvert: relocate mirror tests
+Message-ID: <20140711113428.85B936105E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1931d1e58e1b7af8251d96ed84694c3ba5c7352e
-Commit:        1931d1e58e1b7af8251d96ed84694c3ba5c7352e
-Parent:        c0c1ada88eef8e112515f5415dc4dd89b4191214
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04b8e55f2a2a96d2ffbd124fe3c0fc7c452cfb26
+Commit:        04b8e55f2a2a96d2ffbd124fe3c0fc7c452cfb26
+Parent:        1931d1e58e1b7af8251d96ed84694c3ba5c7352e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 10 22:52:53 2014 +0200
+AuthorDate:    Thu Jul 10 22:02:54 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Jul 11 12:57:45 2014 +0200
 
-tools: arg_is_any_set and arg_is_only_set
+lvconvert: relocate mirror tests
 
-Helpful functions to more easily detect conflicting
-set of options.
 ---
- tools/lvmcmdline.c |   55 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- tools/tools.h      |    2 +
- 2 files changed, 57 insertions(+), 0 deletions(-)
+ tools/lvconvert.c |   25 ++++++++++++-------------
+ 1 files changed, 12 insertions(+), 13 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index fc51c4a..be7844b 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -68,6 +68,61 @@ unsigned arg_is_set(const struct cmd_context *cmd, int a)
- 	return arg_count(cmd, a) ? 1 : 0;
- }
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 264b86c..2892d00 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -236,6 +236,18 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
+ 	if (!_check_conversion_type(cmd, type_str))
+ 		return_0;
  
-+int arg_is_any_set(const struct cmd_context *cmd, const char *err, ...)
-+{
-+	int arg;
-+	va_list ap;
++	if (arg_count(cmd, repair_ARG) &&
++	    !arg_is_only_set(cmd, "cannot be used with --repair",
++			    repair_ARG,
++			    stripes_long_ARG, stripesize_ARG,
++			    -1))
++		return_0;
 +
-+	va_start(ap, err);
-+	while ((arg = va_arg(ap, int)) != -1 && !arg_count(cmd, arg))
-+		/* empty */;
-+	va_end(ap);
-+
-+	if (arg != -1) {
-+		log_error("%s %s.", arg_long_option_name(arg), err);
++	if (arg_is_set(cmd, mirrorlog_ARG) && arg_is_set(cmd, corelog_ARG)) {
++		log_error("--mirrorlog and --corelog are incompatible.");
 +		return 0;
 +	}
 +
-+	return 1;
-+}
-+
-+int arg_is_only_set(const struct cmd_context *cmd, const char *err, ...)
-+{
-+	int i, arg;
-+	va_list ap;
-+
-+	for (i = 0; i < ARG_COUNT; ++i) {
-+		switch (i) {
-+		/* skip common options */
-+		case commandprofile_ARG:
-+		case config_ARG:
-+		case debug_ARG:
-+		case driverloaded_ARG:
-+		case help2_ARG:
-+		case help_ARG:
-+		case profile_ARG:
-+		case quiet_ARG:
-+		case verbose_ARG:
-+		case version_ARG:
-+		case yes_ARG:
-+			continue;
-+		}
-+		if (!arg_count(cmd, i))
-+			continue; /* unset */
-+		va_start(ap, err);
-+		while (((arg = va_arg(ap, int)) != -1) && (arg != i))
-+			/* empty */;
-+		va_end(ap);
-+
-+		if (arg != i) {
-+			log_error("Option %s %s.", arg_long_option_name(i), err);
-+			return 0;
-+		}
-+	}
-+
-+	return 1;
-+}
-+
- unsigned grouped_arg_is_set(const struct arg_values *av, int a)
- {
- 	return grouped_arg_count(av, a) ? 1 : 0;
-diff --git a/tools/tools.h b/tools/tools.h
-index 2b09f37..a92845a 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -144,6 +144,8 @@ int major_minor_valid(const struct cmd_context * cmd, const struct format_type *
- /* we use the enums to access the switches */
- unsigned arg_count(const struct cmd_context *cmd, int a);
- unsigned arg_is_set(const struct cmd_context *cmd, int a);
-+int arg_is_any_set(const struct cmd_context *cmd, const char *err, ...);
-+int arg_is_only_set(const struct cmd_context *cmd, const char *err, ...);
- const char *arg_long_option_name(int a);
- const char *arg_value(struct cmd_context *cmd, int a);
- const char *arg_str_value(struct cmd_context *cmd, int a, const char *def);
+ 	if (arg_count(cmd, splitsnapshot_ARG))
+ 		lp->splitsnapshot = 1;
+ 
+@@ -1273,19 +1285,6 @@ static int _lvconvert_mirrors_parse_params(struct cmd_context *cmd,
+ 		return 1;
+ 	}
+ 
+-	if ((arg_count(cmd, mirrors_ARG) && repair) ||
+-	    (arg_count(cmd, mirrorlog_ARG) && repair) ||
+-	    (arg_count(cmd, corelog_ARG) && repair)) {
+-		log_error("--repair cannot be used with --mirrors, --mirrorlog,"
+-			  " or --corelog");
+-		return 0;
+-	}
+-
+-	if (arg_count(cmd, mirrorlog_ARG) && arg_count(cmd, corelog_ARG)) {
+-		log_error("--mirrorlog and --corelog are incompatible");
+-		return 0;
+-	}
+-
+ 	/*
+ 	 * Adjusting mimage count?
+ 	 */
 
 
