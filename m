@@ -1,41 +1,62 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Jul 2014 11:55:40 +0000 (UTC)
-Subject: master - cleanup: older gcc is not smart enough
-Message-ID: <20140711115540.39AC260D03@fedorahosted.org>
+Date: Fri, 11 Jul 2014 11:34:09 +0000 (UTC)
+Subject: master - prompt: display 'n' for EOF
+Message-ID: <20140711113409.6624761133@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a62cea3371cfac10f74a135b1969120e10f48f60
-Commit:        a62cea3371cfac10f74a135b1969120e10f48f60
-Parent:        d7065f154e497ffe26006bf47b533b23383a8810
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=baf825331cb37fd29007e7ed7596fb3683c8b37d
+Commit:        baf825331cb37fd29007e7ed7596fb3683c8b37d
+Parent:        39cb8aa3abd4e3eea7bbbdcc24225e8475c3aff3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jul 11 13:47:50 2014 +0200
+AuthorDate:    Mon Jul 7 21:03:15 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jul 11 13:52:30 2014 +0200
+CommitterDate: Fri Jul 11 12:47:41 2014 +0200
 
-cleanup: older gcc is not smart enough
+prompt: display 'n' for EOF
 
-Avoid gcc warning about uninitialized 'seg' variable.
-It's not easy for older gcc compiler to deduce it's been set.
+When EOF is detect - it could be either 'Ctrl+C'
+or empty stdin.
+
+For Ctrl+C there is visual ^C sign.
+For EOF print 'n' so decision is clear in debug print.
 ---
- tools/lvconvert.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/display/display.c |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index ff32f76..3a5f129 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2958,7 +2958,7 @@ static int _lvconvert_pool(struct cmd_context *cmd,
- 		/* Swap normal LV with pool's metadata LV ? */
- 		if (lv_is_pool(pool_lv)) {
- 			/* Swap names between old and new metadata LV */
--			if (!detach_pool_metadata_lv(seg, &pool_metadata_lv))
-+			if (!detach_pool_metadata_lv(first_seg(pool_lv), &pool_metadata_lv))
- 				return_0;
- 			old_name = metadata_lv->name;
- 			if (!lv_rename_update(cmd, metadata_lv, "pvmove_tmeta", 0))
+diff --git a/lib/display/display.c b/lib/display/display.c
+index cd204a0..cfd83c9 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -883,7 +883,7 @@ void display_name_error(name_error_t name_error)
+  */
+ char yes_no_prompt(const char *prompt, ...)
+ {
+-	int c = 0, ret = 0;
++	int c = 0, ret = 0, cb = 0;
+ 	va_list ap;
+ 
+ 	sigint_allow();
+@@ -903,6 +903,7 @@ char yes_no_prompt(const char *prompt, ...)
+ 
+ 		if ((c = getchar()) == EOF) {
+ 			ret = 'n'; /* SIGINT */
++			cb = 1;
+ 			break;
+ 		}
+ 
+@@ -918,6 +919,9 @@ char yes_no_prompt(const char *prompt, ...)
+ 
+ 	sigint_restore();
+ 
++	if (cb && !sigint_caught())
++		fputc(ret, stderr);
++
+ 	if (c != '\n')
+ 		fputc('\n', stderr);
+ 
 
 
