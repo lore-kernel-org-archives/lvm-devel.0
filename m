@@ -1,82 +1,63 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 17 Jul 2014 14:29:15 +0000 (UTC)
-Subject: master - metadata: use outfc for comments
-Message-ID: <20140717142915.6CCF661183@fedorahosted.org>
+Date: Thu, 17 Jul 2014 14:29:17 +0000 (UTC)
+Subject: master - raid: support lvdisplay --maps
+Message-ID: <20140717142917.A170960DBB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cac0722cacaac06ac1211194f1d6c21572a32998
-Commit:        cac0722cacaac06ac1211194f1d6c21572a32998
-Parent:        f5d6c4b0f3527b42ff3e7ef7a68010c3540d6f41
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=321592af71686b8963a6bae276533f4f19946578
+Commit:        321592af71686b8963a6bae276533f4f19946578
+Parent:        cac0722cacaac06ac1211194f1d6c21572a32998
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 16 23:57:43 2014 +0200
+AuthorDate:    Wed Jul 16 23:55:46 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 17 16:17:44 2014 +0200
+CommitterDate: Thu Jul 17 16:18:34 2014 +0200
 
-metadata: use outfc for comments
+raid: support lvdisplay --maps
 
-Few unecessary comments were written to on-disc metadata.
-Use outfc() to have comments only in archived files.
-(may also save couple bytes in ringbuffer).
-
-TODO: needed validation against newline char...
+Add legs printing for --maps
+Somewhat similar to mirror support - maybe there are more things to
+show...
 ---
- lib/format_text/export.c |   10 ++++++----
- lib/striped/striped.c    |    4 ++--
- 2 files changed, 8 insertions(+), 6 deletions(-)
+ lib/raid/raid.c |   16 ++++++++++++++++
+ 1 files changed, 16 insertions(+), 0 deletions(-)
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 319e5ea..aa0d905 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -329,6 +329,7 @@ static int _print_header(struct formatter *f,
+diff --git a/lib/raid/raid.c b/lib/raid/raid.c
+index 33ba5b7..c3f5c3f 100644
+--- a/lib/raid/raid.c
++++ b/lib/raid/raid.c
+@@ -30,6 +30,21 @@ static const char *_raid_name(const struct lv_segment *seg)
+ 	return seg->segtype->name;
+ }
+ 
++static void _raid_display(const struct lv_segment *seg)
++{
++	unsigned s;
++
++	for (s = 0; s < seg->area_count; ++s) {
++		log_print("  Raid Data LV%2d", s);
++		display_stripe(seg, s, "    ");
++	}
++
++	for (s = 0; s < seg->area_count; ++s)
++		log_print("  Raid Metadata LV%2d\t%s", s, seg_metalv(seg, s)->name);
++
++	log_print(" ");
++}
++
+ static int _raid_text_import_area_count(const struct dm_config_node *sn,
+ 					uint32_t *area_count)
  {
- 	char *buf;
- 	time_t t;
-+	char com[PATH_MAX];
+@@ -404,6 +419,7 @@ static int _raid_target_unmonitor_events(struct lv_segment *seg, int events)
  
- 	t = time(NULL);
- 
-@@ -344,9 +345,10 @@ static int _print_header(struct formatter *f,
- 	}
- 	outf(f, "description = \"%s\"", dm_escape_double_quotes(buf, desc));
- 	outnl(f);
--	outf(f, "creation_host = \"%s\"\t# %s %s %s %s %s", _utsname.nodename,
--	     _utsname.sysname, _utsname.nodename, _utsname.release,
--	     _utsname.version, _utsname.machine);
-+	(void) dm_snprintf(com, sizeof(com), "# %s %s %s %s %s",
-+			   _utsname.sysname, _utsname.nodename, _utsname.release,
-+			   _utsname.version, _utsname.machine);
-+	outfc(f, com, "creation_host = \"%s\"", _utsname.nodename);
- 	outf(f, "creation_time = %lu\t# %s", t, ctime(&t));
- 
- 	return 1;
-@@ -396,7 +398,7 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
- 	outf(f, "seqno = %u", vg->seqno);
- 
- 	if (vg->fid && vg->fid->fmt)
--		outf(f, "format = \"%s\" # informational", vg->fid->fmt->name);
-+		outfc(f, "# informational", "format = \"%s\"", vg->fid->fmt->name);
- 
- 	if (!_print_flag_config(f, vg->status, VG_FLAGS))
- 		return_0;
-diff --git a/lib/striped/striped.c b/lib/striped/striped.c
-index 3b08467..dfd4518 100644
---- a/lib/striped/striped.c
-+++ b/lib/striped/striped.c
-@@ -94,8 +94,8 @@ static int _striped_text_import(struct lv_segment *seg, const struct dm_config_n
- static int _striped_text_export(const struct lv_segment *seg, struct formatter *f)
- {
- 
--	outf(f, "stripe_count = %u%s", seg->area_count,
--	     (seg->area_count == 1) ? "\t# linear" : "");
-+	outfc(f, (seg->area_count == 1) ? "# linear" : NULL,
-+	      "stripe_count = %u", seg->area_count);
- 
- 	if (seg->area_count > 1)
- 		outsize(f, (uint64_t) seg->stripe_size,
+ static struct segtype_handler _raid_ops = {
+ 	.name = _raid_name,
++	.display = _raid_display,
+ 	.text_import_area_count = _raid_text_import_area_count,
+ 	.text_import = _raid_text_import,
+ 	.text_export = _raid_text_export,
 
 
