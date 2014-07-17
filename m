@@ -1,132 +1,82 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 17 Jul 2014 14:29:13 +0000 (UTC)
-Subject: master - cache: use get_cache_mode for validation
-Message-ID: <20140717142913.4256561171@fedorahosted.org>
+Date: Thu, 17 Jul 2014 14:29:15 +0000 (UTC)
+Subject: master - metadata: use outfc for comments
+Message-ID: <20140717142915.6CCF661183@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f5d6c4b0f3527b42ff3e7ef7a68010c3540d6f41
-Commit:        f5d6c4b0f3527b42ff3e7ef7a68010c3540d6f41
-Parent:        8f9f18013948f696bffaddb612d55a94f6279c9c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cac0722cacaac06ac1211194f1d6c21572a32998
+Commit:        cac0722cacaac06ac1211194f1d6c21572a32998
+Parent:        f5d6c4b0f3527b42ff3e7ef7a68010c3540d6f41
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 17 15:12:21 2014 +0200
+AuthorDate:    Wed Jul 16 23:57:43 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 17 16:16:45 2014 +0200
+CommitterDate: Thu Jul 17 16:17:44 2014 +0200
 
-cache: use get_cache_mode for validation
+metadata: use outfc for comments
 
-Use a single function to validate cache mode arg
-and set DM_ feature flags.
+Few unecessary comments were written to on-disc metadata.
+Use outfc() to have comments only in archived files.
+(may also save couple bytes in ringbuffer).
+
+TODO: needed validation against newline char...
 ---
- lib/cache_segtype/cache.c        |    6 +-----
- lib/metadata/cache_manip.c       |   14 ++++++++++++++
- lib/metadata/metadata-exported.h |    1 +
- tools/lvconvert.c                |   13 +++----------
- tools/lvcreate.c                 |   14 +++-----------
- 5 files changed, 22 insertions(+), 26 deletions(-)
+ lib/format_text/export.c |   10 ++++++----
+ lib/striped/striped.c    |    4 ++--
+ 2 files changed, 8 insertions(+), 6 deletions(-)
 
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index 0e49530..ddaf3cf 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -74,11 +74,7 @@ static int _cache_pool_text_import(struct lv_segment *seg,
- 	if (dm_config_has_node(sn, "cache_mode")) {
- 		if (!(str = dm_config_find_str(sn, "cache_mode", NULL)))
- 			return SEG_LOG_ERROR("cache_mode must be a string in");
--		if (!strcmp(str, "writethrough"))
--			seg->feature_flags |= DM_CACHE_FEATURE_WRITETHROUGH;
--		else if (!strcmp(str, "writeback"))
--			seg->feature_flags |= DM_CACHE_FEATURE_WRITEBACK;
--		else
-+		if (!get_cache_mode(str, &seg->feature_flags))
- 			return SEG_LOG_ERROR("Unknown cache_mode in");
- 	}
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 319e5ea..aa0d905 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -329,6 +329,7 @@ static int _print_header(struct formatter *f,
+ {
+ 	char *buf;
+ 	time_t t;
++	char com[PATH_MAX];
  
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index e220dd9..8a5e5e3 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -299,3 +299,17 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	t = time(NULL);
+ 
+@@ -344,9 +345,10 @@ static int _print_header(struct formatter *f,
+ 	}
+ 	outf(f, "description = \"%s\"", dm_escape_double_quotes(buf, desc));
+ 	outnl(f);
+-	outf(f, "creation_host = \"%s\"\t# %s %s %s %s %s", _utsname.nodename,
+-	     _utsname.sysname, _utsname.nodename, _utsname.release,
+-	     _utsname.version, _utsname.machine);
++	(void) dm_snprintf(com, sizeof(com), "# %s %s %s %s %s",
++			   _utsname.sysname, _utsname.nodename, _utsname.release,
++			   _utsname.version, _utsname.machine);
++	outfc(f, com, "creation_host = \"%s\"", _utsname.nodename);
+ 	outf(f, "creation_time = %lu\t# %s", t, ctime(&t));
  
  	return 1;
- }
-+
-+int get_cache_mode(const char *str, uint32_t *flags)
-+{
-+	if (!strcmp(str, "writethrough"))
-+		*flags |= DM_CACHE_FEATURE_WRITETHROUGH;
-+	else if (!strcmp(str, "writeback"))
-+		*flags |= DM_CACHE_FEATURE_WRITEBACK;
-+	else {
-+		log_error("Cache pool cachemode \"%s\" is unknown.", str);
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index f2521db..2b06718 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1050,6 +1050,7 @@ int update_cache_pool_params(struct volume_group *vg, unsigned attr,
- struct logical_volume *lv_cache_create(struct logical_volume *pool,
- 				       struct logical_volume *origin);
- int lv_cache_remove(struct logical_volume *cache_lv);
-+int get_cache_mode(const char *str, uint32_t *flags);
- /* --  metadata/cache_manip.c */
+@@ -396,7 +398,7 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
+ 	outf(f, "seqno = %u", vg->seqno);
  
- struct cmd_vg *cmd_vg_add(struct dm_pool *mem, struct dm_list *cmd_vgs,
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index e128b81..eef408a 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -289,16 +289,9 @@ static int _read_pool_params(struct lvconvert_params *lp, struct cmd_context *cm
- 	}
+ 	if (vg->fid && vg->fid->fmt)
+-		outf(f, "format = \"%s\" # informational", vg->fid->fmt->name);
++		outfc(f, "# informational", "format = \"%s\"", vg->fid->fmt->name);
  
- 	if (cachepool) {
--		if ((tmp_str = arg_str_value(cmd, cachemode_ARG, NULL))) {
--			if (!strcmp(tmp_str, "writeback"))
--				lp->feature_flags |= DM_CACHE_FEATURE_WRITEBACK;
--			else if (!strcmp(tmp_str, "writethrough"))
--				lp->feature_flags |= DM_CACHE_FEATURE_WRITETHROUGH;
--			else {
--				log_error("Unknown cachemode argument");
--				return 0;
--			}
--		}
-+		if ((tmp_str = arg_str_value(cmd, cachemode_ARG, NULL)) &&
-+		    !get_cache_mode(tmp_str, &lp->feature_flags))
-+			return_0;
- 	} else {
- 		if (!arg_is_any_set(cmd, "is valid only with cache pools",
- 				    cachemode_ARG, -1))
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 8e45cc1..e9a170c 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -713,17 +713,9 @@ static int _read_cache_pool_params(struct lvcreate_params *lp,
- 	lp->chunk_size = arg_uint_value(cmd, chunksize_ARG,
- 					DEFAULT_CACHE_POOL_CHUNK_SIZE * 2);
+ 	if (!_print_flag_config(f, vg->status, VG_FLAGS))
+ 		return_0;
+diff --git a/lib/striped/striped.c b/lib/striped/striped.c
+index 3b08467..dfd4518 100644
+--- a/lib/striped/striped.c
++++ b/lib/striped/striped.c
+@@ -94,8 +94,8 @@ static int _striped_text_import(struct lv_segment *seg, const struct dm_config_n
+ static int _striped_text_export(const struct lv_segment *seg, struct formatter *f)
+ {
  
--	str_arg = arg_str_value(cmd, cachemode_ARG, NULL);
--	if (str_arg) {
--		if (!strcmp(str_arg, "writeback"))
--			lp->feature_flags |= DM_CACHE_FEATURE_WRITEBACK;
--		else if (!strcmp(str_arg, "writethrough"))
--			lp->feature_flags |= DM_CACHE_FEATURE_WRITETHROUGH;
--		else {
--			log_error("Unknown cachemode argument");
--			return 0;
--		}
--	}
-+	if ((str_arg = arg_str_value(cmd, cachemode_ARG, NULL)) &&
-+	    !get_cache_mode(str_arg, &lp->feature_flags))
-+		return_0;
+-	outf(f, "stripe_count = %u%s", seg->area_count,
+-	     (seg->area_count == 1) ? "\t# linear" : "");
++	outfc(f, (seg->area_count == 1) ? "# linear" : NULL,
++	      "stripe_count = %u", seg->area_count);
  
- 	return 1;
- }
+ 	if (seg->area_count > 1)
+ 		outsize(f, (uint64_t) seg->stripe_size,
 
 
