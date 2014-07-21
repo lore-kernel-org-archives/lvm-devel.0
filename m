@@ -1,67 +1,39 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 11 Jul 2014 20:16:46 +0000 (UTC)
-Subject: master - man: lvmthin fix line breaks
-Message-ID: <20140711201646.6C975601B9@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 21 Jul 2014 15:01:55 +0000 (UTC)
+Subject: master - raid: Correct degraded warning message level
+Message-ID: <20140721150155.EFF4160E6D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e4f24115a9b5dc8f60436195bffc60100d02620
-Commit:        3e4f24115a9b5dc8f60436195bffc60100d02620
-Parent:        65a3f50556c3544f1145d86b1b2ddd517838a950
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 11 15:15:03 2014 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jul 11 15:15:03 2014 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8c231a5f4d8e3e309dd018c92644580d06b11dd1
+Commit:        8c231a5f4d8e3e309dd018c92644580d06b11dd1
+Parent:        27574d0e410c9b78a1bdc14dc6fd3c9ed2b6ca9f
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Jul 21 15:40:59 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Jul 21 15:40:59 2014 +0100
 
-man: lvmthin fix line breaks
+raid: Correct degraded warning message level
 
-The html rendering inserted some unpleasant line breaks,
-so insert better breaks explicitly.
 ---
- man/lvmthin.7.in |   14 +++++++++++---
- 1 files changed, 11 insertions(+), 3 deletions(-)
+ tools/lvmcmdline.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvmthin.7.in b/man/lvmthin.7.in
-index fbd7a91..d534b42 100644
---- a/man/lvmthin.7.in
-+++ b/man/lvmthin.7.in
-@@ -662,7 +662,10 @@ of an existing thin pool LV:
- .B lvchange \-\-monitor {y|n} VG/ThinPoolLV
- 
- .BR lvm.conf (5)
--.B thin_pool_autoextend_threshold thin_pool_autoextend_percent
-+.B thin_pool_autoextend_threshold
-+.br
-+.BR lvm.conf (5)
-+.B thin_pool_autoextend_percent
- .br
- control the default autoextend behavior.
- 
-@@ -769,7 +772,10 @@ indicated by the "z" attribute displayed by lvs.  The option \-Z
- 
- Command to set the zeroing mode when creating a thin pool LV:
- .br
--.B lvconvert \-Z{y|n} \-\-thinpool VG/ThinDataLV \-\-poolmetadata VG/ThinMetaLV
-+.B lvconvert \-Z{y|n} \-\-thinpool VG/ThinDataLV
-+.br
-+.B "   "  \-\-poolmetadata VG/ThinMetaLV
-+
- 
- Command to change the zeroing mode of an existing thin pool LV:
- .br
-@@ -987,7 +993,9 @@ and creates a thin LV in the new pool.
- .br
- \-V VirtualSize specifies the virtual size of the thin LV.
- 
--.B lvcreate \-L LargeSize \-V VirtualSize \-n ThinLV \-\-thinpool VG/ThinPoolLV
-+.B lvcreate \-L LargeSize \-V VirtualSize \-n ThinLV
-+.br
-+.B "   "  \-\-thinpool VG/ThinPoolLV
- 
- Equivalent to:
- .br
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index ccef904..a9769f2 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -982,7 +982,7 @@ static int _get_settings(struct cmd_context *cmd)
+ 		log_warn("PARTIAL MODE. Incomplete logical volumes will be processed.");
+ 	} else if (!strcmp(activation_mode, "degraded")) {
+ 		cmd->degraded_activation = 1;
+-		log_debug("DEGRADED MODE. Incomplete RAID LVs will be processed.");
++		log_verbose("DEGRADED MODE. Incomplete RAID LVs will be processed.");
+ 	} else if (strcmp(activation_mode, "complete")) {
+ 		log_error("Invalid activation mode given.");
+ 		return EINVALID_CMD_LINE;
 
 
