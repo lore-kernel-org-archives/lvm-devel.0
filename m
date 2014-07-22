@@ -1,39 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 22 Jul 2014 21:44:14 +0000 (UTC)
-Subject: master - tests: use exclusive activation
-Message-ID: <20140722214414.16A3C61125@fedorahosted.org>
+Date: Tue, 22 Jul 2014 22:26:27 +0000 (UTC)
+Subject: master - tests: support cluster run
+Message-ID: <20140722222627.E584A61052@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3a8bb8d3a4ef379298e97ca5f087a1c8908841ed
-Commit:        3a8bb8d3a4ef379298e97ca5f087a1c8908841ed
-Parent:        ab1887fe4719a296c2bd4b4778348f55f1b7a49a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22be7c441784fd89cf76cb6ed56fd50da126864d
+Commit:        22be7c441784fd89cf76cb6ed56fd50da126864d
+Parent:        3a8bb8d3a4ef379298e97ca5f087a1c8908841ed
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jul 22 23:43:26 2014 +0200
+AuthorDate:    Wed Jul 23 00:25:49 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jul 22 23:44:06 2014 +0200
+CommitterDate: Wed Jul 23 00:25:49 2014 +0200
 
-tests: use exclusive activation
+tests: support cluster run
 
+needs exclusive activation
 ---
- test/shell/lvconvert-raid-allocation.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/lvcreate-cache.sh |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-allocation.sh b/test/shell/lvconvert-raid-allocation.sh
-index aef786c..bd2cab5 100644
---- a/test/shell/lvconvert-raid-allocation.sh
-+++ b/test/shell/lvconvert-raid-allocation.sh
-@@ -18,7 +18,7 @@ vgcreate -s 256k $vg $(cat DEVICES)
+diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
+index 4274897..03ff214 100644
+--- a/test/shell/lvcreate-cache.sh
++++ b/test/shell/lvcreate-cache.sh
+@@ -71,14 +71,14 @@ lvremove -f $vg/cache_pool
  
- # Start with linear on 2 PV and ensure that converting to
- # RAID is not allowed to reuse PVs for different images.  (Bug 1113180)
--lvcreate -l 4 -n $lv1 $vg "$dev1:0-1" "$dev2:0-1"
-+lvcreate -aey -l 4 -n $lv1 $vg "$dev1:0-1" "$dev2:0-1"
- not lvconvert --type raid1 -m 1 $vg/$lv1 "$dev1" "$dev2"
- not lvconvert --type raid1 -m 1 $vg/$lv1 "$dev1" "$dev3:0-2"
- lvconvert --type raid1 -m 1 $vg/$lv1 "$dev3"
+ # Bug 1110026
+ # Create origin, then cache_pool and cache
+-lvcreate -l 2 -n $lv1 $vg
++lvcreate -aey -l 2 -n $lv1 $vg
+ lvcreate --type cache -l 1 $vg/$lv1
+ #should dmsetup table ${vg}-$lv1 | grep cache  # ensure it is loaded in kernel
+ lvremove -ff $vg
+ 
+ # Bug 1110026 & Bug 1095843
+ # Create RAID1 origin, then cache_pool and cache
+-lvcreate -l 2 -n $lv1 $vg
++lvcreate -aey -l 2 -n $lv1 $vg
+ lvcreate --type cache -l 1 $vg/$lv1
+ #should lvs -a $vg/${lv1}_corig_rimage_0        # ensure images are properly renamed
+ #should dmsetup table ${vg}-$lv1 | grep cache  # ensure it is loaded in kernel
+@@ -101,7 +101,7 @@ done
+ ##############################
+ 
+ # Attempt to create smaller cache than origin should fail
+-lvcreate -l 1 -n $lv1 $vg
++lvcreate -aey -l 1 -n $lv1 $vg
+ not lvcreate --type cache -l 2 $vg/$lv1
+ 
+ 
 
 
