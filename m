@@ -1,52 +1,51 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Jul 2014 11:34:17 +0000 (UTC)
-Subject: master - lvchange: just skip on cache pool
-Message-ID: <20140711113417.D70C661381@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Tue, 22 Jul 2014 20:49:53 +0000 (UTC)
+Subject: master - dmeventd: Call lvscan --cache in the RAID plugin.
+Message-ID: <20140722204953.7F6156110F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba048612a3dcb9ca35c54f05a006ec458da4164f
-Commit:        ba048612a3dcb9ca35c54f05a006ec458da4164f
-Parent:        8932d4a6257cfb842adb43c71d650515ef041ba6
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 9 17:55:10 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jul 11 12:50:06 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5dc6671bb550f4b480befee03d234373d08e188a
+Commit:        5dc6671bb550f4b480befee03d234373d08e188a
+Parent:        a9ea014e5152b806f57f6099311b64a2c03ca482
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Jul 21 04:33:21 2014 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Tue Jul 22 22:48:21 2014 +0200
 
-lvchange: just skip on cache pool
+dmeventd: Call lvscan --cache in the RAID plugin.
 
 ---
- tools/lvchange.c |    8 +++-----
- 1 files changed, 3 insertions(+), 5 deletions(-)
+ daemons/dmeventd/plugins/raid/dmeventd_raid.c |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 9bd6a88..992efde 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -215,6 +215,9 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
+diff --git a/daemons/dmeventd/plugins/raid/dmeventd_raid.c b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+index 3fbae15..4690cfa 100644
+--- a/daemons/dmeventd/plugins/raid/dmeventd_raid.c
++++ b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+@@ -33,10 +33,20 @@ static int run_repair(const char *device)
+ 	char cmd_str[CMD_SIZE];
  
- 	activate = (activation_change_t) arg_uint_value(cmd, activate_ARG, CHANGE_AY);
- 
-+	if (lv_is_cache_pool(lv))
-+		return 1;
+ 	if (!dmeventd_lvm2_command(dmeventd_lvm2_pool(), cmd_str, sizeof(cmd_str),
++				  "lvscan --cache", device))
++		return -1;
 +
- 	if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG)))
- 		return 1;
++	r = dmeventd_lvm2_run(cmd_str);
++
++	if (!r)
++		syslog(LOG_INFO, "Re-scan of RAID device %s failed.", device);
++
++	if (!dmeventd_lvm2_command(dmeventd_lvm2_pool(), cmd_str, sizeof(cmd_str),
+ 				  "lvconvert --config devices{ignore_suspended_devices=1} "
+ 				  "--repair --use-policies", device))
+ 		return -1;
  
-@@ -951,11 +954,6 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		return EINVALID_CMD_LINE;
- 	}
++	/* if repair goes OK, report success even if lvscan has failed */
+ 	r = dmeventd_lvm2_run(cmd_str);
  
--	if (lv_is_cache_pool(lv)) {
--		log_error("Can't change cache pool logical volume.");
--		return ECMD_FAILED;
--	}
--
- 	if (lv_is_origin(lv) && !lv_is_thin_volume(lv) &&
- 	    (arg_count(cmd, contiguous_ARG) || arg_count(cmd, permission_ARG) ||
- 	     arg_count(cmd, readahead_ARG) || arg_count(cmd, persistent_ARG) ||
+ 	if (!r)
 
 
