@@ -1,57 +1,38 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 22 Jul 2014 22:26:27 +0000 (UTC)
-Subject: master - tests: support cluster run
-Message-ID: <20140722222627.E584A61052@fedorahosted.org>
+Date: Tue, 22 Jul 2014 22:30:05 +0000 (UTC)
+Subject: master - tests: still unusable kernel
+Message-ID: <20140722223005.BAC3A60E3D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22be7c441784fd89cf76cb6ed56fd50da126864d
-Commit:        22be7c441784fd89cf76cb6ed56fd50da126864d
-Parent:        3a8bb8d3a4ef379298e97ca5f087a1c8908841ed
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8d63d94d853b9675f9d3a86de8b34c68db5d5226
+Commit:        8d63d94d853b9675f9d3a86de8b34c68db5d5226
+Parent:        22be7c441784fd89cf76cb6ed56fd50da126864d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 23 00:25:49 2014 +0200
+AuthorDate:    Wed Jul 23 00:29:32 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 23 00:25:49 2014 +0200
+CommitterDate: Wed Jul 23 00:29:32 2014 +0200
 
-tests: support cluster run
+tests: still unusable kernel
 
-needs exclusive activation
 ---
- test/shell/lvcreate-cache.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ test/lib/aux.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
-index 4274897..03ff214 100644
---- a/test/shell/lvcreate-cache.sh
-+++ b/test/shell/lvcreate-cache.sh
-@@ -71,14 +71,14 @@ lvremove -f $vg/cache_pool
- 
- # Bug 1110026
- # Create origin, then cache_pool and cache
--lvcreate -l 2 -n $lv1 $vg
-+lvcreate -aey -l 2 -n $lv1 $vg
- lvcreate --type cache -l 1 $vg/$lv1
- #should dmsetup table ${vg}-$lv1 | grep cache  # ensure it is loaded in kernel
- lvremove -ff $vg
- 
- # Bug 1110026 & Bug 1095843
- # Create RAID1 origin, then cache_pool and cache
--lvcreate -l 2 -n $lv1 $vg
-+lvcreate -aey -l 2 -n $lv1 $vg
- lvcreate --type cache -l 1 $vg/$lv1
- #should lvs -a $vg/${lv1}_corig_rimage_0        # ensure images are properly renamed
- #should dmsetup table ${vg}-$lv1 | grep cache  # ensure it is loaded in kernel
-@@ -101,7 +101,7 @@ done
- ##############################
- 
- # Attempt to create smaller cache than origin should fail
--lvcreate -l 1 -n $lv1 $vg
-+lvcreate -aey -l 1 -n $lv1 $vg
- not lvcreate --type cache -l 2 $vg/$lv1
- 
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 7b96ad4..dcc86ed 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -736,6 +736,7 @@ raid456_replace_works() {
+ 	  3.13.*.fc20.i686*|3.13.*.fc20.x86_64) return 1 ;;
+ 	  3.14.*.fc21.i686*|3.14.*.fc21.x86_64) return 1 ;;
+ 	  3.15.*rc6*.fc21.i686*|3.15.*rc6*.fc21.x86_64) return 1 ;;
++	  3.16.*rc4*.fc21.i686*|3.16.*rc4*.fc21.x86_64) return 1 ;;
+ 	esac
+ }
  
 
 
