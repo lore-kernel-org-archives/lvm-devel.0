@@ -1,41 +1,65 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 23 Jul 2014 15:20:48 +0000 (UTC)
-Subject: master - raid: Fix partial activation logic for non-raid.
-Message-ID: <20140723152048.62CF360460@fedorahosted.org>
+Date: Wed, 23 Jul 2014 15:24:13 +0000 (UTC)
+Subject: master - post-release
+Message-ID: <20140723152413.CA2F460D56@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=52217f6ebd3dee25808344a9425fc085427075e4
-Commit:        52217f6ebd3dee25808344a9425fc085427075e4
-Parent:        25fa725b05a83dd67e907802d1938bf983ffaad8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=321bed713727a81d743b42c98c1fd91c18ecddb5
+Commit:        321bed713727a81d743b42c98c1fd91c18ecddb5
+Parent:        52217f6ebd3dee25808344a9425fc085427075e4
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Jul 23 16:13:12 2014 +0100
+AuthorDate:    Wed Jul 23 16:23:52 2014 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Jul 23 16:13:12 2014 +0100
+CommitterDate: Wed Jul 23 16:23:52 2014 +0100
 
-raid: Fix partial activation logic for non-raid.
+post-release
 
 ---
- lib/activate/activate.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    3 +++
+ WHATS_NEW_DM |    3 +++
+ 4 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index ebeaa79..1230c9a 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2224,8 +2224,8 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 		goto out;
- 	}
- 
--	if ((!lv->vg->cmd->partial_activation) && (lv->status & PARTIAL_LV) && lv_is_raid_type(lv)) {
--		if (!partial_raid_lv_supports_degraded_activation(lv)) {
-+	if ((!lv->vg->cmd->partial_activation) && (lv->status & PARTIAL_LV)) {
-+		if (!lv_is_raid_type(lv) || !partial_raid_lv_supports_degraded_activation(lv)) {
- 			log_error("Refusing activation of partial LV %s.  "
- 				  "Use '--activationmode partial' to override.",
- 				  display_lvname(lv));
+diff --git a/VERSION b/VERSION
+index fa96924..79c463f 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.108(2)-git (2014-07-23)
++2.02.109(2)-git (2014-07-23)
+diff --git a/VERSION_DM b/VERSION_DM
+index 307f41d..a6ea805 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.87-git (2014-07-23)
++1.02.88-git (2014-07-23)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e443834..64b174b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,6 @@
++Version 2.02.109 - 
++=================================
++
+ Version 2.02.108 - 23rd July 2014
+ =================================
+   Add lvscan --cache which re-scans constituents of a particular LV.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index a39099f..ad25215 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,3 +1,6 @@
++Version 1.02.88 - 
++================================
++
+ Version 1.02.87 - 23rd July 2014
+ ================================
+   Fix dm_report_field_string_list to handle delimiter with multiple chars.
 
 
