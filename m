@@ -1,324 +1,100 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 21 Jun 2019 11:58:21 -0400
-Subject: master - scanning: open devs rw when rescanning for write
-Message-ID: <201906211558.x5LFwLt2014137@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  1 Aug 2014 09:40:11 +0000 (UTC)
+Subject: master - filters: fix regression caused by commit e80884cd080cad7e10be4588e3493b9000649426
+Message-ID: <20140801094011.B67A3612CD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d16142f90fdcf2aef42a51ecabd0c4ff11733d7c
-Commit:        d16142f90fdcf2aef42a51ecabd0c4ff11733d7c
-Parent:        8fecd9c14e0b3f62cc4de6ddac0a015db687b335
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 11 16:17:24 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jun 21 10:57:49 2019 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=54685c20fc9dfb155a2e5bc9d8cf5f0aad944305
+Commit:        54685c20fc9dfb155a2e5bc9d8cf5f0aad944305
+Parent:        c7b9f0ab424136b686cd08ff7416078e7c3728c3
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Aug 1 11:28:18 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Aug 1 11:39:53 2014 +0200
 
-scanning: open devs rw when rescanning for write
+filters: fix regression caused by commit e80884cd080cad7e10be4588e3493b9000649426
 
-When vg_read rescans devices with the intention of
-writing the VG, the label rescan can open the devs
-RW so they do not need to be closed and reopened
-RW in dev_write_bytes.
+Commit e80884cd080cad7e10be4588e3493b9000649426 tried to dump filters
+for them to be reevaluated when creating a PV to avoid overwriting
+any existing signature that may have been created after last
+scan/filtering.
+
+However, we need to call refresh_filters instead of
+persistent_filter->dump since dump requires proper rescannig to fill
+up the persistent filter again. However, this is true only for pvcreate
+but not for vgcreate with PV creation where the scanning happens before
+this PV creation and hence the next rescan (if not full scan), does not
+fill the persistent filter.
+
+Also, move refresh_filters so that it's called sooner and only for
+pvcreate, vgcreate already calls lvmcache_label_scan(cmd, 2) which
+then calls refresh_filters itself, so no need to reevaluate this again.
+
+This caused the persistent filter (/etc/lvm/cache/.cache file) to be
+wrong and contain only the PV just being processed with
+vgcreate <vg_name> <pv_name_to_create>.
+
+This regression caused other block devices to be filtered out in case
+the vgcreate with PV creation was used and then the persistent filter
+is used by any other LVM command afterwards.
 ---
- lib/cache/lvmcache.c             |   17 ++++++++-
- lib/cache/lvmcache.h             |    1 +
- lib/label/label.c                |   32 ++++++++++++++++-
- lib/label/label.h                |    1 +
- lib/metadata/metadata-exported.h |    5 ++-
- lib/metadata/metadata.c          |   72 ++++++++++++++++++++++++-------------
- tools/lvchange.c                 |    2 +-
- tools/pvscan.c                   |    2 +-
- tools/vgchange.c                 |    4 ++-
- 9 files changed, 103 insertions(+), 33 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/metadata.c |    7 -------
+ tools/pvcreate.c        |    9 +++++++++
+ 3 files changed, 10 insertions(+), 7 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 1d92e01..e2d19e8 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -772,7 +772,7 @@ next:
-  * to that VG after a scan.
-  */
- 
--int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid)
-+static int _label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid, int rw)
- {
- 	struct dm_list devs;
- 	struct device_list *devl, *devl2;
-@@ -804,7 +804,10 @@ int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const
- 	/* FIXME: should we also rescan unused_duplicate_devs for devs
- 	   being rescanned here and then repeat resolving the duplicates? */
- 
--	label_scan_devs(cmd, cmd->filter, &devs);
-+	if (rw)
-+		label_scan_devs_rw(cmd, cmd->filter, &devs);
-+	else
-+		label_scan_devs(cmd, cmd->filter, &devs);
- 
- 	dm_list_iterate_items_safe(devl, devl2, &devs) {
- 		dm_list_del(&devl->list);
-@@ -819,6 +822,16 @@ int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const
- 	return 1;
- }
- 
-+int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid)
-+{
-+	return _label_rescan_vg(cmd, vgname, vgid, 0);
-+}
-+
-+int lvmcache_label_rescan_vg_rw(struct cmd_context *cmd, const char *vgname, const char *vgid)
-+{
-+	return _label_rescan_vg(cmd, vgname, vgid, 1);
-+}
-+
- /*
-  * Uses label_scan to populate lvmcache with 'vginfo' struct for each VG
-  * and associated 'info' structs for those VGs.  Only VG summary information
-diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 5b78d7a..e2d967c 100644
---- a/lib/cache/lvmcache.h
-+++ b/lib/cache/lvmcache.h
-@@ -71,6 +71,7 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset);
- 
- int lvmcache_label_scan(struct cmd_context *cmd);
- int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid);
-+int lvmcache_label_rescan_vg_rw(struct cmd_context *cmd, const char *vgname, const char *vgid);
- 
- /* Add/delete a device */
- struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
-diff --git a/lib/label/label.c b/lib/label/label.c
-index a8d87ec..185e51b 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1118,7 +1118,37 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
- 
- 	_scan_list(cmd, f, devs, NULL);
- 
--	/* FIXME: this function should probably fail if any devs couldn't be scanned */
-+	return 1;
-+}
-+
-+/*
-+ * This function is used when the caller plans to write to the devs, so opening
-+ * them RW during rescan avoids needing to close and reopen with WRITE in
-+ * dev_write_bytes.
-+ */
-+
-+int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs)
-+{
-+	struct device_list *devl;
-+
-+	if (!scan_bcache) {
-+		if (!_setup_bcache(0))
-+			return 0;
-+	}
-+
-+	dm_list_iterate_items(devl, devs) {
-+		if (_in_bcache(devl->dev)) {
-+			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
-+			_scan_dev_close(devl->dev);
-+		}
-+		/*
-+		 * With this flag set, _scan_dev_open() done by
-+		 * _scan_list() will do open RW
-+		 */
-+		devl->dev->flags |= DEV_BCACHE_WRITE;
-+	}
-+
-+	_scan_list(cmd, f, devs, NULL);
- 
- 	return 1;
- }
-diff --git a/lib/label/label.h b/lib/label/label.h
-index 07bb77d..f06b7df 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -104,6 +104,7 @@ extern struct bcache *scan_bcache;
- 
- int label_scan(struct cmd_context *cmd);
- int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
-+int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
- int label_scan_devs_excl(struct dm_list *devs);
- void label_scan_invalidate(struct device *dev);
- void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv);
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 9029d3f..966c88f 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -184,8 +184,9 @@
- #define READ_ALLOW_EXPORTED	0x00020000U
- #define READ_OK_NOTFOUND	0x00040000U
- #define READ_WARN_INCONSISTENT	0x00080000U
--#define READ_FOR_UPDATE		0x00100000U /* A meta-flag, useful with toollib for_each_* functions. */
--#define PROCESS_SKIP_SCAN	 0x00200000U /* skip lvmcache_label_scan in process_each_pv */
-+#define READ_FOR_UPDATE		0x00100000U /* command tells vg_read it plans to write the vg */
-+#define PROCESS_SKIP_SCAN	0x00200000U /* skip lvmcache_label_scan in process_each_pv */
-+#define READ_FOR_ACTIVATE	0x00400000U /* command tells vg_read it plans to activate the vg */
- 
- /* vg_read returns these in error_flags */
- #define FAILED_NOT_ENABLED	0x00000001U
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a1099fe..ff30039 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.109 - 
+ =================================
++  Fix incorrect persistent .cache after vgcreate with PV creation. (2.02.108)
+   Display actual size changed when resizing LV.
+   Allow approximate allocation with +%FREE in lvextend.
+   Remove possible spurious "not found" message on PV create before wiping.
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 039a7d6..7b0d6ce 100644
+index 39fa45f..6f88fd8 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -4476,7 +4476,8 @@ void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg)
- static struct volume_group *_vg_read(struct cmd_context *cmd,
- 				     const char *vgname,
- 				     const char *vgid,
--				     unsigned precommitted)
-+				     unsigned precommitted,
-+				     int writing)
- {
- 	const struct format_type *fmt = cmd->fmt;
- 	struct format_instance *fid = NULL;
-@@ -4530,8 +4531,11 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 	 * we can also skip the rescan in that case.
- 	 */
- 	if (!cmd->can_use_one_scan || lvmcache_scan_mismatch(cmd, vgname, vgid)) {
--		log_debug_metadata("Rescanning devices for %s", vgname);
--		lvmcache_label_rescan_vg(cmd, vgname, vgid);
-+		log_debug_metadata("Rescanning devices for %s %s", vgname, writing ? "rw" : "");
-+		if (writing)
-+			lvmcache_label_rescan_vg_rw(cmd, vgname, vgid);
-+		else
-+			lvmcache_label_rescan_vg(cmd, vgname, vgid);
- 	} else {
- 		log_debug_metadata("Skipped rescanning devices for %s", vgname);
- 	}
-@@ -4752,6 +4756,7 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
- 	int missing_pv_flag = 0;
- 	uint32_t failure = 0;
- 	int writing = (read_flags & READ_FOR_UPDATE);
-+	int activating = (read_flags & READ_FOR_ACTIVATE);
+@@ -1337,13 +1337,6 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
  
- 	if (is_orphan_vg(vg_name)) {
- 		log_very_verbose("Reading orphan VG %s", vg_name);
-@@ -4766,13 +4771,23 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
- 		return NULL;
+ 	/* FIXME Check partition type is LVM unless --force is given */
+ 
+-	/*
+-	 * Make sure we don't overwrite any existing signature
+-	 * that may have been created after last time we did filtering.
+-	 */
+-	if (cmd->filter->wipe)
+-		cmd->filter->wipe(cmd->filter);
+-
+ 	/* Is there a pv here already? */
+ 	pv = find_pv_by_name(cmd, name, 1, 1);
+ 
+diff --git a/tools/pvcreate.c b/tools/pvcreate.c
+index 958e353..67ecd41 100644
+--- a/tools/pvcreate.c
++++ b/tools/pvcreate.c
+@@ -105,6 +105,15 @@ int pvcreate(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
  	}
  
--	if (!lock_vol(cmd, vg_name, writing ? LCK_VG_WRITE : LCK_VG_READ, NULL)) {
 +	/*
-+	 * When a command is reading the VG with the intention of eventually
-+	 * writing it, it passes the READ_FOR_UPDATE flag.  This causes vg_read
-+	 * to acquire an exclusive VG lock, and causes vg_read to do some more
-+	 * checks, e.g. that the VG is writable and not exported.  It also
-+	 * means that when the label scan is repeated on the VG's devices, the
-+	 * VG's PVs can be reopened read-write when rescanning in anticipation
-+	 * of needing to write to them.
++	 * Make sure we don't overwrite any existing signature
++	 * that may have been created after last time we did filtering.
 +	 */
++	if (!(refresh_filters(cmd))) {
++		log_error("Failed to refresh filters before pvcreate.");
++		return ECMD_FAILED;
++	}
 +
-+	if (!lock_vol(cmd, vg_name, (writing || activating) ? LCK_VG_WRITE : LCK_VG_READ, NULL)) {
- 		log_error("Can't get lock for %s", vg_name);
- 		failure |= FAILED_LOCKING;
- 		goto_bad;
- 	}
- 
--	if (!(vg = _vg_read(cmd, vg_name, vgid, 0))) {
-+	if (!(vg = _vg_read(cmd, vg_name, vgid, 0, writing))) {
- 		/* Some callers don't care if the VG doesn't exist and don't want an error message. */
- 		if (!(read_flags & READ_OK_NOTFOUND))
- 			log_error("Volume group \"%s\" not found", vg_name);
-@@ -4883,29 +4898,36 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
- 		goto_bad;
- 	}
- 
--	if (writing && !(read_flags & READ_ALLOW_EXPORTED) && vg_is_exported(vg)) {
--		log_error("Volume group %s is exported", vg->name);
--		failure |= FAILED_EXPORTED;
--		goto_bad;
--	}
-+	/*
-+	 * If the command intends to write or activate the VG, there are
-+	 * additional restrictions.  FIXME: These restrictions should
-+	 * probably be checked/applied after vg_read returns.
-+	 */
-+	if (writing || activating) {
-+		if (!(read_flags & READ_ALLOW_EXPORTED) && vg_is_exported(vg)) {
-+			log_error("Volume group %s is exported", vg->name);
-+			failure |= FAILED_EXPORTED;
-+			goto_bad;
-+		}
- 
--	if (writing && !(vg->status & LVM_WRITE)) {
--		log_error("Volume group %s is read-only", vg->name);
--		failure |= FAILED_READ_ONLY;
--		goto_bad;
--	}
-+		if (!(vg->status & LVM_WRITE)) {
-+			log_error("Volume group %s is read-only", vg->name);
-+			failure |= FAILED_READ_ONLY;
-+			goto_bad;
-+		}
- 
--	if (!cmd->handles_missing_pvs && (missing_pv_dev || missing_pv_flag) && writing) {
--		log_error("Cannot change VG %s while PVs are missing.", vg->name);
--		log_error("See vgreduce --removemissing and vgextend --restoremissing.");
--		failure |= FAILED_NOT_ENABLED;
--		goto_bad;
--	}
-+		if (!cmd->handles_missing_pvs && (missing_pv_dev || missing_pv_flag)) {
-+			log_error("Cannot change VG %s while PVs are missing.", vg->name);
-+			log_error("See vgreduce --removemissing and vgextend --restoremissing.");
-+			failure |= FAILED_NOT_ENABLED;
-+			goto_bad;
-+		}
- 
--	if (!cmd->handles_unknown_segments && vg_has_unknown_segments(vg) && writing) {
--		log_error("Cannot change VG %s with unknown segments in it!", vg->name);
--		failure |= FAILED_NOT_ENABLED; /* FIXME new failure code here? */
--		goto_bad;
-+		if (!cmd->handles_unknown_segments && vg_has_unknown_segments(vg)) {
-+			log_error("Cannot change VG %s with unknown segments in it!", vg->name);
-+			failure |= FAILED_NOT_ENABLED; /* FIXME new failure code here? */
-+			goto_bad;
-+		}
- 	}
- 
- 	/*
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 7bdf997..e7fb57d 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -1435,7 +1435,7 @@ int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv)
- 	} else /* Component LVs might be active, support easy deactivation */
- 		cmd->process_component_lvs = 1;
- 
--	ret = process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
-+	ret = process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_ACTIVATE,
- 			      NULL, &_lvchange_activate_check, &_lvchange_activate_single);
- 
- 	if (ret != ECMD_PROCESSED)
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index d41345f..12711cb 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -900,7 +900,7 @@ static int _pvscan_aa(struct cmd_context *cmd, struct pvscan_aa_params *pp,
- 		return ECMD_PROCESSED;
- 	}
- 
--	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, READ_FOR_UPDATE, 0, handle, _pvscan_aa_single);
-+	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, READ_FOR_ACTIVATE, 0, handle, _pvscan_aa_single);
- 
- 	destroy_processing_handle(cmd, handle);
- 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index a17f456..aad6db3 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -800,8 +800,10 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 			cmd->lockd_vg_enforce_sh = 1;
- 	}
- 
--	if (update || arg_is_set(cmd, activate_ARG))
-+	if (update)
- 		flags |= READ_FOR_UPDATE;
-+	else if (arg_is_set(cmd, activate_ARG))
-+		flags |= READ_FOR_ACTIVATE;
- 
- 	if (!(handle = init_processing_handle(cmd, NULL))) {
- 		log_error("Failed to initialize processing handle.");
+ 	for (i = 0; i < argc; i++) {
+ 		if (sigint_caught())
+ 			return_ECMD_FAILED;
 
 
