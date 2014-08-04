@@ -1,41 +1,37 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 25 Jun 2019 11:44:39 -0400
-Subject: stable-2.02 - tests: accept also value 512
-Message-ID: <201906251544.x5PFid8L012195@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Mon,  4 Aug 2014 15:06:41 +0000 (UTC)
+Subject: master - WHATS_NEW: lvscan --cache SEGV fix
+Message-ID: <20140804150641.6D3F060701@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=788d89c4127f69c813813e6a192fe44d8c1abc7a
-Commit:        788d89c4127f69c813813e6a192fe44d8c1abc7a
-Parent:        e0a176f49ab09d2afaea73cafa4d7b41ade0c345
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 20 14:20:35 2019 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 20 14:20:35 2019 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=46262f163b2a6c802f91076c2675bda4be5d8a2d
+Commit:        46262f163b2a6c802f91076c2675bda4be5d8a2d
+Parent:        0208665209c4e8f02841a426e6073a48195f56c1
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Aug 4 17:05:08 2014 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Mon Aug 4 17:05:08 2014 +0200
 
-tests: accept also value 512
+WHATS_NEW: lvscan --cache SEGV fix
 
-Older kernels provide fixed value 512 instead of 0.
 ---
- test/shell/lvchange-cache.sh |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvchange-cache.sh b/test/shell/lvchange-cache.sh
-index ab7c8b0..93c8c3b 100644
---- a/test/shell/lvchange-cache.sh
-+++ b/test/shell/lvchange-cache.sh
-@@ -88,7 +88,8 @@ grep 'random_threshold=4' out
- else
- # When MQ is emulated by SMQ policy it does not hold settings.
- # So just skip testing of param changes when sequential_threshold=0
--grep 'sequential_threshold=0' out
-+# or some older kernel instancies show also value 512
-+grep 'sequential_threshold=0' out || grep 'sequential_threshold=512' out
- fi
- 
- fi  # have_cache 1 5 0
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ff30039..8397d30 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.109 - 
+ =================================
++  Fix a segfault in lvscan --cache when devices were already missing.
+   Fix incorrect persistent .cache after vgcreate with PV creation. (2.02.108)
+   Display actual size changed when resizing LV.
+   Allow approximate allocation with +%FREE in lvextend.
 
 
