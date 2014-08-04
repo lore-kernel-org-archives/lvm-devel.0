@@ -1,37 +1,56 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Mon,  4 Aug 2014 15:06:41 +0000 (UTC)
-Subject: master - WHATS_NEW: lvscan --cache SEGV fix
-Message-ID: <20140804150641.6D3F060701@fedorahosted.org>
+Date: Mon,  4 Aug 2014 15:37:01 +0000 (UTC)
+Subject: master - lvscan: Fix possible gcc warnings in --cache implementation.
+Message-ID: <20140804153701.4270F6104E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=46262f163b2a6c802f91076c2675bda4be5d8a2d
-Commit:        46262f163b2a6c802f91076c2675bda4be5d8a2d
-Parent:        0208665209c4e8f02841a426e6073a48195f56c1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2dac5525fb39f83a8088c10ae6c9bc0131a01433
+Commit:        2dac5525fb39f83a8088c10ae6c9bc0131a01433
+Parent:        46262f163b2a6c802f91076c2675bda4be5d8a2d
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Aug 4 17:05:08 2014 +0200
+AuthorDate:    Mon Aug 4 17:36:12 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Mon Aug 4 17:05:08 2014 +0200
+CommitterDate: Mon Aug 4 17:36:12 2014 +0200
 
-WHATS_NEW: lvscan --cache SEGV fix
+lvscan: Fix possible gcc warnings in --cache implementation.
 
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ tools/lvscan.c |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ff30039..8397d30 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.109 - 
- =================================
-+  Fix a segfault in lvscan --cache when devices were already missing.
-   Fix incorrect persistent .cache after vgcreate with PV creation. (2.02.108)
-   Display actual size changed when resizing LV.
-   Allow approximate allocation with +%FREE in lvextend.
+diff --git a/tools/lvscan.c b/tools/lvscan.c
+index 0cfbe83..487c4cf 100644
+--- a/tools/lvscan.c
++++ b/tools/lvscan.c
+@@ -18,20 +18,20 @@
+ static int _lvscan_single_lvmetad(struct cmd_context *cmd, struct logical_volume *lv)
+ {
+ 	struct pv_list *pvl;
+-	struct dm_list pvs;
+-	char pvid_s[64];
++	struct dm_list all_pvs;
++	char pvid_s[64] __attribute__((aligned(8)));
+ 
+ 	if (!lvmetad_used()) {
+ 		log_verbose("Ignoring lvscan --cache because lvmetad is not in use.");
+ 		return ECMD_PROCESSED;
+ 	}
+ 
+-	dm_list_init(&pvs);
++	dm_list_init(&all_pvs);
+ 
+-	if (!get_pv_list_for_lv(lv->vg->vgmem, lv, &pvs))
++	if (!get_pv_list_for_lv(lv->vg->vgmem, lv, &all_pvs))
+ 		return ECMD_FAILED;
+ 
+-	dm_list_iterate_items(pvl, &pvs) {
++	dm_list_iterate_items(pvl, &all_pvs) {
+ 		if (!pvl->pv->dev) {
+ 			id_write_format(&pvl->pv->id, pvid_s, sizeof(pvid_s));
+ 			log_warn("WARNING: Device for PV %s already missing, skipping.",
 
 
