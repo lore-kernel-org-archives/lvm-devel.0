@@ -1,96 +1,57 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  7 Aug 2014 13:33:48 +0000 (UTC)
-Subject: master - pvmove: remove spurious "Skipping mirror LV" message on pvmove of clustered mirror
-Message-ID: <20140807133348.7BDBE6017F@fedorahosted.org>
+Date: Thu,  7 Aug 2014 14:48:29 +0000 (UTC)
+Subject: master - activation: if LV inactive and non-clustered, do not issue "Cannot deactivate" on -aln
+Message-ID: <20140807144829.A6B24610A7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ea662ca06065d1e3d44814b54cf8501c9bb9594f
-Commit:        ea662ca06065d1e3d44814b54cf8501c9bb9594f
-Parent:        26885ea119891294961939f8e3f73eee8163ad08
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c52c9a1e316b6a92a2475dfe3ad2aac92edc80c0
+Commit:        c52c9a1e316b6a92a2475dfe3ad2aac92edc80c0
+Parent:        ea662ca06065d1e3d44814b54cf8501c9bb9594f
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Aug 7 15:23:58 2014 +0200
+AuthorDate:    Thu Aug 7 16:44:09 2014 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Aug 7 15:23:58 2014 +0200
+CommitterDate: Thu Aug 7 16:44:09 2014 +0200
 
-pvmove: remove spurious "Skipping mirror LV" message on pvmove of clustered mirror
+activation: if LV inactive and non-clustered, do not issue "Cannot deactivate" on -aln
 
-With cmirrord, we can do pvmove of clustered mirror. The code checking
-suitability of LVs on the PV being moved issued a message if a mirror
-LV was found and the VG was clustered. However, the actual pvmove did
-work correctly.
+The message "Cannot deactivate remotely exclusive device locally." makes
+sense only for clustered LV. If the LV is non-clustered, then it's
+always exclusive by definition and if it's already deactivated, this
+message pops up inappropriately as those two conditions are met.
 
-The top-level mirror LV is actually skipped in the code since it's
-always layered on top of internal LVs making up the mirror LV and for pvmove
-we consider these internal devices only as they're actually layered on
-top of concrete PVs then. But we don't need to issue any message here
-about skipping the top-level mirror LV - it's misleading here.
+So issue the message only if the conditions are met AND we have clustered VG.
 ---
- WHATS_NEW      |    1 +
- tools/pvmove.c |   22 ++++++++++------------
- 2 files changed, 11 insertions(+), 12 deletions(-)
+ WHATS_NEW         |    1 +
+ lib/metadata/lv.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index afefd6e..028758e 100644
+index 028758e..96ce8cb 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.110 -
  ==================================
-+  Remove spurious "Skipping mirror LV" message on pvmove of clustered mirror.
++  If LV inactive and non-clustered, do not issue "Cannot deactivate" on -aln.
+   Remove spurious "Skipping mirror LV" message on pvmove of clustered mirror.
  
  Version 2.02.109 - 5th August 2014
- ==================================
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index c4c590b..3448af4 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -319,12 +319,15 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 			continue;
- 
- 		/*
--		 * RAID, thin, mirror, and snapshot-related LVs are not
--		 * processed in a cluster, so we don't have to worry about
--		 * avoiding certain PVs in that context.
-+		 * RAID, thin and snapshot-related LVs are not
-+		 * processed in a cluster, so we don't have to
-+		 * worry about avoiding certain PVs in that context.
- 		 */
--		if (vg_is_clustered(lv->vg))
--			continue;
-+		if (vg_is_clustered(lv->vg)) {
-+			/* Allow clustered mirror, but not raid mirror. */
-+			if (!lv_is_mirror_type(lv) || lv_is_raid(lv))
-+				continue;
-+		}
- 
- 		if (!lv_is_on_pvs(lv, source_pvl))
- 			continue;
-@@ -391,8 +394,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 		 */
- 		if (vg_is_clustered(vg) &&
- 		    (lv_is_origin(lv) || lv_is_cow(lv) ||
--		     lv_is_thin_type(lv) || lv_is_raid_type(lv) ||
--		     lv_is_mirrored(lv))) {
-+		     lv_is_thin_type(lv) || lv_is_raid_type(lv))) {
- 			log_print_unless_silent("Skipping %s LV %s",
- 						lv_is_origin(lv) ? "origin" :
- 						lv_is_cow(lv) ?
-@@ -405,11 +407,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 						seg_is_raid(first_seg(lv)) ?
- 						"RAID" :
- 						lv_is_raid_type(lv) ?
--						"RAID-related" :
--						lv_is_mirrored(lv) ?
--						"mirror" :
--						lv_is_mirror_type(lv) ?
--						"mirror-related" : "",
-+						"RAID-related" : "",
- 						lv->name);
- 			lv_skipped = 1;
- 			continue;
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index f2c9b12..9539369 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -859,7 +859,7 @@ deactivate:
+ 			return_0;
+ 		break;
+ 	case CHANGE_ALN:
+-		if (_lv_is_exclusive(lv)) {
++		if (vg_is_clustered(lv->vg) && _lv_is_exclusive(lv)) {
+ 			if (!lv_is_active_locally(lv)) {
+ 				log_error("Cannot deactivate remotely exclusive device locally.");
+ 				return 0;
 
 
