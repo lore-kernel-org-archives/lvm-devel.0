@@ -1,84 +1,96 @@
-From: Saso Slavicic <saso.linux@astim.si>
-Date: Thu, 7 Aug 2014 10:30:51 +0200
-Subject: [PATCH] blkdeactivate should deactivate loop devices
-Message-ID: <001501cfb219$e61b7780$b2526680$@astim.si>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu,  7 Aug 2014 13:33:48 +0000 (UTC)
+Subject: master - pvmove: remove spurious "Skipping mirror LV" message on pvmove of clustered mirror
+Message-ID: <20140807133348.7BDBE6017F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ea662ca06065d1e3d44814b54cf8501c9bb9594f
+Commit:        ea662ca06065d1e3d44814b54cf8501c9bb9594f
+Parent:        26885ea119891294961939f8e3f73eee8163ad08
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Aug 7 15:23:58 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Aug 7 15:23:58 2014 +0200
 
-When mapping a disk image with kpartx for example, blkdeactivate will
-deactivate dm mappings when shutting down, but loop device will not be
-deactivated. This can lead to errors (unable to unmount filesystem) on
-shutdown if the administrator forgets to unmap the disk image before
-shutdown. Since blkdeactivate already goes half-way (with dm mappings), I
-thought to add support to deactivate the underlying loop device as well.
+pvmove: remove spurious "Skipping mirror LV" message on pvmove of clustered mirror
 
-blkdeactivate: deactivate loop devices
+With cmirrord, we can do pvmove of clustered mirror. The code checking
+suitability of LVs on the PV being moved issued a message if a mirror
+LV was found and the VG was clustered. However, the actual pvmove did
+work correctly.
 
-diff --git a/scripts/blkdeactivate.sh.in b/scripts/blkdeactivate.sh.in
---- a/scripts/blkdeactivate.sh.in
-+++ b/scripts/blkdeactivate.sh.in
-@@ -34,6 +34,7 @@ SYS_BLK_DIR='/sys/block'
+The top-level mirror LV is actually skipped in the code since it's
+always layered on top of internal LVs making up the mirror LV and for pvmove
+we consider these internal devices only as they're actually layered on
+top of concrete PVs then. But we don't need to issue any message here
+about skipping the top-level mirror LV - it's misleading here.
+---
+ WHATS_NEW      |    1 +
+ tools/pvmove.c |   22 ++++++++++------------
+ 2 files changed, 11 insertions(+), 12 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index afefd6e..028758e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.110 -
+ ==================================
++  Remove spurious "Skipping mirror LV" message on pvmove of clustered mirror.
  
- UMOUNT="/bin/umount"
- DMSETUP="@sbindir@/dmsetup"
-+LOSETUP="@sbindir@/losetup"
- LVM="@sbindir@/lvm"
+ Version 2.02.109 - 5th August 2014
+ ==================================
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index c4c590b..3448af4 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -319,12 +319,15 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 			continue;
  
- if $UMOUNT --help | grep -- "--all-targets" >$DEV_DIR/null; then
-@@ -44,6 +45,7 @@ else
- 	FINDMNT_READ="read -r mnt"
- fi
- DMSETUP_OPTS=""
-+LOSETUP_OPTS=""
- LVM_OPTS=""
+ 		/*
+-		 * RAID, thin, mirror, and snapshot-related LVs are not
+-		 * processed in a cluster, so we don't have to worry about
+-		 * avoiding certain PVs in that context.
++		 * RAID, thin and snapshot-related LVs are not
++		 * processed in a cluster, so we don't have to
++		 * worry about avoiding certain PVs in that context.
+ 		 */
+-		if (vg_is_clustered(lv->vg))
+-			continue;
++		if (vg_is_clustered(lv->vg)) {
++			/* Allow clustered mirror, but not raid mirror. */
++			if (!lv_is_mirror_type(lv) || lv_is_raid(lv))
++				continue;
++		}
  
- LSBLK="/bin/lsblk -r --noheadings -o TYPE,KNAME,NAME,MOUNTPOINT"
-@@ -204,6 +206,23 @@ deactivate_dm () {
- 	fi
- }
- 
-+deactivate_loop () {
-+	local name=$(printf $name)
-+	test -b "$DEV_DIR/$name" || return 0
-+	$LOSETUP "$DEV_DIR/$name" &> $DEV_DIR/null || return 0
-+	test -z ${SKIP_DEVICE_LIST["$kname"]} || return 1
-+
-+	deactivate_holders "$DEV_DIR/$name" || return 1
-+
-+	echo -n "  [LOOP]: deactivating $devtype device $name ($kname)... "
-+	if eval $LOSETUP $LOSETUP_OPTS -d "$DEV_DIR/$name" $OUT $ERR; then
-+		echo "done"
-+	else
-+		echo "skipping"
-+		add_device_to_skip_list
-+	fi
-+}
-+
- deactivate_lvm () {
- 	local DM_VG_NAME; local DM_LV_NAME; local DM_LV_LAYER
- 
-@@ -263,6 +282,8 @@ deactivate () {
- 
-######################################################################
- 	if test "$devtype" = "lvm"; then
- 		deactivate_lvm
-+	elif test "$devtype" = "loop"; then
-+		deactivate_loop
- 	elif test "${kname:0:3}" = "dm-"; then
- 		deactivate_dm
- 	fi
-@@ -379,6 +400,7 @@ set_env() {
- 		unset OUT
- 		UMOUNT_OPTS+="-v"
- 		DMSETUP_OPTS+="-vvvv"
-+		LOSETUP_OPTS+="-v"
- 		LVM_OPTS+="-vvvv"
- 	else
- 		OUT="1>$DEV_DIR/null"
+ 		if (!lv_is_on_pvs(lv, source_pvl))
+ 			continue;
+@@ -391,8 +394,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 		 */
+ 		if (vg_is_clustered(vg) &&
+ 		    (lv_is_origin(lv) || lv_is_cow(lv) ||
+-		     lv_is_thin_type(lv) || lv_is_raid_type(lv) ||
+-		     lv_is_mirrored(lv))) {
++		     lv_is_thin_type(lv) || lv_is_raid_type(lv))) {
+ 			log_print_unless_silent("Skipping %s LV %s",
+ 						lv_is_origin(lv) ? "origin" :
+ 						lv_is_cow(lv) ?
+@@ -405,11 +407,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 						seg_is_raid(first_seg(lv)) ?
+ 						"RAID" :
+ 						lv_is_raid_type(lv) ?
+-						"RAID-related" :
+-						lv_is_mirrored(lv) ?
+-						"mirror" :
+-						lv_is_mirror_type(lv) ?
+-						"mirror-related" : "",
++						"RAID-related" : "",
+ 						lv->name);
+ 			lv_skipped = 1;
+ 			continue;
 
 
