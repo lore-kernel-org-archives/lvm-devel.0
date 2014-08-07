@@ -1,65 +1,84 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  5 Aug 2014 01:15:29 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20140805011529.AB83C60E5E@fedorahosted.org>
+From: Saso Slavicic <saso.linux@astim.si>
+Date: Thu, 7 Aug 2014 10:30:51 +0200
+Subject: [PATCH] blkdeactivate should deactivate loop devices
+Message-ID: <001501cfb219$e61b7780$b2526680$@astim.si>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=26885ea119891294961939f8e3f73eee8163ad08
-Commit:        26885ea119891294961939f8e3f73eee8163ad08
-Parent:        9d4e1e51a944c07bad56fe41407b84afefb39357
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Aug 5 02:12:20 2014 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Aug 5 02:12:20 2014 +0100
+Hi,
 
-post-release
+When mapping a disk image with kpartx for example, blkdeactivate will
+deactivate dm mappings when shutting down, but loop device will not be
+deactivated. This can lead to errors (unable to unmount filesystem) on
+shutdown if the administrator forgets to unmap the disk image before
+shutdown. Since blkdeactivate already goes half-way (with dm mappings), I
+thought to add support to deactivate the underlying loop device as well.
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+blkdeactivate: deactivate loop devices
 
-diff --git a/VERSION b/VERSION
-index 2eb161b..81e874b 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.109(2)-git (2014-08-05)
-+2.02.110(2)-git (2014-08-05)
-diff --git a/VERSION_DM b/VERSION_DM
-index e9787c1..f2b3ee8 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.88-git (2014-08-05)
-+1.02.89-git (2014-08-05)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e63a3e8..afefd6e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.110 -
-+==================================
+diff --git a/scripts/blkdeactivate.sh.in b/scripts/blkdeactivate.sh.in
+--- a/scripts/blkdeactivate.sh.in
++++ b/scripts/blkdeactivate.sh.in
+@@ -34,6 +34,7 @@ SYS_BLK_DIR='/sys/block'
+ 
+ UMOUNT="/bin/umount"
+ DMSETUP="@sbindir@/dmsetup"
++LOSETUP="@sbindir@/losetup"
+ LVM="@sbindir@/lvm"
+ 
+ if $UMOUNT --help | grep -- "--all-targets" >$DEV_DIR/null; then
+@@ -44,6 +45,7 @@ else
+ 	FINDMNT_READ="read -r mnt"
+ fi
+ DMSETUP_OPTS=""
++LOSETUP_OPTS=""
+ LVM_OPTS=""
+ 
+ LSBLK="/bin/lsblk -r --noheadings -o TYPE,KNAME,NAME,MOUNTPOINT"
+@@ -204,6 +206,23 @@ deactivate_dm () {
+ 	fi
+ }
+ 
++deactivate_loop () {
++	local name=$(printf $name)
++	test -b "$DEV_DIR/$name" || return 0
++	$LOSETUP "$DEV_DIR/$name" &> $DEV_DIR/null || return 0
++	test -z ${SKIP_DEVICE_LIST["$kname"]} || return 1
 +
- Version 2.02.109 - 5th August 2014
- ==================================
-   Remove lv_volume_type field from reports. (2.02.108)
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 7b19ea1..842ee15 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.89 -
-+=================================
++	deactivate_holders "$DEV_DIR/$name" || return 1
 +
- Version 1.02.88 - 5th August 2014
- =================================
-   Add dm_tree_set_optional_uuid_suffixes to handle upgrades.
++	echo -n "  [LOOP]: deactivating $devtype device $name ($kname)... "
++	if eval $LOSETUP $LOSETUP_OPTS -d "$DEV_DIR/$name" $OUT $ERR; then
++		echo "done"
++	else
++		echo "skipping"
++		add_device_to_skip_list
++	fi
++}
++
+ deactivate_lvm () {
+ 	local DM_VG_NAME; local DM_LV_NAME; local DM_LV_LAYER
+ 
+@@ -263,6 +282,8 @@ deactivate () {
+ 
+######################################################################
+ 	if test "$devtype" = "lvm"; then
+ 		deactivate_lvm
++	elif test "$devtype" = "loop"; then
++		deactivate_loop
+ 	elif test "${kname:0:3}" = "dm-"; then
+ 		deactivate_dm
+ 	fi
+@@ -379,6 +400,7 @@ set_env() {
+ 		unset OUT
+ 		UMOUNT_OPTS+="-v"
+ 		DMSETUP_OPTS+="-vvvv"
++		LOSETUP_OPTS+="-v"
+ 		LVM_OPTS+="-vvvv"
+ 	else
+ 		OUT="1>$DEV_DIR/null"
 
 
