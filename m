@@ -1,85 +1,48 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Aug 2014 13:07:35 +0000 (UTC)
-Subject: master - man: show lv name for lvs
-Message-ID: <20140815130735.BBCD960319@fedorahosted.org>
+Date: Fri, 15 Aug 2014 13:07:37 +0000 (UTC)
+Subject: master - man: add some more reserved names
+Message-ID: <20140815130737.D91FD60319@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=630fcab420ce791612bbeed3e30db4c5371803e5
-Commit:        630fcab420ce791612bbeed3e30db4c5371803e5
-Parent:        7f4b1e7411d7ff59abe2063db7273fd600e2bf72
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba7796e0550dcc8fcc114bc8eadc6815c34c3f4f
+Commit:        ba7796e0550dcc8fcc114bc8eadc6815c34c3f4f
+Parent:        630fcab420ce791612bbeed3e30db4c5371803e5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Aug 14 11:09:30 2014 +0200
+AuthorDate:    Thu Aug 14 11:10:36 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 15 15:06:44 2014 +0200
 
-man: show lv name for lvs
+man: add some more reserved names
 
-Make it more obvious that either just vg name or lv name or path could
-be passed as an argument.
 ---
- man/lvdisplay.8.in |   12 ++++++------
- man/lvs.8.in       |    4 ++--
- 2 files changed, 8 insertions(+), 8 deletions(-)
+ man/lvm.8.in |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/man/lvdisplay.8.in b/man/lvdisplay.8.in
-index ed113dd..3232853 100644
---- a/man/lvdisplay.8.in
-+++ b/man/lvdisplay.8.in
-@@ -18,8 +18,8 @@ lvdisplay \(em display attributes of a logical volume
- .IR hHbBsSkKmMgGtTpPeE ]
- .RB [ \-v | \-\-verbose ]
- .RB [ \-\-version ]
--.RI [ LogicalVolumePath
--.RI [ LogicalVolumePath ...]]
-+.RI [ VolumeGroupName | LogicalVolume { Name | Path }
-+.RI [ VolumeGroupName | LogicalVolume { Name | Path }\ ...]]
- .br
- 
- .B lvdisplay
-@@ -50,8 +50,8 @@ lvdisplay \(em display attributes of a logical volume
- .IR hHbBsSkKmMgGtTpPeE ]
- .RB [ \-v | \-\-verbose ]
- .RB [ \-\-version ]
--.RI [ LogicalVolumePath
--.RI [ LogicalVolumePath ...]]
-+.RI [ VolumeGroupName | LogicalVolume { Name | Path }
-+.RI [ VolumeGroupName | LogicalVolume { Name | Path }\ ...]]
- .SH DESCRIPTION
- lvdisplay allows you to see the attributes of a logical volume
- like size, read/write status, snapshot information etc.
-@@ -111,12 +111,12 @@ logical volumes have been created for this original logical volume,
- this command shows a list of all snapshot logical volumes and their
- status (active or inactive) as well:
- .sp
--.B lvdisplay \-v /dev/vg00/lvol2
-+.B lvdisplay \-v vg00/lvol2
- 
- Shows the attributes of this snapshot logical volume and also which
- original logical volume it is associated with:
- .sp
--.B lvdisplay /dev/vg00/snapshot
-+.B lvdisplay vg00/snapshot
- 
- .SH SEE ALSO
- .BR lvm (8),
-diff --git a/man/lvs.8.in b/man/lvs.8.in
-index b7e3ecc..3ab4120 100644
---- a/man/lvs.8.in
-+++ b/man/lvs.8.in
-@@ -32,8 +32,8 @@ lvs \(em report information about logical volumes
- .RB [ \-\-unquoted ]
- .RB [ \-v | \-\-verbose ]
- .RB [ \-\-version ]
--.RI [ VolumeGroupName
--.RI [ VolumeGroupName ...]]
-+.RI [ VolumeGroupName | LogicalVolume { Name | Path }
-+.RI [ VolumeGroupName | LogicalVolume { Name | Path }\ ...]]
- 
- .SH DESCRIPTION
- lvs produces formatted output about logical volumes.
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 76d1237..069194c 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -339,14 +339,15 @@ Path for the lvmetad pid file.
+ .B LVM_LVMETAD_SOCKET
+ Path for the lvmetad socket file.
+ .SH VALID NAMES
+-The following characters are valid for VG and LV names:
++The valid characters for VG and LV names are:
+ .B a-z A-Z 0-9 + _ . -
+ .LP
+ VG and LV names cannot begin with a hyphen.
+ There are also various reserved names that are used internally by lvm that can not be used as LV or VG names.
+ A VG cannot be called anything that exists in /dev/ at the time of creation, nor can it be called '.' or '..'.
+ A LV cannot be called '.' '..' 'snapshot' or 'pvmove'. The LV name may also not contain
+-the strings '_mlog', '_mimage', '_rimage', '_tdata', '_tmeta'.
++the strings '_cdata', '_cmeta', '_mlog', '_mimage', '_pmspare',
++'_rimage', '_rlog', '_tdata', '_tmeta'.
+ A directory bearing the name of each Volume Group is created under /dev when any of its Logical Volumes are activated.
+ Each active Logical Volume is accessible from this directory as a symbolic link leading to a device node.
+ Links or nodes in /dev/mapper are intended only for internal use and the precise format and escaping might change between releases and distributions.
 
 
