@@ -1,40 +1,39 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Aug 2014 13:07:52 +0000 (UTC)
-Subject: master - cleanup: quite gcc warn
-Message-ID: <20140815130752.D970B60CAD@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 15 Aug 2014 13:21:24 +0000 (UTC)
+Subject: master - man: missing (C)ache in target type lv_attr description
+Message-ID: <20140815132124.E05E5610B5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9534c21ead16dae8975fdaf1959b5534dc175f84
-Commit:        9534c21ead16dae8975fdaf1959b5534dc175f84
-Parent:        ff33d215ba488bc3abf7bb33f1c25ee1fc0e65c4
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 15 14:08:06 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Aug 15 15:06:45 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d213758e5720f47d3a5781d958431c8d80afdda7
+Commit:        d213758e5720f47d3a5781d958431c8d80afdda7
+Parent:        9534c21ead16dae8975fdaf1959b5534dc175f84
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Aug 15 15:21:15 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Aug 15 15:21:15 2014 +0200
 
-cleanup: quite gcc warn
+man: missing (C)ache in target type lv_attr description
 
-gcc can't see dev_get_primary_dev  returns only 0,1,2
-so ensure 'name' is always defined in valid path.
 ---
- lib/filters/filter-mpath.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ man/lvs.8.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/filters/filter-mpath.c b/lib/filters/filter-mpath.c
-index 52c9341..a933ba1 100644
---- a/lib/filters/filter-mpath.c
-+++ b/lib/filters/filter-mpath.c
-@@ -158,6 +158,7 @@ static int dev_is_mpath(struct dev_filter *f, struct device *dev)
- 		return 0;
- 
- 	switch (dev_get_primary_dev(dt, dev, &primary_dev)) {
-+		default:
- 		case 0:
- 			/* Error. */
- 			log_error("Failed to get primary device for %d:%d.", major, minor);
+diff --git a/man/lvs.8.in b/man/lvs.8.in
+index 3ab4120..f268584 100644
+--- a/man/lvs.8.in
++++ b/man/lvs.8.in
+@@ -169,7 +169,7 @@ mapped (d)evice present without tables, mapped device present with (i)nactive ta
+ .IP 6 3
+ device (o)pen, (X) unknown
+ .IP 7 3
+-Target type: (m)irror, (r)aid, (s)napshot, (t)hin, (u)nknown, (v)irtual.
++Target type: (C)ache, (m)irror, (r)aid, (s)napshot, (t)hin, (u)nknown, (v)irtual.
+ This groups logical volumes related to the same kernel target together.  So,
+ for example, mirror images, mirror logs as well as mirrors themselves appear as
+ (m) if they use the original device-mapper mirror kernel driver; whereas the raid
 
 
