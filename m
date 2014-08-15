@@ -1,50 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Aug 2014 13:07:46 +0000 (UTC)
-Subject: master - cleanup: drop unneeded inits
-Message-ID: <20140815130746.67F7661146@fedorahosted.org>
+Date: Fri, 15 Aug 2014 13:07:48 +0000 (UTC)
+Subject: master - cleanup: just easier word wrapping
+Message-ID: <20140815130748.934E160CAD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1bde4c19e65a823c9dc3a34606f2aefb76e41230
-Commit:        1bde4c19e65a823c9dc3a34606f2aefb76e41230
-Parent:        5095a6517da9b57b0d2540b961e9841ad02fa8cc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f183995f8ead0bf63aea6ce7983871015dc3efff
+Commit:        f183995f8ead0bf63aea6ce7983871015dc3efff
+Parent:        1bde4c19e65a823c9dc3a34606f2aefb76e41230
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 13 14:20:41 2014 +0200
+AuthorDate:    Thu Aug 14 11:11:14 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 15 15:06:44 2014 +0200
 
-cleanup: drop unneeded inits
+cleanup: just easier word wrapping
 
 ---
- tools/lvconvert.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ man/lvconvert.8.in |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index d9fc749..7330c73 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3218,7 +3218,7 @@ static int _poll_logical_volume(struct cmd_context *cmd, struct logical_volume *
- 
- static int lvconvert_single(struct cmd_context *cmd, struct lvconvert_params *lp)
- {
--	struct logical_volume *lv = NULL;
-+	struct logical_volume *lv;
- 	int ret = ECMD_FAILED;
- 	int saved_ignore_suspended_devices = ignore_suspended_devices();
- 
-@@ -3265,8 +3265,8 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
- 				  void *handle)
- {
- 	struct lvconvert_params *lp = handle;
--	const char *vg_name = NULL;
--	struct logical_volume *refreshed_lv = NULL;
-+	const char *vg_name;
-+	struct logical_volume *refreshed_lv;
- 	int ret;
- 
- 	/*
+diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
+index 93fb9a9..b8951e2 100644
+--- a/man/lvconvert.8.in
++++ b/man/lvconvert.8.in
+@@ -100,7 +100,8 @@ lvconvert \(em convert a logical volume from linear to mirror or snapshot
+ .RI [ PhysicalVolume [ Path ]...]
+ .sp
+ .B lvconvert
+-.RB [{ \-\-type \  \fIthin [ \fI\-pool ]| \-T | \-\-thin }
++.RB [{ \-\-type
++.BR \fIthin [ \fI\-pool ]| \-T | \-\-thin }
+ .RB [ \-\-originname
+ .IR NewExternalOriginVolumeName ]]
+ .RB [ \-\-thinpool
+@@ -131,7 +132,8 @@ lvconvert \(em convert a logical volume from linear to mirror or snapshot
+ .RB [ \-\-version ]
+ .sp
+ .B lvconvert
+-.RB [ \-\-type \  \fIcache [ \fI\-pool ]| \-\-cache ]
++.RB [ \-\-type
++.BR \fIcache [ \fI\-pool ]| \-\-cache ]
+ .RB [ \-\-cachepool
+ .IR CachePoolLV { Name | Path }]
+ .RB [ \-c | \-\-chunksize
 
 
