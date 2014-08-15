@@ -1,51 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Aug 2014 13:07:44 +0000 (UTC)
-Subject: master - cleanup: simplier struct initilization
-Message-ID: <20140815130744.4DEE161146@fedorahosted.org>
+Date: Fri, 15 Aug 2014 13:07:46 +0000 (UTC)
+Subject: master - cleanup: drop unneeded inits
+Message-ID: <20140815130746.67F7661146@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5095a6517da9b57b0d2540b961e9841ad02fa8cc
-Commit:        5095a6517da9b57b0d2540b961e9841ad02fa8cc
-Parent:        338b991e4072734a4c37573d1bb541ecadee93b8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1bde4c19e65a823c9dc3a34606f2aefb76e41230
+Commit:        1bde4c19e65a823c9dc3a34606f2aefb76e41230
+Parent:        5095a6517da9b57b0d2540b961e9841ad02fa8cc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 13 14:20:10 2014 +0200
+AuthorDate:    Wed Aug 13 14:20:41 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 15 15:06:44 2014 +0200
 
-cleanup: simplier struct initilization
+cleanup: drop unneeded inits
 
 ---
- tools/lvconvert.c |    7 +++----
- 1 files changed, 3 insertions(+), 4 deletions(-)
+ tools/lvconvert.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 9c25bd9..d9fc749 100644
+index d9fc749..7330c73 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -348,9 +348,6 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 	int pagesize = lvm_getpagesize();
- 	const char *type_str = arg_str_value(cmd, type_ARG, "");
+@@ -3218,7 +3218,7 @@ static int _poll_logical_volume(struct cmd_context *cmd, struct logical_volume *
  
--	memset(lp, 0, sizeof(*lp));
--	lp->target_attr = ~0;
--
- 	if (!_check_conversion_type(cmd, type_str))
- 		return_0;
- 
-@@ -3315,7 +3312,9 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
- 
- int lvconvert(struct cmd_context * cmd, int argc, char **argv)
+ static int lvconvert_single(struct cmd_context *cmd, struct lvconvert_params *lp)
  {
--	struct lvconvert_params lp;
-+	struct lvconvert_params lp = {
-+		.target_attr = ~0,
-+	};
+-	struct logical_volume *lv = NULL;
++	struct logical_volume *lv;
+ 	int ret = ECMD_FAILED;
+ 	int saved_ignore_suspended_devices = ignore_suspended_devices();
  
- 	if (!_read_params(&lp, cmd, argc, argv)) {
- 		stack;
+@@ -3265,8 +3265,8 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
+ 				  void *handle)
+ {
+ 	struct lvconvert_params *lp = handle;
+-	const char *vg_name = NULL;
+-	struct logical_volume *refreshed_lv = NULL;
++	const char *vg_name;
++	struct logical_volume *refreshed_lv;
+ 	int ret;
+ 
+ 	/*
 
 
