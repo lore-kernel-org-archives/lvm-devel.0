@@ -1,63 +1,52 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Aug 2014 13:07:31 +0000 (UTC)
-Subject: master - lvconvert: show name of activated volume
-Message-ID: <20140815130731.6EB7C60319@fedorahosted.org>
+Date: Fri, 15 Aug 2014 13:07:33 +0000 (UTC)
+Subject: master - toollib: print ignoring vorigin
+Message-ID: <20140815130733.9AB1660319@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10e3715564e80e08daf04f0ae51067a04dfaa7b8
-Commit:        10e3715564e80e08daf04f0ae51067a04dfaa7b8
-Parent:        e8bbcda2a3a6799ff4e967276f9284c8b808584c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7f4b1e7411d7ff59abe2063db7273fd600e2bf72
+Commit:        7f4b1e7411d7ff59abe2063db7273fd600e2bf72
+Parent:        10e3715564e80e08daf04f0ae51067a04dfaa7b8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Aug 14 11:12:02 2014 +0200
+AuthorDate:    Fri Aug 15 13:53:04 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 15 15:06:44 2014 +0200
 
-lvconvert: show name of activated volume
+toollib: print ignoring vorigin
 
-Display the name of volume that needs to be activated for merging.
+When ignoring 'listed' volume, print info message.
+(So the final command error message is a bit less confusing,
+i.e. when user tries to deactive virtual origin:
+
+> lvchange -an vg/lvol2_vorigin
+  Ignoring virtual origin logical volume vg/lvol2_vorigin.
+  One or more specified logical volume(s) not found.
 ---
- WHATS_NEW         |    1 +
- tools/lvconvert.c |    6 ++++--
- 2 files changed, 5 insertions(+), 2 deletions(-)
+ tools/toollib.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e5d4d6d..a5daf80 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.110 -
- ==================================
-+  Print name of LV which on activation triggers delayed snapshot merge.
-   Add lv_layout and lv_type LV reporting fields.
-   Properly display lvs lv_attr volume type and target type bit for cache origin.
-   Fix pvcreate_check() to update cache correctly after signature wiping.
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 333459d..e369def 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2216,7 +2216,8 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
- 			return_0;
- 		r = 1;
- 		log_print_unless_silent("Merging of snapshot %s will start "
--					"next activation.", lv->name);
-+					"next activation of %s.",
-+					display_lvname(lv), display_lvname(origin));
- 		goto out;
- 	}
+diff --git a/tools/toollib.c b/tools/toollib.c
+index d6ef845..25ff21d 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -230,8 +230,13 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 		    lv_is_cow(lvl->lv) && !lv_is_virtual_origin(origin_from_cow(lvl->lv)))
+ 			continue;
  
-@@ -2323,7 +2324,8 @@ static int _lvconvert_merge_thin_snapshot(struct cmd_context *cmd,
- 		return_0;
+-		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG))
++		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG)) {
++			if (lvargs_supplied &&
++			    str_list_match_item(arg_lvnames, lvl->lv->name))
++				log_print_unless_silent("Ignoring virtual origin logical volume %s.",
++							display_lvname(lvl->lv));
+ 			continue;
++		}
  
- 	log_print_unless_silent("Merging of thin snapshot %s will occur on "
--				"next activation.", lv->name);
-+				"next activation of %s.",
-+				display_lvname(lv), display_lvname(origin));
- 	r = 1;
- out:
- 	backup(lv->vg);
+ 		/*
+ 		 * Only let hidden LVs through it --all was used or the LVs 
 
 
