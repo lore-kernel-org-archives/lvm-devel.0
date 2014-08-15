@@ -1,48 +1,62 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Aug 2014 13:07:37 +0000 (UTC)
-Subject: master - man: add some more reserved names
-Message-ID: <20140815130737.D91FD60319@fedorahosted.org>
+Date: Fri, 15 Aug 2014 13:07:42 +0000 (UTC)
+Subject: master - cleanup: move test for free arg
+Message-ID: <20140815130742.2424F61146@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba7796e0550dcc8fcc114bc8eadc6815c34c3f4f
-Commit:        ba7796e0550dcc8fcc114bc8eadc6815c34c3f4f
-Parent:        630fcab420ce791612bbeed3e30db4c5371803e5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=338b991e4072734a4c37573d1bb541ecadee93b8
+Commit:        338b991e4072734a4c37573d1bb541ecadee93b8
+Parent:        6872adc0ff7e6c72cc94fd15ed5dd910b958386e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Aug 14 11:10:36 2014 +0200
+AuthorDate:    Wed Aug 13 14:19:13 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 15 15:06:44 2014 +0200
 
-man: add some more reserved names
+cleanup: move test for free arg
 
+Move test for list of volumes into common place.
 ---
- man/lvm.8.in |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ tools/lvconvert.c |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/man/lvm.8.in b/man/lvm.8.in
-index 76d1237..069194c 100644
---- a/man/lvm.8.in
-+++ b/man/lvm.8.in
-@@ -339,14 +339,15 @@ Path for the lvmetad pid file.
- .B LVM_LVMETAD_SOCKET
- Path for the lvmetad socket file.
- .SH VALID NAMES
--The following characters are valid for VG and LV names:
-+The valid characters for VG and LV names are:
- .B a-z A-Z 0-9 + _ . -
- .LP
- VG and LV names cannot begin with a hyphen.
- There are also various reserved names that are used internally by lvm that can not be used as LV or VG names.
- A VG cannot be called anything that exists in /dev/ at the time of creation, nor can it be called '.' or '..'.
- A LV cannot be called '.' '..' 'snapshot' or 'pvmove'. The LV name may also not contain
--the strings '_mlog', '_mimage', '_rimage', '_tdata', '_tmeta'.
-+the strings '_cdata', '_cmeta', '_mlog', '_mimage', '_pmspare',
-+'_rimage', '_rlog', '_tdata', '_tmeta'.
- A directory bearing the name of each Volume Group is created under /dev when any of its Logical Volumes are activated.
- Each active Logical Volume is accessible from this directory as a symbolic link leading to a device node.
- Links or nodes in /dev/mapper are intended only for internal use and the precise format and escaping might change between releases and distributions.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index e369def..9c25bd9 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -110,8 +110,13 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
+ 	char *ptr;
+ 	const char *vg_name = NULL;
+ 
+-	if (lp->merge)
++	if (lp->merge) {
++		if (!*pargc) {
++			log_error("Please specify a logical volume path.");
++			return 0;
++		}
+ 		return 1;
++	}
+ 
+ 	if (!*pargc) {
+ 		if (lp->cache) {
+@@ -3317,14 +3322,9 @@ int lvconvert(struct cmd_context * cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	if (lp.merge) {
+-		if (!argc) {
+-			log_error("Please provide logical volume path");
+-			return EINVALID_CMD_LINE;
+-		}
++	if (lp.merge)
+ 		return process_each_lv(cmd, argc, argv, READ_FOR_UPDATE, &lp,
+ 				       &_lvconvert_merge_single);
+-	}
+ 
+ 	return lvconvert_single(cmd, &lp);
+ }
 
 
