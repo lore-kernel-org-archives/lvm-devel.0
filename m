@@ -1,60 +1,37 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 25 Jun 2019 11:44:43 -0400
-Subject: stable-2.02 - tests: for cluster always use exlusive mirrors
-Message-ID: <201906251544.x5PFihpa012299@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 15 Aug 2014 11:31:45 +0000 (UTC)
+Subject: master - WHATS_NEW: previous commit
+Message-ID: <20140815113145.1417260BAD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=49813abc003180a38f9cd1e6c75f68311d005a50
-Commit:        49813abc003180a38f9cd1e6c75f68311d005a50
-Parent:        788d89c4127f69c813813e6a192fe44d8c1abc7a
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 21 14:51:17 2019 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 21 14:51:17 2019 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8740ecfa6492d149637a2f23d3bd7328863f0a78
+Commit:        8740ecfa6492d149637a2f23d3bd7328863f0a78
+Parent:        1cd622d98ba837886fb70d33b1eda920b14ae405
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Aug 15 13:31:11 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Aug 15 13:31:21 2014 +0200
 
-tests: for cluster always use exlusive mirrors
+WHATS_NEW: previous commit
 
-So to check the reason of failure is not influenced by missing cmirrord.
 ---
- test/shell/lvcreate-usage.sh |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
-index ca8694e..4669539 100644
---- a/test/shell/lvcreate-usage.sh
-+++ b/test/shell/lvcreate-usage.sh
-@@ -91,12 +91,12 @@ lvremove -ff $vg/$lv3
- lvchange -an $vg/$lv1
- lvcreate -l1 -s -n $lv3 $vg/$lv1
- fail lvcreate -l1 -n $lv4 $vg
--fail lvcreate -l1 --type mirror -m1 -n $lv4 $vg
-+fail lvcreate -aey -l1 --type mirror -m1 -n $lv4 $vg
- 
- lvremove -ff $vg/$lv3
- lvcreate -aey -l1 --type mirror -m1 -n $lv3 $vg
- not lvcreate -l1 -n $lv4 $vg
--not lvcreate -l1 --type mirror -m1 -n $lv4 $vg
-+not lvcreate -aey -l1 --type mirror -m1 -n $lv4 $vg
- 
- lvconvert -m0 $vg/$lv3
- lvconvert -m2 --type mirror -i 1 $vg/$lv3
-@@ -128,10 +128,10 @@ lvremove -f $vg
- # - nonzero (bz186013)
- # - a power of 2 and a multiple of page size
- # - <= size of LV
--invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 0 $vg 2>err
-+invalid lvcreate -aey --type mirror -m 1 -L 32m -n $lv -R 0 $vg 2>err
- grep "may not be zero" err
--invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 11k $vg
--invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 1k $vg
-+invalid lvcreate -aey --type mirror -m 1 -L 32m -n $lv -R 11k $vg
-+invalid lvcreate -aey --type mirror -m 1 -L 32m -n $lv -R 1k $vg
- lvcreate -aey -L 32m -n $lv --regionsize 128m  --type mirror -m 1 $vg
- check lv_field $vg/$lv regionsize "32.00m"
- lvremove -f $vg
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0ca0485..f6a877d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.110 -
+ ==================================
++  Properly display lvs lv_attr volume type and target type bit for cache origin.
+   Fix pvcreate_check() to update cache correctly after signature wiping.
+   Fix primary device lookup failure for partition when processing mpath filter.
+   If LV inactive and non-clustered, do not issue "Cannot deactivate" on -aln.
 
 
