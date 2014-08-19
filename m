@@ -1,114 +1,56 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 19 Aug 2014 12:20:43 +0000 (UTC)
-Subject: master - lv: remove lv_type_name fn
-Message-ID: <20140819122043.C533660DF1@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 19 Aug 2014 14:06:24 +0000 (UTC)
+Subject: v2_02_109 annotated tag has been created
+Message-ID: <20140819140624.A6E8161542@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=84860fd54f05ca24c389ee60c4aef6903ae227ce
-Commit:        84860fd54f05ca24c389ee60c4aef6903ae227ce
-Parent:        aec4d0c939653cfc0dadcec43a9db98597154bcb
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Aug 19 14:16:39 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Aug 19 14:16:39 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=825573e72c7b7041d91702e3c82073a01b2ec6f9
+Commit:        825573e72c7b7041d91702e3c82073a01b2ec6f9
+Parent:        0000000000000000000000000000000000000000
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    2014-08-05 01:08 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: 2014-08-05 01:08 +0000
 
-lv: remove lv_type_name fn
+annotated tag: v2_02_109 has been created
+	    at 825573e72c7b7041d91702e3c82073a01b2ec6f9 (tag)
+       tagging 9d4e1e51a944c07bad56fe41407b84afefb39357 (commit)
+      replaces v2_02_108
 
-The lv_type_name function is remnant from old code that reported
-only single string for the LV type. LV types are now reported
-in a more extended way as keyword list that describe the type
-precisely (using lv_layout_and_type fn).
+Release 2.02.109.
 
-The lv_type_name was used in some error messages to display the
-type of the LV so just reinstate the old messages back referencing
-the type directly with a string - this is enough for error messages.
-They don't need to display the LV type as precisely as it's used
-on lvs output (which is optimized for selection anyway).
----
- lib/metadata/lv_manip.c          |    5 -----
- lib/metadata/metadata-exported.h |    3 ---
- tools/lvconvert.c                |   15 +++++++--------
- 3 files changed, 7 insertions(+), 16 deletions(-)
+Fixes for a few problems found in the previous release.
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index dd0ba33..c314377 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -151,11 +151,6 @@ static const char *_lv_type_names[] = {
- 	[LV_TYPE_RAID_N_CONTINUE] =			"n-continue",
- };
- 
--const char *lv_type_name(const struct logical_volume *lv)
--{
--	return " ";
--}
--
- static int _lv_type_list_mirror(struct dm_pool *mem,
- 				const struct logical_volume *lv,
- 				struct dm_list *layout,
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 59d68d6..61bb140 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -910,9 +910,6 @@ int get_pv_list_for_lv(struct dm_pool *mem,
- struct lv_segment *first_seg(const struct logical_volume *lv);
- struct lv_segment *last_seg(const struct logical_volume *lv);
- 
--/* Human-readable LV type name. */
--const char *lv_type_name(const struct logical_volume *lv);
--
- /*
- * Useful functions for managing snapshots.
- */
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 7330c73..cf8d2c0 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2718,8 +2718,8 @@ static int _lvconvert_pool(struct cmd_context *cmd,
- 		}
- 		if (lv_is_thin_type(metadata_lv) ||
- 		    lv_is_cache_type(metadata_lv)) {
--			log_error("Can't use %s LV %s for pool metadata.",
--				  lv_type_name(metadata_lv), display_lvname(metadata_lv));
-+			log_error("Can't use thin or cache type LV %s for pool metadata.",
-+				  display_lvname(metadata_lv));
- 			return 0;
- 		}
- 
-@@ -2822,16 +2822,15 @@ static int _lvconvert_pool(struct cmd_context *cmd,
- 
- 		if (!lp->yes &&
- 		    yes_no_prompt("Do you want to swap metadata of %s "
--				  "pool with %s volume %s? [y/n]: ",
-+				  "pool with metadata volume %s? [y/n]: ",
- 				  display_lvname(pool_lv),
--				  lv_type_name(metadata_lv),
- 				  display_lvname(metadata_lv)) == 'n') {
- 			log_error("Conversion aborted.");
- 			return 0;
- 		}
- 	} else if (lv_is_thin_type(pool_lv)) {
--		log_error("Can't use %s logical volume %s for thin pool data.",
--			  lv_type_name(pool_lv), display_lvname(pool_lv));
-+		log_error("Can't use thin type logical volume %s for thin pool data.",
-+			  display_lvname(pool_lv));
- 		return 0;
- 	} else {
- 		log_warn("WARNING: Converting logical volume %s%s%s to pool's data%s.",
-@@ -3047,8 +3046,8 @@ static int _lvconvert_cache(struct cmd_context *cmd,
- 	}
- 
- 	if (lv_is_pool(origin) || lv_is_cache_type(origin)) {
--		log_error("Can't cache %s volume %s.",
--			  lv_type_name(origin), display_lvname(origin));
-+		log_error("Can't cache pool or cache type volume %s.",
-+			  display_lvname(origin));
- 		return 0;
- 	}
- 
+iEYEABECAAYFAlPgLucACgkQIoGRwVZ+LBfizgCgz80ccvkw+PDz+5RT7j9my/gI
+L18An1+9pnv/GHP8TW7jlxRFt/dQamQh
+=Jh+N
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (5):
+      post-release
+      activation: Fix upgrades using uuid suffixes.
+      lvresize: Allow approximation with +%FREE.
+      report: Remove lv_volume_type field.
+      pre-release
+
+Marian Csontos (1):
+      test: Skip lvextend-thin when thin not available
+
+Peter Rajnoha (2):
+      metadata: remove spurious "Physical volume <dev_name> not found"
+      filters: fix regression caused by commit e80884cd080cad7e10be4588e3493b9000649426
+
+Petr Rockai (5):
+      test: Add a test for lvextend -l+100%FREE of a striped thin pool.
+      test: Add a test for lvscan --cache.
+      lvscan: Make --cache impervious to already-missing devices.
+      WHATS_NEW: lvscan --cache SEGV fix
+      lvscan: Fix possible gcc warnings in --cache implementation.
 
 
