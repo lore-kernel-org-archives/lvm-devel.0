@@ -1,42 +1,71 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 19 Aug 2014 14:18:51 +0000 (UTC)
-Subject: master - lv_manip: check for str_list_dup failure
-Message-ID: <20140819141851.7663D6030C@fedorahosted.org>
+Date: Tue, 19 Aug 2014 14:18:55 +0000 (UTC)
+Subject: master - cleanup: reindent and make obvious error path
+Message-ID: <20140819141855.AB9C46030C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dec39b1a5f0f599fd751bc6cea8caaac8a211d31
-Commit:        dec39b1a5f0f599fd751bc6cea8caaac8a211d31
-Parent:        cdb16a603954a1a3771644a101d0b372f8e0826c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e4a21427bdba7d6cfc9083e8c3736707ab31cc0
+Commit:        3e4a21427bdba7d6cfc9083e8c3736707ab31cc0
+Parent:        10e2370d2efc501067702ffd5cd86940c3637e1c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 19 14:27:03 2014 +0200
+AuthorDate:    Mon Aug 18 22:04:39 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Aug 19 14:33:06 2014 +0200
 
-lv_manip: check for str_list_dup failure
+cleanup: reindent and make obvious error path
 
 ---
- lib/metadata/lv_manip.c |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ lib/filters/filter-mpath.c |   34 +++++++++++++++-------------------
+ 1 files changed, 15 insertions(+), 19 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index c314377..db70818 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -470,8 +470,9 @@ int lv_layout_and_type(struct dm_pool *mem, const struct logical_volume *lv,
- 	 * device that is not combined with any other type. So just copy what
- 	 * we have set for "layout" and use it for "type" too.
- 	 */
--	if (dm_list_empty(*type))
--		str_list_dup(mem, *type, *layout);
-+	if (dm_list_empty(*type) &&
-+	    !str_list_dup(mem, *type, *layout))
-+                goto_bad;
+diff --git a/lib/filters/filter-mpath.c b/lib/filters/filter-mpath.c
+index a933ba1..902cc25 100644
+--- a/lib/filters/filter-mpath.c
++++ b/lib/filters/filter-mpath.c
+@@ -158,25 +158,21 @@ static int dev_is_mpath(struct dev_filter *f, struct device *dev)
+ 		return 0;
  
- 	return 1;
- bad:
+ 	switch (dev_get_primary_dev(dt, dev, &primary_dev)) {
+-		default:
+-		case 0:
+-			/* Error. */
+-			log_error("Failed to get primary device for %d:%d.", major, minor);
+-			return 0;
+-		case 1:
+-			/* The dev is already a primary dev. Just continue with the dev. */
+-			if (!(name = get_sysfs_name(dev)))
+-				return_0;
+-			break;
+-		case 2:
+-			/* The dev is partition. */
+-			part_name = dev_name(dev); /* name of original dev for log_debug msg */
+-			if (!(name = get_sysfs_name_by_devt(sysfs_dir, primary_dev, parent_name, PATH_MAX)))
+-				return_0;
+-			log_debug_devs("%s: Device is a partition, using primary "
+-				       "device %s for mpath component detection",
+-					part_name, name);
+-			break;
++	case 2: /* The dev is partition. */
++		part_name = dev_name(dev); /* name of original dev for log_debug msg */
++		if (!(name = get_sysfs_name_by_devt(sysfs_dir, primary_dev, parent_name, sizeof(parent_name))))
++			return_0;
++		log_debug_devs("%s: Device is a partition, using primary "
++			       "device %s for mpath component detection",
++			       part_name, name);
++		break;
++	case 1: /* The dev is already a primary dev. Just continue with the dev. */
++		if (!(name = get_sysfs_name(dev)))
++			return_0;
++		break;
++	default: /* 0, error. */
++		log_error("Failed to get primary device for %d:%d.", major, minor);
++		return 0;
+ 	}
+ 
+ 	if (dm_snprintf(path, PATH_MAX, "%s/block/%s/holders", sysfs_dir, name) < 0) {
 
 
