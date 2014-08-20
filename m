@@ -1,39 +1,65 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Tue, 19 Aug 2014 14:58:27 +0000 (UTC)
-Subject: master - cleanup: Remove extra '; ' from the end of a line.
-Message-ID: <20140819145827.8FDFA60F06@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 20 Aug 2014 08:12:18 +0000 (UTC)
+Subject: master - lvconvert: snapshot: allow using raid1 for snapshot and snapshot origin
+Message-ID: <20140820081218.5B8AF60F42@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4f05e55f84fc1d1c4f839b7f523392e369f681b0
-Commit:        4f05e55f84fc1d1c4f839b7f523392e369f681b0
-Parent:        c5f2c541f6b0ce5d9ef8a1eda66bd021c044e6d2
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Aug 19 09:57:30 2014 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Aug 19 09:57:30 2014 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8d00499167f010b82ea6ddebcc6b22ec170002f9
+Commit:        8d00499167f010b82ea6ddebcc6b22ec170002f9
+Parent:        4f05e55f84fc1d1c4f839b7f523392e369f681b0
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Aug 20 10:05:51 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Aug 20 10:12:09 2014 +0200
 
-cleanup: Remove extra ';' from the end of a line.
+lvconvert: snapshot: allow using raid1 for snapshot and snapshot origin
 
+When testing conversion sanity, we checked lv->status & MIRRORED
+which encompasses both old mirrors and raid1 mirrors. But we need to
+ban only the old mirrors here hence allow raid1 mirrors.
 ---
- libdm/libdm-report.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    6 ++++--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 155ac60..261b436 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -1278,7 +1278,7 @@ static int _cmp_field_string_list_subset_all(const struct str_list_sort_value *v
- 					     const struct selection_str_list *sel)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2e2a064..f5a1dcf 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.110 -
+ ==================================
++  Allow conversion of raid1 LV into a snapshot LV or snapshot origin LV.
+   Cleanly error when creating RAID with stripe size < PAGE_SIZE.
+   Print name of LV which on activation triggers delayed snapshot merge.
+   Add lv_layout and lv_type LV reporting fields.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index cf8d2c0..00bfe80 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2041,7 +2041,7 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
  {
- 	struct dm_str_list *sel_item;
--	unsigned int i, last_found = 1;;
-+	unsigned int i, last_found = 1;
- 	int r = 0;
+ 	struct logical_volume *org;
  
- 	/* if value has no items and selection has at leas one, it's clear there's no match */
+-	if (lv->status & MIRRORED) {
++	if ((lv->status & MIRRORED) && !lv_is_raid(lv)) {
+ 		log_error("Unable to convert mirrored LV \"%s\" into a snapshot.", lv->name);
+ 		return 0;
+ 	}
+@@ -2066,7 +2066,9 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
+ 	if (!cow_has_min_chunks(lv->vg, lv->le_count, lp->chunk_size))
+ 		return_0;
+ 
+-	if (org->status & (LOCKED|PVMOVE|MIRRORED) || lv_is_cow(org)) {
++	if ((org->status & (LOCKED|PVMOVE)) ||
++	    ((org->status & MIRRORED) && !lv_is_raid(org)) ||
++	    lv_is_cow(org)) {
+ 		log_error("Unable to convert an LV into a snapshot of a %s LV.",
+ 			  org->status & LOCKED ? "locked" :
+ 			  org->status & PVMOVE ? "pvmove" :
 
 
