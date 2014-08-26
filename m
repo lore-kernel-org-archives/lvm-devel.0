@@ -1,68 +1,53 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 26 Aug 2014 12:17:40 +0000 (UTC)
-Subject: master - cleanup: indent and stacktrack
-Message-ID: <20140826121740.F41A160E57@fedorahosted.org>
+Date: Tue, 26 Aug 2014 12:17:43 +0000 (UTC)
+Subject: master - tests: fix volume list test
+Message-ID: <20140826121743.5776E60E57@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=25fe716b123109dee83a593d3c354ffac13b06b1
-Commit:        25fe716b123109dee83a593d3c354ffac13b06b1
-Parent:        24001a08ab92737b32968aeba5f6b2b9c036c480
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c37ca279e33b532f00da4b2f50e8e1ad547e8a77
+Commit:        c37ca279e33b532f00da4b2f50e8e1ad547e8a77
+Parent:        25fe716b123109dee83a593d3c354ffac13b06b1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 26 11:39:51 2014 +0200
+AuthorDate:    Tue Aug 26 12:09:03 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Aug 26 14:13:07 2014 +0200
 
-cleanup: indent and stacktrack
+tests: fix volume list test
 
-Add missing stacktrace on error path
-and newline indent.
+Proper use of \" escaping and shell vars.
 ---
- lib/activate/dev_manager.c |    2 +-
- lib/metadata/lv_manip.c    |    1 +
- lib/metadata/metadata.c    |    2 +-
- 3 files changed, 3 insertions(+), 2 deletions(-)
+ test/shell/lvchange-thin.sh |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 2cf0b65..d336afc 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -2330,7 +2330,7 @@ static int _add_target_to_dtree(struct dev_manager *dm,
- 						  &dm->target_state, seg,
- 						  laopts, dnode,
- 						  extent_size * seg->len,
--						  &dm-> pvmove_mirror_count);
-+						  &dm->pvmove_mirror_count);
- }
+diff --git a/test/shell/lvchange-thin.sh b/test/shell/lvchange-thin.sh
+index cb9be53..4d33563 100644
+--- a/test/shell/lvchange-thin.sh
++++ b/test/shell/lvchange-thin.sh
+@@ -99,7 +99,7 @@ not lvchange --resync --addtag foo $vg/$lv1
+ # Play with tags and activation
+ #
+ TAG=$(uname -n)
+-aux lvmconf 'activation/volume_list = [ "$vg/$lv2", "@mytag", "$vg2" ]'
++aux lvmconf "activation/volume_list = [ \"$vg/$lv2\", \"@mytag\" ]"
  
- static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index e57e7b3..3d91856 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5698,6 +5698,7 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
- 	if (lv_is_used_thin_pool(lv) &&
- 	    !_lv_remove_segs_using_this_lv(cmd, lv, force, level, "pool"))
- 		return_0;
+ lvchange -ay $vg/$lv1
+ check inactive $vg $lv1
+@@ -123,9 +123,11 @@ not lvcreate -Zy -L10 -n $lv3 $vg2
+ lvcreate -Zn -L10 -n $lv3 $vg2
+ check inactive $vg2 $lv3
+ 
+-aux lvmconf 'activation/volume_list = [ "$vg2" ]'
++aux lvmconf "activation/volume_list = [ \"$vg2\" ]"
+ vgchange -an $vg
+ vgchange -ay $vg $vg2
+ lvs -a -o+lv_active $vg $vg2
+ 
++aux lvmconf "activation/volume_list = [ \"$vg\", \"$vg2\" ]"
 +
- 	if ((lv_is_thin_pool(lv) || lv_is_cache_pool(lv)) &&
- 	    lv->vg->pool_metadata_spare_lv) {
- 		/* When removing last pool, also remove the spare */
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 168c110..f8ffe30 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -531,7 +531,7 @@ int remove_lvs_in_vg(struct cmd_context *cmd,
- 	while ((lst = dm_list_first(&vg->lvs))) {
- 		lvl = dm_list_item(lst, struct lv_list);
- 		if (!lv_remove_with_dependencies(cmd, lvl->lv, force, 0))
--		    return 0;
-+			return_0;
- 	}
- 
- 	return 1;
+ vgremove -ff $vg $vg2
 
 
