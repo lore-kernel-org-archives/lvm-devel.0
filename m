@@ -1,45 +1,46 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 26 Aug 2014 12:17:34 +0000 (UTC)
-Subject: master - cleanup: never return uninitialized buffer
-Message-ID: <20140826121734.A462060994@fedorahosted.org>
+Date: Tue, 26 Aug 2014 12:17:36 +0000 (UTC)
+Subject: master - cleanup: use unsigned 1bit elements
+Message-ID: <20140826121736.CA41C6115B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e5356eeba10858c2bb0f57891c262f77707b19bc
-Commit:        e5356eeba10858c2bb0f57891c262f77707b19bc
-Parent:        8f518cf1979e4cbfce40f6ae1bed02bd5b9a5b35
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3b5afac9b433dd26f4461d4f59401bbb299219ec
+Commit:        3b5afac9b433dd26f4461d4f59401bbb299219ec
+Parent:        e5356eeba10858c2bb0f57891c262f77707b19bc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Aug 21 15:35:29 2014 +0200
+AuthorDate:    Thu Aug 21 15:37:39 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Aug 26 14:13:06 2014 +0200
 
-cleanup: never return uninitialized buffer
+cleanup: use unsigned 1bit elements
 
-Coverity noticed this function may return untouched buffer,
-however in this state can't really happen, but anyway
-ensure on error path the buffer will have zero lenght string.
+Avoid using signed 'int' type for 1 bit size.
 ---
- lib/config/config.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ lib/config/config.h |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index a71cbdc..58efb31 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -602,8 +602,10 @@ static int _cfg_def_make_path(char *buf, size_t buf_size, int id, cfg_def_item_t
- 	int parent_id = item->parent;
- 	int count, n;
+diff --git a/lib/config/config.h b/lib/config/config.h
+index 7b1d5b6..d095519 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -139,10 +139,10 @@ struct config_def_tree_spec {
+ 	struct cmd_context *cmd;	/* command context (for run-time defaults */
+ 	cfg_def_tree_t type;		/* tree type */
+ 	uint16_t version;		/* tree at this LVM2 version */
+-	int ignoreadvanced:1;		/* do not include advanced configs */
+-	int ignoreunsupported:1;	/* do not include unsupported configs */
+-	int withcomments:1;		/* include comments */
+-	int withversions:1;		/* include versions */
++	unsigned ignoreadvanced:1;		/* do not include advanced configs */
++	unsigned ignoreunsupported:1;	/* do not include unsupported configs */
++	unsigned withcomments:1;		/* include comments */
++	unsigned withversions:1;		/* include versions */
+ 	uint8_t *check_status;		/* status of last tree check (currently needed for CFG_DEF_TREE_MISSING only) */
+ };
  
--	if (id == parent_id)
-+	if (id == parent_id) {
-+		buf[0] = '\0';
- 		return 0;
-+	}
- 
- 	count = _cfg_def_make_path(buf, buf_size, parent_id, cfg_def_get_item_p(parent_id), xlate);
- 	if ((n = dm_snprintf(buf + count, buf_size - count, "%s%s%s%s",
 
 
