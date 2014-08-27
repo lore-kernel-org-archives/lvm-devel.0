@@ -1,65 +1,45 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 26 Aug 2014 15:41:58 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20140826154158.8306C60355@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 27 Aug 2014 12:31:55 +0000 (UTC)
+Subject: master - cache: Clean-up error message.
+Message-ID: <20140827123155.66CB460DFC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd9700f1925dbe20e657765400a80b62a9d0adb3
-Commit:        dd9700f1925dbe20e657765400a80b62a9d0adb3
-Parent:        8b8d21f8733d800dd672bcc629b20d8585d2021a
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Aug 26 16:41:18 2014 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Aug 26 16:41:18 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8b9eb95ea9d2a950286f622f6d2d571c76642654
+Commit:        8b9eb95ea9d2a950286f622f6d2d571c76642654
+Parent:        dd9700f1925dbe20e657765400a80b62a9d0adb3
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Sun Aug 24 19:44:37 2014 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Sun Aug 24 19:44:37 2014 -0500
 
-post-release
+cache: Clean-up error message.
 
+It is not an internal error message to report to the user that they
+cannot create a cache LV on top of a cache LV.  It is simply not
+supported yet.
 ---
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ lib/metadata/cache_manip.c |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index 86bdbb0..234d9db 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.110(2)-git (2014-08-26)
-+2.02.111(2)-git (2014-08-26)
-diff --git a/VERSION_DM b/VERSION_DM
-index 27fe4c7..fe3203c 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.89-git (2014-08-26)
-+1.02.90-git (2014-08-26)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1d82ed5..46d5791 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.111 - 
-+===================================
-+
- Version 2.02.110 - 26th August 2014
- ===================================
-   Fix manipulation with thin-pools which are excluded via volume_list.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 83119f6..afdb1d0 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.90 - 
-+==================================
-+
- Version 1.02.89 - 26th August 2014
- ==================================
-   Improve libdevmapper-event select() error handling.
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index f617f4e..04e165f 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -117,9 +117,8 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool,
+ 		 * The origin under the origin would become *_corig_corig
+ 		 * before renaming the origin above to *_corig.
+ 		 */
+-		log_error(INTERNAL_ERROR
+-			  "The origin, %s, cannot be of cache type",
+-			  origin->name);
++		log_error("Creating a cache LV from an existing cache LV is"
++			  "not yet supported.");
+ 		return NULL;
+ 	}
+ 
 
 
