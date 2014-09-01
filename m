@@ -1,55 +1,52 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon,  1 Sep 2014 00:58:23 +0000 (UTC)
-Subject: v2_02_111 annotated tag has been created
-Message-ID: <20140901005823.0C6A060324@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon,  1 Sep 2014 10:55:05 +0000 (UTC)
+Subject: master - so: make sure shared libs are built with RELRO option
+Message-ID: <20140901105505.9396861112@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a92570c639c892093d73951262428fb276475632
-Commit:        a92570c639c892093d73951262428fb276475632
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2014-09-01 00:52 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2014-09-01 00:52 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5c34e3263a6032f7a12975662964c8b8d3084257
+Commit:        5c34e3263a6032f7a12975662964c8b8d3084257
+Parent:        fa1a0d170ad7193e9d0c6fe828a5c5df24806a54
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Sep 1 12:50:14 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Sep 1 12:54:29 2014 +0200
 
-annotated tag: v2_02_111 has been created
-	    at a92570c639c892093d73951262428fb276475632 (tag)
-       tagging fcb433abec7c3ed7919fcc6688988e2225e83f40 (commit)
-      replaces v2_02_110
+so: make sure shared libs are built with RELRO option
 
-Release 2.02.111.
+In addition to using RELRO for daemons, use this option for shared
+libraries. See also commit a65ab773b4ddb06e87d678d3b2f4d0ca3e5b9fd0.
+---
+ WHATS_NEW    |    1 +
+ make.tmpl.in |    1 +
+ 2 files changed, 2 insertions(+), 0 deletions(-)
 
-14 files changed, 39 insertions(+), 24 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
-
-iEYEABECAAYFAlQDw3AACgkQIoGRwVZ+LBd6xwCgmz6khkzvIhZ0o9Q1n09gq+KR
-x7MAmwURpuaKrYtbTa0yOOQn59pUCZXM
-=XuFG
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (3):
-      post-release
-      lvextend: Reinstate --nosync logic for mirrors.
-      pre-release
-
-Jonathan Brassow (1):
-      cache: Clean-up error message.
-
-Zdenek Kabelac (10):
-      cache: fix allocation size
-      WHATS_NEW
-      libdm: revert incorrect path length size for sscanf
-      WHATS_NEW_DM
-      clvmd: use correctly sized buffers for sscanf
-      WHATS_NEW
-      makefiles: include path missing
-      cleanup: assignment into ()
-      cleanup: drop duplicate const
-      cleanup: drop extra ()
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 6758389..9a786b4 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.111 - 
+ ===================================
++  Make sure shared libraries are built with RELRO option.
+   Pass properly sized char buffers for sscanf when initializing clvmd.
+   Reinstate nosync logic when extending mirror. (2.02.110)
+   Fix total area extent calculation when allocating cache pool. (2.02.110)
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 5e597df..455e9c2 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -160,6 +160,7 @@ ifeq ("@HAVE_PIE@", "yes")
+ ifeq ("@HAVE_FULL_RELRO@", "yes")
+   EXTRA_EXEC_CFLAGS += -fPIE -DPIE
+   EXTRA_EXEC_LDFLAGS += -Wl,-z,relro,-z,now -pie
++  CLDFLAGS += -Wl,-z,relro
+ endif
+ endif
+ endif
 
 
