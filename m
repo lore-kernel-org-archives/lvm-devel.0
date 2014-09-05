@@ -1,68 +1,51 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Fri,  5 Sep 2014 12:32:44 +0800
-Subject: [PATCH 1/1] cmirrord:fix endian issue on s390
-Message-ID: <1409891564-24053-1-git-send-email-lwang@suse.com>
+From: Eric Wheeler <lvm-dev@lists.ewheeler.net>
+Date: Thu, 4 Sep 2014 23:32:18 -0700 (PDT)
+Subject: Welcome to the "lvm-devel" mailing list
+In-Reply-To: <mailman.0.1409897391.21455.lvm-devel@redhat.com>
+References: <mailman.0.1409897391.21455.lvm-devel@redhat.com>
+Message-ID: <alpine.DEB.2.00.1409042320360.21427@ware.dreamhost.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-        Cmirrord has endian bugs, which cause failure to lvcreate a mirrored lv on s390.
-        - data_size is uint32, should not use xlate64 to convert, which will cause data_size 0
-          after xlate.
-        - request_type and data_size still used by local(v5_data_switch), should convert later.
-          if request_type xlate too early, it will cause request_type judge error;
-          if data_size xlate too early, it will cause coredump in case DM_ULOG_CLEAR_REGION.
-        - when receiving package in clog_request_from_network. vp[0] will always be little endian.
-          we could use xlate64(vp[0]) == vp[0] to decide if the local node is little endian or not.
+Good day all,
 
-Signed-off-by: Lidong Zhong<lzhong@suse.com> & Liuhua Wang <lwang@suse.com> 
+Today I was playing with lvmthin and did a metadata dump and restore with 
+thin_dump.  I was low on space so I `thin_dump --repair`ed through gzip 
+into restore.xml.gz, and hoped to
 
----
- daemons/cmirrord/compat.c | 9 +++++----
- 1 file changed, 5 insertions(+), 4 deletions(-)
+   zcat restore.xml.gz | thin_restore -i /proc/self/fd/0 -o /dev/mapper/pool-pool_tmeta
 
-diff --git a/daemons/cmirrord/compat.c b/daemons/cmirrord/compat.c
-index 3f7a9b5..4955f50 100644
---- a/daemons/cmirrord/compat.c
-+++ b/daemons/cmirrord/compat.c
-@@ -126,13 +126,14 @@ static int v5_endian_to_network(struct clog_request *rq)
- 
- 	u_rq->error = xlate32(u_rq->error);
- 	u_rq->seq = xlate32(u_rq->seq);
--	u_rq->request_type = xlate32(u_rq->request_type);
--	u_rq->data_size = xlate64(u_rq->data_size);
- 
- 	rq->originator = xlate32(rq->originator);
- 
- 	v5_data_endian_switch(rq, 1);
- 
-+	u_rq->request_type = xlate32(u_rq->request_type);
-+	u_rq->data_size = xlate32(u_rq->data_size);
-+
- 	return size;
- }
- 
-@@ -167,7 +168,7 @@ static int v5_endian_from_network(struct clog_request *rq)
- 	u_rq->error = xlate32(u_rq->error);
- 	u_rq->seq = xlate32(u_rq->seq);
- 	u_rq->request_type = xlate32(u_rq->request_type);
--	u_rq->data_size = xlate64(u_rq->data_size);
-+	u_rq->data_size = xlate32(u_rq->data_size);
- 
- 	rq->originator = xlate32(rq->originator);
- 
-@@ -187,7 +188,7 @@ int clog_request_from_network(void *data, size_t data_len)
- 
- 	switch (version) {
- 	case 5: /* Upstream */
--		if (version == unconverted_version)
-+		if (version == vp[0])
- 			return 0;
- 		break;
- 	case 4: /* RHEL 5.[45] */
--- 
-1.9.0
+but it says /proc/self/fd/0 is "Not a regular file" ... which of course it isn't.
+
+Watching lsof -o on thin_restore indicates a linear progression through 
+the input (looks like a simple ifstream), so technically, I believe it 
+could support this.
+
+
+persistent-data/file_utils.cc:~57:
+   persistent_data::check_file_exists(string const &file) does the 
+"Regular file check."
+
+It looks that persistent_data::check_file_exists is used in cache_restore 
+and xml_parser::parse, both appear to read linearly without arbitrary seek 
+so it might be safe to relax or modify that check.
+
+Of course blindly skipping the "Not a regular file" bit might bypass 
+possible problems if used to sanitize file existence elsewhere in the 
+code---but at least for XML restores it would have saved me some time.
+
+Please comment on whether or not this is a good idea and how it would best 
+be implemented.  This is my first runthrough on the userspace thinp tools, 
+so your input expertise is appreciated!
+
+-Eric
+
+--
+Eric Wheeler
+eWheeler Inc
+www.ewheeler.net
 
 
