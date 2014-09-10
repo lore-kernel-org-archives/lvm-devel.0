@@ -1,142 +1,601 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 20 Apr 2017 15:18:49 -0400
-Subject: master - raid: avoid superfluous reload on takeover
-Message-ID: <201704201918.v3KJInep009666@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 10 Sep 2014 20:05:44 +0000 (UTC)
+Subject: master - lv_update_and_reload: replace code sequence
+Message-ID: <20140910200544.005C560DBB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5fb571740224a1a7670d20f23c444c602ef5cf85
-Commit:        5fb571740224a1a7670d20f23c444c602ef5cf85
-Parent:        c7fb0cb861104e99c11e8b4e031d981dab7891a1
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Apr 20 21:17:08 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Apr 20 21:18:27 2017 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a3b75d7a8a3caa832af3b7d1f7d3fa488901ae06
+Commit:        a3b75d7a8a3caa832af3b7d1f7d3fa488901ae06
+Parent:        ca2ea5f984207ca9ff8a48bcbb84ca0fc3ee6e72
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Sep 9 14:40:32 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Sep 10 21:57:38 2014 +0200
 
-raid: avoid superfluous reload on takeover
+lv_update_and_reload: replace code sequence
 
-Allow any reset rebuild flags to trigger the second update on takeover.
-Use descriptive callback names.
-Fix typo and add comments.
+Use lv_update_and_reload() and lv_update_and_reload_origin()
+to handle write/suspend/commit/resume sequence.
+
+In few places this properly handle vg_revert() after suspend failure,
+and also ensures there is metadata backup after successful vg_commit().
 ---
- lib/metadata/raid_manip.c |   39 ++++++++++++++++++++++++---------------
- 1 files changed, 24 insertions(+), 15 deletions(-)
+ lib/metadata/cache_manip.c |   27 ++------
+ lib/metadata/lv_manip.c    |   35 ++-------
+ lib/metadata/raid_manip.c  |  173 ++++----------------------------------------
+ tools/lvchange.c           |  120 ++----------------------------
+ 4 files changed, 34 insertions(+), 321 deletions(-)
 
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 04e165f..73df448 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -175,7 +175,6 @@ static int _cleanup_orphan_lv(struct logical_volume *lv)
+  */
+ int lv_cache_remove(struct logical_volume *cache_lv)
+ {
+-	struct cmd_context *cmd = cache_lv->vg->cmd;
+ 	const char *policy_name;
+ 	uint64_t dirty_blocks;
+ 	struct lv_segment *cache_seg = first_seg(cache_lv);
+@@ -225,14 +224,8 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 		cache_seg->policy_argv = NULL;
+ 
+ 		/* update the kernel to put the cleaner policy in place */
+-		if (!vg_write(cache_lv->vg))
+-			return_0;
+-		if (!suspend_lv(cmd, cache_lv))
+-			return_0;
+-		if (!vg_commit(cache_lv->vg))
+-			return_0;
+-		if (!resume_lv(cmd, cache_lv))
+-			return_0;
++		if (lv_update_and_reload(cache_lv))
++                        return_0;
+ 	}
+ 
+ 	//FIXME: use polling to do this...
+@@ -256,7 +249,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	if (!remove_layer_from_lv(cache_lv, corigin_lv))
+ 			return_0;
+ 
+-	if (!vg_write(cache_lv->vg))
++	if (!lv_update_and_reload(cache_lv))
+ 		return_0;
+ 
+ 	/*
+@@ -264,20 +257,12 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	 * - the top-level cache LV
+ 	 * - the origin
+ 	 * - the cache_pool _cdata and _cmeta
+-	 */
+-	if (!suspend_lv(cmd, cache_lv))
+-		return_0;
+-
+-	if (!vg_commit(cache_lv->vg))
+-		return_0;
+-
+-	/* resume_lv on this (former) cache LV will resume all */
+-	/*
++	 *
++	 * resume_lv on this (former) cache LV will resume all
++	 *
+ 	 * FIXME: currently we can't easily avoid execution of
+ 	 * blkid on resumed error device
+ 	 */
+-	if (!resume_lv(cmd, cache_lv))
+-		return_0;
+ 
+ 	/*
+ 	 * cleanup orphan devices
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2b00957..8c1bd83 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5043,26 +5043,8 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 	}
+ 
+ 	/* store vg on disk(s) */
+-	if (!vg_write(vg))
+-		goto_out;
+-
+-	if (!suspend_lv(cmd, lock_lv)) {
+-		log_error("Failed to suspend %s", lock_lv->name);
+-		vg_revert(vg);
+-		goto bad;
+-	}
+-
+-	if (!vg_commit(vg)) {
+-		stack;
+-		if (!resume_lv(cmd, lock_lv))
+-			stack;
+-		goto bad;
+-	}
+-
+-	if (!resume_lv(cmd, lock_lv)) {
+-		log_error("Problem reactivating %s", lock_lv->name);
+-		goto bad;
+-	}
++	if (!lv_update_and_reload(lock_lv))
++		goto_bad;
+ 
+ 	if (lv_is_cow_covering_origin(lv))
+ 		if (!monitor_dev_for_events(cmd, lv, 0, 0))
+@@ -5073,15 +5055,14 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 		if (!update_pool_lv(lock_lv, 0))
+ 			goto_bad;
+ 
++		backup(vg);
++
+ 		if (inactive && !deactivate_lv(cmd, lock_lv)) {
+ 			log_error("Problem deactivating %s.", lock_lv->name);
+-			backup(vg);
+ 			return 0;
+ 		}
+ 	}
+ 
+-	backup(vg);
+-
+ 	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
+ 
+ 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
+@@ -5089,10 +5070,7 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return_0;
+ 
+ 	return 1;
+-
+ bad:
+-	backup(vg);
+-out:
+ 	if (inactive && !deactivate_lv(cmd, lock_lv))
+ 		log_error("Problem deactivating %s.", lock_lv->name);
+ 
+@@ -6955,9 +6933,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 			 *    I say that would be cleaner, but I'm not sure
+ 			 *    about the effects on thinpool yet...
+ 			 */
+-			if (!vg_write(vg) || !suspend_lv(cmd, lv) ||
+-			    !vg_commit(vg) || !resume_lv(cmd, lv))
++			if (!lv_update_and_reload(lv)) {
++				stack;
+ 				goto deactivate_and_revert_new_lv;
++			}
+ 
+ 			if (!(lvl = find_lv_in_vg(vg, lp->origin)))
+ 				goto deactivate_and_revert_new_lv;
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 173b5bf..9114f60 100644
+index ab30af9..d39dbc8 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -518,7 +518,8 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv,
- 			fn_pre_data = va_arg(ap, void *);
- 	}
+@@ -502,7 +502,6 @@ static int _raid_add_images(struct logical_volume *lv,
+ 	uint32_t old_count = lv_raid_image_count(lv);
+ 	uint32_t count = new_count - old_count;
+ 	uint64_t status_mask = -1;
+-	struct cmd_context *cmd = lv->vg->cmd;
+ 	struct lv_segment *seg = first_seg(lv);
+ 	struct dm_list meta_lvs, data_lvs;
+ 	struct lv_list *lvl;
+@@ -679,29 +678,8 @@ to be left for these sub-lvs.
+ 	dm_list_iterate_items(lvl, &data_lvs)
+ 		lv_set_hidden(lvl->lv);
  
--	/* Call any efn_pre_on_lv before the first update and reload call (e.g. to rename LVs) */
-+	/* Call any fn_pre_on_lv before the first update and reload call (e.g. to rename LVs) */
-+	/* returns 1: ok+ask caller to update, 2: metadata commited+ask caller to resume */
- 	if (fn_pre_on_lv && !(r = fn_pre_on_lv(lv, fn_pre_data))) {
- 		log_error(INTERNAL_ERROR "Pre callout function failed.");
- 		goto err;
-@@ -2100,7 +2101,7 @@ static int _activate_sub_lvs_excl_local(struct logical_volume *lv, uint32_t star
- 	for (s = start_idx; s < seg->area_count; s++)
- 		if (!_activate_sub_lv_excl_local(seg_lv(seg, s)) ||
- 		    (seg->meta_areas && !_activate_sub_lv_excl_local(seg_metalv(seg, s))))
--			return 0;
-+			return_0;
- 
- 	return 1;
- }
-@@ -2123,17 +2124,18 @@ static int _activate_sub_lvs_excl_local_list(struct logical_volume *lv, struct d
- 	return r;
- }
- 
--/* Helper: callback function to activate any new image component pairs @lv */
--static int _pre_raid_add_legs(struct logical_volume *lv, void *data)
-+/* Helper: callback function to activate image component pairs of @lv to update size after reshape space allocation */
-+static int _pre_raid_reactivate_legs(struct logical_volume *lv, void *data)
- {
- 	if (!_vg_write_lv_suspend_vg_commit(lv, 1))
- 		return 0;
- 
--	/* Reload any changed image component pairs for out-of-place reshape apace */
-+	/* Reload any changed image component pairs for out-of-place reshape space */
- 	if (!_activate_sub_lvs_excl_local(lv, 0))
- 		return 0;
- 
--	return 2; /* 1: ok, 2: metadata commited */
-+	/* 1: ok+ask caller to update, 2: metadata commited+ask caller to resume */
-+	return 2;
- }
- 
- /* Helper: callback function to activate any rmetas on @data list */
-@@ -2145,16 +2147,24 @@ static int _pre_raid0_remove_rmeta(struct logical_volume *lv, void *data)
- 	if (!_vg_write_lv_suspend_vg_commit(lv, 1))
- 		return 0;
- 
--	/* 1: ok, 2: metadata commited */
-+	/* 1: ok+ask caller to update, 2: metadata commited+ask caller to resume */
- 	return _activate_sub_lvs_excl_local_list(lv, lv_list) ? 2 : 0;
- }
- 
--/* Helper: callback dummy needed for */
--static int _post_raid_dummy(struct logical_volume *lv, void *data)
-+/* Helper: callback dummy needed for takeover+reshape */
-+static int _post_raid_reshape(struct logical_volume *lv, void *data)
- {
-+	/* 1: ask caller to update, 2: don't ask caller to update */
- 	return 1;
- }
- 
-+/* Helper: callback dummy needed for takeover+reshape */
-+static int _post_raid_takeover(struct logical_volume *lv, void *data)
-+{
-+	/* 1: ask caller to update, 2: don't ask caller to update */
-+	return 2;
-+}
-+
- /*
-  * Reshape logical volume @lv by adding/removing stripes
-  * (absolute new stripes given in @new_stripes), changing
-@@ -2317,8 +2327,8 @@ static int _raid_reshape(struct logical_volume *lv,
- 
- 	if (seg->area_count != 2 || old_image_count != seg->area_count) {
- 		if (!_lv_update_reload_fns_reset_eliminate_lvs(lv, 0, &removal_lvs,
--							       _post_raid_dummy, NULL,
--							       _pre_raid_add_legs, NULL))
-+							       _post_raid_reshape, NULL,
-+							       _pre_raid_reactivate_legs, NULL))
- 			return 0;
- 	} if (!_vg_write_commit_backup(lv->vg))
- 		return 0;
-@@ -5106,7 +5116,7 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
- 	/* raid0_meta -> raid4 needs clearing of MetaLVs in order to avoid raid disk role change issues in the kernel */
- 	}
- 
--	if (seg_is_raid0_meta(seg) &&
-+	if (segtype_is_raid0_meta(initial_segtype) &&
- 	    segtype_is_raid4(new_segtype) &&
- 	    !_clear_meta_lvs(lv))
- 		return_0;
-@@ -5155,7 +5165,6 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
- 		seg = first_seg(lv);
- 	}
- 
+-	if (!vg_write(lv->vg)) {
+-		log_error("Failed to write changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
 -
- 	seg->data_copies = new_data_copies;
+-	if (!suspend_lv_origin(cmd, lv)) {
+-		log_error("Failed to suspend %s/%s before committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		log_error("Failed to commit changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!resume_lv_origin(cmd, lv)) {
+-		log_error("Failed to resume %s/%s after committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
++	if (!lv_update_and_reload_origin(lv))
++		return_0;
  
- 	if (segtype_is_raid4(new_segtype) &&
-@@ -5193,8 +5202,8 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
- 	log_debug_metadata("Updating VG metadata and reloading %s LV %s.",
- 			   lvseg_name(seg), display_lvname(lv));
- 	if (!_lv_update_reload_fns_reset_eliminate_lvs(lv, 0, &removal_lvs,
--						       _post_raid_dummy, NULL,
--						       _pre_raid_add_legs, NULL))
-+						       _post_raid_takeover, NULL,
-+						       _pre_raid_reactivate_legs, NULL))
+ 	/*
+ 	 * Now that the 'REBUILD' has made its way to the kernel, we must
+@@ -1223,34 +1201,12 @@ int lv_raid_split_and_track(struct logical_volume *lv,
+ 		return 0;
+ 	}
+ 
+-	if (!vg_write(lv->vg)) {
+-		log_error("Failed to write changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!suspend_lv(lv->vg->cmd, lv)) {
+-		log_error("Failed to suspend %s/%s before committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		log_error("Failed to commit changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
++	if (!lv_update_and_reload(lv))
++		return_0;
+ 
+ 	log_print_unless_silent("%s split from %s for read-only purposes.",
+ 				seg_lv(seg, s)->name, lv->name);
+ 
+-	/* Resume original LV */
+-	if (!resume_lv(lv->vg->cmd, lv)) {
+-		log_error("Failed to resume %s/%s after committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
+-
+ 	/* Activate the split (and tracking) LV */
+ 	if (!_activate_sublv_preserving_excl(lv, seg_lv(seg, s)))
+ 		return 0;
+@@ -1316,29 +1272,8 @@ int lv_raid_merge(struct logical_volume *image_lv)
+ 	image_lv->status |= (lv->status & LVM_WRITE);
+ 	image_lv->status |= RAID_IMAGE;
+ 
+-	if (!vg_write(vg)) {
+-		log_error("Failed to write changes to %s in %s",
+-			  lv->name, vg->name);
+-		return 0;
+-	}
+-
+-	if (!suspend_lv(vg->cmd, lv)) {
+-		log_error("Failed to suspend %s/%s before committing changes",
+-			  vg->name, lv->name);
+-		return 0;
+-	}
+-
+-	if (!vg_commit(vg)) {
+-		log_error("Failed to commit changes to %s in %s",
+-			  lv->name, vg->name);
+-		return 0;
+-	}
+-
+-	if (!resume_lv(vg->cmd, lv)) {
+-		log_error("Failed to resume %s/%s after committing changes",
+-			  vg->name, lv->name);
+-		return 0;
+-	}
++	if (!lv_update_and_reload(lv))
++		return_0;
+ 
+ 	log_print_unless_silent("%s/%s successfully merged back into %s/%s",
+ 				vg->name, image_lv->name, vg->name, lv->name);
+@@ -1439,29 +1374,8 @@ static int _convert_mirror_to_raid1(struct logical_volume *lv,
+ 	lv->status |= RAID;
+ 	seg->status |= RAID;
+ 
+-	if (!vg_write(lv->vg)) {
+-		log_error("Failed to write changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!suspend_lv(lv->vg->cmd, lv)) {
+-		log_error("Failed to suspend %s/%s before committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		log_error("Failed to commit changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!resume_lv(lv->vg->cmd, lv)) {
+-		log_error("Failed to resume %s/%s after committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
++	if (!lv_update_and_reload(lv))
++		return_0;
+ 
+ 	return 1;
+ }
+@@ -1806,29 +1720,8 @@ try_again:
+ 		}
+ 	}
+ 
+-	if (!vg_write(lv->vg)) {
+-		log_error("Failed to write changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!suspend_lv_origin(lv->vg->cmd, lv)) {
+-		log_error("Failed to suspend %s/%s before committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		log_error("Failed to commit changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!resume_lv_origin(lv->vg->cmd, lv)) {
+-		log_error("Failed to resume %s/%s after committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
++	if (!lv_update_and_reload_origin(lv))
++		return_0;
+ 
+ 	dm_list_iterate_items(lvl, &old_lvs) {
+ 		if (!deactivate_lv(lv->vg->cmd, lvl->lv))
+@@ -1848,29 +1741,8 @@ try_again:
+ 		}
+ 	}
+ 
+-	if (!vg_write(lv->vg)) {
+-		log_error("Failed to write changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!suspend_lv_origin(lv->vg->cmd, lv)) {
+-		log_error("Failed to suspend %s/%s before committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		log_error("Failed to commit changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!resume_lv_origin(lv->vg->cmd, lv)) {
+-		log_error("Failed to resume %s/%s after committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
++	if (!lv_update_and_reload_origin(lv))
++		return_0;
+ 
+ 	return 1;
+ }
+@@ -1879,7 +1751,6 @@ int lv_raid_remove_missing(struct logical_volume *lv)
+ {
+ 	uint32_t s;
+ 	struct lv_segment *seg = first_seg(lv);
+-	struct cmd_context *cmd = lv->vg->cmd;
+ 
+ 	if (!(lv->status & PARTIAL_LV)) {
+ 		log_error(INTERNAL_ERROR "%s/%s is not a partial LV",
+@@ -1915,25 +1786,7 @@ int lv_raid_remove_missing(struct logical_volume *lv)
+ 		}
+ 	}
+ 
+-	if (!vg_write(lv->vg)) {
+-		log_error("Failed to write changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!suspend_lv(cmd, lv)) {
+-		log_error("Failed to suspend %s/%s before committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		log_error("Failed to commit changes to %s in %s",
+-			  lv->name, lv->vg->name);
+-		return 0;
+-	}
+-
+-	if (!resume_lv(cmd, lv))
++	if (!lv_update_and_reload(lv))
+ 		return_0;
+ 
+ 	return 1;
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 31c397b..bbb030f 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -20,7 +20,6 @@ static int lvchange_permission(struct cmd_context *cmd,
+ {
+ 	uint32_t lv_access;
+ 	struct lvinfo info;
+-	int r = 0;
+ 
+ 	lv_access = arg_uint_value(cmd, permission_ARG, 0);
+ 
+@@ -73,38 +72,15 @@ static int lvchange_permission(struct cmd_context *cmd,
+ 			    lv->name);
+ 	}
+ 
+-	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+-	if (!vg_write(lv->vg))
++	if (!lv_update_and_reload(lv))
+ 		return_0;
+ 
+-	if (!suspend_lv(cmd, lv)) {
+-		log_error("Failed to lock %s", lv->name);
+-		vg_revert(lv->vg);
+-		goto out;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		if (!resume_lv(cmd, lv))
+-			stack;
+-		goto_out;
+-	}
+-
+-	log_very_verbose("Updating permissions for \"%s\" in kernel", lv->name);
+-	if (!resume_lv(cmd, lv)) {
+-		log_error("Problem reactivating %s", lv->name);
+-		goto out;
+-	}
+-
+-	r = 1;
+-out:
+-	backup(lv->vg);
+-	return r;
++	return 1;
+ }
+ 
+ static int lvchange_pool_update(struct cmd_context *cmd,
+ 				struct logical_volume *lv)
+ {
+-	int r = 0;
+ 	int update = 0;
+ 	unsigned val;
+ 	thin_discards_t discards;
+@@ -143,32 +119,10 @@ static int lvchange_pool_update(struct cmd_context *cmd,
+ 	if (!update)
  		return 0;
  
- 	if (segtype_is_raid4(new_segtype) &&
+-	log_very_verbose("Updating logical volume \"%s\" on disk(s).", lv->name);
+-	if (!vg_write(lv->vg))
++	if (!lv_update_and_reload_origin(lv))
+ 		return_0;
+ 
+-	if (!suspend_lv_origin(cmd, lv)) {
+-		log_error("Failed to update active %s/%s (deactivation is needed).",
+-			  lv->vg->name, lv->name);
+-		vg_revert(lv->vg);
+-		goto out;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		if (!resume_lv_origin(cmd, lv))
+-			stack;
+-		goto_out;
+-	}
+-
+-	if (!resume_lv_origin(cmd, lv)) {
+-		log_error("Problem reactivating %s.", lv->name);
+-		goto out;
+-	}
+-
+-	r = 1;
+-out:
+-	backup(lv->vg);
+-	return r;
++	return 1;
+ }
+ 
+ static int lvchange_monitoring(struct cmd_context *cmd,
+@@ -555,7 +509,6 @@ static int lvchange_readahead(struct cmd_context *cmd,
+ {
+ 	unsigned read_ahead = 0;
+ 	unsigned pagesize = (unsigned) lvm_getpagesize() >> SECTOR_SHIFT;
+-	int r = 0;
+ 
+ 	read_ahead = arg_uint_value(cmd, readahead_ARG, 0);
+ 
+@@ -590,32 +543,10 @@ static int lvchange_readahead(struct cmd_context *cmd,
+ 	log_verbose("Setting read ahead to %u for \"%s\"", read_ahead,
+ 		    lv->name);
+ 
+-	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+-	if (!vg_write(lv->vg))
++	if (!lv_update_and_reload(lv))
+ 		return_0;
+ 
+-	if (!suspend_lv(cmd, lv)) {
+-		log_error("Failed to lock %s", lv->name);
+-		vg_revert(lv->vg);
+-		goto out;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		if (!resume_lv(cmd, lv))
+-			stack;
+-		goto_out;
+-	}
+-
+-	log_very_verbose("Updating permissions for \"%s\" in kernel", lv->name);
+-	if (!resume_lv(cmd, lv)) {
+-		log_error("Problem reactivating %s", lv->name);
+-		goto out;
+-	}
+-
+-	r = 1;
+-out:
+-	backup(lv->vg);
+-	return r;
++	return 1;
+ }
+ 
+ static int lvchange_persistent(struct cmd_context *cmd,
+@@ -814,25 +745,8 @@ static int lvchange_writemostly(struct logical_volume *lv)
+ 		}
+ 	}
+ 
+-	if (!vg_write(lv->vg))
+-		return_0;
+-
+-	if (!suspend_lv(cmd, lv)) {
+-		vg_revert(lv->vg);
+-		return_0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		if (!resume_lv(cmd, lv))
+-			stack;
++	if (!lv_update_and_reload(lv))
+ 		return_0;
+-	}
+-
+-	log_very_verbose("Updating writemostly for \"%s\" in kernel", lv->name);
+-	if (!resume_lv(cmd, lv)) {
+-		log_error("Problem reactivating %s", lv->name);
+-		return 0;
+-	}
+ 
+ 	return 1;
+ }
+@@ -862,26 +776,8 @@ static int lvchange_recovery_rate(struct logical_volume *lv)
+ 		return 0;
+ 	}
+ 
+-	if (!vg_write(lv->vg))
+-		return_0;
+-
+-	if (!suspend_lv(cmd, lv)) {
+-		vg_revert(lv->vg);
++	if (!lv_update_and_reload(lv))
+ 		return_0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		if (!resume_lv(cmd, lv))
+-			stack;
+-		return_0;
+-	}
+-
+-	log_very_verbose("Updating recovery rate for \"%s\" in kernel",
+-			 lv->name);
+-	if (!resume_lv(cmd, lv)) {
+-		log_error("Problem reactivating %s", lv->name);
+-		return 0;
+-	}
+ 
+ 	return 1;
+ }
 
 
