@@ -1,48 +1,49 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Sep 2014 12:45:03 +0000 (UTC)
-Subject: master - debug: add missing stack trace on error path
-Message-ID: <20140912124503.E316960DE9@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 10 Sep 2014 22:02:14 +0000 (UTC)
+Subject: master - lv_rename: actual fix for snapshot
+Message-ID: <20140910220214.CA19260515@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ad376e9e00eaa453e7d8ba1ffdc763345ec49d0e
-Commit:        ad376e9e00eaa453e7d8ba1ffdc763345ec49d0e
-Parent:        c10c16cc3531cf613152675b732a50b1339e62c9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a86d9a3b305be466d221f2a5e210bc1cad8fe842
+Commit:        a86d9a3b305be466d221f2a5e210bc1cad8fe842
+Parent:        c710f02e0181cc2db5455f0c98033247a70ecc30
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 11 20:11:44 2014 +0200
+AuthorDate:    Tue Sep 9 20:15:51 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 12 13:51:29 2014 +0200
+CommitterDate: Tue Sep 9 20:15:51 2014 +0200
 
-debug: add missing stack trace on error path
+lv_rename: actual fix for snapshot
 
+By my rebasing mistake it's been eliminated from previous patch set.
 ---
- lib/metadata/raid_manip.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 6edd56d..d0740e8 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1238,7 +1238,7 @@ int lv_raid_split_and_track(struct logical_volume *lv,
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index cc7b6da..8c1bd83 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3966,6 +3966,7 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ 		log_error("Failed to allocate space for new name.");
+ 		return 0;
+ 	}
++
+ 	/* rename sub LVs */
+ 	if (!for_each_sub_lv(lv, _rename_cb, (void *) &lv_names))
+ 		return_0;
+@@ -3973,6 +3974,9 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ 	/* rename main LV */
+ 	lv->name = lv_names.new;
  
- 	/* Activate the split (and tracking) LV */
- 	if (!_activate_sublv_preserving_excl(lv, seg_lv(seg, s)))
--		return 0;
-+		return_0;
++	if (lv_is_cow(lv))
++		lv = origin_from_cow(lv);
++
+ 	if (update_mda && !lv_update_and_reload(lv))
+ 		return_0;
  
- 	log_print_unless_silent("Use 'lvconvert --merge %s/%s' to merge back into %s",
- 				lv->vg->name, seg_lv(seg, s)->name, lv->name);
-@@ -1907,7 +1907,7 @@ int partial_raid_lv_supports_degraded_activation(struct logical_volume *lv)
- 	int not_capable = 0;
- 
- 	if (!_lv_may_be_activated_in_degraded_mode(lv, &not_capable) || not_capable)
--		return 0;
-+		return_0;
- 
- 	if (!for_each_sub_lv(lv, _lv_may_be_activated_in_degraded_mode, &not_capable)) {
- 		log_error(INTERNAL_ERROR "for_each_sub_lv failure.");
 
 
