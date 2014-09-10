@@ -1,51 +1,44 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 15 Sep 2014 11:51:52 +0000 (UTC)
-Subject: master - tests: update lv_no_exists
-Message-ID: <20140915115152.24B0860702@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 10 Sep 2014 22:02:19 +0000 (UTC)
+Subject: master - debug: turn message into debug
+Message-ID: <20140910220219.073DF60F52@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10a448eb2fdc795d144f13ba4a7d83351eb8c9df
-Commit:        10a448eb2fdc795d144f13ba4a7d83351eb8c9df
-Parent:        f435bef957cea11a16d15ea10a1d85193bacd736
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47ff145e08f689306762840efd72e8a4e1c91214
+Commit:        47ff145e08f689306762840efd72e8a4e1c91214
+Parent:        55aa3cc813620ecbf2f569720fb24107e737b836
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 15 13:45:43 2014 +0200
+AuthorDate:    Wed Sep 10 10:10:13 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 15 13:51:19 2014 +0200
+CommitterDate: Wed Sep 10 10:10:13 2014 +0200
 
-tests: update lv_no_exists
+debug: turn message into debug
 
-On successful exit path remove debug.log file.
+This message should be printed only for activation commands,
+however since the handling of this flag is not correct
+(rhbz 1140029) and will require further changes,
+do now just a minor change and switch message into log_debug
+(so it's not printed i.e. with every  'lvs -v')
 ---
- test/lib/check.sh |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ tools/lvmcmdline.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index cd29ef4..add8fb8 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -259,8 +259,9 @@ lv_exists() {
- lv_not_exists() {
- 	local vg=$1
- 	if test $# -le 1 ; then
--		lvl $vg &>/dev/null || return
--		die "$vg expected to not exist but it does!"
-+		if lvl $vg &>/dev/null ; then
-+			die "$vg expected to not exist but it does!"
-+		fi
- 	else
- 		while [ $# -gt 1 ]; do
- 			shift
-@@ -268,6 +269,7 @@ lv_not_exists() {
- 			die "$vg/$1 expected to not exist but it does!"
- 		done
- 	fi
-+	rm -f debug.log
- }
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 10dac8f..14ea7a6 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1343,7 +1343,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 		goto_out;
+ 	_apply_settings(cmd);
+ 	if (cmd->degraded_activation)
+-		log_verbose("DEGRADED MODE. Incomplete RAID LVs will be processed.");
++		log_debug("DEGRADED MODE. Incomplete RAID LVs will be processed.");
  
- pv_field() {
+ 	if (!get_activation_monitoring_mode(cmd, &monitoring))
+ 		goto_out;
 
 
