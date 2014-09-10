@@ -1,56 +1,46 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 10 Sep 2014 20:05:48 +0000 (UTC)
-Subject: master - tests: test for rename of snapshot
-Message-ID: <20140910200548.546816055D@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 10 Sep 2014 22:02:04 +0000 (UTC)
+Subject: master - cleanup: add stacktrace for error path
+Message-ID: <20140910220204.4BC896115D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4d936d56e02d59aaae7ee52b2a3c5a1a18e5510e
-Commit:        4d936d56e02d59aaae7ee52b2a3c5a1a18e5510e
-Parent:        3a5eb1bc38b8555d7ae0d16fa07db96a3b73db16
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=319f67b1abd8b391958c8cd6d396c590bb5225be
+Commit:        319f67b1abd8b391958c8cd6d396c590bb5225be
+Parent:        c774d9a3f35c312d5b24c4ba13da707ccd975194
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 10 22:02:18 2014 +0200
+AuthorDate:    Mon Sep 8 22:36:42 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 10 22:02:18 2014 +0200
+CommitterDate: Mon Sep 8 22:36:42 2014 +0200
 
-tests: test for rename of snapshot
+cleanup: add stacktrace for error path
 
 ---
- test/shell/snapshot-rename.sh |   24 ++++++++++++++++++++++++
- 1 files changed, 24 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/snapshot-rename.sh b/test/shell/snapshot-rename.sh
-new file mode 100644
-index 0000000..8d1eefb
---- /dev/null
-+++ b/test/shell/snapshot-rename.sh
-@@ -0,0 +1,24 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# Testing renaming snapshots (had problem in cluster)
-+# https://bugzilla.redhat.com/show_bug.cgi?id=1136925
-+
-+. lib/inittest
-+
-+aux prepare_vg 1
-+
-+lvcreate -aey -L1 -n $lv1 $vg
-+lvcreate -s -L1 -n $lv2 $vg/$lv1
-+lvrename $vg/$lv2 $vg/$lv3
-+lvremove -f $vg/$lv1
-+
-+vgremove -f $vg
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index fcf9975..60aa6f8 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3963,13 +3963,13 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ 	}
+ 
+ 	if (update_mda && !archive(vg))
+-		return 0;
++		return_0;
+ 
+ 	/* rename sub LVs */
+ 	lv_names.old = lv->name;
+ 	lv_names.new = new_name;
+ 	if (!for_each_sub_lv(lv, _rename_cb, (void *) &lv_names))
+-		return 0;
++		return_0;
+ 
+ 	/* rename main LV */
+ 	if (!(lv->name = dm_pool_strdup(cmd->mem, new_name))) {
 
 
