@@ -1,56 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  9 Sep 2014 18:23:47 +0000 (UTC)
-Subject: master - tests: test for rename of snapshot
-Message-ID: <20140909182347.B968460BD5@fedorahosted.org>
+Date: Wed, 10 Sep 2014 08:51:57 +0000 (UTC)
+Subject: master - debug: turn message into debug
+Message-ID: <20140910085157.BC0D961074@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=55aa3cc813620ecbf2f569720fb24107e737b836
-Commit:        55aa3cc813620ecbf2f569720fb24107e737b836
-Parent:        a86d9a3b305be466d221f2a5e210bc1cad8fe842
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47ff145e08f689306762840efd72e8a4e1c91214
+Commit:        47ff145e08f689306762840efd72e8a4e1c91214
+Parent:        55aa3cc813620ecbf2f569720fb24107e737b836
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 9 20:17:47 2014 +0200
+AuthorDate:    Wed Sep 10 10:10:13 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 9 20:17:47 2014 +0200
+CommitterDate: Wed Sep 10 10:10:13 2014 +0200
 
-tests: test for rename of snapshot
+debug: turn message into debug
 
+This message should be printed only for activation commands,
+however since the handling of this flag is not correct
+(rhbz 1140029) and will require further changes,
+do now just a minor change and switch message into log_debug
+(so it's not printed i.e. with every  'lvs -v')
 ---
- test/shell/snapshot-cluster.sh |   24 ++++++++++++++++++++++++
- 1 files changed, 24 insertions(+), 0 deletions(-)
+ tools/lvmcmdline.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/snapshot-cluster.sh b/test/shell/snapshot-cluster.sh
-new file mode 100644
-index 0000000..051c165
---- /dev/null
-+++ b/test/shell/snapshot-cluster.sh
-@@ -0,0 +1,24 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# Testing renaming snapshots in cluster
-+# https://bugzilla.redhat.com/show_bug.cgi?id=1136925
-+
-+. lib/inittest
-+
-+aux prepare_vg 1
-+
-+lvcreate -aey -L1 -n $lv1 $vg
-+lvcreate -s -L1 -n $lv2 $vg/$lv1
-+lvrename  $vg/$lv2 $vg/$lv3
-+lvremove -f $vg/$lv1
-+
-+vgremove -f $vg
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 10dac8f..14ea7a6 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1343,7 +1343,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 		goto_out;
+ 	_apply_settings(cmd);
+ 	if (cmd->degraded_activation)
+-		log_verbose("DEGRADED MODE. Incomplete RAID LVs will be processed.");
++		log_debug("DEGRADED MODE. Incomplete RAID LVs will be processed.");
+ 
+ 	if (!get_activation_monitoring_mode(cmd, &monitoring))
+ 		goto_out;
 
 
