@@ -1,56 +1,104 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:37:19 +0000 (UTC)
-Subject: dev-dct-process-latest - tests: test for rename of snapshot
-Message-ID: <20140922153719.8F8F06153C@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 12 Sep 2014 10:56:49 +0000 (UTC)
+Subject: master - libdm: use dm-mod autoloading during dm_is_dm_major call if needed
+Message-ID: <20140912105649.3B52360F3D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=55aa3cc813620ecbf2f569720fb24107e737b836
-Commit:        55aa3cc813620ecbf2f569720fb24107e737b836
-Parent:        a86d9a3b305be466d221f2a5e210bc1cad8fe842
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 9 20:17:47 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 9 20:17:47 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3880ca5ecad1761bd13a190c58f8f85fdd7cd0e1
+Commit:        3880ca5ecad1761bd13a190c58f8f85fdd7cd0e1
+Parent:        f0cafc92812e285e5120241da04b5d119b27060b
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Sep 12 12:49:37 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Sep 12 12:49:37 2014 +0200
 
-tests: test for rename of snapshot
+libdm: use dm-mod autoloading during dm_is_dm_major call if needed
 
+For dm_is_dm_major to determine whether the major number given as
+an argument belongs to a DM device, libdm code needs to know what
+the actual DM major is to do the comparison.
+
+It may happen that the dm-mod module is not loaded during this
+call and so for the completness let's try our best before we start
+giving various errors - we can still make use of dm-mod autoloading,
+though only since kernels 2.6.36 where this feature was introduced.
 ---
- test/shell/snapshot-cluster.sh |   24 ++++++++++++++++++++++++
- 1 files changed, 24 insertions(+), 0 deletions(-)
+ WHATS_NEW_DM              |    1 +
+ libdm/ioctl/libdm-iface.c |   40 +++++++++++++++++++++++++++++-----------
+ 2 files changed, 30 insertions(+), 11 deletions(-)
 
-diff --git a/test/shell/snapshot-cluster.sh b/test/shell/snapshot-cluster.sh
-new file mode 100644
-index 0000000..051c165
---- /dev/null
-+++ b/test/shell/snapshot-cluster.sh
-@@ -0,0 +1,24 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 4effe09..1374934 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.91 - 
+ ====================================
++  Use dm-mod autoloading during dm_is_dm_major call if needed (kernels>=2.6.36).
+ 
+ Version 1.02.90 - 1st September 2014
+ ====================================
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 7d50f3a..9350912 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -336,17 +336,6 @@ static int _create_dm_bitset(void)
+ #endif
+ }
+ 
+-int dm_is_dm_major(uint32_t major)
+-{
+-	if (!_create_dm_bitset())
+-		return 0;
+-
+-	if (_dm_multiple_major_support)
+-		return dm_bit(_dm_bitset, major) ? 1 : 0;
+-	else
+-		return (major == _dm_device_major) ? 1 : 0;
+-}
+-
+ static void _close_control_fd(void)
+ {
+ 	if (_control_fd != -1) {
+@@ -423,6 +412,35 @@ bad:
+ #endif
+ }
+ 
++int dm_is_dm_major(uint32_t major)
++{
++	/*
++	 * If dm-mod module is not loaded yet during this call, we
++	 * can make it to load automatically in kernels >= 2.6.36
++	 * just by opening the dm control device. However, in older
++	 * kernels, there's nothing else we can do here - dm_is_dm_major
++	 * will fail as it can't determine this without the module
++	 * being loaded first - there's an error message issued for
++	 * this scenario deeper in this code.
++	 */
++	if (!_uname())
++		return 0;
 +
-+# Testing renaming snapshots in cluster
-+# https://bugzilla.redhat.com/show_bug.cgi?id=1136925
++	if (KERNEL_VERSION(_kernel_major, _kernel_minor, _kernel_release) >=
++	    KERNEL_VERSION(2, 6, 36)) {
++		if (_control_fd == -1 && !_open_control())
++			return 0;
++	}
 +
-+. lib/inittest
++	if (!_create_dm_bitset())
++		return 0;
 +
-+aux prepare_vg 1
++	if (_dm_multiple_major_support)
++		return dm_bit(_dm_bitset, major) ? 1 : 0;
++	else
++		return (major == _dm_device_major) ? 1 : 0;
++}
 +
-+lvcreate -aey -L1 -n $lv1 $vg
-+lvcreate -s -L1 -n $lv2 $vg/$lv1
-+lvrename  $vg/$lv2 $vg/$lv3
-+lvremove -f $vg/$lv1
-+
-+vgremove -f $vg
+ static void _dm_zfree_string(char *string)
+ {
+ 	if (string) {
 
 
