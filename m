@@ -1,53 +1,90 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:37:49 +0000 (UTC)
-Subject: dev-dct-process-latest - raid: check result of get_segtype_from_string
-Message-ID: <20140922153749.0D51760D7D@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 12 Sep 2014 12:44:51 +0000 (UTC)
+Subject: master - raid: add missing backups
+Message-ID: <20140912124451.6676060DAB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=40b7b107b186e1680db05dcb05230b978852d010
-Commit:        40b7b107b186e1680db05dcb05230b978852d010
-Parent:        08bde75093665001e7b30a7491c5bb9a53383d56
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd1fa0e808918b51a690e26de8a8cfff6c307854
+Commit:        dd1fa0e808918b51a690e26de8a8cfff6c307854
+Parent:        15ba2afdc2d70ee21c2599f0d51a413f0a7afa9b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 12 11:48:51 2014 +0200
+AuthorDate:    Thu Sep 11 19:05:40 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 12 13:45:50 2014 +0200
+CommitterDate: Fri Sep 12 13:42:57 2014 +0200
 
-raid: check result of get_segtype_from_string
+raid: add missing backups
 
-Error here is rather highly unpexpected for these types, but
-stay consistent with rest of the code and don't use unchecked value.
+Add backup() calls that were missing after successful update
+of metadata.
 ---
- lib/metadata/raid_manip.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ WHATS_NEW                 |    2 ++
+ lib/metadata/raid_manip.c |   17 ++++++++++++-----
+ 2 files changed, 14 insertions(+), 5 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 983bc1a..be549b8 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.02.112 - 
+ =====================================
++  Add missing backup of lvm2 metadata after some raid modifications.
++  Use vg memory pool for extent allocation.
+   Add allocation/physical_extent_size config option for default PE size of VGs.
+   Introduce common code to modify metadate and reload updated LV.
+   Fix rename of active snapshot volume in cluster.
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 4bfe9c9..b7ba464 100644
+index d39dbc8..91cc0dd 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -362,7 +362,9 @@ static int _alloc_image_component(struct logical_volume *lv,
- 		return 0;
+@@ -13,6 +13,7 @@
+  */
+ 
+ #include "lib.h"
++#include "archiver.h"
+ #include "metadata.h"
+ #include "toolcontext.h"
+ #include "segtype.h"
+@@ -695,11 +696,13 @@ to be left for these sub-lvs.
+ 			rebuild_flag_cleared = 1;
+ 		}
+ 	}
+-	if (rebuild_flag_cleared &&
+-	    (!vg_write(lv->vg) || !vg_commit(lv->vg))) {
+-		log_error("Failed to clear REBUILD flag for %s/%s components",
+-			  lv->vg->name, lv->name);
+-		return 0;
++	if (rebuild_flag_cleared) {
++		if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
++			log_error("Failed to clear REBUILD flag for %s/%s components",
++				  lv->vg->name, lv->name);
++			return 0;
++		}
++		backup(lv->vg);
  	}
  
--	segtype = get_segtype_from_string(lv->vg->cmd, "striped");
-+	if (!(segtype = get_segtype_from_string(lv->vg->cmd, "striped")))
-+		return_0;
+ 	return 1;
+@@ -978,6 +981,8 @@ static int _raid_remove_images(struct logical_volume *lv,
+ 			return_0;
+ 	}
+ 
++	backup(lv->vg);
 +
- 	if (!lv_add_segment(ah, first_area, 1, tmp_lv, segtype, 0, status, 0)) {
- 		log_error("Failed to add segment to LV, %s", img_name);
- 		return 0;
-@@ -833,7 +835,8 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
- 	if (!lvl_array)
+ 	return 1;
+ }
+ 
+@@ -1149,6 +1154,8 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
+ 	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
  		return_0;
  
--	error_segtype = get_segtype_from_string(lv->vg->cmd, "error");
-+	if (!(error_segtype = get_segtype_from_string(lv->vg->cmd, "error")))
-+		return_0;
++	backup(lv->vg);
++
+ 	return 1;
+ }
  
- 	/*
- 	 * We make two passes over the devices.
 
 
