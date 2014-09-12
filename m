@@ -1,49 +1,77 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 10 Sep 2014 22:02:14 +0000 (UTC)
-Subject: master - lv_rename: actual fix for snapshot
-Message-ID: <20140910220214.CA19260515@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 12 Sep 2014 12:45:10 +0000 (UTC)
+Subject: master - raid: destroy allocation handle on error path
+Message-ID: <20140912124510.4E66E6109B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a86d9a3b305be466d221f2a5e210bc1cad8fe842
-Commit:        a86d9a3b305be466d221f2a5e210bc1cad8fe842
-Parent:        c710f02e0181cc2db5455f0c98033247a70ecc30
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08914ed7c1df18dc2a16c6f896ae388ac5e7c299
+Commit:        08914ed7c1df18dc2a16c6f896ae388ac5e7c299
+Parent:        76c3c94bd2a2ac4d3e255541da515cae8e823621
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 9 20:15:51 2014 +0200
+AuthorDate:    Fri Sep 12 11:37:01 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 9 20:15:51 2014 +0200
+CommitterDate: Fri Sep 12 13:51:30 2014 +0200
 
-lv_rename: actual fix for snapshot
+raid: destroy allocation handle on error path
 
-By my rebasing mistake it's been eliminated from previous patch set.
+Don't leak ah memory pool on error path.
 ---
- lib/metadata/lv_manip.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/raid_manip.c |   14 +++++++++-----
+ 2 files changed, 10 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index cc7b6da..8c1bd83 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -3966,6 +3966,7 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 		log_error("Failed to allocate space for new name.");
- 		return 0;
- 	}
-+
- 	/* rename sub LVs */
- 	if (!for_each_sub_lv(lv, _rename_cb, (void *) &lv_names))
- 		return_0;
-@@ -3973,6 +3974,9 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 	/* rename main LV */
- 	lv->name = lv_names.new;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ebbc76f..f127d7d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Don't leak alloc_handle on raid target error path.
+   Properly validate raid leg names.
+   Archive metadata before starting their modification in raid target.
+   Add missing vg_revert in suspend_lv() error path in raid target.
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index b670058..58bc09b 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -459,15 +459,17 @@ static int _alloc_image_components(struct logical_volume *lv,
+ 		 * from 's + count'.
+ 		 */
+ 		if (!(lvl_array[s + count].lv =
+-		      _alloc_image_component(lv, NULL, ah, s + count, RAID_META)))
++		      _alloc_image_component(lv, NULL, ah, s + count, RAID_META))) {
++			alloc_destroy(ah);
+ 			return_0;
+-
++		}
+ 		dm_list_add(new_meta_lvs, &(lvl_array[s + count].list));
  
-+	if (lv_is_cow(lv))
-+		lv = origin_from_cow(lv);
-+
- 	if (update_mda && !lv_update_and_reload(lv))
+ 		if (!(lvl_array[s].lv =
+-		      _alloc_image_component(lv, NULL, ah, s, RAID_IMAGE)))
++		      _alloc_image_component(lv, NULL, ah, s, RAID_IMAGE))) {
++			alloc_destroy(ah);
+ 			return_0;
+-
++		}
+ 		dm_list_add(new_data_lvs, &(lvl_array[s].list));
+ 	}
+ 
+@@ -517,8 +519,10 @@ static int _alloc_rmeta_for_lv(struct logical_volume *data_lv,
+ 				    &allocatable_pvs, data_lv->alloc, 0, NULL)))
  		return_0;
+ 
+-	if (!(*meta_lv = _alloc_image_component(data_lv, base_name, ah, 0, RAID_META)))
++	if (!(*meta_lv = _alloc_image_component(data_lv, base_name, ah, 0, RAID_META))) {
++		alloc_destroy(ah);
+ 		return_0;
++	}
+ 
+ 	alloc_destroy(ah);
  
 
 
