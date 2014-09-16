@@ -1,142 +1,97 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 16 Sep 2014 09:43:14 +0000 (UTC)
-Subject: master - vgchange: disable cluster convert for active LVs
-Message-ID: <20140916094314.2D45D607BD@fedorahosted.org>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Tue, 16 Sep 2014 15:34:50 +0000 (UTC)
+Subject: dev-mcsontos-clvmd-stack-overflow - revert: commit 3880ca5ecad1761bd13a190c58f8f85fdd7cd0e1
+Message-ID: <20140916153450.DF91A61137@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a853361b01feda77031901eb2828c6ecabe760f
-Commit:        4a853361b01feda77031901eb2828c6ecabe760f
-Parent:        1ce21c19d5894b889a6d8da67c8a159709c3dda9
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 16 11:41:28 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 16 11:42:41 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=25ae9383bbdec063257f67ac2dee8defd24aa2cf
+Commit:        25ae9383bbdec063257f67ac2dee8defd24aa2cf
+Parent:        ae08a3a2945b277af81a4cff42c6dcfb26f12fae
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Sep 12 15:16:08 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Sep 12 15:28:51 2014 +0200
 
-vgchange: disable cluster convert for active LVs
+revert: commit 3880ca5ecad1761bd13a190c58f8f85fdd7cd0e1
 
-While we could probably reacquire some type of lock when
-going from non-clustered to clustered vg, we don't have any
-single road back to drop the lock and keep LV active.
-
-For now keep it safe and prohibit conversion when LV
-is active in the VG.
+There's a better solution to this...
 ---
- WHATS_NEW                    |    1 +
- lib/metadata/vg.c            |   42 +++++++++++++++++-------------------------
- test/shell/vgchange-usage.sh |   11 +++++++++++
- 3 files changed, 29 insertions(+), 25 deletions(-)
+ WHATS_NEW_DM              |    1 -
+ libdm/ioctl/libdm-iface.c |   40 +++++++++++-----------------------------
+ 2 files changed, 11 insertions(+), 30 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d3f926d..6c12186 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Disable vgchange of clustered attribute with any active LV in VG.
-   Use va_copy to properly pass va_list through functions.
-   Add function to detect rotational devices.
-   Review internal checks for mirror/raid/pvmove volumes.
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index 8ebec99..acda5be 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -519,36 +519,24 @@ int vg_set_alloc_policy(struct volume_group *vg, alloc_policy_t alloc)
- 	return 1;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 1374934..4effe09 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,6 +1,5 @@
+ Version 1.02.91 - 
+ ====================================
+-  Use dm-mod autoloading during dm_is_dm_major call if needed (kernels>=2.6.36).
+ 
+ Version 1.02.90 - 1st September 2014
+ ====================================
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 9350912..7d50f3a 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -336,6 +336,17 @@ static int _create_dm_bitset(void)
+ #endif
  }
  
-+/*
-+ * We do not currently support switching the cluster attribute
-+ * with any active logical volumes.
-+ *
-+ * FIXME: resolve logic with reacquiring proper top-level LV locks
-+ *        and we likely can't giveup DLM locks for active LVs...
-+ */
- int vg_set_clustered(struct volume_group *vg, int clustered)
++int dm_is_dm_major(uint32_t major)
++{
++	if (!_create_dm_bitset())
++		return 0;
++
++	if (_dm_multiple_major_support)
++		return dm_bit(_dm_bitset, major) ? 1 : 0;
++	else
++		return (major == _dm_device_major) ? 1 : 0;
++}
++
+ static void _close_control_fd(void)
  {
- 	struct lv_list *lvl;
-+	struct logical_volume *lv;
- 
--	/*
--	 * We do not currently support switching the cluster attribute
--	 * on active mirrors, snapshots or RAID logical volumes.
--	 */
- 	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (lv_is_active(lvl->lv) &&
--		    (lv_is_mirrored(lvl->lv) || lv_is_raid_type(lvl->lv))) {
--			log_error("%s logical volumes must be inactive "
--				  "when changing the cluster attribute.",
--				  lv_is_raid_type(lvl->lv) ? "RAID" : "Mirror");
--			return 0;
--		}
--
--		if (clustered) {
--			if (lv_is_origin(lvl->lv) || lv_is_cow(lvl->lv)) {
--				log_error("Volume group %s contains snapshots "
--					  "that are not yet supported.",
--					  vg->name);
--				return 0;
--			}
--		}
--
--		if ((lv_is_origin(lvl->lv) || lv_is_cow(lvl->lv)) &&
--		    lv_is_active(lvl->lv)) {
--			log_error("Snapshot logical volumes must be inactive "
--				  "when changing the cluster attribute.");
-+		/* For COW, check lock for origin */
-+		lv = lv_is_cow(lvl->lv) ? origin_from_cow(lvl->lv) : lvl->lv;
-+		if (lv_is_active(lv)) {
-+			log_error("Can't change cluster attribute with active "
-+				  "oogical volume %s.", display_lvname(lv));
- 			return 0;
- 		}
- 	}
-@@ -557,6 +545,10 @@ int vg_set_clustered(struct volume_group *vg, int clustered)
- 		vg->status |= CLUSTERED;
- 	else
- 		vg->status &= ~CLUSTERED;
-+
-+	log_debug_metadata("Setting volume group %s as %sclustered.",
-+			   vg->name, clustered ? "" : "not " );
-+
- 	return 1;
+ 	if (_control_fd != -1) {
+@@ -412,35 +423,6 @@ bad:
+ #endif
  }
  
-diff --git a/test/shell/vgchange-usage.sh b/test/shell/vgchange-usage.sh
-index 6ba3f69..ff80722 100644
---- a/test/shell/vgchange-usage.sh
-+++ b/test/shell/vgchange-usage.sh
-@@ -89,16 +89,27 @@ fail vgchange -cy |& tee out
- grep "y/n" out
- check vg_attr_bit cluster $vg "-"
- 
-+lvcreate -l1 $vg
-+
- # check on cluster
- # either skipped as clustered (non-cluster), or already clustered (on cluster)
- if test -e LOCAL_CLVMD ; then
-+	# can't switch with active LV
-+	not vgchange -cy $vg
-+	lvchange -an $vg
- 	vgchange -cy $vg
- 	fail vgchange -cy $vg
- 	check vg_attr_bit cluster $vg "c"
-+	lvchange -ay $vg
-+	not vgchange -cn $vg
-+	lvchange -an $vg
- 	vgchange -cn $vg
- else
- 	# no clvmd is running
- 	fail vgchange -cy $vg
-+	# can't switch with active LV
-+	not vgchange --yes -cy $vg
-+	lvchange -an $vg
- 	vgchange --yes -cy $vg
- 	fail vgchange --yes -cy $vg
- 	fail vgs $vg |& tee out
+-int dm_is_dm_major(uint32_t major)
+-{
+-	/*
+-	 * If dm-mod module is not loaded yet during this call, we
+-	 * can make it to load automatically in kernels >= 2.6.36
+-	 * just by opening the dm control device. However, in older
+-	 * kernels, there's nothing else we can do here - dm_is_dm_major
+-	 * will fail as it can't determine this without the module
+-	 * being loaded first - there's an error message issued for
+-	 * this scenario deeper in this code.
+-	 */
+-	if (!_uname())
+-		return 0;
+-
+-	if (KERNEL_VERSION(_kernel_major, _kernel_minor, _kernel_release) >=
+-	    KERNEL_VERSION(2, 6, 36)) {
+-		if (_control_fd == -1 && !_open_control())
+-			return 0;
+-	}
+-
+-	if (!_create_dm_bitset())
+-		return 0;
+-
+-	if (_dm_multiple_major_support)
+-		return dm_bit(_dm_bitset, major) ? 1 : 0;
+-	else
+-		return (major == _dm_device_major) ? 1 : 0;
+-}
+-
+ static void _dm_zfree_string(char *string)
+ {
+ 	if (string) {
 
 
