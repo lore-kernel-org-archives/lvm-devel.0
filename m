@@ -1,72 +1,142 @@
 From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Tue, 16 Sep 2014 15:35:20 +0000 (UTC)
-Subject: dev-mcsontos-clvmd-stack-overflow - clvmd: Fix stack overflow on 64 bit ARM
-Message-ID: <20140916153520.BEDD760735@fedorahosted.org>
+Date: Tue, 16 Sep 2014 15:35:18 +0000 (UTC)
+Subject: dev-mcsontos-clvmd-stack-overflow - vgchange: disable cluster convert for active LVs
+Message-ID: <20140916153518.9F6E860735@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05716c2d8a68e5acc698daf1234bed5feb93b743
-Commit:        05716c2d8a68e5acc698daf1234bed5feb93b743
-Parent:        4a853361b01feda77031901eb2828c6ecabe760f
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Sep 16 17:23:11 2014 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Sep 16 17:34:32 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a853361b01feda77031901eb2828c6ecabe760f
+Commit:        4a853361b01feda77031901eb2828c6ecabe760f
+Parent:        1ce21c19d5894b889a6d8da67c8a159709c3dda9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Sep 16 11:41:28 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Sep 16 11:42:41 2014 +0200
 
-clvmd: Fix stack overflow on 64 bit ARM
+vgchange: disable cluster convert for active LVs
 
-Seems the amount of allocated data on stack is dependent on page size.
-As the page size on aarch64 is 64kiB writing to memory allocated by
-alloca results in stack overflow as at the time of allocation the are
-already 2 pages allocated. Clearly 128kiB is not sufficient and at least
-3 pages are needed.
+While we could probably reacquire some type of lock when
+going from non-clustered to clustered vg, we don't have any
+single road back to drop the lock and keep LV active.
+
+For now keep it safe and prohibit conversion when LV
+is active in the VG.
 ---
- daemons/clvmd/clvmd.c |    8 ++++++--
- 1 files changed, 6 insertions(+), 2 deletions(-)
+ WHATS_NEW                    |    1 +
+ lib/metadata/vg.c            |   42 +++++++++++++++++-------------------------
+ test/shell/vgchange-usage.sh |   11 +++++++++++
+ 3 files changed, 29 insertions(+), 25 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 9b865f6..0684efb 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -24,6 +24,7 @@
- #include "clvmd.h"
- #include "lvm-functions.h"
- #include "lvm-version.h"
-+#include "lvm-wrappers.h"
- #include "refresh_clvmd.h"
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d3f926d..6c12186 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Disable vgchange of clustered attribute with any active LV in VG.
+   Use va_copy to properly pass va_list through functions.
+   Add function to detect rotational devices.
+   Review internal checks for mirror/raid/pvmove volumes.
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index 8ebec99..acda5be 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -519,36 +519,24 @@ int vg_set_alloc_policy(struct volume_group *vg, alloc_policy_t alloc)
+ 	return 1;
+ }
  
- #ifdef HAVE_COROSYNC_CONFDB_H
-@@ -88,7 +89,7 @@ static debug_t debug = DEBUG_OFF;
- static int foreground_mode = 0;
- static pthread_t lvm_thread;
- /* Stack size 128KiB for thread, must be bigger then DEFAULT_RESERVED_STACK */
--static const size_t STACK_SIZE = 128 * 1024;
-+static const size_t MIN_STACK_SIZE = 128 * 1024;
- static pthread_attr_t stack_attr;
- static int lvm_thread_exit = 0;
- static pthread_mutex_t lvm_thread_mutex;
-@@ -358,6 +359,7 @@ int main(int argc, char *argv[])
- 	int clusterwide_opt = 0;
- 	mode_t old_mask;
- 	int ret = 1;
-+	size_t stack_size;
++/*
++ * We do not currently support switching the cluster attribute
++ * with any active logical volumes.
++ *
++ * FIXME: resolve logic with reacquiring proper top-level LV locks
++ *        and we likely can't giveup DLM locks for active LVs...
++ */
+ int vg_set_clustered(struct volume_group *vg, int clustered)
+ {
+ 	struct lv_list *lvl;
++	struct logical_volume *lv;
  
- 	struct option longopts[] = {
- 		{ "help", 0, 0, 'h' },
-@@ -514,8 +516,10 @@ int main(int argc, char *argv[])
- 
- 	/* Initialise the LVM thread variables */
- 	dm_list_init(&lvm_cmd_head);
-+	stack_size = 3 * lvm_getpagesize();
-+	stack_size = stack_size < MIN_STACK_SIZE ? MIN_STACK_SIZE : stack_size;
- 	if (pthread_attr_init(&stack_attr) ||
--	    pthread_attr_setstacksize(&stack_attr, STACK_SIZE)) {
-+	    pthread_attr_setstacksize(&stack_attr, stack_size)) {
- 		log_sys_error("pthread_attr_init", "");
- 		exit(1);
+-	/*
+-	 * We do not currently support switching the cluster attribute
+-	 * on active mirrors, snapshots or RAID logical volumes.
+-	 */
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+-		if (lv_is_active(lvl->lv) &&
+-		    (lv_is_mirrored(lvl->lv) || lv_is_raid_type(lvl->lv))) {
+-			log_error("%s logical volumes must be inactive "
+-				  "when changing the cluster attribute.",
+-				  lv_is_raid_type(lvl->lv) ? "RAID" : "Mirror");
+-			return 0;
+-		}
+-
+-		if (clustered) {
+-			if (lv_is_origin(lvl->lv) || lv_is_cow(lvl->lv)) {
+-				log_error("Volume group %s contains snapshots "
+-					  "that are not yet supported.",
+-					  vg->name);
+-				return 0;
+-			}
+-		}
+-
+-		if ((lv_is_origin(lvl->lv) || lv_is_cow(lvl->lv)) &&
+-		    lv_is_active(lvl->lv)) {
+-			log_error("Snapshot logical volumes must be inactive "
+-				  "when changing the cluster attribute.");
++		/* For COW, check lock for origin */
++		lv = lv_is_cow(lvl->lv) ? origin_from_cow(lvl->lv) : lvl->lv;
++		if (lv_is_active(lv)) {
++			log_error("Can't change cluster attribute with active "
++				  "oogical volume %s.", display_lvname(lv));
+ 			return 0;
+ 		}
  	}
+@@ -557,6 +545,10 @@ int vg_set_clustered(struct volume_group *vg, int clustered)
+ 		vg->status |= CLUSTERED;
+ 	else
+ 		vg->status &= ~CLUSTERED;
++
++	log_debug_metadata("Setting volume group %s as %sclustered.",
++			   vg->name, clustered ? "" : "not " );
++
+ 	return 1;
+ }
+ 
+diff --git a/test/shell/vgchange-usage.sh b/test/shell/vgchange-usage.sh
+index 6ba3f69..ff80722 100644
+--- a/test/shell/vgchange-usage.sh
++++ b/test/shell/vgchange-usage.sh
+@@ -89,16 +89,27 @@ fail vgchange -cy |& tee out
+ grep "y/n" out
+ check vg_attr_bit cluster $vg "-"
+ 
++lvcreate -l1 $vg
++
+ # check on cluster
+ # either skipped as clustered (non-cluster), or already clustered (on cluster)
+ if test -e LOCAL_CLVMD ; then
++	# can't switch with active LV
++	not vgchange -cy $vg
++	lvchange -an $vg
+ 	vgchange -cy $vg
+ 	fail vgchange -cy $vg
+ 	check vg_attr_bit cluster $vg "c"
++	lvchange -ay $vg
++	not vgchange -cn $vg
++	lvchange -an $vg
+ 	vgchange -cn $vg
+ else
+ 	# no clvmd is running
+ 	fail vgchange -cy $vg
++	# can't switch with active LV
++	not vgchange --yes -cy $vg
++	lvchange -an $vg
+ 	vgchange --yes -cy $vg
+ 	fail vgchange --yes -cy $vg
+ 	fail vgs $vg |& tee out
 
 
