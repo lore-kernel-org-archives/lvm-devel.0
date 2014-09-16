@@ -1,107 +1,72 @@
 From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Tue, 16 Sep 2014 15:35:16 +0000 (UTC)
-Subject: dev-mcsontos-clvmd-stack-overflow - va_list: properly pass va_list through functions
-Message-ID: <20140916153516.6E75060735@fedorahosted.org>
+Date: Tue, 16 Sep 2014 15:35:20 +0000 (UTC)
+Subject: dev-mcsontos-clvmd-stack-overflow - clvmd: Fix stack overflow on 64 bit ARM
+Message-ID: <20140916153520.BEDD760735@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1ce21c19d5894b889a6d8da67c8a159709c3dda9
-Commit:        1ce21c19d5894b889a6d8da67c8a159709c3dda9
-Parent:        b9c16b750694c4ec03d05bc9e4a12cecc4d9450f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 15 15:33:56 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 16 11:42:40 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05716c2d8a68e5acc698daf1234bed5feb93b743
+Commit:        05716c2d8a68e5acc698daf1234bed5feb93b743
+Parent:        4a853361b01feda77031901eb2828c6ecabe760f
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Sep 16 17:23:11 2014 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Sep 16 17:34:32 2014 +0200
 
-va_list: properly pass va_list through functions
+clvmd: Fix stack overflow on 64 bit ARM
 
-Code should not just pass va_list arg through the function
-as args could be passed in many strange ways.
-Use va_copy().
-
-For details look in i.e.:
-
-http://julipedia.meroh.net/2011/09/using-vacopy-to-safely-pass-ap.html
+Seems the amount of allocated data on stack is dependent on page size.
+As the page size on aarch64 is 64kiB writing to memory allocated by
+alloca results in stack overflow as at the time of allocation the are
+already 2 pages allocated. Clearly 128kiB is not sufficient and at least
+3 pages are needed.
 ---
- WHATS_NEW                        |    1 +
- lib/format_text/export.c         |    5 ++++-
- libdaemon/client/daemon-client.c |   16 ++++++++++++----
- 3 files changed, 17 insertions(+), 5 deletions(-)
+ daemons/clvmd/clvmd.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5b8a32f..d3f926d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Use va_copy to properly pass va_list through functions.
-   Add function to detect rotational devices.
-   Review internal checks for mirror/raid/pvmove volumes.
-   Track mirror segment type with separate MIRROR flag.
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 7ffb4e3..c2453f2 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -190,9 +190,12 @@ static int _out_with_comment_raw(struct formatter *f,
- 				 const char *fmt, va_list ap)
- {
- 	int n;
-+	va_list apc;
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 9b865f6..0684efb 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -24,6 +24,7 @@
+ #include "clvmd.h"
+ #include "lvm-functions.h"
+ #include "lvm-version.h"
++#include "lvm-wrappers.h"
+ #include "refresh_clvmd.h"
  
-+	va_copy(apc, ap);
- 	n = vsnprintf(f->data.buf.start + f->data.buf.used,
--		      f->data.buf.size - f->data.buf.used, fmt, ap);
-+		      f->data.buf.size - f->data.buf.used, fmt, apc);
-+	va_end(apc);
+ #ifdef HAVE_COROSYNC_CONFDB_H
+@@ -88,7 +89,7 @@ static debug_t debug = DEBUG_OFF;
+ static int foreground_mode = 0;
+ static pthread_t lvm_thread;
+ /* Stack size 128KiB for thread, must be bigger then DEFAULT_RESERVED_STACK */
+-static const size_t STACK_SIZE = 128 * 1024;
++static const size_t MIN_STACK_SIZE = 128 * 1024;
+ static pthread_attr_t stack_attr;
+ static int lvm_thread_exit = 0;
+ static pthread_mutex_t lvm_thread_mutex;
+@@ -358,6 +359,7 @@ int main(int argc, char *argv[])
+ 	int clusterwide_opt = 0;
+ 	mode_t old_mask;
+ 	int ret = 1;
++	size_t stack_size;
  
- 	/* If metadata doesn't fit, extend buffer */
- 	if (n < 0 || (n + f->data.buf.used + 2 > f->data.buf.size)) {
-diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
-index a11b604..d0b8951 100644
---- a/libdaemon/client/daemon-client.c
-+++ b/libdaemon/client/daemon-client.c
-@@ -129,12 +129,16 @@ daemon_reply daemon_send_simple_v(daemon_handle h, const char *id, va_list ap)
- 	static const daemon_reply err = { .error = ENOMEM };
- 	daemon_request rq = { .cft = NULL };
- 	daemon_reply repl;
-+	va_list apc;
+ 	struct option longopts[] = {
+ 		{ "help", 0, 0, 'h' },
+@@ -514,8 +516,10 @@ int main(int argc, char *argv[])
  
-+	va_copy(apc, ap);
- 	if (!buffer_append_f(&rq.buffer, "request = %s", id, NULL) ||
--	    !buffer_append_vf(&rq.buffer, ap)) {
-+	    !buffer_append_vf(&rq.buffer, apc)) {
-+		va_end(apc);
- 		buffer_destroy(&rq.buffer);
- 		return err;
+ 	/* Initialise the LVM thread variables */
+ 	dm_list_init(&lvm_cmd_head);
++	stack_size = 3 * lvm_getpagesize();
++	stack_size = stack_size < MIN_STACK_SIZE ? MIN_STACK_SIZE : stack_size;
+ 	if (pthread_attr_init(&stack_attr) ||
+-	    pthread_attr_setstacksize(&stack_attr, STACK_SIZE)) {
++	    pthread_attr_setstacksize(&stack_attr, stack_size)) {
+ 		log_sys_error("pthread_attr_init", "");
+ 		exit(1);
  	}
-+	va_end(apc);
- 
- 	repl = daemon_send(h, rq);
- 	buffer_destroy(&rq.buffer);
-@@ -181,13 +185,17 @@ bad:
- 
- int daemon_request_extend_v(daemon_request r, va_list ap)
- {
-+	int res;
-+	va_list apc;
-+
- 	if (!r.cft)
- 		return 0;
- 
--	if (!config_make_nodes_v(r.cft, NULL, r.cft->root, ap))
--		return 0;
-+	va_copy(apc, ap);
-+	res = config_make_nodes_v(r.cft, NULL, r.cft->root, apc) ? 1 : 0;
-+	va_end(apc);
- 
--	return 1;
-+	return res;
- }
- 
- int daemon_request_extend(daemon_request r, ...)
 
 
