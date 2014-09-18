@@ -1,52 +1,72 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 18 Sep 2014 23:14:54 +0000 (UTC)
-Subject: master - memlock: ensure memory is allocation before locking
-Message-ID: <20140918231454.354CC611A3@fedorahosted.org>
+Date: Thu, 18 Sep 2014 23:14:56 +0000 (UTC)
+Subject: master - memlock: drop uneeded lock
+Message-ID: <20140918231456.59F1B606D1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b0bd8ce4086531f4f83ce417ddb988d8b4e0907a
-Commit:        b0bd8ce4086531f4f83ce417ddb988d8b4e0907a
-Parent:        2263a3bcf559ef1eba68a6ef6216aca4deaf4d3e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d8b775f4eb871e771c9f18dcd9f6b28509e7e52a
+Commit:        d8b775f4eb871e771c9f18dcd9f6b28509e7e52a
+Parent:        b0bd8ce4086531f4f83ce417ddb988d8b4e0907a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 19 01:07:32 2014 +0200
+AuthorDate:    Fri Sep 19 01:09:36 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 19 01:12:03 2014 +0200
+CommitterDate: Fri Sep 19 01:13:49 2014 +0200
 
-memlock: ensure memory is allocation before locking
+memlock: drop uneeded lock
 
-strerror may mmap ram if it was not yet used.
-dm_udev_get_sync_support  may initilize udev if it was still not used.
+Avoid doing buffered operation within memory lock.
 ---
- lib/mm/memlock.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c   |    4 ++++
+ lib/metadata/thin_manip.c |    4 ++++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index a58efd9..0658800 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -266,9 +266,6 @@ static int _memlock_maps(struct cmd_context *cmd, lvmlock_t lock, size_t *mstats
- #endif
- 	}
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 58bc79b..2e683b9 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -29,6 +29,7 @@
+ #include "defaults.h"
+ #include "lvm-exec.h"
+ #include "lvm-signal.h"
++#include "memlock.h"
  
--	/* Force libc.mo load */
--	if (lock == LVM_MLOCK)
--		(void)strerror(0);
- 	/* Reset statistic counters */
- 	*mstats = 0;
+ typedef enum {
+ 	PREFERRED,
+@@ -6877,6 +6878,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		       thin_name, lp->pvh, lp->alloc, lp->approx_alloc))
+ 		return_NULL;
  
-@@ -442,6 +439,9 @@ static void _lock_mem(struct cmd_context *cmd)
- 			stack;
- 	}
- 
-+	(void)strerror(0);		/* Force libc.mo load */
-+	(void)dm_udev_get_sync_support(); /* udev is initialized */
++	/* Unlock memory if possible */
++	memlock_unlock(vg->cmd);
 +
- 	log_very_verbose("Locking memory");
- 	if (!_memlock_maps(cmd, LVM_MLOCK, &_mstats))
- 		stack;
+ 	if (seg_is_cache_pool(lp)) {
+ 		first_seg(lv)->chunk_size = lp->chunk_size;
+ 		first_seg(lv)->feature_flags = lp->feature_flags;
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 61e9c6e..b781e02 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -15,6 +15,7 @@
+ #include "lib.h"
+ #include "activate.h"
+ #include "locking.h"
++#include "memlock.h"
+ #include "metadata.h"
+ #include "segtype.h"
+ #include "defaults.h"
+@@ -370,6 +371,9 @@ int update_pool_lv(struct logical_volume *lv, int activate)
+ 				return_0;
+ 			}
+ 			init_dmeventd_monitor(monitored);
++
++			/* Unlock memory if possible */
++			memlock_unlock(lv->vg->cmd);
+ 		}
+ 		/*
+ 		 * Resume active pool to send thin messages.
 
 
