@@ -1,123 +1,87 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 19 Sep 2014 13:57:49 +0000 (UTC)
-Subject: master - debug: enhance mmap catch code
-Message-ID: <20140919135749.2FB0A6030C@fedorahosted.org>
+Date: Fri, 19 Sep 2014 13:57:47 +0000 (UTC)
+Subject: master - man: document obsoleted options
+Message-ID: <20140919135747.1C51760FB6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=386fbf8e0d30823854ffefb1b4e3b47b09ec5905
-Commit:        386fbf8e0d30823854ffefb1b4e3b47b09ec5905
-Parent:        081e406d0d0c02d8fb6f93d6b8fb97f4217fde62
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=081e406d0d0c02d8fb6f93d6b8fb97f4217fde62
+Commit:        081e406d0d0c02d8fb6f93d6b8fb97f4217fde62
+Parent:        e3cbdde070b25db30984efa0898f16c2555301d9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 19 11:04:36 2014 +0200
+AuthorDate:    Fri Sep 19 14:53:14 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Sep 19 15:55:47 2014 +0200
 
-debug: enhance mmap catch code
+man: document obsoleted options
 
-Use nice instruction_HLT macro
-Use log_debug_mem()
-Don't actually log things after we prohibit 'mmap'.
-Move initialization of strerror & udev before blocking mmap.
+It's shown on comand line help and it's accepted argument,
+so provide matching man entry.
 ---
- lib/mm/memlock.c |   29 ++++++++++++-----------------
- 1 files changed, 12 insertions(+), 17 deletions(-)
+ man/lvchange.8.in |    9 ++++++++-
+ man/lvcreate.8.in |    9 ++++++++-
+ 2 files changed, 16 insertions(+), 2 deletions(-)
 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index 0658800..37d9457 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -334,6 +334,7 @@ static int _memlock_maps(struct cmd_context *cmd, lvmlock_t lock, size_t *mstats
- #define _GNU_SOURCE
- #endif
- #include <dlfcn.h>
-+static const unsigned char INSTRUCTION_HLT = 0x94;
- static char _mmap_orig;
- static unsigned char *_mmap_addr;
- #ifdef __i386__
-@@ -358,7 +359,7 @@ static int _disable_mmap(void)
- #endif /* __i386__ */
- 			_mmap_addr = *(void **)abs_addr;
- 		} else
--			log_debug("Can't find PLT jump entry assuming -fPIE linkage.");
-+			log_debug_mem("Can't find PLT jump entry assuming -fPIE linkage.");
- 		if (mprotect((void *)((unsigned long)_mmap_addr & ~4095UL), 4096, PROT_READ|PROT_WRITE|PROT_EXEC)) {
- 			log_sys_error("mprotect", "");
- 			_mmap_addr = NULL;
-@@ -366,8 +367,8 @@ static int _disable_mmap(void)
- 		}
- 		_mmap_orig = *_mmap_addr;
- 	}
--	*_mmap_addr = 0xf4;
--	log_debug("Remapped mmap jump entry %x to %x.", _mmap_orig, *_mmap_addr);
-+	log_debug_mem("Remapping mmap entry %02x to %02x.", _mmap_orig, INSTRUCTION_HLT);
-+	*_mmap_addr = INSTRUCTION_HLT;
- 
- #ifdef __i386__
- 	if (!_mmap64_addr) {
-@@ -375,8 +376,7 @@ static int _disable_mmap(void)
- 		if (_mmap64_addr[0] == 0xff && _mmap64_addr[1] == 0x25) {
- 			abs_addr = *(void **)(_mmap64_addr + 2);
- 			_mmap64_addr = *(void **)abs_addr;
--		} else
--			log_debug("Can't find PLT jump entry assuming -fPIE linkage.");
-+		} /* Can't find PLT jump entry assuming -fPIE linkage */
- 		if (mprotect((void *)((unsigned long)_mmap64_addr & ~4095UL), 4096, PROT_READ|PROT_WRITE|PROT_EXEC)) {
- 			log_sys_error("mprotect", "");
- 			_mmap64_addr = NULL;
-@@ -384,8 +384,7 @@ static int _disable_mmap(void)
- 		}
- 		_mmap64_orig = *_mmap64_addr;
- 	}
--	*_mmap64_addr = 0xf4;
--	log_debug("Remapped mmap64 jump entry %x to %x.", _mmap64_orig, *_mmap64_addr);
-+	*_mmap64_addr = INSTRUCTION_HLT;
- #endif /* __i386__ */
- #endif /* ARCH_X86 */
- 	return 1;
-@@ -394,16 +393,13 @@ static int _disable_mmap(void)
- static int _restore_mmap(void)
- {
- #ifdef ARCH_X86
--	if (_mmap_addr) {
--		log_debug("Restoring mmap jump entry.");
-+	if (_mmap_addr)
- 		*_mmap_addr = _mmap_orig;
--	}
- #ifdef __i386__
--	if (_mmap64_addr) {
--		log_debug("Restoring mmap64 jump entry.");
-+	if (_mmap64_addr)
- 		*_mmap64_addr = _mmap64_orig;
--	}
- #endif /* __i386__ */
-+	log_debug_mem("Restored mmap entry.");
- #endif /* ARCH_X86 */
- 	return 1;
- }
-@@ -412,6 +408,9 @@ static int _restore_mmap(void)
- static void _lock_mem(struct cmd_context *cmd)
- {
- 	_allocate_memory();
-+	(void)strerror(0);		/* Force libc.mo load */
-+	(void)dm_udev_get_sync_support(); /* udev is initialized */
-+	log_very_verbose("Locking memory");
- 
- 	/*
- 	 * For daemon we need to use mlockall()
-@@ -439,10 +438,6 @@ static void _lock_mem(struct cmd_context *cmd)
- 			stack;
- 	}
- 
--	(void)strerror(0);		/* Force libc.mo load */
--	(void)dm_udev_get_sync_support(); /* udev is initialized */
--
--	log_very_verbose("Locking memory");
- 	if (!_memlock_maps(cmd, LVM_MLOCK, &_mstats))
- 		stack;
- 
+diff --git a/man/lvchange.8.in b/man/lvchange.8.in
+index 39187f0..d3d63fd 100644
+--- a/man/lvchange.8.in
++++ b/man/lvchange.8.in
+@@ -50,9 +50,11 @@ lvchange \(em change attributes of a logical volume
+ .RB [ \-\-metadataprofile
+ .IR ProfileName ]
+ .RB [ \-M | \-\-persistent
+-.RI { y | n }]
++.RI { y | n }
+ .RB [ \-\-minor
+ .IR minor ]
++.RB [ \-\-major
++.IR major ]]
+ .RB [ \-P | \-\-partial ]
+ .RB [ \-p | \-\-permission
+ .RI { r | rw }]
+@@ -165,6 +167,11 @@ See \fBlvm.conf\fP(5) for more information about \fBmetadata profiles\fP.
+ .B \-\-minor \fIminor
+ Set the minor number.
+ .TP
++.B \-\-major \fImajor
++Sets the major number. This option is supported only on older systems
++(kernel version 2.4) and is ignored on modern Linux systems where major
++numbers are dynamically assigned.
++.TP
+ .BR \-\-monitor " {" \fIy | \fIn }
+ Start or stop monitoring a mirrored or snapshot logical volume with
+ dmeventd, if it is installed.
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index 5440ced..ed0ed65 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -43,9 +43,11 @@ lvcreate \- create a logical volume in an existing volume group
+ .BR \-V | \-\-virtualsize
+ .IR VirtualSize [ bBsSkKmMgGtTpPeE ]}
+ .RB [ \-M | \-\-persistent
+-.RI { y | n }]
++.RI { y | n }
+ .RB [ \-\-minor
+ .IR minor ]
++.RB [ \-\-major
++.IR major ]]
+ .RB [ \-m | \-\-mirrors
+ .IR Mirrors
+ .RB [ \-\-nosync ]
+@@ -298,6 +300,11 @@ Set to \fIy\fP to make the minor number specified persistent.
+ .B \-\-minor \fIminor
+ Sets the minor number.
+ .TP
++.B \-\-major \fImajor
++Sets the major number. This option is supported only on older systems
++(kernel version 2.4) and is ignored on modern Linux systems where major
++numbers are dynamically assigned.
++.TP
+ .BR \-\-monitor " {" \fIy | \fIn }
+ Starts or avoids monitoring a mirrored, snapshot or thin pool logical volume with
+ dmeventd, if it is installed.
 
 
