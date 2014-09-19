@@ -1,87 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 19 Sep 2014 13:57:40 +0000 (UTC)
-Subject: master - lvchange: backup final metadata
-Message-ID: <20140919135740.C020560CD4@fedorahosted.org>
+Date: Fri, 19 Sep 2014 13:57:42 +0000 (UTC)
+Subject: master - cleanup: lvchange remove some extra code.
+Message-ID: <20140919135742.DD69F60317@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3adc50ac22f5a3e355db5d143303c8b7dfb7c828
-Commit:        3adc50ac22f5a3e355db5d143303c8b7dfb7c828
-Parent:        f09f85d027d8833727483efd6077f52d2e5b6ba2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=702b6482154b0d8a9488c304081992f2d569f005
+Commit:        702b6482154b0d8a9488c304081992f2d569f005
+Parent:        3adc50ac22f5a3e355db5d143303c8b7dfb7c828
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 19 15:16:26 2014 +0200
+AuthorDate:    Fri Sep 19 15:10:21 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 19 15:55:34 2014 +0200
+CommitterDate: Fri Sep 19 15:55:46 2014 +0200
 
-lvchange: backup final metadata
+cleanup: lvchange remove some extra code.
 
-Shift backup after final metadata commit.
+We do not need to restore LV content on error path - since
+for reactivation we always use  ondisk/commited metadata,
+so passed data are never used.
 
-Synchronize with wiping.
+Drop some unneded extra message, since the called function
+repeated logs same info.
 ---
- WHATS_NEW        |    1 +
- tools/lvchange.c |    9 ++++++++-
- 2 files changed, 9 insertions(+), 1 deletions(-)
+ tools/lvchange.c |   20 ++------------------
+ 1 files changed, 2 insertions(+), 18 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a2c4577..c5ba9fa 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Backup final metadata after resync of mirror/raid.
-   Unify handling of --persistent option for lvcreate and lvchange.
-   Validate major and minor numbers stored in metadata.
-   Use -fPIE when linking -pie executables.
 diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 8ccbe19..b196591 100644
+index b196591..e520157 100644
 --- a/tools/lvchange.c
 +++ b/tools/lvchange.c
-@@ -14,6 +14,7 @@
-  */
- 
- #include "tools.h"
-+#include "memlock.h"
- 
- static int lvchange_permission(struct cmd_context *cmd,
- 			       struct logical_volume *lv)
-@@ -416,7 +417,8 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+@@ -399,19 +399,8 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
  		return 0;
  	}
  
--	backup(lv->vg);
-+	/* No backup for intermediate metadata, so just unlock memory */
-+	memlock_unlock(lv->vg->cmd);
- 
- 	dm_list_iterate_items(lvl, &device_list) {
- 		if (!activate_lv_excl_local(cmd, lvl->lv)) {
-@@ -449,6 +451,8 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+-	if (!vg_write(lv->vg)) {
+-		log_error("Failed to write intermediate VG metadata.");
+-		if (!attach_metadata_devices(seg, &device_list))
+-			stack;
+-		if (!_reactivate_lv(lv, active, exclusive))
+-			stack;
+-		return 0;
+-	}
+-
+-	if (!vg_commit(lv->vg)) {
+-		log_error("Failed to commit intermediate VG metadata.");
+-		if (!attach_metadata_devices(seg, &device_list))
+-			stack;
++	if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
++		log_error("Failed to update intermediate VG metadata on disk.");
+ 		if (!_reactivate_lv(lv, active, exclusive))
+ 			stack;
+ 		return 0;
+@@ -428,10 +417,6 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 			return 0;
  		}
- 	}
  
-+	sync_local_dev_names(lv->vg->cmd);  /* Wait until devices are away */
-+
- 	/* Put metadata sub-LVs back in place */
- 	if (!attach_metadata_devices(seg, &device_list)) {
- 		log_error("Failed to reattach %s device after clearing",
-@@ -463,11 +467,14 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
- 	}
- 
- 	if (!_reactivate_lv(lv, active, exclusive)) {
-+		backup(lv->vg);
- 		log_error("Failed to reactivate %s after resync",
- 			  lv->name);
+-		log_very_verbose("Clearing %s device %s",
+-				 (seg_is_raid(seg)) ? "metadata" : "log",
+-				 lvl->lv->name);
+-
+ 		if (!wipe_lv(lvl->lv, (struct wipe_params)
+ 			     { .do_zero = 1, .zero_sectors = lvl->lv->size })) {
+ 			log_error("Unable to reset sync status for %s",
+@@ -460,7 +445,6 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
  		return 0;
  	}
  
-+	backup(lv->vg);
-+
- 	return 1;
- }
- 
+-	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+ 	if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
+ 		log_error("Failed to update metadata on disk.");
+ 		return 0;
 
 
