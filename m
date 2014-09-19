@@ -1,129 +1,162 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 19 Sep 2014 13:57:34 +0000 (UTC)
-Subject: master - cleanup: use const for cmd context
-Message-ID: <20140919135734.6428960ECF@fedorahosted.org>
+Date: Fri, 19 Sep 2014 13:57:36 +0000 (UTC)
+Subject: master - metadata: validate major, minor numbers
+Message-ID: <20140919135736.8F3A860CD4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=656ba3a744af5548ee0a5983590698aeee3dd326
-Commit:        656ba3a744af5548ee0a5983590698aeee3dd326
-Parent:        e2312d28ed031dd5c53084b4789763f3c5e6410c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=73f4fa6bc100e21562397627ea95a5e89443c1ab
+Commit:        73f4fa6bc100e21562397627ea95a5e89443c1ab
+Parent:        656ba3a744af5548ee0a5983590698aeee3dd326
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 19 14:29:12 2014 +0200
+AuthorDate:    Fri Sep 19 14:51:41 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 19 15:51:31 2014 +0200
+CommitterDate: Fri Sep 19 15:53:27 2014 +0200
 
-cleanup: use const for cmd context
+metadata: validate major, minor numbers
 
+Validate major, minor numbers after reading them from metadata.
 ---
- tools/lvmcmdline.c |   18 +++++++++---------
- tools/tools.h      |   20 ++++++++++----------
- 2 files changed, 19 insertions(+), 19 deletions(-)
+ WHATS_NEW                        |    1 +
+ lib/format_text/import_vsn1.c    |   33 +++++++++++++++++-----------
+ lib/metadata/metadata-exported.h |    3 ++
+ lib/metadata/metadata.c          |   43 ++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 67 insertions(+), 13 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 04598e2..d90ef91 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -137,12 +137,12 @@ const char *arg_long_option_name(int a)
- 	return _cmdline.arg_props[a].long_arg;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e06fcc2..24e28c7 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Validate major and minor numbers stored in metadata.
+   Use -fPIE when linking -pie executables.
+   Enable cache segment type by default.
+   Ensure only supported volume types are used with cache segments.
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 174b3bf..580349f 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -635,7 +635,7 @@ static int _read_lvnames(struct format_instance *fid __attribute__((unused)),
+ 	return 1;
  }
  
--const char *arg_value(struct cmd_context *cmd, int a)
-+const char *arg_value(const struct cmd_context *cmd, int a)
- {
- 	return cmd->arg_values[a].value;
+-static int _read_lvsegs(struct format_instance *fid __attribute__((unused)),
++static int _read_lvsegs(struct format_instance *fid,
+ 			struct volume_group *vg, const struct dm_config_node *lvn,
+ 			const struct dm_config_node *vgn __attribute__((unused)),
+ 			struct dm_hash_table *pv_hash,
+@@ -668,20 +668,27 @@ static int _read_lvsegs(struct format_instance *fid __attribute__((unused)),
+ 		return_0;
+ 
+ 	lv->size = (uint64_t) lv->le_count * (uint64_t) vg->extent_size;
+-
+ 	lv->minor = -1;
+-	if ((lv->status & FIXED_MINOR) &&
+-	    !_read_int32(lvn, "minor", &lv->minor)) {
+-		log_error("Couldn't read minor number for logical "
+-			  "volume %s.", lv->name);
+-		return 0;
+-	}
+-
+ 	lv->major = -1;
+-	if ((lv->status & FIXED_MINOR) &&
+-	    !_read_int32(lvn, "major", &lv->major)) {
+-		log_error("Couldn't read major number for logical "
+-			  "volume %s.", lv->name);
++
++	if (lv->status & FIXED_MINOR) {
++		if (!_read_int32(lvn, "minor", &lv->minor)) {
++			log_error("Couldn't read minor number for logical "
++				  "volume %s.", lv->name);
++			return 0;
++		}
++
++		if (!_read_int32(lvn, "major", &lv->major)) {
++			log_error("Couldn't read major number for logical "
++				  "volume %s.", lv->name);
++			return 0;
++		}
++
++		if (!validate_major_minor(vg->cmd, fid->fmt, lv->major, lv->minor)) {
++			log_error("Logical volume %s does not have a valid major, minor number.",
++				  lv->name);
++			return 0;
++		}
+ 	}
+ 
+ 	return 1;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 935d3f7..aa0edcf 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1136,6 +1136,9 @@ struct vgcreate_params {
+ 	uint32_t vgmetadatacopies;
+ };
+ 
++int validate_major_minor(const struct cmd_context *cmd,
++			 const struct format_type *fmt,
++			 int32_t major, int32_t minor);
+ int vgcreate_params_validate(struct cmd_context *cmd,
+ 			     struct vgcreate_params *vp);
+ 
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 2900ccc..0842563 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -837,6 +837,49 @@ const char *strip_dir(const char *vg_name, const char *dev_dir)
  }
  
--const char *arg_str_value(struct cmd_context *cmd, int a, const char *def)
-+const char *arg_str_value(const struct cmd_context *cmd, int a, const char *def)
- {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].value : def;
- }
-@@ -157,7 +157,7 @@ int32_t grouped_arg_int_value(const struct arg_values *av, int a, const int32_t
- 	return grouped_arg_count(av, a) ? av[a].i_value : def;
- }
- 
--int32_t first_grouped_arg_int_value(struct cmd_context *cmd, int a, const int32_t def)
-+int32_t first_grouped_arg_int_value(const struct cmd_context *cmd, int a, const int32_t def)
- {
- 	struct arg_value_group_list *current_group;
- 	struct arg_values *av;
-@@ -171,23 +171,23 @@ int32_t first_grouped_arg_int_value(struct cmd_context *cmd, int a, const int32_
- 	return def;
- }
- 
--int32_t arg_int_value(struct cmd_context *cmd, int a, const int32_t def)
-+int32_t arg_int_value(const struct cmd_context *cmd, int a, const int32_t def)
- {
- 	return (_cmdline.arg_props[a].flags & ARG_GROUPABLE) ?
- 		first_grouped_arg_int_value(cmd, a, def) : (arg_count(cmd, a) ? cmd->arg_values[a].i_value : def);
- }
- 
--uint32_t arg_uint_value(struct cmd_context *cmd, int a, const uint32_t def)
-+uint32_t arg_uint_value(const struct cmd_context *cmd, int a, const uint32_t def)
- {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].ui_value : def;
- }
- 
--int64_t arg_int64_value(struct cmd_context *cmd, int a, const int64_t def)
-+int64_t arg_int64_value(const struct cmd_context *cmd, int a, const int64_t def)
- {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].i64_value : def;
- }
- 
--uint64_t arg_uint64_value(struct cmd_context *cmd, int a, const uint64_t def)
-+uint64_t arg_uint64_value(const struct cmd_context *cmd, int a, const uint64_t def)
- {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].ui64_value : def;
- }
-@@ -199,12 +199,12 @@ const void *arg_ptr_value(struct cmd_context *cmd, int a, const void *def)
- }
- */
- 
--sign_t arg_sign_value(struct cmd_context *cmd, int a, const sign_t def)
-+sign_t arg_sign_value(const struct cmd_context *cmd, int a, const sign_t def)
- {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].sign : def;
- }
- 
--percent_type_t arg_percent_value(struct cmd_context *cmd, int a, const percent_type_t def)
-+percent_type_t arg_percent_value(const struct cmd_context *cmd, int a, const percent_type_t def)
- {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].percent : def;
- }
-diff --git a/tools/tools.h b/tools/tools.h
-index beb1671..51c6a4e 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -147,16 +147,16 @@ unsigned arg_is_set(const struct cmd_context *cmd, int a);
- int arg_from_list_is_set(const struct cmd_context *cmd, const char *err_found, ...);
- int arg_outside_list_is_set(const struct cmd_context *cmd, const char *err_found, ...);
- const char *arg_long_option_name(int a);
--const char *arg_value(struct cmd_context *cmd, int a);
--const char *arg_str_value(struct cmd_context *cmd, int a, const char *def);
--int32_t arg_int_value(struct cmd_context *cmd, int a, const int32_t def); 
--int32_t first_grouped_arg_int_value(struct cmd_context *cmd, int a, const int32_t def); 
--uint32_t arg_uint_value(struct cmd_context *cmd, int a, const uint32_t def);
--int64_t arg_int64_value(struct cmd_context *cmd, int a, const int64_t def);
--uint64_t arg_uint64_value(struct cmd_context *cmd, int a, const uint64_t def);
--const void *arg_ptr_value(struct cmd_context *cmd, int a, const void *def);
--sign_t arg_sign_value(struct cmd_context *cmd, int a, const sign_t def);
--percent_type_t arg_percent_value(struct cmd_context *cmd, int a, const percent_type_t def);
-+const char *arg_value(const struct cmd_context *cmd, int a);
-+const char *arg_str_value(const struct cmd_context *cmd, int a, const char *def);
-+int32_t arg_int_value(const struct cmd_context *cmd, int a, const int32_t def);
-+int32_t first_grouped_arg_int_value(const struct cmd_context *cmd, int a, const int32_t def);
-+uint32_t arg_uint_value(const struct cmd_context *cmd, int a, const uint32_t def);
-+int64_t arg_int64_value(const struct cmd_context *cmd, int a, const int64_t def);
-+uint64_t arg_uint64_value(const struct cmd_context *cmd, int a, const uint64_t def);
-+const void *arg_ptr_value(const struct cmd_context *cmd, int a, const void *def);
-+sign_t arg_sign_value(const struct cmd_context *cmd, int a, const sign_t def);
-+percent_type_t arg_percent_value(const struct cmd_context *cmd, int a, const percent_type_t def);
- int arg_count_increment(struct cmd_context *cmd, int a);
- 
- unsigned grouped_arg_count(const struct arg_values *av, int a);
+ /*
++ * Validates major and minor numbers.
++ * On >2.4 kernel we only support dynamic major number.
++ */
++int validate_major_minor(const struct cmd_context *cmd,
++			 const struct format_type *fmt,
++			 int32_t major, int32_t minor)
++{
++	int r = 1;
++
++	if (!strncmp(cmd->kernel_vsn, "2.4.", 4) ||
++	    (fmt->features & FMT_RESTRICTED_LVIDS)) {
++		if (major < 0 || major > 255) {
++			log_error("Major number %d outside range 0-255.", major);
++			r = 0;
++		}
++		if (minor < 0 || minor > 255) {
++			log_error("Minor number %d outside range 0-255.", minor);
++			r = 0;
++		}
++	} else {
++		/* 12 bits for major number */
++		if ((major != -1) &&
++		    (major != cmd->dev_types->device_mapper_major)) {
++			/* User supplied some major number */
++			if (major < 0 || major > 4095) {
++				log_error("Major number %d outside range 0-4095.", major);
++				r = 0;
++			} else
++				log_print_unless_silent("Ignoring supplied major %d number - "
++							"kernel assigns major numbers dynamically.",
++							major);
++		}
++		/* 20 bits for minor number */
++		if (minor < 0 || minor > 1048575) {
++			log_error("Minor number %d outside range 0-1048575.", minor);
++			r = 0;
++		}
++	}
++
++	return r;
++}
++
++/*
+  * Validate parameters to vg_create() before calling.
+  * FIXME: Move inside vg_create library function.
+  * FIXME: Change vgcreate_params struct to individual gets/sets
 
 
