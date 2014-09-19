@@ -1,57 +1,49 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 11 Sep 2014 07:40:11 +0000 (UTC)
-Subject: master - filters: fix incorrect filter indexing in composite filter array
-Message-ID: <20140911074011.2902D6106C@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 19 Sep 2014 13:57:30 +0000 (UTC)
+Subject: master - wipe_lv: move sync_local_dev_names in front
+Message-ID: <20140919135730.133E660318@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=80ac8f37d6ac5f8c5228678d4ee07187b5d4db7b
-Commit:        80ac8f37d6ac5f8c5228678d4ee07187b5d4db7b
-Parent:        4748f4a9e4516a8c9226ce61b5a3ca41f0852ffc
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Sep 11 09:30:03 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Sep 11 09:30:03 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f1e9e94a5b2d4aa6b7c454634c2b45b2a1082822
+Commit:        f1e9e94a5b2d4aa6b7c454634c2b45b2a1082822
+Parent:        d8b775f4eb871e771c9f18dcd9f6b28509e7e52a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Sep 19 11:06:31 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Sep 19 15:51:30 2014 +0200
 
-filters: fix incorrect filter indexing in composite filter array
+wipe_lv: move sync_local_dev_names in front
 
-Caused by recent changes - a7be3b12dfe7388d1648595e6cc4c7a1379bb8a7.
-If global filter was not defined, then part of the code
-creating composite filter (the cmd->lvmetad_filter) incorrectly
-increased index value even if this global filter was not created
-as part of the composite filter. This caused a gap with "NULL"
-value in the composite filter array which ended up with the rest
-of the filters after the gap to be ignored and also it caused a mem
-leak when destroying the composite filter.
+Synchronize things before checking for locally active volume.
 ---
- lib/commands/toolcontext.c |   11 ++++++-----
- 1 files changed, 6 insertions(+), 5 deletions(-)
+ lib/metadata/lv_manip.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 5bf5cbf..c3afae4 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -861,12 +861,13 @@ static struct dev_filter *_init_filter_components(struct cmd_context *cmd)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2e683b9..968b8d0 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6360,6 +6360,8 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 		/* nothing to do */
+ 		return 1;
+ 
++	sync_local_dev_names(lv->vg->cmd);  /* Wait until devices are available */
++
+ 	if (!lv_is_active_locally(lv)) {
+ 		log_error("Volume \"%s/%s\" is not active locally.",
+ 			  lv->vg->name, lv->name);
+@@ -6379,8 +6381,6 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 		return 0;
  	}
  
- 	/* regex filter. Optional. */
--	if ((cn = find_config_tree_node(cmd, devices_global_filter_CFG, NULL)) &&
--	    !(filters[nr_filt] = regex_filter_create(cn->v))) {
--		log_error("Failed to create global regex device filter");
--		goto bad;
--	} else
-+	if ((cn = find_config_tree_node(cmd, devices_global_filter_CFG, NULL))) {
-+		if (!(filters[nr_filt] = regex_filter_create(cn->v))) {
-+			log_error("Failed to create global regex device filter");
-+			goto bad;
-+		}
- 		nr_filt++;
-+	}
- 
- 	/* device type filter. Required. */
- 	if (!(filters[nr_filt] = lvm_type_filter_create(cmd->dev_types))) {
+-	sync_local_dev_names(lv->vg->cmd);  /* Wait until devices are available */
+-
+ 	if (!(dev = dev_cache_get(name, NULL))) {
+ 		log_error("%s: not found: device not cleared", name);
+ 		return 0;
 
 
