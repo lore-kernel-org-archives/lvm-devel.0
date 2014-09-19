@@ -1,87 +1,43 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 19 Sep 2014 13:57:47 +0000 (UTC)
-Subject: master - man: document obsoleted options
-Message-ID: <20140919135747.1C51760FB6@fedorahosted.org>
+Date: Fri, 19 Sep 2014 14:19:30 +0000 (UTC)
+Subject: master - cache: fix regression and invert test
+Message-ID: <20140919141930.B158460F3B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=081e406d0d0c02d8fb6f93d6b8fb97f4217fde62
-Commit:        081e406d0d0c02d8fb6f93d6b8fb97f4217fde62
-Parent:        e3cbdde070b25db30984efa0898f16c2555301d9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d274724c83e0bed34b4a1d794a6eb16cab777c05
+Commit:        d274724c83e0bed34b4a1d794a6eb16cab777c05
+Parent:        386fbf8e0d30823854ffefb1b4e3b47b09ec5905
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 19 14:53:14 2014 +0200
+AuthorDate:    Fri Sep 19 16:16:36 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 19 15:55:47 2014 +0200
+CommitterDate: Fri Sep 19 16:18:39 2014 +0200
 
-man: document obsoleted options
+cache: fix regression and invert test
 
-It's shown on comand line help and it's accepted argument,
-so provide matching man entry.
+Last commit c710f02e0181cc2db5455f0c98033247a70ecc30
+converting code to use lv_update_and_reload()
+intoduced invalid test for error result.
+Fix it and properly check for  if (!...)
 ---
- man/lvchange.8.in |    9 ++++++++-
- man/lvcreate.8.in |    9 ++++++++-
- 2 files changed, 16 insertions(+), 2 deletions(-)
+ lib/metadata/cache_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvchange.8.in b/man/lvchange.8.in
-index 39187f0..d3d63fd 100644
---- a/man/lvchange.8.in
-+++ b/man/lvchange.8.in
-@@ -50,9 +50,11 @@ lvchange \(em change attributes of a logical volume
- .RB [ \-\-metadataprofile
- .IR ProfileName ]
- .RB [ \-M | \-\-persistent
--.RI { y | n }]
-+.RI { y | n }
- .RB [ \-\-minor
- .IR minor ]
-+.RB [ \-\-major
-+.IR major ]]
- .RB [ \-P | \-\-partial ]
- .RB [ \-p | \-\-permission
- .RI { r | rw }]
-@@ -165,6 +167,11 @@ See \fBlvm.conf\fP(5) for more information about \fBmetadata profiles\fP.
- .B \-\-minor \fIminor
- Set the minor number.
- .TP
-+.B \-\-major \fImajor
-+Sets the major number. This option is supported only on older systems
-+(kernel version 2.4) and is ignored on modern Linux systems where major
-+numbers are dynamically assigned.
-+.TP
- .BR \-\-monitor " {" \fIy | \fIn }
- Start or stop monitoring a mirrored or snapshot logical volume with
- dmeventd, if it is installed.
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index 5440ced..ed0ed65 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -43,9 +43,11 @@ lvcreate \- create a logical volume in an existing volume group
- .BR \-V | \-\-virtualsize
- .IR VirtualSize [ bBsSkKmMgGtTpPeE ]}
- .RB [ \-M | \-\-persistent
--.RI { y | n }]
-+.RI { y | n }
- .RB [ \-\-minor
- .IR minor ]
-+.RB [ \-\-major
-+.IR major ]]
- .RB [ \-m | \-\-mirrors
- .IR Mirrors
- .RB [ \-\-nosync ]
-@@ -298,6 +300,11 @@ Set to \fIy\fP to make the minor number specified persistent.
- .B \-\-minor \fIminor
- Sets the minor number.
- .TP
-+.B \-\-major \fImajor
-+Sets the major number. This option is supported only on older systems
-+(kernel version 2.4) and is ignored on modern Linux systems where major
-+numbers are dynamically assigned.
-+.TP
- .BR \-\-monitor " {" \fIy | \fIn }
- Starts or avoids monitoring a mirrored, snapshot or thin pool logical volume with
- dmeventd, if it is installed.
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 73df448..7f5ea65 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -224,7 +224,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 		cache_seg->policy_argv = NULL;
+ 
+ 		/* update the kernel to put the cleaner policy in place */
+-		if (lv_update_and_reload(cache_lv))
++		if (!lv_update_and_reload(cache_lv))
+                         return_0;
+ 	}
+ 
 
 
