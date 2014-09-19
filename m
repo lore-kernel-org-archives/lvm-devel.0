@@ -1,87 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 19 Sep 2014 15:11:03 +0000 (UTC)
-Subject: master - fix: regression for recent persistent commit
-Message-ID: <20140919151103.80EE060F64@fedorahosted.org>
+Date: Fri, 19 Sep 2014 15:11:01 +0000 (UTC)
+Subject: master - cleanup: use int32 for major minor
+Message-ID: <20140919151101.647BA60CD2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=392bb6f46eb73dcf725566fbdf006a4e02ae7502
-Commit:        392bb6f46eb73dcf725566fbdf006a4e02ae7502
-Parent:        18b8fdc8c92f54c39b8089c343d6fc12fafd1f38
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=18b8fdc8c92f54c39b8089c343d6fc12fafd1f38
+Commit:        18b8fdc8c92f54c39b8089c343d6fc12fafd1f38
+Parent:        d274724c83e0bed34b4a1d794a6eb16cab777c05
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 19 17:05:35 2014 +0200
+AuthorDate:    Fri Sep 19 17:04:28 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 19 17:08:41 2014 +0200
+CommitterDate: Fri Sep 19 17:04:28 2014 +0200
 
-fix: regression for recent persistent commit
+cleanup: use int32 for major minor
 
-Do not let fly metadata with just 'minor' set
-(since they would not be readable on older version)
-
-Be permissive with invalid major/minor number and
-just report them as problem, but allow to use
-such metadata with default major:minor.
+Use consistently int32_t for major, minor.
 ---
- lib/format_text/import_vsn1.c |   17 ++++++++++-------
- tools/lvmcmdline.c            |   12 +++++++-----
- 2 files changed, 17 insertions(+), 12 deletions(-)
+ lib/metadata/metadata-exported.h |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index 580349f..1783b1e 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -678,16 +678,19 @@ static int _read_lvsegs(struct format_instance *fid,
- 			return 0;
- 		}
- 
--		if (!_read_int32(lvn, "major", &lv->major)) {
--			log_error("Couldn't read major number for logical "
--				  "volume %s.", lv->name);
--			return 0;
-+		if (!dm_config_has_node(lvn, "major"))
-+			/* If major is missing, pick default */
-+			lv->major = vg->cmd->dev_types->device_mapper_major;
-+		else if (!_read_int32(lvn, "major", &lv->major)) {
-+			log_warn("WARNING: Couldn't read major number for logical "
-+				 "volume %s.", lv->name);
-+			lv->major = vg->cmd->dev_types->device_mapper_major;
- 		}
- 
- 		if (!validate_major_minor(vg->cmd, fid->fmt, lv->major, lv->minor)) {
--			log_error("Logical volume %s does not have a valid major, minor number.",
--				  lv->name);
--			return 0;
-+			log_warn("WARNING: Ignoring invalid major, minor number for "
-+				 "logical volume %s.", lv->name);
-+			lv->major = lv->minor = -1;
- 		}
- 	}
- 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 9a5cc3a..5f258a2 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -607,11 +607,13 @@ int read_and_validate_major_minor(const struct cmd_context *cmd,
- 			return 0;
- 		}
- 		*major = arg_int_value(cmd, major_ARG, -1);
--	} else if (arg_is_set(cmd, major_ARG)) {
--		log_warn("WARNING: Ignoring supplied major number - "
--			 "kernel assigns major numbers dynamically. "
--			 "Using major number %d instead.",
--			 cmd->dev_types->device_mapper_major);
-+	} else {
-+		if (arg_is_set(cmd, major_ARG)) {
-+			log_warn("WARNING: Ignoring supplied major number - "
-+				 "kernel assigns major numbers dynamically. "
-+				 "Using major number %d instead.",
-+				 cmd->dev_types->device_mapper_major);
-+		}
- 		*major = cmd->dev_types->device_mapper_major;
- 	}
- 
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index aa0edcf..0fa6c97 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -797,8 +797,8 @@ struct lvcreate_params {
+ 	int create_pool; /* thin */
+ 	int zero; /* all */
+ 	int wipe_signatures; /* all */
+-	int major; /* all */
+-	int minor; /* all */
++	int32_t major; /* all */
++	int32_t minor; /* all */
+ 	int log_count; /* mirror */
+ 	int nosync; /* mirror */
+ 	int poolmetadataspare; /* thin pool */
 
 
