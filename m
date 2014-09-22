@@ -1,59 +1,57 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Sep 2014 12:44:53 +0000 (UTC)
-Subject: master - raid: add missing vg_revert
-Message-ID: <20140912124453.7D3B9601AB@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 22 Sep 2014 15:38:05 +0000 (UTC)
+Subject: dev-dct-process-latest - cleanup: missing error message
+Message-ID: <20140922153805.BD52960D38@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=569184a3bb124f94bc79c1a1d042f686270e7864
-Commit:        569184a3bb124f94bc79c1a1d042f686270e7864
-Parent:        dd1fa0e808918b51a690e26de8a8cfff6c307854
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=68981310916114e8659bb7754c5847a178aaea5d
+Commit:        68981310916114e8659bb7754c5847a178aaea5d
+Parent:        3e57143abd49682a90a96a95514b781289bf43f4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 11 19:58:28 2014 +0200
+AuthorDate:    Thu Sep 11 23:32:54 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 12 13:45:14 2014 +0200
+CommitterDate: Fri Sep 12 13:51:31 2014 +0200
 
-raid: add missing vg_revert
+cleanup: missing error message
 
-After failing vg_write() and suspend_lv() there was missing vg_revert() call.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/raid_manip.c |    2 ++
- 2 files changed, 3 insertions(+), 0 deletions(-)
+ lib/metadata/raid_manip.c |   12 +++++++++---
+ 1 files changed, 9 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index be549b8..f65d7fb 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Add missing vg_revert in suspend_lv() error path in raid target.
-   Add missing backup of lvm2 metadata after some raid modifications.
-   Use vg memory pool for extent allocation.
-   Add allocation/physical_extent_size config option for default PE size of VGs.
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 91cc0dd..989244c 100644
+index 92ea177..0c96fd0 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -938,6 +938,7 @@ static int _raid_remove_images(struct logical_volume *lv,
- 	if (!suspend_lv(lv->vg->cmd, lv)) {
- 		log_error("Failed to suspend %s/%s before committing changes",
- 			  lv->vg->name, lv->name);
-+		vg_revert(lv->vg);
- 		return 0;
- 	}
+@@ -1290,8 +1290,12 @@ int lv_raid_merge(struct logical_volume *image_lv)
+ 		if (seg_lv(seg, s) == image_lv)
+ 			meta_lv = seg_metalv(seg, s);
  
-@@ -1113,6 +1114,7 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
- 	if (!suspend_lv(cmd, lv)) {
- 		log_error("Failed to suspend %s/%s before committing changes",
- 			  lv->vg->name, lv->name);
-+		vg_revert(lv->vg);
- 		return 0;
- 	}
+-	if (!meta_lv)
+-		return_0;
++	if (!meta_lv) {
++		log_error("Failed to find meta for %s in RAID array %s.",
++			  display_lvname(image_lv),
++			  display_lvname(lv));
++		return 0;
++	}
  
+ 	if (!deactivate_lv(vg->cmd, meta_lv)) {
+ 		log_error("Failed to deactivate %s before merging.",
+@@ -1632,8 +1636,10 @@ int lv_raid_replace(struct logical_volume *lv,
+ try_again:
+ 	if (!_alloc_image_components(lv, allocate_pvs, match_count,
+ 				     &new_meta_lvs, &new_data_lvs)) {
+-		if (!(lv->status & PARTIAL_LV))
++		if (!(lv->status & PARTIAL_LV)) {
++			log_error("LV %s in not partial.", display_lvname(lv));
+ 			return 0;
++		}
+ 
+ 		/* This is a repair, so try to do better than all-or-nothing */
+ 		match_count--;
 
 
