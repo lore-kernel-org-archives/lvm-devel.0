@@ -1,1140 +1,445 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:40:03 +0000 (UTC)
-Subject: dev-dct-process-latest - toollib: rewrite process_each_pv
-Message-ID: <20140922154003.5AB0B60D27@fedorahosted.org>
+Date: Mon, 22 Sep 2014 15:40:07 +0000 (UTC)
+Subject: dev-dct-process-latest - logging: use flags to enable warnings
+Message-ID: <20140922154007.90D3A60D27@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c88ae037e5e1e860cd58e873a90dc3e3cd0bbe1
-Commit:        7c88ae037e5e1e860cd58e873a90dc3e3cd0bbe1
-Parent:        84b51035909394ad52010a4f7aaa5f9da22b0faa
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=437bcc5abe67c97da965403b699f2ed1a54af40a
+Commit:        437bcc5abe67c97da965403b699f2ed1a54af40a
+Parent:        6351dabe95a7c0f4837567953466c4910c858fa9
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Aug 29 16:32:46 2013 -0500
+AuthorDate:    Wed Apr 23 13:44:54 2014 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Sep 22 10:32:23 2014 -0500
+CommitterDate: Mon Sep 22 10:32:24 2014 -0500
 
-toollib: rewrite process_each_pv
+logging: use flags to enable warnings
 
-Process pvs by iterating through vgs, then iterating through
-devs if the command wants to process non-pv devices.  The
-process_single function can always use the vg and pv args.
+The "warnings" arg was used to enable logging of warnings
+when reading a pv.  This arg is turned into a set of flags
+with the WARN_PV_READ flag matching the existing behavior.
+
+A new flag WARN_INCONSISTENT is added that will cause
+vg_read_internal() to log the "vg is not consistent"
+warning, and the various callers do not need to log
+this warning themselves.
+
+A new vg_read flag READ_WARN_INCONSISTENT is used from
+reporting to enable the WARN_INCONSISTENT flag in
+vg_read_internal.
 ---
- lib/metadata/pv_manip.c |   22 --
- lib/metadata/vg.c       |    1 +
- lib/report/columns.h    |    4 +-
- lib/report/report.c     |   37 +++-
- tools/pvdisplay.c       |   59 ++---
- tools/pvresize.c        |    2 +-
- tools/reporter.c        |   83 ++-----
- tools/toollib.c         |  614 ++++++++++++++++++++++++++++-------------------
- tools/toollib.h         |    8 +-
- tools/vgdisplay.c       |    2 +-
- tools/vgreduce.c        |    2 +-
- 11 files changed, 460 insertions(+), 374 deletions(-)
+ daemons/clvmd/lvm-functions.c    |    2 +-
+ lib/format_text/import.c         |    7 ++-
+ lib/metadata/metadata-exported.h |    9 +++-
+ lib/metadata/metadata.c          |   92 +++++++++++++++++++-------------------
+ tools/toollib.c                  |    2 +-
+ 5 files changed, 59 insertions(+), 53 deletions(-)
 
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index 2cc7892..9a0f287 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -615,31 +615,12 @@ int pv_resize_single(struct cmd_context *cmd,
- 		     struct physical_volume *pv,
- 		     const uint64_t new_size)
- {
--	struct pv_list *pvl;
- 	uint64_t size = 0;
- 	int r = 0;
- 	const char *pv_name = pv_dev_name(pv);
- 	const char *vg_name = pv->vg_name;
--	struct volume_group *old_vg = vg;
- 	int vg_needs_pv_write = 0;
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index f3a56ce..4ebd059 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -842,7 +842,7 @@ void lvm_do_backup(const char *vgname)
  
--	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
--
--	if (vg_read_error(vg)) {
--		release_vg(vg);
--		log_error("Unable to read volume group \"%s\".",
--			  vg_name);
--		return 0;
--	}
--
--	if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--		log_error("Unable to find \"%s\" in volume group \"%s\"",
--			  pv_name, vg->name);
--		goto out;
--	}
--
--	pv = pvl->pv;
--
- 	if (!archive(vg))
+ 	pthread_mutex_lock(&lvm_lock);
+ 
+-	vg = vg_read_internal(cmd, vgname, NULL /*vgid*/, 1, &consistent);
++	vg = vg_read_internal(cmd, vgname, NULL /*vgid*/, WARN_PV_READ, &consistent);
+ 
+ 	if (vg && consistent)
+ 		check_current_backup(vg);
+diff --git a/lib/format_text/import.c b/lib/format_text/import.c
+index 1b1f332..41e41a6 100644
+--- a/lib/format_text/import.c
++++ b/lib/format_text/import.c
+@@ -51,8 +51,10 @@ const char *text_vgname_import(const struct format_type *fmt,
+ 
+ 	if ((!dev && !config_file_read(cft)) ||
+ 	    (dev && !config_file_read_fd(cft, dev, offset, size,
+-					 offset2, size2, checksum_fn, checksum)))
+-		goto_out;
++					 offset2, size2, checksum_fn, checksum))) {
++		log_error("Couldn't read volume group metadata.");
++		goto out;
++	}
+ 
+ 	/*
+ 	 * Find a set of version functions that can read this file
+@@ -98,7 +100,6 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
+ 	if ((!dev && !config_file_read(cft)) ||
+ 	    (dev && !config_file_read_fd(cft, dev, offset, size,
+ 					 offset2, size2, checksum_fn, checksum))) {
+-		log_error("Couldn't read volume group metadata.");
  		goto out;
+ 	}
  
-@@ -698,9 +679,6 @@ out:
- 	if (!r && vg_needs_pv_write)
- 		log_error("Use pvcreate and vgcfgrestore "
- 			  "to repair from archived metadata.");
--	unlock_vg(cmd, vg_name);
--	if (!old_vg)
--		release_vg(vg);
- 	return r;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 0fa6c97..a699799 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -144,6 +144,7 @@
+ #define READ_ALLOW_INCONSISTENT	0x00010000U
+ #define READ_ALLOW_EXPORTED	0x00020000U
+ #define READ_WITHOUT_LOCK	0x00040000U
++#define READ_WARN_INCONSISTENT	0x00080000U
+ 
+ /* A meta-flag, useful with toollib for_each_* functions. */
+ #define READ_FOR_UPDATE		0x00100000U
+@@ -542,6 +543,10 @@ int pvcreate_single(struct cmd_context *cmd, const char *pv_name,
+ 		    struct pvcreate_params *pp);
+ void pvcreate_params_set_defaults(struct pvcreate_params *pp);
+ 
++/* warn_flags */
++#define WARN_PV_READ      0x00000001
++#define WARN_INCONSISTENT 0x00000002
++
+ /*
+ * Utility functions
+ */
+@@ -549,7 +554,7 @@ int vg_write(struct volume_group *vg);
+ int vg_commit(struct volume_group *vg);
+ void vg_revert(struct volume_group *vg);
+ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name,
+-				      const char *vgid, int warnings, int *consistent);
++				      const char *vgid, uint32_t warn_flags, int *consistent);
+ 
+ #define get_pvs( cmd ) get_pvs_internal((cmd), NULL, NULL)
+ #define get_pvs_perserve_vg( cmd, pv_list, vg_list ) get_pvs_internal((cmd), (pv_list), (vg_list))
+@@ -567,7 +572,7 @@ void lv_set_hidden(struct logical_volume *lv);
+ 
+ struct dm_list *get_vgnames(struct cmd_context *cmd, int include_internal);
+ struct dm_list *get_vgids(struct cmd_context *cmd, int include_internal);
+-int scan_vgs_for_pvs(struct cmd_context *cmd, int warnings);
++int scan_vgs_for_pvs(struct cmd_context *cmd, uint32_t warn_flags);
+ 
+ int pv_write(struct cmd_context *cmd, struct physical_volume *pv, int allow_non_orphan);
+ int move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 0842563..586876d 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -39,7 +39,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 					struct dm_pool *pvmem,
+ 					const char *pv_name,
+ 					struct format_instance *fid,
+-					int warnings, int scan_label_only);
++					uint32_t warn_flags, int scan_label_only);
+ 
+ static uint32_t _vg_bad_status_bits(const struct volume_group *vg,
+ 				    uint64_t status);
+@@ -333,18 +333,15 @@ int get_pv_from_vg_by_id(const struct format_type *fmt, const char *vg_name,
+ {
+ 	struct volume_group *vg;
+ 	struct pv_list *pvl;
++	uint32_t warn_flags = WARN_PV_READ | WARN_INCONSISTENT;
+ 	int r = 0, consistent = 0;
+ 
+-	if (!(vg = vg_read_internal(fmt->cmd, vg_name, vgid, 1, &consistent))) {
++	if (!(vg = vg_read_internal(fmt->cmd, vg_name, vgid, warn_flags, &consistent))) {
+ 		log_error("get_pv_from_vg_by_id: vg_read_internal failed to read VG %s",
+ 			  vg_name);
+ 		return 0;
+ 	}
+ 
+-	if (!consistent)
+-		log_warn("WARNING: Volume group %s is not consistent",
+-			 vg_name);
+-
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		if (id_equal(&pvl->pv->id, (const struct id *) pvid)) {
+ 			if (!_copy_pv(fmt->cmd->mem, pv, pvl->pv)) {
+@@ -1045,7 +1042,7 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
+ 	/* FIXME: Is this vg_read_internal necessary? Move it inside
+ 	   vg_lock_newname? */
+ 	/* is this vg name already in use ? */
+-	if ((vg = vg_read_internal(cmd, vg_name, NULL, 1, &consistent))) {
++	if ((vg = vg_read_internal(cmd, vg_name, NULL, WARN_PV_READ, &consistent))) {
+ 		log_error("A volume group called '%s' already exists.", vg_name);
+ 		unlock_and_release_vg(cmd, vg, vg_name);
+ 		return _vg_make_handle(cmd, NULL, FAILED_EXIST);
+@@ -2909,7 +2906,7 @@ void vg_revert(struct volume_group *vg)
+ 
+ struct _vg_read_orphan_baton {
+ 	struct volume_group *vg;
+-	int warnings;
++	uint32_t warn_flags;
+ };
+ 
+ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
+@@ -2919,7 +2916,7 @@ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
+ 	struct pv_list *pvl;
+ 
+ 	if (!(pv = _pv_read(b->vg->cmd, b->vg->vgmem, dev_name(lvmcache_device(info)),
+-			    b->vg->fid, b->warnings, 0))) {
++			    b->vg->fid, b->warn_flags, 0))) {
+ 		stack;
+ 		return 1;
+ 	}
+@@ -2936,7 +2933,7 @@ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
+ 
+ /* Make orphan PVs look like a VG. */
+ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+-					     int warnings,
++					     uint32_t warn_flags,
+ 					     const char *orphan_vgname)
+ {
+ 	const struct format_type *fmt;
+@@ -2969,7 +2966,7 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+ 	vg->extent_count = 0;
+ 	vg->free_count = 0;
+ 
+-	baton.warnings = warnings;
++	baton.warn_flags = warn_flags;
+ 	baton.vg = vg;
+ 
+ 	while ((pvl = (struct pv_list *) dm_list_first(&head.list))) {
+@@ -3118,7 +3115,7 @@ static int _check_mda_in_use(struct metadata_area *mda, void *_in_use)
+ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 				     const char *vgname,
+ 				     const char *vgid,
+-				     int warnings, 
++				     uint32_t warn_flags, 
+ 				     int *consistent, unsigned precommitted)
+ {
+ 	struct format_instance *fid = NULL;
+@@ -3147,7 +3144,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 			return NULL;
+ 		}
+ 		*consistent = 1;
+-		return _vg_read_orphans(cmd, warnings, vgname);
++		return _vg_read_orphans(cmd, warn_flags, vgname);
+ 	}
+ 
+ 	if (lvmetad_active() && !use_precommitted) {
+@@ -3584,19 +3581,21 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
  }
  
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index 7b6cb85..1d2491d 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -44,6 +44,7 @@ struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
- 	vg->cmd = cmd;
- 	vg->vgmem = vgmem;
- 	vg->alloc = ALLOC_NORMAL;
-+	vg->system_id = (char *) "";
+ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgname,
+-			     const char *vgid, int warnings, int *consistent)
++			     const char *vgid, uint32_t warn_flags, int *consistent)
+ {
+ 	struct volume_group *vg;
+ 	struct lv_list *lvl;
  
- 	if (!(vg->hostnames = dm_hash_create(16))) {
- 		log_error("Failed to allocate VG hostname hashtable.");
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 796ac4e..4035758 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -120,7 +120,7 @@ FIELD(PVS, pv, SIZ, "BA size", ba_size, 7, size64, pv_ba_size, "Size of PV Bootl
- 
- FIELD(VGS, vg, STR, "Fmt", cmd, 3, vgfmt, vg_fmt, "Type of metadata.", 0)
- FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, vg_uuid, "Unique identifier.", 0)
--FIELD(VGS, vg, STR, "VG", name, 4, string, vg_name, "Name.", 0)
-+FIELD(VGS, vg, STR, "VG", cmd, 4, vgname, vg_name, "Name.", 0)
- FIELD(VGS, vg, STR, "Attr", cmd, 5, vgstatus, vg_attr, "Various attributes - see man page.", 0)
- FIELD(VGS, vg, STR, "VPerms", cmd, 10, vgpermissions, vg_permissions, "VG permissions.", 0)
- FIELD(VGS, vg, BIN, "Extendable", cmd, 10, vgextendable, vg_extendable, "Set if VG is extendable.", 0)
-@@ -130,7 +130,7 @@ FIELD(VGS, vg, STR, "AllocPol", cmd, 10, vgallocationpolicy, vg_allocation_polic
- FIELD(VGS, vg, BIN, "Clustered", cmd, 10, vgclustered, vg_clustered, "Set if VG is clustered.", 0)
- FIELD(VGS, vg, SIZ, "VSize", cmd, 5, vgsize, vg_size, "Total size of VG in current units.", 0)
- FIELD(VGS, vg, NUM, "VFree", cmd, 5, vgfree, vg_free, "Total amount of free space in current units.", 0)
--FIELD(VGS, vg, STR, "SYS ID", system_id, 6, string, vg_sysid, "System ID indicating when and where it was created.", 0)
-+FIELD(VGS, vg, STR, "SYS ID", cmd, 6, vgsysid, vg_sysid, "System ID indicating when and where it was created.", 0)
- FIELD(VGS, vg, SIZ, "Ext", extent_size, 3, size32, vg_extent_size, "Size of Physical Extents in current units.", 0)
- FIELD(VGS, vg, NUM, "#Ext", extent_count, 4, uint32, vg_extent_count, "Total number of Physical Extents.", 0)
- FIELD(VGS, vg, NUM, "Free", free_count, 4, uint32, vg_free_count, "Total number of unallocated Physical Extents.", 0)
-diff --git a/lib/report/report.c b/lib/report/report.c
-index c34aa5e..c0e0b47 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -386,6 +386,36 @@ static int _loglv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((
- 	return _field_set_value(field, "", NULL);
- }
- 
-+static int _vgname_disp(struct dm_report *rh, struct dm_pool *mem,
-+			struct dm_report_field *field,
-+			const void *data, void *private)
-+{
-+	const struct volume_group *vg = (const struct volume_group *) data;
-+
-+	if (!is_orphan_vg(vg->name))
-+		return dm_report_field_string(rh, field, &vg->name);
-+
-+	return _field_set_value(field, "", NULL);
-+}
-+
-+static int _vgsysid_disp(struct dm_report *rh, struct dm_pool *mem,
-+			 struct dm_report_field *field,
-+			 const void *data, void *private)
-+{
-+	const struct volume_group *vg = (const struct volume_group *) data;
-+	const char *sysid;
-+
-+	if (!vg->system_id)
-+		return _field_set_value(field, "", NULL);
-+
-+	if (!(sysid = dm_pool_strdup(mem, vg->system_id))) {
-+		log_error("dm_pool_strdup failed");
-+		return 0;
+-	if (!(vg = _vg_read(cmd, vgname, vgid, warnings, consistent, 0)))
+-		return NULL;
++	if (!(vg = _vg_read(cmd, vgname, vgid, warn_flags, consistent, 0))) {
++		goto_out;
 +	}
-+
-+	return dm_report_field_string(rh, field, &sysid);
-+}
-+
- static int _lvname_disp(struct dm_report *rh, struct dm_pool *mem,
- 			struct dm_report_field *field,
- 			const void *data, void *private __attribute__((unused)))
-@@ -1695,7 +1725,10 @@ static void *_obj_get_vg(void *obj)
- {
- 	struct volume_group *vg = ((struct lvm_report_object *)obj)->vg;
  
--	return vg ? vg : &_dummy_vg;
-+	if (!vg || is_orphan_vg(vg->name))
-+		return &_dummy_vg;
-+
-+	return vg;
- }
- 
- static void *_obj_get_lv(void *obj)
-@@ -1863,7 +1896,7 @@ int report_object(void *handle, struct volume_group *vg,
+ 	if (!check_pv_segments(vg)) {
+ 		log_error(INTERNAL_ERROR "PV segments corrupted in %s.",
+ 			  vg->name);
+ 		release_vg(vg);
+-		return NULL;
++		vg = NULL;
++		goto out;
  	}
  
- 	/* The two format fields might as well match. */
--	if (!vg && pv)
-+	if ((!vg || is_orphan_vg(vg->name)) && pv)
- 		_dummy_fid.fmt = pv->fmt;
- 
- 	return dm_report_object(handle, &obj);
-diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
-index 773d9a9..d4cb516 100644
---- a/tools/pvdisplay.c
-+++ b/tools/pvdisplay.c
-@@ -19,36 +19,9 @@ static int _pvdisplay_single(struct cmd_context *cmd,
- 			     struct volume_group *vg,
- 			     struct physical_volume *pv, void *handle)
- {
--	struct pv_list *pvl;
-+	const char *pv_name = pv_dev_name(pv);
- 	int ret = ECMD_PROCESSED;
- 	uint64_t size;
--	struct volume_group *old_vg = vg;
--
--	const char *pv_name = pv_dev_name(pv);
--	const char *vg_name = NULL;
--
--	if (!is_orphan(pv) && !vg) {
--		vg_name = pv_vg_name(pv);
--		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
--		if (ignore_vg(vg, vg_name, 0, &ret)) {
--			release_vg(vg);
--			stack;
--			return ret;
--		}
--
--		/*
--		 * Replace possibly incomplete PV structure with new one
--		 * allocated in vg_read_internal() path.
--		 */
--		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--			log_error("Unable to find \"%s\" in volume group \"%s\"",
--				  pv_name, vg->name);
--			ret = ECMD_FAILED;
--			goto out;
--		}
--
--		pv = pvl->pv;
--	}
- 
- 	if (is_orphan(pv))
- 		size = pv_size(pv);
-@@ -81,16 +54,14 @@ static int _pvdisplay_single(struct cmd_context *cmd,
- 		pvdisplay_segments(pv);
- 
- out:
--	if (vg_name)
--		unlock_vg(cmd, vg_name);
--	if (!old_vg)
--		release_vg(vg);
--
- 	return ret;
- }
- 
- int pvdisplay(struct cmd_context *cmd, int argc, char **argv)
- {
-+	int lock_global = 0;
-+	int ret;
-+
- 	if (arg_count(cmd, columns_ARG)) {
- 		if (arg_count(cmd, colon_ARG) || arg_count(cmd, maps_ARG) ||
- 		    arg_count(cmd, short_ARG)) {
-@@ -122,6 +93,24 @@ int pvdisplay(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+@@ -3604,7 +3603,8 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
+ 			log_error(INTERNAL_ERROR "LV segments corrupted in %s.",
+ 				  lvl->lv->name);
+ 			release_vg(vg);
+-			return NULL;
++			vg = NULL;
++			goto out;
+ 		}
  	}
  
--	return process_each_pv(cmd, argc, argv, NULL, 0, 0, NULL,
--			       _pvdisplay_single);
-+	/*
-+	 * If the lock_type is LCK_VG_READ (used only in reporting commands),
-+	 * we lock VG_GLOBAL to enable use of metadata cache.
-+	 * This can pause alongide pvscan or vgscan process for a while.
-+	 */
-+	if (!lvmetad_active()) {
-+		lock_global = 1;
-+		if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_READ, NULL)) {
-+			log_error("Unable to obtain global lock.");
-+			return ECMD_FAILED;
-+		}
-+	}
-+
-+	ret = process_each_pv(cmd, argc, argv, NULL, 0, NULL,
-+			      _pvdisplay_single);
-+
-+	if (lock_global)
-+		unlock_vg(cmd, VG_GLOBAL);
-+
-+	return ret;
+@@ -3616,9 +3616,13 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
+ 			log_error(INTERNAL_ERROR "LV segments corrupted in %s.",
+ 				  lvl->lv->name);
+ 			release_vg(vg);
+-			return NULL;
++			vg = NULL;
++			goto out;
+ 		}
+ 	}
++out:
++	if (!*consistent && (warn_flags & WARN_INCONSISTENT))
++		log_warn("WARNING: Volume Group %s is not consistent", vgname);
+ 
+ 	return vg;
  }
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index 1bb8a15..70b564d 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -61,7 +61,7 @@ int pvresize(struct cmd_context *cmd, int argc, char **argv)
- 	params.done = 0;
- 	params.total = 0;
+@@ -3643,16 +3647,13 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
+ 	struct dm_list *vgnames;
+ 	struct volume_group *vg;
+ 	struct dm_str_list *strl;
++	uint32_t warn_flags = WARN_PV_READ | WARN_INCONSISTENT;
+ 	int consistent = 0;
  
--	ret = process_each_pv(cmd, argc, argv, NULL, READ_FOR_UPDATE, 0, &params,
-+	ret = process_each_pv(cmd, argc, argv, NULL, READ_FOR_UPDATE, &params,
- 			      _pvresize_single);
- 
- 	log_print_unless_silent("%d physical volume(s) resized / %d physical volume(s) "
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 462ca8a..32a0b05 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -209,61 +209,10 @@ static int _pvsegs_with_lv_info_single(struct cmd_context *cmd,
- static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- 		       struct physical_volume *pv, void *handle)
+ 	/* Is corresponding vgname already cached? */
+ 	if (lvmcache_vgid_is_cached(vgid)) {
+-		if ((vg = _vg_read(cmd, NULL, vgid, 1,
+-				   &consistent, precommitted)) &&
++		if ((vg = _vg_read(cmd, NULL, vgid, warn_flags, &consistent, precommitted)) &&
+ 		    id_equal(&vg->id, (const struct id *)vgid)) {
+-			if (!consistent)
+-				log_error("Volume group %s metadata is "
+-					  "inconsistent", vg->name);
+ 			return vg;
+ 		}
+ 		release_vg(vg);
+@@ -3678,12 +3679,9 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
+ 		if (!vgname)
+ 			continue;	// FIXME Unnecessary?
+ 		consistent = 0;
+-		if ((vg = _vg_read(cmd, vgname, vgid, 1, &consistent,
+-				   precommitted)) &&
++		if ((vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted)) &&
+ 		    id_equal(&vg->id, (const struct id *)vgid)) {
+ 			if (!consistent) {
+-				log_error("Volume group %s metadata is "
+-					  "inconsistent", vgname);
+ 				release_vg(vg);
+ 				return NULL;
+ 			}
+@@ -3747,7 +3745,7 @@ const char *find_vgname_from_pvid(struct cmd_context *cmd,
+ 		 * every PV on the system.
+ 		 */
+ 		if (lvmcache_uncertain_ownership(info)) {
+-			if (!scan_vgs_for_pvs(cmd, 1)) {
++			if (!scan_vgs_for_pvs(cmd, WARN_PV_READ)) {
+ 				log_error("Rescan for PVs without "
+ 					  "metadata areas failed.");
+ 				return NULL;
+@@ -3781,7 +3779,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 					struct dm_pool *pvmem,
+ 					const char *pv_name,
+ 					struct format_instance *fid,
+-					int warnings, int scan_label_only)
++					uint32_t warn_flags, int scan_label_only)
  {
--	struct pv_list *pvl;
--	int ret = ECMD_PROCESSED;
--	const char *vg_name = NULL;
--	struct volume_group *old_vg = vg;
--	char uuid[64] __attribute__((aligned(8)));
--
--	if (is_pv(pv) && !is_orphan(pv) && !vg) {
--		vg_name = pv_vg_name(pv);
--
--		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
--		if (ignore_vg(vg, vg_name, 0, &ret)) {
--			release_vg(vg);
--			stack;
--			return ret;
--		}
--
--		/*
--		 * Replace possibly incomplete PV structure with new one
--		 * allocated in vg_read.
--		*/
--		if (!is_missing_pv(pv)) {
--			if (!(pvl = find_pv_in_vg(vg, pv_dev_name(pv)))) {
--				log_error("Unable to find \"%s\" in volume group \"%s\"",
--					  pv_dev_name(pv), vg->name);
--				ret = ECMD_FAILED;
--				goto out;
--			}
--		} else if (!(pvl = find_pv_in_vg_by_uuid(vg, &pv->id))) {
--			if (!id_write_format(&pv->id, uuid, sizeof(uuid))) {
--				stack;
--				uuid[0] = '\0';
--			}
--
--			log_error("Unable to find missing PV %s in volume group %s",
--				  uuid, vg->name);
--			ret = ECMD_FAILED;
--			goto out;
--		}
--
--		pv = pvl->pv;
--	}
--
--	if (!report_object(handle, vg, NULL, pv, NULL, NULL, NULL, NULL)) {
--		stack;
--		ret = ECMD_FAILED;
--	}
--
--out:
--	if (vg_name)
--		unlock_vg(cmd, vg_name);
--
--	if (!old_vg)
--		release_vg(vg);
-+	if (!report_object(handle, vg, NULL, pv, NULL, NULL, NULL, NULL))
-+		return_ECMD_FAILED;
- 
--	return ret;
-+	return ECMD_PROCESSED;
+ 	struct physical_volume *pv;
+ 	struct label *label;
+@@ -3799,13 +3797,13 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 			if (!lvmetad_pv_lookup_by_dev(cmd, dev, &found))
+ 				return_NULL;
+ 			if (!found) {
+-				if (warnings)
++				if (warn_flags & WARN_PV_READ)
+ 					log_error("No physical volume found in lvmetad cache for %s",
+ 						  pv_name);
+ 				return NULL;
+ 			}
+ 			if (!(info = lvmcache_info_from_pvid(dev->pvid, 0))) {
+-				if (warnings)
++				if (warn_flags & WARN_PV_READ)
+ 					log_error("No cache info in lvmetad cache for %s.",
+ 						  pv_name);
+ 				return NULL;
+@@ -3814,7 +3812,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 		label = lvmcache_get_label(info);
+ 	} else {
+ 		if (!(label_read(dev, &label, UINT64_C(0)))) {
+-			if (warnings)
++			if (warn_flags & WARN_PV_READ)
+ 				log_error("No physical volume label read from %s",
+ 					  pv_name);
+ 			return NULL;
+@@ -3870,7 +3868,7 @@ struct dm_list *get_vgids(struct cmd_context *cmd, int include_internal)
+ 	return lvmcache_get_vgids(cmd, include_internal);
  }
  
- static int _label_single(struct cmd_context *cmd, struct label *label,
-@@ -286,7 +235,7 @@ static int _pvs_in_vg(struct cmd_context *cmd, const char *vg_name,
- 		return ret;
+-static int _get_pvs(struct cmd_context *cmd, int warnings,
++static int _get_pvs(struct cmd_context *cmd, uint32_t warn_flags,
+ 		struct dm_list *pvslist, struct dm_list *vgslist)
+ {
+ 	struct dm_str_list *strl;
+@@ -3913,13 +3911,13 @@ static int _get_pvs(struct cmd_context *cmd, int warnings,
+ 		 * vgid will be NULL.
+ 		 * FIXME Remove this hack.
+ 		 */
+-		if (!(vg = vg_read_internal(cmd, vgname, (!vgslist) ? vgid : NULL, warnings, &consistent))) {
++
++		warn_flags |= WARN_INCONSISTENT;
++
++		if (!(vg = vg_read_internal(cmd, vgname, (!vgslist) ? vgid : NULL, warn_flags, &consistent))) {
+ 			stack;
+ 			continue;
+ 		}
+-		if (!consistent)
+-			log_warn("WARNING: Volume Group %s is not consistent",
+-				 vgname);
+ 
+ 		/* Move PVs onto results list */
+ 		if (pvslist)
+@@ -4001,7 +3999,7 @@ struct dm_list *get_pvs_internal(struct cmd_context *cmd,
+ 		dm_list_init(results);
  	}
  
--	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvs_single);
-+	return process_each_pv_in_vg(cmd, vg, handle, &_pvs_single);
+-	if (!_get_pvs(cmd, 1, results, vgslist)) {
++	if (!_get_pvs(cmd, WARN_PV_READ, results, vgslist)) {
+ 		if (!pvslist)
+ 			dm_pool_free(cmd->mem, results);
+ 		return NULL;
+@@ -4009,9 +4007,9 @@ struct dm_list *get_pvs_internal(struct cmd_context *cmd,
+ 	return results;
  }
  
- static int _pvsegs_in_vg(struct cmd_context *cmd, const char *vg_name,
-@@ -300,7 +249,7 @@ static int _pvsegs_in_vg(struct cmd_context *cmd, const char *vg_name,
- 		return ret;
+-int scan_vgs_for_pvs(struct cmd_context *cmd, int warnings)
++int scan_vgs_for_pvs(struct cmd_context *cmd, uint32_t warn_flags)
+ {
+-	return _get_pvs(cmd, warnings, NULL, NULL);
++	return _get_pvs(cmd, warn_flags, NULL, NULL);
+ }
+ 
+ int pv_write(struct cmd_context *cmd __attribute__((unused)),
+@@ -4217,7 +4215,7 @@ static struct volume_group *_recover_vg(struct cmd_context *cmd,
+ 	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE, NULL))
+ 		return_NULL;
+ 
+-	if (!(vg = vg_read_internal(cmd, vg_name, vgid, 1, &consistent))) {
++	if (!(vg = vg_read_internal(cmd, vg_name, vgid, WARN_PV_READ, &consistent))) {
+ 		unlock_vg(cmd, vg_name);
+ 		return_NULL;
  	}
+@@ -4250,6 +4248,7 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
+ 	int consistent = 1;
+ 	int consistent_in;
+ 	uint32_t failure = 0;
++	uint32_t warn_flags = 0;
+ 	int already_locked;
  
--	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvsegs_single);
-+	return process_each_pv_in_vg(cmd, vg, handle, &_pvsegs_single);
- }
+ 	if (misc_flags & READ_ALLOW_INCONSISTENT || lock_flags != LCK_VG_WRITE)
+@@ -4274,16 +4273,17 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
  
- static int _report(struct cmd_context *cmd, int argc, char **argv,
-@@ -314,6 +263,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	int aligned, buffered, headings, field_prefixes, quoted;
- 	int columns_as_rows;
- 	unsigned args_are_pvs, lv_info_needed;
-+	int lock_global = 0;
+ 	consistent_in = consistent;
  
- 	aligned = find_config_tree_bool(cmd, report_aligned_CFG, NULL);
- 	buffered = find_config_tree_bool(cmd, report_buffered_CFG, NULL);
-@@ -333,6 +283,19 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	if (args_are_pvs && argc)
- 		cmd->filter->wipe(cmd->filter);
- 
-+	/*
-+	 * This moved here as part of factoring it out of process_each_pv.
-+	 * We lock VG_GLOBAL to enable use of metadata cache.
-+	 * This can pause alongide pvscan or vgscan process for a while.
-+	 */
-+	if ((report_type == PVS || report_type == PVSEGS) && !lvmetad_active()) {
-+		lock_global = 1;
-+		if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_READ, NULL)) {
-+			log_error("Unable to obtain global lock.");
-+			return ECMD_FAILED;
-+		}
-+	}
++	warn_flags = WARN_PV_READ;
++	if (consistent || (misc_flags & READ_WARN_INCONSISTENT))
++		warn_flags |= WARN_INCONSISTENT;
 +
- 	switch (report_type) {
- 	case DEVTYPES:
- 		keys = find_config_tree_str(cmd, report_devtypes_sort_CFG, NULL);
-@@ -483,7 +446,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	case PVS:
- 		if (args_are_pvs)
- 			r = process_each_pv(cmd, argc, argv, NULL, 0,
--					    0, report_handle, &_pvs_single);
-+					    report_handle, &_pvs_single);
- 		else
- 			r = process_each_vg(cmd, argc, argv, 0,
- 					    report_handle, &_pvs_in_vg);
-@@ -496,7 +459,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	case PVSEGS:
- 		if (args_are_pvs)
- 			r = process_each_pv(cmd, argc, argv, NULL, 0,
--					    0, report_handle,
-+					    report_handle,
- 					    lv_info_needed ? &_pvsegs_with_lv_info_single
- 							   : &_pvsegs_single);
- 		else
-@@ -508,6 +471,10 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	dm_report_output(report_handle);
- 
- 	dm_report_free(report_handle);
-+
-+	if (lock_global)
-+		unlock_vg(cmd, VG_GLOBAL);
-+
- 	return r;
- }
- 
+ 	/* If consistent == 1, we get NULL here if correction fails. */
+-	if (!(vg = vg_read_internal(cmd, vg_name, vgid, 1, &consistent))) {
++	if (!(vg = vg_read_internal(cmd, vg_name, vgid, warn_flags, &consistent))) {
+ 		if (consistent_in && !consistent) {
+-			log_error("Volume group \"%s\" inconsistent.", vg_name);
+ 			failure |= FAILED_INCONSISTENT;
+ 			goto bad;
+ 		}
+-
+ 		log_error("Volume group \"%s\" not found", vg_name);
+-
+ 		failure |= FAILED_NOTFOUND;
+ 		goto bad;
+ 	}
 diff --git a/tools/toollib.c b/tools/toollib.c
-index d222da9..b1ec7c5 100644
+index 0a0cb6f..bc5e5e1 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -264,249 +264,6 @@ int process_each_segment_in_lv(struct cmd_context *cmd,
- 	return ret_max;
- }
+@@ -2014,7 +2014,7 @@ static int process_pvs_in_vgs(struct cmd_context *cmd, uint32_t flags,
+ 		ret = 0;
+ 		skip = 0;
  
--int process_each_pv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
--			  const struct dm_list *tagsl, void *handle,
--			  process_single_pv_fn_t process_single_pv)
--{
--	int ret_max = ECMD_PROCESSED;
--	int ret;
--	struct pv_list *pvl;
--
--	dm_list_iterate_items(pvl, &vg->pvs) {
--		if (sigint_caught())
--			return_ECMD_FAILED;
--		if (tagsl && !dm_list_empty(tagsl) &&
--		    !str_list_match_list(tagsl, &pvl->pv->tags, NULL)) {
--			continue;
--		}
--		if ((ret = process_single_pv(cmd, vg, pvl->pv, handle)) > ret_max)
--			ret_max = ret;
--	}
--
--	return ret_max;
--}
--
--static int _process_all_devs(struct cmd_context *cmd, void *handle,
--			     process_single_pv_fn_t process_single_pv)
--{
--	struct pv_list *pvl;
--	struct dm_list *pvslist;
--	struct physical_volume *pv;
--	struct physical_volume pv_dummy;
--	struct dev_iter *iter;
--	struct device *dev;
--
--	int ret_max = ECMD_PROCESSED;
--	int ret;
--
--	lvmcache_seed_infos_from_lvmetad(cmd);
--	if (!(pvslist = get_pvs(cmd)))
--		return_ECMD_FAILED;
--
--	if (!(iter = dev_iter_create(cmd->filter, 1))) {
--		log_error("dev_iter creation failed");
--		return ECMD_FAILED;
--	}
--
--	while ((dev = dev_iter_get(iter)))
--	{
--		if (sigint_caught()) {
--			ret_max = ECMD_FAILED;
--			stack;
--			break;
--		}
--
--		memset(&pv_dummy, 0, sizeof(pv_dummy));
--		dm_list_init(&pv_dummy.tags);
--		dm_list_init(&pv_dummy.segments);
--		pv_dummy.dev = dev;
--		pv = &pv_dummy;
--
--		/* TODO use a device-indexed hash here */
--		dm_list_iterate_items(pvl, pvslist)
--			if (pvl->pv->dev == dev)
--				pv = pvl->pv;
--
--		ret = process_single_pv(cmd, NULL, pv, handle);
--
--		if (ret > ret_max)
--			ret_max = ret;
--
--		free_pv_fid(pv);
--	}
--
--	dev_iter_destroy(iter);
--	dm_list_iterate_items(pvl, pvslist)
--		free_pv_fid(pvl->pv);
--
--	return ret_max;
--}
--
--/*
-- * If the lock_type is LCK_VG_READ (used only in reporting commands),
-- * we lock VG_GLOBAL to enable use of metadata cache.
-- * This can pause alongide pvscan or vgscan process for a while.
-- */
--int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
--		    struct volume_group *vg, uint32_t flags,
--		    int scan_label_only, void *handle,
--		    process_single_pv_fn_t process_single_pv)
--{
--	int opt = 0;
--	int ret_max = ECMD_PROCESSED;
--	int ret;
--	int lock_global = !(flags & READ_WITHOUT_LOCK) && !(flags & READ_FOR_UPDATE) && !lvmetad_active();
--
--	struct pv_list *pvl;
--	struct physical_volume *pv;
--	struct dm_list *pvslist = NULL, *vgnames;
--	struct dm_list tagsl;
--	struct dm_str_list *sll;
--	char *at_sign, *tagname;
--	struct device *dev;
--
--	dm_list_init(&tagsl);
--
--	if (lock_global && !lock_vol(cmd, VG_GLOBAL, LCK_VG_READ, NULL)) {
--		log_error("Unable to obtain global lock.");
--		return ECMD_FAILED;
--	}
--
--	if (argc) {
--		log_verbose("Using physical volume(s) on command line");
--		for (; opt < argc; opt++) {
--			if (sigint_caught()) {
--				ret_max = ECMD_FAILED;
--				goto_out;
--			}
--			dm_unescape_colons_and_at_signs(argv[opt], NULL, &at_sign);
--			if (at_sign && (at_sign == argv[opt])) {
--				tagname = at_sign + 1;
--
--				if (!validate_tag(tagname)) {
--					log_error("Skipping invalid tag %s",
--						  tagname);
--					if (ret_max < EINVALID_CMD_LINE)
--						ret_max = EINVALID_CMD_LINE;
--					continue;
--				}
--				if (!str_list_add(cmd->mem, &tagsl,
--						  dm_pool_strdup(cmd->mem,
--							      tagname))) {
--					log_error("strlist allocation failed");
--					goto bad;
--				}
--				continue;
--			}
--			if (vg) {
--				if (!(pvl = find_pv_in_vg(vg, argv[opt]))) {
--					log_error("Physical Volume \"%s\" not "
--						  "found in Volume Group "
--						  "\"%s\"", argv[opt],
--						  vg->name);
--					ret_max = ECMD_FAILED;
--					continue;
--				}
--				pv = pvl->pv;
--			} else {
--				if (!pvslist) {
--					lvmcache_seed_infos_from_lvmetad(cmd);
--					if (!(pvslist = get_pvs(cmd)))
--						goto bad;
--				}
--
--				if (!(dev = dev_cache_get(argv[opt], cmd->filter))) {
--					log_error("Failed to find device "
--						  "\"%s\"", argv[opt]);
--					ret_max = ECMD_FAILED;
--					continue;
--				}
--
--				pv = NULL;
--				dm_list_iterate_items(pvl, pvslist)
--					if (pvl->pv->dev == dev)
--						pv = pvl->pv;
--
--				if (!pv) {
--					log_error("Failed to find physical volume "
--						  "\"%s\"", argv[opt]);
--					ret_max = ECMD_FAILED;
--					continue;
--				}
--			}
--
--			ret = process_single_pv(cmd, vg, pv, handle);
--
--			if (ret > ret_max)
--				ret_max = ret;
--		}
--		if (!dm_list_empty(&tagsl) && (vgnames = get_vgnames(cmd, 1)) &&
--			   !dm_list_empty(vgnames)) {
--			dm_list_iterate_items(sll, vgnames) {
--				if (sigint_caught()) {
--					ret_max = ECMD_FAILED;
--					goto_out;
--				}
--				vg = vg_read(cmd, sll->str, NULL, flags);
--				if (ignore_vg(vg, sll->str, 0, &ret_max)) {
--					release_vg(vg);
--					stack;
--					continue;
--				}
--
--				ret = process_each_pv_in_vg(cmd, vg, &tagsl,
--							    handle,
--							    process_single_pv);
--				if (ret > ret_max)
--					ret_max = ret;
--
--				unlock_and_release_vg(cmd, vg, sll->str);
--			}
--		}
--	} else {
--		if (vg) {
--			log_verbose("Using all physical volume(s) in "
--				    "volume group");
--			ret_max = process_each_pv_in_vg(cmd, vg, NULL, handle,
--							process_single_pv);
--		} else if (arg_count(cmd, all_ARG)) {
--			ret_max = _process_all_devs(cmd, handle, process_single_pv);
--		} else {
--			log_verbose("Scanning for physical volume names");
--
--			lvmcache_seed_infos_from_lvmetad(cmd);
--			if (!(pvslist = get_pvs(cmd)))
--				goto bad;
--
--			dm_list_iterate_items(pvl, pvslist) {
--				if (sigint_caught()) {
--					ret_max = ECMD_FAILED;
--					goto_out;
--				}
--				ret = process_single_pv(cmd, NULL, pvl->pv,
--						     handle);
--				if (ret > ret_max)
--					ret_max = ret;
--
--				free_pv_fid(pvl->pv);
--			}
--		}
--	}
--out:
--	if (pvslist)
--		dm_list_iterate_items(pvl, pvslist)
--			free_pv_fid(pvl->pv);
--
--	if (lock_global)
--		unlock_vg(cmd, VG_GLOBAL);
--	return ret_max;
--bad:
--	if (lock_global)
--		unlock_vg(cmd, VG_GLOBAL);
--
--	return ECMD_FAILED;
--}
--
- /*
-  * Determine volume group name from a logical volume name
-  */
-@@ -1511,7 +1268,8 @@ static int get_arg_vgnames(struct cmd_context *cmd,
-  * duplicate vg names.)
-  */
- 
--static int get_all_vgnames(struct cmd_context *cmd, struct dm_list *all_vgnames)
-+static int get_all_vgnames(struct cmd_context *cmd, struct dm_list *all_vgnames,
-+			   int include_orphan)
- {
- 	int ret_max = ECMD_PROCESSED;
- 	struct name_id_list *nl;
-@@ -1524,7 +1282,7 @@ static int get_all_vgnames(struct cmd_context *cmd, struct dm_list *all_vgnames)
- 	if (!lvmetad_vg_list_to_lvmcache(cmd))
- 		stack;
- 
--	vgids = get_vgids(cmd, 0);
-+	vgids = get_vgids(cmd, include_orphan);
- 
- 	if (!vgids || dm_list_empty(vgids))
- 		goto out;
-@@ -1660,7 +1418,7 @@ int process_each_vg(struct cmd_context *cmd,
- 
- 	if ((dm_list_empty(&arg_vgnames) && enable_all_vgs) ||
- 	    !dm_list_empty(&arg_tags)) {
--		ret = get_all_vgnames(cmd, &all_vgnames);
-+		ret = get_all_vgnames(cmd, &all_vgnames, 0);
- 		if (ret != ECMD_PROCESSED)
- 			return ret;
- 	}
-@@ -1998,7 +1756,7 @@ int process_each_lv(struct cmd_context *cmd,
- 
- 	if ((dm_list_empty(&arg_vgnames) && enable_all_vgs) ||
- 	    !dm_list_empty(&arg_tags)) {
--		ret = get_all_vgnames(cmd, &all_vgnames);
-+		ret = get_all_vgnames(cmd, &all_vgnames, 0);
- 		if (ret != ECMD_PROCESSED)
- 			return ret;
- 	}
-@@ -2022,3 +1780,365 @@ int process_each_lv(struct cmd_context *cmd,
- 	return ret;
- }
- 
-+static int get_arg_pvnames(struct cmd_context *cmd,
-+			   int argc, char **argv,
-+			   struct dm_list *arg_pvnames,
-+			   struct dm_list *arg_tags)
-+{
-+	int opt = 0;
-+	char *at_sign, *tagname;
-+	char *arg_name;
-+	int ret_max = ECMD_PROCESSED;
-+
-+	log_verbose("Using physical volume(s) on command line");
-+
-+	for (; opt < argc; opt++) {
-+		arg_name = argv[opt];
-+
-+		dm_unescape_colons_and_at_signs(arg_name, NULL, &at_sign);
-+		if (at_sign && (at_sign == arg_name)) {
-+			tagname = at_sign + 1;
-+
-+			if (!validate_tag(tagname)) {
-+				log_error("Skipping invalid tag %s", tagname);
-+				if (ret_max < EINVALID_CMD_LINE)
-+					ret_max = EINVALID_CMD_LINE;
-+				continue;
-+			}
-+			if (!str_list_add(cmd->mem, arg_tags,
-+					  dm_pool_strdup(cmd->mem, tagname))) {
-+				log_error("strlist allocation failed");
-+				return ECMD_FAILED;
-+			}
-+			continue;
-+		}
-+
-+		if (!str_list_add(cmd->mem, arg_pvnames,
-+				  dm_pool_strdup(cmd->mem, arg_name))) {
-+			log_error("strlist allocation failed");
-+			return ECMD_FAILED;
-+		}
-+	}
-+
-+	return ret_max;
-+}
-+
-+static int get_all_devs(struct cmd_context *cmd, struct dm_list *all_devs)
-+{
-+	struct dev_iter *iter;
-+	struct device *dev;
-+	struct device_list *devl;
-+
-+	lvmcache_seed_infos_from_lvmetad(cmd);
-+
-+	if (!(iter = dev_iter_create(cmd->filter, 1))) {
-+		log_error("dev_iter creation failed");
-+		return ECMD_FAILED;
-+	}
-+
-+	while ((dev = dev_iter_get(iter))) {
-+		if (!(devl = dm_pool_alloc(cmd->mem, sizeof(*devl)))) {
-+			log_error("device_list alloc failed");
-+			return ECMD_FAILED;
-+		}
-+
-+		devl->dev = dev;
-+		dm_list_add(all_devs, &devl->list);
-+	}
-+
-+	dev_iter_destroy(iter);
-+
-+	return ECMD_PROCESSED;
-+}
-+
-+static void device_list_remove(struct dm_list *all_devs, struct device *dev)
-+{
-+	struct device_list *devl;
-+
-+	dm_list_iterate_items(devl, all_devs) {
-+		if (devl->dev == dev) {
-+			dm_list_del(&devl->list);
-+			return;
-+		}
-+	}
-+	log_error(INTERNAL_ERROR "device_list_remove %s not found", dev_name(dev));
-+}
-+
-+static int process_dev_list(struct cmd_context *cmd, struct dm_list *all_devs,
-+			    void *handle, process_single_pv_fn_t process_single_pv)
-+{
-+	struct physical_volume pv_dummy;
-+	struct physical_volume *pv;
-+	struct device_list *devl;
-+	int ret_max = ECMD_PROCESSED;
-+	int ret = 0;
-+
-+	dm_list_iterate_items(devl, all_devs) {
-+		memset(&pv_dummy, 0, sizeof(pv_dummy));
-+		dm_list_init(&pv_dummy.tags);
-+		dm_list_init(&pv_dummy.segments);
-+		pv_dummy.dev = devl->dev;
-+		pv = &pv_dummy;
-+
-+		log_very_verbose("Processing device %s", dev_name(devl->dev));
-+
-+		ret = process_single_pv(cmd, NULL, pv, handle);
-+
-+		if (ret > ret_max)
-+			ret_max = ret;
-+		if (sigint_caught())
-+			break;
-+	}
-+
-+	return ECMD_PROCESSED;
-+}
-+
-+static int process_pvs_in_vg(struct cmd_context *cmd,
-+			     struct volume_group *vg,
-+			     struct dm_list *all_devs,
-+			     struct dm_list *arg_pvnames,
-+			     struct dm_list *arg_tags,
-+			     int process_all,
-+			     int skip,
-+			     void *handle,
-+			     process_single_pv_fn_t process_single_pv)
-+{
-+	struct physical_volume *pv;
-+	struct pv_list *pvl;
-+	const char *pv_name;
-+	int process_pv;
-+	int ret_max = ECMD_PROCESSED;
-+	int ret = 0;
-+
-+	dm_list_iterate_items(pvl, &vg->pvs) {
-+		pv = pvl->pv;
-+		pv_name = pv_dev_name(pv);
-+
-+		process_pv = 0;
-+
-+		/*
-+		 * We cannot check for empty arg_tags and empty
-+		 * arg_pvnames to determine process_all here because we
-+		 * remove items from arg_pvnames as they are completed.
-+		 */
-+		if (process_all)
-+			process_pv = 1;
-+
-+		if (!process_pv && !dm_list_empty(arg_pvnames) &&
-+		    str_list_match_item(arg_pvnames, pv_name)) {
-+			process_pv = 1;
-+			str_list_del(arg_pvnames, pv_name);
-+		}
-+
-+		if (!process_pv && !dm_list_empty(arg_tags) &&
-+		    str_list_match_list(arg_tags, &pv->tags, NULL)) {
-+			process_pv = 1;
-+		}
-+
-+		if (process_pv) {
-+			if (skip)
-+				log_verbose("Skipping PV %s in VG %s", pv_name, vg->name);
-+			else
-+				log_very_verbose("Processing PV %s in VG %s", pv_name, vg->name);
-+
-+			if (all_devs)
-+				device_list_remove(all_devs, pv->dev);
-+
-+			if (!skip)
-+				ret = process_single_pv(cmd, vg, pv, handle);
-+
-+			if (ret > ret_max)
-+				ret_max = ret;
-+		}
-+
-+		if (sigint_caught())
-+			break;
-+
-+		/*
-+		 * When processing only specific pv names, we can quit
-+		 * once they've all been found.
-+	 	 */
-+		if (!process_all && dm_list_empty(arg_tags) && dm_list_empty(arg_pvnames))
-+			break;
-+	}
-+
-+	return ret_max;
-+}
-+
-+/*
-+ * Iterate through all pvs in each listed vg.  Process a pv if
-+ * the name or tag matches arg_pvnames or arg_tags.  If both
-+ * arg_pvnames and arg_tags are empty, then process all pvs.
-+ *
-+ * This removes items from arg_pvnames and all_devs when a pv
-+ * is found.  Any names remaining in arg_pvnames were not found, and
-+ * should produce an error.  Any devs remaining in all_devs were
-+ * not found and should be processed by process_all_devs().
-+ */
-+
-+static int process_pvs_in_vgs(struct cmd_context *cmd, uint32_t flags,
-+			      struct dm_list *all_vgnames,
-+			      struct dm_list *all_devs,
-+			      struct dm_list *arg_pvnames,
-+			      struct dm_list *arg_tags,
-+			      int process_all,
-+			      void *handle,
-+			      process_single_pv_fn_t process_single_pv)
-+{
-+	struct volume_group *vg;
-+	struct name_id_list *nl;
-+	struct dm_str_list *sl;
-+	const char *vg_name;
-+	const char *vg_uuid;
-+	int skip;
-+	int ret_max = ECMD_PROCESSED;
-+	int ret;
-+
-+	dm_list_iterate_items(nl, all_vgnames) {
-+		vg_name = nl->name;
-+		vg_uuid = nl->uuid;
-+		ret = 0;
-+		skip = 0;
-+
-+		vg = vg_read(cmd, vg_name, vg_uuid, flags);
-+		if (ignore_vg(vg, vg_name, flags & READ_ALLOW_INCONSISTENT, &ret)) {
-+			if (ret > ret_max)
-+				ret_max = ret;
-+			skip = 1;
-+		}
-+
-+		ret = process_pvs_in_vg(cmd, vg, all_devs, arg_pvnames, arg_tags,
-+					process_all, skip, handle, process_single_pv);
-+
-+		if (ret > ret_max)
-+			ret_max = ret;
-+
-+		if (skip)
-+			release_vg(vg);
-+		else
-+			unlock_and_release_vg(cmd, vg, vg->name);
-+
-+		if (sigint_caught())
-+			return ret_max;
-+
-+		/* quit early when possible */
-+		if (!process_all && dm_list_empty(arg_tags) && dm_list_empty(arg_pvnames))
-+			return ret_max;
-+	}
-+
-+	/* command should return an error if a pvname arg was not found */
-+
-+	dm_list_iterate_items(sl, arg_pvnames) {
-+		log_error("Failed to find physical volume \"%s\"", sl->str);
-+		ret_max = ECMD_FAILED;
-+	}
-+
-+	return ret_max;
-+}
-+
-+int process_each_pv(struct cmd_context *cmd,
-+		    int argc, char **argv,
-+		    struct volume_group *vg,
-+		    uint32_t flags,
-+		    void *handle,
-+		    process_single_pv_fn_t process_single_pv)
-+{
-+	struct dm_list arg_tags;    /* str_list */
-+	struct dm_list arg_pvnames; /* str_list */
-+	struct dm_list all_vgnames; /* name_id_list */
-+	struct dm_list all_devs;    /* device_list */
-+	struct dm_str_list *sl;
-+	int process_all_pvs;
-+	int process_all_devs;
-+	int ret_max = ECMD_PROCESSED;
-+	int ret;
-+
-+	dm_list_init(&arg_tags);
-+	dm_list_init(&arg_pvnames);
-+	dm_list_init(&all_vgnames);
-+	dm_list_init(&all_devs);
-+
-+	/*
-+	 * Create two lists from argv:
-+	 * arg_pvnames: pvs explicitly named in argv
-+	 * arg_tags: tags explicitly named in argv
-+	 */
-+	ret = get_arg_pvnames(cmd, argc, argv, &arg_pvnames, &arg_tags);
-+	if (ret != ECMD_PROCESSED)
-+		return ret;
-+
-+	process_all_pvs = dm_list_empty(&arg_pvnames) && dm_list_empty(&arg_tags);
-+
-+	process_all_devs = process_all_pvs &&
-+			   (cmd->command->flags & ENABLE_ALL_DEVS) &&
-+			   arg_count(cmd, all_ARG);
-+
-+	/*
-+	 * Caller has already selected, locked, and read one vg in which to
-+	 * process pvs (all pvs, or named pvs, or pvs with matching tags).
-+	 */
-+	if (vg) {
-+		ret = process_pvs_in_vg(cmd, vg, NULL,
-+					&arg_pvnames, &arg_tags, process_all_pvs,
-+					handle, process_single_pv);
-+
-+		dm_list_iterate_items(sl, &arg_pvnames) {
-+			log_error("Physical Volume \"%s\" not found in Volume Group \"%s\"",
-+				  sl->str, vg->name);
-+			ret = ECMD_FAILED;
-+		}
-+		return ret;
-+	}
-+
-+	/*
-+	 * If the caller wants to process all devs (not only pvs), then all pvs
-+	 * from all vgs are processed first, removing each from all_devs.  Then
-+	 * any devs remaining in all_devs are processed.
-+	 */
-+	if (process_all_devs) {
-+		ret = get_all_devs(cmd, &all_devs);
-+		if (ret != ECMD_PROCESSED)
-+			return ret;
-+	}
-+
-+	ret = get_all_vgnames(cmd, &all_vgnames, 1);
-+	if (ret != ECMD_PROCESSED)
-+		return ret;
-+
-+	ret = process_pvs_in_vgs(cmd, flags, &all_vgnames,
-+				 process_all_devs ? &all_devs : NULL,
-+				 &arg_pvnames, &arg_tags, process_all_pvs,
-+				 handle, process_single_pv);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+
-+	if (sigint_caught())
-+		goto out;
-+
-+	if (dm_list_empty(&all_devs))
-+		goto out;
-+
-+	ret = process_dev_list(cmd, &all_devs, handle, process_single_pv);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+out:
-+	return ret_max;
-+}
-+
-+int process_each_pv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
-+			  void *handle, process_single_pv_fn_t process_single_pv)
-+{
-+	int ret_max = ECMD_PROCESSED;
-+	int ret = 0;
-+	struct pv_list *pvl;
-+
-+	dm_list_iterate_items(pvl, &vg->pvs) {
-+		if (sigint_caught())
-+			return_ECMD_FAILED;
-+		if ((ret = process_single_pv(cmd, vg, pvl->pv, handle)) > ret_max)
-+			ret_max = ret;
-+	}
-+
-+	return ret_max;
-+}
-+
-diff --git a/tools/toollib.h b/tools/toollib.h
-index 3f21470..4327f84 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -58,8 +58,7 @@ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
- 
- int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 		    struct volume_group *vg, uint32_t lock_type,
--		    int scan_label_only, void *handle,
--		    process_single_pv_fn_t process_single_pv);
-+		    void *handle, process_single_pv_fn_t process_single_pv);
- 
- int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 		       void *handle, process_single_label_fn_t process_single_label);
-@@ -80,13 +79,12 @@ int process_each_segment_in_lv(struct cmd_context *cmd,
- 			       process_single_seg_fn_t process_single_seg);
- 
- int process_each_pv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
--			  const struct dm_list *tagsl, void *handle,
--			  process_single_pv_fn_t process_single_pv);
-+			  void *handle, process_single_pv_fn_t process_single_pv);
- 
- 
- int process_each_lv_in_vg(struct cmd_context *cmd,
- 			  struct volume_group *vg,
--			  const struct dm_list *arg_lvnames,
-+			  struct dm_list *arg_lvnames,
- 			  const struct dm_list *tagsl,
- 			  void *handle,
- 			  process_single_lv_fn_t process_single_lv);
-diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
-index 39cdaf3..95a5ebd 100644
---- a/tools/vgdisplay.c
-+++ b/tools/vgdisplay.c
-@@ -43,7 +43,7 @@ static int vgdisplay_single(struct cmd_context *cmd, const char *vg_name,
- 				      (process_single_lv_fn_t)lvdisplay_full);
- 
- 		log_print("--- Physical volumes ---");
--		process_each_pv_in_vg(cmd, vg, NULL, NULL,
-+		process_each_pv_in_vg(cmd, vg, NULL,
- 				      (process_single_pv_fn_t)pvdisplay_short);
- 	}
- 
-diff --git a/tools/vgreduce.c b/tools/vgreduce.c
-index 970f61c..493a084 100644
---- a/tools/vgreduce.c
-+++ b/tools/vgreduce.c
-@@ -249,7 +249,7 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
- 
- 		/* FIXME: Pass private struct through to all these functions */
- 		/* and update in batch here? */
--		ret = process_each_pv(cmd, argc, argv, vg, READ_FOR_UPDATE, 0, NULL,
-+		ret = process_each_pv(cmd, argc, argv, vg, READ_FOR_UPDATE, NULL,
- 				      _vgreduce_single);
- 
- 	}
+-		vg = vg_read(cmd, vg_name, vg_uuid, flags);
++		vg = vg_read(cmd, vg_name, vg_uuid, flags | READ_WARN_INCONSISTENT);
+ 		if (ignore_vg(vg, vg_name, flags & READ_ALLOW_INCONSISTENT, &ret)) {
+ 			if (ret > ret_max)
+ 				ret_max = ret;
 
 
