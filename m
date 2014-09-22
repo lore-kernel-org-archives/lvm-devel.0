@@ -1,40 +1,49 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Sep 2014 12:44:49 +0000 (UTC)
-Subject: master - allocation: use vg memory pool
-Message-ID: <20140912124449.4BCC160F0B@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 22 Sep 2014 15:37:17 +0000 (UTC)
+Subject: dev-dct-process-latest - lv_rename: actual fix for snapshot
+Message-ID: <20140922153717.75D816153C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=15ba2afdc2d70ee21c2599f0d51a413f0a7afa9b
-Commit:        15ba2afdc2d70ee21c2599f0d51a413f0a7afa9b
-Parent:        3880ca5ecad1761bd13a190c58f8f85fdd7cd0e1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a86d9a3b305be466d221f2a5e210bc1cad8fe842
+Commit:        a86d9a3b305be466d221f2a5e210bc1cad8fe842
+Parent:        c710f02e0181cc2db5455f0c98033247a70ecc30
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 11 19:00:13 2014 +0200
+AuthorDate:    Tue Sep 9 20:15:51 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 12 13:39:58 2014 +0200
+CommitterDate: Tue Sep 9 20:15:51 2014 +0200
 
-allocation: use vg memory pool
+lv_rename: actual fix for snapshot
 
-Looks like forgotten memory allocation related to VG used cmd mem pool.
+By my rebasing mistake it's been eliminated from previous patch set.
 ---
- lib/metadata/lv_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 8c1bd83..12585ef 100644
+index cc7b6da..8c1bd83 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -3083,7 +3083,7 @@ struct alloc_handle *allocate_extents(struct volume_group *vg,
- 	if (alloc >= ALLOC_INHERIT)
- 		alloc = vg->alloc;
+@@ -3966,6 +3966,7 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ 		log_error("Failed to allocate space for new name.");
+ 		return 0;
+ 	}
++
+ 	/* rename sub LVs */
+ 	if (!for_each_sub_lv(lv, _rename_cb, (void *) &lv_names))
+ 		return_0;
+@@ -3973,6 +3974,9 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ 	/* rename main LV */
+ 	lv->name = lv_names.new;
  
--	if (!(ah = _alloc_init(vg->cmd, vg->cmd->mem, segtype, alloc, approx_alloc,
-+	if (!(ah = _alloc_init(vg->cmd, vg->vgmem, segtype, alloc, approx_alloc,
- 			       lv ? lv->le_count : 0, extents, mirrors, stripes, log_count,
- 			       vg->extent_size, region_size,
- 			       parallel_areas)))
++	if (lv_is_cow(lv))
++		lv = origin_from_cow(lv);
++
+ 	if (update_mda && !lv_update_and_reload(lv))
+ 		return_0;
+ 
 
 
