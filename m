@@ -1,55 +1,33 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:37:30 +0000 (UTC)
-Subject: dev-dct-process-latest - lvmetad: Differentiate between filtered and truly missing devices.
-Message-ID: <20140922153730.1873960D7D@fedorahosted.org>
+Date: Mon, 22 Sep 2014 15:37:32 +0000 (UTC)
+Subject: dev-dct-process-latest - tests: test for rename of snapshot
+Message-ID: <20140922153732.312ED615CC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=671d0ea1b16ca83d0bf27ef6afdf451efaf4097e
-Commit:        671d0ea1b16ca83d0bf27ef6afdf451efaf4097e
-Parent:        5f9b30d17807aeb3bd31a3490cf9a45223324a4f
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Sep 10 12:45:52 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4748f4a9e4516a8c9226ce61b5a3ca41f0852ffc
+Commit:        4748f4a9e4516a8c9226ce61b5a3ca41f0852ffc
+Parent:        671d0ea1b16ca83d0bf27ef6afdf451efaf4097e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Sep 10 22:02:18 2014 +0200
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Sep 10 22:58:22 2014 +0100
+CommitterDate: Wed Sep 10 22:59:13 2014 +0100
 
-lvmetad: Differentiate between filtered and truly missing devices.
+tests: test for rename of snapshot
 
-We used to print an error message whenever we tried to deal with devices that
-lvmetad knew about but were rejected by a client-side filter. Instead, we now
-check whether the device is actually absent or only filtered out and only print
-a warning in the latter case.
 ---
- lib/cache/lvmetad.c                 |    6 +++++-
- test/shell/lvmetad-client-filter.sh |   18 ++++++++++++++++++
- 2 files changed, 23 insertions(+), 1 deletions(-)
+ test/shell/snapshot-rename.sh |   24 ++++++++++++++++++++++++
+ 1 files changed, 24 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 7896ddd..ef1d01a 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -293,7 +293,11 @@ static struct lvmcache_info *_pv_populate_lvmcache(struct cmd_context *cmd,
- 		dev = dev_cache_get_by_devt(fallback, cmd->filter);
- 
- 	if (!dev) {
--		log_error("No device found for PV %s.", pvid_txt);
-+		dev = dev_cache_get_by_devt(devt, cmd->lvmetad_filter);
-+		if (!dev)
-+			log_error("No device found for PV %s.", pvid_txt);
-+		else
-+			log_warn("WARNING: Device %s for PV %s rejected by a filter.", dev_name(dev), pvid_txt);
- 		return NULL;
- 	}
- 
-diff --git a/test/shell/lvmetad-client-filter.sh b/test/shell/lvmetad-client-filter.sh
+diff --git a/test/shell/snapshot-rename.sh b/test/shell/snapshot-rename.sh
 new file mode 100644
-index 0000000..3002a47
+index 0000000..8d1eefb
 --- /dev/null
-+++ b/test/shell/lvmetad-client-filter.sh
-@@ -0,0 +1,18 @@
++++ b/test/shell/snapshot-rename.sh
+@@ -0,0 +1,24 @@
 +#!/bin/sh
 +# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
 +#
@@ -61,12 +39,18 @@ index 0000000..3002a47
 +# along with this program; if not, write to the Free Software Foundation,
 +# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
++# Testing renaming snapshots (had problem in cluster)
++# https://bugzilla.redhat.com/show_bug.cgi?id=1136925
++
 +. lib/inittest
 +
-+test -e LOCAL_LVMETAD || skip
-+aux prepare_pvs 2
++aux prepare_vg 1
 +
-+pvs --config 'devices { filter = [ "r%.*%" ] }' 2>&1 | grep rejected
-+pvs --config 'devices { filter = [ "r%.*%" ] }' 2>&1 | not grep 'No device found'
++lvcreate -aey -L1 -n $lv1 $vg
++lvcreate -s -L1 -n $lv2 $vg/$lv1
++lvrename $vg/$lv2 $vg/$lv3
++lvremove -f $vg/$lv1
++
++vgremove -f $vg
 
 
