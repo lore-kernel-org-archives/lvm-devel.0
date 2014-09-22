@@ -1,85 +1,114 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:38:47 +0000 (UTC)
-Subject: dev-dct-process-latest - locking: add locking_supports_remote_queries
-Message-ID: <20140922153847.CEDDD60E5C@fedorahosted.org>
+Date: Mon, 22 Sep 2014 15:38:52 +0000 (UTC)
+Subject: dev-dct-process-latest - cleanup: Remove metadata.h from tools dir.
+Message-ID: <20140922153852.09BD261087@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f90bc22ca532f5852aeaab92e0c40b36d65ef62d
-Commit:        f90bc22ca532f5852aeaab92e0c40b36d65ef62d
-Parent:        9d57aa9a0fe00322cb188ad1f3103d57392546e7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 17 14:21:41 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 17 14:36:38 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b4f5be76a3b8c9c89719e5d8699033a79c993b6f
+Commit:        b4f5be76a3b8c9c89719e5d8699033a79c993b6f
+Parent:        98414ca7dd2682b64fec141ae58b4c8ed4367fc7
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Sep 17 15:50:24 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Sep 17 15:50:24 2014 +0100
 
-locking: add locking_supports_remote_queries
+cleanup: Remove metadata.h from tools dir.
 
-Add function to detect whether locking could be used to
-query for lock type so we could recognize exclusive
-activation.
+metadata.h is meant to be internal to the library.
+metadata-exported.h contains the things needed by tools.
 ---
- lib/locking/cluster_locking.c |    2 +-
- lib/locking/locking.c         |    5 +++++
- lib/locking/locking.h         |    1 +
- lib/locking/locking_types.h   |    1 +
- 4 files changed, 8 insertions(+), 1 deletions(-)
+ lib/metadata/metadata-exported.h |    5 +++++
+ lib/metadata/metadata.h          |    5 -----
+ tools/pvmove.c                   |    1 -
+ tools/pvremove.c                 |    1 -
+ tools/vgsplit.c                  |    1 -
+ 5 files changed, 5 insertions(+), 8 deletions(-)
 
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index 0a11262..f2f4c80 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -611,7 +611,7 @@ int init_cluster_locking(struct locking_type *locking, struct cmd_context *cmd,
- 	locking->query_resource = _query_resource;
- 	locking->fin_locking = _locking_end;
- 	locking->reset_locking = _reset_locking;
--	locking->flags = LCK_PRE_MEMLOCK | LCK_CLUSTERED;
-+	locking->flags = LCK_PRE_MEMLOCK | LCK_CLUSTERED | LCK_SUPPORTS_REMOTE_QUERIES;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 01b04ff..0a307ab 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -615,6 +615,10 @@ struct physical_volume *pv_create(const struct cmd_context *cmd,
+ 				  unsigned metadataignore,
+ 				  struct pvcreate_restorable_params *rp);
  
- 	_clvmd_sock = _open_local_sock(suppress_messages);
- 	if (_clvmd_sock == -1)
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 9432f84..544751e 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -492,6 +492,11 @@ int locking_is_clustered(void)
- 	return (_locking.flags & LCK_CLUSTERED) ? 1 : 0;
- }
- 
-+int locking_supports_remote_queries(void)
-+{
-+	return (_locking.flags & LCK_SUPPORTS_REMOTE_QUERIES) ? 1 : 0;
-+}
++int pvremove_single(struct cmd_context *cmd, const char *pv_name,
++		    void *handle __attribute__((unused)), unsigned force_count,
++		    unsigned prompt);
 +
- int remote_lock_held(const char *vol, int *exclusive)
+ int pv_resize_single(struct cmd_context *cmd,
+ 			     struct volume_group *vg,
+ 			     struct physical_volume *pv,
+@@ -927,6 +931,7 @@ int get_pv_list_for_lv(struct dm_pool *mem,
+ /* Find LV segment containing given LE */
+ struct lv_segment *first_seg(const struct logical_volume *lv);
+ struct lv_segment *last_seg(const struct logical_volume *lv);
++struct lv_segment *get_only_segment_using_this_lv(const struct logical_volume *lv);
+ 
+ /*
+ * Useful functions for managing snapshots.
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 518dd21..439f6b7 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -341,10 +341,6 @@ unsigned long set_pe_align_offset(struct physical_volume *pv,
+ 
+ int pv_write_orphan(struct cmd_context *cmd, struct physical_volume *pv);
+ 
+-int pvremove_single(struct cmd_context *cmd, const char *pv_name,
+-			   void *handle __attribute__((unused)), unsigned force_count,
+-			   unsigned prompt);
+-
+ struct physical_volume *pvcreate_vol(struct cmd_context *cmd, const char *pv_name,
+                                      struct pvcreate_params *pp, int write_now);
+ 
+@@ -428,7 +424,6 @@ int lv_split_segment(struct logical_volume *lv, uint32_t le);
+  */
+ int add_seg_to_segs_using_this_lv(struct logical_volume *lv, struct lv_segment *seg);
+ int remove_seg_from_segs_using_this_lv(struct logical_volume *lv, struct lv_segment *seg);
+-struct lv_segment *get_only_segment_using_this_lv(const struct logical_volume *lv);
+ 
+ int for_each_sub_lv(struct logical_volume *lv,
+                     int (*fn)(struct logical_volume *lv, void *data),
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index a9d750d..3072584 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -16,7 +16,6 @@
+ #include "tools.h"
+ #include "polldaemon.h"
+ #include "display.h"
+-#include "metadata.h"  /* for 'get_only_segment_using_this_lv' */
+ 
+ #define PVMOVE_FIRST_TIME   0x00000001      /* Called for first time */
+ #define PVMOVE_EXCLUSIVE    0x00000002      /* Require exclusive LV */
+diff --git a/tools/pvremove.c b/tools/pvremove.c
+index dfd6007..035d4fd 100644
+--- a/tools/pvremove.c
++++ b/tools/pvremove.c
+@@ -14,7 +14,6 @@
+  */
+ 
+ #include "tools.h"
+-#include "metadata.h"
+ 
+ int pvremove(struct cmd_context *cmd, int argc, char **argv)
  {
- 	int mode = LCK_NULL;
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index 284ce7a..1351cd2 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -26,6 +26,7 @@ void fin_locking(void);
- void reset_locking(void);
- int vg_write_lock_held(void);
- int locking_is_clustered(void);
-+int locking_supports_remote_queries(void);
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index ad2eb48..362f854 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -14,7 +14,6 @@
+  */
  
- int remote_lock_held(const char *vol, int *exclusive);
+ #include "tools.h"
+-#include "metadata.h"  /* for 'get_only_segment_using_this_lv' */
  
-diff --git a/lib/locking/locking_types.h b/lib/locking/locking_types.h
-index 6e4adcc..5fa5cba 100644
---- a/lib/locking/locking_types.h
-+++ b/lib/locking/locking_types.h
-@@ -25,6 +25,7 @@ typedef void (*reset_lock_fn) (void);
- 
- #define LCK_PRE_MEMLOCK	0x00000001	/* Is memlock() needed before calls? */
- #define LCK_CLUSTERED	0x00000002
-+#define LCK_SUPPORTS_REMOTE_QUERIES	0x00000004
- 
- struct locking_type {
- 	uint32_t flags;
+ static int _lv_is_in_vg(struct volume_group *vg, struct logical_volume *lv)
+ {
 
 
