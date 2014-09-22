@@ -1,40 +1,46 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:37:11 +0000 (UTC)
-Subject: dev-dct-process-latest - lv_manip: remove vg_revert
-Message-ID: <20140922153711.1E6476153C@fedorahosted.org>
+Date: Mon, 22 Sep 2014 15:37:06 +0000 (UTC)
+Subject: dev-dct-process-latest - cleanup: add stacktrace for error path
+Message-ID: <20140922153706.D9D7760362@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aee8611af5992db2dd19a4235849f1953b560364
-Commit:        aee8611af5992db2dd19a4235849f1953b560364
-Parent:        413fc9d3e699206ec493a70c6baf98bc87b83a9f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=319f67b1abd8b391958c8cd6d396c590bb5225be
+Commit:        319f67b1abd8b391958c8cd6d396c590bb5225be
+Parent:        c774d9a3f35c312d5b24c4ba13da707ccd975194
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 8 22:39:58 2014 +0200
+AuthorDate:    Mon Sep 8 22:36:42 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 9 19:15:26 2014 +0200
+CommitterDate: Mon Sep 8 22:36:42 2014 +0200
 
-lv_manip: remove vg_revert
+cleanup: add stacktrace for error path
 
-vg_commit is supposed to have implicit revert handling.
-(however as of now it needs fixes).
 ---
- lib/metadata/lv_manip.c |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 7374484..cec9f84 100644
+index fcf9975..60aa6f8 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -6096,7 +6096,6 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
+@@ -3963,13 +3963,13 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ 	}
  
- 		if (!vg_commit(lv_where->vg)) {
- 			log_error("Failed to commit intermediate VG %s metadata for mirror conversion.", lv_where->vg->name);
--			vg_revert(lv_where->vg);
- 			return NULL;
- 		}
+ 	if (update_mda && !archive(vg))
+-		return 0;
++		return_0;
  
+ 	/* rename sub LVs */
+ 	lv_names.old = lv->name;
+ 	lv_names.new = new_name;
+ 	if (!for_each_sub_lv(lv, _rename_cb, (void *) &lv_names))
+-		return 0;
++		return_0;
+ 
+ 	/* rename main LV */
+ 	if (!(lv->name = dm_pool_strdup(cmd->mem, new_name))) {
 
 
