@@ -1,80 +1,76 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:39:57 +0000 (UTC)
-Subject: dev-dct-process-latest - toollib: improve error message in process_each_lv_in_vg
-Message-ID: <20140922153957.1B1DE60228@fedorahosted.org>
+Date: Mon, 22 Sep 2014 15:39:59 +0000 (UTC)
+Subject: dev-dct-process-latest - toollib: remove unused arg from process_each_lv_in_vg
+Message-ID: <20140922153959.2FA6360D27@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bb21649a4700b5a19251def33a3a3418b5d0830d
-Commit:        bb21649a4700b5a19251def33a3a3418b5d0830d
-Parent:        2f1bf1978e6d3986be5a44648e8ac59ef7aaa4e2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ced473a352ceca9ef9759c98eaaca8f9a9a7fe7c
+Commit:        ced473a352ceca9ef9759c98eaaca8f9a9a7fe7c
+Parent:        bb21649a4700b5a19251def33a3a3418b5d0830d
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Aug 29 16:42:49 2013 -0500
+AuthorDate:    Wed Aug 28 14:32:13 2013 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Sep 22 10:32:23 2014 -0500
 
-toollib: improve error message in process_each_lv_in_vg
+toollib: remove unused arg from process_each_lv_in_vg
 
-Include in the error message the lv name args that were not found.
+The failed_lvnames arg is no longer used since the
+cmd_vg replicator wrapper was removed.
 ---
- tools/toollib.c |   17 +++++++++++------
- 1 files changed, 11 insertions(+), 6 deletions(-)
+ tools/toollib.c   |    3 +--
+ tools/toollib.h   |    1 -
+ tools/vgdisplay.c |    2 +-
+ 3 files changed, 2 insertions(+), 4 deletions(-)
 
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 0f9e241..31e2fcf 100644
+index 31e2fcf..d222da9 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -1698,8 +1698,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 	unsigned process_lv = 0;
- 	unsigned tags_supplied = 0;
- 	unsigned lvargs_supplied = 0;
--	unsigned lvargs_matched = 0;
- 	struct lv_list *lvl;
-+	struct dm_str_list *sl;
- 
- 	if (!vg_check_status(vg, EXPORTED_VG))
- 		return_ECMD_FAILED;
-@@ -1760,7 +1760,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 		if (lvargs_supplied &&
- 		    str_list_match_item(arg_lvnames, lvl->lv->name)) {
- 			process_lv = 1;
--			lvargs_matched++;
-+			str_list_del(arg_lvnames, lvl->lv->name);
+@@ -1688,7 +1688,6 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 			  struct volume_group *vg,
+ 			  struct dm_list *arg_lvnames,
+ 			  const struct dm_list *tags_in,
+-			  struct dm_list *failed_lvnames,
+ 			  void *handle,
+ 			  process_single_lv_fn_t process_single_lv)
+ {
+@@ -1959,7 +1958,7 @@ static int process_lv_vg_name_list(struct cmd_context *cmd, uint32_t flags,
+ 			continue;
  		}
  
- 		if (!process_lv)
-@@ -1769,20 +1769,25 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 		if (sigint_caught())
- 			return_ECMD_FAILED;
+-		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg, NULL,
++		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
+ 					    handle, process_single_lv);
+ 		unlock_and_release_vg(cmd, vg, vg_name);
  
-+		log_very_verbose("Processing LV %s in VG %s", lvl->lv->name, vg->name);
-+
- 		ret = process_single_lv(cmd, lvl->lv, handle);
+diff --git a/tools/toollib.h b/tools/toollib.h
+index c605aed..3f21470 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -88,7 +88,6 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 			  struct volume_group *vg,
+ 			  const struct dm_list *arg_lvnames,
+ 			  const struct dm_list *tagsl,
+-			  struct dm_list *failed_lvnames,
+ 			  void *handle,
+ 			  process_single_lv_fn_t process_single_lv);
  
- 		if (ret > ret_max)
- 			ret_max = ret;
- 	}
+diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
+index a739d11..39cdaf3 100644
+--- a/tools/vgdisplay.c
++++ b/tools/vgdisplay.c
+@@ -39,7 +39,7 @@ static int vgdisplay_single(struct cmd_context *cmd, const char *vg_name,
+ 	if (arg_count(cmd, verbose_ARG)) {
+ 		vgdisplay_extents(vg);
  
--	if (lvargs_supplied && lvargs_matched != dm_list_size(arg_lvnames)) {
-+	if (lvargs_supplied) {
- 		/*
- 		 * FIXME: lvm supports removal of LV with all its dependencies
- 		 * this leads to miscalculation that depends on the order of args.
- 		 */
--		log_error("One or more specified logical volume(s) not found.");
--		if (ret_max < ECMD_FAILED)
--			ret_max = ECMD_FAILED;
-+		dm_list_iterate_items(sl, arg_lvnames) {
-+			log_error("Failed to find logical volume \"%s/%s\"",
-+				  vg->name, sl->str);
-+			if (ret_max < ECMD_FAILED)
-+				ret_max = ECMD_FAILED;
-+		}
- 	}
+-		process_each_lv_in_vg(cmd, vg, NULL, NULL, NULL, NULL,
++		process_each_lv_in_vg(cmd, vg, NULL, NULL, NULL,
+ 				      (process_single_lv_fn_t)lvdisplay_full);
  
- 	return ret_max;
+ 		log_print("--- Physical volumes ---");
 
 
