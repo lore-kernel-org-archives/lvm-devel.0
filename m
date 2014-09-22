@@ -1,39 +1,79 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:38:31 +0000 (UTC)
-Subject: dev-dct-process-latest - cleanup: fix last commit
-Message-ID: <20140922153831.1137D60EE6@fedorahosted.org>
+Date: Mon, 22 Sep 2014 15:38:33 +0000 (UTC)
+Subject: dev-dct-process-latest - cmirror: fix endian issues on s390
+Message-ID: <20140922153833.294A9602D6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e9216eedfe8189947c506041d8fc9e879fac6d58
-Commit:        e9216eedfe8189947c506041d8fc9e879fac6d58
-Parent:        2360ce3551f2989f1cc2af06c3d3a0a0f1429bce
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Sep 15 22:04:14 2014 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Sep 15 22:04:14 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=829e5a40373a2ef1721dc9210350c86c4b9d70f7
+Commit:        829e5a40373a2ef1721dc9210350c86c4b9d70f7
+Parent:        e9216eedfe8189947c506041d8fc9e879fac6d58
+Author:        Liuhua Wang <lwang@suse.com>
+AuthorDate:    Sat Sep 13 02:08:28 2014 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Mon Sep 15 16:08:35 2014 -0500
 
-cleanup: fix last commit
+cmirror: fix endian issues on s390
 
+Cmirrord has endian bugs, which cause failure to lvcreate a mirrored lv
+on s390.
+- data_size is uint32, should not use xlate64 to convert, which will
+  cause data_size 0 after xlate.
+- request_type and data_size still used by local(v5_data_switch),
+  should convert later.  If request_type xlate too early, it will
+  cause request_type judge error; if data_size xlate too early, it
+  will cause coredump in case DM_ULOG_CLEAR_REGION.
+- when receiving package in clog_request_from_network. vp[0] will always
+  be little endian.  We could use xlate64(vp[0]) == vp[0] to decide if
+  the local node is little endian or not.
+
+Signed-off-by: Lidong Zhong<lzhong@suse.com> & Liuhua Wang <lwang@suse.com>
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 ---
- tools/lvchange.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/cmirrord/compat.c |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index c3d0b6a..3ac5165 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -287,7 +287,7 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+diff --git a/daemons/cmirrord/compat.c b/daemons/cmirrord/compat.c
+index 3f7a9b5..4955f50 100644
+--- a/daemons/cmirrord/compat.c
++++ b/daemons/cmirrord/compat.c
+@@ -126,13 +126,14 @@ static int v5_endian_to_network(struct clog_request *rq)
  
- 	dm_list_init(&device_list);
+ 	u_rq->error = xlate32(u_rq->error);
+ 	u_rq->seq = xlate32(u_rq->seq);
+-	u_rq->request_type = xlate32(u_rq->request_type);
+-	u_rq->data_size = xlate64(u_rq->data_size);
  
--	if (lv_is_mirrored(lv) && !seg_is_raid(seg)) {
-+	if (!lv_is_mirrored(lv) && !seg_is_raid(seg)) {
- 		log_error("Unable to resync %s.  It is not RAID or mirrored.",
- 			  lv->name);
- 		return 0;
+ 	rq->originator = xlate32(rq->originator);
+ 
+ 	v5_data_endian_switch(rq, 1);
+ 
++	u_rq->request_type = xlate32(u_rq->request_type);
++	u_rq->data_size = xlate32(u_rq->data_size);
++
+ 	return size;
+ }
+ 
+@@ -167,7 +168,7 @@ static int v5_endian_from_network(struct clog_request *rq)
+ 	u_rq->error = xlate32(u_rq->error);
+ 	u_rq->seq = xlate32(u_rq->seq);
+ 	u_rq->request_type = xlate32(u_rq->request_type);
+-	u_rq->data_size = xlate64(u_rq->data_size);
++	u_rq->data_size = xlate32(u_rq->data_size);
+ 
+ 	rq->originator = xlate32(rq->originator);
+ 
+@@ -187,7 +188,7 @@ int clog_request_from_network(void *data, size_t data_len)
+ 
+ 	switch (version) {
+ 	case 5: /* Upstream */
+-		if (version == unconverted_version)
++		if (version == vp[0])
+ 			return 0;
+ 		break;
+ 	case 4: /* RHEL 5.[45] */
 
 
