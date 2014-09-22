@@ -1,90 +1,70 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Sep 2014 12:44:51 +0000 (UTC)
-Subject: master - raid: add missing backups
-Message-ID: <20140912124451.6676060DAB@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 22 Sep 2014 15:37:51 +0000 (UTC)
+Subject: dev-dct-process-latest - raid: add function for name creation
+Message-ID: <20140922153751.2056960EE6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd1fa0e808918b51a690e26de8a8cfff6c307854
-Commit:        dd1fa0e808918b51a690e26de8a8cfff6c307854
-Parent:        15ba2afdc2d70ee21c2599f0d51a413f0a7afa9b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2db0312455260cda6f45ee8d3814a00f3f297af0
+Commit:        2db0312455260cda6f45ee8d3814a00f3f297af0
+Parent:        40b7b107b186e1680db05dcb05230b978852d010
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 11 19:05:40 2014 +0200
+AuthorDate:    Fri Sep 12 11:30:00 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 12 13:42:57 2014 +0200
+CommitterDate: Fri Sep 12 13:51:29 2014 +0200
 
-raid: add missing backups
+raid: add function for name creation
 
-Add backup() calls that were missing after successful update
-of metadata.
+Add name for construction and validation of raid subvolume
+name with a given suffix.
+
+TODO: check if reusable for mirrors as well.
 ---
- WHATS_NEW                 |    2 ++
- lib/metadata/raid_manip.c |   17 ++++++++++++-----
- 2 files changed, 14 insertions(+), 5 deletions(-)
+ lib/metadata/raid_manip.c |   29 +++++++++++++++++++++++++++++
+ 1 files changed, 29 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 983bc1a..be549b8 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.02.112 - 
- =====================================
-+  Add missing backup of lvm2 metadata after some raid modifications.
-+  Use vg memory pool for extent allocation.
-   Add allocation/physical_extent_size config option for default PE size of VGs.
-   Introduce common code to modify metadate and reload updated LV.
-   Fix rename of active snapshot volume in cluster.
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index d39dbc8..91cc0dd 100644
+index b7ba464..bff6e59 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -13,6 +13,7 @@
-  */
- 
- #include "lib.h"
-+#include "archiver.h"
- #include "metadata.h"
- #include "toolcontext.h"
- #include "segtype.h"
-@@ -695,11 +696,13 @@ to be left for these sub-lvs.
- 			rebuild_flag_cleared = 1;
- 		}
- 	}
--	if (rebuild_flag_cleared &&
--	    (!vg_write(lv->vg) || !vg_commit(lv->vg))) {
--		log_error("Failed to clear REBUILD flag for %s/%s components",
--			  lv->vg->name, lv->name);
--		return 0;
-+	if (rebuild_flag_cleared) {
-+		if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
-+			log_error("Failed to clear REBUILD flag for %s/%s components",
-+				  lv->vg->name, lv->name);
-+			return 0;
-+		}
-+		backup(lv->vg);
- 	}
- 
- 	return 1;
-@@ -978,6 +981,8 @@ static int _raid_remove_images(struct logical_volume *lv,
- 			return_0;
- 	}
- 
-+	backup(lv->vg);
-+
+@@ -320,6 +320,35 @@ static int _shift_and_rename_image_components(struct lv_segment *seg)
  	return 1;
  }
  
-@@ -1149,6 +1154,8 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
- 	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
- 		return_0;
- 
-+	backup(lv->vg);
++/* Generate raid subvolume name and validate it */
++static char *_generate_raid_name(struct logical_volume *lv,
++				 const char *suffix, int count)
++{
++	const char *format = (count >= 0) ? "%s_%s_%u" : "%s_%s";
++	size_t len = strlen(lv->name) + strlen(suffix) + ((count >= 0) ? 5 : 2);
++	char *name;
 +
- 	return 1;
- }
- 
++	if (!(name = dm_pool_alloc(lv->vg->vgmem, len))) {
++		log_error("Failed to allocate new name.");
++		return NULL;
++	}
++
++	if (dm_snprintf(name, len, format, lv->name, suffix, count) < 0)
++		return_NULL;
++
++	if (!validate_name(name)) {
++		log_error("New logical volume name \"%s\" is not valid.", name);
++		return NULL;
++	}
++
++	if (find_lv_in_vg(lv->vg, name)) {
++		log_error("Logical volume %s already exists in volume group %s.",
++			  name, lv->vg->name);
++		return NULL;
++	}
++
++	return name;
++}
+ /*
+  * Create an LV of specified type.  Set visible after creation.
+  * This function does not make metadata changes.
 
 
