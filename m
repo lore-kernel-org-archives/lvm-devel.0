@@ -1,49 +1,57 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:37:17 +0000 (UTC)
-Subject: dev-dct-process-latest - lv_rename: actual fix for snapshot
-Message-ID: <20140922153717.75D816153C@fedorahosted.org>
+Date: Mon, 22 Sep 2014 15:37:34 +0000 (UTC)
+Subject: dev-dct-process-latest - filters: fix incorrect filter indexing in composite filter array
+Message-ID: <20140922153734.42771615CC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a86d9a3b305be466d221f2a5e210bc1cad8fe842
-Commit:        a86d9a3b305be466d221f2a5e210bc1cad8fe842
-Parent:        c710f02e0181cc2db5455f0c98033247a70ecc30
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 9 20:15:51 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 9 20:15:51 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=80ac8f37d6ac5f8c5228678d4ee07187b5d4db7b
+Commit:        80ac8f37d6ac5f8c5228678d4ee07187b5d4db7b
+Parent:        4748f4a9e4516a8c9226ce61b5a3ca41f0852ffc
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Sep 11 09:30:03 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Sep 11 09:30:03 2014 +0200
 
-lv_rename: actual fix for snapshot
+filters: fix incorrect filter indexing in composite filter array
 
-By my rebasing mistake it's been eliminated from previous patch set.
+Caused by recent changes - a7be3b12dfe7388d1648595e6cc4c7a1379bb8a7.
+If global filter was not defined, then part of the code
+creating composite filter (the cmd->lvmetad_filter) incorrectly
+increased index value even if this global filter was not created
+as part of the composite filter. This caused a gap with "NULL"
+value in the composite filter array which ended up with the rest
+of the filters after the gap to be ignored and also it caused a mem
+leak when destroying the composite filter.
 ---
- lib/metadata/lv_manip.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ lib/commands/toolcontext.c |   11 ++++++-----
+ 1 files changed, 6 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index cc7b6da..8c1bd83 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -3966,6 +3966,7 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 		log_error("Failed to allocate space for new name.");
- 		return 0;
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 5bf5cbf..c3afae4 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -861,12 +861,13 @@ static struct dev_filter *_init_filter_components(struct cmd_context *cmd)
  	}
-+
- 	/* rename sub LVs */
- 	if (!for_each_sub_lv(lv, _rename_cb, (void *) &lv_names))
- 		return_0;
-@@ -3973,6 +3974,9 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 	/* rename main LV */
- 	lv->name = lv_names.new;
  
-+	if (lv_is_cow(lv))
-+		lv = origin_from_cow(lv);
-+
- 	if (update_mda && !lv_update_and_reload(lv))
- 		return_0;
+ 	/* regex filter. Optional. */
+-	if ((cn = find_config_tree_node(cmd, devices_global_filter_CFG, NULL)) &&
+-	    !(filters[nr_filt] = regex_filter_create(cn->v))) {
+-		log_error("Failed to create global regex device filter");
+-		goto bad;
+-	} else
++	if ((cn = find_config_tree_node(cmd, devices_global_filter_CFG, NULL))) {
++		if (!(filters[nr_filt] = regex_filter_create(cn->v))) {
++			log_error("Failed to create global regex device filter");
++			goto bad;
++		}
+ 		nr_filt++;
++	}
  
+ 	/* device type filter. Required. */
+ 	if (!(filters[nr_filt] = lvm_type_filter_create(cmd->dev_types))) {
 
 
