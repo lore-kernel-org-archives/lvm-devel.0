@@ -1,70 +1,53 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Sep 2014 12:44:59 +0000 (UTC)
-Subject: master - raid: add function for name creation
-Message-ID: <20140912124459.B8CD461021@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 22 Sep 2014 15:38:45 +0000 (UTC)
+Subject: dev-dct-process-latest - cache-pool: Fix specification of cachemode when converting to cache-pool
+Message-ID: <20140922153845.B3CFF60E5C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2db0312455260cda6f45ee8d3814a00f3f297af0
-Commit:        2db0312455260cda6f45ee8d3814a00f3f297af0
-Parent:        40b7b107b186e1680db05dcb05230b978852d010
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 12 11:30:00 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 12 13:51:29 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9d57aa9a0fe00322cb188ad1f3103d57392546e7
+Commit:        9d57aa9a0fe00322cb188ad1f3103d57392546e7
+Parent:        b87a7683e23c2c309f11929a488230570daf0dc0
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Sep 16 22:19:53 2014 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Sep 16 22:19:53 2014 -0500
 
-raid: add function for name creation
+cache-pool:  Fix specification of cachemode when converting to cache-pool
 
-Add name for construction and validation of raid subvolume
-name with a given suffix.
-
-TODO: check if reusable for mirrors as well.
+Failure to copy the 'feature_flags' lvconvert_param to the matching
+lv_segment field meant that when a user specified the cachemode argument,
+the request was not honored.
 ---
- lib/metadata/raid_manip.c |   29 +++++++++++++++++++++++++++++
- 1 files changed, 29 insertions(+), 0 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    1 +
+ 2 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index b7ba464..bff6e59 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -320,6 +320,35 @@ static int _shift_and_rename_image_components(struct lv_segment *seg)
- 	return 1;
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 6c12186..1015835 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Fix inablility to specify cachemode when 'lvconvert'ing to cache-pool.
+   Disable vgchange of clustered attribute with any active LV in VG.
+   Use va_copy to properly pass va_list through functions.
+   Add function to detect rotational devices.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index c7eb02d..93a2be4 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2925,6 +2925,7 @@ mda_write:
+ 	seg->chunk_size = lp->chunk_size;
+ 	seg->discards = lp->discards;
+ 	seg->zero_new_blocks = lp->zero ? 1 : 0;
++	seg->feature_flags = lp->feature_flags; /* cache-pool */
  
-+/* Generate raid subvolume name and validate it */
-+static char *_generate_raid_name(struct logical_volume *lv,
-+				 const char *suffix, int count)
-+{
-+	const char *format = (count >= 0) ? "%s_%s_%u" : "%s_%s";
-+	size_t len = strlen(lv->name) + strlen(suffix) + ((count >= 0) ? 5 : 2);
-+	char *name;
-+
-+	if (!(name = dm_pool_alloc(lv->vg->vgmem, len))) {
-+		log_error("Failed to allocate new name.");
-+		return NULL;
-+	}
-+
-+	if (dm_snprintf(name, len, format, lv->name, suffix, count) < 0)
-+		return_NULL;
-+
-+	if (!validate_name(name)) {
-+		log_error("New logical volume name \"%s\" is not valid.", name);
-+		return NULL;
-+	}
-+
-+	if (find_lv_in_vg(lv->vg, name)) {
-+		log_error("Logical volume %s already exists in volume group %s.",
-+			  name, lv->vg->name);
-+		return NULL;
-+	}
-+
-+	return name;
-+}
- /*
-  * Create an LV of specified type.  Set visible after creation.
-  * This function does not make metadata changes.
+ 	/* Rename deactivated metadata LV to have _tmeta suffix */
+ 	/* Implicit checks if metadata_lv is visible */
 
 
