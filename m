@@ -1,93 +1,42 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Sep 2014 12:44:55 +0000 (UTC)
-Subject: master - raid: add missing archive call
-Message-ID: <20140912124455.92BD6601AB@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 22 Sep 2014 15:38:24 +0000 (UTC)
+Subject: dev-dct-process-latest - test: test there is no leak of LV on error path
+Message-ID: <20140922153824.B2AA660EE6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08bde75093665001e7b30a7491c5bb9a53383d56
-Commit:        08bde75093665001e7b30a7491c5bb9a53383d56
-Parent:        569184a3bb124f94bc79c1a1d042f686270e7864
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f435bef957cea11a16d15ea10a1d85193bacd736
+Commit:        f435bef957cea11a16d15ea10a1d85193bacd736
+Parent:        75a5de1462c30f364c7d478a4f74f355ce559ae9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 12 11:30:38 2014 +0200
+AuthorDate:    Mon Sep 15 13:44:41 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 12 13:45:49 2014 +0200
+CommitterDate: Mon Sep 15 13:51:19 2014 +0200
 
-raid: add missing archive call
+test: test there is no leak of LV on error path
 
-Before starting to update raid metadata, archive existing unmodified one.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/raid_manip.c |   15 +++++++++++++++
- 2 files changed, 16 insertions(+), 0 deletions(-)
+ test/shell/thin-volume-list.sh |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f65d7fb..a84ef4b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Archive metadata before starting their modification in raid target.
-   Add missing vg_revert in suspend_lv() error path in raid target.
-   Add missing backup of lvm2 metadata after some raid modifications.
-   Use vg memory pool for extent allocation.
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 989244c..4bfe9c9 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -520,6 +520,9 @@ static int _raid_add_images(struct logical_volume *lv,
- 		return 0;
- 	}
+diff --git a/test/shell/thin-volume-list.sh b/test/shell/thin-volume-list.sh
+index b53e772..31f4034 100644
+--- a/test/shell/thin-volume-list.sh
++++ b/test/shell/thin-volume-list.sh
+@@ -38,6 +38,11 @@ aux lvmconf "activation/volume_list = [ \"$vg1\" ]"
+ # Pool is not active - so it cannot create thin volume
+ not lvcreate -V10 -T $vg/pool
  
-+	if (!archive(lv->vg))
-+		return_0;
++# Cannot create even new pool
++# check there are not left devices (RHBZ #1140128)
++not lvcreate -L10 -T $vg/new_pool
++check lv_not_exists $vg/new_pool
 +
- 	dm_list_init(&meta_lvs); /* For image addition */
- 	dm_list_init(&data_lvs); /* For image addition */
+ aux lvmconf "activation/volume_list = [ \"$vg\" ]"
  
-@@ -909,6 +912,9 @@ static int _raid_remove_images(struct logical_volume *lv,
- 	struct dm_list removal_list;
- 	struct lv_list *lvl;
- 
-+	if (!archive(lv->vg))
-+		return_0;
-+
- 	dm_list_init(&removal_list);
- 
- 	if (!_raid_extract_images(lv, new_count, pvs, 1,
-@@ -1313,6 +1319,9 @@ static int _convert_mirror_to_raid1(struct logical_volume *lv,
- 		return 0;
- 	}
- 
-+	if (!archive(lv->vg))
-+		return_0;
-+
- 	for (s = 0; s < seg->area_count; s++) {
- 		log_debug_metadata("Allocating new metadata LV for %s",
- 				   seg_lv(seg, s)->name);
-@@ -1543,6 +1552,9 @@ int lv_raid_replace(struct logical_volume *lv,
- 		return 0;
- 	}
- 
-+	if (!archive(lv->vg))
-+		return_0;
-+
- 	/*
- 	 * How many sub-LVs are being removed?
- 	 */
-@@ -1767,6 +1779,9 @@ int lv_raid_remove_missing(struct logical_volume *lv)
- 		return 0;
- 	}
- 
-+	if (!archive(lv->vg))
-+		return_0;
-+
- 	log_debug("Attempting to remove missing devices from %s LV, %s",
- 		  seg->segtype->ops->name(seg), lv->name);
- 
+ lvcreate -V10 -T $vg/pool
 
 
