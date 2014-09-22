@@ -1,43 +1,48 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:39:42 +0000 (UTC)
-Subject: dev-dct-process-latest - cache: fix regression and invert test
-Message-ID: <20140922153942.81C3060D27@fedorahosted.org>
+Date: Mon, 22 Sep 2014 15:39:48 +0000 (UTC)
+Subject: dev-dct-process-latest - Revert "toollib: print ignoring vorigin"
+Message-ID: <20140922153948.BD80E60228@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d274724c83e0bed34b4a1d794a6eb16cab777c05
-Commit:        d274724c83e0bed34b4a1d794a6eb16cab777c05
-Parent:        386fbf8e0d30823854ffefb1b4e3b47b09ec5905
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 19 16:16:36 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 19 16:18:39 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aa33c4245b312cc883890d19e5d769a3d3c441ba
+Commit:        aa33c4245b312cc883890d19e5d769a3d3c441ba
+Parent:        392bb6f46eb73dcf725566fbdf006a4e02ae7502
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Sep 4 13:27:05 2014 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Sep 22 10:32:23 2014 -0500
 
-cache: fix regression and invert test
+Revert "toollib: print ignoring vorigin"
 
-Last commit c710f02e0181cc2db5455f0c98033247a70ecc30
-converting code to use lv_update_and_reload()
-intoduced invalid test for error result.
-Fix it and properly check for  if (!...)
+This reverts commit 7f4b1e7411d7ff59abe2063db7273fd600e2bf72.
+
+will reapply this on top of toollib patch set
 ---
- lib/metadata/cache_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/toollib.c |    7 +------
+ 1 files changed, 1 insertions(+), 6 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 73df448..7f5ea65 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -224,7 +224,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
- 		cache_seg->policy_argv = NULL;
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 7be5b5a..03d83e5 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -230,13 +230,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 		    lv_is_cow(lvl->lv) && !lv_is_virtual_origin(origin_from_cow(lvl->lv)))
+ 			continue;
  
- 		/* update the kernel to put the cleaner policy in place */
--		if (lv_update_and_reload(cache_lv))
-+		if (!lv_update_and_reload(cache_lv))
-                         return_0;
- 	}
+-		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG)) {
+-			if (lvargs_supplied &&
+-			    str_list_match_item(arg_lvnames, lvl->lv->name))
+-				log_print_unless_silent("Ignoring virtual origin logical volume %s.",
+-							display_lvname(lvl->lv));
++		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG))
+ 			continue;
+-		}
  
+ 		/*
+ 		 * Only let hidden LVs through it --all was used or the LVs 
 
 
