@@ -1,77 +1,87 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue, 30 Sep 2014 09:40:57 +0000 (UTC)
-Subject: master - conf: Update comments on lvmetad+filters in example.conf.in.
-Message-ID: <20140930094057.7F59360E00@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 22 Sep 2014 15:39:32 +0000 (UTC)
+Subject: dev-dct-process-latest - lvchange: backup final metadata
+Message-ID: <20140922153932.0BE706092E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fbc28cc7adb453122b83a18361809152bdee263f
-Commit:        fbc28cc7adb453122b83a18361809152bdee263f
-Parent:        9f3c11b39acc4252d6d40ae040319f66f9060a75
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Sep 30 11:39:07 2014 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Tue Sep 30 11:39:07 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3adc50ac22f5a3e355db5d143303c8b7dfb7c828
+Commit:        3adc50ac22f5a3e355db5d143303c8b7dfb7c828
+Parent:        f09f85d027d8833727483efd6077f52d2e5b6ba2
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Sep 19 15:16:26 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Sep 19 15:55:34 2014 +0200
 
-conf: Update comments on lvmetad+filters in example.conf.in.
+lvchange: backup final metadata
 
+Shift backup after final metadata commit.
+
+Synchronize with wiping.
 ---
- conf/example.conf.in |   35 ++++++++++++++++++++---------------
- 1 files changed, 20 insertions(+), 15 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvchange.c |    9 ++++++++-
+ 2 files changed, 9 insertions(+), 1 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 511ca0b..dd1d066 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -678,26 +678,31 @@ global {
-     # If lvmetad has been running while use_lvmetad was 0, it MUST be stopped
-     # before changing use_lvmetad to 1 and started again afterwards.
-     #
--    # If using lvmetad, the volume activation is also switched to automatic
-+    # If using lvmetad, volume activation is also switched to automatic
-     # event-based mode. In this mode, the volumes are activated based on
--    # incoming udev events that automatically inform lvmetad about new PVs
--    # that appear in the system. Once the VG is complete (all the PVs are
--    # present), it is auto-activated. The activation/auto_activation_volume_list
--    # setting controls which volumes are auto-activated (all by default).
--    #
-+    # incoming udev events that automatically inform lvmetad about new PVs that
-+    # appear in the system. Once a VG is complete (all the PVs are present), it
-+    # is auto-activated. The activation/auto_activation_volume_list setting
-+    # controls which volumes are auto-activated (all by default).
-+
-     # A note about device filtering while lvmetad is used:
--    # When lvmetad is updated (either automatically based on udev events
--    # or directly by pvscan --cache <device> call), the devices/filter
--    # is ignored and all devices are scanned by default. The lvmetad always
--    # keeps unfiltered information which is then provided to LVM commands
--    # and then each LVM command does the filtering based on devices/filter
--    # setting itself.
--    # To prevent scanning devices completely, even when using lvmetad,
--    # the devices/global_filter must be used.
-+
-+    # When lvmetad is updated (either automatically based on udev events or
-+    # directly by a pvscan --cache <device> call), devices/filter is ignored and
-+    # all devices are scanned by default -- lvmetad always keeps unfiltered
-+    # information which is then provided to LVM commands and then each LVM
-+    # command does the filtering based on devices/filter setting itself.  This
-+    # does not apply to non-regexp filters though: component filters such as
-+    # multipath and MD are checked at pvscan --cache time.
-+
-+    # In order to completely prevent LVM from scanning a device, even when using
-+    # lvmetad, devices/global_filter must be used.
-+
-     # N.B. Don't use lvmetad with locking type 3 as lvmetad is not yet
-     # supported in clustered environment. If use_lvmetad=1 and locking_type=3
-     # is set at the same time, LVM always issues a warning message about this
--    # and then it automatically disables lvmetad use.
-+    # and then it automatically disables use_lvmetad.
-+
-     use_lvmetad = 0
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a2c4577..c5ba9fa 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Backup final metadata after resync of mirror/raid.
+   Unify handling of --persistent option for lvcreate and lvchange.
+   Validate major and minor numbers stored in metadata.
+   Use -fPIE when linking -pie executables.
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 8ccbe19..b196591 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -14,6 +14,7 @@
+  */
  
-     # Full path of the utility called to check that a thin metadata device
+ #include "tools.h"
++#include "memlock.h"
+ 
+ static int lvchange_permission(struct cmd_context *cmd,
+ 			       struct logical_volume *lv)
+@@ -416,7 +417,8 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 		return 0;
+ 	}
+ 
+-	backup(lv->vg);
++	/* No backup for intermediate metadata, so just unlock memory */
++	memlock_unlock(lv->vg->cmd);
+ 
+ 	dm_list_iterate_items(lvl, &device_list) {
+ 		if (!activate_lv_excl_local(cmd, lvl->lv)) {
+@@ -449,6 +451,8 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 		}
+ 	}
+ 
++	sync_local_dev_names(lv->vg->cmd);  /* Wait until devices are away */
++
+ 	/* Put metadata sub-LVs back in place */
+ 	if (!attach_metadata_devices(seg, &device_list)) {
+ 		log_error("Failed to reattach %s device after clearing",
+@@ -463,11 +467,14 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 	}
+ 
+ 	if (!_reactivate_lv(lv, active, exclusive)) {
++		backup(lv->vg);
+ 		log_error("Failed to reactivate %s after resync",
+ 			  lv->name);
+ 		return 0;
+ 	}
+ 
++	backup(lv->vg);
++
+ 	return 1;
+ }
+ 
 
 
