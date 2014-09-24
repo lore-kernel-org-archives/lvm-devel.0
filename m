@@ -1,53 +1,64 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 24 Sep 2014 08:56:39 +0000 (UTC)
-Subject: master - activate: lv_check_not_in_use no check of closed
-Message-ID: <20140924085639.66D696109B@fedorahosted.org>
+Date: Wed, 24 Sep 2014 08:56:41 +0000 (UTC)
+Subject: master - lv_ondisk: option search for lv without vg_ondisk
+Message-ID: <20140924085641.80EB76109B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0f2adcc9efc8621fa5cf3a1871f2294fa7da7f1f
-Commit:        0f2adcc9efc8621fa5cf3a1871f2294fa7da7f1f
-Parent:        392bb6f46eb73dcf725566fbdf006a4e02ae7502
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9776979b02ddd6405e13208a74fedfee0e1cfec3
+Commit:        9776979b02ddd6405e13208a74fedfee0e1cfec3
+Parent:        0f2adcc9efc8621fa5cf3a1871f2294fa7da7f1f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Sep 21 23:07:02 2014 +0200
+AuthorDate:    Sun Sep 21 23:10:04 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 24 10:47:00 2014 +0200
+CommitterDate: Wed Sep 24 10:48:01 2014 +0200
 
-activate: lv_check_not_in_use no check of closed
+lv_ondisk: option search for lv without vg_ondisk
 
-Don't perform expensive sysfs tests when the device is closed.
-(having open_count == 0).
+When vg_ondisk is NULL we do not need to search
+through the whole VG to find out the same LV.
+
+NOTE: as of now - VG locking is not enabled as some code parts
+are breaking memory locking rules (lvm2app).
+
+Once we enforce VG locking for read-only commands the effect
+will be much better for larger VGs.
 ---
  WHATS_NEW               |    1 +
- lib/activate/activate.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ lib/metadata/metadata.c |    6 +++---
+ 2 files changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index c5ba9fa..b4ee934 100644
+index b4ee934..9869130 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.112 - 
  =====================================
-+  Do not scan sysfs in lv_check_not_in_use() when device is closed.
++  Improve search of LV in lv_ondisk().
+   Do not scan sysfs in lv_check_not_in_use() when device is closed.
    Backup final metadata after resync of mirror/raid.
    Unify handling of --persistent option for lvcreate and lvchange.
-   Validate major and minor numbers stored in metadata.
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 2091fa1..7f3a711 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -700,7 +700,7 @@ int lv_check_not_in_use(struct cmd_context *cmd, struct logical_volume *lv,
- {
- 	unsigned int open_count_check_retries;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 0842563..464b8bc 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4813,10 +4813,10 @@ struct logical_volume *lv_ondisk(struct logical_volume *lv)
+ 	if (!lv)
+ 		return NULL;
  
--	if (!info->exists)
-+	if (!info->exists || !info->open_count)
- 		return 1;
+-	vg = lv->vg;
++	if (!lv->vg->vg_ondisk)
++		return lv;
  
- 	/* If sysfs is not used, use open_count information only. */
+-	if (vg->vg_ondisk)
+-		vg = vg->vg_ondisk;
++	vg = lv->vg->vg_ondisk;
+ 
+ 	dm_list_iterate_items(lvl, &vg->lvs)
+ 		if (!strncmp(lvl->lv->lvid.s, lv->lvid.s, sizeof(lv->lvid)))
 
 
