@@ -1,34 +1,39 @@
-From: heinzm@redhat.com <heinzm@redhat.com>
-Date: Wed, 24 Sep 2014 14:33:21 +0200
-Subject: [PATCH] Use segtype.h definitions of segment type names wherever possible
-Message-ID: <1411562001-11962-1-git-send-email-heinzm@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 24 Sep 2014 13:26:01 +0000 (UTC)
+Subject: master - cleanup: Use segtype.h definitions of segment type names wherever possible
+Message-ID: <20140924132601.E8A4E60F20@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Heinz Mauelshagen <heinzm@redhat.com>
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45f57477f46368fbad1864e4606690b274dd2e7d
+Commit:        45f57477f46368fbad1864e4606690b274dd2e7d
+Parent:        21aa850b43535ab251eebabe2a2773a62439bf61
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Wed Sep 24 15:24:41 2014 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Sep 24 15:24:41 2014 +0200
 
+cleanup: Use segtype.h definitions of segment type names wherever possible
 
 We are not using already defined segement type names where we could.
 
-There is a lot of other places in device-mapper and LVM2 we have those hardcoded
-so we should better finally have a common interface in libdevmapper to avoid this.
-
-
-
+There is a lot of other places in device-mapper and LVM2 we have those
+hardcoded so we should better finally have a common interface in
+libdevmapper to avoid this.
 ---
- lib/metadata/lv_manip.c   | 30 +++++++++++++++---------------
- lib/metadata/raid_manip.c | 12 ++++++------
- lib/raid/raid.c           |  4 ++--
- tools/lvchange.c          |  2 +-
- tools/lvconvert.c         |  9 +++++----
- tools/lvcreate.c          | 10 +++++-----
+ lib/metadata/lv_manip.c   |   30 +++++++++++++++---------------
+ lib/metadata/raid_manip.c |   12 ++++++------
+ lib/raid/raid.c           |    4 ++--
+ tools/lvchange.c          |    2 +-
+ tools/lvconvert.c         |    9 +++++----
+ tools/lvcreate.c          |   10 +++++-----
  6 files changed, 34 insertions(+), 33 deletions(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 968b8d0..5589cc7 100644
+index 70e8013..6136b43 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
 @@ -158,18 +158,18 @@ static const char *_lv_type_names[] = {
@@ -90,7 +95,7 @@ index 968b8d0..5589cc7 100644
  	
  				sz = seg->stripe_size;
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index f494f11..603ad1f 100644
+index c07de90..44272e8 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
 @@ -431,7 +431,7 @@ static int _alloc_image_components(struct logical_volume *lv,
@@ -138,7 +143,7 @@ index f494f11..603ad1f 100644
  		uint32_t i, rebuilds_per_group = 0;
  		/* FIXME: We only support 2-way mirrors in RAID10 currently */
  		uint32_t copies = 2;
-@@ -1829,7 +1829,7 @@ static int _partial_raid_lv_is_redundant(struct logical_volume *lv)
+@@ -1829,7 +1829,7 @@ static int _partial_raid_lv_is_redundant(const struct logical_volume *lv)
  	uint32_t i, s, rebuilds_per_group = 0;
  	uint32_t failed_components = 0;
  
@@ -170,7 +175,7 @@ index 831c912..6628dc8 100644
  
  	static int _raid_checked = 0;
 diff --git a/tools/lvchange.c b/tools/lvchange.c
-index e520157..eb13225 100644
+index 7497bde..288b736 100644
 --- a/tools/lvchange.c
 +++ b/tools/lvchange.c
 @@ -640,7 +640,7 @@ static int lvchange_writemostly(struct logical_volume *lv)
@@ -183,7 +188,7 @@ index e520157..eb13225 100644
  			  arg_count(cmd, writemostly_ARG) ? "mostly" : "behind");
  		return 0;
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 6a2676b..74b6e17 100644
+index 1d60c21..28a3526 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
 @@ -1720,8 +1720,9 @@ static int _lvconvert_mirrors(struct cmd_context *cmd,
@@ -198,23 +203,23 @@ index 6a2676b..74b6e17 100644
  		return 0;
  	}
  
-@@ -2703,7 +2704,7 @@ static int _lvconvert_pool(struct cmd_context *cmd,
- 		if (lv_is_mirror(metadata_lv)) {
- 			log_error("Mirror logical volumes cannot be used "
- 				  "for pool metadata.");
--			log_error("Try \"raid1\" segment type instead.");
-+			log_error("Try \"%s\" segment type instead.", SEG_TYPE_NAME_RAID1);
- 			return 0;
- 		}
- 
-@@ -2755,7 +2756,7 @@ static int _lvconvert_pool(struct cmd_context *cmd,
+@@ -2667,7 +2668,7 @@ static int _lvconvert_pool(struct cmd_context *cmd,
  
  	if (lv_is_mirror(pool_lv)) {
- 		log_error("Mirror logical volumes cannot be used as pools.\n"
--			  "Try \"raid1\" segment type instead.");
-+			  "Try \"%s\" segment type instead.", SEG_TYPE_NAME_RAID1);
+ 		log_error("Mirror logical volumes cannot be used as pools.");
+-		log_print_unless_silent("Try \"raid1\" segment type instead.");
++		log_print_unless_silent("Try \"%s\" segment type instead.", SEG_TYPE_NAME_RAID1);
  		return 0;
  	}
+ 
+@@ -2713,7 +2714,7 @@ static int _lvconvert_pool(struct cmd_context *cmd,
+ 
+ 		if (lv_is_mirror(metadata_lv)) {
+ 			log_error("Mirror logical volumes cannot be used for pool metadata.");
+-			log_print_unless_silent("Try \"raid1\" segment type instead.");
++			log_print_unless_silent("Try \"%s\" segment type instead.", SEG_TYPE_NAME_RAID1);
+ 			return 0;
+ 		}
  
 diff --git a/tools/lvcreate.c b/tools/lvcreate.c
 index 499d686..7c811ba 100644
@@ -265,7 +270,5 @@ index 499d686..7c811ba 100644
  		if (!arg_count(cmd, stripes_ARG))
  			lp->stripes = devs / lp->mirrors;
  		if (lp->stripes < 2) {
--- 
-1.9.3
 
 
