@@ -1,68 +1,64 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 24 Sep 2014 08:57:13 +0000 (UTC)
-Subject: master - cleanup: simplier _lv_passes_volumes_filter
-Message-ID: <20140924085713.03A3E613A4@fedorahosted.org>
+Date: Wed, 24 Sep 2014 08:57:15 +0000 (UTC)
+Subject: master - cleanup: replace error with print message
+Message-ID: <20140924085715.27491613A4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bc0a3e23553f8d622a7218ded55ac1fdaa75286c
-Commit:        bc0a3e23553f8d622a7218ded55ac1fdaa75286c
-Parent:        a1213401393ac6e6a9a9e168379574469eb715c8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=914be0696daf3603b6db055b2afe146190e9a7f7
+Commit:        914be0696daf3603b6db055b2afe146190e9a7f7
+Parent:        bc0a3e23553f8d622a7218ded55ac1fdaa75286c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Sep 21 01:08:43 2014 +0200
+AuthorDate:    Sat Sep 20 22:05:29 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 24 10:54:47 2014 +0200
 
-cleanup: simplier _lv_passes_volumes_filter
+cleanup: replace error with print message
 
-Don't recreate string and just check components directly.
+These are not error messages.
+They are informing a user about missconfigured
+options which do not change resulting error status.
 ---
- lib/activate/activate.c |   23 +++++++----------------
- 1 files changed, 7 insertions(+), 16 deletions(-)
+ lib/activate/activate.c |   13 ++++++-------
+ 1 files changed, 6 insertions(+), 7 deletions(-)
 
 diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 3f9d1a2..2a94ea6 100644
+index 2a94ea6..4e1ec5f 100644
 --- a/lib/activate/activate.c
 +++ b/lib/activate/activate.c
-@@ -114,7 +114,7 @@ static int _lv_passes_volumes_filter(struct cmd_context *cmd, const struct logic
- 	const struct dm_config_value *cv;
- 	const char *str;
- 	static char config_path[PATH_MAX];
--	static char path[PATH_MAX];
-+	size_t len = strlen(lv->vg->name);
- 
- 	config_def_get_path(config_path, sizeof(config_path), cfg_id);
- 	log_verbose("%s configuration setting defined: "
-@@ -161,21 +161,12 @@ static int _lv_passes_volumes_filter(struct cmd_context *cmd, const struct logic
- 			else
- 				continue;
+@@ -125,24 +125,23 @@ static int _lv_passes_volumes_filter(struct cmd_context *cmd, const struct logic
+ 		if (cv->type == DM_CFG_EMPTY_ARRAY)
+ 			goto out;
+ 		if (cv->type != DM_CFG_STRING) {
+-			log_error("Ignoring invalid string in config file %s",
+-				  config_path);
++			log_print_unless_silent("Ignoring invalid string in config file %s.",
++						config_path);
+ 			continue;
  		}
--		if (!strchr(str, '/')) {
--			/* vgname supplied */
--			if (!strcmp(str, lv->vg->name))
--				return 1;
--			else
--				continue;
--		}
--		/* vgname/lvname */
--		if (dm_snprintf(path, sizeof(path), "%s/%s", lv->vg->name,
--				 lv->name) < 0) {
--			log_error("dm_snprintf error from %s/%s", lv->vg->name,
--				  lv->name);
--			continue;
--		}
--		if (!strcmp(path, str))
-+
-+		/* If supplied name is vgname[/lvname] */
-+		if ((strncmp(str, lv->vg->name, len) == 0) &&
-+		    (!str[len] ||
-+		     ((str[len] == '/') &&
-+		      !strcmp(str + len + 1, lv->name))))
- 			return 1;
- 	}
+ 		str = cv->v.str;
+ 		if (!*str) {
+-			log_error("Ignoring empty string in config file %s",
+-				  config_path);
++			log_print_unless_silent("Ignoring empty string in config file %s.",
++						config_path);
+ 			continue;
+ 		}
  
+-
+ 		/* Tag? */
+ 		if (*str == '@') {
+ 			str++;
+ 			if (!*str) {
+-				log_error("Ignoring empty tag in config file "
+-					  "%s", config_path);
++				log_print_unless_silent("Ignoring empty tag in config file %s",
++							config_path);
+ 				continue;
+ 			}
+ 			/* If any host tag matches any LV or VG tag, activate */
 
 
