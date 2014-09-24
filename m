@@ -1,129 +1,258 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 22 Sep 2014 15:39:25 +0000 (UTC)
-Subject: dev-dct-process-latest - cleanup: use const for cmd context
-Message-ID: <20140922153925.B6C396092E@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 24 Sep 2014 08:57:08 +0000 (UTC)
+Subject: master - activate: update lv_check_not_in_use: API
+Message-ID: <20140924085708.C9AFB60D58@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=656ba3a744af5548ee0a5983590698aeee3dd326
-Commit:        656ba3a744af5548ee0a5983590698aeee3dd326
-Parent:        e2312d28ed031dd5c53084b4789763f3c5e6410c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a8aee7dba2b76409d1630edc4f76021b50b08792
+Commit:        a8aee7dba2b76409d1630edc4f76021b50b08792
+Parent:        c96665e6a88780e31a84f9fb287c2e30c7552b0c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 19 14:29:12 2014 +0200
+AuthorDate:    Wed Sep 24 10:05:26 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 19 15:51:31 2014 +0200
+CommitterDate: Wed Sep 24 10:54:47 2014 +0200
 
-cleanup: use const for cmd context
+activate: update lv_check_not_in_use: API
 
+Use of lv_info() internally in lv_check_not_in_use(),
+so it always could use with_open_count properly.
+
+Skip sysfs() testing in open_count == 0 case.
+
+Accept just 'lv' pointer like other functions.
+
+The function has 'built-in' lv_is_active_locally check,
+which however is not what we need to check in many place.
+For now at least remotely active snapshot merge is
+detected and for this case merge on next activation is scheduled.
 ---
- tools/lvmcmdline.c |   18 +++++++++---------
- tools/tools.h      |   20 ++++++++++----------
- 2 files changed, 19 insertions(+), 19 deletions(-)
+ lib/activate/activate.c |   25 +++++++++++--------------
+ lib/activate/activate.h |    3 +--
+ lib/metadata/lv_manip.c |    6 ++----
+ tools/lvchange.c        |    4 ++--
+ tools/lvconvert.c       |   23 +++++++++++++----------
+ tools/vgchange.c        |    4 +---
+ 6 files changed, 30 insertions(+), 35 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 04598e2..d90ef91 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -137,12 +137,12 @@ const char *arg_long_option_name(int a)
- 	return _cmdline.arg_props[a].long_arg;
- }
- 
--const char *arg_value(struct cmd_context *cmd, int a)
-+const char *arg_value(const struct cmd_context *cmd, int a)
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 82ce6d8..3f9d1a2 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -248,8 +248,7 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
  {
- 	return cmd->arg_values[a].value;
+ 	return 0;
  }
- 
--const char *arg_str_value(struct cmd_context *cmd, int a, const char *def)
-+const char *arg_str_value(const struct cmd_context *cmd, int a, const char *def)
+-int lv_check_not_in_use(struct cmd_context *cmd, const struct logical_volume *lv,
+-			struct lvinfo *info)
++int lv_check_not_in_use(const struct logical_volume *lv)
  {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].value : def;
+         return 0;
  }
-@@ -157,7 +157,7 @@ int32_t grouped_arg_int_value(const struct arg_values *av, int a, const int32_t
- 	return grouped_arg_count(av, a) ? av[a].i_value : def;
- }
+@@ -695,23 +694,23 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
+ #define OPEN_COUNT_CHECK_RETRIES 25
+ #define OPEN_COUNT_CHECK_USLEEP_DELAY 200000
  
--int32_t first_grouped_arg_int_value(struct cmd_context *cmd, int a, const int32_t def)
-+int32_t first_grouped_arg_int_value(const struct cmd_context *cmd, int a, const int32_t def)
+-int lv_check_not_in_use(struct cmd_context *cmd, const struct logical_volume *lv,
+-			struct lvinfo *info)
++int lv_check_not_in_use(const struct logical_volume *lv)
  {
- 	struct arg_value_group_list *current_group;
- 	struct arg_values *av;
-@@ -171,23 +171,23 @@ int32_t first_grouped_arg_int_value(struct cmd_context *cmd, int a, const int32_
- 	return def;
- }
++	struct lvinfo info;
+ 	unsigned int open_count_check_retries;
  
--int32_t arg_int_value(struct cmd_context *cmd, int a, const int32_t def)
-+int32_t arg_int_value(const struct cmd_context *cmd, int a, const int32_t def)
+-	if (!info->exists || !info->open_count)
++	if (!lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) || !info.exists || !info.open_count)
+ 		return 1;
+ 
+ 	/* If sysfs is not used, use open_count information only. */
+ 	if (dm_sysfs_dir()) {
+-		if (dm_device_has_holders(info->major, info->minor)) {
++		if (dm_device_has_holders(info.major, info.minor)) {
+ 			log_error("Logical volume %s/%s is used by another device.",
+ 				  lv->vg->name, lv->name);
+ 			return 0;
+ 		}
+ 
+-		if (dm_device_has_mounted_fs(info->major, info->minor)) {
++		if (dm_device_has_mounted_fs(info.major, info.minor)) {
+ 			log_error("Logical volume %s/%s contains a filesystem in use.",
+ 				  lv->vg->name, lv->name);
+ 			return 0;
+@@ -719,7 +718,7 @@ int lv_check_not_in_use(struct cmd_context *cmd, const struct logical_volume *lv
+ 	}
+ 
+ 	open_count_check_retries = retry_deactivation() ? OPEN_COUNT_CHECK_RETRIES : 1;
+-	while (info->open_count > 0 && open_count_check_retries--) {
++	while (info.open_count > 0 && open_count_check_retries--) {
+ 		if (!open_count_check_retries) {
+ 			log_error("Logical volume %s/%s in use.",
+ 				  lv->vg->name, lv->name);
+@@ -729,7 +728,7 @@ int lv_check_not_in_use(struct cmd_context *cmd, const struct logical_volume *lv
+ 		usleep(OPEN_COUNT_CHECK_USLEEP_DELAY);
+ 		log_debug_activation("Retrying open_count check for %s/%s.",
+ 				     lv->vg->name, lv->name);
+-		if (!lv_info(cmd, lv, 0, info, 1, 0)) {
++		if (!lv_info(lv->vg->cmd, lv, 0, &info, 1, 0)) {
+ 			stack; /* device dissappeared? */
+ 			break;
+ 		}
+@@ -2104,12 +2103,10 @@ int lv_resume(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only,
+ static int _lv_has_open_snapshots(const struct logical_volume *lv)
  {
- 	return (_cmdline.arg_props[a].flags & ARG_GROUPABLE) ?
- 		first_grouped_arg_int_value(cmd, a, def) : (arg_count(cmd, a) ? cmd->arg_values[a].i_value : def);
- }
+ 	struct lv_segment *snap_seg;
+-	struct lvinfo info;
+ 	int r = 0;
  
--uint32_t arg_uint_value(struct cmd_context *cmd, int a, const uint32_t def)
-+uint32_t arg_uint_value(const struct cmd_context *cmd, int a, const uint32_t def)
+ 	dm_list_iterate_items_gen(snap_seg, &lv->snapshot_segs, origin_list)
+-		if (!lv_info(lv->vg->cmd, snap_seg->cow, 0, &info, 1, 0) ||
+-		    !lv_check_not_in_use(lv->vg->cmd, snap_seg->cow, &info))
++		if (!lv_check_not_in_use(snap_seg->cow))
+ 			r++;
+ 
+ 	if (r)
+@@ -2140,7 +2137,7 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
+ 
+ 	log_debug_activation("Deactivating %s/%s.", lv->vg->name, lv->name);
+ 
+-	if (!lv_info(cmd, lv, 0, &info, 1, 0))
++	if (!lv_info(cmd, lv, 0, &info, 0, 0))
+ 		goto_out;
+ 
+ 	if (!info.exists) {
+@@ -2150,7 +2147,7 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
+ 
+ 	if (lv_is_visible(lv) || lv_is_virtual_origin(lv) ||
+ 	    lv_is_merging_thin_snapshot(lv)) {
+-		if (!lv_check_not_in_use(cmd, lv, &info))
++		if (!lv_check_not_in_use(lv))
+ 			goto_out;
+ 
+ 		if (lv_is_origin(lv) && _lv_has_open_snapshots(lv))
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index 17648fc..4f32bca 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -95,8 +95,7 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_la
+ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
+ 		    struct lvinfo *info, int with_open_count, int with_read_ahead);
+ 
+-int lv_check_not_in_use(struct cmd_context *cmd, const struct logical_volume *lv,
+-			struct lvinfo *info);
++int lv_check_not_in_use(const struct logical_volume *lv);
+ 
+ /*
+  * Returns 1 if activate_lv has been set: 1 = activate; 0 = don't.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 81cc997..70e8013 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5363,7 +5363,6 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		     force_t force, int suppress_remove_message)
  {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].ui_value : def;
- }
+ 	struct volume_group *vg;
+-	struct lvinfo info;
+ 	struct logical_volume *format1_origin = NULL;
+ 	int format1_reload_required = 0;
+ 	int visible;
+@@ -5422,9 +5421,8 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	/* FIXME Ensure not referred to by another existing LVs */
+ 	ask_discard = find_config_tree_bool(cmd, devices_issue_discards_CFG, NULL);
  
--int64_t arg_int64_value(struct cmd_context *cmd, int a, const int64_t def)
-+int64_t arg_int64_value(const struct cmd_context *cmd, int a, const int64_t def)
+-	if (!lv_is_cache_pool(lv) &&
+-	    lv_info(cmd, lv, 0, &info, 1, 0)) {
+-		if (!lv_check_not_in_use(cmd, lv, &info))
++	if (!lv_is_cache_pool(lv) && lv_is_active_locally(lv)) {
++		if (!lv_check_not_in_use(lv))
+ 			return_0;
+ 
+ 		if ((force == PROMPT) &&
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index e520157..7497bde 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -304,8 +304,8 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 		return 0;
+ 	}
+ 
+-	if (lv_info(cmd, lv, 0, &info, 1, 0)) {
+-		if (!lv_check_not_in_use(cmd, lv, &info)) {
++	if (lv_is_active_locally(lv)) {
++		if (!lv_check_not_in_use(lv)) {
+ 			log_error("Can't resync open logical volume \"%s\"",
+ 				  lv->name);
+ 			return 0;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 9f9ec5d..1b71866 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1929,7 +1929,6 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volume *cow,
+ 				    struct lvconvert_params *lp)
  {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].i64_value : def;
- }
+-	struct lvinfo info;
+ 	struct volume_group *vg = cow->vg;
  
--uint64_t arg_uint64_value(struct cmd_context *cmd, int a, const uint64_t def)
-+uint64_t arg_uint64_value(const struct cmd_context *cmd, int a, const uint64_t def)
+ 	if (!lv_is_cow(cow)) {
+@@ -1970,8 +1969,8 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	if (lv_info(cmd, cow, 0, &info, 1, 0)) {
+-		if (!lv_check_not_in_use(cmd, cow, &info))
++	if (lv_is_active_locally(cow)) {
++		if (!lv_check_not_in_use(cow))
+ 			return_ECMD_FAILED;
+ 
+ 		if ((lp->force == PROMPT) &&
+@@ -2165,13 +2164,17 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
+ 	 * constructor and DM should prevent appropriate devices from
+ 	 * being open.
+ 	 */
+-	if (lv_info(cmd, origin, 0, &info, 1, 0) &&
+-	    !lv_check_not_in_use(cmd, origin, &info)) {
+-		log_print_unless_silent("Can't merge over open origin volume.");
+-		merge_on_activate = 1;
+-	} else if (lv_info(cmd, lv, 0, &info, 1, 0) &&
+-		   !lv_check_not_in_use(cmd, lv, &info)) {
+-		log_print_unless_silent("Can't merge when snapshot is open.");
++	if (lv_is_active_locally(origin)) {
++		if (!lv_check_not_in_use(origin)) {
++			log_print_unless_silent("Can't merge over open origin volume.");
++			merge_on_activate = 1;
++		} else if (!lv_check_not_in_use(lv)) {
++			log_print_unless_silent("Can't merge when snapshot is open.");
++			merge_on_activate = 1;
++		}
++	} else if (vg_is_clustered(origin->vg) && lv_is_active(origin)) {
++		/* When it's active somewhere else */
++		log_print_unless_silent("Can't check whether remotely active snapshot is open.");
+ 		merge_on_activate = 1;
+ 	}
+ 
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 350d8a3..1a597a6 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -197,7 +197,6 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
  {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].ui64_value : def;
- }
-@@ -199,12 +199,12 @@ const void *arg_ptr_value(struct cmd_context *cmd, int a, const void *def)
- }
- */
+ 	int lv_open, active, monitored = 0, r = 1;
+ 	const struct lv_list *lvl;
+-	struct lvinfo info;
+ 	int do_activate = is_change_activating(activate);
  
--sign_t arg_sign_value(struct cmd_context *cmd, int a, const sign_t def)
-+sign_t arg_sign_value(const struct cmd_context *cmd, int a, const sign_t def)
- {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].sign : def;
- }
- 
--percent_type_t arg_percent_value(struct cmd_context *cmd, int a, const percent_type_t def)
-+percent_type_t arg_percent_value(const struct cmd_context *cmd, int a, const percent_type_t def)
- {
- 	return arg_count(cmd, a) ? cmd->arg_values[a].percent : def;
- }
-diff --git a/tools/tools.h b/tools/tools.h
-index beb1671..51c6a4e 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -147,16 +147,16 @@ unsigned arg_is_set(const struct cmd_context *cmd, int a);
- int arg_from_list_is_set(const struct cmd_context *cmd, const char *err_found, ...);
- int arg_outside_list_is_set(const struct cmd_context *cmd, const char *err_found, ...);
- const char *arg_long_option_name(int a);
--const char *arg_value(struct cmd_context *cmd, int a);
--const char *arg_str_value(struct cmd_context *cmd, int a, const char *def);
--int32_t arg_int_value(struct cmd_context *cmd, int a, const int32_t def); 
--int32_t first_grouped_arg_int_value(struct cmd_context *cmd, int a, const int32_t def); 
--uint32_t arg_uint_value(struct cmd_context *cmd, int a, const uint32_t def);
--int64_t arg_int64_value(struct cmd_context *cmd, int a, const int64_t def);
--uint64_t arg_uint64_value(struct cmd_context *cmd, int a, const uint64_t def);
--const void *arg_ptr_value(struct cmd_context *cmd, int a, const void *def);
--sign_t arg_sign_value(struct cmd_context *cmd, int a, const sign_t def);
--percent_type_t arg_percent_value(struct cmd_context *cmd, int a, const percent_type_t def);
-+const char *arg_value(const struct cmd_context *cmd, int a);
-+const char *arg_str_value(const struct cmd_context *cmd, int a, const char *def);
-+int32_t arg_int_value(const struct cmd_context *cmd, int a, const int32_t def);
-+int32_t first_grouped_arg_int_value(const struct cmd_context *cmd, int a, const int32_t def);
-+uint32_t arg_uint_value(const struct cmd_context *cmd, int a, const uint32_t def);
-+int64_t arg_int64_value(const struct cmd_context *cmd, int a, const int64_t def);
-+uint64_t arg_uint64_value(const struct cmd_context *cmd, int a, const uint64_t def);
-+const void *arg_ptr_value(const struct cmd_context *cmd, int a, const void *def);
-+sign_t arg_sign_value(const struct cmd_context *cmd, int a, const sign_t def);
-+percent_type_t arg_percent_value(const struct cmd_context *cmd, int a, const percent_type_t def);
- int arg_count_increment(struct cmd_context *cmd, int a);
- 
- unsigned grouped_arg_count(const struct arg_values *av, int a);
+ 	/*
+@@ -210,8 +209,7 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
+ 	if (!do_activate && (lv_open = lvs_in_vg_opened(vg))) {
+ 		dm_list_iterate_items(lvl, &vg->lvs)
+ 			if (lv_is_visible(lvl->lv) &&
+-			    lv_info(cmd, lvl->lv, 0, &info, 1, 0) &&
+-			    !lv_check_not_in_use(cmd, lvl->lv, &info)) {
++			    !lv_check_not_in_use(lvl->lv)) {
+ 				log_error("Can't deactivate volume group \"%s\" with %d open "
+ 					  "logical volume(s)", vg->name, lv_open);
+ 				return 0;
 
 
