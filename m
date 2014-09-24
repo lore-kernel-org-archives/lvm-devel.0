@@ -1,46 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 24 Sep 2014 08:57:35 +0000 (UTC)
-Subject: master - debug: add debug message
-Message-ID: <20140924085735.EE3BD60B46@fedorahosted.org>
+Date: Wed, 24 Sep 2014 08:57:38 +0000 (UTC)
+Subject: master - tests: drop * from dmsetup
+Message-ID: <20140924085738.0B11A610D9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bc5031c28383d492aa0c349fe2e058c2c26b2934
-Commit:        bc5031c28383d492aa0c349fe2e058c2c26b2934
-Parent:        edb3902c25801117557852f4a37802144da63841
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9acbb0695f96a400f2be6c1c5bf76b914653c200
+Commit:        9acbb0695f96a400f2be6c1c5bf76b914653c200
+Parent:        bc5031c28383d492aa0c349fe2e058c2c26b2934
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 24 10:03:55 2014 +0200
+AuthorDate:    Sun Sep 21 01:11:42 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 24 10:54:48 2014 +0200
 
-debug: add debug message
+tests: drop * from dmsetup
 
-Since we leave error printing on the called of deactivation,
-at least put in debug log for this case.
+We cannot use shell expansion for dmsetup here.
 ---
- lib/activate/activate.c |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ test/shell/pvmove-restart.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 3e4b04b..58e847e 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2160,8 +2160,12 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
- 	r = _lv_deactivate(lv);
- 	critical_section_dec(cmd, "deactivated");
+diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
+index dde7308..effa43d 100644
+--- a/test/shell/pvmove-restart.sh
++++ b/test/shell/pvmove-restart.sh
+@@ -41,7 +41,7 @@ wait
+ # Simulate reboot - forcibly remove related devices
+ dmsetup table
+ dmsetup remove $vg-$lv1
+-dmsetup remove "$DM_DEV_DIR/mapper/$vg-pvmove0*"
++dmsetup remove "$DM_DEV_DIR/mapper/$vg-pvmove0"
  
--	if (!lv_info(cmd, lv, 0, &info, 0, 0) || info.exists)
-+	if (!lv_info(cmd, lv, 0, &info, 0, 0) || info.exists) {
-+		/* Turn into log_error, but we do not log error */
-+		log_debug_activation("Deactivated volume is still %s present.",
-+				     display_lvname(lv));
- 		r = 0;
-+	}
- out:
- 	if (lv_to_free) {
- 		lv_release_replicator_vgs(lv_to_free);
+ # Check we really have pvmove volume
+ check lv_attr_bit type $vg/pvmove0 "p"
 
 
