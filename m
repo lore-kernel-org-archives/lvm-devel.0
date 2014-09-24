@@ -1,52 +1,52 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 24 Sep 2014 08:57:31 +0000 (UTC)
-Subject: master - debug: drop printing debug trace without labeler
-Message-ID: <20140924085731.C95FC60E42@fedorahosted.org>
+Date: Wed, 24 Sep 2014 08:57:33 +0000 (UTC)
+Subject: master - debug: show stacktrace on error path
+Message-ID: <20140924085733.D87C160E42@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2bfd986ea343244d33181c6b78dc39c8725014cd
-Commit:        2bfd986ea343244d33181c6b78dc39c8725014cd
-Parent:        4319e06a0fe0b27471ea47687e344b836577f465
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=edb3902c25801117557852f4a37802144da63841
+Commit:        edb3902c25801117557852f4a37802144da63841
+Parent:        2bfd986ea343244d33181c6b78dc39c8725014cd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 22 13:34:12 2014 +0200
+AuthorDate:    Mon Sep 22 15:59:50 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 24 10:54:48 2014 +0200
 
-debug: drop printing debug trace without labeler
+debug: show stacktrace on error path
 
-Not having labeller on device is not reason eo generate backtrace in log.
 ---
- lib/label/label.c |   13 +++++--------
- 1 files changed, 5 insertions(+), 8 deletions(-)
+ tools/lvconvert.c |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 703fef7..ce59da8 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -278,15 +278,12 @@ int label_read(struct device *dev, struct label **result,
- 		return r;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index cc874c5..1d60c21 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3307,7 +3307,8 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
  	}
  
--	if (!(l = _find_labeller(dev, buf, &sector, scan_sector)))
--		goto_out;
--
--	if ((r = (l->ops->read)(l, dev, buf, result)) && result && *result) {
--		(*result)->dev = dev;
--		(*result)->sector = sector;
--	}
-+	if ((l = _find_labeller(dev, buf, &sector, scan_sector)))
-+		if ((r = (l->ops->read)(l, dev, buf, result)) && result && *result) {
-+			(*result)->dev = dev;
-+			(*result)->sector = sector;
-+		}
+ 	lp->lv_to_poll = refreshed_lv;
+-	ret = _lvconvert_single(cmd, refreshed_lv, lp);
++	if ((ret = _lvconvert_single(cmd, refreshed_lv, lp)) != ECMD_PROCESSED)
++		stack;
  
--      out:
- 	if (!dev_close(dev))
- 		stack;
+ 	if (ret == ECMD_PROCESSED && lp->need_polling) {
+ 		/*
+@@ -3316,8 +3317,9 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
+ 		 */
+ 		unlock_vg(cmd, vg_name);
  
+-		ret = _poll_logical_volume(cmd, lp->lv_to_poll,
+-					  lp->wait_completion);
++		if (!(ret = _poll_logical_volume(cmd, lp->lv_to_poll,
++						 lp->wait_completion)) != ECMD_PROCESSED)
++			stack;
+ 
+ 		/* use LCK_VG_WRITE to match lvconvert()'s READ_FOR_UPDATE */
+ 		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE, NULL)) {
 
 
