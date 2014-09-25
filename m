@@ -1,28 +1,32 @@
 From: David Teigland <teigland@redhat.com>
-Date: Thu, 25 Sep 2014 16:30:49 -0500
+Date: Thu, 25 Sep 2014 16:54:43 -0500
 Subject: [PATCH] report: display cache mode of a cache pool
-Message-ID: <20140925213049.GA4763@redhat.com>
+Message-ID: <20140925215443.GB4763@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+V2: avoid duplicating the feature flag test, and
+writethrough may be implied by the lack of the WRITEBACK
+flag, without the WRITETHROUGH flag set.
+
 ---
- lib/metadata/cache_manip.c       | 12 ++++++++++++
+ lib/metadata/cache_manip.c       |  8 ++++++++
  lib/metadata/lv.c                |  5 +++++
  lib/metadata/lv.h                |  1 +
  lib/metadata/metadata-exported.h |  1 +
  lib/report/columns.h             |  1 +
  lib/report/properties.c          |  2 ++
- lib/report/report.c              | 19 +++++++++++++++++++
- 7 files changed, 41 insertions(+)
+ lib/report/report.c              | 18 ++++++++++++++++++
+ 7 files changed, 36 insertions(+)
 
 diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 7f5ea65c35fe..7d65193bcf8c 100644
+index 7f5ea65c35fe..902bfb43a77b 100644
 --- a/lib/metadata/cache_manip.c
 +++ b/lib/metadata/cache_manip.c
-@@ -22,6 +22,18 @@
+@@ -22,6 +22,14 @@
  #include "activate.h"
  #include "defaults.h"
  
@@ -30,12 +34,8 @@ index 7f5ea65c35fe..7d65193bcf8c 100644
 +{
 +	if (feature_flags & DM_CACHE_FEATURE_WRITEBACK)
 +		return "writeback";
-+	else if (feature_flags & DM_CACHE_FEATURE_WRITETHROUGH)
-+		return "writethrough";
 +	else
-+		log_error(INTERNAL_ERROR "Unknown cachemode encountered.");
-+
-+	return "unknown";
++		return "writethrough";
 +}
 +
  int update_cache_pool_params(struct volume_group *vg, unsigned attr,
@@ -107,10 +107,10 @@ index e0092dbfc96a..8f4f472507a0 100644
  #define _seg_start_set prop_not_implemented_set
  GET_LVSEG_NUM_PROPERTY_FN(seg_start_pe, lvseg->le)
 diff --git a/lib/report/report.c b/lib/report/report.c
-index c0e0b47cc4a5..849aefdd901b 100644
+index c0e0b47cc4a5..56d0be47c2cd 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -803,6 +803,25 @@ static int _discards_disp(struct dm_report *rh, struct dm_pool *mem,
+@@ -803,6 +803,24 @@ static int _discards_disp(struct dm_report *rh, struct dm_pool *mem,
  	return _field_set_value(field, "", NULL);
  }
  
@@ -119,15 +119,14 @@ index c0e0b47cc4a5..849aefdd901b 100644
 +			   const void *data, void *private)
 +{
 +	const struct lv_segment *seg = (const struct lv_segment *) data;
++	const char *cachemode_str;
 +
 +	if (seg_is_cache(seg))
 +		seg = first_seg(seg->pool_lv);
 +
 +	if (seg_is_cache_pool(seg)) {
-+		if (seg->feature_flags & DM_CACHE_FEATURE_WRITEBACK)
-+			return _field_set_value(field, "writeback", &RESERVED(number_undef_64));
-+		else
-+			return _field_set_value(field, "writethrough", &RESERVED(number_undef_64));
++		cachemode_str = get_cachepool_cachemode_name(seg->feature_flags);
++		return dm_report_field_string(rh, field, &cachemode_str);
 +	}
 +
 +	return _field_set_value(field, "", NULL);
