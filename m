@@ -1,90 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 28 Sep 2014 11:56:46 +0000 (UTC)
-Subject: master - lvconvert: switch to validate_lvname_param
-Message-ID: <20140928115646.B748B60041@fedorahosted.org>
+Date: Sun, 28 Sep 2014 11:56:48 +0000 (UTC)
+Subject: master - cleanup: drop unused variable
+Message-ID: <20140928115648.C965A600CB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ad60805ffd6a2a5a52c81bc52d818098f674f44e
-Commit:        ad60805ffd6a2a5a52c81bc52d818098f674f44e
-Parent:        0d4baeba18646478e1edb7b26a9f9c74d6add1f5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f3e9ff7179303cb23ee78819a0c24fc1ccc5394f
+Commit:        f3e9ff7179303cb23ee78819a0c24fc1ccc5394f
+Parent:        ad60805ffd6a2a5a52c81bc52d818098f674f44e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Sep 28 13:07:18 2014 +0200
+AuthorDate:    Sat Sep 27 20:43:32 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Sep 28 13:49:01 2014 +0200
 
-lvconvert: switch to validate_lvname_param
+cleanup: drop unused variable
 
-Use new toollib function for validation.
 ---
- tools/lvconvert.c |   39 ++++-----------------------------------
- 1 files changed, 4 insertions(+), 35 deletions(-)
+ tools/lvresize.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 28a3526..c05ea1b 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -72,37 +72,6 @@ struct lvconvert_params {
- 	thin_discards_t discards;
- };
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index c5f01da..133cc6f 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -20,7 +20,6 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
+ {
+ 	const char *cmd_name;
+ 	char *st;
+-	unsigned dev_dir_found = 0;
+ 	int use_policy = arg_count(cmd, use_policies_ARG);
  
--static int _lvconvert_vg_name(struct lvconvert_params *lp,
--			      struct cmd_context *cmd,
--			      const char **lv_name)
--{
--	const char *vg_name;
--	const char *tmp_str;
--
--	if (!lv_name || !*lv_name)
--		return 1;
--
--	/* If contains VG name, extract it. */
--	if ((tmp_str = strchr(*lv_name, (int) '/'))) {
--		if (!(vg_name = extract_vgname(cmd, *lv_name)))
--			return_0;
--		if (!lp->vg_name)
--			lp->vg_name = vg_name;
--		else if (strcmp(vg_name, lp->vg_name)) {
--			log_error("Please use a single volume group name "
--				  "(\"%s\" or \"%s\")", vg_name, lp->vg_name);
--			return 0;
--		}
--		/* Strip VG from lv_name */
--		*lv_name = tmp_str + 1;
--	}
--
--	if (!apply_lvname_restrictions(*lv_name))
--		return_0;
--
--	return 1;
--}
--
- static int _lvconvert_name_params(struct lvconvert_params *lp,
- 				  struct cmd_context *cmd,
- 				  int *pargc, char ***pargv)
-@@ -142,16 +111,16 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
- 		(*pargv)++, (*pargc)--;
- 	}
+ 	lp->sign = SIGN_NONE;
+@@ -106,7 +105,7 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
+ 	argv++;
+ 	argc--;
  
--	if (!_lvconvert_vg_name(lp, cmd, &lp->pool_metadata_lv_name))
-+	if (!validate_lvname_param(cmd, &lp->vg_name, &lp->pool_metadata_lv_name))
- 		return_0;
- 
--	if (!_lvconvert_vg_name(lp, cmd, &lp->pool_data_lv_name))
-+	if (!validate_lvname_param(cmd, &lp->vg_name, &lp->pool_data_lv_name))
- 		return_0;
- 
--	if (!_lvconvert_vg_name(lp, cmd, &lp->origin_lv_name))
-+	if (!validate_lvname_param(cmd, &lp->vg_name, &lp->origin_lv_name))
- 		return_0;
- 
--	if (!_lvconvert_vg_name(lp, cmd, &lp->lv_split_name))
-+	if (!validate_lvname_param(cmd, &lp->vg_name, &lp->lv_split_name))
- 		return_0;
- 
- 	if (strchr(lp->lv_name_full, '/') &&
+-	if (!(lp->lv_name = skip_dev_dir(cmd, lp->lv_name, &dev_dir_found)) ||
++	if (!(lp->lv_name = skip_dev_dir(cmd, lp->lv_name, NULL)) ||
+ 	    !(lp->vg_name = extract_vgname(cmd, lp->lv_name))) {
+ 		log_error("Please provide a volume group name");
+ 		return 0;
 
 
