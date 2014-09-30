@@ -1,52 +1,51 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Tue, 30 Sep 2014 16:13:19 -0400
+From: Eric Wheeler <lvm-dev@lists.ewheeler.net>
+Date: Tue, 30 Sep 2014 15:38:13 -0700 (PDT)
 Subject: dm-thinp feature request: skip allocation on writes of all zeroes
-In-Reply-To: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
+In-Reply-To: <20140930201319.GA11339@redhat.com>
 References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
-Message-ID: <20140930201319.GA11339@redhat.com>
+	<20140930201319.GA11339@redhat.com>
+Message-ID: <alpine.DEB.2.00.1409301519210.26721@ware.dreamhost.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Sep 30 2014 at  2:38pm -0400,
-Eric Wheeler <lvm-dev@lists.ewheeler.net> wrote:
+>> I have always wondered, does LVM ignore writes with blocks of all
+>> zeroes when the destination address is unallocated? From experience,
+>> it does not appear that this is so (or I cannot find the config
+>> option). This would reduce IOs, particularily when importing VM disk
+>> images from other sources. Currently, we must import, allocate lots
+>> of zeroes, then fstrim after the fact.
+>
+> And in your example fstrim wouldn't do anything for you. [...]
+> fstrim is only useful to reclaim blocks that are no longer used.
 
-> Hello all,
-> 
-> We have been testing dm-thinp for the last couple years and it has
-> been stable for the most part.
-> 
-> I have always wondered, does LVM ignore writes with blocks of all
-> zeroes when the destination address is unallocated? From experience,
-> it does not appear that this is so (or I cannot find the config
-> option). This would reduce IOs, particularily when importing VM disk
-> images from other sources. Currently, we must import, allocate lots
-> of zeroes, then fstrim after the fact.
+For this particular example, unused data is mostly zeroes and thus fstrim 
+frees those unused chunks when dm-thinp receives the discard. I realize 
+that fstrim, strictly speaking, is not the solution---it was only meant to 
+highlight my example.
 
-We don't inspect the data being written to infer WRITE SAME-like action.
-And in your example fstrim wouldn't do anything for you.  The zeroed
-data in the image is still valid isn't it?  fstrim is only useful to
-reclaim blocks that are no longer used.
+> The zeroed data in the image is still valid isn't it?
 
-> I have paged through the dm-thinp code, but I am not quite certain
-> what the best place to add this logic would be such that the IO is
-> completed and the allocation is not performed.
-> 
-> I would be happy to work on a patch, but I need a little bit of direction:
-> 
-> What would it take to add this as a feature option to the dmsetup
-> table string?
-> 
-> Where in the dm-thinp code would this best be addressed?
+Yes, and it would continue to be valid because dm-thinp returns zeroes in 
+read requests to unallocated chunks. A quick check for all zeroes in the 
+bio before writing to an unallocated chunk would save a good amount of 
+overhead in our application, and probably others' as well. (Of course if 
+the chunk is allocated, the write must proceed like normal.)
 
-Honestly, you'd be better served to use deduplication.  A dm-dedup
-target has been in development (and I'm reviewing it), see:
-http://git.kernel.org/cgit/linux/kernel/git/snitzer/linux.git/log/?h=dm-dedup
+> We don't inspect the data being written to infer WRITE SAME-like action.
 
-It is very much in-development, but it gives you an idea.  You could
-pair a dedup target with dm-thinp in a stacked configuration to achieve
-your goals.
+I would like to implement data inspection in this way and make it 
+available as an option to the dmsetup table string.
+
+Can you recommend where I should look in the dm-thinp code to check the 
+bio for all zeroes and branch accordingly?
+
+(You are correct, deduplication would be an even better solution, but for 
+the moment I believe that WRITE SAME-like action could be implemented with 
+a relatively small patch if I can learn where to insert the code.)
+
+-Eric
 
 
