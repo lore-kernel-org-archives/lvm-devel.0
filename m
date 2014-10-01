@@ -1,112 +1,145 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed,  1 Oct 2014 15:44:39 +0000 (UTC)
-Subject: master - Revert "Revert "man: lvmcache should use clearer cache pool options""
-Message-ID: <20141001154439.406EB60F5F@fedorahosted.org>
+Date: Wed,  1 Oct 2014 15:44:41 +0000 (UTC)
+Subject: master - man: lvmthin mention alternate syntax
+Message-ID: <20141001154441.69D0460F5F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=33b96bef5bd8cfda3cf24007b84597f61a2cf0b6
-Commit:        33b96bef5bd8cfda3cf24007b84597f61a2cf0b6
-Parent:        a5f01dad224929ea39fd3a53753b8341028017b8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d66f2574529ccce5fab2c217805504f6a8fe1673
+Commit:        d66f2574529ccce5fab2c217805504f6a8fe1673
+Parent:        33b96bef5bd8cfda3cf24007b84597f61a2cf0b6
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Oct 1 10:43:53 2014 -0500
+AuthorDate:    Wed Oct 1 10:29:30 2014 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Oct 1 10:43:53 2014 -0500
+CommitterDate: Wed Oct 1 10:44:18 2014 -0500
 
-Revert "Revert "man: lvmcache should use clearer cache pool options""
+man: lvmthin mention alternate syntax
 
-This reverts commit f120c954fc065d67c1aacd5cfba58843eb552b0f.
+Users will probably run across the alternate syntax,
+so we should explain how it relates to what is used here.
 ---
- man/lvmcache.7.in |   32 ++++++++++++++++++--------------
- 1 files changed, 18 insertions(+), 14 deletions(-)
+ man/lvmthin.7.in |   78 ++++++++++++++++++++++++++++++++++-------------------
+ 1 files changed, 50 insertions(+), 28 deletions(-)
 
-diff --git a/man/lvmcache.7.in b/man/lvmcache.7.in
-index cc92673..6d7109a 100644
---- a/man/lvmcache.7.in
-+++ b/man/lvmcache.7.in
-@@ -88,11 +88,15 @@ CacheDataLV is renamed CachePoolLV_cdata and becomes hidden.
- .br
- CacheMetaLV is renamed CachePoolLV_cmeta and becomes hidden.
+diff --git a/man/lvmthin.7.in b/man/lvmthin.7.in
+index af9669d..8009a9e 100644
+--- a/man/lvmthin.7.in
++++ b/man/lvmthin.7.in
+@@ -152,7 +152,8 @@ Create a new thin LV from the thin pool LV.
+ The thin LV is created with a virtual size.
+ Multiple new thin LVs may be created in the thin pool.
+ Thin LV names must be unique in the VG.
+-The thinpool argument specifies which thin pool will
++The '--type thin' option is inferred from the virtual size option.
++The --thinpool argument specifies which thin pool will
+ contain the ThinLV.
+ .fi
  
--.B lvconvert \-\-cachepool VG/CacheDataLV \-\-poolmetadata VG/CacheMetaLV
-+.B lvconvert \-\-type cache-pool \-\-poolmetadata VG/CacheMetaLV \\
+@@ -225,6 +226,10 @@ or vgchange to activate thin snapshots with the "k" attribute.
+ 
+ .SH Thin Topics
+ 
++.B Alternate syntax for specifying type thin\-pool
 +.br
-+.RS
-+.B VG/CacheDataLV
-+.RE
- 
- .I Example
++.B Automatic pool metadata LV
++.br
+ .B Specify devices for data and metadata LVs
  .br
--# lvconvert \-\-cachepool vg/cache0 \-\-poolmetadata vg/cache0meta
-+# lvconvert \-\-type cache\-pool \-\-poolmetadata vg/cache0meta vg/cache0
- 
- .nf
- # lvs -a vg
-@@ -193,21 +197,21 @@ pool sub-LVs redundant.
- 
- .nf
- 0. Create an origin LV we wish to cache
--# lvcreate \-L 10G \-n lvx vg /dev/slow_devs
-+# lvcreate \-L 10G \-n lv1 vg /dev/slow_devs
- 
- 1. Create a 2-way RAID1 cache data LV
--# lvcreate \-\-type raid1 \-m 1 \-L 1G -n lvx_cache vg \\
-+# lvcreate \-\-type raid1 \-m 1 \-L 1G -n cache1 vg \\
- 	/dev/fast1 /dev/fast2
- 
- 2. Create a 2-way RAID1 cache metadata LV
--# lvcreate \-\-type raid1 \-m 1 \-L 8M -n lvx_cache_meta vg \\
-+# lvcreate \-\-type raid1 \-m 1 \-L 8M -n cache1meta vg \\
- 	/dev/fast1 /dev/fast2
- 
- 3. Create a cache pool LV combining cache data LV and cache metadata LV
--# lvconvert \-\-cachepool vg/lvx_cache \-\-poolmetadata vg/lvx_cache_meta
-+# lvconvert \-\-type cache\-pool \-\-poolmetadata vg/cache1meta vg/cache1
- 
- 4. Create a cached LV by combining the cache pool LV and origin LV
--# lvconvert \-\-type cache \-\-cachepool vg/lvx_cache vg/lvx
-+# lvconvert \-\-type cache \-\-cachepool vg/cache1 vg/lv1
- .fi
- 
- .SS Writethough caching
-@@ -223,20 +227,20 @@ cache pool LV, properties of the cache can be specified - in this case,
- 
- .nf
- 0. Create an origin LV we wish to cache (yours may already exist)
--# lvcreate \-L 10G \-n lvx vg /dev/slow
-+# lvcreate \-L 10G \-n lv1 vg /dev/slow
- 
- 1. Create a cache data LV
--# lvcreate \-L 1G \-n lvx_cache vg /dev/fast
-+# lvcreate \-L 1G \-n cache1 vg /dev/fast
- 
- 2. Create a cache metadata LV
--# lvcreate \-L 8M \-n lvx_cache_meta vg /dev/fast
-+# lvcreate \-L 8M \-n cache1meta vg /dev/fast
- 
- 3. Create a cache pool LV specifying cache mode "writethrough"
--# lvconvert \-\-cachepool vg/lvx_cache \-\-poolmetadata vg/lvx_cache_meta \\
--	\-\-cachemode writethrough
-+# lvconvert \-\-type cache\-pool \-\-poolmetadata vg/cache1meta \\
-+	\-\-cachemode writethrough vg/cache1
- 
- 4. Create a cache LV by combining the cache pool LV and origin LV
--# lvconvert \-\-type cache \-\-cachepool vg/lvx_cache vg/lvx
-+# lvconvert \-\-type cache \-\-cachepool vg/cache1 vg/lv1
- .fi
- 
- .SS Spare metadata LV
-@@ -258,7 +262,7 @@ the same VG.
- 
- .B lvcreate -n CacheDataLV -L CacheSize VG
+ .B Tolerate device failures using raid
+@@ -233,8 +238,6 @@ or vgchange to activate thin snapshots with the "k" attribute.
  .br
--.B lvconvert --cachepool VG/CacheDataLV
-+.B lvconvert --type cache\-pool VG/CacheDataLV
+ .B Metadata check and repair
+ .br
+-.B Automatic pool metadata LV
+-.br
+ .B Activation of thin snapshots
+ .br
+ .B Removing thin pool LVs, thin LVs and snapshots
+@@ -273,6 +276,50 @@ or vgchange to activate thin snapshots with the "k" attribute.
+ 
+ \&
+ 
++.SS Alternate syntax for specifying type thin\-pool
++
++\&
++
++The fully specified syntax for creating a thin pool LV shown above is:
++
++.B lvconvert \-\-type thin-pool \-\-poolmetadata VG/ThinMetaLV VG/ThinDataLV
++
++An existing LV is converted to a thin pool by changing its type to
++thin-pool.  An alternate syntax may be used for the same operation:
++
++.B lvconvert \-\-thinpool VG/ThinDataLV \-\-poolmetadata VG/ThinMetaLV
++
++The thin-pool type is inferred by lvm; the --thinpool option is not an
++alias for --type thin-pool.  The use of the --thinpool option here is
++different from the use of the --thinpool option when creating a thin LV,
++where it specifies the pool in which the thin LV is created.
++
++
++.SS Automatic pool metadata LV
++
++\&
++
++A thin data LV can be converted to a thin pool LV without specifying a
++thin pool metadata LV.  LVM automatically creates a metadata LV from the
++same VG.
++
++.B lvcreate \-n ThinDataLV \-L LargeSize VG
++.br
++.B lvconvert \-\-type thin\-pool VG/ThinDataLV
++
++.I Example
++.br
++.nf
++# lvcreate \-n pool0 \-L 10G vg
++# lvconvert \-\-type thin\-pool vg/pool0
++
++# lvs \-a
++  pool0           vg          twi-a-tz--  10.00g
++  [pool0_tdata]   vg          Twi-ao----  10.00g
++  [pool0_tmeta]   vg          ewi-ao----  16.00m
++.fi
++
++
+ .SS Specify devices for data and metadata LVs
+ 
+ \&
+@@ -420,31 +467,6 @@ containing new metadata:
+ .B lvconvert \-\-thinpool VG/ThinPoolLV \-\-poolmetadata VG/NewThinMetaLV
  
  
- .SH SEE ALSO
+-.SS Automatic pool metadata LV
+-
+-\&
+-
+-A thin data LV can be converted to a thin pool LV without
+-specifying a thin pool metadata LV.  LVM will automatically
+-create a metadata LV from the same VG.
+-
+-.B lvcreate \-n ThinDataLV \-L LargeSize VG
+-.br
+-.B lvconvert \-\-type thin\-pool VG/ThinDataLV
+-
+-.I Example
+-.br
+-.nf
+-# lvcreate \-n pool0 \-L 10G vg
+-# lvconvert \-\-type thin\-pool vg/pool0
+-
+-# lvs \-a
+-  pool0           vg          twi-a-tz--  10.00g
+-  [pool0_tdata]   vg          Twi-ao----  10.00g
+-  [pool0_tmeta]   vg          ewi-ao----  16.00m
+-.fi
+-
+-
+ .SS Activation of thin snapshots
+ 
+ \&
 
 
