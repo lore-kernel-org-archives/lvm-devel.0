@@ -1,90 +1,59 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  6 Oct 2014 13:32:59 +0000 (UTC)
-Subject: master - lvconvert: reuse cache validation
-Message-ID: <20141006133259.CD98E609E5@fedorahosted.org>
+Date: Mon,  6 Oct 2014 13:33:02 +0000 (UTC)
+Subject: master - lv_manip: fix out of order backup
+Message-ID: <20141006133302.07043609E5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a0cfc5eee2763b7e68c028b517db1825c1f3cce7
-Commit:        a0cfc5eee2763b7e68c028b517db1825c1f3cce7
-Parent:        5a366918432bf4f825d2ddbb00780943c0761a0d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0662391ff60c5fbdf4b941bad92de31558ecd89b
+Commit:        0662391ff60c5fbdf4b941bad92de31558ecd89b
+Parent:        a0cfc5eee2763b7e68c028b517db1825c1f3cce7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 3 18:52:08 2014 +0200
+AuthorDate:    Fri Oct 3 18:39:54 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 6 15:18:05 2014 +0200
 
-lvconvert: reuse cache validation
+lv_manip: fix out of order backup
 
-Validation is now already in
-validate_lv_cache_create() so reuse it.
-
-Also properly rename var origin -> origin_lv.
+We had only 2 remaining places that were leaving unbackuped metadata.
 ---
- tools/lvconvert.c |   41 +++++------------------------------------
- 1 files changed, 5 insertions(+), 36 deletions(-)
+ lib/metadata/lv_manip.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 03118cb..11a10f7 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3168,50 +3168,19 @@ revert_new_lv:
-  * Convert origin into a cache LV by attaching a cache pool.
-  */
- static int _lvconvert_cache(struct cmd_context *cmd,
--			    struct logical_volume *origin,
-+			    struct logical_volume *origin_lv,
- 			    struct lvconvert_params *lp)
- {
- 	struct logical_volume *pool_lv = lp->pool_data_lv;
- 	struct logical_volume *cache_lv;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 6136b43..25342d6 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7031,6 +7031,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 				stack;
+ 				goto revert_new_lv;
+ 			}
++
++			backup(vg);
+ 		}
+ 		if (is_change_activating(lp->activate)) {
+ 			/* Send message so that table preload knows new thin */
+@@ -7038,6 +7040,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 				stack;
+ 				goto revert_new_lv;
+ 			}
++
++			backup(vg);
++
+ 			if (!lv_active_change(cmd, lv, lp->activate)) {
+ 				log_error("Failed to activate thin %s.", lv->name);
+ 				goto deactivate_and_revert_new_lv;
+@@ -7125,8 +7130,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		if (!lv_update_and_reload(org))
+ 			return_0;
+ 	}
+-	/* FIXME out of sequence */
+-	backup(vg);
  
--	if (origin == pool_lv) {
--		log_error("Can't use same LV %s for cache pool and cache volume.",
--			  display_lvname(pool_lv));
--		return 0;
--	}
--
--	if (lv_is_pool(origin) || lv_is_cache_type(origin)) {
--		log_error("Can't cache pool or cache type volume %s.",
--			  display_lvname(origin));
--		return 0;
--	}
--
--	/* We support conversion of _tdata */
--	if (!lv_is_visible(origin) && !lv_is_thin_pool_data(origin)) {
--		log_error("Can't convert internal LV %s.", display_lvname(origin));
--		return 0;
--	}
--
--	/*
--	 * Only linear, striped or raid supported.
--	 * FIXME Tidy up all these type restrictions.
--	 */
--	if (lv_is_cache_origin(origin) ||
--	    lv_is_mirror_type(origin) ||
--	    lv_is_thin_volume(origin) || lv_is_thin_pool_metadata(origin) ||
--	    lv_is_origin(origin) || lv_is_merging_origin(origin) ||
--	    lv_is_cow(origin) || lv_is_merging_cow(origin) ||
--	    lv_is_external_origin(origin) ||
--	    lv_is_virtual(origin)) {
--		log_error("Cache is not supported with origin LV %s type.",
--			  display_lvname(origin));
--		return 0;
--	}
-+	if (!validate_lv_cache_create(pool_lv, origin_lv))
-+		return_0;
- 
--	if (!archive(origin->vg))
-+	if (!archive(origin_lv->vg))
- 		return_0;
- 
--	if (!(cache_lv = lv_cache_create(pool_lv, origin)))
-+	if (!(cache_lv = lv_cache_create(pool_lv, origin_lv)))
- 		return_0;
- 
- 	if (!lv_update_and_reload(cache_lv))
+ out:
+ 	return lv;
 
 
