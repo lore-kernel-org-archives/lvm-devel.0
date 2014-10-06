@@ -1,86 +1,53 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  6 Oct 2014 13:33:17 +0000 (UTC)
-Subject: master - cache: use same alg for cache size calc
-Message-ID: <20141006133317.1C47760DDB@fedorahosted.org>
+Date: Mon,  6 Oct 2014 13:33:12 +0000 (UTC)
+Subject: master - lvremove: detect cluster wide active state
+Message-ID: <20141006133312.CB8316016C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f76f2ce1df4e95774b8fded602a8e35f8ae71fe1
-Commit:        f76f2ce1df4e95774b8fded602a8e35f8ae71fe1
-Parent:        d46c2f1c946e21393537a730eaa624665cb96bbc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=189d0f8e1deb2ad8b985696d9925f5259ab30baa
+Commit:        189d0f8e1deb2ad8b985696d9925f5259ab30baa
+Parent:        b37203c8193ea47d2de1033b5e57ae5bd1360df4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 6 12:22:03 2014 +0200
+AuthorDate:    Fri Oct 3 23:49:57 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 6 15:18:06 2014 +0200
 
-cache: use same alg for cache size calc
+lvremove: detect cluster wide active state
 
-Use the same algorithm for cache metadata size as the cache tool is using.
+If the LV is active remotely do not skip question for deactivation.
 ---
- lib/metadata/cache_manip.c |   26 +++++++++++++++++---------
- 1 files changed, 17 insertions(+), 9 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index ed08726..350a18e 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -22,6 +22,12 @@
- #include "activate.h"
- #include "defaults.h"
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 275d666..8a4fa13 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Check cluster-wide (not local) active status before removing LV.
+   Properly check if activation of removed cached LV really activated.
+   Lvremoving cached LV removes cachepool (keep with lvconvert --splitcache).
+   Always remove spare LV with last removed pool volume.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 168ce05..1edb0a0 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5429,7 +5429,8 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	/* FIXME Ensure not referred to by another existing LVs */
+ 	ask_discard = find_config_tree_bool(cmd, devices_issue_discards_CFG, NULL);
  
-+/* https://github.com/jthornber/thin-provisioning-tools/blob/master/caching/cache_metadata_size.cc */
-+#define DM_TRANSACTION_OVERHEAD		4096  /* KiB */
-+#define DM_BYTES_PER_BLOCK		16 /* bytes */
-+#define DM_HINT_OVERHEAD_PER_BLOCK	8  /* bytes */
-+#define DM_MAX_HINT_WIDTH		(4+16)  /* bytes,  TODO: configurable ?? */
-+
- const char *get_cachepool_cachemode_name(const struct lv_segment *seg)
- {
- 	if (seg->feature_flags & DM_CACHE_FEATURE_WRITEBACK)
-@@ -39,6 +45,7 @@ int update_cache_pool_params(struct volume_group *vg, unsigned attr,
- 			     int *chunk_size_calc_method, uint32_t *chunk_size)
- {
- 	uint64_t min_meta_size;
-+	uint32_t extent_size = vg->extent_size;
+-	if (!lv_is_cache_pool(lv) && lv_is_active_locally(lv)) {
++	if (!lv_is_cache_pool(lv) && /* cache pool cannot be active */
++	    lv_is_active(lv)) {
+ 		if (!lv_check_not_in_use(lv))
+ 			return_0;
  
- 	if (!(passed_args & PASS_ARG_CHUNK_SIZE))
- 		*chunk_size = DEFAULT_CACHE_POOL_CHUNK_SIZE * 2;
-@@ -59,15 +66,16 @@ int update_cache_pool_params(struct volume_group *vg, unsigned attr,
- 
- 	/*
- 	 * Default meta size is:
--	 * (4MiB + (16 Bytes for each chunk-sized block))
--	 * ... plus a good amount of padding (2x) to cover any
--	 * policy hint data that may be added in the future.
-+	 * (Overhead + mapping size + hint size)
- 	 */
--	min_meta_size = (uint64_t)data_extents * vg->extent_size * 16;
--	min_meta_size /= *chunk_size; /* # of Bytes we need */
--	min_meta_size *= 2;              /* plus some padding */
--	min_meta_size /= 512;            /* in sectors */
--	min_meta_size += 4*1024*2;       /* plus 4MiB */
-+	min_meta_size = (uint64_t) data_extents * extent_size / *chunk_size;	/* nr_chunks */
-+	min_meta_size *= (DM_BYTES_PER_BLOCK + DM_MAX_HINT_WIDTH + DM_HINT_OVERHEAD_PER_BLOCK);
-+	min_meta_size = (min_meta_size + (SECTOR_SIZE - 1)) >> SECTOR_SHIFT;	/* in sectors */
-+	min_meta_size += DM_TRANSACTION_OVERHEAD * (1024 >> SECTOR_SHIFT);
-+
-+	/* Round up to extent size */
-+	if (min_meta_size % extent_size)
-+		min_meta_size += extent_size - min_meta_size % extent_size;
- 
- 	if (!*pool_metadata_size)
- 		*pool_metadata_size = min_meta_size;
-@@ -79,7 +87,7 @@ int update_cache_pool_params(struct volume_group *vg, unsigned attr,
- 				 display_size(vg->cmd, *pool_metadata_size));
- 	} else if (*pool_metadata_size < min_meta_size) {
- 		if (passed_args & PASS_ARG_POOL_METADATA_SIZE)
--			log_warn("WARNING: Minimum supported pool metadata size is %s "
-+			log_warn("WARNING: Minimum required pool metadata size is %s "
- 				 "(needs extra %s).",
- 				 display_size(vg->cmd, min_meta_size),
- 				 display_size(vg->cmd, min_meta_size - *pool_metadata_size));
 
 
