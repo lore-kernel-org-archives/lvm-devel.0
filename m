@@ -1,68 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  6 Oct 2014 13:32:51 +0000 (UTC)
-Subject: master - lvcreate: support --cache and --cachepool
-Message-ID: <20141006133251.64242609E5@fedorahosted.org>
+Date: Mon,  6 Oct 2014 13:32:53 +0000 (UTC)
+Subject: master - toollib: validate also name
+Message-ID: <20141006133253.7E62A609E5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=68bf974769ff2491f90620d15fd76c42244190a1
-Commit:        68bf974769ff2491f90620d15fd76c42244190a1
-Parent:        fc77e4291bdae39e1ea9dfdf0c8ef9af493df9cb
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4e9fbb4b96ad4beed5dd004f221cdbfb874e1094
+Commit:        4e9fbb4b96ad4beed5dd004f221cdbfb874e1094
+Parent:        68bf974769ff2491f90620d15fd76c42244190a1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 30 21:46:02 2014 +0200
+AuthorDate:    Tue Sep 30 21:45:10 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 6 15:18:05 2014 +0200
 
-lvcreate: support --cache and --cachepool
+toollib: validate also name
 
-Enable in cmdline options for cache and cachepool.
+In validate_lvname_param() call also validate_name().
 ---
- tools/commands.h |   15 ++++++++++-----
- 1 files changed, 10 insertions(+), 5 deletions(-)
+ tools/toollib.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index 1e3677e..ed911fa 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -241,7 +241,10 @@ xx(lvcreate,
-    "\t[-a|--activate [a|e|l]{y|n}]\n"
-    "\t[--addtag Tag]\n"
-    "\t[--alloc AllocationPolicy]\n"
--   "\t[--cachemode CacheMode]\n"
-+   "\t[-H|--cache\n"
-+   "\t  [-c|--chunksize ChunkSize]\n"
-+   "\t  [--cachemode {writeback|writethrough}]\n"
-+   "\t[--cachepool CachePoolLogicalVolume{Name|Path}]\n"
-    "\t[-C|--contiguous {y|n}]\n"
-    "\t[--commandprofile ProfileName]\n"
-    "\t[-d|--debug]\n"
-@@ -263,10 +266,11 @@ xx(lvcreate,
-    "\t[--[raid]maxrecoveryrate Rate]\n"
-    "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
-    "\t[-R|--regionsize MirrorLogRegionSize]\n"
--   "\t[-T|--thin  [-c|--chunksize  ChunkSize]\n"
-+   "\t[-T|--thin\n"
-+   "\t  [-c|--chunksize ChunkSize]\n"
-    "\t  [--discards {ignore|nopassdown|passdown}]\n"
--   "\t  [--poolmetadatasize MetadataSize[bBsSkKmMgG]]]\n"
--   "\t  [--poolmetadataspare {y|n}]\n"
-+   "\t  [--poolmetadatasize MetadataSize[bBsSkKmMgG]]\n"
-+   "\t  [--poolmetadataspare {y|n}]]\n"
-    "\t[--thinpool ThinPoolLogicalVolume{Name|Path}]\n"
-    "\t[-t|--test]\n"
-    "\t[--type VolumeType]\n"
-@@ -312,7 +316,8 @@ xx(lvcreate,
-    "\t[PhysicalVolumePath...]\n\n",
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 721c727..69c1c39 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1539,6 +1539,12 @@ int validate_lvname_param(struct cmd_context *cmd, const char **vg_name,
+ 	if (!apply_lvname_restrictions(*lv_name))
+ 		return_0;
  
-    addtag_ARG, alloc_ARG, autobackup_ARG, activate_ARG, available_ARG,
--   cachemode_ARG, chunksize_ARG, contiguous_ARG, corelog_ARG, discards_ARG,
-+   cache_ARG, cachemode_ARG, cachepool_ARG,
-+   chunksize_ARG, contiguous_ARG, corelog_ARG, discards_ARG,
-    extents_ARG, ignoreactivationskip_ARG, ignoremonitoring_ARG, major_ARG,
-    metadataprofile_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG, monitor_ARG,
-    minrecoveryrate_ARG, maxrecoveryrate_ARG, name_ARG, nosync_ARG,
++	if (!validate_name(*lv_name)) {
++		log_error("Logical volume name \"%s\" is invalid.",
++			  *lv_name);
++		return 0;
++	}
++
+ 	return 1;
+ }
+ 
 
 
