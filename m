@@ -1,83 +1,131 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  6 Oct 2014 13:34:07 +0000 (UTC)
-Subject: master - tests: lvconvert cache usage of thin pool
-Message-ID: <20141006133407.1F34860905@fedorahosted.org>
+Date: Mon,  6 Oct 2014 13:34:04 +0000 (UTC)
+Subject: master - tests: lvconvert thin pool
+Message-ID: <20141006133404.EF4E060905@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa517221a19751b93a5b94f8b379919b9c1c0226
-Commit:        fa517221a19751b93a5b94f8b379919b9c1c0226
-Parent:        742d250cc52dcbd965310b1bf5357d4793254f4d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=742d250cc52dcbd965310b1bf5357d4793254f4d
+Commit:        742d250cc52dcbd965310b1bf5357d4793254f4d
+Parent:        c243cf6581904c2628294d342ba1380208985e49
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 6 15:30:19 2014 +0200
+AuthorDate:    Mon Oct 6 11:56:09 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 6 15:31:44 2014 +0200
 
-tests: lvconvert cache usage of thin pool
+tests: lvconvert thin pool
 
-Checked stacking usage of thin pool data volume being cached.
+More tests.
 ---
- test/shell/lvconvert-cache-thin.sh |   50 ++++++++++++++++++++++++++++++++++++
- 1 files changed, 50 insertions(+), 0 deletions(-)
+ test/shell/lvconvert-thin.sh |   53 +++++++++++++++++++++++++++++++----------
+ 1 files changed, 40 insertions(+), 13 deletions(-)
 
-diff --git a/test/shell/lvconvert-cache-thin.sh b/test/shell/lvconvert-cache-thin.sh
-new file mode 100644
-index 0000000..87256a4
---- /dev/null
-+++ b/test/shell/lvconvert-cache-thin.sh
-@@ -0,0 +1,50 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index 4aee7d2..bd43d58 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -27,6 +27,7 @@ aux prepare_pvs 4 64
+ 
+ # build one large PV
+ vgcreate $vg1 $(head -n 3 DEVICES)
 +
-+# Exercise usage of stacked cache volume used in thin pool volumes
+ # 32bit linux kernels are fragille with device size >= 16T
+ # maybe  uname -m    [ x86_64 | i686 ]
+ TSIZE=64T
+@@ -63,12 +64,25 @@ lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+ 
+ prepare_lvs
+ lvconvert --yes -c 64 --stripes 2 --thinpool $vg/$lv1 --readahead 48
+-
+ lvremove -f $vg
+-lvcreate -L1T -n $lv1 $vg
+-lvconvert --yes -c 8M --type thin-pool $vg/$lv1
+ 
 +
-+. lib/inittest
-+
-+aux have_cache 1 3 0 || skip
-+aux have_thin 1 0 0 || skip
-+
-+aux prepare_vg 5 80
-+
-+lvcreate -L10 -n cpool $vg
-+lvcreate -L10 -n tpool $vg
-+lvcreate -L10 -n $lv1 $vg
-+
-+lvconvert --yes --cache --cachepool cpool $vg/tpool
-+
-+# Currently the only allowed stacking is cache thin data volume
-+lvconvert --yes --type thin-pool $vg/tpool
-+
-+lvcreate -V10 -T -n $lv2 $vg/tpool
-+
-+aux mkdev_md5sum $vg $lv2
-+
-+lvconvert --splitcache $vg/tpool
-+
-+check dev_md5sum $vg $lv2
++# Swaping of metadata volume
++lvcreate -L1T -n $lv1 $vg
++lvcreate -L32 -n $lv2 $vg
++lvconvert --yes -c 8M --type thin-pool $vg/$lv1 |& tee err
++# Check tther is warning for large chunk size and zeroing enabled
++grep "Pool zeroing and large" err
++UUID=$(get lv_field $vg/$lv2 uuid)
++# Fail is pool is active
++# TODO  maybe detect inactive pool and deactivate
++fail lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $lv2
 +lvchange -an $vg
-+lvchange -ay $vg
-+check dev_md5sum $vg $lv2
++lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $lv2
++check lv_field $vg/${lv1}_tmeta uuid "$UUID"
+ lvremove -f $vg
 +
-+lvs -a $vg
-+lvconvert --yes --cache --cachepool cpool $vg/tpool
 +
-+lvconvert --yes -T --thinpool $vg/tpool $vg/$lv1
-+check lv_field $vg/tpool segtype "thin-pool"
-+check lv_field $vg/$lv1 segtype "thin"
-+lvconvert --uncache $vg/tpool
-+lvs -a $vg
+ # test with bigger sizes
+ lvcreate -L1T -n $lv1 $vg
+ lvcreate -L8M -n $lv2 $vg
+@@ -81,39 +95,52 @@ invalid lvconvert --stripes 2 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+ # too small metadata (<2M)
+ fail lvconvert --yes -c 64 --thinpool $vg/$lv1 --poolmetadata $vg/$lv3
+ # too small chunk size fails
+-# 'fail' because profiles need to read VG
+-fail lvconvert -c 4 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
++invalid lvconvert -c 4 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+ # too big chunk size fails
+-fail lvconvert -c 2G --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
++invalid lvconvert -c 2G --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+ # negative chunk size fails
+ invalid lvconvert -c -256 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+-# non power of 2 fails
+-fail lvconvert -c 88 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
++# non multiple of 64KiB fails
++invalid lvconvert -c 88 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+ 
+ # Warning about smaller then suggested
+ lvconvert --yes -c 256 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2 |& tee err
+ grep "WARNING: Chunk size is smaller" err
+-
+ lvremove -f $vg
 +
-+vgremove -f $vg
++
+ lvcreate -L1T -n $lv1 $vg
+ lvcreate -L32G -n $lv2 $vg
+ # Warning about bigger then needed
+ lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $vg/$lv2 |& tee err
+ grep "WARNING: Maximum" err
+-
+ lvremove -f $vg
+ 
++
+ if test "$TSIZE" = 64T; then
+ lvcreate -L24T -n $lv1 $vg
+ # Warning about bigger then needed (24T data and 16G -> 128K chunk)
+ lvconvert --yes -c 64 --thinpool $vg/$lv1 |& tee err
+ grep "WARNING: Chunk size is too small" err
++lvremove -f $vg
+ fi
+ 
+ #lvs -a -o+chunk_size,stripe_size,seg_pe_ranges
+ 
+-# Convertions of pool to mirror or RAID is unsupported
+-fail lvconvert --type mirror -m1 $vg/$lv1
+-fail lvconvert --type raid1 -m1 $vg/$lv1
++####################################
++# Prohibites thin pool conversions #
++####################################
++lvcreate -L32 -n $lv1 $vg
++lvcreate -L16 -n $lv2 $vg
++lvconvert --yes --thinpool $vg/$lv1
++
++fail lvconvert --yes --type cache-pool $vg/$lv1
++fail lvconvert --yes --type mirror -m1 $vg/$lv1
++fail lvconvert --yes --type raid1 -m1 $vg/$lv1
++fail lvconvert --yes --type snapshot $vg/$lv1 $vg/$lv2
++fail lvconvert --yes --type snapshot $vg/$lv2 $vg/$lv1
++fail lvconvert --yes --type thin-pool $vg/$lv1
++
++lvremove -f $vg
+ 
+ vgremove -ff $vg
 
 
