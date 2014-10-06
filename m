@@ -1,69 +1,64 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  6 Oct 2014 13:33:58 +0000 (UTC)
-Subject: master - tests: lvcreate thin-pool support --name
-Message-ID: <20141006133358.88E6260DB1@fedorahosted.org>
+Date: Mon,  6 Oct 2014 13:34:00 +0000 (UTC)
+Subject: master - tests: lvcreate external origin
+Message-ID: <20141006133400.A34A76113F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=de0e6029f18a78a816f3c183d42ab641001dbebe
-Commit:        de0e6029f18a78a816f3c183d42ab641001dbebe
-Parent:        4baf4b8cf982a3ead10b9644b5c04ec3575e3009
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=52821572d507a48b7bf9b9b79e2fd765ece9c423
+Commit:        52821572d507a48b7bf9b9b79e2fd765ece9c423
+Parent:        de0e6029f18a78a816f3c183d42ab641001dbebe
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 5 20:00:39 2014 +0200
+AuthorDate:    Mon Oct 6 11:52:40 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 6 15:23:08 2014 +0200
+CommitterDate: Mon Oct 6 15:31:33 2014 +0200
 
-tests: lvcreate thin-pool support --name
+tests: lvcreate external origin
 
+Fix unsupportable case.
+We cannot create thinpool and snapshot at the same time.
+(-L could not have 2 meanings).
 ---
- test/shell/lvcreate-thin.sh |   26 +++++++++++++++++++++++++-
- 1 files changed, 25 insertions(+), 1 deletions(-)
+ test/shell/lvcreate-thin-external.sh |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
-index 215bfac..42ea635 100644
---- a/test/shell/lvcreate-thin.sh
-+++ b/test/shell/lvcreate-thin.sh
+diff --git a/test/shell/lvcreate-thin-external.sh b/test/shell/lvcreate-thin-external.sh
+index 74e5521..65401fb 100644
+--- a/test/shell/lvcreate-thin-external.sh
++++ b/test/shell/lvcreate-thin-external.sh
 @@ -1,6 +1,6 @@
  #!/bin/sh
  
--# Copyright (C) 2011-2013 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2011-2014 Red Hat, Inc. All rights reserved.
+-# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2013-2014 Red Hat, Inc. All rights reserved.
  #
  # This copyrighted material is made available to anyone wishing to use,
  # modify, copy, or redistribute it subject to the terms and conditions
-@@ -50,6 +50,30 @@ lvremove -ff $vg/pool1 $vg/pool2 $vg/pool3 $vg/pool4 $vg/pool5 $vg/pool6 $vg/poo
- check vg_field $vg lv_count 0
+@@ -60,8 +60,11 @@ lvcreate -s $vg/$lv2 --thinpool $vg/pool
+ # Fail with --thin and --snapshot
+ not lvcreate -s $vg/$lv5 --name $vg/$lv7 -T $vg/newpool
  
+-# Fail to create already existing pool
+-not lvcreate -s $vg/$lv2 -L10 --thinpool $vg/pool
++# Cannot specify size and thin pool.
++# TODO: maybe with --poolsize
++invalid lvcreate -s $vg/$lv2 -L10 --thinpool $vg/pool
++invalid lvcreate -s -K $vg/$lv2 --name $vg/$lv3 -L20 --chunksize 128 --thinpool $vg/newpool
++
+ not lvcreate -s $vg/$lv2 --chunksize 64 --thinpool $vg/pool
+ not lvcreate -s $vg/$lv2 --zero y --thinpool $vg/pool
+ not lvcreate -s $vg/$lv2 --poolmetadata $vg/$lv1 --thinpool $vg/pool
+@@ -70,7 +73,7 @@ not lvcreate -s $vg/$lv2 --poolmetadata $vg/$lv1 --thinpool $vg/pool
+ not lvcreate -s $vg/$lv2 --thinpool $vg/newpool
  
-+# Let's pretend pool is like normal LV when using --type thin-pool support --name
-+# Reject ambigous thin pool names
-+invalid lvcreate --type thin-pool -l1 --name pool1 $vg/pool2
-+invalid lvcreate --type thin-pool -l1 --name pool3 --thinpool pool4 $vg
-+invalid lvcreate --type thin-pool -l1 --name pool5 --thinpool pool6 $vg/pool7
-+invalid lvcreate --type thin-pool -l1 --name pool8 --thinpool pool8 $vg/pool9
-+check vg_field $vg lv_count 0
-+
-+lvcreate --type thin-pool -l1 --name pool1 $vg
-+lvcreate --type thin-pool -l1 --name $vg/pool2
-+# If the thin pool name is unambigous let it proceed
-+lvcreate --type thin-pool -l1 --name pool3 $vg/pool3
-+lvcreate --type thin-pool -l1 --name pool4 --thinpool $vg/pool4
-+lvcreate --type thin-pool -l1 --name pool5 --thinpool $vg/pool5 $vg/pool5
-+
-+check lv_field $vg/pool1 segtype "thin-pool"
-+check lv_field $vg/pool2 segtype "thin-pool"
-+check lv_field $vg/pool3 segtype "thin-pool"
-+check lv_field $vg/pool4 segtype "thin-pool"
-+check lv_field $vg/pool5 segtype "thin-pool"
-+
-+lvremove -ff $vg
-+
-+
- # Create default pool name
- lvcreate -l1 -T $vg
- lvcreate -l1 --type thin $vg
+ # Create pool and snap
+-lvcreate -s -K $vg/$lv2 --name $vg/$lv3 -L20 --chunksize 128 --thinpool $vg/newpool
++lvcreate -T --name $vg/$lv3 -V10 -L20 --chunksize 128 --thinpool $vg/newpool
+ lvcreate -s -K $vg/$lv3 --name $vg/$lv4
+ lvcreate -s -K $vg/$lv2 --name $vg/$lv5 --thinpool $vg/newpool
+ # Make normal thin snapshot
 
 
