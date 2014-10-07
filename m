@@ -1,62 +1,58 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  7 Oct 2014 07:32:57 +0000 (UTC)
-Subject: master - test: Creating a cache on top of active RAID works now.
-Message-ID: <20141007073257.DC90560C85@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue,  7 Oct 2014 08:20:29 +0000 (UTC)
+Subject: master - cleanup: dont hide pv_dev declaration from pv
+Message-ID: <20141007082029.3CCB4602D9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b836525d9cc267a04881b82935a6a045753631bf
-Commit:        b836525d9cc267a04881b82935a6a045753631bf
-Parent:        888da17495bc4b8a62833315cf7ad1a0bfd8fe2a
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Oct 7 09:31:21 2014 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Tue Oct 7 09:32:24 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9810f8aac7c0e38bd6cb88a45140bb41d52cd5b5
+Commit:        9810f8aac7c0e38bd6cb88a45140bb41d52cd5b5
+Parent:        b836525d9cc267a04881b82935a6a045753631bf
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Oct 7 10:17:34 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Oct 7 10:19:32 2014 +0200
 
-test: Creating a cache on top of active RAID works now.
+cleanup: dont hide pv_dev declaration from pv
 
+Just skip using local vars here...
 ---
- test/shell/lvconvert-cache.sh |    3 ---
- test/shell/lvcreate-cache.sh  |    5 +----
- 2 files changed, 1 insertions(+), 7 deletions(-)
+ lib/metadata/metadata.c |    9 +++------
+ 1 files changed, 3 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvconvert-cache.sh b/test/shell/lvconvert-cache.sh
-index 1c62309..d2f591f 100644
---- a/test/shell/lvconvert-cache.sh
-+++ b/test/shell/lvconvert-cache.sh
-@@ -90,11 +90,8 @@ fail lvconvert --type cache --cachepool $vg/pool $vg/corigin
- lvconvert --yes --cache --cachepool $vg/pool $vg/corigin
- lvremove -ff $vg
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 681c2dd..3e5bd5d 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1778,12 +1778,9 @@ struct pv_list *find_pv_in_vg(const struct volume_group *vg,
+ 			       const char *pv_name)
+ {
+ 	struct pv_list *pvl;
+-	struct device *pv_dev, *cached_dev;
  
--
--# TODO: creating a cache on top of active RAID appears to be broken
- lvcreate -n corigin -m 1 --type raid1 -l 10 $vg
- lvcreate -n cpool --type cache $vg/corigin -l 10
--lvchange --refresh $vg # fix up DM tables
- lvconvert --splitmirrors 1 --name split $vg/corigin $dev1
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+-		pv_dev = pvl->pv->dev;
+-		cached_dev = dev_cache_get(pv_name, vg->cmd->filter);
+-		if (!pv_dev) {
++		if (!pvl->pv->dev) {
+ 			/*
+ 			 * pv_dev can't be NULL here!
+ 			 * We have to catch this situation earlier in the
+@@ -1800,10 +1797,10 @@ struct pv_list *find_pv_in_vg(const struct volume_group *vg,
+ 			 * handled earlier in the code in that case.
+ 			 */
+ 			log_error(INTERNAL_ERROR "find_pv_in_vg: PV that is not "
+-				  "bound to any existing device found");
++				  "bound to any existing device found.");
+ 			return NULL;
+ 		}
+-		if (pv_dev == cached_dev)
++		if (pvl->pv->dev == dev_cache_get(pv_name, vg->cmd->filter))
+ 			return pvl;
+ 	}
  
- lvremove -f $vg
-diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
-index 63591c4..3bc8f40 100644
---- a/test/shell/lvcreate-cache.sh
-+++ b/test/shell/lvcreate-cache.sh
-@@ -156,13 +156,10 @@ grep "is bigger" out
- # --poolmetadatasize
- # --poolmetadataspare
- 
--# TODO: creating a cache on top of active RAID appears to be broken
- lvremove -f $vg
- lvcreate -n corigin -m 1 --type raid1 -l 10 $vg
- lvcreate -n cpool --type cache $vg/corigin -l 10
--should check active $vg corigin_corig
--dmsetup table | grep ^$PREFIX | should grep corigin_corig
--lvchange --refresh $vg
-+check active $vg corigin_corig
- dmsetup table | grep ^$PREFIX | grep corigin_corig
- 
- vgremove -ff $vg
 
 
