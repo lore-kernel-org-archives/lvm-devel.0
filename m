@@ -1,453 +1,2008 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  7 Oct 2014 00:16:20 +0000 (UTC)
-Subject: master - metadata: Use flags to control warnings.
-Message-ID: <20141007001620.6EF8D6006D@fedorahosted.org>
+Date: Tue,  7 Oct 2014 00:16:22 +0000 (UTC)
+Subject: master - test: Add process-each toollib tests.
+Message-ID: <20141007001622.823F66036F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8dc5f42254b319430d02e2d0ca4cffd36b2cbaca
-Commit:        8dc5f42254b319430d02e2d0ca4cffd36b2cbaca
-Parent:        e458fc9a6a3a82231367450b5f54f3c12700cd20
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86dad329be2fa20a528066776aab77f26a29790c
+Commit:        86dad329be2fa20a528066776aab77f26a29790c
+Parent:        8dc5f42254b319430d02e2d0ca4cffd36b2cbaca
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Oct 7 01:04:09 2014 +0100
+AuthorDate:    Tue Oct 7 01:08:03 2014 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
 CommitterDate: Tue Oct 7 01:15:43 2014 +0100
 
-metadata: Use flags to control warnings.
+test: Add process-each toollib tests.
 
-The warnings arg was used to enable logging of warnings
-when reading a PV.  This arg is turned into a set of flags
-with the WARN_PV_READ flag matching the existing behavior.
-
-A new flag WARN_INCONSISTENT is added that will cause
-vg_read_internal() to log the "VG is not consistent"
-warning so the various callers do not need to log
-this warning themselves.
-
-A new vg_read flag READ_WARN_INCONSISTENT is used from
-reporting to enable the WARN_INCONSISTENT flag in
-vg_read_internal.
-
-[Committed by agk with cosmetic changes and tweaks.]
 ---
- daemons/clvmd/lvm-functions.c    |    2 +-
- lib/format_text/import.c         |   10 ++--
- lib/metadata/metadata-exported.h |   11 ++++-
- lib/metadata/metadata.c          |   92 +++++++++++++++++++-------------------
- tools/toollib.c                  |    2 +-
- 5 files changed, 62 insertions(+), 55 deletions(-)
+ WHATS_NEW                               |    4 +
+ test/shell/process-each-pv-nomda-all.sh |   60 ++
+ test/shell/process-each-pv-nomda.sh     |   27 +
+ test/shell/process-each-pv.sh           | 1285 +++++++++++++++++++++++++++++++
+ test/shell/process-each-pvresize.sh     |  561 ++++++++++++++
+ 5 files changed, 1937 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index f3a56ce..4ebd059 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -842,7 +842,7 @@ void lvm_do_backup(const char *vgname)
- 
- 	pthread_mutex_lock(&lvm_lock);
- 
--	vg = vg_read_internal(cmd, vgname, NULL /*vgid*/, 1, &consistent);
-+	vg = vg_read_internal(cmd, vgname, NULL /*vgid*/, WARN_PV_READ, &consistent);
- 
- 	if (vg && consistent)
- 		check_current_backup(vg);
-diff --git a/lib/format_text/import.c b/lib/format_text/import.c
-index 1b1f332..4b02264 100644
---- a/lib/format_text/import.c
-+++ b/lib/format_text/import.c
-@@ -51,8 +51,10 @@ const char *text_vgname_import(const struct format_type *fmt,
- 
- 	if ((!dev && !config_file_read(cft)) ||
- 	    (dev && !config_file_read_fd(cft, dev, offset, size,
--					 offset2, size2, checksum_fn, checksum)))
--		goto_out;
-+					 offset2, size2, checksum_fn, checksum))) {
-+		log_error("Couldn't read volume group metadata.");
-+		goto out;
-+	}
- 
- 	/*
- 	 * Find a set of version functions that can read this file
-@@ -97,10 +99,8 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
- 
- 	if ((!dev && !config_file_read(cft)) ||
- 	    (dev && !config_file_read_fd(cft, dev, offset, size,
--					 offset2, size2, checksum_fn, checksum))) {
--		log_error("Couldn't read volume group metadata.");
-+					 offset2, size2, checksum_fn, checksum)))
- 		goto out;
--	}
- 
- 	/*
- 	 * Find a set of version functions that can read this file
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 4843d2c..4ab7672 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -144,6 +144,7 @@
- #define READ_ALLOW_INCONSISTENT	0x00010000U
- #define READ_ALLOW_EXPORTED	0x00020000U
- #define READ_WITHOUT_LOCK	0x00040000U
-+#define READ_WARN_INCONSISTENT	0x00080000U
- 
- /* A meta-flag, useful with toollib for_each_* functions. */
- #define READ_FOR_UPDATE		0x00100000U
-@@ -544,13 +545,19 @@ int pvcreate_single(struct cmd_context *cmd, const char *pv_name,
- void pvcreate_params_set_defaults(struct pvcreate_params *pp);
- 
- /*
-+ * Flags that indicate which warnings a library function should issue.
-+ */ 
-+#define WARN_PV_READ      0x00000001
-+#define WARN_INCONSISTENT 0x00000002
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 875ab20..fa4ff65 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,8 @@
+ Version 2.02.112 - 
+ =====================================
++  Introduce WARN_ flags to control some metadata warning messages.
++  Use process_each_pv in vgreduce.
++  Refactor process_each_pv in toollib.
+   Introduce single validation routine for pool chunk size.
+   Support --yes like --force in vg/lvremove to skip y|n prompt.
+   Support --yes with lvconvert --splitsnapshot.
+@@ -14,6 +17,7 @@ Version 2.02.112 -
+   Support lvconvert --splitcache and --uncache of cached LV.
+   Option --cache has also shortcut -H (i.e. lvcreate -H).
+   Refactor lvcreate code and better preserve --type argument.
++  Refactor process_each_lv in toollib.
+   Refactor process_each_vg in toollib.
+   Pools cannot be used as external origin.
+   Use lv_update_and_reload() for snapshot reload.
+diff --git a/test/shell/process-each-pv-nomda-all.sh b/test/shell/process-each-pv-nomda-all.sh
+new file mode 100644
+index 0000000..ae9f8e5
+--- /dev/null
++++ b/test/shell/process-each-pv-nomda-all.sh
+@@ -0,0 +1,60 @@
++#!/bin/sh
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+/*
- * Utility functions
- */
- int vg_write(struct volume_group *vg);
- int vg_commit(struct volume_group *vg);
- void vg_revert(struct volume_group *vg);
- struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name,
--				      const char *vgid, int warnings, int *consistent);
-+				      const char *vgid, uint32_t warn_flags, int *consistent);
- 
- #define get_pvs( cmd ) get_pvs_internal((cmd), NULL, NULL)
- #define get_pvs_perserve_vg( cmd, pv_list, vg_list ) get_pvs_internal((cmd), (pv_list), (vg_list))
-@@ -568,7 +575,7 @@ void lv_set_hidden(struct logical_volume *lv);
- 
- struct dm_list *get_vgnames(struct cmd_context *cmd, int include_internal);
- struct dm_list *get_vgids(struct cmd_context *cmd, int include_internal);
--int scan_vgs_for_pvs(struct cmd_context *cmd, int warnings);
-+int scan_vgs_for_pvs(struct cmd_context *cmd, uint32_t warn_flags);
- 
- int pv_write(struct cmd_context *cmd, struct physical_volume *pv, int allow_non_orphan);
- int move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 6719fe4..8443f94 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -39,7 +39,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
- 					struct dm_pool *pvmem,
- 					const char *pv_name,
- 					struct format_instance *fid,
--					int warnings, int scan_label_only);
-+					uint32_t warn_flags, int scan_label_only);
- 
- static uint32_t _vg_bad_status_bits(const struct volume_group *vg,
- 				    uint64_t status);
-@@ -333,18 +333,15 @@ int get_pv_from_vg_by_id(const struct format_type *fmt, const char *vg_name,
- {
- 	struct volume_group *vg;
- 	struct pv_list *pvl;
-+	uint32_t warn_flags = WARN_PV_READ | WARN_INCONSISTENT;
- 	int r = 0, consistent = 0;
- 
--	if (!(vg = vg_read_internal(fmt->cmd, vg_name, vgid, 1, &consistent))) {
-+	if (!(vg = vg_read_internal(fmt->cmd, vg_name, vgid, warn_flags, &consistent))) {
- 		log_error("get_pv_from_vg_by_id: vg_read_internal failed to read VG %s",
- 			  vg_name);
- 		return 0;
- 	}
- 
--	if (!consistent)
--		log_warn("WARNING: Volume group %s is not consistent",
--			 vg_name);
--
- 	dm_list_iterate_items(pvl, &vg->pvs) {
- 		if (id_equal(&pvl->pv->id, (const struct id *) pvid)) {
- 			if (!_copy_pv(fmt->cmd->mem, pv, pvl->pv)) {
-@@ -1045,7 +1042,7 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
- 	/* FIXME: Is this vg_read_internal necessary? Move it inside
- 	   vg_lock_newname? */
- 	/* is this vg name already in use ? */
--	if ((vg = vg_read_internal(cmd, vg_name, NULL, 1, &consistent))) {
-+	if ((vg = vg_read_internal(cmd, vg_name, NULL, WARN_PV_READ, &consistent))) {
- 		log_error("A volume group called '%s' already exists.", vg_name);
- 		unlock_and_release_vg(cmd, vg, vg_name);
- 		return _vg_make_handle(cmd, NULL, FAILED_EXIST);
-@@ -2909,7 +2906,7 @@ void vg_revert(struct volume_group *vg)
- 
- struct _vg_read_orphan_baton {
- 	struct volume_group *vg;
--	int warnings;
-+	uint32_t warn_flags;
- };
- 
- static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
-@@ -2919,7 +2916,7 @@ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
- 	struct pv_list *pvl;
- 
- 	if (!(pv = _pv_read(b->vg->cmd, b->vg->vgmem, dev_name(lvmcache_device(info)),
--			    b->vg->fid, b->warnings, 0))) {
-+			    b->vg->fid, b->warn_flags, 0))) {
- 		stack;
- 		return 1;
- 	}
-@@ -2936,7 +2933,7 @@ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
- 
- /* Make orphan PVs look like a VG. */
- static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
--					     int warnings,
-+					     uint32_t warn_flags,
- 					     const char *orphan_vgname)
- {
- 	const struct format_type *fmt;
-@@ -2969,7 +2966,7 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
- 	vg->extent_count = 0;
- 	vg->free_count = 0;
- 
--	baton.warnings = warnings;
-+	baton.warn_flags = warn_flags;
- 	baton.vg = vg;
- 
- 	while ((pvl = (struct pv_list *) dm_list_first(&head.list))) {
-@@ -3118,7 +3115,7 @@ static int _check_mda_in_use(struct metadata_area *mda, void *_in_use)
- static struct volume_group *_vg_read(struct cmd_context *cmd,
- 				     const char *vgname,
- 				     const char *vgid,
--				     int warnings, 
-+				     uint32_t warn_flags, 
- 				     int *consistent, unsigned precommitted)
- {
- 	struct format_instance *fid = NULL;
-@@ -3147,7 +3144,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			return NULL;
- 		}
- 		*consistent = 1;
--		return _vg_read_orphans(cmd, warnings, vgname);
-+		return _vg_read_orphans(cmd, warn_flags, vgname);
- 	}
- 
- 	if (lvmetad_active() && !use_precommitted) {
-@@ -3584,19 +3581,20 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- }
- 
- struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgname,
--			     const char *vgid, int warnings, int *consistent)
-+				      const char *vgid, uint32_t warn_flags, int *consistent)
- {
- 	struct volume_group *vg;
- 	struct lv_list *lvl;
- 
--	if (!(vg = _vg_read(cmd, vgname, vgid, warnings, consistent, 0)))
--		return NULL;
-+	if (!(vg = _vg_read(cmd, vgname, vgid, warn_flags, consistent, 0)))
-+		goto_out;
- 
- 	if (!check_pv_segments(vg)) {
- 		log_error(INTERNAL_ERROR "PV segments corrupted in %s.",
- 			  vg->name);
- 		release_vg(vg);
--		return NULL;
-+		vg = NULL;
-+		goto out;
- 	}
- 
- 	dm_list_iterate_items(lvl, &vg->lvs) {
-@@ -3604,7 +3602,8 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
- 			log_error(INTERNAL_ERROR "LV segments corrupted in %s.",
- 				  lvl->lv->name);
- 			release_vg(vg);
--			return NULL;
-+			vg = NULL;
-+			goto out;
- 		}
- 	}
- 
-@@ -3616,10 +3615,15 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
- 			log_error(INTERNAL_ERROR "LV segments corrupted in %s.",
- 				  lvl->lv->name);
- 			release_vg(vg);
--			return NULL;
-+			vg = NULL;
-+			goto out;
- 		}
- 	}
- 
-+out:
-+	if (!*consistent && (warn_flags & WARN_INCONSISTENT))
-+		log_warn("WARNING: Volume Group %s is not consistent", vgname);
++test_description='Test process_each_pv with zero mda'
 +
- 	return vg;
- }
- 
-@@ -3643,16 +3647,13 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 	struct dm_list *vgnames;
- 	struct volume_group *vg;
- 	struct dm_str_list *strl;
-+	uint32_t warn_flags = WARN_PV_READ | WARN_INCONSISTENT;
- 	int consistent = 0;
- 
- 	/* Is corresponding vgname already cached? */
- 	if (lvmcache_vgid_is_cached(vgid)) {
--		if ((vg = _vg_read(cmd, NULL, vgid, 1,
--				   &consistent, precommitted)) &&
-+		if ((vg = _vg_read(cmd, NULL, vgid, warn_flags, &consistent, precommitted)) &&
- 		    id_equal(&vg->id, (const struct id *)vgid)) {
--			if (!consistent)
--				log_error("Volume group %s metadata is "
--					  "inconsistent", vg->name);
- 			return vg;
- 		}
- 		release_vg(vg);
-@@ -3678,12 +3679,9 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 		if (!vgname)
- 			continue;	// FIXME Unnecessary?
- 		consistent = 0;
--		if ((vg = _vg_read(cmd, vgname, vgid, 1, &consistent,
--				   precommitted)) &&
-+		if ((vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted)) &&
- 		    id_equal(&vg->id, (const struct id *)vgid)) {
- 			if (!consistent) {
--				log_error("Volume group %s metadata is "
--					  "inconsistent", vgname);
- 				release_vg(vg);
- 				return NULL;
- 			}
-@@ -3747,7 +3745,7 @@ const char *find_vgname_from_pvid(struct cmd_context *cmd,
- 		 * every PV on the system.
- 		 */
- 		if (lvmcache_uncertain_ownership(info)) {
--			if (!scan_vgs_for_pvs(cmd, 1)) {
-+			if (!scan_vgs_for_pvs(cmd, WARN_PV_READ)) {
- 				log_error("Rescan for PVs without "
- 					  "metadata areas failed.");
- 				return NULL;
-@@ -3781,7 +3779,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
- 					struct dm_pool *pvmem,
- 					const char *pv_name,
- 					struct format_instance *fid,
--					int warnings, int scan_label_only)
-+					uint32_t warn_flags, int scan_label_only)
- {
- 	struct physical_volume *pv;
- 	struct label *label;
-@@ -3799,13 +3797,13 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
- 			if (!lvmetad_pv_lookup_by_dev(cmd, dev, &found))
- 				return_NULL;
- 			if (!found) {
--				if (warnings)
-+				if (warn_flags & WARN_PV_READ)
- 					log_error("No physical volume found in lvmetad cache for %s",
- 						  pv_name);
- 				return NULL;
- 			}
- 			if (!(info = lvmcache_info_from_pvid(dev->pvid, 0))) {
--				if (warnings)
-+				if (warn_flags & WARN_PV_READ)
- 					log_error("No cache info in lvmetad cache for %s.",
- 						  pv_name);
- 				return NULL;
-@@ -3814,7 +3812,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
- 		label = lvmcache_get_label(info);
- 	} else {
- 		if (!(label_read(dev, &label, UINT64_C(0)))) {
--			if (warnings)
-+			if (warn_flags & WARN_PV_READ)
- 				log_error("No physical volume label read from %s",
- 					  pv_name);
- 			return NULL;
-@@ -3870,7 +3868,7 @@ struct dm_list *get_vgids(struct cmd_context *cmd, int include_internal)
- 	return lvmcache_get_vgids(cmd, include_internal);
- }
- 
--static int _get_pvs(struct cmd_context *cmd, int warnings,
-+static int _get_pvs(struct cmd_context *cmd, uint32_t warn_flags,
- 		struct dm_list *pvslist, struct dm_list *vgslist)
- {
- 	struct dm_str_list *strl;
-@@ -3913,13 +3911,13 @@ static int _get_pvs(struct cmd_context *cmd, int warnings,
- 		 * vgid will be NULL.
- 		 * FIXME Remove this hack.
- 		 */
--		if (!(vg = vg_read_internal(cmd, vgname, (!vgslist) ? vgid : NULL, warnings, &consistent))) {
++. lib/inittest
 +
-+		warn_flags |= WARN_INCONSISTENT;
++aux prepare_devs 14
 +
-+		if (!(vg = vg_read_internal(cmd, vgname, (!vgslist) ? vgid : NULL, warn_flags, &consistent))) {
- 			stack;
- 			continue;
- 		}
--		if (!consistent)
--			log_warn("WARNING: Volume Group %s is not consistent",
--				 vgname);
- 
- 		/* Move PVs onto results list */
- 		if (pvslist)
-@@ -4001,7 +3999,7 @@ struct dm_list *get_pvs_internal(struct cmd_context *cmd,
- 		dm_list_init(results);
- 	}
- 
--	if (!_get_pvs(cmd, 1, results, vgslist)) {
-+	if (!_get_pvs(cmd, WARN_PV_READ, results, vgslist)) {
- 		if (!pvslist)
- 			dm_pool_free(cmd->mem, results);
- 		return NULL;
-@@ -4009,9 +4007,9 @@ struct dm_list *get_pvs_internal(struct cmd_context *cmd,
- 	return results;
- }
- 
--int scan_vgs_for_pvs(struct cmd_context *cmd, int warnings)
-+int scan_vgs_for_pvs(struct cmd_context *cmd, uint32_t warn_flags)
- {
--	return _get_pvs(cmd, warnings, NULL, NULL);
-+	return _get_pvs(cmd, warn_flags, NULL, NULL);
- }
- 
- int pv_write(struct cmd_context *cmd __attribute__((unused)),
-@@ -4217,7 +4215,7 @@ static struct volume_group *_recover_vg(struct cmd_context *cmd,
- 	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE, NULL))
- 		return_NULL;
- 
--	if (!(vg = vg_read_internal(cmd, vg_name, vgid, 1, &consistent))) {
-+	if (!(vg = vg_read_internal(cmd, vg_name, vgid, WARN_PV_READ, &consistent))) {
- 		unlock_vg(cmd, vg_name);
- 		return_NULL;
- 	}
-@@ -4250,6 +4248,7 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
- 	int consistent = 1;
- 	int consistent_in;
- 	uint32_t failure = 0;
-+	uint32_t warn_flags = 0;
- 	int already_locked;
- 
- 	if (misc_flags & READ_ALLOW_INCONSISTENT || lock_flags != LCK_VG_WRITE)
-@@ -4274,16 +4273,17 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
- 
- 	consistent_in = consistent;
- 
-+	warn_flags = WARN_PV_READ;
-+	if (consistent || (misc_flags & READ_WARN_INCONSISTENT))
-+		warn_flags |= WARN_INCONSISTENT;
++# for vg1
++pvcreate $dev10
 +
- 	/* If consistent == 1, we get NULL here if correction fails. */
--	if (!(vg = vg_read_internal(cmd, vg_name, vgid, 1, &consistent))) {
-+	if (!(vg = vg_read_internal(cmd, vg_name, vgid, warn_flags, &consistent))) {
- 		if (consistent_in && !consistent) {
--			log_error("Volume group \"%s\" inconsistent.", vg_name);
- 			failure |= FAILED_INCONSISTENT;
- 			goto bad;
- 		}
--
- 		log_error("Volume group \"%s\" not found", vg_name);
--
- 		failure |= FAILED_NOTFOUND;
- 		goto bad;
- 	}
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 16aeaa2..1ee8469 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -2136,7 +2136,7 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t flags,
- 		ret = 0;
- 		skip = 0;
- 
--		vg = vg_read(cmd, vg_name, vg_uuid, flags);
-+		vg = vg_read(cmd, vg_name, vg_uuid, flags | READ_WARN_INCONSISTENT);
- 		if (ignore_vg(vg, vg_name, flags & READ_ALLOW_INCONSISTENT, &ret)) {
- 			if (ret > ret_max)
- 				ret_max = ret;
++# for vg2
++pvcreate $dev2 --metadatacopies 0
++pvcreate $dev3
++pvcreate $dev4
++pvcreate $dev5
++
++# for vg3
++pvcreate $dev6 --metadatacopies 0
++pvcreate $dev7 --metadatacopies 0
++pvcreate $dev8 --metadatacopies 0
++pvcreate $dev9
++
++# orphan with mda
++pvcreate "$dev11"
++# orphan without mda
++pvcreate "$dev14" --metadatacopies 0
++
++# non-pv devs
++# dev12
++# dev13
++
++vgcreate $vg1 "$dev10"
++vgcreate $vg2 "$dev2" "$dev3" "$dev4" "$dev5"
++vgcreate $vg3 "$dev6" "$dev7" "$dev8" "$dev9"
++
++pvs -a >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++grep $dev12 err
++grep $dev13 err
++grep $dev14 err
++
+diff --git a/test/shell/process-each-pv-nomda.sh b/test/shell/process-each-pv-nomda.sh
+new file mode 100644
+index 0000000..10ce878
+--- /dev/null
++++ b/test/shell/process-each-pv-nomda.sh
+@@ -0,0 +1,27 @@
++#!/bin/sh
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++test_description='Test process_each_pv with zero mda'
++
++. lib/inittest
++
++aux prepare_devs 2
++
++pvcreate $dev1 --metadatacopies 0
++pvcreate $dev2
++
++vgcreate $vg1 "$dev1" "$dev2"
++
++pvdisplay -a -C >err
++cat err
++grep $dev1 err
++grep $dev2 err
++
+diff --git a/test/shell/process-each-pv.sh b/test/shell/process-each-pv.sh
+new file mode 100644
+index 0000000..a24b80b
+--- /dev/null
++++ b/test/shell/process-each-pv.sh
+@@ -0,0 +1,1285 @@
++#!/bin/sh
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++test_description='Exercise toollib process_each_pv'
++
++. lib/inittest
++
++aux prepare_devs 14
++
++#
++# process_each_pv is used by a number of pv commands:
++# pvdisplay
++# pvresize
++# pvs
++# vgreduce
++#
++# process-each-pvresize.sh covers pvresize,
++# the others are covered here.
++#
++
++
++#
++# set up
++#
++# use use dev10 instead of dev1 because simple grep for
++# dev1 matchines dev10,dev11,etc
++#
++
++vgcreate $vg1 "$dev10"
++vgcreate $vg2 "$dev2" "$dev3" "$dev4" "$dev5"
++vgcreate $vg3 "$dev6" "$dev7" "$dev8" "$dev9"
++
++pvchange --addtag V2D3 "$dev3"
++pvchange --addtag V2D4 "$dev4"
++pvchange --addtag V2D45 "$dev4"
++pvchange --addtag V2D5 "$dev5"
++pvchange --addtag V2D45 "$dev5"
++
++pvchange --addtag V3 "$dev6" "$dev7" "$dev8" "$dev9"
++pvchange --addtag V3D9 "$dev9"
++
++# orphan
++pvcreate "$dev11"
++
++# dev (a non-pv device)
++pvcreate "$dev12"
++pvremove "$dev12"
++
++# dev13 is intentionally untouched so we can
++# test that it is handled appropriately as a non-pv
++
++# orphan
++pvcreate "$dev14"
++
++
++#
++# test pvdisplay
++#
++
++# pv in vg
++pvdisplay -s $dev10 >err
++grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# pv not in vg (one orphan)
++pvdisplay -s $dev11 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# dev is not a pv
++not pvdisplay -s $dev12 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# two pvs in different vgs
++pvdisplay -s $dev10 $dev2 >err
++grep $dev10 err
++grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# -a is invalid when used alone
++not pvdisplay -a >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# one pv and one orphan
++pvdisplay -s $dev10 $dev11 >err
++grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# one pv and one dev (dev refers to a non-pv device)
++not pvdisplay -s $dev10 $dev12 >err
++grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# one orphan and one dev
++not pvdisplay -s $dev11 $dev12 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# all pvs (pvs in vgs and orphan pvs)
++pvdisplay -s >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++grep $dev14 err
++
++# all devs (pvs in vgs, orphan pvs, and devs)
++pvdisplay -a -C >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++grep $dev12 err
++grep $dev13 err
++grep $dev14 err
++
++# pv and orphan and dev
++not pvdisplay -s $dev9 $dev11 $dev12 > err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# -s option not allowed with -a -C
++not pvdisplay -s -a -C > err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# pv and all (all ignored)
++pvdisplay -a -C $dev9 > err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# orphan and all (all ignored)
++pvdisplay -a -C $dev11 > err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# one tag
++pvdisplay -s @V2D3 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# two tags
++pvdisplay -s @V2D3 @V2D45 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and pv
++pvdisplay -s @V2D3 $dev4 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and orphan
++pvdisplay -s @V2D3 $dev11 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and dev
++not pvdisplay -s @V2D3 $dev12 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and all (all ignored)
++pvdisplay @V2D3 -a -C > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and pv redundant
++pvdisplay -s @V2D3 $dev3 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++
++#
++# test pvs
++#
++
++# pv in vg
++pvs $dev10 >err
++grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# pv not in vg (one orphan)
++pvs $dev11 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# dev is not a pv
++not pvs $dev12 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# two pvs in different vgs
++pvs $dev10 $dev2 >err
++grep $dev10 err
++grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# one pv and one orphan
++pvs $dev10 $dev11 >err
++grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# one pv and one dev
++not pvs $dev10 $dev12 >err
++grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# one orphan and one dev
++not pvs $dev11 $dev12 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# all pvs (pvs in vgs and orphan pvs)
++pvs >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++grep $dev14 err
++
++# all devs (pvs in vgs, orphan pvs, and devs)
++pvs -a >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++grep $dev12 err
++grep $dev13 err
++grep $dev14 err
++
++# pv and orphan and dev
++not pvs $dev9 $dev11 $dev12 > err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# pv and all (all ignored)
++pvs -a $dev9 > err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# orphan and all (all ignored)
++pvs -a $dev11 > err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# one tag
++pvs @V2D3 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# two tags
++pvs @V2D3 @V2D45 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and pv
++pvs @V2D3 $dev4 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and orphan
++pvs @V2D3 $dev11 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and dev
++not pvs @V2D3 $dev12 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and all (all ignored)
++pvs @V2D3 -a > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag and pv redundant
++pvs @V2D3 $dev3 > err
++not grep $dev10 err
++not grep $dev2 err
++grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++
++#
++# test vgreduce
++#
++
++# fail without dev
++not vgreduce $vg2
++
++
++# fail with dev and -a
++not vgreduce $vg2 $dev2 -a
++check pv_field $dev2 vg_name $vg2
++check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++
++
++# remove one pv
++vgreduce $vg2 $dev2
++not check pv_field $dev2 vg_name $vg2
++check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev2
++
++
++# remove two pvs
++vgreduce $vg2 $dev2 $dev3
++not check pv_field $dev2 vg_name $vg2
++not check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev2 $dev3
++pvchange --addtag V2D3 "$dev3"
++
++
++# remove one pv with tag
++vgreduce $vg2 @V2D3
++check pv_field $dev2 vg_name $vg2
++not check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev3
++pvchange --addtag V2D3 "$dev3"
++
++
++# remove two pvs, each with different tag
++vgreduce $vg2 @V2D3 @V2D4
++check pv_field $dev2 vg_name $vg2
++not check pv_field $dev3 vg_name $vg2
++not check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev3 $dev4
++pvchange --addtag V2D3 "$dev3"
++pvchange --addtag V2D4 "$dev4"
++pvchange --addtag V2D45 "$dev4"
++
++
++# remove two pvs, both with same tag
++vgreduce $vg2 @V2D45
++check pv_field $dev2 vg_name $vg2
++check pv_field $dev3 vg_name $vg2
++not check pv_field $dev4 vg_name $vg2
++not check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev4 $dev5
++pvchange --addtag V2D4 "$dev4"
++pvchange --addtag V2D45 "$dev4"
++pvchange --addtag V2D5 "$dev5"
++pvchange --addtag V2D45 "$dev5"
++
++
++# remove two pvs, one by name, one by tag
++vgreduce $vg2 $dev2 @V2D3
++not check pv_field $dev2 vg_name $vg2
++not check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev2 $dev3
++pvchange --addtag V2D3 "$dev3"
++
++
++# remove one pv by tag, where another vg has a pv with same tag
++pvchange --addtag V2D5V3D9 "$dev5"
++pvchange --addtag V2D5V3D9 "$dev9"
++vgreduce $vg2 @V2D5V3D9
++check pv_field $dev2 vg_name $vg2
++check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++not check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev5
++pvchange --addtag V2D5 "$dev5"
++pvchange --addtag V2D45 "$dev5"
++
++
++# fail to remove last pv (don't know which will be last)
++not vgreduce -a $vg2
++# reset
++vgremove $vg2
++vgcreate $vg2 "$dev2" "$dev3" "$dev4" "$dev5"
++pvchange --addtag V2D3 "$dev3"
++pvchange --addtag V2D4 "$dev4"
++pvchange --addtag V2D45 "$dev4"
++pvchange --addtag V2D5 "$dev5"
++pvchange --addtag V2D45 "$dev5"
++
++
++# lvcreate on one pv to make it used
++# remove all unused pvs
++lvcreate -n $lv1 -l 2 $vg2 $dev2
++not vgreduce -a $vg2
++check pv_field $dev2 vg_name $vg2
++not check pv_field $dev3 vg_name $vg2
++not check pv_field $dev4 vg_name $vg2
++not check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev3 $dev4 $dev5
++pvchange --addtag V2D3 "$dev3"
++pvchange --addtag V2D4 "$dev4"
++pvchange --addtag V2D45 "$dev4"
++pvchange --addtag V2D5 "$dev5"
++pvchange --addtag V2D45 "$dev5"
++lvchange -an $vg2/$lv1
++lvremove $vg2/$lv1
++
++
++#
++# tests including pvs without mdas
++#
++
++# remove old config
++vgremove $vg1
++vgremove $vg2
++vgremove $vg3
++pvremove $dev11
++pvremove $dev14
++
++# new config with some pvs that have zero mdas
++
++# for vg1
++pvcreate $dev10
++
++# for vg2
++pvcreate $dev2 --metadatacopies 0
++pvcreate $dev3
++pvcreate $dev4
++pvcreate $dev5
++
++# for vg3
++pvcreate $dev6 --metadatacopies 0
++pvcreate $dev7 --metadatacopies 0
++pvcreate $dev8 --metadatacopies 0
++pvcreate $dev9
++
++# orphan with mda
++pvcreate "$dev11"
++# orphan without mda
++pvcreate "$dev14" --metadatacopies 0
++
++# non-pv devs
++# dev12
++# dev13
++
++vgcreate $vg1 "$dev10"
++vgcreate $vg2 "$dev2" "$dev3" "$dev4" "$dev5"
++vgcreate $vg3 "$dev6" "$dev7" "$dev8" "$dev9"
++
++pvchange --addtag V2D3 "$dev3"
++pvchange --addtag V2D4 "$dev4"
++pvchange --addtag V2D45 "$dev4"
++pvchange --addtag V2D5 "$dev5"
++pvchange --addtag V2D45 "$dev5"
++
++pvchange --addtag V3 "$dev6" "$dev7" "$dev8" "$dev9"
++pvchange --addtag V3D8 "$dev8"
++pvchange --addtag V3D9 "$dev9"
++
++
++#
++# pvdisplay including pvs without mdas
++#
++
++# pv with mda
++pvdisplay -s $dev10 >err
++grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# pv without mda
++pvdisplay -s $dev2 >err
++not grep $dev10 err
++grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# orphan with mda
++pvdisplay -s $dev11 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# orphan without mda
++pvdisplay -s $dev14 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++grep $dev14 err
++
++# pv with mda, pv without mda, orphan with mda, orphan without mda
++pvdisplay -s $dev10 $dev2 $dev11 $dev14 >err
++grep $dev10 err
++grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++grep $dev14 err
++
++# tag refering to pv with mda and pv without mda
++pvdisplay -s @V3 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag refering to one pv without mda
++pvdisplay -s @V3D8 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# all pvs (pvs in vgs and orphan pvs)
++pvdisplay -s >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++grep $dev14 err
++
++# all devs (pvs in vgs, orphan pvs, and devs)
++pvdisplay -a -C >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++grep $dev12 err
++grep $dev13 err
++grep $dev14 err
++
++#
++# pvs including pvs without mdas
++#
++
++# pv with mda
++pvs $dev10 >err
++grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# pv without mda
++pvs $dev2 >err
++not grep $dev10 err
++grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# orphan with mda
++pvs $dev11 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# orphan without mda
++pvs $dev14 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++grep $dev14 err
++
++# pv with mda, pv without mda, orphan with mda, orphan without mda
++pvs $dev10 $dev2 $dev11 $dev14 >err
++grep $dev10 err
++grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++not grep $dev8 err
++not grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++grep $dev14 err
++
++# tag refering to pv with mda and pv without mda
++pvs @V3 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# tag refering to one pv without mda
++pvs @V3D8 >err
++not grep $dev10 err
++not grep $dev2 err
++not grep $dev3 err
++not grep $dev4 err
++not grep $dev5 err
++not grep $dev6 err
++not grep $dev7 err
++grep $dev8 err
++not grep $dev9 err
++not grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++not grep $dev14 err
++
++# all pvs (pvs in vgs and orphan pvs)
++pvs >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++not grep $dev12 err
++not grep $dev13 err
++grep $dev14 err
++
++# all devs (pvs in vgs, orphan pvs, and devs)
++pvs -a >err
++grep $dev10 err
++grep $dev2 err
++grep $dev3 err
++grep $dev4 err
++grep $dev5 err
++grep $dev6 err
++grep $dev7 err
++grep $dev8 err
++grep $dev9 err
++grep $dev11 err
++grep $dev12 err
++grep $dev13 err
++grep $dev14 err
++
++
++#
++# vgreduce including pvs without mdas
++#
++
++# remove pv without mda
++vgreduce $vg2 $dev2
++not check pv_field $dev2 vg_name $vg2
++check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev2
++
++# remove pv with mda and pv without mda
++vgreduce $vg2 $dev2 $dev3
++not check pv_field $dev2 vg_name $vg2
++not check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++# reset
++vgextend $vg2 $dev2
++vgextend $vg2 $dev3
++
++# fail to remove only pv with mda
++not vgreduce $vg3 $dev9
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++check pv_field $dev2 vg_name $vg2
++check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++
++# remove by tag a pv without mda
++vgreduce $vg3 @V3D8
++check pv_field $dev6 vg_name $vg3
++check pv_field $dev7 vg_name $vg3
++not check pv_field $dev8 vg_name $vg3
++check pv_field $dev9 vg_name $vg3
++check pv_field $dev2 vg_name $vg2
++check pv_field $dev3 vg_name $vg2
++check pv_field $dev4 vg_name $vg2
++check pv_field $dev5 vg_name $vg2
++# reset
++vgextend $vg3 $dev8
++
++
+diff --git a/test/shell/process-each-pvresize.sh b/test/shell/process-each-pvresize.sh
+new file mode 100644
+index 0000000..caa0890
+--- /dev/null
++++ b/test/shell/process-each-pvresize.sh
+@@ -0,0 +1,561 @@
++#!/bin/sh
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++test_description='Exercise toollib process_each_pv'
++
++. lib/inittest
++
++aux prepare_devs 14
++
++#
++# process_each_pv is used by a number of pv commands:
++# pvdisplay
++# pvresize
++# pvs
++# vgreduce
++#
++
++
++#
++# set up
++#
++# use use dev10 instead of dev1 because simple grep for
++# dev1 matchines dev10,dev11,etc
++#
++
++vgcreate $vg1 "$dev10"
++vgcreate $vg2 "$dev2" "$dev3" "$dev4" "$dev5"
++vgcreate $vg3 "$dev6" "$dev7" "$dev8" "$dev9"
++
++pvchange --addtag V2D3 "$dev3"
++pvchange --addtag V2D4 "$dev4"
++pvchange --addtag V2D45 "$dev4"
++pvchange --addtag V2D5 "$dev5"
++pvchange --addtag V2D45 "$dev5"
++
++pvchange --addtag V3 "$dev6" "$dev7" "$dev8" "$dev9"
++pvchange --addtag V3D9 "$dev9"
++
++# orphan
++pvcreate "$dev11"
++
++# dev (a non-pv device)
++pvcreate "$dev12"
++pvremove "$dev12"
++
++# dev13 is intentionally untouched so we can
++# test that it is handled appropriately as a non-pv
++
++# orphan
++pvcreate "$dev14"
++
++#
++# test pvresize without orphans and and without non-pv devs
++#
++
++# For pvs in vgs, pvresize setphysicalvolumesize does not give us
++# the size requested, but reduces the requested size by some the
++# amount for alignment, metadata areas and pv headers.  So, when we resize
++# to 30M, the result is 28M, and when we resize to 20M, the result is 16M.
++# For orphans, the resulting size is the same as requested.
++# It suspect that these reduction amounts might be inconsistent, and
++# depend on other changing factors, so it may be that we eventually
++# want to give up checking the exact resulting size, but just check
++# that the result is less than the original size.
++
++old_request="30.00m"
++old_reduced="28.00m"
++new_request="20.00m"
++new_reduced="16.00m"
++
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++
++# one pv
++pvresize --setphysicalvolumesize $new_request $dev10
++check pv_field $dev10 pv_size $new_reduced
++# unchanged
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++# two pvs in separate vgs
++pvresize --setphysicalvolumesize $new_request $dev2 $dev6
++check pv_field $dev2 pv_size $new_reduced
++check pv_field $dev6 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++# one tag on one pv
++pvresize --setphysicalvolumesize $new_request @V2D4
++check pv_field $dev4 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++# one tag on all pvs in one vg
++pvresize --setphysicalvolumesize $new_request @V3
++check pv_field $dev6 pv_size $new_reduced
++check pv_field $dev7 pv_size $new_reduced
++check pv_field $dev8 pv_size $new_reduced
++check pv_field $dev9 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++# one tag on some pvs in one vg
++pvresize --setphysicalvolumesize $new_request @V2D45
++check pv_field $dev4 pv_size $new_reduced
++check pv_field $dev5 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++# one tag on multiple pvs in separate vgs
++pvchange --addtag V12 "$dev10" "$dev2" "$dev3" "$dev4" "$dev5"
++pvresize --setphysicalvolumesize $new_request @V12
++check pv_field $dev10 pv_size $new_reduced
++check pv_field $dev2 pv_size $new_reduced
++check pv_field $dev3 pv_size $new_reduced
++check pv_field $dev4 pv_size $new_reduced
++check pv_field $dev5 pv_size $new_reduced
++# unchanged
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++# one pv and one tag on different pv
++pvresize --setphysicalvolumesize $new_request $dev10 @V3D9
++check pv_field $dev10 pv_size $new_reduced
++check pv_field $dev9 pv_size $new_reduced
++# unchanged
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++# redundant pv and tag
++pvresize --setphysicalvolumesize $new_request $dev9 @V3D9
++check pv_field $dev9 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++# two tags on pvs in separate vgs
++pvresize --setphysicalvolumesize $new_request @V3D9 @V2D3
++check pv_field $dev9 pv_size $new_reduced
++check pv_field $dev3 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++
++
++#
++# test pvresize with orphans
++#
++
++old_request="30.00m"
++old_reduced="28.00m"
++old_orphan="30.00m"
++new_request="20.00m"
++new_reduced="16.00m"
++new_orphan="20.00m"
++
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++check pv_field $dev14 pv_size $old_orphan
++
++# one orphan
++pvresize --setphysicalvolumesize $new_request $dev11
++check pv_field $dev11 pv_size $new_orphan
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev14 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# two orphans
++pvresize --setphysicalvolumesize $new_request $dev11 $dev14
++check pv_field $dev11 pv_size $new_orphan
++check pv_field $dev14 pv_size $new_orphan
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one orphan, one tag
++pvresize --setphysicalvolumesize $new_request @V3D9 $dev14
++check pv_field $dev9 pv_size $new_reduced
++check pv_field $dev14 pv_size $new_orphan
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one pv, one orphan, one tag
++pvresize --setphysicalvolumesize $new_request @V3D9 $dev14 $dev10
++check pv_field $dev9 pv_size $new_reduced
++check pv_field $dev10 pv_size $new_reduced
++check pv_field $dev14 pv_size $new_orphan
++# unchanged
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++
++#
++# test pvresize with non-pv devs
++#
++
++# one dev (non-pv)
++not pvresize --setphysicalvolumesize $new_request $dev13
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++check pv_field $dev14 pv_size $old_orphan
++
++# one orphan and one dev (non-pv)
++not pvresize --setphysicalvolumesize $new_request $dev14 $dev13
++check pv_field $dev14 pv_size $new_orphan
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one pv and one dev (non-pv)
++not pvresize --setphysicalvolumesize $new_request $dev9 $dev13
++check pv_field $dev9 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++check pv_field $dev14 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one tag and one dev (non-pv)
++not pvresize --setphysicalvolumesize $new_request @V3D9 $dev13
++check pv_field $dev9 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++check pv_field $dev14 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one pv, one orphan, one tag, one dev
++not pvresize --setphysicalvolumesize $new_request @V3D9 $dev13 $dev14 $dev10
++check pv_field $dev9 pv_size $new_reduced
++check pv_field $dev10 pv_size $new_reduced
++check pv_field $dev14 pv_size $new_orphan
++# unchanged
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++
++#
++# pvresize including pvs without mdas
++#
++
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++check pv_field $dev14 pv_size $old_orphan
++
++# one pv without mda
++pvresize --setphysicalvolumesize $new_request $dev2
++check pv_field $dev2 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++check pv_field $dev14 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# two pvs without mdas
++pvresize --setphysicalvolumesize $new_request $dev6 $dev7
++check pv_field $dev6 pv_size $new_reduced
++check pv_field $dev7 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++check pv_field $dev14 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one pv with mda and one pv without mda
++pvresize --setphysicalvolumesize $new_request $dev8 $dev9
++check pv_field $dev8 pv_size $new_reduced
++check pv_field $dev9 pv_size $new_reduced
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++check pv_field $dev14 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one orphan with mda
++pvresize --setphysicalvolumesize $new_request $dev11
++check pv_field $dev11 pv_size $new_orphan
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev14 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one orphan without mda
++pvresize --setphysicalvolumesize $new_request $dev14
++check pv_field $dev14 pv_size $new_orphan
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++check pv_field $dev11 pv_size $old_orphan
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one orphan with mda and one orphan without mda
++pvresize --setphysicalvolumesize $new_request $dev14 $dev11
++check pv_field $dev11 pv_size $new_orphan
++check pv_field $dev14 pv_size $new_orphan
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++check pv_field $dev8 pv_size $old_reduced
++check pv_field $dev9 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
++# one pv with mda and one pv without mda, and
++# one orphan with mda and one orphan without mda
++pvresize --setphysicalvolumesize $new_request $dev8 $dev9 $dev14 $dev11
++check pv_field $dev8 pv_size $new_reduced
++check pv_field $dev9 pv_size $new_reduced
++check pv_field $dev11 pv_size $new_orphan
++check pv_field $dev14 pv_size $new_orphan
++# unchanged
++check pv_field $dev10 pv_size $old_reduced
++check pv_field $dev2 pv_size $old_reduced
++check pv_field $dev3 pv_size $old_reduced
++check pv_field $dev4 pv_size $old_reduced
++check pv_field $dev5 pv_size $old_reduced
++check pv_field $dev6 pv_size $old_reduced
++check pv_field $dev7 pv_size $old_reduced
++# reset back to old size
++pvresize --setphysicalvolumesize $old_request $dev10 $dev2 $dev3 $dev4 $dev5 $dev6 $dev7 $dev8 $dev9
++pvresize --setphysicalvolumesize $old_request $dev11 $dev14
++
 
 
