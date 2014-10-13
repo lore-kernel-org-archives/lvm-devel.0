@@ -1,61 +1,39 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Mon, 13 Oct 2014 14:24:10 +0000 (UTC)
-Subject: master - lvchange: Allow appropriate actions on cache (in addition to thin) pools.
-Message-ID: <20141013142410.4D60F60F6B@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 13 Oct 2014 17:16:55 +0000 (UTC)
+Subject: master - device: Fix BLKSSZGET definition check.
+Message-ID: <20141013171655.2C77261102@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22a6b0e40b302b333f9bd995c0b81b0146e8232a
-Commit:        22a6b0e40b302b333f9bd995c0b81b0146e8232a
-Parent:        b59335fb398062d6537e8d4e815dcbf339343967
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Oct 13 16:21:41 2014 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Mon Oct 13 16:21:41 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d1bcdd7338148a887aae44149e3ea756c1df17a3
+Commit:        d1bcdd7338148a887aae44149e3ea756c1df17a3
+Parent:        22a6b0e40b302b333f9bd995c0b81b0146e8232a
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Oct 13 18:15:41 2014 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Oct 13 18:15:41 2014 +0100
 
-lvchange: Allow appropriate actions on cache (in addition to thin) pools.
+device: Fix BLKSSZGET definition check.
 
 ---
- test/shell/lvconvert-cache-raid.sh |    4 +++-
- tools/lvchange.c                   |    3 ++-
- 2 files changed, 5 insertions(+), 2 deletions(-)
+ lib/device/dev-io.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-cache-raid.sh b/test/shell/lvconvert-cache-raid.sh
-index 0678846..3ac2d0b 100644
---- a/test/shell/lvconvert-cache-raid.sh
-+++ b/test/shell/lvconvert-cache-raid.sh
-@@ -49,6 +49,9 @@ lvcreate -n cpool -m 1 --type raid1 -l 10 $vg
- lvconvert --yes --type cache-pool --poolmetadata $vg/cpool_meta $vg/cpool
- lvcreate -n corigin --type cache --cachepool $vg/cpool -l 10
- 
-+lvchange --syncaction repair $vg/cpool_cmeta
-+lvchange --syncaction repair $vg/cpool_cdata
-+
- lvconvert --repair -y $vg/cpool_cmeta
- lvconvert --repair -y $vg/cpool_cdata
- 
-@@ -60,5 +63,4 @@ not lvconvert --splitmirrors 1 --name split_cdata $vg/cpool_cdata "$dev1"
- lvconvert --splitmirrors 1 --name split_meta $vg/cpool_cmeta "$dev1"
- lvconvert --splitmirrors 1 --name split_data $vg/cpool_cdata "$dev1"
- 
--
- vgremove -f $vg
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 3a0e848..114065c 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -857,7 +857,8 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	    lv_is_virtual_origin(origin = origin_from_cow(lv)))
- 		lv = origin;
- 
--	if ((lv_is_thin_pool_data(lv) || lv_is_thin_pool_metadata(lv)) &&
-+	if ((lv_is_thin_pool_data(lv) || lv_is_thin_pool_metadata(lv) ||
-+	     lv_is_cache_pool_data(lv) || lv_is_cache_pool_metadata(lv)) &&
- 	    !arg_count(cmd, activate_ARG) &&
- 	    !arg_count(cmd, permission_ARG) &&
- 	    !arg_count(cmd, setactivationskip_ARG))
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index 0a75088..122b616 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -154,7 +154,7 @@ int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, un
+ 		}
+ 		log_debug_devs("%s: physical block size is %u bytes", name, dev->phys_block_size);
+ 	}
+-#elif BLKSSZGET
++#elif defined (BLKSSZGET)
+ 	/* if we can't get physical block size, just use logical block size instead */
+ 	if (dev->phys_block_size == -1) {
+ 		if (ioctl(dev_fd(dev), BLKSSZGET, &dev->phys_block_size) < 0) {
 
 
