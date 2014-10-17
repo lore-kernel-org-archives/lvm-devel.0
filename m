@@ -1,97 +1,66 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 17 Oct 2014 12:05:24 +0000 (UTC)
-Subject: master - liblvm2cmd: recognize quotes properly when splitting cmd line string into argv array fields
-Message-ID: <20141017120524.F0906606E4@fedorahosted.org>
+From: David Teigland <teigland@redhat.com>
+Date: Fri, 17 Oct 2014 10:37:57 -0500
+Subject: [PATCH] pvchange: use process_each_pv
+In-Reply-To: <5440C3D8.2080009@redhat.com>
+References: <20141016214130.GA13251@redhat.com> <5440C3D8.2080009@redhat.com>
+Message-ID: <20141017153757.GA18008@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4988d799a26032bfde4888d55080f5d42f5d55c1
-Commit:        4988d799a26032bfde4888d55080f5d42f5d55c1
-Parent:        a6c294c5d0b989c3a881c8d084291aaf97fa3ac8
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Oct 17 13:55:06 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Oct 17 14:03:43 2014 +0200
+On Fri, Oct 17, 2014 at 09:23:04AM +0200, Zdenek Kabelac wrote:
+> Dne 16.10.2014 v 23:41 David Teigland napsal(a):
+> >The summary output at the end has been removed.
+> >A similar counter method could be added to the
+> >various process_each functions if we want to
+> >retain this sort of summary reporting.
+> >
+> >---
+> >  tools/pvchange.c | 112 +++++++++++--------------------------------------------
+> >  1 file changed, 22 insertions(+), 90 deletions(-)
+> >
+> >diff --git a/tools/pvchange.c b/tools/pvchange.c
+> >index c2adc34309c5..e10da609f3c5 100644
+> >--- a/tools/pvchange.c
+> >+++ b/tools/pvchange.c
+> >@@ -40,20 +40,20 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
+> >  		if (tagargs && !(vg->fid->fmt->features & FMT_TAGS)) {
+> >  			log_error("Volume group containing %s does not "
+> >  				  "support tags", pv_name);
+> >-			return 0;
+> >+			return ECMD_FAILED;
+> >  		}
+> 
+> 
+> I'd prefer to not switch internal functions that are called after
+> the VG is opened to anything else then 0/1 return code.
+> 
+> Logic is:
+> 
+> 
+> When command starts - it validates options - any error detected
+> before the VG is opened means  EINVALID_CMD_LINE == 3 return code
+> (but if the error is result of i.e. failing memory alloc it should
+> be ECMD_FAIL)
+> 
+> Once you open VG - error is always ECMD_FAIL since VG was needed to
+> resolve it. We do not make any more differences on cmd return code -
+> more info goes from error message.
+> 
+> So until we figure out reasonable good interface for error passing
+> form library function for error reporting I'd keep any function to
+> stay with
+> 0 - error
+> 1 - ok
+> 
+> Once we start mixing ECMD_PROCESSED == 0  with 0/1 functions
+> we get into troubles  (I've already fixing these errors).
 
-liblvm2cmd: recognize quotes properly when splitting cmd line string into argv array fields
-
-Fix lvm_split that is called when cmd line string is separated into
-argv fields to recognize quote chars ('\'" and '"') properly and
-when these quotes are used, consider the text within quotes as one
-argument, do not separate it based on space characters inside.
-
-The lvm_split is used during processing lvm shell command line or
-when calling lvm commands through cmdlib (e.g. dmeventd plugins).
-
-For example, the lvm shell scenario:
-
-Before this patch:
-$lvm
-lvm> lvs --config 'global{ suffix=0 }'
-  Parse error at byte 9 (line 1): unexpected token
-  Failed to set overridden configuration entries.
-
-With this patch applied:
-$lvm
-lvm> lvs --config 'global{ suffix=0 }'
-  LV    VG     Attr       LSize   Pool Origin Data%  Meta%  Move Log  Cpy%Sync Convert
-  root  fedora -wi-ao----   9.00g
-  swap  fedora -wi-ao---- 512.00m
-
-(Exactly the same problem is hit when calling LVM commands with
-quoted arguments via lvm2cmd lib in dmeventd plugins.)
----
- WHATS_NEW          |    1 +
- tools/lvmcmdline.c |    9 ++++++++-
- 2 files changed, 9 insertions(+), 1 deletions(-)
-
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d7a00fe..0d4487e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Fix liblvm2cmd and lvm shell to respect quotes around args in cmd line string.
-   Permit extent sizes > 128KB that are not power of 2 with lvm2 format.
-   Remove workaround for lvm2-monitor.service hang on stop if lvmetad stopped.
-   Change vgremove to use process_each_lv_in_vg.
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 4697b24..4c61332 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1407,6 +1407,7 @@ int lvm_split(char *str, int *argc, char **argv, int max)
- {
- 	char *b = str, *e;
- 	*argc = 0;
-+	char quote = 0;
- 
- 	while (*b) {
- 		while (*b && isspace(*b))
-@@ -1415,14 +1416,20 @@ int lvm_split(char *str, int *argc, char **argv, int max)
- 		if ((!*b) || (*b == '#'))
- 			break;
- 
-+		if (*b == '\'' || *b == '"') {
-+			quote = *b;
-+			b++;
-+		}
-+
- 		e = b;
--		while (*e && !isspace(*e))
-+		while (*e && (quote ? *e != quote : !isspace(*e)))
- 			e++;
- 
- 		argv[(*argc)++] = b;
- 		if (!*e)
- 			break;
- 		*e++ = '\0';
-+		quote = 0;
- 		b = e;
- 		if (*argc == max)
- 			break;
+Returning 0/1 is not compatible with process_each, so I simply switched it
+to the ECMD standard used by process_each.  The old 0/1 appears to be no
+more than a method to count objects for the summary output.  Whether
+process_each ought to change from ECMD to 0/1 is another question.
 
 
