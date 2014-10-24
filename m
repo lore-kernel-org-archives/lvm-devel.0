@@ -1,41 +1,92 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:40:26 +0000 (UTC)
-Subject: master - lv_manip: preserve read-only status in layered volume
-Message-ID: <20141024144026.6243460CE2@fedorahosted.org>
+Date: Fri, 24 Oct 2014 14:40:34 +0000 (UTC)
+Subject: master - cleanup: move code
+Message-ID: <20141024144034.ACD1A60CE2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f1cb267274916fcd63456a859ff433bdceefef07
-Commit:        f1cb267274916fcd63456a859ff433bdceefef07
-Parent:        be3f666ef3ad25f2af598ecfa305ab9c2f7de3f4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf674142a2c1504d5652a5dd5479041272fd34ec
+Commit:        cf674142a2c1504d5652a5dd5479041272fd34ec
+Parent:        4f8ed25a999821cd37cc1e2c0051e60e8a63e371
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 23 14:27:05 2014 +0200
+AuthorDate:    Sat Oct 18 11:01:34 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 24 16:39:31 2014 +0200
 
-lv_manip: preserve read-only status in layered volume
+cleanup: move code
 
 ---
- lib/metadata/lv_manip.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |   10 ++++------
+ tools/lvcreate.c        |    5 ++---
+ 2 files changed, 6 insertions(+), 9 deletions(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 3c84a5c..6240f14 100644
+index ec09b41..244db1b 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -6075,7 +6075,9 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
- 		return NULL;
+@@ -6573,7 +6573,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ {
+ 	struct cmd_context *cmd = vg->cmd;
+ 	uint32_t size_rest;
+-	uint64_t status = UINT64_C(0);
++	uint64_t status = lp->permission | VISIBLE_LV;
+ 	struct logical_volume *lv, *origin_lv = NULL;
+ 	struct logical_volume *pool_lv;
+ 	struct logical_volume *tmp_lv;
+@@ -6672,8 +6672,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		lp->extents = lp->extents - size_rest + lp->stripes;
  	}
  
--	if (!(layer_lv = lv_create_empty(name, NULL, LVM_READ | LVM_WRITE,
-+	if (!(layer_lv = lv_create_empty(name, NULL,
-+					 /* Preserve read-only flag */
-+					 LVM_READ | (lv_where->status & LVM_WRITE),
- 					 ALLOC_INHERIT, lv_where->vg))) {
- 		log_error("Creation of layer LV failed");
- 		return NULL;
+-	status |= lp->permission | VISIBLE_LV;
+-
+ 	if (seg_is_cache(lp)) {
+ 		if (!lp->pool_name) {
+ 			log_error(INTERNAL_ERROR "Cannot create thin volume without thin pool.");
+@@ -6900,6 +6898,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		if (!recalculate_pool_chunk_size_with_dev_hints(lv, lp->passed_args,
+ 								THIN_CHUNK_SIZE_CALC_METHOD_GENERIC))
+ 			return_NULL;
++	} else if (seg_is_raid(lp)) {
++		first_seg(lv)->min_recovery_rate = lp->min_recovery_rate;
++		first_seg(lv)->max_recovery_rate = lp->max_recovery_rate;
+ 	} else if (seg_is_thin_pool(lp)) {
+ 		first_seg(lv)->chunk_size = lp->chunk_size;
+ 		first_seg(lv)->zero_new_blocks = lp->zero ? 1 : 0;
+@@ -6936,9 +6937,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		if (!attach_pool_message(first_seg(pool_lv),
+ 					 DM_THIN_MESSAGE_CREATE_THIN, lv, 0, 0))
+ 			return_NULL;
+-	} else if (seg_is_raid(lp)) {
+-		first_seg(lv)->min_recovery_rate = lp->min_recovery_rate;
+-		first_seg(lv)->max_recovery_rate = lp->max_recovery_rate;
+ 	}
+ 
+ 	/* FIXME Log allocation and attachment should have happened inside lv_extend. */
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 7573a2e..8b3255c 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -806,9 +806,6 @@ static int _read_activation_params(struct lvcreate_params *lp,
+ 		return 0;
+ 	}
+ 
+-	lp->yes = arg_count(cmd, yes_ARG);
+-	lp->force = (force_t) arg_count(cmd, force_ARG);
+-
+ 	return 1;
+ }
+ 
+@@ -825,6 +822,8 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+ 	memset(lcp, 0, sizeof(*lcp));
+ 	dm_list_init(&lp->tags);
+ 	lp->target_attr = ~0;
++	lp->yes = arg_count(cmd, yes_ARG);
++	lp->force = (force_t) arg_count(cmd, force_ARG);
+ 
+ 	/* Set default segtype - remember, '-m 0' implies stripe. */
+ 	if (arg_count(cmd, mirrors_ARG) &&
 
 
