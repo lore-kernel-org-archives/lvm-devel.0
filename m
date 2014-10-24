@@ -1,243 +1,270 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:41:18 +0000 (UTC)
-Subject: master - mirror: extra parsing for mirrorlog arg
-Message-ID: <20141024144118.B6F5860CE2@fedorahosted.org>
+Date: Fri, 24 Oct 2014 14:41:20 +0000 (UTC)
+Subject: master - tests: lvcreate usage
+Message-ID: <20141024144120.D69E760CE2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=11ea72cfd872d4a54e7db52e347688039378bc72
-Commit:        11ea72cfd872d4a54e7db52e347688039378bc72
-Parent:        29c14a11943d52e47424140ffa3b91dc9b095bc5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9642f013a104590b575badc024b887a02c7ad750
+Commit:        9642f013a104590b575badc024b887a02c7ad750
+Parent:        11ea72cfd872d4a54e7db52e347688039378bc72
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 22 21:02:29 2014 +0200
+AuthorDate:    Sat Oct 11 09:12:56 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 24 16:39:32 2014 +0200
 
-mirror: extra parsing for mirrorlog arg
+tests: lvcreate usage
 
-Put validation of mirrorlog arg into a separate function.
 ---
- lib/config/defaults.h            |    2 +-
- lib/metadata/metadata-exported.h |    8 ++++++++
- lib/metadata/mirror.c            |   27 +++++++++++++++++++++++++++
- tools/args.h                     |    2 +-
- tools/lvconvert.c                |   23 ++++-------------------
- tools/lvcreate.c                 |   19 ++++---------------
- tools/lvmcmdline.c               |   13 +++++++++++++
- tools/tools.h                    |    1 +
- 8 files changed, 59 insertions(+), 36 deletions(-)
+ test/shell/lvcreate-usage.sh |  159 ++++++++++++++++++++++++++----------------
+ 1 files changed, 98 insertions(+), 61 deletions(-)
 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 2cb1e5a..2724cd1 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -53,7 +53,7 @@
- #define DEFAULT_LVDISPLAY_SHOWS_FULL_DEVICE_PATH 0
+diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
+index 7ae6d25..c2b7112 100644
+--- a/test/shell/lvcreate-usage.sh
++++ b/test/shell/lvcreate-usage.sh
+@@ -17,62 +17,70 @@ aux prepare_pvs 4
+ aux pvcreate --metadatacopies 0 "$dev1"
+ vgcreate $vg $(cat DEVICES)
  
- #define DEFAULT_MIRROR_SEGTYPE "raid1"
--#define DEFAULT_MIRRORLOG "disk"
-+#define DEFAULT_MIRRORLOG MIRROR_LOG_DISK
- #define DEFAULT_MIRROR_LOG_FAULT_POLICY "allocate"
- #define DEFAULT_MIRROR_IMAGE_FAULT_POLICY "remove"
- #define DEFAULT_MIRROR_MAX_IMAGES 8 /* limited by kernel DM_KCOPYD_MAX_REGIONS */
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 19508ab..7467b64 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -225,6 +225,12 @@ typedef enum {
- 	DONT_PROMPT_OVERRIDE = 2 /* Add even more dangerous prompts */
- } force_t;
- 
-+enum {
-+	MIRROR_LOG_CORE,
-+	MIRROR_LOG_DISK,
-+	MIRROR_LOG_MIRRORED,
-+};
+-# "lvcreate rejects repeated invocation (run 2 times) (bz178216)" 
+-lvcreate -n $lv -l 4 $vg 
++invalid lvcreate --type free -l1 -n $lv1 $vg 2>err
++grep "Invalid argument for --type" err
++invalid lvcreate --type $RANDOM -l1 -n $lv1 $vg
++invalid lvcreate --type unknown -l1 -n $lv1 $vg
 +
- typedef enum {
- 	THIN_DISCARDS_IGNORE,
- 	THIN_DISCARDS_NO_PASSDOWN,
-@@ -1003,6 +1009,8 @@ int lv_remove_mirrors(struct cmd_context *cmd, struct logical_volume *lv,
- 		      uint32_t mirrors, uint32_t log_count,
- 		      int (*is_removable)(struct logical_volume *, void *),
- 		      void *removable_baton, uint64_t status_mask);
-+int get_mirror_log_count(const char *mirrorlog, int *log_count);
-+const char *get_mirror_log_name(int log_count);
- 
- int is_temporary_mirror_layer(const struct logical_volume *lv);
- struct logical_volume * find_temporary_mirror(const struct logical_volume *lv);
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index d89e5cd..a943ac4 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -2273,3 +2273,30 @@ int lv_remove_mirrors(struct cmd_context *cmd __attribute__((unused)),
- 	return remove_mirrors_from_segments(lv, new_mirrors, status_mask);
- }
- 
-+int get_mirror_log_count(const char *mirrorlog, int *log_count)
-+{
-+	if (!strcmp("core", mirrorlog))
-+		*log_count = MIRROR_LOG_CORE;
-+	else if (!strcmp("disk", mirrorlog))
-+		*log_count = MIRROR_LOG_DISK;
-+	else if (!strcmp("mirrored", mirrorlog))
-+		*log_count = MIRROR_LOG_MIRRORED;
-+	else {
-+		log_error("Mirror log type \"%s\" is unknown.", mirrorlog);
-+		return 0;
-+	}
++lvcreate --type linear -aey -l1 -n $lv1 $vg
++lvcreate --type snapshot -l1 -n $lv2 $vg/$lv1
 +
-+	return 1;
-+}
-+
-+const char *get_mirror_log_name(int log_count)
-+{
-+	switch (log_count) {
-+	case MIRROR_LOG_CORE: return "core";
-+	case MIRROR_LOG_DISK: return "disk";
-+	case MIRROR_LOG_MIRRORED: return "mirrored";
-+	default:
-+		log_error(INTERNAL_ERROR "Unknown mirror log count %d.", log_count);
-+		return "unknown";
-+	}
-+}
-diff --git a/tools/args.h b/tools/args.h
-index 4a4845f..000af01 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -55,7 +55,7 @@ arg(metadataprofile_ARG, '\0', "metadataprofile", string_arg, 0)
- arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
- arg(minor_ARG, '\0', "minor", int_arg, ARG_GROUPABLE)
- arg(minrecoveryrate_ARG, '\0', "minrecoveryrate", size_kb_arg, 0)
--arg(mirrorlog_ARG, '\0', "mirrorlog", string_arg, 0)
-+arg(mirrorlog_ARG, '\0', "mirrorlog", mirrorlog_arg, 0)
- arg(mirrorsonly_ARG, '\0', "mirrorsonly", NULL, 0)
- arg(mknodes_ARG, '\0', "mknodes", NULL, 0)
- arg(monitor_ARG, '\0', "monitor", yes_no_arg, 0)
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index c792986..6d6d305 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1265,7 +1265,6 @@ static int _lvconvert_mirrors_parse_params(struct cmd_context *cmd,
- 					   uint32_t *new_log_count)
- {
- 	int repair = arg_count(cmd, repair_ARG);
--	const char *mirrorlog;
- 	*old_mimage_count = lv_mirror_count(lv);
- 	*old_log_count = _get_log_count(lv);
++# Reject repeated invocation (run 2 times) (bz178216)
++lvcreate -n $lv -l 4 $vg
+ not lvcreate -n $lv -l 4 $vg
+ lvremove -ff $vg/$lv
+-# try to remove it again - should fail (but not segfault)
++# Try to remove it again - should fail (but not segfault)
+ not lvremove -ff $vg/$lv
  
-@@ -1334,33 +1333,19 @@ static int _lvconvert_mirrors_parse_params(struct cmd_context *cmd,
- 	if (!arg_count(cmd, corelog_ARG) && !arg_count(cmd, mirrorlog_ARG))
- 		return 1;
+-# "lvcreate rejects a negative stripe_size"
+-not lvcreate -L 64m -n $lv -i2 --stripesize -4 $vg 2>err;
+-grep "Negative stripesize is invalid" err
++# Reject a negative stripe_size
++invalid lvcreate -L 64m -n $lv -i2 --stripesize -4 $vg 2>err;
++grep "may not be negative" err
  
--	if (arg_count(cmd, corelog_ARG))
--		*new_log_count = 0;
+-# 'lvcreate rejects a too-large stripesize'
+-not lvcreate -L 64m -n $lv -i2 --stripesize 4294967291 $vg 2>err
++# Reject a too-large stripesize
++invalid lvcreate -L 64m -n $lv -i2 --stripesize 4294967291 $vg 2>err
+ grep "Stripe size cannot be larger than" err
+ 
+-# 'lvcreate w/single stripe succeeds with diagnostics to stdout' 
++# w/single stripe succeeds with diagnostics to stdout
+ lvcreate -L 64m -n $lv -i1 --stripesize 4 $vg 2> err | tee out
+ grep "Ignoring stripesize argument with single stripe" out
+-lvdisplay $vg 
++lvdisplay $vg
+ lvremove -ff $vg
+ 
+-# 'lvcreate w/default (64KB) stripe size succeeds with diagnostics to stdout'
++# w/default (64KB) stripe size succeeds with diagnostics to stdout
+ lvcreate -L 64m -n $lv -i2 $vg > out
+ grep "Using default stripesize" out
+-lvdisplay $vg 
++lvdisplay $vg
+ check lv_field $vg/$lv stripesize "64.00k"
+ lvremove -ff $vg
+ 
+-# 'lvcreate rejects an invalid number of stripes' 
+-not lvcreate -L 64m -n $lv -i129 $vg 2>err
++# Reject an invalid number of stripes
++invalid lvcreate -L 64m -n $lv -i129 $vg 2>err
+ grep "Number of stripes (129) must be between 1 and 128" err
+ 
+-# The case on lvdisplay output is to verify that the LV was not created.
+-# 'lvcreate rejects an invalid stripe size'
+-not lvcreate -L 64m -n $lv -i2 --stripesize 3 $vg 2>err
++# Reject an invalid stripe size
++invalid lvcreate -L 64m -n $lv -i2 --stripesize 3 $vg 2>err
+ grep "Invalid stripe size" err
++# Verify that the LV was not created via lvdisplay empty output
+ test -z "$(lvdisplay $vg)"
+ 
+ # Setting max_lv works. (bz490298)
+-lvremove -ff $vg
++check vg_field $vg max_lv "0"
+ vgchange -l 3 $vg
++check vg_field $vg max_lv "3"
+ lvcreate -aey -l1 -n $lv1 $vg
+ lvcreate -l1 -s -n $lv2 $vg/$lv1
+ lvcreate -l1 -n $lv3 $vg
+-not lvcreate -l1 -n $lv4 $vg
 -
--	mirrorlog = arg_str_value(cmd, mirrorlog_ARG,
--				  !*new_log_count ? "core" : DEFAULT_MIRRORLOG);
--
--	if (!strcmp("mirrored", mirrorlog))
--		*new_log_count = 2;
--	else if (!strcmp("disk", mirrorlog))
--		*new_log_count = 1;
--	else if (!strcmp("core", mirrorlog))
--		*new_log_count = 0;
--	else {
--		log_error("Unknown mirrorlog type: %s", mirrorlog);
--		return 0;
--	}
-+	*new_log_count = arg_int_value(cmd, mirrorlog_ARG,
-+				       arg_is_set(cmd, corelog_ARG) ? MIRROR_LOG_CORE : DEFAULT_MIRRORLOG);
- 
- 	/*
- 	 * No mirrored logs for cluster mirrors until
- 	 * log daemon is multi-threaded.
- 	 */
--	if ((*new_log_count == 2) && vg_is_clustered(lv->vg)) {
-+	if ((*new_log_count == MIRROR_LOG_MIRRORED) && vg_is_clustered(lv->vg)) {
- 		log_error("Log type, \"mirrored\", is unavailable to cluster mirrors");
- 		return 0;
- 	}
- 
--	log_verbose("Setting logging type to %s", mirrorlog);
-+	log_verbose("Setting logging type to %s", get_mirror_log_name(*new_log_count));
- 
- 	/*
- 	 * Region size must not change on existing mirrors
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 45f432e..199636c 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -428,27 +428,16 @@ static int _read_size_params(struct cmd_context *cmd,
- static int _read_mirror_params(struct cmd_context *cmd,
- 			       struct lvcreate_params *lp)
- {
--	int corelog = arg_count(cmd, corelog_ARG);
--	const char *mirrorlog = arg_str_value(cmd, mirrorlog_ARG, corelog
--					      ? "core" : DEFAULT_MIRRORLOG);
--
--	if (!strcmp("mirrored", mirrorlog))
--		lp->log_count = 2;
--	else if (!strcmp("disk", mirrorlog))
--		lp->log_count = 1;
--	else if (!strcmp("core", mirrorlog)) {
--		lp->log_count = 0;
--	} else {
--		log_error("Unknown mirrorlog type: %s", mirrorlog);
--		return 0;
--	}
-+	int corelog = arg_is_set(cmd, corelog_ARG);
++fail lvcreate -l1 -n $lv4 $vg
+ lvremove -ff $vg/$lv3
+-# check snapshot of inactive origin
 +
-+	lp->log_count = arg_int_value(cmd, mirrorlog_ARG, corelog ? 0 : DEFAULT_MIRRORLOG);
++# Check snapshot of inactive origin
+ lvchange -an $vg/$lv1
+ lvcreate -l1 -s -n $lv3 $vg/$lv1
+-not lvcreate -l1 -n $lv4 $vg
+-not lvcreate -l1 --type mirror -m1 -n $lv4 $vg
++fail lvcreate -l1 -n $lv4 $vg
++fail lvcreate -l1 --type mirror -m1 -n $lv4 $vg
  
- 	if (corelog && (lp->log_count != 0)) {
- 		log_error("Please use only one of --corelog or --mirrorlog.");
- 		return 0;
- 	}
+ lvremove -ff $vg/$lv3
+ lvcreate -aey -l1 --type mirror -m1 -n $lv3 $vg
+-vgs -o +max_lv $vg
+ not lvcreate -l1 -n $lv4 $vg
+ not lvcreate -l1 --type mirror -m1 -n $lv4 $vg
  
--	log_verbose("Setting logging type to %s", mirrorlog);
-+	log_verbose("Setting logging type to %s", get_mirror_log_name(lp->log_count));
+@@ -80,17 +88,17 @@ lvconvert -m0 $vg/$lv3
+ lvconvert -m2 --type mirror -i 1 $vg/$lv3
+ lvconvert -m1 $vg/$lv3
  
- 	return 1;
- }
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index bbf0145..c426873 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -327,6 +327,19 @@ int discards_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_val
- 	return 1;
- }
+-not vgchange -l 2
++fail vgchange -l 2
++check vg_field $vg max_lv "3"
+ vgchange -l 4
+-vgs $vg
++check vg_field $vg max_lv "4"
  
-+int mirrorlog_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
-+{
-+	int log_count;
+ lvremove -ff $vg
+ vgchange -l 0 $vg
++check vg_field $vg max_lv "0"
+ 
+-# lvcreate rejects invalid chunksize, accepts between 4K and 512K
+-# validate origin_size
+-vgremove -ff $vg
+-vgcreate $vg $(cat DEVICES)
++# Rejects invalid chunksize, accepts between 4K and 512K
++# and validate origin_size
+ lvcreate -aey -L 32m -n $lv1 $vg
+ not lvcreate -L 8m -n $lv2 -s --chunksize 3k $vg/$lv1
+ not lvcreate -L 8m -n $lv2 -s --chunksize 1024k $vg/$lv1
+@@ -100,25 +108,29 @@ check lv_field $vg/$lv2 origin_size "32.00m"
+ lvcreate -L 8m -n $lv3 -s --chunksize 512k $vg/$lv1
+ check lv_field $vg/$lv3 chunk_size "512.00k"
+ check lv_field $vg/$lv3 origin_size "32.00m"
+-lvremove -ff $vg
+-vgchange -l 0 $vg
++lvremove -f $vg
+ 
+-# regionsize must be
++# Mirror regionsize must be
+ # - nonzero (bz186013)
+ # - a power of 2 and a multiple of page size
+ # - <= size of LV
+-not lvcreate -L 32m -n $lv -R0 $vg 2>err
+-grep "Non-zero region size must be supplied." err
+-not lvcreate -L 32m -n $lv -R 11k $vg
+-not lvcreate -L 32m -n $lv -R 1k $vg
++invalid lvcreate -m 1 -L 32m -n $lv -R 0 $vg 2>err
++grep "may not be zero" err
++invalid lvcreate -m 1 -L 32m -n $lv -R 11k $vg
++invalid lvcreate -m 1 -L 32m -n $lv -R 1k $vg
+ lvcreate -aey -L 32m -n $lv --regionsize 128m  --type mirror -m 1 $vg
+ check lv_field $vg/$lv regionsize "32.00m"
+-lvremove -ff $vg
++lvremove -f $vg
+ lvcreate -aey -L 32m -n $lv --regionsize 4m --type mirror -m 1 $vg
+ check lv_field $vg/$lv regionsize "4.00m"
 +
-+	if (!get_mirror_log_count(av->value, &log_count))
-+		return_0;
++# -m0 is creating non-mirrored segment and give info about redundant option
++lvcreate -m 0 -l1 -n $lv1 $vg |& tee err
++grep "Redundant" err
++check lv_field $vg/$lv1 segtype "linear"
+ lvremove -ff $vg
+ 
+-# snapshot with virtual origin works
++# Snapshot with virtual origin works
+ lvcreate -s --virtualoriginsize 64m -L 32m -n $lv1 $vg
+ lvrename $vg/$lv1 $vg/$lv2
+ lvcreate -s --virtualoriginsize 64m -L 32m -n $lv1 $vg
+@@ -127,30 +139,50 @@ lvremove -ff $vg/$lv1
+ lvremove -ff $vg
+ 
+ # readahead default (auto), none, #, auto
+-lvcreate -L 32m -n $lv $vg
+-check lv_field $vg/$lv lv_read_ahead "auto"
+-lvremove -ff $vg
+-lvcreate -L 32m -n $lv --readahead none $vg
+-check lv_field $vg/$lv lv_read_ahead "0"
+-check lv_field $vg/$lv lv_kernel_read_ahead "0"
+-lvremove -ff $vg
+-lvcreate -L 32m -n $lv --readahead 8k $vg
+-check lv_field $vg/$lv lv_read_ahead "8.00k"
+-check lv_field $vg/$lv lv_kernel_read_ahead "8.00k"
+-lvremove -ff $vg
+-lvcreate -L 32m -n $lv --readahead auto $vg
+-check lv_field $vg/$lv lv_read_ahead "auto"
+-check lv_field $vg/$lv lv_kernel_read_ahead "128.00k"
+-lvremove -ff $vg
+-lvcreate -L 32m -n $lv -i2 --stripesize 16k --readahead auto $vg
+-check lv_field $vg/$lv lv_read_ahead "auto"
+-check lv_field $vg/$lv lv_kernel_read_ahead "128.00k"
+-lvremove -ff $vg
+-lvcreate -L 32m -n $lv -i2 --stripesize 128k --readahead auto $vg
+-check lv_field $vg/$lv lv_read_ahead "auto"
+-check lv_field $vg/$lv lv_kernel_read_ahead "512.00k"
++lvcreate -L 8 -n $lv1 $vg
++check lv_field $vg/$lv1 lv_read_ahead "auto"
++lvcreate -L 8 -n $lv2 --readahead none $vg
++check lv_field $vg/$lv2 lv_read_ahead "0"
++check lv_field $vg/$lv2 lv_kernel_read_ahead "0"
++lvcreate -L 8 -n $lv3 --readahead 8k $vg
++check lv_field $vg/$lv3 lv_read_ahead "8.00k"
++check lv_field $vg/$lv3 lv_kernel_read_ahead "8.00k"
++lvcreate -L 8 -n $lv4 --readahead auto $vg
++check lv_field $vg/$lv4 lv_read_ahead "auto"
++check lv_field $vg/$lv4 lv_kernel_read_ahead "128.00k"
++lvcreate -L 8 -n $lv5 -i2 --stripesize 16k --readahead auto $vg
++check lv_field $vg/$lv5 lv_read_ahead "auto"
++check lv_field $vg/$lv5 lv_kernel_read_ahead "128.00k"
++lvcreate -L 8 -n $lv6 -i2 --stripesize 128k --readahead auto $vg
++check lv_field $vg/$lv6 lv_read_ahead "auto"
++check lv_field $vg/$lv6 lv_kernel_read_ahead "512.00k"
+ lvremove -ff $vg
+ 
++#
++# Validate --major --minor,  we need to know VG, thus failing
++#
++fail lvcreate -My --major 234 -l1 $vg
++# cannot specify --major or --minor with -Mn
++fail lvcreate -Mn --major 234 -l1 $vg
++fail lvcreate --persistent n --minor 234 -l1 $vg
++# out-of-range minor value
++fail lvcreate --minor 9999999 -l1 $vg
++if kernel_at_least 2 4 0; then
++# On >2.4 we ignore --major
++lvcreate --major 234 -l1 $vg |& tee err;
++grep "Ignoring" err
++# Try some bigger possibly unused minor
++if test ! -d /sys/block/dm-2345; then
++	lvcreate --minor 2345 -l1 -n $lv1 $vg
++	check lv_field $vg/$lv1 lv_kernel_minor "2345"
++fi
++if test ! -d /sys/block/dm-23456; then
++	lvcreate -My --minor 23456 -j 122 -l1 -n $lv2 $vg
++	check lv_field $vg/$lv2 lv_kernel_minor "23456"
++fi
++fi # 2.4
++lvremove -f $vg
 +
-+	av->i_value = log_count;
-+	av->ui_value = log_count;
+ # prohibited names
+ for i in pvmove snapshot ; do
+ 	invalid lvcreate -l1 -n ${i}1 $vg
+@@ -158,3 +190,8 @@ done
+ for i in _cdata _cmeta _mimage _mlog _pmspare _tdata _tmeta _vorigin ; do
+ 	invalid lvcreate -l1 -n s_${i}_1 $vg
+ done
 +
-+	return 1;
-+}
-+
- int metadatatype_arg(struct cmd_context *cmd, struct arg_values *av)
- {
- 	return get_format_by_name(cmd, av->value) ? 1 : 0;
-diff --git a/tools/tools.h b/tools/tools.h
-index 75c3eaa..5a5d729 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -126,6 +126,7 @@ void usage(const char *name);
- int yes_no_arg(struct cmd_context *cmd, struct arg_values *av);
- int activation_arg(struct cmd_context *cmd, struct arg_values *av);
- int discards_arg(struct cmd_context *cmd, struct arg_values *av);
-+int mirrorlog_arg(struct cmd_context *cmd, struct arg_values *av);
- int size_kb_arg(struct cmd_context *cmd, struct arg_values *av);
- int size_mb_arg(struct cmd_context *cmd, struct arg_values *av);
- int int_arg(struct cmd_context *cmd, struct arg_values *av);
++# Check invalid error for pool-only options
++invalid lvcreate --poolmetadataspare y -l1 $vg
++invalid lvcreate --poolmetadatasize 10 -l1 $vg
++invalid lvcreate --discards passdown -l1 $vg
 
 
