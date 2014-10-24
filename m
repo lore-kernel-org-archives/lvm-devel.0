@@ -1,97 +1,74 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:41:01 +0000 (UTC)
-Subject: master - lvcreate: handle linear segment
-Message-ID: <20141024144101.C66F260CE2@fedorahosted.org>
+Date: Fri, 24 Oct 2014 14:41:03 +0000 (UTC)
+Subject: master - pools: error path removes metadata
+Message-ID: <20141024144103.D82AE60CE2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dfcf03a9ce2fe9b618f44c5f99e13ff5610ffcc0
-Commit:        dfcf03a9ce2fe9b618f44c5f99e13ff5610ffcc0
-Parent:        7359a9df889a2ed8d6e6114ecc3f57438a75d9d7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=51a29e60564d5379b38ee4688bca5eb9b844c410
+Commit:        51a29e60564d5379b38ee4688bca5eb9b844c410
+Parent:        dfcf03a9ce2fe9b618f44c5f99e13ff5610ffcc0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 11 18:36:40 2014 +0200
+AuthorDate:    Fri Oct 24 15:21:48 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 24 16:39:32 2014 +0200
 
-lvcreate: handle linear segment
+pools: error path removes metadata
 
-Put in code to accept 'linear' segment type
-(when specified stripes cannot be used)
-
-Also report 'error' when unknown type is specified.
+When pool volume is create - it has already managed to update metadata
+once within lv_extend - so revert new created LV here.
 ---
- WHATS_NEW          |    1 +
- tools/lvcreate.c   |   10 ++++++++++
- tools/lvmcmdline.c |    8 +++++++-
- 3 files changed, 18 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |   20 +++++++++++++++-----
+ 1 files changed, 15 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 70b41bc..fa88ddc 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Support lvcreate --type linear.
-   Improve _should_wipe_lv() to warn with message.
-   Inform about temporarily created volumes only in verbose mode.
-   Better support for --test mode with pool creation.
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 301bda6..b6907f5 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -714,6 +714,7 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	struct arg_value_group_list *current_group;
- 	const char *segtype_str;
- 	const char *tag;
-+	int only_linear = 0;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 5125412..277a51d 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6888,8 +6888,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		first_seg(lv)->feature_flags = lp->feature_flags;
+ 		/* TODO: some calc_policy solution for cache ? */
+ 		if (!recalculate_pool_chunk_size_with_dev_hints(lv, lp->passed_args,
+-								THIN_CHUNK_SIZE_CALC_METHOD_GENERIC))
+-			return_NULL;
++								THIN_CHUNK_SIZE_CALC_METHOD_GENERIC)) {
++			stack;
++			goto revert_new_lv;
++		}
+ 	} else if (seg_is_raid(lp)) {
+ 		first_seg(lv)->min_recovery_rate = lp->min_recovery_rate;
+ 		first_seg(lv)->max_recovery_rate = lp->max_recovery_rate;
+@@ -6900,8 +6902,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		/* FIXME: use lowwatermark  via lvm.conf global for all thinpools ? */
+ 		first_seg(lv)->low_water_mark = 0;
+ 		if (!recalculate_pool_chunk_size_with_dev_hints(lv, lp->passed_args,
+-								lp->thin_chunk_size_calc_policy))
+-			return_NULL;
++								lp->thin_chunk_size_calc_policy)) {
++			stack;
++			goto revert_new_lv;
++		}
+ 	} else if (seg_is_thin_volume(lp)) {
+ 		pool_lv = first_seg(lv)->pool_lv;
+ 		if (!(first_seg(lv)->device_id =
+@@ -7007,8 +7011,14 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 	}
  
- 	memset(lcp, 0, sizeof(*lcp));
- 	dm_list_init(&lp->tags);
-@@ -745,6 +746,10 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 		segtype_str = "striped";
- 
- 	segtype_str = arg_str_value(cmd, type_ARG, segtype_str);
-+	if (!strcmp(segtype_str, "linear")) {
-+		segtype_str = "striped";
-+		only_linear = 1; /* User requested linear only target */
+ 	/* store vg on disk(s) */
+-	if (!vg_write(vg) || !vg_commit(vg))
++	if (!vg_write(vg) || !vg_commit(vg)) {
++		if (seg_is_pool(lp)) {
++			/* Pool volumes have already created metadata LV */
++			stack;
++			goto revert_new_lv;
++		}
+ 		return_NULL;
 +	}
  
- 	if (!(lp->segtype = get_segtype_from_string(cmd, segtype_str)))
- 		return_0;
-@@ -911,6 +916,11 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	    !_read_cache_pool_params(lp, cmd))
- 		return_0;
+ 	backup(vg);
  
-+	if (only_linear && lp->stripes > 1) {
-+		log_error("Cannot use stripes with linear type.");
-+		return 0;
-+	}
-+
- 	if (lp->snapshot && (lp->extents || lcp->size)) {
- 		lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
- 		if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 6e13679..bbf0145 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -564,7 +564,13 @@ int alloc_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values
- 
- int segtype_arg(struct cmd_context *cmd, struct arg_values *av)
- {
--	return get_segtype_from_string(cmd, av->value) ? 1 : 0;
-+	struct segment_type *segtype;
-+	const char *str = (!strcmp(av->value, "linear")) ? "striped" : av->value;
-+
-+	if (!(segtype = get_segtype_from_string(cmd, str)))
-+		return_0;
-+
-+	return (!segtype_is_unknown(segtype)) ? 1 : 0;
- }
- 
- /*
 
 
