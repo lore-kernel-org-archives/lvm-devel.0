@@ -1,300 +1,332 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:39:50 +0000 (UTC)
-Subject: master - segments: introduce lvseg_name
-Message-ID: <20141024143950.EB7F060E3E@fedorahosted.org>
+Date: Fri, 24 Oct 2014 14:39:53 +0000 (UTC)
+Subject: master - cleanup: drop default implementation
+Message-ID: <20141024143953.1BAC860E3E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9411c19b31b391e7be262d95fb2fa5a5162012b2
-Commit:        9411c19b31b391e7be262d95fb2fa5a5162012b2
-Parent:        ab940456931ea5a5a6f29f63d1b27057df3fdf75
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d4dab0aa34102527c32d68f69196aaabda5e3711
+Commit:        d4dab0aa34102527c32d68f69196aaabda5e3711
+Parent:        9411c19b31b391e7be262d95fb2fa5a5162012b2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 20 18:40:39 2014 +0200
+AuthorDate:    Mon Oct 20 20:09:42 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 24 16:39:30 2014 +0200
+CommitterDate: Fri Oct 24 16:39:31 2014 +0200
 
-segments: introduce lvseg_name
+cleanup: drop default implementation
 
-Instead of segtype->ops->name()  introduce lvseg_name().
+Now we reference segment name via  lvseg_name() and
+we can drop default implementation and leave its
+function pointer to be NULL.
 
-This also allows us to leave name() function 'empty' for default
-return of segtype->name.
-
-TODO: add functions for rest of ops->
+Default give us 'return seg->segtype->name'.
 ---
- WHATS_NEW                 |    1 +
- lib/display/display.c     |    2 +-
- lib/metadata/lv.c         |   12 +++++++++++-
- lib/metadata/lv.h         |    1 +
- lib/metadata/lv_manip.c   |    2 +-
- lib/metadata/merge.c      |    3 +--
- lib/metadata/pool_manip.c |    6 +++---
- lib/metadata/raid_manip.c |   14 +++++++-------
- lib/report/report.c       |    2 +-
- tools/lvchange.c          |    2 +-
- tools/lvconvert.c         |    9 ++++-----
- 11 files changed, 32 insertions(+), 22 deletions(-)
+ lib/cache_segtype/cache.c   |    7 -------
+ lib/error/errseg.c          |    6 ------
+ lib/freeseg/freeseg.c       |    6 ------
+ lib/mirror/mirrored.c       |    6 ------
+ lib/raid/raid.c             |    8 +-------
+ lib/replicator/replicator.c |    6 ------
+ lib/snapshot/snapshot.c     |    8 +-------
+ lib/thin/thin.c             |   12 ------------
+ lib/unknown/unknown.c       |    7 -------
+ lib/zero/zero.c             |    6 ------
+ 10 files changed, 2 insertions(+), 70 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4d2a6d2..f5b7931 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Add internal lvseg_name() function.
-   Skip trying to file lock virtual internal vg name.
-   Fix selection on {vg,lv}_permissions fields to properly match selection criteria.
-   Fix lv_permissions reporting to display read-only{-override} instead of blank.
-diff --git a/lib/display/display.c b/lib/display/display.c
-index d12c393..f86b67f 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -667,7 +667,7 @@ int lvdisplay_segments(const struct logical_volume *lv)
- 			  lv_is_virtual(lv) ? "Virtual" : "Logical",
- 			  seg->le, seg->le + seg->len - 1);
+diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
+index ddaf3cf..9927688 100644
+--- a/lib/cache_segtype/cache.c
++++ b/lib/cache_segtype/cache.c
+@@ -31,11 +31,6 @@
+                   dm_config_parent_name(sn), seg->lv->name), 0;
  
--		log_print("  Type\t\t%s", seg->segtype->ops->name(seg));
-+		log_print("  Type\t\t%s", lvseg_name(seg));
  
- 		if (seg->segtype->ops->target_monitored)
- 			log_print("  Monitoring\t\t%s",
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 23f0991..92b38f4 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -120,7 +120,7 @@ char *lvseg_tags_dup(const struct lv_segment *seg)
+-static const char *_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static int _cache_pool_text_import(struct lv_segment *seg,
+ 				   const struct dm_config_node *sn,
+ 				   struct dm_hash_table *pv_hash __attribute__((unused)))
+@@ -262,7 +257,6 @@ static int _modules_needed(struct dm_pool *mem,
+ #endif /* DEVMAPPER_SUPPORT */
  
- char *lvseg_segtype_dup(struct dm_pool *mem, const struct lv_segment *seg)
+ static struct segtype_handler _cache_pool_ops = {
+-	.name = _name,
+ 	.text_import = _cache_pool_text_import,
+ 	.text_import_area_count = _cache_pool_text_import_area_count,
+ 	.text_export = _cache_pool_text_export,
+@@ -365,7 +359,6 @@ static int _cache_add_target_line(struct dev_manager *dm,
+ #endif /* DEVMAPPER_SUPPORT */
+ 
+ static struct segtype_handler _cache_ops = {
+-	.name = _name,
+ 	.text_import = _cache_text_import,
+ 	.text_import_area_count = _cache_text_import_area_count,
+ 	.text_export = _cache_text_export,
+diff --git a/lib/error/errseg.c b/lib/error/errseg.c
+index f3bf9c9..af19e7d 100644
+--- a/lib/error/errseg.c
++++ b/lib/error/errseg.c
+@@ -21,11 +21,6 @@
+ #include "activate.h"
+ #include "str_list.h"
+ 
+-static const char *_errseg_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static int _errseg_merge_segments(struct lv_segment *seg1, struct lv_segment *seg2)
  {
--	return dm_pool_strdup(mem, seg->segtype->ops->name(seg));
-+	return dm_pool_strdup(mem, lvseg_name(seg));
+ 	seg1->len += seg2->len;
+@@ -83,7 +78,6 @@ static void _errseg_destroy(struct segment_type *segtype)
  }
  
- char *lvseg_discards_dup(struct dm_pool *mem, const struct lv_segment *seg)
-@@ -183,6 +183,16 @@ uint64_t lvseg_chunksize(const struct lv_segment *seg)
- 	return size;
- }
+ static struct segtype_handler _error_ops = {
+-	.name = _errseg_name,
+ 	.merge_segments = _errseg_merge_segments,
+ #ifdef DEVMAPPER_SUPPORT
+ 	.add_target_line = _errseg_add_target_line,
+diff --git a/lib/freeseg/freeseg.c b/lib/freeseg/freeseg.c
+index 1dce243..b4eba94 100644
+--- a/lib/freeseg/freeseg.c
++++ b/lib/freeseg/freeseg.c
+@@ -16,18 +16,12 @@
+ #include "toolcontext.h"
+ #include "segtype.h"
  
-+const char *lvseg_name(const struct lv_segment *seg)
-+{
-+	/* Support even segtypes without 'ops' */
-+	if (seg->segtype->ops &&
-+	    seg->segtype->ops->name)
-+		return seg->segtype->ops->name(seg);
-+
-+	return seg->segtype->name;
-+}
-+
- uint64_t lvseg_start(const struct lv_segment *seg)
+-static const char *_freeseg_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static void _freeseg_destroy(struct segment_type *segtype)
  {
- 	return (uint64_t) seg->le * seg->lv->vg->extent_size;
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index bcd7028..2261913 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -77,6 +77,7 @@ struct logical_volume *lv_parent(const struct logical_volume *lv);
- char *lv_parent_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
- uint32_t lv_kernel_read_ahead(const struct logical_volume *lv);
-+const char *lvseg_name(const struct lv_segment *seg);
- uint64_t lvseg_start(const struct lv_segment *seg);
- uint64_t lvseg_size(const struct lv_segment *seg);
- uint64_t lvseg_chunksize(const struct lv_segment *seg);
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index f14cec0..f60b964 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4617,7 +4617,7 @@ static int _lvresize_adjust_extents(struct cmd_context *cmd, struct logical_volu
- 			else if (seg_is_raid(first_seg(lv)) &&
- 				 (lp->stripes != seg_stripes)) {
- 				log_error("Unable to extend \"%s\" segment type with different number of stripes.",
--					  first_seg(lv)->segtype->ops->name(first_seg(lv)));
-+					  lvseg_name(first_seg(lv)));
- 				return 0;
- 			}
- 	
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index ad918f1..c8c9543 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -481,8 +481,7 @@ static int _lv_split_segment(struct logical_volume *lv, struct lv_segment *seg,
- 
- 	if (!seg_can_split(seg)) {
- 		log_error("Unable to split the %s segment at LE %" PRIu32
--			  " in LV %s", seg->segtype->ops->name(seg),
--			  le, lv->name);
-+			  " in LV %s", lvseg_name(seg), le, lv->name);
- 		return 0;
- 	}
- 
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-index 439b8ed..4c0ab72 100644
---- a/lib/metadata/pool_manip.c
-+++ b/lib/metadata/pool_manip.c
-@@ -33,7 +33,7 @@ int attach_pool_metadata_lv(struct lv_segment *pool_seg,
- 	if (!seg_is_pool(pool_seg)) {
- 		log_error(INTERNAL_ERROR
- 			  "Unable to attach pool metadata LV to %s segtype.",
--			  pool_seg->segtype->ops->name(pool_seg));
-+			  lvseg_name(pool_seg));
- 		return 0;
- 	}
- 	pool_seg->metadata_lv = metadata_lv;
-@@ -70,7 +70,7 @@ int attach_pool_data_lv(struct lv_segment *pool_seg,
- 	if (!seg_is_pool(pool_seg)) {
- 		log_error(INTERNAL_ERROR
- 			  "Unable to attach pool data LV to %s segtype.",
--			  pool_seg->segtype->ops->name(pool_seg));
-+			  lvseg_name(pool_seg));
- 		return 0;
- 	}
- 
-@@ -129,7 +129,7 @@ int detach_pool_lv(struct lv_segment *seg)
- 	if (!seg->pool_lv) {
- 		log_error(INTERNAL_ERROR
- 			  "No pool associated with %s LV, %s.",
--			  seg->segtype->ops->name(seg), seg->lv->name);
-+			  lvseg_name(seg), seg->lv->name);
- 		return 0;
- 	}
- 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 44272e8..8219984 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -117,7 +117,7 @@ static int _raid_remove_top_layer(struct logical_volume *lv,
- 	if (!seg_is_mirrored(seg)) {
- 		log_error(INTERNAL_ERROR
- 			  "Unable to remove RAID layer from segment type %s",
--			  seg->segtype->ops->name(seg));
-+			  lvseg_name(seg));
- 		return 0;
- 	}
- 
-@@ -579,7 +579,7 @@ static int _raid_add_images(struct logical_volume *lv,
- 		dm_list_add(&meta_lvs, &lvl->list);
- 	} else if (!seg_is_raid(seg)) {
- 		log_error("Unable to add RAID images to %s of segment type %s",
--			  lv->name, seg->segtype->ops->name(seg));
-+			  lv->name, lvseg_name(seg));
- 		return 0;
- 	}
- 
-@@ -1075,7 +1075,7 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
- 	if (!seg_is_mirrored(first_seg(lv)) ||
- 	    !strcmp(first_seg(lv)->segtype->name, SEG_TYPE_NAME_RAID10)) {
- 		log_error("Unable to split logical volume of segment type, %s",
--			  first_seg(lv)->segtype->ops->name(first_seg(lv)));
-+			  lvseg_name(first_seg(lv)));
- 		return 0;
- 	}
- 
-@@ -1445,7 +1445,7 @@ int lv_raid_reshape(struct logical_volume *lv,
- 
- 	log_error("Converting the segment type for %s/%s from %s to %s"
- 		  " is not yet supported.", lv->vg->name, lv->name,
--		  seg->segtype->ops->name(seg), new_segtype->name);
-+		  lvseg_name(seg), new_segtype->name);
- 	return 0;
+ 	dm_free(segtype);
  }
  
-@@ -1601,7 +1601,7 @@ int lv_raid_replace(struct logical_volume *lv,
- 		   (match_count > raid_seg->segtype->parity_devs)) {
- 		log_error("Unable to replace more than %u PVs from (%s) %s/%s",
- 			  raid_seg->segtype->parity_devs,
--			  raid_seg->segtype->ops->name(raid_seg),
-+			  lvseg_name(raid_seg),
- 			  lv->vg->name, lv->name);
- 		return 0;
- 	} else if (!strcmp(raid_seg->segtype->name, SEG_TYPE_NAME_RAID10)) {
-@@ -1790,7 +1790,7 @@ int lv_raid_remove_missing(struct logical_volume *lv)
- 		return_0;
+ static struct segtype_handler _freeseg_ops = {
+-	.name = _freeseg_name,
+ 	.destroy = _freeseg_destroy,
+ };
  
- 	log_debug("Attempting to remove missing devices from %s LV, %s",
--		  seg->segtype->ops->name(seg), lv->name);
-+		  lvseg_name(seg), lv->name);
+diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
+index 411b4d4..46dfe02 100644
+--- a/lib/mirror/mirrored.c
++++ b/lib/mirror/mirrored.c
+@@ -38,11 +38,6 @@ struct mirror_state {
+ 	uint32_t default_region_size;
+ };
  
- 	/*
- 	 * FIXME: Make sure # of compromised components will not affect RAID
-@@ -1870,7 +1870,7 @@ static int _partial_raid_lv_is_redundant(const struct logical_volume *lv)
- 		   (failed_components > raid_seg->segtype->parity_devs)) {
- 		log_verbose("More than %u components from %s %s have failed.",
- 			    raid_seg->segtype->parity_devs,
--			    raid_seg->segtype->ops->name(raid_seg),
-+			    lvseg_name(raid_seg),
- 			    display_lvname(lv));
- 		return 0;	/* Insufficient redundancy to activate */
- 	}
-diff --git a/lib/report/report.c b/lib/report/report.c
-index e85c349..445f603 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -366,7 +366,7 @@ static int _segtype_disp(struct dm_report *rh __attribute__((unused)),
- 	char *name;
+-static const char *_mirrored_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static void _mirrored_display(const struct lv_segment *seg)
+ {
+ 	const char *size;
+@@ -592,7 +587,6 @@ static void _mirrored_destroy(struct segment_type *segtype)
+ }
  
- 	if (!(name = lvseg_segtype_dup(mem, seg))) {
--		log_error("Failed to get segtype.");
-+		log_error("Failed to get segtype name.");
- 		return 0;
- 	}
+ static struct segtype_handler _mirrored_ops = {
+-	.name = _mirrored_name,
+ 	.display = _mirrored_display,
+ 	.text_import_area_count = _mirrored_text_import_area_count,
+ 	.text_import = _mirrored_text_import,
+diff --git a/lib/raid/raid.c b/lib/raid/raid.c
+index 6628dc8..7cc4301 100644
+--- a/lib/raid/raid.c
++++ b/lib/raid/raid.c
+@@ -25,11 +25,6 @@
+ #include "metadata.h"
+ #include "lv_alloc.h"
  
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 114065c..6cb6f15 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -355,7 +355,7 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
- 			 vg_is_clustered(lv->vg) ? "clustered " : "",
- 			 (seg->log_lv) ? "disk-logged " :
- 			 seg_is_raid(seg) ? "" : "core-logged ",
--			 seg->segtype->ops->name(seg), lv->name);
-+			 lvseg_name(seg), lv->name);
+-static const char *_raid_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static void _raid_display(const struct lv_segment *seg)
+ {
+ 	unsigned s;
+@@ -243,7 +238,7 @@ static int _raid_add_target_line(struct dev_manager *dm __attribute__((unused)),
+ 	if (mirror_in_sync())
+ 		flags = DM_NOSYNC;
  
- 	/*
- 	 * If this mirror has a core log (i.e. !seg->log_lv),
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index ad4a6c0..e976880 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1850,7 +1850,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
- 	if (arg_count(cmd, mirrors_ARG) &&
- 	    !seg_is_mirrored(seg) && !seg_is_linear(seg)) {
- 		log_error("'--mirrors/-m' is not compatible with %s",
--			  seg->segtype->ops->name(seg));
-+			  lvseg_name(seg));
- 		return 0;
- 	}
+-	params.raid_type = _raid_name(seg);
++	params.raid_type = lvseg_name(seg);
+ 	if (seg->segtype->parity_devs) {
+ 		/* RAID 4/5/6 */
+ 		params.mirrors = 1;
+@@ -418,7 +413,6 @@ static int _raid_target_unmonitor_events(struct lv_segment *seg, int events)
+ #endif /* DEVMAPPER_SUPPORT */
  
-@@ -1860,7 +1860,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
- 	if (!_is_valid_raid_conversion(seg->segtype, lp->segtype)) {
- 		log_error("Unable to convert %s/%s from %s to %s",
- 			  lv->vg->name, lv->name,
--			  seg->segtype->ops->name(seg), lp->segtype->name);
-+			  lvseg_name(seg), lp->segtype->name);
- 		return 0;
- 	}
+ static struct segtype_handler _raid_ops = {
+-	.name = _raid_name,
+ 	.display = _raid_display,
+ 	.text_import_area_count = _raid_text_import_area_count,
+ 	.text_import = _raid_text_import,
+diff --git a/lib/replicator/replicator.c b/lib/replicator/replicator.c
+index 2e3632a..ae87d7f 100644
+--- a/lib/replicator/replicator.c
++++ b/lib/replicator/replicator.c
+@@ -39,10 +39,6 @@
+ /*
+  *  Replicator target
+  */
+-static const char *_replicator_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
  
-@@ -2672,7 +2672,7 @@ static int _lvconvert_thin(struct cmd_context *cmd,
- 	    lv_is_thin_pool_data(lv) ||
- 	    lv_is_thin_pool_metadata(lv)) {
- 		log_error("Can't use %s %s as external origin.",
--			  first_seg(lv)->segtype->name,
-+			  lvseg_name(first_seg(lv)),
- 			  display_lvname(lv));
- 		return 0;
- 	}
-@@ -3294,8 +3294,7 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			if (arg_count(cmd, use_policies_ARG))
- 				return ECMD_PROCESSED; /* nothing to be done here */
- 			log_error("Can't repair LV \"%s\" of segtype %s.",
--				  lv->name,
--				  first_seg(lv)->segtype->ops->name(first_seg(lv)));
-+				  lv->name, lvseg_name(first_seg(lv)));
- 			return ECMD_FAILED;
- 		}
- 	}
+ /* FIXME: missing implementation */
+ static void _replicator_display(const struct lv_segment *seg)
+@@ -410,7 +406,6 @@ static void _replicator_destroy(struct segment_type *segtype)
+ }
+ 
+ static struct segtype_handler _replicator_ops = {
+-	.name = _replicator_name,
+ 	.display = _replicator_display,
+ 	.text_import = _replicator_text_import,
+ 	.text_export = _replicator_text_export,
+@@ -739,7 +734,6 @@ static int _replicator_dev_target_present(struct cmd_context *cmd,
+ #endif
+ 
+ static struct segtype_handler _replicator_dev_ops = {
+-	.name = _replicator_name,
+ 	.display = _replicator_dev_display,
+ 	.text_import = _replicator_dev_text_import,
+ 	.text_export = _replicator_dev_text_export,
+diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
+index 0557f45..18e8111 100644
+--- a/lib/snapshot/snapshot.c
++++ b/lib/snapshot/snapshot.c
+@@ -25,18 +25,13 @@
+ 	log_error(t " segment %s of logical volume %s.", ## p, \
+ 		  dm_config_parent_name(sn), seg->lv->name), 0;
+ 
+-static const char *_snap_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static const char *_snap_target_name(const struct lv_segment *seg,
+ 				     const struct lv_activate_opts *laopts)
+ {
+ 	if (!laopts->no_merging && (seg->status & MERGING))
+ 		return "snapshot-merge";
+ 
+-	return _snap_name(seg);
++	return lvseg_name(seg);
+ }
+ 
+ static int _snap_text_import(struct lv_segment *seg, const struct dm_config_node *sn,
+@@ -234,7 +229,6 @@ static void _snap_destroy(struct segment_type *segtype)
+ }
+ 
+ static struct segtype_handler _snapshot_ops = {
+-	.name = _snap_name,
+ 	.target_name = _snap_target_name,
+ 	.text_import = _snap_text_import,
+ 	.text_export = _snap_text_export,
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index 6982782..9ae237e 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -36,11 +36,6 @@ static const char _thin_module[] = "thin";
+ /* TODO: using static field here, maybe should be a part of segment_type */
+ static unsigned _feature_mask;
+ 
+-static const char *_thin_pool_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static void _thin_pool_display(const struct lv_segment *seg)
+ {
+ 	log_print("  Chunk size\t\t%s",
+@@ -449,11 +444,6 @@ static int _target_unregister_events(struct lv_segment *seg,
+ #  endif /* DMEVENTD */
+ #endif /* DEVMAPPER_SUPPORT */
+ 
+-static const char *_thin_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static void _thin_display(const struct lv_segment *seg)
+ {
+ 	log_print("  Device ID\t\t%u", seg->device_id);
+@@ -720,7 +710,6 @@ static void _thin_destroy(struct segment_type *segtype)
+ }
+ 
+ static struct segtype_handler _thin_pool_ops = {
+-	.name = _thin_pool_name,
+ 	.display = _thin_pool_display,
+ 	.text_import = _thin_pool_text_import,
+ 	.text_import_area_count = _thin_pool_text_import_area_count,
+@@ -740,7 +729,6 @@ static struct segtype_handler _thin_pool_ops = {
+ };
+ 
+ static struct segtype_handler _thin_ops = {
+-	.name = _thin_name,
+ 	.display = _thin_display,
+ 	.text_import = _thin_text_import,
+ 	.text_export = _thin_text_export,
+diff --git a/lib/unknown/unknown.c b/lib/unknown/unknown.c
+index 2ce2f9d..760f1c2 100644
+--- a/lib/unknown/unknown.c
++++ b/lib/unknown/unknown.c
+@@ -18,12 +18,6 @@
+ #include "text_export.h"
+ #include "config.h"
+ 
+-static const char *_unknown_name(const struct lv_segment *seg)
+-{
+-
+-	return seg->segtype->name;
+-}
+-
+ static int _unknown_text_import(struct lv_segment *seg, const struct dm_config_node *sn,
+ 				struct dm_hash_table *pv_hash)
+ {
+@@ -59,7 +53,6 @@ static void _unknown_destroy(struct segment_type *segtype)
+ }
+ 
+ static struct segtype_handler _unknown_ops = {
+-	.name = _unknown_name,
+ 	.text_import = _unknown_text_import,
+ 	.text_export = _unknown_text_export,
+ 	.destroy = _unknown_destroy,
+diff --git a/lib/zero/zero.c b/lib/zero/zero.c
+index 2a1fd0b..9f9d06c 100644
+--- a/lib/zero/zero.c
++++ b/lib/zero/zero.c
+@@ -19,11 +19,6 @@
+ #include "str_list.h"
+ #include "activate.h"
+ 
+-static const char *_zero_name(const struct lv_segment *seg)
+-{
+-	return seg->segtype->name;
+-}
+-
+ static int _zero_merge_segments(struct lv_segment *seg1, struct lv_segment *seg2)
+ {
+ 	seg1->len += seg2->len;
+@@ -79,7 +74,6 @@ static void _zero_destroy(struct segment_type *segtype)
+ }
+ 
+ static struct segtype_handler _zero_ops = {
+-	.name = _zero_name,
+ 	.merge_segments = _zero_merge_segments,
+ #ifdef DEVMAPPER_SUPPORT
+ 	.add_target_line = _zero_add_target_line,
 
 
