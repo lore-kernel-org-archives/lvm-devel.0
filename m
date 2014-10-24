@@ -1,100 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:40:16 +0000 (UTC)
-Subject: master - lvcreate: move tests that requires activation
-Message-ID: <20141024144016.041D560317@fedorahosted.org>
+Date: Fri, 24 Oct 2014 14:40:18 +0000 (UTC)
+Subject: master - lvconvert: external detects more conflicts
+Message-ID: <20141024144018.1A91060317@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8a2f553b7d5f516ac750aadd4ca75cc4a20aef15
-Commit:        8a2f553b7d5f516ac750aadd4ca75cc4a20aef15
-Parent:        f7cfea251c07b3a63131320cf4751b91480b9be7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=128131dbc579daf510c4aa7b5cd8f0ca076539a3
+Commit:        128131dbc579daf510c4aa7b5cd8f0ca076539a3
+Parent:        8a2f553b7d5f516ac750aadd4ca75cc4a20aef15
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 21 12:12:45 2014 +0200
+AuthorDate:    Sun Oct 19 22:04:02 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 24 16:39:31 2014 +0200
 
-lvcreate: move tests that requires activation
+lvconvert: external detects more conflicts
 
-Tests that needs active kernel driver put in single place.
+Check for more prohibited types for external origin conversion.
+TODO: Move this function to separate validation code.
+(Continuing in release fixes.)
 ---
- lib/metadata/lv_manip.c |   48 ++++++++++++++++++++++++----------------------
- 1 files changed, 25 insertions(+), 23 deletions(-)
+ tools/lvconvert.c |   12 ++++++++----
+ 1 files changed, 8 insertions(+), 4 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 6caa284..61620e5 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6590,6 +6590,31 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		return NULL;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 9155998..eb8a83b 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2664,12 +2664,16 @@ static int _lvconvert_thin(struct cmd_context *cmd,
+ 		return 0;
  	}
  
-+	if (!activation()) {
-+		if (seg_is_cache(lp) ||
-+		    seg_is_mirror(lp) ||
-+		    seg_is_raid(lp) ||
-+		    seg_is_thin(lp) ||
-+		    lp->snapshot) {
-+			/*
-+			 * FIXME: For thin pool add some code to allow delayed
-+			 * initialization of empty thin pool volume.
-+			 * i.e. using some LV flag, fake message,...
-+			 * and testing for metadata pool header signature?
-+			 */
-+			log_error("Can't create %s without using "
-+				  "device-mapper kernel driver.",
-+				  lp->segtype->name);
-+			return NULL;
-+		}
-+		/* Does LV need to be zeroed? */
-+		if (lp->zero && !seg_is_thin(lp)) {
-+			log_error("Can't wipe start of new LV without using "
-+				  "device-mapper kernel driver.");
-+			return NULL;
-+		}
-+	}
-+
- 	if (lp->stripe_size > vg->extent_size) {
- 		if (segtype_is_raid(lp->segtype) &&
- 		    (vg->extent_size < STRIPE_SIZE_MIN)) {
-@@ -6629,13 +6654,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		lp->extents = lp->extents - size_rest + lp->stripes;
- 	}
- 
--	/* Does LV need to be zeroed?  Thin handles this as a per-pool in-kernel setting. */
--	if (lp->zero && !segtype_is_thin(lp->segtype) && !activation()) {
--		log_error("Can't wipe start of new LV without using "
--			  "device-mapper kernel driver");
--		return NULL;
--	}
--
- 	status |= lp->permission | VISIBLE_LV;
- 
- 	if (seg_is_cache(lp)) {
-@@ -6773,22 +6791,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		return NULL;
- 	}
- 
--	if (!activation() &&
--	    (seg_is_mirrored(lp) ||
--	     seg_is_raid(lp) ||
--	     seg_is_pool(lp))) {
--		/*
--		 * FIXME: For thin pool add some code to allow delayed
--		 * initialization of empty thin pool volume.
--		 * i.e. using some LV flag, fake message,...
--		 * and testing for metadata pool header signature?
--		 */
--		log_error("Can't create %s without using "
--			  "device-mapper kernel driver.",
--			  lp->segtype->name);
--		return NULL;
--	}
--
- 	/* The snapshot segment gets created later */
- 	if (lp->snapshot && !seg_is_thin(lp) &&
- 	    !(lp->segtype = get_segtype_from_string(cmd, "striped")))
+-	if (lv_is_cache_type(lv) ||
++	if (lv_is_locked(lv) ||
++	    !lv_is_visible(lv) ||
++	    lv_is_cache_type(lv) ||
+ 	    lv_is_cow(lv) ||
+ 	    lv_is_pool(lv) ||
+-	    lv_is_thin_pool_data(lv) ||
+-	    lv_is_thin_pool_metadata(lv)) {
+-		log_error("Can't use %s %s as external origin.",
++	    lv_is_pool_data(lv) ||
++	    lv_is_pool_metadata(lv)) {
++		log_error("Can't use%s%s %s %s as external origin.",
++			  lv_is_locked(lv) ? " locked" : "",
++			  lv_is_visible(lv) ? "" : " hidden",
+ 			  lvseg_name(first_seg(lv)),
+ 			  display_lvname(lv));
+ 		return 0;
 
 
