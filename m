@@ -1,111 +1,136 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:40:24 +0000 (UTC)
-Subject: master - lv_manip: improve should_wipe reporting
-Message-ID: <20141024144024.5090761079@fedorahosted.org>
+Date: Fri, 24 Oct 2014 14:40:59 +0000 (UTC)
+Subject: master - pool: better error path handling
+Message-ID: <20141024144059.B394360CE2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=be3f666ef3ad25f2af598ecfa305ab9c2f7de3f4
-Commit:        be3f666ef3ad25f2af598ecfa305ab9c2f7de3f4
-Parent:        2fc403b0fc5c7fffec4d7864433d0db3c139995c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7359a9df889a2ed8d6e6114ecc3f57438a75d9d7
+Commit:        7359a9df889a2ed8d6e6114ecc3f57438a75d9d7
+Parent:        16320642813c811c30c9348c57b7f7fec1221ee9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 22 13:29:25 2014 +0200
+AuthorDate:    Fri Oct 24 14:22:25 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 24 16:39:31 2014 +0200
+CommitterDate: Fri Oct 24 16:39:32 2014 +0200
 
-lv_manip: improve should_wipe reporting
+pool: better error path handling
 
-We want to print smarter warning message only when
-the zeroing was not provided on the first zeroable segment
-of newly created LV.
+Move test for size of new LV names in front before
+any creation of LV.
 
-Put warning within _should_wipe_lv function to avoid reevaluation
-of same conditions twice.
+Properly check striped  segtype kernel presence,
+since passed 'segtype' is already tested.
+
+Keep deactivation error path local to wiping part of the function.
+
+Create metadata with temporary flag (it's activated, zeroed
+and deactivated).
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   40 +++++++++++++++++++++++++---------------
- 2 files changed, 26 insertions(+), 15 deletions(-)
+ lib/metadata/pool_manip.c |   52 +++++++++++++++++++++++++-------------------
+ 1 files changed, 29 insertions(+), 23 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e2372e5..70b41bc 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Improve _should_wipe_lv() to warn with message.
-   Inform about temporarily created volumes only in verbose mode.
-   Better support for --test mode with pool creation.
-   Query lock holding LV when replacing and converting raid volumes.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 61620e5..3c84a5c 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6530,14 +6530,31 @@ int lv_activation_skip(struct logical_volume *lv, activation_change_t activate,
- 	return 1;
- }
+diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
+index 02a82bd..b4259a8 100644
+--- a/lib/metadata/pool_manip.c
++++ b/lib/metadata/pool_manip.c
+@@ -390,6 +390,7 @@ int create_pool(struct logical_volume *pool_lv,
+ 	struct logical_volume *meta_lv, *data_lv;
+ 	struct lv_segment *seg;
+ 	char name[NAME_LEN];
++	int r;
  
--static int _should_wipe_lv(struct lvcreate_params *lp, struct logical_volume *lv) {
--	int r = lp->zero | lp->wipe_signatures;
-+static int _should_wipe_lv(struct lvcreate_params *lp,
-+			   struct logical_volume *lv, int warn)
-+{
-+	/* Unzeroable segment */
-+	if (first_seg(lv)->segtype->flags & SEG_CANNOT_BE_ZEROED)
+ 	if (pool_lv->le_count) {
+ 		log_error(INTERNAL_ERROR "Pool %s already has extents.",
+@@ -397,14 +398,22 @@ int create_pool(struct logical_volume *pool_lv,
+ 		return 0;
+ 	}
+ 
++	if (dm_snprintf(name, sizeof(name), "%s_%s", pool_lv->name,
++			(segtype_is_cache_pool(segtype)) ?
++			"cmeta" : "tmeta") < 0) {
++		log_error("Name of logical volume %s is too long to be a pool name.",
++			  display_lvname(pool_lv));
 +		return 0;
- 
--	if (!seg_is_thin(lp) && !seg_is_cache_pool(lp))
--		return r;
-+	/* Thin snapshot need not to be zeroed */
-+	/* Thin pool with zeroing doesn't need zeroing or wiping */
-+	if (lv_is_thin_volume(lv) &&
-+	    (first_seg(lv)->origin ||
-+	     first_seg(first_seg(lv)->pool_lv)->zero_new_blocks))
-+		return 0;
- 
--	if (lv_is_thin_volume(lv))
--		return r && !lp->snapshot && !first_seg(first_seg(lv)->pool_lv)->zero_new_blocks;
-+	/* Cannot zero read-only volume */
-+	if ((lv->status & LVM_WRITE) &&
-+	    (lp->zero || lp->wipe_signatures))
-+		return 1;
++	}
 +
-+	if (warn && (!lp->zero || !(lv->status & LVM_WRITE)))
-+		log_warn("WARNING: Logical volume %s not zeroed.",
-+			 display_lvname(lv));
-+	if (warn && (!lp->wipe_signatures || !(lv->status & LVM_WRITE)))
-+		log_verbose("Signature wiping on logical volume %s not requested.",
-+			    display_lvname(lv));
+ 	/* LV is not yet a pool, so it's extension from lvcreate */
+ 	if (!(striped = get_segtype_from_string(pool_lv->vg->cmd, "striped")))
+ 		return_0;
  
- 	return 0;
- }
-@@ -7017,7 +7034,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+-	if (activation() && segtype->ops->target_present &&
+-	    !segtype->ops->target_present(pool_lv->vg->cmd, NULL, NULL)) {
++	if (activation() && striped->ops->target_present &&
++	    !striped->ops->target_present(pool_lv->vg->cmd, NULL, NULL)) {
+ 		log_error("%s: Required device-mapper target(s) not "
+-			  "detected in your kernel.", segtype->name);
++			  "detected in your kernel.", striped->name);
+ 		return 0;
  	}
  
- 	/* Do not scan this LV until properly zeroed/wiped. */
--	if (_should_wipe_lv(lp, lv))
-+	if (_should_wipe_lv(lp, lv, 0))
- 		lv->status |= LV_NOSCAN;
- 
- 	if (lp->temporary)
-@@ -7073,14 +7090,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		return NULL;
- 	}
- 
--	if (!seg_is_thin(lp) && !lp->snapshot) {
--		if (!lp->zero)
--			log_warn("WARNING: \"%s/%s\" not zeroed", lv->vg->name, lv->name);
--		if (!lp->wipe_signatures)
--			log_verbose("Signature wiping on \"%s/%s\" not requested", lv->vg->name, lv->name);
+@@ -432,24 +441,25 @@ int create_pool(struct logical_volume *pool_lv,
+ 		 * or directly converted to invisible device via suspend/resume
+ 		 */
+ 		pool_lv->status |= LV_TEMPORARY;
+-		if (!activate_lv_local(pool_lv->vg->cmd, pool_lv) ||
+-		    /* Clear 4KB of pool metadata device. */
+-		    !wipe_lv(pool_lv, (struct wipe_params) { .do_zero = 1 })) {
+-			log_error("Aborting. Failed to wipe pool metadata %s.",
+-				  pool_lv->name);
++		if (!activate_lv_local(pool_lv->vg->cmd, pool_lv)) {
++			log_error("Aborting. Failed to activate pool metadata %s.",
++				  display_lvname(pool_lv));
+ 			goto bad;
+ 		}
++		/* Clear 4KB of pool metadata device. */
++		if (!(r = wipe_lv(pool_lv, (struct wipe_params) { .do_zero = 1 }))) {
++			log_error("Aborting. Failed to wipe pool metadata %s.",
++				  display_lvname(pool_lv));
++		}
+ 		pool_lv->status &= ~LV_TEMPORARY;
+ 		/* Deactivates cleared metadata LV */
+-		if (!deactivate_lv_local(pool_lv->vg->cmd, pool_lv))
+-			goto_bad;
 -	}
 -
--	if (_should_wipe_lv(lp, lv)) {
-+	if (_should_wipe_lv(lp, lv, 1)) {
- 		if (!wipe_lv(lv, (struct wipe_params)
- 			     {
- 				     .do_zero = lp->zero,
+-	if (dm_snprintf(name, sizeof(name), "%s_%s", pool_lv->name,
+-			(segtype_is_cache_pool(segtype)) ?
+-			"cmeta" : "tmeta") < 0) {
+-		log_error("Name is too long to be a pool name.");
+-		goto bad;
++		if (!deactivate_lv_local(pool_lv->vg->cmd, pool_lv)) {
++			log_error("Aborting. Could not deactivate pool metadata %s.",
++				  display_lvname(pool_lv));
++			return 0;
++		}
++		if (!r)
++			goto bad;
+ 	}
+ 
+ 	if (!(meta_lv = lv_create_empty(name, NULL, LVM_READ | LVM_WRITE,
+@@ -486,12 +496,7 @@ int create_pool(struct logical_volume *pool_lv,
+ 
+ bad:
+ 	if (activation()) {
+-		if (lv_is_active_locally(pool_lv) &&
+-		    deactivate_lv_local(pool_lv->vg->cmd, pool_lv)) {
+-			log_error("Aborting. Could not deactivate pool %s.",
+-				  pool_lv->name);
+-			return 0;
+-		}
++		/* Without activation there was no intermediate commit */
+ 		if (!lv_remove(pool_lv) ||
+ 		    !vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
+ 			log_error("Manual intervention may be required to "
+@@ -520,6 +525,7 @@ struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
+ 		.stripe_size = stripe_size,
+ 		.stripes = stripes,
+ 		.zero = 1,
++		.temporary = 1,
+ 	};
+ 
+ 	dm_list_init(&lvc.tags);
 
 
