@@ -1,242 +1,111 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:40:57 +0000 (UTC)
-Subject: master - cleanup: code move
-Message-ID: <20141024144057.A306760CE2@fedorahosted.org>
+Date: Fri, 24 Oct 2014 14:40:24 +0000 (UTC)
+Subject: master - lv_manip: improve should_wipe reporting
+Message-ID: <20141024144024.5090761079@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=16320642813c811c30c9348c57b7f7fec1221ee9
-Commit:        16320642813c811c30c9348c57b7f7fec1221ee9
-Parent:        b23e125982ea5f1c4b712a31b2133526a8fc12d8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=be3f666ef3ad25f2af598ecfa305ab9c2f7de3f4
+Commit:        be3f666ef3ad25f2af598ecfa305ab9c2f7de3f4
+Parent:        2fc403b0fc5c7fffec4d7864433d0db3c139995c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 22 13:53:36 2014 +0200
+AuthorDate:    Wed Oct 22 13:29:25 2014 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 24 16:39:32 2014 +0200
+CommitterDate: Fri Oct 24 16:39:31 2014 +0200
 
-cleanup: code move
+lv_manip: improve should_wipe reporting
 
-Update comment and move code to new place.
-Gets updated with next commit.
+We want to print smarter warning message only when
+the zeroing was not provided on the first zeroable segment
+of newly created LV.
+
+Put warning within _should_wipe_lv function to avoid reevaluation
+of same conditions twice.
 ---
- tools/lvcreate.c |  196 +++++++++++++++++++++++++++---------------------------
- 1 files changed, 98 insertions(+), 98 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |   40 +++++++++++++++++++++++++---------------
+ 2 files changed, 26 insertions(+), 15 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 8c52611..301bda6 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -231,104 +231,6 @@ static int _lvcreate_name_params(struct lvcreate_params *lp,
- }
- 
- /*
-- * Normal snapshot or thinly-provisioned snapshot?
-- */
--static int _determine_snapshot_type(struct volume_group *vg,
--				    struct lvcreate_params *lp)
--{
--	struct logical_volume *lv, *pool_lv = NULL;
--
--	if (!(lv = find_lv(vg, lp->origin_name))) {
--		log_error("Snapshot origin LV %s not found in Volume group %s.",
--			  lp->origin_name, vg->name);
--		return 0;
--	}
--
--	if (lv_is_cache(lv)) {
--		log_error("Snapshot of cache LV is not yet supported.");
--		return 0;
--	}
--
--	if (lp->pool_name) {
--		if (!(pool_lv = find_lv(vg, lp->pool_name))) {
--			log_error("Thin pool volume %s not found in Volume group %s.",
--				  lp->pool_name, vg->name);
--			return 0;
--		}
--
--		if (!lv_is_thin_pool(pool_lv)) {
--			log_error("Logical volume %s is not a thin pool volume.",
--				  display_lvname(pool_lv));
--			return 0;
--		}
--	}
--
--	if (!arg_count(vg->cmd, extents_ARG) && !arg_count(vg->cmd, size_ARG)) {
--		if (lv_is_thin_volume(lv) && !lp->pool_name)
--			lp->pool_name = first_seg(lv)->pool_lv->name;
--
--		if (seg_is_thin(lp) || lp->pool_name) {
--			if (!(lp->segtype = get_segtype_from_string(vg->cmd, "thin")))
--				return_0;
--			return 1;
--		}
--
--		log_error("Please specify either size or extents with snapshots.");
--		return 0;
--	} else if (lp->pool_name) {
--		log_error("Cannot specify size with thin pool snapshot.");
--		return 0;
--	}
--
--	return 1;
--}
--
--/*
-- * _determine_cache_argument
-- * @vg
-- * @lp
-- *
-- * 'lp->pool' is set with an LV that could be either the cache_pool
-- * or the origin of the cached LV which is being created.  This
-- * function determines which it is and sets 'lp->origin' or
-- * 'lp->pool' appropriately.
-- */
--static int _determine_cache_argument(struct volume_group *vg,
--				     struct lvcreate_params *lp)
--{
--	struct logical_volume *lv;
--
--	if (!seg_is_cache(lp)) {
--		log_error(INTERNAL_ERROR
--			  "Unable to determine cache argument on %s segtype",
--			  lp->segtype->name);
--		return 0;
--	}
--
--	if (!lp->pool_name) {
--		lp->pool_name = lp->lv_name;
--	} else if (lp->pool_name == lp->origin_name) {
--		if (!(lv = find_lv(vg, lp->pool_name))) {
--			/* Cache pool nor origin volume exists */
--			lp->cache = 0;
--			lp->origin_name = NULL;
--			if (!(lp->segtype = get_segtype_from_string(vg->cmd, "cache-pool")))
--				return_0;
--		} else if (!lv_is_cache_pool(lv)) {
--			/* Name arg in this case is for pool name */
--			lp->pool_name = lp->lv_name;
--			/* We were given origin for caching */
--		} else {
--			/* FIXME error on pool args */
--			lp->create_pool = 0;
--			lp->origin_name = NULL;
--		}
--	}
--
--	return 1;
--}
--
--/*
-  * Update extents parameters based on other parameters which affect the size
-  * calculation.
-  * NOTE: We must do this here because of the dm_percent_t typedef and because we
-@@ -1064,6 +966,104 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e2372e5..70b41bc 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Improve _should_wipe_lv() to warn with message.
+   Inform about temporarily created volumes only in verbose mode.
+   Better support for --test mode with pool creation.
+   Query lock holding LV when replacing and converting raid volumes.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 61620e5..3c84a5c 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6530,14 +6530,31 @@ int lv_activation_skip(struct logical_volume *lv, activation_change_t activate,
  	return 1;
  }
  
-+/*
-+ * _determine_cache_argument
-+ * @vg
-+ * @lp
-+ *
-+ * 'lp->pool_name' is set with an LV that could be either the cache_pool name
-+ * or the origin name of the cached LV which is being created.
-+ * This function determines which it is and sets 'lp->origin_name' or
-+ * 'lp->pool_name' appropriately.
-+ */
-+static int _determine_cache_argument(struct volume_group *vg,
-+				     struct lvcreate_params *lp)
+-static int _should_wipe_lv(struct lvcreate_params *lp, struct logical_volume *lv) {
+-	int r = lp->zero | lp->wipe_signatures;
++static int _should_wipe_lv(struct lvcreate_params *lp,
++			   struct logical_volume *lv, int warn)
 +{
-+	struct logical_volume *lv;
-+
-+	if (!seg_is_cache(lp)) {
-+		log_error(INTERNAL_ERROR
-+			  "Unable to determine cache argument on %s segtype",
-+			  lp->segtype->name);
++	/* Unzeroable segment */
++	if (first_seg(lv)->segtype->flags & SEG_CANNOT_BE_ZEROED)
 +		return 0;
-+	}
-+
-+	if (!lp->pool_name) {
-+		lp->pool_name = lp->lv_name;
-+	} else if (lp->pool_name == lp->origin_name) {
-+		if (!(lv = find_lv(vg, lp->pool_name))) {
-+			/* Cache pool nor origin volume exists */
-+			lp->cache = 0;
-+			lp->origin_name = NULL;
-+			if (!(lp->segtype = get_segtype_from_string(vg->cmd, "cache-pool")))
-+				return_0;
-+		} else if (!lv_is_cache_pool(lv)) {
-+			/* Name arg in this case is for pool name */
-+			lp->pool_name = lp->lv_name;
-+			/* We were given origin for caching */
-+		} else {
-+			/* FIXME error on pool args */
-+			lp->create_pool = 0;
-+			lp->origin_name = NULL;
-+		}
-+	}
-+
-+	return 1;
-+}
-+
-+/*
-+ * Normal snapshot or thinly-provisioned snapshot?
-+ */
-+static int _determine_snapshot_type(struct volume_group *vg,
-+				    struct lvcreate_params *lp)
-+{
-+	struct logical_volume *lv, *pool_lv = NULL;
-+
-+	if (!(lv = find_lv(vg, lp->origin_name))) {
-+		log_error("Snapshot origin LV %s not found in Volume group %s.",
-+			  lp->origin_name, vg->name);
+ 
+-	if (!seg_is_thin(lp) && !seg_is_cache_pool(lp))
+-		return r;
++	/* Thin snapshot need not to be zeroed */
++	/* Thin pool with zeroing doesn't need zeroing or wiping */
++	if (lv_is_thin_volume(lv) &&
++	    (first_seg(lv)->origin ||
++	     first_seg(first_seg(lv)->pool_lv)->zero_new_blocks))
 +		return 0;
-+	}
+ 
+-	if (lv_is_thin_volume(lv))
+-		return r && !lp->snapshot && !first_seg(first_seg(lv)->pool_lv)->zero_new_blocks;
++	/* Cannot zero read-only volume */
++	if ((lv->status & LVM_WRITE) &&
++	    (lp->zero || lp->wipe_signatures))
++		return 1;
 +
-+	if (lv_is_cache(lv)) {
-+		log_error("Snapshot of cache LV is not yet supported.");
-+		return 0;
-+	}
-+
-+	if (lp->pool_name) {
-+		if (!(pool_lv = find_lv(vg, lp->pool_name))) {
-+			log_error("Thin pool volume %s not found in Volume group %s.",
-+				  lp->pool_name, vg->name);
-+			return 0;
-+		}
-+
-+		if (!lv_is_thin_pool(pool_lv)) {
-+			log_error("Logical volume %s is not a thin pool volume.",
-+				  display_lvname(pool_lv));
-+			return 0;
-+		}
-+	}
-+
-+	if (!arg_count(vg->cmd, extents_ARG) && !arg_count(vg->cmd, size_ARG)) {
-+		if (lv_is_thin_volume(lv) && !lp->pool_name)
-+			lp->pool_name = first_seg(lv)->pool_lv->name;
-+
-+		if (seg_is_thin(lp) || lp->pool_name) {
-+			if (!(lp->segtype = get_segtype_from_string(vg->cmd, "thin")))
-+				return_0;
-+			return 1;
-+		}
-+
-+		log_error("Please specify either size or extents with snapshots.");
-+		return 0;
-+	} else if (lp->pool_name) {
-+		log_error("Cannot specify size with thin pool snapshot.");
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
- static int _check_thin_parameters(struct volume_group *vg, struct lvcreate_params *lp,
- 				  struct lvcreate_cmdline_params *lcp)
- {
++	if (warn && (!lp->zero || !(lv->status & LVM_WRITE)))
++		log_warn("WARNING: Logical volume %s not zeroed.",
++			 display_lvname(lv));
++	if (warn && (!lp->wipe_signatures || !(lv->status & LVM_WRITE)))
++		log_verbose("Signature wiping on logical volume %s not requested.",
++			    display_lvname(lv));
+ 
+ 	return 0;
+ }
+@@ -7017,7 +7034,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 	}
+ 
+ 	/* Do not scan this LV until properly zeroed/wiped. */
+-	if (_should_wipe_lv(lp, lv))
++	if (_should_wipe_lv(lp, lv, 0))
+ 		lv->status |= LV_NOSCAN;
+ 
+ 	if (lp->temporary)
+@@ -7073,14 +7090,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		return NULL;
+ 	}
+ 
+-	if (!seg_is_thin(lp) && !lp->snapshot) {
+-		if (!lp->zero)
+-			log_warn("WARNING: \"%s/%s\" not zeroed", lv->vg->name, lv->name);
+-		if (!lp->wipe_signatures)
+-			log_verbose("Signature wiping on \"%s/%s\" not requested", lv->vg->name, lv->name);
+-	}
+-
+-	if (_should_wipe_lv(lp, lv)) {
++	if (_should_wipe_lv(lp, lv, 1)) {
+ 		if (!wipe_lv(lv, (struct wipe_params)
+ 			     {
+ 				     .do_zero = lp->zero,
 
 
