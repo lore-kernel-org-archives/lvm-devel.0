@@ -1,108 +1,114 @@
-From: Martin Wilck <mwilck@suse.com>
-Date: Tue, 01 Feb 2022 11:55:46 +0100
-Subject: [PATCH] udev: create symlinks and watch even in suspended state
-In-Reply-To: <cc5c503a-c94f-d32f-9f91-e388f36c647c@gmail.com>
-References: <20220128134229.1783-1-mwilck@suse.com>
-	<10ad6fc0-6c24-c98b-4a02-2140883af72d@gmail.com>
-	<a1f472a89e9825f90a4104bea535086f0cde6b93.camel@suse.com>
-	<d0d0d8f39257bcddf480524f01faae1f15ac2c42.camel@suse.com>
-	<e85bd660-0c50-df5d-35de-2fd5b16cc47f@gmail.com>
-	<0a55dd1393df2c125f8cb443daaeb7d1b7162bcc.camel@suse.com>
-	<aba2f6dd-f4cf-6af4-e2b6-965f5de06cd8@redhat.com>
-	<92de9eff521e2702e364f7aa3cce6927d9d9c03c.camel@suse.com>
-	<1b20e88f-2714-3c61-73a6-2f34f6a34edc@gmail.com>
-	<712b54a06fa1b13f9ac92a00d7b121979c43d31c.camel@suse.com>
-	<20220131133354.vfomn5gdlgrhue4g@alatyr-rpi.brq.redhat.com>
-	<3f7f5039c4529912970f21fe699ad204dfbe5be3.camel@suse.com>
-	<cc5c503a-c94f-d32f-9f91-e388f36c647c@gmail.com>
-Message-ID: <5342a690855f0047efd9eede5499227246e3fb08.camel@suse.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 24 Oct 2014 14:40:30 +0000 (UTC)
+Subject: master - cleanup: commands.h update descriptions
+Message-ID: <20141024144030.872B060CE2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, 2022-02-01 at 11:11 +0100, Zdenek Kabelac wrote:
-> > > 
-> > > But yes, if temporarily losing the symlink causes issues, your
-> > > patch
-> > > solves that (Zdenek will push that upstream).
-> > 
-> > Thank you very much! It occured to me that if we want to solve my
-> > use
-> > case with minimal risk, we could make the the case in which the
-> > symlinks are preserved conditional on ACTION=="add" (i.e. true
-> > coldplug
-> > events). Tell me if you'd prefer that, I can re-submit.
-> 
-> The problem is handling of 'suspended' state in udev rules - as I've
-> mentioned 
-> original no userland tool should mostly care about this.
-> 
-> However since there are those things like udev 'trigger' and it would
-> be kind 
-> of ugly if the 'left-over' suspended device would stop whole system
-> operation
-> it's most likely better ATM to have some kind of support for this.
-> 
-> It's should be noted there is still 'race' risk of system freezing in
-> the case 
-> the suspend happens just after sysfs test and before actual i.e.
-> 'blkid' use.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c6456bd6390f6d99dd975f671c5730b0438c4c89
+Commit:        c6456bd6390f6d99dd975f671c5730b0438c4c89
+Parent:        df933c2ac92203c7352be2e7062ca8c01777cb51
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Oct 22 22:43:42 2014 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Oct 24 16:39:31 2014 +0200
 
-Right. Even if blkid was smart enough to check immediately before 
-doing I/O on the device, there would still be a race window. 
+cleanup: commands.h update descriptions
 
-It occured to me that it might be useful if IO on suspended DM devices
-failed with -EAGAIN when opened with a non-blocking file descriptor.
-But I haven't thought it through ... I suppose that would have other
-issues, it would be a breaking change anyway.
+---
+ tools/commands.h |   31 ++++++++++++++++---------------
+ 1 files changed, 16 insertions(+), 15 deletions(-)
 
-The good thing is that most of the time, the devices are suspended only
-for a short period of time, so blkid will just hang for a few fractions
-of a second. The fact that udev skips calling blkid is only for the
-very rare remaining cases in which the suspend state persists for a
-long time.
-
-> The missed issue to be solve is - that ALL rules have to rely on a
-> single 
-> suspend check - otherwise we risk 'partial' processing? which is the
-> last 
-> thing we want to see (aka all or nothing).
-
-Don't we have that already? Isn't that the check that sets the
-DM_SUSPENDED flag?
-
-> Your real problem was not the suspend on its own - which still may
-> happen 
-> anytime (so i.e. just after the test whether device is suspended),
-> but the bug was related to bad exit path cleaning udev db content in
-> this case 
-> - which is clear bug.? Next bug is that other rules have to be
-> consistent and 
-> properly skip its processing if the 1st. rules decides its meant to
-> be skipped.
-
-Part of the consistency problem is that we have a lot of related but
-not equivalent udev variables:
-
-DM_SUSPENDED
-DM_NOSCAN
-DM_UDEV_DISABLE_OTHER_RULES_FLAG
-DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG
-DM_UDEV_DISABLE_DISK_RULES_FLAG
-
-and then of course
-
-SYSTEMD_READY
-MPATH_DEVICE_READY
-
-For consumers of these variables (i.e. udev rules from other
-subsystems), it's not always obvious which one they should look at
-(just my ?0.02).
-
-Regards,
-Martin
-
+diff --git a/tools/commands.h b/tools/commands.h
+index 524297d..eb0d248 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -121,7 +121,7 @@ xx(lvchange,
+    "\t[--monitor {y|n}]\n"
+    "\t[--poll {y|n}]\n"
+    "\t[--noudevsync]\n"
+-   "\t[-M|--persistent y|n] [--major major] [--minor minor]\n"
++   "\t[-M|--persistent y|n] [-j|--major major] [--minor minor]\n"
+    "\t[--metadataprofile ProfileName]\n"
+    "\t[-P|--partial]\n"
+    "\t[-p|--permission r|rw]\n"
+@@ -221,25 +221,25 @@ xx(lvconvert,
+    "\t[--chunksize size]\n"
+    "\t[--discards {ignore|nopassdown|passdown}]\n"
+    "\t[--poolmetadataspare {y|n}]\n"
+-   "\t[--poolmetadata ThinMetadataLogicalVolume[Path] |\n"
+-   "\t [--poolmetadatasize size]\n"
+-   "\t [-r|--readahead ReadAheadSectors|auto|none]\n"
+-   "\t [--stripes Stripes [-I|--stripesize StripeSize]]]\n"
++   "\t[{--poolmetadata ThinMetadataLogicalVolume[Path] |\n"
++   "\t --poolmetadatasize size}]\n"
++   "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
++   "\t[--stripes Stripes [-I|--stripesize StripeSize]]]\n"
+    "\t[--originname NewExternalOriginVolumeName]]\n"
+    "\t[-Z|--zero {y|n}]\n"
+    COMMON_OPTS
+-   "\t[ExternalOrigin|ThinDataPool]LogicalVolume[Path]\n\n"
++   "\t[ExternalOrigin|ThinDataPool]LogicalVolume[Path] [PhysicalVolumePath...]\n\n"
+ 
+    "lvconvert "
+-   "[--type cache[-pool]|--cache]\n"
++   "[--type cache[-pool]|-H|--cache]\n"
+    "\t[--cachepool CacheDataLogicalVolume[Path]]\n"
+    "\t[--cachemode CacheMode]\n"
+    "\t[--chunksize size]\n"
+    "\t[--poolmetadataspare {y|n}]]\n"
+-   "\t[--poolmetadata CacheMetadataLogicalVolume[Path] |\n"
+-   "\t [--poolmetadatasize size]\n"
++   "\t[{--poolmetadata CacheMetadataLogicalVolume[Path] |\n"
++   "\t --poolmetadatasize size}]\n"
+    COMMON_OPTS
+-   "\t[Cache|CacheDataPool]LogicalVolume[Path]\n\n",
++   "\t[Cache|CacheDataPool]LogicalVolume[Path] [PhysicalVolumePath...]\n\n",
+ 
+    alloc_ARG, background_ARG, cache_ARG, cachemode_ARG, cachepool_ARG, chunksize_ARG,
+    corelog_ARG, discards_ARG, force_ARG, interval_ARG, merge_ARG, mirrorlog_ARG,
+@@ -273,9 +273,10 @@ xx(lvcreate,
+    "\t[-K|--ignoreactivationskip]\n"
+    "\t{-l|--extents LogicalExtentsNumber[%{VG|PVS|FREE}] |\n"
+    "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
+-   "\t[-M|--persistent {y|n}] [--major major] [--minor minor]\n"
++   "\t[-M|--persistent {y|n}] [-j|--major major] [--minor minor]\n"
+    "\t[--metadataprofile ProfileName]\n"
+-   "\t[-m|--mirrors Mirrors [--nosync] [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
++   "\t[-m|--mirrors Mirrors [--nosync]\n"
++   "\t  [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
+    "\t[-n|--name LogicalVolumeName]\n"
+    "\t[--noudevsync]\n"
+    "\t[-p|--permission {r|rw}]\n"
+@@ -283,7 +284,7 @@ xx(lvcreate,
+    "\t[--poolmetadataspare {y|n}]]\n"
+    "\t[--[raid]minrecoveryrate Rate]\n"
+    "\t[--[raid]maxrecoveryrate Rate]\n"
+-   "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
++   "\t[-r|--readahead {ReadAheadSectors|auto|none}]\n"
+    "\t[-R|--regionsize MirrorLogRegionSize]\n"
+    "\t[-T|--thin\n"
+    "\t  [--discards {ignore|nopassdown|passdown}]\n"
+@@ -319,7 +320,7 @@ xx(lvcreate,
+    "\t{-l|--extents LogicalExtentsNumber[%{VG|FREE|ORIGIN}] |\n"
+    "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
+    "\t[--poolmetadatasize MetadataVolumeSize[bBsSkKmMgG]]\n"
+-   "\t[-M|--persistent {y|n}] [--major major] [--minor minor]\n"
++   "\t[-M|--persistent {y|n}] [-j|--major major] [--minor minor]\n"
+    "\t[--metadataprofile ProfileName]\n"
+    "\t[-n|--name LogicalVolumeName]\n"
+    "\t[--noudevsync]\n"
+@@ -848,7 +849,7 @@ xx(pvscan,
+    PERMITTED_READ_ONLY,
+    "pvscan\n"
+    "\t[-b|--background]\n"
+-   "\t[--cache [-a|--activate ay] [ DevicePath | --major major --minor minor]...]\n"
++   "\t[--cache [-a|--activate ay] [ DevicePath | -j|--major major --minor minor]...]\n"
+    "\t[--commandprofile ProfileName]\n"
+    "\t[-d|--debug]\n"
+    "\t{-e|--exported | -n|--novolumegroup}\n"
 
 
