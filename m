@@ -1,64 +1,81 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 24 Oct 2014 20:59:17 +0000 (UTC)
-Subject: master - vg_read: Remove unused READ_WITHOUT_LOCK.
-Message-ID: <20141024205917.41DF961176@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Sun, 26 Oct 2014 17:37:49 +0000 (UTC)
+Subject: master - cache: apply chunk rounding also for cache creation.
+Message-ID: <20141026173749.BACD360282@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7916cae697aed7e9f8c286e4f9c6de3cb7ed5e88
-Commit:        7916cae697aed7e9f8c286e4f9c6de3cb7ed5e88
-Parent:        c3bb9629a8e1cd786fad33def773873008bdc413
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Oct 24 21:54:04 2014 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Oct 24 21:54:04 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=52dfa6dd4491fd6f584b83d0924b82bea3bc1092
+Commit:        52dfa6dd4491fd6f584b83d0924b82bea3bc1092
+Parent:        25307e4add1e3f25cf5ae00d942df61afa46fe60
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Oct 26 18:17:59 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sun Oct 26 18:37:13 2014 +0100
 
-vg_read: Remove unused READ_WITHOUT_LOCK.
+cache: apply chunk rounding also for cache creation.
 
-Unused since 67a7b7a87da65b2350f975272e581be5f41976e0:
-  report: Iterate over labels instead of PVs for label-only reports.
-(included in 2.02.105).
+When we create volumes with chunk size bigger then extent size
+we try to round up to some nearest chunk boundary.
+Until now we did this for thins - use same logic for
+cache volumes.
 ---
- lib/metadata/metadata-exported.h |    1 -
- lib/metadata/metadata.c          |    4 ++--
- 2 files changed, 2 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c |   26 ++++++++++++++------------
+ 1 files changed, 14 insertions(+), 12 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 7467b64..d05333c 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -145,7 +145,6 @@
- /* vg_read and vg_read_for_update flags */
- #define READ_ALLOW_INCONSISTENT	0x00010000U
- #define READ_ALLOW_EXPORTED	0x00020000U
--#define READ_WITHOUT_LOCK	0x00040000U
- #define READ_WARN_INCONSISTENT	0x00080000U
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 8523b58..b12af6c 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3017,7 +3017,6 @@ int lv_add_virtual_segment(struct logical_volume *lv, uint64_t status,
+ 	struct lv_segment *seg;
+ 	struct logical_volume *thin_pool_lv = NULL;
+ 	struct lv_list *lvl;
+-	uint32_t size;
  
- /* A meta-flag, useful with toollib for_each_* functions. */
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 9308cb7..3e1b94a 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4256,7 +4256,7 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
+ 	if (thin_pool_name) {
+ 		if (!(lvl = find_lv_in_vg(lv->vg, thin_pool_name))) {
+@@ -3026,17 +3025,6 @@ int lv_add_virtual_segment(struct logical_volume *lv, uint64_t status,
+ 			return 0;
+ 		}
+ 		thin_pool_lv = lvl->lv;
+-		size = first_seg(thin_pool_lv)->chunk_size;
+-		if (lv->vg->extent_size < size) {
+-			/* Align extents on chunk boundary size */
+-			size = ((uint64_t)lv->vg->extent_size * extents + size - 1) /
+-				size * size / lv->vg->extent_size;
+-			if (size != extents) {
+-				log_print_unless_silent("Rounding size (%d extents) up to chunk boundary "
+-							"size (%d extents).", extents, size);
+-				extents = size;
+-			}
+-		}
+ 	}
  
- 	already_locked = lvmcache_vgname_is_locked(vg_name);
+ 	if (!dm_list_empty(&lv->segments) &&
+@@ -6722,6 +6710,20 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 				  display_lvname(pool_lv));
+ 			return NULL;
+ 		}
++
++		/* Validate volume size to to aling on chunk for small extents */
++		/* Cache chunk size is always set */
++		size = seg_is_cache(lp) ? lp->chunk_size : first_seg(pool_lv)->chunk_size;
++		if (size > vg->extent_size) {
++			/* Align extents on chunk boundary size */
++			size = ((uint64_t)vg->extent_size * lp->extents + size - 1) /
++				size * size / vg->extent_size;
++			if (size != lp->extents) {
++				log_print_unless_silent("Rounding size (%d extents) up to chunk boundary "
++							"size (%d extents).", lp->extents, size);
++				lp->extents = size;
++			}
++		}
+ 	}
  
--	if (!already_locked && !(misc_flags & READ_WITHOUT_LOCK) &&
-+	if (!already_locked &&
- 	    !lock_vol(cmd, vg_name, lock_flags, NULL)) {
- 		log_error("Can't get lock for %s", vg_name);
- 		return _vg_make_handle(cmd, vg, FAILED_LOCKING);
-@@ -4330,7 +4330,7 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
- 	return _vg_make_handle(cmd, vg, failure);
- 
- bad:
--	if (!already_locked && !(misc_flags & READ_WITHOUT_LOCK))
-+	if (!already_locked)
- 		unlock_vg(cmd, vg_name);
- 
- bad_no_unlock:
+ 	/* Resolve origin volume */
 
 
