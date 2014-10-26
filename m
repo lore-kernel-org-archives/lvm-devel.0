@@ -1,127 +1,195 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 26 Oct 2014 17:37:45 +0000 (UTC)
-Subject: master - lvm2app: update to new lv_create_single API
-Message-ID: <20141026173745.86C1F60282@fedorahosted.org>
+Date: Sun, 26 Oct 2014 17:37:47 +0000 (UTC)
+Subject: master - pools: prefetch pool_lv and origin_lv
+Message-ID: <20141026173747.A7D8160282@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=618d818c0d31bbfa1ed4af2e8954c8a4b53127af
-Commit:        618d818c0d31bbfa1ed4af2e8954c8a4b53127af
-Parent:        7916cae697aed7e9f8c286e4f9c6de3cb7ed5e88
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=25307e4add1e3f25cf5ae00d942df61afa46fe60
+Commit:        25307e4add1e3f25cf5ae00d942df61afa46fe60
+Parent:        618d818c0d31bbfa1ed4af2e8954c8a4b53127af
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 26 07:25:30 2014 +0100
+AuthorDate:    Sun Oct 26 18:17:40 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Oct 26 18:37:13 2014 +0100
 
-lvm2app: update to new lv_create_single API
+pools: prefetch pool_lv and origin_lv
 
-lv_create_single is more type based.
+Load pool_lv and origin_lv at a single place and
+use it for more types as they need them.
 ---
- liblvm/lvm_lv.c |   25 +++++++++++--------------
- python/liblvm.c |   14 +++++---------
- 2 files changed, 16 insertions(+), 23 deletions(-)
+ lib/metadata/lv_manip.c |  105 ++++++++++++++++++++++++----------------------
+ 1 files changed, 55 insertions(+), 50 deletions(-)
 
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index f7f1596..49737d5 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -221,7 +221,6 @@ static int _lv_set_default_linear_params(struct cmd_context *cmd,
- 	}
- 
- 	lp->stripes = 1;
--	lp->stripe_size = DEFAULT_STRIPESIZE * 2;
- 
- 	return 1;
- }
-@@ -499,9 +498,7 @@ static int _lv_set_pool_params(struct lvcreate_params *lp,
- 				vg_t vg, const char *pool_name,
- 				uint64_t extents, uint64_t meta_size)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 335a1bd..8523b58 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6602,7 +6602,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 					       const char *new_lv_name)
  {
--	_lv_set_default_params(lp, vg, NULL, extents);
--
--	lp->pool_name = pool_name;
-+	_lv_set_default_params(lp, vg, pool_name, extents);
+ 	struct cmd_context *cmd = vg->cmd;
+-	uint32_t size_rest;
++	uint32_t size_rest, size;
+ 	uint64_t status = lp->permission | VISIBLE_LV;
+ 	const struct segment_type *create_segtype = lp->segtype;
+ 	struct logical_volume *lv, *origin_lv = NULL;
+@@ -6702,18 +6702,46 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
  
- 	lp->create_pool = 1;
- 	lp->segtype = get_segtype_from_string(vg->cmd, "thin-pool");
-@@ -625,8 +622,8 @@ static int _lv_set_thin_params(struct lvcreate_params *lp,
- }
- 
- static lv_create_params_t _lvm_lv_params_create_snapshot(const lv_t lv,
--						 const char *snap_name,
--						 uint64_t max_snap_size)
-+							 const char *snap_name,
-+							 uint64_t max_snap_size)
- {
- 	uint64_t size = 0;
- 	uint64_t extents = 0;
-@@ -652,24 +649,24 @@ static lv_create_params_t _lvm_lv_params_create_snapshot(const lv_t lv,
- 
- 	if (!size && !lv_is_thin_volume(lv) ) {
- 		log_error("Origin is not thin, specify size of snapshot");
--					return NULL;
-+		return NULL;
- 	}
- 
- 	lvcp = dm_pool_zalloc(lv->vg->vgmem, sizeof (struct lvm_lv_create_params));
- 	if (lvcp) {
- 		lvcp->vg = lv->vg;
- 		_lv_set_default_params(&lvcp->lvp, lv->vg, snap_name, extents);
--		lvcp->lvp.snapshot = 1;
--
- 
- 		if (size) {
--			lvcp->lvp.segtype = _get_segtype(lvcp->vg->cmd);
-+			if (!(lvcp->lvp.segtype = get_segtype_from_string(lv->vg->cmd, "snapshot"))) {
-+				log_error("Segtype snapshot not found.");
-+				return NULL;
-+			}
- 			lvcp->lvp.chunk_size = 8;
-+			lvcp->lvp.snapshot = 1;
- 		} else {
--			lvcp->lvp.segtype = get_segtype_from_string(lv->vg->cmd, "thin");
--
--			if (!lvcp->lvp.segtype) {
--				log_error(INTERNAL_ERROR "Segtype thin not found.");
-+			if (!(lvcp->lvp.segtype = get_segtype_from_string(lv->vg->cmd, "thin"))) {
-+				log_error("Segtype thin not found.");
- 				return NULL;
- 			}
- 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 094aec2..9983135 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -611,7 +611,10 @@ static PyObject *_liblvm_lvm_vg_close(vgobject *self)
- {
- 	/* if already closed, don't reclose it */
- 	if (self->vg) {
--		lvm_vg_close(self->vg);
-+		if (lvm_vg_close(self->vg) == -1) {
-+			PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+ 	if (seg_is_pool(lp))
+ 		status |= LVM_WRITE; /* Pool is always writable */
++        else if (seg_is_cache(lp) || seg_is_thin_volume(lp)) {
++		/* Resolve pool volume */
++		if (!lp->pool_name) {
++			/* Should be already checked */
++			log_error(INTERNAL_ERROR "Cannot create %s volume without %s pool.",
++				  lp->segtype->name, lp->segtype->name);
 +			return NULL;
 +		}
- 		self->vg = NULL;
- 		self->libh_copy = NULL;
- 	}
-@@ -647,14 +650,7 @@ static PyObject *_liblvm_lvm_vg_remove(vgobject *self)
- 		goto error;
  
- 	/* Not much you can do with a vg that is removed so close it */
--	if (lvm_vg_close(self->vg) == -1)
--		goto error;
--
--	self->vg = NULL;
--
--	Py_INCREF(Py_None);
--
--	return Py_None;
-+	return _liblvm_lvm_vg_close(self);
+-	if (seg_is_cache_pool(lp) && lp->origin_name) {
+-		/* Converting exiting origin and creating cache pool */
+-		if (!(origin_lv = find_lv(vg, lp->origin_name))) {
+-			log_error("Cache origin volume %s not found in Volume group %s.",
+-				  lp->origin_name, vg->name);
++		if (!(pool_lv = find_lv(vg, lp->pool_name))) {
++			log_error("Couldn't find volume %s in Volume group %s.",
++				  lp->pool_name, vg->name);
+ 			return NULL;
+ 		}
  
- error:
- 	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
++		if (lv_is_locked(pool_lv)) {
++			log_error("Cannot use locked pool volume %s.",
++				  display_lvname(pool_lv));
++			return NULL;
++		}
++	}
++
++	/* Resolve origin volume */
++	if (lp->origin_name &&
++	    !(origin_lv = find_lv(vg, lp->origin_name))) {
++		log_error("Origin volume %s not found in Volume group %s.",
++			  lp->origin_name, vg->name);
++		return NULL;
++	}
++
++	if (origin_lv && seg_is_cache_pool(lp)) {
++		/* Converting exiting origin and creating cache pool */
+ 		if (!validate_lv_cache_create_origin(origin_lv))
+ 			return_NULL;
+ 
++		if (origin_lv->size < lp->chunk_size) {
++			log_error("Caching of origin cache volume smaller then chunk size is unsupported.");
++			return NULL;
++		}
++
+ 		/* Validate cache origin is exclusively active */
+ 		if (vg_is_clustered(origin_lv->vg) &&
+ 		    locking_is_clustered() &&
+@@ -6724,29 +6752,12 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 				  display_lvname(origin_lv));
+ 			return NULL;
+ 		}
+-	} else if (seg_is_cache(lp)) {
+-		if (!lp->pool_name) {
+-			log_error(INTERNAL_ERROR "Cannot create thin volume without thin pool.");
+-			return NULL;
+-		}
+-		if (!(pool_lv = find_lv(vg, lp->pool_name))) {
+-			log_error("Couldn't find volume %s in Volume group %s.",
+-				  lp->pool_name, vg->name);
+-			return NULL;
+-		}
+-
++	} else if (pool_lv && seg_is_cache(lp)) {
+ 		if (!lv_is_cache_pool(pool_lv)) {
+ 			log_error("Logical volume %s is not a cache pool.",
+ 				  display_lvname(pool_lv));
+ 			return NULL;
+ 		}
+-
+-		if (lv_is_locked(pool_lv)) {
+-			log_error("Cannot use locked cache pool %s.",
+-				  display_lvname(pool_lv));
+-			return NULL;
+-		}
+-
+ 		/* Create cache origin for cache pool */
+ 		/* TODO: eventually support raid/mirrors with -m */
+ 		if (!(create_segtype = get_segtype_from_string(vg->cmd, "striped")))
+@@ -6765,39 +6776,16 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		lp->region_size = adjusted_mirror_region_size(vg->extent_size,
+ 							      lp->extents,
+ 							      lp->region_size, 0);
+-	} else if (seg_is_thin_volume(lp)) {
+-		if (!lp->pool_name) {
+-			log_error(INTERNAL_ERROR "Cannot create thin volume without thin pool.");
+-			return NULL;
+-		}
+-
+-		if (!(pool_lv = find_lv(vg, lp->pool_name))) {
+-			log_error("Unable to find existing pool LV %s in VG %s.",
+-				  lp->pool_name, vg->name);
+-			return NULL;
+-		}
+-
++	} else if (pool_lv && seg_is_thin_volume(lp)) {
+ 		if (!lv_is_thin_pool(pool_lv)) {
+ 			log_error("Logical volume %s is not a thin pool.",
+ 				  display_lvname(pool_lv));
+ 			return NULL;
+ 		}
+ 
+-		if (lv_is_locked(pool_lv)) {
+-			log_error("Cannot use locked thin pool %s.",
+-				  display_lvname(pool_lv));
+-			return NULL;
+-		}
+-
+ 		thin_name = lp->pool_name;
+ 
+-		if (lp->origin_name) {
+-			if (!(origin_lv = find_lv(vg, lp->origin_name))) {
+-				log_error("Couldn't find origin volume '%s'.",
+-					  lp->origin_name);
+-				return NULL;
+-			}
+-
++		if (origin_lv) {
+ 			if (lv_is_locked(origin_lv)) {
+ 				log_error("Snapshots of locked devices are not supported.");
+ 				return NULL;
+@@ -6809,10 +6797,27 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 				thin_name = origin_lv->name;
+ 
+ 			lp->voriginextents = origin_lv->le_count;
++
++			/*
++			 * Check if using 'external origin' or the 'normal' snapshot
++			 * within the same thin pool
++			 */
++			if (first_seg(origin_lv)->pool_lv != pool_lv) {
++				if (!pool_supports_external_origin(first_seg(pool_lv), origin_lv))
++					return_NULL;
++				if (origin_lv->status & LVM_WRITE) {
++					log_error("Cannot use writable LV as the external origin.");
++					return NULL; // TODO conversion for inactive
++				}
++				if (lv_is_active(origin_lv) && !lv_is_external_origin(origin_lv)) {
++					log_error("Cannot use active LV for the external origin.");
++					return NULL; // We can't be sure device is read-only
++				}
++			}
+ 		}
+ 	} else if (lp->snapshot) {
+ 		if (!lp->voriginsize) {
+-			if (!(origin_lv = find_lv(vg, lp->origin_name))) {
++			if (!origin_lv) {
+ 				log_error("Couldn't find origin volume '%s'.",
+ 					  lp->origin_name);
+ 				return NULL;
 
 
