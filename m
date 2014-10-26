@@ -1,62 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 26 Oct 2014 17:37:56 +0000 (UTC)
-Subject: master - lvcreate: delay check for free extents
-Message-ID: <20141026173756.1792860282@fedorahosted.org>
+Date: Sun, 26 Oct 2014 17:37:58 +0000 (UTC)
+Subject: master - tests: pytest update
+Message-ID: <20141026173758.2F80360282@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=205e3ff88898848b6e5dcfde74bff829bd27bf83
-Commit:        205e3ff88898848b6e5dcfde74bff829bd27bf83
-Parent:        c9fbbf48baf9866dc57b336f9ca2b54346fb9827
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=70616187b32ee890eae8e8607c2d247d16cd6787
+Commit:        70616187b32ee890eae8e8607c2d247d16cd6787
+Parent:        205e3ff88898848b6e5dcfde74bff829bd27bf83
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 26 16:18:53 2014 +0100
+AuthorDate:    Sun Oct 26 07:27:23 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Oct 26 18:37:13 2014 +0100
 
-lvcreate: delay check for free extents
+tests: pytest update
 
-As the rounding for cache creation may change the value of extents
-postpone check for free extents.
 ---
- lib/metadata/lv_manip.c |   16 ++++++++--------
- 1 files changed, 8 insertions(+), 8 deletions(-)
+ test/api/pytest.sh          |    3 +++
+ test/api/python_lvm_unit.py |    2 +-
+ 2 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 1ab47c6..36bc2d8 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6636,14 +6636,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		return NULL;
- 	}
+diff --git a/test/api/pytest.sh b/test/api/pytest.sh
+index 7b6085f..36f55fa 100644
+--- a/test/api/pytest.sh
++++ b/test/api/pytest.sh
+@@ -21,6 +21,9 @@
+ # thus it needs dmeventd
+ #
  
--	if (!seg_is_virtual(lp) && !lp->approx_alloc &&
--	    (vg->free_count < lp->extents)) {
--		log_error("Volume group \"%s\" has insufficient free space "
--			  "(%u extents): %u required.",
--			  vg->name, vg->free_count, lp->extents);
--		return NULL;
--	}
--
- 	if ((lp->alloc != ALLOC_ANYWHERE) && (lp->stripes > dm_list_size(lp->pvh))) {
- 		log_error("Number of stripes (%u) must not exceed "
- 			  "number of physical volumes (%d)", lp->stripes,
-@@ -6836,6 +6828,14 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		lp->wipe_signatures = 0;
- 	}
- 
-+	if (!seg_is_virtual(lp) && !lp->approx_alloc &&
-+	    (vg->free_count < lp->extents)) {
-+		log_error("Volume group \"%s\" has insufficient free space "
-+			  "(%u extents): %u required.",
-+			  vg->name, vg->free_count, lp->extents);
-+		return NULL;
-+	}
++# Example of using 'gdb' with python:
++# gdb -ex r --args python FULL_PATH/lvm2/test/api/python_lvm_unit.py -v TestLvm.test_lv_active_inactive
 +
- 	if (!archive(vg))
- 		return_NULL;
+ #Locate the python binding library to use.
+ python_lib=$(find $abs_top_builddir -name lvm.so)
+ # Unable to test python bindings if library not available
+diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
+index ab2e86f..c338775 100755
+--- a/test/api/python_lvm_unit.py
++++ b/test/api/python_lvm_unit.py
+@@ -132,7 +132,7 @@ class TestLvm(unittest.TestCase):
+ 			vg.extend(d)
  
+ 		vg.createLvThinpool(pool_name, vg.getSize()/2, 0, 0,
+-							lvm.THIN_DISCARDS_PASSDOWN, 1)
++				    lvm.THIN_DISCARDS_PASSDOWN, 1)
+ 		return vg
+ 
+ 	@staticmethod
 
 
