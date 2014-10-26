@@ -1,91 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:40:22 +0000 (UTC)
-Subject: master - toollib: new arg list functions
-Message-ID: <20141024144022.4128E61079@fedorahosted.org>
+Date: Sun, 26 Oct 2014 17:38:00 +0000 (UTC)
+Subject: master - tests: lvcreate-update
+Message-ID: <20141026173800.4FF5E60236@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2fc403b0fc5c7fffec4d7864433d0db3c139995c
-Commit:        2fc403b0fc5c7fffec4d7864433d0db3c139995c
-Parent:        fd1aa7fd5a1ccd7ebcf3446988110ad5c16fddc7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7bbf3cf3066a62c19e5ec439f658ae5253edaace
+Commit:        7bbf3cf3066a62c19e5ec439f658ae5253edaace
+Parent:        70616187b32ee890eae8e8607c2d247d16cd6787
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 15 15:06:42 2014 +0200
+AuthorDate:    Sun Oct 26 07:29:25 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 24 16:39:31 2014 +0200
+CommitterDate: Sun Oct 26 18:37:13 2014 +0100
 
-toollib: new arg list functions
+tests: lvcreate-update
 
-Check for negative arg list:
-arg_from_list_is_negative()
-
-Check for zero arg in list:
-arg_from_list_is_zero()
+Test with old mirror type.
 ---
- tools/lvmcmdline.c |   35 +++++++++++++++++++++++++++++++++++
- tools/tools.h      |    2 ++
- 2 files changed, 37 insertions(+), 0 deletions(-)
+ test/shell/lvcreate-usage.sh |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 4c61332..6e13679 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -127,6 +127,41 @@ int arg_outside_list_is_set(const struct cmd_context *cmd, const char *err_found
- 	return 0;
- }
- 
-+int arg_from_list_is_negative(const struct cmd_context *cmd, const char *err_found, ...)
-+{
-+	int arg, ret = 0;
-+	va_list ap;
-+
-+	va_start(ap, err_found);
-+	while ((arg = va_arg(ap, int)) != -1)
-+		if (arg_sign_value(cmd, arg, SIGN_NONE) == SIGN_MINUS) {
-+			if (err_found)
-+				log_error("%s %s.", arg_long_option_name(arg), err_found);
-+			ret = 1;
-+		}
-+	va_end(ap);
-+
-+	return ret;
-+}
-+
-+int arg_from_list_is_zero(const struct cmd_context *cmd, const char *err_found, ...)
-+{
-+	int arg, ret = 0;
-+	va_list ap;
-+
-+	va_start(ap, err_found);
-+	while ((arg = va_arg(ap, int)) != -1)
-+		if (arg_is_set(cmd, arg) &&
-+		    !arg_int_value(cmd, arg, 0)) {
-+			if (err_found)
-+				log_error("%s %s.", arg_long_option_name(arg), err_found);
-+			ret = 1;
-+		}
-+	va_end(ap);
-+
-+	return ret;
-+}
-+
- unsigned grouped_arg_is_set(const struct arg_values *av, int a)
- {
- 	return grouped_arg_count(av, a) ? 1 : 0;
-diff --git a/tools/tools.h b/tools/tools.h
-index 5fa1ab6..75c3eaa 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -148,6 +148,8 @@ unsigned arg_count(const struct cmd_context *cmd, int a);
- unsigned arg_is_set(const struct cmd_context *cmd, int a);
- int arg_from_list_is_set(const struct cmd_context *cmd, const char *err_found, ...);
- int arg_outside_list_is_set(const struct cmd_context *cmd, const char *err_found, ...);
-+int arg_from_list_is_negative(const struct cmd_context *cmd, const char *err_found, ...);
-+int arg_from_list_is_zero(const struct cmd_context *cmd, const char *err_found, ...);
- const char *arg_long_option_name(int a);
- const char *arg_value(const struct cmd_context *cmd, int a);
- const char *arg_str_value(const struct cmd_context *cmd, int a, const char *def);
+diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
+index c2b7112..05f2515 100644
+--- a/test/shell/lvcreate-usage.sh
++++ b/test/shell/lvcreate-usage.sh
+@@ -114,10 +114,10 @@ lvremove -f $vg
+ # - nonzero (bz186013)
+ # - a power of 2 and a multiple of page size
+ # - <= size of LV
+-invalid lvcreate -m 1 -L 32m -n $lv -R 0 $vg 2>err
++invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 0 $vg 2>err
+ grep "may not be zero" err
+-invalid lvcreate -m 1 -L 32m -n $lv -R 11k $vg
+-invalid lvcreate -m 1 -L 32m -n $lv -R 1k $vg
++invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 11k $vg
++invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 1k $vg
+ lvcreate -aey -L 32m -n $lv --regionsize 128m  --type mirror -m 1 $vg
+ check lv_field $vg/$lv regionsize "32.00m"
+ lvremove -f $vg
 
 
