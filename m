@@ -1,45 +1,62 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 26 Oct 2014 17:38:00 +0000 (UTC)
-Subject: master - tests: lvcreate-update
-Message-ID: <20141026173800.4FF5E60236@fedorahosted.org>
+Date: Sun, 26 Oct 2014 17:37:56 +0000 (UTC)
+Subject: master - lvcreate: delay check for free extents
+Message-ID: <20141026173756.1792860282@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7bbf3cf3066a62c19e5ec439f658ae5253edaace
-Commit:        7bbf3cf3066a62c19e5ec439f658ae5253edaace
-Parent:        70616187b32ee890eae8e8607c2d247d16cd6787
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=205e3ff88898848b6e5dcfde74bff829bd27bf83
+Commit:        205e3ff88898848b6e5dcfde74bff829bd27bf83
+Parent:        c9fbbf48baf9866dc57b336f9ca2b54346fb9827
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 26 07:29:25 2014 +0100
+AuthorDate:    Sun Oct 26 16:18:53 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Oct 26 18:37:13 2014 +0100
 
-tests: lvcreate-update
+lvcreate: delay check for free extents
 
-Test with old mirror type.
+As the rounding for cache creation may change the value of extents
+postpone check for free extents.
 ---
- test/shell/lvcreate-usage.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c |   16 ++++++++--------
+ 1 files changed, 8 insertions(+), 8 deletions(-)
 
-diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
-index c2b7112..05f2515 100644
---- a/test/shell/lvcreate-usage.sh
-+++ b/test/shell/lvcreate-usage.sh
-@@ -114,10 +114,10 @@ lvremove -f $vg
- # - nonzero (bz186013)
- # - a power of 2 and a multiple of page size
- # - <= size of LV
--invalid lvcreate -m 1 -L 32m -n $lv -R 0 $vg 2>err
-+invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 0 $vg 2>err
- grep "may not be zero" err
--invalid lvcreate -m 1 -L 32m -n $lv -R 11k $vg
--invalid lvcreate -m 1 -L 32m -n $lv -R 1k $vg
-+invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 11k $vg
-+invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 1k $vg
- lvcreate -aey -L 32m -n $lv --regionsize 128m  --type mirror -m 1 $vg
- check lv_field $vg/$lv regionsize "32.00m"
- lvremove -f $vg
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 1ab47c6..36bc2d8 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6636,14 +6636,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		return NULL;
+ 	}
+ 
+-	if (!seg_is_virtual(lp) && !lp->approx_alloc &&
+-	    (vg->free_count < lp->extents)) {
+-		log_error("Volume group \"%s\" has insufficient free space "
+-			  "(%u extents): %u required.",
+-			  vg->name, vg->free_count, lp->extents);
+-		return NULL;
+-	}
+-
+ 	if ((lp->alloc != ALLOC_ANYWHERE) && (lp->stripes > dm_list_size(lp->pvh))) {
+ 		log_error("Number of stripes (%u) must not exceed "
+ 			  "number of physical volumes (%d)", lp->stripes,
+@@ -6836,6 +6828,14 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		lp->wipe_signatures = 0;
+ 	}
+ 
++	if (!seg_is_virtual(lp) && !lp->approx_alloc &&
++	    (vg->free_count < lp->extents)) {
++		log_error("Volume group \"%s\" has insufficient free space "
++			  "(%u extents): %u required.",
++			  vg->name, vg->free_count, lp->extents);
++		return NULL;
++	}
++
+ 	if (!archive(vg))
+ 		return_NULL;
+ 
 
 
