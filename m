@@ -1,80 +1,278 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 26 Oct 2014 18:48:28 +0000 (UTC)
-Subject: master - pools: workaround hints
-Message-ID: <20141026184829.004D1608F0@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 27 Oct 2014 10:37:47 +0000 (UTC)
+Subject: master - report: selection: fix selection criteria to not match reserved values when using >, <, >=, <
+Message-ID: <20141027103747.8600A6055C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e223c801fc3eb12c2a4502aee471f18a0b903de8
-Commit:        e223c801fc3eb12c2a4502aee471f18a0b903de8
-Parent:        c28a7706ed00c135e6fb06d22dde1c374f32f847
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 26 19:45:17 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Oct 26 19:45:17 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2f7f6932dcd450ba75fe590aba8c09838d2618dc
+Commit:        2f7f6932dcd450ba75fe590aba8c09838d2618dc
+Parent:        e223c801fc3eb12c2a4502aee471f18a0b903de8
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Oct 27 11:25:08 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Oct 27 11:25:08 2014 +0100
 
-pools: workaround hints
+report: selection: fix selection criteria to not match reserved values when using >, <, >=, <
 
-Missing code for stacked hint estimation
+Some values are reserved for special purpose like 'undefined', 'unmanaged' etc.
+When using >, <, >= and < comparison operators where the range is considered,
+do not include reserved values as proper values in this range which
+would otherwise result in not so obvious criteria match (as the reserved value is
+actually transparent for the user). It's incorrect.
+
+Example scenario:
+$ vgs -o vg_name,vg_mda_copies vg1 vg2
+  VG   #VMdaCps
+  vg1          1
+  vg2  unmanaged
+
+The "unmanaged" is actually mapped onto reserved value
+18446744073709551615 (2^64 - 1) internally.
+
+Such reseved value is already caught on selection criteria input
+properly:
+
+$ vgs -o name,vg_mda_copies vg1 vg2 -S 'vg_mda_copies=18446744073709551615'
+  Numeric value 18446744073709551615 found in selection is reserved.
+
+However, we still need to fix situaton where the reserved value may be
+included in resulting range:
+
+Before this patch:
+$ vgs -o vg_name,vg_mda_copies vg1 vg2 -S 'vg_mda_copies >= 1'
+  VG   #VMdaCps
+  vg1          1
+  vg2  unmanaged
+
+With this patch applied:
+$ vgs -o vg_name,vg_mda_copies vg1 vg2 -S 'vg_mda_copies >= 1'
+  VG   #VMdaCps
+  vg1         1
+
+>From the examples above, we can see that without this patch applied,
+the vg_mda_copies >= 1 also matched the reserved value 18446744073709551615
+(which is represented by the "unamanged" string on report). When
+applying the operators, such values must be skipped! They're meant to
+be matched only against their string representation only, e.g.:
+
+$ vgs -o name,vg_mda_copies vg1 vg2 -S 'vg_mda_copies=unmanaged'
+  VG   #VMdaCps
+  vg2  unmanaged
+
+...or any synonyms:
+
+$ vgs -o name,vg_mda_copies vg1 vg2 -S 'vg_mda_copies=undefined'
+  VG   #VMdaCps
+  vg2  unmanaged
 ---
- lib/metadata/pool_manip.c          |   29 +++++++++++++++++++----------
- test/shell/lvconvert-cache-raid.sh |    1 +
- 2 files changed, 20 insertions(+), 10 deletions(-)
+ WHATS_NEW_DM         |    1 +
+ libdm/libdm-report.c |  118 ++++++++++++++++++++++++++------------------------
+ 2 files changed, 62 insertions(+), 57 deletions(-)
 
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-index b84950c..d1b4497 100644
---- a/lib/metadata/pool_manip.c
-+++ b/lib/metadata/pool_manip.c
-@@ -324,16 +324,25 @@ int recalculate_pool_chunk_size_with_dev_hints(struct logical_volume *pool_lv,
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 5ab34c1..6981f8f 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.91 - 
+ ====================================
++  Fix selection criteria to not match reserved values when using >, <, >=, <.
+   Add DM_LIST_HEAD_INIT macro to libdevmapper.h
+   Fix dm_is_dm_major to not issue error about missing /proc lines for dm module.
  
- 	pool_data_lv = seg_lv(first_seg(pool_lv), 0);
- 	dm_list_iterate_items(seg, &pool_data_lv->segments) {
--		pv = seg_pv(seg, 0);
--		if (chunk_size_calc_policy == THIN_CHUNK_SIZE_CALC_METHOD_PERFORMANCE)
--			hint = dev_optimal_io_size(cmd->dev_types, pv_dev(pv));
--		else
--			hint = dev_minimum_io_size(cmd->dev_types, pv_dev(pv));
--		if (!hint)
--			continue;
--		if (previous_hint)
--			hint = _lcm(previous_hint, hint);
--		previous_hint = hint;
-+		switch (seg_type(seg, 0)) {
-+		case AREA_PV:
-+			pv = seg_pv(seg, 0);
-+			if (chunk_size_calc_policy == THIN_CHUNK_SIZE_CALC_METHOD_PERFORMANCE)
-+				hint = dev_optimal_io_size(cmd->dev_types, pv_dev(pv));
-+			else
-+				hint = dev_minimum_io_size(cmd->dev_types, pv_dev(pv));
-+			if (!hint)
-+				continue;
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 8c27c5b..f68aa85 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -1234,7 +1234,49 @@ static void *_report_get_implicit_field_data(struct dm_report *rh __attribute__(
+ 	return NULL;
+ }
+ 
+-static int _cmp_field_int(const char *field_id, uint64_t a, uint64_t b, uint32_t flags)
++static int _close_enough(double d1, double d2)
++{
++	return fabs(d1 - d2) < DBL_EPSILON;
++}
 +
-+			if (previous_hint)
-+				hint = _lcm(previous_hint, hint);
-+			previous_hint = hint;
-+			break;
-+		case AREA_LV:
-+			/* FIXME: hint for stacked (raid) LVs - estimate geometry from LV ?? */
-+		default:
-+			break;
++/*
++ * Used to check whether a value of certain type used in selection is reserved.
++ */
++static int _check_value_is_reserved(struct dm_report *rh, unsigned type, const void *value)
++{
++	const struct dm_report_reserved_value *iter = rh->reserved_values;
++
++	if (!iter)
++		return 0;
++
++	while (iter->type) {
++		if (iter->type & type) {
++			switch (type) {
++				case DM_REPORT_FIELD_TYPE_NUMBER:
++					if (*(uint64_t *)iter->value == *(uint64_t *)value)
++						return 1;
++					break;
++				case DM_REPORT_FIELD_TYPE_STRING:
++					if (!strcmp((const char *)iter->value, (const char *) value))
++						return 1;
++					break;
++				case DM_REPORT_FIELD_TYPE_SIZE:
++					if (_close_enough(*(double *)iter->value, *(double *) value))
++						return 1;
++					break;
++				case DM_REPORT_FIELD_TYPE_STRING_LIST:
++					// TODO: add comparison for string list
++					break;
++			}
 +		}
- 	}
++		iter++;
++	}
++
++	return 0;
++}
++
++static int _cmp_field_int(struct dm_report *rh, const char *field_id,
++			  uint64_t a, uint64_t b, uint32_t flags)
+ {
+ 	switch(flags & FLD_CMP_MASK) {
+ 		case FLD_CMP_EQUAL:
+@@ -1242,13 +1284,13 @@ static int _cmp_field_int(const char *field_id, uint64_t a, uint64_t b, uint32_t
+ 		case FLD_CMP_NOT|FLD_CMP_EQUAL:
+ 			return a != b;
+ 		case FLD_CMP_NUMBER|FLD_CMP_GT:
+-			return a > b;
++			return _check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_NUMBER, &a) ? 0 : a > b;
+ 		case FLD_CMP_NUMBER|FLD_CMP_GT|FLD_CMP_EQUAL:
+-			return a >= b;
++			return _check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_NUMBER, &a) ? 0 : a >= b;
+ 		case FLD_CMP_NUMBER|FLD_CMP_LT:
+-			return a < b;
++			return _check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_NUMBER, &a) ? 0 : a < b;
+ 		case FLD_CMP_NUMBER|FLD_CMP_LT|FLD_CMP_EQUAL:
+-			return a <= b;
++			return _check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_NUMBER, &a) ? 0 : a <= b;
+ 		default:
+ 			log_error(INTERNAL_ERROR "_cmp_field_int: unsupported number "
+ 				  "comparison type for field %s", field_id);
+@@ -1257,12 +1299,8 @@ static int _cmp_field_int(const char *field_id, uint64_t a, uint64_t b, uint32_t
+ 	return 0;
+ }
  
- 	if (!hint)
-diff --git a/test/shell/lvconvert-cache-raid.sh b/test/shell/lvconvert-cache-raid.sh
-index 3ac2d0b..16dd38e 100644
---- a/test/shell/lvconvert-cache-raid.sh
-+++ b/test/shell/lvconvert-cache-raid.sh
-@@ -46,6 +46,7 @@ lvremove -f $vg
+-static int _close_enough(double d1, double d2)
+-{
+-	return fabs(d1 - d2) < DBL_EPSILON;
+-}
+-
+-static int _cmp_field_double(const char *field_id, double a, double b, uint32_t flags)
++static int _cmp_field_double(struct dm_report *rh, const char *field_id,
++			     double a, double b, uint32_t flags)
+ {
+ 	switch(flags & FLD_CMP_MASK) {
+ 		case FLD_CMP_EQUAL:
+@@ -1270,13 +1308,13 @@ static int _cmp_field_double(const char *field_id, double a, double b, uint32_t
+ 		case FLD_CMP_NOT|FLD_CMP_EQUAL:
+ 			return !_close_enough(a, b);
+ 		case FLD_CMP_NUMBER|FLD_CMP_GT:
+-			return (a > b) && !_close_enough(a, b);
++			return _check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_SIZE, &a) ? 0 : (a > b) && !_close_enough(a, b);
+ 		case FLD_CMP_NUMBER|FLD_CMP_GT|FLD_CMP_EQUAL:
+-			return (a > b) || _close_enough(a, b);
++			return _check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_SIZE, &a) ? 0 : (a > b) || _close_enough(a, b);
+ 		case FLD_CMP_NUMBER|FLD_CMP_LT:
+-			return (a < b) && !_close_enough(a, b);
++			return _check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_SIZE, &a) ? 0 : (a < b) && !_close_enough(a, b);
+ 		case FLD_CMP_NUMBER|FLD_CMP_LT|FLD_CMP_EQUAL:
+-			return a < b || _close_enough(a, b);
++			return _check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_SIZE, &a) ? 0 : a < b || _close_enough(a, b);
+ 		default:
+ 			log_error(INTERNAL_ERROR "_cmp_field_double: unsupported number "
+ 				  "comparison type for selection field %s", field_id);
+@@ -1285,7 +1323,8 @@ static int _cmp_field_double(const char *field_id, double a, double b, uint32_t
+ 	return 0;
+ }
  
- lvcreate -n cpool_meta -m 1 --type raid1 -l 10 $vg
- lvcreate -n cpool -m 1 --type raid1 -l 10 $vg
-+lvs -a -o+seg_pe_ranges $vg
- lvconvert --yes --type cache-pool --poolmetadata $vg/cpool_meta $vg/cpool
- lvcreate -n corigin --type cache --cachepool $vg/cpool -l 10
+-static int _cmp_field_string(const char *field_id, const char *a, const char *b, uint32_t flags)
++static int _cmp_field_string(struct dm_report *rh __attribute__((unused)), const char *field_id,
++			     const char *a, const char *b, uint32_t flags)
+ {
+ 	switch (flags & FLD_CMP_MASK) {
+ 		case FLD_CMP_EQUAL:
+@@ -1377,7 +1416,8 @@ static int _cmp_field_string_list_any(const struct str_list_sort_value *val,
+ 	return 0;
+ }
  
+-static int _cmp_field_string_list(const char *field_id,
++static int _cmp_field_string_list(struct dm_report *rh __attribute__((unused)),
++				  const char *field_id,
+ 				  const struct str_list_sort_value *value,
+ 				  const struct selection_str_list *selection, uint32_t flags)
+ {
+@@ -1447,16 +1487,16 @@ static int _compare_selection_field(struct dm_report *rh,
+ 					return 0;
+ 				/* fall through */
+ 			case DM_REPORT_FIELD_TYPE_NUMBER:
+-				r = _cmp_field_int(field_id, *(const uint64_t *) f->sort_value, fs->v.i, fs->flags);
++				r = _cmp_field_int(rh, field_id, *(const uint64_t *) f->sort_value, fs->v.i, fs->flags);
+ 				break;
+ 			case DM_REPORT_FIELD_TYPE_SIZE:
+-				r = _cmp_field_double(field_id, *(const uint64_t *) f->sort_value, fs->v.d, fs->flags);
++				r = _cmp_field_double(rh, field_id, *(const uint64_t *) f->sort_value, fs->v.d, fs->flags);
+ 				break;
+ 			case DM_REPORT_FIELD_TYPE_STRING:
+-				r = _cmp_field_string(field_id, (const char *) f->sort_value, fs->v.s, fs->flags);
++				r = _cmp_field_string(rh, field_id, (const char *) f->sort_value, fs->v.s, fs->flags);
+ 				break;
+ 			case DM_REPORT_FIELD_TYPE_STRING_LIST:
+-				r = _cmp_field_string_list(field_id, (const struct str_list_sort_value *) f->sort_value,
++				r = _cmp_field_string_list(rh, field_id, (const struct str_list_sort_value *) f->sort_value,
+ 							   fs->v.l, fs->flags);
+ 				break;
+ 			default:
+@@ -1851,42 +1891,6 @@ static const char *_get_reserved(struct dm_report *rh, unsigned type,
+ 	return s;
+ }
+ 
+-/*
+- * Used to check whether a value of certain type used in selection is reserved.
+- */
+-static int _check_value_is_reserved(struct dm_report *rh, unsigned type, const void *value)
+-{
+-	const struct dm_report_reserved_value *iter = rh->reserved_values;
+-
+-	if (!iter)
+-		return 0;
+-
+-	while (iter->type) {
+-		if (iter->type & type) {
+-			switch (type) {
+-				case DM_REPORT_FIELD_TYPE_NUMBER:
+-					if (*(uint64_t *)iter->value == *(uint64_t *)value)
+-						return 1;
+-					break;
+-				case DM_REPORT_FIELD_TYPE_STRING:
+-					if (!strcmp((const char *)iter->value, (const char *) value))
+-						return 1;
+-					break;
+-				case DM_REPORT_FIELD_TYPE_SIZE:
+-					if (_close_enough(*(double *)iter->value, *(double *) value))
+-						return 1;
+-					break;
+-				case DM_REPORT_FIELD_TYPE_STRING_LIST:
+-					// TODO: add comparison for string list
+-					break;
+-			}
+-		}
+-		iter++;
+-	}
+-
+-	return 0;
+-}
+-
+ float dm_percent_to_float(dm_percent_t percent)
+ {
+ 	return (float) percent / DM_PERCENT_1;
 
 
