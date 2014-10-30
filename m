@@ -1,48 +1,46 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 Oct 2014 23:33:09 +0000 (UTC)
-Subject: master - tests: explicitely use old snapshots
-Message-ID: <20141030233309.9EAE760DD4@fedorahosted.org>
+Date: Thu, 30 Oct 2014 23:33:11 +0000 (UTC)
+Subject: master - tests: wait for raid sync
+Message-ID: <20141030233311.C528B60DD4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e7c130430a2b232bdf062f8fb3064899b176986b
-Commit:        e7c130430a2b232bdf062f8fb3064899b176986b
-Parent:        8926230f6e7ac46c5bbed70d3e8efbc43e5b444d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47d50a8f2735a8c4496082eab5b312a596e2c2d4
+Commit:        47d50a8f2735a8c4496082eab5b312a596e2c2d4
+Parent:        e7c130430a2b232bdf062f8fb3064899b176986b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 31 00:28:25 2014 +0100
+AuthorDate:    Fri Oct 31 00:31:54 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 31 00:28:25 2014 +0100
+CommitterDate: Fri Oct 31 00:31:54 2014 +0100
 
-tests: explicitely use old snapshots
+tests: wait for raid sync
 
 ---
- test/shell/snapshot-usage.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/lvconvert-cache-raid.sh |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
-index c29d310..a3dd7a6 100644
---- a/test/shell/snapshot-usage.sh
-+++ b/test/shell/snapshot-usage.sh
-@@ -111,7 +111,7 @@ lvs -a $vg1
- lvremove -f $vg1
+diff --git a/test/shell/lvconvert-cache-raid.sh b/test/shell/lvconvert-cache-raid.sh
+index 16dd38e..174b0ec 100644
+--- a/test/shell/lvconvert-cache-raid.sh
++++ b/test/shell/lvconvert-cache-raid.sh
+@@ -50,6 +50,7 @@ lvs -a -o+seg_pe_ranges $vg
+ lvconvert --yes --type cache-pool --poolmetadata $vg/cpool_meta $vg/cpool
+ lvcreate -n corigin --type cache --cachepool $vg/cpool -l 10
  
- # Test virtual snapshot over /dev/zero
--lvcreate -V50 -L10 -n $lv1 -s $vg1
-+lvcreate --type snapshot -V50 -L10 -n $lv1 -s $vg1
- CHECK_ACTIVE="active"
- test ! -e LOCAL_CLVMD || CHECK_ACTIVE="local exclusive"
- check lv_field $vg1/$lv1 lv_active "$CHECK_ACTIVE"
-@@ -228,7 +228,7 @@ lvcreate -s -l100%FREE -n $lv2 $vg1/$lv1
- check lv_field $vg1/$lv2 size "7.50p"
- lvremove -ff $vg1
++aux wait_for_sync $vg cpool
+ lvchange --syncaction repair $vg/cpool_cmeta
+ lvchange --syncaction repair $vg/cpool_cdata
  
--lvcreate -V15E -l1 -n $lv1 -s $vg1
-+lvcreate --type snapshot -V15E -l1 -n $lv1 -s $vg1
- check lv_field $vg1/$lv1 origin_size "15.00e"
+@@ -61,6 +62,7 @@ not lvconvert --splitmirrors 1 --name split_cmeta $vg/cpool_cmeta "$dev1"
+ not lvconvert --splitmirrors 1 --name split_cdata $vg/cpool_cdata "$dev1"
  
- vgremove -ff $vg1
+ # but allow manipulating existing LVs with reserved names
++aux wait_for_sync $vg cpool
+ lvconvert --splitmirrors 1 --name split_meta $vg/cpool_cmeta "$dev1"
+ lvconvert --splitmirrors 1 --name split_data $vg/cpool_cdata "$dev1"
+ 
 
 
