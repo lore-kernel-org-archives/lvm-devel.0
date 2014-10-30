@@ -1,71 +1,166 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 Oct 2014 23:00:57 +0000 (UTC)
-Subject: master - tests: raid syncaction test
-Message-ID: <20141030230057.A99C560AA2@fedorahosted.org>
+Date: Thu, 30 Oct 2014 23:00:43 +0000 (UTC)
+Subject: master - lvmcmdline: support size_mb_arg_with_percent
+Message-ID: <20141030230043.280DE60DD0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=da61e6355e35ba7961b2073812c6a5639d9d541d
-Commit:        da61e6355e35ba7961b2073812c6a5639d9d541d
-Parent:        fe245d78ff603dd798b719854ee8d900f858779d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=464f3b8abd03633ff5dd2c5fe5585d921af8931f
+Commit:        464f3b8abd03633ff5dd2c5fe5585d921af8931f
+Parent:        519fbe71e46c747a254bc200ea93396591e1a1a3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 25 16:03:44 2014 +0200
+AuthorDate:    Thu Oct 30 14:52:37 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Oct 30 23:58:49 2014 +0100
 
-tests: raid syncaction test
+lvmcmdline: support size_mb_arg_with_percent
 
-Add sync wait for syncaction of raid1 test.
---syncaction requires raid to be in sync first.
+New size_mb_arg_with_percent is able to read  size_mb_arg
+but also it's able to read % values.
+
+Percent parsing is share with int_arg_with_sign_and_percent.
 ---
- test/shell/lvchange-syncaction-raid.sh |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ WHATS_NEW          |    1 +
+ tools/lvmcmdline.c |   66 +++++++++++++++++++++++++++++++++++++---------------
+ tools/tools.h      |    1 +
+ 3 files changed, 49 insertions(+), 19 deletions(-)
 
-diff --git a/test/shell/lvchange-syncaction-raid.sh b/test/shell/lvchange-syncaction-raid.sh
-index 9a42894..7ef4e01 100644
---- a/test/shell/lvchange-syncaction-raid.sh
-+++ b/test/shell/lvchange-syncaction-raid.sh
-@@ -21,12 +21,15 @@ aux prepare_vg 3
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a8ea15f..bb8cd8d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Introduce size_mb_arg_with_percent() for advanced size arg reading.
+   Add extra support for '.' as decimal point in size args.
+   Configurable support for creation of sparse volumes with thin-pools.
+   Update and correct lvcreate and lvcovert man pages.
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 33c0045..1d3e993 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -384,8 +384,32 @@ static int _get_int_arg(struct arg_values *av, char **ptr)
+ 	return 1;
+ }
  
- lvcreate -n $lv1 $vg -l1 --type raid1
- 
-+aux wait_for_sync $vg $lv1
++static int _get_percent_arg(struct arg_values *av, const char *ptr)
++{
++	if (!strcasecmp(ptr, "V") || !strcasecmp(ptr, "VG"))
++		av->percent = PERCENT_VG;
++	else if (!strcasecmp(ptr, "L") || !strcasecmp(ptr, "LV"))
++		av->percent = PERCENT_LV;
++	else if (!strcasecmp(ptr, "P") || !strcasecmp(ptr, "PV") ||
++		 !strcasecmp(ptr, "PVS"))
++		av->percent = PERCENT_PVS;
++	else if (!strcasecmp(ptr, "F") || !strcasecmp(ptr, "FR") ||
++		 !strcasecmp(ptr, "FREE"))
++		av->percent = PERCENT_FREE;
++	else if (!strcasecmp(ptr, "O") || !strcasecmp(ptr, "OR") ||
++		 !strcasecmp(ptr, "ORIGIN"))
++		av->percent = PERCENT_ORIGIN;
++	else {
++		log_error("Specified %%%s is unknown.", ptr);
++		return 0;
++	}
 +
- START=$(get pv_field "$dev2" pe_start --units 1k)
- METASIZE=$(get lv_field $vg/${lv1}_rmeta_1 size -a --units 1k)
- SEEK=$((${START%\.00k} + ${METASIZE%\.00k}))
- # Overwrite some portion of  _rimage_1
- dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK oflag=direct
++	return 1;
++}
++
+ /* Size stored in sectors */
+-static int _size_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av, int factor)
++static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
++		     struct arg_values *av, int factor, int percent)
+ {
+ 	char *ptr;
+ 	int i;
+@@ -429,7 +453,14 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)), struct arg
+ 	if (ptr == val)
+ 		return 0;
  
-+aux wait_for_sync $vg $lv1
- lvchange --syncaction check $vg/$lv1
- check lv_field $vg/$lv1 raid_mismatch_count "128"
+-	if (*ptr) {
++	if (percent && *ptr == '%') {
++		if (!_get_percent_arg(av, ++ptr))
++			return_0;
++		if ((uint64_t) v >= UINT32_MAX) {
++			log_error("Percentage is too big (>=%d%%).", UINT32_MAX);
++			return 0;
++		}
++	} else if (*ptr) {
+ 		for (i = strlen(suffixes) - 1; i >= 0; i--)
+ 			if (suffixes[i] == tolower((int) *ptr))
+ 				break;
+@@ -474,12 +505,17 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)), struct arg
  
-@@ -34,7 +37,7 @@ check lv_field $vg/$lv1 raid_mismatch_count "128"
- lvchange -an $vg/$lv1
+ int size_kb_arg(struct cmd_context *cmd, struct arg_values *av)
+ {
+-	return _size_arg(cmd, av, 2);
++	return _size_arg(cmd, av, 2, 0);
+ }
  
- # Slow down write by 100ms
--aux delay_dev "$dev2" 0 100
-+aux delay_dev "$dev2" 0 50
- lvchange -ay $vg/$lv1
- # noone has it open and target is read & running
- dmsetup info -c | grep $vg
-@@ -49,9 +52,12 @@ dmsetup info -c | grep $vg
- # For now it fails with:
- # device-mapper: message ioctl on  failed: Device or resource busy
- #
-+# As solution for now - user needs to run --synaction on synchronous raid array
-+#
-+aux wait_for_sync $vg $lv1
- should lvchange --syncaction check $vg/$lv1
+ int size_mb_arg(struct cmd_context *cmd, struct arg_values *av)
+ {
+-	return _size_arg(cmd, av, 2048);
++	return _size_arg(cmd, av, 2048, 0);
++}
++
++int size_mb_arg_with_percent(struct cmd_context *cmd, struct arg_values *av)
++{
++	return _size_arg(cmd, av, 2048, 1);
+ }
  
- aux enable_dev "$dev2"
--lvs -o+raid_mismatch_count -a $vg
-+check lv_field $vg/$lv1 raid_mismatch_count "0"
+ int int_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
+@@ -516,21 +552,13 @@ int int_arg_with_sign_and_percent(struct cmd_context *cmd __attribute__((unused)
+ 	if (*ptr++ != '%')
+ 		return 0;
  
- vgremove -ff $vg
+-	if (!strcasecmp(ptr, "V") || !strcasecmp(ptr, "VG"))
+-		av->percent = PERCENT_VG;
+-	else if (!strcasecmp(ptr, "L") || !strcasecmp(ptr, "LV"))
+-		av->percent = PERCENT_LV;
+-	else if (!strcasecmp(ptr, "P") || !strcasecmp(ptr, "PV") ||
+-		 !strcasecmp(ptr, "PVS"))
+-		av->percent = PERCENT_PVS;
+-	else if (!strcasecmp(ptr, "F") || !strcasecmp(ptr, "FR") ||
+-		 !strcasecmp(ptr, "FREE"))
+-		av->percent = PERCENT_FREE;
+-	else if (!strcasecmp(ptr, "O") || !strcasecmp(ptr, "OR") ||
+-		 !strcasecmp(ptr, "ORIGIN"))
+-		av->percent = PERCENT_ORIGIN;
+-	else
++	if (!_get_percent_arg(av, ptr))
++		return_0;
++
++	if (av->ui64_value >= UINT32_MAX) {
++		log_error("Percentage is too big (>=%d%%).", UINT32_MAX);
+ 		return 0;
++	}
+ 
+ 	return 1;
+ }
+@@ -613,7 +641,7 @@ int readahead_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_va
+ 		return 1;
+ 	}
+ 
+-	if (!_size_arg(cmd, av, 1))
++	if (!_size_arg(cmd, av, 1, 0))
+ 		return 0;
+ 
+ 	if (av->sign == SIGN_MINUS)
+diff --git a/tools/tools.h b/tools/tools.h
+index 5a5d729..2196dba 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -129,6 +129,7 @@ int discards_arg(struct cmd_context *cmd, struct arg_values *av);
+ int mirrorlog_arg(struct cmd_context *cmd, struct arg_values *av);
+ int size_kb_arg(struct cmd_context *cmd, struct arg_values *av);
+ int size_mb_arg(struct cmd_context *cmd, struct arg_values *av);
++int size_mb_arg_with_percent(struct cmd_context *cmd, struct arg_values *av);
+ int int_arg(struct cmd_context *cmd, struct arg_values *av);
+ int int_arg_with_sign(struct cmd_context *cmd, struct arg_values *av);
+ int int_arg_with_sign_and_percent(struct cmd_context *cmd, struct arg_values *av);
 
 
