@@ -1,48 +1,64 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 Oct 2014 23:01:01 +0000 (UTC)
-Subject: master - tests: lvcreate snapshot usage update
-Message-ID: <20141030230101.D1A1360AA2@fedorahosted.org>
+Date: Thu, 30 Oct 2014 23:00:53 +0000 (UTC)
+Subject: master - cleanup: extents_from_size is 32bit value
+Message-ID: <20141030230053.8955E60AA2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8926230f6e7ac46c5bbed70d3e8efbc43e5b444d
-Commit:        8926230f6e7ac46c5bbed70d3e8efbc43e5b444d
-Parent:        b58a0f5cd31669e789d6944ced5b42ce7c6f4f74
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=888b21e9bd10d70154fb361359a2342aa56af27a
+Commit:        888b21e9bd10d70154fb361359a2342aa56af27a
+Parent:        9a6cf3d9f4b43e0d47ac686d8acc5f280d4bfd70
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 30 23:16:03 2014 +0100
+AuthorDate:    Thu Oct 30 11:38:49 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Oct 30 23:58:49 2014 +0100
 
-tests: lvcreate snapshot usage update
+cleanup: extents_from_size is 32bit value
 
+Current lvm2 does support only 32bit extents count.
 ---
- test/shell/lvcreate-usage.sh |   10 +++++++++-
- 1 files changed, 9 insertions(+), 1 deletions(-)
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/metadata.c          |    5 +++--
+ 2 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
-index 05f2515..5d37d9c 100644
---- a/test/shell/lvcreate-usage.sh
-+++ b/test/shell/lvcreate-usage.sh
-@@ -130,8 +130,16 @@ grep "Redundant" err
- check lv_field $vg/$lv1 segtype "linear"
- lvremove -ff $vg
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 890e808..013da16 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -731,7 +731,7 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ int lv_update_and_reload(struct logical_volume *lv);
+ int lv_update_and_reload_origin(struct logical_volume *lv);
  
--# Snapshot with virtual origin works
-+# Old --type snapshot works with -s
-+lvcreate --type snapshot -s -V64 -L32 -n $lv1 $vg
-+check lv_field $vg/$lv1 segtype "linear"
-+lvcreate --type snapshot -V64 -L32 -n $lv2 $vg
-+check lv_field $vg/$lv2 segtype "linear"
-+lvremove -ff $vg
-+
-+# --virtualoriginsize  always makes old snapshot
- lvcreate -s --virtualoriginsize 64m -L 32m -n $lv1 $vg
-+check lv_field $vg/$lv1 segtype "linear"
- lvrename $vg/$lv1 $vg/$lv2
- lvcreate -s --virtualoriginsize 64m -L 32m -n $lv1 $vg
- lvchange -a n $vg/$lv1
+-uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
++uint32_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ 			   uint32_t extent_size);
+ uint32_t extents_from_percent_size(struct volume_group *vg, const struct dm_list *pvh,
+ 				   uint32_t extents, int roundup,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 2038f06..df2d6a3 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1075,7 +1075,8 @@ bad:
+ 	return NULL;
+ }
+ 
+-uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
++/* Rounds up by default */
++uint32_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ 			   uint32_t extent_size)
+ {
+ 	if (size % extent_size) {
+@@ -1094,7 +1095,7 @@ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ 		return 0;
+ 	}
+ 
+-	return size / extent_size;
++	return (uint32_t) (size / extent_size);
+ }
+ 
+ /*
 
 
