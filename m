@@ -1,39 +1,74 @@
-From: Rommer <rommer@active.by>
-Date: Thu, 30 Oct 2014 18:57:40 +0300
-Subject: [PATCH] Try to convert existing lock on volume reactivation for clustered volume groups.
-In-Reply-To: <52B14E83.8040303@redhat.com>
-References: <52A14E1A.3030509@activecloud.com>
-	<52A18F2B.5070607@redhat.com>	<52A1DB94.1020001@activecloud.com>
-	<52A1DFDE.8050706@redhat.com>	<52A29120.2000203@activecloud.com>
-	<52B110EF.6070304@activecloud.com> <52B14E83.8040303@redhat.com>
-Message-ID: <54525FF4.3000602@active.by>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 30 Oct 2014 23:00:51 +0000 (UTC)
+Subject: master - cleanup: prints and stacks
+Message-ID: <20141030230051.7636F60AA2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9a6cf3d9f4b43e0d47ac686d8acc5f280d4bfd70
+Commit:        9a6cf3d9f4b43e0d47ac686d8acc5f280d4bfd70
+Parent:        0da749c9a4c488bd336b2c6b3df7d781a812cb47
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Oct 30 11:38:03 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Oct 30 23:58:49 2014 +0100
 
-Patch for the latest lvm2 version.
+cleanup: prints and stacks
 
-On 12/18/13 10:28, Zdenek Kabelac wrote:
-> Dne 18.12.2013 04:05, Raman Shishniou napsal(a):
->> Hello,
->>
->> Is something wrong with this patch?
->
-> I believe the patch is fine. I just need to extend the patch for other
-> supported clvmd modes and enhance singlenode to be able to test it works
-> and I'm currently busy with fixing other discovered bugs.
->
-> Zdenek
->
+---
+ lib/metadata/lv_manip.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-2_02_111-convertlock.patch
-Type: text/x-patch
-Size: 4986 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20141030/9a7fd53c/attachment.bin>
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 49d2300..e5b36df 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4600,21 +4600,21 @@ static int _lvresize_adjust_extents(struct cmd_context *cmd, struct logical_volu
+ 	/* If reducing, find stripes, stripesize & size of last segment */
+ 	if (reducing) {
+ 		if (lp->stripes || lp->stripe_size || lp->mirrors)
+-			log_error("Ignoring stripes, stripesize and mirrors "
+-				  "arguments when reducing");
++			log_print_unless_silent("Ignoring stripes, stripesize and mirrors "
++						"arguments when reducing.");
+ 
+ 		if (lp->sign == SIGN_MINUS) 
+ 			if (lp->extents_are_pes) {
+ 				if (lp->extents >= existing_physical_extents) {
+ 					log_error("Unable to reduce %s below 1 extent.", lp->lv_name);
+-					return_0;
++					return 0;
+ 				}
+ 				new_extents = existing_physical_extents - lp->extents;
+ 			} else {
+ 				new_extents = existing_logical_extents - lp->extents;
+ 				if (lp->extents >= existing_logical_extents) {
+ 					log_error("Unable to reduce %s below 1 extent.", lp->lv_name);
+-					return_0;
++					return 0;
+ 				}
+ 			}
+ 		else
+@@ -4843,7 +4843,7 @@ static struct logical_volume *_lvresize_volume(struct cmd_context *cmd,
+ 
+ 	if (lv_is_thin_pool(lv)) {
+ 		if (lp->resizefs) {
+-			log_warn("Thin pool volumes do not have filesystem.");
++			log_print_unless_silent("Ignoring --resizefs as thin pool volumes do not have filesystem.");
+ 			lp->resizefs = 0;
+ 		}
+ 		lock_lv = lv;
+@@ -4854,7 +4854,7 @@ static struct logical_volume *_lvresize_volume(struct cmd_context *cmd,
+ 	alloc = lp->ac_alloc ?: lv->alloc;
+ 
+ 	if ((lp->resize == LV_REDUCE) && lp->argc)
+-		log_warn("Ignoring PVs on command line when reducing");
++		log_print_unless_silent("Ignoring PVs on command line when reducing.");
+ 
+ 	/* Request confirmation before operations that are often mistakes. */
+ 	if ((lp->resizefs || (lp->resize == LV_REDUCE)) &&
+
+
