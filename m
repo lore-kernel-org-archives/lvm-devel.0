@@ -1,51 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 Oct 2014 23:37:59 +0000 (UTC)
-Subject: master - tests: update raid sync
-Message-ID: <20141030233759.D718860DA0@fedorahosted.org>
+Date: Thu, 30 Oct 2014 23:00:59 +0000 (UTC)
+Subject: master - tests: use aux func to disable device
+Message-ID: <20141030230059.B9E5F60AA2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e09ee21fd46287ed245ea086ddcf06140a83431a
-Commit:        e09ee21fd46287ed245ea086ddcf06140a83431a
-Parent:        47d50a8f2735a8c4496082eab5b312a596e2c2d4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b58a0f5cd31669e789d6944ced5b42ce7c6f4f74
+Commit:        b58a0f5cd31669e789d6944ced5b42ce7c6f4f74
+Parent:        da61e6355e35ba7961b2073812c6a5639d9d541d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 31 00:37:35 2014 +0100
+AuthorDate:    Sun Oct 26 20:41:49 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 31 00:37:35 2014 +0100
+CommitterDate: Thu Oct 30 23:58:49 2014 +0100
 
-tests: update raid sync
+tests: use aux func to disable device
 
 ---
- test/shell/lvconvert-cache-raid.sh |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ test/shell/lvcreate-missing.sh |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/lvconvert-cache-raid.sh b/test/shell/lvconvert-cache-raid.sh
-index 174b0ec..1fcd0fe 100644
---- a/test/shell/lvconvert-cache-raid.sh
-+++ b/test/shell/lvconvert-cache-raid.sh
-@@ -46,11 +46,11 @@ lvremove -f $vg
+diff --git a/test/shell/lvcreate-missing.sh b/test/shell/lvcreate-missing.sh
+index 2b74052..4553e98 100644
+--- a/test/shell/lvcreate-missing.sh
++++ b/test/shell/lvcreate-missing.sh
+@@ -12,10 +12,11 @@
+ . lib/inittest
  
- lvcreate -n cpool_meta -m 1 --type raid1 -l 10 $vg
- lvcreate -n cpool -m 1 --type raid1 -l 10 $vg
-+aux wait_for_sync $vg cpool
- lvs -a -o+seg_pe_ranges $vg
- lvconvert --yes --type cache-pool --poolmetadata $vg/cpool_meta $vg/cpool
- lvcreate -n corigin --type cache --cachepool $vg/cpool -l 10
+ aux prepare_vg 2
+-init_udev_transaction
+-dmsetup remove -f "$dev1" || true
+-finish_udev_transaction
++
++aux disable_dev "$dev1"
  
--aux wait_for_sync $vg cpool
- lvchange --syncaction repair $vg/cpool_cmeta
- lvchange --syncaction repair $vg/cpool_cdata
+ not lvcreate -n "foo" $vg -l 1
  
-@@ -62,7 +62,6 @@ not lvconvert --splitmirrors 1 --name split_cmeta $vg/cpool_cmeta "$dev1"
- not lvconvert --splitmirrors 1 --name split_cdata $vg/cpool_cdata "$dev1"
- 
- # but allow manipulating existing LVs with reserved names
--aux wait_for_sync $vg cpool
- lvconvert --splitmirrors 1 --name split_meta $vg/cpool_cmeta "$dev1"
- lvconvert --splitmirrors 1 --name split_data $vg/cpool_cdata "$dev1"
- 
++aux enable_dev "$dev1"
++
+ vgremove -ff $vg
 
 
