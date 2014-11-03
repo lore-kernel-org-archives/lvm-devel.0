@@ -1,80 +1,53 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 20 Jul 2017 07:54:05 -0400
-Subject: master - raid: move syncing with udev into function
-Message-ID: <201707201154.v6KBs5LO032067@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  3 Nov 2014 13:23:21 +0000 (UTC)
+Subject: master - libdm: init char array
+Message-ID: <20141103132321.C6EF2602D9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c78316b7a5341aa9259c118988e659d38ef862f2
-Commit:        c78316b7a5341aa9259c118988e659d38ef862f2
-Parent:        7b048f6b43a7cb752bae44fbed0da8508b24b959
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ed2a0560ad23f3de0b63e4c48ce91e6d5c744c23
+Commit:        ed2a0560ad23f3de0b63e4c48ce91e6d5c744c23
+Parent:        e09ee21fd46287ed245ea086ddcf06140a83431a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 20 13:46:39 2017 +0200
+AuthorDate:    Fri Oct 31 13:04:46 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 20 13:52:18 2017 +0200
+CommitterDate: Mon Nov 3 14:19:31 2014 +0100
 
-raid: move syncing with udev into function
+libdm: init char array
 
-Since _deactivate_and_remove_lvs() is used in more then one place,
-move the needed udev synchronization into this function so other
-users automatically get correct fs state before next dm manipulation.
-
-Assumption here is that this udev synchronization 'delay' may also
-prevent to 'early' table reloads which might cause kernel problems
-for md-core - but we may need more generic time-limited reload
-frequency for raid devices.
-
-Note: on udev-less system there will be almost no delay.
+When non-root uses dm_check_version() it's been printing some unit
+values from stack. So always init those vars.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/raid_manip.c |   14 +++++++-------
- 2 files changed, 8 insertions(+), 7 deletions(-)
+ WHATS_NEW_DM              |    1 +
+ libdm/ioctl/libdm-iface.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 48ec679..c587a9c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 6981f8f..6b5ee3a 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.173 - 
- =================================
-+  Add synchornization points with udev during conversion of raid LVs.
-   Improve --size args validation and report more detailed error message.
-   Initialize debugging mutex before any debug message in clvmd.
-   Log error instad of warn when noticing connection problem with lvmetad.
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 895bb73..e275da1 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -329,6 +329,13 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
- 			return_0;
- 	}
+ Version 1.02.91 - 
+ ====================================
++  Don't print uninitialized stack bytes when non-root uses dm_check_version().
+   Fix selection criteria to not match reserved values when using >, <, >=, <.
+   Add DM_LIST_HEAD_INIT macro to libdevmapper.h
+   Fix dm_is_dm_major to not issue error about missing /proc lines for dm module.
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index c308fd2..4c37a53 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -544,7 +544,7 @@ static int _check_version(char *version, size_t size, int log_suppress)
+  */
+ int dm_check_version(void)
+ {
+-	char libversion[64], dmversion[64];
++	char libversion[64] = "", dmversion[64] = "";
+ 	const char *compat = "";
  
-+	/* Wait for events following any deactivation. */
-+	if (!sync_local_dev_names(vg->cmd)) {
-+		log_error("Failed to sync local devices after removing %u LVs in VG %s.",
-+			  dm_list_size(removal_lvs), vg->name);
-+		return 0;
-+	}
-+
- 	return 1;
- }
- 
-@@ -3852,13 +3859,6 @@ static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
- 	if (!_deactivate_and_remove_lvs(vg, removal_lvs))
- 		return_0;
- 
--	/* Wait for events following any deactivation. */
--	if (!sync_local_dev_names(vg->cmd)) {
--		log_error("Failed to sync local devices after removing %u LVs in VG %s.",
--			  dm_list_size(removal_lvs), vg->name);
--		return 0;
--	}
--
- 	dm_list_init(removal_lvs);
- 
- 	if (vg_write_requested) {
+ 	if (_version_checked)
 
 
