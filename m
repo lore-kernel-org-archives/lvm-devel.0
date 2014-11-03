@@ -1,65 +1,98 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Thu, 20 Jul 2017 12:19:50 -0400
-Subject: master - post-release
-Message-ID: <201707201619.v6KGJoQp014177@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  3 Nov 2014 13:23:36 +0000 (UTC)
+Subject: master - cache: allow deactivation of empty pool
+Message-ID: <20141103132336.73487602D9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e0c5d0cb6385df11c7f65a8d5eb0e846cd31dd9
-Commit:        8e0c5d0cb6385df11c7f65a8d5eb0e846cd31dd9
-Parent:        88f15659374042f7657d73393f73e267d752b4e1
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jul 20 17:19:09 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jul 20 17:19:09 2017 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0b7335f84717743bf9c3f9ea9cafff279dff8672
+Commit:        0b7335f84717743bf9c3f9ea9cafff279dff8672
+Parent:        969ab6bbf02c11bf989ccc3105910a205448507b
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Nov 2 17:48:21 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Nov 3 14:19:33 2014 +0100
 
-post-release
+cache: allow deactivation of empty pool
 
+Tool will use internal activation of unused cache pool to
+clear metadata area before next use of cache-pool.
+So allow to deactivation unused pool in case some error
+case happend and we were not able to deactivation pool
+right after metadata wipe.
 ---
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ tools/lvchange.c |    5 +----
+ tools/toollib.c  |   17 +++++++++++++++++
+ tools/vgchange.c |    4 ----
+ 3 files changed, 18 insertions(+), 8 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index 44639a1..cbce772 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.173(2)-git (2017-07-20)
-+2.02.174(2)-git (2017-07-20)
-diff --git a/VERSION_DM b/VERSION_DM
-index 5123a72..a338597 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.142-git (2017-07-20)
-+1.02.143-git (2017-07-20)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4215069..a5eef63 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.174 - 
-+=================================
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 6697905..99dba82 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -170,9 +170,6 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
+ 
+ 	activate = (activation_change_t) arg_uint_value(cmd, activate_ARG, CHANGE_AY);
+ 
+-	if (lv_is_cache_pool(lv))
+-		return 1;
+-
+ 	if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG)))
+ 		return 1;
+ 
+diff --git a/tools/toollib.c b/tools/toollib.c
+index e87fd30..0472597 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -688,6 +688,23 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
+ {
+ 	int r = 1;
+ 
++	if (lv_is_cache_pool(lv)) {
++		if (is_change_activating(activate)) {
++			log_verbose("Skipping activation of cache pool %s.",
++				    display_lvname(lv));
++			return 1;
++		}
++		if (!dm_list_empty(&lv->segs_using_this_lv)) {
++			log_verbose("Skipping deactivation of used cache pool %s.",
++				    display_lvname(lv));
++			return 1;
++		}
++		/*
++		 * Allow to pass only deactivation of unused cache pool.
++		 * Useful only for recovery of failed zeroing of metadata LV.
++		 */
++	}
 +
- Version 2.02.173 - 20th July 2017
- =================================
-   Add synchronization points with udev during conversion of raid LVs.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index c39929a..7007c95 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.143 - 
-+=================================
-+
- Version 1.02.142 - 20th July 2017
- =================================
-   Create /dev/disk/by-part{uuid,label} and gpt-auto-root symlinks with udev.
+ 	if (lv_is_merging_origin(lv)) {
+ 		/*
+ 		 * For merging origin, its snapshot must be inactive.
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index af59f3a..e5d700d 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -97,10 +97,6 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 		if (!lv_is_visible(lv))
+ 			continue;
+ 
+-		/* Cache pool cannot be activated */
+-		if (lv_is_cache_pool(lv))
+-			continue;
+-
+ 		/* If LV is sparse, activate origin instead */
+ 		if (lv_is_cow(lv) && lv_is_virtual_origin(origin_from_cow(lv)))
+ 			lv = origin_from_cow(lv);
 
 
