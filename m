@@ -1,217 +1,70 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 20 Jul 2017 06:19:04 -0400
-Subject: master - tidy: else after continue
-Message-ID: <201707201019.v6KAJ4lH016503@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  3 Nov 2014 13:24:14 +0000 (UTC)
+Subject: master - tests: usage of -m0 -Mn
+Message-ID: <20141103132414.0566560E6E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4ef6cfc882fd89ee23a12be11d631b691f7e8ddf
-Commit:        4ef6cfc882fd89ee23a12be11d631b691f7e8ddf
-Parent:        0bf836aa14f98eb83969a6e81695a024f56a5eb5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e4e96f6b19e2ae7ba8841c1e93ba385cc18ca3c9
+Commit:        e4e96f6b19e2ae7ba8841c1e93ba385cc18ca3c9
+Parent:        6c32ced6572b857ca954601757268dc4bb688b2f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 19 23:12:48 2017 +0200
+AuthorDate:    Fri Oct 31 23:18:31 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 20 11:18:29 2017 +0200
+CommitterDate: Mon Nov 3 14:19:34 2014 +0100
 
-tidy: else after continue
+tests: usage of -m0 -Mn
 
-Similar as with 'else' after 'return'  unindent whole block
-for better readability of code.
+Test -m0 passed with types.
+Check --readahead and thins.
 ---
- lib/activate/activate.c      |    8 ++--
- lib/format1/import-extents.c |   58 +++++++++++++++++------------------
- lib/metadata/lv_manip.c      |   69 +++++++++++++++++++++--------------------
- 3 files changed, 67 insertions(+), 68 deletions(-)
+ test/shell/lvcreate-thin.sh  |   17 +++++++++++++++++
+ test/shell/lvcreate-usage.sh |    2 +-
+ 2 files changed, 18 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 1bbd1b5..d00e61e 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -150,15 +150,15 @@ static int _lv_passes_volumes_filter(struct cmd_context *cmd, const struct logic
- 				    || str_list_match_list(&cmd->tags,
- 							   &lv->vg->tags, NULL))
- 					    return 1;
--				else
--					continue;
+diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
+index 619a40c..733888e 100644
+--- a/test/shell/lvcreate-thin.sh
++++ b/test/shell/lvcreate-thin.sh
+@@ -200,6 +200,23 @@ not lvcreate --chunksize 256 -l1 -T $vg/pool1
+ not lvcreate --chunksize 32 -l1 -T $vg/pool1
+ # Too large chunk size (max is 1GB)
+ not lvcreate -L4M --chunksize 2G -T $vg/pool1
++# Cannot specify --minor with pool
++fail lvcreate -L10M --minor 100 -T $vg/pool_minor
 +
-+				continue;
- 			}
- 			/* If supplied tag matches LV or VG tag, activate */
- 			if (str_list_match_item(&lv->tags, str) ||
- 			    str_list_match_item(&lv->vg->tags, str))
- 				return 1;
--			else
--				continue;
++# FIXME: Currently ambigous - is it for thin, thin-pool, both ?
++fail lvcreate -L4M -Mn -m0 -T --readahead 32 -V20 -n $lv $vg/pool_normal
 +
-+			continue;
- 		}
++# Check read-ahead setting will also pass with -Mn -m0
++lvcreate -L4M -Mn -m0 -T --readahead 64k $vg/pool_readahead
++lvcreate -V20M -Mn -m0 -T --readahead 128k -n thin_readahead $vg/pool_readahead
++check lv_field $vg/pool_readahead lv_read_ahead "64.00k"
++check lv_field $vg/thin_readahead lv_read_ahead "128.00k"
++
++if test ! -d /sys/block/dm-2345; then
++# Check some unused minor and support for --minor with thins
++	lvcreate --minor 2345 -T -V20M -n thin_minor $vg/pool_readahead
++	check lv_field $vg/thin_minor lv_minor "2345"
++fi
  
- 		/* If supplied name is vgname[/lvname] */
-diff --git a/lib/format1/import-extents.c b/lib/format1/import-extents.c
-index 4c259c1..c583741 100644
---- a/lib/format1/import-extents.c
-+++ b/lib/format1/import-extents.c
-@@ -134,37 +134,35 @@ static int _fill_maps(struct dm_hash_table *maps, struct volume_group *vg,
- 			if (lv_num == UNMAPPED_EXTENT)
- 				continue;
+ # Test creation of inactive pool
+ lvcreate -an -L4M -T $vg/pool1
+diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
+index 5d37d9c..fe82005 100644
+--- a/test/shell/lvcreate-usage.sh
++++ b/test/shell/lvcreate-usage.sh
+@@ -22,7 +22,7 @@ grep "Invalid argument for --type" err
+ invalid lvcreate --type $RANDOM -l1 -n $lv1 $vg
+ invalid lvcreate --type unknown -l1 -n $lv1 $vg
  
--			else {
--				lv_num--;
--				lvm = lvms[lv_num];
--
--				if (!lvm) {
--					log_error("Invalid LV in extent map "
--						  "(PV %s, PE %" PRIu32
--						  ", LV %" PRIu32
--						  ", LE %" PRIu32 ")",
--						  dev_name(pv->dev), i,
--						  lv_num, e[i].le_num);
--					return 0;
--				}
--
--				le = e[i].le_num;
--
--				if (le >= lvm->lv->le_count) {
--					log_error("logical extent number "
--						  "out of bounds");
--					return 0;
--				}
--
--				if (lvm->map[le].pv) {
--					log_error("logical extent (%u) "
--						  "already mapped.", le);
--					return 0;
--				}
--
--				lvm->map[le].pv = pv;
--				lvm->map[le].pe = i;
-+			lv_num--;
-+			lvm = lvms[lv_num];
-+
-+			if (!lvm) {
-+				log_error("Invalid LV in extent map "
-+					  "(PV %s, PE %" PRIu32
-+					  ", LV %" PRIu32
-+					  ", LE %" PRIu32 ")",
-+					  dev_name(pv->dev), i,
-+					  lv_num, e[i].le_num);
-+				return 0;
- 			}
-+
-+			le = e[i].le_num;
-+
-+			if (le >= lvm->lv->le_count) {
-+				log_error("logical extent number "
-+					  "out of bounds");
-+				return 0;
-+			}
-+
-+			if (lvm->map[le].pv) {
-+				log_error("logical extent (%u) "
-+					  "already mapped.", le);
-+				return 0;
-+			}
-+
-+			lvm->map[le].pv = pv;
-+			lvm->map[le].pe = i;
- 		}
- 	}
+-lvcreate --type linear -aey -l1 -n $lv1 $vg
++lvcreate --type linear -aey -m0 -l1 -n $lv1 $vg
+ lvcreate --type snapshot -l1 -n $lv2 $vg/$lv1
  
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 5c2e722..1851783 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2155,53 +2155,54 @@ static int _match_pv_tags(const struct dm_config_node *cling_tag_list_cn,
- 				}
- 				continue;
- 			}
-+
- 			if (!str_list_match_list(&pv1->tags, tags_to_match, &tag_matched))
- 				continue;
--			else {
--				if (!pv_tags) {
--					if (parallel_pv)
--						log_debug_alloc("Not using free space on %s: Matched allocation PV tag %s on existing parallel PV %s.",
--								pv_dev_name(pv1), tag_matched, pv2 ? pv_dev_name(pv2) : "-");
--					else
--						log_debug_alloc("Matched allocation PV tag %s on existing %s with free space on %s.",
--								tag_matched, pv_dev_name(pv1), pv2 ? pv_dev_name(pv2) : "-");
--				} else
--					log_debug_alloc("Eliminating allocation area %" PRIu32 " at PV %s start PE %" PRIu32
--							" from consideration: PV tag %s already used.",
--							area_num, pv_dev_name(pv1), pv1_start_pe, tag_matched);
--				return 1;
--			}
--		}
- 
--		if (!str_list_match_item(&pv1->tags, str) ||
--		    (tags_to_match && !str_list_match_item(tags_to_match, str)))
--			continue;
--		else {
--			if (mem) {
--				if (!first_tag && !dm_pool_grow_object(mem, ",", 0)) {
--					log_error("PV tags string extension failed.");
--					return 0;
--				}
--				first_tag = 0;
--				if (!dm_pool_grow_object(mem, str, 0)) {
--					log_error("PV tags string extension failed.");
--					return 0;
--				}
--				continue;
--			}
- 			if (!pv_tags) {
- 				if (parallel_pv)
- 					log_debug_alloc("Not using free space on %s: Matched allocation PV tag %s on existing parallel PV %s.",
-- 							pv2 ? pv_dev_name(pv2) : "-", str, pv_dev_name(pv1));
-+							pv_dev_name(pv1), tag_matched, pv2 ? pv_dev_name(pv2) : "-");
- 				else
- 					log_debug_alloc("Matched allocation PV tag %s on existing %s with free space on %s.",
--							str, pv_dev_name(pv1), pv2 ? pv_dev_name(pv2) : "-");
-+							tag_matched, pv_dev_name(pv1), pv2 ? pv_dev_name(pv2) : "-");
- 			} else
- 				log_debug_alloc("Eliminating allocation area %" PRIu32 " at PV %s start PE %" PRIu32
- 						" from consideration: PV tag %s already used.",
--						area_num, pv_dev_name(pv1), pv1_start_pe, str);
-+						area_num, pv_dev_name(pv1), pv1_start_pe, tag_matched);
- 			return 1;
- 		}
-+
-+		if (!str_list_match_item(&pv1->tags, str) ||
-+		    (tags_to_match && !str_list_match_item(tags_to_match, str)))
-+			continue;
-+
-+		if (mem) {
-+			if (!first_tag && !dm_pool_grow_object(mem, ",", 0)) {
-+				log_error("PV tags string extension failed.");
-+				return 0;
-+			}
-+			first_tag = 0;
-+			if (!dm_pool_grow_object(mem, str, 0)) {
-+				log_error("PV tags string extension failed.");
-+				return 0;
-+			}
-+			continue;
-+		}
-+
-+		if (!pv_tags) {
-+			if (parallel_pv)
-+				log_debug_alloc("Not using free space on %s: Matched allocation PV tag %s on existing parallel PV %s.",
-+						pv2 ? pv_dev_name(pv2) : "-", str, pv_dev_name(pv1));
-+			else
-+				log_debug_alloc("Matched allocation PV tag %s on existing %s with free space on %s.",
-+						str, pv_dev_name(pv1), pv2 ? pv_dev_name(pv2) : "-");
-+		} else
-+			log_debug_alloc("Eliminating allocation area %" PRIu32 " at PV %s start PE %" PRIu32
-+					" from consideration: PV tag %s already used.",
-+					area_num, pv_dev_name(pv1), pv1_start_pe, str);
-+
-+		return 1;
- 	}
- 
- 	if (mem)
+ # Reject repeated invocation (run 2 times) (bz178216)
 
 
