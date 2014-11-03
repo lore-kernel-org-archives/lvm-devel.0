@@ -1,229 +1,211 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  3 Nov 2014 13:23:42 +0000 (UTC)
-Subject: master - cleanup: rename virtual_extents
-Message-ID: <20141103132342.AF7A560243@fedorahosted.org>
+Date: Mon,  3 Nov 2014 13:23:44 +0000 (UTC)
+Subject: master - cleanup: add arg to _setup_task
+Message-ID: <20141103132344.C8C0C60243@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb931eed72e8618cfeefacaa3be1a4a2d5679d99
-Commit:        cb931eed72e8618cfeefacaa3be1a4a2d5679d99
-Parent:        913f025d3e481fc4ffe6ab7b29f7e7b27c0f1b19
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=13e6369d7f3b44b50e583e48868fb075a9f31757
+Commit:        13e6369d7f3b44b50e583e48868fb075a9f31757
+Parent:        cb931eed72e8618cfeefacaa3be1a4a2d5679d99
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 31 11:33:19 2014 +0100
+AuthorDate:    Sun Nov 2 17:22:32 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 3 14:19:33 2014 +0100
 
-cleanup: rename virtual_extents
+cleanup: add arg to _setup_task
 
-Use standard 'virtual_extents' naming.
-Move virtual_size into  'lcp' struct out of lvcreate_params.
+Add init of  no_open_count into _setup_task().
+Report problem as warning (cannot happen anyway).
+
+Also drop some duplicated debug messages - we have already
+printed the info about operation so make log a bit shorter.
 ---
- lib/metadata/lv_manip.c          |   12 ++++++------
- lib/metadata/metadata-exported.h |    3 +--
- liblvm/lvm_lv.c                  |   35 ++++++++++++++++-------------------
- tools/lvconvert.c                |    3 +--
- tools/lvcreate.c                 |    7 ++++---
- 5 files changed, 28 insertions(+), 32 deletions(-)
+ lib/activate/dev_manager.c |   67 +++++++++++--------------------------------
+ 1 files changed, 17 insertions(+), 50 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index e5b36df..a42a7f5 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6745,7 +6745,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 				return NULL;
- 			}
- 
--			lp->voriginextents = origin_lv->le_count;
-+			lp->virtual_extents = origin_lv->le_count;
- 
- 			/*
- 			 * Check if using 'external origin' or the 'normal' snapshot
-@@ -6765,7 +6765,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 			}
- 		}
- 	} else if (lp->snapshot) {
--		if (!lp->voriginsize) {
-+		if (!lp->virtual_extents) {
- 			if (!origin_lv) {
- 				log_error("Couldn't find origin volume '%s'.",
- 					  lp->origin_name);
-@@ -6868,7 +6868,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		       lp->stripes, lp->stripe_size,
- 		       lp->mirrors,
- 		       seg_is_pool(lp) ? lp->pool_metadata_extents : lp->region_size,
--		       seg_is_thin_volume(lp) ? lp->voriginextents : lp->extents,
-+		       seg_is_thin_volume(lp) ? lp->virtual_extents : lp->extents,
- 		       lp->pvh, lp->alloc, lp->approx_alloc))
- 		return_NULL;
- 
-@@ -7080,7 +7080,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		 * if origin is real (not virtual) inactive device.
- 		 */
- 		if ((vg_is_clustered(vg) ||
--		     (!lp->voriginsize && !lv_is_active(origin_lv))) &&
-+		     (!lp->virtual_extents && !lv_is_active(origin_lv))) &&
- 		    !deactivate_lv(cmd, lv)) {
- 			log_error("Aborting. Couldn't deactivate snapshot COW area. "
- 				  "Manual intervention required.");
-@@ -7088,10 +7088,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		}
- 
- 		/* A virtual origin must be activated explicitly. */
--		if (lp->voriginsize) {
-+		if (lp->virtual_extents) {
- 			if (!(origin_lv = _create_virtual_origin(cmd, vg, lv->name,
- 								 lp->permission,
--								 lp->voriginextents))) {
-+								 lp->virtual_extents))) {
- 				stack;
- 				goto deactivate_and_revert_new_lv;
- 			}
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index ecab56e..39d91a1 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -857,12 +857,11 @@ struct lvcreate_params {
- 
- 	/* size */
- 	uint32_t extents; /* all */
--	uint32_t voriginextents; /* snapshot */
--	uint64_t voriginsize; /* snapshot */
- 	uint32_t pool_metadata_extents; /* pools */
- 	uint64_t pool_metadata_size; /* pools */
- 	uint32_t pool_data_extents; /* pools */
- 	uint64_t pool_data_size; /* pools */
-+	uint32_t virtual_extents; /* snapshots, thins */
- 	struct dm_list *pvh; /* all */
- 
- 	uint64_t permission; /* all */
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 49737d5..33af348 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -498,6 +498,8 @@ static int _lv_set_pool_params(struct lvcreate_params *lp,
- 				vg_t vg, const char *pool_name,
- 				uint64_t extents, uint64_t meta_size)
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 9956fd4..b7e496e 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -74,7 +74,8 @@ int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts
+  */
+ static struct dm_task *_setup_task(const char *name, const char *uuid,
+ 				   uint32_t *event_nr, int task,
+-				   uint32_t major, uint32_t minor)
++				   uint32_t major, uint32_t minor,
++				   int with_open_count)
  {
-+	uint64_t pool_metadata_size;
+ 	struct dm_task *dmt;
+ 
+@@ -95,7 +96,10 @@ static struct dm_task *_setup_task(const char *name, const char *uuid,
+ 
+ 	if (activation_checks() && !dm_task_enable_checks(dmt))
+ 		goto_out;
+-		
 +
- 	_lv_set_default_params(lp, vg, pool_name, extents);
++	if (!with_open_count && !dm_task_no_open_count(dmt))
++		log_warn("WARNING: Failed to disable open_count.");
++
+ 	return dmt;
+       out:
+ 	dm_task_destroy(dmt);
+@@ -112,13 +116,10 @@ static int _info_run(const char *name, const char *dlid, struct dm_info *info,
  
- 	lp->create_pool = 1;
-@@ -505,23 +507,23 @@ static int _lv_set_pool_params(struct lvcreate_params *lp,
- 	lp->stripes = 1;
+ 	dmtask = mknodes ? DM_DEVICE_MKNODES : DM_DEVICE_INFO;
  
- 	if (!meta_size) {
--		lp->pool_metadata_size = extents * vg->extent_size /
-+		pool_metadata_size = extents * vg->extent_size /
- 			(lp->chunk_size * (SECTOR_SIZE / 64));
--		while ((lp->pool_metadata_size >
-+		while ((pool_metadata_size >
- 			(2 * DEFAULT_THIN_POOL_OPTIMAL_SIZE / SECTOR_SIZE)) &&
- 		       lp->chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE) {
- 			lp->chunk_size <<= 1;
--			lp->pool_metadata_size >>= 1;
-+			pool_metadata_size >>= 1;
- 	         }
- 	} else
--		lp->pool_metadata_size = meta_size;
-+		pool_metadata_size = meta_size;
- 
--	if (lp->pool_metadata_size % vg->extent_size)
--		lp->pool_metadata_size +=
--			vg->extent_size - lp->pool_metadata_size % vg->extent_size;
-+	if (pool_metadata_size % vg->extent_size)
-+		pool_metadata_size +=
-+			vg->extent_size - pool_metadata_size % vg->extent_size;
- 
- 	if (!(lp->pool_metadata_extents =
--	      extents_from_size(vg->cmd, lp->pool_metadata_size / SECTOR_SIZE,
-+	      extents_from_size(vg->cmd, pool_metadata_size / SECTOR_SIZE,
- 				vg->extent_size)))
+-	if (!(dmt = _setup_task(mknodes ? name : NULL, dlid, 0, dmtask, major, minor)))
++	if (!(dmt = _setup_task(mknodes ? name : NULL, dlid, 0, dmtask, major, minor,
++				with_open_count)))
  		return_0;
  
-@@ -602,20 +604,15 @@ lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
- 
- /* Set defaults for thin LV specific parameters */
- static int _lv_set_thin_params(struct lvcreate_params *lp,
--				vg_t vg, const char *pool_name,
--				const char *lvname,
--				uint64_t extents)
-+			       vg_t vg, const char *pool_name,
-+			       const char *lvname,
-+			       uint32_t extents)
- {
--	_lv_set_default_params(lp, vg, lvname, extents);
-+	_lv_set_default_params(lp, vg, lvname, 0);
- 
- 	lp->pool_name = pool_name;
- 	lp->segtype = get_segtype_from_string(vg->cmd, "thin");
+-	if (!with_open_count &&
+-	    !dm_task_no_open_count(dmt))
+-		log_warn("WARNING: Failed to disable open_count.");
 -
--	lp->voriginsize = extents * vg->extent_size;
--	if (!(lp->voriginextents = extents_from_size(vg->cmd, lp->voriginsize,
--						     vg->extent_size)))
--		return_0;
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
+ 
+@@ -586,12 +587,9 @@ static int _status_run(const char *name, const char *uuid,
+ 	char *type = NULL;
+ 	char *params = NULL;
+ 
+-	if (!(dmt = _setup_task(name, uuid, 0, DM_DEVICE_STATUS, 0, 0)))
++	if (!(dmt = _setup_task(name, uuid, 0, DM_DEVICE_STATUS, 0, 0, 0)))
+ 		return_0;
+ 
+-	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
 -
-+	lp->virtual_extents = extents;
- 	lp->stripes = 1;
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
  
- 	return 1;
-@@ -698,7 +695,7 @@ static lv_create_params_t _lvm_lv_params_create_thin(const vg_t vg,
- 									const char *lvname, uint64_t size)
- {
- 	struct lvm_lv_create_params *lvcp = NULL;
--	uint64_t extents = 0;
-+	uint32_t extents = 0;
- 
- 	/* precondition checks */
- 	if (vg_read_error(vg))
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index fbd8b04..f2eb5f5 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2640,8 +2640,7 @@ static int _lvconvert_thin(struct cmd_context *cmd,
- 		.pvh = &vg->pvs,
- 		.read_ahead = DM_READ_AHEAD_AUTO,
- 		.stripes = 1,
--		.voriginextents = lv->le_count,
--		.voriginsize = lv->size,
-+		.virtual_extents = lv->le_count,
- 	};
- 
- 	if (lv == pool_lv) {
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 2e01561..2cbfbe5 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -20,6 +20,7 @@
- struct lvcreate_cmdline_params {
- 	percent_type_t percent;
- 	uint64_t size;
-+	uint64_t virtual_size; /* snapshot, thin */
- 	char **pvs;
- 	uint32_t pv_count;
- };
-@@ -251,8 +252,8 @@ static int _update_extents_params(struct volume_group *vg,
- 					       vg->extent_size)))
+@@ -667,13 +665,9 @@ int lv_has_target_type(struct dm_pool *mem, const struct logical_volume *lv,
+ 	if (!(dlid = build_dm_uuid(mem, lv, layer)))
  		return_0;
  
--	if (lp->voriginsize &&
--	    !(lp->voriginextents = extents_from_size(vg->cmd, lp->voriginsize,
-+	if (lcp->virtual_size &&
-+	    !(lp->virtual_extents = extents_from_size(vg->cmd, lcp->virtual_size,
- 						      vg->extent_size)))
+-	if (!(dmt = _setup_task(NULL, dlid, 0,
+-				DM_DEVICE_STATUS, 0, 0)))
++	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0, 0)))
+ 		goto_bad;
+ 
+-	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
+-
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
+ 
+@@ -777,12 +771,9 @@ static int _percent_run(struct dev_manager *dm, const char *name,
+ 	*overall_percent = percent;
+ 
+ 	if (!(dmt = _setup_task(name, dlid, event_nr,
+-				wait ? DM_DEVICE_WAITEVENT : DM_DEVICE_STATUS, 0, 0)))
++				wait ? DM_DEVICE_WAITEVENT : DM_DEVICE_STATUS, 0, 0, 0)))
  		return_0;
  
-@@ -406,7 +407,7 @@ static int _read_size_params(struct cmd_context *cmd,
- 				  -1))
+-	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
+-
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
+ 
+@@ -898,12 +889,9 @@ int dev_manager_transient(struct dev_manager *dm, const struct logical_volume *l
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv, layer)))
  		return_0;
  
--	lp->voriginsize = arg_uint64_value(cmd, virtualsize_ARG, UINT64_C(0));
-+	lcp->virtual_size = arg_uint64_value(cmd, virtualsize_ARG, UINT64_C(0));
+-	if (!(dmt = _setup_task(0, dlid, NULL, DM_DEVICE_STATUS, 0, 0)))
++	if (!(dmt = _setup_task(0, dlid, NULL, DM_DEVICE_STATUS, 0, 0, 0)))
+ 		return_0;
  
- 	if (arg_count(cmd, extents_ARG)) {
- 		if (arg_count(cmd, size_ARG)) {
+-	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
+-
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
+ 
+@@ -1044,7 +1032,6 @@ int dev_manager_snapshot_percent(struct dev_manager *dm,
+ 	/*
+ 	 * Try and get some info on this device.
+ 	 */
+-	log_debug_activation("Getting device status percentage for %s", name);
+ 	if (!_percent(dm, name, dlid, "snapshot", 0, NULL, percent,
+ 		      NULL, fail_if_percent_unsupported))
+ 		return_0;
+@@ -1100,14 +1087,9 @@ int dev_manager_raid_status(struct dev_manager *dm,
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv, layer)))
+ 		return_0;
+ 
+-	log_debug_activation("Getting raid device status for %s.", lv->name);
+-
+-	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0)))
++	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0, 0)))
+ 		return_0;
+ 
+-	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count.");
+-
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
+ 
+@@ -1164,12 +1146,9 @@ int dev_manager_raid_message(struct dev_manager *dm,
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv, layer)))
+ 		return_0;
+ 
+-	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_TARGET_MSG, 0, 0)))
++	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_TARGET_MSG, 0, 0, 0)))
+ 		return_0;
+ 
+-	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count.");
+-
+ 	if (!dm_task_set_message(dmt, msg))
+ 		goto_out;
+ 
+@@ -1199,14 +1178,9 @@ int dev_manager_cache_status(struct dev_manager *dm,
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv, layer)))
+ 		return_0;
+ 
+-	log_debug_activation("Getting cache device status for %s.", lv->name);
+-
+-	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0)))
++	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0, 0)))
+ 		return_0;
+ 
+-	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count.");
+-
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
+ 
+@@ -1308,14 +1282,9 @@ int dev_manager_thin_pool_status(struct dev_manager *dm,
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv, lv_layer(lv))))
+ 		return_0;
+ 
+-	log_debug_activation("Getting thin pool device status for %s.", lv->name);
+-
+-	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0)))
++	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0, 0)))
+ 		return_0;
+ 
+-	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count.");
+-
+ 	if (noflush && !dm_task_no_flush(dmt))
+ 		log_warn("Can't set no_flush.");
+ 
+@@ -1400,9 +1369,7 @@ int dev_manager_thin_device_id(struct dev_manager *dm,
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv, lv_layer(lv))))
+ 		return_0;
+ 
+-	log_debug_activation("Getting device id for %s.", dlid);
+-
+-	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_TABLE, 0, 0)))
++	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_TABLE, 0, 0, 0)))
+ 		return_0;
+ 
+ 	if (!dm_task_run(dmt))
 
 
