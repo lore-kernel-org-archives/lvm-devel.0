@@ -1,46 +1,82 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  3 Nov 2014 13:23:55 +0000 (UTC)
-Subject: master - cleanup: use arg_is_set
-Message-ID: <20141103132355.3F49960243@fedorahosted.org>
+Date: Mon,  3 Nov 2014 13:23:57 +0000 (UTC)
+Subject: master - cleanup: correcting tracing
+Message-ID: <20141103132357.5866B60243@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d574072dd8eb11f54c2f9835e49da5b193cdfca7
-Commit:        d574072dd8eb11f54c2f9835e49da5b193cdfca7
-Parent:        ca9482b276c4a74021d158e4b9c8e8a18dd50e35
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d6c5445bea45de548bb16378030cd4f381bf4c04
+Commit:        d6c5445bea45de548bb16378030cd4f381bf4c04
+Parent:        d574072dd8eb11f54c2f9835e49da5b193cdfca7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 31 11:41:03 2014 +0100
+AuthorDate:    Mon Nov 3 12:52:24 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 3 14:19:33 2014 +0100
+CommitterDate: Mon Nov 3 14:19:34 2014 +0100
 
-cleanup: use arg_is_set
+cleanup: correcting tracing
 
+Use log_error for real error.
 ---
- tools/toollib.c |    5 ++---
- 1 files changed, 2 insertions(+), 3 deletions(-)
+ lib/activate/dev_manager.c |    6 +++---
+ lib/metadata/cache_manip.c |    5 +++--
+ 2 files changed, 6 insertions(+), 5 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 0472597..5906ccb 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -978,13 +978,12 @@ int get_pool_params(struct cmd_context *cmd,
- 	*passed_args = 0;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 9272742..7b43e09 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -558,7 +558,7 @@ static const struct dm_info *_cached_info(struct dm_pool *mem,
+ 	}
  
- 	if (segtype_is_thin_pool(segtype) || segtype_is_thin(segtype)) {
--		if (arg_count(cmd, zero_ARG)) {
-+		if (arg_is_set(cmd, zero_ARG)) {
- 			*passed_args |= PASS_ARG_ZERO;
- 			*zero = arg_int_value(cmd, zero_ARG, 1);
- 			log_very_verbose("Setting pool zeroing: %u", *zero);
- 		}
--
--		if (arg_count(cmd, discards_ARG)) {
-+		if (arg_is_set(cmd, discards_ARG)) {
- 			*passed_args |= PASS_ARG_DISCARDS;
- 			*discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, 0);
- 			log_very_verbose("Setting pool discards: %s",
+ 	if (!(dnode = dm_tree_find_node_by_uuid(dtree, dlid)))
+-		goto out;
++		goto_out;
+ 
+ 	if (!(dinfo = dm_tree_node_get_info(dnode))) {
+ 		log_error("Failed to get info from tree node for %s.", lv->name);
+@@ -1099,7 +1099,7 @@ int dev_manager_raid_status(struct dev_manager *dm,
+ 	dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
+ 
+ 	if (!type || strcmp(type, "raid")) {
+-		log_debug("Expected raid segment type but got %s instead",
++		log_error("Expected raid segment type but got %s instead",
+ 			  type ? type : "NULL");
+ 		goto out;
+ 	}
+@@ -1193,7 +1193,7 @@ int dev_manager_cache_status(struct dev_manager *dm,
+ 	dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
+ 
+ 	if (!type || strcmp(type, "cache")) {
+-		log_debug("Expected cache segment type but got %s instead",
++		log_error("Expected cache segment type but got %s instead",
+ 			  type ? type : "NULL");
+ 		goto out;
+ 	}
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index a9f21ad..ec7f444 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -241,7 +241,8 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	struct lv_status_cache *status;
+ 
+ 	if (!lv_is_cache(cache_lv)) {
+-		log_error(INTERNAL_ERROR "LV %s is not cached.", cache_lv->name);
++		log_error(INTERNAL_ERROR "LV %s is not cache volume.",
++			  display_lvname(cache_lv));
+ 		return 0;
+ 	}
+ 
+@@ -291,7 +292,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 
+ 		/* update the kernel to put the cleaner policy in place */
+ 		if (!lv_update_and_reload(cache_lv))
+-                        return_0;
++			return_0;
+ 	}
+ 
+ 	//FIXME: use polling to do this...
 
 
