@@ -1,49 +1,42 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Thu, 20 Jul 2017 11:24:22 -0400
-Subject: master - raid: avoid lv_size compiler warning
-Message-ID: <201707201524.v6KFOMY8003148@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  3 Nov 2014 13:23:26 +0000 (UTC)
+Subject: master - filters: change return code
+Message-ID: <20141103132326.07CDF602D9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7ba0017468d977cf51bfce0e708317ab84bc04e7
-Commit:        7ba0017468d977cf51bfce0e708317ab84bc04e7
-Parent:        c78316b7a5341aa9259c118988e659d38ef862f2
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jul 20 16:16:51 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jul 20 16:16:51 2017 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dc11dcf11d90f24c8d37988f3029e29cc6a45441
+Commit:        dc11dcf11d90f24c8d37988f3029e29cc6a45441
+Parent:        c1ee6d4ffc7d520e015a8e44f50392510fb85167
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Oct 31 20:25:25 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Nov 3 14:19:32 2014 +0100
 
-raid: avoid lv_size compiler warning
+filters: change return code
 
-warning: declaration of ???lv_size??? shadows a global declaration
+No data for writing should be seen as 'dump' success.
+(reduces one <bactrace> in the log) - it has no other
+effect.
 ---
- lib/metadata/raid_manip.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/filters/filter-persistent.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index e275da1..b90d6f4 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1526,7 +1526,7 @@ static int _lv_relocate_reshape_space(struct logical_volume *lv, enum alloc_wher
- /* HM Helper: reset @lv to @segtype, @stripe_size and @lv_size post lv_extend() when changed for area_count < 3. */
- static int _lv_alloc_reshape_post_extend(struct logical_volume *lv,
- 					 const struct segment_type *segtype,
--					 uint32_t stripe_size, uint64_t lv_size)
-+					 uint32_t stripe_size, uint64_t lv_size_cur)
- {
- 	struct lv_segment *seg = first_seg(lv);
- 
-@@ -1534,7 +1534,7 @@ static int _lv_alloc_reshape_post_extend(struct logical_volume *lv,
- 		/* Reset segment type, stripe and lv size */
- 		seg->segtype = segtype;
- 		seg->stripe_size = stripe_size;
--		lv->size = lv_size;
-+		lv->size = lv_size_cur;
- 
- 		/* Update and reload mapping for proper size of data SubLVs in the cluster */
- 		if (!lv_update_and_reload(lv))
+diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
+index 600fa38..3c1701b 100644
+--- a/lib/filters/filter-persistent.c
++++ b/lib/filters/filter-persistent.c
+@@ -193,7 +193,7 @@ static int _persistent_filter_dump(struct dev_filter *f, int merge_existing)
+ 	if (!dm_hash_get_num_entries(pf->devices)) {
+ 		log_very_verbose("Internal persistent device cache empty "
+ 				 "- not writing to %s", pf->file);
+-		return 0;
++		return 1;
+ 	}
+ 	if (!dev_cache_has_scanned()) {
+ 		log_very_verbose("Device cache incomplete - not writing "
 
 
