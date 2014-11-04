@@ -1,65 +1,73 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  4 Nov 2014 16:59:59 +0000 (UTC)
-Subject: master - dmeventd: Remove redundant checks.
-Message-ID: <20141104165959.A3901607A5@fedorahosted.org>
+Date: Tue,  4 Nov 2014 17:00:01 +0000 (UTC)
+Subject: master - dmeventd: Include shutdown threads in responses.
+Message-ID: <20141104170001.DA290607A5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6b25faa218fc5cd1601e5418ce1481400386ecce
-Commit:        6b25faa218fc5cd1601e5418ce1481400386ecce
-Parent:        cebbda0931e43097a148bbf2c4b8a1de1c77d9fa
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=89f635a0759dd9499155b4bf6bf8c07090444ade
+Commit:        89f635a0759dd9499155b4bf6bf8c07090444ade
+Parent:        6b25faa218fc5cd1601e5418ce1481400386ecce
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Nov 4 16:55:42 2014 +0000
+AuthorDate:    Tue Nov 4 16:58:14 2014 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Nov 4 16:55:42 2014 +0000
+CommitterDate: Tue Nov 4 16:58:14 2014 +0000
 
-dmeventd: Remove redundant checks.
+dmeventd: Include shutdown threads in responses.
 
-The status of threads in _thread_registry is always DM_THREAD_RUNNING
-(zero).
+When responding to DM_EVENT_CMD_GET_REGISTERED_DEVICE no longer
+ignore threads that have already been unregistered but which
+are still present.
 
-DM_EVENT_REGISTRATION_PENDING is never stored in thread->events.
+This means the caller can unregister a device and poll dmeventd
+to ensure the monitoring thread has gone away before removing
+the device.  If a device was registered and unregistered in quick
+succession and then removed, WAITEVENT could run in parallel with
+the REMOVE.
+
+Threads are moved to the _thread_registry_unused list when they
+are unregistered.
 ---
- daemons/dmeventd/dmeventd.c |   14 ++++----------
- 1 files changed, 4 insertions(+), 10 deletions(-)
+ WHATS_NEW                   |    1 +
+ daemons/dmeventd/dmeventd.c |   12 ++++++++++++
+ 2 files changed, 13 insertions(+), 0 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 3914392..6c76fa9 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Include threads being shutdown in dmeventd device registration responses.
+   Inital support for external users of thin pools based on transaction_id.
+   Report some basic percentage info for cache pools.
+   Introduce size_mb_arg_with_percent() for advanced size arg reading.
 diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index dcde7b1..faae5ba 100644
+index faae5ba..1b950cf 100644
 --- a/daemons/dmeventd/dmeventd.c
 +++ b/daemons/dmeventd/dmeventd.c
-@@ -1136,26 +1136,20 @@ static int _registered_device(struct message_data *message_data,
- }
+@@ -1177,6 +1177,18 @@ static int _get_registered_dev(struct message_data *message_data, int next)
+ 	if (hit && !next)
+ 		goto reg;
  
- static int _want_registered_device(char *dso_name, char *device_uuid,
--				  struct thread_status *thread)
-+				   struct thread_status *thread)
- {
- 	/* If DSO names and device paths are equal. */
- 	if (dso_name && device_uuid)
- 		return !strcmp(dso_name, thread->dso_data->dso_name) &&
--		    !strcmp(device_uuid, thread->device.uuid) &&
--			(thread->status == DM_THREAD_RUNNING ||
--			 (thread->events & DM_EVENT_REGISTRATION_PENDING));
-+		    !strcmp(device_uuid, thread->device.uuid);
++	/*
++	 * If we didn't get a match, try the threads waiting to be deleted.
++	 * FIXME Do something similar if 'next' is set.
++	 */
++	if (!hit && !next)
++		dm_list_iterate_items(thread, &_thread_registry_unused)
++			if (_want_registered_device(message_data->dso_name,
++						    message_data->device_uuid, thread)) {
++				hit = thread;
++				goto reg;
++			}
++
+ 	if (!hit)
+ 		goto out;
  
- 	/* If DSO names are equal. */
- 	if (dso_name)
--		return !strcmp(dso_name, thread->dso_data->dso_name) &&
--			(thread->status == DM_THREAD_RUNNING ||
--			 (thread->events & DM_EVENT_REGISTRATION_PENDING));
-+		return !strcmp(dso_name, thread->dso_data->dso_name);
- 
- 	/* If device paths are equal. */
- 	if (device_uuid)
--		return !strcmp(device_uuid, thread->device.uuid) &&
--			(thread->status == DM_THREAD_RUNNING ||
--			 (thread->events & DM_EVENT_REGISTRATION_PENDING));
-+		return !strcmp(device_uuid, thread->device.uuid);
- 
- 	return 1;
- }
 
 
