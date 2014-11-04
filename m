@@ -1,68 +1,63 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  4 Nov 2014 14:32:59 +0000 (UTC)
-Subject: master - libdm: allow to activate any pool with tid == 0
-Message-ID: <20141104143259.B17CE61089@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue,  4 Nov 2014 16:59:59 +0000 (UTC)
+Subject: master - dmeventd: Remove redundant checks.
+Message-ID: <20141104165959.A3901607A5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=89233544e00a0acfad82055b737ebcce41919d58
-Commit:        89233544e00a0acfad82055b737ebcce41919d58
-Parent:        7092b47ec90571668c30ef38a9ec251adcff2c82
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Nov 4 09:42:15 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Nov 4 15:28:00 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6b25faa218fc5cd1601e5418ce1481400386ecce
+Commit:        6b25faa218fc5cd1601e5418ce1481400386ecce
+Parent:        cebbda0931e43097a148bbf2c4b8a1de1c77d9fa
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Nov 4 16:55:42 2014 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Nov 4 16:55:42 2014 +0000
 
-libdm: allow to activate any pool with tid == 0
+dmeventd: Remove redundant checks.
 
-When transaction_id is set 0 for thin-pool, libdm avoids validation
-of thin-pool, unless there are real messages to be send to thin-pool.
-This relaxes strict policy which always required to know
-in front transaction_id for the kernel target.
+The status of threads in _thread_registry is always DM_THREAD_RUNNING
+(zero).
 
-It now allows to activate thin-pool with any transaction_id
-(when transaction_id is passed in)
-
-It is now upto application to validate transaction_id from life
-thin-pool volume with transaction_id within it's own metadata.
+DM_EVENT_REGISTRATION_PENDING is never stored in thread->events.
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |    4 +++-
- 2 files changed, 4 insertions(+), 1 deletions(-)
+ daemons/dmeventd/dmeventd.c |   14 ++++----------
+ 1 files changed, 4 insertions(+), 10 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 6b5ee3a..0305077 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.91 - 
- ====================================
-+  Allow activation of any thin-pool with passed transaction_id == 0.
-   Don't print uninitialized stack bytes when non-root uses dm_check_version().
-   Fix selection criteria to not match reserved values when using >, <, >=, <.
-   Add DM_LIST_HEAD_INIT macro to libdevmapper.h
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 0048b1c..d120bf5 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -3757,7 +3757,8 @@ int dm_tree_node_add_thin_pool_target(struct dm_tree_node *node,
- 	seg->metadata->props.delay_resume_if_new = 0;
- 	seg->pool->props.delay_resume_if_new = 0;
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index dcde7b1..faae5ba 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1136,26 +1136,20 @@ static int _registered_device(struct message_data *message_data,
+ }
  
--	node->props.send_messages = 1;
-+	/* Validate only transaction_id > 0 when activating thin-pool */
-+	node->props.send_messages = transaction_id ? 1 : 0;
- 	seg->transaction_id = transaction_id;
- 	seg->low_water_mark = low_water_mark;
- 	seg->data_block_size = data_block_size;
-@@ -3826,6 +3827,7 @@ int dm_tree_node_add_thin_pool_message(struct dm_tree_node *node,
+ static int _want_registered_device(char *dso_name, char *device_uuid,
+-				  struct thread_status *thread)
++				   struct thread_status *thread)
+ {
+ 	/* If DSO names and device paths are equal. */
+ 	if (dso_name && device_uuid)
+ 		return !strcmp(dso_name, thread->dso_data->dso_name) &&
+-		    !strcmp(device_uuid, thread->device.uuid) &&
+-			(thread->status == DM_THREAD_RUNNING ||
+-			 (thread->events & DM_EVENT_REGISTRATION_PENDING));
++		    !strcmp(device_uuid, thread->device.uuid);
  
- 	tm->message.type = type;
- 	dm_list_add(&seg->thin_messages, &tm->list);
-+	node->props.send_messages = 1;
+ 	/* If DSO names are equal. */
+ 	if (dso_name)
+-		return !strcmp(dso_name, thread->dso_data->dso_name) &&
+-			(thread->status == DM_THREAD_RUNNING ||
+-			 (thread->events & DM_EVENT_REGISTRATION_PENDING));
++		return !strcmp(dso_name, thread->dso_data->dso_name);
+ 
+ 	/* If device paths are equal. */
+ 	if (device_uuid)
+-		return !strcmp(device_uuid, thread->device.uuid) &&
+-			(thread->status == DM_THREAD_RUNNING ||
+-			 (thread->events & DM_EVENT_REGISTRATION_PENDING));
++		return !strcmp(device_uuid, thread->device.uuid);
  
  	return 1;
  }
