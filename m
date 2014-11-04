@@ -1,48 +1,51 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  4 Nov 2014 14:33:12 +0000 (UTC)
-Subject: master - tests: duplicate update of config
-Message-ID: <20141104143312.53A73608F0@fedorahosted.org>
+Date: Tue,  4 Nov 2014 14:33:03 +0000 (UTC)
+Subject: master - thin: no validation skip of new thin pools
+Message-ID: <20141104143303.E8F24608F0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cebbda0931e43097a148bbf2c4b8a1de1c77d9fa
-Commit:        cebbda0931e43097a148bbf2c4b8a1de1c77d9fa
-Parent:        00a45ca491de21336f8d1d0253344995cea3b4f0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ee627884de95ae5a40f0fc2534dcd60e63e2a58d
+Commit:        ee627884de95ae5a40f0fc2534dcd60e63e2a58d
+Parent:        26aa912b4663633c6e094bad85393601903bcaac
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Nov 4 15:07:40 2014 +0100
+AuthorDate:    Tue Nov 4 09:51:58 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Nov 4 15:29:22 2014 +0100
+CommitterDate: Tue Nov 4 15:28:00 2014 +0100
 
-tests: duplicate update of config
+thin: no validation skip of new thin pools
 
+Allowing 'external' use of thin-pools requires to validate even
+so far 'unused' new thin pools.
+
+Later we may have 'smarter' way to resolve which thin-pools are
+owned by lvm2 and which are external.
 ---
- test/shell/thin-volume-list.sh |    4 +---
- 1 files changed, 1 insertions(+), 3 deletions(-)
+ lib/activate/dev_manager.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/thin-volume-list.sh b/test/shell/thin-volume-list.sh
-index 31f4034..32d13b8 100644
---- a/test/shell/thin-volume-list.sh
-+++ b/test/shell/thin-volume-list.sh
-@@ -22,6 +22,7 @@ aux prepare_vg 2
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 266c80a..41911c1 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1815,12 +1815,15 @@ static int _pool_register_callback(struct dev_manager *dm,
+ {
+ 	struct pool_cb_data *data;
  
- lvcreate -T -L8M $vg/pool -V10M -n $lv1
++	/* Do not skip metadata of testing even for unused thin pools */
++#if 0
+ 	/* Skip metadata testing for unused thin pool. */
+ 	if (lv_is_thin_pool(lv) &&
+ 	    (!first_seg(lv)->transaction_id ||
+ 	     ((first_seg(lv)->transaction_id == 1) &&
+ 	      pool_has_message(first_seg(lv), NULL, 0))))
+ 		return 1;
++#endif
  
-+# skip $vg from activation
- aux lvmconf "activation/volume_list = [ \"$vg1\" ]"
- 
- # We still could pass - since pool is still active
-@@ -32,9 +33,6 @@ check inactive $vg $lv2
- 
- vgchange -an $vg
- 
--# skip $vg from activation
--aux lvmconf "activation/volume_list = [ \"$vg1\" ]"
--
- # Pool is not active - so it cannot create thin volume
- not lvcreate -V10 -T $vg/pool
- 
+ 	if (!(data = dm_pool_zalloc(dm->mem, sizeof(*data)))) {
+ 		log_error("Failed to allocated path for callback.");
 
 
