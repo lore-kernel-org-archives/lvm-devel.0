@@ -1,86 +1,56 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 24 Jul 2017 16:12:19 -0400
-Subject: master - commands: expand comment on configuring option vals
-Message-ID: <201707242012.v6OKCJ11004047@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed,  5 Nov 2014 14:33:27 +0000 (UTC)
+Subject: master - snapshot: no snapshot of any cache type LVs
+Message-ID: <20141105143327.8B06260E61@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ca71ad0d5025d2d01eb9666368c1da7db3c9c7ce
-Commit:        ca71ad0d5025d2d01eb9666368c1da7db3c9c7ce
-Parent:        2938fa541aa66da66e32b9ea4b796dbedcf5062e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jul 20 16:54:40 2017 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jul 24 14:12:08 2017 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a82dcadf66dbd43a43d3be40cd62a5074248d218
+Commit:        a82dcadf66dbd43a43d3be40cd62a5074248d218
+Parent:        3261e539a01efffb56abd78e5a060af8d1cf1537
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Nov 4 23:21:07 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Nov 5 15:28:38 2014 +0100
 
-commands: expand comment on configuring option vals
+snapshot: no snapshot of any cache type LVs
 
+Unsupported as of now.
 ---
- tools/command.c |   48 ++++++++++++++++++++++++++++++++++++++----------
- 1 files changed, 38 insertions(+), 10 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    6 ++++++
+ 2 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index b4e5e76..52a3766 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -1575,17 +1575,45 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 8acbc3d..03baa06 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Properly report error when taking snapshot of any cache type LV.
+   Add basic thread debugging messages to dmeventd.
+   Include threads being shutdown in dmeventd device registration responses.
+   Inital support for external users of thin pools based on transaction_id.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index d3c0c47..6cf51f9 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6804,6 +6804,12 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 				return NULL;
+ 			}
  
- /*
-- * This does not change the option vals in the cmd defs in commands[]
-- * which are used when printing help/man output.
-+ * The opt_names[] table describes each option.  It is indexed by the
-+ * option typedef, e.g. size_ARG.  The size_ARG entry specifies the
-+ * option name, e.g. --size, and the kind of value it accepts,
-+ * e.g. sizemb_VAL.
-  *
-- * The specific val types for each command are specified in
-- * command-lines.in/commands[], and those are used for printing
-- * man/help.  But the opt_names[] array for each option is global
-- * and has no command name context.  So the opt_names[] array always
-- * specifies a non-signed val, e.g. sizemb_VAL, extents_VAL.  The
-- * opt_names[] array is used by run time processing, and for part
-- * of the help/man output.  This adjusts the opt_names[] val types
-- * according to the command being run.
-+ * The val_names[] table describes each option value type.  It is indexed by
-+ * the value typedef, e.g. sizemb_VAL.  The sizemb_VAL entry specifies the
-+ * function used to parse the value, e.g. size_mb_arg(), the string used to
-+ * refer to the value in the command-lines.in specifications, e.g. SizeMB,
-+ * and how the value should be displayed in a man page, e.g. Size[m|UNIT].
-+ *
-+ * A problem is that these tables are independent of a particular command
-+ * (they are created at build time), but different commands accept different
-+ * types of values for the same option, e.g. one command will accept
-+ * signed size values (ssizemb_VAL), while another does not accept a signed
-+ * number, (sizemb_VAL).  This function deals with this problem by tweaking
-+ * the opt_names[] table at run time according to the specific command being run.
-+ * i.e. it changes size_ARG to accept sizemb_VAL or ssizemb_VAL depending
-+ * on the command.
-+ *
-+ * By default, size_ARG in opt_names[] is set up to accept a standard
-+ * sizemb_VAL.  The same is done for other opt_names[] entries that
-+ * take different option values.
-+ *
-+ * This function overrides default opt_names[] entries at run time according
-+ * to the command name, adjusting the value types accepted by various options.
-+ * So, for lvresize, opt_names[sizemb_VAL] is overriden to accept
-+ * the relative (+ or -) value type ssizemb_VAL, instead of the default
-+ * sizemb_VAL.  This way, when lvresize processes the --size value, it
-+ * will use the ssize_mb_arg() function which accepts relative size values.
-+ * When lvcreate processes the --size value, it uses size_mb_arg() which
-+ * rejects signed values.
-+ *
-+ * The command defs in commands[] do not need to be overriden because
-+ * the command-lines.in defs have the context of a command, and are
-+ * described using the proper value type, e.g. this cmd def already
-+ * uses the relative size value: "lvresize --size SSizeMB LV",
-+ * so the commands[] entry for the cmd def already references the
-+ * correct ssizemb_VAL.
-  */
- void configure_command_option_values(const char *name)
- {
++			if (lv_is_cache_type(origin_lv)) {
++				log_error("Snapshots of cache type volume %s "
++					  "is not supported.", display_lvname(origin_lv));
++				return NULL;
++			}
++
+ 			if (lv_is_thin_type(origin_lv) && !lv_is_thin_volume(origin_lv)) {
+ 				log_error("Snapshots of thin pool %sdevices "
+ 					  "are not supported.",
 
 
