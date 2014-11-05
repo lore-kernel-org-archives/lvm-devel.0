@@ -1,77 +1,39 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  5 Nov 2014 14:33:31 +0000 (UTC)
-Subject: master - activate: check all snap segs are inactive
-Message-ID: <20141105143331.CAAB760E61@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed,  5 Nov 2014 09:47:03 +0000 (UTC)
+Subject: master - cleanup: keep 'fall through' switch case for LVSINFO for compiler to understand this properly
+Message-ID: <20141105094703.9998360CD1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6e5790f2d24d798e217fc005522c07e06c97adc9
-Commit:        6e5790f2d24d798e217fc005522c07e06c97adc9
-Parent:        a3a2c792a87054ab78a1b8e54b99db1c24739fb8
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 5 11:53:11 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 5 15:30:58 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3261e539a01efffb56abd78e5a060af8d1cf1537
+Commit:        3261e539a01efffb56abd78e5a060af8d1cf1537
+Parent:        bf4681ba134914e5847d94bc0ca01b7a2af0b2b5
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Nov 5 10:46:52 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Nov 5 10:46:52 2014 +0100
 
-activate: check all snap segs are inactive
+cleanup: keep 'fall through' switch case for LVSINFO for compiler to understand this properly
 
-When deactivating origin, we may have possibly left table in broken state,
-where origin is not active, but snapshot volume is still present.
-
-Let's ensure deactivation of origin detects also all associated
-snapshots are inactive - otherwise do not skip deactivation.
-(so i.e. 'vgchange -an' would detect errors)
 ---
- WHATS_NEW               |    1 +
- lib/activate/activate.c |   15 ++++++++++++++-
- 2 files changed, 15 insertions(+), 1 deletions(-)
+ tools/reporter.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 03baa06..06d3b9b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Deactivation of snapshot origin detects and deactivates left-over snapshots.
-   Properly report error when taking snapshot of any cache type LV.
-   Add basic thread debugging messages to dmeventd.
-   Include threads being shutdown in dmeventd device registration responses.
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index c2a662f..ac6330f 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2002,6 +2002,7 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
- 	const struct logical_volume *lv_to_free = NULL;
- 	struct lvinfo info;
- 	static const struct lv_activate_opts laopts = { .skip_in_use = 1 };
-+	struct dm_list *snh;
- 	int r = 0;
- 
- 	if (!activation())
-@@ -2023,7 +2024,19 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
- 
- 	if (!info.exists) {
- 		r = 1;
--		goto out;
-+		/* Check attached snapshot segments are also inactive */
-+		dm_list_iterate(snh, &lv->snapshot_segs) {
-+			if (!lv_info(cmd, dm_list_struct_base(snh, struct lv_segment, origin_list)->cow,
-+				     0, &info, 0, 0))
-+				goto_out;
-+			if (info.exists) {
-+				r = 0; /* Snapshot left in table? */
-+				break;
-+			}
-+		}
-+
-+		if (r)
-+			goto out;
- 	}
- 
- 	if (lv_is_visible(lv) || lv_is_virtual_origin(lv) ||
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 080e3d5..b49f37d 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -414,6 +414,8 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 	case DEVTYPES:
+ 		r = _process_each_devtype(cmd, argc, report_handle);
+ 		break;
++	case LVSINFO:
++		/* fall through */
+ 	case LVS:
+ 		r = process_each_lv(cmd, argc, argv, 0, report_handle,
+ 				    lv_info_needed ? &_lvs_with_info_single
 
 
