@@ -1,50 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 10 Nov 2014 21:06:02 +0000 (UTC)
-Subject: master - pools: after fail of vg_write no restore
-Message-ID: <20141110210602.6FC5960AA4@fedorahosted.org>
+Date: Wed,  5 Nov 2014 14:33:31 +0000 (UTC)
+Subject: master - activate: check all snap segs are inactive
+Message-ID: <20141105143331.CAAB760E61@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=138c2417c070eef5cdb9839a88efae5b601f4a49
-Commit:        138c2417c070eef5cdb9839a88efae5b601f4a49
-Parent:        94e4d5fcf51abdfd42df9299109fbc9d22f2f92b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6e5790f2d24d798e217fc005522c07e06c97adc9
+Commit:        6e5790f2d24d798e217fc005522c07e06c97adc9
+Parent:        a3a2c792a87054ab78a1b8e54b99db1c24739fb8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 5 20:27:51 2014 +0100
+AuthorDate:    Wed Nov 5 11:53:11 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 10 21:34:02 2014 +0100
+CommitterDate: Wed Nov 5 15:30:58 2014 +0100
 
-pools: after fail of vg_write no restore
+activate: check all snap segs are inactive
 
-Revert part of commit 51a29e60564d537,
-it's probably bad idea to continue with any recovery, when
-vg_write() or vg_commit() fail - so it's better to leave it as it is.
+When deactivating origin, we may have possibly left table in broken state,
+where origin is not active, but snapshot volume is still present.
+
+Let's ensure deactivation of origin detects also all associated
+snapshots are inactive - otherwise do not skip deactivation.
+(so i.e. 'vgchange -an' would detect errors)
 ---
- lib/metadata/lv_manip.c |    9 ++-------
- 1 files changed, 2 insertions(+), 7 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/activate/activate.c |   15 ++++++++++++++-
+ 2 files changed, 15 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 6292626..bedf4b6 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6971,14 +6971,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		lp->activate = CHANGE_AN;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 03baa06..06d3b9b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.112 - 
+ =====================================
++  Deactivation of snapshot origin detects and deactivates left-over snapshots.
+   Properly report error when taking snapshot of any cache type LV.
+   Add basic thread debugging messages to dmeventd.
+   Include threads being shutdown in dmeventd device registration responses.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index c2a662f..ac6330f 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -2002,6 +2002,7 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
+ 	const struct logical_volume *lv_to_free = NULL;
+ 	struct lvinfo info;
+ 	static const struct lv_activate_opts laopts = { .skip_in_use = 1 };
++	struct dm_list *snh;
+ 	int r = 0;
  
- 	/* store vg on disk(s) */
--	if (!vg_write(vg) || !vg_commit(vg)) {
--		if (seg_is_pool(lp)) {
--			/* Pool volumes have already created metadata LV */
--			stack;
--			goto revert_new_lv;
--		}
-+	if (!vg_write(vg) || !vg_commit(vg))
-+		/* Pool created metadata LV, but better avoid recover when vg_write/commit fails */
- 		return_NULL;
--	}
+ 	if (!activation())
+@@ -2023,7 +2024,19 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
  
- 	backup(vg);
+ 	if (!info.exists) {
+ 		r = 1;
+-		goto out;
++		/* Check attached snapshot segments are also inactive */
++		dm_list_iterate(snh, &lv->snapshot_segs) {
++			if (!lv_info(cmd, dm_list_struct_base(snh, struct lv_segment, origin_list)->cow,
++				     0, &info, 0, 0))
++				goto_out;
++			if (info.exists) {
++				r = 0; /* Snapshot left in table? */
++				break;
++			}
++		}
++
++		if (r)
++			goto out;
+ 	}
  
+ 	if (lv_is_visible(lv) || lv_is_virtual_origin(lv) ||
 
 
