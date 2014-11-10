@@ -1,162 +1,90 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 10 Nov 2014 21:06:42 +0000 (UTC)
-Subject: master - cleanup: indents comments backtraces
-Message-ID: <20141110210642.939D460C9A@fedorahosted.org>
+Date: Mon, 10 Nov 2014 21:06:44 +0000 (UTC)
+Subject: master - cleanup: gcc warnings
+Message-ID: <20141110210644.AA28060C9A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e5d3f812854b23ef5e7e51f96a3f89fa02c093fa
-Commit:        e5d3f812854b23ef5e7e51f96a3f89fa02c093fa
-Parent:        1e97d2dd286a184fc1d26a9abb60fea9e2b7d44d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f12e3da6393376ed13370a45995bf1950081a954
+Commit:        f12e3da6393376ed13370a45995bf1950081a954
+Parent:        e5d3f812854b23ef5e7e51f96a3f89fa02c093fa
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 6 20:36:53 2014 +0100
+AuthorDate:    Sat Nov 8 15:33:17 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 10 22:05:49 2014 +0100
 
-cleanup: indents comments backtraces
+cleanup: gcc warnings
 
 ---
- lib/activate/activate.c    |    3 ++-
- lib/activate/dev_manager.c |    2 +-
- lib/cache_segtype/cache.c  |   11 +++++------
- lib/metadata/cache_manip.c |    3 ++-
- lib/metadata/lv_manip.c    |    1 +
- libdm/mm/pool-debug.c      |    2 +-
- libdm/mm/pool-fast.c       |    2 +-
- 7 files changed, 13 insertions(+), 11 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |    2 +-
+ libdm/libdm-deptree.c          |    2 +-
+ python/liblvm.c                |    3 ++-
+ tools/lvmcmdline.c             |    2 +-
+ 4 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 7adb90f..93f9b9c 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1687,7 +1687,8 @@ static int _preload_detached_lv(struct logical_volume *lv, void *data)
- 	struct lv_list *lvl_pre;
- 
- 	if ((lvl_pre = find_lv_in_vg(detached->lv_pre->vg, lv->name))) {
--		if (lv_is_visible(lvl_pre->lv) && lv_is_active(lv) && (!lv_is_cow(lv) || !lv_is_cow(lvl_pre->lv)) &&
-+		if (lv_is_visible(lvl_pre->lv) && lv_is_active(lv) &&
-+		    (!lv_is_cow(lv) || !lv_is_cow(lvl_pre->lv)) &&
- 		    !_lv_preload(lvl_pre->lv, detached->laopts, detached->flush_required))
- 			return_0;
- 	}
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 2c6ed50..ffd7ff3 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1207,7 +1207,7 @@ int dev_manager_cache_status(struct dev_manager *dm,
- 		goto_out;
- 
- 	c = (*status)->cache;
--	(*status)->mem = dm->mem; /* User can destroy this mem pool later */
-+	(*status)->mem = dm->mem; /* User has to destroy this mem pool later */
- 	(*status)->data_usage = dm_make_percent(c->used_blocks,
- 						c->total_blocks);
- 	(*status)->metadata_usage = dm_make_percent(c->metadata_used_blocks,
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index 11c5b10..ab9d4a0 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -45,7 +45,7 @@ static int _cache_pool_text_import(struct lv_segment *seg,
- 		return SEG_LOG_ERROR("Cache data must be a string in");
- 	if (!(data_lv = find_lv(seg->lv->vg, str)))
- 		return SEG_LOG_ERROR("Unknown logical volume %s specified for "
--			  "cache data in", str);
-+				     "cache data in", str);
- 
- 	if (!dm_config_has_node(sn, "metadata"))
- 		return SEG_LOG_ERROR("Cache metadata not specified in");
-@@ -53,7 +53,7 @@ static int _cache_pool_text_import(struct lv_segment *seg,
- 		return SEG_LOG_ERROR("Cache metadata must be a string in");
- 	if (!(meta_lv = find_lv(seg->lv->vg, str)))
- 		return SEG_LOG_ERROR("Unknown logical volume %s specified for "
--			  "cache metadata in", str);
-+				     "cache metadata in", str);
- 
- 	if (!dm_config_get_uint32(sn, "chunk_size", &seg->chunk_size))
- 		return SEG_LOG_ERROR("Couldn't read cache chunk_size in");
-@@ -199,7 +199,7 @@ static int _cache_text_import(struct lv_segment *seg,
- 			      struct dm_hash_table *pv_hash __attribute__((unused)))
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index 5b23a56..693eb86 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -1035,7 +1035,7 @@ static void _dump_pairs(struct buffer *buf, struct dm_hash_table *ht, const char
+ 			   *val = dm_hash_get_data(ht, n);
+ 		buffer_append(buf, "    ");
+ 		if (int_key)
+-			(void) dm_asprintf(&append, "%d = \"%s\"", *(int*)key, val);
++			(void) dm_asprintf(&append, "%d = \"%s\"", *(const int*)key, val);
+ 		else
+ 			(void) dm_asprintf(&append, "%s = \"%s\"", key, val);
+ 		if (append)
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 6521360..70373a2 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -3176,7 +3176,7 @@ int dm_tree_node_add_raid_target_with_params(struct dm_tree_node *node,
+ 					     uint64_t size,
+ 					     struct dm_tree_node_raid_params *p)
  {
- 	struct logical_volume *pool_lv, *origin_lv;
--	const char *name = NULL;
-+	const char *name;
+-	int i;
++	unsigned i;
+ 	struct load_segment *seg = NULL;
  
- 	if (!dm_config_has_node(sn, "cache_pool"))
- 		return SEG_LOG_ERROR("cache_pool not specified in");
-@@ -207,7 +207,7 @@ static int _cache_text_import(struct lv_segment *seg,
- 		return SEG_LOG_ERROR("cache_pool must be a string in");
- 	if (!(pool_lv = find_lv(seg->lv->vg, name)))
- 		return SEG_LOG_ERROR("Unknown logical volume %s specified for "
--			  "cache_pool in", name);
-+				     "cache_pool in", name);
- 
- 	if (!dm_config_has_node(sn, "origin"))
- 		return SEG_LOG_ERROR("Cache origin not specified in");
-@@ -215,8 +215,7 @@ static int _cache_text_import(struct lv_segment *seg,
- 		return SEG_LOG_ERROR("Cache origin must be a string in");
- 	if (!(origin_lv = find_lv(seg->lv->vg, name)))
- 		return SEG_LOG_ERROR("Unknown logical volume %s specified for "
--			  "cache origin in", name);
--
-+				     "cache origin in", name);
- 	if (!set_lv_segment_area_lv(seg, 0, origin_lv, 0, 0))
- 		return_0;
- 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index e50b796..6c74e57 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -342,8 +342,9 @@ int lv_cache_remove(struct logical_volume *cache_lv)
- 	 */
- 	corigin_lv = seg_lv(cache_seg, 0);
- 	lv_set_visible(corigin_lv);
-+
- 	if (!remove_layer_from_lv(cache_lv, corigin_lv))
--			return_0;
-+		return_0;
- 
- 	/* Replace 'error' with 'cache' segtype */
- 	cache_seg = first_seg(corigin_lv);
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 30944c1..220f894 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7018,6 +7018,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 
- 	if (seg_is_cache(lp)) {
- 		/* TODO: support remote exclusive activation? */
-+		/* Not yet 'cache' LV, it is stripe volume for wiping */
- 		if (is_change_activating(lp->activate) &&
- 		    !activate_lv_excl_local(cmd, lv)) {
- 			log_error("Aborting. Failed to activate LV %s locally exclusively.",
-diff --git a/libdm/mm/pool-debug.c b/libdm/mm/pool-debug.c
-index afaa39e..a2767cd 100644
---- a/libdm/mm/pool-debug.c
-+++ b/libdm/mm/pool-debug.c
-@@ -170,7 +170,7 @@ void *dm_pool_alloc_aligned(struct dm_pool *p, size_t s, unsigned alignment)
- 	struct block *b = _new_block(s, alignment);
- 
- 	if (!b)
--		return NULL;
-+		return_NULL;
- 
- 	_append_block(p, b);
- 
-diff --git a/libdm/mm/pool-fast.c b/libdm/mm/pool-fast.c
-index edb31a0..803842c 100644
---- a/libdm/mm/pool-fast.c
-+++ b/libdm/mm/pool-fast.c
-@@ -107,7 +107,7 @@ void *dm_pool_alloc_aligned(struct dm_pool *p, size_t s, unsigned alignment)
- 			       needed : p->chunk_size);
- 
- 		if (!c)
--			return NULL;
-+			return_NULL;
- 
- 		_align_chunk(c, alignment);
+ 	for (i = 0; i < DM_ARRAY_SIZE(_dm_segtypes) && !seg; ++i)
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 9983135..1b0942d 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -1986,6 +1986,7 @@ static void _liblvm_cleanup(void)
  	}
+ }
+ 
++PyMODINIT_FUNC initlvm(void);
+ PyMODINIT_FUNC initlvm(void)
+ {
+ 	PyObject *m;
+@@ -2020,7 +2021,7 @@ PyMODINIT_FUNC initlvm(void)
+ 				    LVM_THIN_DISCARDS_PASSDOWN) < 0)
+ 		return;
+ 
+-	if ((_LibLVMError = PyErr_NewException("lvm.LibLVMError", NULL, NULL))) {
++	if ((_LibLVMError = PyErr_NewException((char*)"lvm.LibLVMError", NULL, NULL))) {
+ 		/* Each call to PyModule_AddObject decrefs it; compensate: */
+ 		Py_INCREF(_LibLVMError);
+ 		Py_INCREF(_LibLVMError);
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index ce45eb4..6149dbc 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1500,8 +1500,8 @@ int lvm_return_code(int ret)
+ int lvm_split(char *str, int *argc, char **argv, int max)
+ {
+ 	char *b = str, *e;
+-	*argc = 0;
+ 	char quote = 0;
++	*argc = 0;
+ 
+ 	while (*b) {
+ 		while (*b && isspace(*b))
 
 
