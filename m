@@ -1,52 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 10 Nov 2014 21:06:50 +0000 (UTC)
-Subject: master - tests: reach cache params
-Message-ID: <20141110210650.F3BB360789@fedorahosted.org>
+Date: Mon, 10 Nov 2014 21:33:25 +0000 (UTC)
+Subject: master - mirror: layer remove doesn't work properly with mirrors
+Message-ID: <20141110213325.B74CE61026@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=094596cfd2001a8714923dd87abb2feacd116a13
-Commit:        094596cfd2001a8714923dd87abb2feacd116a13
-Parent:        10ebabdd2a8c686d814205fd923229572eebdd3a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a7fc1082987c3d5842664fd7817ec01e1ddec9cc
+Commit:        a7fc1082987c3d5842664fd7817ec01e1ddec9cc
+Parent:        094596cfd2001a8714923dd87abb2feacd116a13
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 10 21:29:20 2014 +0100
+AuthorDate:    Mon Nov 10 22:32:43 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 10 22:05:49 2014 +0100
+CommitterDate: Mon Nov 10 22:32:43 2014 +0100
 
-tests: reach cache params
+mirror: layer remove doesn't work properly with mirrors
 
 ---
- test/shell/lvcreate-cache.sh |   11 +++++++----
- 1 files changed, 7 insertions(+), 4 deletions(-)
+ lib/metadata/lv_manip.c |   17 +++++++++--------
+ 1 files changed, 9 insertions(+), 8 deletions(-)
 
-diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
-index b37f321..eeba827 100644
---- a/test/shell/lvcreate-cache.sh
-+++ b/test/shell/lvcreate-cache.sh
-@@ -206,14 +206,17 @@ lvremove -f $vg
- # Validate args are properly preserved #
- ########################################
- lvcreate --type cache-pool -L10 --chunksize 256 --cachemode writeback $vg/cpool1
--lvcreate -H -L10 $vg/cpool1
- check lv_field $vg/cpool1 chunksize "256.00k"
- check lv_field $vg/cpool1 cachemode "writeback"
-+lvcreate -H -L10 -n $lv1 $vg/cpool1
-+lvs -a -o+cachemode,chunksize $vg
-+check lv_field $vg/$lv1 chunksize "256.00k"
-+check lv_field $vg/$lv1 cachemode "writeback"
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 220f894..20bf76f 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6007,14 +6007,15 @@ int remove_layer_from_lv(struct logical_volume *lv,
+ 	 *   currently supported only for thin data layer
+ 	 *   FIXME: without strcmp it breaks mirrors....
+ 	 */
+-	for (r = 0; r < DM_ARRAY_SIZE(_suffixes); ++r)
+-		if (strstr(layer_lv->name, _suffixes[r]) == 0) {
+-			lv_names.old = layer_lv->name;
+-			lv_names.new = parent_lv->name;
+-			if (!for_each_sub_lv(parent_lv, _rename_cb, (void *) &lv_names))
+-				return_0;
+-			break;
+-		}
++	if (!strstr(layer_lv->name, "_mimage"))
++		for (r = 0; r < DM_ARRAY_SIZE(_suffixes); ++r)
++			if (strstr(layer_lv->name, _suffixes[r]) == 0) {
++				lv_names.old = layer_lv->name;
++				lv_names.new = parent_lv->name;
++				if (!for_each_sub_lv(parent_lv, _rename_cb, (void *) &lv_names))
++					return_0;
++				break;
++			}
  
- lvcreate --type cache-pool -L10 --chunksize 256 --cachemode writethrough $vg/cpool2
--lvcreate -H -L10 --chunksize 512 --cachemode writeback $vg/cpool2
--check lv_field $vg/cpool2 chunksize "512.00k"
--check lv_field $vg/cpool2 cachemode "writeback"
-+lvcreate -H -L10 --chunksize 512 --cachemode writeback -n $lv2 $vg/cpool2
-+check lv_field $vg/$lv2 chunksize "512.00k"
-+check lv_field $vg/$lv2 cachemode "writeback"
- 
- # Chunk bigger then pool size
- fail lvcreate --type cache-pool -l1 --chunksize 1G $vg/cpool3
+ 	return 1;
+ }
 
 
