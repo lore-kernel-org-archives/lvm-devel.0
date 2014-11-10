@@ -1,172 +1,92 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 10 Nov 2014 21:06:19 +0000 (UTC)
-Subject: master - snapshot: virtual save commit
-Message-ID: <20141110210619.3BF0A608F1@fedorahosted.org>
+Date: Mon, 10 Nov 2014 21:06:34 +0000 (UTC)
+Subject: master - cache: option
+Message-ID: <20141110210634.2964660FA4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6a41286c012e8a15a41f0d807c0cb62de7f515b3
-Commit:        6a41286c012e8a15a41f0d807c0cb62de7f515b3
-Parent:        ff30783a4f44c823544133260acb8c5171fbd0a6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6effcb16fcc912bdca250b45442b783ebe75c481
+Commit:        6effcb16fcc912bdca250b45442b783ebe75c481
+Parent:        c5c2665a213332904836ad90e2f90dd72b6db4c5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 5 15:15:07 2014 +0100
+AuthorDate:    Mon Nov 10 10:07:41 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 10 22:05:48 2014 +0100
+CommitterDate: Mon Nov 10 22:05:49 2014 +0100
 
-snapshot: virtual save commit
+cache: option
 
-More efficient spare volume creation. Save 1 extra commit
-and properly activate this volume according to our cluster
-activation rules (using lv_active_change() for this).
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   83 ++++++++++++++++++++++++-----------------------
- 2 files changed, 43 insertions(+), 41 deletions(-)
+ lib/metadata/cache_manip.c |   30 ++++++++++++++++++++++++++----
+ 1 files changed, 26 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f70c657..616d1b0 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.112 - 
- =====================================
-+  Reduce vg write and vg commits when creating spare volumes.
-   When remove_layer_from_lv() removes layer, restore subLV names.
-   Cache-pool in use becomes invisible LV.
-   Don't prompt for removal of _pmspare in VG without pool metadata LV.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 99ed6d1..d664453 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6434,12 +6434,6 @@ static struct logical_volume *_create_virtual_origin(struct cmd_context *cmd,
- 		       NULL, ALLOC_INHERIT, 0))
- 		return_NULL;
- 
--	/* store vg on disk(s) */
--	if (!vg_write(vg) || !vg_commit(vg))
--		return_NULL;
--
--	backup(vg);
--
- 	return lv;
- }
- 
-@@ -7084,11 +7078,13 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 			}
- 		}
- 	} else if (lp->snapshot) {
-+		lv->status |= LV_TEMPORARY;
- 		if (!activate_lv_local(cmd, lv)) {
- 			log_error("Aborting. Failed to activate snapshot "
- 				  "exception store.");
- 			goto revert_new_lv;
- 		}
-+		lv->status &= ~LV_TEMPORARY;
- 	} else if (!lv_active_change(cmd, lv, lp->activate, 0)) {
- 		log_error("Failed to activate new LV.");
- 		goto deactivate_and_revert_new_lv;
-@@ -7132,41 +7128,25 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 			return NULL; /* FIXME: revert */
- 		}
- 	} else if (lp->snapshot) {
-+		/* Deactivate zeroed COW, avoid any race usage */
-+		if (!deactivate_lv(cmd, lv)) {
-+			log_error("Aborting. Couldn't deactivate snapshot COW area %s.",
-+				  display_lvname(lv));
-+			goto deactivate_and_revert_new_lv; /* Let's retry on error path */
-+		}
-+
-+		/* Create zero origin volume for spare snapshot */
-+		if (lp->virtual_extents &&
-+		    !(origin_lv = _create_virtual_origin(cmd, vg, lv->name,
-+							 lp->permission,
-+							 lp->virtual_extents)))
-+			goto revert_new_lv;
-+
- 		/* Reset permission after zeroing */
- 		if (!(lp->permission & LVM_WRITE))
- 			lv->status &= ~LVM_WRITE;
- 
- 		/*
--		 * For clustered VG deactivate zeroed COW to not keep
--		 * the LV lock. For non-clustered VG, deactivate
--		 * if origin is real (not virtual) inactive device.
--		 */
--		if ((vg_is_clustered(vg) ||
--		     (!lp->virtual_extents && !lv_is_active(origin_lv))) &&
--		    !deactivate_lv(cmd, lv)) {
--			log_error("Aborting. Couldn't deactivate snapshot COW area. "
--				  "Manual intervention required.");
--			return NULL;
--		}
--
--		/* A virtual origin must be activated explicitly. */
--		if (lp->virtual_extents) {
--			if (!(origin_lv = _create_virtual_origin(cmd, vg, lv->name,
--								 lp->permission,
--								 lp->virtual_extents))) {
--				stack;
--				goto deactivate_and_revert_new_lv;
--			}
--			if (!activate_lv_excl(cmd, origin_lv)) {
--				log_error("Couldn't get exclusive lock for virtual origin LV %s",
--					  lv->name);
--				if (!lv_remove(origin_lv))
--					stack;
--				goto deactivate_and_revert_new_lv;
--			}
--		}
--
--		/*
- 		 * COW LV is activated via implicit activation of origin LV
- 		 * Only the snapshot origin holds the LV lock in cluster
- 		 */
-@@ -7176,17 +7156,38 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 			goto deactivate_and_revert_new_lv;
- 		}
- 
--		/* store vg on disk(s) */
--		if (!lv_update_and_reload(origin_lv))
--			return_NULL;
-+		if (lp->virtual_extents) {
-+			/* Store vg on disk(s) */
-+			if (!vg_write(vg) || !vg_commit(vg))
-+				return_NULL; /* Metadata update fails, deep troubles */
-+
-+			backup(vg);
-+			/*
-+			 * TODO:
-+			 *   We do not actually need snapshot-origin as an active device,
-+			 *   as virtual origin is already 'hidden' private device without
-+			 *   vg/lv links. As such it is not supposed to be used by any user.
-+			 *   Also it would save one dm table entry, but it needs quite a few
-+			 *   changes in the libdm/lvm2 code base to support it.
-+			 */
-+			/* Activate spare snapshot once it is a complete LV */
-+			if (!lv_active_change(cmd, origin_lv, lp->activate, 1)) {
-+				log_error("Failed to activate sparce volume %s.",
-+					  display_lvname(origin_lv));
-+				return NULL;
-+			}
-+		} else if (!lv_update_and_reload(origin_lv)) {
-+			log_error("Aborting. Manual intervention required.");
-+			return NULL; /* FIXME: revert */
-+		}
- 	}
- out:
- 	return lv;
- 
- deactivate_and_revert_new_lv:
- 	if (!deactivate_lv(cmd, lv)) {
--		log_error("Unable to deactivate failed new LV \"%s/%s\". "
--			  "Manual intervention required.", lv->vg->name, lv->name);
-+		log_error("Unable to deactivate failed new LV %s. "
-+			  "Manual intervention required.",  display_lvname(lv));
- 		return NULL;
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index cce2911..b94b867 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -268,8 +268,27 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 		return 0;
  	}
  
+-	/* Localy active volume is needed (writeback only?) */
++	/* Localy active volume is needed for writeback */
+ 	if (!lv_is_active_locally(cache_lv)) {
++		/* Give up any remote locks */
++		if (!deactivate_lv(cache_lv->vg->cmd, cache_lv)) {
++			log_error("Cannot deactivate remotely active cache lv.");
++			return 0;
++		}
++		/* For inactive writethrough just drop cache layer */
++		if (first_seg(cache_seg->pool_lv)->feature_flags &
++		    DM_CACHE_FEATURE_WRITETHROUGH) {
++			corigin_lv = seg_lv(cache_seg, 0);
++			if (!detach_pool_lv(cache_seg))
++				return_0;
++			if (!remove_layer_from_lv(cache_lv, corigin_lv))
++				return_0;
++			if (!lv_remove(corigin_lv))
++				return_0;
++			return 1;
++		}
++
++		/* Otherwise localy active volume is need to sync dirty blocks */
+ 		cache_lv->status |= LV_TEMPORARY;
+ 		if (!activate_lv_excl_local(cache_lv->vg->cmd, cache_lv) ||
+ 		    !lv_is_active_locally(cache_lv)) {
+@@ -297,10 +316,13 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	 */
+ 	if (!lv_cache_status(cache_lv, &status))
+ 		return_0;
++	dirty_blocks = status->cache->dirty_blocks;
++	if (!(status->cache->feature_flags & DM_CACHE_FEATURE_WRITETHROUGH))
++		dirty_blocks++; /* Not writethrough - always dirty */
+ 	is_cleaner = !strcmp(status->cache->policy_name, "cleaner");
+ 	dm_pool_destroy(status->mem);
+ 
+-	if (!is_cleaner) {
++	if (dirty_blocks && !is_cleaner) {
+ 		/* Switch to cleaner policy to flush the cache */
+ 		log_print_unless_silent("Flushing cache for %s.", cache_lv->name);
+ 		cache_seg->cleaner_policy = 1;
+@@ -310,7 +332,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	}
+ 
+ 	//FIXME: use polling to do this...
+-	do {
++	while (dirty_blocks) {
+ 		if (!lv_cache_status(cache_lv, &status))
+ 			return_0;
+ 		dirty_blocks = status->cache->dirty_blocks;
+@@ -320,7 +342,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 						dirty_blocks);
+ 			sleep(1);
+ 		}
+-	} while (dirty_blocks);
++	}
+ 
+ 	cache_pool_lv = cache_seg->pool_lv;
+ 	if (!detach_pool_lv(cache_seg))
 
 
