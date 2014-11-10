@@ -1,142 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  5 Nov 2014 14:33:29 +0000 (UTC)
-Subject: master - lv: lv_active_change add needs_exclusive flag
-Message-ID: <20141105143329.ACCBB60E61@fedorahosted.org>
+Date: Mon, 10 Nov 2014 21:06:02 +0000 (UTC)
+Subject: master - pools: after fail of vg_write no restore
+Message-ID: <20141110210602.6FC5960AA4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a3a2c792a87054ab78a1b8e54b99db1c24739fb8
-Commit:        a3a2c792a87054ab78a1b8e54b99db1c24739fb8
-Parent:        a82dcadf66dbd43a43d3be40cd62a5074248d218
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=138c2417c070eef5cdb9839a88efae5b601f4a49
+Commit:        138c2417c070eef5cdb9839a88efae5b601f4a49
+Parent:        94e4d5fcf51abdfd42df9299109fbc9d22f2f92b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 5 15:14:58 2014 +0100
+AuthorDate:    Wed Nov 5 20:27:51 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 5 15:29:43 2014 +0100
+CommitterDate: Mon Nov 10 21:34:02 2014 +0100
 
-lv: lv_active_change add needs_exclusive flag
+pools: after fail of vg_write no restore
 
-Let's use this function for more activations in the code.
-
-'needs_exlusive' will enforce exlusive type for any given LV.
-
-We may want to activate LV in exlusive mode, even when we know
-the LV (as is) supports non-exlusive activation as well.
-
-lvcreate -ay   -> exclusive & local
-lvcreate -aay  -> exclusive & local
-lvcreate -aly  -> exclusive & local
-lvcreate -aey  -> exclusive  (might be on any node).
+Revert part of commit 51a29e60564d537,
+it's probably bad idea to continue with any recovery, when
+vg_write() or vg_commit() fail - so it's better to leave it as it is.
 ---
- lib/metadata/lv.c       |    8 ++++----
- lib/metadata/lv.h       |    2 +-
- lib/metadata/lv_manip.c |    4 ++--
- tools/lvchange.c        |    2 +-
- tools/toollib.c         |    2 +-
- 5 files changed, 9 insertions(+), 9 deletions(-)
+ lib/metadata/lv_manip.c |    9 ++-------
+ 1 files changed, 2 insertions(+), 7 deletions(-)
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 92b38f4..ed21894 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -866,7 +866,7 @@ static int _lv_is_exclusive(struct logical_volume *lv)
- }
- 
- int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
--		     enum activation_change activate)
-+		     enum activation_change activate, int needs_exclusive)
- {
- 	switch (activate) {
- 	case CHANGE_AN:
-@@ -876,7 +876,7 @@ deactivate:
- 			return_0;
- 		break;
- 	case CHANGE_ALN:
--		if (vg_is_clustered(lv->vg) && _lv_is_exclusive(lv)) {
-+		if (vg_is_clustered(lv->vg) && (needs_exclusive || _lv_is_exclusive(lv))) {
- 			if (!lv_is_active_locally(lv)) {
- 				log_error("Cannot deactivate remotely exclusive device locally.");
- 				return 0;
-@@ -891,7 +891,7 @@ deactivate:
- 		break;
- 	case CHANGE_ALY:
- 	case CHANGE_AAY:
--		if (_lv_is_exclusive(lv)) {
-+		if (needs_exclusive || _lv_is_exclusive(lv)) {
- 			log_verbose("Activating logical volume \"%s\" exclusively locally.",
- 				    lv->name);
- 			if (!activate_lv_excl_local(cmd, lv))
-@@ -911,7 +911,7 @@ exclusive:
- 			return_0;
- 		break;
- 	default: /* CHANGE_AY */
--		if (_lv_is_exclusive(lv))
-+		if (needs_exclusive || _lv_is_exclusive(lv))
- 			goto exclusive;
- 		log_verbose("Activating logical volume \"%s\".", lv->name);
- 		if (!activate_lv(cmd, lv))
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 2261913..8064ba2 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -94,7 +94,7 @@ int lv_set_creation(struct logical_volume *lv,
- 		    const char *hostname, uint64_t timestamp);
- const char *lv_layer(const struct logical_volume *lv);
- int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
--		     enum activation_change activate);
-+		     enum activation_change activate, int needs_exlusive);
- char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv);
- const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
- const struct logical_volume *lv_ondisk(const struct logical_volume *lv);
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 6cf51f9..30188e4 100644
+index 6292626..bedf4b6 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -7051,7 +7051,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+@@ -6971,14 +6971,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		lp->activate = CHANGE_AN;
  
- 			backup(vg);
+ 	/* store vg on disk(s) */
+-	if (!vg_write(vg) || !vg_commit(vg)) {
+-		if (seg_is_pool(lp)) {
+-			/* Pool volumes have already created metadata LV */
+-			stack;
+-			goto revert_new_lv;
+-		}
++	if (!vg_write(vg) || !vg_commit(vg))
++		/* Pool created metadata LV, but better avoid recover when vg_write/commit fails */
+ 		return_NULL;
+-	}
  
--			if (!lv_active_change(cmd, lv, lp->activate)) {
-+			if (!lv_active_change(cmd, lv, lp->activate, 0)) {
- 				log_error("Failed to activate thin %s.", lv->name);
- 				goto deactivate_and_revert_new_lv;
- 			}
-@@ -7070,7 +7070,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 				  "exception store.");
- 			goto revert_new_lv;
- 		}
--	} else if (!lv_active_change(cmd, lv, lp->activate)) {
-+	} else if (!lv_active_change(cmd, lv, lp->activate, 0)) {
- 		log_error("Failed to activate new LV.");
- 		goto deactivate_and_revert_new_lv;
- 	}
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 99dba82..e0bb4b1 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -593,7 +593,7 @@ static int lvchange_persistent(struct cmd_context *cmd,
+ 	backup(vg);
  
- 	if (activate != CHANGE_AN) {
- 		log_verbose("Re-activating logical volume %s", display_lvname(lv));
--		if (!lv_active_change(cmd, lv, activate)) {
-+		if (!lv_active_change(cmd, lv, activate, 0)) {
- 			log_error("%s: reactivation failed", display_lvname(lv));
- 			backup(lv->vg);
- 			return 0;
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 5906ccb..596dba5 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -731,7 +731,7 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
- 		}
- 	}
- 
--	if (!lv_active_change(cmd, lv, activate))
-+	if (!lv_active_change(cmd, lv, activate, 0))
- 		return_0;
- 
- 	if (background_polling() &&
 
 
