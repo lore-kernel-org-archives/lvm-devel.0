@@ -1,283 +1,392 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 11 Nov 2014 12:12:35 +0000 (UTC)
-Subject: master - report: add new LVSSTATUS and SEGSSTATUS report type
-Message-ID: <20141111121235.A7B8361079@fedorahosted.org>
+Date: Tue, 11 Nov 2014 12:12:37 +0000 (UTC)
+Subject: master - dev_manager: enhance dev_manager_info to acquire LV segment status if requested, add lv_info_with_seg_status fn
+Message-ID: <20141111121237.C3D1961079@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7f90ad84c1f9bbc51a833b7ebb6459842405de52
-Commit:        7f90ad84c1f9bbc51a833b7ebb6459842405de52
-Parent:        d7e5f038887be820874522674a51071705439c8e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2c1024f6ac7e22ac5c010a267d0c1df331ee416
+Commit:        a2c1024f6ac7e22ac5c010a267d0c1df331ee416
+Parent:        7f90ad84c1f9bbc51a833b7ebb6459842405de52
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 21 12:01:57 2014 +0200
+AuthorDate:    Tue Nov 4 15:00:32 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Nov 11 08:53:28 2014 +0100
+CommitterDate: Tue Nov 11 13:04:02 2014 +0100
 
-report: add new LVSSTATUS and SEGSSTATUS report type
+dev_manager: enhance dev_manager_info to acquire LV segment status if requested, add lv_info_with_seg_status fn
 
-Similar to LVSINFO type which gathers LV + its DM_DEVICE_INFO, the
-new LVSSTATUS/SEGSSTATUS report type will gather LV/segment + its
-DM_DEVICE_STATUS.
-
-Since we can report status only for certain segment, in case
-of LVSSTATUS we need to choose which segment related to the LV
-should be processed that represents the "LV status". In case of
-SEGSSTATUS type it's clear - the status is reported for the
-segment just processed.
 ---
- lib/report/report.c |    2 +
- lib/report/report.h |   14 +++---
- tools/reporter.c    |  122 ++++++++++++++++++++++++++++++++++++++++++++++-----
- 3 files changed, 121 insertions(+), 17 deletions(-)
+ lib/activate/activate.c    |   42 ++++++++++---
+ lib/activate/activate.h    |    5 ++
+ lib/activate/dev_manager.c |  140 ++++++++++++++++++++++++++++++++++++-------
+ lib/activate/dev_manager.h |    4 +-
+ tools/reporter.c           |    2 +
+ 5 files changed, 160 insertions(+), 33 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 511d6cb..74ba4bc 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1749,9 +1749,11 @@ static const struct dm_report_object_type _report_types[] = {
- 	{ VGS, "Volume Group", "vg_", _obj_get_vg },
- 	{ LVS, "Logical Volume", "lv_", _obj_get_lv },
- 	{ LVSINFO, "Logical Volume Device Info", "lv_", _obj_get_lv_with_info_and_seg_status },
-+	{ LVSSTATUS, "Logical Volume Device Status", "lv_", _obj_get_lv_with_info_and_seg_status },
- 	{ PVS, "Physical Volume", "pv_", _obj_get_pv },
- 	{ LABEL, "Physical Volume Label", "pv_", _obj_get_label },
- 	{ SEGS, "Logical Volume Segment", "seg_", _obj_get_seg },
-+	{ SEGSSTATUS, "Logical Volume Device Segment Status", "seg_", _obj_get_lv_with_info_and_seg_status },
- 	{ PVSEGS, "Physical Volume Segment", "pvseg_", _obj_get_pvseg },
- 	{ 0, "", "", NULL },
- };
-diff --git a/lib/report/report.h b/lib/report/report.h
-index e4b302e..20fb6bd 100644
---- a/lib/report/report.h
-+++ b/lib/report/report.h
-@@ -23,12 +23,14 @@
- typedef enum {
- 	LVS		= 1,
- 	LVSINFO		= 2,
--	PVS		= 4,
--	VGS		= 8,
--	SEGS		= 16,
--	PVSEGS		= 32,
--	LABEL		= 64,
--	DEVTYPES	= 128
-+	LVSSTATUS	= 4,
-+	PVS		= 8,
-+	VGS		= 16,
-+	SEGS		= 32,
-+	SEGSSTATUS	= 64,
-+	PVSEGS		= 128,
-+	LABEL		= 256,
-+	DEVTYPES	= 512
- } report_type_t;
- 
- struct field;
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 959e884..d8c19eb 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -56,6 +56,11 @@ static void _get_lv_info_for_report(struct cmd_context *cmd,
- 		lvinfo->exists = 0;
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 93f9b9c..2843e61 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -617,17 +617,12 @@ int target_present(struct cmd_context *cmd, const char *target_name,
+ 	return target_version(target_name, &maj, &min, &patchlevel);
  }
  
-+static void _get_lv_info_with_segment_status_for_report(struct cmd_context *cmd,
-+							struct lv_with_info_and_seg_status *lvdm)
-+{
-+}
-+
- static int _lvs_with_info_single(struct cmd_context *cmd, struct logical_volume *lv,
- 				 void *handle)
+-/*
+- * Returns 1 if info structure populated, else 0 on failure.
+- * When lvinfo* is NULL, it returns 1 if the device is locally active, 0 otherwise.
+- */
+-int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_layer,
+-	    struct lvinfo *info, int with_open_count, int with_read_ahead)
++static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv,
++		    int use_layer, struct lvinfo *info, struct lv_seg_status *seg_status,
++		    int with_open_count, int with_read_ahead)
  {
-@@ -68,6 +73,58 @@ static int _lvs_with_info_single(struct cmd_context *cmd, struct logical_volume
- 	return ECMD_PROCESSED;
+ 	struct dm_info dminfo;
+ 
+-	if (!activation())
+-		return 0;
+ 	/*
+ 	 * If open_count info is requested and we have to be sure our own udev
+ 	 * transactions are finished
+@@ -648,7 +643,8 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_la
+ 	if (!dev_manager_info(cmd->mem, lv,
+ 			      (use_layer) ? lv_layer(lv) : NULL,
+ 			      with_open_count, with_read_ahead,
+-			      &dminfo, (info) ? &info->read_ahead : NULL))
++			      &dminfo, (info) ? &info->read_ahead : NULL,
++			      seg_status))
+ 		return_0;
+ 
+ 	if (!info)
+@@ -666,6 +662,19 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_la
+ 	return 1;
  }
  
-+static void _choose_lv_segment_for_status_report(struct lv_with_info_and_seg_status *lvdm)
++/*
++ * Returns 1 if info structure populated, else 0 on failure.
++ * When lvinfo* is NULL, it returns 1 if the device is locally active, 0 otherwise.
++ */
++int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_layer,
++	    struct lvinfo *info, int with_open_count, int with_read_ahead)
 +{
-+	/*
-+	 * By default, take the first LV segment to report status for.
-+	 * If there's any other specific segment that needs to be
-+	 * reported instead for the LV, choose it here and assign it
-+	 * to lvdm->seg_status->seg. This is the segment whose
-+	 * status line will be used for report exactly.
-+	 */
-+	lvdm->seg_status->seg = first_seg(lvdm->lv);
++	if (!activation())
++		return 0;
++
++	return _lv_info(cmd, lv, use_layer, info, NULL, with_open_count, with_read_ahead);
 +}
 +
-+static int _lvs_with_status_single(struct cmd_context *cmd, struct logical_volume *lv,
-+				   void *handle)
+ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
+ 		    struct lvinfo *info, int with_open_count, int with_read_ahead)
+ {
+@@ -681,6 +690,21 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
+ 	return r;
+ }
+ 
++int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume *lv,
++			   const struct lv_segment *lv_seg, int use_layer,
++			   struct lv_with_info_and_seg_status *lvdm,
++			   int with_open_count, int with_read_ahead)
 +{
-+	struct lvinfo lvinfo;
-+	struct lv_seg_status lv_seg_status = { .mem = lv->vg->vgmem,
-+					       .type = SEG_STATUS_NONE,
-+					       .status = NULL };
-+	struct lv_with_info_and_seg_status lvdm = { .lv = lv,
-+						    .seg_status = &lv_seg_status };
-+	int r = ECMD_FAILED;
++	if (!activation())
++		return 0;
 +
-+	_choose_lv_segment_for_status_report(&lvdm);
++	if (!_lv_info(cmd, lv, use_layer, lvdm->info, lvdm->seg_status,
++		      with_open_count, with_read_ahead))
++		return 0;
 +
-+	if (lvdm.seg_status->seg->lv != lv) {
-+		/*
-+		 * If the info is requested on one LV and segment
-+		 * status on another LV, we need to call these separately.
-+		 */
-+		_get_lv_info_for_report(cmd, lv, &lvinfo);
-+		lvdm.info = NULL;
-+		_get_lv_info_with_segment_status_for_report(cmd, &lvdm);
-+	} else {
-+		/*
-+		 * If the info is requested on the same LV as status,
-+		 * we can get info and status in one go!
-+		 */
-+		lvdm.info = &lvinfo;
-+		_get_lv_info_with_segment_status_for_report(cmd, &lvdm);
++	return 1;
++}
++
+ #define OPEN_COUNT_CHECK_RETRIES 25
+ #define OPEN_COUNT_CHECK_USLEEP_DELAY 200000
+ 
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index ab5e69d..86c53f5 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -118,6 +118,11 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_la
+ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
+ 		    struct lvinfo *info, int with_open_count, int with_read_ahead);
+ 
++int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume *lv,
++			    const struct lv_segment *lv_seg, int use_layer,
++			    struct lv_with_info_and_seg_status *lvdm,
++			    int with_open_count, int with_read_ahead);
++
+ int lv_check_not_in_use(const struct logical_volume *lv);
+ 
+ /*
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 2651ec8..5a07fad 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -106,32 +106,122 @@ static struct dm_task *_setup_task(const char *name, const char *uuid,
+ 	return NULL;
+ }
+ 
+-static int _info_run(const char *name, const char *dlid, struct dm_info *info,
+-		     uint32_t *read_ahead, int mknodes, int with_open_count,
+-		     int with_read_ahead, uint32_t major, uint32_t minor)
++static int _get_segment_status_from_target_params(const char *target_name,
++						  const char *params,
++						  struct lv_seg_status *seg_status)
++{
++	struct segment_type *segtype;
++
++	/* FIXME: linear is also represented as striped with stripe count 1.
++		  We're not reporting linear or striped status anyway, so
++		  just skip the error here till this is properly resolved.*/
++	if (!strcmp(target_name, "linear") || !strcmp(target_name, "striped"))
++		return 1;
++
++	segtype = get_segtype_from_string(seg_status->seg->lv->vg->cmd, target_name);
++
++	if (segtype != seg_status->seg->segtype) {
++		log_error(INTERNAL_ERROR "_get_segment_status_from_target_params: "
++			  "segment type %s found does not match expected segment type %s",
++			   segtype->name, seg_status->seg->segtype->name);
++		return 0;
 +	}
 +
-+	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL, &lvinfo, lvdm.seg_status, NULL))
-+		goto out;
++	if (!strcmp(segtype->name, "cache")) {
++		if (!dm_get_status_cache(seg_status->mem, params,
++			(struct dm_status_cache **) &seg_status->status))
++				return_0;
++			seg_status->type = SEG_STATUS_CACHE;
++	} else if (!strcmp(segtype->name, "raid")) {
++		if (!dm_get_status_raid(seg_status->mem, params,
++			(struct dm_status_raid **) &seg_status->status))
++				return_0;
++			seg_status->type = SEG_STATUS_RAID;
++	} else if (!strcmp(segtype->name, "thin")) {
++		if (!dm_get_status_thin(seg_status->mem, params,
++			(struct dm_status_thin **) &seg_status->status))
++				return_0;
++			seg_status->type = SEG_STATUS_THIN;
++	} else if (!strcmp(segtype->name, "thin-pool")) {
++		if (!dm_get_status_thin_pool(seg_status->mem, params,
++			(struct dm_status_thin_pool **) &seg_status->status))
++				return_0;
++			seg_status->type = SEG_STATUS_THIN_POOL;
++	} else if (!strcmp(segtype->name, "snapshot")) {
++		if (!dm_get_status_snapshot(seg_status->mem, params,
++			(struct dm_status_snapshot **) &seg_status->status))
++				return_0;
++		seg_status->type = SEG_STATUS_SNAPSHOT;
++	}
 +
-+	r = ECMD_PROCESSED;
-+out:
-+	if (lvdm.seg_status->status)
-+		dm_pool_free(lvdm.seg_status->mem, lvdm.seg_status->status);
-+	return r;
++	return 1;
 +}
 +
- static int _segs_single(struct cmd_context *cmd __attribute__((unused)),
- 			struct lv_segment *seg, void *handle)
++typedef enum {
++	INFO,	/* DM_DEVICE_INFO ioctl */
++	STATUS, /* DM_DEVICE_STATUS ioctl */
++	MKNODES
++} info_type_t;
++
++static int _info_run(info_type_t type, const char *name, const char *dlid,
++		     struct dm_info *dminfo, uint32_t *read_ahead,
++		     struct lv_seg_status *seg_status,
++		     int with_open_count, int with_read_ahead,
++		     uint32_t major, uint32_t minor)
  {
-@@ -89,6 +146,30 @@ static int _segs_with_lv_info_single(struct cmd_context *cmd __attribute__((unus
- 	return ECMD_PROCESSED;
+ 	int r = 0;
+ 	struct dm_task *dmt;
+ 	int dmtask;
++	void *target = NULL;
++	uint64_t target_start, target_length;
++	char *target_name, *target_params, *params_to_process = NULL;
++	uint32_t extent_size;
++
++	switch (type) {
++		case INFO:
++			dmtask = DM_DEVICE_INFO;
++			break;
++		case STATUS:
++			dmtask = DM_DEVICE_STATUS;
++			break;
++		case MKNODES:
++			dmtask = DM_DEVICE_MKNODES;
++			break;
++	}
+ 
+-	dmtask = mknodes ? DM_DEVICE_MKNODES : DM_DEVICE_INFO;
+-
+-	if (!(dmt = _setup_task(mknodes ? name : NULL, dlid, 0, dmtask, major, minor,
+-				with_open_count)))
++	if (!(dmt = _setup_task(type != MKNODES ? name : NULL, dlid, 0, dmtask,
++				major, minor, with_open_count)))
+ 		return_0;
+ 
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
+ 
+-	if (!dm_task_get_info(dmt, info))
++	if (!dm_task_get_info(dmt, dminfo))
+ 		goto_out;
+ 
+-	if (with_read_ahead && info->exists) {
++	if (with_read_ahead && dminfo->exists) {
+ 		if (!dm_task_get_read_ahead(dmt, read_ahead))
+ 			goto_out;
+ 	} else if (read_ahead)
+ 		*read_ahead = DM_READ_AHEAD_NONE;
+ 
++	if (type == STATUS) {
++		extent_size = seg_status->seg->lv->vg->extent_size;
++		do {
++			target = dm_get_next_target(dmt, target, &target_start,
++						    &target_length, &target_name, &target_params);
++			if ((seg_status->seg->le * extent_size == target_start) &&
++			    (seg_status->seg->len * extent_size == target_length)) {
++				params_to_process = target_params;
++				break;
++			}
++		} while (target);
++
++		if (params_to_process &&
++		    !_get_segment_status_from_target_params(target_name, params_to_process, seg_status))
++			goto_out;
++	}
++
+ 	r = 1;
+ 
+       out:
+@@ -476,7 +566,8 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check)
  }
  
-+static int _segs_with_lv_status_single(struct cmd_context *cmd __attribute__((unused)),
-+				       struct lv_segment *seg, void *handle)
-+{
-+	struct lvinfo lvinfo;
-+	struct lv_seg_status lv_seg_status = { .seg = seg,
-+					       .mem = seg->lv->vg->vgmem,
-+					       .type = SEG_STATUS_NONE,
-+					       .status = NULL };
-+	struct lv_with_info_and_seg_status lvdm = { .lv = seg->lv,
-+						    .info = &lvinfo,
-+						    .seg_status = &lv_seg_status };
-+	int r = ECMD_FAILED;
-+
-+	_get_lv_info_with_segment_status_for_report(cmd, &lvdm);
-+	if (!report_object(handle, seg->lv->vg, seg->lv, NULL, seg, NULL, lvdm.info, lvdm.seg_status, NULL))
-+		goto_out;
-+
-+	r = ECMD_PROCESSED;
-+out:
-+	if (lvdm.seg_status->status)
-+		dm_pool_free(lvdm.seg_status->mem, lvdm.seg_status->status);
-+	return r;
-+}
-+
- static int _do_pvsegs_sub_single(struct cmd_context *cmd,
- 				 struct volume_group *vg,
- 				 struct pv_segment *pvseg,
-@@ -182,6 +263,16 @@ static int _lvsegs_with_lv_info_single(struct cmd_context *cmd,
- 	return process_each_segment_in_lv(cmd, lv, handle, _segs_with_lv_info_single);
+ static int _info(const char *dlid, int with_open_count, int with_read_ahead,
+-		 struct dm_info *info, uint32_t *read_ahead)
++		 struct dm_info *dminfo, uint32_t *read_ahead,
++		 struct lv_seg_status *seg_status)
+ {
+ 	int r = 0;
+ 	char old_style_dlid[sizeof(UUID_PREFIX) + 2 * ID_LEN];
+@@ -484,8 +575,8 @@ static int _info(const char *dlid, int with_open_count, int with_read_ahead,
+ 	unsigned i = 0;
+ 
+ 	/* Check for dlid */
+-	if ((r = _info_run(NULL, dlid, info, read_ahead, 0, with_open_count,
+-			   with_read_ahead, 0, 0)) && info->exists)
++	if ((r = _info_run(seg_status ? STATUS : INFO, NULL, dlid, dminfo, read_ahead,
++			   seg_status, with_open_count, with_read_ahead, 0, 0)) && dminfo->exists)
+ 		return 1;
+ 
+ 	/* Check for original version of dlid before the suffixes got added in 2.02.106 */
+@@ -496,16 +587,17 @@ static int _info(const char *dlid, int with_open_count, int with_read_ahead,
+ 
+ 			(void) strncpy(old_style_dlid, dlid, sizeof(old_style_dlid));
+ 			old_style_dlid[sizeof(old_style_dlid) - 1] = '\0';
+-			if ((r = _info_run(NULL, old_style_dlid, info, read_ahead, 0, with_open_count,
+-					   with_read_ahead, 0, 0)) && info->exists)
++			if ((r = _info_run(seg_status ? STATUS : INFO, NULL, old_style_dlid, dminfo,
++					   read_ahead, seg_status, with_open_count,
++					   with_read_ahead, 0, 0)) && dminfo->exists)
+ 				return 1;
+ 		}
+ 	}
+ 
+ 	/* Check for dlid before UUID_PREFIX was added */
+-	if ((r = _info_run(NULL, dlid + sizeof(UUID_PREFIX) - 1, info,
+-				read_ahead, 0, with_open_count,
+-				with_read_ahead, 0, 0)) && info->exists)
++	if ((r = _info_run(seg_status ? STATUS : INFO, NULL, dlid + sizeof(UUID_PREFIX) - 1,
++				dminfo, read_ahead, seg_status, with_open_count,
++				with_read_ahead, 0, 0)) && dminfo->exists)
+ 		return 1;
+ 
+ 	return r;
+@@ -513,13 +605,14 @@ static int _info(const char *dlid, int with_open_count, int with_read_ahead,
+ 
+ static int _info_by_dev(uint32_t major, uint32_t minor, struct dm_info *info)
+ {
+-	return _info_run(NULL, NULL, info, NULL, 0, 0, 0, major, minor);
++	return _info_run(INFO, NULL, NULL, info, NULL, 0, 0, 0, major, minor);
  }
  
-+static int _lvsegs_with_lv_status_single(struct cmd_context *cmd,
-+					 struct logical_volume *lv,
-+					 void *handle)
-+{
-+	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
-+		return ECMD_PROCESSED;
-+
-+	return process_each_segment_in_lv(cmd, lv, handle, _segs_with_lv_status_single);
-+}
-+
- static int _pvsegs_single(struct cmd_context *cmd, struct volume_group *vg,
- 			  struct physical_volume *pv, void *handle)
+ int dev_manager_info(struct dm_pool *mem, const struct logical_volume *lv,
+ 		     const char *layer,
+ 		     int with_open_count, int with_read_ahead,
+-		     struct dm_info *info, uint32_t *read_ahead)
++		     struct dm_info *dminfo, uint32_t *read_ahead,
++		     struct lv_seg_status *seg_status)
  {
-@@ -254,7 +345,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	int r = ECMD_PROCESSED;
- 	int aligned, buffered, headings, field_prefixes, quoted;
- 	int columns_as_rows;
--	unsigned args_are_pvs, lv_info_needed;
-+	unsigned args_are_pvs, lv_info_needed, lv_segment_status_needed;
- 	int lock_global = 0;
+ 	char *dlid, *name;
+ 	int r;
+@@ -536,7 +629,8 @@ int dev_manager_info(struct dm_pool *mem, const struct logical_volume *lv,
+ 	}
  
- 	aligned = find_config_tree_bool(cmd, report_aligned_CFG, NULL);
-@@ -373,15 +464,18 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 					  columns_as_rows, selection)))
- 		return_ECMD_FAILED;
+ 	log_debug_activation("Getting device info for %s [%s]", name, dlid);
+-	r = _info(dlid, with_open_count, with_read_ahead, info, read_ahead);
++	r = _info(dlid, with_open_count, with_read_ahead,
++		  dminfo, read_ahead, seg_status);
+ out:
+ 	dm_pool_free(mem, name);
  
--	/* Do we need lv_info to be called for LV device status? */
-+	/* Do we need to acquire LV device info in addition? */
- 	lv_info_needed = (report_type & LVSINFO) ? 1 : 0;
+@@ -1447,7 +1541,7 @@ int dev_manager_mknodes(const struct logical_volume *lv)
+ 	if (!(name = dm_build_dm_name(lv->vg->cmd->mem, lv->vg->name, lv->name, NULL)))
+ 		return_0;
  
-+	/* Do we need to acquire LV device status in addition? */
-+	lv_segment_status_needed = (report_type & (SEGSSTATUS | LVSSTATUS)) ? 1 : 0;
-+
- 	/* Ensure options selected are compatible */
--	if (report_type & SEGS)
-+	if (report_type & (SEGS | SEGSSTATUS))
- 		report_type |= LVS;
- 	if (report_type & PVSEGS)
- 		report_type |= PVS;
--	if ((report_type & (LVS | LVSINFO)) && (report_type & (PVS | LABEL)) && !args_are_pvs) {
-+	if ((report_type & (LVS | LVSINFO | LVSSTATUS)) && (report_type & (PVS | LABEL)) && !args_are_pvs) {
- 		log_error("Can't report LV and PV fields at the same time");
- 		dm_report_free(report_handle);
- 		return ECMD_FAILED;
-@@ -389,15 +483,15 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+-	if ((r = _info_run(name, NULL, &dminfo, NULL, 1, 0, 0, 0, 0))) {
++	if ((r = _info_run(MKNODES, name, NULL, &dminfo, NULL, NULL, 0, 0, 0, 0))) {
+ 		if (dminfo.exists) {
+ 			if (lv_is_visible(lv))
+ 				r = _dev_manager_lv_mknodes(lv);
+@@ -1589,7 +1683,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		return_0;
  
- 	/* Change report type if fields specified makes this necessary */
- 	if ((report_type & PVSEGS) ||
--	    ((report_type & (PVS | LABEL)) && (report_type & (LVS | LVSINFO))))
-+	    ((report_type & (PVS | LABEL)) && (report_type & (LVS | LVSINFO | LVSSTATUS))))
- 		report_type = PVSEGS;
- 	else if ((report_type & LABEL) && (report_type & VGS))
- 		report_type = PVS;
- 	else if (report_type & PVS)
- 		report_type = PVS;
--	else if (report_type & SEGS)
-+	else if (report_type & (SEGS | SEGSSTATUS))
- 		report_type = SEGS;
--	else if (report_type & (LVS | LVSINFO))
-+	else if (report_type & (LVS | LVSINFO | LVSSTATUS))
- 		report_type = LVS;
+ 	log_debug_activation("Getting device info for %s [%s]", name, dlid);
+-	if (!_info(dlid, 1, 0, &info, NULL)) {
++	if (!_info(dlid, 1, 0, &info, NULL, NULL)) {
+ 		log_error("Failed to get info for %s [%s].", name, dlid);
+ 		return 0;
+ 	}
+@@ -2078,7 +2172,7 @@ static char *_add_error_device(struct dev_manager *dm, struct dm_tree *dtree,
+ 		return_NULL;
  
- 	/*
-@@ -419,10 +513,13 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 		break;
- 	case LVSINFO:
- 		/* fall through */
-+	case LVSSTATUS:
-+		/* fall through */
- 	case LVS:
- 		r = process_each_lv(cmd, argc, argv, 0, report_handle,
--				    lv_info_needed ? &_lvs_with_info_single
--						   : &_lvs_single);
-+				    lv_segment_status_needed ? &_lvs_with_status_single
-+							     : lv_info_needed ? &_lvs_with_info_single
-+									      : &_lvs_single);
- 		break;
- 	case VGS:
- 		r = process_each_vg(cmd, argc, argv, 0,
-@@ -440,10 +537,13 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 			r = process_each_vg(cmd, argc, argv, 0,
- 					    report_handle, &_pvs_in_vg);
- 		break;
-+	case SEGSSTATUS:
-+		/* fall through */
- 	case SEGS:
- 		r = process_each_lv(cmd, argc, argv, 0, report_handle,
--				    lv_info_needed ? &_lvsegs_with_lv_info_single
--						   : &_lvsegs_single);
-+				    lv_segment_status_needed ? &_lvsegs_with_lv_status_single
-+							     :lv_info_needed ? &_lvsegs_with_lv_info_single
-+									     : &_lvsegs_single);
- 		break;
- 	case PVSEGS:
- 		if (args_are_pvs)
+ 	log_debug_activation("Getting device info for %s [%s]", name, dlid);
+-	if (!_info(dlid, 1, 0, &info, NULL)) {
++	if (!_info(dlid, 1, 0, &info, NULL, NULL)) {
+ 		log_error("Failed to get info for %s [%s].", name, dlid);
+ 		return 0;
+ 	}
+diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
+index f4f989c..bfc6c02 100644
+--- a/lib/activate/dev_manager.h
++++ b/lib/activate/dev_manager.h
+@@ -25,6 +25,7 @@ struct cmd_context;
+ struct dev_manager;
+ struct dm_info;
+ struct device;
++struct lv_seg_status;
+ 
+ int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts *laopts);
+ 
+@@ -47,7 +48,8 @@ void dev_manager_exit(void);
+ int dev_manager_info(struct dm_pool *mem, const struct logical_volume *lv,
+ 		     const char *layer,
+ 		     int with_open_count, int with_read_ahead,
+-		     struct dm_info *info, uint32_t *read_ahead);
++		     struct dm_info *dminfo, uint32_t *read_ahead,
++		     struct lv_seg_status *seg_status);
+ int dev_manager_snapshot_percent(struct dev_manager *dm,
+ 				 const struct logical_volume *lv,
+ 				 dm_percent_t *percent);
+diff --git a/tools/reporter.c b/tools/reporter.c
+index d8c19eb..8fe5698 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -59,6 +59,8 @@ static void _get_lv_info_for_report(struct cmd_context *cmd,
+ static void _get_lv_info_with_segment_status_for_report(struct cmd_context *cmd,
+ 							struct lv_with_info_and_seg_status *lvdm)
+ {
++	if (!lv_info_with_seg_status(cmd, lvdm->seg_status->seg->lv, lvdm->seg_status->seg, 0, lvdm, 1, 1))
++		lvdm->info->exists = 0;
+ }
+ 
+ static int _lvs_with_info_single(struct cmd_context *cmd, struct logical_volume *lv,
 
 
