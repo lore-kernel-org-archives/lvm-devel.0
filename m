@@ -1,64 +1,65 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 11 Nov 2014 14:02:28 +0000 (UTC)
-Subject: master - dev_manager: only support status for cache segment at the moment
-Message-ID: <20141111140228.C2F8C6024E@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 11 Nov 2014 14:18:45 +0000 (UTC)
+Subject: master - post-release
+Message-ID: <20141111141845.11C0A60DA5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9704515c1e22ff0ebaec16572d1c51d954259da5
-Commit:        9704515c1e22ff0ebaec16572d1c51d954259da5
-Parent:        8121074fda126cc6c0df05fba066cc9365e00255
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Nov 11 14:55:58 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Nov 11 15:02:21 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=131aaeb6344b17586571f126468b67c960075f50
+Commit:        131aaeb6344b17586571f126468b67c960075f50
+Parent:        9a5910bdf9a8d79051181f110a43a7c1ef2288d6
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Nov 11 14:15:32 2014 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Nov 11 14:15:32 2014 +0000
 
-dev_manager: only support status for cache segment at the moment
+post-release
 
-When getting status for LV segment types, we need to be sure
-that proper segment is selected for the status ioctl.
-
-When reporting fields that require status ioctl,
-the "_choose_lv_segment_for_status_report" fn in tools/reporter.c
-must be completed properly to choose the proper segment for all
-the LV types (at the moment, it just takes the first LV segment
-by default).
-
-This works fine with cache LVs surely. The other segment types
-need more auditing. We use this status ioctl only for cache status
-fields at the moment only, so restrict it to the cache only.
-
-Once the _choose_lv_segment_for_status_report is completed
-properly, release the restriction in _get_segment_status_from_target_params.
 ---
- lib/activate/dev_manager.c |   12 ++++++++----
- 1 files changed, 8 insertions(+), 4 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    3 +++
+ WHATS_NEW_DM |    3 +++
+ 4 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 4351bc9..a392387 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -112,10 +112,14 @@ static int _get_segment_status_from_target_params(const char *target_name,
- {
- 	struct segment_type *segtype;
- 
--	/* FIXME: linear is also represented as striped with stripe count 1.
--		  We're not reporting linear or striped status anyway, so
--		  just skip the error here till this is properly resolved.*/
--	if (!strcmp(target_name, "linear") || !strcmp(target_name, "striped"))
-+	/*
-+	 * TODO: Add support for other segment types too!
-+	 * The segment to report status for must be properly
-+	 * selected for all the other types - mainly make sure
-+	 * linear/striped, old snapshots and raids have proper
-+	 * segment selected for status!
-+	 */
-+	if (strcmp(target_name, "cache"))
- 		return 1;
- 
- 	segtype = get_segtype_from_string(seg_status->seg->lv->vg->cmd, target_name);
+diff --git a/VERSION b/VERSION
+index a533a72..2acba4f 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.112(2)-git (2014-11-11)
++2.02.113(2)-git (2014-11-11)
+diff --git a/VERSION_DM b/VERSION_DM
+index a5eac8b..5b592b1 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.91-git (2014-11-11)
++1.02.92-git (2014-11-11)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 820106b..0c8fcc7 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,6 @@
++Version 2.02.113 - 
++=====================================
++
+ Version 2.02.112 - 11th November 2014
+ =====================================
+   Add cache_{read,write}_{hits,misses} reporting fields.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 97eb339..6f23958 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,3 +1,6 @@
++Version 1.02.92 - 
++====================================
++
+ Version 1.02.91 - 11th November 2014
+ ====================================
+   Update cache creation and dm_config_node to pass policy.
 
 
