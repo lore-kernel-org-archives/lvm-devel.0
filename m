@@ -1,45 +1,43 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 12 Nov 2014 09:18:53 +0000 (UTC)
-Subject: master - coverity: fix possible dereference of NULL pointer
-Message-ID: <20141112091853.EE41160E02@fedorahosted.org>
+Date: Wed, 12 Nov 2014 14:20:21 +0000 (UTC)
+Subject: master - coverity: commit ba2302346 - report log_sys_error properly
+Message-ID: <20141112142021.867F0609D3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c03d8473ea9ad585f27207404a242b7b11caf74f
-Commit:        c03d8473ea9ad585f27207404a242b7b11caf74f
-Parent:        ce8730b5080b85192af1aadea3d9e9b5333a2405
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=359dc6fa76f765a5503b3fda7a596984272a4a4e
+Commit:        359dc6fa76f765a5503b3fda7a596984272a4a4e
+Parent:        c03d8473ea9ad585f27207404a242b7b11caf74f
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 12 10:17:17 2014 +0100
+AuthorDate:    Wed Nov 12 15:16:54 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 12 10:17:17 2014 +0100
+CommitterDate: Wed Nov 12 15:16:54 2014 +0100
 
-coverity: fix possible dereference of NULL pointer
+coverity: commit ba2302346 - report log_sys_error properly
 
-This would be in case the pool segment was not found.
-
-LVM2.2.02.112/lib/metadata/pool_manip.c:238:36: warning: Access to field 'segtype' results in a dereference of a null pointer (loaded from variable 'pool_seg')
+log_sys_error uses errno, hence we need to report the first
+failure before reporting another failure that uses errno as well.
 ---
- lib/metadata/pool_manip.c |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ lib/activate/dev_manager.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-index 70b5a23..ee32a3b 100644
---- a/lib/metadata/pool_manip.c
-+++ b/lib/metadata/pool_manip.c
-@@ -235,6 +235,11 @@ struct lv_segment *find_pool_seg(const struct lv_segment *seg)
- 		pool_seg = sl->seg;
- 	}
- 
-+	if (!pool_seg) {
-+		log_error("Pool segment not found for %s.", display_lvname(seg->lv));
-+		return NULL;
-+	}
-+
- 	if ((lv_is_thin_type(seg->lv) && !seg_is_pool(pool_seg))) {
- 		log_error("%s on %s is not a %s pool segment",
- 			  pool_seg->lv->name, seg->lv->name,
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index a17cd25..6e5b785 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1873,9 +1873,9 @@ static int _pool_callback(struct dm_tree_node *node,
+ 		}
+ 		/* let's assume there is no problem to read 64 bytes */
+ 		if (read(fd, buf, sizeof(buf)) < sizeof(buf)) {
++			log_sys_error("read", argv[args]);
+ 			if (close(fd))
+ 				log_sys_error("close", argv[args]);
+-			log_sys_error("read", argv[args]);
+ 			return 0;
+ 		}
+ 		for (ret = 0; ret < DM_ARRAY_SIZE(buf); ++ret)
 
 
