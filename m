@@ -1,58 +1,45 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 12 Nov 2014 09:05:05 +0000 (UTC)
-Subject: master - coverity: fix possible integer overflow
-Message-ID: <20141112090505.CD59D60223@fedorahosted.org>
+Date: Wed, 12 Nov 2014 09:18:53 +0000 (UTC)
+Subject: master - coverity: fix possible dereference of NULL pointer
+Message-ID: <20141112091853.EE41160E02@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ce8730b5080b85192af1aadea3d9e9b5333a2405
-Commit:        ce8730b5080b85192af1aadea3d9e9b5333a2405
-Parent:        60cc666c949ca16b1d7297eb2a3abc78dfbf3bf9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c03d8473ea9ad585f27207404a242b7b11caf74f
+Commit:        c03d8473ea9ad585f27207404a242b7b11caf74f
+Parent:        ce8730b5080b85192af1aadea3d9e9b5333a2405
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 12 10:03:27 2014 +0100
+AuthorDate:    Wed Nov 12 10:17:17 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 12 10:03:27 2014 +0100
+CommitterDate: Wed Nov 12 10:17:17 2014 +0100
 
-coverity: fix possible integer overflow
+coverity: fix possible dereference of NULL pointer
 
-LVM2.2.02.112/lib/metadata/cache_manip.c:73: overflow_before_widen: Potentially overflowing expression "*pool_metadata_extents *vg->extent_size" with type "unsigned int" (32 bits, unsigned) is evaluated using 32-bit arithmetic, and then used in a context that expects an expression of type "uint64_t" (64 bits, unsigned).
-LVM2.2.02.112/lib/activate/dev_manager.c:217: overflow_before_widen: Potentially overflowing expression "seg_status->seg->len * extent_size" with type "unsigned int" (32 bits, unsigned) is evaluated using 32-bit arithmetic, and then used in a context that expects an expression of type "uint64_t" (64 bits, unsigned).
-LVM2.2.02.112/lib/activate/dev_manager.c:217: overflow_before_widen: Potentially overflowing expression "seg_status->seg->le * extent_size" with type "unsigned int" (32 bits, unsigned) is evaluated using 32-bit arithmetic, and then used in a context that expects an expression of type "uint64_t" (64 bits, unsigned).
+This would be in case the pool segment was not found.
+
+LVM2.2.02.112/lib/metadata/pool_manip.c:238:36: warning: Access to field 'segtype' results in a dereference of a null pointer (loaded from variable 'pool_seg')
 ---
- lib/activate/dev_manager.c |    4 ++--
- lib/metadata/cache_manip.c |    2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ lib/metadata/pool_manip.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index c62dcb8..a17cd25 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -217,8 +217,8 @@ static int _info_run(info_type_t type, const char *name, const char *dlid,
- 		do {
- 			target = dm_get_next_target(dmt, target, &target_start,
- 						    &target_length, &target_name, &target_params);
--			if ((seg_status->seg->le * extent_size == target_start) &&
--			    (seg_status->seg->len * extent_size == target_length)) {
-+			if (((uint64_t) seg_status->seg->le * extent_size == target_start) &&
-+			    ((uint64_t) seg_status->seg->len * extent_size == target_length)) {
- 				params_to_process = target_params;
- 				break;
- 			}
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index d7813c3..27f381d 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -70,7 +70,7 @@ int update_cache_pool_params(const struct segment_type *segtype,
- {
- 	uint64_t min_meta_size;
- 	uint32_t extent_size = vg->extent_size;
--	uint64_t pool_metadata_size = *pool_metadata_extents * vg->extent_size;
-+	uint64_t pool_metadata_size = (uint64_t) *pool_metadata_extents * vg->extent_size;
+diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
+index 70b5a23..ee32a3b 100644
+--- a/lib/metadata/pool_manip.c
++++ b/lib/metadata/pool_manip.c
+@@ -235,6 +235,11 @@ struct lv_segment *find_pool_seg(const struct lv_segment *seg)
+ 		pool_seg = sl->seg;
+ 	}
  
- 	if (!(passed_args & PASS_ARG_CHUNK_SIZE))
- 		*chunk_size = DEFAULT_CACHE_POOL_CHUNK_SIZE * 2;
++	if (!pool_seg) {
++		log_error("Pool segment not found for %s.", display_lvname(seg->lv));
++		return NULL;
++	}
++
+ 	if ((lv_is_thin_type(seg->lv) && !seg_is_pool(pool_seg))) {
+ 		log_error("%s on %s is not a %s pool segment",
+ 			  pool_seg->lv->name, seg->lv->name,
 
 
