@@ -1,188 +1,218 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 10 Nov 2014 21:06:23 +0000 (UTC)
-Subject: master - cleanup: API get/set fixes
-Message-ID: <20141110210623.6B40A60D9C@fedorahosted.org>
+Date: Thu, 13 Nov 2014 12:09:59 +0000 (UTC)
+Subject: master - pool: fix removal of pool metadata spare
+Message-ID: <20141113120959.A27CB60F64@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2e0c926d56f93880f4b7a7813cec7c3a774a8280
-Commit:        2e0c926d56f93880f4b7a7813cec7c3a774a8280
-Parent:        8d7340b7a191376b94c45503f9c5cbee5f337e85
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8cb79dad0bc8b02ad57a4ffaa137e40c3cb8daaf
+Commit:        8cb79dad0bc8b02ad57a4ffaa137e40c3cb8daaf
+Parent:        fba86dd42b57626aa276e4f31e56e5d2a4384e48
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Nov 8 01:28:38 2014 +0100
+AuthorDate:    Thu Nov 13 13:09:07 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 10 22:05:48 2014 +0100
+CommitterDate: Thu Nov 13 13:09:07 2014 +0100
 
-cleanup: API get/set fixes
+pool: fix removal of pool metadata spare
 
+Since we support device stack of pools over pool
+(thin-pool with cache data volume) the existing code
+is no longer able to detect orphan _pmspare.
+
+So instead do a _pmspare check after volume removal,
+and remove spare afterwards.
 ---
- lib/metadata/lv.c                |    2 +-
- lib/metadata/metadata-exported.h |    4 ++--
- lib/metadata/mirror.c            |    4 ++--
- lib/metadata/thin_manip.c        |    4 ++--
- lib/report/report.c              |    2 +-
- lib/thin/thin.c                  |    2 +-
- tools/lvconvert.c                |    2 +-
- tools/lvcreate.c                 |    2 +-
- tools/lvmcmdline.c               |    4 ++--
- 9 files changed, 13 insertions(+), 13 deletions(-)
+ lib/metadata/lv_manip.c             |   90 ++++++++++++++++++++--------------
+ test/shell/pvmove-cache-segtypes.sh |    5 ++
+ 2 files changed, 58 insertions(+), 37 deletions(-)
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 016f299..4ee751c 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -130,7 +130,7 @@ char *lvseg_discards_dup(struct dm_pool *mem, const struct lv_segment *seg)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 543f070..ca2a706 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1318,6 +1318,11 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
+ 	if (!delete)
+ 		return 1;
  
- char *lvseg_cachemode_dup(struct dm_pool *mem, const struct lv_segment *seg)
- {
--	return dm_pool_strdup(mem, get_cachepool_cachemode_name(seg));
-+	return dm_pool_strdup(mem, get_cache_pool_cachemode_name(seg));
- }
++	if (lv == lv->vg->pool_metadata_spare_lv) {
++		lv->status &= ~POOL_METADATA_SPARE;
++		lv->vg->pool_metadata_spare_lv = NULL;
++	}
++
+ 	/* Remove the LV if it is now empty */
+ 	if (!lv->le_count && !unlink_lv_from_vg(lv))
+ 		return_0;
+@@ -5334,7 +5339,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	int ask_discard;
+ 	struct lv_list *lvl;
+ 	struct seg_list *sl;
+-	int is_last_pool;
++	int is_last_pool = lv_is_pool(lv);
  
- #ifdef DMEVENTD
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 713b3b6..9afce35 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -763,8 +763,8 @@ int update_thin_pool_params(const struct segment_type *segtype,
- 			    uint32_t *pool_metadata_extents,
- 			    int *chunk_size_calc_method, uint32_t *chunk_size,
- 			    thin_discards_t *discards, int *zero);
--int get_pool_discards(const char *str, thin_discards_t *discards);
- const char *get_pool_discards_name(thin_discards_t discards);
-+int set_pool_discards(thin_discards_t *discards, const char *str);
- struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
- 					   const char *name, uint32_t read_ahead,
- 					   uint32_t stripes, uint32_t stripe_size,
-@@ -1011,8 +1011,8 @@ int lv_remove_mirrors(struct cmd_context *cmd, struct logical_volume *lv,
- 		      uint32_t mirrors, uint32_t log_count,
- 		      int (*is_removable)(struct logical_volume *, void *),
- 		      void *removable_baton, uint64_t status_mask);
--int get_mirror_log_count(const char *mirrorlog, int *log_count);
- const char *get_mirror_log_name(int log_count);
-+int set_mirror_log_count(int *log_count, const char *mirrorlog);
+ 	vg = lv->vg;
  
- int is_temporary_mirror_layer(const struct logical_volume *lv);
- struct logical_volume * find_temporary_mirror(const struct logical_volume *lv);
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index a943ac4..ba3ff6b 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -2273,7 +2273,7 @@ int lv_remove_mirrors(struct cmd_context *cmd __attribute__((unused)),
- 	return remove_mirrors_from_segments(lv, new_mirrors, status_mask);
- }
- 
--int get_mirror_log_count(const char *mirrorlog, int *log_count)
-+int set_mirror_log_count(int *log_count, const char *mirrorlog)
- {
- 	if (!strcmp("core", mirrorlog))
- 		*log_count = MIRROR_LOG_CORE;
-@@ -2297,6 +2297,6 @@ const char *get_mirror_log_name(int log_count)
- 	case MIRROR_LOG_MIRRORED: return "mirrored";
- 	default:
- 		log_error(INTERNAL_ERROR "Unknown mirror log count %d.", log_count);
--		return "unknown";
-+		return NULL;
- 	}
- }
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 50354cc..b4aec73 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -436,7 +436,7 @@ int update_thin_pool_params(const struct segment_type *segtype,
- 			log_error(INTERNAL_ERROR "Could not find configuration.");
- 			return 0;
+@@ -5428,11 +5433,34 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			log_print_unless_silent("Ignoring uncache failure of %s.",
+ 						display_lvname(lv));
  		}
--		if (!get_pool_discards(str, discards))
-+		if (!set_pool_discards(discards, str))
- 			return_0;
++		is_last_pool = 1;
++	}
++
++	/* Used cache pool or COW cannot be activated */
++	if ((!lv_is_cache_pool(lv) || dm_list_empty(&lv->segs_using_this_lv)) &&
++	    !lv_is_cow(lv) &&
++	    !deactivate_lv(cmd, lv)) {
++		/* FIXME Review and fix the snapshot error paths! */
++		log_error("Unable to deactivate logical volume %s.",
++			  display_lvname(lv));
++		return 0;
  	}
  
-@@ -512,7 +512,7 @@ int update_thin_pool_params(const struct segment_type *segtype,
- 	return 1;
- }
+ 	if (!archive(vg))
+ 		return 0;
  
--int get_pool_discards(const char *str, thin_discards_t *discards)
-+int set_pool_discards(thin_discards_t *discards, const char *str)
- {
- 	if (!strcasecmp(str, "passdown"))
- 		*discards = THIN_DISCARDS_PASSDOWN;
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 4f505e7..262b376 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -784,7 +784,7 @@ static int _cachemode_disp(struct dm_report *rh, struct dm_pool *mem,
- 		seg = first_seg(seg->pool_lv);
++	/* Clear thin pool stacked messages */
++	if (pool_lv && !pool_has_message(first_seg(pool_lv), lv, 0) &&
++	    !update_pool_lv(pool_lv, 1)) {
++		if (force < DONT_PROMPT_OVERRIDE) {
++			log_error("Failed to update pool %s.", display_lvname(pool_lv));
++			return 0;
++		}
++		log_print_unless_silent("Ignoring update failure of pool %s.",
++					display_lvname(pool_lv));
++		pool_lv = NULL; /* Do not retry */
++	}
++
+ 	/* When referenced by the LV with pending delete flag, remove this deleted LV first */
+ 	dm_list_iterate_items(sl, &lv->segs_using_this_lv)
+ 		if (lv_is_pending_delete(sl->seg->lv) && !lv_remove(sl->seg->lv)) {
+@@ -5450,26 +5478,12 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		/* vg_remove_snapshot() will preload origin/former snapshots */
+ 		if (!vg_remove_snapshot(lv))
+ 			return_0;
+-	}
  
- 	if (seg_is_cache_pool(seg)) {
--		cachemode_str = get_cachepool_cachemode_name(seg);
-+		cachemode_str = get_cache_pool_cachemode_name(seg);
- 		return dm_report_field_string(rh, field, &cachemode_str);
+-	if (lv_is_pool(lv) && lv->vg->pool_metadata_spare_lv) {
+-		/* When removing last pool, also remove the spare */
+-		is_last_pool = 1;
+-		dm_list_iterate_items(lvl, &lv->vg->lvs)
+-			if (lv_is_pool(lvl->lv) &&
+-			    lvl->lv != lv) {
+-				is_last_pool = 0;
+-				break;
+-			}
+-		if (is_last_pool) {
+-			/* This is purely internal LV volume, no question */
+-			if (!deactivate_lv(cmd, lv->vg->pool_metadata_spare_lv)) {
+-				log_error("Unable to deactivate logical volume %s",
+-					  display_lvname(lv->vg->pool_metadata_spare_lv));
+-				return 0;
+-			}
+-			if (!lv_remove(lv->vg->pool_metadata_spare_lv))
+-				return_0;
++		if (!deactivate_lv(cmd, lv)) {
++			/* FIXME Review and fix the snapshot error paths! */
++			log_error("Unable to deactivate logical volume %s.",
++				  display_lvname(lv));
++			return 0;
+ 		}
  	}
  
-diff --git a/lib/thin/thin.c b/lib/thin/thin.c
-index f921bef..f27f240 100644
---- a/lib/thin/thin.c
-+++ b/lib/thin/thin.c
-@@ -115,7 +115,7 @@ static int _thin_pool_text_import(struct lv_segment *seg,
+@@ -5483,23 +5497,6 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			if (!lv_cache_remove(cache_seg->lv))
+ 				return_0;
+ 		}
+-	} else if (!deactivate_lv(cmd, lv)) {
+-		/* FIXME Review and fix the snapshot error paths! */
+-		log_error("Unable to deactivate logical volume \"%s\"",
+-			  lv->name);
+-		return 0;
+-	}
+-
+-	/* Clear thin pool stacked messages */
+-	if (pool_lv && !pool_has_message(first_seg(pool_lv), lv, 0) &&
+-	    !update_pool_lv(pool_lv, 1)) {
+-		if (force < DONT_PROMPT_OVERRIDE) {
+-			log_error("Failed to update pool %s.", display_lvname(pool_lv));
+-			return 0;
+-		}
+-		log_print_unless_silent("Ignoring update failure of pool %s.",
+-					display_lvname(pool_lv));
+-		pool_lv = NULL; /* Do not retry */
+ 	}
  
- 	if (!discards_str)
- 		seg->discards = THIN_DISCARDS_IGNORE;
--	else if (!get_pool_discards(discards_str, &seg->discards))
-+	else if (!set_pool_discards(&seg->discards, discards_str))
- 		return SEG_LOG_ERROR("Discards option unsupported for");
+ 	visible = lv_is_visible(lv);
+@@ -5510,6 +5507,25 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return 0;
+ 	}
  
- 	if (dm_config_has_node(sn, "low_water_mark") &&
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index fcec8e1..8b09ee6 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -267,7 +267,7 @@ static int _read_pool_params(struct cmd_context *cmd, int *pargc, char ***pargv,
- 		if (!cachemode)
- 			cachemode = find_config_tree_str(cmd, allocation_cache_pool_cachemode_CFG, NULL);
++	if (is_last_pool && vg->pool_metadata_spare_lv) {
++		/* When removed last pool, also remove the spare */
++		dm_list_iterate_items(lvl, &vg->lvs)
++			if (lv_is_pool_metadata(lvl->lv)) {
++				is_last_pool = 0;
++				break;
++			}
++		if (is_last_pool) {
++			/* This is purely internal LV volume, no question */
++			if (!deactivate_lv(cmd, vg->pool_metadata_spare_lv)) {
++				log_error("Unable to deactivate spare logical volume %s.",
++					  display_lvname(vg->pool_metadata_spare_lv));
++				return 0;
++			}
++			if (!lv_remove(vg->pool_metadata_spare_lv))
++				return_0;
++		}
++	}
++
+ 	/*
+ 	 * Old format1 code: If no snapshots left reload without -real.
+ 	 */
+diff --git a/test/shell/pvmove-cache-segtypes.sh b/test/shell/pvmove-cache-segtypes.sh
+index 9eaf186..2f09596 100644
+--- a/test/shell/pvmove-cache-segtypes.sh
++++ b/test/shell/pvmove-cache-segtypes.sh
+@@ -56,6 +56,7 @@ not check lv_tree_on $vg ${lv1}_pool "$dev5"
+ #check lv_tree_on $vg ${lv1}_foo "$dev5"
  
--		if (!get_cache_mode(cachemode, &lp->feature_flags))
-+		if (!set_cache_pool_feature(&lp->feature_flags, cachemode))
- 			return_0;
- 	} else {
- 		if (arg_from_list_is_set(cmd, "is valid only with cache pools",
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index cf2a07c..af00fee 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -567,7 +567,7 @@ static int _read_cache_params(struct cmd_context *cmd,
- 	if (!(cachemode = arg_str_value(cmd, cachemode_ARG, NULL)))
- 		cachemode = find_config_tree_str(cmd, allocation_cache_pool_cachemode_CFG, NULL);
+ lvremove -ff $vg
++dmsetup info -c | not grep $vg
  
--	if (!get_cache_mode(cachemode, &lp->feature_flags))
-+	if (!set_cache_pool_feature(&lp->feature_flags, cachemode))
- 		return_0;
+ # Testing pvmove of origin LV
+ #############################
+@@ -82,6 +83,7 @@ not check lv_tree_on $vg ${lv1} "$dev3"
+ #check lv_tree_on $vg ${lv1} "$dev1"
+ #check dev_md5sum $vg $lv1
+ lvremove -ff $vg
++dmsetup info -c | not grep $vg
  
- 	return 1;
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 1d3e993..ce45eb4 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -319,7 +319,7 @@ int discards_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_val
- {
- 	thin_discards_t discards;
+ # Testing pvmove of a RAID origin LV
+ ####################################
+@@ -106,6 +108,7 @@ not check lv_tree_on $vg ${lv1} "$dev2" "$dev3"
+ #check lv_tree_on $vg ${lv1}_pool "$dev5"
+ #check dev_md5sum $vg $lv1
+ lvremove -ff $vg
++dmsetup info -c | not grep $vg
  
--	if (!get_pool_discards(av->value, &discards))
-+	if (!set_pool_discards(&discards, av->value))
- 		return_0;
+ # Testing pvmove of a RAID cachepool (metadata and data)
+ ########################################################
+@@ -137,6 +140,7 @@ not check lv_tree_on $vg ${lv1}_pool "$dev2" "$dev3"
+ #check lv_tree_on $vg ${lv1} "$dev5"
+ #check dev_md5sum $vg $lv1
+ lvremove -ff $vg
++dmsetup info -c | not grep $vg
  
- 	av->i_value = discards;
-@@ -332,7 +332,7 @@ int mirrorlog_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_va
- {
- 	int log_count;
+ # Testing pvmove of Thin-pool on cache LV on RAID
+ #################################################
+@@ -177,5 +181,6 @@ check lv_tree_on $vg thinpool "$dev3" "$dev4" "$dev5" # Move non-cache tmeta
+ #check dev_md5sum $vg/thin_lv
  
--	if (!get_mirror_log_count(av->value, &log_count))
-+	if (!set_mirror_log_count(&log_count, av->value))
- 		return_0;
+ lvremove -ff $vg
++dmsetup info -c | not grep $vg
  
- 	av->i_value = log_count;
+ done
 
 
