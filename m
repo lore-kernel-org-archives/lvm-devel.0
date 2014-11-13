@@ -1,106 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 13 Nov 2014 16:53:37 +0000 (UTC)
-Subject: master - cleanup: validate pointers
-Message-ID: <20141113165337.EB7676105D@fedorahosted.org>
+Date: Thu, 13 Nov 2014 16:53:35 +0000 (UTC)
+Subject: master - lvm2api: use fully initilized struct
+Message-ID: <20141113165335.D308C601FB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=428b9fcd87d1c79cd4349c884a68de7ccac51981
-Commit:        428b9fcd87d1c79cd4349c884a68de7ccac51981
-Parent:        7278556c768ae418b03873bd5d9e921e13ce79e8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7278556c768ae418b03873bd5d9e921e13ce79e8
+Commit:        7278556c768ae418b03873bd5d9e921e13ce79e8
+Parent:        49e3fd1ce8d0b1023f553673e76b49e65348878f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 13 17:40:30 2014 +0100
+AuthorDate:    Thu Nov 13 17:42:09 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 13 17:49:42 2014 +0100
+CommitterDate: Thu Nov 13 17:49:41 2014 +0100
 
-cleanup: validate pointers
+lvm2api: use fully initilized struct
 
-Mostly on almost impossible to happen paths - but stay safe.
+Don't pass partially initialized struct.
 ---
- lib/activate/dev_manager.c |    3 ++-
- lib/report/report.c        |    4 +++-
- tools/dmsetup.c            |   11 +++++++----
- tools/pvresize.c           |    4 ++++
- 4 files changed, 16 insertions(+), 6 deletions(-)
+ python/liblvm.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 32abde7..44b273d 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -131,7 +131,8 @@ static int _get_segment_status_from_target_params(const char *target_name,
- 	if (strcmp(target_name, "cache"))
- 		return 1;
- 
--	segtype = get_segtype_from_string(seg_status->seg->lv->vg->cmd, target_name);
-+	if (!(segtype = get_segtype_from_string(seg_status->seg->lv->vg->cmd, target_name)))
-+		return_0;
- 
- 	if (segtype != seg_status->seg->segtype) {
- 		log_error(INTERNAL_ERROR "_get_segment_status_from_target_params: "
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 42355e2..5637d50 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -779,7 +779,9 @@ static int _cachemode_disp(struct dm_report *rh, struct dm_pool *mem,
- 		seg = first_seg(seg->pool_lv);
- 
- 	if (seg_is_cache_pool(seg)) {
--		cachemode_str = get_cache_pool_cachemode_name(seg);
-+		if (!(cachemode_str = get_cache_pool_cachemode_name(seg)))
-+			return_0;
-+
- 		return dm_report_field_string(rh, field, &cachemode_str);
- 	}
- 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index f1808c0..4202dbb 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -3824,13 +3824,15 @@ int main(int argc, char **argv)
- 	}
- 
- 	if (_switches[HELP_ARG]) {
--		cmd = _find_command("help");
--		goto doit;
-+		if ((cmd = _find_command("help")))
-+			goto doit;
-+		goto unknown;
- 	}
- 
- 	if (_switches[VERSION_ARG]) {
--		cmd = _find_command("version");
--		goto doit;
-+		if ((cmd = _find_command("version")))
-+			goto doit;
-+		goto unknown;
- 	}
- 
- 	if (argc == 0) {
-@@ -3839,6 +3841,7 @@ int main(int argc, char **argv)
- 	}
- 
- 	if (!(cmd = _find_command(argv[0]))) {
-+unknown:
- 		fprintf(stderr, "Unknown command\n");
- 		_usage(stderr);
- 		goto out;
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index 70b564d..631e63e 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -30,6 +30,10 @@ static int _pvresize_single(struct cmd_context *cmd,
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 1b0942d..3828f27 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -324,9 +324,10 @@ static PyObject *_liblvm_lvm_pv_remove(PyObject *self, PyObject *arg)
+ static int _set_pv_numeric_prop(pv_create_params_t pv_params, const char *name,
+ 								unsigned long long value)
  {
- 	struct pvresize_params *params = (struct pvresize_params *) handle;
+-	struct lvm_property_value prop_value;
+-	prop_value.is_integer = 1;
+-	prop_value.value.integer = value;
++	struct lvm_property_value prop_value = {
++		.is_integer = 1,
++		.value.integer = value,
++	};
  
-+	if (!params) {
-+		log_error(INTERNAL_ERROR "Invalid resize params.");
-+		return ECMD_FAILED;
-+	}
- 	params->total++;
- 
- 	if (!pv_resize_single(cmd, vg, pv, params->new_size))
+ 	return lvm_pv_params_set_property(pv_params, name, &prop_value);
+ }
 
 
