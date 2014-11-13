@@ -1,50 +1,39 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 13 Nov 2014 13:43:04 +0000 (UTC)
-Subject: master - cleanup: free mempool memory used for LV status in PVSEGS reporting
-Message-ID: <20141113134304.8E85460EBA@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 13 Nov 2014 16:53:31 +0000 (UTC)
+Subject: master - cache: wrong feature in seg is internal error
+Message-ID: <20141113165331.9E7E7601FB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48874703d2deee676d326ed4447c7944ab728767
-Commit:        48874703d2deee676d326ed4447c7944ab728767
-Parent:        4de7699855e06bf341d5f91b9c3fc4ba4de18cd6
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Nov 13 14:41:01 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Nov 13 14:41:01 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6308a8b06d4dd52e9a8e95bb0ec1933eee547ee4
+Commit:        6308a8b06d4dd52e9a8e95bb0ec1933eee547ee4
+Parent:        48874703d2deee676d326ed4447c7944ab728767
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Nov 13 17:41:45 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Nov 13 17:44:31 2014 +0100
 
-cleanup: free mempool memory used for LV status in PVSEGS reporting
+cache: wrong feature in seg is internal error
 
-Addendum to previous commit 4de7699855e06bf341d5f91b9c3fc4ba4de18cd6.
 ---
- tools/reporter.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ lib/metadata/cache_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index ec1feb2..24191f1 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -223,7 +223,8 @@ static int _do_pvsegs_sub_single(struct cmd_context *cmd,
- 	int ret = ECMD_PROCESSED;
- 	struct lv_segment *seg = pvseg->lvseg;
- 	struct lvinfo lvinfo = { .exists = 0 };
--	struct lv_seg_status lv_seg_status = { .type = SEG_STATUS_NONE };
-+	struct lv_seg_status lv_seg_status = { .type = SEG_STATUS_NONE,
-+					       .status = NULL };
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 27f381d..fb5346d 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -40,7 +40,7 @@ const char *get_cache_pool_cachemode_name(const struct lv_segment *seg)
+ 	if (seg->feature_flags & DM_CACHE_FEATURE_PASSTHROUGH)
+ 		return "passthrough";
  
- 	struct segment_type _freeseg_type = {
- 		.name = "free",
-@@ -269,6 +270,8 @@ static int _do_pvsegs_sub_single(struct cmd_context *cmd,
- 	}
+-	log_error("LV %s has uknown feature flags %" PRIu64,
++	log_error(INTERNAL_ERROR "LV %s has uknown feature flags %" PRIu64 ".",
+ 		  display_lvname(seg->lv), seg->feature_flags);
  
-  out:
-+	if (seg && lv_seg_status.status)
-+		dm_pool_free(lv_seg_status.mem, lv_seg_status.status);
- 	return ret;
- }
- 
+ 	return NULL;
 
 
