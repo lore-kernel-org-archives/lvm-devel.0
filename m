@@ -1,39 +1,71 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 13 Nov 2014 12:16:18 +0000 (UTC)
-Subject: master - cleanu: drop duplicate const
-Message-ID: <20141113121618.1ACE260ED9@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 13 Nov 2014 12:27:15 +0000 (UTC)
+Subject: master - pvck: Use non-zero exit status after failure.
+Message-ID: <20141113122715.8CA5C60F17@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c3e29903590b596bfead1d84f91a32362d8e640f
-Commit:        c3e29903590b596bfead1d84f91a32362d8e640f
-Parent:        8cb79dad0bc8b02ad57a4ffaa137e40c3cb8daaf
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 13 13:15:58 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 13 13:15:58 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=efe5245e47201e1947ce0bf60990a7de2151e296
+Commit:        efe5245e47201e1947ce0bf60990a7de2151e296
+Parent:        c3e29903590b596bfead1d84f91a32362d8e640f
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Nov 13 12:26:43 2014 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Nov 13 12:26:43 2014 +0000
 
-cleanu: drop duplicate const
+pvck: Use non-zero exit status after failure.
 
 ---
- lib/activate/dev_manager.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW    |    1 +
+ tools/pvck.c |   12 ++++++++----
+ 2 files changed, 9 insertions(+), 4 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 047e929..32abde7 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -3028,7 +3028,7 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, const
- static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
- 			struct lv_activate_opts *laopts, action_t action)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 9859939..19f029b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.113 - 
+ =====================================
++  Exit with non-zero status code when pvck encounters a problem.
+   Fix clean_tree after activation/resume for cache target (2.02.112).
+ 
+ Version 2.02.112 - 11th November 2014
+diff --git a/tools/pvck.c b/tools/pvck.c
+index e45e77a..0b868e8 100644
+--- a/tools/pvck.c
++++ b/tools/pvck.c
+@@ -18,9 +18,11 @@
+ int pvck(struct cmd_context *cmd, int argc, char **argv)
  {
--	static const char const _action_names[][24] = {
-+	static const char _action_names[][24] = {
- 		"PRELOAD", "ACTIVATE", "DEACTIVATE", "SUSPEND", "SUSPEND_WITH_LOCKFS", "CLEAN"
- 	};
- 	const size_t DLID_SIZE = ID_LEN + sizeof(UUID_PREFIX) - 1;
+ 	int i;
++	int ret_max = ECMD_PROCESSED;
+ 
+ 	/* FIXME: validate cmdline options */
+ 	/* FIXME: what does the cmdline look like? */
++
+ 	/*
+ 	 * Use what's on the cmdline directly, and avoid calling into
+ 	 * some of the other infrastructure functions, so as to avoid
+@@ -32,10 +34,12 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
+ 		log_verbose("Scanning %s", argv[i]);
+ 
+ 		dm_unescape_colons_and_at_signs(argv[i], NULL, NULL);
+-		pv_analyze(cmd, argv[i],
+-			   arg_uint64_value(cmd, labelsector_ARG,
+-					   UINT64_C(0)));
++		if (!pv_analyze(cmd, argv[i],
++				arg_uint64_value(cmd, labelsector_ARG, UINT64_C(0)))) {
++			stack;
++			ret_max = ECMD_FAILED;
++		}
+ 	}
+ 
+-	return ECMD_PROCESSED;
++	return ret_max;
+ }
 
 
