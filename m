@@ -1,75 +1,65 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 18 Nov 2014 15:28:07 +0000 (UTC)
-Subject: master - toollib: improve ignore_vg case in _process_pvs_in_vgs
-Message-ID: <20141118152807.71A616055B@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 19 Nov 2014 00:14:03 +0000 (UTC)
+Subject: master - locking: rename LCK_CONVERT
+Message-ID: <20141119001403.C544C6033B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aaa6205d5ad4beb8a54d56f9285cafb5dbd5c7b4
-Commit:        aaa6205d5ad4beb8a54d56f9285cafb5dbd5c7b4
-Parent:        cf37c04347c6b6209420764da43127a96445af0e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Nov 18 09:22:37 2014 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 18 09:25:56 2014 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=01760967b45a68f1645b797e69b28403a7823ee2
+Commit:        01760967b45a68f1645b797e69b28403a7823ee2
+Parent:        aaa6205d5ad4beb8a54d56f9285cafb5dbd5c7b4
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Nov 18 09:04:30 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Nov 18 16:50:49 2014 +0100
 
-toollib: improve ignore_vg case in _process_pvs_in_vgs
+locking: rename LCK_CONVERT
 
-ignore_vg now returns 0 for the FAILED_CLUSTERED case,
-so all the ignore_vg 1 cases will return vg's with an
-empty vg->pvs, so we do not need to iterate through
-vg->pvs to remove the entries from the devices list.
-
-Clean up whitespace problems in that area from the
-previous commit.
+All 'MODE' bits are using _MODE suffix so rename to LCK_CONVERT_MODE
+(part of rhbz 735445).
+No functional change.
 ---
- tools/toollib.c |   23 ++++++++++++-----------
- 1 files changed, 12 insertions(+), 11 deletions(-)
+ daemons/clvmd/lvm-functions.c |    4 ++--
+ lib/locking/locking.h         |    2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 8eb434d..30dc980 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -2200,25 +2200,26 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t flags,
- 		vg = vg_read(cmd, vg_name, vg_uuid, flags | READ_WARN_INCONSISTENT);
- 		if (ignore_vg(vg, vg_name, flags & READ_ALLOW_INCONSISTENT, &skip)) {
- 			stack;
--			ret = ECMD_FAILED;
--			skip = 1;
--
--			/* Only continue if no vg was returned. */
--			if (!vg)
--				continue;
-+			ret_max = ECMD_FAILED;
-+			continue;
- 		}
- 		
-+		/*
-+		 * Don't continue when skip is set, because we need to remove
-+		 * vg->pvs entries from devices list.
-+		 */
-+		
- 		ret = _process_pvs_in_vg(cmd, vg, all_devices, arg_pvnames, arg_tags,
- 					 process_all, skip, handle, process_single_pv);
- 		if (ret != ECMD_PROCESSED)
- 			stack;
--		 if (ret > ret_max)
-+		if (ret > ret_max)
- 			ret_max = ret;
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index 4ebd059..dafffcc 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -136,7 +136,7 @@ static const char *decode_flags(unsigned char flags)
+ 		flags & LCK_DMEVENTD_MONITOR_MODE ? "DMEVENTD_MONITOR|" : "",
+ 		flags & LCK_ORIGIN_ONLY_MODE ? "ORIGIN_ONLY|" : "",
+ 		flags & LCK_TEST_MODE ? "TEST|" : "",
+-		flags & LCK_CONVERT ? "CONVERT|" : "",
++		flags & LCK_CONVERT_MODE ? "CONVERT|" : "",
+ 		flags & LCK_DMEVENTD_MONITOR_IGNORE ? "DMEVENTD_MONITOR_IGNORE|" : "",
+ 		flags & LCK_REVERT_MODE ? "REVERT|" : "");
  
--		 if (skip)
--			 release_vg(vg);
--		 else
--			 unlock_and_release_vg(cmd, vg, vg->name);
-+		if (skip)
-+			release_vg(vg);
-+		else
-+			unlock_and_release_vg(cmd, vg, vg->name);
+@@ -375,7 +375,7 @@ static int do_activate_lv(char *resource, unsigned char command, unsigned char l
+ 	 * of exclusive lock to shared one during activation.
+ 	 */
+ 	if (!test_mode() && command & LCK_CLUSTER_VG) {
+-		status = hold_lock(resource, mode, LCKF_NOQUEUE | (lock_flags & LCK_CONVERT ? LCKF_CONVERT:0));
++		status = hold_lock(resource, mode, LCKF_NOQUEUE | ((lock_flags & LCK_CONVERT_MODE) ? LCKF_CONVERT:0));
+ 		if (status) {
+ 			/* Return an LVM-sensible error for this.
+ 			 * Forcing EIO makes the upper level return this text
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index c1affb4..644e07c 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -114,7 +114,7 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ #define LCK_DMEVENTD_MONITOR_MODE	0x04	/* Register with dmeventd */
  
- 		/* Quit early when possible. */
- 		if (!process_all && dm_list_empty(arg_tags) && dm_list_empty(arg_pvnames))
+ /* Not yet used. */
+-#define LCK_CONVERT			0x08	/* Convert existing lock */
++#define LCK_CONVERT_MODE		0x08	/* Convert existing lock */
+ 
+ #define LCK_TEST_MODE			0x10    /* Test mode: No activation */
+ #define LCK_ORIGIN_ONLY_MODE		0x20	/* Same as above */
 
 
