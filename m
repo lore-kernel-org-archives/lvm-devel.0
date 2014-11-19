@@ -1,42 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 19 Nov 2014 17:58:43 +0000 (UTC)
-Subject: master - thin: fix error path
-Message-ID: <20141119175844.0338760DF9@fedorahosted.org>
+Date: Wed, 19 Nov 2014 22:25:25 +0000 (UTC)
+Subject: master - tests: prepare control node before clvmd
+Message-ID: <20141119222525.3CD1460392@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d7985ebead2a69f8139bf4ade0747b2a96f784c4
-Commit:        d7985ebead2a69f8139bf4ade0747b2a96f784c4
-Parent:        4a52a9212cc5d3ae90196776f28dbfb319002c74
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c75548300d63452b4fa615d71cb40cb10382aa33
+Commit:        c75548300d63452b4fa615d71cb40cb10382aa33
+Parent:        d7985ebead2a69f8139bf4ade0747b2a96f784c4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 19 18:57:40 2014 +0100
+AuthorDate:    Wed Nov 19 23:22:52 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 19 18:58:30 2014 +0100
+CommitterDate: Wed Nov 19 23:22:52 2014 +0100
 
-thin: fix error path
+tests: prepare control node before clvmd
 
-Print pool name and not the origin name.
+Make sure there is 'control' node before clvmd is started.
+Somehow  'clvmd' is not allowed by selinux to create one.
+
+TODO: Check is selinux policy is right here...
 ---
- lib/metadata/lv_manip.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/lib/aux.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index ca2a706..879cd51 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7085,8 +7085,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 				if (thin_pool_was_active < 0)
- 					thin_pool_was_active = 0;
- 				if (!activate_lv_excl(cmd, pool_lv)) {
--					log_error("Failed to activate thin pool %s/%s.",
--						  origin_lv->vg->name, origin_lv->name);
-+					log_error("Failed to activate thin pool %s.",
-+						  display_lvname(pool_lv));
- 					goto revert_new_lv;
- 				}
- 				if (!lv_is_active(pool_lv)) {
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 58b71c6..2fef207 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -35,6 +35,7 @@ prepare_clvmd() {
+ 	# lvs is executed from clvmd - use our version
+ 	export LVM_BINARY=$(which lvm)
+ 
++	test -e "$DM_DEV_DIR/control" || dmsetup table # create control node
+ 	# skip if singlenode is not compiled in
+ 	(clvmd --help 2>&1 | grep "Available cluster managers" | grep "singlenode") || skip
+ 
 
 
