@@ -1,105 +1,133 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu, 20 Nov 2014 15:53:13 +0000 (UTC)
-Subject: master - lvchange: Accept --cachepolicy.
-Message-ID: <20141120155313.7B14760DBB@fedorahosted.org>
+Date: Thu, 20 Nov 2014 15:53:11 +0000 (UTC)
+Subject: master - toollib: Add --cachepolicy and implement get_cachepolicy_params.
+Message-ID: <20141120155311.63B5E60DBB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c164f59631ca08f56c5f1e2e6cf677f3a85145fb
-Commit:        c164f59631ca08f56c5f1e2e6cf677f3a85145fb
-Parent:        f67e1fadb0fcdc5887663f9b0c9c46fc5835d418
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f67e1fadb0fcdc5887663f9b0c9c46fc5835d418
+Commit:        f67e1fadb0fcdc5887663f9b0c9c46fc5835d418
+Parent:        d22ffd8c289f570b3406f684212b6e7821179710
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Nov 19 18:39:58 2014 +0100
+AuthorDate:    Wed Nov 19 18:39:29 2014 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Nov 20 16:51:07 2014 +0100
+CommitterDate: Thu Nov 20 16:51:06 2014 +0100
 
-lvchange: Accept --cachepolicy.
+toollib: Add --cachepolicy and implement get_cachepolicy_params.
 
 ---
- tools/commands.h |    3 ++-
- tools/lvchange.c |   32 ++++++++++++++++++++++++++++++++
- 2 files changed, 34 insertions(+), 1 deletions(-)
+ tools/args.h    |    1 +
+ tools/toollib.c |   69 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ tools/toollib.h |    2 +
+ 3 files changed, 72 insertions(+), 0 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index d4473a4..e3bac1f 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -106,6 +106,7 @@ xx(lvchange,
-    "\t[--addtag Tag]\n"
-    "\t[--alloc AllocationPolicy]\n"
-    "\t[-C|--contiguous y|n]\n"
-+   "\t[--cachepolicy policy=type] [--cachepolicy parameter=value]\n"
-    "\t[--commandprofile ProfileName]\n"
-    "\t[-d|--debug]\n"
-    "\t[--deltag Tag]\n"
-@@ -143,7 +144,7 @@ xx(lvchange,
- 
-    activationmode_ARG, addtag_ARG, alloc_ARG, autobackup_ARG, activate_ARG,
-    available_ARG,
--   contiguous_ARG, deltag_ARG, discards_ARG, detachprofile_ARG, force_ARG,
-+   cachepolicy_ARG, contiguous_ARG, deltag_ARG, discards_ARG, detachprofile_ARG, force_ARG,
-    ignorelockingfailure_ARG, ignoremonitoring_ARG, ignoreactivationskip_ARG,
-    ignoreskippedcluster_ARG, major_ARG, metadataprofile_ARG, minor_ARG,
-    monitor_ARG, minrecoveryrate_ARG, maxrecoveryrate_ARG, noudevsync_ARG,
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index e0bb4b1..144295b 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -605,6 +605,30 @@ static int lvchange_persistent(struct cmd_context *cmd,
- 	return 1;
+diff --git a/tools/args.h b/tools/args.h
+index 000af01..63fee14 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -104,6 +104,7 @@ arg(trustcache_ARG, '\0', "trustcache", NULL, 0)
+ arg(type_ARG, '\0', "type", segtype_arg, 0)
+ arg(unbuffered_ARG, '\0', "unbuffered", NULL, 0)
+ arg(uncache_ARG, '\0', "uncache", NULL, 0)
++arg(cachepolicy_ARG, '\0', "cachepolicy", string_arg, ARG_GROUPABLE)
+ arg(units_ARG, '\0', "units", string_arg, 0)
+ arg(unquoted_ARG, '\0', "unquoted", NULL, 0)
+ arg(use_policies_ARG, '\0', "use-policies", NULL, 0)
+diff --git a/tools/toollib.c b/tools/toollib.c
+index d33de79..935f06e 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1116,6 +1116,75 @@ int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes, uint32_t *stri
+ 	return _validate_stripe_params(cmd, stripes, stripe_size);
  }
  
-+static int lvchange_cachepolicy(struct cmd_context *cmd, struct logical_volume *lv)
++static int _validate_cachepool_params(struct dm_config_tree *tree)
 +{
-+	struct dm_config_tree *policy = NULL;
-+	int r = 0;
-+
-+	if (!lv_is_cache(lv) && !lv_is_cache_pool(lv)) {
-+		log_error("LV %s is not a cache LV.", lv->name);
-+		log_error("Only cache or cache pool devices can have --cachepolicy set.");
-+		goto_out;
-+	}
-+
-+	if (!(policy = get_cachepolicy_params(cmd)))
-+		goto_out;
-+	if (!lv_cache_setpolicy(lv, policy))
-+		goto_out;
-+	if (!lv_update_and_reload(lv))
-+		goto_out;
-+	r = 1;
-+out:
-+	if (policy)
-+		dm_config_destroy(policy);
-+	return r;
++	return 1;
 +}
 +
- static int lvchange_tag(struct cmd_context *cmd, struct logical_volume *lv, int arg)
- {
- 	if (!change_tag(cmd, NULL, lv, NULL, arg))
-@@ -990,6 +1014,13 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		docmds++;
- 	}
- 
-+	if (arg_count(cmd, cachepolicy_ARG)) {
-+		if (!archive(lv->vg))
-+			return_ECMD_FAILED;
-+		doit += lvchange_cachepolicy(cmd, lv);
-+		docmds++;
++struct dm_config_tree *get_cachepolicy_params(struct cmd_context *cmd)
++{
++	const char *str;
++	struct arg_value_group_list *group;
++	struct dm_config_tree *result = NULL, *prev = NULL, *current = NULL;
++	struct dm_config_node *cn, *last = NULL;
++
++	dm_list_iterate_items(group, &cmd->arg_value_groups) {
++		if (!grouped_arg_is_set(group->arg_values, cachepolicy_ARG))
++			continue;
++
++		current = dm_config_create();
++		if (!current)
++			goto_bad;
++		if (prev)
++			current->cascade = prev;
++		prev = current;
++
++		if (!(str = grouped_arg_str_value(group->arg_values,
++						  cachepolicy_ARG,
++						  NULL)))
++			goto_bad;
++
++		if (!dm_config_parse(current, str, str + strlen(str)))
++			goto_bad;
 +	}
 +
- 	if (doit)
- 		log_print_unless_silent("Logical volume \"%s\" changed.", lv->name);
++	result = dm_config_flatten(current);
++	if (!(cn = dm_config_create_node(result, "policy_settings"))) {
++		dm_config_destroy(result);
++		result = NULL;
++	}
++	cn->child = result->root;
++	result->root = cn;
++	cn = cn->child;
++
++	while (cn) {
++		if (!strcmp(cn->key, "policy")) {
++			if (last)
++				last->sib = cn->sib;
++			else
++				result->root->child = cn->sib;
++			cn->parent = NULL;
++			cn->sib = NULL;
++			result->root->sib = cn;
++		}
++		last = cn;
++		cn = cn->sib;
++	}
++
++	if (!_validate_cachepool_params(current)) {
++		dm_config_destroy(result);
++		result = NULL;
++	}
++
++bad:
++	while (prev) {
++		current = prev->cascade;
++		dm_config_destroy(prev);
++		prev = current;
++	}
++	return result;
++}
++
+ /* FIXME move to lib */
+ static int _pv_change_tag(struct physical_volume *pv, const char *tag, int addtag)
+ {
+diff --git a/tools/toollib.h b/tools/toollib.h
+index 9040387..715f65e 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -123,6 +123,8 @@ int get_pool_params(struct cmd_context *cmd,
+ int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes,
+ 		      uint32_t *stripe_size);
  
-@@ -1049,6 +1080,7 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
- 		arg_count(cmd, maxrecoveryrate_ARG) ||
- 		arg_count(cmd, resync_ARG) ||
- 		arg_count(cmd, syncaction_ARG) ||
-+		arg_count(cmd, cachepolicy_ARG) ||
- 		arg_count(cmd, writebehind_ARG) ||
- 		arg_count(cmd, writemostly_ARG) ||
- 		arg_count(cmd, zero_ARG);
++struct dm_config_tree *get_cachepolicy_params(struct cmd_context *cmd);
++
+ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
+ 	       struct logical_volume *lv, struct physical_volume *pv, int arg);
+ 
 
 
