@@ -1,52 +1,68 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu, 20 Nov 2014 15:53:07 +0000 (UTC)
-Subject: master - libdm-config: Warn about duplicate keys.
-Message-ID: <20141120155307.38C8E60DBB@fedorahosted.org>
+Date: Thu, 20 Nov 2014 15:53:09 +0000 (UTC)
+Subject: master - cache: Add lv_cache_setpolicy to cache_manip.c.
+Message-ID: <20141120155309.4D85560DBB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0050480c0eced1da98ffc76d5010cef605c776eb
-Commit:        0050480c0eced1da98ffc76d5010cef605c776eb
-Parent:        de2c5ab2ac0100c1d2f0648b9fec5304371a1ae5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d22ffd8c289f570b3406f684212b6e7821179710
+Commit:        d22ffd8c289f570b3406f684212b6e7821179710
+Parent:        0050480c0eced1da98ffc76d5010cef605c776eb
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Thu Nov 20 16:18:22 2014 +0100
+AuthorDate:    Wed Nov 19 18:38:30 2014 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Nov 20 16:51:06 2014 +0100
 
-libdm-config: Warn about duplicate keys.
+cache: Add lv_cache_setpolicy to cache_manip.c.
 
 ---
- libdm/libdm-config.c |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ lib/metadata/cache_manip.c       |   18 ++++++++++++++++++
+ lib/metadata/metadata-exported.h |    1 +
+ 2 files changed, 19 insertions(+), 0 deletions(-)
 
-diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
-index e99ae26..93e2887 100644
---- a/libdm/libdm-config.c
-+++ b/libdm/libdm-config.c
-@@ -523,6 +523,7 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
- 	/* IDENTIFIER SECTION_B_CHAR VALUE* SECTION_E_CHAR */
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index fb5346d..f7b1b99 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -395,6 +395,24 @@ int lv_is_cache_origin(const struct logical_volume *lv)
+ 	return seg && lv_is_cache(seg->lv) && !lv_is_pending_delete(seg->lv) && (seg_lv(seg, 0) == lv);
+ }
  
- 	struct dm_config_node *root, *n, *l = NULL;
-+	struct dm_config_value *value;
- 	char *str;
++int lv_cache_setpolicy(struct logical_volume *lv, struct dm_config_tree *policy)
++{
++	struct lv_segment *seg = first_seg(lv);
++	const char *name;
++
++	if (lv_is_cache(lv))
++		seg = first_seg(seg->pool_lv);
++
++	if (!(seg->policy_settings = dm_config_clone_node_with_mem(lv->vg->vgmem, policy->root, 0)))
++		return_0;
++
++	if ((name = dm_config_find_str(policy->root, "policy", NULL)) &&
++	    !(seg->policy_name = dm_pool_strdup(lv->vg->vgmem, name)))
++		return_0;
++
++	return 1;
++}
++
+ /*
+  * Wipe cache pool metadata area before use.
+  *
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index c472f41..d960e1f 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1109,6 +1109,7 @@ int validate_lv_cache_create_origin(const struct logical_volume *origin_lv);
+ struct logical_volume *lv_cache_create(struct logical_volume *pool,
+ 				       struct logical_volume *origin);
+ int lv_cache_remove(struct logical_volume *cache_lv);
++int lv_cache_setpolicy(struct logical_volume *cache_lv, struct dm_config_tree *pol);
+ int wipe_cache_pool(struct logical_volume *cache_pool_lv);
+ /* --  metadata/cache_manip.c */
  
- 	if (p->t == TOK_STRING_ESCAPED) {
-@@ -560,8 +561,12 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
- 		match(TOK_SECTION_E);
- 	} else {
- 		match(TOK_EQ);
--		if (!(root->v = _value(p)))
-+		if (!(value = _value(p)))
- 			return_NULL;
-+		if (root->v)
-+			log_warn("WARNING: Ignoring duplicate"
-+				 " config value: %s", str);
-+		root->v = value;
- 	}
- 
- 	return root;
 
 
