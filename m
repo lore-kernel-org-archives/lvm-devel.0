@@ -1,57 +1,84 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 22 Nov 2014 17:52:04 +0000 (UTC)
-Subject: master - libdm: fix reporting of empty string list
-Message-ID: <20141122175204.7C2B260A2C@fedorahosted.org>
+Date: Sat, 22 Nov 2014 17:52:06 +0000 (UTC)
+Subject: master - tests: use old virt snaps in the test
+Message-ID: <20141122175206.9AFDC601B9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc935495c813b7577ac8237459a2cc65ea291ac2
-Commit:        fc935495c813b7577ac8237459a2cc65ea291ac2
-Parent:        75d79f3dad99106c2ecb68c67507f9c367893ec1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4607cbcb0d785a8b112c32ee2487c5f9ee59cdc4
+Commit:        4607cbcb0d785a8b112c32ee2487c5f9ee59cdc4
+Parent:        fc935495c813b7577ac8237459a2cc65ea291ac2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Nov 22 18:13:21 2014 +0100
+AuthorDate:    Sat Nov 22 18:14:45 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Nov 22 18:50:53 2014 +0100
+CommitterDate: Sat Nov 22 18:51:02 2014 +0100
 
-libdm: fix reporting of empty string list
+tests: use old virt snaps in the test
 
-Don't write behind the allocated array when list is empty.
-Use index 0 for the allocated element.
-
-Error triggered by i.e.:  lvs -a -o all,lv_modules
+Don't use thin with its thin requirements for the test.
 ---
- WHATS_NEW_DM         |    1 +
- libdm/libdm-report.c |    4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ test/shell/lvcreate-large-raid.sh   |   10 +++++-----
+ test/shell/lvcreate-large-raid10.sh |   10 +++++-----
+ test/shell/lvcreate-large.sh        |    2 +-
+ 3 files changed, 11 insertions(+), 11 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index a89696f..0de5b89 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.92 - 
- ====================================
-+  Fix memory corruption with sorting empty string lists (1.02.86).
-   Fix man dmsetup.8 syntax warning of Groff
+diff --git a/test/shell/lvcreate-large-raid.sh b/test/shell/lvcreate-large-raid.sh
+index 286b068..182b267 100644
+--- a/test/shell/lvcreate-large-raid.sh
++++ b/test/shell/lvcreate-large-raid.sh
+@@ -20,11 +20,11 @@ aux have_raid 1 3 0 || skip
  
- Version 1.02.91 - 11th November 2014
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index bf64cc3..f768750 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -378,8 +378,8 @@ static int _report_field_string_list(struct dm_report *rh,
- 	/* zero items */
- 	if (!list_size) {
- 		sort_value->value = field->report_string = "";
--		sort_value->items[1].pos = 0;
--		sort_value->items[1].len = 0;
-+		sort_value->items[0].pos = 0;
-+		sort_value->items[0].len = 0;
- 		field->sort_value = sort_value;
- 		return 1;
- 	}
+ aux prepare_vg 5
+ 
+-lvcreate -s -l 20%FREE -n $lv1 $vg --virtualsize 256T
+-lvcreate -s -l 20%FREE -n $lv2 $vg --virtualsize 256T
+-lvcreate -s -l 20%FREE -n $lv3 $vg --virtualsize 256T
+-lvcreate -s -l 20%FREE -n $lv4 $vg --virtualsize 256T
+-lvcreate -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv1 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv2 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv3 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv4 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
+ 
+ #FIXME this should be 1024T
+ #check lv_field $vg/$lv size "128.00m"
+diff --git a/test/shell/lvcreate-large-raid10.sh b/test/shell/lvcreate-large-raid10.sh
+index 3c6ddcf..de1cc02 100644
+--- a/test/shell/lvcreate-large-raid10.sh
++++ b/test/shell/lvcreate-large-raid10.sh
+@@ -20,11 +20,11 @@ aux have_raid 1 3 0 || skip
+ 
+ aux prepare_vg 5
+ 
+-lvcreate -s -l 20%FREE -n $lv1 $vg --virtualsize 256T
+-lvcreate -s -l 20%FREE -n $lv2 $vg --virtualsize 256T
+-lvcreate -s -l 20%FREE -n $lv3 $vg --virtualsize 256T
+-lvcreate -s -l 20%FREE -n $lv4 $vg --virtualsize 256T
+-lvcreate -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv1 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv2 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv3 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv4 $vg --virtualsize 256T
++lvcreate --type snapshot -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
+ 
+ aux extend_filter_LVMTEST
+ 
+diff --git a/test/shell/lvcreate-large.sh b/test/shell/lvcreate-large.sh
+index 24fccb1..29bdd33 100644
+--- a/test/shell/lvcreate-large.sh
++++ b/test/shell/lvcreate-large.sh
+@@ -18,7 +18,7 @@ aux can_use_16T || skip
+ 
+ aux prepare_vg 4
+ 
+-lvcreate -s -l 100%FREE -n $lv $vg --virtualsize 1024T
++lvcreate --type snapshot -s -l 100%FREE -n $lv $vg --virtualsize 1024T
+ 
+ #FIXME this should be 1024T
+ #check lv_field $vg/$lv size "128.00m"
 
 
