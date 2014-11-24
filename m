@@ -1,58 +1,41 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 28 Nov 2014 23:11:22 +0000 (UTC)
-Subject: v2_02_114 annotated tag has been created
-Message-ID: <20141128231122.CE60A60FC3@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 24 Nov 2014 13:50:07 +0000 (UTC)
+Subject: master - tests: use proper LVMTEST prefix for VG name
+Message-ID: <20141124135007.B8DAB613B6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=95ae8022ff34337ff81d1e9829a970108bc19622
-Commit:        95ae8022ff34337ff81d1e9829a970108bc19622
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2014-11-28 23:06 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2014-11-28 23:06 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=74e6135c4f06f922672a057e7c47f513e84d035d
+Commit:        74e6135c4f06f922672a057e7c47f513e84d035d
+Parent:        1e80265c368f135bf7a92c5bb4ed49948a76f712
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Nov 24 00:44:43 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Nov 24 14:39:04 2014 +0100
 
-annotated tag: v2_02_114 has been created
-	    at 95ae8022ff34337ff81d1e9829a970108bc19622 (tag)
-       tagging e492861749195311cc71910aaacb084110a9ddbb (commit)
-      replaces v2_02_113
+tests: use proper LVMTEST prefix for VG name
 
-Release 2.02.114.
+Cleaner needs prefix to do its jobs and clean any left VG from python
+test as well.
+---
+ test/api/python_lvm_unit.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-19 files changed, 154 insertions(+), 36 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
-
-iEYEABECAAYFAlR5AA4ACgkQIoGRwVZ+LBdbZACgpGyyHYDWMHIE7PswYHIssKZH
-rdgAoLGvssqqpq/R8evtl78ExaX2MvqZ
-=7bcm
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (3):
-      post-release
-      libdaemon: Fix some client leaks.
-      pre-release
-
-Peter Rajnoha (5):
-      pvresize: fix size in 'Resizing to ...' verbose message to show proper result size
-      initscripts: fix typo in clvmd initscript causing CLVMD_STOP_TIMEOUT variable to be ignored
-      coverity: remove dead code in lv_info_with_seg_status
-      coverity: fix possible NULL dereference
-      coverity: remove dead code in lv_info_with_seg_status (continued)
-
-Petr Rockai (4):
-      toollib: Fix uninitialised config value type in get_cachepolicy_params.
-      metadata: Add cache_policy to lvcreate_params and honour it.
-      lvcreate: Implement --cachepolicy/--cachesettings.
-      Update WHATS_NEW.
-
-Zdenek Kabelac (3):
-      thin: add missing 64KB rounding
-      makefiles: avoid regeneration of Makefile
-      toollib: fix regression in parsing /dev/mapper/vg-lv
+diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
+index c338775..2f22fae 100755
+--- a/test/api/python_lvm_unit.py
++++ b/test/api/python_lvm_unit.py
+@@ -103,7 +103,7 @@ class AllowedPVS(object):
+ 
+ class TestLvm(unittest.TestCase):
+ 
+-	VG_P = 'py_unit_test_'
++	VG_P = os.environ.get('PREFIX')
+ 
+ 	@staticmethod
+ 	def _get_pv_device_names():
 
 
