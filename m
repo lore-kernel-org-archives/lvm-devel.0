@@ -1,170 +1,94 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 28 Nov 2014 21:38:12 +0000 (UTC)
-Subject: master - libdaemon: Fix some client leaks.
-Message-ID: <20141128213812.65285607A3@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 24 Nov 2014 13:50:05 +0000 (UTC)
+Subject: master - lvconvert: earlier detection of conflicting names
+Message-ID: <20141124135005.9A7F1613B6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6521c4b2156597a36a986def85449be734336c72
-Commit:        6521c4b2156597a36a986def85449be734336c72
-Parent:        530ebd8976bc08fdbaac7c132301fdde1e66ed8f
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Nov 28 21:31:51 2014 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Nov 28 21:31:51 2014 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1e80265c368f135bf7a92c5bb4ed49948a76f712
+Commit:        1e80265c368f135bf7a92c5bb4ed49948a76f712
+Parent:        a058fab118b74ddddc8492752748f0a68c014ce6
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Nov 24 00:35:27 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Nov 24 14:39:04 2014 +0100
 
-libdaemon: Fix some client leaks.
+lvconvert: earlier detection of conflicting names
 
-Free (and clear) h.protocol string on daemon_open() error paths
-so it's OK for caller to skip calling daemon_close() if returned
-h.socket_fd is -1.
-
-Close h.socket_fd in daemon_close() to avoid possible leak.
-
-https://bugzilla.redhat.com/1164234
+Detect same LV names for lvconvert prior opening VG.
+i.e. lvconvert --thinpool vg/lvol0  -T lvol0
 ---
- WHATS_NEW                        |    1 +
- daemons/lvmetad/testclient.c     |    4 +++-
- libdaemon/client/daemon-client.c |   30 +++++++++++++++++++++++-------
- libdaemon/client/daemon-client.h |    7 ++++---
- 4 files changed, 31 insertions(+), 11 deletions(-)
+ test/shell/lvconvert-thin.sh |    4 ++--
+ tools/lvconvert.c            |   25 +++++++++++++++++++++++++
+ 2 files changed, 27 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 89f0ebb..b1cce84 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.114 - 
- =====================================
-+  Release socket in daemon_close and protocol string in a daemon_open error path.
-   Add --cachepolicy and --cachesettings to lvcreate.
-   Fix regression when parsing /dev/mapper dir (2.02.112).
-   Fix missing rounding to 64KB when estimating optimal thin pool chunk size.
-diff --git a/daemons/lvmetad/testclient.c b/daemons/lvmetad/testclient.c
-index c4cf7c5..8ea068d 100644
---- a/daemons/lvmetad/testclient.c
-+++ b/daemons/lvmetad/testclient.c
-@@ -105,6 +105,7 @@ void _dump_vg(daemon_handle h, const char *uuid)
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index 74484b1..951f694 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -53,7 +53,7 @@ lvchange -an $vg/$lv1
+ # conversion fails for mirror segment type
+ fail lvconvert --thinpool $vg/$lv1
+ # cannot use same LV
+-fail lvconvert --yes --thinpool $vg/$lv2 --poolmetadata $vg/$lv2
++invalid lvconvert --yes --thinpool $vg/$lv2 --poolmetadata $vg/$lv2
  
- int main(int argc, char **argv) {
- 	daemon_handle h = lvmetad_open();
-+	/* FIXME Missing error path */
+ prepare_lvs
  
- 	if (argc > 1) {
- 		int i;
-@@ -114,6 +115,7 @@ int main(int argc, char **argv) {
- 			scan(h, argv[i]);
+@@ -104,7 +104,7 @@ invalid lvconvert -c -256 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+ invalid lvconvert -c 88 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+ 
+ # cannot use same LV for pool and convertion
+-fail lvconvert --yes --thinpool $vg/$lv3 -T $vg/$lv3
++invalid lvconvert --yes --thinpool $vg/$lv3 -T $vg/$lv3
+ 
+ # Warning about smaller then suggested
+ lvconvert --yes -c 256 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2 |& tee err
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 8436c24..c7acd5d 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -76,6 +76,28 @@ struct lvconvert_params {
+ 	thin_discards_t discards;
+ };
+ 
++static int _lvconvert_validate_names(struct lvconvert_params *lp)
++{
++	int i, j;
++	const char *names[] = {
++		(lp->lv_name == lp->pool_data_name) ? NULL : lp->lv_name, "converted",
++		lp->pool_data_name, "pool",
++		lp->pool_metadata_name, "pool metadata",
++		lp->origin_name, "origin",
++	};
++
++	for (i = 0; i < DM_ARRAY_SIZE(names); i += 2)
++		if (names[i])
++			for (j = i + 2; j < DM_ARRAY_SIZE(names); j += 2)
++				if (names[j] && !strcmp(names[i], names[j])) {
++					log_error("Can't use same name %s for %s and %s volume.",
++						  names[i], names[i + 1], names[j + 1]);
++					return 0;
++				}
++
++	return 1;
++}
++
+ static int _lvconvert_name_params(struct lvconvert_params *lp,
+ 				  struct cmd_context *cmd,
+ 				  int *pargc, char ***pargv)
+@@ -195,6 +217,9 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
  		}
- 		destroy_toolcontext(cmd);
-+		/* FIXME Missing lvmetad_close() */
- 		return 0;
  	}
  
-@@ -122,6 +124,6 @@ int main(int argc, char **argv) {
- 	_dump_vg(h, vgid);
- 	_pv_add(h, uuid3, NULL);
- 
--	daemon_close(h);
-+	daemon_close(h);	/* FIXME lvmetad_close? */
- 	return 0;
- }
-diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
-index d0b8951..d37b966 100644
---- a/libdaemon/client/daemon-client.c
-+++ b/libdaemon/client/daemon-client.c
-@@ -26,7 +26,11 @@
- 
- daemon_handle daemon_open(daemon_info i)
- {
--	daemon_handle h = { .protocol_version = 0, .error = 0 };
-+	daemon_handle h = {
-+		.protocol = NULL,
-+		.protocol_version = 0,
-+		.error = 0
-+	};
- 	daemon_reply r = { 0 };
- 	struct sockaddr_un sockaddr = { .sun_family = AF_UNIX };
- 
-@@ -79,12 +83,16 @@ daemon_handle daemon_open(daemon_info i)
- 	return h;
- 
- error:
--	if (h.socket_fd >= 0)
--		if (close(h.socket_fd))
--			log_sys_error("close", "daemon_open");
-+	if (h.socket_fd >= 0 && close(h.socket_fd))
-+		log_sys_error("close", "daemon_open");
-+	h.socket_fd = -1;
++	if (!_lvconvert_validate_names(lp))
++		return_0;
 +
- 	if (r.cft)
- 		daemon_reply_destroy(r);
--	h.socket_fd = -1;
-+
-+	dm_free((char *)h.protocol);
-+	h.protocol = NULL;
-+
- 	return h;
+ 	return 1;
  }
- 
-@@ -118,7 +126,8 @@ daemon_reply daemon_send(daemon_handle h, daemon_request rq)
- 	return reply;
- }
- 
--void daemon_reply_destroy(daemon_reply r) {
-+void daemon_reply_destroy(daemon_reply r)
-+{
- 	if (r.cft)
- 		dm_config_destroy(r.cft);
- 	buffer_destroy(&r.buffer);
-@@ -160,6 +169,12 @@ daemon_reply daemon_send_simple(daemon_handle h, const char *id, ...)
- 
- void daemon_close(daemon_handle h)
- {
-+	if (h.socket_fd >= 0) {
-+		log_debug("Closing daemon socket (fd %d).", h.socket_fd);
-+ 		if (close(h.socket_fd))
-+			log_sys_error("close", "daemon_close");
-+	}
-+
- 	dm_free((char *)h.protocol);
- }
- 
-@@ -210,7 +225,8 @@ int daemon_request_extend(daemon_request r, ...)
- 	return res;
- }
- 
--void daemon_request_destroy(daemon_request r) {
-+void daemon_request_destroy(daemon_request r)
-+{
- 	if (r.cft)
- 		dm_config_destroy(r.cft);
- 	buffer_destroy(&r.buffer);
-diff --git a/libdaemon/client/daemon-client.h b/libdaemon/client/daemon-client.h
-index ae3be91..e1445c1 100644
---- a/libdaemon/client/daemon-client.h
-+++ b/libdaemon/client/daemon-client.h
-@@ -97,15 +97,16 @@ void daemon_request_destroy(daemon_request r);
- 
- void daemon_reply_destroy(daemon_reply r);
- 
--static inline int64_t daemon_reply_int(daemon_reply r, const char *path, int64_t def) {
-+static inline int64_t daemon_reply_int(daemon_reply r, const char *path, int64_t def)
-+{
- 	return dm_config_find_int64(r.cft->root, path, def);
- }
- 
--static inline const char *daemon_reply_str(daemon_reply r, const char *path, const char *def) {
-+static inline const char *daemon_reply_str(daemon_reply r, const char *path, const char *def)
-+{
- 	return dm_config_find_str_allow_empty(r.cft->root, path, def);
- }
- 
--
- /* Shut down the communication to the daemon. Compulsory. */
- void daemon_close(daemon_handle h);
  
 
 
