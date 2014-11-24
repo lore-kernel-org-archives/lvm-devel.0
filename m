@@ -1,144 +1,43 @@
-From: Thomas Woerner <twoerner@redhat.com>
-Date: Thu, 11 Dec 2008 17:43:42 +0100
-Subject: [PATCH] New public functions lvm2_reload_config, lvm2_set_config_option and lvm2_reset_config_option.
-In-Reply-To: <1229013822-10809-3-git-send-email-twoerner@redhat.com>
-References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
-	<1229013822-10809-2-git-send-email-twoerner@redhat.com>
-	<1229013822-10809-3-git-send-email-twoerner@redhat.com>
-Message-ID: <1229013822-10809-4-git-send-email-twoerner@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 24 Nov 2014 13:50:01 +0000 (UTC)
+Subject: master - libdm: there is no element in item 0
+Message-ID: <20141124135001.6294F613B6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- lib/lvm2.c |   52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- lib/lvm2.h |   38 ++++++++++++++++++++++++++++++++++++++
- 2 files changed, 90 insertions(+), 0 deletions(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8bc7b4f926c8ae24c99391c39fc8e2a9fa55d80a
+Commit:        8bc7b4f926c8ae24c99391c39fc8e2a9fa55d80a
+Parent:        fb220314ec787bd8f0855b055e1b3bba7368dd26
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Nov 24 14:37:11 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Nov 24 14:38:54 2014 +0100
 
-diff --git a/lib/lvm2.c b/lib/lvm2.c
-index daf9a79..ac5e583 100644
---- a/lib/lvm2.c
-+++ b/lib/lvm2.c
-@@ -15,6 +15,30 @@
- #include "lvm2.h"
- #include "lib.h"
- #include "toolcontext.h"
-+#include "archiver.h"
-+#include "activate.h"
-+#include "../tools/tools.h"
-+
-+
-+static void _apply_settings(struct cmd_context *cmd)
-+{
-+  init_debug(cmd->current_settings.debug);
-+  init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
-+  init_test(cmd->current_settings.test);
-+  init_full_scan_done(0);
-+  init_mirror_in_sync(0);
-+  
-+  init_msg_prefix(cmd->default_settings.msg_prefix);
-+  init_cmd_name(cmd->default_settings.cmd_name);
-+
-+  archive_enable(cmd, cmd->current_settings.archive);
-+  backup_enable(cmd, cmd->current_settings.backup);
-+
-+  set_activation(cmd->current_settings.activation);
-+
-+  cmd->fmt = cmd->current_settings.fmt;
-+  cmd->handles_missing_pvs = 0;
-+}
- 
- 
- lvm2_handle_t lvm2_create(const char *sys_dir)
-@@ -30,6 +54,8 @@ lvm2_handle_t lvm2_create(const char *sys_dir)
-    * - bind logging to handle
-    */
- 
-+  _apply_settings(cmd);
-+
-   return (lvm2_handle_t) cmd;
- }
- 
-@@ -40,3 +66,29 @@ void lvm2_destroy(lvm2_handle_t libh)
- 
-   return 1;
- }
-+
-+
-+int lvm2_reload_config(lvm2_handle_t libh)
-+{
-+  int refresh;
-+  
-+  refresh = refresh_toolcontext((struct cmd_context *) libh);
-+
-+  if (refresh)
-+    _apply_settings((struct cmd_context *) libh);
-+
-+  return refresh;
-+}
-+
-+
-+int lvm2_set_config_option(lvm2_handle_t libh, const char *option,
-+			   const char *value)
-+{
-+  return 1;
-+}
-+
-+
-+int lvm2_reset_config_option(lvm2_handle_t libh, const char *option)
-+{
-+  return 1;
-+}
-diff --git a/lib/lvm2.h b/lib/lvm2.h
-index b131fd7..b2c97d0 100644
---- a/lib/lvm2.h
-+++ b/lib/lvm2.h
-@@ -49,4 +49,42 @@ lvm2_handle_t lvm2_create(const char *sys_dir);
-  */
- void lvm2_destroy(lvm2_handle_t h);
- 
-+/*
-+ * lvm2_reload_config
-+ *
-+ * Description: Reload configuration files
-+ *
-+ * Returns:
-+ *   0: error
-+ *   1: success
-+ */
-+int lvm2_reload_config(lvm2_handle_t h);
-+
-+/*
-+ * lvm2_set_config_option
-+ *
-+ * Description: Load an lvm config option into the existing configuration.
-+ *   The formation of the option parameter is similar to the names
-+ *   in /etc/lvm/lvm.conf.
-+ *   An option within a section is specified with a '/' between the
-+ *   section name and option.  For example, the 'filter' option in the
-+ *   devices section is specified by 'devices/filter'
-+ *
-+ * Returns:
-+ *   0: error
-+ *   1: success
-+ */
-+int lvm2_set_config_option(lvm2_handle_t h, const char *option,
-+			   const char *value);
-+/*
-+ * lvm2_remove_config_option
-+ *
-+ * Description:
-+ *
-+ * Returns:
-+ *   0: error
-+ *   1: success
-+ */
-+int lvm2_reset_config_option(lvm2_handle_t h, const char *option);
-+
- #endif
--- 
-1.6.0.4
+libdm: there is no element in item 0
+
+Items[0] holds only counter in .len.
+So don't zero already zeroed items[0].len assigned above.
+
+(finishing fc935495c813b7577ac8237459a2cc65ea291ac2)
+---
+ libdm/libdm-report.c |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
+
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 470c2d1..a1bab05 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -393,8 +393,6 @@ static int _report_field_string_list(struct dm_report *rh,
+ 	/* zero items */
+ 	if (!list_size) {
+ 		sort_value->value = field->report_string = "";
+-		sort_value->items[0].pos = 0;
+-		sort_value->items[0].len = 0;
+ 		field->sort_value = sort_value;
+ 		return 1;
+ 	}
 
 
