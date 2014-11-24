@@ -1,53 +1,52 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun, 23 Nov 2014 23:03:18 +0000 (UTC)
-Subject: master - man/lvchange: Mention --cachepolicy and --cachesettings.
-Message-ID: <20141123230318.BA95E6055D@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 24 Nov 2014 09:48:32 +0000 (UTC)
+Subject: master - report: add some comments about how string list is stored internally
+Message-ID: <20141124094833.0005C60DA7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ced0c17f2179af623cfec72e5a52f93471cda676
-Commit:        ced0c17f2179af623cfec72e5a52f93471cda676
-Parent:        1445a74d76ddf59043e0e713c6a96eddc4839670
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Nov 23 23:42:20 2014 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Mon Nov 24 00:02:55 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b9601b8353a7d7ccba70638800630065175e6f03
+Commit:        b9601b8353a7d7ccba70638800630065175e6f03
+Parent:        ced0c17f2179af623cfec72e5a52f93471cda676
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Nov 24 10:48:01 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Nov 24 10:48:01 2014 +0100
 
-man/lvchange: Mention --cachepolicy and --cachesettings.
+report: add some comments about how string list is stored internally
 
 ---
- man/lvchange.8.in |    9 +++++++++
- 1 files changed, 9 insertions(+), 0 deletions(-)
+ libdm/libdm-report.c |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
 
-diff --git a/man/lvchange.8.in b/man/lvchange.8.in
-index cafb914..4577cce 100644
---- a/man/lvchange.8.in
-+++ b/man/lvchange.8.in
-@@ -16,6 +16,10 @@ lvchange \(em change attributes of a logical volume
- .RB [ \-K | \-\-ignoreactivationskip ]
- .RB [ \-\-alloc
- .IR AllocationPolicy ]
-+.RB [ \-\-cachepolicy
-+.IR policy ]
-+.RB [ \-\-cachesettings
-+.IR key=value ]
- .RB [ \-\-commandprofile
- .IR ProfileName ]
- .RB [ \-C | \-\-contiguous
-@@ -131,6 +135,11 @@ of the flag is reported within \fBlv_attr\fP bits.
- .BR \-K ", " \-\-ignoreactivationskip
- Ignore the flag to skip Logical Volumes during activation.
- .TP
-+.BR  \-\-cachepolicy " " policy ", " \-\-cachesettings " " key=value
-+Only applicable to cached LVs; see also \fBlvmcache(7)\fP. Sets
-+the cache policy and its associated tunable settings. In most use-cases,
-+default values should be adequate.
-+.TP
- .BR \-C ", " \-\-contiguous " {" \fIy | \fIn }
- Tries to set or reset the contiguous allocation policy for
- logical volumes. It's only possible to change a non-contiguous
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 0dfbc30..88a429b 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -368,6 +368,21 @@ static int _report_field_string_list(struct dm_report *rh,
+ 	 * position and length for each list element withing the report_string.
+ 	 * The first element stores number of elements in 'len' (therefore
+ 	 * list_size + 1 is used below for the extra element).
++	 * For example, with this input:
++	 *   sort = 0;  (we don't want to report sorted)
++	 *   report_string = "abc,xy,defgh";  (this is reported)
++	 *
++	 * ...we end up with:
++	 *   sort_value->value = report_string; (we'll use the original report_string for indices)
++	 *   sort_value->items[0] = {0,3};  (we have 3 items)
++	 *   sort_value->items[1] = {0,3};  ("abc")
++	 *   sort_value->items[2] = {7,4};  ("defgh")
++	 *   sort_value->items[3] = {4,2};  ("xy")
++	 *
++	 *   The items alone are always sorted while in report_string they can be
++	 *   sorted or not (based on "sort" arg) - it depends on how we prefer to
++	 *   display the list. Having items sorted internally helps with searching
++	 *   through them.
+ 	 */
+ 	if (!(sort_value->items = dm_pool_zalloc(rh->mem, (list_size + 1) * sizeof(struct str_list_sort_value_item)))) {
+ 		log_error("dm_report_fiel_string_list: dm_pool_zalloc failed for sort value items");
 
 
