@@ -1,75 +1,105 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Sun, 7 Dec 2008 12:17:31 +0000
-Subject: [PATCH] Add liblvm interactive test infrastructure to build.
-In-Reply-To: <1228624391-904-1-git-send-email-dwysocha@redhat.com>
-References: <1228624391-904-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <20081207121730.GJ26097@agk.fab.redhat.com>
+From: saulery@free.fr <saulery@free.fr>
+Date: Tue, 25 Nov 2014 02:57:21 +0100
+Subject: Improve manpage clvmd.8.in
+In-Reply-To: <1416880642-26059-1-git-send-email-saulery@free.fr>
+References: <1416880642-26059-1-git-send-email-saulery@free.fr>
+Message-ID: <1416880642-26059-2-git-send-email-saulery@free.fr>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sat, Dec 06, 2008 at 11:33:11PM -0500, Dave Wysochanski wrote:
->  configure            |    3 +-
->  configure.in         |    1 +
+From: St?phane Aulery <saulery@free.fr>
 
->  lib/liblvm2.h        |   43 +++++++++++++++++++++
-include/.symlinks missing from patch
+- Standardize the form of arguments
+- clvmd references in bold
+- Highlight arguments used in text
+- Simplify reading of debug levels (omitted = 1)
+- Document the cluster manager "singlenode" that has been forgotten.
+- Simplify -d highlights for "maintenability"
 
->  test/api/Makefile.in |   38 ++++++++++++++++++
->  test/api/test.c      |  102 ++++++++++++++++++++++++++++++++++++++++++++++++++
+Signed-off-by: St?phane Aulery <saulery@free.fr>
+---
+ man/clvmd.8.in | 28 +++++++++++++---------------
+ 1 file changed, 13 insertions(+), 15 deletions(-)
 
-
-> diff --git a/lib/liblvm2.h b/lib/liblvm2.h
-
-Try just "lvm2.h" ?
-(i.e. It can be /usr/include/lvm2.h alongside the existing /usr/include/lvm2cmd.h)
-
-> new file mode 100644
-> index 0000000..757cd31
-> --- /dev/null
-> +++ b/lib/liblvm2.h
-
-Missing copyright notice (also applies to some other new files).
-
-> @@ -0,0 +1,43 @@
-> +#ifndef _LIBLVM_API_H_
-
-Try _LIB_LVM2_H ?
-
-> +/*
-> + * lvm2_close
-> +int lvm2_close(lvm_context_t h);
-> + *
-> + * Description: Close an LVM2 context allocated with lvm2_open
-> + *
-> + * Parameters:
-> + * - h (IN): context obtained from lvm2_open
-> + *
-> + * Returns:
-> + * 0 - fail
-> + * 1 - success
-> + */
-
-For the public library, I think 0 = success fits better - that's what we
-have in our one other public library so far, liblvm2cmd, and fits in with
-the idea we mentioned of trying errno values for errors.
-
-(I'm not that keen on open/close here - personally I find create/new & destroy matches
-the functionality better - and I prefer 'handle' to 'context'.)
-
-And in what way is this function allowed to fail, anyway - what stops it from
-being void?
-
-> +++ b/test/api/test.c
-
-> +#include "../../lib/liblvm2.h"
-
-Try to avoid relative paths - use -I<dir> instead.
-
-Alasdair
+diff --git a/man/clvmd.8.in b/man/clvmd.8.in
+index 9b2bd4e..22f0979 100644
+--- a/man/clvmd.8.in
++++ b/man/clvmd.8.in
+@@ -10,7 +10,7 @@ clvmd \(em cluster LVM daemon
+ .RB [ \-f ]
+ .RB [ \-h ]
+ .RB [ \-I
+-.IR "cluster_manager" ]
++.RI < "cluster manager" >]
+ .RB [ \-R ]
+ .RB [ \-S ]
+ .RB [ \-t
+@@ -25,9 +25,10 @@ if a node in the cluster does not have this daemon running.
+ .SH OPTIONS
+ .TP
+ .BR \-d [< \fIvalue >]
+-Set debug logging level.If \fB\-d\fP is specified without a \fIvalue\fP 
+-then 1 is assumed. \fIValue\fP can be:
++Set debug logging level. \fIValue\fP can be:
+ .RS
++.IP [\fIOmitted\fP]
++Equivalent to \fI1\fP.
+ .IP \fI0\fP
+ Disabled
+ .IP \fI1\fP
+@@ -40,15 +41,12 @@ Sends debug logs to \fBsyslog\fP(3)
+ Only valid if
+ .B \-d
+ is also specified. Tells all clvmds in a cluster to enable/disable debug logging.
+-Without this switch, only the local clvmd will change its debug level to that
+-given with
+-.B \-d
+-.
+-.br
+-This does not work correctly if specified on the command-line that starts clvmd.
+-If you want to start clvmd
+-.B and
+-enable cluster-wide logging then the command needs to be issued twice, eg:
++Without this switch, only the local \fBclvmd\fP will change its debug level to that
++given with \fB\-d\fP.
++
++This does not work correctly if specified on the command-line that starts
++\fBclvmd\fP. If you want to start clvmd \fBand\fP enable cluster-wide logging
++then the command needs to be issued twice, eg:
+ .br
+ .B clvmd
+ .br
+@@ -56,7 +54,7 @@ enable cluster-wide logging then the command needs to be issued twice, eg:
+ .br
+ .TP
+ .BR \-E < "\fIlock uuid" >
+-Pass lock uuid to be reacquired exclusively when clvmd is restarted.
++Pass \fIlock uuid\fP to be reacquired exclusively when \fBclvmd\fP is restarted.
+ .TP
+ .B \-f
+ Don't fork, run in the foreground.
+@@ -64,7 +62,7 @@ Don't fork, run in the foreground.
+ .B \-h
+ Show help information.
+ .TP
+-.BR \-I " \fIcluster_manager\fP"
++.BR \-I < "\fIcluster manager\fP" >
+ Selects the \fIcluster manager\fP to use for locking and internal
+ communications. As it is quite possible to have multiple managers available on
+ the same system you might have to manually specify this option to override the
+@@ -72,7 +70,7 @@ search.
+ 
+ By default, omit \fB-I\fP is equivalent to \fB\-I\fP\fIauto\fP. \fBClvmd\fP
+ will use the first cluster manager that succeeds, and it checks them in a
+-predefined order cman,corosync,openais.
++predefined order: \fIcman, corosync, openais, singlenode\fP.
+ The available managers will be listed by order as part of the
+ \fBclvmd \-h\fP output.
+ .TP
 -- 
-agk at redhat.com
+2.1.3
 
 
