@@ -1,45 +1,39 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 10 Dec 2008 16:16:54 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20081210161654.23913.qmail@sourceware.org>
+From: saulery@free.fr <saulery@free.fr>
+Date: Tue, 25 Nov 2014 02:57:22 +0100
+Subject: Remove -v option of clvmd
+In-Reply-To: <1416880642-26059-1-git-send-email-saulery@free.fr>
+References: <1416880642-26059-1-git-send-email-saulery@free.fr>
+Message-ID: <1416880642-26059-3-git-send-email-saulery@free.fr>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2008-12-10 16:16:54
+From: St?phane Aulery <saulery@free.fr>
 
-Modified files:
-	test           : test-utils.sh 
+-V is documented, not -v. Needless currently. A --version option would be
+better.
 
-Log message:
-	operate on test subdirectory instead on main /dev
+Signed-off-by: St?phane Aulery <saulery@free.fr>
+---
+ daemons/clvmd/clvmd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-
---- LVM2/test/test-utils.sh	2008/12/05 05:03:23	1.7
-+++ LVM2/test/test-utils.sh	2008/12/10 16:16:53	1.8
-@@ -33,7 +33,7 @@
- 	echo $PREFIX
- 
- 	test -n "$PREFIX" && {
--		rm -rf /dev/$PREFIX*
-+		rm -rf $G_root_/dev/$PREFIX*
- 		while dmsetup table | grep -q ^$PREFIX; do
- 			for s in `dmsetup table | grep ^$PREFIX| cut -f1 -d:`; do
- 				dmsetup resume $s 2>/dev/null > /dev/null || true
-@@ -52,7 +52,7 @@
- make_ioerror() {
- 	echo 0 10000000 error | dmsetup create ioerror
- 	dmsetup resume ioerror
--	ln -s /dev/mapper/ioerror /dev/ioerror
-+	ln -s $G_dev_/mapper/ioerror $G_dev_/ioerror
- }
- 
- prepare_loop() {
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 5cd6874..0f1aa5f 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -372,7 +372,7 @@ int main(int argc, char *argv[])
+ 	/* Deal with command-line arguments */
+ 	opterr = 0;
+ 	optind = 0;
+-	while ((opt = getopt_long(argc, argv, "vVhfd:t:RST:CI:E:",
++	while ((opt = getopt_long(argc, argv, "Vhfd:t:RST:CI:E:",
+ 				  longopts, NULL)) != -1) {
+ 		switch (opt) {
+ 		case 'h':
+-- 
+2.1.3
 
 
