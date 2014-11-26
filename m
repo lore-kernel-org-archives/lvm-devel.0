@@ -1,62 +1,62 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 15 Dec 2008 16:56:20 +0100
-Subject: [PATCH] (1/2) new library interface for vg_read
-In-Reply-To: <1229104225.16499.21.camel@localhost.localdomain> (Dave
-	Wysochanski's message of "Fri, 12 Dec 2008 12:50:25 -0500")
-References: <87y6ypcn7l.fsf@eriador.mornfall.net>
-	<1229027813.20795.15.camel@localhost.localdomain>
-	<87ljulbvgu.fsf@eriador.mornfall.net>
-	<1229104225.16499.21.camel@localhost.localdomain>
-Message-ID: <87r649a0uz.fsf@eriador.mornfall.net>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 26 Nov 2014 10:51:53 +0000 (UTC)
+Subject: master - coverity: remove dead code in lv_info_with_seg_status
+Message-ID: <20141126105153.9C17F60E2F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86ae68a5f7e396a6584b8003667b44a433d914fd
+Commit:        86ae68a5f7e396a6584b8003667b44a433d914fd
+Parent:        2cd98b27825b00459bd8e2c0539ffe5c09ed5b62
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Nov 26 11:30:01 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Nov 26 11:30:01 2014 +0100
 
-Dave Wysochanski <dwysocha@redhat.com> writes:
-> Well, doesn't this cause a bug in this path though for the !consistent
-> case?  First patch drops the consistent variable in this vgremove path,
-> but things like _process_one_vg() do not use the new APIs (which sets
-> the proper error codes) until the second patch.  You mention in your
-> patch intro this first patch should apply and make a completely workable
-> LVM so I'm assuming you mean no bugs.
-Oh, hm, you are apparently right. Interestingly enough, the presumably buggy
-code does pass the testsuite, so something's wrong with the testsuite, I
-suppose. It might be good to have a test triggering that problem. I will
-re-split the patch and resubmit later today.
+coverity: remove dead code in lv_info_with_seg_status
 
-To jstava@:
+Just call return 0 directly on error path, without using
+"goto" - the code is short, no need to use it this way
+(the dead code appeared as part of further changes in this
+function).
+---
+ lib/activate/activate.c |    8 +-------
+ 1 files changed, 1 insertions(+), 7 deletions(-)
 
-Could you please apply the attached patch? Now lvm with this patch should break
-down on certain error conditions. I won't be able to exactly tell you how to
-reproduce the problem, or whether it's even possible from the commandline at
-this time, but if there is a testcase, it'll likely include inconsistent
-metadata. If it turns out to be too hard, feel free to leave it alone. You
-might be able to find extra info in this thread on lvm-devel at .
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 60dba1b..258873b 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -719,15 +719,13 @@ int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume
+ 			   struct lvinfo *lvinfo, struct lv_seg_status *lv_seg_status,
+ 			   int with_open_count, int with_read_ahead)
+ {
+-	int r = 0;
+-
+ 	if (!activation())
+ 		return 0;
+ 
+ 	if (lv == lv_seg->lv) {
+ 		r = _lv_info(cmd, lv, use_layer, lvinfo, lv_seg, lv_seg_status,
+ 			     with_open_count, with_read_ahead);
+-		goto out;
++		return 0;
+ 	}
+ 
+ 	/*
+@@ -737,10 +735,6 @@ int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume
+ 	 */
+ 	return _lv_info(cmd, lv, use_layer, lvinfo, NULL, NULL, with_open_count, with_read_ahead) &&
+ 	       _lv_info(cmd, lv_seg->lv, use_layer, NULL, lv_seg, lv_seg_status, 0, 0);
+-
+-	r = 1;
+-out:
+-	return r;
+ }
+ 
+ #define OPEN_COUNT_CHECK_RETRIES 25
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: new-all.diff
-Type: text/x-diff
-Size: 22464 bytes
-Desc: new-all.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081215/baf57aec/attachment.bin>
--------------- next part --------------
 
-Yours,
-   Petr.
-
-PS: This version of the patch actually compiles, but has the abovementioned
-bug. The previous failed to compile due to forgotten int vs uint32_t in
-vg_check_status definition.
-
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
-
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
