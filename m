@@ -1,56 +1,44 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 12 Dec 2008 08:29:39 -0500
-Subject: Re: LVM2 ./WHATS_NEW_DM libdm/libdm-deptree.c
-In-Reply-To: <49422E5E.7030700@redhat.com>
-References: <20081211162552.29826.qmail@sourceware.org>
-	<1229013323.20795.3.camel@localhost.localdomain>
-	<49422E5E.7030700@redhat.com>
-Message-ID: <1229088579.16499.7.camel@localhost.localdomain>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 26 Nov 2014 08:37:10 +0000 (UTC)
+Subject: master - makefiles: avoid regeneration of Makefile
+Message-ID: <20141126083710.DB4D16055B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2cd98b27825b00459bd8e2c0539ffe5c09ed5b62
+Commit:        2cd98b27825b00459bd8e2c0539ffe5c09ed5b62
+Parent:        2de11c9e9e9513fb7d9ab0323370e584d3d3acde
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Nov 25 23:01:28 2014 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Nov 26 09:36:12 2014 +0100
 
-On Fri, 2008-12-12 at 10:26 +0100, Zdenek Kabelac wrote:
-> Dave Wysochanski napsal(a):
-> >> +/* simplify string emiting code */
-> >> +#define EMIT_PARAMS(p, str...)\
-> >> +	do {\
-> >> +		const size_t bufsize = paramsize - (size_t)p;\
-> >> +		int w;\
-> >> +		\
-> >> +		if ((w = snprintf(params + p, bufsize, str)) < 0\
-> >> +		    || ((size_t)w >= bufsize)) {\
-> >> +			stack; /* Out of space */\
-> >> +			return -1;\
-> >> +		}\
-> >> +		p += w;\
-> >> +	} while (0)
-> >> +
-> > 
-> > Do we have to do a macro here?  Macros like this are harder to debug...
-> > 
-> 
-> 
-> I think it's actually minimizing the chance you will add a buggy code by some 
-> cut&paste operation when you add new string emitting line.
-> 
-> Also it makes the code more readable.
-> 
-> Do you think there is some potential debug problem in this code, that makes
-> worth to keep the original emitting style?
-> 
-> (i.e. replicator emits string 11 times - without this macro it makes the code 
-> even less readable,  and also using inline function and 'stack' macro is not 
-> going to work together, so it's hard to use gdb-friendly inline here :( )
-> 
+makefiles: avoid regeneration of Makefile
 
-I agree something like this makes the code more readable - I was not
-suggesting keeping the original code.  Was just wondering why you chose
-the macro vs a regular function.  Is performance very critical here?
-Something to do with using va_list?  Is there another reason for a macro
-I'm missing?
+When Makefile.in is touched, it's been matched by 'man' rule
+and it's been wrongly regnerated.
+
+Put in explicit rules to avoid Makefile sed processing.
+---
+ man/Makefile.in |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/man/Makefile.in b/man/Makefile.in
+index 40bf7a2..c42f07a 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -92,6 +92,9 @@ man: $(MAN5) $(MAN7) $(MAN8) $(MAN8CLUSTER) $(MAN8SYSTEMD_GENERATORS)
+ 
+ $(MAN5) $(MAN7) $(MAN8) $(MAN8DM) $(MAN8CLUSTER):	Makefile
+ 
++Makefile: Makefile.in
++	@:
++
+ %: %.in
+ 	@case "$@" in \
+ 	  */*) ;; \
 
 
