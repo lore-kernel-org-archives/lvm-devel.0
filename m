@@ -1,125 +1,170 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu, 27 Nov 2014 19:32:16 +0000 (UTC)
-Subject: master - lvcreate: Implement --cachepolicy/--cachesettings.
-Message-ID: <20141127193216.A34B360BBB@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 28 Nov 2014 21:38:12 +0000 (UTC)
+Subject: master - libdaemon: Fix some client leaks.
+Message-ID: <20141128213812.65285607A3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5b2726fc6142c734e06fa8b49ad856b2e47da9fc
-Commit:        5b2726fc6142c734e06fa8b49ad856b2e47da9fc
-Parent:        2c3db52356eebd7ad7e950a01f465359c040b379
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Thu Nov 27 20:21:41 2014 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Nov 27 20:22:03 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6521c4b2156597a36a986def85449be734336c72
+Commit:        6521c4b2156597a36a986def85449be734336c72
+Parent:        530ebd8976bc08fdbaac7c132301fdde1e66ed8f
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Nov 28 21:31:51 2014 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Nov 28 21:31:51 2014 +0000
 
-lvcreate: Implement --cachepolicy/--cachesettings.
+libdaemon: Fix some client leaks.
 
+Free (and clear) h.protocol string on daemon_open() error paths
+so it's OK for caller to skip calling daemon_close() if returned
+h.socket_fd is -1.
+
+Close h.socket_fd in daemon_close() to avoid possible leak.
+
+https://bugzilla.redhat.com/1164234
 ---
- test/shell/lvcreate-cache.sh |   14 ++++++++++++++
- tools/commands.h             |    3 ++-
- tools/lvcreate.c             |   19 ++++++++++++++++++-
- 3 files changed, 34 insertions(+), 2 deletions(-)
+ WHATS_NEW                        |    1 +
+ daemons/lvmetad/testclient.c     |    4 +++-
+ libdaemon/client/daemon-client.c |   30 +++++++++++++++++++++++-------
+ libdaemon/client/daemon-client.h |    7 ++++---
+ 4 files changed, 31 insertions(+), 11 deletions(-)
 
-diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
-index eeba827..f709d8b 100644
---- a/test/shell/lvcreate-cache.sh
-+++ b/test/shell/lvcreate-cache.sh
-@@ -226,6 +226,20 @@ fail lvcreate -H -L10 --chunksize 16M $vg/cpool4
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 89f0ebb..b1cce84 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.114 - 
+ =====================================
++  Release socket in daemon_close and protocol string in a daemon_open error path.
+   Add --cachepolicy and --cachesettings to lvcreate.
+   Fix regression when parsing /dev/mapper dir (2.02.112).
+   Fix missing rounding to 64KB when estimating optimal thin pool chunk size.
+diff --git a/daemons/lvmetad/testclient.c b/daemons/lvmetad/testclient.c
+index c4cf7c5..8ea068d 100644
+--- a/daemons/lvmetad/testclient.c
++++ b/daemons/lvmetad/testclient.c
+@@ -105,6 +105,7 @@ void _dump_vg(daemon_handle h, const char *uuid)
  
- lvremove -f $vg
+ int main(int argc, char **argv) {
+ 	daemon_handle h = lvmetad_open();
++	/* FIXME Missing error path */
  
-+lvcreate --type cache-pool -L10 $vg/cpool
-+lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg --cachepolicy mq --cachesettings migration_threshold=233
-+dmsetup status | grep $vg
-+dmsetup status | grep $vg-corigin | grep 'migration_threshold 233'
-+
-+lvremove -f $vg
-+
-+lvcreate --type cache-pool -L10 --cachepolicy mq --cachesettings migration_threshold=233 $vg/cpool
-+lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg
-+dmsetup status | grep $vg
-+dmsetup status | grep $vg-corigin | grep 'migration_threshold 233'
-+
-+lvremove -f $vg
-+
- 
- ##############################
- # Test things that should fail
-diff --git a/tools/commands.h b/tools/commands.h
-index 852b675..8dc335c 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -308,6 +308,7 @@ xx(lvcreate,
-    "\t[-A|--autobackup {y|n}]\n"
-    "\t[--addtag Tag]\n"
-    "\t[--alloc AllocationPolicy]\n"
-+   "\t[--cachepolicy Policy] [--cachesettings Key=Value]\n"
-    "\t[-c|--chunksize]\n"
-    "\t[-C|--contiguous {y|n}]\n"
-    "\t[--commandprofile ProfileName]\n"
-@@ -337,7 +338,7 @@ xx(lvcreate,
-    "\t[PhysicalVolumePath...]\n\n",
- 
-    addtag_ARG, alloc_ARG, autobackup_ARG, activate_ARG, available_ARG,
--   cache_ARG, cachemode_ARG, cachepool_ARG,
-+   cache_ARG, cachemode_ARG, cachepool_ARG, cachepolicy_ARG, cachesettings_ARG,
-    chunksize_ARG, contiguous_ARG, corelog_ARG, discards_ARG,
-    extents_ARG, ignoreactivationskip_ARG, ignoremonitoring_ARG, major_ARG,
-    metadataprofile_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG, monitor_ARG,
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index b0186d3..7236ffc 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -698,7 +698,9 @@ static int _lvcreate_params(struct cmd_context *cmd,
- 
- #define CACHE_POOL_ARGS \
- 	cachemode_ARG,\
--	cachepool_ARG
-+	cachepool_ARG,\
-+	cachepolicy_ARG,\
-+	cachesettings_ARG
- 
- #define MIRROR_ARGS \
- 	corelog_ARG,\
-@@ -1010,6 +1012,13 @@ static int _lvcreate_params(struct cmd_context *cmd,
+ 	if (argc > 1) {
+ 		int i;
+@@ -114,6 +115,7 @@ int main(int argc, char **argv) {
+ 			scan(h, argv[i]);
+ 		}
+ 		destroy_toolcontext(cmd);
++		/* FIXME Missing lvmetad_close() */
  		return 0;
  	}
  
-+	if ((arg_count(cmd, cachepolicy_ARG) || arg_count(cmd, cachesettings_ARG)) &&
-+	    !(lp->cache_policy = get_cachepolicy_params(cmd)))
-+	{
-+		log_error("Failed to parse cache policy and/or settings.");
-+		return 0;
+@@ -122,6 +124,6 @@ int main(int argc, char **argv) {
+ 	_dump_vg(h, vgid);
+ 	_pv_add(h, uuid3, NULL);
+ 
+-	daemon_close(h);
++	daemon_close(h);	/* FIXME lvmetad_close? */
+ 	return 0;
+ }
+diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
+index d0b8951..d37b966 100644
+--- a/libdaemon/client/daemon-client.c
++++ b/libdaemon/client/daemon-client.c
+@@ -26,7 +26,11 @@
+ 
+ daemon_handle daemon_open(daemon_info i)
+ {
+-	daemon_handle h = { .protocol_version = 0, .error = 0 };
++	daemon_handle h = {
++		.protocol = NULL,
++		.protocol_version = 0,
++		.error = 0
++	};
+ 	daemon_reply r = { 0 };
+ 	struct sockaddr_un sockaddr = { .sun_family = AF_UNIX };
+ 
+@@ -79,12 +83,16 @@ daemon_handle daemon_open(daemon_info i)
+ 	return h;
+ 
+ error:
+-	if (h.socket_fd >= 0)
+-		if (close(h.socket_fd))
+-			log_sys_error("close", "daemon_open");
++	if (h.socket_fd >= 0 && close(h.socket_fd))
++		log_sys_error("close", "daemon_open");
++	h.socket_fd = -1;
++
+ 	if (r.cft)
+ 		daemon_reply_destroy(r);
+-	h.socket_fd = -1;
++
++	dm_free((char *)h.protocol);
++	h.protocol = NULL;
++
+ 	return h;
+ }
+ 
+@@ -118,7 +126,8 @@ daemon_reply daemon_send(daemon_handle h, daemon_request rq)
+ 	return reply;
+ }
+ 
+-void daemon_reply_destroy(daemon_reply r) {
++void daemon_reply_destroy(daemon_reply r)
++{
+ 	if (r.cft)
+ 		dm_config_destroy(r.cft);
+ 	buffer_destroy(&r.buffer);
+@@ -160,6 +169,12 @@ daemon_reply daemon_send_simple(daemon_handle h, const char *id, ...)
+ 
+ void daemon_close(daemon_handle h)
+ {
++	if (h.socket_fd >= 0) {
++		log_debug("Closing daemon socket (fd %d).", h.socket_fd);
++ 		if (close(h.socket_fd))
++			log_sys_error("close", "daemon_close");
 +	}
 +
- 	dm_list_iterate_items(current_group, &cmd->arg_value_groups) {
- 		if (!grouped_arg_is_set(current_group->arg_values, addtag_ARG))
- 			continue;
-@@ -1404,6 +1413,13 @@ static int _validate_internal_thin_processing(const struct lvcreate_params *lp)
- 	return r;
+ 	dm_free((char *)h.protocol);
  }
  
-+static void _destroy_lvcreate_params(struct lvcreate_params *lp)
+@@ -210,7 +225,8 @@ int daemon_request_extend(daemon_request r, ...)
+ 	return res;
+ }
+ 
+-void daemon_request_destroy(daemon_request r) {
++void daemon_request_destroy(daemon_request r)
 +{
-+	if (lp->cache_policy)
-+		dm_config_destroy(lp->cache_policy);
-+	lp->cache_policy = NULL;
-+}
-+
- int lvcreate(struct cmd_context *cmd, int argc, char **argv)
- {
- 	int r = ECMD_FAILED;
-@@ -1482,6 +1498,7 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	if (r.cft)
+ 		dm_config_destroy(r.cft);
+ 	buffer_destroy(&r.buffer);
+diff --git a/libdaemon/client/daemon-client.h b/libdaemon/client/daemon-client.h
+index ae3be91..e1445c1 100644
+--- a/libdaemon/client/daemon-client.h
++++ b/libdaemon/client/daemon-client.h
+@@ -97,15 +97,16 @@ void daemon_request_destroy(daemon_request r);
  
- 	r = ECMD_PROCESSED;
- out:
-+	_destroy_lvcreate_params(&lp);
- 	unlock_and_release_vg(cmd, vg, lp.vg_name);
- 	return r;
+ void daemon_reply_destroy(daemon_reply r);
+ 
+-static inline int64_t daemon_reply_int(daemon_reply r, const char *path, int64_t def) {
++static inline int64_t daemon_reply_int(daemon_reply r, const char *path, int64_t def)
++{
+ 	return dm_config_find_int64(r.cft->root, path, def);
  }
+ 
+-static inline const char *daemon_reply_str(daemon_reply r, const char *path, const char *def) {
++static inline const char *daemon_reply_str(daemon_reply r, const char *path, const char *def)
++{
+ 	return dm_config_find_str_allow_empty(r.cft->root, path, def);
+ }
+ 
+-
+ /* Shut down the communication to the daemon. Compulsory. */
+ void daemon_close(daemon_handle h);
+ 
 
 
