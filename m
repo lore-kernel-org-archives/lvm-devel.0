@@ -1,94 +1,72 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 24 Nov 2014 13:50:05 +0000 (UTC)
-Subject: master - lvconvert: earlier detection of conflicting names
-Message-ID: <20141124135005.9A7F1613B6@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 28 Nov 2014 23:11:07 +0000 (UTC)
+Subject: master - pre-release
+Message-ID: <20141128231107.822F5606D7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1e80265c368f135bf7a92c5bb4ed49948a76f712
-Commit:        1e80265c368f135bf7a92c5bb4ed49948a76f712
-Parent:        a058fab118b74ddddc8492752748f0a68c014ce6
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 24 00:35:27 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 24 14:39:04 2014 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e492861749195311cc71910aaacb084110a9ddbb
+Commit:        e492861749195311cc71910aaacb084110a9ddbb
+Parent:        6521c4b2156597a36a986def85449be734336c72
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Nov 28 23:06:07 2014 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Nov 28 23:06:07 2014 +0000
 
-lvconvert: earlier detection of conflicting names
+pre-release
 
-Detect same LV names for lvconvert prior opening VG.
-i.e. lvconvert --thinpool vg/lvol0  -T lvol0
 ---
- test/shell/lvconvert-thin.sh |    4 ++--
- tools/lvconvert.c            |   25 +++++++++++++++++++++++++
- 2 files changed, 27 insertions(+), 2 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    6 +++---
+ WHATS_NEW_DM |    3 ---
+ 4 files changed, 5 insertions(+), 8 deletions(-)
 
-diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
-index 74484b1..951f694 100644
---- a/test/shell/lvconvert-thin.sh
-+++ b/test/shell/lvconvert-thin.sh
-@@ -53,7 +53,7 @@ lvchange -an $vg/$lv1
- # conversion fails for mirror segment type
- fail lvconvert --thinpool $vg/$lv1
- # cannot use same LV
--fail lvconvert --yes --thinpool $vg/$lv2 --poolmetadata $vg/$lv2
-+invalid lvconvert --yes --thinpool $vg/$lv2 --poolmetadata $vg/$lv2
+diff --git a/VERSION b/VERSION
+index 0f1a69f..851b30d 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.114(2)-git (2014-11-24)
++2.02.114(2)-git (2014-11-28)
+diff --git a/VERSION_DM b/VERSION_DM
+index 13ce0a0..b4b6b50 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.93-git (2014-11-24)
++1.02.92-git (2014-11-28)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b1cce84..a23f766 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,10 +1,10 @@
+-Version 2.02.114 - 
++Version 2.02.114 - 28th November 2014
+ =====================================
+-  Release socket in daemon_close and protocol string in a daemon_open error path.
++  Release socket in daemon_close and protocol string in daemon_open error path.
+   Add --cachepolicy and --cachesettings to lvcreate.
+   Fix regression when parsing /dev/mapper dir (2.02.112).
+   Fix missing rounding to 64KB when estimating optimal thin pool chunk size.
+-  Fix typo in clvmd initscript causing CLVMD_STOP_TIMEOUT variable to be ignored.
++  Fix typo in clvmd initscript causing CLVMD_STOP_TIMEOUT var to be ignored.
+   Fix size in pvresize "Resizing to ..." verbose msg to show proper result size.
  
- prepare_lvs
- 
-@@ -104,7 +104,7 @@ invalid lvconvert -c -256 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
- invalid lvconvert -c 88 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
- 
- # cannot use same LV for pool and convertion
--fail lvconvert --yes --thinpool $vg/$lv3 -T $vg/$lv3
-+invalid lvconvert --yes --thinpool $vg/$lv3 -T $vg/$lv3
- 
- # Warning about smaller then suggested
- lvconvert --yes -c 256 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2 |& tee err
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 8436c24..c7acd5d 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -76,6 +76,28 @@ struct lvconvert_params {
- 	thin_discards_t discards;
- };
- 
-+static int _lvconvert_validate_names(struct lvconvert_params *lp)
-+{
-+	int i, j;
-+	const char *names[] = {
-+		(lp->lv_name == lp->pool_data_name) ? NULL : lp->lv_name, "converted",
-+		lp->pool_data_name, "pool",
-+		lp->pool_metadata_name, "pool metadata",
-+		lp->origin_name, "origin",
-+	};
-+
-+	for (i = 0; i < DM_ARRAY_SIZE(names); i += 2)
-+		if (names[i])
-+			for (j = i + 2; j < DM_ARRAY_SIZE(names); j += 2)
-+				if (names[j] && !strcmp(names[i], names[j])) {
-+					log_error("Can't use same name %s for %s and %s volume.",
-+						  names[i], names[i + 1], names[j + 1]);
-+					return 0;
-+				}
-+
-+	return 1;
-+}
-+
- static int _lvconvert_name_params(struct lvconvert_params *lp,
- 				  struct cmd_context *cmd,
- 				  int *pargc, char ***pargv)
-@@ -195,6 +217,9 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
- 		}
- 	}
- 
-+	if (!_lvconvert_validate_names(lp))
-+		return_0;
-+
- 	return 1;
- }
- 
+ Version 2.02.113 - 24th November 2014
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 6eafed6..45d3ece 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,6 +1,3 @@
+-Version 1.02.93 - 
+-====================================
+-
+ Version 1.02.92 - 24th November 2014
+ ====================================
+   Fix memory corruption with sorting empty string lists (1.02.86).
 
 
