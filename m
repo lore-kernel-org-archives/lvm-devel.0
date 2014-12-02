@@ -1,48 +1,71 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 29 Jun 2011 08:54:14 -0000
-Subject: LVM2/libdm/ioctl libdm-iface.c
-Message-ID: <20110629085414.6309.qmail@sourceware.org>
+From: Lukas Wunner <lukas@wunner.de>
+Date: Tue, 2 Dec 2014 18:58:25 +0100
+Subject: [PATCH] dmsetup: Set exit code to 1 if remove_all fails to remove all devices
+Message-ID: <20141202175825.GA8489@wunner.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-06-29 08:54:14
+There are scripts out there which expect "dmsetup remove_all" to
+not exit with 0 if some devices couldn't be removed, e.g. dracut:
+https://git.kernel.org/cgit/boot/dracut/dracut.git/tree/modules.d/90dm/dm-shutdown.sh
 
-Modified files:
-	libdm/ioctl    : libdm-iface.c 
+Up until now the exit code of "dmsetup remove_all" is only non-zero
+if the call to ioctl() fails, causing _do_dm_ioctl() to return NULL
+instead of a struct dm_ioctl*.
 
-Log message:
-	Temporary conversion to internal error and failure, to see how many
-	instances of this problem this flushes out.
+Fix this by counting the remaining devices after the call to
+_simple() even if --force is not used, and by returning success
+only if the call to simple() was succesful AND no devices remain.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.108&r2=1.109
+Signed-off-by: Lukas Wunner <lukas@wunner.de>
+---
+ tools/dmsetup.c | 20 ++++++++------------
+ 1 file changed, 8 insertions(+), 12 deletions(-)
 
---- LVM2/libdm/ioctl/libdm-iface.c	2011/06/27 21:43:59	1.108
-+++ LVM2/libdm/ioctl/libdm-iface.c	2011/06/29 08:54:13	1.109
-@@ -2059,8 +2059,8 @@
- 	}
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 4202dbb..77d7cf6 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -1528,27 +1528,23 @@ static int _remove_all(CMD_ARGS)
+ 	/* Remove all closed devices */
+ 	r =  _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
  
- 	if ((suspended_counter = dm_get_suspended_counter()) &&
--	    dmt->type == DM_DEVICE_RELOAD)
--		log_error("Performing unsafe table load while %d device(s) "
-+	    dmt->type == DM_DEVICE_RELOAD) {
-+		log_error(INTERNAL_ERROR "Performing unsafe table load while %d device(s) "
- 			  "are known to be suspended: "
- 			  "%s%s%s %s%.0d%s%.0d%s%s",
- 			  suspended_counter,
-@@ -2073,6 +2073,8 @@
- 	                  dmt->minor > 0 ? dmt->minor : 0,
- 	                  dmt->major > 0 && dmt->minor == 0 ? "0" : "",
- 	                  dmt->major > 0 ? ") " : "");
-+		return 0;
-+	}
+-	if (!_switches[FORCE_ARG])
+-		return r;
+-
+ 	_num_devices = 0;
+-	r |= _process_all(cmd, argc, argv, 1, _count_devices);
++	r &= _process_all(cmd, argc, argv, 1, _count_devices);
  
- 	/* FIXME Detect and warn if cookie set but should not be. */
- repeat_ioctl:
+-	/* No devices left? */
+-	if (!_num_devices)
+-		return r;
++	if ((r && !_num_devices) || !_switches[FORCE_ARG])
++		goto out;
+ 
+ 	r |= _process_all(cmd, argc, argv, 1, _error_device);
+ 	r |= _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
+ 
+ 	_num_devices = 0;
+-	r |= _process_all(cmd, argc, argv, 1, _count_devices);
+-	if (!_num_devices)
+-		return r;
++	r &= _process_all(cmd, argc, argv, 1, _count_devices);
+ 
+-	fprintf(stderr, "Unable to remove %d device(s).\n", _num_devices);
++out:
++	if (_num_devices)
++		fprintf(stderr, "Unable to remove %d device(s).\n", _num_devices);
+ 
+-	return r;
++	return r && !_num_devices;
+ }
+ 
+ static void _display_dev(struct dm_task *dmt, const char *name)
+-- 
+1.8.5.2
 
 
