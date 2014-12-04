@@ -1,77 +1,126 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed,  3 Dec 2014 22:48:15 +0000 (UTC)
-Subject: master - mirror: Validate raid region size config setting.
-Message-ID: <20141203224815.3C7BF6118F@fedorahosted.org>
+From: Eric Wheeler <lvm-dev@lists.ewheeler.net>
+Date: Wed, 3 Dec 2014 23:05:08 -0800 (PST)
+Subject: [PATCH] dm-thinp: skip allocation on writes of all zeros to unallocated blocks
+In-Reply-To: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
+References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
+Message-ID: <alpine.DEB.2.02.1412032237010.12556@ware.dreamhost.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a057f40155b415be40dac31bb138ee66761ce999
-Commit:        a057f40155b415be40dac31bb138ee66761ce999
-Parent:        de53e0955dc43d5f069604553b038fa672463da9
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Dec 3 22:47:08 2014 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Dec 3 22:47:08 2014 +0000
+This patch skips all-zero writes to unallocated blocks of dm-thinp 
+volumes.
 
-mirror: Validate raid region size config setting.
+Unallocated zero-writes are 70x faster and never allocate space in this test:
+         # dd if=/dev/zero of=/dev/test/test1 bs=1M count=1024
+         1073741824 bytes (1.1 GB) copied, 0.794343 s, 1.4 GB/s
 
-If necessary, round down to a power of 2 the raid/mirror region size
-taken from the config files.
+Without the patch, zero-writes allocate space and hit the disk:
+         # dd if=/dev/zero of=/dev/test/test1 bs=1M count=1024
+         1073741824 bytes (1.1 GB) copied, 53.8064 s, 20.0 MB/s
+
+For the test below, notice the allocation difference for thin volumes
+test1 and test2 (after dd if=test1 of=test2), even though they have the
+same md5sum:
+   LV    VG   Attr       LSize Pool  Origin Data%
+   test1 test Vwi-a-tz-- 4.00g thinp         22.04
+   test2 test Vwi-a-tz-- 4.00g thinp         18.33
+
+An additional 3.71% of space was saved by the patch, and so were
+the ~150MB of (possibly random) IOs that would have hit disk, not to
+mention reads that now bypass the disk since they are unallocated.
+We also save the metadata overhead of ~2400 allocations when calling
+provision_block().
+
+         # lvcreate -T test/thinp -L 5G
+         # lvcreate -T test/thinp -V 4G -n test1
+         # lvcreate -T test/thinp -V 4G -n test2
+
+Simple ext4+kernel tree extract test:
+
+First prepare two dm-thinp volumes test1 and test2 of equal size.  First
+mkfs.ext4 /dev/test/test1 without the patch and then mount and extract
+3.17.4's source tree onto the test1 filesystem, and unmount
+
+Next, install patched dm_thin_pool.ko, then dd test1 over test2 and
+verify checksums:
+         # dd if=/dev/test/test1  of=/dev/test/test2 bs=1M
+         # md5sum /dev/test/test?
+         b210f032a6465178103317f3c40ab59f  /dev/test/test1
+         b210f032a6465178103317f3c40ab59f  /dev/test/test2
+Yes, they match!
+
+Signed-off-by: Eric Wheeler <lvm-dev@lists.ewheeler.net>
 ---
- lib/metadata/lv_manip.c |   31 ++++++++++++++++++++++++++++++-
- 1 files changed, 30 insertions(+), 1 deletions(-)
+  drivers/md/dm-thin.c |   45 +++++++++++++++++++++++++++++++++++++++++++++
+  1 files changed, 45 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index b00e11b..4483fba 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -731,7 +731,7 @@ int get_pv_list_for_lv(struct dm_pool *mem,
-  *
-  * Returns: default region_size in sectors
-  */
--int get_default_region_size(struct cmd_context *cmd)
-+static int _get_default_region_size(struct cmd_context *cmd)
- {
- 	int mrs, rrs;
- 
-@@ -759,6 +759,35 @@ int get_default_region_size(struct cmd_context *cmd)
- 	return rrs;
- }
- 
-+static int _round_down_pow2(int r)
+diff --git a/drivers/md/dm-thin.c b/drivers/md/dm-thin.c
+index fc9c848..71dd545 100644
+--- a/drivers/md/dm-thin.c
++++ b/drivers/md/dm-thin.c
+@@ -1230,6 +1230,42 @@ static void process_shared_bio(struct thin_c *tc, struct bio *bio,
+  	}
+  }
+
++/* return true if bio data contains all 0x00's */
++bool bio_all_zeros(struct bio *bio) 
 +{
-+	/* Set all bits to the right of the leftmost set bit */
-+	r |= (r >> 1);
-+	r |= (r >> 2);
-+	r |= (r >> 4);
-+	r |= (r >> 8);
-+	r |= (r >> 16);
++	unsigned long flags;
++	struct bio_vec bv;
++	struct bvec_iter iter;
 +
-+	/* Pull out the leftmost set bit */
-+	return r & ~(r >> 1);
-+}
++	char *data;
++	uint64_t *p;
++	int i, count;
++ 
++	bool allzeros = true;
 +
-+int get_default_region_size(struct cmd_context *cmd)
-+{
-+	int region_size = _get_default_region_size(cmd);
++	bio_for_each_segment(bv, bio, iter) {
++		data = bvec_kmap_irq(&bv, &flags);
 +
-+	if (region_size > INT32_MAX)
-+		region_size = INT32_MAX;
++		p = (uint64_t*)data;
++		count = bv.bv_len / sizeof(uint64_t);
 +
-+	if (region_size & (region_size - 1)) {
-+		region_size = _round_down_pow2(region_size);
-+		log_verbose("Reducing mirror region size to %u kiB (power of 2).",
-+			    region_size / 2);
++		for (i = 0; i < count; i++) {
++			if (*p)	{
++				allzeros = false;
++				break;
++			}
++			p++;
++		}
++
++		bvec_kunmap_irq(data, &flags);
++
++		if (likely(!allzeros))
++				break;
 +	}
 +
-+	return region_size;
++	return allzeros;
 +}
 +
- int add_seg_to_segs_using_this_lv(struct logical_volume *lv,
- 				  struct lv_segment *seg)
- {
+  static void provision_block(struct thin_c *tc, struct bio *bio, dm_block_t block,
+  			    struct dm_bio_prison_cell *cell)
+  {
+@@ -1258,6 +1294,15 @@ static void provision_block(struct thin_c *tc, struct bio *bio, dm_block_t block
+  		return;
+  	}
+
++	/*
++	 * Skip writes of all zeroes
++	 */
++	if (bio_data_dir(bio) == WRITE && unlikely( bio_all_zeros(bio) )) {
++		cell_defer_no_holder(tc, cell);
++		bio_endio(bio, 0);
++		return;
++	}
++
+  	r = alloc_data_block(tc, &data_block);
+  	switch (r) {
+  	case 0:
+-- 
+1.7.1
 
 
