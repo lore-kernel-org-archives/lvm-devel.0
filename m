@@ -1,48 +1,48 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  5 Dec 2014 14:14:51 +0000 (UTC)
-Subject: master - libdm: report: return immediately from dm_report_compact_fields without error if there are no rows
-Message-ID: <20141205141451.1B3FD60354@fedorahosted.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Fri, 5 Dec 2014 09:47:39 -0500
+Subject: dm thin: optimize away writing all zeroes to unprovisioned blocks
+In-Reply-To: <20141204153358.GA19315@redhat.com>
+References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
+	<alpine.DEB.2.02.1412032237010.12556@ware.dreamhost.com>
+	<alpine.DEB.2.02.1412032318290.29609@ware.dreamhost.com>
+	<20141204153358.GA19315@redhat.com>
+Message-ID: <20141205144739.GA26356@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=42d71b9af393bdbf0e9409eea176b2801a07ea25
-Commit:        42d71b9af393bdbf0e9409eea176b2801a07ea25
-Parent:        f867dc6b294c434e69499e38e66a67812361d8c9
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Dec 5 15:10:50 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Dec 5 15:10:50 2014 +0100
+On Thu, Dec 04 2014 at 10:33am -0500,
+Mike Snitzer <snitzer@redhat.com> wrote:
 
-libdm: report: return immediately from dm_report_compact_fields without error if there are no rows
+> From: Mike Snitzer <snitzer@redhat.com>
+> Date: Thu, 4 Dec 2014 10:18:32 -0500
+> Subject: [PATCH] dm thin: optimize away writing all zeroes to unprovisioned blocks
+> 
+> Introduce bio_is_zero_filled() and use it to optimize away writing all
+> zeroes to unprovisioned blocks.  Subsequent reads to the associated
+> unprovisioned blocks will be zero filled.
+> 
+> Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+> Cc: Eric Wheeler <ewheeler@ewheeler.net>
+> Cc: Jens Axboe <axboe@kernel.dk>
 
-Let's make dm_report_compact_fields consistent with dm_report_output fn
-which also returns with success immediately if there are no rows.
----
- libdm/libdm-report.c |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+In testing this patch it is now quite clear that this change seriously
+impacts test coverage in the device-mapper-test-suite because dmts'
+wipe_device() uses /dev/zero as the ifile for dd to write to the disk.
+As such, with this patch all tests expecting to see provisioned blocks
+as a side-effect of wipe_device now fail (e.g. DiscardQuickTests).
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index f81d964..6d36c1e 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -1696,11 +1696,12 @@ int dm_report_compact_fields(struct dm_report *rh)
- 	struct field_properties *fp;
- 	struct row *row;
- 
--	if (!(rh->flags & DM_REPORT_OUTPUT_BUFFERED))
-+	if (!(rh->flags & DM_REPORT_OUTPUT_BUFFERED) ||
-+	      dm_list_empty(&rh->rows))
- 		return 1;
- 
--	if (!rh || dm_list_empty(&rh->rows)) {
--		log_error("dm_report_enable_compact_output: no report fields to compact");
-+	if (!rh) {
-+		log_error("dm_report_enable_compact_output: dm report handler is NULL.");
- 		return 0;
- 	}
- 
+So this change won't go upstream until full test coverage can be
+restored in dmts.  I'll see what I can come up with but it is low
+priority.
+
+BTW, this also makes me wonder if this change will be extremely
+unintuitive to existing or future user of DM thinp.  So much so that it
+might be best to require a new thin-pool feature flag to enable this
+optimization.
+
+Mike
 
 
