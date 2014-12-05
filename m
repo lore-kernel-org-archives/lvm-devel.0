@@ -1,48 +1,38 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 5 Dec 2014 09:47:39 -0500
+Date: Fri, 5 Dec 2014 13:33:42 -0500
 Subject: dm thin: optimize away writing all zeroes to unprovisioned blocks
-In-Reply-To: <20141204153358.GA19315@redhat.com>
+In-Reply-To: <5481EB1C.4000202@kernel.dk>
 References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
 	<alpine.DEB.2.02.1412032237010.12556@ware.dreamhost.com>
 	<alpine.DEB.2.02.1412032318290.29609@ware.dreamhost.com>
-	<20141204153358.GA19315@redhat.com>
-Message-ID: <20141205144739.GA26356@redhat.com>
+	<20141204153358.GA19315@redhat.com> <5481EB1C.4000202@kernel.dk>
+Message-ID: <20141205183342.GA27397@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Dec 04 2014 at 10:33am -0500,
-Mike Snitzer <snitzer@redhat.com> wrote:
+On Fri, Dec 05 2014 at 12:27pm -0500,
+Jens Axboe <axboe@kernel.dk> wrote:
 
-> From: Mike Snitzer <snitzer@redhat.com>
-> Date: Thu, 4 Dec 2014 10:18:32 -0500
-> Subject: [PATCH] dm thin: optimize away writing all zeroes to unprovisioned blocks
+> On 12/04/2014 08:33 AM, Mike Snitzer wrote:
+> >
+> >Here is a revised patch that is more like I'd expect to land upstream.
+> >Jens are you OK with us adding bio_is_zero_filled to block/bio.c?  If so
+> >should I split it out as a separate patch for you to pick up or just
+> >carry it as part of the patch that lands in linux-dm.git?
 > 
-> Introduce bio_is_zero_filled() and use it to optimize away writing all
-> zeroes to unprovisioned blocks.  Subsequent reads to the associated
-> unprovisioned blocks will be zero filled.
-> 
-> Signed-off-by: Mike Snitzer <snitzer@redhat.com>
-> Cc: Eric Wheeler <ewheeler@ewheeler.net>
-> Cc: Jens Axboe <axboe@kernel.dk>
+> Yeah I'm fine with adding that helper.
 
-In testing this patch it is now quite clear that this change seriously
-impacts test coverage in the device-mapper-test-suite because dmts'
-wipe_device() uses /dev/zero as the ifile for dd to write to the disk.
-As such, with this patch all tests expecting to see provisioned blocks
-as a side-effect of wipe_device now fail (e.g. DiscardQuickTests).
+Good to know, thanks.
 
-So this change won't go upstream until full test coverage can be
-restored in dmts.  I'll see what I can come up with but it is low
-priority.
+> I do wonder what the performance impact is on this for dm. Have you
+> tried a (worst case) test of writing blocks that are zero filled, but
+> with the last byte not being a zero?
 
-BTW, this also makes me wonder if this change will be extremely
-unintuitive to existing or future user of DM thinp.  So much so that it
-might be best to require a new thin-pool feature flag to enable this
-optimization.
-
-Mike
+I haven't tested that yet, but I share your concern.  Does fio offer the
+ability to slap down a specific pattern like this?  If not is there a
+logical place to extend fio to enable this?
 
 
