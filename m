@@ -1,120 +1,154 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  5 Dec 2014 11:01:12 +0000 (UTC)
-Subject: master - config: add report/compact_output lvm.conf setting to enable or isable field compacting
-Message-ID: <20141205110112.1DCA86112E@fedorahosted.org>
+Date: Fri,  5 Dec 2014 11:01:09 +0000 (UTC)
+Subject: master - libdm: report: add dm_report_compact_fields
+Message-ID: <20141205110109.F3B14609E8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00d53d5fc172ee396ea835a110126f83202724d5
-Commit:        00d53d5fc172ee396ea835a110126f83202724d5
-Parent:        5edf6a56c4077edd238bf08bf369e7d82bca4ecf
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5edf6a56c4077edd238bf08bf369e7d82bca4ecf
+Commit:        5edf6a56c4077edd238bf08bf369e7d82bca4ecf
+Parent:        44394cd246dceec20dd404e3d39ba5867176d54b
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Dec 5 11:46:26 2014 +0100
+AuthorDate:    Fri Dec 5 11:42:43 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Fri Dec 5 12:00:28 2014 +0100
 
-config: add report/compact_output lvm.conf setting to enable or isable field compacting
+libdm: report: add dm_report_compact_fields
 
-$ lvm dumpconfig report/compact_output
-compact_output=0
-
-$ lvs vg
-  LV    VG   Attr       LSize Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
-  lvol0 vg   owi-a-s--- 4.00m
-  lvol1 vg   -wi-a----- 4.00m
-  lvol2 vg   swi-a-s--- 4.00m      lvol0  0.00
-
-$ lvm dumpconfig report/compact_output
-compact_output=1
-
-$ lvs vg
-  LV    VG   Attr       LSize Origin Data%
-  lvol0 vg   owi-a-s--- 4.00m
-  lvol1 vg   -wi-a----- 4.00m
-  lvol2 vg   swi-a-s--- 4.00m lvol0  0.00
+Add new dm_report_compact_fields function to cause report outout
+(dm_report_output) to ignore fields which don't have any value set
+in any of the rows reported. This provides support for compact report
+output where only fields which have something to report are displayed.
 ---
- WHATS_NEW                    |    1 +
- conf/example.conf.in         |    4 ++++
- lib/config/config_settings.h |    1 +
- lib/config/defaults.h        |    1 +
- tools/reporter.c             |    5 +++++
- 5 files changed, 12 insertions(+), 0 deletions(-)
+ WHATS_NEW_DM         |    1 +
+ libdm/libdevmapper.h |    7 +++++
+ libdm/libdm-report.c |   67 +++++++++++++++++++++++++++++++++++++++++++------
+ 3 files changed, 66 insertions(+), 9 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 54e46d9..11fa6e1 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 98b0a5c..dcd35fa 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.115 -
- =====================================
-+  Add report/compact_output to lvm.conf to enable/disable compact report output.
-   Still restrict mirror region size to power of 2 when VG extent size is not.
+ Version 1.02.93 -
+ ====================================
++  Add dm_report_compact_fields to remove empty fields from report output.
+   Remove unimplemented dm_report_set_output_selection from libdevmapper.h.
  
- Version 2.02.114 - 28th November 2014
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index d1a1397..5ed2b92 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -1104,6 +1104,10 @@ activation {
- # Report settings.
- #
- # report {
-+    # If compact output is enabled, fields which don't have value
-+    # set for any of the rows reported are skipped on output.
-+    # compact_output=0
+ Version 1.02.92 - 24th November 2014
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 3c93dfd..fef0351 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -1753,6 +1753,13 @@ struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
+ 						const struct dm_report_reserved_value reserved_values[],
+ 						void *private_data);
+ int dm_report_object(struct dm_report *rh, void *object);
 +
-     # Align columns on report output.
-     # aligned=1
- 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index e944b81..6de948e 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -234,6 +234,7 @@ cfg(disk_area_start_sector_CFG, "start_sector", disk_area_CFG_SUBSECTION, CFG_AD
- cfg(disk_area_size_CFG, "size", disk_area_CFG_SUBSECTION, CFG_ADVANCED | CFG_UNSUPPORTED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_INT, 0, vsn(1, 0, 0), NULL)
- cfg(disk_area_id_CFG, "id", disk_area_CFG_SUBSECTION, CFG_ADVANCED | CFG_UNSUPPORTED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL)
- 
-+cfg(report_compact_output_CFG, "compact_output", report_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_REP_COMPACT_OUTPUT, vsn(2, 2, 115), NULL)
- cfg(report_aligned_CFG, "aligned", report_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_REP_ALIGNED, vsn(1, 0, 0), NULL)
- cfg(report_buffered_CFG, "buffered", report_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_REP_BUFFERED, vsn(1, 0, 0), NULL)
- cfg(report_headings_CFG, "headings", report_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_REP_HEADINGS, vsn(1, 0, 0), NULL)
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index cbc95fb..e15926c 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -176,6 +176,7 @@
- 
- #define DEFAULT_MAX_ERROR_COUNT	NO_DEV_ERROR_COUNT_LIMIT
- 
-+#define DEFAULT_REP_COMPACT_OUTPUT 0
- #define DEFAULT_REP_ALIGNED 1
- #define DEFAULT_REP_BUFFERED 1
- #define DEFAULT_REP_COLUMNS_AS_ROWS 0
-diff --git a/tools/reporter.c b/tools/reporter.c
-index eec9948..b312568 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -410,6 +410,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 
- 	args_are_pvs = (report_type == PVS ||
- 			report_type == LABEL ||
++/*
++ * Compact report output so that if field value is empty for all rows in
++ * the report, drop the field from output completely (including headers).
++ */
++int dm_report_compact_fields(struct dm_report *rh);
 +
- 			report_type == PVSEGS) ? 1 : 0;
+ int dm_report_output(struct dm_report *rh);
+ void dm_report_free(struct dm_report *rh);
  
- 	/*
-@@ -614,6 +615,10 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 		break;
- 	}
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index a1bab05..7dd52d4 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -64,6 +64,7 @@ struct dm_report {
+ #define FLD_SORT_KEY	0x00002000
+ #define FLD_ASCENDING	0x00004000
+ #define FLD_DESCENDING	0x00008000
++#define FLD_COMPACTED	0x00010000
  
-+	if (find_config_tree_bool(cmd, report_compact_output_CFG, NULL) &&
-+	    !dm_report_compact_fields(report_handle))
-+		log_error("Failed to compact report output.");
+ struct field_properties {
+ 	struct dm_list list;
+@@ -84,16 +85,16 @@ struct op_def {
+ 	const char *desc;
+ };
+ 
+-#define FLD_CMP_MASK		0x00FF0000
+-#define FLD_CMP_UNCOMPARABLE	0x00010000
+-#define FLD_CMP_EQUAL		0x00020000
+-#define FLD_CMP_NOT		0x00040000
+-#define FLD_CMP_GT		0x00080000
+-#define FLD_CMP_LT		0x00100000
+-#define FLD_CMP_REGEX		0x00200000
+-#define FLD_CMP_NUMBER		0x00400000
++#define FLD_CMP_MASK		0x0FF00000
++#define FLD_CMP_UNCOMPARABLE	0x00100000
++#define FLD_CMP_EQUAL		0x00200000
++#define FLD_CMP_NOT		0x00400000
++#define FLD_CMP_GT		0x00800000
++#define FLD_CMP_LT		0x01000000
++#define FLD_CMP_REGEX		0x02000000
++#define FLD_CMP_NUMBER		0x04000000
+ /*
+- * #define FLD_CMP_STRING 0x00400000
++ * #define FLD_CMP_STRING 0x08000000
+  * We could defined FLD_CMP_STRING here for completeness here,
+  * but it's not needed - we can check operator compatibility with
+  * field type by using FLD_CMP_REGEX and FLD_CMP_NUMBER flags only.
+@@ -1689,6 +1690,54 @@ out:
+ 	return r;
+ }
+ 
++int dm_report_compact_fields(struct dm_report *rh)
++{
++	struct dm_report_field *field;
++	struct field_properties *fp;
++	struct row *row;
 +
- 	dm_report_output(report_handle);
- 
- 	dm_report_free(report_handle);
++	if (!rh || dm_list_empty(&rh->rows)) {
++		log_error("dm_report_enable_compact_output: no report fields to compact");
++		return 0;
++	}
++
++	/*
++	 * At first, mark all fields with FLD_HIDDEN flag.
++	 * Also, mark field with FLD_COMPACTED flag, but only
++	 * the ones that didn't have FLD_HIDDEN set before.
++	 * This prevents losing the original FLD_HIDDEN flag
++	 * in next step...
++	 */
++	dm_list_iterate_items(fp, &rh->field_props) {
++		if (!(fp->flags & FLD_HIDDEN))
++			fp->flags |= (FLD_COMPACTED | FLD_HIDDEN);
++	}
++
++	/*
++	 * ...check each field in a row and if its report value
++	 * is not empty, drop the FLD_COMPACTED and FLD_HIDDEN
++	 * flag if FLD_COMPACTED flag is set. It's important
++	 * to keep FLD_HIDDEN flag for the fields that were
++	 * already marked with FLD_HIDDEN before - these don't
++	 * have FLD_COMPACTED set - check this condition!
++	 */
++	dm_list_iterate_items(row, &rh->rows) {
++		dm_list_iterate_items(field, &row->fields) {
++			if ((field->report_string && *field->report_string) &&
++			     field->props->flags & FLD_COMPACTED)
++					field->props->flags &= ~(FLD_COMPACTED | FLD_HIDDEN);
++			}
++	}
++
++	/*
++	 * The fields left with FLD_COMPACTED and FLD_HIDDEN flag are
++	 * the ones which have blank value in all rows. The FLD_HIDDEN
++	 * will cause such field to not be reported on output at all.
++	 */
++
++	return 1;
++}
++
+ /*
+  * Selection parsing
+  */
 
 
