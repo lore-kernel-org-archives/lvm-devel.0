@@ -1,49 +1,70 @@
-From: Jens Axboe <axboe@kernel.dk>
-Date: Sat, 06 Dec 2014 18:41:33 -0700
-Subject: dm thin: optimize away writing all zeroes to unprovisioned blocks
-In-Reply-To: <alpine.DEB.2.02.1412061437430.19773@ware.dreamhost.com>
-References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
-	<alpine.DEB.2.02.1412032237010.12556@ware.dreamhost.com>
-	<alpine.DEB.2.02.1412032318290.29609@ware.dreamhost.com>
-	<20141204153358.GA19315@redhat.com> <5481EB1C.4000202@kernel.dk>
-	<20141205183342.GA27397@redhat.com>
-	<alpine.DEB.2.02.1412061437430.19773@ware.dreamhost.com>
-Message-ID: <5483B04D.5030606@kernel.dk>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon,  8 Dec 2014 09:56:30 +0000 (UTC)
+Subject: master - configure: fix automatic use of configure --enable-udev-systemd-background-jobs
+Message-ID: <20141208095630.00AF060F70@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 12/06/2014 03:40 PM, Eric Wheeler wrote:
-> On Fri, 5 Dec 2014, Mike Snitzer wrote:
->>> I do wonder what the performance impact is on this for dm. Have you
->>> tried a (worst case) test of writing blocks that are zero filled, but
->>> with the last byte not being a zero?
->
-> The additional overhead of worst-case should be (nearly) equal to the
-> simplest test case of dd if=/dev/zero of=/dev/thinp/vol.  In my testing
-> that was 1.4GB/s within KVM on an Intel Xeon(R) CPU E3-1230 V2 @ 3.30GHz.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4c62215bd178c17d0776448bdc99740180c85402
+Commit:        4c62215bd178c17d0776448bdc99740180c85402
+Parent:        42d71b9af393bdbf0e9409eea176b2801a07ea25
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Dec 8 10:51:33 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Dec 8 10:52:47 2014 +0100
 
-That seems way too slow for checking if it's zero or not... Memory 
-bandwidth should be way higher than that. The line above, was that what 
-you ran? How does it look with bs=4k or higher?
+configure: fix automatic use of configure --enable-udev-systemd-background-jobs
 
-> I could see where really fast storage that can obtain 1.4gb/s might
-> notice a performance regression---but for most use cases that is quite
-> fast.
+Fix incorrect test in configure which sets --enable-udev-systemd-background-jobs
+automatically if proper systemd version is available.
 
-Depends on your view point, I think it's pretty slow. Plenty of devices 
-out there that are faster than that. Quick example, the laptop I am 
-typing this email from:
+The UDEV_SYSTEMD_BACKGROUND_JOBS variable was not properly set to "yes" in
+case systemd is available and we had "maybe" for this variable before.
+---
+ WHATS_NEW    |    1 +
+ configure    |    2 +-
+ configure.in |    2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
 
-   read : io=12233MB, bw=1432.7MB/s, iops=22922, runt=  8539msec
-
-Writes are around 1GB/sec, enough that I bet the slowdown in checking 
-for zeroes will be noticeable. In the pci-e flash space, more than 
-double your current /dev/zero benchmark is common for current devices.
-
--- 
-Jens Axboe
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 213cc31..9201f36 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.115 -
+ =====================================
++  Fix automatic use of configure --enable-udev-systemd-background-jobs.
+   Correctly rename active split LV with -splitmirrors for raid1.
+   Add report/compact_output to lvm.conf to enable/disable compact report output.
+   Still restrict mirror region size to power of 2 when VG extent size is not.
+diff --git a/configure b/configure
+index df902c3..9d1d32f 100755
+--- a/configure
++++ b/configure
+@@ -10694,7 +10694,7 @@ else
+ 	SYSTEMD_LIBS=$pkg_cv_SYSTEMD_LIBS
+         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+ $as_echo "yes" >&6; }
+-	test "UDEV_SYSTEMD_BACKGROUND_JOBS" = maybe && UDEV_SYSTEMD_BACKGROUND_JOBS=yes
++	test "$UDEV_SYSTEMD_BACKGROUND_JOBS" = maybe && UDEV_SYSTEMD_BACKGROUND_JOBS=yes
+ fi
+ fi
+ 
+diff --git a/configure.in b/configure.in
+index 5b22b93..107bb29 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1104,7 +1104,7 @@ AC_MSG_RESULT($UDEV_SYSTEMD_BACKGROUND_JOBS)
+ if test "$UDEV_SYSTEMD_BACKGROUND_JOBS" != no; then
+ 	pkg_config_init
+ 	PKG_CHECK_MODULES(SYSTEMD, systemd >= 205,
+-			  [test "UDEV_SYSTEMD_BACKGROUND_JOBS" = maybe && UDEV_SYSTEMD_BACKGROUND_JOBS=yes],
++			  [test "$UDEV_SYSTEMD_BACKGROUND_JOBS" = maybe && UDEV_SYSTEMD_BACKGROUND_JOBS=yes],
+ 			  [if test "$UDEV_SYSTEMD_BACKGROUND_JOBS" = maybe; then
+ 				UDEV_SYSTEMD_BACKGROUND_JOBS=no
+ 			   else
 
 
