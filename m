@@ -1,110 +1,273 @@
-From: Eric Wheeler <lvm-dev@lists.ewheeler.net>
-Date: Tue, 9 Dec 2014 00:02:12 -0800 (PST)
-Subject: dm thin: optimize away writing all zeroes to unprovisioned blocks
-In-Reply-To: <5485D86C.9040800@kernel.dk>
-References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
-	<alpine.DEB.2.02.1412032237010.12556@ware.dreamhost.com>
-	<alpine.DEB.2.02.1412032318290.29609@ware.dreamhost.com>
-	<20141204153358.GA19315@redhat.com> <5481EB1C.4000202@kernel.dk>
-	<20141205183342.GA27397@redhat.com>
-	<alpine.DEB.2.02.1412061437430.19773@ware.dreamhost.com>
-	<5483B04D.5030606@kernel.dk>
-	<alpine.DEB.2.02.1412062028500.15919@ware.dreamhost.com>
-	<5485D86C.9040800@kernel.dk>
-Message-ID: <alpine.DEB.2.02.1412082258460.10718@ware.dreamhost.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue,  9 Dec 2014 09:43:14 +0000 (UTC)
+Subject: master - libdm: report: fix incorrect memory use while using --select with --unbuffered for reporting
+Message-ID: <20141209094314.D782660EA2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, 5 Dec 2014, Mike Snitzer wrote:
-> I do wonder what the performance impact is on this for dm. Have you
-> tried a (worst case) test of writing blocks that are zero filled,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f94f8463b0d3dddaa0e429123aba673d106f783e
+Commit:        f94f8463b0d3dddaa0e429123aba673d106f783e
+Parent:        4c62215bd178c17d0776448bdc99740180c85402
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Dec 9 10:36:27 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Dec 9 10:41:55 2014 +0100
 
-Jens, thank you for your help w/ fio for generating zeroed writes!  
-Clearly fio is superior to dd as a sequential benchmarking tool; I was 
-actually able to push on the system's memory bandwidth.
+libdm: report: fix incorrect memory use while using --select with --unbuffered for reporting
 
-Results:
+Under certain circumstances, the selection code can segfault:
 
-I hacked block/loop.c and md/dm-thin.c to always call bio_is_zero_filled() 
-and then complete without writing to disk, regardless of the return value 
-from bio_is_zero_filled().  In loop.c this was done in 
-do_bio_filebacked(), and for dm-thin.c this was done within 
-provision_block().
+$ vgs --select 'pv_name=~/dev/sda' --unbuffered vg0
+  VG   #PV #LV #SN Attr   VSize   VFree
+  vg0    6   3   0 wz--n- 744.00m 588.00m
+Segmentation fault (core dumped)
 
-This allows us to compare the performance difference between the simple 
-loopback block device driver vs the more complex dm-thinp implementation 
-just prior to block allocation.  These benchmarks give us a sense of how 
-performance differences relate between bio_is_zero_filled() and block 
-device implementation complexity, in addition to the raw performance of 
-bio_is_zero_filled in best- and worst-case scenarios.
+The problem here is the use of --ubuffered together with regex used in
+selection criteria. If the report output is not buffered, each row is
+discarded as soon as it is reported. The bug is in the use of report
+handle's memory - in the example above, what happens is:
 
-Since we always complete without writing after the call to 
-bio_is_zero_filled, regardless of the bio's content (all zeros or not), we 
-can benchmark the difference in the common use case of random data, as 
-well as the edge case of skipping writes for bio's that contain all zeros 
-when writing to unallocated space of thin-provisioned volumes.
+  1) report handle is initialized together with its memory pool
 
-These benchmarks were performed under KVM, so expect them to be lower 
-bounds due to overhead.  The hardware is a Intel(R) Xeon(R) CPU E3-1230 V2 
-@ 3.30GHz.  The VM was allocated 4GB of memory with 4 cpu cores.
+  2) selection tree is initialized from selection criteria string
+     (using the report handle's memory pool!)
 
-Benchmarks were performed using fio-2.1.14-33-gf8b8f
- --name=writebw 
- --rw=write 
- --time_based 
- --runtime=7 --ramp_time=3 
- --norandommap 
- --ioengine=libaio 
- --group_reporting 
- --direct=1 
- --bs=1m 
- --filename=/dev/X
- --numjobs=Y
+    2a) this also means the regex is initialized from report handle's mem pool
 
-Random data was tested using:
-  --zero_buffers=0 --scramble_buffers=1 
+  3) the object (row) is reported
 
-Zeroed data was tested using:
-  --zero_buffers=1 --scramble_buffers=0
+    3a) any memory needed for output is intialized out of report handle's mem pool
+    3b) selection criteria matching is executed - if the regex is checked the
+        very first time (for the very first row reported), some more memory
+        allocation happens as regex allocates internal structures "on-demand",
+        it's allocating from report handle's mem pool (see also step 2a)
 
-Values below are from aggrb.
+  4) the report output is executed
 
-              dm-thinp (MB/s)   loopback (MB/s)   loop faster by factor of
-==============+======================================================
-random jobs=4 | 18496.0          33522.0           1.68x
-zeros  jobs=4 |  8119.2           9767.2           1.20x
-==============+======================================================
-random jobs=1 |  7330.5          12330.0           1.81x
-zeros  jobs=1 |  4965.2           6799.9           1.11x
-                        
-We can see that fio reports a best-case performance of 33.5GB/s with 
-random data using 4 jobs in this test environment within loop.c.
+  5) the object (row) is discarded, meaning discarding all the mem pool
+     memory used since step 3.
 
-For the real-world best-case within dm-thinp, fio reports 18.4GB/s, which 
-is is relevant for use cases where bio vectors tend to contain non-zero 
-data, particularly toward the beginning of the vector set.
+Now, with step 5) we have discarded the regex internal structures from step 3b.
+When we execute reporting for another object (row), we're using the same
+selection criteria (step 3b), but tihs is second time we're using the regex
+and as such, it's already initialized completely. But the regex is missing the
+internal structures now as they got discarded in step 5) from previous
+object (row) reporting (because we're using "unbuffered" reporting).
 
-I expect that the performance difference between loop.c and dm-thinp is 
-due to implementation complexity of the block device driver, such as 
-checking the metadata to see if a block must be allocated before calling 
-provision_block().
+To resolve this issue and to prevent any similar future issues where each
+object/row memory is discarded after output (the unbuffered reporting) while
+selection tree is global for all the object/rows, use separate memory pool
+for report's selection.
 
-(Note that it may be possible for these test values to exceed the memory 
-bandwidth of the system since we exit early if finding non-zero data in a 
-biovec, thus the remaining data is not actually inspected but is counted 
-by fio.  Worst-case values should all be below the memory bandwidth 
-maximum since all data is inspected.  I believe memtest86+ says my memory 
-bandwidth is ~17GB/s.)
+This patch replaces "struct selection_node *selection_root" in struct
+dm_report with new struct selection which contains both "selection_root"
+and "mem" for separate mem pool used for selection.
 
+We can change struct dm_report this way as it is not exposed via libdevmapper.
 
+(This patch will have even more meaning for upcoming patches where selection
+is used even for non-reporting commands where "internal" reporting and
+selection criteria matching happens and where the internal reporting is
+not buffered.)
+---
+ WHATS_NEW            |    1 +
+ libdm/libdm-report.c |   49 ++++++++++++++++++++++++++++++++-----------------
+ 2 files changed, 33 insertions(+), 17 deletions(-)
 
-
--- 
-Eric Wheeler, President           eWheeler, Inc. dba Global Linux Security
-888-LINUX26 (888-546-8926)        Fax: 503-716-3878           PO Box 25107
-www.GlobalLinuxSecurity.pro       Linux since 1996!     Portland, OR 97298
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 9201f36..ff06b7b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.115 -
+ =====================================
++  Fix segfault while using --select with regex and --unbuffered for reporting.
+   Fix automatic use of configure --enable-udev-systemd-background-jobs.
+   Correctly rename active split LV with -splitmirrors for raid1.
+   Add report/compact_output to lvm.conf to enable/disable compact report output.
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 6d36c1e..e3c3d2f 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -26,6 +26,11 @@
+ #define RH_HEADINGS_PRINTED	0x00000200
+ #define RH_ALREADY_REPORTED	0x00000400
+ 
++struct selection {
++	struct dm_pool *mem;
++	struct selection_node *selection_root;
++};
++
+ struct dm_report {
+ 	struct dm_pool *mem;
+ 
+@@ -52,7 +57,9 @@ struct dm_report {
+ 	/* To store caller private data */
+ 	void *private;
+ 
+-	struct selection_node *selection_root;
++	/* Selection handle */
++	struct selection *selection;
++
+ 	/* Null-terminated array of reserved values */
+ 	const struct dm_report_reserved_value *reserved_values;
+ };
+@@ -1193,6 +1200,8 @@ struct dm_report *dm_report_init(uint32_t *report_types,
+ 
+ void dm_report_free(struct dm_report *rh)
+ {
++	if (rh->selection)
++		dm_pool_destroy(rh->selection->mem);
+ 	dm_pool_destroy(rh->mem);
+ 	dm_free(rh);
+ }
+@@ -1560,10 +1569,10 @@ static int _check_selection(struct dm_report *rh, struct selection_node *sn,
+ 
+ static int _check_report_selection(struct dm_report *rh, struct dm_list *fields)
+ {
+-	if (!rh->selection_root)
++	if (!rh->selection)
+ 		return 1;
+ 
+-	return _check_selection(rh, rh->selection_root, fields);
++	return _check_selection(rh, rh->selection->selection_root, fields);
+ }
+ 
+ int dm_report_object(struct dm_report *rh, void *object)
+@@ -2410,7 +2419,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 	}
+ 
+ 	/* set up selection */
+-	if (!(fs = dm_pool_zalloc(rh->mem, sizeof(struct field_selection)))) {
++	if (!(fs = dm_pool_zalloc(rh->selection->mem, sizeof(struct field_selection)))) {
+ 		log_error("dm_report: struct field_selection "
+ 			  "allocation failed for selection field %s", field_id);
+ 		return NULL;
+@@ -2429,7 +2438,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 		memcpy(s, v, len);
+ 		s[len] = '\0';
+ 
+-		fs->v.r = dm_regex_create(rh->mem, (const char **) &s, 1);
++		fs->v.r = dm_regex_create(rh->selection->mem, (const char **) &s, 1);
+ 		dm_free(s);
+ 		if (!fs->v.r) {
+ 			log_error("dm_report: failed to create regex "
+@@ -2438,7 +2447,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 		}
+ 	} else {
+ 		/* STRING, NUMBER, SIZE or STRING_LIST */
+-		if (!(s = dm_pool_alloc(rh->mem, len + 1))) {
++		if (!(s = dm_pool_alloc(rh->selection->mem, len + 1))) {
+ 			log_error("dm_report: dm_pool_alloc failed to store "
+ 				  "value for selection field %s", field_id);
+ 			goto error;
+@@ -2450,7 +2459,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 			case DM_REPORT_FIELD_TYPE_STRING:
+ 				if (reserved) {
+ 					fs->v.s = (const char *) _get_reserved_value(reserved);
+-					dm_pool_free(rh->mem, s);
++					dm_pool_free(rh->selection->mem, s);
+ 				} else {
+ 					fs->v.s = s;
+ 					if (_check_value_is_reserved(rh, DM_REPORT_FIELD_TYPE_STRING, fs->v.s)) {
+@@ -2473,7 +2482,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 						goto error;
+ 					}
+ 				}
+-				dm_pool_free(rh->mem, s);
++				dm_pool_free(rh->selection->mem, s);
+ 				break;
+ 			case DM_REPORT_FIELD_TYPE_SIZE:
+ 				if (reserved)
+@@ -2492,7 +2501,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 						goto error;
+ 					}
+ 				}
+-				dm_pool_free(rh->mem, s);
++				dm_pool_free(rh->selection->mem, s);
+ 				break;
+ 			case DM_REPORT_FIELD_TYPE_PERCENT:
+ 				if (reserved)
+@@ -2528,7 +2537,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 
+ 	return fs;
+ error:
+-	dm_pool_free(rh->mem, fs);
++	dm_pool_free(rh->selection->mem, fs);
+ 	return NULL;
+ }
+ 
+@@ -2730,7 +2739,7 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
+ 			custom = NULL;
+ 		if (!(last = _tok_value(rh, ft, field_num, implicit,
+ 					last, &vs, &ve, &flags,
+-					&reserved, rh->mem, custom)))
++					&reserved, rh->selection->mem, custom)))
+ 			goto_bad;
+ 	}
+ 
+@@ -2741,7 +2750,7 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
+ 		return_NULL;
+ 
+ 	/* create selection node */
+-	if (!(sn = _alloc_selection_node(rh->mem, SEL_ITEM)))
++	if (!(sn = _alloc_selection_node(rh->selection->mem, SEL_ITEM)))
+ 		return_NULL;
+ 
+ 	/* add selection to selection node */
+@@ -2828,7 +2837,7 @@ static struct selection_node *_parse_and_ex(struct dm_report *rh,
+ 	}
+ 
+ 	if (!and_sn) {
+-		if (!(and_sn = _alloc_selection_node(rh->mem, SEL_AND)))
++		if (!(and_sn = _alloc_selection_node(rh->selection->mem, SEL_AND)))
+ 			goto error;
+ 	}
+ 	dm_list_add(&and_sn->selection.set, &n->list);
+@@ -2860,7 +2869,7 @@ static struct selection_node *_parse_or_ex(struct dm_report *rh,
+ 	}
+ 
+ 	if (!or_sn) {
+-		if (!(or_sn = _alloc_selection_node(rh->mem, SEL_OR)))
++		if (!(or_sn = _alloc_selection_node(rh->selection->mem, SEL_OR)))
+ 			goto error;
+ 	}
+ 	dm_list_add(&or_sn->selection.set, &n->list);
+@@ -2893,7 +2902,7 @@ struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
+ 		return NULL;
+ 
+ 	if (!selection || !selection[0]) {
+-		rh->selection_root = NULL;
++		rh->selection = NULL;
+ 		return rh;
+ 	}
+ 
+@@ -2914,7 +2923,13 @@ struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
+ 		return rh;
+ 	}
+ 
+-	if (!(root = _alloc_selection_node(rh->mem, SEL_OR)))
++	if (!(rh->selection = dm_pool_zalloc(rh->mem, sizeof(struct selection))) ||
++	    !(rh->selection->mem = dm_pool_create("report selection", 10 * 1024))) {
++		log_error("Failed to allocate report selection structure.");
++		goto bad;
++	}
++
++	if (!(root = _alloc_selection_node(rh->selection->mem, SEL_OR)))
+ 		goto_bad;
+ 
+ 	if (!_parse_or_ex(rh, selection, &fin, root))
+@@ -2930,7 +2945,7 @@ struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
+ 
+ 	_dm_report_init_update_types(rh, report_types);
+ 
+-	rh->selection_root = root;
++	rh->selection->selection_root = root;
+ 	return rh;
+ bad:
+ 	dm_report_free(rh);
 
 
