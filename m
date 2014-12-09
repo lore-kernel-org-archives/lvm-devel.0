@@ -1,7 +1,7 @@
-From: Jens Axboe <axboe@kernel.dk>
-Date: Mon, 08 Dec 2014 09:57:16 -0700
+From: Eric Wheeler <lvm-dev@lists.ewheeler.net>
+Date: Tue, 9 Dec 2014 00:02:12 -0800 (PST)
 Subject: dm thin: optimize away writing all zeroes to unprovisioned blocks
-In-Reply-To: <alpine.DEB.2.02.1412062028500.15919@ware.dreamhost.com>
+In-Reply-To: <5485D86C.9040800@kernel.dk>
 References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
 	<alpine.DEB.2.02.1412032237010.12556@ware.dreamhost.com>
 	<alpine.DEB.2.02.1412032318290.29609@ware.dreamhost.com>
@@ -10,48 +10,101 @@ References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
 	<alpine.DEB.2.02.1412061437430.19773@ware.dreamhost.com>
 	<5483B04D.5030606@kernel.dk>
 	<alpine.DEB.2.02.1412062028500.15919@ware.dreamhost.com>
-Message-ID: <5485D86C.9040800@kernel.dk>
+	<5485D86C.9040800@kernel.dk>
+Message-ID: <alpine.DEB.2.02.1412082258460.10718@ware.dreamhost.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 12/06/2014 11:30 PM, Eric Wheeler wrote:
-> On Sat, 6 Dec 2014, Jens Axboe wrote:
->> On 12/06/2014 03:40 PM, Eric Wheeler wrote:
->>> On Fri, 5 Dec 2014, Mike Snitzer wrote:
->>>>> I do wonder what the performance impact is on this for dm. Have you
->>>>> tried a (worst case) test of writing blocks that are zero filled, but
->>>>> with the last byte not being a zero?
->>>
->>> The additional overhead of worst-case should be (nearly) equal to the
->>> simplest test case of dd if=/dev/zero of=/dev/thinp/vol.  In my testing
->>> that was 1.4GB/s within KVM on an Intel Xeon(R) CPU E3-1230 V2 @
->>> 3.30GHz.
->>
->> That seems way too slow for checking if it's zero or not... Memory
->> bandwidth should be way higher than that. The line above, was that
->> what you ran? How does it look with bs=4k or higher?
->
-> In userspace I can get ~12GB/s, so I think the algorithm is sound.
-> dd might not be the right tool for this.
+On Fri, 5 Dec 2014, Mike Snitzer wrote:
+> I do wonder what the performance impact is on this for dm. Have you
+> tried a (worst case) test of writing blocks that are zero filled,
 
-It's straight forward looping through the vectors, it can't really work 
-any other way. But we need to figure out why it's so slow...
+Jens, thank you for your help w/ fio for generating zeroed writes!  
+Clearly fio is superior to dd as a sequential benchmarking tool; I was 
+actually able to push on the system's memory bandwidth.
 
->>  read : io=12233MB, bw=1432.7MB/s, iops=22922, runt=  8539msec
->
-> Can you suggest the right fio commandline to test sequential writes if
-> all zeros?  I tried --zero_buffers but couldn't get it to write zeros,
-> writes kept going to disk.
+Results:
 
-zero_buffers=1
-scramble_buffers=0
+I hacked block/loop.c and md/dm-thin.c to always call bio_is_zero_filled() 
+and then complete without writing to disk, regardless of the return value 
+from bio_is_zero_filled().  In loop.c this was done in 
+do_bio_filebacked(), and for dm-thin.c this was done within 
+provision_block().
 
-should get you all zeroes.
+This allows us to compare the performance difference between the simple 
+loopback block device driver vs the more complex dm-thinp implementation 
+just prior to block allocation.  These benchmarks give us a sense of how 
+performance differences relate between bio_is_zero_filled() and block 
+device implementation complexity, in addition to the raw performance of 
+bio_is_zero_filled in best- and worst-case scenarios.
+
+Since we always complete without writing after the call to 
+bio_is_zero_filled, regardless of the bio's content (all zeros or not), we 
+can benchmark the difference in the common use case of random data, as 
+well as the edge case of skipping writes for bio's that contain all zeros 
+when writing to unallocated space of thin-provisioned volumes.
+
+These benchmarks were performed under KVM, so expect them to be lower 
+bounds due to overhead.  The hardware is a Intel(R) Xeon(R) CPU E3-1230 V2 
+@ 3.30GHz.  The VM was allocated 4GB of memory with 4 cpu cores.
+
+Benchmarks were performed using fio-2.1.14-33-gf8b8f
+ --name=writebw 
+ --rw=write 
+ --time_based 
+ --runtime=7 --ramp_time=3 
+ --norandommap 
+ --ioengine=libaio 
+ --group_reporting 
+ --direct=1 
+ --bs=1m 
+ --filename=/dev/X
+ --numjobs=Y
+
+Random data was tested using:
+  --zero_buffers=0 --scramble_buffers=1 
+
+Zeroed data was tested using:
+  --zero_buffers=1 --scramble_buffers=0
+
+Values below are from aggrb.
+
+              dm-thinp (MB/s)   loopback (MB/s)   loop faster by factor of
+==============+======================================================
+random jobs=4 | 18496.0          33522.0           1.68x
+zeros  jobs=4 |  8119.2           9767.2           1.20x
+==============+======================================================
+random jobs=1 |  7330.5          12330.0           1.81x
+zeros  jobs=1 |  4965.2           6799.9           1.11x
+                        
+We can see that fio reports a best-case performance of 33.5GB/s with 
+random data using 4 jobs in this test environment within loop.c.
+
+For the real-world best-case within dm-thinp, fio reports 18.4GB/s, which 
+is is relevant for use cases where bio vectors tend to contain non-zero 
+data, particularly toward the beginning of the vector set.
+
+I expect that the performance difference between loop.c and dm-thinp is 
+due to implementation complexity of the block device driver, such as 
+checking the metadata to see if a block must be allocated before calling 
+provision_block().
+
+(Note that it may be possible for these test values to exceed the memory 
+bandwidth of the system since we exit early if finding non-zero data in a 
+biovec, thus the remaining data is not actually inspected but is counted 
+by fio.  Worst-case values should all be below the memory bandwidth 
+maximum since all data is inspected.  I believe memtest86+ says my memory 
+bandwidth is ~17GB/s.)
+
+
+
 
 -- 
-Jens Axboe
+Eric Wheeler, President           eWheeler, Inc. dba Global Linux Security
+888-LINUX26 (888-546-8926)        Fax: 503-716-3878           PO Box 25107
+www.GlobalLinuxSecurity.pro       Linux since 1996!     Portland, OR 97298
 
 
