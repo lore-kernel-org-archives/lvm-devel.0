@@ -1,173 +1,78 @@
-From: Eric Wheeler <ewheeler@ewheeler.net>
-Date: Tue, 9 Dec 2014 18:52:08 -0800 (PST)
-Subject: [PATCH] dm thin: optimize away writing all zeroes to unprovisioned blocks
-In-Reply-To: <54871847.6020009@kernel.dk>
-References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
-	<alpine.DEB.2.02.1412032237010.12556@ware.dreamhost.com>
-	<alpine.DEB.2.02.1412032318290.29609@ware.dreamhost.com>
-	<20141204153358.GA19315@redhat.com> <5481EB1C.4000202@kernel.dk>
-	<20141205183342.GA27397@redhat.com>
-	<alpine.DEB.2.02.1412061437430.19773@ware.dreamhost.com>
-	<5483B04D.5030606@kernel.dk>
-	<alpine.DEB.2.02.1412062028500.15919@ware.dreamhost.com>
-	<5485D86C.9040800@kernel.dk>
-	<alpine.DEB.2.02.1412082258460.10718@ware.dreamhost.com>
-	<548715D2.1000509@kernel.dk> <54871847.6020009@kernel.dk>
-Message-ID: <alpine.DEB.2.02.1412091725240.10718@ware.dreamhost.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 10 Dec 2014 13:02:11 +0000 (UTC)
+Subject: master - vgimportclone: replace awk with dumpconfig to generate temporary lvm.conf for vgimportclone
+Message-ID: <20141210130212.0787060C4E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> > >                dm-thinp (MB/s)   loopback (MB/s)   loop faster by
-> > >
-> > > ==============+======================================================
-> > > random jobs=4 | 18496.0          33522.0           1.68x
-> > > zeros  jobs=4 |  8119.2           9767.2           1.20x
-> > > ==============+======================================================
-> > > random jobs=1 |  7330.5          12330.0           1.81x
-> > > zeros  jobs=1 |  4965.2           6799.9           1.11x
-> > 
-> > This looks more reasonable in terms of throughput.
-> > 
-> > One major worry here is that checking every write is blowing your cache,
-> > so you could have a major impact on performance in general. Even for
-> > O_DIRECT writes, you are now accessing the memory. Have you looked into
-> > doing non-temporal memory compares instead? I think that would be the
-> > way to go.
-> 
-> So I found your patch in the thread. For each vector, use memcmp() instead and
-> hope it does the right thing. You can compare with empty_zero_page. That
-> should drastically cut down on the amount of hand rolled code you have in
-> bio_is_zero_filled() at the moment.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00b36ef06acb15c82d7c9b37872753f02c638316
+Commit:        00b36ef06acb15c82d7c9b37872753f02c638316
+Parent:        5378a1a63e8a8d89cca9460051d473b7547404f9
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Dec 10 13:25:23 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Dec 10 13:59:38 2014 +0100
 
-I ran these against dm-thinp within provision_block() when checking
-  memcmp(page_address(ZERO_PAGE()), data, bv.bv_len) != 0
-and got these numbers that show memcmp() based testing is rather slow:
-  zeroed jobs=1 1268.1 MB/s
-  zeroed jobs=4 1445.6 MB/s
+vgimportclone: replace awk with dumpconfig to generate temporary lvm.conf for vgimportclone
 
-  random jobs=1  7554.1 MB/s
-  random jobs=4 17677.0 MB/s
+With current dumpconfig, we can generate lvm.conf easily - we can merge
+current lvm.conf with the config given on cmd line:
+  lvm dumpconfig --mergedconfig --config "..."
 
-
-I updated the checking code to use __uint128_t, and performance got even 
-better than with 64-bit integers (note that gcc is emulating 128bit).  
-These are the numbers w/ __uint128_t:
-
-  zeroed jobs=1  6424 MB/s
-  zeroed jobs=4 10738 MB/s MB/s
-
-  random jobs=1  7928 MB/s
-  random jobs=4 19435 MB/s MB/s
-
-
-Jens says to try non-temporal memory compares to deal with cache 
-invalidation, but that sounds like arch-specific assembler unless I am 
-mistaken.  Does GCC have something I can use to flag the buffer as not to 
-be cached?  If not, I'm happy to poke some asm code into the check 
-routine, but I'm a bit rusty there.  
-
-Can someone suggest the inline asm that I would use to rep until a 
-non-zero value appears?  Assume that we are 8 or 16-byte aligned, probably 
-the bigger the word sized checks are the better, performance wise.
-
-My latest version is attached, and includes moving bvec_kunmap_irq out of 
-the for loops in hopes of getting gcc to unroll loops.
-
--Eric
-
+This is a bit simpler than using awk and it also avoids problems when some of
+the configuration is missing in existing lvm.conf file and hardcoded defaults
+are used instead. The dumpconfig handles this transparently.
 ---
- block/bio.c |   74 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 74 insertions(+), 0 deletions(-)
+ WHATS_NEW                |    1 +
+ scripts/vgimportclone.sh |   22 +++++++++++-----------
+ 2 files changed, 12 insertions(+), 11 deletions(-)
 
-diff --git a/block/bio.c b/block/bio.c
-index 8c2e55e..262f190 100644
---- a/block/bio.c
-+++ b/block/bio.c
-@@ -511,6 +511,80 @@ void zero_fill_bio(struct bio *bio)
- }
- EXPORT_SYMBOL(zero_fill_bio);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 9201f36..72d3b6a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.115 -
+ =====================================
++  Fix vgimportclone to properly override config if it is missing in lvm.conf.
+   Fix automatic use of configure --enable-udev-systemd-background-jobs.
+   Correctly rename active split LV with -splitmirrors for raid1.
+   Add report/compact_output to lvm.conf to enable/disable compact report output.
+diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
+index 7087557..bfff131 100755
+--- a/scripts/vgimportclone.sh
++++ b/scripts/vgimportclone.sh
+@@ -242,17 +242,17 @@ export FILTER="filter=[ ${FILTER} \"r|.*|\" ]"
  
-+bool bio_is_zero_filled(struct bio *bio)
-+{
-+	unsigned i, count, left;
-+	unsigned long flags;
-+	struct bio_vec bv;
-+	struct bvec_iter iter;
-+	char *data = NULL, *p;
-+	__uint128_t *parch;
+ LVMCONF=${TMP_LVM_SYSTEM_DIR}/lvm.conf
+ 
+-# FIXME convert to cmdline override
+-"$LVM" dumpconfig ${LVM_OPTS} | \
+-"$AWK" -v DEV=${TMP_LVM_SYSTEM_DIR} -v CACHE=${TMP_LVM_SYSTEM_DIR}/.cache \
+-    -v CACHE_DIR=${TMP_LVM_SYSTEM_DIR}/cache \
+-    '/^[ \t]*filter[ \t]*=/{print ENVIRON["FILTER"];next} \
+-     /^[ \t]*scan[ \t]*=/{print "scan = [ \"" DEV "\" ]";next} \
+-     /^[ \t]*cache[ \t]*=/{print "cache = \"" CACHE "\"";next} \
+-     /^[ \t]*use_lvmetad[ \t]*=/{print "use_lvmetad = 0";next} \
+-     /^[ \t]*global_filter[ \t]*=/{print "global_filter = [ \"a|.*|\" ]";next} \
+-     /^[ \t]*cache_dir[ \t]*=/{print "cache_dir = \"" CACHE_DIR "\"";next} \
+-     {print $0}' > ${LVMCONF}
++CMD_CONFIG_LINE="devices { \
++                   scan = [ \"${TMP_LVM_SYSTEM_DIR}\" ] \
++                   cache_dir = \"$TMP_LVM_SYSTEM_DIR}/cache\"
++                   global_filter = [ \"a|.*|\" ] \
++                   ${FILTER}
++                 } \
++                 global { \
++                   use_lvmetad = 0 \
++                 }"
 +
-+	bio_for_each_segment(bv, bio, iter) {
-+		data = bvec_kmap_irq(&bv, &flags);
-+		p = data;
-+		left = bv.bv_len;
-+
-+		if (unlikely( data == NULL ))
-+			continue;
-+
-+
-+		/* check unaligned bytes at the beginning of p */
-+		if (unlikely( ( (uintptr_t)p & (sizeof(__uint128_t)-1) ) != 0 )) {
-+			count = sizeof(__uint128_t) - ( (uintptr_t)p & (sizeof(__uint128_t)-1) );
-+			for (i = 0; i < count; i++) {
-+				if (*p) 
-+					break;
-+				p++;
-+			}
-+			if (i < count)
-+				goto out_false;
-+			left -= count;
-+		}
-+
-+		/* we should be word aligned now */
-+		BUG_ON(unlikely( ((uintptr_t)p & (sizeof(__uint128_t)-1) ) != 0 ));
-+
-+		/* now check in word-sized chunks */
-+		parch = (__uint128_t*)p;
-+		count = left >> ilog2(sizeof(__uint128_t)); /* count = left / sizeof(__uint128_t) */;
-+		for (i = 0; i < count; i++) {
-+			if (*parch) 
-+				break;
-+			parch++;
-+		}
-+		if (i < count)
-+			goto out_false;
-+		left -= count << ilog2(sizeof(__uint128_t)); /* left -= count*sizeof(__uint128_t) */
-+
-+		/* check remaining unaligned values@the end */
-+		p = (char*)parch;
-+		if (unlikely(left > 0))
-+		{
-+			for (i = 0; i < left; i++) {
-+				if (*p)
-+					break;
-+				p++; 
-+			}
-+			if (i < count)
-+				goto out_false;
-+			left = 0;
-+		}
-+
-+		bvec_kunmap_irq(data, &flags);
-+		BUG_ON(unlikely( left > 0 ));
-+		BUG_ON(unlikely( data+bv.bv_len != p ));
-+	}
-+
-+	return true;
-+
-+out_false:
-+	if (data != NULL)
-+		bvec_kunmap_irq(data, &flags);
-+	return false;
-+}
-+EXPORT_SYMBOL(bio_is_zero_filled);
-+
- /**
-  * bio_put - release a reference to a bio
-  * @bio:   bio to release reference to
--- 
-1.7.1
++$LVM dumpconfig ${LVM_OPTS} --file ${LVMCONF} --mergedconfig --config "${CMD_CONFIG_LINE}"
+ 
+ checkvalue $? "Failed to generate ${LVMCONF}"
+ # Only keep TMP_LVM_SYSTEM_DIR if it contains something worth keeping
 
 
