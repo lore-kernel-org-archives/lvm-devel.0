@@ -1,7 +1,7 @@
-From: Jens Axboe <axboe@kernel.dk>
-Date: Tue, 09 Dec 2014 08:41:59 -0700
-Subject: dm thin: optimize away writing all zeroes to unprovisioned blocks
-In-Reply-To: <548715D2.1000509@kernel.dk>
+From: Eric Wheeler <ewheeler@ewheeler.net>
+Date: Tue, 9 Dec 2014 18:52:08 -0800 (PST)
+Subject: [PATCH] dm thin: optimize away writing all zeroes to unprovisioned blocks
+In-Reply-To: <54871847.6020009@kernel.dk>
 References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
 	<alpine.DEB.2.02.1412032237010.12556@ware.dreamhost.com>
 	<alpine.DEB.2.02.1412032318290.29609@ware.dreamhost.com>
@@ -12,96 +12,162 @@ References: <alpine.DEB.2.00.1409301121470.26721@ware.dreamhost.com>
 	<alpine.DEB.2.02.1412062028500.15919@ware.dreamhost.com>
 	<5485D86C.9040800@kernel.dk>
 	<alpine.DEB.2.02.1412082258460.10718@ware.dreamhost.com>
-	<548715D2.1000509@kernel.dk>
-Message-ID: <54871847.6020009@kernel.dk>
+	<548715D2.1000509@kernel.dk> <54871847.6020009@kernel.dk>
+Message-ID: <alpine.DEB.2.02.1412091725240.10718@ware.dreamhost.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 12/09/2014 08:31 AM, Jens Axboe wrote:
-> On 12/09/2014 01:02 AM, Eric Wheeler wrote:
->> On Fri, 5 Dec 2014, Mike Snitzer wrote:
->>> I do wonder what the performance impact is on this for dm. Have you
->>> tried a (worst case) test of writing blocks that are zero filled,
->>
->> Jens, thank you for your help w/ fio for generating zeroed writes!
->> Clearly fio is superior to dd as a sequential benchmarking tool; I was
->> actually able to push on the system's memory bandwidth.
->>
->> Results:
->>
->> I hacked block/loop.c and md/dm-thin.c to always call
->> bio_is_zero_filled()
->> and then complete without writing to disk, regardless of the return value
->> from bio_is_zero_filled().  In loop.c this was done in
->> do_bio_filebacked(), and for dm-thin.c this was done within
->> provision_block().
->>
->> This allows us to compare the performance difference between the simple
->> loopback block device driver vs the more complex dm-thinp implementation
->> just prior to block allocation.  These benchmarks give us a sense of how
->> performance differences relate between bio_is_zero_filled() and block
->> device implementation complexity, in addition to the raw performance of
->> bio_is_zero_filled in best- and worst-case scenarios.
->>
->> Since we always complete without writing after the call to
->> bio_is_zero_filled, regardless of the bio's content (all zeros or
->> not), we
->> can benchmark the difference in the common use case of random data, as
->> well as the edge case of skipping writes for bio's that contain all zeros
->> when writing to unallocated space of thin-provisioned volumes.
->>
->> These benchmarks were performed under KVM, so expect them to be lower
->> bounds due to overhead.  The hardware is a Intel(R) Xeon(R) CPU
->> E3-1230 V2
->> @ 3.30GHz.  The VM was allocated 4GB of memory with 4 cpu cores.
->>
->> Benchmarks were performed using fio-2.1.14-33-gf8b8f
->>   --name=writebw
->>   --rw=write
->>   --time_based
->>   --runtime=7 --ramp_time=3
->>   --norandommap
->>   --ioengine=libaio
->>   --group_reporting
->>   --direct=1
->>   --bs=1m
->>   --filename=/dev/X
->>   --numjobs=Y
->>
->> Random data was tested using:
->>    --zero_buffers=0 --scramble_buffers=1
->>
->> Zeroed data was tested using:
->>    --zero_buffers=1 --scramble_buffers=0
->>
->> Values below are from aggrb.
->>
->>                dm-thinp (MB/s)   loopback (MB/s)   loop faster by
->> factor of
->> ==============+======================================================
->> random jobs=4 | 18496.0          33522.0           1.68x
->> zeros  jobs=4 |  8119.2           9767.2           1.20x
->> ==============+======================================================
->> random jobs=1 |  7330.5          12330.0           1.81x
->> zeros  jobs=1 |  4965.2           6799.9           1.11x
->
-> This looks more reasonable in terms of throughput.
->
-> One major worry here is that checking every write is blowing your cache,
-> so you could have a major impact on performance in general. Even for
-> O_DIRECT writes, you are now accessing the memory. Have you looked into
-> doing non-temporal memory compares instead? I think that would be the
-> way to go.
+> > >                dm-thinp (MB/s)   loopback (MB/s)   loop faster by
+> > >
+> > > ==============+======================================================
+> > > random jobs=4 | 18496.0          33522.0           1.68x
+> > > zeros  jobs=4 |  8119.2           9767.2           1.20x
+> > > ==============+======================================================
+> > > random jobs=1 |  7330.5          12330.0           1.81x
+> > > zeros  jobs=1 |  4965.2           6799.9           1.11x
+> > 
+> > This looks more reasonable in terms of throughput.
+> > 
+> > One major worry here is that checking every write is blowing your cache,
+> > so you could have a major impact on performance in general. Even for
+> > O_DIRECT writes, you are now accessing the memory. Have you looked into
+> > doing non-temporal memory compares instead? I think that would be the
+> > way to go.
+> 
+> So I found your patch in the thread. For each vector, use memcmp() instead and
+> hope it does the right thing. You can compare with empty_zero_page. That
+> should drastically cut down on the amount of hand rolled code you have in
+> bio_is_zero_filled() at the moment.
 
-So I found your patch in the thread. For each vector, use memcmp() 
-instead and hope it does the right thing. You can compare with 
-empty_zero_page. That should drastically cut down on the amount of hand 
-rolled code you have in bio_is_zero_filled() at the moment.
+I ran these against dm-thinp within provision_block() when checking
+  memcmp(page_address(ZERO_PAGE()), data, bv.bv_len) != 0
+and got these numbers that show memcmp() based testing is rather slow:
+  zeroed jobs=1 1268.1 MB/s
+  zeroed jobs=4 1445.6 MB/s
 
+  random jobs=1  7554.1 MB/s
+  random jobs=4 17677.0 MB/s
+
+
+I updated the checking code to use __uint128_t, and performance got even 
+better than with 64-bit integers (note that gcc is emulating 128bit).  
+These are the numbers w/ __uint128_t:
+
+  zeroed jobs=1  6424 MB/s
+  zeroed jobs=4 10738 MB/s MB/s
+
+  random jobs=1  7928 MB/s
+  random jobs=4 19435 MB/s MB/s
+
+
+Jens says to try non-temporal memory compares to deal with cache 
+invalidation, but that sounds like arch-specific assembler unless I am 
+mistaken.  Does GCC have something I can use to flag the buffer as not to 
+be cached?  If not, I'm happy to poke some asm code into the check 
+routine, but I'm a bit rusty there.  
+
+Can someone suggest the inline asm that I would use to rep until a 
+non-zero value appears?  Assume that we are 8 or 16-byte aligned, probably 
+the bigger the word sized checks are the better, performance wise.
+
+My latest version is attached, and includes moving bvec_kunmap_irq out of 
+the for loops in hopes of getting gcc to unroll loops.
+
+-Eric
+
+---
+ block/bio.c |   74 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 74 insertions(+), 0 deletions(-)
+
+diff --git a/block/bio.c b/block/bio.c
+index 8c2e55e..262f190 100644
+--- a/block/bio.c
++++ b/block/bio.c
+@@ -511,6 +511,80 @@ void zero_fill_bio(struct bio *bio)
+ }
+ EXPORT_SYMBOL(zero_fill_bio);
+ 
++bool bio_is_zero_filled(struct bio *bio)
++{
++	unsigned i, count, left;
++	unsigned long flags;
++	struct bio_vec bv;
++	struct bvec_iter iter;
++	char *data = NULL, *p;
++	__uint128_t *parch;
++
++	bio_for_each_segment(bv, bio, iter) {
++		data = bvec_kmap_irq(&bv, &flags);
++		p = data;
++		left = bv.bv_len;
++
++		if (unlikely( data == NULL ))
++			continue;
++
++
++		/* check unaligned bytes at the beginning of p */
++		if (unlikely( ( (uintptr_t)p & (sizeof(__uint128_t)-1) ) != 0 )) {
++			count = sizeof(__uint128_t) - ( (uintptr_t)p & (sizeof(__uint128_t)-1) );
++			for (i = 0; i < count; i++) {
++				if (*p) 
++					break;
++				p++;
++			}
++			if (i < count)
++				goto out_false;
++			left -= count;
++		}
++
++		/* we should be word aligned now */
++		BUG_ON(unlikely( ((uintptr_t)p & (sizeof(__uint128_t)-1) ) != 0 ));
++
++		/* now check in word-sized chunks */
++		parch = (__uint128_t*)p;
++		count = left >> ilog2(sizeof(__uint128_t)); /* count = left / sizeof(__uint128_t) */;
++		for (i = 0; i < count; i++) {
++			if (*parch) 
++				break;
++			parch++;
++		}
++		if (i < count)
++			goto out_false;
++		left -= count << ilog2(sizeof(__uint128_t)); /* left -= count*sizeof(__uint128_t) */
++
++		/* check remaining unaligned values@the end */
++		p = (char*)parch;
++		if (unlikely(left > 0))
++		{
++			for (i = 0; i < left; i++) {
++				if (*p)
++					break;
++				p++; 
++			}
++			if (i < count)
++				goto out_false;
++			left = 0;
++		}
++
++		bvec_kunmap_irq(data, &flags);
++		BUG_ON(unlikely( left > 0 ));
++		BUG_ON(unlikely( data+bv.bv_len != p ));
++	}
++
++	return true;
++
++out_false:
++	if (data != NULL)
++		bvec_kunmap_irq(data, &flags);
++	return false;
++}
++EXPORT_SYMBOL(bio_is_zero_filled);
++
+ /**
+  * bio_put - release a reference to a bio
+  * @bio:   bio to release reference to
 -- 
-Jens Axboe
+1.7.1
 
 
