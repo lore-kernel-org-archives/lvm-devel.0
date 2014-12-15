@@ -1,7 +1,9 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 15 Dec 2014 23:32:37 +0100
-Subject: [PATCH 1/4] report: Print NULL strings as "" in _string_disp (instead of a SEGV).
-Message-ID: <1418682760-16427-1-git-send-email-prockai@redhat.com>
+Date: Mon, 15 Dec 2014 23:32:40 +0100
+Subject: [PATCH 4/4] test: Check that cache settings properly survive LV reactivation.
+In-Reply-To: <1418682760-16427-1-git-send-email-prockai@redhat.com>
+References: <1418682760-16427-1-git-send-email-prockai@redhat.com>
+Message-ID: <1418682760-16427-4-git-send-email-prockai@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -9,21 +11,22 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 ---
- lib/report/report.c | 2 ++
- 1 file changed, 2 insertions(+)
+ test/shell/lvcreate-cache.sh | 3 +++
+ 1 file changed, 3 insertions(+)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 5637d50..043de88 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -179,6 +179,8 @@ static int _string_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
- 			struct dm_report_field *field,
- 			const void *data, void *private __attribute__((unused)))
- {
-+	if (!*(void**) data)
-+		return _field_set_value(field, "", NULL);
- 	return dm_report_field_string(rh, field, (const char * const *) data);
- }
+diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
+index f709d8b..89efc4d 100644
+--- a/test/shell/lvcreate-cache.sh
++++ b/test/shell/lvcreate-cache.sh
+@@ -230,6 +230,9 @@ lvcreate --type cache-pool -L10 $vg/cpool
+ lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg --cachepolicy mq --cachesettings migration_threshold=233
+ dmsetup status | grep $vg
+ dmsetup status | grep $vg-corigin | grep 'migration_threshold 233'
++lvchange -an $vg
++lvchange -ay $vg
++dmsetup status | grep $vg-corigin | grep 'migration_threshold 233'
+ 
+ lvremove -f $vg
  
 -- 
 2.1.2
