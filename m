@@ -1,100 +1,61 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 15 Dec 2014 23:32:38 +0100
-Subject: [PATCH 2/4] report: Add cache_policy and cache_settings (LV) segment fields.
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 16 Dec 2014 10:20:42 +0100
+Subject: [PATCH 1/4] report: Print NULL strings as "" in _string_disp (instead of a SEGV).
 In-Reply-To: <1418682760-16427-1-git-send-email-prockai@redhat.com>
 References: <1418682760-16427-1-git-send-email-prockai@redhat.com>
-Message-ID: <1418682760-16427-2-git-send-email-prockai@redhat.com>
+Message-ID: <548FF96A.4020706@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- lib/report/columns.h    |  2 ++
- lib/report/properties.c |  5 +++++
- lib/report/report.c     | 38 ++++++++++++++++++++++++++++++++++++++
- 3 files changed, 45 insertions(+)
+On 12/15/2014 11:32 PM, Petr Rockai wrote:
+> ---
+>  lib/report/report.c | 2 ++
+>  1 file changed, 2 insertions(+)
+> 
+> diff --git a/lib/report/report.c b/lib/report/report.c
+> index 5637d50..043de88 100644
+> --- a/lib/report/report.c
+> +++ b/lib/report/report.c
+> @@ -179,6 +179,8 @@ static int _string_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+>  			struct dm_report_field *field,
+>  			const void *data, void *private __attribute__((unused)))
+>  {
+> +	if (!*(void**) data)
+> +		return _field_set_value(field, "", NULL);
+>  	return dm_report_field_string(rh, field, (const char * const *) data);
+>  }
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index db43e13..4b627a3 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -178,6 +178,8 @@ FIELD(SEGS, seg, STR_LIST, "Seg Tags", tags, 8, tags, seg_tags, "Tags, if any.",
- FIELD(SEGS, seg, STR, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format.", 0)
- FIELD(SEGS, seg, STR, "Devices", list, 7, devices, devices, "Underlying devices used with starting extent numbers.", 0)
- FIELD(SEGS, seg, STR, "Monitor", list, 7, segmonitor, seg_monitor, "Dmeventd monitoring status of the segment.", 0)
-+FIELD(SEGS, seg, STR, "Cache Policy", policy_name, 11, string, cache_policy, "The cache policy (cached segments only).", 0)
-+FIELD(SEGS, seg, STR_LIST, "Cache Settings", policy_settings, 20, cache_settings, cache_settings, "Cache settings/parameters (cached segments only).", 0)
- 
- FIELD(PVSEGS, pvseg, NUM, "Start", pe, 5, uint32, pvseg_start, "Physical Extent number of start of segment.", 0)
- FIELD(PVSEGS, pvseg, NUM, "SSize", len, 5, uint32, pvseg_size, "Number of extents in segment.", 0)
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 2308c36..4796000 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -440,6 +440,11 @@ GET_LVSEG_STR_PROPERTY_FN(devices, lvseg_devices(lvseg->lv->vg->vgmem, lvseg))
- GET_LVSEG_STR_PROPERTY_FN(seg_monitor, lvseg_monitor_dup(lvseg->lv->vg->vgmem, lvseg))
- #define _seg_monitor_set prop_not_implemented_set
- 
-+#define _cache_policy_get prop_not_implemented_get
-+#define _cache_policy_set prop_not_implemented_set
-+#define _cache_settings_get prop_not_implemented_get
-+#define _cache_settings_set prop_not_implemented_set
-+
- /* PVSEG */
- GET_PVSEG_NUM_PROPERTY_FN(pvseg_start, pvseg->pe)
- #define _pvseg_start_set prop_not_implemented_set
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 043de88..c62f34c 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -233,6 +233,44 @@ static int _tags_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return _field_set_string_list(rh, field, tagsl, private, 1);
- }
- 
-+struct _str_list_append_baton {
-+	struct dm_pool *mem;
-+	struct dm_list *result;
-+};
-+
-+static int _str_list_append(const char *line, void *baton)
-+{
-+	struct _str_list_append_baton *b = baton;
-+	const char *dup = dm_pool_strdup(b->mem, line);
-+	if (!dup)
-+		return_0;
-+	if (!str_list_add(b->mem, b->result, dup))
-+		return_0;
-+	return 1;
-+}
-+
-+static int _cache_settings_disp(struct dm_report *rh, struct dm_pool *mem,
-+				struct dm_report_field *field,
-+				const void *data, void *private)
-+{
-+	const struct dm_config_node *settings = *(const struct dm_config_node **) data;
-+	struct dm_list *result = str_list_create(mem);
-+	struct _str_list_append_baton baton = { mem, result };
-+
-+	if (!result)
-+		return_0;
-+
-+	if (settings)
-+		settings = settings->child;
-+
-+	while (settings) {
-+		dm_config_write_one_node(settings, _str_list_append, &baton);
-+		settings = settings->sib;
-+	};
-+
-+	return _field_set_string_list(rh, field, result, private, 0);
-+}
-+
- static int _modules_disp(struct dm_report *rh, struct dm_pool *mem,
- 			 struct dm_report_field *field,
- 			 const void *data, void *private)
+...we could do this, but I think more appropriate here would be to
+define field-specific reserved value to represent the "undefined"
+value so we can match against this too when using selection
+(-S|--select).
+
+So, in lib/report/values.h, you can just define:
+
+FIELD_RESERVED_VALUE(cache_policy, cache_policy_undefined, "", "", "undefined", ... add as many synonym to "undefined" here as you need ...)
+
+With this, any "" or "undefined" (or any other synonym) can be used
+in selection criteria to match against (the first synonym on the list
+is the one printed - in this case it's blank value "").
+
+But that would mean defining own display function for the
+cache_policy, not using the generic _string_disp (but that's
+not a problem, of course).
+
+So the patch above is OK, but it depends how you need
+the selection to behave when matching the cache_policy
+field.
+
+(I'm thinking whether the "" STR value should be a global
+reserved value with that "undefined" and other synonyms,
+but it's possible that wouldn't probably suit all STR fields...
+I'd probably go with the field-specific reserved value for now.
+We can make that generic anytime later...)
+
 -- 
-2.1.2
+Peter
 
 
