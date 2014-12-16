@@ -1,140 +1,97 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 16 Dec 2014 16:32:09 +0000 (UTC)
-Subject: master - cache: disallow cache lvs and cache pools in cluster vg
-Message-ID: <20141216163209.E8B8660C44@fedorahosted.org>
+Date: Tue, 16 Dec 2014 17:44:58 +0000 (UTC)
+Subject: master - tests: skip cache tests in cluster
+Message-ID: <20141216174458.7D0A060F6A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=40e1d5b269fa76b839e3e8e2e7c9beb2bbbfed5e
-Commit:        40e1d5b269fa76b839e3e8e2e7c9beb2bbbfed5e
-Parent:        2e905d454058ef17bbb2b9758c59a5505d1c95be
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e20bf7e71ace22f554a8c2f7abb7af14d1c90ac
+Commit:        3e20bf7e71ace22f554a8c2f7abb7af14d1c90ac
+Parent:        40e1d5b269fa76b839e3e8e2e7c9beb2bbbfed5e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Oct 31 15:50:09 2014 -0500
+AuthorDate:    Tue Dec 16 11:43:48 2014 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Dec 16 10:30:27 2014 -0600
+CommitterDate: Tue Dec 16 11:43:48 2014 -0600
 
-cache: disallow cache lvs and cache pools in cluster vg
+tests: skip cache tests in cluster
 
-Disable this combination until problems are resolved.
+The previous commit disabled cache types with cluster.
+Disable the tests also.
 ---
- lib/metadata/segtype.c |    8 ++++++++
- lib/metadata/segtype.h |    2 ++
- tools/lvconvert.c      |   16 +++++++++++++++-
- tools/lvcreate.c       |    6 ++++++
- tools/vgchange.c       |   12 ++++++++++++
- 5 files changed, 43 insertions(+), 1 deletions(-)
+ test/shell/lvchange-cache.sh       |    2 ++
+ test/shell/lvconvert-cache-raid.sh |    2 ++
+ test/shell/lvconvert-cache-thin.sh |    2 ++
+ test/shell/lvconvert-cache.sh      |    2 ++
+ test/shell/lvcreate-cache.sh       |    2 ++
+ 5 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/segtype.c b/lib/metadata/segtype.c
-index 02dff4c..c28c894 100644
---- a/lib/metadata/segtype.c
-+++ b/lib/metadata/segtype.c
-@@ -34,3 +34,11 @@ struct segment_type *get_segtype_from_string(struct cmd_context *cmd,
+diff --git a/test/shell/lvchange-cache.sh b/test/shell/lvchange-cache.sh
+index 87a217a..3b108c1 100644
+--- a/test/shell/lvchange-cache.sh
++++ b/test/shell/lvchange-cache.sh
+@@ -11,6 +11,8 @@
  
- 	return segtype;
- }
-+
-+int segtype_allowed_in_cluster_vg(const struct segment_type *segtype)
-+{
-+	if (segtype_is_cache(segtype) || segtype_is_cache_pool(segtype))
-+		return 0;
-+
-+	return 1;
-+}
-diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
-index ecb598d..3c387e2 100644
---- a/lib/metadata/segtype.h
-+++ b/lib/metadata/segtype.h
-@@ -138,6 +138,8 @@ struct segtype_handler {
- struct segment_type *get_segtype_from_string(struct cmd_context *cmd,
- 					     const char *str);
+ . lib/inittest
  
-+int segtype_allowed_in_cluster_vg(const struct segment_type *segtype);
++test -e LOCAL_CLVMD && skip
 +
- struct segtype_library;
- int lvm_register_segtype(struct segtype_library *seglib,
- 			 struct segment_type *segtype);
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index c7acd5d..6f4a546 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3345,13 +3345,27 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
- 				return_ECMD_FAILED;
- 		}
- 	}
-+
- 	if (lp->merge) {
- 		if ((lv_is_thin_volume(lv) && !_lvconvert_merge_thin_snapshot(cmd, lv, lp)) ||
- 		    (!lv_is_thin_volume(lv) && !_lvconvert_merge_old_snapshot(cmd, lv, lp))) {
- 			log_print_unless_silent("Unable to merge LV \"%s\" into its origin.", lv->name);
- 			return ECMD_FAILED;
- 		}
--	} else if (lp->snapshot) {
-+		return ECMD_PROCESSED;
-+	}
-+
-+	/*
-+	 * Converting to a new type.
-+	 */
-+
-+	if (vg_is_clustered(lv->vg) && !segtype_allowed_in_cluster_vg(lp->segtype)) {
-+		log_error("LV segtype %s is not allowed in a cluster VG.",
-+			  lp->segtype->name);
-+		return ECMD_FAILED;
-+	}
-+
-+	if (lp->snapshot) {
- 		if (!_lvconvert_snapshot(cmd, lv, lp))
- 			return_ECMD_FAILED;
- 	} else if (segtype_is_pool(lp->segtype) || lp->thin || lp->cache) {
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 7236ffc..c4691dd 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -1450,6 +1450,12 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
- 	if (!_read_activation_params(cmd, vg, &lp))
- 		goto_out;
+ aux have_cache 1 3 0 || skip
+ aux prepare_vg 3
  
-+	if (vg_is_clustered(vg) && !segtype_allowed_in_cluster_vg(lp.segtype)) {
-+		log_error("LV segtype %s is not allowed in a cluster VG.",
-+			  lp.segtype->name);
-+		goto_out;
-+	}
-+
- 	/* Resolve segment types with opened VG */
- 	if (lp.snapshot && lp.origin_name && !_determine_snapshot_type(vg, &lp, &lcp))
- 		goto_out;
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index e5d700d..5e52a87 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -299,6 +299,7 @@ static int _vgchange_resizeable(struct cmd_context *cmd,
- static int _vgchange_clustered(struct cmd_context *cmd,
- 			       struct volume_group *vg)
- {
-+	struct lv_list *lvl;
- 	int clustered = arg_int_value(cmd, clustered_ARG, 0);
+diff --git a/test/shell/lvconvert-cache-raid.sh b/test/shell/lvconvert-cache-raid.sh
+index faab251..f0e0d19 100644
+--- a/test/shell/lvconvert-cache-raid.sh
++++ b/test/shell/lvconvert-cache-raid.sh
+@@ -13,6 +13,8 @@
  
- 	if (clustered && (vg_is_clustered(vg))) {
-@@ -313,6 +314,17 @@ static int _vgchange_clustered(struct cmd_context *cmd,
- 		return 0;
- 	}
+ . lib/inittest
  
-+	if (clustered) {
-+		dm_list_iterate_items(lvl, &vg->lvs) {
-+			if (!segtype_allowed_in_cluster_vg(first_seg(lvl->lv)->segtype)) {
-+				log_error("LV %s segtype %s is not allowed in cluster VG.",
-+					  display_lvname(lvl->lv),
-+					  first_seg(lvl->lv)->segtype->name);
-+				return 0;
-+			}
-+		}
-+	}
++test -e LOCAL_CLVMD && skip
 +
- 	if (clustered && !arg_count(cmd, yes_ARG)) {
- 		if (!clvmd_is_running()) {
- 			if (yes_no_prompt("LVM cluster daemon (clvmd) is not"
+ aux have_cache 1 3 0 || skip
+ aux have_raid 1 0 0 || skip
+ 
+diff --git a/test/shell/lvconvert-cache-thin.sh b/test/shell/lvconvert-cache-thin.sh
+index 87256a4..09971b5 100644
+--- a/test/shell/lvconvert-cache-thin.sh
++++ b/test/shell/lvconvert-cache-thin.sh
+@@ -13,6 +13,8 @@
+ 
+ . lib/inittest
+ 
++test -e LOCAL_CLVMD && skip
++
+ aux have_cache 1 3 0 || skip
+ aux have_thin 1 0 0 || skip
+ 
+diff --git a/test/shell/lvconvert-cache.sh b/test/shell/lvconvert-cache.sh
+index ed414ed..35b4ba8 100644
+--- a/test/shell/lvconvert-cache.sh
++++ b/test/shell/lvconvert-cache.sh
+@@ -13,6 +13,8 @@
+ 
+ . lib/inittest
+ 
++test -e LOCAL_CLVMD && skip
++
+ aux have_cache 1 3 0 || skip
+ 
+ aux prepare_vg 5 80
+diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
+index f709d8b..6e9b33a 100644
+--- a/test/shell/lvcreate-cache.sh
++++ b/test/shell/lvcreate-cache.sh
+@@ -16,6 +16,8 @@
+ 
+ . lib/inittest
+ 
++test -e LOCAL_CLVMD && skip
++
+ aux have_cache 1 3 0 || skip
+ 
+ # FIXME: parallel cache metadata allocator is crashing when used value 8000!
 
 
