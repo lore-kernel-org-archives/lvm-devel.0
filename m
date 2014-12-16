@@ -1,55 +1,140 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Tue, 16 Dec 2014 10:56:05 +0100
-Subject: [PATCH 1/4] report: Print NULL strings as "" in _string_disp (instead of a SEGV).
-In-Reply-To: <548FF96A.4020706@redhat.com>
-References: <1418682760-16427-1-git-send-email-prockai@redhat.com>
-	<548FF96A.4020706@redhat.com>
-Message-ID: <549001B5.6010508@redhat.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Tue, 16 Dec 2014 16:32:09 +0000 (UTC)
+Subject: master - cache: disallow cache lvs and cache pools in cluster vg
+Message-ID: <20141216163209.E8B8660C44@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 12/16/2014 10:20 AM, Peter Rajnoha wrote:
-> On 12/15/2014 11:32 PM, Petr Rockai wrote:
->> ---
->>  lib/report/report.c | 2 ++
->>  1 file changed, 2 insertions(+)
->>
->> diff --git a/lib/report/report.c b/lib/report/report.c
->> index 5637d50..043de88 100644
->> --- a/lib/report/report.c
->> +++ b/lib/report/report.c
->> @@ -179,6 +179,8 @@ static int _string_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
->>  			struct dm_report_field *field,
->>  			const void *data, void *private __attribute__((unused)))
->>  {
->> +	if (!*(void**) data)
->> +		return _field_set_value(field, "", NULL);
->>  	return dm_report_field_string(rh, field, (const char * const *) data);
->>  }
-> 
-> ...we could do this, but I think more appropriate here would be to
-> define field-specific reserved value to represent the "undefined"
-> value so we can match against this too when using selection
-> (-S|--select).
-> 
-> So, in lib/report/values.h, you can just define:
-> 
-> FIELD_RESERVED_VALUE(cache_policy, cache_policy_undefined, "", "", "undefined", ... add as many synonym to "undefined" here as you need ...)
-> 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=40e1d5b269fa76b839e3e8e2e7c9beb2bbbfed5e
+Commit:        40e1d5b269fa76b839e3e8e2e7c9beb2bbbfed5e
+Parent:        2e905d454058ef17bbb2b9758c59a5505d1c95be
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Oct 31 15:50:09 2014 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Dec 16 10:30:27 2014 -0600
 
-Thinking about this more, we have actually three situations to display
-(correct me if I'm wrong please).
+cache: disallow cache lvs and cache pools in cluster vg
 
-So in the end, we need:
+Disable this combination until problems are resolved.
+---
+ lib/metadata/segtype.c |    8 ++++++++
+ lib/metadata/segtype.h |    2 ++
+ tools/lvconvert.c      |   16 +++++++++++++++-
+ tools/lvcreate.c       |    6 ++++++
+ tools/vgchange.c       |   12 ++++++++++++
+ 5 files changed, 43 insertions(+), 1 deletions(-)
 
- - if cache LV and NULL policy -> we should report "default" (or similar keyword to denote "default" policy used)
- - if cache LV and non-NULL policy -> we should report the policy name directly
- - if non-cache LV (which has always the policy NULL, if course) -> we should report "" (with "undefined", "undef" ... synonyms to match against in selection criteria)
-
--- 
-Peter
+diff --git a/lib/metadata/segtype.c b/lib/metadata/segtype.c
+index 02dff4c..c28c894 100644
+--- a/lib/metadata/segtype.c
++++ b/lib/metadata/segtype.c
+@@ -34,3 +34,11 @@ struct segment_type *get_segtype_from_string(struct cmd_context *cmd,
+ 
+ 	return segtype;
+ }
++
++int segtype_allowed_in_cluster_vg(const struct segment_type *segtype)
++{
++	if (segtype_is_cache(segtype) || segtype_is_cache_pool(segtype))
++		return 0;
++
++	return 1;
++}
+diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
+index ecb598d..3c387e2 100644
+--- a/lib/metadata/segtype.h
++++ b/lib/metadata/segtype.h
+@@ -138,6 +138,8 @@ struct segtype_handler {
+ struct segment_type *get_segtype_from_string(struct cmd_context *cmd,
+ 					     const char *str);
+ 
++int segtype_allowed_in_cluster_vg(const struct segment_type *segtype);
++
+ struct segtype_library;
+ int lvm_register_segtype(struct segtype_library *seglib,
+ 			 struct segment_type *segtype);
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index c7acd5d..6f4a546 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3345,13 +3345,27 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 				return_ECMD_FAILED;
+ 		}
+ 	}
++
+ 	if (lp->merge) {
+ 		if ((lv_is_thin_volume(lv) && !_lvconvert_merge_thin_snapshot(cmd, lv, lp)) ||
+ 		    (!lv_is_thin_volume(lv) && !_lvconvert_merge_old_snapshot(cmd, lv, lp))) {
+ 			log_print_unless_silent("Unable to merge LV \"%s\" into its origin.", lv->name);
+ 			return ECMD_FAILED;
+ 		}
+-	} else if (lp->snapshot) {
++		return ECMD_PROCESSED;
++	}
++
++	/*
++	 * Converting to a new type.
++	 */
++
++	if (vg_is_clustered(lv->vg) && !segtype_allowed_in_cluster_vg(lp->segtype)) {
++		log_error("LV segtype %s is not allowed in a cluster VG.",
++			  lp->segtype->name);
++		return ECMD_FAILED;
++	}
++
++	if (lp->snapshot) {
+ 		if (!_lvconvert_snapshot(cmd, lv, lp))
+ 			return_ECMD_FAILED;
+ 	} else if (segtype_is_pool(lp->segtype) || lp->thin || lp->cache) {
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 7236ffc..c4691dd 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -1450,6 +1450,12 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	if (!_read_activation_params(cmd, vg, &lp))
+ 		goto_out;
+ 
++	if (vg_is_clustered(vg) && !segtype_allowed_in_cluster_vg(lp.segtype)) {
++		log_error("LV segtype %s is not allowed in a cluster VG.",
++			  lp.segtype->name);
++		goto_out;
++	}
++
+ 	/* Resolve segment types with opened VG */
+ 	if (lp.snapshot && lp.origin_name && !_determine_snapshot_type(vg, &lp, &lcp))
+ 		goto_out;
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index e5d700d..5e52a87 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -299,6 +299,7 @@ static int _vgchange_resizeable(struct cmd_context *cmd,
+ static int _vgchange_clustered(struct cmd_context *cmd,
+ 			       struct volume_group *vg)
+ {
++	struct lv_list *lvl;
+ 	int clustered = arg_int_value(cmd, clustered_ARG, 0);
+ 
+ 	if (clustered && (vg_is_clustered(vg))) {
+@@ -313,6 +314,17 @@ static int _vgchange_clustered(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
++	if (clustered) {
++		dm_list_iterate_items(lvl, &vg->lvs) {
++			if (!segtype_allowed_in_cluster_vg(first_seg(lvl->lv)->segtype)) {
++				log_error("LV %s segtype %s is not allowed in cluster VG.",
++					  display_lvname(lvl->lv),
++					  first_seg(lvl->lv)->segtype->name);
++				return 0;
++			}
++		}
++	}
++
+ 	if (clustered && !arg_count(cmd, yes_ARG)) {
+ 		if (!clvmd_is_running()) {
+ 			if (yes_no_prompt("LVM cluster daemon (clvmd) is not"
 
 
