@@ -1,23 +1,44 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 17 Dec 2014 14:26:45 +0100
-Subject: [PATCH] report: Add cache_policy and cache_settings (LV) segment fields.
-Message-ID: <1418822805-24304-1-git-send-email-prockai@redhat.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 17 Dec 2014 13:43:29 +0000 (UTC)
+Subject: master - report: Add cache_policy and cache_settings (LV) segment fields.
+Message-ID: <20141217134329.A774060F47@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- lib/report/columns.h         |  2 ++
- lib/report/properties.c      |  5 ++++
- lib/report/report.c          | 68 ++++++++++++++++++++++++++++++++++++++++++++
- lib/report/values.h          |  6 ++++
- test/shell/lvcreate-cache.sh |  3 ++
- test/shell/lvs-cache.sh      | 50 ++++++++++++++++++++++++++++++++
- 6 files changed, 134 insertions(+)
- create mode 100644 test/shell/lvs-cache.sh
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00ad13eb719607682dfcf17d99ad96cfd5603d14
+Commit:        00ad13eb719607682dfcf17d99ad96cfd5603d14
+Parent:        2e905d454058ef17bbb2b9758c59a5505d1c95be
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Dec 15 20:48:05 2014 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Dec 17 14:43:12 2014 +0100
 
+report: Add cache_policy and cache_settings (LV) segment fields.
+
+---
+ WHATS_NEW                    |    1 +
+ lib/report/columns.h         |    2 +
+ lib/report/properties.c      |    5 +++
+ lib/report/report.c          |   68 ++++++++++++++++++++++++++++++++++++++++++
+ lib/report/values.h          |    6 ++++
+ test/shell/lvcreate-cache.sh |    3 ++
+ test/shell/lvs-cache.sh      |   65 ++++++++++++++++++++++++++++++++++++++++
+ 7 files changed, 150 insertions(+), 0 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 4855e1a..6f289bb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.115 -
+ =====================================
++  Add cache_policy and cache_settings output fields in lvs.
+   Add missing recognition for --binary option with {pv,vg,lv}display -C.
+   Fix vgimportclone to notify lvmetad about changes done if lvmetad is used.
+   Fix vgimportclone to properly override config if it is missing in lvm.conf.
 diff --git a/lib/report/columns.h b/lib/report/columns.h
 index db43e13..1dd2ae0 100644
 --- a/lib/report/columns.h
@@ -48,7 +69,7 @@ index 2308c36..4796000 100644
  GET_PVSEG_NUM_PROPERTY_FN(pvseg_start, pvseg->pe)
  #define _pvseg_start_set prop_not_implemented_set
 diff --git a/lib/report/report.c b/lib/report/report.c
-index 5637d50..4e025e0 100644
+index 5637d50..173157d 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
 @@ -231,6 +231,74 @@ static int _tags_disp(struct dm_report *rh, struct dm_pool *mem,
@@ -83,12 +104,12 @@ index 5637d50..4e025e0 100644
 +	if (seg_is_cache(seg))
 +		seg = first_seg(seg->pool_lv);
 +	else
-+		return _field_set_value(field, "", NULL /* TODO: &FIRST_NAME(cache_settings_undef) */);
++		return _field_set_value(field, "", NULL /* TODO: FIRST_NAME(cache_settings_undef) */);
 +
 +	if (seg->policy_settings)
 +		settings = seg->policy_settings->child;
 +	else
-+		return _field_set_value(field, "", NULL /* TODO: &FIRST_NAME(cache_settings_default) */);
++		return _field_set_value(field, "", NULL /* TODO: FIRST_NAME(cache_settings_default) */);
 +
 +	if (!(result = str_list_create(mem)))
 +		return_0;
@@ -113,7 +134,7 @@ index 5637d50..4e025e0 100644
 +	if (seg_is_cache(seg))
 +		seg = first_seg(seg->pool_lv);
 +	else
-+		return _field_set_value(field, "", &FIRST_NAME(cache_policy_undef));
++		return _field_set_value(field, "", FIRST_NAME(cache_policy_undef));
 +
 +	if (seg->policy_name)
 +		return _field_set_value(field, seg->policy_name, NULL);
@@ -157,10 +178,10 @@ index f709d8b..89efc4d 100644
  
 diff --git a/test/shell/lvs-cache.sh b/test/shell/lvs-cache.sh
 new file mode 100644
-index 0000000..a4aa164
+index 0000000..5108076
 --- /dev/null
 +++ b/test/shell/lvs-cache.sh
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,65 @@
 +#!/bin/sh
 +# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
 +#
@@ -207,11 +228,24 @@ index 0000000..a4aa164
 +lvcreate --type cache-pool -L10 --cachepolicy mq --cachesettings migration_threshold=233 --cachesettings sequential_threshold=13 $vg/cpool
 +lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg
 +lvs -o lv_name,cache_policy   | grep mq
++lvs -a -o lv_name,cache_policy -S 'cache_policy=mq' | grep corigin
 +lvs -o lv_name,cache_settings | grep migration_threshold=233
 +lvs -o lv_name,cache_settings | grep sequential_threshold=13
 +
++lvcreate -n foo -l 1 $vg
++lvs -S 'cache_policy=mq' | grep corigin
++lvs -S 'cache_policy=mq' | not grep foo
++lvs -S 'cache_policy=undefined' | not grep corigin
++lvs -S 'cache_policy=undefined' | grep foo
++lvs -o +cache_policy -S 'cache_policy=mq' | grep corigin
++lvs -o +cache_policy -S 'cache_policy=mq' | not grep foo
++lvs -o +cache_policy -S 'cache_policy=undefined' | not grep corigin
++lvs -o +cache_policy -S 'cache_policy=undefined' | grep foo
++lvs -o +cache_policy -O cache_policy
++
 +lvremove -f $vg
--- 
-2.1.2
++
++lvcreate -n foo -l 1 $vg
++lvs -a -S 'cache_policy=undefined' | grep foo
 
 
