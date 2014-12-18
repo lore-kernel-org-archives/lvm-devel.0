@@ -1,93 +1,83 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 18 Dec 2014 10:37:26 +0000 (UTC)
-Subject: master - libdm: report: also check whether field type is supported for field-specific reserved value
-Message-ID: <20141218103726.62E7D61147@fedorahosted.org>
+Date: Thu, 18 Dec 2014 10:57:40 +0000 (UTC)
+Subject: master - report: dup cache policy name string for report in cache_policy field
+Message-ID: <20141218105740.3FD2960EEB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aaf25ec6bd2201d4219765d7bfca05636b554145
-Commit:        aaf25ec6bd2201d4219765d7bfca05636b554145
-Parent:        e471ea7890cf555ad920ca67a38254dd2504dabe
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f6f32f39e4ef007fd8566fe32c00975f917fc807
+Commit:        f6f32f39e4ef007fd8566fe32c00975f917fc807
+Parent:        aaf25ec6bd2201d4219765d7bfca05636b554145
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Dec 18 11:29:48 2014 +0100
+AuthorDate:    Thu Dec 18 11:54:40 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Dec 18 11:29:48 2014 +0100
+CommitterDate: Thu Dec 18 11:54:40 2014 +0100
 
-libdm: report: also check whether field type is supported for field-specific reserved value
+report: dup cache policy name string for report in cache_policy field
 
-We only checked global per-report-type reserved values for compatibility
-with selection code. This patch also adds a check for per-report-field
-reserved values. This avoids problems where unsupported report type is
-used as reserved value which could cause hard to debug problems
-otherwise. So this additional check stops from registering unsupported
-and unhandled per-field reserved values.
+The cache policy name taken as LV segment property must be duped
+for report as the VG/LV/seg structure is destroyed after processing,
+reporting happens later:
 
-Registerting such unsupported reserved value is a programmatic error,
-so report internal error in this case to stop us from making a mistake
-here in the future or even today where STR_LIST fields can't have
-reserved values yet.
+$ valgrind lvs -o+cache_policy
+...
+==16589== Invalid read of size 1
+==16589==    at 0x54ABCC3: dm_report_compact_fields
+(libdm-report.c:1739)
+==16589==    by 0x153FC7: _report (reporter.c:619)
+==16589==    by 0x1540A6: lvs (reporter.c:641)
+==16589==    by 0x148021: lvm_run_command (lvmcmdline.c:1452)
+==16589==    by 0x1495CB: lvm2_main (lvmcmdline.c:1907)
+==16589==    by 0x164712: main (lvm.c:21)
+==16589==  Address 0x7d465f2 is 8,338 bytes inside a block of size
+16,384 free'd
+==16589==    at 0x4C2ACE9: free (in
+/usr/lib64/valgrind/vgpreload_memcheck-amd64-linux.so)
+==16589==    by 0x54B8C85: _free_chunk (pool-fast.c:318)
+==16589==    by 0x54B84FB: dm_pool_destroy (pool-fast.c:78)
+==16589==    by 0x1E59C7: _free_vg (vg.c:78)
+==16589==    by 0x1E5A6D: release_vg (vg.c:95)
+==16589==    by 0x159B6E: _process_lv_vgnameid_list (toollib.c:1967)
+==16589==    by 0x159DD7: process_each_lv (toollib.c:2030)
+==16589==    by 0x153ED8: _report (reporter.c:598)
+==16589==    by 0x1540A6: lvs (reporter.c:641)
+==16589==    by 0x148021: lvm_run_command (lvmcmdline.c:1452)
+==16589==    by 0x1495CB: lvm2_main (lvmcmdline.c:1907)
+==16589==    by 0x164712: main (lvm.c:21)
 ---
- libdm/libdm-report.c |   29 ++++++++++++++++++++++++-----
- 1 files changed, 24 insertions(+), 5 deletions(-)
+ lib/report/report.c |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index e3c3d2f..5ff6cda 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -1995,9 +1995,12 @@ dm_percent_t dm_make_percent(uint64_t numerator, uint64_t denominator)
-  * Used to check whether the reserved_values definition passed to
-  * dm_report_init_with_selection contains only supported reserved value types.
-  */
--static int _check_reserved_values_supported(const struct dm_report_reserved_value reserved_values[])
-+static int _check_reserved_values_supported(const struct dm_report_field_type fields[],
-+					    const struct dm_report_reserved_value reserved_values[])
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 173157d..a23b226 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -285,15 +285,20 @@ static int _cache_policy_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			      const void *data, void *private)
  {
- 	const struct dm_report_reserved_value *iter;
-+	const struct dm_report_field_reserved_value *field_res;
-+	const struct dm_report_field_type *field;
- 	static uint32_t supported_reserved_types = DM_REPORT_FIELD_TYPE_NUMBER |
- 						   DM_REPORT_FIELD_TYPE_SIZE |
- 						   DM_REPORT_FIELD_TYPE_PERCENT |
-@@ -2008,9 +2011,25 @@ static int _check_reserved_values_supported(const struct dm_report_reserved_valu
+ 	const struct lv_segment *seg = (const struct lv_segment *) data;
++	const char *cache_policy_name;
  
- 	iter = reserved_values;
+ 	if (seg_is_cache(seg))
+ 		seg = first_seg(seg->pool_lv);
+ 	else
+ 		return _field_set_value(field, "", FIRST_NAME(cache_policy_undef));
  
--	while (iter->type) {
--		if (!(iter->type & supported_reserved_types))
--			return 0;
-+	while (iter->value) {
-+		if (iter->type) {
-+			if (!(iter->type & supported_reserved_types)) {
-+				log_error(INTERNAL_ERROR "_check_reserved_values_supported: "
-+					  "global reserved value for type 0x%x not supported",
-+					   iter->type);
-+				return 0;
-+			}
-+		} else {
-+			field_res = (const struct dm_report_field_reserved_value *) iter->value;
-+			field = &fields[field_res->field_num];
-+			if (!(field->flags & supported_reserved_types)) {
-+				log_error(INTERNAL_ERROR "_check_reserved_values_supported: "
-+					  "field-specific reserved value of type 0x%x for "
-+					  "field %s not supported",
-+					   field->flags & DM_REPORT_FIELD_TYPE_MASK, field->id);
-+				return 0;
-+			}
+-	if (seg->policy_name)
+-		return _field_set_value(field, seg->policy_name, NULL);
+-	else {
++	if (seg->policy_name) {
++		if (!(cache_policy_name = dm_pool_strdup(mem, seg->policy_name))) {
++			log_error("dm_pool_strdup failed");
++			return 0;
 +		}
- 		iter++;
++		return _field_set_value(field, cache_policy_name, NULL);
++	} else {
+ 		log_error(INTERNAL_ERROR "unexpected NULL policy name");
+ 		return_0;
  	}
- 
-@@ -2906,7 +2925,7 @@ struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
- 		return rh;
- 	}
- 
--	if (!_check_reserved_values_supported(reserved_values)) {
-+	if (!_check_reserved_values_supported(fields, reserved_values)) {
- 		log_error(INTERNAL_ERROR "dm_report_init_with_selection: "
- 			  "trying to register unsupported reserved value type, "
- 			  "skipping report selection");
 
 
