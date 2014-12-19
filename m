@@ -1,89 +1,75 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 19 Dec 2014 08:23:30 +0000 (UTC)
-Subject: master - libdm: report: add more comments about helper macros to get reserved values
-Message-ID: <20141219082330.54F47612BE@fedorahosted.org>
+From: heinzm@redhat.com <heinzm@redhat.com>
+Date: Fri, 19 Dec 2014 18:24:17 +0100
+Subject: [PATCH] raid_manip: fix multi-segment misallocation on 'lvconvert --repair ' (bz#1168959)
+Message-ID: <1419009857-19750-1-git-send-email-heinzm@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e0ed83bc8103d36efe0e2dcdfd4b5ad5fd822a8
-Commit:        3e0ed83bc8103d36efe0e2dcdfd4b5ad5fd822a8
-Parent:        57af48d734f1f7aa985424a1e11287a0975077b9
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Dec 19 09:17:16 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Dec 19 09:23:05 2014 +0100
+From: Heinz Mauelshagen <heinzm@redhat.com>
 
-libdm: report: add more comments about helper macros to get reserved values
+An 'lvconvert --repair $RAID_LV" to replace a failed leg of a multi-segment
+RAID10/4/5/6 logical volume can lead to allocation of (parts of) the replacement
+image component pair on the physical volume of another image component
+(e.g. image 0 allocated on the same PV as image 1 silently impeding resilience).
 
-Since GET_FIELD_RESERVED_VALUE always returns a pointer, don't reference
-it with "&" when used - we already have that pointer value (this is an
-addendum to recent commit 028ff309472834e82fe4b849ea4c243feb5098b9).
+Patch fixes this severe resilince issue by prohibiting allocation
+on PVs already holding other legs of the RAID set.
+It allows to allocate free space on any operational PV already holding parts of
+the image component pair
 
-Only GET_TYPE_RESERVED_VALUE needs to be referenced with "&" as it
-returns directly the value of that type.
+Signed-off-by: Heinz Mauelshagen <heinzm@redhat.com>
+
 ---
- lib/report/report.c |   25 +++++++++++++++++++------
- 1 files changed, 19 insertions(+), 6 deletions(-)
+ lib/metadata/raid_manip.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 818e3fd..d0351f7 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -63,6 +63,23 @@ static const char _str_unknown[] = "unknown";
- static const int32_t _reserved_num_undef_32 = INT32_C(-1);
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 59d3adb..97f79ee 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -1545,6 +1545,28 @@ has_enough_space:
+ 	return 1;
+ }
  
++static int _avoid_pvs_of_lv(struct logical_volume *lv, void *data)
++{
++	struct dm_list *allocate_pvs = (struct dm_list *) data;
++	struct pv_list *pvl;
++
++	dm_list_iterate_items(pvl, allocate_pvs)
++		if (!(lv->status & PARTIAL_LV) &&
++		    lv_is_on_pv(lv, pvl->pv))
++			pvl->pv->status &= ~ALLOCATABLE_PV;
++ 
++ 	return 1;
++ }
++ 
++/*
++ * Prevent any PVs holding other image components of @lv from being used for allocation,
++ * I.e. reset ALLOCATABLE_PV on respective PVs listed on @allocatable_pvs
++ */
++static void _avoid_pvs_with_other_images_of_lv(struct logical_volume *lv, struct dm_list *allocate_pvs)
++{
++	for_each_sub_lv(lv, _avoid_pvs_of_lv, allocate_pvs);
++}
++
  /*
-+ * Get type reserved value - the value returned is the direct value of that type.
-+ */
-+#define GET_TYPE_RESERVED_VALUE(id) _reserved_ ## id
+  * lv_raid_replace
+  * @lv
+@@ -1643,6 +1665,9 @@ int lv_raid_replace(struct logical_volume *lv,
+ 		}
+ 	}
+ 
++	/* Prevent any PVs holding image components from being used for allocation */
++	_avoid_pvs_with_other_images_of_lv(lv, allocate_pvs);
 +
-+/*
-+ * Get field reserved value - the value returned is always a pointer (const void *).
-+ */
-+#define GET_FIELD_RESERVED_VALUE(id) _reserved_ ## id.value
-+
-+/*
-+ * Get first name assigned to the reserved value - this is the one that
-+ * should be reported/displayed. All the other names assigned for the reserved
-+ * value are synonyms recognized in selection criteria.
-+ */
-+#define GET_FIRST_RESERVED_NAME(id) _reserved_ ## id ## _names[0]
-+
-+/*
-  * Reserved values and their assigned names.
-  * The first name is the one that is also used for reporting.
-  * All names listed are synonyms recognized in selection criteria.
-@@ -76,10 +93,6 @@ static const int32_t _reserved_num_undef_32 = INT32_C(-1);
-  * 		- 'reserved_value_id_y' (for 1)
-  * 		- 'reserved_value_id_n' (for 0)
-  */
--#define GET_TYPE_RESERVED_VALUE(id) _reserved_ ## id
--#define GET_FIELD_RESERVED_VALUE(id) _reserved_ ## id.value
--#define GET_FIRST_RESERVED_NAME(id) _reserved_ ## id ## _names[0]
--
- #define NUM uint64_t
- 
- #define TYPE_RESERVED_VALUE(type, id, desc, value, ...) \
-@@ -721,7 +734,7 @@ static int _lvreadahead_disp(struct dm_report *rh, struct dm_pool *mem,
- 
- 	if (lv->read_ahead == DM_READ_AHEAD_AUTO)
- 		return _field_set_value(field, GET_FIRST_RESERVED_NAME(lv_read_ahead_auto),
--					&GET_FIELD_RESERVED_VALUE(lv_read_ahead_auto));
-+					GET_FIELD_RESERVED_VALUE(lv_read_ahead_auto));
- 
- 	return _size32_disp(rh, mem, field, &lv->read_ahead, private);
- }
-@@ -1021,7 +1034,7 @@ static int _vgmdacopies_disp(struct dm_report *rh, struct dm_pool *mem,
- 
- 	if (count == VGMETADATACOPIES_UNMANAGED)
- 		return _field_set_value(field, GET_FIRST_RESERVED_NAME(vg_mda_copies_unmanaged),
--					&GET_FIELD_RESERVED_VALUE(vg_mda_copies_unmanaged));
-+					GET_FIELD_RESERVED_VALUE(vg_mda_copies_unmanaged));
- 
- 	return _uint32_disp(rh, mem, field, &count, private);
- }
+ 	/*
+ 	 * Allocate the new image components first
+ 	 * - This makes it easy to avoid all currently used devs
+-- 
+2.1.0
 
 
