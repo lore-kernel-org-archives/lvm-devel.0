@@ -1,75 +1,43 @@
-From: heinzm@redhat.com <heinzm@redhat.com>
-Date: Fri, 19 Dec 2014 18:24:17 +0100
-Subject: [PATCH] raid_manip: fix multi-segment misallocation on 'lvconvert --repair ' (bz#1168959)
-Message-ID: <1419009857-19750-1-git-send-email-heinzm@redhat.com>
+From: David Taylor <davidt-lvm2@yadt.co.uk>
+Date: Fri, 26 Dec 2014 20:06:32 +0100
+Subject: Allow read-only snapshots to be created using liblvm2app
+Message-ID: <1419620794-29008-1-git-send-email-davidt-lvm2@yadt.co.uk>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Heinz Mauelshagen <heinzm@redhat.com>
+Hi,
 
-An 'lvconvert --repair $RAID_LV" to replace a failed leg of a multi-segment
-RAID10/4/5/6 logical volume can lead to allocation of (parts of) the replacement
-image component pair on the physical volume of another image component
-(e.g. image 0 allocated on the same PV as image 1 silently impeding resilience).
+I've recently been attempting to use the lvm Python module to script
+creation of snapshots for backup purposes.  I'd prefer these to be
+read-only snapshots, but the current API doesn't appear to allow this,
+either using the Python module or using liblvm2app directly.
 
-Patch fixes this severe resilince issue by prohibiting allocation
-on PVs already holding other legs of the RAID set.
-It allows to allocate free space on any operational PV already holding parts of
-the image component pair
+I've managed to bodge support for read-only snapshots locally using
+the following patches.  I have a couple of reservations about my
+approach, but thought I'd send them anyway in the hope of provoking
+a better patch!
 
-Signed-off-by: Heinz Mauelshagen <heinzm@redhat.com>
+- By adding a new parameter to the existing lvm_lv_snapshot this
+  would break any existing users of liblvm2app, but there appear
+  to have been other breaking changes in the recent past.
 
----
- lib/metadata/raid_manip.c | 25 +++++++++++++++++++++++++
- 1 file changed, 25 insertions(+)
+- A more flexible way to set params for LVs (etc.) would probably
+  be more useful, but as this works for my purposes at least,
+  I decided to KISS.
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 59d3adb..97f79ee 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1545,6 +1545,28 @@ has_enough_space:
- 	return 1;
- }
- 
-+static int _avoid_pvs_of_lv(struct logical_volume *lv, void *data)
-+{
-+	struct dm_list *allocate_pvs = (struct dm_list *) data;
-+	struct pv_list *pvl;
-+
-+	dm_list_iterate_items(pvl, allocate_pvs)
-+		if (!(lv->status & PARTIAL_LV) &&
-+		    lv_is_on_pv(lv, pvl->pv))
-+			pvl->pv->status &= ~ALLOCATABLE_PV;
-+ 
-+ 	return 1;
-+ }
-+ 
-+/*
-+ * Prevent any PVs holding other image components of @lv from being used for allocation,
-+ * I.e. reset ALLOCATABLE_PV on respective PVs listed on @allocatable_pvs
-+ */
-+static void _avoid_pvs_with_other_images_of_lv(struct logical_volume *lv, struct dm_list *allocate_pvs)
-+{
-+	for_each_sub_lv(lv, _avoid_pvs_of_lv, allocate_pvs);
-+}
-+
- /*
-  * lv_raid_replace
-  * @lv
-@@ -1643,6 +1665,9 @@ int lv_raid_replace(struct logical_volume *lv,
- 		}
- 	}
- 
-+	/* Prevent any PVs holding image components from being used for allocation */
-+	_avoid_pvs_with_other_images_of_lv(lv, allocate_pvs);
-+
- 	/*
- 	 * Allocate the new image components first
- 	 * - This makes it easy to avoid all currently used devs
+David Taylor(2):
+  Add readonly parameter to liblvm2app lvm_lv_snapshot()
+  Expose readonly parameter of lvm_lv_snapshot() to python bindings.
+
+ liblvm/lvm2app.h | 11 +++++++++--
+ liblvm/lvm_lv.c  | 17 ++++++++++++-----
+ python/liblvm.c  |  6 ++++--
+ 3 files changed, 25 insertions(+), 9 deletions(-)
+
 -- 
-2.1.0
+David Taylor
 
 
