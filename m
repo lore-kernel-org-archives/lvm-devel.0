@@ -1,74 +1,85 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 30 Jan 2015 11:35:17 +0000 (UTC)
-Subject: master - tests: test stacked raid
-Message-ID: <20150130113517.5AA3660247@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Tue,  6 Jan 2015 13:29:06 +0000 (UTC)
+Subject: master - lvmetad: Re-use fmt from the VG for PVs when possible.
+Message-ID: <20150106132906.9F7BA60781@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d021284bcfda0222f10787ea798077f312ee3275
-Commit:        d021284bcfda0222f10787ea798077f312ee3275
-Parent:        2055b04c111eb5df3a445a9b544aff7a17b411a1
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jan 30 12:30:35 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jan 30 12:33:52 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0987f290a7b53840c2811392868f050d9a632ea3
+Commit:        0987f290a7b53840c2811392868f050d9a632ea3
+Parent:        509650ec4cb1ef65e277870e96976d7dd8882170
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Tue Jan 6 12:39:57 2015 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Tue Jan 6 14:27:30 2015 +0100
 
-tests: test stacked raid
+lvmetad: Re-use fmt from the VG for PVs when possible.
 
 ---
- test/shell/lvconvert-thin-raid.sh |   26 +++++++++++++++++++++++---
- 1 files changed, 23 insertions(+), 3 deletions(-)
+ lib/cache/lvmetad.c |   13 +++++++------
+ 1 files changed, 7 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvconvert-thin-raid.sh b/test/shell/lvconvert-thin-raid.sh
-index d7a353b..3d7eee5 100644
---- a/test/shell/lvconvert-thin-raid.sh
-+++ b/test/shell/lvconvert-thin-raid.sh
-@@ -1,6 +1,6 @@
- #!/bin/sh
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 5612c1b..20302c1 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -264,7 +264,7 @@ static int _read_mda(struct lvmcache_info *info,
  
--# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2014-2015 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -18,8 +18,10 @@ aux have_raid 1 4 0 || skip
- aux prepare_vg 4
+ static struct lvmcache_info *_pv_populate_lvmcache(struct cmd_context *cmd,
+ 						   struct dm_config_node *cn,
+-						   dev_t fallback)
++						   struct format_type *fmt, dev_t fallback)
+ {
+ 	struct device *dev;
+ 	struct id pvid, vgid;
+@@ -283,7 +283,8 @@ static struct lvmcache_info *_pv_populate_lvmcache(struct cmd_context *cmd,
+ 	uint64_t devsize = dm_config_find_int64(cn->child, "dev_size", 0),
+ 		 label_sector = dm_config_find_int64(cn->child, "label_sector", 0);
  
- # create RAID LVs for data and metadata volumes
--lvcreate -aey --nosync -L10M --type raid1 -m1 -n $lv1 $vg
--lvcreate -aey --nosync -L8M --type raid1 -m1 -n $lv2 $vg
-+lvcreate -aey -L10M --type raid1 -m3 -n $lv1 $vg
-+lvcreate -aey -L8M --type raid1 -m3 -n $lv2 $vg
-+aux wait_for_sync $vg $lv1
-+aux wait_for_sync $vg $lv2
- lvchange -an $vg/$lv1
+-	struct format_type *fmt = fmt_name ? get_format_by_name(cmd, fmt_name) : NULL;
++	if (!fmt && fmt_name)
++		fmt = get_format_by_name(cmd, fmt_name);
  
- # conversion fails for internal volumes
-@@ -28,4 +30,22 @@ invalid lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $vg/${lv2}_rimage_0
+ 	if (!fmt) {
+ 		log_error("PV %s not recognised. Is the device missing?", pvid_txt);
+@@ -422,7 +423,7 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
  
- lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
+ 		if ((pvcn = dm_config_find_node(top, "metadata/physical_volumes")))
+ 			for (pvcn = pvcn->child; pvcn; pvcn = pvcn->sib)
+-				_pv_populate_lvmcache(cmd, pvcn, 0);
++				_pv_populate_lvmcache(cmd, pvcn, fmt, 0);
  
-+lvchange -ay $vg
-+
-+lvconvert --splitmirrors 1 --name data2 $vg/${lv1}_tdata "$dev2"
-+lvconvert --splitmirrors 1 --name data3 $vg/${lv1}_tdata "$dev3"
-+lvconvert --splitmirrors 1 --trackchanges $vg/${lv1}_tdata "$dev4"
-+
-+lvconvert --splitmirrors 1 --name meta1 $vg/${lv1}_tmeta "$dev1"
-+lvconvert --splitmirrors 1 --name meta2 $vg/${lv1}_tmeta "$dev2"
-+lvconvert --splitmirrors 1 --trackchanges $vg/${lv1}_tmeta "$dev4"
-+
-+lvremove -ff $vg/data2 $vg/data3 $vg/meta1 $vg/meta2
-+
-+lvconvert --merge $vg/${lv1}_tdata_rimage_1
-+lvconvert --merge $vg/${lv1}_tmeta_rimage_1
-+
-+lvconvert -m+1 $vg/${lv1}_tdata "$dev2"
-+lvconvert -m+1 $vg/${lv1}_tmeta "$dev1"
-+
- vgremove -ff $vg
+ 		top->key = name;
+ 		if (!(vg = import_vg_from_config_tree(reply.cft, fid)))
+@@ -573,7 +574,7 @@ int lvmetad_pv_lookup(struct cmd_context *cmd, struct id pvid, int *found)
+ 
+ 	if (!(cn = dm_config_find_node(reply.cft->root, "physical_volume")))
+ 		goto_out;
+-        else if (!_pv_populate_lvmcache(cmd, cn, 0))
++        else if (!_pv_populate_lvmcache(cmd, cn, NULL, 0))
+ 		goto_out;
+ 
+ out_success:
+@@ -603,7 +604,7 @@ int lvmetad_pv_lookup_by_dev(struct cmd_context *cmd, struct device *dev, int *f
+ 		goto out_success;
+ 
+ 	cn = dm_config_find_node(reply.cft->root, "physical_volume");
+-	if (!cn || !_pv_populate_lvmcache(cmd, cn, dev->dev))
++	if (!cn || !_pv_populate_lvmcache(cmd, cn, NULL, dev->dev))
+ 		goto_out;
+ 
+ out_success:
+@@ -631,7 +632,7 @@ int lvmetad_pv_list_to_lvmcache(struct cmd_context *cmd)
+ 
+ 	if ((cn = dm_config_find_node(reply.cft->root, "physical_volumes")))
+ 		for (cn = cn->child; cn; cn = cn->sib)
+-			_pv_populate_lvmcache(cmd, cn, 0);
++			_pv_populate_lvmcache(cmd, cn, NULL, 0);
+ 
+ 	daemon_reply_destroy(reply);
+ 
 
 
