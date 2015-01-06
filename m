@@ -1,59 +1,45 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 29 Jan 2015 10:54:01 +0000 (UTC)
-Subject: master - cache: use built-in define for cache_mode
-Message-ID: <20150129105401.81C196118F@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue,  6 Jan 2015 09:03:37 +0000 (UTC)
+Subject: master - cmirror: do not check for cmirror availability when creating deactivated cluster mirrors
+Message-ID: <20150106090337.8708760EAC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f654139e6870ff1ce15238ce19842921449273fc
-Commit:        f654139e6870ff1ce15238ce19842921449273fc
-Parent:        bfeabea631782b3f0b8ec6494c4490663c412774
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 29 11:53:30 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jan 29 11:53:30 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=509650ec4cb1ef65e277870e96976d7dd8882170
+Commit:        509650ec4cb1ef65e277870e96976d7dd8882170
+Parent:        cba6186325f0d5806cf1ddec276b3bb8e178687a
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jan 6 09:59:04 2015 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Jan 6 09:59:04 2015 +0100
 
-cache: use built-in define for cache_mode
+cmirror: do not check for cmirror availability when creating deactivated cluster mirrors
 
-When cache_mode is undefined, the read of metadata will miss to
-set a bit with mode and fails to process metadata on internal
-error:
-
-  Internal error: LV vg/lvol1 has uknown feature flags 0.
-
-Fix it by using compile time DEFAULTS.
+When creating cluster mirrors while they're not supposed to be activated
+immediately after creation, we don't need to check for cmirrord availability.
+We can just create these mirrors and let the check to be done on activation
+later on. This is addendum for commit cba6186325f0d5806cf1ddec276b3bb8e178687a.
 ---
- WHATS_NEW                 |    1 +
- lib/cache_segtype/cache.c |    3 ++-
- 2 files changed, 3 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 92b62a6..2a58a8b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.116 - 
- ====================================
-+  Set default cache_mode when unset/missing in metadata.
-   Preserve chunk size with repair and metadata swap of a thin pool.
-   Fix raid --splitmirror 1 functionality (2.02.112).
-   Fix tree preload to handle splitting raid images.
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index 73839f4..5de7baf 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -68,7 +68,8 @@ static int _cache_pool_text_import(struct lv_segment *seg,
- 			return SEG_LOG_ERROR("cache_mode must be a string in");
- 		if (!set_cache_pool_feature(&seg->feature_flags, str))
- 			return SEG_LOG_ERROR("Unknown cache_mode in");
--	}
-+	} else if (!set_cache_pool_feature(&seg->feature_flags, DEFAULT_CACHE_POOL_CACHEMODE))
-+			return SEG_LOG_ERROR(INTERNAL_ERROR "Unknown built-in cache_mode");
- 
- 	if (dm_config_has_node(sn, "policy")) {
- 		if (!(str = dm_config_find_str(sn, "policy", NULL)))
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 260a76a..457cf9e 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6817,8 +6817,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		if (!(create_segtype = get_segtype_from_string(vg->cmd, "striped")))
+ 			return_0;
+ 	} else if (seg_is_mirrored(lp) || seg_is_raid(lp)) {
+-		if (lp->activate != CHANGE_AEY && vg_is_clustered(vg) &&
+-		    seg_is_mirrored(lp) && !seg_is_raid(lp) &&
++		if (is_change_activating(lp->activate) && (lp->activate != CHANGE_AEY) &&
++		    vg_is_clustered(vg) && seg_is_mirrored(lp) && !seg_is_raid(lp) &&
+ 		    !cluster_mirror_is_available(vg->cmd)) {
+ 			log_error("Shared cluster mirrors are not available.");
+ 			return NULL;
 
 
