@@ -1,80 +1,65 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 12 Jan 2015 13:12:31 +0000 (UTC)
-Subject: master - dev-type: filter out partitioned device-mapper devices as unsuitable for use as PVs
-Message-ID: <20150112131231.1FF14601E1@fedorahosted.org>
+Date: Mon, 12 Jan 2015 14:21:29 +0000 (UTC)
+Subject: master - tests: pvscan --cache DevicePath does not fail if the device is just filtered
+Message-ID: <20150112142129.91707609E3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=99d895014d971395fe7a739838952e7405eb4dda
-Commit:        99d895014d971395fe7a739838952e7405eb4dda
-Parent:        8dbe76734049a225a34bbbab383418b62acdcce1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8804023825e9eb00df653a7c5116097d1ce49087
+Commit:        8804023825e9eb00df653a7c5116097d1ce49087
+Parent:        99d895014d971395fe7a739838952e7405eb4dda
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jan 12 14:02:57 2015 +0100
+AuthorDate:    Mon Jan 12 15:16:57 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jan 12 14:10:44 2015 +0100
+CommitterDate: Mon Jan 12 15:16:57 2015 +0100
 
-dev-type: filter out partitioned device-mapper devices as unsuitable for use as PVs
+tests: pvscan --cache DevicePath does not fail if the device is just filtered
 
-Normally, if there are partitions defined on top of device-mapper
-device, there should be a device-mapper device created for each
-partiton on top of the old one and once the underlying DM device
-is used by another devices (partition mappings in this case),
-it can't be used as a PV anymore.
+It's not an error if the device is filtered out and hence cleared from
+lvmetad cache - "pvscan --cache DevPath" has now the same behaviour in
+this case as "pvscan --cache major:minor" (which is more consistent).
 
-However, sometimes, it may happen the partition mappings are
-missing - either the partitioning tool is not creating them if
-it does not contain full support for device-mapper devices or
-the mappings were removed.
-
-Better safe than sorry - check for partition header on DM devs
-and filter them out as unsuitable for PVs in case the check is
-positive. Whatever the user is doing, let's do our best to prevent
-unwanted corruption (...by running pvcreate on top of such device
-that would corrupt the partition header).
+Before, the tests expected failure return code for "pvscan --cache DevicePath"
+if the device was filtered (which is a different situation if the device
+is missing in the system completely!).
 ---
- WHATS_NEW                    |    1 +
- lib/device/dev-type.c        |    3 +++
- test/shell/test-partition.sh |    3 ++-
- 3 files changed, 6 insertions(+), 1 deletions(-)
+ test/shell/lvmetad-pvscan-filter.sh |    4 +++-
+ test/shell/lvmetad-pvscan-md.sh     |    4 ++--
+ 2 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 11611dd..e295e6c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.115 -
- =====================================
-+  Filter out partitioned device-mapper devices as unsuitable for use as PVs.
-   Also notify lvmetad about filtered device if using pvscan --cache DevicePath.
-   Use LVM's own selection instead of awk expressions in clvmd startup scripts.
-   Do not filter out snapshot origin LVs as unusable devices for an LVM stack.
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 001248d..a84f7e9 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -272,6 +272,9 @@ static int _is_partitionable(struct dev_types *dt, struct device *dev)
- {
- 	int parts = major_max_partitions(dt, MAJOR(dev->dev));
+diff --git a/test/shell/lvmetad-pvscan-filter.sh b/test/shell/lvmetad-pvscan-filter.sh
+index a3af1b2..05666df 100644
+--- a/test/shell/lvmetad-pvscan-filter.sh
++++ b/test/shell/lvmetad-pvscan-filter.sh
+@@ -18,8 +18,10 @@ aux prepare_pvs 2
+ maj=$(($(stat -L --printf=0x%t "$dev2")))
+ min=$(($(stat -L --printf=0x%T "$dev2")))
  
-+	if (MAJOR(dev->dev) == dt->device_mapper_major)
-+		return 1;
-+
- 	/* All MD devices are partitionable via blkext (as of 2.6.28) */
- 	if (MAJOR(dev->dev) == dt->md_major)
- 		return 1;
-diff --git a/test/shell/test-partition.sh b/test/shell/test-partition.sh
-index af04b4e..e79216e 100644
---- a/test/shell/test-partition.sh
-+++ b/test/shell/test-partition.sh
-@@ -28,4 +28,5 @@ pvs "$dev1"
- # create small partition table
- echo "1 2" | sfdisk "$dev1"
++# Filter out device, pvscan should trigger
++# clearing of the device from lvmetad cache.
+ aux hide_dev "$dev2"
+-not pvscan --cache "$dev2" 2>&1 | grep "not found"
++pvscan --cache "$dev2" 2>&1 | grep "not found"
+ # pvscan with --major/--minor does not fail: lvmetad needs to
+ # be notified about device removal on REMOVE uevent, hence
+ # this should not fail so udev does not grab a "failed" state
+diff --git a/test/shell/lvmetad-pvscan-md.sh b/test/shell/lvmetad-pvscan-md.sh
+index 449369d..653d18a 100644
+--- a/test/shell/lvmetad-pvscan-md.sh
++++ b/test/shell/lvmetad-pvscan-md.sh
+@@ -69,8 +69,8 @@ pvcreate $lvmdev
+ pvscan --cache "$lvmdev"
  
--pvs "$dev1"
-+aux notify_lvmetad "$dev1"
-+not pvs "$dev1"
+ # ensure that lvmetad can only see the toplevel MD device
+-not pvscan --cache "$dev1" 2>&1 | grep "not found"
+-not pvscan --cache "$dev2" 2>&1 | grep "not found"
++pvscan --cache "$dev1" 2>&1 | grep "not found"
++pvscan --cache "$dev2" 2>&1 | grep "not found"
+ 
+ pvs | grep $lvmdev
+ pvs | not grep "$dev1"
 
 
