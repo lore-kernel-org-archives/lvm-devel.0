@@ -1,70 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 14 Jan 2015 13:54:48 +0000 (UTC)
-Subject: master - cleanup: properly align code lines
-Message-ID: <20150114135448.6FC0360C44@fedorahosted.org>
+Date: Wed, 14 Jan 2015 13:54:54 +0000 (UTC)
+Subject: master - cleanup: missed for build without devmapper
+Message-ID: <20150114135454.BBBE060C44@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d0f26440eed53fd34faf2773a9a7faf6deaf7d66
-Commit:        d0f26440eed53fd34faf2773a9a7faf6deaf7d66
-Parent:        d202f43fff6ff7d12540440ae6b16a0ec2c7de5e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1e050a77ff333fd1849eb8068b6d22cb9411fc06
+Commit:        1e050a77ff333fd1849eb8068b6d22cb9411fc06
+Parent:        0869631d7d197fec3ea909c243a5e1f2901bea5c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 14 12:51:59 2015 +0100
+AuthorDate:    Wed Jan 14 13:03:52 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jan 14 14:50:08 2015 +0100
 
-cleanup: properly align code lines
+cleanup: missed for build without devmapper
 
-Misaligned indetion in branches.
+configure --disable-devmapper build fixes.
 ---
- lib/activate/dev_manager.c |   24 ++++++++++++------------
- 1 files changed, 12 insertions(+), 12 deletions(-)
+ lib/activate/activate.c |   16 ++++++++++++++++
+ 1 files changed, 16 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 18092db..c134e1b 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -145,26 +145,26 @@ static int _get_segment_status_from_target_params(const char *target_name,
- 		if (!dm_get_status_cache(seg_status->mem, params,
- 			(struct dm_status_cache **) &seg_status->status))
- 				return_0;
--			seg_status->type = SEG_STATUS_CACHE;
-+		seg_status->type = SEG_STATUS_CACHE;
- 	} else if (!strcmp(segtype->name, "raid")) {
- 		if (!dm_get_status_raid(seg_status->mem, params,
--			(struct dm_status_raid **) &seg_status->status))
--				return_0;
--			seg_status->type = SEG_STATUS_RAID;
-+					(struct dm_status_raid **) &seg_status->status))
-+			return_0;
-+		seg_status->type = SEG_STATUS_RAID;
- 	} else if (!strcmp(segtype->name, "thin")) {
- 		if (!dm_get_status_thin(seg_status->mem, params,
--			(struct dm_status_thin **) &seg_status->status))
--				return_0;
--			seg_status->type = SEG_STATUS_THIN;
-+					(struct dm_status_thin **) &seg_status->status))
-+			return_0;
-+		seg_status->type = SEG_STATUS_THIN;
- 	} else if (!strcmp(segtype->name, "thin-pool")) {
- 		if (!dm_get_status_thin_pool(seg_status->mem, params,
--			(struct dm_status_thin_pool **) &seg_status->status))
--				return_0;
--			seg_status->type = SEG_STATUS_THIN_POOL;
-+					     (struct dm_status_thin_pool **) &seg_status->status))
-+			return_0;
-+		seg_status->type = SEG_STATUS_THIN_POOL;
- 	} else if (!strcmp(segtype->name, "snapshot")) {
- 		if (!dm_get_status_snapshot(seg_status->mem, params,
--			(struct dm_status_snapshot **) &seg_status->status))
--				return_0;
-+					    (struct dm_status_snapshot **) &seg_status->status))
-+			return_0;
- 		seg_status->type = SEG_STATUS_SNAPSHOT;
- 	}
- 
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 94ad9e2..ed41058 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -238,6 +238,22 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
+ {
+ 	return 0;
+ }
++int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume *lv,
++			    const struct lv_segment *lv_seg, int use_layer,
++			    struct lv_with_info_and_seg_status *status,
++			    int with_open_count, int with_read_ahead)
++{
++	return 0;
++}
++int lv_status(struct cmd_context *cmd, const struct lv_segment *lv_seg,
++	      struct lv_seg_status *lv_seg_status)
++{
++	return 0;
++}
++int lv_cache_status(const struct logical_volume *cache_lv,
++		    struct lv_status_cache **status)
++{
++}
+ int lv_check_not_in_use(const struct logical_volume *lv)
+ {
+         return 0;
 
 
