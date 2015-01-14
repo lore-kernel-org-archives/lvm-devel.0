@@ -1,39 +1,51 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 14 Jan 2015 14:15:49 +0000 (UTC)
-Subject: master - WHATS_NEW
-Message-ID: <20150114141549.E096360668@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 14 Jan 2015 17:08:10 +0000 (UTC)
+Subject: master - dmeventd: Call lvscan --cache also for mirrors (in addition to RAID).
+Message-ID: <20150114170810.540B460300@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a55175bacbad1261917f170254040fb2846f994
-Commit:        4a55175bacbad1261917f170254040fb2846f994
-Parent:        2908ab3eed4d7feb041c99a4e2fca98a5bcf6922
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 14 15:15:29 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jan 14 15:15:29 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eac4e1e939c6fe7eba0d2c3865e25b8ed43fe6d9
+Commit:        eac4e1e939c6fe7eba0d2c3865e25b8ed43fe6d9
+Parent:        4a55175bacbad1261917f170254040fb2846f994
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Wed Jan 14 18:04:46 2015 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Jan 14 18:05:44 2015 +0100
 
-WHATS_NEW
+dmeventd: Call lvscan --cache also for mirrors (in addition to RAID).
 
-More news
 ---
- WHATS_NEW |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 3881d5d..344aeb7 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.02.115 -
- =====================================
-+  Report lv_health_status and health attribute also for thin pool.
-+  Add lv_error_when_full reporting field.
-   Add support for lvcreate --errorwhenfull y|n for thin pools.
-   Fix lvconvert --repair to honour resilience requirement for segmented RAID LV.
-   Filter out partitioned device-mapper devices as unsuitable for use as PVs.
+diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+index 2328089..084be28 100644
+--- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
++++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+@@ -136,10 +136,20 @@ static int _remove_failed_devices(const char *device)
+ 	char cmd_str[CMD_SIZE];
+ 
+ 	if (!dmeventd_lvm2_command(dmeventd_lvm2_pool(), cmd_str, sizeof(cmd_str),
++				   "lvscan --cache", device))
++		return -1;
++
++	r = dmeventd_lvm2_run(cmd_str);
++
++	if (!r)
++		syslog(LOG_INFO, "Re-scan of mirror device %s failed.", device);
++
++	if (!dmeventd_lvm2_command(dmeventd_lvm2_pool(), cmd_str, sizeof(cmd_str),
+ 				  "lvconvert --config devices{ignore_suspended_devices=1} "
+ 				  "--repair --use-policies", device))
+ 		return -ENAMETOOLONG; /* FIXME Replace with generic error return - reason for failure has already got logged */
+ 
++	/* if repair goes OK, report success even if lvscan has failed */
+ 	r = dmeventd_lvm2_run(cmd_str);
+ 
+ 	syslog(LOG_INFO, "Repair of mirrored device %s %s.", device,
 
 
