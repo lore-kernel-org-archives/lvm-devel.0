@@ -1,40 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 20 Jan 2015 14:26:58 +0000 (UTC)
-Subject: master - report: use info
-Message-ID: <20150120142658.40CD4612D3@fedorahosted.org>
+Date: Tue, 20 Jan 2015 14:44:37 +0000 (UTC)
+Subject: master - thin: support errorwhenfull with thin creation
+Message-ID: <20150120144437.EC22E61040@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a625812bec4597adb6e71816130dacac2ff38b34
-Commit:        a625812bec4597adb6e71816130dacac2ff38b34
-Parent:        3b78d5237ddc7dc8d328bd1b16628c5a61454826
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=75b786c5ef557b690e5638b6702ad19f20cb13f1
+Commit:        75b786c5ef557b690e5638b6702ad19f20cb13f1
+Parent:        a625812bec4597adb6e71816130dacac2ff38b34
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jan 20 15:25:05 2015 +0100
+AuthorDate:    Tue Jan 20 15:43:16 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jan 20 15:25:05 2015 +0100
+CommitterDate: Tue Jan 20 15:43:16 2015 +0100
 
-report: use info
+thin: support errorwhenfull with thin creation
 
-Use LVSINFO since  LVSSTATUS only fills status
+When thinpool and thinvolume are created at the same time,
+still support usage of --errorwhenfull.
 ---
- lib/report/columns.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/lvcreate.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index fbbbe9d..2b788c1 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -38,7 +38,7 @@ FIELD(LVS, lv, STR, "LV", lvid, 4, lvfullname, lv_full_name, "Full name of LV in
- FIELD(LVS, lv, STR, "Path", lvid, 4, lvpath, lv_path, "Full pathname for LV. Blank for internal LVs.", 0)
- FIELD(LVS, lv, STR, "DMPath", lvid, 6, lvdmpath, lv_dm_path, "Internal device-mapper pathname for LV (in /dev/mapper directory).", 0)
- FIELD(LVS, lv, STR, "Parent", lvid, 6, lvparent, lv_parent, "For LVs that are components of another LV, the parent LV.", 0)
--FIELD(LVSSTATUS, lv, STR, "Attr", lvid, 4, lvstatus, lv_attr, "Various attributes - see man page.", 0)
-+FIELD(LVSINFO, lv, STR, "Attr", lvid, 4, lvstatus, lv_attr, "Various attributes - see man page.", 0)
- FIELD(LVS, lv, STR_LIST, "Layout", lvid, 10, lvlayout, lv_layout, "LV layout.", 0)
- FIELD(LVS, lv, STR_LIST, "Role", lvid, 10, lvrole, lv_role, "LV role.", 0)
- FIELD(LVS, lv, BIN, "InitImgSync", lvid, 10, lvinitialimagesync, lv_initial_image_sync, "Set if mirror/RAID images underwent initial resynchronization.", 0)
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index fd5ac39..3f7fe6f 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -951,7 +951,8 @@ static int _lvcreate_params(struct cmd_context *cmd,
+ 				 -1))
+ 		return_0;
+ 
+-	if (!seg_can_error_when_full(lp) && arg_is_set(cmd, errorwhenfull_ARG)) {
++	if (!seg_can_error_when_full(lp) && !lp->create_pool &&
++	    arg_is_set(cmd, errorwhenfull_ARG)) {
+ 		log_error("Segment type %s does not support --errorwhenfull.", lp->segtype->name);
+ 		return 0;
+ 	}
 
 
