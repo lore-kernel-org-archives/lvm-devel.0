@@ -1,50 +1,48 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 20 Jan 2015 17:16:24 +0000 (UTC)
-Subject: master - report: Fix warning in _str_list_append.
-Message-ID: <20150120171624.AA4806105D@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Tue, 20 Jan 2015 19:13:11 +0000 (UTC)
+Subject: master - vgimportclone: remove arg check that uses pvs
+Message-ID: <20150120191311.693A06063C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=404c834e14657645d70d19b825d328bff5b165b7
-Commit:        404c834e14657645d70d19b825d328bff5b165b7
-Parent:        87e80b6aac630f0c26d128006c975841a76ca890
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jan 20 17:15:28 2015 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jan 20 17:15:28 2015 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a164d603d386c5daed06b46316ef3c001807dff9
+Commit:        a164d603d386c5daed06b46316ef3c001807dff9
+Parent:        404c834e14657645d70d19b825d328bff5b165b7
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jan 20 13:08:22 2015 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Jan 20 13:08:22 2015 -0600
 
-report: Fix warning in _str_list_append.
+vgimportclone: remove arg check that uses pvs
 
-../../lib/report/report.c: In function ???_str_list_append???:
-../../lib/report/report.c:256: warning: declaration of ???dup??? shadows a global declaration
+The arg check using pvs is unnecessary.  If the arg is not a PV,
+the command will just fail later.  Using the pvs command at this
+point in the command is a problem when lvmetad is running, because
+the pvs command does not report duplicate PVs when using lvmetad.
+(Alternatively, use_lvmetad could be disabled by adding a --config
+override to this pvs command.)
 ---
- lib/report/report.c |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+ scripts/vgimportclone.sh |    5 -----
+ 1 files changed, 0 insertions(+), 5 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index b3365b0..3331e5e 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -253,11 +253,14 @@ struct _str_list_append_baton {
- static int _str_list_append(const char *line, void *baton)
- {
- 	struct _str_list_append_baton *b = baton;
--	const char *dup = dm_pool_strdup(b->mem, line);
--	if (!dup)
-+	const char *line2 = dm_pool_strdup(b->mem, line);
-+
-+	if (!line2)
- 		return_0;
--	if (!str_list_add(b->mem, b->result, dup))
-+
-+	if (!str_list_add(b->mem, b->result, line2))
- 		return_0;
-+
- 	return 1;
- }
- 
+diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
+index 9d319bd..388d14c 100755
+--- a/scripts/vgimportclone.sh
++++ b/scripts/vgimportclone.sh
+@@ -204,11 +204,6 @@ for ARG
+ do
+     if [ -b "$ARG" ]
+     then
+-        PVS_OUT=`"${LVM}" pvs ${LVM_OPTS} --noheadings -o vg_name "$ARG"`
+-        checkvalue $? "$ARG could not be verified to be a PV without errors."
+-        PV_VGNAME=$(echo $PVS_OUT | $GREP -v '[[:space:]]+$')
+-        [ -z "$PV_VGNAME" ] && die 3 "$ARG is not in a VG."
+-
+         ln -s "$ARG" ${TMP_LVM_SYSTEM_DIR}/vgimport${DEVNO}
+         DISKS="${DISKS} ${TMP_LVM_SYSTEM_DIR}/vgimport${DEVNO}"
+         DEVNO=$((${DEVNO}+1))
 
 
