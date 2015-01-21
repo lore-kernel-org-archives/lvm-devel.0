@@ -1,51 +1,65 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 21 Jan 2015 12:54:33 +0000 (UTC)
-Subject: master - dmeventd: Reduce waitevent EINTR message severity.
-Message-ID: <20150121125433.6302360CD7@fedorahosted.org>
+Date: Wed, 21 Jan 2015 13:25:21 +0000 (UTC)
+Subject: master - post-release
+Message-ID: <20150121132521.3971D602D7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=25d906dbde45bc64c5a0978e40c810b3b070cb0d
-Commit:        25d906dbde45bc64c5a0978e40c810b3b070cb0d
-Parent:        7cfc9a4f640296679f2b860842cc8b25b82fd30f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=57f67ce8558d9688d1e743aba5d65d1e1545aad6
+Commit:        57f67ce8558d9688d1e743aba5d65d1e1545aad6
+Parent:        fa01faaa4aa96de834ba7e8fbb9d9aff908571c3
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Jan 21 12:54:00 2015 +0000
+AuthorDate:    Wed Jan 21 13:25:10 2015 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Jan 21 12:54:00 2015 +0000
+CommitterDate: Wed Jan 21 13:25:10 2015 +0000
 
-dmeventd: Reduce waitevent EINTR message severity.
+post-release
 
 ---
- WHATS_NEW_DM              |    1 +
- libdm/ioctl/libdm-iface.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    3 +++
+ WHATS_NEW_DM |    3 +++
+ 4 files changed, 8 insertions(+), 2 deletions(-)
 
+diff --git a/VERSION b/VERSION
+index 6a4aebc..bc3587c 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.115(2)-git (2015-01-21)
++2.02.116(2)-git (2015-01-21)
+diff --git a/VERSION_DM b/VERSION_DM
+index 3a73cd9..de76fb3 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.93-git (2015-01-21)
++1.02.94-git (2015-01-21)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 75c4569..15ab94f 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,6 @@
++Version 2.02.116 - 
++====================================
++
+ Version 2.02.115 - 21st January 2015
+ ====================================
+   Report segment types without monitoring support as undefined.
 diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 0a59875..8cbb6b6 100644
+index 169831c..3fb69cb 100644
 --- a/WHATS_NEW_DM
 +++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.93 -
- ====================================
-+  Reduce severity of ioctl error message when dmeventd waitevent is interrupted.
-   Report 'unknown version' when incompatible version numbers were not obtained.
-   Report more info from thin pool status (out of data, metadata-ro, fail).
-   Support error_if_no_space for thin pool target.
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index f8b4ed9..f971519 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1801,7 +1801,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- 				       (dmt->type == DM_DEVICE_STATUS)))
- 			dmi->flags &= ~DM_EXISTS_FLAG;	/* FIXME */
- 		else {
--			if (_log_suppress)
-+			if (_log_suppress || errno == EINTR)
- 				log_verbose("device-mapper: %s ioctl "
- 					    "failed: %s",
- 				    	    _cmd_data_v4[dmt->type].name,
+@@ -1,3 +1,6 @@
++Version 1.02.94 - 
++===================================
++
+ Version 1.02.93 - 21st January 2015
+ ===================================
+   Reduce severity of ioctl error message when dmeventd waitevent is interrupted.
 
 
