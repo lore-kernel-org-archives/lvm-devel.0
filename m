@@ -1,71 +1,114 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 28 Jan 2015 12:45:52 +0000 (UTC)
-Subject: master - raid: fix tree preload for splitting raid images
-Message-ID: <20150128124552.E4E8360314@fedorahosted.org>
+Date: Wed, 28 Jan 2015 12:45:55 +0000 (UTC)
+Subject: master - raid: fix raid image splitting
+Message-ID: <20150128124555.0ECC260314@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b254d330e4410e3eb10ab65fbe892ba56f95e2e9
-Commit:        b254d330e4410e3eb10ab65fbe892ba56f95e2e9
-Parent:        3e11d85c774084783520b5cc77e059cfa5e1b254
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=93b90157605f557cd4b0e48c38e6f290eaa871b1
+Commit:        93b90157605f557cd4b0e48c38e6f290eaa871b1
+Parent:        b254d330e4410e3eb10ab65fbe892ba56f95e2e9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 28 13:36:25 2015 +0100
+AuthorDate:    Wed Jan 28 13:39:41 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jan 28 13:44:06 2015 +0100
+CommitterDate: Wed Jan 28 13:45:18 2015 +0100
 
-raid: fix tree preload for splitting raid images
+raid: fix raid image splitting
 
-When raid is being splitted, extracted leg & metadata
-is still floating in the table - and thus we need to
-detect this case and properly preload their matching
-table so consequent activation of extracted LVs properly
-renames (and FREES) existing raid images, so ongoing
-image name shifting will work.
+When raid leg is extracted, now the preload code handles this state
+correctly and put proper new table entry into dm tree,
+so the activation of extracted leg and removed metadata works
+after commit.
 ---
- WHATS_NEW               |    1 +
- lib/activate/activate.c |   16 ++++++++++++++++
- 2 files changed, 17 insertions(+), 0 deletions(-)
+ WHATS_NEW                    |    1 +
+ lib/metadata/raid_manip.c    |   30 ++++++++++--------------------
+ test/shell/lvconvert-raid.sh |    6 ++++++
+ 3 files changed, 17 insertions(+), 20 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 666c51e..1424fab 100644
+index 1424fab..45a02d6 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.116 - 
  ====================================
-+  Fix tree preload to handle splitting raid images.
++  Fix raid --splitmirror 1 functionality (2.02.112).
+   Fix tree preload to handle splitting raid images.
    Do not support unpartitioned DASD devices.
    Improve config validation to check if setting with string value can be empty.
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 5c2ca95..4ce84a0 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -1149,12 +1149,6 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
+ 		return 0;
+ 	}
  
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 424786c..151e714 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1760,6 +1760,22 @@ static int _preload_detached_lv(struct logical_volume *lv, void *data)
- 	struct detached_lv_data *detached = data;
- 	struct lv_list *lvl_pre;
+-	if (!resume_lv(lv->vg->cmd, lv_lock_holder(lv))) {
+-		log_error("Failed to resume %s/%s after committing changes",
+-			  lv->vg->name, lv->name);
+-		return 0;
+-	}
+-
+ 	/*
+ 	 * First activate the newly split LV and LVs on the removal list.
+ 	 * This is necessary so that there are no name collisions due to
+@@ -1164,26 +1158,22 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
+ 	if (!activate_lv_excl_local(cmd, lvl->lv))
+ 		return_0;
  
-+        /* Check and preload removed raid image leg */
-+	if (lv_is_raid_image(lv)) {
-+		if ((lvl_pre = find_lv_in_vg_by_lvid(detached->lv_pre->vg, &lv->lvid)) &&
-+		    !lv_is_raid_image(lvl_pre->lv) &&
-+		    !_lv_preload(lvl_pre->lv, detached->laopts, detached->flush_required))
++	dm_list_iterate_items(lvl, &removal_list)
++		if (!activate_lv_excl_local(cmd, lvl->lv))
 +			return_0;
++
++	if (!resume_lv(cmd, lv_lock_holder(lv))) {
++		log_error("Failed to resume %s/%s after committing changes",
++			  lv->vg->name, lv->name);
++		return 0;
 +	}
 +
-+        /* Check and preload removed of raid metadata */
-+	if (lv_is_raid_metadata(lv)) {
-+		if ((lvl_pre = find_lv_in_vg_by_lvid(detached->lv_pre->vg, &lv->lvid)) &&
-+		    !lv_is_raid_metadata(lvl_pre->lv) &&
-+		    !_lv_preload(lvl_pre->lv, detached->laopts, detached->flush_required))
-+			return_0;
-+	}
+ 	/*
+ 	 * Since newly split LV is typically already active - we need to call
+ 	 * suspend() and resume() to also rename it.
+ 	 *
+ 	 * TODO: activate should recognize it and avoid these 2 calls
+ 	 */
+-	if (!suspend_lv(cmd, lvl->lv)) {
+-		log_error("Failed to suspend %s.", lvl->lv->name);
+-		return 0;
+-	}
+-
+-	if (!resume_lv(cmd, lvl->lv)) {
+-		log_error("Failed to reactivate %s.", lvl->lv->name);
+-		return 0;
+-	}
+-
+-	dm_list_iterate_items(lvl, &removal_list)
+-		if (!activate_lv_excl_local(cmd, lvl->lv))
+-			return_0;
+-
+ 
+ 	/*
+ 	 * Eliminate the residual LVs
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 8621311..12e0420 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -121,6 +121,12 @@ check active $vg $lv2
+ # FIXME: ensure no residual devices
+ lvremove -ff $vg
+ 
++# 4-way
++lvcreate --type raid1 -m 4 -l 2 -n $lv1 $vg
++aux wait_for_sync $vg $lv1
++lvconvert --yes --splitmirrors 1 --name $lv2 $vg/$lv1 "$dev2"
++lvremove -ff $vg
 +
- 	if ((lvl_pre = find_lv_in_vg(detached->lv_pre->vg, lv->name))) {
- 		if (lv_is_visible(lvl_pre->lv) && lv_is_active(lv) &&
- 		    (!lv_is_cow(lv) || !lv_is_cow(lvl_pre->lv)) &&
+ ###########################################
+ # RAID1 split + trackchanges / merge
+ ###########################################
 
 
