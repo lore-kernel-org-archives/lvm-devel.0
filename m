@@ -1,49 +1,42 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 28 Jan 2015 15:32:48 +0000 (UTC)
-Subject: master - cache: add pool deps for preload
-Message-ID: <20150128153248.3583A60228@fedorahosted.org>
+From: Lidong Zhong <lzhong@suse.com>
+Date: Thu, 29 Jan 2015 15:16:53 +0800
+Subject: [PATCH] metadata: remove mdas variable
+Message-ID: <1422515813-9565-1-git-send-email-lzhong@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c3bb6d77dd6193755070c62c6f3adb93c1976f19
-Commit:        c3bb6d77dd6193755070c62c6f3adb93c1976f19
-Parent:        4f1309080a462988e10c11a328356a6c5c22dd6e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 28 16:29:35 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jan 28 16:29:35 2015 +0100
+This variable is not ever used in pvcreate_vol function
 
-cache: add pool deps for preload
-
-for_each_sub_lv() normally does not put  pool_lv into deps.
-
-So for now go around it in 'lv_preload()' and add explicit
-call with pool.
-
-TODO: think about a better way, we want pool_lv deps only in certain
-moments, so maybe for_each_sub_lv() needs new arg for this.
+Signed-off-by: Lidong Zhong <lzhong@suse.com>
 ---
- lib/activate/activate.c |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ lib/metadata/metadata.c | 3 ---
+ 1 file changed, 3 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 151e714..00d3a10 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1879,6 +1879,11 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
- 		if (!for_each_sub_lv((struct logical_volume *)ondisk_lv, &_preload_detached_lv, &detached))
- 			goto_out;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 465eb84..3304631 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1620,7 +1620,6 @@ struct physical_volume *pvcreate_vol(struct cmd_context *cmd, const char *pv_nam
+ {
+ 	struct physical_volume *pv = NULL;
+ 	struct device *dev;
+-	struct dm_list mdas;
+ 	struct pvcreate_params default_pp;
+ 	char buffer[64] __attribute__((aligned(8)));
  
-+		/* ATM cache/thin pool is not scanned in  'for_each_sub_lv()', TODO explore better way */
-+		if (lv_is_cache(ondisk_lv) &&
-+		    !for_each_sub_lv(first_seg(ondisk_lv)->pool_lv, &_preload_detached_lv, &detached))
-+			goto_out;
-+
- 		/*
- 		 * Preload any snapshots that are being removed.
- 		 */
+@@ -1656,8 +1655,6 @@ struct physical_volume *pvcreate_vol(struct cmd_context *cmd, const char *pv_nam
+ 		goto bad;
+ 	}
+ 
+-	dm_list_init(&mdas);
+-
+ 	if (!(pv = pv_create(cmd, dev, pp->size, pp->data_alignment,
+ 			     pp->data_alignment_offset, pp->labelsector,
+ 			     pp->pvmetadatacopies, pp->pvmetadatasize,
+-- 
+1.8.1.4
 
 
