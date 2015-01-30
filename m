@@ -1,85 +1,46 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  6 Jan 2015 13:29:06 +0000 (UTC)
-Subject: master - lvmetad: Re-use fmt from the VG for PVs when possible.
-Message-ID: <20150106132906.9F7BA60781@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 30 Jan 2015 11:35:19 +0000 (UTC)
+Subject: master - revert "cache: add pool deps for preload"
+Message-ID: <20150130113519.6C1F760247@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0987f290a7b53840c2811392868f050d9a632ea3
-Commit:        0987f290a7b53840c2811392868f050d9a632ea3
-Parent:        509650ec4cb1ef65e277870e96976d7dd8882170
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Jan 6 12:39:57 2015 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Tue Jan 6 14:27:30 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=578b236a19fab565a4416b17cbc26d53a72b66db
+Commit:        578b236a19fab565a4416b17cbc26d53a72b66db
+Parent:        d021284bcfda0222f10787ea798077f312ee3275
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jan 30 12:31:09 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jan 30 12:33:52 2015 +0100
 
-lvmetad: Re-use fmt from the VG for PVs when possible.
+revert "cache: add pool deps for preload"
 
+This reverts commit c3bb6d77dd6193755070c62c6f3adb93c1976f19.
+
+Since we now have  for_each_sub_lv() scanning all sub LVs,
+this commit could be safely reverted.
 ---
- lib/cache/lvmetad.c |   13 +++++++------
- 1 files changed, 7 insertions(+), 6 deletions(-)
+ lib/activate/activate.c |    5 -----
+ 1 files changed, 0 insertions(+), 5 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 5612c1b..20302c1 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -264,7 +264,7 @@ static int _read_mda(struct lvmcache_info *info,
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index fc9bc4b..dbfb427 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1876,11 +1876,6 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 		if (!for_each_sub_lv((struct logical_volume *)ondisk_lv, &_preload_detached_lv, &detached))
+ 			goto_out;
  
- static struct lvmcache_info *_pv_populate_lvmcache(struct cmd_context *cmd,
- 						   struct dm_config_node *cn,
--						   dev_t fallback)
-+						   struct format_type *fmt, dev_t fallback)
- {
- 	struct device *dev;
- 	struct id pvid, vgid;
-@@ -283,7 +283,8 @@ static struct lvmcache_info *_pv_populate_lvmcache(struct cmd_context *cmd,
- 	uint64_t devsize = dm_config_find_int64(cn->child, "dev_size", 0),
- 		 label_sector = dm_config_find_int64(cn->child, "label_sector", 0);
- 
--	struct format_type *fmt = fmt_name ? get_format_by_name(cmd, fmt_name) : NULL;
-+	if (!fmt && fmt_name)
-+		fmt = get_format_by_name(cmd, fmt_name);
- 
- 	if (!fmt) {
- 		log_error("PV %s not recognised. Is the device missing?", pvid_txt);
-@@ -422,7 +423,7 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
- 
- 		if ((pvcn = dm_config_find_node(top, "metadata/physical_volumes")))
- 			for (pvcn = pvcn->child; pvcn; pvcn = pvcn->sib)
--				_pv_populate_lvmcache(cmd, pvcn, 0);
-+				_pv_populate_lvmcache(cmd, pvcn, fmt, 0);
- 
- 		top->key = name;
- 		if (!(vg = import_vg_from_config_tree(reply.cft, fid)))
-@@ -573,7 +574,7 @@ int lvmetad_pv_lookup(struct cmd_context *cmd, struct id pvid, int *found)
- 
- 	if (!(cn = dm_config_find_node(reply.cft->root, "physical_volume")))
- 		goto_out;
--        else if (!_pv_populate_lvmcache(cmd, cn, 0))
-+        else if (!_pv_populate_lvmcache(cmd, cn, NULL, 0))
- 		goto_out;
- 
- out_success:
-@@ -603,7 +604,7 @@ int lvmetad_pv_lookup_by_dev(struct cmd_context *cmd, struct device *dev, int *f
- 		goto out_success;
- 
- 	cn = dm_config_find_node(reply.cft->root, "physical_volume");
--	if (!cn || !_pv_populate_lvmcache(cmd, cn, dev->dev))
-+	if (!cn || !_pv_populate_lvmcache(cmd, cn, NULL, dev->dev))
- 		goto_out;
- 
- out_success:
-@@ -631,7 +632,7 @@ int lvmetad_pv_list_to_lvmcache(struct cmd_context *cmd)
- 
- 	if ((cn = dm_config_find_node(reply.cft->root, "physical_volumes")))
- 		for (cn = cn->child; cn; cn = cn->sib)
--			_pv_populate_lvmcache(cmd, cn, 0);
-+			_pv_populate_lvmcache(cmd, cn, NULL, 0);
- 
- 	daemon_reply_destroy(reply);
- 
+-		/* ATM cache/thin pool is not scanned in  'for_each_sub_lv()', TODO explore better way */
+-		if (lv_is_cache(ondisk_lv) &&
+-		    !for_each_sub_lv(first_seg(ondisk_lv)->pool_lv, &_preload_detached_lv, &detached))
+-			goto_out;
+-
+ 		/*
+ 		 * Preload any snapshots that are being removed.
+ 		 */
 
 
