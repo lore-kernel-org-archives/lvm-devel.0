@@ -1,118 +1,124 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 30 Jan 2015 12:31:59 +0000 (UTC)
-Subject: master - filter-md: use new 'udev' external device info source to get MD component status
-Message-ID: <20150130123159.7E3D361152@fedorahosted.org>
+Date: Fri, 30 Jan 2015 12:31:55 +0000 (UTC)
+Subject: master - filter-composite: add external device info hooks
+Message-ID: <20150130123155.4460D61152@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=590fbd89618fa8fb2556c89c1d12b5deb5b5f1a4
-Commit:        590fbd89618fa8fb2556c89c1d12b5deb5b5f1a4
-Parent:        bf8943b0f63336272f3434455b906e0167e27b52
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c50a90c9e6084350682a315ed1732c2a54a3a828
+Commit:        c50a90c9e6084350682a315ed1732c2a54a3a828
+Parent:        fbfde21e7cdc770f0a1189d40f983aa046d605bb
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Sep 3 15:47:52 2014 +0200
+AuthorDate:    Mon Dec 15 15:12:42 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Fri Jan 30 13:01:12 2015 +0100
 
-filter-md: use new 'udev' external device info source to get MD component status
+filter-composite: add external device info hooks
 
-MD components are marked in udev db as:
-  ID_FS_TYPE="linux_raid_member"
+Composite filter is a filter that can put several filters in one set.
+This patch adds a switch when creating the composite filter which will
+enable or disable external device info handles for all the filters
+the composite filter encompasses.
+
+We want to use this external device info for majority of the filters
+which are in the "lvmetad filter chain" (or the respective part if
+we're not using lvmetad).
+
+Following patches will use the enabled external device handle in
+concrete filters from the composite filter...
 ---
- lib/device/dev-md.c     |   47 ++++++++++++++++++++++++++++++++++++++++++++++-
- lib/filters/filter-md.c |    3 ++-
- 2 files changed, 48 insertions(+), 2 deletions(-)
+ lib/commands/toolcontext.c     |    6 +++---
+ lib/filters/filter-composite.c |   15 +++++++++++++--
+ lib/filters/filter.h           |    3 ++-
+ 3 files changed, 18 insertions(+), 6 deletions(-)
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 76e3093..535259f 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -16,6 +16,9 @@
- #include "lib.h"
- #include "dev-type.h"
- #include "xlate.h"
-+#ifdef UDEV_SYNC_SUPPORT
-+#include <libudev.h> /* for MD detection using udev db records */
-+#endif
- 
- #ifdef __linux__
- 
-@@ -81,10 +84,31 @@ static uint64_t _v1_sb_offset(uint64_t size, md_minor_version_t minor_version)
- 	return sb_offset;
- }
- 
-+#ifdef UDEV_SYNC_SUPPORT
-+static int _udev_dev_is_md(struct device *dev)
-+{
-+	const char *value;
-+	struct dev_ext *ext;
-+
-+	if (!(ext = dev_ext_get(dev)))
-+		return_0;
-+
-+	if (!(value = udev_device_get_property_value((struct udev_device *)ext->handle, "ID_FS_TYPE")))
-+		return 0;
-+
-+	return !strcmp(value, "linux_raid_member");
-+}
-+#else
-+static int _udev_dev_is_md(struct device *dev)
-+{
-+	return 0;
-+}
-+#endif
-+
- /*
-  * Returns -1 on error
-  */
--int dev_is_md(struct device *dev, uint64_t *offset_found)
-+static int _native_dev_is_md(struct device *dev, uint64_t *offset_found)
- {
- 	int ret = 1;
- 	md_minor_version_t minor;
-@@ -129,6 +153,27 @@ out:
- 	return ret;
- }
- 
-+int dev_is_md(struct device *dev, uint64_t *offset_found)
-+{
-+
-+	/*
-+	 * If non-native device status source is selected, use it
-+	 * only if offset_found is not requested as this
-+	 * information is not in udev db.
-+	 */
-+	if ((dev->ext.src == DEV_EXT_NONE) || offset_found)
-+		return _native_dev_is_md(dev, offset_found);
-+
-+	if (dev->ext.src == DEV_EXT_UDEV)
-+		return _udev_dev_is_md(dev);
-+
-+	log_error(INTERNAL_ERROR "Missing hook for MD device recognition "
-+		  "using external device info source %s", dev_ext_name(dev));
-+
-+	return -1;
-+
-+}
-+
- static int _md_sysfs_attribute_snprintf(char *path, size_t size,
- 					struct dev_types *dt,
- 					struct device *blkdev,
-diff --git a/lib/filters/filter-md.c b/lib/filters/filter-md.c
-index fe79f3d..ad9f540 100644
---- a/lib/filters/filter-md.c
-+++ b/lib/filters/filter-md.c
-@@ -29,7 +29,8 @@ static int _ignore_md(struct dev_filter *f __attribute__((unused)),
- 	ret = dev_is_md(dev, NULL);
- 
- 	if (ret == 1) {
--		log_debug_devs("%s: Skipping md component device", dev_name(dev));
-+		log_debug_devs("%s: Skipping md component device [%s:%p]",
-+				dev_name(dev), dev_ext_name(dev), dev->ext.handle);
- 		return 0;
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 3900179..83238fb 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -905,7 +905,7 @@ static struct dev_filter *_init_lvmetad_filter_chain(struct cmd_context *cmd)
+ 			nr_filt++;
  	}
  
+-	if (!(composite = composite_filter_create(nr_filt, filters)))
++	if (!(composite = composite_filter_create(nr_filt, 1, filters)))
+ 		goto_bad;
+ 
+ 	return composite;
+@@ -985,7 +985,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
+ 		if (!(filter_components[1] = regex_filter_create(cn->v)))
+ 			goto_bad;
+ 		/* we have two filter components - create composite filter */
+-		if (!(filter = composite_filter_create(2, filter_components)))
++		if (!(filter = composite_filter_create(2, 0, filter_components)))
+ 			goto_bad;
+ 	} else
+ 		/* we have only one filter component - no need to create composite filter */
+@@ -1004,7 +1004,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
+ 	if (lvmetad_used()) {
+ 		filter_components[0] = cmd->lvmetad_filter;
+ 		filter_components[1] = cmd->filter;
+-		if (!(cmd->full_filter = composite_filter_create(2, filter_components)))
++		if (!(cmd->full_filter = composite_filter_create(2, 0, filter_components)))
+ 			goto_bad;
+ 	} else
+ 		cmd->full_filter = filter;
+diff --git a/lib/filters/filter-composite.c b/lib/filters/filter-composite.c
+index a6ba71a..950705b 100644
+--- a/lib/filters/filter-composite.c
++++ b/lib/filters/filter-composite.c
+@@ -27,6 +27,17 @@ static int _and_p(struct dev_filter *f, struct device *dev)
+ 	return 1;
+ }
+ 
++static int _and_p_with_dev_ext_info(struct dev_filter *f, struct device *dev)
++{
++	int r;
++
++	dev_ext_enable(dev, DEV_EXT_NONE);
++	r = _and_p(f, dev);
++	dev_ext_disable(dev);
++
++	return r;
++}
++
+ static void _composite_destroy(struct dev_filter *f)
+ {
+ 	struct dev_filter **filters;
+@@ -62,7 +73,7 @@ static void _wipe(struct dev_filter *f)
+ 			(*filters)->wipe(*filters);
+ }
+ 
+-struct dev_filter *composite_filter_create(int n, struct dev_filter **filters)
++struct dev_filter *composite_filter_create(int n, int use_dev_ext_info, struct dev_filter **filters)
+ {
+ 	struct dev_filter **filters_copy, *cft;
+ 
+@@ -83,7 +94,7 @@ struct dev_filter *composite_filter_create(int n, struct dev_filter **filters)
+ 		return NULL;
+ 	}
+ 
+-	cft->passes_filter = _and_p;
++	cft->passes_filter = use_dev_ext_info ? _and_p_with_dev_ext_info : _and_p;
+ 	cft->destroy = _composite_destroy;
+ 	cft->dump = _dump;
+ 	cft->wipe = _wipe;
+diff --git a/lib/filters/filter.h b/lib/filters/filter.h
+index 0519439..e73cf9c 100644
+--- a/lib/filters/filter.h
++++ b/lib/filters/filter.h
+@@ -20,7 +20,8 @@
+ #include "dev-cache.h"
+ #include "dev-type.h"
+ 
+-struct dev_filter *composite_filter_create(int n, struct dev_filter **filters);
++struct dev_filter *composite_filter_create(int n, int use_dev_ext_info, struct dev_filter **filters);
++
+ struct dev_filter *lvm_type_filter_create(struct dev_types *dt);
+ struct dev_filter *md_filter_create(struct dev_types *dt);
+ struct dev_filter *mpath_filter_create(struct dev_types *dt);
 
 
