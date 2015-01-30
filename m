@@ -1,38 +1,54 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Fri, 30 Jan 2015 10:54:29 +0100
-Subject: "lv_attr" disappeared from lvm_lv_get_property?
-In-Reply-To: <54CB5213.7030108@redhat.com>
-References: <87r3udicy7.fsf@red.mvo.lan>, <87oapgiu3z.fsf@red.mvo.lan>,
-	<54CB4B79.8000005@redhat.com> <87mw50ipfv.fsf@red.mvo.lan>
-	<54CB5213.7030108@redhat.com>
-Message-ID: <54CB54D5.3080402@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 30 Jan 2015 10:21:48 +0000 (UTC)
+Subject: master - properties: also recognize LVSINFO, LVSSTATUS and LVSINFOSTATUS as subtypes of LVS
+Message-ID: <20150130102148.418746138D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 01/30/2015 10:42 AM, Peter Rajnoha wrote:
-> On 01/30/2015 10:32 AM, Marius Vollmer wrote:
->> Do you know of any users besides storaged?
->>
-> 
-> Anaconda was one of the candidates to use liblvm, but afaik, they're
-> still forking LVM commands.
-> 
-> The other one I know of is the udisks, but it removed support for LVM
-> some time ago and udisks2 and later does not handle LVM anymore.
-> 
-> And then your use case :)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8650404df1884f1e040aad4343c8db0eac71e125
+Commit:        8650404df1884f1e040aad4343c8db0eac71e125
+Parent:        531cc58d899b7dd1421bfe83f5503aa266390334
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Jan 30 11:13:49 2015 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Jan 30 11:13:49 2015 +0100
 
-+2 more - collectd and glusterfs-server, at least on Fedora:
+properties: also recognize LVSINFO, LVSSTATUS and LVSINFOSTATUS as subtypes of LVS
 
-[1] f21/~ # repoquery --whatrequires lvm2-libs
-collectd-lvm-0:5.4.1-8.fc21.x86_64
-glusterfs-server-0:3.5.3-1.fc21.x86_64
-storaged-0:0.3.1-1.fc21.x86_64
+LVSINFO, LVSSTATUS and LVSINFOSTATUS is the same as LVS, just with some
+extra info/status decoration attached to it. Recognize this when looking
+for properties for lvm2app. This fixes lvm_lv_get_property lvm2app call
+for fields which already use LVS{INFO,STATUS,INFOSTATUS} - currently,
+this is lv_attr field which was converted to LVSINFOSTATUS from
+pure LVS type.
+---
+ lib/report/properties.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
--- 
-Peter
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 8866928..c1c9563 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -476,7 +476,7 @@ int lvseg_get_property(const struct lv_segment *lvseg,
+ int lv_get_property(const struct logical_volume *lv,
+ 		    struct lvm_property_type *prop)
+ {
+-	return prop_get_property(_properties, lv, prop, LVS);
++	return prop_get_property(_properties, lv, prop, LVS | LVSINFO | LVSSTATUS | LVSINFOSTATUS);
+ }
+ 
+ int vg_get_property(const struct volume_group *vg,
+@@ -500,7 +500,7 @@ int pv_get_property(const struct physical_volume *pv,
+ int lv_set_property(struct logical_volume *lv,
+ 		    struct lvm_property_type *prop)
+ {
+-	return prop_set_property(_properties, lv, prop, LVS);
++	return prop_set_property(_properties, lv, prop, LVS | LVSINFO | LVSSTATUS | LVSINFOSTATUS);
+ }
+ 
+ int vg_set_property(struct volume_group *vg,
 
 
