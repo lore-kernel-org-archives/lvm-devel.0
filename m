@@ -1,68 +1,44 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 30 Jan 2015 08:54:42 +0000 (UTC)
-Subject: master - lvm2app: fix lvm_lv_get_attr regression causing unknown values
-Message-ID: <20150130085442.07F3860FA9@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 30 Jan 2015 10:14:33 +0100
+Subject: "lv_attr" disappeared from lvm_lv_get_property?
+In-Reply-To: <87oapgiu3z.fsf@red.mvo.lan>
+References: <87r3udicy7.fsf@red.mvo.lan>,
+	<20150129200344.GO23957@agk-dp.fab.redhat.com>
+	<87oapgiu3z.fsf@red.mvo.lan>
+Message-ID: <54CB4B79.8000005@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=531cc58d899b7dd1421bfe83f5503aa266390334
-Commit:        531cc58d899b7dd1421bfe83f5503aa266390334
-Parent:        8dc1da2cbed42e9c5a4dee5b342bb4aff8c9d9a3
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jan 30 09:45:22 2015 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Jan 30 09:53:34 2015 +0100
+On 01/30/2015 08:51 AM, Marius Vollmer wrote:
+> Alasdair G Kergon <agk@redhat.com> writes:
+> 
+>> Sounds like we forgot to update the library code to use the new method...
+> 
+> I filed a bug for this:
+> 
+>     https://bugzilla.redhat.com/show_bug.cgi?id=1187481
+> 
 
-lvm2app: fix lvm_lv_get_attr regression causing unknown values
+Unfortunately, this was a regression introduced in LVM2 v115. It should
+be fixed now (https://bugzilla.redhat.com/show_bug.cgi?id=1187481#c2).
 
-This is a regression from v115 where some of the fields/properties
-were converted to using the common "struct lvinfo" and
-"struct lv_seg_status" so we don't need to issue info and status
-ioctl several times per one reported line. Not all fields are
-converted yet, but one that *is* converted is the lv_attr field
-with the lv_attr_dup counterpart used in lvm_lv_get_attr lvm2app fn.
+> Let us know how we are going to fix this.  If lvm2app is really a lost
+> cause, we can change storaged to fork lvs etc and parse it's output.
 
-These changes were introduced with e34b004422f0d51263e0d34f4064556cfc9148f6
-and later - this patch introduced the "info_ok" field in the
-lv_with_info_and_seg_status structure which encapsulates the lvinfo
-and lv_seg_status struct.
+I wouldn't say lvm2app is unusable, it's just not as maintained and
+refreshed as direct LVM tools. The bug above was just a silly regression
+that happened (yes, we should add full test coverage to lvm2app - that's
+currently missing, I admit).
 
-For the lv_attr_dup, the lv_attr_dup code  missed the
-assignment for the "info_ok" flag which saves the result of the
-lv_info_with_seg_status call. Hence such info was marked
-as unusable - unknown and it was returned as such via lvm_lv_get_attr
-lvm2app fn.
----
- WHATS_NEW         |    1 +
- lib/metadata/lv.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
-
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f2546a9..62f03ef 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.116 - 
- ====================================
-+  Fix lvm2app regression in lvm_lv_get_attr causing unknown values (2.02.115).
-   Set default cache_mode to writehrough when missing in metadata.
-   Preserve chunk size with repair and metadata swap of a thin pool.
-   Fix raid --splitmirror 1 functionality (2.02.112).
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 9052e63..c3c5d4a 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -831,7 +831,7 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	if (!(status.seg_status.mem = dm_pool_create("reporter_pool", 1024)))
- 		return_0;
- 
--	if (!lv_info_with_seg_status(lv->vg->cmd, lv, first_seg(lv), 1, &status, 1, 1))
-+	if (!(status.info_ok = lv_info_with_seg_status(lv->vg->cmd, lv, first_seg(lv), 1, &status, 1, 1)))
- 		goto_bad;
- 
- 	ret = lv_attr_dup_with_info_and_seg_status(mem, &status);
+Also, recently, we've added tons of new fields, also fields for
+reporting each attribute in its own field so you have easier job
+when parsing the output (see lvs/vgs/pvs -o help). However,
+some of these new fields doesn't have lvm2app hooks yet written -
+they're going to be added soon.
+-- 
+Peter
 
 
