@@ -1,38 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 30 Jan 2015 15:34:57 +0000 (UTC)
-Subject: master - WHATS_NEW
-Message-ID: <20150130153457.E4EBB614B8@fedorahosted.org>
+Date: Fri, 30 Jan 2015 15:46:44 +0000 (UTC)
+Subject: master - tests: add --force to sfdisk
+Message-ID: <20150130154644.458BE60CD8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04b60e927464454c376ac97d7285affbde186e2f
-Commit:        04b60e927464454c376ac97d7285affbde186e2f
-Parent:        40102ae01401741e007066373e8013f16c694f89
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=71e88f761d4d3517dbc810e28c807fb84b49ac20
+Commit:        71e88f761d4d3517dbc810e28c807fb84b49ac20
+Parent:        04b60e927464454c376ac97d7285affbde186e2f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jan 30 16:34:19 2015 +0100
+AuthorDate:    Fri Jan 30 16:46:06 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jan 30 16:34:19 2015 +0100
+CommitterDate: Fri Jan 30 16:46:06 2015 +0100
 
-WHATS_NEW
+tests: add --force to sfdisk
 
-For thin fix.
+Avoid udev sync troubles for now.
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ test/shell/test-partition.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 45e01fb..b99ce31 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.116 - 
- ====================================
-+  Deactivate unused thin pools activated with lvm2 pre 2.02.112 version.
-   Check lock holding LV when lvconverting stacked raid LV in cluster.
-   Support "udev" ext. dev. info for filters: PV min size, mpath, md, partition.
-   Add fw_raid_component_detection lvm.conf option to enable FW raid detection.
+diff --git a/test/shell/test-partition.sh b/test/shell/test-partition.sh
+index e79216e..f68d572 100644
+--- a/test/shell/test-partition.sh
++++ b/test/shell/test-partition.sh
+@@ -26,7 +26,7 @@ aux prepare_pvs 1 30
+ pvs "$dev1"
+ 
+ # create small partition table
+-echo "1 2" | sfdisk "$dev1"
++echo "1 2" | sfdisk --force "$dev1"
+ 
+ aux notify_lvmetad "$dev1"
+ not pvs "$dev1"
 
 
