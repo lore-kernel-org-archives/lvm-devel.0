@@ -1,54 +1,37 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 30 Jan 2015 10:21:48 +0000 (UTC)
-Subject: master - properties: also recognize LVSINFO, LVSSTATUS and LVSINFOSTATUS as subtypes of LVS
-Message-ID: <20150130102148.418746138D@fedorahosted.org>
+Date: Fri, 30 Jan 2015 10:28:20 +0000 (UTC)
+Subject: master - WHATS_NEW: previous commit
+Message-ID: <20150130102820.4944F60B44@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8650404df1884f1e040aad4343c8db0eac71e125
-Commit:        8650404df1884f1e040aad4343c8db0eac71e125
-Parent:        531cc58d899b7dd1421bfe83f5503aa266390334
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c35503e0f74968224e71d79b4359d32af5bdea93
+Commit:        c35503e0f74968224e71d79b4359d32af5bdea93
+Parent:        8650404df1884f1e040aad4343c8db0eac71e125
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jan 30 11:13:49 2015 +0100
+AuthorDate:    Fri Jan 30 11:28:10 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Jan 30 11:13:49 2015 +0100
+CommitterDate: Fri Jan 30 11:28:10 2015 +0100
 
-properties: also recognize LVSINFO, LVSSTATUS and LVSINFOSTATUS as subtypes of LVS
+WHATS_NEW: previous commit
 
-LVSINFO, LVSSTATUS and LVSINFOSTATUS is the same as LVS, just with some
-extra info/status decoration attached to it. Recognize this when looking
-for properties for lvm2app. This fixes lvm_lv_get_property lvm2app call
-for fields which already use LVS{INFO,STATUS,INFOSTATUS} - currently,
-this is lv_attr field which was converted to LVSINFOSTATUS from
-pure LVS type.
 ---
- lib/report/properties.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 8866928..c1c9563 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -476,7 +476,7 @@ int lvseg_get_property(const struct lv_segment *lvseg,
- int lv_get_property(const struct logical_volume *lv,
- 		    struct lvm_property_type *prop)
- {
--	return prop_get_property(_properties, lv, prop, LVS);
-+	return prop_get_property(_properties, lv, prop, LVS | LVSINFO | LVSSTATUS | LVSINFOSTATUS);
- }
- 
- int vg_get_property(const struct volume_group *vg,
-@@ -500,7 +500,7 @@ int pv_get_property(const struct physical_volume *pv,
- int lv_set_property(struct logical_volume *lv,
- 		    struct lvm_property_type *prop)
- {
--	return prop_set_property(_properties, lv, prop, LVS);
-+	return prop_set_property(_properties, lv, prop, LVS | LVSINFO | LVSSTATUS | LVSINFOSTATUS);
- }
- 
- int vg_set_property(struct volume_group *vg,
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 62f03ef..474cd24 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.116 - 
+ ====================================
++  Fix lvm2app lvm_lv_get_property return value for fields with info/status ioctl.
+   Fix lvm2app regression in lvm_lv_get_attr causing unknown values (2.02.115).
+   Set default cache_mode to writehrough when missing in metadata.
+   Preserve chunk size with repair and metadata swap of a thin pool.
 
 
