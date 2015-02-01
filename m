@@ -1,90 +1,78 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:56 -0400
-Subject: [PATCH 25/38] Make vg->mda_copies persistent in on disk vg metadata.
-In-Reply-To: <1277520789-6808-25-git-send-email-dwysocha@redhat.com>
-References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-19-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-20-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-21-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-22-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-26-git-send-email-dwysocha@redhat.com>
+From: Oliver Rath <rath@mglug.de>
+Date: Sun, 01 Feb 2015 11:35:08 +0100
+Subject: lvm2 compile error with python-3.x on gentoo
+Message-ID: <54CE015C.5080609@mglug.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds the ability to read/write the vg->mda_copies values
-from/to the vg metadata.
+Hi list,
 
-If we read the VG metadata and this field does not exist, we set
-mda_copies to the default value of 0.  Later in the code, we use
-this special '0' value to indicate a disable of metadata balancing.
-This should preserve existing LVM behavior and ensure metadata balancing
-can be turned off should the need arise.
+compiling the actual code-base of lvm2 gets an error on gentoo with a
+newer python-release than 3.2:
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/format_text/export.c      |    1 +
- lib/format_text/import_vsn1.c |    5 +++++
- 2 files changed, 6 insertions(+), 0 deletions(-)
+Ive started with python-3.2:
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 5f02b5d..52ae11c 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -397,6 +397,7 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
- 		outf(f, "allocation_policy = \"%s\"",
- 		     get_alloc_string(vg->alloc));
- 	}
-+	outf(f, "metadata_copies = %u", vg->mda_copies);
- 
- 	return 1;
- }
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index 316adb5..62bcbec 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -23,6 +23,7 @@
- #include "pv_alloc.h"
- #include "segtype.h"
- #include "text_import.h"
-+#include "defaults.h"
- 
- typedef int (*section_fn) (struct format_instance * fid, struct dm_pool * mem,
- 			   struct volume_group * vg, struct config_node * pvn,
-@@ -745,6 +746,10 @@ static struct volume_group *_read_vg(struct format_instance *fid,
- 			return_0;
- 	}
- 
-+	if (!_read_uint32(vgn, "metadata_copies", &vg->mda_copies)) {
-+		vg->mda_copies = DEFAULT_VGMETADATACOPIES;
-+	}
-+
- 	/*
- 	 * The pv hash memorises the pv section names -> pv
- 	 * structures.
--- 
-1.6.0.6
+./configure       --with-thin=internal      
+--with-replicators=internal       --enable-udev_sync      
+--enable-udev_rules       --enable-python-bindings      
+--enable-applib       --enable-cmdlib       --with-cache=internal      
+--enable-lvmetad --enable-dmeventd
+
+[..]
+
+then the build is broken:
+
+[..]
+liblvm_python.c: In function '_liblvm_lvm_lv_get_tags':
+/usr/include/python3.2/tupleobject.h:62:73: warning: assignment makes
+pointer from integer without a cast [enabled by default]
+ #define PyTuple_SET_ITEM(op, i, v) (((PyTupleObject *)(op))->ob_item[i]
+= v)
+                                                                         ^
+liblvm_python.c:1493:3: note: in expansion of macro 'PyTuple_SET_ITEM'
+   PyTuple_SET_ITEM(pytuple, i, PyString_FromString(strl->str));
+   ^
+liblvm_python.c: In function 'initlvm':
+liblvm_python.c:2010:10: warning: assignment makes pointer from integer
+without a cast [enabled by default]
+  if (!(m = Py_InitModule3("lvm", _Liblvm_methods, "Liblvm module")))
+          ^
+error: command 'i686-pc-linux-gnu-gcc' failed with exit status 1
+make[1]: *** [.liblvm_built] Error 1
+rm liblvm_python.c
+make[1]: Leaving directory `/mnt/lvm2/python'
+make: *** [python] Error 2
+
+Now I change to python-2.7:
+heimserver lvm2 # eselect python list
+Available Python interpreters:
+  [1]   python2.6
+  [2]   python2.7
+  [3]   python3.2 *
+  [4]   python3.2
+  [5]   python3.4
+heimserver lvm2 # eselect python set 2
+
+Now all is fine:
+[..]
+running build_ext
+building 'lvm' extension
+creating build/temp.linux-i686-2.7
+i686-pc-linux-gnu-gcc -pthread -fPIC -I../include
+-I/usr/include/python2.7 -c liblvm_python.c -o
+build/temp.linux-i686-2.7/liblvm_python.o
+creating build/lib.linux-i686-2.7
+i686-pc-linux-gnu-gcc -pthread -shared -Wl,-O1 -Wl,--as-needed -L.
+build/temp.linux-i686-2.7/liblvm_python.o -L../liblvm -L/usr/lib
+-llvm2app -lpython2.7 -o build/lib.linux-i686-2.7/lvm.so
+touch .liblvm_built
+rm liblvm_python.c
+make[1]: Leaving directory `/mnt/lvm2/python'
+
+Regards,
+Oliver
 
 
