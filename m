@@ -1,40 +1,68 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Mon,  2 Feb 2015 09:21:12 +0000 (UTC)
-Subject: master - libdaemon: set CLOEXEC on client socket fd
-Message-ID: <20150202092112.49FCD60324@fedorahosted.org>
+Date: Mon,  2 Feb 2015 09:21:14 +0000 (UTC)
+Subject: master - libdaemon: set CLOEXEC flag on systemd socket
+Message-ID: <20150202092114.69F8760324@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9dd81df8b25a51c919679b5f1c4e5fea9269972b
-Commit:        9dd81df8b25a51c919679b5f1c4e5fea9269972b
-Parent:        99c443facce33d2c666b0e043d9e8a6bd1cb40a2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f73526f58cd8e86a19b5cd8a26449ef40c9697ef
+Commit:        f73526f58cd8e86a19b5cd8a26449ef40c9697ef
+Parent:        9dd81df8b25a51c919679b5f1c4e5fea9269972b
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Wed Nov 12 09:50:59 2014 +0100
+AuthorDate:    Fri Jan 30 15:15:24 2015 +0100
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Mon Feb 2 10:15:52 2015 +0100
+CommitterDate: Mon Feb 2 10:20:35 2015 +0100
 
-libdaemon: set CLOEXEC on client socket fd
+libdaemon: set CLOEXEC flag on systemd socket
 
+all sockets opened by a daemon or handed over by systemd
+have to have CLOEXEC flag set. Otherwise we get nasty
+warnings about leaking descriptors in processes spawned by
+daemon.
 ---
- libdaemon/server/daemon-server.c |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ WHATS_NEW                        |    1 +
+ libdaemon/server/daemon-server.c |    8 +++++---
+ 2 files changed, 6 insertions(+), 3 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 3555063..cd4abfe 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.117 - 
+ ====================================
++  set CLOEXEC flag on file descriptors originating in libdaemon
+ 
+ Version 2.02.116 - 30th January 2015
+ ====================================
 diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index a8afcc1..3dffdbb 100644
+index 3dffdbb..5ccf4e9 100644
 --- a/libdaemon/server/daemon-server.c
 +++ b/libdaemon/server/daemon-server.c
-@@ -470,6 +470,9 @@ static int handle_connect(daemon_state s)
- 	if (client.socket_fd < 0)
- 		return 0;
+@@ -221,9 +221,7 @@ static int _open_socket(daemon_state s)
+ 		goto error;
+ 	}
  
-+	 if (fcntl(client.socket_fd, F_SETFD, FD_CLOEXEC))
-+		WARN(&s, "setting CLOEXEC on client socket fd %d failed", client.socket_fd);
+-	/* Set Close-on-exec & non-blocking */
+-	if (fcntl(fd, F_SETFD, 1))
+-		fprintf(stderr, "setting CLOEXEC on socket fd %d failed: %s\n", fd, strerror(errno));
++	/* Set non-blocking */
+ 	if (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK))
+ 		fprintf(stderr, "setting O_NONBLOCK on socket fd %d failed: %s\n", fd, strerror(errno));
+ 
+@@ -572,6 +570,10 @@ void daemon_start(daemon_state s)
+ 			failed = 1;
+ 	}
+ 
++	/* Set Close-on-exec */
++	if (fcntl(s.socket_fd, F_SETFD, 1))
++		fprintf(stderr, "setting CLOEXEC on socket fd %d failed: %s\n", s.socket_fd, strerror(errno));
 +
- 	if (!(ts = dm_malloc(sizeof(thread_state)))) {
- 		if (close(client.socket_fd))
- 			perror("close");
+ 	/* Signal parent, letting them know we are ready to go. */
+ 	if (!s.foreground)
+ 		kill(getppid(), SIGTERM);
 
 
