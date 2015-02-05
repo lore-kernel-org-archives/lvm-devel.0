@@ -1,94 +1,47 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:42:11 +0000 (UTC)
-Subject: master - test: Disable lvmetad logging in lvconvert-{mirror, raid}*.
-Message-ID: <20150205134211.896776036E@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:41:54 +0000 (UTC)
+Subject: master - NIX: Use --batch mode for running the testsuite.
+Message-ID: <20150205134154.BE2996052F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f0d314bd6dcf22cee8e18c6e21fa06829a0f01ac
-Commit:        f0d314bd6dcf22cee8e18c6e21fa06829a0f01ac
-Parent:        fa2e84caa80053dbc5a8b42d2d3e2e1492736243
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dcf5182a96c7eb65fe5d61ce5ceea9ba5bf7a3f2
+Commit:        dcf5182a96c7eb65fe5d61ce5ceea9ba5bf7a3f2
+Parent:        4b5ae314049cebbd1b4f6ad35fd11d957a50db8e
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Jul 21 21:44:53 2014 +0200
+AuthorDate:    Fri Jun 27 23:09:02 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Feb 5 13:47:19 2015 +0100
 
-test: Disable lvmetad logging in lvconvert-{mirror,raid}*.
+NIX: Use --batch mode for running the testsuite.
 
 ---
- test/lib/aux.sh                      |    5 ++++-
- test/shell/lvconvert-mirror-basic.sh |    2 ++
- test/shell/lvconvert-mirror.sh       |    3 +++
- test/shell/lvconvert-raid.sh         |    3 +++
- 4 files changed, 12 insertions(+), 1 deletions(-)
+ nix/default.nix |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 9def304..84edb7d 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -80,6 +80,7 @@ prepare_dmeventd() {
- }
+diff --git a/nix/default.nix b/nix/default.nix
+index 2ea248e..bd3d969 100644
+--- a/nix/default.nix
++++ b/nix/default.nix
+@@ -28,14 +28,14 @@ let
  
- prepare_lvmetad() {
-+	test $# -eq 0 && default_opts="-l wire,debug"
- 	rm -f debug.log
- 	# skip if we don't have our own lvmetad...
- 	(which lvmetad 2>/dev/null | grep "$abs_builddir") || skip
-@@ -90,8 +91,10 @@ prepare_lvmetad() {
- 	local run_valgrind=
- 	test "${LVM_VALGRIND_LVMETAD:-0}" -eq 0 || run_valgrind="run_valgrind"
+          export LVM_TEST_BACKING_DEVICE=/dev/vdb
+          if ! test -e /tmp/xchg/results-ndev/list; then
+-             lvm2-testsuite --outdir /tmp/xchg/results-ndev --continue \
++             lvm2-testsuite --batch --outdir /tmp/xchg/results-ndev --continue \
+                  --flavours ndev-vanilla,ndev-cluster,ndev-lvmetad
+          fi
  
-+	kill_sleep_kill_ LOCAL_LVMETAD ${LVM_VALGRIND_LVMETAD:-0}
-+
- 	echo "preparing lvmetad..."
--	$run_valgrind lvmetad -f "$@" -s "$TESTDIR/lvmetad.socket" -l wire,debug &
-+	$run_valgrind lvmetad -f "$@" -s "$TESTDIR/lvmetad.socket" $default_opts "$@" &
- 	echo $! > LOCAL_LVMETAD
- 	while ! test -e "$TESTDIR/lvmetad.socket"; do echo -n .; sleep .1; done # wait for the socket
- 	echo ok
-diff --git a/test/shell/lvconvert-mirror-basic.sh b/test/shell/lvconvert-mirror-basic.sh
-index 07bafb9..ce5b344 100644
---- a/test/shell/lvconvert-mirror-basic.sh
-+++ b/test/shell/lvconvert-mirror-basic.sh
-@@ -110,6 +110,8 @@ test_lvconvert() {
- 	fi
- }
+          if ! test -e /tmp/xchg/results-udev/list; then
+              (/usr/lib/systemd/systemd-udevd || /usr/lib/udev/udevd || /sbin/udevd || \
+                  find / -xdev -name \*udevd) &
+-             lvm2-testsuite --outdir /tmp/xchg/results-udev --continue \
++             lvm2-testsuite --batch --outdir /tmp/xchg/results-udev --continue \
+                  --flavours udev-vanilla,udev-cluster,udev-lvmetad
+          fi
  
-+# disable lvmetad logging as it bogs down test systems
-+test -e LOCAL_LVMETAD && aux prepare_lvmetad ""
- 
- aux prepare_pvs 5 5
- vgcreate -s 32k $vg $(cat DEVICES)
-diff --git a/test/shell/lvconvert-mirror.sh b/test/shell/lvconvert-mirror.sh
-index d8f057a..6ba2ab2 100644
---- a/test/shell/lvconvert-mirror.sh
-+++ b/test/shell/lvconvert-mirror.sh
-@@ -11,6 +11,9 @@
- 
- . lib/inittest
- 
-+# disable lvmetad logging as it bogs down test systems
-+test -e LOCAL_LVMETAD && aux prepare_lvmetad ""
-+
- aux prepare_pvs 5 10
- # proper DEVRANGE needs to be set according to extent size
- DEVRANGE="0-32"
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index 12e0420..34c94bf 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -11,6 +11,9 @@
- 
- . lib/inittest
- 
-+# disable lvmetad logging as it bogs down test systems
-+test -e LOCAL_LVMETAD && aux prepare_lvmetad ""
-+
- get_image_pvs() {
- 	local d
- 	local images
 
 
