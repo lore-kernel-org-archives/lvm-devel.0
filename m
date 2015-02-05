@@ -1,87 +1,119 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:41:19 +0000 (UTC)
-Subject: master - test: Improve tracking of silence (stuck testcases) in the runner.
-Message-ID: <20150205134119.202D660F11@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:41:21 +0000 (UTC)
+Subject: master - test: Improve IO handling in the runner.
+Message-ID: <20150205134121.3B98160F11@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8c8fb67fc21f7f5c651ea0b30961039c868a0bc6
-Commit:        8c8fb67fc21f7f5c651ea0b30961039c868a0bc6
-Parent:        dc1d15787830e37480925fbd5bb3ab04982ad1dd
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=efb3e7ca007f57c7627ef47e084d2f03cdc906f3
+Commit:        efb3e7ca007f57c7627ef47e084d2f03cdc906f3
+Parent:        8c8fb67fc21f7f5c651ea0b30961039c868a0bc6
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Fri Jun 27 01:21:20 2014 +0200
+AuthorDate:    Fri Jun 27 01:23:02 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Feb 5 13:47:18 2015 +0100
 
-test: Improve tracking of silence (stuck testcases) in the runner.
+test: Improve IO handling in the runner.
 
 ---
- test/lib/runner.cpp |   22 +++++++++++-----------
- 1 files changed, 11 insertions(+), 11 deletions(-)
+ test/lib/runner.cpp |   36 ++++++++++++++++++++++++++++--------
+ 1 files changed, 28 insertions(+), 8 deletions(-)
 
 diff --git a/test/lib/runner.cpp b/test/lib/runner.cpp
-index 1a91738..0c99dbd 100644
+index 0c99dbd..7f1f495 100644
 --- a/test/lib/runner.cpp
 +++ b/test/lib/runner.cpp
-@@ -112,10 +112,9 @@ struct TestCase {
+@@ -108,6 +108,7 @@ struct TestCase {
+ 	TestProcess child;
+ 	std::string name, flavour;
+ 	IO io;
++	BufSink *iobuf;
+ 
  	struct rusage usage;
  	int status;
- 	bool timeout;
--	int silent_ctr;
- 	pid_t pid;
- 
--	time_t start, end;
-+	time_t start, end, silent_start;
- 	Options options;
- 
- 	Journal *journal;
-@@ -148,11 +147,13 @@ struct TestCase {
- 
- 	bool monitor() {
- 		end = time( 0 );
--		if ( wait4(pid, &status, WNOHANG, &usage) != 0 )
-+		if ( wait4(pid, &status, WNOHANG, &usage) != 0 ) {
+@@ -162,6 +163,7 @@ struct TestCase {
+ 				waitpid( pid, &status, 0 );
+ 			}
+ 			timeout = true;
 +			io.sync();
  			return false;
-+		}
+ 		}
  
- 		/* kill off tests after a minute of silence */
--		if ( silent_ctr > 2 * 60 ) {
-+		if ( end - silent_start > 60 ) {
- 			kill( pid, SIGINT );
- 			sleep( 5 ); /* wait a bit for a reaction */
- 			if ( waitpid( pid, &status, WNOHANG ) == 0 ) {
-@@ -175,14 +176,10 @@ struct TestCase {
- 		if ( !options.verbose && !options.interactive )
- 			progress( Update ) << tag( "running" ) << pretty() << " " << end - start << std::flush;
+@@ -179,6 +181,7 @@ struct TestCase {
+ 		if ( select( io.fd + 1, &set, NULL, NULL, &wait ) > 0 )
+ 			silent_start = end; /* something happened */
  
--		if ( select( io.fd + 1, &set, NULL, NULL, &wait ) <= 0 )
--		{
--			silent_ctr++;
--			return true;
--		}
-+		if ( select( io.fd + 1, &set, NULL, NULL, &wait ) > 0 )
-+			silent_start = end; /* something happened */
- 
++		usleep(500000);
  		io.sync();
--		silent_ctr = 0;
  
  		return true;
- 	}
-@@ -216,7 +213,10 @@ struct TestCase {
- 		return null;
- 	}
+@@ -215,8 +218,16 @@ struct TestCase {
  
--	void parent() {
-+	void parent()
-+	{
-+		silent_start = start = time( 0 );
+ 	void parent()
+ 	{
++		::close( child.fd );
++		setupIO();
++
++		journal->started( id() );
+ 		silent_start = start = time( 0 );
+ 
++		progress( First ) << tag( "running" ) << pretty() << std::flush;
++		if ( options.verbose || options.interactive )
++			progress() << std::endl;
 +
  		while ( monitor() );
  
  		Journal::R r = Journal::UNKNOWN;
+@@ -243,8 +254,12 @@ struct TestCase {
+ 			close(fd_debuglog);
+ 		} */
+ 
++		if ( iobuf && r == Journal::FAILED || r == Journal::TIMEOUT )
++			iobuf->dump( std::cout );
++
+ 		journal->done( id(), r );
+ 		progress( Last ) << tag( r ) << pretty() << std::endl;
++		io.clear();
+ 	}
+ 
+ 	void run() {
+@@ -258,21 +273,26 @@ struct TestCase {
+ 			setenv("LVM_TEST_FLAVOUR", flavour.c_str(), 1);
+ 			child.exec();
+ 		} else {
+-			::close( child.fd );
+-			journal->started( id() );
+-			progress( First ) << tag( "running" ) << pretty() << std::flush;
+-			if ( options.verbose || options.interactive )
+-				progress() << std::endl;
+-			start = time( 0 );
+ 			parent();
+ 		}
+ 	}
+ 
++	void setupIO() {
++		iobuf = 0;
++		if ( options.verbose )
++			io.sinks.push_back( new FdSink( 1 ) );
++		else
++			io.sinks.push_back( iobuf = new BufSink() );
++
++		std::string n = id();
++		std::replace( n.begin(), n.end(), '/', '_' );
++		std::string fn = options.outdir + "/" + n + ".txt";
++		io.sinks.push_back( new FileSink( fn ) );
++	}
++
+ 	TestCase( Journal &j, Options opt, std::string path, std::string name, std::string flavour )
+ 		: timeout( false ), child( path ), name( name ), flavour( flavour ), options( opt ), journal( &j )
+ 	{
+-		if ( opt.verbose )
+-			io.sinks.push_back( new FdSink( 1 ) );
+ 	}
+ };
+ 
 
 
