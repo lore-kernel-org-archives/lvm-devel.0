@@ -1,75 +1,99 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:42:07 +0000 (UTC)
-Subject: master - NIX: Add Fedora 20 jobs.
-Message-ID: <20150205134207.698096036E@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:42:09 +0000 (UTC)
+Subject: master - NIX: Re-work VM monitoring.
+Message-ID: <20150205134209.7A0506036E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f96c310eea7e4f6a6cc567e2f5b52a2d1f5f4c90
-Commit:        f96c310eea7e4f6a6cc567e2f5b52a2d1f5f4c90
-Parent:        0abad40f416a3831c9e4b44924468bd7b591a4fa
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa2e84caa80053dbc5a8b42d2d3e2e1492736243
+Commit:        fa2e84caa80053dbc5a8b42d2d3e2e1492736243
+Parent:        f96c310eea7e4f6a6cc567e2f5b52a2d1f5f4c90
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Jun 29 17:37:16 2014 +0200
+AuthorDate:    Sun Jun 29 17:37:35 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Feb 5 13:47:19 2015 +0100
 
-NIX: Add Fedora 20 jobs.
+NIX: Re-work VM monitoring.
 
 ---
- nix/default.nix |   13 ++++++++++++-
- 1 files changed, 12 insertions(+), 1 deletions(-)
+ nix/default.nix |   35 ++++++++++++++++++++++-------------
+ 1 files changed, 22 insertions(+), 13 deletions(-)
 
 diff --git a/nix/default.nix b/nix/default.nix
-index 55ad8e1..c73ec29 100644
+index c73ec29..19df6e8 100644
 --- a/nix/default.nix
 +++ b/nix/default.nix
-@@ -1,5 +1,6 @@
+@@ -1,3 +1,4 @@
++# -*- mode: nix; indent-tabs-mode: nil -*-
  { nixpkgs ? <nixpkgs>, lvm2Src, release ? false,
    rawhide32 ? "" , rawhide64 ? "" ,
-+  fc20_32_updates ? "", fc20_64_updates ? "",
-   fc19_32_updates ? "", fc19_64_updates ? "",
-   fc18_32_updates ? "", fc18_64_updates ? "",
-   T ? "" }:
-@@ -190,6 +191,8 @@ let
-     in {
-       rawhidex86_64 = rawhide "rawhide" "x86_64" rawhide64;
-       rawhidei386 = rawhide "rawhide" "i386" rawhide32;
-+      fedora20ux86_64 = update "20" "x86_64" fc20_64_updates pkgs.vmTools.rpmDistros.fedora20x86_64;
-+      fedora20ui386 = update "20" "i386" fc20_32_updates pkgs.vmTools.rpmDistros.fedora20i386;
-       fedora19ux86_64 = update "19" "x86_64" fc19_64_updates pkgs.vmTools.rpmDistros.fedora19x86_64;
-       fedora19ui386 = update "19" "i386" fc19_32_updates pkgs.vmTools.rpmDistros.fedora19i386;
-       fedora18ux86_64 = update "18" "x86_64" fc18_64_updates pkgs.vmTools.rpmDistros.fedora18x86_64;
-@@ -252,12 +255,18 @@ let
-       fedora16 = [ "clusterlib-devel" "openaislib-devel" "cman" "systemd-devel" "libudev-devel" ];
-       fedora17 = [ "dlm-devel" "corosynclib-devel" "device-mapper-persistent-data"
-                    "dlm" "systemd-devel" "perl-Digest-MD5" "libudev-devel" ];
+   fc20_32_updates ? "", fc20_64_updates ? "",
+@@ -72,34 +73,42 @@ let
+            counter=0
+            rm -f j.current j.last t.current t.last
+            while true; do
++               if ! test -f pid; then
++                   counter=0
++                   sleep 60
++                   continue
++               fi
 +
-       fedora18 = [ "dlm-devel" "corosynclib-devel" "device-mapper-persistent-data"
-                    "dlm" "systemd-devel" "perl-Digest-MD5" ];
-       fedora18u = fedora18;
-+
-       fedora19 = [ "dlm-devel" "dlm" "corosynclib-devel" "perl-Digest-MD5" "systemd-devel" "procps-ng" ];
-       fedora19u = fedora19;
--      rawhide = fedora19;
-+
-+      fedora20 = fedora19;
-+      fedora20u = fedora20;
-+
-+      rawhide = fedora20;
-     };
+                cat xchg/results-ndev/journal xchg/results-udev/journal > j.current 2> /dev/null
+                cat xchg/results-ndev/timestamp xchg/results-udev/timestamp > t.current 2> /dev/null
+-               # the journal didn't change for 10 minutes, kill the VM
+-               if diff j.current j.last > /dev/null 2> /dev/null; then
++               if diff j.current j.last >& /dev/null; then
+                    counter=$(($counter + 1));
+                else
+                    counter=0
+                fi
+-               if test $counter -eq 10 || diff t.current t.last > /dev/null 2> /dev/null; then
+-                   kill $1
+-                   sleep 3600 # wait for the parent to kill us
++               if test $counter -eq 10 || diff t.current t.last >& /dev/null; then
++                   echo
++                   echo "VM got stuck; timestamps: $(cat t.current) $(cat t.last), counter = $counter."
++                   echo "last journal entry: $(tail -n 1 j.current), previously $(tail -n 1 j.last)"
++                   kill -- -$(cat pid)
+                fi
+                sleep 60
+-               mv j.current j.last
+-               mv t.current t.last
++               mv j.current j.last >& /dev/null
++               mv t.current t.last >& /dev/null
+            done
+        }
  
-   wrapper = fun: { arch, image, build ? {}, istest ? false }: with lib;
-@@ -275,6 +284,8 @@ let
-         };
+-       for i in seq 1 20; do # we allow up to 20 VM restarts
++       monitor &
++
++       for i in `seq 1 20`; do # we allow up to 20 VM restarts
+            ${vmtools.qemu}/bin/qemu-img create -f qcow2 /dev/shm/testdisk.img 4G
+            setsid bash -e ${vmtools.vmRunCommand (vmtools.qemuCommandLinux kernel)} &
+            pid=$!
+-           sleep 60 # give the VM some time to get up and running
+-           monitor $pid &
+-           mon=$!
  
-   configs = {
-+    fc20_x86_64 = { arch = "x86_64"; image = "fedora20"; };
-+    fc20_i386   = { arch = "i386"  ; image = "fedora20"; };
-     fc19_x86_64 = { arch = "x86_64"; image = "fedora19"; };
-     fc19_i386   = { arch = "i386"  ; image = "fedora19"; };
-     fc18_x86_64 = { arch = "x86_64"; image = "fedora18"; };
++           sleep 180 # give the VM some time to get up and running
++           echo $pid > pid # monitor go
+            wait $pid || true
+-           kill $mon
++           rm -f pid # disarm the monitor process
+ 
+            # if we have any new results, stash them
+            mv xchg/results-*'/'*.txt $out/test-results/ || true
+@@ -109,7 +118,7 @@ let
+                break
+            fi
+ 
+-           sleep 5 # wait for the VM to clean up before starting up a new one
++           sleep 10 # wait for the VM to clean up before starting up a new one
+        done
+ 
+        cat xchg/results-ndev/list xchg/results-udev/list > $out/test-results/list || true
 
 
