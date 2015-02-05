@@ -1,57 +1,53 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:43:21 +0000 (UTC)
-Subject: master - memlock: Do not check memory balance if RUNNING_ON_VALGRIND.
-Message-ID: <20150205134321.6A25B60E22@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:43:25 +0000 (UTC)
+Subject: master - test: Call $VALGRIND directly in lvm-wrapper.
+Message-ID: <20150205134325.8FF0C60E22@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2a8dc7fb538595ffecee53298a38a284f8df89c0
-Commit:        2a8dc7fb538595ffecee53298a38a284f8df89c0
-Parent:        d571eab3b2bbb9be80e75e633bf2e30834975552
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1f727f3f3d925af35877ad572ba606965bc6f1e7
+Commit:        1f727f3f3d925af35877ad572ba606965bc6f1e7
+Parent:        3af008d4051d54d9138933d99ca234ede8ea6b05
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Oct 1 08:17:59 2014 +0200
+AuthorDate:    Wed Oct 1 08:19:05 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Feb 5 13:50:34 2015 +0100
+CommitterDate: Thu Feb 5 13:51:06 2015 +0100
 
-memlock: Do not check memory balance if RUNNING_ON_VALGRIND.
+test: Call $VALGRIND directly in lvm-wrapper.
 
 ---
- lib/mm/memlock.c |    9 +++++++--
- 1 files changed, 7 insertions(+), 2 deletions(-)
+ test/lib/aux.sh         |    2 +-
+ test/lib/lvm-wrapper.sh |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index c5358dc..2327d4c 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -27,6 +27,10 @@
- #include <sys/resource.h>
- #include <malloc.h>
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index ca06c69..88b821a 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -14,7 +14,7 @@
+ run_valgrind() {
+ 	# Execute script which may use $TESTNAME for creating individual
+ 	# log files for each execute command
+-	exec "${VALGRIND:-valg}" "$@"
++	exec "${VALGRIND:-valgrind}" "$@"
+ }
  
-+#ifdef HAVE_VALGRIND
-+#include <valgrind.h>
-+#endif
-+
- #ifndef DEVMAPPER_SUPPORT
+ expect_failure() {
+diff --git a/test/lib/lvm-wrapper.sh b/test/lib/lvm-wrapper.sh
+index 3eb0d99..496facc 100644
+--- a/test/lib/lvm-wrapper.sh
++++ b/test/lib/lvm-wrapper.sh
+@@ -24,7 +24,7 @@ test -z "$LVM_GDB" || exec gdb --readnow --args "$abs_top_builddir/tools/lvm" $C
+ # Multiple level of LVM_VALGRIND support
+ # the higher level the more commands are traced
+ if test -n "$LVM_VALGRIND"; then
+-	RUN_DBG="aux run_valgrind";
++	RUN_DBG="${VALGRIND:-valgrind}";
+ fi
  
- void memlock_inc_daemon(struct cmd_context *cmd)
-@@ -254,12 +258,13 @@ static int _maps_line(const struct dm_config_node *cn, lvmlock_t lock,
- 		}
- 	}
- 
--#ifdef VALGRIND_POOL
-+#ifdef HAVE_VALGRIND
- 	/*
- 	 * Valgrind is continually eating memory while executing code
- 	 * so we need to deactivate check of locked memory size
-          */
--	sz -= sz; /* = 0, but avoids getting warning about dead assigment */
-+	if (RUNNING_ON_VALGRIND)
-+		sz -= sz; /* = 0, but avoids getting warning about dead assigment */
- 
- #endif
- 	*mstats += sz;
+ if test -n "$LVM_STRACE"; then
 
 
