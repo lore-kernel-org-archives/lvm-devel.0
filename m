@@ -1,50 +1,38 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:43:10 +0000 (UTC)
-Subject: master - NIX: Make timeout and test envvars configurable via --arg.
-Message-ID: <20150205134310.CA4DF60E22@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:43:12 +0000 (UTC)
+Subject: master - NIX: Install valgrind, gdb and strace in the test environment.
+Message-ID: <20150205134312.E7EDF60E22@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e4d5e22c91561a6722996e6b5c9735ae1397571d
-Commit:        e4d5e22c91561a6722996e6b5c9735ae1397571d
-Parent:        c2b7642d4d8df4a9d6798f339415466c9b69a805
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=41c2e07a8dee3d3e5212c7c1939ddbd4624d3bed
+Commit:        41c2e07a8dee3d3e5212c7c1939ddbd4624d3bed
+Parent:        e4d5e22c91561a6722996e6b5c9735ae1397571d
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Sep 30 17:06:19 2014 +0200
+AuthorDate:    Tue Sep 30 17:06:46 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Feb 5 13:47:21 2015 +0100
+CommitterDate: Thu Feb 5 13:50:23 2015 +0100
 
-NIX: Make timeout and test envvars configurable via --arg.
+NIX: Install valgrind, gdb and strace in the test environment.
 
 ---
- nix/default.nix |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ nix/default.nix |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
 diff --git a/nix/default.nix b/nix/default.nix
-index 5999bd2..fe1c377 100644
+index fe1c377..8fc2152 100644
 --- a/nix/default.nix
 +++ b/nix/default.nix
-@@ -4,7 +4,7 @@
-   fc20_32_updates ? "", fc20_64_updates ? "",
-   fc19_32_updates ? "", fc19_64_updates ? "",
-   fc18_32_updates ? "", fc18_64_updates ? "",
--  T ? "" }:
-+  T ? "", ENV ? "", timeout ? 60 }:
- 
- let
-   pkgs = import nixpkgs {};
-@@ -58,8 +58,9 @@ let
-            watch="--watch /xchg/udevd.log"
-          fi
- 
-+         export ${ENV}
-          lvm2-testsuite --batch --outdir /xchg/results --continue \
--             --fatal-timeouts --heartbeat /xchg/heartbeat \
-+             --timeout ${toString timeout} --fatal-timeouts --heartbeat /xchg/heartbeat \
-              --flavours ${flavour} $watch --kmsg ${if lib.eqStrings T "" then "" else "--only ${T}"}
- 
-          # TODO: coverage reports
+@@ -285,6 +285,7 @@ let
+   extra_rpms = rec {
+       common = [ "libselinux-devel" "libsepol-devel" "ncurses-devel" "readline-devel"
+                  "corosynclib-devel"
++                 "valgrind" "strace" "gdb"
+                  "redhat-rpm-config" # needed for rpmbuild of lvm
+                  "which" "e2fsprogs" # needed for fsadm
+                  "perl-GD" # for lcov
 
 
