@@ -1,96 +1,68 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:41:48 +0000 (UTC)
-Subject: master - test: Implement --only option to runner.
-Message-ID: <20150205134148.8541260F11@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:41:58 +0000 (UTC)
+Subject: master - NIX: Adapt to the append-based test journal.
+Message-ID: <20150205134158.F2CCA6036E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d488f032298ee6e8bf3f0abc50e2756f11a73196
-Commit:        d488f032298ee6e8bf3f0abc50e2756f11a73196
-Parent:        a8eb70209322f4344b9b11d190f64a9184fe23eb
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2b6f9152ccbc74ab4c599089dc6bf0ae43ccd123
+Commit:        2b6f9152ccbc74ab4c599089dc6bf0ae43ccd123
+Parent:        285db7a240229e17fabaaf03ad9febd90afe8a8e
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Jul 1 14:07:27 2014 +0200
+AuthorDate:    Sat Jun 28 11:16:22 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Feb 5 13:47:18 2015 +0100
+CommitterDate: Thu Feb 5 13:47:19 2015 +0100
 
-test: Implement --only option to runner.
+NIX: Adapt to the append-based test journal.
 
 ---
- test/lib/runner.cpp |   31 ++++++++++++++++++++++++-------
- 1 files changed, 24 insertions(+), 7 deletions(-)
+ nix/default.nix |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/test/lib/runner.cpp b/test/lib/runner.cpp
-index 303b66d..1522fd5 100644
---- a/test/lib/runner.cpp
-+++ b/test/lib/runner.cpp
-@@ -62,7 +62,7 @@ bool interrupt = false;
- struct Options {
- 	bool verbose, batch, interactive, cont;
- 	std::string testdir, outdir;
--	std::vector< std::string > flavours;
-+	std::vector< std::string > flavours, filter;
- 	Options() : verbose( false ), batch( false ), interactive( false ), cont( false ) {}
- };
+diff --git a/nix/default.nix b/nix/default.nix
+index 9b466ba..843440e 100644
+--- a/nix/default.nix
++++ b/nix/default.nix
+@@ -16,7 +16,7 @@ let
+          #!/bin/bash
+          export PATH=/usr/bin:/bin:/usr/sbin:/sbin
  
-@@ -375,6 +375,15 @@ struct Main {
- 					continue;
- 				if ( i->substr( 0, 4 ) == "lib/" )
- 					continue;
-+				bool filter = !options.filter.empty();
-+
-+				for ( std::vector< std::string >::iterator filt = options.filter.begin();
-+				      filt != options.filter.end(); ++filt ) {
-+					if ( i->find( *filt ) != std::string::npos )
-+						filter = false;
-+				}
-+				if ( filter )
-+					continue;
- 				cases.push_back( TestCase( journal, options, options.testdir + *i, *i, *flav ) );
- 				cases.back().options = options;
- 			}
-@@ -473,6 +482,14 @@ bool hasenv( const char *name ) {
- 	return true;
- }
+-	 # we always run in a fresh image, so need to install everything again
++         # we always run in a fresh image, so need to install everything again
+          ls ${build}/rpms/*/*.rpm | grep -v sysvinit | xargs rpm -Uvh # */
+          rpm -Uv ${pkgs.fetchurl {
+             url = "http://archives.fedoraproject.org/pub/archive/fedora/linux/updates/16/i386/lcov-1.9-2.fc16.noarch.rpm";
+@@ -72,8 +72,9 @@ let
+        monitor() {
+            set +e
+            counter=0
++           rm -f j.current j.last t.current t.last
+            while true; do
+-               cat xchg/results-ndev/journal* xchg/results-udev/journal* > j.current 2> /dev/null
++               cat xchg/results-ndev/journal xchg/results-udev/journal > j.current 2> /dev/null
+                cat xchg/results-ndev/timestamp xchg/results-udev/timestamp > t.current 2> /dev/null
+                # the journal didn't change for 10 minutes, kill the VM
+                if diff j.current j.last > /dev/null 2> /dev/null; then
+@@ -95,6 +96,7 @@ let
+            ${vmtools.qemu}/bin/qemu-img create -f qcow2 /dev/shm/testdisk.img 4G
+            setsid bash -e ${vmtools.vmRunCommand (vmtools.qemuCommandLinux kernel)} &
+            pid=$!
++           sleep 60 # give the VM some time to get up and running
+            monitor $pid &
+            mon=$!
  
-+template< typename C >
-+void split( std::string s, C &c ) {
-+	std::stringstream ss( s );
-+	std::string item;
-+	while ( std::getline( ss, item, ',' ) )
-+		c.push_back( item );
-+}
-+
- int main(int argc, char **argv)
- {
- 	Args args( argc, argv );
-@@ -481,6 +498,9 @@ int main(int argc, char **argv)
- 	if ( args.has( "--continue" ) )
- 		opt.cont = true;
+@@ -112,8 +114,7 @@ let
+            sleep 5 # wait for the VM to clean up before starting up a new one
+        done
  
-+	if ( args.has( "--only" ) )
-+		split( args.opt( "--only" ), opt.filter );
-+
- 	if ( args.has( "--batch" ) || hasenv( "BATCH" ) ) {
- 		opt.verbose = false;
- 		opt.batch = true;
-@@ -497,12 +517,9 @@ int main(int argc, char **argv)
- 		opt.interactive = true;
- 	}
+-       # (ab)use the journals in case the lists weren't actually written yet
+-       cat xchg/results-ndev/journal xchg/results-udev/journal > $out/test-results/list || true
++       cat xchg/results-ndev/list xchg/results-udev/list > $out/test-results/list || true
+      '';
+   };
  
--	if ( args.has( "--flavours" ) ) {
--		std::stringstream ss( args.opt( "--flavours" ) );
--		std::string item;
--		while ( std::getline( ss, item, ',' ) )
--			opt.flavours.push_back( item );
--	} else
-+	if ( args.has( "--flavours" ) )
-+		split( args.opt( "--flavours" ), opt.flavours );
-+	else
- 		opt.flavours.push_back( "vanilla" );
- 
- 	opt.outdir = args.opt( "--outdir" );
 
 
