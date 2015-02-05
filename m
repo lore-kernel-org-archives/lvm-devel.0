@@ -1,73 +1,65 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:41:06 +0000 (UTC)
-Subject: master - test: Use the new flavour setup files in lib/inittest.
-Message-ID: <20150205134106.8F89460A54@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:41:08 +0000 (UTC)
+Subject: master - test: Make it possible to run tests from an installed location.
+Message-ID: <20150205134108.A49AF60A54@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=569895394895ea4354a3ab8de919f99acf5a5e87
-Commit:        569895394895ea4354a3ab8de919f99acf5a5e87
-Parent:        9752ee8ed2322b9f35f16e259c87b525796d4b2d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b4215f956f4576ce38b19a9a9ca216e9d096fe5a
+Commit:        b4215f956f4576ce38b19a9a9ca216e9d096fe5a
+Parent:        569895394895ea4354a3ab8de919f99acf5a5e87
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Fri Jun 27 00:58:28 2014 +0200
+AuthorDate:    Fri Jun 27 00:59:17 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Feb 5 13:47:17 2015 +0100
 
-test: Use the new flavour setup files in lib/inittest.
+test: Make it possible to run tests from an installed location.
 
 ---
- test/lib/inittest.sh |   22 ++++++++++------------
- 1 files changed, 10 insertions(+), 12 deletions(-)
+ test/lib/utils.sh |   29 ++++++++++++++++-------------
+ 1 files changed, 16 insertions(+), 13 deletions(-)
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index 731cd7a..7f49b02 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -39,19 +39,23 @@ test -n "$BASH" && trap 'set +vx; STACKTRACE; set -vx' ERR
- trap 'aux teardown' EXIT # don't forget to clean up
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index b4cfdeb..70f8ca5 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -207,18 +207,21 @@ prepare_test_vars() {
+ 	done
+ }
  
- cd "$TESTDIR"
-+mkdir lib
-+
-+# Setting up symlink from $i to $TESTDIR/lib
-+test -n "$abs_top_builddir" && \
-+    find "$abs_top_builddir/daemons/dmeventd/plugins/" -name '*.so' \
-+    -exec ln -s -t lib "{}" +
-+find "$TESTOLDPWD/lib" ! \( -name '*.sh' -o -name '*.[cdo]' \
-+    -o -name '*~' \)  -exec ln -s -t lib "{}" +
- 
- if test -n "$LVM_TEST_FLAVOUR"; then
--	touch flavour_overrides
--	env | grep ^${LVM_TEST_FLAVOUR} | while read var; do
--		(echo -n "export "; echo $var | sed -e s,^${LVM_TEST_FLAVOUR}_,,) >> flavour_overrides
--	done
--	. flavour_overrides
-+	. lib/flavour-$LVM_TEST_FLAVOUR
- fi
- 
- DM_DEFAULT_NAME_MANGLING_MODE=none
- DM_DEV_DIR="$TESTDIR/dev"
- LVM_SYSTEM_DIR="$TESTDIR/etc"
--mkdir "$LVM_SYSTEM_DIR" "$TESTDIR/lib" "$DM_DEV_DIR"
-+mkdir "$LVM_SYSTEM_DIR" "$DM_DEV_DIR"
- if test -n "$LVM_TEST_DEVDIR" ; then
- 	DM_DEV_DIR=$LVM_TEST_DEVDIR
- else
-@@ -76,12 +80,6 @@ else
- 	echo "Selinux mode is not installed."
- fi
- 
--# Setting up symlink from $i to $TESTDIR/lib
--find "$abs_top_builddir/daemons/dmeventd/plugins/" -name '*.so' \
--	-exec ln -s -t lib "{}" +
--find "$abs_top_builddir/test/lib" ! \( -name '*.sh' -o -name '*.[cdo]' \
--	-o -name '*~' \)  -exec ln -s -t lib "{}" +
+-# check if $abs_top_builddir was already set via 'lib/paths'
+-test -n "${abs_top_builddir+varset}" || . lib/paths || die "you must run make first"
 -
- # Set vars from utils now that we have TESTDIR/PREFIX/...
- prepare_test_vars
+-case "$PATH" in
+-*"$abs_top_builddir/test/lib"*) ;;
+-*)
+-	PATH="$abs_top_builddir/test/lib":"$abs_top_builddir/test/api":$PATH
+-	for i in `find $abs_top_builddir -name \*.so`; do
+-		p=`dirname $i`
+-		LD_LIBRARY_PATH="$p":$LD_LIBRARY_PATH
+-	done
+-        export PATH LD_LIBRARY_PATH ;;
+-esac
++if test -z "${abs_top_builddir+varset}" && test -z "${installed_testsuite+varset}"; then
++    . lib/paths || die "something went wrong -- lib/paths is missing?"
++fi
++
++if test -z "${installed_testsuite+varset}"; then
++    case "$PATH" in
++    *"$abs_top_builddir/test/lib"*) ;;
++    *)
++	    PATH="$abs_top_builddir/test/lib":"$abs_top_builddir/test/api":$PATH
++	    for i in `find $abs_top_builddir -name \*.so`; do
++		    p=`dirname $i`
++		    LD_LIBRARY_PATH="$p":$LD_LIBRARY_PATH
++	    done
++            export PATH LD_LIBRARY_PATH ;;
++    esac
++fi
  
+ test -z "$PREFIX" || prepare_test_vars
 
 
