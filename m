@@ -1,57 +1,45 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:43:02 +0000 (UTC)
-Subject: master - NIX: Detect that the VM booted up more directly.
-Message-ID: <20150205134302.6CF1460E22@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:43:04 +0000 (UTC)
+Subject: master - test: Re-try with loopback if a backing device is too small.
+Message-ID: <20150205134304.867C760E22@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f3cc6576ee065b02ff58974f0f0e8792dffbd824
-Commit:        f3cc6576ee065b02ff58974f0f0e8792dffbd824
-Parent:        734a183c5658c1f305a375da02bb24cccad566df
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7a0aa25c28ccb89834a83b06917be803713b4804
+Commit:        7a0aa25c28ccb89834a83b06917be803713b4804
+Parent:        f3cc6576ee065b02ff58974f0f0e8792dffbd824
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Sep 30 11:02:25 2014 +0200
+AuthorDate:    Tue Sep 30 16:19:14 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Feb 5 13:47:21 2015 +0100
 
-NIX: Detect that the VM booted up more directly.
+test: Re-try with loopback if a backing device is too small.
 
 ---
- nix/default.nix |    9 ++++++++-
- 1 files changed, 8 insertions(+), 1 deletions(-)
+ test/lib/aux.sh |    8 +++++++-
+ 1 files changed, 7 insertions(+), 1 deletions(-)
 
-diff --git a/nix/default.nix b/nix/default.nix
-index 734fb3b..5999bd2 100644
---- a/nix/default.nix
-+++ b/nix/default.nix
-@@ -45,6 +45,7 @@ let
-             sha256 = "0ycdh5mb7p5ll76mqk0p6gpnjskvxxgh3a3bfr1crh94nvpwhp4z"; }}
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 84edb7d..32268a6 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -370,7 +370,13 @@ prepare_devs() {
+ 		DEVICES[$count]=$dev
+ 		count=$(( $count + 1 ))
+ 		echo 0 $size linear "$BACKING_DEV" $((($i-1)*$size)) > "$name.table"
+-		dmsetup create -u "TEST-$name" "$name" "$name.table"
++		if not dmsetup create -u "TEST-$name" "$name" "$name.table" &&
++		   test -n "$LVM_TEST_BACKING_DEVICE";
++		then # maybe the backing device is too small for this test
++		    LVM_TEST_BACKING_DEVICE=
++		    prepare_devs "$@"
++		    return $?
++		fi
+ 	done
+ 	finish_udev_transaction
  
-          mkdir -p /xchg/results
-+         touch /xchg/booted
- 
-          dmsetup targets
- 
-@@ -123,11 +124,17 @@ let
-        monitor &
- 
-        for i in `seq 1 20`; do # we allow up to 20 VM restarts
-+           rm -f xchg/booted
-            ${vmtools.qemu}/bin/qemu-img create -f qcow2 /dev/shm/testdisk.img 4G
-            setsid bash -e ${vmtools.vmRunCommand (vmtools.qemuCommandLinux kernel)} &
-            pid=$!
- 
--           sleep 180 # give the VM some time to get up and running
-+           # give the VM some time to get up and running
-+           slept=0
-+           while test $slept -le 180 && test ! -e xchg/booted; do
-+               sleep 10
-+               slept=$(($slept + 10))
-+           done
-            echo $pid > pid # monitor go
-            wait $pid || true
-            rm -f pid # disarm the monitor process
 
 
