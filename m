@@ -1,158 +1,97 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:43:17 +0000 (UTC)
-Subject: master - test: Add support for running LVM commands in tests through strace.
-Message-ID: <20150205134317.277DB60E22@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:43:19 +0000 (UTC)
+Subject: master - configure: Look for valgrind.h independently of VALGRIND_POOLS.
+Message-ID: <20150205134319.3CED060E22@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5d833fd4587ce30eb1fb4e20363ede07c40bc2f0
-Commit:        5d833fd4587ce30eb1fb4e20363ede07c40bc2f0
-Parent:        a6d006d9db033e8251fd58848f8876b3e3d0fe90
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d571eab3b2bbb9be80e75e633bf2e30834975552
+Commit:        d571eab3b2bbb9be80e75e633bf2e30834975552
+Parent:        5d833fd4587ce30eb1fb4e20363ede07c40bc2f0
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Sep 30 17:09:26 2014 +0200
+AuthorDate:    Wed Oct 1 08:16:27 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Feb 5 13:50:34 2015 +0100
 
-test: Add support for running LVM commands in tests through strace.
+configure: Look for valgrind.h independently of VALGRIND_POOLS.
 
 ---
- test/lib/aux.sh         |   18 +++++++++---------
- test/lib/lvm-wrapper.sh |   23 ++++++++++++++---------
- test/lib/utils.sh       |    1 +
- 3 files changed, 24 insertions(+), 18 deletions(-)
+ configure.in      |   14 ++++++++++----
+ lib/Makefile.in   |    2 +-
+ libdm/Makefile.in |    5 +----
+ make.tmpl.in      |    1 +
+ 4 files changed, 13 insertions(+), 9 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index fd537bd..ca06c69 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -22,7 +22,7 @@ expect_failure() {
- }
+diff --git a/configure.in b/configure.in
+index add6653..18e1c17 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1023,12 +1023,18 @@ AC_ARG_ENABLE(valgrind_pool,
+ 	      VALGRIND_POOL=$enableval, VALGRIND_POOL=no)
+ AC_MSG_RESULT($VALGRIND_POOL)
  
- prepare_clvmd() {
--	rm -f debug.log
-+	rm -f debug.log strace.log
- 	test "${LVM_TEST_LOCKING:-0}" -ne 3 && return # not needed
- 
- 	if pgrep clvmd ; then
-@@ -54,7 +54,7 @@ prepare_clvmd() {
- }
- 
- prepare_dmeventd() {
--	rm -f debug.log
-+	rm -f debug.log strace.log
- 	if pgrep dmeventd ; then
- 		echo "Cannot test dmeventd with real dmeventd ($(pgrep dmeventd)) running."
- 		skip
-@@ -81,7 +81,7 @@ prepare_dmeventd() {
- 
- prepare_lvmetad() {
- 	test $# -eq 0 && default_opts="-l wire,debug"
--	rm -f debug.log
-+	rm -f debug.log strace.log
- 	# skip if we don't have our own lvmetad...
- 	(which lvmetad 2>/dev/null | grep "$abs_builddir") || skip
- 
-@@ -227,7 +227,7 @@ teardown() {
- 		# Avoid activation of dmeventd if there is no pid
- 		cfg=$(test -s LOCAL_DMEVENTD || echo "--config activation{monitoring=0}")
- 		vgremove -ff $cfg  \
--			$vg $vg1 $vg2 $vg3 $vg4 &>/dev/null || rm -f debug.log
-+			$vg $vg1 $vg2 $vg3 $vg4 &>/dev/null || rm -f debug.log strace.log
- 	}
- 
- 	kill_sleep_kill_ LOCAL_CLVMD ${LVM_VALGRIND_CLVMD:-0}
-@@ -478,7 +478,7 @@ enable_dev() {
- 	    shift
- 	fi
- 
--	rm -f debug.log
-+	rm -f debug.log strace.log
- 	init_udev_transaction
- 	for dev in "$@"; do
- 		local name=$(echo "$dev" | sed -e 's,.*/,,')
-@@ -601,7 +601,7 @@ unhide_dev() {
- }
- 
- mkdev_md5sum() {
--	rm -f debug.log
-+	rm -f debug.log strace.log
- 	mkfs.ext2 "$DM_DEV_DIR/$1/$2" || return 1
- 	md5sum "$DM_DEV_DIR/$1/$2" > "md5.$1-$2"
- }
-@@ -704,12 +704,12 @@ apitest() {
- 	local t=$1
- 	shift
- 	test -x "$abs_top_builddir/test/api/$t.t" || skip
--	"$abs_top_builddir/test/api/$t.t" "$@" && rm -f debug.log
-+	"$abs_top_builddir/test/api/$t.t" "$@" && rm -f debug.log strace.log
- }
- 
- api() {
- 	test -x "$abs_top_builddir/test/api/wrapper" || skip
--	"$abs_top_builddir/test/api/wrapper" "$@" && rm -f debug.log
-+	"$abs_top_builddir/test/api/wrapper" "$@" && rm -f debug.log strace.log
- }
- 
- mirror_recovery_works() {
-@@ -820,7 +820,7 @@ version_at_least() {
- #
- # i.e.   dm_target_at_least  dm-thin-pool  1 0
- target_at_least() {
--	rm -f debug.log
-+	rm -f debug.log strace.log
- 	case "$1" in
- 	  dm-*) modprobe "$1" || true ;;
- 	esac
-diff --git a/test/lib/lvm-wrapper.sh b/test/lib/lvm-wrapper.sh
-index 013bc13..3eb0d99 100644
---- a/test/lib/lvm-wrapper.sh
-+++ b/test/lib/lvm-wrapper.sh
-@@ -24,17 +24,22 @@ test -z "$LVM_GDB" || exec gdb --readnow --args "$abs_top_builddir/tools/lvm" $C
- # Multiple level of LVM_VALGRIND support
- # the higher level the more commands are traced
- if test -n "$LVM_VALGRIND"; then
--	RUN_VALGRIND="aux run_valgrind";
--	case "$CMD" in
--	  lvs|pvs|vgs|vgck|vgscan)
--		test "$LVM_VALGRIND" -gt 2 || unset RUN_VALGRIND ;;
--	  pvcreate|pvremove|lvremove|vgcreate|vgremove)
--		test "$LVM_VALGRIND" -gt 1 || unset RUN_VALGRIND ;;
--	  *)
--		test "$LVM_VALGRIND" -gt 0 || unset RUN_VALGRIND ;;
--	esac
-+	RUN_DBG="aux run_valgrind";
- fi
- 
-+if test -n "$LVM_STRACE"; then
-+	RUN_DBG="strace $LVM_STRACE -o strace.log"
+-if test "$VALGRIND_POOL" = yes; then
+-	pkg_config_init
+-	PKG_CHECK_MODULES(VALGRIND, valgrind, [], [AC_MSG_ERROR(bailing out)])
++pkg_config_init
++PKG_CHECK_MODULES(VALGRIND, valgrind, [HAVE_VALGRIND=yes], [if test x$VALGRIND_POOL = xyes; then AC_MSG_ERROR(bailing out); fi])
++AC_SUBST(VALGRIND_CFLAGS)
++
++if test x$HAVE_VALGRIND = xyes; then
++	AC_DEFINE([HAVE_VALGRIND], 1, [valgrind.h found])
++	AC_SUBST(HAVE_VALGRIND)
 +fi
 +
-+set -x
-+
-+case "$CMD" in
-+  lvs|pvs|vgs|vgck|vgscan)
-+	test ${LVM_DEBUG_LEVEL:-0} -lt 2 && RUN_DBG= ;;
-+  pvcreate|pvremove|lvremove|vgcreate|vgremove)
-+	test ${LVM_DEBUG_LEVEL:-0} -lt 1 && RUN_DBG= ;;
-+esac
-+
- # the exec is important, because otherwise fatal signals inside "not" go unnoticed
- if test -n "$abs_top_builddir"; then
-     exec $RUN_DBG "$abs_top_builddir/tools/lvm" $CMD "$@"
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 70f8ca5..0599f4d 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -129,6 +129,7 @@ STACKTRACE() {
++if test x$VALGRIND_POOL = xyes; then
+ 	AC_DEFINE([VALGRIND_POOL], 1, [Enable a valgrind aware build of pool])
+ 	AC_SUBST(VALGRIND_POOL)
+-	AC_SUBST(VALGRIND_CFLAGS)
+ fi
  
- 	test -z "$LVM_TEST_NODEBUG" -a -f debug.log && {
- 		sed -e "s,^,## DEBUG: ,;s,$top_srcdir/\?,," < debug.log
-+		test -e strace.log && sed -e "s,^,## STRACE: ,;s,$top_srcdir/\?,," < strace.log
- 	}
+ ################################################################################
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 62600d5..749342d 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -222,7 +222,7 @@ CFLOW_LIST_TARGET = $(LIB_NAME).cflow
  
- 	test -f SKIP_THIS_TEST && exit 200
+ include $(top_builddir)/make.tmpl
+ 
+-CFLAGS += $(BLKID_CFLAGS) $(UDEV_CFLAGS)
++CFLAGS += $(BLKID_CFLAGS) $(UDEV_CFLAGS) $(VALGRIND_CFLAGS)
+ 
+ $(SUBDIRS): $(LIB_STATIC)
+ 
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index e50b174..8e057c3 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -34,10 +34,7 @@ SOURCES =\
+ 	$(interface)/libdm-iface.c
+ 
+ INCLUDES = -I$(srcdir)/$(interface) -I$(srcdir)
+-ifeq ("@VALGRIND_POOL@", "yes")
+-INCLUDES += @VALGRIND_CFLAGS@
+-endif
+-CFLAGS += $(UDEV_CFLAGS)
++CFLAGS += $(UDEV_CFLAGS) $(VALGRIND_CFLAGS)
+ 
+ ifeq ("@STATIC_LINK@", "yes")
+ LIB_STATIC = $(interface)/libdevmapper.a
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 3a82731..cfa065c 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -61,6 +61,7 @@ UDEV_CFLAGS = @UDEV_CFLAGS@
+ UDEV_LIBS = @UDEV_LIBS@
+ BLKID_CFLAGS = @BLKID_CFLAGS@
+ BLKID_LIBS = @BLKID_LIBS@
++VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
+ TESTING = @TESTING@
+ 
+ # Setup directory variables
 
 
