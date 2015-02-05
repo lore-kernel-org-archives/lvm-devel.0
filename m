@@ -1,67 +1,99 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon,  9 Feb 2015 10:48:35 +0000 (UTC)
-Subject: master - reporter: properly check for _do_info_and_status return value and free the mempool if created within the fn
-Message-ID: <20150209104835.DCAA76022B@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Thu,  5 Feb 2015 13:41:56 +0000 (UTC)
+Subject: master - NIX: Implement a smarter VM monitoring loop.
+Message-ID: <20150205134156.D74996052F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4e4ea46cfee9afcfc9a48eb60925177890c5ec31
-Commit:        4e4ea46cfee9afcfc9a48eb60925177890c5ec31
-Parent:        4065741a672d97f1c6b158ad781bc486c38e7c0a
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Feb 9 11:48:21 2015 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Feb 9 11:48:21 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=285db7a240229e17fabaaf03ad9febd90afe8a8e
+Commit:        285db7a240229e17fabaaf03ad9febd90afe8a8e
+Parent:        dcf5182a96c7eb65fe5d61ce5ceea9ba5bf7a3f2
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Fri Jun 27 23:09:30 2014 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Thu Feb 5 13:47:19 2015 +0100
 
-reporter: properly check for _do_info_and_status return value and free the mempool if created within the fn
+NIX: Implement a smarter VM monitoring loop.
 
 ---
- tools/reporter.c |   16 ++++++----------
- 1 files changed, 6 insertions(+), 10 deletions(-)
+ nix/default.nix |   48 ++++++++++++++++++++++++++++++++++++++----------
+ 1 files changed, 38 insertions(+), 10 deletions(-)
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 7c481be..20fa4ab 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -92,10 +92,8 @@ static int _do_lvs_with_info_and_status_single(struct cmd_context *cmd,
- 	};
- 	int r = ECMD_FAILED;
+diff --git a/nix/default.nix b/nix/default.nix
+index bd3d969..9b466ba 100644
+--- a/nix/default.nix
++++ b/nix/default.nix
+@@ -61,30 +61,58 @@ let
+      builder = pkgs.writeScript "vm-test" ''
+        #!${pkgs.bash}/bin/bash
+        . $stdenv/setup
+-       set -x
  
--	if (!_do_info_and_status(cmd, lv, NULL, &status, do_info, do_status)) {
--		stack;
--		return r;
--	}
-+	if (!_do_info_and_status(cmd, lv, NULL, &status, do_info, do_status))
-+		goto_out;
+        export QEMU_OPTS="-drive file=/dev/shm/testdisk.img,if=virtio -m 256M"
+-       export KERNEL_OPTS="log_buf_len=131072"
++       export KERNEL_OPTS="log_buf_len=131072 loglevel=1"
+        export mountDisk=1
  
- 	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL,
- 			   &status, NULL))
-@@ -143,10 +141,8 @@ static int _do_segs_with_info_and_status_single(struct cmd_context *cmd,
- 	};
- 	int r = ECMD_FAILED;
+        mkdir -p $out/test-results $out/nix-support
+        touch $out/nix-support/failed
  
--	if (!_do_info_and_status(cmd, seg->lv, seg, &status, do_info, do_status)) {
--		stack;
--		return r;
--	}
-+	if (!_do_info_and_status(cmd, seg->lv, seg, &status, do_info, do_status))
-+		goto_out;
+-       # give it 9x 20 minutes, i.e. about 3 hours
+-       for i in seq 1 9; do
++       monitor() {
++           set +e
++           counter=0
++           while true; do
++               cat xchg/results-ndev/journal* xchg/results-udev/journal* > j.current 2> /dev/null
++               cat xchg/results-ndev/timestamp xchg/results-udev/timestamp > t.current 2> /dev/null
++               # the journal didn't change for 10 minutes, kill the VM
++               if diff j.current j.last > /dev/null 2> /dev/null; then
++                   counter=$(($counter + 1));
++               else
++                   counter=0
++               fi
++               if test $counter -eq 10 || diff t.current t.last > /dev/null 2> /dev/null; then
++                   kill $1
++                   sleep 3600 # wait for the parent to kill us
++               fi
++               sleep 60
++               mv j.current j.last
++               mv t.current t.last
++           done
++       }
++
++       for i in seq 1 20; do # we allow up to 20 VM restarts
+            ${vmtools.qemu}/bin/qemu-img create -f qcow2 /dev/shm/testdisk.img 4G
+            setsid bash -e ${vmtools.vmRunCommand (vmtools.qemuCommandLinux kernel)} &
+            pid=$!
+-           ( sleep 1200 ; kill -- -$pid ) &
+-           if wait $pid; then
+-               rm -f $out/nix-support/failed
++           monitor $pid &
++           mon=$!
++
++           wait $pid || true
++           kill $mon
++
++           # if we have any new results, stash them
++           mv xchg/results-*'/'*.txt $out/test-results/ || true
++
++           if test -n "$(cat xchg/in-vm-exit)"; then # the VM is done
++               test 0 -eq "$(cat xchg/in-vm-exit)" && rm -f $out/nix-support/failed
+                break
+            fi
+-           mv xchg/results-*'/'*.txt $out/test-results/
+-           sleep 5
++
++           sleep 5 # wait for the VM to clean up before starting up a new one
+        done
  
- 	if (!report_object(handle, seg->lv->vg, seg->lv, NULL, seg, NULL,
- 			   &status, NULL))
-@@ -268,8 +264,8 @@ static int _do_pvsegs_sub_single(struct cmd_context *cmd,
- 		.lv = &_free_logical_volume
- 	};
- 
--	if (seg)
--		_do_info_and_status(cmd, seg->lv, seg, &status, do_info, do_status);
-+	if (seg && !_do_info_and_status(cmd, seg->lv, seg, &status, do_info, do_status))
-+		goto_out;
- 
- 	if (!report_object(handle, vg, seg ? seg->lv : &_free_logical_volume, pvseg->pv,
- 			   seg ? : &_free_lv_segment, pvseg, &status,
+-       # use journals in case the lists weren't actually written yet
++       # (ab)use the journals in case the lists weren't actually written yet
+        cat xchg/results-ndev/journal xchg/results-udev/journal > $out/test-results/list || true
+      '';
+   };
 
 
