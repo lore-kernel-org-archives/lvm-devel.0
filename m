@@ -1,55 +1,62 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:43:53 +0000 (UTC)
-Subject: master - NIX: Move corosynclib-devel & valgrind-devel out of common.
-Message-ID: <20150205134353.2656160B93@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:43:55 +0000 (UTC)
+Subject: master - NIX: We need to install lcov for ./configure now as well.
+Message-ID: <20150205134355.429ED60B93@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5cd6cce5a41cd5583470c45bad2dad4b08f04ad2
-Commit:        5cd6cce5a41cd5583470c45bad2dad4b08f04ad2
-Parent:        57c39ecbcd6b97643f99427dfe426cc20c1acd66
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=81b34dce6173cb8599aebb5e052d8df573d3aecb
+Commit:        81b34dce6173cb8599aebb5e052d8df573d3aecb
+Parent:        5cd6cce5a41cd5583470c45bad2dad4b08f04ad2
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Jan 14 17:29:13 2015 +0100
+AuthorDate:    Thu Feb 5 13:30:02 2015 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Feb 5 13:51:37 2015 +0100
+CommitterDate: Thu Feb 5 13:51:38 2015 +0100
 
-NIX: Move corosynclib-devel & valgrind-devel out of common.
+NIX: We need to install lcov for ./configure now as well.
 
 ---
- nix/default.nix |    7 +++----
- 1 files changed, 3 insertions(+), 4 deletions(-)
+ nix/default.nix |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
 
 diff --git a/nix/default.nix b/nix/default.nix
-index cd92b91..b72379e 100644
+index b72379e..6bb94db 100644
 --- a/nix/default.nix
 +++ b/nix/default.nix
-@@ -293,13 +293,12 @@ let
+@@ -11,6 +11,11 @@ let
+   pkgs = import nixpkgs {};
+   lib = pkgs.lib;
+   over = overrides { inherit pkgs; };
++  install_lcov = ''
++     rpm -Uv ${pkgs.fetchurl {
++        url = "http://archives.fedoraproject.org/pub/archive/fedora/linux/updates/16/i386/lcov-1.9-2.fc16.noarch.rpm";
++        sha256 = "0ycdh5mb7p5ll76mqk0p6gpnjskvxxgh3a3bfr1crh94nvpwhp4z"; }}
++  '';
  
-   install_rpms = rec {
-       common = [ "libselinux-devel" "libsepol-devel" "ncurses-devel" "readline-devel"
--                 "corosynclib-devel"
--                 "valgrind" "valgrind-devel" "gdb" "strace"
-+                 "valgrind" "gdb" "strace"
-                  "redhat-rpm-config" # needed for rpmbuild of lvm
-                  "which" "e2fsprogs" # needed for fsadm
-                  "perl-GD" # for lcov
-                ];
--      centos63 = [ "clusterlib-devel" "openaislib-devel" "cman" "libudev-devel" ];
-+      centos63 = [ "clusterlib-devel" "openaislib-devel" "cman" "libudev-devel" "valgrind-devel" ];
-       centos64 = centos63;
-       centos65 = centos64;
-       fedora16 = [ "clusterlib-devel" "openaislib-devel" "cman" "systemd-devel" "libudev-devel" ];
-@@ -310,7 +309,7 @@ let
-                    "dlm" "systemd-devel" "perl-Digest-MD5" ];
-       fedora18u = fedora18;
+   mkTest = args: pkgs.stdenv.mkDerivation rec {
+      name = "lvm2-test-${(args.diskFun {}).name}";
+@@ -42,9 +47,7 @@ let
  
--      fedora19 = [ "dlm-devel" "dlm" "corosynclib-devel" "perl-Digest-MD5" "systemd-devel" "procps-ng" ];
-+      fedora19 = [ "dlm-devel" "dlm" "corosynclib-devel" "perl-Digest-MD5" "systemd-devel" "procps-ng" "valgrind-devel" ];
-       fedora19u = fedora19;
+          # we always run in a fresh image, so need to install everything again
+          ls ${build}/rpms/*/*.rpm | grep -v sysvinit | xargs rpm -Uv --oldpackage # */
+-         rpm -Uv ${pkgs.fetchurl {
+-            url = "http://archives.fedoraproject.org/pub/archive/fedora/linux/updates/16/i386/lcov-1.9-2.fc16.noarch.rpm";
+-            sha256 = "0ycdh5mb7p5ll76mqk0p6gpnjskvxxgh3a3bfr1crh94nvpwhp4z"; }}
++         ${install_lcov}
  
-       fedora20 = fedora19;
+          mkdir -p /xchg/results
+          touch /xchg/booted
+@@ -168,6 +171,8 @@ let
+      memSize = 512;
+      checkPhase = ":";
+ 
++     preConfigure = install_lcov;
++
+      postInstall = ''
+       mkdir -p $out/nix-support
+       for i in $out/rpms/*/*.rpm; do # */
 
 
