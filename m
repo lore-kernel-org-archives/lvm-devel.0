@@ -1,82 +1,103 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu,  5 Feb 2015 13:42:13 +0000 (UTC)
-Subject: master - test: Make the runner's heartbeat more reliable.
-Message-ID: <20150205134213.A765D6036E@fedorahosted.org>
+Date: Thu,  5 Feb 2015 13:42:15 +0000 (UTC)
+Subject: master - test: Implement --fatal-timeouts to allow a timely VM restart.
+Message-ID: <20150205134215.BD9A260755@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=34e818042e2dee149207cf3889792f0b87d4738e
-Commit:        34e818042e2dee149207cf3889792f0b87d4738e
-Parent:        f0d314bd6dcf22cee8e18c6e21fa06829a0f01ac
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eec99ffa8c953883c7c22e9e39a42a63b452d611
+Commit:        eec99ffa8c953883c7c22e9e39a42a63b452d611
+Parent:        34e818042e2dee149207cf3889792f0b87d4738e
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Jul 1 21:22:58 2014 +0200
+AuthorDate:    Tue Jul 1 21:34:06 2014 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Thu Feb 5 13:47:19 2015 +0100
 
-test: Make the runner's heartbeat more reliable.
+test: Implement --fatal-timeouts to allow a timely VM restart.
 
 ---
- test/lib/runner.cpp |   24 +++++++++++++-----------
- 1 files changed, 13 insertions(+), 11 deletions(-)
+ test/lib/journal.h  |    8 +++++++-
+ test/lib/runner.cpp |   16 ++++++++++++++--
+ 2 files changed, 21 insertions(+), 3 deletions(-)
 
+diff --git a/test/lib/journal.h b/test/lib/journal.h
+index 8913d7c..1e0a742 100644
+--- a/test/lib/journal.h
++++ b/test/lib/journal.h
+@@ -89,6 +89,7 @@ struct Journal {
+ 	Status status, written;
+ 
+ 	std::string location, list;
++	int timeouts;
+ 
+ 	void append( std::string path ) {
+ 		std::ofstream of( path.c_str(), std::fstream::app );
+@@ -126,6 +127,10 @@ struct Journal {
+ 
+ 	void done( std::string n, R r ) {
+ 		status[ n ] = r;
++		if ( r == TIMEOUT )
++			++ timeouts;
++		else
++			timeouts = 0;
+ 		sync();
+ 	}
+ 
+@@ -165,7 +170,8 @@ struct Journal {
+ 
+ 	Journal( std::string dir )
+ 		: location( dir + "/journal" ),
+-		  list( dir + "/list" )
++		  list( dir + "/list" ),
++		  timeouts( 0 )
+ 	{}
+ };
+ 
 diff --git a/test/lib/runner.cpp b/test/lib/runner.cpp
-index 1522fd5..ffc5398 100644
+index ffc5398..67a9b87 100644
 --- a/test/lib/runner.cpp
 +++ b/test/lib/runner.cpp
-@@ -117,7 +117,7 @@ struct TestCase {
- 	bool timeout;
- 	pid_t pid;
+@@ -60,10 +60,11 @@ bool fatal_signal = false;
+ bool interrupt = false;
  
--	time_t start, end, silent_start, last_update;
-+	time_t start, end, silent_start, last_update, last_heartbeat;
- 	Options options;
- 
- 	Journal *journal;
-@@ -152,6 +152,16 @@ struct TestCase {
- 
- 	bool monitor() {
- 		end = time( 0 );
-+
-+		/* heartbeat */
-+		if ( end - last_heartbeat >= 20 ) {
-+			std::string stampfile( options.outdir + "/timestamp" );
-+			std::ofstream stamp( stampfile.c_str() );
-+			stamp << end;
-+			stamp.close();
-+			fsync_name( stampfile );
-+		}
-+
- 		if ( wait4(pid, &status, WNOHANG, &usage) != 0 ) {
- 			io.sync();
- 			return false;
-@@ -192,15 +202,6 @@ struct TestCase {
- 
- 		io.sync();
- 
--		/* heartbeat */
--		if ( time( 0 ) % 20 == 0 ) {
--			std::string stampfile( options.outdir + "/timestamp" );
--			std::ofstream stamp( stampfile.c_str() );
--			stamp << time( 0 );
--			stamp.close();
--			fsync_name( stampfile );
--		}
--
- 		return true;
- 	}
- 
-@@ -347,7 +348,8 @@ struct TestCase {
- 	}
- 
- 	TestCase( Journal &j, Options opt, std::string path, std::string name, std::string flavour )
--		: timeout( false ), child( path ), name( name ), flavour( flavour ), options( opt ), journal( &j )
-+		: timeout( false ), child( path ), name( name ), flavour( flavour ), options( opt ), journal( &j ),
-+		  last_update( 0 ), last_heartbeat( 0 )
- 	{
- 	}
+ struct Options {
+-	bool verbose, batch, interactive, cont;
++	bool verbose, batch, interactive, cont, fatal_timeouts;
+ 	std::string testdir, outdir;
+ 	std::vector< std::string > flavours, filter;
+-	Options() : verbose( false ), batch( false ), interactive( false ), cont( false ) {}
++	Options() : verbose( false ), batch( false ), interactive( false ),
++		    cont( false ), fatal_timeouts( false ) {}
  };
+ 
+ struct TestProcess
+@@ -409,6 +410,14 @@ struct Main {
+ 
+ 			i->run();
+ 
++			if ( options.fatal_timeouts && journal.timeouts >= 2 ) {
++				journal.started( i->id() ); // retry the test on --continue
++				std::cerr << "E: Hit 2 timeouts in a row with --fatal-timeouts" << std::endl;
++				std::cerr << "Suspending (please restart the VM)." << std::endl;
++				sleep( 3600 );
++				die = 1;
++			}
++
+ 			if ( time(0) - start > 3 * 3600 ) {
+ 				std::cerr << "3 hours passed, giving up..." << std::endl;
+ 				die = 1;
+@@ -503,6 +512,9 @@ int main(int argc, char **argv)
+ 	if ( args.has( "--only" ) )
+ 		split( args.opt( "--only" ), opt.filter );
+ 
++	if ( args.has( "--fatal-timeouts" ) )
++		opt.fatal_timeouts = true;
++
+ 	if ( args.has( "--batch" ) || hasenv( "BATCH" ) ) {
+ 		opt.verbose = false;
+ 		opt.batch = true;
 
 
