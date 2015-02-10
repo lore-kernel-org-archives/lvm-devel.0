@@ -1,39 +1,32 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue, 10 Feb 2015 16:27:53 +0000 (UTC)
-Subject: master - NIX: Drop Fedora 16 builds.
-Message-ID: <20150210162753.180C460B43@fedorahosted.org>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Tue, 10 Feb 2015 16:01:08 -0600
+Subject: Suggested changes to lvm command line tools
+Message-ID: <54DA7FA4.9060404@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=801e47e089ae8e1a09164556536d49af555df734
-Commit:        801e47e089ae8e1a09164556536d49af555df734
-Parent:        79dc8f5ddd89fd54897347167163c5176b6f7511
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Tue Feb 10 17:26:32 2015 +0100
-Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Tue Feb 10 17:27:10 2015 +0100
+The following changes would be helpful for projects that are writing
+wrappers for the lvm command line tools.
 
-NIX: Drop Fedora 16 builds.
+* Have an option to output JSON or XML for all operations
+* When creating/modifying something, if it is successful, output all the
+information about the newly created/modified object so that the user
+doesn't need to turn around and query what they just created/changed.
+Optionally if the change causes other objects in the system to change,
+output those objects too if possible.  Otherwise the client needs to
+'know' what side effects a change has and then query those affected
+objects.  Not sure how easy or feasible this change would be.
+* A mechanism for a client to know that a change has been made without
+having to poll for changes.  For a lvm dbus daemon we could provide a
+dbus method that can be used to signal the daemon that one or more
+things have changed.
 
----
- nix/default.nix |    2 --
- 1 files changed, 0 insertions(+), 2 deletions(-)
+Thanks!
 
-diff --git a/nix/default.nix b/nix/default.nix
-index 919e9c9..08193c8 100644
---- a/nix/default.nix
-+++ b/nix/default.nix
-@@ -348,8 +348,6 @@ let
-     fc18_i386   = { arch = "i386"  ; image = "fedora18"; };
-     fc17_x86_64 = { arch = "x86_64"; image = "fedora17"; };
-     fc17_i386   = { arch = "i386"  ; image = "fedora17"; };
--    fc16_x86_64 = { arch = "x86_64"; image = "fedora16"; };
--    fc16_i386   = { arch = "i386"  ; image = "fedora16"; };
- 
-     fc18u_x86_64 = { arch = "x86_64"; image = "fedora18u"; };
-     fc18u_i386   = { arch = "i386"; image = "fedora18u"; };
+Regards,
+Tony
 
 
