@@ -1,64 +1,39 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue, 10 Feb 2015 16:27:50 +0000 (UTC)
-Subject: master - NIX: Adjust lists of extra RPMs to install.
-Message-ID: <20150210162750.DEEB760973@fedorahosted.org>
+Date: Tue, 10 Feb 2015 16:27:53 +0000 (UTC)
+Subject: master - NIX: Drop Fedora 16 builds.
+Message-ID: <20150210162753.180C460B43@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=79dc8f5ddd89fd54897347167163c5176b6f7511
-Commit:        79dc8f5ddd89fd54897347167163c5176b6f7511
-Parent:        a8b45b7a4c512137be1c919b6d247e2fe889edb4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=801e47e089ae8e1a09164556536d49af555df734
+Commit:        801e47e089ae8e1a09164556536d49af555df734
+Parent:        79dc8f5ddd89fd54897347167163c5176b6f7511
 Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Tue Feb 10 17:26:02 2015 +0100
+AuthorDate:    Tue Feb 10 17:26:32 2015 +0100
 Committer:     Petr Rockai <me@mornfall.net>
 CommitterDate: Tue Feb 10 17:27:10 2015 +0100
 
-NIX: Adjust lists of extra RPMs to install.
+NIX: Drop Fedora 16 builds.
 
 ---
- nix/default.nix |   15 +++++++--------
- 1 files changed, 7 insertions(+), 8 deletions(-)
+ nix/default.nix |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
 
 diff --git a/nix/default.nix b/nix/default.nix
-index 0a45bab..919e9c9 100644
+index 919e9c9..08193c8 100644
 --- a/nix/default.nix
 +++ b/nix/default.nix
-@@ -303,26 +303,25 @@ let
-                  "perl-GD" # for lcov
-                  "kernel"
-                ];
-+      fedora_common = [ "fedora-release" "dlm-devel" "corosynclib-devel" ];
-       centos63 = [ "clusterlib-devel" "openaislib-devel" "cman" "libudev-devel" "valgrind-devel" ];
-       centos64 = centos63;
-       centos65 = centos64;
--      fedora16 = [ "clusterlib-devel" "openaislib-devel" "cman" "systemd-devel" "libudev-devel" ];
--      fedora17 = [ "dlm-devel" "corosynclib-devel" "device-mapper-persistent-data"
--                   "dlm" "systemd-devel" "perl-Digest-MD5" "libudev-devel" ];
-+      centos70 = fedora20;
-+
-+      fedora17 = fedora18 ++ [ "libudev-devel" ];
+@@ -348,8 +348,6 @@ let
+     fc18_i386   = { arch = "i386"  ; image = "fedora18"; };
+     fc17_x86_64 = { arch = "x86_64"; image = "fedora17"; };
+     fc17_i386   = { arch = "i386"  ; image = "fedora17"; };
+-    fc16_x86_64 = { arch = "x86_64"; image = "fedora16"; };
+-    fc16_i386   = { arch = "i386"  ; image = "fedora16"; };
  
--      fedora18 = [ "dlm-devel" "corosynclib-devel" "device-mapper-persistent-data"
-+      fedora18 = [ "fedora-release" "dlm-devel" "corosynclib-devel" "device-mapper-persistent-data"
-                    "dlm" "systemd-devel" "perl-Digest-MD5" ];
-       fedora18u = fedora18;
- 
--      fedora19 = [ "dlm-devel" "dlm" "corosynclib-devel" "perl-Digest-MD5" "systemd-devel" "procps-ng"
--                   "valgrind-devel" ];
-+      fedora19 = [ "fedora-release" "dlm-devel" "dlm" "corosynclib-devel" "perl-Digest-MD5" "systemd-devel"
-+                   "procps-ng" "valgrind-devel" ];
-       fedora19u = fedora19;
- 
-       fedora20 = fedora19;
-       fedora20u = fedora20;
- 
--      centos70 = fedora20;
--
-       rawhide = fedora20;
-     } // over.install_rpms;
- 
+     fc18u_x86_64 = { arch = "x86_64"; image = "fedora18u"; };
+     fc18u_i386   = { arch = "i386"; image = "fedora18u"; };
 
 
