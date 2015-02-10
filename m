@@ -1,91 +1,111 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 20 Feb 2015 20:58:56 +0000 (UTC)
-Subject: master - man: systemid option for vgcreate and vgchange
-Message-ID: <20150220205856.A1BAC6011F@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 10 Feb 2015 15:12:55 +0000 (UTC)
+Subject: master - toollib: add init_processing_handle, init_selection_handle and destroy_processing_handle helper functions
+Message-ID: <20150210151255.0277560C2E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3361e662f4b05096ca6cae9f4d96bbeec8ec4862
-Commit:        3361e662f4b05096ca6cae9f4d96bbeec8ec4862
-Parent:        55dd45239a52a7349f8a2380b3e29dc3beee39f5
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 20 14:58:01 2015 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 20 14:58:01 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a91bc7a19b8f439fa1d21101ad5c11d72413d4c0
+Commit:        a91bc7a19b8f439fa1d21101ad5c11d72413d4c0
+Parent:        c3180c4a05ea947b379e9e9bc51e50d0ca329980
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Nov 28 14:46:18 2014 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Feb 10 16:05:27 2015 +0100
 
-man: systemid option for vgcreate and vgchange
+toollib: add init_processing_handle, init_selection_handle and destroy_processing_handle helper functions
 
+The init_processing_handle, init_selection_handle and
+destroy_processing_handle are helper functions that allocate and
+initialize the handles used when processing items in process_each_*
+and related functions.
 ---
- man/vgchange.8.in |    8 ++++++++
- man/vgcreate.8.in |   13 ++++++++++++-
- 2 files changed, 20 insertions(+), 1 deletions(-)
+ tools/toollib.c |   53 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ tools/toollib.h |    5 +++++
+ 2 files changed, 58 insertions(+), 0 deletions(-)
 
-diff --git a/man/vgchange.8.in b/man/vgchange.8.in
-index 5014300..e6e850a 100644
---- a/man/vgchange.8.in
-+++ b/man/vgchange.8.in
-@@ -47,6 +47,8 @@ vgchange \(em change attributes of a volume group
- .IR PhysicalExtentSize [ bBsSkKmMgGtTpPeE ]]
- .RB [ \-S | \-\-select
- .IR Selection ]
-+.RB [ \-\-systemid
-+.IR SystemID ]
- .RB [ \-\-refresh ]
- .RB [ \-t | \-\-test ]
- .RB [ \-v | \-\-verbose ]
-@@ -243,6 +245,12 @@ impact on I/O performance to the logical volume.  The smallest PE is 1KiB.
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 13cb034..0ce3c50 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1542,6 +1542,59 @@ static int _get_vgnameids_on_system(struct cmd_context *cmd,
+ 	return ECMD_PROCESSED;
+ }
  
- The 2.4 kernel has a limitation of 2TiB per block device.
- .TP
-+.BR \-\-systemid " " \fISystemID
-+Changes the system ID of the VG.  Using this option requires caution
-+because the VG may become foreign to the host running the command,
-+leaving the host unable to access it.  See
-+.BR lvmsystemid (7).
-+.TP
- .BR \-\-refresh
- If any logical volume in the volume group is active, reload its metadata.
- This is not necessary in normal operation, but may be useful
-diff --git a/man/vgcreate.8.in b/man/vgcreate.8.in
-index d850659..c55dbfe 100644
---- a/man/vgcreate.8.in
-+++ b/man/vgcreate.8.in
-@@ -27,6 +27,8 @@ vgcreate \(em create a volume group
- .IR NumberOfCopies | unmanaged | all ]
- .RB [ \-s | \-\-physicalextentsize
- .IR PhysicalExtentSize [ bBsSkKmMgGtTpPeE ]]
-+.RB [ \-\-systemid
-+.IR SystemID ]
- .RB [ \-t | \-\-test ]
- .RB [ \-v | \-\-verbose ]
- .RB [ \-\-version ]
-@@ -110,7 +112,6 @@ power of 2 of at least 1 sector (where the sector size is the largest sector
- size of the PVs currently used in the VG) or, if not a power of 2, at least
- 128KiB.  For the older LVM1 format, it must be a power of 2 of at least 8KiB.
- The default is 4 MiB.
--
- Once this value has been set, it is difficult to change it without recreating
- the volume group which would involve backing up and restoring data on any
- logical volumes.  However, if no extents need moving for the new
-@@ -126,6 +127,16 @@ impact on I/O performance to the logical volume.  The smallest PE is 1KiB
- 
- The 2.4 kernel has a limitation of 2TiB per block device.
- 
-+.TP
-+.BR \-\-systemid " " \fISystemID
-+Specifies the system ID that will be given to the new VG, overriding the
-+system ID of the host running the command.  A VG is normally created
-+without this option, in which case the new VG is given the system ID of
-+the host creating it.  Using this option requires caution because the
-+system ID of the new VG may not match the system ID of the host running
-+the command, leaving the VG inaccessible to the host.  See
-+.BR lvmsystemid (7).
++struct processing_handle *init_processing_handle(struct cmd_context *cmd)
++{
++	struct processing_handle *handle;
 +
- .SH PHYSICAL DEVICE OPTIONS
- The following options are available for initializing physical devices in the
- volume group.  These options are further described in the \fBpvcreate\fP(8)
++	if (!(handle = dm_pool_zalloc(cmd->mem, sizeof(struct processing_handle)))) {
++		log_error("_init_processing_handle: failed to allocate memory for processing handle");
++		return NULL;
++	}
++
++	/*
++	 * For any reporting tool, the internal_report_for_select is reset to 0
++	 * automatically because the internal reporting/selection is simply not
++	 * needed - the reporting/selection is already a part of the code path
++	 * used there.
++	 *
++	 * *The internal report for select is only needed for non-reporting tools!*
++	 */
++	handle->internal_report_for_select = arg_is_set(cmd, select_ARG);
++
++	return handle;
++}
++
++int init_selection_handle(struct cmd_context *cmd, struct processing_handle *handle)
++{
++	struct selection_handle *sh;
++
++	if (!(sh = dm_pool_zalloc(cmd->mem, sizeof(struct selection_handle)))) {
++		log_error("_init_selection_handle: failed to allocate memory for selection handle");
++		return 0;
++	}
++
++	if (!(sh->selection_rh = report_init_for_selection(cmd, &sh->report_type,
++					arg_str_value(cmd, select_ARG, NULL)))) {
++		dm_pool_free(cmd->mem, sh);
++		return_0;
++	}
++
++	handle->selection_handle = sh;
++	return 1;
++}
++
++void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle *handle,
++			       int deallocate_handle_root)
++{
++	if (handle) {
++		if (handle->selection_handle && handle->selection_handle->selection_rh)
++			dm_report_free(handle->selection_handle->selection_rh);
++		if (deallocate_handle_root)
++			dm_pool_free(cmd->mem, handle);
++	}
++}
++
++
+ int select_match_vg(struct cmd_context *cmd, struct processing_handle *handle,
+ 		    struct volume_group *vg, int *selected)
+ {
+diff --git a/tools/toollib.h b/tools/toollib.h
+index ead36d3..4050117 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -137,6 +137,11 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 			  int stop_on_error, struct processing_handle *handle,
+ 			  process_single_lv_fn_t process_single_lv);
+ 
++struct processing_handle *init_processing_handle(struct cmd_context *cmd);
++int init_selection_handle(struct cmd_context *cmd, struct processing_handle *handle);
++void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle *handle,
++			       int deallocate_handle_root);
++
+ int select_match_vg(struct cmd_context *cmd, struct processing_handle *handle,
+ 		    struct volume_group *vg, int *selected);
+ int select_match_lv(struct cmd_context *cmd, struct processing_handle *handle,
 
 
