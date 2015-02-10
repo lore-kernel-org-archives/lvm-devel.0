@@ -1,113 +1,103 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 10 Feb 2015 15:13:16 +0000 (UTC)
-Subject: master - tools: allow -S|--select for vgexport and vgimport
-Message-ID: <20150210151316.5908C60CFB@fedorahosted.org>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Tue, 10 Feb 2015 16:08:02 +0000 (UTC)
+Subject: master - test: Fix harness not building on RHEL5
+Message-ID: <20150210160802.AFB4760268@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=80cca53611d3603c12db08ddc1b25bfd6b874436
-Commit:        80cca53611d3603c12db08ddc1b25bfd6b874436
-Parent:        b93f586954f05147822128b3bf25f668656d2769
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Dec 12 12:03:34 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Feb 10 16:10:17 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a8b45b7a4c512137be1c919b6d247e2fe889edb4
+Commit:        a8b45b7a4c512137be1c919b6d247e2fe889edb4
+Parent:        7f2eebf519c039eea4d8d4f41fd44b04182093f2
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Feb 10 14:51:45 2015 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Feb 10 17:02:01 2015 +0100
 
-tools: allow -S|--select for vgexport and vgimport
+test: Fix harness not building on RHEL5
 
 ---
- WHATS_NEW        |    1 +
- tools/commands.h |    6 ++++--
- tools/vgexport.c |    6 +++---
- tools/vgimport.c |    6 +++---
- 4 files changed, 11 insertions(+), 8 deletions(-)
+ test/lib/brick-shelltest.h |   24 +++++++++++++++++-------
+ 1 files changed, 17 insertions(+), 7 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b9566f8..314cfd8 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.117 - 
- ====================================
-+  Add support for -S/--select to vgexport and vgimport.
-   Add support for -S/--select to vgdisplay, lvdisplay and pvdisplay without -C.
-   Add support for -S/--select to vgremove and lvremove.
-   Add support for -S/--select to vgchange,lvchange and pvchange.
-diff --git a/tools/commands.h b/tools/commands.h
-index f8984d1..5221f79 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -1091,11 +1091,12 @@ xx(vgexport,
-    "\t[--commandprofile ProfileName]\n"
-    "\t[-d|--debug]\n"
-    "\t[-h|--help]\n"
-+   "\t[-S|--select Selection]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]\n"
-    "\tVolumeGroupName [VolumeGroupName...]\n",
+diff --git a/test/lib/brick-shelltest.h b/test/lib/brick-shelltest.h
+index 99e6639..335ef85 100644
+--- a/test/lib/brick-shelltest.h
++++ b/test/lib/brick-shelltest.h
+@@ -431,7 +431,13 @@ struct FileSink : FdSink {
  
--   all_ARG, test_ARG)
-+   all_ARG, select_ARG, test_ARG)
+     void sync( bool force ) {
+         if ( fd < 0 && !killed ) {
++#ifdef O_CLOEXEC
+             fd = open( file.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644 );
++#else
++            fd = open( file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644 );
++            if ( fcntl( fd, F_SETFD, FD_CLOEXEC ) < 0 )
++                perror("failed to set FD_CLOEXEC on file");
++#endif
+             if ( fd < 0 )
+                 killed = true;
+         }
+@@ -463,7 +469,7 @@ struct Source {
  
- xx(vgextend,
-    "Add physical volumes to a volume group",
-@@ -1129,12 +1130,13 @@ xx(vgimport,
-    "\t[-d|--debug]\n"
-    "\t[-f|--force]\n"
-    "\t[-h|--help]\n"
-+   "\t[-S|--select Selection]\n"
-    "\t[-t|--test]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]\n"
-    "\tVolumeGroupName...\n",
+     virtual void reset() {}
  
--   all_ARG, force_ARG, test_ARG)
-+   all_ARG, force_ARG, select_ARG, test_ARG)
+-    virtual int fd_set( fd_set *set ) {
++    virtual int fd_set_( fd_set *set ) {
+         if ( fd >= 0 ) {
+             FD_SET( fd, set );
+             return fd;
+@@ -482,10 +488,16 @@ struct FileSource : Source {
+     std::string file;
+     FileSource( std::string n ) : Source( -1 ), file( n ) {}
  
- xx(vgmerge,
-    "Merge volume groups",
-diff --git a/tools/vgexport.c b/tools/vgexport.c
-index aeff612..d4be3c7 100644
---- a/tools/vgexport.c
-+++ b/tools/vgexport.c
-@@ -51,12 +51,12 @@ bad:
+-    int fd_set( ::fd_set * ) { return -1; } /* reading a file is always non-blocking */
++    int fd_set_( ::fd_set * ) { return -1; } /* reading a file is always non-blocking */
+     void sync( Sink *s ) {
+         if ( fd < 0 ) {
++#ifdef O_CLOEXEC
+             fd = open( file.c_str(), O_RDONLY | O_CLOEXEC | O_NONBLOCK );
++#else
++            fd = open( file.c_str(), O_RDONLY | O_NONBLOCK );
++            if ( fcntl( fd, F_SETFD, FD_CLOEXEC ) < 0 )
++                perror("failed to set FD_CLOEXEC on file");
++#endif
+             if ( fd >= 0 )
+                 lseek( fd, 0, SEEK_END );
+         }
+@@ -505,8 +517,6 @@ struct KMsg : Source {
  
- int vgexport(struct cmd_context *cmd, int argc, char **argv)
- {
--	if (!argc && !arg_count(cmd, all_ARG)) {
--		log_error("Please supply volume groups or use -a for all.");
-+	if (!argc && !arg_count(cmd, all_ARG) && !arg_is_set(cmd, select_ARG)) {
-+		log_error("Please supply volume groups or use -S for selection or use -a for all.");
- 		return EINVALID_CMD_LINE;
- 	}
+     void reset() {
+ #ifdef __unix
+-        int sz;
+-
+         if ( dev_kmsg() ) {
+             if ( (fd = open("/dev/kmsg", O_RDONLY | O_NONBLOCK)) < 0 ) {
+                 if (errno != ENOENT) /* Older kernels (<3.5) do not support /dev/kmsg */
+@@ -589,11 +599,11 @@ struct IO : Sink {
+         sources.clear();
+     }
  
--	if (argc && arg_count(cmd, all_ARG)) {
-+	if (arg_count(cmd, all_ARG) && (argc || arg_is_set(cmd, select_ARG))) {
- 		log_error("No arguments permitted when using -a for all.");
- 		return EINVALID_CMD_LINE;
- 	}
-diff --git a/tools/vgimport.c b/tools/vgimport.c
-index 857f4a9..d5ca7c3 100644
---- a/tools/vgimport.c
-+++ b/tools/vgimport.c
-@@ -58,12 +58,12 @@ bad:
+-    int fd_set( fd_set *set ) {
++    int fd_set_( fd_set *set ) {
+         int max = -1;
  
- int vgimport(struct cmd_context *cmd, int argc, char **argv)
- {
--	if (!argc && !arg_count(cmd, all_ARG)) {
--		log_error("Please supply volume groups or use -a for all.");
-+	if (!argc && !arg_count(cmd, all_ARG) && !arg_is_set(cmd, select_ARG)) {
-+		log_error("Please supply volume groups or -S for selection or use -a for all.");
- 		return EINVALID_CMD_LINE;
- 	}
+         for ( Sources::iterator i = sources.begin(); i != sources.end(); ++i )
+-            max = std::max( (*i)->fd_set( set ), max );
++            max = std::max( (*i)->fd_set_( set ), max );
+         return max + 1;
+     }
  
--	if (argc && arg_count(cmd, all_ARG)) {
-+	if (arg_count(cmd, all_ARG) && (argc || arg_is_set(cmd, select_ARG))) {
- 		log_error("No arguments permitted when using -a for all.");
- 		return EINVALID_CMD_LINE;
- 	}
+@@ -755,7 +765,7 @@ struct TestCase {
+         fd_set set;
+ 
+         FD_ZERO( &set );
+-        int nfds = io.fd_set( &set );
++        int nfds = io.fd_set_( &set );
+         wait.tv_sec = 0;
+         wait.tv_usec = 500000; /* timeout 0.5s */
+ 
 
 
