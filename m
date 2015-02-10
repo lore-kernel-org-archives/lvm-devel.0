@@ -1,109 +1,136 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 10 Feb 2015 15:13:14 +0000 (UTC)
-Subject: master - tools: allow -S|--select for vgdisplay, lvdisplay and pvdisplay without -C
-Message-ID: <20150210151314.208DD6110A@fedorahosted.org>
+Date: Tue, 10 Feb 2015 15:13:03 +0000 (UTC)
+Subject: master - report: add report_for_selection and use it in select_match_{pv, vg, lv}
+Message-ID: <20150210151303.7FDCE607A9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b93f586954f05147822128b3bf25f668656d2769
-Commit:        b93f586954f05147822128b3bf25f668656d2769
-Parent:        00744b053f395be79ab1cb80fdf7342548aa79e2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=984ae7f72dee4f119eafc4e236a276a6c8a3fc95
+Commit:        984ae7f72dee4f119eafc4e236a276a6c8a3fc95
+Parent:        e5b345aff389af24bde7986b236a92e166435f38
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Dec 12 10:20:15 2014 +0100
+AuthorDate:    Mon Dec 1 14:19:30 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Feb 10 16:09:40 2015 +0100
+CommitterDate: Tue Feb 10 16:05:36 2015 +0100
 
-tools: allow -S|--select for vgdisplay, lvdisplay and pvdisplay without -C
+report: add report_for_selection and use it in select_match_{pv,vg,lv}
 
-We already allowed -S|--select with {vg,lv,pv}display -C (which
-was then equal to {vg,lv,pv}s command. Since we support selection
-in toolib now, we can support -S also without using -C in *display
-commands now.
+The report_for_selection does the actual "reporting for selection only".
+The selection status will be saved in struct selection_handle's "selected"
+variable.
 ---
- WHATS_NEW         |    1 +
- tools/commands.h  |    3 +++
- tools/lvdisplay.c |    1 -
- tools/pvdisplay.c |    1 -
- tools/vgdisplay.c |    1 -
- 5 files changed, 4 insertions(+), 3 deletions(-)
+ lib/report/report.h |    4 ++++
+ tools/reporter.c    |    8 ++++++++
+ tools/toollib.c     |   33 ++++++++++++++++++++++++++++++---
+ 3 files changed, 42 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 7fa7d3c..b9566f8 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.117 - 
- ====================================
-+  Add support for -S/--select to vgdisplay, lvdisplay and pvdisplay without -C.
-   Add support for -S/--select to vgremove and lvremove.
-   Add support for -S/--select to vgchange,lvchange and pvchange.
-   Add infrastructure to support selection for non-reporting tools.
-diff --git a/tools/commands.h b/tools/commands.h
-index 63dbb2a..f8984d1 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -369,6 +369,7 @@ xx(lvdisplay,
-    "\t[--nosuffix]\n"
-    "\t[-P|--partial]\n"
-    "\t[--readonly]\n"
-+   "\t[-S|--select Selection]\n"
-    "\t[--units hHbBsSkKmMgGtTpPeE]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]\n"
-@@ -747,6 +748,7 @@ xx(pvdisplay,
-    "\t[-m|--maps]\n"
-    "\t[--nosuffix]\n"
-    "\t[--readonly]\n"
-+   "\t[-S|--select Selection]\n"
-    "\t[-s|--short]\n"
-    "\t[--units hHbBsSkKmMgGtTpPeE]\n"
-    "\t[-v|--verbose]\n"
-@@ -1049,6 +1051,7 @@ xx(vgdisplay,
-    "\t[--nosuffix]\n"
-    "\t[-P|--partial]\n"
-    "\t[--readonly]\n"
-+   "\t[-S|--select Selection]\n"
-    "\t[--units hHbBsSkKmMgGtTpPeE]\n"
-    "\t[--version]\n"
-    "\t[VolumeGroupName [VolumeGroupName...]]\n"
-diff --git a/tools/lvdisplay.c b/tools/lvdisplay.c
-index 6b1540f..7d900cc 100644
---- a/tools/lvdisplay.c
-+++ b/tools/lvdisplay.c
-@@ -46,7 +46,6 @@ int lvdisplay(struct cmd_context *cmd, int argc, char **argv)
- 	    arg_count(cmd, binary_ARG) ||
- 	    arg_count(cmd, noheadings_ARG) ||
- 	    arg_count(cmd, options_ARG) ||
--	    arg_count(cmd, select_ARG) ||
- 	    arg_count(cmd, separator_ARG) ||
- 	    arg_count(cmd, sort_ARG) ||
- 	    arg_count(cmd, unbuffered_ARG)) {
-diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
-index 94a3bbf..2763889 100644
---- a/tools/pvdisplay.c
-+++ b/tools/pvdisplay.c
-@@ -77,7 +77,6 @@ int pvdisplay(struct cmd_context *cmd, int argc, char **argv)
- 	    arg_count(cmd, binary_ARG) ||
- 	    arg_count(cmd, noheadings_ARG) ||
- 	    arg_count(cmd, options_ARG) ||
--	    arg_count(cmd, select_ARG) ||
- 	    arg_count(cmd, separator_ARG) ||
- 	    arg_count(cmd, sort_ARG) ||
- 	    arg_count(cmd, unbuffered_ARG)) {
-diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
-index 3c34727..5e5ceda 100644
---- a/tools/vgdisplay.c
-+++ b/tools/vgdisplay.c
-@@ -66,7 +66,6 @@ int vgdisplay(struct cmd_context *cmd, int argc, char **argv)
- 		   arg_count(cmd, binary_ARG) ||
- 		   arg_count(cmd, noheadings_ARG) ||
- 		   arg_count(cmd, options_ARG) ||
--		   arg_count(cmd, select_ARG) ||
- 		   arg_count(cmd, separator_ARG) ||
- 		   arg_count(cmd, sort_ARG) || arg_count(cmd, unbuffered_ARG)) {
- 		log_error("Incompatible options selected");
+diff --git a/lib/report/report.h b/lib/report/report.h
+index 80a75fd..5bd8b79 100644
+--- a/lib/report/report.h
++++ b/lib/report/report.h
+@@ -71,6 +71,10 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
+ 		  int quoted, int columns_as_rows, const char *selection);
+ void *report_init_for_selection(struct cmd_context *cmd, report_type_t *report_type,
+ 				const char *selection);
++int report_for_selection(struct selection_handle *sh,
++			 struct physical_volume *pv,
++			 struct volume_group *vg,
++			 struct logical_volume *lv);
+ void report_free(void *handle);
+ int report_object(void *handle, int selection_only, const struct volume_group *vg,
+ 		  const struct logical_volume *lv, const struct physical_volume *pv,
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 4e41e90..7301956 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -447,6 +447,14 @@ static int _get_final_report_type(int args_are_pvs,
+ 	return 1;
+ }
+ 
++int report_for_selection(struct selection_handle *sh,
++			 struct physical_volume *pv,
++			 struct volume_group *vg,
++			 struct logical_volume *lv)
++{
++	return 1;
++}
++
+ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 		   report_type_t report_type)
+ {
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 7d406ba..34286e3 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1628,36 +1628,63 @@ void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle
+ int select_match_vg(struct cmd_context *cmd, struct processing_handle *handle,
+ 		    struct volume_group *vg, int *selected)
+ {
++	struct selection_handle *sh = handle->selection_handle;
++
+ 	if (!handle->internal_report_for_select) {
+ 		*selected = 1;
+ 		return 1;
+ 	}
+ 
+-	*selected = 1;
++	sh->orig_report_type = VGS;
++
++	if (!report_for_selection(sh, NULL, vg, NULL))
++		return_0;
++
++	sh->orig_report_type = 0;
++	*selected = sh->selected;
++
+ 	return 1;
+ }
+ 
+ int select_match_lv(struct cmd_context *cmd, struct processing_handle *handle,
+ 		    struct volume_group *vg, struct logical_volume *lv, int *selected)
+ {
++	struct selection_handle *sh = handle->selection_handle;
++
+ 	if (!handle->internal_report_for_select) {
+ 		*selected = 1;
+ 		return 1;
+ 	}
+ 
+-	*selected = 1;
++	sh->orig_report_type = LVS;
++
++	if (!report_for_selection(sh, NULL, vg, lv))
++		return_0;
++
++	sh->orig_report_type = 0;
++	*selected = sh->selected;
++
+ 	return 1;
+ }
+ 
+ int select_match_pv(struct cmd_context *cmd, struct processing_handle *handle,
+ 		    struct volume_group *vg, struct physical_volume *pv, int *selected)
+ {
++	struct selection_handle *sh = handle->selection_handle;
++
+ 	if (!handle->internal_report_for_select) {
+ 		*selected = 1;
+ 		return 1;
+ 	}
+ 
+-	*selected = 1;
++	sh->orig_report_type = PVS;
++
++	if (!report_for_selection(sh, pv, vg, NULL))
++		return_0;
++
++	sh->orig_report_type = 0;
++	*selected = sh->selected;
++
+ 	return 1;
+ }
+ 
 
 
