@@ -1,137 +1,124 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 10 Feb 2015 15:13:11 +0000 (UTC)
-Subject: master - tools: allow -S|--select for vgremove and lvremove
-Message-ID: <20150210151311.EEF5960F9A@fedorahosted.org>
+Date: Tue, 10 Feb 2015 15:13:07 +0000 (UTC)
+Subject: master - pvchange: use processing_handle when processing items for pvchange
+Message-ID: <20150210151307.BAAE2600E1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00744b053f395be79ab1cb80fdf7342548aa79e2
-Commit:        00744b053f395be79ab1cb80fdf7342548aa79e2
-Parent:        f784c60cd65d14d107e957338af041c3a507ef8d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d6c8f0de280653d0d15f491f776046b09d7dc635
+Commit:        d6c8f0de280653d0d15f491f776046b09d7dc635
+Parent:        56846d787381e5dc90f3a3adbcc3de58154a4ed3
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Dec 12 09:34:50 2014 +0100
+AuthorDate:    Wed Dec 3 10:02:13 2014 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Feb 10 16:08:42 2015 +0100
+CommitterDate: Tue Feb 10 16:07:01 2015 +0100
 
-tools: allow -S|--select for vgremove and lvremove
+pvchange: use processing_handle when processing items for pvchange
 
+pvchange is an exception that does not use toollib yet for iterating
+over the list of PVs (process_each_pv) so intialize the
+processing_handle and use just like it's used in toollib.
 ---
- WHATS_NEW        |    1 +
- tools/commands.h |   10 ++++++----
- tools/lvremove.c |    5 +++--
- tools/reporter.c |    2 +-
- tools/vgremove.c |    5 +++--
- 5 files changed, 14 insertions(+), 9 deletions(-)
+ tools/pvchange.c |   45 +++++++++++++++++++++++++++++++++++----------
+ 1 files changed, 35 insertions(+), 10 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f02ac8b..7fa7d3c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.117 - 
- ====================================
-+  Add support for -S/--select to vgremove and lvremove.
-   Add support for -S/--select to vgchange,lvchange and pvchange.
-   Add infrastructure to support selection for non-reporting tools.
-   Add LVM_COMMAND_PROFILE env var to set default command profile name to use.
-diff --git a/tools/commands.h b/tools/commands.h
-index 6df7f7d..63dbb2a 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -512,7 +512,7 @@ xx(lvreduce,
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index 76db917..f0342a6 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -145,7 +145,9 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 	int opt = 0;
+ 	int done = 0;
+ 	int total = 0;
++	int selected;
  
- xx(lvremove,
-    "Remove logical volume(s) from the system",
--   0,
-+   ALL_VGS_IS_DEFAULT, /* all VGs only with --select */
-    "lvremove\n"
-    "\t[-A|--autobackup y|n]\n"
-    "\t[--commandprofile ProfileName]\n"
-@@ -520,12 +520,13 @@ xx(lvremove,
-    "\t[-f|--force]\n"
-    "\t[-h|--help]\n"
-    "\t[--noudevsync]\n"
-+   "\t[-S|--select Selection]\n"
-    "\t[-t|--test]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]\n"
-    "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
++	struct processing_handle *handle = NULL;
+ 	struct volume_group *vg;
+ 	const char *vg_name;
+ 	char *pv_name;
+@@ -154,22 +156,36 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 	struct dm_list *vgnames;
+ 	struct dm_str_list *sll;
  
--   autobackup_ARG, force_ARG, noudevsync_ARG, test_ARG)
-+   autobackup_ARG, force_ARG, noudevsync_ARG, select_ARG, test_ARG)
- 
- xx(lvrename,
-    "Rename a logical volume",
-@@ -1186,19 +1187,20 @@ xx(vgreduce,
- 
- xx(vgremove,
-    "Remove volume group(s)",
--   0,
-+   ALL_VGS_IS_DEFAULT, /* all VGs only with select */
-    "vgremove\n"
-    "\t[--commandprofile ProfileName]\n"
-    "\t[-d|--debug]\n"
-    "\t[-f|--force]\n"
-    "\t[-h|--help]\n"
-    "\t[--noudevsync]\n"
-+   "\t[-S|--select Selection]\n"
-    "\t[-t|--test]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]\n"
-    "\tVolumeGroupName [VolumeGroupName...]\n",
- 
--   force_ARG, noudevsync_ARG, test_ARG)
-+   force_ARG, noudevsync_ARG, select_ARG, test_ARG)
- 
- xx(vgrename,
-    "Rename a volume group",
-diff --git a/tools/lvremove.c b/tools/lvremove.c
-index 1005218..df920fb 100644
---- a/tools/lvremove.c
-+++ b/tools/lvremove.c
-@@ -17,8 +17,9 @@
- 
- int lvremove(struct cmd_context *cmd, int argc, char **argv)
- {
--	if (!argc) {
--		log_error("Please enter one or more logical volume paths");
-+	if (!argc && !arg_is_set(cmd, select_ARG)) {
-+		log_error("Please enter one or more logical volume paths "
-+			  "or use -S for selection.");
- 		return EINVALID_CMD_LINE;
++	int r = ECMD_PROCESSED;
++
+ 	if (!(arg_count(cmd, allocatable_ARG) + arg_is_set(cmd, addtag_ARG) +
+ 	    arg_is_set(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) +
+ 	    arg_count(cmd, metadataignore_ARG))) {
+ 		log_error("Please give one or more of -x, -uuid, "
+ 			  "--addtag, --deltag or --metadataignore");
+-		return EINVALID_CMD_LINE;
++		r = EINVALID_CMD_LINE;
++		goto out;
++	}
++
++	/* FIXME: use process_each_pv for pvchange. */
++
++	if (!(handle = init_processing_handle(cmd)) ||
++	    (handle->internal_report_for_select && !init_selection_handle(cmd, handle))) {
++		log_error("Failed to initialize processing handle.");
++		r = ECMD_FAILED;
++		goto out;
  	}
  
-diff --git a/tools/reporter.c b/tools/reporter.c
-index dba97be..0bfed51 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -455,7 +455,7 @@ int report_for_selection(struct selection_handle *sh,
- 	static const char *incorrect_report_type_msg = "report_for_selection: incorrect report type";
- 	int args_are_pvs = sh->orig_report_type == PVS;
- 	int do_lv_info, do_lv_seg_status;
--	struct processing_handle handle = { .internal_report = 0,
-+	struct processing_handle handle = { .internal_report_for_select = 0,
- 					    .selection_handle = sh,
- 					    .custom_handle = NULL };
- 	int r = 0;
-diff --git a/tools/vgremove.c b/tools/vgremove.c
-index 315e1dc..3ce0763 100644
---- a/tools/vgremove.c
-+++ b/tools/vgremove.c
-@@ -69,8 +69,9 @@ int vgremove(struct cmd_context *cmd, int argc, char **argv)
- {
- 	int ret;
- 
--	if (!argc) {
--		log_error("Please enter one or more volume group paths");
-+	if (!argc && !arg_is_set(cmd, select_ARG)) {
-+		log_error("Please enter one or more volume group paths "
-+			  "or use -S for selection.");
- 		return EINVALID_CMD_LINE;
+-	if (!(arg_count(cmd, all_ARG)) && !argc) {
++	if (!(arg_count(cmd, all_ARG)) && !argc && !handle->internal_report_for_select) {
+ 		log_error("Please give a physical volume path");
+-		return EINVALID_CMD_LINE;
++		r = EINVALID_CMD_LINE;
++		goto out;
  	}
  
+ 	if (arg_count(cmd, all_ARG) && argc) {
+ 		log_error("Option --all and PhysicalVolumePath are exclusive.");
+-		return EINVALID_CMD_LINE;
++		r = EINVALID_CMD_LINE;
++		goto out;
+ 	}
+ 
+ 	if (argc) {
+@@ -213,7 +229,8 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 		 */
+ 		if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_WRITE, NULL)) {
+ 			log_error("Unable to obtain global lock.");
+-			return ECMD_FAILED;
++			r = ECMD_FAILED;
++			goto out;
+ 		}
+ 
+ 		/* populate lvmcache */
+@@ -230,10 +247,13 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 					continue;
+ 				}
+ 				dm_list_iterate_items(pvl, &vg->pvs) {
+-					total++;
+-					done += _pvchange_single(cmd, vg,
+-								 pvl->pv,
+-								 NULL);
++					if (select_match_pv(cmd, handle, vg, pvl->pv,
++							    &selected) && selected) {
++						total++;
++						done += _pvchange_single(cmd, vg,
++									 pvl->pv,
++									 NULL);
++					}
+ 				}
+ 				unlock_and_release_vg(cmd, vg, sll->str);
+ 			}
+@@ -246,5 +266,10 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 				done, done == 1 ? "" : "s",
+ 				total - done, (total - done) == 1 ? "" : "s");
+ 
+-	return (total == done) ? ECMD_PROCESSED : ECMD_FAILED;
++out:
++	destroy_processing_handle(cmd, handle, 1);
++	if (r == ECMD_PROCESSED)
++		return (total == done) ? ECMD_PROCESSED : ECMD_FAILED;
++	else
++		return r;
+ }
 
 
