@@ -1,36 +1,39 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Tue, 10 Feb 2015 15:11:05 +0800
-Subject: [PATCH] man: modify lvscan man
-Message-ID: <1423552265-5589-1-git-send-email-lwang@suse.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Tue, 10 Feb 2015 11:43:13 +0000 (UTC)
+Subject: master - test: Fix a typo in shell/pvmove-restart.sh.
+Message-ID: <20150210114313.E54706114E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-lvscan has no output when it is in silent mode, which is inconsistent
-with man/lvscan.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ee3bcb877b081dd6281644d4c9c366dd08ad1c1
+Commit:        2ee3bcb877b081dd6281644d4c9c366dd08ad1c1
+Parent:        b6f558adcc3b08cb627aca0a0cddbe65bdd19052
+Author:        Petr Rockai <me@mornfall.net>
+AuthorDate:    Tue Feb 10 12:42:05 2015 +0100
+Committer:     Petr Rockai <me@mornfall.net>
+CommitterDate: Tue Feb 10 12:42:05 2015 +0100
 
-Signed-off-by: Liuhua Wang <lwang@suse.com>
+test: Fix a typo in shell/pvmove-restart.sh.
+
 ---
- man/lvscan.8.in | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ test/shell/pvmove-restart.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvscan.8.in b/man/lvscan.8.in
-index 0b6e50b..bc4dc5c 100644
---- a/man/lvscan.8.in
-+++ b/man/lvscan.8.in
-@@ -16,7 +16,8 @@ lvscan \(em scan (all disks) for Logical Volumes
- lvscan scans all known volume groups or all supported LVM block devices
- in the system for defined Logical Volumes.  The output consists
- of one line for each Logical Volume indicating whether or not it is active,
--a snapshot or origin, the size of the device and its allocation policy.
-+a snapshot or origin, the size of the device and its allocation policy when
-+it is not in silent mode.
- Use \fBlvs\fP(8) or \fBlvdisplay\fP(8) to obtain more-comprehensive
- information about the Logical Volumes.
- .SH OPTIONS
--- 
-2.1.2
+diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
+index b4a2893..3c4947d 100644
+--- a/test/shell/pvmove-restart.sh
++++ b/test/shell/pvmove-restart.sh
+@@ -40,7 +40,7 @@ wait
+ 
+ # Simulate reboot - forcibly remove related devices
+ dmsetup table
+-dmsetup ls --exec echo | egrep '$vg-$lv1|$vg-pvmove0' | xargs -r -n 1 dmsetup remove
++dmsetup ls --exec echo | egrep "$vg-$lv1|$vg-pvmove0" | xargs -r -n 1 dmsetup remove
+ 
+ # Check we really have pvmove volume
+ check lv_attr_bit type $vg/pvmove0 "p"
 
 
