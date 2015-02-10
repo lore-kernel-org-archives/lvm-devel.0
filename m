@@ -1,136 +1,135 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 10 Feb 2015 15:13:03 +0000 (UTC)
-Subject: master - report: add report_for_selection and use it in select_match_{pv, vg, lv}
-Message-ID: <20150210151303.7FDCE607A9@fedorahosted.org>
+Date: Tue, 10 Feb 2015 15:13:18 +0000 (UTC)
+Subject: master - select: initialize selection handle for process_each_* fns with initial report type
+Message-ID: <20150210151318.84EB360CFB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=984ae7f72dee4f119eafc4e236a276a6c8a3fc95
-Commit:        984ae7f72dee4f119eafc4e236a276a6c8a3fc95
-Parent:        e5b345aff389af24bde7986b236a92e166435f38
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7f2eebf519c039eea4d8d4f41fd44b04182093f2
+Commit:        7f2eebf519c039eea4d8d4f41fd44b04182093f2
+Parent:        80cca53611d3603c12db08ddc1b25bfd6b874436
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Dec 1 14:19:30 2014 +0100
+AuthorDate:    Tue Feb 10 13:46:37 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Feb 10 16:05:36 2015 +0100
+CommitterDate: Tue Feb 10 16:10:17 2015 +0100
 
-report: add report_for_selection and use it in select_match_{pv,vg,lv}
+select: initialize selection handle for process_each_* fns with initial report type
 
-The report_for_selection does the actual "reporting for selection only".
-The selection status will be saved in struct selection_handle's "selected"
-variable.
+This is a followup patch for previous patchset that enables selection in
+process_each_* fns to fix an issue where field prefixes are not
+automatically used for fields in selection criteria.
+
+Use initial report type that matches the intention of each process_each_* functions:
+- _process_pvs_in_vg - PVS
+- process_each_vg - VGS
+- process_each_lv and process_each_lv_in_vg - LVS
+
+This is not normally needed for the selection handle init, BUT we would
+miss the field prefix matching, e.g.
+
+lvchange -ay -S 'name=lvol0'
+
+The "name" above would not work if we didn't initialize reporting with
+the LVS type at its start. If we pass proper init type, reporting code
+can deduce the prefix automatically ("lv_name" in this case).
+
+This report type is then changed further based on what selection criteria we
+have. When doing pure selection, not report output, the final report type
+is purely based on combination of this initial report type and report types
+of the fields used in selection criteria.
 ---
- lib/report/report.h |    4 ++++
- tools/reporter.c    |    8 ++++++++
- tools/toollib.c     |   33 ++++++++++++++++++++++++++++++---
- 3 files changed, 42 insertions(+), 3 deletions(-)
+ tools/pvchange.c |    2 +-
+ tools/toollib.c  |   12 +++++++-----
+ tools/toollib.h  |    3 ++-
+ 3 files changed, 10 insertions(+), 7 deletions(-)
 
-diff --git a/lib/report/report.h b/lib/report/report.h
-index 80a75fd..5bd8b79 100644
---- a/lib/report/report.h
-+++ b/lib/report/report.h
-@@ -71,6 +71,10 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
- 		  int quoted, int columns_as_rows, const char *selection);
- void *report_init_for_selection(struct cmd_context *cmd, report_type_t *report_type,
- 				const char *selection);
-+int report_for_selection(struct selection_handle *sh,
-+			 struct physical_volume *pv,
-+			 struct volume_group *vg,
-+			 struct logical_volume *lv);
- void report_free(void *handle);
- int report_object(void *handle, int selection_only, const struct volume_group *vg,
- 		  const struct logical_volume *lv, const struct physical_volume *pv,
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 4e41e90..7301956 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -447,6 +447,14 @@ static int _get_final_report_type(int args_are_pvs,
- 	return 1;
- }
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index b164509..1788620 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -170,7 +170,7 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 	/* FIXME: use process_each_pv for pvchange. */
  
-+int report_for_selection(struct selection_handle *sh,
-+			 struct physical_volume *pv,
-+			 struct volume_group *vg,
-+			 struct logical_volume *lv)
-+{
-+	return 1;
-+}
-+
- static int _report(struct cmd_context *cmd, int argc, char **argv,
- 		   report_type_t report_type)
- {
+ 	if (!(handle = init_processing_handle(cmd)) ||
+-	    (handle->internal_report_for_select && !init_selection_handle(cmd, handle))) {
++	    (handle->internal_report_for_select && !init_selection_handle(cmd, handle, PVS))) {
+ 		log_error("Failed to initialize processing handle.");
+ 		r = ECMD_FAILED;
+ 		goto out;
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 7d406ba..34286e3 100644
+index 34286e3..a452676 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -1628,36 +1628,63 @@ void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle
- int select_match_vg(struct cmd_context *cmd, struct processing_handle *handle,
- 		    struct volume_group *vg, int *selected)
- {
-+	struct selection_handle *sh = handle->selection_handle;
-+
- 	if (!handle->internal_report_for_select) {
- 		*selected = 1;
- 		return 1;
- 	}
- 
--	*selected = 1;
-+	sh->orig_report_type = VGS;
-+
-+	if (!report_for_selection(sh, NULL, vg, NULL))
-+		return_0;
-+
-+	sh->orig_report_type = 0;
-+	*selected = sh->selected;
-+
- 	return 1;
+@@ -1594,7 +1594,8 @@ struct processing_handle *init_processing_handle(struct cmd_context *cmd)
+ 	return handle;
  }
  
- int select_match_lv(struct cmd_context *cmd, struct processing_handle *handle,
- 		    struct volume_group *vg, struct logical_volume *lv, int *selected)
+-int init_selection_handle(struct cmd_context *cmd, struct processing_handle *handle)
++int init_selection_handle(struct cmd_context *cmd, struct processing_handle *handle,
++			  report_type_t initial_report_type)
  {
-+	struct selection_handle *sh = handle->selection_handle;
-+
- 	if (!handle->internal_report_for_select) {
- 		*selected = 1;
- 		return 1;
+ 	struct selection_handle *sh;
+ 
+@@ -1603,6 +1604,7 @@ int init_selection_handle(struct cmd_context *cmd, struct processing_handle *han
+ 		return 0;
  	}
  
--	*selected = 1;
-+	sh->orig_report_type = LVS;
-+
-+	if (!report_for_selection(sh, NULL, vg, lv))
-+		return_0;
-+
-+	sh->orig_report_type = 0;
-+	*selected = sh->selected;
-+
- 	return 1;
- }
++	sh->report_type = initial_report_type;
+ 	if (!(sh->selection_rh = report_init_for_selection(cmd, &sh->report_type,
+ 					arg_str_value(cmd, select_ARG, NULL)))) {
+ 		dm_pool_free(cmd->mem, sh);
+@@ -1841,7 +1843,7 @@ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+ 		goto_out;
  
- int select_match_pv(struct cmd_context *cmd, struct processing_handle *handle,
- 		    struct volume_group *vg, struct physical_volume *pv, int *selected)
- {
-+	struct selection_handle *sh = handle->selection_handle;
-+
- 	if (!handle->internal_report_for_select) {
- 		*selected = 1;
- 		return 1;
+ 	if (handle->internal_report_for_select && !handle->selection_handle &&
+-	    !init_selection_handle(cmd, handle))
++	    !init_selection_handle(cmd, handle, VGS))
+ 		goto_out;
+ 
+ 	ret = _process_vgnameid_list(cmd, flags, &vgnameids_to_process,
+@@ -1887,7 +1889,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
  	}
  
--	*selected = 1;
-+	sh->orig_report_type = PVS;
-+
-+	if (!report_for_selection(sh, pv, vg, NULL))
-+		return_0;
-+
-+	sh->orig_report_type = 0;
-+	*selected = sh->selected;
-+
- 	return 1;
- }
+ 	if (handle->internal_report_for_select && !handle->selection_handle &&
+-	    !init_selection_handle(cmd, handle)) {
++	    !init_selection_handle(cmd, handle, LVS)) {
+ 		ret_max = ECMD_FAILED;
+ 		goto_out;
+ 	}
+@@ -2216,7 +2218,7 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv, uint32_t fla
+ 		goto_out;
+ 
+ 	if (handle->internal_report_for_select && !handle->selection_handle &&
+-	    !init_selection_handle(cmd, handle))
++	    !init_selection_handle(cmd, handle, LVS))
+ 		goto_out;
+ 
+ 	/*
+@@ -2455,7 +2457,7 @@ static int _process_pvs_in_vg(struct cmd_context *cmd,
+ 	}
+ 
+ 	if (handle->internal_report_for_select && !handle->selection_handle &&
+-	    !init_selection_handle(cmd, handle)) {
++	    !init_selection_handle(cmd, handle, PVS)) {
+ 		ret_max = ECMD_FAILED;
+ 		goto_out;
+ 	}
+diff --git a/tools/toollib.h b/tools/toollib.h
+index 4050117..3a2c5f8 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -138,7 +138,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 			  process_single_lv_fn_t process_single_lv);
+ 
+ struct processing_handle *init_processing_handle(struct cmd_context *cmd);
+-int init_selection_handle(struct cmd_context *cmd, struct processing_handle *handle);
++int init_selection_handle(struct cmd_context *cmd, struct processing_handle *handle,
++			  report_type_t initial_report_type);
+ void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle *handle,
+ 			       int deallocate_handle_root);
  
 
 
