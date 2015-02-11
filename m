@@ -1,265 +1,36 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 11 Feb 2015 17:40:59 +0000 (UTC)
-Subject: master - tests: rename report-select.sh to select-report.sh
-Message-ID: <20150211174059.0EC0760D77@fedorahosted.org>
+Date: Wed, 11 Feb 2015 17:41:01 +0000 (UTC)
+Subject: master - tests: add select-tools.sh to test selection support in toollib
+Message-ID: <20150211174101.3200160D77@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=599cb41f99170cc3baf9be8b5cfda5d2a2227ba0
-Commit:        599cb41f99170cc3baf9be8b5cfda5d2a2227ba0
-Parent:        263f7831df111a431a064d30b639e4769445f841
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=54c2e9859fee17596f23451f6d36142a1fce06ce
+Commit:        54c2e9859fee17596f23451f6d36142a1fce06ce
+Parent:        599cb41f99170cc3baf9be8b5cfda5d2a2227ba0
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Feb 11 16:15:11 2015 +0100
+AuthorDate:    Wed Feb 11 16:16:50 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Feb 11 16:17:05 2015 +0100
+CommitterDate: Wed Feb 11 18:39:47 2015 +0100
 
-tests: rename report-select.sh to select-report.sh
+tests: add select-tools.sh to test selection support in toollib
 
-Let's name all selection-related tests with the "select-" prefix for
-better sorting.
+Tests for selection within non-reporting tools while using process_each_* fns.
 ---
- test/shell/report-select.sh |  221 -------------------------------------------
- test/shell/select-report.sh |  221 +++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 221 insertions(+), 221 deletions(-)
+ test/shell/select-tools.sh |  279 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 279 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/report-select.sh b/test/shell/report-select.sh
-deleted file mode 100644
-index 70e5366..0000000
---- a/test/shell/report-select.sh
-+++ /dev/null
-@@ -1,221 +0,0 @@
--#!/bin/sh
--# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
--
--. lib/inittest
--
--aux prepare_pvs 6 16
--
--# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
--# MAKE SURE ALL PV, VG AND LV NAMES CREATED IN
--# THIS TEST ARE UNIQUE - THIS SIMPLIFIES TESTING
--# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
--
--# create $VGS with assorted tags
--vgcreate $vg1 --vgmetadatacopies 2 --addtag "vg_tag3" --addtag "vg_tag2" -s 4m "$dev1" "$dev2" "$dev3"
--vgcreate $vg2 --addtag "vg_tag2" -s 4m "$dev4" "$dev5"
--vgcreate $vg3 --addtag "vg_tag1" -s 4m "$dev6"
--
--# add PV assorted tags
--pvchange --addtag "pv_tag3" --addtag "pv_tag1" --addtag "pv_tag2" "$dev1"
--pvchange --addtag "pv_tag1" --addtag "pv_tag4" "$dev6"
--
--# create $LVS with assorted tags and various sizes
--lvcreate --addtag 'lv_tag2.-+/=!:&#' --addtag "lv_tag1" -L8m -n "vol1" $vg1
--lvcreate --addtag "lv_tag1" -L4m -n "vol2" $vg1
--lvcreate --readahead 512 --addtag "lv_tag1" -L16m -n "abc" $vg2
--lvcreate --readahead 512 -My --minor 254 -L4m -n "xyz" $vg3
--lvcreate -L4m -aey -n "orig" $vg3
--lvcreate -L4m -s "$vg3/orig" -n "snap"
--
--OUT_LOG_FILE="out"
--ERR_LOG_FILE="err"
--
--function result()
--{
--	local items_found
--
--	test -f $OUT_LOG_FILE || {
--		echo "  >>> Missing log file to check!"
--		return 1
--	}
--
--	# there shouldn't be any selection syntax error
--	grep "Selection syntax error at" $ERR_LOG_FILE > /dev/null && {
--		echo "  >>> Selection syntax error hit!"
--		return 1
--	}
--
--	items_found=$(wc -l $OUT_LOG_FILE | cut -f 1 -d " ")
--
--	# the number of lines on output must match
--	test $items_found -eq $# || {
--		echo "  >>> NUMBER OF ITEMS EXPECTED: $# ($@)"
--		echo "  >>> NUMBER OF ITEMS FOUND: $items_found ($(< $OUT_LOG_FILE))"
--		return 1
--	}
--
--	# the names selected must be correct
--	# each pv, vg and lv name is unique so just check
--	# the presence of the names given as arg
--	for name in $1; do
--		grep $name $OUT_LOG_FILE > /dev/null || {
--			echo "  >>> $name not found in the output log"
--			return 1
--		}
--	done
--
--	rm -f $OUT_LOG_FILE
--	rm -f $ERR_LOG_FILE
--}
--
--function pvs_sel()
--{
--	pvs 1>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o pv_name --select "$1" && result $2
--}
--
--function vgs_sel()
--{
--	vgs &>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o vg_name --select "$1" && result $2
--}
--
--function lvs_sel()
--{
--	lvs &>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o lv_name --select "$1" && result $2
--}
--
--##########################
--# STRING FIELD SELECTION #
--##########################
--#$LVS 'lv_name="vol1"' && result vol1
--lvs_sel 'lv_name="vol1"' "vol1"
--#$LVS 'lv_name!="vol1"' && result vol2 abc xyz
--lvs_sel 'lv_name!="vol1"' "vol2 abc xyz orig snap"
--# check string values are accepted without quotes too
--lvs_sel 'lv_name=vol1' "vol1"
--# check single quotes are also accepted instead of double quotes
--lvs_sel "lv_name='vol1'" "vol1"
--
--###############################
--# STRING LIST FIELD SELECTION #
--###############################
--pvs_sel 'tags=["pv_tag1"]' ""
--# for one item, no need to use []
--pvs_sel 'tags="pv_tag1"' "$dev1 $dev2"
--# no match
--pvs_sel 'tags=["pv_tag1" && "pv_tag2"]'
--pvs_sel 'tags=["pv_tag1" && "pv_tag2" && "pv_tag3"]' "$dev1"
--# check the order has no effect on selection result
--pvs_sel 'tags=["pv_tag3" && "pv_tag2" && "pv_tag1"]' "$dev1"
--pvs_sel 'tags=["pv_tag4" || "pv_tag3"]' "$dev1 $dev6"
--pvs_sel 'tags!=["pv_tag1"]' "$dev1 $dev2 $dev3 $dev4 $dev5 $dev6"
--# check mixture of && and || - this is not allowed
--not pvs_sel 'tags=["pv_tag1" && "pv_tag2" || "pv_tag3"]'
--
--##########################
--# NUMBER FIELD SELECTION #
--##########################
--vgs_sel 'pv_count=3' "$vg1"
--vgs_sel 'pv_count!=3' "$vg3 $vg2"
--vgs_sel 'pv_count<2' "$vg3"
--vgs_sel 'pv_count<=2' "$vg3 $vg2"
--vgs_sel 'pv_count>2' "$vg1"
--vgs_sel 'pv_count>=2' "$vg1 $vg2"
--
--########################
--# SIZE FIELD SELECTION #
--########################
--# check size units are accepted as well as floating point numbers for sizes
--lvs_sel 'size=8388608b' "vol1"
--lvs_sel 'size=8192k' "vol1"
--lvs_sel 'size=8m' "vol1"
--lvs_sel 'size=8.00m' "vol1"
--lvs_sel 'size=0.0078125g' "vol1"
--lvs_sel 'size=0.00000762939453125t' "vol1"
--lvs_sel 'size=0.000000007450580596923828125p' "vol1"
--lvs_sel 'size=0.0000000000072759576141834259033203125e' "vol1"
--
--lvs_sel 'size>8m' "abc"
--lvs_sel 'size>=8m' "abc vol1"
--lvs_sel 'size<8m' "vol2 xyz orig snap"
--lvs_sel 'size<=8m' "vol2 xyz vol1 orig snap"
--
--###########################
--# PERCENT FIELD SELECTION #
--###########################
--if aux target_at_least dm-snapshot 1 10 0; then
--	# Test zero percent only if snapshot can be zero.
--	# Before 1.10.0, the snap percent included metadata size.
--	lvs_sel 'snap_percent=0' "snap"
--fi
--dd if=/dev/zero of=$DM_DEV_DIR/$vg3/snap bs=1M count=1
--lvs_sel 'snap_percent<50' "snap"
--lvs_sel 'snap_percent>50'
--dd if=/dev/zero of=$DM_DEV_DIR/$vg3/snap bs=1M count=4
--lvs_sel 'snap_percent=100' "snap"
--# % char is accepted as suffix for percent values
--lvs_sel 'snap_percent=100%' "snap"
--# percent values over 100% are not accepted
--not lvs_sel 'snap_percent=101%'
--
--#########################
--# REGEX FIELD SELECTION #
--#########################
--lvs_sel 'lv_name=~"^vol[12]"' "vol1 vol2"
--lvs_sel 'lv_name!~"^vol[12]"' "abc xyz orig snap"
--# check regex is accepted without quotes too
--lvs_sel 'lv_name=~^vol[12]' "vol1 vol2"
--
--###########
--# GENERIC #
--###########
--# check prefix works for selection too
--lvs_sel 'lv_name="vol1"' "vol1"
--lvs_sel 'name="vol1"' "vol1"
--
--# check reserved values are accepted for certain fields as well as usual values
--vgs_sel 'vg_mda_copies=unmanaged' "$vg2 $vg3"
--vgs_sel 'vg_mda_copies=2' "$vg1"
--# also, we must match only vg1, not including vg2 and vg3
--# when comparing ranges - unamanged is mapped onto 2^64 - 1 internally,
--# so we need to skip this internal value if it matches with selection criteria!
--vgs_sel 'vg_mda_copies>=2' "$vg1"
--not vgs_sel 'vg_mda_copies=18446744073709551615'
--
--lvs_sel 'lv_read_ahead=auto' "vol1 vol2 orig snap"
--lvs_sel 'lv_read_ahead=256k' "abc xyz"
--
--lvs_sel 'lv_minor=-1' "vol1 vol2 abc orig snap"
--lvs_sel 'lv_minor=undefined' "vol1 vol2 abc orig snap"
--lvs_sel 'lv_minor=undef' "vol1 vol2 abc orig snap"
--lvs_sel 'lv_minor=unknown' "vol1 vol2 abc orig snap"
--lvs_sel 'lv_minor=254' "xyz"
--
--# if size unit not spefied, the 'm' (MiB) unit is used by default
--lvs_sel 'lv_size=8' "vol1"
--
--# no need to use quotes for the whole selection string if it does not clash with shell
--lvs_sel name=vol1 vol1
--
--##########################################
--# FORMING MORE COMPLEX SELECTION CLAUSES #
--##########################################
--# AND clause
--lvs_sel 'lv_tags=lv_tag1 && lv_size=4m' "vol2"
--# OR clause
--lvs_sel 'lv_name=vol1 || lv_name=vol2' "vol1 vol2"
--# grouping by using ( )
--lvs_sel '(lv_name=vol1 || lv_name=vol2) || vg_tags=vg_tag1' "vol1 vol2 abc orig snap"
--lvs_sel '(lv_name=vol1 && lv_size=100m) || vg_tags=vg_tag1' "xyz orig snap"
--lvs_sel '(lv_name=vol1 || lv_name=vol2) && vg_tags=vg_tag1'
--lvs_sel '(lv_name=vol1 || lv_name=vol2) && lv_size < 8m' "vol2"
--lvs_sel '(lv_name=vol1 && lv_size=8m) && vg_tags=vg_tag2' "vol1"
--# negation of clause grouped by ( )
--lvs_sel '!(lv_name=vol1 || lv_name=vol2)' "abc xyz orig snap"
-diff --git a/test/shell/select-report.sh b/test/shell/select-report.sh
+diff --git a/test/shell/select-tools.sh b/test/shell/select-tools.sh
 new file mode 100644
-index 0000000..70e5366
+index 0000000..1cbbf87
 --- /dev/null
-+++ b/test/shell/select-report.sh
-@@ -0,0 +1,221 @@
++++ b/test/shell/select-tools.sh
+@@ -0,0 +1,279 @@
 +#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
 +#
 +# This copyrighted material is made available to anyone wishing to use,
 +# modify, copy, or redistribute it subject to the terms and conditions
@@ -271,213 +42,271 @@ index 0000000..70e5366
 +
 +. lib/inittest
 +
-+aux prepare_pvs 6 16
++aux prepare_pvs 4 12
 +
-+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-+# MAKE SURE ALL PV, VG AND LV NAMES CREATED IN
-+# THIS TEST ARE UNIQUE - THIS SIMPLIFIES TESTING
-+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++vgcreate -s 4m $vg1 "$dev1" "$dev2"
++vgcreate -s 4m $vg2 "$dev3" "$dev4"
 +
-+# create $VGS with assorted tags
-+vgcreate $vg1 --vgmetadatacopies 2 --addtag "vg_tag3" --addtag "vg_tag2" -s 4m "$dev1" "$dev2" "$dev3"
-+vgcreate $vg2 --addtag "vg_tag2" -s 4m "$dev4" "$dev5"
-+vgcreate $vg3 --addtag "vg_tag1" -s 4m "$dev6"
++# vg1/lv1 mapped onto dev1
++lvcreate -l1 -n "lv1" $vg1 "$dev1"
 +
-+# add PV assorted tags
-+pvchange --addtag "pv_tag3" --addtag "pv_tag1" --addtag "pv_tag2" "$dev1"
-+pvchange --addtag "pv_tag1" --addtag "pv_tag4" "$dev6"
++# vg1/lv2 mapped onto dev1 and dev2 (2 segments)
++lvcreate -l3 -n "lv2" $vg1 "$dev1" "$dev2"
 +
-+# create $LVS with assorted tags and various sizes
-+lvcreate --addtag 'lv_tag2.-+/=!:&#' --addtag "lv_tag1" -L8m -n "vol1" $vg1
-+lvcreate --addtag "lv_tag1" -L4m -n "vol2" $vg1
-+lvcreate --readahead 512 --addtag "lv_tag1" -L16m -n "abc" $vg2
-+lvcreate --readahead 512 -My --minor 254 -L4m -n "xyz" $vg3
-+lvcreate -L4m -aey -n "orig" $vg3
-+lvcreate -L4m -s "$vg3/orig" -n "snap"
++# vg2/lv3 mapped onto dev3
++lvcreate -l1 -n "lv3" $vg2 "$dev3"
 +
-+OUT_LOG_FILE="out"
-+ERR_LOG_FILE="err"
++# vg2/lv4 mapped onto dev3
++lvcreate -l1 -n "lv4" $vg2 "$dev3" "$dev4"
 +
-+function result()
-+{
-+	local items_found
++# vg2/lv1 mapped onto $dev4 (same LV name as vg1/lv1)
++lvcreate -l1 -n "lv1" $vg2 "$dev4"
 +
-+	test -f $OUT_LOG_FILE || {
-+		echo "  >>> Missing log file to check!"
-+		return 1
-+	}
++###########################################
++# exercise process_each_vg with selection #
++###########################################
 +
-+	# there shouldn't be any selection syntax error
-+	grep "Selection syntax error at" $ERR_LOG_FILE > /dev/null && {
-+		echo "  >>> Selection syntax error hit!"
-+		return 1
-+	}
++# select contains VGS field
++# direct vg name match
++vgchange --addtag 101 -S "vg_name=$vg1"
++check vg_field $vg1 vg_tags 101
++not check vg_field $vg2 vg_tags 101
++vgchange --deltag 101
 +
-+	items_found=$(wc -l $OUT_LOG_FILE | cut -f 1 -d " ")
++# select contains LVS fiels
++vgchange --addtag 102 -S "lv_name=lv2"
++check vg_field $vg1 vg_tags 102
++not check vg_field $vg2 vg_tags 102
++vgchange --deltag 102
++vgchange --addtag 103 -S "lv_name=lv1"
++check vg_field $vg1 vg_tags 103
++check vg_field $vg2 vg_tags 103
++vgchange --deltag 103
 +
-+	# the number of lines on output must match
-+	test $items_found -eq $# || {
-+		echo "  >>> NUMBER OF ITEMS EXPECTED: $# ($@)"
-+		echo "  >>> NUMBER OF ITEMS FOUND: $items_found ($(< $OUT_LOG_FILE))"
-+		return 1
-+	}
++# select contains SEGS field
++vgchange --addtag 104 -S 'seg_start=8m'
++check vg_field $vg1 vg_tags 104
++not check vg_field $vg2 vg_tags 104
++vgchange --deltag 104
++vgchange --addtag 105 -S "seg_start=0m"
++check vg_field $vg1 vg_tags 105
++check vg_field $vg2 vg_tags 105
++vgchange --deltag 105
 +
-+	# the names selected must be correct
-+	# each pv, vg and lv name is unique so just check
-+	# the presence of the names given as arg
-+	for name in $1; do
-+		grep $name $OUT_LOG_FILE > /dev/null || {
-+			echo "  >>> $name not found in the output log"
-+			return 1
-+		}
-+	done
++# select contains PVS field
++vgchange --addtag 106 -S "pv_name=$dev1"
++check vg_field $vg1 vg_tags 106
++not check vg_field $vg2 vg_tags 106
++vgchange --deltag 106
++vgchange --addtag 107 -S "pv_size>0m"
++check vg_field $vg1 vg_tags 107
++check vg_field $vg2 vg_tags 107
++vgchange --deltag 107
 +
-+	rm -f $OUT_LOG_FILE
-+	rm -f $ERR_LOG_FILE
-+}
++# select contains PVSEGS field
++vgchange --addtag 108 -S "pvseg_size=2"
++check vg_field $vg1 vg_tags 108
++not check vg_field $vg2 vg_tags 108
++vgchange --deltag 108
++vgchange --addtag 109 -S "pvseg_size=1"
++check vg_field $vg1 vg_tags 109
++check vg_field $vg2 vg_tags 109
++vgchange --deltag 109
 +
-+function pvs_sel()
-+{
-+	pvs 1>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o pv_name --select "$1" && result $2
-+}
++# if VG name or tag is supplied together with the
++# selection, the result is an intersection of both
++vgchange --addtag 110 -S "vg_name=$vg1" $vg2
++not check vg_field $vg1 vg_tags 110
++not check vg_field $vg2 vg_tags 110
++vgchange --deltag 110
++vgchange --addtag 111 -S "vg_name=$vg1" $vg1
++check vg_field $vg1 vg_tags 111
++not check vg_field $vg2 vg_tags 111
++vgchange --deltag 111
++vgchange --addtag "tag" $vg1
++vgchange --addtag 112 -S "vg_name=$vg2" @tag
++not check vg_field $vg1 vg_tags "tag,112"
++not check vg_field $vg2 vg_tags "tag,112"
++vgchange --deltag 112
++vgchange --addtag 113 -S "vg_name=$vg1" @tag
++check vg_field $vg1 vg_tags "113,tag"
++not check vg_field $vg2 vg_tags "113,tag"
++vgchange --deltag 113 --deltag tag
 +
-+function vgs_sel()
-+{
-+	vgs &>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o vg_name --select "$1" && result $2
-+}
++###########################################
++# exercise process_each_lv with selection #
++###########################################
 +
-+function lvs_sel()
-+{
-+	lvs &>$OUT_LOG_FILE 2>$ERR_LOG_FILE --noheadings -o lv_name --select "$1" && result $2
-+}
++# select contains VGS field
++lvchange --addtag 201 -S "vg_name=$vg1"
++check lv_field $vg1/lv1 lv_tags 201
++check lv_field $vg1/lv2 lv_tags 201
++not check lv_field $vg2/lv3 lv_tags 201
++not check lv_field $vg2/lv4 lv_tags 201
++not check lv_field $vg2/lv1 lv_tags 201
++lvchange --deltag 201 $vg1 $vg2
 +
-+##########################
-+# STRING FIELD SELECTION #
-+##########################
-+#$LVS 'lv_name="vol1"' && result vol1
-+lvs_sel 'lv_name="vol1"' "vol1"
-+#$LVS 'lv_name!="vol1"' && result vol2 abc xyz
-+lvs_sel 'lv_name!="vol1"' "vol2 abc xyz orig snap"
-+# check string values are accepted without quotes too
-+lvs_sel 'lv_name=vol1' "vol1"
-+# check single quotes are also accepted instead of double quotes
-+lvs_sel "lv_name='vol1'" "vol1"
++# select contains LVS fiels
++lvchange --addtag 202 -S "lv_name=lv2"
++not check lv_field $vg1/lv1 lv_tags 202
++check lv_field $vg1/lv2 lv_tags 202
++not check lv_field $vg2/lv3 lv_tags 202
++not check lv_field $vg2/lv4 lv_tags 202
++not check lv_field $vg2/lv1 lv_tags 202
++lvchange --deltag 202 $vg1 $vg2
++lvchange --addtag 203 -S "lv_name=lv1"
++check lv_field $vg1/lv1 lv_tags 203
++not check lv_field $vg1/lv2 lv_tags 203
++not check lv_field $vg2/lv3 lv_tags 203
++not check lv_field $vg2/lv4 lv_tags 203
++check lv_field $vg2/lv1 lv_tags 203
++lvchange --deltag 203 $vg1 $vg2
 +
-+###############################
-+# STRING LIST FIELD SELECTION #
-+###############################
-+pvs_sel 'tags=["pv_tag1"]' ""
-+# for one item, no need to use []
-+pvs_sel 'tags="pv_tag1"' "$dev1 $dev2"
-+# no match
-+pvs_sel 'tags=["pv_tag1" && "pv_tag2"]'
-+pvs_sel 'tags=["pv_tag1" && "pv_tag2" && "pv_tag3"]' "$dev1"
-+# check the order has no effect on selection result
-+pvs_sel 'tags=["pv_tag3" && "pv_tag2" && "pv_tag1"]' "$dev1"
-+pvs_sel 'tags=["pv_tag4" || "pv_tag3"]' "$dev1 $dev6"
-+pvs_sel 'tags!=["pv_tag1"]' "$dev1 $dev2 $dev3 $dev4 $dev5 $dev6"
-+# check mixture of && and || - this is not allowed
-+not pvs_sel 'tags=["pv_tag1" && "pv_tag2" || "pv_tag3"]'
++# select contains SEGS field
++lvchange --addtag 204 -S "seg_start=8m"
++not check lv_field $vg1/lv1 lv_tags 204
++check lv_field $vg1/lv2 lv_tags 204
++not check lv_field $vg2/lv3 lv_tags 204
++not check lv_field $vg2/lv4 lv_tags 204
++not check lv_field $vg2/lv1 lv_tags 204
++lvchange --deltag 204 $vg1 $vg2
 +
-+##########################
-+# NUMBER FIELD SELECTION #
-+##########################
-+vgs_sel 'pv_count=3' "$vg1"
-+vgs_sel 'pv_count!=3' "$vg3 $vg2"
-+vgs_sel 'pv_count<2' "$vg3"
-+vgs_sel 'pv_count<=2' "$vg3 $vg2"
-+vgs_sel 'pv_count>2' "$vg1"
-+vgs_sel 'pv_count>=2' "$vg1 $vg2"
++# select contains PVS field - COMBINATION NOT ALLOWED!
++lvchange --addtag 205 -S "pv_name=$dev1" 2>err
++grep "Can't report LV and PV fields at the same time" err
++grep "Selection failed for LV" err
++not check lv_field $vg1/lv1 lv_tags 205
++not check lv_field $vg1/lv2 lv_tags 205
++not check lv_field $vg2/lv3 lv_tags 205
++not check lv_field $vg2/lv4 lv_tags 205
++not check lv_field $vg2/lv1 lv_tags 205
 +
-+########################
-+# SIZE FIELD SELECTION #
-+########################
-+# check size units are accepted as well as floating point numbers for sizes
-+lvs_sel 'size=8388608b' "vol1"
-+lvs_sel 'size=8192k' "vol1"
-+lvs_sel 'size=8m' "vol1"
-+lvs_sel 'size=8.00m' "vol1"
-+lvs_sel 'size=0.0078125g' "vol1"
-+lvs_sel 'size=0.00000762939453125t' "vol1"
-+lvs_sel 'size=0.000000007450580596923828125p' "vol1"
-+lvs_sel 'size=0.0000000000072759576141834259033203125e' "vol1"
++# select contains PVSEGS field - COMBINATION NOT ALLOWED!
++lvchange --addtag 206 -S "pvseg_start>=0" 2>err
++grep "Can't report LV and PV fields at the same time" err
++grep "Selection failed for LV" err
++not check lv_field $vg1/lv1 lv_tags 206
++not check lv_field $vg1/lv2 lv_tags 206
++not check lv_field $vg2/lv3 lv_tags 206
++not check lv_field $vg2/lv4 lv_tags 206
++not check lv_field $vg2/lv1 lv_tags 206
 +
-+lvs_sel 'size>8m' "abc"
-+lvs_sel 'size>=8m' "abc vol1"
-+lvs_sel 'size<8m' "vol2 xyz orig snap"
-+lvs_sel 'size<=8m' "vol2 xyz vol1 orig snap"
++# if LV name or tag is supplied together with the
++# selection, the result is an intersection of both
++lvchange --addtag 207 -S "lv_name=lv2" $vg1/lv1
++not check lv_field $vg1/lv1 lv_tags 207
++not check lv_field $vg1/lv2 lv_tags 207
++not check lv_field $vg2/lv3 lv_tags 207
++not check lv_field $vg2/lv4 lv_tags 207
++not check lv_field $vg2/lv1 lv_tags 207
++lvchange --deltag 207 $vg1 $vg2
++lvchange --addtag 208 -S "lv_name=lv2" $vg1/lv2
++not check lv_field $vg1/lv1 lv_tags 208
++check lv_field $vg1/lv2 lv_tags 208
++not check lv_field $vg2/lv3 lv_tags 208
++not check lv_field $vg2/lv4 lv_tags 208
++not check lv_field $vg2/lv1 lv_tags 208
++lvchange --deltag 208 $vg1 $vg2
++lvchange --addtag "tag" $vg1/lv2
++lvchange --addtag 209 -S "lv_name=lv3" @tag
++not check lv_field $vg1/lv1 lv_tags "209,tag"
++not check lv_field $vg1/lv2 lv_tags "209,tag"
++not check lv_field $vg2/lv3 lv_tags "209,tag"
++not check lv_field $vg2/lv4 lv_tags "209,tag"
++not check lv_field $vg2/lv1 lv_tags "209,tag"
++lvchange --deltag 209 $vg1 $vg2
++lvchange --addtag 210 -S "lv_name=lv2" @tag
++not check lv_field $vg1/lv1 lv_tags "210,tag"
++check lv_field $vg1/lv2 lv_tags "210,tag"
++not check lv_field $vg2/lv3 lv_tags "210,tag"
++not check lv_field $vg2/lv4 lv_tags "210,tag"
++not check lv_field $vg2/lv1 lv_tags "210,tag"
++lvchange --deltag 210 --deltag tag $vg1 $vg2
 +
-+###########################
-+# PERCENT FIELD SELECTION #
-+###########################
-+if aux target_at_least dm-snapshot 1 10 0; then
-+	# Test zero percent only if snapshot can be zero.
-+	# Before 1.10.0, the snap percent included metadata size.
-+	lvs_sel 'snap_percent=0' "snap"
-+fi
-+dd if=/dev/zero of=$DM_DEV_DIR/$vg3/snap bs=1M count=1
-+lvs_sel 'snap_percent<50' "snap"
-+lvs_sel 'snap_percent>50'
-+dd if=/dev/zero of=$DM_DEV_DIR/$vg3/snap bs=1M count=4
-+lvs_sel 'snap_percent=100' "snap"
-+# % char is accepted as suffix for percent values
-+lvs_sel 'snap_percent=100%' "snap"
-+# percent values over 100% are not accepted
-+not lvs_sel 'snap_percent=101%'
++###########################################
++# exercise process_each_pv with selection #
++###########################################
 +
-+#########################
-+# REGEX FIELD SELECTION #
-+#########################
-+lvs_sel 'lv_name=~"^vol[12]"' "vol1 vol2"
-+lvs_sel 'lv_name!~"^vol[12]"' "abc xyz orig snap"
-+# check regex is accepted without quotes too
-+lvs_sel 'lv_name=~^vol[12]' "vol1 vol2"
++# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++# WARNING: pvchange doesn't use process_each_pv yet
++#          but add the tests anyway as this transition
++#          will happen soon - all these tests should
++#          just work (for now, there's a workaround done
++#          in pvchange code to work with the selection).
++#          Let's use {vg,lv,pv}change to exercise all this
++#          selection support so the tests remain readable
++#          and consistent.
++# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 +
-+###########
-+# GENERIC #
-+###########
-+# check prefix works for selection too
-+lvs_sel 'lv_name="vol1"' "vol1"
-+lvs_sel 'name="vol1"' "vol1"
++# select contains VGS field
++pvchange --addtag 301 -S "vg_name=$vg1"
++check pv_field $dev1 pv_tags 301
++check pv_field $dev2 pv_tags 301
++not check pv_field $dev3 pv_tags 301
++not check pv_field $dev4 pv_tags 301
++pvchange -a --deltag 301
 +
-+# check reserved values are accepted for certain fields as well as usual values
-+vgs_sel 'vg_mda_copies=unmanaged' "$vg2 $vg3"
-+vgs_sel 'vg_mda_copies=2' "$vg1"
-+# also, we must match only vg1, not including vg2 and vg3
-+# when comparing ranges - unamanged is mapped onto 2^64 - 1 internally,
-+# so we need to skip this internal value if it matches with selection criteria!
-+vgs_sel 'vg_mda_copies>=2' "$vg1"
-+not vgs_sel 'vg_mda_copies=18446744073709551615'
++# select contains LVS field
++pvchange --addtag 302 -S "lv_name=lv2"
++check pv_field $dev1 pv_tags 302
++check pv_field $dev2 pv_tags 302
++not check pv_field $dev3 pv_tags 302
++not check pv_field $dev4 pv_tags 302
++pvchange -a --deltag 302
 +
-+lvs_sel 'lv_read_ahead=auto' "vol1 vol2 orig snap"
-+lvs_sel 'lv_read_ahead=256k' "abc xyz"
++# select contains SEGS field
++pvchange --addtag 303 -S "seg_start=8m"
++check pv_field $dev1 pv_tags 303
++not check pv_field $dev2 pv_tags 303
++not check pv_field $dev3 pv_tags 303
++not check pv_field $dev4 pv_tags 303
++pvchange -a --deltag 303
 +
-+lvs_sel 'lv_minor=-1' "vol1 vol2 abc orig snap"
-+lvs_sel 'lv_minor=undefined' "vol1 vol2 abc orig snap"
-+lvs_sel 'lv_minor=undef' "vol1 vol2 abc orig snap"
-+lvs_sel 'lv_minor=unknown' "vol1 vol2 abc orig snap"
-+lvs_sel 'lv_minor=254' "xyz"
++# select contains PVS field
++pvchange --addtag 304 -S "pv_name=$dev1"
++check pv_field $dev1 pv_tags 304
++not check pv_field $dev2 pv_tags 304
++not check pv_field $dev3 pv_tags 304
++not check pv_field $dev4 pv_tags 304
++pvchange -a --deltag 304
 +
-+# if size unit not spefied, the 'm' (MiB) unit is used by default
-+lvs_sel 'lv_size=8' "vol1"
++# select contains PVSEGS field
++pvchange --addtag 305 -S "pvseg_size=2"
++not check pv_field $dev1 pv_tags 305
++check pv_field $dev2 pv_tags 305
++not check pv_field $dev3 pv_tags 305
++not check pv_field $dev4 pv_tags 305
++pvchange -a --deltag 305
 +
-+# no need to use quotes for the whole selection string if it does not clash with shell
-+lvs_sel name=vol1 vol1
++# intersection between selection
++# result and supplied VG name/tag
 +
-+##########################################
-+# FORMING MORE COMPLEX SELECTION CLAUSES #
-+##########################################
-+# AND clause
-+lvs_sel 'lv_tags=lv_tag1 && lv_size=4m' "vol2"
-+# OR clause
-+lvs_sel 'lv_name=vol1 || lv_name=vol2' "vol1 vol2"
-+# grouping by using ( )
-+lvs_sel '(lv_name=vol1 || lv_name=vol2) || vg_tags=vg_tag1' "vol1 vol2 abc orig snap"
-+lvs_sel '(lv_name=vol1 && lv_size=100m) || vg_tags=vg_tag1' "xyz orig snap"
-+lvs_sel '(lv_name=vol1 || lv_name=vol2) && vg_tags=vg_tag1'
-+lvs_sel '(lv_name=vol1 || lv_name=vol2) && lv_size < 8m' "vol2"
-+lvs_sel '(lv_name=vol1 && lv_size=8m) && vg_tags=vg_tag2' "vol1"
-+# negation of clause grouped by ( )
-+lvs_sel '!(lv_name=vol1 || lv_name=vol2)' "abc xyz orig snap"
++# ENABLE TESTS BELOW ONCE process_each_pv is used for pvchange
++
++#pvchange --addtag 306 -S "pv_name=$dev1" $dev2
++#not check pv_field $dev1 pv_tags 306
++#not check pv_field $dev2 pv_tags 306
++#not check pv_field $dev3 pv_tags 306
++#not check pv_field $dev4 pv_tags 306
++#pvchange -a --deltag 306
++#pvchange --addtag 307 -S "pv_name=$dev1" $dev1
++#check pv_field $dev1 pv_tags 307
++#not check pv_field $dev2 pv_tags 307
++#not check pv_field $dev3 pv_tags 307
++#not check pv_field $dev4 pv_tags 307
++#pvchange -a --deltag 307
++#pvchange --addtag "tag" $dev1
++#pvchange --addtag 308 -S "pv_name=$dev2" @tag
++#not check pv_field $dev1 pv_tags "308,tag"
++#not check pv_field $dev2 pv_tags "308,tag"
++#not check pv_field $dev3 pv_tags "308,tag"
++#not check pv_field $dev4 pv_tags "308,tag"
++#pvchange --deltag 308 $dev1
++#pvchange --addtag 309 -S "pv_name=$dev1" @tag
++#check pv_field $dev1 pv_tags "309,tag"
++#not check pv_field $dev2 pv_tags "309,tag"
++#not check pv_field $dev3 pv_tags "309,tag"
++#not check pv_field $dev4 pv_tags "309,tag"
++#pvchange -a --deltag 210 --deltag tag
 
 
