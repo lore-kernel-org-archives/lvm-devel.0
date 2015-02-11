@@ -1,66 +1,69 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 11 Feb 2015 09:11:48 +0000 (UTC)
-Subject: master - man: dumpconfig: mention LVM_COMMAND_PROFILE env var and add more references to --mergedconfig option
-Message-ID: <20150211091148.45E9161044@fedorahosted.org>
+Date: Wed, 11 Feb 2015 09:11:50 +0000 (UTC)
+Subject: master - toollib: select: issue an error message for failed VG/LV/PV selection
+Message-ID: <20150211091150.83B8C60D7F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3505e88b18edfc60bb06ffccab8dd91f69356c2d
-Commit:        3505e88b18edfc60bb06ffccab8dd91f69356c2d
-Parent:        801e47e089ae8e1a09164556536d49af555df734
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bc1bb7f8c5cd38bdebe18ebbee270882a4ee82d3
+Commit:        bc1bb7f8c5cd38bdebe18ebbee270882a4ee82d3
+Parent:        3505e88b18edfc60bb06ffccab8dd91f69356c2d
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Feb 11 09:21:08 2015 +0100
+AuthorDate:    Wed Feb 11 09:36:09 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Feb 11 09:34:19 2015 +0100
+CommitterDate: Wed Feb 11 09:36:09 2015 +0100
 
-man: dumpconfig: mention LVM_COMMAND_PROFILE env var and add more references to --mergedconfig option
+toollib: select: issue an error message for failed VG/LV/PV selection
 
-The LVM_COMMAND_PROFILE env var is new - mention it in dumpconfig's
-man page.
-
-Also, dumpconfig always displays the top of the config cascade.
-To display all the config found in the cascade merged (just like
-it's used during LVM command processing), --mergedconfig option
-must be used - this one's already described in that man page,
-just make sure it's clear and add reference for this option also
-in --profile/--commandprofile/--metadataprofile description.
 ---
- man/lvm-dumpconfig.8.in |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+ tools/toollib.c |   18 ++++++++++++------
+ 1 files changed, 12 insertions(+), 6 deletions(-)
 
-diff --git a/man/lvm-dumpconfig.8.in b/man/lvm-dumpconfig.8.in
-index 844f8ac..04afce9 100644
---- a/man/lvm-dumpconfig.8.in
-+++ b/man/lvm-dumpconfig.8.in
-@@ -103,7 +103,8 @@ See also \fBlvm.conf\fP(5) for more info about \fBconfig cascade\fP.
- .BI \-\-commandprofile " ProfileName"
- Use \fBProfileName\fP to override existing configuration.
- This configuration is then applied for dumpconfig command itself.
--See also \fBlvm.conf\fP(5) for more info about \fBconfig cascade\fP.
-+See also \fB\-\-mergedconfig\fP option and \fBlvm.conf\fP(5) for
-+more info about \fBconfig cascade\fP.
+diff --git a/tools/toollib.c b/tools/toollib.c
+index a452676..bdf6494 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1639,8 +1639,10 @@ int select_match_vg(struct cmd_context *cmd, struct processing_handle *handle,
  
- .TP
- .BI \-\-profile " ProfileName"
-@@ -115,12 +116,14 @@ applied for dumpconfig command itself.
- Use \fBProfileName\fP to override existing configuration.
- The configuration defined in metadata profile has no effect for
- dumpconfig command itself, the dumpconfig dumps the configuration only.
--See also \fBlvm.conf\fP(5) for more info about \fBconfig cascade\fP.
-+See also \fB\-\-mergedconfig\fP option and \fBlvm.conf\fP(5) for more
-+info about \fBconfig cascade\fP.
+ 	sh->orig_report_type = VGS;
  
- .TP
- .B \-\-mergedconfig
- When the dumpconfig command is run with the \fB\-\-config\fP option
--and/or \fB\-\-commandprofile\fP, \fB\-\-profile\fP, \fB\-\-metadataprofile\fP
-+and/or \fB\-\-commandprofile\fP (or using \fBLVM_COMMAND_PROFILE\fP
-+environment variable), \fB\-\-profile\fP, \fB\-\-metadataprofile\fP
- option, merge all the contents of the \fBconfig cascade\fP before dumping it.
- Without the \fB\-\-mergeconfig\fP option used, only the configuration at
- the front of the cascade is dumped. See also \fBlvm.conf\fP(5) for more
+-	if (!report_for_selection(sh, NULL, vg, NULL))
+-		return_0;
++	if (!report_for_selection(sh, NULL, vg, NULL)) {
++		log_error("Selection failed for VG %s.", vg->name);
++		return 0;
++	}
+ 
+ 	sh->orig_report_type = 0;
+ 	*selected = sh->selected;
+@@ -1660,8 +1662,10 @@ int select_match_lv(struct cmd_context *cmd, struct processing_handle *handle,
+ 
+ 	sh->orig_report_type = LVS;
+ 
+-	if (!report_for_selection(sh, NULL, vg, lv))
+-		return_0;
++	if (!report_for_selection(sh, NULL, vg, lv)) {
++		log_error("Selection failed for LV %s.", lv->name);
++		return 0;
++	}
+ 
+ 	sh->orig_report_type = 0;
+ 	*selected = sh->selected;
+@@ -1681,8 +1685,10 @@ int select_match_pv(struct cmd_context *cmd, struct processing_handle *handle,
+ 
+ 	sh->orig_report_type = PVS;
+ 
+-	if (!report_for_selection(sh, pv, vg, NULL))
+-		return_0;
++	if (!report_for_selection(sh, pv, vg, NULL)) {
++		log_error("Selection failed for PV %s.", dev_name(pv->dev));
++		return 0;
++	}
+ 
+ 	sh->orig_report_type = 0;
+ 	*selected = sh->selected;
 
 
