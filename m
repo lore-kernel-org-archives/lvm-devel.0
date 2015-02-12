@@ -1,50 +1,74 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 12 Feb 2015 14:42:18 +0000 (UTC)
-Subject: master - tests: BACKING_DEV
-Message-ID: <20150212144218.204596010E@fedorahosted.org>
+Date: Thu, 12 Feb 2015 14:42:20 +0000 (UTC)
+Subject: master - configure.in: AC_SUBST needs to be always executed
+Message-ID: <20150212144220.3BCD660DBD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d303d9973f2a60db3c58b831193686fdb467e4f4
-Commit:        d303d9973f2a60db3c58b831193686fdb467e4f4
-Parent:        4b7097b96c94e115581e77588fe1591dae1e035f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=425c04e4dc54f1c8aee261217b5b0fc00df643ae
+Commit:        425c04e4dc54f1c8aee261217b5b0fc00df643ae
+Parent:        d303d9973f2a60db3c58b831193686fdb467e4f4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Feb 12 13:30:39 2015 +0100
+AuthorDate:    Thu Feb 12 15:29:58 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Feb 12 15:40:52 2015 +0100
+CommitterDate: Thu Feb 12 15:40:53 2015 +0100
 
-tests: BACKING_DEV
+configure.in: AC_SUBST needs to be always executed
 
-Reset BACKING_DEV when it's same as LOOP.
-Reset only 64K - so just eats a bit less space from underlaying loop
-devices...
 ---
- test/lib/aux.sh |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ configure.in            |    4 ++--
+ lib/misc/configure.h.in |    3 +++
+ 2 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 9241fba..f33b62e 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -193,6 +193,7 @@ teardown_devs() {
- 		test ! -f LOOPFILE || rm -f $(< LOOPFILE)
- 	fi
- 	rm -f DEVICES # devs is set in prepare_devs()
-+	not diff LOOP BACKING_DEV || rm -f BACKING_DEV
- 	rm -f LOOP
+diff --git a/configure.in b/configure.in
+index 18e1c17..b4b9ec2 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1029,12 +1029,10 @@ AC_SUBST(VALGRIND_CFLAGS)
  
- 	# Attempt to remove any loop devices that failed to get torn down if earlier tests aborted
-@@ -392,7 +393,7 @@ prepare_devs() {
+ if test x$HAVE_VALGRIND = xyes; then
+ 	AC_DEFINE([HAVE_VALGRIND], 1, [valgrind.h found])
+-	AC_SUBST(HAVE_VALGRIND)
+ fi
  
- 	# non-ephemeral devices need to be cleared between tests
- 	test -f LOOP || for d in ${DEVICES[@]}; do
--		dd if=/dev/zero of=$d bs=1M count=1
-+		dd if=/dev/zero of=$d bs=64K count=1
- 	done
+ if test x$VALGRIND_POOL = xyes; then
+ 	AC_DEFINE([VALGRIND_POOL], 1, [Enable a valgrind aware build of pool])
+-	AC_SUBST(VALGRIND_POOL)
+ fi
  
- 	#for i in `seq 1 $n`; do
+ ################################################################################
+@@ -1723,6 +1721,7 @@ AC_SUBST(FSADM)
+ AC_SUBST(BLKDEACTIVATE)
+ AC_SUBST(HAVE_LIBDL)
+ AC_SUBST(HAVE_REALTIME)
++AC_SUBST(HAVE_VALGRIND)
+ AC_SUBST(INTL)
+ AC_SUBST(INTL_PACKAGE)
+ AC_SUBST(JOBS)
+@@ -1782,6 +1781,7 @@ AC_SUBST(UDEV_SYNC)
+ AC_SUBST(UDEV_SYSTEMD_BACKGROUND_JOBS)
+ AC_SUBST(UDEV_RULE_EXEC_DETECTION)
+ AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
++AC_SUBST(VALGRIND_POOL)
+ AC_SUBST(WRITE_INSTALL)
+ AC_SUBST(DMEVENTD_PIDFILE)
+ AC_SUBST(LVMETAD_PIDFILE)
+diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
+index 7c0d64c..9a002d2 100644
+--- a/lib/misc/configure.h.in
++++ b/lib/misc/configure.h.in
+@@ -459,6 +459,9 @@
+ /* Define to 1 if you have the <utmpx.h> header file. */
+ #undef HAVE_UTMPX_H
+ 
++/* valgrind.h found */
++#undef HAVE_VALGRIND
++
+ /* Define to 1 if you have the `vfork' function. */
+ #undef HAVE_VFORK
+ 
 
 
