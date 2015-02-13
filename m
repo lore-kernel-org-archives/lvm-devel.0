@@ -1,119 +1,106 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 13 Feb 2015 10:29:37 +0000 (UTC)
-Subject: master - tests: select-tools.sh: pvchange now uses process_each_pv
-Message-ID: <20150213102937.3933C6102A@fedorahosted.org>
+Date: Fri, 13 Feb 2015 10:29:39 +0000 (UTC)
+Subject: master - tolllib: process_each_pv: always use full_filter unconditionally when getting all devices
+Message-ID: <20150213102939.4CECB6102A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1c005b557a4b4d282d853e2437536f244bbf72b2
-Commit:        1c005b557a4b4d282d853e2437536f244bbf72b2
-Parent:        969d2bf4484810e1c3d402a45cb433b3bee19191
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e0ce7285794da030a3e87d9b0a81217d6155c3bc
+Commit:        e0ce7285794da030a3e87d9b0a81217d6155c3bc
+Parent:        1c005b557a4b4d282d853e2437536f244bbf72b2
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Feb 13 10:52:36 2015 +0100
+AuthorDate:    Fri Feb 13 10:59:19 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Fri Feb 13 11:27:09 2015 +0100
 
-tests: select-tools.sh: pvchange now uses process_each_pv
+tolllib: process_each_pv: always use full_filter unconditionally when getting all devices
 
-pvchange now uses process_each_pv so uncomment parts of the test
-which check proper functionality of intersection between selection
-result and PVs or PV tags directly provided on command line. This
-didn't work properly before when pvchange was not using process_each_pv.
+(This reverts patch #d95c6154)
 
-For example:
+Filter complete device list through full_filter unconditionally when
+we're getting the list of *all* devices even in case we're interested
+only in fraction of those devices - the PVs, not the other devices
+which are not PVs yet (e.g. pvs vs. pvs -a).
 
-  pvchange -u -S 'pv_name=/dev/sda' /dev/sdb
+We need to do this full filtering whenever we're handling *complete*
+list of devices, we need to be safe here, mainly if there are any
+future changes and we'd forgot to change to use proper filtering then.
+Also properly preventing duplicates if there are any block subsystem
+components used (mpath, MD ...).
 
-..changes nothing since clearly the intersection of /dev/sda and
-/dev/sdb is empty set. The same applies for tags:
+Thing here is that (under use_lvmetad=1), cmd->filter can be used
+only if we're sure that the list of devices we're filtering contains
+only PVs. We have to use cmd->full_filter otherwise (like it is in
+case of _get_all_devices fn which acquires complete list of devices,
+no matter if it is a PV or not).
 
-  pvchange -u -S 'pv_name=/dev/sda' @some_tag
+Of course, cmd->full_filter is more extensive than cmd->filter
+which is only a subset of full_filter.
 
-..changes nothing if /dev/sda is not tagged with some_tag.
+We could optimize this in a way that if we're interested in PVs only
+during process_each_pv processing (e.g. using pvs in contrast to pvs -a),
+we'd get the list of PV devices directly from lvmetad from the
+lvmcache_seed_infos_from_lvmetad fn call which currently updates
+lvmcache only. We'd add an additional output arg for this fn to get
+the list of PV devices directly in addition, without a need to iterate
+over all devices which include non-PVs which we're not interested in
+anyway, hence we could use only cmd->filter, not the cmd->full_filter.
+
+So the code would look something like this:
+
+static int _get_all_devices(....)
+{
+	struct device_id_list *dil;
+
+	if (interested_in_pvs_only)
+		lvmcache_seed_infos_from_lvmetad(cmd, &dil); /* new "dil" arg */
+		/* the "dil" list would be filtered through cmd->filter inside lvmcache_seed_infos_from_lvmetad */
+	else {
+		lvmcache_seed_infos_from_lvmetad(cmd, NULL);
+		dev_iter_create(cmd->full_filter)
+		while (dev = dev_iter_get ...) {
+			dm_list_add(all_devices, &dil->list);
+		}
+	}
+}
 ---
- test/shell/select-tools.sh |   63 +++++++++++++++++--------------------------
- 1 files changed, 25 insertions(+), 38 deletions(-)
+ tools/toollib.c |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/select-tools.sh b/test/shell/select-tools.sh
-index 1cbbf87..b727fd7 100644
---- a/test/shell/select-tools.sh
-+++ b/test/shell/select-tools.sh
-@@ -196,17 +196,6 @@ lvchange --deltag 210 --deltag tag $vg1 $vg2
- # exercise process_each_pv with selection #
- ###########################################
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b0f603b..22fd9a6 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -2328,8 +2328,7 @@ static int _get_arg_devices(struct cmd_context *cmd,
+ 	return ret_max;
+ }
  
--# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
--# WARNING: pvchange doesn't use process_each_pv yet
--#          but add the tests anyway as this transition
--#          will happen soon - all these tests should
--#          just work (for now, there's a workaround done
--#          in pvchange code to work with the selection).
--#          Let's use {vg,lv,pv}change to exercise all this
--#          selection support so the tests remain readable
--#          and consistent.
--# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
--
- # select contains VGS field
- pvchange --addtag 301 -S "vg_name=$vg1"
- check pv_field $dev1 pv_tags 301
-@@ -250,30 +239,28 @@ pvchange -a --deltag 305
- # intersection between selection
- # result and supplied VG name/tag
+-static int _get_all_devices(struct cmd_context *cmd, struct dm_list *all_devices,
+-			    int use_full_filter)
++static int _get_all_devices(struct cmd_context *cmd, struct dm_list *all_devices)
+ {
+ 	struct dev_iter *iter;
+ 	struct device *dev;
+@@ -2338,7 +2337,7 @@ static int _get_all_devices(struct cmd_context *cmd, struct dm_list *all_devices
  
--# ENABLE TESTS BELOW ONCE process_each_pv is used for pvchange
--
--#pvchange --addtag 306 -S "pv_name=$dev1" $dev2
--#not check pv_field $dev1 pv_tags 306
--#not check pv_field $dev2 pv_tags 306
--#not check pv_field $dev3 pv_tags 306
--#not check pv_field $dev4 pv_tags 306
--#pvchange -a --deltag 306
--#pvchange --addtag 307 -S "pv_name=$dev1" $dev1
--#check pv_field $dev1 pv_tags 307
--#not check pv_field $dev2 pv_tags 307
--#not check pv_field $dev3 pv_tags 307
--#not check pv_field $dev4 pv_tags 307
--#pvchange -a --deltag 307
--#pvchange --addtag "tag" $dev1
--#pvchange --addtag 308 -S "pv_name=$dev2" @tag
--#not check pv_field $dev1 pv_tags "308,tag"
--#not check pv_field $dev2 pv_tags "308,tag"
--#not check pv_field $dev3 pv_tags "308,tag"
--#not check pv_field $dev4 pv_tags "308,tag"
--#pvchange --deltag 308 $dev1
--#pvchange --addtag 309 -S "pv_name=$dev1" @tag
--#check pv_field $dev1 pv_tags "309,tag"
--#not check pv_field $dev2 pv_tags "309,tag"
--#not check pv_field $dev3 pv_tags "309,tag"
--#not check pv_field $dev4 pv_tags "309,tag"
--#pvchange -a --deltag 210 --deltag tag
-+pvchange --addtag 306 -S "pv_name=$dev1" $dev2
-+not check pv_field $dev1 pv_tags 306
-+not check pv_field $dev2 pv_tags 306
-+not check pv_field $dev3 pv_tags 306
-+not check pv_field $dev4 pv_tags 306
-+pvchange -a --deltag 306
-+pvchange --addtag 307 -S "pv_name=$dev1" $dev1
-+check pv_field $dev1 pv_tags 307
-+not check pv_field $dev2 pv_tags 307
-+not check pv_field $dev3 pv_tags 307
-+not check pv_field $dev4 pv_tags 307
-+pvchange -a --deltag 307
-+pvchange --addtag "tag" $dev1
-+pvchange --addtag 308 -S "pv_name=$dev2" @tag
-+not check pv_field $dev1 pv_tags "308,tag"
-+not check pv_field $dev2 pv_tags "308,tag"
-+not check pv_field $dev3 pv_tags "308,tag"
-+not check pv_field $dev4 pv_tags "308,tag"
-+pvchange --deltag 308 $dev1
-+pvchange --addtag 309 -S "pv_name=$dev1" @tag
-+check pv_field $dev1 pv_tags "309,tag"
-+not check pv_field $dev2 pv_tags "309,tag"
-+not check pv_field $dev3 pv_tags "309,tag"
-+not check pv_field $dev4 pv_tags "309,tag"
-+pvchange -a --deltag 309 --deltag tag
+ 	lvmcache_seed_infos_from_lvmetad(cmd);
+ 
+-	if (!(iter = dev_iter_create(use_full_filter ? cmd->full_filter : cmd->filter, 1))) {
++	if (!(iter = dev_iter_create(cmd->full_filter, 1))) {
+ 		log_error("dev_iter creation failed.");
+ 		return ECMD_FAILED;
+ 	}
+@@ -2735,7 +2734,7 @@ int process_each_pv(struct cmd_context *cmd,
+ 	 * from all VGs are processed first, removing them from all_devices.  Then
+ 	 * any devs remaining in all_devices are processed.
+ 	 */
+-	if ((ret = _get_all_devices(cmd, &all_devices, process_all_devices) != ECMD_PROCESSED)) {
++	if ((ret = _get_all_devices(cmd, &all_devices) != ECMD_PROCESSED)) {
+ 		stack;
+ 		return ret;
+ 	}
 
 
