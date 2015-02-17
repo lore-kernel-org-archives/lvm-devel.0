@@ -1,52 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 17 Feb 2015 12:42:37 +0000 (UTC)
-Subject: master - cleanup: drop unused val
-Message-ID: <20150217124237.8D76B60090@fedorahosted.org>
+Date: Tue, 17 Feb 2015 12:42:41 +0000 (UTC)
+Subject: master - cleanup: fix compate of return value
+Message-ID: <20150217124241.C683D60090@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb144c0097fe111d9881457de7c686c190c07944
-Commit:        cb144c0097fe111d9881457de7c686c190c07944
-Parent:        cd1a76a49222feb975b440199881d7c70faf103a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a009c0fb407ec3a16e0432cb29434b9e9e79d81b
+Commit:        a009c0fb407ec3a16e0432cb29434b9e9e79d81b
+Parent:        4bb60c05bfc5b1be101807302e0697a4508dd98c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 17 13:39:26 2015 +0100
+AuthorDate:    Tue Feb 17 13:40:35 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 17 13:39:26 2015 +0100
+CommitterDate: Tue Feb 17 13:40:35 2015 +0100
 
-cleanup: drop unused val
+cleanup: fix compate of return value
 
+Drop '!' for 'ret' compare.
+Since the effect of false compare was only stack trace printing,
+it present no real code flow change.
 ---
- libdaemon/client/daemon-io.c |    6 ------
- 1 files changed, 0 insertions(+), 6 deletions(-)
+ tools/lvconvert.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdaemon/client/daemon-io.c b/libdaemon/client/daemon-io.c
-index d19acd6..5ce9dde 100644
---- a/libdaemon/client/daemon-io.c
-+++ b/libdaemon/client/daemon-io.c
-@@ -51,10 +51,7 @@ int buffer_read(int fd, struct buffer *buffer) {
- 			return 0; /* we should never encounter EOF here */
- 		} else if (result < 0 && ( errno == EAGAIN || errno == EWOULDBLOCK ||
- 					   errno == EINTR || errno == EIO)) {
--			struct timeval tval;
- 			fd_set in;
--			tval.tv_sec = 1;
--			tval.tv_usec = 0;
- 			FD_ZERO(&in);
- 			FD_SET(fd, &in);
- 			/* ignore the result, this is just a glorified sleep */
-@@ -83,10 +80,7 @@ int buffer_write(int fd, const struct buffer *buffer) {
- 				written += result;
- 			else if (result < 0 && ( errno == EAGAIN || errno == EWOULDBLOCK ||
- 						 errno == EINTR || errno == EIO)) {
--				struct timeval tval;
- 				fd_set out;
--				tval.tv_sec = 1;
--				tval.tv_usec = 0;
- 				FD_ZERO(&out);
- 				FD_SET(fd, &out);
- 				/* ignore the result, this is just a glorified sleep */
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 3bbe65f..935cbf9 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3519,7 +3519,7 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
+ 		 */
+ 		unlock_vg(cmd, vg_name);
+ 
+-		if (!(ret = _poll_logical_volume(cmd, lp->lv_to_poll,
++		if ((ret = _poll_logical_volume(cmd, lp->lv_to_poll,
+ 						 lp->wait_completion)) != ECMD_PROCESSED)
+ 			stack;
+ 
 
 
