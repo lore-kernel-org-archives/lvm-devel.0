@@ -1,54 +1,91 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 17 Feb 2015 10:05:51 +0000 (UTC)
-Subject: master - tests: ensure lv1 goes away first
-Message-ID: <20150217100551.0D9E760F15@fedorahosted.org>
+Date: Tue, 17 Feb 2015 10:05:53 +0000 (UTC)
+Subject: master - tests: syncaction update
+Message-ID: <20150217100553.2D20260DF8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=120e1aa4bd13a8b2f49b7d6660f83b0277190774
-Commit:        120e1aa4bd13a8b2f49b7d6660f83b0277190774
-Parent:        6b4066585f73df7328ea16f6cb3713cd49cf2d2d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cd1a76a49222feb975b440199881d7c70faf103a
+Commit:        cd1a76a49222feb975b440199881d7c70faf103a
+Parent:        120e1aa4bd13a8b2f49b7d6660f83b0277190774
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 16 10:53:22 2015 +0100
+AuthorDate:    Tue Feb 17 11:03:20 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 17 11:05:04 2015 +0100
 
-tests: ensure lv1 goes away first
+tests: syncaction update
 
-$lv1 may appear in the table after -pvmove0 which could make -pvmove0
-unremovable.
+Improve syncaction testing with some minor
+workaround for current upstream kernel
 ---
- test/shell/pvmove-restart.sh |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ test/shell/lvchange-syncaction-raid.sh |   31 +++++++++++++++++++++++++------
+ 1 files changed, 25 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
-index 3c4947d..98ff6b4 100644
---- a/test/shell/pvmove-restart.sh
-+++ b/test/shell/pvmove-restart.sh
-@@ -29,8 +29,6 @@ lvextend -l+10 $vg/$lv1 "$dev2"
- # Slowdown writes
- aux delay_dev "$dev3" 0 100
- 
--lvs -o+devices $vg
--
- pvmove -i0 -n $vg/$lv1 "$dev1" "$dev3" &
- PVMOVE=$!
- # Let's wait a bit till pvmove starts and kill it
-@@ -39,8 +37,10 @@ kill -9 $PVMOVE
- wait
- 
- # Simulate reboot - forcibly remove related devices
--dmsetup table
--dmsetup ls --exec echo | egrep "$vg-$lv1|$vg-pvmove0" | xargs -r -n 1 dmsetup remove
+diff --git a/test/shell/lvchange-syncaction-raid.sh b/test/shell/lvchange-syncaction-raid.sh
+index 7ef4e01..9c51299 100644
+--- a/test/shell/lvchange-syncaction-raid.sh
++++ b/test/shell/lvchange-syncaction-raid.sh
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2014-2015 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -27,17 +27,28 @@ START=$(get pv_field "$dev2" pe_start --units 1k)
+ METASIZE=$(get lv_field $vg/${lv1}_rmeta_1 size -a --units 1k)
+ SEEK=$((${START%\.00k} + ${METASIZE%\.00k}))
+ # Overwrite some portion of  _rimage_1
 +
-+# First take down $lv1 then it's pvmove0
-+dmsetup ls --exec echo | grep "${vg}-$lv1" | xargs -r dmsetup remove
-+dmsetup ls --exec echo | grep "${vg}-pvmove0" | xargs -r dmsetup remove
++#aux delay_dev "$dev2" 10 10
+ dd if=/dev/urandom of="$dev2" bs=1K count=1 seek=$SEEK oflag=direct
++# FIXME
++# Some delay - there is currently race in upstream kernel
++# test may occasionaly fail with:
++# device-mapper: message ioctl on  failed: Device or resource busy
++#
++# Heinz's kernel seems to fix this particular issue but
++# has some other problem for now
++aux udev_wait
  
- # Check we really have pvmove volume
- check lv_attr_bit type $vg/pvmove0 "p"
+-aux wait_for_sync $vg $lv1
+ lvchange --syncaction check $vg/$lv1
++
++# Wait till scrubbing is finished
++aux wait_for_sync $vg $lv1
++
+ check lv_field $vg/$lv1 raid_mismatch_count "128"
+ 
+ # Let's deactivate
+ lvchange -an $vg/$lv1
+ 
+-# Slow down write by 100ms
+-aux delay_dev "$dev2" 0 50
+ lvchange -ay $vg/$lv1
+ # noone has it open and target is read & running
+ dmsetup info -c | grep $vg
+@@ -55,9 +66,17 @@ dmsetup info -c | grep $vg
+ # As solution for now - user needs to run --synaction on synchronous raid array
+ #
+ aux wait_for_sync $vg $lv1
+-should lvchange --syncaction check $vg/$lv1
+ 
+-aux enable_dev "$dev2"
++# Check raid array doesn't know about error yet
+ check lv_field $vg/$lv1 raid_mismatch_count "0"
+ 
++# Start scrubbing
++lvchange --syncaction check $vg/$lv1
++
++# Wait till scrubbing is finished
++aux wait_for_sync $vg $lv1
++
++# Retest mistmatch exists
++check lv_field $vg/$lv1 raid_mismatch_count "128"
++
+ vgremove -ff $vg
 
 
