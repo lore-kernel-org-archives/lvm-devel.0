@@ -1,40 +1,41 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 17 Feb 2015 14:54:37 +0000 (UTC)
-Subject: master - tests: hide uninteresting output
-Message-ID: <20150217145437.ECE8D610A4@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 18 Feb 2015 09:22:12 +0000 (UTC)
+Subject: master - test: Make pvmove0 device removal more robust, in pvmove-restart.sh.
+Message-ID: <20150218092212.3EC5560D68@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10b8d2a4ea538c21cf991fd608de47a9c18f85f4
-Commit:        10b8d2a4ea538c21cf991fd608de47a9c18f85f4
-Parent:        973afcbb2064ad5ca264d9262ed5fd0a7bdac50e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 17 15:53:24 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 17 15:54:21 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=733e3f6f983d26c346c5426915abfd9594e85a49
+Commit:        733e3f6f983d26c346c5426915abfd9594e85a49
+Parent:        10b8d2a4ea538c21cf991fd608de47a9c18f85f4
+Author:        Petr Rockai <me@mornfall.net>
+AuthorDate:    Wed Feb 18 10:17:43 2015 +0100
+Committer:     Petr Rockai <me@mornfall.net>
+CommitterDate: Wed Feb 18 10:21:06 2015 +0100
 
-tests: hide uninteresting output
+test: Make pvmove0 device removal more robust, in pvmove-restart.sh.
 
-We don't care about diff output.
 ---
- test/lib/aux.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/pvmove-restart.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index f33b62e..d3a3382 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -193,7 +193,7 @@ teardown_devs() {
- 		test ! -f LOOPFILE || rm -f $(< LOOPFILE)
- 	fi
- 	rm -f DEVICES # devs is set in prepare_devs()
--	not diff LOOP BACKING_DEV || rm -f BACKING_DEV
-+	not diff LOOP BACKING_DEV >/dev/null 2>&1 || rm -f BACKING_DEV
- 	rm -f LOOP
+diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
+index 98ff6b4..5e4fd8b 100644
+--- a/test/shell/pvmove-restart.sh
++++ b/test/shell/pvmove-restart.sh
+@@ -39,8 +39,8 @@ wait
+ # Simulate reboot - forcibly remove related devices
  
- 	# Attempt to remove any loop devices that failed to get torn down if earlier tests aborted
+ # First take down $lv1 then it's pvmove0
+-dmsetup ls --exec echo | grep "${vg}-$lv1" | xargs -r dmsetup remove
+-dmsetup ls --exec echo | grep "${vg}-pvmove0" | xargs -r dmsetup remove
++while dmsetup status "$vg-$lv1"; do dmsetup remove "$vg-$lv1" || true; done
++while dmsetup status "$vg-pvmove0"; do dmsetup remove "$vg-pvmove0" || true; done
+ 
+ # Check we really have pvmove volume
+ check lv_attr_bit type $vg/pvmove0 "p"
 
 
