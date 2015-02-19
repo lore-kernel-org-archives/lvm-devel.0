@@ -1,202 +1,196 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 10 Feb 2015 15:12:50 +0000 (UTC)
-Subject: master - report: add report_init_for_selection fn and modify report_object to support reporting for selection only
-Message-ID: <20150210151250.BD07860093@fedorahosted.org>
+Date: Thu, 19 Feb 2015 13:39:35 +0000 (UTC)
+Subject: master - pvcreate: switch to "none" dev-ext source during pvcreate
+Message-ID: <20150219133935.29B2660DEE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a64b39aef80d790dd4afe4ce8fdaa0ed1b0e2c48
-Commit:        a64b39aef80d790dd4afe4ce8fdaa0ed1b0e2c48
-Parent:        51d96a170314b7ce75f233d42501262805384770
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ed420fb6917162ed17af69a9a0ec9ae26e61e209
+Commit:        ed420fb6917162ed17af69a9a0ec9ae26e61e209
+Parent:        69b1e32c8a06c77023d2e3440e0abfaeb86808f7
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Dec 2 13:14:12 2014 +0100
+AuthorDate:    Thu Feb 19 14:30:20 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Feb 10 16:05:25 2015 +0100
+CommitterDate: Thu Feb 19 14:34:55 2015 +0100
 
-report: add report_init_for_selection fn and modify report_object to support reporting for selection only
+pvcreate: switch to "none" dev-ext source during pvcreate
 
-The new "report_init_for_selection" is just a wrapper over
-dm_report_init_with_selection that initializes reporting for selection
-only. This means we're not going to do the actual reporting to output
-for display and as such we intialize reporting as if no fields are reported
-or sorted. The only fields "reported" are taken from the selection criteria
-string and all such fields are marked as hidden automatically (FLD_HIDDEN flag).
-These fields are used solely for selection criteria matching.
+The dev ext source must be reset for the dev_cache_get call
+(which evaluates filters), not lvmcache_label_scan - so fix
+original commit 727c7ff85d448743f751bc5218e73c41314ed5f1.
 
-Also, modify existing report_object function that was used for reporting to
-output for display. Now, it can either cause reporting to output or reporting
-for selection only. The selection result is stored in struct selection_handle's
-"selected" variable which can be handled further by any report_object caller.
+Also, add comments in _pvcreate_check fn explaining why
+refresh filter and rescan is needed and exactly in which
+situations.
 ---
- lib/report/report.c |   18 ++++++++++++++++--
- lib/report/report.h |    4 +++-
- tools/reporter.c    |   35 ++++++++++++++++++++++++-----------
- 3 files changed, 43 insertions(+), 14 deletions(-)
+ lib/metadata/metadata.c |   82 +++++++++++++++++++++++++++++++++-------------
+ 1 files changed, 59 insertions(+), 23 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 53de714..cf3d9b6 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -2009,15 +2009,28 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
- 	return rh;
- }
- 
-+void *report_init_for_selection(struct cmd_context *cmd,
-+				report_type_t *report_type,
-+				const char *selection_criteria)
-+{
-+	return dm_report_init_with_selection(report_type, _report_types, _fields,
-+					     "", DEFAULT_REP_SEPARATOR,
-+					     DM_REPORT_OUTPUT_FIELD_UNQUOTED,
-+					     "", selection_criteria,
-+					     _report_reserved_values,
-+					     cmd);
-+}
-+
- /*
-  * Create a row of data for an object
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index a4c3033..5acb2b4 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1416,18 +1416,18 @@ int vg_split_mdas(struct cmd_context *cmd __attribute__((unused)),
+  * 0 indicates we may not.
   */
--int report_object(void *handle, const struct volume_group *vg,
-+int report_object(void *handle, int selection_only, const struct volume_group *vg,
- 		  const struct logical_volume *lv, const struct physical_volume *pv,
- 		  const struct lv_segment *seg, const struct pv_segment *pvseg,
- 		  const struct lv_with_info_and_seg_status *lvdm,
- 		  const struct label *label)
+ static int _pvcreate_check(struct cmd_context *cmd, const char *name,
+-			   struct pvcreate_params *pp)
++			   struct pvcreate_params *pp, int *wiped)
  {
-+	struct selection_handle *sh = selection_only ? (struct selection_handle *) handle : NULL;
- 	struct device dummy_device = { .dev = 0 };
- 	struct label dummy_label = { .dev = &dummy_device };
- 	struct lvm_report_object obj = {
-@@ -2051,7 +2064,8 @@ int report_object(void *handle, const struct volume_group *vg,
- 	if (!obj.vg && pv)
- 		_dummy_fid.fmt = pv->fmt;
+ 	struct physical_volume *pv;
+ 	struct device *dev;
+ 	int r = 0;
+-	int wiped;
+ 	int scan_needed = 0;
+ 	int filter_refresh_needed = 0;
+-	dev_ext_t dev_ext_src = external_device_info_source();
  
--	return dm_report_object(handle, &obj);
-+	return sh ? dm_report_object_is_selected(sh->selection_rh, &obj, 0, &sh->selected)
-+		  : dm_report_object(handle, &obj);
+ 	/* FIXME Check partition type is LVM unless --force is given */
+ 
++	*wiped = 0;
++
+ 	/* Is there a pv here already? */
+ 	pv = find_pv_by_name(cmd, name, 1, 1);
+ 
+@@ -1452,6 +1452,33 @@ static int _pvcreate_check(struct cmd_context *cmd, const char *name,
+ 
+ 	dev = dev_cache_get(name, cmd->full_filter);
+ 
++	/*
++	 * Refresh+rescan at the end is needed if:
++	 *   - we don't obtain device list from udev,
++	 *     hence persistent cache file is used
++	 *     and we need to trash it and reevaluate
++	 *     for any changes done outside - adding
++	 *     any new foreign signature which may affect
++	 *     filtering - before we do pvcreate, we
++	 *     need to be sure that we have up-to-date
++	 *     view for filters
++	 *
++	 *   - we have wiped existing foreign signatures
++	 *     from dev as this may affect what's filtered
++	 *     as well
++	 *
++	 *
++	 * Only rescan at the end is needed if:
++	 *   - we've just checked whether dev is fileterd
++	 *     by MD filter. We do the refresh in-situ,
++	 *     so no need to require the refresh at the
++	 *     end of this fn. This is to allow for
++	 *     wiping MD signature during pvcreate for
++	 *     the dev - the dev would normally be
++	 *     filtered because of MD filter.
++	 *     This is an exception.
++	 */
++
+ 	/* Is there an md superblock here? */
+ 	if (!dev && md_filtering()) {
+ 		if (!refresh_filters(cmd))
+@@ -1462,7 +1489,8 @@ static int _pvcreate_check(struct cmd_context *cmd, const char *name,
+ 		init_md_filtering(1);
+ 
+ 		scan_needed = 1;
+-	}
++	} else if (!obtain_device_list_from_udev())
++		filter_refresh_needed = scan_needed = 1;
+ 
+ 	if (!dev) {
+ 		log_error("Device %s not found (or ignored by filtering).", name);
+@@ -1481,26 +1509,13 @@ static int _pvcreate_check(struct cmd_context *cmd, const char *name,
+ 
+ 	if (!wipe_known_signatures(cmd, dev, name,
+ 				   TYPE_LVM1_MEMBER | TYPE_LVM2_MEMBER,
+-				   0, pp->yes, pp->force, &wiped)) {
++				   0, pp->yes, pp->force, wiped)) {
+ 		log_error("Aborting pvcreate on %s.", name);
+ 		goto out;
+ 	}
+ 
+-	if (wiped) {
+-		if (dev_ext_src == DEV_EXT_UDEV)
+-			/*
+-			 * wipe_known_signatures called later fires WATCH event
+-			 * to update udev database. But at the moment, we have
+-			 * no way to synchronize with such event - we may end
+-			 * up still seeing the old info in udev db and pvcreate
+-			 * can fail to proceed because of the device still
+-			 * being filtered (because of the stale info in udev db).
+-			 * Disable udev dev-ext source temporarily here for
+-			 * this reason.
+-			 */
+-			init_external_device_info_source(DEV_EXT_NONE);
++	if (wiped)
+ 		filter_refresh_needed = scan_needed = 1;
+-	}
+ 
+ 	if (sigint_caught())
+ 		goto_out;
+@@ -1521,14 +1536,14 @@ out:
+ 			r = 0;
+ 		}
+ 
+-	if (scan_needed)
++	if (scan_needed) {
+ 		if (!lvmcache_label_scan(cmd, 2)) {
+ 			stack;
+ 			r = 0;
+ 		}
++	}
+ 
+ 	free_pv_fid(pv);
+-	init_external_device_info_source(dev_ext_src);
+ 	return r;
  }
  
- static int _report_devtype_single(void *handle, const dev_known_type_t *devtype)
-diff --git a/lib/report/report.h b/lib/report/report.h
-index aef6d72..80a75fd 100644
---- a/lib/report/report.h
-+++ b/lib/report/report.h
-@@ -69,8 +69,10 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
- 		  report_type_t *report_type, const char *separator,
- 		  int aligned, int buffered, int headings, int field_prefixes,
- 		  int quoted, int columns_as_rows, const char *selection);
-+void *report_init_for_selection(struct cmd_context *cmd, report_type_t *report_type,
-+				const char *selection);
- void report_free(void *handle);
--int report_object(void *handle, const struct volume_group *vg,
-+int report_object(void *handle, int selection_only, const struct volume_group *vg,
- 		  const struct logical_volume *lv, const struct physical_volume *pv,
- 		  const struct lv_segment *seg, const struct pv_segment *pvseg,
- 		  const struct lv_with_info_and_seg_status *lvdm,
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 3d7e5dd..3cba020 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -32,7 +32,10 @@ static int _vgs_single(struct cmd_context *cmd __attribute__((unused)),
- 		       const char *vg_name, struct volume_group *vg,
- 		       struct processing_handle *handle)
+@@ -1637,9 +1652,11 @@ struct physical_volume *pvcreate_vol(struct cmd_context *cmd, const char *pv_nam
  {
--	if (!report_object(handle->custom_handle, vg, NULL, NULL, NULL, NULL, NULL, NULL))
-+	struct selection_handle *sh = handle->selection_handle;
-+
-+	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-+			   vg, NULL, NULL, NULL, NULL, NULL, NULL))
- 		return_ECMD_FAILED;
+ 	struct physical_volume *pv = NULL;
+ 	struct device *dev;
++	int wiped = 0;
+ 	struct dm_list mdas;
+ 	struct pvcreate_params default_pp;
+ 	char buffer[64] __attribute__((aligned(8)));
++	dev_ext_t dev_ext_src;
  
- 	check_current_backup(vg);
-@@ -88,6 +91,7 @@ static int _do_lvs_with_info_and_status_single(struct cmd_context *cmd,
- 					       int do_info, int do_status,
- 					       struct processing_handle *handle)
- {
-+	struct selection_handle *sh = handle->selection_handle;
- 	struct lv_with_info_and_seg_status status = {
- 		.seg_status.type = SEG_STATUS_NONE
- 	};
-@@ -96,8 +100,8 @@ static int _do_lvs_with_info_and_status_single(struct cmd_context *cmd,
- 	if (!_do_info_and_status(cmd, lv, NULL, &status, do_info, do_status))
- 		goto_out;
- 
--	if (!report_object(handle->custom_handle, lv->vg, lv,
--			   NULL, NULL, NULL, &status, NULL))
-+	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-+			   lv->vg, lv, NULL, NULL, NULL, &status, NULL))
- 		goto out;
- 
- 	r = ECMD_PROCESSED;
-@@ -137,6 +141,7 @@ static int _do_segs_with_info_and_status_single(struct cmd_context *cmd,
- 						int do_info, int do_status,
- 						struct processing_handle *handle)
- {
-+	struct selection_handle *sh = handle->selection_handle;
- 	struct lv_with_info_and_seg_status status = {
- 		.seg_status.type = SEG_STATUS_NONE
- 	};
-@@ -145,9 +150,9 @@ static int _do_segs_with_info_and_status_single(struct cmd_context *cmd,
- 	if (!_do_info_and_status(cmd, seg->lv, seg, &status, do_info, do_status))
- 		goto_out;
- 
--	if (!report_object(handle->custom_handle, seg->lv->vg, seg->lv, NULL, seg, NULL,
--			   &status, NULL))
--		goto_out;
-+	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-+			   seg->lv->vg, seg->lv, NULL, seg, NULL, &status, NULL))
-+	goto_out;
- 
- 	r = ECMD_PROCESSED;
- out:
-@@ -224,6 +229,7 @@ static int _do_pvsegs_sub_single(struct cmd_context *cmd,
- 				 int do_status,
- 				 struct processing_handle *handle)
- {
-+	struct selection_handle *sh = handle->selection_handle;
- 	int ret = ECMD_PROCESSED;
- 	struct lv_segment *seg = pvseg->lvseg;
- 
-@@ -268,9 +274,10 @@ static int _do_pvsegs_sub_single(struct cmd_context *cmd,
- 	if (seg && !_do_info_and_status(cmd, seg->lv, seg, &status, do_info, do_status))
- 		goto_out;
- 
--	if (!report_object(handle->custom_handle, vg, seg ? seg->lv : &_free_logical_volume,
--			   pvseg->pv, seg ? : &_free_lv_segment, pvseg, &status,
--			   pv_label(pvseg->pv))) {
-+	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-+			   vg, seg ? seg->lv : &_free_logical_volume,
-+			   pvseg->pv, seg ? : &_free_lv_segment, pvseg,
-+			   &status, pv_label(pvseg->pv))) {
- 		ret = ECMD_FAILED;
- 		goto_out;
+ 	pvcreate_params_set_defaults(&default_pp);
+ 	if (!pp)
+@@ -1661,13 +1678,32 @@ struct physical_volume *pvcreate_vol(struct cmd_context *cmd, const char *pv_nam
+ 		}
  	}
-@@ -350,7 +357,10 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- 		       struct physical_volume *pv,
- 		       struct processing_handle *handle)
- {
--	if (!report_object(handle->custom_handle, vg, NULL, pv, NULL, NULL, NULL, NULL))
-+	struct selection_handle *sh = handle->selection_handle;
-+
-+	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-+			   vg, NULL, pv, NULL, NULL, NULL, NULL))
- 		return_ECMD_FAILED;
  
- 	return ECMD_PROCESSED;
-@@ -359,7 +369,10 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- static int _label_single(struct cmd_context *cmd, struct label *label,
- 		         struct processing_handle *handle)
- {
--	if (!report_object(handle->custom_handle, NULL, NULL, NULL, NULL, NULL, NULL, label))
-+	struct selection_handle *sh = handle->selection_handle;
-+
-+	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-+			   NULL, NULL, NULL, NULL, NULL, NULL, label))
- 		return_ECMD_FAILED;
+-	if (!_pvcreate_check(cmd, pv_name, pp))
++	if (!_pvcreate_check(cmd, pv_name, pp, &wiped))
+ 		goto_bad;
  
- 	return ECMD_PROCESSED;
+ 	if (sigint_caught())
+ 		goto_bad;
+ 
+-	if (!(dev = dev_cache_get(pv_name, cmd->full_filter))) {
++	/*
++	 * wipe_known_signatures called in _pvcreate_check fires
++	 * WATCH event to update udev database. But at the moment,
++	 * we have no way to synchronize with such event - we may
++	 * end up still seeing the old info in udev db and pvcreate
++	 * can fail to proceed because of the device still being
++	 * filtered (because of the stale info in udev db).
++	 * Disable udev dev-ext source temporarily here for
++	 * this reason and rescan with DEV_EXT_NONE dev-ext
++	 * source (so filters use DEV_EXT_NONE source).
++	 */
++	dev_ext_src = external_device_info_source();
++	if (wiped && (dev_ext_src == DEV_EXT_UDEV))
++		init_external_device_info_source(DEV_EXT_NONE);
++
++	dev = dev_cache_get(pv_name, cmd->full_filter);
++
++	init_external_device_info_source(dev_ext_src);
++
++	if (!dev) {
+ 		log_error("%s: Couldn't find device.  Check your filters?",
+ 			  pv_name);
+ 		goto bad;
 
 
