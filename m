@@ -1,118 +1,457 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 19 Feb 2015 17:34:50 +0000 (UTC)
-Subject: master - doc: explanation of caching foreign VGs
-Message-ID: <20150219173450.8128D60FA9@fedorahosted.org>
+Date: Thu, 19 Feb 2015 20:45:48 +0000 (UTC)
+Subject: master - tests: add system_id test
+Message-ID: <20150219204548.20DC561169@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0c6faaab4321ff91672ad818c47b8120d2b14180
-Commit:        0c6faaab4321ff91672ad818c47b8120d2b14180
-Parent:        97e3e84c2ca8678630ee8a45cb5e3cc2949c607b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b896bf8f5a4e811578c0cb606b2ad73220f985fd
+Commit:        b896bf8f5a4e811578c0cb606b2ad73220f985fd
+Parent:        0c6faaab4321ff91672ad818c47b8120d2b14180
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 19 11:33:23 2015 -0600
+AuthorDate:    Thu Feb 19 14:08:51 2015 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Feb 19 11:33:23 2015 -0600
+CommitterDate: Thu Feb 19 14:42:39 2015 -0600
 
-doc: explanation of caching foreign VGs
+tests: add system_id test
 
 ---
- doc/caching_foreign_vgs.txt |   86 +++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 86 insertions(+), 0 deletions(-)
+ test/shell/system_id.sh |  425 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 425 insertions(+), 0 deletions(-)
 
-diff --git a/doc/caching_foreign_vgs.txt b/doc/caching_foreign_vgs.txt
+diff --git a/test/shell/system_id.sh b/test/shell/system_id.sh
 new file mode 100644
-index 0000000..12ffeca
+index 0000000..feb66ae
 --- /dev/null
-+++ b/doc/caching_foreign_vgs.txt
-@@ -0,0 +1,86 @@
-+Q: Why should lvmetad cache foreign VGs?
-+A: It's the most useful behavior in the "steady state".
++++ b/test/shell/system_id.sh
+@@ -0,0 +1,425 @@
++#!/bin/sh
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+How to arrive at that conclusion.
-+Four code configurations to consider, each in two different circumstances.
++test_description='Test system_id'
 +
-+configurations:
++. lib/inittest
 +
-+1. lvm not using lvmetad
-+2. lvm using lvmetad and lvmlockd
-+3. lvm using lvmetad, and lvmetad does not cache foreign VGs
-+   (Not currently implemented.)
-+4. lvm using lvmetad, and lvmetad caches foreign VGs
++# FIXME: vgs --foreign is not seeing foreign vg when lvmetad is not used
++test -e LOCAL_LVMETAD || skip
 +
-+circumstances:
++aux prepare_devs 1
 +
-+A. steady state: PVs are not added or removed to/from foreign VGs
-+B. transient state: PVs are added or removed to/from foreign VGs
++# create vg with system_id using each source
 +
-+combinations:
++## none
 +
-+1.A. A PV is correctly shown in the foreign VG.
-+1.B. A PV is correctly shown in the foreign VG.
++SID=""
++aux lvmconf "global/system_id_source = none"
++vgcreate $vg1 "$dev1"
++check vg_field $vg1 systemid $SID
++vgremove $vg1
 +
-+The most accurate representation, at the cost of always scanning disks.
++## machineid
++
++if [ ! -e /etc/machine-id ]; then
++  echo "49e0eef929d541a0b8b56128441b2d60" > /etc/machine-id
++fi
++SID=$(cat /etc/machine-id)
++aux lvmconf "global/system_id_source = machineid"
++vgcreate $vg1 "$dev1"
++vgs -o+systemid $vg1
++check vg_field $vg1 systemid $SID
++vgremove $vg1
++# FIXME: remove file if created
++
++## uname
++
++SID=$(uname -n)
++if [ -n $SID ]; then
++aux lvmconf "global/system_id_source = uname"
++vgcreate $vg1 "$dev1"
++vgs -o+systemid $vg1
++check vg_field $vg1 systemid $SID
++vgremove $vg1
++fi
++
++## lvmlocal
++
++SID=sidfoolocal
++LVMLOCAL=etc/lvmlocal.conf
++rm -f $LVMLOCAL
++echo "local {" > $LVMLOCAL
++echo "  system_id = $SID" >> $LVMLOCAL
++echo "}" >> $LVMLOCAL
++aux lvmconf "global/system_id_source = lvmlocal"
++vgcreate $vg1 "$dev1"
++vgs -o+systemid $vg1
++check vg_field $vg1 systemid $SID
++vgremove $vg1
++rm -f $LVMLOCAL
++
++## file
++
++SID=sidfoofile
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++echo "$SID" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++vgcreate $vg1 "$dev1"
++vgs -o+systemid $vg1
++check vg_field $vg1 systemid $SID
++vgremove $vg1
++rm -f $SIDFILE
++
++# override system_id to create a foreign vg, then fail to use the vg
++
++SID1=sidfoofile1
++SID2=sidfoofile2
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg, overriding the local system_id so the vg looks foreign
++vgcreate --systemid $SID2 $vg1 "$dev1"
++# normal vgs is not an error and does not see the vg
++vgs >err
++not grep $vg1 err
++# vgs on the foreign vg is an error and not displayed
++not vgs $vg1 >err
++not grep $vg1 err
++# fail to remove foreign vg
++not vgremove $vg1
++# using --foreign we can see foreign vg
++vgs --foreign >err
++grep $vg1 err
++vgs --foreign $vg1 >err
++grep $vg1 err
++# change the local system_id to the second value, making the vg not foreign
++echo "$SID2" > $SIDFILE
++# we can now see and remove the vg
++vgs $vg1 >err
++grep $vg1 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# create a vg, then change the local system_id, making the vg foreign
++
++SID1=sidfoofile1
++SID2=sidfoofile2
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++# normal vgs sees the vg
++vgs >err
++grep $vg1 err
++# change the local system_id, making the vg foreign
++echo "$SID2" > $SIDFILE
++# normal vgs doesn't see the vg
++vgs >err
++not grep $vg1 err
++# using --foreign we can see the vg
++vgs --foreign >err
++grep $vg1 err
++# change the local system_id back to the first value, making the vg not foreign
++echo "$SID1" > $SIDFILE
++vgs >err
++grep $vg1 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# create a vg, then change the vg's system_id, making it foreign
++
++SID1=sidfoofile1
++SID2=sidfoofile2
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++# normal vgs sees the vg
++vgs >err
++grep $vg1 err
++# change the vg's system_id, making the vg foreign
++echo "y" | vgchange --systemid $SID2 $vg1
++# normal vgs doesn't see the vg
++vgs >err
++not grep $vg1 err
++# using --foreign we can see the vg
++vgs --foreign >err
++grep $vg1 err
++# change the local system_id to the second system_id so we can remove the vg
++echo "$SID2" > $SIDFILE
++vgs >err
++grep $vg1 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# create a vg, create active lvs in it, change our system_id, making
++# the VG foreign, verify that we can still see the foreign VG,
++# and can deactivate the LVs
++
++SID1=sidfoofile1
++SID2=sidfoofile2
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++lvcreate -n $lv1 -l 2 $vg1
++# normal vgs sees the vg and lv
++vgs >err
++grep $vg1 err
++check lv_exists $vg1 $lv1
++# change our system_id, making the vg foreign, but accessible
++echo "$SID2" > $SIDFILE
++vgs >err
++grep $vg1 err
++check lv_exists $vg1 $lv1
++# can deactivate the lv
++lvchange -an $vg1/$lv1
++# now that the foreign vg has no active lvs, we can't access it
++not lvremove $vg1/$lv1
++not vgremove $vg1
++# change our system_id back to match the vg so it's not foreign
++echo "$SID1" > $SIDFILE
++vgs >err
++grep $vg1 err
++lvremove $vg1/$lv1
++vgremove $vg1
++rm -f $SIDFILE
++
++# local system has no system_id, so it can't access a vg with a system_id
++
++SID1=sidfoofile1
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++aux lvmconf "global/system_id_source = none"
++vgs >err
++not grep $vg1 err
++not vgs $vg1 >err
++not grep $vg1 err
++aux lvmconf "global/system_id_source = file"
++vgs >err
++grep $vg1 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# local system has a system_id, and can use a vg without a system_id
++
++SID1=sidfoofile1
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++# create a vg with no system_id
++aux lvmconf "global/system_id_source = none"
++vgcreate $vg1 "$dev1"
++check vg_field $vg1 systemid ""
++# set a local system_id
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# check we can see and use the vg with no system_id
++vgs >err
++grep $vg1 err
++vgs $vg1 >err
++grep $vg1 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# vgexport clears system_id, vgimport sets system_id
++
++SID1=sidfoofile1
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++# normal vgs sees the vg
++vgs -o+systemid >err
++grep $vg1 err
++grep $SID1 err
++# after vgexport there is no systemid
++vgexport $vg1
++vgs -o+systemid >err
++grep $vg1 err
++not grep $SID1 err
++# after vgimport there is a systemid
++vgimport $vg1
++vgs -o+systemid >err
++grep $vg1 err
++grep $SID1 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# vgchange -cy clears system_id, vgchange -cn sets system_id
++
++SID1=sidfoofile1
++SIDFILE=etc/lvm_test.conf
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++# normal vgs sees the vg
++vgs -o+systemid >err
++grep $vg1 err
++grep $SID1 err
++# after vgchange -cy there is no systemid
++echo "y" | vgchange -cy $vg1
++vgs --config 'global { locking_type=0 }' -o+systemid $vg1 >err
++grep $vg1 err
++not grep $SID1 err
++# after vgchange -cn there is a systemid
++vgchange --config 'global { locking_type=0 }' -cn $vg1
++vgs -o+systemid >err
++grep $vg1 err
++grep $SID1 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# Test max system_id length (127) and invalid system_id characters.
++# The 127 length limit is imposed before invalid characters are omitted.
++
++SIDFILE=etc/lvm_test.conf
++
++# 120 numbers followed by 7 letters (max len)
++SID1=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdefg
++# 120 numbers followed by 8 letters (too long by 1 character, the last is omitted)
++SID2=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdefgh
++
++# max len system_id should appear normally
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++# normal vgs sees the vg
++vgs -o+systemid $vg1 >err
++grep $vg1 err
++grep $SID1 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# max+1 len system_id should be missing the last character
++rm -f $SIDFILE
++echo "$SID2" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++# normal vgs sees the vg
++vgs -o+systemid $vg1 >err
++grep $vg1 err
++grep $SID1 err
++not grep $SID2 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# max len system_id containing an invalid character should appear without
++# the invalid character
++# 120 numbers followed by invalid '#' character followed by 7 letters (too long by 1 character)
++SID1=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789#abcdefg
++# After the invalid character is omitted from SID1
++# The string is truncated to max length (127) before the invalid character is omitted
++SID2=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdef
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++# normal vgs sees the vg
++vgs -o+systemid $vg1 >err
++grep $vg1 err
++not grep $SID1 err
++grep $SID2 err
++vgremove $vg1
++rm -f $SIDFILE
++
++# contains a bunch of invalid characters
++SID1="?#$&A. at 1]"
++# SID1 without the invalid characters
++SID2=A.1
++
++rm -f $SIDFILE
++echo "$SID1" > $SIDFILE
++aux lvmconf "global/system_id_source = file"
++aux lvmconf "global/system_id_file = $SIDFILE"
++# create a vg
++vgcreate $vg1 "$dev1"
++# normal vgs sees the vg
++vgs -o+systemid $vg1 >err
++grep $vg1 err
++not grep $SID1 err
++grep $SID2 err
++vgremove $vg1
++rm -f $SIDFILE
 +
 +
-+2.A. A PV is correctly shown in the foreign VG.
-+2.B. A PV is correctly shown in the foreign VG.
++# pvs: pv in a foreign vg not reported
++# pvs --foreign: pv in a foreign vg is reported
++# TODO
 +
-+The most accurate representation, at the cost of using lvmlockd.
++# lvs: lvs in a foreign vg not reported
++# lvs --foreign: lvs in a foreign vg are reported
++# TODO
 +
-+
-+3.A. A PV in a foreign VG is shown as unused.
-+3.B. A PV in a foreign VG is shown as unused.
-+
-+If lvmetad ignores foreign VGs and does not cache them, the PVs in the
-+foreign VGs appear to be unused.  This largely defeats the purpose of
-+system_id, which is meant to treat VGs/PVs as foreign instead of free
-+(albeit imperfectly, see below.)
++# use allow_system_id to read a foreign VG
++# TODO
 +
 +
-+4.A. A PV is correctly shown in the foreign VG.
-+4.B. A PV is not correctly shown in the foreign VG.
++# Test handling of bad system_id source configurations
++# The commands should proceed without a system_id.
++# Look at the warning/error messages.
 +
-+This avoids the cost of always scanning disks, and avoids the cost of
-+using lvmlockd.  The steady state 4.A. is an improvement over the steady
-+state 3.A.  When the steady state is the common case, this is a big
-+advantage.  When the steady state is *not* the common case, the foreign VG
-+concept is not as useful (if shared devices are this dynamic, lvmlockd
-+should be considered.)
++# vgcreate with source machineid, where no /etc/machine-id file exists
++# TODO
 +
-+The limitations related to the transient state 4.B. are explained in
-+lvmsystemid(7), along with how to handle it.  The specific inaccuracies
-+possible in 4.B. are:
++# vgcreate with source uname, but uname is localhost
++# TODO
 +
-+. PV is shown as belonging to a foreign VG, but is actually unused.
-+. PV is shown as unused, but actually belongs to a foreign VG.
++# vgcreate with source lvmlocal, but no lvmlocal.conf file
++# vgcreate with source lvmlocal, but no system_id = "x" entry
++# TODO
 +
-+To resolve the inaccuracies in the transient state (4.B.), and return the
-+system to an accurate steady state (4.A.), the disks need to be scanned,
-+which updates lvmetad.  The scanning/updating is a manual step, i.e.
-+running 'pvscan --cache', which by definition scans disks and updates
-+lvmetad.
++# vgcreate with source file, but no system_id_file config
++# vgcreate with source file, but system_id_file does not exist
++# TODO
 +
-+--
 +
-+The --foreign command line option for report/display commands
-+(vgs/lvs/pvs/vgdisplay/lvdisplay/pvdisplay) is not directly related to
-+whether or not lvmetad caches foreign VGs.
++# Test cases where lvmetad cache of a foreign VG are out of date
++# because the foreign owner has changed the VG.
++# . Using the --foreign option should update the cache and produce
++#   correct output
++# . Using vgimport should see that the VG is no longer foreign,
++#   but has been exported.
++# TODO
 +
-+By default, foreign VGs are silently ignored and not printed by these
-+commands.  However, when the --foreign option is used, these commands do
-+produce output about foreign VGs.
-+
-+(When --foreign is not used, and the command specifically requests a
-+foreign VG by name, an error is produced about not accessing foreign VGs,
-+and the foreign VG is not displayed.)
-+
-+The decision to report/display foreign VGs or not is independent of
-+whether lvmetad is caching those VGs.  When lvmetad is caching the foreign
-+VG, a report/display command run with --foreign will scan disks to read
-+the foreign VG and give the most up to date version of it (the copy of the
-+foreign VG in lvmetad may be out of date due to changes to the VG by the
-+foreign host.)
 +
 
 
