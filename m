@@ -1,41 +1,43 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 20 Feb 2015 21:32:48 +0000 (UTC)
-Subject: master - vgchange, vgcreate: add systemid option to command help
-Message-ID: <20150220213248.080DD601EC@fedorahosted.org>
+Date: Fri, 20 Feb 2015 22:26:43 +0000 (UTC)
+Subject: master - man lvm: document --foreign option
+Message-ID: <20150220222643.4E99E60E93@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=37a47c0eec68fe3b7abf760be87e619aa51bc544
-Commit:        37a47c0eec68fe3b7abf760be87e619aa51bc544
-Parent:        3361e662f4b05096ca6cae9f4d96bbeec8ec4862
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cfd1b8eae2e2cf30768603d11756f6ec9316958a
+Commit:        cfd1b8eae2e2cf30768603d11756f6ec9316958a
+Parent:        37a47c0eec68fe3b7abf760be87e619aa51bc544
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 20 15:31:17 2015 -0600
+AuthorDate:    Fri Feb 20 16:26:04 2015 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 20 15:31:17 2015 -0600
+CommitterDate: Fri Feb 20 16:26:04 2015 -0600
 
-vgchange, vgcreate: add systemid option to command help
+man lvm: document --foreign option
 
 ---
- tools/commands.h |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ man/lvm.8.in |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index e82cfe4..15a1bb1 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -950,8 +950,10 @@ xx(vgchange,
-    "\t[--[vg]metadatacopies #copies]\n"
-    "\t[--poll {y|n}]\n"
-    "\t[--noudevsync]\n"
-+   "\t[--systemid SystemID]\n"
-    "\t[--refresh]\n"
-    "\t[-S|--select Selection]\n"
-+   "\t[--systemid SystemID]\n"
-    "\t[--sysinit]\n"
-    "\t[-t|--test]\n"
-    "\t[-u|--uuid]\n"
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 7bc4c6b..766b8aa 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -243,6 +243,12 @@ will be made to communicate with the device-mapper kernel driver, so
+ this option is unable to report whether or not Logical Volumes are 
+ actually in use.
+ .TP
++.B \-\-foreign
++Cause the command to access foreign VGs, that would otherwise be skipped.
++It can be used to report or display a VG that is owned by another host.
++This option can cause a command to perform poorly because lvmetad caching
++is not used and metadata is read from disks.
++.TP
+ .B \-\-addtag \fITag
+ Add the tag \fITag\fP to a PV, VG or LV.
+ Supply this argument multiple times to add more than one tag at once.
 
 
