@@ -1,93 +1,64 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 20 Feb 2015 22:56:50 +0000 (UTC)
-Subject: master - man lvmsystemid: update changing the system_id
-Message-ID: <20150220225650.DCFA260EDF@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 23 Feb 2015 17:03:57 +0000 (UTC)
+Subject: master - lvmetad: Add fn to scan only foreign VGs.
+Message-ID: <20150223170357.9DEA96078D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=42ba7974c5e85f3b86807dacaf5f70a722475b52
-Commit:        42ba7974c5e85f3b86807dacaf5f70a722475b52
-Parent:        cfd1b8eae2e2cf30768603d11756f6ec9316958a
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 20 16:55:27 2015 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 20 16:55:27 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48478363109b1ea23a9f0acae8dbfd838cf925c6
+Commit:        48478363109b1ea23a9f0acae8dbfd838cf925c6
+Parent:        42ba7974c5e85f3b86807dacaf5f70a722475b52
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Feb 23 17:03:03 2015 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Feb 23 17:03:03 2015 +0000
 
-man lvmsystemid: update changing the system_id
+lvmetad: Add fn to scan only foreign VGs.
 
+Not implemented yet - just a wrapper.
 ---
- man/lvmsystemid.7.in |   29 ++++++++++++++++++-----------
- 1 files changed, 18 insertions(+), 11 deletions(-)
+ lib/cache/lvmetad.c |    8 ++++++++
+ lib/cache/lvmetad.h |    2 ++
+ 2 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/man/lvmsystemid.7.in b/man/lvmsystemid.7.in
-index 9e3e6f8..c0dd78b 100644
---- a/man/lvmsystemid.7.in
-+++ b/man/lvmsystemid.7.in
-@@ -5,10 +5,10 @@ lvmsystemid \(em LVM system id
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 20302c1..aad4423 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1031,3 +1031,11 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
+ 	return r;
+ }
  
- .SH DESCRIPTION
++/* 
++ * FIXME Implement this function, skipping PVs known to belong to local or clustered,
++ * non-exported VGs.
++ */
++int lvmetad_pvscan_foreign_vgs(struct cmd_context *cmd, activation_handler handler)
++{
++	return lvmetad_pvscan_all_devs(cmd, handler);
++}
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index 2cd738e..4d6f107 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -156,6 +156,7 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
+ 			  activation_handler handler);
  
--Local VG's may exist on shared storage where they are visible to multiple
--hosts.  These VG's are intended to be used by only a single machine, even
-+Local VGs may exist on shared storage where they are visible to multiple
-+hosts.  These VGs are intended to be used by only a single machine, even
- though they are visible to many.  A system_id identifying a single host
--can be assigned to a VG to indicate the VG's owner.  The VG owner can use
-+can be assigned to a VG to indicate the VGs owner.  The VG owner can use
- the VG as usual, and all other hosts will ignore it.  This protects the VG
- from accidental use by other hosts.
+ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler);
++int lvmetad_pvscan_foreign_vgs(struct cmd_context *cmd, activation_handler handler);
  
-@@ -29,7 +29,7 @@ A VG without a system_id can be used by any host, and a VG with a
- system_id can only be used by a host with a matching system_id.  A
- .B foreign VG
- is a VG with a system_id as viewed by a host with a system_id
--that does not match the VG's system_id.  (Or from a host without a
-+that does not match the VGs system_id.  (Or from a host without a
- system_id.)
+ #  else		/* LVMETAD_SUPPORT */
  
- Valid system_id characters are the same as valid VG name characters.  If a
-@@ -236,8 +236,9 @@ devices.
- The system_id of a VG is displayed with the "systemid" reporting option.
+@@ -181,6 +182,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
+ #    define lvmetad_vg_lookup(cmd, vgname, vgid)	(NULL)
+ #    define lvmetad_pvscan_single(cmd, dev, handler)	(0)
+ #    define lvmetad_pvscan_all_devs(cmd, handler)	(0)
++#    define lvmetad_pvscan_foreign_vgs(cmd, handler)	(0)
  
- Report/display commands ignore foreign VGs by default.  To report foreign
--VGs, the --foreign option can be used.  This causes all VGs to be read
--from disk.
-+VGs, the --foreign option can be used.  This causes the VGs to be read
-+from disk.  Because lvmetad caching is not used, this option can cause
-+poor performance.
+ #  endif	/* LVMETAD_SUPPORT */
  
- .B vgs --foreign -o+systemid
- 
-@@ -265,16 +266,22 @@ imported VG as foreign.
- 
- .SS vgchange
- 
--If a VG has a system_id, changing it with vgchange requires --force.
--vgchange --systemid is accepted just as with vgcreate.
-+A host can change the system_id of its own VGs, but the command requires
-+confirmation because the host may lose access to the VG being changed:
- 
--If a host's system_id is changed, the system_id of its own VG's can be
--changed to match.  Using allow_system_id is a way to avoid using force
--with vgchange.
-+.B vgchange --systemid
-+.I SystemID VG
-+
-+A host cannot directly change the system_id of a foreign VG.
- 
- To move a VG from one host to another, vgexport and vgimport should be
- used.
- 
-+To forcibly gain ownership of a foreign VG, a host can add the foreign
-+system_id to its allow_system_id list, change the system_id of the foreign
-+VG to its own, and remove the foreign system_id from its allow_system_id
-+list.
-+
- .SS clustered VGs
- 
- A "clustered" VG should have no system_id set, allowing multiple hosts to
 
 
