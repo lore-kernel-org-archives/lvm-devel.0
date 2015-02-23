@@ -1,41 +1,119 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 27 Feb 2015 12:47:31 +0000 (UTC)
-Subject: master - report: one more comment explaining change of report type when tags are used for original LABEL reporting
-Message-ID: <20150227124731.A02356109C@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 23 Feb 2015 19:50:45 +0000 (UTC)
+Subject: master - systemid: Require alphanumeric 1st character.
+Message-ID: <20150223195045.AE9BB60C5C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5b154ae4a3d875009aa7a7d081c8e76cdb6dd50f
-Commit:        5b154ae4a3d875009aa7a7d081c8e76cdb6dd50f
-Parent:        9ea77b788b0822fe06e8efb92d13f80dbc62e351
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Feb 27 13:48:47 2015 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Feb 27 13:48:47 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0551d1c56e2e901a885aba09a94ebc391930bbc5
+Commit:        0551d1c56e2e901a885aba09a94ebc391930bbc5
+Parent:        a5df78e0f045e374f44be2fad3c09d44d39314f7
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Feb 23 19:47:03 2015 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Feb 23 19:47:03 2015 +0000
 
-report: one more comment explaining change of report type when tags are used for original LABEL reporting
+systemid: Require alphanumeric 1st character.
 
+Require system ID to begin with an alphanumeric character.
+Rename fn to make clear it's only validation for systemid
+and always terminate result rather than imposing this on the caller.
 ---
- tools/reporter.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ lib/commands/toolcontext.c |    2 +-
+ lib/misc/lvm-string.c      |   32 +++++++++++---------------------
+ lib/misc/lvm-string.h      |    2 +-
+ 3 files changed, 13 insertions(+), 23 deletions(-)
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index df5a58b..0e563ac 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -585,6 +585,10 @@ static void _check_pv_list(struct cmd_context *cmd, int argc, char **argv,
- 				rescan_done = 1;
- 			}
- 			if (*argv[i] == '@') {
-+				/*
-+				 * Tags are metadata related, not label
-+				 * related, change report type accordingly!
-+				 */
- 				if (*report_type == LABEL)
- 					*report_type = PVS;
- 				/*
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 2e15086..190f9bd 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -65,7 +65,7 @@ char *system_id_from_string(struct cmd_context *cmd, const char *str)
+ 	if (!(system_id = dm_pool_zalloc(cmd->mem, strlen(str) + 1)))
+ 		return NULL;
+ 
+-	copy_valid_chars(str, system_id);
++	copy_systemid_chars(str, system_id);
+ 
+ 	if (!system_id[0])
+ 		return NULL;
+diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
+index 61941b3..5d63858 100644
+--- a/lib/misc/lvm-string.c
++++ b/lib/misc/lvm-string.c
+@@ -102,46 +102,36 @@ int validate_name(const char *n)
+ }
+ 
+ /*
+- * Copy valid characters from source to destination.
++ * Copy valid systemid characters from source to destination.
+  * Invalid characters are skipped.  Copying is stopped
+  * when NAME_LEN characters have been copied.
++ * A terminating NUL is appended.
+  */
+-
+-void copy_valid_chars(const char *src, char *dst)
++void copy_systemid_chars(const char *src, char *dst)
+ {
+ 	const char *s = src;
+ 	char *d = dst;
+ 	int len = 0;
+-	int i;
+ 	char c;
+ 
+ 	if (!s || !*s)
+ 		return;
+ 
+-	/* Omit leading hypens. */
+-	for (i = 0; i < strlen(src); i++) {
+-		c = *s;
+-		if (c != '-')
+-			break;
++	/* Skip non-alphanumeric starting characters */
++	while (*s && !isalnum(*s))
+ 		s++;
+-	}
+-
+-	for (i = 0; i < strlen(src); i++) {
+-		c = *s;
+ 
+-		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+') {
+-			s++;
++	while ((c = *s++)) {
++		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+')
+ 			continue;
+-		}
+ 
+-		*d = *s;
+-		d++;
+-		s++;
+-		len++;
++		*d++ = c;
+ 
+-		if (len == NAME_LEN)
++		if (++len >= NAME_LEN)
+ 			break;
+ 	}
++
++	*d = '\0';
+ }
+ 
+ static const char *_lvname_has_reserved_prefix(const char *lvname)
+diff --git a/lib/misc/lvm-string.h b/lib/misc/lvm-string.h
+index 065c19f..251aab8 100644
+--- a/lib/misc/lvm-string.h
++++ b/lib/misc/lvm-string.h
+@@ -44,7 +44,7 @@ int validate_name(const char *n);
+ name_error_t validate_name_detailed(const char *n);
+ int validate_tag(const char *n);
+ 
+-void copy_valid_chars(const char *src, char *dst);
++void copy_systemid_chars(const char *src, char *dst);
+ 
+ int apply_lvname_restrictions(const char *name);
+ int is_reserved_lvname(const char *name);
 
 
