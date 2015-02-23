@@ -1,401 +1,411 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 23 Feb 2015 23:09:37 +0000 (UTC)
-Subject: master - lvm1: Reenable sys ID.
-Message-ID: <20150223230937.E62EF6142F@fedorahosted.org>
+Date: Mon, 23 Feb 2015 23:29:07 +0000 (UTC)
+Subject: master - systemid: Fix access restrictions.
+Message-ID: <20150223232907.1060060C92@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=df227be37cb113a1093b2ed092af582c5a900315
-Commit:        df227be37cb113a1093b2ed092af582c5a900315
-Parent:        2fc2928978bb592a6b62a18bbbb0acee10efbfe2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b18feb98e50093d66f03ff63120b6a0f14d7fddd
+Commit:        b18feb98e50093d66f03ff63120b6a0f14d7fddd
+Parent:        df227be37cb113a1093b2ed092af582c5a900315
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Feb 23 23:03:52 2015 +0000
+AuthorDate:    Mon Feb 23 23:19:36 2015 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Feb 23 23:03:52 2015 +0000
+CommitterDate: Mon Feb 23 23:19:36 2015 +0000
 
-lvm1: Reenable sys ID.
+systemid: Fix access restrictions.
 
-Move the lvm1 sys ID into vg->lvm1_system_id and reenable the #if 0
-LVM1 code.  Still display the new-style system ID in the same
-reporting field, though, as only one can be set.
-Add a format feature flag FMT_SYSTEM_ON_PVS for LVM1 and disallow
-access to LVM1 VGs if a new-style system ID has been set.
-Treat the new vg->system_id as const.
+When checking whether the system ID permits access to a VG, check for
+each permitted situation first, and only then issue the appropriate
+error message.  Always issue a message for now.  (We'll try to
+suppress some of those later when the VG concerned wasn't explicitly
+requested.)
+Add more messages to try to ensure every return code is checked and
+every error path (and only an error path) contains a log_error().
+Add self-correction to vgchange -c to deal with situations where
+the cluster state and system ID state are out-of-sync (e.g. if
+old tools were used).
 ---
- WHATS_NEW                        |    1 +
- lib/commands/toolcontext.c       |   10 ++++----
- lib/commands/toolcontext.h       |    2 +-
- lib/format1/format1.c            |    3 +-
- lib/format1/import-export.c      |   48 +++++++++++++++-----------------------
- lib/metadata/metadata-exported.h |    3 ++
- lib/metadata/metadata.c          |   21 ++++++++++++++--
- lib/metadata/vg.c                |   13 ++++++++--
- lib/metadata/vg.h                |    3 +-
- lib/report/columns.h             |    4 +-
- lib/report/report.c              |   11 ++++++++
- 11 files changed, 74 insertions(+), 45 deletions(-)
+ lib/format_text/import_vsn1.c |    9 ++--
+ lib/metadata/metadata.c       |   46 ++++++++++------------
+ tools/toollib.c               |   49 +++++++++++------------
+ tools/vgchange.c              |   85 +++++++++++++++++++++++++++--------------
+ 4 files changed, 106 insertions(+), 83 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 0ae007d..983189c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.117 - 
- ====================================
-+  Install /etc/lvm/lvmlocal.conf template with local section for systemid.
-   Record creation_host_system_id in lvm2 metadata.
-   Reinstate recursive config file tag section processing. (2.02.99)
-   Add 'lvm systemid' to display the current system ID.
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index d81de97..7539b4a 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -58,7 +58,7 @@ static const size_t linebuffer_size = 4096;
- /*
-  * Copy the input string, removing invalid characters.
-  */
--char *system_id_from_string(struct cmd_context *cmd, const char *str)
-+const char *system_id_from_string(struct cmd_context *cmd, const char *str)
- {
- 	char *system_id;
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index c6a0cf9..42ff451 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -737,6 +737,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	struct volume_group *vg;
+ 	struct dm_hash_table *pv_hash = NULL, *lv_hash = NULL;
+ 	unsigned scan_done_once = use_cached_pvs;
++	char *system_id;
  
-@@ -82,12 +82,12 @@ char *system_id_from_string(struct cmd_context *cmd, const char *str)
- 	return system_id;
- }
+ 	/* skip any top-level values */
+ 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib)
+@@ -750,8 +751,9 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	if (!(vg = alloc_vg("read_vg", fid->fmt->cmd, vgn->key)))
+ 		return_NULL;
  
--static char *_read_system_id_from_file(struct cmd_context *cmd, const char *file)
-+static const char *_read_system_id_from_file(struct cmd_context *cmd, const char *file)
- {
- 	char *line = NULL;
- 	size_t line_size;
- 	char *start, *end;
--	char *system_id = NULL;
-+	const char *system_id = NULL;
- 	FILE *fp;
- 
- 	if (!file || !strlen(file) || !file[0])
-@@ -132,13 +132,13 @@ static char *_read_system_id_from_file(struct cmd_context *cmd, const char *file
- 	return system_id;
- }
- 
--static char *_system_id_from_source(struct cmd_context *cmd, const char *source)
-+static const char *_system_id_from_source(struct cmd_context *cmd, const char *source)
- {
- 	char filebuf[PATH_MAX];
- 	const char *file;
- 	const char *etc_str;
- 	const char *str;
--	char *system_id = NULL;
-+	const char *system_id = NULL;
- 
- 	if (!strcasecmp(source, "uname")) {
- 		if (cmd->hostname)
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 8b3e48e..8b38fb1 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -163,6 +163,6 @@ int init_lvmcache_orphans(struct cmd_context *cmd);
- 
- struct format_type *get_format_by_name(struct cmd_context *cmd, const char *format);
- 
--char *system_id_from_string(struct cmd_context *cmd, const char *system_id_string);
-+const char *system_id_from_string(struct cmd_context *cmd, const char *str);
- 
- #endif
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index b0943b1..f7df7c3 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -590,7 +590,8 @@ struct format_type *init_format(struct cmd_context *cmd)
- 	fmt->alias = NULL;
- 	fmt->orphan_vg_name = FMT_LVM1_ORPHAN_VG_NAME;
- 	fmt->features = FMT_RESTRICTED_LVIDS | FMT_ORPHAN_ALLOCATABLE |
--			FMT_RESTRICTED_READAHEAD | FMT_OBSOLETE;
-+			FMT_RESTRICTED_READAHEAD | FMT_OBSOLETE |
-+			FMT_SYSTEMID_ON_PVS;
- 	fmt->private = NULL;
- 
- 	dm_list_init(&fmt->mda_ops);
-diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
-index 9318945..a3c060f 100644
---- a/lib/format1/import-export.c
-+++ b/lib/format1/import-export.c
-@@ -69,14 +69,14 @@ int import_pv(const struct format_type *fmt, struct dm_pool *mem,
- 	memcpy(&pv->vgid, vgd->vg_uuid, sizeof(vg->id));
- 
- 	/* Store system_id from first PV if PV belongs to a VG */
--	if (vg && !*vg->system_id)
--		strncpy(vg->system_id, (char *)pvd->system_id, NAME_LEN);
-+	if (vg && !*vg->lvm1_system_id)
-+		strncpy(vg->lvm1_system_id, (char *)pvd->system_id, NAME_LEN);
- 
- 	if (vg &&
--	    strncmp(vg->system_id, (char *)pvd->system_id, sizeof(pvd->system_id)))
-+	    strncmp(vg->lvm1_system_id, (char *)pvd->system_id, sizeof(pvd->system_id)))
- 		    log_very_verbose("System ID %s on %s differs from %s for "
- 				     "volume group", pvd->system_id,
--				     pv_dev_name(pv), vg->system_id);
-+				     pv_dev_name(pv), vg->lvm1_system_id);
+-	if (!(vg->system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
++	if (!(system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
+ 		goto_bad;
++	vg->system_id = system_id;
  
  	/*
- 	 * If exported, we still need to flag in pv->status too because
-@@ -125,19 +125,17 @@ int import_pv(const struct format_type *fmt, struct dm_pool *mem,
- 	return 1;
- }
+ 	 * The pv hash memorises the pv section names -> pv
+@@ -773,9 +775,8 @@ static struct volume_group *_read_vg(struct format_instance *fid,
  
--#if 0
--static int _system_id(struct cmd_context *cmd, char *s, const char *prefix)
-+static int _lvm1_system_id(struct cmd_context *cmd, char *s, const char *prefix)
- {
+ 	vgn = vgn->child;
  
- 	if (dm_snprintf(s, NAME_LEN, "%s%s%lu",
- 			 prefix, cmd->hostname, time(NULL)) < 0) {
--		log_error("Generated system_id too long");
-+		log_error("Generated LVM1 format system_id too long");
- 		return 0;
- 	}
+-	if (dm_config_get_str(vgn, "system_id", &str)) {
+-		strncpy(vg->system_id, str, NAME_LEN);
+-	}
++	if (dm_config_get_str(vgn, "system_id", &str))
++		strncpy(system_id, str, NAME_LEN);
  
- 	return 1;
- }
--#endif
- 
- int export_pv(struct cmd_context *cmd, struct dm_pool *mem __attribute__((unused)),
- 	      struct volume_group *vg,
-@@ -158,22 +156,18 @@ int export_pv(struct cmd_context *cmd, struct dm_pool *mem __attribute__((unused
- 	}
- 
- 	/* Preserve existing system_id if it exists */
--#if 0
--	if (vg && *vg->system_id)
--		strncpy((char *)pvd->system_id, vg->system_id, sizeof(pvd->system_id));
--#endif
-+	if (vg && *vg->lvm1_system_id)
-+		strncpy((char *)pvd->system_id, vg->lvm1_system_id, sizeof(pvd->system_id));
- 
- 	/* Is VG already exported or being exported? */
- 	if (vg && vg_is_exported(vg)) {
--#if 0
- 		/* Does system_id need setting? */
--		if (!*vg->system_id ||
--		    strncmp(vg->system_id, EXPORTED_TAG,
-+		if (!*vg->lvm1_system_id ||
-+		    strncmp(vg->lvm1_system_id, EXPORTED_TAG,
- 			    sizeof(EXPORTED_TAG) - 1)) {
--			if (!_system_id(cmd, (char *)pvd->system_id, EXPORTED_TAG))
-+			if (!_lvm1_system_id(cmd, (char *)pvd->system_id, EXPORTED_TAG))
- 				return_0;
- 		}
--#endif
- 		if (strlen((char *)pvd->vg_name) + sizeof(EXPORTED_TAG) >
- 		    sizeof(pvd->vg_name)) {
- 			log_error("Volume group name %s too long to export",
-@@ -183,25 +177,23 @@ int export_pv(struct cmd_context *cmd, struct dm_pool *mem __attribute__((unused
- 		strcat((char *)pvd->vg_name, EXPORTED_TAG);
- 	}
- 
--#if 0
- 	/* Is VG being imported? */
--	if (vg && !vg_is_exported(vg) && *vg->system_id &&
--	    !strncmp(vg->system_id, EXPORTED_TAG, sizeof(EXPORTED_TAG) - 1)) {
--		if (!_system_id(cmd, (char *)pvd->system_id, IMPORTED_TAG))
-+	if (vg && !vg_is_exported(vg) && *vg->lvm1_system_id &&
-+	    !strncmp(vg->lvm1_system_id, EXPORTED_TAG, sizeof(EXPORTED_TAG) - 1)) {
-+		if (!_lvm1_system_id(cmd, (char *)pvd->system_id, IMPORTED_TAG))
- 			return_0;
- 	}
- 
- 	/* Generate system_id if PV is in VG */
- 	if (!pvd->system_id[0])
--		if (!_system_id(cmd, (char *)pvd->system_id, ""))
-+		if (!_lvm1_system_id(cmd, (char *)pvd->system_id, ""))
- 			return_0;
- 
- 	/* Update internal system_id if we changed it */
- 	if (vg &&
--	    (!*vg->system_id ||
--	     strncmp(vg->system_id, (char *)pvd->system_id, sizeof(pvd->system_id))))
--		    strncpy(vg->system_id, (char *)pvd->system_id, NAME_LEN);
--#endif
-+	    (!*vg->lvm1_system_id ||
-+	     strncmp(vg->lvm1_system_id, (char *)pvd->system_id, sizeof(pvd->system_id))))
-+		    strncpy(vg->lvm1_system_id, (char *)pvd->system_id, NAME_LEN);
- 
- 	//pvd->pv_major = MAJOR(pv->dev);
- 
-@@ -233,11 +225,9 @@ int import_vg(struct dm_pool *mem,
- 	if (!(vg->name = dm_pool_strdup(mem, (char *)dl->pvd.vg_name)))
- 		return_0;
- 
--	if (!(vg->system_id = dm_pool_zalloc(mem, NAME_LEN + 1)))
-+	if (!(vg->lvm1_system_id = dm_pool_zalloc(mem, NAME_LEN + 1)))
- 		return_0;
- 
--	*vg->system_id = '\0';
--
- 	if (vgd->vg_status & VG_EXPORTED)
- 		vg->status |= EXPORTED_VG;
- 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 6631b1f..2dbaaf0 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -139,6 +139,9 @@
- #define FMT_CONFIG_PROFILE	0x000000800U	/* Supports configuration profiles? */
- #define FMT_OBSOLETE		0x000001000U	/* Obsolete format? */
- #define FMT_NON_POWER2_EXTENTS	0x000002000U	/* Non-power-of-2 extent sizes? */
-+#define FMT_SYSTEMID_ON_PVS	0x000004000U	/* System ID is stored on PVs not VG */
-+
-+#define systemid_on_pvs(vg)	((vg)->fid->fmt->features & FMT_SYSTEMID_ON_PVS)
- 
- /* Mirror conversion type flags */
- #define MIRROR_BY_SEG		0x00000001U	/* segment-by-segment mirror */
+ 	if (!_read_id(&vg->id, vgn, "id")) {
+ 		log_error("Couldn't read uuid for volume group %s.", vg->name);
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index c04b67c..9fb289d 100644
+index 9fb289d..71197ba 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -1045,10 +1045,10 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
- 	}
- 
- 	vg->status = (RESIZEABLE_VG | LVM_READ | LVM_WRITE);
--	if (!(vg->system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
-+	vg->system_id = NULL;
-+	if (!(vg->lvm1_system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
- 		goto_bad;
- 
--	*vg->system_id = '\0';
- 	vg->extent_size = DEFAULT_EXTENT_SIZE * 2;
- 	vg->max_lv = DEFAULT_MAX_LV;
- 	vg->max_pv = DEFAULT_MAX_PV;
-@@ -4380,6 +4380,15 @@ static int _access_vg_clustered(struct cmd_context *cmd, struct volume_group *vg
- static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
- {
- 	/*
-+	 * LVM1 VGs must not be accessed if a new-style LVM2 system ID is set.
-+	 */
-+	if (cmd->system_id && systemid_on_pvs(vg)) {
-+		log_error("Cannot access VG %s with LVM1 system ID \"%s\" when host system ID is set.",
-+			  vg->name, vg->lvm1_system_id);
-+		return 0;
-+	}
-+
-+	/*
- 	 * A VG without a system_id can be accessed by anyone.
- 	 */
- 	if (!vg->system_id || !vg->system_id[0])
-@@ -4436,8 +4445,14 @@ static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
-  */
- static int _access_vg(struct cmd_context *cmd, struct volume_group *vg, uint32_t *failure)
- {
--	if (!is_real_vg(vg->name))
-+	if (!is_real_vg(vg->name)) {
-+		/* Disallow use of LVM1 orphans when a host system ID is set. */
-+		if (cmd->system_id && *cmd->system_id && systemid_on_pvs(vg)) {
-+			*failure |= FAILED_SYSTEMID;
-+			return_0;
-+		}
- 		return 1;
-+	}
- 
- 	if (!_access_vg_clustered(cmd, vg)) {
- 		*failure |= FAILED_CLUSTERED;
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index dbc791b..0143b7b 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -121,7 +121,7 @@ char *vg_name_dup(const struct volume_group *vg)
- 
- char *vg_system_id_dup(const struct volume_group *vg)
- {
--	return dm_pool_strdup(vg->vgmem, vg->system_id);
-+	return dm_pool_strdup(vg->vgmem, vg->system_id ? : vg->lvm1_system_id ? : "");
+@@ -4338,7 +4338,7 @@ static struct volume_group *_recover_vg(struct cmd_context *cmd,
+ 	return (struct volume_group *)vg;
  }
  
- char *vg_uuid_dup(const struct volume_group *vg)
-@@ -605,15 +605,22 @@ int vg_set_clustered(struct volume_group *vg, int clustered)
- 
- int vg_set_system_id(struct volume_group *vg, const char *system_id)
+-static int allow_system_id(struct cmd_context *cmd, const char *system_id)
++static int _allow_system_id(struct cmd_context *cmd, const char *system_id)
  {
--	if (!system_id) {
-+	if (!system_id || !*system_id) {
- 		vg->system_id = NULL;
+ 	const struct dm_config_node *cn;
+ 	const struct dm_config_value *cv;
+@@ -4395,16 +4395,28 @@ static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
+ 		return 1;
+ 
+ 	/*
+-	 * We sometimes want to report foreign vgs.
++	 * A few commands allow read-only access to foreign VGs.
+ 	 */
+ 	if (cmd->include_foreign_vgs)
+ 		return 1;
+ 
+ 	/*
++	 * A host can access a VG with a matching system_id.
++	 */
++	if (cmd->system_id && !strcmp(vg->system_id, cmd->system_id))
++		return 1;
++
++	/*
++	 * A host can access a VG if the VG's system_id is in extra_system_ids list.
++	 */
++	if (cmd->system_id && _allow_system_id(cmd, vg->system_id))
++		return 1;
++
++	/*
+ 	 * Allow VG access if the local host has active LVs in it.
+ 	 */
+ 	if (lvs_in_vg_activated(vg)) {
+-		log_error("LVs should not be active in VG %s with foreign system id \"%s\"",
++		log_warn("WARNING: Found LVs active in VG %s with foreign system ID \"%s\".  Possible data corruption.",
+ 			  vg->name, vg->system_id);
  		return 1;
  	}
- 
-+	if (systemid_on_pvs(vg)) {
-+		log_error("Metadata format %s does not support this type of system id.",
-+			  vg->fid->fmt->name);
-+		return 0;
-+	}
-+
- 	if (!(vg->system_id = dm_pool_strdup(vg->vgmem, system_id))) {
--		log_error("vg_set_system_id no mem");
-+		log_error("Failed to allocate memory for system_id in vg_set_system_id.");
+@@ -4413,29 +4425,13 @@ static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
+ 	 * A host without a system_id cannot access a VG with a system_id.
+ 	 */
+ 	if (!cmd->system_id || cmd->unknown_system_id) {
+-		log_warn("Cannot access VG %s with system id \"%s\" with unknown local system id.",
+-			 vg->name, vg->system_id);
++		log_error("Cannot access VG %s with system id \"%s\" with unknown local system ID.",
++			  vg->name, vg->system_id);
  		return 0;
  	}
+ 
+-	/*
+-	 * A host can access a VG with a matching system_id.
+-	 */
+-	if (!strcmp(vg->system_id, cmd->system_id))
+-		return 1;
+-
+-	/*
+-	 * A host can access a VG if the VG's system_id is in the allow list.
+-	 */
+-	if (allow_system_id(cmd, vg->system_id))
+-		return 1;
+-
+-	/*
+-	 * Silently ignore foreign VGs.  They will only cause the
+-	 * command to fail if they were named as explicit command
+-	 * args, in which case the command will fail indicating the
+-	 * VG was not found.
+-	 */
++	log_error("Cannot access VG %s with system id \"%s\" with local system ID %s.",
++		  vg->name, vg->system_id, cmd->system_id);
+ 
+ 	return 0;
+ }
+@@ -4443,7 +4439,7 @@ static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
+ /*
+  * FIXME: move _vg_bad_status_bits() checks in here.
+  */
+-static int _access_vg(struct cmd_context *cmd, struct volume_group *vg, uint32_t *failure)
++static int _vg_access_permitted(struct cmd_context *cmd, struct volume_group *vg, uint32_t *failure)
+ {
+ 	if (!is_real_vg(vg->name)) {
+ 		/* Disallow use of LVM1 orphans when a host system ID is set. */
+@@ -4526,7 +4522,7 @@ static struct volume_group *_vg_lock_and_read(struct cmd_context *cmd, const cha
+ 		goto bad;
+ 	}
+ 
+-	if (!_access_vg(cmd, vg, &failure))
++	if (!_vg_access_permitted(cmd, vg, &failure))
+ 		goto bad;
+ 
+ 	/* consistent == 0 when VG is not found, but failed == FAILED_NOTFOUND */
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 659eab5..b1795e7 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -200,12 +200,12 @@ static int _ignore_vg(struct volume_group *vg, const char *vg_name,
+ 	 */
+ 	if (read_error & FAILED_SYSTEMID) {
+ 		if (arg_vgnames && str_list_match_item(arg_vgnames, vg->name)) {
+-			log_error("Skipping volume group %s with system id %s",
+-				  vg->name, vg->system_id);
++			log_error("Skipping volume group %s with system ID %s",
++				  vg->name, vg->system_id ? : vg->lvm1_system_id ? : "");
+ 			return 1;
+ 		} else {
+ 			read_error &= ~FAILED_SYSTEMID; /* Check for other errors */
+-			log_verbose("Skipping volume group %s", vg_name);
++			log_verbose("Skipping foreign volume group %s", vg_name);
+ 			*skip = 1;
+ 		}
+ 	}
+@@ -666,6 +666,7 @@ int vgcreate_params_set_defaults(struct cmd_context *cmd,
+ {
+ 	int64_t extent_size;
+ 
++	/* Only vgsplit sets vg */
+ 	if (vg) {
+ 		vp_def->vg_name = NULL;
+ 		vp_def->extent_size = vg->extent_size;
+@@ -674,7 +675,7 @@ int vgcreate_params_set_defaults(struct cmd_context *cmd,
+ 		vp_def->alloc = vg->alloc;
+ 		vp_def->clustered = vg_is_clustered(vg);
+ 		vp_def->vgmetadatacopies = vg->mda_copies;
+-		vp_def->system_id = vg->system_id ? dm_pool_strdup(cmd->mem, vg->system_id) : NULL;
++		vp_def->system_id = vg->system_id;	/* No need to clone this */
+ 	} else {
+ 		vp_def->vg_name = NULL;
+ 		extent_size = find_config_tree_int64(cmd,
+@@ -689,7 +690,7 @@ int vgcreate_params_set_defaults(struct cmd_context *cmd,
+ 		vp_def->alloc = DEFAULT_ALLOC_POLICY;
+ 		vp_def->clustered = DEFAULT_CLUSTERED;
+ 		vp_def->vgmetadatacopies = DEFAULT_VGMETADATACOPIES;
+-		vp_def->system_id = cmd->system_id ? dm_pool_strdup(cmd->mem, cmd->system_id) : NULL;
++		vp_def->system_id = cmd->system_id;
+ 	}
+ 
+ 	return 1;
+@@ -705,7 +706,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
+ 				  struct vgcreate_params *vp_new,
+ 				  struct vgcreate_params *vp_def)
+ {
+-	const char *arg_str;
++	const char *system_id_arg_str;
+ 
+ 	vp_new->vg_name = skip_dev_dir(cmd, vp_def->vg_name, NULL);
+ 	vp_new->max_lv = arg_uint_value(cmd, maxlogicalvolumes_ARG,
+@@ -745,37 +746,35 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
+-	if (arg_count(cmd, metadatacopies_ARG)) {
++	if (arg_count(cmd, metadatacopies_ARG))
+ 		vp_new->vgmetadatacopies = arg_int_value(cmd, metadatacopies_ARG,
+ 							DEFAULT_VGMETADATACOPIES);
+-	} else if (arg_count(cmd, vgmetadatacopies_ARG)) {
++	else if (arg_count(cmd, vgmetadatacopies_ARG))
+ 		vp_new->vgmetadatacopies = arg_int_value(cmd, vgmetadatacopies_ARG,
+ 							DEFAULT_VGMETADATACOPIES);
+-	} else {
++	else
+ 		vp_new->vgmetadatacopies = find_config_tree_int(cmd, metadata_vgmetadatacopies_CFG, NULL);
+-	}
+ 
+-	if ((arg_str = arg_str_value(cmd, systemid_ARG, NULL))) {
+-		vp_new->system_id = system_id_from_string(cmd, arg_str);
+-	} else {
++	/* A clustered VG has no system ID. */
++	if (vp_new->clustered) {
++		if (arg_is_set(cmd, systemid_ARG)) {
++			log_error("System ID cannot be set on clustered Volume Groups.");
++			return 0;
++		}
++		vp_new->system_id = NULL;
++	} else if (!(system_id_arg_str = arg_str_value(cmd, systemid_ARG, NULL)))
+ 		vp_new->system_id = vp_def->system_id;
+-	}
+-
+-	if (arg_str) {
+-		if (!vp_new->system_id)
+-			log_warn("No local system id found, VG will not have a system id.");
++	else {
++		if (!(vp_new->system_id = system_id_from_string(cmd, system_id_arg_str)))
++			return_0;
+ 
++		/* FIXME Take local/extra_system_ids into account */
+ 		if (vp_new->system_id && cmd->system_id &&
+-		    strcmp(vp_new->system_id, cmd->system_id)) {
+-			log_warn("VG system id \"%s\" will not be accessible to local system id \"%s\"",
++		    strcmp(vp_new->system_id, cmd->system_id))
++			log_warn("VG with system ID \"%s\" might become inaccessible as local system ID is \"%s\"",
+ 				 vp_new->system_id, cmd->system_id);
+-		}
+ 	}
+ 
+-	/* A clustered vg has no system_id. */
+-	if (vp_new->clustered)
+-		vp_new->system_id = NULL;
+-
+ 	return 1;
+ }
+ 
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 19aeee7..0b78230 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -301,41 +301,47 @@ static int _vgchange_clustered(struct cmd_context *cmd,
+ {
+ 	int clustered = arg_int_value(cmd, clustered_ARG, 0);
+ 
+-	if (clustered && (vg_is_clustered(vg))) {
+-		log_error("Volume group \"%s\" is already clustered",
+-			  vg->name);
+-		return 0;
++	if (clustered && vg_is_clustered(vg)) {
++		if (vg->system_id && *vg->system_id)
++			log_warn("WARNING: Clearing invalid system ID %s from volume group %s.",
++				 vg->system_id, vg->name);
++		else {
++			log_error("Volume group \"%s\" is already clustered", vg->name);
++			return 0;
++		}
+ 	}
+ 
+-	if (!clustered && !(vg_is_clustered(vg))) {
+-		log_error("Volume group \"%s\" is already not clustered",
+-			  vg->name);
+-		return 0;
++	if (!clustered && !vg_is_clustered(vg)) {
++		if ((!vg->system_id || !*vg->system_id) && cmd->system_id && *cmd->system_id)
++			log_warn("Setting missing system ID on Volume Group %s to %s.",
++				 vg->name, cmd->system_id);
++		else {
++			log_error("Volume group \"%s\" is already not clustered",
++				  vg->name);
++			return 0;
++		}
+ 	}
+ 
+ 	if (clustered && !arg_count(cmd, yes_ARG)) {
+ 		if (!clvmd_is_running()) {
+-			if (yes_no_prompt("LVM cluster daemon (clvmd) is not"
+-					  " running.\n"
+-					  "Make volume group \"%s\" clustered"
+-					  " anyway? [y/n]: ", vg->name) == 'n') {
++			if (yes_no_prompt("LVM cluster daemon (clvmd) is not running. "
++					  "Make volume group \"%s\" clustered "
++					  "anyway? [y/n]: ", vg->name) == 'n') {
+ 				log_error("No volume groups changed.");
+ 				return 0;
+ 			}
+ 
+ 		} else if (!locking_is_clustered() &&
+-			   (yes_no_prompt("LVM locking type is not clustered.\n"
+-					  "Make volume group \"%s\" clustered"
+-					  " anyway? [y/n]: ", vg->name) == 'n')) {
++			   (yes_no_prompt("LVM locking type is not clustered. "
++					  "Make volume group \"%s\" clustered "
++					  "anyway? [y/n]: ", vg->name) == 'n')) {
+ 			log_error("No volume groups changed.");
+ 			return 0;
+ 		}
+ 	}
+ 
+-	if (clustered)
+-		vg->system_id = NULL;
+-	else if (cmd->system_id && cmd->system_id[0])
+-		vg->system_id = dm_pool_strdup(cmd->mem, cmd->system_id);
++	if (!vg_set_system_id(vg, clustered ? NULL : cmd->system_id))
++		return_0;
+ 
+ 	if (!vg_set_clustered(vg, clustered))
+ 		return_0;
+@@ -483,28 +489,49 @@ static int _vgchange_profile(struct cmd_context *cmd,
+  * extra_system_ids list.  This function is not allowed to change the system_id
+  * of a foreign VG (VG owned by another host).
+  */
+-
+ static int _vgchange_system_id(struct cmd_context *cmd, struct volume_group *vg)
+ {
+-	const char *arg_str = arg_str_value(cmd, systemid_ARG, NULL);
+-	char *system_id;
++	const char *system_id;
++	const char *system_id_arg_str = arg_str_value(cmd, systemid_ARG, NULL);
+ 
+-	if (!arg_str)
++	if (!system_id_arg_str || !*system_id_arg_str) {
++		log_error("Invalid system ID supplied: %s", system_id_arg_str);
+ 		return 0;
++	}
++
++	if (!(system_id = system_id_from_string(cmd, system_id_arg_str)))
++		return_0;
++
++	if (!strcmp(vg->system_id, system_id)) {
++		log_error("Volume Group system ID is already \"%s\"", vg->system_id);
++		return 0;
++	}
+ 
+-	system_id = system_id_from_string(cmd, arg_str);
++	if (cmd->system_id && strcmp(system_id, cmd->system_id)) {
++		if (lvs_in_vg_activated(vg)) {
++			log_error("Logical Volumes in VG %s must be deactivated before system ID can be changed.",
++				  vg->name);
++			return 0;
++		}
+ 
+-	if (system_id && cmd->system_id && strcmp(system_id, cmd->system_id)) {
+-		log_warn("VG \"%s\" system id \"%s\" does not match local system id \"%s\"",
+-			 vg->name, system_id, cmd->system_id);
++		log_warn("WARNING: Requested system ID \"%s\" does not match local system ID \"%s\"",
++			 system_id, cmd->system_id);
++		log_warn("WARNING: Volume group %s might become inaccessible from this machine.",
++			 vg->name);
+ 
+-		if (yes_no_prompt("Change system id? [y/n]: ") == 'n') {
+-			log_error("Volume group \"%s\" not changed.", vg->name);
++		if (!arg_count(cmd, yes_ARG) &&
++		    yes_no_prompt("Set foreign system ID %s on volume group %s? [y/n]: ",
++				  system_id, vg->name) == 'n') {
++			log_error("Volume group \"%s\" system ID not changed.", vg->name);
+ 			return 0;
+ 		}
+ 	}
+ 
++	log_verbose("Changing system ID for VG %s: %s -> %s.",
++		    vg->name, vg->system_id, system_id);
++
+ 	vg->system_id = system_id;
 +
  	return 1;
  }
  
-diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
-index 23d60ac..2964b82 100644
---- a/lib/metadata/vg.h
-+++ b/lib/metadata/vg.h
-@@ -67,7 +67,8 @@ struct volume_group {
- 	struct id id;
- 	const char *name;
- 	const char *old_name;		/* Set during vgrename and vgcfgrestore */
--	char *system_id;
-+	const char *system_id;
-+	char *lvm1_system_id;
- 
- 	uint32_t extent_size;
- 	uint32_t extent_count;
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 1dd56ac..a957d98 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -139,8 +139,8 @@ FIELD(VGS, vg, STR, "AllocPol", cmd, 10, vgallocationpolicy, vg_allocation_polic
- FIELD(VGS, vg, BIN, "Clustered", cmd, 10, vgclustered, vg_clustered, "Set if VG is clustered.", 0)
- FIELD(VGS, vg, SIZ, "VSize", cmd, 5, vgsize, vg_size, "Total size of VG in current units.", 0)
- FIELD(VGS, vg, SIZ, "VFree", cmd, 5, vgfree, vg_free, "Total amount of free space in current units.", 0)
--FIELD(VGS, vg, STR, "SYS ID", system_id, 6, string, vg_sysid, "System ID of the VG indicating its owner.", 0)
--FIELD(VGS, vg, STR, "System ID", system_id, 9, string, vg_systemid, "System ID of the VG indicating its owner.", 0)
-+FIELD(VGS, vg, STR, "SYS ID", cmd, 6, vgsystemid, vg_sysid, "System ID of the VG indicating which host owns it.", 0)
-+FIELD(VGS, vg, STR, "System ID", cmd, 9, vgsystemid, vg_systemid, "System ID of the VG indicating which host owns it.", 0)
- FIELD(VGS, vg, SIZ, "Ext", extent_size, 3, size32, vg_extent_size, "Size of Physical Extents in current units.", 0)
- FIELD(VGS, vg, NUM, "#Ext", extent_count, 4, uint32, vg_extent_count, "Total number of Physical Extents.", 0)
- FIELD(VGS, vg, NUM, "Free", free_count, 4, uint32, vg_free_count, "Total number of unallocated Physical Extents.", 0)
-diff --git a/lib/report/report.c b/lib/report/report.c
-index cf3d9b6..b5418e5 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -984,6 +984,16 @@ static int _vgfree_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return _size64_disp(rh, mem, field, &freespace, private);
- }
- 
-+static int _vgsystemid_disp(struct dm_report *rh, struct dm_pool *mem,
-+			    struct dm_report_field *field,
-+			    const void *data, void *private)
-+{
-+	const struct volume_group *vg = (const struct volume_group *) data;
-+	const char *repstr = vg->system_id ? : vg->lvm1_system_id ? : "";
-+
-+	return _string_disp(rh, mem, field, &repstr, private);
-+}
-+
- static int _uuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
- 		      struct dm_report_field *field,
- 		      const void *data, void *private __attribute__((unused)))
-@@ -1864,6 +1874,7 @@ static struct volume_group _dummy_vg = {
- 	.fid = &_dummy_fid,
- 	.name = "",
- 	.system_id = (char *) "",
-+	.lvm1_system_id = (char *) "",
- 	.pvs = DM_LIST_HEAD_INIT(_dummy_vg.pvs),
- 	.lvs = DM_LIST_HEAD_INIT(_dummy_vg.lvs),
- 	.tags = DM_LIST_HEAD_INIT(_dummy_vg.tags),
 
 
