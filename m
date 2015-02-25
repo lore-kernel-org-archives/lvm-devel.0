@@ -1,110 +1,162 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue, 24 Feb 2015 10:39:05 +0000 (UTC)
-Subject: master - cache: Fix a segfault when passing --cachepolicy without --cachesettings.
-Message-ID: <20150224103905.955C3610DF@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 25 Feb 2015 14:11:14 +0000 (UTC)
+Subject: master - systemid: Allow empty systemid with warnings.
+Message-ID: <20150225141114.B869F60D30@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7d615a3fe58e76af4d3b192298d55a60de9b0d5d
-Commit:        7d615a3fe58e76af4d3b192298d55a60de9b0d5d
-Parent:        5793ecd16541961ebb91239395dc82504ad31906
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Tue Feb 24 11:36:30 2015 +0100
-Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Tue Feb 24 11:39:35 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ac6a4cd7079fa97f866cde5ba3adedbf7fd61cba
+Commit:        ac6a4cd7079fa97f866cde5ba3adedbf7fd61cba
+Parent:        7d615a3fe58e76af4d3b192298d55a60de9b0d5d
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Feb 25 14:12:24 2015 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Feb 25 14:12:24 2015 +0000
 
-cache: Fix a segfault when passing --cachepolicy without --cachesettings.
+systemid: Allow empty systemid with warnings.
 
+Add warning messages when empty system ID is set.
 ---
- WHATS_NEW                    |    1 +
- lib/metadata/cache_manip.c   |    5 +++--
- test/shell/lvchange-cache.sh |    5 +++++
- tools/toollib.c              |   13 ++++++++-----
- 4 files changed, 17 insertions(+), 7 deletions(-)
+ lib/commands/toolcontext.c |   13 +++++++++--
+ tools/toollib.c            |   10 ++++++--
+ tools/vgchange.c           |   46 +++++++++++++++++++++++++------------------
+ 3 files changed, 44 insertions(+), 25 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 6220398..8e80241 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.117 - 
- ====================================
-+  Do not crash when --cachepolicy is given without --cachesettings.
-   Add NEEDS_FOREIGN_VGS flag to vgimport so --foreign is always supplied.
-   Add --foreign to the 6 display and reporting tools and vgcfgbackup.
-   Install /etc/lvm/lvmlocal.conf template with local section for systemid.
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 6a13ec1..41de440 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -418,7 +418,8 @@ int lv_cache_setpolicy(struct logical_volume *lv, struct dm_config_tree *policy)
- 			goto_out;
- 	}
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 7539b4a..c917b0a 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -62,6 +62,11 @@ const char *system_id_from_string(struct cmd_context *cmd, const char *str)
+ {
+ 	char *system_id;
  
--	if (!(seg->policy_settings = dm_config_clone_node_with_mem(lv->vg->vgmem, policy->root, 0)))
-+	if ((cn = dm_config_find_node(policy->root, "policy_settings")) &&
-+	    !(seg->policy_settings = dm_config_clone_node_with_mem(lv->vg->vgmem, cn, 0)))
- 		goto_out;
- 
- 	if ((name = dm_config_find_str(policy->root, "policy", NULL)) &&
-@@ -426,7 +427,7 @@ int lv_cache_setpolicy(struct logical_volume *lv, struct dm_config_tree *policy)
- 		goto_out;
- 
- restart: /* remove any 'default" nodes */
--	cn = seg->policy_settings->child;
-+	cn = seg->policy_settings ? seg->policy_settings->child : NULL;
- 	while (cn) {
- 		if (cn->v->type == DM_CFG_STRING && !strcmp(cn->v->v.str, "default")) {
- 			dm_config_remove_node(seg->policy_settings, cn);
-diff --git a/test/shell/lvchange-cache.sh b/test/shell/lvchange-cache.sh
-index 87a217a..9959f93 100644
---- a/test/shell/lvchange-cache.sh
-+++ b/test/shell/lvchange-cache.sh
-@@ -21,7 +21,12 @@ lvcreate -n noncache -l 1 $vg
- not lvchange --cachepolicy mq $vg/noncache
- not lvchange --cachesettings foo=bar $vg/noncache
- 
-+lvchange --cachepolicy cleaner $vg/corigin
-+dmsetup status | grep $vg-corigin | grep 'cleaner'
++	if (!str || !*str) {
++		log_warn("WARNING: Empty system ID supplied.");
++		return "";
++	}
 +
- lvchange --cachepolicy mq --cachesettings migration_threshold=333 $vg/corigin
-+dmsetup status | grep $vg-corigin | not grep 'cleaner'
-+dmsetup status | grep $vg-corigin | grep 'mq'
- dmsetup status | grep $vg-corigin | grep 'migration_threshold 333'
- lvchange --refresh $vg/corigin
- dmsetup status | grep $vg-corigin | grep 'migration_threshold 333'
-diff --git a/tools/toollib.c b/tools/toollib.c
-index b1795e7..b8b0bad 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1232,17 +1232,20 @@ struct dm_config_tree *get_cachepolicy_params(struct cmd_context *cmd)
- 	if (!(result = dm_config_flatten(current)))
- 		goto_out;
+ 	if (!(system_id = dm_pool_zalloc(cmd->mem, strlen(str) + 1))) {
+ 		log_warn("WARNING: Failed to allocate system ID.");
+ 		return NULL;
+@@ -109,13 +114,13 @@ static const char *_read_system_id_from_file(struct cmd_context *cmd, const char
+ 		if (!*start || *start == '#')
+ 			continue;
  
--	if (!(cn = dm_config_create_node(result, "policy_settings")))
--		goto_out;
-+	if (result->root) {
-+		if (!(cn = dm_config_create_node(result, "policy_settings")))
-+			goto_out;
+-		if (system_id) {
++		if (system_id && *system_id) {
+ 			log_warn("WARNING: Ignoring extra line(s) in system ID file %s.", file);
+ 			break;
+ 		}
  
--	cn->child = result->root;
--	result->root = cn;
-+		cn->child = result->root;
-+		result->root = cn;
+ 		/* Remove any comments from end of line */
+-		for (end = start; *end; start++)
++		for (end = start; *end; end++)
+ 			if (*end == '#') {
+ 				*end = '\0';
+ 				break;
+@@ -445,8 +450,10 @@ static int _init_system_id(struct cmd_context *cmd)
+ 	if (!strcmp(source, "none"))
+ 		return 1;
+ 
+-	if ((cmd->system_id = _system_id_from_source(cmd, source)))
++	if ((system_id = _system_id_from_source(cmd, source)) && *system_id) {
++		cmd->system_id = system_id;
+ 		return 1;
 +	}
  
- 	if (arg_count(cmd, cachepolicy_ARG)) {
- 		if (!(cn = dm_config_create_node(result, "policy")))
- 			goto_out;
+ 	/*
+ 	 * The source failed to resolve a system_id.  In this case allow
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b8b0bad..628bc55 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -770,9 +770,13 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
  
--		result->root->sib = cn;
-+		cn->sib = result->root;
-+		result->root = cn;
- 		if (!(cn->v = dm_config_create_value(result)))
- 			goto_out;
+ 		/* FIXME Take local/extra_system_ids into account */
+ 		if (vp_new->system_id && cmd->system_id &&
+-		    strcmp(vp_new->system_id, cmd->system_id))
+-			log_warn("VG with system ID \"%s\" might become inaccessible as local system ID is \"%s\"",
+-				 vp_new->system_id, cmd->system_id);
++		    strcmp(vp_new->system_id, cmd->system_id)) {
++			if (*vp_new->system_id)
++				log_warn("VG with system ID \"%s\" might become inaccessible as local system ID is \"%s\"",
++					 vp_new->system_id, cmd->system_id);
++			else
++				log_warn("WARNING: A VG without a system ID allows concurrent access from other hosts.");
++		}
+ 	}
+ 
+ 	return 1;
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 0b78230..8d5b48a 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -494,36 +494,44 @@ static int _vgchange_system_id(struct cmd_context *cmd, struct volume_group *vg)
+ 	const char *system_id;
+ 	const char *system_id_arg_str = arg_str_value(cmd, systemid_ARG, NULL);
+ 
+-	if (!system_id_arg_str || !*system_id_arg_str) {
+-		log_error("Invalid system ID supplied: %s", system_id_arg_str);
++	if (!(system_id = system_id_from_string(cmd, system_id_arg_str))) {
++		log_error("Unable to set system ID.");
+ 		return 0;
+ 	}
+ 
+-	if (!(system_id = system_id_from_string(cmd, system_id_arg_str)))
+-		return_0;
+-
+ 	if (!strcmp(vg->system_id, system_id)) {
+ 		log_error("Volume Group system ID is already \"%s\"", vg->system_id);
+ 		return 0;
+ 	}
+ 
+ 	if (cmd->system_id && strcmp(system_id, cmd->system_id)) {
+-		if (lvs_in_vg_activated(vg)) {
+-			log_error("Logical Volumes in VG %s must be deactivated before system ID can be changed.",
+-				  vg->name);
+-			return 0;
+-		}
++		if (!*system_id) {
++			log_warn("WARNING: Removing the system ID allows concurrent access from other hosts.");
++
++			if (!arg_count(cmd, yes_ARG) &&
++			    yes_no_prompt("Remove system ID %s on volume group %s? [y/n]: ",
++					  vg->system_id, vg->name) == 'n') {
++				log_error("Volume group \"%s\" system ID not changed.", vg->name);
++				return 0;
++			}
++		} else {
++			if (lvs_in_vg_activated(vg)) {
++				log_error("Logical Volumes in VG %s must be deactivated before system ID can be changed.",
++					  vg->name);
++				return 0;
++			}
+ 
+-		log_warn("WARNING: Requested system ID \"%s\" does not match local system ID \"%s\"",
+-			 system_id, cmd->system_id);
+-		log_warn("WARNING: Volume group %s might become inaccessible from this machine.",
+-			 vg->name);
++			log_warn("WARNING: Requested system ID \"%s\" does not match local system ID \"%s\"",
++				 system_id, cmd->system_id);
++			log_warn("WARNING: Volume group %s might become inaccessible from this machine.",
++				 vg->name);
+ 
+-		if (!arg_count(cmd, yes_ARG) &&
+-		    yes_no_prompt("Set foreign system ID %s on volume group %s? [y/n]: ",
+-				  system_id, vg->name) == 'n') {
+-			log_error("Volume group \"%s\" system ID not changed.", vg->name);
+-			return 0;
++			if (!arg_count(cmd, yes_ARG) &&
++			    yes_no_prompt("Set foreign system ID %s on volume group %s? [y/n]: ",
++					  system_id, vg->name) == 'n') {
++				log_error("Volume group \"%s\" system ID not changed.", vg->name);
++				return 0;
++			}
+ 		}
+ 	}
  
 
 
