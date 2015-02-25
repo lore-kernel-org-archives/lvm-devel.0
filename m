@@ -1,160 +1,71 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 25 Feb 2015 22:12:53 +0000 (UTC)
-Subject: master - tests: add more system_id tests
-Message-ID: <20150225221253.0B69960F4A@fedorahosted.org>
+Date: Wed, 25 Feb 2015 22:55:28 +0000 (UTC)
+Subject: master - man: lvmsystemid: empty string equals no system_id
+Message-ID: <20150225225528.74232601DC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=efd7480de3c1be4c0e7fe2508158dce930bc2c7c
-Commit:        efd7480de3c1be4c0e7fe2508158dce930bc2c7c
-Parent:        1248f94a429faa245968a9efe04250f27a53bc18
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=71d97fd88afa0d8240569412bb1d3d256e596f6d
+Commit:        71d97fd88afa0d8240569412bb1d3d256e596f6d
+Parent:        efd7480de3c1be4c0e7fe2508158dce930bc2c7c
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 25 16:13:28 2015 -0600
+AuthorDate:    Wed Feb 25 16:55:56 2015 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Feb 25 16:13:28 2015 -0600
+CommitterDate: Wed Feb 25 16:55:56 2015 -0600
 
-tests: add more system_id tests
+man: lvmsystemid: empty string equals no system_id
 
 ---
- test/shell/system_id.sh |  115 ++++++++++++++++++++++++++++++++++++++++++++---
- 1 files changed, 109 insertions(+), 6 deletions(-)
+ man/lvmsystemid.7.in |   13 ++++++++++---
+ 1 files changed, 10 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/system_id.sh b/test/shell/system_id.sh
-index 43d1203..3ef3e8b 100644
---- a/test/shell/system_id.sh
-+++ b/test/shell/system_id.sh
-@@ -443,9 +443,114 @@ lvremove $vg1/$lv1
- vgremove $vg1
- rm -f $SIDFILE
+diff --git a/man/lvmsystemid.7.in b/man/lvmsystemid.7.in
+index e188c12..42eee31 100644
+--- a/man/lvmsystemid.7.in
++++ b/man/lvmsystemid.7.in
+@@ -41,7 +41,7 @@ maximum length of a system_id is 128 characters.
+ .SS Limitations and warnings
  
--
- # use extra_system_ids to read a foreign VG
--# TODO
+ To benefit fully from system_id, all hosts must have system_id set, and
+-VGs must have system_id set.  A VG on shared storage can be corrupted or
++VGs must have system_id set.  A VG on shared storage can be damaged or
+ destroyed in the following cases which the user must be careful to avoid:
+ 
+ .IP \[bu] 2
+@@ -220,8 +220,8 @@ local {
+ 
+ .SS vgcreate
+ 
+-In vgcreate, a host sets its own system_id in the VG metadata.
+-To override this and set another system_id:
++In vgcreate, the host running the command assigns its own system_id to the
++new VG.  To override this and set another system_id:
+ 
+ .B vgcreate --systemid
+ .I SystemID VG Devices
+@@ -231,6 +231,9 @@ it may not be able to use.  Another host with a system_id matching the one
+ specified may not recognize the new VG without manually rescanning
+ devices.
+ 
++If the --systemid argument is an empty string (""), the VG is created with
++no system_id, making it accessible to other hosts (see warnings above.)
 +
-+SID1=sidfoofile1
-+SID2=sidfoofile2
-+SIDFILE=etc/lvm_test.conf
-+LVMLOCAL=etc/lvmlocal.conf
-+rm -f $LVMLOCAL
-+rm -f $SIDFILE
-+echo "$SID1" > $SIDFILE
-+aux lvmconf "global/system_id_source = file"
-+aux lvmconf "global/system_id_file = $SIDFILE"
-+# create a vg
-+vgcreate $vg1 "$dev1"
-+# normal vgs sees the vg
-+vgs >err
-+grep $vg1 err
-+# change the local system_id, making the vg foreign
-+echo "$SID2" > $SIDFILE
-+# normal vgs doesn't see the vg
-+vgs >err
-+not grep $vg1 err
-+# using --foreign we can see the vg
-+vgs --foreign >err
-+grep $vg1 err
-+# add the first system_id to extra_system_ids so we can see the vg
-+echo "local {" > $LVMLOCAL
-+echo "  extra_system_ids = [ $SID1" ] >> $LVMLOCAL
-+echo "}" >> $LVMLOCAL
-+vgs >err
-+grep $vg1 err
-+vgremove $vg1
-+rm -f $SIDFILE
-+rm -f $LVMLOCAL
+ .SS report/display
+ 
+ The system_id of a VG is displayed with the "systemid" reporting option.
+@@ -272,6 +275,10 @@ confirmation because the host may lose access to the VG being changed:
+ .B vgchange --systemid
+ .I SystemID VG
+ 
++The system_id can be removed from a VG by specifying an empty string ("")
++as the new system_id.  This makes the VG accessible to other hosts (see
++warnings above.)
 +
-+# vgcreate --systemid "" creates a vg without a system_id even if source is set
-+SID1=sidfoofile1
-+SIDFILE=etc/lvm_test.conf
-+rm -f $SIDFILE
-+echo "$SID1" > $SIDFILE
-+aux lvmconf "global/system_id_source = file"
-+aux lvmconf "global/system_id_file = $SIDFILE"
-+# create a vg
-+vgcreate --systemid "" $vg1 "$dev1"
-+# normal vgs sees the vg
-+vgs >err
-+grep $vg1 err
-+# our system_id is not displayed for the vg
-+vgs -o+systemid >err
-+not grep $SID1 err
-+vgremove $vg1
-+rm -f $SIDFILE
-+
-+# vgchange --systemid "" clears the system_id on owned vg
-+SID1=sidfoofile1
-+SIDFILE=etc/lvm_test.conf
-+rm -f $SIDFILE
-+echo "$SID1" > $SIDFILE
-+aux lvmconf "global/system_id_source = file"
-+aux lvmconf "global/system_id_file = $SIDFILE"
-+# create a vg
-+vgcreate $vg1 "$dev1"
-+# normal vgs sees the vg
-+vgs >err
-+grep $vg1 err
-+# the vg has our system_id
-+vgs -o+systemid >err
-+grep $SID1 err
-+# clear the system_id
-+vgchange --yes --systemid "" $vg1
-+# normal vgs sees the vg
-+vgs >err
-+grep $vg1 err
-+# the vg does not have our system_id
-+vgs -o+systemid >err
-+not grep $SID1 err
-+vgremove $vg1
-+rm -f $SIDFILE
-+
-+# vgchange --systemid does not set the system_id on foreign vg
-+SID1=sidfoofile1
-+SID2=sidfoofile2
-+SIDFILE=etc/lvm_test.conf
-+rm -f $LVMLOCAL
-+rm -f $SIDFILE
-+echo "$SID1" > $SIDFILE
-+aux lvmconf "global/system_id_source = file"
-+aux lvmconf "global/system_id_file = $SIDFILE"
-+# create a vg
-+vgcreate $vg1 "$dev1"
-+# normal vgs sees the vg
-+vgs >err
-+grep $vg1 err
-+# change the local system_id, making the vg foreign
-+echo "$SID2" > $SIDFILE
-+# normal vgs doesn't see the vg
-+vgs >err
-+not grep $vg1 err
-+# using --foreign we can see the vg
-+vgs --foreign >err
-+grep $vg1 err
-+# cannot clear the system_id of the foreign vg
-+not vgchange --yes --systemid "" $vg1
-+# cannot set the system_id of the foreign vg
-+not vgchange --yes --systemid foo $vg1
-+# change our system_id back so we can remove the vg
-+echo "$SID1" > $SIDFILE
-+vgremove $vg1
-+rm -f $SIDFILE
+ A host cannot directly change the system_id of a foreign VG.
  
- 
- # Test handling of bad system_id source configurations
-@@ -473,10 +578,8 @@ rm -f $SIDFILE
- #   correct output
- # . Using vgimport should see that the VG is no longer foreign,
- #   but has been exported.
--# TODO
--
--
--# --systemid "" equals none
-+# . pvscan --cache, vgscan --cache should cause the latest
-+#   version of a foreign VG to be cached in lvmetad.
- # TODO
- 
- 
+ To move a VG from one host to another, vgexport and vgimport should be
 
 
