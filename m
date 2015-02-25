@@ -1,124 +1,92 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 25 Feb 2015 20:59:14 +0000 (UTC)
-Subject: master - lvchange: deactivate is always possible in foreign vgs
-Message-ID: <20150225205914.5747860D6F@fedorahosted.org>
+Date: Wed, 25 Feb 2015 20:59:18 +0000 (UTC)
+Subject: master - tests: fix the system_id tests
+Message-ID: <20150225205918.9969A60D6F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd6a2028316febc4a44785c1cacacea0e53f8f76
-Commit:        dd6a2028316febc4a44785c1cacacea0e53f8f76
-Parent:        dd0ee35378cc2ff405183fea9a3d970aab96ac63
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2c50cbe8cbd5197793abb6f43f42b53980cdc65e
+Commit:        2c50cbe8cbd5197793abb6f43f42b53980cdc65e
+Parent:        ebb2205b4c56aa99cb77939eff396665c47f082d
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 25 11:33:11 2015 -0600
+AuthorDate:    Wed Feb 25 12:27:49 2015 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Wed Feb 25 14:58:49 2015 -0600
 
-lvchange: deactivate is always possible in foreign vgs
+tests: fix the system_id tests
 
-The only realistic way for a host to have active LVs in a
-foreign VG is if the host's system_id (or system_id_source)
-is changed while LVs are active.
-
-In this case, the active LVs produce an warning, and access
-to the VG is implicitly allowed (without requiring --foreign.)
-This allows the active LVs to be deactivated.
-
-In this case, rescanning PVs for the VG offers no benefit.
-It is not possible that rescanning would reveal an LV that
-is active but wasn't previously in the VG metadata.
+That were broken by yesterday's system_id changes.
 ---
- lib/commands/toolcontext.h |    1 +
- lib/metadata/metadata.c    |    4 +++-
- tools/lvchange.c           |   20 +++++++++++++++-----
- tools/lvmcmdline.c         |    1 +
- 4 files changed, 20 insertions(+), 6 deletions(-)
+ man/lvmsystemid.7.in    |    2 +-
+ test/shell/system_id.sh |   22 +++++++++++-----------
+ 2 files changed, 12 insertions(+), 12 deletions(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index f491d1c..28f5a2c 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -98,6 +98,7 @@ struct cmd_context {
- 	unsigned independent_metadata_areas:1;	/* Active formats have MDAs outside PVs */
- 	unsigned unknown_system_id:1;
- 	unsigned include_foreign_vgs:1;
-+	unsigned include_active_foreign_vgs:1;
- 	unsigned error_foreign_vgs:1;
+diff --git a/man/lvmsystemid.7.in b/man/lvmsystemid.7.in
+index 741aafe..e188c12 100644
+--- a/man/lvmsystemid.7.in
++++ b/man/lvmsystemid.7.in
+@@ -36,7 +36,7 @@ Valid system_id characters are the same as valid VG name characters.  If a
+ system_id contains invalid characters, those characters are omitted and
+ remaining characters are used.  If a system_id is longer than the maximum
+ name length, the characters up to the maximum length are used.  The
+-maximum length of a system_id is 127 characters.
++maximum length of a system_id is 128 characters.
  
- 	struct dev_types *dev_types;
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index f011af8..5ae3780 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4418,7 +4418,9 @@ static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
- 	if (lvs_in_vg_activated(vg)) {
- 		log_warn("WARNING: Found LVs active in VG %s with foreign system ID \"%s\".  Possible data corruption.",
- 			  vg->name, vg->system_id);
--		return 1;
-+		if (cmd->include_active_foreign_vgs)
-+			return 1;
-+		return 0;
- 	}
+ .SS Limitations and warnings
  
- 	/*
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 1ed0dd5..b44ef33 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -170,6 +170,18 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
+diff --git a/test/shell/system_id.sh b/test/shell/system_id.sh
+index 5327153..43d1203 100644
+--- a/test/shell/system_id.sh
++++ b/test/shell/system_id.sh
+@@ -298,15 +298,15 @@ grep $SID1 err
+ vgremove $vg1
+ rm -f $SIDFILE
  
- 	activate = (activation_change_t) arg_uint_value(cmd, activate_ARG, CHANGE_AY);
+-# Test max system_id length (127) and invalid system_id characters.
+-# The 127 length limit is imposed before invalid characters are omitted.
++# Test max system_id length (128) and invalid system_id characters.
++# The 128 length limit is imposed before invalid characters are omitted.
  
-+	/*
-+	 * We can get here in the odd case where an LV is already active in
-+	 * a foreign VG, which allows the VG to be accessed by lvchange -a
-+	 * so the LV can be deactivated.
-+	 */
-+	if (lv->vg->system_id && cmd->system_id &&
-+	    strcmp(lv->vg->system_id, cmd->system_id) &&
-+	    is_change_activating(activate)) {
-+		log_error("Cannot activate LVs in a foreign VG.");
-+		return ECMD_FAILED;
-+	}
-+
- 	if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG)))
- 		return 1;
+ SIDFILE=etc/lvm_test.conf
  
-@@ -1178,11 +1190,6 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
- 	}
+-# 120 numbers followed by 7 letters (max len)
+-SID1=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdefg
+-# 120 numbers followed by 8 letters (too long by 1 character, the last is omitted)
+-SID2=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdefgh
++# 120 numbers followed by 8 letters (max len)
++SID1=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdefgh
++# 120 numbers followed by 9 letters (too long by 1 character, the last is omitted)
++SID2=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdefghi
  
--	if (!update && !arg_count(cmd, refresh_ARG) && !arg_count(cmd, monitor_ARG) && !arg_count(cmd, poll_ARG) &&
--	     arg_count(cmd, activate_ARG) &&
--	     !is_change_activating((activation_change_t) arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
--		cmd->include_foreign_vgs = 1;
--
- 	/*
- 	 * If --sysinit -aay is used and at the same time lvmetad is used,
- 	 * we want to rely on autoactivation to take place. Also, we
-@@ -1212,6 +1219,9 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
- 		}
- 	}
+ # max len system_id should appear normally
+ rm -f $SIDFILE
+@@ -339,11 +339,11 @@ rm -f $SIDFILE
  
-+	if (arg_is_set(cmd, activate_ARG))
-+		cmd->include_active_foreign_vgs = 1;
-+
- 	return process_each_lv(cmd, argc, argv,
- 			       update ? READ_FOR_UPDATE : 0, NULL,
- 			       &_lvchange_single);
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 7a11183..255fa41 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1077,6 +1077,7 @@ static int _get_settings(struct cmd_context *cmd)
- 	cmd->ignore_clustered_vgs = arg_is_set(cmd, ignoreskippedcluster_ARG);
- 	cmd->error_foreign_vgs = cmd->command->flags & ENABLE_FOREIGN_VGS ? 0 : 1;
- 	cmd->include_foreign_vgs = arg_is_set(cmd, foreign_ARG) ? 1 : 0;
-+	cmd->include_active_foreign_vgs = cmd->command->flags & ENABLE_FOREIGN_VGS ? 1 : 0;
- 		
- 	if (!arg_count(cmd, sysinit_ARG))
- 		lvmetad_connect_or_warn();
+ # max len system_id containing an invalid character should appear without
+ # the invalid character
+-# 120 numbers followed by invalid '#' character followed by 7 letters (too long by 1 character)
+-SID1=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789#abcdefg
++# 120 numbers followed by invalid '%' character followed by 8 letters (too long by 1 character)
++SID1=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789%abcdefgh
+ # After the invalid character is omitted from SID1
+-# The string is truncated to max length (127) before the invalid character is omitted
+-SID2=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdef
++# The string is truncated to max length (128) before the invalid character is omitted
++SID2=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdefg
+ rm -f $SIDFILE
+ echo "$SID1" > $SIDFILE
+ aux lvmconf "global/system_id_source = file"
+@@ -359,7 +359,7 @@ vgremove $vg1
+ rm -f $SIDFILE
+ 
+ # contains a bunch of invalid characters
+-SID1="?#$&A. at 1]"
++SID1="?%$&A. at 1]"
+ # SID1 without the invalid characters
+ SID2=A.1
+ 
 
 
