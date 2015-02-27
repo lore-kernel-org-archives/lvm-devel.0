@@ -1,56 +1,43 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 27 Feb 2015 13:37:23 +0000 (UTC)
-Subject: master - lvchange: Allow -pr to change kernel only.
-Message-ID: <20150227133723.AA15360614@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 27 Feb 2015 13:53:50 +0000 (UTC)
+Subject: master - cleanup: change check order in condition in _check_pv_list fn
+Message-ID: <20150227135350.B063560D23@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ee4cd2c73774feeef3794c24865add1c28adb946
-Commit:        ee4cd2c73774feeef3794c24865add1c28adb946
-Parent:        5b154ae4a3d875009aa7a7d081c8e76cdb6dd50f
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Feb 27 13:38:26 2015 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Feb 27 13:38:26 2015 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=379fb90b05b9fae0559fb697981198d8bb58e0f9
+Commit:        379fb90b05b9fae0559fb697981198d8bb58e0f9
+Parent:        ee4cd2c73774feeef3794c24865add1c28adb946
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Feb 27 14:52:31 2015 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Feb 27 14:52:38 2015 +0100
 
-lvchange: Allow -pr to change kernel only.
+cleanup: change check order in condition in _check_pv_list fn
 
+"!dev_cache_get(argv[i], cmd->full_filter) && !rescan_done" --> "!rescan_done && !dev_cache_get(argv[i], cmd->full_filter)
+
+Check the simple condition first (variable), then the function return value
+(which in this case certainly takes more time to evaluate) - save some time.
 ---
- WHATS_NEW        |    1 +
- tools/lvchange.c |    7 +++++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+ tools/reporter.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index cc974a6..bc2630c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.117 - 
- ====================================
-+  Allow lvchange -p to change kernel state only if metadata state differs.
-   Fix incorrect persistent .cache after report with label fields only (2.02.106).
-   Reinstate PV tag recognition for pvs if reporting label fields only (2.02.105).
-   Rescan devices before vgimport with lvmetad so exported VG is seen.
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 6ed953f..bf7e356 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -32,6 +32,13 @@ static int _lvchange_permission(struct cmd_context *cmd,
- 	}
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 0e563ac..9bf366e 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -578,7 +578,7 @@ static void _check_pv_list(struct cmd_context *cmd, int argc, char **argv,
  
- 	if (!(lv_access & LVM_WRITE) && !(lv->status & LVM_WRITE)) {
-+		/* Refresh if it's read-only in metadata but read-write in kernel */
-+		if (lv_info(cmd, lv, 0, &info, 0, 0) &&
-+		    (info_obtained = 1, info.exists) && !info.read_only) {
-+			log_print_unless_silent("Logical volume \"%s\" is already read-only.  Refreshing kernel state.",
-+						lv->name);
-+			return lv_refresh(cmd, lv);
-+		}
- 		log_error("Logical volume \"%s\" is already read only",
- 			  lv->name);
- 		return 0;
+ 	if (args_are_pvs && argc) {
+ 		for (i = 0; i < argc; i++) {
+-			if (!dev_cache_get(argv[i], cmd->full_filter) && !rescan_done) {
++			if (!rescan_done && !dev_cache_get(argv[i], cmd->full_filter)) {
+ 				cmd->filter->wipe(cmd->filter);
+ 				/* FIXME scan only one device */
+ 				lvmcache_label_scan(cmd, 0);
 
 
