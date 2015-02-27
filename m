@@ -1,96 +1,66 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 26 Feb 2015 22:42:20 +0000 (UTC)
-Subject: master - system_id: remove unwanted foreign error for some commands
-Message-ID: <20150226224220.49761611C9@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 27 Feb 2015 08:16:02 +0000 (UTC)
+Subject: master - conf: be more clear about wipe_signatures_when_zeroing_new_lvs option in comments
+Message-ID: <20150227081602.A715060DDD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0a19238aa30a3a594abaa544c4972c880cefafe1
-Commit:        0a19238aa30a3a594abaa544c4972c880cefafe1
-Parent:        a432066c7c52f59b1d38fbef3896b3ff0c50100f
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 26 16:06:32 2015 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Feb 26 16:33:36 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8bceb1e0bb460a728638aea179b000f07b4cbd0b
+Commit:        8bceb1e0bb460a728638aea179b000f07b4cbd0b
+Parent:        0a19238aa30a3a594abaa544c4972c880cefafe1
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Feb 27 08:53:15 2015 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Feb 27 09:17:10 2015 +0100
 
-system_id: remove unwanted foreign error for some commands
+conf: be more clear about wipe_signatures_when_zeroing_new_lvs option in comments
 
-Commands that can never use foreign VGs begin with
-cmd->error_foreign_vgs = 1.  This tells the vg_read
-lib layer to print an error as soon as a foreign VG
-is read.
-
-The toollib process_each layer also prints an error if a
-foreign VG is read, but is more selective about it.  It
-won't print an error if the command did not explicitly
-name the foreign VG.  We want to silently ignore foreign VGs
-unless a command attempts to use one explicitly.
-
-So, foreign VG errors are printed from two different layers:
-vg_read (lower layer) and process_each (upper layer).
-
-Commands that use toollib process_each, only want errors from
-the process_each layer, not from both layers.  So, process_each
-disables the lower layer vg_read error message by setting
-error_foreign_vgs = 0.
-
-Commands that do not use toollib process_each, want errors
-from the vg_read layer, otherwise they would get no error
-message.  The original cmd->error_foreign_vgs setting
-enables this error.
-
-(Commands that are allowed to operate on foreign VGs always
-begin with cmd->error_foreign_vgs = 0, and all the commands
-in this group use toollib process_each with the selective
-error reporting.)
 ---
- tools/toollib.c |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ conf/example.conf.in |   27 +++++++++++++++++++++------
+ 1 files changed, 21 insertions(+), 6 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 8b750d8..7d1c380 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -200,8 +200,8 @@ static int _ignore_vg(struct volume_group *vg, const char *vg_name,
- 	 */
- 	if (read_error & FAILED_SYSTEMID) {
- 		if (arg_vgnames && str_list_match_item(arg_vgnames, vg->name)) {
--			log_error("Skipping volume group %s with system ID %s",
--				  vg->name, vg->system_id ? : vg->lvm1_system_id ? : "");
-+			log_error("Cannot access VG %s with system id \"%s\" with local system ID %s.",
-+				  vg->name, vg->system_id, vg->cmd->system_id);
- 			return 1;
- 		} else {
- 			read_error &= ~FAILED_SYSTEMID; /* Check for other errors */
-@@ -1877,6 +1877,8 @@ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
- 	unsigned one_vgname_arg = (flags & ONE_VGNAME_ARG);
- 	int ret;
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 1f10dad..51e8e85 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -330,13 +330,28 @@ allocation {
+     # to be recognized, it can take more time to complete the signature scan.
+     use_blkid_wiping = 1
  
-+	cmd->error_foreign_vgs = 0;
-+
- 	dm_list_init(&arg_tags);
- 	dm_list_init(&arg_vgnames);
- 	dm_list_init(&vgnameids_on_system);
-@@ -2277,6 +2279,8 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv, uint32_t fla
- 	int enable_all_vgs = (cmd->command->flags & ALL_VGS_IS_DEFAULT);
- 	int ret;
+-    # Set to 1 to wipe any signatures found on newly-created Logical Volumes
+-    # automatically in addition to zeroing of the first KB on the LV
+-    # (controlled by the -Z/--zero y option).
+-    # The command line option -W/--wipesignatures takes precedence over this
+-    # setting.
+-    # The default is to wipe signatures when zeroing.
+-    #
++    # Set to 1 to detect any signatures found on newly-created Logical Volume
++    # whenever zeroing of the LV is done (zeroing is controlled by -Z/--zero
++    # option and if not specified, zeroing is used by default if possible).
++    #
++    # While zeroing simply overwrites first 4 KiB of the LV with zeroes without
++    # doing any signature detection, signature wiping goes beyond that and it
++    # can detect exact type and position of signature within the whole LV.
++    # As such, it provides cleaner LV for use after creation as all known
++    # signatures are wiped so that the LV is not claimed by other tools
++    # incorrectly by the existence of old signature from any previous use.
++    # The number of signatures that LVM can detect depends on detection
++    # code that is selected - see also use_blkid_wiping option.
++    #
++    # Wiping of each detected signature must be confirmed.
++    #
++    # The default is to wipe signatures when zeroing. The command line
++    # option -W/--wipesignatures takes precedence over this setting.
++    #
++    # Without this option set, signatures on newly-created Logical Volumes
++    # are never detected and wiped and you always need to use
++    # -W/--wipesignatures y option directly to enable this feature
++    # no matter whether zeroing is used or not.
+     wipe_signatures_when_zeroing_new_lvs = 1
  
-+	cmd->error_foreign_vgs = 0;
-+
- 	dm_list_init(&arg_tags);
- 	dm_list_init(&arg_vgnames);
- 	dm_list_init(&arg_lvnames);
-@@ -2761,6 +2765,8 @@ int process_each_pv(struct cmd_context *cmd,
- 	int ret_max = ECMD_PROCESSED;
- 	int ret;
- 
-+	cmd->error_foreign_vgs = 0;
-+
- 	dm_list_init(&arg_tags);
- 	dm_list_init(&arg_pvnames);
- 	dm_list_init(&arg_devices);
+     # Set to 1 to guarantee that mirror logs will always be placed on 
 
 
