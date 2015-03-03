@@ -1,38 +1,57 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  3 Mar 2015 14:54:07 +0000 (UTC)
-Subject: master - spec: Add lvmlocal.conf to RPMs.
-Message-ID: <20150303145407.3F8D460366@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Tue,  3 Mar 2015 22:45:56 +0000 (UTC)
+Subject: master - lvchange, vgchange: fix the system_id check
+Message-ID: <20150303224556.7691C60ECD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=926b38c0d73d958e5774082ff17fb2a48e20d32e
-Commit:        926b38c0d73d958e5774082ff17fb2a48e20d32e
-Parent:        1a41e649a68b03fd6ea4769ed06e83f9d9785c45
-Author:        Petr Rockai <me@mornfall.net>
-AuthorDate:    Tue Mar 3 15:45:47 2015 +0100
-Committer:     Petr Rockai <me@mornfall.net>
-CommitterDate: Tue Mar 3 15:47:13 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=24774959221ab75038c336074470108a0727e672
+Commit:        24774959221ab75038c336074470108a0727e672
+Parent:        cccc2b2980f8321e5f8c8b553f50966f7e1b5abc
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Mar 3 16:45:16 2015 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Mar 3 16:45:16 2015 -0600
 
-spec: Add lvmlocal.conf to RPMs.
+lvchange, vgchange: fix the system_id check
 
+The check for matching system_id needs to check
+that the system_id is not blank.
 ---
- spec/packages.inc |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ tools/lvchange.c |    3 ++-
+ tools/vgchange.c |    3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/spec/packages.inc b/spec/packages.inc
-index 9fb3060..6d6f92e 100644
---- a/spec/packages.inc
-+++ b/spec/packages.inc
-@@ -149,6 +149,7 @@ fi
- %dir %{_sysconfdir}/lvm
- %ghost %{_sysconfdir}/lvm/cache/.cache
- %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/lvm.conf
-+%config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/lvmlocal.conf
- %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/command_profile_template.profile
- %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/metadata_profile_template.profile
- %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/thin-generic.profile
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index bf7e356..0351e4e 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -191,7 +191,8 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
+ 	 * a foreign VG, which allows the VG to be accessed by lvchange -a
+ 	 * so the LV can be deactivated.
+ 	 */
+-	if (lv->vg->system_id && cmd->system_id &&
++	if (lv->vg->system_id && lv->vg->system_id[0] &&
++	    cmd->system_id && cmd->system_id[0] &&
+ 	    strcmp(lv->vg->system_id, cmd->system_id) &&
+ 	    is_change_activating(activate)) {
+ 		log_error("Cannot activate LVs in a foreign VG.");
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 38a129f..8371310 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -201,7 +201,8 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
+ 	 * a foreign VG, which allows the VG to be accessed by vgchange -a
+ 	 * so the LV can be deactivated.
+ 	 */
+-	if (vg->system_id && cmd->system_id &&
++	if (vg->system_id && vg->system_id[0] &&
++	    cmd->system_id && cmd->system_id[0] &&
+ 	    strcmp(vg->system_id, cmd->system_id) &&
+ 	    is_change_activating(activate)) {
+ 		log_error("Cannot activate LVs in a foreign VG.");
 
 
