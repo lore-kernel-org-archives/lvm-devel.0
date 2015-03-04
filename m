@@ -1,160 +1,207 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed,  4 Mar 2015 01:01:49 +0000 (UTC)
-Subject: master - systemid: Init and merge lvm2 and lvm1 fields.
-Message-ID: <20150304010149.B46826111C@fedorahosted.org>
+Date: Wed,  4 Mar 2015 01:17:17 +0000 (UTC)
+Subject: master - systemid: Add ACCESS_NEEDS_SYSTEM_ID VG flag.
+Message-ID: <20150304011717.2B6326020C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3562b5ab39b32bd27c81f57185e397facb7690f5
-Commit:        3562b5ab39b32bd27c81f57185e397facb7690f5
-Parent:        dcba4781eaa5545981a831c3c27374d3fce085fe
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bfbb5d269aa1ed56d9308117b57d4d2da49d53f6
+Commit:        bfbb5d269aa1ed56d9308117b57d4d2da49d53f6
+Parent:        3562b5ab39b32bd27c81f57185e397facb7690f5
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Mar 4 01:00:51 2015 +0000
+AuthorDate:    Wed Mar 4 01:16:32 2015 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Mar 4 01:00:51 2015 +0000
+CommitterDate: Wed Mar 4 01:16:32 2015 +0000
 
-systemid: Init and merge lvm2 and lvm1 fields.
+systemid: Add ACCESS_NEEDS_SYSTEM_ID VG flag.
 
-Use system_id field in preference to lvm1_system_id.
-Initialise both for now.
+Set ACCESS_NEEDS_SYSTEM_ID VG status flag whenever there is
+a non-lvm1 system_id set.  Prevents concurrent access from
+older LVM2 versions.
+Not set on VGs that bear a system_id only due to conversion
+from lvm1 metadata.
 ---
- lib/display/display.c         |    2 +-
- lib/format1/import-export.c   |    4 +++-
- lib/format_text/export.c      |    4 +++-
- lib/format_text/import_vsn1.c |    2 --
- lib/metadata/vg.c             |    5 +++++
- lib/report/report.c           |    2 +-
- tools/toollib.c               |    5 +++--
- tools/vgchange.c              |    3 +++
- 8 files changed, 19 insertions(+), 8 deletions(-)
+ WHATS_NEW                        |    1 +
+ lib/format1/format1.c            |    2 ++
+ lib/format1/import-export.c      |    4 +++-
+ lib/format_text/flags.c          |    1 +
+ lib/format_text/import_vsn1.c    |   20 ++++++++++++--------
+ lib/metadata/metadata-exported.h |    3 ++-
+ lib/metadata/vg.c                |    3 +++
+ tools/vgchange.c                 |    6 +++++-
+ 8 files changed, 29 insertions(+), 11 deletions(-)
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index b511b8e..cf3c7f6 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -695,7 +695,7 @@ void vgdisplay_full(const struct volume_group *vg)
- 
- 	log_print("--- Volume group ---");
- 	log_print("VG Name               %s", vg->name);
--	log_print("System ID             %s", vg->system_id);
-+	log_print("System ID             %s", (vg->system_id && *vg->system_id) ? vg->system_id : vg->lvm1_system_id ? : "");
- 	log_print("Format                %s", vg->fid->fmt->name);
- 	if (vg->fid->fmt->features & FMT_MDAS) {
- 		log_print("Metadata Areas        %d",
-diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
-index 8155b04..9b387e2 100644
---- a/lib/format1/import-export.c
-+++ b/lib/format1/import-export.c
-@@ -156,8 +156,10 @@ int export_pv(struct cmd_context *cmd, struct dm_pool *mem __attribute__((unused
- 	}
- 
- 	/* Preserve existing system_id if it exists */
--	if (vg && *vg->lvm1_system_id)
-+	if (vg && vg->lvm1_system_id && *vg->lvm1_system_id)
- 		strncpy((char *)pvd->system_id, vg->lvm1_system_id, sizeof(pvd->system_id));
-+	else if (vg && vg->system_id && *vg->system_id)
-+		strncpy((char *)pvd->system_id, vg->system_id, sizeof(pvd->system_id));
- 
- 	/* Is VG already exported or being exported? */
- 	if (vg && vg_is_exported(vg)) {
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index ddaaebb..8232e2f 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -414,9 +414,11 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
- 
- 	if (!_out_tags(f, &vg->tags))
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ae8bc70..9beb668 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.117 - 
+ ====================================
++  Set ACCESS_NEEDS_SYSTEM_ID VG status flag while system_id is set.
+   Preserve original format type field when processing backup files.
+   Implement status action for lvm2-monitor initscript to display monitored LVs.
+   Allow lvchange -p to change kernel state only if metadata state differs.
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index 19df8aa..7f37cf5 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -501,6 +501,8 @@ static int _format1_vg_setup(struct format_instance *fid, struct volume_group *v
+             !generate_lvm1_system_id(vg->cmd, vg->lvm1_system_id, ""))
  		return_0;
--
-+ 
- 	if (vg->system_id && *vg->system_id)
- 		outf(f, "system_id = \"%s\"", vg->system_id);
-+	else if (vg->lvm1_system_id && *vg->lvm1_system_id)
-+		outf(f, "system_id = \"%s\"", vg->lvm1_system_id);
  
- 	outsize(f, (uint64_t) vg->extent_size, "extent_size = %u",
- 		vg->extent_size);
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index 366e61c..64c08a0 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -883,8 +883,6 @@ static struct volume_group *_read_vg(struct format_instance *fid,
- 	dm_hash_destroy(pv_hash);
- 	dm_hash_destroy(lv_hash);
- 
--	/* FIXME Determine format type from file contents */
--	/* eg Set to instance of fmt1 here if reading a format1 backup? */
- 	vg_set_fid(vg, fid);
- 
- 	/*
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index 2bed1ad..404cc6f 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -47,6 +47,8 @@ struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
- 		return NULL;
- 	}
- 
-+	vg->system_id = "";
-+
- 	vg->cmd = cmd;
- 	vg->vgmem = vgmem;
- 	vg->alloc = ALLOC_NORMAL;
-@@ -627,6 +629,9 @@ int vg_set_system_id(struct volume_group *vg, const char *system_id)
- 		return 0;
- 	}
- 
-+	if (vg->lvm1_system_id)
-+		*vg->lvm1_system_id = '\0';
++	vg->status &= ~ACCESS_NEEDS_SYSTEM_ID;
 +
  	return 1;
  }
  
-diff --git a/lib/report/report.c b/lib/report/report.c
-index b5418e5..75928c0 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -989,7 +989,7 @@ static int _vgsystemid_disp(struct dm_report *rh, struct dm_pool *mem,
- 			    const void *data, void *private)
- {
- 	const struct volume_group *vg = (const struct volume_group *) data;
--	const char *repstr = vg->system_id ? : vg->lvm1_system_id ? : "";
-+	const char *repstr = (vg->system_id && *vg->system_id) ? vg->system_id : vg->lvm1_system_id ? : "";
+diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
+index 9b387e2..4846a8b 100644
+--- a/lib/format1/import-export.c
++++ b/lib/format1/import-export.c
+@@ -69,8 +69,10 @@ int import_pv(const struct format_type *fmt, struct dm_pool *mem,
+ 	memcpy(&pv->vgid, vgd->vg_uuid, sizeof(vg->id));
  
- 	return _string_disp(rh, mem, field, &repstr, private);
+ 	/* Store system_id from first PV if PV belongs to a VG */
+-	if (vg && !*vg->lvm1_system_id)
++	if (vg && !*vg->lvm1_system_id) {
+ 		strncpy(vg->lvm1_system_id, (char *)pvd->system_id, NAME_LEN);
++		vg->status &= ~ACCESS_NEEDS_SYSTEM_ID;
++	}
+ 
+ 	if (vg &&
+ 	    strncmp(vg->lvm1_system_id, (char *)pvd->system_id, sizeof(pvd->system_id)))
+diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
+index cf01271..1a4a503 100644
+--- a/lib/format_text/flags.c
++++ b/lib/format_text/flags.c
+@@ -36,6 +36,7 @@ static const struct flag _vg_flags[] = {
+ 	{LVM_WRITE, "WRITE", STATUS_FLAG},
+ 	{CLUSTERED, "CLUSTERED", STATUS_FLAG},
+ 	{SHARED, "SHARED", STATUS_FLAG},
++	{ACCESS_NEEDS_SYSTEM_ID, "ACCESS_NEEDS_SYSTEM_ID", STATUS_FLAG},
+ 	{PARTIAL_VG, NULL, 0},
+ 	{PRECOMMITTED, NULL, 0},
+ 	{ARCHIVED_VG, NULL, 0},
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 64c08a0..8ab9363e 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -733,11 +733,10 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ {
+ 	const struct dm_config_node *vgn;
+ 	const struct dm_config_value *cv;
+-	const char *str, *format_str;
++	const char *str, *system_id, *format_str;
+ 	struct volume_group *vg;
+ 	struct dm_hash_table *pv_hash = NULL, *lv_hash = NULL;
+ 	unsigned scan_done_once = use_cached_pvs;
+-	char *system_id;
+ 
+ 	/* skip any top-level values */
+ 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib)
+@@ -751,9 +750,6 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	if (!(vg = alloc_vg("read_vg", fid->fmt->cmd, vgn->key)))
+ 		return_NULL;
+ 
+-	if (!(system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
+-		goto_bad;
+-	vg->system_id = system_id;
+ 
+ 	/*
+ 	 * The pv hash memorises the pv section names -> pv
+@@ -782,9 +778,6 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
+ 	}
+ 
+-	if (dm_config_get_str(vgn, "system_id", &str))
+-		strncpy(system_id, str, NAME_LEN);
+-
+ 	if (!_read_id(&vg->id, vgn, "id")) {
+ 		log_error("Couldn't read uuid for volume group %s.", vg->name);
+ 		goto bad;
+@@ -802,6 +795,17 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
+ 	}
+ 
++	if (dm_config_get_str(vgn, "system_id", &system_id)) {
++		if (!(vg->status & ACCESS_NEEDS_SYSTEM_ID)) {
++			if (!(vg->lvm1_system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
++				goto_bad;
++			strncpy(vg->lvm1_system_id, system_id, NAME_LEN);
++		} else if (!(vg->system_id = dm_pool_strdup(vg->vgmem, system_id))) {
++			log_error("Failed to allocate memory for system_id in vg_set_system_id.");
++			goto bad;
++		}
++	}
++
+ 	if (!_read_int32(vgn, "extent_size", &vg->extent_size)) {
+ 		log_error("Couldn't read extent size for volume group %s.",
+ 			  vg->name);
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 758fa53..5fbfdef 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -60,6 +60,7 @@
+ #define LVM_WRITE		UINT64_C(0x0000000000000200)	/* LV, VG */
+ 
+ #define CLUSTERED		UINT64_C(0x0000000000000400)	/* VG */
++#define ACCESS_NEEDS_SYSTEM_ID	UINT64_C(0x0020000000000000)    /* VG */
+ //#define SHARED		UINT64_C(0x0000000000000800)	/* VG */
+ 
+ /* FIXME Remove when metadata restructuring is completed */
+@@ -122,7 +123,7 @@
+ #define PV_ALLOCATION_PROHIBITED	UINT64_C(0x0010000000000000)	/* PV - internal use only - allocation prohibited
+ 									e.g. to prohibit allocation of a RAID image
+ 									on a PV already holing an image of the RAID set */
+-/* Next unused flag:		UINT64_C(0x0020000000000000)    */
++/* Next unused flag:		UINT64_C(0x0040000000000000)    */
+ 
+ /* Format features flags */
+ #define FMT_SEGMENTS		0x00000001U	/* Arbitrary segment params? */
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index 404cc6f..b23063e 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -615,6 +615,7 @@ int vg_set_system_id(struct volume_group *vg, const char *system_id)
+ {
+ 	if (!system_id || !*system_id) {
+ 		vg->system_id = NULL;
++		vg->status &= ~ACCESS_NEEDS_SYSTEM_ID;
+ 		return 1;
+ 	}
+ 
+@@ -632,6 +633,8 @@ int vg_set_system_id(struct volume_group *vg, const char *system_id)
+ 	if (vg->lvm1_system_id)
+ 		*vg->lvm1_system_id = '\0';
+ 
++	vg->status |= ACCESS_NEEDS_SYSTEM_ID;
++
+ 	return 1;
  }
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 19c23fe..12fe1e2 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -200,8 +200,9 @@ static int _ignore_vg(struct volume_group *vg, const char *vg_name,
- 	 */
- 	if (read_error & FAILED_SYSTEMID) {
- 		if (arg_vgnames && str_list_match_item(arg_vgnames, vg->name)) {
--			log_error("Cannot access VG %s with system ID %s with local system ID %s.",
--				  vg->name, vg->system_id, vg->cmd->system_id);
-+			log_error("Cannot access VG %s with system ID %s with %slocal system ID%s%s.",
-+				  vg->name, vg->system_id, vg->cmd->system_id ? "" : "unknown ",
-+				  vg->cmd->system_id ? " " : "", vg->cmd->system_id ? vg->cmd->system_id : "");
- 			return 1;
- 		} else {
- 			read_error &= ~FAILED_SYSTEMID; /* Check for other errors */
+ 
 diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 3f97722..36b44a9 100644
+index 36b44a9..557fe34 100644
 --- a/tools/vgchange.c
 +++ b/tools/vgchange.c
-@@ -575,6 +575,9 @@ static int _vgchange_system_id(struct cmd_context *cmd, struct volume_group *vg)
+@@ -575,10 +575,14 @@ static int _vgchange_system_id(struct cmd_context *cmd, struct volume_group *vg)
  		    vg->name, vg->system_id, system_id);
  
  	vg->system_id = system_id;
-+	
-+	if (vg->lvm1_system_id)
-+		*vg->lvm1_system_id = '\0';
+-	
+ 	if (vg->lvm1_system_id)
+ 		*vg->lvm1_system_id = '\0';
  
++	if (vg->system_id && *vg->system_id)
++		vg->status |= ACCESS_NEEDS_SYSTEM_ID;
++	else
++		vg->status &= ~ACCESS_NEEDS_SYSTEM_ID;
++
  	return 1;
  }
+ 
 
 
