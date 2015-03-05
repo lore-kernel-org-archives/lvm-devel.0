@@ -1,96 +1,67 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  5 Mar 2015 16:23:48 +0000 (UTC)
-Subject: master - system_id: avoid munging vg and lv fields
-Message-ID: <20150305162348.1991C60E97@fedorahosted.org>
+Date: Thu,  5 Mar 2015 18:12:40 +0000 (UTC)
+Subject: master - man: add info to lvmsystemid
+Message-ID: <20150305181240.D62CE610DC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e25bca1a98f2376b94904a2e220a3e2f68923ad
-Commit:        5e25bca1a98f2376b94904a2e220a3e2f68923ad
-Parent:        8bb76aea81574042c6010291a8c799a90570b0d3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b48ff3b94e7cd771bbaf42f38b546054d02bc0f2
+Commit:        b48ff3b94e7cd771bbaf42f38b546054d02bc0f2
+Parent:        5e25bca1a98f2376b94904a2e220a3e2f68923ad
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 5 10:23:16 2015 -0600
+AuthorDate:    Thu Mar 5 12:12:42 2015 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Mar 5 10:23:16 2015 -0600
+CommitterDate: Thu Mar 5 12:12:42 2015 -0600
 
-system_id: avoid munging vg and lv fields
+man: add info to lvmsystemid
 
-Munge the WRITE/WRITE_LOCKED flags in a temp variable
-instead of in the vg/lv fields.
+about losing access to a VG if lvm is downgraded
+to an earlier version.
 ---
- lib/format_text/export.c |   28 ++++++++++------------------
- 1 files changed, 10 insertions(+), 18 deletions(-)
+ man/lvmsystemid.7.in |   21 ++++++++++++++-------
+ 1 files changed, 14 insertions(+), 7 deletions(-)
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index ec01fcc..2d985b4 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -394,6 +394,7 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
- {
- 	char buffer[4096];
- 	const struct format_type *fmt = NULL;
-+	uint64_t status = vg->status;
+diff --git a/man/lvmsystemid.7.in b/man/lvmsystemid.7.in
+index 0881b1e..76b0e83 100644
+--- a/man/lvmsystemid.7.in
++++ b/man/lvmsystemid.7.in
+@@ -42,13 +42,7 @@ maximum length of a system_id is 128 characters.
  
- 	if (!id_write_format(&vg->id, buffer, sizeof(buffer)))
- 		return_0;
-@@ -413,19 +414,14 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
- 	 * Removing WRITE and adding WRITE_LOCKED makes it read-only
- 	 * to old versions of lvm that only look for WRITE.
- 	 */
--	if ((vg->status & LVM_WRITE) && vg_flag_write_locked(vg)) {
--		vg->status &= ~LVM_WRITE;
--		vg->status |= LVM_WRITE_LOCKED;
-+	if ((status & LVM_WRITE) && vg_flag_write_locked(vg)) {
-+		status &= ~LVM_WRITE;
-+		status |= LVM_WRITE_LOCKED;
- 	}
- 
--	if (!_print_flag_config(f, vg->status, VG_FLAGS))
-+	if (!_print_flag_config(f, status, VG_FLAGS))
- 		return_0;
- 
--	if (vg->status & LVM_WRITE_LOCKED) {
--		vg->status |= LVM_WRITE;
--		vg->status &= ~LVM_WRITE_LOCKED;
--	}
+ To benefit fully from system_id, all hosts must have system_id set, and
+ VGs must have system_id set.  A VG on shared storage can be damaged or
+-destroyed in the following cases which the user must be careful to avoid:
 -
- 	if (!_out_tags(f, &vg->tags))
- 		return_0;
-  
-@@ -621,6 +617,7 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
- 	int seg_count;
- 	struct tm *local_tm;
- 	time_t ts;
-+	uint64_t status = lv->status;
+-.IP \[bu] 2
+-A host using an old version of lvm without the system_id feature will not
+-recognize the system_id of other hosts' VGs.  VGs with a new system_id
+-are nominally protected from old versions of lvm by appearing to be
+-read-only to the old versions.
++destroyed in some cases which the user must be careful to avoid.
  
- 	outnl(f);
- 	outf(f, "%s {", lv->name);
-@@ -636,19 +633,14 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
- 	 * Removing WRITE and adding WRITE_LOCKED makes it read-only
- 	 * to old versions of lvm that only look for WRITE.
- 	 */
--	if ((lv->status & LVM_WRITE) && vg_flag_write_locked(lv->vg)) {
--		lv->status &= ~LVM_WRITE;
--		lv->status |= LVM_WRITE_LOCKED;
-+	if ((status & LVM_WRITE) && vg_flag_write_locked(lv->vg)) {
-+		status &= ~LVM_WRITE;
-+		status |= LVM_WRITE_LOCKED;
- 	}
+ .IP \[bu] 2
+ A VG without a system_id can be used without restriction from any host,
+@@ -73,6 +67,19 @@ operations and corrupting the PVs.  See the
+ .B orphans
+ section for more information.
  
--	if (!_print_flag_config(f, lv->status, LV_FLAGS))
-+	if (!_print_flag_config(f, status, LV_FLAGS))
- 		return_0;
++.IP \[bu] 2
++A host using an old version of lvm without the system_id feature will not
++recognize a new system_id in VGs from other hosts.  Even though the old
++version of lvm is not blocked from reading a VG with a system_id, it is
++blocked from writing to the VG (or its LVs).  The new system_id changes
++the write mode of a VG, making it appear read-only to previous lvm
++versions.
++
++This also means that if a host downgrades its version of lvm, it would
++lose access to any VGs it had created with a system_id.  To avoid this,
++the system_id should be removed from VGs before downgrading to an lvm
++version without the system_id feature.
++
+ .P
  
--	 if (lv->status & LVM_WRITE_LOCKED) {
--		lv->status |= LVM_WRITE;
--		lv->status &= ~LVM_WRITE_LOCKED;
--	 }
--
- 	if (!_out_tags(f, &lv->tags))
- 		return_0;
- 
+ .SS Types of VG access
 
 
