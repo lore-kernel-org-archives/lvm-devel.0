@@ -1,22 +1,22 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  5 Mar 2015 09:53:30 +0000 (UTC)
-Subject: master - report: fix seg_monitor field to display monitoring status for thin snapshots and mirrors
-Message-ID: <20150305095330.9313660D63@fedorahosted.org>
+Date: Thu,  5 Mar 2015 13:04:28 +0000 (UTC)
+Subject: master - report: fix seg_monitor field to display monitoring status for thick snapshots and mirrors
+Message-ID: <20150305130428.E3A5B60C28@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=94d85f815e0ba1f06f7cb9c4c4e9e97468c970a6
-Commit:        94d85f815e0ba1f06f7cb9c4c4e9e97468c970a6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=190d591fbec672a2e1f77d4709fcee75cc695a06
+Commit:        190d591fbec672a2e1f77d4709fcee75cc695a06
 Parent:        56606b5f21682cfb8f36aef419f0cb7dcf55cce9
 Author:        Peter Rajnoha <prajnoha@redhat.com>
 AuthorDate:    Thu Mar 5 10:45:29 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Mar 5 10:54:25 2015 +0100
+CommitterDate: Thu Mar 5 14:05:34 2015 +0100
 
-report: fix seg_monitor field to display monitoring status for thin snapshots and mirrors
+report: fix seg_monitor field to display monitoring status for thick snapshots and mirrors
 
 The seg_monitor did not display monitored status for thick snapshots
 and mirrors (with mirror log *not* mirrored). The seg monitor did work
