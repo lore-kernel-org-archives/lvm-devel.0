@@ -1,194 +1,275 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  6 Mar 2015 13:31:40 +0000 (UTC)
-Subject: master - lib: avoid reparsing same metadata
-Message-ID: <20150306133140.120FD606F1@fedorahosted.org>
+Date: Fri,  6 Mar 2015 13:31:42 +0000 (UTC)
+Subject: master - lib: reduce parsing in vgname_from_mda
+Message-ID: <20150306133142.3A771600E5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7e7411966afc4309cdd91bfed4846720b308c84d
-Commit:        7e7411966afc4309cdd91bfed4846720b308c84d
-Parent:        6a2ae250ffc52c7620ec837cb10eb7b9ca44a121
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a9b28a4f2105b92fdfc9f3915859e0deec4004a0
+Commit:        a9b28a4f2105b92fdfc9f3915859e0deec4004a0
+Parent:        7e7411966afc4309cdd91bfed4846720b308c84d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 26 13:35:26 2012 +0200
+AuthorDate:    Fri Mar 6 10:24:26 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 6 13:53:12 2015 +0100
+CommitterDate: Fri Mar 6 13:53:13 2015 +0100
 
-lib: avoid reparsing same metadata
+lib: reduce parsing in vgname_from_mda
 
-When reading VG mda from multiple PVs - do all the validation only
-when mda is seen for the first time and  when mda checksum and length
-is same just return already existing VG pointer.
+Use similar logic as with text_vg_import_fd() and avoid repeated
+parsing of same mda and its config tree for vgname_from_mda().
 
-(i.e. using 300PVs for a VG would lead to create and destroy 300 config trees....)
+Remember last parsed vgname, vgid and creation_host in labeller
+structure and if the  metadata have the same size and checksum,
+return this stored info.
+
+TODO: The reuse of labeller struct is not ideal, some lvmcache API for
+this functionality would be nicer.
 ---
- WHATS_NEW                        |    1 +
- lib/config/config.c              |   18 +++++++++++++-----
- lib/config/config.h              |    3 ++-
- lib/format_text/import.c         |   24 ++++++++++++++++++++++--
- lib/metadata/metadata-exported.h |    5 +++++
- lib/metadata/metadata.c          |    1 +
- 6 files changed, 44 insertions(+), 8 deletions(-)
+ WHATS_NEW                       |    1 +
+ lib/format_text/format-text.c   |   23 ++++++++++++++++++-----
+ lib/format_text/import-export.h |    9 +++++----
+ lib/format_text/import.c        |   13 +++++++++++--
+ lib/format_text/layout.h        |    4 +++-
+ lib/format_text/text_label.c    |   27 ++++++++++++++++-----------
+ lib/label/label.h               |    8 ++++++++
+ 7 files changed, 62 insertions(+), 23 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index b62a632..ef5abcd 100644
+index ef5abcd..9bf8699 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.118 - 
  =================================
-+  Avoid reparsing same metadata when reading same metadata from multiple PVs.
++  Reduce number of VG metadata parsing when looking for vgname on a PV.
+   Avoid reparsing same metadata when reading same metadata from multiple PVs.
    Save extra device open/close when scanning device for size.
    Fix seg_monitor field to report status also for mirrors and thick snapshots.
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 375a793..d80ebf6 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1124,14 +1124,14 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
+ }
  
-diff --git a/lib/config/config.c b/lib/config/config.c
-index effe93d..5de6df6 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -478,9 +478,15 @@ int override_config_tree_from_profile(struct cmd_context *cmd,
- 	return 0;
+ const char *vgname_from_mda(const struct format_type *fmt,
+-			    struct mda_header *mdah,
+-			    struct device_area *dev_area, struct id *vgid,
++			    struct mda_header *mdah, struct device_area *dev_area,
++			    uint32_t *mda_checksum, size_t *mda_size,
++			    const char *vgname, struct id *vgid,
+ 			    uint64_t *vgstatus, char **creation_host,
+ 			    uint64_t *mda_free_sectors)
+ {
+ 	struct raw_locn *rlocn;
+ 	uint32_t wrap = 0;
+-	const char *vgname = NULL;
+ 	unsigned int len = 0;
+ 	char buf[NAME_LEN + 1] __attribute__((aligned(8)));
+ 	char uuid[64] __attribute__((aligned(8)));
+@@ -1182,6 +1182,10 @@ const char *vgname_from_mda(const struct format_type *fmt,
+ 		return NULL;
+ 	}
+ 
++	/* Check if it could be the same VG */
++	if ((rlocn->checksum != *mda_checksum) || (rlocn->size != *mda_size))
++		vgname = NULL; /* nope, reset to NULL */
++
+ 	/* FIXME 64-bit */
+ 	if (!(vgname = text_vgname_import(fmt, dev_area->dev,
+ 					  (off_t) (dev_area->start +
+@@ -1190,6 +1194,7 @@ const char *vgname_from_mda(const struct format_type *fmt,
+ 					  (off_t) (dev_area->start +
+ 						   MDA_HEADER_SIZE),
+ 					  wrap, calc_crc, rlocn->checksum,
++					  vgname,
+ 					  vgid, vgstatus, creation_host)))
+ 		return_NULL;
+ 
+@@ -1217,6 +1222,9 @@ const char *vgname_from_mda(const struct format_type *fmt,
+ 			*mda_free_sectors = ((buffer_size - 2 * current_usage) / 2) >> SECTOR_SHIFT;
+ 	}
+ 
++	*mda_checksum = rlocn->checksum;
++	*mda_size = rlocn->size;
++
+ 	return vgname;
+ }
+ 
+@@ -1230,6 +1238,8 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
+ 	struct id vgid;
+ 	uint64_t vgstatus;
+ 	struct mda_header *mdah;
++	uint32_t mda_checksum = 0;
++	size_t mda_size = 0;
+ 
+ 	raw_list = &((struct mda_lists *) fmt->private)->raws;
+ 
+@@ -1249,9 +1259,12 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
+ 			goto close_dev;
+ 		}
+ 
++		/* TODO: caching as in vgname_from_mda() (trigger this code?) */
+ 		if ((scanned_vgname = vgname_from_mda(fmt, mdah,
+-					      &rl->dev_area, &vgid, &vgstatus,
+-					      NULL, NULL))) {
++						      &rl->dev_area,
++						      &mda_checksum, &mda_size, NULL,
++						      &vgid, &vgstatus,
++						      NULL, NULL))) {
+ 			vg = _vg_read_raw_area(&fid, scanned_vgname, &rl->dev_area, 0, 0);
+ 			if (vg)
+ 				lvmcache_update_vg(vg, 0);
+diff --git a/lib/format_text/import-export.h b/lib/format_text/import-export.h
+index d4e25f0..4b2756d 100644
+--- a/lib/format_text/import-export.h
++++ b/lib/format_text/import-export.h
+@@ -79,10 +79,11 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
+ 				       time_t *when, char **desc);
+ const char *text_vgname_import(const struct format_type *fmt,
+ 			       struct device *dev,
+-                               off_t offset, uint32_t size,
+-                               off_t offset2, uint32_t size2,
+-                               checksum_fn_t checksum_fn, uint32_t checksum,
+-                               struct id *vgid, uint64_t *vgstatus,
++			       off_t offset, uint32_t size,
++			       off_t offset2, uint32_t size2,
++			       checksum_fn_t checksum_fn, uint32_t checksum,
++			       const char *vgname,
++			       struct id *vgid, uint64_t *vgstatus,
+ 			       char **creation_host);
+ 
+ #endif
+diff --git a/lib/format_text/import.c b/lib/format_text/import.c
+index 8a1771a..c8ba5ce 100644
+--- a/lib/format_text/import.c
++++ b/lib/format_text/import.c
+@@ -32,17 +32,22 @@ static void _init_text_import(void)
+ 	_text_import_initialised = 1;
  }
  
 +/*
-+ * When skip_parse is set, the checksum of buffer is only matched
-+ * and function avoids parsing of mda into config tree which
-+ * remains unmodified and should not be used.
++ * Find out vgname on a given device.
++ * If the checksum and metadata size is matching the vgname discovered in last read
++ * (multi PVs VG) could be passed back and it may skip parsing of such metadata.
 + */
- int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
- 			off_t offset, size_t size, off_t offset2, size_t size2,
--			checksum_fn_t checksum_fn, uint32_t checksum)
-+			checksum_fn_t checksum_fn, uint32_t checksum,
-+			int skip_parse)
+ const char *text_vgname_import(const struct format_type *fmt,
+ 			       struct device *dev,
+ 			       off_t offset, uint32_t size,
+ 			       off_t offset2, uint32_t size2,
+ 			       checksum_fn_t checksum_fn, uint32_t checksum,
++			       const char *vgname,
+ 			       struct id *vgid, uint64_t *vgstatus,
+ 			       char **creation_host)
  {
- 	char *fb, *fe;
- 	int r = 0;
-@@ -529,9 +535,11 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
- 		goto out;
- 	}
- 
--	fe = fb + size + size2;
--	if (!dm_config_parse(cft, fb, fe))
--		goto_out;
-+	if (!skip_parse) {
-+		fe = fb + size + size2;
-+		if (!dm_config_parse(cft, fb, fe))
-+			goto_out;
-+	}
- 
- 	r = 1;
- 
-@@ -575,7 +583,7 @@ int config_file_read(struct dm_config_tree *cft)
- 	}
- 
- 	r = config_file_read_fd(cft, cf->dev, 0, (size_t) info.st_size, 0, 0,
--				(checksum_fn_t) NULL, 0);
-+				(checksum_fn_t) NULL, 0, 0);
- 
- 	if (!cf->keep_open) {
- 		if (!dev_close(cf->dev))
-diff --git a/lib/config/config.h b/lib/config/config.h
-index ba34354..50ea361 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -205,7 +205,8 @@ typedef uint32_t (*checksum_fn_t) (uint32_t initial, const uint8_t *buf, uint32_
- struct dm_config_tree *config_open(config_source_t source, const char *filename, int keep_open);
- int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
- 			off_t offset, size_t size, off_t offset2, size_t size2,
--			checksum_fn_t checksum_fn, uint32_t checksum);
-+			checksum_fn_t checksum_fn, uint32_t checksum,
-+			int skip_parse);
- int config_file_read(struct dm_config_tree *cft);
- struct dm_config_tree *config_file_open_and_read(const char *config_file, config_source_t source,
- 						 struct cmd_context *cmd);
-diff --git a/lib/format_text/import.c b/lib/format_text/import.c
-index fe19dd7..8a1771a 100644
---- a/lib/format_text/import.c
-+++ b/lib/format_text/import.c
-@@ -51,7 +51,7 @@ const char *text_vgname_import(const struct format_type *fmt,
- 
- 	if ((!dev && !config_file_read(cft)) ||
- 	    (dev && !config_file_read_fd(cft, dev, offset, size,
--					 offset2, size2, checksum_fn, checksum))) {
-+					 offset2, size2, checksum_fn, checksum, 0))) {
- 		log_error("Couldn't read volume group metadata.");
- 		goto out;
- 	}
-@@ -88,6 +88,7 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
- 	struct volume_group *vg = NULL;
  	struct dm_config_tree *cft;
  	struct text_vg_version_ops **vsn;
-+	int skip_parse;
+-	const char *vgname = NULL;
  
  	_init_text_import();
  
-@@ -97,11 +98,20 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
- 	if (!(cft = config_open(CONFIG_FILE_SPECIAL, file, 0)))
- 		return_NULL;
+@@ -51,11 +56,15 @@ const char *text_vgname_import(const struct format_type *fmt,
  
-+	skip_parse = fid->vg && (fid->mda_checksum == checksum) &&
-+		(fid->mda_size == (size + size2));
-+
  	if ((!dev && !config_file_read(cft)) ||
  	    (dev && !config_file_read_fd(cft, dev, offset, size,
--					 offset2, size2, checksum_fn, checksum)))
+-					 offset2, size2, checksum_fn, checksum, 0))) {
 +					 offset2, size2, checksum_fn, checksum,
-+					 skip_parse)))
- 		goto_out;
++					 (vgname != NULL)))) {
+ 		log_error("Couldn't read volume group metadata.");
+ 		goto out;
+ 	}
  
-+	if (skip_parse) {
-+		vg = fid->vg;
-+		goto out;
-+	}
++	if (vgname)
++		goto out; /* Everything is matching from the last call */
 +
  	/*
  	 * Find a set of version functions that can read this file
  	 */
-@@ -116,6 +126,16 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
- 		break;
+diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
+index 4753fde..5f6b549 100644
+--- a/lib/format_text/layout.h
++++ b/lib/format_text/layout.h
+@@ -100,7 +100,9 @@ struct mda_context {
+ 
+ const char *vgname_from_mda(const struct format_type *fmt,
+ 			    struct mda_header *mdah,
+-			    struct device_area *dev_area, struct id *vgid,
++			    struct device_area *dev_area,
++			    uint32_t *mda_checksum, size_t *mda_size,
++			    const char *vgname, struct id *vgid,
+ 			    uint64_t *vgstatus, char **creation_host,
+ 			    uint64_t *mda_free_sectors);
+ 
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index e451be4..3a4835c 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -319,10 +319,14 @@ static int _update_mda(struct metadata_area *mda, void *baton)
+ 	const struct format_type *fmt = p->label->labeller->fmt;
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
+ 	struct mda_header *mdah;
+-	const char *vgname = NULL;
+-	struct id vgid;
+-	uint64_t vgstatus;
+-	char *creation_host;
++	struct labeller *l = p->label->labeller;
++
++	/*
++	 * Using the labeller struct to preserve info about
++	 * the last parsed vgname, vgid, creation host
++	 *
++	 * TODO: make lvmcache smarter and move this cache logic there
++	 */
+ 
+ 	if (!dev_open_readonly(mdac->area.dev)) {
+ 		mda_set_ignored(mda, 1);
+@@ -346,17 +350,18 @@ static int _update_mda(struct metadata_area *mda, void *baton)
+ 		return 1;
  	}
  
-+	if (vg && (!fid->vg || (vg->seqno > fid->vg->seqno))) {
-+		/*
-+		 * Remember vg pointer to newest VG for reuse.
-+		 * NOTE: _vg_read() will not release same VG
-+		 */
-+		fid->vg = vg;
-+		fid->mda_size = (size + size2);
-+		fid->mda_checksum = checksum;
-+	}
+-	if ((vgname = vgname_from_mda(fmt, mdah,
+-				      &mdac->area,
+-				      &vgid, &vgstatus, &creation_host,
+-				      &mdac->free_sectors)) &&
+-	    !lvmcache_update_vgname_and_id(p->info, vgname,
+-					   (char *) &vgid, vgstatus,
+-					   creation_host)) {
++	if ((l->vgname = vgname_from_mda(fmt, mdah, &mdac->area,
++					 &l->mda_checksum, &l->mda_size, l->vgname,
++					 &l->vgid, &l->vgstatus, &l->creation_host,
++					 &mdac->free_sectors)) &&
++	    !lvmcache_update_vgname_and_id(p->info, l->vgname,
++					   (char *) &l->vgid, l->vgstatus,
++					   l->creation_host)) {
+ 		if (!dev_close(mdac->area.dev))
+ 			stack;
+ 		return_0;
+ 	}
 +
-       out:
- 	config_destroy(cft);
- 	return vg;
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 8c081d9..b5ab1f2 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -324,6 +324,11 @@ struct format_instance {
- 	struct dm_list metadata_areas_ignored;
- 	struct dm_hash_table *metadata_areas_index;
- 
-+	/* Remember last vg to avoid parsing same mda content for multiple PVs */
-+	struct volume_group *vg;
+ close_dev:
+ 	if (!dev_close(mdac->area.dev))
+ 		stack;
+diff --git a/lib/label/label.h b/lib/label/label.h
+index 253e1e8..831977f 100644
+--- a/lib/label/label.h
++++ b/lib/label/label.h
+@@ -89,6 +89,14 @@ struct label_ops {
+ struct labeller {
+ 	struct label_ops *ops;
+ 	const struct format_type *fmt;
++
++	/* Caching info */
++	const char *vgname;
++	struct id vgid;
++	uint64_t vgstatus;
++	char *creation_host;
 +	uint32_t mda_checksum;
 +	size_t mda_size;
-+
- 	void *private;
  };
  
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 7e440a4..57066a5 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3365,6 +3365,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 		}
- 
- 		if (vg != correct_vg)
-+			/* NOTE: tied to fid->vg logic in text_vg_import_fd() */
- 			release_vg(vg);
- 	}
- 	fid->ref_count--;
+ int label_init(void);
 
 
