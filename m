@@ -1,193 +1,113 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  5 Mar 2015 15:49:59 +0000 (UTC)
-Subject: master - Revert "systemid: Add ACCESS_NEEDS_SYSTEM_ID VG flag."
-Message-ID: <20150305154959.2F7CE610F1@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri,  6 Mar 2015 13:31:31 +0000 (UTC)
+Subject: master - devices: avoid extra open() syscall
+Message-ID: <20150306133131.7816B606F1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c6a57dc4f3af6aa8912fc1f969937e3e3c47f725
-Commit:        c6a57dc4f3af6aa8912fc1f969937e3e3c47f725
-Parent:        06b408ecce9d95f768ace998b83674140bc05abc
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Mar 4 11:11:10 2015 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Mar 5 09:50:43 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6f68f4364b537cf52a27b5e53bb7f10de5a938fe
+Commit:        6f68f4364b537cf52a27b5e53bb7f10de5a938fe
+Parent:        b48ff3b94e7cd771bbaf42f38b546054d02bc0f2
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Mar 3 15:37:17 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Mar 6 13:17:39 2015 +0100
 
-Revert "systemid: Add ACCESS_NEEDS_SYSTEM_ID VG flag."
+devices: avoid extra open() syscall
 
-This reverts commit bfbb5d269aa1ed56d9308117b57d4d2da49d53f6.
-
-This will be done differently.
+If the device is already opened by lvm's device cache,
+avoid extra syscall opening devices for obtaining its size.
 ---
- lib/format1/format1.c            |    2 --
- lib/format1/import-export.c      |    4 +---
- lib/format_text/flags.c          |    1 -
- lib/format_text/import_vsn1.c    |   20 ++++++++------------
- lib/metadata/metadata-exported.h |    3 +--
- lib/metadata/vg.c                |    3 ---
- tools/vgchange.c                 |    6 +-----
- 7 files changed, 11 insertions(+), 28 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/device/dev-io.c |   17 +++++++----------
+ lib/device/device.h |    2 +-
+ lib/report/report.c |    2 +-
+ 4 files changed, 10 insertions(+), 12 deletions(-)
 
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index 7f37cf5..19df8aa 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -501,8 +501,6 @@ static int _format1_vg_setup(struct format_instance *fid, struct volume_group *v
-             !generate_lvm1_system_id(vg->cmd, vg->lvm1_system_id, ""))
- 		return_0;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 46783e1..b62a632 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.118 - 
+ =================================
++  Save extra device open/close when scanning device for size.
+   Fix seg_monitor field to report status also for mirrors and thick snapshots.
  
--	vg->status &= ~ACCESS_NEEDS_SYSTEM_ID;
--
+ Version 2.02.117 - 4th March 2015
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index 122b616..d712f31 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -289,25 +289,22 @@ static int _dev_get_size_file(const struct device *dev, uint64_t *size)
  	return 1;
  }
  
-diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
-index 4846a8b..9b387e2 100644
---- a/lib/format1/import-export.c
-+++ b/lib/format1/import-export.c
-@@ -69,10 +69,8 @@ int import_pv(const struct format_type *fmt, struct dm_pool *mem,
- 	memcpy(&pv->vgid, vgd->vg_uuid, sizeof(vg->id));
- 
- 	/* Store system_id from first PV if PV belongs to a VG */
--	if (vg && !*vg->lvm1_system_id) {
-+	if (vg && !*vg->lvm1_system_id)
- 		strncpy(vg->lvm1_system_id, (char *)pvd->system_id, NAME_LEN);
--		vg->status &= ~ACCESS_NEEDS_SYSTEM_ID;
--	}
- 
- 	if (vg &&
- 	    strncmp(vg->lvm1_system_id, (char *)pvd->system_id, sizeof(pvd->system_id)))
-diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-index 1a4a503..cf01271 100644
---- a/lib/format_text/flags.c
-+++ b/lib/format_text/flags.c
-@@ -36,7 +36,6 @@ static const struct flag _vg_flags[] = {
- 	{LVM_WRITE, "WRITE", STATUS_FLAG},
- 	{CLUSTERED, "CLUSTERED", STATUS_FLAG},
- 	{SHARED, "SHARED", STATUS_FLAG},
--	{ACCESS_NEEDS_SYSTEM_ID, "ACCESS_NEEDS_SYSTEM_ID", STATUS_FLAG},
- 	{PARTIAL_VG, NULL, 0},
- 	{PRECOMMITTED, NULL, 0},
- 	{ARCHIVED_VG, NULL, 0},
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index 8ab9363e..64c08a0 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -733,10 +733,11 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+-static int _dev_get_size_dev(const struct device *dev, uint64_t *size)
++static int _dev_get_size_dev(struct device *dev, uint64_t *size)
  {
- 	const struct dm_config_node *vgn;
- 	const struct dm_config_value *cv;
--	const char *str, *system_id, *format_str;
-+	const char *str, *format_str;
- 	struct volume_group *vg;
- 	struct dm_hash_table *pv_hash = NULL, *lv_hash = NULL;
- 	unsigned scan_done_once = use_cached_pvs;
-+	char *system_id;
+-	int fd;
+ 	const char *name = dev_name(dev);
  
- 	/* skip any top-level values */
- 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib)
-@@ -750,6 +751,9 @@ static struct volume_group *_read_vg(struct format_instance *fid,
- 	if (!(vg = alloc_vg("read_vg", fid->fmt->cmd, vgn->key)))
- 		return_NULL;
- 
-+	if (!(system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
-+		goto_bad;
-+	vg->system_id = system_id;
- 
- 	/*
- 	 * The pv hash memorises the pv section names -> pv
-@@ -778,6 +782,9 @@ static struct volume_group *_read_vg(struct format_instance *fid,
- 		goto bad;
- 	}
- 
-+	if (dm_config_get_str(vgn, "system_id", &str))
-+		strncpy(system_id, str, NAME_LEN);
-+
- 	if (!_read_id(&vg->id, vgn, "id")) {
- 		log_error("Couldn't read uuid for volume group %s.", vg->name);
- 		goto bad;
-@@ -795,17 +802,6 @@ static struct volume_group *_read_vg(struct format_instance *fid,
- 		goto bad;
- 	}
- 
--	if (dm_config_get_str(vgn, "system_id", &system_id)) {
--		if (!(vg->status & ACCESS_NEEDS_SYSTEM_ID)) {
--			if (!(vg->lvm1_system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
--				goto_bad;
--			strncpy(vg->lvm1_system_id, system_id, NAME_LEN);
--		} else if (!(vg->system_id = dm_pool_strdup(vg->vgmem, system_id))) {
--			log_error("Failed to allocate memory for system_id in vg_set_system_id.");
--			goto bad;
--		}
+-	if ((fd = open(name, O_RDONLY)) < 0) {
+-		log_sys_error("open", name);
+-		return 0;
 -	}
--
- 	if (!_read_int32(vgn, "extent_size", &vg->extent_size)) {
- 		log_error("Couldn't read extent size for volume group %s.",
- 			  vg->name);
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 5fbfdef..758fa53 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -60,7 +60,6 @@
- #define LVM_WRITE		UINT64_C(0x0000000000000200)	/* LV, VG */
++	if (!dev_open_readonly(dev))
++		return_0;
  
- #define CLUSTERED		UINT64_C(0x0000000000000400)	/* VG */
--#define ACCESS_NEEDS_SYSTEM_ID	UINT64_C(0x0020000000000000)    /* VG */
- //#define SHARED		UINT64_C(0x0000000000000800)	/* VG */
- 
- /* FIXME Remove when metadata restructuring is completed */
-@@ -123,7 +122,7 @@
- #define PV_ALLOCATION_PROHIBITED	UINT64_C(0x0010000000000000)	/* PV - internal use only - allocation prohibited
- 									e.g. to prohibit allocation of a RAID image
- 									on a PV already holing an image of the RAID set */
--/* Next unused flag:		UINT64_C(0x0040000000000000)    */
-+/* Next unused flag:		UINT64_C(0x0020000000000000)    */
- 
- /* Format features flags */
- #define FMT_SEGMENTS		0x00000001U	/* Arbitrary segment params? */
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index b23063e..404cc6f 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -615,7 +615,6 @@ int vg_set_system_id(struct volume_group *vg, const char *system_id)
- {
- 	if (!system_id || !*system_id) {
- 		vg->system_id = NULL;
--		vg->status &= ~ACCESS_NEEDS_SYSTEM_ID;
- 		return 1;
+-	if (ioctl(fd, BLKGETSIZE64, size) < 0) {
++	if (ioctl(dev_fd(dev), BLKGETSIZE64, size) < 0) {
+ 		log_sys_error("ioctl BLKGETSIZE64", name);
+-		if (close(fd))
++		if (!dev_close(dev))
+ 			log_sys_error("close", name);
+ 		return 0;
  	}
  
-@@ -633,8 +632,6 @@ int vg_set_system_id(struct volume_group *vg, const char *system_id)
- 	if (vg->lvm1_system_id)
- 		*vg->lvm1_system_id = '\0';
+ 	*size >>= BLKSIZE_SHIFT;	/* Convert to sectors */
+-	if (close(fd))
++	if (!dev_close(dev))
+ 		log_sys_error("close", name);
  
--	vg->status |= ACCESS_NEEDS_SYSTEM_ID;
--
- 	return 1;
- }
+ 	log_very_verbose("%s: size is %" PRIu64 " sectors", name, *size);
+@@ -377,7 +374,7 @@ static int _dev_discard_blocks(struct device *dev, uint64_t offset_bytes, uint64
+  * Public functions
+  *---------------------------------------------------------------*/
  
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 557fe34..36b44a9 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -575,14 +575,10 @@ static int _vgchange_system_id(struct cmd_context *cmd, struct volume_group *vg)
- 		    vg->name, vg->system_id, system_id);
+-int dev_get_size(const struct device *dev, uint64_t *size)
++int dev_get_size(struct device *dev, uint64_t *size)
+ {
+ 	if (!dev)
+ 		return 0;
+diff --git a/lib/device/device.h b/lib/device/device.h
+index 0d38f96..dcc3713 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -94,7 +94,7 @@ int dev_ext_release(struct device *dev);
+  * All io should use these routines.
+  */
+ int dev_get_block_size(struct device *dev, unsigned int *phys_block_size, unsigned int *block_size);
+-int dev_get_size(const struct device *dev, uint64_t *size);
++int dev_get_size(struct device *dev, uint64_t *size);
+ int dev_get_read_ahead(struct device *dev, uint32_t *read_ahead);
+ int dev_discard_blocks(struct device *dev, uint64_t offset_bytes, uint64_t size_bytes);
  
- 	vg->system_id = system_id;
-+	
- 	if (vg->lvm1_system_id)
- 		*vg->lvm1_system_id = '\0';
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 4ef2b04..86b0a54 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -965,7 +965,7 @@ static int _devsize_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			 struct dm_report_field *field,
+ 			 const void *data, void *private)
+ {
+-	const struct device *dev = *(const struct device * const *) data;
++	struct device *dev = *(struct device * const *) data;
+ 	uint64_t size;
  
--	if (vg->system_id && *vg->system_id)
--		vg->status |= ACCESS_NEEDS_SYSTEM_ID;
--	else
--		vg->status &= ~ACCESS_NEEDS_SYSTEM_ID;
--
- 	return 1;
- }
- 
+ 	if (!dev || !dev->dev || !dev_get_size(dev, &size))
 
 
