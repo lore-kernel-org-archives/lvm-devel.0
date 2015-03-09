@@ -1,59 +1,45 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon,  9 Mar 2015 18:57:27 +0000 (UTC)
-Subject: master - metadata: Detect internal use of LVM_WRITE_LOCKED.
-Message-ID: <20150309185727.77B71610C3@fedorahosted.org>
+Date: Mon,  9 Mar 2015 19:00:56 +0000 (UTC)
+Subject: master - vgconvert: Check system ID compatibility.
+Message-ID: <20150309190056.B8B5460223@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a8545462349c560cf66362cb3d25b44b7b0e819b
-Commit:        a8545462349c560cf66362cb3d25b44b7b0e819b
-Parent:        faccdeda83ee8c04546a2224fa2dee82a55413fe
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1334ea214ea1f55173f2ff7e3045cc72a8c4e7c7
+Commit:        1334ea214ea1f55173f2ff7e3045cc72a8c4e7c7
+Parent:        a8545462349c560cf66362cb3d25b44b7b0e819b
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Mar 9 18:56:24 2015 +0000
+AuthorDate:    Mon Mar 9 19:01:12 2015 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Mar 9 18:56:24 2015 +0000
+CommitterDate: Mon Mar 9 19:01:12 2015 +0000
 
-metadata: Detect internal use of LVM_WRITE_LOCKED.
+vgconvert: Check system ID compatibility.
 
-Generate internal error if LVM_WRITE_LOCKED ever appears
-in struct volume_group: it's only used in external
-metadata.
+If system ID is set, don't switch to a format that doesn't support it.
 ---
- lib/metadata/metadata.c |   12 ++++++++++++
- 1 files changed, 12 insertions(+), 0 deletions(-)
+ tools/vgconvert.c |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index ab23d25..21066fb 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2495,6 +2495,12 @@ int vg_validate(struct volume_group *vg)
- 		r = 0;
- 	}
+diff --git a/tools/vgconvert.c b/tools/vgconvert.c
+index 50b3e44..3742237 100644
+--- a/tools/vgconvert.c
++++ b/tools/vgconvert.c
+@@ -94,6 +94,13 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
+ 				return ECMD_FAILED;
+ 			}
  
-+	if (vg->status & LVM_WRITE_LOCKED) {
-+		log_error(INTERNAL_ERROR "VG %s has external flag LVM_WRITE_LOCKED set internally.",
-+			  vg->name);
-+		r = 0;
++	/* New-style system ID supported? */ 
++	if (vg->system_id && *vg->system_id && (cmd->fmt->features & FMT_SYSTEMID_ON_PVS)) {
++		log_error("Unable to convert VG %s while it has a system ID set (%s).", vg->name,
++			  vg->system_id);
++		return ECMD_FAILED;
 +	}
 +
- 	/* FIXME Also check there's no data/metadata overlap */
- 	if (!(vhash.pvid = dm_hash_create(vg->pv_count))) {
- 		log_error("Failed to allocate pvid hash.");
-@@ -2568,6 +2574,12 @@ int vg_validate(struct volume_group *vg)
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		lv_count++;
- 
-+		if (lvl->lv->status & LVM_WRITE_LOCKED) {
-+			log_error(INTERNAL_ERROR "LV %s has external flag LVM_WRITE_LOCKED set internally.",
-+				  vg->name);
-+			r = 0;
-+		}
-+
- 		dev_name_len = strlen(lvl->lv->name) + vg_name_len + 3;
- 		if (dev_name_len >= NAME_LEN) {
- 			log_error(INTERNAL_ERROR "LV name \"%s/%s\" length %"
+ 	/* Attempt to change any LVIDs that are too big */
+ 	if (cmd->fmt->features & FMT_RESTRICTED_LVIDS) {
+ 		dm_list_iterate_items(lvl, &vg->lvs) {
 
 
