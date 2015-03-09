@@ -1,40 +1,49 @@
-From: Ondrej Kozina <okozina@redhat.com>
-Date: Mon, 09 Mar 2015 09:31:43 +0100
-Subject: [PATCH] fsadm: add support for btrfs
-In-Reply-To: <1425883705-8022-1-git-send-email-lzhong@suse.com>
-References: <1425883705-8022-1-git-send-email-lzhong@suse.com>
-Message-ID: <54FD5A6F.90806@redhat.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon,  9 Mar 2015 18:29:43 +0000 (UTC)
+Subject: master - system_id: detect an lvm1 system id
+Message-ID: <20150309182943.F088D60F64@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 03/09/2015 07:48 AM, Lidong Zhong wrote:
-> Run `btrfs check` to check filesystem
-> Run `btrfs filesystem show` to get the filesystem size and
-> `btrfs filesystem resize` to resize.
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e9a233ee8ef362fccc5537125a19c28e5d596168
+Commit:        e9a233ee8ef362fccc5537125a19c28e5d596168
+Parent:        08371a8b8031b43394d80612d24029cfd4c710d4
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Mar 9 13:27:34 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Mar 9 13:27:34 2015 -0500
 
-Hi,
+system_id: detect an lvm1 system id
 
-thank you for the patch but I'm afraid it is not correct. For example it 
-doesn't seem to deal with the possibility of btrfs volume spanning 
-across multiple block devices. You have to resize (meant with btrfs 
-tools) specific subvolume to not to break the filesystem on LV about to 
-get resized with lvresize.
+Detect an lvm1 system id by looking at the WRITE_LOCKED flag.
+Don't copy this lvm1 system id into vg->system_id so that the
+restrictions associated with the new system id are not applied
+to the old VG with the inherited lvm1 system id.
+---
+ lib/format_text/import_vsn1.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-I proposed similar patch before 
-(http://www.redhat.com/archives/lvm-devel/2012-November/msg00052.html) 
-but in the end came to conclusion it was not worth the pain considering 
-the btrfs-check couldn't detect even elemental fs breakage. Is the state 
-of btrfs-check tool better than what I described earlier in my patch header?
-
-Kind regards
-Ondrej
-
-PS: The original patch is from 2012 so perhaps some of the magic I used 
-to extract proper btrfs device id is useless as of now. At least I hope 
-so...
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 6afe71d..837af6b 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -812,6 +812,14 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
+ 	}
+ 
++	/*
++	 * A system id without WRITE_LOCKED is an old lvm1 system id.
++	 */
++	if (!(vg->status & LVM_WRITE_LOCKED) && system_id[0]) {
++		memcpy(vg->lvm1_system_id, system_id, NAME_LEN + 1);
++		memset(system_id, 0, NAME_LEN + 1);
++	}
++
+ 	if (vg->status & LVM_WRITE_LOCKED) {
+ 		vg->status |= LVM_WRITE;
+ 		vg->status &= ~LVM_WRITE_LOCKED;
 
 
