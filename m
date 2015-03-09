@@ -1,106 +1,99 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon,  9 Mar 2015 19:05:00 +0000 (UTC)
-Subject: master - vgchange: Additional system ID warnings.
-Message-ID: <20150309190500.EDFDE60FF4@fedorahosted.org>
+Date: Mon,  9 Mar 2015 19:34:59 +0000 (UTC)
+Subject: master - systemid: Use temp status var for LVM_WRITE_LOCKED
+Message-ID: <20150309193459.7CF5E60366@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=458b0210d1b4195171992f112aeb3a798d4509a3
-Commit:        458b0210d1b4195171992f112aeb3a798d4509a3
-Parent:        1334ea214ea1f55173f2ff7e3045cc72a8c4e7c7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=379d9ec8ec1a07b8fd218ab155ed7f6e611d8c73
+Commit:        379d9ec8ec1a07b8fd218ab155ed7f6e611d8c73
+Parent:        458b0210d1b4195171992f112aeb3a798d4509a3
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Mar 9 19:03:11 2015 +0000
+AuthorDate:    Mon Mar 9 19:18:14 2015 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Mar 9 19:03:11 2015 +0000
+CommitterDate: Mon Mar 9 19:18:14 2015 +0000
 
-vgchange: Additional system ID warnings.
+systemid: Use temp status var for LVM_WRITE_LOCKED
 
-Also prompt before setting a system ID on a VG when none is set
-on the host.
-Put quotes round system ID in messages where it could be blank.
 ---
- tools/vgchange.c |   57 ++++++++++++++++++++++++++++-------------------------
- 1 files changed, 30 insertions(+), 27 deletions(-)
+ lib/format_text/import_vsn1.c |   23 +++++++++++++----------
+ 1 files changed, 13 insertions(+), 10 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 36b44a9..88a85d8 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -536,42 +536,45 @@ static int _vgchange_system_id(struct cmd_context *cmd, struct volume_group *vg)
- 	}
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 837af6b..f930c08 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -531,7 +531,7 @@ static int _read_lvnames(struct format_instance *fid __attribute__((unused)),
+ 	const char *str;
+ 	const struct dm_config_value *cv;
+ 	const char *hostname;
+-	uint64_t timestamp = 0;
++	uint64_t timestamp = 0, lvstatus;
  
- 	if (!strcmp(vg->system_id, system_id)) {
--		log_error("Volume Group system ID is already %s", vg->system_id);
-+		log_error("Volume Group system ID is already \"%s\".", vg->system_id);
+ 	if (!(lv = alloc_lv(mem)))
+ 		return_0;
+@@ -544,16 +544,17 @@ static int _read_lvnames(struct format_instance *fid __attribute__((unused)),
  		return 0;
  	}
  
--	if (cmd->system_id && strcmp(system_id, cmd->system_id)) {
--		if (!*system_id) {
--			log_warn("WARNING: Removing the system ID allows unsafe access from other hosts.");
-+	if (!*system_id && cmd->system_id && strcmp(system_id, cmd->system_id)) {
-+		log_warn("WARNING: Removing the system ID allows unsafe access from other hosts.");
- 
--			if (!arg_count(cmd, yes_ARG) &&
--			    yes_no_prompt("Remove system ID %s on volume group %s? [y/n]: ",
--					  vg->system_id, vg->name) == 'n') {
--				log_error("Volume group %s system ID not changed.", vg->name);
--				return 0;
--			}
--		} else {
--			if (lvs_in_vg_activated(vg)) {
--				log_error("Logical Volumes in VG %s must be deactivated before system ID can be changed.",
--					  vg->name);
--				return 0;
--			}
-+		if (!arg_count(cmd, yes_ARG) &&
-+		    yes_no_prompt("Remove system ID %s from volume group %s? [y/n]: ",
-+				  vg->system_id, vg->name) == 'n') {
-+			log_error("System ID of volume group %s not changed.", vg->name);
-+			return 0;
-+		}
-+	}
- 
--			log_warn("WARNING: Requested system ID %s does not match local system ID %s",
--				 system_id, cmd->system_id);
--			log_warn("WARNING: Volume group %s might become inaccessible from this machine.",
--				 vg->name);
-+	if (*system_id && (!cmd->system_id || strcmp(system_id, cmd->system_id))) {
-+		if (lvs_in_vg_activated(vg)) {
-+			log_error("Logical Volumes in VG %s must be deactivated before system ID can be changed.",
-+				  vg->name);
-+			return 0;
-+		}
- 
--			if (!arg_count(cmd, yes_ARG) &&
--			    yes_no_prompt("Set foreign system ID %s on volume group %s? [y/n]: ",
--					  system_id, vg->name) == 'n') {
--				log_error("Volume group %s system ID not changed.", vg->name);
--				return 0;
--			}
-+		if (cmd->system_id)
-+			log_warn("WARNING: Requested system ID %s does not match local system ID %s.",
-+				 system_id, cmd->system_id ? : "");
-+		else
-+			log_warn("WARNING: No local system ID is set.");
-+		log_warn("WARNING: Volume group %s might become inaccessible from this machine.",
-+			 vg->name);
-+
-+		if (!arg_count(cmd, yes_ARG) &&
-+		    yes_no_prompt("Set foreign system ID %s on volume group %s? [y/n]: ",
-+				  system_id, vg->name) == 'n') {
-+			log_error("Volume group %s system ID not changed.", vg->name);
-+			return 0;
- 		}
+-	if (!_read_flag_config(lvn, &lv->status, LV_FLAGS)) {
++	if (!_read_flag_config(lvn, &lvstatus, LV_FLAGS)) {
+ 		log_error("Couldn't read status flags for logical volume %s.",
+ 			  lv->name);
+ 		return 0;
  	}
  
--	log_verbose("Changing system ID for VG %s from %s to %s.",
-+	log_verbose("Changing system ID for VG %s from \"%s\" to \"%s\".",
- 		    vg->name, vg->system_id, system_id);
+-	if (lv->status & LVM_WRITE_LOCKED) {
+-		lv->status |= LVM_WRITE;
+-		lv->status &= ~LVM_WRITE_LOCKED;
++	if (lvstatus & LVM_WRITE_LOCKED) {
++		lvstatus |= LVM_WRITE;
++		lvstatus &= ~LVM_WRITE_LOCKED;
+ 	}
++	lv->status = lvstatus;
  
- 	vg->system_id = system_id;
+ 	if (dm_config_has_node(lvn, "creation_time")) {
+ 		if (!_read_uint64(lvn, "creation_time", &timestamp)) {
+@@ -743,6 +744,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	struct dm_hash_table *pv_hash = NULL, *lv_hash = NULL;
+ 	unsigned scan_done_once = use_cached_pvs;
+ 	char *system_id;
++	uint64_t vgstatus;
+ 
+ 	/* skip any top-level values */
+ 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib)
+@@ -806,7 +808,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
+ 	}
+ 
+-	if (!_read_flag_config(vgn, &vg->status, VG_FLAGS)) {
++	if (!_read_flag_config(vgn, &vgstatus, VG_FLAGS)) {
+ 		log_error("Error reading flags of volume group %s.",
+ 			  vg->name);
+ 		goto bad;
+@@ -815,15 +817,16 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	/*
+ 	 * A system id without WRITE_LOCKED is an old lvm1 system id.
+ 	 */
+-	if (!(vg->status & LVM_WRITE_LOCKED) && system_id[0]) {
++	if (!(vgstatus & LVM_WRITE_LOCKED) && system_id[0]) {
+ 		memcpy(vg->lvm1_system_id, system_id, NAME_LEN + 1);
+ 		memset(system_id, 0, NAME_LEN + 1);
+ 	}
+ 
+-	if (vg->status & LVM_WRITE_LOCKED) {
+-		vg->status |= LVM_WRITE;
+-		vg->status &= ~LVM_WRITE_LOCKED;
++	if (vgstatus & LVM_WRITE_LOCKED) {
++		vgstatus |= LVM_WRITE;
++		vgstatus &= ~LVM_WRITE_LOCKED;
+ 	}
++	vg->status = vgstatus;
+ 
+ 	if (!_read_int32(vgn, "extent_size", &vg->extent_size)) {
+ 		log_error("Couldn't read extent size for volume group %s.",
 
 
