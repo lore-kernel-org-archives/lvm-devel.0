@@ -1,66 +1,65 @@
-From: Lidong Zhong <lzhong@suse.com>
-Date: Tue, 10 Mar 2015 02:13:04 -0600
-Subject: [PATCH] fsadm: add support for btrfs
-In-Reply-To: <54FD5A6F.90806@redhat.com>
-References: <1425883705-8022-1-git-send-email-lzhong@suse.com>
-	<54FD5A6F.90806@redhat.com>
-Message-ID: <54FF1810020000E10001D266@relay2.provo.novell.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 10 Mar 2015 13:09:33 +0000 (UTC)
+Subject: master - display: fix return values
+Message-ID: <20150310130933.DF78961094@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Ondrej,
-Thank you for your reply.
->>> On 3/9/2015 at 04:31 PM, in message <54FD5A6F.90806@redhat.com>, Ondrej Kozina
-<okozina@redhat.com> wrote: 
-> On 03/09/2015 07:48 AM, Lidong Zhong wrote: 
-> > Run `btrfs check` to check filesystem 
-> > Run `btrfs filesystem show` to get the filesystem size and 
-> > `btrfs filesystem resize` to resize. 
-> > 
->  
-> Hi, 
->  
-> thank you for the patch but I'm afraid it is not correct. For example it  
-> doesn't seem to deal with the possibility of btrfs volume spanning  
-> across multiple block devices. You have to resize (meant with btrfs  
-> tools) specific subvolume to not to break the filesystem on LV about to  
-> get resized with lvresize. 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47b704462eea3c93ab5f46d970e5a74a4a5d4e70
+Commit:        47b704462eea3c93ab5f46d970e5a74a4a5d4e70
+Parent:        1d3711c0b2a1679b18e0ee3032c5d38149a6619b
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Mar 9 14:16:41 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 10 14:10:18 2015 +0100
 
-Yeah, I didn't think of that. But the solution is already in your patch.  I guess this
-is not a problem. right?
+display: fix return values
 
->  
-> I proposed similar patch before  
-> (http://www.redhat.com/archives/lvm-devel/2012-November/msg00052.html)  
-> but in the end came to conclusion it was not worth the pain considering  
-> the btrfs-check couldn't detect even elemental fs breakage. Is the state  
-> of btrfs-check tool better than what I described earlier in my patch header? 
+Return 1 on success in pvdisplay_short() and lvdisplay_full()
+so commands like vgdisplay are not printinig stracktraces
+on successful passes.
 
-How about mount the device on a tmp place(as temp_mount()) first and then run
-  btrfs scrub start -B device
-and check if the error is zero in the output?
-(or the return value of the command is not zero)
+As the results of fail/success have been internally ignored for those
+calls, it had no other visible side effect - command's return value was
+still 0 (success).
+---
+ lib/display/display.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-Regards,
-Lidong
->  
-> Kind regards 
-> Ondrej 
->  
-> PS: The original patch is from 2012 so perhaps some of the magic I used  
-> to extract proper btrfs device id is useless as of now. At least I hope  
-> so... 
->  
-> -- 
-> lvm-devel mailing list 
-> lvm-devel at redhat.com 
-> https://www.redhat.com/mailman/listinfo/lvm-devel 
->  
->  
-
-
+diff --git a/lib/display/display.c b/lib/display/display.c
+index cf3c7f6..2cc5d27 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -385,7 +385,7 @@ int pvdisplay_short(const struct cmd_context *cmd __attribute__((unused)),
+ 	char uuid[64] __attribute__((aligned(8)));
+ 
+ 	if (!pv)
+-		return 0;
++		return_0;
+ 
+ 	if (!id_write_format(&pv->id, uuid, sizeof(uuid)))
+ 		return_0;
+@@ -399,7 +399,8 @@ int pvdisplay_short(const struct cmd_context *cmd __attribute__((unused)),
+ 		  pv->pe_count, pv->pe_count - pv->pe_alloc_count);
+ 
+ 	log_print(" ");
+-	return 0;
++
++	return 1; /* ECMD_PROCESSED */
+ }
+ 
+ void lvdisplay_colons(const struct logical_volume *lv)
+@@ -623,7 +624,7 @@ int lvdisplay_full(struct cmd_context *cmd,
+ 
+ 	log_print(" ");
+ 
+-	return 0;
++	return 1; /* ECMD_PROCESSED */
+ }
+ 
+ void display_stripe(const struct lv_segment *seg, uint32_t s, const char *pre)
 
 
