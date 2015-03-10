@@ -1,65 +1,117 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 10 Mar 2015 13:09:33 +0000 (UTC)
-Subject: master - display: fix return values
-Message-ID: <20150310130933.DF78961094@fedorahosted.org>
+Date: Tue, 10 Mar 2015 13:09:36 +0000 (UTC)
+Subject: master - configure: check for sync-nand
+Message-ID: <20150310130936.05AA261094@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47b704462eea3c93ab5f46d970e5a74a4a5d4e70
-Commit:        47b704462eea3c93ab5f46d970e5a74a4a5d4e70
-Parent:        1d3711c0b2a1679b18e0ee3032c5d38149a6619b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0982c5c79f3467bcff1d64ac12cb30b25d446a5a
+Commit:        0982c5c79f3467bcff1d64ac12cb30b25d446a5a
+Parent:        47b704462eea3c93ab5f46d970e5a74a4a5d4e70
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 9 14:16:41 2015 +0100
+AuthorDate:    Tue Mar 10 13:36:55 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 10 14:10:18 2015 +0100
 
-display: fix return values
+configure: check for sync-nand
 
-Return 1 on success in pvdisplay_short() and lvdisplay_full()
-so commands like vgdisplay are not printinig stracktraces
-on successful passes.
-
-As the results of fail/success have been internally ignored for those
-calls, it had no other visible side effect - command's return value was
-still 0 (success).
+Check whether gcc support this flag.
+Some older compilers (gcc version 4.3.2) miss it.
 ---
- lib/display/display.c |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ configure    |   39 +++++++++++++++++++++++++++++++++++++++
+ configure.in |    2 ++
+ make.tmpl.in |    6 +++++-
+ 3 files changed, 46 insertions(+), 1 deletions(-)
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index cf3c7f6..2cc5d27 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -385,7 +385,7 @@ int pvdisplay_short(const struct cmd_context *cmd __attribute__((unused)),
- 	char uuid[64] __attribute__((aligned(8)));
+diff --git a/configure b/configure
+index c5c3b85..d85e7c9 100755
+--- a/configure
++++ b/configure
+@@ -749,6 +749,7 @@ CUNIT_CFLAGS
+ GENPNG
+ GENHTML
+ LCOV
++HAVE_WSYNCNAND
+ HAVE_WCLOBBERED
+ HAVE_WJUMP
+ SACKPT_LIBS
+@@ -10214,6 +10215,44 @@ $as_echo "$ac_cv_flag_HAVE_WCLOBBERED" >&6; }
  
- 	if (!pv)
--		return 0;
-+		return_0;
  
- 	if (!id_write_format(&pv->id, uuid, sizeof(uuid)))
- 		return_0;
-@@ -399,7 +399,8 @@ int pvdisplay_short(const struct cmd_context *cmd __attribute__((unused)),
- 		  pv->pe_count, pv->pe_count - pv->pe_alloc_count);
  
- 	log_print(" ");
--	return 0;
 +
-+	return 1; /* ECMD_PROCESSED */
- }
++    ac_save_CFLAGS=$CFLAGS
++    CFLAGS=-Wsync-nand
++    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC accepts -Wsync-nand flag" >&5
++$as_echo_n "checking whether $CC accepts -Wsync-nand flag... " >&6; }
++if ${ac_cv_flag_HAVE_WSYNCNAND+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++
++int
++main ()
++{
++
++  ;
++  return 0;
++}
++_ACEOF
++if ac_fn_c_try_compile "$LINENO"; then :
++  ac_cv_flag_HAVE_WSYNCNAND=yes
++else
++  ac_cv_flag_HAVE_WSYNCNAND=no
++fi
++rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_flag_HAVE_WSYNCNAND" >&5
++$as_echo "$ac_cv_flag_HAVE_WSYNCNAND" >&6; }
++    CFLAGS=$ac_save_CFLAGS
++    HAVE_WSYNCNAND=$ac_cv_flag_HAVE_WSYNCNAND
++    if test "HAVE_WSYNCNAND" = yes; then
++        :
++    else
++        :
++    fi
++
++
++
+ ################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking for C optimisation flag" >&5
+ $as_echo_n "checking for C optimisation flag... " >&6; }
+diff --git a/configure.in b/configure.in
+index 15d371b..55c13a6 100644
+--- a/configure.in
++++ b/configure.in
+@@ -962,6 +962,8 @@ AC_TRY_CCFLAG([-Wjump-misses-init], [HAVE_WJUMP], [], [])
+ AC_SUBST(HAVE_WJUMP)
+ AC_TRY_CCFLAG([-Wclobbered], [HAVE_WCLOBBERED], [], [])
+ AC_SUBST(HAVE_WCLOBBERED)
++AC_TRY_CCFLAG([-Wsync-nand], [HAVE_WSYNCNAND], [], [])
++AC_SUBST(HAVE_WSYNCNAND)
  
- void lvdisplay_colons(const struct logical_volume *lv)
-@@ -623,7 +624,7 @@ int lvdisplay_full(struct cmd_context *cmd,
+ ################################################################################
+ dnl -- Override optimisation
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 72e2613..11721f1 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -156,7 +156,11 @@ endif
+ ifeq ("@HAVE_WCLOBBERED@", "yes")
+ WFLAGS += -Wclobbered -Wempty-body -Wignored-qualifiers \
+  -Wmissing-parameter-type -Wold-style-declaration -Woverride-init \
+- -Wtype-limits -Wsync-nand -Wlogical-op
++ -Wtype-limits -Wlogical-op
++endif
++
++ifeq ("@HAVE_WSYNCNAND@", "yes")
++WFLAGS += -Wsync-nand
+ endif
  
- 	log_print(" ");
- 
--	return 0;
-+	return 1; /* ECMD_PROCESSED */
- }
- 
- void display_stripe(const struct lv_segment *seg, uint32_t s, const char *pre)
+ ifneq ("@STATIC_LINK@", "yes")
 
 
