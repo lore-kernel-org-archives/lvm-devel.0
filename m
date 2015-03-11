@@ -1,123 +1,68 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 11 Mar 2015 20:17:37 +0000 (UTC)
-Subject: master - makefiles: split gcc -W options
-Message-ID: <20150311201737.9C05360242@fedorahosted.org>
+Date: Wed, 11 Mar 2015 20:17:39 +0000 (UTC)
+Subject: master - tests: do not leak in mem in destructor
+Message-ID: <20150311201739.B655660242@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e7e499e80fa31c7c465d43e11e14c2342477ee53
-Commit:        e7e499e80fa31c7c465d43e11e14c2342477ee53
-Parent:        8a2b9f045fffd4e9d9450477b946af31dde5848f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bdf4e3e2f20dd186f3640e808930c152fc8d77e9
+Commit:        bdf4e3e2f20dd186f3640e808930c152fc8d77e9
+Parent:        e7e499e80fa31c7c465d43e11e14c2342477ee53
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 11 15:41:03 2015 +0100
+AuthorDate:    Wed Mar 11 15:41:53 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Mar 11 21:17:23 2015 +0100
 
-makefiles: split gcc -W options
+tests: do not leak in mem in destructor
 
-Avoid using gcc only Warnings for compilation of g++ object files.
 ---
- make.tmpl.in |   52 ++++++++++++++++++++++++++++++++++++++--------------
- 1 files changed, 38 insertions(+), 14 deletions(-)
+ test/lib/brick-shelltest.h |   12 +++++++-----
+ 1 files changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 11721f1..3a8597a 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -142,21 +142,45 @@ INSTALL_SCRIPT = $(INSTALL) -p $(M_INSTALL_PROGRAM)
+diff --git a/test/lib/brick-shelltest.h b/test/lib/brick-shelltest.h
+index 820aa81..7c49fa3 100644
+--- a/test/lib/brick-shelltest.h
++++ b/test/lib/brick-shelltest.h
+@@ -625,14 +625,15 @@ struct IO : Sink {
+         return *new (this) IO( io );
+     }
  
- .SUFFIXES: .c .cpp .d .o .so .a .po .pot .mo .dylib
+-    void clear() {
++    void clear(int push = 1) {
+         for ( Sinks::iterator i = sinks.begin(); i != sinks.end(); ++i )
+             delete *i;
+         sinks.clear();
+-        sinks.push_back( _observer = new Observer );
++        if (push)
++            sinks.push_back( _observer = new Observer );
+     }
  
--WFLAGS += -Wall -Wundef -Wshadow -Wcast-align -Wwrite-strings \
-- -Wmissing-prototypes -Wmissing-declarations -Wnested-externs \
-- -Winline -Wmissing-noreturn -Wformat-security -Wredundant-decls \
-- -Wpointer-arith -Wuninitialized -Wmissing-include-dirs \
-- -Wfloat-equal -Wstrict-prototypes \
-- -Wold-style-definition -Wmissing-format-attribute
-+WFLAGS +=\
-+ -Wall\
-+ -Wcast-align\
-+ -Wfloat-equal\
-+ -Wformat-security\
-+ -Winline\
-+ -Wmissing-declarations\
-+ -Wmissing-format-attribute\
-+ -Wmissing-include-dirs\
-+ -Wmissing-noreturn\
-+ -Wpointer-arith\
-+ -Wredundant-decls\
-+ -Wshadow\
-+ -Wundef\
-+ -Wuninitialized\
-+ -Wwrite-strings
-+
-+WCFLAGS +=\
-+ -Wmissing-prototypes\
-+ -Wnested-externs\
-+ -Wold-style-definition\
-+ -Wstrict-prototypes
+-    ~IO() { close(); clear(); }
++    ~IO() { close(); clear(0); }
  
- ifeq ("@HAVE_WJUMP@", "yes")
--WFLAGS += -Wjump-misses-init
-+WCFLAGS += -Wjump-misses-init
- endif
+ };
  
- ifeq ("@HAVE_WCLOBBERED@", "yes")
--WFLAGS += -Wclobbered -Wempty-body -Wignored-qualifiers \
-- -Wmissing-parameter-type -Wold-style-declaration -Woverride-init \
-- -Wtype-limits -Wlogical-op
-+WFLAGS +=\
-+ -Wclobbered\
-+ -Wempty-body\
-+ -Wignored-qualifiers\
-+ -Wlogical-op\
-+ -Wtype-limits
-+
-+WCFLAGS +=\
-+ -Wmissing-parameter-type\
-+ -Wold-style-declaration\
-+ -Woverride-init
- endif
+@@ -659,7 +660,7 @@ struct TestProcess
+     bool interactive;
+     int fd;
  
- ifeq ("@HAVE_WSYNCNAND@", "yes")
-@@ -174,7 +198,7 @@ endif
- endif
+-    void exec() {
++    void exec() __attribute__ ((noreturn)) {
+         assert( fd >= 0 );
+         if ( !interactive ) {
+             int devnull = ::open( "/dev/null", O_RDONLY );
+@@ -858,7 +859,8 @@ struct TestCase {
+         if ( options.verbose || options.interactive )
+             progress() << std::endl;
  
- #WFLAGS += -W -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers
--#WFLAGS += -Wsign-compare -Wunused-parameter -Wmissing-field-initializers 
-+#WFLAGS += -Wsign-compare -Wunused-parameter -Wmissing-field-initializers
- #WFLAGS += -Wconversion -Wbad-function-cast -Wcast-qual -Waggregate-return -Wpacked
- #WFLAGS += -pedantic -std=gnu99
- #DEFS += -DDEBUG_CRC32
-@@ -372,7 +396,7 @@ endif
- $(TARGETS): $(OBJECTS)
+-        while ( monitor() );
++        while ( monitor() )
++            /* empty */ ;
  
- %.o: %.c
--	$(CC) -c $(INCLUDES) $(DEFS) $(WFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
-+	$(CC) -c $(INCLUDES) $(DEFS) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
+         Journal::R r = Journal::UNKNOWN;
  
- %.o: %.cpp
- 	$(CXX) -c $(INCLUDES) $(DEFS) $(WFLAGS) $(CXXFLAGS) $(CXXFLAGS_$@) $< -o $@
-@@ -405,7 +429,7 @@ install_lib_shared: $(LIB_SHARED)
- 	$(INSTALL_DIR) $(usrlibdir)
- 	$(LN_S) -f $(USRLIB_RELPATH)$(<F).$(LIB_VERSION) $(usrlibdir)/$(<F)
- 
--# FIXME: plugins are installed to subdirs 
-+# FIXME: plugins are installed to subdirs
- #        and for compatibility links in libdir are created
- #        when the code is fixed links could be removed.
- install_dm_plugin: $(LIB_SHARED)
-@@ -446,7 +470,7 @@ clean: $(SUBDIRS.clean) cleandir
- 
- distclean: cleandir $(SUBDIRS.distclean)
- 	test -z "$(DISTCLEAN_DIRS)" || $(RM) -r $(DISTCLEAN_DIRS)
--	$(RM) $(DISTCLEAN_TARGETS) Makefile 
-+	$(RM) $(DISTCLEAN_TARGETS) Makefile
- 
- .exported_symbols_generated: $(EXPORTED_HEADER) .exported_symbols
- 	set -e; \
 
 
