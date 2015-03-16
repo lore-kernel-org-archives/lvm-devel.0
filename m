@@ -1,39 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 16 Mar 2015 14:06:43 +0000 (UTC)
-Subject: master - tests: drop unused ""
-Message-ID: <20150316140643.E693460F91@fedorahosted.org>
+Date: Mon, 16 Mar 2015 14:06:46 +0000 (UTC)
+Subject: master - tests: check for dmeventd first
+Message-ID: <20150316140646.0FC2E60F91@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6a69af2d751c83e6c1e82005607448630ae7047
-Commit:        e6a69af2d751c83e6c1e82005607448630ae7047
-Parent:        05f23e77634b2ed3d7861511c07ed73a3bb6d096
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0e1d1aaca833813fb6cadd16c704c83bb8e94f09
+Commit:        0e1d1aaca833813fb6cadd16c704c83bb8e94f09
+Parent:        e6a69af2d751c83e6c1e82005607448630ae7047
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 13 11:39:55 2015 +0100
+AuthorDate:    Mon Mar 16 12:26:00 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 13 12:12:54 2015 +0100
+CommitterDate: Mon Mar 16 12:26:00 2015 +0100
 
-tests: drop unused ""
+tests: check for dmeventd first
 
+Check there is no dmeventd before creating vg.
 ---
- test/shell/pv-range-overflow.sh |    2 +-
+ test/shell/lvconvert-repair-transient-dmeventd.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/pv-range-overflow.sh b/test/shell/pv-range-overflow.sh
-index 4caee02..f6b9622 100644
---- a/test/shell/pv-range-overflow.sh
-+++ b/test/shell/pv-range-overflow.sh
-@@ -15,7 +15,7 @@
+diff --git a/test/shell/lvconvert-repair-transient-dmeventd.sh b/test/shell/lvconvert-repair-transient-dmeventd.sh
+index 5347d88..4f6171d 100644
+--- a/test/shell/lvconvert-repair-transient-dmeventd.sh
++++ b/test/shell/lvconvert-repair-transient-dmeventd.sh
+@@ -11,9 +11,9 @@
  
- aux prepare_vg 2
+ . lib/inittest
  
--lvcreate -L4 -n"$lv" $vg
-+lvcreate -L4 -n $lv $vg
++aux prepare_dmeventd
+ aux mirror_recovery_works || skip
+ aux prepare_vg 5
+-aux prepare_dmeventd
  
- # Test for the bogus diagnostic reported in BZ 284771
- # http://bugzilla.redhat.com/284771.
+ lvcreate -aey --type mirror -m 3 --ignoremonitoring -L 1 -n 4way $vg
+ lvchange --monitor y $vg/4way
 
 
