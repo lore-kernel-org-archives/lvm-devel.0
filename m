@@ -1,105 +1,127 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 18 Mar 2015 12:46:40 +0000 (UTC)
-Subject: master - lvchange: disable persistent minors for pools
-Message-ID: <20150318124640.E93B260C9B@fedorahosted.org>
+Date: Wed, 18 Mar 2015 12:46:43 +0000 (UTC)
+Subject: master - configure: detect st_ctim
+Message-ID: <20150318124643.1AFCD60C9B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a10a11bd54d9f33842eee8c168dc3c47aebec05b
-Commit:        a10a11bd54d9f33842eee8c168dc3c47aebec05b
-Parent:        95fbbf4f40e8d0e9d9565f5a25f66a8127986822
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=17583f1b591bc4f84acf1e6be76083ddd84020ac
+Commit:        17583f1b591bc4f84acf1e6be76083ddd84020ac
+Parent:        a10a11bd54d9f33842eee8c168dc3c47aebec05b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 17 09:44:26 2015 +0100
+AuthorDate:    Wed Mar 18 10:52:40 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 18 13:42:13 2015 +0100
+CommitterDate: Wed Mar 18 13:42:24 2015 +0100
 
-lvchange: disable persistent minors for pools
+configure: detect st_ctim
 
-There is no reason to support persistent major/minor numbers
-for pool volumes - it's only meant to be supported for filesystems
-(since i.e. nfs may need to keep volume on a persistent device node.)
-
-Support for pools is now explicitely disabled and documented.
+Check stat has nanosecond precision for ctim.
 ---
- WHATS_NEW                    |    1 +
- man/lvchange.8.in            |    1 +
- test/shell/lvchange-cache.sh |    4 ++++
- test/shell/lvchange-thin.sh  |    5 +++--
- tools/lvchange.c             |    5 +++++
- 5 files changed, 14 insertions(+), 2 deletions(-)
+ acinclude.m4            |    4 ++++
+ configure               |   34 ++++++++++++++++++++++++++++++++++
+ configure.in            |   12 ++++++++++++
+ lib/misc/configure.h.in |    3 +++
+ 4 files changed, 53 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d0a0c2d..0ce81fb 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.118 - 
- =================================
-+  Disable lvchange of major and minor of pool LVs.
-   Fix pvscan --cache to not scan and read ignored metadata areas on PVs.
-   Add After=iscsi-shutdown.service to blk-availability.service systemd unit.
-   Disallow vgconvert from changing metadata format when lvmetad is used.
-diff --git a/man/lvchange.8.in b/man/lvchange.8.in
-index fbae953..6b41c81 100644
---- a/man/lvchange.8.in
-+++ b/man/lvchange.8.in
-@@ -279,6 +279,7 @@ Do not use this if dmeventd is already monitoring a device.
- .TP
- .BR \-M ", " \-\-persistent " {" \fIy | \fIn }
- Set to y to make the minor number specified persistent.
-+Change of persistent numbers is not supported for pool volumes.
- .TP
- .BR \-p ", " \-\-permission " {" \fIr | \fIrw }
- Change access permission to read-only or read/write.
-diff --git a/test/shell/lvchange-cache.sh b/test/shell/lvchange-cache.sh
-index 9959f93..20826fb 100644
---- a/test/shell/lvchange-cache.sh
-+++ b/test/shell/lvchange-cache.sh
-@@ -18,6 +18,10 @@ lvcreate --type cache-pool -an -v -L 2 -n cpool $vg
- lvcreate -H -L 4 -n corigin --cachepool $vg/cpool
- lvcreate -n noncache -l 1 $vg
+diff --git a/acinclude.m4 b/acinclude.m4
+index 601ae9d..b6c9b18 100644
+--- a/acinclude.m4
++++ b/acinclude.m4
+@@ -37,6 +37,10 @@ AC_DEFUN([AC_TRY_CCFLAG],
+     fi
+ ])
  
-+# cannot change major minor for pools
-+not lvchange --yes -M y --minor 235 --major 253 $vg/cpool
-+not lvchange -M n $vg/cpool
++dnl AC_IF_YES([TEST-FOR-YES], [ACTION-IF-TRUE], [ACTION-IF-FALSE])
++dnl AS_IF() abstraction, checks shell variable for 'yes'
++AC_DEFUN([AC_IF_YES], [AS_IF([test $$1 = yes], [$2], [$3])])
 +
- not lvchange --cachepolicy mq $vg/noncache
- not lvchange --cachesettings foo=bar $vg/noncache
+ dnl AC_TRY_LDFLAGS([LDFLAGS], [VAR], [ACTION-IF-WORKS], [ACTION-IF-FAILS])
+ dnl check if $CC supports given ld flags
  
-diff --git a/test/shell/lvchange-thin.sh b/test/shell/lvchange-thin.sh
-index 4d33563..87919bc 100644
---- a/test/shell/lvchange-thin.sh
-+++ b/test/shell/lvchange-thin.sh
-@@ -54,8 +54,9 @@ lvchange -r auto $vg/$lv1
- lvchange --yes -M y --minor 234 --major 253 $vg/$lv1
- lvchange -M n $vg/$lv1
+diff --git a/configure b/configure
+index d85e7c9..34d2a50 100755
+--- a/configure
++++ b/configure
+@@ -11958,6 +11958,40 @@ $as_echo "$as_me: WARNING: Disabling realtime clock" >&2;}
+ 	fi
+ fi
  
--lvchange --yes -M y --minor 235 --major 253 $vg/pool
--lvchange -M n $vg/pool
-+# cannot change major minor for pools
-+not lvchange --yes -M y --minor 235 --major 253 $vg/pool
-+not lvchange -M n $vg/pool
- 
- # addtag_ARG
- lvchange --addtag foo $vg/$lv1
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 5e90adc..096aae4 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -966,6 +966,11 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		return ECMD_FAILED;
- 	}
- 
-+	if (arg_count(cmd, persistent_ARG) && lv_is_pool(lv)) {
-+		log_error("Persistent major and minor numbers are not supported with pools.");
-+		return ECMD_FAILED;
-+	}
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for struct stat has st_ctim." >&5
++$as_echo_n "checking for struct stat has st_ctim.... " >&6; }
++if ${ac_cv_stat_st_ctim+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++#include <sys/stat.h>
++long bar(void) { struct stat s; return (long)(s.st_ctim.tv_sec + s.st_ctim.tv_nsec);}
 +
- 	/*
- 	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
- 	 * If --poll is explicitly provided use it; otherwise polling
++int
++main ()
++{
++
++  ;
++  return 0;
++}
++_ACEOF
++if ac_fn_c_try_compile "$LINENO"; then :
++  ac_cv_stat_st_ctim=yes
++else
++  ac_cv_stat_st_ctim=no
++fi
++rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_stat_st_ctim" >&5
++$as_echo "$ac_cv_stat_st_ctim" >&6; }
++
++if test $ac_cv_stat_st_ctim = yes; then :
++
++$as_echo "#define HAVE_STAT_ST_CTIM 1" >>confdefs.h
++
++fi
++
+ ################################################################################
+ for ac_header in getopt.h
+ do :
+diff --git a/configure.in b/configure.in
+index 55c13a6..38c7b51 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1379,6 +1379,18 @@ if test "$REALTIME" = yes; then
+ 	fi
+ fi
+ 
++dnl Check if the system has struct stat st_ctim.
++AC_CACHE_CHECK([for struct stat has st_ctim.],
++	[ac_cv_stat_st_ctim],
++	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
++[#include <sys/stat.h>
++long bar(void) { struct stat s; return (long)(s.st_ctim.tv_sec + s.st_ctim.tv_nsec);}]
++	 )], [ac_cv_stat_st_ctim=yes], [ac_cv_stat_st_ctim=no])])
++
++AC_IF_YES(ac_cv_stat_st_ctim,
++	  AC_DEFINE(HAVE_STAT_ST_CTIM, 1,
++		    [Define if struct stat has a field st_ctim with timespec for ctime]))
++
+ ################################################################################
+ dnl -- Check for getopt
+ AC_CHECK_HEADERS(getopt.h, AC_DEFINE([HAVE_GETOPTLONG], 1, [Define to 1 if getopt_long is available.]))
+diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
+index ee9f859..48ae3f6 100644
+--- a/lib/misc/configure.h.in
++++ b/lib/misc/configure.h.in
+@@ -322,6 +322,9 @@
+    zero-length file name argument. */
+ #undef HAVE_STAT_EMPTY_STRING_BUG
+ 
++/* Define if struct stat has a field st_ctim with timespec for ctime */
++#undef HAVE_STAT_ST_CTIM
++
+ /* Define to 1 if you have the <stdarg.h> header file. */
+ #undef HAVE_STDARG_H
+ 
 
 
