@@ -1,127 +1,79 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 18 Mar 2015 12:46:43 +0000 (UTC)
-Subject: master - configure: detect st_ctim
-Message-ID: <20150318124643.1AFCD60C9B@fedorahosted.org>
+Date: Wed, 18 Mar 2015 12:46:45 +0000 (UTC)
+Subject: master - lvm-file: wrapper to read ctim from stat
+Message-ID: <20150318124645.2E62760C9B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=17583f1b591bc4f84acf1e6be76083ddd84020ac
-Commit:        17583f1b591bc4f84acf1e6be76083ddd84020ac
-Parent:        a10a11bd54d9f33842eee8c168dc3c47aebec05b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6606b1bff3fba90cc7af92dcda1c6eafdbf5e200
+Commit:        6606b1bff3fba90cc7af92dcda1c6eafdbf5e200
+Parent:        17583f1b591bc4f84acf1e6be76083ddd84020ac
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 18 10:52:40 2015 +0100
+AuthorDate:    Wed Mar 18 10:54:08 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Mar 18 13:42:24 2015 +0100
 
-configure: detect st_ctim
+lvm-file: wrapper to read ctim from stat
 
-Check stat has nanosecond precision for ctim.
+When available use nanosecond stat info.
+
+If commands are running closely enough after config update,
+the .cache file from persistent filter could have been ignored.
+
+This happens sometimes during i.e. synthetic test suite run.
 ---
- acinclude.m4            |    4 ++++
- configure               |   34 ++++++++++++++++++++++++++++++++++
- configure.in            |   12 ++++++++++++
- lib/misc/configure.h.in |    3 +++
- 4 files changed, 53 insertions(+), 0 deletions(-)
+ lib/misc/lvm-file.c |   11 +++++++++++
+ lib/misc/lvm-file.h |   11 +++++++++++
+ 2 files changed, 22 insertions(+), 0 deletions(-)
 
-diff --git a/acinclude.m4 b/acinclude.m4
-index 601ae9d..b6c9b18 100644
---- a/acinclude.m4
-+++ b/acinclude.m4
-@@ -37,6 +37,10 @@ AC_DEFUN([AC_TRY_CCFLAG],
-     fi
- ])
+diff --git a/lib/misc/lvm-file.c b/lib/misc/lvm-file.c
+index f0e2841..2e896ec 100644
+--- a/lib/misc/lvm-file.c
++++ b/lib/misc/lvm-file.c
+@@ -21,6 +21,7 @@
+ #include <sys/file.h>
+ #include <fcntl.h>
+ #include <dirent.h>
++#include <sys/time.h>
  
-+dnl AC_IF_YES([TEST-FOR-YES], [ACTION-IF-TRUE], [ACTION-IF-FALSE])
-+dnl AS_IF() abstraction, checks shell variable for 'yes'
-+AC_DEFUN([AC_IF_YES], [AS_IF([test $$1 = yes], [$2], [$3])])
+ /*
+  * Creates a temporary filename, and opens a descriptor to the
+@@ -273,3 +274,13 @@ int lvm_fclose(FILE *fp, const char *filename)
+ 
+ 	return EOF;
+ }
 +
- dnl AC_TRY_LDFLAGS([LDFLAGS], [VAR], [ACTION-IF-WORKS], [ACTION-IF-FAILS])
- dnl check if $CC supports given ld flags
- 
-diff --git a/configure b/configure
-index d85e7c9..34d2a50 100755
---- a/configure
-+++ b/configure
-@@ -11958,6 +11958,40 @@ $as_echo "$as_me: WARNING: Disabling realtime clock" >&2;}
- 	fi
- fi
- 
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for struct stat has st_ctim." >&5
-+$as_echo_n "checking for struct stat has st_ctim.... " >&6; }
-+if ${ac_cv_stat_st_ctim+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-+/* end confdefs.h.  */
-+#include <sys/stat.h>
-+long bar(void) { struct stat s; return (long)(s.st_ctim.tv_sec + s.st_ctim.tv_nsec);}
-+
-+int
-+main ()
++void lvm_stat_ctim(struct timespec *ctim, const struct stat *buf)
 +{
-+
-+  ;
-+  return 0;
++#ifdef HAVE_STAT_ST_CTIM
++	*ctim = buf->st_ctim;
++#else
++	ctim->tv_sec = buf->st_ctime;
++	ctim->tv_nsec = 0;
++#endif
 +}
-+_ACEOF
-+if ac_fn_c_try_compile "$LINENO"; then :
-+  ac_cv_stat_st_ctim=yes
-+else
-+  ac_cv_stat_st_ctim=no
-+fi
-+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-+fi
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_stat_st_ctim" >&5
-+$as_echo "$ac_cv_stat_st_ctim" >&6; }
-+
-+if test $ac_cv_stat_st_ctim = yes; then :
-+
-+$as_echo "#define HAVE_STAT_ST_CTIM 1" >>confdefs.h
-+
-+fi
-+
- ################################################################################
- for ac_header in getopt.h
- do :
-diff --git a/configure.in b/configure.in
-index 55c13a6..38c7b51 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1379,6 +1379,18 @@ if test "$REALTIME" = yes; then
- 	fi
- fi
+diff --git a/lib/misc/lvm-file.h b/lib/misc/lvm-file.h
+index c23d8ad..a4f332c 100644
+--- a/lib/misc/lvm-file.h
++++ b/lib/misc/lvm-file.h
+@@ -62,4 +62,15 @@ void fcntl_unlock_file(int lockfd);
+  */
+ int lvm_fclose(FILE *fp, const char *filename);
  
-+dnl Check if the system has struct stat st_ctim.
-+AC_CACHE_CHECK([for struct stat has st_ctim.],
-+	[ac_cv_stat_st_ctim],
-+	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
-+[#include <sys/stat.h>
-+long bar(void) { struct stat s; return (long)(s.st_ctim.tv_sec + s.st_ctim.tv_nsec);}]
-+	 )], [ac_cv_stat_st_ctim=yes], [ac_cv_stat_st_ctim=no])])
++/*
++ * Convert stat->st_ctim  status of last change in nanoseconds
++ * uses  st_ctime when not available.
++ */
++void lvm_stat_ctim(struct timespec *ts, const struct stat *buf);
 +
-+AC_IF_YES(ac_cv_stat_st_ctim,
-+	  AC_DEFINE(HAVE_STAT_ST_CTIM, 1,
-+		    [Define if struct stat has a field st_ctim with timespec for ctime]))
-+
- ################################################################################
- dnl -- Check for getopt
- AC_CHECK_HEADERS(getopt.h, AC_DEFINE([HAVE_GETOPTLONG], 1, [Define to 1 if getopt_long is available.]))
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index ee9f859..48ae3f6 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -322,6 +322,9 @@
-    zero-length file name argument. */
- #undef HAVE_STAT_EMPTY_STRING_BUG
- 
-+/* Define if struct stat has a field st_ctim with timespec for ctime */
-+#undef HAVE_STAT_ST_CTIM
-+
- /* Define to 1 if you have the <stdarg.h> header file. */
- #undef HAVE_STDARG_H
- 
++/* Inspired by <sys/time.h>  timercmp() macro for timeval */
++#define timespeccmp(tsp, usp, cmp)\
++	(((tsp)->tv_sec == (usp)->tv_sec) ?\
++		((tsp)->tv_nsec cmp (usp)->tv_nsec) :\
++		((tsp)->tv_sec cmp (usp)->tv_sec))
+ #endif
 
 
