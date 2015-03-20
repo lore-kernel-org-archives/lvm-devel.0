@@ -1,42 +1,39 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 19 Mar 2015 11:17:13 +0000 (UTC)
-Subject: master - format_text: Fix precommitted segfault.
-Message-ID: <20150319111713.CC1826053E@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 20 Mar 2015 10:11:42 +0000 (UTC)
+Subject: master - tests: start clvmd without lib/
+Message-ID: <20150320101142.62E9260B44@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a515a91fcc8df04b5dfd9fe23ef6925c58846af0
-Commit:        a515a91fcc8df04b5dfd9fe23ef6925c58846af0
-Parent:        e4fa7563853a0f104dec0872760d4acfa08d2554
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Mar 19 11:14:47 2015 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Mar 19 11:14:47 2015 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21343ffbfed94f41da11fac4dd056af58f4341a9
+Commit:        21343ffbfed94f41da11fac4dd056af58f4341a9
+Parent:        a515a91fcc8df04b5dfd9fe23ef6925c58846af0
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Mar 20 11:08:21 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Mar 20 11:08:21 2015 +0100
 
-format_text: Fix precommitted segfault.
+tests: start clvmd without lib/
 
-The code never mixes reads of committed and precommitted metadata,
-so there's no need to attempt to set PRECOMMITTED when
-*use_previous_vg is being set.
 ---
- lib/format_text/format-text.c |    2 +-
+ test/lib/aux.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 6b09d00..bdac7f9 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -551,7 +551,7 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
- 				   dev_name(area->dev),
- 				   area->start + rlocn->offset, rlocn->size);
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 339da31..69c1473 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -43,7 +43,7 @@ prepare_clvmd() {
+ 	local run_valgrind=
+ 	test "${LVM_VALGRIND_CLVMD:-0}" -eq 0 || run_valgrind="run_valgrind"
+ 	rm -f "$CLVMD_PIDFILE"
+-	$run_valgrind lib/clvmd -Isinglenode -d 1 -f &
++	$run_valgrind clvmd -Isinglenode -d 1 -f &
+ 	echo $! > LOCAL_CLVMD
  
--	if (precommitted)
-+	if (vg && precommitted)
- 		vg->status |= PRECOMMITTED;
- 
-       out:
+ 	for i in $(seq 1 100) ; do
 
 
