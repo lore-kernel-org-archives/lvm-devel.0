@@ -1,57 +1,51 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Mon, 23 Mar 2015 02:26:23 -0600
-Subject: Week report - week 12
-Message-ID: <55103EAF020000A00000F135@relay2.provo.novell.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 23 Mar 2015 12:40:54 +0000 (UTC)
+Subject: master - pvmove: use safe version of iteration when iterating over vg->lvs list in _poll_vg
+Message-ID: <20150323124054.5D29660E58@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-[red]
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6e7b24d34ff3da1c56718bb7def8a8ecd4258c43
+Commit:        6e7b24d34ff3da1c56718bb7def8a8ecd4258c43
+Parent:        361e2d8df726e8428ed917939dab54643761b9e4
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Mar 23 13:33:57 2015 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Mar 23 13:40:39 2015 +0100
 
-[amber]
+pvmove: use safe version of iteration when iterating over vg->lvs list in _poll_vg
 
-[green]
+When we're iterating over LVs in _poll_vg fn, we need to use the safe
+version of iteration - the LV can be removed from the list which we're
+just iterating over if we're finishing or aborting pvmove operation.
+---
+ tools/polldaemon.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-Sle11sp3:
-
-- bsc#850414 /dev/$VGNAME/$LVNAME symlinks missing in SLE11SP3 rescue system
-   * reproduce locally,  waiting for feedback
-
-- bsc#914391 - L3: Multipath/LVM boot failure with incomplete root volume
-   * seems '/dev/mapper/*-mpath' links are not created successfully.
-       let use modify filter and have a try
-
-opensuse:
-
--bsc#923127- split clvm package into independent specfiles
-   * modified lvm2.spec and sred to opensuse:Factory
-
--bsc# Boot fails during mount of a /etc/fstab entry on LVM partition
-    * modified fstab entry as user's and cannot reproduce either.
-
-# sles10sp4 
--bsc#730584 - if lvchange command is invoked through 
-  a shell script, the command is getting hanged
-   * close as resolved noresponse.
-
-Fate#312262:Automatic recover mirrored LV from a failed PV device
-   * discussion with Lidong
-   * did some userspace coding
-   * tested with the modified kernel modules
-
-Others:
-  o Weekly English class(2H)
-  o Beijing HA weekly meeting
-  o 1:1 talk with Jason
-  o All hands meeting with Jason
-  o Training about multipath from Mike
-  o Team building
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 10ca4a5..53dab96 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -192,7 +192,7 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
+ 		    struct volume_group *vg, struct processing_handle *handle)
+ {
+ 	struct daemon_parms *parms = (struct daemon_parms *) handle->custom_handle;
+-	struct lv_list *lvl;
++	struct lv_list *lvl, *tmp_lvl;
+ 	struct logical_volume *lv;
+ 	const char *name;
+ 	int finished;
+@@ -202,7 +202,7 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
+ 		return ECMD_FAILED;
+ 	}
  
-Best regards,
-Liuhua Wang
-
-
+-	dm_list_iterate_items(lvl, &vg->lvs) {
++	dm_list_iterate_items_safe(lvl, tmp_lvl, &vg->lvs) {
+ 		lv = lvl->lv;
+ 		if (!(lv->status & parms->lv_type))
+ 			continue;
 
 
