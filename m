@@ -1,44 +1,57 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 20 Mar 2015 10:11:44 +0000 (UTC)
-Subject: master - tests: revert should removal in mirror test
-Message-ID: <20150320101144.93A0360B44@fedorahosted.org>
+From: Liuhua Wang <lwang@suse.com>
+Date: Mon, 23 Mar 2015 02:26:23 -0600
+Subject: Week report - week 12
+Message-ID: <55103EAF020000A00000F135@relay2.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=361e2d8df726e8428ed917939dab54643761b9e4
-Commit:        361e2d8df726e8428ed917939dab54643761b9e4
-Parent:        21343ffbfed94f41da11fac4dd056af58f4341a9
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 20 11:08:44 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 20 11:08:44 2015 +0100
+[red]
 
-tests: revert should removal in mirror test
+[amber]
 
-Since cluster test was actually not been working,
-removal of should has been premature.
-So restore 'should' back - bug in mirror code is still there.
----
- test/shell/lvconvert-mirror-updown.sh |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+[green]
 
-diff --git a/test/shell/lvconvert-mirror-updown.sh b/test/shell/lvconvert-mirror-updown.sh
-index ddd34c7..4d401fb 100644
---- a/test/shell/lvconvert-mirror-updown.sh
-+++ b/test/shell/lvconvert-mirror-updown.sh
-@@ -29,6 +29,9 @@ lvconvert -m+1 -b $vg/$lv1 "$dev3"
+Sle11sp3:
+
+- bsc#850414 /dev/$VGNAME/$LVNAME symlinks missing in SLE11SP3 rescue system
+   * reproduce locally,  waiting for feedback
+
+- bsc#914391 - L3: Multipath/LVM boot failure with incomplete root volume
+   * seems '/dev/mapper/*-mpath' links are not created successfully.
+       let use modify filter and have a try
+
+opensuse:
+
+-bsc#923127- split clvm package into independent specfiles
+   * modified lvm2.spec and sred to opensuse:Factory
+
+-bsc# Boot fails during mount of a /etc/fstab entry on LVM partition
+    * modified fstab entry as user's and cannot reproduce either.
+
+# sles10sp4 
+-bsc#730584 - if lvchange command is invoked through 
+  a shell script, the command is getting hanged
+   * close as resolved noresponse.
+
+Fate#312262:Automatic recover mirrored LV from a failed PV device
+   * discussion with Lidong
+   * did some userspace coding
+   * tested with the modified kernel modules
+
+Others:
+  o Weekly English class(2H)
+  o Beijing HA weekly meeting
+  o 1:1 talk with Jason
+  o All hands meeting with Jason
+  o Training about multipath from Mike
+  o Team building
  
- lvs -a $vg
- 
--lvconvert -m-1 $vg/$lv1 "$dev2"
-+#
-+# It fails so use 'should' and -vvvv for now
-+#
-+should lvconvert -vvvv -m-1 $vg/$lv1 "$dev2"
- 
- vgremove -f $vg
+Best regards,
+Liuhua Wang
+
+
 
 
