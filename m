@@ -1,37 +1,41 @@
-From: Michael Lass <bevan@bi-co.net>
-Date: Sun, 29 Mar 2015 23:06:40 +0200
-Subject: [PATCH] systemd: stop lvm2-pvscan@.service before lvm2-lvmetad.service
-Message-ID: <1427663200-2349-1-git-send-email-bevan@bi-co.net>
+From: okozina <okozina@fedoraproject.org>
+Date: Mon, 30 Mar 2015 16:43:09 +0000 (UTC)
+Subject: master - tests: fix check for existence of a pvmove Lv
+Message-ID: <20150330164309.898F560905@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When lvm2-pvscan at .service and lvm2-lvmetad.service are scheduled to be stopped
-lvm2-pvscan at .service should be stopped first since pvscan uses lvmetad.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c8caa04b1c58e1590654b405d1a6d34cd30c7b4f
+Commit:        c8caa04b1c58e1590654b405d1a6d34cd30c7b4f
+Parent:        f1e3e9916966a2ebdaf9315f929c1f34e326f6e0
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Fri Mar 27 15:42:11 2015 +0100
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Mon Mar 30 18:38:50 2015 +0200
 
-This is especially important if lvm2-lvmetad.socket is also scheduled to be
-stopped as in this case connection requests are suppressed causing pvscan to
-fail.
+tests: fix check for existence of a pvmove Lv
+
 ---
- scripts/lvm2_pvscan_systemd_red_hat at .service.in | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/pvmove-basic.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/scripts/lvm2_pvscan_systemd_red_hat at .service.in b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-index 7d3b291..03651d5 100644
---- a/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-+++ b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-@@ -4,7 +4,7 @@ Documentation=man:pvscan(8)
- DefaultDependencies=no
- BindsTo=dev-block-%i.device
- Requires=lvm2-lvmetad.socket
--After=lvm2-lvmetad.socket
-+After=lvm2-lvmetad.socket lvm2-lvmetad.service
- Before=shutdown.target
- Conflicts=shutdown.target
- 
--- 
-2.3.4
+diff --git a/test/shell/pvmove-basic.sh b/test/shell/pvmove-basic.sh
+index e5add05..1b9b63f 100644
+--- a/test/shell/pvmove-basic.sh
++++ b/test/shell/pvmove-basic.sh
+@@ -69,8 +69,8 @@ check_and_cleanup_lvs_() {
+ 	check dev_md5sum $vg $lv1
+ 	check dev_md5sum $vg $lv2
+ 	check dev_md5sum $vg $lv3
+-	get lv_field $vg name >out
+-	not grep ^pvmove out
++	get lv_field $vg name -a >out
++	not grep "^\[pvmove" out
+ 	vgchange -an $vg
+ 	lvremove -ff $vg
+ 	(dm_table | not grep $vg) || \
 
 
