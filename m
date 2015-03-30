@@ -1,108 +1,92 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Mon, 30 Mar 2015 16:43:13 +0000 (UTC)
-Subject: master - pvmove: fix pvmove --abort or pvmove w/o parameters
-Message-ID: <20150330164313.E53FC60D2C@fedorahosted.org>
+Date: Mon, 30 Mar 2015 16:43:16 +0000 (UTC)
+Subject: master - tests: add pvmove --abort test
+Message-ID: <20150330164316.15E1460F36@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c282a66132063d702d1df1e342961f75a5ffcdd2
-Commit:        c282a66132063d702d1df1e342961f75a5ffcdd2
-Parent:        7c66850ce506d9a8bdae74f999a658507943d57c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5f7428e4d54254943da721f7ce11ae90aaa3f5a4
+Commit:        5f7428e4d54254943da721f7ce11ae90aaa3f5a4
+Parent:        c282a66132063d702d1df1e342961f75a5ffcdd2
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Mon Mar 30 16:25:04 2015 +0200
+AuthorDate:    Mon Mar 30 16:59:06 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Mon Mar 30 18:38:50 2015 +0200
+CommitterDate: Mon Mar 30 18:39:24 2015 +0200
 
-pvmove: fix pvmove --abort or pvmove w/o parameters
+tests: add pvmove --abort test
 
-_check_lv_status was called from within dm_list_iterate_items cycle.
-This was utterly wrong! _check_lv_status may remove more than one LV from
-vg->lvs list we iterated in the same time.
-
-In some scenarios this could lead to deadlock iterationg over same LV
-indefinitely or segfault depending on the circumstances.
-
-Fixed by moving the _check_lv_status outside iterating the vg->lvs
-list.
-
-Note that commit 6e7b24d34ff3da1c56718bb7def8a8ecd4258c43 was not enough
-as _check_lv_status may result in removal of more than one LV from the list.
+test for bug described in c282a66132063d702d1df1e342961f75a5ffcdd2
 ---
- tools/polldaemon.c |   42 ++++++++++++++++++++++++++++++++++++------
- 1 files changed, 36 insertions(+), 6 deletions(-)
+ test/shell/pvmove-abort.sh |   59 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 59 insertions(+), 0 deletions(-)
 
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index 53dab96..5383812 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -192,7 +192,9 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
- 		    struct volume_group *vg, struct processing_handle *handle)
- {
- 	struct daemon_parms *parms = (struct daemon_parms *) handle->custom_handle;
--	struct lv_list *lvl, *tmp_lvl;
-+	struct lv_list *lvl;
-+	struct dm_list *sls;
-+	struct dm_str_list *sl;
- 	struct logical_volume *lv;
- 	const char *name;
- 	int finished;
-@@ -202,7 +204,18 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
- 		return ECMD_FAILED;
- 	}
- 
--	dm_list_iterate_items_safe(lvl, tmp_lvl, &vg->lvs) {
-+	if (!(sls = str_list_create(cmd->mem)))
-+		return ECMD_FAILED;
+diff --git a/test/shell/pvmove-abort.sh b/test/shell/pvmove-abort.sh
+new file mode 100644
+index 0000000..6798b59
+--- /dev/null
++++ b/test/shell/pvmove-abort.sh
+@@ -0,0 +1,59 @@
++#!/bin/sh
++# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+	log_verbose("Looking for pvmove LVs in VG: %s.", vg->name);
++# Check pvmove --abort behaviour when specific device is requested
 +
-+	/*
-+	 * _check_lv_status must not be called from within any
-+	 * dm_list_iterate_ routine with vg->lvs as list head.
-+	 * It may remove more than one LV in the process thus
-+	 * even "*_safe" variant won't help.
-+	 */
-+	dm_list_iterate_items(lvl, &vg->lvs) {
- 		lv = lvl->lv;
- 		if (!(lv->status & parms->lv_type))
- 			continue;
-@@ -217,13 +230,30 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
- 			continue;
- 		}
- 
--		if (_check_lv_status(cmd, vg, lv, name, parms, &finished) &&
--		    !finished)
--			parms->outstanding_count++;
-+		if (!str_list_add(cmd->mem, sls, dm_pool_strdup(cmd->mem, name)))
-+		{
-+			log_error("Failed to clone pvname");
-+			goto err;
-+		}
++. lib/inittest
 +
-+		log_verbose("Found LV: %s/%s. It belongs to pvmove task on PV %s.", lv->vg->name, lv->name, name);
- 	}
- 
--	return ECMD_PROCESSED;
-+	dm_list_iterate_items(sl, sls) {
-+		lv = parms->poll_fns->get_copy_lv(cmd, vg, sl->str, NULL, parms->lv_type);
-+		if (lv) {
-+			log_verbose("About to call _check_lv_status on LV: %s/%s, name: %s",
-+				    lv->vg->name, lv->name, sl->str);
-+			if (_check_lv_status(cmd, vg, lv, sl->str, parms, &finished) &&
-+			    !finished)
-+				parms->outstanding_count++;
-+		}
-+	}
++aux prepare_pvs 3 60
 +
-+err:
-+	dm_pool_free(cmd->mem, sls);
- 
-+	return ECMD_PROCESSED;
- }
- 
- static void _poll_for_all_vgs(struct cmd_context *cmd,
++vgcreate -s 128k $vg "$dev1" "$dev2"
++pvcreate --metadatacopies 0 "$dev3"
++vgextend $vg "$dev3"
++
++for mode in "--atomic" "" ;
++do
++for backgroundarg in "-b" "" ;
++do
++
++# Create multisegment LV
++lvcreate -an -Zn -l30 -n $lv1 $vg "$dev1"
++lvcreate -an -Zn -l30 -n $lv2 $vg "$dev2"
++
++# Slowdown writes
++aux delay_dev "$dev3" 0 200
++
++pvmove -i1 $backgroundarg "$dev1" "$dev3" $mode &
++aux wait_pvmove_lv_ready "$vg-pvmove0" 300
++pvmove -i1 $backgroundarg "$dev2" "$dev3" $mode &
++aux wait_pvmove_lv_ready "$vg-pvmove1" 300
++
++# remove specific device
++pvmove --abort "$dev1"
++
++# check if proper pvmove was canceled
++get lv_field $vg name -a | tee out
++not grep "^\[pvmove0\]" out
++grep "^\[pvmove1\]" out
++
++# Restore delayed device back
++aux enable_dev "$dev3"
++
++# remove any remaining pvmoves in progress
++pvmove --abort
++
++lvremove -ff $vg
++
++wait
++done
++done
++
++vgremove -ff $vg
 
 
