@@ -1,101 +1,68 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Mon, 30 Mar 2015 16:43:18 +0000 (UTC)
-Subject: master - tests: add pvmove --abort for all moves in progress
-Message-ID: <20150330164318.2EAB460F52@fedorahosted.org>
+Date: Mon, 30 Mar 2015 16:43:11 +0000 (UTC)
+Subject: master - tests: add helper routine for pvmove status check
+Message-ID: <20150330164311.B5C8D60D2C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b9e6e66de15ca638ca504a07d6476e571a6197d3
-Commit:        b9e6e66de15ca638ca504a07d6476e571a6197d3
-Parent:        5f7428e4d54254943da721f7ce11ae90aaa3f5a4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c66850ce506d9a8bdae74f999a658507943d57c
+Commit:        7c66850ce506d9a8bdae74f999a658507943d57c
+Parent:        c8caa04b1c58e1590654b405d1a6d34cd30c7b4f
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Mon Mar 30 16:59:51 2015 +0200
+AuthorDate:    Fri Mar 27 14:24:16 2015 +0100
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Mon Mar 30 18:39:30 2015 +0200
+CommitterDate: Mon Mar 30 18:38:50 2015 +0200
 
-tests: add pvmove --abort for all moves in progress
+tests: add helper routine for pvmove status check
 
-test for bug described in c282a66132063d702d1df1e342961f75a5ffcdd2
 ---
- test/shell/pvmove-abort-all.sh |   68 ++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 68 insertions(+), 0 deletions(-)
+ test/lib/aux.sh              |   12 ++++++++++++
+ test/shell/pvmove-restart.sh |    7 ++-----
+ 2 files changed, 14 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/pvmove-abort-all.sh b/test/shell/pvmove-abort-all.sh
-new file mode 100644
-index 0000000..85ee457
---- /dev/null
-+++ b/test/shell/pvmove-abort-all.sh
-@@ -0,0 +1,68 @@
-+#!/bin/sh
-+# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index cdd9a2d..b9f63b5 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -902,6 +902,18 @@ dmsetup_wrapped() {
+ 	dmsetup "$@"
+ }
+ 
++wait_pvmove_lv_ready() {
++	# given sleep .1 this is about 60 secs of waiting
++	local retries=${2:-600}
++	while : ; do
++		test $retries -le 0 && die "Waiting for pvmove LV to get activated has timed out"
++		dmsetup info -c -o tables_loaded $1 > out || true;
++		not grep Live out || break
++		sleep .1
++		retries=$((retries-1))
++	done
++}
 +
-+# Check pvmove --abort behaviour for all VGs and PVs
-+
-+. lib/inittest
-+
-+aux prepare_pvs 6 60
-+
-+vgcreate -s 128k $vg "$dev1" "$dev2"
-+pvcreate --metadatacopies 0 "$dev3"
-+vgextend $vg "$dev3"
-+vgcreate -s 128k $vg1 "$dev4" "$dev5"
-+pvcreate --metadatacopies 0 "$dev6"
-+vgextend $vg1 "$dev6"
-+
-+for mode in "--atomic" "" ;
-+do
-+for backgroundarg in "-b" "" ;
-+do
-+
-+# Create multisegment LV
-+lvcreate -an -Zn -l30 -n $lv1 $vg "$dev1"
-+lvcreate -an -Zn -l30 -n $lv2 $vg "$dev2"
-+lvcreate -an -Zn -l30 -n $lv1 $vg1 "$dev4"
-+lvextend -l+30 -n $vg1/$lv1 "$dev5"
-+
-+# Slowdown writes
-+aux delay_dev "$dev3" 0 300
-+aux delay_dev "$dev6" 0 300
-+
-+pvmove -i1 $backgroundarg "$dev1" "$dev3" $mode &
+ test -z "$LVM_TEST_AUX_TRACE" || set -x
+ 
+ test -f DEVICES && devs=$(< DEVICES)
+diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
+index 06455f5..ca26779 100644
+--- a/test/shell/pvmove-restart.sh
++++ b/test/shell/pvmove-restart.sh
+@@ -34,11 +34,8 @@ aux delay_dev "$dev3" 0 200
+ pvmove -i0 -n $vg/$lv1 "$dev1" "$dev3" $mode &
+ PVMOVE=$!
+ # Let's wait a bit till pvmove starts and kill it
+-while : ; do
+-	dmsetup info -c -o tables_loaded "$vg-pvmove0" > out || true;
+-	not grep Live out || break
+-	sleep .1
+-done
 +aux wait_pvmove_lv_ready "$vg-pvmove0" 300
-+pvmove -i1 $backgroundarg "$dev2" "$dev3" $mode &
-+aux wait_pvmove_lv_ready "$vg-pvmove1" 300
-+pvmove -i1 $backgroundarg -n $vg1/$lv1 "$dev4" "$dev6" $mode &
-+aux wait_pvmove_lv_ready "$vg1-pvmove0" 300
 +
-+# test removal of all pvmove LVs
-+pvmove  --abort
-+
-+# check if proper pvmove was canceled
-+get lv_field $vg name -a | tee out
-+not grep "^\[pvmove" out
-+get lv_field $vg1 name -a | tee out
-+not grep "^\[pvmove" out
-+
-+# Restore delayed device back
-+aux enable_dev "$dev3"
-+aux enable_dev "$dev6"
-+
-+lvremove -ff $vg
-+lvremove -ff $vg1
-+
-+wait
-+done
-+done
-+
-+vgremove -ff $vg
-+vgremove -ff $vg1
+ kill -9 $PVMOVE
+ wait
+ 
 
 
