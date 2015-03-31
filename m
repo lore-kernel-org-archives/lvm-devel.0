@@ -1,46 +1,62 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Tue, 31 Mar 2015 15:52:49 +0200
-Subject: [PATCH] systemd: stop lvm2-pvscan@.service before lvm2-lvmetad.service
-In-Reply-To: <1427663200-2349-1-git-send-email-bevan@bi-co.net>
-References: <1427663200-2349-1-git-send-email-bevan@bi-co.net>
-Message-ID: <551AA6B1.4070607@redhat.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Tue, 31 Mar 2015 19:46:29 +0000 (UTC)
+Subject: master - tests: add clvm case to system_id.sh
+Message-ID: <20150331194629.A12FC60F26@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 03/29/2015 11:06 PM, Michael Lass wrote:
-> When lvm2-pvscan at .service and lvm2-lvmetad.service are scheduled to be stopped
-> lvm2-pvscan at .service should be stopped first since pvscan uses lvmetad.
-> 
-> This is especially important if lvm2-lvmetad.socket is also scheduled to be
-> stopped as in this case connection requests are suppressed causing pvscan to
-> fail.
-> ---
->  scripts/lvm2_pvscan_systemd_red_hat at .service.in | 2 +-
->  1 file changed, 1 insertion(+), 1 deletion(-)
-> 
-> diff --git a/scripts/lvm2_pvscan_systemd_red_hat at .service.in b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-> index 7d3b291..03651d5 100644
-> --- a/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-> +++ b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-> @@ -4,7 +4,7 @@ Documentation=man:pvscan(8)
->  DefaultDependencies=no
->  BindsTo=dev-block-%i.device
->  Requires=lvm2-lvmetad.socket
-> -After=lvm2-lvmetad.socket
-> +After=lvm2-lvmetad.socket lvm2-lvmetad.service
->  Before=shutdown.target
->  Conflicts=shutdown.target
->  
-> 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bf2d831e7e9ceb7fe0528dba8587a4157b4ac789
+Commit:        bf2d831e7e9ceb7fe0528dba8587a4157b4ac789
+Parent:        20c6192fbb9901468fad8fe41c7a6366aa3ab6fd
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Mar 31 14:45:14 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Mar 31 14:45:14 2015 -0500
 
-Applied. Thanks!
+tests: add clvm case to system_id.sh
 
-https://git.fedorahosted.org/cgit/lvm2.git/commit/?id=666738d57a6e6b4005030995a9641933c1a54e9d
+---
+ test/shell/system_id.sh |   23 ++++++++++++++++++++---
+ 1 files changed, 20 insertions(+), 3 deletions(-)
 
--- 
-Peter
+diff --git a/test/shell/system_id.sh b/test/shell/system_id.sh
+index ad8871a..e1d8967 100644
+--- a/test/shell/system_id.sh
++++ b/test/shell/system_id.sh
+@@ -13,11 +13,28 @@ test_description='Test system_id'
+ 
+ . lib/inittest
+ 
+-# Should 'system_id' be usable in cluster ??
+-test -e LOCAL_CLVMD && skip
+-
+ aux prepare_devs 1
+ 
++# with clvm enabled, vgcreate with no -c option creates a clustered vg,
++# which should have no system id
++
++if [ -e LOCAL_CLVMD ]; then
++SID1=sidfoolocal
++SID2=""
++LVMLOCAL=etc/lvmlocal.conf
++rm -f $LVMLOCAL
++echo "local {" > $LVMLOCAL
++echo "  system_id = $SID1" >> $LVMLOCAL
++echo "}" >> $LVMLOCAL
++aux lvmconf "global/system_id_source = lvmlocal"
++vgcreate $vg1 "$dev1"
++vgs -o+systemid $vg1
++check vg_field $vg1 systemid $SID2
++vgremove $vg1
++rm -f $LVMLOCAL
++exit 0
++fi
++
+ # create vg with system_id using each source
+ 
+ ## none
 
 
