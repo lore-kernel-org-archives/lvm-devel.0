@@ -1,160 +1,112 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  3 Apr 2015 18:15:44 +0000 (UTC)
-Subject: master - tests: slow down devices in outer loop
-Message-ID: <20150403181544.DED686103B@fedorahosted.org>
+Date: Fri,  3 Apr 2015 18:15:47 +0000 (UTC)
+Subject: master - tests: change default to 30s.
+Message-ID: <20150403181547.091D36103B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=32a0f625a555140adc95a6dc394e6723e5897ea3
-Commit:        32a0f625a555140adc95a6dc394e6723e5897ea3
-Parent:        4f94669eca3c2a90577a972fd748f4b0c4e89928
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=87cb0a3e9ff3efb35d9383a9044f683e28f41776
+Commit:        87cb0a3e9ff3efb35d9383a9044f683e28f41776
+Parent:        32a0f625a555140adc95a6dc394e6723e5897ea3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 3 19:38:28 2015 +0200
+AuthorDate:    Fri Apr 3 19:35:18 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 3 19:40:42 2015 +0200
+CommitterDate: Fri Apr 3 19:40:43 2015 +0200
 
-tests: slow down devices in outer loop
+tests: change default to 30s.
 
-Since now we have metadata parts running with normal speed,
-we could avoid reinitilising delayed dev for every test.
-(Saving seconds on cookie waits...)
+Keep rather the default lower and avoid to pass it with every call.
 ---
- test/shell/pvmove-abort-all.sh |   16 ++++++++--------
- test/shell/pvmove-abort.sh     |   12 ++++++------
- test/shell/pvmove-restart.sh   |   14 +++++++-------
- 3 files changed, 21 insertions(+), 21 deletions(-)
+ test/lib/aux.sh                |    3 ++-
+ test/shell/pvmove-abort-all.sh |    6 +++---
+ test/shell/pvmove-abort.sh     |    7 ++-----
+ test/shell/pvmove-restart.sh   |    4 ++--
+ 4 files changed, 9 insertions(+), 11 deletions(-)
 
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index f4fc1b5..0dbb8b9 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -470,6 +470,7 @@ common_dev_() {
+ 
+ 	init_udev_transaction
+ 	dmsetup load "$name" "$name.devtable"
++	# TODO: add support for resume without udev rescan
+ 	dmsetup resume "$name"
+ 	finish_udev_transaction
+ }
+@@ -903,7 +904,7 @@ dmsetup_wrapped() {
+ 
+ wait_pvmove_lv_ready() {
+ 	# given sleep .1 this is about 60 secs of waiting
+-	local retries=${2:-600}
++	local retries=${2:-300}
+ 	while : ; do
+ 		test $retries -le 0 && die "Waiting for pvmove LV to get activated has timed out"
+ 		dmsetup info -c -o tables_loaded $1 > out 2>/dev/null|| true;
 diff --git a/test/shell/pvmove-abort-all.sh b/test/shell/pvmove-abort-all.sh
-index cf0985d..dddf210 100644
+index dddf210..235ebd8 100644
 --- a/test/shell/pvmove-abort-all.sh
 +++ b/test/shell/pvmove-abort-all.sh
-@@ -22,6 +22,10 @@ vgcreate -s 128k $vg1 "$dev4" "$dev5"
- pvcreate --metadatacopies 0 "$dev6"
- vgextend $vg1 "$dev6"
- 
-+# Slowdown writes
-+aux delay_dev "$dev3" 100 100 $(get first_extent_sector "$dev3"):
-+aux delay_dev "$dev6" 100 100 $(get first_extent_sector "$dev6"):
-+
- for mode in "--atomic" "" ;
- do
- for backgroundarg in "-b" "" ;
-@@ -33,10 +37,6 @@ lvcreate -an -Zn -l30 -n $lv2 $vg "$dev2"
- lvcreate -an -Zn -l30 -n $lv1 $vg1 "$dev4"
+@@ -38,12 +38,12 @@ lvcreate -an -Zn -l30 -n $lv1 $vg1 "$dev4"
  lvextend -l+30 -n $vg1/$lv1 "$dev5"
  
--# Slowdown writes
--aux delay_dev "$dev3" 100 100 $(get first_extent_sector "$dev3"):
--aux delay_dev "$dev6" 100 100 $(get first_extent_sector "$dev6"):
--
  pvmove -i1 $backgroundarg "$dev1" "$dev3" $mode &
- aux wait_pvmove_lv_ready "$vg-pvmove0" 300
+-aux wait_pvmove_lv_ready "$vg-pvmove0" 300
++aux wait_pvmove_lv_ready "$vg-pvmove0"
  pvmove -i1 $backgroundarg "$dev2" "$dev3" $mode &
-@@ -54,14 +54,14 @@ not grep "^\[pvmove" out
- get lv_field $vg1 name -a | tee out
- not grep "^\[pvmove" out
+-aux wait_pvmove_lv_ready "$vg-pvmove1" 300
++aux wait_pvmove_lv_ready "$vg-pvmove1"
  
--# Restore delayed device back
--aux enable_dev "$dev3"
--aux enable_dev "$dev6"
--
- lvremove -ff $vg $vg1
+ pvmove -i1 $backgroundarg -n $vg1/$lv1 "$dev4" "$dev6" $mode &
+-aux wait_pvmove_lv_ready "$vg1-pvmove0" 300
++aux wait_pvmove_lv_ready "$vg1-pvmove0"
  
- wait
- done
- done
- 
-+# Restore delayed device back
-+aux enable_dev "$dev3"
-+aux enable_dev "$dev6"
-+
- vgremove -ff $vg $vg1
+ # test removal of all pvmove LVs
+ pvmove  --abort
 diff --git a/test/shell/pvmove-abort.sh b/test/shell/pvmove-abort.sh
-index 4ad3e62..0efecea 100644
+index 0efecea..37837ba 100644
 --- a/test/shell/pvmove-abort.sh
 +++ b/test/shell/pvmove-abort.sh
-@@ -19,6 +19,9 @@ vgcreate -s 128k $vg "$dev1" "$dev2"
- pvcreate --metadatacopies 0 "$dev3"
- vgextend $vg "$dev3"
- 
-+# Slowdown read/writes
-+aux delay_dev "$dev3" 100 100 $(get first_extent_sector "$dev3"):
-+
- for mode in "--atomic" "" ;
- do
- for backgroundarg in "-b" "" ;
-@@ -28,9 +31,6 @@ do
- lvcreate -an -Zn -l30 -n $lv1 $vg "$dev1"
+@@ -32,12 +32,9 @@ lvcreate -an -Zn -l30 -n $lv1 $vg "$dev1"
  lvcreate -an -Zn -l30 -n $lv2 $vg "$dev2"
  
--# Slowdown writes
--aux delay_dev "$dev3" 0 200
--
  pvmove -i1 $backgroundarg "$dev1" "$dev3" $mode &
- aux wait_pvmove_lv_ready "$vg-pvmove0" 300
+-aux wait_pvmove_lv_ready "$vg-pvmove0" 300
++aux wait_pvmove_lv_ready "$vg-pvmove0"
  pvmove -i1 $backgroundarg "$dev2" "$dev3" $mode &
-@@ -47,9 +47,6 @@ get lv_field $vg name -a | tee out
- not grep "^\[pvmove0\]" out
- grep "^\[pvmove1\]" out
- 
--# Restore delayed device back
--aux enable_dev "$dev3"
+-aux wait_pvmove_lv_ready "$vg-pvmove1" 300
 -
- # remove any remaining pvmoves in progress
- pvmove --abort
+-# Slow things even more for very slow machines....
+-aux delay_dev "$dev3" 0 1000
++aux wait_pvmove_lv_ready "$vg-pvmove1"
  
-@@ -59,4 +56,7 @@ wait
- done
- done
- 
-+# Restore delayed device back
-+aux enable_dev "$dev3"
-+
- vgremove -ff $vg
+ # remove specific device
+ pvmove --abort "$dev1"
 diff --git a/test/shell/pvmove-restart.sh b/test/shell/pvmove-restart.sh
-index 9426d52..92e46bf 100644
+index 92e46bf..88dfebe 100644
 --- a/test/shell/pvmove-restart.sh
 +++ b/test/shell/pvmove-restart.sh
-@@ -19,6 +19,10 @@ vgcreate -s 128k $vg "$dev1" "$dev2"
- pvcreate --metadatacopies 0 "$dev3"
- vgextend $vg "$dev3"
- 
-+# Slowdown writes
-+# (FIXME: generates interesting race when not used)
-+aux delay_dev "$dev3" 100 100 $(get first_extent_sector "$dev3"):
-+
- for mode in "--atomic" ""
- do
- 
-@@ -28,10 +32,6 @@ lvextend -l+10 $vg/$lv1 "$dev2"
- lvextend -l+5 $vg/$lv1 "$dev1"
- lvextend -l+10 $vg/$lv1 "$dev2"
- 
--# Slowdown writes
--# (FIXME: generates interesting race when not used)
--aux delay_dev "$dev3" 100 100 $(get first_extent_sector "$dev3"):
--
+@@ -35,7 +35,7 @@ lvextend -l+10 $vg/$lv1 "$dev2"
  pvmove -i0 -n $vg/$lv1 "$dev1" "$dev3" $mode &
  PVMOVE=$!
  # Let's wait a bit till pvmove starts and kill it
-@@ -87,12 +87,12 @@ pvmove --abort
+-aux wait_pvmove_lv_ready "$vg-pvmove0" 300
++aux wait_pvmove_lv_ready "$vg-pvmove0"
+ 
+ kill -9 $PVMOVE
+ wait
+@@ -80,7 +80,7 @@ dmsetup table
+ # Restart pvmove
+ # use exclusive activation to have usable pvmove without cmirrord
+ vgchange -aey $vg
+-aux wait_pvmove_lv_ready "$vg-pvmove0" 300
++aux wait_pvmove_lv_ready "$vg-pvmove0"
+ dmsetup table
  
  pvmove --abort
- 
--# Restore delayed device back
--aux delay_dev "$dev3"
--
- lvs -a -o+devices $vg
- 
- lvremove -ff $vg
- done
- 
-+# Restore delayed device back
-+aux delay_dev "$dev3"
-+
- vgremove -ff $vg
 
 
