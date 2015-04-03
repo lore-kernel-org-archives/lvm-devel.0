@@ -1,65 +1,66 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  3 Apr 2015 12:55:32 +0000 (UTC)
-Subject: master - tests: test update
-Message-ID: <20150403125532.3324560353@fedorahosted.org>
+Date: Fri,  3 Apr 2015 12:55:34 +0000 (UTC)
+Subject: master - tests: delay only data area
+Message-ID: <20150403125534.5083B610FF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=385457de236022b3afb1cc20cd99445a59340831
-Commit:        385457de236022b3afb1cc20cd99445a59340831
-Parent:        d3a591a7b30baf00d2189638532d825f32a5b913
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ce3c61c4af4622674d8ebd4301d4fd24c4cb8886
+Commit:        ce3c61c4af4622674d8ebd4301d4fd24c4cb8886
+Parent:        385457de236022b3afb1cc20cd99445a59340831
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 3 14:24:15 2015 +0200
+AuthorDate:    Fri Apr 3 14:39:05 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 3 14:54:22 2015 +0200
 
-tests: test update
+tests: delay only data area
 
-Really wait till fsck is running (sleep 2 is not ideal)
-Use new  'delay_dev'.
 ---
- test/shell/lock-parallel.sh |   10 +++++++---
- 1 files changed, 7 insertions(+), 3 deletions(-)
+ test/shell/pvmove-abort-all.sh |   12 ++++--------
+ 1 files changed, 4 insertions(+), 8 deletions(-)
 
-diff --git a/test/shell/lock-parallel.sh b/test/shell/lock-parallel.sh
-index 993175f..98d3d4c 100644
---- a/test/shell/lock-parallel.sh
-+++ b/test/shell/lock-parallel.sh
-@@ -1,5 +1,5 @@
- #!/bin/sh
--# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2014-2015 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -15,6 +15,7 @@
- . lib/inittest
+diff --git a/test/shell/pvmove-abort-all.sh b/test/shell/pvmove-abort-all.sh
+index 3b561eb..cf0985d 100644
+--- a/test/shell/pvmove-abort-all.sh
++++ b/test/shell/pvmove-abort-all.sh
+@@ -34,18 +34,16 @@ lvcreate -an -Zn -l30 -n $lv1 $vg1 "$dev4"
+ lvextend -l+30 -n $vg1/$lv1 "$dev5"
  
- which mkfs.ext3 || skip
-+which fsck || skip
+ # Slowdown writes
+-aux delay_dev "$dev3" 0 300
+-aux delay_dev "$dev6" 0 300
++aux delay_dev "$dev3" 100 100 $(get first_extent_sector "$dev3"):
++aux delay_dev "$dev6" 100 100 $(get first_extent_sector "$dev6"):
  
- aux prepare_vg
+ pvmove -i1 $backgroundarg "$dev1" "$dev3" $mode &
+ aux wait_pvmove_lv_ready "$vg-pvmove0" 300
+ pvmove -i1 $backgroundarg "$dev2" "$dev3" $mode &
+ aux wait_pvmove_lv_ready "$vg-pvmove1" 300
+-aux delay_dev "$dev3" 0 1000
  
-@@ -23,12 +24,15 @@ lvcreate -l1 -n $lv2 $vg
- mkfs.ext3 "$DM_DEV_DIR/$vg/$lv1"
+ pvmove -i1 $backgroundarg -n $vg1/$lv1 "$dev4" "$dev6" $mode &
+ aux wait_pvmove_lv_ready "$vg1-pvmove0" 300
+-aux delay_dev "$dev6" 0 1000
  
- # Slowdown PV for resized LV
--aux delay_dev "$dev1" 20 20
-+aux delay_dev "$dev1" 50 50 $(get first_extent_sector "$dev1"):
+ # test removal of all pvmove LVs
+ pvmove  --abort
+@@ -60,12 +58,10 @@ not grep "^\[pvmove" out
+ aux enable_dev "$dev3"
+ aux enable_dev "$dev6"
  
- lvresize -L-5 -r $vg/$lv1 &
+-lvremove -ff $vg
+-lvremove -ff $vg1
++lvremove -ff $vg $vg1
  
- # Let's wait till resize starts
--sleep 2
-+for i in $(seq 1 300); do
-+        pgrep fsck && break
-+        sleep .1
-+done
+ wait
+ done
+ done
  
- lvremove -f $vg/$lv2
- 
+-vgremove -ff $vg
+-vgremove -ff $vg1
++vgremove -ff $vg $vg1
 
 
