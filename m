@@ -1,56 +1,53 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  7 Apr 2015 11:42:43 +0000 (UTC)
-Subject: master - tests: when test fails collect more info
-Message-ID: <20150407114243.24EB360F22@fedorahosted.org>
+From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
+Date: Tue,  7 Apr 2015 12:33:03 +0000 (UTC)
+Subject: master - lvcreate: do not silently accept '-m #' with raid4/5/6
+Message-ID: <20150407123303.CDB6F60BD5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=64353ff74b56c71b508fd040a45062facb395bae
-Commit:        64353ff74b56c71b508fd040a45062facb395bae
-Parent:        ba049e203b35d6e03e38669a2a92af6538a0b2d0
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 7 13:40:15 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 7 13:40:15 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=035276ab83bae4349e06a3158f288fa75e0bdf9c
+Commit:        035276ab83bae4349e06a3158f288fa75e0bdf9c
+Parent:        64353ff74b56c71b508fd040a45062facb395bae
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Apr 7 14:32:25 2015 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Apr 7 14:32:25 2015 +0200
 
-tests: when test fails collect more info
+lvcreate: do not silently accept '-m #' with raid4/5/6
 
-In some case it might be worth to know some more surrouding info
-when command has crashed.
+If the user provides '-m #' (# > 0) with mappings
+raid4/5/6, the command silently creates
+'#mirrors * #stripes + #parity' image component pairs.
 
-So collect  tables and some udev db content in this case.
+Patch rejects '-m #' altogether for those mappings
+in order to avoid LV creation with unexpected layout.
+
+- resolves bz#1209445
 ---
- test/lib/utils.sh |   15 +++++++++++++++
- 1 files changed, 15 insertions(+), 0 deletions(-)
+ tools/lvcreate.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 2f7dc65..401a862 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -130,6 +130,21 @@ STACKTRACE() {
- 	test -z "$LVM_TEST_NODEBUG" -a -f debug.log && {
- 		sed -e "s,^,## DEBUG: ,;s,$top_srcdir/\?,," < debug.log
- 		test -e strace.log && sed -e "s,^,## STRACE: ,;s,$top_srcdir/\?,," < strace.log
-+		echo "========= Info ==========="
-+		dmsetup info -c | grep "$PREFIX"
-+		echo "========= Active table ==========="
-+		dmsetup table | grep "$PREFIX"
-+		echo "======== Inactive table =========="
-+		dmsetup table --inactive  | grep "$PREFIX"
-+		echo "======== Status =========="
-+		dmsetup status | grep "$PREFIX"
-+		echo "======== Tree =========="
-+		dmsetup ls --tree
-+		echo "======== Recursive list of $DM_DEV_DIR =========="
-+		ls -Rla "$DM_DEV_DIR"
-+		for i in "/sys/block/dm-* /sys/block/loop*" ; do
-+			udevadm info --export-db "$i" || true
-+		done
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 3f7fe6f..e41f76c 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -474,6 +474,14 @@ static int _read_raid_params(struct cmd_context *cmd,
+ 		return 0;
  	}
  
- 	test -f SKIP_THIS_TEST && exit 200
++	if (arg_count(cmd, mirrors_ARG) && segtype_is_raid(lp->segtype) &&
++	    strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID1) &&
++	    strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID10)) {
++		log_error("Mirror argument cannot be used with segment type, %s",
++			  lp->segtype->name);
++		return 0;
++	}
++
+ 	/* Rates are recorded in kiB/sec/disk, not sectors/sec/disk */
+ 	lp->min_recovery_rate = arg_uint_value(cmd, minrecoveryrate_ARG, 0) / 2;
+ 	lp->max_recovery_rate = arg_uint_value(cmd, maxrecoveryrate_ARG, 0) / 2;
 
 
