@@ -1,54 +1,75 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  9 Apr 2015 21:11:15 +0000 (UTC)
-Subject: master - config: update description
-Message-ID: <20150409211115.212E66004F@fedorahosted.org>
+Date: Thu,  9 Apr 2015 21:36:16 +0000 (UTC)
+Subject: master - config: comments update
+Message-ID: <20150409213616.599F360C98@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=303c5ba803cbfe81b1bc92cc2b2e9aa0970b21d2
-Commit:        303c5ba803cbfe81b1bc92cc2b2e9aa0970b21d2
-Parent:        6f3f421228754b1758f909eabcedfd30f4d9780a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4eaa399b54fb3cd7d30fd919666723159d9a04b5
+Commit:        4eaa399b54fb3cd7d30fd919666723159d9a04b5
+Parent:        303c5ba803cbfe81b1bc92cc2b2e9aa0970b21d2
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Apr 9 16:09:53 2015 -0500
+AuthorDate:    Thu Apr 9 16:35:20 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Apr 9 16:09:53 2015 -0500
+CommitterDate: Thu Apr 9 16:35:20 2015 -0500
 
-config: update description
+config: comments update
 
-Remove examples that simply replicate the default shown.
+missing \n
 ---
- lib/config/config_settings.h |    9 ++-------
- 1 files changed, 2 insertions(+), 7 deletions(-)
+ lib/config/config_settings.h |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
 diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 19ec279..d76ed0f 100644
+index d76ed0f..b55b39b 100644
 --- a/lib/config/config_settings.h
 +++ b/lib/config/config_settings.h
-@@ -333,10 +333,7 @@ cfg(devices_pv_min_size_CFG, "pv_min_size", devices_CFG_SECTION, 0, CFG_TYPE_INT
- 	"Minimum size (in KB) of block devices which can be used as PVs.\n"
- 	"In a clustered environment all nodes must use the same value.\n"
- 	"Any value smaller than 512KB is ignored.\n"
--	"The original built-in setting was 512 up to and including version 2.02.84.\n"
--	"Example:\n"
--	"Ignore devices smaller than 2MB such as floppy drives:\n"
--	"pv_min_size = 2048\n")
-+	"The original built-in setting was 512 up to and including version 2.02.84.\n")
+@@ -72,11 +72,11 @@
+ cfg_section(root_CFG_SECTION, "(root)", root_CFG_SECTION, 0, vsn(0, 0, 0), NULL)
  
- cfg(devices_issue_discards_CFG, "issue_discards", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ISSUE_DISCARDS, vsn(2, 2, 85),
- 	"Issue discards to a logical volumes's underlying physical volume(s) when\n"
-@@ -772,9 +769,7 @@ cfg_array(global_thin_check_options_CFG, "thin_check_options", global_CFG_SECTIO
- 	"option -q is for quiet output.\n"
- 	"With thin_check version 2.1 or newer you can add --ignore-non-fatal-errors\n"
- 	"to let it pass through ignorable errors and fix them later.\n"
--	"With thin_check version 3.2 or newer you should add --clear-needs-check-flag.\n"
--	"Example:\n"
--	"thin_check_options = [ \"-q\", \"--clear-needs-check-flag\" ]\n")
-+	"With thin_check version 3.2 or newer you should add --clear-needs-check-flag.\n")
+ cfg_section(config_CFG_SECTION, "config", root_CFG_SECTION, 0, vsn(2, 2, 99),
+-	"This section allows you to set the way the configuration settings are handled.")
++	"This section allows you to set the way the configuration settings are handled.\n")
  
- cfg_array(global_thin_disabled_features_CFG, "thin_disabled_features", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, NULL, vsn(2, 2, 99),
- 	"The specified features are not used by thin driver.\n"
+ cfg_section(devices_CFG_SECTION, "devices", root_CFG_SECTION, 0, vsn(1, 0, 0),
+ 	"This section allows you to configure which block devices should\n"
+-	"be used by the LVM system.")
++	"be used by the LVM system.\n")
+ 
+ cfg_section(allocation_CFG_SECTION, "allocation", root_CFG_SECTION, CFG_PROFILABLE, vsn(2, 2, 77),
+ 	"This section allows you to configure the way in which LVM selects\n"
+@@ -115,17 +115,17 @@ cfg(config_checks_CFG, "checks", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2,
+ 	"configuration key not being found is issued in verbose mode only).\n")
+ 
+ cfg(config_abort_on_errors_CFG, "abort_on_errors", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 0, vsn(2,2,99),
+-	"If enabled, any configuration mismatch aborts the LVM process.")
++	"If enabled, any configuration mismatch aborts the LVM process.\n")
+ 
+ cfg_runtime(config_profile_dir_CFG, "profile_dir", config_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(2, 2, 99),
+-	"Directory where LVM looks for configuration profiles.")
++	"Directory where LVM looks for configuration profiles.\n")
+ 
+ cfg(devices_dir_CFG, "dir", devices_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_DEV_DIR, vsn(1, 0, 0),
+ 	"Where do you want your volume groups to appear ?")
+ 
+ cfg_array(devices_scan_CFG, "scan", devices_CFG_SECTION, 0, CFG_TYPE_STRING, "#S/dev", vsn(1, 0, 0),
+ 	"An array of directories that contain the device nodes you wish\n"
+-	"to use with LVM.")
++	"to use with LVM.\n")
+ 
+ cfg_array(devices_loopfiles_CFG, "loopfiles", devices_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 2, 0), NULL)
+ 
+@@ -229,7 +229,7 @@ cfg_runtime(devices_cache_dir_CFG, "cache_dir", devices_CFG_SECTION, 0, CFG_TYPE
+ 	"file is removed.\n")
+ 
+ cfg(devices_cache_file_prefix_CFG, "cache_file_prefix", devices_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, DEFAULT_CACHE_FILE_PREFIX, vsn(1, 2, 19),
+-	"A prefix used before the .cache file name.")
++	"A prefix used before the .cache file name.\n")
+ 
+ cfg(devices_write_cache_state_CFG, "write_cache_state", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(1, 0, 0),
+ 	"Enable/disable writing the cache file.\n")
 
 
