@@ -1,79 +1,100 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 13 Apr 2015 14:39:36 +0000 (UTC)
-Subject: master - tests: update runner
-Message-ID: <20150413143936.905F160F0C@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 13 Apr 2015 18:40:30 +0000 (UTC)
+Subject: master - config: update descriptions
+Message-ID: <20150413184030.A0A926007A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e4261ba03784f122759670cc2022a2dcb5f5a3ef
-Commit:        e4261ba03784f122759670cc2022a2dcb5f5a3ef
-Parent:        0aef2b719f17bddfe8afeaa4d38447975c192f50
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 13 16:31:02 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 13 16:38:32 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=29220a181ac3ad0faf63681e465f0a9ba9e625dd
+Commit:        29220a181ac3ad0faf63681e465f0a9ba9e625dd
+Parent:        e4261ba03784f122759670cc2022a2dcb5f5a3ef
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Apr 13 13:39:30 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Apr 13 13:40:11 2015 -0500
 
-tests: update runner
+config: update descriptions
 
-Reenable TESTDIR  & PREFIX replacement.
-Since we need to replace string in proper order (1st. @TESTDIR@,
-2nd. @PREFIX@), drop map and use plain string.
-
-Drop timestamp logging when 'stacktracing'
+- filter, preferred_names
 ---
- test/lib/brick-shelltest.h |   24 ++++++++++++++++++------
- 1 files changed, 18 insertions(+), 6 deletions(-)
+ lib/config/config_settings.h |   41 ++++++++++++++++++++++++-----------------
+ 1 files changed, 24 insertions(+), 17 deletions(-)
 
-diff --git a/test/lib/brick-shelltest.h b/test/lib/brick-shelltest.h
-index 60aab20..00f1616 100644
---- a/test/lib/brick-shelltest.h
-+++ b/test/lib/brick-shelltest.h
-@@ -345,18 +345,23 @@ struct Sink {
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index ecdf368..84c81c6 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -159,10 +159,11 @@ cfg(devices_external_device_info_source_CFG, "external_device_info_source", devi
+ 	"only if LVM is compiled with udev support.\n")
  
- struct Substitute {
-     typedef std::map< std::string, std::string > Map;
--    Map _map;
-+    std::string testdir; // replace testdir first
-+    std::string prefix;
+ cfg_array(devices_preferred_names_CFG, "preferred_names", devices_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 2, 19),
+-	"If several entries in the scanned directories correspond to the\n"
+-	"same block device and the tools need to display a name for the device,\n"
+-	"all the path names are matched against each item in this list of\n"
+-	"regular expressions. The first match is used.\n"
++	"Select which path name to display for a block device.\n"
++	"If multiple path names exist for a block device,\n"
++	"and LVM needs to display a name for the device,\n"
++	"the path names are matched against each item in\n"
++	"this list of regular expressions. The first match is used.\n"
+ 	"Try to avoid using undescriptive /dev/dm-N names, if present.\n"
+ 	"If no preferred name matches, or if preferred_names are not\n"
+ 	"defined, built-in rules are used until one produces a preference.\n"
+@@ -175,33 +176,39 @@ cfg_array(devices_preferred_names_CFG, "preferred_names", devices_CFG_SECTION, C
+ 	"preferred_names = [ \"^/dev/mpath/\", \"^/dev/mapper/mpath\", \"^/dev/[hs]d\" ]\n")
  
-     std::string map( std::string line ) {
-         if ( std::string( line, 0, 9 ) == "@TESTDIR=" )
--            _map[ "@TESTDIR@" ] = std::string( line, 9, std::string::npos );
-+            testdir = std::string( line, 9, line.length() - 10 ); // skip \n
-         else if ( std::string( line, 0, 8 ) == "@PREFIX=" )
--            _map[ "@PREFIX@" ] = std::string( line, 8, std::string::npos );
-+            prefix = std::string( line, 8, line.length() - 9 );  // skip \n
-         else {
-             size_t off;
--            for ( Map::iterator s = _map.begin(); s != _map.end(); ++s )
--                while ( (off = line.find( s->first )) != std::string::npos )
--                    line.replace( off, s->first.length(), s->second );
-+            if (!testdir.empty())
-+                while ( (off = line.find( testdir )) != std::string::npos )
-+                    line.replace( off, testdir.length(), "@TESTDIR@" );
-+
-+            if (!prefix.empty())
-+                while ( (off = line.find( prefix )) != std::string::npos )
-+                    line.replace( off, prefix.length(), "@PREFIX@" );
-         }
-         return line;
-     }
-@@ -406,6 +411,13 @@ struct FdSink : Sink {
-     virtual void outline( bool force )
-     {
-         TimedBuffer::Line line = stream.shift( force );
-+        if (line.second.c_str()[0] == '#') {
-+            /* Disable timing between  STACKTRACE & teardown keywords */
-+            if (strstr(line.second.c_str() + 1, "# 0 STACKTRACE"))
-+                fmt.stamp = false;
-+            else if (strstr(line.second.c_str() + 1, "# teardown"))
-+                fmt.stamp = true;
-+        }
-         std::string out = fmt.format( line );
-         write( fd, out.c_str(), out.length() );
-     }
+ cfg_array(devices_filter_CFG, "filter", devices_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0),
+-	"Patterns used to accept or reject devices found by a scan.\n"
+-	"Patterns are regular expressions delimited by any character\n"
+-	"and preceded by 'a' for accept or 'r' for reject.\n"
+-	"The list is traversed in order, and the first regex that matches\n"
+-	"determines if the device is accepted or rejected (ignored).\n"
+-	"Devices that don't match any patterns are accepted.\n"
+-	"If there are several names for the same device, e.g. from symlinks,\n"
+-	"the first pattern matching any of the names determines if the\n"
+-	"device is accepted or rejected (depending on whether the first\n"
+-	"matching pattern is 'a' or 'r'.)\n"
++	"Limit the block devices that are used by LVM.\n"
++	"This is a list of regular expressions used to accept or\n"
++	"reject block device path names.  Each regex is delimited\n"
++	"by a vertical bar '|' (or any character) and is preceded\n"
++	"by 'a' to accept the path, or by 'r' to reject the path.\n"
++	"The first regex in the list to match the path is used,\n"
++	"producing the 'a' or 'r' result for the device.\n"
++	"When multiple path names exist for a block device, if any\n"
++	"path name matches an 'a' pattern before an 'r' pattern,\n"
++	"then the device is accepted. If all the path names match\n"
++	"an 'r' pattern first, then the device is rejected.\n"
++	"Unmatching path names do not affect the accept or reject\n"
++	"decision. If no path names for a device match a pattern,\n"
++	"then the device is accepted.\n"
++	"Be careful mixing 'a' and 'r' patterns, as the combination\n"
++	"might produce unexpected results (test any changes.)\n"
+ 	"Run vgscan after changing the filter to regenerate the cache.\n"
+ 	"See the use_lvmetad comment for a special case regarding filters.\n"
+ 	"Example:\n"
+ 	"Accept every block device.\n"
+-	"filter = [ \"a/.*/\" ]\n"
++	"filter = [ \"a|.*/|" ]\n"
+ 	"Example:\n"
+ 	"Reject the cdrom drive.\n"
+ 	"filter = [ \"r|/dev/cdrom|\" ]\n"
+ 	"Example:\n"
+ 	"Work with just loopback devices, e.g. for testing.\n"
+-	"filter = [ \"a/loop/\", \"r/.*/\" ]\n"
++	"filter = [ \"a|loop|\", \"r|.*|\" ]\n"
+ 	"Example:\n"
+ 	"Accept all loop devices and ide drives except hdc.\n"
+ 	"filter =[ \"a|loop|\", \"r|/dev/hdc|\", \"a|/dev/ide|\", \"r|.*|\" ]\n"
+ 	"Example:\n"
+ 	"Use anchors to be very specific.\n"
+-	"filter = [ \"a|^/dev/hda8$|\", \"r/.*/\" ]\n")
++	"filter = [ \"a|^/dev/hda8$|\", \"r|.*/|" ]\n")
+ 
+ cfg_array(devices_global_filter_CFG, "global_filter", devices_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 98),
+ 	"Since filter is often overridden from the command line,\n"
 
 
