@@ -1,49 +1,44 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 13 Apr 2015 18:48:33 +0000 (UTC)
-Subject: master - config: fix description syntax errors
-Message-ID: <20150413184833.E870C60A62@fedorahosted.org>
+From: okozina <okozina@fedoraproject.org>
+Date: Mon, 13 Apr 2015 18:53:56 +0000 (UTC)
+Subject: master - vgchange: remove redundant check
+Message-ID: <20150413185356.615AE60FCD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa16c9b7cbe5a4d71452247765142c670b3b0e31
-Commit:        fa16c9b7cbe5a4d71452247765142c670b3b0e31
-Parent:        29220a181ac3ad0faf63681e465f0a9ba9e625dd
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Apr 13 13:48:01 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Apr 13 13:48:01 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=59c417379e067f85cd962c2024f7a042f04a41fd
+Commit:        59c417379e067f85cd962c2024f7a042f04a41fd
+Parent:        fa16c9b7cbe5a4d71452247765142c670b3b0e31
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Wed Apr 8 10:30:30 2015 +0200
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Mon Apr 13 20:52:12 2015 +0200
 
-config: fix description syntax errors
+vgchange: remove redundant check
 
-from previous commit
+pvmove LVs are invisible thus already skipped due to check
+lv_is_visible() at the beginning of the cycle.
 ---
- lib/config/config_settings.h |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ tools/vgchange.c |    5 -----
+ 1 files changed, 0 insertions(+), 5 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 84c81c6..1e53c7e 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -196,7 +196,7 @@ cfg_array(devices_filter_CFG, "filter", devices_CFG_SECTION, CFG_DEFAULT_UNDEFIN
- 	"See the use_lvmetad comment for a special case regarding filters.\n"
- 	"Example:\n"
- 	"Accept every block device.\n"
--	"filter = [ \"a|.*/|" ]\n"
-+	"filter = [ \"a|.*/|\" ]\n"
- 	"Example:\n"
- 	"Reject the cdrom drive.\n"
- 	"filter = [ \"r|/dev/cdrom|\" ]\n"
-@@ -208,7 +208,7 @@ cfg_array(devices_filter_CFG, "filter", devices_CFG_SECTION, CFG_DEFAULT_UNDEFIN
- 	"filter =[ \"a|loop|\", \"r|/dev/hdc|\", \"a|/dev/ide|\", \"r|.*|\" ]\n"
- 	"Example:\n"
- 	"Use anchors to be very specific.\n"
--	"filter = [ \"a|^/dev/hda8$|\", \"r|.*/|" ]\n")
-+	"filter = [ \"a|^/dev/hda8$|\", \"r|.*/|\" ]\n")
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 88a85d8..1665d3e 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -114,11 +114,6 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 		if (lv_is_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
+ 			continue;
  
- cfg_array(devices_global_filter_CFG, "global_filter", devices_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 98),
- 	"Since filter is often overridden from the command line,\n"
+-		/* Can't deactivate a pvmove LV */
+-		/* FIXME There needs to be a controlled way of doing this */
+-		if (lv_is_pvmove(lv) && !is_change_activating(activate))
+-			continue;
+-
+ 		if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG)))
+ 			continue;
+ 
 
 
