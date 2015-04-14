@@ -1,80 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 14 Apr 2015 08:12:06 +0000 (UTC)
-Subject: master - tests: integrate default thin/cache tool paths
-Message-ID: <20150414081206.6687F60E5E@fedorahosted.org>
+Date: Tue, 14 Apr 2015 11:31:30 +0000 (UTC)
+Subject: master - makefiles: check lcov file has content
+Message-ID: <20150414113130.CE53660B47@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a084b3122f5df4d9dcd244762132abcb5f46ea6a
-Commit:        a084b3122f5df4d9dcd244762132abcb5f46ea6a
-Parent:        c6bcfcba8541d053f142496c30f437a694daf5ee
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4cdf155a87211d269ae31c70856f580111fca186
+Commit:        4cdf155a87211d269ae31c70856f580111fca186
+Parent:        a084b3122f5df4d9dcd244762132abcb5f46ea6a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 14 10:08:57 2015 +0200
+AuthorDate:    Tue Apr 14 13:28:26 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 14 10:11:36 2015 +0200
+CommitterDate: Tue Apr 14 13:29:43 2015 +0200
 
-tests: integrate default thin/cache tool paths
+makefiles: check lcov file has content
 
-If the system is correctly configure (cache & thin tools are present)
-avoid 'extra' rebuild of configuration.
-
-On the other hand - if some tool is missing - duplicate ##LVMCONF should
-make it more straighforward to see.
+genhtml may get confused without content.
 ---
- test/lib/aux.sh |   15 +++++++++++++++
- 1 files changed, 15 insertions(+), 0 deletions(-)
+ Makefile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index bccc30c..8e729a7 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -690,6 +690,12 @@ global/locking_dir = "$TESTDIR/var/lock/lvm"
- global/locking_type=$LVM_TEST_LOCKING
- global/si_unit_consistency = 1
- global/fallback_to_local_locking = 0
-+global/cache_check_executable = "$LVM_TEST_CACHE_CHECK_CMD"
-+global/cache_dump_executable = "$LVM_TEST_CACHE_DUMP_CMD"
-+global/cache_repair_executable = "$LVM_TEST_CACHE_REPAIR_CMD"
-+global/thin_check_executable = "$LVM_TEST_THIN_CHECK_CMD"
-+global/thin_dump_executable = "$LVM_TEST_THIN_DUMP_CMD"
-+global/thin_repair_executable = "$LVM_TEST_THIN_REPAIR_CMD"
- activation/checks = 1
- activation/udev_sync = 1
- activation/udev_rules = 1
-@@ -887,9 +893,13 @@ have_thin() {
- 	test -x "$LVM_TEST_THIN_CHECK_CMD" || LVM_TEST_THIN_CHECK_CMD=""
- 	test -x "$LVM_TEST_THIN_DUMP_CMD" || LVM_TEST_THIN_DUMP_CMD=""
- 	test -x "$LVM_TEST_THIN_REPAIR_CMD" || LVM_TEST_THIN_REPAIR_CMD=""
-+	test -z "$LVM_TEST_THIN_CHECK_CMD" -o \
-+	     -z "$LVM_TEST_THIN_DUMP_CMD" -o \
-+	     -z "$LVM_TEST_THIN_REPAIR_CMD" && {
- 	lvmconf "global/thin_check_executable = \"$LVM_TEST_THIN_CHECK_CMD\"" \
- 		"global/thin_dump_executable = \"$LVM_TEST_THIN_DUMP_CMD\"" \
- 		"global/thin_repair_executable = \"$LVM_TEST_THIN_REPAIR_CMD\""
-+	}
- }
- 
- have_raid() {
-@@ -901,12 +911,17 @@ have_cache() {
- 	test "$CACHE" = shared -o "$CACHE" = internal || return 1
- 	target_at_least dm-cache "$@"
- 
-+	# disable cache_check if not present in system
- 	test -x "$LVM_TEST_CACHE_CHECK_CMD" || LVM_TEST_CACHE_CHECK_CMD=""
- 	test -x "$LVM_TEST_CACHE_DUMP_CMD" || LVM_TEST_CACHE_DUMP_CMD=""
- 	test -x "$LVM_TEST_CACHE_REPAIR_CMD" || LVM_TEST_CACHE_REPAIR_CMD=""
-+	test -z "$LVM_TEST_CACHE_CHECK_CMD" -o \
-+	     -z "$LVM_TEST_CACHE_DUMP_CMD" -o \
-+	     -z "$LVM_TEST_CACHE_REPAIR_CMD" && {
- 	lvmconf "global/cache_check_executable = \"$LVM_TEST_CACHE_CHECK_CMD\"" \
- 		"global/cache_dump_executable = \"$LVM_TEST_CACHE_DUMP_CMD\"" \
- 		"global/cache_repair_executable = \"$LVM_TEST_CACHE_REPAIR_CMD\""
-+	}
- }
- 
- have_tool_at_least() {
+diff --git a/Makefile.in b/Makefile.in
+index 41eb2e9..a7bed8e 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -155,7 +155,7 @@ lcov: $(LCOV_TRACES)
+ 	$(RM) -r $(LCOV_REPORTS_DIR)
+ 	$(MKDIR_P) $(LCOV_REPORTS_DIR)
+ 	for i in $(LCOV_TRACES); do \
+-		test -s $$i && lc="$$lc $$i"; \
++		test -s $$i -a $$(wc -w <$$i) -ge 100 && lc="$$lc $$i"; \
+ 	done; \
+ 	test -z "$$lc" || $(GENHTML) -p @abs_top_builddir@ \
+ 		-o $(LCOV_REPORTS_DIR) $$lc
 
 
