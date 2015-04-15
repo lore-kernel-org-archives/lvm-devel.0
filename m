@@ -1,56 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 15 Apr 2015 11:38:13 +0000 (UTC)
-Subject: master - makefiles: fix usage of default value
-Message-ID: <20150415113813.4A98860612@fedorahosted.org>
+Date: Wed, 15 Apr 2015 11:38:15 +0000 (UTC)
+Subject: master - tests: preserve "" around dev
+Message-ID: <20150415113815.764DC60612@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1a814af46b6c8163c6b9b60932f9d700583914b0
-Commit:        1a814af46b6c8163c6b9b60932f9d700583914b0
-Parent:        22defdac64703945938483433a8d7cc7e3708ef9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f5466fe43597bfacb7fc70e0a61d569b6c5198c4
+Commit:        f5466fe43597bfacb7fc70e0a61d569b6c5198c4
+Parent:        1a814af46b6c8163c6b9b60932f9d700583914b0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 15 13:08:41 2015 +0200
+AuthorDate:    Tue Apr 14 14:15:52 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Apr 15 13:35:42 2015 +0200
 
-makefiles: fix usage of default value
+tests: preserve "" around dev
 
-When a var like LVM_TEST_THIN_CHECK_CMD is set to ""
-(which is valid) we need to correctly use '-'.
-Otherwise ':-' replaces such value with built-in default.
 ---
- test/Makefile.in |   16 ++++++++--------
- 1 files changed, 8 insertions(+), 8 deletions(-)
+ test/shell/pvmove-abort-all.sh |    7 ++++---
+ test/shell/pvmove-abort.sh     |    5 +++--
+ 2 files changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index da09a6c..c99f8f2 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -188,14 +188,14 @@ lib/paths-common: $(srcdir)/Makefile.in .lib-dir-stamp Makefile
- 	echo 'export LVMETAD_PIDFILE="@LVMETAD_PIDFILE@"' >> $@-t
- 	echo 'export DMEVENTD_PIDFILE="@DMEVENTD_PIDFILE@"' >> $@-t
- 	echo 'export CLVMD_PIDFILE="@CLVMD_PIDFILE@"' >> $@-t
--	echo 'export LVM_TEST_THIN_CHECK_CMD=$${LVM_TEST_THIN_CHECK_CMD:- at THIN_CHECK_CMD@}' >> $@-t
--	echo 'export LVM_TEST_THIN_DUMP_CMD=$${LVM_TEST_THIN_DUMP_CMD:- at THIN_DUMP_CMD@}' >> $@-t
--	echo 'export LVM_TEST_THIN_REPAIR_CMD=$${LVM_TEST_THIN_REPAIR_CMD:- at THIN_REPAIR_CMD@}' >> $@-t
--	echo 'export LVM_TEST_THIN_RESTORE_CMD=$${LVM_TEST_THIN_RESTORE_CMD:- at THIN_RESTORE_CMD@}' >> $@-t
--	echo 'export LVM_TEST_CACHE_CHECK_CMD=$${LVM_TEST_CACHE_CHECK_CMD:- at CACHE_CHECK_CMD@}' >> $@-t
--	echo 'export LVM_TEST_CACHE_DUMP_CMD=$${LVM_TEST_CACHE_DUMP_CMD:- at CACHE_DUMP_CMD@}' >> $@-t
--	echo 'export LVM_TEST_CACHE_REPAIR_CMD=$${LVM_TEST_CACHE_REPAIR_CMD:- at CACHE_REPAIR_CMD@}' >> $@-t
--	echo 'export LVM_TEST_CACHE_RESTORE_CMD=$${LVM_TEST_CACHE_RESTORE_CMD:- at CACHE_RESTORE_CMD@}' >> $@-t
-+	echo 'export LVM_TEST_THIN_CHECK_CMD=$${LVM_TEST_THIN_CHECK_CMD- at THIN_CHECK_CMD@}' >> $@-t
-+	echo 'export LVM_TEST_THIN_DUMP_CMD=$${LVM_TEST_THIN_DUMP_CMD- at THIN_DUMP_CMD@}' >> $@-t
-+	echo 'export LVM_TEST_THIN_REPAIR_CMD=$${LVM_TEST_THIN_REPAIR_CMD- at THIN_REPAIR_CMD@}' >> $@-t
-+	echo 'export LVM_TEST_THIN_RESTORE_CMD=$${LVM_TEST_THIN_RESTORE_CMD- at THIN_RESTORE_CMD@}' >> $@-t
-+	echo 'export LVM_TEST_CACHE_CHECK_CMD=$${LVM_TEST_CACHE_CHECK_CMD- at CACHE_CHECK_CMD@}' >> $@-t
-+	echo 'export LVM_TEST_CACHE_DUMP_CMD=$${LVM_TEST_CACHE_DUMP_CMD- at CACHE_DUMP_CMD@}' >> $@-t
-+	echo 'export LVM_TEST_CACHE_REPAIR_CMD=$${LVM_TEST_CACHE_REPAIR_CMD- at CACHE_REPAIR_CMD@}' >> $@-t
-+	echo 'export LVM_TEST_CACHE_RESTORE_CMD=$${LVM_TEST_CACHE_RESTORE_CMD- at CACHE_RESTORE_CMD@}' >> $@-t
- 	mv $@-t $@
+diff --git a/test/shell/pvmove-abort-all.sh b/test/shell/pvmove-abort-all.sh
+index 3166965..e6e65e5 100644
+--- a/test/shell/pvmove-abort-all.sh
++++ b/test/shell/pvmove-abort-all.sh
+@@ -37,9 +37,10 @@ lvcreate -an -Zn -l30 -n $lv2 $vg "$dev2"
+ lvcreate -an -Zn -l30 -n $lv1 $vg1 "$dev4"
+ lvextend -l+30 -n $vg1/$lv1 "$dev5"
  
- lib/paths-installed: lib/paths-common
+-cmd1=$(echo pvmove -i1 $backgroundarg "$dev1" "$dev3" $mode)
+-cmd2=$(echo pvmove -i1 $backgroundarg "$dev2" "$dev3" $mode)
+-cmd3=$(echo pvmove -i1 $backgroundarg -n $vg1/$lv1 "$dev4" "$dev6" $mode)
++cmd1="pvmove -i1 $backgroundarg \"$dev1\" \"$dev3\" $mode"
++cmd2="pvmove -i1 $backgroundarg \"$dev2\" \"$dev3\" $mode"
++cmd3="pvmove -i1 $backgroundarg -n $vg1/$lv1 \"$dev4\" \"$dev6\" $mode"
++
+ if test -z "$backgroundarg" ; then
+ 	$cmd1 &
+ 	aux wait_pvmove_lv_ready "$vg-pvmove0"
+diff --git a/test/shell/pvmove-abort.sh b/test/shell/pvmove-abort.sh
+index 39360a0..2c32f32 100644
+--- a/test/shell/pvmove-abort.sh
++++ b/test/shell/pvmove-abort.sh
+@@ -31,8 +31,9 @@ do
+ lvcreate -an -Zn -l30 -n $lv1 $vg "$dev1"
+ lvcreate -an -Zn -l30 -n $lv2 $vg "$dev2"
+ 
+-cmd1=$(echo pvmove -i1 $backgroundarg "$dev1" "$dev3" $mode)
+-cmd2=$(echo pvmove -i1 $backgroundarg "$dev2" "$dev3" $mode)
++cmd1="pvmove -i1 $backgroundarg \"$dev1\" \"$dev3\" $mode"
++cmd2="pvmove -i1 $backgroundarg \"$dev2\" \"$dev3\" $mode"
++
+ if test -z "$backgroundarg" ; then
+ 	$cmd1 &
+ 	aux wait_pvmove_lv_ready "$vg-pvmove0"
 
 
