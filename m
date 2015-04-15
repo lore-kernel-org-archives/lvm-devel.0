@@ -1,108 +1,102 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 15 Apr 2015 11:38:17 +0000 (UTC)
-Subject: master - tests: no tables for no devices
-Message-ID: <20150415113817.979A760DD2@fedorahosted.org>
+Date: Wed, 15 Apr 2015 11:38:19 +0000 (UTC)
+Subject: master - tests: fix aux have test
+Message-ID: <20150415113819.B01F060DD2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1a7dd13e70e32bc519b27b509b67b0de8f86e631
-Commit:        1a7dd13e70e32bc519b27b509b67b0de8f86e631
-Parent:        f5466fe43597bfacb7fc70e0a61d569b6c5198c4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=930f0aae845e65f3673d14df97e141baccf37849
+Commit:        930f0aae845e65f3673d14df97e141baccf37849
+Parent:        1a7dd13e70e32bc519b27b509b67b0de8f86e631
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 14 14:56:15 2015 +0200
+AuthorDate:    Wed Apr 15 11:51:00 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Apr 15 13:35:42 2015 +0200
 
-tests: no tables for no devices
+tests: fix aux have test
 
-If dm table does't contain any PREFIX device, don't bother
-to call other commands
+Previous commit has made have_cache & have_thin producing
+false return value.
 
-No tracing if test is skipped.
+Fix it and at the some time provide much better reconfiguring
+warning message.
+
+If the test machine is missing needed and configured binaries
+it will produce TEST WARNING result.
 ---
- test/lib/utils.sh |   51 +++++++++++++++++++++++++++------------------------
- 1 files changed, 27 insertions(+), 24 deletions(-)
+ test/lib/aux.sh |   48 ++++++++++++++++++++++++++++--------------------
+ 1 files changed, 28 insertions(+), 20 deletions(-)
 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 1713cc9..e2b257d 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -132,6 +132,8 @@ STACKTRACE() {
- 		done
- 	fi
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index bc70cc0..505d15e 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -893,17 +893,21 @@ have_thin() {
+ 	test "$THIN" = shared -o "$THIN" = internal || return 1
+ 	target_at_least dm-thin-pool "$@" || return 1
  
-+	test -f SKIP_THIS_TEST && exit 200
-+
- 	test -z "$LVM_TEST_NODEBUG" -a -f debug.log && {
- 		IDX=
- 		for i in debug.log* ; do
-@@ -139,39 +141,40 @@ STACKTRACE() {
- 			sed -e "s,^,## DEBUG${IDX}: ," $i
- 			IDX=$(($IDX + 1))
- 		done
--		test -e clvmddebug.log && {
-+		if test -e clvmddebug.log ; then
- 			echo "<======== CLVMD debug log ========>"
- 			sed -e "s,^,## CLVMD: ," clvmddebug.log
--		}
--		test -e strace.log && {
-+		fi
-+		if test -e strace.log ; then
- 			echo "<======== Strace debug log ========>"
- 			sed -e "s,^,## STRACE: ," strace.log
--		}
--		echo "<======== Info ========>"
--		dmsetup info -c | grep1_ "$PREFIX" | sed -e "s,^,## DMINFO:   ,"
--		echo "<======== Active table ========>"
--		dmsetup table | grep "$PREFIX" | sed -e "s,^,## DMTABLE:  ,"
--		echo "<======== Inactive table ========>"
--		dmsetup table --inactive  | grep "$PREFIX" | sed -e "s,^,## DMITABLE: ,"
--		echo "<======== Status ========>"
--		dmsetup status | grep "$PREFIX" | sed -e "s,^,## DMSTATUS: ,"
--		echo "<======== Tree ========>"
--		dmsetup ls --tree | sed -e "s,^,## DMTREE:   ,"
--		echo "<======== Recursive list of $DM_DEV_DIR ========>"
--		ls -Rl --hide=shm --hide=bus --hide=snd --hide=input --hide=dri \
--		       --hide=net --hide=hugepages --hide=mqueue --hide=pts \
--		       "$DM_DEV_DIR" | sed -e "s,^,## LSLR:     ,"
--		echo "<======== Udev DB content ========>"
--		for i in /sys/block/dm-* /sys/block/loop* ; do
--			udevadm info --path "$i" || true
--		done | sed -e "s,^,## UDEV:     ,"
-+		fi
-+		dmsetup info -c | grep1_ "$PREFIX" > out
-+		if test $(wc -l < out) -gt 1 ; then
-+			echo "<======== Info ========>"
-+			sed -e "s,^,## DMINFO:   ," out
-+			echo "<======== Active table ========>"
-+			dmsetup table | grep "$PREFIX" | sed -e "s,^,## DMTABLE:  ,"
-+			echo "<======== Inactive table ========>"
-+			dmsetup table --inactive  | grep "$PREFIX" | sed -e "s,^,## DMITABLE: ,"
-+			echo "<======== Status ========>"
-+			dmsetup status | grep "$PREFIX" | sed -e "s,^,## DMSTATUS: ,"
-+			echo "<======== Tree ========>"
-+			dmsetup ls --tree | sed -e "s,^,## DMTREE:   ,"
-+			echo "<======== Recursive list of $DM_DEV_DIR ========>"
-+			ls -Rl --hide=shm --hide=bus --hide=snd --hide=input --hide=dri \
-+			       --hide=net --hide=hugepages --hide=mqueue --hide=pts \
-+			       "$DM_DEV_DIR" | sed -e "s,^,## LSLR:	,"
-+			echo "<======== Udev DB content ========>"
-+			for i in /sys/block/dm-* /sys/block/loop* ; do
-+				udevadm info --query=all --path "$i" || true
-+			done | sed -e "s,^,## UDEV:	,"
-+		fi
- 		echo "<======== Script file \"$(< TESTNAME)\" ========>"
- 		local script=$0
- 		test -f "$script" || script="$TESTOLDPWD/$0"
- 		awk '{print "## Line:", NR, "\t", $0}' "$script"
- 	}
--
--	test -f SKIP_THIS_TEST && exit 200
++	declare -a CONF
+ 	# disable thin_check if not present in system
+-	test -x "$LVM_TEST_THIN_CHECK_CMD" || LVM_TEST_THIN_CHECK_CMD=""
+-	test -x "$LVM_TEST_THIN_DUMP_CMD" || LVM_TEST_THIN_DUMP_CMD=""
+-	test -x "$LVM_TEST_THIN_REPAIR_CMD" || LVM_TEST_THIN_REPAIR_CMD=""
+-	test -z "$LVM_TEST_THIN_CHECK_CMD" -o \
+-	     -z "$LVM_TEST_THIN_DUMP_CMD" -o \
+-	     -z "$LVM_TEST_THIN_REPAIR_CMD" && {
+-	lvmconf "global/thin_check_executable = \"$LVM_TEST_THIN_CHECK_CMD\"" \
+-		"global/thin_dump_executable = \"$LVM_TEST_THIN_DUMP_CMD\"" \
+-		"global/thin_repair_executable = \"$LVM_TEST_THIN_REPAIR_CMD\""
+-	}
++	if test -n "$LVM_TEST_THIN_CHECK_CMD" -a ! -x "$LVM_TEST_THIN_CHECK_CMD" ; then
++		CONF[0]="global/thin_check_executable = \"\""
++	fi
++	if test -n "$LVM_TEST_THIN_DUMP_CMD" -a ! -x "$LVM_TEST_THIN_DUMP_CMD" ; then
++		CONF[1]="global/thin_dump_executable = \"\""
++	fi
++	if test -n "$LVM_TEST_THIN_REPAIR_CMD" -a ! -x "$LVM_TEST_THIN_REPAIR_CMD" ; then
++		CONF[2]="global/thin_repair_executable = \"\""
++	fi
++	if test ${#CONF[@]} -ne 0 ; then
++		echo "TEST WARNING: Reconfiguring ${CONF[@]}"
++		lvmconf "${CONF[@]}"
++	fi
  }
  
- init_udev_transaction() {
+ have_raid() {
+@@ -915,17 +919,21 @@ have_cache() {
+ 	test "$CACHE" = shared -o "$CACHE" = internal || return 1
+ 	target_at_least dm-cache "$@"
+ 
++	declare -a CONF
+ 	# disable cache_check if not present in system
+-	test -x "$LVM_TEST_CACHE_CHECK_CMD" || LVM_TEST_CACHE_CHECK_CMD=""
+-	test -x "$LVM_TEST_CACHE_DUMP_CMD" || LVM_TEST_CACHE_DUMP_CMD=""
+-	test -x "$LVM_TEST_CACHE_REPAIR_CMD" || LVM_TEST_CACHE_REPAIR_CMD=""
+-	test -z "$LVM_TEST_CACHE_CHECK_CMD" -o \
+-	     -z "$LVM_TEST_CACHE_DUMP_CMD" -o \
+-	     -z "$LVM_TEST_CACHE_REPAIR_CMD" && {
+-	lvmconf "global/cache_check_executable = \"$LVM_TEST_CACHE_CHECK_CMD\"" \
+-		"global/cache_dump_executable = \"$LVM_TEST_CACHE_DUMP_CMD\"" \
+-		"global/cache_repair_executable = \"$LVM_TEST_CACHE_REPAIR_CMD\""
+-	}
++	if test -n "$LVM_TEST_CACHE_CHECK_CMD" -a ! -x "$LVM_TEST_CACHE_CHECK_CMD" ; then
++		CONF[0]="global/cache_check_executable = \"\""
++	fi
++	if test -n "$LVM_TEST_CACHE_DUMP_CMD" -a ! -x "$LVM_TEST_CACHE_DUMP_CMD" ; then
++		CONF[1]="global/cache_dump_executable = \"\""
++	fi
++	if test -n "$LVM_TEST_CACHE_REPAIR_CMD" -a ! -x "$LVM_TEST_CACHE_REPAIR_CMD" ; then
++		CONF[2]="global/cache_repair_executable = \"\""
++	fi
++	if test ${#CONF[@]} -ne 0 ; then
++		echo "TEST WARNING: Reconfiguring ${CONF[@]}"
++		lvmconf "${CONF[@]}"
++	fi
+ }
+ 
+ have_tool_at_least() {
 
 
