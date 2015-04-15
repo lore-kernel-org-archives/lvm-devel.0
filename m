@@ -1,49 +1,56 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 15 Apr 2015 07:19:26 +0000 (UTC)
-Subject: master - man: fix some formatting and also mention -vv
-Message-ID: <20150415071926.A460F606FF@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 15 Apr 2015 11:38:13 +0000 (UTC)
+Subject: master - makefiles: fix usage of default value
+Message-ID: <20150415113813.4A98860612@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22defdac64703945938483433a8d7cc7e3708ef9
-Commit:        22defdac64703945938483433a8d7cc7e3708ef9
-Parent:        6cdab82cf360f2237fc55aabac60e7e1f8866250
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Apr 15 09:19:11 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Apr 15 09:19:11 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1a814af46b6c8163c6b9b60932f9d700583914b0
+Commit:        1a814af46b6c8163c6b9b60932f9d700583914b0
+Parent:        22defdac64703945938483433a8d7cc7e3708ef9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Apr 15 13:08:41 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Apr 15 13:35:42 2015 +0200
 
-man: fix some formatting and also mention -vv
+makefiles: fix usage of default value
 
+When a var like LVM_TEST_THIN_CHECK_CMD is set to ""
+(which is valid) we need to correctly use '-'.
+Otherwise ':-' replaces such value with built-in default.
 ---
- man/blkdeactivate.8.in |    4 +---
- 1 files changed, 1 insertions(+), 3 deletions(-)
+ test/Makefile.in |   16 ++++++++--------
+ 1 files changed, 8 insertions(+), 8 deletions(-)
 
-diff --git a/man/blkdeactivate.8.in b/man/blkdeactivate.8.in
-index ebeaeaa..990be4a 100644
---- a/man/blkdeactivate.8.in
-+++ b/man/blkdeactivate.8.in
-@@ -9,9 +9,7 @@ blkdeactivate \(em utility to deactivate block devices
- .RB [ \-l \  \fIlvm_options\fP ]
- .RB [ \-u ]
- .RB [ \-v ]
--.RS
- .RI [ device ]
--.RE
- .SH DESCRIPTION
- blkdeactivate utility deactivates block devices. If a device
- is mounted, the utility can unmount it automatically before
-@@ -57,7 +55,7 @@ Unmount a mounted device before trying to deactivate it.
- Without this option used, a device that is mounted is not deactivated.
- .TP
- .BR \-v ", " \-\-verbose
--Run in verbose mode.
-+Run in verbose mode. Use \-\-vv for even more verbose mode.
- .SH EXAMPLES
- .sp
- Deactivate all supported block devices found in the system. If a device
+diff --git a/test/Makefile.in b/test/Makefile.in
+index da09a6c..c99f8f2 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -188,14 +188,14 @@ lib/paths-common: $(srcdir)/Makefile.in .lib-dir-stamp Makefile
+ 	echo 'export LVMETAD_PIDFILE="@LVMETAD_PIDFILE@"' >> $@-t
+ 	echo 'export DMEVENTD_PIDFILE="@DMEVENTD_PIDFILE@"' >> $@-t
+ 	echo 'export CLVMD_PIDFILE="@CLVMD_PIDFILE@"' >> $@-t
+-	echo 'export LVM_TEST_THIN_CHECK_CMD=$${LVM_TEST_THIN_CHECK_CMD:- at THIN_CHECK_CMD@}' >> $@-t
+-	echo 'export LVM_TEST_THIN_DUMP_CMD=$${LVM_TEST_THIN_DUMP_CMD:- at THIN_DUMP_CMD@}' >> $@-t
+-	echo 'export LVM_TEST_THIN_REPAIR_CMD=$${LVM_TEST_THIN_REPAIR_CMD:- at THIN_REPAIR_CMD@}' >> $@-t
+-	echo 'export LVM_TEST_THIN_RESTORE_CMD=$${LVM_TEST_THIN_RESTORE_CMD:- at THIN_RESTORE_CMD@}' >> $@-t
+-	echo 'export LVM_TEST_CACHE_CHECK_CMD=$${LVM_TEST_CACHE_CHECK_CMD:- at CACHE_CHECK_CMD@}' >> $@-t
+-	echo 'export LVM_TEST_CACHE_DUMP_CMD=$${LVM_TEST_CACHE_DUMP_CMD:- at CACHE_DUMP_CMD@}' >> $@-t
+-	echo 'export LVM_TEST_CACHE_REPAIR_CMD=$${LVM_TEST_CACHE_REPAIR_CMD:- at CACHE_REPAIR_CMD@}' >> $@-t
+-	echo 'export LVM_TEST_CACHE_RESTORE_CMD=$${LVM_TEST_CACHE_RESTORE_CMD:- at CACHE_RESTORE_CMD@}' >> $@-t
++	echo 'export LVM_TEST_THIN_CHECK_CMD=$${LVM_TEST_THIN_CHECK_CMD- at THIN_CHECK_CMD@}' >> $@-t
++	echo 'export LVM_TEST_THIN_DUMP_CMD=$${LVM_TEST_THIN_DUMP_CMD- at THIN_DUMP_CMD@}' >> $@-t
++	echo 'export LVM_TEST_THIN_REPAIR_CMD=$${LVM_TEST_THIN_REPAIR_CMD- at THIN_REPAIR_CMD@}' >> $@-t
++	echo 'export LVM_TEST_THIN_RESTORE_CMD=$${LVM_TEST_THIN_RESTORE_CMD- at THIN_RESTORE_CMD@}' >> $@-t
++	echo 'export LVM_TEST_CACHE_CHECK_CMD=$${LVM_TEST_CACHE_CHECK_CMD- at CACHE_CHECK_CMD@}' >> $@-t
++	echo 'export LVM_TEST_CACHE_DUMP_CMD=$${LVM_TEST_CACHE_DUMP_CMD- at CACHE_DUMP_CMD@}' >> $@-t
++	echo 'export LVM_TEST_CACHE_REPAIR_CMD=$${LVM_TEST_CACHE_REPAIR_CMD- at CACHE_REPAIR_CMD@}' >> $@-t
++	echo 'export LVM_TEST_CACHE_RESTORE_CMD=$${LVM_TEST_CACHE_RESTORE_CMD- at CACHE_RESTORE_CMD@}' >> $@-t
+ 	mv $@-t $@
+ 
+ lib/paths-installed: lib/paths-common
 
 
