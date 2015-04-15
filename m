@@ -1,432 +1,212 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  8 Apr 2015 21:20:34 +0000 (UTC)
-Subject: master - tests: use single lvmconf call
-Message-ID: <20150408212034.CE6D26055A@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 15 Apr 2015 19:22:43 +0000 (UTC)
+Subject: master - config: edit descriptions
+Message-ID: <20150415192243.4A71F60FC1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ebde60beab2d3421892a37780eacf7ed1459d8b9
-Commit:        ebde60beab2d3421892a37780eacf7ed1459d8b9
-Parent:        a5b34f0f1bf38807bdbed2855516f9b2ceebf7b7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 8 22:44:16 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Apr 8 23:19:37 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=105c07d1b4d34191ed939f53d98b253e620e449b
+Commit:        105c07d1b4d34191ed939f53d98b253e620e449b
+Parent:        5f6ac1c81274de2a3162764d7c4b14a80b3a5ae2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Apr 15 14:21:20 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Apr 15 14:21:20 2015 -0500
 
-tests: use single lvmconf call
+config: edit descriptions
 
+Take some new information and wording from lvm.conf.5.
 ---
- test/lib/aux.sh                         |    4 +-
- test/shell/lvconvert-repair-policy.sh   |    4 +-
- test/shell/lvconvert-repair-raid.sh     |    4 +-
- test/shell/lvconvert-repair-replace.sh  |    4 +-
- test/shell/lvconvert-repair-snapshot.sh |    4 +-
- test/shell/lvcreate-mirror.sh           |    4 +-
- test/shell/lvcreate-pvtags.sh           |    4 +-
- test/shell/pvcreate-bootloaderarea.sh   |    3 +-
- test/shell/system_id.sh                 |  100 +++++++++++++++---------------
- 9 files changed, 65 insertions(+), 66 deletions(-)
+ lib/config/config_settings.h |  100 ++++++++++++++++++++++++++++++------------
+ 1 files changed, 72 insertions(+), 28 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 3232074..37a9a9a 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -85,8 +85,8 @@ prepare_lvmetad() {
- 	# skip if we don't have our own lvmetad...
- 	(which lvmetad 2>/dev/null | grep "$abs_builddir") || skip
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 4dcec95..c0a732e 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -107,16 +107,18 @@ cfg_section(report_CFG_SECTION, "report", root_CFG_SECTION, CFG_ADVANCED | CFG_P
+ cfg_section(dmeventd_CFG_SECTION, "dmeventd", root_CFG_SECTION, 0, vsn(1, 2, 3),
+ 	"Settings for the LVM event daemon.\n")
  
--	lvmconf "global/use_lvmetad = 1"
--	lvmconf "devices/md_component_detection = 0"
-+	lvmconf "global/use_lvmetad = 1" \
-+		"devices/md_component_detection = 0"
+-cfg_section(tags_CFG_SECTION, "tags", root_CFG_SECTION, 0, vsn(1, 0, 18), NULL)
++cfg_section(tags_CFG_SECTION, "tags", root_CFG_SECTION, 0, vsn(1, 0, 18),
++	"Host tag settings.\n")
++
+ cfg_section(local_CFG_SECTION, "local", root_CFG_SECTION, 0, vsn(2, 2, 117),
+ 	"LVM settings that are specific to the local host.\n")
  
- 	local run_valgrind=
- 	test "${LVM_VALGRIND_LVMETAD:-0}" -eq 0 || run_valgrind="run_valgrind"
-diff --git a/test/shell/lvconvert-repair-policy.sh b/test/shell/lvconvert-repair-policy.sh
-index ace52fc..96a69d0 100644
---- a/test/shell/lvconvert-repair-policy.sh
-+++ b/test/shell/lvconvert-repair-policy.sh
-@@ -12,8 +12,8 @@
- . lib/inittest
+ cfg(config_checks_CFG, "checks", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 99),
+ 	"If enabled, any LVM configuration mismatch is reported.\n"
+ 	"This implies checking that the configuration key is understood\n"
+-	"by LVM and that the value of the key is of a proper type.\n"
+-	"If disabled, any configuration mismatch is ignored and default\n"
+-	"value is used instead without any warning (a message about the\n"
++	"by LVM and that the value of the key is the proper type.\n"
++	"If disabled, any configuration mismatch is ignored and the default\n"
++	"value is used without any warning (a message about the\n"
+ 	"configuration key not being found is issued in verbose mode only).\n")
  
- aux prepare_vg 4
--aux lvmconf 'allocation/maximise_cling = 0'
--aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
-+aux lvmconf 'allocation/maximise_cling = 0' \
-+	    'allocation/mirror_logs_require_separate_pvs = 1'
+ cfg(config_abort_on_errors_CFG, "abort_on_errors", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 0, vsn(2,2,99),
+@@ -500,7 +502,7 @@ cfg(log_level_CFG, "level", log_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_LOGLEVEL,
+ 	"7 is the most verbose (LOG_DEBUG).\n")
  
- # Clean-up and create a 2-way mirror, where the the
- # leg devices are always on $dev[12] and the log
-diff --git a/test/shell/lvconvert-repair-raid.sh b/test/shell/lvconvert-repair-raid.sh
-index 4f0175a..6b1e51f 100644
---- a/test/shell/lvconvert-repair-raid.sh
-+++ b/test/shell/lvconvert-repair-raid.sh
-@@ -14,8 +14,8 @@
- aux have_raid 1 3 0 || skip
- aux raid456_replace_works || skip
+ cfg(log_indent_CFG, "indent", log_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_INDENT, vsn(1, 0, 0),
+-	"indent messages according to their severity.\n")
++	"Indent messages according to their severity.\n")
  
--aux lvmconf 'allocation/maximise_cling = 0'
--aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
-+aux lvmconf 'allocation/maximise_cling = 0' \
-+	    'allocation/mirror_logs_require_separate_pvs = 1'
+ cfg(log_command_names_CFG, "command_names", log_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CMD_NAME, vsn(1, 0, 0),
+ 	"Display the command name on each line of output.\n")
+@@ -544,10 +546,10 @@ cfg_runtime(backup_archive_dir_CFG, "archive_dir", backup_CFG_SECTION, 0, CFG_TY
+ 	"Remember to back up this directory regularly!\n")
  
- aux prepare_vg 8
+ cfg(backup_retain_min_CFG, "retain_min", backup_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_ARCHIVE_NUMBER, vsn(1, 0, 0),
+-	"The minimum number of archive files you wish to keep.\n")
++	"Minimum number of archives to keep.\n")
  
-diff --git a/test/shell/lvconvert-repair-replace.sh b/test/shell/lvconvert-repair-replace.sh
-index 3c0dc53..8a3567c 100644
---- a/test/shell/lvconvert-repair-replace.sh
-+++ b/test/shell/lvconvert-repair-replace.sh
-@@ -12,8 +12,8 @@
- . lib/inittest
+ cfg(backup_retain_days_CFG, "retain_days", backup_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_ARCHIVE_DAYS, vsn(1, 0, 0),
+-	"The minimum time you wish to keep an archive file.\n")
++	"Minimum number of days to keep archive files.\n")
  
- aux prepare_vg 6
--aux lvmconf 'allocation/maximise_cling = 0'
--aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
-+aux lvmconf 'allocation/maximise_cling = 0' \
-+	    'allocation/mirror_logs_require_separate_pvs = 1'
+ cfg(shell_history_size_CFG, "history_size", shell_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_MAX_HISTORY, vsn(1, 0, 0),
+ 	"Number of lines of history to store in ~/.lvm_history.\n")
+@@ -939,13 +941,17 @@ cfg(activation_use_linear_target_CFG, "use_linear_target", activation_CFG_SECTIO
+ 	"that only handles a single stripe.\n")
  
- # 3-way, disk log
- # multiple failures, full replace
-diff --git a/test/shell/lvconvert-repair-snapshot.sh b/test/shell/lvconvert-repair-snapshot.sh
-index 473d561..a0c0399 100644
---- a/test/shell/lvconvert-repair-snapshot.sh
-+++ b/test/shell/lvconvert-repair-snapshot.sh
-@@ -12,8 +12,8 @@
- . lib/inittest
+ cfg(activation_reserved_stack_CFG, "reserved_stack", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_RESERVED_STACK, vsn(1, 0, 0),
+-	"Stack size in KB to reserve for use while devices are suspended.\n")
++	"Stack size in KB to reserve for use while devices are suspended.\n"
++	"Insufficent reserve risks I/O deadlock during device suspension.\n")
  
- aux prepare_vg 5
--aux lvmconf 'allocation/maximise_cling = 0'
--aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
-+aux lvmconf 'allocation/maximise_cling = 0' \
-+	    'allocation/mirror_logs_require_separate_pvs = 1'
+ cfg(activation_reserved_memory_CFG, "reserved_memory", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_RESERVED_MEMORY, vsn(1, 0, 0),
+-	"Memory size in KB to reserve for use while devices are suspended.\n")
++	"Memory size in KB to reserve for use while devices are suspended.\n"
++	"Insufficent reserve risks I/O deadlock during device suspension.\n")
  
- lvcreate -aey --type mirror -m 3 --ignoremonitoring -L 2M -n 4way $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5":0
- lvcreate -s $vg/4way -L 2M -n snap
-diff --git a/test/shell/lvcreate-mirror.sh b/test/shell/lvcreate-mirror.sh
-index a151126..f62bee7 100644
---- a/test/shell/lvcreate-mirror.sh
-+++ b/test/shell/lvcreate-mirror.sh
-@@ -11,8 +11,8 @@
+ cfg(activation_process_priority_CFG, "process_priority", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_PROCESS_PRIORITY, vsn(1, 0, 0),
+-	"Nice value used while devices are suspended.\n")
++	"Nice value used while devices are suspended.\n"
++	"Use a high priority so that LVs are suspended\n"
++	"for the shortest possible time.\n")
  
- . lib/inittest
- aux prepare_vg 5 80
--aux lvmconf 'allocation/maximise_cling = 0'
--aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
-+aux lvmconf 'allocation/maximise_cling = 0' \
-+	    'allocation/mirror_logs_require_separate_pvs = 1'
+ cfg_array(activation_volume_list_CFG, "volume_list", activation_CFG_SECTION, CFG_ALLOW_EMPTY|CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 18),
+ 	"Only LVs selected by this list are activated.\n"
+@@ -1168,9 +1174,12 @@ cfg(activation_polling_interval_CFG, "polling_interval", activation_CFG_SECTION,
+ cfg(activation_auto_set_activation_skip_CFG, "auto_set_activation_skip", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_AUTO_SET_ACTIVATION_SKIP, vsn(2,2,99),
+ 	"Set the activation skip flag on new thin snapshot LVs.\n"
+ 	"An LV can have a persistent 'activation skip' flag.\n"
+-	"The flag determines if the LV is skipped during activation.\n"
++	"The flag causes the LV to be skipped during normal activation.\n"
++	"The lvchange/vgchange -K option is required to activate LVs\n"
++	"that have the activation skip flag set.\n"
+ 	"When this setting is enabled, the activation skip flag is\n"
+-	"set on new thin snapshot LVs.\n")
++	"set on new thin snapshot LVs.\n"
++	"The '--setactivationskip y|n' option overrides this setting.\n")
  
- # 2-way mirror with corelog, 2 PVs
- lvcreate -aey -l2 --type mirror -m1 --mirrorlog core -n $lv1 $vg "$dev1" "$dev2"
-diff --git a/test/shell/lvcreate-pvtags.sh b/test/shell/lvcreate-pvtags.sh
-index b7c814f..6bfb55b 100644
---- a/test/shell/lvcreate-pvtags.sh
-+++ b/test/shell/lvcreate-pvtags.sh
-@@ -12,8 +12,8 @@
- . lib/inittest
+ cfg(activation_mode_CFG, "activation_mode", activation_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_ACTIVATION_MODE, vsn(2,2,108),
+ 	"How LVs with missing devices are activated.\n"
+@@ -1193,9 +1202,12 @@ cfg(activation_mode_CFG, "activation_mode", activation_CFG_SECTION, 0, CFG_TYPE_
+ cfg(metadata_pvmetadatacopies_CFG, "pvmetadatacopies", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_INT, DEFAULT_PVMETADATACOPIES, vsn(1, 0, 0),
+ 	"Number of copies of metadata to store on each PV.\n"
+ 	"Possible options are: 0, 1, 2.\n"
+-	"You may want to override this from the command line\n"
+-	"with 0 when running pvcreate on new PVs which are to\n"
+-	"be added to large VGs.\n")
++	"If set to 2, two copies of the VG metadata are stored on\n"
++	"the PV, one at the front of the PV, and one at the end.\n"
++	"If set to 1, one copy is stored at the front of the PV.\n"
++	"If set to 0, no copies are stored on the PV. This may\n"
++	"be useful with VGs containing large numbers of PVs.\n"
++	"The '--pvmetadatacopies' option overrides this setting.\n")
  
- aux prepare_pvs 3
--aux lvmconf 'allocation/maximise_cling = 0'
--aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
-+aux lvmconf 'allocation/maximise_cling = 0' \
-+	    'allocation/mirror_logs_require_separate_pvs = 1'
+ cfg(metadata_vgmetadatacopies_CFG, "vgmetadatacopies", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_INT, DEFAULT_VGMETADATACOPIES, vsn(2, 2, 69),
+ 	"Number of copies of metadata to maintain for each VG.\n"
+@@ -1206,14 +1218,23 @@ cfg(metadata_vgmetadatacopies_CFG, "vgmetadatacopies", metadata_CFG_SECTION, CFG
+ 	"metadata is stored in them all.\n"
+ 	"The value 0 (unmanaged) disables this automatic management\n"
+ 	"and allows you to control which metadata areas are used at\n"
+-	"the individual PV level using 'pvchange --metadataignore y|n'.\n")
++	"the individual PV level using 'pvchange --metadataignore y|n'.\n"
++	"The '--vgmetadatacopies' option overrides this setting.\n")
  
- # not required, just testing
- aux pvcreate --metadatacopies 0 "$dev1"
-diff --git a/test/shell/pvcreate-bootloaderarea.sh b/test/shell/pvcreate-bootloaderarea.sh
-index 53a9839..6dd45f5 100644
---- a/test/shell/pvcreate-bootloaderarea.sh
-+++ b/test/shell/pvcreate-bootloaderarea.sh
-@@ -14,8 +14,7 @@ test_description='Test pvcreate bootloader area support'
- . lib/inittest
+ cfg(metadata_pvmetadatasize_CFG, "pvmetadatasize", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_INT, DEFAULT_PVMETADATASIZE, vsn(1, 0, 0),
+-	"Approximate default size of on-disk metadata areas in sectors.\n"
+-	"Increase this if you have large volume groups or you want to\n"
+-	"retain a large on-disk history of your metadata changes.\n")
++	"Approximate number of sectors to use for each metadata copy.\n"
++	"VGs with large numbers of PVs or LVs, or VGs containing\n"
++	"complex LV structures, may need additional space for VG\n"
++	"metadata. The metadata areas are treated as circular buffers,\n"
++	"so unused space becomes filled with an archive of the most\n"
++	"recent previous versions of the metadata.\n")
++
++cfg(metadata_pvmetadataignore_CFG, "pvmetadataignore", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_BOOL, DEFAULT_PVMETADATAIGNORE, vsn(2, 2, 69),
++	"Ignore metadata areas on a new PV.\n"
++	"If metadata areas on a PV are ignored, LVM will not store\n"
++	"metadata in them.\n"
++	"The '--metadataignore' option overrides this setting.\n")
  
- aux prepare_devs 1
--aux lvmconf 'global/suffix=0'
--aux lvmconf 'global/units="b"'
-+aux lvmconf 'global/suffix=0' 'global/units="b"'
+-cfg(metadata_pvmetadataignore_CFG, "pvmetadataignore", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_BOOL, DEFAULT_PVMETADATAIGNORE, vsn(2, 2, 69), NULL)
+ cfg(metadata_stripesize_CFG, "stripesize", metadata_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_INT, DEFAULT_STRIPESIZE, vsn(1, 0, 0), NULL)
  
- #COMM 'pvcreate sets/aligns bootloader area correctly'
- pvcreate --dataalignment 262144b --bootloaderareasize 614400b "$dev1"
-diff --git a/test/shell/system_id.sh b/test/shell/system_id.sh
-index e1d8967..ff03e14 100644
---- a/test/shell/system_id.sh
-+++ b/test/shell/system_id.sh
-@@ -89,8 +89,8 @@ SID=sidfoofile
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- vgcreate $vg1 "$dev1"
- vgs -o+systemid $vg1
- check vg_field $vg1 systemid $SID
-@@ -104,8 +104,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg, overriding the local system_id so the vg looks foreign
- vgcreate --systemid $SID2 $vg1 "$dev1"
- # normal vgs is not an error and does not see the vg
-@@ -136,8 +136,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -165,8 +165,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -196,8 +196,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- lvcreate -n $lv1 -l 2 $vg1
-@@ -229,8 +229,8 @@ SID1=sidfoofile1
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- aux lvmconf "global/system_id_source = none"
-@@ -255,8 +255,8 @@ vgcreate $vg1 "$dev1"
- check vg_field $vg1 systemid ""
- # set a local system_id
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # check we can see and use the vg with no system_id
- vgs >err
- grep $vg1 err
-@@ -271,8 +271,8 @@ SID1=sidfoofile1
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -298,8 +298,8 @@ SID1=sidfoofile1
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -332,8 +332,8 @@ SID2=012345678901234567890123456789012345678901234567890123456789012345678901234
- # max len system_id should appear normally
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -346,8 +346,8 @@ rm -f $SIDFILE
- # max+1 len system_id should be missing the last character
- rm -f $SIDFILE
- echo "$SID2" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -367,8 +367,8 @@ SID1=012345678901234567890123456789012345678901234567890123456789012345678901234
- SID2=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789abcdefg
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -386,8 +386,8 @@ SID2=A.1
+ cfg_array(metadata_dirs_CFG, "dirs", metadata_CFG_SECTION, CFG_ADVANCED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0),
+@@ -1238,12 +1259,13 @@ cfg(disk_area_size_CFG, "size", disk_area_CFG_SUBSECTION, CFG_ADVANCED | CFG_UNS
+ cfg(disk_area_id_CFG, "id", disk_area_CFG_SUBSECTION, CFG_ADVANCED | CFG_UNSUPPORTED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL)
  
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -407,8 +407,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal pvs sees the vg and pv
-@@ -438,8 +438,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- lvcreate -n $lv1 -l 2 $vg1
-@@ -473,8 +473,8 @@ LVMLOCAL=etc/lvmlocal.conf
- rm -f $LVMLOCAL
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -503,8 +503,8 @@ SID1=sidfoofile1
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate --systemid "" $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -521,8 +521,8 @@ SID1=sidfoofile1
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -549,8 +549,8 @@ SIDFILE=etc/lvm_test.conf
- rm -f $LVMLOCAL
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -580,8 +580,8 @@ SIDFILE=etc/lvm_test.conf
- rm -f $LVMLOCAL
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg
- vgcreate $vg1 "$dev1"
- # normal vgs sees the vg
-@@ -677,8 +677,8 @@ rm -f $SIDFILE
- SID=""
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- vgcreate $vg1 "$dev1" |& tee err
- vgs -o+systemid $vg1
- check vg_field $vg1 systemid $SID
-@@ -700,8 +700,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg with an lv
- vgcreate $vg1 "$dev1"
- lvcreate -n $lv1 -l 2 -an $vg1
-@@ -741,8 +741,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg with an lv
- vgcreate $vg1 "$dev1"
- lvcreate -n $lv1 -l 2 -an $vg1
-@@ -781,8 +781,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg with an lv
- vgcreate $vg1 "$dev1"
- lvcreate -n $lv1 -l 2 -an $vg1
-@@ -833,8 +833,8 @@ SID2=sidfoofile2
- SIDFILE=etc/lvm_test.conf
- rm -f $SIDFILE
- echo "$SID1" > $SIDFILE
--aux lvmconf "global/system_id_source = file"
--aux lvmconf "global/system_id_file = $SIDFILE"
-+aux lvmconf "global/system_id_source = file" \
-+	    "global/system_id_file = \"$SIDFILE\""
- # create a vg with an lv
- vgcreate $vg1 "$dev1"
- lvcreate -n $lv1 -l 2 -an $vg1
+ cfg(report_compact_output_CFG, "compact_output", report_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_REP_COMPACT_OUTPUT, vsn(2, 2, 115),
+-	"If enabled, fields which don't have value set for any of the rows\n"
+-	"reported are skipped on output. Compact output is applicable only\n"
+-	"if report is buffered (report/buffered=1).\n")
++	"Do not print empty report fields.\n"
++	"Fields that don't have a value set for any of the rows\n"
++	"reported are skipped and not printed. Compact output is\n"
++	"applicable only if report/buffered is enabled.\n")
+ 
+ cfg(report_aligned_CFG, "aligned", report_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_REP_ALIGNED, vsn(1, 0, 0),
+-	"Align columns on report output.\n")
++	"Align columns in report output.\n")
+ 
+ cfg(report_buffered_CFG, "buffered", report_CFG_SECTION, CFG_PROFILABLE, CFG_TYPE_BOOL, DEFAULT_REP_BUFFERED, vsn(1, 0, 0),
+ 	"Buffer report output.\n"
+@@ -1376,10 +1398,32 @@ cfg(dmeventd_thin_library_CFG, "thin_library", dmeventd_CFG_SECTION, 0, CFG_TYPE
+ cfg(dmeventd_executable_CFG, "executable", dmeventd_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_DMEVENTD_PATH, vsn(2, 2, 73),
+ 	"The full path to the dmeventd binary.\n")
+ 
+-cfg(tags_hosttags_CFG, "hosttags", tags_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_HOSTTAGS, vsn(1, 0, 18), NULL)
+-
+-cfg_section(tag_CFG_SUBSECTION, "tag", tags_CFG_SECTION, CFG_NAME_VARIABLE | CFG_DEFAULT_UNDEFINED, vsn(1, 0, 18), NULL)
+-cfg(tag_host_list_CFG, "host_list", tag_CFG_SUBSECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 18), NULL)
++cfg(tags_hosttags_CFG, "hosttags", tags_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_HOSTTAGS, vsn(1, 0, 18),
++	"Create a host tag using the machine name.\n"
++	"The machine name is nodename returned by uname(2).\n")
++
++cfg_section(tag_CFG_SUBSECTION, "tag", tags_CFG_SECTION, CFG_NAME_VARIABLE | CFG_DEFAULT_UNDEFINED, vsn(1, 0, 18),
++	"Replace this subsection name with a custom tag name.\n"
++	"Multiple subsections like this can be created.\n"
++	"The '@' prefix for tags is optional.\n"
++	"This subsection can contain host_list, which is a\n"
++	"list of machine names. If the name of the local\n"
++	"machine is found in host_list, then the name of\n"
++	"this subsection is used as a tag and is applied\n"
++	"to the local machine as a 'host tag'.\n"
++	"If this subsection is empty (has no host_list), then\n"
++	"the subsection name is always applied as a 'host tag'.\n"
++	"Example:\n"
++	"The host tag foo is given to all hosts, and the host tag\n"
++	"bar is given to the hosts named machine1 and machine2.\n"
++	"tags { foo { } bar { host_list = [ \"machine1\", \"machine2\" ] } }\n")
++
++cfg(tag_host_list_CFG, "host_list", tag_CFG_SUBSECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 18),
++	"A list of machine names.\n"
++	"These machine names are compared to the nodename\n"
++	"returned by uname(2). If the local machine name\n"
++	"matches an entry in this list, the name of the\n"
++	"subsection is applied to the machine as a 'host tag'.\n")
+ 
+ cfg(local_system_id_CFG, "system_id", local_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 117),
+ 	"Defines the local system ID for lvmlocal mode.\n"
 
 
