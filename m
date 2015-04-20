@@ -1,56 +1,169 @@
-From: okozina <okozina@fedoraproject.org>
-Date: Mon, 20 Apr 2015 08:42:31 +0000 (UTC)
-Subject: master - WHATS_NEW: update for various commits
-Message-ID: <20150420084231.0C76460EAB@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 20 Apr 2015 10:14:05 +0000 (UTC)
+Subject: master - debug: add new envvar
+Message-ID: <20150420101405.B862460DA7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=de4791c052b1576bb9de73b3fa8e51b771522f7e
-Commit:        de4791c052b1576bb9de73b3fa8e51b771522f7e
-Parent:        5cd6381717696ad1513a9f8ff1cbd8fa3098e4b1
-Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Mon Apr 20 10:31:43 2015 +0200
-Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Mon Apr 20 10:38:54 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5723a7cd7e857c4b5899b19060d17cac1b14e6b6
+Commit:        5723a7cd7e857c4b5899b19060d17cac1b14e6b6
+Parent:        de4791c052b1576bb9de73b3fa8e51b771522f7e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Apr 20 10:04:18 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Apr 20 12:12:22 2015 +0200
 
-WHATS_NEW: update for various commits
+debug: add new envvar
 
-add info for various commits, most significant were:
+Add support for 2 new envvars for internal lvm2 test suite
+(though it could be possible usable for other cases)
 
-- toollib: close connection to lvmetad after fork
-  (fe30658a4d5fe4e4e6bb346c9c9ee7142a98f49d)
+LVM_LOG_FILE_EPOCH
 
-- toollib: do not spawn polling in lv_change_activate
-  (c26d81d6e6939906729d91fae83cd8bbdd743bb7)
+Whether to add 'epoch' extension that consist from
+the envvar 'string' + pid + starttime in kernel units
+obtained from /proc/self/stat.
 
-- pvmove: split pvmove_update_metadata function
-  (65623b63a20a221b48dfd87455dc77f5ac0c6bf4)
+LVM_LOG_FILE_UNLINK_STATUS
 
-- lvconvert: move poll code in before refactoring
-  (5190f566055ab4584772b1288fd8cbf69565eb4a)
+Whether to unlink the log depending on return status value,
+so if the command is successful the log is automatically
+deleted.
 
-- pvmove: move poll code in before refactoring
-  (a098aa419f5be5d8f805ab6dc747770e58a4b7b1)
+API is still for now experimental to catch various issue.
 ---
- WHATS_NEW |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ lib/log/log.c         |   68 +++++++++++++++++++++++++++++++++++++++++++++++-
+ lib/log/lvm-logging.h |    1 +
+ tools/lvmcmdline.c    |    2 +
+ 3 files changed, 69 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 9c306db..987a7c9 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,9 @@
- Version 2.02.119 - 
- ==================================
-+  Close connection to lvmetad after fork.
-+  Make lvchange able to resume background pvmove polling again.
-+  Split pvmove update metadata fn in an initial one and a subsequent one.
-+  Refactor shared pvmove and lvconvert code into new _poll files.
-   Add --unconfigured option to dumpconfig to print strings unconfigured.
-   Add --withfullcomments option to dumpconfig to print full comment.
-   Check for lvm binary in blkdeactivate and skip LVM processing if not present.
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 2d1fe74..141d02d 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -18,10 +18,12 @@
+ #include "memlock.h"
+ #include "defaults.h"
+ 
++#include <stdio.h>
+ #include <stdarg.h>
+ #include <syslog.h>
+ 
+ static FILE *_log_file;
++static char _log_file_path[PATH_MAX];
+ static struct device _log_dev;
+ static struct dm_str_list _log_dev_alias;
+ 
+@@ -52,11 +54,48 @@ void init_log_fn(lvm2_log_fn_t log_fn)
+ 		_lvm2_log_fn = NULL;
+ }
+ 
++/*
++ * Support envvar LVM_LOG_FILE_EPOCH and allow to attach
++ * extra keyword to openned log file. After this word pid
++ * and starttime (in kernel units, read from /proc/self/stat
++ * is automatically attached.
++ * If command/daemon forks multiple times, it could create multiple
++ * log files ensure, there are no overwrites.
++ */
+ void init_log_file(const char *log_file, int append)
+ {
+-	const char *open_mode = append ? "a" : "w";
++	static const char statfile[] = "/proc/self/stat";
++	const char *env;
++	int pid;
++	long long starttime;
++	FILE *st;
++
++	_log_file_path[0] = '\0';
++	if ((env = getenv("LVM_LOG_FILE_EPOCH"))) {
++		if (!(st = fopen(statfile, "r")))
++			log_sys_error("fopen", statfile);
++		else if (fscanf(st, "%d %*s %*c %*d %*d %*d %*d " /* tty_nr */
++			   "%*d %*u %*u %*u %*u " /* mjflt */
++			   "%*u %*u %*u %*d %*d " /* cstim */
++			   "%*d %*d %*d %*d " /* itrealvalue */
++			   "%llu", &pid, &starttime) != 2) {
++			log_warn("WARNING: Cannot parse content of %s.", statfile);
++		} else {
++			if (fclose(st))
++				log_sys_debug("fclose", statfile);
++
++			if (dm_snprintf(_log_file_path, sizeof(_log_file_path),
++					"%s_%s_%d_%lld", log_file, env, pid, starttime) < 0) {
++				log_warn("WARNING: Debug log file path is too long for epoch.");
++				_log_file_path[0] = '\0';
++			} else {
++				log_file = _log_file_path;
++				append = 1; /* force */
++			}
++		}
++	}
+ 
+-	if (!(_log_file = fopen(log_file, open_mode))) {
++	if (!(_log_file = fopen(log_file, append ? "a" : "w"))) {
+ 		log_sys_error("fopen", log_file);
+ 		return;
+ 	}
+@@ -64,6 +103,31 @@ void init_log_file(const char *log_file, int append)
+ 	_log_to_file = 1;
+ }
+ 
++/*
++ * Unlink the log file depeding on command's return value
++ *
++ * When envvar LVM_LOG_FILE_UNLINK_STATUS is set, compare
++ * resulting status with this string.
++ *
++ * It's possible to specify 2 variants - having it equal to
++ * a single number or having it different from a single number.
++ *
++ * i.e.  LVM_LOG_FILE_UNLINK_STATUS="!1"  # delete when ret != 1.
++ */
++void unlink_log_file(int ret)
++{
++	const char *env;
++
++	if (_log_file_path[0] &&
++	    (env = getenv("LVM_LOG_FILE_UNLINK_STATUS")) &&
++	    ((env[0] == '!' && atoi(env + 1) != ret) ||
++	     (atoi(env) == ret))) {
++		if (unlink(_log_file_path))
++			log_sys_error("unlink", _log_file_path);
++		_log_file_path[0] = '\0';
++	}
++}
++
+ void init_log_direct(const char *log_file, int append)
+ {
+ 	int open_flags = append ? 0 : O_TRUNC;
+diff --git a/lib/log/lvm-logging.h b/lib/log/lvm-logging.h
+index 145e2a1..983da5b 100644
+--- a/lib/log/lvm-logging.h
++++ b/lib/log/lvm-logging.h
+@@ -40,6 +40,7 @@ void init_indent(int indent);
+ void init_msg_prefix(const char *prefix);
+ 
+ void init_log_file(const char *log_file, int append);
++void unlink_log_file(int ret);
+ void init_log_direct(const char *log_file, int append);
+ void init_log_while_suspended(int log_while_suspended);
+ void init_abort_on_internal_errors(int fatal);
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index f9acd60..26c48f9 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1561,6 +1561,8 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 
+ int lvm_return_code(int ret)
+ {
++	unlink_log_file(ret);
++
+ 	return (ret == ECMD_PROCESSED ? 0 : ret);
+ }
+ 
 
 
