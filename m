@@ -1,68 +1,114 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  8 Apr 2015 09:15:02 +0000 (UTC)
-Subject: master - select: mention { } use in lvm.8 man page and '-S help' properly
-Message-ID: <20150408091502.19F66616B8@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 20 Apr 2015 17:22:03 +0000 (UTC)
+Subject: master - tests: update to renamed envvars
+Message-ID: <20150420172203.7302360221@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f32973c78e981226577e88db662a285ea6c11bd5
-Commit:        f32973c78e981226577e88db662a285ea6c11bd5
-Parent:        8fdca0de7910052594a55bfb7bd3815afe701dad
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Apr 8 11:14:16 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Apr 8 11:14:16 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=caa9223c8549b4a937c2cc13eb7f306f55e4beee
+Commit:        caa9223c8549b4a937c2cc13eb7f306f55e4beee
+Parent:        85e833c172a0a0403c1de5e6f480a67629e51e36
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Apr 20 19:16:33 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Apr 20 19:18:56 2015 +0200
 
-select: mention { } use in lvm.8 man page and '-S help' properly
+tests: update to renamed envvars
 
+Enhance 'not' so 'should' now shows log trace from
+command which has failed but should not.
 ---
- libdm/libdm-report.c |    2 +-
- man/lvm.8.in         |   10 +++++++++-
- 2 files changed, 10 insertions(+), 2 deletions(-)
+ test/lib/aux.sh      |    2 +-
+ test/lib/inittest.sh |    2 +-
+ test/lib/not.c       |   23 ++++++++++++++++++-----
+ 3 files changed, 20 insertions(+), 7 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 6f528f1..9f50ff3 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -2612,7 +2612,7 @@ static void _display_selection_help(struct dm_report *rh)
- 	log_warn("  size                - Floating point value with units, 'm' unit used by default if not specified.");
- 	log_warn("  percent             - Non-negative integer with or without %% suffix.");
- 	log_warn("  string              - Characters quoted by \' or \" or unquoted.");
--	log_warn("  string list         - Strings enclosed by [ ] and elements delimited by either");
-+	log_warn("  string list         - Strings enclosed by [ ] or { } and elements delimited by either");
- 	log_warn("                        \"all items must match\" or \"at least one item must match\" operator.");
- 	log_warn("  regular expression  - Characters quoted by \' or \" or unquoted.");
- 	log_warn(" ");
-diff --git a/man/lvm.8.in b/man/lvm.8.in
-index 2faaba4..26d94ee 100644
---- a/man/lvm.8.in
-+++ b/man/lvm.8.in
-@@ -470,6 +470,10 @@ that can be used in selection, see the output of \fB<lvm reporting command> -S h
- \fB[\fP  \(em List start
- .IP
- \fB]\fP  \(em List end
-+.IP
-+\fB{\fP  \(em List subset start
-+.IP
-+\fB}\fP  \(em List subset end
- .LP
- \fBInformal grammar specification\fP:
- .IP
-@@ -477,7 +481,11 @@ that can be used in selection, see the output of \fB<lvm reporting command> -S h
- .IP
- .BR VALUE " = " [VALUE " log_op " VALUE]
- .br
--For list-based types: string list. The log_op must always be of one type within the whole list value.
-+For list-based types: string list. Matches strictly. The log_op must always be of one type within the whole list value.
-+.IP
-+.BR VALUE " = " {VALUE " log_op " VALUE}
-+.br
-+For list-based types: string list. Matches a subset. The log_op must always be of one type within the whole list value.
- .IP
- .BR VALUE " = " value
- .br
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 3c00470..d0d2aa8 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -124,7 +124,7 @@ lvmetad_dump() {
+ 
+ notify_lvmetad() {
+ 	if test -e LOCAL_LVMETAD; then
+-		pvscan --cache "$@" || true
++		LVM_LOG_FILE_EPOCH= pvscan --cache "$@" || rm -f debug.log
+ 	fi
+ }
+ 
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index b096c9e..0efbf0d 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -36,7 +36,7 @@ RUNNING_DMEVENTD=$(pgrep dmeventd) || true
+ 
+ export TESTOLDPWD TESTDIR COMMON_PREFIX PREFIX RUNNING_DMEVENTD
+ export LVM_LOG_FILE_EPOCH=DEBUG
+-export LVM_LOG_FILE_UNLINK_STATUS=1
++export LVM_EXPECTED_EXIT_STATUS=1
+ 
+ test -n "$BASH" && trap 'set +vx; STACKTRACE; set -vx' ERR
+ trap 'aux teardown' EXIT # don't forget to clean up
+diff --git a/test/lib/not.c b/test/lib/not.c
+index 1e00fe3..ce46699 100644
+--- a/test/lib/not.c
++++ b/test/lib/not.c
+@@ -20,12 +20,25 @@
+ #include <sys/types.h>
+ #include <sys/wait.h>
+ 
+-static int finished(const char *cmd, int status) {
++static int _finished(const char *cmd, int status, int pid) {
++	int ret;
+ 	if (!strcmp(cmd, "not"))
+ 		return !status;
+ 	if (!strcmp(cmd, "should")) {
+-		if (status)
++		if (status) {
+ 			fprintf(stderr, "TEST WARNING: Ignoring command failure.\n");
++			/* TODO: avoid using shell here */
++			/* Show log for failing command which should be passing */
++			ret = system("ls debug.log*${LVM_LOG_FILE_EPOCH}* 2>/dev/null");
++			if (WIFEXITED(ret) && WEXITSTATUS(ret) == 0) {
++				printf("## timing off\n<======== Debug log ========>\n"); /* timing off */
++				fflush(stdout);
++				system("sed -e 's,^,## DEBUG: ,' debug.log*${LVM_LOG_FILE_EPOCH}* 2>/dev/null");
++				printf("## timing on\n"); /* timing on */
++				system("rm -f debug.log*${LVM_LOG_FILE_EPOCH}*");
++				fflush(stdout);
++			}
++		}
+ 		return 0;
+ 	} else if (!strcmp(cmd, "invalid")) {
+ 		if (status == 3)
+@@ -56,14 +69,14 @@ int main(int args, char **argv) {
+ 		return FAILURE;
+ 	} else if (pid == 0) { 	/* child */
+ 		if (!strcmp(argv[0], "not"))
+-			val = "!1";
++			val = ">1";
+ 		else if (!strcmp(argv[0], "invalid"))
+ 			val = "3";
+ 		else if (!strcmp(argv[0], "fail"))
+ 			val = "5";
+ 
+ 		if (val)
+-			setenv("LVM_LOG_FILE_UNLINK_STATUS", val, 1);
++			setenv("LVM_EXPECTED_EXIT_STATUS", val, 1);
+ 
+ 		execvp(argv[1], &argv[1]);
+ 		/* should not be accessible */
+@@ -79,7 +92,7 @@ int main(int args, char **argv) {
+ 			return FAILURE;
+ 		}
+ 
+-		return finished(argv[0], WEXITSTATUS(status));
++		return _finished(argv[0], WEXITSTATUS(status), pid);
+ 	}
+ 	/* not accessible */
+ 	return FAILURE;
 
 
