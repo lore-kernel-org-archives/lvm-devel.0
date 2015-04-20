@@ -1,114 +1,107 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 20 Apr 2015 17:22:03 +0000 (UTC)
-Subject: master - tests: update to renamed envvars
-Message-ID: <20150420172203.7302360221@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 20 Apr 2015 22:08:16 +0000 (UTC)
+Subject: master - toollib: fix duplicate handling in process_each_pv
+Message-ID: <20150420220816.B774960C97@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=caa9223c8549b4a937c2cc13eb7f306f55e4beee
-Commit:        caa9223c8549b4a937c2cc13eb7f306f55e4beee
-Parent:        85e833c172a0a0403c1de5e6f480a67629e51e36
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 20 19:16:33 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 20 19:18:56 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0d0d50182d1bf6b11b80fe8fe701f654b953f2fa
+Commit:        0d0d50182d1bf6b11b80fe8fe701f654b953f2fa
+Parent:        caa9223c8549b4a937c2cc13eb7f306f55e4beee
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Apr 20 14:35:35 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Apr 20 17:07:58 2015 -0500
 
-tests: update to renamed envvars
+toollib: fix duplicate handling in process_each_pv
 
-Enhance 'not' so 'should' now shows log trace from
-command which has failed but should not.
+With use_lvmetad=0, duplicate PVs /dev/loop0 and /dev/loop1,
+where in this example, /dev/loop1 is the cached device
+referenced by pv->dev, the command 'pvs /dev/loop0' reports:
+
+Failed to find physical volume "/dev/loop0".
+
+This is because the duplicate PV detection by pvid is
+not working because _get_all_devices() is not setting
+any dev->pvid for any entries.  This is because the
+pvid information has not yet been saved in lvmcache.
+This is fixed by calling _get_vgnameids_on_system()
+before _get_all_devices(), which has the effect of
+caching the necessary pvid information.
+
+With this fix, running pvs /dev/loop0, or pvs /dev/loop1,
+produces no error and one line of output for the PV (the
+device printed is the one cached in pv->dev, in this
+example /dev/loop1.)
+
+Running 'pvs /dev/loop0 /dev/loop1' produces no error
+and two lines of output, with each device displayed
+on one of the lines.
+
+Running 'pvs -a' shows two PVs, one with loop0 and one
+with loop1, and both shown as a member of the same VG.
+
+Running 'pvs' shows only one of the duplicate PVs,
+and that shows the device cached in pv->dev (loop1).
+
+The above output is what the duplicate handling code
+was previously designed to output in commits:
+
+b64da4d8b521 toollib: search for duplicate PVs only when needed
+3a7c47af0e88 toollib: pvs -a should display VG name for each duplicate PV
+57d74a45a05e toollib: override the PV device with duplicates
+c1f246fedfc3 toollib: handle duplicate pvs in process_in_pv
+
+As a further step after this, we may choose to change
+some of those.
+
+For all of these commands, a warning is printed about
+the existence of the duplicate PVs:
+
+Found duplicate PV ...: using /dev/loop1 not /dev/loop0
 ---
- test/lib/aux.sh      |    2 +-
- test/lib/inittest.sh |    2 +-
- test/lib/not.c       |   23 ++++++++++++++++++-----
- 3 files changed, 20 insertions(+), 7 deletions(-)
+ tools/toollib.c |   19 ++++++++++---------
+ 1 files changed, 10 insertions(+), 9 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 3c00470..d0d2aa8 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -124,7 +124,7 @@ lvmetad_dump() {
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 26810b2..2268b7e 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -2821,6 +2821,16 @@ int process_each_pv(struct cmd_context *cmd,
+ 			      arg_count(cmd, all_ARG);
  
- notify_lvmetad() {
- 	if test -e LOCAL_LVMETAD; then
--		pvscan --cache "$@" || true
-+		LVM_LOG_FILE_EPOCH= pvscan --cache "$@" || rm -f debug.log
- 	fi
- }
+ 	/*
++	 * Read all the vgs here because this has the effect of initializing
++	 * device/lvmcache info so that dev->pvid is available when creating
++	 * a list of devices.
++	 */
++	if ((ret = _get_vgnameids_on_system(cmd, &all_vgnameids, only_this_vgname, 1) != ECMD_PROCESSED)) {
++		stack;
++		return ret;
++	}
++
++	/*
+ 	 * If the caller wants to process all devices (not just PVs), then all PVs
+ 	 * from all VGs are processed first, removing them from all_devices.  Then
+ 	 * any devs remaining in all_devices are processed.
+@@ -2834,15 +2844,6 @@ int process_each_pv(struct cmd_context *cmd,
+ 		/* get_arg_devices reports the error for any PV names not found. */
+ 		ret_max = ECMD_FAILED;
  
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index b096c9e..0efbf0d 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -36,7 +36,7 @@ RUNNING_DMEVENTD=$(pgrep dmeventd) || true
- 
- export TESTOLDPWD TESTDIR COMMON_PREFIX PREFIX RUNNING_DMEVENTD
- export LVM_LOG_FILE_EPOCH=DEBUG
--export LVM_LOG_FILE_UNLINK_STATUS=1
-+export LVM_EXPECTED_EXIT_STATUS=1
- 
- test -n "$BASH" && trap 'set +vx; STACKTRACE; set -vx' ERR
- trap 'aux teardown' EXIT # don't forget to clean up
-diff --git a/test/lib/not.c b/test/lib/not.c
-index 1e00fe3..ce46699 100644
---- a/test/lib/not.c
-+++ b/test/lib/not.c
-@@ -20,12 +20,25 @@
- #include <sys/types.h>
- #include <sys/wait.h>
- 
--static int finished(const char *cmd, int status) {
-+static int _finished(const char *cmd, int status, int pid) {
-+	int ret;
- 	if (!strcmp(cmd, "not"))
- 		return !status;
- 	if (!strcmp(cmd, "should")) {
--		if (status)
-+		if (status) {
- 			fprintf(stderr, "TEST WARNING: Ignoring command failure.\n");
-+			/* TODO: avoid using shell here */
-+			/* Show log for failing command which should be passing */
-+			ret = system("ls debug.log*${LVM_LOG_FILE_EPOCH}* 2>/dev/null");
-+			if (WIFEXITED(ret) && WEXITSTATUS(ret) == 0) {
-+				printf("## timing off\n<======== Debug log ========>\n"); /* timing off */
-+				fflush(stdout);
-+				system("sed -e 's,^,## DEBUG: ,' debug.log*${LVM_LOG_FILE_EPOCH}* 2>/dev/null");
-+				printf("## timing on\n"); /* timing on */
-+				system("rm -f debug.log*${LVM_LOG_FILE_EPOCH}*");
-+				fflush(stdout);
-+			}
-+		}
- 		return 0;
- 	} else if (!strcmp(cmd, "invalid")) {
- 		if (status == 3)
-@@ -56,14 +69,14 @@ int main(int args, char **argv) {
- 		return FAILURE;
- 	} else if (pid == 0) { 	/* child */
- 		if (!strcmp(argv[0], "not"))
--			val = "!1";
-+			val = ">1";
- 		else if (!strcmp(argv[0], "invalid"))
- 			val = "3";
- 		else if (!strcmp(argv[0], "fail"))
- 			val = "5";
- 
- 		if (val)
--			setenv("LVM_LOG_FILE_UNLINK_STATUS", val, 1);
-+			setenv("LVM_EXPECTED_EXIT_STATUS", val, 1);
- 
- 		execvp(argv[1], &argv[1]);
- 		/* should not be accessible */
-@@ -79,7 +92,7 @@ int main(int args, char **argv) {
- 			return FAILURE;
- 		}
- 
--		return finished(argv[0], WEXITSTATUS(status));
-+		return _finished(argv[0], WEXITSTATUS(status), pid);
- 	}
- 	/* not accessible */
- 	return FAILURE;
+-	/*
+-	 * Read all the vgs first because this has the effect of initializing
+-	 * other device/lvmcache info that is needed when creating device lists.
+-	 */
+-	if ((ret = _get_vgnameids_on_system(cmd, &all_vgnameids, only_this_vgname, 1) != ECMD_PROCESSED)) {
+-		stack;
+-		return ret;
+-	}
+-
+ 	ret = _process_pvs_in_vgs(cmd, flags, &all_vgnameids, &all_devices,
+ 				  &arg_devices, &arg_tags,
+ 				  process_all_pvs, process_all_devices,
 
 
