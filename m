@@ -1,144 +1,114 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 20 Apr 2015 10:14:10 +0000 (UTC)
-Subject: master - tests: use new debug logging feature
-Message-ID: <20150420101410.04F9560DA7@fedorahosted.org>
+Date: Mon, 20 Apr 2015 17:21:59 +0000 (UTC)
+Subject: master - debug: change envvar
+Message-ID: <20150420172159.34D2D60221@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf4df9e3496d60e7183952e44863250e64618748
-Commit:        cf4df9e3496d60e7183952e44863250e64618748
-Parent:        bff3a1651d1b5b6b83a978f5896655b8df84ffc0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2b4f10ac668f01e63528ccea71545c06120fa9aa
+Commit:        2b4f10ac668f01e63528ccea71545c06120fa9aa
+Parent:        cf4df9e3496d60e7183952e44863250e64618748
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 20 10:05:27 2015 +0200
+AuthorDate:    Mon Apr 20 19:10:29 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 20 12:12:22 2015 +0200
+CommitterDate: Mon Apr 20 19:18:56 2015 +0200
 
-tests: use new debug logging feature
+debug: change envvar
 
-Enhance 'not' to manage autodeletion of log files in right cases.
-Use separately marked epoch log files for clvmd and dmeventd.
-Properly manage stack tracing for new debug.log names.
+Rename envvar LVM_LOG_FILE_UNLINK_STATUS to LVM_EXPECTED_EXIT_STATUS
+and change compare sign from  '!' to  '>'.
+
+Validate LVM_LOG_FILE_EPOCH and support strictly only
+up-to 32 alpha chars. If the content doesn't pass
+epoch is simply ignored.
 ---
- test/lib/aux.sh      |    8 +++-----
- test/lib/inittest.sh |    2 ++
- test/lib/not.c       |   12 ++++++++++++
- test/lib/utils.sh    |   17 ++++++++---------
- 4 files changed, 25 insertions(+), 14 deletions(-)
+ lib/log/log.c |   27 +++++++++++++++++++--------
+ 1 files changed, 19 insertions(+), 8 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index c28ac7b..3c00470 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -44,16 +44,14 @@ prepare_clvmd() {
- 	test "${LVM_VALGRIND_CLVMD:-0}" -eq 0 || run_valgrind="run_valgrind"
- 	rm -f "$CLVMD_PIDFILE"
- 	echo "<======== Starting CLVMD ========>"
--	$run_valgrind clvmd -Isinglenode -d 1 -f &
-+	LVM_LOG_FILE_EPOCH=CLVMD $run_valgrind clvmd -Isinglenode -d 1 -f &
- 	echo $! > LOCAL_CLVMD
- 
- 	for i in $(seq 1 100) ; do
- 		test $i -eq 100 && die "Startup of clvmd is too slow."
--		test -e "$CLVMD_PIDFILE" -a -e debug.log && break
-+		test -e "$CLVMD_PIDFILE" && break
- 		sleep .2
- 	done
--	# Keep log of clvmd in separate debug file
--	mv debug.log clvmddebug.log
- }
- 
- prepare_dmeventd() {
-@@ -70,7 +68,7 @@ prepare_dmeventd() {
- 
- 	local run_valgrind=
- 	test "${LVM_VALGRIND_DMEVENTD:-0}" -eq 0 || run_valgrind="run_valgrind"
--	$run_valgrind dmeventd -f "$@" &
-+	LVM_LOG_FILE_EPOCH=DMEVENTD $run_valgrind dmeventd -f "$@" &
- 	echo $! > LOCAL_DMEVENTD
- 
- 	# FIXME wait for pipe in /var/run instead
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index 3a0d332..b096c9e 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -35,6 +35,8 @@ TESTDIR=$(mkdtemp "${LVM_TEST_DIR:-/tmp}" "$PREFIX.XXXXXXXXXX") || \
- RUNNING_DMEVENTD=$(pgrep dmeventd) || true
- 
- export TESTOLDPWD TESTDIR COMMON_PREFIX PREFIX RUNNING_DMEVENTD
-+export LVM_LOG_FILE_EPOCH=DEBUG
-+export LVM_LOG_FILE_UNLINK_STATUS=1
- 
- test -n "$BASH" && trap 'set +vx; STACKTRACE; set -vx' ERR
- trap 'aux teardown' EXIT # don't forget to clean up
-diff --git a/test/lib/not.c b/test/lib/not.c
-index 1cb12f9..1e00fe3 100644
---- a/test/lib/not.c
-+++ b/test/lib/not.c
-@@ -14,6 +14,7 @@
- 
- #include <unistd.h>
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 141d02d..d8d65ee 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -21,6 +21,7 @@
  #include <stdio.h>
-+#include <stdlib.h>
  #include <stdarg.h>
- #include <string.h>
- #include <sys/types.h>
-@@ -39,6 +40,7 @@ static int finished(const char *cmd, int status) {
- }
+ #include <syslog.h>
++#include <ctype.h>
  
- int main(int args, char **argv) {
-+	const char *val = NULL;
- 	pid_t pid;
- 	int status;
- 	int FAILURE = 6;
-@@ -53,6 +55,16 @@ int main(int args, char **argv) {
- 		fprintf(stderr, "Could not fork\n");
- 		return FAILURE;
- 	} else if (pid == 0) { 	/* child */
-+		if (!strcmp(argv[0], "not"))
-+			val = "!1";
-+		else if (!strcmp(argv[0], "invalid"))
-+			val = "3";
-+		else if (!strcmp(argv[0], "fail"))
-+			val = "5";
+ static FILE *_log_file;
+ static char _log_file_path[PATH_MAX];
+@@ -56,11 +57,12 @@ void init_log_fn(lvm2_log_fn_t log_fn)
+ 
+ /*
+  * Support envvar LVM_LOG_FILE_EPOCH and allow to attach
+- * extra keyword to openned log file. After this word pid
+- * and starttime (in kernel units, read from /proc/self/stat
++ * extra keyword (consist of upto 32 alpha chars) to
++ * opened log file. After this 'epoch' word pid and starttime
++ * (in kernel units, read from /proc/self/stat)
+  * is automatically attached.
+  * If command/daemon forks multiple times, it could create multiple
+- * log files ensure, there are no overwrites.
++ * log files ensuring, there are no overwrites.
+  */
+ void init_log_file(const char *log_file, int append)
+ {
+@@ -69,9 +71,18 @@ void init_log_file(const char *log_file, int append)
+ 	int pid;
+ 	long long starttime;
+ 	FILE *st;
++	int i = 0;
+ 
+ 	_log_file_path[0] = '\0';
+ 	if ((env = getenv("LVM_LOG_FILE_EPOCH"))) {
++		while (isalpha(env[i]) && i < 32) /* Up to 32 alphas */
++			i++;
++		if (env[i]) {
++			if (i)
++				log_warn("WARNING: Ignoring invalid LVM_LOG_FILE_EPOCH envvar \"%s\".", env);
++			goto no_epoch;
++		}
 +
-+		if (val)
-+			setenv("LVM_LOG_FILE_UNLINK_STATUS", val, 1);
-+
- 		execvp(argv[1], &argv[1]);
- 		/* should not be accessible */
- 		return FAILURE;
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index e2b257d..87152a4 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -134,17 +134,16 @@ STACKTRACE() {
+ 		if (!(st = fopen(statfile, "r")))
+ 			log_sys_error("fopen", statfile);
+ 		else if (fscanf(st, "%d %*s %*c %*d %*d %*d %*d " /* tty_nr */
+@@ -94,7 +105,7 @@ void init_log_file(const char *log_file, int append)
+ 			}
+ 		}
+ 	}
+-
++no_epoch:
+ 	if (!(_log_file = fopen(log_file, append ? "a" : "w"))) {
+ 		log_sys_error("fopen", log_file);
+ 		return;
+@@ -106,21 +117,21 @@ void init_log_file(const char *log_file, int append)
+ /*
+  * Unlink the log file depeding on command's return value
+  *
+- * When envvar LVM_LOG_FILE_UNLINK_STATUS is set, compare
++ * When envvar LVM_EXPECTED_EXIT_STATUS is set, compare
+  * resulting status with this string.
+  *
+  * It's possible to specify 2 variants - having it equal to
+  * a single number or having it different from a single number.
+  *
+- * i.e.  LVM_LOG_FILE_UNLINK_STATUS="!1"  # delete when ret != 1.
++ * i.e.  LVM_EXPECTED_EXIT_STATUS=">1"  # delete when ret > 1.
+  */
+ void unlink_log_file(int ret)
+ {
+ 	const char *env;
  
- 	test -f SKIP_THIS_TEST && exit 200
- 
--	test -z "$LVM_TEST_NODEBUG" -a -f debug.log && {
--		IDX=
-+	test -z "$LVM_TEST_NODEBUG" && {
-+		local name
-+		local idx
- 		for i in debug.log* ; do
--			echo "<======== Last traced lvm2 command $i ========>"
--			sed -e "s,^,## DEBUG${IDX}: ," $i
--			IDX=$(($IDX + 1))
-+			name=${i##debug.log_}
-+			name=${name%%_*}
-+			test "$name" = "DEBUG" && { name="$name$idx" ; idx=$(($idx + 1)) ; }
-+			echo "<======== Debug log $i ========>"
-+			sed -e "s,^,## $name: ," $i
- 		done
--		if test -e clvmddebug.log ; then
--			echo "<======== CLVMD debug log ========>"
--			sed -e "s,^,## CLVMD: ," clvmddebug.log
--		fi
- 		if test -e strace.log ; then
- 			echo "<======== Strace debug log ========>"
- 			sed -e "s,^,## STRACE: ," strace.log
+ 	if (_log_file_path[0] &&
+-	    (env = getenv("LVM_LOG_FILE_UNLINK_STATUS")) &&
+-	    ((env[0] == '!' && atoi(env + 1) != ret) ||
++	    (env = getenv("LVM_EXPECTED_EXIT_STATUS")) &&
++	    ((env[0] == '>' && ret > atoi(env + 1)) ||
+ 	     (atoi(env) == ret))) {
+ 		if (unlink(_log_file_path))
+ 			log_sys_error("unlink", _log_file_path);
 
 
