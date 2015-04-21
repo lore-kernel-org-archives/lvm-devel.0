@@ -1,107 +1,141 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 20 Apr 2015 22:08:16 +0000 (UTC)
-Subject: master - toollib: fix duplicate handling in process_each_pv
-Message-ID: <20150420220816.B774960C97@fedorahosted.org>
+Date: Tue, 21 Apr 2015 20:10:47 +0000 (UTC)
+Subject: master - dumpconfig: add --ignorelocal
+Message-ID: <20150421201047.63DA160B34@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0d0d50182d1bf6b11b80fe8fe701f654b953f2fa
-Commit:        0d0d50182d1bf6b11b80fe8fe701f654b953f2fa
-Parent:        caa9223c8549b4a937c2cc13eb7f306f55e4beee
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9b86e8e8f4a3c429f8e5632103fbef6eb1f8dc7d
+Commit:        9b86e8e8f4a3c429f8e5632103fbef6eb1f8dc7d
+Parent:        0d0d50182d1bf6b11b80fe8fe701f654b953f2fa
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Apr 20 14:35:35 2015 -0500
+AuthorDate:    Tue Apr 21 14:53:54 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Apr 20 17:07:58 2015 -0500
+CommitterDate: Tue Apr 21 14:55:03 2015 -0500
 
-toollib: fix duplicate handling in process_each_pv
+dumpconfig: add --ignorelocal
 
-With use_lvmetad=0, duplicate PVs /dev/loop0 and /dev/loop1,
-where in this example, /dev/loop1 is the cached device
-referenced by pv->dev, the command 'pvs /dev/loop0' reports:
-
-Failed to find physical volume "/dev/loop0".
-
-This is because the duplicate PV detection by pvid is
-not working because _get_all_devices() is not setting
-any dev->pvid for any entries.  This is because the
-pvid information has not yet been saved in lvmcache.
-This is fixed by calling _get_vgnameids_on_system()
-before _get_all_devices(), which has the effect of
-caching the necessary pvid information.
-
-With this fix, running pvs /dev/loop0, or pvs /dev/loop1,
-produces no error and one line of output for the PV (the
-device printed is the one cached in pv->dev, in this
-example /dev/loop1.)
-
-Running 'pvs /dev/loop0 /dev/loop1' produces no error
-and two lines of output, with each device displayed
-on one of the lines.
-
-Running 'pvs -a' shows two PVs, one with loop0 and one
-with loop1, and both shown as a member of the same VG.
-
-Running 'pvs' shows only one of the duplicate PVs,
-and that shows the device cached in pv->dev (loop1).
-
-The above output is what the duplicate handling code
-was previously designed to output in commits:
-
-b64da4d8b521 toollib: search for duplicate PVs only when needed
-3a7c47af0e88 toollib: pvs -a should display VG name for each duplicate PV
-57d74a45a05e toollib: override the PV device with duplicates
-c1f246fedfc3 toollib: handle duplicate pvs in process_in_pv
-
-As a further step after this, we may choose to change
-some of those.
-
-For all of these commands, a warning is printed about
-the existence of the duplicate PVs:
-
-Found duplicate PV ...: using /dev/loop1 not /dev/loop0
+When generating a sample lvm.conf file, we don't want to
+include the "local" section, which is kept in lvmlocal.conf.
 ---
- tools/toollib.c |   19 ++++++++++---------
- 1 files changed, 10 insertions(+), 9 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/config/config.c     |    3 +++
+ lib/config/config.h     |    1 +
+ man/lvm-dumpconfig.8.in |    5 +++++
+ tools/args.h            |    1 +
+ tools/commands.h        |    3 ++-
+ tools/dumpconfig.c      |    3 +++
+ 7 files changed, 16 insertions(+), 1 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 26810b2..2268b7e 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -2821,6 +2821,16 @@ int process_each_pv(struct cmd_context *cmd,
- 			      arg_count(cmd, all_ARG);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 987a7c9..23c70eb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.119 - 
+ ==================================
++  Add --ignorelocal option to dumpconfig to ignore the local section.
+   Close connection to lvmetad after fork.
+   Make lvchange able to resume background pvmove polling again.
+   Split pvmove update metadata fn in an initial one and a subsequent one.
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 57e7cb9..4051fa4 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -1817,6 +1817,9 @@ struct dm_config_tree *config_def_create_tree(struct config_def_tree_spec *spec)
+ 		if (cfg_def_get_item_p(id)->parent != root_CFG_SECTION)
+ 			continue;
  
- 	/*
-+	 * Read all the vgs here because this has the effect of initializing
-+	 * device/lvmcache info so that dev->pvid is available when creating
-+	 * a list of devices.
-+	 */
-+	if ((ret = _get_vgnameids_on_system(cmd, &all_vgnameids, only_this_vgname, 1) != ECMD_PROCESSED)) {
-+		stack;
-+		return ret;
-+	}
++		if (spec->ignorelocal && (id == local_CFG_SECTION))
++			continue;
 +
-+	/*
- 	 * If the caller wants to process all devices (not just PVs), then all PVs
- 	 * from all VGs are processed first, removing them from all_devices.  Then
- 	 * any devs remaining in all_devices are processed.
-@@ -2834,15 +2844,6 @@ int process_each_pv(struct cmd_context *cmd,
- 		/* get_arg_devices reports the error for any PV names not found. */
- 		ret_max = ECMD_FAILED;
+ 		if ((tmp = _add_def_section_subtree(cft, spec, root, relay, id))) {
+ 			relay = tmp;
+ 			if (!root)
+diff --git a/lib/config/config.h b/lib/config/config.h
+index 54bd183..cc5681c 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -145,6 +145,7 @@ struct config_def_tree_spec {
+ 	uint16_t version;		/* tree at this LVM2 version */
+ 	unsigned ignoreadvanced:1;		/* do not include advanced configs */
+ 	unsigned ignoreunsupported:1;	/* do not include unsupported configs */
++	unsigned ignorelocal:1;		/* do not include the local section */
+ 	unsigned withcomments:1;		/* include first line of comment */
+ 	unsigned withfullcomments:1;		/* include all comment lines */
+ 	unsigned withversions:1;		/* include versions */
+diff --git a/man/lvm-dumpconfig.8.in b/man/lvm-dumpconfig.8.in
+index a4289d9..b16afb4 100644
+--- a/man/lvm-dumpconfig.8.in
++++ b/man/lvm-dumpconfig.8.in
+@@ -11,6 +11,7 @@ lvm-dumpconfig \(em dump LVM configuration
+ .IR version ]
+ .RB [ \-\-ignoreadvanced ]
+ .RB [ \-\-ignoreunsupported ]
++.RB [ \-\-ignorelocal ]
+ .RB [ \-\-config
+ .IR ConfigurationString ]
+ .RB [ \-\-commandprofile
+@@ -95,6 +96,10 @@ either used for debugging purposes only or their support is not yet
+ complete and they are not meant to be used in production.
  
--	/*
--	 * Read all the vgs first because this has the effect of initializing
--	 * other device/lvmcache info that is needed when creating device lists.
--	 */
--	if ((ret = _get_vgnameids_on_system(cmd, &all_vgnameids, only_this_vgname, 1) != ECMD_PROCESSED)) {
--		stack;
--		return ret;
--	}
--
- 	ret = _process_pvs_in_vgs(cmd, flags, &all_vgnameids, &all_devices,
- 				  &arg_devices, &arg_tags,
- 				  process_all_pvs, process_all_devices,
+ .TP
++.B \-\-ignorelocal
++Ignore local section.
++
++.TP
+ .BI \-\-config " ConfigurationString"
+ Use \fBConfigurationString\fP to override existing configuration.
+ This configuration is then applied for dumpconfig command itself.
+diff --git a/tools/args.h b/tools/args.h
+index 201a2ef..9497223 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -43,6 +43,7 @@ arg(errorwhenfull_ARG, '\0', "errorwhenfull", yes_no_arg, 0)
+ arg(force_long_ARG, '\0', "force", NULL, ARG_COUNTABLE)
+ arg(foreign_ARG, '\0', "foreign", NULL, 0)
+ arg(ignoreadvanced_ARG, '\0', "ignoreadvanced", NULL, 0)
++arg(ignorelocal_ARG, '\0', "ignorelocal", NULL, 0)
+ arg(ignorelockingfailure_ARG, '\0', "ignorelockingfailure", NULL, 0)
+ arg(ignoremonitoring_ARG, '\0', "ignoremonitoring", NULL, 0)
+ arg(ignoreskippedcluster_ARG, '\0', "ignoreskippedcluster", NULL, 0)
+diff --git a/tools/commands.h b/tools/commands.h
+index 10916bf..64c8bf2 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -63,6 +63,7 @@ xx(dumpconfig,
+    "\t[--atversion version]]\n"
+    "\t[--ignoreadvanced]\n"
+    "\t[--ignoreunsupported]\n"
++   "\t[--ignorelocal]\n"
+    "\t[--config ConfigurationString]\n"
+    "\t[--commandprofile ProfileName]\n"
+    "\t[--profile ProfileName]\n"
+@@ -75,7 +76,7 @@ xx(dumpconfig,
+    "\t[--withversions]\n"
+    "\t[ConfigurationNode...]\n",
+    atversion_ARG, configtype_ARG, file_ARG, ignoreadvanced_ARG,
+-   ignoreunsupported_ARG, mergedconfig_ARG, metadataprofile_ARG,
++   ignoreunsupported_ARG, ignorelocal_ARG, mergedconfig_ARG, metadataprofile_ARG,
+    validate_ARG, withcomments_ARG, withfullcomments_ARG, unconfigured_ARG, withversions_ARG)
+ 
+ xx(formats,
+diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
+index 2d1cd9c..d1b4acc 100644
+--- a/tools/dumpconfig.c
++++ b/tools/dumpconfig.c
+@@ -113,6 +113,9 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
+ 	if (arg_count(cmd, ignoreunsupported_ARG))
+ 		tree_spec.ignoreunsupported = 1;
+ 
++	if (arg_count(cmd, ignorelocal_ARG))
++		tree_spec.ignorelocal = 1;
++
+ 	if (!strcmp(type, "current")) {
+ 		if (arg_count(cmd, atversion_ARG)) {
+ 			log_error("--atversion has no effect with --type current");
 
 
