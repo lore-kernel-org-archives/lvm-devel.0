@@ -1,36 +1,41 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Wed, 22 Apr 2015 21:34:54 -0600
-Subject: How to judge a vg is empty
-Message-ID: <5538D8DE020000A000010BE1@relay2.provo.novell.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Thu, 23 Apr 2015 15:21:10 +0000 (UTC)
+Subject: master - config: thin_disabled_features default should be undefined
+Message-ID: <20150423152111.05ABC6006F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi list,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a8bdfbe959a641da21d3baf27046deb8d2eaddb2
+Commit:        a8bdfbe959a641da21d3baf27046deb8d2eaddb2
+Parent:        3fc9615d156892efd8bb28b0306c2fe9c14738ff
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Apr 23 10:19:00 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Apr 23 10:19:00 2015 -0500
 
-I'd like to remove the limit of LVM RA that does not support an vg with no lvs,
-because it is not convenient while configuring the resource especially through 
-wizard like hawk. The wizard has to be split into two parts.
+config: thin_disabled_features default should be undefined
 
-First I would like to use this command. 
-       `vgdisplay vg_name | awk '/Cur LV/{print $3}'  `
-  If the Cur LV  is 0 then look the vg as empty.
+An array that's empty by default should be flagged as
+undefined.
+---
+ lib/config/config_settings.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
- But as to ResourceAgent upstream says, it is not recommended to use any lvm commands
- in RA monitor/status function because of the execute time issue.
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 1a0ebf7..6db9cda 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -823,7 +823,7 @@ cfg_array(global_thin_check_options_CFG, "thin_check_options", global_CFG_SECTIO
+ cfg_array(global_thin_repair_options_CFG, "thin_repair_options", global_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, "#S" DEFAULT_THIN_REPAIR_OPTIONS, vsn(2, 2, 100), NULL,
+ 	"String of options passed to the thin_repair command.\n")
  
-Then I suppose I can check the backup file. 
-        `grep "logical_volumes" /etc/lvm/backup/vg_name`
-  If string "logical_volumes" is found in backup/vg_name it means this vg is not empty.
-
-I want to know whether this is a reliable way to announce a vg empty or is there a better way?
-Thanks!
-
-Best regards
-     Liuhua
-
-
+-cfg_array(global_thin_disabled_features_CFG, "thin_disabled_features", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, NULL, vsn(2, 2, 99), NULL,
++cfg_array(global_thin_disabled_features_CFG, "thin_disabled_features", global_CFG_SECTION, CFG_DEFAULT_UNDEFINED | CFG_ALLOW_EMPTY, CFG_TYPE_STRING, NULL, vsn(2, 2, 99), NULL,
+ 	"Features to not use in the thin driver.\n"
+ 	"This can be helpful for testing, or to avoid\n"
+ 	"using a feature that is causing problems.\n"
 
 
