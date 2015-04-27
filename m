@@ -1,54 +1,68 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 27 Apr 2015 19:16:05 +0000 (UTC)
-Subject: master - config: fix a couple mistakes with defaults
-Message-ID: <20150427191605.83D45600E1@fedorahosted.org>
+Date: Mon, 27 Apr 2015 19:16:07 +0000 (UTC)
+Subject: master - example.conf.in: regenerate
+Message-ID: <20150427191607.AAAD660F47@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cfb0174fed25cb6a27a5ff3554b5c442d2defcc9
-Commit:        cfb0174fed25cb6a27a5ff3554b5c442d2defcc9
-Parent:        a7d28639eb4a2cd5adbf5b14b07702ba4d84593c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0c1bda9b53d1935a6eadea579061c323366c8e61
+Commit:        0c1bda9b53d1935a6eadea579061c323366c8e61
+Parent:        cfb0174fed25cb6a27a5ff3554b5c442d2defcc9
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Apr 27 13:17:15 2015 -0500
+AuthorDate:    Mon Apr 27 14:15:24 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Apr 27 13:54:45 2015 -0500
+CommitterDate: Mon Apr 27 14:15:24 2015 -0500
 
-config: fix a couple mistakes with defaults
+example.conf.in: regenerate
 
-for archive, archive_dir, and cache
+>From recent config_settings.h changes.
 ---
- lib/config/config_settings.h |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ conf/example.conf.in |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 742fa19..dcbc332 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -222,7 +222,7 @@ cfg_array(devices_global_filter_CFG, "global_filter", devices_CFG_SECTION, CFG_D
- 	"Devices rejected by global_filter are not opened by LVM.\n")
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index eedefb5..5354779 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -144,7 +144,7 @@ devices {
+ #	global_filter=[]
  
- cfg_runtime(devices_cache_CFG, "cache", devices_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(1, 0, 0), NULL,
--	"This has been replaced by the devices/cache_dir setting.\n")
-+	"The path can be set using the devices/cache_dir setting.\n")
+ 	# Configuration option devices/cache.
+-	# This has been replaced by the devices/cache_dir setting.
++	# The path can be set using the devices/cache_dir setting.
+ 	cache="/etc/lvm/cache/.cache"
  
- cfg_runtime(devices_cache_dir_CFG, "cache_dir", devices_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(1, 2, 19), "@DEFAULT_SYS_DIR@/@DEFAULT_CACHE_SUBDIR@",
- 	"Directory in which to store the device cache file.\n"
-@@ -537,11 +537,11 @@ cfg_runtime(backup_backup_dir_CFG, "backup_dir", backup_CFG_SECTION, 0, CFG_TYPE
- 	"Location of the metadata backup files.\n"
- 	"Remember to back up this directory regularly!\n")
+ 	# Configuration option devices/cache_dir.
+@@ -540,7 +540,7 @@ backup {
+ 	# Configuration option backup/archive_dir.
+ 	# Location of the metdata archive files.
+ 	# Remember to back up this directory regularly!
+-	archive_dir="/etc/lvm/archive"
++	archive_dir="@DEFAULT_SYS_DIR@/@DEFAULT_ARCHIVE_SUBDIR@"
  
--cfg(backup_archive_CFG, "archive", backup_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ARCHIVE_ENABLED, vsn(1, 0, 0), "@DEFAULT_SYS_DIR@/@DEFAULT_ARCHIVE_SUBDIR@",
-+cfg(backup_archive_CFG, "archive", backup_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ARCHIVE_ENABLED, vsn(1, 0, 0), NULL,
- 	"Maintain an archive of old metadata configurations.\n"
- 	"Think very hard before turning this off.\n")
+ 	# Configuration option backup/retain_min.
+ 	# Minimum number of archives to keep.
+@@ -863,7 +863,7 @@ global {
+ 	# ignorable errors and fix them later.
+ 	# With thin_check version 3.2 or newer you should add
+ 	# --clear-needs-check-flag.
+-	thin_check_options="-q --clear-needs-check-flag"
++	thin_check_options=["-q", "--clear-needs-check-flag"]
  
--cfg_runtime(backup_archive_dir_CFG, "archive_dir", backup_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(1, 0, 0), NULL,
-+cfg_runtime(backup_archive_dir_CFG, "archive_dir", backup_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(1, 0, 0), "@DEFAULT_SYS_DIR@/@DEFAULT_ARCHIVE_SUBDIR@",
- 	"Location of the metdata archive files.\n"
- 	"Remember to back up this directory regularly!\n")
+ 	# Configuration option global/thin_repair_options.
+ 	# String of options passed to the thin_repair command.
+@@ -879,7 +879,8 @@ global {
+ 	# error_if_no_space.
+ 	# Example:
+ 	# thin_disabled_features = [ "discards", "block_size" ]
+-	thin_disabled_features=[]
++	# This configuration option does not have a default value defined.
++#	thin_disabled_features=[]
  
+ 	# Configuration option global/cache_check_executable.
+ 	# The full path to the cache_check command.
 
 
