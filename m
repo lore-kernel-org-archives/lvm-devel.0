@@ -1,38 +1,51 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 28 Apr 2015 09:36:44 +0000 (UTC)
-Subject: master - tests: more help#
-Message-ID: <20150428093644.8B22361086@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 28 Apr 2015 12:03:26 +0000 (UTC)
+Subject: master - conf: Avoid temp files when generating config.
+Message-ID: <20150428120326.2D4D960921@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=71dbfd7c2077fc5d83eac37da68b55ef1a195d29
-Commit:        71dbfd7c2077fc5d83eac37da68b55ef1a195d29
-Parent:        3fbb7b6e35b12c36838139eb365b526129b63baf
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 28 11:35:56 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 28 11:35:56 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d0c46c9ed5247732e46fcb9ca4ad5be9f77a64a0
+Commit:        d0c46c9ed5247732e46fcb9ca4ad5be9f77a64a0
+Parent:        71dbfd7c2077fc5d83eac37da68b55ef1a195d29
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Apr 28 13:02:19 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Apr 28 13:02:19 2015 +0100
 
-tests: more help#
+conf: Avoid temp files when generating config.
 
 ---
- test/Makefile.in |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ conf/Makefile.in |   10 +++-------
+ 1 files changed, 3 insertions(+), 7 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index bf9b58e..04fbea0 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -76,6 +76,7 @@ help:
- 	@echo "  clean			Clean dir."
- 	@echo "  help			Display callable targets."
- 	@echo -e "\nSupported variables:"
-+	@echo "  LVM_TEST_BACKING_DEVICE Set device used for testing (see also LVM_TEST_DIR)."
- 	@echo "  LVM_TEST_CAN_CLOBBER_DMESG Allow to clobber dmesg buffer without /dev/kmsg. (1)"
- 	@echo "  LVM_TEST_DEVDIR	Set to '/dev' to run on real /dev."
- 	@echo "  LVM_TEST_DIR		Where to create test files  [$(LVM_TEST_DIR)]."
+diff --git a/conf/Makefile.in b/conf/Makefile.in
+index ee78f6a..c427a2e 100644
+--- a/conf/Makefile.in
++++ b/conf/Makefile.in
+@@ -27,12 +27,8 @@ include $(top_builddir)/make.tmpl
+ .PHONY: install_conf install_localconf install_profiles
+ 
+ generate:
+-	LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withfullcomments --ignorelocal > example.conf.gen
+-	cat example.conf.base example.conf.gen > example.conf.in
+-	$(RM) example.conf.gen
+-	LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withfullcomments local > lvmlocal.conf.gen
+-	cat lvmlocal.conf.base lvmlocal.conf.gen > lvmlocal.conf.in
+-	$(RM) lvmlocal.conf.gen
++	(cat $(top_srcdir)/conf/example.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withfullcomments --ignorelocal) > example.conf.in
++	(cat $(top_srcdir)/conf/lvmlocal.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withfullcomments local) > lvmlocal.conf.in
+ 
+ install_conf: $(CONFSRC)
+ 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
+@@ -54,4 +50,4 @@ install_lvm2: install_conf install_localconf install_profiles
+ 
+ install: install_lvm2
+ 
+-DISTCLEAN_TARGETS += $(CONFSRC) $(CONFLOCAL) $(PROFILE_TEMPLATES) $(CONFSRC).gen $(CONFLOCAL).gen
++DISTCLEAN_TARGETS += $(CONFSRC) $(CONFLOCAL) $(PROFILE_TEMPLATES)
 
 
