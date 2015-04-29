@@ -1,142 +1,72 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Wed, 29 Apr 2015 15:12:32 +0000 (UTC)
-Subject: master - libdaemon: introduce support for exit on idle
-Message-ID: <20150429151232.ACCA3611BF@fedorahosted.org>
+Date: Wed, 29 Apr 2015 15:12:30 +0000 (UTC)
+Subject: master - toollib: code cleanup in lv_spawn_background_polling
+Message-ID: <20150429151230.8E125611BF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e0a62b8fdc8d041c14ca523643e319431b80126f
-Commit:        e0a62b8fdc8d041c14ca523643e319431b80126f
-Parent:        b120454b505f88719735fd1b653dec48816d6036
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b120454b505f88719735fd1b653dec48816d6036
+Commit:        b120454b505f88719735fd1b653dec48816d6036
+Parent:        f0ff3e9982f1812435bf294d18f743762c944eb1
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Wed Apr 29 16:59:30 2015 +0200
+AuthorDate:    Wed Apr 29 16:25:50 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Wed Apr 29 17:10:44 2015 +0200
+CommitterDate: Wed Apr 29 17:10:37 2015 +0200
 
-libdaemon: introduce support for exit on idle
+toollib: code cleanup in lv_spawn_background_polling
 
-works with systemd activated daemons only as of now
-
-each daemon implementation may decide to signalize its
-internal idle state (i.e. all background tasks unrelated to
-client threads are finished)
+we're going to extract parameters from lv_mirr later
+with code refactoring of polldaemon
 ---
- libdaemon/server/daemon-server.c |   41 ++++++++++++++++++++++++++++++++++++-
- libdaemon/server/daemon-server.h |   19 +++++++++++++++++
- 2 files changed, 58 insertions(+), 2 deletions(-)
+ tools/toollib.c |   19 ++++++++++---------
+ 1 files changed, 10 insertions(+), 9 deletions(-)
 
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 5ccf4e9..1869956 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -80,6 +80,29 @@ static void _exit_handler(int sig __attribute__((unused)))
- 
- #  include <stdio.h>
- 
-+static int _is_idle(daemon_state s)
-+{
-+	return _systemd_activation && s.idle && s.idle->is_idle && !s.threads->next;
-+}
-+
-+static struct timeval *_get_timeout(daemon_state s)
-+{
-+	return (_systemd_activation && s.idle) ? s.idle->ptimeout : NULL;
-+}
-+
-+static void _reset_timeout(daemon_state s)
-+{
-+	if (s.idle) {
-+		s.idle->ptimeout->tv_sec = 1;
-+		s.idle->ptimeout->tv_usec = 0;
-+	}
-+}
-+
-+static unsigned _get_max_timeouts(daemon_state s)
-+{
-+	return s.idle ? s.idle->max_timeouts : 0;
-+}
-+
- static int _set_oom_adj(const char *oom_adj_path, int val)
- {
- 	FILE *fp;
-@@ -513,6 +536,7 @@ void daemon_start(daemon_state s)
- 	int failed = 0;
- 	log_state _log = { { 0 } };
- 	thread_state _threads = { .next = NULL };
-+	unsigned timeout_count = 0;
- 
- 	/*
- 	 * Switch to C locale to avoid reading large locale-archive file used by
-@@ -583,15 +607,28 @@ void daemon_start(daemon_state s)
- 			failed = 1;
- 
- 	while (!_shutdown_requested && !failed) {
-+		_reset_timeout(s);
- 		fd_set in;
- 		FD_ZERO(&in);
- 		FD_SET(s.socket_fd, &in);
--		if (select(FD_SETSIZE, &in, NULL, NULL, NULL) < 0 && errno != EINTR)
-+		if (select(FD_SETSIZE, &in, NULL, NULL, _get_timeout(s)) < 0 && errno != EINTR)
- 			perror("select error");
--		if (FD_ISSET(s.socket_fd, &in))
-+		if (FD_ISSET(s.socket_fd, &in)) {
-+			timeout_count = 0;
- 			if (!_shutdown_requested && !handle_connect(s))
- 				ERROR(&s, "Failed to handle a client connection.");
-+		}
-+
- 		reap(s, 0);
-+
-+		/* s.idle == NULL equals no shutdown on timeout */
-+		if (_is_idle(s)) {
-+			DEBUGLOG(&s, "timeout occured");
-+			if (++timeout_count >= _get_max_timeouts(s)) {
-+				INFO(&s, "Inactive for %d seconds. Exiting.", timeout_count);
-+				break;
-+			}
-+		}
- 	}
- 
- 	INFO(&s, "%s waiting for client threads to finish", s.name);
-diff --git a/libdaemon/server/daemon-server.h b/libdaemon/server/daemon-server.h
-index a7673d4..820e5e0 100644
---- a/libdaemon/server/daemon-server.h
-+++ b/libdaemon/server/daemon-server.h
-@@ -35,6 +35,21 @@ typedef struct {
- 	struct buffer buffer;
- } response;
- 
-+struct timeval;
-+
-+/*
-+ * is_idle:	 daemon implementation sets it to true when no background task
-+ *		 is running
-+ * max_timeouts: how many seconds do daemon allow to be idle before it shutdowns
-+ * ptimeout:	 internal variable passed to select(). has to be reset to 1 second
-+ *		 before each select
-+ */
-+typedef struct {
-+	volatile unsigned is_idle;
-+	unsigned max_timeouts;
-+	struct timeval *ptimeout;
-+} daemon_idle;
-+
- struct daemon_state;
- 
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 2268b7e..d29bebf 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1,6 +1,6 @@
  /*
-@@ -98,6 +113,10 @@ typedef struct daemon_state {
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -910,14 +910,15 @@ void lv_spawn_background_polling(struct cmd_context *cmd,
+ 				 struct logical_volume *lv)
+ {
+ 	const char *pvname;
++	const struct logical_volume *lv_mirr = NULL;
  
- 	log_state *log;
- 	struct thread_state *threads;
+-	if (lv_is_pvmove(lv) &&
+-	    (pvname = get_pvmove_pvname_from_lv_mirr(lv))) {
+-		log_verbose("Spawning background pvmove process for %s.",
+-			    pvname);
+-		pvmove_poll(cmd, pvname, 1);
+-	} else if (lv_is_locked(lv) &&
+-		   (pvname = get_pvmove_pvname_from_lv(lv))) {
++	if (lv_is_pvmove(lv))
++		lv_mirr = lv;
++	else if (lv_is_locked(lv))
++		lv_mirr = find_pvmove_lv_in_lv(lv);
 +
-+	/* suport for shutdown on idle */
-+	daemon_idle *idle;
-+
- 	void *private; /* the global daemon state */
- } daemon_state;
++	if (lv_mirr &&
++	    (pvname = get_pvmove_pvname_from_lv_mirr(lv_mirr))) {
+ 		log_verbose("Spawning background pvmove process for %s.",
+ 			    pvname);
+ 		pvmove_poll(cmd, pvname, 1);
+@@ -925,7 +926,7 @@ void lv_spawn_background_polling(struct cmd_context *cmd,
  
+ 	if (lv_is_converting(lv) || lv_is_merging(lv)) {
+ 		log_verbose("Spawning background lvconvert process for %s.",
+-			lv->name);
++			    lv->name);
+ 		lvconvert_poll(cmd, lv, 1);
+ 	}
+ }
 
 
