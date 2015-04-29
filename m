@@ -1,55 +1,81 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 29 Apr 2015 15:14:41 +0000 (UTC)
-Subject: master - man: 'lvmconfig' is preferred over 'lvm config'
-Message-ID: <20150429151441.AB49E60D66@fedorahosted.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 29 Apr 2015 19:55:06 +0100
+Subject: Storage Management Job Vacancy at Red Hat
+Message-ID: <20150429185506.GH31048@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bf73ccb8483219c72cb7e80daf2e40f0a14db4e1
-Commit:        bf73ccb8483219c72cb7e80daf2e40f0a14db4e1
-Parent:        08a82aa940ad3c2841c52544543a08919c0ed110
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Apr 29 10:13:13 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Apr 29 10:14:23 2015 -0500
+We're seeking to recruit another experienced linux developer to work on
+management of the storage stack which includes device-mapper and LVM
+amongst other components.
 
-man: 'lvmconfig' is preferred over 'lvm config'
+Candidates should apply directly through the website.
+  http://jobs.redhat.com/jobs/descriptions/principal-software-engineer-storage-management-westford-massachusetts-job-1-5244624
 
----
- man/lvm.8.in      |    2 +-
- man/lvm.conf.5.in |    4 ++--
- 2 files changed, 3 insertions(+), 3 deletions(-)
+Note that although it is listed under our main engineering office at
+Westford outside Boston, MA, it is also open to good candidates who
+would prefer to be based at other Red Hat offices worldwide (or to work
+from home).  If this would be the case, please mention it when applying.
 
-diff --git a/man/lvm.8.in b/man/lvm.8.in
-index 7ed35c8..298d05b 100644
---- a/man/lvm.8.in
-+++ b/man/lvm.8.in
-@@ -321,7 +321,7 @@ way it fits with other LVM configuration methods.
- A short form of \fB\-\-metadataprofile\fP for \fBvgcreate\fP, \fBlvcreate\fP,
- \fBvgchange\fP and \fBlvchange\fP command and a short form of \fB\-\-commandprofile\fP
- for any other command (with the exception of \fBlvmconfig\fP command where the
--\-\-profile has special meaning, see \fBlvm config\fP(8) for more information).
-+\-\-profile has special meaning, see \fBlvmconfig\fP(8) for more information).
- .TP
- .IR \fB\-\-config " " \fIConfigurationString
- Uses the ConfigurationString as direct string representation of the configuration
-diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
-index 88694a1..6ff8674 100644
---- a/man/lvm.conf.5.in
-+++ b/man/lvm.conf.5.in
-@@ -65,8 +65,8 @@ For this purpose, there's the \fBcommand_profile_template.profile\fP
- (for metadata profiles) which contain all settings that are customizable
- by profiles of certain type. Users are encouraged to copy these template
- profiles and edit them as needed. Alternatively, the
--\fBlvm config \-\-file <ProfileName.profile> \-\-type profilable-command <section>\fP
--or \fBlvm config \-\-file <ProfileName.profile> \-\-type profilable-metadata <section>\fP
-+\fBlvmconfig \-\-file <ProfileName.profile> \-\-type profilable-command <section>\fP
-+or \fBlvmconfig \-\-file <ProfileName.profile> \-\-type profilable-metadata <section>\fP
- can be used to generate a configuration with profilable settings in either
- of the type for given section and save it to new ProfileName.profile
- (if the section is not specified, all profilable settings are reported).
+                        --------------------
+
+Red Hat is seeking an experienced Principal Software Engineer to work on
+our Linux storage stack. The stack provides a rich set of capabilities
+to configure, control, and monitor storage resources, and extends from
+storage hardware to operating system device drivers, protocol drivers
+like SCSI and SATA, device-mapper, crypto, multipath, software RAID, and
+LVM. In this role, you will develop APIs to provide access to the
+management of each of these components. The APIs will serve as the basis
+for developing higher-level tools, managing the data center, and for
+platforms such as OpenStack.
+
+Primary job responsibilities:
+
+- Determine the requirements of the higher-level tools that will make
+  use of the storage management APIs
+
+- Investigate the design and capabilities of each component to be
+  managed
+
+- Determine feasibility, and collaborate to design the API
+
+- Develop the C and Python APIs needed to allow management of each
+  component in the Linux storage stack
+
+- Test the interfaces; debug, document, and deliver for use by
+  higher-level system management tools
+
+                        --------------------
+Required skills:
+
+- Professional development experience with C
+- Solid scripting skills; experience with Python is an advantage
+- Experience developing Inter-Process Communication (IPC) systems;
+  familiarity with D-Bus message bus is a plus
+- Experience with storage concepts like device drivers, RAID, device
+  mapper, multipath, (i)SCSI, or SATA is a plus
+- Understanding of how to develop management code at the hardware or
+  software interface is a plus
+- Committed to open source software development and fostering
+  community engagement
+- Experience working with open source projects is a plus
+
+                        --------------------
+
+Red Hat is proud to be an equal opportunity workplace and an affirmative
+action employer. We review applications for employment without regard to
+applicants? race, color, religion, national origin, ancestry,
+citizenship, sex, gender, age, uniformed services, genetic information,
+physical or mental disability, medical condition, marital status, or any
+other basis prohibited by law.
+
+                        --------------------
+
+Alasdair
+-- 
+agk at redhat.com
 
 
