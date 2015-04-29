@@ -1,80 +1,49 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Mar 2012 21:56:45 -0000
-Subject: LVM2 ./WHATS_NEW_DM tools/dmsetup.c
-Message-ID: <20120301215645.19897.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 29 Apr 2015 13:10:26 +0000 (UTC)
+Subject: master - lvmetad: drop unused vars
+Message-ID: <20150429131026.2AC1C60ECF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-01 21:56:44
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=923902013c6d47f02abe2d6171bdeed9f16f413c
+Commit:        923902013c6d47f02abe2d6171bdeed9f16f413c
+Parent:        5d8b31ffad4fb6e3f1e9a4f20387cd7f1e141085
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Apr 29 15:00:33 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Apr 29 15:09:58 2015 +0200
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	tools          : dmsetup.c 
+lvmetad: drop unused vars
 
-Log message:
-	Add some more pointer validation
-	
-	Ensure _display_name() and _add_dep() would not deref NULL names.
-	Switch to use internal dm_basename().
+Squash some unused vars introduced in some previous commit.s
+---
+ daemons/lvmetad/lvmetad-core.c |    4 +---
+ 1 files changed, 1 insertions(+), 3 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.578&r2=1.579
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.184&r2=1.185
-
---- LVM2/WHATS_NEW_DM	2012/03/01 10:07:38	1.578
-+++ LVM2/WHATS_NEW_DM	2012/03/01 21:56:44	1.579
-@@ -1,5 +1,6 @@
- Version 1.02.73 - 
- ====================================
-+  Add few pointer validation in dmsetup.
-   Support dm_task_get_driver_version() query without version string.
-   Log failure of pthread_join when cleaning unused threads in dmeventd.
-   Fix empty string warning logic in _find_config_str. (1.02.68)
---- LVM2/tools/dmsetup.c	2012/03/01 21:50:35	1.184
-+++ LVM2/tools/dmsetup.c	2012/03/01 21:56:44	1.185
-@@ -1869,6 +1869,9 @@
- {
- 	char dev_name[PATH_MAX];
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index e3394ab..398ef38 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -809,8 +809,7 @@ static response pv_gone(lvmetad_state *s, request r)
+ 	int64_t device = daemon_request_int(r, "device", 0);
+ 	int64_t alt_device = 0;
+ 	struct dm_config_tree *pvmeta;
+-	struct dm_config_node *pvmeta_tmp;
+-	char *pvid_old, *vgid;
++	char *vgid;
  
-+	if (!names)
-+		return 1;
-+
- 	if ((_dev_name_type == DN_BLK || _dev_name_type == DN_MAP) &&
- 	    dm_device_get_name((int) MAJOR(names->dev), (int) MINOR(names->dev),
- 			       _dev_name_type == DN_BLK, dev_name, PATH_MAX))
-@@ -2203,7 +2206,8 @@
+ 	DEBUGLOG(s, "pv_gone: %s / %" PRIu64, pvid, device);
  
- static int _add_dep(CMD_ARGS)
- {
--	if (!dm_tree_add_dev(_dtree, (unsigned) MAJOR(names->dev), (unsigned) MINOR(names->dev)))
-+	if (names &&
-+	    !dm_tree_add_dev(_dtree, (unsigned) MAJOR(names->dev), (unsigned) MINOR(names->dev)))
- 		return 0;
+@@ -825,7 +824,6 @@ static response pv_gone(lvmetad_state *s, request r)
+ 	DEBUGLOG(s, "pv_gone (updated): %s / %" PRIu64, pvid, device);
  
- 	return 1;
-@@ -3417,7 +3421,8 @@
+ 	pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, pvid);
+-	pvid_old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device));
+ 	vgid = dm_hash_lookup(s->pvid_to_vgid, pvid);
  
- static int _process_switches(int *argc, char ***argv, const char *dev_dir)
- {
--	char *base, *namebase, *s;
-+	const char *base;
-+	char *namebase, *s;
- 	static int ind;
- 	int c, r;
- 
-@@ -3482,7 +3487,7 @@
- 		fprintf(stderr, "Failed to duplicate name.\n");
- 		return 0;
- 	}
--	base = basename(namebase);
-+	base = dm_basename(namebase);
- 
- 	if (!strcmp(base, "devmap_name")) {
- 		free(namebase);
+ 	dm_hash_remove_binary(s->device_to_pvid, &device, sizeof(device));
 
 
