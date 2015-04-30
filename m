@@ -1,76 +1,80 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 Apr 2015 09:17:11 +0000 (UTC)
-Subject: master - tests: lvmconf update
-Message-ID: <20150430091711.866EA61085@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 30 Apr 2015 12:10:29 +0000 (UTC)
+Subject: master - lvmconfig: comment out settings with proper space/tab prefix
+Message-ID: <20150430121029.C612960F6A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3706abde5e7703562bad3072cca13faf31b6b8b6
-Commit:        3706abde5e7703562bad3072cca13faf31b6b8b6
-Parent:        13fea879606c4dfdeb8d7686ca2ab606a70a5cd4
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 30 11:12:19 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Apr 30 11:16:14 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4388ab477c644c3d58b81acf2de969d49fb984ca
+Commit:        4388ab477c644c3d58b81acf2de969d49fb984ca
+Parent:        3706abde5e7703562bad3072cca13faf31b6b8b6
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Apr 30 13:59:00 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Apr 30 14:06:55 2015 +0200
 
-tests: lvmconf update
+lvmconfig: comment out settings with proper space/tab prefix
 
-New lvmconf function is using bash associative arrays - however
-older systems like RHEL5 doesn't provide this feature. In this case
-stay with older variant.
+We're commenting out settings with undefined default values.
+The comment character '#' was printed at the very beginning of
+the line, it should be placed just at the beginning of the setting,
+after the space/tab prefix is printed.
 
-Restore support for use case like this:
-aux lvmconf 'tags/@foo {}'
+Before this patch:
+
+  $ lvmconfig --type default activation
+  activation {
+           ...
+  #        volume_list=[]
+           ...
+  }
+
+With this patch applied:
+
+  $ lvmconfig --type default activation
+  activation {
+           ...
+           # volume_list=[]
+           ...
+  }
 ---
- test/lib/aux.sh |   20 +++++++++++++++++---
- 1 files changed, 17 insertions(+), 3 deletions(-)
+ lib/config/config.c |   14 +++++++++++---
+ 1 files changed, 11 insertions(+), 3 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 373909a..67df0f5 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -786,14 +786,28 @@ EOF
- 	    echo "$v"
- 	done >> "$config_values"
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 167cfff..385bf9e 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -1609,6 +1609,8 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void
+ 	char summary[MAX_COMMENT_LINE+1];
+ 	char version[9];
+ 	int pos = 0;
++	size_t len;
++	char *space_prefix;
  
--	declare -A CONF
-+	declare -A CONF || {
-+		# Associative arrays is not available
-+		local s
-+		for s in $(cut -f1 -d/ "$config_values" | sort | uniq); do
-+			echo "$s {"
-+			local k
-+			for k in $(grep ^"$s"/ "$config_values" | cut -f1 -d= | sed -e 's, *$,,' | sort | uniq); do
-+				grep "^$k" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ,"
-+			done
-+			echo "}"
-+			echo
-+		done | tee "$config" | sed -e "s,^,## LVMCONF: ,"
-+		return 0
-+	}
-+
- 	local sec
- 	local last_sec
+ 	if ((out->tree_spec->type == CFG_DEF_TREE_DIFF) &&
+ 	    (!(out->tree_spec->check_status[cn->id] & CFG_DIFF)))
+@@ -1639,9 +1641,15 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void
+ 	}
  
- 	# read sequential list and put into associative array
- 	while IFS=$IFS_NL read -r v; do
- 		# trim white-space-chars via echo when inserting
--		CONF[$(echo ${v%%=*})]=${v##*=}
-+		CONF[$(echo ${v%%[={]*})]=${v#*/}
- 	done < "$config_values"
+ 	/* Usual tree view with nodes and their values. */
+-	fprintf(out->fp, "%s%s\n", (out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
+-				   (out->tree_spec->type != CFG_DEF_TREE_DIFF) &&
+-				   (cfg_def->flags & CFG_DEFAULT_UNDEFINED) ? "#" : "", line);
++	if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
++	    (out->tree_spec->type != CFG_DEF_TREE_DIFF) &&
++	    (cfg_def->flags & CFG_DEFAULT_UNDEFINED)) {
++		space_prefix = ((len = strspn(line, "\t "))) ? dm_pool_strndup(out->mem, line, len) : NULL;
++		fprintf(out->fp, "%s%s%s\n", space_prefix ? : "", "# ", line + len);
++		if (space_prefix)
++			dm_pool_free(out->mem, space_prefix);
++	} else
++		fprintf(out->fp, "%s\n", line);
  
- 	# sort by section and iterate through them
-@@ -804,7 +818,7 @@ EOF
- 			echo "$sec {"
- 			last_sec=$sec
- 		}
--		echo "	${v#*/} =${CONF[$v]}"
-+		echo "    ${CONF[$v]}"
- 	done > "$config"
- 	echo "}" >> "$config"
- 
+ 	return 1;
+ }
 
 
