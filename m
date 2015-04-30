@@ -1,47 +1,76 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Thu, 30 Apr 2015 04:35:44 +0000 (UTC)
-Subject: master - spec: Pull in lvmconfig and associated manpages.
-Message-ID: <20150430043544.D057F60D5F@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 30 Apr 2015 09:17:11 +0000 (UTC)
+Subject: master - tests: lvmconf update
+Message-ID: <20150430091711.866EA61085@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=13fea879606c4dfdeb8d7686ca2ab606a70a5cd4
-Commit:        13fea879606c4dfdeb8d7686ca2ab606a70a5cd4
-Parent:        d6b624686478c0f162ac4f7f4af7d35d5539d151
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Apr 29 17:58:19 2015 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Thu Apr 30 06:35:05 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3706abde5e7703562bad3072cca13faf31b6b8b6
+Commit:        3706abde5e7703562bad3072cca13faf31b6b8b6
+Parent:        13fea879606c4dfdeb8d7686ca2ab606a70a5cd4
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Apr 30 11:12:19 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Apr 30 11:16:14 2015 +0200
 
-spec: Pull in lvmconfig and associated manpages.
+tests: lvmconf update
 
+New lvmconf function is using bash associative arrays - however
+older systems like RHEL5 doesn't provide this feature. In this case
+stay with older variant.
+
+Restore support for use case like this:
+aux lvmconf 'tags/@foo {}'
 ---
- spec/packages.inc |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |   20 +++++++++++++++++---
+ 1 files changed, 17 insertions(+), 3 deletions(-)
 
-diff --git a/spec/packages.inc b/spec/packages.inc
-index 6d6f92e..109abd2 100644
---- a/spec/packages.inc
-+++ b/spec/packages.inc
-@@ -77,6 +77,7 @@ fi
- %{_sbindir}/vgs
- %{_sbindir}/vgscan
- %{_sbindir}/vgsplit
-+%{_sbindir}/lvmconfig
- %{_sbindir}/lvmconf
- %{_sbindir}/blkdeactivate
- %if %{have_service lvmetad}
-@@ -139,6 +140,8 @@ fi
- %{_mandir}/man8/vgsplit.8.gz
- %{_mandir}/man8/blkdeactivate.8.gz
- %{_mandir}/man8/lvm-dumpconfig.8.gz
-+%{_mandir}/man8/lvm-config.8.gz
-+%{_mandir}/man8/lvmconfig.8.gz
- %if %{enable_udev}
-  %{_udevdir}/11-dm-lvm.rules
-  %if %{have_service lvmetad}
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 373909a..67df0f5 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -786,14 +786,28 @@ EOF
+ 	    echo "$v"
+ 	done >> "$config_values"
+ 
+-	declare -A CONF
++	declare -A CONF || {
++		# Associative arrays is not available
++		local s
++		for s in $(cut -f1 -d/ "$config_values" | sort | uniq); do
++			echo "$s {"
++			local k
++			for k in $(grep ^"$s"/ "$config_values" | cut -f1 -d= | sed -e 's, *$,,' | sort | uniq); do
++				grep "^$k" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ,"
++			done
++			echo "}"
++			echo
++		done | tee "$config" | sed -e "s,^,## LVMCONF: ,"
++		return 0
++	}
++
+ 	local sec
+ 	local last_sec
+ 
+ 	# read sequential list and put into associative array
+ 	while IFS=$IFS_NL read -r v; do
+ 		# trim white-space-chars via echo when inserting
+-		CONF[$(echo ${v%%=*})]=${v##*=}
++		CONF[$(echo ${v%%[={]*})]=${v#*/}
+ 	done < "$config_values"
+ 
+ 	# sort by section and iterate through them
+@@ -804,7 +818,7 @@ EOF
+ 			echo "$sec {"
+ 			last_sec=$sec
+ 		}
+-		echo "	${v#*/} =${CONF[$v]}"
++		echo "    ${CONF[$v]}"
+ 	done > "$config"
+ 	echo "}" >> "$config"
+ 
 
 
