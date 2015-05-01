@@ -1,58 +1,57 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Tue,  5 May 2015 16:34:14 -0500
-Subject: [PATCH 0/5] V2 lvm2app & python bindings bug fixes
-Message-ID: <1430861659-2755-1-git-send-email-tasleson@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri,  1 May 2015 20:50:04 +0000 (UTC)
+Subject: master - tests: configure use_lvmetad when needed
+Message-ID: <20150501205004.9937B60AA2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch set should resolve the following issues:
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=abdfb1e75ba372072919ddad0f43f8806412d531
+Commit:        abdfb1e75ba372072919ddad0f43f8806412d531
+Parent:        6a171bbdf5bc579670b225c291421eb8ee14d2c3
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri May 1 22:40:58 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri May 1 22:49:38 2015 +0200
 
-* Handle signed properties better
+tests: configure use_lvmetad when needed
 
-I added another flag on the properties structure to indicate if the property is
-signed and added a int64_t signed_integer to the union.  Updated python binding
-to build the correct representation.  I didn't get any feedback on this
-approach in the bz, not sure if another approach would work better.
+---
+ test/lib/aux.sh      |    7 +++++--
+ test/lib/inittest.sh |    1 -
+ 2 files changed, 5 insertions(+), 3 deletions(-)
 
-ref. https://bugzilla.redhat.com/show_bug.cgi?id=838257
-
-
-* Unable to retrieve specific properties:
-
-Any property that internally was defined as a string list was broken, ended up
-being a missing flag.
-
-ref. https://bugzilla.redhat.com/show_bug.cgi?id=1139920
-
-Would appreciate someone taking a peek at these changes.
-
-V2: Re-word the commit headers to provide more context.
-
-Thanks,
-Tony
-
-Tony Asleson (5):
-  lvm2app: Add signed numerical property values
-  python: Build correct python value for numerical property
-  python: Check for NULL value before constructing string property
-  lvm2app: Correct missing string properties
-  Python: Improve lv property test coverage
-
- lib/properties/prop_common.h |  5 +++-
- lib/report/columns.h         |  8 +++----
- lib/report/properties.c      |  3 ++-
- lib/report/report.c          |  2 ++
- liblvm/lvm2app.h             |  4 +++-
- liblvm/lvm_misc.c            |  1 +
- liblvm/lvm_prop.c            |  2 +-
- python/liblvm.c              | 17 ++++++++++----
- test/api/python_lvm_unit.py  | 56 +++++++++++++++++++++++++++++++++++++++++---
- 9 files changed, 83 insertions(+), 15 deletions(-)
-
--- 
-1.8.2.1
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index c1889ac..c01fb80 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -94,8 +94,11 @@ prepare_lvmetad() {
+ 
+ 	kill_sleep_kill_ LOCAL_LVMETAD ${LVM_VALGRIND_LVMETAD:-0}
+ 
+-        # Default debug is "-l all" and could be override
+-        # by setting LVM_TEST_LVMETAD_DEBUG_OPTS before calling inittest.
++	# Avoid reconfiguring, if already set to use_lvmetad
++	(grep use_lvmetad CONFIG_VALUES 2>/dev/null | tail -1 | grep -q 1) || \
++		aux lvmconf "global/use_lvmetad = 1" "devices/md_component_detection = 0"
++	# Default debug is "-l all" and could be override
++	# by setting LVM_TEST_LVMETAD_DEBUG_OPTS before calling inittest.
+ 	echo "preparing lvmetad..."
+ 	$run_valgrind lvmetad -f "$@" -s "$TESTDIR/lvmetad.socket" \
+ 		${LVM_TEST_LVMETAD_DEBUG_OPTS--l all} "$@" &
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 98abae6..b577389 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -92,7 +92,6 @@ echo "@PREFIX=$PREFIX"
+ if test -n "$LVM_TEST_LVMETAD" ; then
+ 	export LVM_LVMETAD_SOCKET="$TESTDIR/lvmetad.socket"
+ 	export LVM_LVMETAD_PIDFILE="$TESTDIR/lvmetad.pid"
+-	aux lvmconf "global/use_lvmetad = 1" "devices/md_component_detection = 0"
+ 	aux prepare_lvmetad
+ else
+ 	# lvmetad prepares its own lvmconf
 
 
