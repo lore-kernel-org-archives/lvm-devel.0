@@ -1,43 +1,75 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 26 Oct 2012 15:40:09 -0500
-Subject: [PATCH 1/2] test: set LD_LIBRARY_PATH to all dirs with *.so
-Message-ID: <1351284010-8247-1-git-send-email-tasleson@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri,  1 May 2015 13:08:25 +0000 (UTC)
+Subject: master - tests: watch out for RAM size
+Message-ID: <20150501130825.4390860366@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Instead of manually editing entries, add all the
-directories which contain shared objects.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f48a4c391c2f7f92765f6608a60e79b008ead890
+Commit:        f48a4c391c2f7f92765f6608a60e79b008ead890
+Parent:        11e0dc40dcae9021bb52d60403fd1a3b8b40c58c
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Apr 30 11:55:38 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri May 1 15:07:58 2015 +0200
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+tests: watch out for RAM size
+
+Reduce mem-requirements on low memory boxes,
+activate less volumes if machine is below 0.5G.
+
+Also print mem size at test header.
 ---
- test/lib/utils.sh |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ test/lib/aux.sh             |    7 +++++++
+ test/lib/inittest.sh        |    1 +
+ test/shell/vgchange-many.sh |    2 ++
+ 3 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 70d9f66..ab5abc1 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -204,11 +204,11 @@ test -n "${abs_top_builddir+varset}" || . lib/paths || die "you must run make fi
- case "$PATH" in
- *"$abs_top_builddir/test/lib"*) ;;
- *)
--        PATH="$abs_top_builddir/test/lib":$PATH
--        for d in daemons/dmeventd/plugins/mirror daemons/dmeventd/plugins/snapshot \
--                daemons/dmeventd/plugins/lvm2 daemons/dmeventd liblvm tools libdm; do
--                LD_LIBRARY_PATH="$abs_top_builddir/$d":$LD_LIBRARY_PATH
--        done
-+	PATH="$abs_top_builddir/test/lib":"$abs_top_builddir/test/api":$PATH
-+	for i in `find $abs_top_builddir -name \*.so`; do
-+		p=`dirname $i`
-+		LD_LIBRARY_PATH="$p":$LD_LIBRARY_PATH
-+	done
-         export PATH LD_LIBRARY_PATH ;;
- esac
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 67df0f5..6fceb68 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1066,6 +1066,13 @@ wait_pvmove_lv_ready() {
+ 	done
+ }
  
--- 
-1.7.1
++# return total memory size in kB units
++total_mem() {
++	while IFS=":" read -r a b ; do
++		case "$a" in MemTotal*) echo ${b%% kB} ; break ;; esac
++	done < /proc/meminfo
++}
++
+ test -z "$LVM_TEST_AUX_TRACE" || set -x
+ 
+ test -f DEVICES && devs=$(< DEVICES)
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 96dfff2..dd4f060 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -78,6 +78,7 @@ echo "$TESTNAME" >TESTNAME
+ echo "Kernel is $(uname -a)"
+ # Report SELinux mode
+ echo "Selinux mode is $(getenforce 2>/dev/null || echo not installed)."
++free -h
+ 
+ # Set vars from utils now that we have TESTDIR/PREFIX/...
+ prepare_test_vars
+diff --git a/test/shell/vgchange-many.sh b/test/shell/vgchange-many.sh
+index 16e0516..cbb4363 100644
+--- a/test/shell/vgchange-many.sh
++++ b/test/shell/vgchange-many.sh
+@@ -16,6 +16,8 @@
+ 
+ # Number of LVs to create
+ DEVICES=1000
++# On low-memory boxes let's not stress too much
++test "$(aux total_mem)" -gt 524288 || DEVICES=256
+ 
+ aux prepare_pvs 1 400
+ 
 
 
