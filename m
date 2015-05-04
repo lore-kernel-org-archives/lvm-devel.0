@@ -1,59 +1,55 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  4 May 2015 08:21:31 +0000 (UTC)
-Subject: master - tests: drop extra scsi init
-Message-ID: <20150504082131.1E16760F2F@fedorahosted.org>
+Date: Mon,  4 May 2015 08:21:33 +0000 (UTC)
+Subject: master - tests: check for open_count
+Message-ID: <20150504082133.3C33C60F2F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7a588bce7bd032175d56a1a10af528d61e1c554b
-Commit:        7a588bce7bd032175d56a1a10af528d61e1c554b
-Parent:        c90ee0414d74ddbaabf270c306acd4fef76718b5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2d10a6f6aef9eb013986c40a8bd83db6f571472f
+Commit:        2d10a6f6aef9eb013986c40a8bd83db6f571472f
+Parent:        7a588bce7bd032175d56a1a10af528d61e1c554b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 4 10:17:48 2015 +0200
+AuthorDate:    Mon May 4 10:18:44 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 4 10:17:48 2015 +0200
+CommitterDate: Mon May 4 10:18:44 2015 +0200
 
-tests: drop extra scsi init
+tests: check for open_count
 
-Use first test also for checking the support is there -
-avoid one extra unnecessary scsi_debug reload.
+Instead of checking /proc/mounts check for open_count of snap device.
+Parallel umount has race, so check for open_count.
 ---
- test/shell/topology-support.sh |   14 +++++---------
- 1 files changed, 5 insertions(+), 9 deletions(-)
+ test/shell/snapshot-autoumount-dmeventd.sh |   13 ++++++++-----
+ 1 files changed, 8 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/topology-support.sh b/test/shell/topology-support.sh
-index f465ab7..f1e42a8 100644
---- a/test/shell/topology-support.sh
-+++ b/test/shell/topology-support.sh
-@@ -43,21 +43,17 @@ NUM_DEVS=1
- PER_DEV_SIZE=34
- DEV_SIZE=$(($NUM_DEVS*$PER_DEV_SIZE))
+diff --git a/test/shell/snapshot-autoumount-dmeventd.sh b/test/shell/snapshot-autoumount-dmeventd.sh
+index e059684..860d170 100644
+--- a/test/shell/snapshot-autoumount-dmeventd.sh
++++ b/test/shell/snapshot-autoumount-dmeventd.sh
+@@ -30,14 +30,17 @@ lvchange --monitor y $vg/snap
  
--# Test that kernel supports topology
--aux prepare_scsi_debug_dev $DEV_SIZE || skip
--
--if [ ! -e /sys/block/$(basename $(< SCSI_DEBUG_DEV))/alignment_offset ] ; then
--	aux cleanup_scsi_debug_dev
--	skip
--fi
--aux cleanup_scsi_debug_dev
--
- # ---------------------------------------------
- # Create "desktop-class" 4K drive
- # (logical_block_size=512, physical_block_size=4096, alignment_offset=0):
- LOGICAL_BLOCK_SIZE=512
- aux prepare_scsi_debug_dev $DEV_SIZE \
-     sector_size=$LOGICAL_BLOCK_SIZE physblk_exp=3
-+# Test that kernel supports topology
-+if [ ! -e /sys/block/$(basename $(< SCSI_DEBUG_DEV))/alignment_offset ] ; then
-+	aux cleanup_scsi_debug_dev
-+	skip
-+fi
- check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size $LOGICAL_BLOCK_SIZE
- aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
- get_devs
+ mkdir "$mntdir"
+ mount "$DM_DEV_DIR/mapper/$vg-snap" "$mntdir"
+-mount
++
+ cat /proc/mounts | grep "$mntdir"
+ not dd if=/dev/zero of="$mntdir/file$1" bs=1M count=5 oflag=direct
+ 
+-#dmeventd only checks every 10 seconds :(
+-for i in {1..10}; do
+-	cat /proc/mounts | grep "$mntdir" || break
+-	sleep 1
++# Should be nearly instant check of dmeventd for invalid snapshot.
++# Wait here for umount and open_count drops to 0 as it may
++# take a while to finalize umount operation (it might be already
++# removed from /proc/mounts, but still opened).
++for i in {1..100}; do
++	test $(dmsetup info -c --noheadings -o open $vg-snap) -eq 0 && break
++	sleep .1
+ done
+ 
+ cat /proc/mounts | not grep "$mntdir"
 
 
