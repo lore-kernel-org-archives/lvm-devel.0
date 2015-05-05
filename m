@@ -1,100 +1,170 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Tue,  5 May 2015 14:25:31 -0500
-Subject: [PATCH 5/5] Python: Improve lv property test coverage
+Date: Tue,  5 May 2015 14:25:27 -0500
+Subject: [PATCH 1/5] lvm2app: Handle property values which are signed
 In-Reply-To: <1430853931-20572-1-git-send-email-tasleson@redhat.com>
 References: <1430853931-20572-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1430853931-20572-6-git-send-email-tasleson@redhat.com>
+Message-ID: <1430853931-20572-2-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- test/api/python_lvm_unit.py |   56 ++++++++++++++++++++++++++++++++++++++++--
- 1 files changed, 53 insertions(+), 3 deletions(-)
+Properties originially were allowed to be unsigned integers or strings.
+In some cases the numeric value is signed with negative return values.
+Add the ability to distinguish signed vs. unsigned.
 
-diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
-index e66ebda..6fc1963 100755
---- a/test/api/python_lvm_unit.py
-+++ b/test/api/python_lvm_unit.py
-@@ -21,7 +21,7 @@ import itertools
- import sys
+https://bugzilla.redhat.com/show_bug.cgi?id=838257
+
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ lib/properties/prop_common.h |    5 ++++-
+ lib/report/columns.h         |    8 ++++----
+ lib/report/properties.c      |    3 ++-
+ lib/report/report.c          |    2 ++
+ liblvm/lvm2app.h             |    4 +++-
+ liblvm/lvm_misc.c            |    1 +
+ liblvm/lvm_prop.c            |    2 +-
+ 7 files changed, 17 insertions(+), 8 deletions(-)
+
+diff --git a/lib/properties/prop_common.h b/lib/properties/prop_common.h
+index d7d01af..0b1678d 100644
+--- a/lib/properties/prop_common.h
++++ b/lib/properties/prop_common.h
+@@ -26,9 +26,11 @@ struct lvm_property_type {
+ 	unsigned is_settable:1;
+ 	unsigned is_string:1;
+ 	unsigned is_integer:1;
++	unsigned is_signed:1;
+ 	union {
+ 		const char *string;
+ 		uint64_t integer;
++		int64_t signed_integer;
+ 	} value;
+ 	int (*get) (const void *obj, struct lvm_property_type *prop);
+ 	int (*set) (void *obj, struct lvm_property_type *prop);
+@@ -126,9 +128,10 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+ #define SIZ 4
+ #define PCT 5
+ #define STR_LIST 6
++#define SNUM 7              /* Signed Number */
  
- if sys.version_info[0] > 2:
--    long = int
-+	long = int
+ #define FIELD_MODIFIABLE 0x00000001
+ #define FIELD(type, strct, field_type, head, field, width, fn, id, desc, settable) \
+-	{ type, #id, settable, field_type == STR, ((field_type == NUM) || (field_type == BIN) || (field_type == SIZ) || (field_type == PCT)), { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
++	{ type, #id, settable, field_type == STR, ((field_type == NUM) || (field_type == BIN) || (field_type == SIZ) || (field_type == PCT) || (field_type == SNUM)), ((field_type == SNUM) || (field_type == PCT)), { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
  
- # Set of basic unit tests for the python bindings.
- #
-@@ -309,7 +309,11 @@ class TestLvm(unittest.TestCase):
- 	def _test_prop(self, prop_obj, prop, var_type, settable):
- 		result = prop_obj.getProperty(prop)
+ #endif
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index cf84295..06282c5 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -56,8 +56,8 @@ FIELD(LVS, lv, STR, "Active", lvid, 6, lvactive, lv_active, "Active state of the
+ FIELD(LVS, lv, BIN, "ActLocal", lvid, 10, lvactivelocally, lv_active_locally, "Set if the LV is active locally.", 0)
+ FIELD(LVS, lv, BIN, "ActRemote", lvid, 10, lvactiveremotely, lv_active_remotely, "Set if the LV is active remotely.", 0)
+ FIELD(LVS, lv, BIN, "ActExcl", lvid, 10, lvactiveexclusively, lv_active_exclusively, "Set if the LV is active exclusively.", 0)
+-FIELD(LVS, lv, NUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
+-FIELD(LVS, lv, NUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
++FIELD(LVS, lv, SNUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
++FIELD(LVS, lv, SNUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
+ FIELD(LVS, lv, SIZ, "Rahead", lvid, 6, lvreadahead, lv_read_ahead, "Read ahead setting in current units.", 0)
+ FIELD(LVS, lv, SIZ, "LSize", size, 5, size64, lv_size, "Size of LV in current units.", 0)
+ FIELD(LVS, lv, SIZ, "MSize", lvid, 6, lvmetadatasize, lv_metadata_size, "For thin and cache pools, the size of the LV that holds the metadata.", 0)
+@@ -88,8 +88,8 @@ FIELD(LVS, lv, STR, "Time", lvid, 26, lvtime, lv_time, "Creation time of the LV,
+ FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
+ FIELD(LVS, lv, STR_LIST, "Modules", lvid, 7, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
  
--		self.assertEqual(type(result[0]), var_type)
-+		#If we have no string value we can get a None type back
-+		if result[0] is not None:
-+			self.assertEqual(type(result[0]), var_type)
-+		else:
-+			self.assertTrue(str == var_type)
- 		self.assertEqual(type(result[1]), bool)
- 		self.assertTrue(result[1] == settable)
+-FIELD(LVSINFO, lv, NUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
+-FIELD(LVSINFO, lv, NUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
++FIELD(LVSINFO, lv, SNUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
++FIELD(LVSINFO, lv, SNUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
+ FIELD(LVSINFO, lv, SIZ, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
+ FIELD(LVSINFO, lv, STR, "LPerms", lvid, 8, lvpermissions, lv_permissions, "LV permissions.", 0)
+ FIELD(LVSINFO, lv, BIN, "Suspended", lvid, 10, lvsuspended, lv_suspended, "Set if LV is suspended.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index ea70690..b0a91a7 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -462,7 +462,7 @@ GET_PVSEG_NUM_PROPERTY_FN(pvseg_size, (SECTOR_SIZE * pvseg->len))
  
-@@ -332,7 +336,53 @@ class TestLvm(unittest.TestCase):
- 		lv_name = 'lv_test'
- 		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
- 		lv, vg = TestLvm._get_lv(None, lv_name)
--		self._test_prop(lv, 'seg_count', long, False)
-+
-+		lv_seg_properties = [
-+			('chunk_size', long, False), ('devices', str, False),
-+			('discards', str, False), ('region_size', long, False),
-+			('segtype', str, False), ('seg_pe_ranges', str, False),
-+			('seg_size', long, False), ('seg_size_pe', long, False),
-+			('seg_start', long, False), ('seg_start_pe', long, False),
-+			('seg_tags', str, False), ('stripes', long, False),
-+			('stripe_size', long, False), ('thin_count', long, False),
-+			('transaction_id', long, False), ('zero', long, False)]
-+
-+		lv_properties = [
-+			('convert_lv', str, False), ('copy_percent', long, False),
-+			('data_lv', str, False), ('lv_attr', str, False),
-+			('lv_host', str, False), ('lv_kernel_major', long, False),
-+			('lv_kernel_minor', long, False),
-+			('lv_kernel_read_ahead', long, False),
-+			('lv_major', long, False), ('lv_minor', long, False),
-+			('lv_name', str, False), ('lv_path', str, False),
-+			('lv_profile', str, False), ('lv_read_ahead', long, False),
-+			('lv_size', long, False), ('lv_tags', str, False),
-+			('lv_time', str, False), ('lv_uuid', str, False),
-+			('metadata_lv', str, False), ('mirror_log', str, False),
-+			('lv_modules', str, False), ('move_pv', str, False),
-+			('origin', str, False), ('origin_size', long, False),
-+			('pool_lv', str, False), ('raid_max_recovery_rate', long, False),
-+			('raid_min_recovery_rate', long, False),
-+			('raid_mismatch_count', long, False),
-+			('raid_sync_action', str, False),
-+			('raid_write_behind', long, False), ('seg_count', long, False),
-+			('snap_percent', long, False), ('sync_percent', long, False)]
-+
-+		# Generic test case, make sure we get what we expect
-+		for t in lv_properties:
-+			self._test_prop(lv, *t)
-+
-+		segments = lv.listLVsegs()
-+		if segments and len(segments):
-+			for s in segments:
-+				for t in lv_seg_properties:
-+					self._test_prop(s, *t)
-+
-+		# Test specific cases
-+		tag = 'hello_world'
-+		lv.addTag(tag)
-+		tags = lv.getProperty('lv_tags')
-+		self.assertTrue(tag in tags[0])
- 		vg.close()
+ struct lvm_property_type _properties[] = {
+ #include "columns.h"
+-	{ 0, "", 0, 0, 0, { .integer = 0 }, prop_not_implemented_get, prop_not_implemented_set },
++	{ 0, "", 0, 0, 0, 0, { .integer = 0 }, prop_not_implemented_get, prop_not_implemented_set },
+ };
  
- 	def test_lv_tags(self):
+ #undef STR
+@@ -471,6 +471,7 @@ struct lvm_property_type _properties[] = {
+ #undef SIZ
+ #undef PCT
+ #undef STR_LIST
++#undef SNUM
+ #undef FIELD
+ 
+ int lvseg_get_property(const struct lv_segment *lvseg,
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 500bf2b..a107669 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -2057,6 +2057,7 @@ static const struct dm_report_object_type _devtypes_report_types[] = {
+ #define SIZ DM_REPORT_FIELD_TYPE_SIZE
+ #define PCT DM_REPORT_FIELD_TYPE_PERCENT
+ #define STR_LIST DM_REPORT_FIELD_TYPE_STRING_LIST
++#define SNUM DM_REPORT_FIELD_TYPE_NUMBER
+ #define FIELD(type, strct, sorttype, head, field, width, func, id, desc, writeable) \
+ 	{type, sorttype, offsetof(type_ ## strct, field), width, \
+ 	 #id, head, &_ ## func ## _disp, desc},
+@@ -2085,6 +2086,7 @@ static const struct dm_report_field_type _devtypes_fields[] = {
+ #undef BIN
+ #undef SIZ
+ #undef STR_LIST
++#undef SNUM
+ #undef FIELD
+ 
+ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 3692f9a..1a5bc08 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -231,10 +231,12 @@ typedef struct lvm_property_value {
+ 	uint32_t is_string:1;
+ 	uint32_t is_integer:1;
+ 	uint32_t is_valid:1;
+-	uint32_t padding:28;
++	uint32_t is_signed:1;
++	uint32_t padding:27;
+ 	union {
+ 		const char *string;
+ 		uint64_t integer;
++		int64_t signed_integer;
+ 	} value;
+ } lvm_property_value_t;
+ 
+diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
+index ff26cdf..431d354 100644
+--- a/liblvm/lvm_misc.c
++++ b/liblvm/lvm_misc.c
+@@ -88,6 +88,7 @@ struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
+ 	v.is_settable = prop.is_settable;
+ 	v.is_string = prop.is_string;
+ 	v.is_integer = prop.is_integer;
++	v.is_signed = prop.is_signed;
+ 	if (v.is_string)
+ 		v.value.string = prop.value.string;
+ 	if (v.is_integer)
+diff --git a/liblvm/lvm_prop.c b/liblvm/lvm_prop.c
+index 79ed113..4ea868d 100644
+--- a/liblvm/lvm_prop.c
++++ b/liblvm/lvm_prop.c
+@@ -41,7 +41,7 @@ SET_PVCREATEPARAMS_NUM_PROPERTY_FN(zero, pvcp->zero)
+ 
+ struct lvm_property_type _lib_properties[] = {
+ #include "lvm_prop_fields.h"
+-	{ 0, "", 0, 0, 0, { .integer = 0 }, prop_not_implemented_get,
++	{ 0, "", 0, 0, 0, 0, { .integer = 0 }, prop_not_implemented_get,
+ 			prop_not_implemented_set },
+ };
+ 
 -- 
 1.7.1
 
