@@ -1,65 +1,41 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Tue,  5 May 2015 18:54:19 +0000 (UTC)
-Subject: master - polldaemon: make wait_for_single_lv public
-Message-ID: <20150505185419.C753A60ED3@fedorahosted.org>
+Date: Tue,  5 May 2015 18:54:21 +0000 (UTC)
+Subject: master - WHATS_NEW: update for recent changes
+Message-ID: <20150505185421.DC84660ED3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7fca7f196d17add08cdcc22ede99e8432a2fc4d0
-Commit:        7fca7f196d17add08cdcc22ede99e8432a2fc4d0
-Parent:        81c038934c61f4c2afe159460b04dbccdda2a721
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9fc6b654f55dfe0d6c1a7fc214f9d35cb505be11
+Commit:        9fc6b654f55dfe0d6c1a7fc214f9d35cb505be11
+Parent:        7fca7f196d17add08cdcc22ede99e8432a2fc4d0
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Fri Apr 10 16:36:50 2015 +0200
+AuthorDate:    Tue May 5 19:35:52 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Tue May 5 20:52:24 2015 +0200
+CommitterDate: Tue May 5 20:52:49 2015 +0200
 
-polldaemon: make wait_for_single_lv public
+WHATS_NEW: update for recent changes
 
-referenced by new lvpoll command after lvmpolld
-gets merged.
+commits:
+- bda26acf70e92232b1ed644dba6b44ecbff2a058
+- 76a0dffe6f4869de9ca457119c9d7ced837d4e0b
 ---
- tools/polldaemon.c |    6 +++---
- tools/polldaemon.h |    3 +++
- 2 files changed, 6 insertions(+), 3 deletions(-)
+ WHATS_NEW |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index a311e24..9c62ebf 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -158,8 +158,8 @@ static void _sleep_and_rescan_devices(struct daemon_parms *parms)
- 	}
- }
- 
--static int _wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
--			       struct daemon_parms *parms)
-+int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
-+		       struct daemon_parms *parms)
- {
- 	struct volume_group *vg;
- 	struct logical_volume *lv;
-@@ -392,7 +392,7 @@ static int _poll_daemon(struct cmd_context *cmd, struct poll_operation_id *id,
- 	 * Process one specific task or all incomplete tasks?
- 	 */
- 	if (id) {
--		if (!_wait_for_single_lv(cmd, id, parms)) {
-+		if (!wait_for_single_lv(cmd, id, parms)) {
- 			stack;
- 			ret = ECMD_FAILED;
- 		}
-diff --git a/tools/polldaemon.h b/tools/polldaemon.h
-index 9c33250..6309a5f 100644
---- a/tools/polldaemon.h
-+++ b/tools/polldaemon.h
-@@ -87,4 +87,7 @@ struct logical_volume *poll_get_copy_lv(struct cmd_context *cmd,
- 					const char *name, const char *uuid,
- 					uint64_t lv_type);
- 
-+int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
-+		       struct daemon_parms *parms);
-+
- #endif
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 5956b74..94851aa 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.02.120 -
+ ===============================
++  Refactor polldaemon interfaces to poll every operation by VG/LV couple
++  Skip wait after testing in _wait_for_single_lv when polling finished
+   lvm2app closes locking on lvm_quit().
+   Configure detects /run or /var/run.
+   Add missing newline in clvmd --help output.
 
 
