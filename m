@@ -1,40 +1,50 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  8 May 2015 13:16:42 +0000 (UTC)
-Subject: master - cleanup: indent mismatch
-Message-ID: <20150508131642.8AFD060759@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Wed,  6 May 2015 13:53:20 +0000 (UTC)
+Subject: master - lvm2app: Correct missing string properties
+Message-ID: <20150506135320.0C8D060FDD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b8dfd7a53d6ef203ca6204d00f7c26c0baea99f6
-Commit:        b8dfd7a53d6ef203ca6204d00f7c26c0baea99f6
-Parent:        28f18404a7a2fe64f3c7918d8d543f913515651b
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 7 11:00:23 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 8 15:15:10 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dc5190de74893ede7d3170b861ce8ae9327ecfae
+Commit:        dc5190de74893ede7d3170b861ce8ae9327ecfae
+Parent:        e8c11c7df0f1d582494922cbadb717296c02e05b
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Mon May 4 15:20:55 2015 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed May 6 08:51:04 2015 -0500
 
-cleanup: indent mismatch
+lvm2app: Correct missing string properties
 
-Aling break (Coverity).
+Synopsis: STR_LIST needs to be treated as STR for properties.
+
+For any lvm property that was internally 'typed' as a string list we were failing
+to return a string in the property API.  This was due to the fact that for the
+properties to work the value needs to either be evaulated as a string or a
+number.  This change corrects the macro used to build the memory array of
+structures so that the string bitfield is set as needed to ensure that the value
+is a string.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1139920
+
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- libdm/libdm-report.c |    2 +-
+ lib/properties/prop_common.h |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 2fe9300..def72fe 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -1270,7 +1270,7 @@ static int _do_check_value_is_reserved(unsigned type, const void *reserved_value
- 			if ((*(uint64_t *)value1 == *(uint64_t *) reserved_value) ||
- 			    (value2 && (*(uint64_t *)value2 == *(uint64_t *) reserved_value)))
- 				return 1;
--				break;
-+			break;
- 		case DM_REPORT_FIELD_TYPE_STRING:
- 			if ((!strcmp((const char *)value1, (const char *) reserved_value)) ||
- 			    (value2 && (!strcmp((const char *)value2, (const char *) reserved_value))))
+diff --git a/lib/properties/prop_common.h b/lib/properties/prop_common.h
+index 0b1678d..9cc963a 100644
+--- a/lib/properties/prop_common.h
++++ b/lib/properties/prop_common.h
+@@ -132,6 +132,6 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+ 
+ #define FIELD_MODIFIABLE 0x00000001
+ #define FIELD(type, strct, field_type, head, field, width, fn, id, desc, settable) \
+-	{ type, #id, settable, field_type == STR, ((field_type == NUM) || (field_type == BIN) || (field_type == SIZ) || (field_type == PCT) || (field_type == SNUM)), ((field_type == SNUM) || (field_type == PCT)), { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
++	{ type, #id, settable, (field_type == STR || field_type == STR_LIST), ((field_type == NUM) || (field_type == BIN) || (field_type == SIZ) || (field_type == PCT) || (field_type == SNUM)), ((field_type == SNUM) || (field_type == PCT)), { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
+ 
+ #endif
 
 
