@@ -1,10 +1,10 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 06 May 2015 12:23:30 +0200
-Subject: [PATCH 1/5] lvm2app: Add signed numerical property values
-In-Reply-To: <1430861659-2755-2-git-send-email-tasleson@redhat.com>
+Date: Wed, 06 May 2015 12:25:08 +0200
+Subject: [PATCH 4/5] lvm2app: Correct missing string properties
+In-Reply-To: <1430861659-2755-5-git-send-email-tasleson@redhat.com>
 References: <1430861659-2755-1-git-send-email-tasleson@redhat.com>
-	<1430861659-2755-2-git-send-email-tasleson@redhat.com>
-Message-ID: <5549EBA2.1080805@redhat.com>
+	<1430861659-2755-5-git-send-email-tasleson@redhat.com>
+Message-ID: <5549EC04.1060302@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,82 +12,34 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 On 05/05/2015 11:34 PM, Tony Asleson wrote:
-> Currently lvm2app properties have the following structure:
+> Synopsis: STR_LIST needs to be treated as STR for properties.
 > 
-> typedef struct lvm_property_value {
->         uint32_t is_settable:1;
->         uint32_t is_string:1;
->         uint32_t is_integer:1;
->         uint32_t is_valid:1;
->         uint32_t padding:28;
->         union {
->                 const char *string;
->                 uint64_t integer;
->         } value;
-> } lvm_property_value_t;
+> For any lvm property that was internally 'typed' as a string list we were failing
+> to return a string in the property API.  This was due to the fact that for the
+> properties to work the value needs to either be evaulated as a string or a
+> number.  This change corrects the macro used to build the memory array of
+> structures so that the string bitfield is set as needed to ensure that the value
+> is a string.
 > 
-> which assumes that numerical values were in the range of 0 to 2**64-1.  However,
-> some of the properties were 'signed', like LV major/minor numbers and some
-> reserved values for properties that represent percentages.  Thus when the
-> values were retrieved they were in two's complement notation.  So for a -1
-> major number the API user would get a value of 18446744073709551615.  The
-> API user could cast the returned value to an int64_t to handle this, but that
-> requires the API developer to look at the source code and determine when it
-> should be done.
+> https://bugzilla.redhat.com/show_bug.cgi?id=1139920
 > 
-> This change modifies the return property structure to:
+> Signed-off-by: Tony Asleson <tasleson@redhat.com>
+> ---
+>  lib/properties/prop_common.h | 2 +-
+>  1 file changed, 1 insertion(+), 1 deletion(-)
 > 
-> typedef struct lvm_property_value {
->         uint32_t is_settable:1;
->         uint32_t is_string:1;
->         uint32_t is_integer:1;
->         uint32_t is_valid:1;
->         uint32_t is_signed:1;
->         uint32_t padding:27;
->         union {
->                 const char *string;
->                 uint64_t integer;
->                 int64_t signed_integer;
->         } value;
-> } lvm_property_value_t;
-> 
-...
-> +FIELD(LVS, lv, SNUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
-> +FIELD(LVS, lv, SNUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
-...
-> +FIELD(LVSINFO, lv, SNUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
-> +FIELD(LVSINFO, lv, SNUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
->  FIELD(LVSINFO, lv, SIZ, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
->  FIELD(LVSINFO, lv, STR, "LPerms", lvid, 8, lvpermissions, lv_permissions, "LV permissions.", 0)
->  FIELD(LVSINFO, lv, BIN, "Suspended", lvid, 10, lvsuspended, lv_suspended, "Set if LV is suspended.", 0)
-...
-> diff --git a/lib/report/report.c b/lib/report/report.c
-> index 500bf2b..a107669 100644
-> --- a/lib/report/report.c
-> +++ b/lib/report/report.c
-> @@ -2057,6 +2057,7 @@ static const struct dm_report_object_type _devtypes_report_types[] = {
->  #define SIZ DM_REPORT_FIELD_TYPE_SIZE
->  #define PCT DM_REPORT_FIELD_TYPE_PERCENT
->  #define STR_LIST DM_REPORT_FIELD_TYPE_STRING_LIST
-> +#define SNUM DM_REPORT_FIELD_TYPE_NUMBER
+> diff --git a/lib/properties/prop_common.h b/lib/properties/prop_common.h
+> index 0b1678d..9cc963a 100644
+> --- a/lib/properties/prop_common.h
+> +++ b/lib/properties/prop_common.h
+> @@ -132,6 +132,6 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+>  
+>  #define FIELD_MODIFIABLE 0x00000001
+>  #define FIELD(type, strct, field_type, head, field, width, fn, id, desc, settable) \
+> -	{ type, #id, settable, field_type == STR, ((field_type == NUM) || (field_type == BIN) || (field_type == SIZ) || (field_type == PCT) || (field_type == SNUM)), ((field_type == SNUM) || (field_type == PCT)), { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
+> +	{ type, #id, settable, (field_type == STR || field_type == STR_LIST), ((field_type == NUM) || (field_type == BIN) || (field_type == SIZ) || (field_type == PCT) || (field_type == SNUM)), ((field_type == SNUM) || (field_type == PCT)), { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
 
-Yes, for now, these negative numbers are here to indicate individual
-special values only (just like the "-1" for major/minor/kmajor/kminor
-when it's "undefined").
-
-When it comes to reporting, we cover these extra values at the moment
-with "reserved" values (defined in values.h). But once we need to report
-negative numbers fully, not just individual reserved values, we'd need
-similar patch for reporting part too, introducing new DM_REPORT_FIELD_TYPE_SIGNED_NUMBER.
-
-But for now, I think it's fine to map SNUM to DM_REPORT_FILED_TYPE_NUMBER
-as we don't actually report negative numbers in their full range, it's
-just the "-1" (with the "undefined", "undef", "unknown" synonyms for
-those 4 fields).
-
-But we surely need your patch for the liblvm as we don't export these
-synonyms/reserved values via liblvm in any way so liblvm users
-don't know about these mappings of these special values...
+My mistake! I always forget to add these. Thanks for fixing this!
 
 -- 
 Peter
