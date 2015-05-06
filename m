@@ -1,108 +1,95 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Tue,  5 May 2015 16:34:19 -0500
-Subject: [PATCH 5/5] Python: Improve lv property test coverage
-In-Reply-To: <1430861659-2755-1-git-send-email-tasleson@redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Wed, 06 May 2015 12:23:30 +0200
+Subject: [PATCH 1/5] lvm2app: Add signed numerical property values
+In-Reply-To: <1430861659-2755-2-git-send-email-tasleson@redhat.com>
 References: <1430861659-2755-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1430861659-2755-6-git-send-email-tasleson@redhat.com>
+	<1430861659-2755-2-git-send-email-tasleson@redhat.com>
+Message-ID: <5549EBA2.1080805@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Improve the python unit test case to cover all of the properties of a LV and
-the properties of a LV segment.
+On 05/05/2015 11:34 PM, Tony Asleson wrote:
+> Currently lvm2app properties have the following structure:
+> 
+> typedef struct lvm_property_value {
+>         uint32_t is_settable:1;
+>         uint32_t is_string:1;
+>         uint32_t is_integer:1;
+>         uint32_t is_valid:1;
+>         uint32_t padding:28;
+>         union {
+>                 const char *string;
+>                 uint64_t integer;
+>         } value;
+> } lvm_property_value_t;
+> 
+> which assumes that numerical values were in the range of 0 to 2**64-1.  However,
+> some of the properties were 'signed', like LV major/minor numbers and some
+> reserved values for properties that represent percentages.  Thus when the
+> values were retrieved they were in two's complement notation.  So for a -1
+> major number the API user would get a value of 18446744073709551615.  The
+> API user could cast the returned value to an int64_t to handle this, but that
+> requires the API developer to look at the source code and determine when it
+> should be done.
+> 
+> This change modifies the return property structure to:
+> 
+> typedef struct lvm_property_value {
+>         uint32_t is_settable:1;
+>         uint32_t is_string:1;
+>         uint32_t is_integer:1;
+>         uint32_t is_valid:1;
+>         uint32_t is_signed:1;
+>         uint32_t padding:27;
+>         union {
+>                 const char *string;
+>                 uint64_t integer;
+>                 int64_t signed_integer;
+>         } value;
+> } lvm_property_value_t;
+> 
+...
+> +FIELD(LVS, lv, SNUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
+> +FIELD(LVS, lv, SNUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
+...
+> +FIELD(LVSINFO, lv, SNUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
+> +FIELD(LVSINFO, lv, SNUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
+>  FIELD(LVSINFO, lv, SIZ, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
+>  FIELD(LVSINFO, lv, STR, "LPerms", lvid, 8, lvpermissions, lv_permissions, "LV permissions.", 0)
+>  FIELD(LVSINFO, lv, BIN, "Suspended", lvid, 10, lvsuspended, lv_suspended, "Set if LV is suspended.", 0)
+...
+> diff --git a/lib/report/report.c b/lib/report/report.c
+> index 500bf2b..a107669 100644
+> --- a/lib/report/report.c
+> +++ b/lib/report/report.c
+> @@ -2057,6 +2057,7 @@ static const struct dm_report_object_type _devtypes_report_types[] = {
+>  #define SIZ DM_REPORT_FIELD_TYPE_SIZE
+>  #define PCT DM_REPORT_FIELD_TYPE_PERCENT
+>  #define STR_LIST DM_REPORT_FIELD_TYPE_STRING_LIST
+> +#define SNUM DM_REPORT_FIELD_TYPE_NUMBER
 
-In addition we also add a 'tag' to the lv so that we can retrieve it
-using the 'lv_tags' property to ensure that this works as expected.
+Yes, for now, these negative numbers are here to indicate individual
+special values only (just like the "-1" for major/minor/kmajor/kminor
+when it's "undefined").
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
----
- test/api/python_lvm_unit.py | 56 ++++++++++++++++++++++++++++++++++++++++++---
- 1 file changed, 53 insertions(+), 3 deletions(-)
+When it comes to reporting, we cover these extra values at the moment
+with "reserved" values (defined in values.h). But once we need to report
+negative numbers fully, not just individual reserved values, we'd need
+similar patch for reporting part too, introducing new DM_REPORT_FIELD_TYPE_SIGNED_NUMBER.
 
-diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
-index e66ebda..6fc1963 100755
---- a/test/api/python_lvm_unit.py
-+++ b/test/api/python_lvm_unit.py
-@@ -21,7 +21,7 @@ import itertools
- import sys
- 
- if sys.version_info[0] > 2:
--    long = int
-+	long = int
- 
- # Set of basic unit tests for the python bindings.
- #
-@@ -309,7 +309,11 @@ class TestLvm(unittest.TestCase):
- 	def _test_prop(self, prop_obj, prop, var_type, settable):
- 		result = prop_obj.getProperty(prop)
- 
--		self.assertEqual(type(result[0]), var_type)
-+		#If we have no string value we can get a None type back
-+		if result[0] is not None:
-+			self.assertEqual(type(result[0]), var_type)
-+		else:
-+			self.assertTrue(str == var_type)
- 		self.assertEqual(type(result[1]), bool)
- 		self.assertTrue(result[1] == settable)
- 
-@@ -332,7 +336,53 @@ class TestLvm(unittest.TestCase):
- 		lv_name = 'lv_test'
- 		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
- 		lv, vg = TestLvm._get_lv(None, lv_name)
--		self._test_prop(lv, 'seg_count', long, False)
-+
-+		lv_seg_properties = [
-+			('chunk_size', long, False), ('devices', str, False),
-+			('discards', str, False), ('region_size', long, False),
-+			('segtype', str, False), ('seg_pe_ranges', str, False),
-+			('seg_size', long, False), ('seg_size_pe', long, False),
-+			('seg_start', long, False), ('seg_start_pe', long, False),
-+			('seg_tags', str, False), ('stripes', long, False),
-+			('stripe_size', long, False), ('thin_count', long, False),
-+			('transaction_id', long, False), ('zero', long, False)]
-+
-+		lv_properties = [
-+			('convert_lv', str, False), ('copy_percent', long, False),
-+			('data_lv', str, False), ('lv_attr', str, False),
-+			('lv_host', str, False), ('lv_kernel_major', long, False),
-+			('lv_kernel_minor', long, False),
-+			('lv_kernel_read_ahead', long, False),
-+			('lv_major', long, False), ('lv_minor', long, False),
-+			('lv_name', str, False), ('lv_path', str, False),
-+			('lv_profile', str, False), ('lv_read_ahead', long, False),
-+			('lv_size', long, False), ('lv_tags', str, False),
-+			('lv_time', str, False), ('lv_uuid', str, False),
-+			('metadata_lv', str, False), ('mirror_log', str, False),
-+			('lv_modules', str, False), ('move_pv', str, False),
-+			('origin', str, False), ('origin_size', long, False),
-+			('pool_lv', str, False), ('raid_max_recovery_rate', long, False),
-+			('raid_min_recovery_rate', long, False),
-+			('raid_mismatch_count', long, False),
-+			('raid_sync_action', str, False),
-+			('raid_write_behind', long, False), ('seg_count', long, False),
-+			('snap_percent', long, False), ('sync_percent', long, False)]
-+
-+		# Generic test case, make sure we get what we expect
-+		for t in lv_properties:
-+			self._test_prop(lv, *t)
-+
-+		segments = lv.listLVsegs()
-+		if segments and len(segments):
-+			for s in segments:
-+				for t in lv_seg_properties:
-+					self._test_prop(s, *t)
-+
-+		# Test specific cases
-+		tag = 'hello_world'
-+		lv.addTag(tag)
-+		tags = lv.getProperty('lv_tags')
-+		self.assertTrue(tag in tags[0])
- 		vg.close()
- 
- 	def test_lv_tags(self):
+But for now, I think it's fine to map SNUM to DM_REPORT_FILED_TYPE_NUMBER
+as we don't actually report negative numbers in their full range, it's
+just the "-1" (with the "undefined", "undef", "unknown" synonyms for
+those 4 fields).
+
+But we surely need your patch for the liblvm as we don't export these
+synonyms/reserved values via liblvm in any way so liblvm users
+don't know about these mappings of these special values...
+
 -- 
-1.8.2.1
+Peter
 
 
