@@ -1,40 +1,45 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 11 May 2015 14:15:03 +0000 (UTC)
-Subject: master - tests: typo in aux
-Message-ID: <20150511141503.067006138A@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu,  7 May 2015 11:08:30 +0000 (UTC)
+Subject: master - man: Fix recursive lvm-config man page.
+Message-ID: <20150507110830.8E16A6031B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3eb2d4d2ce3c660fb5bd99c2093a00cb8f2fa4d5
-Commit:        3eb2d4d2ce3c660fb5bd99c2093a00cb8f2fa4d5
-Parent:        20e9ec35836fc4dd8064f40068e5be83dbf67bfa
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 11 16:14:24 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 11 16:14:24 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=87578b5d94a733b4b57b353c2430df32497a87a4
+Commit:        87578b5d94a733b4b57b353c2430df32497a87a4
+Parent:        6d35c69b06ebe4b51edf277610eb803d23aba11d
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu May 7 12:07:40 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu May 7 12:07:40 2015 +0100
 
-tests: typo in aux
+man: Fix recursive lvm-config man page.
 
-Ooops editor grabbed q in test.
 ---
- test/lib/aux.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW           |    1 +
+ man/lvm-config.8.in |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 0985767..ef25117 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -841,7 +841,7 @@ devices/cache_dir = "$TESTDIR/etc"
- devices/default_data_alignment = 1
- devices/dir = "$DM_DEV_DIR"
- devices/filter = "a|.*|"
--qdevices/global_filter = [ "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]
-+devices/global_filter = [ "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]
- devices/md_component_detection  = 0
- devices/scan = "$DM_DEV_DIR"
- devices/sysfs_scan = 1
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 94851aa..41f8739 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.120 -
+ ===============================
++  Fix recursive lvm-config man page. (2.02.119)
+   Refactor polldaemon interfaces to poll every operation by VG/LV couple
+   Skip wait after testing in _wait_for_single_lv when polling finished
+   lvm2app closes locking on lvm_quit().
+diff --git a/man/lvm-config.8.in b/man/lvm-config.8.in
+index 3d1bec9..5050d77 100644
+--- a/man/lvm-config.8.in
++++ b/man/lvm-config.8.in
+@@ -1 +1 @@
+-.so man8/lvm-config.8
++.so man8/lvmconfig.8
 
 
