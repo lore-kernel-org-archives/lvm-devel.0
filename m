@@ -1,61 +1,55 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Wed,  6 May 2015 13:53:15 +0000 (UTC)
-Subject: master - python: Build correct python value for numerical property
-Message-ID: <20150506135315.B099060C24@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri,  8 May 2015 13:16:32 +0000 (UTC)
+Subject: master - pvcreate: fix test for wiping status
+Message-ID: <20150508131632.3E49C60759@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c21f1ba07a4701b0653bc086673be43ede20efc1
-Commit:        c21f1ba07a4701b0653bc086673be43ede20efc1
-Parent:        91f737383c7c4be70689c9d6ce809de00dc1485e
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon May 4 14:55:00 2015 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed May 6 08:51:04 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2cea1c1bd9d432a7544713c49620e4cc2ab56ee6
+Commit:        2cea1c1bd9d432a7544713c49620e4cc2ab56ee6
+Parent:        bf5cb4af8e7722a4b29bff0caf23a1c5a167a360
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu May 7 12:10:20 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri May 8 13:36:39 2015 +0200
 
-python: Build correct python value for numerical property
+pvcreate: fix test for wiping status
 
-With the lvm2app C API adding the ability to determine when a property is
-signed we can then use this information to construct the correct representation
-of the number for python which will maintain value and sign.  Previously, we
-only represented the numbers in python as positive integers.
-
-Python long type exceeds the range for unsigned and signed integers, we just
-need to use the appropriate parsing code to build correctly.
-
-Python part of the fix for:
-https://bugzilla.redhat.com/show_bug.cgi?id=838257
-
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+Commit ed420fb6917162ed17af69a9a0ec9ae26e61e209 changed
+paramet wiped to be a pointer, but missed to switch
+to test pointer dereferenced value and instead always
+checked 'pointer'.
 ---
- python/liblvm.c |   11 ++++++++---
- 1 files changed, 8 insertions(+), 3 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/metadata.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 6151745..f4a7a2d 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -870,10 +870,15 @@ static PyObject *get_property(struct lvm_property_value *prop)
- 	if (!(pytuple = PyTuple_New(2)))
- 		return NULL;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 87ce45c..3b22ec5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.120 -
+ ===============================
++  Fix check if pvcreate wiped device (2.02.117).
+   Fix storing of vgid when caching metadata (2.02.118).
+   Fix recursive lvm-config man page. (2.02.119)
+   Refactor polldaemon interfaces to poll every operation by VG/LV couple
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index a1a31eb..2a5be7d 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1504,7 +1504,7 @@ static int _pvcreate_check(struct cmd_context *cmd, const char *name,
+ 		goto out;
+ 	}
  
--	if (prop->is_integer)
--		PyTuple_SET_ITEM(pytuple, 0, Py_BuildValue("K", prop->value.integer));
--	else
-+	if (prop->is_integer) {
-+		if (prop->is_signed) {
-+			PyTuple_SET_ITEM(pytuple, 0, Py_BuildValue("L", prop->value.signed_integer));
-+		} else {
-+			PyTuple_SET_ITEM(pytuple, 0, Py_BuildValue("K", prop->value.integer));
-+		}
-+	} else {
- 		PyTuple_SET_ITEM(pytuple, 0, PYSTRTYPE_FROMSTRING(prop->value.string));
-+	}
+-	if (wiped)
++	if (*wiped)
+ 		filter_refresh_needed = scan_needed = 1;
  
- 	if (prop->is_settable)
- 		setable = Py_True;
+ 	if (sigint_caught())
 
 
