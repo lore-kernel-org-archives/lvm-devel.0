@@ -1,49 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 11 May 2015 14:10:59 +0000 (UTC)
-Subject: master - makefiles: move clean
-Message-ID: <20150511141059.9B02060EF1@fedorahosted.org>
+Date: Mon, 11 May 2015 14:15:03 +0000 (UTC)
+Subject: master - tests: typo in aux
+Message-ID: <20150511141503.067006138A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20e9ec35836fc4dd8064f40068e5be83dbf67bfa
-Commit:        20e9ec35836fc4dd8064f40068e5be83dbf67bfa
-Parent:        62e7a6ca1a3479017b026c380a97c9f826b087da
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3eb2d4d2ce3c660fb5bd99c2093a00cb8f2fa4d5
+Commit:        3eb2d4d2ce3c660fb5bd99c2093a00cb8f2fa4d5
+Parent:        20e9ec35836fc4dd8064f40068e5be83dbf67bfa
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 11 16:08:58 2015 +0200
+AuthorDate:    Mon May 11 16:14:24 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 11 16:08:58 2015 +0200
+CommitterDate: Mon May 11 16:14:24 2015 +0200
 
-makefiles: move clean
+tests: typo in aux
 
-Move clean: target below, so it's not a default target to execute.
+Ooops editor grabbed q in test.
 ---
- Makefile.in |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index ac806bb..a180d10 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -49,8 +49,6 @@ tools.distclean: test.distclean
- endif
- DISTCLEAN_DIRS += lcov_reports*
- DISTCLEAN_TARGETS += config.cache config.log config.status make.tmpl
--clean:
--	$(RM) -r build
- 
- include make.tmpl
- 
-@@ -103,6 +101,8 @@ conf.generate: tools
- 
- VER = LVM2. at LVM_MAJOR@. at LVM_MINOR@. at LVM_PATCHLEVEL@
- CLEAN_TARGETS += $(VER).tgz
-+clean:
-+	$(RM) -r build
- 
- dist:
- 	@echo "Generating $(VER).tgz";\
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 0985767..ef25117 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -841,7 +841,7 @@ devices/cache_dir = "$TESTDIR/etc"
+ devices/default_data_alignment = 1
+ devices/dir = "$DM_DEV_DIR"
+ devices/filter = "a|.*|"
+-qdevices/global_filter = [ "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]
++devices/global_filter = [ "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]
+ devices/md_component_detection  = 0
+ devices/scan = "$DM_DEV_DIR"
+ devices/sysfs_scan = 1
 
 
