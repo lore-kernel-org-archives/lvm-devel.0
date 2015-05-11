@@ -1,45 +1,43 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu,  7 May 2015 11:08:30 +0000 (UTC)
-Subject: master - man: Fix recursive lvm-config man page.
-Message-ID: <20150507110830.8E16A6031B@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 11 May 2015 14:30:43 +0000 (UTC)
+Subject: master - vgimport: fall back when lvmetad is not running
+Message-ID: <20150511143043.58100611BA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=87578b5d94a733b4b57b353c2430df32497a87a4
-Commit:        87578b5d94a733b4b57b353c2430df32497a87a4
-Parent:        6d35c69b06ebe4b51edf277610eb803d23aba11d
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu May 7 12:07:40 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu May 7 12:07:40 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d748b3455d25192d68e166d89d1c6f67ac226d44
+Commit:        d748b3455d25192d68e166d89d1c6f67ac226d44
+Parent:        3eb2d4d2ce3c660fb5bd99c2093a00cb8f2fa4d5
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon May 11 09:28:47 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon May 11 09:28:47 2015 -0500
 
-man: Fix recursive lvm-config man page.
+vgimport: fall back when lvmetad is not running
 
+If lvmetad is configured, but not running,
+vgimport would not fall back and run without
+lvmetad, but would report an error about
+requiring lvmetad.
 ---
- WHATS_NEW           |    1 +
- man/lvm-config.8.in |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ tools/vgimport.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 94851aa..41f8739 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.120 -
- ===============================
-+  Fix recursive lvm-config man page. (2.02.119)
-   Refactor polldaemon interfaces to poll every operation by VG/LV couple
-   Skip wait after testing in _wait_for_single_lv when polling finished
-   lvm2app closes locking on lvm_quit().
-diff --git a/man/lvm-config.8.in b/man/lvm-config.8.in
-index 3d1bec9..5050d77 100644
---- a/man/lvm-config.8.in
-+++ b/man/lvm-config.8.in
-@@ -1 +1 @@
--.so man8/lvm-config.8
-+.so man8/lvmconfig.8
+diff --git a/tools/vgimport.c b/tools/vgimport.c
+index b416e21..b64a7a3 100644
+--- a/tools/vgimport.c
++++ b/tools/vgimport.c
+@@ -91,7 +91,7 @@ int vgimport(struct cmd_context *cmd, int argc, char **argv)
+ 	 * We need to reread it to see that it's been exported before we can
+ 	 * import it.
+ 	 */
+-	if (lvmetad_used() && !lvmetad_pvscan_all_devs(cmd, NULL)) {
++	if (lvmetad_active() && !lvmetad_pvscan_all_devs(cmd, NULL)) {
+ 		log_error("Failed to scan devices.");
+ 		return ECMD_FAILED;
+ 	}
 
 
