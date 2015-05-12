@@ -1,47 +1,74 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Tue, 12 May 2015 15:22:14 +0000 (UTC)
-Subject: master - lvmpolld.8.in: clarify the timeout parameter
-Message-ID: <20150512152214.5D9606024B@fedorahosted.org>
+Date: Tue, 12 May 2015 15:22:18 +0000 (UTC)
+Subject: master - lvmpolld-client.c: be more specific about fallback on error
+Message-ID: <20150512152218.9D60E60403@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e213aa17bd9ef648f8fc44047ab4bd8c8ff80959
-Commit:        e213aa17bd9ef648f8fc44047ab4bd8c8ff80959
-Parent:        cdb7ce6f17e01821268c38ec10fed65f0400cc55
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=24a92e08c0d9b7b9a5333c4413f6e95900f966f8
+Commit:        24a92e08c0d9b7b9a5333c4413f6e95900f966f8
+Parent:        c3d351ec9b4d98a08b4d5556130870332f650b67
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Tue May 12 10:20:39 2015 +0200
+AuthorDate:    Tue May 12 15:34:45 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Tue May 12 17:16:31 2015 +0200
+CommitterDate: Tue May 12 17:16:43 2015 +0200
 
-lvmpolld.8.in: clarify the timeout parameter
+lvmpolld-client.c: be more specific about fallback on error
 
-Remove references to systemd native service. Now
-the libdaemon supports shutdown on idle no matter
-the init process implementation installed.
+if client fails to contact lvmpolld it fallbacks to using classical
+polldaemon. Be more specific and give some hints to users what went
+possibly wrong
 ---
- man/lvmpolld.8.in |    7 ++-----
- 1 files changed, 2 insertions(+), 5 deletions(-)
+ lib/lvmpolld/lvmpolld-client.c |   23 +++++++++++++++++------
+ 1 files changed, 17 insertions(+), 6 deletions(-)
 
-diff --git a/man/lvmpolld.8.in b/man/lvmpolld.8.in
-index 8573395..26e7afe 100644
---- a/man/lvmpolld.8.in
-+++ b/man/lvmpolld.8.in
-@@ -61,11 +61,8 @@ Path to the socket file. This overrides both the built-in default
- \fBLVM_LVMPOLLD_SOCKET\fP.
- .TP
- .B \-t \fItimeout_value
--When runs as native systemd service daemon may shutdown after being
--idle for the given time (in seconds). When the option is omitted or
--the value given is zero the daemon never shutdowns on idle. When
--the daemon doesn't run as native systemd service the timeout is
--ignored and never shutdowns on idle.
-+The daemon may shutdown after being idle for the given time (in seconds). When the
-+option is omitted or the value given is zero the daemon never shutdowns on idle.
- .TP
- .B \-B \fIlvm_binary_path
- Optional path to alternative LVM binary (default: #LVM_PATH#). Use for
+diff --git a/lib/lvmpolld/lvmpolld-client.c b/lib/lvmpolld/lvmpolld-client.c
+index ee8860f..d03a650 100644
+--- a/lib/lvmpolld/lvmpolld-client.c
++++ b/lib/lvmpolld/lvmpolld-client.c
+@@ -34,7 +34,7 @@ static const char* _lvmpolld_socket;
+ 
+ static daemon_handle _lvmpolld = { .error = 0 };
+ 
+-static daemon_handle _lvmpolld_connect(const char *socket)
++static daemon_handle _lvmpolld_open(const char *socket)
+ {
+ 	daemon_info lvmpolld_info = {
+ 		.path = "lvmpolld",
+@@ -56,15 +56,26 @@ void lvmpolld_set_socket(const char *socket)
+ 	_lvmpolld_socket = socket;
+ }
+ 
++static void _lvmpolld_connect_or_warn(void)
++{
++	if (!_lvmpolld_connected && !_lvmpolld.error) {
++		_lvmpolld = _lvmpolld_open(_lvmpolld_socket);
++		if ( _lvmpolld.socket_fd >= 0 && !_lvmpolld.error) {
++			log_debug_lvmpolld("Sucessfully connected to lvmpolld on fd %d.", _lvmpolld.socket_fd);
++			_lvmpolld_connected = 1;
++		} else {
++			log_warn("WARNING: Failed to connect to lvmpolld. Proceeding with polling without using lvmpolld.");
++			log_warn("WARNING: Check global/use_lvmpolld in lvm.conf or the lvmpolld daemon state.");
++		}
++	}
++}
++
+ int lvmpolld_use(void)
+ {
+-	if (!_lvmpolld_use)
++	if (!_lvmpolld_use || !_lvmpolld_socket)
+ 		return 0;
+ 
+-	if (!_lvmpolld_connected && !_lvmpolld.error) {
+-		_lvmpolld = _lvmpolld_connect(_lvmpolld_socket);
+-		_lvmpolld_connected = _lvmpolld.socket_fd >= 0;
+-	}
++	_lvmpolld_connect_or_warn();
+ 
+ 	return _lvmpolld_connected;
+ }
 
 
