@@ -1,48 +1,79 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 14 May 2015 15:53:29 +0000 (UTC)
-Subject: master - lvm.conf: add more information to the comment header
-Message-ID: <20150514155329.14A5E60D23@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 13 May 2015 22:20:00 +0000 (UTC)
+Subject: master - configure: set optimize flags when CFLAGS is unset
+Message-ID: <20150513222000.48F4A600E7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3f10dfd6c79e05de89a9ef09bd92239ec1681b13
-Commit:        3f10dfd6c79e05de89a9ef09bd92239ec1681b13
-Parent:        8081ee1440d4a88247504c8f985161098637c520
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 14 10:52:24 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 14 10:52:24 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3fa66d103652df217059e2629da816adb9599e7c
+Commit:        3fa66d103652df217059e2629da816adb9599e7c
+Parent:        f207a6d353c895c6078f8345340228a2a790a659
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 13 21:30:20 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 14 00:19:33 2015 +0200
 
-lvm.conf: add more information to the comment header
+configure: set optimize flags when CFLAGS is unset
 
+If we are given CFLAGS - preserve user's request and avoid placing
+just -O2 there.
 ---
- conf/example.conf.base |   11 +++++++++++
- 1 files changed, 11 insertions(+), 0 deletions(-)
+ configure    |    6 +++---
+ configure.in |    4 +---
+ 2 files changed, 4 insertions(+), 6 deletions(-)
 
-diff --git a/conf/example.conf.base b/conf/example.conf.base
-index e4f4761..5c49899 100644
---- a/conf/example.conf.base
-+++ b/conf/example.conf.base
-@@ -4,6 +4,17 @@
- #
- # Refer to 'man lvm.conf' for further information including the file layout.
- #
-+# Refer to 'man lvm.conf' for information about how settings configured in
-+# this file are combined with built-in values and command line options to
-+# arrive at the final values used by LVM.
-+#
-+# Refer to 'man lvmconfig' for information about displaying the built-in
-+# and configured values used by LVM.
-+#
-+# If a default value is set in this file (not commented out), then a
-+# new version of LVM using this file will continue using that value,
-+# even if the new version of LVM changes the built-in default value.
-+#
- # To put this file in a different directory and override @DEFAULT_SYS_DIR@ set
- # the environment variable LVM_SYSTEM_DIR before running the tools.
- #
+diff --git a/configure b/configure
+index 9485c2b..c4d714b 100755
+--- a/configure
++++ b/configure
+@@ -3033,10 +3033,11 @@ test -n "$target_alias" &&
+     NONENONEs,x,x, &&
+   program_prefix=${target_alias}-
+ 
++if test -z "$CFLAGS"; then :
++  COPTIMISE_FLAG="-O2"
++fi
+ case "$host_os" in
+ 	linux*)
+-		CFLAGS="$CFLAGS"
+-		COPTIMISE_FLAG="-O2"
+ 		CLDFLAGS="$CLDFLAGS -Wl,--version-script,.export.sym"
+ 		ELDFLAGS="-Wl,--export-dynamic"
+ 		# FIXME Generate list and use --dynamic-list=.dlopen.sym
+@@ -3056,7 +3057,6 @@ case "$host_os" in
+ 		;;
+ 	darwin*)
+ 		CFLAGS="$CFLAGS -no-cpp-precomp -fno-common"
+-		COPTIMISE_FLAG="-O2"
+ 		CLDFLAGS="$CLDFLAGS"
+ 		ELDFLAGS=
+ 		CLDWHOLEARCHIVE="-all_load"
+diff --git a/configure.in b/configure.in
+index 5933763..161f832 100644
+--- a/configure.in
++++ b/configure.in
+@@ -26,10 +26,9 @@ AC_CONFIG_AUX_DIR(autoconf)
+ dnl -- Get system type
+ AC_CANONICAL_TARGET([])
+ 
++AS_IF([test -z "$CFLAGS"], [COPTIMISE_FLAG="-O2"])
+ case "$host_os" in
+ 	linux*)
+-		CFLAGS="$CFLAGS"
+-		COPTIMISE_FLAG="-O2"
+ 		CLDFLAGS="$CLDFLAGS -Wl,--version-script,.export.sym"
+ 		ELDFLAGS="-Wl,--export-dynamic"
+ 		# FIXME Generate list and use --dynamic-list=.dlopen.sym
+@@ -49,7 +48,6 @@ case "$host_os" in
+ 		;;
+ 	darwin*)
+ 		CFLAGS="$CFLAGS -no-cpp-precomp -fno-common"
+-		COPTIMISE_FLAG="-O2"
+ 		CLDFLAGS="$CLDFLAGS"
+ 		ELDFLAGS=
+ 		CLDWHOLEARCHIVE="-all_load"
 
 
