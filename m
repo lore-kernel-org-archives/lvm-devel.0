@@ -1,49 +1,60 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Wed,  6 May 2015 13:53:17 +0000 (UTC)
-Subject: master - python: Check for NULL value before constructing string property
-Message-ID: <20150506135317.D03CF60C24@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 13 May 2015 11:20:40 +0000 (UTC)
+Subject: master - nix: more base packages
+Message-ID: <20150513112040.4745960067@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e8c11c7df0f1d582494922cbadb717296c02e05b
-Commit:        e8c11c7df0f1d582494922cbadb717296c02e05b
-Parent:        c21f1ba07a4701b0653bc086673be43ede20efc1
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon May 4 15:19:48 2015 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed May 6 08:51:04 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=007ac0d36f2430a7a9048e2bc7f20cb5a204c413
+Commit:        007ac0d36f2430a7a9048e2bc7f20cb5a204c413
+Parent:        1b43d633688c5bc30cef8bc82f5db6a4fa1abeb6
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue May 12 14:33:14 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed May 13 13:19:35 2015 +0200
 
-python: Check for NULL value before constructing string property
+nix: more base packages
 
-When retrieving a property value that is a string, if the character pointer in C
-was NULL, we would segfault.  This change checks for non-null before creating a
-python string representation.  In the case where the character pointer is NULL
-we will return a python 'None' for the value.
-
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- python/liblvm.c |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ nix/default.nix |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index f4a7a2d..089abb3 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -877,7 +877,11 @@ static PyObject *get_property(struct lvm_property_value *prop)
- 			PyTuple_SET_ITEM(pytuple, 0, Py_BuildValue("K", prop->value.integer));
- 		}
- 	} else {
--		PyTuple_SET_ITEM(pytuple, 0, PYSTRTYPE_FROMSTRING(prop->value.string));
-+		if ( prop->value.string ) {
-+			PyTuple_SET_ITEM(pytuple, 0, PYSTRTYPE_FROMSTRING(prop->value.string));
-+		} else {
-+			PyTuple_SET_ITEM(pytuple, 0, Py_None);
-+		}
- 	}
+diff --git a/nix/default.nix b/nix/default.nix
+index b1693af..6b0001e 100644
+--- a/nix/default.nix
++++ b/nix/default.nix
+@@ -351,23 +351,25 @@ let
  
- 	if (prop->is_settable)
+   install_rpms = rec {
+       common = [ "libselinux-devel" "libsepol-devel" "ncurses-devel" "readline-devel"
+-                 "valgrind" "gdb" "strace"
++                 "valgrind" "valgrind-devel" "gdb" "strace"
+                  "redhat-rpm-config" # needed for rpmbuild of lvm
+                  "which" "e2fsprogs" # needed for fsadm
+                  "perl-GD" # for lcov
+                  "mdadm" # for tests with lvm2 and mdadm
++                 "device-mapper-persistent-data" # thin and cache
++                 "sockat # used by test suite lvmpolld
+                  "kernel"
+                ];
+-      centos63 = [ "clusterlib-devel" "openaislib-devel" "cman" "libudev-devel" "valgrind-devel" "procps" ];
++      centos63 = [ "clusterlib-devel" "openaislib-devel" "cman" "libudev-devel" "procps" ];
+       centos64 = centos63 ++ [ "corosynclib-devel" ];
+       centos65 = centos64;
+       centos66 = centos65;
+       centos70 = [ "dlm-devel" "dlm" "corosynclib-devel" "perl-Digest-MD5" "systemd-devel"
+-                   "device-mapper-persistent-data" "procps-ng" "valgrind-devel" ];
++                   "procps-ng" ];
+ 
+       fedora17 = fedora18 ++ [ "libudev-devel" ];
+ 
+-      fedora18 = [ "dlm-devel" "corosynclib-devel" "device-mapper-persistent-data"
++      fedora18 = [ "dlm-devel" "corosynclib-devel"
+                    "dlm" "systemd-devel" "perl-Digest-MD5" "kernel-modules-extra" ];
+       fedora18u = fedora18;
+ 
 
 
