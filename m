@@ -1,74 +1,70 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 20 May 2015 17:48:09 +0000 (UTC)
-Subject: master - metadata: Add pvs_outdated to struct volume_group.
-Message-ID: <20150520174809.BE94660188@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 13 May 2015 22:19:58 +0000 (UTC)
+Subject: master - configure: preserve CXX/CFLAGS
+Message-ID: <20150513221958.345AC6066A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=611c8b6d29ca164a22270cb9b3dcf7958063c712
-Commit:        611c8b6d29ca164a22270cb9b3dcf7958063c712
-Parent:        5435346052f491333b79da48bec5ef160cd118d5
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Apr 15 16:41:09 2015 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed May 20 19:46:14 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f207a6d353c895c6078f8345340228a2a790a659
+Commit:        f207a6d353c895c6078f8345340228a2a790a659
+Parent:        5e38b8439a48c5d3e7a9624336e1a4ae73049717
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 13 21:23:24 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 14 00:19:32 2015 +0200
 
-metadata: Add pvs_outdated to struct volume_group.
+configure: preserve CXX/CFLAGS
 
-This is a list of PVs that should have their MDAs wiped because they carry
-outdated metadata (that used to belong to the VG they are attached to).
+AC_PROG_CC
+AC_PROG_CXX
+
+Does not preserve CFLAGS CXXFLAGS
 ---
- lib/metadata/metadata.c |    3 +++
- lib/metadata/vg.c       |    1 +
- lib/metadata/vg.h       |    7 +++++++
- 3 files changed, 11 insertions(+), 0 deletions(-)
+ configure    |    4 ++++
+ configure.in |    4 ++++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5456c4e..8300eb6 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3307,6 +3307,9 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 				*consistent = _repair_inconsistent_vg(correct_vg);
- 			else
- 				*consistent = !reappeared;
-+			if (_wipe_outdated_pvs(cmd, correct_vg, &correct_vg->pvs_outdated))
-+				/* clear the list */
-+				dm_list_init(&correct_vg->pvs_outdated);
- 		}
- 		return correct_vg;
- 	}
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index c9a7e9e..1db8e75 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -61,6 +61,7 @@ struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
+diff --git a/configure b/configure
+index 9babc59..9485c2b 100755
+--- a/configure
++++ b/configure
+@@ -3184,6 +3184,8 @@ fi
+   test -n "$AWK" && break
+ done
  
- 	dm_list_init(&vg->pvs);
- 	dm_list_init(&vg->pvs_to_create);
-+	dm_list_init(&vg->pvs_outdated);
- 	dm_list_init(&vg->lvs);
- 	dm_list_init(&vg->tags);
- 	dm_list_init(&vg->removed_lvs);
-diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
-index b0ab122..bb21f34 100644
---- a/lib/metadata/vg.h
-+++ b/lib/metadata/vg.h
-@@ -91,6 +91,13 @@ struct volume_group {
- 	struct dm_list pvs_to_create;
++save_CFLAGS=$CFLAGS
++save_CXXFLAGS=$CXXFLAGS
+ ac_ext=c
+ ac_cpp='$CPP $CPPFLAGS'
+ ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+@@ -4230,6 +4232,8 @@ ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ ac_compiler_gnu=$ac_cv_c_compiler_gnu
  
- 	/*
-+	 * List of physical volumes that carry outdated metadata that belongs
-+	 * to this VG. Currently only populated when lvmetad is in use.
-+	 */
-+
-+	struct dm_list pvs_outdated;
-+
-+	/*
- 	 * logical volumes
- 	 * The following relationship should always hold:
- 	 * dm_list_size(lvs) = user visible lv_count + snapshot_count + other invisible LVs
++CFLAGS=$save_CFLAGS
++CXXFLAGS=$save_CXXFLAGS
+ 
+ 
+ ac_ext=c
+diff --git a/configure.in b/configure.in
+index c3222ed..5933763 100644
+--- a/configure.in
++++ b/configure.in
+@@ -69,8 +69,12 @@ esac
+ dnl -- Checks for programs.
+ AC_PROG_SED
+ AC_PROG_AWK
++save_CFLAGS=$CFLAGS
++save_CXXFLAGS=$CXXFLAGS
+ AC_PROG_CC
+ AC_PROG_CXX
++CFLAGS=$save_CFLAGS
++CXXFLAGS=$save_CXXFLAGS
+ 
+ dnl probably no longer needed in 2008, but...
+ AC_PROG_GCC_TRADITIONAL
 
 
