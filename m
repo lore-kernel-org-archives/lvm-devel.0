@@ -1,46 +1,60 @@
-From: okozina <okozina@fedoraproject.org>
-Date: Fri, 15 May 2015 18:37:21 +0000 (UTC)
-Subject: master - commands.h: reorder lvpoll options
-Message-ID: <20150515183721.136EB610DA@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 13 May 2015 22:20:04 +0000 (UTC)
+Subject: master - makefiles: assign vars before include
+Message-ID: <20150513222004.7654660CFB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e93058ed814f4e669287a6c5e8fa913130f2d591
-Commit:        e93058ed814f4e669287a6c5e8fa913130f2d591
-Parent:        ce3c457dcc4385c6740bacf1b0e9ca7575ab8c10
-Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Thu May 14 19:33:54 2015 +0200
-Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Fri May 15 20:32:25 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2c9ede6b38f2a454e1a18fc4cac9dd06af04972
+Commit:        a2c9ede6b38f2a454e1a18fc4cac9dd06af04972
+Parent:        b184d7a2ca03d0ad82cc37007578e8c9d4fa0497
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 13 23:42:17 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 14 00:19:33 2015 +0200
 
-commands.h: reorder lvpoll options
+makefiles: assign vars before include
 
+Before we include, set INCLUDE and TARGETS.
+Extend CFLAGS after include.
 ---
- tools/commands.h |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ libdm/Makefile.in |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index bbfcd72..8e87681 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -884,12 +884,13 @@ xx(lvpoll,
-    "Continue already initiated poll operation on a logical volume",
-    0,
-    "\t[--abort]\n"
--   "\t[--handlemissingpvs]\n"
--   "\t[--polloperation\n"
-    "\t[-A|--autobackup {y|n}]\n"
-+   "\t[--commandprofile ProfileName]\n"
-    "\t[-d|--debug]\n "
-    "\t[-h|-?|--help]\n"
-+   "\t[--handlemissingpvs]\n"
-    "\t[-i|--interval seconds]\n"
-+   "\t[--polloperation]\n"
-    "\t[-t|--test]\n "
-    "\t[-v|--verbose]\n "
-    "\t[--version]\n",
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index 8e057c3..852cab0 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -33,8 +33,7 @@ SOURCES =\
+ 	regex/ttree.c \
+ 	$(interface)/libdm-iface.c
+ 
+-INCLUDES = -I$(srcdir)/$(interface) -I$(srcdir)
+-CFLAGS += $(UDEV_CFLAGS) $(VALGRIND_CFLAGS)
++INCLUDES = -I$(srcdir)/$(interface)
+ 
+ ifeq ("@STATIC_LINK@", "yes")
+ LIB_STATIC = $(interface)/libdevmapper.a
+@@ -42,7 +41,7 @@ endif
+ 
+ LIB_SHARED = $(interface)/libdevmapper.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_DM)
+-TARGETS += libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION)
++TARGETS = libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION)
+ 
+ CFLOW_LIST = $(SOURCES)
+ CFLOW_LIST_TARGET = libdevmapper.cflow
+@@ -52,6 +51,8 @@ EXPORTED_FN_PREFIX = dm
+ 
+ include $(top_builddir)/make.tmpl
+ 
++CFLAGS += $(UDEV_CFLAGS) $(VALGRIND_CFLAGS)
++
+ DEFS += -DDM_DEVICE_UID=@DM_DEVICE_UID@ -DDM_DEVICE_GID=@DM_DEVICE_GID@ \
+ 	-DDM_DEVICE_MODE=@DM_DEVICE_MODE@
+ 
 
 
