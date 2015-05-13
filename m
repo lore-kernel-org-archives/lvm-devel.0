@@ -1,81 +1,69 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 13 May 2015 11:20:42 +0000 (UTC)
-Subject: master - configure: start to use AS_IF
-Message-ID: <20150513112042.6631760067@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 13 May 2015 12:45:56 +0000 (UTC)
+Subject: master - libdaemon: Fix socket reuse error paths.
+Message-ID: <20150513124556.7511C6034F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cc560b75aa5144ce6859e6d0ecc4cb918af7f4d8
-Commit:        cc560b75aa5144ce6859e6d0ecc4cb918af7f4d8
-Parent:        007ac0d36f2430a7a9048e2bc7f20cb5a204c413
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 12 14:46:36 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 13 13:19:36 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=02e10f4ccd60f66a00d5406452459317baba7c62
+Commit:        02e10f4ccd60f66a00d5406452459317baba7c62
+Parent:        cc560b75aa5144ce6859e6d0ecc4cb918af7f4d8
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed May 13 13:42:09 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed May 13 13:42:09 2015 +0100
 
-configure: start to use AS_IF
+libdaemon: Fix socket reuse error paths.
 
+Invert S_ISSOCK validation.
+Fail instead of replacing a symlink with a new socket.
+After failure, skip calling fcntl with invalid socket_fd.
 ---
- configure    |   16 ++++++++++++----
- configure.in |   12 ++++++++----
- 2 files changed, 20 insertions(+), 8 deletions(-)
+ WHATS_NEW                        |    1 +
+ libdaemon/server/daemon-server.c |    6 +++---
+ 2 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/configure b/configure
-index 7c1ffe0..9babc59 100755
---- a/configure
-+++ b/configure
-@@ -14603,14 +14603,22 @@ $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
- fi
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e1674e2..e92c01a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.120 -
+ ===============================
++  Fix some libdaemon socket creation and reuse error paths.
+   Daemons (libdaemon) support exit on idle also in non-systemd environment.
+   Provide make dist and make rpm targets
+   Configure lvm.conf for use_lvmetad and use_lvmpolld.
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 5b1aff1..e1a9da9 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -261,12 +261,12 @@ static int _open_socket(daemon_state s)
+ 		}
  
+ 		/* Socket already exists. If it's stale, remove it. */
+-		if (stat(sockaddr.sun_path, &buf)) {
++		if (lstat(sockaddr.sun_path, &buf)) {
+ 			perror("stat failed");
+ 			goto error;
+ 		}
  
--test -n "$THIN_CONFIGURE_WARN" && { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Support for thin provisioning is limited since some thin provisioning tools are missing!" >&5
-+if test -n "$THIN_CONFIGURE_WARN"; then :
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Support for thin provisioning is limited since some thin provisioning tools are missing!" >&5
- $as_echo "$as_me: WARNING: Support for thin provisioning is limited since some thin provisioning tools are missing!" >&2;}
-+fi
+-		if (S_ISSOCK(buf.st_mode)) {
++		if (!S_ISSOCK(buf.st_mode)) {
+ 			fprintf(stderr, "%s: not a socket\n", sockaddr.sun_path);
+ 			goto error;
+ 		}
+@@ -595,7 +595,7 @@ void daemon_start(daemon_state s)
+ 	}
  
--test -n "$THIN_CHECK_VERSION_WARN" && { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning" >&5
-+if test -n "$THIN_CHECK_VERSION_WARN"; then :
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning" >&5
- $as_echo "$as_me: WARNING: You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning" >&2;}
-+fi
+ 	/* Set Close-on-exec */
+-	if (fcntl(s.socket_fd, F_SETFD, 1))
++	if (!failed && fcntl(s.socket_fd, F_SETFD, 1))
+ 		fprintf(stderr, "setting CLOEXEC on socket fd %d failed: %s\n", s.socket_fd, strerror(errno));
  
--test -n "$CACHE_CONFIGURE_WARN" && { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Support for cache is limited since some cache tools are missing!" >&5
-+if test -n "$CACHE_CONFIGURE_WARN"; then :
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Support for cache is limited since some cache tools are missing!" >&5
- $as_echo "$as_me: WARNING: Support for cache is limited since some cache tools are missing!" >&2;}
-+fi
- 
--test "$ODIRECT" = yes || { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&5
-+if test "$ODIRECT" != yes; then :
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&5
- $as_echo "$as_me: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&2;}
-+fi
-diff --git a/configure.in b/configure.in
-index 83358f5..c3222ed 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1955,10 +1955,14 @@ unit-tests/mm/Makefile
- ])
- AC_OUTPUT
- 
--test -n "$THIN_CONFIGURE_WARN" && AC_MSG_WARN([Support for thin provisioning is limited since some thin provisioning tools are missing!])
-+AS_IF([test -n "$THIN_CONFIGURE_WARN"],
-+      [AC_MSG_WARN([Support for thin provisioning is limited since some thin provisioning tools are missing!])])
- 
--test -n "$THIN_CHECK_VERSION_WARN" && AC_MSG_WARN([You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning])
-+AS_IF([test -n "$THIN_CHECK_VERSION_WARN"],
-+      [AC_MSG_WARN([You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning])])
- 
--test -n "$CACHE_CONFIGURE_WARN" && AC_MSG_WARN([Support for cache is limited since some cache tools are missing!])
-+AS_IF([test -n "$CACHE_CONFIGURE_WARN"],
-+      [AC_MSG_WARN([Support for cache is limited since some cache tools are missing!])])
- 
--test "$ODIRECT" = yes || AC_MSG_WARN([O_DIRECT disabled: low-memory pvmove may lock up])
-+AS_IF([test "$ODIRECT" != yes],
-+      [AC_MSG_WARN([O_DIRECT disabled: low-memory pvmove may lock up])])
+ 	/* Signal parent, letting them know we are ready to go. */
 
 
