@@ -1,39 +1,46 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 14 May 2015 09:47:05 +0000 (UTC)
-Subject: master - nix: drop util-linux
-Message-ID: <20150514094705.7FFB960243@fedorahosted.org>
+Date: Thu, 14 May 2015 13:02:04 +0000 (UTC)
+Subject: master - nix: socat for f18, nc for f17
+Message-ID: <20150514130204.CE00D6107C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=679f1a9e29da5a1425ef7de857bd798bd211448c
-Commit:        679f1a9e29da5a1425ef7de857bd798bd211448c
-Parent:        4f375d03dd2fba5b32eb8547fdb0f95f30e0bc8c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4931d0132c45d3da5cce12ccf76ac2a8774cef39
+Commit:        4931d0132c45d3da5cce12ccf76ac2a8774cef39
+Parent:        64a999097747316dcfea8c8b7b91778aed56b585
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 14 11:45:37 2015 +0200
+AuthorDate:    Thu May 14 15:01:01 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 14 11:45:37 2015 +0200
+CommitterDate: Thu May 14 15:01:01 2015 +0200
 
-nix: drop util-linux
+nix: socat for f18, nc for f17
 
-Doesn't appear on centos???
+Use common f17_f18 and add extras for f17 and f18
 ---
- nix/default.nix |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ nix/default.nix |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/nix/default.nix b/nix/default.nix
-index 8a5521a..a5dbc34 100644
+index a5dbc34..cd2fd33 100644
 --- a/nix/default.nix
 +++ b/nix/default.nix
-@@ -355,7 +355,6 @@ let
-                  "redhat-rpm-config" # needed for rpmbuild of lvm
-                  "which" "e2fsprogs" # needed for fsadm
-                  "e2fsprogs-libs" "e2fsprogs-devel"
--                 "util-linux"
-                  "perl-GD" # for lcov
-                  "mdadm" # for tests with lvm2 and mdadm
-                  "device-mapper-persistent-data" # thin and cache
+@@ -369,10 +369,11 @@ let
+                    "socat" # used by test suite lvmpolld
+                    "procps-ng" ];
+ 
+-      fedora17 = fedora18 ++ [ "libudev-devel" ];
++      fedora17_18 = [ "dlm-devel" "corosynclib-devel" "libblkid" "libblkid-devel"
++                      "dlm" "systemd-devel" "perl-Digest-MD5" "kernel-modules-extra" ];
++      fedora17 = fedora17_18 ++ [ "libudev-devel" "nc" ];
+ 
+-      fedora18 = [ "dlm-devel" "corosynclib-devel" "nc" "libblkid" "libblkid-devel"
+-                   "dlm" "systemd-devel" "perl-Digest-MD5" "kernel-modules-extra" ];
++      fedora18 = fedora17_18 ++ [ "socat" ];
+       fedora18u = fedora18;
+ 
+       fedora19 = centos70 ++ [ "kernel-modules-extra" ];
 
 
