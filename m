@@ -1,60 +1,55 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 14 May 2015 08:53:54 +0000 (UTC)
-Subject: master - tests: respect @CONFDIR@/machine-id
-Message-ID: <20150514085354.5DF8D601FA@fedorahosted.org>
+Date: Thu, 14 May 2015 08:53:50 +0000 (UTC)
+Subject: master - nix: socat is quite new package
+Message-ID: <20150514085350.2FB1B601FA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a42c1c5728d28b8903725694afb3735dac62f11a
-Commit:        a42c1c5728d28b8903725694afb3735dac62f11a
-Parent:        57a16abe2ce75f65306b70a4dd8e1cd45cbe385d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1406aba8da1a74cc038ae0a8e71e940341b4b7ba
+Commit:        1406aba8da1a74cc038ae0a8e71e940341b4b7ba
+Parent:        b7d80806b68a97cde6dfdf64ef7bc31e9c42a6b8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 14 10:51:34 2015 +0200
+AuthorDate:    Thu May 14 09:49:54 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu May 14 10:52:55 2015 +0200
 
-tests: respect @CONFDIR@/machine-id
+nix: socat is quite new package
 
-Obtain location of machine-id.
-
-NOTE: lvmconfig cannot dump 'life' value - should be fixed.
+Install 'nc' on older systems.
+Test suite handles both.
 ---
- test/shell/system_id.sh |   12 +++++++-----
- 1 files changed, 7 insertions(+), 5 deletions(-)
+ nix/default.nix |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/system_id.sh b/test/shell/system_id.sh
-index 3e3fa94..5bb5c3a 100644
---- a/test/shell/system_id.sh
-+++ b/test/shell/system_id.sh
-@@ -47,10 +47,12 @@ vgcreate $vg1 "$dev1"
- check vg_field $vg1 systemid $SID
- vgremove $vg1
+diff --git a/nix/default.nix b/nix/default.nix
+index b3acc0e..5c2e3d3 100644
+--- a/nix/default.nix
++++ b/nix/default.nix
+@@ -357,19 +357,19 @@ let
+                  "perl-GD" # for lcov
+                  "mdadm" # for tests with lvm2 and mdadm
+                  "device-mapper-persistent-data" # thin and cache
+-                 "socat" # used by test suite lvmpolld
+                  "kernel"
+                ];
+-      centos63 = [ "clusterlib-devel" "openaislib-devel" "cman" "libudev-devel" "procps" ];
++      centos63 = [ "clusterlib-devel" "openaislib-devel" "cman" "libudev-devel" "procps" "nc" ];
+       centos64 = centos63 ++ [ "corosynclib-devel" ];
+       centos65 = centos64;
+       centos66 = centos65;
+       centos70 = [ "dlm-devel" "dlm" "corosynclib-devel" "perl-Digest-MD5" "systemd-devel"
++                   "socat" # used by test suite lvmpolld
+                    "procps-ng" ];
  
--## machineid
-+# FIXME - print 'life' config data
-+eval $(lvmconfig global/etc 2>/dev/null || lvmconfig --type default global/etc)
+       fedora17 = fedora18 ++ [ "libudev-devel" ];
  
--if [ -e /etc/machine-id ]; then
--SID=$(cat /etc/machine-id)
-+## machineid
-+if [ -e $etc/machine-id ]; then
-+SID=$(cat $etc/machine-id)
- aux lvmconf "global/system_id_source = machineid"
- vgcreate $vg1 "$dev1"
- vgs -o+systemid $vg1
-@@ -608,8 +610,8 @@ rm -f $SIDFILE
- # The commands should proceed without a system_id.
- # Look at the warning/error messages.
+-      fedora18 = [ "dlm-devel" "corosynclib-devel"
++      fedora18 = [ "dlm-devel" "corosynclib-devel" "nc"
+                    "dlm" "systemd-devel" "perl-Digest-MD5" "kernel-modules-extra" ];
+       fedora18u = fedora18;
  
--# vgcreate with source machineid, where no /etc/machine-id file exists
--if [ ! -e /etc/machine-id ]; then
-+# vgcreate with source machineid, where no $etc/machine-id file exists
-+if [ ! -e $etc/machine-id ]; then
- SID=""
- aux lvmconf "global/system_id_source = machineid"
- vgcreate $vg1 "$dev1" 2>&1 | tee err
 
 
