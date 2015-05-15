@@ -1,54 +1,55 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Fri, 15 May 2015 18:37:27 +0000 (UTC)
-Subject: master - config_settings.h: improve lvmpolld config description
-Message-ID: <20150515183727.5DF1060E34@fedorahosted.org>
+Date: Fri, 15 May 2015 18:37:29 +0000 (UTC)
+Subject: master - example.conf.in: apply previous improvements to example.conf
+Message-ID: <20150515183729.7A57060E34@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f0095fa2c2c3ceb542be7d3da54072dd6c2bef5
-Commit:        9f0095fa2c2c3ceb542be7d3da54072dd6c2bef5
-Parent:        bf19bbbd5596ea55111678c56087672ee1b72c11
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0d15217a6c08d99314324469f42ad9b8cd0baccc
+Commit:        0d15217a6c08d99314324469f42ad9b8cd0baccc
+Parent:        9f0095fa2c2c3ceb542be7d3da54072dd6c2bef5
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri May 15 14:26:50 2015 +0200
+AuthorDate:    Fri May 15 14:28:30 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Fri May 15 20:32:51 2015 +0200
+CommitterDate: Fri May 15 20:32:58 2015 +0200
 
-config_settings.h: improve lvmpolld config description
+example.conf.in: apply previous improvements to example.conf
 
 ---
- lib/config/config_settings.h |   17 ++++++++++-------
- 1 files changed, 10 insertions(+), 7 deletions(-)
+ conf/example.conf.in |   18 ++++++++++--------
+ 1 files changed, 10 insertions(+), 8 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index cfcc72e..4e1c126 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -937,13 +937,16 @@ cfg(activation_checks_CFG, "checks", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, D
- 	"this only when there seems to be a problem.\n")
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index cc02e98..e809488 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -939,14 +939,16 @@ global {
+ 	# This configuration option does not have a default value defined.
+ 	# system_id_file = ""
  
- cfg(global_use_lvmpolld_CFG, "use_lvmpolld", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMPOLLD, vsn(2, 2, 120), NULL, 0, NULL,
--	"Indicates whether to use lvmpolld instead of classical polldaemon (a process\n"
--	"forked off an initiating lvm command) or not. When set to 1 and native systemd\n"
--	"service is installed in the system lvm starts using lvmpolld. lvmpolld gets\n"
--	"auto-activated by systemd when a message lands on the respective lvmpolld socket.\n"
--	"All commands that would require polling of in-progress operation are therefore\n"
--	"spawned in lvmpolld's service cgroup.\n"
--	"When set to 0 lvm falls back to classical polling.\n")
-+	"Use lvmpolld to supervise long running LVM commands.\n"
-+	"When enabled, control of long running LVM commands is transferred\n"
-+	"from the original LVM command to the lvmpolld daemon.  This allows\n"
-+	"the operation to continue independent of the original LVM command.\n"
-+	"After lvmpolld takes over, the LVM command displays the progress\n"
-+	"of the ongoing operation.  lvmpolld itself runs LVM commands to manage\n"
-+	"the progress of ongoing operations.  lvmpolld can be used as a native\n"
-+	"systemd service, which allows it to be started on demand, and to use\n"
-+	"its own control group.  When this option is disabled, LVM commands will\n"
-+	"supervise long running operations by forking themselves.\n")
+-	# Indicates whether to use lvmpolld instead of classical polldaemon (a process
+-	# forked off an initiating lvm command) or not. When set to 1 and native systemd
+-	# service is installed in the system lvm starts using lvmpolld. lvmpolld gets
+-	# auto-activated by systemd when a message lands on the respective lvmpolld socket.
+-	# All commands that would require polling of in-progress operation are therefore
+-	# spawned in lvmpolld's service cgroup.
+-	#
+-	# When set to 0 lvm falls back to classical polling.
++	# Use lvmpolld to supervise long running LVM commands.
++	# When enabled, control of long running LVM commands is transferred
++	# from the original LVM command to the lvmpolld daemon. This allows
++	# the operation to continue independent of the original LVM command.
++	# After lvmpolld takes over, the LVM command displays the progress
++	# of the ongoing operation. lvmpolld itself runs LVM commands to manage
++	# the progress of ongoing operations. lvmpolld can be used as a native
++	# systemd service, which allows it to be started on demand, and to use
++	# its own control group. When this option is disabled, LVM commands will
++	# supervise long running operations by forking themselves.
+ 	use_lvmpolld = @DEFAULT_USE_LVMPOLLD@
+ }
  
- cfg(activation_udev_sync_CFG, "udev_sync", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_UDEV_SYNC, vsn(2, 2, 51), NULL, 0, NULL,
- 	"Use udev notifications to synchronize udev and LVM.\n"
 
 
