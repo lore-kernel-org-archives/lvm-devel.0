@@ -1,44 +1,41 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Fri, 15 May 2015 18:37:08 +0000 (UTC)
-Subject: master - libdaemon: suggest daemon already running
-Message-ID: <20150515183708.17F8C610DA@fedorahosted.org>
+Date: Fri, 15 May 2015 18:37:10 +0000 (UTC)
+Subject: master - libdaemon: fprintf(stderr...) -> ERROR()
+Message-ID: <20150515183710.3BE88610DA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f653b123cf41751ebabfc910061c07e6e3c47149
-Commit:        f653b123cf41751ebabfc910061c07e6e3c47149
-Parent:        c0d30da60968e202d1e834dea28869a571bee991
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8d594c409c33884a00be578543589d8207338413
+Commit:        8d594c409c33884a00be578543589d8207338413
+Parent:        f653b123cf41751ebabfc910061c07e6e3c47149
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Thu May 14 15:43:43 2015 +0200
+AuthorDate:    Thu May 14 15:50:16 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Fri May 15 20:31:36 2015 +0200
+CommitterDate: Fri May 15 20:31:42 2015 +0200
 
-libdaemon: suggest daemon already running
+libdaemon: fprintf(stderr...) -> ERROR()
 
-when dm_creat_lockfile fails, it's probably due to
-another instance is holding the same pid file...
+log data structures are ready. so why not pass
+error messages through ERROR()
 ---
- libdaemon/server/daemon-server.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ libdaemon/server/daemon-server.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index e1a9da9..6e497b8 100644
+index 6e497b8..bedd3b2 100644
 --- a/libdaemon/server/daemon-server.c
 +++ b/libdaemon/server/daemon-server.c
-@@ -568,8 +568,10 @@ void daemon_start(daemon_state s)
- 		 * NB. Take care to not keep stale locks around. Best not exit(...)
- 		 * after this point.
- 		 */
--		if (dm_create_lockfile(s.pidfile) == 0)
-+		if (dm_create_lockfile(s.pidfile) == 0) {
-+			ERROR(&s, "Failed to acquire lock on %s. Already running?\n", s.pidfile);
- 			exit(EXIT_ALREADYRUNNING);
-+		}
+@@ -598,7 +598,7 @@ void daemon_start(daemon_state s)
  
- 		(void) dm_prepare_selinux_context(NULL, 0);
- 	}
+ 	/* Set Close-on-exec */
+ 	if (!failed && fcntl(s.socket_fd, F_SETFD, 1))
+-		fprintf(stderr, "setting CLOEXEC on socket fd %d failed: %s\n", s.socket_fd, strerror(errno));
++		ERROR(&s, "setting CLOEXEC on socket fd %d failed: %s\n", s.socket_fd, strerror(errno));
+ 
+ 	/* Signal parent, letting them know we are ready to go. */
+ 	if (!s.foreground)
 
 
