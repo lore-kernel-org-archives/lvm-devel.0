@@ -1,41 +1,41 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 15 May 2015 19:27:31 +0000 (UTC)
-Subject: master - config: remove UNDEFINED from cache_pool_cachemode
-Message-ID: <20150515192731.2F8A260E60@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 15 May 2015 19:31:52 +0000 (UTC)
+Subject: master - spec: new man page
+Message-ID: <20150515193153.0020C60EED@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=463c86008ba9cbadedc42b022bd5e5247b774513
-Commit:        463c86008ba9cbadedc42b022bd5e5247b774513
-Parent:        850606e9fa4f462adce3699172f6b4af6c29b86b
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri May 15 14:24:23 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri May 15 14:24:23 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=190e91231c7822fd7b1a3dcf0e17dd2fdf162a57
+Commit:        190e91231c7822fd7b1a3dcf0e17dd2fdf162a57
+Parent:        463c86008ba9cbadedc42b022bd5e5247b774513
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri May 15 21:14:25 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri May 15 21:31:28 2015 +0200
 
-config: remove UNDEFINED from cache_pool_cachemode
+spec: new man page
 
-Replace UNDEFINED with COMMENTED because the code
-requires a value to be returned from the config.
 ---
- lib/config/config_settings.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ spec/packages.inc |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index d7404ac..a06b3e6 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -460,7 +460,7 @@ cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separa
- cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 106), NULL, 0, NULL,
- 	"Cache pool metadata and data will always use different PVs.\n")
- 
--cfg(allocation_cache_pool_cachemode_CFG, "cache_pool_cachemode", allocation_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, DEFAULT_CACHE_POOL_CACHEMODE, vsn(2, 2, 113), NULL, 0, NULL,
-+cfg(allocation_cache_pool_cachemode_CFG, "cache_pool_cachemode", allocation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_CACHE_POOL_CACHEMODE, vsn(2, 2, 113), NULL, 0, NULL,
- 	"The default cache mode used for new cache pools.\n"
- 	"Possible options are: writethrough, writeback.\n"
- 	"writethrough - Data blocks are immediately written from\n"
+diff --git a/spec/packages.inc b/spec/packages.inc
+index f315524..b9caa65 100644
+--- a/spec/packages.inc
++++ b/spec/packages.inc
+@@ -152,8 +152,9 @@ fi
+   %{_udevdir}/69-dm-lvm-metad.rules
+  %endif
+ %endif
+-%if %{have_service lvmetad}
++%if %{have_service lvmpolld}
+   %{_mandir}/man8/lvmpolld.8.gz
++  %{_mandir}/man8/lvm-lvpoll.8.gz
+ %endif
+ %dir %{_sysconfdir}/lvm
+ %ghost %{_sysconfdir}/lvm/cache/.cache
 
 
