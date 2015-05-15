@@ -1,42 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 13 May 2015 22:20:02 +0000 (UTC)
-Subject: master - makefiles: drop DEBUG mangling
-Message-ID: <20150513222002.5EB176006F@fedorahosted.org>
+Date: Fri, 15 May 2015 15:45:06 +0000 (UTC)
+Subject: master - man: missed y|n for wipesignatures
+Message-ID: <20150515154506.0973160CDD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b184d7a2ca03d0ad82cc37007578e8c9d4fa0497
-Commit:        b184d7a2ca03d0ad82cc37007578e8c9d4fa0497
-Parent:        3fa66d103652df217059e2629da816adb9599e7c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03aec36fc05c7cd78e0a5407c09e4d47b973c02f
+Commit:        03aec36fc05c7cd78e0a5407c09e4d47b973c02f
+Parent:        a98ceceb1d101f0b19a6115f406e23f13feab5ae
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 13 21:33:17 2015 +0200
+AuthorDate:    Fri May 15 17:43:15 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 14 00:19:33 2015 +0200
+CommitterDate: Fri May 15 17:44:52 2015 +0200
 
-makefiles: drop DEBUG mangling
+man: missed y|n for wipesignatures
 
-DEBUG is already set through make.tmpl.
 ---
- daemons/clvmd/Makefile.in |    4 ----
- 1 files changed, 0 insertions(+), 4 deletions(-)
+ man/lvcreate.8.in |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
-index d51ea3d..38ff1c7 100644
---- a/daemons/clvmd/Makefile.in
-+++ b/daemons/clvmd/Makefile.in
-@@ -36,10 +36,6 @@ SOURCES = \
- 	lvm-functions.c  \
- 	refresh_clvmd.c
- 
--ifeq ("@DEBUG@", "yes")
--	DEFS += -DDEBUG
--endif
--
- ifneq (,$(findstring cman,, "@CLVMD@,"))
- 	SOURCES += clvmd-cman.c
- 	LMLIBS += $(CMAN_LIBS) $(CONFDB_LIBS) $(DLM_LIBS)
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index de4f168..5f5f74b 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -91,7 +91,8 @@ lvcreate \- create a logical volume in an existing volume group
+ .RB [ \-\-type
+ .IR SegmentType ]
+ .RB [ \-v | \-\-verbose ]
+-.RB [ \-W | \-\-wipesignatures ]
++.RB [ \-W | \-\-wipesignatures
++.RI { y | n }]
+ .RB [ \-Z | \-\-zero
+ .RI { y | n }]
+ .RI [ VolumeGroup { Name | Path }
 
 
