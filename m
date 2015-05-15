@@ -1,41 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 May 2015 19:31:52 +0000 (UTC)
-Subject: master - spec: new man page
-Message-ID: <20150515193153.0020C60EED@fedorahosted.org>
+Date: Fri, 15 May 2015 20:54:07 +0000 (UTC)
+Subject: master - mirror: use proper 64bit constants
+Message-ID: <20150515205407.1766E60781@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=190e91231c7822fd7b1a3dcf0e17dd2fdf162a57
-Commit:        190e91231c7822fd7b1a3dcf0e17dd2fdf162a57
-Parent:        463c86008ba9cbadedc42b022bd5e5247b774513
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9e102ecbd9b6efc36e09c84b8f0882d993038f84
+Commit:        9e102ecbd9b6efc36e09c84b8f0882d993038f84
+Parent:        190e91231c7822fd7b1a3dcf0e17dd2fdf162a57
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 15 21:14:25 2015 +0200
+AuthorDate:    Fri May 15 22:53:12 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 15 21:31:28 2015 +0200
+CommitterDate: Fri May 15 22:53:12 2015 +0200
 
-spec: new man page
+mirror: use proper 64bit constants
 
+ed2a08bf25e3b4e6a88c55402ab5dc11061ad68e missed to use 64bit
+constants.
 ---
- spec/packages.inc |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ lib/metadata/mirror.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/spec/packages.inc b/spec/packages.inc
-index f315524..b9caa65 100644
---- a/spec/packages.inc
-+++ b/spec/packages.inc
-@@ -152,8 +152,9 @@ fi
-   %{_udevdir}/69-dm-lvm-metad.rules
-  %endif
- %endif
--%if %{have_service lvmetad}
-+%if %{have_service lvmpolld}
-   %{_mandir}/man8/lvmpolld.8.gz
-+  %{_mandir}/man8/lvm-lvpoll.8.gz
- %endif
- %dir %{_sysconfdir}/lvm
- %ghost %{_sysconfdir}/lvm/cache/.cache
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index ff8b657..543c00e 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -164,7 +164,7 @@ uint32_t adjusted_mirror_region_size(uint32_t extent_size, uint32_t extents,
+ 	uint64_t region_max;
+ 	uint64_t region_min, region_min_pow2;
+ 
+-	region_max = (1UL << (ffs((int)extents) - 1)) * (1UL << (ffs((int)extent_size) - 1));
++	region_max = (UINT64_C(1) << (ffs((int)extents) - 1)) * (UINT64_C(1) << (ffs((int)extent_size) - 1));
+ 
+ 	if (region_max < UINT32_MAX && region_size > region_max) {
+ 		region_size = (uint32_t) region_max;
 
 
