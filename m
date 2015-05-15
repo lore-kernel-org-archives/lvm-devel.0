@@ -1,40 +1,41 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 May 2015 15:45:06 +0000 (UTC)
-Subject: master - man: missed y|n for wipesignatures
-Message-ID: <20150515154506.0973160CDD@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Fri, 15 May 2015 16:39:20 +0000 (UTC)
+Subject: master - config: thin_pool_chunk_size_policy is not undefined
+Message-ID: <20150515163920.DE8C3602C1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03aec36fc05c7cd78e0a5407c09e4d47b973c02f
-Commit:        03aec36fc05c7cd78e0a5407c09e4d47b973c02f
-Parent:        a98ceceb1d101f0b19a6115f406e23f13feab5ae
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 15 17:43:15 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 15 17:44:52 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b7db994aba358d2dc456eb8b22c6b375961e1b07
+Commit:        b7db994aba358d2dc456eb8b22c6b375961e1b07
+Parent:        03aec36fc05c7cd78e0a5407c09e4d47b973c02f
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri May 15 11:37:16 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri May 15 11:37:16 2015 -0500
 
-man: missed y|n for wipesignatures
+config: thin_pool_chunk_size_policy is not undefined
 
+The default policy setting does not depend on any
+system/kernel values.
 ---
- man/lvcreate.8.in |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ lib/config/config_settings.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index de4f168..5f5f74b 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -91,7 +91,8 @@ lvcreate \- create a logical volume in an existing volume group
- .RB [ \-\-type
- .IR SegmentType ]
- .RB [ \-v | \-\-verbose ]
--.RB [ \-W | \-\-wipesignatures ]
-+.RB [ \-W | \-\-wipesignatures
-+.RI { y | n }]
- .RB [ \-Z | \-\-zero
- .RI { y | n }]
- .RI [ VolumeGroup { Name | Path }
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index e255392..9f31f6e 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -491,7 +491,7 @@ cfg(allocation_thin_pool_discards_CFG, "thin_pool_discards", allocation_CFG_SECT
+ 	"The discards behaviour of thin pool volumes.\n"
+ 	"Possible options are: ignore, nopassdown, passdown.\n")
+ 
+-cfg(allocation_thin_pool_chunk_size_policy_CFG, "thin_pool_chunk_size_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, DEFAULT_THIN_POOL_CHUNK_SIZE_POLICY, vsn(2, 2, 101), NULL, 0, NULL,
++cfg(allocation_thin_pool_chunk_size_policy_CFG, "thin_pool_chunk_size_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA, CFG_TYPE_STRING, DEFAULT_THIN_POOL_CHUNK_SIZE_POLICY, vsn(2, 2, 101), NULL, 0, NULL,
+ 	"The chunk size calculation policy for thin pool volumes.\n"
+ 	"Possible options are: generic, performance.\n"
+ 	"generic - If thin_pool_chunk_size is defined, use it.\n"
 
 
