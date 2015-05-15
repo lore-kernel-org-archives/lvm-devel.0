@@ -1,41 +1,44 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 15 May 2015 16:45:31 +0000 (UTC)
-Subject: master - config: thin_pool_chunk_size_policy should be commented
-Message-ID: <20150515164531.84C8A60787@fedorahosted.org>
+From: okozina <okozina@fedoraproject.org>
+Date: Fri, 15 May 2015 18:37:08 +0000 (UTC)
+Subject: master - libdaemon: suggest daemon already running
+Message-ID: <20150515183708.17F8C610DA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0d30da60968e202d1e834dea28869a571bee991
-Commit:        c0d30da60968e202d1e834dea28869a571bee991
-Parent:        b7db994aba358d2dc456eb8b22c6b375961e1b07
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri May 15 11:43:56 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri May 15 11:43:56 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f653b123cf41751ebabfc910061c07e6e3c47149
+Commit:        f653b123cf41751ebabfc910061c07e6e3c47149
+Parent:        c0d30da60968e202d1e834dea28869a571bee991
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Thu May 14 15:43:43 2015 +0200
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Fri May 15 20:31:36 2015 +0200
 
-config: thin_pool_chunk_size_policy should be commented
+libdaemon: suggest daemon already running
 
-It is commented in existing example.conf, so leave
-that as it was.
+when dm_creat_lockfile fails, it's probably due to
+another instance is holding the same pid file...
 ---
- lib/config/config_settings.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdaemon/server/daemon-server.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 9f31f6e..cfcc72e 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -491,7 +491,7 @@ cfg(allocation_thin_pool_discards_CFG, "thin_pool_discards", allocation_CFG_SECT
- 	"The discards behaviour of thin pool volumes.\n"
- 	"Possible options are: ignore, nopassdown, passdown.\n")
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index e1a9da9..6e497b8 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -568,8 +568,10 @@ void daemon_start(daemon_state s)
+ 		 * NB. Take care to not keep stale locks around. Best not exit(...)
+ 		 * after this point.
+ 		 */
+-		if (dm_create_lockfile(s.pidfile) == 0)
++		if (dm_create_lockfile(s.pidfile) == 0) {
++			ERROR(&s, "Failed to acquire lock on %s. Already running?\n", s.pidfile);
+ 			exit(EXIT_ALREADYRUNNING);
++		}
  
--cfg(allocation_thin_pool_chunk_size_policy_CFG, "thin_pool_chunk_size_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA, CFG_TYPE_STRING, DEFAULT_THIN_POOL_CHUNK_SIZE_POLICY, vsn(2, 2, 101), NULL, 0, NULL,
-+cfg(allocation_thin_pool_chunk_size_policy_CFG, "thin_pool_chunk_size_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_THIN_POOL_CHUNK_SIZE_POLICY, vsn(2, 2, 101), NULL, 0, NULL,
- 	"The chunk size calculation policy for thin pool volumes.\n"
- 	"Possible options are: generic, performance.\n"
- 	"generic - If thin_pool_chunk_size is defined, use it.\n"
+ 		(void) dm_prepare_selinux_context(NULL, 0);
+ 	}
 
 
