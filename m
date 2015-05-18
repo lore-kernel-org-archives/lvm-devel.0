@@ -1,62 +1,82 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 18 May 2015 10:52:33 +0000 (UTC)
-Subject: master - makefiles: drop LVM_SHARED_PATH
-Message-ID: <20150518105233.826FE61057@fedorahosted.org>
+Date: Mon, 18 May 2015 10:52:35 +0000 (UTC)
+Subject: master - tests: thin_restore not needed
+Message-ID: <20150518105235.A1DC861057@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=62ac80c8fad09fb14f27d56663a5377948e20fce
-Commit:        62ac80c8fad09fb14f27d56663a5377948e20fce
-Parent:        30c3bbcd9e852d7f79846ecc57148a47e52e818d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=caaca15854440c1781ecde06f3f8e3ecc6c728ca
+Commit:        caaca15854440c1781ecde06f3f8e3ecc6c728ca
+Parent:        62ac80c8fad09fb14f27d56663a5377948e20fce
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 18 12:16:24 2015 +0200
+AuthorDate:    Mon May 18 10:14:12 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon May 18 12:45:42 2015 +0200
 
-makefiles: drop LVM_SHARED_PATH
+tests: thin_restore  not needed
 
-We already have LVM_PATH define used everywhere else
-to access LVM binary so stay with one name.
+Few more test which could live without thin_restore.
 ---
- tools/Makefile.in  |    2 --
- tools/lvmcmdline.c |    6 +++---
- 2 files changed, 3 insertions(+), 5 deletions(-)
+ test/api/thin_percent.sh              |    2 ++
+ test/shell/lvconvert-thin-external.sh |    2 ++
+ test/shell/lvconvert-thin-raid.sh     |    2 ++
+ test/shell/lvconvert-thin.sh          |    2 ++
+ 4 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 9bbf87b..cec74a9 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -114,8 +114,6 @@ LVMLIBS += -ldevmapper
- EXPORTED_HEADER = $(srcdir)/lvm2cmd.h
- EXPORTED_FN_PREFIX = lvm2
+diff --git a/test/api/thin_percent.sh b/test/api/thin_percent.sh
+index f93bd15..fd64e3b 100644
+--- a/test/api/thin_percent.sh
++++ b/test/api/thin_percent.sh
+@@ -11,6 +11,8 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  
--DEFS += -DLVM_SHARED_PATH=\"$(exec_prefix)/sbin/lvm\"
--
- CFLOW_LIST = lvmcmdlib.c lvm2cmd.c
- CFLOW_LIST_TARGET = liblvm2cmd.cflow
- CFLOW_TARGET = lvm
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 78974df..29fffb3 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1925,12 +1925,12 @@ int lvm2_main(int argc, char **argv)
- 		return -1;
++export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
++
+ . lib/inittest
  
- 	if (is_static() && strcmp(base, "lvm.static") &&
--	    path_exists(LVM_SHARED_PATH) &&
-+	    path_exists(LVM_PATH) &&
- 	    !getenv("LVM_DID_EXEC")) {
- 		if (setenv("LVM_DID_EXEC", base, 1))
- 			log_sys_error("setenv", "LVM_DID_EXEC");
--		if (execvp(LVM_SHARED_PATH, argv) == -1)
--			log_sys_error("execvp", "LVM_SHARED_PATH");
-+		if (execvp(LVM_PATH, argv) == -1)
-+			log_sys_error("execvp", LVM_PATH);
- 		if (unsetenv("LVM_DID_EXEC"))
- 			log_sys_error("unsetenv", "LVM_DID_EXEC");
- 	}
+ aux have_thin 1 0 0 || skip
+diff --git a/test/shell/lvconvert-thin-external.sh b/test/shell/lvconvert-thin-external.sh
+index b688d3a..eba9e36 100644
+--- a/test/shell/lvconvert-thin-external.sh
++++ b/test/shell/lvconvert-thin-external.sh
+@@ -12,6 +12,8 @@
+ 
+ # Test conversion to thin external origin
+ 
++export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
++
+ . lib/inittest
+ 
+ test -e LOCAL_LVMPOLLD && skip
+diff --git a/test/shell/lvconvert-thin-raid.sh b/test/shell/lvconvert-thin-raid.sh
+index 8b4052c..bd554b2 100644
+--- a/test/shell/lvconvert-thin-raid.sh
++++ b/test/shell/lvconvert-thin-raid.sh
+@@ -10,6 +10,8 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 
++export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
++
+ . lib/inittest
+ 
+ test -e LOCAL_LVMPOLLD && skip
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index b833362..8270c0e 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -10,6 +10,8 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 
++export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
++
+ . lib/inittest
+ 
+ test -e LOCAL_LVMPOLLD && skip
 
 
