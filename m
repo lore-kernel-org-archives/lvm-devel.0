@@ -1,64 +1,39 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Tue, 19 May 2015 19:03:08 +0000 (UTC)
-Subject: master - polldaemon.c: do not report error when LV not found
-Message-ID: <20150519190308.4705360FC8@fedorahosted.org>
+Date: Tue, 19 May 2015 19:03:10 +0000 (UTC)
+Subject: master - WHATS_NEW: various updates
+Message-ID: <20150519190310.92B4460FC8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6b5eb88f23701446653ed616b54bec15c54d42d
-Commit:        e6b5eb88f23701446653ed616b54bec15c54d42d
-Parent:        cf5b4a228612981ec5de358adad670014e885e4c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=788e4c54232372db6551d9a1323e1b59892900c1
+Commit:        788e4c54232372db6551d9a1323e1b59892900c1
+Parent:        e6b5eb88f23701446653ed616b54bec15c54d42d
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Tue May 19 17:04:29 2015 +0200
+AuthorDate:    Tue May 19 21:01:24 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Tue May 19 20:56:46 2015 +0200
+CommitterDate: Tue May 19 21:01:24 2015 +0200
 
-polldaemon.c: do not report error when LV not found
+WHATS_NEW: various updates
 
-currently in wait_for_single_lv() fn trying to poll missing pvmove LV
-is considered success. It may have been already finished by another
-instance of polldaemon. either by another forked off polldaemon
-or by lvmpolld.
-
-Let's try to handle the mirror conversion and snapshot merge the same
-way.
 ---
- tools/polldaemon.c |   18 ++++++++----------
- 1 files changed, 8 insertions(+), 10 deletions(-)
+ WHATS_NEW |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index 9f4fc94..fe2e7fd 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -160,18 +160,16 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 		if (lv && parms->lv_type && !(lv->status & parms->lv_type))
- 			lv = NULL;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index de3ddce..e14c858 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,8 @@
+ Version 2.02.121 - 
+ ================================
++  Do not fail polling when poll LV not found (already finished or removed).
++  Replace poll_get_copy_vg/lv fns with vg_read() and find_lv() in polldaemon.
++  Close all device fds only in before sleep call in polldaemon.
  
--		if (!lv && parms->lv_type == PVMOVE) {
--			log_print_unless_silent("%s: No pvmove in progress - already finished or aborted.",
--						id->display_name);
--			unlock_and_release_vg(cmd, vg, vg->name);
--			return 1;
--		}
--
- 		if (!lv) {
--			log_error("ABORTING: Can't find LV in %s for %s.",
--				  vg->name, id->display_name);
-+			if (parms->lv_type == PVMOVE)
-+				log_print_unless_silent("%s: No pvmove in progress - already finished or aborted.",
-+							id->display_name);
-+			else
-+				log_print_unless_silent("Can't find LV in %s for %s.",
-+							vg->name, id->display_name);
-+
- 			unlock_and_release_vg(cmd, vg, vg->name);
--			return 0;
-+			return 1;
- 		}
- 
- 		/*
+ Version 2.02.120 - 15th May 2015
+ ================================
 
 
