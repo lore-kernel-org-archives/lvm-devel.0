@@ -1,124 +1,174 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Tue, 19 May 2015 19:03:04 +0000 (UTC)
-Subject: master - pvmove.c: code cleanup
-Message-ID: <20150519190304.0E71060FC8@fedorahosted.org>
+Date: Tue, 19 May 2015 19:03:06 +0000 (UTC)
+Subject: master - lvconvert.c: drop get_vg_lock_and_logical_volume fn
+Message-ID: <20150519190306.2105660FC8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f400f9db19324a29aeff6ad92039db91adc1e8f9
-Commit:        f400f9db19324a29aeff6ad92039db91adc1e8f9
-Parent:        7a8ce8dbf73fc149c67b22e3b90f542f70944e93
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf5b4a228612981ec5de358adad670014e885e4c
+Commit:        cf5b4a228612981ec5de358adad670014e885e4c
+Parent:        f400f9db19324a29aeff6ad92039db91adc1e8f9
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue May 19 15:27:36 2015 +0200
+AuthorDate:    Tue May 19 16:46:11 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Tue May 19 20:56:24 2015 +0200
+CommitterDate: Tue May 19 20:56:32 2015 +0200
 
-pvmove.c: code cleanup
+lvconvert.c: drop get_vg_lock_and_logical_volume fn
 
 ---
- tools/pvmove.c |   29 +++++++++++++++++------------
- 1 files changed, 17 insertions(+), 12 deletions(-)
+ tools/lvconvert.c |   81 +++++++++++++++++++++-------------------------------
+ 1 files changed, 33 insertions(+), 48 deletions(-)
 
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index d5b246f..f4b9d6c 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -585,10 +585,11 @@ static int _copy_id_components(struct cmd_context *cmd,
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 9192d04..6e47f81 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3231,37 +3231,6 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	return ECMD_PROCESSED;
  }
  
- static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
--			  int argc, char **argv, union lvid *lvid, char **vg_name,
-+			  int argc, char **argv, union lvid *lvid, char **vg_name_copy,
- 			  char **lv_mirr_name)
+-/*
+- * FIXME move to toollib along with the rest of the drop/reacquire
+- * VG locking that is used by _lvconvert_merge_single()
+- */
+-static struct logical_volume *get_vg_lock_and_logical_volume(struct cmd_context *cmd,
+-							     const char *vg_name,
+-							     const char *lv_name)
+-{
+-	/*
+-	 * Returns NULL if the requested LV doesn't exist;
+-	 * otherwise the caller must release_vg(lv->vg)
+-	 * - it is also up to the caller to unlock_vg() as needed
+-	 */
+-	struct volume_group *vg;
+-	struct logical_volume* lv = NULL;
+-
+-	vg = vg_read(cmd, vg_name, NULL, READ_FOR_UPDATE);
+-	if (vg_read_error(vg)) {
+-		release_vg(vg);
+-		return_NULL;
+-	}
+-
+-	if (!(lv = find_lv(vg, lv_name))) {
+-		log_error("Can't find LV %s in VG %s", lv_name, vg_name);
+-		unlock_and_release_vg(cmd, vg, vg_name);
+-		return NULL;
+-	}
+-
+-	return lv;
+-}
+-
+ static int _poll_logical_volume(struct cmd_context *cmd, struct logical_volume *lv,
+ 			       int wait_completion)
  {
- 	const char *lv_name = NULL;
-+	const char *vg_name;
- 	char *pv_name_arg;
- 	struct volume_group *vg;
- 	struct dm_list *source_pvl;
-@@ -611,9 +612,10 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
- 		return EINVALID_CMD_LINE;
- 	}
- 
-+	vg_name = pv_vg_name(pv);
-+
- 	if (arg_count(cmd, name_ARG)) {
--		if (!(lv_name = _extract_lvname(cmd, pv_vg_name(pv),
--						arg_value(cmd, name_ARG)))) {
-+		if (!(lv_name = _extract_lvname(cmd, vg_name, arg_value(cmd, name_ARG)))) {
- 			stack;
- 			free_pv_fid(pv);
- 			return EINVALID_CMD_LINE;
-@@ -627,9 +629,9 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
- 	}
- 
- 	/* Read VG */
--	log_verbose("Finding volume group \"%s\"", pv_vg_name(pv));
-+	log_verbose("Finding volume group \"%s\"", vg_name);
- 
--	vg = vg_read(cmd, pv_vg_name(pv), NULL, READ_FOR_UPDATE);
-+	vg = vg_read(cmd, vg_name, NULL, READ_FOR_UPDATE);
- 	if (vg_read_error(vg)) {
- 		release_vg(vg);
- 		return_ECMD_FAILED;
-@@ -686,7 +688,7 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
- 	/* init_pvmove(1); */
- 	/* vg->status |= PVMOVE; */
- 
--	if (!_copy_id_components(cmd, lv_mirr, vg_name, lv_mirr_name, lvid))
-+	if (!_copy_id_components(cmd, lv_mirr, vg_name_copy, lv_mirr_name, lvid))
- 		goto out;
- 
- 	if (flags & PVMOVE_FIRST_TIME)
-@@ -697,15 +699,16 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
- 	r = ECMD_PROCESSED;
- out:
- 	free_pv_fid(pv);
--	unlock_and_release_vg(cmd, vg, pv_vg_name(pv));
-+	unlock_and_release_vg(cmd, vg, vg_name);
- 	return r;
- }
- 
- static int _read_poll_id_from_pvname(struct cmd_context *cmd, const char *pv_name,
--				     union lvid *lvid, char **vg_name, char **lv_name,
--				     unsigned *in_progress)
-+				     union lvid *lvid, char **vg_name_copy,
-+				     char **lv_name_copy, unsigned *in_progress)
+@@ -3278,6 +3247,7 @@ static int _poll_logical_volume(struct cmd_context *cmd, struct logical_volume *
+ static int lvconvert_single(struct cmd_context *cmd, struct lvconvert_params *lp)
  {
- 	int ret = 0;
-+	const char *vg_name;
  	struct logical_volume *lv;
- 	struct physical_volume *pv;
- 	struct volume_group *vg;
-@@ -718,8 +721,10 @@ static int _read_poll_id_from_pvname(struct cmd_context *cmd, const char *pv_nam
- 	if (!(pv = find_pv_by_name(cmd, pv_name, 0, 0)))
- 		return_0;
++	struct volume_group *vg;
+ 	int ret = ECMD_FAILED;
+ 	int saved_ignore_suspended_devices = ignore_suspended_devices();
  
-+	vg_name = pv_vg_name(pv);
-+
- 	/* need read-only access */
--	vg = vg_read(cmd, pv_vg_name(pv), NULL, 0);
-+	vg = vg_read(cmd, vg_name, NULL, 0);
- 	if (vg_read_error(vg)) {
- 		log_error("ABORTING: Can't read VG for %s.", pv_name);
- 		release_vg(vg);
-@@ -732,12 +737,12 @@ static int _read_poll_id_from_pvname(struct cmd_context *cmd, const char *pv_nam
- 					pv_name);
- 		ret = 1;
- 		*in_progress = 0;
--	} else if (_copy_id_components(cmd, lv, vg_name, lv_name, lvid)) {
-+	} else if (_copy_id_components(cmd, lv, vg_name_copy, lv_name_copy, lvid)) {
- 		ret = 1;
- 		*in_progress = 1;
+@@ -3286,21 +3256,29 @@ static int lvconvert_single(struct cmd_context *cmd, struct lvconvert_params *lp
+ 		cmd->handles_missing_pvs = 1;
  	}
  
--	unlock_and_release_vg(cmd, vg, pv_vg_name(pv));
-+	unlock_and_release_vg(cmd, vg, vg_name);
- 	free_pv_fid(pv);
+-	if (!(lv = get_vg_lock_and_logical_volume(cmd, lp->vg_name, lp->lv_name)))
++	vg = vg_read(cmd, lp->vg_name, NULL, READ_FOR_UPDATE);
++	if (vg_read_error(vg)) {
++		release_vg(vg);
+ 		goto_out;
++	}
++
++	if (!(lv = find_lv(vg, lp->lv_name))) {
++		log_error("Can't find LV %s in VG %s", lp->lv_name, lp->vg_name);
++		unlock_and_release_vg(cmd, vg, lp->vg_name);
++		goto_out;
++	}
+ 
+ 	/*
+ 	 * lp->pvh holds the list of PVs available for allocation or removal
+ 	 */
+ 	if (lp->pv_count) {
+-		if (!(lp->pvh = create_pv_list(cmd->mem, lv->vg, lp->pv_count,
+-					      lp->pvs, 0)))
++		if (!(lp->pvh = create_pv_list(cmd->mem, vg, lp->pv_count, lp->pvs, 0)))
+ 			goto_bad;
+ 	} else
+-		lp->pvh = &lv->vg->pvs;
++		lp->pvh = &vg->pvs;
+ 
+ 	if (lp->replace_pv_count &&
+-	    !(lp->replace_pvh = create_pv_list(cmd->mem, lv->vg,
++	    !(lp->replace_pvh = create_pv_list(cmd->mem, vg,
+ 					       lp->replace_pv_count,
+ 					       lp->replace_pvs, 0)))
+ 			goto_bad;
+@@ -3314,7 +3292,7 @@ bad:
+ 		ret = _poll_logical_volume(cmd, lp->lv_to_poll,
+ 					  lp->wait_completion);
+ 
+-	release_vg(lv->vg);
++	release_vg(vg);
+ out:
+ 	init_ignore_suspended_devices(saved_ignore_suspended_devices);
+ 	return ret;
+@@ -3325,8 +3303,9 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
+ {
+ 	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
+ 	const char *vg_name;
+-	struct logical_volume *refreshed_lv;
+-	int ret;
++	struct volume_group *vg_fresh;
++	struct logical_volume *lv_fresh;
++	int ret = ECMD_FAILED;
+ 
+ 	/*
+ 	 * FIXME can't trust lv's VG to be current given that caller
+@@ -3335,16 +3314,23 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
+ 	 * - preemptively drop the VG lock, as is needed for
+ 	 *   _poll_logical_volume(), refresh LV (and VG in the process).
+ 	 */
++
+ 	vg_name = lv->vg->name;
+ 	unlock_vg(cmd, vg_name);
+-	refreshed_lv = get_vg_lock_and_logical_volume(cmd, vg_name, lv->name);
+-	if (!refreshed_lv) {
+-		log_error("ABORTING: Can't reread LV %s/%s", vg_name, lv->name);
+-		return ECMD_FAILED;
++	vg_fresh = vg_read(cmd, vg_name, NULL, READ_FOR_UPDATE);
++	if (vg_read_error(vg_fresh)) {
++		log_error("ABORTING: Can't reread VG %s", vg_name);
++		goto out;
++	}
++
++	if (!(lv_fresh = find_lv(vg_fresh, lv->name))) {
++		log_error("ABORTING: Can't find LV %s in VG %s", lv->name, vg_name);
++		unlock_vg(cmd, vg_name);
++		goto out;
+ 	}
+ 
+-	lp->lv_to_poll = refreshed_lv;
+-	if ((ret = _lvconvert_single(cmd, refreshed_lv, lp)) != ECMD_PROCESSED)
++	lp->lv_to_poll = lv_fresh;
++	if ((ret = _lvconvert_single(cmd, lv_fresh, lp)) != ECMD_PROCESSED)
+ 		stack;
+ 
+ 	if (ret == ECMD_PROCESSED && lp->need_polling) {
+@@ -3365,9 +3351,8 @@ static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volum
+ 			ret = ECMD_FAILED;
+ 		}
+ 	}
+-
+-	release_vg(refreshed_lv->vg);
+-
++out:
++	release_vg(vg_fresh);
  	return ret;
  }
+ 
 
 
