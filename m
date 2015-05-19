@@ -1,136 +1,167 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 18 May 2015 17:03:08 +0000 (UTC)
-Subject: master - configure: update localedir
-Message-ID: <20150518170308.5C23760C9C@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Tue, 19 May 2015 16:03:49 +0000 (UTC)
+Subject: master - tests: add test for duplicate pvs
+Message-ID: <20150519160349.7AB5960D8C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dc49e1cde0a0736c581b10062797807c65ae0ce3
-Commit:        dc49e1cde0a0736c581b10062797807c65ae0ce3
-Parent:        aa2d39c2ca720d9443c2682311945d56ab9a0559
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 18 18:13:07 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 18 18:48:18 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e27182249a2cef2518fbbab1037810ed5c9a6d37
+Commit:        e27182249a2cef2518fbbab1037810ed5c9a6d37
+Parent:        dc49e1cde0a0736c581b10062797807c65ae0ce3
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Apr 23 14:52:21 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue May 19 11:02:53 2015 -0500
 
-configure: update localedir
+tests: add test for duplicate pvs
 
-Previous patch incorrectly skipped replace of @LOCALEDIR at .
-
-The standard option is --localedir  so use --with-localedir
-as backward compatible option and set localedir if it's not
-yet been set (if the could ever happen).
-
-Use double-eval to translate $datarootdir to $prefix to real dir.
 ---
- configure               |   10 ++++++----
- configure.in            |    8 +++++---
- lib/misc/configure.h.in |    2 +-
- make.tmpl.in            |    2 +-
- 4 files changed, 13 insertions(+), 9 deletions(-)
+ test/shell/process-each-duplicate-pvs.sh |  135 ++++++++++++++++++++++++++++++
+ 1 files changed, 135 insertions(+), 0 deletions(-)
 
-diff --git a/configure b/configure
-index 9cd225a..6d5abc4 100755
---- a/configure
-+++ b/configure
-@@ -1724,7 +1724,7 @@ Optional Packages:
-                           lvmetad pidfile [PID_DIR/lvmetad.pid]
-   --with-lvmpolld-pidfile=PATH
-                           lvmpolld pidfile [PID_DIR/lvmpolld.pid]
--  --with-localedir=DIR    translation files in DIR [PREFIX/share/locale]
-+  --with-localedir=DIR    locale-dependent data [DATAROOTDIR/locale]
-   --with-confdir=DIR      configuration files in DIR [/etc]
-   --with-staticdir=DIR    static binaries in DIR [EPREFIX/sbin]
-   --with-usrlibdir=DIR    usrlib in DIR [PREFIX/lib]
-@@ -12432,9 +12432,9 @@ fi
- 
- # Check whether --with-localedir was given.
- if test "${with_localedir+set}" = set; then :
--  withval=$with_localedir; LOCALEDIR=$withval
-+  withval=$with_localedir; localedir=$withval
- else
--  LOCALEDIR="${prefix}/share/locale"
-+  localedir=${localedir-'${datarootdir}/locale'}
- fi
- 
- 
-@@ -12442,9 +12442,10 @@ cat >>confdefs.h <<_ACEOF
- #define INTL_PACKAGE "$INTL_PACKAGE"
- _ACEOF
- 
-+	# double eval needed ${datarootdir} -> ${prefix}/share -> real path
- 
- cat >>confdefs.h <<_ACEOF
--#define LOCALEDIR "$LOCALEDIR"
-+#define LOCALEDIR "$(eval echo $(eval echo $localedir))"
- _ACEOF
- 
- fi
-@@ -13264,6 +13265,7 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]' '{print $2}'`
- 
- 
- 
+diff --git a/test/shell/process-each-duplicate-pvs.sh b/test/shell/process-each-duplicate-pvs.sh
+new file mode 100644
+index 0000000..353b296
+--- /dev/null
++++ b/test/shell/process-each-duplicate-pvs.sh
+@@ -0,0 +1,135 @@
++#!/bin/sh
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
 +
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile daemons/lvmpolld/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile lib/cache_segtype/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile 
- liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat@.service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/
- Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
- 
-diff --git a/configure.in b/configure.in
-index d31c431..75af936 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1516,10 +1516,11 @@ if test "$INTL" = yes; then
- 
- 	AC_ARG_WITH(localedir,
- 		    AC_HELP_STRING([--with-localedir=DIR],
--				   [translation files in DIR [PREFIX/share/locale]]),
--		    LOCALEDIR=$withval, LOCALEDIR="${prefix}/share/locale")
-+				   [locale-dependent data [DATAROOTDIR/locale]]),
-+		    localedir=$withval, localedir=${localedir-'${datarootdir}/locale'})
- 	AC_DEFINE_UNQUOTED([INTL_PACKAGE], ["$INTL_PACKAGE"], [Internalization package])
--	AC_DEFINE_UNQUOTED([LOCALEDIR], ["$LOCALEDIR"], [Location of translation files])
-+	# double eval needed ${datarootdir} -> ${prefix}/share -> real path
-+	AC_DEFINE_UNQUOTED([LOCALEDIR], ["$(eval echo $(eval echo $localedir))"], [Locale-dependent data])
- fi
- 
- ################################################################################
-@@ -1813,6 +1814,7 @@ AC_SUBST(LVM_PATCHLEVEL)
- AC_SUBST(LVM_PATH)
- AC_SUBST(LVM_RELEASE)
- AC_SUBST(LVM_RELEASE_DATE)
-+AC_SUBST(localedir)
- AC_SUBST(MANGLING)
- AC_SUBST(MIRRORS)
- AC_SUBST(MSGFMT)
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index 986b2bc..3af8ec0 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -507,7 +507,7 @@
- /* Internalization package */
- #undef INTL_PACKAGE
- 
--/* Location of translation files */
-+/* Locale-dependent data */
- #undef LOCALEDIR
- 
- /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 95ca299..806bde4 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -82,7 +82,7 @@ datarootdir = @datarootdir@
- datadir = $(DESTDIR)@datadir@
- infodir = $(DESTDIR)@infodir@
- mandir = $(DESTDIR)@mandir@
--localedir = $(DESTDIR)@LOCALEDIR@
-+localedir = $(DESTDIR)@localedir@
- staticdir = $(DESTDIR)@STATICDIR@
- udevdir = $(DESTDIR)@udevdir@
- pkgconfigdir = $(usrlibdir)/pkgconfig
++test_description='Test duplicate PVs'
++
++. lib/inittest
++
++aux prepare_devs 2
++
++pvcreate "$dev1"
++vgcreate $vg1 "$dev1"
++
++# Clone the PV
++dd if="$dev1" of="$dev2" bs=256K count=1 iflag=direct oflag=direct
++aux notify_lvmetad "$dev2"
++
++# When there are cloned devices (same pvid), one will be referenced in
++# lvmcache as pv->dev, and the other will not be referenced from lvmcache,
++# it'll only be in device cache.  The one referenced by lvmcache is
++# referred to as the "preferred" one, and is the one that is printed by a
++# standard 'pvs' command.
++#
++# We don't know if dev1 or dev2 will be preferred, so we first check that
++# and save it as PV1, the other as PV2.
++#
++# The rules that 'pvs' follows to choose which PVs to display are
++# somewhat strange and seem arbitrary from a user perspective;
++# the choice is driven largely by what's most practical in the code,
++# but also by what vgimportclone needs.
++#
++# Some of the rules that process_each_pv is using:
++# - When no pv arg is specified, print the one preferred dev.
++# - When pv args are specified, print one line per specified arg,
++#   i.e. don't print all duplicate pvs when one is specified.
++# - Always print the preferred duplicate, even if it was not the
++#   one specified, e.g. If there are two duplicates on A and B,
++#   and A is the preferred device, then 'pvs A' will show A and
++#   'pvs B' will show A.
++# - If multiple duplicates are specified, then print each, e.g.
++#   'pvs A B' will show both A and B.
++# - If three duplicates exist on A, B, C, and the preferred is A,
++#   and the command 'pvs B C' is run, then the A will be printed
++#   first since we always print the preferred device, and then
++#   either B or C will be printed.  'pvs A B C' will print all.
++# - 'pvs -a' should print all the duplicates and should show
++#   the same VG for each.
++# - 'pvs -o+size ...' should show the correct size of the
++#   devices being printed if they differ among the duplicates.
++# - By using 'pvs --config' with a filter, you can filter out
++#   the duplicate devs you don't want so that pvs will
++#   print the devs you do want to see.
++#
++# The tests below check these behaviors on up to two duplicates,
++# so if the process_each_pv logic changes regarding which
++# duplicates are chosen, then this test will need adjusting.
++
++# Verify that there is only one PV printed, i.e. the preferred
++pvs --noheading | tee out
++test $(wc -l < out) -eq 1
++
++# Set PV1 to the perferred/cached PV, and PV2 to the other.
++# Cannot use pvs -o pv_name because that command goes to
++# disk and does not represent what lvmetad thinks.
++PV1=$(pvs --noheading | awk '{ print $1 }')
++echo PV1 is $PV1
++if [ $PV1 == $dev1 ]; then
++	PV2=$dev2
++else
++	PV2=$dev1
++fi
++echo PV2 is $PV2
++
++# check listed pvs
++pvs --noheading | tee out
++grep $PV1 out
++not grep $PV2 out
++
++# check error messages
++pvs --noheading 2>&1 | tee out
++grep "Found duplicate" out >err
++grep "using $PV1 not $PV2" err
++
++# check listed pvs
++pvs --noheading "$dev1" | tee out
++grep $PV1 out
++not grep $PV2 out
++
++# check error messages
++pvs --noheading "$dev1" 2>&1 | tee out
++grep "Found duplicate" out >err
++grep "using $PV1 not $PV2" err
++
++# check listed pvs
++pvs --noheading "$dev2" | tee out
++grep $PV1 out
++not grep $PV2 out
++
++# check error messages
++pvs --noheading "$dev2" 2>&1 | tee out
++grep "Found duplicate" out >err
++grep "using $PV1 not $PV2" err
++
++# check listed pvs
++pvs --noheading "$dev1" "$dev2" | tee out
++grep $PV1 out
++grep $PV2 out
++
++# check error messages
++pvs --noheading "$dev1" "$dev2" 2>&1 | tee out
++grep "Found duplicate" out >err
++grep "using $PV1 not $PV2" err
++
++# check listed pvs
++pvs --noheading -a | tee out
++grep $PV1 out
++grep $PV2 out
++grep $PV1 out | grep $vg1
++grep $PV2 out | grep $vg1
++
++# check error messages
++pvs --noheading -a 2>&1 | tee out
++grep "Found duplicate" out >err
++grep "using $PV1 not $PV2" err
++
++
++# TODO: I'd like to test that a subsystem device is preferred
++# over a non-subsystem device, but all the devices used here
++# are DM devices, i.e. they are already subsystem devices,
++# so I can't just wrap a standard block device with a DM
++# identity mapping.
++
 
 
