@@ -1,167 +1,81 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 19 May 2015 16:03:49 +0000 (UTC)
-Subject: master - tests: add test for duplicate pvs
-Message-ID: <20150519160349.7AB5960D8C@fedorahosted.org>
+From: okozina <okozina@fedoraproject.org>
+Date: Tue, 19 May 2015 19:02:49 +0000 (UTC)
+Subject: master - polldaemon: move dev_close_all out of poll_get_copy_vg
+Message-ID: <20150519190249.2FD2260976@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e27182249a2cef2518fbbab1037810ed5c9a6d37
-Commit:        e27182249a2cef2518fbbab1037810ed5c9a6d37
-Parent:        dc49e1cde0a0736c581b10062797807c65ae0ce3
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Apr 23 14:52:21 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue May 19 11:02:53 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e5e0e220223edf0789d38a0a98341d745cf95b15
+Commit:        e5e0e220223edf0789d38a0a98341d745cf95b15
+Parent:        e27182249a2cef2518fbbab1037810ed5c9a6d37
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Tue May 19 11:37:39 2015 +0200
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Tue May 19 20:55:22 2015 +0200
 
-tests: add test for duplicate pvs
+polldaemon: move dev_close_all out of poll_get_copy_vg
 
+let's call dev_close_all() only before we're about to 'sleep'
+for at least one second during the polling.
+
+(it's questionable whether to call dev_close_all() at all in
+polldaemon code. Natural extension would be to drop it completely)
 ---
- test/shell/process-each-duplicate-pvs.sh |  135 ++++++++++++++++++++++++++++++
- 1 files changed, 135 insertions(+), 0 deletions(-)
+ tools/polldaemon.c |   11 +++++++++--
+ 1 files changed, 9 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/process-each-duplicate-pvs.sh b/test/shell/process-each-duplicate-pvs.sh
-new file mode 100644
-index 0000000..353b296
---- /dev/null
-+++ b/test/shell/process-each-duplicate-pvs.sh
-@@ -0,0 +1,135 @@
-+#!/bin/sh
-+# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 83497b0..7f25887 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -59,8 +59,6 @@ struct volume_group *poll_get_copy_vg(struct cmd_context *cmd,
+ 				      const char *uuid __attribute__((unused)),
+ 				      uint32_t flags)
+ {
+-	dev_close_all();
+-
+ 	if (name && !strchr(name, '/'))
+ 		return vg_read(cmd, name, NULL, flags);
+ 
+@@ -153,6 +151,7 @@ static void _nanosleep(unsigned secs, unsigned allow_zero_time)
+ static void _sleep_and_rescan_devices(struct daemon_parms *parms)
+ {
+ 	if (parms->interval && !parms->aborting) {
++		dev_close_all();
+ 		_nanosleep(parms->interval, 1);
+ 		/* Devices might have changed while we slept */
+ 		init_full_scan_done(0);
+@@ -362,6 +361,8 @@ static void _poll_for_all_vgs(struct cmd_context *cmd,
+ 		process_each_vg(cmd, 0, NULL, READ_FOR_UPDATE, handle, _poll_vg);
+ 		if (!parms->outstanding_count)
+ 			break;
++		if (parms->interval)
++			dev_close_all();
+ 		_nanosleep(parms->interval, 1);
+ 	}
+ }
+@@ -487,6 +488,9 @@ static void _lvmpolld_poll_for_all_vgs(struct cmd_context *cmd,
+ 				report_progress(cmd, idl->id, lpdp.parms);
+ 		}
+ 
++		if (lpdp.parms->interval)
++			dev_close_all();
 +
-+test_description='Test duplicate PVs'
+ 		_nanosleep(lpdp.parms->interval, 0);
+ 	}
+ 
+@@ -513,6 +517,9 @@ static int _lvmpoll_daemon(struct cmd_context *cmd, struct poll_operation_id *id
+ 				    (!parms->aborting && !(r = report_progress(cmd, id, parms))))
+ 					break;
+ 
++				if (parms->interval)
++					dev_close_all();
 +
-+. lib/inittest
-+
-+aux prepare_devs 2
-+
-+pvcreate "$dev1"
-+vgcreate $vg1 "$dev1"
-+
-+# Clone the PV
-+dd if="$dev1" of="$dev2" bs=256K count=1 iflag=direct oflag=direct
-+aux notify_lvmetad "$dev2"
-+
-+# When there are cloned devices (same pvid), one will be referenced in
-+# lvmcache as pv->dev, and the other will not be referenced from lvmcache,
-+# it'll only be in device cache.  The one referenced by lvmcache is
-+# referred to as the "preferred" one, and is the one that is printed by a
-+# standard 'pvs' command.
-+#
-+# We don't know if dev1 or dev2 will be preferred, so we first check that
-+# and save it as PV1, the other as PV2.
-+#
-+# The rules that 'pvs' follows to choose which PVs to display are
-+# somewhat strange and seem arbitrary from a user perspective;
-+# the choice is driven largely by what's most practical in the code,
-+# but also by what vgimportclone needs.
-+#
-+# Some of the rules that process_each_pv is using:
-+# - When no pv arg is specified, print the one preferred dev.
-+# - When pv args are specified, print one line per specified arg,
-+#   i.e. don't print all duplicate pvs when one is specified.
-+# - Always print the preferred duplicate, even if it was not the
-+#   one specified, e.g. If there are two duplicates on A and B,
-+#   and A is the preferred device, then 'pvs A' will show A and
-+#   'pvs B' will show A.
-+# - If multiple duplicates are specified, then print each, e.g.
-+#   'pvs A B' will show both A and B.
-+# - If three duplicates exist on A, B, C, and the preferred is A,
-+#   and the command 'pvs B C' is run, then the A will be printed
-+#   first since we always print the preferred device, and then
-+#   either B or C will be printed.  'pvs A B C' will print all.
-+# - 'pvs -a' should print all the duplicates and should show
-+#   the same VG for each.
-+# - 'pvs -o+size ...' should show the correct size of the
-+#   devices being printed if they differ among the duplicates.
-+# - By using 'pvs --config' with a filter, you can filter out
-+#   the duplicate devs you don't want so that pvs will
-+#   print the devs you do want to see.
-+#
-+# The tests below check these behaviors on up to two duplicates,
-+# so if the process_each_pv logic changes regarding which
-+# duplicates are chosen, then this test will need adjusting.
-+
-+# Verify that there is only one PV printed, i.e. the preferred
-+pvs --noheading | tee out
-+test $(wc -l < out) -eq 1
-+
-+# Set PV1 to the perferred/cached PV, and PV2 to the other.
-+# Cannot use pvs -o pv_name because that command goes to
-+# disk and does not represent what lvmetad thinks.
-+PV1=$(pvs --noheading | awk '{ print $1 }')
-+echo PV1 is $PV1
-+if [ $PV1 == $dev1 ]; then
-+	PV2=$dev2
-+else
-+	PV2=$dev1
-+fi
-+echo PV2 is $PV2
-+
-+# check listed pvs
-+pvs --noheading | tee out
-+grep $PV1 out
-+not grep $PV2 out
-+
-+# check error messages
-+pvs --noheading 2>&1 | tee out
-+grep "Found duplicate" out >err
-+grep "using $PV1 not $PV2" err
-+
-+# check listed pvs
-+pvs --noheading "$dev1" | tee out
-+grep $PV1 out
-+not grep $PV2 out
-+
-+# check error messages
-+pvs --noheading "$dev1" 2>&1 | tee out
-+grep "Found duplicate" out >err
-+grep "using $PV1 not $PV2" err
-+
-+# check listed pvs
-+pvs --noheading "$dev2" | tee out
-+grep $PV1 out
-+not grep $PV2 out
-+
-+# check error messages
-+pvs --noheading "$dev2" 2>&1 | tee out
-+grep "Found duplicate" out >err
-+grep "using $PV1 not $PV2" err
-+
-+# check listed pvs
-+pvs --noheading "$dev1" "$dev2" | tee out
-+grep $PV1 out
-+grep $PV2 out
-+
-+# check error messages
-+pvs --noheading "$dev1" "$dev2" 2>&1 | tee out
-+grep "Found duplicate" out >err
-+grep "using $PV1 not $PV2" err
-+
-+# check listed pvs
-+pvs --noheading -a | tee out
-+grep $PV1 out
-+grep $PV2 out
-+grep $PV1 out | grep $vg1
-+grep $PV2 out | grep $vg1
-+
-+# check error messages
-+pvs --noheading -a 2>&1 | tee out
-+grep "Found duplicate" out >err
-+grep "using $PV1 not $PV2" err
-+
-+
-+# TODO: I'd like to test that a subsystem device is preferred
-+# over a non-subsystem device, but all the devices used here
-+# are DM devices, i.e. they are already subsystem devices,
-+# so I can't just wrap a standard block device with a DM
-+# identity mapping.
-+
+ 				_nanosleep(parms->interval, 0);
+ 			}
+ 		}
 
 
