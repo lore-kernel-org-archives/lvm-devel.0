@@ -1,48 +1,39 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Tue, 19 May 2015 19:02:51 +0000 (UTC)
-Subject: master - pvmove.c: call vg_read directly
-Message-ID: <20150519190251.5488860FC8@fedorahosted.org>
+Date: Tue, 19 May 2015 19:02:57 +0000 (UTC)
+Subject: master - lvconvert.c: call find_lv directly
+Message-ID: <20150519190257.ACDAD60FC8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=131c657735d3a315ceb9f072cb9a9591d363fa78
-Commit:        131c657735d3a315ceb9f072cb9a9591d363fa78
-Parent:        e5e0e220223edf0789d38a0a98341d745cf95b15
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08114840caf0a31d76b8870ec96594dd715baff0
+Commit:        08114840caf0a31d76b8870ec96594dd715baff0
+Parent:        0d300b70f911beacf099daa3950e1e77c30f27c2
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue May 19 12:05:38 2015 +0200
+AuthorDate:    Tue May 19 14:50:58 2015 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Tue May 19 20:55:31 2015 +0200
+CommitterDate: Tue May 19 20:55:57 2015 +0200
 
-pvmove.c: call vg_read directly
+lvconvert.c: call find_lv directly
 
 ---
- tools/pvmove.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ tools/lvconvert.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 94a5ffc..dc36955 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -629,7 +629,7 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
- 	/* Read VG */
- 	log_verbose("Finding volume group \"%s\"", pv_vg_name(pv));
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 48a4711..7267c2f 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3259,7 +3259,7 @@ static struct logical_volume *get_vg_lock_and_logical_volume(struct cmd_context
+ 		return_NULL;
+ 	}
  
--	vg = poll_get_copy_vg(cmd, pv_vg_name(pv), NULL, READ_FOR_UPDATE);
-+	vg = vg_read(cmd, pv_vg_name(pv), NULL, READ_FOR_UPDATE);
- 	if (vg_read_error(vg)) {
- 		release_vg(vg);
- 		return_ECMD_FAILED;
-@@ -719,7 +719,7 @@ static int _read_poll_id_from_pvname(struct cmd_context *cmd, const char *pv_nam
- 		return_0;
- 
- 	/* need read-only access */
--	vg = poll_get_copy_vg(cmd, pv_vg_name(pv), NULL, 0);
-+	vg = vg_read(cmd, pv_vg_name(pv), NULL, 0);
- 	if (vg_read_error(vg)) {
- 		log_error("ABORTING: Can't read VG for %s.", pv_name);
- 		release_vg(vg);
+-	if (!(lv = poll_get_copy_lv(cmd, vg, lv_name, NULL, 0))) {
++	if (!(lv = find_lv(vg, lv_name))) {
+ 		log_error("Can't find LV %s in VG %s", lv_name, vg_name);
+ 		unlock_and_release_vg(cmd, vg, vg_name);
+ 		return NULL;
 
 
