@@ -1,66 +1,99 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 20 May 2015 17:48:11 +0000 (UTC)
-Subject: master - lvmetad: Provide entire pvmeta sections for outdated_pvs.
-Message-ID: <20150520174811.D021860188@fedorahosted.org>
+Date: Wed, 20 May 2015 17:48:13 +0000 (UTC)
+Subject: master - lvmetad: Set up lvmcache & PV structs for outdated_pvs.
+Message-ID: <20150520174813.EB5E560188@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=55f33696928728e60f15dc7a557e55bf910dabdd
-Commit:        55f33696928728e60f15dc7a557e55bf910dabdd
-Parent:        611c8b6d29ca164a22270cb9b3dcf7958063c712
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e8d00e068762d0ebd7dd489d45c43927b7ffdc58
+Commit:        e8d00e068762d0ebd7dd489d45c43927b7ffdc58
+Parent:        55f33696928728e60f15dc7a557e55bf910dabdd
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Apr 29 15:00:28 2015 +0200
+AuthorDate:    Wed Apr 29 15:01:20 2015 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Wed May 20 19:46:14 2015 +0200
 
-lvmetad: Provide entire pvmeta sections for outdated_pvs.
+lvmetad: Set up lvmcache & PV structs for outdated_pvs.
 
 ---
- daemons/lvmetad/lvmetad-core.c |   28 ++++++++++++++++++++++------
- 1 files changed, 22 insertions(+), 6 deletions(-)
+ lib/cache/lvmetad.c |   43 +++++++++++++++++++++++++++++++------------
+ 1 files changed, 31 insertions(+), 12 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 40cf7d4..449e332 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -470,13 +470,29 @@ static void mark_outdated_pv(lvmetad_state *s, const char *vgid, const char *pvi
- 	list->v = v;
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index a66f915..68162b6 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -395,6 +395,22 @@ static int _pv_populate_lvmcache(struct cmd_context *cmd,
+ 	return 1;
  }
  
--static void chain_outdated_pvs(lvmetad_state *s, const char *vgid, struct dm_config_tree *metadata, struct dm_config_node *last)
-+static void chain_outdated_pvs(lvmetad_state *s, const char *vgid, struct dm_config_tree *metadata_cft, struct dm_config_node *metadata)
++static int _pv_update_struct_pv(struct physical_volume *pv, struct format_instance *fid)
++{
++	struct lvmcache_info *info;
++	if ((info = lvmcache_info_from_pvid((const char *)&pv->id, 0))) {
++		pv->label_sector = lvmcache_get_label(info)->sector;
++		pv->dev = lvmcache_device(info);
++		if (!pv->dev)
++			pv->status |= MISSING_PV;
++		if (!lvmcache_fid_add_mdas_pv(info, fid))
++			return_0;
++                pv->fid = fid;
++	} else
++		pv->status |= MISSING_PV; /* probably missing */
++	return 1;
++}
++
+ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgname, const char *vgid)
  {
--	struct dm_config_tree *cft = dm_hash_lookup(s->vgid_to_outdated_pvs, vgid);
--	if (!cft)
--		return; /* nothing to chain in */
--	last->sib = dm_config_clone_node(metadata, dm_config_find_node(cft->root, "outdated_pvs/pv_list"), 0);
--	last->sib->key = "outdated_pvs";
-+	struct dm_config_tree *cft = dm_hash_lookup(s->vgid_to_outdated_pvs, vgid), *pvmeta;
-+	struct dm_config_node *pv, *res, *pvs = cft ? dm_config_find_node(cft->root, "outdated_pvs/pv_list") : NULL;
-+	struct dm_config_value *pvs_v = pvs ? pvs->v : NULL;
-+	if (!pvs_v)
-+		return;
-+	if (!(res = make_config_node(metadata_cft, "outdated_pvs", metadata_cft->root, 0)))
-+		return; /* oops */
-+	res->sib = metadata->child;
-+	metadata->child = res;
-+	for (; pvs_v && pvs_v->type != DM_CFG_EMPTY_ARRAY; pvs_v = pvs_v->next) {
-+		pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, pvs_v->v.str);
-+		if (!pvmeta) {
-+			WARN(s, "metadata for PV %s not found", pvs_v->v.str);
-+			continue;
-+		}
-+		if (!(pv = dm_config_clone_node(metadata_cft, pvmeta->root, 0)))
-+			continue;
-+		pv->key = dm_config_find_str(pv, "pvmeta/id", NULL);
-+		pv->sib = res->child;
-+		res->child = pv;
-+	}
- }
+ 	struct volume_group *vg = NULL;
+@@ -409,7 +425,6 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
+ 	struct format_type *fmt;
+ 	struct dm_config_node *pvcn;
+ 	struct pv_list *pvl;
+-	struct lvmcache_info *info;
  
- static response vg_lookup(lvmetad_state *s, request r)
+ 	if (!lvmetad_active())
+ 		return NULL;
+@@ -460,22 +475,26 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
+ 			for (pvcn = pvcn->child; pvcn; pvcn = pvcn->sib)
+ 				_pv_populate_lvmcache(cmd, pvcn, fmt, 0);
+ 
++		if ((pvcn = dm_config_find_node(top, "metadata/outdated_pvs")))
++			for (pvcn = pvcn->child; pvcn; pvcn = pvcn->sib)
++				_pv_populate_lvmcache(cmd, pvcn, fmt, 0);
++
+ 		top->key = name;
+ 		if (!(vg = import_vg_from_config_tree(reply.cft, fid)))
+ 			goto_out;
+ 
+ 		dm_list_iterate_items(pvl, &vg->pvs) {
+-			if ((info = lvmcache_info_from_pvid((const char *)&pvl->pv->id, 0))) {
+-				pvl->pv->label_sector = lvmcache_get_label(info)->sector;
+-				pvl->pv->dev = lvmcache_device(info);
+-				if (!pvl->pv->dev)
+-					pvl->pv->status |= MISSING_PV;
+-				if (!lvmcache_fid_add_mdas_pv(info, fid)) {
+-					vg = NULL;
+-					goto_out;	/* FIXME error path */
+-				}
+-			} else
+-				pvl->pv->status |= MISSING_PV; /* probably missing */
++			if (!_pv_update_struct_pv(pvl->pv, fid)) {
++				vg = NULL;
++				goto_out;	/* FIXME error path */
++			}
++		}
++
++		dm_list_iterate_items(pvl, &vg->pvs_outdated) {
++			if (!_pv_update_struct_pv(pvl->pv, fid)) {
++				vg = NULL;
++				goto_out;	/* FIXME error path */
++			}
+ 		}
+ 
+ 		lvmcache_update_vg(vg, 0);
 
 
