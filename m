@@ -1,40 +1,54 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 20 May 2015 17:48:03 +0000 (UTC)
-Subject: master - lvmetad: Clear the vgid_to_outdated_pvs hash on shutdown.
-Message-ID: <20150520174803.5DCE560188@fedorahosted.org>
+Date: Wed, 20 May 2015 17:48:05 +0000 (UTC)
+Subject: master - lvmetad: Attach an outdated_pvs list to vg_lookup replies.
+Message-ID: <20150520174805.89CE660188@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=da1527d65dbe474fe4c9e620ad028a9a09213ac8
-Commit:        da1527d65dbe474fe4c9e620ad028a9a09213ac8
-Parent:        925268794f4c97091674d99d98e3d73349a75502
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1562cd732060f995663a586566b15bc129e62b64
+Commit:        1562cd732060f995663a586566b15bc129e62b64
+Parent:        da1527d65dbe474fe4c9e620ad028a9a09213ac8
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Apr 15 16:38:57 2015 +0200
+AuthorDate:    Wed Apr 15 16:39:32 2015 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Wed May 20 19:46:13 2015 +0200
 
-lvmetad: Clear the vgid_to_outdated_pvs hash on shutdown.
+lvmetad: Attach an outdated_pvs list to vg_lookup replies.
 
 ---
- daemons/lvmetad/lvmetad-core.c |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
 
 diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 7e30add..d14bac2 100644
+index d14bac2..40cf7d4 100644
 --- a/daemons/lvmetad/lvmetad-core.c
 +++ b/daemons/lvmetad/lvmetad-core.c
-@@ -61,6 +61,9 @@ static void destroy_metadata_hashes(lvmetad_state *s)
- 	dm_hash_iterate(n, s->vgid_to_metadata)
- 		dm_config_destroy(dm_hash_get_data(s->vgid_to_metadata, n));
+@@ -470,8 +470,13 @@ static void mark_outdated_pv(lvmetad_state *s, const char *vgid, const char *pvi
+ 	list->v = v;
+ }
  
-+	dm_hash_iterate(n, s->vgid_to_outdated_pvs)
-+		dm_config_destroy(dm_hash_get_data(s->vgid_to_outdated_pvs, n));
-+
- 	dm_hash_iterate(n, s->pvid_to_pvmeta)
- 		dm_config_destroy(dm_hash_get_data(s->pvid_to_pvmeta, n));
+-static void chain_outdated_pvs(lvmetad_state *s, const char *vgid, struct dm_config_tree *metadata)
++static void chain_outdated_pvs(lvmetad_state *s, const char *vgid, struct dm_config_tree *metadata, struct dm_config_node *last)
+ {
++	struct dm_config_tree *cft = dm_hash_lookup(s->vgid_to_outdated_pvs, vgid);
++	if (!cft)
++		return; /* nothing to chain in */
++	last->sib = dm_config_clone_node(metadata, dm_config_find_node(cft->root, "outdated_pvs/pv_list"), 0);
++	last->sib->key = "outdated_pvs";
+ }
  
+ static response vg_lookup(lvmetad_state *s, request r)
+@@ -540,7 +545,7 @@ static response vg_lookup(lvmetad_state *s, request r)
+ 	unlock_vg(s, uuid);
+ 
+ 	update_pv_status(s, res.cft, n, 1); /* FIXME report errors */
+-	chain_outdated_pvs(s, uuid, res.cft);
++	chain_outdated_pvs(s, uuid, res.cft, n);
+ 
+ 	return res;
+ bad:
 
 
