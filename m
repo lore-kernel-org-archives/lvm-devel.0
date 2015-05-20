@@ -1,54 +1,74 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 20 May 2015 17:48:05 +0000 (UTC)
-Subject: master - lvmetad: Attach an outdated_pvs list to vg_lookup replies.
-Message-ID: <20150520174805.89CE660188@fedorahosted.org>
+Date: Wed, 20 May 2015 17:48:09 +0000 (UTC)
+Subject: master - metadata: Add pvs_outdated to struct volume_group.
+Message-ID: <20150520174809.BE94660188@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1562cd732060f995663a586566b15bc129e62b64
-Commit:        1562cd732060f995663a586566b15bc129e62b64
-Parent:        da1527d65dbe474fe4c9e620ad028a9a09213ac8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=611c8b6d29ca164a22270cb9b3dcf7958063c712
+Commit:        611c8b6d29ca164a22270cb9b3dcf7958063c712
+Parent:        5435346052f491333b79da48bec5ef160cd118d5
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Apr 15 16:39:32 2015 +0200
+AuthorDate:    Wed Apr 15 16:41:09 2015 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed May 20 19:46:13 2015 +0200
+CommitterDate: Wed May 20 19:46:14 2015 +0200
 
-lvmetad: Attach an outdated_pvs list to vg_lookup replies.
+metadata: Add pvs_outdated to struct volume_group.
 
+This is a list of PVs that should have their MDAs wiped because they carry
+outdated metadata (that used to belong to the VG they are attached to).
 ---
- daemons/lvmetad/lvmetad-core.c |    9 +++++++--
- 1 files changed, 7 insertions(+), 2 deletions(-)
+ lib/metadata/metadata.c |    3 +++
+ lib/metadata/vg.c       |    1 +
+ lib/metadata/vg.h       |    7 +++++++
+ 3 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index d14bac2..40cf7d4 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -470,8 +470,13 @@ static void mark_outdated_pv(lvmetad_state *s, const char *vgid, const char *pvi
- 	list->v = v;
- }
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 5456c4e..8300eb6 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3307,6 +3307,9 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 				*consistent = _repair_inconsistent_vg(correct_vg);
+ 			else
+ 				*consistent = !reappeared;
++			if (_wipe_outdated_pvs(cmd, correct_vg, &correct_vg->pvs_outdated))
++				/* clear the list */
++				dm_list_init(&correct_vg->pvs_outdated);
+ 		}
+ 		return correct_vg;
+ 	}
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index c9a7e9e..1db8e75 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -61,6 +61,7 @@ struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
  
--static void chain_outdated_pvs(lvmetad_state *s, const char *vgid, struct dm_config_tree *metadata)
-+static void chain_outdated_pvs(lvmetad_state *s, const char *vgid, struct dm_config_tree *metadata, struct dm_config_node *last)
- {
-+	struct dm_config_tree *cft = dm_hash_lookup(s->vgid_to_outdated_pvs, vgid);
-+	if (!cft)
-+		return; /* nothing to chain in */
-+	last->sib = dm_config_clone_node(metadata, dm_config_find_node(cft->root, "outdated_pvs/pv_list"), 0);
-+	last->sib->key = "outdated_pvs";
- }
+ 	dm_list_init(&vg->pvs);
+ 	dm_list_init(&vg->pvs_to_create);
++	dm_list_init(&vg->pvs_outdated);
+ 	dm_list_init(&vg->lvs);
+ 	dm_list_init(&vg->tags);
+ 	dm_list_init(&vg->removed_lvs);
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index b0ab122..bb21f34 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -91,6 +91,13 @@ struct volume_group {
+ 	struct dm_list pvs_to_create;
  
- static response vg_lookup(lvmetad_state *s, request r)
-@@ -540,7 +545,7 @@ static response vg_lookup(lvmetad_state *s, request r)
- 	unlock_vg(s, uuid);
- 
- 	update_pv_status(s, res.cft, n, 1); /* FIXME report errors */
--	chain_outdated_pvs(s, uuid, res.cft);
-+	chain_outdated_pvs(s, uuid, res.cft, n);
- 
- 	return res;
- bad:
+ 	/*
++	 * List of physical volumes that carry outdated metadata that belongs
++	 * to this VG. Currently only populated when lvmetad is in use.
++	 */
++
++	struct dm_list pvs_outdated;
++
++	/*
+ 	 * logical volumes
+ 	 * The following relationship should always hold:
+ 	 * dm_list_size(lvs) = user visible lv_count + snapshot_count + other invisible LVs
 
 
