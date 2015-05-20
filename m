@@ -1,39 +1,53 @@
-From: okozina <okozina@fedoraproject.org>
-Date: Tue, 19 May 2015 19:03:10 +0000 (UTC)
-Subject: master - WHATS_NEW: various updates
-Message-ID: <20150519190310.92B4460FC8@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 20 May 2015 07:36:12 +0000 (UTC)
+Subject: master - configure: fix missing [
+Message-ID: <20150520073612.5D6C160EFC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=788e4c54232372db6551d9a1323e1b59892900c1
-Commit:        788e4c54232372db6551d9a1323e1b59892900c1
-Parent:        e6b5eb88f23701446653ed616b54bec15c54d42d
-Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Tue May 19 21:01:24 2015 +0200
-Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Tue May 19 21:01:24 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=682e0c898e7fd96ff936b7113738f773335e0fff
+Commit:        682e0c898e7fd96ff936b7113738f773335e0fff
+Parent:        788e4c54232372db6551d9a1323e1b59892900c1
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 20 09:07:49 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed May 20 09:32:03 2015 +0200
 
-WHATS_NEW: various updates
+configure: fix missing [
 
 ---
- WHATS_NEW |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ configure    |    2 +-
+ configure.in |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index de3ddce..e14c858 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,8 @@
- Version 2.02.121 - 
- ================================
-+  Do not fail polling when poll LV not found (already finished or removed).
-+  Replace poll_get_copy_vg/lv fns with vg_read() and find_lv() in polldaemon.
-+  Close all device fds only in before sleep call in polldaemon.
+diff --git a/configure b/configure
+index 6d5abc4..534948f 100755
+--- a/configure
++++ b/configure
+@@ -12425,7 +12425,7 @@ else
+ fi
  
- Version 2.02.120 - 15th May 2015
- ================================
+ 
+-	if test -z "$MSGFMT"]; then :
++	if test -z "$MSGFMT"; then :
+   as_fn_error $? "msgfmt not found in path $PATH" "$LINENO" 5
+ fi
+ 
+diff --git a/configure.in b/configure.in
+index 75af936..86ab98a 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1512,7 +1512,7 @@ if test "$INTL" = yes; then
+ 	INTL_PACKAGE="lvm2"
+ 	AC_PATH_TOOL(MSGFMT, msgfmt)
+ 
+-	AS_IF(test -z "$MSGFMT"], [AC_MSG_ERROR([msgfmt not found in path $PATH])])
++	AS_IF([test -z "$MSGFMT"], [AC_MSG_ERROR([msgfmt not found in path $PATH])])
+ 
+ 	AC_ARG_WITH(localedir,
+ 		    AC_HELP_STRING([--with-localedir=DIR],
 
 
