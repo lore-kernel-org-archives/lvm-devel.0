@@ -1,20 +1,20 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 26 May 2015 13:58:28 +0000 (UTC)
+Date: Tue, 26 May 2015 14:16:29 +0000 (UTC)
 Subject: master - libdm: Add dm_task_get_errno to return ioctl errno.
-Message-ID: <20150526135829.01390603F9@fedorahosted.org>
+Message-ID: <20150526141630.0431660E2D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f9510548667754d9209b232348ccd2d806c0f1d8
-Commit:        f9510548667754d9209b232348ccd2d806c0f1d8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eeb498627c46626c782cb6a2f0e54eb011da8b8e
+Commit:        eeb498627c46626c782cb6a2f0e54eb011da8b8e
 Parent:        b244fffc182ef15ff23d4fc11658997347f66d79
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue May 26 14:52:13 2015 +0100
+AuthorDate:    Tue May 26 15:13:49 2015 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue May 26 14:52:13 2015 +0100
+CommitterDate: Tue May 26 15:13:49 2015 +0100
 
 libdm: Add dm_task_get_errno to return ioctl errno.
 
@@ -23,13 +23,16 @@ An explanation might be that the wrong value of errno is being used.
 
 Change libdevmapper to store an errno set by from dm ioctl() directly
 and provide it to the caller through a new dm_task_get_errno() function.
+
+[Replaced f9510548667754d9209b232348ccd2d806c0f1d8]
 ---
- WHATS_NEW_DM                |    2 ++
- daemons/dmeventd/dmeventd.c |   25 ++++++++++++++-----------
- libdm/ioctl/libdm-iface.c   |   22 +++++++++++++++-------
- libdm/ioctl/libdm-targets.h |    1 +
- libdm/libdevmapper.h        |    5 +++++
- 5 files changed, 37 insertions(+), 18 deletions(-)
+ WHATS_NEW_DM                       |    2 ++
+ daemons/dmeventd/dmeventd.c        |   25 ++++++++++++++-----------
+ libdm/.exported_symbols.DM_1_02_98 |    1 +
+ libdm/ioctl/libdm-iface.c          |   22 +++++++++++++++-------
+ libdm/ioctl/libdm-targets.h        |    1 +
+ libdm/libdevmapper.h               |    5 +++++
+ 6 files changed, 38 insertions(+), 18 deletions(-)
 
 diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
 index 00c11e8..4dabdea 100644
@@ -94,6 +97,13 @@ index e8d1e3b..ad27060 100644
  		}
  	}
  	DEBUGLOG("Completed waitevent task for %s", thread->device.uuid);
+diff --git a/libdm/.exported_symbols.DM_1_02_98 b/libdm/.exported_symbols.DM_1_02_98
+new file mode 100644
+index 0000000..f90bcef
+--- /dev/null
++++ b/libdm/.exported_symbols.DM_1_02_98
+@@ -0,0 +1 @@
++dm_task_get_errno
 diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
 index face593..e3b33b8 100644
 --- a/libdm/ioctl/libdm-iface.c
