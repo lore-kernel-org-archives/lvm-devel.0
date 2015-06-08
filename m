@@ -1,61 +1,60 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue,  9 Jun 2015 17:46:08 +0000 (UTC)
-Subject: master - Add support for raid0/raid0_meta raid types
-Message-ID: <20150609174608.891E761260@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 08 Jun 2015 10:38:29 +0200
+Subject: [RFC 0/6] Waiting for the missing device in mirror
+In-Reply-To: <1433749712-11837-1-git-send-email-lzhong@suse.com>
+References: <1433749712-11837-1-git-send-email-lzhong@suse.com>
+Message-ID: <55755485.2080802@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b46743be20680b252ce4291d707905db5a4df5dc
-Commit:        b46743be20680b252ce4291d707905db5a4df5dc
-Parent:        fd29c7f3a171174dcd47eb8b23ff42a145cdacc6 cb5156ce1f909abfde91e51a46b95eaca45f46ce
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Jun 9 19:45:10 2015 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Jun 9 19:45:10 2015 +0200
+Dne 8.6.2015 v 09:48 Lidong Zhong napsal(a):
+> Hi List,
+>
+> The implementation here is trying to add another policy for the
+> missing leg/log device in mirror. We want to wait the device for some
+> time in case of a temporary device failure, especially a network disconnection
+> for clvmd, to avoid a full disk recovery.
+>
+> This version is kind of a draft. There are many immature places to improve. So comments
+> and suggestions are welcomed.
+>
+> The responding kernel part is here:
+> https://git.kernel.org/cgit/linux/kernel/git/device-mapper/linux-dm.git/
+> commit/?h=for-next&id=ed63287dd670f8e9d2412a913de7fdc50a689831
 
-Add support for raid0/raid0_meta raid types
+Hi
 
-Supports creation of raid types raid0 and raid0_meta
-with 'lvcreate --type (raid0|raid0_meta) ...' based on
-functionality available in dm-raid target version 1.0.7
+I think you should please start first with the very precise description what 
+you are trying to achieve/fix - then we should discuss how to reach desired goal.
 
-The raid0 type provides access via the MD raid0
-personality without metadata devices
+With very light overview of patches there are number of problem which can't 
+fit lvm2 design.
 
-The raid0_meta type provides access via the MD raid0
-personality _with_ metadata devices, i.e. it reserves
-space for rmeta devices which is e.g. useful for future
-functional enhancements supporting conversions between
-raid0 and raid4/5/6/10 to ensure metadata space
-on raid0_meta creation.
+#1 - Never store any device major:minor in lvm2 metadata - everything is 
+strictly PV UUID oriented (there are number of daemons these days)
 
-Conversion between striped/raid0/raid0_meta
-LVs with striped LVs being restricted to one
-stripe zone (i.e. no varying stripes) is possible
-with 'lvconvert --type (striped|raid0|raid0_meta) ...'
+#2 - Activation layer & Command layer are 2 separate entities - so your 
+command may run on different node then the actual activation happens (unless 
+you do a local activation) -  the layer separator is ATM 'lock' - the code 
+before lock and  after lock do not share any data - and the 'activation' layer 
+knows only what is in written metadata on disk (just for optimization purposes 
+there is some internal mechanism of caching and reusing of some existing data).
 
-lvconvert-striped-raid0.sh provides various tests"
+#3 - There is no 'hidden' data exchange channel via /tmp for activation - 
+everything goes strictly via written and committed metadata, and for every 
+such metadata state there needs to be some clear recovery path (e.g. what 
+happens after 'power-off' with each committed lvm2 metadata state)
 
- WHATS_NEW                        |    1 +
- lib/activate/dev_manager.c       |   14 +-
- lib/config/defaults.h            |    2 +
- lib/format_text/export.c         |    6 +-
- lib/metadata/lv.c                |    1 +
- lib/metadata/lv.h                |    4 +-
- lib/metadata/lv_manip.c          |  362 ++++++----
- lib/metadata/merge.c             |    2 +-
- lib/metadata/metadata-exported.h |   12 +-
- lib/metadata/raid_manip.c        | 1483 +++++++++++++++++++++++++++++++-------
- lib/metadata/segtype.h           |  133 +++-
- lib/raid/raid.c                  |  213 +++---
- lib/uuid/uuid.c                  |    2 +-
- libdm/libdm-deptree.c            |   70 ++-
- tools/lvchange.c                 |    2 +-
- tools/lvconvert.c                |   60 +-
- tools/lvcreate.c                 |   75 ++-
- 17 files changed, 1834 insertions(+), 608 deletions(-)
+I do not yet quite understand what are you trying to achieve - but I've not 
+noticed any patch for 'dmeventd' which is the actual tool that fixes broken 
+mirrors - so could that tool by anyhow used for detection of some temporary 
+network failures ?
+
+Regards
+
+Zdenek
 
 
