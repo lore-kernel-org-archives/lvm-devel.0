@@ -1,105 +1,68 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Wed, 10 Jun 2015 13:35:25 +0000 (UTC)
-Subject: master - raid0 commit missed test/shell/lvconvert-striped-raid0.sh
-Message-ID: <20150610133525.993DC60757@fedorahosted.org>
+From: okozina <okozina@fedoraproject.org>
+Date: Mon,  8 Jun 2015 14:01:59 +0000 (UTC)
+Subject: master - lvmetad.h: rephrase API descriptions
+Message-ID: <20150608140159.1447561137@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d5c64f4b9bb748c46d7e3c052f1524eee4bb845e
-Commit:        d5c64f4b9bb748c46d7e3c052f1524eee4bb845e
-Parent:        c2c0a029fe5fcb8585039073ca49c023d237a300
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Jun 9 21:00:56 2015 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Jun 9 21:00:56 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b89ad7e2d4a5dd5e1947c2b14941f6a87d354451
+Commit:        b89ad7e2d4a5dd5e1947c2b14941f6a87d354451
+Parent:        3225f8d17596b79b76ed9da5291843d02a2aa7b6
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Fri May 22 14:25:54 2015 +0200
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Mon Jun 8 16:01:32 2015 +0200
 
-raid0 commit missed test/shell/lvconvert-striped-raid0.sh
+lvmetad.h: rephrase API descriptions
 
+Some of descritpions were misleading at least. Some were completely
+off the reality.
+
+lvmetad_init doesn't re-establish or initialise a connection
+lvmetad_active and lvmetad_connect_or_warn can do so.
 ---
- test/shell/lvconvert-striped-raid0.sh |   73 +++++++++++++++++++++++++++++++++
- 1 files changed, 73 insertions(+), 0 deletions(-)
+ lib/cache/lvmetad.h |   12 +++++++-----
+ 1 files changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvconvert-striped-raid0.sh b/test/shell/lvconvert-striped-raid0.sh
-new file mode 100644
-index 0000000..fb7c5a1
---- /dev/null
-+++ b/test/shell/lvconvert-striped-raid0.sh
-@@ -0,0 +1,73 @@
-+#!/bin/sh
-+# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/inittest
-+
-+########################################################
-+# MAIN
-+########################################################
-+aux have_raid 1 3 0 || skip
-+
-+aux prepare_pvs 6 20  # 6 devices for striped test
-+vgcreate -s 128k $vg $(cat DEVICES)
-+
-+############################################
-+# Create striped LV, convert to raid0* tests
-+############################################
-+# Create striped 6-way and cycle conversions
-+lvcreate -y -i 6 -l 50%FREE -n $lv1 $vg
-+lvconvert --type raid0 $vg/$lv1
-+lvconvert --type raid0_meta $vg/$lv1
-+lvconvert --type striped $vg/$lv1
-+lvremove -ff $vg
-+
-+# Create raid0 5-way and cycle conversions
-+lvcreate -y --type raid0 -i 5 -l 50%FREE -n $lv1 $vg
-+lvconvert --type raid0_meta $vg/$lv1
-+lvconvert --type striped $vg/$lv1
-+lvconvert --type raid0 $vg/$lv1
-+lvremove -ff $vg
-+
-+# Create raid0_meta 4-way and cycle conversions
-+lvcreate -y --type raid0_meta -i 4 -l 50%FREE -n $lv1 $vg
-+lvconvert --type raid0 $vg/$lv1
-+lvconvert --type striped $vg/$lv1
-+lvconvert --type raid0_meta $vg/$lv1
-+lvremove -ff $vg
-+
-+# Create striped 3-way cosuming all vg space
-+lvcreate -y -i 3 -l 100%FREE -n $lv1 $vg
-+lvconvert --type raid0 $vg/$lv1
-+not lvconvert --type raid0_meta $vg/$lv1
-+lvconvert --type striped $vg/$lv1
-+lvremove -ff $vg
-+
-+# Not enough drives
-+not lvcreate -y -i3 -l1 $vg "$dev1" "$dev2"
-+not lvcreate -y --type raid0 -i3 -l1 $vg "$dev1" "$dev2"
-+not lvcreate -y --type raid0_meta -i4 -l1 $vg "$dev1" "$dev2" "$dev3"
-+
-+# Create 2..6-way raid0 LV and cycle conversions
-+for s in $(seq 2..6)
-+do
-+	lvcreate -y --type raid0 -l 95%FREE -i $s -n $lv1 $vg
-+	lvconvert --type raid0_meta $vg/$lv1
-+	lvconvert --type raid0 $vg/$lv1
-+	lvconvert --type striped $vg/$lv1
-+	lvconvert --type raid0 $vg/$lv1
-+	lvconvert --type raid0_meta $vg/$lv1
-+	lvremove -ff $vg
-+done
-+
-+# Not enough drives for 7-way
-+not lvcreate -y --type raid0 -l 7 -i 7 -n $lv1 $vg
-+
-+vgremove -ff $vg
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index 6769f76..395bc41 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -29,8 +29,7 @@ typedef int (*activation_handler) (struct cmd_context *cmd,
+ 
+ #ifdef LVMETAD_SUPPORT
+ /*
+- * Initialise the communication with lvmetad. Normally called by
+- * lvmcache_init. Sets up a global handle for our process.
++ * Sets up a global handle for our process.
+  */
+ void lvmetad_init(struct cmd_context *);
+ 
+@@ -59,7 +58,9 @@ int lvmetad_socket_present(void);
+ 
+ /*
+  * Check whether lvmetad is active (where active means both that it is running
+- * and that we have a working connection with it).
++ * and that we have a working connection with it). It opens new connection
++ * with lvmetad in the process when lvmetad is supposed to be used and the
++ * connection is not open yet.
+  */
+ int lvmetad_active(void);
+ 
+@@ -70,8 +71,9 @@ int lvmetad_active(void);
+ void lvmetad_connect_or_warn(void);
+ 
+ /*
+- * Drop connection to lvmetad. A subsequent lvmetad_init() will re-establish
+- * the connection (possibly at a different socket path).
++ * Drop connection to lvmetad. A subsequent lvmetad_connect_or_warn or
++ * lvmetad_active will re-establish the connection (possibly at a
++ * different socket path).
+  */
+ void lvmetad_disconnect(void);
+ 
 
 
