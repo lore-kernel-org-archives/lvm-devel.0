@@ -1,39 +1,78 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 25 Mar 2014 23:06:37 +0000 (UTC)
-Subject: master - tests: disable test for broken kernel raid targe
-Message-ID: <20140325230637.B280A61055@fedorahosted.org>
+From: Lidong Zhong <lzhong@suse.com>
+Date: Mon,  8 Jun 2015 15:48:29 +0800
+Subject: [RFC 3/6] Mark a device if already being waited
+In-Reply-To: <1433749712-11837-1-git-send-email-lzhong@suse.com>
+References: <1433749712-11837-1-git-send-email-lzhong@suse.com>
+Message-ID: <1433749712-11837-4-git-send-email-lzhong@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4adbb85c372b1030b67749f7f208132a2cc06a7f
-Commit:        4adbb85c372b1030b67749f7f208132a2cc06a7f
-Parent:        fb471a372dd8b5e750e8001304657eefa355ce6e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 25 23:56:46 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 26 00:04:59 2014 +0100
-
-tests: disable test for broken kernel raid targe
-
-Since using raid5 - validate it's usable on the system
+We use a file named by uuid of the missing device under /tmp to identify
+if this device is already being waited. In case of there are two or more
+missing device in one mirror, we keep waiting for the same device.
+Fix me if there is other good idea.
 ---
- test/shell/lvconvert-repair-raid.sh |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ tools/lvconvert.c | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 43 insertions(+)
 
-diff --git a/test/shell/lvconvert-repair-raid.sh b/test/shell/lvconvert-repair-raid.sh
-index 71c84c1..bc5483b 100644
---- a/test/shell/lvconvert-repair-raid.sh
-+++ b/test/shell/lvconvert-repair-raid.sh
-@@ -11,6 +11,7 @@
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index fe8b761..8fcbefd 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -962,6 +962,49 @@ static void _lvconvert_mirrors_repair_ask(struct cmd_context *cmd,
+ }
  
- . lib/test
- 
-+aux raid456_replace_works || skip
- aux target_at_least dm-raid 1 1 0 || skip
- 
- aux lvmconf 'allocation/maximise_cling = 0'
+ /*
++ * Here we use a tmp file named UUID of pv under /tmp
++ * to identify if this device already being waited.
++ */
++#define WAITING_DIR  "/tmp/"
++static int already_being_waited(struct physical_volume *pv)
++{
++	char uuid[64];
++	char path[70];
++	FILE *fp;
++	int r = 0;
++
++	id_write_format(&pv->id, uuid, 64);
++	sprintf(path, WAITING_DIR"%s", uuid);
++	fp = fopen(path, "r");
++	if (!fp) {
++		fp = fopen(path, "w");
++		fclose(fp);
++	} else
++		r = 1;
++	return r;
++}
++
++static int remove_device_from_waiting_dir(struct physical_volume *pv)
++{
++	char uuid[64];
++	char path[70];
++	FILE *fp;
++	int r = 1;
++
++	id_write_format(&pv->id, uuid, 64);
++	sprintf(path, WAITING_DIR"%s", uuid);
++	fp = fopen(path, "r");
++	if (!fp) {
++		log_error("It should open the file successfully");
++		r = 0;
++	} else {
++		fclose(fp);
++		remove(path);
++	}
++	return r;
++}
++
++/*
+  * _get_log_count
+  * @lv: the mirror LV
+  *
+-- 
+1.8.1.4
 
 
