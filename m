@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue,  9 Jun 2015 17:46:06 +0000 (UTC)
+Date: Tue,  9 Jun 2015 17:56:23 +0000 (UTC)
 Subject: master - Add support for raid0/raid0_meta raid types
-Message-ID: <20150609174606.6F89861260@fedorahosted.org>
+Message-ID: <20150609175623.93D8C60D7A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb5156ce1f909abfde91e51a46b95eaca45f46ce
-Commit:        cb5156ce1f909abfde91e51a46b95eaca45f46ce
-Parent:        3225f8d17596b79b76ed9da5291843d02a2aa7b6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c2c0a029fe5fcb8585039073ca49c023d237a300
+Commit:        c2c0a029fe5fcb8585039073ca49c023d237a300
+Parent:        fd29c7f3a171174dcd47eb8b23ff42a145cdacc6
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Jun 9 19:41:41 2015 +0200
+AuthorDate:    Tue Jun 9 19:56:02 2015 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Jun 9 19:41:41 2015 +0200
+CommitterDate: Tue Jun 9 19:56:02 2015 +0200
 
 Add support for raid0/raid0_meta raid types
 
@@ -27,7 +27,7 @@ personality without metadata devices
 
 The raid0_meta type provides access via the MD raid0
 personality _with_ metadata devices, i.e. it reserves
-space for rmeta devices which is useful for future
+space for rmeta devices which is e.g. useful for future
 functional enhancements supporting conversions between
 raid0 and raid4/5/6/10 to ensure metadata space
 on raid0_meta creation.
@@ -40,7 +40,11 @@ with 'lvconvert --type (striped|raid0|raid0_meta) ...'
 lvconvert-striped-raid0.sh provides various tests
 ---
  WHATS_NEW                        |    1 +
+ daemons/lvmetad/Makefile.in      |    3 +-
+ daemons/lvmpolld/Makefile.in     |    3 +-
  lib/activate/dev_manager.c       |   14 +-
+ lib/cache/lvmetad.c              |    4 -
+ lib/cache/lvmetad.h              |   12 +-
  lib/config/defaults.h            |    2 +
  lib/format_text/export.c         |    6 +-
  lib/metadata/lv.c                |    1 +
@@ -56,7 +60,7 @@ lvconvert-striped-raid0.sh provides various tests
  tools/lvchange.c                 |    2 +-
  tools/lvconvert.c                |   60 +-
  tools/lvcreate.c                 |   75 ++-
- 17 files changed, 1834 insertions(+), 608 deletions(-)
+ 21 files changed, 1843 insertions(+), 621 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
 index bfcc094..db48233 100644
@@ -70,6 +74,34 @@ index bfcc094..db48233 100644
  
  Version 2.02.120 - 15th May 2015
  ================================
+diff --git a/daemons/lvmetad/Makefile.in b/daemons/lvmetad/Makefile.in
+index 765128c..f9b997e 100644
+--- a/daemons/lvmetad/Makefile.in
++++ b/daemons/lvmetad/Makefile.in
+@@ -39,7 +39,8 @@ CFLAGS += $(EXTRA_EXEC_CFLAGS)
+ 
+ lvmetad: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LVMLIBS) $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
++	$(DL_LIBS) $(LVMLIBS) $(LIBS) -rdynamic
+ 
+ # TODO: No idea. No idea how to test either.
+ #ifneq ("$(CFLOW_CMD)", "")
+diff --git a/daemons/lvmpolld/Makefile.in b/daemons/lvmpolld/Makefile.in
+index 8ebbb90..55f3dad 100644
+--- a/daemons/lvmpolld/Makefile.in
++++ b/daemons/lvmpolld/Makefile.in
+@@ -38,7 +38,8 @@ CFLAGS += $(DAEMON_CFLAGS)
+ 
+ lvmpolld: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LVMLIBS) $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
++	$(DL_LIBS) $(LVMLIBS) $(LIBS)
+ 
+ install_lvmpolld: lvmpolld
+ 	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
 diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
 index 1171f4c..38d76c4 100644
 --- a/lib/activate/dev_manager.c
@@ -109,6 +141,58 @@ index 1171f4c..38d76c4 100644
  		    !_add_new_lv_to_dtree(dm, dtree, seg_metalv(seg, s),
  					  laopts, NULL))
  			return_0;
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index dd1219b..73a382c 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -46,10 +46,6 @@ void lvmetad_init(struct cmd_context *cmd)
+ 	if (!_lvmetad_use && !access(getenv("LVM_LVMETAD_PIDFILE") ? : LVMETAD_PIDFILE, F_OK))
+ 		log_warn("WARNING: lvmetad is running but disabled."
+ 			 " Restart lvmetad before enabling it!");
+-
+-	if (_lvmetad_connected)
+-		log_debug(INTERNAL_ERROR "Refreshing lvmetad global handle while connection with the daemon is active");
+-
+ 	_lvmetad_cmd = cmd;
+ }
+ 
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index 395bc41..6769f76 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -29,7 +29,8 @@ typedef int (*activation_handler) (struct cmd_context *cmd,
+ 
+ #ifdef LVMETAD_SUPPORT
+ /*
+- * Sets up a global handle for our process.
++ * Initialise the communication with lvmetad. Normally called by
++ * lvmcache_init. Sets up a global handle for our process.
+  */
+ void lvmetad_init(struct cmd_context *);
+ 
+@@ -58,9 +59,7 @@ int lvmetad_socket_present(void);
+ 
+ /*
+  * Check whether lvmetad is active (where active means both that it is running
+- * and that we have a working connection with it). It opens new connection
+- * with lvmetad in the process when lvmetad is supposed to be used and the
+- * connection is not open yet.
++ * and that we have a working connection with it).
+  */
+ int lvmetad_active(void);
+ 
+@@ -71,9 +70,8 @@ int lvmetad_active(void);
+ void lvmetad_connect_or_warn(void);
+ 
+ /*
+- * Drop connection to lvmetad. A subsequent lvmetad_connect_or_warn or
+- * lvmetad_active will re-establish the connection (possibly at a
+- * different socket path).
++ * Drop connection to lvmetad. A subsequent lvmetad_init() will re-establish
++ * the connection (possibly at a different socket path).
+  */
+ void lvmetad_disconnect(void);
+ 
 diff --git a/lib/config/defaults.h b/lib/config/defaults.h
 index 6793d01..3b6a877 100644
 --- a/lib/config/defaults.h
