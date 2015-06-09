@@ -1,51 +1,61 @@
-From: Lidong Zhong <lzhong@suse.com>
-Date: Mon,  8 Jun 2015 15:48:31 +0800
-Subject: [RFC 5/6] Add another policy for the missing device -- wait
-In-Reply-To: <1433749712-11837-1-git-send-email-lzhong@suse.com>
-References: <1433749712-11837-1-git-send-email-lzhong@suse.com>
-Message-ID: <1433749712-11837-6-git-send-email-lzhong@suse.com>
+From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
+Date: Tue,  9 Jun 2015 17:46:08 +0000 (UTC)
+Subject: master - Add support for raid0/raid0_meta raid types
+Message-ID: <20150609174608.891E761260@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We add another policy for the missing device. If the missing deivce
-could not come back with in the waiting time, then it will excute the
-original policy(remove/allocate)
-Not sure about the vsn() meaning, so I put down the kernel version...
----
- lib/config/config_settings.h | 2 ++
- lib/config/defaults.h        | 2 ++
- 2 files changed, 4 insertions(+)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b46743be20680b252ce4291d707905db5a4df5dc
+Commit:        b46743be20680b252ce4291d707905db5a4df5dc
+Parent:        fd29c7f3a171174dcd47eb8b23ff42a145cdacc6 cb5156ce1f909abfde91e51a46b95eaca45f46ce
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Jun 9 19:45:10 2015 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Jun 9 19:45:10 2015 +0200
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 885a2fa..bfea715 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -1147,6 +1147,8 @@ cfg(activation_mirror_log_fault_policy_CFG, "mirror_log_fault_policy", activatio
- 	"Defines how a device failure in a 'mirror' log LV is handled.\n"
- 	"The mirror_image_fault_policy description for mirrored LVs\n"
- 	"also applies to mirrored log LVs.\n")
-+cfg(activation_mirror_keep_log_CFG, "mirror_keep_log", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_MIRROR_KEEP_LOG, vsn(4, 2, 0), NULL,0, NULL, "Enable to wait for the missing device come back within a fixed time.\n")
-+cfg(activation_mirror_keep_log_timeout_CFG, "mirror_keep_log_timeout", activation_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_MIRROR_KEEP_LOG_TIMEOUT, vsn(4, 2, 0), NULL, 0, NULL, "Defines the wating time.\n")
- 
- cfg(activation_mirror_device_fault_policy_CFG, "mirror_device_fault_policy", activation_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_MIRROR_DEVICE_FAULT_POLICY, vsn(1, 2, 10), NULL, vsn(2, 2, 57),
- 	"This has been replaced by the activation/mirror_image_fault_policy setting.\n",
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 6793d01..6fbadfd 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -216,6 +216,8 @@
- 
- #define DEFAULT_MIRROR_DEVICE_FAULT_POLICY "remove"
- #define DEFAULT_MIRROR_LOG_FAULT_POLICY "allocate"
-+#define DEFAULT_MIRROR_KEEP_LOG 0
-+#define DEFAULT_MIRROR_KEEP_LOG_TIMEOUT 60
- #define DEFAULT_SNAPSHOT_AUTOEXTEND_THRESHOLD 100
- #define DEFAULT_SNAPSHOT_AUTOEXTEND_PERCENT 20
- #define DEFAULT_THIN_POOL_AUTOEXTEND_THRESHOLD 100
--- 
-1.8.1.4
+Add support for raid0/raid0_meta raid types
+
+Supports creation of raid types raid0 and raid0_meta
+with 'lvcreate --type (raid0|raid0_meta) ...' based on
+functionality available in dm-raid target version 1.0.7
+
+The raid0 type provides access via the MD raid0
+personality without metadata devices
+
+The raid0_meta type provides access via the MD raid0
+personality _with_ metadata devices, i.e. it reserves
+space for rmeta devices which is e.g. useful for future
+functional enhancements supporting conversions between
+raid0 and raid4/5/6/10 to ensure metadata space
+on raid0_meta creation.
+
+Conversion between striped/raid0/raid0_meta
+LVs with striped LVs being restricted to one
+stripe zone (i.e. no varying stripes) is possible
+with 'lvconvert --type (striped|raid0|raid0_meta) ...'
+
+lvconvert-striped-raid0.sh provides various tests"
+
+ WHATS_NEW                        |    1 +
+ lib/activate/dev_manager.c       |   14 +-
+ lib/config/defaults.h            |    2 +
+ lib/format_text/export.c         |    6 +-
+ lib/metadata/lv.c                |    1 +
+ lib/metadata/lv.h                |    4 +-
+ lib/metadata/lv_manip.c          |  362 ++++++----
+ lib/metadata/merge.c             |    2 +-
+ lib/metadata/metadata-exported.h |   12 +-
+ lib/metadata/raid_manip.c        | 1483 +++++++++++++++++++++++++++++++-------
+ lib/metadata/segtype.h           |  133 +++-
+ lib/raid/raid.c                  |  213 +++---
+ lib/uuid/uuid.c                  |    2 +-
+ libdm/libdm-deptree.c            |   70 ++-
+ tools/lvchange.c                 |    2 +-
+ tools/lvconvert.c                |   60 +-
+ tools/lvcreate.c                 |   75 ++-
+ 17 files changed, 1834 insertions(+), 608 deletions(-)
 
 
