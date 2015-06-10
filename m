@@ -1,7 +1,7 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue,  9 Jun 2015 19:01:22 +0000 (UTC)
+Date: Wed, 10 Jun 2015 13:35:25 +0000 (UTC)
 Subject: master - raid0 commit missed test/shell/lvconvert-striped-raid0.sh
-Message-ID: <20150609190122.1B68460B3E@fedorahosted.org>
+Message-ID: <20150610133525.993DC60757@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
