@@ -1,56 +1,41 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon,  8 Jun 2015 16:50:07 +0000 (UTC)
-Subject: master - lvmetad, lvmpolld: remove DL_LIBS from Makefile
-Message-ID: <20150608165007.3485960309@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 12 Jun 2015 15:10:24 +0000 (UTC)
+Subject: master - test: Ensure that outdated PVs are wiped just once.
+Message-ID: <20150612151024.BC1DB60AAD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fd29c7f3a171174dcd47eb8b23ff42a145cdacc6
-Commit:        fd29c7f3a171174dcd47eb8b23ff42a145cdacc6
-Parent:        7c312932215f8d70c4f6beb7db506898f4670cfe
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jun 8 11:48:22 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jun 8 11:48:22 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c0049b1ce027ab4befdbfbcd8194d57ce6eb2b7
+Commit:        9c0049b1ce027ab4befdbfbcd8194d57ce6eb2b7
+Parent:        632dde0cbc98de9c04b4c2451d09e36d6299bbd6
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Wed Jun 10 16:27:59 2015 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Jun 10 16:27:59 2015 +0200
 
-lvmetad, lvmpolld: remove DL_LIBS from Makefile
+test: Ensure that outdated PVs are wiped just once.
 
-and rdynamic.  They are not needed.
 ---
- daemons/lvmetad/Makefile.in  |    3 +--
- daemons/lvmpolld/Makefile.in |    3 +--
- 2 files changed, 2 insertions(+), 4 deletions(-)
+ test/shell/unlost-pv.sh |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/lvmetad/Makefile.in b/daemons/lvmetad/Makefile.in
-index f9b997e..765128c 100644
---- a/daemons/lvmetad/Makefile.in
-+++ b/daemons/lvmetad/Makefile.in
-@@ -39,8 +39,7 @@ CFLAGS += $(EXTRA_EXEC_CFLAGS)
+diff --git a/test/shell/unlost-pv.sh b/test/shell/unlost-pv.sh
+index 09de21a..c56d488 100644
+--- a/test/shell/unlost-pv.sh
++++ b/test/shell/unlost-pv.sh
+@@ -45,4 +45,10 @@ check_
+ test -e LOCAL_LVMETAD && lvremove $vg/boo # FIXME trigger a write :-(
+ check_ not
  
- lvmetad: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
- 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
--	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
--	$(DL_LIBS) $(LVMLIBS) $(LIBS) -rdynamic
-+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LVMLIBS) $(LIBS)
- 
- # TODO: No idea. No idea how to test either.
- #ifneq ("$(CFLOW_CMD)", "")
-diff --git a/daemons/lvmpolld/Makefile.in b/daemons/lvmpolld/Makefile.in
-index 55f3dad..8ebbb90 100644
---- a/daemons/lvmpolld/Makefile.in
-+++ b/daemons/lvmpolld/Makefile.in
-@@ -38,8 +38,7 @@ CFLAGS += $(DAEMON_CFLAGS)
- 
- lvmpolld: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
- 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
--	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
--	$(DL_LIBS) $(LVMLIBS) $(LIBS)
-+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LVMLIBS) $(LIBS)
- 
- install_lvmpolld: lvmpolld
- 	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
++aux disable_dev "$dev1"
++vgreduce --removemissing --force $vg
++aux enable_dev "$dev1"
++vgs 2>&1 | grep 'Removing PV'
++vgs 2>&1 | not grep 'Removing PV'
++
+ vgremove -ff $vg
 
 
