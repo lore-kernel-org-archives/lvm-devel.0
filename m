@@ -1,101 +1,122 @@
-From: Lidong Zhong <lzhong@suse.com>
-Date: Mon, 15 Jun 2015 20:24:01 -0600
-Subject: [PATCH] makefile: fail to compile if there are more than one exported symbols.
-In-Reply-To: <557E9E4A.6060001@redhat.com>
-References: <1434094405-8391-1-git-send-email-lzhong@suse.com>
-	<557B001F.30804@redhat.com>
-	<557EAFC6020000E1000108C5@relay2.provo.novell.com>
-	<557E96FF.1050509@redhat.com>
-	<557F0AB3020000E1000109DF@relay2.provo.novell.com>
-	<557E9E4A.6060001@redhat.com>
-Message-ID: <557FF941020000E100010BD6@relay2.provo.novell.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Tue, 16 Jun 2015 19:24:43 +0000 (UTC)
+Subject: master - xlate: add new variants
+Message-ID: <20150616192443.9856960DAC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Zdenek,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7fe5e4010ce210b54cfcd7b81d088227fde9b23a
+Commit:        7fe5e4010ce210b54cfcd7b81d088227fde9b23a
+Parent:        ce18fb61c0a3b94b642edb056a717a198473449c
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jun 16 09:30:14 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Jun 16 09:30:14 2015 -0500
 
-Sorry I forgot to check the latest source, and this has been fixed in your latest commit of make.tmpl.in.
-Sorry for the noise :(
+xlate: add new variants
 
-Regards,
-Lidong
->>> On 6/15/2015 at 05:43 PM, in message <557E9E4A.6060001@redhat.com>, Zdenek
-Kabelac <zkabelac@redhat.com> wrote: 
-> Dne 15.6.2015 v 11:26 Lidong Zhong napsal(a): 
-> > Hi , 
-> > 
-> > Without this patch, I would get the following error: 
-> > 
-> > set -e;\ 
-> > R=dm_lv_simple_resume dm_lv_simple_suspend dm_replace_mirror_table;\ 
-> > test -z "$R" || { echo "Mismatch between symbols in shared library and lists  
-> in .exported_symbols.* files: $R"; false; } ;\ 
-> > (for i in ./.exported_symbols.Base ./.exported_symbols.DM_1_02_97 ; do\ 
-> > 	echo "${i##*.} {"; echo "	global:";\ 
-> > 	/usr/bin/sed "s/^/		/;s/$/;/" < $i;\ 
-> > 	test "$i" = Base && { echo "	local:"; echo "		*;"; };\ 
-> > 	echo "};";\ 
-> > done ) > .export.sym 
-> > /bin/sh: line 1: dm_lv_simple_suspend: command not found 
-> > ../make.tmpl:508: recipe for target '.export.sym' failed 
-> > make[1]: *** [.export.sym] Error 127 
-> > make[1]: Leaving directory '/home/lwang/LVM2.2.02.120/libdm' 
-> > make.tmpl:323: recipe for target 'libdm.device-mapper' failed 
-> > make: *** [libdm.device-mapper] Error 2 
->  
-> Hmmm interesting - in my case I get: 
->  
-> --- 
-> set -e;\ 
-> R=$(sort .exported_symbols_generated .exported_symbols.Base  
-> .exported_symbols.DM_1_02_98 .exported_symbols.DM_1_02_97 | uniq -u);\ 
-> test -z "$R" || { echo "Mismatch between symbols in shared library and lists  
-> in .exported_symbols.* files: $R"; false; } ;\ 
-> --- 
->  
-> While you get directly assigned result. 
->  
-> So how is possible that in your case you get already 'translated' string, 
-> while in my case I get regular  shell evaluation  R=$(sort....) which should  
->  
-> not need "". 
->  
-> Are you testing against latest 'git' HEAD ? 
->  
-> Do you this in make.tmpl.in? 
->  
-> .export.sym: .exported_symbols_generated $(EXPORTED_SYMBOLS) 
-> ifeq (,$(firstword $(EXPORTED_SYMBOLS))) 
-> 	set -e; (echo "Base {"; echo "	global:";\ 
-> 		 $(SED) "s/^/		/;s/$$/;/" $<;\ 
-> 		 echo "	local:"; echo "		*;"; echo "};") > $@ 
-> else 
-> 	set -e;\ 
-> 	R=$$(sort $^ | uniq -u);\ 
-> 	test -z "$$R" || { echo "Mismatch between symbols in shared library and lists  
->  
-> in .exported_symbols.* files: $$R"; false; } ;\ 
-> 	for i in $(EXPORTED_SYMBOLS); do\ 
-> 		echo "$${i##*.} {"; echo "	global:";\ 
-> 		$(SED) "s/^/		/;s/$$/;/" $$i;\ 
-> 		test "$$i" = Base && { echo "	local:"; echo "		*;"; };\ 
-> 		echo "};";\ 
-> 	done > $@ 
-> endif 
->  
->  
-> Zdenek 
->  
-> -- 
-> lvm-devel mailing list 
-> lvm-devel at redhat.com 
-> https://www.redhat.com/mailman/listinfo/lvm-devel 
->  
->  
+New variants use the clearer function names from the kernel.
+---
+ lib/mm/xlate.h |   82 +++++++++++++++++++++++++++++++++++++++++++-------------
+ 1 files changed, 63 insertions(+), 19 deletions(-)
 
-
+diff --git a/lib/mm/xlate.h b/lib/mm/xlate.h
+index 0d243c4..efb9ee3 100644
+--- a/lib/mm/xlate.h
++++ b/lib/mm/xlate.h
+@@ -38,27 +38,71 @@
+ #endif
+ 
+ #if BYTE_ORDER == LITTLE_ENDIAN
+-#  define xlate16(x) (x)
+-#  define xlate32(x) (x)
+-#  define xlate64(x) (x)
+-#  define xlate16_be(x) bswap_16(x)
+-#  define xlate32_be(x) bswap_32(x)
+-#  define xlate64_be(x) bswap_64(x)
++/* New clearer variants. */
++#define le16_to_cpu(x) (x)
++#define le32_to_cpu(x) (x)
++#define le64_to_cpu(x) (x)
++#define cpu_to_le16(x) (x)
++#define cpu_to_le32(x) (x)
++#define cpu_to_le64(x) (x)
++#define be16_to_cpu(x) bswap_16(x)
++#define be32_to_cpu(x) bswap_32(x)
++#define be64_to_cpu(x) bswap_64(x)
++#define cpu_to_be16(x) bswap_16(x)
++#define cpu_to_be32(x) bswap_32(x)
++#define cpu_to_be64(x) bswap_64(x)
++/* Old alternative variants. */
++#define xlate16(x) (x)
++#define xlate32(x) (x)
++#define xlate64(x) (x)
++#define xlate16_be(x) bswap_16(x)
++#define xlate32_be(x) bswap_32(x)
++#define xlate64_be(x) bswap_64(x)
++
+ #elif BYTE_ORDER == BIG_ENDIAN
+-#  define xlate16(x) bswap_16(x)
+-#  define xlate32(x) bswap_32(x)
+-#  define xlate64(x) bswap_64(x)
+-#  define xlate16_be(x) (x)
+-#  define xlate32_be(x) (x)
+-#  define xlate64_be(x) (x)
++/* New clearer variants. */
++#define le16_to_cpu(x) bswap_16(x)
++#define le32_to_cpu(x) bswap_32(x)
++#define le64_to_cpu(x) bswap_64(x)
++#define cpu_to_le16(x) bswap_16(x)
++#define cpu_to_le32(x) bswap_32(x)
++#define cpu_to_le64(x) bswap_64(x)
++#define be16_to_cpu(x) (x)
++#define be32_to_cpu(x) (x)
++#define be64_to_cpu(x) (x)
++#define cpu_to_be16(x) (x)
++#define cpu_to_be32(x) (x)
++#define cpu_to_be64(x) (x)
++/* Old alternative variants. */
++#define xlate16(x) bswap_16(x)
++#define xlate32(x) bswap_32(x)
++#define xlate64(x) bswap_64(x)
++#define xlate16_be(x) (x)
++#define xlate32_be(x) (x)
++#define xlate64_be(x) (x)
++
+ #else
+-#  include <asm/byteorder.h>
+-#  define xlate16(x) __cpu_to_le16((x))
+-#  define xlate32(x) __cpu_to_le32((x))
+-#  define xlate64(x) __cpu_to_le64((x))
+-#  define xlate16_be(x) __cpu_to_be16((x))
+-#  define xlate32_be(x) __cpu_to_be32((x))
+-#  define xlate64_be(x) __cpu_to_be64((x))
++#include <asm/byteorder.h>
++/* New clearer variants. */
++#define le16_to_cpu(x) __le16_to_cpu(x)
++#define le32_to_cpu(x) __le32_to_cpu(x)
++#define le64_to_cpu(x) __le64_to_cpu(x)
++#define cpu_to_le16(x) __cpu_to_le16(x)
++#define cpu_to_le32(x) __cpu_to_le32(x)
++#define cpu_to_le64(x) __cpu_to_le64(x)
++#define be16_to_cpu(x) __be16_to_cpu(x)
++#define be32_to_cpu(x) __be32_to_cpu(x)
++#define be64_to_cpu(x) __be64_to_cpu(x)
++#define cpu_to_be16(x) __cpu_to_be16(x)
++#define cpu_to_be32(x) __cpu_to_be32(x)
++#define cpu_to_be64(x) __cpu_to_be64(x)
++/* Old alternative variants. */
++#define xlate16(x) __cpu_to_le16(x)
++#define xlate32(x) __cpu_to_le32(x)
++#define xlate64(x) __cpu_to_le64(x)
++#define xlate16_be(x) __cpu_to_be16(x)
++#define xlate32_be(x) __cpu_to_be32(x)
++#define xlate64_be(x) __cpu_to_be64(x)
+ #endif
+ 
+ #endif
 
 
