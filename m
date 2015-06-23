@@ -1,48 +1,65 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 23 Jun 2015 21:49:21 +0000 (UTC)
-Subject: master - doc: mention new invalid states in lvmetad_design
-Message-ID: <20150623214921.CEF8160246@fedorahosted.org>
+Date: Tue, 23 Jun 2015 21:56:33 +0000 (UTC)
+Subject: master - libdaemon: allow main processing function to be specified
+Message-ID: <20150623215633.3837F61054@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba2b701f2cc98eb8e4049866f3d1cc77b61b4abd
-Commit:        ba2b701f2cc98eb8e4049866f3d1cc77b61b4abd
-Parent:        c23e7ff2a02c65619d05eb525adaaf9336de2692
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c5ba60827ea720679c70f51b6ee7e999750e44e3
+Commit:        c5ba60827ea720679c70f51b6ee7e999750e44e3
+Parent:        ba2b701f2cc98eb8e4049866f3d1cc77b61b4abd
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 23 16:48:28 2015 -0500
+AuthorDate:    Tue Dec 2 14:08:58 2014 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jun 23 16:48:28 2015 -0500
+CommitterDate: Tue Jun 23 16:55:45 2015 -0500
 
-doc: mention new invalid states in lvmetad_design
+libdaemon: allow main processing function to be specified
 
 ---
- doc/lvmetad_design.txt |   11 +++++++++++
- 1 files changed, 11 insertions(+), 0 deletions(-)
+ libdaemon/server/daemon-server.c |    8 +++++++-
+ libdaemon/server/daemon-server.h |    1 +
+ 2 files changed, 8 insertions(+), 1 deletions(-)
 
-diff --git a/doc/lvmetad_design.txt b/doc/lvmetad_design.txt
-index 3b336ec..1961cfb 100644
---- a/doc/lvmetad_design.txt
-+++ b/doc/lvmetad_design.txt
-@@ -137,6 +137,17 @@ hosts. Overall, this is not hard, but the devil is in the details. I would
- possibly disable lvmetad for clustered volume groups in the first phase and
- only proceed when the local mode is robust and well tested.
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index bedd3b2..ef0b964 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -604,6 +604,12 @@ void daemon_start(daemon_state s)
+ 	if (!s.foreground)
+ 		kill(getppid(), SIGTERM);
  
-+With lvmlockd, lvmetad state is kept up to date by flagging either an
-+individual VG as "invalid", or the global state as "invalid".  When either
-+the VG or the global state are read, this invalid flag is returned along
-+with the data.  The client command can check for this invalid state and
-+decide to read the information from disk rather than use the stale cached
-+data.  After the latest data is read from disk, the command may choose to
-+send it to lvmetad to update the cache.  lvmlockd uses version numbers
-+embedded in its VG and global locks to detect when cached data becomes
-+invalid, and it then tells lvmetad to set the related invalid flag.
-+dct, 2015-06-23
++	if (s.daemon_main) {
++		if (!s.daemon_main(&s))
++			failed = 1;
++		goto out;
++	}
 +
- Protocol & co.
- --------------
+ 	if (s.daemon_init)
+ 		if (!s.daemon_init(&s))
+ 			failed = 1;
+@@ -635,7 +641,7 @@ void daemon_start(daemon_state s)
  
+ 	INFO(&s, "%s waiting for client threads to finish", s.name);
+ 	reap(s, 1);
+-
++out:
+ 	/* If activated by systemd, do not unlink the socket - systemd takes care of that! */
+ 	if (!_systemd_activation && s.socket_fd >= 0)
+ 		if (unlink(s.socket_path))
+diff --git a/libdaemon/server/daemon-server.h b/libdaemon/server/daemon-server.h
+index 820e5e0..b235edc 100644
+--- a/libdaemon/server/daemon-server.h
++++ b/libdaemon/server/daemon-server.h
+@@ -107,6 +107,7 @@ typedef struct daemon_state {
+ 	handle_request handler;
+ 	int (*daemon_init)(struct daemon_state *st);
+ 	int (*daemon_fini)(struct daemon_state *st);
++	int (*daemon_main)(struct daemon_state *st);
+ 
+ 	/* Global runtime info maintained by the framework. */
+ 	int socket_fd;
 
 
