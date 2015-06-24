@@ -1,74 +1,39 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 12 Aug 2008 10:01:56 -0000
-Subject: LVM2/test t-vgsplit-usage.sh
-Message-ID: <20080812100156.5184.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 24 Jun 2015 09:27:43 +0000 (UTC)
+Subject: master - config: display global/umask in octal form
+Message-ID: <20150624092743.9E2B360DF6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-08-12 10:01:56
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6575122c63de3d400ee46ea0f400ab44b8520978
+Commit:        6575122c63de3d400ee46ea0f400ab44b8520978
+Parent:        74bf75a2f5f7b918e1fe7531766aa377de23191c
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jun 23 13:24:15 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Jun 24 11:13:38 2015 +0200
 
-Modified files:
-	test           : t-vgsplit-usage.sh 
+config: display global/umask in octal form
 
-Log message:
-	test vgsplit: reject to give away pv with the last mda copy (Jaroslav Stava)
+---
+ lib/config/config_settings.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-usage.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-
---- LVM2/test/t-vgsplit-usage.sh	2008/07/17 04:03:04	1.7
-+++ LVM2/test/t-vgsplit-usage.sh	2008/08/12 10:01:56	1.8
-@@ -20,7 +20,8 @@
-   test -n "$d2" && losetup -d "$d2"
-   test -n "$d3" && losetup -d "$d3"
-   test -n "$d4" && losetup -d "$d4"
--  rm -f "$f1" "$f2" "$f3" "$f4"
-+  test -n "$d5" && losetup -d "$d5"
-+  rm -f "$f1" "$f2" "$f3" "$f4" "$f5"
- }
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 1b67488..461bacc 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -597,7 +597,7 @@ cfg(backup_retain_days_CFG, "retain_days", backup_CFG_SECTION, 0, CFG_TYPE_INT,
+ cfg(shell_history_size_CFG, "history_size", shell_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_MAX_HISTORY, vsn(1, 0, 0), NULL, 0, NULL,
+ 	"Number of lines of history to store in ~/.lvm_history.\n")
  
- # FIXME: paramaterize lvm1 vs lvm2 metadata; most of these tests should run
-@@ -32,6 +33,7 @@
-    f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
-    f3=$(pwd)/3 && d3=$(loop_setup_ "$f3") &&
-    f4=$(pwd)/4 && d4=$(loop_setup_ "$f4") &&
-+   f5=$(pwd)/5 && d5=$(loop_setup_ "$f5") &&
-    vg1=$(this_test_)-test-vg1-$$          &&
-    vg2=$(this_test_)-test-vg2-$$          &&
-    lv1=$(this_test_)-test-lv1-$$          &&
-@@ -42,7 +44,8 @@
- do
- test_expect_success \
-   "(lvm$mdatype) setup PVs" \
--  'pvcreate -M$mdatype $d1 $d2 $d3 $d4'
-+  'pvcreate -M$mdatype $d1 $d2 $d3 $d4 &&
-+   pvcreate -M$mdatype --metadatacopies 0 $d5'
+-cfg(global_umask_CFG, "umask", global_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_UMASK, vsn(1, 0, 0), NULL, 0, NULL,
++cfg(global_umask_CFG, "umask", global_CFG_SECTION, CFG_FORMAT_INT_OCTAL, CFG_TYPE_INT, DEFAULT_UMASK, vsn(1, 0, 0), NULL, 0, NULL,
+ 	"The file creation mask for any files and directories created.\n"
+ 	"Interpreted as octal if the first digit is zero.\n")
  
- test_expect_success \
-   "(lvm$mdatype) vgsplit accepts new vg as destination of split" \
-@@ -197,6 +200,18 @@
-    status=$?; echo status=$status; test $status = 5 &&
-    vgremove -f $vg2 &&
-    vgremove -f $vg1'
-+
-+test_expect_success \
-+  "(lvm2) vgsplit rejects to give away pv with the last mda copy" '
-+   vgcreate -M$mdatype $vg1 $d5 $d2  &&
-+   lvcreate -l 10 -n $lv1  $vg1 &&
-+   lvchange -an $vg1/$lv1 &&
-+   vg_validate_pvlv_counts_ $vg1 2 1 0 &&
-+   vgsplit  $vg1 $vg2 $d5;
-+   status=$?; echo status=$status; test $status != 0 &&
-+   vg_validate_pvlv_counts_ $vg1 2 1 0 &&
-+   vgremove -ff $vg1
-+'
- done
- 
- test_expect_success \
 
 
