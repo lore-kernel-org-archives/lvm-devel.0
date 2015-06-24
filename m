@@ -1,142 +1,64 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 24 Jun 2015 09:27:45 +0000 (UTC)
-Subject: master - configure: add DEFAULT_USE_BLKID_WIPING
-Message-ID: <20150624092745.BD01960DF6@fedorahosted.org>
+Date: Wed, 24 Jun 2015 09:27:47 +0000 (UTC)
+Subject: master - config: allow empty values for {thin, cache}_{check, repair}_options
+Message-ID: <20150624092747.DEC8760DF6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20e336f21c242e7a98d11d9dc03941512c0ab69a
-Commit:        20e336f21c242e7a98d11d9dc03941512c0ab69a
-Parent:        6575122c63de3d400ee46ea0f400ab44b8520978
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c725648f6c3c5709c0a6823900c716d67a31818d
+Commit:        c725648f6c3c5709c0a6823900c716d67a31818d
+Parent:        20e336f21c242e7a98d11d9dc03941512c0ab69a
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 23 15:20:51 2015 +0200
+AuthorDate:    Tue Jun 23 15:35:24 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Wed Jun 24 11:13:38 2015 +0200
 
-configure: add DEFAULT_USE_BLKID_WIPING
+config: allow empty values for {thin,cache}_{check,repair}_options
 
-If blkid wiping is possible, than set use_blkid_wiping=1 and
-use_blkid_wiping=0 otherwise for its default value. If blkid wiping
-is disabled during configure and use_blkid_wiping=1 is set by chance,
-it's simply ignored - this patch is just a cleanup that makes it more
-obvious for the user (we use similar logic for use_lvmetad and
-use_lvmpolld settings).
+It's not an error to define empty values for
+{thin,cache}_{check,repair}_options - such empty value means no
+options are passed when these external commands are called.
 ---
- configure                    |   12 +++++++++++-
- configure.in                 |    9 ++++++++-
- lib/config/config_settings.h |    2 +-
- lib/misc/configure.h.in      |    3 +++
- 4 files changed, 23 insertions(+), 3 deletions(-)
+ lib/config/config_settings.h |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/configure b/configure
-index 534948f..13d10c4 100755
---- a/configure
-+++ b/configure
-@@ -695,6 +695,7 @@ DL_LIBS
- DEVMAPPER
- DEFAULT_USE_LVMPOLLD
- DEFAULT_USE_LVMETAD
-+DEFAULT_USE_BLKID_WIPING
- DEFAULT_SYS_DIR
- DEFAULT_SPARSE_SEGTYPE
- DEFAULT_RUN_DIR
-@@ -724,7 +725,6 @@ BUILD_LVMPOLLD
- BUILD_LVMETAD
- BUILD_DMEVENTD
- BUILD_CMIRRORD
--BLKID_WIPING
- BLKID_PC
- APPLIB
- MODPROBE_CMD
-@@ -11052,12 +11052,22 @@ $as_echo "yes" >&6; }
- fi
- 	if test "$BLKID_WIPING" = yes; then
- 		BLKID_PC="blkid"
-+		DEFAULT_USE_BLKID_WIPING=1
- 
- $as_echo "#define BLKID_WIPING_SUPPORT 1" >>confdefs.h
- 
-+	else
-+		DEFAULT_USE_BLKID_WIPING=1
- 	fi
-+else
-+	DEFAULT_USE_BLKID_WIPING=0
- fi
- 
-+cat >>confdefs.h <<_ACEOF
-+#define DEFAULT_USE_BLKID_WIPING $DEFAULT_USE_BLKID_WIPING
-+_ACEOF
-+
-+
- ################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use udev-systemd protocol for jobs in background" >&5
- $as_echo_n "checking whether to use udev-systemd protocol for jobs in background... " >&6; }
-diff --git a/configure.in b/configure.in
-index 86ab98a..d330bd2 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1152,9 +1152,16 @@ if test "$BLKID_WIPING" != no; then
- 			   fi])
- 	if test "$BLKID_WIPING" = yes; then
- 		BLKID_PC="blkid"
-+		DEFAULT_USE_BLKID_WIPING=1
- 		AC_DEFINE([BLKID_WIPING_SUPPORT], 1, [Define to 1 to use libblkid detection of signatures when wiping.])
-+	else
-+		DEFAULT_USE_BLKID_WIPING=1
- 	fi
-+else
-+	DEFAULT_USE_BLKID_WIPING=0
- fi
-+AC_DEFINE_UNQUOTED(DEFAULT_USE_BLKID_WIPING, [$DEFAULT_USE_BLKID_WIPING],
-+		   [Use blkid wiping by default.])
- 
- ################################################################################
- dnl -- Enable udev-systemd protocol to instantiate a service for background jobs
-@@ -1742,7 +1749,6 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[[()]]' '{print $2}'`
- AC_SUBST(APPLIB)
- AC_SUBST(AWK)
- AC_SUBST(BLKID_PC)
--AC_SUBST(BLKID_WIPING)
- AC_SUBST(BUILD_CMIRRORD)
- AC_SUBST(BUILD_DMEVENTD)
- AC_SUBST(BUILD_LVMETAD)
-@@ -1783,6 +1789,7 @@ AC_SUBST(DEFAULT_RAID10_SEGTYPE)
- AC_SUBST(DEFAULT_RUN_DIR)
- AC_SUBST(DEFAULT_SPARSE_SEGTYPE)
- AC_SUBST(DEFAULT_SYS_DIR)
-+AC_SUBST(DEFAULT_USE_BLKID_WIPING)
- AC_SUBST(DEFAULT_USE_LVMETAD)
- AC_SUBST(DEFAULT_USE_LVMPOLLD)
- AC_SUBST(DEVMAPPER)
 diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 461bacc..092e86d 100644
+index 092e86d..e5edf6d 100644
 --- a/lib/config/config_settings.h
 +++ b/lib/config/config_settings.h
-@@ -423,7 +423,7 @@ cfg(allocation_maximise_cling_CFG, "maximise_cling", allocation_CFG_SECTION, 0,
- 	"the same disks.  This setting can be used to disable the changes\n"
- 	"and revert to the previous algorithm.\n")
+@@ -855,7 +855,7 @@ cfg(global_thin_repair_executable_CFG, "thin_repair_executable", global_CFG_SECT
+ 	"Also see thin_repair_options.\n"
+ 	"(For thin tools, see thin_check_executable.)\n")
  
--cfg(allocation_use_blkid_wiping_CFG, "use_blkid_wiping", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), NULL, 0, NULL,
-+cfg(allocation_use_blkid_wiping_CFG, "use_blkid_wiping", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 105), "@DEFAULT_USE_BLKID_WIPING@", 0, NULL,
- 	"Use blkid to detect existing signatures on new PVs and LVs.\n"
- 	"The blkid library can detect more signatures than the\n"
- 	"native LVM detection code, but may take longer.\n"
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index 3af8ec0..9ec997f 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -95,6 +95,9 @@
- /* Path to LVM system directory. */
- #undef DEFAULT_SYS_DIR
+-cfg_array(global_thin_check_options_CFG, "thin_check_options", global_CFG_SECTION, DEFAULT_THIN_CHECK_OPTIONS_CONFIG ? CFG_DEFAULT_COMMENTED : CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, DEFAULT_THIN_CHECK_OPTIONS_CONFIG, vsn(2, 2, 96), NULL, 0, NULL,
++cfg_array(global_thin_check_options_CFG, "thin_check_options", global_CFG_SECTION, CFG_ALLOW_EMPTY | (DEFAULT_THIN_CHECK_OPTIONS_CONFIG ? CFG_DEFAULT_COMMENTED : CFG_DEFAULT_UNDEFINED), CFG_TYPE_STRING, DEFAULT_THIN_CHECK_OPTIONS_CONFIG, vsn(2, 2, 96), NULL, 0, NULL,
+ 	"List of options passed to the thin_check command.\n"
+ 	"With thin_check version 2.1 or newer you can add\n"
+ 	"--ignore-non-fatal-errors to let it pass through\n"
+@@ -863,7 +863,7 @@ cfg_array(global_thin_check_options_CFG, "thin_check_options", global_CFG_SECTIO
+ 	"With thin_check version 3.2 or newer you should add\n"
+ 	"--clear-needs-check-flag.\n")
  
-+/* Use blkid wiping by default. */
-+#undef DEFAULT_USE_BLKID_WIPING
-+
- /* Use lvmetad by default. */
- #undef DEFAULT_USE_LVMETAD
+-cfg_array(global_thin_repair_options_CFG, "thin_repair_options", global_CFG_SECTION, DEFAULT_THIN_REPAIR_OPTIONS_CONFIG ? CFG_DEFAULT_COMMENTED : CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, DEFAULT_THIN_REPAIR_OPTIONS_CONFIG, vsn(2, 2, 100), NULL, 0, NULL,
++cfg_array(global_thin_repair_options_CFG, "thin_repair_options", global_CFG_SECTION, CFG_ALLOW_EMPTY | (DEFAULT_THIN_REPAIR_OPTIONS_CONFIG ? CFG_DEFAULT_COMMENTED : CFG_DEFAULT_UNDEFINED), CFG_TYPE_STRING, DEFAULT_THIN_REPAIR_OPTIONS_CONFIG, vsn(2, 2, 100), NULL, 0, NULL,
+ 	"List of options passed to the thin_repair command.\n")
  
+ cfg_array(global_thin_disabled_features_CFG, "thin_disabled_features", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 99), NULL, 0, NULL,
+@@ -900,10 +900,10 @@ cfg(global_cache_repair_executable_CFG, "cache_repair_executable", global_CFG_SE
+ 	"Also see cache_repair_options.\n"
+ 	"(For cache tools, see cache_check_executable.)\n")
+ 
+-cfg_array(global_cache_check_options_CFG, "cache_check_options", global_CFG_SECTION, DEFAULT_CACHE_CHECK_OPTIONS_CONFIG ? CFG_DEFAULT_COMMENTED : CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, DEFAULT_CACHE_CHECK_OPTIONS_CONFIG, vsn(2, 2, 108), NULL, 0, NULL,
++cfg_array(global_cache_check_options_CFG, "cache_check_options", global_CFG_SECTION, CFG_ALLOW_EMPTY | (DEFAULT_CACHE_CHECK_OPTIONS_CONFIG ? CFG_DEFAULT_COMMENTED : CFG_DEFAULT_UNDEFINED), CFG_TYPE_STRING, DEFAULT_CACHE_CHECK_OPTIONS_CONFIG, vsn(2, 2, 108), NULL, 0, NULL,
+ 	"List of options passed to the cache_check command.\n")
+ 
+-cfg_array(global_cache_repair_options_CFG, "cache_repair_options", global_CFG_SECTION, DEFAULT_CACHE_REPAIR_OPTIONS_CONFIG ? CFG_DEFAULT_COMMENTED : CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, DEFAULT_CACHE_REPAIR_OPTIONS_CONFIG, vsn(2, 2, 108), NULL, 0, NULL,
++cfg_array(global_cache_repair_options_CFG, "cache_repair_options", global_CFG_SECTION, CFG_ALLOW_EMPTY | (DEFAULT_CACHE_REPAIR_OPTIONS_CONFIG ? CFG_DEFAULT_COMMENTED : CFG_DEFAULT_UNDEFINED), CFG_TYPE_STRING, DEFAULT_CACHE_REPAIR_OPTIONS_CONFIG, vsn(2, 2, 108), NULL, 0, NULL,
+ 	"List of options passed to the cache_repair command.\n")
+ 
+ cfg(global_system_id_source_CFG, "system_id_source", global_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_SYSTEM_ID_SOURCE, vsn(2, 2, 117), NULL, 0, NULL,
 
 
