@@ -1,44 +1,42 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 24 Jun 2015 13:20:22 +0000 (UTC)
-Subject: master - tests: workaround udev problem
-Message-ID: <20150624132022.59F3A60045@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 24 Jun 2015 17:17:10 +0000 (UTC)
+Subject: master - libdaemon: add comment about using main and init
+Message-ID: <20150624171710.1A01B6106A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=44c7bc0262b6719efe75ecb6eb32eaab359e5779
-Commit:        44c7bc0262b6719efe75ecb6eb32eaab359e5779
-Parent:        e217873ed6ef7d77974fa10bfee4609160d7091d
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 24 13:21:21 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 24 15:19:53 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7760665fb8f4a85a244a9751a0a1d1cc46c157dc
+Commit:        7760665fb8f4a85a244a9751a0a1d1cc46c157dc
+Parent:        44c7bc0262b6719efe75ecb6eb32eaab359e5779
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jun 24 12:16:26 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jun 24 12:16:26 2015 -0500
 
-tests: workaround udev problem
+libdaemon: add comment about using main and init
 
-If udev has not removed 'dir' entry - just issue TEST WARNING, clear
-dir, but do not fail whole rest of test.
 ---
- test/shell/profiles-thin.sh |    5 +++++
+ libdaemon/server/daemon-server.c |    5 +++++
  1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/profiles-thin.sh b/test/shell/profiles-thin.sh
-index 0c7fb61..5940cc6 100644
---- a/test/shell/profiles-thin.sh
-+++ b/test/shell/profiles-thin.sh
-@@ -59,6 +59,11 @@ check lv_field $vg/pool_performance zero ""
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index ef0b964..8eda8cf 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -604,6 +604,11 @@ void daemon_start(daemon_state s)
+ 	if (!s.foreground)
+ 		kill(getppid(), SIGTERM);
  
- vgremove -ff $vg
- 
-+if test -d "$DM_DEV_DIR/$vg" ; then
-+	should not echo "Udev has left \"$DM_DEV_DIR/$vg\"!"
-+	rm -rf "$DM_DEV_DIR/$vg"
-+fi
++	/*
++	 * Use daemon_main for daemon-specific init and polling, or
++	 * use daemon_init for daemon-specific init and generic lib polling.
++	 */
 +
- # The profile must be also applied if using the profile
- # for the whole VG - any LVs inherit this profile then.
- vgcreate --profile thin-performance $vg "$dev1"
+ 	if (s.daemon_main) {
+ 		if (!s.daemon_main(&s))
+ 			failed = 1;
 
 
