@@ -1,86 +1,59 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Aug 2008 13:34:34 -0000
-Subject: LVM2/test t-covercmd.sh
-Message-ID: <20080820133434.29420.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 24 Jun 2015 09:27:41 +0000 (UTC)
+Subject: master - config: use proper unconfigured default values for use_lvmetad and use_lvmpolld settings
+Message-ID: <20150624092741.7896560FB4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2008-08-20 13:34:33
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=74bf75a2f5f7b918e1fe7531766aa377de23191c
+Commit:        74bf75a2f5f7b918e1fe7531766aa377de23191c
+Parent:        1545ebf938d3eab5df5ab48b8258afc4f62b896b
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jun 23 14:13:12 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Jun 24 11:13:38 2015 +0200
 
-Modified files:
-	test           : t-covercmd.sh 
+config: use proper unconfigured default values for use_lvmetad and use_lvmpolld settings
 
-Log message:
-	fail testcase for failed commands inside the for loop
+Default value for lvmetad and lvmpolld has hooks in configure script,
+the "lvmconfig --type default --unconfigured" should display:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-covercmd.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+   use_lvmetad = @DEFAULT_USE_LVMETAD@
+   use_lvmpolld = @DEFAULT_USE_LVMPOLLD@
 
---- LVM2/test/t-covercmd.sh	2008/08/13 14:28:17	1.2
-+++ LVM2/test/t-covercmd.sh	2008/08/20 13:34:33	1.3
-@@ -54,35 +54,36 @@
-    lvcreate -n "$lv" -l 1%FREE -i5 -I256 "$vg"'
+Note that these settings are not of string type. Recent change (the
+DM_CONFIG_VALUE_FMT_STRING_NO_QUOTES formatting flag) makes it
+possible to recognize that the setting is not of string type and if
+there's unconfigured value defined for it, the enclosing " " is
+automatically removed on output.
+---
+ lib/config/config_settings.h |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 9335a7a..1b67488 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -797,7 +797,7 @@ cfg(global_lvdisplay_shows_full_device_path_CFG, "lvdisplay_shows_full_device_pa
+ 	"was never a valid path in the /dev filesystem.\n"
+ 	"Enable this option to reinstate the previous format.\n")
  
- test_expect_success "test *scan and *display tools" \
--  'pvscan &&
--   vgscan &&
--   lvscan &&
--   for i in b k m g t p e H B K M G T P E ; do pvdisplay --units $i ; done &&
-+  'pvscan              &&
-+   vgscan              &&
-+   lvscan              &&
-+   lvmdiskscan         &&
-    vgdisplay --units k &&
--   lvdisplay --units g'
-+   lvdisplay --units g &&
-+   for i in b k m g t p e H B K M G T P E ; do \
-+     pvdisplay --units "$i" "$d1" || return $? ; done'
+-cfg(global_use_lvmetad_CFG, "use_lvmetad", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMETAD, vsn(2, 2, 93), NULL, 0, NULL,
++cfg(global_use_lvmetad_CFG, "use_lvmetad", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMETAD, vsn(2, 2, 93), "@DEFAULT_USE_LVMETAD@", 0, NULL,
+ 	"Use lvmetad to cache metadata and reduce disk scanning.\n"
+ 	"When enabled (and running), lvmetad provides LVM commands\n"
+ 	"with VG metadata and PV state.  LVM commands then avoid\n"
+@@ -937,7 +937,7 @@ cfg(activation_checks_CFG, "checks", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, D
+ 	"Some of the checks may be expensive, so it's best to use\n"
+ 	"this only when there seems to be a problem.\n")
  
- test_expect_success "test vgexport vgimport tools" \
--  'vgchange -an "$vg" &&
--   vgexport "$vg" &&
--   vgimport "$vg" &&
-+  'vgchange -an "$vg"  &&
-+   vgexport "$vg"      &&
-+   vgimport "$vg"      &&
-    vgchange -ay "$vg"'
- 
- # "-persistent y --major 254 --minor 20"
-+# "-persistent n"
- test_expect_success "test various lvm utils" \
--  'lvmdiskscan &&
--   for i in dumpconfig formats segtypes ; do lvm $i ; done &&
--   for i in pr \"p rw\" an ay -refresh  "-monitor y" "-monitor n" \
--      "-persistent n" -resync \
--      "-addtag MYTAG" "-deltag MYTAG"; \
--      do lvchange -$i "$vg"/"$lv" ; done &&
--   pvck "$d1" &&
--   vgck "$vg" &&
--   lvrename "$vg" "$lv" "$lv-rename" &&
--   vgcfgbackup -f $(pwd)/backup.$$ "$vg"  &&
--   vgchange -an "$vg" &&
--   pvdisplay &&
--   vgcfgrestore  -f $(pwd)/backup.$$ "$vg" &&
--   vgremove -f "$vg" &&
-+  'for i in dumpconfig formats segtypes 
-+     do lvm "$i" || return $? ; done                 &&
-+   for i in pr "p rw" an ay "-monitor y" "-monitor n" \
-+     -resync -refresh "-addtag MYTAG" "-deltag MYETAG"
-+     do lvchange -$i "$vg"/"$lv" || return $? ; done &&
-+   pvck "$d1"                                        &&
-+   vgck "$vg"                                        &&
-+   lvrename "$vg" "$lv" "$lv-rename"                 &&
-+   vgcfgbackup -f "$(pwd)/backup.$$" "$vg"           &&
-+   vgchange -an "$vg"                                &&
-+   vgcfgrestore  -f "$(pwd)/backup.$$" "$vg"         &&
-+   vgremove -f "$vg"                                 &&
-    pvresize --setphysicalvolumesize 10M "$d1"'
- 
- test_expect_failure "test various errors and obsoleted tools" \
+-cfg(global_use_lvmpolld_CFG, "use_lvmpolld", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMPOLLD, vsn(2, 2, 120), NULL, 0, NULL,
++cfg(global_use_lvmpolld_CFG, "use_lvmpolld", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMPOLLD, vsn(2, 2, 120), "@DEFAULT_USE_LVMPOLLD@", 0, NULL,
+ 	"Use lvmpolld to supervise long running LVM commands.\n"
+ 	"When enabled, control of long running LVM commands is transferred\n"
+ 	"from the original LVM command to the lvmpolld daemon.  This allows\n"
 
 
