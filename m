@@ -1,41 +1,62 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 24 Jun 2015 11:21:43 +0000 (UTC)
-Subject: master - make: use lvmconfig ... --withspaces when generating lvm.conf and lvmlocal.conf
-Message-ID: <20150624112143.747CE6098F@fedorahosted.org>
+Date: Wed, 24 Jun 2015 11:28:53 +0000 (UTC)
+Subject: master - commands: --withspaces also for config and lvmconfig cmd aliases
+Message-ID: <20150624112853.3CFE761056@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7559d871fb9b8001a22493f2d18bcc2a9205656d
-Commit:        7559d871fb9b8001a22493f2d18bcc2a9205656d
-Parent:        a4724350e4909dd1b74231f22c41434dbe02c14d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf189a572ae6fa6f7e00047925ebc965e57c6a8b
+Commit:        cf189a572ae6fa6f7e00047925ebc965e57c6a8b
+Parent:        7559d871fb9b8001a22493f2d18bcc2a9205656d
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 24 13:18:50 2015 +0200
+AuthorDate:    Wed Jun 24 13:28:40 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 24 13:20:38 2015 +0200
+CommitterDate: Wed Jun 24 13:28:40 2015 +0200
 
-make: use lvmconfig ... --withspaces when generating lvm.conf and lvmlocal.conf
+commands: --withspaces also for config and lvmconfig cmd aliases
 
 ---
- conf/Makefile.in |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ tools/commands.h |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/conf/Makefile.in b/conf/Makefile.in
-index c98be88..43d5f75 100644
---- a/conf/Makefile.in
-+++ b/conf/Makefile.in
-@@ -27,8 +27,8 @@ include $(top_builddir)/make.tmpl
- .PHONY: install_conf install_localconf install_profiles
+diff --git a/tools/commands.h b/tools/commands.h
+index 9403951..d89b214 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -49,13 +49,14 @@ xx(config,
+    "\t[--validate]\n"
+    "\t[--withsummary]\n"
+    "\t[--withcomments]\n"
++   "\t[--withspaces]\n"
+    "\t[--unconfigured]\n"
+    "\t[--withversions]\n"
+    "\t[ConfigurationNode...]\n",
+    atversion_ARG, configtype_ARG, file_ARG, ignoreadvanced_ARG,
+    ignoreunsupported_ARG, ignorelocal_ARG, list_ARG, mergedconfig_ARG, metadataprofile_ARG,
+    showdeprecated_ARG, showunsupported_ARG, validate_ARG, withsummary_ARG, withcomments_ARG,
+-   unconfigured_ARG, withversions_ARG)
++   withspaces_ARG, unconfigured_ARG, withversions_ARG)
  
- generate:
--	(cat $(top_srcdir)/conf/example.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withcomments --ignorelocal) > example.conf.in
--	(cat $(top_srcdir)/conf/lvmlocal.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withcomments local) > lvmlocal.conf.in
-+	(cat $(top_srcdir)/conf/example.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withcomments --ignorelocal --withspaces) > example.conf.in
-+	(cat $(top_srcdir)/conf/lvmlocal.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withcomments --withspaces local) > lvmlocal.conf.in
+ xx(devtypes,
+    "Display recognised built-in block device types",
+@@ -509,13 +510,14 @@ xx(lvmconfig,
+    "\t[--validate]\n"
+    "\t[--withsummary]\n"
+    "\t[--withcomments]\n"
++   "\t[--withspaces]\n"
+    "\t[--unconfigured]\n"
+    "\t[--withversions]\n"
+    "\t[ConfigurationNode...]\n",
+    atversion_ARG, configtype_ARG, file_ARG, ignoreadvanced_ARG,
+    ignoreunsupported_ARG, ignorelocal_ARG, list_ARG, mergedconfig_ARG, metadataprofile_ARG,
+    showdeprecated_ARG, showunsupported_ARG, validate_ARG, withsummary_ARG, withcomments_ARG,
+-   unconfigured_ARG, withversions_ARG)
++   withspaces_ARG, unconfigured_ARG, withversions_ARG)
  
- install_conf: $(CONFSRC)
- 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
+ xx(lvmdiskscan,
+    "List devices that may be used as physical volumes",
 
 
