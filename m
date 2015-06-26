@@ -1,33 +1,40 @@
-From: Ferenc Wágner <wferi@niif.hu>
-Date: Fri, 26 Jun 2015 09:00:16 +0200
-Subject: [PATCH] The == operator is Bash syntax, use = instead
-Message-ID: <1435302016-7016-1-git-send-email-wferi@niif.hu>
+From: Lidong Zhong <lzhong@suse.com>
+Date: Fri, 26 Jun 2015 17:16:06 +0800
+Subject: [PATCH] dmeventd: fix dso name wrong compare
+Message-ID: <1435310166-2418-1-git-send-email-lzhong@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Commit e587b0677b705786a78f21bac1966621f70b2752 broke the build on
-systems where /bin/sh is Dash, for example.
+If the dso name is not set in client, then it will be replaced by "-".
+So the server should compare the dso name with "-" to decide whether
+it is set.
 ---
- libdaemon/Makefile.in |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ daemons/dmeventd/dmeventd.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/libdaemon/Makefile.in b/libdaemon/Makefile.in
-index c0379a4..7a637c4 100644
---- a/libdaemon/Makefile.in
-+++ b/libdaemon/Makefile.in
-@@ -19,7 +19,7 @@ top_builddir = @top_builddir@
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index fcfa423..d81c4ee 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1190,12 +1190,12 @@ static int _want_registered_device(char *dso_name, char *device_uuid,
+ 				   struct thread_status *thread)
+ {
+ 	/* If DSO names and device paths are equal. */
+-	if (dso_name && device_uuid)
++	if (strcmp(dso_name,"-") && device_uuid)
+ 		return !strcmp(dso_name, thread->dso_data->dso_name) &&
+ 		    !strcmp(device_uuid, thread->device.uuid);
  
- SUBDIRS += client
+ 	/* If DSO names are equal. */
+-	if (dso_name)
++	if (strcmp(dso_name, "-"))
+ 		return !strcmp(dso_name, thread->dso_data->dso_name);
  
--ifeq (yes, $(shell test @BUILD_LVMETAD@ == yes -o @BUILD_LVMPOLLD@ == yes && echo yes))
-+ifeq (yes, $(shell test @BUILD_LVMETAD@ = yes -o @BUILD_LVMPOLLD@ = yes && echo yes))
-   SUBDIRS += server
- server: client
- endif
+ 	/* If device paths are equal. */
 -- 
-1.7.10.4
+1.8.1.4
 
 
