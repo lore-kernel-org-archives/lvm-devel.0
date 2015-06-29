@@ -1,66 +1,93 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 29 Jun 2015 07:45:54 +0000 (UTC)
-Subject: master - cleanup: remove unused tags.c file
-Message-ID: <20150629074554.B01A360300@fedorahosted.org>
+Date: Mon, 29 Jun 2015 07:45:56 +0000 (UTC)
+Subject: master - refactor: rename _out_tags fn to _out_list and use it for string lists in general
+Message-ID: <20150629074556.CD5CD60300@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f143ad3a9340eb3c90fa37cf912ce163ad107e1a
-Commit:        f143ad3a9340eb3c90fa37cf912ce163ad107e1a
-Parent:        e29d4773f4de731d8483a12684d5f4b96092088b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7b45a1fc60859faa4163bde8332ac7c173802640
+Commit:        7b45a1fc60859faa4163bde8332ac7c173802640
+Parent:        f143ad3a9340eb3c90fa37cf912ce163ad107e1a
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed May 6 13:59:49 2015 +0200
+AuthorDate:    Wed May 6 14:06:44 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jun 29 09:43:47 2015 +0200
+CommitterDate: Mon Jun 29 09:43:55 2015 +0200
 
-cleanup: remove unused tags.c file
+refactor: rename _out_tags fn to _out_list and use it for string lists in general
 
 ---
- lib/Makefile.in        |    1 -
- lib/format_text/tags.c |   21 ---------------------
- 2 files changed, 0 insertions(+), 22 deletions(-)
+ lib/format_text/export.c |   23 ++++++++++++-----------
+ 1 files changed, 12 insertions(+), 11 deletions(-)
 
-diff --git a/lib/Makefile.in b/lib/Makefile.in
-index 4a282eb..ffe18f0 100644
---- a/lib/Makefile.in
-+++ b/lib/Makefile.in
-@@ -82,7 +82,6 @@ SOURCES =\
- 	format_text/format-text.c \
- 	format_text/import.c \
- 	format_text/import_vsn1.c \
--	format_text/tags.c \
- 	format_text/text_label.c \
- 	freeseg/freeseg.c \
- 	label/label.c \
-diff --git a/lib/format_text/tags.c b/lib/format_text/tags.c
-deleted file mode 100644
-index e22ca28..0000000
---- a/lib/format_text/tags.c
-+++ /dev/null
-@@ -1,21 +0,0 @@
--/*
-- * Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2005 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-- */
--
--#include "lib.h"
--#include "metadata.h"
--#include "import-export.h"
--#include "str_list.h"
--#include "lvm-string.h"
--
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index a1af06b..11766ac 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -414,18 +414,19 @@ bad:
+ 	return_NULL;
+ }
+ 
+-static int _out_tags(struct formatter *f, struct dm_list *tagsl)
++static int _out_list(struct formatter *f, struct dm_list *list,
++		     const char *list_name)
+ {
+-	char *tag_buffer;
++	char *buffer;
+ 
+-	if (!dm_list_empty(tagsl)) {
+-		if (!(tag_buffer = _alloc_printed_str_list(tagsl)))
++	if (!dm_list_empty(list)) {
++		if (!(buffer = _alloc_printed_str_list(list)))
+ 			return_0;
+-		if (!out_text(f, "tags = %s", tag_buffer)) {
+-			dm_free(tag_buffer);
++		if (!out_text(f, "%s = %s", list_name, buffer)) {
++			dm_free(buffer);
+ 			return_0;
+ 		}
+-		dm_free(tag_buffer);
++		dm_free(buffer);
+ 	}
+ 
+ 	return 1;
+@@ -463,7 +464,7 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
+ 	if (!_print_flag_config(f, status, VG_FLAGS))
+ 		return_0;
+ 
+-	if (!_out_tags(f, &vg->tags))
++	if (!_out_list(f, &vg->tags, "tags"))
+ 		return_0;
+  
+ 	if (vg->system_id && *vg->system_id)
+@@ -550,7 +551,7 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
+ 		if (!_print_flag_config(f, pv->status, PV_FLAGS))
+ 			return_0;
+ 
+-		if (!_out_tags(f, &pv->tags))
++		if (!_out_list(f, &pv->tags, "tags"))
+ 			return_0;
+ 
+ 		outsize(f, pv->size, "dev_size = %" PRIu64, pv->size);
+@@ -586,7 +587,7 @@ static int _print_segment(struct formatter *f, struct volume_group *vg,
+ 	outnl(f);
+ 	outf(f, "type = \"%s\"", seg->segtype->name);
+ 
+-	if (!_out_tags(f, &seg->tags))
++	if (!_out_list(f, &seg->tags, "tags"))
+ 		return_0;
+ 
+ 	if (seg->segtype->ops->text_export &&
+@@ -682,7 +683,7 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
+ 	if (!_print_flag_config(f, status, LV_FLAGS))
+ 		return_0;
+ 
+-	if (!_out_tags(f, &lv->tags))
++	if (!_out_list(f, &lv->tags, "tags"))
+ 		return_0;
+ 
+ 	if (lv->timestamp) {
 
 
