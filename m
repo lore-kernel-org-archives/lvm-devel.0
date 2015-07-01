@@ -1,63 +1,87 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  1 Jul 2015 11:44:51 +0000 (UTC)
-Subject: master - libdm: add helper function to print _node_name
-Message-ID: <20150701114451.77BCA60392@fedorahosted.org>
+Date: Wed,  1 Jul 2015 11:44:53 +0000 (UTC)
+Subject: master - libdm: enhance tracing messages
+Message-ID: <20150701114453.A13E960392@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04ae5007e3952c3d071cfcd03e03db87332b9027
-Commit:        04ae5007e3952c3d071cfcd03e03db87332b9027
-Parent:        a69ded43b0364812c58eb9479c2dae4dd2febc8c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21c0b1134f7812300aea1e24da11ac1d93bac7b5
+Commit:        21c0b1134f7812300aea1e24da11ac1d93bac7b5
+Parent:        04ae5007e3952c3d071cfcd03e03db87332b9027
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 1 09:54:57 2015 +0200
+AuthorDate:    Wed Jul 1 13:29:32 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 1 13:41:40 2015 +0200
+CommitterDate: Wed Jul 1 13:44:28 2015 +0200
 
-libdm: add helper function to print _node_name
+libdm: enhance tracing messages
 
-_node_name() prepares into dm_tree internal buffer device
-name and it (major:minor) for easy usage for debug messages.
-
-To avoid any allocation a small buffer in struct dm_tree is preallocated
-to store this message.
+Use new _node_name() and print name major:minor for thin-pool device.
 ---
- libdm/libdm-deptree.c |   14 ++++++++++++++
- 1 files changed, 14 insertions(+), 0 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |   17 ++++++++++-------
+ 2 files changed, 11 insertions(+), 7 deletions(-)
 
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 91643af..38045d6 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.101 -
+ =================================
++  Thin pool trace messages show a device name and major:minor.
+ 
+ Version 1.02.100 - 30th June 2015
+ =================================
 diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 8428376..cb43afe 100644
+index cb43afe..e344d1a 100644
 --- a/libdm/libdm-deptree.c
 +++ b/libdm/libdm-deptree.c
-@@ -301,6 +301,7 @@ struct dm_tree {
- 	int no_flush;			/* 1 sets noflush (mirrors/multipath) */
- 	int retry_remove;		/* 1 retries remove if not successful */
- 	uint32_t cookie;
-+	char buf[DM_NAME_LEN + 32];	/* print buffer for device_name (major:minor) */
- 	const char **optional_uuid_suffixes;	/* uuid suffixes ignored when matching */
- };
+@@ -1456,7 +1456,9 @@ static int _thin_pool_status_transaction_id(struct dm_tree_node *dnode, uint64_t
+ 		goto out;
+ 	}
  
-@@ -595,6 +596,19 @@ static struct dm_tree_node *_find_dm_tree_node_by_uuid(struct dm_tree *dtree,
- 	return NULL;
- }
+-	log_debug_activation("Thin pool transaction id: %" PRIu64 " status: %s.", *transaction_id, params);
++	log_debug_activation("Found transaction id %" PRIu64 " for thin pool %s "
++			     "with status line: %s.",
++			     *transaction_id, _node_name(dnode), params);
  
-+/* Return node's device_name (major:minor) for debug messages */
-+static const char *_node_name(struct dm_tree_node *dnode)
-+{
-+	if (dm_snprintf(dnode->dtree->buf, sizeof(dnode->dtree->buf),
-+			"%s (%" PRIu32 ":%" PRIu32 ")",
-+			dnode->name, dnode->info.major, dnode->info.minor) < 0) {
-+		stack;
-+		return dnode->name;
-+	}
-+
-+	return dnode->dtree->buf;
-+}
-+
- void dm_tree_node_set_udev_flags(struct dm_tree_node *dnode, uint16_t udev_flags)
+ 	r = 1;
+ out:
+@@ -1570,15 +1572,16 @@ static int _node_send_messages(struct dm_tree_node *dnode,
+ 	if (trans_id == seg->transaction_id) {
+ 		dnode->props.send_messages = 0; /* messages already committed */
+ 		if (have_messages)
+-			log_debug_activation("Thin pool transaction_id matches %" PRIu64
+-					     ", skipping messages.", trans_id);
++			log_debug_activation("Thin pool %s transaction_id matches %"
++					     PRIu64 ", skipping messages.",
++					     _node_name(dnode), trans_id);
+ 		return 1;
+ 	}
  
- {
+ 	/* Error if there are no stacked messages or id mismatches */
+ 	if (trans_id != (seg->transaction_id - have_messages)) {
+-		log_error("Thin pool transaction_id is %" PRIu64 ", while expected %" PRIu64 ".",
+-			  trans_id, seg->transaction_id - have_messages);
++		log_error("Thin pool %s transaction_id is %" PRIu64 ", while expected %" PRIu64 ".",
++			  _node_name(dnode), trans_id, seg->transaction_id - have_messages);
+ 		return 0;
+ 	}
+ 
+@@ -1592,9 +1595,9 @@ static int _node_send_messages(struct dm_tree_node *dnode,
+ 			if (!_thin_pool_status_transaction_id(dnode, &trans_id))
+ 				return_0;
+ 			if (trans_id != tmsg->message.u.m_set_transaction_id.new_id) {
+-				log_error("Thin pool transaction_id is %" PRIu64
++				log_error("Thin pool %s transaction_id is %" PRIu64
+ 					  " and does not match expected  %" PRIu64 ".",
+-					  trans_id,
++					  _node_name(dnode), trans_id,
+ 					  tmsg->message.u.m_set_transaction_id.new_id);
+ 				return 0;
+ 			}
 
 
