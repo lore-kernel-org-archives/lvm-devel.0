@@ -1,39 +1,48 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  2 Jul 2015 09:49:51 +0000 (UTC)
-Subject: master - tests: add test for 454782f (select with synonyms for string field types)
-Message-ID: <20150702094951.2022A60C85@fedorahosted.org>
+Date: Thu,  2 Jul 2015 14:13:12 +0000 (UTC)
+Subject: master - report: adjust shared flags based on expected type for reserved values
+Message-ID: <20150702141312.56B0B60637@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eaa0d927a4490c632b02a223cb426d7e483d9055
-Commit:        eaa0d927a4490c632b02a223cb426d7e483d9055
-Parent:        454782f1a3cf41148711773ae820e646bd2fd95f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a32d5a4afc5bdc4585132765fb02739a8f352e49
+Commit:        a32d5a4afc5bdc4585132765fb02739a8f352e49
+Parent:        eaa0d927a4490c632b02a223cb426d7e483d9055
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jul 2 11:46:58 2015 +0200
+AuthorDate:    Thu Jul 2 16:05:25 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jul 2 11:46:58 2015 +0200
+CommitterDate: Thu Jul 2 16:12:01 2015 +0200
 
-tests: add test for 454782f (select with synonyms for string field types)
+report: adjust shared flags based on expected type for reserved values
 
+Generic numbers and time values share some operators so make sure
+we have the flags correctly adjusted based on expected type if
+we're using reserved values.
 ---
- test/shell/select-report.sh |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ libdm/libdm-report.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/select-report.sh b/test/shell/select-report.sh
-index a79457e..cd3f452 100644
---- a/test/shell/select-report.sh
-+++ b/test/shell/select-report.sh
-@@ -185,6 +185,8 @@ sel lv 'lv_minor=undefined' vol1 vol2 abc orig snap
- sel lv 'lv_minor=undef' vol1 vol2 abc orig snap
- sel lv 'lv_minor=unknown' vol1 vol2 abc orig snap
- sel lv 'lv_minor=254' xyz
-+# also test synonym for string field type
-+sel lv 'seg_monitor=undefined' vol1 vol2 abc abc orig snap xyz
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 3f68a9e..f8bd581 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -2962,6 +2962,14 @@ static const char *_tok_value(struct dm_report *rh,
  
- # if size unit not spefied, the 'm' (MiB) unit is used by default
- sel lv 'lv_size=8' vol1
+ 	s = _get_reserved(rh, expected_type, field_num, implicit, s, begin, end, rvw);
+ 	if (rvw->reserved) {
++		/*
++		 * FLD_CMP_NUMBER shares operators with FLD_CMP_TIME,
++		 * so adjust flags here based on expected type.
++		 */
++		if (expected_type == DM_REPORT_FIELD_TYPE_TIME)
++			*flags &= ~FLD_CMP_NUMBER;
++		else if (expected_type == DM_REPORT_FIELD_TYPE_NUMBER)
++			*flags &= ~FLD_CMP_TIME;
+ 		*flags |= expected_type;
+ 		return s;
+ 	}
 
 
