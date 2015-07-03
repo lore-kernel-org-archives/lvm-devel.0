@@ -1,65 +1,68 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  3 Jul 2015 15:58:57 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20150703155857.2C03C60EA7@fedorahosted.org>
+Date: Fri,  3 Jul 2015 15:59:11 +0000 (UTC)
+Subject: v2_02_124 annotated tag has been created
+Message-ID: <20150703155911.08A6C60E2E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b4e8de3a3156e2385e08bf12fb483eb3cad519e2
-Commit:        b4e8de3a3156e2385e08bf12fb483eb3cad519e2
-Parent:        36ce97c6250a513c73e388261ccb376cd351e11f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c1668e2218721473193e8bef93bdf775cec0e89
+Commit:        6c1668e2218721473193e8bef93bdf775cec0e89
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jul 3 16:58:24 2015 +0100
+AuthorDate:    2015-07-03 15:55 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jul 3 16:58:24 2015 +0100
+CommitterDate: 2015-07-03 15:55 +0000
 
-post-release
+annotated tag: v2_02_124 has been created
+	    at 6c1668e2218721473193e8bef93bdf775cec0e89 (tag)
+       tagging 36ce97c6250a513c73e388261ccb376cd351e11f (commit)
+      replaces v2_02_123
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Release 2.02.124.
 
-diff --git a/VERSION b/VERSION
-index 48674ea..c32ce9f 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.124(2)-git (2015-07-03)
-+2.02.125(2)-git (2015-07-03)
-diff --git a/VERSION_DM b/VERSION_DM
-index 61632f7..53b1ce1 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.101-git (2015-07-03)
-+1.02.102-git (2015-07-03)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index cec1980..f22f0eb 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.125 -
-+================================
-+
- Version 2.02.124 - 3rd July 2015
- ================================
-   Move sending thin pool messages from resume to suspend phase.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 0e3b648..8b4faff 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.102 -
-+================================
-+
- Version 1.02.101 - 3rd July 2015
- ================================
-   Add experimental support to passing messages in suspend tree.
+This release includes experimental lvmlockd code which is still under
+active development.  If you enable and use this feature, upgrading to
+future releases might require manual intervention if we introduce
+incompatibilities.
+
+115 files changed, 17287 insertions(+), 553 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAlWWsGcACgkQIoGRwVZ+LBdPQACeKbwBnsWs+pTIA44G+NT+SRPG
+vsEAnRnqNhe6IldFJA4Q6nae3rXY6uiH
+=DI93
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (3):
+      post-release
+      locking: Add missing error handling.
+      pre-release
+
+David Teigland (2):
+      Add lvmlockd
+      lockd: fix stub functions for LV locking
+
+Peter Rajnoha (8):
+      config: report/time_format appeared in v2.02.123
+      report: fix regression while selecting string fields using synonyms
+      tests: add test for 454782f (select with synonyms for string field types)
+      report: adjust shared flags based on expected type for reserved values
+      cleanup: commit fe70b03 turned lv_time to STR, put it back to TIM
+      report: add infrastructure to recognize fuzzy reserved names and returning dynamic reserved values
+      report: call appropriate handler to evaluate fuzzy reserved names and dynamic reserved values
+      report: select: add handler to recognize fuzzy time specification
+
+Zdenek Kabelac (7):
+      libdm: add helper function to print _node_name
+      libdm: enhance tracing messages
+      display: missed to count with 0
+      thin: check for overprovisioning
+      libdm: support for posting messages in suspend
+      thin: move pool messaging from resume to suspend
+      tests: update for new thin pool messaging
 
 
