@@ -1,131 +1,242 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon,  6 Jul 2015 20:33:37 +0000 (UTC)
-Subject: master - man lvmlockd: minor updates
-Message-ID: <20150706203337.C28B06024D@fedorahosted.org>
+Date: Mon,  6 Jul 2015 20:56:31 +0000 (UTC)
+Subject: master - lvmetactl: program to interact with lvmetad
+Message-ID: <20150706205631.2E582602FC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6a8cc1dcd41f12a48108744b9070405169e7853f
-Commit:        6a8cc1dcd41f12a48108744b9070405169e7853f
-Parent:        c923dee8de0fd01ca1538ecf783fb6c1dfa9d127
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d16332be72ff46d90b5245d25c4aa471913f0e91
+Commit:        d16332be72ff46d90b5245d25c4aa471913f0e91
+Parent:        6a8cc1dcd41f12a48108744b9070405169e7853f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jul 6 15:32:41 2015 -0500
+AuthorDate:    Tue Oct 21 09:42:20 2014 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jul 6 15:32:41 2015 -0500
+CommitterDate: Mon Jul 6 15:54:22 2015 -0500
 
-man lvmlockd: minor updates
+lvmetactl: program to interact with lvmetad
 
+This is not installed; it's only a developer utility
+at this point.
 ---
- man/lvmlockd.8.in |   36 +++++++++++++++++++++++++-----------
- 1 files changed, 25 insertions(+), 11 deletions(-)
+ daemons/lvmetad/Makefile.in |    6 +-
+ daemons/lvmetad/lvmetactl.c |  183 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 188 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvmlockd.8.in b/man/lvmlockd.8.in
-index 3710df6..4d9b3f5 100644
---- a/man/lvmlockd.8.in
-+++ b/man/lvmlockd.8.in
-@@ -72,6 +72,10 @@ For default settings, see lvmlockd -h.
- .I path
-         A file containing the local sanlock host_id.
+diff --git a/daemons/lvmetad/Makefile.in b/daemons/lvmetad/Makefile.in
+index 765128c..090bb76 100644
+--- a/daemons/lvmetad/Makefile.in
++++ b/daemons/lvmetad/Makefile.in
+@@ -18,7 +18,7 @@ top_builddir = @top_builddir@
+ SOURCES = lvmetad-core.c
+ SOURCES2 = testclient.c
  
-+.B  --sanlock-timeout | -o
-+.I seconds
-+        Override the default sanlock I/O timeout.
+-TARGETS = lvmetad
++TARGETS = lvmetad lvmetactl
+ 
+ .PHONY: install_lvmetad
+ 
+@@ -41,6 +41,10 @@ lvmetad: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LVMLIBS) $(LIBS)
+ 
++lvmetactl: lvmetactl.o $(top_builddir)/libdaemon/client/libdaemonclient.a \
++	$(top_builddir)/libdaemon/server/libdaemonserver.a
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ lvmetactl.o $(LVMLIBS)
 +
- .B  --adopt | A 0|1
-         Adopt locks from a previous instance of lvmlockd.
- 
-@@ -242,6 +246,9 @@ lvmlockd.  From a host not using lvmlockd, visible lockd VGs are ignored
- in the same way as foreign VGs, i.e. those with a foreign system ID, see
- .BR lvmsystemid (7).
- 
-+The --shared option displays lockd VGs on a host not using lvmlockd, like
-+the --foreign option does for foreign VGs.
+ # TODO: No idea. No idea how to test either.
+ #ifneq ("$(CFLOW_CMD)", "")
+ #CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES))
+diff --git a/daemons/lvmetad/lvmetactl.c b/daemons/lvmetad/lvmetactl.c
+new file mode 100644
+index 0000000..2c1c9b9
+--- /dev/null
++++ b/daemons/lvmetad/lvmetactl.c
+@@ -0,0 +1,183 @@
++/*
++ * Copyright (C) 2014 Red Hat, Inc.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ */
 +
- 
- .SS vgcreate differences
- 
-@@ -290,12 +297,12 @@ exists, VGs can still be read, but commands that require the global lock
- exclusively will fail.
- 
- When a new lockd VG is created, its lockspace is automatically started on
--the host that creates the VG.  Other hosts will need to run 'vgcreate
-+the host that creates the VG.  Other hosts will need to run 'vgchange
- --lock-start' to start the new VG before they can use it.
- 
--From the 'vgs' reporting command, lockd VGs are indicated by "s" (for
--shared) in the sixth attr field.  The specific lock type and lock args
--for a lockd VG can be displayed with 'vgs -o+locktype,lockargs'.
-+From the 'vgs' command, lockd VGs are indicated by "s" (for shared) in the
-+sixth attr field.  The specific lock type and lock args for a lockd VG can
-+be displayed with 'vgs -o+locktype,lockargs'.
- 
- 
- .SS starting and stopping VGs
-@@ -419,7 +426,7 @@ enabled unless lockd VGs will be used.
- A VG lock is associated with each VG.  The VG lock is acquired in shared
- mode to read the VG and in exclusive mode to change the VG (modify the VG
- metadata).  This lock serializes modifications to a VG with all other LVM
--commands on other hosts.
-+commands accessing the VG from all hosts.
- 
- The command 'vgs' will not only acquire the GL lock to read the list of
- all VG names, but will acquire the VG lock for each VG prior to reading
-@@ -458,7 +465,7 @@ contain disabled global locks that can be enabled later if necessary.
- The VG containing the global lock must be visible to all hosts using
- sanlock VGs.  This can be a reason to create a small sanlock VG, visible
- to all hosts, and dedicated to just holding the global lock.  While not
--required, this strategy can help to avoid extra work in the future if VGs
-+required, this strategy can help to avoid difficulty in the future if VGs
- are moved or removed.
- 
- The vgcreate command typically acquires the global lock, but in the case
-@@ -509,7 +516,7 @@ Changing a lockd VG to a local VG is not yet generally allowed.
- (It can be done partially in certain recovery cases.)
- 
- 
--.SS vgremove of a sanlock VG
-+.SS vgremove and vgreduce with sanlock VGs
- 
- vgremove of a sanlock VG will fail if other hosts have the VG started.
- Run vgchange --lock-stop <vg_name> on all other hosts before vgremove.
-@@ -517,6 +524,9 @@ Run vgchange --lock-stop <vg_name> on all other hosts before vgremove.
- (It may take several seconds before vgremove recognizes that all hosts
- have stopped.)
- 
-+A sanlock VG contains a hidden LV called "lvmlock" that holds the sanlock
-+locks.  vgreduce cannot yet remove the PV holding the lvmlockd LV.
++#include "tool.h"
 +
- 
- .SS shared LVs
- 
-@@ -615,7 +625,7 @@ same lease exclusively at once, so the same LV should never be active on
- two hosts at once when activated exclusively.
- 
- The current method of handling this involves no action from lvmlockd,
--while allowing sanlock to protect the leases itself.  This produces a safe
-+which allows sanlock to protect the leases itself.  This produces a safe
- but potentially inconvenient result.  Doing nothing from lvmlockd leads to
- the host's LV locks not being released, which leads to sanlock using the
- local watchdog to reset the host before another host can acquire any locks
-@@ -738,9 +748,13 @@ stopped the lockspace for the VG.  Stop the VG lockspace on all uses using
- vgchange --lock-stop.
- 
- .IP \[bu] 2
--Long lasting lock contention among hosts may result in a command giving up
--and failing.  The number of lock retries can be adjusted with
--global/lvmlockd_lock_retries.
-+vgreduce of a PV in a sanlock VG may fail if it holds the internal
-+"lvmlock" LV that holds the sanlock locks.
++#include "lvmetad-client.h"
 +
-+.IP \[bu] 2
-+lvmlockd uses lock retries instead of lock queueing, so high lock
-+contention may require increasing global/lvmlockd_lock_retries to
-+avoid transient lock contention failures.
- 
- .IP \[bu] 2
- The reporting options locktype and lockargs can be used to view lockd VG
++daemon_handle h;
++
++static void print_reply(daemon_reply reply)
++{
++	const char *a = daemon_reply_str(reply, "response", NULL);
++	const char *b = daemon_reply_str(reply, "status", NULL);
++	const char *c = daemon_reply_str(reply, "reason", NULL);
++
++	printf("response \"%s\" status \"%s\" reason \"%s\"\n",
++	       a ? a : "", b ? b : "", c ? c : "");
++}
++
++int main(int argc, char **argv)
++{
++	daemon_reply reply;
++	char *cmd;
++	char *uuid;
++	char *name;
++	int val;
++	int ver;
++
++	if (argc < 2) {
++		printf("lvmeta dump\n");
++		printf("lvmeta pv_list\n");
++		printf("lvmeta vg_list\n");
++		printf("lvmeta vg_lookup_name <name>\n");
++		printf("lvmeta vg_lookup_uuid <uuid>\n");
++		printf("lvmeta pv_lookup_uuid <uuid>\n");
++		printf("lvmeta set_global_invalid 0|1\n");
++		printf("lvmeta get_global_invalid\n");
++		printf("lvmeta set_vg_version <uuid> <version>\n");
++		printf("lvmeta vg_lock_type <uuid>\n");
++		return -1;
++	}
++
++	cmd = argv[1];
++
++	h = lvmetad_open(NULL);
++
++	if (!strcmp(cmd, "dump")) {
++		reply = daemon_send_simple(h, "dump",
++					   "token = %s", "skip",
++					   NULL);
++		printf("%s\n", reply.buffer.mem);
++
++	} else if (!strcmp(cmd, "pv_list")) {
++		reply = daemon_send_simple(h, "pv_list",
++					   "token = %s", "skip",
++					   NULL);
++		printf("%s\n", reply.buffer.mem);
++
++	} else if (!strcmp(cmd, "vg_list")) {
++		reply = daemon_send_simple(h, "vg_list",
++					   "token = %s", "skip",
++					   NULL);
++		printf("%s\n", reply.buffer.mem);
++
++	} else if (!strcmp(cmd, "set_global_invalid")) {
++		if (argc < 3) {
++			printf("set_global_invalid 0|1\n");
++			return -1;
++		}
++		val = atoi(argv[2]);
++
++		reply = daemon_send_simple(h, "set_global_info",
++					   "global_invalid = %d", val,
++					   "token = %s", "skip",
++					   NULL);
++		print_reply(reply);
++
++	} else if (!strcmp(cmd, "get_global_invalid")) {
++		reply = daemon_send_simple(h, "get_global_info",
++					   "token = %s", "skip",
++					   NULL);
++		printf("%s\n", reply.buffer.mem);
++
++	} else if (!strcmp(cmd, "set_vg_version")) {
++		if (argc < 4) {
++			printf("set_vg_version <uuid> <ver>\n");
++			return -1;
++		}
++		uuid = argv[2];
++		ver = atoi(argv[3]);
++
++		reply = daemon_send_simple(h, "set_vg_info",
++					   "uuid = %s", uuid,
++					   "version = %d", ver,
++					   "token = %s", "skip",
++					   NULL);
++		print_reply(reply);
++
++	} else if (!strcmp(cmd, "vg_lookup_name")) {
++		if (argc < 3) {
++			printf("vg_lookup_name <name>\n");
++			return -1;
++		}
++		name = argv[2];
++
++		reply = daemon_send_simple(h, "vg_lookup",
++					   "name = %s", name,
++					   "token = %s", "skip",
++					   NULL);
++		printf("%s\n", reply.buffer.mem);
++
++	} else if (!strcmp(cmd, "vg_lookup_uuid")) {
++		if (argc < 3) {
++			printf("vg_lookup_uuid <uuid>\n");
++			return -1;
++		}
++		uuid = argv[2];
++
++		reply = daemon_send_simple(h, "vg_lookup",
++					   "uuid = %s", uuid,
++					   "token = %s", "skip",
++					   NULL);
++		printf("%s\n", reply.buffer.mem);
++
++	} else if (!strcmp(cmd, "vg_lock_type")) {
++		struct dm_config_node *metadata;
++		const char *lock_type;
++
++		if (argc < 3) {
++			printf("vg_lock_type <uuid>\n");
++			return -1;
++		}
++		uuid = argv[2];
++
++		reply = daemon_send_simple(h, "vg_lookup",
++					   "uuid = %s", uuid,
++					   "token = %s", "skip",
++					   NULL);
++		/* printf("%s\n", reply.buffer.mem); */
++
++		metadata = dm_config_find_node(reply.cft->root, "metadata");
++		if (!metadata) {
++			printf("no metadata\n");
++			goto out;
++		}
++
++		lock_type = dm_config_find_str(metadata, "metadata/lock_type", NULL);
++		if (!lock_type) {
++			printf("no lock_type\n");
++			goto out;
++		}
++		printf("lock_type %s\n", lock_type);
++
++	} else if (!strcmp(cmd, "pv_lookup_uuid")) {
++		if (argc < 3) {
++			printf("pv_lookup_uuid <uuid>\n");
++			return -1;
++		}
++		uuid = argv[2];
++
++		reply = daemon_send_simple(h, "pv_lookup",
++					   "uuid = %s", uuid,
++					   "token = %s", "skip",
++					   NULL);
++		printf("%s\n", reply.buffer.mem);
++
++	} else {
++		printf("unknown command\n");
++		goto out_close;
++	}
++out:
++	daemon_reply_destroy(reply);
++out_close:
++	daemon_close(h);
++	return 0;
++}
 
 
