@@ -1,750 +1,131 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon,  6 Jul 2015 17:21:07 +0000 (UTC)
-Subject: master - configure: Separate sanlock and dlm lock config.
-Message-ID: <20150706172107.1148760D72@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon,  6 Jul 2015 20:33:37 +0000 (UTC)
+Subject: master - man lvmlockd: minor updates
+Message-ID: <20150706203337.C28B06024D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c923dee8de0fd01ca1538ecf783fb6c1dfa9d127
-Commit:        c923dee8de0fd01ca1538ecf783fb6c1dfa9d127
-Parent:        633aea92fbcb228417ac2b4a1ac3d808460d8df5
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Jul 6 18:20:20 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Jul 6 18:20:20 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6a8cc1dcd41f12a48108744b9070405169e7853f
+Commit:        6a8cc1dcd41f12a48108744b9070405169e7853f
+Parent:        c923dee8de0fd01ca1538ecf783fb6c1dfa9d127
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Jul 6 15:32:41 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Jul 6 15:32:41 2015 -0500
 
-configure: Separate sanlock and dlm lock config.
+man lvmlockd: minor updates
 
 ---
- WHATS_NEW               |    1 +
- configure               |  340 +++++++++++++++++++++++++++--------------------
- configure.in            |  189 +++++++++++++--------------
- lib/misc/configure.h.in |   11 +-
- 4 files changed, 292 insertions(+), 249 deletions(-)
+ man/lvmlockd.8.in |   36 +++++++++++++++++++++++++-----------
+ 1 files changed, 25 insertions(+), 11 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f22f0eb..8ba1e43 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.125 -
- ================================
-+  Replace --enable-lvmlockd by --enable-lockd-sanlock and --enable-lockd-dlm.
+diff --git a/man/lvmlockd.8.in b/man/lvmlockd.8.in
+index 3710df6..4d9b3f5 100644
+--- a/man/lvmlockd.8.in
++++ b/man/lvmlockd.8.in
+@@ -72,6 +72,10 @@ For default settings, see lvmlockd -h.
+ .I path
+         A file containing the local sanlock host_id.
  
- Version 2.02.124 - 3rd July 2015
- ================================
-diff --git a/configure b/configure
-index 3d650a1..4c4c843 100755
---- a/configure
-+++ b/configure
-@@ -724,6 +724,8 @@ CLDWHOLEARCHIVE
- CLDNOWHOLEARCHIVE
- CLDFLAGS
- CACHE
-+BUILD_LOCKDDLM
-+BUILD_LOCKDSANLOCK
- BUILD_LVMLOCKD
- BUILD_LVMPOLLD
- BUILD_LVMETAD
-@@ -918,14 +920,15 @@ enable_testing
- enable_valgrind_pool
- enable_devmapper
- enable_lvmetad
-+enable_lvmpolld
-+enable_lockd_sanlock
-+enable_lockd_dlm
-+enable_use_lvmlockd
-+with_lvmlockd_pidfile
- enable_use_lvmetad
- with_lvmetad_pidfile
--enable_lvmpolld
- enable_use_lvmpolld
- with_lvmpolld_pidfile
--enable_lvmlockd
--enable_use_lvmlockd
--with_lvmlockd_pidfile
- enable_blkid_wiping
- enable_udev_systemd_background_jobs
- enable_udev_sync
-@@ -1643,11 +1646,12 @@ Optional Features:
-   --enable-valgrind-pool  enable valgrind awareness of pools
-   --disable-devmapper     disable LVM2 device-mapper interaction
-   --enable-lvmetad        enable the LVM Metadata Daemon
--  --disable-use-lvmetad   disable usage of LVM Metadata Daemon
-   --enable-lvmpolld       enable the LVM Polling Daemon
--  --disable-use-lvmpolld  disable usage of LVM Poll Daemon
--  --enable-lvmlockd       enable the LVM lock daemon
-+  --enable-lockd-sanlock  enable the LVM lock daemon using sanlock
-+  --enable-lockd-dlm      enable the LVM lock daemon using dlm
-   --disable-use-lvmlockd  disable usage of LVM lock daemon
-+  --disable-use-lvmetad   disable usage of LVM Metadata Daemon
-+  --disable-use-lvmpolld  disable usage of LVM Poll Daemon
-   --disable-blkid_wiping  disable libblkid detection of signatures when wiping
-                           and use native code instead
-   --disable-udev-systemd-background-jobs
-@@ -1737,12 +1741,12 @@ Optional Packages:
-   --with-cmirrord-pidfile=PATH
-                           cmirrord pidfile [PID_DIR/cmirrord.pid]
-   --with-optimisation=OPT C optimisation flag [OPT=-O2]
-+  --with-lvmlockd-pidfile=PATH
-+                          lvmlockd pidfile [PID_DIR/lvmlockd.pid]
-   --with-lvmetad-pidfile=PATH
-                           lvmetad pidfile [PID_DIR/lvmetad.pid]
-   --with-lvmpolld-pidfile=PATH
-                           lvmpolld pidfile [PID_DIR/lvmpolld.pid]
--  --with-lvmlockd-pidfile=PATH
--                          lvmlockd pidfile [PID_DIR/lvmlockd.pid]
-   --with-localedir=DIR    locale-dependent data [DATAROOTDIR/locale]
-   --with-confdir=DIR      configuration files in DIR [/etc]
-   --with-staticdir=DIR    static binaries in DIR [EPREFIX/sbin]
-@@ -3069,6 +3073,8 @@ case "$host_os" in
- 		LVMETAD=no
- 		LVMPOLLD=no
- 		LVMLOCKD=no
-+		LOCKDSANLOCK=no
-+		LOCKDDLM=no
- 		ODIRECT=yes
- 		DM_IOCTLS=yes
- 		SELINUX=yes
-@@ -10897,47 +10903,6 @@ $as_echo "$LVMETAD" >&6; }
++.B  --sanlock-timeout | -o
++.I seconds
++        Override the default sanlock I/O timeout.
++
+ .B  --adopt | A 0|1
+         Adopt locks from a previous instance of lvmlockd.
  
- BUILD_LVMETAD=$LVMETAD
+@@ -242,6 +246,9 @@ lvmlockd.  From a host not using lvmlockd, visible lockd VGs are ignored
+ in the same way as foreign VGs, i.e. those with a foreign system ID, see
+ .BR lvmsystemid (7).
  
--if test "$BUILD_LVMETAD" = yes; then
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking defaults for use_lvmetad" >&5
--$as_echo_n "checking defaults for use_lvmetad... " >&6; }
--	# Check whether --enable-use_lvmetad was given.
--if test "${enable_use_lvmetad+set}" = set; then :
--  enableval=$enable_use_lvmetad; case ${enableval} in
--		       yes) DEFAULT_USE_LVMETAD=1 ;;
--		       *) DEFAULT_USE_LVMETAD=0 ;;
--		       esac
--else
--  DEFAULT_USE_LVMETAD=1
--fi
--
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $DEFAULT_USE_LVMETAD" >&5
--$as_echo "$DEFAULT_USE_LVMETAD" >&6; }
--
--$as_echo "#define LVMETAD_SUPPORT 1" >>confdefs.h
--
--
--
--# Check whether --with-lvmetad-pidfile was given.
--if test "${with_lvmetad_pidfile+set}" = set; then :
--  withval=$with_lvmetad_pidfile; LVMETAD_PIDFILE=$withval
--else
--  LVMETAD_PIDFILE="$DEFAULT_PID_DIR/lvmetad.pid"
--fi
--
--
--cat >>confdefs.h <<_ACEOF
--#define LVMETAD_PIDFILE "$LVMETAD_PIDFILE"
--_ACEOF
--
--else
--	DEFAULT_USE_LVMETAD=0
--fi
--
--cat >>confdefs.h <<_ACEOF
--#define DEFAULT_USE_LVMETAD $DEFAULT_USE_LVMETAD
--_ACEOF
--
--
- ################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build lvmpolld" >&5
- $as_echo_n "checking whether to build lvmpolld... " >&6; }
-@@ -10951,103 +10916,27 @@ $as_echo "$LVMPOLLD" >&6; }
++The --shared option displays lockd VGs on a host not using lvmlockd, like
++the --foreign option does for foreign VGs.
++
  
- BUILD_LVMPOLLD=$LVMPOLLD
+ .SS vgcreate differences
  
--if test "$BUILD_LVMPOLLD" = yes; then
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking defaults for use_lvmpolld" >&5
--$as_echo_n "checking defaults for use_lvmpolld... " >&6; }
--	# Check whether --enable-use_lvmpolld was given.
--if test "${enable_use_lvmpolld+set}" = set; then :
--  enableval=$enable_use_lvmpolld; case ${enableval} in
--		       yes) DEFAULT_USE_LVMPOLLD=1 ;;
--		       *) DEFAULT_USE_LVMPOLLD=0 ;;
--		       esac
--else
--  DEFAULT_USE_LVMPOLLD=1
--fi
--
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $DEFAULT_USE_LVMPOLLD" >&5
--$as_echo "$DEFAULT_USE_LVMPOLLD" >&6; }
--
--$as_echo "#define LVMPOLLD_SUPPORT 1" >>confdefs.h
--
--
--
--# Check whether --with-lvmpolld-pidfile was given.
--if test "${with_lvmpolld_pidfile+set}" = set; then :
--  withval=$with_lvmpolld_pidfile; LVMPOLLD_PIDFILE=$withval
--else
--  LVMPOLLD_PIDFILE="$DEFAULT_PID_DIR/lvmpolld.pid"
--fi
--
--
--cat >>confdefs.h <<_ACEOF
--#define LVMPOLLD_PIDFILE "$LVMPOLLD_PIDFILE"
--_ACEOF
--
--else
--	DEFAULT_USE_LVMPOLLD=0
--fi
--
--cat >>confdefs.h <<_ACEOF
--#define DEFAULT_USE_LVMPOLLD $DEFAULT_USE_LVMPOLLD
--_ACEOF
--
--
- ################################################################################
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build lvmlockd" >&5
--$as_echo_n "checking whether to build lvmlockd... " >&6; }
--# Check whether --enable-lvmlockd was given.
--if test "${enable_lvmlockd+set}" = set; then :
--  enableval=$enable_lvmlockd; LVMLOCKD=$enableval
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build lockdsanlock" >&5
-+$as_echo_n "checking whether to build lockdsanlock... " >&6; }
-+# Check whether --enable-lockd-sanlock was given.
-+if test "${enable_lockd_sanlock+set}" = set; then :
-+  enableval=$enable_lockd_sanlock; LOCKDSANLOCK=$enableval
- fi
+@@ -290,12 +297,12 @@ exists, VGs can still be read, but commands that require the global lock
+ exclusively will fail.
  
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $LVMLOCKD" >&5
--$as_echo "$LVMLOCKD" >&6; }
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $LOCKDSANLOCK" >&5
-+$as_echo "$LOCKDSANLOCK" >&6; }
+ When a new lockd VG is created, its lockspace is automatically started on
+-the host that creates the VG.  Other hosts will need to run 'vgcreate
++the host that creates the VG.  Other hosts will need to run 'vgchange
+ --lock-start' to start the new VG before they can use it.
  
--BUILD_LVMLOCKD=$LVMLOCKD
-+BUILD_LOCKDSANLOCK=$LOCKDSANLOCK
- 
--if test "$BUILD_LVMLOCKD" = yes; then
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking defaults for use_lvmlockd" >&5
--$as_echo_n "checking defaults for use_lvmlockd... " >&6; }
--	# Check whether --enable-use_lvmlockd was given.
--if test "${enable_use_lvmlockd+set}" = set; then :
--  enableval=$enable_use_lvmlockd; case ${enableval} in
--		       yes) DEFAULT_USE_LVMLOCKD=1 ;;
--		       *) DEFAULT_USE_LVMLOCKD=0 ;;
--		       esac
--else
--  DEFAULT_USE_LVMLOCKD=1
--fi
-+if test "$BUILD_LOCKDSANLOCK" = yes; then
- 
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $DEFAULT_USE_LVMLOCKD" >&5
--$as_echo "$DEFAULT_USE_LVMLOCKD" >&6; }
-+$as_echo "#define LOCKDSANLOCK_SUPPORT 1" >>confdefs.h
- 
--$as_echo "#define LVMLOCKD_SUPPORT 1" >>confdefs.h
--
--
--
--# Check whether --with-lvmlockd-pidfile was given.
--if test "${with_lvmlockd_pidfile+set}" = set; then :
--  withval=$with_lvmlockd_pidfile; LVMLOCKD_PIDFILE=$withval
--else
--  LVMLOCKD_PIDFILE="$DEFAULT_PID_DIR/lvmlockd.pid"
- fi
- 
--
--cat >>confdefs.h <<_ACEOF
--#define LVMLOCKD_PIDFILE "$LVMLOCKD_PIDFILE"
--_ACEOF
--
--else
--	DEFAULT_USE_LVMLOCKD=0
--fi
--
--cat >>confdefs.h <<_ACEOF
--#define DEFAULT_USE_LVMLOCKD $DEFAULT_USE_LVMLOCKD
--_ACEOF
--
--
- ################################################################################
--if test "$BUILD_LVMLOCKD" = yes; then
-+if test "$BUILD_LOCKDSANLOCK" = yes; then
- 
- pkg_failed=no
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for LOCKD_SANLOCK" >&5
-@@ -11119,6 +11008,30 @@ else
- $as_echo "yes" >&6; }
- 	HAVE_LOCKD_SANLOCK=yes
- fi
-+	BUILD_LVMLOCKD=yes
-+fi
-+
-+################################################################################
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build lockddlm" >&5
-+$as_echo_n "checking whether to build lockddlm... " >&6; }
-+# Check whether --enable-lockd-dlm was given.
-+if test "${enable_lockd_dlm+set}" = set; then :
-+  enableval=$enable_lockd_dlm; LOCKDDLM=$enableval
-+fi
-+
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $LOCKDDLM" >&5
-+$as_echo "$LOCKDDLM" >&6; }
-+
-+BUILD_LOCKDDLM=$LOCKDDLM
-+
-+if test "$BUILD_LOCKDDLM" = yes; then
-+
-+$as_echo "#define LOCKDDLM_SUPPORT 1" >>confdefs.h
-+
-+fi
-+
-+################################################################################
-+if test "$BUILD_LOCKDDLM" = yes; then
- 
- pkg_failed=no
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for LOCKD_DLM" >&5
-@@ -11190,8 +11103,149 @@ else
- $as_echo "yes" >&6; }
- 	HAVE_LOCKD_DLM=yes
- fi
-+	BUILD_LVMLOCKD=yes
-+fi
-+
-+################################################################################
-+
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build lvmlockd" >&5
-+$as_echo_n "checking whether to build lvmlockd... " >&6; }
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $BUILD_LVMLOCKD" >&5
-+$as_echo "$BUILD_LVMLOCKD" >&6; }
-+
-+if test "$BUILD_LVMLOCKD" = yes; then
-+	if test -n "$BUILD_LVMPOLLD"; then :
-+  BUILD_LVMPOLLD=yes; { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Enabling lvmpolld - required by lvmlockd." >&5
-+$as_echo "$as_me: WARNING: Enabling lvmpolld - required by lvmlockd." >&2;}
-+fi
-+	if test -n "$BUILD_LVMETAD"; then :
-+  BUILD_LVMETAD=yes; { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Enabling lvmetad - required by lvmlockd." >&5
-+$as_echo "$as_me: WARNING: Enabling lvmetad - required by lvmlockd." >&2;}
-+fi
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking defaults for use_lvmlockd" >&5
-+$as_echo_n "checking defaults for use_lvmlockd... " >&6; }
-+	# Check whether --enable-use_lvmlockd was given.
-+if test "${enable_use_lvmlockd+set}" = set; then :
-+  enableval=$enable_use_lvmlockd; case ${enableval} in
-+		       yes) DEFAULT_USE_LVMLOCKD=1 ;;
-+		       *) DEFAULT_USE_LVMLOCKD=0 ;;
-+		       esac
-+else
-+  DEFAULT_USE_LVMLOCKD=1
-+fi
-+
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $DEFAULT_USE_LVMLOCKD" >&5
-+$as_echo "$DEFAULT_USE_LVMLOCKD" >&6; }
-+
-+$as_echo "#define LVMLOCKD_SUPPORT 1" >>confdefs.h
-+
-+
-+
-+# Check whether --with-lvmlockd-pidfile was given.
-+if test "${with_lvmlockd_pidfile+set}" = set; then :
-+  withval=$with_lvmlockd_pidfile; LVMLOCKD_PIDFILE=$withval
-+else
-+  LVMLOCKD_PIDFILE="$DEFAULT_PID_DIR/lvmlockd.pid"
-+fi
-+
-+
-+cat >>confdefs.h <<_ACEOF
-+#define LVMLOCKD_PIDFILE "$LVMLOCKD_PIDFILE"
-+_ACEOF
-+
-+else
-+	DEFAULT_USE_LVMLOCKD=0
- fi
- 
-+cat >>confdefs.h <<_ACEOF
-+#define DEFAULT_USE_LVMLOCKD $DEFAULT_USE_LVMLOCKD
-+_ACEOF
-+
-+
-+################################################################################
-+if test "$BUILD_LVMETAD" = yes; then
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking defaults for use_lvmetad" >&5
-+$as_echo_n "checking defaults for use_lvmetad... " >&6; }
-+	# Check whether --enable-use_lvmetad was given.
-+if test "${enable_use_lvmetad+set}" = set; then :
-+  enableval=$enable_use_lvmetad; case ${enableval} in
-+		       yes) DEFAULT_USE_LVMETAD=1 ;;
-+		       *) DEFAULT_USE_LVMETAD=0 ;;
-+		       esac
-+else
-+  DEFAULT_USE_LVMETAD=1
-+fi
-+
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $DEFAULT_USE_LVMETAD" >&5
-+$as_echo "$DEFAULT_USE_LVMETAD" >&6; }
-+
-+$as_echo "#define LVMETAD_SUPPORT 1" >>confdefs.h
-+
-+
-+
-+# Check whether --with-lvmetad-pidfile was given.
-+if test "${with_lvmetad_pidfile+set}" = set; then :
-+  withval=$with_lvmetad_pidfile; LVMETAD_PIDFILE=$withval
-+else
-+  LVMETAD_PIDFILE="$DEFAULT_PID_DIR/lvmetad.pid"
-+fi
-+
-+
-+cat >>confdefs.h <<_ACEOF
-+#define LVMETAD_PIDFILE "$LVMETAD_PIDFILE"
-+_ACEOF
-+
-+else
-+	DEFAULT_USE_LVMETAD=0
-+fi
-+
-+cat >>confdefs.h <<_ACEOF
-+#define DEFAULT_USE_LVMETAD $DEFAULT_USE_LVMETAD
-+_ACEOF
-+
-+
-+################################################################################
-+if test "$BUILD_LVMPOLLD" = yes; then
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking defaults for use_lvmpolld" >&5
-+$as_echo_n "checking defaults for use_lvmpolld... " >&6; }
-+	# Check whether --enable-use_lvmpolld was given.
-+if test "${enable_use_lvmpolld+set}" = set; then :
-+  enableval=$enable_use_lvmpolld; case ${enableval} in
-+		       yes) DEFAULT_USE_LVMPOLLD=1 ;;
-+		       *) DEFAULT_USE_LVMPOLLD=0 ;;
-+		       esac
-+else
-+  DEFAULT_USE_LVMPOLLD=1
-+fi
-+
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $DEFAULT_USE_LVMPOLLD" >&5
-+$as_echo "$DEFAULT_USE_LVMPOLLD" >&6; }
-+
-+$as_echo "#define LVMPOLLD_SUPPORT 1" >>confdefs.h
-+
-+
-+
-+# Check whether --with-lvmpolld-pidfile was given.
-+if test "${with_lvmpolld_pidfile+set}" = set; then :
-+  withval=$with_lvmpolld_pidfile; LVMPOLLD_PIDFILE=$withval
-+else
-+  LVMPOLLD_PIDFILE="$DEFAULT_PID_DIR/lvmpolld.pid"
-+fi
-+
-+
-+cat >>confdefs.h <<_ACEOF
-+#define LVMPOLLD_PIDFILE "$LVMPOLLD_PIDFILE"
-+_ACEOF
-+
-+else
-+	DEFAULT_USE_LVMPOLLD=0
-+fi
-+
-+cat >>confdefs.h <<_ACEOF
-+#define DEFAULT_USE_LVMPOLLD $DEFAULT_USE_LVMPOLLD
-+_ACEOF
-+
-+
- ################################################################################
- 
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable libblkid detection of signatures when wiping" >&5
-@@ -13517,6 +13571,8 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]' '{print $2}'`
+-From the 'vgs' reporting command, lockd VGs are indicated by "s" (for
+-shared) in the sixth attr field.  The specific lock type and lock args
+-for a lockd VG can be displayed with 'vgs -o+locktype,lockargs'.
++From the 'vgs' command, lockd VGs are indicated by "s" (for shared) in the
++sixth attr field.  The specific lock type and lock args for a lockd VG can
++be displayed with 'vgs -o+locktype,lockargs'.
  
  
+ .SS starting and stopping VGs
+@@ -419,7 +426,7 @@ enabled unless lockd VGs will be used.
+ A VG lock is associated with each VG.  The VG lock is acquired in shared
+ mode to read the VG and in exclusive mode to change the VG (modify the VG
+ metadata).  This lock serializes modifications to a VG with all other LVM
+-commands on other hosts.
++commands accessing the VG from all hosts.
  
+ The command 'vgs' will not only acquire the GL lock to read the list of
+ all VG names, but will acquire the VG lock for each VG prior to reading
+@@ -458,7 +465,7 @@ contain disabled global locks that can be enabled later if necessary.
+ The VG containing the global lock must be visible to all hosts using
+ sanlock VGs.  This can be a reason to create a small sanlock VG, visible
+ to all hosts, and dedicated to just holding the global lock.  While not
+-required, this strategy can help to avoid extra work in the future if VGs
++required, this strategy can help to avoid difficulty in the future if VGs
+ are moved or removed.
+ 
+ The vgcreate command typically acquires the global lock, but in the case
+@@ -509,7 +516,7 @@ Changing a lockd VG to a local VG is not yet generally allowed.
+ (It can be done partially in certain recovery cases.)
+ 
+ 
+-.SS vgremove of a sanlock VG
++.SS vgremove and vgreduce with sanlock VGs
+ 
+ vgremove of a sanlock VG will fail if other hosts have the VG started.
+ Run vgchange --lock-stop <vg_name> on all other hosts before vgremove.
+@@ -517,6 +524,9 @@ Run vgchange --lock-stop <vg_name> on all other hosts before vgremove.
+ (It may take several seconds before vgremove recognizes that all hosts
+ have stopped.)
+ 
++A sanlock VG contains a hidden LV called "lvmlock" that holds the sanlock
++locks.  vgreduce cannot yet remove the PV holding the lvmlockd LV.
 +
+ 
+ .SS shared LVs
+ 
+@@ -615,7 +625,7 @@ same lease exclusively at once, so the same LV should never be active on
+ two hosts at once when activated exclusively.
+ 
+ The current method of handling this involves no action from lvmlockd,
+-while allowing sanlock to protect the leases itself.  This produces a safe
++which allows sanlock to protect the leases itself.  This produces a safe
+ but potentially inconvenient result.  Doing nothing from lvmlockd leads to
+ the host's LV locks not being released, which leads to sanlock using the
+ local watchdog to reset the host before another host can acquire any locks
+@@ -738,9 +748,13 @@ stopped the lockspace for the VG.  Stop the VG lockspace on all uses using
+ vgchange --lock-stop.
+ 
+ .IP \[bu] 2
+-Long lasting lock contention among hosts may result in a command giving up
+-and failing.  The number of lock retries can be adjusted with
+-global/lvmlockd_lock_retries.
++vgreduce of a PV in a sanlock VG may fail if it holds the internal
++"lvmlock" LV that holds the sanlock locks.
 +
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile lib/cache_segtype/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdev
- mapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan
- _systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
++.IP \[bu] 2
++lvmlockd uses lock retries instead of lock queueing, so high lock
++contention may require increasing global/lvmlockd_lock_retries to
++avoid transient lock contention failures.
  
-@@ -14902,13 +14958,3 @@ if test "$ODIRECT" != yes; then :
-   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&5
- $as_echo "$as_me: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&2;}
- fi
--
--if test "$BUILD_LVMLOCKD" == yes && test "$BUILD_LVMPOLLD" == no; then :
--  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: lvmlockd requires lvmpolld" >&5
--$as_echo "$as_me: WARNING: lvmlockd requires lvmpolld" >&2;}
--fi
--
--if test "$BUILD_LVMLOCKD" == yes && test "$BUILD_LVMETAD" == no; then :
--  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: lvmlockd requires lvmetad" >&5
--$as_echo "$as_me: WARNING: lvmlockd requires lvmetad" >&2;}
--fi
-diff --git a/configure.in b/configure.in
-index 9e713aa..7839480 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1079,31 +1079,6 @@ AC_MSG_RESULT($LVMETAD)
- 
- BUILD_LVMETAD=$LVMETAD
- 
--if test "$BUILD_LVMETAD" = yes; then
--	AC_MSG_CHECKING([defaults for use_lvmetad])
--	AC_ARG_ENABLE(use_lvmetad,
--		      AC_HELP_STRING([--disable-use-lvmetad],
--				     [disable usage of LVM Metadata Daemon]),
--		      [case ${enableval} in
--		       yes) DEFAULT_USE_LVMETAD=1 ;;
--		       *) DEFAULT_USE_LVMETAD=0 ;;
--		       esac], DEFAULT_USE_LVMETAD=1)
--	AC_MSG_RESULT($DEFAULT_USE_LVMETAD)
--	AC_DEFINE([LVMETAD_SUPPORT], 1, [Define to 1 to include code that uses lvmetad.])
--
--	AC_ARG_WITH(lvmetad-pidfile,
--		    AC_HELP_STRING([--with-lvmetad-pidfile=PATH],
--				   [lvmetad pidfile [PID_DIR/lvmetad.pid]]),
--		    LVMETAD_PIDFILE=$withval,
--		    LVMETAD_PIDFILE="$DEFAULT_PID_DIR/lvmetad.pid")
--	AC_DEFINE_UNQUOTED(LVMETAD_PIDFILE, ["$LVMETAD_PIDFILE"],
--			   [Path to lvmetad pidfile.])
--else
--	DEFAULT_USE_LVMETAD=0
--fi
--AC_DEFINE_UNQUOTED(DEFAULT_USE_LVMETAD, [$DEFAULT_USE_LVMETAD],
--		   [Use lvmetad by default.])
--
- ################################################################################
- dnl -- Build lvmpolld
- AC_MSG_CHECKING(whether to build lvmpolld)
-@@ -1115,43 +1090,59 @@ AC_MSG_RESULT($LVMPOLLD)
- 
- BUILD_LVMPOLLD=$LVMPOLLD
- 
--if test "$BUILD_LVMPOLLD" = yes; then
--	AC_MSG_CHECKING([defaults for use_lvmpolld])
--	AC_ARG_ENABLE(use_lvmpolld,
--		      AC_HELP_STRING([--disable-use-lvmpolld],
--				     [disable usage of LVM Poll Daemon]),
--		      [case ${enableval} in
--		       yes) DEFAULT_USE_LVMPOLLD=1 ;;
--		       *) DEFAULT_USE_LVMPOLLD=0 ;;
--		       esac], DEFAULT_USE_LVMPOLLD=1)
--	AC_MSG_RESULT($DEFAULT_USE_LVMPOLLD)
--	AC_DEFINE([LVMPOLLD_SUPPORT], 1, [Define to 1 to include code that uses lvmpolld.])
-+################################################################################
-+dnl -- Build lockdsanlock
-+AC_MSG_CHECKING(whether to build lockdsanlock)
-+AC_ARG_ENABLE(lockd-sanlock,
-+	      AC_HELP_STRING([--enable-lockd-sanlock],
-+			     [enable the LVM lock daemon using sanlock]),
-+	      LOCKDSANLOCK=$enableval)
-+AC_MSG_RESULT($LOCKDSANLOCK)
- 
--	AC_ARG_WITH(lvmpolld-pidfile,
--		    AC_HELP_STRING([--with-lvmpolld-pidfile=PATH],
--				   [lvmpolld pidfile [PID_DIR/lvmpolld.pid]]),
--		    LVMPOLLD_PIDFILE=$withval,
--		    LVMPOLLD_PIDFILE="$DEFAULT_PID_DIR/lvmpolld.pid")
--	AC_DEFINE_UNQUOTED(LVMPOLLD_PIDFILE, ["$LVMPOLLD_PIDFILE"],
--			   [Path to lvmpolld pidfile.])
--else
--	DEFAULT_USE_LVMPOLLD=0
-+BUILD_LOCKDSANLOCK=$LOCKDSANLOCK
-+
-+if test "$BUILD_LOCKDSANLOCK" = yes; then
-+	AC_DEFINE([LOCKDSANLOCK_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd sanlock option.])
-+fi
-+
-+################################################################################
-+dnl -- Look for sanlock libraries
-+if test "$BUILD_LOCKDSANLOCK" = yes; then
-+	PKG_CHECK_MODULES(LOCKD_SANLOCK, libsanlock_client, [HAVE_LOCKD_SANLOCK=yes], $bailout)
-+	BUILD_LVMLOCKD=yes
-+fi
-+
-+################################################################################
-+dnl -- Build lockddlm
-+AC_MSG_CHECKING(whether to build lockddlm)
-+AC_ARG_ENABLE(lockd-dlm,
-+	      AC_HELP_STRING([--enable-lockd-dlm],
-+			     [enable the LVM lock daemon using dlm]),
-+	      LOCKDDLM=$enableval)
-+AC_MSG_RESULT($LOCKDDLM)
-+
-+BUILD_LOCKDDLM=$LOCKDDLM
-+
-+if test "$BUILD_LOCKDDLM" = yes; then
-+	AC_DEFINE([LOCKDDLM_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd dlm option.])
-+fi
-+
-+################################################################################
-+dnl -- Look for dlm libraries
-+if test "$BUILD_LOCKDDLM" = yes; then
-+	PKG_CHECK_MODULES(LOCKD_DLM, libdlm, [HAVE_LOCKD_DLM=yes], $bailout)
-+	BUILD_LVMLOCKD=yes
- fi
--AC_DEFINE_UNQUOTED(DEFAULT_USE_LVMPOLLD, [$DEFAULT_USE_LVMPOLLD],
--		   [Use lvmpolld by default.])
- 
- ################################################################################
- dnl -- Build lvmlockd
--AC_MSG_CHECKING(whether to build lvmlockd)
--AC_ARG_ENABLE(lvmlockd,
--	      AC_HELP_STRING([--enable-lvmlockd],
--			     [enable the LVM lock daemon]),
--	      LVMLOCKD=$enableval)
--AC_MSG_RESULT($LVMLOCKD)
- 
--BUILD_LVMLOCKD=$LVMLOCKD
-+AC_MSG_CHECKING(whether to build lvmlockd)
-+AC_MSG_RESULT($BUILD_LVMLOCKD)
- 
- if test "$BUILD_LVMLOCKD" = yes; then
-+	AS_IF([test -n "$BUILD_LVMPOLLD"], [BUILD_LVMPOLLD=yes; AC_MSG_WARN([Enabling lvmpolld - required by lvmlockd.])])
-+	AS_IF([test -n "$BUILD_LVMETAD"], [BUILD_LVMETAD=yes; AC_MSG_WARN([Enabling lvmetad - required by lvmlockd.])])
- 	AC_MSG_CHECKING([defaults for use_lvmlockd])
- 	AC_ARG_ENABLE(use_lvmlockd,
- 		      AC_HELP_STRING([--disable-use-lvmlockd],
-@@ -1177,46 +1168,58 @@ AC_DEFINE_UNQUOTED(DEFAULT_USE_LVMLOCKD, [$DEFAULT_USE_LVMLOCKD],
- 		   [Use lvmlockd by default.])
- 
- ################################################################################
--dnl -- Build lockdsanlock
--AC_MSG_CHECKING(whether to build lockdsanlock)
--AC_ARG_ENABLE(lockd-sanlock,
--	      AC_HELP_STRING([--enable-lockd-sanlock],
--			     [enable the LVM lock daemon sanlock option]),
--	      LOCKDSANLOCK=$enableval)
--AC_MSG_RESULT($LOCKDSANLOCK)
--
--BUILD_LOCKDSANLOCK=$LOCKDSANLOCK
--
--if test "$BUILD_LOCKDSANLOCK" = yes; then
--	AC_DEFINE([LOCKDSANLOCK_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd sanlock option.])
--fi
--
--################################################################################
--dnl -- Build lockddlm
--AC_MSG_CHECKING(whether to build lockddlm)
--AC_ARG_ENABLE(lockd-dlm,
--	      AC_HELP_STRING([--enable-lockd-dlm],
--			     [enable the LVM lock daemon dlm option]),
--	      LOCKDDLM=$enableval)
--AC_MSG_RESULT($LOCKDDLM)
--
--BUILD_LOCKDDLM=$LOCKDDLM
-+dnl -- Check lvmetad
-+if test "$BUILD_LVMETAD" = yes; then
-+	AC_MSG_CHECKING([defaults for use_lvmetad])
-+	AC_ARG_ENABLE(use_lvmetad,
-+		      AC_HELP_STRING([--disable-use-lvmetad],
-+				     [disable usage of LVM Metadata Daemon]),
-+		      [case ${enableval} in
-+		       yes) DEFAULT_USE_LVMETAD=1 ;;
-+		       *) DEFAULT_USE_LVMETAD=0 ;;
-+		       esac], DEFAULT_USE_LVMETAD=1)
-+	AC_MSG_RESULT($DEFAULT_USE_LVMETAD)
-+	AC_DEFINE([LVMETAD_SUPPORT], 1, [Define to 1 to include code that uses lvmetad.])
- 
--if test "$BUILD_LOCKDDLM" = yes; then
--	AC_DEFINE([LOCKDDLM_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd dlm option.])
-+	AC_ARG_WITH(lvmetad-pidfile,
-+		    AC_HELP_STRING([--with-lvmetad-pidfile=PATH],
-+				   [lvmetad pidfile [PID_DIR/lvmetad.pid]]),
-+		    LVMETAD_PIDFILE=$withval,
-+		    LVMETAD_PIDFILE="$DEFAULT_PID_DIR/lvmetad.pid")
-+	AC_DEFINE_UNQUOTED(LVMETAD_PIDFILE, ["$LVMETAD_PIDFILE"],
-+			   [Path to lvmetad pidfile.])
-+else
-+	DEFAULT_USE_LVMETAD=0
- fi
-+AC_DEFINE_UNQUOTED(DEFAULT_USE_LVMETAD, [$DEFAULT_USE_LVMETAD],
-+		   [Use lvmetad by default.])
- 
- ################################################################################
--dnl -- Look for sanlock libraries
--if test "$BUILD_LOCKDSANLOCK" = yes; then
--	PKG_CHECK_MODULES(LOCKD_SANLOCK, libsanlock_client, [HAVE_LOCKD_SANLOCK=yes], $bailout)
--fi
-+dnl -- Check lvmpolld
-+if test "$BUILD_LVMPOLLD" = yes; then
-+	AC_MSG_CHECKING([defaults for use_lvmpolld])
-+	AC_ARG_ENABLE(use_lvmpolld,
-+		      AC_HELP_STRING([--disable-use-lvmpolld],
-+				     [disable usage of LVM Poll Daemon]),
-+		      [case ${enableval} in
-+		       yes) DEFAULT_USE_LVMPOLLD=1 ;;
-+		       *) DEFAULT_USE_LVMPOLLD=0 ;;
-+		       esac], DEFAULT_USE_LVMPOLLD=1)
-+	AC_MSG_RESULT($DEFAULT_USE_LVMPOLLD)
-+	AC_DEFINE([LVMPOLLD_SUPPORT], 1, [Define to 1 to include code that uses lvmpolld.])
- 
--################################################################################
--dnl -- Look for dlm libraries
--if test "$BUILD_LOCKDDLM" = yes; then
--	PKG_CHECK_MODULES(LOCKD_DLM, libdlm, [HAVE_LOCKD_DLM=yes], $bailout)
-+	AC_ARG_WITH(lvmpolld-pidfile,
-+		    AC_HELP_STRING([--with-lvmpolld-pidfile=PATH],
-+				   [lvmpolld pidfile [PID_DIR/lvmpolld.pid]]),
-+		    LVMPOLLD_PIDFILE=$withval,
-+		    LVMPOLLD_PIDFILE="$DEFAULT_PID_DIR/lvmpolld.pid")
-+	AC_DEFINE_UNQUOTED(LVMPOLLD_PIDFILE, ["$LVMPOLLD_PIDFILE"],
-+			   [Path to lvmpolld pidfile.])
-+else
-+	DEFAULT_USE_LVMPOLLD=0
- fi
-+AC_DEFINE_UNQUOTED(DEFAULT_USE_LVMPOLLD, [$DEFAULT_USE_LVMPOLLD],
-+		   [Use lvmpolld by default.])
- 
- ################################################################################
- 
-@@ -2072,13 +2075,3 @@ AS_IF([test -n "$CACHE_CONFIGURE_WARN"],
- 
- AS_IF([test "$ODIRECT" != yes],
-       [AC_MSG_WARN([O_DIRECT disabled: low-memory pvmove may lock up])])
--
--AS_IF([test "$BUILD_LVMLOCKD" == yes && test "$BUILD_LVMPOLLD" == no],
--      [AC_MSG_WARN([lvmlockd requires lvmpolld])])
--
--AS_IF([test "$BUILD_LVMLOCKD" == yes && test "$BUILD_LVMETAD" == no],
--      [AC_MSG_WARN([lvmlockd requires lvmetad])])
--
--AS_IF([test "$BUILD_LVMLOCKD" == yes && test "$BUILD_LOCKDDLM" == no && test "$BUILD_LOCKDSANLOCK" == no],
--      [AC_MSG_WARN([lvmlockd requires enabling sanlock or dlm or both])])
--
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index 89b7a7b..57de7a2 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -410,7 +410,7 @@
- /* Define to 1 if you have the `strtoul' function. */
- #undef HAVE_STRTOUL
- 
--/* Define to 1 if `st_rdev' is a member of `struct stat'. */
-+/* Define to 1 if `st_rdev' is member of `struct stat'. */
- #undef HAVE_STRUCT_STAT_ST_RDEV
- 
- /* Define to 1 if you have the <syslog.h> header file. */
-@@ -520,6 +520,12 @@
- /* Locale-dependent data */
- #undef LOCALEDIR
- 
-+/* Define to 1 to include code that uses lvmlockd dlm option. */
-+#undef LOCKDDLM_SUPPORT
-+
-+/* Define to 1 to include code that uses lvmlockd sanlock option. */
-+#undef LOCKDSANLOCK_SUPPORT
-+
- /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
-    slash. */
- #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
-@@ -581,9 +587,6 @@
- /* Define to the one symbol short name of this package. */
- #undef PACKAGE_TARNAME
- 
--/* Define to the home page for this package. */
--#undef PACKAGE_URL
--
- /* Define to the version of this package. */
- #undef PACKAGE_VERSION
- 
+ .IP \[bu] 2
+ The reporting options locktype and lockargs can be used to view lockd VG
 
 
