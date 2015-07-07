@@ -1,69 +1,90 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  7 Jul 2015 13:00:23 +0000 (UTC)
-Subject: v2_02_125 annotated tag has been created
-Message-ID: <20150707130023.A8823610C1@fedorahosted.org>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Tue,  7 Jul 2015 15:00:15 +0000 (UTC)
+Subject: master - spec: Update to use enable_lockd_*
+Message-ID: <20150707150015.7246561110@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7b397fb6e272f632d553971463f4a136964604cd
-Commit:        7b397fb6e272f632d553971463f4a136964604cd
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2015-07-07 12:56 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2015-07-07 12:56 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=181e701cc51af20c599998358a49902228cb65c1
+Commit:        181e701cc51af20c599998358a49902228cb65c1
+Parent:        a421879bb5da8b32141cec851c490a1ce9906e6d
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Jul 7 14:54:57 2015 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Jul 7 16:53:19 2015 +0200
 
-annotated tag: v2_02_125 has been created
-	    at 7b397fb6e272f632d553971463f4a136964604cd (tag)
-       tagging 3472910177c96780628c7d54dfb6b4aab735353c (commit)
-      replaces v2_02_124
+spec: Update to use enable_lockd_*
 
-Release 2.02.125.
+---
+ spec/build.inc  |    5 ++++-
+ spec/source.inc |   22 +++++++++++++++++++++-
+ 2 files changed, 25 insertions(+), 2 deletions(-)
 
-82 files changed, 1095 insertions(+), 614 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
-
-iEYEABECAAYFAlWbzIQACgkQIoGRwVZ+LBeVCQCePpJjvDWXV2L+HtdeA4AzmDmN
-7DEAnA3woE7XcoVEBmKtAT29VYxBHILG
-=kZ0K
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (6):
-      post-release
-      macros: Wrap PRI with FMT.
-      include: Standardise around new tool.h.
-      configure: Separate sanlock and dlm lock config.
-      WHATS_NEW: Update. Fix renamed config setting vsn.
-      pre-release
-
-David Teigland (6):
-      configure: enable building lvmlockd without sanlock or dlm
-      config: rename lock_retries lvmlockd_lock_retries
-      lockd: remove unused code for overriding lock modes
-      config: remove read_only_lock_modes
-      man lvmlockd: minor updates
-      lvmetactl: program to interact with lvmetad
-
-Jonathan Brassow (1):
-      clean-up: typos s/bellow/below/
-
-Marian Csontos (2):
-      Build lockd only for Fedora >= 22 and RHEL >= 7
-      lockd: Clean up spec
-
-Ondrej Kozina (1):
-      lvmpolld: fix possible memory corruption with mem debug
-
-Peter Rajnoha (2):
-      conf: regenerate
-      conf: regenerate
-
-Zdenek Kabelac (2):
-      cache: support clear-needs-check
-      tests: use old snapshot for huge volumes
+diff --git a/spec/build.inc b/spec/build.inc
+index db9bcc2..94d5e06 100644
+--- a/spec/build.inc
++++ b/spec/build.inc
+@@ -7,7 +7,10 @@
+ %global enable_lvmpolld %(if echo %{services} | grep -q lvmpolld; then echo 1; else echo 0; fi)
+ %enableif %{enable_lvmpolld} lvmpolld
+ %global enable_lvmlockd %(if echo %{services} | grep -q lvmlockd; then echo 1; else echo 0; fi)
+-%enableif %{enable_lvmlockd} lvmlockd
++%if %{enable_lvmlockd}
++%enableif %{enable_lockd_dlm} lockd-dlm
++%enableif %{enable_lockd_sanlock} lockd-sanlock
++%endif
+ 
+ %build
+ %configure \
+diff --git a/spec/source.inc b/spec/source.inc
+index 0a0d9e5..2c17dbd 100644
+--- a/spec/source.inc
++++ b/spec/source.inc
+@@ -8,6 +8,9 @@
+ %global enable_udev 1
+ %global enable_systemd 1
+ %global enable_cmirror 1
++#%global enable_lvmlockd 0
++#%global enable_lockd_dlm 0
++#%global enable_lockd_sanlock 0
+ 
+ %global buildreq_cluster corosync-devel >= 1.99.9-1, dlm-devel >= 3.99.1-1
+ %global req_cluster corosync >= 1.99.9-1, dlm >= 3.99.2-1
+@@ -28,7 +31,22 @@
+ %service lvmpolld 1
+ 
+ %if %{fedora} >= 22 || %{rhel} >= 7
+-%service lvmlockd 1
++ %service lvmlockd 1
++ %define sanlock_version 3.2.4-1
++ %define enable_lockd_dlm 1
++ %define enable_lockd_sanlock 1
++ %if %{rhel}
++  %ifarch i686 x86_64 s390x
++   %global buildreq_lockd_dlm dlm-devel >= %{dlm_version}
++  %else
++   %define enable_lockd_dlm 0
++  %endif
++  %ifarch x86_64 ppc64le ppc64 aarch64
++   %global buildreq_lockd_sanlock sanlock-devel >= %{sanlock_version}
++  %else
++   %define enable_lockd_sanlock 0
++  %endif
++ %endif
+ %endif
+ 
+ ##############################################################
+@@ -109,6 +127,8 @@ BuildRequires: pkgconfig
+ 
+ %maybe BuildRequires: %{?buildreq_udev}
+ %maybe BuildRequires: %{?buildreq_cluster}
++%maybe BuildRequires: %{?buildreq_lockd_dlm}
++%maybe BuildRequires: %{?buildreq_lockd_sanlock}
+ 
+ %description
+ LVM2 includes all of the support for handling read/write operations on
 
 
