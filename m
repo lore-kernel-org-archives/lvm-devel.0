@@ -1,65 +1,69 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  7 Jul 2015 13:00:03 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20150707130003.4F65A611C5@fedorahosted.org>
+Date: Tue,  7 Jul 2015 13:00:23 +0000 (UTC)
+Subject: v2_02_125 annotated tag has been created
+Message-ID: <20150707130023.A8823610C1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a421879bb5da8b32141cec851c490a1ce9906e6d
-Commit:        a421879bb5da8b32141cec851c490a1ce9906e6d
-Parent:        3472910177c96780628c7d54dfb6b4aab735353c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7b397fb6e272f632d553971463f4a136964604cd
+Commit:        7b397fb6e272f632d553971463f4a136964604cd
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jul 7 13:57:13 2015 +0100
+AuthorDate:    2015-07-07 12:56 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jul 7 13:57:13 2015 +0100
+CommitterDate: 2015-07-07 12:56 +0000
 
-post-release
+annotated tag: v2_02_125 has been created
+	    at 7b397fb6e272f632d553971463f4a136964604cd (tag)
+       tagging 3472910177c96780628c7d54dfb6b4aab735353c (commit)
+      replaces v2_02_124
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Release 2.02.125.
 
-diff --git a/VERSION b/VERSION
-index 6e9667f..c491170 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.125(2)-git (2015-07-07)
-+2.02.126(2)-git (2015-07-07)
-diff --git a/VERSION_DM b/VERSION_DM
-index e0980a8..9c79a79 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.102-git (2015-07-07)
-+1.02.103-git (2015-07-07)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f792ffb..1a8bbbb 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.126 -
-+================================
-+
- Version 2.02.125 - 7th July 2015
- ================================
-   Fix getline memory usage in lvmpolld.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 8e38a24..57edd8d 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.103 -
-+================================
-+
- Version 1.02.102 - 7th July 2015
- ================================
-   Include tool.h for default non-library use.
+82 files changed, 1095 insertions(+), 614 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAlWbzIQACgkQIoGRwVZ+LBeVCQCePpJjvDWXV2L+HtdeA4AzmDmN
+7DEAnA3woE7XcoVEBmKtAT29VYxBHILG
+=kZ0K
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (6):
+      post-release
+      macros: Wrap PRI with FMT.
+      include: Standardise around new tool.h.
+      configure: Separate sanlock and dlm lock config.
+      WHATS_NEW: Update. Fix renamed config setting vsn.
+      pre-release
+
+David Teigland (6):
+      configure: enable building lvmlockd without sanlock or dlm
+      config: rename lock_retries lvmlockd_lock_retries
+      lockd: remove unused code for overriding lock modes
+      config: remove read_only_lock_modes
+      man lvmlockd: minor updates
+      lvmetactl: program to interact with lvmetad
+
+Jonathan Brassow (1):
+      clean-up: typos s/bellow/below/
+
+Marian Csontos (2):
+      Build lockd only for Fedora >= 22 and RHEL >= 7
+      lockd: Clean up spec
+
+Ondrej Kozina (1):
+      lvmpolld: fix possible memory corruption with mem debug
+
+Peter Rajnoha (2):
+      conf: regenerate
+      conf: regenerate
+
+Zdenek Kabelac (2):
+      cache: support clear-needs-check
+      tests: use old snapshot for huge volumes
 
 
