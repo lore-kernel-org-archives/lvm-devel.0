@@ -1,90 +1,117 @@
 From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Tue,  7 Jul 2015 15:00:15 +0000 (UTC)
-Subject: master - spec: Update to use enable_lockd_*
-Message-ID: <20150707150015.7246561110@fedorahosted.org>
+Date: Tue,  7 Jul 2015 15:00:17 +0000 (UTC)
+Subject: master - spec: Move lvm2-lockd into separate package
+Message-ID: <20150707150017.9D92060066@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=181e701cc51af20c599998358a49902228cb65c1
-Commit:        181e701cc51af20c599998358a49902228cb65c1
-Parent:        a421879bb5da8b32141cec851c490a1ce9906e6d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d9d47b7b88b47719ff972f27a448f9cdf6982c4a
+Commit:        d9d47b7b88b47719ff972f27a448f9cdf6982c4a
+Parent:        181e701cc51af20c599998358a49902228cb65c1
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Jul 7 14:54:57 2015 +0200
+AuthorDate:    Tue Jul 7 16:27:17 2015 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
 CommitterDate: Tue Jul 7 16:53:19 2015 +0200
 
-spec: Update to use enable_lockd_*
+spec: Move lvm2-lockd into separate package
 
 ---
- spec/build.inc  |    5 ++++-
- spec/source.inc |   22 +++++++++++++++++++++-
- 2 files changed, 25 insertions(+), 2 deletions(-)
+ spec/packages.inc |   52 ++++++++++++++++++++++++++++++++++++++++------------
+ 1 files changed, 40 insertions(+), 12 deletions(-)
 
-diff --git a/spec/build.inc b/spec/build.inc
-index db9bcc2..94d5e06 100644
---- a/spec/build.inc
-+++ b/spec/build.inc
-@@ -7,7 +7,10 @@
- %global enable_lvmpolld %(if echo %{services} | grep -q lvmpolld; then echo 1; else echo 0; fi)
- %enableif %{enable_lvmpolld} lvmpolld
- %global enable_lvmlockd %(if echo %{services} | grep -q lvmlockd; then echo 1; else echo 0; fi)
--%enableif %{enable_lvmlockd} lvmlockd
-+%if %{enable_lvmlockd}
-+%enableif %{enable_lockd_dlm} lockd-dlm
-+%enableif %{enable_lockd_sanlock} lockd-sanlock
-+%endif
- 
- %build
- %configure \
-diff --git a/spec/source.inc b/spec/source.inc
-index 0a0d9e5..2c17dbd 100644
---- a/spec/source.inc
-+++ b/spec/source.inc
-@@ -8,6 +8,9 @@
- %global enable_udev 1
- %global enable_systemd 1
- %global enable_cmirror 1
-+#%global enable_lvmlockd 0
-+#%global enable_lockd_dlm 0
-+#%global enable_lockd_sanlock 0
- 
- %global buildreq_cluster corosync-devel >= 1.99.9-1, dlm-devel >= 3.99.1-1
- %global req_cluster corosync >= 1.99.9-1, dlm >= 3.99.2-1
-@@ -28,7 +31,22 @@
- %service lvmpolld 1
- 
- %if %{fedora} >= 22 || %{rhel} >= 7
--%service lvmlockd 1
-+ %service lvmlockd 1
-+ %define sanlock_version 3.2.4-1
-+ %define enable_lockd_dlm 1
-+ %define enable_lockd_sanlock 1
-+ %if %{rhel}
-+  %ifarch i686 x86_64 s390x
-+   %global buildreq_lockd_dlm dlm-devel >= %{dlm_version}
-+  %else
-+   %define enable_lockd_dlm 0
-+  %endif
-+  %ifarch x86_64 ppc64le ppc64 aarch64
-+   %global buildreq_lockd_sanlock sanlock-devel >= %{sanlock_version}
-+  %else
-+   %define enable_lockd_sanlock 0
-+  %endif
-+ %endif
+diff --git a/spec/packages.inc b/spec/packages.inc
+index ed02822..33dda2e 100644
+--- a/spec/packages.inc
++++ b/spec/packages.inc
+@@ -86,10 +86,6 @@ fi
+ %if %{have_service lvmpolld}
+  %{_sbindir}/lvmpolld
  %endif
+-%if %{have_service lvmlockd}
+- %{_sbindir}/lvmlockd
+- %{_sbindir}/lvmlockctl
+-%endif
+ %if %{have_with cache}
+   %{_mandir}/man7/lvmcache.7.gz
+ %endif
+@@ -160,9 +156,6 @@ fi
+   %{_mandir}/man8/lvmpolld.8.gz
+   %{_mandir}/man8/lvm-lvpoll.8.gz
+ %endif
+-%if %{have_service lvmlockd}
+-  %{_mandir}/man8/lvmlockd.8.gz
+-%endif
+ %dir %{_sysconfdir}/lvm
+ %ghost %{_sysconfdir}/lvm/cache/.cache
+ %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/lvm.conf
+@@ -174,7 +167,6 @@ fi
+ %dir %{_sysconfdir}/lvm/backup
+ %dir %{_sysconfdir}/lvm/cache
+ %dir %{_sysconfdir}/lvm/archive
+-%dir %{_default_locking_dir}
+ %dir %{_default_run_dir}
+ %if %{enable_systemd}
+  %config(noreplace) %{_prefix}/lib/tmpfiles.d/%{name}.conf
+@@ -189,10 +181,6 @@ fi
+   %{_unitdir}/lvm2-lvmpolld.service
+   %{_unitdir}/lvm2-lvmpolld.socket
+  %endif
+- %if %{have_service lvmlockd}
+-  %{_unitdir}/lvm2-lvmlockd.service
+-  %{_unitdir}/lvm2-lvmlocking.service
+- %endif
+ %else
+  %{_sysconfdir}/rc.d/init.d/lvm2-monitor
+  %{_sysconfdir}/rc.d/init.d/blk-availability
+@@ -259,6 +247,46 @@ This package contains shared lvm2 libraries for applications.
+ %{_libdir}/libdevmapper-event-lvm2snapshot.so
+ %{_libdir}/libdevmapper-event-lvm2raid.so
  
- ##############################################################
-@@ -109,6 +127,8 @@ BuildRequires: pkgconfig
- 
- %maybe BuildRequires: %{?buildreq_udev}
- %maybe BuildRequires: %{?buildreq_cluster}
-+%maybe BuildRequires: %{?buildreq_lockd_dlm}
-+%maybe BuildRequires: %{?buildreq_lockd_sanlock}
- 
- %description
- LVM2 includes all of the support for handling read/write operations on
++
++##############################################################################
++# LVM locking daemon
++##############################################################################
++%if %{have_service lvmlockd}
++%package lockd
++Summary: LVM locking daemon
++Group: System Environment/Base
++Requires: lvm2 = %{version}-%{release}
++%if %{enable_lockd_dlm}
++Requires: dlm >= %{dlm_version}
++%endif
++%if %{enable_lockd_sanlock}
++Requires: sanlock-lib >= %{sanlock_version}
++%endif
++Requires(post): systemd-units
++Requires(preun): systemd-units
++Requires(postun): systemd-units
++
++%description lockd
++LVM commands use lvmlockd to coordinate access to shared storage.
++
++%post lockd
++%systemd_post lvm2-lvmlockd.service lvm2-lvmlocking.service
++
++%preun lockd
++%systemd_preun lvm2-lvmlockd.service lvm2-lvmlocking.service
++
++%postun lockd
++%systemd_postun lvm2-lvmlockd.service lvm2-lvmlocking.service
++
++%files lockd
++%{_sbindir}/lvmlockd
++%{_sbindir}/lvmlockctl
++%{_mandir}/man8/lvmlockd.8.gz
++%dir %{_default_locking_dir}
++%{_unitdir}/lvm2-lvmlockd.service
++%{_unitdir}/lvm2-lvmlocking.service
++%endif
++
+ ##############################################################################
+ # Cluster subpackage
+ ##############################################################################
 
 
