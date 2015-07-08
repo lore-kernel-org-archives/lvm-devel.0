@@ -1,47 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  8 Jul 2015 13:43:09 +0000 (UTC)
-Subject: master - coverity: fix regresions from 16e9b32c2f1
-Message-ID: <20150708134309.0AFC3617CD@fedorahosted.org>
+Date: Wed,  8 Jul 2015 13:43:11 +0000 (UTC)
+Subject: master - tests: follow symlinks
+Message-ID: <20150708134311.35AE2602F5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fd37eeddd6b3901da806d536f44d43070e4fb660
-Commit:        fd37eeddd6b3901da806d536f44d43070e4fb660
-Parent:        6b48233f2548621c42129b8f0e2911e05c206660
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6e1f421a6d3a515a9720514bbcceb6789f96dd44
+Commit:        6e1f421a6d3a515a9720514bbcceb6789f96dd44
+Parent:        fd37eeddd6b3901da806d536f44d43070e4fb660
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 8 15:35:37 2015 +0200
+AuthorDate:    Wed Jul 8 15:14:09 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jul 8 15:41:48 2015 +0200
 
-coverity: fix regresions from 16e9b32c2f1
+tests: follow symlinks
 
-16e9b32c2f1a2d7e0f05a88981824ef0e7607965 incorrectly moved
-free of opened descriptor out of if{} - resulted of
-closing random file handle.
+If the srcdir itself is a symlink the find would not return expected
+value. So support also this config and use -L.
 ---
- lib/log/log.c |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ test/Makefile.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index e3570d4..a439d1d 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -101,10 +101,11 @@ void init_log_file(const char *log_file, int append)
- 				append = 1; /* force */
- 			}
- 		}
-+
-+		if (st && fclose(st))
-+			log_sys_debug("fclose", statfile);
- 	}
+diff --git a/test/Makefile.in b/test/Makefile.in
+index bba33db..72eb4e6 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -36,9 +36,9 @@ include $(top_builddir)/make.tmpl
+ T ?= .
+ S ?= @ # never match anything by default
+ VERBOSE ?= 0
+-ALL := $(shell find $(srcdir) \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) | sort)
++ALL := $(shell find -L $(srcdir) \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) | sort)
+ comma = ,
+-RUN := $(shell find $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | sort)
++RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | sort)
+ RUN_BASE = $(subst $(srcdir)/,,$(RUN))
  
--	if (st && fclose(st))
--		log_sys_debug("fclose", statfile);
- no_epoch:
- 	if (!(_log_file = fopen(log_file, append ? "a" : "w"))) {
- 		log_sys_error("fopen", log_file);
+ ifeq ("@BUILD_LVMETAD@", "yes")
 
 
