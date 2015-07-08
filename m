@@ -1,117 +1,55 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Tue,  7 Jul 2015 15:00:17 +0000 (UTC)
-Subject: master - spec: Move lvm2-lockd into separate package
-Message-ID: <20150707150017.9D92060066@fedorahosted.org>
+From: Lidong Zhong <lzhong@suse.com>
+Date: Tue, 07 Jul 2015 21:30:49 -0600
+Subject: [PATCH] dmeventd: fix dso name wrong compare
+In-Reply-To: <1435310166-2418-1-git-send-email-lzhong@suse.com>
+References: <1435310166-2418-1-git-send-email-lzhong@suse.com>
+Message-ID: <559D09E9020000E100013790@relay2.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d9d47b7b88b47719ff972f27a448f9cdf6982c4a
-Commit:        d9d47b7b88b47719ff972f27a448f9cdf6982c4a
-Parent:        181e701cc51af20c599998358a49902228cb65c1
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Jul 7 16:27:17 2015 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Jul 7 16:53:19 2015 +0200
+Hi list,
 
-spec: Move lvm2-lockd into separate package
+dmevent_tool won't work without this patch. Could somebody help to
+review this patch?
 
----
- spec/packages.inc |   52 ++++++++++++++++++++++++++++++++++++++++------------
- 1 files changed, 40 insertions(+), 12 deletions(-)
+Thanks,
+Lidong
 
-diff --git a/spec/packages.inc b/spec/packages.inc
-index ed02822..33dda2e 100644
---- a/spec/packages.inc
-+++ b/spec/packages.inc
-@@ -86,10 +86,6 @@ fi
- %if %{have_service lvmpolld}
-  %{_sbindir}/lvmpolld
- %endif
--%if %{have_service lvmlockd}
-- %{_sbindir}/lvmlockd
-- %{_sbindir}/lvmlockctl
--%endif
- %if %{have_with cache}
-   %{_mandir}/man7/lvmcache.7.gz
- %endif
-@@ -160,9 +156,6 @@ fi
-   %{_mandir}/man8/lvmpolld.8.gz
-   %{_mandir}/man8/lvm-lvpoll.8.gz
- %endif
--%if %{have_service lvmlockd}
--  %{_mandir}/man8/lvmlockd.8.gz
--%endif
- %dir %{_sysconfdir}/lvm
- %ghost %{_sysconfdir}/lvm/cache/.cache
- %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/lvm.conf
-@@ -174,7 +167,6 @@ fi
- %dir %{_sysconfdir}/lvm/backup
- %dir %{_sysconfdir}/lvm/cache
- %dir %{_sysconfdir}/lvm/archive
--%dir %{_default_locking_dir}
- %dir %{_default_run_dir}
- %if %{enable_systemd}
-  %config(noreplace) %{_prefix}/lib/tmpfiles.d/%{name}.conf
-@@ -189,10 +181,6 @@ fi
-   %{_unitdir}/lvm2-lvmpolld.service
-   %{_unitdir}/lvm2-lvmpolld.socket
-  %endif
-- %if %{have_service lvmlockd}
--  %{_unitdir}/lvm2-lvmlockd.service
--  %{_unitdir}/lvm2-lvmlocking.service
-- %endif
- %else
-  %{_sysconfdir}/rc.d/init.d/lvm2-monitor
-  %{_sysconfdir}/rc.d/init.d/blk-availability
-@@ -259,6 +247,46 @@ This package contains shared lvm2 libraries for applications.
- %{_libdir}/libdevmapper-event-lvm2snapshot.so
- %{_libdir}/libdevmapper-event-lvm2raid.so
+>>> On 6/26/2015 at 05:16 PM, in message
+<1435310166-2418-1-git-send-email-lzhong@suse.com>, Lidong Zhong
+<lzhong@suse.com> wrote: 
+> If the dso name is not set in client, then it will be replaced by "-". 
+> So the server should compare the dso name with "-" to decide whether 
+> it is set. 
+> --- 
+>  daemons/dmeventd/dmeventd.c | 4 ++-- 
+>  1 file changed, 2 insertions(+), 2 deletions(-) 
+>  
+> diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c 
+> index fcfa423..d81c4ee 100644 
+> --- a/daemons/dmeventd/dmeventd.c 
+> +++ b/daemons/dmeventd/dmeventd.c 
+> @@ -1190,12 +1190,12 @@ static int _want_registered_device(char *dso_name,  
+> char *device_uuid, 
+>  				   struct thread_status *thread) 
+>  { 
+>  	/* If DSO names and device paths are equal. */ 
+> -	if (dso_name && device_uuid) 
+> +	if (strcmp(dso_name,"-") && device_uuid) 
+>  		return !strcmp(dso_name, thread->dso_data->dso_name) && 
+>  		    !strcmp(device_uuid, thread->device.uuid); 
+>   
+>  	/* If DSO names are equal. */ 
+> -	if (dso_name) 
+> +	if (strcmp(dso_name, "-")) 
+>  		return !strcmp(dso_name, thread->dso_data->dso_name); 
+>   
+>  	/* If device paths are equal. */ 
  
-+
-+##############################################################################
-+# LVM locking daemon
-+##############################################################################
-+%if %{have_service lvmlockd}
-+%package lockd
-+Summary: LVM locking daemon
-+Group: System Environment/Base
-+Requires: lvm2 = %{version}-%{release}
-+%if %{enable_lockd_dlm}
-+Requires: dlm >= %{dlm_version}
-+%endif
-+%if %{enable_lockd_sanlock}
-+Requires: sanlock-lib >= %{sanlock_version}
-+%endif
-+Requires(post): systemd-units
-+Requires(preun): systemd-units
-+Requires(postun): systemd-units
-+
-+%description lockd
-+LVM commands use lvmlockd to coordinate access to shared storage.
-+
-+%post lockd
-+%systemd_post lvm2-lvmlockd.service lvm2-lvmlocking.service
-+
-+%preun lockd
-+%systemd_preun lvm2-lvmlockd.service lvm2-lvmlocking.service
-+
-+%postun lockd
-+%systemd_postun lvm2-lvmlockd.service lvm2-lvmlocking.service
-+
-+%files lockd
-+%{_sbindir}/lvmlockd
-+%{_sbindir}/lvmlockctl
-+%{_mandir}/man8/lvmlockd.8.gz
-+%dir %{_default_locking_dir}
-+%{_unitdir}/lvm2-lvmlockd.service
-+%{_unitdir}/lvm2-lvmlocking.service
-+%endif
-+
- ##############################################################################
- # Cluster subpackage
- ##############################################################################
+
+
 
 
