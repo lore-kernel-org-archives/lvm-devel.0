@@ -1,39 +1,39 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  8 Jul 2015 12:36:33 +0000 (UTC)
-Subject: master - coverity: missing break in switch expression
-Message-ID: <20150708123633.2F64E60E06@fedorahosted.org>
+From: Ferenc Wágner <wferi@niif.hu>
+Date: Wed,  8 Jul 2015 14:41:21 +0200
+Subject: [PATCH 0/6] cmirrord memory handling fixes
+Message-ID: <1436359287-6682-1-git-send-email-wferi@niif.hu>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=705fee709fdb2f3f23a5a466d30cf36dab0a9c96
-Commit:        705fee709fdb2f3f23a5a466d30cf36dab0a9c96
-Parent:        71f4fbfbde720795995abffa1bd8aeaa00706a6b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jul 8 14:36:02 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jul 8 14:36:02 2015 +0200
+Hi,
 
-coverity: missing break in switch expression
+During clustered pvmove tests cmirrord kept on dying.  To ease
+debugging, I added a --foreground option to it [1-3], which made the
+GCC stack protector messages stand out at once.  The backtraces made
+the fix straightforward [4].  As log_checkpoint seems a constant false
+condition, preparing the message is generally wasted effort, but I
+didn't want to change the logic, and now it does not crash the process
+at least.  Looking for other unsafe sprintf() usages provided plentiful
+results, I fixed the two easy ones [5,6].  Please use as you see fit.
 
-lib/lvmpolld/lvmpolld-client.c:109: fallthrough: The above case falls through to this one
----
- lib/lvmpolld/lvmpolld-client.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+Ferenc W?gner (6):
+  cmirrord: move generic setup from daemonize() to init_all()
+  cmirrord: introduce the --foreground option to avoid daemonization
+  cmirrord: document the --foreground and --help options
+  cmirrord: fix stack smashing
+  cmirrord: avoid debugging buffer overflow in LOG_SPRINT
+  cmirrord: avoid resync buffer overflow in LOG_SPRINT
 
-diff --git a/lib/lvmpolld/lvmpolld-client.c b/lib/lvmpolld/lvmpolld-client.c
-index d770e74..6676ce9 100644
---- a/lib/lvmpolld/lvmpolld-client.c
-+++ b/lib/lvmpolld/lvmpolld-client.c
-@@ -106,6 +106,7 @@ static void _explain_error_codes(int retcode)
- 	/* lvmpolld specific return codes */
- 	case LVMPD_RET_DUP_FAILED:
- 		log_error("lvmpolld failed to duplicate file descriptors.");
-+		break;
- 	case LVMPD_RET_EXC_FAILED:
- 		log_error("lvmpolld failed to exec() lvm binary.");
- 		break;
+ daemons/cmirrord/clogd.c     |   62 +++++++++++++++++++++++++++++++++---------
+ daemons/cmirrord/cluster.c   |   23 ++++++++++++----
+ daemons/cmirrord/functions.c |    5 ++--
+ man/cmirrord.8.in            |    8 +++++-
+ 4 files changed, 76 insertions(+), 22 deletions(-)
+
+-- 
+1.7.10.4
 
 
