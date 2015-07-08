@@ -1,42 +1,41 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed,  8 Jul 2015 16:02:46 +0000 (UTC)
-Subject: master - lvmlockd: fix unreachable code
-Message-ID: <20150708160246.8FA7260D37@fedorahosted.org>
+From: Andy Grover <grover@fedoraproject.org>
+Date: Wed,  8 Jul 2015 17:02:38 +0000 (UTC)
+Subject: master - man: add lvmlocal.conf to config cascade
+Message-ID: <20150708170238.B08C7612BC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=de13abdfdf44c1119ee03c2514dd886191f3d9c3
-Commit:        de13abdfdf44c1119ee03c2514dd886191f3d9c3
-Parent:        2566bdfbc3dd1ca7296d8828bb4235c18e06672e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jul 8 11:02:11 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jul 8 11:02:11 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d77546773bfe0dd2db98427d6b5b16fa4f19e47a
+Commit:        d77546773bfe0dd2db98427d6b5b16fa4f19e47a
+Parent:        de13abdfdf44c1119ee03c2514dd886191f3d9c3
+Author:        Andy Grover <agrover@redhat.com>
+AuthorDate:    Wed Jul 8 10:02:28 2015 -0700
+Committer:     Andy Grover <agrover@redhat.com>
+CommitterDate: Wed Jul 8 10:02:28 2015 -0700
 
-lvmlockd: fix unreachable code
+man: add lvmlocal.conf to config cascade
 
+see BZ 1241182, lvmlocal is searched before lvm.conf but after
+lvm_<tag>.conf.
 ---
- daemons/lvmlockd/lvmlockd-core.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ man/lvm.conf.5.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index b247bb5..73a2fb3 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -920,9 +920,9 @@ static int lm_unlock(struct lockspace *ls, struct resource *r, struct action *ac
- 	int rv;
+diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
+index 6ff8674..ae884be 100644
+--- a/man/lvm.conf.5.in
++++ b/man/lvm.conf.5.in
+@@ -87,7 +87,7 @@ When several configuration methods are used at the same time
+ and when LVM looks for the value of a particular setting, it traverses
+ this \fBconfig cascade\fP from left to right:
  
- 	if (ls->lm_type == LD_LM_DLM)
--		return lm_unlock_dlm(ls, r, r_version, lmu_flags);
-+		rv = lm_unlock_dlm(ls, r, r_version, lmu_flags);
- 	else if (ls->lm_type == LD_LM_SANLOCK)
--		return lm_unlock_sanlock(ls, r, r_version, lmu_flags);
-+		rv = lm_unlock_sanlock(ls, r, r_version, lmu_flags);
- 	else
- 		return -1;
+-\fBdirect config override on command line\fP -> \fBcommand profile config\fP -> \fBmetadata profile config\fP -> \fBtag config\fP -> \fBlvm.conf\fP
++\fBdirect config override on command line\fP -> \fBcommand profile config\fP -> \fBmetadata profile config\fP -> \fBtag config\fP -> \fBlvmlocal.conf\fB -> \fBlvm.conf\fP
  
+ No part of this cascade is compulsory. If there's no setting value found at
+ the end of the cascade, a default value is used for that setting.
 
 
