@@ -1,50 +1,39 @@
-From: Ferenc Wágner <wferi@niif.hu>
-Date: Wed,  8 Jul 2015 14:41:27 +0200
-Subject: [PATCH 6/6] cmirrord: avoid resync buffer overflow in LOG_SPRINT
-In-Reply-To: <1436359287-6682-1-git-send-email-wferi@niif.hu>
-References: <1436359287-6682-1-git-send-email-wferi@niif.hu>
-Message-ID: <1436359287-6682-7-git-send-email-wferi@niif.hu>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed,  8 Jul 2015 12:43:26 +0000 (UTC)
+Subject: master - coverity: previous commit - not "break" but "fall through"
+Message-ID: <20150708124326.0FEA8601E2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use snprintf() instead of sprintf() to exclude the possibility of
-overflowing the resync history buffers.
----
- daemons/cmirrord/functions.c |    5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e8dbaf62d3b3e2a175d3b0237a4d85c009d98038
+Commit:        e8dbaf62d3b3e2a175d3b0237a4d85c009d98038
+Parent:        705fee709fdb2f3f23a5a466d30cf36dab0a9c96
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Jul 8 14:42:26 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Jul 8 14:42:31 2015 +0200
 
-diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
-index f6e0918..61b3e11 100644
---- a/daemons/cmirrord/functions.c
-+++ b/daemons/cmirrord/functions.c
-@@ -32,12 +32,13 @@
- #define LOG_OFFSET 2
- 
- #define RESYNC_HISTORY 50
-+#define RESYNC_BUFLEN 128
- //static char resync_history[RESYNC_HISTORY][128];
- //static int idx = 0;
- #define LOG_SPRINT(_lc, f, arg...) do {					\
- 		lc->idx++;						\
- 		lc->idx = lc->idx % RESYNC_HISTORY;			\
--		sprintf(lc->resync_history[lc->idx], f, ## arg);	\
-+		snprintf(lc->resync_history[lc->idx], RESYNC_BUFLEN, f, ## arg); \
- 	} while (0)
- 
- struct log_header {
-@@ -88,7 +89,7 @@ struct log_c {
- 	size_t disk_size;       /* size of disk_buffer in bytes */
- 	void *disk_buffer;      /* aligned memory for O_DIRECT */
- 	int idx;
--	char resync_history[RESYNC_HISTORY][128];
-+	char resync_history[RESYNC_HISTORY][RESYNC_BUFLEN];
- };
- 
- struct mark_entry {
--- 
-1.7.10.4
+coverity: previous commit - not "break" but "fall through"
+
+---
+ lib/lvmpolld/lvmpolld-client.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/lib/lvmpolld/lvmpolld-client.c b/lib/lvmpolld/lvmpolld-client.c
+index 6676ce9..8be2d7b 100644
+--- a/lib/lvmpolld/lvmpolld-client.c
++++ b/lib/lvmpolld/lvmpolld-client.c
+@@ -106,7 +106,7 @@ static void _explain_error_codes(int retcode)
+ 	/* lvmpolld specific return codes */
+ 	case LVMPD_RET_DUP_FAILED:
+ 		log_error("lvmpolld failed to duplicate file descriptors.");
+-		break;
++		/* fall through */
+ 	case LVMPD_RET_EXC_FAILED:
+ 		log_error("lvmpolld failed to exec() lvm binary.");
+ 		break;
 
 
