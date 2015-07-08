@@ -1,60 +1,47 @@
 From: Ferenc Wágner <wferi@niif.hu>
-Date: Wed,  8 Jul 2015 14:41:25 +0200
-Subject: [PATCH 4/6] cmirrord: fix stack smashing
+Date: Wed,  8 Jul 2015 14:41:26 +0200
+Subject: [PATCH 5/6] cmirrord: avoid debugging buffer overflow in LOG_SPRINT
 In-Reply-To: <1436359287-6682-1-git-send-email-wferi@niif.hu>
 References: <1436359287-6682-1-git-send-email-wferi@niif.hu>
-Message-ID: <1436359287-6682-5-git-send-email-wferi@niif.hu>
+Message-ID: <1436359287-6682-6-git-send-email-wferi@niif.hu>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-With clusters larger than 3 nodes, the 32-byte debug buffer in
-cpg_join_callback() is too small to contain all the node IDs, because
-32-bit identifiers are generally rendered in 10 decimal digits.  No fixed
-size is good in all cases, but this is conditionally logged debug info,
-so we can simply truncate it.  Double the size, nevertheless.
+Use snprintf() instead of sprintf() to exclude the possibility of
+overflowing the debugging history buffers.
 ---
- daemons/cmirrord/cluster.c |   18 ++++++++++++++----
- 1 file changed, 14 insertions(+), 4 deletions(-)
+ daemons/cmirrord/cluster.c |    5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/daemons/cmirrord/cluster.c b/daemons/cmirrord/cluster.c
-index 3fd5d23..4a4bdab 100644
+index 4a4bdab..2850d9b 100644
 --- a/daemons/cmirrord/cluster.c
 +++ b/daemons/cmirrord/cluster.c
-@@ -1294,7 +1294,9 @@ static void cpg_join_callback(struct clog_cpg *match,
- 	uint32_t my_pid = (uint32_t)getpid();
- 	uint32_t lowest = match->lowest_id;
- 	struct clog_request *rq;
--	char dbuf[32] = { 0 };
-+	char dbuf[64] = { 0 };
-+	char *dbuf_p = dbuf;
-+	size_t dbuf_rem = sizeof dbuf;
+@@ -104,10 +104,11 @@ static SaVersionT version = { 'B', 1, 1 };
+ #endif
  
- 	/* Assign my_cluster_id */
- 	if ((my_cluster_id == 0xDEAD) && (joined->pid == my_pid))
-@@ -1310,9 +1312,17 @@ static void cpg_join_callback(struct clog_cpg *match,
- 	if (joined->nodeid == my_cluster_id)
- 		goto out;
+ #define DEBUGGING_HISTORY 100
++#define DEBUGGING_BUFLEN 128
+ #define LOG_SPRINT(cc, f, arg...) do {				\
+ 		cc->idx++;					\
+ 		cc->idx = cc->idx % DEBUGGING_HISTORY;		\
+-		sprintf(cc->debugging[cc->idx], f, ## arg);	\
++		snprintf(cc->debugging[cc->idx], DEBUGGING_BUFLEN, f, ## arg); \
+ 	} while (0)
  
--	for (i = 0; i < member_list_entries - 1; i++)
--		sprintf(dbuf+strlen(dbuf), "%u-", member_list[i].nodeid);
--	sprintf(dbuf+strlen(dbuf), "(%u)", joined->nodeid);
-+	for (i = 0; i < member_list_entries - 1; i++) {
-+		int written = snprintf(dbuf_p, dbuf_rem, "%u-", member_list[i].nodeid);
-+		if (written < 0) continue; /* impossible */
-+		if ((unsigned)written >= dbuf_rem) {
-+			dbuf_rem = 0;
-+			break;
-+		}
-+		dbuf_rem -= written;
-+		dbuf_p += written;
-+	}
-+	snprintf(dbuf_p, dbuf_rem, "(%u)", joined->nodeid);
- 	LOG_COND(log_checkpoint, "[%s] Joining node, %u needs checkpoint [%s]",
- 		 SHORT_UUID(match->name.value), joined->nodeid, dbuf);
+ static int log_resp_rec = 0;
+@@ -150,7 +151,7 @@ struct clog_cpg {
+ 	uint32_t checkpoint_requesters[MAX_CHECKPOINT_REQUESTERS];
+ 	struct checkpoint_data *checkpoint_list;
+ 	int idx;
+-	char debugging[DEBUGGING_HISTORY][128];
++	char debugging[DEBUGGING_HISTORY][DEBUGGING_BUFLEN];
+ };
  
+ static struct dm_list clog_cpg_list;
 -- 
 1.7.10.4
 
