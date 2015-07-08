@@ -1,44 +1,61 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  8 Jul 2015 13:43:11 +0000 (UTC)
-Subject: master - tests: follow symlinks
-Message-ID: <20150708134311.35AE2602F5@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed,  8 Jul 2015 15:28:46 +0000 (UTC)
+Subject: master - toollib: skip processing the sanlock LV unless named or all
+Message-ID: <20150708152846.42CED6052F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6e1f421a6d3a515a9720514bbcceb6789f96dd44
-Commit:        6e1f421a6d3a515a9720514bbcceb6789f96dd44
-Parent:        fd37eeddd6b3901da806d536f44d43070e4fb660
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 8 15:14:09 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 8 15:41:48 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=143a9d7ee690c68269572a44f4f1e396916c9b57
+Commit:        143a9d7ee690c68269572a44f4f1e396916c9b57
+Parent:        6e1f421a6d3a515a9720514bbcceb6789f96dd44
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jul 7 16:04:18 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jul 8 10:27:21 2015 -0500
 
-tests: follow symlinks
+toollib: skip processing the sanlock LV unless named or all
 
-If the srcdir itself is a symlink the find would not return expected
-value. So support also this config and use -L.
+This prevents 'lvremove vgname' from attempting to remove the
+hidden sanlock LV.  Only vgremove should remove the hidden
+sanlock LV holding the sanlock locks.
 ---
- test/Makefile.in |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ tools/toollib.c |   15 ++++++++++++++-
+ 1 files changed, 14 insertions(+), 1 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index bba33db..72eb4e6 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -36,9 +36,9 @@ include $(top_builddir)/make.tmpl
- T ?= .
- S ?= @ # never match anything by default
- VERBOSE ?= 0
--ALL := $(shell find $(srcdir) \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) | sort)
-+ALL := $(shell find -L $(srcdir) \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) | sort)
- comma = ,
--RUN := $(shell find $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | sort)
-+RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | sort)
- RUN_BASE = $(subst $(srcdir)/,,$(RUN))
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 8c301bb..b0b2b01 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -2135,13 +2135,26 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 		}
  
- ifeq ("@BUILD_LVMETAD@", "yes")
+ 		/*
+-		 * Only let hidden LVs through it --all was used or the LVs 
++		 * Only let hidden LVs through if --all was used or the LVs 
+ 		 * were specifically named on the command line.
+ 		 */
+ 		if (!lvargs_supplied && !lv_is_visible(lvl->lv) && !arg_count(cmd, all_ARG))
+ 			continue;
+ 
+ 		/*
++		 * Only let sanlock LV through if --all was used or if
++		 * it is named on the command line.
++		 */
++		if (lv_is_lockd_sanlock_lv(lvl->lv)) {
++			if (arg_count(cmd, all_ARG) ||
++			    (lvargs_supplied && str_list_match_item(arg_lvnames, lvl->lv->name))) {
++				log_very_verbose("Processing lockd_sanlock_lv %s/%s.", vg->name, lvl->lv->name);
++			} else {
++				continue;
++			}
++		}
++
++		/*
+ 		 * process the LV if one of the following:
+ 		 * - process_all is set
+ 		 * - LV name matches a supplied LV name
 
 
