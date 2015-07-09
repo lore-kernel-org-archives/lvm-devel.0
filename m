@@ -1,62 +1,98 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  9 Jul 2015 08:40:39 +0000 (UTC)
-Subject: master - lvmconf: fix ignored --startstopservices in lvmconf ... --mirrorservice on systemd
-Message-ID: <20150709084039.093416022F@fedorahosted.org>
+Date: Thu,  9 Jul 2015 10:09:01 +0000 (UTC)
+Subject: master - coverity: fix possible invalid dereferences
+Message-ID: <20150709100901.4E9DC602F0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb305b9fc0ae3f554b71aa3839d091424c660e63
-Commit:        cb305b9fc0ae3f554b71aa3839d091424c660e63
-Parent:        a0cc570f86ad267e4903aac9bedaecaf22e8d714
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=023cf21848bdf75bade560f6f43b2dea62a54f80
+Commit:        023cf21848bdf75bade560f6f43b2dea62a54f80
+Parent:        cb305b9fc0ae3f554b71aa3839d091424c660e63
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jul 9 10:35:41 2015 +0200
+AuthorDate:    Thu Jul 9 12:07:34 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jul 9 10:40:14 2015 +0200
+CommitterDate: Thu Jul 9 12:07:41 2015 +0200
 
-lvmconf: fix ignored --startstopservices in lvmconf ... --mirrorservice on systemd
+coverity: fix possible invalid dereferences
 
-If running lvmconf ... --startstopservice --mirrorservice in systemd
-environment, handle lvm2-cmirrord accordingly. A typo in the script
-caused the lvm2-cmirrord to not start/stop immediately, it was
-only enabled/disabled (so the --startstopservice was ignored in this
-case).
+lib/format1/import-export.c:167: var_deref_op: Dereferencing null pointer "vg->lvm1_system_id"
+lib/cache/lvmetad.c:1023: var_deref_op: Dereferencing null pointer "this"
+daemons/lvmlockd/lvmlockd-core.c:2659: check_after_deref: Null-checking "act" suggests that it may be null, but it has already been dereferenced on all paths leading to the check
+/daemons/lvmetad/lvmetad-core.c:1024: check_after_deref: Null-checking "pvmeta" suggests that it may be null, but it has already been dereferenced on all paths leading to the check
 ---
- WHATS_NEW          |    1 +
- scripts/lvmconf.sh |    4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ daemons/lvmetad/lvmetad-core.c   |    6 ++----
+ daemons/lvmlockd/lvmlockd-core.c |    3 +--
+ lib/cache/lvmetad.c              |    3 ++-
+ lib/format1/import-export.c      |    2 +-
+ 4 files changed, 6 insertions(+), 8 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1a8bbbb..f3da3e0 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.126 -
- ================================
-+  Fix ignored --startstopservices option if running lvmconf with systemd.
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index f4e77b7..b4382c7 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -999,7 +999,8 @@ static response pv_gone(lvmetad_state *s, request r)
  
- Version 2.02.125 - 7th July 2015
- ================================
-diff --git a/scripts/lvmconf.sh b/scripts/lvmconf.sh
-index 396f7a1..c3c1700 100644
---- a/scripts/lvmconf.sh
-+++ b/scripts/lvmconf.sh
-@@ -412,12 +412,12 @@ if [ "$HANDLE_SERVICES" == "1" ]; then
+ 	DEBUGLOG(s, "pv_gone (updated): %s / %" PRIu64, pvid, device);
  
-         if [ "$LOCKING_TYPE" = "3" ]; then
-             set_service systemd activate lvm2-cluster-activation.service
--            if [ "$HANDLE_CMIRROR_SERVICE" ]; then
-+            if [ "$HANDLE_MIRROR_SERVICE" = "1" ]; then
-                 set_service activate lvm2-cmirrord.service
-             fi
-         else
-             set_service systemd deactivate lvm2-cluster-activation.service
--            if [ "$HANDLE_CMIRROR_SERVICE" ]; then
-+            if [ "$HANDLE_MIRROR_SERVICE" = "1" ]; then
-                 set_service systemd deactivate lvm2-cmirrord.service
-             fi
-         fi
+-	pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, pvid);
++	if (!(pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, pvid)))
++		return reply_unknown("PVID does not exist");
+ 	vgid = dm_hash_lookup(s->pvid_to_vgid, pvid);
+ 
+ 	dm_hash_remove_binary(s->device_to_pvid, &device, sizeof(device));
+@@ -1021,9 +1022,6 @@ static response pv_gone(lvmetad_state *s, request r)
+ 		dm_free(vgid);
+ 	}
+ 
+-	if (!pvmeta)
+-		return reply_unknown("PVID does not exist");
+-
+ 	if (!alt_device)
+ 		dm_config_destroy(pvmeta);
+ 
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 1b7f494..ff5510c 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -2661,8 +2661,7 @@ static int rem_lockspace(struct action *act)
+ 	}
+ 	ls->thread_work = 1;
+ 	ls->thread_stop = 1;
+-	if (act)
+-		list_add_tail(&act->list, &ls->actions);
++	list_add_tail(&act->list, &ls->actions);
+ 	pthread_cond_signal(&ls->cond);
+ 	pthread_mutex_unlock(&ls->mutex);
+ 	pthread_mutex_unlock(&lockspaces_mutex);
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 783a114..8905640 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1017,7 +1017,8 @@ static int _lvmetad_pvscan_single(struct metadata_area *mda, void *baton)
+ 	struct _lvmetad_pvscan_baton *b = baton;
+ 	struct volume_group *this;
+ 
+-	this = mda_is_ignored(mda) ? NULL : mda->ops->vg_read(b->fid, "", mda, NULL, NULL, 1);
++	if (!(this = mda_is_ignored(mda) ? NULL : mda->ops->vg_read(b->fid, "", mda, NULL, NULL, 1)))
++		return 1;
+ 
+ 	/* FIXME Also ensure contents match etc. */
+ 	if (!b->vg || this->seqno > b->vg->seqno)
+diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
+index 72f6946..275583d 100644
+--- a/lib/format1/import-export.c
++++ b/lib/format1/import-export.c
+@@ -164,7 +164,7 @@ int export_pv(struct cmd_context *cmd, struct dm_pool *mem __attribute__((unused
+ 	/* Is VG already exported or being exported? */
+ 	if (vg && vg_is_exported(vg)) {
+ 		/* Does system_id need setting? */
+-		if (!*vg->lvm1_system_id ||
++		if ((vg->lvm1_system_id && !*vg->lvm1_system_id) ||
+ 		    strncmp(vg->lvm1_system_id, EXPORTED_TAG,
+ 			    sizeof(EXPORTED_TAG) - 1)) {
+ 			if (!generate_lvm1_system_id(cmd, (char *)pvd->system_id, EXPORTED_TAG))
 
 
