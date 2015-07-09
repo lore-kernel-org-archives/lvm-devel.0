@@ -1,153 +1,84 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  9 Jul 2015 20:16:41 +0000 (UTC)
-Subject: master - metadata: vg_validate lock_args
-Message-ID: <20150709201641.3298F60072@fedorahosted.org>
+Date: Thu,  9 Jul 2015 20:16:43 +0000 (UTC)
+Subject: master - metadata: add comments describing lock_args for lvmlockd
+Message-ID: <20150709201643.4829960072@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=841c3478fd1a20560db4ef01bfe30a7f8beb6608
-Commit:        841c3478fd1a20560db4ef01bfe30a7f8beb6608
-Parent:        6294509cc6a6a4f6150e6f4de84483a7f54ad9b5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb14bbdbc93a129f0ef9cf37314691b7fe79050e
+Commit:        cb14bbdbc93a129f0ef9cf37314691b7fe79050e
+Parent:        841c3478fd1a20560db4ef01bfe30a7f8beb6608
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jul 9 13:24:28 2015 -0500
+AuthorDate:    Thu Jul 9 15:14:19 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jul 9 13:25:00 2015 -0500
+CommitterDate: Thu Jul 9 15:16:28 2015 -0500
 
-metadata: vg_validate lock_args
+metadata: add comments describing lock_args for lvmlockd
 
 ---
- lib/metadata/metadata.c |   91 +++++++++++++++++++++++++++++++++++++++++++----
- 1 files changed, 84 insertions(+), 7 deletions(-)
+ lib/format_text/import_vsn1.c |   40 ++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 40 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 07ef54e..b0aa122 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2484,6 +2484,75 @@ static int _lv_validate_references_single(struct logical_volume *lv, void *data)
- 	return r;
- }
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 3645fa2..a4dcdf1 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -600,6 +600,25 @@ static int _read_lvnames(struct format_instance *fid __attribute__((unused)),
+ 		return 0;
+ 	}
  
-+/*
-+ * Format is <version>:<info>
-+ */
-+static int _validate_lock_args_chars(const char *lock_args)
-+{
-+	int i;
-+	char c;
-+	int found_colon = 0;
-+	int r = 1;
-+
-+	for (i = 0; i < strlen(lock_args); i++) {
-+		c = lock_args[i];
-+
-+		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+' && c != ':') {
-+			log_error(INTERNAL_ERROR "Invalid character at index %d of lock_args \"%s\"",
-+				  i, lock_args);
-+			r = 0;
-+		}
-+
-+		if (c == ':' && found_colon) {
-+			log_error(INTERNAL_ERROR "Invalid colon@index %d of lock_args \"%s\"",
-+				  i, lock_args);
-+			r = 0;
-+		}
-+
-+		if (c == ':')
-+			found_colon = 1;
-+	}
-+
-+	return r;
-+}
-+
-+static int _validate_vg_lock_args(struct volume_group *vg)
-+{
-+	if (!_validate_lock_args_chars(vg->lock_args)) {
-+		log_error(INTERNAL_ERROR "VG %s has invalid lock_args chars", vg->name);
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+/*
-+ * For lock_type sanlock, LV lock_args are <version>:<info>
-+ * For lock_type dlm, LV lock_args are not used, and lock_args is
-+ * just set to "dlm".
-+ */
-+static int _validate_lv_lock_args(struct logical_volume *lv)
-+{
-+	int r = 1;
-+
-+	if (!strcmp(lv->vg->lock_type, "sanlock")) {
-+		if (!_validate_lock_args_chars(lv->lock_args)) {
-+			log_error(INTERNAL_ERROR "LV %s/%s has invalid lock_args chars",
-+				  lv->vg->name, display_lvname(lv));
-+			return 0;
-+		}
-+
-+	} else if (!strcmp(lv->vg->lock_type, "dlm")) {
-+		if (strcmp(lv->lock_args, "dlm")) {
-+			log_error(INTERNAL_ERROR "LV %s/%s has invalid lock_args \"%s\"",
-+				   lv->vg->name, display_lvname(lv), lv->lock_args);
-+			r = 0;
-+		}
-+	}
-+
-+	return r;
-+}
-+
- int vg_validate(struct volume_group *vg)
- {
- 	struct pv_list *pvl;
-@@ -2829,6 +2898,9 @@ int vg_validate(struct volume_group *vg)
- 				  vg->name, vg->lock_type);
- 			r = 0;
- 		}
-+
-+		if (!vg->skip_validate_lock_args && !_validate_vg_lock_args(vg))
-+			r = 0;
- 	} else {
- 		if (vg->lock_args) {
- 			log_error(INTERNAL_ERROR "VG %s has lock_args %s without lock_type",
-@@ -2840,13 +2912,22 @@ int vg_validate(struct volume_group *vg)
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		if (is_lockd_type(vg->lock_type)) {
- 			if (lockd_lv_uses_lock(lvl->lv)) {
--				if (vg->skip_validate_lock_args) {
-+				if (vg->skip_validate_lock_args)
- 					continue;
--				} else if (!lvl->lv->lock_args) {
-+
-+				if (!lvl->lv->lock_args) {
- 					log_error(INTERNAL_ERROR "LV %s/%s missing lock_args",
- 						  vg->name, lvl->lv->name);
- 					r = 0;
--				} else if (!strcmp(vg->lock_type, "sanlock")) {
-+					continue;
-+				}
-+
-+				if (!_validate_lv_lock_args(lvl->lv)) {
-+					r = 0;
-+					continue;
-+				}
-+
-+				if (!strcmp(vg->lock_type, "sanlock")) {
- 					if (dm_hash_lookup(vhash.lv_lock_args, lvl->lv->lock_args)) {
- 						log_error(INTERNAL_ERROR "LV %s/%s has duplicate lock_args %s.",
- 							  vg->name, lvl->lv->name, lvl->lv->lock_args);
-@@ -2858,10 +2939,6 @@ int vg_validate(struct volume_group *vg)
- 						r = 0;
- 					}
++	/*
++	 * The LV lock_args string is generated in lvmlockd, and the content
++	 * depends on the lock_type.
++	 *
++	 * lock_type dlm does not use LV lock_args, so the LV lock_args field
++	 * is just set to "dlm".
++	 *
++	 * lock_type sanlock uses the LV lock_args field to save the
++	 * location on disk of that LV's sanlock lock.  The disk name is
++	 * specified in the VG lock_args.  The lock_args string begins
++	 * with a version number, e.g. 1.0.0, followed by a colon, followed
++	 * by a number.  The number is the offset on disk where sanlock is
++	 * told to find the LV's lock.
++	 * e.g. lock_args = 1.0.0:70254592
++	 * means that the lock is located at offset 70254592.
++	 *
++	 * The lvmlockd code for each specific lock manager also validates
++	 * the lock_args before using it to access the lock manager.
++	 */
+ 	if (dm_config_get_str(lvn, "lock_args", &str)) {
+ 		if (!(lv->lock_args = dm_pool_strdup(mem, str)))
+ 			return_0;
+@@ -828,6 +847,27 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 			goto bad;
+ 	}
  
--				} else if (!strcmp(vg->lock_type, "dlm") && strcmp(lvl->lv->lock_args, "dlm")) {
--					log_error(INTERNAL_ERROR "LV %s/%s bad dlm lock_args %s",
--						  vg->name, lvl->lv->name, lvl->lv->lock_args);
--					r = 0;
- 				}
- 			} else {
- 				if (lvl->lv->lock_args) {
++	/*
++	 * The VG lock_args string is generated in lvmlockd, and the content
++	 * depends on the lock_type.  lvmlockd begins the lock_args string
++	 * with a version number, e.g. 1.0.0, followed by a colon, followed
++	 * by a string that depends on the lock manager.  The string after
++	 * the colon is information needed to use the lock manager for the VG.
++	 *
++	 * For sanlock, the string is the name of the internal LV used to store
++	 * sanlock locks.  lvmlockd needs to know where the locks are located
++	 * so it can pass that location to sanlock which needs to access the locks.
++	 * e.g. lock_args = 1.0.0:lvmlock
++	 * means that the locks are located on the the LV "lvmlock".
++	 *
++	 * For dlm, the string is the dlm cluster name.  lvmlockd needs to use
++	 * a dlm lockspace in this cluster to use the VG.
++	 * e.g. lock_args = 1.0.0:foo
++	 * means that the host needs to be a member of the cluster "foo".
++	 *
++	 * The lvmlockd code for each specific lock manager also validates
++	 * the lock_args before using it to access the lock manager.
++	 */
+ 	if (dm_config_get_str(vgn, "lock_args", &str)) {
+ 		if (!(vg->lock_args = dm_pool_strdup(vg->vgmem, str)))
+ 			goto bad;
 
 
