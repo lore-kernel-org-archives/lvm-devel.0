@@ -1,42 +1,62 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed,  8 Jul 2015 20:27:35 +0000 (UTC)
-Subject: master - vgchange: don't disable VG lock in lock_stop
-Message-ID: <20150708202735.6DF0960DD7@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu,  9 Jul 2015 08:40:39 +0000 (UTC)
+Subject: master - lvmconf: fix ignored --startstopservices in lvmconf ... --mirrorservice on systemd
+Message-ID: <20150709084039.093416022F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a0cc570f86ad267e4903aac9bedaecaf22e8d714
-Commit:        a0cc570f86ad267e4903aac9bedaecaf22e8d714
-Parent:        903569d53375f8305bcfb8c2a0e9af7c29fa1d46
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jul 8 15:14:28 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jul 8 15:26:25 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb305b9fc0ae3f554b71aa3839d091424c660e63
+Commit:        cb305b9fc0ae3f554b71aa3839d091424c660e63
+Parent:        a0cc570f86ad267e4903aac9bedaecaf22e8d714
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Jul 9 10:35:41 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Jul 9 10:40:14 2015 +0200
 
-vgchange: don't disable VG lock in lock_stop
+lvmconf: fix ignored --startstopservices in lvmconf ... --mirrorservice on systemd
 
-It was an optimization to avoid a pointless unlock call.
-It affects all VGs, but was only intended to affect the
-VG being stopped.
+If running lvmconf ... --startstopservice --mirrorservice in systemd
+environment, handle lvm2-cmirrord accordingly. A typo in the script
+caused the lvm2-cmirrord to not start/stop immediately, it was
+only enabled/disabled (so the --startstopservice was ignored in this
+case).
 ---
- tools/vgchange.c |    2 --
- 1 files changed, 0 insertions(+), 2 deletions(-)
+ WHATS_NEW          |    1 +
+ scripts/lvmconf.sh |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 92c854b..437dbae 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -873,8 +873,6 @@ do_start:
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1a8bbbb..f3da3e0 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.126 -
+ ================================
++  Fix ignored --startstopservices option if running lvmconf with systemd.
  
- static int _vgchange_lock_stop(struct cmd_context *cmd, struct volume_group *vg)
- {
--	/* Disable the unlock in toollib because it's pointless after the stop. */
--	cmd->lockd_vg_disable = 1;
- 	return lockd_stop_vg(cmd, vg);
- }
+ Version 2.02.125 - 7th July 2015
+ ================================
+diff --git a/scripts/lvmconf.sh b/scripts/lvmconf.sh
+index 396f7a1..c3c1700 100644
+--- a/scripts/lvmconf.sh
++++ b/scripts/lvmconf.sh
+@@ -412,12 +412,12 @@ if [ "$HANDLE_SERVICES" == "1" ]; then
  
+         if [ "$LOCKING_TYPE" = "3" ]; then
+             set_service systemd activate lvm2-cluster-activation.service
+-            if [ "$HANDLE_CMIRROR_SERVICE" ]; then
++            if [ "$HANDLE_MIRROR_SERVICE" = "1" ]; then
+                 set_service activate lvm2-cmirrord.service
+             fi
+         else
+             set_service systemd deactivate lvm2-cluster-activation.service
+-            if [ "$HANDLE_CMIRROR_SERVICE" ]; then
++            if [ "$HANDLE_MIRROR_SERVICE" = "1" ]; then
+                 set_service systemd deactivate lvm2-cmirrord.service
+             fi
+         fi
 
 
