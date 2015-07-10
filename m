@@ -1,76 +1,63 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 10 Jul 2015 20:54:29 +0000 (UTC)
-Subject: master - vgchange: allow changing to lockd type when mirrors exist
-Message-ID: <20150710205429.4299160139@fedorahosted.org>
+Date: Fri, 10 Jul 2015 20:54:31 +0000 (UTC)
+Subject: master - lockd: note that external origins don't work in lockd VGs
+Message-ID: <20150710205431.B3CCF60139@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b8538f5dcd2e1c0880607a2bbd067d6aa60e689a
-Commit:        b8538f5dcd2e1c0880607a2bbd067d6aa60e689a
-Parent:        c4fdcb04be174dd3ec68eb0c3f17dd8a08314b59
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=222bb2b88d06a67cc25ed19332919fa339d7e831
+Commit:        222bb2b88d06a67cc25ed19332919fa339d7e831
+Parent:        b8538f5dcd2e1c0880607a2bbd067d6aa60e689a
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 10 11:48:50 2015 -0500
+AuthorDate:    Fri Jul 10 13:27:02 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Jul 10 15:53:21 2015 -0500
 
-vgchange: allow changing to lockd type when mirrors exist
+lockd: note that external origins don't work in lockd VGs
 
-and update lvmlockd man page to reflect the fact that
-mirror LVs work correctly in lockd VGs.
+in a comment at the point where it fails, and in the
+lvmlockd man page.
 ---
- man/lvmlockd.8.in |    4 +---
- tools/vgchange.c  |   17 -----------------
- 2 files changed, 1 insertions(+), 20 deletions(-)
+ man/lvmlockd.8.in |    2 ++
+ tools/lvconvert.c |   10 ++++++++++
+ 2 files changed, 12 insertions(+), 0 deletions(-)
 
 diff --git a/man/lvmlockd.8.in b/man/lvmlockd.8.in
-index 4d9b3f5..c3b0ac0 100644
+index c3b0ac0..659fead 100644
 --- a/man/lvmlockd.8.in
 +++ b/man/lvmlockd.8.in
-@@ -682,13 +682,11 @@ it are not autoactivated.
- 
- Things that do not yet work in lockd VGs:
- .br
--- old style mirror LVs (only raid1)
--.br
- - creating a new thin pool and a new thin LV in a single command
+@@ -686,6 +686,8 @@ Things that do not yet work in lockd VGs:
  .br
  - using lvcreate to create cache pools or cache LVs (use lvconvert)
  .br
--- splitting raid1 mirror LVs
-+- splitting mirrors and snapshots from LVs
++- using external origins for thin LVs
++.br
+ - splitting mirrors and snapshots from LVs
  .br
  - vgsplit
- .br
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 4b90b56..95cffaf 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -604,23 +604,6 @@ static int _vgchange_locktype(struct cmd_context *cmd,
- 		return 0;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index c543a1e..1461f4a 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2533,6 +2533,16 @@ static int _lvconvert_thin(struct cmd_context *cmd,
  	}
  
--	/*
--	 * Check if there are any LV types in the VG that cannot be handled
--	 * with the new lock type.  Remove this once all LV types can be
--	 * handled.
--	 */
--	if (is_lockd_type(lock_type)) {
--		dm_list_iterate_items(lvl, &vg->lvs) {
--			lv = lvl->lv;
--
--			if (lv_is_mirror_type(lv)) {
--				log_error("Changing to lock type %s is not allowed with mirror type LV %s/%s",
--					  lock_type, vg->name, display_lvname(lv));
--				return 0;
--			}
--		}
--	}
--
- 	/* none to clvm */
- 	if (!strcmp(vg->lock_type, "none") && !strcmp(lock_type, "clvm")) {
- 		log_warn("New clvm lock type will not be usable with lvmlockd.");
+ 	if (is_lockd_type(lv->vg->lock_type)) {
++		/*
++		 * FIXME: external origins don't work in lockd VGs.
++		 * Prior to the lvconvert, there's a lock associated with
++		 * the uuid of the external origin LV.  After the convert,
++		 * that uuid belongs to the new thin LV, and a new LV with
++		 * a new uuid exists as the non-thin, readonly external LV.
++		 * We'd need to remove the lock for the previous uuid
++		 * (the new thin LV will have no lock), and create a new
++		 * lock for the new LV uuid used by the external LV.
++		 */
+ 		log_error("Can't use lock_type %s LV as external origin.",
+ 			  lv->vg->lock_type);
+ 		return 0;
 
 
