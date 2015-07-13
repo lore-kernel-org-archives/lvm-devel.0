@@ -1,138 +1,153 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 13 Jul 2015 18:16:52 +0000 (UTC)
-Subject: master - lockd: allow nolocking and readonly options
-Message-ID: <20150713181652.18E3C611F4@fedorahosted.org>
+Date: Mon, 13 Jul 2015 19:10:25 +0000 (UTC)
+Subject: master - lockd: allow vgexport and vgimport
+Message-ID: <20150713191025.F3C0360DD1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9cfa27f9c56edad26c2830562233b48e06bb4802
-Commit:        9cfa27f9c56edad26c2830562233b48e06bb4802
-Parent:        c39f3026a8280bb4c62c785138302cd1475facb6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3da88b89172b588bef69d62e18ed5db127b2c845
+Commit:        3da88b89172b588bef69d62e18ed5db127b2c845
+Parent:        9cfa27f9c56edad26c2830562233b48e06bb4802
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 10 17:20:22 2015 -0500
+AuthorDate:    Mon Jul 13 13:48:39 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jul 13 13:15:51 2015 -0500
+CommitterDate: Mon Jul 13 14:07:57 2015 -0500
 
-lockd: allow nolocking and readonly options
+lockd: allow vgexport and vgimport
 
-When --nolocking is used (by vgs, lvs, pvs):
+The "exported" state of the VG can be useful with lockd VGs
+because the exported state keeps a VG from being used in general.
+It's a way to keep a VG protected and out of the way.
 
-. don't use lvmlockd at all (set use_lvmlockd to 0)
-. allow lockd VGs to be read
-
-When --readonly is used (by vgs, lvs, pvs, vgdisplay, lvdisplay,
-pvdisplay, lvmdiskscan, lvscan, pvscan, vgcfgbackup):
-
-. skip actual lvmlockd locking calls
-. allow lockd VGs to be read
-. check that only shared gl/vg locks are being requested
-  (even though the actually locking is being skipped)
-. check that no LV locks are requested, because no LVs
-  should be activated or used in readonly mode
-. disable using lvmetad so VGs are read from disk
-
-It is important to note the limited commands that accept
-the --nolocking and --readonly options, i.e. no commands
-that change/write a VG or change/activate LVs accept these
-options, only commands that read VGs.
+Also fix the command flags: ALL_VGS_IS_DEFAULT is not true for
+vgimport/vgexport, since they both return errors immediately if
+no VG args are specified.  LOCKD_VG_SH is not true for vgexport
+beause it must use an ex lock to write the VG.
 ---
- lib/locking/lvmlockd.c |   26 ++++++++++++++++++++++++++
- tools/lvmcmdline.c     |   22 +++++++++++++++++++++-
- 2 files changed, 47 insertions(+), 1 deletions(-)
+ tools/commands.h |    4 ++--
+ tools/vgchange.c |   12 +++++++++---
+ tools/vgexport.c |   25 ++++++++++++++++++-------
+ tools/vgimport.c |    4 +++-
+ 4 files changed, 32 insertions(+), 13 deletions(-)
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index 99fc047..a0dff8a 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -1346,6 +1346,14 @@ int lockd_gl(struct cmd_context *cmd, const char *def_mode, uint32_t flags)
- 	if (!_use_lvmlockd)
- 		return 1;
+diff --git a/tools/commands.h b/tools/commands.h
+index 43d5c80..e50505d 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -1191,7 +1191,7 @@ xx(vgdisplay,
  
-+	/*
-+	 * Verify that when --readonly is used, no ex locks should be used.
-+	 */
-+	if (cmd->metadata_read_only && def_mode && !strcmp(def_mode, "ex")) {
-+		log_error("Exclusive locks are not allowed with readonly option.");
-+		return 0;
-+	}
+ xx(vgexport,
+    "Unregister volume group(s) from the system",
+-   ALL_VGS_IS_DEFAULT | LOCKD_VG_SH,
++   0,
+    "vgexport\n"
+    "\t[-a|--all]\n"
+    "\t[--commandprofile ProfileName]\n"
+@@ -1229,7 +1229,7 @@ xx(vgextend,
+ 
+ xx(vgimport,
+    "Register exported volume group with system",
+-   ALL_VGS_IS_DEFAULT,
++   0,
+    "vgimport\n"
+    "\t[-a|--all]\n"
+    "\t[--commandprofile ProfileName]\n"
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 95cffaf..0ed8fec 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -888,7 +888,8 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 		{ systemid_ARG, &_vgchange_system_id },
+ 	};
+ 
+-	if (vg_is_exported(vg)) {
++	if (vg_is_exported(vg) &&
++	    !(arg_is_set(cmd, lockstop_ARG) || arg_is_set(cmd, lockstart_ARG))) {
+ 		log_error("Volume group \"%s\" is exported", vg_name);
+ 		return ECMD_FAILED;
+ 	}
+@@ -1052,6 +1053,7 @@ static int _lockd_vgchange(struct cmd_context *cmd, int argc, char **argv)
+ 
+ int vgchange(struct cmd_context *cmd, int argc, char **argv)
+ {
++	uint32_t flags = 0;
+ 	int ret;
+ 
+ 	int noupdate =
+@@ -1185,8 +1187,12 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
+ 	if (!_lockd_vgchange(cmd, argc, argv))
+ 		return_ECMD_FAILED;
+ 
+-	ret = process_each_vg(cmd, argc, argv, update ? READ_FOR_UPDATE : 0,
+-			      NULL, &vgchange_single);
++	if (update)
++		flags |= READ_FOR_UPDATE;
++	if (arg_is_set(cmd, lockstart_ARG) || arg_is_set(cmd, lockstop_ARG))
++		flags |= READ_ALLOW_EXPORTED;
 +
- 	if (cmd->lockd_gl_disable)
- 		return 1;
++	ret = process_each_vg(cmd, argc, argv, flags, NULL, &vgchange_single);
  
-@@ -1529,6 +1537,16 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
- 		return 1;
+ 	/* Wait for lock-start ops that were initiated in vgchange_lockstart. */
  
- 	/*
-+	 * Verify that when --readonly is used, no ex locks should be used.
-+	 */
-+	if (cmd->metadata_read_only &&
-+	    ((def_mode && !strcmp(def_mode, "ex")) ||
-+	     (!def_mode && !cmd->lockd_vg_default_sh))) {
-+		log_error("Exclusive locks are not allowed with readonly option.");
-+		return 0;
-+	}
-+
-+	/*
- 	 * Some special cases need to disable the vg lock.
- 	 */
- 	if (cmd->lockd_vg_disable)
-@@ -1799,6 +1817,14 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
- 	int refreshed = 0;
- 	int result;
+diff --git a/tools/vgexport.c b/tools/vgexport.c
+index 7e90e5c..566cc96 100644
+--- a/tools/vgexport.c
++++ b/tools/vgexport.c
+@@ -22,19 +22,30 @@ static int vgexport_single(struct cmd_context *cmd __attribute__((unused)),
+ {
+ 	struct pv_list *pvl;
  
-+	/*
-+	 * Verify that when --readonly is used, no LVs should be activated or used.
-+	 */
-+	if (cmd->metadata_read_only) {
-+		log_error("LV locks are not allowed with readonly option.");
-+		return 0;
-+	}
-+
- 	if (cmd->lockd_lv_disable)
- 		return 1;
- 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index c4a78b0..6dbc189 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1435,6 +1435,14 @@ static int _init_lvmlockd(struct cmd_context *cmd)
- 	const char *lvmlockd_socket;
- 	int use_lvmlockd = find_config_tree_bool(cmd, global_use_lvmlockd_CFG, NULL);
- 
-+	if (use_lvmlockd && arg_count(cmd, nolocking_ARG)) {
-+		/* --nolocking is only allowed with vgs/lvs/pvs commands */
-+		cmd->lockd_gl_disable = 1;
-+		cmd->lockd_vg_disable = 1;
-+		cmd->lockd_lv_disable = 1;
-+		return 1;
-+	}
-+
- 	if (use_lvmlockd && locking_is_clustered()) {
- 		log_error("ERROR: configuration setting use_lvmlockd cannot be used with clustered locking_type 3.");
- 		return 0;
-@@ -1567,7 +1575,19 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+-	/* vgexport/vgimport have to use with shared VGs. */
+-	if (is_lockd_type(vg->lock_type)) {
+-		log_error("Volume group \"%s\" has lock_type %s that cannot be exported",
+-			  vg_name, vg->lock_type);
+-		goto bad;
+-	}
+-
+ 	if (lvs_in_vg_activated(vg)) {
+ 		log_error("Volume group \"%s\" has active logical volumes",
+ 			  vg_name);
+ 		goto bad;
  	}
  
- 	if (arg_count(cmd, readonly_ARG)) {
--		locking_type = 5;
-+		if (find_config_tree_bool(cmd, global_use_lvmlockd_CFG, NULL)) {
-+			/*
-+			 * FIXME: we could use locking_type 5 here if that didn't
-+			 * cause CLUSTERED to be set, which conflicts with using lvmlockd.
-+			 */
-+			locking_type = 1;
-+			cmd->lockd_gl_disable = 1;
-+			cmd->lockd_vg_disable = 1;
-+			cmd->lockd_lv_disable = 1;
-+		} else {
-+			locking_type = 5;
-+		}
++	if (is_lockd_type(vg->lock_type)) {
++		struct lv_list *lvl;
++		dm_list_iterate_items(lvl, &vg->lvs) {
++			if (!lockd_lv_uses_lock(lvl->lv))
++				continue;
 +
- 		if (lvmetad_used()) {
- 			lvmetad_set_active(cmd, 0);
- 			log_verbose("Disabling use of lvmetad because read-only is set.");
++			if (!lockd_lv(cmd, lvl->lv, "ex", 0)) {
++				log_error("LV %s/%s must be inactive on all hosts before vgexport.",
++					  vg->name, display_lvname(lvl->lv));
++				goto bad;
++			}
++
++			if (!lockd_lv(cmd, lvl->lv, "un", 0))
++				goto bad;
++		}
++	}
++
++
+ 	if (!archive(vg))
+ 		goto_bad;
+ 
+diff --git a/tools/vgimport.c b/tools/vgimport.c
+index b64a7a3..04a59dc 100644
+--- a/tools/vgimport.c
++++ b/tools/vgimport.c
+@@ -37,7 +37,9 @@ static int vgimport_single(struct cmd_context *cmd,
+ 		goto_bad;
+ 
+ 	vg->status &= ~EXPORTED_VG;
+-	vg->system_id = cmd->system_id ? dm_pool_strdup(vg->vgmem, cmd->system_id) : NULL;
++
++	if (!is_lockd_type(vg->lock_type))
++		vg->system_id = cmd->system_id ? dm_pool_strdup(vg->vgmem, cmd->system_id) : NULL;
+ 
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		pv = pvl->pv;
 
 
