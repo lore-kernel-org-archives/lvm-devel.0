@@ -1,78 +1,50 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 14 Jul 2015 19:40:15 +0000 (UTC)
-Subject: master - vgchange: fix lock-start filtering and waiting
-Message-ID: <20150714194015.82F8B6096D@fedorahosted.org>
+Date: Tue, 14 Jul 2015 19:43:51 +0000 (UTC)
+Subject: master - metadata: change function name to _allow_extra_system_id
+Message-ID: <20150714194352.0081F60ED3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9ab6bdce01d7780a9c8f7194bc488032dbf3348f
-Commit:        9ab6bdce01d7780a9c8f7194bc488032dbf3348f
-Parent:        681f779a3cb711c32663e594242a3b28a64e9f27
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=96a883a4541211fc3af09f682854ed88e200c036
+Commit:        96a883a4541211fc3af09f682854ed88e200c036
+Parent:        9ab6bdce01d7780a9c8f7194bc488032dbf3348f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jul 14 14:30:01 2015 -0500
+AuthorDate:    Tue Jul 14 14:42:18 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jul 14 14:39:34 2015 -0500
+CommitterDate: Tue Jul 14 14:43:16 2015 -0500
 
-vgchange: fix lock-start filtering and waiting
+metadata: change function name to _allow_extra_system_id
 
-Both lock_start filters were being skipped when any lock-opt
-values were used.  The "auto" lock-opt should cause the
-auto_lock_start_list to be used.  The lock_start_list should
-always be used.
-
-The behavior of lock_start_list/auto_lock_start_list are tested
-and verified to behave like volume_list/auto_activation_volume_list.
-
-Since the default was changed to wait for lock-start to finish,
-the "wait" and "autowait" lock-opt values are not needed, but a
-new "autonowait" is added to the existing "nowait" avoid the
-default waiting.
+The previous name was misleading since this is not the
+primary system_id check, only the "extra" check.
 ---
- tools/vgchange.c |   17 ++++++++++++-----
- 1 files changed, 12 insertions(+), 5 deletions(-)
+ lib/metadata/metadata.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 0ed8fec..72a5c1e 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -834,10 +834,17 @@ static int _vgchange_lock_start(struct cmd_context *cmd, struct volume_group *vg
- 	const char *start_opt = arg_str_value(cmd, lockopt_ARG, NULL);
- 	int auto_opt = 0;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 3ebcc2d..56ed3fb 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4707,7 +4707,7 @@ static struct volume_group *_recover_vg(struct cmd_context *cmd,
+ 	return (struct volume_group *)vg;
+ }
  
--	if (!start_opt || arg_is_set(cmd, force_ARG))
-+	if (!is_lockd_type(vg->lock_type))
-+		return 1;
-+
-+	if (arg_is_set(cmd, force_ARG))
- 		goto do_start;
+-static int _allow_system_id(struct cmd_context *cmd, const char *system_id)
++static int _allow_extra_system_id(struct cmd_context *cmd, const char *system_id)
+ {
+ 	const struct dm_config_node *cn;
+ 	const struct dm_config_value *cv;
+@@ -4848,7 +4848,7 @@ static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
+ 	/*
+ 	 * A host can access a VG if the VG's system_id is in extra_system_ids list.
+ 	 */
+-	if (cmd->system_id && _allow_system_id(cmd, vg->system_id))
++	if (cmd->system_id && _allow_extra_system_id(cmd, vg->system_id))
+ 		return 1;
  
--	if (!strcmp(start_opt, "auto") || !strcmp(start_opt, "autowait"))
-+	/*
-+	 * Recognize both "auto" and "autonowait" options.
-+	 * Any waiting is done at the end of vgchange.
-+	 */
-+	if (start_opt && !strncmp(start_opt, "auto", 4))
- 		auto_opt = 1;
- 
- 	if (!_passes_lock_start_filter(cmd, vg, activation_lock_start_list_CFG)) {
-@@ -1201,12 +1208,12 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 
- 		lockd_gl(cmd, "un", 0);
- 
--		if (!start_opt || !strcmp(start_opt, "wait") || !strcmp(start_opt, "autowait")) {
-+		if (!start_opt || !strcmp(start_opt, "auto")) {
- 			log_print_unless_silent("Starting locking.  Waiting until locks are ready...");
- 			lockd_start_wait(cmd);
- 
--		} else if (!strcmp(start_opt, "nowait")) {
--			log_print_unless_silent("Starting locking.  VG is read-only until locks are ready.");
-+		} else if (!strcmp(start_opt, "nowait") || !strcmp(start_opt, "autonowait")) {
-+			log_print_unless_silent("Starting locking.  VG can only be read until locks are ready.");
- 		}
- 	}
- 
+ 	/*
 
 
