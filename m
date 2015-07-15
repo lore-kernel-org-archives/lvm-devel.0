@@ -1,74 +1,94 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 21 Jul 2015 09:01:01 +0000 (UTC)
-Subject: master - wiping: add "Wiping skipped." for the message context to be complete
-Message-ID: <20150721090101.4F80C60F5A@fedorahosted.org>
+Date: Wed, 15 Jul 2015 08:55:12 +0000 (UTC)
+Subject: master - config: use find_config_tree_array for all arrays
+Message-ID: <20150715085512.709D9602E8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c3fddb0fbbcabf73d3bcf2786cea31c179f13fae
-Commit:        c3fddb0fbbcabf73d3bcf2786cea31c179f13fae
-Parent:        697fb353dc5ecf813199c598eed07983868fdd56
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=34a410994674f450564d6f221ff5ef0b16d37280
+Commit:        34a410994674f450564d6f221ff5ef0b16d37280
+Parent:        7e728fe1a164cc5d4f64e46fcfcbb224c22b2457
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jul 21 11:00:43 2015 +0200
+AuthorDate:    Wed Jul 15 10:52:23 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jul 21 11:00:43 2015 +0200
+CommitterDate: Wed Jul 15 10:52:23 2015 +0200
 
-wiping: add "Wiping skipped." for the message context to be complete
+config: use find_config_tree_array for all arrays
 
+Use find_config_tree_array for all config arrays. Also, add
+INTERNAL_ERROR in case there should have been at least default
+value defined for a setting but it was not returned for some
+reason (either config_settings.h misconfiguration or other config
+tree error printed by functions called by find_config_tree_array).
 ---
- lib/device/dev-type.c |    9 +++++----
- 1 files changed, 5 insertions(+), 4 deletions(-)
+ lib/commands/toolcontext.c |   16 ++++++++--------
+ lib/mm/memlock.c           |    2 +-
+ 2 files changed, 9 insertions(+), 9 deletions(-)
 
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 873e02e..db40792 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -530,6 +530,7 @@ static inline int _type_in_flag_list(const char *type, uint32_t flag_list)
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 002627b..3fe2bb2 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -245,8 +245,10 @@ static int _parse_debug_classes(struct cmd_context *cmd)
+ 	const struct dm_config_value *cv;
+ 	int debug_classes = 0;
  
- #define MSG_FAILED_SIG_OFFSET "Failed to get offset of the %s signature on %s."
- #define MSG_FAILED_SIG_LENGTH "Failed to get length of the %s signature on %s."
-+#define MSG_WIPING_SKIPPED " Wiping skipped."
+-	if (!(cn = find_config_tree_array(cmd, log_debug_classes_CFG, NULL)))
++	if (!(cn = find_config_tree_array(cmd, log_debug_classes_CFG, NULL))) {
++		log_error(INTERNAL_ERROR "Unable to find configuration for log/debug_classes.");
+ 		return -1;
++	}
  
- static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 		       uint32_t types_to_exclude, uint32_t types_no_prompt,
-@@ -549,7 +550,7 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 				log_error(MSG_FAILED_SIG_OFFSET, type, name);
- 				return 0;
- 			} else {
--				log_error("WARNING: " MSG_FAILED_SIG_OFFSET, type, name);
-+				log_error("WARNING: " MSG_FAILED_SIG_OFFSET MSG_WIPING_SKIPPED, type, name);
- 				return 2;
- 			}
- 		}
-@@ -558,7 +559,7 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 				log_error(MSG_FAILED_SIG_LENGTH, type, name);
- 				return 0;
- 			} else {
--				log_warn("WARNING: " MSG_FAILED_SIG_LENGTH, type, name);
-+				log_warn("WARNING: " MSG_FAILED_SIG_LENGTH MSG_WIPING_SKIPPED, type, name);
- 				return 2;
- 			}
- 		}
-@@ -568,7 +569,7 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 				log_error(MSG_FAILED_SIG_OFFSET, type, name);
- 				return 0;
- 			} else {
--				log_warn("WARNING: " MSG_FAILED_SIG_OFFSET, type, name);
-+				log_warn("WARNING: " MSG_FAILED_SIG_OFFSET MSG_WIPING_SKIPPED, type, name);
- 				return 2;
- 			}
- 		}
-@@ -577,7 +578,7 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
- 				log_error(MSG_FAILED_SIG_LENGTH, type, name);
- 				return 0;
- 			} else {
--				log_warn("WARNING: " MSG_FAILED_SIG_LENGTH, type, name);
-+				log_warn("WARNING: " MSG_FAILED_SIG_LENGTH MSG_WIPING_SKIPPED, type, name);
- 				return 2;
- 			}
- 		}
+ 	for (cv = cn->v; cv; cv = cv->next) {
+ 		if (cv->type != DM_CFG_STRING) {
+@@ -686,7 +688,7 @@ static int _process_config(struct cmd_context *cmd)
+ 						      DEFAULT_RUN_DIR "/lvmetad.socket");
+ 	*/
+ 	lvmetad_set_socket(lvmetad_socket);
+-	cn = find_config_tree_node(cmd, devices_global_filter_CFG, NULL);
++	cn = find_config_tree_array(cmd, devices_global_filter_CFG, NULL);
+ 	lvmetad_set_token(cn ? cn->v : NULL);
+ 
+ 	if (find_config_tree_int(cmd, global_locking_type_CFG, NULL) == 3 &&
+@@ -1015,11 +1017,9 @@ static int _init_dev_cache(struct cmd_context *cmd)
+ 
+ 	init_obtain_device_list_from_udev(device_list_from_udev);
+ 
+-	if (!(cn = find_config_tree_node(cmd, devices_scan_CFG, NULL))) {
+-		log_verbose("device/scan not in config file, "
+-			    "using defaults.");
+-		if (!(cn = find_config_tree_array(cmd, devices_scan_CFG, NULL)))
+-			return_0;
++	if (!(cn = find_config_tree_array(cmd, devices_scan_CFG, NULL))) {
++		log_error(INTERNAL_ERROR "Unable to find configuration for devices/scan.");
++		return_0;
+ 	}
+ 
+ 	for (cv = cn->v; cv; cv = cv->next) {
+@@ -1232,7 +1232,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
+ 	}
+ 
+ 	/* filter component 1 */
+-	if ((cn = find_config_tree_node(cmd, devices_filter_CFG, NULL))) {
++	if ((cn = find_config_tree_array(cmd, devices_filter_CFG, NULL))) {
+ 		if (!(filter_components[1] = regex_filter_create(cn->v)))
+ 			goto_bad;
+ 		/* we have two filter components - create composite filter */
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index 534aab3..60686ea 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -347,7 +347,7 @@ static int _memlock_maps(struct cmd_context *cmd, lvmlock_t lock, size_t *mstats
+ 	}
+ 
+ 	line = _maps_buffer;
+-	cn = find_config_tree_node(cmd, activation_mlock_filter_CFG, NULL);
++	cn = find_config_tree_array(cmd, activation_mlock_filter_CFG, NULL);
+ 
+ 	while ((line_end = strchr(line, '\n'))) {
+ 		*line_end = '\0'; /* remove \n */
 
 
