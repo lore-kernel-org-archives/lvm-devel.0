@@ -1,60 +1,41 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 19 Aug 2020 13:09:42 +0000 (GMT)
-Subject: master - wipe_lv: close devices on error path
-Message-ID: <20200819130942.25A8E3857C7C@sourceware.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 15 Jul 2015 14:23:39 +0000 (UTC)
+Subject: master - vgexport: fix the all VGs case
+Message-ID: <20150715142339.7090960FCF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=46d15b5e4d2830fce313d7a58a1498d61b7a8f86
-Commit:        46d15b5e4d2830fce313d7a58a1498d61b7a8f86
-Parent:        3e9664bacad3b31f074d58ff5ae8e2403a7ba9d0
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 19 14:40:08 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Aug 19 15:09:09 2020 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2972604f0c189217e9f46280798bd01243d37f83
+Commit:        2972604f0c189217e9f46280798bd01243d37f83
+Parent:        d947a815e8bc6080ee5b364bd55f8aa0c2807f4e
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jul 15 09:21:45 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jul 15 09:23:30 2015 -0500
 
-wipe_lv: close devices on error path
+vgexport: fix the all VGs case
 
-Device was kept open preventing its deactivated and removed
-on error path.
+The ALL_VGS_IS_DEFAULT flag was wrongly removed;
+it is needed for vgexport -a to work.
 ---
- WHATS_NEW               | 1 +
- lib/metadata/lv_manip.c | 2 ++
- 2 files changed, 3 insertions(+)
+ tools/commands.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f3cb50692..cdc491c83 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.11 - 
- ==================================
-+  Fix missing device closing on wiping error path.
-   Update lvmvdo man page and better explain DISCARD usage.
+diff --git a/tools/commands.h b/tools/commands.h
+index e50505d..bab7bc9 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -1191,7 +1191,7 @@ xx(vgdisplay,
  
- Version 2.03.10 - 09th August 2020
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index f0ba3f0db..bb2ad5beb 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7625,6 +7625,7 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
- 		if (!wipe_known_signatures(lv->vg->cmd, dev, name, 0,
- 					   TYPE_DM_SNAPSHOT_COW,
- 					   wp.yes, wp.force, NULL)) {
-+			label_scan_invalidate(dev);
- 			log_error("Filed to wipe signatures of logical volume %s.",
- 				  display_lvname(lv));
- 			return 0;
-@@ -7659,6 +7660,7 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
- 						     (size_t) zero_sectors << SECTOR_SHIFT,
- 						     (uint8_t)wp.zero_value)) ||
- 		    !dev_write_zeros(dev, UINT64_C(0), (size_t) zero_sectors << SECTOR_SHIFT)) {
-+			label_scan_invalidate(dev);
- 			log_error("Failed to initialize %s of logical volume %s with value %d.",
- 				  display_size(lv->vg->cmd, zero_sectors),
- 				  display_lvname(lv), wp.zero_value);
+ xx(vgexport,
+    "Unregister volume group(s) from the system",
+-   0,
++   ALL_VGS_IS_DEFAULT,
+    "vgexport\n"
+    "\t[-a|--all]\n"
+    "\t[--commandprofile ProfileName]\n"
 
 
