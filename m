@@ -1,7 +1,7 @@
 From: Mathias Krause <mathias.krause@secunet.com>
-Date: Wed, 15 Jul 2015 09:27:56 +0200
-Subject: [PATCH] libdm: mark control fd as close-on-exec
-Message-ID: <1436945276-18080-1-git-send-email-mathias.krause@secunet.com>
+Date: Wed, 15 Jul 2015 09:34:58 +0200
+Subject: [PATCHv2] libdm: mark control fd as close-on-exec
+Message-ID: <1436945698-18193-1-git-send-email-mathias.krause@secunet.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,12 +12,15 @@ The control fd should be marked as close-on-exec to avoid file
 descriptor leaks in forking applications executing other programs.
 
 Signed-off-by: Mathias Krause <mathias.krause@secunet.com>
+
+---
+v2: fix return value mix-up (should be 1 on success)
 ---
  libdm/ioctl/libdm-iface.c | 13 +++++++++++++
  1 file changed, 13 insertions(+)
 
 diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index e3b33b805e93..86fbc5f2c4ba 100644
+index e3b33b805e93..0f9e98a4a061 100644
 --- a/libdm/ioctl/libdm-iface.c
 +++ b/libdm/ioctl/libdm-iface.c
 @@ -385,11 +385,24 @@ static void _close_control_fd(void)
@@ -31,7 +34,7 @@ index e3b33b805e93..86fbc5f2c4ba 100644
 +	 * atomic.
 +	 */
 +	if ((_control_fd = open(control, O_RDWR | O_CLOEXEC)) >= 0)
-+		return 0;
++		return 1;
 +#endif
 +
  	if ((_control_fd = open(control, O_RDWR)) < 0) {
