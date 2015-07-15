@@ -1,66 +1,71 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Thu, 30 Jul 2015 14:15:55 +0000 (UTC)
-Subject: dev-bmr-dmstats-test - tools: add 'dmstats' to install targets in Makefile.in
-Message-ID: <20150730141555.12CEB610E8@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 15 Jul 2015 11:10:53 +0000 (UTC)
+Subject: master - cache: capture missing policy name
+Message-ID: <20150715111053.0CA80609E2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d5847d21bbe6b6328e7c921c08b6d6f6cffc5c7a
-Commit:        d5847d21bbe6b6328e7c921c08b6d6f6cffc5c7a
-Parent:        8ffc93139ee301919bb77df7386f7fa88ee29143
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Jul 30 15:15:33 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Thu Jul 30 15:15:33 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=077645476cdfd7de0a16c283712b6c01938015d7
+Commit:        077645476cdfd7de0a16c283712b6c01938015d7
+Parent:        e9e35b011e084616f97ede9a31305259e70f883d
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jul 15 10:54:49 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jul 15 13:10:22 2015 +0200
 
-tools: add 'dmstats' to install targets in Makefile.in
+cache: capture missing policy name
 
+Policy name has to be always defined.
+Capture it as an internal error before write.
+When reading metadata without defined policy name, use default defined policy.
+
+TODO: Unsure, but it might have to be actually always 'mq' in this case.
 ---
- tools/Makefile.in |   10 +++++++++-
- 1 files changed, 9 insertions(+), 1 deletions(-)
+ lib/cache_segtype/cache.c |   16 ++++++++++++----
+ 1 files changed, 12 insertions(+), 4 deletions(-)
 
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index cec74a9..0a6069e 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -79,9 +79,10 @@ TARGETS =\
- 	lvm
+diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
+index ca30495..ad356a9 100644
+--- a/lib/cache_segtype/cache.c
++++ b/lib/cache_segtype/cache.c
+@@ -77,9 +77,13 @@ static int _cache_pool_text_import(struct lv_segment *seg,
+ 			return SEG_LOG_ERROR("policy must be a string in");
+ 		if (!(seg->policy_name = dm_pool_strdup(mem, str)))
+ 			return SEG_LOG_ERROR("Failed to duplicate policy in");
+-	} else
++	} else {
+ 		/* Cannot use 'just' default, so pick one */
+ 		seg->policy_name = DEFAULT_CACHE_POOL_POLICY; /* FIXME make configurable */
++		/* FIXME maybe here should be always 'mq' */
++		log_warn("WARNING: cache_policy undefined, using default \"%s\" policy.",
++			 seg->policy_name);
++	}
  
- TARGETS_DM = dmsetup
-+TARGETS_DM += dmstats
+ 	/*
+ 	 * Read in policy args:
+@@ -130,13 +134,17 @@ static int _cache_pool_text_export(const struct lv_segment *seg,
+ 	if (!(cache_mode = get_cache_pool_cachemode_name(seg)))
+ 		return_0;
  
- INSTALL_LVM_TARGETS = install_tools_dynamic
--INSTALL_DMSETUP_TARGETS = install_dmsetup_dynamic
-+INSTALL_DMSETUP_TARGETS = install_dmsetup_dynamic install_dmstats_dynamic
- INSTALL_CMDLIB_TARGETS = install_cmdlib_dynamic install_cmdlib_include 
- 
- ifeq ("@STATIC_LINK@", "yes")
-@@ -89,6 +90,7 @@ ifeq ("@STATIC_LINK@", "yes")
-   TARGETS_DM += dmsetup.static
-   INSTALL_LVM_TARGETS += install_tools_static
-   INSTALL_DMSETUP_TARGETS += install_dmsetup_static
-+  INSTALL_DMSETUP_TARGETS += install_dmstats_static
-   INSTALL_CMDLIB_TARGETS += install_cmdlib_static
- endif
- 
-@@ -205,9 +207,15 @@ install_tools_static: lvm.static
- install_dmsetup_dynamic: dmsetup
- 	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
- 
-+install_dmstats_dynamic: dmstats
-+	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
++	if (!seg->policy_name) {
++		log_error(INTERNAL_ERROR "Policy name for %s is not defined.",
++			  display_lvname(seg->lv));
++		return 0;
++	}
 +
- install_dmsetup_static: dmsetup.static
- 	$(INSTALL_PROGRAM) -D $< $(staticdir)/$(<F)
+ 	outf(f, "data = \"%s\"", seg_lv(seg, 0)->name);
+ 	outf(f, "metadata = \"%s\"", seg->metadata_lv->name);
+ 	outf(f, "chunk_size = %" PRIu32, seg->chunk_size);
+ 	outf(f, "cache_mode = \"%s\"", cache_mode);
+-
+-	if (seg->policy_name)
+-		outf(f, "policy = \"%s\"", seg->policy_name);
++	outf(f, "policy = \"%s\"", seg->policy_name);
  
-+install_dmstats_static: dmstats.static
-+	$(INSTALL_PROGRAM) -D $< $(staticdir)/$(<F)
-+
- install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
- 
- install_lvm2: $(INSTALL_LVM_TARGETS)
+ 	if (seg->policy_settings) {
+ 		if (strcmp(seg->policy_settings->key, "policy_settings")) {
 
 
