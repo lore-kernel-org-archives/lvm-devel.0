@@ -1,184 +1,131 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 17 Jul 2015 16:16:32 +0000 (UTC)
-Subject: master - lvmlockd: improve errors when lvm is built without a lock manager
-Message-ID: <20150717161632.D0064606F3@fedorahosted.org>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Fri, 17 Jul 2015 18:38:13 +0000 (UTC)
+Subject: master - test: Fix hardcoded /usr/share in testsuite
+Message-ID: <20150717183813.6899C6017F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=85b42d7c9551993f2d9cb48bb84e555ba0af5197
-Commit:        85b42d7c9551993f2d9cb48bb84e555ba0af5197
-Parent:        c7fc06a262bacb6355485edebc5f7b7037471106
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jul 16 16:28:57 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jul 17 11:16:18 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2bc0525e939ea38c74a814bd51683955599824a3
+Commit:        2bc0525e939ea38c74a814bd51683955599824a3
+Parent:        85b42d7c9551993f2d9cb48bb84e555ba0af5197
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Jul 14 20:27:31 2015 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Fri Jul 17 20:36:50 2015 +0200
 
-lvmlockd: improve errors when lvm is built without a lock manager
+test: Fix hardcoded /usr/share in testsuite
 
-When lvmlockd is compiled without support for one of the
-lock managers (sanlock or dlm), and a command tries to use
-one of them, explain that in the error message.
 ---
- daemons/lvmlockd/lvmlockd-core.c     |   21 +++++++++++++++++----
- daemons/lvmlockd/lvmlockd-internal.h |   20 ++++++++++++++++++++
- lib/locking/lvmlockd.c               |   13 ++++++++++++-
- 3 files changed, 49 insertions(+), 5 deletions(-)
+ configure                  |   14 ++++++++++++++
+ configure.in               |   11 +++++++++++
+ lib/misc/configure.h.in    |    3 +++
+ test/lib/brick-shelltest.h |    2 +-
+ 4 files changed, 29 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 19d96f0..a01c8a6 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -4167,9 +4167,9 @@ static void client_recv_action(struct client *cl)
- 		strncpy(cl->name, cl_name, MAX_NAME);
+diff --git a/configure b/configure
+index 48f5381..139f332 100755
+--- a/configure
++++ b/configure
+@@ -649,6 +649,7 @@ UDEV_SYNC
+ UDEV_RULES
+ UDEV_PC
+ THIN
++TESTSUITE_DATA
+ TESTING
+ STATIC_LINK
+ STATICDIR
+@@ -7351,6 +7352,9 @@ $as_echo "$ac_cv_flag_HAVE_FULL_RELRO" >&6; }
  
- 	if (!gl_use_dlm && !gl_use_sanlock && (lm > 0)) {
--		if (lm == LD_LM_DLM)
-+		if (lm == LD_LM_DLM && lm_support_dlm())
- 			gl_use_dlm = 1;
--		else if (lm == LD_LM_SANLOCK)
-+		else if (lm == LD_LM_SANLOCK && lm_support_sanlock())
- 			gl_use_sanlock = 1;
+ ################################################################################
  
- 		log_debug("set gl_use_%s", lm_str(lm));
-@@ -4233,6 +4233,18 @@ static void client_recv_action(struct client *cl)
- 		  cl->name[0] ? cl->name : "client", cl->pid, cl->id,
- 		  op_str(act->op), rt_str(act->rt), act->vg_name, mode_str(act->mode), opts);
++if test "$prefix" = NONE; then
++  datarootdir=${ac_default_prefix}/share
++fi
  
-+	if (lm == LD_LM_DLM && !lm_support_dlm()) {
-+		log_debug("dlm not supported");
-+		rv = -EPROTONOSUPPORT;
-+		goto out;
-+	}
+ ################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking file owner" >&5
+@@ -10813,6 +10817,16 @@ fi
+ fi
+ 
+ ################################################################################
++TESTSUITE_DATA='${datarootdir}/lvm2-testsuite'
++# double eval needed ${datarootdir} -> ${prefix}/share -> real path
 +
-+	if (lm == LD_LM_SANLOCK && !lm_support_sanlock()) {
-+		log_debug("sanlock not supported");
-+		rv = -EPROTONOSUPPORT;
-+		goto out;
-+	}
++cat >>confdefs.h <<_ACEOF
++#define TESTSUITE_DATA "$(eval echo $(eval echo $TESTSUITE_DATA))"
++_ACEOF
 +
- 	switch (act->op) {
- 	case LD_OP_START:
- 		rv = add_lockspace(act);
-@@ -4265,6 +4277,7 @@ static void client_recv_action(struct client *cl)
- 		rv = -EINVAL;
- 	};
- 
-+out:
- 	if (rv < 0) {
- 		act->result = rv;
- 		add_client_result(act);
-@@ -5685,9 +5698,9 @@ int main(int argc, char *argv[])
- 			break;
- 		case 'g':
- 			lm = str_to_lm(optarg);
--			if (lm == LD_LM_DLM)
-+			if (lm == LD_LM_DLM && lm_support_dlm())
- 				gl_use_dlm = 1;
--			else if (lm == LD_LM_SANLOCK)
-+			else if (lm == LD_LM_SANLOCK && lm_support_sanlock())
- 				gl_use_sanlock = 1;
- 			else {
- 				fprintf(stderr, "invalid gl-type option");
-diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
-index e9b6277..1fd7125 100644
---- a/daemons/lvmlockd/lvmlockd-internal.h
-+++ b/daemons/lvmlockd/lvmlockd-internal.h
-@@ -350,6 +350,11 @@ int lm_get_lockspaces_dlm(struct list_head *ls_rejoin);
- int lm_data_size_dlm(void);
- int lm_is_running_dlm(void);
- 
-+static inline int lm_support_dlm(void)
-+{
-+	return 1;
-+}
 +
- #else
- 
- static inline int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
-@@ -410,6 +415,11 @@ static inline int lm_is_running_dlm(void)
- 	return 0;
- }
- 
-+static inline int lm_support_dlm(void)
-+{
-+	return 0;
-+}
 +
- #endif /* dlm support */
++################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable valgrind awareness of pools" >&5
+ $as_echo_n "checking whether to enable valgrind awareness of pools... " >&6; }
+ # Check whether --enable-valgrind_pool was given.
+diff --git a/configure.in b/configure.in
+index ca461af..7bb18a4 100644
+--- a/configure.in
++++ b/configure.in
+@@ -174,6 +174,9 @@ AC_SUBST(HAVE_FULL_RELRO)
+ ################################################################################
+ dnl -- Prefix is /usr by default, the exec_prefix default is setup later
+ AC_PREFIX_DEFAULT(/usr)
++if test "$prefix" = NONE; then
++  datarootdir=${ac_default_prefix}/share
++fi
  
- #ifdef LOCKDSANLOCK_SUPPORT
-@@ -437,6 +447,11 @@ int lm_data_size_sanlock(void);
- int lm_is_running_sanlock(void);
- int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset);
+ ################################################################################
+ dnl -- Setup the ownership of the files
+@@ -1062,6 +1065,13 @@ if test "$TESTING" = yes; then
+ fi
  
-+static inline int lm_support_sanlock(void)
-+{
-+	return 1;
-+}
+ ################################################################################
++dnl -- Set LVM2 testsuite data
++TESTSUITE_DATA='${datarootdir}/lvm2-testsuite'
++# double eval needed ${datarootdir} -> ${prefix}/share -> real path
++AC_DEFINE_UNQUOTED(TESTSUITE_DATA, ["$(eval echo $(eval echo $TESTSUITE_DATA))"], [Path to testsuite data])
 +
- #else
- 
- static inline int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
-@@ -537,6 +552,11 @@ static inline int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free
- 	return -1;
- }
- 
-+static inline int lm_support_sanlock(void)
-+{
-+	return 0;
-+}
 +
- #endif /* sanlock support */
++################################################################################
+ dnl -- Enable valgrind awareness of memory pools
+ AC_MSG_CHECKING(whether to enable valgrind awareness of pools)
+ AC_ARG_ENABLE(valgrind_pool,
+@@ -1971,6 +1981,7 @@ AC_SUBST(SNAPSHOTS)
+ AC_SUBST(STATICDIR)
+ AC_SUBST(STATIC_LINK)
+ AC_SUBST(TESTING)
++AC_SUBST(TESTSUITE_DATA)
+ AC_SUBST(THIN)
+ AC_SUBST(THIN_CHECK_CMD)
+ AC_SUBST(THIN_DUMP_CMD)
+diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
+index d9f5a7d..13e8a2d 100644
+--- a/lib/misc/configure.h.in
++++ b/lib/misc/configure.h.in
+@@ -632,6 +632,9 @@
+ /* Define to 1 if you have the ANSI C header files. */
+ #undef STDC_HEADERS
  
- #endif	/* _LVM_LVMLOCKD_INTERNAL_H */
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index a0dff8a..ac8c155 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -522,6 +522,9 @@ static int _init_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
- 	case -EMANAGER:
- 		log_error("VG %s init failed: lock manager dlm is not running", vg->name);
- 		break;
-+	case -EPROTONOSUPPORT:
-+		log_error("VG %s init failed: lock manager dlm is not supported by lvmlockd", vg->name);
-+		break;
- 	default:
- 		log_error("VG %s init failed: %d", vg->name, result);
- 	}
-@@ -624,6 +627,9 @@ static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg)
- 	case -EMANAGER:
- 		log_error("VG %s init failed: lock manager sanlock is not running", vg->name);
- 		break;
-+	case -EPROTONOSUPPORT:
-+		log_error("VG %s init failed: lock manager sanlock is not supported by lvmlockd", vg->name);
-+		break;
- 	case -EMSGSIZE:
- 		log_error("VG %s init failed: no disk space for leases", vg->name);
- 		break;
-@@ -952,6 +958,9 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg)
- 	case -EMANAGER:
- 		log_error("VG %s start failed: lock manager %s is not running", vg->name, vg->lock_type);
- 		break;
-+	case -EPROTONOSUPPORT:
-+		log_error("VG %s start failed: lock manager %s is not supported by lvmlockd", vg->name, vg->lock_type);
-+		break;
- 	default:
- 		log_error("VG %s start failed: %d", vg->name, result);
- 	}
-@@ -1233,8 +1242,10 @@ int lockd_gl_create(struct cmd_context *cmd, const char *def_mode, const char *v
- 	if (result < 0) {
- 		if (result == -ESTARTING)
- 			log_error("Global lock failed: lockspace is starting.");
--		else if (result -EAGAIN)
-+		else if (result == -EAGAIN)
- 			log_error("Global lock failed: held by other host.");
-+		else if (result == -EPROTONOSUPPORT)
-+			log_error("VG create failed: lock manager %s is not supported by lvmlockd.", vg_lock_type);
- 		else
- 			log_error("Global lock failed: error %d", result);
- 		return 0;
++/* Path to testsuite data */
++#undef TESTSUITE_DATA
++
+ /* The path to 'thin_check', if available. */
+ #undef THIN_CHECK_CMD
+ 
+diff --git a/test/lib/brick-shelltest.h b/test/lib/brick-shelltest.h
+index e64a166..21e1eec 100644
+--- a/test/lib/brick-shelltest.h
++++ b/test/lib/brick-shelltest.h
+@@ -1173,7 +1173,7 @@ static int run( int argc, const char **argv, std::string fl_envvar = "TEST_FLAVO
+     opt.workdir = args.opt( "--workdir" );
+ 
+     if ( opt.testdir.empty() )
+-        opt.testdir = "/usr/share/lvm2-testsuite";
++        opt.testdir = TESTSUITE_DATA;
+ 
+     if ( opt.workdir.empty() )
+         opt.workdir = opt.testdir;
 
 
