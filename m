@@ -1,109 +1,91 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 17 Jul 2015 20:35:40 +0000 (UTC)
-Subject: master - vgchange/lvchange: enforce the shared VG lock from lvmlockd
-Message-ID: <20150717203540.BAFF060066@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 20 Jul 2015 14:51:51 +0000 (UTC)
+Subject: master - log: Add DM_ABORT_ON_INTERNAL_ERRORS lvm override.
+Message-ID: <20150720145151.9747761471@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b4be988732e909d34ae7b4868bf30cf44c087518
-Commit:        b4be988732e909d34ae7b4868bf30cf44c087518
-Parent:        b785a50da415cd8ee48e971f720640457514032d
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 17 15:13:22 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jul 17 15:35:34 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=500fd8b9bfc6f15d2417c829bce33ea4768261b8
+Commit:        500fd8b9bfc6f15d2417c829bce33ea4768261b8
+Parent:        b4be988732e909d34ae7b4868bf30cf44c087518
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Jul 20 15:48:59 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Jul 20 15:48:59 2015 +0100
 
-vgchange/lvchange: enforce the shared VG lock from lvmlockd
+log: Add DM_ABORT_ON_INTERNAL_ERRORS lvm override.
 
-The vgchange/lvchange activation commands read the VG, and
-don't write it, so they acquire a shared VG lock from lvmlockd.
-When other commands fail to acquire a shared VG lock from
-lvmlockd, a warning is printed and they continue without it.
-(Without it, the VG metadata they display from lvmetad may
-not be up to date.)
-
-vgchange/lvchange -a shouldn't continue without the shared
-lock for a couple reasons:
-
-. Usually they will just continue on and fail to acquire the
-  LV locks for activation, so continuing is pointless.
-
-. More importantly, without the sh VG lock, the VG metadata
-  used by the command may be stale, and the LV locks shown
-  in the VG metadata may no longer be current.  In the
-  case of sanlock, this would result in odd, unpredictable
-  errors when lvmlockd doesn't find the expected lock on
-  disk.  In the case of dlm, the invalid LV lock could be
-  granted for the non-existing LV.
-
-The solution is to not continue after the shared lock fails,
-in the same way that a command fails if an exclusive lock fails.
+Recognise DM_ABORT_ON_INTERNAL_ERRORS in the lvm logging function as
+well as the default dm function it replaces.
 ---
- lib/commands/toolcontext.h |    1 +
- lib/metadata/metadata.c    |    2 +-
- tools/lvchange.c           |    4 +++-
- tools/vgchange.c           |    4 +++-
- 4 files changed, 8 insertions(+), 3 deletions(-)
+ WHATS_NEW     |    1 +
+ lib/log/log.c |   21 ++++++++++++++++++---
+ 2 files changed, 19 insertions(+), 3 deletions(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 283783f..4e8998d 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -107,6 +107,7 @@ struct cmd_context {
- 	unsigned lockd_vg_disable:1;
- 	unsigned lockd_lv_disable:1;
- 	unsigned lockd_vg_default_sh:1;
-+	unsigned lockd_vg_enforce_sh:1;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 596a92f..3cd9111 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.126 -
+ ================================
++  Recognise DM_ABORT_ON_INTERNAL_ERRORS env var override in lvm logging fn.
+   Fix alloc segfault when extending LV with fewer stripes than in first seg.
+   Fix handling of cache policy name.
+   Set cache policy before with the first lvm2 cache pool metadata commit.
+diff --git a/lib/log/log.c b/lib/log/log.c
+index a439d1d..9929090 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -36,7 +36,7 @@ static int _indent = 1;
+ static int _log_suppress = 0;
+ static char _msg_prefix[30] = "  ";
+ static int _already_logging = 0;
+-static int _abort_on_internal_errors = 0;
++static int _abort_on_internal_errors_config = 0;
  
- 	struct dev_types *dev_types;
+ static lvm2_log_fn_t _lvm2_log_fn = NULL;
  
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 56ed3fb..8757331 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4803,7 +4803,7 @@ static int _access_vg_lock_type(struct cmd_context *cmd, struct volume_group *vg
- 	 * no lock.
- 	 */
- 	if (lockd_state & LDST_FAIL) {
--		if (lockd_state & LDST_EX) {
-+		if ((lockd_state & LDST_EX) || cmd->lockd_vg_enforce_sh) {
- 			log_error("Cannot access VG %s due to failed lock.", vg->name);
- 			*failure |= FAILED_LOCK_MODE;
- 			return 0;
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 58e0fb2..823c36a 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -1294,8 +1294,10 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
- 	 * are cases where lvchange does not modify the vg, so they can use
- 	 * the sh lock mode.
- 	 */
--	if (arg_count(cmd, activate_ARG) || arg_count(cmd, refresh_ARG))
-+	if (arg_count(cmd, activate_ARG) || arg_count(cmd, refresh_ARG)) {
- 		cmd->lockd_vg_default_sh = 1;
-+		cmd->lockd_vg_enforce_sh = 1;
+@@ -218,9 +218,10 @@ void init_indent(int indent)
+ 	_indent = indent;
+ }
+ 
++/* If present, environment setting will override this. */
+ void init_abort_on_internal_errors(int fatal)
+ {
+-	_abort_on_internal_errors = fatal;
++	_abort_on_internal_errors_config = fatal;
+ }
+ 
+ void reset_lvm_errno(int store_errmsg)
+@@ -277,10 +278,24 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 	size_t msglen;
+ 	const char *indent_spaces = "";
+ 	FILE *stream;
++	static int _abort_on_internal_errors_env_present = -1;
++	static int _abort_on_internal_errors_env = 0;
++	char *env_str;
+ 
+ 	level &= ~(_LOG_STDERR|_LOG_ONCE);
+ 
+-	if (_abort_on_internal_errors &&
++	if (_abort_on_internal_errors_env_present < 0) {
++		if ((env_str = getenv("DM_ABORT_ON_INTERNAL_ERRORS"))) {
++			_abort_on_internal_errors_env_present = 1;
++			/* Set when env DM_ABORT_ON_INTERNAL_ERRORS is not "0" */
++			_abort_on_internal_errors_env = strcmp(env_str, "0");
++		} else
++			_abort_on_internal_errors_env_present = 0;
 +	}
- 
- 	return process_each_lv(cmd, argc, argv,
- 			       update ? READ_FOR_UPDATE : 0, NULL,
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 9612222..824fd91 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -1017,8 +1017,10 @@ static int _lockd_vgchange(struct cmd_context *cmd, int argc, char **argv)
- 		return 0;
- 	}
- 
--	if (arg_is_set(cmd, activate_ARG) || arg_is_set(cmd, refresh_ARG))
-+	if (arg_is_set(cmd, activate_ARG) || arg_is_set(cmd, refresh_ARG)) {
- 		cmd->lockd_vg_default_sh = 1;
-+		cmd->lockd_vg_enforce_sh = 1;
-+	}
- 
- 	/* Starting a vg lockspace means there are no locks available yet. */
- 
++
++	/* Use value from environment if present, otherwise use value from config. */
++	if (((_abort_on_internal_errors_env_present && _abort_on_internal_errors_env) ||
++	     (!_abort_on_internal_errors_env_present && _abort_on_internal_errors_config)) &&
+ 	    !strncmp(format, INTERNAL_ERROR, sizeof(INTERNAL_ERROR) - 1)) {
+ 		fatal_internal_error = 1;
+ 		/* Internal errors triggering abort cannot be suppressed. */
 
 
