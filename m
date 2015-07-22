@@ -1,102 +1,191 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 22 Jul 2015 12:26:40 +0000 (UTC)
-Subject: master - config: add CFG_SECTION_NO_CHECK flag
-Message-ID: <20150722122640.444B461078@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 22 Jul 2015 17:29:55 +0000 (UTC)
+Subject: master - lvconvert: merge polling fixes for lockd
+Message-ID: <20150722172955.CA6F1617DD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8bfcefe11a2ce594d1f6e8ef5a1b17e80786ceab
-Commit:        8bfcefe11a2ce594d1f6e8ef5a1b17e80786ceab
-Parent:        00d24511bc5e1ae446867f65b5adfe3e7d404398
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jul 22 14:19:07 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jul 22 14:25:42 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=27e6aee3904d195de658505b3bacc65601344d46
+Commit:        27e6aee3904d195de658505b3bacc65601344d46
+Parent:        8bfcefe11a2ce594d1f6e8ef5a1b17e80786ceab
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jul 22 11:42:57 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jul 22 12:28:06 2015 -0500
 
-config: add CFG_SECTION_NO_CHECK flag
+lvconvert: merge polling fixes for lockd
 
-The CFG_SECTION_NO_CHECK flag can be used to mark a section
-and its whole subtree as containing settings where checks
-won't be made (lvmconfig --validate).
+. the poll check will eventually call finish which will
+  write the VG, so an ex VG lock is needed from lvmlockd.
 
-These are setting where we don't know the names and and type
-in advance and they're recognized in runtime. As we don't know
-the type and name in advance, we can't do any checks here
-of course.
+. fix missing unlock on poll error path
 
-Use this flag with great care as it disables config checks
-for the whole config subtree found under such section.
-
-This flag is going to be used by subsequent patches from
-Zdenek to support some cache settings...
+. remove the lockd locking while monitoring the progress
+  of the command, as suggested by the earlier FIXME comment,
+  as it's not needed.
 ---
- lib/config/config.c          |   12 ++++++------
- lib/config/config.h          |    2 ++
- lib/config/config_settings.h |    1 +
- 3 files changed, 9 insertions(+), 6 deletions(-)
+ tools/lvconvert.c  |   10 +------
+ tools/polldaemon.c |   61 +++++++++++++++++++++++++++++-----------------------
+ 2 files changed, 36 insertions(+), 35 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 35ee3ac..eb8880e 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1040,9 +1040,14 @@ static int _config_def_check_tree(struct cft_check_handle *handle,
- 				  size_t buf_size, struct dm_config_node *root)
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 0c5e2bd..6a0e0ca 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3410,10 +3410,7 @@ static int lvconvert_single(struct cmd_context *cmd, struct lvconvert_params *lp
+ 		cmd->handles_missing_pvs = 1;
+ 	}
+ 
+-	/*
+-	 * The VG lock will be released when the command exits.
+-	 * Commands that poll the LV will reacquire the VG lock.
+-	 */
++	/* Unlock on error paths not required, it's automatic when command exits. */
+ 	if (!lockd_vg(cmd, lp->vg_name, "ex", 0, &lockd_state))
+ 		goto_out;
+ 
+@@ -3461,10 +3458,7 @@ static int lvconvert_single(struct cmd_context *cmd, struct lvconvert_params *lp
+ bad:
+ 	unlock_vg(cmd, lp->vg_name);
+ 
+-	/*
+-	 * The command may sit and monitor progress for some time,
+-	 * and we do not need or want the VG lock held during that.
+-	 */
++	/* Unlock here so it's not held during polling. */
+ 	lockd_vg(cmd, lp->vg_name, "un", 0, &lockd_state);
+ 
+ 	release_vg(vg);
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index bbe4641..4527efb 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -136,17 +136,22 @@ static void _sleep_and_rescan_devices(struct daemon_parms *parms)
+ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
+ 		       struct daemon_parms *parms)
  {
- 	struct dm_config_node *cn;
-+	cfg_def_item_t *def;
- 	int valid, r = 1;
- 	size_t len;
+-	struct volume_group *vg;
++	struct volume_group *vg = NULL;
+ 	struct logical_volume *lv;
+ 	int finished = 0;
+ 	uint32_t lockd_state = 0;
++	int ret;
  
-+	def = cfg_def_get_item_p(root->id);
-+	if (def->flags & CFG_SECTION_NO_CHECK)
-+		return 1;
-+
- 	for (cn = root->child; cn; cn = cn->sib) {
- 		if ((valid = _config_def_check_node(handle, vp, pvp, rp, prp,
- 						    buf_size, cn)) && !cn->v) {
-@@ -1662,14 +1667,9 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
- 	char path[CFG_PATH_MAX_LEN];
- 	char commentline[MAX_COMMENT_LINE+1];
+ 	/* Poll for completion */
+ 	while (!finished) {
+ 		if (parms->wait_before_testing)
+ 			_sleep_and_rescan_devices(parms);
  
--	if (cn->id < 0)
-+	if (cn->id <= 0)
- 		return 1;
+-		if (!lockd_vg(cmd, id->vg_name, "sh", 0, &lockd_state)) {
++		/*
++		 * An ex VG lock is needed because the check can call finish_copy
++		 * which writes the VG.
++		 */
++		if (!lockd_vg(cmd, id->vg_name, "ex", 0, &lockd_state)) {
+ 			log_error("ABORTING: Can't lock VG for %s.", id->display_name);
+ 			return 0;
+ 		}
+@@ -154,10 +159,12 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
+ 		/* Locks the (possibly renamed) VG again */
+ 		vg = vg_read(cmd, id->vg_name, NULL, READ_FOR_UPDATE, lockd_state);
+ 		if (vg_read_error(vg)) {
+-			release_vg(vg);
+-			log_error("ABORTING: Can't reread VG for %s.", id->display_name);
+ 			/* What more could we do here? */
+-			return 0;
++			log_error("ABORTING: Can't reread VG for %s.", id->display_name);
++			release_vg(vg);
++			vg = NULL;
++			ret = 0;
++			goto out;
+ 		}
  
--	if (!cn->id) {
--		log_error(INTERNAL_ERROR "Configuration node %s has invalid id.", cn->key);
--		return 0;
--	}
+ 		lv = find_lv(vg, id->lv_name);
+@@ -174,9 +181,8 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
+ 			else
+ 				log_print_unless_silent("Can't find LV in %s for %s.",
+ 							vg->name, id->display_name);
 -
- 	if (out->tree_spec->type == CFG_DEF_TREE_LIST)
- 		return 1;
+-			unlock_and_release_vg(cmd, vg, vg->name);
+-			return 1;
++			ret = 1;
++			goto out;
+ 		}
  
-diff --git a/lib/config/config.h b/lib/config/config.h
-index 03319bf..7520fc0 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -121,6 +121,8 @@ typedef union {
- #define CFG_DISABLED		0x200
- /* whether to print integers in octal form (prefixed by "0") */
- #define CFG_FORMAT_INT_OCTAL	0x400
-+/* whether to disable checks for the whole config section subtree */
-+#define CFG_SECTION_NO_CHECK	0x800
+ 		/*
+@@ -185,13 +191,13 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
+ 		 */
+ 		if (!lv_is_active_locally(lv)) {
+ 			log_print_unless_silent("%s: Interrupted: No longer active.", id->display_name);
+-			unlock_and_release_vg(cmd, vg, vg->name);
+-			return 1;
++			ret = 1;
++			goto out;
+ 		}
  
- /* configuration definition item structure */
- typedef struct cfg_def_item {
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index ce03b36..5209531 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -51,6 +51,7 @@
-  *                                 CFG_DEFAULT_COMMENTED - node's default value is commented out on output
-  *                                 CFG_DISABLED - configuration is disabled (defaults always used)
-  *                                 CFG_FORMAT_INT_OCTAL - print integer number in octal form (also prefixed by "0")
-+ *                                 CFG_SECTION_NO_CHECK - do not check content of the section at all - use with care!!!
-  *
-  * type:		       Allowed type for the value of simple configuation setting, one of:
-  *                                 CFG_TYPE_BOOL
+ 		if (!_check_lv_status(cmd, vg, lv, id->display_name, parms, &finished)) {
+-			unlock_and_release_vg(cmd, vg, vg->name);
+-			return_0;
++			ret = 0;
++			goto_out;
+ 		}
+ 
+ 		unlock_and_release_vg(cmd, vg, vg->name);
+@@ -215,6 +221,12 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
+ 	}
+ 
+ 	return 1;
++
++out:
++	if (vg)
++		unlock_and_release_vg(cmd, vg, vg->name);
++	lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state);
++	return ret;
+ }
+ 
+ struct poll_id_list {
+@@ -373,21 +385,17 @@ static int report_progress(struct cmd_context *cmd, struct poll_operation_id *id
+ 	int ret;
+ 
+ 	/*
+-	 * FIXME: we don't really need to take the vg lock here,
+-	 * because we only report the progress on the same host
+-	 * where the pvmove/lvconvert is happening.  This means
+-	 * that the local pvmove/lvconvert/lvpoll commands are
+-	 * updating the local lvmetad with the latest info they
+-	 * have, and we just need to read the latest info that
+-	 * they have put into lvmetad about their progress.
+-	 * No VG lock is needed to protect anything here
+-	 * (we're just reading the VG), and no VG lock is
+-	 * needed to force a VG read from disk to get changes
+-	 * from other hosts, because the only change to the VG
+-	 * we're interested in is the change done locally.
++	 * It's reasonable to expect a lockd_vg("sh") here, but it should
++	 * not actually be needed, because we only report the progress on
++	 * the same host where the pvmove/lvconvert is happening.  This means
++	 * that the local pvmove/lvconvert/lvpoll commands are updating the
++	 * local lvmetad with the latest info they have, and we just need to
++	 * read the latest info that they have put into lvmetad about their
++	 * progress.  No VG lock is needed to protect anything here (we're
++	 * just reading the VG), and no VG lock is needed to force a VG read
++	 * from disk to get changes from other hosts, because the only change
++	 * to the VG we're interested in is the change done locally.
+ 	 */
+-	if (!lockd_vg(cmd, id->vg_name, "sh", 0, &lockd_state))
+-		return 0;
+ 
+ 	vg = vg_read(cmd, id->vg_name, NULL, 0, lockd_state);
+ 	if (vg_read_error(vg)) {
+@@ -431,7 +439,6 @@ static int report_progress(struct cmd_context *cmd, struct poll_operation_id *id
+ out:
+ 	unlock_and_release_vg(cmd, vg, vg->name);
+ out_ret:
+-	lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state);
+ 	return ret;
+ }
+ 
 
 
