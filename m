@@ -1,191 +1,89 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 22 Jul 2015 17:29:55 +0000 (UTC)
-Subject: master - lvconvert: merge polling fixes for lockd
-Message-ID: <20150722172955.CA6F1617DD@fedorahosted.org>
+Date: Wed, 22 Jul 2015 20:46:04 +0000 (UTC)
+Subject: master - pvscan: skip autoactivation for lockd VGs
+Message-ID: <20150722204604.D585860EE4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=27e6aee3904d195de658505b3bacc65601344d46
-Commit:        27e6aee3904d195de658505b3bacc65601344d46
-Parent:        8bfcefe11a2ce594d1f6e8ef5a1b17e80786ceab
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b92e5026957c5ca72e6e88304feaf7527ca80af1
+Commit:        b92e5026957c5ca72e6e88304feaf7527ca80af1
+Parent:        27e6aee3904d195de658505b3bacc65601344d46
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jul 22 11:42:57 2015 -0500
+AuthorDate:    Wed Jul 22 14:53:46 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jul 22 12:28:06 2015 -0500
+CommitterDate: Wed Jul 22 15:44:20 2015 -0500
 
-lvconvert: merge polling fixes for lockd
+pvscan: skip autoactivation for lockd VGs
 
-. the poll check will eventually call finish which will
-  write the VG, so an ex VG lock is needed from lvmlockd.
+pvscan autoactivation does not work for lockd VGs because
+lock start is needed on a lockd VG before locking can be
+done for it.  Add a check to skip the attempt at autoactivate
+rather than calling it, knowing it will fail.
 
-. fix missing unlock on poll error path
-
-. remove the lockd locking while monitoring the progress
-  of the command, as suggested by the earlier FIXME comment,
-  as it's not needed.
+Add a comment explaining why pvscan --cache works fine for
+lockd VGs without locks, and why autoactivate is not done.
 ---
- tools/lvconvert.c  |   10 +------
- tools/polldaemon.c |   61 +++++++++++++++++++++++++++++-----------------------
- 2 files changed, 36 insertions(+), 35 deletions(-)
+ lib/cache/lvmetad.c |   45 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 45 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 0c5e2bd..6a0e0ca 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3410,10 +3410,7 @@ static int lvconvert_single(struct cmd_context *cmd, struct lvconvert_params *lp
- 		cmd->handles_missing_pvs = 1;
- 	}
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 60f0277..856b30f 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -952,6 +952,51 @@ int lvmetad_pv_found(const struct id *pvid, struct device *dev, const struct for
+ 	     daemon_reply_int(reply, "seqno_after", -1) != daemon_reply_int(reply, "seqno_before", -1)))
+ 		log_warn("WARNING: Inconsistent metadata found for VG %s", vg->name);
  
--	/*
--	 * The VG lock will be released when the command exits.
--	 * Commands that poll the LV will reacquire the VG lock.
--	 */
-+	/* Unlock on error paths not required, it's automatic when command exits. */
- 	if (!lockd_vg(cmd, lp->vg_name, "ex", 0, &lockd_state))
- 		goto_out;
- 
-@@ -3461,10 +3458,7 @@ static int lvconvert_single(struct cmd_context *cmd, struct lvconvert_params *lp
- bad:
- 	unlock_vg(cmd, lp->vg_name);
- 
--	/*
--	 * The command may sit and monitor progress for some time,
--	 * and we do not need or want the VG lock held during that.
--	 */
-+	/* Unlock here so it's not held during polling. */
- 	lockd_vg(cmd, lp->vg_name, "un", 0, &lockd_state);
- 
- 	release_vg(vg);
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index bbe4641..4527efb 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -136,17 +136,22 @@ static void _sleep_and_rescan_devices(struct daemon_parms *parms)
- int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 		       struct daemon_parms *parms)
- {
--	struct volume_group *vg;
-+	struct volume_group *vg = NULL;
- 	struct logical_volume *lv;
- 	int finished = 0;
- 	uint32_t lockd_state = 0;
-+	int ret;
- 
- 	/* Poll for completion */
- 	while (!finished) {
- 		if (parms->wait_before_testing)
- 			_sleep_and_rescan_devices(parms);
- 
--		if (!lockd_vg(cmd, id->vg_name, "sh", 0, &lockd_state)) {
-+		/*
-+		 * An ex VG lock is needed because the check can call finish_copy
-+		 * which writes the VG.
-+		 */
-+		if (!lockd_vg(cmd, id->vg_name, "ex", 0, &lockd_state)) {
- 			log_error("ABORTING: Can't lock VG for %s.", id->display_name);
- 			return 0;
- 		}
-@@ -154,10 +159,12 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 		/* Locks the (possibly renamed) VG again */
- 		vg = vg_read(cmd, id->vg_name, NULL, READ_FOR_UPDATE, lockd_state);
- 		if (vg_read_error(vg)) {
--			release_vg(vg);
--			log_error("ABORTING: Can't reread VG for %s.", id->display_name);
- 			/* What more could we do here? */
--			return 0;
-+			log_error("ABORTING: Can't reread VG for %s.", id->display_name);
-+			release_vg(vg);
-+			vg = NULL;
-+			ret = 0;
-+			goto out;
- 		}
- 
- 		lv = find_lv(vg, id->lv_name);
-@@ -174,9 +181,8 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 			else
- 				log_print_unless_silent("Can't find LV in %s for %s.",
- 							vg->name, id->display_name);
--
--			unlock_and_release_vg(cmd, vg, vg->name);
--			return 1;
-+			ret = 1;
-+			goto out;
- 		}
- 
- 		/*
-@@ -185,13 +191,13 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 		 */
- 		if (!lv_is_active_locally(lv)) {
- 			log_print_unless_silent("%s: Interrupted: No longer active.", id->display_name);
--			unlock_and_release_vg(cmd, vg, vg->name);
--			return 1;
-+			ret = 1;
-+			goto out;
- 		}
- 
- 		if (!_check_lv_status(cmd, vg, lv, id->display_name, parms, &finished)) {
--			unlock_and_release_vg(cmd, vg, vg->name);
--			return_0;
-+			ret = 0;
-+			goto_out;
- 		}
- 
- 		unlock_and_release_vg(cmd, vg, vg->name);
-@@ -215,6 +221,12 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 	}
- 
- 	return 1;
++	/*
++	 * pvscan --cache does not perform any lvmlockd locking, and
++	 * pvscan --cache -aay skips autoactivation in lockd VGs.
++	 *
++	 * pvscan --cache populates lvmetad with VG metadata from disk.
++	 * No lvmlockd locking is needed.  It is expected that lockd VG
++	 * metadata that is read by pvscan and populated in lvmetad may
++	 * be immediately stale due to changes to the VG from other hosts
++	 * during or after this pvscan.  This is normal and not a problem.
++	 * When a subsequent lvm command uses the VG, it will lock the VG
++	 * with lvmlockd, read the VG from lvmetad, and update the cached
++	 * copy from disk if necessary.
++	 *
++	 * pvscan --cache -aay does not activate LVs in lockd VGs because
++	 * activation requires locking, and a lock-start operation is needed
++	 * on a lockd VG before any locking can be performed in it.
++	 *
++	 * An equivalent of pvscan --cache -aay for lockd VGs is:
++	 * 1. pvscan --cache
++	 * 2. vgchange --lock-start
++	 * 3. vgchange -aay -S 'locktype=sanlock || locktype=dlm'
++	 *
++	 * [We could eventually add support for autoactivating lockd VGs
++	 * using pvscan by incorporating the lock start step (which can
++	 * take a long time), but there may be a better option than
++	 * continuing to overload pvscan.]
++	 * 
++	 * Stages of starting a lockd VG:
++	 *
++	 * . pvscan --cache populates lockd VGs in lvmetad without locks,
++	 *   and this initial cached copy may quickly become stale.
++	 *
++	 * . vgchange --lock-start VG reads the VG without the VG lock
++	 *   because no locks are available until the locking is started.
++	 *   It only uses the VG name and lock_type from the VG metadata,
++	 *   and then only uses it to start the VG lockspace in lvmlockd.
++	 *
++	 * . Further lvm commands, e.g. activation, can then lock the VG
++	 *   with lvmlockd and use current VG metdata.
++	 */
++	if (handler && vg && is_lockd_type(vg->lock_type)) {
++		log_debug_lvmetad("Skip pvscan activation for lockd type VG %s", vg->name);
++		handler = NULL;
++	}
 +
-+out:
-+	if (vg)
-+		unlock_and_release_vg(cmd, vg, vg->name);
-+	lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state);
-+	return ret;
- }
- 
- struct poll_id_list {
-@@ -373,21 +385,17 @@ static int report_progress(struct cmd_context *cmd, struct poll_operation_id *id
- 	int ret;
- 
- 	/*
--	 * FIXME: we don't really need to take the vg lock here,
--	 * because we only report the progress on the same host
--	 * where the pvmove/lvconvert is happening.  This means
--	 * that the local pvmove/lvconvert/lvpoll commands are
--	 * updating the local lvmetad with the latest info they
--	 * have, and we just need to read the latest info that
--	 * they have put into lvmetad about their progress.
--	 * No VG lock is needed to protect anything here
--	 * (we're just reading the VG), and no VG lock is
--	 * needed to force a VG read from disk to get changes
--	 * from other hosts, because the only change to the VG
--	 * we're interested in is the change done locally.
-+	 * It's reasonable to expect a lockd_vg("sh") here, but it should
-+	 * not actually be needed, because we only report the progress on
-+	 * the same host where the pvmove/lvconvert is happening.  This means
-+	 * that the local pvmove/lvconvert/lvpoll commands are updating the
-+	 * local lvmetad with the latest info they have, and we just need to
-+	 * read the latest info that they have put into lvmetad about their
-+	 * progress.  No VG lock is needed to protect anything here (we're
-+	 * just reading the VG), and no VG lock is needed to force a VG read
-+	 * from disk to get changes from other hosts, because the only change
-+	 * to the VG we're interested in is the change done locally.
- 	 */
--	if (!lockd_vg(cmd, id->vg_name, "sh", 0, &lockd_state))
--		return 0;
- 
- 	vg = vg_read(cmd, id->vg_name, NULL, 0, lockd_state);
- 	if (vg_read_error(vg)) {
-@@ -431,7 +439,6 @@ static int report_progress(struct cmd_context *cmd, struct poll_operation_id *id
- out:
- 	unlock_and_release_vg(cmd, vg, vg->name);
- out_ret:
--	lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state);
- 	return ret;
- }
- 
+ 	if (result && handler) {
+ 		status = daemon_reply_str(reply, "status", "<missing>");
+ 		vgname = daemon_reply_str(reply, "vgname", "<missing>");
 
 
