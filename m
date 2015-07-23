@@ -1,251 +1,145 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 22 Jul 2015 22:13:20 +0000 (UTC)
-Subject: master - libdm: Use wrappers for all malloc functions.
-Message-ID: <20150722221320.297CC60EE6@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Thu, 23 Jul 2015 15:39:26 +0000 (UTC)
+Subject: master - lvmlockd: improve check for duplicate global locks
+Message-ID: <20150723153926.304206036D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1612c570b6412b68349b055ba3a6dab1796b8f35
-Commit:        1612c570b6412b68349b055ba3a6dab1796b8f35
-Parent:        b92e5026957c5ca72e6e88304feaf7527ca80af1
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Jul 22 23:03:32 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Jul 22 23:11:48 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=57534733b7750f17f5ffa115306dcb650d8015b9
+Commit:        57534733b7750f17f5ffa115306dcb650d8015b9
+Parent:        1612c570b6412b68349b055ba3a6dab1796b8f35
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Jul 23 10:34:24 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Jul 23 10:39:11 2015 -0500
 
-libdm: Use wrappers for all malloc functions.
+lvmlockd: improve check for duplicate global locks
 
-Move the DEBUG_MEM decision inside libdevmapper.so instead of exposing
-it in libdevmapper.h which causes failures if the binary and library
-were compiled with opposite debugging settings.
+When there are duplicate global locks, check if the gl
+is still enabled each time a gl or vg lock is acquired
+in the lockspace.  Once one of the duplicates is disabled,
+then other hosts will recognize that the issue is resolved
+without needing to restart the lockspaces.
 ---
- WHATS_NEW_DM                        |    1 +
- libdm/.exported_symbols             |    9 +++
- libdm/.exported_symbols.DM_1_02_103 |    7 +++
- libdm/libdevmapper.h                |   52 +++++++------------
- libdm/mm/dbg_malloc.c               |   95 +++++++++++++++++++++++++++++++++++
- 5 files changed, 130 insertions(+), 34 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c     |   23 +++++------------------
+ daemons/lvmlockd/lvmlockd-internal.h |   11 +++++++++++
+ daemons/lvmlockd/lvmlockd-sanlock.c  |   10 ++++++++--
+ 3 files changed, 24 insertions(+), 20 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 57edd8d..3dba5b8 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.103 -
- ================================
-+  Introduce libdevmapper wrappers for all malloc-related functions.
- 
- Version 1.02.102 - 7th July 2015
- ================================
-diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
-index 2b85343..6000686 100644
---- a/libdm/.exported_symbols
-+++ b/libdm/.exported_symbols
-@@ -1,3 +1,12 @@
-+dm_bounds_check_debug
-+dm_dump_memory_debug
-+dm_free_aux
- dm_log
- dm_log_with_errno
-+dm_malloc_aux
-+dm_malloc_aux_debug
-+dm_realloc_aux
-+dm_strdup_aux
- dm_task_get_info_with_deferred_remove
-+dm_zalloc_aux
-+dm_zalloc_aux_debug
-diff --git a/libdm/.exported_symbols.DM_1_02_103 b/libdm/.exported_symbols.DM_1_02_103
-new file mode 100644
-index 0000000..5dea5ea
---- /dev/null
-+++ b/libdm/.exported_symbols.DM_1_02_103
-@@ -0,0 +1,7 @@
-+dm_bounds_check_wrapper
-+dm_dump_memory_wrapper
-+dm_free_wrapper
-+dm_malloc_wrapper
-+dm_realloc_wrapper
-+dm_strdup_wrapper
-+dm_zalloc_wrapper
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index aad2971..6523c70 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -962,44 +962,28 @@ uint32_t dm_tree_get_cookie(struct dm_tree_node *node);
-  * Memory management
-  *******************/
- 
--void *dm_malloc_aux(size_t s, const char *file, int line)
-+/*
-+ * Never use these functions directly - use the macros following instead.
-+ */
-+void *dm_malloc_wrapper(size_t s, const char *file, int line)
- 	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
--void *dm_malloc_aux_debug(size_t s, const char *file, int line)
--	__attribute__((__warn_unused_result__));
--void *dm_zalloc_aux(size_t s, const char *file, int line)
-+void *dm_zalloc_wrapper(size_t s, const char *file, int line)
- 	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
--void *dm_zalloc_aux_debug(size_t s, const char *file, int line)
-+void *dm_realloc_wrapper(void *p, unsigned int s, const char *file, int line)
- 	__attribute__((__warn_unused_result__));
--char *dm_strdup_aux(const char *str, const char *file, int line)
--	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
--void dm_free_aux(void *p);
--void *dm_realloc_aux(void *p, unsigned int s, const char *file, int line)
-+void dm_free_wrapper(void *ptr);
-+char *dm_strdup_wrapper(const char *s, const char *file, int line)
- 	__attribute__((__warn_unused_result__));
--int dm_dump_memory_debug(void);
--void dm_bounds_check_debug(void);
--
--#ifdef DEBUG_MEM
--
--#  define dm_malloc(s) dm_malloc_aux_debug((s), __FILE__, __LINE__)
--#  define dm_zalloc(s) dm_zalloc_aux_debug((s), __FILE__, __LINE__)
--#  define dm_strdup(s) dm_strdup_aux((s), __FILE__, __LINE__)
--#  define dm_free(p) dm_free_aux(p)
--#  define dm_realloc(p, s) dm_realloc_aux(p, s, __FILE__, __LINE__)
--#  define dm_dump_memory() dm_dump_memory_debug()
--#  define dm_bounds_check() dm_bounds_check_debug()
--
--#else
--
--#  define dm_malloc(s) dm_malloc_aux((s), __FILE__, __LINE__)
--#  define dm_zalloc(s) dm_zalloc_aux((s), __FILE__, __LINE__)
--#  define dm_strdup(s) strdup(s)
--#  define dm_free(p) free(p)
--#  define dm_realloc(p, s) realloc(p, s)
--#  define dm_dump_memory() {}
--#  define dm_bounds_check() {}
--
--#endif
--
-+int dm_dump_memory_wrapper(void);
-+void dm_bounds_check_wrapper(void);
-+
-+#define dm_malloc(s) dm_malloc_wrapper((s), __FILE__, __LINE__)
-+#define dm_zalloc(s) dm_zalloc_wrapper((s), __FILE__, __LINE__)
-+#define dm_strdup(s) dm_strdup_wrapper((s), __FILE__, __LINE__)
-+#define dm_free(p) dm_free_wrapper(p)
-+#define dm_realloc(p, s) dm_realloc_wrapper((p), (s), __FILE__, __LINE__)
-+#define dm_dump_memory() dm_dump_memory_wrapper()
-+#define dm_bounds_check() dm_bounds_check_wrapper()
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index a01c8a6..7375d9e 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -199,17 +199,6 @@ static struct list_head lockspaces;
+ static struct list_head lockspaces_inactive;
  
  /*
-  * The pool allocator is useful when you are going to allocate
-diff --git a/libdm/mm/dbg_malloc.c b/libdm/mm/dbg_malloc.c
-index e26f05e..ac71480 100644
---- a/libdm/mm/dbg_malloc.c
-+++ b/libdm/mm/dbg_malloc.c
-@@ -22,6 +22,22 @@
- #include <assert.h>
- #include <stdarg.h>
+- * This flag is set to 1 if we see multiple vgs with the global
+- * lock enabled.  While this is set, we return a special flag
+- * with the vg lock result indicating to the lvm command that
+- * there is a duplicate gl in the vg which should be resolved.
+- * While this is set, find_lockspace_name has the side job of
+- * counting the number of lockspaces with enabled gl's so that
+- * this can be set back to zero when the duplicates are disabled.
+- */
+-static int sanlock_gl_dup;
+-
+-/*
+  * Client thread reads client requests and writes client results.
+  */
+ static pthread_t client_thread;
+@@ -1046,6 +1035,9 @@ static int res_lock(struct lockspace *ls, struct resource *r, struct action *act
+ 	log_debug("S %s R %s res_lock lm done r_version %u",
+ 		  ls->name, r->name, r_version);
  
-+void *dm_malloc_aux(size_t s, const char *file, int line)
-+        __attribute__((__malloc__)) __attribute__((__warn_unused_result__));
-+void *dm_malloc_aux_debug(size_t s, const char *file, int line)
-+        __attribute__((__malloc__)) __attribute__((__warn_unused_result__));
-+void *dm_zalloc_aux(size_t s, const char *file, int line)
-+        __attribute__((__malloc__)) __attribute__((__warn_unused_result__));
-+void *dm_zalloc_aux_debug(size_t s, const char *file, int line)
-+        __attribute__((__malloc__)) __attribute__((__warn_unused_result__));
-+void *dm_realloc_aux(void *p, unsigned int s, const char *file, int line)
-+        __attribute__((__warn_unused_result__));
-+void dm_free_aux(void *p);
-+char *dm_strdup_aux(const char *str, const char *file, int line)
-+        __attribute__((__warn_unused_result__));
-+int dm_dump_memory_debug(void);
-+void dm_bounds_check_debug(void);
++	if (sanlock_gl_dup && ls->sanlock_gl_enabled)
++		act->flags |= LD_AF_DUP_GL_LS;
 +
- char *dm_strdup_aux(const char *str, const char *file, int line)
- {
- 	char *ret;
-@@ -279,3 +295,82 @@ void *dm_zalloc_aux(size_t s, const char *file, int line)
+ 	/* lm_lock() reads new r_version */
  
- 	return ptr;
+ 	if ((r_version > r->version) || (!r->version && !r->version_zero_valid)) {
+@@ -2096,9 +2088,6 @@ static void *lockspace_thread_main(void *arg_in)
+ 
+ 			act = list_first_entry(&ls->actions, struct action, list);
+ 
+-			if (sanlock_gl_dup && ls->sanlock_gl_enabled)
+-				act->flags |= LD_AF_DUP_GL_LS;
+-
+ 			if (act->op == LD_OP_STOP) {
+ 				ls->thread_work = 0;
+ 				break;
+@@ -3855,8 +3844,7 @@ static int print_lockspace(struct lockspace *ls, const char *prefix, int pos, in
+ 			"thread_work=%d "
+ 			"thread_stop=%d "
+ 			"thread_done=%d "
+-			"sanlock_gl_enabled=%d "
+-			"sanlock_gl_dup=%d\n",
++			"sanlock_gl_enabled=%d",
+ 			prefix,
+ 			ls->name,
+ 			ls->vg_name,
+@@ -3870,8 +3858,7 @@ static int print_lockspace(struct lockspace *ls, const char *prefix, int pos, in
+ 			ls->thread_work ? 1 : 0,
+ 			ls->thread_stop ? 1 : 0,
+ 			ls->thread_done ? 1 : 0,
+-			ls->sanlock_gl_enabled ? 1 : 0,
+-			ls->sanlock_gl_dup ? 1 : 0);
++			ls->sanlock_gl_enabled ? 1 : 0);
  }
+ 
+ static int print_action(struct action *act, const char *prefix, int pos, int len)
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index 1fd7125..7bbddb4 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -322,6 +322,17 @@ EXTERN int daemon_host_id;
+ EXTERN const char *daemon_host_id_file;
+ EXTERN int sanlock_io_timeout;
+ 
++/*
++ * This flag is set to 1 if we see multiple vgs with the global
++ * lock enabled.  While this is set, we return a special flag
++ * with the vg lock result indicating to the lvm command that
++ * there is a duplicate gl in the vg which should be resolved.
++ * While this is set, find_lockspace_name has the side job of
++ * counting the number of lockspaces with enabled gl's so that
++ * this can be set back to zero when the duplicates are disabled.
++ */
++EXTERN int sanlock_gl_dup;
 +
-+#ifdef DEBUG_MEM
+ void log_level(int level, const char *fmt, ...)  __attribute__((format(printf, 2, 3)));
+ #define log_debug(fmt, args...) log_level(LOG_DEBUG, fmt, ##args)
+ #define log_error(fmt, args...) log_level(LOG_ERR, fmt, ##args)
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 28dac6b..44926da 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -801,8 +801,6 @@ int lm_able_gl_sanlock(struct lockspace *ls, int enable)
+ 	log_debug("S %s able_gl %s", ls->name, gl_name);
+ 
+ 	ls->sanlock_gl_enabled = enable;
+-	if (ls->sanlock_gl_dup && !enable)
+-		ls->sanlock_gl_dup = 0;
+ 
+ 	if (enable)
+ 		strncpy(gl_lsname_sanlock, ls->name, MAX_NAME);
+@@ -1254,6 +1252,14 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 
+ 	rs = &rds->rs;
+ 
++	/*
++	 * While there are duplicate global locks, keep checking
++	 * to see if any have been disabled.
++	 */
++	if (sanlock_gl_dup && ls->sanlock_gl_enabled &&
++	    (r->type == LD_RT_GL || r->type == LD_RT_VG))
++		ls->sanlock_gl_enabled = gl_is_enabled(ls, ls->lm_data);
 +
-+void *dm_malloc_wrapper(size_t s, const char *file, int line)
-+{
-+	return dm_malloc_aux_debug(s, file, line);
-+}
-+
-+void *dm_zalloc_wrapper(size_t s, const char *file, int line)
-+{
-+	return dm_zalloc_aux_debug(s, file, line);
-+}
-+
-+char *dm_strdup_wrapper(const char *str, const char *file, int line)
-+{
-+	return dm_strdup_aux(str, file, line);
-+}
-+
-+void dm_free_wrapper(void *ptr)
-+{
-+	dm_free_aux(ptr);
-+}
-+
-+void *dm_realloc_wrapper(void *p, unsigned int s, const char *file, int line)
-+{
-+	return dm_realloc_aux(p, s, file, line);
-+}
-+
-+int dm_dump_memory_wrapper(void)
-+{
-+	return dm_dump_memory_debug();
-+}
-+
-+void dm_bounds_check_wrapper(void)
-+{
-+	dm_bounds_check_debug();
-+}
-+
-+#else /* !DEBUG_MEM */
-+
-+void *dm_malloc_wrapper(size_t s, const char *file, int line)
-+{
-+	return dm_malloc_aux(s, file, line);
-+}
-+
-+void *dm_zalloc_wrapper(size_t s, const char *file, int line)
-+{
-+	return dm_zalloc_aux(s, file, line);
-+}
-+
-+char *dm_strdup_wrapper(const char *str,
-+			const char *file __attribute__((unused)),
-+			int line __attribute__((unused)))
-+{
-+	return strdup(str);
-+}
-+
-+void dm_free_wrapper(void *ptr)
-+{
-+	free(ptr);
-+}
-+
-+void *dm_realloc_wrapper(void *p, unsigned int s, 
-+			 const char *file __attribute__((unused)),
-+			 int line __attribute__((unused)))
-+{
-+	return realloc(p, s);
-+}
-+
-+int dm_dump_memory_wrapper(void)
-+{
-+	return 1;
-+}
-+
-+void dm_bounds_check_wrapper(void)
-+{
-+}
-+
-+#endif /* DEBUG_MEM */
+ 	if (r->type == LD_RT_LV) {
+ 		/*
+ 		 * The lv may have been removed and recreated with a new lease
 
 
