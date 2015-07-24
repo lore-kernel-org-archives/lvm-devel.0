@@ -1,109 +1,117 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 24 Jul 2015 15:56:41 +0000 (UTC)
-Subject: master - lockd: remove an unreachable global lock condition
-Message-ID: <20150724155641.767B860D87@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 24 Jul 2015 18:49:20 +0000 (UTC)
+Subject: master - tools: Streamline long option hyphen removal.
+Message-ID: <20150724184920.538AC60B92@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c1f5ac3eca1ebccc08fdc3f9304e3d85fa115146
-Commit:        c1f5ac3eca1ebccc08fdc3f9304e3d85fa115146
-Parent:        bcb875dcb19323ab62f2f3b409c4bda4ce8267d1
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jul 23 11:00:03 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jul 24 10:56:08 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=705caa8c32782a9b42cdd05138cf61536e0a99f9
+Commit:        705caa8c32782a9b42cdd05138cf61536e0a99f9
+Parent:        c1f5ac3eca1ebccc08fdc3f9304e3d85fa115146
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Jul 24 19:45:49 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Jul 24 19:45:49 2015 +0100
 
-lockd: remove an unreachable global lock condition
+tools: Streamline long option hyphen removal.
 
-There is no longer an "enable" option for the global lock,
-so remove the bit of code that was checking for it.  It
-was an optional variation anyway, and not one that was likely
-to be used.
-
-Also update the corresponding comment describing global lock
-creation.
 ---
- lib/locking/lvmlockd.c |   63 ++++++++++++-----------------------------------
- 1 files changed, 16 insertions(+), 47 deletions(-)
+ WHATS_NEW          |    1 +
+ tools/lvmcmdline.c |   48 ++++++++++++++++++++++++++----------------------
+ 2 files changed, 27 insertions(+), 22 deletions(-)
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index ac8c155..e9d7882 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -1169,55 +1169,24 @@ int lockd_gl_create(struct cmd_context *cmd, const char *def_mode, const char *v
- 			return 1;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 03e76c7..8f74625 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.126 -
+ ================================
++  Fix long option hyphen removal. (2.02.122)
+   Fix clvmd freeze if client disappears without first releasing its locks.
+   Fix lvconvert segfaults while performing snapshots merge.
+   Ignore errors during detection if use_blkid_wiping=1 and --force is used.
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 403948a..9e0d029 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1463,8 +1463,6 @@ static int _init_lvmlockd(struct cmd_context *cmd)
+ 	return 1;
+ }
  
- 		/*
--		 * This is the explicit sanlock bootstrap condition for
--		 * proceding without the global lock: a chicken/egg case
--		 * for the first sanlock VG that is created.
-+		 * This is the sanlock bootstrap condition for proceding
-+		 * without the global lock: a chicken/egg case for the first
-+		 * sanlock VG that is created.  When creating the first
-+		 * sanlock VG, there is no global lock to acquire because
-+		 * the gl will exist in the VG being created.  So, we
-+		 * skip acquiring the global lock when creating this initial
-+		 * VG, and enable the global lock in this VG.
- 		 *
--		 * When creating the first sanlock VG, there is no global
--		 * lock to acquire because the gl will exist in the VG
--		 * being created.  The "enable" option makes explicit that
--		 * this is expected:
-+		 * Here we assume that this is an initial bootstrap condition
-+		 * based on the fact that lvmlockd has seen no lockd VGs.
-+		 * (A commmand line option could be added to allow the user
-+		 * to make this initial bootstrap condition explicit.)
- 		 *
--		 * vgcreate --lock-type sanlock --lock-gl enable
--		 *
--		 * There are three indications that this is the unique
--		 * first-sanlock-vg bootstrap case:
--		 *
--		 * - result from lvmlockd is -ENOLS because lvmlockd found
--		 *   no lockspace for this VG; expected because it's being
--		 *   created here.
--		 *
--		 * - result flag LD_RF_NO_GL_LS from lvmlockd means that
--		 *   lvmlockd has seen no other lockspace with a global lock.
--		 *   This implies that this is probably the first sanlock vg
--		 *   to be created.  If other sanlock vgs exist, the global
--		 *   lock should be available from one of them.
--		 *
--		 * - command line lock-gl arg is "enable" which means the
--		 *   user expects this to be the first sanlock vg, and the
--		 *   global lock should be enabled in it.
--		 */
+-#define MAX_ARG_LEN 64
 -
--		if ((lockd_flags & LD_RF_NO_GL_LS) &&
--		    !strcmp(vg_lock_type, "sanlock") &&
--		    !strcmp(mode, "enable")) {
--			log_print_unless_silent("Enabling sanlock global lock");
--			lvmetad_validate_global_cache(cmd, 1);
--			return 1;
--		}
--
--		/*
--		 * This is an implicit sanlock bootstrap condition for
--		 * proceeding without the global lock.  The command line does
--		 * not indicate explicitly that this is a bootstrap situation
--		 * (via "enable"), but it seems likely to be because lvmlockd
--		 * has seen no lockd-type vgs.  It is possible that a global
--		 * lock does exist in a vg that has not yet been seen.  If that
--		 * vg appears after this creates a new vg with a new enabled
--		 * gl, then there will be two enabled global locks, and one
--		 * will need to be disabled.  (We could instead return an error
--		 * here and insist with an error message that the --lock-gl
--		 * enable option be used to exercise the explicit case above.)
-+		 * That assumption might be wrong.  It is possible that a global
-+		 * lock does exist in a VG that has not yet been seen.  If that
-+		 * VG appears after this creates a new VG with a new enabled
-+		 * global lock, then there will be two VGs containing enabled
-+		 * global locks, and one will need to be disabled by the user.
- 		 */
+ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	struct dm_config_tree *config_string_cft;
+@@ -1472,10 +1470,9 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	int ret = 0;
+ 	int locking_type;
+ 	int monitoring;
+-	char arg_new[MAX_ARG_LEN];
+-	char *arg;
+-	int quit_arg_hyphen_removal;
+-	int i, j, j_new;
++	char *arg_new, *arg;
++	int i;
++	int skip_hyphens;
  
- 		if ((lockd_flags & LD_RF_NO_GL_LS) &&
+ 	init_error_message_produced(0);
+ 
+@@ -1484,28 +1481,35 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	/* eliminate '-' from all options starting with -- */
+ 	for (i = 1; i < argc; i++) {
+-		quit_arg_hyphen_removal = 0;
++
+ 		arg = argv[i];
+ 
+-		if (arg[0] == '-' && arg[1] == '-' && strlen(arg) == 2)
++		if (*arg++ != '-' || *arg++ != '-')
++			continue;
++
++		/* If we reach "--" then stop. */
++		if (!*arg)
+ 			break;
+ 
+-		if (arg[0] == '-' && arg[1] == '-' && strlen(arg) < MAX_ARG_LEN) {
+-			memset(arg_new, 0, sizeof(arg_new));
+-			arg_new[0] = '-';
+-			arg_new[1] = '-';
+-
+-			for (j = 2, j_new = 2; j < strlen(arg) + 1; j++) {
+-				if (arg[j] == '=')
+-					quit_arg_hyphen_removal = 1;
+-				if (!quit_arg_hyphen_removal && arg[j] == '-')
+-					continue;
+-				arg_new[j_new] = arg[j];
+-				j_new++;
++		arg_new = arg;
++		skip_hyphens = 1;
++		while (*arg) {
++			/* If we encounter '=', stop any further hyphen removal. */
++			if (*arg == '=')
++				skip_hyphens = 0;
++
++			/* Do we need to keep the next character? */
++			if (*arg != '-' || !skip_hyphens) {
++				if (arg_new != arg)
++					*arg_new = *arg;
++				++arg_new;
+ 			}
+-
+-			memcpy(argv[i], arg_new, strlen(arg_new) + 1);
++			arg++;
+ 		}
++
++		/* Terminate a shortened arg */
++		if (arg_new != arg)
++			*arg_new = '\0';
+ 	}
+ 
+ 	if (!(cmd->cmd_line = _copy_command_line(cmd, argc, argv)))
 
 
