@@ -1,102 +1,109 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 24 Jul 2015 15:30:36 +0000 (UTC)
-Subject: master - Fix dehyphenation cases
-Message-ID: <20150724153036.3AE7A6016D@fedorahosted.org>
+Date: Fri, 24 Jul 2015 15:56:41 +0000 (UTC)
+Subject: master - lockd: remove an unreachable global lock condition
+Message-ID: <20150724155641.767B860D87@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bcb875dcb19323ab62f2f3b409c4bda4ce8267d1
-Commit:        bcb875dcb19323ab62f2f3b409c4bda4ce8267d1
-Parent:        be662439331abf6ccb16dd996bfe15eb613b4e53
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c1f5ac3eca1ebccc08fdc3f9304e3d85fa115146
+Commit:        c1f5ac3eca1ebccc08fdc3f9304e3d85fa115146
+Parent:        bcb875dcb19323ab62f2f3b409c4bda4ce8267d1
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 24 10:25:13 2015 -0500
+AuthorDate:    Thu Jul 23 11:00:03 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jul 24 10:25:13 2015 -0500
+CommitterDate: Fri Jul 24 10:56:08 2015 -0500
 
-Fix dehyphenation cases
+lockd: remove an unreachable global lock condition
 
-Stop removing hyphens when = is seen.  With an option
-like --profile=thin-performance, the hyphen removal
-will stop at = and will not remove - after thin.
+There is no longer an "enable" option for the global lock,
+so remove the bit of code that was checking for it.  It
+was an optional variation anyway, and not one that was likely
+to be used.
 
-Stop removing hyphens altogether when a stand alone arg
-of -- appears.
+Also update the corresponding comment describing global lock
+creation.
 ---
- tools/lvmcmdline.c |   41 +++++++++++++++++++++++++----------------
- 1 files changed, 25 insertions(+), 16 deletions(-)
+ lib/locking/lvmlockd.c |   63 ++++++++++++-----------------------------------
+ 1 files changed, 16 insertions(+), 47 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 6dbc189..403948a 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1463,6 +1463,8 @@ static int _init_lvmlockd(struct cmd_context *cmd)
- 	return 1;
- }
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index ac8c155..e9d7882 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -1169,55 +1169,24 @@ int lockd_gl_create(struct cmd_context *cmd, const char *def_mode, const char *v
+ 			return 1;
  
-+#define MAX_ARG_LEN 64
-+
- int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- {
- 	struct dm_config_tree *config_string_cft;
-@@ -1470,8 +1472,10 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	int ret = 0;
- 	int locking_type;
- 	int monitoring;
--	char *arg_new, *arg;
--	int i;
-+	char arg_new[MAX_ARG_LEN];
-+	char *arg;
-+	int quit_arg_hyphen_removal;
-+	int i, j, j_new;
- 
- 	init_error_message_produced(0);
- 
-@@ -1479,24 +1483,29 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	sigint_clear();
- 
- 	/* eliminate '-' from all options starting with -- */
--	for (i = 1; i < argc; ++i) {
+ 		/*
+-		 * This is the explicit sanlock bootstrap condition for
+-		 * proceding without the global lock: a chicken/egg case
+-		 * for the first sanlock VG that is created.
++		 * This is the sanlock bootstrap condition for proceding
++		 * without the global lock: a chicken/egg case for the first
++		 * sanlock VG that is created.  When creating the first
++		 * sanlock VG, there is no global lock to acquire because
++		 * the gl will exist in the VG being created.  So, we
++		 * skip acquiring the global lock when creating this initial
++		 * VG, and enable the global lock in this VG.
+ 		 *
+-		 * When creating the first sanlock VG, there is no global
+-		 * lock to acquire because the gl will exist in the VG
+-		 * being created.  The "enable" option makes explicit that
+-		 * this is expected:
++		 * Here we assume that this is an initial bootstrap condition
++		 * based on the fact that lvmlockd has seen no lockd VGs.
++		 * (A commmand line option could be added to allow the user
++		 * to make this initial bootstrap condition explicit.)
+ 		 *
+-		 * vgcreate --lock-type sanlock --lock-gl enable
+-		 *
+-		 * There are three indications that this is the unique
+-		 * first-sanlock-vg bootstrap case:
+-		 *
+-		 * - result from lvmlockd is -ENOLS because lvmlockd found
+-		 *   no lockspace for this VG; expected because it's being
+-		 *   created here.
+-		 *
+-		 * - result flag LD_RF_NO_GL_LS from lvmlockd means that
+-		 *   lvmlockd has seen no other lockspace with a global lock.
+-		 *   This implies that this is probably the first sanlock vg
+-		 *   to be created.  If other sanlock vgs exist, the global
+-		 *   lock should be available from one of them.
+-		 *
+-		 * - command line lock-gl arg is "enable" which means the
+-		 *   user expects this to be the first sanlock vg, and the
+-		 *   global lock should be enabled in it.
+-		 */
 -
--		if (argv[i][0] != '-' || argv[i][1] != '-')
--			continue;
-+	for (i = 1; i < argc; i++) {
-+		quit_arg_hyphen_removal = 0;
-+		arg = argv[i];
- 
--		arg_new = arg = argv[i] + 2;
-+		if (arg[0] == '-' && arg[1] == '-' && strlen(arg) == 2)
-+			break;
- 
--		while (*arg) {
--			if (*arg != '-') {
--				if (arg_new != arg)
--					*arg_new = *arg;
--				++arg_new;
-+		if (arg[0] == '-' && arg[1] == '-' && strlen(arg) < MAX_ARG_LEN) {
-+			memset(arg_new, 0, sizeof(arg_new));
-+			arg_new[0] = '-';
-+			arg_new[1] = '-';
-+
-+			for (j = 2, j_new = 2; j < strlen(arg) + 1; j++) {
-+				if (arg[j] == '=')
-+					quit_arg_hyphen_removal = 1;
-+				if (!quit_arg_hyphen_removal && arg[j] == '-')
-+					continue;
-+				arg_new[j_new] = arg[j];
-+				j_new++;
- 			}
--			++arg;
+-		if ((lockd_flags & LD_RF_NO_GL_LS) &&
+-		    !strcmp(vg_lock_type, "sanlock") &&
+-		    !strcmp(mode, "enable")) {
+-			log_print_unless_silent("Enabling sanlock global lock");
+-			lvmetad_validate_global_cache(cmd, 1);
+-			return 1;
 -		}
+-
+-		/*
+-		 * This is an implicit sanlock bootstrap condition for
+-		 * proceeding without the global lock.  The command line does
+-		 * not indicate explicitly that this is a bootstrap situation
+-		 * (via "enable"), but it seems likely to be because lvmlockd
+-		 * has seen no lockd-type vgs.  It is possible that a global
+-		 * lock does exist in a vg that has not yet been seen.  If that
+-		 * vg appears after this creates a new vg with a new enabled
+-		 * gl, then there will be two enabled global locks, and one
+-		 * will need to be disabled.  (We could instead return an error
+-		 * here and insist with an error message that the --lock-gl
+-		 * enable option be used to exercise the explicit case above.)
++		 * That assumption might be wrong.  It is possible that a global
++		 * lock does exist in a VG that has not yet been seen.  If that
++		 * VG appears after this creates a new VG with a new enabled
++		 * global lock, then there will be two VGs containing enabled
++		 * global locks, and one will need to be disabled by the user.
+ 		 */
  
--		if (arg_new != arg)
--			*arg_new = 0;
-+			memcpy(argv[i], arg_new, strlen(arg_new) + 1);
-+		}
- 	}
- 
- 	if (!(cmd->cmd_line = _copy_command_line(cmd, argc, argv)))
+ 		if ((lockd_flags & LD_RF_NO_GL_LS) &&
 
 
