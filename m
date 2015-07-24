@@ -1,117 +1,67 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 24 Jul 2015 18:49:20 +0000 (UTC)
-Subject: master - tools: Streamline long option hyphen removal.
-Message-ID: <20150724184920.538AC60B92@fedorahosted.org>
+Date: Fri, 24 Jul 2015 22:38:49 +0000 (UTC)
+Subject: master - pre-release
+Message-ID: <20150724223849.59B0360C9C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=705caa8c32782a9b42cdd05138cf61536e0a99f9
-Commit:        705caa8c32782a9b42cdd05138cf61536e0a99f9
-Parent:        c1f5ac3eca1ebccc08fdc3f9304e3d85fa115146
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=33eb7d7dfb772c432251f0926f6a0fb8fb824772
+Commit:        33eb7d7dfb772c432251f0926f6a0fb8fb824772
+Parent:        705caa8c32782a9b42cdd05138cf61536e0a99f9
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jul 24 19:45:49 2015 +0100
+AuthorDate:    Fri Jul 24 23:20:42 2015 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jul 24 19:45:49 2015 +0100
+CommitterDate: Fri Jul 24 23:20:42 2015 +0100
 
-tools: Streamline long option hyphen removal.
+pre-release
 
 ---
- WHATS_NEW          |    1 +
- tools/lvmcmdline.c |   48 ++++++++++++++++++++++++++----------------------
- 2 files changed, 27 insertions(+), 22 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    4 ++--
+ WHATS_NEW_DM |    4 ++--
+ 4 files changed, 6 insertions(+), 6 deletions(-)
 
+diff --git a/VERSION b/VERSION
+index c491170..7aa049b 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.126(2)-git (2015-07-07)
++2.02.126(2)-git (2015-07-24)
+diff --git a/VERSION_DM b/VERSION_DM
+index 9c79a79..eeff838 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.103-git (2015-07-07)
++1.02.103-git (2015-07-24)
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 03e76c7..8f74625 100644
+index 8f74625..eacc2c9 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.126 -
- ================================
-+  Fix long option hyphen removal. (2.02.122)
+@@ -1,5 +1,5 @@
+-Version 2.02.126 -
+-================================
++Version 2.02.126 - 24th July 2015
++=================================
+   Fix long option hyphen removal. (2.02.122)
    Fix clvmd freeze if client disappears without first releasing its locks.
    Fix lvconvert segfaults while performing snapshots merge.
-   Ignore errors during detection if use_blkid_wiping=1 and --force is used.
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 403948a..9e0d029 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1463,8 +1463,6 @@ static int _init_lvmlockd(struct cmd_context *cmd)
- 	return 1;
- }
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 3dba5b8..9486514 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.103 -
+-================================
++Version 1.02.103 - 24th July 2015
++=================================
+   Introduce libdevmapper wrappers for all malloc-related functions.
  
--#define MAX_ARG_LEN 64
--
- int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- {
- 	struct dm_config_tree *config_string_cft;
-@@ -1472,10 +1470,9 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	int ret = 0;
- 	int locking_type;
- 	int monitoring;
--	char arg_new[MAX_ARG_LEN];
--	char *arg;
--	int quit_arg_hyphen_removal;
--	int i, j, j_new;
-+	char *arg_new, *arg;
-+	int i;
-+	int skip_hyphens;
- 
- 	init_error_message_produced(0);
- 
-@@ -1484,28 +1481,35 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 
- 	/* eliminate '-' from all options starting with -- */
- 	for (i = 1; i < argc; i++) {
--		quit_arg_hyphen_removal = 0;
-+
- 		arg = argv[i];
- 
--		if (arg[0] == '-' && arg[1] == '-' && strlen(arg) == 2)
-+		if (*arg++ != '-' || *arg++ != '-')
-+			continue;
-+
-+		/* If we reach "--" then stop. */
-+		if (!*arg)
- 			break;
- 
--		if (arg[0] == '-' && arg[1] == '-' && strlen(arg) < MAX_ARG_LEN) {
--			memset(arg_new, 0, sizeof(arg_new));
--			arg_new[0] = '-';
--			arg_new[1] = '-';
--
--			for (j = 2, j_new = 2; j < strlen(arg) + 1; j++) {
--				if (arg[j] == '=')
--					quit_arg_hyphen_removal = 1;
--				if (!quit_arg_hyphen_removal && arg[j] == '-')
--					continue;
--				arg_new[j_new] = arg[j];
--				j_new++;
-+		arg_new = arg;
-+		skip_hyphens = 1;
-+		while (*arg) {
-+			/* If we encounter '=', stop any further hyphen removal. */
-+			if (*arg == '=')
-+				skip_hyphens = 0;
-+
-+			/* Do we need to keep the next character? */
-+			if (*arg != '-' || !skip_hyphens) {
-+				if (arg_new != arg)
-+					*arg_new = *arg;
-+				++arg_new;
- 			}
--
--			memcpy(argv[i], arg_new, strlen(arg_new) + 1);
-+			arg++;
- 		}
-+
-+		/* Terminate a shortened arg */
-+		if (arg_new != arg)
-+			*arg_new = '\0';
- 	}
- 
- 	if (!(cmd->cmd_line = _copy_command_line(cmd, argc, argv)))
+ Version 1.02.102 - 7th July 2015
 
 
