@@ -1,39 +1,28 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 27 Jul 2015 13:53:27 +0000 (UTC)
-Subject: master - lvmlockd: Drop -lrt now handled by configure.
-Message-ID: <20150727135327.66428602B6@fedorahosted.org>
+From: Ferenc Wagner <wferi@niif.hu>
+Date: Mon, 27 Jul 2015 16:45:18 +0200
+Subject: master - clvmd: Fix freeze if client dies holding locks.
+In-Reply-To: <20150723222626.8A47A61043@fedorahosted.org> (Alasdair Kergon's
+	message of "Thu, 23 Jul 2015 22:26:26 +0000 (UTC)")
+References: <20150723222626.8A47A61043@fedorahosted.org>
+Message-ID: <877fplwtfl.fsf@lant.ki.iif.hu>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa11ddd7df9cd29956cb2610d4a730980734b8c2
-Commit:        fa11ddd7df9cd29956cb2610d4a730980734b8c2
-Parent:        3e333e9b5c0fcae2014dcb22f14d288b440b9576
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Jul 27 14:53:08 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Jul 27 14:53:08 2015 +0100
+Alasdair Kergon <agk@fedoraproject.org> writes:
 
-lvmlockd: Drop -lrt now handled by configure.
+> +		if (max_fd > FD_SETSIZE - 32) {
+> +			fprintf(stderr, "WARNING: There are too many connections to clvmd.  Investigate and take action now!\n");
+> + 			fprintf(stderr, "WARNING: Your cluster may freeze up if the number of clvmd file descriptors (%d) exceeds %d.\n", max_fd + 1, FD_SETSIZE);
+> +		}
 
----
- daemons/lvmlockd/Makefile.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/daemons/lvmlockd/Makefile.in b/daemons/lvmlockd/Makefile.in
-index fed7c22..a2aca30 100644
---- a/daemons/lvmlockd/Makefile.in
-+++ b/daemons/lvmlockd/Makefile.in
-@@ -34,7 +34,7 @@ include $(top_builddir)/make.tmpl
- INCLUDES += -I$(top_srcdir)/libdaemon/server
- LVMLIBS = -ldaemonserver $(LVMINTERNAL_LIBS) -ldevmapper
- 
--LIBS += $(PTHREAD_LIBS) -lrt
-+LIBS += $(PTHREAD_LIBS)
- 
- ifeq ("@BUILD_LOCKDSANLOCK@", "yes")
-   LIBS += -lsanlock_client
+Just an outsider question: why do you use stderr here instead of some
+generic logging function?  If clvmd is run as a daemon, stderr is
+/dev/null, thus these messages are lost.
+-- 
+Thanks,
+Feri.
 
 
