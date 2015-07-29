@@ -1,168 +1,144 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 29 Jul 2015 19:49:10 +0000 (UTC)
-Subject: master - lvmcache: add lock_type to VG summary and info structs
-Message-ID: <20150729194910.63D6860DD7@fedorahosted.org>
+Date: Wed, 29 Jul 2015 19:49:12 +0000 (UTC)
+Subject: master - vgcreate: improve checks for existing global lock
+Message-ID: <20150729194912.7F87660DD7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e593213b875e96a3de77594f7ce8dd1809a930a0
-Commit:        e593213b875e96a3de77594f7ce8dd1809a930a0
-Parent:        3cd644aeb5cac432a92ad50584973a3430168ed6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=772b54a08bae19f59d93ca456691e3ce3cbb00da
+Commit:        772b54a08bae19f59d93ca456691e3ce3cbb00da
+Parent:        e593213b875e96a3de77594f7ce8dd1809a930a0
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 24 15:20:37 2015 -0500
+AuthorDate:    Fri Jul 24 10:06:58 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Wed Jul 29 14:27:32 2015 -0500
 
-lvmcache: add lock_type to VG summary and info structs
+vgcreate: improve checks for existing global lock
 
-vgsummary information contains provisional VG information
-that is obtained without holding the VG lock.  This info
-can be used to lock the VG, and then read it with vg_read().
-After the VG is read properly, the vgsummary info should
-be verified.
-
-Add the VG lock_type to the vgsummary.  It needs to be
-known before the VG can be locked and read.
+This tries harder to avoid creating duplicate global locks in
+sanlock VGs by refusing to create a new sanlock VG with a
+global lock if other sanlock VGs exist that may have a gl.
 ---
- lib/cache/lvmcache.c          |   30 +++++++++++++++++++++++++-----
- lib/cache/lvmcache.h          |   12 ++++++++++++
- lib/format_text/import_vsn1.c |    7 +++++++
- 3 files changed, 44 insertions(+), 5 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c |    6 -----
+ lib/cache/lvmcache.c             |   13 +++++++++++
+ lib/cache/lvmcache.h             |    2 +
+ lib/locking/lvmlockd.c           |   45 +++++++++++++++++++++++++++++--------
+ 4 files changed, 50 insertions(+), 16 deletions(-)
 
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 7375d9e..1361569 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -3341,12 +3341,6 @@ static void client_send_result(struct client *cl, struct action *act)
+ 		 * or if lockspaces exist, but not one with the global lock.
+ 		 * Given this detail, it may be able to procede without
+ 		 * the lock.
+-		 *
+-		 * FIXME: it would also help the caller to know if there
+-		 * are other sanlock VGs that have not been started.
+-		 * If there are, then one of them might have a global
+-		 * lock enabled.  In that case, vgcreate may not want
+-		 * to create a new sanlock vg with gl enabled.
+ 		 */
+ 		pthread_mutex_lock(&lockspaces_mutex);
+ 		if (list_empty(&lockspaces))
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 9f5b83a..36926f2 100644
+index 36926f2..cfa1d5f 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -56,6 +56,7 @@ struct lvmcache_vginfo {
- 	char _padding[7];
- 	struct lvmcache_vginfo *next; /* Another VG with same name? */
- 	char *creation_host;
-+	char *lock_type;
- 	uint32_t mda_checksum;
- 	size_t mda_size;
- 	size_t vgmetadata_size;
-@@ -1447,7 +1448,7 @@ static int _lvmcache_update_vgname(struct lvmcache_info *info,
+@@ -2345,3 +2345,16 @@ int lvmcache_lookup_mda(struct lvmcache_vgsummary *vgsummary)
+ 
+ 	return 0;
  }
- 
- static int _lvmcache_update_vgstatus(struct lvmcache_info *info, uint32_t vgstatus,
--				     const char *creation_host)
-+				     const char *creation_host, const char *lock_type)
- {
- 	if (!info || !info->vginfo)
- 		return 1;
-@@ -1460,11 +1461,11 @@ static int _lvmcache_update_vgstatus(struct lvmcache_info *info, uint32_t vgstat
- 	info->vginfo->status = vgstatus;
- 
- 	if (!creation_host)
--		return 1;
-+		goto set_lock_type;
- 
- 	if (info->vginfo->creation_host && !strcmp(creation_host,
- 						   info->vginfo->creation_host))
--		return 1;
-+		goto set_lock_type;
- 
- 	if (info->vginfo->creation_host)
- 		dm_free(info->vginfo->creation_host);
-@@ -1478,6 +1479,24 @@ static int _lvmcache_update_vgstatus(struct lvmcache_info *info, uint32_t vgstat
- 	log_debug_cache("lvmcache: %s: VG %s: Set creation host to %s.",
- 			dev_name(info->dev), info->vginfo->vgname, creation_host);
- 
-+set_lock_type:
 +
-+	if (!lock_type)
-+		goto out;
++int lvmcache_contains_lock_type_sanlock(struct cmd_context *cmd)
++{
++	struct lvmcache_vginfo *vginfo;
 +
-+	if (info->vginfo->lock_type && !strcmp(lock_type, info->vginfo->lock_type))
-+		goto out;
-+
-+	if (info->vginfo->lock_type)
-+		dm_free(info->vginfo->lock_type);
-+
-+	if (!(info->vginfo->lock_type = dm_strdup(lock_type))) {
-+		log_error("cache creation host alloc failed for %s",
-+			  lock_type);
-+		return 0;
++	dm_list_iterate_items(vginfo, &_vginfos) {
++		if (vginfo->lock_type && !strcmp(vginfo->lock_type, "sanlock"))
++			return 1;
 +	}
 +
-+out:
- 	return 1;
- }
- 
-@@ -1546,7 +1565,7 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info, struct lvmcache_vg
- 	if (!_lvmcache_update_vgname(info, vgname, vgid, vgsummary->vgstatus,
- 				     vgsummary->creation_host, info->fmt) ||
- 	    !_lvmcache_update_vgid(info, info->vginfo, vgid) ||
--	    !_lvmcache_update_vgstatus(info, vgsummary->vgstatus, vgsummary->creation_host) ||
-+	    !_lvmcache_update_vgstatus(info, vgsummary->vgstatus, vgsummary->creation_host, vgsummary->lock_type) ||
- 	    !_lvmcache_update_vg_mda_info(info, vgsummary->mda_checksum, vgsummary->mda_size))
- 		return_0;
- 
-@@ -1561,7 +1580,8 @@ int lvmcache_update_vg(struct volume_group *vg, unsigned precommitted)
- 	struct lvmcache_vgsummary vgsummary = {
- 		.vgname = vg->name,
- 		.vgstatus = vg->status,
--		.vgid = vg->id
-+		.vgid = vg->id,
-+		.lock_type = vg->lock_type
- 	};
- 
- 	pvid_s[sizeof(pvid_s) - 1] = '\0';
++	return 0;
++}
++
 diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 780325a..008b194 100644
+index 008b194..76b9b10 100644
 --- a/lib/cache/lvmcache.h
 +++ b/lib/cache/lvmcache.h
-@@ -39,11 +39,23 @@ struct disk_locn;
+@@ -188,4 +188,6 @@ int lvmcache_found_duplicate_pvs(void);
  
- struct lvmcache_vginfo;
+ void lvmcache_set_preferred_duplicates(const char *vgid);
  
-+/*
-+ * vgsummary represents a summary of the VG that is read
-+ * without a lock.  The info does not come through vg_read(),
-+ * but through reading mdas.  It provides information about
-+ * the VG that is needed to lock the VG and then read it fully
-+ * with vg_read(), after which the VG summary should be checked
-+ * against the full VG metadata to verify it was correct (since
-+ * it was read without a lock.)
-+ *
-+ * Once read, vgsummary information is saved in lvmcache_vginfo.
-+ */
- struct lvmcache_vgsummary {
- 	const char *vgname;
- 	struct id vgid;
- 	uint64_t vgstatus;
- 	char *creation_host;
-+	const char *lock_type;
- 	uint32_t mda_checksum;
- 	size_t mda_size;
- };
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index a4dcdf1..7888695 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -1031,6 +1031,11 @@ static void _read_desc(struct dm_pool *mem,
- 	*when = u;
- }
- 
-+/*
-+ * It would be more accurate to call this _read_vgsummary().
-+ * It is used to read vgsummary information about a VG
-+ * before locking and reading the VG via vg_read().
-+ */
- static int _read_vgname(const struct format_type *fmt, const struct dm_config_tree *cft, 
- 			struct lvmcache_vgsummary *vgsummary)
- {
-@@ -1067,6 +1072,8 @@ static int _read_vgname(const struct format_type *fmt, const struct dm_config_tr
- 		return 0;
- 	}
- 
-+	dm_config_get_str(vgn, "lock_type", &vgsummary->lock_type);
++int lvmcache_contains_lock_type_sanlock(struct cmd_context *cmd);
 +
- 	return 1;
- }
+ #endif
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index e9d7882..84eb861 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -1177,23 +1177,48 @@ int lockd_gl_create(struct cmd_context *cmd, const char *def_mode, const char *v
+ 		 * skip acquiring the global lock when creating this initial
+ 		 * VG, and enable the global lock in this VG.
+ 		 *
+-		 * Here we assume that this is an initial bootstrap condition
+-		 * based on the fact that lvmlockd has seen no lockd VGs.
+-		 * (A commmand line option could be added to allow the user
+-		 * to make this initial bootstrap condition explicit.)
++		 * This initial bootstrap condition is identified based on
++		 * two things:
+ 		 *
+-		 * That assumption might be wrong.  It is possible that a global
+-		 * lock does exist in a VG that has not yet been seen.  If that
+-		 * VG appears after this creates a new VG with a new enabled
+-		 * global lock, then there will be two VGs containing enabled
+-		 * global locks, and one will need to be disabled by the user.
++		 * 1. No sanlock VGs have been started in lvmlockd, causing
++		 *    lvmlockd to return NO_GL_LS/NO_LOCKSPACES.
++		 *
++		 * 2. No sanlock VGs are seen in lvmcache after the disk
++		 *    scan performed in lvmetad_validate_global_cache().
++		 *
++		 * If both of those are true, we go ahead and create this new
++		 * VG which will have the global lock enabled.  However, this
++		 * has a shortcoming: another sanlock VG may exist that hasn't
++		 * appeared to the system yet.  If that VG has its global lock
++		 * enabled, then when it appears later, duplicate global locks
++		 * will be seen, and a warning will indicate that one of them
++		 * should be disabled.
++		 *
++		 * The two bootstrap conditions have another shortcoming to the
++		 * opposite effect:  other sanlock VGs may be visible to the
++		 * system, but none of them have a global lock enabled.
++		 * In that case, it would make sense to create this new VG with
++		 * an enabled global lock.  (FIXME: we could detect that none
++		 * of the existing sanlock VGs have a gl enabled and allow this
++		 * vgcreate to go ahead.)  Enabling the global lock in one of
++		 * the existing sanlock VGs is currently the simplest solution.
+ 		 */
+ 
+ 		if ((lockd_flags & LD_RF_NO_GL_LS) &&
+ 		    (lockd_flags & LD_RF_NO_LOCKSPACES) &&
+ 		    !strcmp(vg_lock_type, "sanlock")) {
+-			log_print_unless_silent("Enabling sanlock global lock");
+ 			lvmetad_validate_global_cache(cmd, 1);
++			/*
++			 * lvmcache holds provisional VG lock_type info because
++			 * lvmetad_validate_global_cache did a disk scan.
++			 */
++			if (lvmcache_contains_lock_type_sanlock(cmd)) {
++				/* FIXME: we could check that all are started, and then check that none have gl enabled. */
++				log_error("Global lock failed: start existing sanlock VGs to access global lock.");
++				log_error("(If all sanlock VGs are started, enable global lock with lvmlockctl.)");
++				return 0;
++			}
++			log_print_unless_silent("Enabling sanlock global lock");
+ 			return 1;
+ 		}
  
 
 
