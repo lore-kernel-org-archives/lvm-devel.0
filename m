@@ -1,131 +1,163 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 30 Jul 2015 11:57:55 +0000 (UTC)
-Subject: master - refactor: toolcontext: add struct cmd_context_initialized_parts
-Message-ID: <20150730115755.5385060EAE@fedorahosted.org>
+Date: Thu, 30 Jul 2015 11:57:57 +0000 (UTC)
+Subject: master - refactor: toolcontext: move lvmetad and lvmpolld init into separate function
+Message-ID: <20150730115757.818A160EAE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6b0c464a3462c568931c22fe71cc4f80b7ead508
-Commit:        6b0c464a3462c568931c22fe71cc4f80b7ead508
-Parent:        9aabf441bdb8480f2e99722955fedcb4a19d760d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e343ba5ef02d8ae3e87eadc80cf69fc34c65622
+Commit:        3e343ba5ef02d8ae3e87eadc80cf69fc34c65622
+Parent:        6b0c464a3462c568931c22fe71cc4f80b7ead508
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jul 30 09:59:39 2015 +0200
+AuthorDate:    Thu Jul 30 10:13:45 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jul 30 13:54:05 2015 +0200
+CommitterDate: Thu Jul 30 13:54:09 2015 +0200
 
-refactor: toolcontext: add struct cmd_context_initialized_parts
+refactor: toolcontext: move lvmetad and lvmpolld init into separate function
 
-Add struct cmd_context_initialized_parts to wrap up information
-about which cmd context pieces are initialized and add variable
-of this struct type into struct cmd_context.
-
-Also, move existing "config_initialized" variable that was directly
-part of cmd_context into the new cmd_context.initialized wrapper.
-
-We'll be adding more items into the struct cmd_context_initialized_parts
-with subsequent patches...
+Move original lvmetad and lvmpolld initialization code from
+_process_config fn to their own functions _init_lvmetad and
+_init_lvmpolld (both covered with single _init_connections fn).
 ---
- daemons/clvmd/lvm-functions.c |    2 +-
- lib/commands/toolcontext.c    |    8 ++++----
- lib/commands/toolcontext.h    |    8 +++++++-
- tools/lvmcmdline.c            |    2 +-
- 4 files changed, 13 insertions(+), 7 deletions(-)
+ lib/commands/toolcontext.c |   98 +++++++++++++++++++++++++++++---------------
+ 1 files changed, 65 insertions(+), 33 deletions(-)
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index dafffcc..e7dbfde 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -510,7 +510,7 @@ int do_lock_lv(unsigned char command, unsigned char lock_flags, char *resource)
- 	DEBUGLOG("do_lock_lv: resource '%s', cmd = %s, flags = %s, critical_section = %d\n",
- 		 resource, decode_locking_cmd(command), decode_flags(lock_flags), critical_section());
- 
--	if (!cmd->config_initialized || config_files_changed(cmd)) {
-+	if (!cmd->initialized.config || config_files_changed(cmd)) {
- 		/* Reinitialise various settings inc. logging, filters */
- 		if (do_refresh_cache()) {
- 			log_error("Updated config file invalid. Aborting.");
 diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 3fe2bb2..da0ca22 100644
+index da0ca22..dadb3c5 100644
 --- a/lib/commands/toolcontext.c
 +++ b/lib/commands/toolcontext.c
-@@ -1851,9 +1851,9 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 	cmd->default_settings.cache_vgmetadata = 1;
- 	cmd->current_settings = cmd->default_settings;
+@@ -55,6 +55,7 @@
+ #endif
  
--	cmd->config_initialized = 1;
-+	cmd->initialized.config = 1;
- out:
--	if (!cmd->config_initialized) {
-+	if (!cmd->initialized.config) {
- 		destroy_toolcontext(cmd);
- 		cmd = NULL;
- 	}
-@@ -1979,7 +1979,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
+ static const size_t linebuffer_size = 4096;
++static int _init_connections(struct cmd_context *cmd);
  
- 	_destroy_config(cmd);
+ /*
+  * Copy the input string, removing invalid characters.
+@@ -532,8 +533,6 @@ static int _process_config(struct cmd_context *cmd)
+ 	const struct dm_config_node *cn;
+ 	const struct dm_config_value *cv;
+ 	int64_t pv_min_kb;
+-	const char *lvmetad_socket;
+-	const char *lvmpolld_socket;
+ 	int udev_disabled = 0;
+ 	char sysfs_dir[PATH_MAX];
  
--	cmd->config_initialized = 0;
-+	cmd->initialized.config = 0;
+@@ -676,41 +675,12 @@ static int _process_config(struct cmd_context *cmd)
+ 	init_detect_internal_vg_cache_corruption
+ 		(find_config_tree_bool(cmd, global_detect_internal_vg_cache_corruption_CFG, NULL));
  
- 	cmd->hosttags = 0;
+-	lvmetad_disconnect();
+-	lvmpolld_disconnect();
+-
+-	lvmetad_socket = getenv("LVM_LVMETAD_SOCKET");
+-	if (!lvmetad_socket)
+-		lvmetad_socket = DEFAULT_RUN_DIR "/lvmetad.socket";
+-
+-	/* TODO?
+-		lvmetad_socket = find_config_tree_str(cmd, "lvmetad/socket_path",
+-						      DEFAULT_RUN_DIR "/lvmetad.socket");
+-	*/
+-	lvmetad_set_socket(lvmetad_socket);
+-	cn = find_config_tree_array(cmd, devices_global_filter_CFG, NULL);
+-	lvmetad_set_token(cn ? cn->v : NULL);
+-
+-	if (find_config_tree_int(cmd, global_locking_type_CFG, NULL) == 3 &&
+-	    find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
+-		log_warn("WARNING: configuration setting use_lvmetad overridden to 0 due to locking_type 3. "
+-			 "Clustered environment not supported by lvmetad yet.");
+-		lvmetad_set_active(NULL, 0);
+-	} else
+-		lvmetad_set_active(NULL, find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL));
+-
+-	lvmetad_init(cmd);
++	if (!_init_connections(cmd))
++		return_0;
  
-@@ -2057,7 +2057,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
- 	if (!_init_backup(cmd))
+ 	if (!_init_system_id(cmd))
  		return_0;
  
--	cmd->config_initialized = 1;
-+	cmd->initialized.config = 1;
- 
- 	reset_lvm_errno(1);
+-	lvmpolld_socket = getenv("LVM_LVMPOLLD_SOCKET");
+-	if (!lvmpolld_socket)
+-		lvmpolld_socket = DEFAULT_RUN_DIR "/lvmpolld.socket";
+-	lvmpolld_set_socket(lvmpolld_socket);
+-
+-	lvmpolld_set_active(find_config_tree_bool(cmd, global_use_lvmpolld_CFG, NULL));
+-
  	return 1;
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 4e8998d..c59024b 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -60,6 +60,10 @@ struct config_tree_list {
- 	struct dm_config_tree *cft;
- };
+ }
  
-+struct cmd_context_initialized_parts {
-+	unsigned config:1; /* used to reinitialize config if previous init was not successful */
-+};
+@@ -1679,6 +1649,68 @@ static int _reopen_stream(FILE *stream, int fd, const char *mode, const char *na
+ 	return 1;
+ }
+ 
++static int _init_lvmetad(struct cmd_context *cmd)
++{
++	const struct dm_config_node *cn;
++	const char *lvmetad_socket;
 +
- /* FIXME Split into tool & library contexts */
- /* command-instance-related variables needed by library */
- struct cmd_context {
-@@ -82,6 +86,9 @@ struct cmd_context {
- 	char **argv;
- 	struct arg_values *arg_values;
- 	struct dm_list arg_value_groups;
++	lvmetad_disconnect();
 +
-+	struct cmd_context_initialized_parts initialized;
++	lvmetad_socket = getenv("LVM_LVMETAD_SOCKET");
++	if (!lvmetad_socket)
++		lvmetad_socket = DEFAULT_RUN_DIR "/lvmetad.socket";
 +
- 	unsigned is_long_lived:1;	/* Optimises persistent_filter handling */
- 	unsigned handles_missing_pvs:1;
- 	unsigned handles_unknown_segments:1;
-@@ -132,7 +139,6 @@ struct cmd_context {
- 	struct dm_list config_files; /* master lvm config + any existing tag configs */
- 	struct profile_params *profile_params; /* profile handling params including loaded profile configs */
- 	struct dm_config_tree *cft; /* the whole cascade: CONFIG_STRING -> CONFIG_PROFILE -> CONFIG_FILE/CONFIG_MERGED_FILES */
--	int config_initialized; /* used to reinitialize config if previous init was not successful */
- 
- 	struct dm_hash_table *cft_def_hash; /* config definition hash used for validity check (item type + item recognized) */
- 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 9e0d029..98a2c30 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1541,7 +1541,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 			goto_out;
- 		}
- 
--	if (arg_count(cmd, config_ARG) || !cmd->config_initialized || config_files_changed(cmd)) {
-+	if (arg_count(cmd, config_ARG) || !cmd->initialized.config || config_files_changed(cmd)) {
- 		/* Reinitialise various settings inc. logging, filters */
- 		if (!refresh_toolcontext(cmd)) {
- 			if ((config_string_cft = remove_config_tree_by_source(cmd, CONFIG_STRING)))
++	/* TODO?
++		lvmetad_socket = find_config_tree_str(cmd, "lvmetad/socket_path",
++						      DEFAULT_RUN_DIR "/lvmetad.socket");
++	*/
++
++	lvmetad_set_socket(lvmetad_socket);
++	cn = find_config_tree_array(cmd, devices_global_filter_CFG, NULL);
++	lvmetad_set_token(cn ? cn->v : NULL);
++
++	if (find_config_tree_int(cmd, global_locking_type_CFG, NULL) == 3 &&
++	    find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
++		log_warn("WARNING: configuration setting use_lvmetad overridden to 0 due to locking_type 3. "
++			 "Clustered environment not supported by lvmetad yet.");
++		lvmetad_set_active(NULL, 0);
++	} else
++		lvmetad_set_active(NULL, find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL));
++
++	lvmetad_init(cmd);
++	return 1;
++}
++
++static int _init_lvmpolld(struct cmd_context *cmd)
++{
++	const char *lvmpolld_socket;
++
++	lvmpolld_disconnect();
++
++	lvmpolld_socket = getenv("LVM_LVMPOLLD_SOCKET");
++	if (!lvmpolld_socket)
++		lvmpolld_socket = DEFAULT_RUN_DIR "/lvmpolld.socket";
++	lvmpolld_set_socket(lvmpolld_socket);
++
++	lvmpolld_set_active(find_config_tree_bool(cmd, global_use_lvmpolld_CFG, NULL));
++	return 1;
++}
++
++static int _init_connections(struct cmd_context *cmd)
++{
++	if (!_init_lvmetad(cmd)) {
++		log_error("Failed to initialize lvmetad connection.");
++		return 0;
++	}
++
++	if (!_init_lvmpolld(cmd)) {
++		log_error("Failed to initialize lvmpolld connection.");
++		return 0;
++	}
++
++	return 1;
++}
++
+ /* Entry point */
+ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 				       const char *system_dir,
 
 
