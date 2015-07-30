@@ -1,236 +1,211 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 30 Jul 2015 11:58:01 +0000 (UTC)
-Subject: master - commands: add new NO_METADATA_PROCESSING flag to selected commands
-Message-ID: <20150730115801.C916260FB1@fedorahosted.org>
+Date: Thu, 30 Jul 2015 14:04:08 +0000 (UTC)
+Subject: master - cleanup: toolcontext: make cmd_context more readable
+Message-ID: <20150730140408.718706100F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0629c13fe2dfa8d6aaace242209f4bf7675345f
-Commit:        c0629c13fe2dfa8d6aaace242209f4bf7675345f
-Parent:        f6473baffc2d0b486b2aa941cf2681683026b3a5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6834b3237e2d523430a8b8a3ff24b0b27f7cb2f
+Commit:        e6834b3237e2d523430a8b8a3ff24b0b27f7cb2f
+Parent:        c0629c13fe2dfa8d6aaace242209f4bf7675345f
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jul 30 10:48:28 2015 +0200
+AuthorDate:    Thu Jul 30 16:01:02 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jul 30 13:56:13 2015 +0200
+CommitterDate: Thu Jul 30 16:01:02 2015 +0200
 
-commands: add new NO_METADATA_PROCESSING flag to selected commands
+cleanup: toolcontext: make cmd_context more readable
 
-When a command is flagged with NO_METADATA_PROCESSING flag, it means
-such command does not process any metadata and hence it doens't require
-lvmetad, lvmpolld and it can get away with no locking too. These are
-mostly simple commands (like lvmconfig/dumpconfig, version, types,
-segtypes and other builtin commands that do not process metadata
-in any way).
-
-At first, when lvm command is executed, create toolcontext without
-initializing connections (lvmetad,lvmpolld) and without initializing
-filters (which depend on connections init). Instead, delay this
-initialization until we know we need this. That is, until the
-lvm_run_command fn is called in which we know what the actual
-command to run is and hence we can avoid any connection, filter
-or locking initiliazation for commands that would not make use
-of it anyway.
-
-For all the other create_toolcontext calls, we keep the original
-behaviour - the filters and connections are initialized together
-with the toolcontext.
+Just shuffle the items and put them into logical groups so it's
+visible at first sight what each group contains - it makes it a bit
+easier to make heads and tails of the whole cmd_context monster.
 ---
- WHATS_NEW             |    1 +
- lib/locking/locking.c |    5 +++--
- tools/commands.h      |   20 ++++++++++----------
- tools/lvmcmdline.c    |   21 +++++++++++++++++----
- tools/tools.h         |    2 ++
- 5 files changed, 33 insertions(+), 16 deletions(-)
+ lib/commands/toolcontext.h |  134 ++++++++++++++++++++++++++------------------
+ 1 files changed, 79 insertions(+), 55 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1d8f472..1e04acb 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.127 - 
- =================================
-+  Do not init filters, locking, lvmetad, lvmpolld if command doesn't use it.
-   Recognise vg/lv name format in dmsetup.
-   Fix regression in cache causing some PVs to bypass filters (2.02.105).
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index 57feb01..d2fd8a2 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -69,29 +69,50 @@ struct cmd_context_initialized_parts {
+ /* FIXME Split into tool & library contexts */
+ /* command-instance-related variables needed by library */
+ struct cmd_context {
+-	struct dm_pool *libmem;	/* For permanent config data */
+-	struct dm_pool *mem;	/* Transient: Cleared between each command */
+-
+-	const struct format_type *fmt;	/* Current format to use by default */
+-	struct format_type *fmt_backup;	/* Format to use for backups */
+-
+-	struct dm_list formats;	/* Available formats */
+-	struct dm_list segtypes;	/* Available segment types */
+-	const char *system_id;
+-	const char *hostname;
+-	const char *kernel_vsn;
++	/*
++	 * Memory handlers.
++	 */
++	struct dm_pool *libmem;			/* for permanent config data */
++	struct dm_pool *mem;			/* transient: cleared between each command */
  
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index c88a85b..22e83d2 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -119,8 +119,9 @@ int init_locking(int type, struct cmd_context *cmd, int suppress_messages)
- 	switch (type) {
- 	case 0:
- 		init_no_locking(&_locking, cmd, suppress_messages);
--		log_warn("WARNING: Locking disabled. Be careful! "
--			  "This could corrupt your metadata.");
-+		log_warn_suppress(suppress_messages,
-+			"WARNING: Locking disabled. Be careful! "
-+			"This could corrupt your metadata.");
- 		return 1;
+-	unsigned rand_seed;
+-	char *linebuffer;
++	/*
++	 * Command line and arguments.
++	 */
+ 	const char *cmd_line;
+ 	struct command *command;
+ 	char **argv;
+ 	struct arg_values *arg_values;
+ 	struct dm_list arg_value_groups;
  
- 	case 1:
-diff --git a/tools/commands.h b/tools/commands.h
-index 7f4b4e2..0ab578d 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -30,7 +30,7 @@ xx(e2fsadm,
- 
- xx(config,
-    "Display and manipulate configuration information",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "config\n"
-    "\t[-f|--file filename]\n"
-    "\t[--type {current|default|diff|full|list|missing|new|profilable|profilable-command|profilable-metadata}\n"
-@@ -60,7 +60,7 @@ xx(config,
- 
- xx(devtypes,
-    "Display recognised built-in block device types",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "devtypes\n"
-    "\t[--aligned]\n"
-    "\t[--binary]\n"
-@@ -86,7 +86,7 @@ xx(devtypes,
- 
- xx(dumpconfig,
-    "Display and manipulate configuration information",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "dumpconfig\n"
-    "\t[-f|--file filename]\n"
-    "\t[--type {current|default|diff|full|list|missing|new|profilable|profilable-command|profilable-metadata}\n"
-@@ -116,12 +116,12 @@ xx(dumpconfig,
- 
- xx(formats,
-    "List available metadata formats",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "formats\n")
- 
- xx(help,
-    "Display help for commands",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "help <command>\n")
- 
- /*********
-@@ -491,7 +491,7 @@ xx(lvmchange,
- 
- xx(lvmconfig,
-    "Display and manipulate configuration information",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "lvmconfig\n"
-    "\t[-f|--file filename]\n"
-    "\t[--type {current|default|diff|full|list|missing|new|profilable|profilable-command|profilable-metadata}\n"
-@@ -979,17 +979,17 @@ xx(pvscan,
- 
- xx(segtypes,
-    "List available segment types",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "segtypes\n")
- 
- xx(systemid,
-    "Display the system ID, if any, currently set on this host",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "systemid\n")
- 
- xx(tags,
-    "List tags defined on this host",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "tags\n")
- 
- xx(vgcfgbackup,
-@@ -1409,5 +1409,5 @@ xx(vgsplit,
- 
- xx(version,
-    "Display software and driver version information",
--   PERMITTED_READ_ONLY,
-+   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
-    "version\n")
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 0c88164..b7809c7 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1463,6 +1463,11 @@ static int _init_lvmlockd(struct cmd_context *cmd)
- 	return 1;
- }
- 
-+static int _cmd_no_meta_proc(struct cmd_context *cmd)
-+{
-+	return cmd->command->flags & NO_METADATA_PROCESSING;
-+}
++	/*
++	 * Format handlers.
++	 */
++	const struct format_type *fmt;		/* current format to use by default */
++	struct format_type *fmt_backup;		/* format to use for backups */
++	struct dm_list formats;			/* available formats */
++	struct dm_list segtypes;		/* available segment types */
 +
- int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- {
- 	struct dm_config_tree *config_string_cft;
-@@ -1554,6 +1559,12 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	if (!_prepare_profiles(cmd))
- 		return_ECMD_FAILED;
- 
-+	if (!cmd->initialized.connections && !_cmd_no_meta_proc(cmd) && !init_connections(cmd))
-+		return_ECMD_FAILED;
++	/*
++	 * Machine and system identification.
++	 */
++	const char *system_id;
++	const char *hostname;
++	const char *kernel_vsn;
 +
-+	if (!cmd->initialized.filters && !_cmd_no_meta_proc(cmd) && !init_filters(cmd, 1))
-+		return_ECMD_FAILED;
++	/*
++	 * Device identification.
++	 */
++	struct dev_types *dev_types;		/* recognized extra device types. */
 +
- 	if (arg_count(cmd, readonly_ARG))
- 		cmd->metadata_read_only = 1;
++	/*
++	 * Initialization state.
++	 */
+ 	struct cmd_context_initialized_parts initialized;
  
-@@ -1587,7 +1598,9 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 		goto out;
- 	}
+-	unsigned is_long_lived:1;	/* Optimises persistent_filter handling */
++	/*
++	 * Switches.
++	 */
++	unsigned is_long_lived:1;		/* optimises persistent_filter handling */
+ 	unsigned handles_missing_pvs:1;
+ 	unsigned handles_unknown_segments:1;
+ 	unsigned use_linear_target:1;
+@@ -102,68 +123,71 @@ struct cmd_context {
+ 	unsigned report_binary_values_as_numeric:1;
+ 	unsigned metadata_read_only:1;
+ 	unsigned ignore_clustered_vgs:1;
+-	unsigned threaded:1;		/* Set if running within a thread e.g. clvmd */
+-
+-	const char *time_format;
+-
+-	unsigned independent_metadata_areas:1;	/* Active formats have MDAs outside PVs */
++	unsigned threaded:1;			/* set if running within a thread e.g. clvmd */
++	unsigned independent_metadata_areas:1;	/* active formats have MDAs outside PVs */
+ 	unsigned unknown_system_id:1;
+-	unsigned include_foreign_vgs:1; /* report/display cmds can reveal foreign VGs */
+-	unsigned include_shared_vgs:1;  /* report/display cmds can reveal lockd VGs */
+-	unsigned include_active_foreign_vgs:1; /* cmd should process foreign VGs with active LVs */
+-	unsigned vg_read_print_access_error:1; /* print access errors from vg_read */
++	unsigned include_foreign_vgs:1;		/* report/display cmds can reveal foreign VGs */
++	unsigned include_shared_vgs:1;		/* report/display cmds can reveal lockd VGs */
++	unsigned include_active_foreign_vgs:1;	/* cmd should process foreign VGs with active LVs */
++	unsigned vg_read_print_access_error:1;	/* print access errors from vg_read */
+ 	unsigned lockd_gl_disable:1;
+ 	unsigned lockd_vg_disable:1;
+ 	unsigned lockd_lv_disable:1;
+ 	unsigned lockd_vg_default_sh:1;
+ 	unsigned lockd_vg_enforce_sh:1;
  
--	if (arg_count(cmd, readonly_ARG)) {
-+	if (_cmd_no_meta_proc(cmd))
-+		locking_type = 0;
-+	else if (arg_count(cmd, readonly_ARG)) {
- 		if (find_config_tree_bool(cmd, global_use_lvmlockd_CFG, NULL)) {
- 			/*
- 			 * FIXME: we could use locking_type 5 here if that didn't
-@@ -1610,12 +1623,12 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	else
- 		locking_type = -1;
+-	struct dev_types *dev_types;
+-
+ 	/*
+-	 * Use of filters depends on whether lvmetad is used or not:
+-	 *
+-	 *   - if lvmetad is used:
+-	 *   	- cmd->lvmetad_filter used when scanning devices for lvmetad
+-	 *   	- cmd->filter used when processing lvmetad responses
+-	 *   	- cmd->full_filter used for remaining situations
+-	 *
+-	 *   - if lvmetad is not used:
+-	 *   	- cmd->lvmetad_filter is NULL
+-	 *   	- cmd->filter == cmd->full_filter used for all situations
+-	 *
++	 * Filtering.
+ 	 */
+-	struct dev_filter *lvmetad_filter;
+-	struct dev_filter *filter;
+-	struct dev_filter *full_filter;
+-	int dump_filter;	/* Dump filter when exiting? */
+-
+-	struct dm_list config_files; /* master lvm config + any existing tag configs */
+-	struct profile_params *profile_params; /* profile handling params including loaded profile configs */
+-	struct dm_config_tree *cft; /* the whole cascade: CONFIG_STRING -> CONFIG_PROFILE -> CONFIG_FILE/CONFIG_MERGED_FILES */
++	struct dev_filter *lvmetad_filter;	/* pre-lvmetad filter chain */
++	struct dev_filter *filter;		/* post-lvmetad filter chain */
++	struct dev_filter *full_filter;		/* lvmetad_filter + filter */
++	int dump_filter;			/* Dump filter when exiting? */
  
--	if (!init_locking(locking_type, cmd, arg_count(cmd, sysinit_ARG))) {
-+	if (!init_locking(locking_type, cmd, _cmd_no_meta_proc(cmd) || arg_count(cmd, sysinit_ARG))) {
- 		ret = ECMD_FAILED;
- 		goto_out;
- 	}
+-	struct dm_hash_table *cft_def_hash; /* config definition hash used for validity check (item type + item recognized) */
+-
+-	/* selected settings with original default/configured value which can be changed during cmd processing */
+-	struct config_info default_settings;
+-	/* may contain changed values compared to default_settings */
+-	struct config_info current_settings;
++	/*
++	 * Configuration.
++	 */
++	struct dm_list config_files; 		/* master lvm config + any existing tag configs */
++	struct profile_params *profile_params;	/* profile handling params including loaded profile configs */
++	struct dm_config_tree *cft;		/* the whole cascade: CONFIG_STRING -> CONFIG_PROFILE -> CONFIG_FILE/CONFIG_MERGED_FILES */
++	struct dm_hash_table *cft_def_hash;	/* config definition hash used for validity check (item type + item recognized) */
++	struct config_info default_settings;	/* selected settings with original default/configured value which can be changed during cmd processing */
++	struct config_info current_settings; 	/* may contain changed values compared to default_settings */
  
--	if (!_init_lvmlockd(cmd)) {
-+	if (!_cmd_no_meta_proc(cmd) && !_init_lvmlockd(cmd)) {
- 		ret = ECMD_FAILED;
- 		goto_out;
- 	}
-@@ -2056,7 +2069,7 @@ int lvm2_main(int argc, char **argv)
- 	if (!alias && argc > 1 && !strcmp(argv[1], "version"))
- 		return lvm_return_code(version(NULL, argc, argv));
++	/*
++	 * Archives and backups.
++	 */
+ 	struct archive_params *archive_params;
+ 	struct backup_params *backup_params;
+ 	const char *stripe_filler;
  
--	if (!(cmd = init_lvm(1, 1)))
-+	if (!(cmd = init_lvm(0, 0)))
- 		return -1;
+-	/* List of defined tags */
+-	struct dm_list tags;
++	/*
++	 * Host tags.
++	 */
++	struct dm_list tags;			/* list of defined tags */
+ 	const char *report_list_item_separator;
+ 	int hosttags;
  
- 	cmd->argv = argv;
-diff --git a/tools/tools.h b/tools/tools.h
-index 5ee5786..4ed893f 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -103,6 +103,8 @@ struct arg_value_group_list {
- #define ONE_VGNAME_ARG		0x00000010
- /* Command needs a shared lock on a VG; it only reads the VG. */
- #define LOCKD_VG_SH		0x00000020
-+/* Command does not process any metadata. */
-+#define NO_METADATA_PROCESSING	0x00000040
-  
- /* a register of the lvm commands */
- struct command {
+-	const char *lib_dir;		/* Cache value global/library_dir */
++	/*
++	 * Paths.
++	 */
++	const char *lib_dir;			/* cache value global/library_dir */
+ 	char system_dir[PATH_MAX];
+ 	char dev_dir[PATH_MAX];
+ 	char proc_dir[PATH_MAX];
+-	char display_buffer[NAME_LEN * 10];	/* Ring buffer for upto 10 longest vg/lv names */
+-	unsigned display_lvname_idx;		/* Index to ring buffer */
++
++	/*
++	 * Buffers.
++	 */
++	char display_buffer[NAME_LEN * 10];	/* ring buffer for upto 10 longest vg/lv names */
++	unsigned display_lvname_idx;		/* index to ring buffer */
++	char *linebuffer;
++
++	/*
++	 * Others - unsorted.
++	 */
++	const char *time_format;
++	unsigned rand_seed;
+ };
+ 
+ /*
 
 
