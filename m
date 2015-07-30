@@ -1,343 +1,236 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 30 Jul 2015 11:57:59 +0000 (UTC)
-Subject: master - toolcontext: add switches to create_toolcontext for connections and filters init
-Message-ID: <20150730115759.A1AD760FB1@fedorahosted.org>
+Date: Thu, 30 Jul 2015 11:58:01 +0000 (UTC)
+Subject: master - commands: add new NO_METADATA_PROCESSING flag to selected commands
+Message-ID: <20150730115801.C916260FB1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f6473baffc2d0b486b2aa941cf2681683026b3a5
-Commit:        f6473baffc2d0b486b2aa941cf2681683026b3a5
-Parent:        3e343ba5ef02d8ae3e87eadc80cf69fc34c65622
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0629c13fe2dfa8d6aaace242209f4bf7675345f
+Commit:        c0629c13fe2dfa8d6aaace242209f4bf7675345f
+Parent:        f6473baffc2d0b486b2aa941cf2681683026b3a5
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jul 30 10:34:10 2015 +0200
+AuthorDate:    Thu Jul 30 10:48:28 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jul 30 13:54:09 2015 +0200
+CommitterDate: Thu Jul 30 13:56:13 2015 +0200
 
-toolcontext: add switches to create_toolcontext for connections and filters init
+commands: add new NO_METADATA_PROCESSING flag to selected commands
 
-Make it possible to decide whether we want to initialize connections and
-filters together with toolcontext creation.
+When a command is flagged with NO_METADATA_PROCESSING flag, it means
+such command does not process any metadata and hence it doens't require
+lvmetad, lvmpolld and it can get away with no locking too. These are
+mostly simple commands (like lvmconfig/dumpconfig, version, types,
+segtypes and other builtin commands that do not process metadata
+in any way).
 
-Add "filters" and "connections" fields to struct
-cmd_context_initialized_parts and set these in cmd_context.initialized
-instance accordingly.
+At first, when lvm command is executed, create toolcontext without
+initializing connections (lvmetad,lvmpolld) and without initializing
+filters (which depend on connections init). Instead, delay this
+initialization until we know we need this. That is, until the
+lvm_run_command fn is called in which we know what the actual
+command to run is and hence we can avoid any connection, filter
+or locking initiliazation for commands that would not make use
+of it anyway.
 
-(For now, all create_toolcontext calls do initialize connections and
-filters, we'll change that in subsequent patch appropriately.)
+For all the other create_toolcontext calls, we keep the original
+behaviour - the filters and connections are initialized together
+with the toolcontext.
 ---
- daemons/clvmd/lvm-functions.c |    2 +-
- daemons/lvmetad/testclient.c  |    2 +-
- lib/commands/toolcontext.c    |   54 ++++++++++++++++++++++++++++------------
- lib/commands/toolcontext.h    |    8 +++++-
- liblvm/lvm_base.c             |    2 +-
- tools/lvm2cmdline.h           |    2 +-
- tools/lvmcmdlib.c             |    2 +-
- tools/lvmcmdline.c            |    7 +++--
- 8 files changed, 54 insertions(+), 25 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/locking/locking.c |    5 +++--
+ tools/commands.h      |   20 ++++++++++----------
+ tools/lvmcmdline.c    |   21 +++++++++++++++++----
+ tools/tools.h         |    2 ++
+ 5 files changed, 33 insertions(+), 16 deletions(-)
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index e7dbfde..99e7317 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -899,7 +899,7 @@ int init_clvm(struct dm_hash_table *excl_uuid)
- 	if (!get_initial_state(excl_uuid))
- 		log_error("Cannot load initial lock states.");
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1d8f472..1e04acb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.127 - 
+ =================================
++  Do not init filters, locking, lvmetad, lvmpolld if command doesn't use it.
+   Recognise vg/lv name format in dmsetup.
+   Fix regression in cache causing some PVs to bypass filters (2.02.105).
  
--	if (!(cmd = create_toolcontext(1, NULL, 0, 1))) {
-+	if (!(cmd = create_toolcontext(1, NULL, 0, 1, 1, 1))) {
- 		log_error("Failed to allocate command context");
- 		return 0;
- 	}
-diff --git a/daemons/lvmetad/testclient.c b/daemons/lvmetad/testclient.c
-index fbf7b65..59aedc6 100644
---- a/daemons/lvmetad/testclient.c
-+++ b/daemons/lvmetad/testclient.c
-@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index c88a85b..22e83d2 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -119,8 +119,9 @@ int init_locking(int type, struct cmd_context *cmd, int suppress_messages)
+ 	switch (type) {
+ 	case 0:
+ 		init_no_locking(&_locking, cmd, suppress_messages);
+-		log_warn("WARNING: Locking disabled. Be careful! "
+-			  "This could corrupt your metadata.");
++		log_warn_suppress(suppress_messages,
++			"WARNING: Locking disabled. Be careful! "
++			"This could corrupt your metadata.");
+ 		return 1;
  
- 	if (argc > 1) {
- 		int i;
--		struct cmd_context *cmd = create_toolcontext(0, NULL, 0, 0);
-+		struct cmd_context *cmd = create_toolcontext(0, NULL, 0, 0, 1, 1);
- 		for (i = 1; i < argc; ++i) {
- 			const char *uuid = NULL;
- 			scan(h, argv[i]);
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index dadb3c5..c087820 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -55,7 +55,6 @@
- #endif
+ 	case 1:
+diff --git a/tools/commands.h b/tools/commands.h
+index 7f4b4e2..0ab578d 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -30,7 +30,7 @@ xx(e2fsadm,
  
- static const size_t linebuffer_size = 4096;
--static int _init_connections(struct cmd_context *cmd);
+ xx(config,
+    "Display and manipulate configuration information",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "config\n"
+    "\t[-f|--file filename]\n"
+    "\t[--type {current|default|diff|full|list|missing|new|profilable|profilable-command|profilable-metadata}\n"
+@@ -60,7 +60,7 @@ xx(config,
  
- /*
-  * Copy the input string, removing invalid characters.
-@@ -675,9 +674,6 @@ static int _process_config(struct cmd_context *cmd)
- 	init_detect_internal_vg_cache_corruption
- 		(find_config_tree_bool(cmd, global_detect_internal_vg_cache_corruption_CFG, NULL));
+ xx(devtypes,
+    "Display recognised built-in block device types",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "devtypes\n"
+    "\t[--aligned]\n"
+    "\t[--binary]\n"
+@@ -86,7 +86,7 @@ xx(devtypes,
  
--	if (!_init_connections(cmd))
--		return_0;
--
- 	if (!_init_system_id(cmd))
- 		return_0;
+ xx(dumpconfig,
+    "Display and manipulate configuration information",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "dumpconfig\n"
+    "\t[-f|--file filename]\n"
+    "\t[--type {current|default|diff|full|list|missing|new|profilable|profilable-command|profilable-metadata}\n"
+@@ -116,12 +116,12 @@ xx(dumpconfig,
  
-@@ -1165,7 +1161,7 @@ bad:
-  *     md component filter -> fw raid filter
-  *
-  */
--static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
-+int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
- {
- 	const char *dev_cache;
- 	struct dev_filter *filter = NULL, *filter_components[2] = {0};
-@@ -1173,6 +1169,11 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
- 	const struct dm_config_node *cn;
- 	struct timespec ts, cts;
+ xx(formats,
+    "List available metadata formats",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "formats\n")
  
-+	if (!cmd->initialized.connections) {
-+		log_error(INTERNAL_ERROR "connections must be initialized before filters");
-+		return 0;
-+	}
-+
- 	cmd->dump_filter = 0;
+ xx(help,
+    "Display help for commands",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "help <command>\n")
  
- 	cmd->lvmetad_filter = _init_lvmetad_filter_chain(cmd);
-@@ -1253,6 +1254,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
- 				    dev_cache);
- 	}
+ /*********
+@@ -491,7 +491,7 @@ xx(lvmchange,
  
-+	cmd->initialized.filters = 1;
- 	return 1;
- bad:
- 	if (!filter) {
-@@ -1276,6 +1278,7 @@ bad:
- 	if (cmd->lvmetad_filter)
- 		cmd->lvmetad_filter->destroy(cmd->lvmetad_filter);
+ xx(lvmconfig,
+    "Display and manipulate configuration information",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "lvmconfig\n"
+    "\t[-f|--file filename]\n"
+    "\t[--type {current|default|diff|full|list|missing|new|profilable|profilable-command|profilable-metadata}\n"
+@@ -979,17 +979,17 @@ xx(pvscan,
  
-+	cmd->initialized.filters = 0;
- 	return 0;
- }
+ xx(segtypes,
+    "List available segment types",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "segtypes\n")
  
-@@ -1696,26 +1699,33 @@ static int _init_lvmpolld(struct cmd_context *cmd)
- 	return 1;
- }
+ xx(systemid,
+    "Display the system ID, if any, currently set on this host",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "systemid\n")
  
--static int _init_connections(struct cmd_context *cmd)
-+int init_connections(struct cmd_context *cmd)
- {
-+
- 	if (!_init_lvmetad(cmd)) {
- 		log_error("Failed to initialize lvmetad connection.");
--		return 0;
-+		goto bad;
- 	}
+ xx(tags,
+    "List tags defined on this host",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "tags\n")
  
- 	if (!_init_lvmpolld(cmd)) {
- 		log_error("Failed to initialize lvmpolld connection.");
--		return 0;
-+		goto bad;
- 	}
+ xx(vgcfgbackup,
+@@ -1409,5 +1409,5 @@ xx(vgsplit,
  
-+	cmd->initialized.connections = 1;
- 	return 1;
-+bad:
-+	cmd->initialized.connections = 0;
-+	return 0;
- }
- 
- /* Entry point */
- struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 				       const char *system_dir,
- 				       unsigned set_buffering,
--				       unsigned threaded)
-+				       unsigned threaded,
-+				       unsigned set_connections,
-+				       unsigned set_filters)
- {
- 	struct cmd_context *cmd;
- 	FILE *new_stream;
-@@ -1859,9 +1869,6 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 	if (!_init_dev_cache(cmd))
- 		goto_out;
- 
--	if (!_init_filters(cmd, 1))
--		goto_out;
--
- 	memlock_init(cmd);
- 
- 	if (!_init_formats(cmd))
-@@ -1880,6 +1887,12 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 
- 	_init_globals(cmd);
- 
-+	if (set_connections && !init_connections(cmd))
-+		return_0;
-+
-+	if (set_filters && !init_filters(cmd, 1))
-+		goto_out;
-+
- 	cmd->default_settings.cache_vgmetadata = 1;
- 	cmd->current_settings = cmd->default_settings;
- 
-@@ -1957,14 +1970,19 @@ static void _destroy_filters(struct cmd_context *cmd)
- 		cmd->full_filter->destroy(cmd->full_filter);
- 		cmd->lvmetad_filter = cmd->filter = cmd->full_filter = NULL;
- 	}
-+	cmd->initialized.filters = 0;
- }
- 
- int refresh_filters(struct cmd_context *cmd)
- {
- 	int r, saved_ignore_suspended_devices = ignore_suspended_devices();
- 
-+	if (!cmd->initialized.filters)
-+		/* if filters not initialized, there's nothing to refresh */
-+		return 1;
-+
- 	_destroy_filters(cmd);
--	if (!(r = _init_filters(cmd, 0)))
-+	if (!(r = init_filters(cmd, 0)))
-                 stack;
- 
- 	/*
-@@ -2074,9 +2092,6 @@ int refresh_toolcontext(struct cmd_context *cmd)
- 	if (!_init_dev_cache(cmd))
- 		return_0;
- 
--	if (!_init_filters(cmd, 0))
--		return_0;
--
- 	if (!_init_formats(cmd))
- 		return_0;
- 
-@@ -2091,6 +2106,12 @@ int refresh_toolcontext(struct cmd_context *cmd)
- 
- 	cmd->initialized.config = 1;
- 
-+	if (cmd->initialized.connections && !init_connections(cmd))
-+		return_0;
-+
-+	if (cmd->initialized.filters && !init_filters(cmd, 0))
-+		return_0;
-+
- 	reset_lvm_errno(1);
- 	return 1;
- }
-@@ -2159,6 +2180,7 @@ void destroy_toolcontext(struct cmd_context *cmd)
- 	lvmetad_release_token();
- 	lvmetad_disconnect();
- 	lvmpolld_disconnect();
-+	cmd->initialized.connections = 0;
- 
- 	release_log_memory();
- 	activation_exit();
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index c59024b..57feb01 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -62,6 +62,8 @@ struct config_tree_list {
- 
- struct cmd_context_initialized_parts {
- 	unsigned config:1; /* used to reinitialize config if previous init was not successful */
-+	unsigned filters:1;
-+	unsigned connections:1;
- };
- 
- /* FIXME Split into tool & library contexts */
-@@ -171,13 +173,17 @@ struct cmd_context {
- struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 				       const char *system_dir,
- 				       unsigned set_buffering,
--				       unsigned threaded);
-+				       unsigned threaded,
-+				       unsigned set_connections,
-+				       unsigned set_filters);
- void destroy_toolcontext(struct cmd_context *cmd);
- int refresh_toolcontext(struct cmd_context *cmd);
- int refresh_filters(struct cmd_context *cmd);
- int process_profilable_config(struct cmd_context *cmd);
- int config_files_changed(struct cmd_context *cmd);
- int init_lvmcache_orphans(struct cmd_context *cmd);
-+int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache);
-+int init_connections(struct cmd_context *cmd);
- 
- struct format_type *get_format_by_name(struct cmd_context *cmd, const char *format);
- 
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index c1954d1..5b14c3b 100644
---- a/liblvm/lvm_base.c
-+++ b/liblvm/lvm_base.c
-@@ -45,7 +45,7 @@ static lvm_t _lvm_init(const char *system_dir)
- 	/* create context */
- 	/* FIXME: split create_toolcontext */
- 	/* FIXME: make all globals configurable */
--	cmd = create_toolcontext(0, system_dir, 0, 0);
-+	cmd = create_toolcontext(0, system_dir, 0, 0, 1, 1);
- 	if (!cmd)
- 		return NULL;
- 
-diff --git a/tools/lvm2cmdline.h b/tools/lvm2cmdline.h
-index 5c4889e..fe77d56 100644
---- a/tools/lvm2cmdline.h
-+++ b/tools/lvm2cmdline.h
-@@ -31,7 +31,7 @@ int lvm2_main(int argc, char **argv);
- void *cmdlib_lvm2_init(unsigned static_compile);
- void lvm_fin(struct cmd_context *cmd);
- 
--struct cmd_context *init_lvm(void);
-+struct cmd_context *init_lvm(unsigned set_connections, unsigned set_filters);
- void lvm_register_commands(void);
- int lvm_split(char *str, int *argc, char **argv, int max);
- int lvm_run_command(struct cmd_context *cmd, int argc, char **argv);
-diff --git a/tools/lvmcmdlib.c b/tools/lvmcmdlib.c
-index 76576c2..26f160f 100644
---- a/tools/lvmcmdlib.c
-+++ b/tools/lvmcmdlib.c
-@@ -33,7 +33,7 @@ void *cmdlib_lvm2_init(unsigned static_compile)
- 	lvm_register_commands();
- 
- 	init_is_static(static_compile);
--	if (!(cmd = init_lvm()))
-+	if (!(cmd = init_lvm(1, 1)))
- 		return NULL;
- 
- 	return (void *) cmd;
+ xx(version,
+    "Display software and driver version information",
+-   PERMITTED_READ_ONLY,
++   PERMITTED_READ_ONLY | NO_METADATA_PROCESSING,
+    "version\n")
 diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 98a2c30..0c88164 100644
+index 0c88164..b7809c7 100644
 --- a/tools/lvmcmdline.c
 +++ b/tools/lvmcmdline.c
-@@ -1873,7 +1873,7 @@ static int _close_stray_fds(const char *command)
+@@ -1463,6 +1463,11 @@ static int _init_lvmlockd(struct cmd_context *cmd)
  	return 1;
  }
  
--struct cmd_context *init_lvm(void)
-+struct cmd_context *init_lvm(unsigned set_connections, unsigned set_filters)
++static int _cmd_no_meta_proc(struct cmd_context *cmd)
++{
++	return cmd->command->flags & NO_METADATA_PROCESSING;
++}
++
+ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
  {
- 	struct cmd_context *cmd;
+ 	struct dm_config_tree *config_string_cft;
+@@ -1554,6 +1559,12 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	if (!_prepare_profiles(cmd))
+ 		return_ECMD_FAILED;
  
-@@ -1887,7 +1887,8 @@ struct cmd_context *init_lvm(void)
- 	 */
- 	dm_set_name_mangling_mode(DM_STRING_MANGLING_NONE);
++	if (!cmd->initialized.connections && !_cmd_no_meta_proc(cmd) && !init_connections(cmd))
++		return_ECMD_FAILED;
++
++	if (!cmd->initialized.filters && !_cmd_no_meta_proc(cmd) && !init_filters(cmd, 1))
++		return_ECMD_FAILED;
++
+ 	if (arg_count(cmd, readonly_ARG))
+ 		cmd->metadata_read_only = 1;
  
--	if (!(cmd = create_toolcontext(0, NULL, 1, 0))) {
-+	if (!(cmd = create_toolcontext(0, NULL, 1, 0,
-+			set_connections, set_filters))) {
- 		udev_fin_library_context();
- 		return_NULL;
+@@ -1587,7 +1598,9 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 		goto out;
  	}
-@@ -2055,7 +2056,7 @@ int lvm2_main(int argc, char **argv)
+ 
+-	if (arg_count(cmd, readonly_ARG)) {
++	if (_cmd_no_meta_proc(cmd))
++		locking_type = 0;
++	else if (arg_count(cmd, readonly_ARG)) {
+ 		if (find_config_tree_bool(cmd, global_use_lvmlockd_CFG, NULL)) {
+ 			/*
+ 			 * FIXME: we could use locking_type 5 here if that didn't
+@@ -1610,12 +1623,12 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	else
+ 		locking_type = -1;
+ 
+-	if (!init_locking(locking_type, cmd, arg_count(cmd, sysinit_ARG))) {
++	if (!init_locking(locking_type, cmd, _cmd_no_meta_proc(cmd) || arg_count(cmd, sysinit_ARG))) {
+ 		ret = ECMD_FAILED;
+ 		goto_out;
+ 	}
+ 
+-	if (!_init_lvmlockd(cmd)) {
++	if (!_cmd_no_meta_proc(cmd) && !_init_lvmlockd(cmd)) {
+ 		ret = ECMD_FAILED;
+ 		goto_out;
+ 	}
+@@ -2056,7 +2069,7 @@ int lvm2_main(int argc, char **argv)
  	if (!alias && argc > 1 && !strcmp(argv[1], "version"))
  		return lvm_return_code(version(NULL, argc, argv));
  
--	if (!(cmd = init_lvm()))
-+	if (!(cmd = init_lvm(1, 1)))
+-	if (!(cmd = init_lvm(1, 1)))
++	if (!(cmd = init_lvm(0, 0)))
  		return -1;
  
  	cmd->argv = argv;
+diff --git a/tools/tools.h b/tools/tools.h
+index 5ee5786..4ed893f 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -103,6 +103,8 @@ struct arg_value_group_list {
+ #define ONE_VGNAME_ARG		0x00000010
+ /* Command needs a shared lock on a VG; it only reads the VG. */
+ #define LOCKD_VG_SH		0x00000020
++/* Command does not process any metadata. */
++#define NO_METADATA_PROCESSING	0x00000040
+  
+ /* a register of the lvm commands */
+ struct command {
 
 
