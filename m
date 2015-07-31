@@ -1,104 +1,111 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 31 Jul 2015 15:14:29 +0000 (UTC)
-Subject: master - dmsetup: Rename _commands to _dmsetup_commands.
-Message-ID: <20150731151429.21DA56098C@fedorahosted.org>
+Date: Fri, 31 Jul 2015 15:28:06 +0000 (UTC)
+Subject: master - dmsetup: Add _dmsetup to help and usage fns.
+Message-ID: <20150731152806.249D860DAE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=027fe112ecb75e46c671658e233ff353523e9ec3
-Commit:        027fe112ecb75e46c671658e233ff353523e9ec3
-Parent:        f54198eed62f915df6fdb7c09a186160b5bb3954
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fef3cb3f21cba9e88add8ffd1aad8d6691c77109
+Commit:        fef3cb3f21cba9e88add8ffd1aad8d6691c77109
+Parent:        027fe112ecb75e46c671658e233ff353523e9ec3
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jul 31 16:13:45 2015 +0100
+AuthorDate:    Fri Jul 31 16:26:38 2015 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jul 31 16:13:45 2015 +0100
+CommitterDate: Fri Jul 31 16:26:38 2015 +0100
 
-dmsetup: Rename _commands to _dmsetup_commands.
+dmsetup: Add _dmsetup to help and usage fns.
 
-We'll need to accommodate sub-commands for dmstats.
+Prepare for dmstats.
+Adjust some text to avoid 80-char wrap.
 ---
- tools/dmsetup.c |   26 ++++++++++++++++----------
- 1 files changed, 16 insertions(+), 10 deletions(-)
+ tools/dmsetup.c |   28 +++++++++++++++-------------
+ 1 files changed, 15 insertions(+), 13 deletions(-)
 
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 7a26db1..6481288 100644
+index 6481288..b803e44 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -3057,7 +3057,7 @@ static int _help(CMD_ARGS);
+@@ -3052,17 +3052,18 @@ out:
+ 	return r;
+ }
+ 
+-static int _help(CMD_ARGS);
++static int _dmsetup_help(CMD_ARGS);
+ 
  /*
   * Dispatch table
   */
--static struct command _commands[] = {
-+static struct command _dmsetup_commands[] = {
- 	{"help", "[-c|-C|--columns]", 0, 0, 0, _help},
- 	{"create", "<dev_name> [-j|--major <major> -m|--minor <minor>]\n"
- 	  "\t                  [-U|--uid <uid>] [-G|--gid <gid>] [-M|--mode <octal_mode>]\n"
-@@ -3108,8 +3108,8 @@ static void _usage(FILE *out)
- 		"        [-c|-C|--columns] [-o <fields>] [-O|--sort <sort_fields>]\n"
- 		"        [-S|--select <selection>] [--nameprefixes] [--noheadings]\n"
- 		"        [--separator <separator>]\n\n");
--	for (i = 0; _commands[i].name; i++)
--		fprintf(out, "\t%s %s\n", _commands[i].name, _commands[i].help);
-+	for (i = 0; _dmsetup_commands[i].name; i++)
-+		fprintf(out, "\t%s %s\n", _dmsetup_commands[i].name, _dmsetup_commands[i].help);
- 	fprintf(out, "\n<device> may be device name or -u <uuid> or "
- 		     "-j <major> -m <minor>\n");
- 	fprintf(out, "<mangling_mode> is one of 'none', 'auto' and 'hex'.\n");
-@@ -3147,17 +3147,23 @@ static int _help(CMD_ARGS)
- 	return 1;
- }
+ static struct command _dmsetup_commands[] = {
+-	{"help", "[-c|-C|--columns]", 0, 0, 0, _help},
+-	{"create", "<dev_name> [-j|--major <major> -m|--minor <minor>]\n"
+-	  "\t                  [-U|--uid <uid>] [-G|--gid <gid>] [-M|--mode <octal_mode>]\n"
+-	  "\t                  [-u|uuid <uuid>] [{--addnodeonresume|--addnodeoncreate}]\n"
+-	  "\t                  [--notable | --table <table> | <table_file>]",
++	{"help", "[-c|-C|--columns]", 0, 0, 0, _dmsetup_help},
++	{"create", "<dev_name>\n"
++	  "\t    [-j|--major <major> -m|--minor <minor>]\n"
++	  "\t    [-U|--uid <uid>] [-G|--gid <gid>] [-M|--mode <octal_mode>]\n"
++	  "\t    [-u|uuid <uuid>] [{--addnodeonresume|--addnodeoncreate}]\n"
++	  "\t    [--notable | --table <table> | <table_file>]",
+ 	 1, 2,0,  _create},
+ 	{"remove", "[-f|--force] [--deferred] <device>", 0, -1, 1, _remove},
+ 	{"remove_all", "[-f|--force]", 0, 0, 0,  _remove_all},
+@@ -3095,13 +3096,14 @@ static struct command _dmsetup_commands[] = {
+ 	{NULL, NULL, 0, 0, 0, NULL}
+ };
  
--static struct command *_find_command(const char *name)
-+static struct command *_find_command(const struct command *commands,
-+				     const char *name)
+-static void _usage(FILE *out)
++static void _dmsetup_usage(FILE *out)
  {
  	int i;
  
--	for (i = 0; _commands[i].name; i++)
--		if (!strcmp(_commands[i].name, name))
--			return _commands + i;
-+	for (i = 0; commands[i].name; i++)
-+		if (!strcmp(commands[i].name, name))
-+			return commands + i;
- 
- 	return NULL;
+ 	fprintf(out, "Usage:\n\n");
+ 	fprintf(out, "dmsetup [--version] [-h|--help [-c|-C|--columns]]\n"
+-		"        [--checks] [--manglename <mangling_mode>] [-v|--verbose [-v|--verbose ...]]\n"
++		"        [-v|--verbose [-v|--verbose ...]]\n"
++		"        [--checks] [--manglename <mangling_mode>]\n"
+ 		"        [-r|--readonly] [--noopencount] [--nolockfs] [--inactive]\n"
+ 		"        [--udevcookie [cookie]] [--noudevrules] [--noudevsync] [--verifyudev]\n"
+ 		"        [-y|--yes] [--readahead [+]<sectors>|auto|none] [--retry]\n"
+@@ -3128,9 +3130,9 @@ static void _losetup_usage(FILE *out)
+ 		     "[-o offset] [-f|loop_device] [file]\n\n");
  }
  
-+static struct command *_find_dmsetup_command(const char *name)
-+{
-+	return _find_command(_dmsetup_commands, name);
-+}
-+
- static int _process_tree_options(const char *options)
+-static int _help(CMD_ARGS)
++static int _dmsetup_help(CMD_ARGS)
  {
- 	const char *s, *end;
-@@ -3816,13 +3822,13 @@ int main(int argc, char **argv)
+-	_usage(stderr);
++	_dmsetup_usage(stderr);
+ 
+ 	if (_switches[COLS_ARG]) {
+ 		_switches[OPTIONS_ARG] = 1;
+@@ -3834,21 +3836,21 @@ int main(int argc, char **argv)
  	}
  
- 	if (_switches[HELP_ARG]) {
--		if ((cmd = _find_command("help")))
-+		if ((cmd = _find_dmsetup_command("help")))
- 			goto doit;
- 		goto unknown;
- 	}
- 
- 	if (_switches[VERSION_ARG]) {
--		if ((cmd = _find_command("version")))
-+		if ((cmd = _find_dmsetup_command("version")))
- 			goto doit;
- 		goto unknown;
- 	}
-@@ -3832,7 +3838,7 @@ int main(int argc, char **argv)
+ 	if (argc == 0) {
+-		_usage(stderr);
++		_dmsetup_usage(stderr);
  		goto out;
  	}
  
--	if (!(cmd = _find_command(argv[0]))) {
-+	if (!(cmd = _find_dmsetup_command(argv[0]))) {
+ 	if (!(cmd = _find_dmsetup_command(argv[0]))) {
  unknown:
  		fprintf(stderr, "Unknown command\n");
- 		_usage(stderr);
+-		_usage(stderr);
++		_dmsetup_usage(stderr);
+ 		goto out;
+ 	}
+ 
+ 	if (argc < cmd->min_args + 1 ||
+ 	    (cmd->max_args >= 0 && argc > cmd->max_args + 1)) {
+ 		fprintf(stderr, "Incorrect number of arguments\n");
+-		_usage(stderr);
++		_dmsetup_usage(stderr);
+ 		goto out;
+ 	}
+ 
 
 
