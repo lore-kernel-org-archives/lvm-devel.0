@@ -1,158 +1,172 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 31 Jul 2015 16:49:34 +0000 (UTC)
-Subject: master - dmsetup: Add subcommand parameter.
-Message-ID: <20150731164934.0F71860C57@fedorahosted.org>
+Date: Fri, 31 Jul 2015 18:13:49 +0000 (UTC)
+Subject: master - dmsetup: Allow commands to have subcommands.
+Message-ID: <20150731181349.26E0C60DF2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=51f89f2fbdabc3b1800a1fd5ba4c7136ada0f9d3
-Commit:        51f89f2fbdabc3b1800a1fd5ba4c7136ada0f9d3
-Parent:        e06d188f0d9763195c9e6040ffb26b7203e39df2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=649c9d47199feddf7f5b65b5dbe12918ba2b383b
+Commit:        649c9d47199feddf7f5b65b5dbe12918ba2b383b
+Parent:        51f89f2fbdabc3b1800a1fd5ba4c7136ada0f9d3
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jul 31 17:47:03 2015 +0100
+AuthorDate:    Fri Jul 31 19:09:31 2015 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jul 31 17:47:03 2015 +0100
+CommitterDate: Fri Jul 31 19:09:31 2015 +0100
 
-dmsetup: Add subcommand parameter.
+dmsetup: Allow commands to have subcommands.
 
-Not yet used.
-Allows for dmsetup stats <subcommand> dev1 dev2...
+No commands set has_subcommands yet.
+
+Move multiple device loop to separate function because we'll
+soon want to call it repeatedly.
+
+(Based on patch from bmr.)
 ---
- tools/dmsetup.c |   32 ++++++++++++++++----------------
- 1 files changed, 16 insertions(+), 16 deletions(-)
+ tools/dmsetup.c |   94 ++++++++++++++++++++++++++++++++----------------------
+ 1 files changed, 56 insertions(+), 38 deletions(-)
 
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 2f62d70..10bf3c6 100644
+index 10bf3c6..f36119f 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -188,7 +188,7 @@ static dev_name_t _dev_name_type;
+@@ -197,6 +197,7 @@ struct command {
+ 	int min_args;
+ 	int max_args;
+ 	int repeatable_cmd;	/* Repeat to process device list? */
++	int has_subcommands;	/* Command implements sub-commands. */
+ 	command_fn fn;
+ };
+ 
+@@ -3058,42 +3059,42 @@ static int _dmsetup_help(CMD_ARGS);
+  * Dispatch table
   */
+ static struct command _dmsetup_commands[] = {
+-	{"help", "[-c|-C|--columns]", 0, 0, 0, _dmsetup_help},
++	{"help", "[-c|-C|--columns]", 0, 0, 0, 0, _dmsetup_help},
+ 	{"create", "<dev_name>\n"
+ 	  "\t    [-j|--major <major> -m|--minor <minor>]\n"
+ 	  "\t    [-U|--uid <uid>] [-G|--gid <gid>] [-M|--mode <octal_mode>]\n"
+ 	  "\t    [-u|uuid <uuid>] [{--addnodeonresume|--addnodeoncreate}]\n"
+ 	  "\t    [--notable | --table <table> | <table_file>]",
+-	 1, 2,0,  _create},
+-	{"remove", "[-f|--force] [--deferred] <device>", 0, -1, 1, _remove},
+-	{"remove_all", "[-f|--force]", 0, 0, 0,  _remove_all},
+-	{"suspend", "[--noflush] <device>", 0, -1, 1, _suspend},
+-	{"resume", "<device> [{--addnodeonresume|--addnodeoncreate}]", 0, -1, 1, _resume},
+-	{"load", "<device> [<table_file>]", 0, 2, 0, _load},
+-	{"clear", "<device>", 0, -1, 1, _clear},
+-	{"reload", "<device> [<table_file>]", 0, 2, 0, _load},
+-	{"wipe_table", "<device>", 0, -1, 1, _error_device},
+-	{"rename", "<device> [--setuuid] <new_name_or_uuid>", 1, 2, 0, _rename},
+-	{"message", "<device> <sector> <message>", 2, -1, 0, _message},
+-	{"ls", "[--target <target_type>] [--exec <command>] [-o options] [--tree]", 0, 0, 0, _ls},
+-	{"info", "[<device>]", 0, -1, 1, _info},
+-	{"deps", "[-o options] [<device>]", 0, -1, 1, _deps},
+-	{"status", "[<device>] [--noflush] [--target <target_type>]", 0, -1, 1, _status},
+-	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, -1, 1, _status},
+-	{"wait", "<device> [<event_nr>] [--noflush]", 0, 2, 0, _wait},
+-	{"mknodes", "[<device>]", 0, -1, 1, _mknodes},
+-	{"mangle", "[<device>]", 0, -1, 1, _mangle},
+-	{"udevcreatecookie", "", 0, 0, 0, _udevcreatecookie},
+-	{"udevreleasecookie", "[<cookie>]", 0, 1, 0, _udevreleasecookie},
+-	{"udevflags", "<cookie>", 1, 1, 0, _udevflags},
+-	{"udevcomplete", "<cookie>", 1, 1, 0, _udevcomplete},
+-	{"udevcomplete_all", "<age_in_minutes>", 0, 1, 0, _udevcomplete_all},
+-	{"udevcookies", "", 0, 0, 0, _udevcookies},
+-	{"targets", "", 0, 0, 0, _targets},
+-	{"version", "", 0, 0, 0, _version},
+-	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, 0, _setgeometry},
+-	{"splitname", "<device> [<subsystem>]", 1, 2, 0, _splitname},
+-	{NULL, NULL, 0, 0, 0, NULL}
++	 1, 2,0,  0, _create},
++	{"remove", "[-f|--force] [--deferred] <device>", 0, -1, 1, 0, _remove},
++	{"remove_all", "[-f|--force]", 0, 0, 0,  0, _remove_all},
++	{"suspend", "[--noflush] <device>", 0, -1, 1, 0, _suspend},
++	{"resume", "<device> [{--addnodeonresume|--addnodeoncreate}]", 0, -1, 1, 0, _resume},
++	{"load", "<device> [<table_file>]", 0, 2, 0, 0, _load},
++	{"clear", "<device>", 0, -1, 1, 0, _clear},
++	{"reload", "<device> [<table_file>]", 0, 2, 0, 0, _load},
++	{"wipe_table", "<device>", 0, -1, 1, 0, _error_device},
++	{"rename", "<device> [--setuuid] <new_name_or_uuid>", 1, 2, 0, 0, _rename},
++	{"message", "<device> <sector> <message>", 2, -1, 0, 0, _message},
++	{"ls", "[--target <target_type>] [--exec <command>] [-o options] [--tree]", 0, 0, 0, 0, _ls},
++	{"info", "[<device>]", 0, -1, 1, 0, _info},
++	{"deps", "[-o options] [<device>]", 0, -1, 1, 0, _deps},
++	{"status", "[<device>] [--noflush] [--target <target_type>]", 0, -1, 1, 0, _status},
++	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, -1, 1, 0, _status},
++	{"wait", "<device> [<event_nr>] [--noflush]", 0, 2, 0, 0, _wait},
++	{"mknodes", "[<device>]", 0, -1, 1, 0, _mknodes},
++	{"mangle", "[<device>]", 0, -1, 1, 0, _mangle},
++	{"udevcreatecookie", "", 0, 0, 0, 0, _udevcreatecookie},
++	{"udevreleasecookie", "[<cookie>]", 0, 1, 0, 0, _udevreleasecookie},
++	{"udevflags", "<cookie>", 1, 1, 0, 0, _udevflags},
++	{"udevcomplete", "<cookie>", 1, 1, 0, 0, _udevcomplete},
++	{"udevcomplete_all", "<age_in_minutes>", 0, 1, 0, 0, _udevcomplete_all},
++	{"udevcookies", "", 0, 0, 0, 0, _udevcookies},
++	{"targets", "", 0, 0, 0, 0, _targets},
++	{"version", "", 0, 0, 0, 0, _version},
++	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, 0, 0, _setgeometry},
++	{"splitname", "<device> [<subsystem>]", 1, 2, 0, 0, _splitname},
++	{NULL, NULL, 0, 0, 0, 0, NULL}
+ };
  
- struct command;
--#define CMD_ARGS const struct command *cmd, int argc, char **argv, struct dm_names *names, int multiple_devices
-+#define CMD_ARGS const struct command *cmd, const char *subcommand, int argc, char **argv, struct dm_names *names, int multiple_devices
- typedef int (*command_fn) (CMD_ARGS);
- 
- struct command {
-@@ -1360,7 +1360,7 @@ static int _wait(CMD_ARGS)
- 		       (argc > 1) ? (uint32_t) atoi(argv[argc - 1]) : 0, 1);
+ static void _dmsetup_usage(FILE *out)
+@@ -3800,11 +3801,25 @@ static int _process_switches(int *argc, char ***argv, const char *dev_dir)
+ 	return 1;
  }
  
--static int _process_all(const struct command *cmd, int argc, char **argv, int silent,
-+static int _process_all(const struct command *cmd, const char *subcommand, int argc, char **argv, int silent,
- 			int (*fn) (CMD_ARGS))
++static int _perform_command_for_all_repeatable_args(CMD_ARGS)
++{
++	/* FIXME Shift args to remove argv[0] that fn is not allowed to access? */
++	do {
++		if (!cmd->fn(cmd, subcommand, argc--, argv++, NULL, multiple_devices)) {
++			fprintf(stderr, "Command failed\n");
++			return 1;
++		}
++	} while (cmd->repeatable_cmd && argc > 1);
++
++	return 0;
++}
++
+ int main(int argc, char **argv)
  {
  	int r = 1;
-@@ -1393,7 +1393,7 @@ static int _process_all(const struct command *cmd, int argc, char **argv, int si
+ 	const char *dev_dir;
+ 	const struct command *cmd;
++	const char *subcommand = NULL;
+ 	int multiple_devices;
  
- 	do {
- 		names = (struct dm_names *)((char *) names + next);
--		if (!fn(cmd, argc, argv, names, 1))
-+		if (!fn(cmd, subcommand, argc, argv, names, 1))
- 			r = 0;
- 		next = names->next;
- 	} while (next);
-@@ -1500,7 +1500,7 @@ static int _remove(CMD_ARGS)
- 		 */
- 		if (_udev_cookie)
- 			log_warn("WARNING: Use of cookie and --force is not compatible.");
--		(void) _error_device(cmd, argc, argv, NULL, 0);
-+		(void) _error_device(cmd, NULL, argc, argv, NULL, 0);
- 	}
+ 	(void) setlocale(LC_ALL, "");
+@@ -3873,17 +3888,20 @@ unknown:
+ 		goto out;
+ 	#endif
  
- 	return _simple(DM_DEVICE_REMOVE, argc > 1 ? argv[1] : NULL, 0, 0);
-@@ -1524,17 +1524,17 @@ static int _remove_all(CMD_ARGS)
- 		return r;
- 
- 	_num_devices = 0;
--	r |= _process_all(cmd, argc, argv, 1, _count_devices);
-+	r |= _process_all(cmd, NULL, argc, argv, 1, _count_devices);
- 
- 	/* No devices left? */
- 	if (!_num_devices)
- 		return r;
- 
--	r |= _process_all(cmd, argc, argv, 1, _error_device);
-+	r |= _process_all(cmd, NULL, argc, argv, 1, _error_device);
- 	r |= _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
- 
- 	_num_devices = 0;
--	r |= _process_all(cmd, argc, argv, 1, _count_devices);
-+	r |= _process_all(cmd, NULL, argc, argv, 1, _count_devices);
- 	if (!_num_devices)
- 		return r;
- 
-@@ -1633,7 +1633,7 @@ static int _status(CMD_ARGS)
- 		name = names->name;
- 	else {
- 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG])
--			return _process_all(cmd, argc, argv, 0, _status);
-+			return _process_all(cmd, NULL, argc, argv, 0, _status);
- 		name = argv[1];
- 	}
- 
-@@ -1772,7 +1772,7 @@ static int _info(CMD_ARGS)
- 		name = names->name;
- 	else {
- 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG])
--			return _process_all(cmd, argc, argv, 0, _info);
-+			return _process_all(cmd, NULL, argc, argv, 0, _info);
- 		name = argv[1];
- 	}
- 
-@@ -1816,7 +1816,7 @@ static int _deps(CMD_ARGS)
- 		name = names->name;
- 	else {
- 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG])
--			return _process_all(cmd, argc, argv, 0, _deps);
-+			return _process_all(cmd, NULL, argc, argv, 0, _deps);
- 		name = argv[1];
- 	}
- 
-@@ -2239,7 +2239,7 @@ static int _build_whole_deptree(const struct command *cmd)
- 	if (!(_dtree = dm_tree_create()))
- 		return 0;
- 
--	if (!_process_all(cmd, 0, NULL, 0, _add_dep))
-+	if (!_process_all(cmd, NULL, 0, NULL, 0, _add_dep))
- 		return 0;
- 
- 	return 1;
-@@ -2954,11 +2954,11 @@ static int _ls(CMD_ARGS)
- {
- 	if ((_switches[TARGET_ARG] && _target) ||
- 	    (_switches[EXEC_ARG] && _command))
--		return _status(cmd, argc, argv, NULL, 0);
-+		return _status(cmd, NULL, argc, argv, NULL, 0);
- 	else if ((_switches[TREE_ARG]))
--		return _display_tree(cmd, 0, NULL, NULL, 0);
-+		return _display_tree(cmd, NULL, 0, NULL, NULL, 0);
- 	else
--		return _process_all(cmd, argc, argv, 0, _display_name);
-+		return _process_all(cmd, NULL, argc, argv, 0, _display_name);
- }
- 
- static int _mangle(CMD_ARGS)
-@@ -2974,7 +2974,7 @@ static int _mangle(CMD_ARGS)
- 		name = names->name;
- 	else {
- 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG])
--			return _process_all(cmd, argc, argv, 0, _mangle);
-+			return _process_all(cmd, NULL, argc, argv, 0, _mangle);
- 		name = argv[1];
- 	}
- 
-@@ -3877,7 +3877,7 @@ unknown:
++	/*
++	 * Extract subcommand?
++	 * dmsetup <command> <subcommand> [args...]
++	 */
++	if (cmd->has_subcommands) {
++		subcommand = argv[1];
++		argc--, argv++;
++	}
++
+       doit:
  	multiple_devices = (cmd->repeatable_cmd && argc != 2 &&
  			    (argc != 1 || (!_switches[UUID_ARG] && !_switches[MAJOR_ARG])));
- 	do {
--		if (!cmd->fn(cmd, argc--, argv++, NULL, multiple_devices)) {
-+		if (!cmd->fn(cmd, NULL, argc--, argv++, NULL, multiple_devices)) {
- 			fprintf(stderr, "Command failed\n");
- 			goto out;
- 		}
+-	do {
+-		if (!cmd->fn(cmd, NULL, argc--, argv++, NULL, multiple_devices)) {
+-			fprintf(stderr, "Command failed\n");
+-			goto out;
+-		}
+-	} while (cmd->repeatable_cmd && argc > 1);
+ 
+-	r = 0;
++	r = _perform_command_for_all_repeatable_args(cmd, subcommand, argc, argv, NULL, multiple_devices);
+ 
+ out:
+ 	if (_report) {
 
 
