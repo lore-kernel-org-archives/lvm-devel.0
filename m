@@ -1,54 +1,50 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Thu, 30 Jul 2015 18:40:17 +0000 (UTC)
-Subject: master - test: Update Makefiles
-Message-ID: <20150730184017.B6CD160D8A@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 31 Jul 2015 08:25:54 +0000 (UTC)
+Subject: master - toolcontext: use refresh_filters in refresh_toolcontext
+Message-ID: <20150731082554.D46E760F81@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0dae377fbf1e0b3e1484984602cbaf73487efa47
-Commit:        0dae377fbf1e0b3e1484984602cbaf73487efa47
-Parent:        8bc90a25c26baa3d31f46415b3bb61e46f0477c1
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Jul 30 20:23:14 2015 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Jul 30 20:39:38 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f54198eed62f915df6fdb7c09a186160b5bb3954
+Commit:        f54198eed62f915df6fdb7c09a186160b5bb3954
+Parent:        0dae377fbf1e0b3e1484984602cbaf73487efa47
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Jul 31 10:20:33 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Jul 31 10:25:36 2015 +0200
 
-test: Update Makefiles
+toolcontext: use refresh_filters in refresh_toolcontext
 
-- Add missing check_lvmpolld to toplevel Makefile
-- Document check_system
+Use refresh_filters instead of destroy_filters and init_filters
+in refresh_toolcontext fn which deals with cmd->initialized.filters
+correctly on refresh.
 ---
- Makefile.in      |    2 +-
- test/Makefile.in |    1 +
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ lib/commands/toolcontext.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index 1eb026b..35e5d8f 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -95,7 +95,7 @@ endif
- DISTCLEAN_TARGETS += cscope.out
- CLEAN_DIRS += autom4te.cache
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index c087820..f4c0c95 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -2011,7 +2011,6 @@ int refresh_toolcontext(struct cmd_context *cmd)
+ 	label_exit();
+ 	_destroy_segtypes(&cmd->segtypes);
+ 	_destroy_formats(cmd, &cmd->formats);
+-	_destroy_filters(cmd);
  
--check check_system check_cluster check_local check_lvmetad unit: all
-+check check_system check_cluster check_local check_lvmetad check_lvmpolld unit: all
- 	$(MAKE) -C test $(@)
+ 	if (!dev_cache_exit())
+ 		stack;
+@@ -2109,7 +2108,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
+ 	if (cmd->initialized.connections && !init_connections(cmd))
+ 		return_0;
  
- conf.generate: tools
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 72eb4e6..65ba294 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -66,6 +66,7 @@ help:
- 	@echo -e "\nAvailable targets:"
- 	@echo "  all			Default target, run check."
- 	@echo "  check			Run all tests."
-+	@echo "  check_system		Run all tests using udev."
- 	@echo "  check_local		Run tests without clvmd and lvmetad."
- 	@echo "  check_cluster		Run tests with cluster daemon."
- 	@echo "  check_lvmetad		Run tests with lvmetad daemon."
+-	if (cmd->initialized.filters && !init_filters(cmd, 0))
++	if (!refresh_filters(cmd))
+ 		return_0;
+ 
+ 	reset_lvm_errno(1);
 
 
