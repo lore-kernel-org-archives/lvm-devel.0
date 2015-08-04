@@ -1,54 +1,58 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  4 Aug 2015 08:25:58 +0000 (UTC)
-Subject: master - coverity: fix cppcheck warnings
-Message-ID: <20150804082558.A7BDB609D9@fedorahosted.org>
+Date: Tue,  4 Aug 2015 08:26:00 +0000 (UTC)
+Subject: master - coverity: return value check in lvmlockd-dlm
+Message-ID: <20150804082600.CF5B6609D9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=83541123c81b8ff129175963866d9fbd01c21e38
-Commit:        83541123c81b8ff129175963866d9fbd01c21e38
-Parent:        46e6b2b86e58e081fa40e9cc724f09f03ecf843e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c78033233ab03749b37c01454310ac0c29fd5af8
+Commit:        c78033233ab03749b37c01454310ac0c29fd5af8
+Parent:        83541123c81b8ff129175963866d9fbd01c21e38
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Aug 4 09:33:55 2015 +0200
+AuthorDate:    Tue Aug 4 09:49:23 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Aug 4 09:33:55 2015 +0200
+CommitterDate: Tue Aug 4 09:49:29 2015 +0200
 
-coverity: fix cppcheck warnings
+coverity: return value check in lvmlockd-dlm
 
-/lib/log/log.c:88: warning[invalidScanfArgType_int]: %llu in format string (no. 2) requires 'unsigned long long *' but the argument type is 'long long *'.
-daemons/lvmlockd/lvmlockd-core.c:791: error[uninitstring]: Dangerous usage of 'version' (strncpy doesn't always null-terminate it).
+daemons/lvmlockd/lvmlockd-dlm.c:647: check_return: Calling "closedir" without checking return value (as is done elsewhere 13 out of 14 times).
 ---
- daemons/lvmlockd/lvmlockd-core.c |    1 +
- lib/log/log.c                    |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/lvmlockd/lvmlockd-dlm.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 2f470f5..266339d 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -787,6 +787,7 @@ int version_from_args(char *args, unsigned int *major, unsigned int *minor, unsi
- 	char *n, *d1, *d2;
+diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
+index f1b060a..c96866b 100644
+--- a/daemons/lvmlockd/lvmlockd-dlm.c
++++ b/daemons/lvmlockd/lvmlockd-dlm.c
+@@ -616,6 +616,7 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
  
- 	strncpy(version, args, MAX_ARGS);
-+	version[MAX_ARGS] = '\0';
+ int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
+ {
++	static const char closedir_err_msg[] = "lm_get_lockspace_dlm: closedir failed";
+ 	struct lockspace *ls;
+ 	struct dirent *de;
+ 	DIR *ls_dir;
+@@ -632,7 +633,7 @@ int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
  
- 	n = strstr(version, ":");
- 	if (n)
-diff --git a/lib/log/log.c b/lib/log/log.c
-index 9929090..bd11363 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -69,7 +69,7 @@ void init_log_file(const char *log_file, int append)
- 	static const char statfile[] = "/proc/self/stat";
- 	const char *env;
- 	int pid;
--	long long starttime;
-+	unsigned long long starttime;
- 	FILE *st;
- 	int i = 0;
+ 		if (!(ls = alloc_lockspace())) {
+ 			if (closedir(ls_dir))
+-				log_error("lm_get_lockspace_dlm: closedir failed");
++				log_error(closedir_err_msg);
+ 			return -ENOMEM;
+ 		}
+ 
+@@ -642,7 +643,8 @@ int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
+ 		list_add_tail(&ls->list, ls_rejoin);
+ 	}
+ 
+-	closedir(ls_dir);
++	if (closedir(ls_dir))
++		log_error(closedir_err_msg);
+ 	return 0;
+ }
  
 
 
