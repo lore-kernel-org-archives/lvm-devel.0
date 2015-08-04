@@ -1,58 +1,49 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  4 Aug 2015 08:26:00 +0000 (UTC)
-Subject: master - coverity: return value check in lvmlockd-dlm
-Message-ID: <20150804082600.CF5B6609D9@fedorahosted.org>
+Date: Tue,  4 Aug 2015 08:26:02 +0000 (UTC)
+Subject: master - coverity: variable init must be done before its use
+Message-ID: <20150804082602.E4AE0609D9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c78033233ab03749b37c01454310ac0c29fd5af8
-Commit:        c78033233ab03749b37c01454310ac0c29fd5af8
-Parent:        83541123c81b8ff129175963866d9fbd01c21e38
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1f3d04cddf5a447de9bfb81ed22d0ccbe58e82fc
+Commit:        1f3d04cddf5a447de9bfb81ed22d0ccbe58e82fc
+Parent:        c78033233ab03749b37c01454310ac0c29fd5af8
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Aug 4 09:49:23 2015 +0200
+AuthorDate:    Tue Aug 4 09:51:16 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Aug 4 09:49:29 2015 +0200
+CommitterDate: Tue Aug 4 09:51:16 2015 +0200
 
-coverity: return value check in lvmlockd-dlm
+coverity: variable init must be done before its use
 
-daemons/lvmlockd/lvmlockd-dlm.c:647: check_return: Calling "closedir" without checking return value (as is done elsewhere 13 out of 14 times).
+tools/polldaemon.c:465: uninit_use_in_call: Using uninitialized value "id.vg_name" when calling "print_log".
+tools/polldaemon.c:465: uninit_use_in_call: Using uninitialized value "id.lv_name" when calling "print_log".
 ---
- daemons/lvmlockd/lvmlockd-dlm.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ tools/polldaemon.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index f1b060a..c96866b 100644
---- a/daemons/lvmlockd/lvmlockd-dlm.c
-+++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -616,6 +616,7 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 4527efb..83928b7 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -461,13 +461,14 @@ static int _lvmpolld_init_poll_vg(struct cmd_context *cmd, const char *vgname,
+ 		if (!id.display_name && !lpdp->parms->aborting)
+ 			continue;
  
- int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
- {
-+	static const char closedir_err_msg[] = "lm_get_lockspace_dlm: closedir failed";
- 	struct lockspace *ls;
- 	struct dirent *de;
- 	DIR *ls_dir;
-@@ -632,7 +633,7 @@ int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
- 
- 		if (!(ls = alloc_lockspace())) {
- 			if (closedir(ls_dir))
--				log_error("lm_get_lockspace_dlm: closedir failed");
-+				log_error(closedir_err_msg);
- 			return -ENOMEM;
++		id.vg_name = lv->vg->name;
++		id.lv_name = lv->name;
++
+ 		if (!*lv->lvid.s) {
+ 			log_print_unless_silent("Missing LV uuid within: %s/%s", id.vg_name, id.lv_name);
+ 			continue;
  		}
  
-@@ -642,7 +643,8 @@ int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
- 		list_add_tail(&ls->list, ls_rejoin);
- 	}
+-		id.vg_name = lv->vg->name;
+-		id.lv_name = lv->name;
+ 		id.uuid = lv->lvid.s;
  
--	closedir(ls_dir);
-+	if (closedir(ls_dir))
-+		log_error(closedir_err_msg);
- 	return 0;
- }
- 
+ 		r = lvmpolld_poll_init(cmd, &id, lpdp->parms);
 
 
