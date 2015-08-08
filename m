@@ -1,67 +1,41 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri,  7 Aug 2015 21:35:45 +0000 (UTC)
-Subject: master - man: mention system ID in vgexport and vgimport
-Message-ID: <20150807213545.6456C60139@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Sat,  8 Aug 2015 10:49:40 +0000 (UTC)
+Subject: master - libdm: ensure new dm_timestamp objects are initialized
+Message-ID: <20150808104940.91352601D5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b59cdf089217e1b86b2106bdccb990bda92690e5
-Commit:        b59cdf089217e1b86b2106bdccb990bda92690e5
-Parent:        993fe07a3c9cd756d854d36d576cba5620bf3e36
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Aug 7 16:35:07 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Aug 7 16:35:07 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=974e7b9220f26154c5f491ca8ec49f57dd834c66
+Commit:        974e7b9220f26154c5f491ca8ec49f57dd834c66
+Parent:        b59cdf089217e1b86b2106bdccb990bda92690e5
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Fri Aug 7 13:10:34 2015 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Sat Aug 8 10:42:14 2015 +0100
 
-man: mention system ID in vgexport and vgimport
+libdm: ensure new dm_timestamp objects are initialized
 
+Allocate a dm_timestamp with dm_zalloc() to ensure the memory is
+initialized to a known state.
 ---
- man/vgexport.8.in |    5 ++++-
- man/vgimport.8.in |    5 ++++-
- 2 files changed, 8 insertions(+), 2 deletions(-)
+ libdm/libdm-timestamp.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/man/vgexport.8.in b/man/vgexport.8.in
-index 94a3e32..08c1d78 100644
---- a/man/vgexport.8.in
-+++ b/man/vgexport.8.in
-@@ -20,6 +20,8 @@ You can then move all the Physical Volumes in that Volume Group to
- a different system for later
- .BR vgimport (8).
- Most LVM2 tools ignore exported Volume Groups.
-+vgexport clears the VG system ID, and vgimport sets the VG system ID
-+to match the host running vgimport (if the host has a system ID).
- .SH OPTIONS
- See \fBlvm\fP(8) for common options.
- .TP
-@@ -29,4 +31,5 @@ Export all inactive Volume Groups.
- .BR lvm (8),
- .BR pvscan (8),
- .BR vgimport (8),
--.BR vgscan (8)
-+.BR vgscan (8),
-+.BR lvmsystemid (7)
-diff --git a/man/vgimport.8.in b/man/vgimport.8.in
-index 3a8a230..cd34049 100644
---- a/man/vgimport.8.in
-+++ b/man/vgimport.8.in
-@@ -16,6 +16,8 @@ exported using
- .BR vgexport (8)
- known to the system again, perhaps after moving its Physical Volumes
- from a different machine.
-+vgexport clears the VG system ID, and vgimport sets the VG system ID
-+to match the host running vgimport (if the host has a system ID).
- .SH OPTIONS
- See \fBlvm\fP(8) for common options.
- .TP
-@@ -30,4 +32,5 @@ failed and they cannot be restored.
- .BR lvm (8),
- .BR pvscan (8),
- .BR vgexport (8),
--.BR vgscan (8)
-+.BR vgscan (8),
-+.BR lvmsystemid (7)
+diff --git a/libdm/libdm-timestamp.c b/libdm/libdm-timestamp.c
+index 7690ccb..fe006d5 100644
+--- a/libdm/libdm-timestamp.c
++++ b/libdm/libdm-timestamp.c
+@@ -54,7 +54,7 @@ struct dm_timestamp *dm_timestamp_alloc(void)
+ {
+ 	struct dm_timestamp *ts = NULL;
+ 
+-	if (!(ts = dm_malloc(sizeof(*ts))))
++	if (!(ts = dm_zalloc(sizeof(*ts))))
+ 		stack;
+ 
+ 	return ts;
 
 
