@@ -1,57 +1,43 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon, 10 Aug 2015 19:30:27 +0000 (UTC)
-Subject: master - libdm: fix stats handle leak in dm_stats_create (Coverity)
-Message-ID: <20150810193027.86A7C6022D@fedorahosted.org>
+Date: Mon, 10 Aug 2015 19:30:29 +0000 (UTC)
+Subject: master - dmsetup: don't free handle if dm_stats_create fails (Coverity)
+Message-ID: <20150810193029.A705F60D8B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f9f5aac123d2244daeff92a692a03da3fea6bd74
-Commit:        f9f5aac123d2244daeff92a692a03da3fea6bd74
-Parent:        1134de3c89c5a07699365031d0cb88383e365929
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ec87e88c5264511576341286b474b453a15594ba
+Commit:        ec87e88c5264511576341286b474b453a15594ba
+Parent:        f9f5aac123d2244daeff92a692a03da3fea6bd74
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Aug 10 10:15:22 2015 +0100
+AuthorDate:    Mon Aug 10 19:05:10 2015 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Aug 10 20:20:30 2015 +0100
+CommitterDate: Mon Aug 10 20:25:59 2015 +0100
 
-libdm: fix stats handle leak in dm_stats_create (Coverity)
+dmsetup: don't free handle if dm_stats_create fails (Coverity)
 
-Make sure the newly created handle is freed if we are unable to
-also create the pool for it.
+The error path of _stats_list frees the task and stats objects:
+don't try to branch to it before they have been allocated.
 
-tools/dmsetup.c: 4255 in _stats_list() - Variable "dms" going out of scope leaks the storage it points to.
+tools/dmsetup.c: 4589 in _stats_help() - Null pointer dereferences  (FORWARD_NULL)
 ---
- libdm/libdm-stats.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ tools/dmsetup.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 64ca23f..a672e05 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -94,10 +94,10 @@ struct dm_stats *dm_stats_create(const char *program_id)
- {
- 	struct dm_stats *dms = NULL;
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 2ee432b..ed3cbd1 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -4253,7 +4253,7 @@ static int _stats_list(CMD_ARGS)
+ 		return 1;
  
--	if (!(dms = dm_malloc(sizeof(*dms))))
-+	if (!(dms = dm_zalloc(sizeof(*dms))))
- 		return_NULL;
- 	if (!(dms->mem = dm_pool_create("stats_pool", 4096)))
--		return_NULL;
-+		goto_out;
+ 	if (!(dms = dm_stats_create(DM_STATS_PROGRAM_ID)))
+-		goto_out;
++		return_0;
  
- 	if (!program_id || !strlen(program_id))
- 		dms->program_id = _program_id_from_proc();
-@@ -117,6 +117,9 @@ struct dm_stats *dm_stats_create(const char *program_id)
- 	dms->regions = NULL;
- 
- 	return dms;
-+out:
-+	dm_free(dms);
-+	return NULL;
- }
- 
- /**
+ 	if (!_bind_stats_device(dms, name))
+ 		goto_out;
 
 
