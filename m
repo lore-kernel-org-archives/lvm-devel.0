@@ -1,91 +1,60 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon, 10 Aug 2015 19:30:33 +0000 (UTC)
-Subject: master - libdm-stats: backtrace if fclose fails (Coverity)
-Message-ID: <20150810193033.CE6CB61021@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 10 Aug 2015 20:13:37 +0000 (UTC)
+Subject: master - lvmlockd: add LV name to some debug logging
+Message-ID: <20150810201337.C666460F66@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f072a7632655d0541b56858d5fbe172fa6075e68
-Commit:        f072a7632655d0541b56858d5fbe172fa6075e68
-Parent:        856f9cced83078a90ca2291eff0758d42775f195
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Aug 10 19:23:41 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Aug 10 20:26:07 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=597de9d58673f141bf21aa9db899d13ca2c97b7b
+Commit:        597de9d58673f141bf21aa9db899d13ca2c97b7b
+Parent:        f072a7632655d0541b56858d5fbe172fa6075e68
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Aug 10 15:05:41 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Aug 10 15:07:10 2015 -0500
 
-libdm-stats: backtrace if fclose fails (Coverity)
+lvmlockd: add LV name to some debug logging
 
-Since libdm-stats only uses fmemopen'd FILE objects the only way
-that a close can fail is corruption of the memory containing the
-FILE: check for this case and emit a backtrace if it occurs.
-
-libdm/libdm-stats.c: 338 in _stats_parse_list()
-libdm/libdm-stats.c: 341 in _stats_parse_list()
-libdm/libdm-stats.c: 481 in _stats_parse_region()
-libdm/libdm-stats.c: 487 in _stats_parse_region()
-libdm/libdm-stats.c: 487 in _stats_parse_region()
- - Calling "fclose" without checking return value
+The LV uuid is used as the lock name, and including
+the LV name in some log messages makes it easier to
+follow log messages.
 ---
- libdm/libdm-stats.c |   20 ++++++++++++++------
- 1 files changed, 14 insertions(+), 6 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c |   13 ++++++++++---
+ 1 files changed, 10 insertions(+), 3 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 192326e..ea4feef 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -81,11 +81,13 @@ static char *_program_id_from_proc(void)
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 5e4e73f..86bb89b 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -1022,7 +1022,10 @@ static int res_lock(struct lockspace *ls, struct resource *r, struct action *act
+ 	uint32_t r_version = 0;
+ 	int rv;
  
- 	if (!fgets(buf, sizeof(buf), comm)) {
- 		log_error("Could not read from %s", PROC_SELF_COMM);
--		fclose(comm);
-+		if(fclose(comm))
-+			stack;
- 		return NULL;
- 	}
+-	log_debug("S %s R %s res_lock mode %s", ls->name, r->name, mode_str(act->mode));
++	if (r->type == LD_RT_LV)
++		log_debug("S %s R %s res_lock mode %s (%s)", ls->name, r->name, mode_str(act->mode), act->lv_name);
++	else
++		log_debug("S %s R %s res_lock mode %s", ls->name, r->name, mode_str(act->mode));
  
--	fclose(comm);
-+	if (fclose(comm))
-+		stack;
+ 	if (r->mode == LD_LK_SH && act->mode == LD_LK_SH)
+ 		goto add_lk;
+@@ -1284,8 +1287,12 @@ static int res_unlock(struct lockspace *ls, struct resource *r,
+ 	return -ENOENT;
  
- 	return dm_strdup(buf);
- }
-@@ -340,10 +342,13 @@ static int _stats_parse_list(struct dm_stats *dms, const char *resp)
- 	dms->max_region = max_region - 1;
- 	dms->regions = dm_pool_end_object(mem);
+ do_unlock:
+-	log_debug("S %s R %s res_unlock %s", ls->name, r->name,
+-		  (act->op == LD_OP_CLOSE) ? "from close" : "");
++	if (act->op == LD_OP_CLOSE)
++		log_debug("S %s R %s res_unlock from close", ls->name, r->name);
++	else if (r->type == LD_RT_LV)
++		log_debug("S %s R %s res_unlock (%s)", ls->name, r->name, act->lv_name);
++	else
++		log_debug("S %s R %s res_unlock", ls->name, r->name);
  
--	fclose(list_rows);
-+	if (fclose(list_rows))
-+		stack;
-+
- 	return 1;
- out:
--	fclose(list_rows);
-+	if(fclose(list_rows))
-+		stack;
- 	dm_pool_abandon_object(mem);
- 	return 0;
- }
-@@ -483,13 +488,16 @@ static int _stats_parse_region(struct dm_pool *mem, const char *resp,
- 	region->timescale = timescale;
- 	region->counters = dm_pool_end_object(mem);
- 
--	fclose(stats_rows);
-+	if (fclose(stats_rows))
-+		stack;
-+
- 	return 1;
- 
- out:
- 
- 	if (stats_rows)
--		fclose(stats_rows);
-+		if(fclose(stats_rows))
-+			stack;
- 	dm_pool_abandon_object(mem);
- 	return 0;
- }
+ 	/* send unlock to lm when last sh lock is unlocked */
+ 	if (lk->mode == LD_LK_SH) {
 
 
