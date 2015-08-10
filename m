@@ -1,43 +1,44 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon, 10 Aug 2015 19:30:29 +0000 (UTC)
-Subject: master - dmsetup: don't free handle if dm_stats_create fails (Coverity)
-Message-ID: <20150810193029.A705F60D8B@fedorahosted.org>
+Date: Mon, 10 Aug 2015 19:30:31 +0000 (UTC)
+Subject: master - libdm: simplify stats nr_areas calculation (Coverity)
+Message-ID: <20150810193031.BD05160D8B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ec87e88c5264511576341286b474b453a15594ba
-Commit:        ec87e88c5264511576341286b474b453a15594ba
-Parent:        f9f5aac123d2244daeff92a692a03da3fea6bd74
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=856f9cced83078a90ca2291eff0758d42775f195
+Commit:        856f9cced83078a90ca2291eff0758d42775f195
+Parent:        ec87e88c5264511576341286b474b453a15594ba
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Aug 10 19:05:10 2015 +0100
+AuthorDate:    Mon Aug 10 19:18:16 2015 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Aug 10 20:25:59 2015 +0100
+CommitterDate: Mon Aug 10 20:26:07 2015 +0100
 
-dmsetup: don't free handle if dm_stats_create fails (Coverity)
+libdm: simplify stats nr_areas calculation (Coverity)
 
-The error path of _stats_list frees the task and stats objects:
-don't try to branch to it before they have been allocated.
+Remove an unneccessary conditional operator and simplify the logic
+in _nr_areas:
 
-tools/dmsetup.c: 4589 in _stats_help() - Null pointer dereferences  (FORWARD_NULL)
+libdm/libdm-stats.c: 501 in _nr_areas() - Control flow issues  (DEADCODE)
 ---
- tools/dmsetup.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdm/libdm-stats.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 2ee432b..ed3cbd1 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -4253,7 +4253,7 @@ static int _stats_list(CMD_ARGS)
- 		return 1;
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index a672e05..192326e 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -503,8 +503,7 @@ static uint64_t _nr_areas(uint64_t len, uint64_t step)
+ 	 * treat the entire region as a single area. Any partial area at the
+ 	 * end of the region is treated as an additional complete area.
+ 	 */
+-	return (len && step)
+-		? (len / (step ? step : len)) + !!(len % step) : 0;
++	return (len / (step ? : len)) + !!(len % step);
+ }
  
- 	if (!(dms = dm_stats_create(DM_STATS_PROGRAM_ID)))
--		goto_out;
-+		return_0;
- 
- 	if (!_bind_stats_device(dms, name))
- 		goto_out;
+ static uint64_t _nr_areas_region(struct dm_stats_region *region)
 
 
