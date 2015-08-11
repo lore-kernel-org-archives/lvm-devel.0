@@ -1,52 +1,54 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 10 Aug 2015 20:51:10 +0000 (UTC)
-Subject: master - lvrename: fix lockd LV locking
-Message-ID: <20150810205110.E584560D17@fedorahosted.org>
+From: Brassow Jonathan <jbrassow@redhat.com>
+Date: Tue, 11 Aug 2015 10:09:44 -0500
+Subject: [PATCH 0/6] cmirrord memory handling fixes
+In-Reply-To: <87vbcn39mf.fsf@lant.ki.iif.hu>
+References: <1436359287-6682-1-git-send-email-wferi@niif.hu>
+	<87vbcn39mf.fsf@lant.ki.iif.hu>
+Message-ID: <CF5D8B6E-8ED4-4931-9A7E-DEC790DD136D@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=53c08f0bba9f18df80403eab67acb032f3049902
-Commit:        53c08f0bba9f18df80403eab67acb032f3049902
-Parent:        597de9d58673f141bf21aa9db899d13ca2c97b7b
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Aug 10 15:46:21 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Aug 10 15:46:21 2015 -0500
 
-lvrename: fix lockd LV locking
+> On Aug 10, 2015, at 2:06 AM, Ferenc Wagner <wferi@niif.hu> wrote:
+> 
+> Ferenc W?gner <wferi@niif.hu> writes:
+> 
+>> During clustered pvmove tests cmirrord kept on dying.  To ease
+>> debugging, I added a --foreground option to it [1-3], which made the
+>> GCC stack protector messages stand out at once.  The backtraces made
+>> the fix straightforward [4].  As log_checkpoint seems a constant false
+>> condition, preparing the message is generally wasted effort, but I
+>> didn't want to change the logic, and now it does not crash the process
+>> at least.  Looking for other unsafe sprintf() usages provided plentiful
+>> results, I fixed the two easy ones [5,6].  Please use as you see fit.
+>> 
+>> Ferenc W?gner (6):
+>>  cmirrord: move generic setup from daemonize() to init_all()
+>>  cmirrord: introduce the --foreground option to avoid daemonization
+>>  cmirrord: document the --foreground and --help options
+>>  cmirrord: fix stack smashing
+>>  cmirrord: avoid debugging buffer overflow in LOG_SPRINT
+>>  cmirrord: avoid resync buffer overflow in LOG_SPRINT
+>> 
+>> daemons/cmirrord/clogd.c     |   62 +++++++++++++++++++++++++++++++++---------
+>> daemons/cmirrord/cluster.c   |   23 ++++++++++++----
+>> daemons/cmirrord/functions.c |    5 ++--
+>> man/cmirrord.8.in            |    8 +++++-
+>> 4 files changed, 76 insertions(+), 22 deletions(-)
+> 
+> Hi,
+> 
+> Are there any objections to these patches?  Shall I rework them to have
+> any hope for inclusion?
 
-lvrename should not be done if the LV is active on another host.
-This check was mistakenly removed when the code was changed to
-use LV uuids in locks rather than LV names.
----
- lib/metadata/lv_manip.c |   12 ++++++++++++
- 1 files changed, 12 insertions(+), 0 deletions(-)
+No objections.  They look helpful, thanks!
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 86411d5..b22773e 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4205,6 +4205,18 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 		return 0;
- 	}
- 
-+	/*
-+	 * The lvmlockd LV lock is only acquired here to ensure the LV is not
-+	 * active on another host.  This requests a transient LV lock.
-+	 * If the LV is active, a persistent LV lock already exists in
-+	 * lvmlockd, and the transient lock request does nothing.
-+	 * If the LV is not active, then no LV lock exists and the transient
-+	 * lock request acquires the LV lock (or fails).  The transient lock
-+	 * is automatically released when the command exits.
-+	 */
-+	if (!lockd_lv(cmd, lv, "ex", 0))
-+		return_0;
-+
- 	if (update_mda && !archive(vg))
- 		return_0;
- 
+I?ve looked them over, but I haven?t had a chance to test them.  I?ll try to get them pulled in soon.
+
+ brassow
+
 
 
