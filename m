@@ -1,153 +1,161 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue, 18 Aug 2015 14:26:09 +0000 (UTC)
-Subject: master - configure: check for -lm and log10 function
-Message-ID: <20150818142609.2E3E161120@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 12 Aug 2015 12:40:49 +0000 (UTC)
+Subject: master - cache: add cache_policy cache_settings
+Message-ID: <20150812124049.8FC7561086@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c1bd76d6fcbbc7c07c99a5738dea99f830f79810
-Commit:        c1bd76d6fcbbc7c07c99a5738dea99f830f79810
-Parent:        a7abade088b5085eed248ab4369fa70263a40bfc
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Tue Aug 18 15:21:19 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Tue Aug 18 15:25:54 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=036d90bba6c1ac76195302bc5c7f2f5ce8ad89b4
+Commit:        036d90bba6c1ac76195302bc5c7f2f5ce8ad89b4
+Parent:        664a9f4830925cc3f51934dc09f9e2f3963c0de2
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jul 20 11:44:15 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Aug 12 14:11:16 2015 +0200
 
-configure: check for -lm and log10 function
+cache: add cache_policy cache_settings
 
-We already use -lm functions in a couple of places (these are
-satisfied by gcc built-ins for most builds): add a configure.in
-check and explicitly link to -lm.
+Add new profilable configurables:
+
+allocation/cache_policy
+allocation/cache_settings
+
+and mark allocation/cache_pool_chunk_size as profilable as well.
+
+Obsolete allocation/cache_pool_cachemode and
+introduce new allocation/cache_mode instead.
+
+Rename DEFAULT_CACHE_POOL_POLICY to DEFAULT_CACHE_POLICY.
 ---
- configure         |   46 ++++++++++++++++++++++++++++++++++++++++++++++
- configure.in      |    5 +++++
- libdm/Makefile.in |    2 +-
- make.tmpl.in      |    1 +
- 4 files changed, 53 insertions(+), 1 deletions(-)
+ WHATS_NEW                    |    1 +
+ lib/cache_segtype/cache.c    |    2 +-
+ lib/config/config.c          |    5 +++++
+ lib/config/config.h          |    2 ++
+ lib/config/config_settings.h |   24 +++++++++++++++++++++---
+ lib/config/defaults.h        |    4 ++--
+ tools/toollib.c              |    2 +-
+ 7 files changed, 33 insertions(+), 7 deletions(-)
 
-diff --git a/configure b/configure
-index 630f12a..57bec69 100755
---- a/configure
-+++ b/configure
-@@ -665,6 +665,7 @@ PYTHON_LIBDIRS
- PYTHON_INCDIRS
- PYTHON_BINDINGS
- PTHREAD_LIBS
-+M_LIBS
- POOL
- PKGCONFIG
- OCFDIR
-@@ -12570,6 +12571,50 @@ if [ \( "$LVM1" = shared -o "$POOL" = shared -o "$CLUSTER" = shared \
- fi
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d28e06c..9c8a103 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.128 - 
+ ===================================
++  Add cmd profilable allocation/cache_policy,cache_settings,cache_mode.
+   Require cache_check 0.5.4 for use of --clear-needs-check-flag.
+   Fix lvmetad udev rules to not override SYSTEMD_WANTS, add the service instead.
  
- ################################################################################
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for log10 in -lm" >&5
-+$as_echo_n "checking for log10 in -lm... " >&6; }
-+if ${ac_cv_lib_m_log10+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  ac_check_lib_save_LIBS=$LIBS
-+LIBS="-lm  $LIBS"
-+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-+/* end confdefs.h.  */
+diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
+index ad356a9..18c0168 100644
+--- a/lib/cache_segtype/cache.c
++++ b/lib/cache_segtype/cache.c
+@@ -79,7 +79,7 @@ static int _cache_pool_text_import(struct lv_segment *seg,
+ 			return SEG_LOG_ERROR("Failed to duplicate policy in");
+ 	} else {
+ 		/* Cannot use 'just' default, so pick one */
+-		seg->policy_name = DEFAULT_CACHE_POOL_POLICY; /* FIXME make configurable */
++		seg->policy_name = DEFAULT_CACHE_POLICY; /* FIXME make configurable */
+ 		/* FIXME maybe here should be always 'mq' */
+ 		log_warn("WARNING: cache_policy undefined, using default \"%s\" policy.",
+ 			 seg->policy_name);
+diff --git a/lib/config/config.c b/lib/config/config.c
+index eb8880e..436efff 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -2415,3 +2415,8 @@ int get_default_allocation_cache_pool_chunk_size_CFG(struct cmd_context *cmd, st
+ {
+ 	return DEFAULT_CACHE_POOL_CHUNK_SIZE * 2;
+ }
 +
-+/* Override any GCC internal prototype to avoid an error.
-+   Use char because int might match the return type of a GCC
-+   builtin and then its argument prototype would still apply.  */
-+#ifdef __cplusplus
-+extern "C"
-+#endif
-+char log10 ();
-+int
-+main ()
++const char *get_default_allocation_cache_policy_CFG(struct cmd_context *cmd, struct profile *profile)
 +{
-+return log10 ();
-+  ;
-+  return 0;
++	return DEFAULT_CACHE_POLICY;
 +}
-+_ACEOF
-+if ac_fn_c_try_link "$LINENO"; then :
-+  ac_cv_lib_m_log10=yes
-+else
-+  ac_cv_lib_m_log10=no
-+fi
-+rm -f core conftest.err conftest.$ac_objext \
-+    conftest$ac_exeext conftest.$ac_ext
-+LIBS=$ac_check_lib_save_LIBS
-+fi
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_m_log10" >&5
-+$as_echo "$ac_cv_lib_m_log10" >&6; }
-+if test "x$ac_cv_lib_m_log10" = xyes; then :
-+  M_LIBS="-lm"
-+else
-+  hard_bailout
-+fi
+diff --git a/lib/config/config.h b/lib/config/config.h
+index 7520fc0..fb39e6e 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -296,5 +296,7 @@ int get_default_allocation_thin_pool_chunk_size_CFG(struct cmd_context *cmd, str
+ #define get_default_unconfigured_allocation_thin_pool_chunk_size_CFG NULL
+ int get_default_allocation_cache_pool_chunk_size_CFG(struct cmd_context *cmd, struct profile *profile);
+ #define get_default_unconfigured_allocation_cache_pool_chunk_size_CFG NULL
++const char *get_default_allocation_cache_policy_CFG(struct cmd_context *cmd, struct profile *profile);
++#define get_default_unconfigured_allocation_cache_policy_CFG NULL
+ 
+ #endif
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 5209531..deb17ef 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -462,15 +462,33 @@ cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separa
+ cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 106), NULL, 0, NULL,
+ 	"Cache pool metadata and data will always use different PVs.\n")
+ 
+-cfg(allocation_cache_pool_cachemode_CFG, "cache_pool_cachemode", allocation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_CACHE_POOL_CACHEMODE, vsn(2, 2, 113), NULL, 0, NULL,
+-	"The default cache mode used for new cache pools.\n"
++cfg(allocation_cache_pool_cachemode_CFG, "cache_pool_cachemode", allocation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_CACHE_MODE, vsn(2, 2, 113), NULL, vsn(2, 2, 128),
++	"This has been replaced by the allocation/cache_mode setting.\n",
++	"Cache mode.\n")
 +
++cfg(allocation_cache_mode_CFG, "cache_mode", allocation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_CACHE_MODE, vsn(2, 2, 128), NULL, 0, NULL,
++	"The default cache mode used for new cache.\n"
+ 	"Possible options are: writethrough, writeback.\n"
+ 	"writethrough - Data blocks are immediately written from\n"
+ 	"the cache to disk.\n"
+ 	"writeback - Data blocks are written from the cache back\n"
+ 	"to disk after some delay to improve performance.\n")
+ 
+-cfg_runtime(allocation_cache_pool_chunk_size_CFG, "cache_pool_chunk_size", allocation_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_INT, vsn(2, 2, 106), 0, NULL,
++cfg_runtime(allocation_cache_policy_CFG, "cache_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, vsn(2, 2, 127), 0, NULL,
++	"The default cache policy used for new cache volume.\n"
++	"Generally available policies are: mq, smq.\n"
++	"mq  - Multiqueue policy with 88 bytes per block\n"
++	"smq - Stochastic multique with 25 bytes per block (kernel >= 4.2).\n")
 +
-+################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for pthread_mutex_lock in -lpthread" >&5
- $as_echo_n "checking for pthread_mutex_lock in -lpthread... " >&6; }
- if ${ac_cv_lib_pthread_pthread_mutex_lock+:} false; then :
-@@ -14153,6 +14198,7 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]' '{print $2}'`
- 
- 
- 
++cfg_section(allocation_cache_settings_CFG_SECTION, "cache_settings", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, vsn(2, 2, 127), 0, NULL,
++	"Individual settings for policies.\n"
++	"See the help for individual policies for more info.\n")
 +
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile lib/cache_segtype/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdev
- mapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan
- _systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
- 
-diff --git a/configure.in b/configure.in
-index c3e55e9..2c89d8c 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1538,6 +1538,10 @@ if [[ \( "$LVM1" = shared -o "$POOL" = shared -o "$CLUSTER" = shared \
- fi
- 
- ################################################################################
-+AC_CHECK_LIB(m, log10,
-+	[M_LIBS="-lm"], hard_bailout)
++cfg_section(policy_settings_CFG_SUBSECTION, "policy_settings", allocation_cache_settings_CFG_SECTION, CFG_NAME_VARIABLE | CFG_SECTION_NO_CHECK | CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, vsn(2, 2, 127), 0, NULL,
++	"Replace this subsection name with a policy name.\n"
++	"Multiple subsections for different policies can be created.\n")
 +
-+################################################################################
- AC_CHECK_LIB([pthread], [pthread_mutex_lock],
- 	[PTHREAD_LIBS="-lpthread"], hard_bailout)
++cfg_runtime(allocation_cache_pool_chunk_size_CFG, "cache_pool_chunk_size", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_UNDEFINED, CFG_TYPE_INT, vsn(2, 2, 106), 0, NULL,
+ 	"The minimal chunk size (in kiB) for cache pool volumes.\n"
+ 	"Using a chunk_size that is too large can result in wasteful\n"
+ 	"use of the cache, where small reads and writes can cause\n"
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 5ee9b1c..f84eb19 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -117,8 +117,8 @@
+ #define DEFAULT_CACHE_POOL_CHUNK_SIZE 64 /* KB */
+ #define DEFAULT_CACHE_POOL_MIN_METADATA_SIZE 2048  /* KB */
+ #define DEFAULT_CACHE_POOL_MAX_METADATA_SIZE (16 * 1024 * 1024)  /* KB */
+-#define DEFAULT_CACHE_POOL_CACHEMODE "writethrough"
+-#define DEFAULT_CACHE_POOL_POLICY "mq"
++#define DEFAULT_CACHE_POLICY "mq"
++#define DEFAULT_CACHE_MODE "writethrough"
  
-@@ -1984,6 +1988,7 @@ AC_SUBST(OCF)
- AC_SUBST(OCFDIR)
- AC_SUBST(PKGCONFIG)
- AC_SUBST(POOL)
-+AC_SUBST(M_LIBS)
- AC_SUBST(PTHREAD_LIBS)
- AC_SUBST(PYTHON)
- AC_SUBST(PYTHON_BINDINGS)
-diff --git a/libdm/Makefile.in b/libdm/Makefile.in
-index 880b40c..1b924ce 100644
---- a/libdm/Makefile.in
-+++ b/libdm/Makefile.in
-@@ -55,7 +55,7 @@ include $(top_builddir)/make.tmpl
+ #define DEFAULT_UMASK 0077
  
- CFLAGS += $(UDEV_CFLAGS) $(VALGRIND_CFLAGS)
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 5d5e4d6..0d401e4 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1408,7 +1408,7 @@ int get_cache_policy_params(struct cmd_context *cmd, const char **name,
+ 	struct dm_config_node *cn;
+ 	int ok = 0;
  
--LIBS += $(SELINUX_LIBS) $(UDEV_LIBS) $(PTHREAD_LIBS)
-+LIBS += $(SELINUX_LIBS) $(UDEV_LIBS) $(PTHREAD_LIBS) $(M_LIBS)
+-	*name = arg_str_value(cmd, cachepolicy_ARG, DEFAULT_CACHE_POOL_POLICY);
++	*name = arg_str_value(cmd, cachepolicy_ARG, DEFAULT_CACHE_POLICY);
  
- device-mapper: all
- 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 731dab7..e4f8835 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -54,6 +54,7 @@ LDDEPS += @LDDEPS@
- LIB_SUFFIX = @LIB_SUFFIX@
- LVMINTERNAL_LIBS = -llvm-internal $(DAEMON_LIBS) $(UDEV_LIBS) $(DL_LIBS) $(BLKID_LIBS)
- DL_LIBS = @DL_LIBS@
-+M_LIBS = @M_LIBS@
- PTHREAD_LIBS = @PTHREAD_LIBS@
- READLINE_LIBS = @READLINE_LIBS@
- SELINUX_LIBS = @SELINUX_LIBS@
+ 	dm_list_iterate_items(group, &cmd->arg_value_groups) {
+ 		if (!grouped_arg_is_set(group->arg_values, cachesettings_ARG))
 
 
