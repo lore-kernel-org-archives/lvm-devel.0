@@ -1,121 +1,84 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 12 Aug 2015 12:40:47 +0000 (UTC)
-Subject: master - configure: --clear-need-check-flag needs 0.5.4
-Message-ID: <20150812124047.7A1CA61086@fedorahosted.org>
+Date: Wed, 12 Aug 2015 12:41:19 +0000 (UTC)
+Subject: master - cleanup: indent
+Message-ID: <20150812124119.1FDCE60072@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=664a9f4830925cc3f51934dc09f9e2f3963c0de2
-Commit:        664a9f4830925cc3f51934dc09f9e2f3963c0de2
-Parent:        3ea396e9d220cec55fd4e139be7ae486cb4ddb91
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48ed8ac50cd0c384c3ff4e5e7dbc79b8f1c24cef
+Commit:        48ed8ac50cd0c384c3ff4e5e7dbc79b8f1c24cef
+Parent:        ece758457de0c5a40b5b33b90cab2238de34d55e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 15 16:08:02 2015 +0200
+AuthorDate:    Tue Jul 21 11:18:42 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Aug 12 14:11:15 2015 +0200
+CommitterDate: Wed Aug 12 14:33:16 2015 +0200
 
-configure: --clear-need-check-flag needs 0.5.4
+cleanup: indent
 
-Require version 5.4 of cache_check tool where this option
-will work correctly.
 ---
- WHATS_NEW    |    1 +
- configure    |   25 ++++++++++++++++---------
- configure.in |   25 ++++++++++++++++---------
- 3 files changed, 33 insertions(+), 18 deletions(-)
+ lib/cache_segtype/cache.c |    4 ++--
+ lib/metadata/lv_manip.c   |    3 ++-
+ libdm/libdm-deptree.c     |    2 --
+ 3 files changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 8241dc1..d28e06c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.128 - 
- ===================================
-+  Require cache_check 0.5.4 for use of --clear-needs-check-flag.
-   Fix lvmetad udev rules to not override SYSTEMD_WANTS, add the service instead.
+diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
+index 53c867e..85cba18 100644
+--- a/lib/cache_segtype/cache.c
++++ b/lib/cache_segtype/cache.c
+@@ -170,8 +170,8 @@ static void _destroy(struct segment_type *segtype)
  
- Version 2.02.127 - 10th August 2015
-diff --git a/configure b/configure
-index 07059b8..b17e5a3 100755
---- a/configure
-+++ b/configure
-@@ -8813,20 +8813,27 @@ $as_echo "$as_me: WARNING: cache_check not found in path $PATH" >&2;}
- 		fi
- 	fi
- 	if test "$CACHE_CHECK_NEEDS_CHECK" = yes; then
--		CACHE_CHECK_VSN=`"$CACHE_CHECK_CMD" -V 2>/dev/null`
--		CACHE_CHECK_VSN_MAJOR=`echo "$CACHE_CHECK_VSN" | $AWK -F '.' '{print $1}'`
--		CACHE_CHECK_VSN_MINOR=`echo "$CACHE_CHECK_VSN" | $AWK -F '.' '{print $2}'`
--
--		if test -z "$CACHE_CHECK_VSN_MAJOR" -o -z "$CACHE_CHECK_VSN_MINOR"; then
-+		$CACHE_CHECK_CMD -V 2>/dev/null >conftest.tmp
-+		read -r CACHE_CHECK_VSN < conftest.tmp
-+		IFS=. read -r CACHE_CHECK_VSN_MAJOR CACHE_CHECK_VSN_MINOR CACHE_CHECK_VSN_PATCH < conftest.tmp
-+		rm -f conftest.tmp
+ #ifdef DEVMAPPER_SUPPORT
+ static int _target_present(struct cmd_context *cmd,
+-				const struct lv_segment *seg __attribute__((unused)),
+-				unsigned *attributes __attribute__((unused)))
++			   const struct lv_segment *seg __attribute__((unused)),
++			   unsigned *attributes __attribute__((unused)))
+ {
+ 	/* List of features with their kernel target version */
+ 	static const struct feature {
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 116f099..c192d1b 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6998,7 +6998,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 
+ 	if (seg_is_pool(lp))
+ 		status |= LVM_WRITE; /* Pool is always writable */
+-        else if (seg_is_cache(lp) || seg_is_thin_volume(lp)) {
++	else if (seg_is_cache(lp) || seg_is_thin_volume(lp)) {
+ 		/* Resolve pool volume */
+ 		if (!lp->pool_name) {
+ 			/* Should be already checked */
+@@ -7222,6 +7222,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 	if (!archive(vg))
+ 		return_NULL;
+ 
 +
-+		# Require version >= 0.5.4 for --clear-needs-check-flag
-+		if test -z "$CACHE_CHECK_VSN_MAJOR" \
-+			|| test -z "$CACHE_CHECK_VSN_MINOR" \
-+			|| test -z "$CACHE_CHECK_VSN_PATCH"; then
- 			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $CACHE_CHECK_CMD: Bad version \"$CACHE_CHECK_VSN\" found" >&5
- $as_echo "$as_me: WARNING: $CACHE_CHECK_CMD: Bad version \"$CACHE_CHECK_VSN\" found" >&2;}
- 			CACHE_CHECK_VERSION_WARN=y
- 			CACHE_CHECK_NEEDS_CHECK=no
--		elif test "$CACHE_CHECK_VSN_MAJOR" -eq 0 -a "$CACHE_CHECK_VSN_MINOR" -lt 5; then
--			{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $CACHE_CHECK_CMD: Old version \"$CACHE_CHECK_VSN\" found" >&5
-+		elif test "$CACHE_CHECK_VSN_MAJOR" -eq 0 ; then
-+			if test "$CACHE_CHECK_VSN_MINOR" -lt 5 \
-+				|| test "$CACHE_CHECK_VSN_MINOR" -eq 5 -a "$CACHE_CHECK_VSN_PATCH" -lt 4; then
-+				{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $CACHE_CHECK_CMD: Old version \"$CACHE_CHECK_VSN\" found" >&5
- $as_echo "$as_me: WARNING: $CACHE_CHECK_CMD: Old version \"$CACHE_CHECK_VSN\" found" >&2;}
--			CACHE_CHECK_VERSION_WARN=y
--			CACHE_CHECK_NEEDS_CHECK=no
-+				CACHE_CHECK_VERSION_WARN=y
-+				CACHE_CHECK_NEEDS_CHECK=no
-+			fi
- 		fi
- 	fi
- 	# Empty means a config way to ignore cache dumping
-diff --git a/configure.in b/configure.in
-index 1825fb7..243b634 100644
---- a/configure.in
-+++ b/configure.in
-@@ -584,18 +584,25 @@ case "$CACHE" in
- 		fi
- 	fi
- 	if test "$CACHE_CHECK_NEEDS_CHECK" = yes; then
--		CACHE_CHECK_VSN=`"$CACHE_CHECK_CMD" -V 2>/dev/null`
--		CACHE_CHECK_VSN_MAJOR=`echo "$CACHE_CHECK_VSN" | $AWK -F '.' '{print $1}'`
--		CACHE_CHECK_VSN_MINOR=`echo "$CACHE_CHECK_VSN" | $AWK -F '.' '{print $2}'`
+ 	if (pool_lv && seg_is_thin_volume(lp)) {
+ 		/* Ensure all stacked messages are submitted */
+ 		if ((pool_is_active(pool_lv) || is_change_activating(lp->activate)) &&
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 040a826..d28f0de 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -3405,7 +3405,6 @@ int dm_tree_node_add_cache_target(struct dm_tree_node *node,
+ 	if (!_link_tree_nodes(node, seg->metadata))
+ 		return_0;
+ 
 -
--		if test -z "$CACHE_CHECK_VSN_MAJOR" -o -z "$CACHE_CHECK_VSN_MINOR"; then
-+		$CACHE_CHECK_CMD -V 2>/dev/null >conftest.tmp
-+		read -r CACHE_CHECK_VSN < conftest.tmp
-+		IFS=. read -r CACHE_CHECK_VSN_MAJOR CACHE_CHECK_VSN_MINOR CACHE_CHECK_VSN_PATCH < conftest.tmp
-+		rm -f conftest.tmp
-+
-+		# Require version >= 0.5.4 for --clear-needs-check-flag
-+		if test -z "$CACHE_CHECK_VSN_MAJOR" \
-+			|| test -z "$CACHE_CHECK_VSN_MINOR" \
-+			|| test -z "$CACHE_CHECK_VSN_PATCH"; then
- 			AC_MSG_WARN([$CACHE_CHECK_CMD: Bad version "$CACHE_CHECK_VSN" found])
- 			CACHE_CHECK_VERSION_WARN=y
- 			CACHE_CHECK_NEEDS_CHECK=no
--		elif test "$CACHE_CHECK_VSN_MAJOR" -eq 0 -a "$CACHE_CHECK_VSN_MINOR" -lt 5; then
--			AC_MSG_WARN([$CACHE_CHECK_CMD: Old version "$CACHE_CHECK_VSN" found])
--			CACHE_CHECK_VERSION_WARN=y
--			CACHE_CHECK_NEEDS_CHECK=no
-+		elif test "$CACHE_CHECK_VSN_MAJOR" -eq 0 ; then
-+			if test "$CACHE_CHECK_VSN_MINOR" -lt 5 \
-+				|| test "$CACHE_CHECK_VSN_MINOR" -eq 5 -a "$CACHE_CHECK_VSN_PATCH" -lt 4; then
-+				AC_MSG_WARN([$CACHE_CHECK_CMD: Old version "$CACHE_CHECK_VSN" found])
-+				CACHE_CHECK_VERSION_WARN=y
-+				CACHE_CHECK_NEEDS_CHECK=no
-+			fi
- 		fi
- 	fi
- 	# Empty means a config way to ignore cache dumping
+ 	if (!(seg->origin = dm_tree_find_node_by_uuid(node->dtree,
+ 						      origin_uuid))) {
+ 		log_error("Missing cache's origin uuid %s.",
+@@ -3434,7 +3433,6 @@ int dm_tree_node_add_cache_target(struct dm_tree_node *node,
+ 		}
+ 	}
+ 
+-
+ 	return 1;
+ }
+ 
 
 
