@@ -1,41 +1,58 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 12 Aug 2015 17:47:09 +0000 (UTC)
-Subject: master - udev: fix missing escape for +
-Message-ID: <20150812174709.9057560DF2@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Wed, 12 Aug 2015 18:17:59 +0000 (UTC)
+Subject: master - dmsetup: only free resources once in the final interval
+Message-ID: <20150812181759.209576109C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0f45aa7f313e60e10aec6779e86f2179b8ac8865
-Commit:        0f45aa7f313e60e10aec6779e86f2179b8ac8865
-Parent:        2cf3336130b01dc40e89bdd83fceabf057b4a03c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 12 19:45:32 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Aug 12 19:46:44 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e96041e18fa5f8f0ccb50d31ee0b1c9fb6c5db21
+Commit:        e96041e18fa5f8f0ccb50d31ee0b1c9fb6c5db21
+Parent:        0f45aa7f313e60e10aec6779e86f2179b8ac8865
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Wed Aug 12 19:16:05 2015 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Wed Aug 12 19:16:05 2015 +0100
 
-udev: fix missing escape for +
+dmsetup: only free resources once in the final interval
 
-Commit 3ea396e9d220cec55fd4e139be7ae486cb4ddb91 missed to escape +
-which is used by 'sed' as separator for 's'.
+The _update_interval_times() function is called once per reported
+object: when shutting down at the end of a run only the first call
+should free timestamps. Clear the timestamp pointers after free
+and use this to signal to other callers that the clock is already
+shut down.
 ---
- udev/Makefile.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/dmsetup.c |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
-diff --git a/udev/Makefile.in b/udev/Makefile.in
-index c4cc2bd..cd031ae 100644
---- a/udev/Makefile.in
-+++ b/udev/Makefile.in
-@@ -47,7 +47,7 @@ BLKID_RULE=IMPORT{program}=\"${SBIN}\/blkid -o udev -p \$$tempnode\"
- endif
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 9876bd2..459639b 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -638,6 +638,12 @@ static int _update_interval_times(void)
+ 	int r = 0;
  
- ifeq ("@UDEV_SYSTEMD_BACKGROUND_JOBS@", "yes")
--PVSCAN_RULE=ACTION\!=\"remove\", ENV{LVM_PV_GONE}==\"1\", RUN\+=\"@bindir@/systemd-run $(LVM_EXEC)\/lvm pvscan --cache \$$major\:\$$minor\", GOTO=\"lvm_end\"\nENV{SYSTEMD_ALIAS}=\"\/dev\/block\/\$$major:\$$minor\"\nENV{ID_MODEL}=\"LVM PV \$$env{ID_FS_UUID_ENC} on \/dev\/\$$name\"\nENV{SYSTEMD_WANTS}+=\"lvm2-pvscan@\$$major:\$$minor.service\"
-+PVSCAN_RULE=ACTION\!=\"remove\", ENV{LVM_PV_GONE}==\"1\", RUN\+=\"@bindir@/systemd-run $(LVM_EXEC)\/lvm pvscan --cache \$$major\:\$$minor\", GOTO=\"lvm_end\"\nENV{SYSTEMD_ALIAS}=\"\/dev\/block\/\$$major:\$$minor\"\nENV{ID_MODEL}=\"LVM PV \$$env{ID_FS_UUID_ENC} on \/dev\/\$$name\"\nENV{SYSTEMD_WANTS}\+=\"lvm2-pvscan@\$$major:\$$minor.service\"
- else
- PVSCAN_RULE=RUN\+\=\"$(LVM_EXEC)/lvm pvscan --background --cache --activate ay --major \$$major --minor \$$minor\", ENV{LVM_SCANNED}=\"1\"
- endif
+ 	/*
++	 * Clock shutdown for exit - nothing to do.
++	 */
++	if (_timer_fd == TIMER_STOPPED && !_cycle_timestamp)
++		return 1;
++
++	/*
+          * Current timestamp. If _new_interval is set this is used as
+          * the new cycle start timestamp.
+ 	 */
+@@ -717,6 +723,9 @@ out:
+ 		if (_cycle_timestamp)
+ 			dm_timestamp_destroy(_cycle_timestamp);
+ 		dm_timestamp_destroy(this_timestamp);
++
++		/* Clear timestamp pointers to signal shutdown. */
++		_cycle_timestamp = this_timestamp = NULL;
+ 	}
+ 	return r;
+ }
 
 
