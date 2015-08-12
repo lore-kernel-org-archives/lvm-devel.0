@@ -1,155 +1,98 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 18 Aug 2015 16:20:00 +0000 (UTC)
-Subject: master - lockd: no error when unlock fails
-Message-ID: <20150818162000.90014602F4@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 12 Aug 2015 12:41:06 +0000 (UTC)
+Subject: master - cache: add more validation
+Message-ID: <20150812124106.818356062C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7b570840cd5c503ff55a446e211ac30bb09ef3fd
-Commit:        7b570840cd5c503ff55a446e211ac30bb09ef3fd
-Parent:        c1bd76d6fcbbc7c07c99a5738dea99f830f79810
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 18 10:39:40 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Aug 18 11:18:40 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=533ac4d47dcecc976c05ba503acff11b9546b67c
+Commit:        533ac4d47dcecc976c05ba503acff11b9546b67c
+Parent:        f0c18fceb43d77b0a79685fc7b1c8bbe64df7e97
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Aug 11 15:11:45 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Aug 12 14:33:14 2015 +0200
 
-lockd: no error when unlock fails
+cache: add more validation
 
-The unlock call will fail in expected and normal cases,
-and should not cause the command to fail.  (An actual
-unlock in the lock manager should never fail.)
 ---
- tools/lvconvert.c  |    4 +---
- tools/polldaemon.c |    6 ++----
- tools/pvmove.c     |    8 ++------
- tools/toollib.c    |   12 +++---------
- tools/vgchange.c   |    2 +-
- 5 files changed, 9 insertions(+), 23 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/cache_segtype/cache.c |    3 +++
+ lib/metadata/lv_manip.c   |    6 +++++-
+ lib/metadata/merge.c      |   16 +++++++++++++++-
+ 4 files changed, 24 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 37ae197..95996b7 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3450,10 +3450,8 @@ bad:
- 	unlock_vg(cmd, lp->vg_name);
- 
- 	/* Unlock here so it's not held during polling. */
--	if (!lockd_vg(cmd, lp->vg_name, "un", 0, &lockd_state)) {
-+	if (!lockd_vg(cmd, lp->vg_name, "un", 0, &lockd_state))
- 		stack;
--		ret = ECMD_FAILED;
--	}
- 
- 	release_vg(vg);
- out:
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index c7f6795..cee1983 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -203,7 +203,7 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 		unlock_and_release_vg(cmd, vg, vg->name);
- 
- 		if (!lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state))
--			return_0;
-+			stack;
- 
- 		/*
- 		 * FIXME Sleeping after testing, while preferred, also works around
-@@ -226,10 +226,8 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- out:
- 	if (vg)
- 		unlock_and_release_vg(cmd, vg, vg->name);
--	if (!lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state)) {
-+	if (!lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state))
- 		stack;
--		ret = 0;
--	}
- 
- 	return ret;
- }
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 849780a..0e31764 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -712,10 +712,8 @@ out_ret:
- 	 * for some time monitoring the progress, and we don not want
- 	 * or need the lockd lock held over that.
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 7fcf49a..1e34e1c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.128 - 
+ ===================================
++  Check for valid cache mode in validation of cache segment.
+   Enhance internal API cache_set_mode() and cache_set_policy().
+   Enhance toollib's get_cache_params().
+   Runtime detect presence of cache smq policy.
+diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
+index 0526173..53c867e 100644
+--- a/lib/cache_segtype/cache.c
++++ b/lib/cache_segtype/cache.c
+@@ -100,6 +100,9 @@ static int _cache_pool_text_import(struct lv_segment *seg,
+ 	 *   If the policy is not present, default policy is used.
  	 */
--	if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state)) {
-+	if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state))
- 		stack;
--		r = ECMD_FAILED;
--	}
+ 	if ((sn = dm_config_find_node(sn, "policy_settings"))) {
++		if (!seg->policy_name)
++			return SEG_LOG_ERROR("policy_settings must have a policy_name in");
++
+ 		if (sn->v)
+ 			return SEG_LOG_ERROR("policy_settings must be a section in");
  
- 	return r;
- }
-@@ -765,10 +763,8 @@ static int _read_poll_id_from_pvname(struct cmd_context *cmd, const char *pv_nam
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index f13df1b..116f099 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7074,7 +7074,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 				  display_lvname(origin_lv));
+ 			return NULL;
+ 		}
+-	} else if (pool_lv && seg_is_cache(lp)) {
++	} else if (seg_is_cache(lp)) {
++		if (!pool_lv) {
++			log_error(INTERNAL_ERROR "Pool LV for cache is missing.");
++			return NULL;
++		}
+ 		if (!lv_is_cache_pool(pool_lv)) {
+ 			log_error("Logical volume %s is not a cache pool.",
+ 				  display_lvname(pool_lv));
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index e38cb53..a3e6af1 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -208,7 +208,21 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
+ 				}
  
- 	unlock_and_release_vg(cmd, vg, vg_name);
- out:
--	if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state)) {
-+	if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state))
- 		stack;
--		ret = 0;
--	}
- 	free_pv_fid(pv);
- 	return ret;
- }
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 8a85739..01146a4 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1957,10 +1957,8 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t flags,
- 			unlock_vg(cmd, vg_name);
- endvg:
- 		release_vg(vg);
--		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state)) {
-+		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state))
- 			stack;
--			ret_max = ECMD_FAILED;
--		}
- 	}
- 
- 	/* the VG is selected if at least one LV is selected */
-@@ -2441,10 +2439,8 @@ static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t flags,
- 		unlock_vg(cmd, vg_name);
- endvg:
- 		release_vg(vg);
--		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state)) {
-+		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state))
- 			stack;
--			ret_max = ECMD_FAILED;
--		}
- 	}
- 
- 	return ret_max;
-@@ -2948,10 +2944,8 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t flags,
- 			unlock_vg(cmd, vg->name);
- endvg:
- 		release_vg(vg);
--		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state)) {
-+		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state))
- 			stack;
--			ret_max = ECMD_FAILED;
--		}
- 
- 		/* Quit early when possible. */
- 		if (!process_all_pvs && dm_list_empty(arg_tags) && dm_list_empty(arg_devices))
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 32a8a7f..cbdc29a 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -1228,7 +1228,7 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 		const char *start_opt = arg_str_value(cmd, lockopt_ARG, NULL);
- 
- 		if (!lockd_gl(cmd, "un", 0))
--			return_ECMD_FAILED;
-+			stack;
- 
- 		if (!start_opt || !strcmp(start_opt, "auto")) {
- 			log_print_unless_silent("Starting locking.  Waiting until locks are ready...");
+ 			}
+-			if (seg_is_cache_pool(seg)) {
++			if (seg_is_cache_pool(seg) &&
++			    !dm_list_empty(&seg->lv->segs_using_this_lv)) {
++				switch (seg->feature_flags &
++					(DM_CACHE_FEATURE_PASSTHROUGH |
++					 DM_CACHE_FEATURE_WRITETHROUGH |
++					 DM_CACHE_FEATURE_WRITEBACK)) {
++					 case DM_CACHE_FEATURE_PASSTHROUGH:
++					 case DM_CACHE_FEATURE_WRITETHROUGH:
++					 case DM_CACHE_FEATURE_WRITEBACK:
++						 break;
++					 default:
++						 log_error("LV %s has invalid cache's feature flag.",
++							   lv->name);
++						 inc_error_count;
++				}
+ 				if (!seg->policy_name) {
+ 					log_error("LV %s is missing cache policy name.", lv->name);
+ 					inc_error_count;
 
 
