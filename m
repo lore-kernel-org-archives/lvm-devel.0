@@ -1,18 +1,41 @@
-From: Thomas Bächler <thomas@archlinux.org>
-Date: Tue, 11 Aug 2015 09:44:02 +0200
-Subject: [PATCH] udev: Do not override SYSTEMD_WANTS environment variable
-Message-ID: <1439279042-2040-1-git-send-email-thomas@archlinux.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 12 Aug 2015 07:33:24 +0000 (UTC)
+Subject: master - udev: use += for SYSTEMD_WANTS instead of =
+Message-ID: <20150812073324.00CFD60641@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Instead of using = to override SYSTEMD_WANTS, use += to add the pvscan service.
----
- udev/Makefile.in | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3ea396e9d220cec55fd4e139be7ae486cb4ddb91
+Commit:        3ea396e9d220cec55fd4e139be7ae486cb4ddb91
+Parent:        819dc1845edcf48e0f3eb282a6d8b9ace8cb1a1b
+Author:        Thomas B??chler <thomas@archlinux.org>
+AuthorDate:    Wed Aug 12 09:29:04 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Aug 12 09:33:06 2015 +0200
 
+udev: use += for SYSTEMD_WANTS instead of =
+
+Instead of using = to override SYSTEMD_WANTS, use += to add
+the pvscan service.
+---
+ WHATS_NEW        |    1 +
+ udev/Makefile.in |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 71c41d2..8241dc1 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.128 - 
+ ===================================
++  Fix lvmetad udev rules to not override SYSTEMD_WANTS, add the service instead.
+ 
+ Version 2.02.127 - 10th August 2015
+ ===================================
 diff --git a/udev/Makefile.in b/udev/Makefile.in
 index 390069b..c4cc2bd 100644
 --- a/udev/Makefile.in
@@ -26,7 +49,5 @@ index 390069b..c4cc2bd 100644
  else
  PVSCAN_RULE=RUN\+\=\"$(LVM_EXEC)/lvm pvscan --background --cache --activate ay --major \$$major --minor \$$minor\", ENV{LVM_SCANNED}=\"1\"
  endif
--- 
-2.4.6
 
 
