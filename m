@@ -1,87 +1,76 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 21 Aug 2015 20:27:10 +0000 (UTC)
-Subject: master - tests: create/remove improvements for lvmlockd testing
-Message-ID: <20150821202710.8D80660DAA@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 12 Aug 2015 12:41:12 +0000 (UTC)
+Subject: master - libdm: cache target arg validation
+Message-ID: <20150812124112.BCF8660072@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1f27c9f6a44cb893b6653641b35295e129531bf8
-Commit:        1f27c9f6a44cb893b6653641b35295e129531bf8
-Parent:        d310e1f90720e5ba387efe7ba0d7cc6266d9f844
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Aug 20 16:10:36 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Aug 21 15:09:38 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08f047eb51375f6b96b0612e766cc9e0edae6ca0
+Commit:        08f047eb51375f6b96b0612e766cc9e0edae6ca0
+Parent:        9edd2258ffc7ae7593a6e193760861090d0fb273
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Aug 11 13:31:26 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Aug 12 14:33:15 2015 +0200
 
-tests: create/remove improvements for lvmlockd testing
+libdm: cache target arg validation
 
+Add some arg validation for dm_tree_node_add_cache_target().
 ---
- test/shell/dlm-remove.sh      |    4 ++++
- test/shell/sanlock-prepare.sh |    1 +
- test/shell/sanlock-remove.sh  |   15 +++++++++++++--
- 3 files changed, 18 insertions(+), 2 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |   26 ++++++++++++++++++++++++++
+ 2 files changed, 27 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/dlm-remove.sh b/test/shell/dlm-remove.sh
-index d7af46f..3120d7f 100644
---- a/test/shell/dlm-remove.sh
-+++ b/test/shell/dlm-remove.sh
-@@ -15,6 +15,10 @@ test_description='Remove the dlm test setup'
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index e857241..a72d3e0 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.105 - 
+ ===================================
++  Add more arg validation for dm_tree_node_add_cache_target().
  
- [ -z "$LVM_TEST_LOCK_TYPE_DLM" ] && skip;
+ Version 1.02.104 - 10th August 2015
+ ===================================
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 36befff..bbbd2d8 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -3358,6 +3358,32 @@ int dm_tree_node_add_cache_target(struct dm_tree_node *node,
+ 	struct dm_config_node *cn;
+ 	struct load_segment *seg;
  
-+# FIXME: collect debug logs (only if a test failed?)
-+# lvmlockctl -d > lvmlockd-debug.txt
-+# dlm_tool dump > dlm-debug.txt
++	switch (feature_flags &
++		(DM_CACHE_FEATURE_PASSTHROUGH |
++		 DM_CACHE_FEATURE_WRITETHROUGH |
++		 DM_CACHE_FEATURE_WRITEBACK)) {
++		 case DM_CACHE_FEATURE_PASSTHROUGH:
++		 case DM_CACHE_FEATURE_WRITETHROUGH:
++		 case DM_CACHE_FEATURE_WRITEBACK:
++			 break;
++		 default:
++			 log_error("Invalid cache's feature flag " FMTu64 ".",
++				   feature_flags);
++			 return 0;
++	}
 +
- systemctl stop dlm
- systemctl stop corosync
- killall lvmlockd
-diff --git a/test/shell/sanlock-prepare.sh b/test/shell/sanlock-prepare.sh
-index 401d6d7..c3a25bf 100644
---- a/test/shell/sanlock-prepare.sh
-+++ b/test/shell/sanlock-prepare.sh
-@@ -73,6 +73,7 @@ prepare_lvmlockd_sanlock() {
- 
- GL_DEV="/dev/mapper/GL_DEV"
- GL_FILE="$PWD/gl_file.img"
-+dmsetup remove GL_DEV || true
- rm -f "$GL_FILE"
- dd if=/dev/zero of="$GL_FILE" bs=$((1024*1024)) count=1024 2> /dev/null
- GL_LOOP=$(losetup -f "$GL_FILE" --show)
-diff --git a/test/shell/sanlock-remove.sh b/test/shell/sanlock-remove.sh
-index 47487d6..19a2602 100644
---- a/test/shell/sanlock-remove.sh
-+++ b/test/shell/sanlock-remove.sh
-@@ -15,14 +15,25 @@ test_description='Remove the sanlock test setup'
- 
- [ -z "$LVM_TEST_LOCK_TYPE_SANLOCK" ] && skip;
- 
-+# FIMXME: get this to run after a test fails
++	if (data_block_size < DM_CACHE_MIN_DATA_BLOCK_SIZE) {
++		log_error("Data block size %u is lower then %u sectors.",
++			  data_block_size, DM_CACHE_MIN_DATA_BLOCK_SIZE);
++		return 0;
++	}
 +
- # Removes the VG with the global lock that was created by
- # the corresponding create script.
- 
- vgremove --config 'devices { global_filter=["a|GL_DEV|", "r|.*|"] filter=["a|GL_DEV|", "r|.*|"]}' glvg
- 
-+# FIXME: collect debug logs (only if a test failed?)
-+# lvmlockctl -d > lvmlockd-debug.txt
-+# sanlock log_dump > sanlock-debug.txt
- 
- killall lvmlockd
- killall sanlock
- 
--dmsetup remove GL_DEV
--# dmsetup remove glvg-lvmlock
-+killall -9 lvmlockd
-+killall -9 sanlock
++	if (data_block_size > DM_CACHE_MAX_DATA_BLOCK_SIZE) {
++		log_error("Data block size %u is higher then %u sectors.",
++			  data_block_size, DM_CACHE_MAX_DATA_BLOCK_SIZE);
++		return 0;
++	}
 +
-+# FIXME: dmsetup remove LVMTEST*-lvmlock
-+
-+dmsetup remove glvg-lvmlock || true
-+dmsetup remove GL_DEV || true
-+
+ 	if (!(seg = _add_segment(node, SEG_CACHE, size)))
+ 		return_0;
+ 
 
 
