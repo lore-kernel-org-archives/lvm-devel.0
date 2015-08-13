@@ -1,85 +1,102 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 13 Aug 2015 12:11:17 +0000 (UTC)
-Subject: master - dmsetup: Use #define for command names.
-Message-ID: <20150813121117.9BFD7609E3@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Thu, 13 Aug 2015 18:06:25 +0000 (UTC)
+Subject: master - dmsetup: make timekeeping debug messages more readable
+Message-ID: <20150813180625.3E97E609E5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b22b7d7ba9208c5ead5ea6d7353cd903ebb3c075
-Commit:        b22b7d7ba9208c5ead5ea6d7353cd903ebb3c075
-Parent:        7995eedd3581407b030b0864202068b51dd1ef45
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Aug 13 13:10:23 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Aug 13 13:10:23 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86adb6ca63358ca09d3a886915f30fcec997787f
+Commit:        86adb6ca63358ca09d3a886915f30fcec997787f
+Parent:        b22b7d7ba9208c5ead5ea6d7353cd903ebb3c075
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Wed Aug 12 19:46:11 2015 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Thu Aug 13 19:05:45 2015 +0100
 
-dmsetup: Use #define for command names.
+dmsetup: make timekeeping debug messages more readable
 
+Don't use cryptic abbreviations and make sure that all values can
+be understood by someone not familiar with the clock internals.
+
+Include the current interval number (inverse of the _count) in all
+interval update messages and attempt to align interval timestamp
+logs for interval counts < 99,999.
 ---
- tools/dmsetup.c |   15 ++++++++++-----
- 1 files changed, 10 insertions(+), 5 deletions(-)
+ tools/dmsetup.c |   30 ++++++++++++++++++++----------
+ 1 files changed, 20 insertions(+), 10 deletions(-)
 
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index dd2f153..4a1a396 100644
+index 4a1a396..3473244 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -108,6 +108,11 @@ extern char *optarg;
- /* program_id used for dmstats-managed statistics regions */
- #define DM_STATS_PROGRAM_ID "dmstats"
- 
-+#define DMSETUP_CMD_NAME "dmsetup"
-+#define LOSETUP_CMD_NAME "losetup"
-+#define DMLOSETUP_CMD_NAME "dmlosetup"
-+#define DMSTATS_CMD_NAME "dmstats"
-+
- /*
-  * We have only very simple switches ATM.
+@@ -482,6 +482,14 @@ static void _destroy_split_name(struct dm_split_name *split_name)
+  *  _update_interval_times() - Update timestamps and interval estimate.
   */
-@@ -4818,7 +4823,7 @@ static void _dmsetup_usage(FILE *out)
- 	int i;
  
- 	fprintf(out, "Usage:\n\n");
--	fprintf(out, "dmsetup [--version] [-h|--help [-c|-C|--columns]]\n"
-+	fprintf(out, DMSETUP_CMD_NAME " [--version] [-h|--help [-c|-C|--columns]]\n"
- 		"        [-v|--verbose [-v|--verbose ...]]\n"
- 		"        [--checks] [--manglename <mangling_mode>]\n"
- 		"        [-r|--readonly] [--noopencount] [--nolockfs] [--inactive]\n"
-@@ -4843,7 +4848,7 @@ static void _dmsetup_usage(FILE *out)
- static void _losetup_usage(FILE *out)
++/*
++ * Return the current interval number counting upwards from one.
++ */
++static uint64_t _interval_num(void)
++{
++	return 1 + (uint64_t) _int_args[COUNT_ARG] - _count;
++}
++
+ #if HAVE_SYS_TIMERFD_H
+ static int _start_timerfd_timer(void)
  {
- 	fprintf(out, "Usage:\n\n");
--	fprintf(out, "losetup [-d|-a] [-e encryption] "
-+	fprintf(out, LOSETUP_CMD_NAME " [-d|-a] [-e encryption] "
- 		     "[-o offset] [-f|loop_device] [file]\n\n");
- }
+@@ -639,7 +647,7 @@ static int _do_timer_wait(void)
+ static int _update_interval_times(void)
+ {
+ 	static struct dm_timestamp *this_timestamp = NULL;
+-	uint64_t delta_t;
++	uint64_t delta_t, interval_num = _interval_num();
+ 	int r = 0;
  
-@@ -5110,7 +5115,7 @@ static int _loop_table(char *table, size_t tlen, char *file,
- 	sectors = size >> SECTOR_SHIFT;
- 
- 	if (_switches[VERBOSE_ARG])
--		fprintf(stderr, "losetup: set loop size to %llukB "
-+		fprintf(stderr, LOSETUP_CMD_NAME ": set loop size to %llukB "
- 			"(%llu sectors)\n", (long long unsigned) sectors >> 1,
- 			(long long unsigned) sectors);
- 
-@@ -5413,13 +5418,13 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
- 		return 1;
+ 	/*
+@@ -697,7 +705,9 @@ static int _update_interval_times(void)
+ 		_new_interval = 1;
  	}
  
--	if (!strcmp(base, "losetup") || !strcmp(base, "dmlosetup")){
-+	if (!strcmp(base, LOSETUP_CMD_NAME) || !strcmp(base, DMLOSETUP_CMD_NAME)){
- 		r = _process_losetup_switches(base, argcp, argvp, dev_dir);
- 		free(namebase);
- 		return r;
+-	log_debug("Checking for interval end, dt="FMTu64, delta_t);
++	log_debug("Interval     #%-4"PRIu64"     time delta: %12"
++		  PRIu64"ns", interval_num, delta_t);
++
+ 	if (_new_interval) {
+ 		/* Update timestamp and interval and clear _new_interval */
+ 		dm_timestamp_copy(_cycle_timestamp, this_timestamp);
+@@ -708,14 +718,14 @@ static int _update_interval_times(void)
+ 		_mean_interval = ((double) delta_t + _mean_interval) / 2.0;
+ 
+ 		/*
+-		 * Log interval duration, mean interval, the last interval
+-		 * error and the difference between the mean and configured
+-		 * intervals.
++		 * Log interval duration, mean duration and interval error.
+ 		 */
+-		log_debug("Ending interval, I="FMTu64" Imean=%f, Ierr="FMTi64
+-			  ", Emean=%.2f", _last_interval, _mean_interval,
+-			  ((int64_t)_last_interval - (int64_t)_interval),
+-			  _mean_interval - (double) _interval);
++		log_debug("Interval     #%-5"PRIu64" mean duration: %12.0fns, "
++			  "current err: "FMTi64"ns", interval_num,
++			  _mean_interval, ((int64_t)_last_interval
++					   - (int64_t)_interval));
++		log_debug("End interval #%-9"PRIu64"  duration: %12"PRIu64"ns",
++			  interval_num, _last_interval);
  	}
  
--	if (!strcmp(base, "dmstats")) {
-+	if (!strcmp(base, DMSTATS_CMD_NAME)) {
- 		/* save the offset to the 'stats' in 'dmstats' */
- 		stats_p = (*argvp)[0] + strlen(namebase) - strlen(base) + 2;
- 		stats_c = (*argvp)[1]; /* stats command */
+ 	r = 1;
+@@ -785,7 +795,7 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
+ 		/* Update timestamps and handle end-of-interval accounting. */
+ 		_update_interval_times();
+ 
+-		log_debug("Setting interval, I="FMTu64, _last_interval);
++		log_debug("Adjusted sample interval duration: %12"PRIu64"ns", _last_interval);
+ 		/* use measured approximation for calculations */
+ 		dm_stats_set_sampling_interval_ns(obj.stats, _last_interval);
+ 	}
 
 
