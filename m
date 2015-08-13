@@ -1,60 +1,39 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 13 Aug 2015 23:10:00 +0000 (UTC)
-Subject: master - dmsetup: Fix dmsetup return code.
-Message-ID: <20150813231000.89D5860317@fedorahosted.org>
+From: Natanael Copa <ncopa@alpinelinux.org>
+Date: Thu, 13 Aug 2015 09:16:28 +0200
+Subject: [PATCH] libdm: do not in include internal bits/time.h header
+Message-ID: <1439450188-3686-1-git-send-email-ncopa@alpinelinux.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6a93206882cb628a88dbd372d36dc8fc8cc5053a
-Commit:        6a93206882cb628a88dbd372d36dc8fc8cc5053a
-Parent:        043fb32c4b67d1456a77ab7caf0d077f419fae88
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Aug 14 00:09:40 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Aug 14 00:09:40 2015 +0100
+Do not include bits/time.h as it is an internal libc header file.
 
-dmsetup: Fix dmsetup return code.
+A comment at the top of the glibc specific bits/time.h says:
+"Never include this file directly; use <time.h> instead."
 
+This fixes the following build error with musl libc:
+libdm-timestamp.c:37:23: fatal error: bits/time.h: No such file or directory
 ---
- tools/dmsetup.c |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+Compile tested with Alpine Linx (musl libc) and ubuntu 15.04
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index b3820fe..c5be193 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -5832,7 +5832,7 @@ static int _do_report_wait(void)
+ libdm/libdm-timestamp.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/libdm/libdm-timestamp.c b/libdm/libdm-timestamp.c
+index 3e01442..9be93a4 100644
+--- a/libdm/libdm-timestamp.c
++++ b/libdm/libdm-timestamp.c
+@@ -34,7 +34,6 @@
+ #ifdef HAVE_REALTIME
  
- int main(int argc, char **argv)
- {
--	int r = 1;
-+	int ret = 1, r;
- 	const char *dev_dir;
- 	const struct command *cmd;
- 	const char *subcommand = NULL;
-@@ -5975,9 +5975,12 @@ doit:
- 		}
+ #include <time.h>
+-#include <bits/time.h>
  
- 		if (!r)
--			break;
-+			goto_out;
- 	} while (--_count);
- 
-+	/* Success */
-+	ret = 0;
-+
- out:
- 	if (_report)
- 		dm_report_free(_report);
-@@ -5990,5 +5993,5 @@ out:
- 	if (_initial_timestamp)
- 		dm_timestamp_destroy(_initial_timestamp);
- 
--	return r;
-+	return ret;
- }
+ struct dm_timestamp {
+ 	struct timespec t;
+-- 
+2.5.0
 
 
