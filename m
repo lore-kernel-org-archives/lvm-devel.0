@@ -1,209 +1,168 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Thu, 13 Aug 2015 18:06:27 +0000 (UTC)
-Subject: master - dmstats: improve region creation messages
-Message-ID: <20150813180627.523AA607A2@fedorahosted.org>
+Date: Thu, 13 Aug 2015 18:06:29 +0000 (UTC)
+Subject: master - dmstats: replace --force with new stats-specific --alldevices
+Message-ID: <20150813180629.6A22C61373@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=988ca743519839b283ebdbaaf06243cb0541b935
-Commit:        988ca743519839b283ebdbaaf06243cb0541b935
-Parent:        86adb6ca63358ca09d3a886915f30fcec997787f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6b81ac5807bdbfdd0063db4f53cc6d310c2fe4fc
+Commit:        6b81ac5807bdbfdd0063db4f53cc6d310c2fe4fc
+Parent:        988ca743519839b283ebdbaaf06243cb0541b935
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Aug 13 12:42:35 2015 +0100
+AuthorDate:    Thu Aug 13 14:42:55 2015 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Thu Aug 13 19:05:45 2015 +0100
+CommitterDate: Thu Aug 13 19:05:46 2015 +0100
 
-dmstats: improve region creation messages
+dmstats: replace --force with new stats-specific --alldevices
 
-The region creation message just outputs the new region_id, e.g.:
+The '--force' switch is only used by dmstats to allow either
+creation or deletion of one or more regions on all devices.
 
-Created region: 0
+These operations do not carry any risk: just a possible mess of
+region IDs to be cleaned up.
 
-This is fine when the device is unambigous (as above) but produces
-unhelpful output when creating multiple regions, or regions on
-multiple devices:
-
-Created region: 0
-Created region: 0
-Created region: 1
-Created region: 2
-Created region: 0
-
-To address this refactor _stats_create_segments() (previously only
-used when creating one-region-per-target for --segments) into a
-more general _do_stats_create_regions() that can create regions
-for each segment, or a single region spanning either the entire
-device or a specied start/len range.
-
-This allows us to output all region creation messages from a
-single point where both the device name and all information needed
-to derive the number of areas is available.
-
-This allows us to log all these facts in the resulting messages:
-
-vg_hex-lv_home: Created new region with 13 area(s) as region ID 0
-vg_hex-lv_home: Created new region with 4 area(s) as region ID 1
-vg_hex-lv_home: Created new region with 1 area(s) as region ID 2
-vg_hex-lv_swap: Created new region with 1 area(s) as region ID 0
-vg_hex-lv_root: Created new region with 10 area(s) as region ID 0
-luks-79733921-3f68-4c92-9eb7-d0aca4c6ba3e: Created new region with 17 area(s) as region ID 0
-vg_hex-lv_images: Created new region with 20 area(s) as region ID 0
-vg_hex-lv_images: Created new region with 4 area(s) as region ID 1
+Remove the use of '--force' for stats commands and change current
+uses to a new '--alldevices' switch.
 ---
- tools/dmsetup.c |   97 +++++++++++++++++++++++++++++++++++++------------------
- 1 files changed, 65 insertions(+), 32 deletions(-)
+ WHATS_NEW_DM     |    1 +
+ man/dmstats.8.in |   16 +++++++++++-----
+ tools/dmsetup.c  |   16 ++++++++++------
+ 3 files changed, 22 insertions(+), 11 deletions(-)
 
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index a72d3e0..45db0e4 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,6 +1,7 @@
+ Version 1.02.105 - 
+ ===================================
+   Add more arg validation for dm_tree_node_add_cache_target().
++  Add --alldevices switch to replace use of --force for stats create / delete.
+ 
+ Version 1.02.104 - 10th August 2015
+ ===================================
+diff --git a/man/dmstats.8.in b/man/dmstats.8.in
+index c5ef47f..3b9f032 100644
+--- a/man/dmstats.8.in
++++ b/man/dmstats.8.in
+@@ -27,6 +27,7 @@ dmstats \(em device-mapper statistics management
+ .br
+ .B dmstats create
+ .I device_name
++.RB [ \-\-alldevices ]
+ .RB [[ \-\-areas
+ .IR nr_areas ]
+ .RB |[ \-\-areasize
+@@ -43,7 +44,7 @@ dmstats \(em device-mapper statistics management
+ .br
+ .B dmstats delete
+ .I device_name
+-.RB [ \-\-force ]
++.RB [ \-\-alldevices ]
+ .RB [ \-\-allregions
+ .RB | \-\-regionid
+ .IR id ]
+@@ -115,10 +116,14 @@ when run as 'dmsetup stats'.
+ 
+ When no device argument is given dmstats will by default operate on all
+ device-mapper devices present. The \fBcreate\fP and \fBdelete\fP
+-commands require the use of \fB--force\fP when used in this way.
++commands require the use of \fB--alldevices\fP when used in this way.
+ 
+ .SH OPTIONS
+ .TP
++.B \-\-alldevices
++If no device arguments are given allow operation on all devices when
++creating or deleting regions.
++.TP
+ .B \-\-allprograms
+ Include regions from all program IDs for list and report operations.
+ .TP
+@@ -267,7 +272,7 @@ stdout.
+ .TP
+ .B delete
+ .I [ device_name ]
+-.RB [ \-\-force ]
++.RB [ \-\-alldevices ]
+ .RB [ \-\-allregions
+ .RB | \-\-regionid
+ .IR id ]
+@@ -282,7 +287,8 @@ of subsequent list, print, or report operations.
+ All regions registered on a device may be removed using
+ \fB\-\-allregions\fP.
+ 
+-To remove all regions on all devices \fB\-\-force\fP must be used.
++To remove all regions on all devices both \fB--allregions\fP and
++\fB\-\-alldevices\fP must be used.
+ .br
+ .TP
+ .B help
+@@ -601,7 +607,7 @@ Created region: 0
+ Delete all regions on all devices
+ .br
+ .br
+-# dmstats delete --allregions --force
++# dmstats delete --alldevices --allregions
+ .br
+ .br
+ 
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 3473244..420e263 100644
+index 420e263..20ab3a0 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -4282,19 +4282,43 @@ static int _size_from_string(char *argptr, uint64_t *size, const char *name)
- 	return 1;
- }
- 
--static int _stats_create_segments(struct dm_stats *dms,
--				  const char *name, int64_t step,
--				  const char *program_id, const char *aux_data)
-+/*
-+ * FIXME: expose this from libdm-stats
-+ */
-+static uint64_t _nr_areas_from_step(uint64_t len, int64_t step)
- {
--	uint64_t start, length, region_id = UINT64_C(0);
-+	/* --areas */
-+	if (step < 0)
-+		return (uint64_t)(-step);
-+
-+	/* --areasize - cast step to unsigned as it cannot be -ve here. */
-+	return (len / (step ? : len)) + !!(len % (uint64_t) step);
-+}
-+
-+/*
-+ * Create a single region starting@start and spanning len sectors,
-+ * or, if the segments argument is no-zero create one region for each
-+ * segment present in the mapped device.
-+ */
-+static int _do_stats_create_regions(struct dm_stats *dms,
-+				    const char *name, uint64_t start,
-+				    uint64_t len, int64_t step,
-+				    int segments,
-+				    const char *program_id,
-+				    const char *aux_data)
-+{
-+	uint64_t this_start = start, this_len = len, region_id = UINT64_C(0);
- 	char *target_type, *params; /* unused */
- 	struct dm_task *dmt;
- 	struct dm_info info;
- 	void *next = NULL;
- 	const char *devname = NULL;
-+	int r = 0;
- 
--	if (!(dmt = dm_task_create(DM_DEVICE_TABLE)))
-+	if (!(dmt = dm_task_create(DM_DEVICE_TABLE))) {
-+		dm_stats_destroy(dms);
- 		return 0;
-+	}
- 
- 	if (!_set_task_device(dmt, name, 0))
- 		goto out;
-@@ -4315,30 +4339,50 @@ static int _stats_create_segments(struct dm_stats *dms,
- 		goto out;
- 
- 	do {
--		next = dm_get_next_target(dmt, next, &start, &length,
-+		uint64_t segment_start, segment_len;
-+		next = dm_get_next_target(dmt, next, &segment_start, &segment_len,
- 					  &target_type, &params);
--		if (!dm_stats_create_region(dms, &region_id, start, length,
--					    step, program_id, aux_data)) {
--			log_error("Could not create statistics region.");
-+
-+		/* Accumulate whole-device size for nr_areas calculation. */
-+		if (!segments && !len)
-+			this_len += segment_len;
-+
-+		/* Segments or whole-device. */
-+		if (segments || !next) {
-+			/*
-+			 * this_start and this_len hold the start and length in
-+			 * sectors of the to-be-created region: this is either the
-+			 * segment start/len (for --segments), the value of the
-+			 * --start/--length arguments, or 0/0 for a default
-+			 *  whole-device region).
-+			 */
-+			this_start = (segments) ? segment_start : this_start;
-+			this_len = (segments) ? segment_len : this_len;
-+			if (!dm_stats_create_region(dms, &region_id,
-+						    this_start, this_len, step,
-+						    program_id, aux_data)) {
-+				log_error("%s: Could not create statistics region.",
-+					  devname);
-+				goto out;
-+			}
-+
-+			printf("%s: Created new region with "FMTu64" area(s) as "
-+			       "region ID "FMTu64"\n", devname,
-+			       _nr_areas_from_step(this_len, step), region_id);
- 		}
--		printf("Created region %"PRIu64" on %s\n",
--		       region_id, devname);
- 	} while (next);
--
--	dm_stats_destroy(dms);
--	dm_task_destroy(dmt);
--	return 1;
-+	r = 1;
- 
- out:
- 	dm_task_destroy(dmt);
--	return 0;
-+	dm_stats_destroy(dms);
-+	return r;
- }
- 
- static int _stats_create(CMD_ARGS)
- {
- 	struct dm_stats *dms;
- 	const char *name, *aux_data = "", *program_id = DM_STATS_PROGRAM_ID;
--	uint64_t region_id;
- 	uint64_t start = 0, len = 0, areas = 0, area_size = 0;
- 	int64_t step = 0;
- 
-@@ -4393,7 +4437,7 @@ static int _stats_create(CMD_ARGS)
- 			return 0;
- 
- 	areas = (areas) ? areas : 1;
--	/* bytes to sectors or area count - promote to int before conversion */
-+	/* bytes to sectors or -(areas): promote to signed before conversion */
- 	step = (area_size) ? ((int64_t) area_size / 512) : -((int64_t) areas);
- 
- 	if (_switches[START_ARG]) {
-@@ -4430,20 +4474,9 @@ static int _stats_create(CMD_ARGS)
- 		/* force creation of a region with no id */
- 		dm_stats_set_program_id(dms, 1, NULL);
- 
--	if (_switches[SEGMENTS_ARG])
--		return _stats_create_segments(dms, name, step,
--					      program_id, aux_data);
--
--	if (!dm_stats_create_region(dms, &region_id, start, len,
--				    step, program_id, aux_data)) {
--		log_error("Could not create statistics region.");
--		goto out;
--	}
--
--	/* FIXME: support --quiet and --export output modes */
--	printf("Created region: %"PRIu64"\n", region_id);
--	dm_stats_destroy(dms);
--	return 1;
-+	return _do_stats_create_regions(dms, name, start, len, step,
-+					_switches[SEGMENTS_ARG],
-+					program_id, aux_data);
- 
- out:
- 	dm_stats_destroy(dms);
+@@ -120,6 +120,7 @@ enum {
+ 	READ_ONLY = 0,
+ 	ADD_NODE_ON_CREATE_ARG,
+ 	ADD_NODE_ON_RESUME_ARG,
++	ALL_DEVICES_ARG,
+ 	ALL_PROGRAMS_ARG,
+ 	ALL_REGIONS_ARG,
+ 	AREAS_ARG,
+@@ -4418,9 +4419,9 @@ static int _stats_create(CMD_ARGS)
+ 		name = names->name;
+ 	else {
+ 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG]) {
+-			if (!_switches[FORCE_ARG]) {
+-				log_error("Creating regions on all devices "
+-					  "requires --force.");
++			if (!_switches[ALL_DEVICES_ARG]) {
++				log_error("Please specify device(s) or use "
++					  "--alldevices.");
+ 				return 0;
+ 			}
+ 			return _process_all(cmd, subcommand, argc, argv, 0, _stats_create);
+@@ -4506,9 +4507,9 @@ static int _stats_delete(CMD_ARGS)
+ 		name = names->name;
+ 	else {
+ 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG]) {
+-			if (!_switches[FORCE_ARG]) {
+-				log_error("Deleting regions from all devices "
+-					  "requires --force.");
++			if (!_switches[ALL_DEVICES_ARG]) {
++				log_error("Please specify device(s) or use "
++					  "--alldevices.");
+ 				return 0;
+ 			}
+ 			return _process_all(cmd, subcommand, argc, argv, 0, _stats_delete);
+@@ -5355,6 +5356,7 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
+ #ifdef HAVE_GETOPTLONG
+ 	static struct option long_options[] = {
+ 		{"readonly", 0, &ind, READ_ONLY},
++		{"alldevices", 0, &ind, ALL_DEVICES_ARG},
+ 		{"allprograms", 0, &ind, ALL_PROGRAMS_ARG},
+ 		{"allregions", 0, &ind, ALL_REGIONS_ARG},
+ 		{"areas", 1, &ind, AREAS_ARG},
+@@ -5479,6 +5481,8 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
+ 	optind = OPTIND_INIT;
+ 	while ((ind = -1, c = GETOPTLONG_FN(*argcp, *argvp, "cCfG:hj:m:M:no:O:rS:u:U:vy",
+ 					    long_options, NULL)) != -1) {
++		if (ind == ALL_DEVICES_ARG)
++			_switches[ALL_DEVICES_ARG]++;
+ 		if (ind == ALL_PROGRAMS_ARG)
+ 			_switches[ALL_PROGRAMS_ARG]++;
+ 		if (ind == ALL_REGIONS_ARG)
 
 
