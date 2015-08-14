@@ -1,121 +1,80 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Fri, 14 Aug 2015 21:05:20 +0000 (UTC)
-Subject: master - libdm: add dm_stats_get_{current_}area_offset()
-Message-ID: <20150814210520.9906B60358@fedorahosted.org>
+Date: Fri, 14 Aug 2015 21:05:22 +0000 (UTC)
+Subject: master - dmstats: add 'area_offset' field to stats reports
+Message-ID: <20150814210522.AB55960358@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00ed52365916753d0bd6eb0de09c46ad782fec2e
-Commit:        00ed52365916753d0bd6eb0de09c46ad782fec2e
-Parent:        77fae3d8522ffb1077dcb0e2e9ebfba86cf19daf
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0f3b81bb2e7de61457ec0f2a72f381b9992421c6
+Commit:        0f3b81bb2e7de61457ec0f2a72f381b9992421c6
+Parent:        00ed52365916753d0bd6eb0de09c46ad782fec2e
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Fri Aug 14 20:30:05 2015 +0100
+AuthorDate:    Fri Aug 14 21:49:40 2015 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Fri Aug 14 22:03:37 2015 +0100
 
-libdm: add dm_stats_get_{current_}area_offset()
+dmstats: add 'area_offset' field to stats reports
 
-Add a method to retrieve the offset of an area within the
-containing region (rather than the offset within the containing
-device returned by dm_stats_get_area_start()).
-
-Although users of the library can calculate this themselves it is
-better to provide this through a method call to avoid users making
-assumptions about the structure of regions and areas.
 ---
- libdm/.exported_symbols.DM_1_02_105 |    2 ++
- libdm/libdevmapper.h                |   17 ++++++++++++++---
- libdm/libdm-stats.c                 |   15 +++++++++++++++
- 3 files changed, 31 insertions(+), 3 deletions(-)
+ tools/dmsetup.c |   32 ++++++++++++++++++++++++++++++--
+ 1 files changed, 30 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/.exported_symbols.DM_1_02_105 b/libdm/.exported_symbols.DM_1_02_105
-index 9b701f1..4707164 100644
---- a/libdm/.exported_symbols.DM_1_02_105
-+++ b/libdm/.exported_symbols.DM_1_02_105
-@@ -1 +1,3 @@
- dm_report_is_empty
-+dm_stats_get_area_offset
-+dm_stats_get_current_area_offset
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 303ed67..bfc90da 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -705,19 +705,27 @@ uint64_t dm_stats_get_region_area_len(const struct dm_stats *dms,
- 				      uint64_t *area_len, uint64_t region_id);
- 
- /*
-- * Area properties: start and length.
-+ * Area properties: start, offset and length.
-  *
-  * The area length is always equal to the area length of the region
-  * that contains it and is obtained from dm_stats_get_region_area_len().
-  *
-- * The start offset of an area is a function of the area_id and the
-- * containing region's start and area length.
-+ * The start of an area is a function of the area_id and the containing
-+ * region's start and area length: it gives the absolute offset into the
-+ * containing device of the beginning of the area.
-+ *
-+ * The offset expresses the area's relative offset into the current
-+ * region. I.e. the area start minus the start offset of the containing
-+ * region.
-  *
-  * All values are returned in units of 512b sectors.
-  */
- uint64_t dm_stats_get_area_start(const struct dm_stats *dms, uint64_t *start,
- 				 uint64_t region_id, uint64_t area_id);
- 
-+uint64_t dm_stats_get_area_offset(const struct dm_stats *dms, uint64_t *offset,
-+				  uint64_t region_id, uint64_t area_id);
-+
- /*
-  * Retrieve program_id and aux_data for a specific region. Only valid
-  * following a call to dm_stats_list(). The returned pointer does not
-@@ -876,6 +884,9 @@ uint64_t dm_stats_get_current_region_area_len(const struct dm_stats *dms,
- uint64_t dm_stats_get_current_area_start(const struct dm_stats *dms,
- 					 uint64_t *start);
- 
-+uint64_t dm_stats_get_current_area_offset(const struct dm_stats *dms,
-+					  uint64_t *offset);
-+
- uint64_t dm_stats_get_current_area_len(const struct dm_stats *dms,
- 				       uint64_t *start);
- 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 51aba79..400b12d 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -1335,6 +1335,14 @@ uint64_t dm_stats_get_area_start(const struct dm_stats *dms, uint64_t *start,
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 74e7806..f69fbe4 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -3319,6 +3319,34 @@ static int _dm_stats_area_start_disp(struct dm_report *rh,
  	return 1;
  }
  
-+uint64_t dm_stats_get_area_offset(const struct dm_stats *dms, uint64_t *offset,
-+				  uint64_t region_id, uint64_t area_id)
++static int _dm_stats_area_offset_disp(struct dm_report *rh,
++				      struct dm_pool *mem __attribute__((unused)),
++				      struct dm_report_field *field, const void *data,
++				      void *private __attribute__((unused)))
 +{
-+	if (!dms || !dms->regions)
++	const struct dm_stats *dms = (const struct dm_stats *) data;
++	uint64_t area_offset;
++	const char *repstr;
++	double *sortval;
++	char units = _disp_units;
++	uint64_t factor = _disp_factor;
++
++	if (!dm_stats_get_current_area_offset(dms, &area_offset))
 +		return_0;
-+	*offset = dms->regions[region_id].step * area_id;
++
++	if (!(repstr = dm_size_to_string(mem, area_offset, units, 1, factor,
++					 _show_units(), DM_SIZE_UNIT)))
++		return_0;
++
++	if (!(sortval = dm_pool_alloc(mem, sizeof(uint64_t))))
++		return_0;
++
++	*sortval = (double) area_offset;
++
++	dm_report_field_set_value(field, repstr, sortval);
++	return 1;
 +}
 +
- uint64_t dm_stats_get_current_area_start(const struct dm_stats *dms,
- 					 uint64_t *start)
- {
-@@ -1342,6 +1350,13 @@ uint64_t dm_stats_get_current_area_start(const struct dm_stats *dms,
- 				       dms->cur_region, dms->cur_area);
- }
- 
-+uint64_t dm_stats_get_current_area_offset(const struct dm_stats *dms,
-+					  uint64_t *offset)
-+{
-+	return dm_stats_get_area_offset(dms, offset,
-+				       dms->cur_region, dms->cur_area);
-+}
-+
- uint64_t dm_stats_get_current_area_len(const struct dm_stats *dms,
- 				       uint64_t *len)
- {
+ static int _dm_stats_area_len_disp(struct dm_report *rh,
+ 				      struct dm_pool *mem __attribute__((unused)),
+ 				      struct dm_report_field *field, const void *data,
+@@ -3976,12 +4004,12 @@ FIELD_F(STATS_META, NUM, "RgID", 5, dm_stats_region_id, "region_id", "Region ID.
+ FIELD_F(STATS_META, SIZ, "RStart", 5, dm_stats_region_start, "region_start", "Region start.")
+ FIELD_F(STATS_META, SIZ, "RSize", 5, dm_stats_region_len, "region_len", "Region length.")
+ FIELD_F(STATS_META, NUM, "ArID", 5, dm_stats_area_id, "area_id", "Area ID.")
+-FIELD_F(STATS_META, SIZ, "AStrt", 5, dm_stats_area_start, "area_start", "Area start.")
++FIELD_F(STATS_META, SIZ, "AStart", 5, dm_stats_area_start, "area_start", "Area offset from start of device.")
+ FIELD_F(STATS_META, SIZ, "ASize", 5, dm_stats_area_len, "area_len", "Area length.")
++FIELD_F(STATS_META, SIZ, "AOff", 5, dm_stats_area_offset, "area_offset", "Area offset from start of region.")
+ FIELD_F(STATS_META, NUM, "#Areas", 6, dm_stats_area_count, "area_count", "Area count.")
+ FIELD_F(STATS_META, STR, "ProgID", 6, dm_stats_program_id, "program_id", "Program ID.")
+ FIELD_F(STATS_META, STR, "AuxDat", 6, dm_stats_aux_data, "aux_data", "Auxiliary data.")
+-
+ {0, 0, 0, 0, "", "", NULL, NULL},
+ /* *INDENT-ON* */
+ };
 
 
