@@ -1,61 +1,56 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sun, 16 Aug 2015 00:17:55 +0000 (UTC)
-Subject: master - WHATS_NEW: Update.
-Message-ID: <20150816001755.6B44760F4A@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 17 Aug 2015 09:25:12 +0000 (UTC)
+Subject: master - cache: use undefined settings for cache_policy
+Message-ID: <20150817092512.18BBE6104D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b297d78367c2a9395bcc6abc7484763368979842
-Commit:        b297d78367c2a9395bcc6abc7484763368979842
-Parent:        4a6d5e2012cbcf40842b5ef051347694bbf5ca04
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sun Aug 16 01:16:16 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sun Aug 16 01:16:16 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d4c024c836aa10be0fe4d55157bac15f5ede62a8
+Commit:        d4c024c836aa10be0fe4d55157bac15f5ede62a8
+Parent:        b297d78367c2a9395bcc6abc7484763368979842
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Aug 17 11:19:28 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Aug 17 11:25:03 2015 +0200
 
-WHATS_NEW: Update.
+cache: use undefined settings for cache_policy
 
+As cache_policy is evaluated in runtime, we no longer should use
+CFG_COMMENTED, but have to switch to CFG_UNDEFINED.
+
+So as long as the value is undefined, it's runtime evaluated.
+Once it's set - it's always respected (no runtime fallback).
+
+Also fix version of introduced settings to 2.2.128.
 ---
- WHATS_NEW    |    7 +++----
- WHATS_NEW_DM |    6 +++---
- 2 files changed, 6 insertions(+), 7 deletions(-)
+ lib/config/config_settings.h |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1e34e1c..dbb78d6 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,10 +1,9 @@
- Version 2.02.128 - 
- ===================================
-   Check for valid cache mode in validation of cache segment.
--  Enhance internal API cache_set_mode() and cache_set_policy().
--  Enhance toollib's get_cache_params().
--  Runtime detect presence of cache smq policy.
--  Add demo cache-mq  and cache-smq profiles.
-+  Change internal interface handling cache mode and policy.
-+  When no cache policy specified, prefer smq (if available) over mq.
-+  Add demo cache-mq and cache-smq profiles.
-   Add cmd profilable allocation/cache_policy,cache_settings,cache_mode.
-   Require cache_check 0.5.4 for use of --clear-needs-check-flag.
-   Fix lvmetad udev rules to not override SYSTEMD_WANTS, add the service instead.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 8e816a0..870ffb2 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,8 +1,8 @@
- Version 1.02.105 - 
- ===================================
--  Fix 'stats list -o all' segfault
--  Separate statistics fields from region information fields
--  Add interval and interval_ns fields to DR_STATS reports.
-+  Fix 'dmstats list -o all' segfault.
-+  Separate dmstats statistics fields from region information fields.
-+  Add interval and interval_ns fields to dmstats reports.
-   Do not include internal glibc headers in libdm-timestamp.c (1.02.104)
-   Exit immediately if no device is supplied to dmsetup wipe_table.
-   Suppress dmsetup report headings when no data is output. (1.02.104)
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index b687c57..f18d173 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -474,13 +474,13 @@ cfg(allocation_cache_mode_CFG, "cache_mode", allocation_CFG_SECTION, CFG_DEFAULT
+ 	"writeback - Data blocks are written from the cache back\n"
+ 	"to disk after some delay to improve performance.\n")
+ 
+-cfg_runtime(allocation_cache_policy_CFG, "cache_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, vsn(2, 2, 127), 0, NULL,
++cfg_runtime(allocation_cache_policy_CFG, "cache_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, vsn(2, 2, 128), 0, NULL,
+ 	"The default cache policy used for new cache volume.\n"
+-	"Generally available policies are: mq, smq.\n"
+-	"mq  - Multiqueue policy with 88 bytes per block\n"
+-	"smq - Stochastic multique with 25 bytes per block (kernel >= 4.2).\n")
++	"For the kernel 4.2 and newer the default policy is smq\n"
++	"(Stochastic multique), otherwise the older mq (Multiqueue),\n"
++	"policy is selected.\n")
+ 
+-cfg_section(allocation_cache_settings_CFG_SECTION, "cache_settings", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, vsn(2, 2, 127), 0, NULL,
++cfg_section(allocation_cache_settings_CFG_SECTION, "cache_settings", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, vsn(2, 2, 128), 0, NULL,
+ 	"Individual settings for policies.\n"
+ 	"See the help for individual policies for more info.\n")
+ 
 
 
