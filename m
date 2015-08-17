@@ -1,61 +1,52 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 17 Aug 2015 15:27:55 +0000 (UTC)
-Subject: master - tests: update thin test
-Message-ID: <20150817152755.AB01D6035D@fedorahosted.org>
+Date: Mon, 17 Aug 2015 15:27:57 +0000 (UTC)
+Subject: master - cache: more comments for new setting
+Message-ID: <20150817152757.C96D160F49@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=77357081c8143d13d02aa0b7d5eb044a29aa65c3
-Commit:        77357081c8143d13d02aa0b7d5eb044a29aa65c3
-Parent:        4b28383b1c5f84d5f4190dd19586082c23d6c904
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=80bc87e377cbcc10225e1d2b58d6e84b65b449de
+Commit:        80bc87e377cbcc10225e1d2b58d6e84b65b449de
+Parent:        77357081c8143d13d02aa0b7d5eb044a29aa65c3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Aug 17 17:07:09 2015 +0200
+AuthorDate:    Mon Aug 17 17:26:39 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Aug 17 17:07:09 2015 +0200
+CommitterDate: Mon Aug 17 17:26:39 2015 +0200
 
-tests: update thin test
+cache: more comments for new setting
 
-Since we now let pass activation of thin-pool 'off-by-one' for
-plain 'vgchange -ay' update the test to use higher TID.
 ---
- test/shell/lvextend-thin-metadata-dmeventd.sh |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ WHATS_NEW                    |    1 +
+ lib/config/config_settings.h |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-metadata-dmeventd.sh b/test/shell/lvextend-thin-metadata-dmeventd.sh
-index d7f5ccc..4e80f75 100644
---- a/test/shell/lvextend-thin-metadata-dmeventd.sh
-+++ b/test/shell/lvextend-thin-metadata-dmeventd.sh
-@@ -63,8 +63,9 @@ vgcreate -s 1M $vg $(cat DEVICES)
- # Testing dmeventd autoresize
- lvcreate -L200M -V500M -n thin -T $vg/pool 2>&1 | tee out
- not grep "WARNING: Sum" out
-+lvcreate -V2M -n thin2 $vg/pool
- lvcreate -L2M -n $lv1 $vg
--lvchange -an $vg/thin $vg/pool
-+lvchange -an $vg/thin $vg/thin2 $vg/pool
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 7508794..8e6ca10 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.128 - 
+ ===================================
++  Allocation setting cache_pool_cachemode is replaced by cache_mode.
+   Don't attempt to close config file that couldn't be opened.
+   Check for valid cache mode in validation of cache segment.
+   Change internal interface handling cache mode and policy.
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index bdf7e6c..399f748 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -472,7 +472,8 @@ cfg(allocation_cache_mode_CFG, "cache_mode", allocation_CFG_SECTION, CFG_PROFILA
+ 	"writethrough - Data blocks are immediately written from\n"
+ 	"the cache to disk.\n"
+ 	"writeback - Data blocks are written from the cache back\n"
+-	"to disk after some delay to improve performance.\n")
++	"to disk after some delay to improve performance.\n"
++	"This setting replaces allocation/cache_pool_cachemode.\n")
  
- # Prepare some fake metadata with unmatching id
- # Transaction_id is lower by 1 and there are no message -> ERROR
-@@ -77,7 +78,7 @@ grep expected out
- check inactive $vg pool_tmeta
- 
- # Transaction_id is higher by 1
--fake_metadata_ 10 2 >data
-+fake_metadata_ 10 3 >data
- "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
- lvconvert -y --thinpool $vg/pool --poolmetadata $vg/$lv1
- not vgchange -ay $vg 2>&1 | tee out
-@@ -86,7 +87,7 @@ grep expected out
- check inactive $vg pool_tmeta
- 
- # Prepare some fake metadata prefilled to ~81% (>70%)
--fake_metadata_ 400 1 >data
-+fake_metadata_ 400 2 >data
- "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
- 
- # Swap volume with restored fake metadata
+ cfg(allocation_cache_policy_CFG, "cache_policy", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, 0, vsn(2, 2, 128), NULL, 0, NULL,
+ 	"The default cache policy used for new cache volume.\n"
 
 
