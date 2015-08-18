@@ -1,39 +1,226 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 18 Aug 2015 13:01:39 +0000 (UTC)
-Subject: master - cleanup: add cast
-Message-ID: <20150818130139.2228661037@fedorahosted.org>
+Date: Tue, 18 Aug 2015 13:01:43 +0000 (UTC)
+Subject: master - cleanup: typo fix and drop \
+Message-ID: <20150818130143.6935B60E94@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d08a49790c180e10e8a6d35cbd43d7eb214bf30
-Commit:        3d08a49790c180e10e8a6d35cbd43d7eb214bf30
-Parent:        55a9262bdbc53acbd79035e904e7e00df8eec88b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=40af31729fc3400809e618b5cb5b2ff7c116b6f2
+Commit:        40af31729fc3400809e618b5cb5b2ff7c116b6f2
+Parent:        58f8f29c41ea77678875e8784bd991fb480e3132
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 18 12:39:17 2015 +0200
+AuthorDate:    Tue Aug 18 13:18:59 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Aug 18 15:00:08 2015 +0200
 
-cleanup: add cast
+cleanup: typo fix and drop \
 
+Fix 'th e'  and use % directly.
 ---
- tools/lvconvert.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/config/config_settings.h |  126 +++++++++++++++++++++---------------------
+ 1 files changed, 63 insertions(+), 63 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 36c4593..0897e09 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2002,7 +2002,7 @@ static int _lvconvert_uncache(struct cmd_context *cmd,
- 		return 0;
- 	}
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 8603ae6..1903e90 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -1521,131 +1521,131 @@ cfg(report_time_format_CFG, "time_format", report_CFG_SECTION, CFG_PROFILABLE |
+ 	"Format specification is a string which may contain special character\n"
+ 	"sequences and ordinary character sequences. Ordinary character\n"
+ 	"sequences are copied verbatim. Each special character sequence is\n"
+-	"introduced by th e\'%\' character and such sequence is then\n"
++	"introduced by the '%' character and such sequence is then\n"
+ 	"substituted with a value as described below.\n"
+ 	"#\n"
+ 	"Accepted values:\n"
+-	"  \%a\n"
++	"  %a\n"
+ 	"    The abbreviated name of the day of the week according to the\n"
+ 	"    current locale.\n"
+-	"  \%A\n"
++	"  %A\n"
+ 	"    The full name of the day of the week according to the current\n"
+ 	"    locale.\n"
+-	"  \%b\n"
++	"  %b\n"
+ 	"    The abbreviated month name according to the current locale.\n"
+-	"  \%B\n"
++	"  %B\n"
+ 	"    The full month name according to the current locale.\n"
+-	"  \%c\n"
++	"  %c\n"
+ 	"    The preferred date and time representation for the current\n"
+ 	"    locale (alt E)\n"
+-	"  \%C\n"
++	"  %C\n"
+ 	"    The century number (year/100) as a 2-digit integer. (alt E)\n"
+-	"  \%d\n"
++	"  %d\n"
+ 	"    The day of the month as a decimal number (range 01 to 31).\n"
+ 	"    (alt O)\n"
+-	"  \%D\n"
+-	"    Equivalent to \%m/\%d/\%y.  (For Americans only. Americans should\n"
+-	"    note that in other countries\%d/\%m/\%y is rather common. This\n"
++	"  %D\n"
++	"    Equivalent to %m/%d/%y.  (For Americans only. Americans should\n"
++	"    note that in other countries%d/%m/%y is rather common. This\n"
+ 	"    means that in international context this format is ambiguous and\n"
+ 	"    should not be used.\n"
+-	"  \%e\n"
+-	"    Like \%d, the day of the month as a decimal number, but a leading\n"
++	"  %e\n"
++	"    Like %d, the day of the month as a decimal number, but a leading\n"
+ 	"    zero is replaced by a space. (alt O)\n"
+-	"  \%E\n"
++	"  %E\n"
+ 	"    Modifier: use alternative local-dependent representation if\n"
+ 	"    available.\n"
+-	"  \%F\n"
+-	"    Equivalent to \%Y-\%m-\%d (the ISO 8601 date format).\n"
+-	"  \%G\n"
++	"  %F\n"
++	"    Equivalent to %Y-%m-%d (the ISO 8601 date format).\n"
++	"  %G\n"
+ 	"    The ISO 8601 week-based year with century as adecimal number.\n"
+-	"    The 4-digit year corresponding to the ISO week number (see \%V).\n"
+-	"    This has the same format and value as \%Y, except that if the\n"
++	"    The 4-digit year corresponding to the ISO week number (see %V).\n"
++	"    This has the same format and value as %Y, except that if the\n"
+ 	"    ISO week number belongs to the previous or next year, that year\n"
+ 	"    is used instead.\n"
+-	"  \%g\n"
+-	"    Like \%G, but without century, that is, with a 2-digit year\n"
++	"  %g\n"
++	"    Like %G, but without century, that is, with a 2-digit year\n"
+ 	"    (00-99).\n"
+-	"  \%h\n"
+-	"    Equivalent to \%b.\n"
+-	"  \%H\n"
++	"  %h\n"
++	"    Equivalent to %b.\n"
++	"  %H\n"
+ 	"    The hour as a decimal number using a 24-hour clock\n"
+ 	"    (range 00 to 23). (alt O)\n"
+-	"  \%I\n"
++	"  %I\n"
+ 	"    The hour as a decimal number using a 12-hour clock\n"
+ 	"    (range 01 to 12). (alt O)\n"
+-	"  \%j\n"
++	"  %j\n"
+ 	"    The day of the year as a decimal number (range 001 to 366).\n"
+-	"  \%k\n"
++	"  %k\n"
+ 	"    The hour (24-hour clock) as a decimal number (range 0 to 23);\n"
+-	"    single digits are preceded by a blank. (See also \%H.)\n"
+-	"  \%l\n"
++	"    single digits are preceded by a blank. (See also %H.)\n"
++	"  %l\n"
+ 	"    The hour (12-hour clock) as a decimal number (range 1 to 12);\n"
+-	"    single digits are preceded by a blank. (See also \%I.)\n"
+-	"  \%m\n"
++	"    single digits are preceded by a blank. (See also %I.)\n"
++	"  %m\n"
+ 	"    The month as a decimal number (range 01 to 12). (alt O)\n"
+-	"  \%M\n"
++	"  %M\n"
+ 	"    The minute as a decimal number (range 00 to 59). (alt O)\n"
+-	"  \%O\n"
++	"  %O\n"
+ 	"    Modifier: use alternative numeric symbols.\n"
+-	"  \%p\n"
++	"  %p\n"
+ 	"    Either \"AM\" or \"PM\" according to the given time value,\n"
+ 	"    or the corresponding strings for the current locale. Noon is\n"
+ 	"    treated as \"PM\" and midnight as \"AM\".\n"
+-	"  \%P\n"
+-	"    Like \%p but in lowercase: \"am\" or \"pm\" or a corresponding\n"
++	"  %P\n"
++	"    Like %p but in lowercase: \"am\" or \"pm\" or a corresponding\n"
+ 	"    string for the current locale.\n"
+-	"  \%r\n"
++	"  %r\n"
+ 	"    The time in a.m. or p.m. notation. In the POSIX locale this is\n"
+-	"    equivalent to \%I:\%M:\%S \%p.\n"
+-	"  \%R\n"
+-	"    The time in 24-hour notation (\%H:\%M). For a version including\n"
+-	"    the seconds, see \%T below.\n"
+-	"  \%s\n"
++	"    equivalent to %I:%M:%S %p.\n"
++	"  %R\n"
++	"    The time in 24-hour notation (%H:%M). For a version including\n"
++	"    the seconds, see %T below.\n"
++	"  %s\n"
+ 	"    The number of seconds since the Epoch,\n"
+ 	"    1970-01-01 00:00:00 +0000 (UTC)\n"
+-	"  \%S\n"
++	"  %S\n"
+ 	"    The second as a decimal number (range 00 to 60). (The range is\n"
+ 	"    up to 60 to allow for occasional leap seconds.) (alt O)\n"
+-	"  \%t\n"
++	"  %t\n"
+ 	"    A tab character.\n"
+-	"  \%T\n"
+-	"    The time in 24-hour notation (\%H:\%M:\%S).\n"
+-	"  \%u\n"
++	"  %T\n"
++	"    The time in 24-hour notation (%H:%M:%S).\n"
++	"  %u\n"
+ 	"    The day of the week as a decimal, range 1 to 7, Monday being 1.\n"
+-	"    See also \%w. (alt O)\n"
+-	"  \%U\n"
++	"    See also %w. (alt O)\n"
++	"  %U\n"
+ 	"    The week number of the current year as a decimal number,\n"
+ 	"    range 00 to 53, starting with the first Sunday as the first\n"
+-	"    day of week 01. See also \%V and \%W. (alt O)\n"
+-	"  \%V\n"
++	"    day of week 01. See also %V and %W. (alt O)\n"
++	"  %V\n"
+ 	"    The ISO 8601 week number of the current year as a decimal number,\n"
+ 	"    range 01 to 53, where week 1 is the first week that has at least\n"
+-	"    4 days in the new year. See also \%U and \%W. (alt O)\n"
+-	"  \%w\n"
++	"    4 days in the new year. See also %U and %W. (alt O)\n"
++	"  %w\n"
+ 	"    The day of the week as a decimal, range 0 to 6, Sunday being 0.\n"
+-	"    See also \%u. (alt O)\n"
+-	"  \%W\n"
++	"    See also %u. (alt O)\n"
++	"  %W\n"
+ 	"    The week number of the current year as a decimal number,\n"
+ 	"    range 00 to 53, starting with the first Monday as the first day\n"
+ 	"    of week 01. (alt O)\n"
+-	"  \%x\n"
++	"  %x\n"
+ 	"    The preferred date representation for the current locale without\n"
+ 	"    the time. (alt E)\n"
+-	"  \%X\n"
++	"  %X\n"
+ 	"    The preferred time representation for the current locale without\n"
+ 	"    the date. (alt E)\n"
+-	"  \%y\n"
++	"  %y\n"
+ 	"    The year as a decimal number without a century (range 00 to 99).\n"
+ 	"    (alt E, alt O)\n"
+-	"  \%Y\n"
++	"  %Y\n"
+ 	"    The year as a decimal number including the century. (alt E)\n"
+-	"  \%z\n"
++	"  %z\n"
+ 	"    The +hhmm or -hhmm numeric timezone (that is, the hour and minute\n"
+ 	"    offset from UTC).\n"
+-	"  \%Z\n"
++	"  %Z\n"
+ 	"    The timezone name or abbreviation.\n"
+-	"  \%\%\n"
+-	"    A literal '\%' character.\n"
++	"  %%\n"
++	"    A literal '%' character.\n"
+ 	"#\n")
  
--	if (!lv_remove_single(cmd, first_seg(lv)->pool_lv, lp->force, 0))
-+	if (!lv_remove_single(cmd, first_seg(lv)->pool_lv, (force_t) lp->force, 0))
- 		return_0;
- 
- 	log_print_unless_silent("Logical volume %s is not cached.", display_lvname(lv));
+ cfg(report_devtypes_sort_CFG, "devtypes_sort", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_DEVTYPES_SORT, vsn(2, 2, 101), NULL, 0, NULL,
 
 
