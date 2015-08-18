@@ -1,64 +1,78 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 18 Aug 2015 13:01:30 +0000 (UTC)
-Subject: master - lvmcache: check for too long pvid
-Message-ID: <20150818130130.902E260643@fedorahosted.org>
+Date: Tue, 18 Aug 2015 13:01:36 +0000 (UTC)
+Subject: master - cleanup: unused header files (Coverity)
+Message-ID: <20150818130136.EB75B60643@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=70db1d523db330cbdfc39163c30dc00cf16a1fdc
-Commit:        70db1d523db330cbdfc39163c30dc00cf16a1fdc
-Parent:        8e229cb7ea37ccab0e235e53d27adca9b32ffae0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=55a9262bdbc53acbd79035e904e7e00df8eec88b
+Commit:        55a9262bdbc53acbd79035e904e7e00df8eec88b
+Parent:        ba94d0f144844ff3fb15d0a2a87ccf7f27f550bc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 18 11:28:02 2015 +0200
+AuthorDate:    Tue Aug 18 12:31:20 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 18 14:53:36 2015 +0200
+CommitterDate: Tue Aug 18 15:00:08 2015 +0200
 
-lvmcache: check for too long pvid
+cleanup: unused header files (Coverity)
 
 ---
- lib/cache/lvmcache.c         |    7 ++++++-
- lib/format_text/text_label.c |    8 +++++---
- 2 files changed, 11 insertions(+), 4 deletions(-)
+ lib/config/config.c       |    1 -
+ lib/metadata/raid_manip.c |    1 -
+ lib/metadata/vg.c         |    1 -
+ libdm/libdm-stats.c       |    2 --
+ 4 files changed, 0 insertions(+), 5 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index cfa1d5f..530bcd3 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1178,7 +1178,12 @@ static int _lvmcache_update_pvid(struct lvmcache_info *info, const char *pvid)
- 		return 1;
- 	if (*info->dev->pvid)
- 		dm_hash_remove(_pvid_hash, info->dev->pvid);
--	strncpy(info->dev->pvid, pvid, sizeof(info->dev->pvid));
-+
-+	if (!dm_strncpy(info->dev->pvid, pvid, sizeof(info->dev->pvid))){
-+		log_error("_lvmcache_update: too long pvid: %s.", pvid);
-+		return 0;
-+	}
-+
- 	if (!dm_hash_insert(_pvid_hash, pvid, info)) {
- 		log_error("_lvmcache_update: pvid insertion failed: %s", pvid);
- 		return 0;
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 4ad2ccd..5835bc2 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -94,9 +94,11 @@ static int _text_write(struct label *label, void *buf)
- 	 * PV header base
- 	 */
- 	/* FIXME Move to where label is created */
--	strncpy(label->type, LVM2_LABEL, sizeof(label->type));
--
--	strncpy((char *)lh->type, label->type, sizeof(label->type));
-+	if (!dm_strncpy(label->type, LVM2_LABEL, sizeof(label->type)) ||
-+	    !dm_strncpy((char *)lh->type, label->type, sizeof(label->type))) {
-+		log_error(INTERNAL_ERROR "LVM2 label %s does not fit.", LVM2_LABEL);
-+		return 0;
-+	}
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 0c3cf92..ac1049d 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -23,7 +23,6 @@
+ #include "toolcontext.h"
+ #include "lvm-file.h"
+ #include "memlock.h"
+-#include "segtype.h"
  
- 	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
- 	info = (struct lvmcache_info *) label->info;
+ #include <sys/stat.h>
+ #include <sys/mman.h>
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index c574a14..8ecdc02 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -21,7 +21,6 @@
+ #include "activate.h"
+ #include "lv_alloc.h"
+ #include "lvm-string.h"
+-#include "lvmlockd.h"
+ 
+ static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
+ 				     struct logical_volume **tracking)
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index 0e5aee5..ca2bf96 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -20,7 +20,6 @@
+ #include "toolcontext.h"
+ #include "lvmcache.h"
+ #include "archiver.h"
+-#include "lvmlockd.h"
+ 
+ struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
+ 			      const char *vg_name)
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index f231016..4b4135a 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -13,8 +13,6 @@
+  */
+ 
+ #include "dmlib.h"
+-#include "libdm-targets.h"
+-#include "libdm-common.h"
+ 
+ #define DM_STATS_REGION_NOT_PRESENT UINT64_MAX
+ 
 
 
