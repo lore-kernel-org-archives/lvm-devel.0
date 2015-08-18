@@ -1,58 +1,67 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 18 Aug 2015 13:01:47 +0000 (UTC)
-Subject: master - cleanup: trace error from lvmcache_update_vgname_and_id
-Message-ID: <20150818130147.AAD9D60D19@fedorahosted.org>
+Date: Tue, 18 Aug 2015 13:23:27 +0000 (UTC)
+Subject: master - Revert "lvmcache: check for too long pvid"
+Message-ID: <20150818132327.13E0760048@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a8fd88463e662b769073e7b06d1a5acfd07fbc13
-Commit:        a8fd88463e662b769073e7b06d1a5acfd07fbc13
-Parent:        3a3e17d603698967e5febb84036923dc7e8da674
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=28b4fa3e270711e7f7ee45642b28a7c7127ea982
+Commit:        28b4fa3e270711e7f7ee45642b28a7c7127ea982
+Parent:        b19380998739b9971d27845a70a78511c2335cb0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 18 13:48:53 2015 +0200
+AuthorDate:    Tue Aug 18 15:21:48 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 18 15:00:08 2015 +0200
+CommitterDate: Tue Aug 18 15:22:13 2015 +0200
 
-cleanup: trace error from lvmcache_update_vgname_and_id
+Revert "lvmcache: check for too long pvid"
 
-Check result value from lvmcache_update_vgname_and_id().
+This reverts commit 70db1d523db330cbdfc39163c30dc00cf16a1fdc.
+Since we use 'strncpy' even for case where it exactly matches
+the buffer size and \0 is not expected to be added there.
 ---
- lib/format_text/format-text.c |    5 +++--
- lib/label/label.c             |    3 ++-
- 2 files changed, 5 insertions(+), 3 deletions(-)
+ lib/cache/lvmcache.c         |    7 +------
+ lib/format_text/text_label.c |    8 +++-----
+ 2 files changed, 4 insertions(+), 11 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 1d7dc3c..4544f26 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -453,8 +453,9 @@ static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
- 				   "not match expected name %s.", vgname);
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 530bcd3..cfa1d5f 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1178,12 +1178,7 @@ static int _lvmcache_update_pvid(struct lvmcache_info *info, const char *pvid)
+ 		return 1;
+ 	if (*info->dev->pvid)
+ 		dm_hash_remove(_pvid_hash, info->dev->pvid);
+-
+-	if (!dm_strncpy(info->dev->pvid, pvid, sizeof(info->dev->pvid))){
+-		log_error("_lvmcache_update: too long pvid: %s.", pvid);
+-		return 0;
+-	}
+-
++	strncpy(info->dev->pvid, pvid, sizeof(info->dev->pvid));
+ 	if (!dm_hash_insert(_pvid_hash, pvid, info)) {
+ 		log_error("_lvmcache_update: pvid insertion failed: %s", pvid);
+ 		return 0;
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index 5835bc2..4ad2ccd 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -94,11 +94,9 @@ static int _text_write(struct label *label, void *buf)
+ 	 * PV header base
+ 	 */
+ 	/* FIXME Move to where label is created */
+-	if (!dm_strncpy(label->type, LVM2_LABEL, sizeof(label->type)) ||
+-	    !dm_strncpy((char *)lh->type, label->type, sizeof(label->type))) {
+-		log_error(INTERNAL_ERROR "LVM2 label %s does not fit.", LVM2_LABEL);
+-		return 0;
+-	}
++	strncpy(label->type, LVM2_LABEL, sizeof(label->type));
++
++	strncpy((char *)lh->type, label->type, sizeof(label->type));
  
-       bad:
--	if ((info = lvmcache_info_from_pvid(dev_area->dev->pvid, 0)))
--		lvmcache_update_vgname_and_id(info, &vgsummary_orphan);
-+	if ((info = lvmcache_info_from_pvid(dev_area->dev->pvid, 0)) &&
-+	    !lvmcache_update_vgname_and_id(info, &vgsummary_orphan))
-+		stack;
- 
- 	return NULL;
- }
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 4510400..bc3c653 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -105,7 +105,8 @@ static void _update_lvmcache_orphan(struct lvmcache_info *info)
- 
-         memcpy(&vgsummary_orphan.vgid, lvmcache_fmt(info)->orphan_vg_name, strlen(lvmcache_fmt(info)->orphan_vg_name));
- 
--	lvmcache_update_vgname_and_id(info, &vgsummary_orphan);
-+	if (!lvmcache_update_vgname_and_id(info, &vgsummary_orphan))
-+		stack;
- }
- 
- static struct labeller *_find_labeller(struct device *dev, char *buf,
+ 	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
+ 	info = (struct lvmcache_info *) label->info;
 
 
