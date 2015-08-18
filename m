@@ -1,47 +1,64 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 18 Aug 2015 13:01:34 +0000 (UTC)
-Subject: master - libdm: simplify dmstats formula.
-Message-ID: <20150818130134.D2FEB60643@fedorahosted.org>
+Date: Tue, 18 Aug 2015 13:01:30 +0000 (UTC)
+Subject: master - lvmcache: check for too long pvid
+Message-ID: <20150818130130.902E260643@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba94d0f144844ff3fb15d0a2a87ccf7f27f550bc
-Commit:        ba94d0f144844ff3fb15d0a2a87ccf7f27f550bc
-Parent:        ae4db9f302701ccbde1409647a85f53feaa6e13b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=70db1d523db330cbdfc39163c30dc00cf16a1fdc
+Commit:        70db1d523db330cbdfc39163c30dc00cf16a1fdc
+Parent:        8e229cb7ea37ccab0e235e53d27adca9b32ffae0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 18 12:12:07 2015 +0200
+AuthorDate:    Tue Aug 18 11:28:02 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 18 15:00:08 2015 +0200
+CommitterDate: Tue Aug 18 14:53:36 2015 +0200
 
-libdm: simplify dmstats formula.
+lvmcache: check for too long pvid
 
-Since we check for stats for not being 0,
-simplify the operation and use a single division.
 ---
- libdm/libdm-stats.c |    7 +++----
- 1 files changed, 3 insertions(+), 4 deletions(-)
+ lib/cache/lvmcache.c         |    7 ++++++-
+ lib/format_text/text_label.c |    8 +++++---
+ 2 files changed, 11 insertions(+), 4 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index ba213b7..f231016 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -510,11 +510,10 @@ static uint64_t _nr_areas(uint64_t len, uint64_t step)
- 	/*
- 	 * drivers/md/dm-stats.c::message_stats_create()
- 	 * A region may be sub-divided into areas with their own counters.
--	 * If step is non-zero, divide len into that many areas, otherwise
--	 * treat the entire region as a single area. Any partial area at the
--	 * end of the region is treated as an additional complete area.
-+	 * Any partial area at the end of the region is treated as an
-+	 * additional complete area.
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index cfa1d5f..530bcd3 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1178,7 +1178,12 @@ static int _lvmcache_update_pvid(struct lvmcache_info *info, const char *pvid)
+ 		return 1;
+ 	if (*info->dev->pvid)
+ 		dm_hash_remove(_pvid_hash, info->dev->pvid);
+-	strncpy(info->dev->pvid, pvid, sizeof(info->dev->pvid));
++
++	if (!dm_strncpy(info->dev->pvid, pvid, sizeof(info->dev->pvid))){
++		log_error("_lvmcache_update: too long pvid: %s.", pvid);
++		return 0;
++	}
++
+ 	if (!dm_hash_insert(_pvid_hash, pvid, info)) {
+ 		log_error("_lvmcache_update: pvid insertion failed: %s", pvid);
+ 		return 0;
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index 4ad2ccd..5835bc2 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -94,9 +94,11 @@ static int _text_write(struct label *label, void *buf)
+ 	 * PV header base
  	 */
--	return (len / (step ? : len)) + !!(len % step);
-+	return (len + step - 1) / step;
- }
+ 	/* FIXME Move to where label is created */
+-	strncpy(label->type, LVM2_LABEL, sizeof(label->type));
+-
+-	strncpy((char *)lh->type, label->type, sizeof(label->type));
++	if (!dm_strncpy(label->type, LVM2_LABEL, sizeof(label->type)) ||
++	    !dm_strncpy((char *)lh->type, label->type, sizeof(label->type))) {
++		log_error(INTERNAL_ERROR "LVM2 label %s does not fit.", LVM2_LABEL);
++		return 0;
++	}
  
- static uint64_t _nr_areas_region(struct dm_stats_region *region)
+ 	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
+ 	info = (struct lvmcache_info *) label->info;
 
 
