@@ -1,78 +1,59 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 18 Aug 2015 13:01:36 +0000 (UTC)
-Subject: master - cleanup: unused header files (Coverity)
-Message-ID: <20150818130136.EB75B60643@fedorahosted.org>
+Date: Tue, 18 Aug 2015 13:01:41 +0000 (UTC)
+Subject: master - cleanup: add FMTssize_t
+Message-ID: <20150818130141.4551160C4A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=55a9262bdbc53acbd79035e904e7e00df8eec88b
-Commit:        55a9262bdbc53acbd79035e904e7e00df8eec88b
-Parent:        ba94d0f144844ff3fb15d0a2a87ccf7f27f550bc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=58f8f29c41ea77678875e8784bd991fb480e3132
+Commit:        58f8f29c41ea77678875e8784bd991fb480e3132
+Parent:        3d08a49790c180e10e8a6d35cbd43d7eb214bf30
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 18 12:31:20 2015 +0200
+AuthorDate:    Tue Aug 18 12:59:13 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Aug 18 15:00:08 2015 +0200
 
-cleanup: unused header files (Coverity)
+cleanup: add FMTssize_t
 
+Add define to print nicely ssize_t type.
 ---
- lib/config/config.c       |    1 -
- lib/metadata/raid_manip.c |    1 -
- lib/metadata/vg.c         |    1 -
- libdm/libdm-stats.c       |    2 --
- 4 files changed, 0 insertions(+), 5 deletions(-)
+ lib/misc/util.h |    2 ++
+ tools/dmsetup.c |    2 +-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 0c3cf92..ac1049d 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -23,7 +23,6 @@
- #include "toolcontext.h"
- #include "lvm-file.h"
- #include "memlock.h"
--#include "segtype.h"
+diff --git a/lib/misc/util.h b/lib/misc/util.h
+index 113ca69..52d9f2b 100644
+--- a/lib/misc/util.h
++++ b/lib/misc/util.h
+@@ -37,11 +37,13 @@
  
- #include <sys/stat.h>
- #include <sys/mman.h>
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index c574a14..8ecdc02 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -21,7 +21,6 @@
- #include "activate.h"
- #include "lv_alloc.h"
- #include "lvm-string.h"
--#include "lvmlockd.h"
+ /* Define some portable printing types */
+ #define PRIsize_t "zu"
++#define PRIssize_t "zd"
+ #define PRIptrdiff_t "td"
+ #define PRIpid_t PRId32
  
- static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
- 				     struct logical_volume **tracking)
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index 0e5aee5..ca2bf96 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -20,7 +20,6 @@
- #include "toolcontext.h"
- #include "lvmcache.h"
- #include "archiver.h"
--#include "lvmlockd.h"
+ /* For convenience */
+ #define FMTsize_t "%" PRIsize_t
++#define FMTssize_t "%" PRIssize_t
+ #define FMTptrdiff_t "%" PRIptrdiff_t
+ #define FMTpid_t "%" PRIpid_t
  
- struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
- 			      const char *vg_name)
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index f231016..4b4135a 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -13,8 +13,6 @@
-  */
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 8074395..b944402 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -590,7 +590,7 @@ static int _do_timerfd_wait(void)
  
- #include "dmlib.h"
--#include "libdm-targets.h"
--#include "libdm-common.h"
+ 	/* read(2) on a timerfd descriptor is guaranteed to return 8 bytes. */
+ 	if (bytes != 8)
+-		log_error("Unexepcted byte count on timerfd read: %d", bytes);
++		log_error("Unexpected byte count on timerfd read: " FMTssize_t, bytes);
  
- #define DM_STATS_REGION_NOT_PRESENT UINT64_MAX
- 
+ 	/* FIXME: attempt to rebase clock? */
+ 	if (expired > 1)
 
 
