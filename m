@@ -1,39 +1,57 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 18 Aug 2015 20:07:25 +0000 (UTC)
-Subject: master - tests: fix lockd options in sanlock-prepare
-Message-ID: <20150818200725.32161602E8@fedorahosted.org>
+Date: Tue, 18 Aug 2015 21:51:05 +0000 (UTC)
+Subject: master - lvmlockctl: fix debug output
+Message-ID: <20150818215105.7CE0561009@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c09dad71fb56710caa375404ef9974d72079422e
-Commit:        c09dad71fb56710caa375404ef9974d72079422e
-Parent:        d08427030dc68d827f7ad5be83b81063f613758c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c5a85ce249f6a076ac1623ad6ad8f29bdbbb199
+Commit:        9c5a85ce249f6a076ac1623ad6ad8f29bdbbb199
+Parent:        c09dad71fb56710caa375404ef9974d72079422e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 18 14:50:45 2015 -0500
+AuthorDate:    Tue Aug 18 16:49:33 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Aug 18 15:06:49 2015 -0500
+CommitterDate: Tue Aug 18 16:49:33 2015 -0500
 
-tests: fix lockd options in sanlock-prepare
+lvmlockctl: fix debug output
 
 ---
- test/shell/sanlock-prepare.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/lvmlockd/lvmlockctl.c |   11 +++++------
+ 1 files changed, 5 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/sanlock-prepare.sh b/test/shell/sanlock-prepare.sh
-index 289a481..401d6d7 100644
---- a/test/shell/sanlock-prepare.sh
-+++ b/test/shell/sanlock-prepare.sh
-@@ -80,7 +80,7 @@ echo "0 `blockdev --getsize $GL_LOOP` linear $GL_LOOP 0" | dmsetup create GL_DEV
+diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
+index 148077e..e2ad9c5 100644
+--- a/daemons/lvmlockd/lvmlockctl.c
++++ b/daemons/lvmlockd/lvmlockctl.c
+@@ -151,13 +151,12 @@ static void format_info_r(char *line, char *r_name_out, char *r_type_out)
+ 	sscanf(line, "info=r name=%s type=%s mode=%s %s version=%u",
+ 	       r_name, r_type, mode, sh_count, &ver);
  
- prepare_lvmlockd_sanlock
+-	/* when mode is not un, wait and print each lk line */
++	strcpy(r_name_out, r_name);
++	strcpy(r_type_out, r_type);
  
--vgcreate --config 'devices { global_filter=["a|GL_DEV|", "r|.*|"] filter=["a|GL_DEV|", "r|.*|"]}' --lock-type sanlock --lock-gl enable --lock-opt wait glvg $GL_DEV
-+vgcreate --config 'devices { global_filter=["a|GL_DEV|", "r|.*|"] filter=["a|GL_DEV|", "r|.*|"]}' --lock-type sanlock glvg $GL_DEV
+-	if (strcmp(mode, "un")) {
+-		strcpy(r_name_out, r_name);
+-		strcpy(r_type_out, r_type);
++	/* when mode is not un, wait and print each lk line */
++	if (strcmp(mode, "un"))
+ 		return;
+-	}
  
- vgs --config 'devices { global_filter=["a|GL_DEV|", "r|.*|"] filter=["a|GL_DEV|", "r|.*|"]}' -o+locktype,lockargs glvg
+ 	/* when mode is un, there will be no lk lines, so print now */
+ 
+@@ -229,7 +228,7 @@ static void format_info_r_action(char *line, char *r_name, char *r_type)
+ 	find_client_info(client_id, &pid, cl_name);
+ 
+ 	if (strcmp(op, "lock")) {
+-		printf("OP %s pid %u (%s)", op, pid, cl_name);
++		printf("OP %s pid %u (%s)\n", op, pid, cl_name);
+ 		return;
+ 	}
  
 
 
