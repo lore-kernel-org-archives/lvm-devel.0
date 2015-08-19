@@ -1,60 +1,42 @@
-From: Mathias Krause <mathias.krause@secunet.com>
-Date: Wed, 19 Aug 2015 15:42:18 +0200
-Subject: [PATCHv2] libdm: mark control fd as close-on-exec
-In-Reply-To: <1436945698-18193-1-git-send-email-mathias.krause@secunet.com>
-References: <1436945698-18193-1-git-send-email-mathias.krause@secunet.com>
-Message-ID: <55D487BA.6030504@secunet.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 19 Aug 2015 17:18:24 +0000 (UTC)
+Subject: master - lvmlockd: change log_error to log_debug for non error
+Message-ID: <20150819171824.73F8160528@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 15.07.2015 09:34, Mathias Krause wrote:
-> The control fd should be marked as close-on-exec to avoid file
-> descriptor leaks in forking applications executing other programs.
-> 
-> Signed-off-by: Mathias Krause <mathias.krause@secunet.com>
-> 
-> ---
-> v2: fix return value mix-up (should be 1 on success)
-> ---
->  libdm/ioctl/libdm-iface.c | 13 +++++++++++++
->  1 file changed, 13 insertions(+)
-> 
-> diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-> index e3b33b805e93..0f9e98a4a061 100644
-> --- a/libdm/ioctl/libdm-iface.c
-> +++ b/libdm/ioctl/libdm-iface.c
-> @@ -385,11 +385,24 @@ static void _close_control_fd(void)
->  #ifdef DM_IOCTLS
->  static int _open_and_assign_control_fd(const char *control)
->  {
-> +#ifdef O_CLOEXEC
-> +	/*
-> +	 * O_CLOEXEC is supported since v2.6.23, so this may fail on old
-> +	 * kernels. Nonetheless favour it to a two staged approach as it's
-> +	 * atomic.
-> +	 */
-> +	if ((_control_fd = open(control, O_RDWR | O_CLOEXEC)) >= 0)
-> +		return 1;
-> +#endif
-> +
->  	if ((_control_fd = open(control, O_RDWR)) < 0) {
->  		log_sys_error("open", control);
->  		return 0;
->  	}
->  
-> +	if (fcntl(_control_fd, F_SETFD, FD_CLOEXEC))
-> +		log_sys_error("fcntl", "setting FD_CLOEXEC");
-> +
->  	return 1;
->  }
->  #endif
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ce2e60ab45a5e275adb40380e3a9886a1c1e4ce7
+Commit:        ce2e60ab45a5e275adb40380e3a9886a1c1e4ce7
+Parent:        9c5a85ce249f6a076ac1623ad6ad8f29bdbbb199
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Aug 19 11:43:39 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Aug 19 11:43:39 2015 -0500
 
-Ping? Any objections to the patch?
+lvmlockd: change log_error to log_debug for non error
 
-Regards,
-Mathias
+It's not uncommon for a command like vgchange -an to
+deactivate and unlock LVs that were not active, so
+don't lock that as an error.
+---
+ daemons/lvmlockd/lvmlockd-core.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 86bb89b..dddae23 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -1283,7 +1283,7 @@ static int res_unlock(struct lockspace *ls, struct resource *r,
+ 	}
+ 
+ 	if (act->op != LD_OP_CLOSE)
+-		log_error("S %s R %s res_unlock no locks", ls->name, r->name);
++		log_debug("S %s R %s res_unlock no locks", ls->name, r->name);
+ 	return -ENOENT;
+ 
+ do_unlock:
 
 
