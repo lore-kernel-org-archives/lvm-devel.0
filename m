@@ -1,40 +1,60 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 12 Aug 2015 12:41:08 +0000 (UTC)
-Subject: master - config: support longer config paths
-Message-ID: <20150812124108.922DC6020B@fedorahosted.org>
+From: Mathias Krause <mathias.krause@secunet.com>
+Date: Wed, 19 Aug 2015 15:42:18 +0200
+Subject: [PATCHv2] libdm: mark control fd as close-on-exec
+In-Reply-To: <1436945698-18193-1-git-send-email-mathias.krause@secunet.com>
+References: <1436945698-18193-1-git-send-email-mathias.krause@secunet.com>
+Message-ID: <55D487BA.6030504@secunet.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=13c7bbf8a9ff2fad2718ba6cb627d7fcef766900
-Commit:        13c7bbf8a9ff2fad2718ba6cb627d7fcef766900
-Parent:        533ac4d47dcecc976c05ba503acff11b9546b67c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 23 14:21:35 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Aug 12 14:33:15 2015 +0200
+On 15.07.2015 09:34, Mathias Krause wrote:
+> The control fd should be marked as close-on-exec to avoid file
+> descriptor leaks in forking applications executing other programs.
+> 
+> Signed-off-by: Mathias Krause <mathias.krause@secunet.com>
+> 
+> ---
+> v2: fix return value mix-up (should be 1 on success)
+> ---
+>  libdm/ioctl/libdm-iface.c | 13 +++++++++++++
+>  1 file changed, 13 insertions(+)
+> 
+> diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+> index e3b33b805e93..0f9e98a4a061 100644
+> --- a/libdm/ioctl/libdm-iface.c
+> +++ b/libdm/ioctl/libdm-iface.c
+> @@ -385,11 +385,24 @@ static void _close_control_fd(void)
+>  #ifdef DM_IOCTLS
+>  static int _open_and_assign_control_fd(const char *control)
+>  {
+> +#ifdef O_CLOEXEC
+> +	/*
+> +	 * O_CLOEXEC is supported since v2.6.23, so this may fail on old
+> +	 * kernels. Nonetheless favour it to a two staged approach as it's
+> +	 * atomic.
+> +	 */
+> +	if ((_control_fd = open(control, O_RDWR | O_CLOEXEC)) >= 0)
+> +		return 1;
+> +#endif
+> +
+>  	if ((_control_fd = open(control, O_RDWR)) < 0) {
+>  		log_sys_error("open", control);
+>  		return 0;
+>  	}
+>  
+> +	if (fcntl(_control_fd, F_SETFD, FD_CLOEXEC))
+> +		log_sys_error("fcntl", "setting FD_CLOEXEC");
+> +
+>  	return 1;
+>  }
+>  #endif
 
-config: support longer config paths
+Ping? Any objections to the patch?
 
-64 bytes might not be enough, so use larger buffer size.
----
- lib/config/config.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/lib/config/config.h b/lib/config/config.h
-index fb39e6e..e112223 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -50,7 +50,7 @@ struct profile_params {
- 	struct dm_list profiles;                 /* list of profiles which are loaded already and which are ready for use */
- };
- 
--#define CFG_PATH_MAX_LEN 64
-+#define CFG_PATH_MAX_LEN 128
- 
- /*
-  * Structures used for definition of a configuration tree.
+Regards,
+Mathias
 
 
