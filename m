@@ -1,41 +1,56 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 12 Aug 2015 12:41:10 +0000 (UTC)
-Subject: master - config: extend definition for Allocation
-Message-ID: <20150812124110.A0DD760A52@fedorahosted.org>
+From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
+Date: Thu, 20 Aug 2015 17:07:14 +0000 (UTC)
+Subject: master - cmirrord: avoid resync buffer overflow in LOG_SPRINT
+Message-ID: <20150820170714.ACA1760960@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9edd2258ffc7ae7593a6e193760861090d0fb273
-Commit:        9edd2258ffc7ae7593a6e193760861090d0fb273
-Parent:        13c7bbf8a9ff2fad2718ba6cb627d7fcef766900
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 23 14:20:29 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Aug 12 14:33:15 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5476ee865597e7f2fcc189412aaaccdc15cc3db9
+Commit:        5476ee865597e7f2fcc189412aaaccdc15cc3db9
+Parent:        3c396cf1e1efd179c37ddd71a144deab4b9b806c
+Author:        Ferenc W??gner <wferi@niif.hu>
+AuthorDate:    Wed Jul 8 14:41:27 2015 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Aug 20 19:06:47 2015 +0200
 
-config: extend definition for Allocation
+cmirrord: avoid resync buffer overflow in LOG_SPRINT
 
-Extend comment for this section.
+Use snprintf() instead of sprintf() to exclude the possibility of
+overflowing the resync history buffers.
 ---
- lib/config/config_settings.h |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/cmirrord/functions.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index c8461f7..c2bef27 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -122,7 +122,8 @@ cfg_section(devices_CFG_SECTION, "devices", root_CFG_SECTION, 0, vsn(1, 0, 0), 0
- 	"How LVM uses block devices.\n")
+diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
+index f6e0918..61b3e11 100644
+--- a/daemons/cmirrord/functions.c
++++ b/daemons/cmirrord/functions.c
+@@ -32,12 +32,13 @@
+ #define LOG_OFFSET 2
  
- cfg_section(allocation_CFG_SECTION, "allocation", root_CFG_SECTION, CFG_PROFILABLE, vsn(2, 2, 77), 0, NULL,
--	"How LVM selects free space for Logical Volumes.\n")
-+	"How LVM selects free space for Logical Volumes and default\n"
-+	"properties applied to new Logical Volumes of various types.\n")
+ #define RESYNC_HISTORY 50
++#define RESYNC_BUFLEN 128
+ //static char resync_history[RESYNC_HISTORY][128];
+ //static int idx = 0;
+ #define LOG_SPRINT(_lc, f, arg...) do {					\
+ 		lc->idx++;						\
+ 		lc->idx = lc->idx % RESYNC_HISTORY;			\
+-		sprintf(lc->resync_history[lc->idx], f, ## arg);	\
++		snprintf(lc->resync_history[lc->idx], RESYNC_BUFLEN, f, ## arg); \
+ 	} while (0)
  
- cfg_section(log_CFG_SECTION, "log", root_CFG_SECTION, 0, vsn(1, 0, 0), 0, NULL,
- 	"How LVM log information is reported.\n")
+ struct log_header {
+@@ -88,7 +89,7 @@ struct log_c {
+ 	size_t disk_size;       /* size of disk_buffer in bytes */
+ 	void *disk_buffer;      /* aligned memory for O_DIRECT */
+ 	int idx;
+-	char resync_history[RESYNC_HISTORY][128];
++	char resync_history[RESYNC_HISTORY][RESYNC_BUFLEN];
+ };
+ 
+ struct mark_entry {
 
 
