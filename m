@@ -1,70 +1,85 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 19 Aug 2015 17:18:26 +0000 (UTC)
-Subject: master - lvmlockd: ignore cmd close if no locks were taken
-Message-ID: <20150819171826.9342860528@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Thu, 20 Aug 2015 16:28:48 +0000 (UTC)
+Subject: master - libdm: add dm_message_supports_precise_timestamps()
+Message-ID: <20150820162848.F2668602B4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=62a87c84edc12788a088b3cc7dc5a35a18951f38
-Commit:        62a87c84edc12788a088b3cc7dc5a35a18951f38
-Parent:        ce2e60ab45a5e275adb40380e3a9886a1c1e4ce7
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 19 12:16:04 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Aug 19 12:16:04 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=386e91addbaffcaae20f4f20084cb06b7374e402
+Commit:        386e91addbaffcaae20f4f20084cb06b7374e402
+Parent:        62a87c84edc12788a088b3cc7dc5a35a18951f38
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Tue Aug 18 16:37:03 2015 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Thu Aug 20 12:11:23 2015 +0100
 
-lvmlockd: ignore cmd close if no locks were taken
+libdm: add dm_message_supports_precise_timestamps()
 
-When a command closes its connection, don't waste
-time looking for locks to purge if it did not make
-any lock requests.
+Add a function to test whether the kernel precise_timestamps
+feature is available in the current device-mapper driver version.
+
+Presence of precise_timestamps also implies the availability of
+latency histograms.
 ---
- daemons/lvmlockd/lvmlockd-core.c     |   10 ++++++++++
- daemons/lvmlockd/lvmlockd-internal.h |    1 +
- 2 files changed, 11 insertions(+), 0 deletions(-)
+ libdm/.exported_symbols.DM_1_02_106 |    1 +
+ libdm/ioctl/libdm-iface.c           |   14 ++++++++++++++
+ libdm/libdevmapper.h                |    9 +++++++++
+ 3 files changed, 24 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index dddae23..666f340 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -3529,6 +3529,13 @@ static void client_purge(struct client *cl)
- 	struct lockspace *ls;
- 	struct action *act;
+diff --git a/libdm/.exported_symbols.DM_1_02_106 b/libdm/.exported_symbols.DM_1_02_106
+new file mode 100644
+index 0000000..0ce8924
+--- /dev/null
++++ b/libdm/.exported_symbols.DM_1_02_106
+@@ -0,0 +1 @@
++dm_message_supports_precise_timestamps
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 73af12b..fe0bffa 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -604,6 +604,20 @@ static int dm_inactive_supported(void)
+ 	return inactive_supported;
+ }
  
++int dm_message_supports_precise_timestamps(void)
++{
 +	/*
-+	 * If the client made no lock requests, there can be
-+	 * no locks to release for it.
++	 * 4.32.0 supports "precise_timestamps" and "histogram:" options
++	 * to @stats_create messages but lacks the ability to report
++	 * these properties via a subsequent @stats_list: require at
++	 * least 4.33.0 in order to use these features.
 +	 */
-+	if (!cl->lock_ops)
-+		return;
++	if (dm_check_version() && _dm_version >= 4)
++		if (_dm_version_minor >= 33)
++			return 1;
++	return 0;
++}
 +
- 	pthread_mutex_lock(&lockspaces_mutex);
- 	list_for_each_entry(ls, &lockspaces, list) {
- 		if (!(act = alloc_action()))
-@@ -4345,6 +4352,9 @@ static void client_recv_action(struct client *cl)
- 		goto out;
- 	}
+ void *dm_get_next_target(struct dm_task *dmt, void *next,
+ 			 uint64_t *start, uint64_t *length,
+ 			 char **target_type, char **params)
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index af08ba3..2be2ce3 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -464,6 +464,15 @@ int dm_stats_bind_name(struct dm_stats *dms, const char *name);
+  */
+ int dm_stats_bind_uuid(struct dm_stats *dms, const char *uuid);
  
-+	if (act->op == LD_OP_LOCK && act->mode != LD_LK_UN)
-+		cl->lock_ops = 1;
++/*
++ * Test whether the running kernel supports the precise_timestamps
++ * feature. Presence of this feature also implies histogram support.
++ * The library will check this call internally and fails any attempt
++ * to use nanosecond counters or histograms on kernels that fail to
++ * meet this check.
++ */
++int dm_message_supports_precise_timestamps(void);
 +
- 	switch (act->op) {
- 	case LD_OP_START:
- 		rv = add_lockspace(act);
-diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
-index a1f74a7..8e0582b 100644
---- a/daemons/lvmlockd/lvmlockd-internal.h
-+++ b/daemons/lvmlockd/lvmlockd-internal.h
-@@ -85,6 +85,7 @@ struct client {
- 	unsigned int recv : 1;
- 	unsigned int dead : 1;
- 	unsigned int poll_ignore : 1;
-+	unsigned int lock_ops : 1;
- 	char name[MAX_NAME+1];
- };
- 
+ #define DM_STATS_ALL_PROGRAMS ""
+ /*
+  * Parse the response from a @stats_list message. dm_stats_list will
 
 
