@@ -1,76 +1,60 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 12 Aug 2015 12:41:12 +0000 (UTC)
-Subject: master - libdm: cache target arg validation
-Message-ID: <20150812124112.BCF8660072@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Fri, 21 Aug 2015 20:27:12 +0000 (UTC)
+Subject: master - tests: add lib function to test hidden LVs with lvs -a
+Message-ID: <20150821202712.AC07560DAA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08f047eb51375f6b96b0612e766cc9e0edae6ca0
-Commit:        08f047eb51375f6b96b0612e766cc9e0edae6ca0
-Parent:        9edd2258ffc7ae7593a6e193760861090d0fb273
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 11 13:31:26 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Aug 12 14:33:15 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e53758c5f6074f920325afe0a01616f7c663f766
+Commit:        e53758c5f6074f920325afe0a01616f7c663f766
+Parent:        1f27c9f6a44cb893b6653641b35295e129531bf8
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Aug 21 15:06:00 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Aug 21 15:09:38 2015 -0500
 
-libdm: cache target arg validation
+tests: add lib function to test hidden LVs with lvs -a
 
-Add some arg validation for dm_tree_node_add_cache_target().
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |   26 ++++++++++++++++++++++++++
- 2 files changed, 27 insertions(+), 0 deletions(-)
+ test/lib/check.sh |    6 ++++++
+ test/lib/get.sh   |    5 +++++
+ 2 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index e857241..a72d3e0 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.105 - 
- ===================================
-+  Add more arg validation for dm_tree_node_add_cache_target().
+diff --git a/test/lib/check.sh b/test/lib/check.sh
+index a6a9b38..9d48851 100644
+--- a/test/lib/check.sh
++++ b/test/lib/check.sh
+@@ -308,6 +308,12 @@ lv_field() {
+ 		die "lv_field: lv=$1, field=\"$2\", actual=\"$actual\", expected=\"$3\""
+ }
  
- Version 1.02.104 - 10th August 2015
- ===================================
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 36befff..bbbd2d8 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -3358,6 +3358,32 @@ int dm_tree_node_add_cache_target(struct dm_tree_node *node,
- 	struct dm_config_node *cn;
- 	struct load_segment *seg;
++lva_field() {
++	local actual=$(get lva_field "$1" "$2" "${@:4}")
++	test "$actual" = "$3" || \
++		die "lva_field: lv=$1, field=\"$2\", actual=\"$actual\", expected=\"$3\""
++}
++
+ lv_attr_bit() {
+ 	local actual=$(get lv_field "$2" lv_attr "${@:4}")
+ 	local offset=$1
+diff --git a/test/lib/get.sh b/test/lib/get.sh
+index ef1ddc4..1b432c6 100644
+--- a/test/lib/get.sh
++++ b/test/lib/get.sh
+@@ -42,6 +42,11 @@ lv_field() {
+ 	trim_ "$r"
+ }
  
-+	switch (feature_flags &
-+		(DM_CACHE_FEATURE_PASSTHROUGH |
-+		 DM_CACHE_FEATURE_WRITETHROUGH |
-+		 DM_CACHE_FEATURE_WRITEBACK)) {
-+		 case DM_CACHE_FEATURE_PASSTHROUGH:
-+		 case DM_CACHE_FEATURE_WRITETHROUGH:
-+		 case DM_CACHE_FEATURE_WRITEBACK:
-+			 break;
-+		 default:
-+			 log_error("Invalid cache's feature flag " FMTu64 ".",
-+				   feature_flags);
-+			 return 0;
-+	}
++lva_field() {
++	local r=$(lvs -a --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
++	trim_ "$r"
++}
 +
-+	if (data_block_size < DM_CACHE_MIN_DATA_BLOCK_SIZE) {
-+		log_error("Data block size %u is lower then %u sectors.",
-+			  data_block_size, DM_CACHE_MIN_DATA_BLOCK_SIZE);
-+		return 0;
-+	}
-+
-+	if (data_block_size > DM_CACHE_MAX_DATA_BLOCK_SIZE) {
-+		log_error("Data block size %u is higher then %u sectors.",
-+			  data_block_size, DM_CACHE_MAX_DATA_BLOCK_SIZE);
-+		return 0;
-+	}
-+
- 	if (!(seg = _add_segment(node, SEG_CACHE, size)))
- 		return_0;
- 
+ lv_devices() {
+ 	lv_field "$1" devices -a "${@:2}" | sed 's/([^)]*)//g; s/,/\n/g'
+ }
 
 
