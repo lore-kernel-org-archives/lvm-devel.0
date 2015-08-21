@@ -1,53 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 21 Aug 2015 13:36:17 +0000 (UTC)
-Subject: master - man: fix sqm typo
-Message-ID: <20150821133617.D293760DC5@fedorahosted.org>
+Date: Fri, 21 Aug 2015 13:36:19 +0000 (UTC)
+Subject: master - cleanup: add .
+Message-ID: <20150821133619.EF22860DC5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c868609cff48597db50ac5bb98ecba0ecc828dbd
-Commit:        c868609cff48597db50ac5bb98ecba0ecc828dbd
-Parent:        e4b9ac46d74e2783d4a27ceffc49d7f97fe4409f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6d9e7d48fb34010f0e1447e99a92193b153acdc3
+Commit:        6d9e7d48fb34010f0e1447e99a92193b153acdc3
+Parent:        c868609cff48597db50ac5bb98ecba0ecc828dbd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 21 11:06:18 2015 +0200
+AuthorDate:    Thu Aug 20 15:09:23 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 21 15:35:45 2015 +0200
 
-man: fix sqm typo
+cleanup: add .
 
 ---
- man/lvconvert.8.in |    2 +-
- man/lvcreate.8.in  |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
-index 562de1e..c2ee2b2 100644
---- a/man/lvconvert.8.in
-+++ b/man/lvconvert.8.in
-@@ -228,7 +228,7 @@ For more information on cache pool LVs and cache LVs, see \fBlvmcache\fP(7).
- .TP
- .B \-\-cachepolicy \fIpolicy
- Only applicable to cached LVs; see also \fBlvmcache(7)\fP. Sets
--the cache policy. \fImq\fP is the basic policy name. \fIsqm\fP is more advanced
-+the cache policy. \fImq\fP is the basic policy name. \fIsmq\fP is more advanced
- version available in newer kernels.
- .TP
- .BR \-\-cachepool " " \fICachePoolLV
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index 5f922b4..ee10392 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -200,7 +200,7 @@ cache pool LV.
- .TP
- .B \-\-cachepolicy \fIpolicy
- Only applicable to cached LVs; see also \fBlvmcache(7)\fP. Sets
--the cache policy. \fImq\fP is the basic policy name. \fIsqm\fP is more advanced
-+the cache policy. \fImq\fP is the basic policy name. \fIsmq\fP is more advanced
- version available in newer kernels.
- .TP
- .IR \fB\-\-cachepool " " CachePoolLogicalVolume { Name | Path }
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 5630234..88c516b 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5327,7 +5327,7 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 		}
+ 	}
+ 
+-	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
++	log_print_unless_silent("Logical volume %s successfully resized.", lp->lv_name);
+ 
+ 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
+ 	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL))
 
 
