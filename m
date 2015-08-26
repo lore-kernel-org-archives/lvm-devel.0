@@ -1,39 +1,43 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue, 25 Aug 2015 18:06:17 +0000 (UTC)
-Subject: master - makefiles: remove stray ')'
-Message-ID: <20150825180617.761DA6031C@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 26 Aug 2015 09:29:18 +0000 (UTC)
+Subject: master - cache: no report error for cpool without mode
+Message-ID: <20150826092918.1533261188@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8c09f12943a8136079360a05bc0afc120cfc7674
-Commit:        8c09f12943a8136079360a05bc0afc120cfc7674
-Parent:        19ef3e0f31f375be72da875a5e6beb5d10af44df
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Tue Aug 25 19:05:45 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Tue Aug 25 19:05:45 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cbe81ad3932417ffaf89cbd924bd6d1ce1c7f199
+Commit:        cbe81ad3932417ffaf89cbd924bd6d1ce1c7f199
+Parent:        8c09f12943a8136079360a05bc0afc120cfc7674
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Aug 25 14:47:07 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Aug 26 10:49:23 2015 +0200
 
-makefiles: remove stray ')'
+cache: no report error for cpool without mode
 
+It's perferctly valid to not have cachemode for
+unused cache-pool.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1255184
 ---
- make.tmpl.in |    2 +-
+ lib/report/report.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 3e39a3a..dbc839a 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -502,7 +502,7 @@ else
- 	set -e;\
- 	R=$$(sort $^ | uniq -u);\
- 	test -z "$$R" || { echo "Mismatch between symbols in shared library and lists in .exported_symbols.* files: $$R"; false; } ;\
--	for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | sort -rnt_ -k5 )); do\
-+	for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | sort -rnt_ -k5 ); do\
- 		echo "$${i##*.} {"; echo "	global:";\
- 		$(SED) "s/^/		/;s/$$/;/" $$i;\
- 		test "$$i" = Base && { echo "	local:"; echo "		*;"; };\
+diff --git a/lib/report/report.c b/lib/report/report.c
+index a17af32..1885f45 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -2078,7 +2078,7 @@ static int _cachemode_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	if (seg_is_cache(seg))
+ 		seg = first_seg(seg->pool_lv);
+ 
+-	if (seg_is_cache_pool(seg)) {
++	if (seg_is_cache_pool(seg) && cache_mode_is_set(seg)) {
+ 		if (!(cachemode_str = get_cache_mode_name(seg)))
+ 			return_0;
+ 
 
 
