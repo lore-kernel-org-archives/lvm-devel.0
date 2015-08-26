@@ -1,105 +1,260 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 26 Aug 2015 20:52:40 +0000 (UTC)
-Subject: master - lvmlockd: fix to work around dlm lvb bug
-Message-ID: <20150826205240.CEF1460F47@fedorahosted.org>
+Date: Wed, 26 Aug 2015 20:52:43 +0000 (UTC)
+Subject: master - lvmlockd: improve VG removal for lock_type dlm
+Message-ID: <20150826205243.0345560F47@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c8fc4b842223c96ed2a1b77ad774871dd34a2e2
-Commit:        7c8fc4b842223c96ed2a1b77ad774871dd34a2e2
-Parent:        d56ae01ebc0100af4caecd45c58f6e36f10bb173
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c58f4892f606aafb3828c8c0d2738ed8b6407577
+Commit:        c58f4892f606aafb3828c8c0d2738ed8b6407577
+Parent:        7c8fc4b842223c96ed2a1b77ad774871dd34a2e2
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 25 16:10:12 2015 -0500
+AuthorDate:    Wed Aug 26 10:01:05 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Aug 26 15:26:09 2015 -0500
+CommitterDate: Wed Aug 26 15:27:22 2015 -0500
 
-lvmlockd: fix to work around dlm lvb bug
+lvmlockd: improve VG removal for lock_type dlm
 
-Work around a dlm bug that fails to copy lvb
-on a NL->EX conversion.
+This makes lvmlockd removal steps for dlm VGs closely match
+sanlock VGs.  Because dlm lockspaces are not required to be
+stopped on all hosts before vgremove, there is an extra bit
+for dlm lockspaces, where a flag is set in the VG lock lvb
+indicating that the VG was removed.  If other hosts happen
+to use the VG lock they will see this flag and stop their
+lockspace.
 ---
- daemons/lvmlockd/lvmlockd-dlm.c |   35 +++++++++++++++++++++++++++++++++--
- 1 files changed, 33 insertions(+), 2 deletions(-)
+ daemons/lvmlockd/lvmlockd-client.h   |    1 +
+ daemons/lvmlockd/lvmlockd-core.c     |    7 +++-
+ daemons/lvmlockd/lvmlockd-dlm.c      |   25 ++++++++++++----
+ daemons/lvmlockd/lvmlockd-internal.h |    4 ++
+ lib/locking/lvmlockd.c               |   51 ++++++++++++++++++++++++---------
+ 5 files changed, 66 insertions(+), 22 deletions(-)
 
+diff --git a/daemons/lvmlockd/lvmlockd-client.h b/daemons/lvmlockd/lvmlockd-client.h
+index 0a1424f..67fcbe3 100644
+--- a/daemons/lvmlockd/lvmlockd-client.h
++++ b/daemons/lvmlockd/lvmlockd-client.h
+@@ -47,5 +47,6 @@ static inline void lvmlockd_close(daemon_handle h)
+ #define ELOCKD    216
+ #define EVGKILLED 217 /* sanlock lost access to leases and VG is killed. */
+ #define ELOCKIO   218 /* sanlock io errors during lock op, may be transient. */
++#define EREMOVED  219
+ 
+ #endif	/* _LVM_LVMLOCKD_CLIENT_H */
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index b99cb0b..3d41bd2 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -1763,7 +1763,7 @@ static void res_process(struct lockspace *ls, struct resource *r,
+ 				list_del(&act->list);
+ 				add_client_result(act);
+ 			}
+-			if (rv == -EUNATCH)
++			if (rv == -EUNATCH || rv == -EREMOVED)
+ 				goto r_free;
+ 		}
+ 	}
+@@ -1796,7 +1796,7 @@ static void res_process(struct lockspace *ls, struct resource *r,
+ 				list_del(&act->list);
+ 				add_client_result(act);
+ 			}
+-			if (rv == -EUNATCH)
++			if (rv == -EUNATCH || rv == -EREMOVED)
+ 				goto r_free;
+ 			break;
+ 		}
+@@ -1817,6 +1817,9 @@ r_free:
+ 	lm_rem_resource(ls, r);
+ 	list_del(&r->list);
+ 	free_resource(r);
++
++	if (rv == -EREMOVED)
++		ls->thread_stop = 1;
+ }
+ 
+ #define LOCKS_EXIST_ANY 1
 diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index 1d7cfe6..e242685 100644
+index e242685..676c944 100644
 --- a/daemons/lvmlockd/lvmlockd-dlm.c
 +++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -67,6 +67,8 @@ int lm_data_size_dlm(void)
- #define VG_LOCK_ARGS_MINOR 0
- #define VG_LOCK_ARGS_PATCH 0
- 
-+static int dlm_has_lvb_bug;
-+
- static int cluster_name_from_args(char *vg_args, char *clustername)
- {
- 	return last_string_from_args(vg_args, clustername);
-@@ -160,6 +162,7 @@ int lm_prepare_lockspace_dlm(struct lockspace *ls)
- {
- 	char sys_clustername[MAX_ARGS+1];
- 	char arg_clustername[MAX_ARGS+1];
-+	uint32_t major = 0, minor = 0, patch = 0;
- 	struct lm_dlm *lmd;
+@@ -443,6 +443,7 @@ int lm_lock_dlm(struct lockspace *ls, struct resource *r, int ld_mode,
+ 	struct val_blk vb;
+ 	uint32_t flags = 0;
+ 	uint16_t vb_version;
++	uint16_t vb_flags;
+ 	int mode;
  	int rv;
  
-@@ -170,6 +173,17 @@ int lm_prepare_lockspace_dlm(struct lockspace *ls)
- 	if (rv < 0)
- 		return -EMANAGER;
+@@ -522,6 +523,7 @@ lockrv:
  
-+	rv = dlm_kernel_version(&major, &minor, &patch);
-+	if (rv < 0) {
-+		log_error("prepare_lockspace_dlm kernel_version not detected %d", rv);
-+		dlm_has_lvb_bug = 1;
-+	}
-+
-+	if ((major == 6) && (minor == 0) && (patch == 1)) {
-+		log_debug("dlm kernel version %u.%u.%u has lvb bug", major, minor, patch);
-+		dlm_has_lvb_bug = 1;
-+	}
-+
- 	if (!ls->vg_args[0]) {
- 		/* global lockspace has no vg args */
- 		goto skip_args;
-@@ -468,9 +482,27 @@ int lm_lock_dlm(struct lockspace *ls, struct resource *r, int ld_mode,
- 		return 0;
- 	}
+ 		memcpy(&vb, lksb->sb_lvbptr, sizeof(struct val_blk));
+ 		vb_version = le16_to_cpu(vb.version);
++		vb_flags = le16_to_cpu(vb.flags);
  
-+	/*
-+	 * The dlm lvb bug means that converting NL->EX will not return 
-+	 * the latest lvb, so we have to convert NL->PR->EX to reread it.
-+	 */
-+	if (dlm_has_lvb_bug && (ld_mode == LD_LK_EX)) {
-+		rv = dlm_ls_lock_wait(lmd->dh, LKM_PRMODE, lksb, flags,
-+				      r->name, strlen(r->name),
-+				      0, NULL, NULL, NULL);
-+		if (rv == -1) {
-+			log_debug("S %s R %s lock_dlm acquire mode PR for %d rv %d",
-+				  ls->name, r->name, mode, rv);
-+			goto lockrv;
+ 		if (vb_version && ((vb_version & 0xFF00) > (VAL_BLK_VERSION & 0xFF00))) {
+ 			log_error("S %s R %s lock_dlm ignore vb_version %x",
+@@ -536,8 +538,14 @@ lockrv:
+ 		*r_version = le32_to_cpu(vb.r_version);
+ 		memcpy(rdd->vb, &vb, sizeof(vb)); /* rdd->vb saved as le */
+ 
+-		log_debug("S %s R %s lock_dlm get r_version %u",
+-			  ls->name, r->name, *r_version);
++		log_debug("S %s R %s lock_dlm get r_version %u flags %x",
++			  ls->name, r->name, *r_version, vb_flags);
++
++		if (vb_flags & VBF_REMOVED) {
++			log_debug("S %s R %s lock_dlm VG has been removed",
++				  ls->name, r->name);
++			return -EREMOVED;
 +		}
-+
-+		/* Fall through to request EX. */
-+	}
-+
- 	rv = dlm_ls_lock_wait(lmd->dh, mode, lksb, flags,
- 			      r->name, strlen(r->name),
- 			      0, NULL, NULL, NULL);
-+lockrv:
- 	if (rv == -1 && errno == EAGAIN) {
- 		log_debug("S %s R %s lock_dlm acquire mode %d rv EAGAIN", ls->name, r->name, mode);
- 		return -EAGAIN;
-@@ -584,8 +616,7 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
+ 	}
+ out:
+ 	return 0;
+@@ -593,7 +601,7 @@ int lm_convert_dlm(struct lockspace *ls, struct resource *r,
+ }
+ 
+ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
+-		  uint32_t r_version, uint32_t lmuf_flags)
++		  uint32_t r_version, uint32_t lmu_flags)
+ {
+ 	struct lm_dlm *lmd = (struct lm_dlm *)ls->lm_data;
+ 	struct rd_dlm *rdd = (struct rd_dlm *)r->lm_data;
+@@ -602,7 +610,7 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
+ 	int rv;
+ 
+ 	log_debug("S %s R %s unlock_dlm r_version %u flags %x",
+-		  ls->name, r->name, r_version, lmuf_flags);
++		  ls->name, r->name, r_version, lmu_flags);
+ 
+ 	/*
+ 	 * Do not set PERSISTENT, because we don't need an orphan
+@@ -611,12 +619,17 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
+ 
+ 	flags |= LKF_CONVERT;
+ 
+-	if (rdd->vb && r_version && (r->mode == LD_LK_EX)) {
++	if (rdd->vb && (r->mode == LD_LK_EX)) {
+ 		if (!rdd->vb->version) {
  			/* first time vb has been written */
  			rdd->vb->version = cpu_to_le16(VAL_BLK_VERSION);
  		}
--		if (r_version)
--			rdd->vb->r_version = cpu_to_le32(r_version);
-+		rdd->vb->r_version = cpu_to_le32(r_version);
+-		rdd->vb->r_version = cpu_to_le32(r_version);
++		if (r_version)
++			rdd->vb->r_version = cpu_to_le32(r_version);
++
++		if ((lmu_flags & LMUF_FREE_VG) && (r->type == LD_RT_VG))
++			rdd->vb->flags = cpu_to_le16(VBF_REMOVED);
++
  		memcpy(lksb->sb_lvbptr, rdd->vb, sizeof(struct val_blk));
  
  		log_debug("S %s R %s unlock_dlm set r_version %u",
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index 8e0582b..46ae67f 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -194,8 +194,12 @@ struct lockspace {
+ 	struct list_head resources;	/* resource/lock state for gl/vg/lv */
+ };
+ 
++/* val_blk version */
+ #define VAL_BLK_VERSION 0x0101
+ 
++/* val_blk flags */
++#define VBF_REMOVED 0x0001
++
+ struct val_blk {
+ 	uint16_t version;
+ 	uint16_t flags;
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 3f73cf3..e647c96 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -694,7 +694,8 @@ out:
+ 
+ static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
+ {
+-	uint32_t lockd_flags;
++	daemon_reply reply;
++	uint32_t lockd_flags = 0;
+ 	int result;
+ 	int ret;
+ 
+@@ -704,23 +705,31 @@ static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
+ 		return 0;
+ 
+ 	/*
+-	 * Unlocking the vg lock here preempts the lvmlockd unlock in
+-	 * toollib.c which happens too late since the lockspace is
+-	 * left here.
++	 * For the dlm, free_vg means unlock the ex VG lock,
++	 * and include an indication in the lvb that the VG
++	 * has been removed.  Then, leave the lockspace.
++	 * If another host tries to acquire the VG lock, it
++	 * will see that the VG has been removed by looking
++	 * at the lvb value.
+ 	 */
+ 
+-	/* Equivalent to a standard unlock. */
+-	ret = _lockd_request(cmd, "lock_vg",
+-			     vg->name, NULL, NULL, NULL, NULL, NULL, "un", NULL,
+-			     &result, &lockd_flags);
++	reply = _lockd_send("free_vg",
++				"pid = %d", getpid(),
++				"vg_name = %s", vg->name,
++				"vg_lock_type = %s", vg->lock_type,
++				"vg_lock_args = %s", vg->lock_args,
++				NULL);
+ 
+-	if (!ret || result < 0) {
+-		log_error("_free_vg_dlm lvmlockd result %d", result);
+-		return 0;
++	if (!_lockd_result(reply, &result, &lockd_flags)) {
++		ret = 0;
++	} else {
++		ret = (result < 0) ? 0 : 1;
+ 	}
+ 
+-	/* Leave the dlm lockspace. */
+-	lockd_stop_vg(cmd, vg);
++	if (!ret)
++		log_error("_free_vg_dlm lvmlockd result %d", result);
++
++	daemon_reply_destroy(reply);
+ 
+ 	return 1;
+ }
+@@ -893,7 +902,11 @@ static int _lockd_all_lvs(struct cmd_context *cmd, struct volume_group *vg)
+ int lockd_free_vg_before(struct cmd_context *cmd, struct volume_group *vg,
+ 			 int changing)
+ {
+-	/* Check that no LVs are active on other hosts. */
++	/*
++	 * Check that no LVs are active on other hosts.
++	 * When removing (not changing), each LV is locked
++	 * when it is removed, they do not need checking here.
++	 */
+ 	if (changing && !_lockd_all_lvs(cmd, vg)) {
+ 		log_error("Cannot change VG %s with active LVs", vg->name);
+ 		return 0;
+@@ -1741,6 +1754,16 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
+ 	}
+ 
+ 	/*
++	 * The VG has been removed.  This will only happen with a dlm VG
++	 * since a sanlock VG must be stopped everywhere before it's removed.
++	 */
++	if (result == -EREMOVED) {
++		log_error("VG %s lock is removed", vg_name);
++		ret = 0;
++		goto out;
++	}
++
++	/*
+ 	 * The lockspace for the VG is starting (the VG must not
+ 	 * be local), and is not yet ready to do locking.  Allow
+ 	 * reading without a sh lock during this period.
 
 
