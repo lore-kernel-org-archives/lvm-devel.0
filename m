@@ -1,63 +1,69 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 26 Aug 2015 09:29:20 +0000 (UTC)
-Subject: master - cache: report cache pool attrs also for pools
-Message-ID: <20150826092920.2B17461188@fedorahosted.org>
+Date: Wed, 26 Aug 2015 09:29:22 +0000 (UTC)
+Subject: master - cache: lvconvert accepts --cachemode for --cache
+Message-ID: <20150826092922.47E9561188@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a4fdfc098d7a1c28793a8ba6f82277ecef40dfcd
-Commit:        a4fdfc098d7a1c28793a8ba6f82277ecef40dfcd
-Parent:        cbe81ad3932417ffaf89cbd924bd6d1ce1c7f199
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9886fd236e2cf09f299589e0e2b6cb7454b2314a
+Commit:        9886fd236e2cf09f299589e0e2b6cb7454b2314a
+Parent:        a4fdfc098d7a1c28793a8ba6f82277ecef40dfcd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 25 15:07:41 2015 +0200
+AuthorDate:    Tue Aug 25 14:48:31 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Aug 26 11:24:41 2015 +0200
 
-cache: report cache pool attrs also for pools
+cache: lvconvert accepts --cachemode for --cache
 
-Since cache-pool actualy keeps info about caching,
-display this info for cache-pool LV as well
-(matches info for cache LV when cache-pool is asociated with it).
+All cache args could be specified when caching LV
+(means converting LV to cached).
+
+When --cachemode arg is given during cache-pool conversion,
+store it in the metadata.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1255184
 ---
- WHATS_NEW           |    1 +
- lib/report/report.c |    4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    6 +++++-
+ 2 files changed, 6 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 4eb852c..ac8e1e9 100644
+index ac8e1e9..ea50997 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.129 -
  ===================================
-+  Fix and improve reporting properties of cache-pool.
++  Accept --cachemode with lvconvert.
+   Fix and improve reporting properties of cache-pool.
    Enable usage of --cachepolicy and --cachesetting with lvconvert.
    Don't allow to reduce size of thin-pool metadata.
-   Fix debug buffer overflows in cmirrord logging.
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 1885f45..4fd311a 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1344,7 +1344,7 @@ static int _cache_settings_disp(struct dm_report *rh, struct dm_pool *mem,
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 95996b7..07d9f43 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2828,7 +2828,7 @@ static int _lvconvert_pool(struct cmd_context *cmd,
  
- 	if (seg_is_cache(seg))
- 		seg = first_seg(seg->pool_lv);
--	else {
-+	else if (!seg_is_cache_pool(seg)) {
- 		dm_list_init(&dummy_list);
- 		return _field_set_string_list(rh, field, &dummy_list, private, 0);
- 		/* TODO: once we have support for STR_LIST reserved values, replace with:
-@@ -1384,7 +1384,7 @@ static int _cache_policy_disp(struct dm_report *rh, struct dm_pool *mem,
+ 		if (!metadata_lv) {
+ 			if (arg_from_list_is_set(cmd, "is invalid with existing pool",
+-						 cachemode_ARG, chunksize_ARG, discards_ARG,
++						 chunksize_ARG, discards_ARG,
+ 						 zero_ARG, poolmetadatasize_ARG, -1))
+ 				return_0;
  
- 	if (seg_is_cache(seg))
- 		seg = first_seg(seg->pool_lv);
--	else
-+	else if (!seg_is_cache_pool(seg) || !seg->policy_name)
- 		return _field_set_value(field, GET_FIRST_RESERVED_NAME(cache_policy_undef),
- 					GET_FIELD_RESERVED_VALUE(cache_policy_undef));
+@@ -3069,6 +3069,10 @@ mda_write:
+ 	seg->discards = lp->discards;
+ 	seg->zero_new_blocks = lp->zero ? 1 : 0;
  
++	if (lp->cache_mode &&
++	    !cache_set_mode(seg, lp->cache_mode))
++		return_0;
++
+ 	if ((lp->policy_name || lp->policy_settings) &&
+ 	    !cache_set_policy(seg, lp->policy_name, lp->policy_settings))
+ 		return_0;
 
 
