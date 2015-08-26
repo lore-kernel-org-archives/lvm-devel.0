@@ -1,260 +1,219 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 26 Aug 2015 20:52:43 +0000 (UTC)
-Subject: master - lvmlockd: improve VG removal for lock_type dlm
-Message-ID: <20150826205243.0345560F47@fedorahosted.org>
+Date: Wed, 26 Aug 2015 20:52:45 +0000 (UTC)
+Subject: master - lvmlockd: rescan lockd VG in two new cases
+Message-ID: <20150826205245.245F260F47@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c58f4892f606aafb3828c8c0d2738ed8b6407577
-Commit:        c58f4892f606aafb3828c8c0d2738ed8b6407577
-Parent:        7c8fc4b842223c96ed2a1b77ad774871dd34a2e2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=436ec3221eb5c429b2a0a01c95e962cbf1706e65
+Commit:        436ec3221eb5c429b2a0a01c95e962cbf1706e65
+Parent:        c58f4892f606aafb3828c8c0d2738ed8b6407577
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 26 10:01:05 2015 -0500
+AuthorDate:    Wed Aug 26 14:06:39 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Aug 26 15:27:22 2015 -0500
+CommitterDate: Wed Aug 26 15:49:55 2015 -0500
 
-lvmlockd: improve VG removal for lock_type dlm
+lvmlockd: rescan lockd VG in two new cases
 
-This makes lvmlockd removal steps for dlm VGs closely match
-sanlock VGs.  Because dlm lockspaces are not required to be
-stopped on all hosts before vgremove, there is an extra bit
-for dlm lockspaces, where a flag is set in the VG lock lvb
-indicating that the VG was removed.  If other hosts happen
-to use the VG lock they will see this flag and stop their
-lockspace.
+Previously, a command would only rescan a lockd VG
+when lvmetad returned the "vg_invalid" flag indicating
+that the cached copy was invalid (which is done by
+lvmlockd.)  This is still the only usual reason for
+rescanning a lockd VG, but two new special cases are
+added where we also do the rescan:
+
+. When the --shared option is used to display lockd VGs
+  from hosts not using lvmlockd.  This is the same case
+  as using --foreign to display foreign VGs, but --shared
+  was missing the corresponding bits to rescan the VGs.
+
+. When a lockd VG is allowed to be read for displaying
+  after failing to acquire the lock from lvmlockd.  In
+  this case, the usual mechanism for validating the
+  cache is missed, so assume the cache would have been
+  invalidated.  (This had been a previous todo item
+  that was lost during other cleanup.)
+
+These were long-standing todos that were lost track of.
 ---
- daemons/lvmlockd/lvmlockd-client.h   |    1 +
- daemons/lvmlockd/lvmlockd-core.c     |    7 +++-
- daemons/lvmlockd/lvmlockd-dlm.c      |   25 ++++++++++++----
- daemons/lvmlockd/lvmlockd-internal.h |    4 ++
- lib/locking/lvmlockd.c               |   51 ++++++++++++++++++++++++---------
- 5 files changed, 66 insertions(+), 22 deletions(-)
+ lib/cache/lvmetad.c        |   45 ++++++++++++++++++++++++++++++++++++++++++-
+ lib/commands/toolcontext.h |    1 +
+ lib/locking/lvmlockd.c     |   35 ++++++++++++++++++++++++++++++++-
+ 3 files changed, 77 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-client.h b/daemons/lvmlockd/lvmlockd-client.h
-index 0a1424f..67fcbe3 100644
---- a/daemons/lvmlockd/lvmlockd-client.h
-+++ b/daemons/lvmlockd/lvmlockd-client.h
-@@ -47,5 +47,6 @@ static inline void lvmlockd_close(daemon_handle h)
- #define ELOCKD    216
- #define EVGKILLED 217 /* sanlock lost access to leases and VG is killed. */
- #define ELOCKIO   218 /* sanlock io errors during lock op, may be transient. */
-+#define EREMOVED  219
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 856b30f..b2e2f55 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -434,6 +434,7 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
+ 	struct format_type *fmt;
+ 	struct dm_config_node *pvcn;
+ 	struct pv_list *pvl;
++	int rescan = 0;
  
- #endif	/* _LVM_LVMLOCKD_CLIENT_H */
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index b99cb0b..3d41bd2 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -1763,7 +1763,7 @@ static void res_process(struct lockspace *ls, struct resource *r,
- 				list_del(&act->list);
- 				add_client_result(act);
- 			}
--			if (rv == -EUNATCH)
-+			if (rv == -EUNATCH || rv == -EREMOVED)
- 				goto r_free;
- 		}
- 	}
-@@ -1796,7 +1796,7 @@ static void res_process(struct lockspace *ls, struct resource *r,
- 				list_del(&act->list);
- 				add_client_result(act);
- 			}
--			if (rv == -EUNATCH)
-+			if (rv == -EUNATCH || rv == -EREMOVED)
- 				goto r_free;
- 			break;
- 		}
-@@ -1817,6 +1817,9 @@ r_free:
- 	lm_rem_resource(ls, r);
- 	list_del(&r->list);
- 	free_resource(r);
+ 	if (!lvmetad_active())
+ 		return NULL;
+@@ -493,15 +494,55 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
+ 			goto_out;
+ 
+ 		/*
++		 * Read the VG from disk, ignoring the lvmetad copy in these
++		 * cases:
++		 *
++		 * 1. The host is not using lvmlockd, but is reading lockd VGs
++		 * using the --shared option.  The shared option is meant to
++		 * let hosts not running lvmlockd look at lockd VGs, like the
++		 * foreign option allows hosts to look at foreign VGs.  When
++		 * --foreign is used, the code forces a rescan since the local
++		 * lvmetad cache of foreign VGs is likely stale.  Similarly,
++		 * for --shared, have the code reading the shared VGs below
++		 * not use the cached copy from lvmetad but to rescan the VG.
++		 *
++		 * 2. The host failed to acquire the VG lock from lvmlockd for
++		 * the lockd VG.  In this case, the usual mechanisms for
++		 * updating the lvmetad copy of the VG have been missed.  Since
++		 * we don't know if the cached copy is valid, assume it's not.
++		 *
++		 * 3. lvmetad has returned the "vg_invalid" flag, which is the
++		 * usual mechanism used by lvmlockd/lvmetad to cause a host to
++		 * reread a VG from disk that has been modified from another
++		 * host.
++		 */
 +
-+	if (rv == -EREMOVED)
-+		ls->thread_stop = 1;
- }
- 
- #define LOCKS_EXIST_ANY 1
-diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index e242685..676c944 100644
---- a/daemons/lvmlockd/lvmlockd-dlm.c
-+++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -443,6 +443,7 @@ int lm_lock_dlm(struct lockspace *ls, struct resource *r, int ld_mode,
- 	struct val_blk vb;
- 	uint32_t flags = 0;
- 	uint16_t vb_version;
-+	uint16_t vb_flags;
- 	int mode;
- 	int rv;
- 
-@@ -522,6 +523,7 @@ lockrv:
- 
- 		memcpy(&vb, lksb->sb_lvbptr, sizeof(struct val_blk));
- 		vb_version = le16_to_cpu(vb.version);
-+		vb_flags = le16_to_cpu(vb.flags);
- 
- 		if (vb_version && ((vb_version & 0xFF00) > (VAL_BLK_VERSION & 0xFF00))) {
- 			log_error("S %s R %s lock_dlm ignore vb_version %x",
-@@ -536,8 +538,14 @@ lockrv:
- 		*r_version = le32_to_cpu(vb.r_version);
- 		memcpy(rdd->vb, &vb, sizeof(vb)); /* rdd->vb saved as le */
- 
--		log_debug("S %s R %s lock_dlm get r_version %u",
--			  ls->name, r->name, *r_version);
-+		log_debug("S %s R %s lock_dlm get r_version %u flags %x",
-+			  ls->name, r->name, *r_version, vb_flags);
-+
-+		if (vb_flags & VBF_REMOVED) {
-+			log_debug("S %s R %s lock_dlm VG has been removed",
-+				  ls->name, r->name);
-+			return -EREMOVED;
++		if (is_lockd_type(vg->lock_type) && cmd->include_shared_vgs) {
++			log_debug_lvmetad("Rescan VG %s because including shared", vgname);
++			rescan = 1;
++		} else if (is_lockd_type(vg->lock_type) && cmd->lockd_vg_rescan) {
++			log_debug_lvmetad("Rescan VG %s because no lvmlockd lock is held", vgname);
++			rescan = 1;
++		} else if (dm_config_find_node(reply.cft->root, "vg_invalid")) {
++			log_debug_lvmetad("Rescan VG %s because lvmetad returned invalid", vgname);
++			rescan = 1;
 +		}
- 	}
- out:
- 	return 0;
-@@ -593,7 +601,7 @@ int lm_convert_dlm(struct lockspace *ls, struct resource *r,
- }
- 
- int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
--		  uint32_t r_version, uint32_t lmuf_flags)
-+		  uint32_t r_version, uint32_t lmu_flags)
- {
- 	struct lm_dlm *lmd = (struct lm_dlm *)ls->lm_data;
- 	struct rd_dlm *rdd = (struct rd_dlm *)r->lm_data;
-@@ -602,7 +610,7 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
- 	int rv;
- 
- 	log_debug("S %s R %s unlock_dlm r_version %u flags %x",
--		  ls->name, r->name, r_version, lmuf_flags);
-+		  ls->name, r->name, r_version, lmu_flags);
- 
- 	/*
- 	 * Do not set PERSISTENT, because we don't need an orphan
-@@ -611,12 +619,17 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
- 
- 	flags |= LKF_CONVERT;
- 
--	if (rdd->vb && r_version && (r->mode == LD_LK_EX)) {
-+	if (rdd->vb && (r->mode == LD_LK_EX)) {
- 		if (!rdd->vb->version) {
- 			/* first time vb has been written */
- 			rdd->vb->version = cpu_to_le16(VAL_BLK_VERSION);
++
++		/*
+ 		 * locking may have detected a newer vg version and
+ 		 * invalidated the cached vg.
+ 		 */
+-		if (dm_config_find_node(reply.cft->root, "vg_invalid")) {
++		if (rescan) {
+ 			log_debug_lvmetad("Update invalid lvmetad cache for VG %s", vgname);
+ 			vg2 = lvmetad_pvscan_vg(cmd, vg);
+ 			release_vg(vg);
+ 			vg = vg2;
+-			fid = vg->fid;
++			if (!vg) {
++				log_debug_lvmetad("VG %s from lvmetad not found during rescan.", vgname);
++				fid = NULL;
++				goto out;
++			} else
++				fid = vg->fid;
  		}
--		rdd->vb->r_version = cpu_to_le32(r_version);
-+		if (r_version)
-+			rdd->vb->r_version = cpu_to_le32(r_version);
-+
-+		if ((lmu_flags & LMUF_FREE_VG) && (r->type == LD_RT_VG))
-+			rdd->vb->flags = cpu_to_le16(VBF_REMOVED);
-+
- 		memcpy(lksb->sb_lvbptr, rdd->vb, sizeof(struct val_blk));
  
- 		log_debug("S %s R %s unlock_dlm set r_version %u",
-diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
-index 8e0582b..46ae67f 100644
---- a/daemons/lvmlockd/lvmlockd-internal.h
-+++ b/daemons/lvmlockd/lvmlockd-internal.h
-@@ -194,8 +194,12 @@ struct lockspace {
- 	struct list_head resources;	/* resource/lock state for gl/vg/lv */
- };
+ 		dm_list_iterate_items(pvl, &vg->pvs) {
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index 0440163..cd55348 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -134,6 +134,7 @@ struct cmd_context {
+ 	unsigned lockd_vg_disable:1;
+ 	unsigned lockd_lv_disable:1;
+ 	unsigned lockd_gl_removed:1;
++	unsigned lockd_vg_rescan:1;
+ 	unsigned lockd_vg_default_sh:1;
+ 	unsigned lockd_vg_enforce_sh:1;
  
-+/* val_blk version */
- #define VAL_BLK_VERSION 0x0101
- 
-+/* val_blk flags */
-+#define VBF_REMOVED 0x0001
-+
- struct val_blk {
- 	uint16_t version;
- 	uint16_t flags;
 diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index 3f73cf3..e647c96 100644
+index e647c96..45159d2 100644
 --- a/lib/locking/lvmlockd.c
 +++ b/lib/locking/lvmlockd.c
-@@ -694,7 +694,8 @@ out:
+@@ -1323,6 +1323,9 @@ int lockd_gl_create(struct cmd_context *cmd, const char *def_mode, const char *v
+ 		return 0;
+ 	}
  
- static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
- {
--	uint32_t lockd_flags;
-+	daemon_reply reply;
-+	uint32_t lockd_flags = 0;
++	/* --shared with vgcreate does not mean include_shared_vgs */
++	cmd->include_shared_vgs = 0;
++
+ 	lvmetad_validate_global_cache(cmd, 1);
+ 
+ 	return 1;
+@@ -1631,8 +1634,31 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
  	int result;
  	int ret;
  
-@@ -704,23 +705,31 @@ static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
- 		return 0;
++	/*
++	 * The result of the VG lock request is saved in lockd_state to be
++	 * passed into vg_read where the lock result is needed once we
++	 * know if this is a local VG or lockd VG.
++	 */
+ 	*lockd_state = 0;
  
- 	/*
--	 * Unlocking the vg lock here preempts the lvmlockd unlock in
--	 * toollib.c which happens too late since the lockspace is
--	 * left here.
-+	 * For the dlm, free_vg means unlock the ex VG lock,
-+	 * and include an indication in the lvb that the VG
-+	 * has been removed.  Then, leave the lockspace.
-+	 * If another host tries to acquire the VG lock, it
-+	 * will see that the VG has been removed by looking
-+	 * at the lvb value.
++	/*
++	 * Use of lockd_vg_rescan.
++	 *
++	 * This is the VG equivalent of using lvmetad_validate_global_cache()
++	 * for the global lock (after failing to acquire the global lock).  If
++	 * we fail to acquire the VG lock from lvmlockd, then the lvmlockd
++	 * mechanism has been missed that would have updated the cached lvmetad
++	 * copy of the VG.  So, set lockd_vg_rescan to tell the VG reading code
++	 * to treat the lvmetad copy as if the invalid flag had been returned.
++	 * i.e. If a lockd VG is read without a lock, ignore the lvmetad copy
++	 * and read it from disk since we don't know if the cache is stale.
++	 *
++	 * Because lvmlockd requests return an error for local VGs, this will
++	 * be set for local VGs, but it ends up being ignored once the VG is
++	 * read and found to be a local VG.
++	 */
++	cmd->lockd_vg_rescan = 0;
++
+ 	if (!is_real_vg(vg_name))
+ 		return 1;
+ 
+@@ -1703,6 +1729,7 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
  	 */
- 
--	/* Equivalent to a standard unlock. */
--	ret = _lockd_request(cmd, "lock_vg",
--			     vg->name, NULL, NULL, NULL, NULL, NULL, "un", NULL,
--			     &result, &lockd_flags);
-+	reply = _lockd_send("free_vg",
-+				"pid = %d", getpid(),
-+				"vg_name = %s", vg->name,
-+				"vg_lock_type = %s", vg->lock_type,
-+				"vg_lock_args = %s", vg->lock_args,
-+				NULL);
- 
--	if (!ret || result < 0) {
--		log_error("_free_vg_dlm lvmlockd result %d", result);
--		return 0;
-+	if (!_lockd_result(reply, &result, &lockd_flags)) {
-+		ret = 0;
-+	} else {
-+		ret = (result < 0) ? 0 : 1;
+ 	if (!_use_lvmlockd) {
+ 		*lockd_state |= LDST_FAIL_REQUEST;
++		cmd->lockd_vg_rescan = 1;
+ 		return 1;
  	}
  
--	/* Leave the dlm lockspace. */
--	lockd_stop_vg(cmd, vg);
-+	if (!ret)
-+		log_error("_free_vg_dlm lvmlockd result %d", result);
-+
-+	daemon_reply_destroy(reply);
+@@ -1719,6 +1746,7 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
+ 		 * this error for local VGs, but we do care for lockd VGs.
+ 		 */
+ 		*lockd_state |= LDST_FAIL_REQUEST;
++		cmd->lockd_vg_rescan = 1;
+ 		return 1;
+ 	}
  
- 	return 1;
- }
-@@ -893,7 +902,11 @@ static int _lockd_all_lvs(struct cmd_context *cmd, struct volume_group *vg)
- int lockd_free_vg_before(struct cmd_context *cmd, struct volume_group *vg,
- 			 int changing)
- {
--	/* Check that no LVs are active on other hosts. */
-+	/*
-+	 * Check that no LVs are active on other hosts.
-+	 * When removing (not changing), each LV is locked
-+	 * when it is removed, they do not need checking here.
-+	 */
- 	if (changing && !_lockd_all_lvs(cmd, vg)) {
- 		log_error("Cannot change VG %s with active LVs", vg->name);
- 		return 0;
-@@ -1741,6 +1754,16 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
+@@ -1737,12 +1765,15 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
+ 		break;
+ 	case -ENOLS:
+ 		*lockd_state |= LDST_FAIL_NOLS;
++		cmd->lockd_vg_rescan = 1;
+ 		break;
+ 	case -ESTARTING:
+ 		*lockd_state |= LDST_FAIL_STARTING;
++		cmd->lockd_vg_rescan = 1;
+ 		break;
+ 	default:
+ 		*lockd_state |= LDST_FAIL_OTHER;
++		cmd->lockd_vg_rescan = 1;
  	}
  
  	/*
-+	 * The VG has been removed.  This will only happen with a dlm VG
-+	 * since a sanlock VG must be stopped everywhere before it's removed.
-+	 */
-+	if (result == -EREMOVED) {
-+		log_error("VG %s lock is removed", vg_name);
-+		ret = 0;
-+		goto out;
-+	}
-+
-+	/*
- 	 * The lockspace for the VG is starting (the VG must not
- 	 * be local), and is not yet ready to do locking.  Allow
- 	 * reading without a sh lock during this period.
+@@ -1758,8 +1789,8 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
+ 	 * since a sanlock VG must be stopped everywhere before it's removed.
+ 	 */
+ 	if (result == -EREMOVED) {
+-		log_error("VG %s lock is removed", vg_name);
+-		ret = 0;
++		log_error("VG %s lock failed: removed", vg_name);
++		ret = 1;
+ 		goto out;
+ 	}
+ 
 
 
