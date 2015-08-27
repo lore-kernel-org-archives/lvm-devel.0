@@ -1,39 +1,71 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 27 Aug 2015 15:28:58 +0000 (UTC)
-Subject: master - lvmlockd: fix function def for non-lvmlockd build
-Message-ID: <20150827152858.74BE6603F7@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 27 Aug 2015 14:02:04 +0200
+Subject: [PATCHv2] libdm: mark control fd as close-on-exec
+In-Reply-To: <55D487BA.6030504@secunet.com>
+References: <1436945698-18193-1-git-send-email-mathias.krause@secunet.com>
+	<55D487BA.6030504@secunet.com>
+Message-ID: <55DEFC3C.4040908@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fd238f3c0eb0ec158ac402c224f8dc5641bc1d8f
-Commit:        fd238f3c0eb0ec158ac402c224f8dc5641bc1d8f
-Parent:        58713d34dd71873ab97378e96d7ab0b8e9bda8ef
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 26 16:05:20 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Aug 27 10:27:24 2015 -0500
+Dne 19.8.2015 v 15:42 Mathias Krause napsal(a):
+> On 15.07.2015 09:34, Mathias Krause wrote:
+>> The control fd should be marked as close-on-exec to avoid file
+>> descriptor leaks in forking applications executing other programs.
+>>
+>> Signed-off-by: Mathias Krause <mathias.krause@secunet.com>
+>>
+>> ---
+>> v2: fix return value mix-up (should be 1 on success)
+>> ---
+>>   libdm/ioctl/libdm-iface.c | 13 +++++++++++++
+>>   1 file changed, 13 insertions(+)
+>>
+>> diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+>> index e3b33b805e93..0f9e98a4a061 100644
+>> --- a/libdm/ioctl/libdm-iface.c
+>> +++ b/libdm/ioctl/libdm-iface.c
+>> @@ -385,11 +385,24 @@ static void _close_control_fd(void)
+>>   #ifdef DM_IOCTLS
+>>   static int _open_and_assign_control_fd(const char *control)
+>>   {
+>> +#ifdef O_CLOEXEC
+>> +	/*
+>> +	 * O_CLOEXEC is supported since v2.6.23, so this may fail on old
+>> +	 * kernels. Nonetheless favour it to a two staged approach as it's
+>> +	 * atomic.
+>> +	 */
+>> +	if ((_control_fd = open(control, O_RDWR | O_CLOEXEC)) >= 0)
+>> +		return 1;
+>> +#endif
+>> +
+>>   	if ((_control_fd = open(control, O_RDWR)) < 0) {
+>>   		log_sys_error("open", control);
+>>   		return 0;
+>>   	}
+>>
+>> +	if (fcntl(_control_fd, F_SETFD, FD_CLOEXEC))
+>> +		log_sys_error("fcntl", "setting FD_CLOEXEC");
+>> +
+>>   	return 1;
+>>   }
+>>   #endif
+>
+> Ping? Any objections to the patch?
+>
 
-lvmlockd: fix function def for non-lvmlockd build
 
----
- lib/locking/lvmlockd.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Hi
 
-diff --git a/lib/locking/lvmlockd.h b/lib/locking/lvmlockd.h
-index ec36ff8..4bec782 100644
---- a/lib/locking/lvmlockd.h
-+++ b/lib/locking/lvmlockd.h
-@@ -129,7 +129,7 @@ static inline int lockd_init_vg(struct cmd_context *cmd, struct volume_group *vg
- 	return 1;
- }
- 
--static inline int lockd_free_vg_before(struct cmd_context *cmd, struct volume_group *vg)
-+static inline int lockd_free_vg_before(struct cmd_context *cmd, struct volume_group *vg, int changing)
- {
- 	return 1;
- }
+_control_fd  is then 'set' in forked code - means 'forked' libdm user might 
+live with impression it has opened control handler.
+
+So you would also need to ensure _control_fd is zeroed.
+
+Zdenek
+
 
 
