@@ -1,48 +1,48 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 27 Aug 2015 21:37:16 +0000 (UTC)
-Subject: master - lvmlockd: VG lock can be used when changing lock type
-Message-ID: <20150827213716.DA90F6026B@fedorahosted.org>
+From: Liuhua Wang <lwang@suse.com>
+Date: Thu, 27 Aug 2015 20:58:26 -0600
+Subject: [PATCH] libdm-iface: not output error message inside retry loops
+In-Reply-To: <55DEFB92.5020106@redhat.com>
+References: <1440664241-6149-1-git-send-email-lwang@suse.com>
+	<55DEFB92.5020106@redhat.com>
+Message-ID: <55E03ED2020000A000019F1D@relay2.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e5d99cb9e685ba167f10413694e5d9d34fe90bb0
-Commit:        e5d99cb9e685ba167f10413694e5d9d34fe90bb0
-Parent:        3c1924c9c0d45cbce67aa3c1dad70737a6956cc3
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Aug 27 16:34:51 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Aug 27 16:34:51 2015 -0500
+Hi Zdenek,
 
-lvmlockd: VG lock can be used when changing lock type
+Thanks for your reply.
 
-This bit was missed from commit de4db6a that added
-changing lock_type.
----
- tools/vgchange.c |    9 ---------
- 1 files changed, 0 insertions(+), 9 deletions(-)
+> It's in fact made 'noisy' intentionally - we normally should detect whether 
+> retry makes sense - so  what are the conditions when you experience this 
+> problem ?
+> 
+> Common scenario:
+> 
+> The major reason for retry is 'unpredictable'  udev event processing
+> i.e. you run  'umount' -> fires watch-rule -> lvremove  could have failed - 
+> retry fixes this problem.
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index f57fa15..6d86051 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -1048,15 +1048,6 @@ static int _lockd_vgchange(struct cmd_context *cmd, int argc, char **argv)
- 		cmd->lockd_vg_disable = 1;
+ We first found this problem when we were testing lvcreate-usage.sh included in
+ lvm2-2.02.120 package. The case always failed due to the following message:
+  device-mapper: remove ioctl on (253:6) failed: Device or resource busy
+ [ 0:01]   Node @TESTDIR@/dev/mapper/@PREFIX at vg-LV2-cow was not removed by udev. Falling back to direct node removal.
+
+Then we tested more cases and found the problem occurs in the following cases:
+   - lvremove/lvcreate a snap lv
+   - lvremove/lvcreate a thin lv
+   - lvremove/lvcreate a mirror lv
  
- 	/*
--	 * In most cases, lockd_vg does not apply when changing lock type.
--	 * (We don't generally allow changing *from* lockd type yet.)
--	 * lockd_vg could be called within _vgchange_locktype as needed.
--	 */
--
--	if (arg_is_set(cmd, locktype_ARG))
--		cmd->lockd_vg_disable = 1;
--
--	/*
- 	 * Changing system_id or lock_type must only be done on explicitly
- 	 * named vgs.
- 	 */
+o Reproduce frequency:
+   lvremove about 80%, lvcreate occurs occasionally 
+  
+With the patch I attached, the lvcreate-usage.sh will not fail due to the error message.
+
+Regards,
+Liuhua
+
+
 
 
