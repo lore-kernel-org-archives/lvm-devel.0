@@ -1,98 +1,61 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 17 Dec 2018 11:06:12 -0500
-Subject: master - unit test: use_lvmetad replaced by event_activation
-Message-ID: <201812171606.wBHG6Cho022855@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue,  1 Sep 2015 15:28:51 +0000 (UTC)
+Subject: master - libdm: Reinstate dm_task_get_info@Base.
+Message-ID: <20150901152851.25F6960C83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1f1d36f6a2b441fbf84e59f435bd5169459392b1
-Commit:        1f1d36f6a2b441fbf84e59f435bd5169459392b1
-Parent:        2076dda0b8e6a33eec92a8e6b4616f8ab5a9b495
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Dec 17 10:04:44 2018 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Dec 17 10:04:44 2018 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb57f4f89b908ad3d7149ce18204b71448c9d259
+Commit:        cb57f4f89b908ad3d7149ce18204b71448c9d259
+Parent:        8b6226997eecb35560fd32fcb571478971024bd1
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Sep 1 16:26:02 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Sep 1 16:26:02 2015 +0100
 
-unit test: use_lvmetad replaced by event_activation
+libdm: Reinstate dm_task_get_info at Base.
 
+Move the version script local:* wildcard into a node of its own
+to avoid conflicting with in-source export macro definitions.
 ---
- test/unit/activation-generator_t.c |   26 +++++++++++++-------------
- 1 files changed, 13 insertions(+), 13 deletions(-)
+ WHATS_NEW_DM |    1 +
+ make.tmpl.in |    7 ++++---
+ 2 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/test/unit/activation-generator_t.c b/test/unit/activation-generator_t.c
-index f02da05..ef4946d 100644
---- a/test/unit/activation-generator_t.c
-+++ b/test/unit/activation-generator_t.c
-@@ -110,7 +110,7 @@ static void _test_parse_bool(void *fixture)
- struct pl_test {
- 	const char *input;
- 	bool success;
--	bool use_lvmetad;
-+	bool event_activation;
- 	bool sysinit_needed;
- };
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 176759a..ba89a9d 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.107 - 
+ ===================================
++  Reinstate dm_task_get_info at Base to libdevmapper exports. (1.02.106)
  
-@@ -119,8 +119,8 @@ static void _test_parse_line(void *fixture)
- 	static struct pl_test _tests[] = {
-         	{"", false, false, false},
-         	{"sldkjfs", false, false, false},
--        	{"use_lvmetad=1", true, true, true},
--        	{"use_lvmetad=0", true, false, true},
-+        	{"event_activation=1", true, true, true},
-+        	{"event_activation=0", true, false, true},
-         	{"use_lvmpolld=1", true, false, false},
-         	{"use_lvmpolld=0", true, false, true}
- 	};
-@@ -139,9 +139,9 @@ static void _test_parse_line(void *fixture)
- 			if (!r)
-         			test_fail("_parse_line('%s') failed", t->input);
+ Version 1.02.106 - 26th August 2015
+ ===================================
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 96889b4..6fc1195 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -502,12 +502,13 @@ else
+ 	set -e;\
+ 	R=$$(sort $^ | uniq -u);\
+ 	test -z "$$R" || { echo "Mismatch between symbols in shared library and lists in .exported_symbols.* files: $$R"; false; } ;\
+-	for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | sort -rnt_ -k5 ); do\
++	( for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | sort -rnt_ -k5 ); do\
+ 		echo "$${i##*.} {"; echo "	global:";\
+ 		$(SED) "s/^/		/;s/$$/;/" $$i;\
+-		test "$${i##*.}" = Base && { echo "	local:"; echo "		*;"; };\
+ 		echo "};";\
+-	done > $@
++	  done;\
++	  echo "Local {"; echo "	local:"; echo "		*;"; echo "};";\
++	) > $@
+ endif
  
--			//if (cfg.use_lvmetad != t->use_lvmetad)
--			//	test_fail("_parse_line('%s') -> use_lvmetad='%s'",
--			//		t->input, _bool(cfg.use_lvmetad));
-+			//if (cfg.event_activation != t->event_activation)
-+			//	test_fail("_parse_line('%s') -> event_activation='%s'",
-+			//		t->input, _bool(cfg.event_activation));
- 
-                 	if (cfg.sysinit_needed != t->sysinit_needed)
-                         	test_fail("_parse_line('%s') -> sysinit_needed='%s'",
-@@ -170,7 +170,7 @@ static void _test_get_config_bad_exit(void *fixture)
- struct gc_test {
-         const char *output;
-         bool success;
--        bool use_lvmetad;
-+        bool event_activation;
-         bool sysinit_needed;
- };
- 
-@@ -199,9 +199,9 @@ static void _test_get_config(void *fixture)
- 		{"", true, false, true},
- 		{"lsdjkf\n\n\n", false, false, false},
- 
--		{"use_lvmetad=0\nuse_lvmpolld=1\n", true, false, false},
--		{"use_lvmetad=1\nuse_lvmpolld=1\n", true, true, false},
--		{"use_lvmetad=1\nuse_lvmpolld=0\n", true, true, true},
-+		{"event_activation=0\nuse_lvmpolld=1\n", true, false, false},
-+		{"event_activation=1\nuse_lvmpolld=1\n", true, true, false},
-+		{"event_activation=1\nuse_lvmpolld=0\n", true, true, true},
- 	};
- 
- 	bool r;
-@@ -223,9 +223,9 @@ static void _test_get_config(void *fixture)
- 			if (!r)
-         			test_fail("_get_config() <- '%s' failed", t->output);
- 
--			//if (t->use_lvmetad != cfg.use_lvmetad)
--			//	test_fail("_get_config() <- '%s', use_lvmetad = %s",
--			//		  t->output, _bool(cfg.use_lvmetad));
-+			//if (t->event_activation != cfg.event_activation)
-+			//	test_fail("_get_config() <- '%s', event_activation = %s",
-+			//		  t->output, _bool(cfg.event_activation));
- 
-                 	if (t->sysinit_needed != cfg.sysinit_needed)
-                         	test_fail("_get_config() <- '%s', sysinit = %s",
+ ifeq (,$(findstring $(MAKECMDGOALS),cscope.out cflow clean distclean lcov \
 
 
