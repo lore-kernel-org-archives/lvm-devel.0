@@ -1,61 +1,95 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  1 Sep 2015 15:28:51 +0000 (UTC)
-Subject: master - libdm: Reinstate dm_task_get_info@Base.
-Message-ID: <20150901152851.25F6960C83@fedorahosted.org>
+From: okozina <okozina@fedoraproject.org>
+Date: Wed,  2 Sep 2015 15:27:38 +0000 (UTC)
+Subject: master - lvmpolld: make lvpoll error messages visible
+Message-ID: <20150902152738.1B34E60D5E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb57f4f89b908ad3d7149ce18204b71448c9d259
-Commit:        cb57f4f89b908ad3d7149ce18204b71448c9d259
-Parent:        8b6226997eecb35560fd32fcb571478971024bd1
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Sep 1 16:26:02 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Sep 1 16:26:02 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7bbc128c3dd6e75524a4447c29ed7be2ace8e3b3
+Commit:        7bbc128c3dd6e75524a4447c29ed7be2ace8e3b3
+Parent:        cb57f4f89b908ad3d7149ce18204b71448c9d259
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Wed Sep 2 16:50:14 2015 +0200
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Wed Sep 2 17:24:26 2015 +0200
 
-libdm: Reinstate dm_task_get_info at Base.
+lvmpolld: make lvpoll error messages visible
 
-Move the version script local:* wildcard into a node of its own
-to avoid conflicting with in-source export macro definitions.
+Previously all stderr messages issued by spawned lvpoll command were reported
+as INFO only. This made all such messages invisible in syslog or lvmpolld log
+while running default configuration.
+
+All lvpoll stderr messages are loged with WARN priority now and lvpoll
+command exiting with retcode != 0 is logged with ERROR priority in
+syslog and lvmpolld log
 ---
- WHATS_NEW_DM |    1 +
- make.tmpl.in |    7 ++++---
- 2 files changed, 5 insertions(+), 3 deletions(-)
+ WHATS_NEW                        |    1 +
+ daemons/lvmpolld/lvmpolld-core.c |   20 +++++++++++++++-----
+ 2 files changed, 16 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 176759a..ba89a9d 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b5e8414..48b2a07 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.107 - 
+ Version 2.02.130 - 
  ===================================
-+  Reinstate dm_task_get_info at Base to libdevmapper exports. (1.02.106)
++  Make lvpoll error messages visible in lvmpolld's stderr and in syslog.
+   Add 'make install_full_man' to install all man pages regardless of config.
  
- Version 1.02.106 - 26th August 2015
- ===================================
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 96889b4..6fc1195 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -502,12 +502,13 @@ else
- 	set -e;\
- 	R=$$(sort $^ | uniq -u);\
- 	test -z "$$R" || { echo "Mismatch between symbols in shared library and lists in .exported_symbols.* files: $$R"; false; } ;\
--	for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | sort -rnt_ -k5 ); do\
-+	( for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | sort -rnt_ -k5 ); do\
- 		echo "$${i##*.} {"; echo "	global:";\
- 		$(SED) "s/^/		/;s/$$/;/" $$i;\
--		test "$${i##*.}" = Base && { echo "	local:"; echo "		*;"; };\
- 		echo "};";\
--	done > $@
-+	  done;\
-+	  echo "Local {"; echo "	local:"; echo "		*;"; echo "};";\
-+	) > $@
- endif
+ Version 2.02.129 - 26th August 2015
+diff --git a/daemons/lvmpolld/lvmpolld-core.c b/daemons/lvmpolld/lvmpolld-core.c
+index 7d2a98b..68072d9 100644
+--- a/daemons/lvmpolld/lvmpolld-core.c
++++ b/daemons/lvmpolld/lvmpolld-core.c
+@@ -83,6 +83,12 @@ static int _init(struct daemon_state *s)
+ 	struct lvmpolld_state *ls = s->private;
+ 	ls->log = s->log;
  
- ifeq (,$(findstring $(MAKECMDGOALS),cscope.out cflow clean distclean lcov \
++	/*
++	 * log warnings to stderr by default. Otherwise we would miss any lvpoll
++	 * error messages in default configuration
++	 */
++	daemon_log_enable(ls->log, DAEMON_LOG_OUTLET_STDERR, DAEMON_LOG_WARN,  1);
++
+ 	if (!daemon_log_parse(ls->log, DAEMON_LOG_OUTLET_STDERR, ls->log_config, 1))
+ 		return 0;
+ 
+@@ -284,7 +290,7 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
+ 				 "caught input data in STDERR");
+ 
+ 			assert(read_single_line(data, 1)); /* may block indef. anyway */
+-			INFO(pdlv->ls, "%s: PID %d: %s: '%s'", LVM2_LOG_PREFIX,
++			WARN(pdlv->ls, "%s: PID %d: %s: '%s'", LVM2_LOG_PREFIX,
+ 			     pdlv->cmd_pid, "STDERR", data->line);
+ 		} else if (fds[1].revents) {
+ 			if (fds[1].revents & POLLHUP)
+@@ -327,15 +333,19 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
+ 	if (fds[1].fd >= 0)
+ 		while (read_single_line(data, 1)) {
+ 			assert(r > 0);
+-			INFO(pdlv->ls, "%s: PID %d: %s: %s", LVM2_LOG_PREFIX, pdlv->cmd_pid, "STDERR", data->line);
++			WARN(pdlv->ls, "%s: PID %d: %s: %s", LVM2_LOG_PREFIX, pdlv->cmd_pid, "STDERR", data->line);
+ 		}
+ 
+ 	if (WIFEXITED(ch_stat)) {
+-		INFO(pdlv->ls, "%s: %s (PID %d) %s (%d)", PD_LOG_PREFIX,
+-		     "lvm2 cmd", pdlv->cmd_pid, "exited with", WEXITSTATUS(ch_stat));
+ 		cmd_state.retcode = WEXITSTATUS(ch_stat);
++		if (cmd_state.retcode)
++			ERROR(pdlv->ls, "%s: %s (PID %d) %s (retcode: %d)", PD_LOG_PREFIX,
++			     "lvm2 cmd", pdlv->cmd_pid, "failed", cmd_state.retcode);
++		else
++			INFO(pdlv->ls, "%s: %s (PID %d) %s", PD_LOG_PREFIX,
++			     "lvm2 cmd", pdlv->cmd_pid, "finished successfully");
+ 	} else if (WIFSIGNALED(ch_stat)) {
+-		WARN(pdlv->ls, "%s: %s (PID %d) %s (%d)", PD_LOG_PREFIX,
++		ERROR(pdlv->ls, "%s: %s (PID %d) %s (%d)", PD_LOG_PREFIX,
+ 		     "lvm2 cmd", pdlv->cmd_pid, "got terminated by signal",
+ 		     WTERMSIG(ch_stat));
+ 		cmd_state.signal = WTERMSIG(ch_stat);
 
 
