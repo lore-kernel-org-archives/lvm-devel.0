@@ -1,36 +1,46 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 17 Dec 2018 05:08:24 -0500
-Subject: master - makefiles: drop unneeded LIBS add
-Message-ID: <201812171008.wBHA8Oto024777@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Wed,  2 Sep 2015 20:03:32 +0000 (UTC)
+Subject: master - man: document --regionid in dmstats.8.in
+Message-ID: <20150902200332.C690360FDC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a63015442e8bf3893e8531b209057a44158e438b
-Commit:        a63015442e8bf3893e8531b209057a44158e438b
-Parent:        d76b4afb8ed9531c1609804b684900a0ea96815c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 14 23:27:35 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Dec 17 10:36:52 2018 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=341460178871140500cf14c89022e013ced943d5
+Commit:        341460178871140500cf14c89022e013ced943d5
+Parent:        d31c4e0bc12fb673d4b30ba8846eec8e27ae6276
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Wed Sep 2 20:35:43 2015 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Wed Sep 2 21:03:03 2015 +0100
 
-makefiles: drop unneeded LIBS add
+man: document --regionid in dmstats.8.in
 
 ---
- libdaemon/server/Makefile.in |    2 --
- 1 files changed, 0 insertions(+), 2 deletions(-)
+ man/dmstats.8.in |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/libdaemon/server/Makefile.in b/libdaemon/server/Makefile.in
-index e971a52..3a5a220 100644
---- a/libdaemon/server/Makefile.in
-+++ b/libdaemon/server/Makefile.in
-@@ -18,5 +18,3 @@ LIB_STATIC = libdaemonserver.a
- SOURCES = daemon-server.c daemon-log.c
- 
- include $(top_builddir)/make.tmpl
--
--LIBS += $(DAEMON_LIBS)
+diff --git a/man/dmstats.8.in b/man/dmstats.8.in
+index 69ba2a3..3ffd534 100644
+--- a/man/dmstats.8.in
++++ b/man/dmstats.8.in
+@@ -1,4 +1,4 @@
+-.TH DMSTATS 8 "Jul 25 2015" "Linux" "MAINTENANCE COMMANDS"
++eTH DMSTATS 8 "Jul 25 2015" "Linux" "MAINTENANCE COMMANDS"
+ .SH NAME
+ dmstats \(em device-mapper statistics management
+ .SH SYNOPSIS
+@@ -223,6 +223,9 @@ string is stored with the region. Subsequent operations may supply a
+ program ID in order to select only regions with a matching value. The
+ default program ID for dmstats-managed regions is "dmstats".
+ .TP
++.BR \-\-regionid \fIid
++Specify the region to operate on.
++.TP
+ .BR \-\-relative
+ If displaying the histogram report show relative (percentage) values
+ instead of absolute counts.
 
 
