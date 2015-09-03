@@ -1,42 +1,42 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 18 Dec 2018 03:55:10 -0500
-Subject: master - build: Remove reference to undefined @BUILD_LVMETAD@
-Message-ID: <201812180855.wBI8tAA3020945@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Thu,  3 Sep 2015 15:39:02 +0000 (UTC)
+Subject: master - vgrename: add missing trace on error path
+Message-ID: <20150903153902.2E7EF602E8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e0c2d374aeeb77258c3bcdf2bb3ec5a0fca95a97
-Commit:        e0c2d374aeeb77258c3bcdf2bb3ec5a0fca95a97
-Parent:        07fc4866f040a382c39577fb739e010734d83e42
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Dec 18 09:36:48 2018 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Dec 18 09:54:45 2018 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0a73a5012aece3d0f7fd03a270cfe5067c1fafc8
+Commit:        0a73a5012aece3d0f7fd03a270cfe5067c1fafc8
+Parent:        96dc03b33782cf0e33f5fdf57cd8eb475e4bd7c9
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Sep 3 10:38:16 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Sep 3 10:38:16 2015 -0500
 
-build: Remove reference to undefined @BUILD_LVMETAD@
+vgrename: add missing trace on error path
 
 ---
- libdaemon/Makefile.in |    5 +----
- 1 files changed, 1 insertions(+), 4 deletions(-)
+ tools/vgrename.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/libdaemon/Makefile.in b/libdaemon/Makefile.in
-index c7fe1d3..4b0a0ad 100644
---- a/libdaemon/Makefile.in
-+++ b/libdaemon/Makefile.in
-@@ -19,10 +19,7 @@ top_builddir = @top_builddir@
+diff --git a/tools/vgrename.c b/tools/vgrename.c
+index 620345b..316228a 100644
+--- a/tools/vgrename.c
++++ b/tools/vgrename.c
+@@ -149,8 +149,10 @@ static int vg_rename_path(struct cmd_context *cmd, const char *old_vg_path,
+ 	if (!drop_cached_metadata(vg))
+ 		stack;
  
- SUBDIRS += client
+-	if (!lockd_rename_vg_before(cmd, vg))
++	if (!lockd_rename_vg_before(cmd, vg)) {
++		stack;
+ 		goto error;
++	}
  
--ifeq (@BUILD_LVMETAD@,yes)
--  SUBDIRS += server
--server: client
--else ifeq (@BUILD_LVMPOLLD@,yes)
-+ifeq (@BUILD_LVMPOLLD@,yes)
-   SUBDIRS += server
- server: client
- endif
+ 	/* Change the volume group name */
+ 	vg_rename(cmd, vg, vg_name_new);
 
 
