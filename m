@@ -1,48 +1,74 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Thu,  3 Sep 2015 21:08:31 +0000 (UTC)
-Subject: master - dmstats: support --noheadings for histogram fields
-Message-ID: <20150903210831.C5DE4603F2@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu,  3 Sep 2015 21:36:02 +0000 (UTC)
+Subject: master - configure: better parsing of cache_check version
+Message-ID: <20150903213602.DA77360EB9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=49b5022993cd57f7fda416bd62d182cdbe209fb8
-Commit:        49b5022993cd57f7fda416bd62d182cdbe209fb8
-Parent:        84d88cb2cf11ecb3c186477cd3c79cef0fa1c378
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Sep 3 21:56:34 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Thu Sep 3 22:04:11 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ce334923f1f82e0ca5dcbd0f5e830109c1f9c0b
+Commit:        5ce334923f1f82e0ca5dcbd0f5e830109c1f9c0b
+Parent:        49b5022993cd57f7fda416bd62d182cdbe209fb8
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Sep 3 22:48:56 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Sep 3 23:34:36 2015 +0200
 
-dmstats: support --noheadings for histogram fields
+configure: better parsing of cache_check version
 
+Properly read also version string like  0.5.5-1.fc24
+and read just first 3 digits split by '.'
+
+Also remove one extra  $HAVE_REALTIME.
 ---
- tools/dmsetup.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ configure    |    4 +---
+ configure.in |    3 +--
+ 2 files changed, 2 insertions(+), 5 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index ea30a3c..432677b 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -3443,7 +3443,7 @@ static const char *_get_histogram_string(const struct dm_stats *dms, int rel,
- 					 int vals, int bounds)
- {
- 	const struct dm_histogram *dmh;
--	int flags = 0;
-+	int flags = 0, width = (_switches[NOHEADINGS_ARG]) ? -1 : 0;
+diff --git a/configure b/configure
+index f4820c4..c7b7dd5 100755
+--- a/configure
++++ b/configure
+@@ -8816,7 +8816,7 @@ $as_echo "$as_me: WARNING: cache_check not found in path $PATH" >&2;}
+ 	if test "$CACHE_CHECK_NEEDS_CHECK" = yes; then
+ 		$CACHE_CHECK_CMD -V 2>/dev/null >conftest.tmp
+ 		read -r CACHE_CHECK_VSN < conftest.tmp
+-		IFS=. read -r CACHE_CHECK_VSN_MAJOR CACHE_CHECK_VSN_MINOR CACHE_CHECK_VSN_PATCH < conftest.tmp
++		IFS=.- read -r CACHE_CHECK_VSN_MAJOR CACHE_CHECK_VSN_MINOR CACHE_CHECK_VSN_PATCH LEFTOVER < conftest.tmp
+ 		rm -f conftest.tmp
  
- 	if (!(dmh = dm_stats_get_histogram(dms, DM_STATS_REGION_CURRENT,
- 					   DM_STATS_AREA_CURRENT)))
-@@ -3460,7 +3460,7 @@ static const char *_get_histogram_string(const struct dm_stats *dms, int rel,
- 	flags |= (_switches[NOTIMESUFFIX_ARG]) ? 0 : DM_HISTOGRAM_SUFFIX;
+ 		# Require version >= 0.5.4 for --clear-needs-check-flag
+@@ -12852,8 +12852,6 @@ $as_echo "#define HAVE_REALTIME 1" >>confdefs.h
+ 		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Disabling realtime clock" >&5
+ $as_echo "$as_me: WARNING: Disabling realtime clock" >&2;}
+ 	fi
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $HAVE_REALTIME" >&5
+-$as_echo "$HAVE_REALTIME" >&6; }
+ fi
  
- 	/* FIXME: make unit conversion optional. */
--	return dm_histogram_to_string(dmh, -1, 0, flags);
-+	return dm_histogram_to_string(dmh, -1, width, flags);
- }
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking for struct stat has st_ctim." >&5
+diff --git a/configure.in b/configure.in
+index 3d83af5..868b373 100644
+--- a/configure.in
++++ b/configure.in
+@@ -586,7 +586,7 @@ case "$CACHE" in
+ 	if test "$CACHE_CHECK_NEEDS_CHECK" = yes; then
+ 		$CACHE_CHECK_CMD -V 2>/dev/null >conftest.tmp
+ 		read -r CACHE_CHECK_VSN < conftest.tmp
+-		IFS=. read -r CACHE_CHECK_VSN_MAJOR CACHE_CHECK_VSN_MINOR CACHE_CHECK_VSN_PATCH < conftest.tmp
++		IFS=.- read -r CACHE_CHECK_VSN_MAJOR CACHE_CHECK_VSN_MINOR CACHE_CHECK_VSN_PATCH LEFTOVER < conftest.tmp
+ 		rm -f conftest.tmp
  
- static int _stats_hist_count_disp(struct dm_report *rh,
+ 		# Require version >= 0.5.4 for --clear-needs-check-flag
+@@ -1585,7 +1585,6 @@ if test "$REALTIME" = yes; then
+ 	else
+ 		AC_MSG_WARN(Disabling realtime clock)
+ 	fi
+-	AC_MSG_RESULT($HAVE_REALTIME)
+ fi
+ 
+ dnl Check if the system has struct stat st_ctim.
 
 
