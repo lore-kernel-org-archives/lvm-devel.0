@@ -1,84 +1,82 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  4 Sep 2015 16:04:09 +0000 (UTC)
-Subject: master - dev-cache: fix use of uninitialized device status if reading outdated .cache record
-Message-ID: <20150904160409.A610060FCE@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Fri,  4 Sep 2015 16:05:21 +0000 (UTC)
+Subject: master - man lvmlockd: explain the use of lvmlockctl kill
+Message-ID: <20150904160521.37BAE61264@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=55c13f3de4a8b709b950297369182cd81a6c738f
-Commit:        55c13f3de4a8b709b950297369182cd81a6c738f
-Parent:        96948540825d8b3f8e89cbf22527a2d3d8435667
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Sep 4 18:00:29 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Sep 4 18:00:29 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b00ee99a21f3a6f502fc5d165b979af128e3b8b2
+Commit:        b00ee99a21f3a6f502fc5d165b979af128e3b8b2
+Parent:        55c13f3de4a8b709b950297369182cd81a6c738f
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Sep 4 10:29:01 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Sep 4 11:05:13 2015 -0500
 
-dev-cache: fix use of uninitialized device status if reading outdated .cache record
+man lvmlockd: explain the use of lvmlockctl kill
 
-As part of fix that came with cf700151eba483aeedbf790fd66ce1c44e19c707,
-I forgot to add the check whether the result of stat was successful or
-not. This bug caused uninitialized buffer to be used for entries
-from .cache file which are no longer valid.
-
-This bug may have caused these uninitialized values to be used further,
-for example (see the unreal (2567,590944) representing major:minor
-pair):
-
-$ pvs
-  /dev/abc: stat failed: No such file or directory
-  Path /dev/abc no longer valid for device(2567,590944)
-  PV               VG   Fmt  Attr PSize   PFree
-  /dev/mapper/test      lvm2 ---  104.00m 104.00m
-  /dev/vda2        rhel lvm2 a--    9.51g      0
 ---
- WHATS_NEW              |    1 +
- lib/device/dev-cache.c |    6 ++++--
- 2 files changed, 5 insertions(+), 2 deletions(-)
+ man/lvmlockd.8.in |   30 ++++++++++++++++++++----------
+ 1 files changed, 20 insertions(+), 10 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 887fafd..9ff1ce2 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.130 - 
- ===================================
-+  Fix use of uninitialized device status if reading outdated .cache record.
-   Restore support for --monitor option in lvcreate (2.02.112).
-   Read thin-pool data and metadata percent without flush.
-   Detect blocked thin-pool and avoid scanning their thin volumes.
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 4ed0130..b9d4271 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -948,6 +948,7 @@ struct device *dev_cache_get(const char *name, struct dev_filter *f)
- {
- 	struct stat buf;
- 	struct device *d = (struct device *) dm_hash_lookup(_cache.names, name);
-+	int info_available = 0;
+diff --git a/man/lvmlockd.8.in b/man/lvmlockd.8.in
+index 4e7883a..02fa338 100644
+--- a/man/lvmlockd.8.in
++++ b/man/lvmlockd.8.in
+@@ -536,7 +536,7 @@ Run vgchange \-\-lock-stop <vgname> on all other hosts before vgremove.
+ have stopped.)
  
- 	if (d && (d->flags & DEV_REGULAR))
- 		return d;
-@@ -958,7 +959,8 @@ struct device *dev_cache_get(const char *name, struct dev_filter *f)
- 			dm_hash_remove(_cache.names, name);
- 		log_sys_very_verbose("stat", name);
- 		d = NULL;
--	}
-+	} else
-+		info_available = 1;
+ A sanlock VG contains a hidden LV called "lvmlock" that holds the sanlock
+-locks.  vgreduce cannot yet remove the PV holding the lvmlockd LV.  To
++locks.  vgreduce cannot yet remove the PV holding the lvmlock LV.  To
+ remove this PV, change the VG lock type to "none", run vgreduce, then
+ change the VG lock type back to "sanlock".
  
- 	if (d && (buf.st_rdev != d->dev)) {
- 		dm_hash_remove(_cache.names, name);
-@@ -966,7 +968,7 @@ struct device *dev_cache_get(const char *name, struct dev_filter *f)
- 	}
+@@ -590,13 +590,20 @@ the dlm/corosync recovery process is complete.
  
- 	if (!d) {
--		_insert(name, &buf, 0, obtain_device_list_from_udev());
-+		_insert(name, info_available ? &buf : NULL, 0, obtain_device_list_from_udev());
- 		d = (struct device *) dm_hash_lookup(_cache.names, name);
- 		if (!d) {
- 			_full_scan(0);
+ .B sanlock lease storage failure
+ 
+-If a host loses access to the device holding a VG's locks, sanlock cannot
+-renew its lease for the VG's locks.  After some time, the lease will
+-expire, and locks held by the host can be acquired by other hosts.
++If the PV under a sanlock VG's lvmlock LV is disconnected, unresponsive or
++too slow, sanlock cannot renew the lease for the VG's locks.  After some
++time, the lease will expire, and locks that the host owns in the VG can be
++acquired by other hosts.  The VG must be forcibly deactivated on the host
++with the expiring lease before other hosts can acquire its locks.
+ 
+-If no LVs are active in the VG, the lockspace with an expiring lease will
+-be shut down, and errors will be reported when trying to use the VG.  Use
+-the lvmlockctl \-\-drop command to clear the stale lockspace from
++When the sanlock daemon detects that the lease storage is lost, it runs
++the command lvmlockctl \-\-kill <vgname>.  This command emits a syslog
++message stating that lease storage is lost for the VG and LVs must be
++immediately deactivated.
++
++If no LVs are active in the VG, then the lockspace with an expiring lease
++will be removed, and errors will be reported when trying to use the VG.
++Use the lvmlockctl \-\-drop command to clear the stale lockspace from
+ lvmlockd.
+ 
+ If the VG has active LVs when the lock storage is lost, the LVs must be
+@@ -607,9 +614,12 @@ about 40 seconds, sanlock will reset the host using the local watchdog.
+ The machine reset is effectively a severe form of "deactivating" LVs
+ before they can be activated on other hosts.  The reset is considered a
+ better alternative than having LVs used by multiple hosts at once, which
+-could easily damage or destroy their content.  A future enhancement may
+-automatically attempt to forcibly deactivate LVs before the lockspace
+-lease expires.
++could easily damage or destroy their content.
++
++In the future, the lvmlockctl kill command may automatically attempt to
++forcibly deactivate LVs before the sanlock lease expires.  Until then, the
++user must notice the syslog message and manually deactivate the VG before
++sanlock resets the machine.
+ 
+ .B sanlock daemon failure
+ 
 
 
