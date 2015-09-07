@@ -1,91 +1,38 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 21 Sep 2015 22:11:54 +0000 (UTC)
-Subject: master - lvchange: update help text
-Message-ID: <20150921221154.D1A5860703@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Mon,  7 Sep 2015 19:15:03 +0000 (UTC)
+Subject: master - libdm: fix display of nsec suffixes in histogram strings
+Message-ID: <20150907191503.2D8CE61655@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2e5bde4a77d672ff763b5134055d4d35a753de6d
-Commit:        2e5bde4a77d672ff763b5134055d4d35a753de6d
-Parent:        cfe869692f42ee2f4ac0f36c5337e7638ff01c29
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 22 00:06:40 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 22 00:08:44 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=daa94eb792ee76a507dcafe74c5ceda9707a370f
+Commit:        daa94eb792ee76a507dcafe74c5ceda9707a370f
+Parent:        5f990473e46b97e4642744798429c02f7ddc0763
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Mon Sep 7 20:11:28 2015 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Mon Sep 7 20:14:53 2015 +0100
 
-lvchange: update help text
+libdm: fix display of nsec suffixes in histogram strings
 
-Use <> for user specified options.
-(meant to match 'Italic' style in man page).
 ---
- tools/commands.h |   34 +++++++++++++++++-----------------
- 1 files changed, 17 insertions(+), 17 deletions(-)
+ libdm/libdm-stats.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index 4505d18..92d13fd 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -138,16 +138,16 @@ xx(lvchange,
-    "Change the attributes of logical volume(s)",
-    CACHE_VGMETADATA | PERMITTED_READ_ONLY,
-    "lvchange\n"
--   "\t[-A|--autobackup y|n]\n"
--   "\t[-a|--activate [a|e|l]{y|n}]\n"
-+   "\t[-A|--autobackup {y|n}]\n"
-+   "\t[-a|--activate [a][e|s|l]{y|n}]\n"
-    "\t[--activationmode {complete|degraded|partial}"
--   "\t[--addtag Tag]\n"
--   "\t[--alloc AllocationPolicy]\n"
--   "\t[-C|--contiguous y|n]\n"
--   "\t[--cachepolicy policyname] [--cachesettings parameter=value]\n"
--   "\t[--commandprofile ProfileName]\n"
-+   "\t[--addtag <Tag>]\n"
-+   "\t[--alloc <AllocationPolicy>]\n"
-+   "\t[-C|--contiguous {y|n}]\n"
-+   "\t[--cachepolicy <policyname>] [--cachesettings <parameter=value>]\n"
-+   "\t[--commandprofile <ProfileName>]\n"
-    "\t[-d|--debug]\n"
--   "\t[--deltag Tag]\n"
-+   "\t[--deltag <Tag>]\n"
-    "\t[--detachprofile]\n"
-    "\t[--errorwhenfull {y|n}]\n"
-    "\t[-f|--force]\n"
-@@ -161,16 +161,16 @@ xx(lvchange,
-    "\t[--monitor {y|n}]\n"
-    "\t[--poll {y|n}]\n"
-    "\t[--noudevsync]\n"
--   "\t[-M|--persistent y|n] [-j|--major major] [--minor minor]\n"
--   "\t[--metadataprofile ProfileName]\n"
-+   "\t[-M|--persistent {y|n}] [-j|--major <major>] [--minor <minor>]\n"
-+   "\t[--metadataprofile <ProfileName>]\n"
-    "\t[-P|--partial]\n"
--   "\t[-p|--permission r|rw]\n"
--   "\t[--[raid]minrecoveryrate Rate]\n"
--   "\t[--[raid]maxrecoveryrate Rate]\n"
-+   "\t[-p|--permission {r|rw}]\n"
-+   "\t[--[raid]minrecoveryrate <Rate>]\n"
-+   "\t[--[raid]maxrecoveryrate <Rate>]\n"
-    "\t[--[raid]syncaction {check|repair}\n"
--   "\t[--[raid]writebehind IOCount]\n"
--   "\t[--[raid]writemostly PhysicalVolume[:{t|n|y}]]\n"
--   "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
-+   "\t[--[raid]writebehind <IOCount>]\n"
-+   "\t[--[raid]writemostly <PhysicalVolume>[:{t|n|y}]]\n"
-+   "\t[-r|--readahead <ReadAheadSectors>|auto|none]\n"
-    "\t[--refresh]\n"
-    "\t[--resync]\n"
-    "\t[-S|--select Selection]\n"
-@@ -180,7 +180,7 @@ xx(lvchange,
-    "\t[--version]\n"
-    "\t[-y|--yes]\n"
-    "\t[-Z|--zero {y|n}]\n"
--   "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
-+   "\t<LogicalVolume[Path]> [<LogicalVolume[Path]>...]\n",
- 
-    activationmode_ARG, addtag_ARG, alloc_ARG, autobackup_ARG, activate_ARG,
-    available_ARG, cachepolicy_ARG, cachesettings_ARG, contiguous_ARG, deltag_ARG,
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 4e5210d..f239f01 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -2148,6 +2148,7 @@ void dm_histogram_bounds_destroy(struct dm_histogram *bounds)
+  */
+ static void _scale_bound_value_to_suffix(uint64_t *bound, const char **suffix)
+ {
++	*suffix = "ns";
+ 	if (!(*bound % NSEC_PER_SEC)) {
+ 		*bound /= NSEC_PER_SEC;
+ 		*suffix = "s";
 
 
