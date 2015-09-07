@@ -1,83 +1,65 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 21 Sep 2015 12:46:06 +0000 (UTC)
-Subject: master - cleanup: report: reuse existing _uuid_disp fn to report pv_uuid field
-Message-ID: <20150921124606.0769D61059@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Mon,  7 Sep 2015 17:03:16 +0000 (UTC)
+Subject: master - libdm: only free the first histogram explicitly (Coverity)
+Message-ID: <20150907170316.92D0A60C19@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f644431346465389bf1aaab0e9880cf0b1751c5a
-Commit:        f644431346465389bf1aaab0e9880cf0b1751c5a
-Parent:        83a52c07b7c7f36a084a21cce148061c1e77cd21
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Sep 21 11:34:03 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Sep 21 12:13:01 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4bc7a86f3aefbb1b805f94a17891c501b7de40b0
+Commit:        4bc7a86f3aefbb1b805f94a17891c501b7de40b0
+Parent:        ffbf12504d24a25a66de53e11bfcbaac84c51ab5
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Mon Sep 7 17:53:56 2015 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Mon Sep 7 17:53:56 2015 +0100
 
-cleanup: report: reuse existing _uuid_disp fn to report pv_uuid field
+libdm: only free the first histogram explicitly (Coverity)
 
+Coverity flags a user-after-free in _stats_histograms_destroy():
+
+>>>     Calling "dm_pool_free" frees pointer "mem->chunk" which has
+>>>     already been freed.
+
+This should not be possible since the histograms are destroyed in
+reverse order of allocation:
+
+ 203         for (n = _nr_areas_region(region) - 1; n; n--)
+ 204                 if (region->counters[n].histogram)
+ 205                         dm_pool_free(mem, region->counters[n].histogram);
+
+It appears that Coverity is unaware that pool->chunk is updated
+during the call to dm_pool_free() and valgrind flags no errors in
+this function when called with multiple allocated histograms.
+
+Since there is no actual need to free the histograms individually
+in this way simplify the code and just free the first allocated
+object (which will also free all later allocated histograms in a
+single call).
 ---
- lib/report/report.c |   32 +++++++++++++++-----------------
- 1 files changed, 15 insertions(+), 17 deletions(-)
+ libdm/libdm-stats.c |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 4fd311a..1c6ce5b 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1271,6 +1271,18 @@ static int _chars_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((
- 	return dm_report_field_string(rh, field, (const char * const *) &data);
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 20e3c9b..d20949a 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -200,9 +200,11 @@ static void _stats_histograms_destroy(struct dm_pool *mem,
+ 	if (!region->counters)
+ 		return;
+ 
+-	for (n = _nr_areas_region(region) - 1; n; n--)
+-		if (region->counters[n].histogram)
+-			dm_pool_free(mem, region->counters[n].histogram);
++	/*
++	 * Only the first histogram needs to be freed explicitly.
++	 */
++	if (region->counters[0].histogram)
++		dm_pool_free(mem, region->counters[0].histogram);
  }
  
-+static int _uuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
-+		      struct dm_report_field *field,
-+		      const void *data, void *private __attribute__((unused)))
-+{
-+	char *repstr;
-+
-+	if (!(repstr = id_format_and_copy(mem, data)))
-+		return_0;
-+
-+	return _field_set_value(field, repstr, NULL);
-+}
-+
- static int _dev_name_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
- 			  struct dm_report_field *field,
- 			  const void *data, void *private __attribute__((unused)))
-@@ -2187,30 +2199,16 @@ static int _vglockargs_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return _string_disp(rh, mem, field, &repstr, private);
- }
- 
--static int _uuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
--		      struct dm_report_field *field,
--		      const void *data, void *private __attribute__((unused)))
--{
--	char *repstr;
--
--	if (!(repstr = id_format_and_copy(mem, data)))
--		return_0;
--
--	return _field_set_value(field, repstr, NULL);
--}
--
- static int _pvuuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
- 		        struct dm_report_field *field,
- 		        const void *data, void *private __attribute__((unused)))
- {
- 	const struct label *label = (const struct label *) data;
--	const char *repstr = "";
- 
--	if (label->dev &&
--	    !(repstr = id_format_and_copy(mem, (const struct id *) label->dev->pvid)))
--		return_0;
-+	if (!label->dev)
-+		return _field_set_value(field, "", NULL);
- 
--	return _field_set_value(field, repstr, NULL);
-+	return _uuid_disp(rh, mem, field, label->dev->pvid, private);
- }
- 
- static int _pvmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ static void _stats_region_destroy(struct dm_stats_region *region)
 
 
