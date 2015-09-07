@@ -1,64 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Sep 2015 19:54:31 +0000 (UTC)
-Subject: master - thin: lvconvert use passed PVs for _pmspare
-Message-ID: <20150911195431.1B65660F52@fedorahosted.org>
+Date: Mon,  7 Sep 2015 15:45:26 +0000 (UTC)
+Subject: master - makefiles: do not generate tags for everyone
+Message-ID: <20150907154526.17B4A60F51@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=280a6275ce7262baae0062c58a63b910bc16327d
-Commit:        280a6275ce7262baae0062c58a63b910bc16327d
-Parent:        95b5d24f434b6f2174d500a0c7b2bba78b7cd2e9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=acfc56957c008d30c98ced5fae5f7888ec2a5a22
+Commit:        acfc56957c008d30c98ced5fae5f7888ec2a5a22
+Parent:        3ba431e79e4914dfaf3cc74aeb52b46757acc8df
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 11 20:56:02 2015 +0200
+AuthorDate:    Mon Sep 7 13:44:14 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 11 21:48:19 2015 +0200
+CommitterDate: Mon Sep 7 17:44:04 2015 +0200
 
-thin: lvconvert use passed PVs for _pmspare
+makefiles: do not generate tags for everyone
 
-When PVs are given on 'lvconvert' respect them when converting
-volume to thin-pool and allocating i.e. _pmspare.
+Create tags file only on request (make tags).
+Also clean file with 'make clean'.
 ---
- WHATS_NEW         |    3 ++-
- tools/lvconvert.c |    4 ++--
- 2 files changed, 4 insertions(+), 3 deletions(-)
+ Makefile.in |    5 ++---
+ WHATS_NEW   |    1 +
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
+diff --git a/Makefile.in b/Makefile.in
+index 1ce9ca8..d9ac815 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -229,10 +229,9 @@ endif
+ 
+ ifneq ($(shell which ctags),)
+ .PHONY: tags
+-all: tags
+ tags:
+-	test -z "$(shell find $(top_srcdir) -type f -name '*.[ch]' -newer tags | head -1)" || $(RM) tags
++	test -z "$(shell find $(top_srcdir) -type f -name '*.[ch]' -newer tags 2>/dev/null | head -1)" || $(RM) tags
+ 	test -f tags || find $(top_srcdir) -maxdepth 4 -type f -name '*.[ch]' -exec ctags -a '{}' +
+ 
+-DISTCLEAN_TARGETS += tags
++CLEAN_TARGETS += tags
+ endif
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 6e23fcb..163077f 100644
+index 1ce1c81..c9dec02 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,6 +1,7 @@
+@@ -1,5 +1,6 @@
  Version 2.02.131 - 
  =====================================
--  Disallow usage of --stripe and --stripsize when creating cache pool.
-+  Use passed list of PVS when allocating space in lvconvert --thinpool.
-+  Disallow usage of --stripe and --stripesize when creating cache pool.
-   Warn user when caching raid or thin pool data LV.
-   When layering LV, move LV flags with segments.
-   Ignore persistent cache if configuration changed. (2.02.127)
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 237de2d..6b8f7aa 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2348,7 +2348,7 @@ static int _lvconvert_pool_repair(struct cmd_context *cmd,
- 	pmslv = pool_lv->vg->pool_metadata_spare_lv;
++  Make tags only when requested via 'make tags'.
+   Configure supports --disable-dependency-tracking for one-time builds.
+   Fix usage of configure.h when building in srcdir != builddir.
  
- 	/* Check we have pool metadata spare LV */
--	if (!handle_pool_metadata_spare(pool_lv->vg, 0, NULL, 1))
-+	if (!handle_pool_metadata_spare(pool_lv->vg, 0, lp->pvh, 1))
- 		return_0;
- 
- 	if (pmslv != pool_lv->vg->pool_metadata_spare_lv) {
-@@ -2473,7 +2473,7 @@ deactivate_pmslv:
- 	}
- 
- 	/* Try to allocate new pool metadata spare LV */
--	if (!handle_pool_metadata_spare(pool_lv->vg, 0, NULL, 1))
-+	if (!handle_pool_metadata_spare(pool_lv->vg, 0, lp->pvh, 1))
- 		stack;
- 
- 	if (dm_snprintf(meta_path, sizeof(meta_path), "%s_meta%%d", pool_lv->name) < 0) {
 
 
