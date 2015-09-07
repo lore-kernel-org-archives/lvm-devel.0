@@ -1,62 +1,61 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 10 Sep 2015 14:50:28 +0000 (UTC)
-Subject: master - lvmlockd: flag for internal actions
-Message-ID: <20150910145028.D9741610F3@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  7 Sep 2015 15:45:19 +0000 (UTC)
+Subject: master - configure: simpler version reading
+Message-ID: <20150907154519.CA71860F6B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f11d690967c9d352cb19076a99de81661ee43343
-Commit:        f11d690967c9d352cb19076a99de81661ee43343
-Parent:        15ae237d2c029116395e5436826f896a5a00d6c4
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Sep 9 13:33:10 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Sep 10 09:47:26 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1999e368f16cf7537c553be573809713213fdacd
+Commit:        1999e368f16cf7537c553be573809713213fdacd
+Parent:        fc4f0d3fce05a601e768dbfb315b0c7e6d6c0030
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Sep 7 13:58:54 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Sep 7 17:43:27 2015 +0200
 
-lvmlockd: flag for internal actions
+configure: simpler version reading
 
-When an action is created by lvmlockd for itself,
-there is no client to send the result to.  Add
-the NO_CLIENT flag to the action to skip sending
-the result to a client.
+Avoid calling 'cat' when 'read' could handle it.
+
+Also drop DM_LIB_VERSION from AC_SUBST as it's not used anywhere
+in .in file.
 ---
- daemons/lvmlockd/lvmlockd-core.c     |    7 +++++++
- daemons/lvmlockd/lvmlockd-internal.h |    2 +-
- 2 files changed, 8 insertions(+), 1 deletions(-)
+ configure.in |    9 ++++-----
+ 1 files changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 9b79131..8b78af3 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -959,6 +959,13 @@ static int lm_find_free_lock(struct lockspace *ls, uint64_t *free_offset)
+diff --git a/configure.in b/configure.in
+index 4843678..31f4b3a 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1888,14 +1888,14 @@ test "$interface" != ioctl && AC_MSG_ERROR([--with-interface=ioctl required. fs
+ AC_MSG_RESULT($interface)
  
- static void add_client_result(struct action *act)
- {
-+	if (act->flags & LD_AF_NO_CLIENT) {
-+		log_debug("internal action done op %s mode %s result %d vg %s",
-+			  op_str(act->op), mode_str(act->mode), act->result, act->vg_name);
-+		free_action(act);
-+		return;
-+	}
-+
- 	pthread_mutex_lock(&client_mutex);
- 	if (act->flags & LD_AF_ADOPT)
- 		list_add_tail(&act->list, &adopt_results);
-diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
-index 68dcd9d..a58976f 100644
---- a/daemons/lvmlockd/lvmlockd-internal.h
-+++ b/daemons/lvmlockd/lvmlockd-internal.h
-@@ -89,7 +89,7 @@ struct client {
- };
+ ################################################################################
+-DM_LIB_VERSION="\"`cat "$srcdir"/VERSION_DM 2>/dev/null || echo Unknown`\""
+-AC_DEFINE_UNQUOTED(DM_LIB_VERSION, $DM_LIB_VERSION, [Library version])
++read DM_LIB_VERSION < "$srcdir"/VERSION_DM 2>/dev/null || DM_LIB_VERSION=Unknown
++AC_DEFINE_UNQUOTED(DM_LIB_VERSION, "$DM_LIB_VERSION", [Library version])
  
- #define LD_AF_PERSISTENT           0x00000001
--#define LD_AF_UNUSED               0x00000002 /* use me */
-+#define LD_AF_NO_CLIENT            0x00000002
- #define LD_AF_UNLOCK_CANCEL        0x00000004
- #define LD_AF_NEXT_VERSION         0x00000008
- #define LD_AF_WAIT                 0x00000010
+ DM_LIB_PATCHLEVEL=`cat "$srcdir"/VERSION_DM | $AWK -F '[[-. ]]' '{printf "%s.%s.%s",$1,$2,$3}'`
+ 
+-LVM_VERSION="\"`cat "$srcdir"/VERSION 2>/dev/null || echo Unknown`\""
++read VER < "$srcdir"/VERSION 2>/dev/null || VER=Unknown
+ 
+-VER=`cat "$srcdir"/VERSION`
++LVM_VERSION=\"$VER\"
+ LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.* (//;s/).*//'`\""
+ VER=`echo "$VER" | $AWK '{print $1}'`
+ LVM_RELEASE="\"`echo "$VER" | $AWK -F '-' '{print $2}'`\""
+@@ -1963,7 +1963,6 @@ AC_SUBST(DLM_LIBS)
+ AC_SUBST(DL_LIBS)
+ AC_SUBST(DMEVENTD)
+ AC_SUBST(DMEVENTD_PATH)
+-AC_SUBST(DM_LIB_VERSION)
+ AC_SUBST(DM_LIB_PATCHLEVEL)
+ AC_SUBST(ELDFLAGS)
+ AC_SUBST(FSADM)
 
 
