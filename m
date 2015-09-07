@@ -1,65 +1,40 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sat,  5 Sep 2015 22:58:44 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20150905225844.6EA2C60D79@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Mon,  7 Sep 2015 10:16:42 +0000 (UTC)
+Subject: master - dmsetup: fix bounds leak in _do_stats_create_regions()
+Message-ID: <20150907101642.B981B602FA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2a022e9e6ef24741c5ebf1ebeaff6241cc505287
-Commit:        2a022e9e6ef24741c5ebf1ebeaff6241cc505287
-Parent:        fb123084166634e8f3b8550520391df369e9db70
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Sep 5 23:58:40 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Sep 5 23:58:40 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a26523330e8f461b90eca7d2dcea0d0a6866e635
+Commit:        a26523330e8f461b90eca7d2dcea0d0a6866e635
+Parent:        2a022e9e6ef24741c5ebf1ebeaff6241cc505287
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Mon Sep 7 11:14:28 2015 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Mon Sep 7 11:14:28 2015 +0100
 
-post-release
+dmsetup: fix bounds leak in _do_stats_create_regions()
 
+If we fail to create the DM_DEVICE_TABLE dm_task destroy the bounds
+object before returning.
 ---
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ tools/dmsetup.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index af427ed..4f600d1 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.130(2)-git (2015-09-05)
-+2.02.131(2)-git (2015-09-05)
-diff --git a/VERSION_DM b/VERSION_DM
-index 60f6f69..25d799d 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.107-git (2015-09-05)
-+1.02.108-git (2015-09-05)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e74fd55..3dc7384 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.131 - 
-+=====================================
-+
- Version 2.02.130 - 5th September 2015
- =====================================
-   Fix use of uninitialized device status if reading outdated .cache record.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index b509d68..db40deb 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.108 - 
-+=====================================
-+
- Version 1.02.107 - 5th September 2015
- =====================================
-   Parse thin-pool status with one single routine internally.
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 61ad5a9..8b7ad74 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -4674,6 +4674,7 @@ static int _do_stats_create_regions(struct dm_stats *dms,
+ 		return_0;
+ 
+ 	if (!(dmt = dm_task_create(DM_DEVICE_TABLE))) {
++		dm_histogram_bounds_destroy(bounds);
+ 		dm_stats_destroy(dms);
+ 		return_0;
+ 	}
 
 
