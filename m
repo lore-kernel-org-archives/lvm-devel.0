@@ -1,42 +1,41 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  7 Sep 2015 15:45:24 +0000 (UTC)
-Subject: master - makefiles: deps depends on header links
-Message-ID: <20150907154524.01EA560A75@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed,  9 Sep 2015 20:43:51 +0000 (UTC)
+Subject: master - man lvmlockd: fix typo
+Message-ID: <20150909204351.40C996034D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3ba431e79e4914dfaf3cc74aeb52b46757acc8df
-Commit:        3ba431e79e4914dfaf3cc74aeb52b46757acc8df
-Parent:        d62448cb456170bab17b2af24e11df964666e1c6
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 7 14:00:27 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 7 17:43:27 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d323acdfec8aaab1161aa5f80ae67622e396a632
+Commit:        d323acdfec8aaab1161aa5f80ae67622e396a632
+Parent:        81b0e9de7c28e1516263427d270907c4781964e1
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Sep 9 15:43:28 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Sep 9 15:43:28 2015 -0500
 
-makefiles: deps depends on header links
+man lvmlockd: fix typo
 
-Put include/.symlinks_created as a prerequisite for dep calc.
-Otherwise if these are not generated and user enters tests subdir and
-runs 'make' he just gets endless loop of dep calculation.
 ---
- make.tmpl.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ man/lvmlockd.8.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 3fd3410..7124144 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -448,7 +448,7 @@ $(LIB_STATIC): $(OBJECTS)
- 	$(RM) $@
- 	$(AR) rs $@ $(OBJECTS)
+diff --git a/man/lvmlockd.8.in b/man/lvmlockd.8.in
+index 15f9b73..8567651 100644
+--- a/man/lvmlockd.8.in
++++ b/man/lvmlockd.8.in
+@@ -309,8 +309,8 @@ contain the "global lock".
+ The first vgcreate command needs to be given the path to a device that has
+ not yet been initialized with pvcreate.  The pvcreate initialization will
+ be done by vgcreate.  This is because the pvcreate command requires the
+-global lock, which will not available until after the first sanlock VG is
+-created.
++global lock, which will not be available until after the first sanlock VG
++is created.
  
--%.d: %.c
-+%.d: %.c $(INC_LNS)
- 	$(MKDIR_P) $(dir $@); \
- 	set -e; \
- 	FILE=`echo $@ | sed 's/\\//\\\\\\//g;s/\\.d//g'`; \
+ .IP \[bu] 2
+ While running vgcreate for the first sanlock VG, ensure that the device
 
 
