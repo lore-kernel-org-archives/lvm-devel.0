@@ -1,61 +1,52 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Sep 2015 19:54:35 +0000 (UTC)
-Subject: master - pool: validate pool_metadata has proper suffix
-Message-ID: <20150911195435.624CC609C4@fedorahosted.org>
+Date: Fri, 11 Sep 2015 19:54:37 +0000 (UTC)
+Subject: master - makefiles: distclean missing files
+Message-ID: <20150911195437.7F741609C4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=729b035edd923554275ac7b3bc446b57f0e9f0d5
-Commit:        729b035edd923554275ac7b3bc446b57f0e9f0d5
-Parent:        fda853b573920ccefda23ad97f54d7b4dafaa9f1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fd3d795b9301dd1defd33e4340fd453e5aee4e8d
+Commit:        fd3d795b9301dd1defd33e4340fd453e5aee4e8d
+Parent:        729b035edd923554275ac7b3bc446b57f0e9f0d5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 11 20:58:58 2015 +0200
+AuthorDate:    Fri Sep 11 21:30:45 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Sep 11 21:52:27 2015 +0200
 
-pool: validate pool_metadata has proper suffix
+makefiles: distclean missing files
 
 ---
- lib/metadata/merge.c |   24 ++++++++++++++++++------
- 1 files changed, 18 insertions(+), 6 deletions(-)
+ daemons/lvmetad/Makefile.in |    2 ++
+ scripts/Makefile.in         |    1 +
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index a3e6af1..351ab39 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -119,12 +119,24 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
- 			inc_error_count;
- 		}
+diff --git a/daemons/lvmetad/Makefile.in b/daemons/lvmetad/Makefile.in
+index 090bb76..ce7e5d6 100644
+--- a/daemons/lvmetad/Makefile.in
++++ b/daemons/lvmetad/Makefile.in
+@@ -45,6 +45,8 @@ lvmetactl: lvmetactl.o $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 	$(top_builddir)/libdaemon/server/libdaemonserver.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ lvmetactl.o $(LVMLIBS)
  
--		if (lv_is_pool_metadata(lv) &&
--		    (!(seg2 = first_seg(lv)) || !(seg2 = find_pool_seg(seg2)) ||
--		     seg2->metadata_lv != lv)) {
--			log_error("LV %s: segment 1 pool metadata LV does not point back to same LV",
--				  lv->name);
--			inc_error_count;
-+		if (lv_is_pool_metadata(lv)) {
-+			if (!(seg2 = first_seg(lv)) || !(seg2 = find_pool_seg(seg2)) ||
-+			    seg2->metadata_lv != lv) {
-+				log_error("LV %s: segment 1 pool metadata LV does not point back to same LV",
-+					  lv->name);
-+				inc_error_count;
-+			}
-+			if (lv_is_thin_pool_metadata(lv) &&
-+			    !strstr(lv->name, "_tmeta")) {
-+				log_error("LV %s: thin pool metadata LV does not use _tmeta",
-+					  lv->name);
-+				inc_error_count;
-+			} else if (lv_is_cache_pool_metadata(lv) &&
-+				   !strstr(lv->name, "_cmeta")) {
-+				log_error("LV %s: cache pool metadata LV does not use _cmeta",
-+					  lv->name);
-+				inc_error_count;
-+			}
- 		}
- 	}
- 
++CLEAN_TARGETS += lvmetactl.o
++
+ # TODO: No idea. No idea how to test either.
+ #ifneq ("$(CFLOW_CMD)", "")
+ #CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES))
+diff --git a/scripts/Makefile.in b/scripts/Makefile.in
+index 2ae5325..dabe2ee 100644
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -151,6 +151,7 @@ DISTCLEAN_TARGETS += \
+ 	lvm2_clvmd_systemd_red_hat.service \
+ 	lvm2_cmirrord_systemd_red_hat.service \
+ 	lvm2_lvmetad_init_red_hat \
++	lvm2_lvmpolld_init_red_hat \
+ 	lvm2_lvmetad_systemd_red_hat.service \
+ 	lvm2_lvmetad_systemd_red_hat.socket \
+ 	lvm2_lvmpolld_systemd_red_hat.service \
 
 
