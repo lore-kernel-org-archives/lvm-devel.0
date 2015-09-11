@@ -1,86 +1,96 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  7 Sep 2015 15:45:17 +0000 (UTC)
-Subject: master - configure: support --disable-dependency-tracking
-Message-ID: <20150907154517.AFC4E60F6B@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Fri, 11 Sep 2015 18:24:53 +0000 (UTC)
+Subject: master - lvmlockd: optimize dlm global lockspace creation
+Message-ID: <20150911182453.C35B86017F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc4f0d3fce05a601e768dbfb315b0c7e6d6c0030
-Commit:        fc4f0d3fce05a601e768dbfb315b0c7e6d6c0030
-Parent:        9403edbb93a2c337df790408e9ff3d26566b7443
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 7 13:57:38 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 7 17:43:11 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=18dfbbb150e04026e4c11822e5f80f79da691d08
+Commit:        18dfbbb150e04026e4c11822e5f80f79da691d08
+Parent:        0a26c20b88ab5fe7894a2e2207fd492aaca41095
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Sep 10 10:31:25 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Sep 11 13:20:01 2015 -0500
 
-configure: support --disable-dependency-tracking
+lvmlockd: optimize dlm global lockspace creation
 
-One-time build may enjoy little speedup of build when dependencies are not
-calculated.
+Set a flag indicating that the dlm global lockspace
+exists to avoid going through the entire process of
+trying to add it before finding it exists.
 ---
- WHATS_NEW    |    1 +
- configure.in |   10 ++++++++++
- make.tmpl.in |    2 ++
- 3 files changed, 13 insertions(+), 0 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c     |   18 ++++++++++++++++--
+ daemons/lvmlockd/lvmlockd-internal.h |    3 +--
+ 2 files changed, 17 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5f8846b..1ce1c81 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.131 - 
- =====================================
-+  Configure supports --disable-dependency-tracking for one-time builds.
-   Fix usage of configure.h when building in srcdir != builddir.
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 0b0161a..8f89181 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -2546,6 +2546,8 @@ out_act:
+ 	ls->thread_done = 1;
+ 	ls->free_vg = free_vg;
+ 	ls->drop_vg = drop_vg;
++	if (ls->lm_type == LD_LM_DLM && !strcmp(ls->name, gl_lsname_dlm))
++		global_dlm_lockspace_exists = 0;
+ 	pthread_mutex_unlock(&lockspaces_mutex);
  
- Version 2.02.130 - 5th September 2015
-diff --git a/configure.in b/configure.in
-index 3b58527..4843678 100644
---- a/configure.in
-+++ b/configure.in
-@@ -156,6 +156,15 @@ AC_FUNC_STRTOD
- AC_FUNC_VPRINTF
+ 	/* worker_thread will join this thread, and free the ls */
+@@ -2702,6 +2704,8 @@ static int add_lockspace_thread(const char *ls_name,
+ 	if (act)
+ 		list_add(&act->list, &ls->actions);
  
- ################################################################################
-+dnl -- Disable dependency tracking
-+AC_MSG_CHECKING(whether to disable dependency tracking)
-+AC_ARG_ENABLE(dependency-tracking,
-+	      AC_HELP_STRING([--disable-dependency-tracking],
-+			     [speeds up one-time build.]),
-+	      USE_TRACKING=$enableval, USE_TRACKING=yes)
-+AC_MSG_RESULT($USE_TRACKING)
++	if (ls->lm_type == LD_LM_DLM && !strcmp(ls->name, gl_lsname_dlm))
++		global_dlm_lockspace_exists = 1;
+ 	list_add_tail(&ls->list, &lockspaces);
+ 	pthread_mutex_unlock(&lockspaces_mutex);
+ 
+@@ -2729,15 +2733,25 @@ static int add_dlm_global_lockspace(struct action *act)
+ {
+ 	int rv;
+ 
++	if (global_dlm_lockspace_exists)
++		return 0;
 +
-+################################################################################
- dnl -- Enables statically-linked tools
- AC_MSG_CHECKING(whether to use static linking)
- AC_ARG_ENABLE(static_link,
-@@ -2023,6 +2032,7 @@ AC_SUBST(UDEV_SYNC)
- AC_SUBST(UDEV_SYSTEMD_BACKGROUND_JOBS)
- AC_SUBST(UDEV_RULE_EXEC_DETECTION)
- AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
-+AC_SUBST(USE_TRACKING)
- AC_SUBST(VALGRIND_POOL)
- AC_SUBST(WRITE_INSTALL)
- AC_SUBST(DMEVENTD_PIDFILE)
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 6fc1195..3fd3410 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -511,6 +511,7 @@ else
- 	) > $@
- endif
+ 	/*
+-	 * FIXME: optimize this by setting a flag to indicate that the
+-	 * dlm global lockspace is running so we can quit here.
++	 * FIXME: if the dlm global lockspace is started without a global
++	 * lock request, insert an internal gl sh lock request?
+ 	 */
  
-+ifeq ("@USE_TRACKING@","yes")
- ifeq (,$(findstring $(MAKECMDGOALS),cscope.out cflow clean distclean lcov \
-  help check check_local check_cluster check_lvmetad check_lvmpolld))
-     ifdef SOURCES
-@@ -520,3 +521,4 @@ ifeq (,$(findstring $(MAKECMDGOALS),cscope.out cflow clean distclean lcov \
-        -include $(SOURCES2:.c=.d)
-     endif
- endif
-+endif
+ 	rv = add_lockspace_thread(gl_lsname_dlm, NULL, NULL, LD_LM_DLM, NULL, act);
+ 	if (rv < 0)
+ 		log_debug("add_dlm_global_lockspace add_lockspace_thread %d", rv);
+ 
++	/*
++	 * EAGAIN may be returned for a short period because
++	 * global_dlm_lockspace_exists is set to 0 before the
++	 * ls is removed from the lockspaces list by the
++	 * worker_thread.
++	 */
++
+ 	return rv;
+ }
+ 
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index 6bdd4c7..55ac460 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -316,10 +316,9 @@ static inline int list_empty(const struct list_head *head)
+ EXTERN int gl_type_static;
+ EXTERN int gl_use_dlm;
+ EXTERN int gl_use_sanlock;
+-EXTERN pthread_mutex_t gl_type_mutex;
+-
+ EXTERN char gl_lsname_dlm[MAX_NAME+1];
+ EXTERN char gl_lsname_sanlock[MAX_NAME+1];
++EXTERN int global_dlm_lockspace_exists;
+ 
+ EXTERN int daemon_test; /* run as much as possible without a live lock manager */
+ EXTERN int daemon_debug;
 
 
