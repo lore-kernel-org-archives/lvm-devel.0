@@ -1,56 +1,70 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Sep 2015 19:54:42 +0000 (UTC)
-Subject: master - tests: wait for sync before deactivation
-Message-ID: <20150911195442.0F236611FD@fedorahosted.org>
+Date: Mon, 14 Sep 2015 07:32:22 +0000 (UTC)
+Subject: master - vgimporeclone: use correct cache dir path
+Message-ID: <20150914073222.CB4BD611CE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=226e7d7b3c30f083c422063ec107c50b3534ee0f
-Commit:        226e7d7b3c30f083c422063ec107c50b3534ee0f
-Parent:        cd2e4310b320782ec58b712d3c2f24a56c7d10c5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e42ee69988fc770314a355e6acd417e00e0c9623
+Commit:        e42ee69988fc770314a355e6acd417e00e0c9623
+Parent:        226e7d7b3c30f083c422063ec107c50b3534ee0f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 11 20:54:43 2015 +0200
+AuthorDate:    Mon Sep 14 09:24:15 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 11 21:52:27 2015 +0200
+CommitterDate: Mon Sep 14 09:31:26 2015 +0200
 
-tests: wait for sync before deactivation
+vgimporeclone: use correct cache dir path
 
-On slower machine/disk, sync may block udev from reading and may prevent
-deactivation.
+Commit 00b36ef06acb15c82d7c9b37872753f02c638316 had a typo
+and missed '{' for shell variable, thus command used slightly
+different 'tmp' dir name for cache dir (with extra '}').
+
+Such change was unnoticed until a recent fix in persistent
+filter, lvm2 missed to update cache file when --config
+was specified.
+
+The result was, /tmp dir was accumulating snap.XXXXX} dirs when
+running vgimportclose  script.
 ---
- test/shell/lvresize-raid.sh |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ WHATS_NEW                |    1 +
+ scripts/vgimportclone.sh |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvresize-raid.sh b/test/shell/lvresize-raid.sh
-index 1a1a75f..333318a 100644
---- a/test/shell/lvresize-raid.sh
-+++ b/test/shell/lvresize-raid.sh
-@@ -24,7 +24,10 @@ for deactivate in true false; do
- # Extend and reduce a 2-way RAID1
- 	lvcreate --type raid1 -m 1 -l 2 -n $lv1 $vg
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2c444c7..c661702 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.131 - 
+ =====================================
++  Fix vgimportclone cache_dir path name (2.02.115).
+   Swapping of LV identifiers handles more complex LVs.
+   Use passed list of PVS when allocating space in lvconvert --thinpool.
+   Disallow usage of --stripe and --stripesize when creating cache pool.
+diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
+index 388d14c..af8cf5c 100755
+--- a/scripts/vgimportclone.sh
++++ b/scripts/vgimportclone.sh
+@@ -1,7 +1,7 @@
+ #!/bin/bash
  
--	test $deactivate && lvchange -an $vg/$lv1
-+	test $deactivate && {
-+		aux wait_for_sync $vg $lv1
-+		lvchange -an $vg/$lv1
-+	}
+ # Copyright (C) 2009 Chris Procter All rights reserved.
+-# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2009-2015 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -239,7 +239,7 @@ LVMCONF=${TMP_LVM_SYSTEM_DIR}/lvm.conf
  
- 	lvresize -l +2 $vg/$lv1
- 
-@@ -36,7 +39,10 @@ for deactivate in true false; do
- 	for i in 4 5 6 ; do
- 		lvcreate --type raid$i -i 3 -l 3 -n $lv2 $vg
- 
--		test $deactivate && lvchange -an $vg/$lv2
-+		test $deactivate && {
-+			aux wait_for_sync $vg $lv2
-+			lvchange -an $vg/$lv2
-+		}
- 
- 		lvresize -l +3 $vg/$lv2
- 
+ CMD_CONFIG_LINE="devices { \
+                    scan = [ \"${TMP_LVM_SYSTEM_DIR}\" ] \
+-                   cache_dir = \"$TMP_LVM_SYSTEM_DIR}/cache\"
++                   cache_dir = \"${TMP_LVM_SYSTEM_DIR}/cache\"
+                    global_filter = [ \"a|.*|\" ] \
+                    ${FILTER}
+                  } \
 
 
