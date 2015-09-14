@@ -1,56 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 14 Sep 2015 18:20:39 +0000 (UTC)
-Subject: master - libdm: no validate for pool without messages
-Message-ID: <20150914182039.DE8BD60CF8@fedorahosted.org>
+Date: Mon, 14 Sep 2015 18:20:42 +0000 (UTC)
+Subject: master - thin: show message on error path
+Message-ID: <20150914182042.1392B60CF8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c356991fa83b15af261e8d7e33f5615397c07778
-Commit:        c356991fa83b15af261e8d7e33f5615397c07778
-Parent:        e42ee69988fc770314a355e6acd417e00e0c9623
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ffeeb5c1e70e554defa45ee8aa28dcaeb47c705f
+Commit:        ffeeb5c1e70e554defa45ee8aa28dcaeb47c705f
+Parent:        c356991fa83b15af261e8d7e33f5615397c07778
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 14 14:59:40 2015 +0200
+AuthorDate:    Mon Sep 14 12:58:21 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 14 20:18:54 2015 +0200
 
-libdm: no validate for pool without messages
+thin: show message on error path
 
-Avoid validation of free space in pool, when no messages are passed.
+Add missing log_error and show proper reason for failure
+when autoextend is set to 0.
 
-Patch a3c7e326c3e9950fe74e433c406d6e1b5a53bf25 add new check for
-pool overload - but this check should not be made if there are
-no messages and transaction_id is still within 'bounds' (bigger by 1).
+Add missing log_error when checked LV is not locally active.
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |   13 +++++++++++--
+ 1 files changed, 11 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index db40deb..9e30786 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.108 - 
- =====================================
-+  Do not check for full thin pool when activating without messages (1.02.107).
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index f43d281..46213fe 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4405,8 +4405,11 @@ static int _adjust_policy_params(struct cmd_context *cmd,
+ 		policy_amount =
+ 			find_config_tree_int(cmd, activation_thin_pool_autoextend_percent_CFG,
+ 					     lv_config_profile(lv));
+-		if (!policy_amount && policy_threshold < DM_PERCENT_100)
+-                        return 0;
++		if (!policy_amount && policy_threshold < DM_PERCENT_100) {
++			log_error("Can't extend thin pool %s, autoextend is set to 0%%.",
++				  display_lvname(lv));
++			return 0;
++		}
+ 	} else {
+ 		policy_threshold =
+ 			find_config_tree_int(cmd, activation_snapshot_autoextend_threshold_CFG, NULL) * DM_PERCENT_1;
+@@ -4417,6 +4420,12 @@ static int _adjust_policy_params(struct cmd_context *cmd,
+ 	if (policy_threshold >= DM_PERCENT_100)
+ 		return 1; /* nothing to do */
  
- Version 1.02.107 - 5th September 2015
- =====================================
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index d40362d..7b7ca5b 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -1633,7 +1633,7 @@ static int _node_send_messages(struct dm_tree_node *dnode,
- 		return 0;
- 	}
- 
--	if (!send)
-+	if (!have_messages || !send)
- 		return 1; /* transaction_id is matching */
- 
- 	dm_list_iterate_items(tmsg, &seg->thin_messages) {
++	if (!lv_is_active_locally(lv)) {
++		log_error("Can't read state of locally inactive LV %s.",
++			  display_lvname(lv));
++		return 0;
++	}
++
+ 	if (lv_is_thin_pool(lv)) {
+ 		if (!lv_thin_pool_percent(lv, 1, &percent))
+ 			return_0;
 
 
