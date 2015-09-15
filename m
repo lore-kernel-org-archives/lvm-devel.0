@@ -1,108 +1,94 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 15 Sep 2015 13:09:41 +0000 (UTC)
-Subject: v2_02_131 annotated tag has been created
-Message-ID: <20150915130941.4CCAD60FE5@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 15 Sep 2015 16:08:45 +0000 (UTC)
+Subject: master - format-text: label: fix missing dev assignment for struct label in _text_pv_write
+Message-ID: <20150915160845.B8B47601FC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10619ffc87ca3f7c3e2bc9cb7ecafb692d13b2d8
-Commit:        10619ffc87ca3f7c3e2bc9cb7ecafb692d13b2d8
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2015-09-15 12:18 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2015-09-15 12:18 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fcfca57e2e15c5cae3ccac225669d97c65b6b9db
+Commit:        fcfca57e2e15c5cae3ccac225669d97c65b6b9db
+Parent:        0ac10bb23a9e356b87ead9e1304a6482f6761b9b
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Sep 15 17:38:02 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Sep 15 18:07:32 2015 +0200
 
-annotated tag: v2_02_131 has been created
-	    at 10619ffc87ca3f7c3e2bc9cb7ecafb692d13b2d8 (tag)
-       tagging a729b1aa294ab4525e09c83f392560bcf59a5b81 (commit)
-      replaces v2_02_130
+format-text: label: fix missing dev assignment for struct label in _text_pv_write
 
-Release 2.02.131.
+When using lvm shell, some structures which are cached in memory may be
+reused. This happens for the struct label (a part of lvmcache_info
+structure) when lvmetad is used in which case the PV scan is not
+done that would normally overwrite these label structures in memory
+and making them up-to-date.
 
-66 files changed, 2457 insertions(+), 1719 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
+This is all consequence of the fact that struct lvmcache_info and
+struct label are not always assigned in the same part of the code.
+For example, if lvmetad *is not* used, parts of the struct label are
+reassigned in label_read fn while struct lvmcache_info is created
+elsewhere. No part of the code reused struct label (and its "dev"
+field) before calling label_read fn. That's why the real bug is
+hidden when using lvm shell without lvmetad.
 
-iEYEABECAAYFAlX4DKAACgkQIoGRwVZ+LBdiTQCg7ot+g1jnQcLU26on6n6NfNJC
-btUAoPBnpR9WaSm0r0dkbrC/L8XBlkF5
-=axmX
------END PGP SIGNATURE-----
+However, with lvmetad and lvm shell, the situation is a bit different.
+The label_read fn is not called if lvmetad *is* used, hence the
+struct label may have ended up not initialized properly.
 
-Alasdair G Kergon (4):
-      style: Standardise some error paths.
-      post-release
-      man: Add all_man Makefile target.
-      pre-release
+There was missing assignment for the dev field in struct label
+in _text_pv_write fn which caused this problem to appear in
+lvm shell with lvmetad, for example:
 
-Bryn M. Reeves (9):
-      dmsetup: fix bounds leak in _do_stats_create_regions()
-      libdm: add missing error handling in _stats_parse_histogram()
-      libdm: check dm_pool_begin_object() return value.
-      libdm: handle pool errors in dm_histogram_to_string()
-      libdm: fix dm_stats leak in dm_stats_create()
-      libdm: only free the first histogram explicitly (Coverity)
-      libdm: clean up _build_histogram_arg()
-      libdm: fix display of nsec suffixes in histogram strings
-      libdm: clean up stats local variable use
+Before this patch:
 
-David Teigland (13):
-      man lvmlockd: mention device used for first vgcreate
-      man lvmlockd: fix typo
-      vgchange: lock-stop only needs shared lock
-      lockd: add start_init arg to lockd_start_vg
-      lvmlockd: rename ADOPT_CLIENT_ID
-      lvmlockd: flag for internal actions
-      lvmlockd: check all variations of lvb values
-      lockd: fix rescanning VG metadata
-      lvmlockd: optimize dlm global lockspace creation
-      lvmlockd: remove shortcut for lockspace thread cleanup
-      lvmlockd: prevent vgremove of dlm VG while lockspace is used
-      man lvmlockd: move and update text about vgremove
-      vgcreate: initialize new PVs only in first vg_write
+lvm> pvcreate /dev/sda
+  Physical volume "/dev/sda" successfully created
+lvm> pvs /dev/sda
+  PV             VG     Fmt  Attr PSize   PFree
+  unknown device        lvm2 ---  128.00m 128.00m
 
-Peter Rajnoha (3):
-      filters: make sure regex filter is evaluated before any filter that needs disk access
-      WHATS_NEW: commit b77497cbd86a854add3ffa4ce09a35f165c0d2ba
-      dev-cache: ignore persistent cache if configuration changed
+With this patch applied:
 
-Zdenek Kabelac (34):
-      configure: relocate generated headers
-      configure: support --disable-dependency-tracking
-      configure: simpler version reading
-      configure: regenerate
-      makefiles: deps depends on header links
-      makefiles: do not generate tags for everyone
-      tests: update install rules
-      specs: package lvmlockctl man page
-      cleanup: assign seg_name once
-      specs: install lvmlockctl only when built
-      tests: skip raid testing on 4.[1,2] fc24 kernels
-      makefiles: ensure no old .h are left
-      tests: better check for compiled version
-      tests: ensure dd flushed all data before exit
-      lib: when moving segtypes, move LV bits
-      cache: warn if caching causes troubles
-      cache: disallow stripes/size for cache pool
-      tests: check cache stripe and raid behavior
-      tests: fix check lv_not_exist
-      tests: remove only existing loops
-      spec: upgrade
-      configure: correct message
-      configure: relocate configure.h
-      thin: lvconvert use passed PVs for _pmspare
-      thin: improve swapping of identifiers
-      pool: validate pool_metadata has proper suffix
-      makefiles: distclean missing files
-      tests: new thin tests
-      tests: wait for sync before deactivation
-      vgimporeclone: use correct cache dir path
-      libdm: no validate for pool without messages
-      thin: show message on error path
-      tests: lvextend of full thin pool
-      tests: early check for snapshot-merge
+lvm> pvcreate /dev/sda
+  Physical volume "/dev/sda" successfully created
+lvm> pvs /dev/sda
+  PV         VG   Fmt  Attr PSize   PFree
+  /dev/sda        lvm2 ---  128.00m 128.00m
+
+Also, this problem had not appeared before changes introduced
+by commits e1a63905d14cc73352b905c70cb4084b7e521e33 through
+3a6f91d7139119bea664050a957cbc21490398bc which, among other
+things, added proper label field type reporting. Before, label
+reporting was the same as using struct physical_volume which
+has its own dev field assigned and so this problem was not exposed.
+---
+ WHATS_NEW                     |    1 +
+ lib/format_text/format-text.c |    1 +
+ 2 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c50eecb..e50ffd2 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.132 - 
+ ======================================
++  Fix PV label processing failure after pvcreate in lvm shell with lvmetad.
+ 
+ Version 2.02.131 - 15th September 2015
+ ======================================
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 4544f26..e0ec8ed 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1339,6 +1339,7 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
+ 
+ 	label = lvmcache_get_label(info);
+ 	label->sector = pv->label_sector;
++	label->dev = pv->dev;
+ 
+ 	lvmcache_update_pv(info, pv, fmt);
+ 
 
 
