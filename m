@@ -1,81 +1,108 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 15 Sep 2015 13:09:22 +0000 (UTC)
-Subject: master - pre-release
-Message-ID: <20150915130922.26EA8605B6@fedorahosted.org>
+Date: Tue, 15 Sep 2015 13:09:41 +0000 (UTC)
+Subject: v2_02_131 annotated tag has been created
+Message-ID: <20150915130941.4CCAD60FE5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a729b1aa294ab4525e09c83f392560bcf59a5b81
-Commit:        a729b1aa294ab4525e09c83f392560bcf59a5b81
-Parent:        548c09acfca8970cafe74f43e1944b5f20f540be
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10619ffc87ca3f7c3e2bc9cb7ecafb692d13b2d8
+Commit:        10619ffc87ca3f7c3e2bc9cb7ecafb692d13b2d8
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Sep 15 13:17:50 2015 +0100
+AuthorDate:    2015-09-15 12:18 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Sep 15 13:17:50 2015 +0100
+CommitterDate: 2015-09-15 12:18 +0000
 
-pre-release
+annotated tag: v2_02_131 has been created
+	    at 10619ffc87ca3f7c3e2bc9cb7ecafb692d13b2d8 (tag)
+       tagging a729b1aa294ab4525e09c83f392560bcf59a5b81 (commit)
+      replaces v2_02_130
 
----
- VERSION             |    2 +-
- VERSION_DM          |    2 +-
- WHATS_NEW           |    4 ++--
- WHATS_NEW_DM        |    4 ++--
- libdm/libdm-stats.c |    2 +-
- 5 files changed, 7 insertions(+), 7 deletions(-)
+Release 2.02.131.
 
-diff --git a/VERSION b/VERSION
-index 4f600d1..fbf246a 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.131(2)-git (2015-09-05)
-+2.02.131(2)-git (2015-09-15)
-diff --git a/VERSION_DM b/VERSION_DM
-index 25d799d..1c01d02 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.108-git (2015-09-05)
-+1.02.108-git (2015-09-15)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 8f87617..b15ae48 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,5 @@
--Version 2.02.131 - 
--=====================================
-+Version 2.02.131 - 15th September 2015
-+======================================
-   Rename 'make install_full_man' to install_all_man and add all_man target.
-   Fix vgimportclone cache_dir path name (2.02.115).
-   Swapping of LV identifiers handles more complex LVs.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 9e30786..4e2f515 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,5 @@
--Version 1.02.108 - 
--=====================================
-+Version 1.02.108 - 15th September 2015
-+======================================
-   Do not check for full thin pool when activating without messages (1.02.107).
- 
- Version 1.02.107 - 5th September 2015
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index ee62fe6..d3ae1f2 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -199,7 +199,7 @@ static void _stats_histograms_destroy(struct dm_pool *mem,
- 		return;
- 
- 	/*
--	 * Only the first histogram needs to be freed explicitly.
-+	 * Free everything in the pool back to the first histogram.
- 	 */
- 	if (region->counters[0].histogram)
- 		dm_pool_free(mem, region->counters[0].histogram);
+66 files changed, 2457 insertions(+), 1719 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAlX4DKAACgkQIoGRwVZ+LBdiTQCg7ot+g1jnQcLU26on6n6NfNJC
+btUAoPBnpR9WaSm0r0dkbrC/L8XBlkF5
+=axmX
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (4):
+      style: Standardise some error paths.
+      post-release
+      man: Add all_man Makefile target.
+      pre-release
+
+Bryn M. Reeves (9):
+      dmsetup: fix bounds leak in _do_stats_create_regions()
+      libdm: add missing error handling in _stats_parse_histogram()
+      libdm: check dm_pool_begin_object() return value.
+      libdm: handle pool errors in dm_histogram_to_string()
+      libdm: fix dm_stats leak in dm_stats_create()
+      libdm: only free the first histogram explicitly (Coverity)
+      libdm: clean up _build_histogram_arg()
+      libdm: fix display of nsec suffixes in histogram strings
+      libdm: clean up stats local variable use
+
+David Teigland (13):
+      man lvmlockd: mention device used for first vgcreate
+      man lvmlockd: fix typo
+      vgchange: lock-stop only needs shared lock
+      lockd: add start_init arg to lockd_start_vg
+      lvmlockd: rename ADOPT_CLIENT_ID
+      lvmlockd: flag for internal actions
+      lvmlockd: check all variations of lvb values
+      lockd: fix rescanning VG metadata
+      lvmlockd: optimize dlm global lockspace creation
+      lvmlockd: remove shortcut for lockspace thread cleanup
+      lvmlockd: prevent vgremove of dlm VG while lockspace is used
+      man lvmlockd: move and update text about vgremove
+      vgcreate: initialize new PVs only in first vg_write
+
+Peter Rajnoha (3):
+      filters: make sure regex filter is evaluated before any filter that needs disk access
+      WHATS_NEW: commit b77497cbd86a854add3ffa4ce09a35f165c0d2ba
+      dev-cache: ignore persistent cache if configuration changed
+
+Zdenek Kabelac (34):
+      configure: relocate generated headers
+      configure: support --disable-dependency-tracking
+      configure: simpler version reading
+      configure: regenerate
+      makefiles: deps depends on header links
+      makefiles: do not generate tags for everyone
+      tests: update install rules
+      specs: package lvmlockctl man page
+      cleanup: assign seg_name once
+      specs: install lvmlockctl only when built
+      tests: skip raid testing on 4.[1,2] fc24 kernels
+      makefiles: ensure no old .h are left
+      tests: better check for compiled version
+      tests: ensure dd flushed all data before exit
+      lib: when moving segtypes, move LV bits
+      cache: warn if caching causes troubles
+      cache: disallow stripes/size for cache pool
+      tests: check cache stripe and raid behavior
+      tests: fix check lv_not_exist
+      tests: remove only existing loops
+      spec: upgrade
+      configure: correct message
+      configure: relocate configure.h
+      thin: lvconvert use passed PVs for _pmspare
+      thin: improve swapping of identifiers
+      pool: validate pool_metadata has proper suffix
+      makefiles: distclean missing files
+      tests: new thin tests
+      tests: wait for sync before deactivation
+      vgimporeclone: use correct cache dir path
+      libdm: no validate for pool without messages
+      thin: show message on error path
+      tests: lvextend of full thin pool
+      tests: early check for snapshot-merge
 
 
