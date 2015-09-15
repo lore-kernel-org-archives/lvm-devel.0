@@ -1,63 +1,116 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 14 Sep 2015 18:22:31 +0000 (UTC)
-Subject: master - vgcreate: initialize new PVs only in first vg_write
-Message-ID: <20150914182231.AD9CB61190@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 15 Sep 2015 12:14:37 +0000 (UTC)
+Subject: master - man: Add all_man Makefile target.
+Message-ID: <20150915121437.4BBA461084@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ce8ee0214c84a4afd12589bbe2fe521c2518b87
-Commit:        2ce8ee0214c84a4afd12589bbe2fe521c2518b87
-Parent:        cee9ed22441187a2a3a6290d1e07428df0171144
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Sep 11 16:12:03 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Sep 14 13:22:22 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=548c09acfca8970cafe74f43e1944b5f20f540be
+Commit:        548c09acfca8970cafe74f43e1944b5f20f540be
+Parent:        2ce8ee0214c84a4afd12589bbe2fe521c2518b87
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Sep 15 13:14:16 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Sep 15 13:14:16 2015 +0100
 
-vgcreate: initialize new PVs only in first vg_write
+man: Add all_man Makefile target.
 
-When a command does a sequence of
-vg_write + vg_commit + vg_write + vg_commit,
-
-initialization of non-PV devices happens during the
-first vg_write, and does not need to be repeated by
-the second vg_write.
-
-When creating a lockd VG, this sequence occurs because
-the VG is first created, then the lockd data is created,
-then the lockd data is then written to the VG metadata.
+Use 'make all_man' to generate all man pages (regardless of
+configuration options) or 'make install_all_man' to install them.
 ---
- lib/metadata/metadata.c |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ Makefile.in     |    7 +++++--
+ WHATS_NEW       |    1 +
+ make.tmpl.in    |    2 +-
+ man/Makefile.in |   14 ++++++++++++--
+ 4 files changed, 19 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index b45f850..9bd42c9 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3011,7 +3011,7 @@ out:
- int vg_write(struct volume_group *vg)
- {
- 	struct dm_list *mdah;
--        struct pv_to_create *pv_to_create;
-+	struct pv_to_create *pv_to_create, *pv_to_create_safe;
- 	struct metadata_area *mda;
- 	struct lv_list *lvl;
- 	int revert = 0, wrote = 0;
-@@ -3067,10 +3067,11 @@ int vg_write(struct volume_group *vg)
- 	memlock_unlock(vg->cmd);
- 	vg->seqno++;
+diff --git a/Makefile.in b/Makefile.in
+index d9ac815..68fbc79 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -131,6 +131,9 @@ rpm: dist
+ generate: conf.generate
+ 	$(MAKE) -C conf generate
  
--        dm_list_iterate_items(pv_to_create, &vg->pvs_to_create) {
-+	dm_list_iterate_items_safe(pv_to_create, pv_to_create_safe, &vg->pvs_to_create) {
- 		if (!_pvcreate_write(vg->cmd, pv_to_create))
- 			return 0;
--        }
-+		dm_list_del(&pv_to_create->list);
-+	}
++all_man:
++	$(MAKE) -C man all_man
++
+ install_system_dirs:
+ 	$(INSTALL_DIR) $(DESTDIR)$(DEFAULT_SYS_DIR)
+ 	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_ARCHIVE_DIR)
+@@ -150,8 +153,8 @@ install_systemd_generators:
+ install_systemd_units:
+ 	$(MAKE) -C scripts install_systemd_units
  
- 	/* Write to each copy of the metadata area */
- 	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use) {
+-install_full_man:
+-	$(MAKE) -C man install_full_man
++install_all_man:
++	$(MAKE) -C man install_all_man
+ 
+ ifeq ("@PYTHON_BINDINGS@", "yes")
+ install_python_bindings:
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c661702..8f87617 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.131 - 
+ =====================================
++  Rename 'make install_full_man' to install_all_man and add all_man target.
+   Fix vgimportclone cache_dir path name (2.02.115).
+   Swapping of LV identifiers handles more complex LVs.
+   Use passed list of PVS when allocating space in lvconvert --thinpool.
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 7124144..1217278 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -275,7 +275,7 @@ POTFILES = $(SOURCES:%.c=%.pot)
+ .PHONY: all pofile distclean clean cleandir cflow device-mapper
+ .PHONY: install install_cluster install_device-mapper install_lvm2
+ .PHONY: install_lib_shared install_dm_plugin install_lvm2_plugin
+-.PHONY: install_ocf install_systemd_generators install_full_man help
++.PHONY: install_ocf install_systemd_generators install_all_man all_man man help
+ .PHONY: python_bindings install_python_bindings
+ .PHONY: $(SUBDIRS) $(SUBDIRS.install) $(SUBDIRS.clean) $(SUBDIRS.distclean)
+ .PHONY: $(SUBDIRS.pofile) $(SUBDIRS.install_cluster) $(SUBDIRS.cflow)
+diff --git a/man/Makefile.in b/man/Makefile.in
+index 6ddbaa9..6ef7186 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -42,7 +42,15 @@ MAN8DM=dmsetup.8 dmstats.8
+ MAN8CLUSTER=
+ MAN8SYSTEMD_GENERATORS=lvm2-activation-generator.8
+ 
+-ifeq ($(MAKECMDGOALS),install_full_man)
++ifeq ($(MAKECMDGOALS),all_man)
++  MAN_ALL="yes"
++endif
++
++ifeq ($(MAKECMDGOALS),install_all_man)
++  MAN_ALL="yes"
++endif
++
++ifeq ($(MAN_ALL),"yes")
+   MAN8+=$(FSADMMAN) $(LVMETADMAN) $(LVMPOLLDMAN) $(LVMLOCKDMAN)
+   MAN8DM+=$(BLKDEACTIVATEMAN) $(DMEVENTDMAN)
+   MAN8CLUSTER+=$(CLVMDMAN) $(CMIRRORDMAN)
+@@ -109,6 +117,8 @@ device-mapper: $(MAN8DM)
+ 
+ man: $(MAN5) $(MAN7) $(MAN8) $(MAN8CLUSTER) $(MAN8SYSTEMD_GENERATORS)
+ 
++all_man: man
++
+ $(MAN5) $(MAN7) $(MAN8) $(MAN8DM) $(MAN8CLUSTER):	Makefile
+ 
+ Makefile: Makefile.in
+@@ -150,4 +160,4 @@ install_systemd_generators: $(MAN8SYSTEMD_GENERATORS)
+ 
+ install: install_lvm2 install_device-mapper install_cluster
+ 
+-install_full_man: install install_systemd_generators
++install_all_man: install install_systemd_generators
 
 
