@@ -1,92 +1,144 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 17 Sep 2015 11:37:31 +0000 (UTC)
-Subject: master - libdm: dev_node: use lstat instead of stat while removing and renaming nodes
-Message-ID: <20150917113731.9D5FA609E3@fedorahosted.org>
+Date: Thu, 17 Sep 2015 12:32:08 +0000 (UTC)
+Subject: master - libdm: file: add proper checks for directory components in dm_create_dir
+Message-ID: <20150917123208.071B360236@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=afdae26c71d2539a9f0dfb06b65541dedf28b5f5
-Commit:        afdae26c71d2539a9f0dfb06b65541dedf28b5f5
-Parent:        b5022102bbaf978cddd7ca9b27a1a12d5aeef44d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c0b4a2769067048fa144814e298a3272564c475
+Commit:        6c0b4a2769067048fa144814e298a3272564c475
+Parent:        afdae26c71d2539a9f0dfb06b65541dedf28b5f5
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Sep 17 13:31:34 2015 +0200
+AuthorDate:    Thu Sep 17 14:29:51 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Sep 17 13:37:15 2015 +0200
+CommitterDate: Thu Sep 17 14:29:51 2015 +0200
 
-libdm: dev_node: use lstat instead of stat while removing and renaming nodes
+libdm: file: add proper checks for directory components in dm_create_dir
 
-When using udev, the /dev/mapper entries are symlinks - fix the code
-to count with this.
+Also make error messages more consistent:
 
-This patch also fixes the dmsetup mknodes and vgmknodes to properly
-repair /dev/mapper content if it sees dangling symlink in /dev/mapper.
+Before this patch:
+
+(/run/lock exists and is not a directory)
+$ pvs
+  /run/lock/lvm: mkdir failed: Not a directory
+  File-based locking initialisation failed.
+
+(/run/lock/lvm exists and is not a directory)
+$ pvs
+  Directory "/run/lock/lvm" not found
+  File-based locking initialisation failed.
+
+With this patch applied:
+
+(/run/lock exists and is not a directory)
+$ pvs
+  Existing path /run/lock is not a directory.
+  Failed to create directory /run/lock/lvm.
+  File-based locking initialisation failed
+
+(/run/lock/lvm exists and is not a directory)
+$ pvs
+  Existing path /run/lock/lvm is not a directory.
+  Failed to create directory /run/lock/lvm.
+  File-based locking initialisation failed.
 ---
- WHATS_NEW_DM         |    1 +
- libdm/libdm-common.c |   21 ++++++++++++++++-----
- 2 files changed, 17 insertions(+), 5 deletions(-)
+ libdm/libdm-file.c |   57 +++++++++++++++++++++++++++++++++++++++------------
+ 1 files changed, 43 insertions(+), 14 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 7f0e65e..b519fd5 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.109 - 
- ======================================
-+  Fix /dev/mapper handling to remove dangling entries if symlinks are found.
-   Make it possible to use blank value as selection for string list report field.
+diff --git a/libdm/libdm-file.c b/libdm/libdm-file.c
+index e4beddd..0de2d61 100644
+--- a/libdm/libdm-file.c
++++ b/libdm/libdm-file.c
+@@ -19,6 +19,24 @@
+ #include <fcntl.h>
+ #include <dirent.h>
  
- Version 1.02.108 - 15th September 2015
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index e1bd44e..e648dac 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -1038,7 +1038,7 @@ static int _rm_dev_node(const char *dev_name, int warn_if_udev_failed)
- 
- 	if (!_build_dev_path(path, sizeof(path), dev_name))
- 		return_0;
--	if (stat(path, &info) < 0)
-+	if (lstat(path, &info) < 0)
- 		return 1;
- 	else if (_warn_if_op_needed(warn_if_udev_failed))
- 		log_warn("Node %s was not removed by udev. "
-@@ -1060,20 +1060,31 @@ static int _rename_dev_node(const char *old_name, const char *new_name,
- {
- 	char oldpath[PATH_MAX];
- 	char newpath[PATH_MAX];
--	struct stat info;
-+	struct stat info, info2;
-+	struct stat *info_block_dev;
- 
- 	if (!_build_dev_path(oldpath, sizeof(oldpath), old_name) ||
- 	    !_build_dev_path(newpath, sizeof(newpath), new_name))
- 		return_0;
- 
--	if (stat(newpath, &info) == 0) {
--		if (!S_ISBLK(info.st_mode)) {
-+	if (lstat(newpath, &info) == 0) {
-+		if (S_ISLNK(info.st_mode)) {
-+			if (stat(newpath, &info2) == 0)
-+				info_block_dev = &info2;
-+			else {
-+				log_sys_error("stat", newpath);
-+				return 0;
-+			}
-+		} else
-+			info_block_dev = &info;
++static int _is_dir(const char *path)
++{
++	struct stat st;
 +
-+		if (!S_ISBLK(info_block_dev->st_mode)) {
- 			log_error("A non-block device file at '%s' "
- 				  "is already present", newpath);
- 			return 0;
++	if (stat(path, &st) < 0) {
++		log_sys_error("stat", path);
++		return 0;
++	}
++
++	if (!S_ISDIR(st.st_mode)) {
++		log_error("Existing path %s is not "
++			  "a directory.", path);
++		return 0;
++	}
++
++	return 1;
++}
++
+ static int _create_dir_recursive(const char *dir)
+ {
+ 	char *orig, *s;
+@@ -36,10 +54,15 @@ static int _create_dir_recursive(const char *dir)
+ 		*s = '\0';
+ 		if (*orig) {
+ 			rc = mkdir(orig, 0777);
+-			if (rc < 0 && errno != EEXIST) {
+-				if (errno != EROFS)
+-					log_sys_error("mkdir", orig);
+-				goto out;
++			if (rc < 0) {
++				if (errno == EEXIST) {
++					if (!_is_dir(orig))
++						goto_out;
++				} else {
++					if (errno != EROFS)
++						log_sys_error("mkdir", orig);
++					goto out;
++				}
+ 			}
  		}
- 		else if (_warn_if_op_needed(warn_if_udev_failed)) {
--			if (stat(oldpath, &info) < 0 &&
-+			if (lstat(oldpath, &info) < 0 &&
- 				 errno == ENOENT)
- 				/* assume udev already deleted this */
- 				return 1;
+ 		*s++ = '/';
+@@ -47,10 +70,15 @@ static int _create_dir_recursive(const char *dir)
+ 
+ 	/* Create final directory */
+ 	rc = mkdir(dir, 0777);
+-	if (rc < 0 && errno != EEXIST) {
+-		if (errno != EROFS)
+-			log_sys_error("mkdir", orig);
+-		goto out;
++	if (rc < 0) {
++		if (errno == EEXIST) {
++			if (!_is_dir(dir))
++				goto_out;
++		} else {
++			if (errno != EROFS)
++				log_sys_error("mkdir", orig);
++			goto out;
++		}
+ 	}
+ 
+ 	r = 1;
+@@ -66,14 +94,15 @@ int dm_create_dir(const char *dir)
+ 	if (!*dir)
+ 		return 1;
+ 
+-	if (stat(dir, &info) < 0)
+-		return _create_dir_recursive(dir);
+-
+-	if (S_ISDIR(info.st_mode))
++	if (stat(dir, &info) == 0 && S_ISDIR(info.st_mode))
+ 		return 1;
+ 
+-	log_error("Directory \"%s\" not found", dir);
+-	return 0;
++	if (!_create_dir_recursive(dir)) {
++		log_error("Failed to create directory %s.", dir);
++		return 0;
++	}
++
++	return 1;
+ }
+ 
+ int dm_is_empty_dir(const char *dir)
 
 
