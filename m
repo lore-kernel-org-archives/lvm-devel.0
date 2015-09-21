@@ -1,55 +1,40 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 21 Sep 2015 18:52:18 +0000 (UTC)
-Subject: master - lvmcache: Remove verbose msg when rescanning dev.
-Message-ID: <20150921185218.0B54560357@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 21 Sep 2015 22:11:50 +0000 (UTC)
+Subject: master - clvmd: update help test
+Message-ID: <20150921221150.9267F60E20@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ce80d736848135851bb9961cec8cb361911fe455
-Commit:        ce80d736848135851bb9961cec8cb361911fe455
-Parent:        804c25a81a297753aa60f47f36c21149e9479c22
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Sep 21 19:51:15 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Sep 21 19:51:15 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a61f3c531650e4473291ff162dd4c9faf5888a39
+Commit:        a61f3c531650e4473291ff162dd4c9faf5888a39
+Parent:        ce80d736848135851bb9961cec8cb361911fe455
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Sep 21 22:40:49 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Sep 22 00:08:44 2015 +0200
 
-lvmcache: Remove verbose msg when rescanning dev.
+clvmd: update help test
 
+Use <n> for <input> value.
 ---
- WHATS_NEW            |    3 ++-
- lib/cache/lvmcache.c |    4 ++--
- 2 files changed, 4 insertions(+), 3 deletions(-)
+ daemons/clvmd/clvmd.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 30f047b..cade4b2 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,6 +1,7 @@
- Version 2.02.132 - 
- ======================================
--  Add origin_uuid, mirror_log_uuid, move_pv_uuid, convert_lv_uuid reporting fields.
-+  Remove verbose message when rescanning an unchanged device. (2.02.119)
-+  Add origin_uuid, mirror_log_uuid, move_pv_uuid, convert_lv_uuid report fields.
-   Add pool_lv_uuid, metadata_lv_uuid, data_lv_uuid reporting fields.
-   Fix PV label processing failure after pvcreate in lvm shell with lvmetad.
- 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index cfa1d5f..c495fa7 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1871,8 +1871,8 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 			 * device already exists?  Things don't seem to work
- 			 * if we do that for some reason.
- 			 */
--			log_verbose("Found same device %s with same pvid %s",
--				    dev_name(existing->dev), pvid_s);
-+			log_debug_cache("Found same device %s with same pvid %s",
-+					dev_name(existing->dev), pvid_s);
- 		}
- 
- 		/*
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index c6d51bd..53daa8c 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -154,7 +154,7 @@ static void usage(const char *prog, FILE *file)
+ {
+ 	fprintf(file, "Usage: %s [options]\n"
+ 		"   -C       Sets debug level (from -d) on all clvmd instances clusterwide\n"
+-		"   -d[n]    Set debug logging (0:none, 1:stderr (implies -f option), 2:syslog)\n"
++		"   -d[<n>]  Set debug logging (0:none, 1:stderr (implies -f option), 2:syslog)\n"
+ 		"   -E<uuid> Take this lock uuid as exclusively locked resource (for restart)\n"
+ 		"   -f       Don't fork, run in the foreground\n"
+ 		"   -h       Show this help information\n"
 
 
