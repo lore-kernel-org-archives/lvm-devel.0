@@ -1,97 +1,83 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Sep 2015 15:46:04 +0000 (UTC)
-Subject: master - tests: check dmsetup remove --force
-Message-ID: <20150918154604.131FF606FB@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 21 Sep 2015 12:46:06 +0000 (UTC)
+Subject: master - cleanup: report: reuse existing _uuid_disp fn to report pv_uuid field
+Message-ID: <20150921124606.0769D61059@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=83a52c07b7c7f36a084a21cce148061c1e77cd21
-Commit:        83a52c07b7c7f36a084a21cce148061c1e77cd21
-Parent:        7d1dd5f52d26ebe15dd6de211001ece975be2c7c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 18 17:34:23 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 18 17:45:46 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f644431346465389bf1aaab0e9880cf0b1751c5a
+Commit:        f644431346465389bf1aaab0e9880cf0b1751c5a
+Parent:        83a52c07b7c7f36a084a21cce148061c1e77cd21
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Sep 21 11:34:03 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Sep 21 12:13:01 2015 +0200
 
-tests: check dmsetup remove --force
+cleanup: report: reuse existing _uuid_disp fn to report pv_uuid field
 
 ---
- test/shell/snapshot-remove-dmsetup.sh |   65 +++++++++++++++++++++++++++++++++
- 1 files changed, 65 insertions(+), 0 deletions(-)
+ lib/report/report.c |   32 +++++++++++++++-----------------
+ 1 files changed, 15 insertions(+), 17 deletions(-)
 
-diff --git a/test/shell/snapshot-remove-dmsetup.sh b/test/shell/snapshot-remove-dmsetup.sh
-new file mode 100644
-index 0000000..b5aad1f
---- /dev/null
-+++ b/test/shell/snapshot-remove-dmsetup.sh
-@@ -0,0 +1,65 @@
-+#!/bin/sh
-+# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 4fd311a..1c6ce5b 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -1271,6 +1271,18 @@ static int _chars_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((
+ 	return dm_report_field_string(rh, field, (const char * const *) &data);
+ }
+ 
++static int _uuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
++		      struct dm_report_field *field,
++		      const void *data, void *private __attribute__((unused)))
++{
++	char *repstr;
 +
-+# check if 'dmsetup --noflush' will work properly for mounted snapshot
++	if (!(repstr = id_format_and_copy(mem, data)))
++		return_0;
 +
-+. lib/inittest
++	return _field_set_value(field, repstr, NULL);
++}
 +
-+which mkfs.ext2 || skip
-+
-+test -e LOCAL_LVMETAD && skip
-+test -e LOCAL_LVMPOLLD && skip
-+test -e LOCAL_CLVMD && skip
-+
-+aux prepare_vg 5
-+
-+# Create stacked device
-+lvcreate --type snapshot -s -L10 -n $lv1 $vg --virtualsize 100M
-+aux extend_filter_LVMTEST
-+vgcreate $vg1 "$DM_DEV_DIR"/$vg/$lv1
-+
-+
-+lvcreate -L20 -n $lv1 $vg1
-+lvcreate -L10 -n snap -s $vg1/$lv1
-+
-+mkfs.ext2 "$DM_DEV_DIR/$vg1/snap"
-+mkdir mnt
-+mount -o errors=remount-ro "$DM_DEV_DIR/$vg1/snap" mnt
-+
-+# intetionally suspend layer bellow
-+dmsetup suspend $vg-$lv1
-+
-+# now this should pass without blocking
-+dmsetup suspend --noflush --nolockfs $vg1-snap
-+
-+# unlock device below
-+dmsetup resume $vg-$lv1
-+# so this will pass without blocking on udev
-+# otherwise --noudevsync would be needed
-+dmsetup resume $vg1-snap
-+
-+
-+# Try how force removal works
-+dmsetup suspend $vg-$lv1
-+# needs to fail as device is still open
-+not dmsetup remove --force $vg1-snap
-+dmsetup resume $vg-$lv1
-+
-+# check it really is now 'error' target
-+dmsetup table $vg1-snap | tee out
-+grep error out
-+
-+umount mnt || true
-+
-+lvremove -f $vg1
-+
-+vgremove -ff $vg1
-+vgremove -ff $vg
+ static int _dev_name_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
+ 			  struct dm_report_field *field,
+ 			  const void *data, void *private __attribute__((unused)))
+@@ -2187,30 +2199,16 @@ static int _vglockargs_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _string_disp(rh, mem, field, &repstr, private);
+ }
+ 
+-static int _uuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
+-		      struct dm_report_field *field,
+-		      const void *data, void *private __attribute__((unused)))
+-{
+-	char *repstr;
+-
+-	if (!(repstr = id_format_and_copy(mem, data)))
+-		return_0;
+-
+-	return _field_set_value(field, repstr, NULL);
+-}
+-
+ static int _pvuuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
+ 		        struct dm_report_field *field,
+ 		        const void *data, void *private __attribute__((unused)))
+ {
+ 	const struct label *label = (const struct label *) data;
+-	const char *repstr = "";
+ 
+-	if (label->dev &&
+-	    !(repstr = id_format_and_copy(mem, (const struct id *) label->dev->pvid)))
+-		return_0;
++	if (!label->dev)
++		return _field_set_value(field, "", NULL);
+ 
+-	return _field_set_value(field, repstr, NULL);
++	return _uuid_disp(rh, mem, field, label->dev->pvid, private);
+ }
+ 
+ static int _pvmdas_disp(struct dm_report *rh, struct dm_pool *mem,
 
 
