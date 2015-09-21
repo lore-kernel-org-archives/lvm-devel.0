@@ -1,38 +1,40 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon,  7 Sep 2015 19:15:03 +0000 (UTC)
-Subject: master - libdm: fix display of nsec suffixes in histogram strings
-Message-ID: <20150907191503.2D8CE61655@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 21 Sep 2015 22:11:56 +0000 (UTC)
+Subject: master - tests: check for block device
+Message-ID: <20150921221156.E3D2160703@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=daa94eb792ee76a507dcafe74c5ceda9707a370f
-Commit:        daa94eb792ee76a507dcafe74c5ceda9707a370f
-Parent:        5f990473e46b97e4642744798429c02f7ddc0763
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Sep 7 20:11:28 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Sep 7 20:14:53 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7e63364529e563cf7609875f6aca10303c03883e
+Commit:        7e63364529e563cf7609875f6aca10303c03883e
+Parent:        2e5bde4a77d672ff763b5134055d4d35a753de6d
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Sep 21 22:42:43 2015 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Sep 22 00:08:44 2015 +0200
 
-libdm: fix display of nsec suffixes in histogram strings
+tests: check for block device
 
+Need to detect if block device exist.
 ---
- libdm/libdm-stats.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 4e5210d..f239f01 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -2148,6 +2148,7 @@ void dm_histogram_bounds_destroy(struct dm_histogram *bounds)
-  */
- static void _scale_bound_value_to_suffix(uint64_t *bound, const char **suffix)
- {
-+	*suffix = "ns";
- 	if (!(*bound % NSEC_PER_SEC)) {
- 		*bound /= NSEC_PER_SEC;
- 		*suffix = "s";
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index a59f98a..56316f7 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -253,7 +253,7 @@ teardown_devs() {
+ 		test ${#stray_loops[@]} -eq 0 || {
+ 			teardown_devs_prefixed "$COMMON_PREFIX" 1
+ 			echo "Removing stray loop devices containing $COMMON_PREFIX: ${stray_loops[@]}"
+-			for i in "${stray_loops[@]}" ; do test ! -f $i || losetup -d $i ; done
++			for i in "${stray_loops[@]}" ; do test ! -b $i || losetup -d $i ; done
+ 			# Leave test when udev processed all removed devices
+ 			udev_wait
+ 		}
 
 
