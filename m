@@ -1,163 +1,160 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon,  7 Sep 2015 18:36:24 +0000 (UTC)
-Subject: master - libdm: clean up _build_histogram_arg()
-Message-ID: <20150907183624.59544607A0@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 21 Sep 2015 12:46:25 +0000 (UTC)
+Subject: master - report: add lv_convert_lv_uuid field
+Message-ID: <20150921124625.16CCF6036E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5f990473e46b97e4642744798429c02f7ddc0763
-Commit:        5f990473e46b97e4642744798429c02f7ddc0763
-Parent:        4bc7a86f3aefbb1b805f94a17891c501b7de40b0
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Sep 7 18:27:22 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Sep 7 19:30:03 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a54b4bba3578e371bb36ddb3b040a71825a62814
+Commit:        a54b4bba3578e371bb36ddb3b040a71825a62814
+Parent:        0a01c5aa360db1e54b26ad8b9f7ae22abb6cef7b
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Sep 21 14:10:21 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Sep 21 14:22:23 2015 +0200
 
-libdm: clean up _build_histogram_arg()
+report: add lv_convert_lv_uuid field
 
-Split up _build_histogram_arg() into separate functions to allocate
-and fill the histogram arg string and remove nested local variable
-declarations from the parent function.
 ---
- libdm/libdm-stats.c |   85 +++++++++++++++++++++++++++++++++------------------
- 1 files changed, 55 insertions(+), 30 deletions(-)
+ lib/metadata/lv.c       |   21 ++++++++++++++++++---
+ lib/metadata/lv.h       |    1 +
+ lib/report/columns.h    |    1 +
+ lib/report/properties.c |    2 ++
+ lib/report/report.c     |   32 ++++++++++++++++++++++++++------
+ 5 files changed, 48 insertions(+), 9 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index d20949a..4e5210d 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -194,8 +194,6 @@ static int _stats_region_present(const struct dm_stats_region *region)
- static void _stats_histograms_destroy(struct dm_pool *mem,
- 				      struct dm_stats_region *region)
- {
--	uint64_t n;
--
- 	/* Unpopulated handle. */
- 	if (!region->counters)
- 		return;
-@@ -326,11 +324,54 @@ int dm_stats_driver_supports_histogram(void)
- 	return _stats_check_precise_timestamps(NULL);
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index e32564f..8f3500c 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -443,7 +443,8 @@ int lv_kernel_major(const struct logical_volume *lv)
+ 	return -1;
  }
  
-+static int _fill_hist_arg(char *hist_arg, size_t hist_len, uint64_t scale,
-+			  struct dm_histogram *bounds)
-+{
-+	int i, l, len = 0, nr_bins;
-+	char *arg = hist_arg;
-+	uint64_t value;
-+
-+	nr_bins = bounds->nr_bins;
-+
-+	for (i = 0; i < nr_bins; i++) {
-+		value = bounds->bins[i].upper / scale;
-+		if ((l = dm_snprintf(arg, hist_len - len, FMTu64"%s", value,
-+				     (i == (nr_bins - 1)) ? "" : ",")) < 0)
-+			return_0;
-+		len += l;
-+		arg += l;
-+	}
-+	return 1;
-+}
-+
-+static void *_get_hist_arg(struct dm_histogram *bounds, uint64_t scale,
-+			   size_t *len)
-+{
-+	struct dm_histogram_bin *entry, *bins;
-+	size_t hist_len = 1; /* terminating '\0' */
-+	double value;
-+
-+	entry = bins = bounds->bins;
-+
-+	entry += bounds->nr_bins - 1;
-+	while(entry >= bins) {
-+		value = (double) (entry--)->upper;
-+		/* Use lround to avoid size_t -> double cast warning. */
-+		hist_len += 1 + (size_t) lround(log10(value / scale));
-+		if (entry != bins)
-+			hist_len++; /* ',' */
-+	}
-+
-+	*len = hist_len;
-+
-+	return dm_zalloc(hist_len);
-+}
-+
- static char *_build_histogram_arg(struct dm_histogram *bounds, int *precise)
+-char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
++static char *_do_lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv,
++				   int uuid)
  {
- 	struct dm_histogram_bin *entry, *bins;
--	size_t hist_len = 1, len = 0;
--	char *hist_arg, *arg = NULL;
-+	size_t hist_len;
-+	char *hist_arg;
- 	uint64_t scale;
+ 	struct lv_segment *seg;
  
- 	entry = bins = bounds->bins;
-@@ -341,53 +382,37 @@ static char *_build_histogram_arg(struct dm_histogram *bounds, int *precise)
- 		return NULL;
+@@ -452,12 +453,26 @@ char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ 
+ 		/* Temporary mirror is always area_num == 0 */
+ 		if (seg_type(seg, 0) == AREA_LV &&
+-		    is_temporary_mirror_layer(seg_lv(seg, 0)))
+-			return dm_pool_strdup(mem, seg_lv(seg, 0)->name);
++		    is_temporary_mirror_layer(seg_lv(seg, 0))) {
++			if (uuid)
++				return lv_uuid_dup(mem, seg_lv(seg, 0));
++			else
++				return lv_name_dup(mem, seg_lv(seg, 0));
++		}
  	}
+ 	return NULL;
+ }
  
-+	/* Validate entries and set *precise if precision < 1ms. */
- 	entry += bounds->nr_bins - 1;
--	while(entry >= bins) {
--		double value;
-+	while (entry >= bins) {
- 		if (entry != bins) {
- 			if (entry->upper < (entry - 1)->upper) {
- 				log_error("Histogram boundaries must be in "
- 					  "order of increasing magnitude.");
- 				return 0;
- 			}
--			hist_len++; /* ',' */
- 		}
- 
- 		/*
- 		 * Only enable precise_timestamps automatically if any
- 		 * value in the histogram bounds uses precision < 1ms.
- 		 */
--		if (!*precise && (entry->upper % NSEC_PER_MSEC))
-+		if (((entry--)->upper % NSEC_PER_MSEC) && !*precise)
- 			*precise = 1;
--
--		value = (double) (entry--)->upper;
--		/* Use lround to avoid size_t -> double cast warning. */
--		hist_len += 1 + (size_t) lround(log10(value));
- 	}
- 
--	if (!(hist_arg = dm_zalloc(hist_len))) {
-+	scale = (*precise) ? 1 : NSEC_PER_MSEC;
++char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
++{
++	return _do_lv_convert_lv_dup(mem, lv, 0);
++}
 +
-+	/* Calculate hist_len and allocate a character buffer. */
-+	if (!(hist_arg = _get_hist_arg(bounds, scale, &hist_len))) {
- 		log_error("Could not allocate memory for histogram argument.");
- 		return 0;
- 	}
++char *lv_convert_lv_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv)
++{
++	return _do_lv_convert_lv_dup(mem, lv, 1);
++}
++
+ static char *_do_lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv,
+ 				int uuid)
+ {
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index 879dfe9..efd2a90 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -70,6 +70,7 @@ uint64_t lv_origin_size(const struct logical_volume *lv);
+ char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_move_pv_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv);
++char *lv_convert_lv_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ int lv_kernel_major(const struct logical_volume *lv);
+ int lv_kernel_minor(const struct logical_volume *lv);
+ char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 9578aac..3b58aee 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -80,6 +80,7 @@ FIELD(LVS, lv, NUM, "MaxSync", lvid, 7, raidmaxrecoveryrate, raid_max_recovery_r
+ FIELD(LVS, lv, STR, "Move", lvid, 4, movepv, move_pv, "For pvmove, Source PV of temporary LV created by pvmove.", 0)
+ FIELD(LVS, lv, STR, "Move UUID", lvid, 38, movepvuuid, move_pv_uuid, "For pvmove, the UUID of Source PV of temporary LV created by pvmove.", 0)
+ FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
++FIELD(LVS, lv, STR, "Convert", lvid, 38, convertlvuuid, convert_lv_uuid, "For lvconvert, UUID of temporary LV created by lvconvert.", 0)
+ FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, mirror_log, "For mirrors, the LV holding the synchronisation log.", 0)
+ FIELD(LVS, lv, STR, "Log UUID", lvid, 38, loglvuuid, mirror_log_uuid, "For mirrors, the UUID of the LV holding the synchronisation log.", 0)
+ FIELD(LVS, lv, STR, "Data", lvid, 4, datalv, data_lv, "For thin and cache pools, the LV holding the associated data.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 5363e3d..72dcaff 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -328,6 +328,8 @@ GET_LV_STR_PROPERTY_FN(move_pv_uuid, lv_move_pv_uuid_dup(lv->vg->vgmem, lv))
+ #define _move_pv_uuid_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(convert_lv, lv_convert_lv_dup(lv->vg->vgmem, lv))
+ #define _convert_lv_set prop_not_implemented_set
++GET_LV_STR_PROPERTY_FN(convert_lv_uuid, lv_convert_lv_uuid_dup(lv->vg->vgmem, lv))
++#define _convert_lv_uuid_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
+ #define _lv_tags_set prop_not_implemented_set
+ GET_LV_STR_PROPERTY_FN(mirror_log, lv_mirror_log_dup(lv->vg->vgmem, lv))
+diff --git a/lib/report/report.c b/lib/report/report.c
+index b632629..bf2f1c8 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -1940,19 +1940,39 @@ static int _movepvuuid_disp(struct dm_report *rh, struct dm_pool *mem __attribut
+ 	return _do_movepv_disp(rh, mem, field, data, private, 1);
+ }
  
--	arg = hist_arg;
--
--	if (*precise)
--		scale = 1;
--	else
--		scale = (*precise) ? 1 : NSEC_PER_MSEC;
-+	/* Fill hist_arg with boundary strings. */
-+	if (!_fill_hist_arg(hist_arg, hist_len, scale, bounds))
-+		goto_bad;
+-static int _convertlv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
+-			   struct dm_report_field *field,
+-			   const void *data, void *private __attribute__((unused)))
++static int _do_convertlv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
++			      struct dm_report_field *field,
++			      const void *data, void *private __attribute__((unused)),
++			      int uuid)
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+-	const char *name;
++	const char *repstr;
  
--	for (entry = bins; entry < (bins + bounds->nr_bins); entry++) {
--		uint64_t value;
--		ssize_t l = 0;
--		int last = !(entry < (bins + bounds->nr_bins - 1));
--		value = entry->upper / scale;
--		if ((l = dm_snprintf(arg, hist_len - len, FMTu64"%s", value,
--				     (last) ? "" : ",")) < 0)
--			goto_bad;
--		len += (size_t) l;
--		arg += (size_t) l;
--	}
- 	return hist_arg;
+-	if ((name = lv_convert_lv_dup(mem, lv)))
+-		return dm_report_field_string(rh, field, &name);
++	if (uuid)
++		repstr = lv_convert_lv_uuid_dup(mem, lv);
++	else
++		repstr = lv_convert_lv_dup(mem, lv);
++
++	if (repstr)
++		return dm_report_field_string(rh, field, &repstr);
  
- bad:
+ 	return _field_set_value(field, "", NULL);
+ }
+ 
++static int _convertlv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
++			   struct dm_report_field *field,
++			   const void *data, void *private __attribute__((unused)))
++{
++	return _do_convertlv_disp(rh, mem, field, data, private, 0);
++}
++
++static int _convertlvuuid_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
++			       struct dm_report_field *field,
++			       const void *data, void *private __attribute__((unused)))
++{
++	return _do_convertlv_disp(rh, mem, field, data, private, 1);
++}
++
+ static int _size32_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
+ 			struct dm_report_field *field,
+ 			const void *data, void *private)
 
 
