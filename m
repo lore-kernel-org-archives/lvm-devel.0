@@ -1,90 +1,72 @@
 From: Marian Csontos <mcsontos@redhat.com>
-Date: Tue, 22 Sep 2015 13:16:10 +0200
-Subject: [PATCH 4/4] dmeventd: Allocate new thread only when needed
-In-Reply-To: <1442920570-29969-1-git-send-email-mcsontos@redhat.com>
+Date: Tue, 22 Sep 2015 13:30:03 +0200
+Subject: [PATCHv2 2/4] dmeventd: Fix registration of existing thread
+In-Reply-To: <1442920570-29969-3-git-send-email-mcsontos@redhat.com>
 References: <1442920570-29969-1-git-send-email-mcsontos@redhat.com>
-Message-ID: <1442920570-29969-5-git-send-email-mcsontos@redhat.com>
+	<1442920570-29969-3-git-send-email-mcsontos@redhat.com>
+Message-ID: <56013BBB.3000301@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
-Another microoptimization?
+On 09/22/2015 01:16 PM, Marian Csontos wrote:
+> The existing code is handling only new registrations correctly. Extending
+> an existing registration does not register for timeout.
+> ---
+> If the condition should "never occur" we should either handle it or at least
+> raise an internal error here as it is likely to occur one day without traces
+> what happened.
+>
+> *TODO* Any ideas how to test this? Is explicitly messaging dmeventd required?
+>
+>   daemons/dmeventd/dmeventd.c | 18 ++++++++++++++++--
+>   1 file changed, 16 insertions(+), 2 deletions(-)
+>
+> diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+> index 0f67206..ff11625 100644
+> --- a/daemons/dmeventd/dmeventd.c
+> +++ b/daemons/dmeventd/dmeventd.c
+> @@ -1031,6 +1031,7 @@ static int _register_for_event(struct message_data *message_data)
+>   	int ret = 0;
+>   	struct thread_status *thread, *thread_new = NULL;
+>   	struct dso_data *dso_data;
+> +	enum dm_event_mask orig_events
 
-Do we want to go through these hoops only to discard results later on?
+Lost a semicolon while moving from below :-/
 
-These calls being called in front had justification earlier on when everything
-was done in a single critical section protected by single lock/unlock pair. But
-now when we are taking and releasing mutexes several times in one cycle this is
-loosing grounds IMHO.
+BTW, are we always declaring variables at the top of a function, right?
 
- daemons/dmeventd/dmeventd.c | 46 ++++++++++++++++++++++-----------------------
- 1 file changed, 23 insertions(+), 23 deletions(-)
-
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 82c8cc3..a4bf76e 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -1044,33 +1044,33 @@ static int _register_for_event(struct message_data *message_data)
- 		goto out;
- 	}
- 
--	/* Preallocate thread status struct to avoid deadlock. */
--	if (!(thread_new = _alloc_thread_status(message_data, dso_data))) {
--		stack;
--		ret = -ENOMEM;
--		goto out;
--	}
--
--	if (!_fill_device_data(thread_new)) {
--		stack;
--		ret = -ENODEV;
--		goto out;
--	}
--
--	/* If creation of timeout thread fails (as it may), we fail
--	   here completely. The client is responsible for either
--	   retrying later or trying to register without timeout
--	   events. However, if timeout thread cannot be started, it
--	   usually means we are so starved on resources that we are
--	   almost as good as dead already... */
--	if ((thread_new->events & DM_EVENT_TIMEOUT) &&
--	    (ret = -_register_for_timeout(thread_new)))
--		goto out;
--
- 	_lock_mutex();
- 	if (!(thread = _lookup_thread_status(message_data))) {
- 		_unlock_mutex();
- 
-+		/* Preallocate thread status struct to avoid deadlock. */
-+		if (!(thread_new = _alloc_thread_status(message_data, dso_data))) {
-+			stack;
-+			ret = -ENOMEM;
-+			goto out;
-+		}
-+
-+		if (!_fill_device_data(thread_new)) {
-+			stack;
-+			ret = -ENODEV;
-+			goto out;
-+		}
-+
-+		/* If creation of timeout thread fails (as it may), we fail
-+		   here completely. The client is responsible for either
-+		   retrying later or trying to register without timeout
-+		   events. However, if timeout thread cannot be started, it
-+		   usually means we are so starved on resources that we are
-+		   almost as good as dead already... */
-+		if ((thread_new->events & DM_EVENT_TIMEOUT) &&
-+		    (ret = -_register_for_timeout(thread_new)))
-+			goto out;
-+
- 		if (!(ret = _do_register_device(thread_new)))
- 			goto out;
- 
--- 
-1.8.3.1
+>
+>   	if (!(dso_data = _lookup_dso(message_data)) &&
+>   	    !(dso_data = _load_dso(message_data))) {
+> @@ -1087,10 +1088,23 @@ static int _register_for_event(struct message_data *message_data)
+>   		}
+>
+>   		LINK_THREAD(thread);
+> +	} else {
+> +		/* Or event # into events bitfield. */
+> +		orig_events = thread->events;
+> +		thread->events |= message_data->events_field;
+> +		if ((~orig_events & thread->events & DM_EVENT_TIMEOUT)) {
+> +			_unlock_mutex();
+> +			if (!(ret = -_register_for_timeout(thread))) {
+> +				/* In case previous calls failed we do not
+> +				 * force unregister event. Reset events for
+> +				 * consistency. */
+> +				_lock_mutex();
+> +				thread->events &= ~DM_EVENT_TIMEOUT;
+> +			} else
+> +				_lock_mutex();
+> +		}
+>   	}
+>
+> -	/* Or event # into events bitfield. */
+> -	thread->events |= message_data->events_field;
+>   	_unlock_mutex();
+>
+>         out:
+>
 
 
