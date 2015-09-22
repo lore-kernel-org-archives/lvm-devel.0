@@ -1,53 +1,52 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 21 Sep 2015 22:11:59 +0000 (UTC)
-Subject: master - tests: update removal test
-Message-ID: <20150921221159.0E02F60703@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 22 Sep 2015 09:11:40 +0000 (UTC)
+Subject: master - wiping: warn if use_blkid_wiping=1 is set and LVM not compiled with blkid_wiping support
+Message-ID: <20150922091140.82D7360F51@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47f623d64b6432fbb3533cb72132c947eeb01941
-Commit:        47f623d64b6432fbb3533cb72132c947eeb01941
-Parent:        7e63364529e563cf7609875f6aca10303c03883e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 21 22:44:43 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 22 00:08:45 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2081071bee76bcd168cccbf039a2fac663048c10
+Commit:        2081071bee76bcd168cccbf039a2fac663048c10
+Parent:        47f623d64b6432fbb3533cb72132c947eeb01941
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Sep 22 11:11:26 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Sep 22 11:11:26 2015 +0200
 
-tests: update removal test
+wiping: warn if use_blkid_wiping=1 is set and LVM not compiled with blkid_wiping support
 
-Test is currently checking a very non-standard use case.
-Make it a more resistent against being blocked in kernel.
 ---
- test/shell/snapshot-remove-dmsetup.sh |   10 +++++++++-
- 1 files changed, 9 insertions(+), 1 deletions(-)
+ lib/device/dev-type.c |    9 ++++++++-
+ 1 files changed, 8 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/snapshot-remove-dmsetup.sh b/test/shell/snapshot-remove-dmsetup.sh
-index b5aad1f..610d3c2 100644
---- a/test/shell/snapshot-remove-dmsetup.sh
-+++ b/test/shell/snapshot-remove-dmsetup.sh
-@@ -34,11 +34,19 @@ mkfs.ext2 "$DM_DEV_DIR/$vg1/snap"
- mkdir mnt
- mount -o errors=remount-ro "$DM_DEV_DIR/$vg1/snap" mnt
- 
-+sync
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index db40792..25f11d1 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -734,13 +734,20 @@ int wipe_known_signatures(struct cmd_context *cmd, struct device *dev,
+ 			  uint32_t types_no_prompt, int yes, force_t force,
+ 			  int *wiped)
+ {
++	int blkid_wiping_enabled = find_config_tree_bool(cmd, allocation_use_blkid_wiping_CFG, NULL);
 +
- # intetionally suspend layer bellow
- dmsetup suspend $vg-$lv1
- 
- # now this should pass without blocking
--dmsetup suspend --noflush --nolockfs $vg1-snap
-+#dmsetup suspend --noflush --nolockfs $vg1-snap &
-+dmsetup suspend $vg1-snap &
-+
-+sleep .5
-+
-+dmsetup info --noheadings -c -o suspended $vg1-snap | tee out
-+should grep -i suspend out
- 
- # unlock device below
- dmsetup resume $vg-$lv1
+ #ifdef BLKID_WIPING_SUPPORT
+-	if (find_config_tree_bool(cmd, allocation_use_blkid_wiping_CFG, NULL))
++	if (blkid_wiping_enabled)
+ 		return _wipe_known_signatures_with_blkid(dev, name,
+ 							 types_to_exclude,
+ 							 types_no_prompt,
+ 							 yes, force, wiped);
+ #endif
++	if (blkid_wiping_enabled) {
++		log_warn("allocation/use_blkid_wiping=1 configuration setting is set "
++			 "while LVM is not compiled with blkid wiping support.");
++		log_warn("Falling back to native LVM signature detection.");
++	}
+ 	return _wipe_known_signatures_with_lvm(dev, name,
+ 					       types_to_exclude,
+ 					       types_no_prompt,
 
 
