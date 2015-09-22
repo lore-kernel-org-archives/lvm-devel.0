@@ -1,50 +1,54 @@
 From: Marian Csontos <mcsontos@redhat.com>
-Date: Tue, 22 Sep 2015 13:16:07 +0200
-Subject: [PATCHv2 1/4] dmeventd: Fix segfault in _timeout_thread
+Date: Tue, 22 Sep 2015 13:16:09 +0200
+Subject: [PATCH 3/4] dmeventd: Remove an useless _lock_mutex
 In-Reply-To: <1442920570-29969-1-git-send-email-mcsontos@redhat.com>
 References: <1442920570-29969-1-git-send-email-mcsontos@redhat.com>
-Message-ID: <1442920570-29969-2-git-send-email-mcsontos@redhat.com>
+Message-ID: <1442920570-29969-4-git-send-email-mcsontos@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In case thread was found or thread registration failed after
-_register_for_timeout, thread_status was kept in timeout_list after
-deallocation.
+One of the branches was locking a mutex only to unlock it later.
 ---
-This should be the actual fix for the above mentioned BZ 1210514 and BZ 1220856.
+This may be more esthetic than performance issue.
 
-*TODO* Any ideas how to test this? Is explicitly messaging dmeventd required?
+Definitely trading a little performance gain for clarity.
 
- daemons/dmeventd/dmeventd.c | 5 ++++-
- 1 file changed, 4 insertions(+), 1 deletion(-)
+ daemons/dmeventd/dmeventd.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
 
 diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 1ff5bf9..0f67206 100644
+index ff11625..82c8cc3 100644
 --- a/daemons/dmeventd/dmeventd.c
 +++ b/daemons/dmeventd/dmeventd.c
-@@ -1081,6 +1081,7 @@ static int _register_for_event(struct message_data *message_data)
- 		if ((ret = -_create_thread(thread))) {
- 			_unlock_mutex();
- 			_do_unregister_device(thread);
-+			_unregister_for_timeout(thread);
- 			_free_thread_status(thread);
- 			goto out;
+@@ -1088,6 +1088,7 @@ static int _register_for_event(struct message_data *message_data)
  		}
-@@ -1097,8 +1098,10 @@ static int _register_for_event(struct message_data *message_data)
- 	 * Deallocate thread status after releasing
- 	 * the lock in case we haven't used it.
- 	 */
--	if (thread_new)
-+	if (thread_new) {
-+		_unregister_for_timeout(thread);
- 		_free_thread_status(thread_new);
-+	}
  
- 	return ret;
- }
+ 		LINK_THREAD(thread);
++		_unlock_mutex();
+ 	} else {
+ 		/* Or event # into events bitfield. */
+ 		orig_events = thread->events;
+@@ -1100,13 +1101,12 @@ static int _register_for_event(struct message_data *message_data)
+ 				 * consistency. */
+ 				_lock_mutex();
+ 				thread->events &= ~DM_EVENT_TIMEOUT;
+-			} else
+-				_lock_mutex();
+-		}
++				_unlock_mutex();
++			}
++		} else
++			_unlock_mutex();
+ 	}
+ 
+-	_unlock_mutex();
+-
+       out:
+ 	/*
+ 	 * Deallocate thread status after releasing
 -- 
 1.8.3.1
 
