@@ -1,72 +1,56 @@
-From: Marian Csontos <mcsontos@redhat.com>
-Date: Tue, 22 Sep 2015 13:30:03 +0200
-Subject: [PATCHv2 2/4] dmeventd: Fix registration of existing thread
-In-Reply-To: <1442920570-29969-3-git-send-email-mcsontos@redhat.com>
-References: <1442920570-29969-1-git-send-email-mcsontos@redhat.com>
-	<1442920570-29969-3-git-send-email-mcsontos@redhat.com>
-Message-ID: <56013BBB.3000301@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 22 Sep 2015 11:33:58 +0000 (UTC)
+Subject: master - lvmconf: set locking_type=2 if external library is requested
+Message-ID: <20150922113358.6CCBD60E42@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 09/22/2015 01:16 PM, Marian Csontos wrote:
-> The existing code is handling only new registrations correctly. Extending
-> an existing registration does not register for timeout.
-> ---
-> If the condition should "never occur" we should either handle it or at least
-> raise an internal error here as it is likely to occur one day without traces
-> what happened.
->
-> *TODO* Any ideas how to test this? Is explicitly messaging dmeventd required?
->
->   daemons/dmeventd/dmeventd.c | 18 ++++++++++++++++--
->   1 file changed, 16 insertions(+), 2 deletions(-)
->
-> diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-> index 0f67206..ff11625 100644
-> --- a/daemons/dmeventd/dmeventd.c
-> +++ b/daemons/dmeventd/dmeventd.c
-> @@ -1031,6 +1031,7 @@ static int _register_for_event(struct message_data *message_data)
->   	int ret = 0;
->   	struct thread_status *thread, *thread_new = NULL;
->   	struct dso_data *dso_data;
-> +	enum dm_event_mask orig_events
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=001f747963d66e4cff8e827afb710961193b9f03
+Commit:        001f747963d66e4cff8e827afb710961193b9f03
+Parent:        2081071bee76bcd168cccbf039a2fac663048c10
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Sep 22 13:32:47 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Sep 22 13:33:12 2015 +0200
 
-Lost a semicolon while moving from below :-/
+lvmconf: set locking_type=2 if external library is requested
 
-BTW, are we always declaring variables at the top of a function, right?
+Also, set safe use_lvmetad=0 for external locking (locking_type=2)
+similarly to locking_type=3.
+---
+ WHATS_NEW          |    1 +
+ scripts/lvmconf.sh |    5 +++++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
 
->
->   	if (!(dso_data = _lookup_dso(message_data)) &&
->   	    !(dso_data = _load_dso(message_data))) {
-> @@ -1087,10 +1088,23 @@ static int _register_for_event(struct message_data *message_data)
->   		}
->
->   		LINK_THREAD(thread);
-> +	} else {
-> +		/* Or event # into events bitfield. */
-> +		orig_events = thread->events;
-> +		thread->events |= message_data->events_field;
-> +		if ((~orig_events & thread->events & DM_EVENT_TIMEOUT)) {
-> +			_unlock_mutex();
-> +			if (!(ret = -_register_for_timeout(thread))) {
-> +				/* In case previous calls failed we do not
-> +				 * force unregister event. Reset events for
-> +				 * consistency. */
-> +				_lock_mutex();
-> +				thread->events &= ~DM_EVENT_TIMEOUT;
-> +			} else
-> +				_lock_mutex();
-> +		}
->   	}
->
-> -	/* Or event # into events bitfield. */
-> -	thread->events |= message_data->events_field;
->   	_unlock_mutex();
->
->         out:
->
+diff --git a/WHATS_NEW b/WHATS_NEW
+index cade4b2..ae40c0b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.132 - 
+ ======================================
++  Fix lvmconf to set locking_type=2 if external locking library is requested.
+   Remove verbose message when rescanning an unchanged device. (2.02.119)
+   Add origin_uuid, mirror_log_uuid, move_pv_uuid, convert_lv_uuid report fields.
+   Add pool_lv_uuid, metadata_lv_uuid, data_lv_uuid reporting fields.
+diff --git a/scripts/lvmconf.sh b/scripts/lvmconf.sh
+index c3c1700..fa6bc9c 100644
+--- a/scripts/lvmconf.sh
++++ b/scripts/lvmconf.sh
+@@ -133,6 +133,11 @@ function parse_args
+                 exit 1
+         esac
+     done
++
++    if [ "$LOCKINGLIBDIR" -o "$LOCKINGLIB" ]; then
++        LOCKING_TYPE=2
++        USE_LVMETAD=0
++    fi
+ }
+ 
+ function validate_args
 
 
