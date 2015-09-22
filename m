@@ -1,47 +1,59 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  7 Sep 2015 21:30:51 +0000 (UTC)
-Subject: master - specs: install lvmlockctl only when built
-Message-ID: <20150907213051.0540660FB4@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Tue, 22 Sep 2015 18:45:09 +0000 (UTC)
+Subject: master - man lvmthin: use --poolmetadatasize option
+Message-ID: <20150922184509.4833460D33@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0ec64370b24acf837c725b614db993a663cc8103
-Commit:        0ec64370b24acf837c725b614db993a663cc8103
-Parent:        d7f45ebca52ecb7e15dee42f81718266b127bb5c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 7 23:27:50 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 7 23:27:50 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=532b2d2d4e6817b8971665c2fe30821c7ec7dadd
+Commit:        532b2d2d4e6817b8971665c2fe30821c7ec7dadd
+Parent:        214e2cddf639e4b5a610e34ac24dbe2fd4618fb6
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Sep 22 13:44:09 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Sep 22 13:44:09 2015 -0500
 
-specs: install lvmlockctl only when built
+man lvmthin: use --poolmetadatasize option
 
-Move install line into proper section.
+when extending a pool metadata lv, rather than
+referencing the _tmeta device.
 ---
- spec/packages.inc |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ man/lvmthin.7.in |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/spec/packages.inc b/spec/packages.inc
-index 7e59068..69643ef 100644
---- a/spec/packages.inc
-+++ b/spec/packages.inc
-@@ -105,7 +105,6 @@ fi
- %{_mandir}/man8/lvmconf.8.gz
- %{_mandir}/man8/lvmdiskscan.8.gz
- %{_mandir}/man8/lvmdump.8.gz
--%{_mandir}/man8/lvmlockctl.8.gz
- %{_mandir}/man8/lvmsadc.8.gz
- %{_mandir}/man8/lvmsar.8.gz
- %{_mandir}/man8/lvreduce.8.gz
-@@ -285,6 +284,7 @@ LVM commands use lvmlockd to coordinate access to shared storage.
- %{_sbindir}/lvmlockd
- %{_sbindir}/lvmlockctl
- %{_mandir}/man8/lvmlockd.8.gz
-+%{_mandir}/man8/lvmlockctl.8.gz
- %dir %{_default_locking_dir}
- %{_unitdir}/lvm2-lvmlockd.service
- %{_unitdir}/lvm2-lvmlocking.service
+diff --git a/man/lvmthin.7.in b/man/lvmthin.7.in
+index eb791f0..c142f56 100644
+--- a/man/lvmthin.7.in
++++ b/man/lvmthin.7.in
+@@ -583,7 +583,7 @@ with the lvs \-o+metadata_percent command.
+ 
+ Command to extend thin pool metadata space:
+ .br
+-.B lvextend \-L Size VG/ThinPoolLV_tmeta
++.B lvextend \-\-poolmetadatasize Size VG/ThinPoolLV
+ 
+ .I Example
+ .br
+@@ -605,7 +605,7 @@ Command to extend thin pool metadata space:
+ 
+ 3. Double the amount of physical space in the thin metadata LV.
+ .nf
+-# lvextend \-L+12M vg/pool0_tmeta
++# lvextend \-\-poolmetadatasize +12M vg/pool0
+ .fi
+ 
+ 4. The percentage of used metadata blocks is half the previous value.
+@@ -873,7 +873,7 @@ repair.
+ .br
+    See "Metadata check and repair".
+ 
+-3. Extend pool metadata space with lvextend VG/ThinPoolLV_tmeta.
++3. Extend pool metadata space with lvextend \-\-poolmetadatasize.
+ .br
+    See "Manually manage free metadata space of a thin pool LV".
+ 
 
 
