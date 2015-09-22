@@ -1,262 +1,163 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon,  7 Sep 2015 19:15:05 +0000 (UTC)
-Subject: master - libdm: clean up stats local variable use
-Message-ID: <20150907191505.4145D61655@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 22 Sep 2015 18:05:08 +0000 (UTC)
+Subject: master - segtypes: Extend flags to 64 bits.
+Message-ID: <20150922180508.657D960253@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d7f45ebca52ecb7e15dee42f81718266b127bb5c
-Commit:        d7f45ebca52ecb7e15dee42f81718266b127bb5c
-Parent:        daa94eb792ee76a507dcafe74c5ceda9707a370f
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Sep 7 20:08:10 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Sep 7 20:14:53 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0ce150280ed703aad27f8d5c37db02dfa63da382
+Commit:        0ce150280ed703aad27f8d5c37db02dfa63da382
+Parent:        3a8a37187d65e2c84f98d39e06bdee7000e34875
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Sep 22 18:03:33 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Sep 22 18:03:33 2015 +0100
 
-libdm: clean up stats local variable use
+segtypes: Extend flags to 64 bits.
 
 ---
- libdm/libdm-stats.c |   76 ++++++++++++++++++++++++---------------------------
- 1 files changed, 36 insertions(+), 40 deletions(-)
+ lib/metadata/segtype.h |   74 +++++++++++++++++++++++++----------------------
+ lib/raid/raid.c        |    6 ++--
+ 2 files changed, 42 insertions(+), 38 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index f239f01..ee62fe6 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -454,13 +454,13 @@ static int _stats_parse_histogram_spec(struct dm_stats *dms,
- 				       const char *histogram)
- {
- 	static const char *_valid_chars = "0123456789,";
--	uint64_t scale = region->timescale;
-+	uint64_t scale = region->timescale, this_val = 0;
- 	struct dm_pool *mem = dms->hist_mem;
- 	struct dm_histogram_bin cur;
- 	struct dm_histogram hist;
- 	int nr_bins = 1;
--	const char *c, *v;
--	char *p;
-+	const char *c, *v, *val_start;
-+	char *p, *endptr = NULL;
+diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
+index a80d5ed..7a5195c 100644
+--- a/lib/metadata/segtype.h
++++ b/lib/metadata/segtype.h
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+- * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -28,26 +28,43 @@ struct dm_config_node;
+ struct dev_manager;
  
- 	/* Advance past "histogram:". */
- 	histogram = strchr(histogram, ':');
-@@ -501,9 +501,8 @@ static int _stats_parse_histogram_spec(struct dm_stats *dms,
- 				  histogram);
- 			goto bad;
- 		} else {
--			const char *val_start = c;
--			char *endptr = NULL;
--			uint64_t this_val = 0;
-+			val_start = c;
-+			endptr = NULL;
- 
- 			this_val = strtoull(val_start, &endptr, 10);
- 			if (!endptr) {
-@@ -627,11 +626,11 @@ static int _stats_parse_list_region(struct dm_stats *dms,
- 
- static int _stats_parse_list(struct dm_stats *dms, const char *resp)
- {
--	struct dm_pool *mem = dms->mem;
--	struct dm_stats_region cur;
- 	uint64_t max_region = 0, nr_regions = 0;
-+	struct dm_stats_region cur, fill;
-+	struct dm_pool *mem = dms->mem;
- 	FILE *list_rows;
--	/* FIXME: determine correct maximum line length based on kernel format */
-+	/* FIXME: use correct maximum line length for kernel format */
- 	char line[256];
- 
- 	if (!resp) {
-@@ -666,7 +665,6 @@ static int _stats_parse_list(struct dm_stats *dms, const char *resp)
- 
- 		/* handle holes in the list of region_ids */
- 		if (cur.region_id > max_region) {
--			struct dm_stats_region fill;
- 			memset(&fill, 0, sizeof(fill));
- 			fill.region_id = DM_STATS_REGION_NOT_PRESENT;
- 			do {
-@@ -742,12 +740,13 @@ static int _stats_parse_histogram(struct dm_pool *mem, char *hist_str,
- 				  struct dm_histogram **histogram,
- 				  struct dm_stats_region *region)
- {
-+	struct dm_histogram hist, *bounds = region->bounds;
- 	static const char *_valid_chars = "0123456789:";
- 	int nr_bins = region->bounds->nr_bins;
--	struct dm_histogram hist, *bounds = region->bounds;
-+	const char *c, *v, *val_start;
- 	struct dm_histogram_bin cur;
--	uint64_t sum = 0;
--	const char *c, *v;
-+	uint64_t sum = 0, this_val;
-+	char *endptr = NULL;
- 	int bin = 0;
- 
- 	c = hist_str;
-@@ -771,9 +770,8 @@ static int _stats_parse_histogram(struct dm_pool *mem, char *hist_str,
- 		if (*c == ',')
- 			goto badchar;
- 		else {
--			const char *val_start = c;
--			char *endptr = NULL;
--			uint64_t this_val = 0;
-+			val_start = c;
-+			endptr = NULL;
- 
- 			this_val = strtoull(val_start, &endptr, 10);
- 			if (!endptr) {
-@@ -821,8 +819,8 @@ static int _stats_parse_region(struct dm_stats *dms, const char *resp,
- 			       uint64_t timescale)
- {
- 	struct dm_histogram *hist = NULL;
--	struct dm_stats_counters cur;
- 	struct dm_pool *mem = dms->mem;
-+	struct dm_stats_counters cur;
- 	FILE *stats_rows = NULL;
- 	uint64_t start, len;
- 	char row[256];
-@@ -1075,12 +1073,12 @@ static int _stats_create_region(struct dm_stats *dms, uint64_t *region_id,
- 				int precise, const char *hist_arg,
- 				const char *program_id,	const char *aux_data)
- {
--	struct dm_task *dmt = NULL;
--	char msg[1024], range[64];
- 	const char *err_fmt = "Could not prepare @stats_create %s.";
- 	const char *precise_str = PRECISE_ARG;
- 	const char *resp, *opt_args = NULL;
--	int r = 0, nr_opt = 0; /* number of optional args. */
-+	char msg[1024], range[64], *endptr = NULL;
-+	struct dm_task *dmt = NULL;
-+	int r = 0, nr_opt = 0;
- 
- 	if (!_stats_bound(dms))
- 		return_0;
-@@ -1140,7 +1138,6 @@ static int _stats_create_region(struct dm_stats *dms, uint64_t *region_id,
- 	}
- 
- 	if (region_id) {
--		char *endptr = NULL;
- 		*region_id = strtoull(resp, &endptr, 10);
- 		if (resp == endptr)
- 			goto_out;
-@@ -1230,11 +1227,11 @@ static struct dm_task *_stats_print_region(struct dm_stats *dms,
- 				    uint64_t region_id, unsigned start_line,
- 				    unsigned num_lines, unsigned clear)
- {
--	struct dm_task *dmt = NULL;
- 	/* @stats_print[_clear] <region_id> [<start_line> <num_lines>] */
- 	const char *clear_str = "_clear", *lines_fmt = "%u %u";
- 	const char *msg_fmt = "@stats_print%s " FMTu64 " %s";
- 	const char *err_fmt = "Could not prepare @stats_print %s.";
-+	struct dm_task *dmt = NULL;
- 	char msg[1024], lines[64];
- 
- 	if (start_line || num_lines)
-@@ -1327,6 +1324,8 @@ int dm_stats_populate(struct dm_stats *dms, const char *program_id,
- 		      uint64_t region_id)
- {
- 	int all_regions = (region_id == DM_STATS_REGIONS_ALL);
-+	struct dm_task *dmt = NULL; /* @stats_print task */
-+	const char *resp;
- 
- 	if (!_stats_bound(dms))
- 		return_0;
-@@ -1346,9 +1345,6 @@ int dm_stats_populate(struct dm_stats *dms, const char *program_id,
- 
- 	dm_stats_walk_start(dms);
- 	do {
--		struct dm_task *dmt = NULL; /* @stats_print task */
--		const char *resp;
+ /* Feature flags */
+-#define SEG_CAN_SPLIT		0x00000001U
+-#define SEG_AREAS_STRIPED	0x00000002U
+-#define SEG_AREAS_MIRRORED	0x00000004U
+-#define SEG_SNAPSHOT		0x00000008U
+-#define SEG_FORMAT1_SUPPORT	0x00000010U
+-#define SEG_VIRTUAL		0x00000020U
+-#define SEG_CANNOT_BE_ZEROED	0x00000040U
+-#define SEG_MONITORED		0x00000080U
+-#define SEG_REPLICATOR		0x00000100U
+-#define SEG_REPLICATOR_DEV	0x00000200U
+-#define SEG_RAID		0x00000400U
+-#define SEG_THIN_POOL		0x00000800U
+-#define SEG_THIN_VOLUME		0x00001000U
+-#define SEG_CACHE		0x00002000U
+-#define SEG_CACHE_POOL		0x00004000U
+-#define SEG_MIRROR		0x00008000U
+-#define SEG_ONLY_EXCLUSIVE	0x00010000U /* In cluster only exlusive activation */
+-#define SEG_CAN_ERROR_WHEN_FULL	0x00020000U
+-#define SEG_UNKNOWN		0x80000000U
 -
- 		region_id = (all_regions)
- 			     ? dm_stats_get_current_region(dms) : region_id;
++#define SEG_CAN_SPLIT		0x0000000000000001U
++#define SEG_AREAS_STRIPED	0x0000000000000002U
++#define SEG_AREAS_MIRRORED	0x0000000000000004U
++#define SEG_SNAPSHOT		0x0000000000000008U
++#define SEG_FORMAT1_SUPPORT	0x0000000000000010U
++#define SEG_VIRTUAL		0x0000000000000020U
++#define SEG_CANNOT_BE_ZEROED	0x0000000000000040U
++#define SEG_MONITORED		0x0000000000000080U
++#define SEG_REPLICATOR		0x0000000000000100U
++#define SEG_REPLICATOR_DEV	0x0000000000000200U
++#define SEG_RAID		0x0000000000000400U
++#define SEG_THIN_POOL		0x0000000000000800U
++#define SEG_THIN_VOLUME		0x0000000000001000U
++#define SEG_CACHE		0x0000000000002000U
++#define SEG_CACHE_POOL		0x0000000000004000U
++#define SEG_MIRROR		0x0000000000008000U
++#define SEG_ONLY_EXCLUSIVE	0x0000000000010000U /* In cluster only exlusive activation */
++#define SEG_CAN_ERROR_WHEN_FULL	0x0000000000020000U
++#define SEG_UNKNOWN		0x8000000000000000U
++
++#define SEG_TYPE_NAME_LINEAR		"linear"
++#define SEG_TYPE_NAME_STRIPED		"striped"
++#define SEG_TYPE_NAME_MIRROR		"mirror"
++#define SEG_TYPE_NAME_RAID1		"raid1"
++#define SEG_TYPE_NAME_RAID10		"raid10"
++#define SEG_TYPE_NAME_RAID4		"raid4"
++#define SEG_TYPE_NAME_RAID5		"raid5"
++#define SEG_TYPE_NAME_RAID5_LA		"raid5_la"
++#define SEG_TYPE_NAME_RAID5_LS		"raid5_ls"
++#define SEG_TYPE_NAME_RAID5_RA		"raid5_ra"
++#define SEG_TYPE_NAME_RAID5_RS		"raid5_rs"
++#define SEG_TYPE_NAME_RAID6		"raid6"
++#define SEG_TYPE_NAME_RAID6_NC		"raid6_nc"
++#define SEG_TYPE_NAME_RAID6_NR		"raid6_nr"
++#define SEG_TYPE_NAME_RAID6_ZR		"raid6_zr"
++
++#define segtype_is_linear(segtype)	(!strcmp(segtype->name, SEG_TYPE_NAME_LINEAR))
+ #define segtype_is_cache(segtype)	((segtype)->flags & SEG_CACHE ? 1 : 0)
+ #define segtype_is_cache_pool(segtype)	((segtype)->flags & SEG_CACHE_POOL ? 1 : 0)
+ #define segtype_is_mirrored(segtype)	((segtype)->flags & SEG_AREAS_MIRRORED ? 1 : 0)
+@@ -86,7 +103,7 @@ struct dev_manager;
+ struct segment_type {
+ 	struct dm_list list;		/* Internal */
  
-@@ -2002,10 +1998,12 @@ static struct dm_histogram *_alloc_dm_histogram(int nr_bins)
- struct dm_histogram *dm_histogram_bounds_from_string(const char *bounds_str)
- {
- 	static const char *_valid_chars = "0123456789,muns";
--	struct dm_histogram *dmh;
-+	uint64_t this_val = 0, mult = 1;
-+	const char *c, *v, *val_start;
- 	struct dm_histogram_bin *cur;
--	const char *c, *v;
-+	struct dm_histogram *dmh;
- 	int nr_entries = 1;
-+	char *endptr;
+-	uint32_t flags;
++	uint64_t flags;
+ 	uint32_t parity_devs;           /* Parity drives required by segtype */
  
- 	c = bounds_str;
+ 	struct segtype_handler *ops;
+@@ -157,19 +174,6 @@ struct segment_type *init_unknown_segtype(struct cmd_context *cmd,
+ int init_raid_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
+ #endif
  
-@@ -2038,9 +2036,8 @@ struct dm_histogram *dm_histogram_bounds_from_string(const char *bounds_str)
- 				  bounds_str);
- 			goto bad;
- 		} else {
--			const char *val_start = c;
--			char *endptr = NULL;
--			uint64_t this_val = 0, mult = 1;
-+			val_start = c;
-+			endptr = NULL;
- 
- 			this_val = strtoull(val_start, &endptr, 10);
- 			if (!endptr) {
-@@ -2093,10 +2090,10 @@ bad:
- 
- struct dm_histogram *dm_histogram_bounds_from_uint64(const uint64_t *bounds)
- {
--	struct dm_histogram *dmh;
-+	const uint64_t *entry = bounds;
- 	struct dm_histogram_bin *cur;
-+	struct dm_histogram *dmh;
- 	int nr_entries = 1;
--	const uint64_t *entry = bounds;
- 
- 	if (!bounds || !bounds[0]) {
- 		log_error("Could not parse empty histogram bounds array");
-@@ -2227,12 +2224,14 @@ const char *dm_histogram_to_string(const struct dm_histogram *dmh, int bin,
- 				   int width, int flags)
- {
- 	int minwidth, bounds, values, start, last;
--	uint64_t lower, upper; /* bounds of the current bin. */
-+	uint64_t lower, upper, val_u64; /* bounds of the current bin. */
- 	/* Use the histogram pool for string building. */
- 	struct dm_pool *mem = dmh->dms->hist_mem;
- 	char buf[64], bounds_buf[64];
- 	const char *sep = "";
-+	int bounds_width;
- 	ssize_t len = 0;
-+	float val_flt;
- 
- 	bounds = flags & DM_HISTOGRAM_BOUNDS_MASK;
- 	values = flags & DM_HISTOGRAM_VALUES;
-@@ -2263,8 +2262,6 @@ const char *dm_histogram_to_string(const struct dm_histogram *dmh, int bin,
- 
- 	for (bin = start; bin <= last; bin++) {
- 		if (bounds) {
--			int bounds_width;
+-#define SEG_TYPE_NAME_RAID1	"raid1"
+-#define SEG_TYPE_NAME_RAID10	"raid10"
+-#define SEG_TYPE_NAME_RAID4	"raid4"
+-#define SEG_TYPE_NAME_RAID5	"raid5"
+-#define SEG_TYPE_NAME_RAID5_LA	"raid5_la"
+-#define SEG_TYPE_NAME_RAID5_LS	"raid5_ls"
+-#define SEG_TYPE_NAME_RAID5_RA	"raid5_ra"
+-#define SEG_TYPE_NAME_RAID5_RS	"raid5_rs"
+-#define SEG_TYPE_NAME_RAID6	"raid6"
+-#define SEG_TYPE_NAME_RAID6_NC	"raid6_nc"
+-#define SEG_TYPE_NAME_RAID6_NR	"raid6_nr"
+-#define SEG_TYPE_NAME_RAID6_ZR	"raid6_zr"
 -
- 			/* Default bounds width depends on time suffixes. */
- 			bounds_width = (!(flags & DM_HISTOGRAM_SUFFIX))
- 					? BOUND_WIDTH_NOSUFFIX
-@@ -2297,15 +2294,14 @@ const char *dm_histogram_to_string(const struct dm_histogram *dmh, int bin,
+ #ifdef REPLICATOR_INTERNAL
+ int init_replicator_segtype(struct cmd_context *cmd, struct segtype_library *seglib);
+ #endif
+diff --git a/lib/raid/raid.c b/lib/raid/raid.c
+index ae70cdd..290a590 100644
+--- a/lib/raid/raid.c
++++ b/lib/raid/raid.c
+@@ -434,7 +434,7 @@ static struct segtype_handler _raid_ops = {
+ static const struct raid_type {
+ 	const char name[12];
+ 	unsigned parity;
+-	int extra_flags;
++	uint64_t extra_flags;
+ } _raid_types[] = {
+ 	{ SEG_TYPE_NAME_RAID1,    0, SEG_AREAS_MIRRORED },
+ 	{ SEG_TYPE_NAME_RAID10,   0, SEG_AREAS_MIRRORED },
+@@ -452,7 +452,7 @@ static const struct raid_type {
  
- 		if (flags & DM_HISTOGRAM_PERCENT) {
- 			dm_percent_t pr;
--			float value;
- 			pr = dm_histogram_get_bin_percent(dmh, bin);
--			value = dm_percent_to_float(pr);
-+			val_flt = dm_percent_to_float(pr);
- 			len = dm_snprintf(buf, sizeof(buf), "%s%*.2f%%%s",
--					  bounds_buf, width, value, sep);
-+					  bounds_buf, width, val_flt, sep);
- 		} else if (values) {
--			uint64_t value = dmh->bins[bin].count;
-+			val_u64 = dmh->bins[bin].count;
- 			len = dm_snprintf(buf, sizeof(buf), "%s%*"PRIu64"%s",
--					  bounds_buf, width, value, sep);
-+					  bounds_buf, width, val_u64, sep);
- 		} else if (bounds)
- 			len = dm_snprintf(buf, sizeof(buf), "%s%s", bounds_buf,
- 					  sep);
+ static struct segment_type *_init_raid_segtype(struct cmd_context *cmd,
+ 					       const struct raid_type *rt,
+-					       int monitored)
++					       uint64_t monitored)
+ {
+ 	struct segment_type *segtype = dm_zalloc(sizeof(*segtype));
+ 
+@@ -482,7 +482,7 @@ int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *segl
+ {
+ 	struct segment_type *segtype;
+ 	unsigned i;
+-	int monitored = 0;
++	uint64_t monitored = 0;
+ 
+ #ifdef DEVMAPPER_SUPPORT
+ #  ifdef DMEVENTD
 
 
