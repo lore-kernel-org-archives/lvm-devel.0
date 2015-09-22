@@ -1,65 +1,50 @@
 From: Marian Csontos <mcsontos@redhat.com>
-Date: Tue, 22 Sep 2015 13:16:08 +0200
-Subject: [PATCHv2 2/4] dmeventd: Fix registration of existing thread
+Date: Tue, 22 Sep 2015 13:16:07 +0200
+Subject: [PATCHv2 1/4] dmeventd: Fix segfault in _timeout_thread
 In-Reply-To: <1442920570-29969-1-git-send-email-mcsontos@redhat.com>
 References: <1442920570-29969-1-git-send-email-mcsontos@redhat.com>
-Message-ID: <1442920570-29969-3-git-send-email-mcsontos@redhat.com>
+Message-ID: <1442920570-29969-2-git-send-email-mcsontos@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The existing code is handling only new registrations correctly. Extending
-an existing registration does not register for timeout.
+In case thread was found or thread registration failed after
+_register_for_timeout, thread_status was kept in timeout_list after
+deallocation.
 ---
-If the condition should "never occur" we should either handle it or at least
-raise an internal error here as it is likely to occur one day without traces
-what happened.
+This should be the actual fix for the above mentioned BZ 1210514 and BZ 1220856.
 
 *TODO* Any ideas how to test this? Is explicitly messaging dmeventd required?
 
- daemons/dmeventd/dmeventd.c | 18 ++++++++++++++++--
- 1 file changed, 16 insertions(+), 2 deletions(-)
+ daemons/dmeventd/dmeventd.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 0f67206..ff11625 100644
+index 1ff5bf9..0f67206 100644
 --- a/daemons/dmeventd/dmeventd.c
 +++ b/daemons/dmeventd/dmeventd.c
-@@ -1031,6 +1031,7 @@ static int _register_for_event(struct message_data *message_data)
- 	int ret = 0;
- 	struct thread_status *thread, *thread_new = NULL;
- 	struct dso_data *dso_data;
-+	enum dm_event_mask orig_events
- 
- 	if (!(dso_data = _lookup_dso(message_data)) &&
- 	    !(dso_data = _load_dso(message_data))) {
-@@ -1087,10 +1088,23 @@ static int _register_for_event(struct message_data *message_data)
+@@ -1081,6 +1081,7 @@ static int _register_for_event(struct message_data *message_data)
+ 		if ((ret = -_create_thread(thread))) {
+ 			_unlock_mutex();
+ 			_do_unregister_device(thread);
++			_unregister_for_timeout(thread);
+ 			_free_thread_status(thread);
+ 			goto out;
  		}
+@@ -1097,8 +1098,10 @@ static int _register_for_event(struct message_data *message_data)
+ 	 * Deallocate thread status after releasing
+ 	 * the lock in case we haven't used it.
+ 	 */
+-	if (thread_new)
++	if (thread_new) {
++		_unregister_for_timeout(thread);
+ 		_free_thread_status(thread_new);
++	}
  
- 		LINK_THREAD(thread);
-+	} else {
-+		/* Or event # into events bitfield. */
-+		orig_events = thread->events;
-+		thread->events |= message_data->events_field;
-+		if ((~orig_events & thread->events & DM_EVENT_TIMEOUT)) {
-+			_unlock_mutex();
-+			if (!(ret = -_register_for_timeout(thread))) {
-+				/* In case previous calls failed we do not
-+				 * force unregister event. Reset events for
-+				 * consistency. */
-+				_lock_mutex();
-+				thread->events &= ~DM_EVENT_TIMEOUT;
-+			} else
-+				_lock_mutex();
-+		}
- 	}
- 
--	/* Or event # into events bitfield. */
--	thread->events |= message_data->events_field;
- 	_unlock_mutex();
- 
-       out:
+ 	return ret;
+ }
 -- 
 1.8.3.1
 
