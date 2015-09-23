@@ -1,115 +1,93 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 29 Sep 2015 19:07:51 +0000 (UTC)
-Subject: master - lockd: add VG name to debug logging
-Message-ID: <20150929190751.21F7E60DE2@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 23 Sep 2015 14:43:32 +0000 (UTC)
+Subject: master - raid: Fix raid target write_behind parameter.
+Message-ID: <20150923144332.21B4561291@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=309979d57891912b977edbd89970bf25614ee9eb
-Commit:        309979d57891912b977edbd89970bf25614ee9eb
-Parent:        c805fa7c40ffd704523093edf4749e362f5c46ae
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Sep 29 14:07:08 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Sep 29 14:07:08 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6747665bd7cc9b8e332f48aa4be56716876f5231
+Commit:        6747665bd7cc9b8e332f48aa4be56716876f5231
+Parent:        96a621019871c5fcde42aeae9df465231302b859
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Sep 23 15:43:00 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Sep 23 15:43:00 2015 +0100
 
-lockd: add VG name to debug logging
+raid: Fix raid target write_behind parameter.
 
-Add the VG name to the new debug logging in
-the previous commit.
+Now uses correct "write_behind" instead of "writebehind".
+Patch also includes some tidying up.
 ---
- lib/cache/lvmetad.c |   30 +++++++++++++++---------------
- 1 files changed, 15 insertions(+), 15 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |   15 +++++++++------
+ 2 files changed, 10 insertions(+), 6 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 0545aff..db15866 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -37,7 +37,7 @@ static struct cmd_context *_lvmetad_cmd = NULL;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index f198a50..52dfc01 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.110 - 
+ ======================================
++  Correct use of write_behind parameter when generating raid target line.
+   Fix dm-event systemd service to make sure it is executed before mounting.
  
- static struct volume_group *lvmetad_pvscan_vg(struct cmd_context *cmd, struct volume_group *vg);
+ Version 1.02.109 - 22nd September 2016
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 1a66d98..cba4ea0 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2005-2014 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2005-2015 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of the device-mapper userspace tools.
+  *
+@@ -86,7 +86,7 @@ static const struct {
+ 	{ SEG_RAID6_NC, "raid6_nc"},
  
--static int _log_debug_inequality(struct dm_config_node *a, struct dm_config_node *b)
-+static int _log_debug_inequality(const char *name, struct dm_config_node *a, struct dm_config_node *b)
- {
- 	int result = 0;
- 	int final_result = 0;
-@@ -50,51 +50,51 @@ static int _log_debug_inequality(struct dm_config_node *a, struct dm_config_node
+ 	/*
+-	 *WARNING: Since 'raid' target overloads this 1:1 mapping table
++	 * WARNING: Since 'raid' target overloads this 1:1 mapping table
+ 	 * for search do not add new enum elements past them!
+ 	 */
+ 	{ SEG_RAID5_LS, "raid5"}, /* same as "raid5_ls" (default for MD also) */
+@@ -2369,7 +2369,7 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
  
- 			if (!strcmp(a->key, b->key)) {
- 				if (a->v->type == DM_CFG_STRING && b->v->type == DM_CFG_STRING)
--					log_debug_lvmetad("VG metadata inequality at %s / %s: %s / %s",
--							  a->key, b->key, av->v.str, bv->v.str);
-+					log_debug_lvmetad("VG %s metadata inequality at %s / %s: %s / %s",
-+							  name, a->key, b->key, av->v.str, bv->v.str);
- 				else if (a->v->type == DM_CFG_INT && b->v->type == DM_CFG_INT)
--					log_debug_lvmetad("VG metadata inequality at %s / %s: %li / %li",
--							  a->key, b->key, (int64_t)av->v.i, (int64_t)bv->v.i);
-+					log_debug_lvmetad("VG %s metadata inequality at %s / %s: %li / %li",
-+							  name, a->key, b->key, (int64_t)av->v.i, (int64_t)bv->v.i);
- 				else
--					log_debug_lvmetad("VG metadata inequality at %s / %s: type %d / type %d",
--							  a->key, b->key, av->type, bv->type);
-+					log_debug_lvmetad("VG %s metadata inequality at %s / %s: type %d / type %d",
-+							  name, a->key, b->key, av->type, bv->type);
- 			} else {
--				log_debug_lvmetad("VG metadata inequality at %s / %s", a->key, b->key);
-+				log_debug_lvmetad("VG %s metadata inequality at %s / %s", name, a->key, b->key);
- 			}
- 			final_result = result;
- 		}
- 	}
+ 	return 1;
+ }
+- 
++
+ /* Is parameter non-zero? */
+ #define PARAM_IS_SET(p) (p) ? 1 : 0
  
- 	if (a->v && !b->v) {
--		log_debug_lvmetad("VG metadata inequality at %s / %s", a->key, b->key);
-+		log_debug_lvmetad("VG %s metadata inequality at %s / %s", name, a->key, b->key);
- 		final_result = 1;
- 	}
+@@ -2396,9 +2396,12 @@ static int _raid_emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 	if ((seg->flags & DM_NOSYNC) || (seg->flags & DM_FORCESYNC))
+ 		param_count++;
  
- 	if (!a->v && b->v) {
--		log_debug_lvmetad("VG metadata inequality at %s / %s", a->key, b->key);
-+		log_debug_lvmetad("VG %s metadata inequality at %s / %s", name, a->key, b->key);
- 		final_result = -1;
- 	}
+-	param_count += 2 * (PARAM_IS_SET(seg->region_size) + PARAM_IS_SET(seg->writebehind) +
+-			    PARAM_IS_SET(seg->min_recovery_rate) + PARAM_IS_SET(seg->max_recovery_rate));
++	param_count += 2 * (PARAM_IS_SET(seg->region_size) +
++			    PARAM_IS_SET(seg->writebehind) +
++			    PARAM_IS_SET(seg->min_recovery_rate) +
++			    PARAM_IS_SET(seg->max_recovery_rate));
  
- 	if (a->child && b->child) {
--		result = _log_debug_inequality(a->child, b->child);
-+		result = _log_debug_inequality(name, a->child, b->child);
- 		if (result)
- 			final_result = result;
- 	}
++	/* rebuilds and writemostly are 64 bits */
+ 	param_count += _get_params_count(seg->rebuilds);
+ 	param_count += _get_params_count(seg->writemostly);
  
- 	if (a->sib && b->sib) {
--		result = _log_debug_inequality(a->sib, b->sib);
-+		result = _log_debug_inequality(name, a->sib, b->sib);
- 		if (result)
- 			final_result = result;
- 	}
- 	
+@@ -2425,7 +2428,7 @@ static int _raid_emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 			EMIT_PARAMS(pos, " write_mostly %u", i);
  
- 	if (a->sib && !b->sib) {
--		log_debug_lvmetad("VG metadata inequality at %s / %s", a->key, b->key);
-+		log_debug_lvmetad("VG %s metadata inequality at %s / %s", name, a->key, b->key);
- 		final_result = 1;
- 	}
+ 	if (seg->writebehind)
+-		EMIT_PARAMS(pos, " writebehind %u", seg->writebehind);
++		EMIT_PARAMS(pos, " write_behind %u", seg->writebehind);
  
- 	if (!a->sib && b->sib) {
--		log_debug_lvmetad("VG metadata inequality at %s / %s", a->key, b->key);
-+		log_debug_lvmetad("VG %s metadata inequality at %s / %s", name, a->key, b->key);
- 		final_result = -1;
- 	}
- 
-@@ -1261,7 +1261,7 @@ static struct volume_group *lvmetad_pvscan_vg(struct cmd_context *cmd, struct vo
- 			if (compare_config(vgmeta_ret->root, vgmeta->root)) {
- 				log_error("VG %s metadata comparison failed for device %s vs %s",
- 					  vg->name, dev_name(pvl->pv->dev), save_dev ? dev_name(save_dev) : "none");
--				_log_debug_inequality(vgmeta_ret->root, vgmeta->root);
-+				_log_debug_inequality(vg->name, vgmeta_ret->root, vgmeta->root);
- 				dm_config_destroy(vgmeta);
- 				dm_config_destroy(vgmeta_ret);
- 				release_vg(baton.vg);
+ 	if (seg->min_recovery_rate)
+ 		EMIT_PARAMS(pos, " min_recovery_rate %u",
 
 
