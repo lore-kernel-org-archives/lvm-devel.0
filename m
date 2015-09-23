@@ -1,43 +1,43 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 23 Sep 2015 14:43:32 +0000 (UTC)
+Date: Wed, 23 Sep 2015 14:59:01 +0000 (UTC)
 Subject: master - raid: Fix raid target write_behind parameter.
-Message-ID: <20150923144332.21B4561291@fedorahosted.org>
+Message-ID: <20150923145901.9A29260282@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6747665bd7cc9b8e332f48aa4be56716876f5231
-Commit:        6747665bd7cc9b8e332f48aa4be56716876f5231
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4e60e6244456785c88dcd5bc0998a348a639c17b
+Commit:        4e60e6244456785c88dcd5bc0998a348a639c17b
 Parent:        96a621019871c5fcde42aeae9df465231302b859
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Sep 23 15:43:00 2015 +0100
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Wed Sep 23 15:53:27 2015 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Sep 23 15:43:00 2015 +0100
+CommitterDate: Wed Sep 23 15:53:27 2015 +0100
 
 raid: Fix raid target write_behind parameter.
 
-Now uses correct "write_behind" instead of "writebehind".
-Patch also includes some tidying up.
+Now uses correct "max_write_behind" instead of "writebehind".
+(Includes some tidying up.)
 ---
  WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |   15 +++++++++------
- 2 files changed, 10 insertions(+), 6 deletions(-)
+ libdm/libdm-deptree.c |   27 +++++++++++++++------------
+ 2 files changed, 16 insertions(+), 12 deletions(-)
 
 diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index f198a50..52dfc01 100644
+index f198a50..b665bbc 100644
 --- a/WHATS_NEW_DM
 +++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
  Version 1.02.110 - 
  ======================================
-+  Correct use of write_behind parameter when generating raid target line.
++  Correct use of max_write_behind parameter when generating raid target line.
    Fix dm-event systemd service to make sure it is executed before mounting.
  
  Version 1.02.109 - 22nd September 2016
 diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 1a66d98..cba4ea0 100644
+index 1a66d98..7bc098f 100644
 --- a/libdm/libdm-deptree.c
 +++ b/libdm/libdm-deptree.c
 @@ -1,5 +1,5 @@
@@ -80,14 +80,33 @@ index 1a66d98..cba4ea0 100644
  	param_count += _get_params_count(seg->rebuilds);
  	param_count += _get_params_count(seg->writemostly);
  
-@@ -2425,7 +2428,7 @@ static int _raid_emit_segment_line(struct dm_task *dmt, uint32_t major,
- 			EMIT_PARAMS(pos, " write_mostly %u", i);
+@@ -2420,13 +2423,6 @@ static int _raid_emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 		if (seg->rebuilds & (1ULL << i))
+ 			EMIT_PARAMS(pos, " rebuild %u", i);
  
- 	if (seg->writebehind)
+-	for (i = 0; i < (seg->area_count / 2); i++)
+-		if (seg->writemostly & (1ULL << i))
+-			EMIT_PARAMS(pos, " write_mostly %u", i);
+-
+-	if (seg->writebehind)
 -		EMIT_PARAMS(pos, " writebehind %u", seg->writebehind);
-+		EMIT_PARAMS(pos, " write_behind %u", seg->writebehind);
- 
+-
  	if (seg->min_recovery_rate)
  		EMIT_PARAMS(pos, " min_recovery_rate %u",
+ 			    seg->min_recovery_rate);
+@@ -2435,6 +2431,13 @@ static int _raid_emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 		EMIT_PARAMS(pos, " max_recovery_rate %u",
+ 			    seg->max_recovery_rate);
+ 
++	for (i = 0; i < (seg->area_count / 2); i++)
++		if (seg->writemostly & (1ULL << i))
++			EMIT_PARAMS(pos, " write_mostly %u", i);
++
++	if (seg->writebehind)
++		EMIT_PARAMS(pos, " max_write_behind %u", seg->writebehind);
++
+ 	/* Print number of metadata/data device pairs */
+ 	EMIT_PARAMS(pos, " %u", seg->area_count/2);
+ 
 
 
