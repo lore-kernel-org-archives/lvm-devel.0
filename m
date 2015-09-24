@@ -1,52 +1,46 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  2 Mar 2011 19:09:07 +0100
-Subject: [PATCH 1/2] Fix read byte from char[-1] position
-In-Reply-To: <cover.1299089143.git.zkabelac@redhat.com>
-References: <cover.1299089143.git.zkabelac@redhat.com>
-Message-ID: <4e9cb7c98861937ffc9ce6ac53b3e58124a2eb6f.1299089143.git.zkabelac@redhat.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Thu, 24 Sep 2015 19:03:27 +0000 (UTC)
+Subject: master - lockd: fix changing lock type on VG with pool
+Message-ID: <20150924190327.3C4C560E53@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When the ->params is empty string - access is made on the byte
-before allocated buffer (catched by valgrind) - in case it would
-constains 0x20 - it would even overwrite this buffer.
-So fix by checking len > 0 before doing such access.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d40830a2b13595943ca51d4bfd6249527a0972cf
+Commit:        d40830a2b13595943ca51d4bfd6249527a0972cf
+Parent:        028715b0f07c0cb9740f8bd81e3d69a29c3341d2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Sep 24 13:59:13 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Sep 24 14:03:20 2015 -0500
 
-Optimise the code and use len counter instead of multiple strlen calls.
+lockd: fix changing lock type on VG with pool
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+vgchange --lock-type iterates through LVs to ensure
+no LVs are active before changing the lock type of
+the VG, but the loop was not checking that an LV
+actually has a lock before trying it, so it would
+fail if the VG had any LVs that don't use locks,
+e.g it would fail on a tmeta LV from a pool.
 ---
- libdm/ioctl/libdm-iface.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ lib/locking/lvmlockd.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 2f96a0f..b99f885 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1836,6 +1836,7 @@ static int _reload_with_suppression_v4(struct dm_task *dmt)
- {
- 	struct dm_task *task;
- 	struct target *t1, *t2;
-+	size_t len;
- 	int r;
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index e20920c..afbafcb 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -879,6 +879,9 @@ static int _lockd_all_lvs(struct cmd_context *cmd, struct volume_group *vg)
+ 	struct lv_list *lvl;
  
- 	/* New task to get existing table information */
-@@ -1878,8 +1879,9 @@ static int _reload_with_suppression_v4(struct dm_task *dmt)
- 	t2 = task->head;
- 
- 	while (t1 && t2) {
--		while (t2->params[strlen(t2->params) - 1] == ' ')
--			t2->params[strlen(t2->params) - 1] = '\0';
-+		len = strlen(t2->params);
-+		while (len-- > 0 && t2->params[len] == ' ')
-+			t2->params[len] = '\0';
- 		if ((t1->start != t2->start) ||
- 		    (t1->length != t2->length) ||
- 		    (strcmp(t1->type, t2->type)) ||
--- 
-1.7.4.1
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
++		if (!lockd_lv_uses_lock(lvl->lv))
++			continue;
++
+ 		if (!lockd_lv(cmd, lvl->lv, "ex", 0)) {
+ 			log_error("LV %s/%s must be inactive on all hosts.",
+ 				  vg->name, lvl->lv->name);
 
 
