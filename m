@@ -1,153 +1,212 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  1 Oct 2015 19:43:37 +0000 (UTC)
-Subject: master - man lvmcache: updates for mode and policy
-Message-ID: <20151001194337.B364260D51@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri,  2 Oct 2015 09:13:26 +0000 (UTC)
+Subject: master - raid: Add metadata dev information to reports.
+Message-ID: <20151002091326.57E2A6101E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e5d48348b0c7afdd7a3fb56ddd6875a8b81dc68
-Commit:        5e5d48348b0c7afdd7a3fb56ddd6875a8b81dc68
-Parent:        26da6a3e10d2b8a84326288b53c8e9a6d82a3846
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 1 11:39:07 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Oct 1 14:23:39 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fb957ef3223939424cf1faff4ca9dd104882ab46
+Commit:        fb957ef3223939424cf1faff4ca9dd104882ab46
+Parent:        5e5d48348b0c7afdd7a3fb56ddd6875a8b81dc68
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Oct 2 10:09:28 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Oct 2 10:09:28 2015 +0100
 
-man lvmcache: updates for mode and policy
+raid: Add metadata dev information to reports.
 
-Correct some things, e.g. set mode and policy on
-the cache lv, not the pool, lvm.conf field for
-mode changed.
-
-Add smq which was missing.
-
-Make the sections on cache mode and cache policy
-consistent in structure and style.
+Add metadata_devices and seg_metadata_le_ranges report fields.
+Currently only defined for raid, but should probably be extended
+to all other segment types that don't report all their device
+usage in the 'devices' field.
 ---
- man/lvmcache.7.in |   74 ++++++++++++++++++++++++++++++-----------------------
- 1 files changed, 42 insertions(+), 32 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv.c       |   31 ++++++++++++++++++++++++-------
+ lib/metadata/lv.h       |    2 ++
+ lib/report/columns.h    |    2 ++
+ lib/report/properties.c |    5 +++++
+ lib/report/report.c     |   24 ++++++++++++++++++++++++
+ 6 files changed, 58 insertions(+), 7 deletions(-)
 
-diff --git a/man/lvmcache.7.in b/man/lvmcache.7.in
-index 7257386..44709d1 100644
---- a/man/lvmcache.7.in
-+++ b/man/lvmcache.7.in
-@@ -195,6 +195,7 @@ Users who are concerned about the possibility of failures in their fast
- devices that could lead to data loss might consider making their cache
- pool sub-LVs redundant.
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d693ab8..5da1552 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.133 - 
+ ======================================
++  Add metadata_devices and seg_metadata_le_ranges report fields for raid vols.
+   Fix lvm2-{activation,clvmd,cmirrord,monitor} service to exec before mounting.
  
-+.I Example
- .nf
- 0. Create an origin LV we wish to cache
- # lvcreate \-L 10G \-n lv1 vg /dev/slow_devs
-@@ -228,14 +229,18 @@ from the cache pool back to the origin LV.  This mode will increase
- performance, but the loss of a device associated with the cache pool LV
- can result in lost data.
+ Version 2.02.132 - 22nd September 2015
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index e0080b1..3126086 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -29,7 +29,7 @@ static struct utsname _utsname;
+ static int _utsinit = 0;
  
--The cache mode can be specified with the --cachemode option when a cache
--pool LV is created.
-+With the \-\-cachemode option, the cache mode can be set when creating a
-+cache LV, or changed on an existing cache LV.  The current cache mode of a
-+cache LV can be displayed with the cache_mode reporting option:
+ static char *_format_pvsegs(struct dm_pool *mem, const struct lv_segment *seg,
+-			     int range_format)
++			    int range_format, int metadata_areas_only)
+ {
+ 	unsigned int s;
+ 	const char *name = NULL;
+@@ -41,13 +41,19 @@ static char *_format_pvsegs(struct dm_pool *mem, const struct lv_segment *seg,
+ 		return NULL;
+ 	}
+ 
++	if (metadata_areas_only && (!seg_is_raid(seg) || lv_is_raid_metadata(seg->lv) || lv_is_raid_image(seg->lv)))
++		goto out;
 +
-+.B lvs \-o+cache_mode VG/CacheLV
+ 	for (s = 0; s < seg->area_count; s++) {
+-		switch (seg_type(seg, s)) {
++		switch (metadata_areas_only ? seg_metatype(seg, s) : seg_type(seg, s)) {
+ 		case AREA_LV:
+-			name = seg_lv(seg, s)->name;
+-			extent = seg_le(seg, s);
++			name = metadata_areas_only ? seg_metalv(seg, s)->name : seg_lv(seg, s)->name;
++			extent = metadata_areas_only ? seg_le(seg, s) : 0;
+ 			break;
+ 		case AREA_PV:
++			/* Raid metadata never uses PVs directly */
++			if (metadata_areas_only)
++				continue;
+ 			name = dev_name(seg_dev(seg, s));
+ 			extent = seg_pe(seg, s);
+ 			break;
+@@ -79,7 +85,7 @@ static char *_format_pvsegs(struct dm_pool *mem, const struct lv_segment *seg,
  
- .BR lvm.conf (5)
--.B cache_pool_cachemode
-+.B allocation/cache_mode
- .br
- defines the default cache mode.
+ 		if (range_format) {
+ 			if (dm_snprintf(extent_str, sizeof(extent_str),
+-					FMTu32, extent + seg->area_len - 1) < 0) {
++					FMTu32, metadata_areas_only ? extent + seg_metalv(seg, s)->le_count - 1 : extent + seg->area_len - 1) < 0) {
+ 				log_error("Extent number dm_snprintf failed");
+ 				return NULL;
+ 			}
+@@ -96,6 +102,7 @@ static char *_format_pvsegs(struct dm_pool *mem, const struct lv_segment *seg,
+ 		}
+ 	}
  
-+.I Example
- .nf
- 0. Create an origin LV we wish to cache (yours may already exist)
- # lvcreate \-L 10G \-n lv1 vg /dev/slow
-@@ -246,50 +251,55 @@ defines the default cache mode.
- 2. Create a cache metadata LV
- # lvcreate \-L 8M \-n cache1meta vg /dev/fast
++out:
+ 	if (!dm_pool_grow_object(mem, "\0", 1)) {
+ 		log_error("dm_pool_grow_object failed");
+ 		return NULL;
+@@ -106,12 +113,22 @@ static char *_format_pvsegs(struct dm_pool *mem, const struct lv_segment *seg,
  
--3. Create a cache pool LV specifying cache mode "writethrough"
--# lvconvert \-\-type cache\-pool \-\-poolmetadata vg/cache1meta \\
--	\-\-cachemode writethrough vg/cache1
-+3. Create a cache pool LV
-+# lvconvert \-\-type cache\-pool \-\-poolmetadata vg/cache1meta vg/cache1
- 
--4. Create a cache LV by combining the cache pool LV and origin LV
--# lvconvert \-\-type cache \-\-cachepool vg/cache1 vg/lv1
-+4. Create a cache LV by combining the cache pool LV and origin LV,
-+   and use the writethrough cache mode.
-+# lvconvert \-\-type cache \-\-cachepool vg/cache1 \\
-+	\-\-cachemode writethrough vg/lv1
- .fi
- 
--The cache mode can be changed on an existing LV with the command:
- 
--.B lvconvert --cachemode writethrough|writeback VG/CacheLV
-+.SS Cache policy
- 
-+\&
- 
--.SS Cache policy & policy settings
-+The cache subsystem has additional per-LV parameters: the cache policy to
-+use, and possibly tunable parameters for the cache policy.  Three policies
-+are currently available: "smq" is the default policy, "mq" is an older
-+implementation, and "cleaner" is used to force the cache to write back
-+(flush) all cached writes to the origin LV.
- 
--\&
-+The "mq" policy has a number of tunable parameters. The defaults are
-+chosen to be suitable for the majority of systems, but in special
-+circumstances, changing the settings can improve performance.
- 
--The cache subsystem has an additional per-LV parameter, namely the cache policy
--to use, and possibly the tunable parameters of the said cache policy. In the
--current implementation, two policies are available, "mq" which is the default
--policy and "cleaner" which is used to force the cache to write back (flush) all
--cached writes to the origin LV. Moreover, the "mq" policy has a number of
--tunable parameters: the defaults are chosen to be suitable for the vast
--majority of systems. However, under special circumstances, changing the tunable
--settings of the cache policy can improve performance.
-+With the \-\-cachepolicy and \-\-cachesettings options, the cache policy
-+and settings can be set when creating a cache LV, or changed on an
-+existing cache LV (both options can be used together).  The current cache
-+policy and settings of a cache LV can be displayed with the cache_policy
-+and cache_settings reporting options:
- 
--On an existing cache LV, the policy can be set (to "mq") and the cache settings
--can be changed using commands like these:
-+.B lvs \-o+cache_policy,cache_settings VG/CacheLV
- 
- .I Example
--
- .nf
--# lvchange \-\-cachepolicy mq vg/lv1
--# lvchange \-\-cachesettings \(aqmigration_threshold=2048 random_threshold=4\(aq \\
--     vg/lv1
-+Change the cache policy and settings of an existing cache LV.
-+# lvchange \-\-cachepolicy mq \-\-cachesettings \\
-+	\(aqmigration_threshold=2048 random_threshold=4\(aq vg/lv1
- .fi
- 
--Both commands can be combined, setting both cache policy and its settings
--together. Moreover, when creating a cache LV for the first time (using
--lvcreate), the \-\-cachepolicy and \-\-cachesettings parameters can be used as
--well. The current policy and the policy settings can be listed using the lvs
--command, using 'cache_policy' and 'cache_settings' fields:
-+.BR lvm.conf (5)
-+.B allocation/cache_policy
-+.br
-+defines the default cache policy.
+ char *lvseg_devices(struct dm_pool *mem, const struct lv_segment *seg)
+ {
+-	return _format_pvsegs(mem, seg, 0);
++	return _format_pvsegs(mem, seg, 0, 0);
++}
 +
-+.BR lvm.conf (5)
-+.B allocation/cache_settings
-+.br
-+defines the default cache settings.
++char *lvseg_metadata_devices(struct dm_pool *mem, const struct lv_segment *seg)
++{
++	return _format_pvsegs(mem, seg, 0, 1);
+ }
  
--# lvs -o +cache_policy,cache_settings
+ char *lvseg_seg_pe_ranges(struct dm_pool *mem, const struct lv_segment *seg)
+ {
+-	return _format_pvsegs(mem, seg, 1);
++	return _format_pvsegs(mem, seg, 1, 0);
++}
++
++char *lvseg_seg_metadata_le_ranges(struct dm_pool *mem, const struct lv_segment *seg)
++{
++	return _format_pvsegs(mem, seg, 1, 1);
+ }
  
- .SS Spare metadata LV
+ char *lvseg_tags_dup(const struct lv_segment *seg)
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index a839489..172d29f 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -101,7 +101,9 @@ char *lvseg_cachemode_dup(struct dm_pool *mem, const struct lv_segment *seg);
+ char *lvseg_monitor_dup(struct dm_pool *mem, const struct lv_segment *seg);
+ char *lvseg_tags_dup(const struct lv_segment *seg);
+ char *lvseg_devices(struct dm_pool *mem, const struct lv_segment *seg);
++char *lvseg_metadata_devices(struct dm_pool *mem, const struct lv_segment *seg);
+ char *lvseg_seg_pe_ranges(struct dm_pool *mem, const struct lv_segment *seg);
++char *lvseg_seg_metadata_le_ranges(struct dm_pool *mem, const struct lv_segment *seg);
+ char *lv_time_dup(struct dm_pool *mem, const struct logical_volume *lv, int iso_mode);
+ char *lv_host_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ int lv_set_creation(struct logical_volume *lv,
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 3b58aee..6041eeb 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -190,7 +190,9 @@ FIELD(SEGS, seg, SIZ, "SSize", list, 5, segsize, seg_size, "Size of segment in c
+ FIELD(SEGS, seg, SIZ, "SSize", list, 5, segsizepe, seg_size_pe, "Size of segment in physical extents.", 0)
+ FIELD(SEGS, seg, STR_LIST, "Seg Tags", tags, 8, tags, seg_tags, "Tags, if any.", 0)
+ FIELD(SEGS, seg, STR, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format.", 0)
++FIELD(SEGS, seg, STR, "Metadata LE Ranges", list, 18, metadataleranges, seg_metadata_le_ranges, "Ranges of Logical Extents of underlying metadata devices in command line format.", 0)
+ FIELD(SEGS, seg, STR, "Devices", list, 7, devices, devices, "Underlying devices used with starting extent numbers.", 0)
++FIELD(SEGS, seg, STR, "Metadata Devs", list, 13, metadatadevices, metadata_devices, "Underlying metadata devices used with starting extent numbers.", 0)
+ FIELD(SEGS, seg, STR, "Monitor", list, 7, segmonitor, seg_monitor, "Dmeventd monitoring status of the segment.", 0)
+ FIELD(SEGS, seg, STR, "Cache Policy", list, 12, cache_policy, cache_policy, "The cache policy (cached segments only).", 0)
+ FIELD(SEGS, seg, STR_LIST, "Cache Settings", list, 14, cache_settings, cache_settings, "Cache settings/parameters (cached segments only).", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 72dcaff..262cc26 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -463,8 +463,13 @@ GET_LVSEG_STR_PROPERTY_FN(seg_tags, lvseg_tags_dup(lvseg))
+ GET_LVSEG_STR_PROPERTY_FN(seg_pe_ranges,
+ 			  lvseg_seg_pe_ranges(lvseg->lv->vg->vgmem, lvseg))
+ #define _seg_pe_ranges_set prop_not_implemented_set
++GET_LVSEG_STR_PROPERTY_FN(seg_metadata_le_ranges,
++			  lvseg_seg_metadata_le_ranges(lvseg->lv->vg->vgmem, lvseg))
++#define _seg_metadata_le_ranges_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(devices, lvseg_devices(lvseg->lv->vg->vgmem, lvseg))
+ #define _devices_set prop_not_implemented_set
++GET_LVSEG_STR_PROPERTY_FN(metadata_devices, lvseg_metadata_devices(lvseg->lv->vg->vgmem, lvseg))
++#define _metadata_devices_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(seg_monitor, lvseg_monitor_dup(lvseg->lv->vg->vgmem, lvseg))
+ #define _seg_monitor_set prop_not_implemented_set
  
+diff --git a/lib/report/report.c b/lib/report/report.c
+index bf2f1c8..7ac1ac5 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -1304,6 +1304,18 @@ static int _devices_disp(struct dm_report *rh __attribute__((unused)), struct dm
+ 	return _field_set_value(field, str, NULL);
+ }
+ 
++static int _metadatadevices_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
++				 struct dm_report_field *field,
++				 const void *data, void *private __attribute__((unused)))
++{
++	char *str;
++
++	if (!(str = lvseg_metadata_devices(mem, (const struct lv_segment *) data)))
++		return_0;
++
++	return _field_set_value(field, str, NULL);
++}
++
+ static int _peranges_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
+ 			  struct dm_report_field *field,
+ 			  const void *data, void *private __attribute__((unused)))
+@@ -1316,6 +1328,18 @@ static int _peranges_disp(struct dm_report *rh __attribute__((unused)), struct d
+ 	return _field_set_value(field, str, NULL);
+ }
+ 
++static int _metadataleranges_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
++				  struct dm_report_field *field,
++				  const void *data, void *private __attribute__((unused)))
++{
++	char *str;
++
++	if (!(str = lvseg_seg_metadata_le_ranges(mem, (const struct lv_segment *) data)))
++		return_0;
++
++	return _field_set_value(field, str, NULL);
++}
++
+ static int _tags_disp(struct dm_report *rh, struct dm_pool *mem,
+ 		      struct dm_report_field *field,
+ 		      const void *data, void *private)
 
 
