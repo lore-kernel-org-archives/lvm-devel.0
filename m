@@ -1,58 +1,102 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  8 Oct 2015 15:17:57 +0000 (UTC)
-Subject: master - vgcreate: allow both --shared and --lock-type options
-Message-ID: <20151008151757.3F86F602F2@fedorahosted.org>
+Date: Thu,  8 Oct 2015 15:42:28 +0000 (UTC)
+Subject: master - vgcreate: improve error message for multiple lock managers
+Message-ID: <20151008154228.1D90E6026A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=09981afc1c03e1d79109c483b3d19ae1c207e158
-Commit:        09981afc1c03e1d79109c483b3d19ae1c207e158
-Parent:        3d03e504cda6307f692c5879f6850b2e27af7d71
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d99dd4086da5ab2ed7bf02a8711d4a4998fe2b31
+Commit:        d99dd4086da5ab2ed7bf02a8711d4a4998fe2b31
+Parent:        09981afc1c03e1d79109c483b3d19ae1c207e158
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 8 10:14:33 2015 -0500
+AuthorDate:    Thu Oct 8 10:38:35 2015 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Oct 8 10:14:33 2015 -0500
+CommitterDate: Thu Oct 8 10:41:13 2015 -0500
 
-vgcreate: allow both --shared and --lock-type options
+vgcreate: improve error message for multiple lock managers
 
-Using --lock-type sanlock|dlm implies --shared.
+If 'vgcreate --shared' finds both sanlock and dlm are running,
+print a more accurate error message:
+"Found multiple lock managers, select one with --lock-type."
 
-Using --shared selects lock type sanlock|dlm
-(by choosing the one that's running.)
-
-Using both --shared and --lock-type sanlock|dlm should
-also be allowed (--shared is just redundant information.)
+When neither is running, we still print:
+"Failed to detect a running lock manager to select lock type."
 ---
- tools/toollib.c |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ lib/locking/lvmlockd.c |    5 ++---
+ lib/locking/lvmlockd.h |    4 ++--
+ tools/toollib.c        |    9 +++++++--
+ 3 files changed, 11 insertions(+), 7 deletions(-)
 
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index f741940..2bc34c8 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -2561,7 +2561,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int
+ 	return 1;
+ }
+ 
+-const char *lockd_running_lock_type(struct cmd_context *cmd)
++const char *lockd_running_lock_type(struct cmd_context *cmd, int *found_multiple)
+ {
+ 	daemon_reply reply;
+ 	const char *lock_type = NULL;
+@@ -2583,10 +2583,9 @@ const char *lockd_running_lock_type(struct cmd_context *cmd)
+ 
+ 	switch (result) {
+ 	case -EXFULL:
+-		log_error("lvmlockd found multiple lock managers, use --lock-type to select one.");
++		*found_multiple = 1;
+ 		break;
+ 	case -ENOLCK:
+-		log_error("lvmlockd found no lock manager running.");
+ 		break;
+ 	case LOCK_TYPE_SANLOCK:
+ 		log_debug("lvmlockd found sanlock");
+diff --git a/lib/locking/lvmlockd.h b/lib/locking/lvmlockd.h
+index 7e6505d..8b282d8 100644
+--- a/lib/locking/lvmlockd.h
++++ b/lib/locking/lvmlockd.h
+@@ -89,7 +89,7 @@ int lockd_init_lv_args(struct cmd_context *cmd, struct volume_group *vg,
+ int lockd_free_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 		  const char *lv_name, struct id *lv_id, const char *lock_args);
+ 
+-const char *lockd_running_lock_type(struct cmd_context *cmd);
++const char *lockd_running_lock_type(struct cmd_context *cmd, int *found_multiple);
+ 
+ int handle_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg);
+ 
+@@ -223,7 +223,7 @@ static inline int lockd_free_lv(struct cmd_context *cmd, struct volume_group *vg
+ 	return 1;
+ }
+ 
+-static inline const char *lockd_running_lock_type(struct cmd_context *cmd)
++static inline const char *lockd_running_lock_type(struct cmd_context *cmd, int *found_multiple)
+ {
+ 	log_error("Using a shared lock type requires lvmlockd.");
+ 	return NULL;
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 01146a4..cf5e236 100644
+index cf5e236..dfb2b87 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -898,12 +898,18 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 	use_clvmd = (locking_type == 3);
- 
- 	if (arg_is_set(cmd, locktype_ARG)) {
--		if (arg_is_set(cmd, clustered_ARG) || arg_is_set(cmd, shared_ARG)) {
--			log_error("A lock type cannot be specified with --shared or --clustered.");
-+		if (arg_is_set(cmd, clustered_ARG)) {
-+			log_error("A lock type cannot be specified with --clustered.");
- 			return 0;
+@@ -931,9 +931,14 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
  		}
-+
- 		lock_type = arg_str_value(cmd, locktype_ARG, "");
  
-+		if (arg_is_set(cmd, shared_ARG) && !is_lockd_type(lock_type)) {
-+			log_error("The --shared option requires lock type sanlock or dlm.");
-+			return 0;
-+		}
+ 	} else if (arg_is_set(cmd, shared_ARG)) {
++		int found_multiple = 0;
 +
- 	} else if (arg_is_set(cmd, clustered_ARG)) {
- 		const char *arg_str = arg_str_value(cmd, clustered_ARG, "");
- 		int clustery = strcmp(arg_str, "y") ? 0 : 1;
+ 		if (use_lvmlockd) {
+-			if (!(lock_type = lockd_running_lock_type(cmd))) {
+-				log_error("Failed to detect a running lock manager to select lock type.");
++			if (!(lock_type = lockd_running_lock_type(cmd, &found_multiple))) {
++				if (found_multiple)
++					log_error("Found multiple lock managers, select one with --lock-type.");
++				else
++					log_error("Failed to detect a running lock manager to select lock type.");
+ 				return 0;
+ 			}
+ 
 
 
