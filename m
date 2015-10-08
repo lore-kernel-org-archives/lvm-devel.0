@@ -1,57 +1,58 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  8 Oct 2015 14:28:14 +0000 (UTC)
-Subject: master - metadata: format_text: provide more detailed error message when metadata too large for PV mda
-Message-ID: <20151008142814.96354600E5@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Thu,  8 Oct 2015 15:17:57 +0000 (UTC)
+Subject: master - vgcreate: allow both --shared and --lock-type options
+Message-ID: <20151008151757.3F86F602F2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d03e504cda6307f692c5879f6850b2e27af7d71
-Commit:        3d03e504cda6307f692c5879f6850b2e27af7d71
-Parent:        e04424e87e66df22578d1e4d2488615cd3692873
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Oct 8 16:25:10 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Oct 8 16:27:03 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=09981afc1c03e1d79109c483b3d19ae1c207e158
+Commit:        09981afc1c03e1d79109c483b3d19ae1c207e158
+Parent:        3d03e504cda6307f692c5879f6850b2e27af7d71
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Oct 8 10:14:33 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Oct 8 10:14:33 2015 -0500
 
-metadata: format_text: provide more detailed error message when metadata too large for PV mda
+vgcreate: allow both --shared and --lock-type options
 
-Also, leave out the note about "circular buffer" which is
-an internal imeplementation detail anyway and not quite
-informational for users:
+Using --lock-type sanlock|dlm implies --shared.
 
-Before this patch:
-$ vgcreate vg1 /dev/sda
-  VG vg1 metadata too large for circular buffer
-  Failed to write VG vg1.
+Using --shared selects lock type sanlock|dlm
+(by choosing the one that's running.)
 
-With this patch applied:
-$ vgcreate vg1 /dev/sda
-  VG vg1 metadata too large: size of metadata to write is 691 bytes while PV metadata area size on /dev/sda is 512 bytes.
-  Failed to write VG vg1.
+Using both --shared and --lock-type sanlock|dlm should
+also be allowed (--shared is just redundant information.)
 ---
- lib/format_text/format-text.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ tools/toollib.c |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index e0ec8ed..c1c4787 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -655,8 +655,11 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 	if ((new_wrap && old_wrap) ||
- 	    (rlocn && (new_wrap || old_wrap) && (new_end > rlocn->offset)) ||
- 	    (mdac->rlocn.size >= mdah->size)) {
--		log_error("VG %s metadata too large for circular buffer",
--			  vg->name);
-+		log_error("VG %s metadata too large: size of metadata to write "
-+			  "is %" PRIu64 " bytes while PV metadata area size "
-+			  "on %s is %" PRIu64 " bytes.",
-+			   vg->name, mdac->rlocn.size,
-+			   dev_name(mdac->area.dev), mdah->size);
- 		goto out;
- 	}
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 01146a4..cf5e236 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -898,12 +898,18 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
+ 	use_clvmd = (locking_type == 3);
  
+ 	if (arg_is_set(cmd, locktype_ARG)) {
+-		if (arg_is_set(cmd, clustered_ARG) || arg_is_set(cmd, shared_ARG)) {
+-			log_error("A lock type cannot be specified with --shared or --clustered.");
++		if (arg_is_set(cmd, clustered_ARG)) {
++			log_error("A lock type cannot be specified with --clustered.");
+ 			return 0;
+ 		}
++
+ 		lock_type = arg_str_value(cmd, locktype_ARG, "");
+ 
++		if (arg_is_set(cmd, shared_ARG) && !is_lockd_type(lock_type)) {
++			log_error("The --shared option requires lock type sanlock or dlm.");
++			return 0;
++		}
++
+ 	} else if (arg_is_set(cmd, clustered_ARG)) {
+ 		const char *arg_str = arg_str_value(cmd, clustered_ARG, "");
+ 		int clustery = strcmp(arg_str, "y") ? 0 : 1;
 
 
