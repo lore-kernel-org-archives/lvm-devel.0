@@ -1,70 +1,83 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  8 Oct 2015 18:26:39 +0000 (UTC)
-Subject: master - man lvmsystemid: fix typos
-Message-ID: <20151008182639.280C061141@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu,  8 Oct 2015 11:45:11 +0000 (UTC)
+Subject: master - report: identify LV hodling sanlock locks as 'private, lockd, sanlock' within lv_role report field
+Message-ID: <20151008114511.90E1260E2D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5446d177569ca10476c935013ae03e6a0763ab34
-Commit:        5446d177569ca10476c935013ae03e6a0763ab34
-Parent:        c9ff5c8223c6c2d23829aef076d58c32382891c8
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 8 13:21:42 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Oct 8 13:26:09 2015 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e04424e87e66df22578d1e4d2488615cd3692873
+Commit:        e04424e87e66df22578d1e4d2488615cd3692873
+Parent:        277dd0aa7a9013697ae99164900d8d8ec12a2850
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Oct 8 13:44:21 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Oct 8 13:44:29 2015 +0200
 
-man lvmsystemid: fix typos
+report: identify LV hodling sanlock locks as 'private,lockd,sanlock' within lv_role report field
 
+Before this patch:
+$ lvs -a -o name,layout,role test/lvmlock
+  LV        Layout     Role
+  [lvmlock] linear     public
+
+With this patch applied:
+$ lvs -a -o name,layout,role test/lvmlock
+  LV        Layout     Role
+  [lvmlock] linear     private,lockd,sanlock
 ---
- man/lvmsystemid.7.in |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |   11 +++++++++++
+ 2 files changed, 12 insertions(+), 0 deletions(-)
 
-diff --git a/man/lvmsystemid.7.in b/man/lvmsystemid.7.in
-index eb10ac5..0048873 100644
---- a/man/lvmsystemid.7.in
-+++ b/man/lvmsystemid.7.in
-@@ -274,7 +274,7 @@ cache with pvscan --cache will allow a host to recognize the newly
- exported VG.
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 5da1552..227530d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.133 - 
+ ======================================
++  Properly identify internal LV holding sanlock locks within lv_role field.
+   Add metadata_devices and seg_metadata_le_ranges report fields for raid vols.
+   Fix lvm2-{activation,clvmd,cmirrord,monitor} service to exec before mounting.
  
- vgimport sets the VG system_id to the local system_id as determined by
--lvm.conf system_id_sources.  vgimport automatically scans storage for
-+lvm.conf system_id_source.  vgimport automatically scans storage for
- newly exported VGs.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 48d7d34..3e870d5 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -129,6 +129,8 @@ enum {
+ 	LV_TYPE_RAID6_ZR,
+ 	LV_TYPE_RAID6_NR,
+ 	LV_TYPE_RAID6_NC,
++	LV_TYPE_LOCKD,
++	LV_TYPE_SANLOCK
+ };
  
- After vgimport, the exporting host will continue to see the VG as
-@@ -300,9 +300,9 @@ To move a VG from one host to another, vgexport and vgimport should be
- used.
+ static const char *_lv_type_names[] = {
+@@ -173,6 +175,8 @@ static const char *_lv_type_names[] = {
+ 	[LV_TYPE_RAID6_ZR] =				SEG_TYPE_NAME_RAID6_ZR,
+ 	[LV_TYPE_RAID6_NR] =				SEG_TYPE_NAME_RAID6_NR,
+ 	[LV_TYPE_RAID6_NC] =				SEG_TYPE_NAME_RAID6_NC,
++	[LV_TYPE_LOCKD] =				"lockd",
++	[LV_TYPE_SANLOCK] =				"sanlock",
+ };
  
- To forcibly gain ownership of a foreign VG, a host can add the foreign
--system_id to its allow_system_id list, change the system_id of the foreign
--VG to its own, and remove the foreign system_id from its allow_system_id
--list.
-+system_id to its extra_system_ids list, change the system_id of the
-+foreign VG to its own, and remove the foreign system_id from its
-+extra_system_ids list.
+ static int _lv_layout_and_role_mirror(struct dm_pool *mem,
+@@ -505,6 +509,13 @@ int lv_layout_and_role(struct dm_pool *mem, const struct logical_volume *lv,
+ 	if (!_lv_layout_and_role_thick_origin_snapshot(mem, lv, *layout, *role, &public_lv))
+ 		goto_bad;
  
- .SS shared VGs
- 
-@@ -328,7 +328,7 @@ creation_host will be the same.
- 
- Orphan PVs are unused devices; they are not currently used in any VG.
- Because of this, they are not protected by a system_id, and any host can
--use them.  Coodination of changes to orphan PVs is beyond the scope of
-+use them.  Coordination of changes to orphan PVs is beyond the scope of
- system_id.  The same is true of any block device that is not a PV.
- 
- The effects of this are especially evident when lvm uses lvmetad caching.
-@@ -337,7 +337,7 @@ using the orphan, the other hosts will continue to report the PV as an
- orphan.  Nothing would automatically prevent the other hosts from using
- the newly allocated PV and corrupting it.  If the other hosts run a
- command to rescan devices, and update lvmetad, they would then recognize
--the PV has been used by another host.  A command that rescans devices
-+that the PV has been used by another host.  A command that rescans devices
- could be pvscan --cache, or vgs --foreign.
- 
- .SH SEE ALSO
++	if (lv_is_lockd_sanlock_lv(lv)) {
++		if (!str_list_add_no_dup_check(mem, *role, _lv_type_names[LV_TYPE_LOCKD]) ||
++		    !str_list_add_no_dup_check(mem, *role, _lv_type_names[LV_TYPE_SANLOCK]))
++			goto_bad;
++		public_lv = 0;
++	}
++
+ 	/*
+ 	 * If layout not yet determined, it must be either
+ 	 * linear or striped or mixture of these two.
 
 
