@@ -1,65 +1,103 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 12 Oct 2015 11:02:32 +0200
-Subject: [PATCH] lvcreate: support --force option
-In-Reply-To: <561B8AEB020000E10001DD25@relay2.provo.novell.com>
-References: <1444473552-14906-1-git-send-email-lzhong@suse.com>
-	<56190FE5.1030900@redhat.com>
-	<561B8AEB020000E10001DD25@relay2.provo.novell.com>
-Message-ID: <561B7728.5010804@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 12 Oct 2015 09:13:39 +0000 (UTC)
+Subject: master - vgimportclone: fix vgimportclone with -n to not add number unnecessarily to base VG name
+Message-ID: <20151012091339.A0BCC606FB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 12.10.2015 v 04:26 Lidong Zhong napsal(a):
-> Hi Zdenek,
->
-> Thanks for your reply.
->
->>>> On 10/10/2015 at 09:17 PM, in message <56190FE5.1030900@redhat.com>, Zdenek
-> Kabelac <zkabelac@redhat.com> wrote:
->> Dne 10.10.2015 v 12:39 Lidong Zhong napsal(a):
->>> The option is supported in the logic of lvcreate but is omitted in
->>> commands.h.
->>>
->>
->> Nope - it's not intended to be unsupported so far.
->>
->> We do support --yes  to overcome prompts.
->>
->> Normally --force is meant to be used on paths to proceed with
->> i.e. lvremove, lvconvert
->>
->> Do you have any case in mind where '--force' with lvcreate would have make any
->>
->> sense ?
->
-> Not really. I met this problem when I was using lvcreate with the --wipesignature option.
-> --yes works for me. But I also found that --force should also work when I read the source.
-> However, it reports -f/--force is an invalid option for lvcreate.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=38df48d108e3b040501edfd9e0517bfcb31373de
+Commit:        38df48d108e3b040501edfd9e0517bfcb31373de
+Parent:        21a8ac0cd3a392feaa049ab509c4727eee548d6b
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Oct 12 11:11:34 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Oct 12 11:11:34 2015 +0200
 
-Yep - and so far it should stay that way -  --force has special meaning for 
-being quite unsafe operation.
+vgimportclone: fix vgimportclone with -n to not add number unnecessarily to base VG name
 
->
->> IMHO creating something with --force looks to me like crazy idea to start with
->>
->> - but maybe there is some use-case I'm missing ?
->>
->
-> Currently there is no introduction to --yes in the manpage of lvcreate. How about adding it to
-> the manpage?
+$ vgcreate vgA /dev/sda
+  Volume group "vgA" successfully created
 
-Every lvm man page references 'man lvm' as the source of description for all 
-'commonly' accepted options (like --yes).
+$ dd if=/dev/sda of=/dev/sdb bs=1M
+$ dd if=/dev/sda of=/dev/sdc bs=1M
 
-One day we may switch to 'generated' man pages - where very man page would 
-have all options described - but I guess this 'day' is still pretty far away ;)
+(the new VG name is prefix of existing VG name)
+$ vgimportclone -n vg /dev/sdb
 
-Regards
+(the new VG name is suffix of existing VG name)
+$ vgimportclone -n gA /dev/sdc
 
-Zdenek
+Before this patch:
+------------------
+(we end up with "vg1" and "gA1" names with the "1" suffix which is not needed)
+$ vgs -o vg_name
+  VG
+  gA1
+  vg1
+  vgA
 
+With this patch applied:
+------------------------
+(we end up with "vg" and "gA" names as they're unique already and no extra suffix is added)
+$ # vgs -o vg_name
+  VG
+  gA
+  vg
+  vgA
+
+Of course, if the name supplied is not unique, the number is added correctly:
+$ dd if=/dev/sda of=/dev/sdb bs=1M
+$ vgimportclone -n vgA /dev/sdb
+$ vgs -o vg_name
+  VG
+  vgA
+  vgA1
+---
+ WHATS_NEW                |    1 +
+ scripts/vgimportclone.sh |    8 +++++---
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 9af759e..5fa6e7f 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.133 - 
+ ======================================
++  Fix vgimportclone with -n to not add number unnecessarily to base VG name.
+   Cleanup vgimportclone script and remove dependency on awk, grep, cut and tr.
+   Add vg_missing_pv_count report field to report number of missing PVs in a VG.
+   Properly identify internal LV holding sanlock locks within lv_role field.
+diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
+index d14a170..52f3884 100755
+--- a/scripts/vgimportclone.sh
++++ b/scripts/vgimportclone.sh
+@@ -48,7 +48,7 @@ function getvgname {
+     NAME="${BNAME}"
+     I=0
+ 
+-    while [[ "${VGLIST}" =~ "${NAME}" ]]
++    while [[ "${VGLIST}" =~ ":${NAME}:" ]]
+     do
+         I=$(($I+1))
+         NAME="${BNAME}$I"
+@@ -215,10 +215,12 @@ then
+ fi
+ 
+ #####################################################################
+-### Get the existing state so we can use it later
++### Get the existing state so we can use it later.
++### The list of VG names is saved in this format:
++###     :vgname1:vgname2:...:vgnameN:
+ #####################################################################
+ 
+-OLDVGS=`"${LVM}" vgs ${LVM_OPTS} -o name --noheadings`
++OLDVGS=":`"${LVM}" vgs ${LVM_OPTS} -o name --noheadings --rows --separator :`:"
+ checkvalue $? "Current VG names could not be collected without errors"
+ 
+ #####################################################################
 
 
