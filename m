@@ -1,39 +1,58 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:04:43 +0000 (UTC)
-Subject: master - tests: wait for initial sync
-Message-ID: <20151013140443.4E3076017F@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 13 Oct 2015 14:36:31 +0000 (UTC)
+Subject: master - Revert "log: no file for external logging"
+Message-ID: <20151013143631.A1ECA60EE1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf1c2da836223de64daacd94f0fd40a96f6cd46f
-Commit:        cf1c2da836223de64daacd94f0fd40a96f6cd46f
-Parent:        c4cc5eabfe722daf88d19b60d58c616c31e57edd
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 13 11:21:40 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 16:02:21 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0cf787a377548394f4588b671c2890ee1a45098b
+Commit:        0cf787a377548394f4588b671c2890ee1a45098b
+Parent:        acc70de43968961e9a71612cda04642e4fbfd71f
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Oct 13 15:31:57 2015 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Oct 13 15:31:57 2015 +0100
 
-tests: wait for initial sync
+Revert "log: no file for external logging"
 
-Raid should be in-sync ATM for any gaming.
+This reverts commit 1b1c01a27b359f8e91c3c9e08684c435d8fd51c2.
+
+This caused messages to get dropped instead of logged into the log file.
+
+(The log file and log function are independent at the moment.)
 ---
- test/shell/lvconvert-repair-raid-dmeventd.sh |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ WHATS_NEW     |    1 -
+ lib/log/log.c |    4 ----
+ 2 files changed, 0 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-raid-dmeventd.sh b/test/shell/lvconvert-repair-raid-dmeventd.sh
-index df55449..a5a7a53 100644
---- a/test/shell/lvconvert-repair-raid-dmeventd.sh
-+++ b/test/shell/lvconvert-repair-raid-dmeventd.sh
-@@ -23,6 +23,7 @@ lvcreate -aey --type raid1 -m 3 --ignoremonitoring -L 1 -n 4way $vg
- lvchange --monitor y $vg/4way
- lvs -a -o all,lv_modules $vg
- lvdisplay --maps $vg
-+aux wait_for_sync $vg 4way
- aux disable_dev "$dev2" "$dev4"
- mkfs.ext3 "$DM_DEV_DIR/$vg/4way"
- sleep 10 # FIXME: need a "poll" utility, akin to "check"
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 7507b9c..c089228 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,5 @@
+ Version 2.02.133 - 
+ ======================================
+-  Avoid creation of log file when logging function is set.
+   Do not change logging in lvm2 library when it's already set.
+   Check for enough space in thin-pool in command before creating new thin.
+   Make libblkid detect all copies of the same signature if use_blkid_wiping=1.
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 2f1be72..c44c3d4 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -71,10 +71,6 @@ void init_log_file(const char *log_file, int append)
+ 	int i = 0;
+ 
+ 	_log_file_path[0] = '\0';
+-
+-	if (_lvm2_log_fn)
+-		return; /* No log file, when log function is set */
+-
+ 	if ((env = getenv("LVM_LOG_FILE_EPOCH"))) {
+ 		while (isalpha(env[i]) && i < 32) /* Up to 32 alphas */
+ 			i++;
 
 
