@@ -1,57 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:03:27 +0000 (UTC)
-Subject: master - dmeventd: correct ret code for fail
-Message-ID: <20151013140327.328D260E41@fedorahosted.org>
+Date: Tue, 13 Oct 2015 14:03:29 +0000 (UTC)
+Subject: master - thin: enhance logging
+Message-ID: <20151013140329.511BC60E41@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7e1c08bb6a90acdbf56e362ee017bd48de13a535
-Commit:        7e1c08bb6a90acdbf56e362ee017bd48de13a535
-Parent:        c7b4359ff41634096770d464d362d43d2e82bbda
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86b04ebd193c9db09ee5f03a2de4997aa2ab52c3
+Commit:        86b04ebd193c9db09ee5f03a2de4997aa2ab52c3
+Parent:        7e1c08bb6a90acdbf56e362ee017bd48de13a535
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 13 09:49:59 2015 +0200
+AuthorDate:    Fri Oct 9 21:35:05 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 14:38:49 2015 +0200
+CommitterDate: Tue Oct 13 14:38:52 2015 +0200
 
-dmeventd: correct ret code for fail
+thin: enhance logging
 
-As  _do_register_device() calls  register_device() function that returns
-1 success & 0 fail -  ret = -ENOMEM for fail case instead of 0.
+Add debug message with more details about threshold overflow.
 ---
- WHATS_NEW_DM                |    1 +
- daemons/dmeventd/dmeventd.c |    6 ++++--
- 2 files changed, 5 insertions(+), 2 deletions(-)
+ lib/metadata/thin_manip.c |   16 ++++++++++++++--
+ 1 files changed, 14 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index e760875..a1c121a 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.110 - 
- ======================================
-+  Return -ENOMEM when device registration fails instead of 0 (=success).
-   Enforce writethrough mode for cleaner policy.
-   Add support for recognition and deactivation of MD devices to blkdeactivate.
-   Move target status functions out of libdm-deptree.
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 1ff5bf9..ffc941f 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -1070,8 +1070,10 @@ static int _register_for_event(struct message_data *message_data)
- 	if (!(thread = _lookup_thread_status(message_data))) {
- 		_unlock_mutex();
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 24c68a8..37bf4cb 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -224,15 +224,27 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
+ 	if (!lv_thin_pool_percent(pool_seg->lv, 0, &percent))
+ 		return_0;
  
--		if (!(ret = _do_register_device(thread_new)))
--			goto out;
-+		if (!_do_register_device(thread_new)) {
-+			ret = -ENOMEM;
-+			goto_out;
-+		}
+-	if (percent >= threshold)
++	if (percent >= threshold) {
++		log_debug("Threshold configured for free data space in "
++			  "thin pool %s has been reached (%.2f%% >= %.2f%%).",
++			  display_lvname(pool_seg->lv),
++			  dm_percent_to_float(percent),
++			  dm_percent_to_float(threshold));
+ 		return 0;
++	}
  
- 		thread = thread_new;
- 		thread_new = NULL;
+ 	/* Metadata */
+ 	if (!lv_thin_pool_percent(pool_seg->lv, 1, &percent))
+ 		return_0;
+ 
+-	if (percent >= threshold)
++	if (percent >= threshold) {
++		log_debug("Threshold configured for free metadata space in "
++			  "thin pool %s has been reached (%.2f%% > %.2f%%).",
++			  display_lvname(pool_seg->lv),
++			  dm_percent_to_float(percent),
++			  dm_percent_to_float(threshold));
+ 		return 0;
++	}
+ 
+ 	return 1;
+ }
 
 
