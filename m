@@ -1,40 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:04:39 +0000 (UTC)
-Subject: master - tests: better regex check
-Message-ID: <20151013140439.1B2AD6017F@fedorahosted.org>
+Date: Tue, 13 Oct 2015 14:04:41 +0000 (UTC)
+Subject: master - tests: start logging dmeventd output
+Message-ID: <20151013140441.3EA2F6017F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8cc21354c2b4cb58223950b7e089eb28e602f0e8
-Commit:        8cc21354c2b4cb58223950b7e089eb28e602f0e8
-Parent:        2cb1f6eafeb72dcd49a7ed941d9c5400540284fa
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c4cc5eabfe722daf88d19b60d58c616c31e57edd
+Commit:        c4cc5eabfe722daf88d19b60d58c616c31e57edd
+Parent:        8cc21354c2b4cb58223950b7e089eb28e602f0e8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 9 21:30:37 2015 +0200
+AuthorDate:    Tue Oct 13 09:44:08 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 16:02:20 2015 +0200
+CommitterDate: Tue Oct 13 16:02:21 2015 +0200
 
-tests: better regex check
+tests: start logging dmeventd output
 
-Enhance check for matching prefix.
+Log dmeventd output from test - keep output logging in test
+and avoid sending messages to syslog.
 ---
- test/lib/inittest.sh |    2 +-
+ test/lib/aux.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index 4ed8d20..28bc4e8 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -30,7 +30,7 @@ COMMON_PREFIX="LVMTEST"
- PREFIX="${COMMON_PREFIX}$$"
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 56316f7..8a25d87 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -70,7 +70,7 @@ prepare_dmeventd() {
  
- # Check we are not conflickting with some exiting setup
--dmsetup table | not grep "$PREFIX" || die "DM table already has devices with prefix $PREFIX!"
-+dmsetup table | not grep "${PREFIX}[^0-9]" || die "DM table already has devices with prefix $PREFIX!"
+ 	local run_valgrind=
+ 	test "${LVM_VALGRIND_DMEVENTD:-0}" -eq 0 || run_valgrind="run_valgrind"
+-	LVM_LOG_FILE_EPOCH=DMEVENTD $run_valgrind dmeventd -f "$@" &
++	LVM_LOG_FILE_EPOCH=DMEVENTD $run_valgrind dmeventd -fddddl "$@" >debug.log_DMEVENTD_out 2>&1 &
+ 	echo $! > LOCAL_DMEVENTD
  
- if test -z "$LVM_TEST_DIR"; then LVM_TEST_DIR=$TMPDIR; fi
- TESTDIR=$(mkdtemp "${LVM_TEST_DIR:-/tmp}" "$PREFIX.XXXXXXXXXX") || \
+ 	# FIXME wait for pipe in /var/run instead
 
 
