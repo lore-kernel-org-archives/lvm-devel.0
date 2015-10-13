@@ -1,61 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:03:29 +0000 (UTC)
-Subject: master - thin: enhance logging
-Message-ID: <20151013140329.511BC60E41@fedorahosted.org>
+Date: Tue, 13 Oct 2015 14:03:31 +0000 (UTC)
+Subject: master - toolcontext: do not change already set dm_log
+Message-ID: <20151013140331.65EC860E41@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86b04ebd193c9db09ee5f03a2de4997aa2ab52c3
-Commit:        86b04ebd193c9db09ee5f03a2de4997aa2ab52c3
-Parent:        7e1c08bb6a90acdbf56e362ee017bd48de13a535
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=72d700b064fb64f6bb7e20c23dbb2ce8b6d8feb7
+Commit:        72d700b064fb64f6bb7e20c23dbb2ce8b6d8feb7
+Parent:        86b04ebd193c9db09ee5f03a2de4997aa2ab52c3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 9 21:35:05 2015 +0200
+AuthorDate:    Fri Oct 9 21:38:50 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 14:38:52 2015 +0200
+CommitterDate: Tue Oct 13 14:39:37 2015 +0200
 
-thin: enhance logging
+toolcontext: do not change already set dm_log
 
-Add debug message with more details about threshold overflow.
+If the dm_log is already set to non-default logger,
+avoid to change it.
 ---
- lib/metadata/thin_manip.c |   16 ++++++++++++++--
- 1 files changed, 14 insertions(+), 2 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/commands/toolcontext.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 24c68a8..37bf4cb 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -224,15 +224,27 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
- 	if (!lv_thin_pool_percent(pool_seg->lv, 0, &percent))
- 		return_0;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 348c099..c089228 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.133 - 
+ ======================================
++  Do not change logging in lvm2 library when it's already set.
+   Check for enough space in thin-pool in command before creating new thin.
+   Make libblkid detect all copies of the same signature if use_blkid_wiping=1.
+   Fix vgimportclone with -n to not add number unnecessarily to base VG name.
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index c8d96ca..c150991 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -362,7 +362,8 @@ static void _init_logging(struct cmd_context *cmd)
  
--	if (percent >= threshold)
-+	if (percent >= threshold) {
-+		log_debug("Threshold configured for free data space in "
-+			  "thin pool %s has been reached (%.2f%% >= %.2f%%).",
-+			  display_lvname(pool_seg->lv),
-+			  dm_percent_to_float(percent),
-+			  dm_percent_to_float(threshold));
- 		return 0;
-+	}
- 
- 	/* Metadata */
- 	if (!lv_thin_pool_percent(pool_seg->lv, 1, &percent))
- 		return_0;
- 
--	if (percent >= threshold)
-+	if (percent >= threshold) {
-+		log_debug("Threshold configured for free metadata space in "
-+			  "thin pool %s has been reached (%.2f%% > %.2f%%).",
-+			  display_lvname(pool_seg->lv),
-+			  dm_percent_to_float(percent),
-+			  dm_percent_to_float(threshold));
- 		return 0;
-+	}
- 
- 	return 1;
- }
+ 	/* Tell device-mapper about our logging */
+ #ifdef DEVMAPPER_SUPPORT
+-	dm_log_with_errno_init(print_log);
++	if (!dm_log_is_non_default())
++		dm_log_with_errno_init(print_log);
+ #endif
+ 	reset_log_duplicated();
+ 	reset_lvm_errno(1);
 
 
