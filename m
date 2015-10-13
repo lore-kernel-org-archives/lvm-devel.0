@@ -1,41 +1,43 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:04:41 +0000 (UTC)
-Subject: master - tests: start logging dmeventd output
-Message-ID: <20151013140441.3EA2F6017F@fedorahosted.org>
+Date: Tue, 13 Oct 2015 14:04:32 +0000 (UTC)
+Subject: master - makefiles: drop explicit linking
+Message-ID: <20151013140432.BF9F961175@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c4cc5eabfe722daf88d19b60d58c616c31e57edd
-Commit:        c4cc5eabfe722daf88d19b60d58c616c31e57edd
-Parent:        8cc21354c2b4cb58223950b7e089eb28e602f0e8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=83f00e91567d387caf02da9cd3791c3fef85c80d
+Commit:        83f00e91567d387caf02da9cd3791c3fef85c80d
+Parent:        4f9e7f692ea1dc6370ee9978b34c4255d28b3c3c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 13 09:44:08 2015 +0200
+AuthorDate:    Fri Oct 9 21:33:59 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 16:02:21 2015 +0200
+CommitterDate: Tue Oct 13 16:02:20 2015 +0200
 
-tests: start logging dmeventd output
+makefiles: drop explicit linking
 
-Log dmeventd output from test - keep output logging in test
-and avoid sending messages to syslog.
+Nothing in /sscripts needs devmapper-event library so drop its linking.
 ---
- test/lib/aux.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ scripts/Makefile.in |    5 -----
+ 1 files changed, 0 insertions(+), 5 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 56316f7..8a25d87 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -70,7 +70,7 @@ prepare_dmeventd() {
+diff --git a/scripts/Makefile.in b/scripts/Makefile.in
+index dabe2ee..f7f672d 100644
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -28,11 +28,6 @@ ifeq ("@APPLIB@", "yes")
+ 	LVMLIBS = @LVM2APP_LIB@ -ldevmapper
+ endif
  
- 	local run_valgrind=
- 	test "${LVM_VALGRIND_DMEVENTD:-0}" -eq 0 || run_valgrind="run_valgrind"
--	LVM_LOG_FILE_EPOCH=DMEVENTD $run_valgrind dmeventd -f "$@" &
-+	LVM_LOG_FILE_EPOCH=DMEVENTD $run_valgrind dmeventd -fddddl "$@" >debug.log_DMEVENTD_out 2>&1 &
- 	echo $! > LOCAL_DMEVENTD
+-ifeq ("@DMEVENTD@", "yes")
+-	DEPLIBS += $(top_builddir)/daemons/dmeventd/libdevmapper-event.so
+-	LVMLIBS += -ldevmapper-event
+-endif
+-
+ LVM_SCRIPTS = lvmdump.sh lvmconf.sh vgimportclone.sh
+ DM_SCRIPTS =
  
- 	# FIXME wait for pipe in /var/run instead
 
 
