@@ -1,193 +1,114 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:04:09 +0000 (UTC)
-Subject: master - cleanup: avoid using private
-Message-ID: <20151013140409.70F94602D1@fedorahosted.org>
+From: Ferenc Wágner <wferi@niif.hu>
+Date: Tue, 13 Oct 2015 18:39:13 +0200
+Subject: [PATCH] clvmd: send readiness notification to systemd
+Message-ID: <201510131748.t9DHm4Un004608@int-mx14.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0a633750f1e43aa655e5e6e05269aeab8650f55d
-Commit:        0a633750f1e43aa655e5e6e05269aeab8650f55d
-Parent:        0e2261dbd1d489dff158fce88a705a680aaaa3da
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 12 11:40:51 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 15:22:58 2015 +0200
+If libsystemd is available during configuration, report readiness to systemd
+right before entering the main loop.  This avoids the double timeout handling
+and the need for a PID file in the service definition, while enabling precise
+startup ordering.
 
-cleanup: avoid using private
-
-Switch private to user.
+Signed-off-by: Ferenc W?gner <wferi@niif.hu>
 ---
- daemons/dmeventd/plugins/mirror/dmeventd_mirror.c  |    6 +++---
- daemons/dmeventd/plugins/raid/dmeventd_raid.c      |    6 +++---
- .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |   12 ++++++------
- daemons/dmeventd/plugins/thin/dmeventd_thin.c      |   12 ++++++------
- 4 files changed, 18 insertions(+), 18 deletions(-)
+ configure.in                                  |    5 +++++
+ daemons/clvmd/Makefile.in                     |    6 ++++--
+ daemons/clvmd/clvmd.c                         |    8 ++++++++
+ scripts/lvm2_clvmd_systemd_red_hat.service.in |    7 ++-----
+ 4 files changed, 19 insertions(+), 7 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-index c010794..d418b08 100644
---- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-+++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-@@ -156,7 +156,7 @@ static int _remove_failed_devices(const char *device)
+diff --git a/configure.in b/configure.in
+index c240b4b..40e86f7 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1372,6 +1372,11 @@ if test "$UDEV_RULE" != no ; then
+ fi
  
- void process_event(struct dm_task *dmt,
- 		   enum dm_event_mask event __attribute__((unused)),
--		   void **unused __attribute__((unused)))
-+		   void **user)
- {
- 	void *next = NULL;
- 	uint64_t start, length;
-@@ -215,7 +215,7 @@ int register_device(const char *device,
- 		    const char *uuid __attribute__((unused)),
- 		    int major __attribute__((unused)),
- 		    int minor __attribute__((unused)),
--		    void **unused __attribute__((unused)))
-+		    void **user)
- {
- 	if (!dmeventd_lvm2_init())
- 		return 0;
-@@ -229,7 +229,7 @@ int unregister_device(const char *device,
- 		      const char *uuid __attribute__((unused)),
- 		      int major __attribute__((unused)),
- 		      int minor __attribute__((unused)),
--		      void **unused __attribute__((unused)))
-+		      void **user)
- {
- 	log_info("No longer monitoring mirror device %s for events.",
- 		 device);
-diff --git a/daemons/dmeventd/plugins/raid/dmeventd_raid.c b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-index 822d7c4..6522556 100644
---- a/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-+++ b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-@@ -116,7 +116,7 @@ static int _process_raid_event(char *params, const char *device)
+ ################################################################################
++dnl -- libsystemd
++PKG_CHECK_MODULES([LIBSYSTEMD], [libsystemd],
++    [AC_DEFINE([HAVE_LIBSYSTEMD], [1], [have systemd interface library])], [:])
++
++################################################################################
+ dnl -- Compatibility mode
+ AC_ARG_ENABLE(compat,
+ 	      AC_HELP_STRING([--enable-compat],
+diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
+index 38ff1c7..5946862 100644
+--- a/daemons/clvmd/Makefile.in
++++ b/daemons/clvmd/Makefile.in
+@@ -29,6 +29,8 @@ QUORUM_LIBS = @QUORUM_LIBS@
+ QUORUM_CFLAGS = @QUORUM_CFLAGS@
+ SALCK_LIBS = @SALCK_LIBS@
+ SALCK_CFLAGS = @SALCK_CFLAGS@
++LIBSYSTEMD_CFLAGS = @LIBSYSTEMD_CFLAGS@
++LIBSYSTEMD_LIBS = @LIBSYSTEMD_LIBS@
  
- void process_event(struct dm_task *dmt,
- 		   enum dm_event_mask event __attribute__((unused)),
--		   void **unused __attribute__((unused)))
-+		   void **user)
- {
- 	void *next = NULL;
- 	uint64_t start, length;
-@@ -152,7 +152,7 @@ int register_device(const char *device,
- 		    const char *uuid __attribute__((unused)),
- 		    int major __attribute__((unused)),
- 		    int minor __attribute__((unused)),
--		    void **unused __attribute__((unused)))
-+		    void **user)
- {
- 	if (!dmeventd_lvm2_init())
- 		return 0;
-@@ -166,7 +166,7 @@ int unregister_device(const char *device,
- 		      const char *uuid __attribute__((unused)),
- 		      int major __attribute__((unused)),
- 		      int minor __attribute__((unused)),
--		      void **unused __attribute__((unused)))
-+		      void **user)
- {
- 	log_info("No longer monitoring RAID device %s for events.",
- 		 device);
-diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-index ae8e308..8d5bce1 100644
---- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-+++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-@@ -126,8 +126,9 @@ static void _umount(const char *device, int major, int minor)
+ SOURCES = \
+ 	clvmd-command.c  \
+@@ -81,9 +83,9 @@ endif
+ include $(top_builddir)/make.tmpl
  
- void process_event(struct dm_task *dmt,
- 		   enum dm_event_mask event __attribute__((unused)),
--		   void **private)
-+		   void **user)
- {
-+	struct dso_state *state = *user;
- 	void *next = NULL;
- 	uint64_t start, length;
- 	char *target_type = NULL;
-@@ -135,7 +136,6 @@ void process_event(struct dm_task *dmt,
- 	struct dm_status_snapshot *status = NULL;
- 	const char *device = dm_task_get_name(dmt);
- 	int percent;
--	struct dso_state *state = *private;
+ LVMLIBS += -ldevmapper
+-LIBS += $(PTHREAD_LIBS)
++LIBS += $(PTHREAD_LIBS) $(LIBSYSTEMD_LIBS)
  
- 	/* No longer monitoring, waiting for remove */
- 	if (!state->percent_check)
-@@ -199,7 +199,7 @@ int register_device(const char *device,
- 		    const char *uuid __attribute__((unused)),
- 		    int major __attribute__((unused)),
- 		    int minor __attribute__((unused)),
--		    void **private)
-+		    void **user)
- {
- 	struct dm_pool *statemem = NULL;
- 	struct dso_state *state;
-@@ -218,7 +218,7 @@ int register_device(const char *device,
+-CFLAGS += -fno-strict-aliasing $(EXTRA_EXEC_CFLAGS)
++CFLAGS += -fno-strict-aliasing $(EXTRA_EXEC_CFLAGS) $(LIBSYSTEMD_CFLAGS)
+ LDFLAGS += $(EXTRA_EXEC_LDFLAGS)
  
- 	state->mem = statemem;
- 	state->percent_check = CHECK_MINIMUM;
--	*private = state;
-+	*user = state;
+ INSTALL_TARGETS = \
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 53daa8c..3a41e62 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -43,6 +43,10 @@
+ #include <sys/un.h>
+ #include <sys/utsname.h>
  
- 	log_info("Monitoring snapshot %s.", device);
++#ifdef HAVE_LIBSYSTEMD
++#include <systemd/sd-daemon.h>
++#endif
++
+ #ifndef TRUE
+ #define TRUE 1
+ #endif
+@@ -620,6 +624,10 @@ int main(int argc, char *argv[])
+ 	signal(SIGTERM, sigterm_handler);
+ 	signal(SIGINT, sigterm_handler);
  
-@@ -237,9 +237,9 @@ int unregister_device(const char *device,
- 		      const char *uuid __attribute__((unused)),
- 		      int major __attribute__((unused)),
- 		      int minor __attribute__((unused)),
--		      void **private)
-+		      void **user)
- {
--	struct dso_state *state = *private;
-+	struct dso_state *state = *user;
++#ifdef HAVE_LIBSYSTEMD
++	sd_notify (0, "READY=1");
++#endif
++
+ 	/* Do some work */
+ 	main_loop(cmd_timeout);
  
- 	log_info("No longer monitoring snapshot %s.", device);
- 	dm_pool_destroy(state->mem);
-diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-index f57eb9b..0801adf 100644
---- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-+++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-@@ -251,11 +251,11 @@ out:
+diff --git a/scripts/lvm2_clvmd_systemd_red_hat.service.in b/scripts/lvm2_clvmd_systemd_red_hat.service.in
+index f506fa8..1238da4 100644
+--- a/scripts/lvm2_clvmd_systemd_red_hat.service.in
++++ b/scripts/lvm2_clvmd_systemd_red_hat.service.in
+@@ -11,13 +11,10 @@ DefaultDependencies=no
+ Conflicts=shutdown.target
  
- void process_event(struct dm_task *dmt,
- 		   enum dm_event_mask event __attribute__((unused)),
--		   void **private)
-+		   void **user)
- {
- 	const char *device = dm_task_get_name(dmt);
- 	int percent;
--	struct dso_state *state = *private;
-+	struct dso_state *state = *user;
- 	struct dm_status_thin_pool *tps = NULL;
- 	void *next = NULL;
- 	uint64_t start, length;
-@@ -351,7 +351,7 @@ int register_device(const char *device,
- 		    const char *uuid __attribute__((unused)),
- 		    int major __attribute__((unused)),
- 		    int minor __attribute__((unused)),
--		    void **private)
-+		    void **user)
- {
- 	struct dm_pool *statemem = NULL;
- 	struct dso_state *state;
-@@ -374,7 +374,7 @@ int register_device(const char *device,
- 	state->mem = statemem;
- 	state->metadata_percent_check = CHECK_MINIMUM;
- 	state->data_percent_check = CHECK_MINIMUM;
--	*private = state;
-+	*user = state;
- 
- 	log_info("Monitoring thin %s.", device);
- 
-@@ -389,9 +389,9 @@ int unregister_device(const char *device,
- 		      const char *uuid __attribute__((unused)),
- 		      int major __attribute__((unused)),
- 		      int minor __attribute__((unused)),
--		      void **private)
-+		      void **user)
- {
--	struct dso_state *state = *private;
-+	struct dso_state *state = *user;
- 
- 	log_info("No longer monitoring thin %s.", device);
- 	dm_pool_destroy(state->mem);
+ [Service]
+-Type=forking
+-Environment=CLVMD_OPTS=-T30
++Type=notify
+ EnvironmentFile=- at sysconfdir@/sysconfig/clvmd
+-ExecStart=@sbindir@/clvmd $CLVMD_OPTS
+-SuccessExitStatus=5
++ExecStart=@sbindir@/clvmd -f $CLVMD_OPTS
+ TimeoutStartSec=30
+ TimeoutStopSec=10
+ OOMScoreAdjust=-1000
+ Restart=on-abort
+-PIDFile=@CLVMD_PIDFILE@
+-- 
+1.7.10.4
 
 
