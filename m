@@ -1,159 +1,97 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:03:54 +0000 (UTC)
-Subject: master - man: dmeventd update
-Message-ID: <20151013140354.9A72A61207@fedorahosted.org>
+Date: Tue, 13 Oct 2015 14:03:58 +0000 (UTC)
+Subject: master - cleanup: static with _
+Message-ID: <20151013140358.D2F1561207@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3f03d46fc13be2274b3c29d4fc97a3306bc33eda
-Commit:        3f03d46fc13be2274b3c29d4fc97a3306bc33eda
-Parent:        0e2721030857088803bc71ccc27644b7b95241ca
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=903e9af1b2c1972a897b7dd61e6e463a03cad648
+Commit:        903e9af1b2c1972a897b7dd61e6e463a03cad648
+Parent:        e261af52eb26c22aebd62cdbd8bb79c195274ee9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 12 11:35:53 2015 +0200
+AuthorDate:    Thu Oct 8 11:59:11 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 15:15:43 2015 +0200
+CommitterDate: Tue Oct 13 15:16:56 2015 +0200
 
-man: dmeventd update
+cleanup: static with _
 
+Document ? is printing to stderr.
 ---
- man/dmeventd.8.in |   92 +++++++++++++++++++++++++++++++++++++---------------
- 1 files changed, 65 insertions(+), 27 deletions(-)
+ daemons/dmeventd/dmeventd.c |   17 +++++++++--------
+ 1 files changed, 9 insertions(+), 8 deletions(-)
 
-diff --git a/man/dmeventd.8.in b/man/dmeventd.8.in
-index 77bbafb..15e003b 100644
---- a/man/dmeventd.8.in
-+++ b/man/dmeventd.8.in
-@@ -1,7 +1,11 @@
- .TH DMEVENTD 8 "DM TOOLS #VERSION#" "Red Hat Inc" \" -*- nroff -*-
-+.
- .SH NAME
-+.
- dmeventd \(em Device-mapper event daemon
-+.
- .SH SYNOPSIS
-+.
- .B dmeventd
- .RB [ \-d
- .RB [ \-d
-@@ -11,33 +15,53 @@ dmeventd \(em Device-mapper event daemon
- .RB [ \-R ]
- .RB [ \-V ]
- .RB [ \-? ]
-+.
- .SH DESCRIPTION
-+.
- dmeventd is the event monitoring daemon for device-mapper devices.
- Library plugins can register and carry out actions triggered when
- particular events occur.
--.SH
--LVM PLUGINS
--.TP
--.I Mirror
--Attempts to handle device failure automatically.  See \fBlvm.conf\fP(5).
--.TP
--.I Raid
--Attempts to handle device failure automatically.  See \fBlvm.conf\fP(5).
--.TP
--.I Snapshot
-+.
-+.SH LVM PLUGINS
-+.
-+.HP
-+.IR Mirror
-+.br
-+Attempts to handle device failure automatically. See
-+.BR lvm.conf (5).
-+.
-+.HP
-+.IR Raid
-+.br
-+Attempts to handle device failure automatically. See
-+.BR lvm.conf (5).
-+.
-+.HP
-+.IR Snapshot
-+.br
- Monitors how full a snapshot is becoming and emits a warning to
- syslog when it exceeds 80% full.
- The warning is repeated when 85%, 90% and 95% of the snapshot is filled.
--See \fBlvm.conf\fP(5).
--.TP
--.I Thin
--Monitors how full a thin pool is becoming and emits a warning to
--syslog when it exceeds 80% full.
-+See
-+.BR lvm.conf (5).
-+Snapshot which runs out of space gets invalid and when it is mounted,
-+it gets umounted if possible.
-+.
-+.HP
-+.IR Thin
-+.br
-+Monitors how full a thin pool data and metadata is becoming and emits
-+a warning to syslog when it exceeds 80% full.
- The warning is repeated when 85%, 90% and 95% of the thin pool is filled.
--See \fBlvm.conf\fP(5).
-+See
-+.BR lvm.conf (5).
-+If the thin-pool runs out of space, thin volumes are umounted if possible.
-+.
- .SH OPTIONS
--.TP
--.B \-d
-+.
-+.HP
-+.BR \-d
-+.br
- Repeat from 1 to 3 times (
- .BR \-d ,
- .BR \-dd ,
-@@ -45,21 +69,35 @@ Repeat from 1 to 3 times (
- ) to increase the detail of
- debug messages sent to syslog.
- Each extra d adds more debugging information.
--.TP
--.B \-f
-+.
-+.HP
-+.BR \-f
-+.br
- Don't fork, run in the foreground.
--.TP
--.BR \-h ", " \-?
-+.
-+.HP
-+.BR \-h
-+.br
- Show help information.
--.TP
--.B \-R
-+.
-+.HP
-+.BR \-?
-+.br
-+Show help information on stderr.
-+.
-+.HP
-+.BR \-R
-+.br
- Replace a running dmeventd instance. The running dmeventd must be version
- 2.02.77 or newer. The new dmeventd instance will obtain a list of devices and
- events to monitor from the currently running daemon.
--.TP
--.B \-V
-+.
-+.HP
-+.BR \-V
-+.br
- Show version of dmeventd.
--
-+.
- .SH SEE ALSO
-+.
- .BR lvm (8),
- .BR lvm.conf (5)
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index e34c4c1..f775fb9 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -931,7 +931,7 @@ static int _lookup_symbol(void *dl, void **symbol, const char *name)
+ 	return 0;
+ }
+ 
+-static int lookup_symbols(void *dl, struct dso_data *data)
++static int _lookup_symbols(void *dl, struct dso_data *data)
+ {
+ 	return _lookup_symbol(dl, (void *) &data->process_event,
+ 			     "process_event") &&
+@@ -962,7 +962,7 @@ static struct dso_data *_load_dso(struct message_data *data)
+ 		return NULL;
+ 	}
+ 
+-	if (!(lookup_symbols(dl, ret))) {
++	if (!(_lookup_symbols(dl, ret))) {
+ 		_free_dso_data(ret);
+ 		dlclose(dl);
+ 		return NULL;
+@@ -1931,7 +1931,7 @@ static int _reinstate_registrations(struct dm_event_fifos *fifos)
+ 	return 1;
+ }
+ 
+-static void restart(void)
++static void _restart_dmeventd(void)
+ {
+ 	struct dm_event_fifos fifos = {
+ 		.server = -1,
+@@ -2048,13 +2048,14 @@ bad:
+ 	exit(EXIT_FAILURE);
+ }
+ 
+-static void usage(char *prog, FILE *file)
++static void _usage(char *prog, FILE *file)
+ {
+ 	fprintf(file, "Usage:\n"
+ 		"%s [-d [-d [-d]]] [-f] [-h] [-R] [-V] [-?]\n\n"
+ 		"   -d       Log debug messages to syslog (-d, -dd, -ddd)\n"
+ 		"   -f       Don't fork, run in the foreground\n"
+-		"   -h -?    Show this help information\n"
++		"   -h       Show this help information\n"
++		"   -?       Show this help information on stderr\n"
+ 		"   -R       Restart dmeventd\n"
+ 		"   -V       Show version of dmeventd\n\n", prog);
+ }
+@@ -2077,10 +2078,10 @@ int main(int argc, char *argv[])
+ 	while ((opt = getopt(argc, argv, "?fhVdR")) != EOF) {
+ 		switch (opt) {
+ 		case 'h':
+-			usage(argv[0], stdout);
++			_usage(argv[0], stdout);
+ 			exit(EXIT_SUCCESS);
+ 		case '?':
+-			usage(argv[0], stderr);
++			_usage(argv[0], stderr);
+ 			exit(EXIT_SUCCESS);
+ 		case 'R':
+ 			_restart++;
+@@ -2106,7 +2107,7 @@ int main(int argc, char *argv[])
+ 		perror("Cannot set LC_ALL to C");
+ 
+ 	if (_restart)
+-		restart();
++		_restart_dmeventd();
+ 
+ #ifdef __linux__
+ 	_systemd_activation = _systemd_handover(&fifos);
 
 
