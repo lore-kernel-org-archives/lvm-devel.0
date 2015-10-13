@@ -1,141 +1,159 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:03:52 +0000 (UTC)
-Subject: master - dmeventd: add more debug messages
-Message-ID: <20151013140352.824AA61207@fedorahosted.org>
+Date: Tue, 13 Oct 2015 14:03:54 +0000 (UTC)
+Subject: master - man: dmeventd update
+Message-ID: <20151013140354.9A72A61207@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0e2721030857088803bc71ccc27644b7b95241ca
-Commit:        0e2721030857088803bc71ccc27644b7b95241ca
-Parent:        13086c2523a00bc8501113f56094312bda4881e1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3f03d46fc13be2274b3c29d4fc97a3306bc33eda
+Commit:        3f03d46fc13be2274b3c29d4fc97a3306bc33eda
+Parent:        0e2721030857088803bc71ccc27644b7b95241ca
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 10 16:36:18 2015 +0200
+AuthorDate:    Mon Oct 12 11:35:53 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Oct 13 15:15:43 2015 +0200
 
-dmeventd: add more debug messages
+man: dmeventd update
 
 ---
- daemons/dmeventd/dmeventd.c                        |   15 ++++++++++++---
- daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c       |    4 ++++
- .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |    1 +
- 3 files changed, 17 insertions(+), 3 deletions(-)
+ man/dmeventd.8.in |   92 +++++++++++++++++++++++++++++++++++++---------------
+ 1 files changed, 65 insertions(+), 27 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 0acb919..e34c4c1 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -874,7 +874,7 @@ static void *_monitor_thread(void *arg)
- 		}
- 	}
- 
--	DEBUGLOG("Finished _monitor_thread");
-+	DEBUGLOG("Finished _monitor_thread.");
- 	pthread_cleanup_pop(1);
- 
- 	return NULL;
-@@ -1120,6 +1120,8 @@ static int _unregister_for_event(struct message_data *message_data)
- 	}
- 	_unlock_mutex();
- 
-+	DEBUGLOG("Unregistered uuid:%s.", thread->device.uuid);
-+
-       out:
- 	return ret;
- }
-@@ -1147,6 +1149,7 @@ static int _registered_device(struct message_data *message_data,
- 		return -ENOMEM;
- 
- 	msg->size = (uint32_t) r;
-+	DEBUGLOG("Registered %s.", msg->data);
- 
- 	return 0;
- }
-@@ -1154,6 +1157,7 @@ static int _registered_device(struct message_data *message_data,
- static int _want_registered_device(char *dso_name, char *device_uuid,
- 				   struct thread_status *thread)
- {
-+	DEBUGLOG("Looking for dso:%s  uuid:%s.", dso_name, device_uuid);
- 	/* If DSO names and device paths are equal. */
- 	if (dso_name && device_uuid)
- 		return !strcmp(dso_name, thread->dso_data->dso_name) &&
-@@ -1175,6 +1179,9 @@ static int _get_registered_dev(struct message_data *message_data, int next)
- 	struct thread_status *thread, *hit = NULL;
- 	int ret = -ENOENT;
- 
-+	DEBUGLOG("Get%s dso:%s  uuid:%s.", next ? "" : "Next",
-+		 message_data->dso_name,
-+		 message_data->device_uuid);
- 	_lock_mutex();
- 
- 	/* Iterate list of threads checking if we want a particular one. */
-@@ -1205,8 +1212,10 @@ static int _get_registered_dev(struct message_data *message_data, int next)
- 				goto reg;
- 			}
- 
--	if (!hit)
-+	if (!hit) {
-+		DEBUGLOG("Get%s not registered", next ? "" : "Next");
- 		goto out;
-+	}
- 
- 	while (1) {
- 		if (dm_list_end(&_thread_registry, &thread->list))
-@@ -1613,9 +1622,9 @@ static void _cleanup_unused_threads(void)
- 		}
- 
- 		if (thread->status == DM_THREAD_DONE) {
--			DEBUGLOG("Destroying Thr %x.", (int)thread->thread);
- 			dm_list_del(l);
- 			_unlock_mutex();
-+			DEBUGLOG("Destroying Thr %x.", (int)thread->thread);
- 			join_ret = pthread_join(thread->thread, NULL);
- 			_free_thread_status(thread);
- 			_lock_mutex();
-diff --git a/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c b/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
-index 0ba3694..e3d8321 100644
---- a/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
-+++ b/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
-@@ -74,6 +74,7 @@ int dmeventd_lvm2_init(void)
- 		lvm2_disable_dmeventd_monitoring(_lvm_handle);
- 		/* FIXME Temporary: move to dmeventd core */
- 		lvm2_run(_lvm_handle, "_memlock_inc");
-+		log_debug("lvm plugin initilized.");
- 	}
- 
- 	_register_count++;
-@@ -89,14 +90,17 @@ void dmeventd_lvm2_exit(void)
- 	pthread_mutex_lock(&_register_mutex);
- 
- 	if (!--_register_count) {
-+		log_debug("lvm plugin shuting down.");
- 		lvm2_run(_lvm_handle, "_memlock_dec");
- 		dm_pool_destroy(_mem_pool);
- 		_mem_pool = NULL;
-+		log_debug("lvm plugin exiting.");
- 		lvm2_exit(_lvm_handle);
- 		_lvm_handle = NULL;
- 	}
- 
- 	pthread_mutex_unlock(&_register_mutex);
-+	log_debug("lvm plugin exited.");
- }
- 
- struct dm_pool *dmeventd_lvm2_pool(void)
-diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-index f78b8f7..ffe6666 100644
---- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-+++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-@@ -152,6 +152,7 @@ void process_event(struct dm_task *dmt,
- 
- 	if (status->invalid) {
- 		struct dm_info info;
-+		log_error("Snapshot %s is lost.", device);
- 		if (dm_task_get_info(dmt, &info)) {
- 			dmeventd_lvm2_unlock();
- 			_umount(device, info.major, info.minor);
+diff --git a/man/dmeventd.8.in b/man/dmeventd.8.in
+index 77bbafb..15e003b 100644
+--- a/man/dmeventd.8.in
++++ b/man/dmeventd.8.in
+@@ -1,7 +1,11 @@
+ .TH DMEVENTD 8 "DM TOOLS #VERSION#" "Red Hat Inc" \" -*- nroff -*-
++.
+ .SH NAME
++.
+ dmeventd \(em Device-mapper event daemon
++.
+ .SH SYNOPSIS
++.
+ .B dmeventd
+ .RB [ \-d
+ .RB [ \-d
+@@ -11,33 +15,53 @@ dmeventd \(em Device-mapper event daemon
+ .RB [ \-R ]
+ .RB [ \-V ]
+ .RB [ \-? ]
++.
+ .SH DESCRIPTION
++.
+ dmeventd is the event monitoring daemon for device-mapper devices.
+ Library plugins can register and carry out actions triggered when
+ particular events occur.
+-.SH
+-LVM PLUGINS
+-.TP
+-.I Mirror
+-Attempts to handle device failure automatically.  See \fBlvm.conf\fP(5).
+-.TP
+-.I Raid
+-Attempts to handle device failure automatically.  See \fBlvm.conf\fP(5).
+-.TP
+-.I Snapshot
++.
++.SH LVM PLUGINS
++.
++.HP
++.IR Mirror
++.br
++Attempts to handle device failure automatically. See
++.BR lvm.conf (5).
++.
++.HP
++.IR Raid
++.br
++Attempts to handle device failure automatically. See
++.BR lvm.conf (5).
++.
++.HP
++.IR Snapshot
++.br
+ Monitors how full a snapshot is becoming and emits a warning to
+ syslog when it exceeds 80% full.
+ The warning is repeated when 85%, 90% and 95% of the snapshot is filled.
+-See \fBlvm.conf\fP(5).
+-.TP
+-.I Thin
+-Monitors how full a thin pool is becoming and emits a warning to
+-syslog when it exceeds 80% full.
++See
++.BR lvm.conf (5).
++Snapshot which runs out of space gets invalid and when it is mounted,
++it gets umounted if possible.
++.
++.HP
++.IR Thin
++.br
++Monitors how full a thin pool data and metadata is becoming and emits
++a warning to syslog when it exceeds 80% full.
+ The warning is repeated when 85%, 90% and 95% of the thin pool is filled.
+-See \fBlvm.conf\fP(5).
++See
++.BR lvm.conf (5).
++If the thin-pool runs out of space, thin volumes are umounted if possible.
++.
+ .SH OPTIONS
+-.TP
+-.B \-d
++.
++.HP
++.BR \-d
++.br
+ Repeat from 1 to 3 times (
+ .BR \-d ,
+ .BR \-dd ,
+@@ -45,21 +69,35 @@ Repeat from 1 to 3 times (
+ ) to increase the detail of
+ debug messages sent to syslog.
+ Each extra d adds more debugging information.
+-.TP
+-.B \-f
++.
++.HP
++.BR \-f
++.br
+ Don't fork, run in the foreground.
+-.TP
+-.BR \-h ", " \-?
++.
++.HP
++.BR \-h
++.br
+ Show help information.
+-.TP
+-.B \-R
++.
++.HP
++.BR \-?
++.br
++Show help information on stderr.
++.
++.HP
++.BR \-R
++.br
+ Replace a running dmeventd instance. The running dmeventd must be version
+ 2.02.77 or newer. The new dmeventd instance will obtain a list of devices and
+ events to monitor from the currently running daemon.
+-.TP
+-.B \-V
++.
++.HP
++.BR \-V
++.br
+ Show version of dmeventd.
+-
++.
+ .SH SEE ALSO
++.
+ .BR lvm (8),
+ .BR lvm.conf (5)
 
 
