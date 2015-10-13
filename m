@@ -1,169 +1,136 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:04:22 +0000 (UTC)
-Subject: master - dmeventd: add local mempool for raid and mirror
-Message-ID: <20151013140422.2F5BF6073F@fedorahosted.org>
+Date: Tue, 13 Oct 2015 14:04:24 +0000 (UTC)
+Subject: master - dmeventd: less locking for snapshot and thin
+Message-ID: <20151013140424.4FA896073F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=49e11102c78ddf74bead6020fc51cae0e78e2ad2
-Commit:        49e11102c78ddf74bead6020fc51cae0e78e2ad2
-Parent:        a11cd2ca2d4edbf16c61f8066b1f745fa2fe7d4b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=51ff7d5ed8a7afe4e986a08025da9ef294aea479
+Commit:        51ff7d5ed8a7afe4e986a08025da9ef294aea479
+Parent:        49e11102c78ddf74bead6020fc51cae0e78e2ad2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 13 11:28:57 2015 +0200
+AuthorDate:    Tue Oct 13 11:35:03 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 15:56:23 2015 +0200
+CommitterDate: Tue Oct 13 16:01:41 2015 +0200
 
-dmeventd: add local mempool for raid and mirror
+dmeventd: less locking for snapshot and thin
 
-Using local mempools allows to drop locks when such memory is needed.
+Use lvm lock for lvm library calls.
+
+dm functions in-use are 'thread-safe' since we use
+local per-thread mem pool.
 ---
- WHATS_NEW_DM                                      |    1 +
- daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |   35 +++++++++++++++++++--
- daemons/dmeventd/plugins/raid/dmeventd_raid.c     |   32 +++++++++++++++++--
- 3 files changed, 62 insertions(+), 6 deletions(-)
+ WHATS_NEW_DM                                       |    1 +
+ .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |   20 +++++++++-----------
+ daemons/dmeventd/plugins/thin/dmeventd_thin.c      |    7 +------
+ 3 files changed, 11 insertions(+), 17 deletions(-)
 
 diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index f041ed1..902a485 100644
+index 902a485..f838b98 100644
 --- a/WHATS_NEW_DM
 +++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
  Version 1.02.110 - 
  ======================================
-+  Use local mempool for raid and mirror plugins.
++  Lock protect only lvm2 execution for snapshot and thin dmeventd plugin.
+   Use local mempool for raid and mirror plugins.
    Reworked thread initialization for dmeventd plugins.
    Dmeventd handles snapshot overflow for now equally as invalid.
-   Convert dmeventd to use common logging macro system from libdm.
-diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-index d418b08..e8761d9 100644
---- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-+++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-@@ -23,6 +23,12 @@
- #define ME_INSYNC    1
- #define ME_FAILURE   2
+diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+index 56fb7c2..aebe5f9 100644
+--- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
++++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+@@ -80,7 +80,8 @@ static int _run(const char *cmd, ...)
  
-+struct dso_state {
-+	struct dm_pool *mem;
-+	char cmd_lvscan[512];
-+	char cmd_lvconvert[512];
-+};
-+
- DM_EVENT_LOG_FN("mirr")
- 
- static int _process_status_code(const char status_code, const char *dev_name,
-@@ -217,12 +223,33 @@ int register_device(const char *device,
- 		    int minor __attribute__((unused)),
- 		    void **user)
+ static int _extend(const char *cmd)
  {
--	if (!dmeventd_lvm2_init())
--		return 0;
-+	struct dso_state *state;
-+
-+	if (!dmeventd_lvm2_init_with_pool("mirror_state", state))
-+		goto_bad;
-+
-+	if (!dmeventd_lvm2_command(state->mem, state->cmd_lvscan, sizeof(state->cmd_lvscan),
-+				   "lvscan --cache", device)) {
-+		dmeventd_lvm2_exit_with_pool(state);
-+		goto_bad;
+-	return dmeventd_lvm2_run(cmd);
++	log_debug("Extending snapshot via %s.", cmd);
++	return dmeventd_lvm2_run_with_lock(cmd);
+ }
+ 
+ static void _umount(const char *device, int major, int minor)
+@@ -141,22 +142,21 @@ void process_event(struct dm_task *dmt,
+ 	if (!state->percent_check)
+ 		return;
+ 
+-	dmeventd_lvm2_lock();
+-
+ 	dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
+-	if (!target_type)
+-		goto out;
++	if (!target_type || strcmp(target_type, "snapshot")) {
++		log_error("Target %s is not snapshot.", target_type);
++		return;
 +	}
-+
-+	if (!dmeventd_lvm2_command(state->mem, state->cmd_lvconvert, sizeof(state->cmd_lvconvert),
-+				   "lvconvert --config devices{ignore_suspended_devices=1} "
-+				   "--repair --use-policies", device)) {
-+		dmeventd_lvm2_exit_with_pool(state);
-+		goto_bad;
-+	}
-+
-+	*user = state;
  
- 	log_info("Monitoring mirror device %s for events.", device);
+ 	if (!dm_get_status_snapshot(state->mem, params, &status))
+-		goto out;
++		return;
  
- 	return 1;
-+bad:
-+	log_error("Failed to monitor mirror %s.", device);
-+
-+	return 0;
+ 	if (status->invalid || status->overflow) {
+ 		struct dm_info info;
+ 		log_error("Snapshot %s is lost.", device);
+ 		if (dm_task_get_info(dmt, &info)) {
+-			dmeventd_lvm2_unlock();
+ 			_umount(device, info.major, info.minor);
+-			return;
++			goto_out;
+ 		} /* else; too bad, but this is best-effort thing... */
+ 	}
+ 
+@@ -190,9 +190,7 @@ void process_event(struct dm_task *dmt,
+ 			log_error("Failed to extend snapshot %s.", device);
+ 	}
+ out:
+-	if (status)
+-		dm_pool_free(state->mem, status);
+-	dmeventd_lvm2_unlock();
++	dm_pool_free(state->mem, status);
  }
  
- int unregister_device(const char *device,
-@@ -231,9 +258,11 @@ int unregister_device(const char *device,
- 		      int minor __attribute__((unused)),
- 		      void **user)
- {
-+	struct dso_state *state = *user;
-+
-+	dmeventd_lvm2_exit_with_pool(state);
- 	log_info("No longer monitoring mirror device %s for events.",
- 		 device);
--	dmeventd_lvm2_exit();
- 
- 	return 1;
- }
-diff --git a/daemons/dmeventd/plugins/raid/dmeventd_raid.c b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-index 6522556..714832b 100644
---- a/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-+++ b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-@@ -16,6 +16,13 @@
- #include "dmeventd_lvm.h"
- #include "libdevmapper-event.h"
- 
-+struct dso_state {
-+	struct dm_pool *mem;
-+	char cmd_lvscan[512];
-+	char cmd_lvconvert[512];
-+	int failed;
-+};
-+
- DM_EVENT_LOG_FN("raid")
- 
- /* FIXME Reformat to 80 char lines. */
-@@ -154,12 +161,29 @@ int register_device(const char *device,
- 		    int minor __attribute__((unused)),
- 		    void **user)
- {
--	if (!dmeventd_lvm2_init())
--		return 0;
-+	struct dso_state *state;
-+
-+	if (!dmeventd_lvm2_init_with_pool("raid_state", state))
-+		goto_bad;
-+
-+	if (!dmeventd_lvm2_command(state->mem, state->cmd_lvscan, sizeof(state->cmd_lvscan),
-+				   "lvscan --cache", device) ||
-+	    !dmeventd_lvm2_command(state->mem, state->cmd_lvconvert, sizeof(state->cmd_lvconvert),
-+				   "lvconvert --config devices{ignore_suspended_devices=1} "
-+				   "--repair --use-policies", device)) {
-+		dmeventd_lvm2_exit_with_pool(state);
-+		goto_bad;
-+	}
-+
-+	*user = state;
- 
- 	log_info("Monitoring RAID device %s for events.", device);
- 
- 	return 1;
-+bad:
-+	log_error("Failed to monitor RAID %s.", device);
-+
-+	return 0;
+ int register_device(const char *device,
+diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
+index 15af254..4f08d5b 100644
+--- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
++++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
+@@ -143,7 +143,7 @@ static int _extend(struct dso_state *state)
+ #if THIN_DEBUG
+ 	log_info("dmeventd executes: %s.", state->cmd_str);
+ #endif
+-	return dmeventd_lvm2_run(state->cmd_str);
++	return dmeventd_lvm2_run_with_lock(state->cmd_str);
  }
  
- int unregister_device(const char *device,
-@@ -168,9 +192,11 @@ int unregister_device(const char *device,
- 		      int minor __attribute__((unused)),
- 		      void **user)
- {
-+	struct dso_state *state = *user;
-+
-+	dmeventd_lvm2_exit_with_pool(state);
- 	log_info("No longer monitoring RAID device %s for events.",
- 		 device);
--	dmeventd_lvm2_exit();
+ static int _run(const char *cmd, ...)
+@@ -224,8 +224,6 @@ static void _umount(struct dm_task *dmt, const char *device)
+ 	if (!dm_task_get_info(dmt, &data.info))
+ 		return;
  
- 	return 1;
+-	dmeventd_lvm2_unlock();
+-
+ 	if (!(data.minors = dm_bitset_create(NULL, MINORS))) {
+ 		log_error("Failed to allocate bitset. Not unmounting %s.", device);
+ 		goto out;
+@@ -244,7 +242,6 @@ static void _umount(struct dm_task *dmt, const char *device)
+ out:
+ 	if (data.minors)
+ 		dm_bitset_destroy(data.minors);
+-	dmeventd_lvm2_lock();
  }
+ 
+ void process_event(struct dm_task *dmt,
+@@ -265,8 +262,6 @@ void process_event(struct dm_task *dmt,
+ 	if (!state->meta_percent_check && !state->data_percent_check)
+ 		return;
+ #endif
+-	dmeventd_lvm2_lock();
+-
+ 	dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
+ 
+ 	if (!target_type || (strcmp(target_type, "thin-pool") != 0)) {
 
 
