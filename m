@@ -1,62 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Oct 2015 14:03:56 +0000 (UTC)
-Subject: master - dmeventd: handle snapshot overflow
-Message-ID: <20151013140356.BF53B61207@fedorahosted.org>
+Date: Tue, 13 Oct 2015 14:04:07 +0000 (UTC)
+Subject: master - cleanup: remove multilog
+Message-ID: <20151013140407.5F4D7602D1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e261af52eb26c22aebd62cdbd8bb79c195274ee9
-Commit:        e261af52eb26c22aebd62cdbd8bb79c195274ee9
-Parent:        3f03d46fc13be2274b3c29d4fc97a3306bc33eda
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0e2261dbd1d489dff158fce88a705a680aaaa3da
+Commit:        0e2261dbd1d489dff158fce88a705a680aaaa3da
+Parent:        842a7a17e3c0ffc0467ef23a3b59e4e8af2c8d74
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 9 21:41:50 2015 +0200
+AuthorDate:    Tue Oct 13 09:40:39 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 13 15:15:44 2015 +0200
+CommitterDate: Tue Oct 13 15:22:57 2015 +0200
 
-dmeventd: handle snapshot overflow
+cleanup: remove multilog
 
-When snapshot reports overflow, handle it in the same way as Invalid.
-Until better ideas are implemented.
 ---
- WHATS_NEW_DM                                       |    1 +
- .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |    4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ daemons/dmeventd/dmeventd.c |    6 ------
+ 1 files changed, 0 insertions(+), 6 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index ff4ac22..efe8b37 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.110 - 
- ======================================
-+  Dmeventd handles snapshot overflow for now equally as invalid.
-   Convert dmeventd to use common logging macro system from libdm.
-   Return -ENOMEM when device registration fails instead of 0 (=success).
-   Enforce writethrough mode for cleaner policy.
-diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-index ffe6666..ae8e308 100644
---- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-+++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-@@ -150,7 +150,7 @@ void process_event(struct dm_task *dmt,
- 	if (!dm_get_status_snapshot(state->mem, params, &status))
- 		goto out;
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 7ad30b3..3e54f79 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -2152,11 +2152,6 @@ int main(int argc, char *argv[])
  
--	if (status->invalid) {
-+	if (status->invalid || status->overflow) {
- 		struct dm_info info;
- 		log_error("Snapshot %s is lost.", device);
- 		if (dm_task_get_info(dmt, &info)) {
-@@ -170,7 +170,7 @@ void process_event(struct dm_task *dmt,
- 	 * If the snapshot has been invalidated or we failed to parse
- 	 * the status string. Report the full status string to syslog.
- 	 */
--	if (status->invalid || !status->total_sectors) {
-+	if (status->invalid || status->overflow || !status->total_sectors) {
- 		log_error("Snapshot %s changed state to: %s.", device, params);
- 		state->percent_check = 0;
- 		goto out;
+ 	_init_thread_signals();
+ 
+-	//multilog_clear_logging();
+-	//multilog_add_type(std_syslog, &logdata);
+-	//multilog_init_verbose(std_syslog, _LOG_DEBUG);
+-	//multilog_async(1);
+-
+ 	pthread_mutex_init(&_global_mutex, NULL);
+ 
+ 	if (!_systemd_activation && !_open_fifos(&fifos))
+@@ -2191,7 +2186,6 @@ int main(int argc, char *argv[])
+ 		_cleanup_unused_threads();
+ 	}
+ 
+-
+ 	pthread_mutex_destroy(&_global_mutex);
+ 
+ 	log_notice("dmeventd shutting down.");
 
 
