@@ -1,97 +1,71 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 20 Oct 2015 09:01:15 +0000 (UTC)
-Subject: master - conf: clarify compact output settings
-Message-ID: <20151020090115.DC84860D8F@fedorahosted.org>
+From: okozina <okozina@fedoraproject.org>
+Date: Tue, 20 Oct 2015 10:19:27 +0000 (UTC)
+Subject: master - polldaemon: fix missing mirror in-sync info with lvmpolld
+Message-ID: <20151020101927.18B2960F6A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a5c4c4efbd18809320f49d7ed60c58883140259c
-Commit:        a5c4c4efbd18809320f49d7ed60c58883140259c
-Parent:        83d475626a4d9ecaa2084f349cb2cee4f0f3a719
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 20 11:01:09 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Oct 20 11:01:09 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=33465066c5eddaa6169814d645d543e5673bc2a6
+Commit:        33465066c5eddaa6169814d645d543e5673bc2a6
+Parent:        a5c4c4efbd18809320f49d7ed60c58883140259c
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Mon Oct 19 16:56:45 2015 +0200
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Tue Oct 20 12:18:55 2015 +0200
 
-conf: clarify compact output settings
+polldaemon: fix missing mirror in-sync info with lvmpolld
 
+CONVERTING status flag is a tricky one. It's not set when converting
+a non-mirror LV type to the mirror type, i.e.: linear -> two leg mirror.
+Also the conversion itself is instant and doesn't require to be polled.
+When mirror reaches sync state there's no final update on VG metadata
+for lvmpolld to be made thereby report_progress in fact doesn't report
+percentage of mirror being converted but percentage of mirror
+being in sync. Perhaps we should reword the lvconvert output here.
+
+On the other hand CONVERTING is set while we upconvert the mirror
+from i.e. two leg mirror to four leg mirror. In such case the operation
+is required to be polled so that lvmpolld can cleanup temporary
+conversion log when the conversion is over.
+
+Ignore CONVERTING lv_type for the moment and match LVs only by uuids
+during 'mirror conversion'/'waiting for a sync to finish'.
 ---
- conf/example.conf.in         |   21 ++++++++++++---------
- lib/config/config_settings.h |   21 ++++++++++++---------
- 2 files changed, 24 insertions(+), 18 deletions(-)
+ WHATS_NEW          |    1 +
+ tools/polldaemon.c |    7 ++++++-
+ 2 files changed, 7 insertions(+), 1 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index e96f03f..b8c0407 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -1494,19 +1494,22 @@ activation {
- # report {
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f973f11..763896e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.133 - 
+ ======================================
++  Fix missing in-sync progress info while lvconvert used with lvmpolld.
+   Add report/compact_output_cols to lvm.conf to define report cols to compact.
+   Do not change logging in lvm2 library when it's already set.
+   Check for enough space in thin-pool in command before creating new thin.
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index cee1983..ccfaa7d 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -412,7 +412,12 @@ static int report_progress(struct cmd_context *cmd, struct poll_operation_id *id
  
- 	# Configuration option report/compact_output.
--	# Do not print empty report fields.
--	# Fields that don't have a value set for any of the rows reported are
--	# skipped and not printed. Compact output is applicable only if
--	# report/buffered is enabled.
-+	# Do not print empty values for all report fields.
-+	# If enabled, all fields that don't have a value set for any of the
-+	# rows reported are skipped and not printed. Compact output is
-+	# applicable only if report/buffered is enabled. If you need to
-+	# compact only specified fields, use compact_output=0 and define
-+	# report/compact_output_cols configuration setting instead.
- 	# This configuration option has an automatic default value.
- 	# compact_output = 0
+ 	if (lv && id->uuid && strcmp(id->uuid, (char *)&lv->lvid))
+ 		lv = NULL;
+-	if (lv && parms->lv_type && !(lv->status & parms->lv_type))
++
++	/*
++	 * CONVERTING is set only during mirror upconversion but we may need to
++	 * read LV's progress info even when it's not converting (linear->mirror)
++	 */
++	if (lv && (parms->lv_type ^ CONVERTING) && !(lv->status & parms->lv_type))
+ 		lv = NULL;
  
- 	# Configuration option report/compact_output_cols.
--	# Do not print empty values for given report fields.
--	# The same as compact_output setting, but the compaction is not done
--	# globally for all fields in report but only for given fields. If both
--	# compact_output and compact_output_cols is used at the same time,
--	# the compact_output setting prevails.
-+	# Do not print empty values for specified report fields.
-+	# If defined, specified fields that don't have a value set for any
-+	# of the rows reported are skipped and not printed. Compact output
-+	# is applicable only if report/buffered is enabled. If you need to
-+	# compact all fields, use compact_output=1 instead in which case
-+	# the compact_output_cols setting is then ignored.
- 	# This configuration option has an automatic default value.
- 	# compact_output_cols = ""
- 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 1a261a2..dd2b407 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -1416,17 +1416,20 @@ cfg(disk_area_size_CFG, "size", disk_area_CFG_SUBSECTION, CFG_UNSUPPORTED | CFG_
- cfg(disk_area_id_CFG, "id", disk_area_CFG_SUBSECTION, CFG_UNSUPPORTED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, 0, NULL, NULL)
- 
- cfg(report_compact_output_CFG, "compact_output", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_REP_COMPACT_OUTPUT, vsn(2, 2, 115), NULL, 0, NULL,
--	"Do not print empty report fields.\n"
--	"Fields that don't have a value set for any of the rows reported are\n"
--	"skipped and not printed. Compact output is applicable only if\n"
--	"report/buffered is enabled.\n")
-+	"Do not print empty values for all report fields.\n"
-+	"If enabled, all fields that don't have a value set for any of the\n"
-+	"rows reported are skipped and not printed. Compact output is\n"
-+	"applicable only if report/buffered is enabled. If you need to\n"
-+	"compact only specified fields, use compact_output=0 and define\n"
-+	"report/compact_output_cols configuration setting instead.\n")
- 
- cfg(report_compact_output_cols_CFG, "compact_output_cols", report_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_COMPACT_OUTPUT_COLS, vsn(2, 2, 133), NULL, 0, NULL,
--	"Do not print empty values for given report fields.\n"
--	"The same as compact_output setting, but the compaction is not done\n"
--	"globally for all fields in report but only for given fields. If both\n"
--	"compact_output and compact_output_cols is used at the same time,\n"
--	"the compact_output setting prevails.\n")
-+	"Do not print empty values for specified report fields.\n"
-+	"If defined, specified fields that don't have a value set for any\n"
-+	"of the rows reported are skipped and not printed. Compact output\n"
-+	"is applicable only if report/buffered is enabled. If you need to\n"
-+	"compact all fields, use compact_output=1 instead in which case\n"
-+	"the compact_output_cols setting is then ignored.\n")
- 
- cfg(report_aligned_CFG, "aligned", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_REP_ALIGNED, vsn(1, 0, 0), NULL, 0, NULL,
- 	"Align columns in report output.\n")
+ 	if (!lv) {
 
 
