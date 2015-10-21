@@ -1,50 +1,54 @@
-From: okozina <okozina@fedoraproject.org>
-Date: Tue, 20 Oct 2015 13:46:09 +0000 (UTC)
-Subject: master - lvmetad.8.in: update man page with timeout info
-Message-ID: <20151020134609.37825602B4@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 21 Oct 2015 16:20:44 +0000 (UTC)
+Subject: master - libdaemon: allow all debug levels for stderr
+Message-ID: <20151021162044.3C00D6017F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c15649b3af94e4af573ada0f30e35f7d1fee5321
-Commit:        c15649b3af94e4af573ada0f30e35f7d1fee5321
-Parent:        f67a52677bdc95209c7adfa4575c833bed1659f1
-Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Tue Oct 20 13:33:29 2015 +0200
-Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Tue Oct 20 15:45:21 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0aee04288e221de91de022d84d19424d4698a05c
+Commit:        0aee04288e221de91de022d84d19424d4698a05c
+Parent:        ef4d69f456b22b4e58afb9fe5ff0b09603944f35
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Oct 21 11:16:59 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Oct 21 11:19:18 2015 -0500
 
-lvmetad.8.in: update man page with timeout info
+libdaemon: allow all debug levels for stderr
 
+The parsing code for log levels was missing
+some levels.  Also ignore an unrecognized
+level name rather than failing.
 ---
- man/lvmetad.8.in |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+ libdaemon/server/daemon-log.c |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/man/lvmetad.8.in b/man/lvmetad.8.in
-index cdaf198..2acfd8b 100644
---- a/man/lvmetad.8.in
-+++ b/man/lvmetad.8.in
-@@ -10,6 +10,8 @@ lvmetad \(em LVM metadata cache daemon
- .IR pidfile_path ]
- .RB [ \-s
- .IR socket_path ]
-+.RB [ \-t
-+.IR timeout_value ]
- .RB [ \-f ]
- .RB [ \-h ]
- .RB [ \-V ]
-@@ -97,6 +99,10 @@ Path to the socket file. This overrides both the built-in default
- \fBLVM_LVMETAD_SOCKET\fP.  To communicate successfully with lvmetad,
- all LVM2 processes should use the same socket path.
- .TP
-+.B \-t \fItimeout_value
-+The daemon may shutdown after being idle for the given time (in seconds). When the
-+option is omitted or the value given is zero the daemon never shutdowns on idle.
-+.TP
- .B \-V
- Display the version of lvmetad daemon.
- .SH ENVIRONMENT VARIABLES
+diff --git a/libdaemon/server/daemon-log.c b/libdaemon/server/daemon-log.c
+index 5ea5cdc..abe602b 100644
+--- a/libdaemon/server/daemon-log.c
++++ b/libdaemon/server/daemon-log.c
+@@ -160,12 +160,18 @@ static int _parse_one(log_state *s, int outlet, const char *type, int enable)
+ 	if (!strcmp(type, "all"))
+ 		for (i = 0; i < 32; ++i)
+ 			daemon_log_enable(s, outlet, i, enable);
++	else if (!strcmp(type, "fatal"))
++		daemon_log_enable(s, outlet, DAEMON_LOG_FATAL, enable);
++	else if (!strcmp(type, "error"))
++		daemon_log_enable(s, outlet, DAEMON_LOG_ERROR, enable);
++	else if (!strcmp(type, "warn"))
++		daemon_log_enable(s, outlet, DAEMON_LOG_WARN, enable);
++	else if (!strcmp(type, "warn"))
++		daemon_log_enable(s, outlet, DAEMON_LOG_INFO, enable);
+ 	else if (!strcmp(type, "wire"))
+ 		daemon_log_enable(s, outlet, DAEMON_LOG_WIRE, enable);
+ 	else if (!strcmp(type, "debug"))
+ 		daemon_log_enable(s, outlet, DAEMON_LOG_DEBUG, enable);
+-	else
+-		return 0;
+ 
+ 	return 1;
+ }
 
 
