@@ -1,41 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 22 Oct 2015 21:33:52 +0000 (UTC)
-Subject: master - dmeventd: drop unneded test
-Message-ID: <20151022213352.0D5056057E@fedorahosted.org>
+Date: Thu, 22 Oct 2015 21:33:54 +0000 (UTC)
+Subject: master - dmeventd: minimize locking time for get_imeout
+Message-ID: <20151022213354.2129C6057E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e2ea2a81476495f494915774c46c0b3c139d1c3f
-Commit:        e2ea2a81476495f494915774c46c0b3c139d1c3f
-Parent:        941c6354dbf783da17851be7e38f243334a4acd6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=15dbd4b56a65dba2f19bb1685529731faa9894c6
+Commit:        15dbd4b56a65dba2f19bb1685529731faa9894c6
+Parent:        e2ea2a81476495f494915774c46c0b3c139d1c3f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 22 12:31:45 2015 +0200
+AuthorDate:    Thu Oct 22 12:38:26 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Oct 22 22:34:29 2015 +0200
+CommitterDate: Thu Oct 22 22:34:30 2015 +0200
 
-dmeventd: drop unneded test
+dmeventd: minimize locking time for get_imeout
 
-Function is never called without device.uuid.
+Don't hold lock when creating message (allocating memory).
+Thread cannot dissapear as it's only the same thread which
+may clean it.
 ---
- daemons/dmeventd/dmeventd.c |    3 ---
- 1 files changed, 0 insertions(+), 3 deletions(-)
+ daemons/dmeventd/dmeventd.c |   18 +++++++++---------
+ 1 files changed, 9 insertions(+), 9 deletions(-)
 
 diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index bbdee82..2f5fe67 100644
+index 2f5fe67..26e611d 100644
 --- a/daemons/dmeventd/dmeventd.c
 +++ b/daemons/dmeventd/dmeventd.c
-@@ -545,9 +545,6 @@ static int _fill_device_data(struct thread_status *ts)
- 	struct dm_info dmi;
- 	int ret = 0;
+@@ -1292,18 +1292,18 @@ static int _get_timeout(struct message_data *message_data)
+ 	struct thread_status *thread;
+ 	struct dm_event_daemon_message *msg = message_data->msg;
  
--	if (!ts->device.uuid)
--		return 0;
+-	dm_free(msg->data);
 -
- 	if (!(dmt = dm_task_create(DM_DEVICE_INFO)))
- 		return 0;
+ 	_lock_mutex();
+-	if ((thread = _lookup_thread_status(message_data))) {
+-		msg->size = dm_asprintf(&(msg->data), "%s %" PRIu32,
+-					message_data->id, thread->timeout);
+-	} else
+-		msg->data = NULL;
+-
++	thread = _lookup_thread_status(message_data);
+ 	_unlock_mutex();
  
+-	return thread ? 0 : -ENODEV;
++	if (!thread)
++		return -ENODEV;
++
++	dm_free(msg->data);
++	msg->size = dm_asprintf(&(msg->data), "%s %" PRIu32,
++				message_data->id, thread->timeout);
++
++	return (msg->data && msg->size) ? 0 : -ENOMEM;
+ }
+ 
+ /* Open fifos used for client communication. */
 
 
