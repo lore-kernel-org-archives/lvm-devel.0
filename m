@@ -1,61 +1,103 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 22 Oct 2015 21:33:54 +0000 (UTC)
-Subject: master - dmeventd: minimize locking time for get_imeout
-Message-ID: <20151022213354.2129C6057E@fedorahosted.org>
+Date: Thu, 22 Oct 2015 21:33:56 +0000 (UTC)
+Subject: master - dmeventd: code mode _get_device_status
+Message-ID: <20151022213356.3775B6057E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=15dbd4b56a65dba2f19bb1685529731faa9894c6
-Commit:        15dbd4b56a65dba2f19bb1685529731faa9894c6
-Parent:        e2ea2a81476495f494915774c46c0b3c139d1c3f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=81e9ab3156badecc6a64447708c4ae4886e3c244
+Commit:        81e9ab3156badecc6a64447708c4ae4886e3c244
+Parent:        15dbd4b56a65dba2f19bb1685529731faa9894c6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 22 12:38:26 2015 +0200
+AuthorDate:    Thu Oct 22 12:36:25 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Oct 22 22:34:30 2015 +0200
+CommitterDate: Thu Oct 22 22:35:25 2015 +0200
 
-dmeventd: minimize locking time for get_imeout
+dmeventd: code mode _get_device_status
 
-Don't hold lock when creating message (allocating memory).
-Thread cannot dissapear as it's only the same thread which
-may clean it.
+Move _get_device_status() in code.
+Use dm_task_no_flush() function when reading status.
+(e.g. none blocking for thins pool)
 ---
- daemons/dmeventd/dmeventd.c |   18 +++++++++---------
- 1 files changed, 9 insertions(+), 9 deletions(-)
+ WHATS_NEW_DM                |    1 +
+ daemons/dmeventd/dmeventd.c |   44 +++++++++++++++++++++++-------------------
+ 2 files changed, 25 insertions(+), 20 deletions(-)
 
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 000bddd..5f92657 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.110 - 
+ ======================================
++  Dmeventd read device status with 'noflush'.
+   Dmeventd closes control device when no device is monitored.
+   Thin plugin for dmeventd improved percentage usage.
+   Snapshot plugin for dmeventd improved percentage usage.
 diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 2f5fe67..26e611d 100644
+index 26e611d..cde4f93 100644
 --- a/daemons/dmeventd/dmeventd.c
 +++ b/daemons/dmeventd/dmeventd.c
-@@ -1292,18 +1292,18 @@ static int _get_timeout(struct message_data *message_data)
- 	struct thread_status *thread;
- 	struct dm_event_daemon_message *msg = message_data->msg;
- 
--	dm_free(msg->data);
--
- 	_lock_mutex();
--	if ((thread = _lookup_thread_status(message_data))) {
--		msg->size = dm_asprintf(&(msg->data), "%s %" PRIu32,
--					message_data->id, thread->timeout);
--	} else
--		msg->data = NULL;
--
-+	thread = _lookup_thread_status(message_data);
- 	_unlock_mutex();
- 
--	return thread ? 0 : -ENODEV;
-+	if (!thread)
-+		return -ENODEV;
-+
-+	dm_free(msg->data);
-+	msg->size = dm_asprintf(&(msg->data), "%s %" PRIu32,
-+				message_data->id, thread->timeout);
-+
-+	return (msg->data && msg->size) ? 0 : -ENOMEM;
+@@ -570,6 +570,30 @@ fail:
+ 	return ret;
  }
  
- /* Open fifos used for client communication. */
++static struct dm_task *_get_device_status(struct thread_status *ts)
++{
++	struct dm_task *dmt = dm_task_create(DM_DEVICE_STATUS);
++
++	if (!dmt)
++		return_NULL;
++
++	if (!dm_task_set_uuid(dmt, ts->device.uuid)) {
++		dm_task_destroy(dmt);
++		return_NULL;
++	}
++
++	/* Non-blocking status read */
++	if (!dm_task_no_flush(dmt))
++		log_warn("WARNING: Can't set no_flush for dm status.");
++
++	if (!dm_task_run(dmt)) {
++		dm_task_destroy(dmt);
++		return_NULL;
++	}
++
++	return dmt;
++}
++
+ /*
+  * Find an existing thread for a device.
+  *
+@@ -886,26 +910,6 @@ static void _monitor_unregister(void *arg)
+ 	_unlock_mutex();
+ }
+ 
+-static struct dm_task *_get_device_status(struct thread_status *ts)
+-{
+-	struct dm_task *dmt = dm_task_create(DM_DEVICE_STATUS);
+-
+-	if (!dmt)
+-		return NULL;
+-
+-	if (!dm_task_set_uuid(dmt, ts->device.uuid)) {
+-		dm_task_destroy(dmt);
+-		return NULL;
+-	}
+-
+-	if (!dm_task_run(dmt)) {
+-		dm_task_destroy(dmt);
+-		return NULL;
+-	}
+-
+-	return dmt;
+-}
+-
+ /* Device monitoring thread. */
+ static void *_monitor_thread(void *arg)
+ {
 
 
