@@ -1,60 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 22 Oct 2015 21:33:30 +0000 (UTC)
-Subject: master - dmeventd: raid plugin reporting
-Message-ID: <20151022213330.D1B8B610C3@fedorahosted.org>
+Date: Thu, 22 Oct 2015 21:33:32 +0000 (UTC)
+Subject: master - dmeventd: mirror plugin update
+Message-ID: <20151022213332.E64C2610C3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c5c9e2355826ad3835f35e494dde9bb8b1e6356
-Commit:        9c5c9e2355826ad3835f35e494dde9bb8b1e6356
-Parent:        cde12cbe9e4d3cabefc8644846e86b73b6217b6d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=91350f5c6ad149a565402254688c6bd1700c5bf5
+Commit:        91350f5c6ad149a565402254688c6bd1700c5bf5
+Parent:        9c5c9e2355826ad3835f35e494dde9bb8b1e6356
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 22 10:38:40 2015 +0200
+AuthorDate:    Thu Oct 22 17:09:43 2015 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Oct 22 22:28:37 2015 +0200
 
-dmeventd: raid plugin reporting
+dmeventd: mirror plugin update
 
-Fix raid logging introduced with last updating commit.
+Don't use  --config  - this requires reload of lvm.conf
 ---
- daemons/dmeventd/plugins/raid/dmeventd_raid.c |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+ daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/raid/dmeventd_raid.c b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-index f00ffa4..2f200ba 100644
---- a/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-+++ b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
-@@ -37,14 +37,17 @@ static int _process_raid_event(struct dso_state *state, char *params, const char
- 		return 0;
+diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+index 62ad331..e20b249 100644
+--- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
++++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+@@ -220,8 +220,7 @@ int register_device(const char *device,
  	}
  
--	if ((d = strchr(status->dev_health, 'D')) && !state->failed) {
-+	if ((d = strchr(status->dev_health, 'D'))) {
-+		if (state->failed)
-+			goto out; /* already reported */
-+
- 		log_error("Device #%d of %s array, %s, has failed.",
- 			 (int)(d - status->dev_health),
- 			 status->raid_type, device);
- 
- 		state->failed = 1;
- 		if (!dmeventd_lvm2_run_with_lock(state->cmd_lvscan))
--			log_info("Re-scan of RAID device %s failed.", device);
-+			log_warn("WARNING: Re-scan of RAID device %s failed.", device);
- 
- 		/* if repair goes OK, report success even if lvscan has failed */
- 		if (!dmeventd_lvm2_run_with_lock(state->cmd_lvconvert)) {
-@@ -58,7 +61,7 @@ static int _process_raid_event(struct dso_state *state, char *params, const char
- 			 status->raid_type, device,
- 			 (status->insync_regions == status->total_regions) ? "now" : "not");
+ 	if (!dmeventd_lvm2_command(state->mem, state->cmd_lvconvert, sizeof(state->cmd_lvconvert),
+-				   "lvconvert --config devices{ignore_suspended_devices=1} "
+-				   "--repair --use-policies", device)) {
++				   "lvconvert --repair --use-policies", device)) {
+ 		dmeventd_lvm2_exit_with_pool(state);
+ 		goto_bad;
  	}
--
-+out:
- 	dm_pool_free(state->mem, status);
- 
- 	return 1;
 
 
