@@ -1,57 +1,48 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 25 Oct 2015 20:10:03 +0000 (UTC)
-Subject: master - dev_manager: no flush for extension
-Message-ID: <20151025201003.0BF4C60AA4@fedorahosted.org>
+Date: Sun, 25 Oct 2015 22:46:20 +0000 (UTC)
+Subject: master - libdm: enable no_flush for driver version > 11
+Message-ID: <20151025224620.4FC82613E7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f898cf7539149a54a121b0aae59076c2d647bb37
-Commit:        f898cf7539149a54a121b0aae59076c2d647bb37
-Parent:        844b00958492224c448b30f89ae5532bb6591fd2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9139d7a4bbaf0b6944802b7c6f893e23b59633f7
+Commit:        9139d7a4bbaf0b6944802b7c6f893e23b59633f7
+Parent:        f898cf7539149a54a121b0aae59076c2d647bb37
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 25 20:41:19 2015 +0100
+AuthorDate:    Sun Oct 25 23:43:47 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Oct 25 21:09:31 2015 +0100
+CommitterDate: Sun Oct 25 23:43:47 2015 +0100
 
-dev_manager: no flush for extension
+libdm: enable no_flush for driver version > 11
 
-Recognize the target only 'extends' and do not enforce
-'flush' in this case.  Only the size reduction
-still requires flush (so disables usage of no_flush flag).
-
-If some other targets do require flush before suspend,
-they have to explicitly ask for it.
+It appears the driver version 11 has troubles with usage of no_flush
+So require at least version 12.
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ libdm/ioctl/libdm-iface.c |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 33d11a4..80a198a 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.133 - 
- ======================================
-+  Enforce flush for suspend only when volume size is reduced.
-   Enable code which detects the need of flush during suspend.
-   Ensure --use-policy will resize volume to fit below threshold.
-   Correct percentage evaluation when checking thin-pool over threshold.
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 1caa2d7..dc6d2fd 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -3296,7 +3296,7 @@ static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
- 		if (!dm_tree_preload_children(root, dlid, DLID_SIZE))
- 			goto_out;
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 58a8dfe..615bbd5 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -1202,8 +1202,13 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
  
--		if (dm_tree_node_size_changed(root))
-+		if ((dm_tree_node_size_changed(root) < 0))
- 			dm->flush_required = 1;
- 
- 		if (action == ACTIVATE) {
+ 	if (dmt->type == DM_DEVICE_SUSPEND)
+ 		dmi->flags |= DM_SUSPEND_FLAG;
+-	if (dmt->no_flush)
+-		dmi->flags |= DM_NOFLUSH_FLAG;
++	if (dmt->no_flush) {
++		if (_dm_version_minor < 11)
++			log_verbose("No flush flag unsupported by kernel. "
++				    "Buffers will be flushed.");
++		else
++			dmi->flags |= DM_NOFLUSH_FLAG;
++	}
+ 	if (dmt->read_only)
+ 		dmi->flags |= DM_READONLY_FLAG;
+ 	if (dmt->skip_lockfs)
 
 
