@@ -1,116 +1,146 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 25 Oct 2015 20:09:56 +0000 (UTC)
-Subject: master - lv_manip: ensure it will fit bellow threshold
-Message-ID: <20151025200956.C3D4C60E5F@fedorahosted.org>
+Date: Sun, 25 Oct 2015 20:09:58 +0000 (UTC)
+Subject: master - libdm: dm_tree_node_size_changed recognizes reduction
+Message-ID: <20151025200958.DA46A609CC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=40eea582aea512db7fceafd8559bf66df0733b55
-Commit:        40eea582aea512db7fceafd8559bf66df0733b55
-Parent:        b780d329aa9ce249bf5164154c81cefd9b276970
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9ef820a2a5e174cd08097981d7879e1f4cbded01
+Commit:        9ef820a2a5e174cd08097981d7879e1f4cbded01
+Parent:        40eea582aea512db7fceafd8559bf66df0733b55
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 25 19:19:39 2015 +0100
+AuthorDate:    Sun Oct 25 19:27:09 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Oct 25 21:03:11 2015 +0100
+CommitterDate: Sun Oct 25 21:05:15 2015 +0100
 
-lv_manip: ensure it will fit bellow threshold
+libdm: dm_tree_node_size_changed recognizes reduction
 
-Use single code to evaluate if the percentage value has
-crossed threshold.
+Add more functionality to size_changed function.
+While 'existing' API only detected  0 for
+unchanged,  and !0 for changed,
+new improved API will also detected if the
+size has only went bigger - or there was
+size reduction.
 
-Recalculate amount value to always fit bellow
-threshold so there are not need any extra reiterations
-to reach this state in case policy amount is too small.
+Function work for the whole dm-tree - so
+no change is size is always 0.
+only size extension  1.
+and if some size reduction is there - returns -1.
+
+This result can be used for better evaluation
+whether we need to flush before suspend.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   37 +++++++++++++++++++++++++------------
- 2 files changed, 26 insertions(+), 12 deletions(-)
+ WHATS_NEW_DM                        |    1 +
+ libdm/.exported_symbols.Base        |    1 -
+ libdm/.exported_symbols.DM_1_02_110 |    1 +
+ libdm/libdevmapper.h                |    5 +++++
+ libdm/libdm-deptree.c               |   25 ++++++++++++++++++++++---
+ 5 files changed, 29 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 0495e46..8ca0aa7 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 910f6d6..e09ab63 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.133 - 
+ Version 1.02.110 - 
  ======================================
-+  Ensure --use-policy will resize volume to fit below threshold.
-   Correct percentage evaluation when checking thin-pool over threshold.
-   Fix lvmcache to move PV from VG to orphans if VG is removed and lvmetad used.
-   Fix lvmcache to not cache even invalid info about PV which got removed.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 19032e9..8029dab 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4424,6 +4424,25 @@ static int _fsadm_cmd(struct cmd_context *cmd,
- 	return exec_cmd(cmd, argv, status, 1);
- }
++  Enhance dm_tree_node_size_changed() to recognize size reduction.
+   Support exit on idle for dmenventd (1 hour).
+   Add support to allow unmonitor device from plugin itself.
+   New design for thread co-operation in dmeventd.
+diff --git a/libdm/.exported_symbols.Base b/libdm/.exported_symbols.Base
+index f9c3cb1..27fef53 100644
+--- a/libdm/.exported_symbols.Base
++++ b/libdm/.exported_symbols.Base
+@@ -262,7 +262,6 @@ dm_tree_node_set_thin_external_origin
+ dm_tree_node_set_thin_pool_discard
+ dm_tree_node_set_thin_pool_error_if_no_space
+ dm_tree_node_set_udev_flags
+-dm_tree_node_size_changed
+ dm_tree_preload_children
+ dm_tree_retry_remove
+ dm_tree_set_cookie
+diff --git a/libdm/.exported_symbols.DM_1_02_110 b/libdm/.exported_symbols.DM_1_02_110
+index da742ee..eba5625 100644
+--- a/libdm/.exported_symbols.DM_1_02_110
++++ b/libdm/.exported_symbols.DM_1_02_110
+@@ -1,2 +1,3 @@
+ dm_report_compact_given_fields
+ dm_hold_control_dev
++dm_tree_node_size_changed
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 08b24fe..f7ab257 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -1256,6 +1256,11 @@ const char *dm_tree_node_get_name(const struct dm_tree_node *node);
+ const char *dm_tree_node_get_uuid(const struct dm_tree_node *node);
+ const struct dm_info *dm_tree_node_get_info(const struct dm_tree_node *node);
+ void *dm_tree_node_get_context(const struct dm_tree_node *node);
++/*
++ * Returns  0 when node size and its children is unchanged.
++ * Returns  1 when node or any of its children has increased size.
++ * Rerurns -1 when node or any of its children has reduced size.
++ */
+ int dm_tree_node_size_changed(const struct dm_tree_node *dnode);
  
-+static int _adjust_amount(dm_percent_t percent, int policy_threshold, int *policy_amount)
-+{
-+	if (!(DM_PERCENT_0 < percent && percent <= DM_PERCENT_100) ||
-+	    percent <= (policy_threshold * DM_PERCENT_1))
-+		return 0;
-+	/*
-+	 * Evaluate the minimal amount needed to get bellow threshold.
-+	 * Keep using DM_PERCENT_1 units for better precision.
-+	 * Round-up to needed percentage value
-+	 */
-+	percent = (percent/policy_threshold + (DM_PERCENT_1 - 1) / 100) / (DM_PERCENT_1 / 100) - 100;
-+
-+	/* Use it if current policy amount is smaller */
-+	if (*policy_amount < percent)
-+		*policy_amount = percent;
-+
-+	return 1;
-+}
-+
- static int _adjust_policy_params(struct cmd_context *cmd,
- 				 struct logical_volume *lv, struct lvresize_params *lp)
- {
-@@ -4469,35 +4488,29 @@ static int _adjust_policy_params(struct cmd_context *cmd,
- 		return 0;
- 	}
+ /*
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index afdce8d..d7e2143 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -220,7 +220,7 @@ struct load_properties {
+ 	uint32_t read_ahead_flags;
  
--	policy_threshold *= DM_PERCENT_1;
--
- 	if (lv_is_thin_pool(lv)) {
- 		if (!lv_thin_pool_percent(lv, 1, &percent))
- 			return_0;
--		if ((DM_PERCENT_0 < percent && percent <= DM_PERCENT_100) &&
--		    (percent > policy_threshold)) {
-+		if (_adjust_amount(percent, policy_threshold, &policy_amount)) {
- 			if (!thin_pool_feature_supported(lv, THIN_FEATURE_METADATA_RESIZE)) {
--				log_error_once("Online metadata resize for %s/%s is not supported.",
--					       lv->vg->name, lv->name);
-+				log_error_once("Online metadata resize for %s is not supported.",
-+					       display_lvname(lv));
- 				return 0;
- 			}
- 			lp->poolmetadatasize = (first_seg(lv)->metadata_lv->size *
- 						policy_amount + 99) / 100;
- 			lp->poolmetadatasign = SIGN_PLUS;
+ 	unsigned segment_count;
+-	unsigned size_changed;
++	int size_changed;
+ 	struct dm_list segs;
+ 
+ 	const char *new_name;
+@@ -2729,7 +2729,8 @@ static int _load_node(struct dm_tree_node *dnode)
+ 
+ 		existing_table_size = dm_task_get_existing_table_size(dmt);
+ 		if ((dnode->props.size_changed =
+-		     (existing_table_size == seg_start) ? 0 : 1)) {
++		     (existing_table_size == seg_start) ? 0 :
++		     (existing_table_size > seg_start) ? -1 : 1)) {
+ 			/*
+ 			 * Kernel usually skips size validation on zero-length devices
+ 			 * now so no need to preload them.
+@@ -2825,8 +2826,10 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
  		}
--
- 		if (!lv_thin_pool_percent(lv, 0, &percent))
- 			return_0;
--		if (!(DM_PERCENT_0 < percent && percent <= DM_PERCENT_100) ||
--		    percent <= policy_threshold)
--			return 1;
- 	} else {
- 		if (!lv_snapshot_percent(lv, &percent))
- 			return_0;
--		if (!(DM_PERCENT_0 < percent && percent <= DM_PERCENT_100) || percent <= policy_threshold)
--			return 1; /* nothing to do */
- 	}
  
-+	if (!_adjust_amount(percent, policy_threshold, &policy_amount))
-+		return 1; /* nothing to do */
+ 		/* Propagate device size change change */
+-		if (child->props.size_changed)
++		if (child->props.size_changed > 0 && !dnode->props.size_changed)
+ 			dnode->props.size_changed = 1;
++		else if (child->props.size_changed < 0)
++			dnode->props.size_changed = -1;
+ 
+ 		/* Resume device immediately if it has parents and its size changed */
+ 		if (!dm_tree_node_num_children(child, 1) || !child->props.size_changed)
+@@ -3853,3 +3856,19 @@ void dm_tree_node_set_callback(struct dm_tree_node *dnode,
+ 	dnode->callback = cb;
+ 	dnode->callback_data = data;
+ }
 +
- 	lp->extents = policy_amount;
- 	lp->sizeargs = (lp->extents) ? 1 : 0;
- 
++/*
++ * Backward compatible dm_tree_node_size_changed() implementations.
++ *
++ * Keep these at the end of the file to avoid adding clutter around the
++ * current dm_tree_node_size_changed() version.
++ */
++#if defined(__GNUC__)
++int dm_tree_node_size_changed_base(const struct dm_tree_node *dnode);
++DM_EXPORT_SYMBOL_BASE(dm_tree_node_size_changed);
++int dm_tree_node_size_changed_base(const struct dm_tree_node *dnode)
++{
++	/* Base does not make difference between smaller and bigger */
++	return dm_tree_node_size_changed(dnode) ? 1 : 0;
++}
++#endif
 
 
