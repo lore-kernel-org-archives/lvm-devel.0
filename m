@@ -1,48 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 26 Oct 2015 06:35:01 +0000 (UTC)
-Subject: master - libdm: enable no_flush for driver version > 11
-Message-ID: <20151026063501.03FC3606FA@fedorahosted.org>
+Date: Mon, 26 Oct 2015 06:35:03 +0000 (UTC)
+Subject: master - tests: snapshot now respects threshold
+Message-ID: <20151026063503.16CEE6038F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6e784abbd7336e57fee80dfb6a5a3e7f2fab7a98
-Commit:        6e784abbd7336e57fee80dfb6a5a3e7f2fab7a98
-Parent:        f898cf7539149a54a121b0aae59076c2d647bb37
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3466cd8a6caff3ca9ad00e22b927dbe22404fe5c
+Commit:        3466cd8a6caff3ca9ad00e22b927dbe22404fe5c
+Parent:        6e784abbd7336e57fee80dfb6a5a3e7f2fab7a98
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 26 07:34:14 2015 +0100
+AuthorDate:    Mon Oct 26 07:34:33 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 26 07:34:14 2015 +0100
+CommitterDate: Mon Oct 26 07:34:33 2015 +0100
 
-libdm: enable no_flush for driver version > 11
+tests: snapshot now respects threshold
 
-It appears the driver version 11 has troubles with usage of no_flush
-So require at least version 12.
 ---
- libdm/ioctl/libdm-iface.c |    9 +++++++--
- 1 files changed, 7 insertions(+), 2 deletions(-)
+ test/shell/snapshot-usage.sh |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 58a8dfe..615bbd5 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1202,8 +1202,13 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
+diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
+index ed9d8cb..d15eee1 100644
+--- a/test/shell/snapshot-usage.sh
++++ b/test/shell/snapshot-usage.sh
+@@ -169,13 +169,13 @@ lvcreate -s -l12 $vg1/lvol0
+ fill 1K
+ check lv_field $vg1/lvol1 data_percent "100.00"
  
- 	if (dmt->type == DM_DEVICE_SUSPEND)
- 		dmi->flags |= DM_SUSPEND_FLAG;
--	if (dmt->no_flush)
--		dmi->flags |= DM_NOFLUSH_FLAG;
-+	if (dmt->no_flush) {
-+		if (_dm_version_minor < 11)
-+			log_verbose("No flush flag unsupported by kernel. "
-+				    "Buffers will be flushed.");
-+		else
-+			dmi->flags |= DM_NOFLUSH_FLAG;
-+	}
- 	if (dmt->read_only)
- 		dmi->flags |= DM_READONLY_FLAG;
- 	if (dmt->skip_lockfs)
+-# Check it resizes 100% full valid snapshot
++# Check it resizes 100% full valid snapshot to fit threshold
+ lvextend --use-policies $vg1/lvol1
+-check lv_field $vg1/lvol1 data_percent "80.00"
++check lv_field $vg1/lvol1 data_percent "50.00"
+ 
+ fill 4K
+ lvextend --use-policies $vg1/lvol1
+-check lv_field $vg1/lvol1 size "18.00k"
++check lv_field $vg1/lvol1 size "24.00k"
+ 
+ lvextend -l+33 $vg1/lvol1
+ check lv_field $vg1/lvol1 size "$EXPECT3"
 
 
