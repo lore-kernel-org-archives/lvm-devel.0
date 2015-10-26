@@ -1,47 +1,96 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 26 Oct 2015 06:39:14 +0000 (UTC)
-Subject: master - tests: snapshot now respects threshold
-Message-ID: <20151026063914.7E70660EE7@fedorahosted.org>
+From: Lidong Zhong <lzhong@suse.com>
+Date: Mon, 26 Oct 2015 04:07:18 -0600
+Subject: [PATCH] lvcreate: support --force option
+In-Reply-To: <561B7728.5010804@redhat.com>
+References: <1444473552-14906-1-git-send-email-lzhong@suse.com>
+	<56190FE5.1030900@redhat.com>
+	<561B8AEB020000E10001DD25@relay2.provo.novell.com>
+	<561B7728.5010804@redhat.com>
+Message-ID: <562E6BD6020000E10001F71D@relay2.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b29593378f41f6dd401fb9582fba1a100f33dbbb
-Commit:        b29593378f41f6dd401fb9582fba1a100f33dbbb
-Parent:        428ca9b1207eba53ffc721bd9e528a1a148128c2
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 26 07:38:23 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 26 07:38:23 2015 +0100
+Hi Zdenek,
 
-tests: snapshot now respects threshold
+>>> On 10/12/2015 at 05:02 PM, in message <561B7728.5010804@redhat.com>, Zdenek
+Kabelac <zkabelac@redhat.com> wrote: 
+> Dne 12.10.2015 v 04:26 Lidong Zhong napsal(a): 
+> > Hi Zdenek, 
+> > 
+> > Thanks for your reply. 
+> > 
+> >>>> On 10/10/2015 at 09:17 PM, in message <56190FE5.1030900@redhat.com>, Zdenek 
+> > Kabelac <zkabelac@redhat.com> wrote: 
+> >> Dne 10.10.2015 v 12:39 Lidong Zhong napsal(a): 
+> >>> The option is supported in the logic of lvcreate but is omitted in 
+> >>> commands.h. 
+> >>> 
+> >> 
+> >> Nope - it's not intended to be unsupported so far. 
+> >> 
+> >> We do support --yes  to overcome prompts. 
+> >> 
+> >> Normally --force is meant to be used on paths to proceed with 
+> >> i.e. lvremove, lvconvert 
+> >> 
+> >> Do you have any case in mind where '--force' with lvcreate would have make  
+> any 
+> >> 
+> >> sense ? 
+> > 
+> > Not really. I met this problem when I was using lvcreate with the  
+> --wipesignature option. 
 
----
- test/shell/snapshot-usage.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+If we set the --wipesignature to y while creating an lv, there will be a prompt for confirming 
+in current code. Doesn't it make more sense that there shouldn't be the prompt? since we
+definitely want to remove the signature by setting this option.
+Some options such as "--zero=y" don't give prompt, why it is different? 
+Please give your opinion.
 
-diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
-index ed9d8cb..d15eee1 100644
---- a/test/shell/snapshot-usage.sh
-+++ b/test/shell/snapshot-usage.sh
-@@ -169,13 +169,13 @@ lvcreate -s -l12 $vg1/lvol0
- fill 1K
- check lv_field $vg1/lvol1 data_percent "100.00"
- 
--# Check it resizes 100% full valid snapshot
-+# Check it resizes 100% full valid snapshot to fit threshold
- lvextend --use-policies $vg1/lvol1
--check lv_field $vg1/lvol1 data_percent "80.00"
-+check lv_field $vg1/lvol1 data_percent "50.00"
- 
- fill 4K
- lvextend --use-policies $vg1/lvol1
--check lv_field $vg1/lvol1 size "18.00k"
-+check lv_field $vg1/lvol1 size "24.00k"
- 
- lvextend -l+33 $vg1/lvol1
- check lv_field $vg1/lvol1 size "$EXPECT3"
+Regards,
+Lidong
+
+> > --yes works for me. But I also found that --force should also work when I read  
+> the source. 
+> > However, it reports -f/--force is an invalid option for lvcreate. 
+>  
+> Yep - and so far it should stay that way -  --force has special meaning for  
+> being quite unsafe operation. 
+>  
+> > 
+> >> IMHO creating something with --force looks to me like crazy idea to start  
+> with 
+> >> 
+> >> - but maybe there is some use-case I'm missing ? 
+> >> 
+> > 
+> > Currently there is no introduction to --yes in the manpage of lvcreate. How  
+> about adding it to 
+> > the manpage? 
+>  
+> Every lvm man page references 'man lvm' as the source of description for all  
+>  
+> 'commonly' accepted options (like --yes). 
+>  
+> One day we may switch to 'generated' man pages - where very man page would  
+> have all options described - but I guess this 'day' is still pretty far away  
+> ;) 
+>  
+> Regards 
+>  
+> Zdenek 
+>  
+>  
+> -- 
+> lvm-devel mailing list 
+> lvm-devel at redhat.com 
+> https://www.redhat.com/mailman/listinfo/lvm-devel 
+>  
+>  
+
+
 
 
