@@ -1,141 +1,132 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 27 Oct 2015 15:30:38 +0000 (UTC)
-Subject: master - device: Tidy DASD CDL format detection code.
-Message-ID: <20151027153038.27D6861010@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Tue, 27 Oct 2015 15:55:22 +0000 (UTC)
+Subject: master - vgs, lvs: ignore error if VG is removed
+Message-ID: <20151027155522.1913A606C9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=65ec00ce202411f6e6f91955ab9422d44bb86a9b
-Commit:        65ec00ce202411f6e6f91955ab9422d44bb86a9b
-Parent:        6e1e0e881368be6337599dcf7f627f785ebf415c
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Oct 27 15:27:52 2015 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Oct 27 15:27:52 2015 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a4418b34c150299aa88c6540bb4e3680f8bb4dae
+Commit:        a4418b34c150299aa88c6540bb4e3680f8bb4dae
+Parent:        65ec00ce202411f6e6f91955ab9422d44bb86a9b
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Oct 27 10:52:01 2015 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Oct 27 10:52:01 2015 -0500
 
-device: Tidy DASD CDL format detection code.
+vgs, lvs: ignore error if VG is removed
 
+If a VG is removed between the time that 'vgs'
+or 'lvs' (with no args) creates the list of VGs
+and the time that it reads the VG to process it,
+then ignore the removed VG; don't report an error
+that it could not be found, since it wasn't named
+by the command.
 ---
- lib/device/dev-dasd.c |   85 +++++++++++++++++++++++++++++++++++--------------
- 1 files changed, 61 insertions(+), 24 deletions(-)
+ tools/toollib.c |   26 ++++++++++++++++----------
+ 1 files changed, 16 insertions(+), 10 deletions(-)
 
-diff --git a/lib/device/dev-dasd.c b/lib/device/dev-dasd.c
-index 28156ca..220293e 100644
---- a/lib/device/dev-dasd.c
-+++ b/lib/device/dev-dasd.c
-@@ -17,7 +17,28 @@
- #include "dev-type.h"
- #include <sys/ioctl.h>
- 
--typedef struct dasd_information_t {
-+#ifdef __linux__
-+
-+/*
-+ * Interface taken from kernel header arch/s390/include/uapi/asm/dasd.h
-+ */
-+
-+/* 
-+ * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
-+ * Copyright IBM Corp. 1999, 2000
-+ * EMC Symmetrix ioctl Copyright EMC Corporation, 2008
-+ * Author.........: Nigel Hislop <hislop_nigel@emc.com>
-+ */
-+
-+#define DASD_IOCTL_LETTER 'D'
-+#define DASD_API_VERSION 6
-+
-+/* 
-+ * struct dasd_information2_t
-+ * represents any data about the device, which is visible to userspace.
-+ *  including foramt and featueres.
-+ */
-+typedef struct dasd_information2_t {
- 	unsigned int devno;		/* S/390 devno */
- 	unsigned int real_devno;	/* for aliases */
- 	unsigned int schid;		/* S/390 subchannel identifier */
-@@ -34,41 +55,57 @@ typedef struct dasd_information_t {
- 	unsigned int FBA_layout;	/* fixed block size (like AIXVOL) */
- 	unsigned int characteristics_size;
- 	unsigned int confdata_size;
--	unsigned char characteristics[64];/*from read_device_characteristics */
--	unsigned char configuration_data[256];/*from read_configuration_data */
-+	char characteristics[64];	/* from read_device_characteristics */
-+	char configuration_data[256];	/* from read_configuration_data */
- 	unsigned int format;		/* format info like formatted/cdl/ldl/... */
--	unsigned int features;		/* dasd features like 'ro',...            */
--	unsigned int reserved0;		/* reserved for further use ,...          */
--	unsigned int reserved1;		/* reserved for further use ,...          */
--	unsigned int reserved2;		/* reserved for further use ,...          */
--	unsigned int reserved3;		/* reserved for further use ,...          */
--	unsigned int reserved4;		/* reserved for further use ,...          */
--	unsigned int reserved5;		/* reserved for further use ,...          */
--	unsigned int reserved6;		/* reserved for further use ,...          */
--	unsigned int reserved7;		/* reserved for further use ,...          */
--} dasd_information_t;
--
--#define DASD_FORMAT_CDL 2
--#define BIODASDINFO2  _IOR('D', 3, dasd_information_t)
-+	unsigned int features;		/* dasd features like 'ro',... */
-+	unsigned int reserved0;		/* reserved for further use ,... */
-+	unsigned int reserved1;		/* reserved for further use ,... */
-+	unsigned int reserved2;		/* reserved for further use ,... */
-+	unsigned int reserved3;		/* reserved for further use ,... */
-+	unsigned int reserved4;		/* reserved for further use ,... */
-+	unsigned int reserved5;		/* reserved for further use ,... */
-+	unsigned int reserved6;		/* reserved for further use ,... */
-+	unsigned int reserved7;		/* reserved for further use ,... */
-+} dasd_information2_t;
-+
-+#define DASD_FORMAT_CDL  2
-+
-+/* Get information on a dasd device (enhanced) */
-+#define BIODASDINFO2   _IOR(DASD_IOCTL_LETTER,3,dasd_information2_t)
-+
-+/*
-+ * End of included interface.
-+ */
- 
- int dasd_is_cdl_formatted(struct device *dev)
- {
- 	int ret = 0;
--	dasd_information_t dasd_info;
-+	dasd_information2_t dasd_info2;
- 
--	if (!dev_open_readonly(dev)) {
--		stack;
--		return ret;
--	}
-+	if (!dev_open_readonly(dev))
-+		return_0;
- 
--	if (ioctl(dev->fd, BIODASDINFO2, &dasd_info) != 0)
--		goto_out;
-+	if (ioctl(dev->fd, BIODASDINFO2, &dasd_info2)) {
-+		log_sys_error("ioctl BIODASDINFO2", dev_name(dev));
-+		goto out;
-+	}
- 
--	if (dasd_info.format == DASD_FORMAT_CDL)
-+	if (dasd_info2.format == DASD_FORMAT_CDL)
- 		ret = 1;
-+
- out:
- 	if (!dev_close(dev))
- 		stack;
- 
- 	return ret;
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 59ba29f..3804d66 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1909,7 +1909,7 @@ int select_match_pv(struct cmd_context *cmd, struct processing_handle *handle,
+ 	return 1;
  }
+ 
+-static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t flags,
++static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
+ 				  struct dm_list *vgnameids_to_process,
+ 				  struct dm_list *arg_vgnames,
+ 				  struct dm_list *arg_tags,
+@@ -1952,8 +1952,8 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t flags,
+ 			continue;
+ 		}
+ 
+-		vg = vg_read(cmd, vg_name, vg_uuid, flags, lockd_state);
+-		if (_ignore_vg(vg, vg_name, arg_vgnames, flags, &skip, &notfound)) {
++		vg = vg_read(cmd, vg_name, vg_uuid, read_flags, lockd_state);
++		if (_ignore_vg(vg, vg_name, arg_vgnames, read_flags, &skip, &notfound)) {
+ 			stack;
+ 			ret_max = ECMD_FAILED;
+ 			goto endvg;
+@@ -2020,7 +2020,7 @@ static int _copy_str_to_vgnameid_list(struct cmd_context *cmd, struct dm_list *s
+  * Call process_single_vg() for each VG selected by the command line arguments.
+  */
+ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+-		    uint32_t flags, struct processing_handle *handle,
++		    uint32_t read_flags, struct processing_handle *handle,
+ 		    process_single_vg_fn_t process_single_vg)
+ {
+ 	int handle_supplied = handle != NULL;
+@@ -2070,6 +2070,9 @@ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+ 		goto out;
+ 	}
+ 
++	if (dm_list_empty(&arg_vgnames))
++		read_flags |= READ_OK_NOTFOUND;
 +
-+#else
+ 	/*
+ 	 * If we obtained a full list of VGs on the system, we need to work through them all;
+ 	 * otherwise we can merely work through the VG names provided.
+@@ -2086,7 +2089,7 @@ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+ 	    !init_selection_handle(cmd, handle, VGS))
+ 		goto_out;
+ 
+-	ret = _process_vgnameid_list(cmd, flags, &vgnameids_to_process,
++	ret = _process_vgnameid_list(cmd, read_flags, &vgnameids_to_process,
+ 				     &arg_vgnames, &arg_tags, handle, process_single_vg);
+ out:
+ 	if (!handle_supplied)
+@@ -2375,7 +2378,7 @@ static int _get_arg_lvnames(struct cmd_context *cmd,
+ 	return ret_max;
+ }
+ 
+-static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t flags,
++static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
+ 				     struct dm_list *vgnameids_to_process,
+ 				     struct dm_list *arg_vgnames,
+ 				     struct dm_list *arg_lvnames,
+@@ -2442,8 +2445,8 @@ static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t flags,
+ 			continue;
+ 		}
+ 
+-		vg = vg_read(cmd, vg_name, vg_uuid, flags, lockd_state);
+-		if (_ignore_vg(vg, vg_name, arg_vgnames, flags, &skip, &notfound)) {
++		vg = vg_read(cmd, vg_name, vg_uuid, read_flags, lockd_state);
++		if (_ignore_vg(vg, vg_name, arg_vgnames, read_flags, &skip, &notfound)) {
+ 			stack;
+ 			ret_max = ECMD_FAILED;
+ 			goto endvg;
+@@ -2471,7 +2474,7 @@ endvg:
+ /*
+  * Call process_single_lv() for each LV selected by the command line arguments.
+  */
+-int process_each_lv(struct cmd_context *cmd, int argc, char **argv, uint32_t flags,
++int process_each_lv(struct cmd_context *cmd, int argc, char **argv, uint32_t read_flags,
+ 		    struct processing_handle *handle, process_single_lv_fn_t process_single_lv)
+ {
+ 	int handle_supplied = handle != NULL;
+@@ -2538,6 +2541,9 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv, uint32_t fla
+ 		goto out;
+ 	}
+ 
++	if (dm_list_empty(&arg_vgnames))
++		read_flags |= READ_OK_NOTFOUND;
 +
-+int dasd_is_cdl_formatted(struct device *dev)
-+{
-+	return 0;
-+}
-+
-+#endif
+ 	/*
+ 	 * If we obtained a full list of VGs on the system, we need to work through them all;
+ 	 * otherwise we can merely work through the VG names provided.
+@@ -2547,7 +2553,7 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv, uint32_t fla
+ 	else if ((ret = _copy_str_to_vgnameid_list(cmd, &arg_vgnames, &vgnameids_to_process)) != ECMD_PROCESSED)
+ 		goto_out;
+ 
+-	ret = _process_lv_vgnameid_list(cmd, flags, &vgnameids_to_process, &arg_vgnames, &arg_lvnames,
++	ret = _process_lv_vgnameid_list(cmd, read_flags, &vgnameids_to_process, &arg_vgnames, &arg_lvnames,
+ 					&arg_tags, handle, process_single_lv);
+ out:
+ 	if (!handle_supplied)
 
 
