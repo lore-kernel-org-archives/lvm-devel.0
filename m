@@ -1,45 +1,113 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 29 Oct 2015 10:11:11 +0000 (UTC)
-Subject: master - revert: 3d03e504cda6307f692c5879f6850b2e27af7d71: message about VG metadata size vs. PV mda size
-Message-ID: <20151029101111.F063760F1B@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 29 Oct 2015 11:39:39 +0000 (UTC)
+Subject: master - thin: dmeventd plugin check number of failures
+Message-ID: <20151029113939.5835160E62@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b3c81d02c974eda1c33afd88517d899e64aea24e
-Commit:        b3c81d02c974eda1c33afd88517d899e64aea24e
-Parent:        5886ff64ebcac8c1b53c665c598728e481590964
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Oct 29 11:08:28 2015 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Oct 29 11:10:48 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=099466939e4d6bdbe4b105f6b052dee6fc99b9d4
+Commit:        099466939e4d6bdbe4b105f6b052dee6fc99b9d4
+Parent:        b3c81d02c974eda1c33afd88517d899e64aea24e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Oct 29 11:52:11 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Oct 29 12:14:20 2015 +0100
 
-revert: 3d03e504cda6307f692c5879f6850b2e27af7d71: message about VG metadata size vs. PV mda size
+thin: dmeventd plugin check number of failures
 
-The message needs refinement - it's not correct in all situations.
+If plugin's lvm command execution fails too often (>10 times),
+there is no point to torture system more then necessary, just log
+and drop monitoring in this case.
 ---
- lib/format_text/format-text.c |    7 ++-----
- 1 files changed, 2 insertions(+), 5 deletions(-)
+ WHATS_NEW_DM                                  |    1 +
+ daemons/dmeventd/plugins/thin/dmeventd_thin.c |   19 ++++++++++++++++---
+ 2 files changed, 17 insertions(+), 3 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index c1c4787..e0ec8ed 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -655,11 +655,8 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 	if ((new_wrap && old_wrap) ||
- 	    (rlocn && (new_wrap || old_wrap) && (new_end > rlocn->offset)) ||
- 	    (mdac->rlocn.size >= mdah->size)) {
--		log_error("VG %s metadata too large: size of metadata to write "
--			  "is %" PRIu64 " bytes while PV metadata area size "
--			  "on %s is %" PRIu64 " bytes.",
--			   vg->name, mdac->rlocn.size,
--			   dev_name(mdac->area.dev), mdah->size);
-+		log_error("VG %s metadata too large for circular buffer",
-+			  vg->name);
- 		goto out;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 961aec5..63cb2cc 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.110 - 
+ ======================================
++  Disable thin monitoring plugin when it fails too often (>10 times).
+   Fix/restore parsing of empty field '-' when processing dmeventd event.
+   Enhance dm_tree_node_size_changed() to recognize size reduction.
+   Support exit on idle for dmenventd (1 hour).
+diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
+index 888cc0c..7f422a9 100644
+--- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
++++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
+@@ -18,6 +18,7 @@
+ 
+ #include <sys/wait.h>
+ #include <stdarg.h>
++#include <pthread.h>
+ 
+ /* TODO - move this mountinfo code into library to be reusable */
+ #ifdef __linux__
+@@ -36,6 +37,8 @@
+ 
+ #define UMOUNT_COMMAND "/bin/umount"
+ 
++#define MAX_FAILS	(10)
++
+ #define THIN_DEBUG 0
+ 
+ struct dso_state {
+@@ -44,6 +47,7 @@ struct dso_state {
+ 	int data_percent_check;
+ 	uint64_t known_metadata_size;
+ 	uint64_t known_data_size;
++	unsigned fails;
+ 	char cmd_str[1024];
+ };
+ 
+@@ -157,7 +161,7 @@ static int _run(const char *cmd, ...)
+ 		argv = alloca(sizeof(const char *) * (argc + 1));
+ 
+ 		argv[0] = cmd;
+-                va_start(ap, cmd);
++		va_start(ap, cmd);
+ 		while ((argv[++i] = va_arg(ap, const char *)));
+ 		va_end(ap);
+ 
+@@ -245,7 +249,9 @@ static void _use_policy(struct dm_task *dmt, struct dso_state *state)
+ 		log_error("Failed to extend thin pool %s.",
+ 			  dm_task_get_name(dmt));
+ 		_umount(dmt);
+-	}
++		state->fails++;
++	} else
++		state->fails = 0;
+ }
+ 
+ void process_event(struct dm_task *dmt,
+@@ -270,7 +276,7 @@ void process_event(struct dm_task *dmt,
+ 	if (event & DM_EVENT_DEVICE_ERROR) {
+ 		/* Error -> no need to check and do instant resize */
+ 		_use_policy(dmt, state);
+-		return;
++		goto out;
  	}
  
+ 	dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
+@@ -338,6 +344,13 @@ void process_event(struct dm_task *dmt,
+ out:
+ 	if (tps)
+ 		dm_pool_free(state->mem, tps);
++
++	if (state->fails >= MAX_FAILS) {
++		log_warn("WARNING: Dropping monitoring of %s. "
++			 "lvm2 command fails too often (%u times in raw).",
++			 device, state->fails);
++		pthread_kill(pthread_self(), SIGALRM);
++	}
+ }
+ 
+ int register_device(const char *device,
 
 
