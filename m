@@ -1,94 +1,63 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 29 Oct 2015 14:16:07 +0000 (UTC)
-Subject: master - tests: update test for resize
-Message-ID: <20151029141607.3D54B6022D@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 29 Oct 2015 15:00:38 +0000 (UTC)
+Subject: master - metadata: format_text: check metadata area size is at least MDA_SIZE_MIN
+Message-ID: <20151029150038.2805F60294@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=28e54032c092ed4a5592575ac716fe698ce75d22
-Commit:        28e54032c092ed4a5592575ac716fe698ce75d22
-Parent:        bca55c9b205ff2b0613ad44d85c12c6d6ae9691b
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 29 15:11:16 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Oct 29 15:11:16 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ccb8da404d00288b7d49c7a28006ec5d4687bb55
+Commit:        ccb8da404d00288b7d49c7a28006ec5d4687bb55
+Parent:        28e54032c092ed4a5592575ac716fe698ce75d22
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Oct 29 15:59:29 2015 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Oct 29 16:00:32 2015 +0100
 
-tests: update test for resize
+metadata: format_text: check metadata area size is at least MDA_SIZE_MIN
 
-Drop already tested 'threshold & create' which is in
-lvextend-thin-full.sh
-
-Count with now match faster 'dmeventd' wakeup on watermark
-as it's now nearly instant after crossing threshold value.
 ---
- test/shell/lvextend-thin-metadata-dmeventd.sh |   28 +++++-------------------
- 1 files changed, 6 insertions(+), 22 deletions(-)
+ WHATS_NEW                     |    1 +
+ lib/format_text/format-text.c |    7 ++++++-
+ 2 files changed, 7 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-metadata-dmeventd.sh b/test/shell/lvextend-thin-metadata-dmeventd.sh
-index 030991f..a2d6a39 100644
---- a/test/shell/lvextend-thin-metadata-dmeventd.sh
-+++ b/test/shell/lvextend-thin-metadata-dmeventd.sh
-@@ -23,8 +23,8 @@ meta_percent_() {
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f453604..03c70d6 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.133 - 
+ ======================================
++  Check metadata area size is at least minimum size of 8 * memory page size.
+   Thin pool targets uses low_water_mark from profile.
+   Dropping 'yet' from error of unsupported thick snapshot of snapshots.
+   Do not support unpartitioned DASD devices with CDL formatted with pvcreate.
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index e0ec8ed..6c653ca 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -2146,7 +2146,6 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+ 					goto bad;
+ 			}
+ 			/* Otherwise, give up and take any usable space. */
+-			/* FIXME: We should probably check for some minimum MDA size here. */
+ 			else
+ 				mda_size = limit - mda_start;
  
- wait_for_change_() {
- 	# dmeventd only checks every 10 seconds :(
--	for i in $(seq 1 15) ; do
--		test "$(meta_percent_)" != "$1" && return
-+	for i in $(seq 1 12) ; do
-+		test "$(meta_percent_)" -lt "$1" && return
- 		sleep 1
- 	done
+@@ -2242,6 +2241,12 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+ 				 FMTu64 ").", pv_dev_name(pv),
+ 				  mda_size, limit_name, limit);
  
-@@ -101,43 +101,27 @@ lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv1
- 
- vgchange -ay $vg
- 
--# Check dmeventd resizes metadata
-+# Check dmeventd resizes metadata via timeout (nothing is written to pool)
- pre=$(meta_percent_)
- wait_for_change_ $pre
- 
- lvchange -an $vg
- 
--lvs -a $vg
- #
- fake_metadata_ 350 2 >data
- lvchange -ay $vg/$lv1
- "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
- 
--lvs -a $vg
--dmsetup table
- lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv1
- lvchange -ay $vg/pool  $vg/$lv1
- lvs -a $vg
- 
- lvcreate -s -Ky -n $lv2 $vg/thin
--echo 2 >"$DM_DEV_DIR/mapper/$vg-$lv2"
--
--#lvchange -an $vg
--#lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv1
--#lvchange -ay $vg/$lv1
--#thin_dump "$DM_DEV_DIR/mapper/$vg-$lv1"
--#exit
-+pre=$(meta_percent_)
- 
--# no more space for new thin LV
--#
--# TODO:
--# though maybe 'lvcreate' itself should initiate  resize - if dmeventd is not 'fast' enough
--# deploying usage of threshold kernel module paramater would likely help as well
--# for now it stops here:
--not lvcreate -s -Ky -n $lv3 $vg/thin
--lvs -a $vg
-+# go over thin metadata threshold
-+echo 2 >"$DM_DEV_DIR/mapper/$vg-$lv2"
- 
--pre=$(meta_percent_)
- wait_for_change_ $pre
- 
- lvs -a $vg
++	if (mda_size < MDA_SIZE_MIN) {
++		log_error("Metadata area size too small. "
++			  "It must be@least %u bytes.", MDA_SIZE_MIN);
++		goto bad;
++	}
++
+ 	if (mda_size) {
+ 		/* Wipe metadata area with zeroes. */
+ 		if (!dev_set((struct device *) pv->dev, mda_start,
 
 
