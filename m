@@ -1,57 +1,39 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 29 Oct 2015 15:47:55 +0000 (UTC)
-Subject: master - metadata: format_text: check VG metadata do not overlap themselves
-Message-ID: <20151029154755.1E796602A2@fedorahosted.org>
+Date: Thu, 29 Oct 2015 15:50:22 +0000 (UTC)
+Subject: master - WHATS_NEW: recent commits
+Message-ID: <20151029155022.34C626100F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00348c0a630a7e5578edf48052ec695b15de752f
-Commit:        00348c0a630a7e5578edf48052ec695b15de752f
-Parent:        ccb8da404d00288b7d49c7a28006ec5d4687bb55
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=406d8ff3323dde6860d88b603701aa4dace47af0
+Commit:        406d8ff3323dde6860d88b603701aa4dace47af0
+Parent:        00348c0a630a7e5578edf48052ec695b15de752f
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Oct 29 16:33:06 2015 +0100
+AuthorDate:    Thu Oct 29 16:50:09 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Oct 29 16:46:41 2015 +0100
+CommitterDate: Thu Oct 29 16:50:09 2015 +0100
 
-metadata: format_text: check VG metadata do not overlap themselves
+WHATS_NEW: recent commits
 
-We're already checking whether old and new meta do not overlap in
-ring buffer (as we need to keep both old and new meta during vg_write
-up until vg_commit).
-
-We also need to check whether the new metadata do not overlap
-themselves in case we don't have old metadata yet (...because
-we're in vgcreate). This could happen if we're creating a VG so
-that the very first metadata written are long enough that it wraps
-themselves in metadata ring buffer.
-
-Although we limited the minimum metadata area size better with the
-previous commit ccb8da404d00288b7d49c7a28006ec5d4687bb55 which
-makes the initial VG metadata overlap in ring buffer to be less
-probable, the risk of hitting this overlap condition is still there
-if we still manage to generate big enough metadata somehow.
-
-For example, users can provide many and/or long VG tags during vgcreate
-so that the VG metadata is long enough to start to wrap in the ring
-buffer again...
 ---
- lib/format_text/format-text.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ WHATS_NEW |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 6c653ca..84d0947 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -654,6 +654,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 
- 	if ((new_wrap && old_wrap) ||
- 	    (rlocn && (new_wrap || old_wrap) && (new_end > rlocn->offset)) ||
-+	    (!rlocn && new_wrap && (new_end > mdac->rlocn.offset)) ||
- 	    (mdac->rlocn.size >= mdah->size)) {
- 		log_error("VG %s metadata too large for circular buffer",
- 			  vg->name);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 03c70d6..00e807e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,7 @@
+ Version 2.02.133 - 
+ ======================================
+-  Check metadata area size is at least minimum size of 8 * memory page size.
++  Check newly created VG's metadata do not overlap in metadata ring buffer.
++  Check metadata area size is at least the minimum size defined for the format.
+   Thin pool targets uses low_water_mark from profile.
+   Dropping 'yet' from error of unsupported thick snapshot of snapshots.
+   Do not support unpartitioned DASD devices with CDL formatted with pvcreate.
 
 
