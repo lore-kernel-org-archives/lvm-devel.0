@@ -1,119 +1,143 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 27 Oct 2015 10:43:17 +0000 (UTC)
-Subject: master - dmeventd: event string parser handles empty field
-Message-ID: <20151027104317.41DB06103C@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 30 Oct 2015 14:52:21 +0000 (UTC)
+Subject: master - str_list: add str_list_to_str and str_to_str_list functions
+Message-ID: <20151030145221.D0E2F609F7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5d76bdcdbdf6bef81872e8eef2cce156cfce228f
-Commit:        5d76bdcdbdf6bef81872e8eef2cce156cfce228f
-Parent:        3b5939bbbb974913db3ff7ac363cc7f1154b894e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 27 11:12:59 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 27 11:42:40 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0d5b1294f0350e10698232eb764c28b3ca54df1a
+Commit:        0d5b1294f0350e10698232eb764c28b3ca54df1a
+Parent:        097d14e64e845bdb1c0b8106e33f38f775e54fe5
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Oct 20 16:01:10 2015 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Oct 30 15:47:56 2015 +0100
 
-dmeventd: event string parser handles empty field
+str_list: add str_list_to_str and str_to_str_list functions
 
-Improve event string parser to avoid unneeded alloc+free.
-
-Daemon talk function uses '-' to mark NULL/missing field.
-So restore the NULL pointer back on parser.
-
-This should have made old tools like 'dmevent_tool' work again.
-As now 'uuid' or 'dso' could become NULL and then be
-properly used in _want_registered_device() function.
-
-Since lvm2 always fill these parameters, this change should
-have no effect on lvm2.
+The str_list_to_str and str_to_str_list are helper functions to
+convert string list to a single string and vice versa.
 ---
- WHATS_NEW_DM                |    1 +
- daemons/dmeventd/dmeventd.c |   50 +++++++++++++++++++++++++++---------------
- 2 files changed, 33 insertions(+), 18 deletions(-)
+ lib/datastruct/str_list.c |   87 +++++++++++++++++++++++++++++++++++++++++++++
+ lib/datastruct/str_list.h |    2 +
+ 2 files changed, 89 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index e09ab63..961aec5 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.110 - 
- ======================================
-+  Fix/restore parsing of empty field '-' when processing dmeventd event.
-   Enhance dm_tree_node_size_changed() to recognize size reduction.
-   Support exit on idle for dmenventd (1 hour).
-   Add support to allow unmonitor device from plugin itself.
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index d6accbf..42c724b 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -473,34 +473,48 @@ static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *
+diff --git a/lib/datastruct/str_list.c b/lib/datastruct/str_list.c
+index 25ffddd..a600f60 100644
+--- a/lib/datastruct/str_list.c
++++ b/lib/datastruct/str_list.c
+@@ -16,6 +16,8 @@
+ #include "lib.h"
+ #include "str_list.h"
  
- /*
-  * Fetch a string off src and duplicate it into *ptr.
-- * Pay attention to zero-length strings.
-+ * Pay attention to zero-length and 'empty' strings ('-').
-  */
- /* FIXME? move to libdevmapper to share with the client lib (need to
-    make delimiter a parameter then) */
- static int _fetch_string(char **ptr, char **src, const int delimiter)
++#include <ctype.h>
++
+ struct dm_list *str_list_create(struct dm_pool *mem)
  {
--	int ret = 0;
-+	int ret = 1;
- 	char *p;
- 	size_t len;
-+	*ptr = NULL; /* Empty field returns NULL pointer */
+ 	struct dm_list *sl;
+@@ -160,3 +162,88 @@ int str_list_lists_equal(const struct dm_list *sll, const struct dm_list *sll2)
  
--	if ((p = strchr(*src, delimiter)))
--		*p = 0;
--
--	if ((*ptr = dm_strdup(*src))) {
--		if ((len = strlen(*ptr)))
--			*src += len;
--		else {
--			dm_free(*ptr);
--			*ptr = NULL;
-+	if ((*src)[0] == '-') {
-+		/* Could be empty field '-', handle without allocation */
-+		if ((*src)[1] == '\0') {
-+			(*src)++;
-+			goto out;
-+		} else if ((*src)[1] == delimiter) {
-+			(*src) += 2;
-+			goto out;
- 		}
--
--		(*src)++;
--		ret = 1;
- 	}
- 
--	if (p)
--		*p = delimiter;
--
-+	if ((p = strchr(*src, delimiter))) {
-+		if (*src < p) {
-+			*p = 0; /* Temporary exit with \0 */
-+			if (!(*ptr = dm_strdup(*src))) {
-+				log_error("Failed to fetch item %s.", *src);
-+				ret = 0; /* Allocation fail */
-+			}
-+			*p = delimiter;
-+			*src = p;
-+		}
-+		(*src)++; /* Skip delmiter, next field */
-+	} else if ((len = strlen(*src))) {
-+		/* No delimiter, item ends with '\0' */
-+		if (!(*ptr = dm_strdup(*src))) {
-+			log_error("Failed to fetch last item %s.", *src);
-+			ret = 0; /* Fail */
-+		}
-+		*src += len + 1;
-+	}
-+out:
- 	return ret;
+ 	return 1;
  }
++
++char *str_list_to_str(struct dm_pool *mem, const struct dm_list *list,
++		      const char *delim)
++{
++	size_t delim_len = strlen(delim);
++	unsigned list_size = dm_list_size(list);
++	struct dm_str_list *sl;
++	char *str, *p;
++	size_t len = 0;
++	unsigned i = 0;
++
++	dm_list_iterate_items(sl, list)
++		len += strlen(sl->str);
++	if (list_size > 1)
++		len += ((list_size - 1) * delim_len);
++
++	str = mem ? dm_pool_alloc(mem, len+1) : dm_malloc(len+1);
++	if (!str) {
++		log_error("str_list_to_str: string allocation failed.");
++		return NULL;
++	}
++	str[len] = '\0';
++	p = str;
++
++	dm_list_iterate_items(sl, list) {
++		len = strlen(sl->str);
++		memcpy(p, sl->str, len);
++		p += len;
++
++		if (++i != list_size) {
++			memcpy(p, delim, delim_len);
++			p += delim_len;
++		}
++	}
++
++	return str;
++}
++
++struct dm_list *str_to_str_list(struct dm_pool *mem, const char *str,
++				const char *delim, int ignore_multiple_delim)
++{
++	size_t delim_len = strlen(delim);
++	struct dm_list *list;
++	const char *p1, *p2, *next;
++	char *str_item;
++	size_t len;
++
++	if (!(list = str_list_create(mem))) {
++		log_error("str_to_str_list: string list allocation failed.");
++		return NULL;
++	}
++
++	p1 = p2 = str;
++	while (*p1) {
++		if (!(p2 = strstr(p1, delim)))
++			next = p2 = str + strlen(str);
++		else
++			next = p2 + delim_len;
++
++		len = p2 - p1;
++		str_item = mem ? dm_pool_alloc(mem, len+1) : dm_malloc(len+1);
++		if (!str_item) {
++			log_error("str_to_str_list: string list item allocation failed.");
++			goto bad;
++		}
++		memcpy(str_item, p1, len);
++		str_item[len] = '\0';
++
++		if (!str_list_add_no_dup_check(mem, list, str_item))
++			goto_bad;
++
++		if (ignore_multiple_delim) {
++			while (!strncmp(next, delim, delim_len))
++				next += delim_len;
++		}
++
++		p1 = next;
++	}
++
++	return list;
++bad:
++	if (mem)
++		dm_pool_free(mem, list);
++	return NULL;
++}
+diff --git a/lib/datastruct/str_list.h b/lib/datastruct/str_list.h
+index 3121a28..268a3cf 100644
+--- a/lib/datastruct/str_list.h
++++ b/lib/datastruct/str_list.h
+@@ -30,5 +30,7 @@ int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, c
+ int str_list_lists_equal(const struct dm_list *sll, const struct dm_list *sll2);
+ int str_list_dup(struct dm_pool *mem, struct dm_list *sllnew,
+ 		 const struct dm_list *sllold);
++char *str_list_to_str(struct dm_pool *mem, const struct dm_list *list, const char *delim);
++struct dm_list *str_to_str_list(struct dm_pool *mem, const char *str, const char *delim, int ignore_multiple_delim);
  
+ #endif
 
 
