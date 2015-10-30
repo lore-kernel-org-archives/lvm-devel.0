@@ -1,77 +1,65 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 30 Oct 2015 14:52:30 +0000 (UTC)
-Subject: master - report: support "-o -field_name1, field_name2, ...."
-Message-ID: <20151030145230.419ED609F7@fedorahosted.org>
+Date: Fri, 30 Oct 2015 14:52:32 +0000 (UTC)
+Subject: master - report: add report_get_field_prefix function
+Message-ID: <20151030145232.559BE609F7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e18b101a0845f826de29cfd0c554c5e2be2baa5
-Commit:        3e18b101a0845f826de29cfd0c554c5e2be2baa5
-Parent:        df190dcfa58ee3c7cc9959da6af3ae22e9618992
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bb4d3fa7a70881b72ddf61cba02760b89cf07b53
+Commit:        bb4d3fa7a70881b72ddf61cba02760b89cf07b53
+Parent:        3e18b101a0845f826de29cfd0c554c5e2be2baa5
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Oct 21 15:36:26 2015 +0200
+AuthorDate:    Thu Oct 22 13:27:59 2015 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Fri Oct 30 15:47:56 2015 +0100
 
-report: support "-o -field_name1,field_name2,...."
+report: add report_get_field_prefix function
 
 ---
- tools/reporter.c |   24 +++++++++++++++++++++++-
- 1 files changed, 23 insertions(+), 1 deletions(-)
+ lib/report/report.c |   15 +++++++++++++++
+ lib/report/report.h |    1 +
+ 2 files changed, 16 insertions(+), 0 deletions(-)
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index f053b08..591f4ed 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -604,11 +604,26 @@ static void _check_pv_list(struct cmd_context *cmd, int argc, char **argv,
- 	}
+diff --git a/lib/report/report.c b/lib/report/report.c
+index dea66ee..911c96e 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -3396,6 +3396,21 @@ void *report_init_for_selection(struct cmd_context *cmd,
+ 					     cmd);
  }
  
-+static void _del_option_from_list(struct dm_list *sll, const char *str)
++const char *report_get_field_prefix(report_type_t report_type_id)
 +{
-+	struct dm_list *slh;
-+	struct dm_str_list *sl;
++	const struct dm_report_object_type *report_types, *report_type;
 +
-+	dm_list_uniterate(slh, sll, sll) {
-+		sl = dm_list_item(slh, struct dm_str_list);
-+		if (!strcmp(str, sl->str)) {
-+			dm_list_del(slh);
-+			return;
-+		}
++	report_types = report_type_id & DEVTYPES ? _devtypes_report_types
++						 : _report_types;
++
++	for (report_type = report_types; report_type->id; report_type++) {
++		if (report_type_id & report_type->id)
++			return report_type->prefix;
 +	}
++
++	return "";
 +}
 +
- static int _get_report_options(struct cmd_context *cmd, const char **options)
- {
- 	struct arg_value_group_list *current_group;
- 	struct dm_list *final_opts_list;
- 	struct dm_list *opts_list = NULL;
-+	struct dm_str_list *sl;
- 	const char *opts;
- 	int r = ECMD_PROCESSED;
- 
-@@ -630,11 +645,18 @@ static int _get_report_options(struct cmd_context *cmd, const char **options)
- 
- 		switch (*opts) {
- 			case '+':
-+				/* fall through */
-+			case '-':
- 				if (!(opts_list = str_to_str_list(NULL, opts + 1, ",", 1))) {
- 					r = ECMD_FAILED;
- 					goto_out;
- 				}
--				dm_list_splice(final_opts_list, opts_list);
-+				if (*opts == '+') {
-+					dm_list_splice(final_opts_list, opts_list);
-+				} else if (*opts == '-') {
-+					dm_list_iterate_items(sl, opts_list)
-+						_del_option_from_list(final_opts_list, sl->str);
-+				}
- 				str_list_destroy(opts_list, 1);
- 				opts_list = NULL;
- 				break;
+ /*
+  * Create a row of data for an object
+  */
+diff --git a/lib/report/report.h b/lib/report/report.h
+index 84c5f91..6c8b026 100644
+--- a/lib/report/report.h
++++ b/lib/report/report.h
+@@ -71,6 +71,7 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
+ 		  int quoted, int columns_as_rows, const char *selection);
+ void *report_init_for_selection(struct cmd_context *cmd, report_type_t *report_type,
+ 				const char *selection);
++const char *report_get_field_prefix(report_type_t report_type);
+ int report_for_selection(struct cmd_context *cmd,
+ 			 struct selection_handle *sh,
+ 			 struct physical_volume *pv,
 
 
