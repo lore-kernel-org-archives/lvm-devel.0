@@ -1,93 +1,65 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon,  9 Nov 2015 18:18:53 +0000 (UTC)
-Subject: master - lvmetad: change recent cleanups
-Message-ID: <20151109181853.CF1C960BDB@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon,  9 Nov 2015 01:53:40 +0000 (UTC)
+Subject: master - post-release
+Message-ID: <20151109015340.A20A66160D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cd937efa77dcd8713aa7679728001c11e20fab70
-Commit:        cd937efa77dcd8713aa7679728001c11e20fab70
-Parent:        d2d5191b788cb75c541d00ffd75d8add3b77a9ad
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Nov 9 12:17:06 2015 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Nov 9 12:18:43 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=af6adec7cc1e4229a88cc9d7951a51d0d22c5032
+Commit:        af6adec7cc1e4229a88cc9d7951a51d0d22c5032
+Parent:        a3f77ed4ba4b6d35638f81cf9f58db2a730246e7
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Nov 9 01:48:57 2015 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Nov 9 01:48:57 2015 +0000
 
-lvmetad: change recent cleanups
+post-release
 
-with better alternatives.
 ---
- daemons/lvmetad/lvmetad-core.c |   20 ++++++++++++++------
- 1 files changed, 14 insertions(+), 6 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    3 +++
+ WHATS_NEW_DM |    3 +++
+ 4 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index c17caa7..781cfc6 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -932,7 +932,7 @@ static int remove_metadata(lvmetad_state *s, const char *vgid, int update_pvids)
- 
- 	/* update_pvid_to_vgid will clear/free the pvid_to_vgid hash */
- 	if (update_pvids && meta_lookup)
--		(void) _update_pvid_to_vgid(s, meta_lookup, "#orphan", 0);
-+		_update_pvid_to_vgid(s, meta_lookup, "#orphan", 0);
- 
- 	/* free the unmapped data */
- 
-@@ -1347,7 +1347,7 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
- 	int retval = 0;
- 
- 	DEBUGLOG(s, "update_metadata begin arg_vgid %s arg_name %s pvid %s",
--		 arg_vgid, arg_name, pvid ?: "none");
-+		 arg_vgid ?: "none", arg_name ?: "none", pvid ?: "none");
- 
- 	/*
- 	 * Begin by figuring out what has changed:
-@@ -1378,7 +1378,7 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
- 	 * A lookup of the name arg was successful in finding arg_vgid_lookup,
- 	 * but that resulting vgid doesn't match the arg_vgid.
- 	 */
--	if (arg_vgid_lookup && strcmp(arg_vgid_lookup, arg_vgid)) {
-+	if (arg_vgid_lookup && arg_vgid && strcmp(arg_vgid_lookup, arg_vgid)) {
- 		if (arg_name_lookup) {
- 			/*
- 			 * This shouldn't happen.
-@@ -1419,7 +1419,7 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
- 	 * A lookup of the vgid arg was successful in finding arg_name_lookup,
- 	 * but that resulting name doesn't match the arg_name.
- 	 */
--	if (arg_name_lookup && strcmp(arg_name_lookup, arg_name)) {
-+	if (arg_name_lookup && arg_name && strcmp(arg_name_lookup, arg_name)) {
- 		if (arg_vgid_lookup) {
- 			/*
- 			 * This shouldn't happen.
-@@ -1459,7 +1459,15 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
- 	 * An existing VG has unchanged name and vgid.
- 	 */
- 	if (!new_vgid && !new_name) {
--		if (arg_name_lookup && strcmp(arg_name_lookup, arg_name)) {
-+		if (!arg_vgid_lookup || !arg_name_lookup) {
-+			/* This shouldn't happen. */
-+			ERROR(s, "update_metadata arg_vgid %s arg_name %s missing lookups vgid %s name %s",
-+			      arg_vgid ?: "none", arg_name ?: "none", arg_vgid_lookup ?: "none", arg_name_lookup ?: "none");
-+			needs_repair = 1;
-+			goto update;
-+		}
+diff --git a/VERSION b/VERSION
+index e7542bf..81a0997 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.134(2)-git (2015-11-09)
++2.02.135(2)-git (2015-11-09)
+diff --git a/VERSION_DM b/VERSION_DM
+index 661545a..934b030 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.110-git (2015-11-09)
++1.02.111-git (2015-11-09)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f414e92..5e89eca 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,6 @@
++Version 2.02.135 - 
++====================================
 +
-+		if (strcmp(arg_name_lookup, arg_name)) {
- 			/* This shouldn't happen. */
- 			ERROR(s, "update_metadata arg_vgid %s arg_name %s mismatch arg_name_lookup %s",
- 			      arg_vgid, arg_name, arg_name_lookup);
-@@ -1467,7 +1475,7 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
- 			goto update;
- 		}
- 
--		if (arg_vgid_lookup && strcmp(arg_vgid_lookup, arg_vgid)) {
-+		if (strcmp(arg_vgid_lookup, arg_vgid)) {
- 			/*
- 			 * This shouldn't usually happen, but could when
- 			 * disks are moved (or filters are changed?)
+ Version 2.02.134 - 9th November 2015
+ ====================================
+   Refactor some lvmetad code and adjust some duplicate PV messages.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 5004f84..113a4bb 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,3 +1,6 @@
++Version 1.02.111 - 
++====================================
++
+ Version 1.02.110 - 30th October 2015
+ ====================================
+   Disable thin monitoring plugin when it fails too often (>10 times).
 
 
