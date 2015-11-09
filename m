@@ -1,53 +1,75 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 09:28:33 +0000 (UTC)
-Subject: master - thin: fix error path mem leak
-Message-ID: <20151109092833.1887A60CD3@fedorahosted.org>
+Date: Mon,  9 Nov 2015 09:28:35 +0000 (UTC)
+Subject: master - dev-type: fix TOCTOU order
+Message-ID: <20151109092835.2B78D60DE7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=80c3fb786cc236f200026624ded4c668b37ef22d
-Commit:        80c3fb786cc236f200026624ded4c668b37ef22d
-Parent:        3cadc1c87e4f1f6cede3895a7f7f28f37eaf9648
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa1d73084769ea4a6d07434e12dcae519938e4c5
+Commit:        fa1d73084769ea4a6d07434e12dcae519938e4c5
+Parent:        80c3fb786cc236f200026624ded4c668b37ef22d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Nov 8 17:04:03 2015 +0100
+AuthorDate:    Sun Nov 8 17:15:24 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 9 10:19:19 2015 +0100
+CommitterDate: Mon Nov 9 10:19:20 2015 +0100
 
-thin: fix error path mem leak
+dev-type: fix TOCTOU order
 
-Coverity: when parsing of thin-pool status would have failed,
-it could have leaked memory pool and dmt struct.
+Doing 'stat' checking first and later opening is racy.
+And since we do not really care about any 'status' info
+here and we read 'sysfs' here - just drop whole 'stat()'
+call and directly handle error from failing 'fopen()'.
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/device/dev-type.c |   13 +++----------
+ 2 files changed, 4 insertions(+), 10 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index d0a1476..6368b32 100644
+index 6368b32..19f24f7 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.135 - 
  ====================================
-+  Fix memory leak on error path of failing thin-pool percentage check.
++  Drop unneeded stat() call when checking for sysfs file.
+   Fix memory leak on error path of failing thin-pool percentage check.
    Add missing test for failing node allocation in lvmetad.
    Correct configure messages when enabling/disabling lvmlockd.
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index a66ef95..e1243bd 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -462,7 +462,6 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
+ 		*result = dev->dev;
+ 		ret = 1;
+ 		goto out; /* dev is not a partition! */
+-
+ 	}
  
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 964eef5..6ec9d22 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -567,7 +567,7 @@ static int _ignore_unusable_thins(struct device *dev)
+ 	/*
+@@ -486,17 +485,11 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
+ 	}
  
- 	dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
- 	if (!dm_get_status_thin_pool(mem, params, &status))
--		return_0;
-+		goto_out;
+ 	/* finally, parse 'dev' attribute and create corresponding dev_t */
+-	if (stat(path, &info) == -1) {
++	if (!(fp = fopen(path, "r"))) {
+ 		if (errno == ENOENT)
+-			log_error("sysfs file %s does not exist", path);
++			log_error("sysfs file %s does not exist.", path);
+ 		else
+-			log_sys_error("stat", path);
+-		goto out;
+-	}
+-
+-	fp = fopen(path, "r");
+-	if (!fp) {
+-		log_sys_error("fopen", path);
++			log_sys_error("fopen", path);
+ 		goto out;
+ 	}
  
- 	if (status->read_only || status->out_of_data_space) {
- 		log_warn("WARNING: %s: Thin's thin-pool needs inspection.",
 
 
