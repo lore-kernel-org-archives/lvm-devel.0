@@ -1,51 +1,39 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri,  6 Nov 2015 21:59:15 +0000 (UTC)
-Subject: master - test: disable duplicate VG name test for lvmetad
-Message-ID: <20151106215915.A118760356@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  9 Nov 2015 11:29:07 +0000 (UTC)
+Subject: master - cleanup: update comment
+Message-ID: <20151109112907.6F9196092B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b9341e36f1390c5aa4e79b2faee28a2aeabc64c5
-Commit:        b9341e36f1390c5aa4e79b2faee28a2aeabc64c5
-Parent:        8096f2224c0502a0cb56aaebd59d836daa677bc2
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Nov 6 15:58:22 2015 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Nov 6 15:58:22 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e4c9b390ca9cb1cb847c714f9b08558e9a405ea5
+Commit:        e4c9b390ca9cb1cb847c714f9b08558e9a405ea5
+Parent:        84a954686903b705eb0733a1bc02a7ac66728779
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Nov 9 10:41:17 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Nov 9 12:21:17 2015 +0100
 
-test: disable duplicate VG name test for lvmetad
+cleanup: update comment
 
-Until we decide how duplicate VG names should be
-handled by lvmetad, and implement that.
 ---
- test/shell/vgrename-usage.sh |   12 ++++++++++++
- 1 files changed, 12 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/vgrename-usage.sh b/test/shell/vgrename-usage.sh
-index 92070e8..8893c0f 100644
---- a/test/shell/vgrename-usage.sh
-+++ b/test/shell/vgrename-usage.sh
-@@ -41,6 +41,18 @@ vgcreate $vg2 "$dev2"
- not vgrename $vg1 $vg2
- vgremove $vg1 $vg2
- 
-+# FIXME: decide how lvmetad should handle
-+# duplicate VG names.  lvmetad now ignores
-+# the VG on device B if it already knows
-+# about the same VG name on device A.
-+# This lets you vgrename the VG on device A
-+# which allows the VG on device B to reappear
-+# once it's rescanned.
-+# It's not yet known how we want lvmetad to
-+# handle duplicate VG names.
-+
-+test -e LOCAL_LVMETAD && exit 0
-+
- # vgrename duplicate name
- vgcreate $vg1 "$dev1"
- aux disable_dev "$dev1"
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 4e4a025..68a8ac0 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4058,7 +4058,7 @@ out:
+ /*
+  * Minimal LV renaming function.
+  * Metadata transaction should be made by caller.
+- * Assumes new_name is allocated from cmd->mem pool.
++ * Assumes new_name is allocated from lv->vgmem pool.
+  */
+ static int _rename_single_lv(struct logical_volume *lv, char *new_name)
+ {
 
 
