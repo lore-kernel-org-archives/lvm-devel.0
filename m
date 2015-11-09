@@ -1,49 +1,86 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 09:28:39 +0000 (UTC)
-Subject: master - report: add extra pointer check
-Message-ID: <20151109092839.4AF4460FA0@fedorahosted.org>
+Date: Mon,  9 Nov 2015 09:28:41 +0000 (UTC)
+Subject: master - devmanager: validate target params
+Message-ID: <20151109092841.59E8460E54@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4f8f8fcb52d1d1f2a46468aa6bb4a8da11804c5b
-Commit:        4f8f8fcb52d1d1f2a46468aa6bb4a8da11804c5b
-Parent:        856e11e11c3b3ba4da3cbbd21982d34daa51aaa0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=164d7e72bfd6fa0564e195d0c0fdf64893566ad6
+Commit:        164d7e72bfd6fa0564e195d0c0fdf64893566ad6
+Parent:        4f8f8fcb52d1d1f2a46468aa6bb4a8da11804c5b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Nov 8 17:19:21 2015 +0100
+AuthorDate:    Mon Nov 9 09:27:18 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 9 10:19:20 2015 +0100
 
-report: add extra pointer check
+devmanager: validate target params
 
-Coverity was seeing possible trouble with NULL pointer dereference.
-So ensure it may never happen.
+Coverity: ensure we do not read through NULL pointers for
+target_type and params.
 ---
- lib/report/report.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/activate/dev_manager.c |   12 ++++++------
+ 2 files changed, 7 insertions(+), 6 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 911c96e..91522b1 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -960,13 +960,13 @@ static int _translate_time_items(struct dm_report *rh, struct time_info *info,
- 					t += (multiplier * SECS_PER_HOUR);
- 					break;
- 				case TIME_UNIT_AM:
--					if (ti_p->prop->id == TIME_NUM_MULTIPLIER)
-+					if (ti_p && ti_p->prop->id == TIME_NUM_MULTIPLIER)
- 						tm.tm_hour = multiplier;
- 					break;
- 				case TIME_UNIT_PM:
--					if (_is_time_unit(ti_p->prop->id))
-+					if (ti_p && _is_time_unit(ti_p->prop->id))
- 						t -= 12 * SECS_PER_HOUR;
--					else if (ti_p->prop->id == TIME_NUM_MULTIPLIER)
-+					else if (ti_p && ti_p->prop->id == TIME_NUM_MULTIPLIER)
- 						tm.tm_hour = multiplier + 12;
- 					break;
- 				case TIME_UNIT_DAY:
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 7930631..00b7ee1 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.135 - 
+ ====================================
++  Add missing pointer validation after dm_get_next_target().
+   Do not deref NULL pointer in debug message for _match_pv_tags().
+   Drop unneeded stat() call when checking for sysfs file.
+   Fix memory leak on error path of failing thin-pool percentage check.
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 6ec9d22..0b24f86 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -498,14 +498,14 @@ static int _ignore_suspended_snapshot_component(struct device *dev)
+ 
+ 	do {
+ 		next = dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
+-		if (!strcmp(target_type, "snapshot")) {
+-			if (sscanf(params, "%d:%d %d:%d", &major1, &minor1, &major2, &minor2) != 4) {
++		if (!target_type || !strcmp(target_type, "snapshot")) {
++			if (!params || sscanf(params, "%d:%d %d:%d", &major1, &minor1, &major2, &minor2) != 4) {
+ 				log_error("Incorrect snapshot table found");
+ 				goto_out;
+ 			}
+ 			r = r || _device_is_suspended(major1, minor1) || _device_is_suspended(major2, minor2);
+ 		} else if (!strcmp(target_type, "snapshot-origin")) {
+-			if (sscanf(params, "%d:%d", &major1, &minor1) != 2) {
++			if (!params || sscanf(params, "%d:%d", &major1, &minor1) != 2) {
+ 				log_error("Incorrect snapshot-origin table found");
+ 				goto_out;
+ 			}
+@@ -545,7 +545,7 @@ static int _ignore_unusable_thins(struct device *dev)
+ 		goto out;
+ 	}
+ 	dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
+-	if (sscanf(params, "%d:%d", &minor, &major) != 2) {
++	if (!params || sscanf(params, "%d:%d", &minor, &major) != 2) {
+ 		log_error("Failed to get thin-pool major:minor for thin device %d:%d.",
+ 			  (int)MAJOR(dev->dev), (int)MINOR(dev->dev));
+ 		goto out;
+@@ -1678,12 +1678,12 @@ int dev_manager_thin_device_id(struct dev_manager *dm,
+ 		goto out;
+ 	}
+ 
+-	if (strcmp(target_type, "thin")) {
++	if (!target_type || strcmp(target_type, "thin")) {
+ 		log_error("Unexpected target type %s found for thin %s.", target_type, lv->name);
+ 		goto out;
+ 	}
+ 
+-	if (sscanf(params, "%*u:%*u %u", device_id) != 1) {
++	if (!params || sscanf(params, "%*u:%*u %u", device_id) != 1) {
+ 		log_error("Cannot parse table like parameters %s for %s.", params, lv->name);
+ 		goto out;
+ 	}
 
 
