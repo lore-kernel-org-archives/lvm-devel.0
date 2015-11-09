@@ -1,56 +1,62 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 16 Nov 2015 12:14:23 +0000 (UTC)
-Subject: master - libdm: better error reporting from dm_split_lvm_name
-Message-ID: <20151116121423.20D7B60B40@fedorahosted.org>
+Date: Mon,  9 Nov 2015 09:28:03 +0000 (UTC)
+Subject: master - dmeventd: reorder tou
+Message-ID: <20151109092803.484BD60644@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-An embedded and charset-unspecified text was scrubbed...
-Name: disclaimer.txt
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20151116/fa2ebe0e/attachment.txt>
--------------- next part --------------
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2a2487f02fb2ddb72106f922dcbf0ddda6959b2f
-Commit:        2a2487f02fb2ddb72106f922dcbf0ddda6959b2f
-Parent:        5d4f5873a99c3ebe52e671f828580d4cd045e456
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e1b111b02accb4145b82b8b47ce57ed93b1a7184
+Commit:        e1b111b02accb4145b82b8b47ce57ed93b1a7184
+Parent:        8b857bfdc60668c3cdeeb6c11ffe32def0371a39
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 16 13:07:36 2015 +0100
+AuthorDate:    Sat Nov 7 21:50:27 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 16 13:09:53 2015 +0100
+CommitterDate: Mon Nov 9 10:00:33 2015 +0100
 
-libdm: better error reporting from dm_split_lvm_name
+dmeventd: reorder tou
 
-Report errors from all error paths correctly.
-Validate passed args before dereferencing them.
 ---
- libdm/libdm-string.c |   11 ++++++++---
- 1 files changed, 8 insertions(+), 3 deletions(-)
+ daemons/dmeventd/libdevmapper-event.c |   15 ++++++---------
+ 1 files changed, 6 insertions(+), 9 deletions(-)
 
-diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
-index 9132832..79a969c 100644
---- a/libdm/libdm-string.c
-+++ b/libdm/libdm-string.c
-@@ -95,13 +95,18 @@ static char *_unquote(char *component)
- int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
- 		      char **vgname, char **lvname, char **layer)
- {
--	if (mem && !(*vgname = dm_pool_strdup(mem, dmname))) {
--		log_error("Failed to duplicate dmname.");
-+	if (!vgname || !lvname || !layer) {
-+		log_error(INTERNAL_ERROR "dm_split_lvm_name: vgname, lvname nor layer could be NULL.");
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 9b3b424..85eab5a 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -412,17 +412,15 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
+ 	char default_dmeventd_path[] = DMEVENTD_PATH;
+ 	char *args[] = { dmeventd_path ? : default_dmeventd_path, NULL };
+ 
+-	if (stat(fifos->client_path, &statbuf))
+-		goto start_server;
+-
+-	if (!S_ISFIFO(statbuf.st_mode)) {
+-		log_error("%s is not a fifo.", fifos->client_path);
+-		return 0;
+-	}
+-
+ 	/* Anyone listening?  If not, errno will be ENXIO */
+ 	fifos->client = open(fifos->client_path, O_WRONLY | O_NONBLOCK);
+ 	if (fifos->client >= 0) {
++		if ((fstat(fifos->client, &statbuf) < 0) ||
++		    !S_ISFIFO(statbuf.st_mode)) {
++			log_error("%s is not a fifo.", fifos->client_path);
++			return 0;
++		}
++
+ 		/* server is running and listening */
+ 		if (close(fifos->client))
+ 			log_sys_debug("close", fifos->client_path);
+@@ -433,7 +431,6 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
  		return 0;
  	}
  
--	if (!*vgname)
-+	if (mem && (!dmname || !(*vgname = dm_pool_strdup(mem, dmname)))) {
-+		log_error("Failed to duplicate lvm name.");
- 		return 0;
-+	} else if (!*vgname) {
-+		log_error("Missing lvm name for split.");
-+		return 0;
-+	}
+-      start_server:
+ 	/* server is not running */
  
- 	_unquote(*layer = _unquote(*lvname = _unquote(*vgname)));
- 
+ 	if ((args[0][0] == '/') && stat(args[0], &statbuf)) {
+
+
