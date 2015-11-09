@@ -1,57 +1,46 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 13:05:34 +0000 (UTC)
-Subject: master - lvmetad: restore use of FMTd64
-Message-ID: <20151109130534.53154614BA@fedorahosted.org>
+Date: Mon,  9 Nov 2015 13:05:36 +0000 (UTC)
+Subject: master - libdaemon: prohibit use of %d for 64bit numbres
+Message-ID: <20151109130536.6FDE560160@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0b5a75c9af1be5959ed946fea816aa642b5f918a
-Commit:        0b5a75c9af1be5959ed946fea816aa642b5f918a
-Parent:        7103012754884a964da481626cf96fd6f64b5175
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=36ee36734382b2aa845a435e27fa1fb834be1152
+Commit:        36ee36734382b2aa845a435e27fa1fb834be1152
+Parent:        0b5a75c9af1be5959ed946fea816aa642b5f918a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 9 14:02:27 2015 +0100
+AuthorDate:    Mon Nov 9 14:03:25 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 9 14:02:27 2015 +0100
+CommitterDate: Mon Nov 9 14:03:25 2015 +0100
 
-lvmetad: restore use of FMTd64
+libdaemon: prohibit use of %d for 64bit numbres
 
-daemon_reply_simple() eats just 64bit numbers - so make it explicit.
+Do not let pass %d and print internal error when found one.
+Require all users to use  FMTd64 - it's seriously confusing.
 ---
- daemons/lvmetad/lvmetad-core.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ libdaemon/client/config-util.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 69dc961..da9a510 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -2467,11 +2467,11 @@ static response pv_found(lvmetad_state *s, request r)
- 
- 	return daemon_reply_simple("OK",
- 				   "status = %s", vg_status,
--				   "changed = %d", changed,
-+				   "changed = " FMTd64, (int64_t) changed,
- 				   "vgid = %s", arg_vgid ? arg_vgid : "#orphan",
- 				   "vgname = %s", arg_name ? arg_name : "#orphan",
--				   "seqno_before = %d", old_seqno,
--				   "seqno_after = %d", vg_status_seqno,
-+				   "seqno_before = " FMTd64, (int64_t) old_seqno,
-+				   "seqno_after = " FMTd64, (int64_t) vg_status_seqno,
- 				   NULL);
- 
-  nomem:
-@@ -2590,8 +2590,8 @@ static response set_global_info(lvmetad_state *s, request r)
- 
- static response get_global_info(lvmetad_state *s, request r)
- {
--	return daemon_reply_simple("OK", "global_invalid = %d",
--					 (s->flags & GLFL_INVALID) ? 1 : 0,
-+	return daemon_reply_simple("OK", "global_invalid = " FMTd64,
-+					 (int64_t)((s->flags & GLFL_INVALID) ? 1 : 0),
- 					 NULL);
- }
- 
+diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
+index ec5ea98..bbf4218 100644
+--- a/libdaemon/client/config-util.c
++++ b/libdaemon/client/config-util.c
+@@ -38,7 +38,12 @@ int buffer_append_vf(struct buffer *buf, va_list ap)
+ 			goto fail;
+ 		}
+ 		keylen = strchr(next, '=') - next;
+-		if (strstr(next, "%d") || strstr(next, FMTd64)) {
++		if (strstr(next, "%d")) {
++                        /* Use of plain %d is prohibited, use  FMTd64 */
++			log_error(INTERNAL_ERROR "Do not use  %%d and use correct 64bit form");
++			goto fail;
++		}
++		if (strstr(next, FMTd64)) {
+ 			value = va_arg(ap, int64_t);
+ 			if (dm_asprintf(&append, "%.*s= %" PRId64 "\n", keylen, next, value) < 0)
+ 				goto fail;
 
 
