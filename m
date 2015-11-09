@@ -1,75 +1,53 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 09:28:35 +0000 (UTC)
-Subject: master - dev-type: fix TOCTOU order
-Message-ID: <20151109092835.2B78D60DE7@fedorahosted.org>
+Date: Mon,  9 Nov 2015 09:28:37 +0000 (UTC)
+Subject: master - lv_manip: do not deref NULL for debug message
+Message-ID: <20151109092837.3BD1E6125F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa1d73084769ea4a6d07434e12dcae519938e4c5
-Commit:        fa1d73084769ea4a6d07434e12dcae519938e4c5
-Parent:        80c3fb786cc236f200026624ded4c668b37ef22d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=856e11e11c3b3ba4da3cbbd21982d34daa51aaa0
+Commit:        856e11e11c3b3ba4da3cbbd21982d34daa51aaa0
+Parent:        fa1d73084769ea4a6d07434e12dcae519938e4c5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Nov 8 17:15:24 2015 +0100
+AuthorDate:    Mon Nov 9 09:28:59 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 9 10:19:20 2015 +0100
 
-dev-type: fix TOCTOU order
+lv_manip: do not deref NULL for debug message
 
-Doing 'stat' checking first and later opening is racy.
-And since we do not really care about any 'status' info
-here and we read 'sysfs' here - just drop whole 'stat()'
-call and directly handle error from failing 'fopen()'.
+Coverity: when 'pv2' would be passed as NULL, do not try to
+deref it in debug message.
 ---
- WHATS_NEW             |    1 +
- lib/device/dev-type.c |   13 +++----------
- 2 files changed, 4 insertions(+), 10 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 6368b32..19f24f7 100644
+index 19f24f7..7930631 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.135 - 
  ====================================
-+  Drop unneeded stat() call when checking for sysfs file.
++  Do not deref NULL pointer in debug message for _match_pv_tags().
+   Drop unneeded stat() call when checking for sysfs file.
    Fix memory leak on error path of failing thin-pool percentage check.
    Add missing test for failing node allocation in lvmetad.
-   Correct configure messages when enabling/disabling lvmlockd.
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index a66ef95..e1243bd 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -462,7 +462,6 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
- 		*result = dev->dev;
- 		ret = 1;
- 		goto out; /* dev is not a partition! */
--
- 	}
- 
- 	/*
-@@ -486,17 +485,11 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
- 	}
- 
- 	/* finally, parse 'dev' attribute and create corresponding dev_t */
--	if (stat(path, &info) == -1) {
-+	if (!(fp = fopen(path, "r"))) {
- 		if (errno == ENOENT)
--			log_error("sysfs file %s does not exist", path);
-+			log_error("sysfs file %s does not exist.", path);
- 		else
--			log_sys_error("stat", path);
--		goto out;
--	}
--
--	fp = fopen(path, "r");
--	if (!fp) {
--		log_sys_error("fopen", path);
-+			log_sys_error("fopen", path);
- 		goto out;
- 	}
- 
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 3c72c08..e23a8b9 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -2114,7 +2114,7 @@ static int _match_pv_tags(const struct dm_config_node *cling_tag_list_cn,
+ 			else {
+ 				if (!pv_tags)
+ 					log_debug_alloc("Matched allocation PV tag %s on existing %s with free space on %s.",
+-							tag_matched, pv_dev_name(pv1), pv_dev_name(pv2));
++							tag_matched, pv_dev_name(pv1), pv2 ? pv_dev_name(pv2) : "-");
+ 				else
+ 					log_debug_alloc("Eliminating allocation area %" PRIu32 " at PV %s start PE %" PRIu32
+ 							" from consideration: PV tag %s already used.",
 
 
