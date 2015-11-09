@@ -1,65 +1,49 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon,  9 Nov 2015 01:53:40 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20151109015340.A20A66160D@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon,  9 Nov 2015 19:26:34 +0000 (UTC)
+Subject: master - vgrename: check if new and old names match
+Message-ID: <20151109192634.EB633605B5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=af6adec7cc1e4229a88cc9d7951a51d0d22c5032
-Commit:        af6adec7cc1e4229a88cc9d7951a51d0d22c5032
-Parent:        a3f77ed4ba4b6d35638f81cf9f58db2a730246e7
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Nov 9 01:48:57 2015 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Nov 9 01:48:57 2015 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7ec61cd5b9d4fcafa5313602f0a0696fa4690f6c
+Commit:        7ec61cd5b9d4fcafa5313602f0a0696fa4690f6c
+Parent:        cd937efa77dcd8713aa7679728001c11e20fab70
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Nov 9 13:23:59 2015 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Nov 9 13:23:59 2015 -0600
 
-post-release
+vgrename: check if new and old names match
 
+When the first arg is a UUID and vgrename translates
+that UUID to a current VG name, the old and new VG
+names are not being checked for equality.  If they
+are equal, it produces an internal error rather than
+a proper error.
 ---
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ tools/vgrename.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index e7542bf..81a0997 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.134(2)-git (2015-11-09)
-+2.02.135(2)-git (2015-11-09)
-diff --git a/VERSION_DM b/VERSION_DM
-index 661545a..934b030 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.110-git (2015-11-09)
-+1.02.111-git (2015-11-09)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f414e92..5e89eca 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.135 - 
-+====================================
+diff --git a/tools/vgrename.c b/tools/vgrename.c
+index 316228a..07d992e 100644
+--- a/tools/vgrename.c
++++ b/tools/vgrename.c
+@@ -110,7 +110,13 @@ static int vg_rename_path(struct cmd_context *cmd, const char *old_vg_path,
+ 	log_suppress(2);
+ 	found_id = id_read_format(&id, vg_name_old);
+ 	log_suppress(0);
 +
- Version 2.02.134 - 9th November 2015
- ====================================
-   Refactor some lvmetad code and adjust some duplicate PV messages.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 5004f84..113a4bb 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.111 - 
-+====================================
+ 	if (found_id && (vg_name = lvmcache_vgname_from_vgid(cmd->mem, (char *)id.uuid))) {
++		if (!strcmp(vg_name, vg_name_new)) {
++			log_error("New VG name must differ from the old VG name.");
++			return 0;
++		}
 +
- Version 1.02.110 - 30th October 2015
- ====================================
-   Disable thin monitoring plugin when it fails too often (>10 times).
+ 		vg_name_old = vg_name;
+ 		vgid = (char *)id.uuid;
+ 	} else
 
 
