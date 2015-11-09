@@ -1,107 +1,125 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 16:05:52 +0000 (UTC)
-Subject: master - cleanup: drop unneded headers
-Message-ID: <20151109160552.ED4DF60D27@fedorahosted.org>
+Date: Mon,  9 Nov 2015 16:05:55 +0000 (UTC)
+Subject: master - cleanup: use _ for local function
+Message-ID: <20151109160555.0B71E60D27@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3db5ba08b13fd542e725039646123bd8c0c5326a
-Commit:        3db5ba08b13fd542e725039646123bd8c0c5326a
-Parent:        6c331f3061269cc4a60e2b40f12f2dcb19a86994
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c2d5cfbdb8529305a7dbde3652b7963fed1e3b59
+Commit:        c2d5cfbdb8529305a7dbde3652b7963fed1e3b59
+Parent:        3db5ba08b13fd542e725039646123bd8c0c5326a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 9 16:37:05 2015 +0100
+AuthorDate:    Mon Nov 9 16:37:48 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 9 17:04:10 2015 +0100
 
-cleanup: drop unneded headers
+cleanup: use _ for local function
 
-Coverity notices they are not really needed.
 ---
- daemons/lvmlockd/lvmlockctl.c       |    1 -
- daemons/lvmlockd/lvmlockd-core.c    |    1 -
- daemons/lvmlockd/lvmlockd-dlm.c     |    3 ---
- daemons/lvmlockd/lvmlockd-sanlock.c |    3 ---
- 4 files changed, 0 insertions(+), 8 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |   24 ++++++++++++------------
+ 1 files changed, 12 insertions(+), 12 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
-index 2e1acd4..4f559cf 100644
---- a/daemons/lvmlockd/lvmlockctl.c
-+++ b/daemons/lvmlockd/lvmlockctl.c
-@@ -18,7 +18,6 @@
- #include <errno.h>
- #include <fcntl.h>
- #include <syslog.h>
--#include <sys/wait.h>
- #include <sys/socket.h>
- #include <sys/un.h>
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index da9a510..c17caa7 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -829,8 +829,8 @@ static int vg_remove_if_missing(lvmetad_state *s, const char *vgid, int update_p
+ enum update_pvid_mode { UPDATE_ONLY, REMOVE_EMPTY, MARK_OUTDATED };
  
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 6d5f579..49f408b 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -16,7 +16,6 @@
+ /* You need to be holding the pvid_to_vgid lock already to call this. */
+-static int update_pvid_to_vgid(lvmetad_state *s, struct dm_config_tree *vg,
+-			       const char *vgid, int mode)
++static int _update_pvid_to_vgid(lvmetad_state *s, struct dm_config_tree *vg,
++				const char *vgid, int mode)
+ {
+ 	struct dm_config_node *pv;
+ 	struct dm_hash_table *to_check;
+@@ -932,7 +932,7 @@ static int remove_metadata(lvmetad_state *s, const char *vgid, int update_pvids)
  
- #include "daemon-io.h"
- #include "daemon-server.h"
--#include "daemon-log.h"
- #include "lvm-version.h"
- #include "lvmetad-client.h"
- #include "lvmlockd-client.h"
-diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index acadf2d..2cf2c20 100644
---- a/daemons/lvmlockd/lvmlockd-dlm.c
-+++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -14,7 +14,6 @@
- #include "tool.h"
+ 	/* update_pvid_to_vgid will clear/free the pvid_to_vgid hash */
+ 	if (update_pvids && meta_lookup)
+-		update_pvid_to_vgid(s, meta_lookup, "#orphan", 0);
++		(void) _update_pvid_to_vgid(s, meta_lookup, "#orphan", 0);
  
- #include "daemon-server.h"
--#include "daemon-log.h"
- #include "xlate.h"
+ 	/* free the unmapped data */
  
- #include "lvmlockd-internal.h"
-@@ -26,7 +25,6 @@
-  */
- #include "libdlm.h"
+@@ -1050,7 +1050,7 @@ static int _update_metadata_new_vgid(lvmetad_state *s,
+ 	/*
+ 	 * Temporarily orphan the PVs in the old metadata.
+ 	 */
+-	if (!update_pvid_to_vgid(s, old_meta, "#orphan", 0)) {
++	if (!_update_pvid_to_vgid(s, old_meta, "#orphan", 0)) {
+ 		ERROR(s, "update_metadata_new_vgid failed to move PVs for %s old_vgid %s", arg_name, old_vgid);
+ 		abort_daemon = 1;
+ 		goto ret;
+@@ -1104,7 +1104,7 @@ static int _update_metadata_new_vgid(lvmetad_state *s,
+ 	/*
+ 	 * Reassign PVs based on the new metadata.
+ 	 */
+-	if (!update_pvid_to_vgid(s, new_meta, new_vgid, 1)) {
++	if (!_update_pvid_to_vgid(s, new_meta, new_vgid, 1)) {
+ 		ERROR(s, "update_metadata_new_name failed to update PVs for %s %s", arg_name, new_vgid);
+ 		abort_daemon = 1;
+ 		goto out;
+@@ -1164,7 +1164,7 @@ static int _update_metadata_new_name(lvmetad_state *s,
+ 	/*
+ 	 * Temporarily orphan the PVs in the old metadata.
+ 	 */
+-	if (!update_pvid_to_vgid(s, old_meta, "#orphan", 0)) {
++	if (!_update_pvid_to_vgid(s, old_meta, "#orphan", 0)) {
+ 		ERROR(s, "update_metadata_new_name failed to move PVs for old_name %s %s", old_name, arg_vgid);
+ 		abort_daemon = 1;
+ 		goto ret;
+@@ -1218,7 +1218,7 @@ static int _update_metadata_new_name(lvmetad_state *s,
+ 	/*
+ 	 * Reassign PVs based on the new metadata.
+ 	 */
+-	if (!update_pvid_to_vgid(s, new_meta, arg_vgid, 1)) {
++	if (!_update_pvid_to_vgid(s, new_meta, arg_vgid, 1)) {
+ 		ERROR(s, "update_metadata_new_name failed to update PVs for %s %s", new_name, arg_vgid);
+ 		abort_daemon = 1;
+ 		goto out;
+@@ -1284,7 +1284,7 @@ static int _update_metadata_add_new(lvmetad_state *s, const char *new_name, cons
+ 		goto out;
+ 	}
  
--#include <pthread.h>
- #include <stddef.h>
- #include <poll.h>
- #include <errno.h>
-@@ -35,7 +33,6 @@
- #include <byteswap.h>
- #include <syslog.h>
- #include <dirent.h>
--#include <sys/socket.h>
+-	if (!update_pvid_to_vgid(s, new_meta, new_vgid, 1)) {
++	if (!_update_pvid_to_vgid(s, new_meta, new_vgid, 1)) {
+ 		ERROR(s, "update_metadata_add_new failed to update PVs for %s %s", new_name, new_vgid);
+ 		abort_daemon = 1;
+ 		goto out;
+@@ -1646,7 +1646,7 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
+ 		DEBUGLOG_cft(s, "OLD: ", old_meta->root);
+ 		DEBUGLOG_cft(s, "NEW: ", new_metadata);
+ 		lock_pvid_to_vgid(s);
+-		update_pvid_to_vgid(s, old_meta, arg_vgid, MARK_OUTDATED);
++		_update_pvid_to_vgid(s, old_meta, arg_vgid, MARK_OUTDATED);
+ 		unlock_pvid_to_vgid(s);
+ 	}
  
- struct lm_dlm {
- 	dlm_lshandle_t *dh;
-diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
-index e1a85b4..7cdaf85 100644
---- a/daemons/lvmlockd/lvmlockd-sanlock.c
-+++ b/daemons/lvmlockd/lvmlockd-sanlock.c
-@@ -14,7 +14,6 @@
- #include "tool.h"
- 
- #include "daemon-server.h"
--#include "daemon-log.h"
- #include "xlate.h"
- 
- #include "lvmlockd-internal.h"
-@@ -25,12 +24,10 @@
- #include "sanlock_admin.h"
- #include "sanlock_resource.h"
- 
--#include <pthread.h>
- #include <stddef.h>
- #include <poll.h>
- #include <errno.h>
- #include <syslog.h>
--#include <sys/socket.h>
- 
- /*
- -------------------------------------------------------------------------------
+@@ -1771,9 +1771,9 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
+ 	 * The PVs in the VG may have changed in the new metadata, so
+ 	 * temporarily orphan all of the PVs in the existing VG.
+ 	 * The PVs that are still in the VG will be reassigned to this
+-	 * VG below by the next call to update_pvid_to_vgid().
++	 * VG below by the next call to _update_pvid_to_vgid().
+ 	 */
+-	if (!update_pvid_to_vgid(s, old_meta, "#orphan", 0)) {
++	if (!_update_pvid_to_vgid(s, old_meta, "#orphan", 0)) {
+ 		ERROR(s, "update_metadata failed to move PVs for %s %s", arg_name, arg_vgid);
+ 		unlock_vgid_to_metadata(s);
+ 		unlock_pvid_to_vgid(s);
+@@ -1811,7 +1811,7 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
+ 	 * be newly mapped to this vgid, and previous PVs that
+ 	 * remain in the VG will be remapped to the VG again.
+ 	 */
+-	if (!update_pvid_to_vgid(s, new_meta, arg_vgid, 1)) {
++	if (!_update_pvid_to_vgid(s, new_meta, arg_vgid, 1)) {
+ 		ERROR(s, "update_metadata failed to update PVs for %s %s", arg_name, arg_vgid);
+ 		abort_daemon = 1;
+ 		retval = 0;
 
 
