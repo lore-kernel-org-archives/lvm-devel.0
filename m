@@ -1,54 +1,42 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 30 Nov 2015 22:36:37 +0000 (UTC)
-Subject: master - lvconvert: Improve message for raid without -m.
-Message-ID: <20151130223637.91F7D60E76@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  9 Nov 2015 09:28:22 +0000 (UTC)
+Subject: master - lvconvert: add extra check for existance of pointer
+Message-ID: <20151109092822.9C63A60DE7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=46c8d6bb8ae91ee67c8633496cc6c3d92bb4f3ce
-Commit:        46c8d6bb8ae91ee67c8633496cc6c3d92bb4f3ce
-Parent:        eb22f7c8f7351a38fc4447f56ff588f497037c23
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Nov 30 22:36:05 2015 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Nov 30 22:36:05 2015 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=18fd0bd20ce1d4a7d2bd27b2c9981a402f9bcd2e
+Commit:        18fd0bd20ce1d4a7d2bd27b2c9981a402f9bcd2e
+Parent:        b83a20b80a1f2f239e5c8496e819edd039965a6c
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Nov 9 09:48:17 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Nov 9 10:19:19 2015 +0100
 
-lvconvert: Improve message for raid without -m.
+lvconvert: add extra check for existance of pointer
 
+Coverity here is not fully-in-picture - but please it
+with validation of pointer which currently cannot be null,
+since we always return at least empty string.
 ---
- WHATS_NEW         |    1 +
- tools/lvconvert.c |    4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ tools/lvconvert.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 0096d1e..d2bdb58 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.137 -
- =====================================
-+  Avoid misleading error with -m is omitted with lvconvert to raid types.
- 
- Version 2.02.136 - 28th November 2015
- =====================================
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 72be45b..b309b9e 100644
+index a7df26d..c6cea0d 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -242,9 +242,9 @@ static int _check_conversion_type(struct cmd_context *cmd, const char *type_str)
- 	if (!type_str || !*type_str)
- 		return 1;
+@@ -2340,7 +2340,7 @@ static int _lvconvert_pool_repair(struct cmd_context *cmd,
+ 	struct pipe_data pdata;
+ 	FILE *f;
  
--	if (!strcmp(type_str, "mirror")) {
-+	if (!strcmp(type_str, "mirror") || !strncmp(type_str, "raid", 4)) {
- 		if (!arg_count(cmd, mirrors_ARG)) {
--			log_error("--type mirror requires -m/--mirrors");
-+			log_error("Mirror and raid conversions require -m/--mirrors");
- 			return 0;
- 		}
- 		return 1;
+-	if (!thin_repair[0]) {
++	if (!thin_repair || !thin_repair[0]) {
+ 		log_error("Thin repair commnand is not configured. Repair is disabled.");
+ 		return 0; /* Checking disabled */
+ 	}
 
 
