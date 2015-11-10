@@ -1,50 +1,46 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 21:51:58 +0000 (UTC)
-Subject: master - libdm: replace assign with increment
-Message-ID: <20151109215158.CC13861602@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 10 Nov 2015 01:37:52 +0000 (UTC)
+Subject: master - coverity: Add placeholder modelling file.
+Message-ID: <20151110013753.01C5C60D9D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fb59847a0fe766ccddf5c3a57e2a0033077d62a2
-Commit:        fb59847a0fe766ccddf5c3a57e2a0033077d62a2
-Parent:        7ec61cd5b9d4fcafa5313602f0a0696fa4690f6c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 9 22:48:13 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 9 22:51:48 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=59905100d1326bc651a3b5991fdaed563abcf41e
+Commit:        59905100d1326bc651a3b5991fdaed563abcf41e
+Parent:        fb59847a0fe766ccddf5c3a57e2a0033077d62a2
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Nov 10 01:37:11 2015 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Nov 10 01:37:11 2015 +0000
 
-libdm: replace assign with increment
+coverity: Add placeholder modelling file.
 
-Coverity didn't liked assign with && expression, so use trick.
-It does not complain against this prefix incremenent operation.
 ---
- libdm/libdm-report.c |    5 ++---
- 1 files changed, 2 insertions(+), 3 deletions(-)
+ coverity/coverity_model.c |   14 ++++++++++++++
+ 1 files changed, 14 insertions(+), 0 deletions(-)
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 23d0955..b9906d8 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of the device-mapper userspace tools.
-  *
-@@ -2219,8 +2219,7 @@ static const char *_tok_value_number(const char *s,
- 	int is_float = 0;
- 
- 	*begin = s;
--	/* coverity[assign_where_compare_meant] */
--	while ((!is_float && (*s == '.') && ((is_float = 1))) || isdigit(*s))
-+	while ((!is_float && (*s == '.') && ++is_float) || isdigit(*s))
- 		s++;
- 	*end = s;
- 
+diff --git a/coverity/coverity_model.c b/coverity/coverity_model.c
+new file mode 100644
+index 0000000..8f54e1f
+--- /dev/null
++++ b/coverity/coverity_model.c
+@@ -0,0 +1,14 @@
++/*
++ * Copyright (C) 2015 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU General Public License v.2.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
 
 
