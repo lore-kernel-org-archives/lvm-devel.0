@@ -1,56 +1,43 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon,  9 Nov 2015 01:54:30 +0000 (UTC)
-Subject: v2_02_134 annotated tag has been created
-Message-ID: <20151109015430.17B8860DC5@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 11 Nov 2015 18:57:34 +0000 (UTC)
+Subject: master - dmeventd: fix check for failing open.
+Message-ID: <20151111185734.8446F60334@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b67f6285b6ef68280dac05a08d147790eb78397b
-Commit:        b67f6285b6ef68280dac05a08d147790eb78397b
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2015-11-09 01:46 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2015-11-09 01:46 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=058725c72149e9f852390ca1d52e932ddb745a82
+Commit:        058725c72149e9f852390ca1d52e932ddb745a82
+Parent:        1e729c47d2cdc6591a41f159f84be39ffcc6c200
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Nov 11 19:54:08 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Nov 11 19:54:55 2015 +0100
 
-annotated tag: v2_02_134 has been created
-	    at b67f6285b6ef68280dac05a08d147790eb78397b (tag)
-       tagging a3f77ed4ba4b6d35638f81cf9f58db2a730246e7 (commit)
-      replaces v2_02_133
+dmeventd: fix check for failing open.
 
-Release 2.02.134.
+Recent change 2c8d6f5c90d5be62b48ba2881f2a6631091dc5af
+actually droped restart when the reason of failing open is missing
+device completely - check for ENOENT now as another reason
+to start new dmeventd server  (when there is no systemd to maintain it).
+---
+ daemons/dmeventd/libdevmapper-event.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-Another development checkpoint.
-
-16 files changed, 1779 insertions(+), 343 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
-
-iEYEABECAAYFAlY/+zYACgkQIoGRwVZ+LBfDqQCfa/W1/+VEKuqvFvDInCq4FfYD
-l4gAnj4OoXpmpfuverE+9x1WInbXCuMb
-=4Q2Y
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (3):
-      post-release
-      mirror: Fix log size calc when more than 1 extent.
-      pre-release
-
-David Teigland (7):
-      config: fix copy error in examples
-      lvmetad: refactor and document
-      tests: skip duplicate vg names test with lvmetad
-      lvmetad: log duplicate PVs returned from lvmetad
-      lvmcache: change log_verbose to log_warn
-      vg_read: skip repair and wipe for foreign and shared VGs
-      test: disable duplicate VG name test for lvmetad
-
-Marian Csontos (3):
-      spec: Add python bindings
-      test: Run pytest with installed libs
-      test: api subdirectory is needed in PATH by pytest
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 359dfdd..f1441f5 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -425,7 +425,7 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
+ 		if (close(fifos->client))
+ 			log_sys_debug("close", fifos->client_path);
+ 		return 1;
+-	} else if (errno != ENXIO) {
++	} else if (errno != ENXIO && errno != ENOENT)  {
+ 		/* problem */
+ 		log_sys_error("open", fifos->client_path);
+ 		return 0;
 
 
