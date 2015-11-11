@@ -1,148 +1,175 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 11 Nov 2015 14:18:40 +0000 (UTC)
-Subject: master - configure: check for udev_device_get_is_initialized is available
-Message-ID: <20151111141840.3C6E96055F@fedorahosted.org>
+Date: Wed, 11 Nov 2015 15:11:17 +0000 (UTC)
+Subject: master - str_list: do not support str lists without mempools
+Message-ID: <20151111151117.8778D602B3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b8779e706e1019a8e8212d81bde0cc7e42be5426
-Commit:        b8779e706e1019a8e8212d81bde0cc7e42be5426
-Parent:        f82e0210b7cb9f3926ef5051ca34a4ad383ba271
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1e729c47d2cdc6591a41f159f84be39ffcc6c200
+Commit:        1e729c47d2cdc6591a41f159f84be39ffcc6c200
+Parent:        b8779e706e1019a8e8212d81bde0cc7e42be5426
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 11 15:15:34 2015 +0100
+AuthorDate:    Wed Nov 11 16:09:39 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 11 15:15:50 2015 +0100
+CommitterDate: Wed Nov 11 16:09:52 2015 +0100
 
-configure: check for udev_device_get_is_initialized is available
+str_list: do not support str lists without mempools
 
-The udev_device_get_is_initialized is available since libudev version
-165. Older versions are still used somewhere (e.g. RHEL6). So better
-check for this fn and use it only if it's available.
+Do not support str lists without mempools. Instead, create temporary
+mempool where necessary (currently only _get_report_options fn).
 ---
- aclocal.m4             |    2 +-
- configure              |   44 ++++++++++++++++++++++++++++++++++++++++++++
- configure.in           |    4 ++++
- include/configure.h.in |    3 +++
- lib/device/dev-ext.c   |    2 ++
- 5 files changed, 54 insertions(+), 1 deletions(-)
+ lib/datastruct/str_list.c |   23 ++++-------------------
+ lib/datastruct/str_list.h |    2 --
+ tools/reporter.c          |   32 +++++++++++++-------------------
+ 3 files changed, 17 insertions(+), 40 deletions(-)
 
-diff --git a/aclocal.m4 b/aclocal.m4
-index 67b2d59..05e0ad5 100644
---- a/aclocal.m4
-+++ b/aclocal.m4
-@@ -15,7 +15,7 @@ m4_ifndef([AC_CONFIG_MACRO_DIRS], [m4_defun([_AM_CONFIG_MACRO_DIRS], [])m4_defun
- # pkg.m4 - Macros to locate and utilise pkg-config.            -*- Autoconf -*-
- # serial 1 (pkg-config-0.24)
- # 
--# Copyright (c) 2004 Scott James Remnant <scott@netsplit.com>.
-+# Copyright ?? 2004 Scott James Remnant <scott@netsplit.com>.
- #
- # This program is free software; you can redistribute it and/or modify
- # it under the terms of the GNU General Public License as published by
-diff --git a/configure b/configure
-index c566466..8a9482d 100755
---- a/configure
-+++ b/configure
-@@ -12007,6 +12007,50 @@ fi
+diff --git a/lib/datastruct/str_list.c b/lib/datastruct/str_list.c
+index f056b85..cf7457b 100644
+--- a/lib/datastruct/str_list.c
++++ b/lib/datastruct/str_list.c
+@@ -20,8 +20,7 @@ struct dm_list *str_list_create(struct dm_pool *mem)
+ {
+ 	struct dm_list *sl;
  
- $as_echo "#define UDEV_SYNC_SUPPORT 1" >>confdefs.h
- 
-+
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for udev_device_get_is_initialized in -ludev" >&5
-+$as_echo_n "checking for udev_device_get_is_initialized in -ludev... " >&6; }
-+if ${ac_cv_lib_udev_udev_device_get_is_initialized+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  ac_check_lib_save_LIBS=$LIBS
-+LIBS="-ludev  $LIBS"
-+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-+/* end confdefs.h.  */
-+
-+/* Override any GCC internal prototype to avoid an error.
-+   Use char because int might match the return type of a GCC
-+   builtin and then its argument prototype would still apply.  */
-+#ifdef __cplusplus
-+extern "C"
-+#endif
-+char udev_device_get_is_initialized ();
-+int
-+main ()
-+{
-+return udev_device_get_is_initialized ();
-+  ;
-+  return 0;
-+}
-+_ACEOF
-+if ac_fn_c_try_link "$LINENO"; then :
-+  ac_cv_lib_udev_udev_device_get_is_initialized=yes
-+else
-+  ac_cv_lib_udev_udev_device_get_is_initialized=no
-+fi
-+rm -f core conftest.err conftest.$ac_objext \
-+    conftest$ac_exeext conftest.$ac_ext
-+LIBS=$ac_check_lib_save_LIBS
-+fi
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_udev_udev_device_get_is_initialized" >&5
-+$as_echo "$ac_cv_lib_udev_udev_device_get_is_initialized" >&6; }
-+if test "x$ac_cv_lib_udev_udev_device_get_is_initialized" = xyes; then :
-+
-+$as_echo "#define HAVE_LIBUDEV_UDEV_DEVICE_GET_IS_INITIALIZED 1" >>confdefs.h
-+
-+fi
-+
-+	LIBS=$ac_check_lib_save_LIBS
- fi
- 
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable installation of udev rules required for synchronisation" >&5
-diff --git a/configure.in b/configure.in
-index 68bd341..8e04782 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1334,6 +1334,10 @@ if test "$UDEV_SYNC" = yes; then
- 	pkg_config_init
- 	PKG_CHECK_MODULES(UDEV, libudev >= 143, [UDEV_PC="libudev"])
- 	AC_DEFINE([UDEV_SYNC_SUPPORT], 1, [Define to 1 to enable synchronisation with udev processing.])
-+
-+	AC_CHECK_LIB(udev, udev_device_get_is_initialized, AC_DEFINE([HAVE_LIBUDEV_UDEV_DEVICE_GET_IS_INITIALIZED], 1,
-+	  [Define to 1 if udev_device_get_is_initialized is available.]))
-+	LIBS=$ac_check_lib_save_LIBS
- fi
- 
- dnl -- Enable udev rules
-diff --git a/include/configure.h.in b/include/configure.h.in
-index cb7771f..1681af0 100644
---- a/include/configure.h.in
-+++ b/include/configure.h.in
-@@ -258,6 +258,9 @@
- /* Define to 1 if you have the <libintl.h> header file. */
- #undef HAVE_LIBINTL_H
- 
-+/* Define to 1 if udev_device_get_is_initialized is available. */
-+#undef HAVE_LIBUDEV_UDEV_DEVICE_GET_IS_INITIALIZED
-+
- /* Define to 1 if you have the <limits.h> header file. */
- #undef HAVE_LIMITS_H
- 
-diff --git a/lib/device/dev-ext.c b/lib/device/dev-ext.c
-index 22e9a6d..e8cc012 100644
---- a/lib/device/dev-ext.c
-+++ b/lib/device/dev-ext.c
-@@ -60,11 +60,13 @@ static struct dev_ext *_dev_ext_get_udev(struct device *dev)
- 	if (!(udev_device = udev_device_new_from_devnum(udev, 'b', dev->dev)))
- 		return_NULL;
- 
-+#ifdef HAVE_LIBUDEV_UDEV_DEVICE_GET_IS_INITIALIZED
- 	if (!udev_device_get_is_initialized(udev_device)) {
- 		/* Timeout or some other udev db inconsistency! */
- 		log_error("Udev database has incomplete information about device %s.", dev_name(dev));
+-	if (!(sl = mem ? dm_pool_alloc(mem, sizeof(struct dm_list))
+-		       : dm_malloc(sizeof(struct dm_list)))) {
++	if (!(sl = dm_pool_alloc(mem, sizeof(struct dm_list)))) {
+ 		log_errno(ENOMEM, "str_list allocation failed");
  		return NULL;
  	}
-+#endif
+@@ -38,8 +37,7 @@ static int _str_list_add_no_dup_check(struct dm_pool *mem, struct dm_list *sll,
+ 	if (!str)
+ 		return_0;
  
- 	dev->ext.handle = (void *) udev_device;
- 	return &dev->ext;
+-	if (!(sln = mem ? dm_pool_alloc(mem, sizeof(*sln))
+-			: dm_malloc(sizeof(*sln))))
++	if (!(sln = dm_pool_alloc(mem, sizeof(*sln))))
+ 		return_0;
+ 
+ 	sln->str = str;
+@@ -176,7 +174,7 @@ char *str_list_to_str(struct dm_pool *mem, const struct dm_list *list,
+ 	if (list_size > 1)
+ 		len += ((list_size - 1) * delim_len);
+ 
+-	str = mem ? dm_pool_alloc(mem, len+1) : dm_malloc(len+1);
++	str = dm_pool_alloc(mem, len+1);
+ 	if (!str) {
+ 		log_error("str_list_to_str: string allocation failed.");
+ 		return NULL;
+@@ -220,7 +218,7 @@ struct dm_list *str_to_str_list(struct dm_pool *mem, const char *str,
+ 			next = p2 + delim_len;
+ 
+ 		len = p2 - p1;
+-		str_item = mem ? dm_pool_alloc(mem, len+1) : dm_malloc(len+1);
++		str_item = dm_pool_alloc(mem, len+1);
+ 		if (!str_item) {
+ 			log_error("str_to_str_list: string list item allocation failed.");
+ 			goto bad;
+@@ -245,16 +243,3 @@ bad:
+ 		dm_pool_free(mem, list);
+ 	return NULL;
+ }
+-
+-void str_list_destroy(struct dm_list *list, int deallocate_strings)
+-{
+-	struct dm_str_list *sl, *tmp_sl;
+-
+-	dm_list_iterate_items_safe(sl, tmp_sl, list) {
+-		dm_list_del(&sl->list);
+-		if (deallocate_strings)
+-			dm_free((char *)sl->str);
+-		dm_free(sl);
+-	}
+-	dm_free(list);
+-}
+diff --git a/lib/datastruct/str_list.h b/lib/datastruct/str_list.h
+index 92ff8c5..268a3cf 100644
+--- a/lib/datastruct/str_list.h
++++ b/lib/datastruct/str_list.h
+@@ -32,7 +32,5 @@ int str_list_dup(struct dm_pool *mem, struct dm_list *sllnew,
+ 		 const struct dm_list *sllold);
+ char *str_list_to_str(struct dm_pool *mem, const struct dm_list *list, const char *delim);
+ struct dm_list *str_to_str_list(struct dm_pool *mem, const char *str, const char *delim, int ignore_multiple_delim);
+-/* Only for lists which were *not* allocated from the mem pool! */
+-void str_list_destroy(struct dm_list *list, int deallocate_strings);
+ 
+ #endif
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 89024c2..2c733e3 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -651,13 +651,18 @@ static int _get_report_options(struct cmd_context *cmd,
+ 	struct dm_list *final_opts_list;
+ 	struct dm_list *final_compact_list = NULL;
+ 	struct dm_list *opts_list = NULL;
+-	int opts_list_destroy = 1;
+ 	struct dm_str_list *sl;
+ 	const char *opts;
++	struct dm_pool *mem;
+ 	int r = ECMD_PROCESSED;
+ 
++	if (!(mem = dm_pool_create("report_options", 128))) {
++		r = ECMD_FAILED;
++		log_error("Failed to create temporary mempool to process report options.");
++		goto_out;
++	}
+ 
+-	if (!(final_opts_list = str_to_str_list(NULL, *options, ",", 1))) {
++	if (!(final_opts_list = str_to_str_list(mem, *options, ",", 1))) {
+ 		r = ECMD_FAILED;
+ 		goto_out;
+ 	}
+@@ -679,7 +684,7 @@ static int _get_report_options(struct cmd_context *cmd,
+ 			case '-':
+ 				/* fall through */
+ 			case '#':
+-				if (!(opts_list = str_to_str_list(NULL, opts + 1, ",", 1))) {
++				if (!(opts_list = str_to_str_list(mem, opts + 1, ",", 1))) {
+ 					r = ECMD_FAILED;
+ 					goto_out;
+ 				}
+@@ -690,21 +695,14 @@ static int _get_report_options(struct cmd_context *cmd,
+ 						_del_option_from_list(final_opts_list, prefix,
+ 								      prefix_len, sl->str);
+ 				} else if (*opts == '#') {
+-					if (!final_compact_list) {
++					if (!final_compact_list)
+ 						final_compact_list = opts_list;
+-						opts_list_destroy = 0;
+-					} else
++					else
+ 						dm_list_splice(final_compact_list, opts_list);
+ 				}
+-				if (opts_list_destroy)
+-					str_list_destroy(opts_list, 1);
+-				else
+-					opts_list_destroy = 1;
+-				opts_list = NULL;
+ 				break;
+ 			default:
+-				str_list_destroy(final_opts_list, 1);
+-				if (!(final_opts_list = str_to_str_list(NULL, opts, ",", 1))) {
++				if (!(final_opts_list = str_to_str_list(mem, opts, ",", 1))) {
+ 					r = ECMD_FAILED;
+ 					goto out;
+ 				}
+@@ -722,12 +720,8 @@ static int _get_report_options(struct cmd_context *cmd,
+ 		goto out;
+ 	}
+ out:
+-	if (opts_list)
+-		str_list_destroy(final_opts_list, 1);
+-	if (final_compact_list)
+-		str_list_destroy(final_compact_list, 1);
+-	if (final_opts_list)
+-		str_list_destroy(final_opts_list, 1);
++	if (mem)
++		dm_pool_destroy(mem);
+ 	return r;
+ }
+ 
 
 
