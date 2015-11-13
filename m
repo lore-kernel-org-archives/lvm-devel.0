@@ -1,64 +1,72 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 12 Nov 2015 15:36:43 +0000 (UTC)
-Subject: master - lvmetad: tail chasing to shut up coverity
-Message-ID: <20151112153643.8DACD60E7F@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 13 Nov 2015 10:19:02 +0000 (UTC)
+Subject: master - reporter: add missing stack trace
+Message-ID: <20151113101902.827F5610A6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=43777b551d840a55d70e862bff751e7208c8eaf4
-Commit:        43777b551d840a55d70e862bff751e7208c8eaf4
-Parent:        058725c72149e9f852390ca1d52e932ddb745a82
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Nov 12 09:35:41 2015 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Nov 12 09:35:41 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0128770d6d881c7f30fc5e22137d1b20ce003e13
+Commit:        0128770d6d881c7f30fc5e22137d1b20ce003e13
+Parent:        43777b551d840a55d70e862bff751e7208c8eaf4
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Nov 11 22:07:39 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Nov 13 11:17:05 2015 +0100
 
-lvmetad: tail chasing to shut up coverity
+reporter: add missing stack trace
 
+Use goto_out on error paths.
 ---
- daemons/lvmetad/lvmetad-core.c |   12 +++++++++---
- 1 files changed, 9 insertions(+), 3 deletions(-)
+ tools/reporter.c |   13 ++++++-------
+ 1 files changed, 6 insertions(+), 7 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 781cfc6..f7df5fd 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -1346,8 +1346,14 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
- 	int abort_daemon = 0;
- 	int retval = 0;
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 2c733e3..71f20a3 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -657,9 +657,8 @@ static int _get_report_options(struct cmd_context *cmd,
+ 	int r = ECMD_PROCESSED;
  
-+	if (!arg_vgid || !arg_name) {
-+		ERROR(s, "update_metadata missing args arg_vgid %s arg_name %s pvid %s",
-+		      arg_vgid ?: "none", arg_name ?: "none", pvid ?: "none");
-+		return 0;
-+	}
+ 	if (!(mem = dm_pool_create("report_options", 128))) {
+-		r = ECMD_FAILED;
+ 		log_error("Failed to create temporary mempool to process report options.");
+-		goto_out;
++		return ECMD_FAILED;
+ 	}
+ 
+ 	if (!(final_opts_list = str_to_str_list(mem, *options, ",", 1))) {
+@@ -704,24 +703,24 @@ static int _get_report_options(struct cmd_context *cmd,
+ 			default:
+ 				if (!(final_opts_list = str_to_str_list(mem, opts, ",", 1))) {
+ 					r = ECMD_FAILED;
+-					goto out;
++					goto_out;
+ 				}
+ 		}
+ 	}
+ 
+ 	if (!(*options = str_list_to_str(cmd->mem, final_opts_list, ","))) {
+ 		r = ECMD_FAILED;
+-		goto out;
++		goto_out;
+ 	}
+ 	if (final_compact_list &&
+ 	    !(*fields_to_compact = str_list_to_str(cmd->mem, final_compact_list, ","))) {
+ 		dm_pool_free(cmd->mem, (char *) *options);
+ 		r = ECMD_FAILED;
+-		goto out;
++		goto_out;
+ 	}
+ out:
+-	if (mem)
+-		dm_pool_destroy(mem);
++	dm_pool_destroy(mem);
 +
- 	DEBUGLOG(s, "update_metadata begin arg_vgid %s arg_name %s pvid %s",
--		 arg_vgid ?: "none", arg_name ?: "none", pvid ?: "none");
-+		 arg_vgid, arg_name, pvid ?: "none");
+ 	return r;
+ }
  
- 	/*
- 	 * Begin by figuring out what has changed:
-@@ -1378,7 +1384,7 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
- 	 * A lookup of the name arg was successful in finding arg_vgid_lookup,
- 	 * but that resulting vgid doesn't match the arg_vgid.
- 	 */
--	if (arg_vgid_lookup && arg_vgid && strcmp(arg_vgid_lookup, arg_vgid)) {
-+	if (arg_vgid_lookup && strcmp(arg_vgid_lookup, arg_vgid)) {
- 		if (arg_name_lookup) {
- 			/*
- 			 * This shouldn't happen.
-@@ -1419,7 +1425,7 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
- 	 * A lookup of the vgid arg was successful in finding arg_name_lookup,
- 	 * but that resulting name doesn't match the arg_name.
- 	 */
--	if (arg_name_lookup && arg_name && strcmp(arg_name_lookup, arg_name)) {
-+	if (arg_name_lookup && strcmp(arg_name_lookup, arg_name)) {
- 		if (arg_vgid_lookup) {
- 			/*
- 			 * This shouldn't happen.
 
 
