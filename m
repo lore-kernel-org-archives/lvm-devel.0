@@ -1,72 +1,43 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 13 Nov 2015 10:19:02 +0000 (UTC)
-Subject: master - reporter: add missing stack trace
-Message-ID: <20151113101902.827F5610A6@fedorahosted.org>
+Date: Fri, 13 Nov 2015 10:19:04 +0000 (UTC)
+Subject: master - libdm: put in secure check
+Message-ID: <20151113101904.9A6A1610A6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0128770d6d881c7f30fc5e22137d1b20ce003e13
-Commit:        0128770d6d881c7f30fc5e22137d1b20ce003e13
-Parent:        43777b551d840a55d70e862bff751e7208c8eaf4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d74e1291cd43f50010c22fb2c071d92390a26d28
+Commit:        d74e1291cd43f50010c22fb2c071d92390a26d28
+Parent:        0128770d6d881c7f30fc5e22137d1b20ce003e13
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 11 22:07:39 2015 +0100
+AuthorDate:    Wed Nov 11 22:51:23 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 13 11:17:05 2015 +0100
 
-reporter: add missing stack trace
+libdm: put in secure check
 
-Use goto_out on error paths.
+Coverity complains about NULL deref - while this cannot currently
+happen, put in secure INTERNAL_ERROR.
 ---
- tools/reporter.c |   13 ++++++-------
- 1 files changed, 6 insertions(+), 7 deletions(-)
+ libdm/libdm-report.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 2c733e3..71f20a3 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -657,9 +657,8 @@ static int _get_report_options(struct cmd_context *cmd,
- 	int r = ECMD_PROCESSED;
- 
- 	if (!(mem = dm_pool_create("report_options", 128))) {
--		r = ECMD_FAILED;
- 		log_error("Failed to create temporary mempool to process report options.");
--		goto_out;
-+		return ECMD_FAILED;
- 	}
- 
- 	if (!(final_opts_list = str_to_str_list(mem, *options, ",", 1))) {
-@@ -704,24 +703,24 @@ static int _get_report_options(struct cmd_context *cmd,
- 			default:
- 				if (!(final_opts_list = str_to_str_list(mem, opts, ",", 1))) {
- 					r = ECMD_FAILED;
--					goto out;
-+					goto_out;
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index b9906d8..38dde07 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -3527,6 +3527,10 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
  				}
- 		}
- 	}
- 
- 	if (!(*options = str_list_to_str(cmd->mem, final_opts_list, ","))) {
- 		r = ECMD_FAILED;
--		goto out;
-+		goto_out;
- 	}
- 	if (final_compact_list &&
- 	    !(*fields_to_compact = str_list_to_str(cmd->mem, final_compact_list, ","))) {
- 		dm_pool_free(cmd->mem, (char *) *options);
- 		r = ECMD_FAILED;
--		goto out;
-+		goto_out;
- 	}
- out:
--	if (mem)
--		dm_pool_destroy(mem);
-+	dm_pool_destroy(mem);
-+
- 	return r;
- }
- 
+ 				break;
+ 			case DM_REPORT_FIELD_TYPE_STRING_LIST:
++				if (!custom) {
++					log_error(INTERNAL_ERROR "Custom selection list is undefined.");
++					goto error;
++				}
+ 				fs->value->v.l = *(struct selection_str_list **)custom;
+ 				if (_check_value_is_strictly_reserved(rh, field_num, DM_REPORT_FIELD_TYPE_STRING_LIST, fs->value->v.l, NULL)) {
+ 					log_error("String list value found in selection is reserved.");
 
 
