@@ -1,41 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 16 Nov 2015 00:17:08 +0000 (UTC)
-Subject: master - format-text: ensure no division by zero
-Message-ID: <20151116001708.479B96053A@fedorahosted.org>
+Date: Mon, 16 Nov 2015 00:17:10 +0000 (UTC)
+Subject: master - cleanup: add _free on error path
+Message-ID: <20151116001710.57BD5601DE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c3b292a4a9924d00da421d66d8281f8cd8efc3a9
-Commit:        c3b292a4a9924d00da421d66d8281f8cd8efc3a9
-Parent:        193e7f5973e8a0ff7a4f8ebc542fcb9853a30d0d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a4676fea9808f348b9bbda46c03dce298eef6e5
+Commit:        5a4676fea9808f348b9bbda46c03dce298eef6e5
+Parent:        c3b292a4a9924d00da421d66d8281f8cd8efc3a9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 16 01:04:21 2015 +0100
+AuthorDate:    Sat Dec 6 23:55:25 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 16 01:16:11 2015 +0100
 
-format-text: ensure no division by zero
+cleanup: add _free on error path
 
-Coverity likes here to be 100% sure no division by zero is possible.
-Add check for alignment !=0 which is made on other code paths here.
+Just like with failing allocation above also _free(dev).
+
+TODO: rework this to always use mempool and drop unneeded
+comlexity we have in this function.
 ---
- lib/format_text/format-text.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/device/dev-cache.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index d4f2c89..58d6209 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -2119,7 +2119,7 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index b9d4271..185b394 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -115,6 +115,7 @@ struct device *dev_create_file(const char *filename, struct device *dev,
+ 			}
+ 			if (!(alias->str = _strdup(filename))) {
+ 				log_error("filename strdup failed");
++				_free(dev);
+ 				return NULL;
+ 			}
  		}
- 
- 		/* Align MDA0 end position with given alignment offset if possible. */
--		if (alignment_offset &&
-+		if (alignment && alignment_offset &&
- 		    (((mda_start + mda_size) % alignment) == 0)) {
- 			tmp_mda_size = mda_size + alignment_offset;
- 			if (mda_start + tmp_mda_size <= limit)
 
 
