@@ -1,62 +1,49 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 09:28:03 +0000 (UTC)
-Subject: master - dmeventd: reorder tou
-Message-ID: <20151109092803.484BD60644@fedorahosted.org>
+Date: Mon, 16 Nov 2015 12:14:25 +0000 (UTC)
+Subject: master - libdm: fix check of pointer
+Message-ID: <20151116121425.58D0F60B40@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e1b111b02accb4145b82b8b47ce57ed93b1a7184
-Commit:        e1b111b02accb4145b82b8b47ce57ed93b1a7184
-Parent:        8b857bfdc60668c3cdeeb6c11ffe32def0371a39
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b6a45963e341d85196fcb070026180b3c62d608f
+Commit:        b6a45963e341d85196fcb070026180b3c62d608f
+Parent:        2a2487f02fb2ddb72106f922dcbf0ddda6959b2f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Nov 7 21:50:27 2015 +0100
+AuthorDate:    Mon Nov 16 11:51:43 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 9 10:00:33 2015 +0100
+CommitterDate: Mon Nov 16 13:10:24 2015 +0100
 
-dmeventd: reorder tou
+libdm: fix check of pointer
 
+Ahhh being blind here - wanted to check the pointer before dereference
+not a dereferenced one.
 ---
- daemons/dmeventd/libdevmapper-event.c |   15 ++++++---------
- 1 files changed, 6 insertions(+), 9 deletions(-)
+ libdm/libdm-report.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index 9b3b424..85eab5a 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -412,17 +412,15 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
- 	char default_dmeventd_path[] = DMEVENTD_PATH;
- 	char *args[] = { dmeventd_path ? : default_dmeventd_path, NULL };
- 
--	if (stat(fifos->client_path, &statbuf))
--		goto start_server;
--
--	if (!S_ISFIFO(statbuf.st_mode)) {
--		log_error("%s is not a fifo.", fifos->client_path);
--		return 0;
--	}
--
- 	/* Anyone listening?  If not, errno will be ENXIO */
- 	fifos->client = open(fifos->client_path, O_WRONLY | O_NONBLOCK);
- 	if (fifos->client >= 0) {
-+		if ((fstat(fifos->client, &statbuf) < 0) ||
-+		    !S_ISFIFO(statbuf.st_mode)) {
-+			log_error("%s is not a fifo.", fifos->client_path);
-+			return 0;
-+		}
-+
- 		/* server is running and listening */
- 		if (close(fifos->client))
- 			log_sys_debug("close", fifos->client_path);
-@@ -433,7 +431,6 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
- 		return 0;
- 	}
- 
--      start_server:
- 	/* server is not running */
- 
- 	if ((args[0][0] == '/') && stat(args[0], &statbuf)) {
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 790f84f..2457335 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -2692,14 +2692,14 @@ static const char *_tok_value_string_list(const struct dm_report_field_type *ft,
+ 	dm_free(arr);
+ out:
+ 	*end = s;
+-        if (*sel_str_list)
++        if (sel_str_list)
+ 		*sel_str_list = ssl;
+ 	return s;
+ bad:
+ 	*end = s;
+ 	if (ssl)
+ 		dm_pool_free(mem, ssl);
+-        if (*sel_str_list)
++        if (sel_str_list)
+ 		*sel_str_list = NULL;
+ 	return s;
+ }
 
 
