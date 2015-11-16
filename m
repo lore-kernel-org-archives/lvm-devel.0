@@ -1,81 +1,56 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 16 Nov 2015 00:17:18 +0000 (UTC)
-Subject: master - coverity: model FD_ZERO
-Message-ID: <20151116001718.D2D486029C@fedorahosted.org>
+Date: Mon, 16 Nov 2015 12:14:23 +0000 (UTC)
+Subject: master - libdm: better error reporting from dm_split_lvm_name
+Message-ID: <20151116121423.20D7B60B40@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5d4f5873a99c3ebe52e671f828580d4cd045e456
-Commit:        5d4f5873a99c3ebe52e671f828580d4cd045e456
-Parent:        8ebf2b061174daec744f9e361fa7ca28eb19ea2e
+An embedded and charset-unspecified text was scrubbed...
+Name: disclaimer.txt
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20151116/fa2ebe0e/attachment.txt>
+-------------- next part --------------
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2a2487f02fb2ddb72106f922dcbf0ddda6959b2f
+Commit:        2a2487f02fb2ddb72106f922dcbf0ddda6959b2f
+Parent:        5d4f5873a99c3ebe52e671f828580d4cd045e456
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 13 20:11:52 2015 +0100
+AuthorDate:    Mon Nov 16 13:07:36 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 16 01:16:11 2015 +0100
+CommitterDate: Mon Nov 16 13:09:53 2015 +0100
 
-coverity: model FD_ZERO
+libdm: better error reporting from dm_split_lvm_name
 
-Coverity is not able to understand assembly language in
-system's header file, so provide model for such macro.
-
-Note: to really see model in-use: #nodef FD_ZERO model_FD_ZERO
-need to go to coverity/config/user_nodefs.h
+Report errors from all error paths correctly.
+Validate passed args before dereferencing them.
 ---
- coverity/coverity_model.c |   25 +++++++++++++++++++------
- 1 files changed, 19 insertions(+), 6 deletions(-)
+ libdm/libdm-string.c |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/coverity/coverity_model.c b/coverity/coverity_model.c
-index 947e9c8..d41c67c 100644
---- a/coverity/coverity_model.c
-+++ b/coverity/coverity_model.c
-@@ -29,19 +29,16 @@
-  */
- 
- struct lv_segment;
--
--struct logical_volume {
--	struct lv_segment *seg;
--};
-+struct logical_volume;
- 
- struct lv_segment *first_seg(const struct logical_volume *lv)
+diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
+index 9132832..79a969c 100644
+--- a/libdm/libdm-string.c
++++ b/libdm/libdm-string.c
+@@ -95,13 +95,18 @@ static char *_unquote(char *component)
+ int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
+ 		      char **vgname, char **lvname, char **layer)
  {
--	return lv->seg;
-+	return ((struct lv_segment **)lv)[0];
- }
+-	if (mem && !(*vgname = dm_pool_strdup(mem, dmname))) {
+-		log_error("Failed to duplicate dmname.");
++	if (!vgname || !lvname || !layer) {
++		log_error(INTERNAL_ERROR "dm_split_lvm_name: vgname, lvname nor layer could be NULL.");
+ 		return 0;
+ 	}
  
- struct lv_segment *last_seg(const struct logical_volume *lv)
- {
--	return lv->seg;
-+	return ((struct lv_segment **)lv)[0];
- }
+-	if (!*vgname)
++	if (mem && (!dmname || !(*vgname = dm_pool_strdup(mem, dmname)))) {
++		log_error("Failed to duplicate lvm name.");
+ 		return 0;
++	} else if (!*vgname) {
++		log_error("Missing lvm name for split.");
++		return 0;
++	}
  
- /* simple_memccpy() from glibc */
-@@ -58,6 +55,22 @@ void *memccpy(void *dest, const void *src, int c, size_t n)
- }
+ 	_unquote(*layer = _unquote(*lvname = _unquote(*vgname)));
  
- /*
-+ * 2 lines bellow needs to be placed in coverity/config/user_nodefs.h
-+ * Not sure about any other way.
-+ * Without them, coverity shows warning since x86 system header files
-+ * are using inline assembly to reset fdset
-+ */
-+//#nodef FD_ZERO model_FD_ZERO
-+//void model_FD_ZERO(void *fdset);
-+
-+void model_FD_ZERO(void *fdset)
-+{
-+	unsigned i;
-+	for (i = 0; i < 1024 / 8 / sizeof(int); ++i)
-+		((int*)fdset)[i];
-+}
-+
-+/*
-  * Added extra pointer check to not need these models,
-  * for now just keep then in file
-  */
-
-
