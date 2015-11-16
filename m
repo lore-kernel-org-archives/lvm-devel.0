@@ -1,42 +1,60 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 16 Nov 2015 00:17:10 +0000 (UTC)
-Subject: master - cleanup: add _free on error path
-Message-ID: <20151116001710.57BD5601DE@fedorahosted.org>
+Date: Mon, 16 Nov 2015 00:17:12 +0000 (UTC)
+Subject: master - cleanup: simplify dev_cache_exit
+Message-ID: <20151116001712.7B905601DE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a4676fea9808f348b9bbda46c03dce298eef6e5
-Commit:        5a4676fea9808f348b9bbda46c03dce298eef6e5
-Parent:        c3b292a4a9924d00da421d66d8281f8cd8efc3a9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dccbc3b621cdac035802cb9f60438a389acadcad
+Commit:        dccbc3b621cdac035802cb9f60438a389acadcad
+Parent:        5a4676fea9808f348b9bbda46c03dce298eef6e5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Dec 6 23:55:25 2014 +0100
+AuthorDate:    Sat Dec 6 23:56:14 2014 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 16 01:16:11 2015 +0100
 
-cleanup: add _free on error path
+cleanup: simplify dev_cache_exit
 
-Just like with failing allocation above also _free(dev).
-
-TODO: rework this to always use mempool and drop unneeded
-comlexity we have in this function.
+Just set whole _cache struct into unitialized state just
+like with lib init start usage.
+Lists are initialized with dev_cache_init().
 ---
- lib/device/dev-cache.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ lib/device/dev-cache.c |   16 +++-------------
+ 1 files changed, 3 insertions(+), 13 deletions(-)
 
 diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index b9d4271..185b394 100644
+index 185b394..7626ceb 100644
 --- a/lib/device/dev-cache.c
 +++ b/lib/device/dev-cache.c
-@@ -115,6 +115,7 @@ struct device *dev_create_file(const char *filename, struct device *dev,
- 			}
- 			if (!(alias->str = _strdup(filename))) {
- 				log_error("filename strdup failed");
-+				_free(dev);
- 				return NULL;
- 			}
- 		}
+@@ -819,23 +819,13 @@ int dev_cache_exit(void)
+ 		if ((num_open = _check_for_open_devices(1)) > 0)
+ 			log_error(INTERNAL_ERROR "%d device(s) were left open and have been closed.", num_open);
+ 
+-	if (_cache.preferred_names_matcher)
+-		_cache.preferred_names_matcher = NULL;
+-
+-	if (_cache.mem) {
++	if (_cache.mem)
+ 		dm_pool_destroy(_cache.mem);
+-		_cache.mem = NULL;
+-	}
+ 
+-	if (_cache.names) {
++	if (_cache.names)
+ 		dm_hash_destroy(_cache.names);
+-		_cache.names = NULL;
+-	}
+ 
+-	_cache.devices = NULL;
+-	_cache.has_scanned = 0;
+-	dm_list_init(&_cache.dirs);
+-	dm_list_init(&_cache.files);
++	memset(&_cache, 0, sizeof(_cache));
+ 
+ 	return (!num_open);
+ }
 
 
