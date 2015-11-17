@@ -1,40 +1,43 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 17 Nov 2015 18:01:33 +0000 (UTC)
-Subject: master - libdm: update error message
-Message-ID: <20151117180133.C9BF160F16@fedorahosted.org>
+Date: Tue, 17 Nov 2015 18:01:35 +0000 (UTC)
+Subject: master - raid: drop unneeded NULL test
+Message-ID: <20151117180135.EC87A60F16@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=51dfba002b05cc65346b539b4b030f0c2dfffeaf
-Commit:        51dfba002b05cc65346b539b4b030f0c2dfffeaf
-Parent:        931fede81b5fdc3aecd730567fefc3e31c5275ce
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cad3568def7f82ae58c3585a94ceb377bb155167
+Commit:        cad3568def7f82ae58c3585a94ceb377bb155167
+Parent:        51dfba002b05cc65346b539b4b030f0c2dfffeaf
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 16 14:39:09 2015 +0100
+AuthorDate:    Tue Nov 17 13:17:59 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Nov 17 19:01:25 2015 +0100
 
-libdm: update error message
+raid: drop unneeded NULL test
 
-Correcting error message.
+Skip testing target_pvs for NULL, we already
+dereference it in many other places.
+If check would ever be needed - it needs to be
+in front of _raid_extract_images().
 ---
- libdm/libdm-string.c |    2 +-
+ lib/metadata/raid_manip.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
-index 79a969c..ef93a6b 100644
---- a/libdm/libdm-string.c
-+++ b/libdm/libdm-string.c
-@@ -96,7 +96,7 @@ int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
- 		      char **vgname, char **lvname, char **layer)
- {
- 	if (!vgname || !lvname || !layer) {
--		log_error(INTERNAL_ERROR "dm_split_lvm_name: vgname, lvname nor layer could be NULL.");
-+		log_error(INTERNAL_ERROR "dm_split_lvm_name: Forbidden NULL parameter detected.");
- 		return 0;
- 	}
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 4b2cb61..b99b671 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -913,7 +913,7 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
+ 				  display_lvname(seg_lv(seg, s)));
+ 		} else {
+ 			/* Conditions for second pass */
+-			if (!target_pvs || !lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
++			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
+ 			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
+ 				continue;
  
 
 
