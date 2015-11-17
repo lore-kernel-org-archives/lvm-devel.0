@@ -1,45 +1,46 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue,  3 Nov 2015 19:39:41 +0000 (UTC)
-Subject: master - lvmcache: change log_verbose to log_warn
-Message-ID: <20151103193941.516C860D5E@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 17 Nov 2015 18:01:40 +0000 (UTC)
+Subject: master - cleanup: do not call vg_read with NULL mda
+Message-ID: <20151117180140.30C89600C1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4103896ca02045d1ac13c788031a27e316b0c47a
-Commit:        4103896ca02045d1ac13c788031a27e316b0c47a
-Parent:        d30105f4712d83c89da2e82bb6f5d22dd599a94d
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 15 16:35:40 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 3 13:37:31 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=011dd82050fb3225d7ea3c24be5c8dad026117d3
+Commit:        011dd82050fb3225d7ea3c24be5c8dad026117d3
+Parent:        121341e52c8cb3bf14571cad0c3d90c1ec9d717d
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Nov 17 13:23:28 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Nov 17 19:01:25 2015 +0100
 
-lvmcache: change log_verbose to log_warn
+cleanup: do not call vg_read with NULL mda
 
-Without this, some cases miss printing a
-warning for duplicate PVs.
+Use 'mda' instead of NULL to quite Coverity warn.
+However this code seems to be actually not even possible to hit.
+With proper analysis it may possibly be dropped from code to
+simplify logic.
 ---
- lib/cache/lvmcache.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ lib/cache/lvmetad.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 31f2aa9..8ab1a31 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1784,9 +1784,9 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 				 * been chosen during a previous populating of
- 				 * lvmcache, so just use the existing preferences.
- 				 */
--				log_verbose("Found duplicate PV %s: using existing dev %s",
--					    pvid_s,
--					    dev_name(existing->dev));
-+				log_warn("Found duplicate PV %s: using existing dev %s",
-+					 pvid_s,
-+					 dev_name(existing->dev));
- 				return NULL;
- 			}
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 8b5bcfb..d300d39 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1370,9 +1370,10 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
+ 	 * can scan further devices.
+ 	 */
+ 	if (!baton.vg && !(baton.fid->fmt->features & FMT_MDAS)) {
++		/* This code seems to be unreachable */
+ 		if ((mda = (struct metadata_area *)dm_list_first(&baton.fid->metadata_areas_in_use)))
+ 			baton.vg = mda->ops->vg_read(baton.fid, lvmcache_vgname_from_info(info),
+-						     NULL, NULL, NULL, 1);
++						     mda, NULL, NULL, 1);
+ 	}
  
+ 	if (!baton.vg)
 
 
