@@ -1,66 +1,53 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 19 Nov 2015 11:21:23 +0000 (UTC)
-Subject: master - tests: stacktrace on skip if message is empty
-Message-ID: <20151119112123.E6014601BF@fedorahosted.org>
+Date: Thu, 19 Nov 2015 13:41:44 +0000 (UTC)
+Subject: master - cache: enable raid conversion for _cdata and _cmeta
+Message-ID: <20151119134144.5594B616A4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6f002c29a56d4e80ff7ebc9b8a5334c2599e663a
-Commit:        6f002c29a56d4e80ff7ebc9b8a5334c2599e663a
-Parent:        2a23550cf3f3ecf6f3daec211e2304444170daf3
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Nov 19 12:11:58 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d1608345dffd912dd591d71a147c5acf587cf7fe
+Commit:        d1608345dffd912dd591d71a147c5acf587cf7fe
+Parent:        6f002c29a56d4e80ff7ebc9b8a5334c2599e663a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Nov 19 13:30:55 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 19 12:18:33 2015 +0100
+CommitterDate: Thu Nov 19 14:38:36 2015 +0100
 
-tests: stacktrace on skip if message is empty
+cache: enable raid conversion for _cdata and _cmeta
 
+Since thin-pool supports convertion of data and metadata LV,
+enable the same for cache data and metadata LV.
 ---
- test/lib/utils.sh |   15 +++++++++++++--
- 1 files changed, 13 insertions(+), 2 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    2 ++
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 24c9076..6745c1b 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -107,7 +107,7 @@ grep1_() {
- 	awk -v pattern="${1}" 'NR==1 || $0~pattern' "${@:2}"
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d5a4a3b..0519527 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.135 - 
+ ====================================
++  Allow lvconvert cache pools' data and metadata LV to raid.
+   Fix reading of old metadata with missing cache policy or mode settings.
+   Issue error if external_device_info_source=udev and udev db record incomplete.
+   Fix passing of 32bit values through daemons (mostly lvmlockd).
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 3cfd915..19ee607 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -199,6 +199,8 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
+ 	    !arg_count(cmd, splitmirrors_ARG) &&
+ 	    !strstr(lp->lv_name, "_tdata") &&
+ 	    !strstr(lp->lv_name, "_tmeta") &&
++	    !strstr(lp->lv_name, "_cdata") &&
++	    !strstr(lp->lv_name, "_cmeta") &&
+ 	    !apply_lvname_restrictions(lp->lv_name))
+ 		return_0;
  
--STACKTRACE() {
-+stacktrace() {
- 	trap - ERR
- 	local i=0
- 
-@@ -116,6 +116,13 @@ STACKTRACE() {
- 		echo "## $i ${FUNC}() called from ${BASH_SOURCE[$i]}:${BASH_LINENO[$i]}"
- 		i=$(($i + 1))
- 	done
-+}
-+
-+STACKTRACE() {
-+	trap - ERR
-+	local i=0
-+
-+	stacktrace
- 
- 	test "${LVM_TEST_PARALLEL:-0}" -eq 1 -o -n "$RUNNING_DMEVENTD" -o -f LOCAL_DMEVENTD || {
- 		pgrep dmeventd &>/dev/null && \
-@@ -211,7 +218,11 @@ dm_table() {
- }
- 
- skip() {
--	test "$#" -eq 0 || echo "TEST SKIPPED: $@"
-+	if test "$#" -eq 0; then
-+		stacktrace
-+	else
-+		echo "TEST SKIPPED: $@"
-+	fi
- 	touch SKIP_THIS_TEST
- 	exit 200
- }
 
 
