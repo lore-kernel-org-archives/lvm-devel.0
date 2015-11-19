@@ -1,43 +1,67 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 09:28:07 +0000 (UTC)
-Subject: master - clvmd: check for pthread_create status
-Message-ID: <20151109092807.8849E606F9@fedorahosted.org>
+Date: Thu, 19 Nov 2015 11:21:15 +0000 (UTC)
+Subject: master - cleanup: use display_lvname in pmspare
+Message-ID: <20151119112115.2490B60E43@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9df3069083cd49f75e0ec54fc1e699b057129934
-Commit:        9df3069083cd49f75e0ec54fc1e699b057129934
-Parent:        2c8d6f5c90d5be62b48ba2881f2a6631091dc5af
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e2b00b0a899376b3336e146dc3f4c077726d938a
+Commit:        e2b00b0a899376b3336e146dc3f4c077726d938a
+Parent:        0a2cadf6b87acd62151451cff8fd596715f00718
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 9 09:23:27 2015 +0100
+AuthorDate:    Wed Nov 18 09:14:24 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 9 10:19:18 2015 +0100
+CommitterDate: Wed Nov 18 22:17:26 2015 +0100
 
-clvmd: check for pthread_create status
+cleanup: use display_lvname in pmspare
 
-Coverity: likes to see checked function result.
+Just switch to use display_lvname().
+Also squeeze possibly failing strncpy into INTERNAL_ERROR
+as lvname always should fit.
 ---
- daemons/clvmd/clvmd.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ lib/metadata/pool_manip.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 53daa8c..96cb697 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -604,7 +604,10 @@ int main(int argc, char *argv[])
- 		 local_client_head.fd, &local_client_head, newfd->fd, newfd);
+diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
+index a57d90e..fd7edd2 100644
+--- a/lib/metadata/pool_manip.c
++++ b/lib/metadata/pool_manip.c
+@@ -709,7 +709,7 @@ int vg_remove_pool_metadata_spare(struct volume_group *vg)
  
- 	/* Don't let anyone else to do work until we are started */
--	pthread_create(&lvm_thread, &stack_attr, lvm_thread_fn, &lvm_params);
-+	if (pthread_create(&lvm_thread, &stack_attr, lvm_thread_fn, &lvm_params)) {
-+		log_sys_error("pthread_create", "");
-+		goto out;
-+	}
+ 	if (!(lv->status & POOL_METADATA_SPARE)) {
+ 		log_error(INTERNAL_ERROR "LV %s is not pool metadata spare.",
+-			  lv->name);
++			  display_lvname(lv));
+ 		return 0;
+ 	}
  
- 	/* Don't start until the LVM thread is ready */
- 	pthread_barrier_wait(&lvm_start_barrier);
+@@ -718,10 +718,10 @@ int vg_remove_pool_metadata_spare(struct volume_group *vg)
+ 	lv_set_visible(lv);
+ 
+ 	/* Cut off suffix _pmspare */
+-	(void) dm_strncpy(new_name, lv->name, sizeof(new_name));
+-	if (!(c = strchr(new_name, '_'))) {
++	if (!dm_strncpy(new_name, lv->name, sizeof(new_name)) ||
++	    !(c = strchr(new_name, '_'))) {
+ 		log_error(INTERNAL_ERROR "LV %s has no suffix for pool metadata spare.",
+-			  new_name);
++			  display_lvname(lv));
+ 		return 0;
+ 	}
+ 	*c = 0;
+@@ -735,8 +735,8 @@ int vg_remove_pool_metadata_spare(struct volume_group *vg)
+ 	}
+ 
+ 	log_print_unless_silent("Renaming existing pool metadata spare "
+-				"logical volume \"%s/%s\" to \"%s/%s\".",
+-                                vg->name, lv->name, vg->name, new_name);
++				"logical volume \"%s\" to \"%s/%s\".",
++                                display_lvname(lv), vg->name, new_name);
+ 
+ 	if (!lv_rename_update(vg->cmd, lv, new_name, 0))
+ 		return_0;
 
 
