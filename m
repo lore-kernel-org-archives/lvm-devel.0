@@ -1,100 +1,66 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 19 Nov 2015 11:21:21 +0000 (UTC)
-Subject: master - tests: add missing --skip option and S env.variable
-Message-ID: <20151119112121.65D3C60CD6@fedorahosted.org>
+Date: Thu, 19 Nov 2015 11:21:23 +0000 (UTC)
+Subject: master - tests: stacktrace on skip if message is empty
+Message-ID: <20151119112123.E6014601BF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2a23550cf3f3ecf6f3daec211e2304444170daf3
-Commit:        2a23550cf3f3ecf6f3daec211e2304444170daf3
-Parent:        0614c63579b9ab6ebf68b957b4de3806f231a14c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6f002c29a56d4e80ff7ebc9b8a5334c2599e663a
+Commit:        6f002c29a56d4e80ff7ebc9b8a5334c2599e663a
+Parent:        2a23550cf3f3ecf6f3daec211e2304444170daf3
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Nov 19 10:48:17 2015 +0100
+AuthorDate:    Thu Nov 19 12:11:58 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 19 12:00:59 2015 +0100
+CommitterDate: Thu Nov 19 12:18:33 2015 +0100
 
-tests: add missing --skip option and S env.variable
+tests: stacktrace on skip if message is empty
 
 ---
- test/lib/brick-shelltest.h |   40 ++++++++++++++++++++++++++++++++--------
- 1 files changed, 32 insertions(+), 8 deletions(-)
+ test/lib/utils.sh |   15 +++++++++++++--
+ 1 files changed, 13 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/brick-shelltest.h b/test/lib/brick-shelltest.h
-index cc7135f..be7c3fe 100644
---- a/test/lib/brick-shelltest.h
-+++ b/test/lib/brick-shelltest.h
-@@ -675,7 +675,7 @@ bool interrupt = false;
- struct Options {
-     bool verbose, batch, interactive, cont, fatal_timeouts, kmsg;
-     std::string testdir, outdir, workdir, heartbeat;
--    std::vector< std::string > flavours, filter, watch;
-+    std::vector< std::string > flavours, filter, skip, watch;
-     std::string flavour_envvar;
-     int timeout;
-     Options() : verbose( false ), batch( false ), interactive( false ),
-@@ -986,6 +986,7 @@ struct Main {
-     Cases cases;
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index 24c9076..6745c1b 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -107,7 +107,7 @@ grep1_() {
+ 	awk -v pattern="${1}" 'NR==1 || $0~pattern' "${@:2}"
+ }
  
-     void setup() {
-+        bool filter;
-         Listing l = listdir( options.testdir, true );
-         std::sort( l.begin(), l.end() );
+-STACKTRACE() {
++stacktrace() {
+ 	trap - ERR
+ 	local i=0
  
-@@ -997,15 +998,33 @@ struct Main {
-                     continue;
-                 if ( i->substr( 0, 4 ) == "lib/" )
-                     continue;
--                bool filter = !options.filter.empty();
- 
--                for ( std::vector< std::string >::iterator filt = options.filter.begin();
--                      filt != options.filter.end(); ++filt ) {
--                    if ( i->find( *filt ) != std::string::npos )
--                        filter = false;
-+                if (!options.filter.empty()) {
-+                    filter = true;
-+                    for ( std::vector< std::string >::iterator filt = options.filter.begin();
-+                          filt != options.filter.end(); ++filt ) {
-+                        if ( i->find( *filt ) != std::string::npos ) {
-+                            filter = false;
-+                            break;
-+                        }
-+                    }
-+                    if ( filter )
-+                        continue;
-                 }
--                if ( filter )
--                    continue;
+@@ -116,6 +116,13 @@ STACKTRACE() {
+ 		echo "## $i ${FUNC}() called from ${BASH_SOURCE[$i]}:${BASH_LINENO[$i]}"
+ 		i=$(($i + 1))
+ 	done
++}
 +
-+                if (!options.skip.empty()) {
-+                    filter = false;
-+                    for ( std::vector< std::string >::iterator filt = options.skip.begin();
-+                          filt != options.skip.end(); ++filt ) {
-+                        if ( i->find( *filt ) != std::string::npos ) {
-+                            filter = true;
-+                            break;
-+                        }
-+                    }
-+                    if ( filter )
-+                        continue;
-+                }
++STACKTRACE() {
++	trap - ERR
++	local i=0
 +
-                 cases.push_back( TestCase( journal, options, options.testdir + *i, *i, *flav ) );
-                 cases.back().options = options;
-             }
-@@ -1215,6 +1234,11 @@ static int run( int argc, const char **argv, std::string fl_envvar = "TEST_FLAVO
-     else if ( hasenv( "T" ) )
-         split( getenv( "T" ), opt.filter );
++	stacktrace
  
-+    if ( args.has( "--skip" ) )
-+        split( args.opt( "--skip" ), opt.skip );
-+    else if ( hasenv( "S" ) )
-+        split( getenv( "S" ), opt.skip );
-+
-     if ( args.has( "--fatal-timeouts" ) )
-         opt.fatal_timeouts = true;
+ 	test "${LVM_TEST_PARALLEL:-0}" -eq 1 -o -n "$RUNNING_DMEVENTD" -o -f LOCAL_DMEVENTD || {
+ 		pgrep dmeventd &>/dev/null && \
+@@ -211,7 +218,11 @@ dm_table() {
+ }
  
+ skip() {
+-	test "$#" -eq 0 || echo "TEST SKIPPED: $@"
++	if test "$#" -eq 0; then
++		stacktrace
++	else
++		echo "TEST SKIPPED: $@"
++	fi
+ 	touch SKIP_THIS_TEST
+ 	exit 200
+ }
 
 
