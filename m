@@ -1,116 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 24 Nov 2015 10:33:25 +0000 (UTC)
-Subject: master - tests: data correctness after thin-pool resize
-Message-ID: <20151124103325.A53BA60DEE@fedorahosted.org>
+Date: Tue, 24 Nov 2015 10:33:27 +0000 (UTC)
+Subject: master - tests: improve teardown
+Message-ID: <20151124103327.B9F4760DEE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a220939d9ef77db63a1f6af5f3798573f047ab03
-Commit:        a220939d9ef77db63a1f6af5f3798573f047ab03
-Parent:        9243877ea10f46163506dc64d073d1f24446ab24
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8d86c5db03acd0b74cd919f1deb6cbfd1ff86e80
+Commit:        8d86c5db03acd0b74cd919f1deb6cbfd1ff86e80
+Parent:        a220939d9ef77db63a1f6af5f3798573f047ab03
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 20 22:28:21 2015 +0100
+AuthorDate:    Mon Nov 23 23:17:54 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Nov 24 11:29:27 2015 +0100
+CommitterDate: Tue Nov 24 11:29:28 2015 +0100
 
-tests: data correctness after thin-pool resize
+tests: improve teardown
 
+Do not try to execute vgremove, when test has left suspended devices.
 ---
- test/shell/thin-resize-match.sh |   84 +++++++++++++++++++++++++++++++++++++++
- 1 files changed, 84 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/thin-resize-match.sh b/test/shell/thin-resize-match.sh
-new file mode 100644
-index 0000000..d5481e2
---- /dev/null
-+++ b/test/shell/thin-resize-match.sh
-@@ -0,0 +1,84 @@
-+#!/bin/bash
-+# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# ensure there is no data loss during thin-pool resize
-+
-+export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-+
-+. lib/inittest
-+
-+test -e LOCAL_LVMPOLLD && skip
-+
-+which md5sum || skip
-+
-+aux have_thin 1 0 0 || skip
-+
-+aux prepare_pvs 2 20
-+
-+vgcreate -s 512K $vg $(< DEVICES)
-+
-+lvcreate -L1M -V2M -n $lv1 -T $vg/pool
-+
-+# just ensure we check what we need to check
-+check lv_field $vg/pool size "1.00m"
-+check lv_field $vg/$lv1 size "2.00m"
-+
-+# prepare 2097152  file content
-+seq 0 315465 > 2M
-+md5sum 2M | cut -f 1 -d ' ' | tee MD5
-+dd if=2M of="$DM_DEV_DIR/mapper/$vg-$lv1" bs=512K conv=fdatasync 2>&1 >log &
-+#dd if=2M of="$DM_DEV_DIR/mapper/$vg-$lv1" bs=2M oflag=direct &
-+
-+# give it some time to fill thin-volume
-+# eventually loop to wait for 100% full pool...
-+sleep .1
-+lvs -a $vg
-+
-+# this must not 'block & wait' on suspending flush
-+# if it waits on thin-pool's target timeout
-+# it will harm queued data
-+lvextend -L+512k $vg/pool
-+lvextend -L+512k $vg/pool
-+
-+# collect 'dd' result
-+wait
-+cat log
-+
-+lvs -a $vg
-+
-+dd if="$DM_DEV_DIR/mapper/$vg-$lv1" of=2M-2 iflag=direct
-+md5sum 2M-2 | cut -f 1 -d ' '  | tee MD5-2
-+
-+# these 2 are supposed to match
-+diff MD5  MD5-2
-+
-+
-+# Do not want to see Live & Inactive table entry
-+echo $(dm_info attr,name) | not grep "LI-.*${PREFIX}" || {
-+        dmsetup table --inactive | grep ${PREFIX}
-+	die "Found device with Inactive table"
-+}
-+
-+# Check wrapping active thin-pool linear mapping has matching size
-+POOLSZ=$(dmsetup table ${vg}-pool-tpool | cut -d ' ' -f 2)
-+WRAPSZ=$(dmsetup table ${vg}-pool | cut -d ' ' -f 2)
-+
-+#
-+# FIXME: currently requires to update 2 dependent targets in one 'preload'
-+#        lvm2 cannot handle this and would need one extra --refresh pass.
-+#        Once resolved - enabled this test.
-+#        Maybe other solution without fake linear mapping could be found.
-+#        Eventually strictly map just single sector as it has no real use?
-+#
-+#should test "${POOLSZ}" = "${WRAPSZ}" || \
-+#        die "Wrapping pool device size does not match real pool size"
-+
-+vgremove -f $vg
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 2c66f29..216dd19 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -322,8 +322,12 @@ teardown() {
+ 	dm_table | not egrep -q "$vg|$vg1|$vg2|$vg3|$vg4" || {
+ 		# Avoid activation of dmeventd if there is no pid
+ 		cfg=$(test -s LOCAL_DMEVENTD || echo "--config activation{monitoring=0}")
+-		vgremove -ff $cfg  \
++		if echo "$(dm_info suspended,name)" | grep -q "^Suspended:.*$prefix" ; then
++			echo "Skipping vgremove, suspended devices detected."
++		else
++			vgremove -ff $cfg  \
+ 			$vg $vg1 $vg2 $vg3 $vg4 &>/dev/null || rm -f debug.log strace.log
++		fi
+ 	}
+ 
+ 	kill_sleep_kill_ LOCAL_LVMPOLLD ${LVM_VALGRIND_LVMPOLLD:-0}
 
 
