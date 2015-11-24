@@ -1,66 +1,54 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 23 Nov 2015 17:58:16 +0000 (UTC)
-Subject: master - man lvmcache: include chunk size
-Message-ID: <20151123175816.41AE56067A@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 24 Nov 2015 10:33:10 +0000 (UTC)
+Subject: master - libdm: drop extra space from cache target line
+Message-ID: <20151124103310.9A090610DF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fe64d3a2e27cedd7973d0a01360796089596b20b
-Commit:        fe64d3a2e27cedd7973d0a01360796089596b20b
-Parent:        c026846739eeea4432b75bbe8d577944f0f6b55b
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Nov 23 11:57:41 2015 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Nov 23 11:57:41 2015 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ddbf0075b1abb5ea0cb0ff56cc128fd18523ed36
+Commit:        ddbf0075b1abb5ea0cb0ff56cc128fd18523ed36
+Parent:        fe64d3a2e27cedd7973d0a01360796089596b20b
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Nov 23 23:12:43 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Nov 23 23:33:37 2015 +0100
 
-man lvmcache: include chunk size
+libdm: drop extra space from cache target line
 
+Extra space between 'cache' target and metadata device caused
+string comparation being not equal and thus always causing
+table reload even when uneeded.
 ---
- man/lvmcache.7.in |   29 +++++++++++++++++++++++++++++
- 1 files changed, 29 insertions(+), 0 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvmcache.7.in b/man/lvmcache.7.in
-index 44709d1..45bb5b1 100644
---- a/man/lvmcache.7.in
-+++ b/man/lvmcache.7.in
-@@ -301,6 +301,35 @@ defines the default cache policy.
- defines the default cache settings.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index dd1b0b6..49aa50f 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.112 - 
+ =====================================
++  Drop extra space from cache target line to fix unneded table reloads.
  
+ Version 1.02.111 - 23rd November 2015
+ =====================================
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index d7e2143..830a6a8 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -2429,7 +2429,7 @@ static int _cache_emit_segment_line(struct dm_task *dmt,
+ 	if (!_build_dev_string(origin, sizeof(origin), seg->origin))
+ 		return_0;
  
-+.SS Chunk size
-+
-+\&
-+
-+The size of data blocks managed by a cache pool can be specified with the
-+\-\-chunksize option when the cache LV is created.  The default unit
-+is KiB. The value must be a multiple of 32KiB between 32KiB and 1GiB.
-+
-+Using a chunk size that is too large can result in wasteful use of the
-+cache, where small reads and writes can cause large sections of an LV to
-+be mapped into the cache.  However, choosing a chunk size that is too
-+small can result in more overhead trying to manage the numerous chunks
-+that become mapped into the cache.  Overhead can include both excessive
-+CPU time searching for chunks, and excessive memory tracking chunks.
-+
-+Command to display the cache pool LV chunk size:
-+.br
-+.B lvs \-o+chunksize VG/CacheLV
-+
-+.BR lvm.conf (5)
-+.B cache_pool_chunk_size
-+.br
-+controls the default chunk size used when creating a cache LV.
-+
-+The default value is shown by:
-+.br
-+.B lvmconfig \-\-type default allocation/cache_pool_chunk_size
-+
-+
- .SS Spare metadata LV
+-	EMIT_PARAMS(pos, " %s %s %s", metadata, data, origin);
++	EMIT_PARAMS(pos, "%s %s %s", metadata, data, origin);
  
- \&
+ 	/* Data block size */
+ 	EMIT_PARAMS(pos, " %u", seg->data_block_size);
 
 
