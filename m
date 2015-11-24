@@ -1,78 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 24 Nov 2015 10:33:13 +0000 (UTC)
-Subject: master - libdm: enhance thin-pool preload
-Message-ID: <20151124103313.051E5610DF@fedorahosted.org>
+Date: Tue, 24 Nov 2015 10:33:17 +0000 (UTC)
+Subject: master - thin: work with active thin-pool
+Message-ID: <20151124103317.3BED461437@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6ca5447e0c65ba6126a005aafeff3dc5c340bb75
-Commit:        6ca5447e0c65ba6126a005aafeff3dc5c340bb75
-Parent:        ddbf0075b1abb5ea0cb0ff56cc128fd18523ed36
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=94c9453659e9e2ec0389b8ea3e9ed18718d61d6a
+Commit:        94c9453659e9e2ec0389b8ea3e9ed18718d61d6a
+Parent:        15be97d76b0ca24d62c67a947ae595a2124260be
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 23 23:15:04 2015 +0100
+AuthorDate:    Mon Nov 23 19:53:43 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 23 23:34:46 2015 +0100
+CommitterDate: Mon Nov 23 23:41:36 2015 +0100
 
-libdm: enhance thin-pool preload
+thin: work with active thin-pool
 
-When preloading thin-pool device node for already
-existing/running thin-pool do not resume such thin-pool.
-
-This allows to properly schedule commit point for metadata,
-when thin-pool data or metadata volume is resized.
+When 'lvextend -L+XX vg/thinpool'  do not leave inactive table
+loaded for 'wrapping' LV on top of resized thin-pool
+(ATM we use linear  LV for this with same size as thin-pool).
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |   17 +++++++++++++++++
- 2 files changed, 18 insertions(+), 0 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/activate/dev_manager.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 49aa50f..600c5b7 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0b24981..a4eeebf 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.112 - 
+ Version 2.02.136 - 
  =====================================
-+  Improve preloading sequence of an active thin-pool target.
-   Drop extra space from cache target line to fix unneded table reloads.
++  Fix inactive table loaded for wrapping thin-pool when resizing it.
+   Extend the list of ignored libraries when locking memory.
  
- Version 1.02.111 - 23rd November 2015
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 830a6a8..0b33ad3 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -2788,6 +2788,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 	struct dm_tree_node *child;
- 	struct dm_info newinfo;
- 	int update_devs_flag = 0;
-+	struct load_segment *seg;
+ Version 2.02.135 - 23rd November 2015
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index fd4d842..da24cdd 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -2311,7 +2311,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 			return_0;
+ 		if (seg->pool_lv &&
+ 		    (lv_is_cache_pool(seg->pool_lv) || !dm->skip_external_lv) &&
+-		    !_add_lv_to_dtree(dm, dtree, seg->pool_lv, 1)) /* stack */
++		    !_add_lv_to_dtree(dm, dtree, seg->pool_lv, origin_only))
+ 			return_0;
  
- 	/* Preload children first */
- 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
-@@ -2835,6 +2836,22 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 		if (!dm_tree_node_num_children(child, 1) || !child->props.size_changed)
- 			continue;
- 
-+		if (!node_created && (dm_list_size(&child->props.segs) == 1)) {
-+			/* If thin-pool child nodes were preloaded WITH changed size
-+			 * skip device resume, as this is likely resize of data or
-+			 * metadata device and so thin pool needs suspend before
-+			 * resume operation.
-+			 * Note: child->props.segment_count is already 0 here
-+			 */
-+			seg = dm_list_item(dm_list_last(&child->props.segs),
-+					   struct load_segment);
-+			if (seg->type == SEG_THIN_POOL) {
-+				log_debug_activation("Skipping resume of thin-pool %s.",
-+						     child->name);
-+				continue;
-+			}
-+		}
-+
- 		if (!child->info.inactive_table && !child->info.suspended)
- 			continue;
- 
+ 		for (s = 0; s < seg->area_count; s++) {
 
 
