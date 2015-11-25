@@ -1,45 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 24 Nov 2015 10:33:27 +0000 (UTC)
-Subject: master - tests: improve teardown
-Message-ID: <20151124103327.B9F4760DEE@fedorahosted.org>
+Date: Wed, 25 Nov 2015 10:44:14 +0000 (UTC)
+Subject: master - thin: fix previous update of partial tree building
+Message-ID: <20151125104414.7E48E602C7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8d86c5db03acd0b74cd919f1deb6cbfd1ff86e80
-Commit:        8d86c5db03acd0b74cd919f1deb6cbfd1ff86e80
-Parent:        a220939d9ef77db63a1f6af5f3798573f047ab03
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0285066e10d0c4a37bc4938eeed2139299600b3e
+Commit:        0285066e10d0c4a37bc4938eeed2139299600b3e
+Parent:        8d86c5db03acd0b74cd919f1deb6cbfd1ff86e80
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 23 23:17:54 2015 +0100
+AuthorDate:    Tue Nov 24 23:24:11 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Nov 24 11:29:28 2015 +0100
+CommitterDate: Tue Nov 24 23:24:11 2015 +0100
 
-tests: improve teardown
+thin: fix previous update of partial tree building
 
-Do not try to execute vgremove, when test has left suspended devices.
+We do want to preserve 'active' thin-pool,
+so add this 'fake' layer only when activating.
+
+TODO:  think how to use thin-pool without fake LV layer.
 ---
- test/lib/aux.sh |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ lib/activate/dev_manager.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 2c66f29..216dd19 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -322,8 +322,12 @@ teardown() {
- 	dm_table | not egrep -q "$vg|$vg1|$vg2|$vg3|$vg4" || {
- 		# Avoid activation of dmeventd if there is no pid
- 		cfg=$(test -s LOCAL_DMEVENTD || echo "--config activation{monitoring=0}")
--		vgremove -ff $cfg  \
-+		if echo "$(dm_info suspended,name)" | grep -q "^Suspended:.*$prefix" ; then
-+			echo "Skipping vgremove, suspended devices detected."
-+		else
-+			vgremove -ff $cfg  \
- 			$vg $vg1 $vg2 $vg3 $vg4 &>/dev/null || rm -f debug.log strace.log
-+		fi
- 	}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index da24cdd..eb47ed1 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -2311,7 +2311,8 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 			return_0;
+ 		if (seg->pool_lv &&
+ 		    (lv_is_cache_pool(seg->pool_lv) || !dm->skip_external_lv) &&
+-		    !_add_lv_to_dtree(dm, dtree, seg->pool_lv, origin_only))
++		    /* When activating and not origin_only detect linear 'overlay' over pool */
++		    !_add_lv_to_dtree(dm, dtree, seg->pool_lv, dm->activation ? origin_only : 1))
+ 			return_0;
  
- 	kill_sleep_kill_ LOCAL_LVMPOLLD ${LVM_VALGRIND_LVMPOLLD:-0}
+ 		for (s = 0; s < seg->area_count; s++) {
 
 
