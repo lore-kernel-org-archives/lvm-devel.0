@@ -1,49 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 26 Nov 2015 20:28:15 +0000 (UTC)
-Subject: master - debug: show LV name where dlid creation failed
-Message-ID: <20151126202815.89E5B60B40@fedorahosted.org>
+Date: Thu, 26 Nov 2015 20:28:17 +0000 (UTC)
+Subject: master - cleanup: clean gcc shadow declaration of version warning
+Message-ID: <20151126202817.AE67160B40@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=82ec3e5e93f5017d7c9a83197e34f05e783fa7bf
-Commit:        82ec3e5e93f5017d7c9a83197e34f05e783fa7bf
-Parent:        922fccc6560706f5026d59e383b694f9d7f85945
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0a00efb0bee2e251a4532d0fdb77da7df0215598
+Commit:        0a00efb0bee2e251a4532d0fdb77da7df0215598
+Parent:        82ec3e5e93f5017d7c9a83197e34f05e783fa7bf
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 26 21:20:33 2015 +0100
+AuthorDate:    Thu Nov 26 21:26:55 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 26 21:20:33 2015 +0100
+CommitterDate: Thu Nov 26 21:26:55 2015 +0100
 
-debug: show LV name where dlid creation failed
+cleanup: clean gcc shadow declaration of version warning
 
 ---
- lib/misc/lvm-string.c |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ tools/dumpconfig.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
-index 5d63858..5bdb549 100644
---- a/lib/misc/lvm-string.c
-+++ b/lib/misc/lvm-string.c
-@@ -211,6 +211,7 @@ char *build_dm_uuid(struct dm_pool *mem, const struct logical_volume *lv,
- 		    const char *layer)
+diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
+index 72129c2..85cd619 100644
+--- a/tools/dumpconfig.c
++++ b/tools/dumpconfig.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -17,17 +17,17 @@
+ 
+ static int _get_vsn(struct cmd_context *cmd, uint16_t *version_int)
  {
- 	const char *lvid = lv->lvid.s;
-+	const char *dlid;
+-	const char *version;
++	const char *vsn;
+ 	unsigned int major, minor, patchlevel;
  
- 	if (!layer) {
- 		/*
-@@ -235,5 +236,9 @@ char *build_dm_uuid(struct dm_pool *mem, const struct logical_volume *lv,
- 			NULL;
+ 	if (arg_count(cmd, atversion_ARG))
+-		version = arg_str_value(cmd, atversion_ARG, NULL);
++		vsn = arg_str_value(cmd, atversion_ARG, NULL);
+ 	else if (arg_count(cmd, sinceversion_ARG))
+-		version = arg_str_value(cmd, sinceversion_ARG, NULL);
++		vsn = arg_str_value(cmd, sinceversion_ARG, NULL);
+ 	else
+-		version = LVM_VERSION;
++		vsn = LVM_VERSION;
+ 
+-	if (sscanf(version, "%u.%u.%u", &major, &minor, &patchlevel) != 3) {
++	if (sscanf(vsn, "%u.%u.%u", &major, &minor, &patchlevel) != 3) {
+ 		log_error("Incorrect version format.");
+ 		return 0;
  	}
- 
--	return dm_build_dm_uuid(mem, UUID_PREFIX, lvid, layer);
-+	if (!(dlid = dm_build_dm_uuid(mem, UUID_PREFIX, lvid, layer)))
-+		log_error("Failed to build LVM dlid for %s.",
-+			  display_lvname(lv));
-+
-+	return dlid;
- }
 
 
