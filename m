@@ -1,41 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 09:28:16 +0000 (UTC)
-Subject: master - lvmetad: require meta_lookup
-Message-ID: <20151109092816.370A161102@fedorahosted.org>
+Date: Thu, 26 Nov 2015 08:48:46 +0000 (UTC)
+Subject: master - cleanup: avoid allocation for vg_name
+Message-ID: <20151126084846.C7E4D60DBB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f66fe2c444a4a8c9dccf16ad8bf470a96de1305d
-Commit:        f66fe2c444a4a8c9dccf16ad8bf470a96de1305d
-Parent:        91bde0f4a105fb0d2ad8407b63942f2790447846
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=528695ec2004dcadaacba99d51685ac4a0582ea7
+Commit:        528695ec2004dcadaacba99d51685ac4a0582ea7
+Parent:        d582be43d4cee8c74ee4e251d299a321ded474fa
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 9 09:24:13 2015 +0100
+AuthorDate:    Wed Nov 25 16:04:27 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 9 10:19:19 2015 +0100
+CommitterDate: Thu Nov 26 09:27:37 2015 +0100
 
-lvmetad: require meta_lookup
+cleanup: avoid allocation for vg_name
 
-Coverity: do not call update_pvid_to_vgid() with
-meta_lookup == NULL since it is dereferencing it.
+Since we do not use dev_manager in a way we would have destroyed VG
+content while  in-use - we could safely keep just pointer.
+So dropping strdup.
+
+Also it seems we actually no longer use vg_name for anything
+so it may possibly go away completely unless it would be useful
+for debugging...
 ---
- daemons/lvmetad/lvmetad-core.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/activate/dev_manager.c |    6 ++----
+ 1 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 1de2ad3..78af69b 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -931,7 +931,7 @@ static int remove_metadata(lvmetad_state *s, const char *vgid, int update_pvids)
- 	unlock_vgid_to_metadata(s);
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index eb47ed1..9110ecb 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -66,7 +66,7 @@ struct dev_manager {
+ 	unsigned track_pending_delete;
+ 	unsigned track_pvmove_deps;
  
- 	/* update_pvid_to_vgid will clear/free the pvid_to_vgid hash */
--	if (update_pvids)
-+	if (update_pvids && meta_lookup)
- 		update_pvid_to_vgid(s, meta_lookup, "#orphan", 0);
+-	char *vg_name;
++	const char *vg_name;
+ };
  
- 	/* free the unmapped data */
+ struct lv_layer {
+@@ -1230,9 +1230,7 @@ struct dev_manager *dev_manager_create(struct cmd_context *cmd,
+ 
+ 	dm->cmd = cmd;
+ 	dm->mem = mem;
+-
+-	if (!(dm->vg_name = dm_pool_strdup(dm->mem, vg_name)))
+-		goto_bad;
++	dm->vg_name = vg_name;
+ 
+ 	/*
+ 	 * When we manipulate (normally suspend/resume) the PVMOVE
 
 
