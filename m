@@ -1,20 +1,20 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 26 Nov 2015 20:28:17 +0000 (UTC)
+Date: Thu, 26 Nov 2015 20:53:15 +0000 (UTC)
 Subject: master - cleanup: clean gcc shadow declaration of version warning
-Message-ID: <20151126202817.AE67160B40@fedorahosted.org>
+Message-ID: <20151126205315.D2AB5611E5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0a00efb0bee2e251a4532d0fdb77da7df0215598
-Commit:        0a00efb0bee2e251a4532d0fdb77da7df0215598
-Parent:        82ec3e5e93f5017d7c9a83197e34f05e783fa7bf
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ec647f1d431214264aaa396b6d0ba8e97738f00b
+Commit:        ec647f1d431214264aaa396b6d0ba8e97738f00b
+Parent:        4afe43e1a326d50296b6ad4a7ed836d4b0ae6b26
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 26 21:26:55 2015 +0100
+AuthorDate:    Thu Nov 26 21:52:22 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 26 21:26:55 2015 +0100
+CommitterDate: Thu Nov 26 21:52:22 2015 +0100
 
 cleanup: clean gcc shadow declaration of version warning
 
