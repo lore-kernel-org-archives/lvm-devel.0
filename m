@@ -1,65 +1,69 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sat, 28 Nov 2015 01:34:27 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20151128013427.09D1E60B3D@fedorahosted.org>
+Date: Sat, 28 Nov 2015 01:35:29 +0000 (UTC)
+Subject: v2_02_136 annotated tag has been created
+Message-ID: <20151128013529.385FD60C8E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cd4d2cff97dc4388080a06cb416861d9139d9d09
-Commit:        cd4d2cff97dc4388080a06cb416861d9139d9d09
-Parent:        b4a3aaf910fc2216635c443deed5c26c535ab742
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3a73164f53486e5c75a34f420c120ad2703ddcf8
+Commit:        3a73164f53486e5c75a34f420c120ad2703ddcf8
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Nov 28 01:29:00 2015 +0000
+AuthorDate:    2015-11-28 01:28 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Nov 28 01:29:00 2015 +0000
+CommitterDate: 2015-11-28 01:28 +0000
 
-post-release
+annotated tag: v2_02_136 has been created
+	    at 3a73164f53486e5c75a34f420c120ad2703ddcf8 (tag)
+       tagging b4a3aaf910fc2216635c443deed5c26c535ab742 (commit)
+      replaces v2_02_135
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Release 2.02.136.
 
-diff --git a/VERSION b/VERSION
-index cd7f045..759b847 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.136(2)-git (2015-11-28)
-+2.02.137(2)-git (2015-11-28)
-diff --git a/VERSION_DM b/VERSION_DM
-index 57a2b46..04ea29b 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.112-git (2015-11-28)
-+1.02.113-git (2015-11-28)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 03deb17..0096d1e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.137 -
-+=====================================
-+
- Version 2.02.136 - 28th November 2015
- =====================================
-   Add new --sinceversion option for lvmconfig --type new.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index fe37db9..9f15242 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.113 - 
-+=====================================
-+
- Version 1.02.112 - 28th November 2015
- =====================================
-   Show error message when trying to create unsupported raid type.
+Another development release.  Do not ship this release.
+
+36 files changed, 613 insertions(+), 529 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAlZZAysACgkQIoGRwVZ+LBfh5wCfSVEnKWytXE0BvDHgkGEfiCiP
+o8QAoIUBRoj6Te+eYC/mI5bYj4qK1sto
+=wsdv
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (2):
+      post-release
+      pre-release
+
+David Teigland (1):
+      man lvmcache: include chunk size
+
+Peter Rajnoha (1):
+      lvmconfig: add --sinceversion for --type new
+
+Zdenek Kabelac (20):
+      libdm: drop extra space from cache target line
+      libdm: enhance thin-pool preload
+      memlock: add more libs on ignore list
+      thin: work with active thin-pool
+      cleanup: move towards using direct LV pointers
+      thin: skip detach preload from pools
+      cleanup: use display_lvname
+      tests: data correctness after thin-pool resize
+      tests: improve teardown
+      thin: fix previous update of partial tree building
+      cleanup: rename vg_ondisk to vg_committed
+      cleanup: change ondisk committed
+      cleanup: rename lv_ondisk to lv_committed
+      libdm: const raid params and error for unsupported type
+      cleanup: avoid allocation for vg_name
+      cleanup: remove unused code
+      cleanup: using display_lvname
+      debug: show LV name where dlid creation failed
+      cleanup: clean gcc shadow declaration of version warning
+      tests: make unit testing usable again
 
 
