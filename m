@@ -1,53 +1,124 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  9 Nov 2015 09:28:20 +0000 (UTC)
-Subject: master - lvmetad: validate mda is not NULL
-Message-ID: <20151109092820.7B5C760DE7@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 30 Nov 2015 17:49:10 +0000 (UTC)
+Subject: master - system_id: refactor check for allowed system_id
+Message-ID: <20151130174910.16CD5607B9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b83a20b80a1f2f239e5c8496e819edd039965a6c
-Commit:        b83a20b80a1f2f239e5c8496e819edd039965a6c
-Parent:        99def8f43912958bb8567a123b9725c0e3389048
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 9 09:43:09 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 9 10:19:19 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05ac8367980afb0b660fc312b228337e256a38e8
+Commit:        05ac8367980afb0b660fc312b228337e256a38e8
+Parent:        d3ca18e489d48cc7c7b2a877b95b5a9a324e8e30
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Nov 30 11:46:55 2015 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Nov 30 11:46:55 2015 -0600
 
-lvmetad: validate mda is not NULL
+system_id: refactor check for allowed system_id
 
-Coverity: make it explicitely obvious metadata area is not NULL.
+Refactor the code that checks for an allowable system_id
+so that it can be used from other places.
 ---
- lib/cache/lvmetad.c |    8 ++++++--
- 1 files changed, 6 insertions(+), 2 deletions(-)
+ lib/metadata/metadata-exported.h |    2 +
+ lib/metadata/metadata.c          |   49 ++++++++++++++++++++++++-------------
+ 2 files changed, 34 insertions(+), 17 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index c859413..5c10cf4 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -1310,6 +1310,7 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
- 	struct _lvmetad_pvscan_baton baton;
- 	/* Create a dummy instance. */
- 	struct format_instance_ctx fic = { .type = 0 };
-+	struct metadata_area *mda;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index f009687..8242db1 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1238,4 +1238,6 @@ int validate_vg_rename_params(struct cmd_context *cmd,
  
- 	if (!lvmetad_active()) {
- 		log_error("Cannot proceed since lvmetad is not active.");
-@@ -1353,8 +1354,11 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
- 	 * Note that the single_device parameter also gets ignored and this code
- 	 * can scan further devices.
+ int is_lockd_type(const char *lock_type);
+ 
++int is_system_id_allowed(struct cmd_context *cmd, const char *system_id);
++
+ #endif
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 7ee928d..bf030d3 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4854,39 +4854,53 @@ static int _access_vg_lock_type(struct cmd_context *cmd, struct volume_group *vg
+ 	return 1;
+ }
+ 
+-static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
++int is_system_id_allowed(struct cmd_context *cmd, const char *system_id)
+ {
+ 	/*
+-	 * LVM1 VGs must not be accessed if a new-style LVM2 system ID is set.
++	 * A VG without a system_id can be accessed by anyone.
  	 */
--	if (!baton.vg && !(baton.fid->fmt->features & FMT_MDAS))
--		baton.vg = ((struct metadata_area *) dm_list_first(&baton.fid->metadata_areas_in_use))->ops->vg_read(baton.fid, lvmcache_vgname_from_info(info), NULL, NULL, NULL, 1);
-+	if (!baton.vg && !(baton.fid->fmt->features & FMT_MDAS)) {
-+		if ((mda = (struct metadata_area *)dm_list_first(&baton.fid->metadata_areas_in_use)))
-+			baton.vg = mda->ops->vg_read(baton.fid, lvmcache_vgname_from_info(info),
-+						     NULL, NULL, NULL, 1);
-+	}
+-	if (cmd->system_id && systemid_on_pvs(vg)) {
+-		log_error("Cannot access VG %s with LVM1 system ID %s when host system ID is set.",
+-			  vg->name, vg->lvm1_system_id);
+-		return 0;
+-	}
++	if (!system_id || !system_id[0])
++		return 1;
  
- 	if (!baton.vg)
- 		lvmcache_fmt(info)->ops->destroy_instance(baton.fid);
+ 	/*
+-	 * A VG without a system_id can be accessed by anyone.
++	 * Allowed if the host and VG system_id's match.
+ 	 */
+-	if (!vg->system_id || !vg->system_id[0])
++	if (cmd->system_id && !strcmp(cmd->system_id, system_id))
+ 		return 1;
+ 
+ 	/*
+-	 * A few commands allow read-only access to foreign VGs.
++	 * Allowed if a host's extra system_id matches.
+ 	 */
+-	if (cmd->include_foreign_vgs)
++	if (cmd->system_id && _allow_extra_system_id(cmd, system_id))
+ 		return 1;
+ 
+ 	/*
+-	 * A host can access a VG with a matching system_id.
++	 * Not allowed if the host does not have a system_id
++	 * and the VG does, or if the host and VG's system_id's
++	 * do not match.
+ 	 */
+-	if (cmd->system_id && !strcmp(vg->system_id, cmd->system_id))
+-		return 1;
+ 
++	return 0;
++}
++
++static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
++{
+ 	/*
+-	 * A host can access a VG if the VG's system_id is in extra_system_ids list.
++	 * LVM1 VGs must not be accessed if a new-style LVM2 system ID is set.
+ 	 */
+-	if (cmd->system_id && _allow_extra_system_id(cmd, vg->system_id))
++	if (cmd->system_id && systemid_on_pvs(vg)) {
++		log_error("Cannot access VG %s with LVM1 system ID %s when host system ID is set.",
++			  vg->name, vg->lvm1_system_id);
++		return 0;
++	}
++
++	/*
++	 * A few commands allow read-only access to foreign VGs.
++	 */
++	if (cmd->include_foreign_vgs)
++		return 1;
++
++	if (is_system_id_allowed(cmd, vg->system_id))
+ 		return 1;
+ 
+ 	/*
+@@ -4901,7 +4915,8 @@ static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
+ 	}
+ 
+ 	/*
+-	 * A host without a system_id cannot access a VG with a system_id.
++	 * Print an error when reading a VG that has a system_id
++	 * and the host system_id is unknown.
+ 	 */
+ 	if (!cmd->system_id || cmd->unknown_system_id) {
+ 		log_error("Cannot access VG %s with system ID %s with unknown local system ID.",
 
 
