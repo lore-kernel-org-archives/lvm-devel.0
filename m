@@ -1,124 +1,122 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 30 Nov 2015 17:49:10 +0000 (UTC)
-Subject: master - system_id: refactor check for allowed system_id
-Message-ID: <20151130174910.16CD5607B9@fedorahosted.org>
+Date: Mon, 30 Nov 2015 18:00:44 +0000 (UTC)
+Subject: master - lvmcache: new function to check if VG is foreign
+Message-ID: <20151130180044.04537602B1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05ac8367980afb0b660fc312b228337e256a38e8
-Commit:        05ac8367980afb0b660fc312b228337e256a38e8
-Parent:        d3ca18e489d48cc7c7b2a877b95b5a9a324e8e30
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eb22f7c8f7351a38fc4447f56ff588f497037c23
+Commit:        eb22f7c8f7351a38fc4447f56ff588f497037c23
+Parent:        05ac8367980afb0b660fc312b228337e256a38e8
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Nov 30 11:46:55 2015 -0600
+AuthorDate:    Mon Nov 30 11:54:56 2015 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Nov 30 11:46:55 2015 -0600
+CommitterDate: Mon Nov 30 11:54:56 2015 -0600
 
-system_id: refactor check for allowed system_id
+lvmcache: new function to check if VG is foreign
 
-Refactor the code that checks for an allowable system_id
-so that it can be used from other places.
+When not using lvmetad, this uses the system_id field in
+the cached vginfo structs that are populated during a scan.
+
+When using lvmetad, this requests the VG from lvmetad, and
+checks the system_id field in the returned metadata.
 ---
- lib/metadata/metadata-exported.h |    2 +
- lib/metadata/metadata.c          |   49 ++++++++++++++++++++++++-------------
- 2 files changed, 34 insertions(+), 17 deletions(-)
+ lib/cache/lvmcache.c |   14 ++++++++++++++
+ lib/cache/lvmcache.h |    1 +
+ lib/cache/lvmetad.c  |   26 ++++++++++++++++++++++++++
+ lib/cache/lvmetad.h  |    3 +++
+ 4 files changed, 44 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index f009687..8242db1 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1238,4 +1238,6 @@ int validate_vg_rename_params(struct cmd_context *cmd,
- 
- int is_lockd_type(const char *lock_type);
- 
-+int is_system_id_allowed(struct cmd_context *cmd, const char *system_id);
-+
- #endif
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 7ee928d..bf030d3 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4854,39 +4854,53 @@ static int _access_vg_lock_type(struct cmd_context *cmd, struct volume_group *vg
- 	return 1;
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 6c86a40..985ff43 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -2402,3 +2402,17 @@ void lvmcache_get_max_name_lengths(struct cmd_context *cmd,
+ 	}
  }
  
--static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
-+int is_system_id_allowed(struct cmd_context *cmd, const char *system_id)
- {
- 	/*
--	 * LVM1 VGs must not be accessed if a new-style LVM2 system ID is set.
-+	 * A VG without a system_id can be accessed by anyone.
- 	 */
--	if (cmd->system_id && systemid_on_pvs(vg)) {
--		log_error("Cannot access VG %s with LVM1 system ID %s when host system ID is set.",
--			  vg->name, vg->lvm1_system_id);
--		return 0;
--	}
-+	if (!system_id || !system_id[0])
-+		return 1;
- 
- 	/*
--	 * A VG without a system_id can be accessed by anyone.
-+	 * Allowed if the host and VG system_id's match.
- 	 */
--	if (!vg->system_id || !vg->system_id[0])
-+	if (cmd->system_id && !strcmp(cmd->system_id, system_id))
- 		return 1;
- 
- 	/*
--	 * A few commands allow read-only access to foreign VGs.
-+	 * Allowed if a host's extra system_id matches.
- 	 */
--	if (cmd->include_foreign_vgs)
-+	if (cmd->system_id && _allow_extra_system_id(cmd, system_id))
- 		return 1;
- 
- 	/*
--	 * A host can access a VG with a matching system_id.
-+	 * Not allowed if the host does not have a system_id
-+	 * and the VG does, or if the host and VG's system_id's
-+	 * do not match.
- 	 */
--	if (cmd->system_id && !strcmp(vg->system_id, cmd->system_id))
--		return 1;
- 
-+	return 0;
++int lvmcache_vg_is_foreign(struct cmd_context *cmd, const char *vgname, const char *vgid)
++{
++	struct lvmcache_vginfo *vginfo;
++	int ret = 0;
++
++	if (lvmetad_active())
++		return lvmetad_vg_is_foreign(cmd, vgname, vgid);
++
++	if ((vginfo = lvmcache_vginfo_from_vgid(vgid)))
++		ret = !is_system_id_allowed(cmd, vginfo->system_id);
++
++	return ret;
 +}
 +
-+static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
-+{
- 	/*
--	 * A host can access a VG if the VG's system_id is in extra_system_ids list.
-+	 * LVM1 VGs must not be accessed if a new-style LVM2 system ID is set.
- 	 */
--	if (cmd->system_id && _allow_extra_system_id(cmd, vg->system_id))
-+	if (cmd->system_id && systemid_on_pvs(vg)) {
-+		log_error("Cannot access VG %s with LVM1 system ID %s when host system ID is set.",
-+			  vg->name, vg->lvm1_system_id);
-+		return 0;
-+	}
-+
-+	/*
-+	 * A few commands allow read-only access to foreign VGs.
-+	 */
-+	if (cmd->include_foreign_vgs)
-+		return 1;
-+
-+	if (is_system_id_allowed(cmd, vg->system_id))
- 		return 1;
+diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
+index ed1b916..b968a12 100644
+--- a/lib/cache/lvmcache.h
++++ b/lib/cache/lvmcache.h
+@@ -194,5 +194,6 @@ int lvmcache_contains_lock_type_sanlock(struct cmd_context *cmd);
+ void lvmcache_get_max_name_lengths(struct cmd_context *cmd,
+ 			unsigned *pv_max_name_len, unsigned *vg_max_name_len);
  
- 	/*
-@@ -4901,7 +4915,8 @@ static int _access_vg_systemid(struct cmd_context *cmd, struct volume_group *vg)
++int lvmcache_vg_is_foreign(struct cmd_context *cmd, const char *vgname, const char *vgid);
+ 
+ #endif
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 78844c4..6d9a2f7 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1808,3 +1808,29 @@ void lvmetad_validate_global_cache(struct cmd_context *cmd, int force)
+ 		_update_changed_pvs_in_udev(cmd, &pvc_before, &pvc_after);
  	}
+ }
++
++int lvmetad_vg_is_foreign(struct cmd_context *cmd, const char *vgname, const char *vgid)
++{
++	daemon_reply reply;
++	struct dm_config_node *top;
++	const char *system_id = NULL;
++	char uuid[64];
++	int ret;
++
++	if (!id_write_format((const struct id*)vgid, uuid, sizeof(uuid)))
++		return_0;
++
++	reply = _lvmetad_send("vg_lookup",
++			      "uuid = %s", uuid,
++			      "name = %s", vgname,
++			       NULL);
++
++	if ((top = dm_config_find_node(reply.cft->root, "metadata")))
++		system_id = dm_config_find_str(top, "metadata/system_id", NULL);
++
++	ret = !is_system_id_allowed(cmd, system_id);
++
++	daemon_reply_destroy(reply);
++	return ret;
++}
++
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index af0d562..2c0b134 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -169,6 +169,8 @@ int lvmetad_pvscan_foreign_vgs(struct cmd_context *cmd, activation_handler handl
+ int lvmetad_vg_clear_outdated_pvs(struct volume_group *vg);
+ void lvmetad_validate_global_cache(struct cmd_context *cmd, int force);
  
- 	/*
--	 * A host without a system_id cannot access a VG with a system_id.
-+	 * Print an error when reading a VG that has a system_id
-+	 * and the host system_id is unknown.
- 	 */
- 	if (!cmd->system_id || cmd->unknown_system_id) {
- 		log_error("Cannot access VG %s with system ID %s with unknown local system ID.",
++int lvmetad_vg_is_foreign(struct cmd_context *cmd, const char *vgname, const char *vgid);
++
+ #  else		/* LVMETAD_SUPPORT */
+ 
+ #    define lvmetad_init(cmd)	do { } while (0)
+@@ -197,6 +199,7 @@ void lvmetad_validate_global_cache(struct cmd_context *cmd, int force);
+ #    define lvmetad_pvscan_foreign_vgs(cmd, handler)	(0)
+ #    define lvmetad_vg_clear_outdated_pvs(vg)           (1)
+ #    define lvmetad_validate_global_cache(cmd, force)	do { } while (0)
++#    define lvmetad_vg_is_foreign(cmd, vgname, vgid) (0)
+ 
+ #  endif	/* LVMETAD_SUPPORT */
+ 
 
 
