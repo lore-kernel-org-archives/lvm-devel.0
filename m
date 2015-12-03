@@ -1,57 +1,139 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu,  3 Dec 2015 14:40:52 +0000 (UTC)
-Subject: master - lvconvert: Reinstate mirror to raid conversions.
-Message-ID: <20151203144052.685DD60D70@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu,  3 Dec 2015 17:22:18 +0000 (UTC)
+Subject: master - uuid: add id_read_format_try
+Message-ID: <20151203172218.8A86961136@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aec58c862064e2b9dd5b0ebb54473340ebd97f7f
-Commit:        aec58c862064e2b9dd5b0ebb54473340ebd97f7f
-Parent:        3bbf89e9ec92388cbfa722c0fbb6ff3fad0232aa
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Dec 3 14:40:14 2015 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Dec 3 14:40:14 2015 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c15c44a4924e07d96cea04672fbcd45c7d8aa7ab
+Commit:        c15c44a4924e07d96cea04672fbcd45c7d8aa7ab
+Parent:        aec58c862064e2b9dd5b0ebb54473340ebd97f7f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Dec 3 15:25:09 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Dec 3 18:00:38 2015 +0100
 
-lvconvert: Reinstate mirror to raid conversions.
+uuid: add id_read_format_try
 
-Reinstate conversions from mirror to raid stopped
-by commit 46c8d6bb8ae91ee67c8633496cc6c3d92bb4f3ce
-(lvconvert: Improve message for raid without -m).
+Provide id_read_format() functionality without log_error
+when ID is not valid one - it will just return 0.
+
+Does not need to use log_suppress() then.
 ---
- tools/lvconvert.c |    9 +++++++--
- 1 files changed, 7 insertions(+), 2 deletions(-)
+ WHATS_NEW       |    1 +
+ lib/uuid/uuid.c |   33 ++++++++++++++++++++++++++-------
+ lib/uuid/uuid.h |    4 ++++
+ 3 files changed, 31 insertions(+), 7 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index b309b9e..82b804f 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -242,9 +242,9 @@ static int _check_conversion_type(struct cmd_context *cmd, const char *type_str)
- 	if (!type_str || !*type_str)
- 		return 1;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d9222bc..7ade066 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.137 -
+ =====================================
++  Added internal id_read_format_try() function to check and read valid UUID.
+   Use dm_get_status_mirror() instead of individual parsers.
+   Add mem pool arg for check_transient_status() target function.
+   Avoid misleading error with -m is omitted with lvconvert to raid types.
+diff --git a/lib/uuid/uuid.c b/lib/uuid/uuid.c
+index 67162dd..cfc58b0 100644
+--- a/lib/uuid/uuid.c
++++ b/lib/uuid/uuid.c
+@@ -132,7 +132,7 @@ static void _build_inverse(void)
+ 		_inverse_c[(int) *ptr] = (char) 0x1;
+ }
  
--	if (!strcmp(type_str, "mirror") || !strncmp(type_str, "raid", 4)) {
-+	if (!strcmp(type_str, "mirror")) {
- 		if (!arg_count(cmd, mirrors_ARG)) {
--			log_error("Mirror and raid conversions require -m/--mirrors");
-+			log_error("Conversions to --type mirror require -m/--mirrors");
+-int id_valid(struct id *id)
++static int _id_valid(struct id *id, int e)
+ {
+ 	int i;
+ 
+@@ -140,13 +140,20 @@ int id_valid(struct id *id)
+ 
+ 	for (i = 0; i < ID_LEN; i++)
+ 		if (!_inverse_c[id->uuid[i]]) {
+-			log_error("UUID contains invalid character '%c'", id->uuid[i]);
++			if (e)
++				log_error("UUID contains invalid character '%c'", id->uuid[i]);
  			return 0;
  		}
- 		return 1;
-@@ -1734,6 +1734,11 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 
+ 	return 1;
+ }
+ 
++int id_valid(struct id *id)
++{
++	return _id_valid(id, 1);
++}
++
++
+ int id_equal(const struct id *lhs, const struct id *rhs)
+ {
+ 	return !memcmp(lhs->uuid, rhs->uuid, sizeof(lhs->uuid));
+@@ -179,7 +186,7 @@ int id_write_format(const struct id *id, char *buffer, size_t size)
+ 	return 1;
+ }
+ 
+-int id_read_format(struct id *id, const char *buffer)
++static int _id_read_format(struct id *id, const char *buffer, int e)
+ {
+ 	int out = 0;
+ 
+@@ -192,7 +199,8 @@ int id_read_format(struct id *id, const char *buffer)
+ 		}
+ 
+ 		if (out >= ID_LEN) {
+-			log_error("Too many characters to be uuid.");
++			if (e)
++				log_error("Too many characters to be uuid.");
+ 			return 0;
+ 		}
+ 
+@@ -200,12 +208,23 @@ int id_read_format(struct id *id, const char *buffer)
+ 	}
+ 
+ 	if (out != ID_LEN) {
+-		log_error("Couldn't read uuid: incorrect number of "
+-			  "characters.");
++		if (e)
++			log_error("Couldn't read uuid: incorrect number of "
++				  "characters.");
  		return 0;
  	}
  
-+	if (seg_is_linear(seg) && !arg_count(cmd, mirrors_ARG)) {
-+		log_error("Raid conversions require -m/--mirrors");
-+		return 0;
-+	}
+-	return id_valid(id);
++	return _id_valid(id, e);
++}
 +
- 	/* Change number of RAID1 images */
- 	if (arg_count(cmd, mirrors_ARG) || arg_count(cmd, splitmirrors_ARG)) {
- 		image_count = lv_raid_image_count(lv);
++int id_read_format(struct id *id, const char *buffer)
++{
++	return _id_read_format(id, buffer, 1);
++}
++
++int id_read_format_try(struct id *id, const char *buffer)
++{
++	return _id_read_format(id, buffer, 0);
+ }
+ 
+ char *id_format_and_copy(struct dm_pool *mem, const struct id *id)
+diff --git a/lib/uuid/uuid.h b/lib/uuid/uuid.h
+index d87de73..8ca6352 100644
+--- a/lib/uuid/uuid.h
++++ b/lib/uuid/uuid.h
+@@ -56,6 +56,10 @@ int id_write_format(const struct id *id, char *buffer, size_t size);
+  * Reads a formatted uuid.
+  */
+ int id_read_format(struct id *id, const char *buffer);
++/*
++ * Tries to read a formatted uuid without logging error for invalid ID
++ */
++int id_read_format_try(struct id *id, const char *buffer);
+ 
+ char *id_format_and_copy(struct dm_pool *mem, const struct id *id);
+ 
 
 
