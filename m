@@ -1,102 +1,41 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  3 Dec 2015 17:22:31 +0000 (UTC)
-Subject: master - tests: check read-only backup archive
-Message-ID: <20151203172231.354E06034F@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu,  3 Dec 2015 17:43:03 +0000 (UTC)
+Subject: master - lvconvert: Reinstate raid merge after splitmirror.
+Message-ID: <20151203174303.987AD60AB0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=89418c1253db901eb6f22b342bc5d98d63aa32e5
-Commit:        89418c1253db901eb6f22b342bc5d98d63aa32e5
-Parent:        d2524315e6e9ed6796555d8cafbaf56470260b11
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 3 18:16:07 2015 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 3 18:17:45 2015 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c24d913c47d9639df277b613cee9b5a57aca0762
+Commit:        c24d913c47d9639df277b613cee9b5a57aca0762
+Parent:        89418c1253db901eb6f22b342bc5d98d63aa32e5
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Dec 3 17:40:10 2015 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Dec 3 17:40:10 2015 +0000
 
-tests: check read-only backup archive
+lvconvert: Reinstate raid merge after splitmirror.
 
+After commit 46c8d6bb8ae91ee67c8633496cc6c3d92bb4f3ce
+(lvconvert: Improve message for raid without -m)
 ---
- test/shell/backup-read-only.sh |   70 ++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 70 insertions(+), 0 deletions(-)
+ tools/lvconvert.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/backup-read-only.sh b/test/shell/backup-read-only.sh
-new file mode 100644
-index 0000000..810db0d
---- /dev/null
-+++ b/test/shell/backup-read-only.sh
-@@ -0,0 +1,70 @@
-+#!/bin/sh
-+# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+SKIP_WITH_CLVMD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+which mkfs.ext3 || skip
-+
-+aux prepare_vg 2
-+
-+# Note: inittest.sh  sets   LVM_SYSTEM_DIR to 'just' etc
-+etc_lv="$DM_DEV_DIR/$vg/$lv1"
-+
-+cleanup_mounted_and_teardown()
-+{
-+	umount "$mount_dir" || true
-+	aux teardown
-+}
-+
-+vgreduce $vg "$dev2"
-+
-+lvcreate -n $lv1 -l 20%FREE $vg
-+mkfs.ext3 -b4096 -j "$etc_lv"
-+
-+#
-+# check  read-only  archive dir
-+#
-+mount_dir="etc/archive"
-+trap 'cleanup_mounted_and_teardown' EXIT
-+mkdir -p "$mount_dir"
-+mount -n -r "$etc_lv" "$mount_dir"
-+
-+aux lvmconf "backup/archive = 1" "backup/backup = 1"
-+
-+# cannot archive to read-only
-+not lvcreate -n $lv2 -l 10%FREE $vg
-+lvcreate -An -n $lv2 -l 10%FREE $vg
-+
-+not vgextend  $vg "$dev2"
-+vgextend -An $vg "$dev2"
-+
-+umount "$mount_dir" || true
-+
-+vgreduce $vg "$dev2"
-+
-+#
-+# check  read-only  backup dir
-+#
-+mount_dir="etc/backup"
-+mount -n -r "$etc_lv" "$mount_dir"
-+
-+lvcreate -n $lv3 -l 10%FREE $vg
-+vgextend $vg "$dev2"
-+
-+umount "$mount_dir" || true
-+#ls -laR
-+#grep "" etc/archive/*
-+
-+# TODO maybe also support --ignorelockingfailure ??
-+vgremove -ff $vg
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 82b804f..d480f6a 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1734,7 +1734,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 		return 0;
+ 	}
+ 
+-	if (seg_is_linear(seg) && !arg_count(cmd, mirrors_ARG)) {
++	if (seg_is_linear(seg) && !lp->merge_mirror && !arg_count(cmd, mirrors_ARG)) {
+ 		log_error("Raid conversions require -m/--mirrors");
+ 		return 0;
+ 	}
 
 
