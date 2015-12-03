@@ -1,112 +1,167 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  3 Dec 2015 17:22:22 +0000 (UTC)
-Subject: master - log: use full buffer size for printf
-Message-ID: <20151203172222.C48B160F6F@fedorahosted.org>
+Date: Thu,  3 Dec 2015 17:22:24 +0000 (UTC)
+Subject: master - archiver: inital change toward proper logging
+Message-ID: <20151203172224.DE85D60C8E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20acc66a237429d81b699b56be57d4d043362098
-Commit:        20acc66a237429d81b699b56be57d4d043362098
-Parent:        20483ead5bbc74b68126dfadec7b5f98f41b3400
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f40b3ba1e904f6c6a3e1264e6d734f558ec731d9
+Commit:        f40b3ba1e904f6c6a3e1264e6d734f558ec731d9
+Parent:        20acc66a237429d81b699b56be57d4d043362098
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 3 15:28:01 2015 +0100
+AuthorDate:    Thu Dec 3 17:32:47 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 3 18:01:42 2015 +0100
+CommitterDate: Thu Dec 3 18:01:45 2015 +0100
 
-log: use full buffer size for printf
+archiver: inital change toward proper logging
 
-Pass full buffer size to printf() function - no reason to make
-buffer 1 char smaller.
+We have to modes of  'archive()' usage -
+1. compulsory - fail stops command and user may try '-An' option
+to do a command.
 
-Also rename locn buffer to message buffer directly since it's
-not used for anything else.
+2. non-compulsory - some fails in archiving are ignorable (i.e.
+read-only filesystem where archive dir is located).
 
-TODO: we may use same buffer also for 'buf[]' since there is
-no collision - so may safe 1K on stack usage.
+Those 2 cases needs to be properly handle - i.e. the non-compulsory
+logging should not be tampering  error logging message production.
+
+So more work here is needed
 ---
- WHATS_NEW     |    1 +
- lib/log/log.c |   24 +++++++++++++-----------
- 2 files changed, 14 insertions(+), 11 deletions(-)
+ lib/format_text/archiver.c |   64 +++++++++++++++++++++++++------------------
+ 1 files changed, 37 insertions(+), 27 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 7ade066..c39eae4 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.137 -
- =====================================
-+  Cleaned logging code for buffer size usage.
-   Added internal id_read_format_try() function to check and read valid UUID.
-   Use dm_get_status_mirror() instead of individual parsers.
-   Add mem pool arg for check_transient_status() target function.
-diff --git a/lib/log/log.c b/lib/log/log.c
-index c44c3d4..fc52bdd 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -264,9 +264,8 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
- 	       const char *format, ...)
- {
- 	va_list ap;
--	char buf[1024], locn[4096];
-+	char buf[1024], message[4096];
- 	int bufused, n;
--	const char *message;
- 	const char *trformat;		/* Translated format string */
- 	char *newbuf;
- 	int use_stderr = level & _LOG_STDERR;
-@@ -315,17 +314,16 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
- 	    (_store_errmsg && (level <= _LOG_ERR)) ||
- 	    log_once) {
- 		va_start(ap, format);
--		n = vsnprintf(locn, sizeof(locn) - 1, trformat, ap);
-+		n = vsnprintf(message, sizeof(message), trformat, ap);
- 		va_end(ap);
+diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
+index e3d3d57..4f5ea25 100644
+--- a/lib/format_text/archiver.c
++++ b/lib/format_text/archiver.c
+@@ -98,20 +98,10 @@ static char *_build_desc(struct dm_pool *mem, const char *line, int before)
+ 	return buffer;
+ }
  
-+		/* When newer glibc returns >= sizeof(locn), we will just log what
-+                 * has fit into buffer, it's '\0' terminated string */
- 		if (n < 0) {
- 			fprintf(stderr, _("vsnprintf failed: skipping external "
- 					"logging function"));
- 			goto log_it;
- 		}
+-static int __archive(struct volume_group *vg)
++static int _archive(struct volume_group *vg, int compulsory)
+ {
+ 	char *desc;
+ 
+-	if (!(desc = _build_desc(vg->cmd->mem, vg->cmd->cmd_line, 1)))
+-		return_0;
 -
--		locn[sizeof(locn) - 1] = '\0';
--		message = locn;
+-	return archive_vg(vg, vg->cmd->archive_params->dir, desc,
+-			  vg->cmd->archive_params->keep_days,
+-			  vg->cmd->archive_params->keep_number);
+-}
+-
+-int archive(struct volume_group *vg)
+-{
+ 	/* Don't archive orphan VGs. */
+ 	if (is_orphan_vg(vg->name))
+ 		return 1;
+@@ -130,27 +120,43 @@ int archive(struct volume_group *vg)
+ 		return 1;
  	}
  
- /* FIXME Avoid pointless use of message buffer when it'll never be read! */
-@@ -441,20 +439,24 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
- 		_already_logging = 1;
- 		memset(&buf, ' ', sizeof(buf));
- 		bufused = 0;
--		if ((n = dm_snprintf(buf, sizeof(buf) - 1,
-+		if ((n = dm_snprintf(buf, sizeof(buf),
- 				      "%s:%d %s%s", file, line, log_command_name(),
- 				      _msg_prefix)) == -1)
- 			goto done;
+-	if (!dm_create_dir(vg->cmd->archive_params->dir))
+-		return 0;
++	if (!dm_create_dir(vg->cmd->archive_params->dir)) {
++		/* FIXME: !compulsory logs error here */
++		log_error("Cannot create archiving directory %s.",
++			  vg->cmd->archive_params->dir);
++		return compulsory ? 0 : 1;
++	}
  
--		bufused += n;
-+		bufused += n;		/* n does not include '\0' */
+ 	/* Trap a read-only file system */
+ 	if ((access(vg->cmd->archive_params->dir, R_OK | W_OK | X_OK) == -1) &&
+-	     (errno == EROFS))
+-		return 0;
++	    (errno == EROFS)) {
++		/* FIXME: !compulsory logs error here */
++		log_error("Cannot archive volume group metadata for %s to read-only filesystem.",
++			  vg->name);
++		return compulsory ? 0 : 1;
++	}
  
- 		va_start(ap, format);
--		n = vsnprintf(buf + bufused - 1, sizeof(buf) - bufused - 1,
-+		n = vsnprintf(buf + bufused, sizeof(buf) - bufused,
- 			      trformat, ap);
- 		va_end(ap);
--		bufused += n;
- 
--		buf[bufused - 1] = '\n';
-+		if (n < 0)
-+			goto done;
+ 	log_verbose("Archiving volume group \"%s\" metadata (seqno %u).", vg->name,
+ 		    vg->seqno);
+-	if (!__archive(vg)) {
+-		log_error("Volume group \"%s\" metadata archive failed.",
+-			  vg->name);
+-		return 0;
+-	}
 +
-+		bufused += n;
-+		if (n >= sizeof(buf))
-+			bufused = sizeof(buf) - 1;
- 	      done:
- 		buf[bufused] = '\n';
- 		buf[sizeof(buf) - 1] = '\n';
++	if (!(desc = _build_desc(vg->cmd->mem, vg->cmd->cmd_line, 1)))
++		return_0;
++
++	if (!archive_vg(vg, vg->cmd->archive_params->dir, desc,
++			vg->cmd->archive_params->keep_days,
++			vg->cmd->archive_params->keep_number))
++		return_0;
+ 
+ 	vg->status |= ARCHIVED_VG;
+ 
+ 	return 1;
+ }
+ 
++int archive(struct volume_group *vg)
++{
++	return _archive(vg, 1);
++}
++
+ int archive_display(struct cmd_context *cmd, const char *vg_name)
+ {
+ 	int r1, r2;
+@@ -207,7 +213,7 @@ void backup_enable(struct cmd_context *cmd, int flag)
+ 	cmd->backup_params->enabled = flag;
+ }
+ 
+-static int __backup(struct volume_group *vg)
++static int _backup(struct volume_group *vg)
+ {
+ 	char name[PATH_MAX];
+ 	char *desc;
+@@ -242,10 +248,13 @@ int backup_locally(struct volume_group *vg)
+ 
+ 	/* Trap a read-only file system */
+ 	if ((access(vg->cmd->backup_params->dir, R_OK | W_OK | X_OK) == -1) &&
+-	    (errno == EROFS))
++	    (errno == EROFS)) {
++		log_warn("WARNING: Cannot backup of volume group %s metadata to read-only fs.",
++			  vg->name);
+ 		return 0;
++	}
+ 
+-	if (!__backup(vg)) {
++	if (!_backup(vg)) {
+ 		log_error("Backup of volume group %s metadata failed.",
+ 			  vg->name);
+ 		return 0;
+@@ -500,8 +509,9 @@ void check_current_backup(struct volume_group *vg)
+ 		return;
+ 
+ 	if (dm_snprintf(path, sizeof(path), "%s/%s",
+-			 vg->cmd->backup_params->dir, vg->name) < 0) {
+-		log_debug("Failed to generate backup filename.");
++			vg->cmd->backup_params->dir, vg->name) < 0) {
++		log_warn("WARNING: Failed to generate backup pathname %s/%s.",
++			 vg->cmd->backup_params->dir, vg->name);
+ 		return;
+ 	}
+ 
+@@ -517,11 +527,11 @@ void check_current_backup(struct volume_group *vg)
+ 	log_suppress(old_suppress);
+ 
+ 	if (vg_backup) {
+-		if (!archive(vg_backup))
++		if (!_archive(vg_backup, 0))
+ 			stack;
+ 		release_vg(vg_backup);
+ 	}
+-	if (!archive(vg))
++	if (!_archive(vg, 0))
+ 		stack;
+ 	if (!backup_locally(vg))
+ 		stack;
 
 
