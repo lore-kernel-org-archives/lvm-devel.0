@@ -1,64 +1,102 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  3 Dec 2015 17:22:29 +0000 (UTC)
-Subject: master - vgextend: reinstantiate archiving
-Message-ID: <20151203172229.1BD3E60612@fedorahosted.org>
+Date: Thu,  3 Dec 2015 17:22:31 +0000 (UTC)
+Subject: master - tests: check read-only backup archive
+Message-ID: <20151203172231.354E06034F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d2524315e6e9ed6796555d8cafbaf56470260b11
-Commit:        d2524315e6e9ed6796555d8cafbaf56470260b11
-Parent:        e7978c5ab68b1dabfa886fa437646edfcf270b82
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=89418c1253db901eb6f22b342bc5d98d63aa32e5
+Commit:        89418c1253db901eb6f22b342bc5d98d63aa32e5
+Parent:        d2524315e6e9ed6796555d8cafbaf56470260b11
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 3 18:15:02 2015 +0100
+AuthorDate:    Thu Dec 3 18:16:07 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Dec 3 18:17:45 2015 +0100
 
-vgextend: reinstantiate archiving
+tests: check read-only backup archive
 
-Since commit f5d06efbab4c7c77298b18b95c23111575a8db1a we lost archiving.
-Restore it now with process_each_vg.
 ---
- WHATS_NEW        |    1 +
- tools/vgextend.c |    6 ++++++
- 2 files changed, 7 insertions(+), 0 deletions(-)
+ test/shell/backup-read-only.sh |   70 ++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 70 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 49d1dd6..4b33708 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.137 -
- =====================================
-+  Restore archiving before changing metadata in vgextend (2.02.117).
-   Dropped internal usage of log_suppress(2).
-   Cleaned logging code for buffer size usage.
-   Added internal id_read_format_try() function to check and read valid UUID.
-diff --git a/tools/vgextend.c b/tools/vgextend.c
-index a747113..761df75 100644
---- a/tools/vgextend.c
-+++ b/tools/vgextend.c
-@@ -52,6 +52,9 @@ static int _vgextend_restoremissing(struct cmd_context *cmd __attribute__((unuse
- 	int fixed = 0;
- 	int i;
- 
-+	if (!archive(vg))
-+		return_0;
+diff --git a/test/shell/backup-read-only.sh b/test/shell/backup-read-only.sh
+new file mode 100644
+index 0000000..810db0d
+--- /dev/null
++++ b/test/shell/backup-read-only.sh
+@@ -0,0 +1,70 @@
++#!/bin/sh
++# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
- 	for (i = 0; i < vp->pv_count; i++)
- 		if (_restore_pv(vg, vp->pv_names[i]))
- 			fixed++;
-@@ -88,6 +91,9 @@ static int _vgextend_single(struct cmd_context *cmd, const char *vg_name,
- 		return ECMD_FAILED;
- 	}
- 
-+	if (!archive(vg))
-+		return_ECMD_FAILED;
++SKIP_WITH_CLVMD=1
++SKIP_WITH_LVMPOLLD=1
 +
- 	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
- 		log_error("Can't get lock for orphan PVs");
- 		return ECMD_FAILED;
++. lib/inittest
++
++which mkfs.ext3 || skip
++
++aux prepare_vg 2
++
++# Note: inittest.sh  sets   LVM_SYSTEM_DIR to 'just' etc
++etc_lv="$DM_DEV_DIR/$vg/$lv1"
++
++cleanup_mounted_and_teardown()
++{
++	umount "$mount_dir" || true
++	aux teardown
++}
++
++vgreduce $vg "$dev2"
++
++lvcreate -n $lv1 -l 20%FREE $vg
++mkfs.ext3 -b4096 -j "$etc_lv"
++
++#
++# check  read-only  archive dir
++#
++mount_dir="etc/archive"
++trap 'cleanup_mounted_and_teardown' EXIT
++mkdir -p "$mount_dir"
++mount -n -r "$etc_lv" "$mount_dir"
++
++aux lvmconf "backup/archive = 1" "backup/backup = 1"
++
++# cannot archive to read-only
++not lvcreate -n $lv2 -l 10%FREE $vg
++lvcreate -An -n $lv2 -l 10%FREE $vg
++
++not vgextend  $vg "$dev2"
++vgextend -An $vg "$dev2"
++
++umount "$mount_dir" || true
++
++vgreduce $vg "$dev2"
++
++#
++# check  read-only  backup dir
++#
++mount_dir="etc/backup"
++mount -n -r "$etc_lv" "$mount_dir"
++
++lvcreate -n $lv3 -l 10%FREE $vg
++vgextend $vg "$dev2"
++
++umount "$mount_dir" || true
++#ls -laR
++#grep "" etc/archive/*
++
++# TODO maybe also support --ignorelockingfailure ??
++vgremove -ff $vg
 
 
