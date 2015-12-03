@@ -1,167 +1,114 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  3 Dec 2015 17:22:24 +0000 (UTC)
-Subject: master - archiver: inital change toward proper logging
-Message-ID: <20151203172224.DE85D60C8E@fedorahosted.org>
+Date: Thu,  3 Dec 2015 17:22:26 +0000 (UTC)
+Subject: master - cleanup: drop log_suppress(2) usage
+Message-ID: <20151203172226.F34E360C8E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f40b3ba1e904f6c6a3e1264e6d734f558ec731d9
-Commit:        f40b3ba1e904f6c6a3e1264e6d734f558ec731d9
-Parent:        20acc66a237429d81b699b56be57d4d043362098
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e7978c5ab68b1dabfa886fa437646edfcf270b82
+Commit:        e7978c5ab68b1dabfa886fa437646edfcf270b82
+Parent:        f40b3ba1e904f6c6a3e1264e6d734f558ec731d9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 3 17:32:47 2015 +0100
+AuthorDate:    Thu Dec 3 17:51:43 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 3 18:01:45 2015 +0100
+CommitterDate: Thu Dec 3 18:02:34 2015 +0100
 
-archiver: inital change toward proper logging
+cleanup: drop log_suppress(2) usage
 
-We have to modes of  'archive()' usage -
-1. compulsory - fail stops command and user may try '-An' option
-to do a command.
-
-2. non-compulsory - some fails in archiving are ignorable (i.e.
-read-only filesystem where archive dir is located).
-
-Those 2 cases needs to be properly handle - i.e. the non-compulsory
-logging should not be tampering  error logging message production.
-
-So more work here is needed
+No longer need to use  log_suppress(2) instance so dropped.
 ---
- lib/format_text/archiver.c |   64 +++++++++++++++++++++++++------------------
- 1 files changed, 37 insertions(+), 27 deletions(-)
+ WHATS_NEW                     |    1 +
+ lib/format_text/import_vsn1.c |   31 ++++++++++++++++---------------
+ lib/log/log.c                 |    3 ---
+ 3 files changed, 17 insertions(+), 18 deletions(-)
 
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index e3d3d57..4f5ea25 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -98,20 +98,10 @@ static char *_build_desc(struct dm_pool *mem, const char *line, int before)
- 	return buffer;
- }
- 
--static int __archive(struct volume_group *vg)
-+static int _archive(struct volume_group *vg, int compulsory)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c39eae4..49d1dd6 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.137 -
+ =====================================
++  Dropped internal usage of log_suppress(2).
+   Cleaned logging code for buffer size usage.
+   Added internal id_read_format_try() function to check and read valid UUID.
+   Use dm_get_status_mirror() instead of individual parsers.
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 6aa227b..023c383 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -1019,14 +1019,13 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ static void _read_desc(struct dm_pool *mem,
+ 		       const struct dm_config_tree *cft, time_t *when, char **desc)
  {
- 	char *desc;
+-	const char *d;
++	const char *str;
+ 	unsigned int u = 0u;
+-	int old_suppress;
  
--	if (!(desc = _build_desc(vg->cmd->mem, vg->cmd->cmd_line, 1)))
--		return_0;
--
--	return archive_vg(vg, vg->cmd->archive_params->dir, desc,
--			  vg->cmd->archive_params->keep_days,
--			  vg->cmd->archive_params->keep_number);
--}
--
--int archive(struct volume_group *vg)
--{
- 	/* Don't archive orphan VGs. */
- 	if (is_orphan_vg(vg->name))
- 		return 1;
-@@ -130,27 +120,43 @@ int archive(struct volume_group *vg)
- 		return 1;
+-	old_suppress = log_suppress(1);
+-	d = dm_config_find_str_allow_empty(cft->root, "description", "");
+-	log_suppress(old_suppress);
+-	*desc = dm_pool_strdup(mem, d);
++	if (!dm_config_get_str(cft->root, "description", &str))
++		str = "";
++
++	*desc = dm_pool_strdup(mem, str);
+ 
+ 	(void) dm_config_get_uint32(cft->root, "creation_time", &u);
+ 	*when = u;
+@@ -1043,12 +1042,12 @@ static int _read_vgname(const struct format_type *fmt, const struct dm_config_tr
+ 	const struct dm_config_node *vgn;
+ 	struct dm_pool *mem = fmt->cmd->mem;
+ 	const char *str;
+-	int old_suppress;
+ 
+-	old_suppress = log_suppress(2);
+-	vgsummary->creation_host =
+-	    dm_pool_strdup(mem, dm_config_find_str_allow_empty(cft->root, "creation_host", ""));
+-	log_suppress(old_suppress);
++	if (!dm_config_get_str(cft->root, "creation_host", &str))
++		str = "";
++
++	if (!(vgsummary->creation_host = dm_pool_strdup(mem, str)))
++		return_0;
+ 
+ 	/* skip any top-level values */
+ 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib) ;
+@@ -1074,11 +1073,13 @@ static int _read_vgname(const struct format_type *fmt, const struct dm_config_tr
+ 		return 0;
  	}
  
--	if (!dm_create_dir(vg->cmd->archive_params->dir))
--		return 0;
-+	if (!dm_create_dir(vg->cmd->archive_params->dir)) {
-+		/* FIXME: !compulsory logs error here */
-+		log_error("Cannot create archiving directory %s.",
-+			  vg->cmd->archive_params->dir);
-+		return compulsory ? 0 : 1;
-+	}
- 
- 	/* Trap a read-only file system */
- 	if ((access(vg->cmd->archive_params->dir, R_OK | W_OK | X_OK) == -1) &&
--	     (errno == EROFS))
--		return 0;
-+	    (errno == EROFS)) {
-+		/* FIXME: !compulsory logs error here */
-+		log_error("Cannot archive volume group metadata for %s to read-only filesystem.",
-+			  vg->name);
-+		return compulsory ? 0 : 1;
-+	}
- 
- 	log_verbose("Archiving volume group \"%s\" metadata (seqno %u).", vg->name,
- 		    vg->seqno);
--	if (!__archive(vg)) {
--		log_error("Volume group \"%s\" metadata archive failed.",
--			  vg->name);
--		return 0;
--	}
-+
-+	if (!(desc = _build_desc(vg->cmd->mem, vg->cmd->cmd_line, 1)))
-+		return_0;
-+
-+	if (!archive_vg(vg, vg->cmd->archive_params->dir, desc,
-+			vg->cmd->archive_params->keep_days,
-+			vg->cmd->archive_params->keep_number))
+-	if (dm_config_get_str(vgn, "system_id", &str))
+-		vgsummary->system_id = dm_pool_strdup(mem, str);
++	if (dm_config_get_str(vgn, "system_id", &str) &&
++	    (!(vgsummary->system_id = dm_pool_strdup(mem, str))))
 +		return_0;
  
- 	vg->status |= ARCHIVED_VG;
+-	if (dm_config_get_str(vgn, "lock_type", &str))
+-		vgsummary->lock_type = dm_pool_strdup(mem, str);
++	if (dm_config_get_str(vgn, "lock_type", &str) &&
++	    (!(vgsummary->lock_type = dm_pool_strdup(mem, str))))
++		return_0;
  
  	return 1;
  }
- 
-+int archive(struct volume_group *vg)
-+{
-+	return _archive(vg, 1);
-+}
-+
- int archive_display(struct cmd_context *cmd, const char *vg_name)
- {
- 	int r1, r2;
-@@ -207,7 +213,7 @@ void backup_enable(struct cmd_context *cmd, int flag)
- 	cmd->backup_params->enabled = flag;
- }
- 
--static int __backup(struct volume_group *vg)
-+static int _backup(struct volume_group *vg)
- {
- 	char name[PATH_MAX];
- 	char *desc;
-@@ -242,10 +248,13 @@ int backup_locally(struct volume_group *vg)
- 
- 	/* Trap a read-only file system */
- 	if ((access(vg->cmd->backup_params->dir, R_OK | W_OK | X_OK) == -1) &&
--	    (errno == EROFS))
-+	    (errno == EROFS)) {
-+		log_warn("WARNING: Cannot backup of volume group %s metadata to read-only fs.",
-+			  vg->name);
- 		return 0;
-+	}
- 
--	if (!__backup(vg)) {
-+	if (!_backup(vg)) {
- 		log_error("Backup of volume group %s metadata failed.",
- 			  vg->name);
- 		return 0;
-@@ -500,8 +509,9 @@ void check_current_backup(struct volume_group *vg)
- 		return;
- 
- 	if (dm_snprintf(path, sizeof(path), "%s/%s",
--			 vg->cmd->backup_params->dir, vg->name) < 0) {
--		log_debug("Failed to generate backup filename.");
-+			vg->cmd->backup_params->dir, vg->name) < 0) {
-+		log_warn("WARNING: Failed to generate backup pathname %s/%s.",
-+			 vg->cmd->backup_params->dir, vg->name);
- 		return;
+diff --git a/lib/log/log.c b/lib/log/log.c
+index fc52bdd..1c5ccd7 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -299,9 +299,6 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 		level = _LOG_FATAL;
  	}
  
-@@ -517,11 +527,11 @@ void check_current_backup(struct volume_group *vg)
- 	log_suppress(old_suppress);
+-	if (_log_suppress == 2)
+-		return;
+-
+ 	if (level <= _LOG_ERR)
+ 		init_error_message_produced(1);
  
- 	if (vg_backup) {
--		if (!archive(vg_backup))
-+		if (!_archive(vg_backup, 0))
- 			stack;
- 		release_vg(vg_backup);
- 	}
--	if (!archive(vg))
-+	if (!_archive(vg, 0))
- 		stack;
- 	if (!backup_locally(vg))
- 		stack;
 
 
