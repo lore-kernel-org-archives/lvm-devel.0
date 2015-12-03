@@ -1,139 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  3 Dec 2015 17:22:18 +0000 (UTC)
-Subject: master - uuid: add id_read_format_try
-Message-ID: <20151203172218.8A86961136@fedorahosted.org>
+Date: Thu,  3 Dec 2015 17:22:20 +0000 (UTC)
+Subject: master - cleanup: use try_id_read_format
+Message-ID: <20151203172220.A3BAB6067A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c15c44a4924e07d96cea04672fbcd45c7d8aa7ab
-Commit:        c15c44a4924e07d96cea04672fbcd45c7d8aa7ab
-Parent:        aec58c862064e2b9dd5b0ebb54473340ebd97f7f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20483ead5bbc74b68126dfadec7b5f98f41b3400
+Commit:        20483ead5bbc74b68126dfadec7b5f98f41b3400
+Parent:        c15c44a4924e07d96cea04672fbcd45c7d8aa7ab
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 3 15:25:09 2015 +0100
+AuthorDate:    Thu Dec 3 15:26:44 2015 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 3 18:00:38 2015 +0100
+CommitterDate: Thu Dec 3 18:00:54 2015 +0100
 
-uuid: add id_read_format_try
+cleanup: use try_id_read_format
 
-Provide id_read_format() functionality without log_error
-when ID is not valid one - it will just return 0.
-
-Does not need to use log_suppress() then.
+Better then using log_suppress in this case.
 ---
- WHATS_NEW       |    1 +
- lib/uuid/uuid.c |   33 ++++++++++++++++++++++++++-------
- lib/uuid/uuid.h |    4 ++++
- 3 files changed, 31 insertions(+), 7 deletions(-)
+ tools/toollib.c  |    7 ++-----
+ tools/vgrename.c |    4 +---
+ 2 files changed, 3 insertions(+), 8 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d9222bc..7ade066 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.137 -
- =====================================
-+  Added internal id_read_format_try() function to check and read valid UUID.
-   Use dm_get_status_mirror() instead of individual parsers.
-   Add mem pool arg for check_transient_status() target function.
-   Avoid misleading error with -m is omitted with lvconvert to raid types.
-diff --git a/lib/uuid/uuid.c b/lib/uuid/uuid.c
-index 67162dd..cfc58b0 100644
---- a/lib/uuid/uuid.c
-+++ b/lib/uuid/uuid.c
-@@ -132,7 +132,7 @@ static void _build_inverse(void)
- 		_inverse_c[(int) *ptr] = (char) 0x1;
- }
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 3980a88..e03aaf7 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -2101,11 +2101,8 @@ static void _choose_vgs_to_process(struct cmd_context *cmd,
+ 		 * matches the UUID of a VG.  (--select should generally
+ 		 * be used to select a VG by uuid instead.)
+ 		 */
+-		if (!found && (cmd->command->flags & ALLOW_UUID_AS_NAME)) {
+-			log_suppress(2);
+-			arg_is_uuid = id_read_format(&id, sl->str);
+-			log_suppress(0);
+-		}
++		if (!found && (cmd->command->flags & ALLOW_UUID_AS_NAME))
++			arg_is_uuid = id_read_format_try(&id, sl->str);
  
--int id_valid(struct id *id)
-+static int _id_valid(struct id *id, int e)
- {
- 	int i;
- 
-@@ -140,13 +140,20 @@ int id_valid(struct id *id)
- 
- 	for (i = 0; i < ID_LEN; i++)
- 		if (!_inverse_c[id->uuid[i]]) {
--			log_error("UUID contains invalid character '%c'", id->uuid[i]);
-+			if (e)
-+				log_error("UUID contains invalid character '%c'", id->uuid[i]);
- 			return 0;
+ 		if (!found && arg_is_uuid) {
+ 			dm_list_iterate_items_safe(vgnl, vgnl2, vgnameids_on_system) {
+diff --git a/tools/vgrename.c b/tools/vgrename.c
+index 07d992e..9e6beec 100644
+--- a/tools/vgrename.c
++++ b/tools/vgrename.c
+@@ -107,9 +107,7 @@ static int vg_rename_path(struct cmd_context *cmd, const char *old_vg_path,
  		}
- 
- 	return 1;
- }
- 
-+int id_valid(struct id *id)
-+{
-+	return _id_valid(id, 1);
-+}
-+
-+
- int id_equal(const struct id *lhs, const struct id *rhs)
- {
- 	return !memcmp(lhs->uuid, rhs->uuid, sizeof(lhs->uuid));
-@@ -179,7 +186,7 @@ int id_write_format(const struct id *id, char *buffer, size_t size)
- 	return 1;
- }
- 
--int id_read_format(struct id *id, const char *buffer)
-+static int _id_read_format(struct id *id, const char *buffer, int e)
- {
- 	int out = 0;
- 
-@@ -192,7 +199,8 @@ int id_read_format(struct id *id, const char *buffer)
- 		}
- 
- 		if (out >= ID_LEN) {
--			log_error("Too many characters to be uuid.");
-+			if (e)
-+				log_error("Too many characters to be uuid.");
- 			return 0;
- 		}
- 
-@@ -200,12 +208,23 @@ int id_read_format(struct id *id, const char *buffer)
  	}
  
- 	if (out != ID_LEN) {
--		log_error("Couldn't read uuid: incorrect number of "
--			  "characters.");
-+		if (e)
-+			log_error("Couldn't read uuid: incorrect number of "
-+				  "characters.");
- 		return 0;
- 	}
+-	log_suppress(2);
+-	found_id = id_read_format(&id, vg_name_old);
+-	log_suppress(0);
++	found_id = id_read_format_try(&id, vg_name_old);
  
--	return id_valid(id);
-+	return _id_valid(id, e);
-+}
-+
-+int id_read_format(struct id *id, const char *buffer)
-+{
-+	return _id_read_format(id, buffer, 1);
-+}
-+
-+int id_read_format_try(struct id *id, const char *buffer)
-+{
-+	return _id_read_format(id, buffer, 0);
- }
- 
- char *id_format_and_copy(struct dm_pool *mem, const struct id *id)
-diff --git a/lib/uuid/uuid.h b/lib/uuid/uuid.h
-index d87de73..8ca6352 100644
---- a/lib/uuid/uuid.h
-+++ b/lib/uuid/uuid.h
-@@ -56,6 +56,10 @@ int id_write_format(const struct id *id, char *buffer, size_t size);
-  * Reads a formatted uuid.
-  */
- int id_read_format(struct id *id, const char *buffer);
-+/*
-+ * Tries to read a formatted uuid without logging error for invalid ID
-+ */
-+int id_read_format_try(struct id *id, const char *buffer);
- 
- char *id_format_and_copy(struct dm_pool *mem, const struct id *id);
- 
+ 	if (found_id && (vg_name = lvmcache_vgname_from_vgid(cmd->mem, (char *)id.uuid))) {
+ 		if (!strcmp(vg_name, vg_name_new)) {
 
 
