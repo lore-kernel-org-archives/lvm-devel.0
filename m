@@ -1,41 +1,56 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu,  3 Dec 2015 17:43:03 +0000 (UTC)
-Subject: master - lvconvert: Reinstate raid merge after splitmirror.
-Message-ID: <20151203174303.987AD60AB0@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri,  4 Dec 2015 21:11:39 +0000 (UTC)
+Subject: master - libdm: add some doc for mirror status
+Message-ID: <20151204211139.2176660515@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c24d913c47d9639df277b613cee9b5a57aca0762
-Commit:        c24d913c47d9639df277b613cee9b5a57aca0762
-Parent:        89418c1253db901eb6f22b342bc5d98d63aa32e5
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Dec 3 17:40:10 2015 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Dec 3 17:40:10 2015 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45781161f49dcd9b31909ec40766ab4e71d0afa0
+Commit:        45781161f49dcd9b31909ec40766ab4e71d0afa0
+Parent:        c24d913c47d9639df277b613cee9b5a57aca0762
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Dec 4 20:24:47 2015 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Dec 4 22:10:30 2015 +0100
 
-lvconvert: Reinstate raid merge after splitmirror.
+libdm: add some doc for mirror status
 
-After commit 46c8d6bb8ae91ee67c8633496cc6c3d92bb4f3ce
-(lvconvert: Improve message for raid without -m)
+Comment content of struct for mirror status.
 ---
- tools/lvconvert.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdm/libdevmapper.h |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 82b804f..d480f6a 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1734,7 +1734,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
- 		return 0;
- 	}
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 48f8682..12a665b 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -300,19 +300,19 @@ typedef enum {
+ struct dm_status_mirror {
+ 	uint64_t total_regions;
+ 	uint64_t insync_regions;
+-	uint32_t dev_count;
++	uint32_t dev_count;             /* # of devs[] elements (<= 8) */
+ 	struct {
+ 		dm_status_mirror_health_t health;
+ 		uint32_t major;
+ 		uint32_t minor;
+-	} *devs;
+-	const char *log_type;
+-	uint32_t log_count;
++	} *devs;                        /* array with individual legs */
++	const char *log_type;           /* core, disk,.... */
++	uint32_t log_count;		/* # of logs[] elements */
+ 	struct {
+ 		dm_status_mirror_health_t health;
+ 		uint32_t major;
+ 		uint32_t minor;
+-	} *logs;
++	} *logs;			/* array with individual logs */
+ };
  
--	if (seg_is_linear(seg) && !arg_count(cmd, mirrors_ARG)) {
-+	if (seg_is_linear(seg) && !lp->merge_mirror && !arg_count(cmd, mirrors_ARG)) {
- 		log_error("Raid conversions require -m/--mirrors");
- 		return 0;
- 	}
+ int dm_get_status_mirror(struct dm_pool *mem, const char *params,
 
 
