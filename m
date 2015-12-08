@@ -1,108 +1,90 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  8 Dec 2015 01:02:32 +0000 (UTC)
-Subject: master - dmeventd: Extend checks on client socket.
-Message-ID: <20151208010232.B20FC60E8F@fedorahosted.org>
+Date: Tue,  8 Dec 2015 01:58:33 +0000 (UTC)
+Subject: master - dmeventd: Don't trust fifo with wrong attrs.
+Message-ID: <20151208015833.2FF7F60974@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=94dab390ef68de3a56b67bce771b48445aa13d09
-Commit:        94dab390ef68de3a56b67bce771b48445aa13d09
-Parent:        00bab9d9cd8581e905634658a6cda33d998b1b85
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dcd946e95a80da1b6b2d2285d9a5f41e87cb153d
+Commit:        dcd946e95a80da1b6b2d2285d9a5f41e87cb153d
+Parent:        94dab390ef68de3a56b67bce771b48445aa13d09
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Dec 8 00:54:32 2015 +0000
+AuthorDate:    Tue Dec 8 01:48:17 2015 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Dec 8 00:59:39 2015 +0000
+CommitterDate: Tue Dec 8 01:48:17 2015 +0000
 
-dmeventd: Extend checks on client socket.
+dmeventd: Don't trust fifo with wrong attrs.
 
-Reinstate and extend checks removed by e1b111b02accb4145b82b8b47ce57ed93b1a7184.
-
-The code has always assumed that only root has access to the directory
-containing the fifos and that they are under the complete control of
-dmeventd code.  If anything is found not to be as expected, then open()
-should certainly not be attempted!
+If an existing fifo has the wrong attributes it cannot be trusted
+so we must unlink it and recreate it correctly.
+(Replaces 2c8d6f5c90d5be62b48ba2881f2a6631091dc5af: if the other end of
+the fifo already got opened while its mode was insecure, delaying the
+chmod isn't going to make any difference!)
 ---
- WHATS_NEW_DM                          |    1 +
- daemons/dmeventd/libdevmapper-event.c |   35 +++++++++++++++++++++++++++++++-
- 2 files changed, 34 insertions(+), 2 deletions(-)
+ daemons/dmeventd/dmeventd.c |   34 +++++++++++++++++++++++++---------
+ 1 files changed, 25 insertions(+), 9 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 9dd51aa..f6e9d2a 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.114 -
- ====================================
-+  Extend validity checks on dmeventd client socket.
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index b7fff9a..c093d91 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -408,7 +408,7 @@ static struct thread_status *_alloc_thread_status(const struct message_data *dat
+ 	if (!(thread->device.uuid = dm_strdup(data->device_uuid)))
+ 		goto_out;
  
- Version 1.02.113 - 5th December 2015
- ====================================
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index f1441f5..b49af45 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -412,12 +412,41 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
- 	char default_dmeventd_path[] = DMEVENTD_PATH;
- 	char *args[] = { dmeventd_path ? : default_dmeventd_path, NULL };
+-        /* Until real name resolved, use UUID */
++	/* Until real name resolved, use UUID */
+ 	if (!(thread->device.name = dm_strdup(data->device_uuid)))
+ 		goto_out;
  
-+	/*
-+	 * FIXME Explicitly verify the code's requirement that client_path is secure:
+@@ -1359,6 +1359,26 @@ static int _open_fifo(const char *path)
+ {
+ 	struct stat st;
+ 	int fd = -1;
++ 
++ 	/*
++	 * FIXME Explicitly verify the code's requirement that path is secure:
 +	 * - All parent directories owned by root without group/other write access unless sticky.
 +	 */
 +
-+	/* If client fifo path exists, only use it if it is root-owned fifo mode 0600 */
-+	if ((lstat(fifos->client_path, &statbuf) < 0)) {
-+		if (errno == ENOENT)
-+			/* Jump ahead if fifo does not already exist. */
-+			goto start_server;
-+		else {
-+			log_sys_error("stat", fifos->client_path);
-+			return 0;
++	/* If path exists, only use it if it is root-owned fifo mode 0600 */
++	if ((lstat(path, &st) < 0)) {
++		if (errno != ENOENT) {
++			log_sys_error("stat", path);
++			return -1;
 +		}
-+	} else if (!S_ISFIFO(statbuf.st_mode)) {
-+		log_error("%s must be a fifo.", fifos->client_path);
-+		return 0;
-+	} else if (statbuf.st_uid) {
-+		log_error("%s must be owned by uid 0.", fifos->client_path);
-+		return 0;
-+	} else if (statbuf.st_mode & (S_IEXEC | S_IRWXG | S_IRWXO)) {
-+		log_error("%s must have mode 0600.", fifos->client_path);
-+		return 0;
++	} else if (!S_ISFIFO(st.st_mode) || st.st_uid ||
++		   (st.st_mode & (S_IEXEC | S_IRWXG | S_IRWXO))) {
++		log_warn("WARNING: %s has wrong attributes: Replacing.", path);
++		if (unlink(path)) {
++			log_sys_error("unlink", path);
++			return -1;
++		}
 +	}
-+
- 	/* Anyone listening?  If not, errno will be ENXIO */
- 	fifos->client = open(fifos->client_path, O_WRONLY | O_NONBLOCK);
- 	if (fifos->client >= 0) {
-+		/* Should never happen if all the above checks passed. */
- 		if ((fstat(fifos->client, &statbuf) < 0) ||
--		    !S_ISFIFO(statbuf.st_mode)) {
--			log_error("%s is not a fifo.", fifos->client_path);
-+		    !S_ISFIFO(statbuf.st_mode) || statbuf.st_uid ||
-+		    (statbuf.st_mode & (S_IEXEC | S_IRWXG | S_IRWXO))) {
-+			log_error("%s is no longer a secure root-owned fifo with mode 0600.", fifos->client_path);
-+			if (close(fifos->client))
-+				log_sys_debug("close", fifos->client_path);
- 			return 0;
- 		}
  
-@@ -431,6 +460,7 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
- 		return 0;
+ 	/* Create fifo. */
+ 	(void) dm_prepare_selinux_context(path, S_IFIFO);
+@@ -1382,14 +1402,10 @@ static int _open_fifo(const char *path)
+ 		goto fail;
  	}
  
-+start_server:
- 	/* server is not running */
+-	if ((st.st_mode & 0777) != 0600) {
+-		log_warn("WARNING: Fixing wrong permissions on %s: %s.",
+-			 path, strerror(errno));
+-
+-		if (fchmod(fd, 0600)) {
+-			log_sys_error("fchmod", path);
+-			goto fail;
+-		}
++	if (!S_ISFIFO(st.st_mode) || st.st_uid ||
++	    (st.st_mode & (S_IEXEC | S_IRWXG | S_IRWXO))) {
++		log_error("%s: fifo has incorrect attributes", path);
++		goto fail;
+ 	}
  
- 	if ((args[0][0] == '/') && stat(args[0], &statbuf)) {
-@@ -724,6 +754,7 @@ int dm_event_get_registered_device(struct dm_event_handler *dmevh, int next)
- 
- 	uuid = dm_task_get_uuid(dmt);
- 
-+	/* FIXME Distinguish errors connecting to daemon */
- 	if (_do_event(next ? DM_EVENT_CMD_GET_NEXT_REGISTERED_DEVICE :
- 		      DM_EVENT_CMD_GET_REGISTERED_DEVICE, dmevh->dmeventd_path,
- 		      &msg, dmevh->dso, uuid, dmevh->mask, 0)) {
+ 	if (fcntl(fd, F_SETFD, FD_CLOEXEC)) {
 
 
