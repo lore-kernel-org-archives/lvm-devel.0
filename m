@@ -1,80 +1,108 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sat,  5 Dec 2015 15:57:24 +0000 (UTC)
-Subject: v2_02_137 annotated tag has been created
-Message-ID: <20151205155724.700E3602B8@fedorahosted.org>
+Date: Tue,  8 Dec 2015 01:02:32 +0000 (UTC)
+Subject: master - dmeventd: Extend checks on client socket.
+Message-ID: <20151208010232.B20FC60E8F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2d1f7849b5a902c7809b7ffcc1e16ef1e0138e08
-Commit:        2d1f7849b5a902c7809b7ffcc1e16ef1e0138e08
-Parent:        0000000000000000000000000000000000000000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=94dab390ef68de3a56b67bce771b48445aa13d09
+Commit:        94dab390ef68de3a56b67bce771b48445aa13d09
+Parent:        00bab9d9cd8581e905634658a6cda33d998b1b85
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2015-12-05 15:33 +0000
+AuthorDate:    Tue Dec 8 00:54:32 2015 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2015-12-05 15:33 +0000
+CommitterDate: Tue Dec 8 00:59:39 2015 +0000
 
-annotated tag: v2_02_137 has been created
-	    at 2d1f7849b5a902c7809b7ffcc1e16ef1e0138e08 (tag)
-       tagging 063b353b286652d5ccc692cf636824b9b3270fe9 (commit)
-      replaces v2_02_136
+dmeventd: Extend checks on client socket.
 
-Release 2.02.137.
+Reinstate and extend checks removed by e1b111b02accb4145b82b8b47ce57ed93b1a7184.
 
-Another development release.
+The code has always assumed that only root has access to the directory
+containing the fifos and that they are under the complete control of
+dmeventd code.  If anything is found not to be as expected, then open()
+should certainly not be attempted!
+---
+ WHATS_NEW_DM                          |    1 +
+ daemons/dmeventd/libdevmapper-event.c |   35 +++++++++++++++++++++++++++++++-
+ 2 files changed, 34 insertions(+), 2 deletions(-)
 
-49 files changed, 1263 insertions(+), 637 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
-
-iEYEABECAAYFAlZjA/oACgkQIoGRwVZ+LBdEcwCfaNhyqTQ7t6dFc31yoGhJ+z1F
-vZ0AoLwTPSJE49GhLhIUQPGTAI6f04/x
-=kXAy
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (5):
-      post-release
-      lvconvert: Improve message for raid without -m.
-      lvconvert: Reinstate mirror to raid conversions.
-      lvconvert: Reinstate raid merge after splitmirror.
-      pre-release
-
-David Teigland (16):
-      lvmetad: include both vgid and vgname in lookup request
-      lvmcache: include system_id in vginfo cache
-      system_id: refactor check for allowed system_id
-      lvmcache: new function to check if VG is foreign
-      process_each: always use list of vgnames on system
-      process_each: resolve duplicate VG names
-      toollib: remove unused function
-      vg_read: look up vgid from name
-      lvmcache: change duplicate VG name warnings to verbose
-      vgextend: pass single vgname as process_each_vg arg
-      lvcreate: use process_each_vg
-      lvrename: use process_each_vg
-      lvresize: use process_each_vg
-      toollib: allow VG UUID to be used in place of VG name
-      toollib: only interpret vgname arg as uuid for vgrename
-      man lvm: add section about unique VG names
-
-Zdenek Kabelac (16):
-      libdm: introduce  dm_get_status_mirror
-      tests: unit test for mirror status
-      lib: pass mem pool to check_transient_status
-      cleanup: use dm_get_status_mirror
-      mirror: fix condition
-      uuid: add id_read_format_try
-      cleanup: use try_id_read_format
-      log: use full buffer size for printf
-      archiver: inital change toward proper logging
-      cleanup: drop log_suppress(2) usage
-      vgextend: reinstantiate archiving
-      tests: check read-only backup archive
-      libdm: add some doc for mirror status
-      debug: correct stack tracing
-      archiver: fix reporting for check_current_backup
-      tests: extend test
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 9dd51aa..f6e9d2a 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.114 -
+ ====================================
++  Extend validity checks on dmeventd client socket.
+ 
+ Version 1.02.113 - 5th December 2015
+ ====================================
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index f1441f5..b49af45 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -412,12 +412,41 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
+ 	char default_dmeventd_path[] = DMEVENTD_PATH;
+ 	char *args[] = { dmeventd_path ? : default_dmeventd_path, NULL };
+ 
++	/*
++	 * FIXME Explicitly verify the code's requirement that client_path is secure:
++	 * - All parent directories owned by root without group/other write access unless sticky.
++	 */
++
++	/* If client fifo path exists, only use it if it is root-owned fifo mode 0600 */
++	if ((lstat(fifos->client_path, &statbuf) < 0)) {
++		if (errno == ENOENT)
++			/* Jump ahead if fifo does not already exist. */
++			goto start_server;
++		else {
++			log_sys_error("stat", fifos->client_path);
++			return 0;
++		}
++	} else if (!S_ISFIFO(statbuf.st_mode)) {
++		log_error("%s must be a fifo.", fifos->client_path);
++		return 0;
++	} else if (statbuf.st_uid) {
++		log_error("%s must be owned by uid 0.", fifos->client_path);
++		return 0;
++	} else if (statbuf.st_mode & (S_IEXEC | S_IRWXG | S_IRWXO)) {
++		log_error("%s must have mode 0600.", fifos->client_path);
++		return 0;
++	}
++
+ 	/* Anyone listening?  If not, errno will be ENXIO */
+ 	fifos->client = open(fifos->client_path, O_WRONLY | O_NONBLOCK);
+ 	if (fifos->client >= 0) {
++		/* Should never happen if all the above checks passed. */
+ 		if ((fstat(fifos->client, &statbuf) < 0) ||
+-		    !S_ISFIFO(statbuf.st_mode)) {
+-			log_error("%s is not a fifo.", fifos->client_path);
++		    !S_ISFIFO(statbuf.st_mode) || statbuf.st_uid ||
++		    (statbuf.st_mode & (S_IEXEC | S_IRWXG | S_IRWXO))) {
++			log_error("%s is no longer a secure root-owned fifo with mode 0600.", fifos->client_path);
++			if (close(fifos->client))
++				log_sys_debug("close", fifos->client_path);
+ 			return 0;
+ 		}
+ 
+@@ -431,6 +460,7 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
+ 		return 0;
+ 	}
+ 
++start_server:
+ 	/* server is not running */
+ 
+ 	if ((args[0][0] == '/') && stat(args[0], &statbuf)) {
+@@ -724,6 +754,7 @@ int dm_event_get_registered_device(struct dm_event_handler *dmevh, int next)
+ 
+ 	uuid = dm_task_get_uuid(dmt);
+ 
++	/* FIXME Distinguish errors connecting to daemon */
+ 	if (_do_event(next ? DM_EVENT_CMD_GET_NEXT_REGISTERED_DEVICE :
+ 		      DM_EVENT_CMD_GET_REGISTERED_DEVICE, dmevh->dmeventd_path,
+ 		      &msg, dmevh->dso, uuid, dmevh->mask, 0)) {
 
 
