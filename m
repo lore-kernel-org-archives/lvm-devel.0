@@ -1,45 +1,76 @@
-From: Riku Voipio <riku.voipio@linaro.org>
-Date: Tue,  8 Dec 2015 16:40:08 +0200
-Subject: [PATCH] fix static linking
-Message-ID: <1449585608-4804-1-git-send-email-riku.voipio@linaro.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed,  9 Dec 2015 18:00:46 +0000 (UTC)
+Subject: master - lvrename: move the lvmlockd LV lock
+Message-ID: <20151209180046.2603060ECE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Static linking fails currently, as -lm and -lpthread are missing:
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bdba4e7a931f1e77f9c7cf6837a6c8b33b35a099
+Commit:        bdba4e7a931f1e77f9c7cf6837a6c8b33b35a099
+Parent:        dcd946e95a80da1b6b2d2285d9a5f41e87cb153d
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Dec 9 11:51:25 2015 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Dec 9 11:59:49 2015 -0600
 
-gcc -O2  -fPIC -O2  -L../libdm -L../lib -L../libdaemon/client -static
--L../libdm/ioctl \
-      -o dmsetup.static dmsetup.o -ldevmapper    -lrt
-../libdm/ioctl/libdevmapper.a(libdm-stats.o): In function
-`dm_stats_create_region':
-libdm-stats.c:(.text+0x2d69): undefined reference to `log10'
-libdm-stats.c:(.text+0x2d6e): undefined reference to `lround'
-../libdm/ioctl/libdevmapper.a(pool.o): In function `dm_pool_create':
-pool.c:(.text+0x134): undefined reference to `pthread_mutex_lock'
-pool.c:(.text+0x14f): undefined reference to `pthread_mutex_unlock'
+lvrename: move the lvmlockd LV lock
 
-Signed-off-by: Riku Voipio <riku.voipio@linaro.org>
+The function it was in is used for various
+internal renaming of hidden LVs where a lock
+from lvmlockd does not apply.
 ---
- tools/Makefile.in | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/metadata/lv_manip.c |   12 ------------
+ tools/lvrename.c        |   12 ++++++++++++
+ 2 files changed, 12 insertions(+), 12 deletions(-)
 
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index d6e54f0..518a21a 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -130,7 +130,7 @@ dmsetup: dmsetup.o $(top_builddir)/libdm/libdevmapper.$(LIB_SUFFIX)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2582ed5..2f37f5b 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4247,18 +4247,6 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return 0;
+ 	}
  
- dmsetup.static: dmsetup.o $(interfacebuilddir)/libdevmapper.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) \
--	      -o $@ dmsetup.o -ldevmapper $(STATIC_LIBS) $(LIBS)
-+	      -o $@ dmsetup.o -ldevmapper $(M_LIBS) $(PTHREAD_LIBS) $(STATIC_LIBS) $(LIBS)
+-	/*
+-	 * The lvmlockd LV lock is only acquired here to ensure the LV is not
+-	 * active on another host.  This requests a transient LV lock.
+-	 * If the LV is active, a persistent LV lock already exists in
+-	 * lvmlockd, and the transient lock request does nothing.
+-	 * If the LV is not active, then no LV lock exists and the transient
+-	 * lock request acquires the LV lock (or fails).  The transient lock
+-	 * is automatically released when the command exits.
+-	 */
+-	if (!lockd_lv(cmd, lv, "ex", 0))
+-		return_0;
+-
+ 	if (update_mda && !archive(vg))
+ 		return_0;
  
- all: device-mapper
+diff --git a/tools/lvrename.c b/tools/lvrename.c
+index 18b02d2..217ebdc 100644
+--- a/tools/lvrename.c
++++ b/tools/lvrename.c
+@@ -46,6 +46,18 @@ static int _lvrename_single(struct cmd_context *cmd, const char *vg_name,
+ 		goto bad;
+ 	}
  
--- 
-2.6.2
++	/*
++	 * The lvmlockd LV lock is only acquired here to ensure the LV is not
++	 * active on another host.  This requests a transient LV lock.
++	 * If the LV is active, a persistent LV lock already exists in
++	 * lvmlockd, and the transient lock request does nothing.
++	 * If the LV is not active, then no LV lock exists and the transient
++	 * lock request acquires the LV lock (or fails).  The transient lock
++	 * is automatically released when the command exits.
++	 */
++	if (!lockd_lv(cmd, lvl->lv, "ex", 0))
++		goto_bad;
++
+ 	if (!lv_rename(cmd, lvl->lv, lp->lv_name_new))
+ 		goto_bad;
+ 
 
 
