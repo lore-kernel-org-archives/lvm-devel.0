@@ -1,65 +1,50 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  8 Jan 2016 18:59:51 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20160108185951.4514460068@fedorahosted.org>
+Date: Fri,  8 Jan 2016 18:59:59 +0000 (UTC)
+Subject: v2_02_139 annotated tag has been created
+Message-ID: <20160108185959.94B4760068@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0dac4f09b4fcf752b039a80707653d3b655fc020
-Commit:        0dac4f09b4fcf752b039a80707653d3b655fc020
-Parent:        04b82a81262c2da3b7254c884e6df46d59c69c4a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a52e23085dd84bb3b62d44cd28b421004c7a19c5
+Commit:        a52e23085dd84bb3b62d44cd28b421004c7a19c5
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jan 8 18:51:08 2016 +0000
+AuthorDate:    2016-01-08 18:47 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jan 8 18:51:08 2016 +0000
+CommitterDate: 2016-01-08 18:47 +0000
 
-post-release
+annotated tag: v2_02_139 has been created
+	    at a52e23085dd84bb3b62d44cd28b421004c7a19c5 (tag)
+       tagging 04b82a81262c2da3b7254c884e6df46d59c69c4a (commit)
+      replaces v2_02_138
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Release 2.02.139.
 
-diff --git a/VERSION b/VERSION
-index 0275d39..37dcbe0 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.139(2)-git (2016-01-08)
-+2.02.140(2)-git (2016-01-08)
-diff --git a/VERSION_DM b/VERSION_DM
-index a564059..43446ef 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.114-git (2016-01-08)
-+1.02.115-git (2016-01-08)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d9e9775..15f835b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.140 -
-+===================================
-+
- Version 2.02.139 - 8th January 2016
- ===================================
-   Update lvmlockd with the new VG seqno before devices are suspended.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 4ab492a..f9c808f 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.115 - 
-+=====================================
-+
- Version 1.02.114 - 14th December 2015
- =====================================
-   Better support for dmsetup static linkage.
+21 files changed, 330 insertions(+), 193 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAlaQBGgACgkQIoGRwVZ+LBeXRACg0L0Xsfn9Be8RSX+t+zcAKqxT
+VuYAn3xQ2DZSLSRJ1bjOZQ+23A3heErl
+=5QIx
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (3):
+      post-release
+      pvscan: Remove duplicate filter wipe.
+      pre-release
+
+David Teigland (4):
+      process_each_pv: do full scan earlier to find new devices
+      vgrename: use process_each_vg
+      lvmlockd: update VG lock version earlier
+      document commits since last release
+
+Peter Rajnoha (2):
+      lvmdump: also add lvm2-activation{-early,-net}.service systemd status for lvmdump -s
+      man: lvs: document F,D and M thin pool health status chars for lv_attr in lvs man page
 
 
