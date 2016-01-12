@@ -1,52 +1,39 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 25 Oct 2010 09:53:52 -0400
-Subject: [PATCH 00/05] Add generic property fns for lvm2app, return struct, v2.
-In-Reply-To: <87hbgb5289.fsf@twilight.int.mornfall.net.>
-References: <1287748270-26875-1-git-send-email-dwysocha@redhat.com>
-	<87hbgb5289.fsf@twilight.int.mornfall.net.>
-Message-ID: <1288014832.5029.0.camel@f12-work>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 12 Jan 2016 15:14:52 +0000 (UTC)
+Subject: master - report: use proper string reference in _string_disp call for _cache_policy_disp fn
+Message-ID: <20160112151452.7EFD560C44@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, 2010-10-24 at 12:12 +0200, Petr Rockai wrote:
-> Hi,
-> 
-> Dave Wysochanski <dwysocha@redhat.com> writes:
-> > This is the modified patchset based on Petr's suggestion of changing
-> > the return value from 'int' to struct lvm_property_value:
-> > http://www.redhat.com/archives/lvm-devel/2010-October/msg00068.html
-> 
-> > Returning the struct seems like the approach things are moving, but
-> > a few details probably still worth considering, especially the exact
-> > layout of the exported struct lvm_property_value (ABI implications).
-> > Final submission might be best left to Petr.
-> I think I almost prefer to have this in tree now and tweak the layouts
-> etc. afterwards. I think that all that needs to be done is to pad the
-> bit-field, the union is already 64b wide so we shouldn't need anything
-> else. I'll have a closer look next week.
-> 
-> > Patchset adds the lvm2app 'get' functions for vg, pv, and lv, and interactive
-> > tests to exercise the interface.
-> 
-> > The only two lv properties not included now are still the float/percent
-> > based properties, snap_percent and copy_percent.  These should be
-> > refactored carefully and I did not want to delay these patches further.
-> I will sort these out myself as well.
-> 
-> I went through the individual patches and I don't have any specific
-> comments. So I think all five can go in now, and I'll look at finishing
-> the two above items and will look into test coverage that we already
-> have and maybe extend it. Therefore,
-> 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=176b4aaebeb8b885d5df16172a5bc32481beda59
+Commit:        176b4aaebeb8b885d5df16172a5bc32481beda59
+Parent:        1a3ee6402ecf761554040a551f6c7f52b92f73ca
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jan 12 16:13:56 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Jan 12 16:14:23 2016 +0100
 
-Very good.  As you wish Petr - will check them in!
+report: use proper string reference in _string_disp call for _cache_policy_disp fn
 
+---
+ lib/report/report.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-> Reviewed-by: Petr Rockai <prockai@redhat.com>
-> 
-
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 17aa5c0..9f44212 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -1429,7 +1429,7 @@ static int _cache_policy_disp(struct dm_report *rh, struct dm_pool *mem,
+ 		return 0;
+ 	}
+ 
+-	return _string_disp(rh, mem, field, seg->policy_name, private);
++	return _string_disp(rh, mem, field, &seg->policy_name, private);
+ }
+ 
+ static int _modules_disp(struct dm_report *rh, struct dm_pool *mem,
 
 
