@@ -1,48 +1,42 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Oct 2010 11:44:21 -0000
-Subject: LVM2/libdm ioctl/libdm-iface.c misc/dm-ioctl.h
-Message-ID: <20101025114421.30097.qmail@sourceware.org>
+From: okozina <okozina@fedoraproject.org>
+Date: Tue, 12 Jan 2016 10:42:53 +0000 (UTC)
+Subject: master - vgchange: drop redundant check
+Message-ID: <20160112104253.162E660B3E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-10-25 11:44:21
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d1e30ff0baa3cf4ae0c582c29dc017d63ca99483
+Commit:        d1e30ff0baa3cf4ae0c582c29dc017d63ca99483
+Parent:        d09246a07d3e4d9940cdbbd017b1bc8319384081
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Tue Jan 12 10:15:10 2016 +0100
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Tue Jan 12 11:41:41 2016 +0100
 
-Modified files:
-	libdm/ioctl    : libdm-iface.c 
-	libdm/misc     : dm-ioctl.h 
+vgchange: drop redundant check
 
-Log message:
-	Use a more-generic name for the new kernel flag so list_devices can share it.
+check for background polling option is performed from
+within vgchange_background_polling routine as well.
+---
+ tools/vgchange.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.82&r2=1.83
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/misc/dm-ioctl.h.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-
---- LVM2/libdm/ioctl/libdm-iface.c	2010/10/15 01:10:28	1.82
-+++ LVM2/libdm/ioctl/libdm-iface.c	2010/10/25 11:44:20	1.83
-@@ -1542,7 +1542,7 @@
- 				  "kernel.  Aborting operation.");
- 			goto bad;
- 		}
--		dmi->flags |= DM_NEW_UUID_FLAG;
-+		dmi->flags |= DM_UUID_FLAG;
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 3aea8a4..62e602a 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -998,8 +998,7 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
  	}
  
- 	dmi->target_count = count;
---- LVM2/libdm/misc/dm-ioctl.h	2010/10/15 01:10:28	1.6
-+++ LVM2/libdm/misc/dm-ioctl.h	2010/10/25 11:44:21	1.7
-@@ -328,6 +328,6 @@
-  * If set, rename changes the uuid not the name.  Only permitted
-  * if no uuid was previously supplied: an existing uuid cannot be changed.
-  */
--#define DM_NEW_UUID_FLAG        (1 << 14) /* In */
-+#define DM_UUID_FLAG			(1 << 14) /* In */
+ 	if (!arg_count(cmd, refresh_ARG) &&
+-	    background_polling())
+-		if (!vgchange_background_polling(cmd, vg))
++	    !vgchange_background_polling(cmd, vg))
+ 			return_ECMD_FAILED;
  
- #endif				/* _LINUX_DM_IOCTL_H */
+ 	if (arg_is_set(cmd, lockstart_ARG)) {
 
 
