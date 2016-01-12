@@ -1,97 +1,104 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Tue, 12 Jan 2016 10:42:48 +0000 (UTC)
-Subject: master - pvscan: restore polling in autoactivation handler
-Message-ID: <20160112104248.E2E3760B3E@fedorahosted.org>
+Date: Tue, 12 Jan 2016 10:42:51 +0000 (UTC)
+Subject: master - test: add test for autoactivation regression
+Message-ID: <20160112104251.064D760B3E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=40701af9696a302c904fad30951385eb5a5adb85
-Commit:        40701af9696a302c904fad30951385eb5a5adb85
-Parent:        d6cf83968cb0d397faec30ce54839a679e89dd14
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d09246a07d3e4d9940cdbbd017b1bc8319384081
+Commit:        d09246a07d3e4d9940cdbbd017b1bc8319384081
+Parent:        40701af9696a302c904fad30951385eb5a5adb85
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Thu Jan 7 15:17:08 2016 +0100
+AuthorDate:    Thu Jan 7 15:30:22 2016 +0100
 Committer:     Ondrej Kozina <okozina@redhat.com>
 CommitterDate: Tue Jan 12 11:40:43 2016 +0100
 
-pvscan: restore polling in autoactivation handler
+test: add test for autoactivation regression
 
-This commit fixes regression in auto-activation code introduced
-in commit: c26d81d6e6939906729d91fae83cd8bbdd743bb7.
-
-- resolves rhbz1295562
+add test for a regression fixed in
+40701af9696a302c904fad30951385eb5a5adb85
 ---
- WHATS_NEW        |    1 +
- tools/pvscan.c   |    9 +++++++++
- tools/tools.h    |    2 ++
- tools/vgchange.c |    4 ++--
- 4 files changed, 14 insertions(+), 2 deletions(-)
+ .../shell/lvmetad-pvscan-autoactivation-polling.sh |   70 ++++++++++++++++++++
+ 1 files changed, 70 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f316054..93e0dd5 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.140 -
- ===================================
-+  Restore background polling processing during auto-activation (2.02.119).
-   Use brackets to signify LVs which are not visible when reporting lv_parent.
-   Fix invalid memory read when reporting cache LV policy_name (2.02.126).
- 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 68a074e..e9fb5d5 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -190,6 +190,15 @@ static int _auto_activation_handler(struct cmd_context *cmd,
- 		goto out;
- 	}
- 
-+	/*
-+	 * After sucessfull activation we need to initialise polling
-+	 * for all activated LVs in a VG. Possible enhancement would
-+	 * be adding --poll y|n cmdline option for pvscan and call
-+	 * init_background_polling routine in autoactivation handler.
-+	 */
-+	if (!(vgchange_background_polling(vg->cmd, vg)))
-+		goto_out;
+diff --git a/test/shell/lvmetad-pvscan-autoactivation-polling.sh b/test/shell/lvmetad-pvscan-autoactivation-polling.sh
+new file mode 100644
+index 0000000..f7ea912
+--- /dev/null
++++ b/test/shell/lvmetad-pvscan-autoactivation-polling.sh
+@@ -0,0 +1,70 @@
++#!/bin/sh
++# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
- 	r = 1;
- 
- out:
-diff --git a/tools/tools.h b/tools/tools.h
-index 4179cc8..47dd35e 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -185,4 +185,6 @@ int mirror_remove_missing(struct cmd_context *cmd,
- int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
- 		       activation_change_t activate);
- 
-+int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg);
++SKIP_WITHOUT_LVMETAD=1
 +
- #endif
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 9e1b09e..3aea8a4 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -174,7 +174,7 @@ static int _vgchange_monitoring(struct cmd_context *cmd, struct volume_group *vg
- 	return r;
- }
- 
--static int _vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg)
-+int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg)
- {
- 	int polled;
- 
-@@ -999,7 +999,7 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 
- 	if (!arg_count(cmd, refresh_ARG) &&
- 	    background_polling())
--		if (!_vgchange_background_polling(cmd, vg))
-+		if (!vgchange_background_polling(cmd, vg))
- 			return_ECMD_FAILED;
- 
- 	if (arg_is_set(cmd, lockstart_ARG)) {
++. lib/inittest
++
++which mkfs.ext3 || skip
++
++lvdev_() {
++    echo "$DM_DEV_DIR/$1/$2"
++}
++
++snap_lv_name_() {
++    echo ${1}_snap
++}
++
++setup_merge_() {
++    local VG_NAME=$1
++    local LV_NAME=$2
++    local NUM_EXTRA_SNAPS=${3:-0}
++    local BASE_SNAP_LV_NAME
++
++    BASE_SNAP_LV_NAME=$(snap_lv_name_ $LV_NAME)
++
++    lvcreate -aey -n $LV_NAME -l 50%FREE $VG_NAME
++    lvs
++    lvcreate -s -n $BASE_SNAP_LV_NAME -l 20%FREE ${VG_NAME}/${LV_NAME}
++    mkfs.ext3 "$(lvdev_ $VG_NAME $LV_NAME)"
++
++    if [ $NUM_EXTRA_SNAPS -gt 0 ]; then
++	for i in $(seq 1 $NUM_EXTRA_SNAPS); do
++	    lvcreate -s -n ${BASE_SNAP_LV_NAME}_${i} -l 20%ORIGIN ${VG_NAME}/${LV_NAME}
++	done
++    fi
++}
++
++aux prepare_pvs 1 50
++
++vgcreate $vg1 "$dev1"
++mkdir test_mnt
++
++setup_merge_ $vg1 $lv1
++mount "$(lvdev_ $vg1 $lv1)" test_mnt
++lvconvert --merge $vg1/$(snap_lv_name_ $lv1)
++umount test_mnt
++vgchange -an $vg1
++
++# check snapshot get removed on autoactivation
++pvscan --cache -aay "$dev1"
++
++check active $vg1 $lv1
++i=100
++while ! check lv_not_exists $vg1/$(snap_lv_name_ $lv1); do
++	test $i -lt 0 && fail "Background polling failed to remove merged snapshot LV"
++	sleep .1
++	i=$((i-1))
++done
++
++# TODO: add similar simple tests for other interrupted/unfinished polling operation
++
++vgremove -ff $vg1
 
 
