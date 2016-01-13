@@ -1,31 +1,39 @@
-From: Bastian Blank <bastian@waldi.eu.org>
-Date: Wed, 4 Nov 2009 12:26:55 +0100
-Subject: [PATCH] udev: move notify rule
-In-Reply-To: <4AEB0C50.7090500@redhat.com>
-References: <20091030145125.GA21583@wavehammer.waldi.eu.org>
-	<4AEB0C50.7090500@redhat.com>
-Message-ID: <20091104112655.GB17814@wavehammer.waldi.eu.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 13 Jan 2016 15:44:11 +0000 (UTC)
+Subject: master - cleanup: rename 'invisible devices' to 'hidden devices'
+Message-ID: <20160113154411.8691F60972@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Oct 30, 2009 at 04:54:56PM +0100, Peter Rajnoha wrote:
-> On 10/30/2009 03:51 PM, Bastian Blank wrote:
-> > Move notify rule into the first rules file. The RUN commands is executed
-> > after everything is finished, so it makes no difference if it is set
-> > early or late.
-> yes, this is true with respect to all the other udev processing. But the point of having
-> it as 95-dm.rules is that there could be some other RUN+="..." line in the other rules.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04d1a8a5e41bd9fbcaa885b0b13faba85db532d9
+Commit:        04d1a8a5e41bd9fbcaa885b0b13faba85db532d9
+Parent:        939d29652579e4759d445c87dc21d1a6b37fd97d
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Jan 13 16:43:25 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Jan 13 16:43:25 2016 +0100
 
-And there are no constraints about the order of this executions. If you
-know more then the udev docu, fix it there.
+cleanup: rename 'invisible devices' to 'hidden devices'
 
-Bastian
+---
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
--- 
-Where there's no emotion, there's no motive for violence.
-		-- Spock, "Dagger of the Mind", stardate 2715.1
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 51dba36..439d79e 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -880,7 +880,7 @@ log/level = 9
+ log/overwrite = 1
+ log/syslog = 0
+ log/verbose = 0
+-report/mark_invisible_devices=0
++report/mark_hidden_devices=0
+ EOF
+ 	}
+ 
 
 
