@@ -1,63 +1,37 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Mon, 2 Nov 2009 08:51:45 -0600
-Subject: [PATCH]: Enable snapshots of mirrors
-In-Reply-To: <87iqdusaf6.fsf@twilight.int.mornfall.net.>
-References: <1256237661.14726.3.camel@hydrogen.msp.redhat.com>
-	<87iqdusaf6.fsf@twilight.int.mornfall.net.>
-Message-ID: <402441FE-7AEF-48E4-81DC-817BB004E24B@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 13 Jan 2016 14:37:28 +0000 (UTC)
+Subject: master - cleanup: rename 'invisible devices' to 'hidden devices'
+Message-ID: <20160113143728.E1AF060E0C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-ok, thanks for the reminder!
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9a81881965f1c990632c13699f2184cd1680cf39
+Commit:        9a81881965f1c990632c13699f2184cd1680cf39
+Parent:        1417ed304bf7db0bda167ee83cfbb4126ba4913d
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Jan 13 15:37:15 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Jan 13 15:37:15 2016 +0100
 
-  brassow
+cleanup: rename 'invisible devices' to 'hidden devices'
 
-On Nov 1, 2009, at 6:21 AM, Petr Rockai wrote:
+---
+ conf/command_profile_template.profile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-> Hi,
->
-> it would be great if you could convert your tests into actual  
-> testcase code,
-> maybe gathered all under test/t-snapshots-of-mirrors.sh -- this  
-> would help
-> prevent any possible regressions in the future. It would also mean  
-> we remember
-> all the information you needed to gather to conduct these tests.
->
-> May you need any assistance with writing the tests, please don't  
-> hesitate to
-> contact me (IRC probably works best).
->
-> Also,
->
-> Jonathan Brassow <jbrassow@redhat.com> writes:
->> lvconvert:
->> + down convert works (mirror to linear)
->> + down convert works (mirror to mirror)
->> + up convert works (linear to mirror) - both background and  
->> foreground
->> - up convert doesn't work (mirror to mirror) - disabled in  
->> lvconvert and
->> err msg added
->> + convert between log types works (core <-> disk/redundant)
-> could you please check what lvconvert --repair does under a  
-> snapshot? I would
-> probably look into the mirror->mirror upconversion, although that's  
-> only
-> relevant for a repair of 3+-way mirror.
->
-> The t-lvconvert-repair.sh script should aid you in constructing a  
-> testcase.
->
-> Thanks!
->   Petr.
->
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+diff --git a/conf/command_profile_template.profile.in b/conf/command_profile_template.profile.in
+index 57fc6c0..3e5b031 100644
+--- a/conf/command_profile_template.profile.in
++++ b/conf/command_profile_template.profile.in
+@@ -55,5 +55,5 @@ report {
+ 	pvsegs_sort="pv_name,pvseg_start"
+ 	pvsegs_cols="pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"
+ 	pvsegs_cols_verbose="pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size,lv_name,seg_start_pe,segtype,seg_pe_ranges"
+-	mark_invisible_devices=1
++	mark_hidden_devices=1
+ }
 
 
