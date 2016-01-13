@@ -1,92 +1,113 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 13 Jan 2016 22:40:33 +0000 (UTC)
-Subject: master - vgchange: fix lockd_gl results
-Message-ID: <20160113224033.CCF8260E28@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 13 Jan 2016 13:46:38 +0000 (UTC)
+Subject: master - lv: add common lv_data_lv fn for use in report and dup, use brackets for invisible devices
+Message-ID: <20160113134638.E0AFC6066A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9e9c7575413dca7a1ac7a5f363d1c7a464f86c3d
-Commit:        9e9c7575413dca7a1ac7a5f363d1c7a464f86c3d
-Parent:        1b1f42b49005665e669b52f78864cad59d81f64b
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jan 13 15:55:41 2016 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jan 13 16:40:02 2016 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cdbf76b2f0c12d6ab12c3d4b2253e60f9f5420d3
+Commit:        cdbf76b2f0c12d6ab12c3d4b2253e60f9f5420d3
+Parent:        d50cd9d8d766671e89f24f7fd0e23dc96f883ea3
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jan 12 11:15:22 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Jan 13 11:19:55 2016 +0100
 
-vgchange: fix lockd_gl results
+lv: add common lv_data_lv fn for use in report and dup, use brackets for invisible devices
 
-The wrong error value was being checked from lockd_gl()
-in two cases.
-
-Clarify the use of lockd_gl() in the lock-start case.
+The common lv_data_lv fn avoids code duplication and also
+the reporting part now uses _lvname_disp and _uuid_disp to display
+name and uuid respectively, including brackets for the name if the
+dev is invisible.
 ---
- tools/vgchange.c |   35 ++++++++++++++++++++---------------
- 1 files changed, 20 insertions(+), 15 deletions(-)
+ lib/metadata/lv.c   |   25 ++++++++++++++++---------
+ lib/metadata/lv.h   |    1 +
+ lib/report/report.c |   15 +++++++--------
+ 3 files changed, 24 insertions(+), 17 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 62e602a..6cbb042 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -1046,11 +1046,26 @@ static int _lockd_vgchange(struct cmd_context *cmd, int argc, char **argv)
- 	if (arg_is_set(cmd, lockstop_ARG))
- 		cmd->lockd_vg_default_sh = 1;
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index ab8a7c4..e8b5ada 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -398,20 +398,27 @@ char *lv_pool_lv_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ 	return _do_lv_pool_lv_dup(mem, lv, 1);
+ }
  
--	/* Starting a vg lockspace means there are no locks available yet. */
--
--	if (arg_is_set(cmd, lockstart_ARG))
-+	/*
-+	 * Starting lockspaces.  For VGs not yet started, locks are not
-+	 * available to acquire, and for VGs already started, there's nothing
-+	 * to do, so disable VG locks.  Try to acquire the global lock sh to
-+	 * validate the cache (if no gl is available, lockd_gl will force a
-+	 * cache validation).  If the global lock is available, it can be
-+	 * benficial to hold sh to serialize lock-start with vgremove of the
-+	 * same VG from another host.
-+	 */
-+	if (arg_is_set(cmd, lockstart_ARG)) {
- 		cmd->lockd_vg_disable = 1;
- 
-+		if (!lockd_gl(cmd, "sh", 0))
-+			log_debug("No global lock for lock start");
++struct logical_volume *lv_data_lv(const struct logical_volume *lv)
++{
++	struct lv_segment *seg = (lv_is_thin_pool(lv) || lv_is_cache_pool(lv)) ?
++				  first_seg(lv) : NULL;
++	struct logical_volume *data_lv = seg ? seg_lv(seg, 0) : NULL;
 +
-+		/* Disable the lockd_gl in process_each_vg. */
-+		cmd->lockd_gl_disable = 1;
-+		return 1;
-+	}
++	return data_lv;
++}
 +
- 	/*
- 	 * Changing system_id or lock_type must only be done on explicitly
- 	 * named vgs.
-@@ -1059,17 +1074,7 @@ static int _lockd_vgchange(struct cmd_context *cmd, int argc, char **argv)
- 	if (arg_is_set(cmd, systemid_ARG) || arg_is_set(cmd, locktype_ARG))
- 		cmd->command->flags &= ~ALL_VGS_IS_DEFAULT;
+ static char *_do_lv_data_lv_dup(struct dm_pool *mem, const struct logical_volume *lv,
+ 				int uuid)
+ {
+-	struct lv_segment *seg = (lv_is_thin_pool(lv) || lv_is_cache_pool(lv)) ?
+-		first_seg(lv) : NULL;
++	struct logical_volume *data_lv = lv_data_lv(lv);
  
--	if (arg_is_set(cmd, lockstart_ARG)) {
--		/*
--		 * The lockstart condition takes the global lock to serialize
--		 * with any other host that tries to remove the VG while this
--		 * tries to start it.  (Zero argc means all VGs, in wich case
--		 * process_each_vg will acquire the global lock.)
--		 */
--		if (argc && !lockd_gl(cmd, "sh", 0))
--			return_ECMD_FAILED;
--
--	} else if (arg_is_set(cmd, systemid_ARG) || arg_is_set(cmd, locktype_ARG)) {
-+	if (arg_is_set(cmd, systemid_ARG) || arg_is_set(cmd, locktype_ARG)) {
- 		/*
- 		 * This is a special case where taking the global lock is
- 		 * not needed to protect global state, because the change is
-@@ -1079,7 +1084,7 @@ static int _lockd_vgchange(struct cmd_context *cmd, int argc, char **argv)
- 		 * lock_type.
- 		 */
- 		if (!lockd_gl(cmd, "ex", LDGL_UPDATE_NAMES))
--			return_ECMD_FAILED;
-+			return 0;
- 	}
+-	if (seg) {
+-		if (uuid)
+-			return lv_uuid_dup(mem, seg_lv(seg, 0));
+-		else
+-			return lv_name_dup(mem, seg_lv(seg, 0));
+-	}
++	if (!data_lv)
++		return NULL;
  
- 	return 1;
+-	return NULL;
++	if (uuid)
++		return lv_uuid_dup(mem, data_lv);
++	else
++		return lv_name_dup(mem, data_lv);
+ }
+ 
+ char *lv_data_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index b37cc4e..44f7fda 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -89,6 +89,7 @@ struct logical_volume *lv_parent(const struct logical_volume *lv);
+ struct logical_volume *lv_convert_lv(const struct logical_volume *lv);
+ struct logical_volume *lv_origin_lv(const struct logical_volume *lv);
+ struct logical_volume *lv_mirror_log_lv(const struct logical_volume *lv);
++struct logical_volume *lv_data_lv(const struct logical_volume *lv);
+ char *lv_parent_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_origin_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv);
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 80896b3..467cf85 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -1670,16 +1670,15 @@ static int _do_datalv_disp(struct dm_report *rh, struct dm_pool *mem __attribute
+ 			   int uuid)
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+-	const struct lv_segment *seg = (lv_is_pool(lv)) ? first_seg(lv) : NULL;
++	struct logical_volume *data_lv = lv_data_lv(lv);
+ 
+-	if (seg) {
+-		if (uuid)
+-			return _uuid_disp(rh, mem, field, &seg_lv(seg, 0)->lvid.id[1], private);
+-		else
+-			return _lvname_disp(rh, mem, field, seg_lv(seg, 0), private);
+-	}
++	if (!data_lv)
++		return _field_set_value(field, "", NULL);
+ 
+-	return _field_set_value(field, "", NULL);
++	if (uuid)
++		return _uuid_disp(rh, mem, field, &data_lv->lvid.id[1], private);
++	else
++		return _lvname_disp(rh, mem, field, data_lv, private);
+ }
+ 
+ static int _datalv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
 
 
