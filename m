@@ -1,113 +1,98 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 13 Jan 2016 13:46:38 +0000 (UTC)
-Subject: master - lv: add common lv_data_lv fn for use in report and dup, use brackets for invisible devices
-Message-ID: <20160113134638.E0AFC6066A@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 14 Jan 2016 00:51:14 +0000 (UTC)
+Subject: master - vgcfgrestore: Retain allocatable PV attribute.
+Message-ID: <20160114005114.02F8660ED1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cdbf76b2f0c12d6ab12c3d4b2253e60f9f5420d3
-Commit:        cdbf76b2f0c12d6ab12c3d4b2253e60f9f5420d3
-Parent:        d50cd9d8d766671e89f24f7fd0e23dc96f883ea3
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jan 12 11:15:22 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jan 13 11:19:55 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=01228b692be6850645b91811bbf30366241b036c
+Commit:        01228b692be6850645b91811bbf30366241b036c
+Parent:        9e9c7575413dca7a1ac7a5f363d1c7a464f86c3d
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Jan 14 00:46:45 2016 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Jan 14 00:46:45 2016 +0000
 
-lv: add common lv_data_lv fn for use in report and dup, use brackets for invisible devices
+vgcfgrestore: Retain allocatable PV attribute.
 
-The common lv_data_lv fn avoids code duplication and also
-the reporting part now uses _lvname_disp and _uuid_disp to display
-name and uuid respectively, including brackets for the name if the
-dev is invisible.
+pvchange -xn was getting lost.
+All PVs were set to allocatable again after restore.
+
+Moved setting ALLOCATABLE_PV outside pv_setup().
 ---
- lib/metadata/lv.c   |   25 ++++++++++++++++---------
- lib/metadata/lv.h   |    1 +
- lib/report/report.c |   15 +++++++--------
- 3 files changed, 24 insertions(+), 17 deletions(-)
+ WHATS_NEW                     |    1 +
+ lib/format1/format1.c         |    6 +-----
+ lib/format_text/format-text.c |    4 ----
+ lib/metadata/metadata.c       |    4 ++++
+ 4 files changed, 6 insertions(+), 9 deletions(-)
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index ab8a7c4..e8b5ada 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -398,20 +398,27 @@ char *lv_pool_lv_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	return _do_lv_pool_lv_dup(mem, lv, 1);
- }
- 
-+struct logical_volume *lv_data_lv(const struct logical_volume *lv)
-+{
-+	struct lv_segment *seg = (lv_is_thin_pool(lv) || lv_is_cache_pool(lv)) ?
-+				  first_seg(lv) : NULL;
-+	struct logical_volume *data_lv = seg ? seg_lv(seg, 0) : NULL;
-+
-+	return data_lv;
-+}
-+
- static char *_do_lv_data_lv_dup(struct dm_pool *mem, const struct logical_volume *lv,
- 				int uuid)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index aff000f..885226a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.140 -
+ ===================================
++  Fix vgcfgrestore to respect allocatable attribute of PVs.
+   Add report/mark_hidden_devices to lvm.conf.
+   Use brackets consistently in report fields to mark hidden devices.
+   Restore background polling processing during auto-activation (2.02.119).
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index 1b86ef5..c717184 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -383,7 +383,6 @@ static int _format1_pv_setup(const struct format_type *fmt,
+ 			     struct physical_volume *pv,
+ 			     struct volume_group *vg)
  {
--	struct lv_segment *seg = (lv_is_thin_pool(lv) || lv_is_cache_pool(lv)) ?
--		first_seg(lv) : NULL;
-+	struct logical_volume *data_lv = lv_data_lv(lv);
+-	int r;
+ 	struct pvcreate_restorable_params rp = {.restorefile = NULL,
+ 						.id = {{0}},
+ 						.idp = NULL,
+@@ -393,10 +392,7 @@ static int _format1_pv_setup(const struct format_type *fmt,
+ 						.extent_count = 0,
+ 						.extent_size = vg->extent_size};
  
--	if (seg) {
--		if (uuid)
--			return lv_uuid_dup(mem, seg_lv(seg, 0));
--		else
--			return lv_name_dup(mem, seg_lv(seg, 0));
--	}
-+	if (!data_lv)
-+		return NULL;
- 
--	return NULL;
-+	if (uuid)
-+		return lv_uuid_dup(mem, data_lv);
-+	else
-+		return lv_name_dup(mem, data_lv);
+-	if ((r = _format1_pv_initialise(fmt, -1, 0, 0, &rp, pv)))
+-		pv->status |= ALLOCATABLE_PV;
+-
+-	return r;
++	return _format1_pv_initialise(fmt, -1, 0, 0, &rp, pv);
  }
  
- char *lv_data_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index b37cc4e..44f7fda 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -89,6 +89,7 @@ struct logical_volume *lv_parent(const struct logical_volume *lv);
- struct logical_volume *lv_convert_lv(const struct logical_volume *lv);
- struct logical_volume *lv_origin_lv(const struct logical_volume *lv);
- struct logical_volume *lv_mirror_log_lv(const struct logical_volume *lv);
-+struct logical_volume *lv_data_lv(const struct logical_volume *lv);
- char *lv_parent_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_origin_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv);
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 80896b3..467cf85 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1670,16 +1670,15 @@ static int _do_datalv_disp(struct dm_report *rh, struct dm_pool *mem __attribute
- 			   int uuid)
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
--	const struct lv_segment *seg = (lv_is_pool(lv)) ? first_seg(lv) : NULL;
-+	struct logical_volume *data_lv = lv_data_lv(lv);
+ static int _format1_lv_setup(struct format_instance *fid, struct logical_volume *lv)
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 9aad0fe..02d3459 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1818,10 +1818,6 @@ static int _text_pv_setup(const struct format_type *fmt,
+ 		pv->pe_count = (uint32_t) pe_count;
+ 	}
  
--	if (seg) {
--		if (uuid)
--			return _uuid_disp(rh, mem, field, &seg_lv(seg, 0)->lvid.id[1], private);
--		else
--			return _lvname_disp(rh, mem, field, seg_lv(seg, 0), private);
--	}
-+	if (!data_lv)
-+		return _field_set_value(field, "", NULL);
- 
--	return _field_set_value(field, "", NULL);
-+	if (uuid)
-+		return _uuid_disp(rh, mem, field, &data_lv->lvid.id[1], private);
-+	else
-+		return _lvname_disp(rh, mem, field, data_lv, private);
+-	/* Unlike LVM1, we don't store this outside a VG */
+-	/* FIXME Default from config file? vgextend cmdline flag? */
+-	pv->status |= ALLOCATABLE_PV;
+-
+ 	return 1;
  }
  
- static int _datalv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index a1d2e2b..0336d5d 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -227,6 +227,10 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
+ 	 */
+ 	pv->pe_alloc_count = 0;
+ 
++	/* LVM1 stores this outside a VG; LVM2 only stores it inside */
++	/* FIXME Default from config file? vgextend cmdline flag? */
++	pv->status |= ALLOCATABLE_PV;
++
+ 	if (!fid->fmt->ops->pv_setup(fid->fmt, pv, vg)) {
+ 		log_error("Format-specific setup of physical volume '%s' "
+ 			  "failed.", pv_name);
 
 
