@@ -1,71 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 14 Jan 2016 10:35:24 +0000 (UTC)
-Subject: master - cleanup: explicit prohibition for virtual segs
-Message-ID: <20160114103524.F400C60DBC@fedorahosted.org>
+Date: Thu, 14 Jan 2016 10:35:27 +0000 (UTC)
+Subject: master - cleanup: replace log_warn
+Message-ID: <20160114103527.10E3760DBC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2567d03e95bb4e46cd845c2ae8b518ec4989b939
-Commit:        2567d03e95bb4e46cd845c2ae8b518ec4989b939
-Parent:        4310dfd4e141bb83320148d245f3ab2cae778f6e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7d2b7f2bd8c318ed65097d4cb7141b3035e43e2f
+Commit:        7d2b7f2bd8c318ed65097d4cb7141b3035e43e2f
+Parent:        2567d03e95bb4e46cd845c2ae8b518ec4989b939
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 6 13:54:15 2016 +0100
+AuthorDate:    Fri Jan 8 11:08:07 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jan 14 11:34:05 2016 +0100
 
-cleanup: explicit prohibition for virtual segs
+cleanup: replace log_warn
 
-Internal _alloc_init() is only called from allocate_extents(),
-which already does prevent usage of virtual segments.
-
-So mark as internal error early and do not process it any further.
 ---
- lib/metadata/lv_manip.c |   15 ++++++---------
- 1 files changed, 6 insertions(+), 9 deletions(-)
+ lib/metadata/lv_manip.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 1396b86..6897801 100644
+index 6897801..99f3661 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -3128,19 +3128,20 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
- 	uint32_t s, area_count, alloc_count, parity_count, total_extents;
- 	size_t size = 0;
- 
-+	if (segtype_is_virtual(segtype)) {
-+		log_error(INTERNAL_ERROR "_alloc_init called for virtual segment.");
-+		return NULL;
-+	}
-+
- 	/* FIXME Caller should ensure this */
- 	if (mirrors && !stripes)
- 		stripes = 1;
--
--	if (segtype_is_virtual(segtype))
--		area_count = 0;
- 	else if (mirrors > 1)
- 		area_count = mirrors * stripes;
- 	else
- 		area_count = stripes;
- 
--	if (!segtype_is_virtual(segtype) &&
--	    !(area_count + metadata_area_count)) {
-+	if (!(area_count + metadata_area_count)) {
- 		log_error(INTERNAL_ERROR "_alloc_init called for non-virtual segment with no disk space.");
- 		return NULL;
+@@ -4631,14 +4631,14 @@ static int _lvresize_check_lv(struct cmd_context *cmd, struct logical_volume *lv
+ 		if (vg->fid->fmt->features & FMT_SEGMENTS)
+ 			lp->stripes = lp->ac_stripes_value;
+ 		else
+-			log_warn("Varied striping not supported. Ignoring.");
++			log_print_unless_silent("Varied striping not supported. Ignoring.");
  	}
-@@ -3186,10 +3187,6 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
  
- 	ah->cmd = cmd;
- 	ah->mem = mem;
--
--	if (segtype_is_virtual(segtype))
--		return ah;
--
- 	ah->area_count = area_count;
- 	ah->parity_count = parity_count;
- 	ah->region_size = region_size;
+ 	if (lp->ac_mirrors) {
+ 		if (vg->fid->fmt->features & FMT_SEGMENTS)
+ 			lp->mirrors = lp->ac_mirrors_value;
+ 		else
+-			log_warn("Mirrors not supported. Ignoring.");
++			log_print_unless_silent("Mirrors not supported. Ignoring.");
+ 	}
+ 
+ 	if (lp->ac_stripesize && !_validate_stripesize(cmd, vg, lp))
 
 
