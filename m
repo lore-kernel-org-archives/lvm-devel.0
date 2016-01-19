@@ -1,39 +1,41 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 19 Jan 2016 13:30:47 +0000 (UTC)
-Subject: master - report: add note about seg_pe_ranges and seg_le_ranges in -o help
-Message-ID: <20160119133047.80AAA6033B@fedorahosted.org>
+Date: Tue, 19 Jan 2016 13:46:19 +0000 (UTC)
+Subject: master - report: fix off-by-one error when reporting LV segment's metadata device extent count
+Message-ID: <20160119134619.7A924606DC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=acf1e84e8c067de246fd83b05e723049c9f91407
-Commit:        acf1e84e8c067de246fd83b05e723049c9f91407
-Parent:        1341f835547ce89240754054614ec5acea60a58a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2a4ef78c4a7212b5f1416a0532fa83bbbe74561a
+Commit:        2a4ef78c4a7212b5f1416a0532fa83bbbe74561a
+Parent:        acf1e84e8c067de246fd83b05e723049c9f91407
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jan 19 13:53:30 2016 +0100
+AuthorDate:    Tue Jan 19 14:42:51 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jan 19 14:30:21 2016 +0100
+CommitterDate: Tue Jan 19 14:44:06 2016 +0100
 
-report: add note about seg_pe_ranges and seg_le_ranges in -o help
+report: fix off-by-one error when reporting LV segment's metadata device extent count
 
+Commit a3f484f812bfb89063fbc25e378f34cacd50bf7d used "-1" two times by
+mistake for the extent count when reporting seg_metadata_le_ranges.
 ---
- lib/report/columns.h |    2 +-
+ lib/metadata/lv.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index bbea697..adc2d62 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -192,7 +192,7 @@ FIELD(SEGS, seg, NUM, "Start", list, 5, segstartpe, seg_start_pe, "Offset within
- FIELD(SEGS, seg, SIZ, "SSize", list, 5, segsize, seg_size, "Size of segment in current units.", 0)
- FIELD(SEGS, seg, SIZ, "SSize", list, 5, segsizepe, seg_size_pe, "Size of segment in physical extents.", 0)
- FIELD(SEGS, seg, STR_LIST, "Seg Tags", tags, 8, tags, seg_tags, "Tags, if any.", 0)
--FIELD(SEGS, seg, STR_LIST, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format.", 0)
-+FIELD(SEGS, seg, STR_LIST, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format (deprecated, use seg_le_ranges for common format).", 0)
- FIELD(SEGS, seg, STR_LIST, "LE Ranges", list, 9, leranges, seg_le_ranges, "Ranges of Logical Extents of underlying devices in command line format.", 0)
- FIELD(SEGS, seg, STR_LIST, "Metadata LE Ranges", list, 18, metadataleranges, seg_metadata_le_ranges, "Ranges of Logical Extents of underlying metadata devices in command line format.", 0)
- FIELD(SEGS, seg, STR_LIST, "Devices", list, 7, devices, devices, "Underlying devices used with starting extent numbers.", 0)
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index b5c9852..4f25a59 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -55,7 +55,7 @@ static struct dm_list *_format_pvsegs(struct dm_pool *mem, const struct lv_segme
+ 		switch (metadata_areas_only ? seg_metatype(seg, s) : seg_type(seg, s)) {
+ 		case AREA_LV:
+ 			lv = metadata_areas_only ? seg_metalv(seg, s) : seg_lv(seg, s);
+-			seg_len = metadata_areas_only ? seg_metalv(seg, s)->le_count - 1 : seg_lv(seg, s)->le_count;
++			seg_len = metadata_areas_only ? seg_metalv(seg, s)->le_count : seg_lv(seg, s)->le_count;
+ 			visible = lv_is_visible(lv);
+ 			name = lv->name;
+ 			extent = metadata_areas_only ? seg_le(seg, s) : 0;
 
 
