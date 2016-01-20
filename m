@@ -1,63 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 20 Jan 2016 12:53:50 +0000 (UTC)
-Subject: master - cleanup: use log_print
-Message-ID: <20160120125350.737B260D1E@fedorahosted.org>
+Date: Wed, 20 Jan 2016 12:53:52 +0000 (UTC)
+Subject: master - cleanup: shuffle check of threshold
+Message-ID: <20160120125352.968B960D1E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c99ca6f430eb3650115882b5b6a8f9dde6212b12
-Commit:        c99ca6f430eb3650115882b5b6a8f9dde6212b12
-Parent:        2da7525c8371a94ee8fe700ff021e3b14dd2fd34
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4b9ae55a8d691eb15d34dce74f00230bd2423c5b
+Commit:        4b9ae55a8d691eb15d34dce74f00230bd2423c5b
+Parent:        c99ca6f430eb3650115882b5b6a8f9dde6212b12
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jan 15 10:35:10 2016 +0100
+AuthorDate:    Fri Jan 15 14:39:58 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jan 20 13:44:47 2016 +0100
 
-cleanup: use log_print
+cleanup: shuffle check of threshold
 
-Using log_print for ignoring message instead of log_warn.
-Add some missing '.'.
+Check first threshold and then policy_amount.
 ---
- lib/metadata/lv_manip.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ lib/metadata/lv_manip.c |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 7ba52f9..e0312e3 100644
+index e0312e3..1975c83 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -4269,17 +4269,17 @@ static int _validate_stripesize(struct cmd_context *cmd,
- 				struct lvresize_params *lp)
- {
+@@ -4445,15 +4445,18 @@ static int _adjust_policy_params(struct cmd_context *cmd,
+ 		}
+ 	}
  
--	if ( lp->ac_stripesize_value > STRIPE_SIZE_LIMIT * 2) {
--		log_error("Stripe size cannot be larger than %s",
-+	if (lp->ac_stripesize_value > (STRIPE_SIZE_LIMIT * 2)) {
-+		log_error("Stripe size cannot be larger than %s.",
- 			  display_size(cmd, (uint64_t) STRIPE_SIZE_LIMIT));
+-	if (!policy_amount && policy_threshold < 100) {
++	if (policy_threshold >= 100) {
++		lp->extents = lp->poolmetadatasize = 0;
++		lp->sizeargs = 0;
++		return 1; /* nothing to do */
++	}
++
++	if (!policy_amount) {
+ 		log_error("Can't extend %s with %s autoextend percent set to 0%%.",
+ 			  display_lvname(lv),  first_seg(lv)->segtype->name);
  		return 0;
  	}
  
- 	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
--		log_warn("Varied stripesize not supported. Ignoring.");
-+		log_print_unless_silent("Varied stripesize not supported. Ignoring.");
- 	else if (lp->ac_stripesize_value > vg->extent_size) {
- 		log_print_unless_silent("Reducing stripe size %s to maximum, "
--					"physical extent size %s",
-+					"physical extent size %s.",
- 					display_size(cmd, lp->ac_stripesize_value),
- 					display_size(cmd, vg->extent_size));
- 		lp->stripe_size = vg->extent_size;
-@@ -4287,7 +4287,7 @@ static int _validate_stripesize(struct cmd_context *cmd,
- 		lp->stripe_size = lp->ac_stripesize_value;
- 
- 	if (lp->stripe_size & (lp->stripe_size - 1)) {
--		log_error("Stripe size must be power of 2");
-+		log_error("Stripe size must be power of 2.");
- 		return 0;
- 	}
- 
+-	if (policy_threshold >= 100)
+-		return 1; /* nothing to do */
+-
+ 	if (!lv_is_active_locally(lv)) {
+ 		log_error("Can't read state of locally inactive LV %s.",
+ 			  display_lvname(lv));
 
 
