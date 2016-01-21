@@ -1,40 +1,39 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 21 Jan 2016 12:29:54 +0000 (UTC)
-Subject: master - cleanup: add missing prototype
-Message-ID: <20160121122954.7F2A4614E8@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 21 Jan 2016 13:47:57 +0000 (UTC)
+Subject: master - vgimportclone: fix VG name variable reference in error message after failed PV uuid change
+Message-ID: <20160121134757.12FF660D1B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22810155a65e1f2984e04a7f3984eec01d07b7b9
-Commit:        22810155a65e1f2984e04a7f3984eec01d07b7b9
-Parent:        347575df1d801425b1f1f8ed7106ffe74ce6c8c7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 21 13:25:56 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jan 21 13:29:08 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=55056c2d16a6cb6e0ce5b7179d62d4dc28cd790d
+Commit:        55056c2d16a6cb6e0ce5b7179d62d4dc28cd790d
+Parent:        22810155a65e1f2984e04a7f3984eec01d07b7b9
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Jan 21 14:47:48 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Jan 21 14:47:48 2016 +0100
 
-cleanup: add missing prototype
+vgimportclone: fix VG name variable reference in error message after failed PV uuid change
 
-Commit 2304286f68debd4755b44fa8b779b762142bfada
-missed to add function prototype.
 ---
- lib/activate/activate.h |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ scripts/vgimportclone.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/activate.h b/lib/activate/activate.h
-index 22f3cd2..74afb95 100644
---- a/lib/activate/activate.h
-+++ b/lib/activate/activate.h
-@@ -189,6 +189,7 @@ int lvs_in_vg_opened(const struct volume_group *vg);
+diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
+index 86efeb4..d5b62a8 100755
+--- a/scripts/vgimportclone.sh
++++ b/scripts/vgimportclone.sh
+@@ -291,7 +291,7 @@ while read VGNAME VGEXPORTED VGMISSINGPVCOUNT; do
+     fi
  
- int lv_is_active(const struct logical_volume *lv);
- int lv_is_active_locally(const struct logical_volume *lv);
-+int lv_is_active_remotely(const struct logical_volume *lv);
- int lv_is_active_but_not_locally(const struct logical_volume *lv);
- int lv_is_active_exclusive(const struct logical_volume *lv);
- int lv_is_active_exclusive_locally(const struct logical_volume *lv);
+     "$LVM" pvchange ${LVM_OPTS} ${TEST_OPT} --uuid --config 'global{activation=0}' --select "vg_name=${VGNAME}"
+-    checkvalue $? "Unable to change all PV uuids in VG ${VG_NAME}"
++    checkvalue $? "Unable to change all PV uuids in VG ${VGNAME}"
+ 
+     NEWVGNAME=`getvgname "${OLDVGS}" "${VGNAME}" "${NEWVG}"`
+ 
 
 
