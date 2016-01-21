@@ -1,89 +1,56 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 13 Jan 2016 13:46:49 +0000 (UTC)
-Subject: master - conf: regenerate
-Message-ID: <20160113134649.712616066A@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 21 Jan 2016 11:12:14 +0000 (UTC)
+Subject: master - man: dmsetup
+Message-ID: <20160121111214.ADE8960E28@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=53b355a24b10d50b5f330d71afa80a491532b07a
-Commit:        53b355a24b10d50b5f330d71afa80a491532b07a
-Parent:        e168b5de75204a554fcb6f9a3bd25dada2561c86
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jan 13 11:58:12 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jan 13 12:01:55 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=640c45d5a4da1a1cedf47b5a7f27b05e1fd00d76
+Commit:        640c45d5a4da1a1cedf47b5a7f27b05e1fd00d76
+Parent:        43b436398ec81c8d0a2dbd2062ce864997d22f26
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jan 21 11:36:26 2016 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jan 21 12:10:26 2016 +0100
 
-conf: regenerate
+man: dmsetup
 
+Typo in CMD_UDEVCREATECOOKIE macro name noticed by rpmlint.
 ---
- conf/example.conf.in |   27 ++++++++++++++++-----------
- 1 files changed, 16 insertions(+), 11 deletions(-)
+ WHATS_NEW_DM     |    1 +
+ man/dmsetup.8.in |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index b8c0407..f549f15 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -1108,9 +1108,9 @@ activation {
- 	#     or VG.
- 	#   @*
- 	#     Selects an LV if a tag defined on the host is also set on the LV
--	#     or VG. See tags/hosttags. If any host tags exist but volume_list
--	#     is not defined, a default single-entry list containing '@*' is
--	#     assumed.
-+	#     or VG. See tags/hosttags. If any host tags exist but the volume
-+	#     list is not defined, a default single-entry list containing '@*'
-+	#     is assumed.
- 	# 
- 	# Example
- 	# volume_list = [ "vg1", "vg2/lvol1", "@tag1", "@*" ]
-@@ -1145,12 +1145,12 @@ activation {
- 	#     or VG.
- 	#   @*
- 	#     Selects an LV if a tag defined on the host is also set on the LV
--	#     or VG. See tags/hosttags. If any host tags exist but volume_list
--	#     is not defined, a default single-entry list containing '@*' is
--	#     assumed.
-+	#     or VG. See tags/hosttags. If any host tags exist but the volume
-+	#     list is not defined, a default single-entry list containing '@*'
-+	#     is assumed.
- 	# 
- 	# Example
--	# volume_list = [ "vg1", "vg2/lvol1", "@tag1", "@*" ]
-+	# auto_activation_volume_list = [ "vg1", "vg2/lvol1", "@tag1", "@*" ]
- 	# 
- 	# This configuration option does not have a default value defined.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index e5480e1..df3613b 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.115 -
+ =====================================
++  Fix man page for dmsetup udevcreatecookie.
  
-@@ -1171,12 +1171,12 @@ activation {
- 	#     or VG.
- 	#   @*
- 	#     Selects an LV if a tag defined on the host is also set on the LV
--	#     or VG. See tags/hosttags. If any host tags exist but volume_list
--	#     is not defined, a default single-entry list containing '@*' is
--	#     assumed.
-+	#     or VG. See tags/hosttags. If any host tags exist but the volume
-+	#     list is not defined, a default single-entry list containing '@*'
-+	#     is assumed.
- 	# 
- 	# Example
--	# volume_list = [ "vg1", "vg2/lvol1", "@tag1", "@*" ]
-+	# read_only_volume_list = [ "vg1", "vg2/lvol1", "@tag1", "@*" ]
- 	# 
- 	# This configuration option does not have a default value defined.
- 
-@@ -1808,6 +1808,11 @@ activation {
- 	# See 'pvs --segments -o help' for the list of possible fields.
- 	# This configuration option has an automatic default value.
- 	# pvsegs_cols_verbose = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size,lv_name,seg_start_pe,segtype,seg_pe_ranges"
-+
-+	# Configuration option report/mark_invisible_devices.
-+	# Use brackets [] to mark invisible devices.
-+	# This configuration option has an automatic default value.
-+	# mark_invisible_devices = 1
- # }
- 
- # Configuration section dmeventd.
+ Version 1.02.114 - 14th December 2015
+ =====================================
+diff --git a/man/dmsetup.8.in b/man/dmsetup.8.in
+index 183f4fc..f92dbe5 100644
+--- a/man/dmsetup.8.in
++++ b/man/dmsetup.8.in
+@@ -309,10 +309,10 @@ dmsetup \(em low level logical volume management
+ .
+ .HP
+ .B dmsetup
+-.de CMD_UDEVCTEATECOOKIE
++.de CMD_UDEVCREATECOOKIE
+ .  BR udevcreatecookie
+ ..
+-.CMD_UDEVCTEATECOOKIE
++.CMD_UDEVCREATECOOKIE
+ .
+ .HP
+ .B dmsetup
 
 
