@@ -1,57 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 21 Jan 2016 12:29:52 +0000 (UTC)
-Subject: master - toollib: restore command break support
-Message-ID: <20160121122952.54929614E8@fedorahosted.org>
+Date: Thu, 21 Jan 2016 12:29:54 +0000 (UTC)
+Subject: master - cleanup: add missing prototype
+Message-ID: <20160121122954.7F2A4614E8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=347575df1d801425b1f1f8ed7106ffe74ce6c8c7
-Commit:        347575df1d801425b1f1f8ed7106ffe74ce6c8c7
-Parent:        c701d9cc8c9c559622c8ce27aa9c7f28169b4dfc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22810155a65e1f2984e04a7f3984eec01d07b7b9
+Commit:        22810155a65e1f2984e04a7f3984eec01d07b7b9
+Parent:        347575df1d801425b1f1f8ed7106ffe74ce6c8c7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 21 13:19:27 2016 +0100
+AuthorDate:    Thu Jan 21 13:25:56 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jan 21 13:29:07 2016 +0100
+CommitterDate: Thu Jan 21 13:29:08 2016 +0100
 
-toollib: restore command break support
+cleanup: add missing prototype
 
-Fix regression caused by c9f021de0b4d2c873ef5b97d17c602d0380359fd.
-This commit actually transfered real-action (e.g. device removal)
-into the next loop which has however missed to check for break.
-So add check for break also there.
+Commit 2304286f68debd4755b44fa8b779b762142bfada
+missed to add function prototype.
 ---
- WHATS_NEW       |    1 +
- tools/toollib.c |    4 ++++
- 2 files changed, 5 insertions(+), 0 deletions(-)
+ lib/activate/activate.h |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index fe1da46..6342041 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.141 - 
- ====================================
-+  Restore support for command breaking in process_each_lv_in_vg() (2.02.118).
-   Use correct mempool when process_each_lv_in_vg() (2.02.118).
-   Fix lvm.8 man to show again prohibited suffixes.
-   Fix configure to set proper use_blkid_wiping if autodetected as disabled.
-diff --git a/tools/toollib.c b/tools/toollib.c
-index e681afe..c89d8e5 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -2416,6 +2416,10 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 	}
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index 22f3cd2..74afb95 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -189,6 +189,7 @@ int lvs_in_vg_opened(const struct volume_group *vg);
  
- 	dm_list_iterate_items(lvl, &final_lvs) {
-+		if (sigint_caught()) {
-+			ret_max = ECMD_FAILED;
-+			goto_out;
-+		}
- 		/*
- 		 *  FIXME: Once we have index over vg->removed_lvs, check directly
- 		 *         LV presence there and remove LV_REMOVE flag/lv_is_removed fn
+ int lv_is_active(const struct logical_volume *lv);
+ int lv_is_active_locally(const struct logical_volume *lv);
++int lv_is_active_remotely(const struct logical_volume *lv);
+ int lv_is_active_but_not_locally(const struct logical_volume *lv);
+ int lv_is_active_exclusive(const struct logical_volume *lv);
+ int lv_is_active_exclusive_locally(const struct logical_volume *lv);
 
 
