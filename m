@@ -1,76 +1,65 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 22 Jan 2016 13:20:51 +0000 (UTC)
-Subject: master - tests: add pv-check-dev-size.sh
-Message-ID: <20160122132051.2E6CA60C97@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 25 Jan 2016 01:14:33 +0000 (UTC)
+Subject: master - pre-release
+Message-ID: <20160125011433.31CB6610A5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bc8f8ac0facc610c3252eb9af592b9c63a935ce2
-Commit:        bc8f8ac0facc610c3252eb9af592b9c63a935ce2
-Parent:        136fd8f2f642c82b132ded4b9a95b05e822e9117
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jan 22 13:58:35 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Jan 22 14:16:00 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d05d7d974c5e66e9d9eb834df36a4487cb3c1016
+Commit:        d05d7d974c5e66e9d9eb834df36a4487cb3c1016
+Parent:        bc8f8ac0facc610c3252eb9af592b9c63a935ce2
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Jan 25 01:08:16 2016 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Jan 25 01:08:16 2016 +0000
 
-tests: add pv-check-dev-size.sh
+pre-release
 
 ---
- test/shell/pv-check-dev-size.sh |   44 +++++++++++++++++++++++++++++++++++++++
- 1 files changed, 44 insertions(+), 0 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    2 +-
+ WHATS_NEW_DM |    4 ++--
+ 4 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/pv-check-dev-size.sh b/test/shell/pv-check-dev-size.sh
-new file mode 100644
-index 0000000..8e707fe
---- /dev/null
-+++ b/test/shell/pv-check-dev-size.sh
-@@ -0,0 +1,44 @@
-+#!/bin/sh
-+# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux prepare_pvs 1 8
-+
-+aux lvmconf 'metadata/check_pv_device_sizes = 1'
-+
-+CHECK_MSG="smaller than corresponding PV size"
-+
-+vgcreate $vg $dev1 2>err
-+not grep "$CHECK_MSG" err
-+pvs 2>err
-+not grep "$CHECK_MSG" err
-+vgremove -ff $vg
-+
-+# set PV size to 2x dev size
-+pvcreate --setphysicalvolumesize 16m $dev1
-+vgcreate $vg $dev1 2>err
-+grep "$CHECK_MSG" err
-+pvs 2>err
-+grep "$CHECK_MSG" err
-+vgremove -ff $vg
-+
-+# should be quiet if requested
-+aux lvmconf 'metadata/check_pv_device_sizes = 0'
-+pvcreate --setphysicalvolumesize 16m $dev1
-+vgcreate $vg $dev1 2>err
-+not grep "$CHECK_MSG" err
-+pvs 2>err
-+not grep "$CHECK_MSG" err
-+
-+vgremove -ff $vg
+diff --git a/VERSION b/VERSION
+index 5bdba32..df57cab 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.141(2)-git (2016-01-16)
++2.02.141(2)-git (2016-01-25)
+diff --git a/VERSION_DM b/VERSION_DM
+index dcf06e1..32af08f 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.115-git (2016-01-16)
++1.02.115-git (2016-01-25)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0eb86e6..cce926e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,4 +1,4 @@
+-Version 2.02.141 - 
++Version 2.02.141 - 25th January 2016
+ ====================================
+   Add metadata/check_pv_device_sizes switch to lvm.conf for device size checks.
+   Warn if device size is less than corresponding PV size in metadata.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index df3613b..7ddcfd7 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.115 -
+-=====================================
++Version 1.02.115 - 25th January 2016
++====================================
+   Fix man page for dmsetup udevcreatecookie.
+ 
+ Version 1.02.114 - 14th December 2015
 
 
