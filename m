@@ -1,59 +1,58 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  9 Jan 2015 13:10:49 +0000 (UTC)
-Subject: master - metadata: add "Failed to write VG <vg_name>." on failed vg_write and revert previous patch
-Message-ID: <20150109131049.1F96560921@fedorahosted.org>
+Date: Tue,  2 Feb 2016 12:57:35 +0000 (UTC)
+Subject: master - metadata: format: also delete bootloader areas from lvmcache when reading lvm1 and pool label
+Message-ID: <20160202125735.66D9860E20@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fb7e2ff49368e547d597baf263e8cb7cca8b63fb
-Commit:        fb7e2ff49368e547d597baf263e8cb7cca8b63fb
-Parent:        db7351d3133e237db01361fed8efd6b0fac85c32
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1498bc8cc442ebafea95e5dd8af69cdcd43619c2
+Commit:        1498bc8cc442ebafea95e5dd8af69cdcd43619c2
+Parent:        ec43f55445966b5075fa8083921d182a0a138326
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jan 9 14:04:44 2015 +0100
+AuthorDate:    Tue Feb 2 13:54:19 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Jan 9 14:04:44 2015 +0100
+CommitterDate: Tue Feb 2 13:57:19 2016 +0100
 
-metadata: add "Failed to write VG <vg_name>." on failed vg_write and revert previous patch
+metadata: format: also delete bootloader areas from lvmcache when reading lvm1 and pool label
 
-Better than previous patch which changed log_warn to log_error -
-we can have multiple MDAs and if one of them fails to be written,
-we can still continue with other MDAs if we're in a mode where
-we can handle missing PVs - so keep the log_warn for single
-failed MDA write as it was before.
+lvm1 and pool format do not support bootloader areas and we need to
+remove any existing associated bootloader areas when we read lvm1 and
+pool labels.
 
-However, add log_error with "Failed to write VG <vg_name>." in
-case we're not handling missing PVs or no MDA was written at all
-during VG write process. This also prevents an internal error in
-which the vg_write fails and we're not issuing any other log_error
-in vg_write caller or above, so we end up with:
-  "Internal error: Failed command did not use log_error".
+This has its importance if we're converting from one format to another
+and we're reusing lvmcache in long-running commands (e.g. clvmd or lvm
+shell) and we need to make lvmcache consistent and valid for current format.
 ---
- lib/metadata/metadata.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ lib/format1/lvm1-label.c   |    1 +
+ lib/format_pool/disk_rep.c |    1 +
+ 2 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 39bd325..465eb84 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2795,7 +2795,7 @@ int vg_write(struct volume_group *vg)
- 		}
- 		if (!mda->ops->vg_write(vg->fid, vg, mda)) {
- 			if (vg->cmd->handles_missing_pvs) {
--				log_error("Failed to write an MDA of VG %s.", vg->name);
-+				log_warn("WARNING: Failed to write an MDA of VG %s.", vg->name);
- 				mda->status |= MDA_FAILED;
- 			} else {
- 				stack;
-@@ -2807,6 +2807,7 @@ int vg_write(struct volume_group *vg)
- 	}
+diff --git a/lib/format1/lvm1-label.c b/lib/format1/lvm1-label.c
+index 6f8ee54..b600bd7 100644
+--- a/lib/format1/lvm1-label.c
++++ b/lib/format1/lvm1-label.c
+@@ -81,6 +81,7 @@ static int _lvm1_read(struct labeller *l, struct device *dev, void *buf,
  
- 	if (revert || !wrote) {
-+		log_error("Failed to write VG %s.", vg->name);
- 		dm_list_uniterate(mdah, &vg->fid->metadata_areas_in_use, &mda->list) {
- 			mda = dm_list_item(mdah, struct metadata_area);
+ 	lvmcache_set_device_size(info, ((uint64_t)xlate32(pvd->pv_size)) << SECTOR_SHIFT);
+ 	lvmcache_del_mdas(info);
++	lvmcache_del_bas(info);
+ 	lvmcache_make_valid(info);
  
+ 	return 1;
+diff --git a/lib/format_pool/disk_rep.c b/lib/format_pool/disk_rep.c
+index 75d5299..688c521 100644
+--- a/lib/format_pool/disk_rep.c
++++ b/lib/format_pool/disk_rep.c
+@@ -105,6 +105,7 @@ int read_pool_label(struct pool_list *pl, struct labeller *l,
+ 
+ 	lvmcache_set_device_size(info, ((uint64_t)xlate32_be(pd->pl_blocks)) << SECTOR_SHIFT);
+ 	lvmcache_del_mdas(info);
++	lvmcache_del_bas(info);
+ 	lvmcache_make_valid(info);
+ 
+ 	pl->dev = dev;
 
 
