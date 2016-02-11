@@ -1,54 +1,62 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 11 Feb 2016 17:39:39 +0000 (UTC)
-Subject: master - lvconvert: enable spare creation during conversion
-Message-ID: <20160211173939.CAD5360DBB@fedorahosted.org>
+Date: Thu, 11 Feb 2016 17:39:41 +0000 (UTC)
+Subject: master - dm: fix thin-pool targer params order
+Message-ID: <20160211173941.E5E6E60DBB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e32e793c43280c898ff6b20d22488af568825287
-Commit:        e32e793c43280c898ff6b20d22488af568825287
-Parent:        3b76e9fd98bcbe89e1a73c8a0f7419c21799eecb
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f91622741f95713539b863338743eb217e0731c2
+Commit:        f91622741f95713539b863338743eb217e0731c2
+Parent:        e32e793c43280c898ff6b20d22488af568825287
 Author:        M.H. Tsai <mingnus@gmail.com>
 AuthorDate:    Wed Jan 27 19:11:03 2016 +0800
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Feb 11 18:30:40 2016 +0100
+CommitterDate: Thu Feb 11 18:32:24 2016 +0100
 
-lvconvert: enable spare creation during conversion
+dm: fix thin-pool targer params order
 
-Let user control pool metadata spare creation after repair as
-the VG might not have enough free space.
+Wrong thin-pool feature flag ordering in dm table: It will lead to
+unnecessary table reload.
+
+Fix it by placeing feature flags in order they are returned from the
+kernel so current 'table line diff' code will not see a difference.
 ---
- WHATS_NEW         |    1 +
- tools/lvconvert.c |    3 ++-
- 2 files changed, 3 insertions(+), 1 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |    6 +++---
+ 2 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a757f79..7b10da8 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 2fb1274..f54868f 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.142 - 
+ Version 1.02.116 - 
  ====================================
-+  Support control of spare metadata creation when repairing thin-pool.
-   Fix config type of 'log/verbose' from bool to int (2.02.99).
-   Fix thinp watermark calc for data LV for faster dmeventd responce (2.02.133).
-   Use use_blkid_wiping=0 if not defined in lvm.conf and support not compiled in.
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index fbec9b0..e2b91fa 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2481,7 +2481,8 @@ deactivate_pmslv:
- 	}
++  Fix thin-pool table parameter feature order to match kernel output.
  
- 	/* Try to allocate new pool metadata spare LV */
--	if (!handle_pool_metadata_spare(pool_lv->vg, 0, lp->pvh, 1))
-+	if (!handle_pool_metadata_spare(pool_lv->vg, 0, lp->pvh,
-+					lp->poolmetadataspare))
- 		stack;
+ Version 1.02.115 - 25th January 2016
+ ====================================
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 1b9d6d3..f8b6d89 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -2477,11 +2477,11 @@ static int _thin_pool_emit_segment_line(struct dm_task *dmt,
  
- 	if (dm_snprintf(meta_path, sizeof(meta_path), "%s_meta%%d", pool_lv->name) < 0) {
+ 	EMIT_PARAMS(pos, "%s %s %d %" PRIu64 " %d%s%s%s%s%s", metadata, pool,
+ 		    seg->data_block_size, seg->low_water_mark, features,
+-		    seg->error_if_no_space ? " error_if_no_space" : "",
+-		    seg->read_only ? " read_only" : "",
+ 		    seg->skip_block_zeroing ? " skip_block_zeroing" : "",
+ 		    seg->ignore_discard ? " ignore_discard" : "",
+-		    seg->no_discard_passdown ? " no_discard_passdown" : ""
++		    seg->no_discard_passdown ? " no_discard_passdown" : "",
++		    seg->error_if_no_space ? " error_if_no_space" : "",
++		    seg->read_only ? " read_only" : ""
+ 		   );
+ 
+ 	return 1;
 
 
