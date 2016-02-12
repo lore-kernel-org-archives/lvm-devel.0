@@ -1,22 +1,22 @@
 From: okozina <okozina@fedoraproject.org>
-Date: Fri, 12 Feb 2016 10:07:36 +0000 (UTC)
-Subject: master - pvmove: fix memory pool corruption
-Message-ID: <20160212100736.0C5D5606D7@fedorahosted.org>
+Date: Fri, 12 Feb 2016 10:41:46 +0000 (UTC)
+Subject: master - pvmove: fix possible memory pool corruption
+Message-ID: <20160212104146.C845F60BBB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8a80cc5bc3799483a211b2ff9677a392a7b47e8b
-Commit:        8a80cc5bc3799483a211b2ff9677a392a7b47e8b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0daf9d7ac5009d7c5642a6b1c7d8bb3fbc0c4382
+Commit:        0daf9d7ac5009d7c5642a6b1c7d8bb3fbc0c4382
 Parent:        a077a649837b6d60d892516e32be8854bfb57ee7
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Thu Feb 11 15:41:29 2016 +0100
+AuthorDate:    Fri Feb 12 11:34:26 2016 +0100
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Fri Feb 12 11:07:21 2016 +0100
+CommitterDate: Fri Feb 12 11:40:33 2016 +0100
 
-pvmove: fix memory pool corruption
+pvmove: fix possible memory pool corruption
 
 This is a hotfix for a bug introduced in
 6d7dc87cb356162f912b13c8a0cd198037c0226b.
@@ -33,9 +33,10 @@ pvmove_poll function tried to copy a memory allocated
 at address 2 that could be returned to the system.
 If it was so it led to segfault.
 
-We don't have to call destroy_processing_handle() since
-the mempool is freed automatically during command context
-teardown.
+We need to rethink proper fix but in the same time
+cmd->mem pool is recreated per each lvm command so
+this should not cause problems even when we run
+multiple commands in lvm shell.
 
 A valgrind snapshot of the corruption:
 
@@ -48,7 +49,7 @@ Invalid read of size 1
     by 0x15105B: lvm_run_command (lvmcmdline.c:1655)
     by 0x1523C3: lvm2_main (lvmcmdline.c:2121)
     by 0x1754F3: main (lvm.c:22)
- Address 0xf15df8a is 138 bytes inside a block of size 8,192 free'd
+Address 0xf15df8a is 138 bytes inside a block of size 8,192 free'd
     at 0x4C28430: free (vg_replace_malloc.c:446)
     by 0x5494E73: dm_free_wrapper (dbg_malloc.c:357)
     by 0x5495DE2: _free_chunk (pool-fast.c:318)
@@ -59,9 +60,9 @@ Invalid read of size 1
     by 0x1523C3: lvm2_main (lvmcmdline.c:2121)
     by 0x1754F3: main (lvm.c:22)
 ---
- WHATS_NEW      |    1 +
- tools/pvmove.c |    2 --
- 2 files changed, 1 insertions(+), 2 deletions(-)
+ WHATS_NEW       |    1 +
+ tools/toollib.c |    6 +++++-
+ 2 files changed, 6 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
 index 7b10da8..8c3a204 100644
@@ -74,18 +75,22 @@ index 7b10da8..8c3a204 100644
    Support control of spare metadata creation when repairing thin-pool.
    Fix config type of 'log/verbose' from bool to int (2.02.99).
    Fix thinp watermark calc for data LV for faster dmeventd responce (2.02.133).
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 0b8ca46..21f2eab 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -900,8 +900,6 @@ int pvmove(struct cmd_context *cmd, int argc, char **argv)
- 				handle,
- 				is_abort ? &_pvmove_read_single : &_pvmove_setup_single);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index c89d8e5..f9ac259 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1834,7 +1834,11 @@ void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle
+ 	if (handle) {
+ 		if (handle->selection_handle && handle->selection_handle->selection_rh)
+ 			dm_report_free(handle->selection_handle->selection_rh);
+-		dm_pool_free(cmd->mem, handle);
++		/*
++		 * TODO: think about better alternatives:
++		 * handle mempool, dm_alloc for handle memory...
++		 */
++		memset(handle, 0, sizeof(*handle));
+ 	}
+ }
  
--		destroy_processing_handle(cmd, handle);
--
- 		if (!is_abort) {
- 			if (!pp.found_pv) {
- 				stack;
 
 
