@@ -1,113 +1,91 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Feb 2016 09:22:52 +0000 (UTC)
-Subject: master - tests: update test
-Message-ID: <20160212092252.AB97160E35@fedorahosted.org>
+From: okozina <okozina@fedoraproject.org>
+Date: Fri, 12 Feb 2016 10:07:36 +0000 (UTC)
+Subject: master - pvmove: fix memory pool corruption
+Message-ID: <20160212100736.0C5D5606D7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a077a649837b6d60d892516e32be8854bfb57ee7
-Commit:        a077a649837b6d60d892516e32be8854bfb57ee7
-Parent:        befe0078ad15563967d8b8321638c75a4f25f438
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Feb 12 10:21:07 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Feb 12 10:21:07 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8a80cc5bc3799483a211b2ff9677a392a7b47e8b
+Commit:        8a80cc5bc3799483a211b2ff9677a392a7b47e8b
+Parent:        a077a649837b6d60d892516e32be8854bfb57ee7
+Author:        Ondrej Kozina <okozina@redhat.com>
+AuthorDate:    Thu Feb 11 15:41:29 2016 +0100
+Committer:     Ondrej Kozina <okozina@redhat.com>
+CommitterDate: Fri Feb 12 11:07:21 2016 +0100
 
-tests: update test
+pvmove: fix memory pool corruption
 
-Upgrade test to count with much faster dmeventd work thanks
-to low_watter_mark support.
+This is a hotfix for a bug introduced in
+6d7dc87cb356162f912b13c8a0cd198037c0226b.
 
-Fix some wrong tests.
+The bug description: First we allocate memory for
+processing handle (at an address 1) then we
+allocate some memory on the same pool for later use
+in pvmove_poll function inside the process_each_pv
+function (at an address 2). After we jump out of
+process_each_pv we called destroy_processing_handle.
+As a result of destroying the handle memory pool could
+deallocate all memory at address 1 or higher. The
+pvmove_poll function tried to copy a memory allocated
+at address 2 that could be returned to the system.
+If it was so it led to segfault.
+
+We don't have to call destroy_processing_handle() since
+the mempool is freed automatically during command context
+teardown.
+
+A valgrind snapshot of the corruption:
+
+Invalid read of size 1
+    at 0x4C29F92: strlen (mc_replace_strmem.c:403)
+    by 0x5495F2E: dm_pool_strdup (pool.c:51)
+    by 0x1592A7: _create_id (pvmove.c:774)
+    by 0x159409: pvmove_poll (pvmove.c:796)
+    by 0x1599E3: pvmove (pvmove.c:931)
+    by 0x15105B: lvm_run_command (lvmcmdline.c:1655)
+    by 0x1523C3: lvm2_main (lvmcmdline.c:2121)
+    by 0x1754F3: main (lvm.c:22)
+ Address 0xf15df8a is 138 bytes inside a block of size 8,192 free'd
+    at 0x4C28430: free (vg_replace_malloc.c:446)
+    by 0x5494E73: dm_free_wrapper (dbg_malloc.c:357)
+    by 0x5495DE2: _free_chunk (pool-fast.c:318)
+    by 0x549561C: dm_pool_free (pool-fast.c:151)
+    by 0x164451: destroy_processing_handle (toollib.c:1837)
+    by 0x1598C1: pvmove (pvmove.c:903)
+    by 0x15105B: lvm_run_command (lvmcmdline.c:1655)
+    by 0x1523C3: lvm2_main (lvmcmdline.c:2121)
+    by 0x1754F3: main (lvm.c:22)
 ---
- test/shell/thin-autoumount-dmeventd.sh |   47 +++++++++++++++++++++-----------
- 1 files changed, 31 insertions(+), 16 deletions(-)
+ WHATS_NEW      |    1 +
+ tools/pvmove.c |    2 --
+ 2 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/thin-autoumount-dmeventd.sh b/test/shell/thin-autoumount-dmeventd.sh
-index 781a27e..6b7c7c1 100644
---- a/test/shell/thin-autoumount-dmeventd.sh
-+++ b/test/shell/thin-autoumount-dmeventd.sh
-@@ -1,5 +1,5 @@
- #!/bin/bash
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2012-2016 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -15,9 +15,9 @@ SKIP_WITH_LVMPOLLD=1
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 7b10da8..8c3a204 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.142 - 
+ ====================================
++  Fix memory pool corruption in pvmove (2.02.141).
+   Support control of spare metadata creation when repairing thin-pool.
+   Fix config type of 'log/verbose' from bool to int (2.02.99).
+   Fix thinp watermark calc for data LV for faster dmeventd responce (2.02.133).
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index 0b8ca46..21f2eab 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -900,8 +900,6 @@ int pvmove(struct cmd_context *cmd, int argc, char **argv)
+ 				handle,
+ 				is_abort ? &_pvmove_read_single : &_pvmove_setup_single);
  
- export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
- 
--is_dir_mounted_()
-+is_lv_opened_()
- {
--	cat /proc/mounts | sed 's:\\040: :g' | grep "$1"
-+	test $(get lv_field "$1" lv_device_open --binary) = "1"
- }
- 
- . lib/inittest
-@@ -31,6 +31,7 @@ aux have_thin 1 0 0 || skip
- 
- aux prepare_dmeventd
- 
-+# Use autoextend percent 0 - so extension fails and triggers umount...
- aux lvmconf "activation/thin_pool_autoextend_percent = 0" \
-             "activation/thin_pool_autoextend_threshold = 70"
- 
-@@ -51,24 +52,38 @@ mkdir "$mntdir" "$mntusedir"
- mount "$DM_DEV_DIR/mapper/$vg-$lv1" "$mntdir"
- mount "$DM_DEV_DIR/mapper/$vg-$lv2" "$mntusedir"
- 
--is_dir_mounted_ "$mntdir"
-+# Check both LVs are opened (~mounted)
-+is_lv_opened_ "$vg/$lv1"
-+is_lv_opened_ "$vg/$lv2"
- 
--# fill above 70%
--dd if=/dev/zero of="$mntdir/file$$" bs=1M count=6
- touch "$mntusedir/file$$"
--tail -f "$mntusedir/file$$" &
--PID_TAIL=$!
- sync
--lvs -a $vg
--sleep 12 # dmeventd only checks every 10 seconds :(
- 
--lvs -a $vg
--# both dirs should be unmounted
--not is_dir_mounted "$mntdir"
--not is_dir_mounted "$mntusedir"
-+# Running 'keeper' process sleep holds the block device still in use
-+sleep 60 < "$mntusedir/file$$" &
-+PID_SLEEP=$!
- 
--# running tail keeps the block device still in use
--kill $PID_TAIL
-+# Fill pool above 70%
-+dd if=/dev/zero of="$mntdir/file$$" bs=1M count=6 conv=fdatasync
- lvs -a $vg
- 
-+# Could loop here for a few secs so dmeventd can do some work
-+# In the worst case check only happens every 10 seconds :(
-+# With low water mark it should react way faster
-+for i in $(seq 1 12) ; do
-+	is_lv_opened_ "$vg/$lv1" || break
-+	test $i -lt 12 || die "$mntdir should have been unmounted by dmeventd!"
-+        sleep 1
-+done
-+
-+is_lv_opened_ "$vg/$lv2" || \
-+	die "$mntusedir is not mounted here (sleep already expired??) "
-+
-+# Kill device holding process
-+kill $PID_SLEEP
-+wait
-+
-+is_lv_opened_ "$vg/$lv2" && \
-+	{ mount; die "$mntusedir should have been unmounted by dmeventd!" }
-+
- vgremove -f $vg
+-		destroy_processing_handle(cmd, handle);
+-
+ 		if (!is_abort) {
+ 			if (!pp.found_pv) {
+ 				stack;
 
 
