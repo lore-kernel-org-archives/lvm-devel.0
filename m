@@ -1,39 +1,49 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 18 Feb 2016 00:01:14 +0000 (UTC)
-Subject: master - WHATS_NEW
-Message-ID: <20160218000114.071D8600C0@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 12 Feb 2016 09:22:50 +0000 (UTC)
+Subject: master - gcc: better code for older compiler
+Message-ID: <20160212092250.84EA160E28@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=545e58fd180cb891744a34a4d79440c447e5744b
-Commit:        545e58fd180cb891744a34a4d79440c447e5744b
-Parent:        5987562cf924090affc656e05ae484ead516da30
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Feb 18 00:01:02 2016 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Feb 18 00:01:02 2016 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=befe0078ad15563967d8b8321638c75a4f25f438
+Commit:        befe0078ad15563967d8b8321638c75a4f25f438
+Parent:        ba111e7f4a9481b2b419bd0f402dd0926ac1b0e9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Feb 12 10:17:39 2016 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Feb 12 10:17:39 2016 +0100
 
-WHATS_NEW
+gcc: better code for older compiler
 
+Address this gcc warning:
+
+metadata/lv.c:243: warning: initialized field overwritten
+metadata/lv.c:243: warning: (near initialization for 'status.seg_status')
+
+Present with e.g.: gcc version 4.3.2 (Debian 4.3.2-1.1)
 ---
- WHATS_NEW |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/lv.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 896ecce..684961d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,7 +1,7 @@
- Version 2.02.143 - 
- =====================================
-   Add configure --enable-dbus-service for an LVM D-Bus service.
--  Replace configure --enable-python-bindings with python2 and python3 vsns.
-+  Replace configure --enable-python_bindings with python2 and python3 versions.
-   If PV belongs to some VG and metadata missing, skip it if system ID is used.
-   Automatically change PV header extension to latest version if writing PV/VG.
-   Identify used PVs in pv_attr field by new 'u' character.
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index c4e3437..526284e 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -238,8 +238,10 @@ char *lvseg_kernel_discards_dup(struct dm_pool *mem, const struct lv_segment *se
+ {
+ 	char *ret = NULL;
+ 	struct lv_with_info_and_seg_status status = {
+-		.seg_status.type = SEG_STATUS_NONE,
+-		.seg_status.seg = seg
++		.seg_status = {
++			.type = SEG_STATUS_NONE,
++			.seg = seg
++		},
+ 	};
+ 
+ 	if (!lv_is_thin_pool(seg->lv))
 
 
