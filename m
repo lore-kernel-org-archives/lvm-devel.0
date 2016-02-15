@@ -1,88 +1,120 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Feb 2016 12:08:42 +0000 (UTC)
-Subject: master - report: add pv_ext_vsn field to display PV header extension version used
-Message-ID: <20160215120842.8FB2260509@fedorahosted.org>
+Date: Mon, 15 Feb 2016 12:08:44 +0000 (UTC)
+Subject: master - metadata: _vg_read: check if PV_EXT_USED flag is set correctly for non-orphan PVs and do a repair if needed
+Message-ID: <20160215120844.A7F5660A9E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f75e42c06cd925d414c1069d6c51e0b50e1934a8
-Commit:        f75e42c06cd925d414c1069d6c51e0b50e1934a8
-Parent:        e0b141510523bb09e5a784d6e1b30f106e8dbbf3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=531ced90dcaa6d7b18189cb9169456b74c6a2d65
+Commit:        531ced90dcaa6d7b18189cb9169456b74c6a2d65
+Parent:        f75e42c06cd925d414c1069d6c51e0b50e1934a8
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 17 09:49:08 2015 +0100
+AuthorDate:    Thu Mar 19 07:53:22 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Mon Feb 15 12:44:46 2016 +0100
 
-report: add pv_ext_vsn field  to display PV header extension version used
+metadata: _vg_read: check if PV_EXT_USED flag is set correctly for non-orphan PVs and do a repair if needed
 
-For example:
+The same check as we already do for orphan PVs, just the other way
+round now: if the PV is surely part of some VG and any PV the VG
+contains does not have the PV_EXT_USED flag set, repair it.
 
-$ pvs -o pv_name,vg_name,pv_ext_vsn,pv_in_use
-  PV         VG     ExtVsn InUse
-  /dev/sda               2
-  /dev/sdb   vg          2    used
-  /dev/vda2  fedora      1    used
+For example - /dev/sda here is in VG vg and it's incorrectly not
+marked as used by PV_EXT_USED flag:
+
+pvs --binary -o pv_ext_vsn,pv_in_use
+  WARNING: Volume Group vg is not consistent.
+  WARNING: Repairing Physical Volume /dev/sda that is in Volume Group vg but not marked as used.
+  PV         VG     Fmt  Attr PSize   PFree   ExtVsn PInUse
+  /dev/sda   vg     lvm2 a--  124.00m 124.00m      2      1
 ---
- lib/report/columns.h    |    1 +
- lib/report/properties.c |    2 ++
- lib/report/report.c     |   17 +++++++++++++++++
- 3 files changed, 20 insertions(+), 0 deletions(-)
+ lib/metadata/metadata.c |   57 ++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 56 insertions(+), 1 deletions(-)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index e6f8485..7ea7f52 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -122,6 +122,7 @@ FIELD(LABEL, label, SIZ, "DevSize", dev, 7, devsize, dev_size, "Size of underlyi
- FIELD(LABEL, label, STR, "PV", dev, 10, dev_name, pv_name, "Name.", 0)
- FIELD(LABEL, label, SIZ, "PMdaFree", type, 9, pvmdafree, pv_mda_free, "Free metadata area space on this device in current units.", 0)
- FIELD(LABEL, label, SIZ, "PMdaSize", type, 9, pvmdasize, pv_mda_size, "Size of smallest metadata area on this device in current units.", 0)
-+FIELD(LABEL, label, NUM, "PExtVsn", type, 7, pvextvsn, pv_ext_vsn, "PV header extension version.", 0)
- 
- FIELD(PVS, pv, NUM, "1st PE", pe_start, 7, size64, pe_start, "Offset to the start of data on the underlying device.", 0)
- FIELD(PVS, pv, SIZ, "PSize", id, 5, pvsize, pv_size, "Size of PV in current units.", 0)
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 118e659..d23e4c9 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -190,6 +190,8 @@ GET_PV_NUM_PROPERTY_FN(pv_ba_size, SECTOR_SIZE * pv->ba_size)
- #define _pv_exported_get prop_not_implemented_get
- #define _pv_missing_set prop_not_implemented_set
- #define _pv_missing_get prop_not_implemented_get
-+#define _pv_ext_vsn_get prop_not_implemented_get
-+#define _pv_ext_vsn_set prop_not_implemented_set
- #define _pv_in_use_get prop_not_implemented_get
- #define _pv_in_use_set prop_not_implemented_set
- 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index f7f3775..3f2bd0c 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -2554,6 +2554,23 @@ static int _pvmdasize_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return _size64_disp(rh, mem, field, &min_mda_size, private);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 172edc1..a08cfc3 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3569,6 +3569,52 @@ static int _check_reappeared_pv(struct volume_group *correct_vg,
+ 	return rv;
  }
  
-+static int _pvextvsn_disp(struct dm_report *rh, struct dm_pool *mem,
-+			  struct dm_report_field *field,
-+			  const void *data, void *private)
++static int _check_or_repair_pv_ext(struct cmd_context *cmd,
++				   struct physical_volume *pv,
++				   int repair, int *inconsistent_pvs)
 +{
-+	const struct label *label = (const struct label *) data;
-+	struct lvmcache_info *info = label->info;
-+	uint32_t ext_version;
++	struct lvmcache_info *info;
++	uint32_t ext_version, ext_flags;
 +
-+	if (info) {
-+		ext_version = lvmcache_ext_version(info);
-+		return _uint32_disp(rh, mem, field, &ext_version, private);
++	/* Missing PV - nothing to do. */
++	if (!pv->dev)
++		return 1;
++
++	if (!(info = lvmcache_info_from_pvid(pv->dev->pvid, 0))) {
++		log_error("Failed to find cached info for PV %s.", pv_dev_name(pv));
++		return 0;
 +	}
 +
-+	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64));
++	ext_version = lvmcache_ext_version(info);
++	if (ext_version < 2) {
++		*inconsistent_pvs = 0;
++		return 1;
++	}
++
++	ext_flags = lvmcache_ext_flags(info);
++	if (!(ext_flags & PV_EXT_USED)) {
++		if (!repair) {
++			*inconsistent_pvs = 1;
++			return 1;
++		}
++
++		log_warn("WARNING: Repairing Physical Volume %s that is "
++			 "in Volume Group %s but not marked as used.",
++			  pv_dev_name(pv), pv->vg->name);
++
++		/* pv write will set correct ext_flags */
++		if (!pv_write(cmd, pv, 1)) {
++			*inconsistent_pvs = 1;
++			log_error("Failed to repair physical volume \"%s\".",
++				  pv_dev_name(pv));
++			return 0;
++		}
++	}
++
++	*inconsistent_pvs = 0;
++	return 1;
 +}
 +
+ static int _repair_inconsistent_vg(struct volume_group *vg)
+ {
+ 	unsigned saved_handles_missing_pvs = vg->cmd->handles_missing_pvs;
+@@ -3872,6 +3918,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 					inconsistent_pvs = 1;
+ 					break;
+ 				}
 +
- static int _vgmdasize_disp(struct dm_report *rh, struct dm_pool *mem,
- 			   struct dm_report_field *field,
- 			   const void *data, void *private)
+ 				if (lvmcache_mda_count(info)) {
+ 					if (!lvmcache_fid_add_mdas_pv(info, fid)) {
+ 						release_vg(correct_vg);
+@@ -4149,7 +4196,15 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 		return NULL;
+ 	}
+ 
+-	*consistent = 1;
++	/* We have the VG now finally, check if PV ext info is in sync with VG metadata. */
++	dm_list_iterate_items(pvl, &correct_vg->pvs) {
++		if (!_check_or_repair_pv_ext(cmd, pvl->pv, *consistent, &inconsistent_pvs)) {
++			release_vg(correct_vg);
++			return_NULL;
++		}
++	}
++
++	*consistent = !inconsistent_pvs;
+ 	return correct_vg;
+ }
+ 
 
 
