@@ -1,41 +1,56 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Feb 2016 12:09:01 +0000 (UTC)
-Subject: master - WHATS_NEW: PV_EXT_USED flag and related
-Message-ID: <20160215120901.96EA560D80@fedorahosted.org>
+Date: Mon, 15 Feb 2016 12:30:46 +0000 (UTC)
+Subject: master - cleanup: use is_used_pv fn to detect whether PV is in use while reporting pv_free field
+Message-ID: <20160215123046.71D5A60353@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=698e0eb851b280796e3fbe17fbe9a9158b6344c7
-Commit:        698e0eb851b280796e3fbe17fbe9a9158b6344c7
-Parent:        8ad93874d63d67ea375b37b7014d782476dab88d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=abbaeef096251c4191e6da2518e646dd78b82da8
+Commit:        abbaeef096251c4191e6da2518e646dd78b82da8
+Parent:        698e0eb851b280796e3fbe17fbe9a9158b6344c7
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Feb 15 13:07:35 2016 +0100
+AuthorDate:    Mon Feb 15 13:30:37 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Feb 15 13:07:35 2016 +0100
+CommitterDate: Mon Feb 15 13:30:37 2016 +0100
 
-WHATS_NEW: PV_EXT_USED flag and related
+cleanup: use is_used_pv fn to detect whether PV is in use while reporting pv_free field
 
 ---
- WHATS_NEW |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ lib/report/report.c |   18 +++++-------------
+ 1 files changed, 5 insertions(+), 13 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index c7ffcf7..47eb735 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,10 @@
- Version 2.02.143 - 
- =====================================
-+  Automatically change PV header extension to latest version if writing PV/VG.
-+  Identify used PVs in pv_attr field by new 'u' character.
-+  Add pv_in_use reporting field to report if PV is used or not.
-+  Add pv_ext_vsn reporting field to report PV header extension version.
-+  Add protective flag marking PVs as used even if no metadata available.
+diff --git a/lib/report/report.c b/lib/report/report.c
+index c964bd8..123b9f0 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -2375,20 +2375,12 @@ static int _pvfree_disp(struct dm_report *rh, struct dm_pool *mem,
+ {
+ 	const struct physical_volume *pv =
+ 	    (const struct physical_volume *) data;
+-	struct lvmcache_info *info;
+-	uint32_t ext_flags;
+-	uint64_t freespace = pv_free(pv);
++	uint64_t freespace;
  
- Version 2.02.142 - 15th February 2016
- =====================================
+-	if (is_orphan(pv)) {
+-		if (!(info = lvmcache_info_from_pvid((const char *) &pv->id, 0))) {
+-			log_error("Failed to find cached info for PV %s.", pv_dev_name(pv));
+-			return 0;
+-		}
+-
+-		ext_flags = lvmcache_ext_flags(info);
+-		if (ext_flags & PV_EXT_USED)
+-			freespace = 0;
+-	}
++	if (is_orphan(pv) && is_used_pv(pv))
++		freespace = 0;
++	else
++		freespace = pv_free(pv);
+ 
+ 	return _size64_disp(rh, mem, field, &freespace, private);
+ }
 
 
