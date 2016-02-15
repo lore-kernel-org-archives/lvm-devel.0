@@ -1,71 +1,64 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Feb 2016 12:08:25 +0000 (UTC)
-Subject: master - metadata: schedule PV for header rewrite if adding a PV to VG or restoring VG
-Message-ID: <20160215120825.954B160DC9@fedorahosted.org>
+Date: Mon, 15 Feb 2016 12:08:27 +0000 (UTC)
+Subject: master - pv: format-text: store PV_EXT_USED flag if PV is used and unset it otherwise
+Message-ID: <20160215120827.A94F060DC9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10128c9bd67a027b480e0f0637745f97fb39ecfa
-Commit:        10128c9bd67a027b480e0f0637745f97fb39ecfa
-Parent:        2950adc2ab67fd14173807164f9829f5f53cd33c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d320d9c52bd1817daf5573b772e01a871837d2ee
+Commit:        d320d9c52bd1817daf5573b772e01a871837d2ee
+Parent:        10128c9bd67a027b480e0f0637745f97fb39ecfa
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Mar 12 14:49:10 2015 +0100
+AuthorDate:    Fri Feb 12 10:59:27 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Mon Feb 15 12:44:46 2016 +0100
 
-metadata: schedule PV for header rewrite if adding a PV to VG or restoring VG
+pv: format-text: store PV_EXT_USED flag if PV is used and unset it otherwise
 
-When adding PV to VG, we need to rewrite PV header as there's a flip
-in PV_EXT_USED flag. The same applies if we're restoring VG from backup.
+When adding a PV to VG, set the PV_EXT_USED flag in PV header and
+vice versa - if the PV is no longer in a VG, unset the flag.
 ---
- lib/format_text/archiver.c |   10 ++++++++++
- lib/metadata/metadata.c    |    3 ++-
- 2 files changed, 12 insertions(+), 1 deletions(-)
+ lib/format_text/format-text.c |   18 ++++++++++++++++++
+ 1 files changed, 18 insertions(+), 0 deletions(-)
 
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index 0efe5c5..56eb1ca 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -335,6 +335,7 @@ int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg, int drop
- 	struct pv_list *pvl;
- 	struct format_instance *fid;
- 	struct format_instance_ctx fic;
-+	struct pv_to_write *pvw;
- 	uint32_t tmp;
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index f290619..7202658 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1319,6 +1319,21 @@ static int _write_single_mda(struct metadata_area *mda, void *baton)
+ 	return 1;
+ }
  
- 	/*
-@@ -363,6 +364,15 @@ int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg, int drop
- 
- 	/* Add any metadata areas on the PVs */
- 	dm_list_iterate_items(pvl, &vg->pvs) {
-+		if (pvl->pv->fmt->features & FMT_PV_FLAGS) {
-+			if (!(pvw = dm_pool_zalloc(vg->vgmem, sizeof(*pvw)))) {
-+				log_error("pv_to_write allocation for '%s' failed", pv_dev_name(pvl->pv));
-+				return 0;
-+			}
-+			pvw->pv = pvl->pv;
-+			dm_list_add(&vg->pvs_to_write, &pvw->list);
-+		}
++static int _set_ext_flags(struct physical_volume *pv, struct lvmcache_info *info)
++{
++	uint32_t ext_flags = lvmcache_ext_flags(info);
 +
- 		tmp = vg->extent_size;
- 		vg->extent_size = 0;
- 		if (!vg->fid->fmt->ops->pv_setup(vg->fid->fmt, pvl->pv, vg)) {
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 981bfbc..9c0423e 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -279,7 +279,8 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- 			break;
- 		}
++	if (is_orphan(pv))
++		ext_flags &= ~PV_EXT_USED;
++	else
++		ext_flags |= PV_EXT_USED;
++
++	lvmcache_set_ext_version(info, PV_HEADER_EXTENSION_VSN);
++	lvmcache_set_ext_flags(info, ext_flags);
++
++	return 1;
++}
++
+ /* Only for orphans - FIXME That's not true any more */
+ static int _text_pv_write(const struct format_type *fmt, struct physical_volume *pv)
+ {
+@@ -1402,6 +1417,9 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
+ 	if (!lvmcache_foreach_mda(info, _write_single_mda, &baton))
+ 		return_0;
  
--	if (pv->status & UNLABELLED_PV) {
-+	if ((pv->fmt->features & FMT_PV_FLAGS) ||
-+	    (pv->status & UNLABELLED_PV)) {
- 		if (!(pvw = dm_pool_zalloc(mem, sizeof(*pvw)))) {
- 			log_error("pv_to_write allocation for '%s' failed", pv_name);
- 			return 0;
++	if (!_set_ext_flags(pv, info))
++		return_0;
++
+ 	if (!label_write(pv->dev, label)) {
+ 		stack;
+ 		if (!dev_close(pv->dev))
 
 
