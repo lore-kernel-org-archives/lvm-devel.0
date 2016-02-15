@@ -1,80 +1,101 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Feb 2016 12:08:34 +0000 (UTC)
-Subject: master - pv: _pvcreate_write: do label removal and zeroing only if creating a new PV
-Message-ID: <20160215120834.0FEDE60509@fedorahosted.org>
+Date: Mon, 15 Feb 2016 12:08:36 +0000 (UTC)
+Subject: master - report: add pv_in_use field to display whether PV is in use or not
+Message-ID: <20160215120836.245BB60509@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b6e3080fff7f101f2bbec21a7757e54e6026d61d
-Commit:        b6e3080fff7f101f2bbec21a7757e54e6026d61d
-Parent:        73f1d444c8fccf7f0c95d09ff4b2a6c9f0e40e02
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3436d5b79116d067e8f20d5365ae0dae6bd19dc8
+Commit:        3436d5b79116d067e8f20d5365ae0dae6bd19dc8
+Parent:        b6e3080fff7f101f2bbec21a7757e54e6026d61d
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Mar 12 15:18:52 2015 +0100
+AuthorDate:    Tue Mar 10 16:10:16 2015 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Mon Feb 15 12:44:46 2016 +0100
 
-pv: _pvcreate_write: do label removal and zeroing only if creating a new PV
+report: add pv_in_use field to display whether PV is in use or not
 
+For example:
+
+$ pvs -o pv_name,vg_name,pv_in_use
+  PV         VG     InUse
+  /dev/sda   vg      used
+  /dev/sdb
+  /dev/sdc           used
+
+(sda is part of vg - it's used
+ sdb is not part of vg - it's not used
+ sdc is part of vg, but MDAs missing - it's used)
 ---
- lib/metadata/metadata.c |   33 +++++++++++++++++----------------
- 1 files changed, 17 insertions(+), 16 deletions(-)
+ lib/report/columns.h    |    1 +
+ lib/report/properties.c |    2 ++
+ lib/report/report.c     |   13 +++++++++++++
+ lib/report/values.h     |    1 +
+ 4 files changed, 17 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 90643fa..7af545a 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1637,32 +1637,33 @@ void pvcreate_params_set_defaults(struct pvcreate_params *pp)
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 5cf9d04..e6f8485 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -138,6 +138,7 @@ FIELD(PVS, pv, NUM, "#PMda", id, 5, pvmdas, pv_mda_count, "Number of metadata ar
+ FIELD(PVS, pv, NUM, "#PMdaUse", id, 8, pvmdasused, pv_mda_used_count, "Number of metadata areas in use on this device.", 0)
+ FIELD(PVS, pv, SIZ, "BA start", ba_start, 8, size64, pv_ba_start, "Offset to the start of PV Bootloader Area on the underlying device in current units.", 0)
+ FIELD(PVS, pv, SIZ, "BA size", ba_size, 7, size64, pv_ba_size, "Size of PV Bootloader Area in current units.", 0)
++FIELD(PVS, pv, BIN, "PInUse", id, 6, pvinuse, pv_in_use, "Set if PV is used.", 0)
  
- static int _pvcreate_write(struct cmd_context *cmd, struct pv_to_write *pvw)
- {
--	int zero = pvw->pp ? pvw->pp->zero : 1;
- 	struct physical_volume *pv = pvw->pv;
- 	struct device *dev = pv->dev;
- 	const char *pv_name = dev_name(dev);
+ FIELD(VGS, vg, STR, "Fmt", cmd, 3, vgfmt, vg_fmt, "Type of metadata.", 0)
+ FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, vg_uuid, "Unique identifier.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index ef5a671..118e659 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -190,6 +190,8 @@ GET_PV_NUM_PROPERTY_FN(pv_ba_size, SECTOR_SIZE * pv->ba_size)
+ #define _pv_exported_get prop_not_implemented_get
+ #define _pv_missing_set prop_not_implemented_set
+ #define _pv_missing_get prop_not_implemented_get
++#define _pv_in_use_get prop_not_implemented_get
++#define _pv_in_use_set prop_not_implemented_set
  
--	/* Wipe existing label first */
--	if (!label_remove(pv_dev(pv))) {
--		log_error("Failed to wipe existing label on %s", pv_name);
--		return 0;
--	}
--
--	if (zero) {
--		log_verbose("Zeroing start of device %s", pv_name);
--		if (!dev_open_quiet(dev)) {
--			log_error("%s not opened: device not zeroed", pv_name);
-+	if (pvw->new_pv) {
-+		/* Wipe existing label first */
-+		if (!label_remove(pv_dev(pv))) {
-+			log_error("Failed to wipe existing label on %s", pv_name);
- 			return 0;
- 		}
+ #define _vg_permissions_set prop_not_implemented_set
+ #define _vg_permissions_get prop_not_implemented_get
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 34e71f2..f7f3775 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -2866,6 +2866,19 @@ static int _pvmissing_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _binary_disp(rh, mem, field, missing, GET_FIRST_RESERVED_NAME(pv_missing_y), private);
+ }
  
--		if (!dev_set(dev, UINT64_C(0), (size_t) 2048, 0)) {
--			log_error("%s not wiped: aborting", pv_name);
-+		if (pvw->pp->zero) {
-+			log_verbose("Zeroing start of device %s", pv_name);
-+			if (!dev_open_quiet(dev)) {
-+				log_error("%s not opened: device not zeroed", pv_name);
-+				return 0;
-+			}
++static int _pvinuse_disp(struct dm_report *rh, struct dm_pool *mem,
++			 struct dm_report_field *field,
++			 const void *data, void *private)
++{
++	const struct physical_volume *pv = (const struct physical_volume *) data;
++	int used = is_used_pv(pv);
 +
-+			if (!dev_set(dev, UINT64_C(0), (size_t) 2048, 0)) {
-+				log_error("%s not wiped: aborting", pv_name);
-+				if (!dev_close(dev))
-+					stack;
-+				return 0;
-+			}
- 			if (!dev_close(dev))
- 				stack;
--			return 0;
- 		}
--		if (!dev_close(dev))
--			stack;
- 	}
++	if (used < 0)
++		return _binary_undef_disp(rh, mem, field, private);
++
++	return _binary_disp(rh, mem, field, used, GET_FIRST_RESERVED_NAME(pv_in_use_y), private);
++}
++
+ static int _vgpermissions_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			       struct dm_report_field *field,
+ 			       const void *data, void *private)
+diff --git a/lib/report/values.h b/lib/report/values.h
+index 1db85a2..8a430fc 100644
+--- a/lib/report/values.h
++++ b/lib/report/values.h
+@@ -52,6 +52,7 @@ TYPE_RESERVED_VALUE(NUM, NOFLAG, num_undef_64, "Reserved value for undefined num
+ FIELD_RESERVED_BINARY_VALUE(pv_allocatable, pv_allocatable, "", "allocatable")
+ FIELD_RESERVED_BINARY_VALUE(pv_exported, pv_exported, "", "exported")
+ FIELD_RESERVED_BINARY_VALUE(pv_missing, pv_missing, "", "missing")
++FIELD_RESERVED_BINARY_VALUE(pv_in_use, pv_in_use, "", "used", "in use")
  
- 	log_verbose("Writing physical volume data to disk \"%s\"",
+ /* Reserved values for VG fields */
+ FIELD_RESERVED_BINARY_VALUE(vg_extendable, vg_extendable, "", "extendable")
 
 
