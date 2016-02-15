@@ -1,56 +1,43 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Feb 2016 12:30:46 +0000 (UTC)
-Subject: master - cleanup: use is_used_pv fn to detect whether PV is in use while reporting pv_free field
-Message-ID: <20160215123046.71D5A60353@fedorahosted.org>
+Date: Mon, 15 Feb 2016 13:47:43 +0000 (UTC)
+Subject: master - pv: mark fake PVs as not used
+Message-ID: <20160215134743.AD01D6054A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=abbaeef096251c4191e6da2518e646dd78b82da8
-Commit:        abbaeef096251c4191e6da2518e646dd78b82da8
-Parent:        698e0eb851b280796e3fbe17fbe9a9158b6344c7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0000db7f98a07aa31c5b1cf13938b612e7f2821b
+Commit:        0000db7f98a07aa31c5b1cf13938b612e7f2821b
+Parent:        abbaeef096251c4191e6da2518e646dd78b82da8
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Feb 15 13:30:37 2016 +0100
+AuthorDate:    Mon Feb 15 14:46:31 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Feb 15 13:30:37 2016 +0100
+CommitterDate: Mon Feb 15 14:46:31 2016 +0100
 
-cleanup: use is_used_pv fn to detect whether PV is in use while reporting pv_free field
+ pv: mark fake PVs as not used
 
+Some of the PVs are not even orphan PVs - they're fake PVs - this can
+happen if we're listing all devices with "pvs -a". Such PV must not
+be marked as used.
 ---
- lib/report/report.c |   18 +++++-------------
- 1 files changed, 5 insertions(+), 13 deletions(-)
+ lib/metadata/pv.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index c964bd8..123b9f0 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -2375,20 +2375,12 @@ static int _pvfree_disp(struct dm_report *rh, struct dm_pool *mem,
- {
- 	const struct physical_volume *pv =
- 	    (const struct physical_volume *) data;
--	struct lvmcache_info *info;
--	uint32_t ext_flags;
--	uint64_t freespace = pv_free(pv);
-+	uint64_t freespace;
+diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
+index 260eb9b..d5820b5 100644
+--- a/lib/metadata/pv.c
++++ b/lib/metadata/pv.c
+@@ -213,6 +213,9 @@ int is_used_pv(const struct physical_volume *pv)
+ 	struct lvmcache_info *info;
+ 	uint32_t ext_flags;
  
--	if (is_orphan(pv)) {
--		if (!(info = lvmcache_info_from_pvid((const char *) &pv->id, 0))) {
--			log_error("Failed to find cached info for PV %s.", pv_dev_name(pv));
--			return 0;
--		}
--
--		ext_flags = lvmcache_ext_flags(info);
--		if (ext_flags & PV_EXT_USED)
--			freespace = 0;
--	}
-+	if (is_orphan(pv) && is_used_pv(pv))
-+		freespace = 0;
-+	else
-+		freespace = pv_free(pv);
++	if (!pv->vg)
++		return 0;
++
+ 	if (!is_orphan(pv))
+ 		return 1;
  
- 	return _size64_disp(rh, mem, field, &freespace, private);
- }
 
 
