@@ -1,39 +1,44 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Feb 2016 14:20:31 +0000 (UTC)
-Subject: master - cleanup: make the message about marked PVs consistent with the others
-Message-ID: <20160215142031.67FE760AA3@fedorahosted.org>
+Date: Mon, 15 Feb 2016 14:53:24 +0000 (UTC)
+Subject: master - pv: use pv->fmt to check for fake PVs, not pv->vg
+Message-ID: <20160215145324.58F3360B3B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=099d99975c25ba4f4c0593b778c95e7e185fd527
-Commit:        099d99975c25ba4f4c0593b778c95e7e185fd527
-Parent:        cc9e683adcb6c56332d708baf02dec63eba4fba9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45be3c875f4605f4f950e8abfa12cf422526f5db
+Commit:        45be3c875f4605f4f950e8abfa12cf422526f5db
+Parent:        099d99975c25ba4f4c0593b778c95e7e185fd527
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Feb 15 15:20:23 2016 +0100
+AuthorDate:    Mon Feb 15 15:50:11 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Feb 15 15:20:23 2016 +0100
+CommitterDate: Mon Feb 15 15:52:13 2016 +0100
 
-cleanup: make the message about marked PVs consistent with the others
+pv: use pv->fmt to check for fake PVs, not pv->vg
 
+pv->vg is not set yet during pvcreate processing. Use pv->fmt instead to
+check for these fake PVs (all normal PVs have format defined, devices
+which are not PVs don't have this set).
+
+This fixes commit 0000db7f98a07aa31c5b1cf13938b612e7f2821b.
 ---
- tools/toollib.c |    2 +-
+ lib/metadata/pv.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 1bdc113..22c38a1 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3068,7 +3068,7 @@ static int _process_pvs_in_vg(struct cmd_context *cmd,
- 		pv_name = pv_dev_name(pv);
+diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
+index d5820b5..1d68045 100644
+--- a/lib/metadata/pv.c
++++ b/lib/metadata/pv.c
+@@ -213,7 +213,7 @@ int is_used_pv(const struct physical_volume *pv)
+ 	struct lvmcache_info *info;
+ 	uint32_t ext_flags;
  
- 		if (cmd->system_id && is_orphan(pv) && is_used_pv(pv)) {
--			log_verbose("PV %s is belonging to a VG but its metadata is missing.", pv_name);
-+			log_verbose("PV %s is marked as belonging to a VG but its metadata is missing.", pv_name);
- 			log_verbose("Skipping PV %s because it's not possible to decide whether it matches system id.", pv_name);
- 			continue;
- 		}
+-	if (!pv->vg)
++	if (!pv->fmt)
+ 		return 0;
+ 
+ 	if (!is_orphan(pv))
 
 
