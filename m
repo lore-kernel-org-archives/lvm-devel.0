@@ -1,94 +1,39 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 17 Feb 2016 11:08:22 +0100
-Subject: [PATCH] dmsetup: treat no devices found as error
-In-Reply-To: <1455695471-5710-1-git-send-email-hare@suse.de>
-References: <1455695471-5710-1-git-send-email-hare@suse.de>
-Message-ID: <56C44696.8020806@redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 17 Feb 2016 14:38:44 +0000 (UTC)
+Subject: master - man: fix list of restricted LV name suffixes
+Message-ID: <20160217143844.F3D0460C94@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 17.2.2016 v 08:51 Hannes Reinecke napsal(a):
-> When calling 'dmsetup ls' and no devices are found the program will
-> print out 'No devices found' and exit normally.
-> This makes it really hard for the calling application to determine
-> if the output 'No devices found' is a valid device or not.
-> This patch moves the 'No devices found' string to stderr and
-> sets the return code to non-0 to allow calling applications to
-> better differentiate here.
->
-> Signed-off-by: Hannes Reinecke <hare@suse.com>
-> ---
->   tools/dmsetup.c | 3 ++-
->   1 file changed, 2 insertions(+), 1 deletion(-)
->
-> diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-> index 4db6004..3629931 100644
-> --- a/tools/dmsetup.c
-> +++ b/tools/dmsetup.c
-> @@ -1835,7 +1835,8 @@ static int _process_all(const struct command *cmd, const char *subcommand, int a
->
->   	if (!names->dev) {
->   		if (!silent)
-> -			printf("No devices found\n");
-> +			fprintf(stderr, "No devices found\n");
-> +		r = 0;
->   		goto out;
->   	}
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=055c628e38589bf1ea66bc0b2c5da36ed115b551
+Commit:        055c628e38589bf1ea66bc0b2c5da36ed115b551
+Parent:        065526c59084d3d47de476acee2d095199e9412d
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Feb 17 15:38:27 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Feb 17 15:38:27 2016 +0100
 
-Hi
+man: fix list of restricted LV name suffixes
 
-NACKing this patch.
+---
+ man/lvm.8.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-dmsetup cannot change behavior this way - it'd cause major regression for 
-existing script using dmsetup (rule #1 - no regressions).
-
-
-'No devices found'  when you list empty table  is correct & expected state.
-
-So return code is  'success' in this case
-(and as success output goes to stdout).
-
-
-I'm actually not even sure why would you want to base ANY script on error code 
-as empty dm table is not an error (btw with this logic   'dmsetup table'  for 
-empty table would also need to return error and so on...)
-
-
-You may get mapping pairs   major:minor with 'dmsetup ls -o devno' :
-
-"vg-lvol0	(253:0)"
-...
-
-
-or with 'dmsetup ls -o blkdevname' pairs like this:
-
-"vg-lvol0	(dm-0)"
-...
-
-
-and when no device exists:
-"No devices found"
-
-
-and all you need to do is just check for string on output line (stdout).
-(i.e. line does not have '(', ':', ')'  --> so it's empty table --> no device...)
-
-Technically I don't see much difference in checking string or error code 
-(which is just not an error).
-
-
-On the other hand - when 'dmsetup' has a real error - you should take correct 
-steps to work around some real error (e.g. out-of-mem system).
-But usually 'error' code behavior is 'exception' state - and as exception
-it's typically more 'expensive' in code handling...
-
-
-Regards
-
-Zdenek
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 4f801c9..fe30b75 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -489,7 +489,7 @@ not be used as LV or VG names. A VG cannot be called anything that exists in
+ An LV cannot be called '.', '..', 'snapshot' or 'pvmove'.
+ The LV name may also not contain any of the following strings:
+ \fR'_cdata', '_cmeta', '_corig', '_mlog', '_mimage', '_pmspare',
+-\fR'_rimage', '_rlog', '_tdata' or '_tmeta'.
++\fR'_rimage', '_rmeta', '_tdata', '_tmeta' or '_vorigin'.
+ A directory bearing the name of each Volume Group is created under
+ \fI/dev\fP when any of its Logical Volumes are activated.
+ Each active Logical Volume is accessible from this directory as a symbolic
 
 
