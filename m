@@ -1,82 +1,94 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 17 Feb 2016 09:32:49 +0000 (UTC)
-Subject: master - metadata: add missing _repair_inconsinstent_vg call during PV ext repair
-Message-ID: <20160217093249.300AD60B41@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 17 Feb 2016 11:08:22 +0100
+Subject: [PATCH] dmsetup: treat no devices found as error
+In-Reply-To: <1455695471-5710-1-git-send-email-hare@suse.de>
+References: <1455695471-5710-1-git-send-email-hare@suse.de>
+Message-ID: <56C44696.8020806@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=065526c59084d3d47de476acee2d095199e9412d
-Commit:        065526c59084d3d47de476acee2d095199e9412d
-Parent:        b077e7374f6bcb4ad5d8d9247553301ce75fa38e
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Feb 16 15:50:32 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Feb 17 10:19:55 2016 +0100
+Dne 17.2.2016 v 08:51 Hannes Reinecke napsal(a):
+> When calling 'dmsetup ls' and no devices are found the program will
+> print out 'No devices found' and exit normally.
+> This makes it really hard for the calling application to determine
+> if the output 'No devices found' is a valid device or not.
+> This patch moves the 'No devices found' string to stderr and
+> sets the return code to non-0 to allow calling applications to
+> better differentiate here.
+>
+> Signed-off-by: Hannes Reinecke <hare@suse.com>
+> ---
+>   tools/dmsetup.c | 3 ++-
+>   1 file changed, 2 insertions(+), 1 deletion(-)
+>
+> diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+> index 4db6004..3629931 100644
+> --- a/tools/dmsetup.c
+> +++ b/tools/dmsetup.c
+> @@ -1835,7 +1835,8 @@ static int _process_all(const struct command *cmd, const char *subcommand, int a
+>
+>   	if (!names->dev) {
+>   		if (!silent)
+> -			printf("No devices found\n");
+> +			fprintf(stderr, "No devices found\n");
+> +		r = 0;
+>   		goto out;
+>   	}
+>
 
-metadata: add missing _repair_inconsinstent_vg call during PV ext repair
+Hi
 
----
- lib/metadata/metadata.c |   19 +++++++++++++++----
- 1 files changed, 15 insertions(+), 4 deletions(-)
+NACKing this patch.
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 3b59e65..ca7f9c7 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3723,6 +3723,8 @@ static int _check_or_repair_pv_ext(struct cmd_context *cmd,
- 	struct lvmcache_info *info;
- 	uint32_t ext_version, ext_flags;
- 	struct pv_list *pvl;
-+	unsigned pvs_fixed = 0;
-+	int r = 0;
- 
- 	*inconsistent_pvs = 0;
- 
-@@ -3733,7 +3735,7 @@ static int _check_or_repair_pv_ext(struct cmd_context *cmd,
- 
- 		if (!(info = lvmcache_info_from_pvid(pvl->pv->dev->pvid, 0))) {
- 			log_error("Failed to find cached info for PV %s.", pv_dev_name(pvl->pv));
--			return 0;
-+			goto out;
- 		}
- 
- 		ext_version = lvmcache_ext_version(info);
-@@ -3744,7 +3746,10 @@ static int _check_or_repair_pv_ext(struct cmd_context *cmd,
- 		if (!(ext_flags & PV_EXT_USED)) {
- 			if (!repair) {
- 				*inconsistent_pvs = 1;
--				continue;
-+				/* we're not repairing now, so no need to
-+				 * check further PVs - inconsistent_pvs is already
-+				 * set and that will trigger the repair next time */
-+				return 1;
- 			}
- 
- 			if (_is_foreign_vg(vg)) {
-@@ -3762,13 +3767,19 @@ static int _check_or_repair_pv_ext(struct cmd_context *cmd,
- 					*inconsistent_pvs = 1;
- 					log_error("Failed to repair physical volume \"%s\".",
- 						  pv_dev_name(pvl->pv));
--					return 0;
-+					goto out;
- 				}
-+				pvs_fixed++;
- 			}
- 		}
- 	}
- 
--	return 1;
-+	r = 1;
-+out:
-+	if ((pvs_fixed > 0) && !_repair_inconsistent_vg(vg))
-+		return_0;
-+
-+	return r;
- }
- 
- /* Caller sets consistent to 1 if it's safe for vg_read_internal to correct
+dmsetup cannot change behavior this way - it'd cause major regression for 
+existing script using dmsetup (rule #1 - no regressions).
+
+
+'No devices found'  when you list empty table  is correct & expected state.
+
+So return code is  'success' in this case
+(and as success output goes to stdout).
+
+
+I'm actually not even sure why would you want to base ANY script on error code 
+as empty dm table is not an error (btw with this logic   'dmsetup table'  for 
+empty table would also need to return error and so on...)
+
+
+You may get mapping pairs   major:minor with 'dmsetup ls -o devno' :
+
+"vg-lvol0	(253:0)"
+...
+
+
+or with 'dmsetup ls -o blkdevname' pairs like this:
+
+"vg-lvol0	(dm-0)"
+...
+
+
+and when no device exists:
+"No devices found"
+
+
+and all you need to do is just check for string on output line (stdout).
+(i.e. line does not have '(', ':', ')'  --> so it's empty table --> no device...)
+
+Technically I don't see much difference in checking string or error code 
+(which is just not an error).
+
+
+On the other hand - when 'dmsetup' has a real error - you should take correct 
+steps to work around some real error (e.g. out-of-mem system).
+But usually 'error' code behavior is 'exception' state - and as exception
+it's typically more 'expensive' in code handling...
+
+
+Regards
+
+Zdenek
 
 
