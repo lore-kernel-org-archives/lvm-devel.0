@@ -1,44 +1,41 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Feb 2016 14:53:24 +0000 (UTC)
-Subject: master - pv: use pv->fmt to check for fake PVs, not pv->vg
-Message-ID: <20160215145324.58F3360B3B@fedorahosted.org>
+From: Hannes Reinecke <hare@suse.de>
+Date: Wed, 17 Feb 2016 08:51:11 +0100
+Subject: [PATCH] dmsetup: treat no devices found as error
+Message-ID: <1455695471-5710-1-git-send-email-hare@suse.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45be3c875f4605f4f950e8abfa12cf422526f5db
-Commit:        45be3c875f4605f4f950e8abfa12cf422526f5db
-Parent:        099d99975c25ba4f4c0593b778c95e7e185fd527
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Feb 15 15:50:11 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Feb 15 15:52:13 2016 +0100
+When calling 'dmsetup ls' and no devices are found the program will
+print out 'No devices found' and exit normally.
+This makes it really hard for the calling application to determine
+if the output 'No devices found' is a valid device or not.
+This patch moves the 'No devices found' string to stderr and
+sets the return code to non-0 to allow calling applications to
+better differentiate here.
 
-pv: use pv->fmt to check for fake PVs, not pv->vg
-
-pv->vg is not set yet during pvcreate processing. Use pv->fmt instead to
-check for these fake PVs (all normal PVs have format defined, devices
-which are not PVs don't have this set).
-
-This fixes commit 0000db7f98a07aa31c5b1cf13938b612e7f2821b.
+Signed-off-by: Hannes Reinecke <hare@suse.com>
 ---
- lib/metadata/pv.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/dmsetup.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
-index d5820b5..1d68045 100644
---- a/lib/metadata/pv.c
-+++ b/lib/metadata/pv.c
-@@ -213,7 +213,7 @@ int is_used_pv(const struct physical_volume *pv)
- 	struct lvmcache_info *info;
- 	uint32_t ext_flags;
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 4db6004..3629931 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -1835,7 +1835,8 @@ static int _process_all(const struct command *cmd, const char *subcommand, int a
  
--	if (!pv->vg)
-+	if (!pv->fmt)
- 		return 0;
+ 	if (!names->dev) {
+ 		if (!silent)
+-			printf("No devices found\n");
++			fprintf(stderr, "No devices found\n");
++		r = 0;
+ 		goto out;
+ 	}
  
- 	if (!is_orphan(pv))
+-- 
+2.6.2
 
 
