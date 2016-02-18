@@ -1,39 +1,39 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 17 Feb 2016 14:38:44 +0000 (UTC)
-Subject: master - man: fix list of restricted LV name suffixes
-Message-ID: <20160217143844.F3D0460C94@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 18 Feb 2016 00:01:14 +0000 (UTC)
+Subject: master - WHATS_NEW
+Message-ID: <20160218000114.071D8600C0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=055c628e38589bf1ea66bc0b2c5da36ed115b551
-Commit:        055c628e38589bf1ea66bc0b2c5da36ed115b551
-Parent:        065526c59084d3d47de476acee2d095199e9412d
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Feb 17 15:38:27 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Feb 17 15:38:27 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=545e58fd180cb891744a34a4d79440c447e5744b
+Commit:        545e58fd180cb891744a34a4d79440c447e5744b
+Parent:        5987562cf924090affc656e05ae484ead516da30
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Feb 18 00:01:02 2016 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Feb 18 00:01:02 2016 +0000
 
-man: fix list of restricted LV name suffixes
+WHATS_NEW
 
 ---
- man/lvm.8.in |    2 +-
+ WHATS_NEW |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvm.8.in b/man/lvm.8.in
-index 4f801c9..fe30b75 100644
---- a/man/lvm.8.in
-+++ b/man/lvm.8.in
-@@ -489,7 +489,7 @@ not be used as LV or VG names. A VG cannot be called anything that exists in
- An LV cannot be called '.', '..', 'snapshot' or 'pvmove'.
- The LV name may also not contain any of the following strings:
- \fR'_cdata', '_cmeta', '_corig', '_mlog', '_mimage', '_pmspare',
--\fR'_rimage', '_rlog', '_tdata' or '_tmeta'.
-+\fR'_rimage', '_rmeta', '_tdata', '_tmeta' or '_vorigin'.
- A directory bearing the name of each Volume Group is created under
- \fI/dev\fP when any of its Logical Volumes are activated.
- Each active Logical Volume is accessible from this directory as a symbolic
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 896ecce..684961d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,7 +1,7 @@
+ Version 2.02.143 - 
+ =====================================
+   Add configure --enable-dbus-service for an LVM D-Bus service.
+-  Replace configure --enable-python-bindings with python2 and python3 vsns.
++  Replace configure --enable-python_bindings with python2 and python3 versions.
+   If PV belongs to some VG and metadata missing, skip it if system ID is used.
+   Automatically change PV header extension to latest version if writing PV/VG.
+   Identify used PVs in pv_attr field by new 'u' character.
 
 
