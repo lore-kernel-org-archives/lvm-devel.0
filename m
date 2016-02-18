@@ -1,146 +1,180 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Thu, 18 Feb 2016 19:47:16 +0000 (UTC)
-Subject: master - spec: Update python bindings and dbus-service
-Message-ID: <20160218194716.1505460AA5@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 18 Feb 2016 13:34:03 +0000 (UTC)
+Subject: master - metadata: ask for confirmation before really initializing/removing PV that is marked as belonging to a VG
+Message-ID: <20160218133403.D12BC60AB6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04ab1fa572bbc6751463b137576bc733ec27b2ca
-Commit:        04ab1fa572bbc6751463b137576bc733ec27b2ca
-Parent:        a89ddda1a292402a2cf2422d09e58dba46079163
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Feb 18 14:34:17 2016 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Feb 18 20:46:03 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ecfa465366d2d6f2a995111eef3c8dac3987c2ef
+Commit:        ecfa465366d2d6f2a995111eef3c8dac3987c2ef
+Parent:        1a141e86238b45ed8c4a2f1f3b8918f40d33f5a9
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Feb 18 14:30:14 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Feb 18 14:33:54 2016 +0100
 
-spec: Update python bindings and dbus-service
+metadata: ask for confirmation before really initializing/removing PV that is marked as belonging to a VG
 
-The workaround for python3 is no longer needed.
+Ask for confirmation when using pvcreate/pvremove on a PV which is
+marked as belonging to a VG, just like we do in case of a PV which
+belongs to known VG:
+
+$ pvcreate -ff /dev/sda
+Really INITIALIZE physical volume "/dev/sda" that is marked as belonging to a VG [y/n]? n
+  /dev/sda: physical volume not initialized
+
+$ pvremove -ff /dev/sda
+Really WIPE LABELS from physical volume "/dev/sda" that is marked as belonging to a VG [y/n]? n
+  /dev/sda: physical volume label not removed
 ---
- spec/build.inc    |   12 ++----------
- spec/packages.inc |   44 +++++++++++++++++++++++++++++++++++++++++++-
- spec/source.inc   |   17 +++++++++++++++++
- 3 files changed, 62 insertions(+), 11 deletions(-)
+ lib/metadata/metadata.c    |   23 ++++++++++++++++++-----
+ lib/metadata/pv_manip.c    |   44 +++++++++++++++++++++++++-------------------
+ test/shell/pv-ext-flags.sh |    8 ++++----
+ 3 files changed, 47 insertions(+), 28 deletions(-)
 
-diff --git a/spec/build.inc b/spec/build.inc
-index 2bb285d..3ba7840 100644
---- a/spec/build.inc
-+++ b/spec/build.inc
-@@ -31,20 +31,12 @@
- %enableif %{enable_lockd_sanlock} lockd-sanlock
- %endif
- %enableif %{enable_python} python2-bindings
-+%enableif %{enable_python3} python3-bindings
- %enableif %{enable_python} applib
-+%enableif %{enable_dbusd} dbus-service
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index ca7f9c7..8478abb 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1470,6 +1470,8 @@ int vg_split_mdas(struct cmd_context *cmd __attribute__((unused)),
+ static int _pvcreate_check(struct cmd_context *cmd, const char *name,
+ 			   struct pvcreate_params *pp, int *wiped)
+ {
++	static const char really_init_msg[] = "Really INITIALIZE physical volume";
++	static const char not_init_msg[] = "physical volume not initialized";
+ 	struct physical_volume *pv;
+ 	struct device *dev;
+ 	int r = 0;
+@@ -1504,11 +1506,22 @@ static int _pvcreate_check(struct cmd_context *cmd, const char *name,
+ 	}
  
- %build
+ 	/* prompt */
+-	if (pv && !is_orphan(pv) && !pp->yes &&
+-	    yes_no_prompt("Really INITIALIZE physical volume \"%s\" of volume group \"%s\" [y/n]? ",
+-			  name, pv_vg_name(pv)) == 'n') {
+-		log_error("%s: physical volume not initialized", name);
+-		goto out;
++	if (pv && !pp->yes) {
++		if (is_orphan(pv)) {
++			if (used) {
++				if (yes_no_prompt("%s \"%s\" that is marked as belonging to a VG [y/n]? ",
++						  really_init_msg, name) == 'n') {
++					log_error("%s: %s", name, not_init_msg);
++					goto out;
++				}
++			}
++		} else {
++			if (yes_no_prompt("%s \"%s\" of volume group \"%s\" [y/n]? ",
++					  really_init_msg, name, pv_vg_name(pv)) == 'n') {
++				log_error("%s: %s", name, not_init_msg);
++				goto out;
++			}
++		}
+ 	}
  
--%if %{enable_python3}
--rm -rf %{py3dir}
--cp -a . %{py3dir}
--pushd %{py3dir}
--%configure %{configure_flags} --disable-python2-bindings --enable-python3-bindings PYTHON=/usr/bin/python3 PYTHON_CONFIG=/usr/bin/python3-config
+ 	if (sigint_caught())
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index 423b647..8c3a5dd 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -687,9 +687,6 @@ out:
+ 	return r;
+ }
+ 
+-const char _really_wipe[] =
+-    "Really WIPE LABELS from physical volume \"%s\" of volume group \"%s\" [y/n]? ";
 -
--make %{?_smp_mflags}
--popd
--%endif
+ /*
+  * Decide whether it is "safe" to wipe the labels on this device.
+  * 0 indicates we may not.
+@@ -697,6 +694,8 @@ const char _really_wipe[] =
+ static int pvremove_check(struct cmd_context *cmd, const char *name,
+ 			  unsigned force_count, unsigned prompt, struct dm_list *pvslist)
+ {
++	static const char really_wipe_msg[] = "Really WIPE LABELS from physical volume";
++	static const char not_removed_msg[] = "physical volume label not removed";
+ 	static const char pvremove_force_hint_msg[] = "(If you are certain you need pvremove, then confirm by using --force twice.)";
+ 	struct device *dev;
+ 	struct label *label;
+@@ -741,25 +740,32 @@ static int pvremove_check(struct cmd_context *cmd, const char *name,
+ 			log_error("%s", pvremove_force_hint_msg);
+ 			goto out;
+ 		}
 -
- %configure %{configure_flags}
+-		r = 1;
+-		goto out;
+-	}
+-
+-	/* we must have -ff to overwrite a non orphan */
+-	if (force_count < 2) {
+-		log_error("PV %s belongs to Volume Group %s so please use vgreduce first.", name, pv_vg_name(pv));
+-		log_error("%s", pvremove_force_hint_msg);
+-		goto out;
++	} else {
++		/* we must have -ff to overwrite a non orphan */
++		if (force_count < 2) {
++			log_error("PV %s belongs to Volume Group %s so please use vgreduce first.", name, pv_vg_name(pv));
++			log_error("%s", pvremove_force_hint_msg);
++			goto out;
++		}
+ 	}
  
- make %{?_smp_mflags}
-diff --git a/spec/packages.inc b/spec/packages.inc
-index 6c3dfde..bfc6703 100644
---- a/spec/packages.inc
-+++ b/spec/packages.inc
-@@ -442,7 +442,49 @@ Python 3 module to allow the creation and use of LVM
- logical volumes, physical volumes, and volume groups.
+ 	/* prompt */
+-	if (!prompt &&
+-	    yes_no_prompt("Really WIPE LABELS from physical volume \"%s\" "
+-			  "of volume group \"%s\" [y/n]? ",
+-			  name, pv_vg_name(pv)) == 'n') {
+-		log_error("%s: physical volume label not removed", name);
+-		goto out;
++	if (!prompt) {
++		if (is_orphan(pv)) {
++			if (used) {
++				if (yes_no_prompt("%s \"%s\" that is marked as belonging to a VG [y/n]? ",
++						   really_wipe_msg, name) == 'n') {
++					log_error("%s: %s", name, not_removed_msg);
++					goto out;
++				}
++			}
++		} else {
++			if (yes_no_prompt("%s \"%s\" of volume group \"%s\" [y/n]? ",
++					  really_wipe_msg, name, pv_vg_name(pv)) == 'n') {
++				log_error("%s: %s", name, not_removed_msg);
++				goto out;
++			}
++		}
+ 	}
  
- %files python3-libs
--%{python3_sitearch}/*
-+%{python3_sitearch}/*.so
-+%{python3_sitearch}/*.egg-info
-+%endif
-+
-+##############################################################################
-+# LVM D-Bus daemon
-+##############################################################################
-+%if %{enable_dbusd}
-+%package dbusd
-+Summary: LVM2 D-Bus daemon
-+License: GPLv2
-+Group: System Environment/Base
-+Requires: lvm2 >= %{version}-%{release}
-+Requires: dbus
-+Requires: python3-dbus
-+Requires: python3-pyudev
-+Requires(post): systemd-units >= %{systemd_version}
-+Requires(preun): systemd-units >= %{systemd_version}
-+Requires(postun): systemd-units >= %{systemd_version}
-+
-+%description dbusd
-+
-+Daemon for access to LVM2 functionality through a D-Bus interface.
-+
-+%post dbusd
-+%systemd_post lvm2-lvmdbusd.service
-+
-+%preun dbusd
-+%systemd_preun lvm2-lvmdbusd.service
-+
-+%postun dbusd
-+%systemd_postun lvm2-lvmdbusd.service
-+
-+%files dbusd
-+%defattr(555,root,root,-)
-+%{_sbindir}/lvmdbusd
-+%defattr(444,root,root,-)
-+%{_sysconfdir}/dbus-1/system.d/com.redhat.lvmdbus1.conf
-+%{_datadir}/dbus-1/system-services/com.redhat.lvmdbus1.service
-+%{_mandir}/man8/lvmdbusd.8.gz
-+%{_unitdir}/lvm2-lvmdbusd.service
-+%{python3_sitelib}/lvmdbusd/*
-+
- %endif
+ 	if (force_count) {
+diff --git a/test/shell/pv-ext-flags.sh b/test/shell/pv-ext-flags.sh
+index 072ec2c..5b35aa4 100644
+--- a/test/shell/pv-ext-flags.sh
++++ b/test/shell/pv-ext-flags.sh
+@@ -55,9 +55,9 @@ grep "$MARKED_AS_USED_MSG" err
+ dd if="$dev1" of=dev1_backup bs=1M
  
- ##############################################################################
-diff --git a/spec/source.inc b/spec/source.inc
-index 07859ba..97f29f1 100644
---- a/spec/source.inc
-+++ b/spec/source.inc
-@@ -8,6 +8,7 @@
- %global enable_python 1
- # Off by default - <= does not work well with or:
- %global enable_python3 0
-+%global enable_dbusd 0
- %global enable_udev 1
- %global enable_systemd 1
- %global enable_cmirror 1
-@@ -87,6 +88,22 @@
+ # pvcreate and pvremove can be forced even if the PV is marked as used
+-pvremove -ff "$dev1"
++pvremove -ff -y "$dev1"
+ dd if=dev1_backup of="$dev1" bs=1M
+-pvcreate -ff "$dev1"
++pvcreate -ff -y "$dev1"
+ dd if=dev1_backup of="$dev1" bs=1M
  
- ##############################################################
+ # prepare a VG with $dev1 and $dev both having 1 MDA
+@@ -120,9 +120,9 @@ grep "$MARKED_AS_USED_MSG" err
+ dd if="$dev1" of=dev1_backup bs=1M
  
-+%if %{rhel} >= 8 || %{fedora} >= 23
-+  %if %{enable_python3}
-+    %global enable_dbusd 1
-+  %else
-+    # dbusd requires python3
-+    false
-+  %endif
-+%endif
-+
-+%if %{enable_dbusd}
-+  %global buildreq_python3_dbus python3-dbus
-+  %global buildreq_python3_pyudev python3-pyudev
-+%endif
-+
-+##############################################################
-+
- %if %{fedora} == 16 || %{rhel} == 6
- %global enable_systemd 0
+ # pvcreate and pvremove can be forced even if the PV is marked as used
+-pvremove -ff "$dev1"
++pvremove -ff -y "$dev1"
+ dd if=dev1_backup of="$dev1" bs=1M
+-pvcreate -ff "$dev1"
++pvcreate -ff -y "$dev1"
+ dd if=dev1_backup of="$dev1" bs=1M
  
+ # prepare a VG with $dev1 and $dev both having 1 MDA
 
 
