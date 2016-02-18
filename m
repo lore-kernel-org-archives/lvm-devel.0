@@ -1,129 +1,67 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 18 Feb 2016 15:50:18 +0000 (UTC)
-Subject: master - libdm: thin status update
-Message-ID: <20160218155018.AF69B60D32@fedorahosted.org>
+Date: Thu, 18 Feb 2016 15:50:20 +0000 (UTC)
+Subject: master - thin: report PERCENT_INVALID for failed pool
+Message-ID: <20160218155020.C7CC260C98@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0fb3669d49040ea2e616491326eecad9926048c8
-Commit:        0fb3669d49040ea2e616491326eecad9926048c8
-Parent:        ecfa465366d2d6f2a995111eef3c8dac3987c2ef
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0358ca3aadaddd8ed60c817abb67ea38bf07a420
+Commit:        0358ca3aadaddd8ed60c817abb67ea38bf07a420
+Parent:        0fb3669d49040ea2e616491326eecad9926048c8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 15 16:33:38 2016 +0100
+AuthorDate:    Thu Feb 18 13:18:18 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Feb 18 16:45:42 2016 +0100
 
-libdm: thin status update
+thin: report PERCENT_INVALID for failed pool
 
-Fix parsing of 'Fail' status (using capital letter) for thin-pool.
-Add also parsing of 'Error' state for thin-pool.
-Add needs_check test for thin-pool.
-
-Detect Fail state for thin.
+When thin-pool is in failed/error state, we can't
+read percentage so report invalid value.
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdevmapper.h  |    8 ++++++--
- libdm/libdm-targets.c |   29 ++++++++++++++++++++++-------
- 3 files changed, 29 insertions(+), 9 deletions(-)
+ WHATS_NEW       |    1 +
+ lib/thin/thin.c |    8 ++++++--
+ 2 files changed, 7 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index d82ebf3..984d7fa 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index bf3fc07..27bb7e2 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.117 - 
+ Version 2.02.143 -
  =====================================
-+  Improve status parsing for thin-pool and thin devices.
++  For failing thin-pool and thin volume correctly report percentage as INVALID.
+   Report -1, not 'unkown' for lv_{snapshot_invalid,merge_failed} with --binary.
+   Add configure --enable-dbus-service for an LVM D-Bus service.
+   Replace configure --enable-python_bindings with python2 and python3 versions.
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index c9ee9f5..221ac48 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -404,8 +404,10 @@ static int _thin_pool_target_percent(void **target_state __attribute__((unused))
+ 	if (!dm_get_status_thin_pool(mem, params, &s))
+ 		return_0;
  
- Version 1.02.116 - 15th February 2016
- =====================================
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index fcbc8ce..0b7d5ba 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -406,8 +406,10 @@ struct dm_status_thin_pool {
- 	dm_thin_discards_t discards;
- 	uint32_t fail : 1;		/* all I/O fails */
- 	uint32_t error_if_no_space : 1;	/* otherwise queue_if_no_space */
--	uint32_t out_of_data_space : 1;	/* metadata may be changed, but data may not be allocated */
--	uint32_t reserved : 29;
-+	uint32_t out_of_data_space : 1;	/* metadata may be changed, but data may not be allocated (no rw) */
-+	uint32_t needs_check : 1;	/* metadata needs check */
-+	uint32_t error : 1;		/* detected error (switches to fail soon) */
-+	uint32_t reserved : 27;
- };
++	if (s->fail || s->error)
++		*percent = DM_PERCENT_INVALID;
+ 	/* With 'seg' report metadata percent, otherwice data percent */
+-	if (seg) {
++	else if (seg) {
+ 		*percent = dm_make_percent(s->used_metadata_blocks,
+ 					   s->total_metadata_blocks);
+ 		*total_numerator += s->used_metadata_blocks;
+@@ -622,7 +624,9 @@ static int _thin_target_percent(void **target_state __attribute__((unused)),
+ 	if (!dm_get_status_thin(mem, params, &s))
+ 		return_0;
  
- int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
-@@ -417,6 +419,8 @@ int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
- struct dm_status_thin {
- 	uint64_t mapped_sectors;
- 	uint64_t highest_mapped_sector;
-+	uint32_t fail : 1;              /* Thin volume fails I/O */
-+	uint32_t reserved : 31;
- };
- 
- int dm_get_status_thin(struct dm_pool *mem, const char *params,
-diff --git a/libdm/libdm-targets.c b/libdm/libdm-targets.c
-index 16d4f6b..7428eba 100644
---- a/libdm/libdm-targets.c
-+++ b/libdm/libdm-targets.c
-@@ -278,6 +278,17 @@ int parse_thin_pool_status(const char *params, struct dm_status_thin_pool *s)
- 		return 0;
- 	}
- 
-+	if (strstr(params, "Error")) {
-+		s->error = 1;
-+		s->fail = 1; /*  This is also I/O fail state */
-+		return 1;
-+	}
-+
-+	if (strstr(params, "Fail")) {
-+		s->fail = 1;
-+		return 1;
-+	}
-+
- 	/* FIXME: add support for held metadata root */
- 	if (sscanf(params, FMTu64 " " FMTu64 "/" FMTu64 " " FMTu64 "/" FMTu64 "%n",
- 		   &s->transaction_id,
-@@ -297,16 +308,19 @@ int parse_thin_pool_status(const char *params, struct dm_status_thin_pool *s)
- 	else /* default discard_passdown */
- 		s->discards = DM_THIN_DISCARDS_PASSDOWN;
- 
--	if (strstr(params + pos, "ro "))
--		s->read_only = 1;
--	else if (strstr(params + pos, "fail"))
--		s->fail = 1;
--	else if (strstr(params + pos, "out_of_data_space"))
-+	/* Default is 'writable' (rw) data */
-+	if (strstr(params + pos, "out_of_data_space"))
- 		s->out_of_data_space = 1;
-+	else if (strstr(params + pos, "ro "))
-+		s->read_only = 1;
- 
-+	/* Default is 'queue_if_no_space' */
- 	if (strstr(params + pos, "error_if_no_space"))
- 		s->error_if_no_space = 1;
- 
-+	if (strstr(params + pos, "needs_check"))
-+		s->needs_check = 1;
-+
- 	return 1;
- }
- 
-@@ -341,8 +355,9 @@ int dm_get_status_thin(struct dm_pool *mem, const char *params,
- 	}
- 
- 	if (strchr(params, '-')) {
--		s->mapped_sectors = 0;
--		s->highest_mapped_sector = 0;
-+		/* nothing to parse */
-+	} else if (strstr(params, "Fail")) {
-+		s->fail = 1;
- 	} else if (sscanf(params, FMTu64 " " FMTu64,
- 		   &s->mapped_sectors,
- 		   &s->highest_mapped_sector) != 2) {
+-	if (seg) {
++	if (s->fail)
++		*percent = DM_PERCENT_INVALID;
++	else if (seg) {
+ 		/* Pool allocates whole chunk so round-up to nearest one */
+ 		csize = first_seg(seg->pool_lv)->chunk_size;
+ 		csize = ((seg->lv->size + csize - 1) / csize) * csize;
 
 
