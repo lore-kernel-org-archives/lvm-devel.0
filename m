@@ -1,149 +1,77 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 18 Feb 2016 02:11:32 +0000 (UTC)
-Subject: master - configure: Use python-config if python2-config not found.
-Message-ID: <20160218021132.6475160DFB@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 18 Feb 2016 11:14:32 +0000 (UTC)
+Subject: master - report: report -1, not 'unkown' for lv_{snapshot_invalid, merge_failed} with --binary
+Message-ID: <20160218111432.C3D0260B69@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e5fc48411a5e872eb7c34dff51aa7e0910812119
-Commit:        e5fc48411a5e872eb7c34dff51aa7e0910812119
-Parent:        7dce72ee182d80d85d5292c85877d826c283cf33
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Feb 18 02:10:35 2016 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Feb 18 02:10:35 2016 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bc19a16fc7d952550849b1f6359ed0515515f0aa
+Commit:        bc19a16fc7d952550849b1f6359ed0515515f0aa
+Parent:        e5fc48411a5e872eb7c34dff51aa7e0910812119
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Feb 18 12:10:00 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Feb 18 12:10:00 2016 +0100
 
-configure: Use python-config if python2-config not found.
+report: report -1, not 'unkown' for lv_{snapshot_invalid,merge_failed} with --binary
 
-Assume that's good enough for older systems.
+State:
+$ lvs -o lv_name,lv_active_locally,lv_snapshot_invalid,lv_merge_failed vg/lvol0
+  LV    ActLocal       SnapInvalid     MergeFailed
+  lvol0 active locally         unknown         unknown
+
+Now with using --binary switch.
+
+Before this patch (lv_snapshot_invalid and lv_merge_failed not switched into numeric value
+where -1 represents 'unknown' value)
+$ lvs -o lv_name,lv_active_locally,lv_snapshot_invalid,lv_merge_failed vg/lvol0 --binary
+  LV    ActLocal   SnapInvalid     MergeFailed
+  lvol0          1         unknown         unknown
+
+With this patch applied:
+$ lvs -o lv_name,lv_active_locally,lv_snapshot_invalid,lv_merge_failed vg/lvol0 --binary
+  LV    ActLocal   SnapInvalid     MergeFailed
+  lvol0          1              -1              -1
 ---
- configure    |   98 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- configure.in |    1 +
- 2 files changed, 99 insertions(+), 0 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/report/report.c |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/configure b/configure
-index 93e0003..1d742ec 100755
---- a/configure
-+++ b/configure
-@@ -12827,6 +12827,104 @@ else
-   PYTHON2_CONFIG="$ac_cv_path_PYTHON2_CONFIG"
- fi
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a4474cd..bf3fc07 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.143 -
+ =====================================
++  Report -1, not 'unkown' for lv_{snapshot_invalid,merge_failed} with --binary.
+   Add configure --enable-dbus-service for an LVM D-Bus service.
+   Replace configure --enable-python_bindings with python2 and python3 versions.
+   If PV belongs to some VG and metadata missing, skip it if system ID is used.
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 123b9f0..542cbc4 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -3194,7 +3194,7 @@ static int _lvmergefailed_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	int merge_failed;
  
-+	test -z "$PYTHON2_CONFIG" && if test -n "$ac_tool_prefix"; then
-+  # Extract the first word of "${ac_tool_prefix}python-config", so it can be a program name with args.
-+set dummy ${ac_tool_prefix}python-config; ac_word=$2
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-+$as_echo_n "checking for $ac_word... " >&6; }
-+if ${ac_cv_path_PYTHON2_CONFIG+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  case $PYTHON2_CONFIG in
-+  [\\/]* | ?:[\\/]*)
-+  ac_cv_path_PYTHON2_CONFIG="$PYTHON2_CONFIG" # Let the user override the test with a path.
-+  ;;
-+  *)
-+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-+for as_dir in $PATH
-+do
-+  IFS=$as_save_IFS
-+  test -z "$as_dir" && as_dir=.
-+    for ac_exec_ext in '' $ac_executable_extensions; do
-+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-+    ac_cv_path_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
-+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-+    break 2
-+  fi
-+done
-+  done
-+IFS=$as_save_IFS
-+
-+  ;;
-+esac
-+fi
-+PYTHON2_CONFIG=$ac_cv_path_PYTHON2_CONFIG
-+if test -n "$PYTHON2_CONFIG"; then
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2_CONFIG" >&5
-+$as_echo "$PYTHON2_CONFIG" >&6; }
-+else
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
-+
-+
-+fi
-+if test -z "$ac_cv_path_PYTHON2_CONFIG"; then
-+  ac_pt_PYTHON2_CONFIG=$PYTHON2_CONFIG
-+  # Extract the first word of "python-config", so it can be a program name with args.
-+set dummy python-config; ac_word=$2
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-+$as_echo_n "checking for $ac_word... " >&6; }
-+if ${ac_cv_path_ac_pt_PYTHON2_CONFIG+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  case $ac_pt_PYTHON2_CONFIG in
-+  [\\/]* | ?:[\\/]*)
-+  ac_cv_path_ac_pt_PYTHON2_CONFIG="$ac_pt_PYTHON2_CONFIG" # Let the user override the test with a path.
-+  ;;
-+  *)
-+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-+for as_dir in $PATH
-+do
-+  IFS=$as_save_IFS
-+  test -z "$as_dir" && as_dir=.
-+    for ac_exec_ext in '' $ac_executable_extensions; do
-+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-+    ac_cv_path_ac_pt_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
-+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-+    break 2
-+  fi
-+done
-+  done
-+IFS=$as_save_IFS
-+
-+  ;;
-+esac
-+fi
-+ac_pt_PYTHON2_CONFIG=$ac_cv_path_ac_pt_PYTHON2_CONFIG
-+if test -n "$ac_pt_PYTHON2_CONFIG"; then
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PYTHON2_CONFIG" >&5
-+$as_echo "$ac_pt_PYTHON2_CONFIG" >&6; }
-+else
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
-+
-+  if test "x$ac_pt_PYTHON2_CONFIG" = x; then
-+    PYTHON2_CONFIG=""
-+  else
-+    case $cross_compiling:$ac_tool_warned in
-+yes:)
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
-+$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
-+ac_tool_warned=yes ;;
-+esac
-+    PYTHON2_CONFIG=$ac_pt_PYTHON2_CONFIG
-+  fi
-+else
-+  PYTHON2_CONFIG="$ac_cv_path_PYTHON2_CONFIG"
-+fi
-+
- 	test -z "$PYTHON2_CONFIG" && as_fn_error $? "python headers are required for --enable-python2_bindings but cannot be found" "$LINENO" 5
- 	PYTHON2_INCDIRS=`"$PYTHON2_CONFIG" --includes`
- 	PYTHON2_LIBDIRS=`"$PYTHON2_CONFIG" --libs`
-diff --git a/configure.in b/configure.in
-index 22ba812..7a5aa5d 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1476,6 +1476,7 @@ if test "$PYTHON2_BINDINGS" = yes; then
- 	AC_PATH_TOOL(PYTHON2, python2)
- 	test -z "$PYTHON2" && AC_MSG_ERROR([python2 is required for --enable-python2_bindings but cannot be found])
- 	AC_PATH_TOOL(PYTHON2_CONFIG, python2-config)
-+	test -z "$PYTHON2_CONFIG" && AC_PATH_TOOL(PYTHON2_CONFIG, python-config)
- 	test -z "$PYTHON2_CONFIG" && AC_MSG_ERROR([python headers are required for --enable-python2_bindings but cannot be found])
- 	PYTHON2_INCDIRS=`"$PYTHON2_CONFIG" --includes`
- 	PYTHON2_LIBDIRS=`"$PYTHON2_CONFIG" --libs`
+ 	if (!lv_is_cow(lv) || !lv_snapshot_percent(lv, &snap_percent))
+-		return _field_set_value(field, _str_unknown, &GET_TYPE_RESERVED_VALUE(num_undef_64));
++		return _binary_undef_disp(rh, mem, field, private);
+ 
+ 	merge_failed = snap_percent == LVM_PERCENT_MERGE_FAILED;
+ 	return _binary_disp(rh, mem, field, merge_failed, GET_FIRST_RESERVED_NAME(lv_merge_failed_y), private);
+@@ -3209,7 +3209,7 @@ static int _lvsnapshotinvalid_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	int snap_invalid;
+ 
+ 	if (!lv_is_cow(lv))
+-		return _field_set_value(field, _str_unknown, &GET_TYPE_RESERVED_VALUE(num_undef_64));
++		return _binary_undef_disp(rh, mem, field, private);
+ 
+ 	snap_invalid = !lv_snapshot_percent(lv, &snap_percent) || snap_percent == DM_PERCENT_INVALID;
+ 	return _binary_disp(rh, mem, field, snap_invalid, GET_FIRST_RESERVED_NAME(lv_snapshot_invalid_y), private);
 
 
