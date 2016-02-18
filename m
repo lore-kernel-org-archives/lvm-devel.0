@@ -1,68 +1,146 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 18 Feb 2016 17:12:03 +0000 (UTC)
-Subject: master - tests: needs_check needs version 16
-Message-ID: <20160218171203.CC1CF60ED8@fedorahosted.org>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Thu, 18 Feb 2016 19:47:16 +0000 (UTC)
+Subject: master - spec: Update python bindings and dbus-service
+Message-ID: <20160218194716.1505460AA5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a89ddda1a292402a2cf2422d09e58dba46079163
-Commit:        a89ddda1a292402a2cf2422d09e58dba46079163
-Parent:        42b394c1425c18fb236e82847c64258afd150ae6
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Feb 18 18:10:31 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Feb 18 18:11:29 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04ab1fa572bbc6751463b137576bc733ec27b2ca
+Commit:        04ab1fa572bbc6751463b137576bc733ec27b2ca
+Parent:        a89ddda1a292402a2cf2422d09e58dba46079163
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Feb 18 14:34:17 2016 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Feb 18 20:46:03 2016 +0100
 
-tests: needs_check needs version 16
+spec: Update python bindings and dbus-service
 
-Skip part of test when driver is too old.
+The workaround for python3 is no longer needed.
 ---
- test/shell/thin-flags.sh |   23 +++++++++++++----------
- 1 files changed, 13 insertions(+), 10 deletions(-)
+ spec/build.inc    |   12 ++----------
+ spec/packages.inc |   44 +++++++++++++++++++++++++++++++++++++++++++-
+ spec/source.inc   |   17 +++++++++++++++++
+ 3 files changed, 62 insertions(+), 11 deletions(-)
 
-diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
-index 336e541..7dd0d6e 100644
---- a/test/shell/thin-flags.sh
-+++ b/test/shell/thin-flags.sh
-@@ -92,23 +92,26 @@ lvchange -ay $vg/$lv2
- dd if=/dev/zero of="$DM_DEV_DIR/mapper/$vg-$lv2" bs=32K count=1
+diff --git a/spec/build.inc b/spec/build.inc
+index 2bb285d..3ba7840 100644
+--- a/spec/build.inc
++++ b/spec/build.inc
+@@ -31,20 +31,12 @@
+ %enableif %{enable_lockd_sanlock} lockd-sanlock
+ %endif
+ %enableif %{enable_python} python2-bindings
++%enableif %{enable_python3} python3-bindings
+ %enableif %{enable_python} applib
++%enableif %{enable_dbusd} dbus-service
  
- check lv_attr_bit health $vg/pool "M"
--check lv_attr_bit state $vg/pool "c"
--check lv_field $vg/pool lv_check_needed "check needed"
- # TODO - use spaces ??
- check lv_field $vg/pool lv_health_status "metadata_read_only"
+ %build
+ 
+-%if %{enable_python3}
+-rm -rf %{py3dir}
+-cp -a . %{py3dir}
+-pushd %{py3dir}
+-%configure %{configure_flags} --disable-python2-bindings --enable-python3-bindings PYTHON=/usr/bin/python3 PYTHON_CONFIG=/usr/bin/python3-config
 -
- check lv_attr_bit health $vg/$lv2 "-"
+-make %{?_smp_mflags}
+-popd
+-%endif
+-
+ %configure %{configure_flags}
  
--dmsetup suspend $vg-pool-tpool
-+# needs_check needs newer version
-+if aux have_thin 1 16 0 ; then
-+	check lv_attr_bit state $vg/pool "c"
-+	check lv_field $vg/pool lv_check_needed "check needed"
+ make %{?_smp_mflags}
+diff --git a/spec/packages.inc b/spec/packages.inc
+index 6c3dfde..bfc6703 100644
+--- a/spec/packages.inc
++++ b/spec/packages.inc
+@@ -442,7 +442,49 @@ Python 3 module to allow the creation and use of LVM
+ logical volumes, physical volumes, and volume groups.
+ 
+ %files python3-libs
+-%{python3_sitearch}/*
++%{python3_sitearch}/*.so
++%{python3_sitearch}/*.egg-info
++%endif
 +
-+	dmsetup suspend $vg-pool-tpool
++##############################################################################
++# LVM D-Bus daemon
++##############################################################################
++%if %{enable_dbusd}
++%package dbusd
++Summary: LVM2 D-Bus daemon
++License: GPLv2
++Group: System Environment/Base
++Requires: lvm2 >= %{version}-%{release}
++Requires: dbus
++Requires: python3-dbus
++Requires: python3-pyudev
++Requires(post): systemd-units >= %{systemd_version}
++Requires(preun): systemd-units >= %{systemd_version}
++Requires(postun): systemd-units >= %{systemd_version}
++
++%description dbusd
++
++Daemon for access to LVM2 functionality through a D-Bus interface.
++
++%post dbusd
++%systemd_post lvm2-lvmdbusd.service
++
++%preun dbusd
++%systemd_preun lvm2-lvmdbusd.service
++
++%postun dbusd
++%systemd_postun lvm2-lvmdbusd.service
++
++%files dbusd
++%defattr(555,root,root,-)
++%{_sbindir}/lvmdbusd
++%defattr(444,root,root,-)
++%{_sysconfdir}/dbus-1/system.d/com.redhat.lvmdbus1.conf
++%{_datadir}/dbus-1/system-services/com.redhat.lvmdbus1.service
++%{_mandir}/man8/lvmdbusd.8.gz
++%{_unitdir}/lvm2-lvmdbusd.service
++%{python3_sitelib}/lvmdbusd/*
++
+ %endif
  
--# suspended  thin-pool with Capital 'c'
--check lv_attr_bit state $vg/pool "C"
-+	# suspended  thin-pool with Capital 'c'
-+	check lv_attr_bit state $vg/pool "C"
+ ##############################################################################
+diff --git a/spec/source.inc b/spec/source.inc
+index 07859ba..97f29f1 100644
+--- a/spec/source.inc
++++ b/spec/source.inc
+@@ -8,6 +8,7 @@
+ %global enable_python 1
+ # Off by default - <= does not work well with or:
+ %global enable_python3 0
++%global enable_dbusd 0
+ %global enable_udev 1
+ %global enable_systemd 1
+ %global enable_cmirror 1
+@@ -87,6 +88,22 @@
  
--dmsetup resume $vg-pool-tpool
-+	dmsetup resume $vg-pool-tpool
+ ##############################################################
  
--lvresize -L+2M $vg/pool_tmeta
-+	lvresize -L+2M $vg/pool_tmeta
++%if %{rhel} >= 8 || %{fedora} >= 23
++  %if %{enable_python3}
++    %global enable_dbusd 1
++  %else
++    # dbusd requires python3
++    false
++  %endif
++%endif
++
++%if %{enable_dbusd}
++  %global buildreq_python3_dbus python3-dbus
++  %global buildreq_python3_pyudev python3-pyudev
++%endif
++
++##############################################################
++
+ %if %{fedora} == 16 || %{rhel} == 6
+ %global enable_systemd 0
  
--# still require thin_check
--check lv_attr_bit state $vg/pool "c"
-+	# still require thin_check
-+	check lv_attr_bit state $vg/pool "c"
-+fi
- 
- vgremove -ff $vg
 
 
