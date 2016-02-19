@@ -1,74 +1,77 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Mon, 22 Feb 2016 16:50:58 +0000 (UTC)
-Subject: master - spec: Fix 04ab1fa572bb: Remove left-overs
-Message-ID: <20160222165058.9B7686053A@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 19 Feb 2016 10:27:39 +0000 (UTC)
+Subject: master - thin: fix update_pool_lv error path
+Message-ID: <20160219102739.6E68D60DEA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=367fb85e44e0718a335c328ca75cb646539d3148
-Commit:        367fb85e44e0718a335c328ca75cb646539d3148
-Parent:        c716813651c2691c44bc709040cd16fbf363a74e
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Mon Feb 22 17:40:12 2016 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Mon Feb 22 17:50:35 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eefcbd5b28aae6c0bed22a6ff8cb97141184083f
+Commit:        eefcbd5b28aae6c0bed22a6ff8cb97141184083f
+Parent:        04ab1fa572bbc6751463b137576bc733ec27b2ca
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Feb 19 11:18:41 2016 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Feb 19 11:25:56 2016 +0100
 
-spec: Fix 04ab1fa572bb: Remove left-overs
+thin: fix update_pool_lv error path
 
+When update fails in suspend() (sending of messages
+fails because metadata space is full) call resume(),
+so the locking sequence works properly for clustering.
+
+Also failing deactivation should unlock memory.
 ---
- spec/build.inc     |    5 -----
- test/api/pytest.sh |   16 ++++++++++++----
- 2 files changed, 12 insertions(+), 9 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/thin_manip.c |   20 +++++++++++++-------
+ 2 files changed, 14 insertions(+), 7 deletions(-)
 
-diff --git a/spec/build.inc b/spec/build.inc
-index 3ba7840..cd58f3b 100644
---- a/spec/build.inc
-+++ b/spec/build.inc
-@@ -55,11 +55,6 @@ make install_initscripts DESTDIR=$RPM_BUILD_ROOT
- %if %{enable_testsuite}
- make -C test install DESTDIR=$RPM_BUILD_ROOT
- %endif
--%if %{enable_python3}
--pushd %{py3dir}
--make -C python install DESTDIR=$RPM_BUILD_ROOT
--popd
--%endif
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 8d9294b..654f0a1 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.143 -
+ =====================================
++  Fix error path when sending thin-pool message fails in update_pool_lv().
+   Support reporting CheckNeeded and Fail state for thin-pool and thin LV.
+   For failing thin-pool and thin volume correctly report percentage as INVALID.
+   Report -1, not 'unkown' for lv_{snapshot_invalid,merge_failed} with --binary.
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 2886259..de3c7e8 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -469,16 +469,22 @@ int update_pool_lv(struct logical_volume *lv, int activate)
  
- # when building an src.rpm from freestanding specfiles
- test -e %{_sourcedir}/source.inc || cp source.inc build.inc packages.inc macros.inc %{_sourcedir}
-diff --git a/test/api/pytest.sh b/test/api/pytest.sh
-index 33c1095..28a1cd0 100644
---- a/test/api/pytest.sh
-+++ b/test/api/pytest.sh
-@@ -1,4 +1,4 @@
--#!/bin/sh
-+#!/bin/bash
- # Copyright (C) 2012-2015 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
-@@ -31,9 +31,17 @@ aux prepare_dmeventd
+ 		if (!(ret = _check_pool_create(lv)))
+ 			stack; /* Safety guard, needs local presence of thin-pool target */
+-		else if (!(ret = suspend_lv_origin(lv->vg->cmd, lv)))
+-			/* Send messages */
+-			log_error("Failed to suspend and send message %s.", display_lvname(lv));
+-		else if (!(ret = resume_lv_origin(lv->vg->cmd, lv)))
+-			log_error("Failed to resume %s.", display_lvname(lv));
++		else {
++			if (!(ret = suspend_lv_origin(lv->vg->cmd, lv)))
++				/* Send messages */
++				log_error("Failed to suspend %s with queued messages.", display_lvname(lv));
++
++			/* Even failing suspend needs resume */
++			if (!resume_lv_origin(lv->vg->cmd, lv)) {
++				log_error("Failed to resume %s.", display_lvname(lv));
++				ret = 0;
++			}
++		}
  
- #Locate the python binding library to use.
- if [[ -n $abs_top_builddir ]]; then
--  python_lib=$(find $abs_top_builddir -name lvm.so)
--  # Unable to test python bindings if library not available
--  test -n "$python_lib" || skip "lvm2-python-libs not built"
-+  python_lib=($(find $abs_top_builddir -name lvm.so))
-+  if [[ ${#python_lib[*]} -ne 1 ]]; then
-+    if [[ ${#python_lib[*]} -gt 1 ]]; then
-+      # Unable to test python bindings if multiple libraries found:
-+      echo "Found left over lvm.so: ${python_lib[*]}"
-+      false
-+    else
-+      # Unable to test python bindings if library not available
-+      skip "lvm2-python-libs not built"
-+    fi
-+  fi
- 
-   export PYTHONPATH=$(dirname $python_lib):$PYTHONPATH
- elif rpm -q lvm2-python-libs &>/dev/null; then
+ 		if (activate) {
+ 			if (!deactivate_lv(lv->vg->cmd, lv)) {
+-				init_dmeventd_monitor(monitored);
+-				return_0;
++				log_error("Failed to deactivate %s.", display_lvname(lv));
++				ret = 0;
+ 			}
+ 			init_dmeventd_monitor(monitored);
+ 		}
 
 
