@@ -1,52 +1,65 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 26 Feb 2016 09:22:44 +0000 (UTC)
-Subject: master - dbus: fix the systemd service providing the DBus service
-Message-ID: <20160226092244.7A08560DAC@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Sun, 21 Feb 2016 23:38:20 +0000 (UTC)
+Subject: master - post-release
+Message-ID: <20160221233820.21CA060756@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e31f5186904328d7f3fc8eae71cda72715107e7
-Commit:        3e31f5186904328d7f3fc8eae71cda72715107e7
-Parent:        88530b2ef34527eae2bacc86c765fb680f5b6b2b
-Author:        Vratislav Podzimek <vpodzime@redhat.com>
-AuthorDate:    Thu Feb 25 16:34:41 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Feb 26 10:20:08 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=44b3909e588bc8d1896b4a94cf7d0ce85e251960
+Commit:        44b3909e588bc8d1896b4a94cf7d0ce85e251960
+Parent:        3ef36f05b6269f752a6d8fb62e098e89843958fa
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Sun Feb 21 23:37:48 2016 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Sun Feb 21 23:37:48 2016 +0000
 
-dbus: fix the systemd service providing the DBus service
+post-release
 
-Correct name is lvm2-lvmdbusd.service not lvmdbusd.service.
-This makes the bus-activation (auto-activation) work.
-
-Signed-off-by: Vratislav Podzimek <vpodzime@redhat.com>
 ---
- WHATS_NEW                              |    1 +
- scripts/com.redhat.lvmdbus1.service.in |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    3 +++
+ WHATS_NEW_DM |    3 +++
+ 4 files changed, 8 insertions(+), 2 deletions(-)
 
+diff --git a/VERSION b/VERSION
+index b7455e6..d831047 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.143(2)-git (2016-02-21)
++2.02.144(2)-git (2016-02-21)
+diff --git a/VERSION_DM b/VERSION_DM
+index 505ccd5..c19e2b5 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.117-git (2016-02-21)
++1.02.118-git (2016-02-21)
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 250f3f1..ecae780 100644
+index 9097ce9..f94cabd 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.144 - 
+@@ -1,3 +1,6 @@
++Version 2.02.144 - 
++=====================================
++
+ Version 2.02.143 - 21st February 2016
  =====================================
-+  Fix SystemdService lvm2-lvmdbusd.service name.
-   Improve support for env LVM_VG_NAME for reference VG name in lvconvert.
-   Fix regresion when lvresize accepted zero sizes (2.02.141).
-   Always warn user about PV in use even when pvremove uses --force --force.
-diff --git a/scripts/com.redhat.lvmdbus1.service.in b/scripts/com.redhat.lvmdbus1.service.in
-index e271b08..5578ed1 100644
---- a/scripts/com.redhat.lvmdbus1.service.in
-+++ b/scripts/com.redhat.lvmdbus1.service.in
-@@ -2,4 +2,4 @@
- Name=com.redhat.lvmdbus1
- Exec=@sbindir@/lvmdbusd --udev
- User=root
--SystemdService=lvmdbusd.service
-+SystemdService=lvm2-lvmdbusd.service
+   Fix error path when sending thin-pool message fails in update_pool_lv().
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index f23c541..dd47c6b 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,3 +1,6 @@
++Version 1.02.118 -
++=====================================
++
+ Version 1.02.117 - 21st February 2016
+ =====================================
+   Improve status parsing for thin-pool and thin devices.
 
 
