@@ -1,67 +1,95 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 22 Feb 2016 22:11:04 +0000 (UTC)
-Subject: master - lvmdbusd: Remove unlimited retries
-Message-ID: <20160222221104.C3C1960AA1@fedorahosted.org>
+Date: Mon, 22 Feb 2016 22:11:06 +0000 (UTC)
+Subject: master - lvmdbusd: Initial unit test driver script
+Message-ID: <20160222221106.E651F60F39@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ecc040688601ec0f4b35f4250e057db13fd847a0
-Commit:        ecc040688601ec0f4b35f4250e057db13fd847a0
-Parent:        21034644b6582a6d9ad571ff51cc57ad5e08b9ff
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05eb87ca2defb6e7e7bd9759bab566de7cb6e3f0
+Commit:        05eb87ca2defb6e7e7bd9759bab566de7cb6e3f0
+Parent:        ecc040688601ec0f4b35f4250e057db13fd847a0
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Feb 22 15:53:31 2016 -0600
+AuthorDate:    Mon Feb 22 16:05:43 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Mon Feb 22 16:07:54 2016 -0600
 
-lvmdbusd: Remove unlimited retries
+lvmdbusd: Initial unit test driver script
 
-Change while to for loop to prevent the daemon from getting stuck
-when lvm is messed up.
+It's disabled until we can fix it up.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- daemons/lvmdbusd/cmdhandler.py |   12 +++++++++++-
- 1 files changed, 11 insertions(+), 1 deletions(-)
+ test/api/dbustest.sh |   60 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 60 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index 83feb0a..370fb61 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -388,6 +388,9 @@ def lv_detach_cache(lv_full_name, detach_options, destroy_cache):
- 
- def pv_retrieve_with_segs(device=None):
- 	d = []
-+	err = ""
-+	out = ""
-+	rc = 0
- 
- 	columns = ['pv_name', 'pv_uuid', 'pv_fmt', 'pv_size', 'pv_free',
- 				'pv_used', 'dev_size', 'pv_mda_size', 'pv_mda_free',
-@@ -398,7 +401,7 @@ def pv_retrieve_with_segs(device=None):
- 	# Lvm has some issues where it returns failure when querying pvs when other
- 	# operations are in process, see:
- 	# https://bugzilla.redhat.com/show_bug.cgi?id=1274085
--	while True:
-+	for i in range(0, 10):
- 		cmd = _dc('pvs', ['-o', ','.join(columns)])
- 
- 		if device:
-@@ -413,6 +416,13 @@ def pv_retrieve_with_segs(device=None):
- 			time.sleep(0.2)
- 			log_debug("LVM Bug workaround, retrying pvs command...")
- 
-+	if rc != 0:
-+		msg = "We were unable to get pvs to return without error after " \
-+			"trying 10 times, RC=%d, STDERR=(%s), STDOUT=(%s)" % \
-+			(rc, err, out)
-+		log_error(msg)
-+		raise RuntimeError(msg)
+diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
+new file mode 100644
+index 0000000..f33add0
+--- /dev/null
++++ b/test/api/dbustest.sh
+@@ -0,0 +1,60 @@
++#!/bin/sh
++# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
- 	return d
- 
- 
++SKIP_WITH_CLVMD=1
++
++. lib/inittest
++
++# Will default to skip until we can get this reviewed
++skip
++
++aux prepare_pvs 6
++
++# This allows us to run without installing
++# com.redhat.lvmdbus1.conf to /etc/dbus-1/system.d/
++# but in normal operation it needs to be on system bus
++export LVMDBUSD_USE_SESSION="True"
++
++# Setup the python path so we can run
++export PYTHONPATH=$abs_top_builddir/daemons
++
++# Where should we be logging the output of the daemon when not running as
++# a systemd service
++# Start the dbus service
++$abs_top_builddir/daemons/lvmdbusd/lvmdbusd --debug --udev > /tmp/lvmdbusd.log 2>&1 &
++
++# Give the service some time to start before we try to run the
++# unit test
++sleep 1
++
++LVM_DBUS_PID=$(ps aux | grep lvmdbus[d] |  awk '{print $2}')
++if [ "CHK${LVM_DBUS_PID}" == "CHK" ];then
++	echo "Failed to start lsmdbusd daemon"
++	exit 1
++fi
++
++# Run all the unit tests
++# Are we already logging stdout & stderror?
++$abs_top_builddir/test/dbus/lvmdbustest.py -v > /tmp/lvmdbustest.log 2>&1
++
++# We can run individual unit tests by doing this
++# $abs_top_builddir/test/dbus/lvmdbustest.py -v TestDbusService.test_snapshot_merge
++
++# I'm guessing there is a better way to handle this with the built in test env.
++if [ $? -eq 0 ]; then
++	rm -f /tmp/lvmdbusd.log
++	rm -f /tmp/lvmdbustest.log
++fi
++
++echo "Stopping service"
++kill $LVM_DBUS_PID
 
 
