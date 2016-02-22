@@ -1,162 +1,84 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 22 Feb 2016 22:10:58 +0000 (UTC)
-Subject: master - lvmdbusd: background.py, fix stdout parse error
-Message-ID: <20160222221058.49D5C602B3@fedorahosted.org>
+Date: Mon, 22 Feb 2016 22:11:02 +0000 (UTC)
+Subject: master - lvmdbusd: Add env variable to use session bus
+Message-ID: <20160222221102.A778560D5A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=70d0b210e17884ab8cfc5f2a9be90461afb993c7
-Commit:        70d0b210e17884ab8cfc5f2a9be90461afb993c7
-Parent:        d7dd8bf9d6ef146d48e5a2d39cf7ae17ca93545b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21034644b6582a6d9ad571ff51cc57ad5e08b9ff
+Commit:        21034644b6582a6d9ad571ff51cc57ad5e08b9ff
+Parent:        64aab5885d7afdbd63979b6f8520564ad2eb59ac
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Feb 22 14:00:30 2016 -0600
+AuthorDate:    Mon Feb 22 14:28:11 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Mon Feb 22 16:07:54 2016 -0600
 
-lvmdbusd: background.py, fix stdout parse error
+lvmdbusd: Add env variable to use session bus
 
-It appears that the output of lvconvert --merge can vary some.  The code
-was blowing up as it was trying to parse a line of stdout to retrieve the
-% complete, but the line did not have the needed format and an execption
-was thrown.  The uncaught exception caused the background thread to exit
-without updating the job object, which caused the client to hang forever
-waiting.  Added a default exception handler to prevent unhandled execptions
-causing hangs and removed the parameter skip_first_line as it's no longer
-needed.  The code checks to see if the line can be parsed before doing so.
+export LVMDBUSD_SESSION=True to run on the session bus instead
+of the system bus so that we can run the unit test without
+installing the dbus conf file.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- daemons/lvmdbusd/background.py |   85 ++++++++++++++++++++++++----------------
- 1 files changed, 51 insertions(+), 34 deletions(-)
+ daemons/lvmdbusd/main.py |    9 ++++++++-
+ test/dbus/lvmdbustest.py |    7 ++++++-
+ 2 files changed, 14 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmdbusd/background.py b/daemons/lvmdbusd/background.py
-index 16ee7a6..4265154 100644
---- a/daemons/lvmdbusd/background.py
-+++ b/daemons/lvmdbusd/background.py
-@@ -14,8 +14,9 @@ import time
- from .cmdhandler import options_to_cli_args
- import dbus
- from .job import Job, JobState
--from .utils import pv_range_append, pv_dest_ranges
-+from .utils import pv_range_append, pv_dest_ranges, log_debug, log_error
- from .request import RequestEntry
-+import traceback
- 
- _rlock = threading.RLock()
- _thread_list = list()
-@@ -48,11 +49,11 @@ def _create_background_dbus_job(job_state):
- 	return job_obj.dbus_object_path()
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index 43545b2..c9211f7 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -28,6 +28,7 @@ import sys
+ from . import udevwatch
+ from .utils import log_debug
+ import argparse
++import os
  
  
--def _move_merge(interface_name, cmd, time_out, skip_first_line=False):
-+def _move_merge(interface_name, cmd, time_out):
- 	# Create job object to be used while running the command
- 	rc = '/'
- 	job_state = JobState(None)
--	add(cmd, job_state, skip_first_line)
-+	add(cmd, job_state)
+ class Lvm(objectmanager.ObjectManager):
+@@ -71,6 +72,8 @@ def main():
+ 						help="Dump debug messages", default=False,
+ 						dest='debug')
  
- 	if time_out == -1:
- 		# Waiting forever
-@@ -122,7 +123,7 @@ def merge(interface_name, lv_uuid, lv_name, merge_options, time_out):
- 	dbo = cfg.om.get_object_by_uuid_lvm_id(lv_uuid, lv_name)
- 	if dbo:
- 		cmd = lv_merge_cmd(merge_options, dbo.lvm_id)
--		return _move_merge(interface_name, cmd, time_out, True)
-+		return _move_merge(interface_name, cmd, time_out)
- 	else:
- 		raise dbus.exceptions.DBusException(
- 			interface_name,
-@@ -154,41 +155,57 @@ def empty_cb(disregard):
- 
- 
- def background_execute(command, background_job, skip_first_line=False):
--	process = subprocess.Popen(command, stdout=subprocess.PIPE,
--								stderr=subprocess.PIPE, close_fds=True)
--	lines_iterator = iter(process.stdout.readline, b"")
--	for line in lines_iterator:
--		# Merge ouputs a line before updates, move does not
--		if skip_first_line:
--			skip_first_line = False
--			continue
--
--		if len(line) > 10:
--			(device, ignore, percentage) = line.decode("utf-8").split(':')
--			background_job.Percent = round(float(percentage.strip()[:-1]), 1)
--
--	out = process.communicate()
--
--	# print "DEBUG: EC %d, STDOUT %s, STDERR %s" % \
--	#      (process.returncode, out[0], out[1])
--
--	if process.returncode == 0:
--		background_job.Percent = 100
--
--	# Queue up the result so that it gets executed in same thread as others.
--	r = RequestEntry(
--		-1, process_background_result,
--		(background_job, process.returncode, out[1]),
--		empty_cb, empty_cb, False)
--	cfg.worker_q.put(r)
--
- 
--def add(command, reporting_job, skip_first_line=False):
-+	# Wrap this whole operation in an exception handler, otherwise if we
-+	# hit a code bug we will silently exit this thread without anyone being
-+	# the wiser.
-+	try:
-+		process = subprocess.Popen(command, stdout=subprocess.PIPE,
-+									stderr=subprocess.PIPE, close_fds=True)
-+		lines_iterator = iter(process.stdout.readline, b"")
-+		for line in lines_iterator:
-+			line_str = line.decode("utf-8")
++	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
 +
-+			# Check to see if the line has the correct number of separators
-+			try:
-+				if line_str.count(':') == 2:
-+					(device, ignore, percentage) = line_str.split(':')
-+					background_job.Percent = \
-+						round(float(percentage.strip()[:-1]), 1)
-+			except ValueError:
-+				log_error("Trying to parse percentage which failed for %s" %
-+					line_str)
-+
-+		out = process.communicate()
-+
-+		if process.returncode == 0:
-+			background_job.Percent = 100
-+
-+		# Queue up the result so that it gets executed in same thread as others.
-+		r = RequestEntry(
-+			-1, process_background_result,
-+			(background_job, process.returncode, out[1]),
-+			empty_cb, empty_cb, False)
-+		cfg.worker_q.put(r)
-+	except Exception:
-+		# In the unlikely event that we blew up, lets notify fill out the
-+		# job object so that the client doesn't hang potentially forever!
-+		st = traceback.format_exc()
-+		error = "Exception in background thread: \n%s" % st
-+		log_error(error)
-+		r = RequestEntry(
-+			-1, process_background_result,
-+			(background_job, 1, error),
-+			empty_cb, empty_cb, False)
-+		cfg.worker_q.put(r)
-+
-+
-+def add(command, reporting_job):
- 	# Create the thread, get it running and then add it to the list
- 	t = threading.Thread(
- 		target=background_execute,
- 		name="thread: " + ' '.join(command),
--		args=(command, reporting_job, skip_first_line))
-+		args=(command, reporting_job))
- 	t.start()
+ 	args = parser.parse_args()
  
- 	with _rlock:
+ 	cfg.DEBUG = args.debug
+@@ -90,7 +93,11 @@ def main():
+ 	dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+ 	GObject.threads_init()
+ 	dbus.mainloop.glib.threads_init()
+-	cfg.bus = dbus.SystemBus()
++
++	if use_session:
++		cfg.bus = dbus.SessionBus()
++	else:
++		cfg.bus = dbus.SystemBus()
+ 	# The base name variable needs to exist for things to work.
+ 	# noinspection PyUnusedLocal
+ 	base_name = dbus.service.BusName(BASE_INTERFACE, cfg.bus)
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 16fffdf..92f5d70 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -44,7 +44,12 @@ def rs(length, suffix, character_set=string.ascii_lowercase):
+ 				for _ in range(length)) + suffix
+ 
+ 
+-bus = dbus.SystemBus(mainloop=DBusGMainLoop())
++use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
++
++if use_session:
++	bus = dbus.SessionBus(mainloop=DBusGMainLoop())
++else:
++	bus = dbus.SystemBus(mainloop=DBusGMainLoop())
+ 
+ 
+ def mib(s):
 
 
