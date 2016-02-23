@@ -1,52 +1,48 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 23 Feb 2016 20:41:19 +0000 (UTC)
-Subject: master - coverity: check for info pointer existance
-Message-ID: <20160223204119.E05936104D@fedorahosted.org>
+Date: Tue, 23 Feb 2016 20:41:22 +0000 (UTC)
+Subject: master - coverity: check for zero length buffer
+Message-ID: <20160223204122.0D5A46104D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b08eb91df132e84fa41b4cf06707629b2c5c895e
-Commit:        b08eb91df132e84fa41b4cf06707629b2c5c895e
-Parent:        2e168a52b07bb9dc659bdcda80fc77031edebbd6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eaaae185b7870372298502d076defab2c3486ed3
+Commit:        eaaae185b7870372298502d076defab2c3486ed3
+Parent:        b08eb91df132e84fa41b4cf06707629b2c5c895e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 19:48:01 2016 +0100
+AuthorDate:    Tue Feb 23 19:54:19 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 23 21:40:16 2016 +0100
 
-coverity: check for info pointer existance
+coverity: check for zero length buffer
 
-Since we already check in few other places  'info' is not NULL,
-do the same for others - however when info would be NULL
-it more or less looks like internal error.
+When get_shared_library_path() would got zero length buffer,
+it could have underflow in size calc later.
+So just put extra small check for this case.
 ---
- lib/cache/lvmetad.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ lib/misc/sharedlib.c |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index b68e6c9..a483e04 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -1062,14 +1062,16 @@ int lvmetad_pv_found(const struct id *pvid, struct device *dev, const struct for
- 		return_0;
- 	}
+diff --git a/lib/misc/sharedlib.c b/lib/misc/sharedlib.c
+index 28b8aae..db1ba43 100644
+--- a/lib/misc/sharedlib.c
++++ b/lib/misc/sharedlib.c
+@@ -27,10 +27,13 @@ void get_shared_library_path(struct cmd_context *cmd, const char *libname,
+ {
+ 	struct stat info;
  
-+	/* TODO: resolve what does it actually mean  'info == NULL'
-+	 *       missing info is likely an INTERNAL_ERROR */
- 	if (!config_make_nodes(pvmeta, pvmeta->root, NULL,
- 			       "device = %"PRId64, (int64_t) dev->dev,
- 			       "dev_size = %"PRId64, (int64_t) (info ? lvmcache_device_size(info) : 0),
- 			       "format = %s", fmt->name,
- 			       "label_sector = %"PRId64, (int64_t) label_sector,
- 			       "id = %s", uuid,
--			       "ext_version = %"PRId64, (int64_t) lvmcache_ext_version(info),
--			       "ext_flags = %"PRId64, (int64_t) lvmcache_ext_flags(info),
-+			       "ext_version = %"PRId64, (int64_t) (info ? lvmcache_ext_version(info) : 0),
-+			       "ext_flags = %"PRId64, (int64_t) (info ? lvmcache_ext_flags(info) : 0),
- 			       NULL))
- 	{
- 		dm_config_destroy(pvmeta);
++	if (!path_len)
++		return;
++
+ 	/* If libname doesn't begin with '/' then use lib_dir/libname,
+ 	 * if present */
+ 	if (libname[0] == '/' ||
+-            (!cmd->lib_dir &&
++	    (!cmd->lib_dir &&
+ 	     !(cmd->lib_dir = find_config_tree_str(cmd, global_library_dir_CFG, NULL))) ||
+ 	    (dm_snprintf(path, path_len, "%s/%s", cmd->lib_dir,
+ 			 libname) == -1) || stat(path, &info) == -1) {
 
 
