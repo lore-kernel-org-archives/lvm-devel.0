@@ -1,53 +1,55 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 23 Feb 2016 11:26:00 +0000 (UTC)
-Subject: master - thin: fix read size compare
-Message-ID: <20160223112600.5001560D10@fedorahosted.org>
+Date: Tue, 23 Feb 2016 11:26:02 +0000 (UTC)
+Subject: master - cache: enforce header check
+Message-ID: <20160223112602.657E460D10@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f501f083bf1ea9f60a8b18aa9b5d59f3459ee4a6
-Commit:        f501f083bf1ea9f60a8b18aa9b5d59f3459ee4a6
-Parent:        05eb87ca2defb6e7e7bd9759bab566de7cb6e3f0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=293aabe4cd43a80fa94d7adb009fb8ab6c9d3641
+Commit:        293aabe4cd43a80fa94d7adb009fb8ab6c9d3641
+Parent:        f501f083bf1ea9f60a8b18aa9b5d59f3459ee4a6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 12:11:15 2016 +0100
+AuthorDate:    Tue Feb 23 12:15:42 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 23 12:22:18 2016 +0100
+CommitterDate: Tue Feb 23 12:25:25 2016 +0100
 
-thin: fix read size compare
+cache: enforce header check
 
-Fix the compare with 'unsigned' sizeof() and error read -1 result.
-So the read error is correctly recognized.
+Currently it's been checked for 'zero' header for thin-pool,
+but lets use it always for cache as well - since it's relatively 'cheap'
+detection of read 'error' problems as thin/cache tools
+currently do not work fast enough in this case.
 ---
  WHATS_NEW                  |    1 +
  lib/activate/dev_manager.c |    2 +-
  2 files changed, 2 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index f15d885..355712c 100644
+index 355712c..8c11277 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.144 - 
  =====================================
-+  Fir read error detection when checking for uninitialized thin-pool header.
++  Use uninitilized pool header detection in all cases.
+   Fir read error detection when checking for uninitialized thin-pool header.
    Fix error path for internal error in lvmetad vg lookup code.
  
- Version 2.02.143 - 21st February 2016
 diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 2826218..15d6bb9 100644
+index 15d6bb9..fbb0688 100644
 --- a/lib/activate/dev_manager.c
 +++ b/lib/activate/dev_manager.c
-@@ -1841,7 +1841,7 @@ static int _pool_callback(struct dm_tree_node *node,
- 			return 0;
- 		}
- 		/* let's assume there is no problem to read 64 bytes */
--		if (read(fd, buf, sizeof(buf)) < sizeof(buf)) {
-+		if (read(fd, buf, sizeof(buf)) < (int)sizeof(buf)) {
- 			log_sys_error("read", argv[args]);
- 			if (close(fd))
- 				log_sys_error("close", argv[args]);
+@@ -1916,7 +1916,7 @@ static int _pool_register_callback(struct dev_manager *dm,
+ 		data->global = "thin";
+ 	} else if (lv_is_cache(lv)) { /* cache pool */
+ 		data->pool_lv = first_seg(lv)->pool_lv;
+-		data->skip_zero = dm->activation;
++		data->skip_zero = 1; /* cheap read-error detection */
+ 		data->exec = global_cache_check_executable_CFG;
+ 		data->opts = global_cache_check_options_CFG;
+ 		data->global = "cache";
 
 
