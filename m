@@ -1,72 +1,51 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 23 Feb 2016 13:41:46 +0000 (UTC)
-Subject: master - gcc: logical-op warning go away
-Message-ID: <20160223134146.F0B3261098@fedorahosted.org>
+Date: Tue, 23 Feb 2016 13:41:49 +0000 (UTC)
+Subject: master - tests: check warn about belong is printed
+Message-ID: <20160223134149.1080F60A54@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0b836e316c20b8ed4325331cf33ef36815eb233
-Commit:        c0b836e316c20b8ed4325331cf33ef36815eb233
-Parent:        05cc1b87a952995c54ad99b8e9a0da9479bb56a5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5d7e83c73cba507c4e5d798dbfe00314a4850b02
+Commit:        5d7e83c73cba507c4e5d798dbfe00314a4850b02
+Parent:        c0b836e316c20b8ed4325331cf33ef36815eb233
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 13:16:55 2016 +0100
+AuthorDate:    Tue Feb 23 14:38:26 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 23 14:41:24 2016 +0100
 
-gcc: logical-op warning go away
+tests: check warn about belong is printed
 
-Don't be too much inventive and shutdown gcc6 warning:
-https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69602
 ---
- lib/device/dev-md.c          |    4 ++--
- libdaemon/client/daemon-io.c |   10 ++++++----
- 2 files changed, 8 insertions(+), 6 deletions(-)
+ test/shell/pvremove-usage.sh |    9 ++++++---
+ 1 files changed, 6 insertions(+), 3 deletions(-)
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index b6ee59f..3dbe831 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -38,8 +38,8 @@ static int _dev_has_md_magic(struct device *dev, uint64_t sb_offset)
+diff --git a/test/shell/pvremove-usage.sh b/test/shell/pvremove-usage.sh
+index 94c606b..08c8b24 100644
+--- a/test/shell/pvremove-usage.sh
++++ b/test/shell/pvremove-usage.sh
+@@ -54,14 +54,17 @@ for mdacp in 0 1 2; do
+     vgcreate $vg "$dev1" "$dev2"
  
- 	/* Version 1 is little endian; version 0.90.0 is machine endian */
- 	if (dev_read(dev, sb_offset, sizeof(uint32_t), &md_magic) &&
--	    ((md_magic == xlate32(MD_SB_MAGIC)) ||
--	     (md_magic == MD_SB_MAGIC)))
-+	    ((md_magic == MD_SB_MAGIC) ||
-+	     ((MD_SB_MAGIC != xlate32(MD_SB_MAGIC)) && (md_magic == xlate32(MD_SB_MAGIC)))))
- 		return 1;
+     # pvremove -f fails when pv in a vg (---metadatacopies $mdacp)
+-    not pvremove -f "$dev1"
++    not pvremove -f "$dev1" 2>&1 | tee out
++    grep "belongs" out
+     pvs "$dev1"
  
- 	return 0;
-diff --git a/libdaemon/client/daemon-io.c b/libdaemon/client/daemon-io.c
-index f072764..5419d40 100644
---- a/libdaemon/client/daemon-io.c
-+++ b/libdaemon/client/daemon-io.c
-@@ -49,8 +49,9 @@ int buffer_read(int fd, struct buffer *buffer) {
- 		} else if (result == 0) {
- 			errno = ECONNRESET;
- 			return 0; /* we should never encounter EOF here */
--		} else if (result < 0 && ( errno == EAGAIN || errno == EWOULDBLOCK ||
--					   errno == EINTR || errno == EIO)) {
-+		} else if (result < 0 && (errno == EAGAIN ||
-+					  (EWOULDBLOCK != EAGAIN && errno == EWOULDBLOCK) ||
-+					  errno == EINTR || errno == EIO)) {
- 			fd_set in;
- 			FD_ZERO(&in);
- 			FD_SET(fd, &in);
-@@ -78,8 +79,9 @@ int buffer_write(int fd, const struct buffer *buffer) {
- 			result = write(fd, use->mem + written, use->used - written);
- 			if (result > 0)
- 				written += result;
--			else if (result < 0 && ( errno == EAGAIN || errno == EWOULDBLOCK ||
--						 errno == EINTR || errno == EIO)) {
-+			else if (result < 0 && (errno == EAGAIN ||
-+						(EWOULDBLOCK != EAGAIN && errno == EWOULDBLOCK) ||
-+						errno == EINTR || errno == EIO)) {
- 				fd_set out;
- 				FD_ZERO(&out);
- 				FD_SET(fd, &out);
+     # pvremove -ff fails without confirmation when pv in a vg (---metadatacopies $mdacp)
+-    echo n | not pvremove -ff "$dev1"
++    not pvremove -ff "$dev1" 2>&1 | tee out
++    grep "belongs" out
+ 
+     # pvremove -ff succeds with confirmation when pv in a vg (---metadatacopies $mdacp)
+-    pvremove -ffy "$dev1"
++    pvremove -ffy "$dev1" 2>&1 | tee out
++    grep "belongs" out
+     not pvs "$dev1"
+ 
+     vgreduce --removemissing $vg
 
 
