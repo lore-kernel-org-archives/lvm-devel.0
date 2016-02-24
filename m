@@ -1,45 +1,51 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 23 Feb 2016 21:45:27 +0000 (UTC)
-Subject: master - lvmlockd: fix sparse snapshot case
-Message-ID: <20160223214527.D2AE1605A9@fedorahosted.org>
+Date: Wed, 24 Feb 2016 15:58:20 +0000 (UTC)
+Subject: master - tests: include lvmlockd in default make check
+Message-ID: <20160224155820.B43AA60F99@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e79325308454814d968dd3e06cd261a269716675
-Commit:        e79325308454814d968dd3e06cd261a269716675
-Parent:        79809d6cdc3a1e4dfb4466fc0e10040bd069211d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=77f034bfa3d85600ec9b9581c17352202ce09ae8
+Commit:        77f034bfa3d85600ec9b9581c17352202ce09ae8
+Parent:        e79325308454814d968dd3e06cd261a269716675
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 23 15:44:14 2016 -0600
+AuthorDate:    Tue Feb 23 16:34:46 2016 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Feb 23 15:45:25 2016 -0600
+CommitterDate: Tue Feb 23 16:34:46 2016 -0600
 
-lvmlockd: fix sparse snapshot case
+tests: include lvmlockd in default make check
 
-A snapshot can be created without a real origin LV
-in this case, so there's no lock to use.
 ---
- lib/locking/lvmlockd.c |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+ test/Makefile.in |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index e78e2cb..c55f2b5 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -2331,6 +2331,12 @@ int lockd_init_lv(struct cmd_context *cmd, struct volume_group *vg, struct logic
- 		 * represents itself and all associated cow snapshots.
- 		 */
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 6ed9b9e..98f6cc9 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -54,6 +54,11 @@ LVMPOLLD_NDEV_FLAVOUR = ,ndev-lvmpolld,ndev-cluster-lvmpolld,ndev-lvmetad-lvmpol
+ LVMPOLLD_UDEV_FLAVOUR = ,udev-lvmpolld,udev-cluster-lvmpolld,udev-lvmetad-lvmpolld
+ endif
  
-+		if (!lp->origin_name) {
-+			/* Sparse LV case. We require a lock from the origin LV. */
-+			log_error("Cannot create snapshot without origin LV in shared VG.");
-+			return 0;
-+		}
++ifeq ("@BUILD_LVMLOCKD@", "yes")
++LVMLOCKD_RUN_BASE = $(RUN_BASE)
++LVMLOCKD_UDEV_FLAVOUR = ,udev-lvmlockd-test
++endif
 +
- 		if (!(origin_lv = find_lv(vg, lp->origin_name))) {
- 			log_error("Failed to find origin LV %s/%s", vg->name, lp->origin_name);
- 			return 0;
+ # Shell quote;
+ SHELL_PATH_SQ := $(subst ','\'',$(SHELL_PATH))
+ 
+@@ -112,7 +117,7 @@ help:
+ check: .tests-stamp
+ 	VERBOSE=$(VERBOSE) ./lib/runner \
+ 		--testdir . --outdir $(LVM_TEST_RESULTS) \
+-		--flavours ndev-vanilla,ndev-cluster$(LVMETAD_NDEV_FLAVOUR)$(LVMPOLLD_NDEV_FLAVOUR) --only $(T) --skip $(S)
++		--flavours ndev-vanilla,ndev-cluster$(LVMETAD_NDEV_FLAVOUR)$(LVMPOLLD_NDEV_FLAVOUR)$(LVMLOCKD_UDEV_FLAVOUR) --only $(T) --skip $(S)
+ 
+ check_system: .tests-stamp
+ 	VERBOSE=$(VERBOSE) ./lib/runner \
 
 
