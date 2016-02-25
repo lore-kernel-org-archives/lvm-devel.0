@@ -1,63 +1,127 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sun, 21 Feb 2016 23:38:17 +0000 (UTC)
-Subject: master - pre-release
-Message-ID: <20160221233817.F1FFF60756@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Thu, 25 Feb 2016 22:44:26 +0000 (UTC)
+Subject: master - lvmdbusd: Reduce unnecessary state refreshes
+Message-ID: <20160225224426.CFCF66109C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3ef36f05b6269f752a6d8fb62e098e89843958fa
-Commit:        3ef36f05b6269f752a6d8fb62e098e89843958fa
-Parent:        8b6cad32199dd08d8f56d5f0cec0f5e24928211c
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sun Feb 21 23:17:24 2016 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sun Feb 21 23:17:24 2016 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f1bc68beb4e493a9c1a52750e99d50f874ca89d9
+Commit:        f1bc68beb4e493a9c1a52750e99d50f874ca89d9
+Parent:        045d086a570d327b00a4a06d139b387d059ade60
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Thu Feb 25 14:57:12 2016 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Feb 25 16:43:55 2016 -0600
 
-pre-release
+lvmdbusd: Reduce unnecessary state refreshes
 
+When we use udev or have lvm call back into the dbus service when a
+change occurs, even if that change originated from the dbus service
+we end up refreshing the state of the system twice which is not
+needed or wanted.  This change handles this case by removing any
+pending refreshes in the worker queue if the state of the system
+was just updated.
+
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    2 +-
- WHATS_NEW_DM |    2 +-
- 4 files changed, 4 insertions(+), 4 deletions(-)
+ daemons/lvmdbusd/lvmdb.py |    3 +--
+ daemons/lvmdbusd/main.py  |   43 ++++++++++++++++++++++++++++++++++++-------
+ 2 files changed, 37 insertions(+), 9 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index 3dc718b..b7455e6 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.143(2)-git (2016-02-15)
-+2.02.143(2)-git (2016-02-21)
-diff --git a/VERSION_DM b/VERSION_DM
-index 621718a..505ccd5 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.117-git (2016-02-15)
-+1.02.117-git (2016-02-21)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 654f0a1..9097ce9 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,4 +1,4 @@
--Version 2.02.143 -
-+Version 2.02.143 - 21st February 2016
- =====================================
-   Fix error path when sending thin-pool message fails in update_pool_lv().
-   Support reporting CheckNeeded and Fail state for thin-pool and thin LV.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 984d7fa..f23c541 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,4 +1,4 @@
--Version 1.02.117 - 
-+Version 1.02.117 - 21st February 2016
- =====================================
-   Improve status parsing for thin-pool and thin devices.
+diff --git a/daemons/lvmdbusd/lvmdb.py b/daemons/lvmdbusd/lvmdb.py
+index 46e2099..132bee7 100755
+--- a/daemons/lvmdbusd/lvmdb.py
++++ b/daemons/lvmdbusd/lvmdb.py
+@@ -272,10 +272,9 @@ class DataStore(object):
+ 		:param log  Add debug log entry/exit messages
+ 		:return: None
+ 		"""
+-
++		self.num_refreshes += 1
+ 		if log:
+ 			log_debug("lvmdb - refresh entry")
+-			self.num_refreshes += 1
  
+ 		# Grab everything first then parse it
+ 		_raw_pvs = cmdhandler.pv_retrieve_with_segs()
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index c9211f7..6cabcc4 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -24,11 +24,11 @@ from .manager import Manager
+ from .background import background_reaper
+ import traceback
+ import queue
+-import sys
+ from . import udevwatch
+ from .utils import log_debug
+ import argparse
+ import os
++from .refresh import handle_external_event, event_complete
+ 
+ 
+ class Lvm(objectmanager.ObjectManager):
+@@ -36,6 +36,30 @@ class Lvm(objectmanager.ObjectManager):
+ 		super(Lvm, self).__init__(object_path, BASE_INTERFACE)
+ 
+ 
++def _discard_pending_refreshes():
++	# We just handled a refresh, if we have any in the queue they can be
++	# removed because by definition they are older than the refresh we just did.
++	# As we limit the number of refreshes getting into the queue
++	# we should only ever have one to remove.
++	requests = []
++	while not cfg.worker_q.empty():
++		try:
++			r = cfg.worker_q.get(block=False)
++			if r.method != handle_external_event:
++				requests.append(r)
++			else:
++				# Make sure we make this event complete even though it didn't
++				# run, otherwise no other events will get processed
++				event_complete()
++				break
++		except queue.Empty:
++			break
++
++	# Any requests we removed, but did not discard need to be re-queued
++	for r in requests:
++		cfg.worker_q.put(r)
++
++
+ def process_request():
+ 	while cfg.run.value != 0:
+ 		try:
+@@ -50,16 +74,21 @@ def process_request():
+ 
+ 			end = cfg.db.num_refreshes
+ 
+-			if end - start > 1:
+-				log_debug(
+-					"Inspect method %s for too many refreshes" %
+-					(str(req.method)))
++			num_refreshes = end - start
++
++			if num_refreshes > 0:
++				_discard_pending_refreshes()
++
++				if num_refreshes > 1:
++					log_debug(
++						"Inspect method %s for too many refreshes" %
++						(str(req.method)))
+ 			log_debug("Complete ")
+ 		except queue.Empty:
+ 			pass
+ 		except Exception:
+-			traceback.print_exc(file=sys.stdout)
+-			pass
++			st = traceback.format_exc()
++			utils.log_error("process_request exception: \n%s" % st)
+ 
+ 
+ def main():
 
 
