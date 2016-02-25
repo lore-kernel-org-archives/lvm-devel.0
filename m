@@ -1,181 +1,155 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 25 Feb 2016 15:15:38 +0000 (UTC)
-Subject: master - pvcreate: use the common toollib pv create
-Message-ID: <20160225151538.1B5E861BB7@fedorahosted.org>
+Date: Thu, 25 Feb 2016 15:15:40 +0000 (UTC)
+Subject: master - vgextend: use the common toollib pv create
+Message-ID: <20160225151540.DEE6B61BB7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6a1c22aadf26bfa60782537968d1a03b535cd555
-Commit:        6a1c22aadf26bfa60782537968d1a03b535cd555
-Parent:        71671778ab0b2ae4f9f014b37372939b00e90e1d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=749a7cecf895264bb8b924e2cc091d13cb111965
+Commit:        749a7cecf895264bb8b924e2cc091d13cb111965
+Parent:        6a1c22aadf26bfa60782537968d1a03b535cd555
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 15 14:09:42 2016 -0600
+AuthorDate:    Mon Feb 15 14:28:09 2016 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Thu Feb 25 09:14:09 2016 -0600
 
-pvcreate: use the common toollib pv create
+vgextend: use the common toollib pv create
 
 ---
- tools/pvcreate.c |  143 ++++++++++++++++++++++++++++++++++-------------------
- 1 files changed, 92 insertions(+), 51 deletions(-)
+ tools/vgextend.c |   89 +++++++++++++++++++++++++++++++++--------------------
+ 1 files changed, 55 insertions(+), 34 deletions(-)
 
-diff --git a/tools/pvcreate.c b/tools/pvcreate.c
-index 31657c7..47eb85c 100644
---- a/tools/pvcreate.c
-+++ b/tools/pvcreate.c
-@@ -22,13 +22,10 @@
-  * Output arguments:
-  * pp: structure allocated by caller, fields written / validated here
-  */
--static int pvcreate_restore_params_validate(struct cmd_context *cmd,
--					    int argc, char **argv,
--					    struct pvcreate_params *pp)
-+static int pvcreate_each_restore_params_from_args(struct cmd_context *cmd, int argc,
-+					          struct pvcreate_each_params *pp)
+diff --git a/tools/vgextend.c b/tools/vgextend.c
+index d22f426..2780755 100644
+--- a/tools/vgextend.c
++++ b/tools/vgextend.c
+@@ -16,9 +16,7 @@
+ #include "tools.h"
+ 
+ struct vgextend_params {
+-	struct pvcreate_params pp;
+-	int pv_count;
+-	const char *const *pv_names;
++	struct pvcreate_each_params pp;
+ };
+ 
+ static int _restore_pv(struct volume_group *vg, const char *pv_name)
+@@ -49,14 +47,15 @@ static int _vgextend_restoremissing(struct cmd_context *cmd __attribute__((unuse
+ 				    struct processing_handle *handle)
  {
--	const char *uuid = NULL;
--	struct volume_group *vg;
--	struct pv_list *existing_pvl;
-+	pp->restorefile = arg_str_value(cmd, restorefile_ARG, NULL);
+ 	struct vgextend_params *vp = (struct vgextend_params *) handle->custom_handle;
++	struct pvcreate_each_params *pp = &vp->pp;
+ 	int fixed = 0;
+ 	int i;
  
- 	if (arg_count(cmd, restorefile_ARG) && !arg_count(cmd, uuidstr_ARG)) {
- 		log_error("--uuid is required with --restorefile");
-@@ -48,35 +45,10 @@ static int pvcreate_restore_params_validate(struct cmd_context *cmd,
- 		return 0;
- 	}
+ 	if (!archive(vg))
+ 		return_0;
  
-- 	if (arg_count(cmd, uuidstr_ARG)) {
--		uuid = arg_str_value(cmd, uuidstr_ARG, "");
--		if (!id_read_format(&pp->rp.id, uuid))
--			return 0;
--		pp->rp.idp = &pp->rp.id;
--		lvmcache_seed_infos_from_lvmetad(cmd); /* need to check for UUID dups */
+-	for (i = 0; i < vp->pv_count; i++)
+-		if (_restore_pv(vg, vp->pv_names[i]))
++	for (i = 0; i < pp->pv_count; i++)
++		if (_restore_pv(vg, pp->pv_names[i]))
+ 			fixed++;
+ 
+ 	if (!fixed) {
+@@ -78,7 +77,7 @@ static int _vgextend_single(struct cmd_context *cmd, const char *vg_name,
+ 			    struct volume_group *vg, struct processing_handle *handle)
+ {
+ 	struct vgextend_params *vp = (struct vgextend_params *) handle->custom_handle;
+-	struct pvcreate_params *pp = &vp->pp;
++	struct pvcreate_each_params *pp = &vp->pp;
+ 	uint32_t mda_copies;
+ 	uint32_t mda_used;
+ 	int ret = ECMD_FAILED;
+@@ -94,12 +93,7 @@ static int _vgextend_single(struct cmd_context *cmd, const char *vg_name,
+ 	if (!archive(vg))
+ 		return_ECMD_FAILED;
+ 
+-	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
+-		log_error("Can't get lock for orphan PVs");
+-		return ECMD_FAILED;
 -	}
 -
--	if (arg_count(cmd, restorefile_ARG)) {
--		pp->rp.restorefile = arg_str_value(cmd, restorefile_ARG, "");
--		/* The uuid won't already exist */
--		if (!(vg = backup_read_vg(cmd, NULL, pp->rp.restorefile))) {
--			log_error("Unable to read volume group from %s",
--				  pp->rp.restorefile);
-+	if (arg_count(cmd, uuidstr_ARG)) {
-+		pp->uuid_str = arg_str_value(cmd, uuidstr_ARG, "");
-+		if (!id_read_format(&pp->id, pp->uuid_str))
- 			return 0;
--		}
--		if (!(existing_pvl = find_pv_in_vg_by_uuid(vg, pp->rp.idp))) {
--			release_vg(vg);
--			log_error("Can't find uuid %s in backup file %s",
--				  uuid, pp->rp.restorefile);
--			return 0;
--		}
--		pp->rp.ba_start = pv_ba_start(existing_pvl->pv);
--		pp->rp.ba_size = pv_ba_size(existing_pvl->pv);
--		pp->rp.pe_start = pv_pe_start(existing_pvl->pv);
--		pp->rp.extent_size = pv_pe_size(existing_pvl->pv);
--		pp->rp.extent_count = pv_pe_count(existing_pvl->pv);
--
--		release_vg(vg);
+-	if (!vg_extend(vg, vp->pv_count, vp->pv_names, pp))
++	if (!vg_extend_each_pv(vg, pp))
+ 		goto_out;
+ 
+ 	if (arg_count(cmd, metadataignore_ARG)) {
+@@ -114,7 +108,7 @@ static int _vgextend_single(struct cmd_context *cmd, const char *vg_name,
+ 		}
  	}
  
- 	if (arg_sign_value(cmd, physicalvolumesize_ARG, SIGN_NONE) == SIGN_MINUS) {
-@@ -90,34 +62,103 @@ static int pvcreate_restore_params_validate(struct cmd_context *cmd,
- 	return 1;
+-	log_verbose("Volume group \"%s\" will be extended by %d new physical volumes", vg_name, vp->pv_count);
++	log_verbose("Volume group \"%s\" will be extended by %d new physical volumes", vg_name, pp->pv_count);
+ 
+ 	if (!vg_write(vg) || !vg_commit(vg))
+ 		goto_out;
+@@ -123,19 +117,17 @@ static int _vgextend_single(struct cmd_context *cmd, const char *vg_name,
+ 
+ 	log_print_unless_silent("Volume group \"%s\" successfully extended", vg_name);
+ 	ret = ECMD_PROCESSED;
+-
+ out:
+-	unlock_vg(cmd, VG_ORPHANS);
+-
+ 	return ret;
  }
  
-+static int pvcreate_each_restore_params_from_backup(struct cmd_context *cmd,
-+					            struct pvcreate_each_params *pp)
-+{
-+	struct volume_group *vg;
-+	struct pv_list *existing_pvl;
-+
-+	/*
-+	 * When restoring a PV, params need to be read from a backup file.
-+	 */
-+	if (!pp->restorefile)
-+		return 1;
-+
-+	if (!(vg = backup_read_vg(cmd, NULL, pp->restorefile))) {
-+		log_error("Unable to read volume group from %s", pp->restorefile);
-+		return 0;
-+	}
-+
-+	if (!(existing_pvl = find_pv_in_vg_by_uuid(vg, &pp->id))) {
-+		release_vg(vg);
-+		log_error("Can't find uuid %s in backup file %s",
-+			  pp->uuid_str, pp->restorefile);
-+		return 0;
-+	}
-+
-+	pp->ba_start = pv_ba_start(existing_pvl->pv);
-+	pp->ba_size = pv_ba_size(existing_pvl->pv);
-+	pp->pe_start = pv_pe_start(existing_pvl->pv);
-+	pp->extent_size = pv_pe_size(existing_pvl->pv);
-+	pp->extent_count = pv_pe_count(existing_pvl->pv);
-+
-+	release_vg(vg);
-+	return 1;
-+}
-+
- int pvcreate(struct cmd_context *cmd, int argc, char **argv)
+ int vgextend(struct cmd_context *cmd, int argc, char **argv)
  {
--	int i;
--	int ret = ECMD_PROCESSED;
--	struct pvcreate_params pp;
 +	struct processing_handle *handle;
-+	struct pvcreate_each_params pp;
-+	int ret;
+ 	struct vgextend_params vp;
++	struct pvcreate_each_params *pp = &vp.pp;
+ 	unsigned restoremissing = arg_is_set(cmd, restoremissing_ARG);
+-	struct processing_handle *handle;
+-	const char *one_vgname;
++	const char *vg_name;
+ 	int ret;
  
--	/* Needed to change the set of orphan PVs. */
--	if (!lockd_gl(cmd, "ex", 0))
--		return_ECMD_FAILED;
-+	if (!argc) {
-+		log_error("Please enter a physical volume path.");
-+		return 0;
-+	}
+ 	if (!argc) {
+@@ -144,27 +136,56 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
  
--	pvcreate_params_set_defaults(&pp);
-+	/*
-+	 * Device info needs to be available for reading the VG backup file in
-+	 * pvcreate_each_restore_params_from_backup.
-+	 */
-+	lvmcache_seed_infos_from_lvmetad(cmd);
-+
-+	/*
-+	 * Five kinds of pvcreate param values:
-+	 * 1. defaults
-+	 * 2. recovery-related command line args
-+	 * 3. recovery-related args from backup file
-+	 * 4. normal command line args
-+	 *    (this also checks some settings from 2 & 3)
-+	 * 5. argc/argv free args specifying devices
-+	 */
-+
-+	pvcreate_each_params_set_defaults(&pp);
-+
-+	if (!pvcreate_each_restore_params_from_args(cmd, argc, &pp))
+-	one_vgname = skip_dev_dir(cmd, argv[0], NULL);
+-
+ 	if (arg_count(cmd, metadatacopies_ARG)) {
+ 		log_error("Invalid option --metadatacopies, "
+ 			  "use --pvmetadatacopies instead.");
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	pvcreate_params_set_defaults(&vp.pp);
+-	vp.pv_count = argc - 1;
+-	vp.pv_names = (const char* const*)(argv + 1);
++	vg_name = skip_dev_dir(cmd, argv[0], NULL);
++	argc--;
++	argv++;
+ 
+-	if (!pvcreate_params_validate(cmd, vp.pv_count, &vp.pp))
+-		return_EINVALID_CMD_LINE;
++	pvcreate_each_params_set_defaults(pp);
+ 
+-        if (!(handle = init_processing_handle(cmd))) {
+-                log_error("Failed to initialize processing handle.");
+-                return ECMD_FAILED;
+-        }
++	if (!pvcreate_each_params_from_args(cmd, pp))
 +		return EINVALID_CMD_LINE;
  
--	if (!pvcreate_restore_params_validate(cmd, argc, argv, &pp)) {
-+	if (!pvcreate_each_restore_params_from_backup(cmd, &pp))
- 		return EINVALID_CMD_LINE;
--	}
--	if (!pvcreate_params_validate(cmd, argc, &pp)) {
+-	handle->custom_handle = &vp;
++	pp->pv_count = argc;
++	pp->pv_names = argv;
 +
-+	if (!pvcreate_each_params_from_args(cmd, &pp))
- 		return EINVALID_CMD_LINE;
--	}
- 
--	for (i = 0; i < argc; i++) {
--		if (sigint_caught())
--			return_ECMD_FAILED;
-+	pp.pv_count = argc;
-+	pp.pv_names = argv;
- 
--		dm_unescape_colons_and_at_signs(argv[i], NULL, NULL);
++	/* Don't create a new PV on top of an existing PV like pvcreate does. */
++	pp->preserve_existing = 1;
++
++	/* pvcreate within vgextend cannot be forced. */
++	pp->force = 0;
++
 +	/*
 +	 * Needed to change the set of orphan PVs.
 +	 * (disable afterward to prevent process_each_pv from doing
@@ -189,18 +163,40 @@ index 31657c7..47eb85c 100644
 +		log_error("Failed to initialize processing handle.");
 +		return ECMD_FAILED;
 +	}
++
++	if (!restoremissing) {
++		if (!pvcreate_each_device(cmd, handle, pp)) {
++			destroy_processing_handle(cmd, handle);
++			return_ECMD_FAILED;
++		}
++	}
++
++	/*
++	 * pvcreate_each_device returns with the VG_ORPHANS write lock held,
++	 * which was used to do pvcreate.  Now to create the VG using those
++	 * PVs, the VG lock will be taken (with the orphan lock already held.)
++	 */
  
--		if (!pvcreate_single(cmd, argv[i], &pp))
--			ret = ECMD_FAILED;
-+	if (!pvcreate_each_device(cmd, handle, &pp))
-+		ret = ECMD_FAILED;
-+	else {
-+		/* pvcreate_each_device returns with orphans locked */
+ 	/*
+ 	 * It is always ok to add new PVs to a VG - even if there are
+@@ -174,15 +195,15 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
+ 	 */
+ 	cmd->handles_missing_pvs = 1;
+ 
+-	/* Needed to change the set of orphan PVs. */
+-	if (!lockd_gl(cmd, "ex", 0))
+-		return_ECMD_FAILED;
++	handle->custom_handle = &vp;
+ 
+-	ret = process_each_vg(cmd, 0, NULL, one_vgname,
++	ret = process_each_vg(cmd, 0, NULL, vg_name,
+ 			      READ_FOR_UPDATE, handle,
+ 			      restoremissing ? &_vgextend_restoremissing : &_vgextend_single);
+ 
+ 	destroy_processing_handle(cmd, handle);
+ 
++	if (!restoremissing)
 +		unlock_vg(cmd, VG_ORPHANS);
-+		ret = ECMD_PROCESSED;
- 	}
- 
-+	destroy_processing_handle(cmd, handle);
  	return ret;
  }
 
