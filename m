@@ -1,41 +1,44 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 29 Feb 2016 18:44:13 +0000 (UTC)
-Subject: master - tests: check [unknown] in lvmetad-pvscan-cache
-Message-ID: <20160229184413.6589E613D5@fedorahosted.org>
+Date: Mon, 29 Feb 2016 19:50:51 +0000 (UTC)
+Subject: master - update WHATS_NEW
+Message-ID: <20160229195051.E557D60F4A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e3b904fd08712cf71a2248f72dd2be5b42039282
-Commit:        e3b904fd08712cf71a2248f72dd2be5b42039282
-Parent:        250b915364735a7a9a5e476b542041eb93f5017f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b2d819eafac630cc683c5fdf02730a636dd9bff6
+Commit:        b2d819eafac630cc683c5fdf02730a636dd9bff6
+Parent:        e3b904fd08712cf71a2248f72dd2be5b42039282
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 29 12:43:07 2016 -0600
+AuthorDate:    Mon Feb 29 13:50:02 2016 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 29 12:43:07 2016 -0600
+CommitterDate: Mon Feb 29 13:50:02 2016 -0600
 
-tests: check [unknown] in lvmetad-pvscan-cache
+update WHATS_NEW
 
-Update test for new [unknown] VG name from
-commit 250b9153.
+including changes not recorded for the previous release.
 ---
- test/shell/lvmetad-pvscan-cache.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvmetad-pvscan-cache.sh b/test/shell/lvmetad-pvscan-cache.sh
-index 22c9b5e..501eec5 100644
---- a/test/shell/lvmetad-pvscan-cache.sh
-+++ b/test/shell/lvmetad-pvscan-cache.sh
-@@ -32,7 +32,7 @@ vgs | grep $vg1
- pvchange --metadataignore y "$dev1"
- aux disable_dev "$dev2"
- pvscan --cache
--check pv_field "$dev1" vg_name ""
-+check pv_field "$dev1" vg_name "[unknown]"
- aux enable_dev "$dev2"
- pvscan --cache
- check pv_field "$dev1" vg_name "$vg1"
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 77b0a40..507e028 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,8 +1,12 @@
+ Version 2.02.145 - 
+ =====================================
++  Display [unknown] instead of blank for unknown VG names in pvs output.
+ 
+ Version 2.02.144 - 26th February 2016
+ =====================================
++  Use new PV processing code in pvcreate/vgcreate/vgextend/pvremove.
++  Add new PV processing code that prompts user without locks held.
++  Prevent lvmlockd blocking with new flag requiring sanlock 3.3.0.
+   Only show (u)sed pv_attr char when PV is not (a)llocatable. (2.02.143)
+   Update makefile to generate lcov output also for lvmpolld and lvmlockd.
+   Fix SystemdService lvm2-lvmdbusd.service name.
 
 
