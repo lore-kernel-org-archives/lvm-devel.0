@@ -1,52 +1,50 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2012 09:14:26 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20120125091426.31531.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue,  1 Mar 2016 13:03:12 +0000 (UTC)
+Subject: master - coverity: missing error path
+Message-ID: <20160301130312.5864A60DA1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-25 09:14:25
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8173c2ff9af805a1f8eb79fb4bd223622f79ad0d
+Commit:        8173c2ff9af805a1f8eb79fb4bd223622f79ad0d
+Parent:        b2d819eafac630cc683c5fdf02730a636dd9bff6
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Mar 1 11:40:53 2016 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 1 14:02:43 2016 +0100
 
-Modified files:
-	lib/metadata   : lv_manip.c 
+coverity: missing error path
 
-Log message:
-	Thin use  suspend/resume_lv_origin
-	
-	Use origin_only support for thin volume when thin snapshot is created.
+---
+ WHATS_NEW       |    1 +
+ tools/toollib.c |    1 +
+ 2 files changed, 2 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.350&r2=1.351
-
---- LVM2/lib/metadata/lv_manip.c	2012/01/25 09:02:35	1.350
-+++ LVM2/lib/metadata/lv_manip.c	2012/01/25 09:14:25	1.351
-@@ -4354,16 +4354,17 @@
- 					  "the autoextend threshold (%d%%).", percent);
- 				goto revert_new_lv;
- 			}
--			if (!suspend_lv(cmd, org)) {
--				log_error("Failed to suspend thin origin %s.",
-+			if (!suspend_lv_origin(cmd, org)) {
-+				log_error("Failed to suspend thin snapshot origin %s.",
- 					  org->name);
- 				goto revert_new_lv;
--			} else if (!resume_lv(cmd, org)) {
--				log_error("Failed to resume thin origin %s.",
-+			}
-+			if (!resume_lv_origin(cmd, org)) { /* deptree updates thin-pool */
-+				log_error("Failed to resume thin snapshot origin %s.",
- 					  org->name);
- 				goto revert_new_lv;
- 			}
--			/* At this point snapshot is active in kernel thin mda */
-+			/* At this point remove pool messages, snapshot is active */
- 			if (!update_pool_lv(first_seg(org)->pool_lv, 0)) {
- 				stack;
- 				goto deactivate_and_revert_new_lv;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 507e028..3494455 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.145 - 
+ =====================================
++  Fix error path when pvcreate allocation fails (2.02.144).
+   Display [unknown] instead of blank for unknown VG names in pvs output.
+ 
+ Version 2.02.144 - 26th February 2016
+diff --git a/tools/toollib.c b/tools/toollib.c
+index dd5ece3..dbb6d40 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -4406,6 +4406,7 @@ do_command:
+ 		if (!(pvl = dm_pool_alloc(cmd->mem, sizeof(*pvl)))) {
+ 			log_error("alloc pvl failed");
+ 			dm_list_move(&pp->arg_fail, &pd->list);
++			continue;
+ 		}
+ 
+ 		pv_name = pd->name;
 
 
