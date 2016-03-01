@@ -1,50 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  1 Mar 2016 13:03:12 +0000 (UTC)
-Subject: master - coverity: missing error path
-Message-ID: <20160301130312.5864A60DA1@fedorahosted.org>
+Date: Tue,  1 Mar 2016 13:03:14 +0000 (UTC)
+Subject: master - coverity: eliminate DEADCODE
+Message-ID: <20160301130314.70E0360DAC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8173c2ff9af805a1f8eb79fb4bd223622f79ad0d
-Commit:        8173c2ff9af805a1f8eb79fb4bd223622f79ad0d
-Parent:        b2d819eafac630cc683c5fdf02730a636dd9bff6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=36d0dcef38ec3ce89f3c13be272efc69f981b207
+Commit:        36d0dcef38ec3ce89f3c13be272efc69f981b207
+Parent:        8173c2ff9af805a1f8eb79fb4bd223622f79ad0d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 1 11:40:53 2016 +0100
+AuthorDate:    Tue Mar 1 13:58:15 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 1 14:02:43 2016 +0100
 
-coverity: missing error path
+coverity: eliminate DEADCODE
 
+Coverity notice this cannot be NULL: cur = &dms->regions[*cur_r]
+so avoid NULL checking and simplify form.
 ---
- WHATS_NEW       |    1 +
- tools/toollib.c |    1 +
- 2 files changed, 2 insertions(+), 0 deletions(-)
+ libdm/libdm-stats.c |    6 ++----
+ 1 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 507e028..3494455 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.145 - 
- =====================================
-+  Fix error path when pvcreate allocation fails (2.02.144).
-   Display [unknown] instead of blank for unknown VG names in pvs output.
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 82d3fa5..1dce3eb 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -957,15 +957,13 @@ bad:
+ static void _stats_walk_next(const struct dm_stats *dms, int region,
+ 			     uint64_t *cur_r, uint64_t *cur_a)
+ {
+-	struct dm_stats_region *cur = NULL;
++	struct dm_stats_region *cur;
+ 	int present;
  
- Version 2.02.144 - 26th February 2016
-diff --git a/tools/toollib.c b/tools/toollib.c
-index dd5ece3..dbb6d40 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -4406,6 +4406,7 @@ do_command:
- 		if (!(pvl = dm_pool_alloc(cmd->mem, sizeof(*pvl)))) {
- 			log_error("alloc pvl failed");
- 			dm_list_move(&pp->arg_fail, &pd->list);
-+			continue;
- 		}
+ 	if (!dms || !dms->regions)
+ 		return;
  
- 		pv_name = pd->name;
+-	if (!(cur = &dms->regions[*cur_r]))
+-		return;
+-
++	cur = dms->regions + *cur_r;
+ 	present = _stats_region_present(cur);
+ 
+ 	if (region && present)
 
 
