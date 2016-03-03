@@ -1,53 +1,78 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  3 Mar 2016 13:20:03 +0000 (UTC)
-Subject: master - report: display (h)istorical state in lv_attr field
-Message-ID: <20160303132003.893876024B@fedorahosted.org>
+Date: Thu,  3 Mar 2016 13:20:05 +0000 (UTC)
+Subject: master - report: report historical LV names with '-' prefix
+Message-ID: <20160303132005.A2A32602AD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8b9953e8c59ef4c3ced277cc40b8bb5006a24161
-Commit:        8b9953e8c59ef4c3ced277cc40b8bb5006a24161
-Parent:        2af59715235dedb0ab9f1768d6bbccfdc5d28d02
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f228750386ae4b5b00375e1a14139b53f86f9cca
+Commit:        f228750386ae4b5b00375e1a14139b53f86f9cca
+Parent:        8b9953e8c59ef4c3ced277cc40b8bb5006a24161
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 1 15:23:58 2016 +0100
+AuthorDate:    Tue Mar 1 15:24:07 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Thu Mar 3 13:49:15 2016 +0100
 
-report: display (h)istorical state in lv_attr field
+report: report historical LV names with '-' prefix
 
-The 'historical' state is displayed as 5th bit ("state") in the lv_attr
-field and denoted by new 'h' character.
+All names for historical LVs are prefixed with '-' character to make clear
+difference between live and historical LVs. The '-' can't be set by users
+for live LV names during lvcreate hence we never get into a conflict with
+the names that user defines for live LVs.
 ---
- lib/metadata/lv.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ lib/report/report.c |   23 ++++++++++++++++-------
+ 1 files changed, 16 insertions(+), 7 deletions(-)
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index ab937c4..9e9549d 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -1040,7 +1040,7 @@ char *lv_attr_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 8ef8eaf..dfc76bc 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -1685,27 +1685,36 @@ static int _lvname_disp(struct dm_report *rh, struct dm_pool *mem,
+ {
+ 	struct cmd_context *cmd = (struct cmd_context *) private;
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
++	int is_historical = lv_is_historical(lv);
++	const char *tmp_lvname;
+ 	char *repstr, *lvname;
+ 	size_t len;
+ 
+-	if (lv_is_historical(lv))
+-		return _string_disp(rh, mem, field, &lv->this_glv->historical->name, private);
+-
+-	if (lv_is_visible(lv) || !cmd->report_mark_hidden_devices)
++	if (!is_historical && (lv_is_visible(lv) || !cmd->report_mark_hidden_devices))
+ 		return _field_string(rh, field, lv->name);
+ 
+-	len = strlen(lv->name) + 3;
++	if (is_historical) {
++		tmp_lvname = lv->this_glv->historical->name;
++		len = strlen(tmp_lvname) + strlen(HISTORICAL_LV_PREFIX) + 1;
++	} else {
++		tmp_lvname = lv->name;
++		len = strlen(tmp_lvname) + 3;
++	}
++
+ 	if (!(repstr = dm_pool_zalloc(mem, len))) {
+ 		log_error("dm_pool_alloc failed");
+ 		return 0;
  	}
  
- 	/* Blank if this is a "free space" LV. */
--	if (!*lv->name)
-+	if (!*lv->name && !lv_is_historical(lv))
- 		goto out;
+-	if (dm_snprintf(repstr, len, "[%s]", lv->name) < 0) {
++	if (dm_snprintf(repstr, len, "%s%s%s",
++			is_historical ? HISTORICAL_LV_PREFIX : "[",
++			tmp_lvname,
++			is_historical ? "" : "]") < 0) {
+ 		log_error("lvname snprintf failed");
+ 		return 0;
+ 	}
  
- 	if (lv_is_pvmove(lv))
-@@ -1104,7 +1104,10 @@ char *lv_attr_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_
- 
- 	repstr[3] = (lv->status & FIXED_MINOR) ? 'm' : '-';
- 
--	if (!activation() || !lvdm->info_ok) {
-+	if (lv_is_historical(lv)) {
-+		repstr[4] = 'h';
-+		repstr[5] = '-';
-+	} else if (!activation() || !lvdm->info_ok) {
- 		repstr[4] = 'X';		/* Unknown */
- 		repstr[5] = 'X';		/* Unknown */
- 	} else if (lvdm->info.exists) {
+-	if (!(lvname = dm_pool_strdup(mem, lv->name))) {
++	if (!(lvname = dm_pool_strdup(mem, tmp_lvname))) {
+ 		log_error("dm_pool_strdup failed");
+ 		return 0;
+ 	}
 
 
