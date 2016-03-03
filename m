@@ -1,73 +1,47 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  3 Mar 2016 13:20:11 +0000 (UTC)
-Subject: master - report: add new 'none' lv_layout and 'history' lv_role and mark historical LVs that way
-Message-ID: <20160303132011.E6B00602AD@fedorahosted.org>
+Date: Thu,  3 Mar 2016 13:20:18 +0000 (UTC)
+Subject: master - commands: lvremove: recognize --nohistory option
+Message-ID: <20160303132018.CC9E160308@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8f47119f6fb00b685d3a631ca9464ab940ee256a
-Commit:        8f47119f6fb00b685d3a631ca9464ab940ee256a
-Parent:        0339a5f447f8d0b12bb874f19e84427849b33674
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b1399090cd7db6d16e10ddf0a7b0ca72e254c63c
+Commit:        b1399090cd7db6d16e10ddf0a7b0ca72e254c63c
+Parent:        f545dd5952ee0b191ae2cda2d7b6f304442debab
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 1 15:25:04 2016 +0100
+AuthorDate:    Tue Mar 1 15:25:37 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Thu Mar 3 13:49:15 2016 +0100
 
-report: add new 'none' lv_layout and 'history' lv_role and mark historical LVs that way
+commands: lvremove: recognize --nohistory option
 
-Report proper values for historical LVs in lv_layout and lv_role fields.
-Any historical LV doesn't have any layout anymore and the role is "history".
-
-For example:
-
-$ lvs -H -o name,lv_attr,lv_layout,lv_role vg/-lvol1
-  LV     Attr       Layout     Role
-  -lvol1 ----h----- none       public,history
 ---
- lib/metadata/lv_manip.c |   10 ++++++++++
- 1 files changed, 10 insertions(+), 0 deletions(-)
+ tools/commands.h |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index ed46ad3..e355cc4 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -84,8 +84,10 @@ struct lv_names {
+diff --git a/tools/commands.h b/tools/commands.h
+index ffc15b5..97f7de1 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -598,6 +598,7 @@ xx(lvremove,
+    "\t[-d|--debug]\n"
+    "\t[-f|--force]\n"
+    "\t[-h|--help]\n"
++   "\t[--nohistory]\n"
+    "\t[--noudevsync]\n"
+    "\t[-S|--select Selection]\n"
+    "\t[-t|--test]\n"
+@@ -605,7 +606,7 @@ xx(lvremove,
+    "\t[--version]\n"
+    "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
  
- enum {
- 	LV_TYPE_UNKNOWN,
-+	LV_TYPE_NONE,
- 	LV_TYPE_PUBLIC,
- 	LV_TYPE_PRIVATE,
-+	LV_TYPE_HISTORY,
- 	LV_TYPE_LINEAR,
- 	LV_TYPE_STRIPED,
- 	LV_TYPE_MIRROR,
-@@ -130,8 +132,10 @@ enum {
+-   autobackup_ARG, force_ARG, noudevsync_ARG, select_ARG, test_ARG)
++   autobackup_ARG, force_ARG, nohistory_ARG, noudevsync_ARG, select_ARG, test_ARG)
  
- static const char *_lv_type_names[] = {
- 	[LV_TYPE_UNKNOWN] =				"unknown",
-+	[LV_TYPE_NONE] =				"none",
- 	[LV_TYPE_PUBLIC] =				"public",
- 	[LV_TYPE_PRIVATE] =				"private",
-+	[LV_TYPE_HISTORY] =				"history",
- 	[LV_TYPE_LINEAR] =				"linear",
- 	[LV_TYPE_STRIPED] =				"striped",
- 	[LV_TYPE_MIRROR] =				"mirror",
-@@ -472,6 +476,12 @@ int lv_layout_and_role(struct dm_pool *mem, const struct logical_volume *lv,
- 		goto bad;
- 	}
- 
-+	if (lv_is_historical(lv)) {
-+		if (!str_list_add_no_dup_check(mem, *layout, _lv_type_names[LV_TYPE_NONE]) ||
-+		    !str_list_add_no_dup_check(mem, *role, _lv_type_names[LV_TYPE_HISTORY]))
-+			goto_bad;
-+	}
-+
- 	/* Mirrors and related */
- 	if ((lv_is_mirror_type(lv) || lv_is_pvmove(lv)) &&
- 	    !_lv_layout_and_role_mirror(mem, lv, *layout, *role, &public_lv))
+ xx(lvrename,
+    "Rename a logical volume",
 
 
