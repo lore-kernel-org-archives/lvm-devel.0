@@ -1,117 +1,77 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  3 Mar 2016 13:20:27 +0000 (UTC)
-Subject: master - metadata: add vg_strip_outdated_historical_lvs fn and call it during VG read
-Message-ID: <20160303132027.3D29E60308@fedorahosted.org>
+Date: Thu,  3 Mar 2016 13:20:29 +0000 (UTC)
+Subject: master - conf: add metadata/lvs_history_timeout configuration setting
+Message-ID: <20160303132029.4D0E860310@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=74272e163de8c62208d6de41d15631cf3ecf0b2c
-Commit:        74272e163de8c62208d6de41d15631cf3ecf0b2c
-Parent:        53b064b9aed3bd2237638cab778b3bffd018ce08
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ff6e124a338d1dbdde3b6280784d599e504378ef
+Commit:        ff6e124a338d1dbdde3b6280784d599e504378ef
+Parent:        74272e163de8c62208d6de41d15631cf3ecf0b2c
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 1 15:27:21 2016 +0100
+AuthorDate:    Tue Mar 1 15:29:27 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Thu Mar 3 13:50:59 2016 +0100
 
-metadata: add vg_strip_outdated_historical_lvs fn and call it during VG read
+conf: add metadata/lvs_history_timeout configuration setting
 
-The vg_strip_outdated_historical_lvs iterates over the list of historical LVs
-we have and it shoots down the ones which are outdated.
-
-Configuration hook to set the timeout will be in subsequent patch.
 ---
- lib/metadata/metadata-exported.h |    2 +
- lib/metadata/metadata.c          |   39 +++++++++++++++++++++++++++++++++++++-
- 2 files changed, 40 insertions(+), 1 deletions(-)
+ lib/config/config_settings.h |    5 +++++
+ lib/config/defaults.h        |    1 +
+ lib/metadata/metadata.c      |    3 ++-
+ 3 files changed, 8 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index d81166d..dc95995 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1298,4 +1298,6 @@ int is_lockd_type(const char *lock_type);
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index b093351..1291109 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -1367,6 +1367,11 @@ cfg(metadata_record_lvs_history_CFG, "record_lvs_history", metadata_CFG_SECTION,
+ 	"information kept in metadata for live LVs. Currently, this\n"
+ 	"feature is supported for thin and thin snapshot LVs only.\n")
  
- int is_system_id_allowed(struct cmd_context *cmd, const char *system_id);
- 
-+int vg_strip_outdated_historical_lvs(struct volume_group *vg);
++cfg(metadata_lvs_history_retention_time_CFG, "lvs_history_retention_time", metadata_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_LVS_HISTORY_RETENTION_TIME, vsn(2, 2, 145), NULL, 0, NULL,
++	"Retention time in seconds after which a record about individual\n"
++	"historical logical volume is automatically destroyed.\n"
++	"A value of 0 disables this feature.\n")
 +
- #endif
+ cfg(metadata_pvmetadatacopies_CFG, "pvmetadatacopies", metadata_CFG_SECTION, CFG_ADVANCED | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_PVMETADATACOPIES, vsn(1, 0, 0), NULL, 0, NULL,
+ 	"Number of copies of metadata to store on each PV.\n"
+ 	"The --pvmetadatacopies option overrides this setting.\n"
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 6c7060a..fd7986c 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -129,6 +129,7 @@
+ 
+ #define DEFAULT_STRIPESIZE 64	/* KB */
+ #define DEFAULT_RECORD_LVS_HISTORY 0
++#define DEFAULT_LVS_HISTORY_RETENTION_TIME 0
+ #define DEFAULT_PVMETADATAIGNORE 0
+ #define DEFAULT_PVMETADATASIZE 255
+ #define DEFAULT_PVMETADATACOPIES 1
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index c37c7ba..417629b 100644
+index 417629b..a5cb15a 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -3930,6 +3930,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 	int inconsistent_pvs = 0;
- 	int inconsistent_mdas = 0;
- 	int inconsistent_mda_count = 0;
-+	int strip_historical_lvs = *consistent;
- 	unsigned use_precommitted = precommitted;
- 	struct dm_list *pvids;
- 	struct pv_list *pvl;
-@@ -3965,6 +3966,10 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 				lvmetad_vg_clear_outdated_pvs(correct_vg);
-                         }
- 		}
-+
-+		if (correct_vg && strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg))
-+			return_NULL;
-+
- 		return correct_vg;
- 	}
- 
-@@ -4405,6 +4410,10 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 	}
- 
- 	*consistent = !inconsistent_pvs;
-+
-+	if (*consistent && correct_vg && strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg))
-+		return_NULL;
-+
- 	return correct_vg;
- }
- 
-@@ -4451,7 +4460,6 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
+@@ -4460,6 +4460,7 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
  			goto out;
  		}
  	}
--
++
  out:
  	if (!*consistent && (warn_flags & WARN_INCONSISTENT)) {
  		if (is_orphan_vg(vgname))
-@@ -6002,3 +6010,32 @@ int is_lockd_type(const char *lock_type)
- 	return 0;
- }
+@@ -6013,7 +6014,7 @@ int is_lockd_type(const char *lock_type)
+ int vg_strip_outdated_historical_lvs(struct volume_group *vg) {
+ 	struct glv_list *glvl, *tglvl;
+ 	time_t current_time = time(NULL);
+-	uint64_t threshold = 0;
++	uint64_t threshold = find_config_tree_int(vg->cmd, metadata_lvs_history_retention_time_CFG, NULL);
  
-+int vg_strip_outdated_historical_lvs(struct volume_group *vg) {
-+	struct glv_list *glvl, *tglvl;
-+	time_t current_time = time(NULL);
-+	uint64_t threshold = 0;
-+
-+	if (!threshold)
-+		return 1;
-+
-+	dm_list_iterate_items_safe(glvl, tglvl, &vg->historical_lvs) {
-+		/*
-+		 * Removal time in the future? Not likely,
-+		 * but skip this item in any case.
-+		*/
-+		if ((current_time) < glvl->glv->historical->timestamp_removed)
-+			continue;
-+
-+		if ((current_time - glvl->glv->historical->timestamp_removed) > threshold) {
-+			if (!historical_glv_remove(glvl->glv)) {
-+				log_error("Failed to destroy record about historical LV %s/%s.",
-+					  vg->name, glvl->glv->historical->name);
-+				return 0;
-+			}
-+			log_verbose("Outdated record for historical logical volume \"%s\" "
-+				    "automatically destroyed.", glvl->glv->historical->name);
-+		}
-+	}
-+
-+	return 1;
-+}
+ 	if (!threshold)
+ 		return 1;
 
 
