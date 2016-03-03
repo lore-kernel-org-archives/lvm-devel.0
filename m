@@ -1,184 +1,116 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  3 Mar 2016 13:20:35 +0000 (UTC)
-Subject: master - metadata: also validate historical LVs in VG in vg_validate and check_lv_segments
-Message-ID: <20160303132035.9F58660310@fedorahosted.org>
+Date: Thu,  3 Mar 2016 13:20:37 +0000 (UTC)
+Subject: master - metadata: automatically remove invalid (dangling) historical LVs
+Message-ID: <20160303132037.BE5B560310@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1297b0c8bef38a9269186ca26d6827560ce0fddf
-Commit:        1297b0c8bef38a9269186ca26d6827560ce0fddf
-Parent:        fc628e92ba1b403988a0b058d0d3283d23bab5bf
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8a601454e178c72b39be66365eaa153d69d4ed40
+Commit:        8a601454e178c72b39be66365eaa153d69d4ed40
+Parent:        1297b0c8bef38a9269186ca26d6827560ce0fddf
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 1 15:32:01 2016 +0100
+AuthorDate:    Wed Mar 2 12:19:07 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Thu Mar 3 13:50:59 2016 +0100
 
-metadata: also validate historical LVs in VG in vg_validate and check_lv_segments
+metadata: automatically remove invalid (dangling) historical LVs
 
+Historical LV is valid as long as there is at least one live LV among
+its ancestors. If we find any invalid (dangling) historical LVs, remove
+them automatically.
 ---
- lib/metadata/merge.c    |   20 +++++++++++
- lib/metadata/metadata.c |   88 +++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 108 insertions(+), 0 deletions(-)
+ lib/metadata/lv.h       |    2 ++
+ lib/metadata/metadata.c |   47 ++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 48 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index a36cafd..17227c1 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -80,6 +80,7 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
- 	unsigned seg_count = 0, seg_found;
- 	uint32_t area_multiplier, s;
- 	struct seg_list *sl;
-+	struct glv_list *glvl;
- 	int error_count = 0;
- 	struct replicator_site *rsite;
- 	struct replicator_device *rdev;
-@@ -495,6 +496,25 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
- 		}
- 	}
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index f9f5b4e..da81419 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -94,6 +94,8 @@ struct historical_logical_volume {
+ 	uint64_t timestamp_removed;
+ 	struct generic_logical_volume *indirect_origin;
+ 	struct dm_list indirect_glvs; /* list of struct generic_logical_volume */
++	int checked:1; /* set if this historical LV has been checked for validity */
++	int valid:1;   /* historical LV is valid if there's at least one live LV among ancestors */
+ };
  
-+	dm_list_iterate_items(glvl, &lv->indirect_glvs) {
-+		if (glvl->glv->is_historical) {
-+			if (glvl->glv->historical->indirect_origin != lv->this_glv) {
-+				log_error("LV %s is indirectly used by historical LV %s"
-+					  "but that historical LV does not point back to LV %s",
-+					   lv->name, glvl->glv->historical->name, lv->name);
-+				inc_error_count;
-+			}
-+		} else {
-+			if (!(seg = first_seg(glvl->glv->live)) ||
-+			    seg->indirect_origin != lv->this_glv) {
-+				log_error("LV %s is indirectly used by LV %s"
-+					  "but that LV does not point back to LV %s",
-+					  lv->name, glvl->glv->live->name, lv->name);
-+				inc_error_count;
-+			}
-+		}
-+	}
-+
- 	if (le != lv->le_count) {
- 		log_error("LV %s: inconsistent LE count %u != %u",
- 			  lv->name, le, lv->le_count);
+ struct generic_logical_volume {
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5ab6f8e..4951d71 100644
+index 4951d71..9700e73 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -2613,7 +2613,9 @@ void lv_calculate_readahead(const struct logical_volume *lv, uint32_t *read_ahea
+@@ -3319,15 +3319,45 @@ static int _check_old_pv_ext_for_vg(struct volume_group *vg)
+ 	return 1;
+ }
  
- struct validate_hash {
- 	struct dm_hash_table *lvname;
-+	struct dm_hash_table *historical_lvname;
- 	struct dm_hash_table *lvid;
-+	struct dm_hash_table *historical_lvid;
- 	struct dm_hash_table *pvid;
- 	struct dm_hash_table *lv_lock_args;
- };
-@@ -2733,6 +2735,8 @@ int vg_validate(struct volume_group *vg)
+-static int _handle_historical_lvs(struct volume_group *vg)
++static int _check_historical_lv_is_valid(struct historical_logical_volume *hlv)
  {
- 	struct pv_list *pvl;
- 	struct lv_list *lvl;
-+	struct glv_list *glvl;
-+	struct historical_logical_volume *hlv;
- 	struct lv_segment *seg;
- 	struct dm_str_list *sl;
- 	char uuid[64] __attribute__((aligned(8)));
-@@ -3166,11 +3170,95 @@ int vg_validate(struct volume_group *vg)
+ 	struct glv_list *glvl;
++
++	if (hlv->checked)
++		return hlv->valid;
++
++	/*
++	 * Historical LV is valid if there is
++	 * at least one live LV among ancestors.
++	 */
++	hlv->valid = 0;
++	dm_list_iterate_items(glvl, &hlv->indirect_glvs) {
++		if (!glvl->glv->is_historical ||
++		    _check_historical_lv_is_valid(glvl->glv->historical)) {
++			hlv->valid = 1;
++			break;
++		}
++	}
++
++	hlv->checked = 1;
++	return hlv->valid;
++}
++
++static int _handle_historical_lvs(struct volume_group *vg)
++{
++	struct glv_list *glvl, *tglvl;
+ 	time_t current_timestamp = 0;
+ 	struct historical_logical_volume *hlv;
++	int valid = 1;
++
++	dm_list_iterate_items(glvl, &vg->historical_lvs)
++		glvl->glv->historical->checked = 0;
+ 
+ 	dm_list_iterate_items(glvl, &vg->historical_lvs) {
+ 		hlv = glvl->glv->historical;
+ 
++		valid &= _check_historical_lv_is_valid(hlv);
++
+ 		if (!hlv->timestamp_removed) {
+ 			if (!current_timestamp)
+ 				current_timestamp = time(NULL);
+@@ -3335,6 +3365,21 @@ static int _handle_historical_lvs(struct volume_group *vg)
  		}
  	}
  
-+	if (!(vhash.historical_lvname = dm_hash_create(dm_list_size(&vg->historical_lvs)))) {
-+		log_error("Failed to allocate historical LV name hash");
-+		r = 0;
-+		goto out;
-+	}
++	if (valid)
++		return 1;
 +
-+        if (!(vhash.historical_lvid = dm_hash_create(dm_list_size(&vg->historical_lvs)))) {
-+                log_error("Failed to allocate historical LV uuid hash");
-+                r = 0;
-+                goto out;
-+        }
-+
-+	dm_list_iterate_items(glvl, &vg->historical_lvs) {
-+		if (!glvl->glv->is_historical) {
-+			log_error(INTERNAL_ERROR "LV %s/%s appearing in VG's historical list is not a historical LV",
-+				  vg->name, glvl->glv->live->name);
-+			r = 0;
-+			continue;
-+		}
-+
++	dm_list_iterate_items_safe(glvl, tglvl, &vg->historical_lvs) {
 +		hlv = glvl->glv->historical;
-+
-+		if (hlv->vg != vg) {
-+			log_error(INTERNAL_ERROR "Historical LV %s points to different VG %s while it is listed in VG %s",
-+				  hlv->name, hlv->vg->name, vg->name);
-+			r = 0;
++		if (hlv->checked && hlv->valid)
 +			continue;
-+		}
 +
-+		if (!id_equal(&hlv->lvid.id[0], &hlv->vg->id)) {
-+			if (!id_write_format(&hlv->lvid.id[0], uuid, sizeof(uuid)))
-+				stack;
-+			if (!id_write_format(&hlv->vg->id, uuid2, sizeof(uuid2)))
-+				stack;
-+			log_error(INTERNAL_ERROR "Historical LV %s has VG UUID %s but its VG %s has UUID %s",
-+				  hlv->name, uuid, hlv->vg->name, uuid2);
-+			r = 0;
-+			continue;
-+                }
-+
-+		if (dm_hash_lookup_binary(vhash.historical_lvid, &hlv->lvid.id[1], sizeof(hlv->lvid.id[1]))) {
-+			if (!id_write_format(&hlv->lvid.id[1], uuid,sizeof(uuid)))
-+				stack;
-+			log_error(INTERNAL_ERROR "Duplicate historical LV id %s detected for %s in %s",
-+				  uuid, hlv->name, vg->name);
-+                        r = 0;
-+                }
-+
-+		if (dm_hash_lookup(vhash.historical_lvname, hlv->name)) {
-+			log_error(INTERNAL_ERROR "Duplicate historical LV name %s detected in %s", hlv->name, vg->name);
-+			r = 0;
-+			continue;
-+		}
-+
-+                if (!dm_hash_insert(vhash.historical_lvname, hlv->name, hlv)) {
-+                        log_error("Failed to hash historical LV name");
-+                        r = 0;
-+                        break;
-+                }
-+
-+                if (!dm_hash_insert_binary(vhash.historical_lvid, &hlv->lvid.id[1], sizeof(hlv->lvid.id[1]), hlv)) {
-+                        log_error("Failed to hash historical LV id");
-+                        r = 0;
-+                        break;
-+                }
-+
-+		if (dm_hash_lookup(vhash.lvname, hlv->name)) {
-+			log_error(INTERNAL_ERROR "Name %s appears as live and historical LV at the same time in VG %s",
-+				  hlv->name, vg->name);
-+			r = 0;
-+			continue;
-+		}
-+
-+		if (!hlv->indirect_origin && !dm_list_size(&hlv->indirect_glvs)) {
-+			log_error(INTERNAL_ERROR "Historical LV %s is not part of any LV chain in VG %s", hlv->name, vg->name);
-+			r = 0;
-+			continue;
-+		}
++		log_print_unless_silent("Automatically removing historical "
++					"logical volume %s/%s%s.",
++					 vg->name, HISTORICAL_LV_PREFIX, hlv->name);
++		if (!historical_glv_remove(glvl->glv))
++			return_0;
 +	}
 +
- out:
- 	if (vhash.lvid)
- 		dm_hash_destroy(vhash.lvid);
- 	if (vhash.lvname)
- 		dm_hash_destroy(vhash.lvname);
-+	if (vhash.historical_lvid)
-+		dm_hash_destroy(vhash.historical_lvid);
-+	if (vhash.historical_lvname)
-+		dm_hash_destroy(vhash.historical_lvname);
- 	if (vhash.pvid)
- 		dm_hash_destroy(vhash.pvid);
- 	if (vhash.lv_lock_args)
+ 	return 1;
+ }
+ 
 
 
