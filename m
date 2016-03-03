@@ -1,107 +1,117 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  3 Mar 2016 13:20:25 +0000 (UTC)
-Subject: master - commands: lvremove: also process historical LVs
-Message-ID: <20160303132025.2E24E60308@fedorahosted.org>
+Date: Thu,  3 Mar 2016 13:20:27 +0000 (UTC)
+Subject: master - metadata: add vg_strip_outdated_historical_lvs fn and call it during VG read
+Message-ID: <20160303132027.3D29E60308@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=53b064b9aed3bd2237638cab778b3bffd018ce08
-Commit:        53b064b9aed3bd2237638cab778b3bffd018ce08
-Parent:        f833a6d074979813e8bd9980b719b09758bd833a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=74272e163de8c62208d6de41d15631cf3ecf0b2c
+Commit:        74272e163de8c62208d6de41d15631cf3ecf0b2c
+Parent:        53b064b9aed3bd2237638cab778b3bffd018ce08
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 1 15:27:08 2016 +0100
+AuthorDate:    Tue Mar 1 15:27:21 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Thu Mar 3 13:50:59 2016 +0100
 
-commands: lvremove: also process historical LVs
+metadata: add vg_strip_outdated_historical_lvs fn and call it during VG read
 
+The vg_strip_outdated_historical_lvs iterates over the list of historical LVs
+we have and it shoots down the ones which are outdated.
+
+Configuration hook to set the timeout will be in subsequent patch.
 ---
- lib/metadata/lv_manip.c |   19 +++++++++++++------
- tools/commands.h        |    3 ++-
- tools/lvremove.c        |    1 +
- 3 files changed, 16 insertions(+), 7 deletions(-)
+ lib/metadata/metadata-exported.h |    2 +
+ lib/metadata/metadata.c          |   39 +++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 40 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index c612873..85f61a1 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5691,7 +5691,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	struct volume_group *vg;
- 	struct logical_volume *format1_origin = NULL;
- 	int format1_reload_required = 0;
--	int visible;
-+	int visible, historical;
- 	struct logical_volume *pool_lv = NULL;
- 	struct logical_volume *lock_lv = lv;
- 	struct lv_segment *cache_seg = NULL;
-@@ -5782,7 +5782,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index d81166d..dc95995 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1298,4 +1298,6 @@ int is_lockd_type(const char *lock_type);
+ 
+ int is_system_id_allowed(struct cmd_context *cmd, const char *system_id);
+ 
++int vg_strip_outdated_historical_lvs(struct volume_group *vg);
++
+ #endif
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index c37c7ba..417629b 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3930,6 +3930,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 	int inconsistent_pvs = 0;
+ 	int inconsistent_mdas = 0;
+ 	int inconsistent_mda_count = 0;
++	int strip_historical_lvs = *consistent;
+ 	unsigned use_precommitted = precommitted;
+ 	struct dm_list *pvids;
+ 	struct pv_list *pvl;
+@@ -3965,6 +3966,10 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 				lvmetad_vg_clear_outdated_pvs(correct_vg);
+                         }
+ 		}
++
++		if (correct_vg && strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg))
++			return_NULL;
++
+ 		return correct_vg;
+ 	}
+ 
+@@ -4405,6 +4410,10 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 	}
+ 
+ 	*consistent = !inconsistent_pvs;
++
++	if (*consistent && correct_vg && strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg))
++		return_NULL;
++
+ 	return correct_vg;
+ }
+ 
+@@ -4451,7 +4460,6 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
+ 			goto out;
  		}
  	}
- 
--	if ((force == PROMPT) && ask_discard &&
-+	if (!lv_is_historical(lv) && (force == PROMPT) && ask_discard &&
- 	    yes_no_prompt("Do you really want to remove and DISCARD "
- 			  "logical volume %s? [y/n]: ",
- 			  lv->name) == 'n') {
-@@ -5868,10 +5868,15 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	}
- 
- 	visible = lv_is_visible(lv);
-+	historical = lv_is_historical(lv);
- 
--	log_verbose("Releasing logical volume \"%s\"", lv->name);
-+	log_verbose("Releasing %slogical volume \"%s\"",
-+		    historical ? "historical " : "",
-+		    historical ? lv->this_glv->historical->name : lv->name);
- 	if (!lv_remove(lv)) {
--		log_error("Error releasing logical volume \"%s\"", lv->name);
-+		log_error("Error releasing %slogical volume \"%s\"",
-+			  historical ? "historical ": "",
-+			  historical ? lv->this_glv->historical->name : lv->name);
- 		return 0;
- 	}
- 
-@@ -5934,8 +5939,10 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	lockd_lv(cmd, lock_lv, "un", LDLV_PERSISTENT);
- 	lockd_free_lv(cmd, vg, lv->name, &lv->lvid.id[1], lv->lock_args);
- 
--	if (!suppress_remove_message && visible)
--		log_print_unless_silent("Logical volume \"%s\" successfully removed", lv->name);
-+	if (!suppress_remove_message && (visible || historical))
-+		log_print_unless_silent("%sogical volume \"%s\" successfully removed",
-+					historical ? "Historical l" : "L",
-+					historical ? lv->this_glv->historical->name : lv->name);
- 
- 	return 1;
+-
+ out:
+ 	if (!*consistent && (warn_flags & WARN_INCONSISTENT)) {
+ 		if (is_orphan_vg(vgname))
+@@ -6002,3 +6010,32 @@ int is_lockd_type(const char *lock_type)
+ 	return 0;
  }
-diff --git a/tools/commands.h b/tools/commands.h
-index 97f7de1..bc5eb92 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -606,7 +606,8 @@ xx(lvremove,
-    "\t[--version]\n"
-    "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
  
--   autobackup_ARG, force_ARG, nohistory_ARG, noudevsync_ARG, select_ARG, test_ARG)
-+   autobackup_ARG, force_ARG, nohistory_ARG, noudevsync_ARG,
-+   select_ARG, test_ARG)
- 
- xx(lvrename,
-    "Rename a logical volume",
-diff --git a/tools/lvremove.c b/tools/lvremove.c
-index 220d3e3..18da1fa 100644
---- a/tools/lvremove.c
-+++ b/tools/lvremove.c
-@@ -24,6 +24,7 @@ int lvremove(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 
- 	cmd->handles_missing_pvs = 1;
-+	cmd->include_historical_lvs = 1;
- 
- 	return process_each_lv(cmd, argc, argv, READ_FOR_UPDATE, NULL,
- 			       &lvremove_single);
++int vg_strip_outdated_historical_lvs(struct volume_group *vg) {
++	struct glv_list *glvl, *tglvl;
++	time_t current_time = time(NULL);
++	uint64_t threshold = 0;
++
++	if (!threshold)
++		return 1;
++
++	dm_list_iterate_items_safe(glvl, tglvl, &vg->historical_lvs) {
++		/*
++		 * Removal time in the future? Not likely,
++		 * but skip this item in any case.
++		*/
++		if ((current_time) < glvl->glv->historical->timestamp_removed)
++			continue;
++
++		if ((current_time - glvl->glv->historical->timestamp_removed) > threshold) {
++			if (!historical_glv_remove(glvl->glv)) {
++				log_error("Failed to destroy record about historical LV %s/%s.",
++					  vg->name, glvl->glv->historical->name);
++				return 0;
++			}
++			log_verbose("Outdated record for historical logical volume \"%s\" "
++				    "automatically destroyed.", glvl->glv->historical->name);
++		}
++	}
++
++	return 1;
++}
 
 
