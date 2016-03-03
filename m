@@ -1,160 +1,165 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  3 Mar 2016 13:19:46 +0000 (UTC)
-Subject: master - metadata: add support for interconnection of thin pool LV segment with indirect origin
-Message-ID: <20160303131946.80D7960091@fedorahosted.org>
+Date: Thu,  3 Mar 2016 13:19:48 +0000 (UTC)
+Subject: master - metadata: format_text: interconnect historical LVs among each other and also with live LVs
+Message-ID: <20160303131948.A257160091@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a61bc70f62a1648632985fa7ac81b89773da6d78
-Commit:        a61bc70f62a1648632985fa7ac81b89773da6d78
-Parent:        c45af2df4ee1f3a7cf1e979ce5312acdc392ba68
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=673bc0636cf1a73321656b2129a6db1681fbd8f4
+Commit:        673bc0636cf1a73321656b2129a6db1681fbd8f4
+Parent:        a61bc70f62a1648632985fa7ac81b89773da6d78
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 1 15:21:36 2016 +0100
+AuthorDate:    Tue Mar 1 15:22:28 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Mar 3 13:46:40 2016 +0100
+CommitterDate: Thu Mar 3 13:49:13 2016 +0100
 
-metadata: add support for interconnection of thin pool LV segment with indirect origin
+metadata: format_text: interconnect historical LVs among each other and also with live LVs
 
-Add support for making an interconnection between thin LV segment and
-its indirect origin (which may be historical or live LV) - add a new
-"indirect_origin" argument to attach_pool_lv function.
+Interconnect historical LVs in an ancestry chain and also connect the first/last
+one with its live ancestor/descendant if it exists.
 ---
- lib/cache_segtype/cache.c  |    2 +-
- lib/metadata/cache_manip.c |    4 ++--
- lib/metadata/lv_manip.c    |    4 ++--
- lib/metadata/metadata.h    |    4 +++-
- lib/metadata/pool_manip.c  |   15 +++++++++++++++
- lib/thin/thin.c            |    3 ++-
- 6 files changed, 25 insertions(+), 7 deletions(-)
+ lib/format_text/import_vsn1.c |  119 +++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 119 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index 17d1b31..a645756 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -348,7 +348,7 @@ static int _cache_text_import(struct lv_segment *seg,
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 3bc38b9..163ea38 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -770,6 +770,118 @@ bad:
+ 	return 0;
+ }
  
- 	seg->lv->status |= strstr(seg->lv->name, "_corig") ? LV_PENDING_DELETE : 0;
- 
--	if (!attach_pool_lv(seg, pool_lv, NULL, NULL))
-+	if (!attach_pool_lv(seg, pool_lv, NULL, NULL, NULL))
- 		return_0;
- 
- 	if (!dm_list_empty(&pool_lv->segments) &&
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 4fe8613..115abcb 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -273,7 +273,7 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool_lv,
- 	seg = first_seg(cache_lv);
- 	seg->segtype = segtype;
- 
--	if (!attach_pool_lv(seg, pool_lv, NULL, NULL))
-+	if (!attach_pool_lv(seg, pool_lv, NULL, NULL, NULL))
- 		return_NULL;
- 
- 	return cache_lv;
-@@ -424,7 +424,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
- 	corigin_lv->status |= LV_PENDING_DELETE;
- 
- 	/* Reattach cache pool */
--	if (!attach_pool_lv(cache_seg, cache_pool_lv, NULL, NULL))
-+	if (!attach_pool_lv(cache_seg, cache_pool_lv, NULL, NULL, NULL))
- 		return_0;
- 
- 	/* Suspend/resume also deactivates deleted LV via support of LV_PENDING_DELETE */
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 399668c..ed46ad3 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7335,13 +7335,13 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		if (origin_lv && lv_is_thin_volume(origin_lv) &&
- 		    (first_seg(origin_lv)->pool_lv == pool_lv)) {
- 			/* For thin snapshot pool must match */
--			if (!attach_pool_lv(seg, pool_lv, origin_lv, NULL))
-+			if (!attach_pool_lv(seg, pool_lv, origin_lv, NULL, NULL))
- 				return_NULL;
- 			/* Use the same external origin */
- 			if (!attach_thin_external_origin(seg, first_seg(origin_lv)->external_lv))
- 				return_NULL;
- 		} else {
--			if (!attach_pool_lv(seg, pool_lv, NULL, NULL))
-+			if (!attach_pool_lv(seg, pool_lv, NULL, NULL, NULL))
- 				return_NULL;
- 			/* If there is an external origin... */
- 			if (!attach_thin_external_origin(seg, origin_lv))
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 33cbfa6..31c9346 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -487,7 +487,9 @@ int fixup_imported_mirrors(struct volume_group *vg);
-  * From thin_manip.c
-  */
- int attach_pool_lv(struct lv_segment *seg, struct logical_volume *pool_lv,
--		   struct logical_volume *origin_lv, struct logical_volume *merge_lv);
-+		   struct logical_volume *origin_lv,
-+		   struct generic_logical_volume *indirect_origin,
-+		   struct logical_volume *merge_lv);
- int detach_pool_lv(struct lv_segment *seg);
- int attach_pool_message(struct lv_segment *pool_seg, dm_thin_message_t type,
- 			struct logical_volume *lv, uint32_t delete_id,
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-index 20bb756..ac590b3 100644
---- a/lib/metadata/pool_manip.c
-+++ b/lib/metadata/pool_manip.c
-@@ -90,8 +90,11 @@ int attach_pool_data_lv(struct lv_segment *pool_seg,
- int attach_pool_lv(struct lv_segment *seg,
- 		   struct logical_volume *pool_lv,
- 		   struct logical_volume *origin,
-+		   struct generic_logical_volume *indirect_origin,
- 		   struct logical_volume *merge_lv)
- {
-+	struct glv_list *glvl;
++static int _read_historical_lvnames_interconnections(struct format_instance *fid __attribute__((unused)),
++						 struct volume_group *vg, const struct dm_config_node *hlvn,
++						 const struct dm_config_node *vgn __attribute__((unused)),
++						 struct dm_hash_table *pv_hash __attribute__((unused)),
++						 struct dm_hash_table *lv_hash __attribute__((unused)),
++						 unsigned *scan_done_once __attribute__((unused)),
++						 unsigned report_missing_devices __attribute__((unused)))
++{
++	struct dm_pool *mem = vg->vgmem;
++	const char *historical_lv_name, *origin_name = NULL;
++	struct generic_logical_volume *glv, *origin_glv, *descendant_glv;
++	struct logical_volume *tmp_lv;
++	struct glv_list *glvl = NULL;
++	const struct dm_config_value *descendants = NULL;
 +
- 	if (!seg_is_thin_volume(seg) && !seg_is_cache(seg)) {
- 		log_error(INTERNAL_ERROR "Unable to attach pool to %s/%s"
- 			  " that is not cache or thin volume.",
-@@ -109,6 +112,18 @@ int attach_pool_lv(struct lv_segment *seg,
- 	if (origin && !add_seg_to_segs_using_this_lv(origin, seg))
- 		return_0;
- 
-+	if (indirect_origin) {
-+		if (!(glvl = get_or_create_glvl(seg->lv->vg->vgmem, seg->lv, NULL)))
-+			return_0;
++	historical_lv_name = hlvn->key;
++	hlvn = hlvn->child;
 +
-+		seg->indirect_origin = indirect_origin;
-+		if (indirect_origin->is_historical)
-+			dm_list_add(&indirect_origin->historical->indirect_glvs, &glvl->list);
-+		else
-+			dm_list_add(&indirect_origin->live->indirect_glvs, &glvl->list);
-+
++	if (!(glv = find_historical_glv(vg, historical_lv_name, NULL))) {
++		log_error("Unknown historical logical volume %s/%s%s",
++			  vg->name, HISTORICAL_LV_PREFIX, historical_lv_name);
++		goto bad;
 +	}
 +
- 	if (!add_seg_to_segs_using_this_lv(pool_lv, seg))
- 		return_0;
- 
-diff --git a/lib/thin/thin.c b/lib/thin/thin.c
-index 6a19055..a850757 100644
---- a/lib/thin/thin.c
-+++ b/lib/thin/thin.c
-@@ -473,6 +473,7 @@ static int _thin_text_import(struct lv_segment *seg,
- {
- 	const char *lv_name;
- 	struct logical_volume *pool_lv, *origin = NULL, *external_lv = NULL, *merge_lv = NULL;
-+	struct generic_logical_volume *indirect_origin = NULL;
- 
- 	if (!dm_config_get_str(sn, "thin_pool", &lv_name))
- 		return SEG_LOG_ERROR("Thin pool must be a string in");
-@@ -513,7 +514,7 @@ static int _thin_text_import(struct lv_segment *seg,
- 			return SEG_LOG_ERROR("Unknown external origin %s in", lv_name);
++	if (dm_config_has_node(hlvn, "origin")) {
++		if (!dm_config_get_str(hlvn, "origin", &origin_name)) {
++			log_error("Couldn't read origin for historical logical "
++				  "volume %s/%s%s", vg->name, HISTORICAL_LV_PREFIX, historical_lv_name);
++			goto bad;
++		}
++	}
++
++	if (dm_config_has_node(hlvn, "descendants")) {
++		if (!dm_config_get_list(hlvn, "descendants", &descendants)) {
++			log_error("Couldn't get descendants list for historical logical "
++				  "volume %s/%s%s", vg->name, HISTORICAL_LV_PREFIX, historical_lv_name);
++			goto bad;
++		}
++		if (descendants->type == DM_CFG_EMPTY_ARRAY) {
++			log_error("Found empty descendants list for historical logical "
++				  "volume %s/%s%s", vg->name, HISTORICAL_LV_PREFIX, historical_lv_name);
++			goto bad;
++		}
++	}
++
++	if (!origin_name && !descendants)
++		/* no interconnections */
++		return 1;
++
++	if (origin_name) {
++		if (!(glvl = dm_pool_zalloc(mem, sizeof(struct glv_list)))) {
++			log_error("Failed to allocate list item for historical logical "
++				  "volume %s/%s%s", vg->name, HISTORICAL_LV_PREFIX, historical_lv_name);
++			goto bad;
++		}
++		glvl->glv = glv;
++
++		if (!strncmp(origin_name, HISTORICAL_LV_PREFIX, strlen(HISTORICAL_LV_PREFIX))) {
++			if (!(origin_glv = find_historical_glv(vg, origin_name + strlen(HISTORICAL_LV_PREFIX), NULL))) {
++				log_error("Unknown origin %s for historical logical volume %s/%s%s",
++					  origin_name, vg->name, HISTORICAL_LV_PREFIX, historical_lv_name);
++				goto bad;
++			}
++		} else {
++			if (!(tmp_lv = find_lv(vg, origin_name))) {
++				log_error("Unknown origin %s for historical logical volume %s/%s%s",
++					  origin_name, vg->name, HISTORICAL_LV_PREFIX, historical_lv_name);
++				goto bad;
++			}
++
++			if (!(origin_glv = get_or_create_glv(mem, tmp_lv, NULL)))
++				goto bad;
++		}
++
++		glv->historical->indirect_origin = origin_glv;
++		if (origin_glv->is_historical)
++			dm_list_add(&origin_glv->historical->indirect_glvs, &glvl->list);
++		else
++			dm_list_add(&origin_glv->live->indirect_glvs, &glvl->list);
++	}
++
++	if (descendants) {
++		do {
++			if (descendants->type != DM_CFG_STRING) {
++				log_error("Descendant value for historical logical volume %s/%s%s "
++					  "is not a string.", vg->name, HISTORICAL_LV_PREFIX, historical_lv_name);
++				goto bad;
++			}
++
++			if (!(tmp_lv = find_lv(vg, descendants->v.str))) {
++				log_error("Failed to find descendant %s for historical LV %s.",
++					  descendants->v.str, historical_lv_name);
++				goto bad;
++			}
++
++			if (!(descendant_glv = get_or_create_glv(mem, tmp_lv, NULL)))
++				goto bad;
++
++			if (!add_glv_to_indirect_glvs(mem, glv, descendant_glv))
++				goto bad;
++
++			descendants = descendants->next;
++		} while (descendants);
++	}
++
++	return 1;
++bad:
++	if (glvl)
++		dm_pool_free(mem, glvl);
++	return 0;
++}
++
+ static int _read_lvsegs(struct format_instance *fid,
+ 			struct volume_group *vg, const struct dm_config_node *lvn,
+ 			const struct dm_config_node *vgn __attribute__((unused)),
+@@ -1067,6 +1179,13 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
  	}
  
--	if (!attach_pool_lv(seg, pool_lv, origin, merge_lv))
-+	if (!attach_pool_lv(seg, pool_lv, origin, indirect_origin, merge_lv))
- 		return_0;
- 
- 	if (!attach_thin_external_origin(seg, external_lv))
++	if (!_read_sections(fid, "historical_logical_volumes", _read_historical_lvnames_interconnections,
++			    vg, vgn, pv_hash, lv_hash, 1, NULL)) {
++		log_error("Couldn't read all removed logical volume interconnections "
++			  "for volume group %s.", vg->name);
++		goto bad;
++	}
++
+ 	if (!fixup_imported_mirrors(vg)) {
+ 		log_error("Failed to fixup mirror pointers after import for "
+ 			  "volume group %s.", vg->name);
 
 
