@@ -1,90 +1,67 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 2 May 2019 14:33:46 -0400
-Subject: master - scan: remove comments about lvmetad
-Message-ID: <201905021833.x42IXkaL008686@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri,  4 Mar 2016 18:07:42 +0000 (UTC)
+Subject: master - pre-release
+Message-ID: <20160304180742.CA32B60E29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99de816a1bb6414e4611030c8d83766b1ff3cd65
-Commit:        99de816a1bb6414e4611030c8d83766b1ff3cd65
-Parent:        81735b46d9c7ab8f2dd27835d2a43cc5ad705c86
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 2 13:32:30 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 2 13:32:30 2019 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=68ec240b99fca4e0860cb6e1b17ce4b888eb2585
+Commit:        68ec240b99fca4e0860cb6e1b17ce4b888eb2585
+Parent:        6c781751261a6e75f8e3e63f5efbecf467d63476
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Mar 4 17:59:21 2016 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Mar 4 17:59:21 2016 +0000
 
-scan: remove comments about lvmetad
+pre-release
 
 ---
- lib/label/label.c |   18 ++++--------------
- 1 files changed, 4 insertions(+), 14 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    4 ++--
+ WHATS_NEW_DM |    4 ++--
+ 4 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 31b290b..b999f87 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1024,8 +1024,6 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
- {
- 	struct device_list *devl;
+diff --git a/VERSION b/VERSION
+index 10d6493..2b2c83e 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.145(2)-git (2016-02-26)
++2.02.145(2)-git (2016-03-04)
+diff --git a/VERSION_DM b/VERSION_DM
+index d930b03..6307cc1 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.119-git (2016-02-26)
++1.02.119-git (2016-03-04)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index cbdd14f..5452a0b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,5 @@
+-Version 2.02.145 - 
+-=====================================
++Version 2.02.145 - 4th March 2016
++=================================
+   Make it possible to use lvremove and lvrename on historical LVs.
+   For historical LVs, report 'none' for lv_layout and 'history' for lv_role.
+   Add full_{ancestors,descendants} fields to report LV ancestry with history.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 109249a..d54353d 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.119 -
+-=====================================
++Version 1.02.119 - 4th March 2016
++=================================
+   Fix dm_config_write_node and variants to return error on subsection failures.
+   Remove 4096 char limit due to buffer size if writing dm_config_node.
  
--	/* FIXME: get rid of this, it's only needed for lvmetad in which
--	   case we should be setting up bcache in one place. */
- 	if (!scan_bcache) {
- 		if (!_setup_bcache(0))
- 			return 0;
-@@ -1227,14 +1225,6 @@ out:
- 	return ret;
- }
- 
--/*
-- * This is only needed when commands are using lvmetad, in which case they
-- * don't do an initial label_scan, but may later need to rescan certain devs
-- * from disk and call this function.  FIXME: is there some better number to
-- * choose here?  How should we predict the number of devices that might need
-- * scanning when using lvmetad?
-- */
--
- int label_scan_setup_bcache(void)
- {
- 	if (!scan_bcache) {
-@@ -1293,7 +1283,7 @@ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data)
- 	}
- 
- 	if (dev->bcache_fd <= 0) {
--		/* This is not often needed, perhaps only with lvmetad. */
-+		/* This is not often needed. */
- 		if (!label_scan_open(dev)) {
- 			log_error("Error opening device %s for reading@%llu length %u.",
- 				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
-@@ -1333,7 +1323,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
- 	}
- 
- 	if (dev->bcache_fd <= 0) {
--		/* This is not often needed, perhaps only with lvmetad. */
-+		/* This is not often needed. */
- 		dev->flags |= DEV_BCACHE_WRITE;
- 		if (!label_scan_open(dev)) {
- 			log_error("Error opening device %s for writing at %llu length %u.",
-@@ -1379,7 +1369,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
- 	}
- 
- 	if (dev->bcache_fd <= 0) {
--		/* This is not often needed, perhaps only with lvmetad. */
-+		/* This is not often needed. */
- 		dev->flags |= DEV_BCACHE_WRITE;
- 		if (!label_scan_open(dev)) {
- 			log_error("Error opening device %s for writing at %llu length %u.",
-@@ -1428,7 +1418,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
- 	}
- 
- 	if (dev->bcache_fd <= 0) {
--		/* This is not often needed, perhaps only with lvmetad. */
-+		/* This is not often needed. */
- 		dev->flags |= DEV_BCACHE_WRITE;
- 		if (!label_scan_open(dev)) {
- 			log_error("Error opening device %s for writing at %llu length %u.",
 
 
