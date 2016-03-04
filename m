@@ -1,40 +1,33 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 10 Mar 2016 21:41:06 +0000 (UTC)
-Subject: master - man: vgcreate shared
-Message-ID: <20160310214106.37B0961073@fedorahosted.org>
+From: Vratislav Podzimek <vpodzime@redhat.com>
+Date: Fri,  4 Mar 2016 07:59:28 +0100
+Subject: [PATCH] Run the DBus daemon with the "C" locale
+Message-ID: <1457074768-11160-1-git-send-email-vpodzime@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6807eb88634fd0db95cdccbbc65570b2d96c989a
-Commit:        6807eb88634fd0db95cdccbbc65570b2d96c989a
-Parent:        0f10823ec910c0a6015b20580f5aa26f209cea04
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 10 15:40:37 2016 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Mar 10 15:40:37 2016 -0600
-
-man: vgcreate shared
-
+Otherwise it uses the system default which may be e.g. cs_CZ.UTF-8 causing the
+daemon to fail when parsing output from the CLI tools - it for example gets 1,5G
+instead of 1.5G.
 ---
- man/vgcreate.8.in |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ scripts/lvm2_lvmdbusd_systemd_red_hat.service.in | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/man/vgcreate.8.in b/man/vgcreate.8.in
-index 92ef06c..22feedf 100644
---- a/man/vgcreate.8.in
-+++ b/man/vgcreate.8.in
-@@ -132,7 +132,8 @@ The 2.4 kernel has a limitation of 2TiB per block device.
- .B \-\-shared
- Create a shared VG using lvmlockd.  lvmlockd will select lock type sanlock
- or dlm depending on which lock manager is running.  This allows multiple
--hosts to share a VG on shared devices.  See
-+hosts to share a VG on shared devices.  lvmlockd and a lock manager must
-+be configured and running.  See
- .BR lvmlockd (8).
+diff --git a/scripts/lvm2_lvmdbusd_systemd_red_hat.service.in b/scripts/lvm2_lvmdbusd_systemd_red_hat.service.in
+index d3ad870..b7e9ace 100644
+--- a/scripts/lvm2_lvmdbusd_systemd_red_hat.service.in
++++ b/scripts/lvm2_lvmdbusd_systemd_red_hat.service.in
+@@ -5,6 +5,7 @@ Documentation=man:lvmdbusd(8)
+ [Service]
+ Type=dbus
+ BusName=com.redhat.lvmdbus1
++Environment="LC_ALL=C"
+ ExecStart=@sbindir@/lvmdbusd --udev
  
- .TP
+ [Install]
+-- 
+2.5.0
 
 
