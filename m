@@ -1,82 +1,86 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 30 Mar 2016 11:07:13 +0000 (UTC)
-Subject: master - dev-cache: dev_cache_index_devs fn is available unconditionally
-Message-ID: <20160330110713.D178660D63@fedorahosted.org>
+Date: Fri,  4 Mar 2016 14:05:51 +0000 (UTC)
+Subject: master - libdm: config: remove 4096 char limit due to buffer size if writing dm_config_node
+Message-ID: <20160304140551.6486B60FC3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8b258a005ba6852209ec7af5b373a69f437abfaa
-Commit:        8b258a005ba6852209ec7af5b373a69f437abfaa
-Parent:        52e0d0db4460d90172e9bd45b9ef30e7f4f75ae7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=967a0889a024e2cc3f3afb3469e1b0657ebb85bc
+Commit:        967a0889a024e2cc3f3afb3469e1b0657ebb85bc
+Parent:        418b7c6be8e553c04eeeb8a96d6b3d4b1da1bb9a
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Mar 30 13:06:12 2016 +0200
+AuthorDate:    Fri Mar 4 14:59:22 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Mar 30 13:06:20 2016 +0200
+CommitterDate: Fri Mar 4 14:59:22 2016 +0100
 
-dev-cache: dev_cache_index_devs fn is available unconditionally
+libdm: config: remove 4096 char limit due to buffer size if writing dm_config_node
 
-The new dev_cache_index_devs fn was under ifdef UDEV_SYNC_SUPPORT by mistake,
-move it out of this ifdef.
 ---
- lib/device/dev-cache.c |   36 ++++++++++++++++++------------------
- 1 files changed, 18 insertions(+), 18 deletions(-)
+ WHATS_NEW_DM         |    1 +
+ libdm/libdm-config.c |   26 ++++++++++++++++++++++++--
+ 2 files changed, 25 insertions(+), 2 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 1729aba..50ef2f2 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -777,6 +777,24 @@ static int _insert_file(const char *path)
- 	return 1;
- }
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 174b6bd..d3eac29 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.119 -
+ =====================================
++  Remove 4096 char limit due to buffer size if writing dm_config_node.
  
-+int dev_cache_index_devs(void)
-+{
-+	struct btree_iter *iter = btree_first(_cache.devices);
-+	struct device *dev;
-+	int r = 1;
-+
-+	while (iter) {
-+		dev = btree_get_data(iter);
-+
-+		if (!_index_dev_by_vgid_and_lvid(dev))
-+			r = 0;
-+
-+		iter = btree_next(iter);
-+	}
-+
-+	return r;
-+}
-+
- #ifdef UDEV_SYNC_SUPPORT
- 
- static int _device_in_udev_db(const dev_t d)
-@@ -854,24 +872,6 @@ bad:
- 	return 0;
- }
- 
--int dev_cache_index_devs(void)
--{
--	struct btree_iter *iter = btree_first(_cache.devices);
--	struct device *dev;
--	int r = 1;
--
--	while (iter) {
--		dev = btree_get_data(iter);
--
--		if (!_index_dev_by_vgid_and_lvid(dev))
--			r = 0;
--
--		iter = btree_next(iter);
--	}
--
--	return r;
--}
--
- static void _insert_dirs(struct dm_list *dirs)
+ Version 1.02.118 - 26th February 2016
+ =====================================
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index 25f85e5..a7f4096 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -222,19 +222,41 @@ __attribute__ ((format(printf, 2, 3)))
+ static int _line_append(struct config_output *out, const char *fmt, ...)
  {
- 	struct dir_list *dl;
+ 	char buf[4096];
++	char *final_buf;
+ 	va_list ap;
+ 	int n;
+ 
++	/*
++	 * We should be fine with the 4096 char buffer 99% of the time,
++	 * but if we need to go beyond that, allocate the buffer dynamically.
++	 */
++
+ 	va_start(ap, fmt);
+ 	n = vsnprintf(&buf[0], sizeof buf - 1, fmt, ap);
+ 	va_end(ap);
+ 
+-	if (n < 0 || n > (int) sizeof buf - 1) {
++	if (n < 0) {
+ 		log_error("vsnprintf failed for config line");
+ 		return 0;
+ 	}
+ 
+-	if (!dm_pool_grow_object(out->mem, &buf[0], strlen(buf))) {
++	if (n > (int) sizeof buf - 1) {
++		/*
++		 * Fixed size buffer with sizeof buf is not enough,
++		 * so try dynamically allocated buffer now...
++		 */
++		va_start(ap, fmt);
++		n = dm_vasprintf(&final_buf, fmt, ap);
++		va_end(ap);
++
++		if (n < 0) {
++			log_error("dm_vasprintf failed for config line");
++			return 0;
++		}
++	} else
++		final_buf = buf;
++
++	if (!dm_pool_grow_object(out->mem, final_buf, strlen(final_buf))) {
+ 		log_error("dm_pool_grow_object failed for config line");
+ 		return 0;
+ 	}
 
 
