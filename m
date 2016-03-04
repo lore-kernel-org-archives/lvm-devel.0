@@ -1,47 +1,40 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Wed, 23 Mar 2016 11:00:48 +0000 (UTC)
-Subject: master - test: Fix checks to skip lvmdbusd tests
-Message-ID: <20160323110048.D1D6C60D59@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  4 Mar 2016 10:52:02 +0000 (UTC)
+Subject: master - man: lvrename: also mention possibility to rename historical logical volumes
+Message-ID: <20160304105202.8A90261126@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c1d376b1abdb6b6a2410a5372a3a76748c1daa98
-Commit:        c1d376b1abdb6b6a2410a5372a3a76748c1daa98
-Parent:        c6d383a6da5cd7f5acddb314e1419243447e7be8
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed Mar 23 11:45:21 2016 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Mar 23 11:58:48 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e447ab87e904799dac89f70d32733d4368563d91
+Commit:        e447ab87e904799dac89f70d32733d4368563d91
+Parent:        fa06c2263b24561c25c04aefd93204f7cfc39543
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Mar 4 11:51:57 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Mar 4 11:51:57 2016 +0100
 
-test: Fix checks to skip lvmdbusd tests
+man: lvrename: also mention possibility to rename historical logical volumes
 
-The executable is always present in the tree, need to check the
-runtime dependencies.
 ---
- test/lib/aux.sh |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ man/lvrename.8.in |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index af6b25a..ed1e3d8 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -311,10 +311,12 @@ prepare_lvmdbusd() {
- 	echo ok
- 
- 	# skip if we don't have our own lvmdbusd...
--        # TODO: lvmdbusd is not in PATH
--	#(which lvmdbusd 2>/dev/null | grep "$abs_builddir") || skip
-+	# NOTE: this is always present - additional checks are needed:
- 	[[ -x $abs_top_builddir/daemons/lvmdbusd/lvmdbusd ]] || skip
- 
-+	which python3 >/dev/null || skip "Missing python3"
-+	python3 -c "import pyudev, dbus, gi.repository" || skip "Missing python modules"
-+
- 	kill_sleep_kill_ LOCAL_LVMDBUSD 0
- 
- 	echo "preparing lvmdbusd..."
+diff --git a/man/lvrename.8.in b/man/lvrename.8.in
+index bba46ae..fdacac7 100644
+--- a/man/lvrename.8.in
++++ b/man/lvrename.8.in
+@@ -19,7 +19,8 @@ lvrename \(em rename a logical volume
+ |
+ .I VolumeGroupName OldLogicalVolumeName NewLogicalVolumeName\fR}
+ .SH DESCRIPTION
+-lvrename renames an existing logical volume from
++lvrename renames an existing logical volume or an existing
++historical logical volume from
+ .IR OldLogicalVolume { Name | Path }
+ to
+ .IR NewLogicalVolume { Name | Path }.
 
 
