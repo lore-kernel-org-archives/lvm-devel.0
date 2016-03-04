@@ -1,51 +1,67 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 31 Mar 2016 10:22:20 +0000 (UTC)
-Subject: master - tests: do not test settings when MQ is emulated by SMQ
-Message-ID: <20160331102220.2315C60DEB@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri,  4 Mar 2016 14:19:15 +0000 (UTC)
+Subject: master - cleanup: previous patch with libdm config node buffer size
+Message-ID: <20160304141915.611DF61042@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bc5376b151f4a5993c223de51f0218aa95184471
-Commit:        bc5376b151f4a5993c223de51f0218aa95184471
-Parent:        5034bb8d180a496fc24cd0ac0d8dde2332d28bc2
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 31 11:59:55 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 31 12:21:40 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=67c5006e12c9e3bf888db0fbaa78a50efcbfa9b2
+Commit:        67c5006e12c9e3bf888db0fbaa78a50efcbfa9b2
+Parent:        967a0889a024e2cc3f3afb3469e1b0657ebb85bc
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Mar 4 15:19:09 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Mar 4 15:19:09 2016 +0100
 
-tests: do not test settings when MQ is emulated by SMQ
+cleanup: previous patch with libdm config node buffer size
 
 ---
- test/shell/lvchange-cache.sh |    9 ++++++++-
- 1 files changed, 8 insertions(+), 1 deletions(-)
+ libdm/libdm-config.c |   12 +++++++-----
+ 1 files changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvchange-cache.sh b/test/shell/lvchange-cache.sh
-index ca7522a..06d2f09 100644
---- a/test/shell/lvchange-cache.sh
-+++ b/test/shell/lvchange-cache.sh
-@@ -48,7 +48,8 @@ get lv_field $vg/corigin kernel_cache_settings | grep 'migration_threshold=333'
- lvchange --cachesettings 'migration_threshold = 233 sequential_threshold = 13' $vg/corigin
- get lv_field $vg/corigin kernel_cache_settings | tee out
- grep 'migration_threshold=233' out
--grep 'sequential_threshold=13' out
-+
-+if grep 'sequential_threshold=13' out ; then
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index a7f4096..5fa06a1 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -222,7 +222,7 @@ __attribute__ ((format(printf, 2, 3)))
+ static int _line_append(struct config_output *out, const char *fmt, ...)
+ {
+ 	char buf[4096];
+-	char *final_buf;
++	char *dyn_buf = NULL;
+ 	va_list ap;
+ 	int n;
  
- lvchange --cachesettings 'migration_threshold = 17' $vg/corigin
- get lv_field $vg/corigin kernel_cache_settings | tee out
-@@ -79,4 +80,10 @@ grep 'migration_threshold=2048' out
- grep 'sequential_threshold=13' out
- grep 'random_threshold=4' out
+@@ -246,21 +246,23 @@ static int _line_append(struct config_output *out, const char *fmt, ...)
+ 		 * so try dynamically allocated buffer now...
+ 		 */
+ 		va_start(ap, fmt);
+-		n = dm_vasprintf(&final_buf, fmt, ap);
++		n = dm_vasprintf(&dyn_buf, fmt, ap);
+ 		va_end(ap);
  
-+else
-+# When MQ is emulated by SMQ policy it does not hold settings.
-+# So just skip testing of param changes when sequential_threshold=0
-+grep 'sequential_threshold=0' out
-+fi
+ 		if (n < 0) {
+ 			log_error("dm_vasprintf failed for config line");
+ 			return 0;
+ 		}
+-	} else
+-		final_buf = buf;
++	}
+ 
+-	if (!dm_pool_grow_object(out->mem, final_buf, strlen(final_buf))) {
++	if (!dm_pool_grow_object(out->mem, dyn_buf ? : buf, 0)) {
+ 		log_error("dm_pool_grow_object failed for config line");
++		dm_free(dyn_buf);
+ 		return 0;
+ 	}
+ 
++	dm_free(dyn_buf);
 +
- vgremove -f $vg
+ 	return 1;
+ }
+ 
 
 
