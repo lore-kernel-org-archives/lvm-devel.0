@@ -1,192 +1,91 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 23 May 2019 12:47:22 -0400
-Subject: master - tests: change mkfs usage in lvconvert raid tests
-Message-ID: <201905231647.x4NGlMXQ026126@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon,  7 Mar 2016 09:44:16 +0000 (UTC)
+Subject: master - coverity: fix possible resource leak in _print_historical_lv function
+Message-ID: <20160307094416.EC18660E95@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1022b88a66dd02e981e738719e17452cd5c1bd59
-Commit:        1022b88a66dd02e981e738719e17452cd5c1bd59
-Parent:        6169c0a51b8098e4ffa15fb52cafccf7a73ab22c
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 23 11:45:26 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 23 11:45:26 2019 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d03b1779b4e2edaec221e2c29d3384d4c86052cd
+Commit:        d03b1779b4e2edaec221e2c29d3384d4c86052cd
+Parent:        7b15ca5c9ac3645b8d714014f89dbcd6731b2b04
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Mar 7 10:32:41 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Mar 7 10:43:50 2016 +0100
 
-tests: change mkfs usage in lvconvert raid tests
+coverity: fix possible resource leak in _print_historical_lv function
 
-The "echo y | mkfs" was failing at times from echo y.
-Remove echo y and replace with wipefs -a prior to mkfs.
+The code in _print_historical_lv function works with temporary
+"descendants_buffer" that is allocated and freed within this
+function.
+
+When printing text out, we used "outf" macro which called
+"out_text" fn and it checked return value and if failed,
+the macro called "return_0" automatically. But since we
+use the temporary buffer, if any of the out_text calls
+fails, we need to deallocate this buffer properly - that's
+the "goto_out", otherwise we'll be leaking memory.
+
+So add new "outfgo" helper macro which does the same as "outf",
+but it calls "goto_out" instead of "return_0" so we can jump
+to a cleanup hook at the end.
 ---
- ...ert-raid-reshape-linear_to_raid6-single-type.sh |    3 ++-
- ...t-raid-reshape-linear_to_striped-single-type.sh |    3 ++-
- .../lvconvert-raid-reshape-linear_to_striped.sh    |    3 ++-
- test/shell/lvconvert-raid-reshape-load.sh          |    3 ++-
- ...t-raid-reshape-striped_to_linear-single-type.sh |    3 ++-
- .../lvconvert-raid-reshape-striped_to_linear.sh    |    3 ++-
- .../lvconvert-raid-reshape-stripes-load-fail.sh    |    3 ++-
- .../lvconvert-raid-reshape-stripes-load-reload.sh  |    3 ++-
- test/shell/lvconvert-raid-reshape-stripes-load.sh  |    3 ++-
- test/shell/lvconvert-raid-restripe-linear.sh       |    3 ++-
- test/shell/lvconvert-raid5_to_raid10.sh            |    3 ++-
- 11 files changed, 22 insertions(+), 11 deletions(-)
+ lib/format_text/export.c      |   12 ++++++------
+ lib/format_text/text_export.h |    1 +
+ 2 files changed, 7 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh b/test/shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh
-index cbacf4a..b75e690 100644
---- a/test/shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh
-+++ b/test/shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh
-@@ -32,7 +32,8 @@ lvcreate -aey -L 16M -n $lv $vg
- check lv_field $vg/$lv segtype "linear"
- check lv_field $vg/$lv stripes 1
- check lv_field $vg/$lv data_stripes 1
--echo y|mkfs -t ext4 $DM_DEV_DIR/$vg/$lv
-+wipefs -a $DM_DEV_DIR/$vg/$lv
-+mkfs -t ext4 $DM_DEV_DIR/$vg/$lv
- fsck -fn $DM_DEV_DIR/$vg/$lv
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index c4c7b38..90fb044 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -854,10 +854,10 @@ static int _print_historical_lv(struct formatter *f, struct historical_logical_v
+ 		goto_out;
  
- # Convert linear -> raid1 (takeover)
-diff --git a/test/shell/lvconvert-raid-reshape-linear_to_striped-single-type.sh b/test/shell/lvconvert-raid-reshape-linear_to_striped-single-type.sh
-index 6d49f54..62bf482 100644
---- a/test/shell/lvconvert-raid-reshape-linear_to_striped-single-type.sh
-+++ b/test/shell/lvconvert-raid-reshape-linear_to_striped-single-type.sh
-@@ -31,7 +31,8 @@ lvcreate -aey -L 16M -n $lv $vg
- check lv_field $vg/$lv segtype "linear"
- check lv_field $vg/$lv stripes 1
- check lv_field $vg/$lv data_stripes 1
--echo y|mkfs -t ext4 $DM_DEV_DIR/$vg/$lv
-+wipefs -a $DM_DEV_DIR/$vg/$lv
-+mkfs -t ext4 $DM_DEV_DIR/$vg/$lv
- fsck -fn $DM_DEV_DIR/$vg/$lv
+ 	outnl(f);
+-	outf(f, "%s {", hlv->name);
++	outfgo(f, "%s {", hlv->name);
+ 	_inc_indent(f);
  
- # Convert linear -> raid1
-diff --git a/test/shell/lvconvert-raid-reshape-linear_to_striped.sh b/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
-index c398c5e..b77a1d9 100644
---- a/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
-+++ b/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
-@@ -30,7 +30,8 @@ lvcreate -aey -L 16M -n $lv1 $vg
- check lv_field $vg/$lv1 segtype "linear"
- check lv_field $vg/$lv1 stripes 1
- check lv_field $vg/$lv1 data_stripes 1
--echo y|mkfs -t ext4 $DM_DEV_DIR/$vg/$lv1
-+wipefs -a $DM_DEV_DIR/$vg/$lv1
-+mkfs -t ext4 $DM_DEV_DIR/$vg/$lv1
- fsck -fn $DM_DEV_DIR/$vg/$lv1
+-	outf(f, "id = \"%s\"", buffer);
++	outfgo(f, "id = \"%s\"", buffer);
  
- # Convert linear -> raid1
-diff --git a/test/shell/lvconvert-raid-reshape-load.sh b/test/shell/lvconvert-raid-reshape-load.sh
-index 11af24d..7cd149b 100644
---- a/test/shell/lvconvert-raid-reshape-load.sh
-+++ b/test/shell/lvconvert-raid-reshape-load.sh
-@@ -44,7 +44,8 @@ lvcreate --yes --type raid5_ls --stripes 13 -L190M -n$lv1 $vg
- check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
- check lv_first_seg_field $vg/$lv1 data_stripes 13
- check lv_first_seg_field $vg/$lv1 stripes 14
--echo y|mkfs -t ext4 /dev/$vg/$lv1
-+wipefs -a /dev/$vg/$lv1
-+mkfs -t ext4 /dev/$vg/$lv1
- aux wait_for_sync $vg $lv1
+ 	if (!_print_timestamp(f, "creation_time", hlv->timestamp, buffer, sizeof(buffer)))
+ 		goto_out;
+@@ -867,16 +867,16 @@ static int _print_historical_lv(struct formatter *f, struct historical_logical_v
  
- mkdir -p $mount_dir
-diff --git a/test/shell/lvconvert-raid-reshape-striped_to_linear-single-type.sh b/test/shell/lvconvert-raid-reshape-striped_to_linear-single-type.sh
-index 60fc59f..9840eea 100644
---- a/test/shell/lvconvert-raid-reshape-striped_to_linear-single-type.sh
-+++ b/test/shell/lvconvert-raid-reshape-striped_to_linear-single-type.sh
-@@ -32,7 +32,8 @@ check lv_first_seg_field $vg/$lv segtype "striped"
- check lv_first_seg_field $vg/$lv stripes 4
- check lv_first_seg_field $vg/$lv data_stripes 4
- check lv_first_seg_field $vg/$lv stripesize "64.00k"
--echo y|mkfs -t ext4 $DM_DEV_DIR/$vg/$lv
-+wipefs -a $DM_DEV_DIR/$vg/$lv
-+mkfs -t ext4 $DM_DEV_DIR/$vg/$lv
- fsck -fn $DM_DEV_DIR/$vg/$lv
- lvextend -y -L64M $DM_DEV_DIR/$vg/$lv
+ 	if (hlv->indirect_origin) {
+ 		if (hlv->indirect_origin->is_historical)
+-			outf(f, "origin = \"%s%s\"", HISTORICAL_LV_PREFIX, hlv->indirect_origin->historical->name);
++			outfgo(f, "origin = \"%s%s\"", HISTORICAL_LV_PREFIX, hlv->indirect_origin->historical->name);
+ 		else
+-			outf(f, "origin = \"%s\"", hlv->indirect_origin->live->name);
++			outfgo(f, "origin = \"%s\"", hlv->indirect_origin->live->name);
+ 	}
  
-diff --git a/test/shell/lvconvert-raid-reshape-striped_to_linear.sh b/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
-index e217ea3..77e04bc 100644
---- a/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
-+++ b/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
-@@ -33,7 +33,8 @@ check lv_field $vg/$lv1 data_stripes 4
- check lv_field $vg/$lv1 stripes 4
- check lv_field $vg/$lv1 stripesize "32.00k"
- check lv_field $vg/$lv1 reshape_len_le ""
--echo y|mkfs -t ext4 $DM_DEV_DIR/$vg/$lv1
-+wipefs -a $DM_DEV_DIR/$vg/$lv1
-+mkfs -t ext4 $DM_DEV_DIR/$vg/$lv1
- fsck -fn $DM_DEV_DIR/$vg/$lv1
+ 	if (descendants_buffer)
+-		outf(f, "descendants = %s", descendants_buffer);
++		outfgo(f, "descendants = %s", descendants_buffer);
  
- # Convert striped -> raid5(_n)
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-index 5fa21dc..8dda252 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-@@ -45,7 +45,8 @@ check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
- check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
- check lv_first_seg_field $vg/$lv1 data_stripes 10
- check lv_first_seg_field $vg/$lv1 stripes 11
--echo y|mkfs -t ext4 /dev/$vg/$lv1
-+wipefs -a /dev/$vg/$lv1
-+mkfs -t ext4 /dev/$vg/$lv1
- fsck -fn /dev/$vg/$lv1
+ 	_dec_indent(f);
+-	outf(f, "}");
++	outfgo(f, "}");
  
- mkdir -p $mount_dir
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-index 61afa88..7318561 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-@@ -48,7 +48,8 @@ check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
- check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
- check lv_first_seg_field $vg/$lv1 data_stripes 10
- check lv_first_seg_field $vg/$lv1 stripes 11
--echo y|mkfs -t ext4 /dev/$vg/$lv1
-+wipefs -a /dev/$vg/$lv1
-+mkfs -t ext4 /dev/$vg/$lv1
+ 	r = 1;
+ out:
+diff --git a/lib/format_text/text_export.h b/lib/format_text/text_export.h
+index 33c136b..377ee93 100644
+--- a/lib/format_text/text_export.h
++++ b/lib/format_text/text_export.h
+@@ -20,6 +20,7 @@
+ #define outhint(args...) do {if (!out_hint(args)) return_0;} while (0)
+ #define outfc(args...) do {if (!out_text_with_comment(args)) return_0;} while (0)
+ #define outf(args...) do {if (!out_text(args)) return_0;} while (0)
++#define outfgo(args...) do {if (!out_text(args)) goto_out;} while (0)
+ #define outnl(f) do {if (!out_newline(f)) return_0;} while (0)
  
- mkdir -p "$mount_dir"
- mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load.sh b/test/shell/lvconvert-raid-reshape-stripes-load.sh
-index dd04798..32c8174 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load.sh
-@@ -45,7 +45,8 @@ check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
- check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
- check lv_first_seg_field $vg/$lv1 data_stripes 10
- check lv_first_seg_field $vg/$lv1 stripes 11
--echo y|mkfs -t ext4 /dev/$vg/$lv1
-+wipefs -a /dev/$vg/$lv1
-+mkfs -t ext4 /dev/$vg/$lv1
- 
- mkdir -p $mount_dir
- mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
-diff --git a/test/shell/lvconvert-raid-restripe-linear.sh b/test/shell/lvconvert-raid-restripe-linear.sh
-index 70d31db..b770a47 100644
---- a/test/shell/lvconvert-raid-restripe-linear.sh
-+++ b/test/shell/lvconvert-raid-restripe-linear.sh
-@@ -29,7 +29,8 @@ lvcreate -aey -L 16M -n $lv $vg
- check lv_field $vg/$lv segtype "linear"
- check lv_field $vg/$lv stripes 1
- check lv_field $vg/$lv data_stripes 1
--echo y|mkfs -t ext4 $DM_DEV_DIR/$vg/$lv
-+wipefs -a $DM_DEV_DIR/$vg/$lv
-+mkfs -t ext4 $DM_DEV_DIR/$vg/$lv
- fsck -fn $DM_DEV_DIR/$vg/$lv
- 
- # Convert linear -> raid1
-diff --git a/test/shell/lvconvert-raid5_to_raid10.sh b/test/shell/lvconvert-raid5_to_raid10.sh
-index e38e4d3..28f3026 100644
---- a/test/shell/lvconvert-raid5_to_raid10.sh
-+++ b/test/shell/lvconvert-raid5_to_raid10.sh
-@@ -30,7 +30,8 @@ check lv_field $vg/$lv1 segtype "raid5"
- check lv_field $vg/$lv1 stripes 4
- check lv_field $vg/$lv1 data_stripes 3
- check lv_field $vg/$lv1 region_size "256.00k"
--echo y|mkfs -t ext4 $DM_DEV_DIR/$vg/$lv1
-+wipefs -a $DM_DEV_DIR/$vg/$lv1
-+mkfs -t ext4 $DM_DEV_DIR/$vg/$lv1
- fsck -fn $DM_DEV_DIR/$vg/$lv1
- aux wait_for_sync $vg $lv1
- fsck -fn $DM_DEV_DIR/$vg/$lv1
+ struct formatter;
 
 
