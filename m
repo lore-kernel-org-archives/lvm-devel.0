@@ -1,39 +1,40 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  3 Mar 2016 13:20:39 +0000 (UTC)
-Subject: master - lvmdump: also list historical LVs in lvmdump
-Message-ID: <20160303132039.D48E860310@fedorahosted.org>
+From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
+Date: Mon,  7 Mar 2016 14:25:45 +0000 (UTC)
+Subject: master - raid_manip: allow for raid leg to be replaced when not both data and metadata image are on pvs
+Message-ID: <20160307142545.8D73160DF2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b39473a537249b60e36f69e28155bfc6829763ab
-Commit:        b39473a537249b60e36f69e28155bfc6829763ab
-Parent:        8a601454e178c72b39be66365eaa153d69d4ed40
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Mar 3 10:36:58 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Mar 3 13:50:59 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=18cf5e8e6758db59c9413bd9c9abcc183c49293d
+Commit:        18cf5e8e6758db59c9413bd9c9abcc183c49293d
+Parent:        d03b1779b4e2edaec221e2c29d3384d4c86052cd
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Mon Mar 7 15:25:30 2016 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Mon Mar 7 15:25:30 2016 +0100
 
-lvmdump: also list historical LVs in lvmdump
+raid_manip: allow for raid leg to be replaced when not both data and metadata image are on pvs
 
+resolves rhbz#1130329
 ---
- scripts/lvmdump.sh |    2 +-
+ lib/metadata/raid_manip.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/scripts/lvmdump.sh b/scripts/lvmdump.sh
-index bf72d65..1e91a9d 100755
---- a/scripts/lvmdump.sh
-+++ b/scripts/lvmdump.sh
-@@ -137,7 +137,7 @@ if (( $advanced )); then
- 	log "\"$LVM\" pvscan -v >> \"$dir/pvscan\" 2>> \"$log\""
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 3b9f81c..887b27f 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -914,7 +914,7 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
+ 				  display_lvname(seg_lv(seg, s)));
+ 		} else {
+ 			/* Conditions for second pass */
+-			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
++			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) &&
+ 			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
+ 				continue;
  
- 	myecho "  lvs..."
--	log "\"$LVM\" lvs -a -o +devices >> \"$dir/lvs\" 2>> \"$log\""
-+	log "\"$LVM\" lvs -a -H -o +devices >> \"$dir/lvs\" 2>> \"$log\""
- 
- 	myecho "  pvs..."
- 	log "\"$LVM\" pvs -a -v >> \"$dir/pvs\" 2>> \"$log\""
 
 
