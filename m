@@ -1,52 +1,414 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon,  7 Mar 2016 20:26:32 +0000 (UTC)
-Subject: master - toollib: always process in use pvs
-Message-ID: <20160307202632.BF2CB60F6A@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue,  8 Mar 2016 20:02:00 +0000 (UTC)
+Subject: master - report: Tidy some field names, widths and headings.
+Message-ID: <20160308200200.C25AA60ABA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6cf1eff46d2ec32363576ea21318fc8036656e07
-Commit:        6cf1eff46d2ec32363576ea21318fc8036656e07
-Parent:        a8319e62c079e807af275f220dbd6ea875b0c0c6
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Mar 7 14:15:33 2016 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Mar 7 14:15:33 2016 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=90c5d470c2f3a67a90894846f7294ad31d7dc877
+Commit:        90c5d470c2f3a67a90894846f7294ad31d7dc877
+Parent:        6cf1eff46d2ec32363576ea21318fc8036656e07
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Mar 8 19:50:22 2016 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Mar 8 19:50:22 2016 +0000
 
-toollib: always process in use pvs
+report: Tidy some field names, widths and headings.
 
-With the recent conversion of pvcreate/pvremove to the
-common toollib processing function, skipping in-use PVs
-in _process_pvs_in_vg prevented them from being protected
-as intended by the in-use flag.
+Specifying an output width of 0 now leads to a default minimum width
+taken from the width of the column heading.  (Most fields should use
+this.)
 
-The processing code for pvcreate/pvremove checks for the
-in-use state itself and prevents using an in-use PV.
-If a PV is skipped, it looks like an unused device and
-is not protected from being used in pvcreate/pvremove.
+Components of field names are generally separated by underscores (which
+are optional at run-time).  (Dropped 3 duplicate fields now covered by
+this rule.)
+
+Each field heading must be unique and generally doesn't have spaces
+between words (which get capitalised) unless they are already short and
+the fields are normally longer or clarity demands it.
 ---
- tools/toollib.c |    6 ------
- 1 files changed, 0 insertions(+), 6 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/report/columns.h    |  225 +++++++++++++++++++++++------------------------
+ lib/report/properties.c |   18 ++---
+ lib/report/report.c     |    2 +-
+ 4 files changed, 119 insertions(+), 127 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 14aca15..2ff5a3b 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3049,12 +3049,6 @@ static int _process_pvs_in_vg(struct cmd_context *cmd,
- 		pv = pvl->pv;
- 		pv_name = pv_dev_name(pv);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index bf49764..f52b879 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.146 - 
+ =================================
++  Tidy report field names, headings and widths.
+   Add vgscan --notifydbus to send a dbus notification.
+   Add dbus notification from commands after a PV/VG/LV changes state.
  
--		if (cmd->system_id && is_orphan(pv) && is_used_pv(pv)) {
--			log_verbose("PV %s is used by a VG but its metadata is missing.", pv_name);
--			log_verbose("Skipping PV %s because it's not possible to decide whether it matches system id.", pv_name);
--			continue;
--		}
--
- 		process_pv = process_all_pvs;
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index f22b37a..1abc4c8 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -28,23 +28,23 @@
+  */
  
- 		/* Remove each arg_devices entry as it is processed. */
+ /*
+- * FIELD(report_object_type, structure, sort_type, heading, structure_field, output width, reporting_function, field_id, description, settable_via_lib)
++ * FIELD(report_object_type, structure, sort_type, heading, structure_field, output_width, reporting_function, field_id, description, settable_via_lib)
+  */
+ 
+ /* *INDENT-OFF* */
+ FIELD(LVS, lv, STR, "LV UUID", lvid, 38, lvuuid, lv_uuid, "Unique identifier.", 0)
+ FIELD(LVS, lv, STR, "LV", lvid, 4, lvname, lv_name, "Name.  LVs created for internal use are enclosed in brackets.", 0)
+ FIELD(LVS, lv, STR, "LV", lvid, 4, lvfullname, lv_full_name, "Full name of LV including its VG, namely VG/LV.", 0)
+-FIELD(LVS, lv, STR, "Path", lvid, 4, lvpath, lv_path, "Full pathname for LV. Blank for internal LVs.", 0)
+-FIELD(LVS, lv, STR, "DMPath", lvid, 6, lvdmpath, lv_dm_path, "Internal device-mapper pathname for LV (in /dev/mapper directory).", 0)
+-FIELD(LVS, lv, STR, "Parent", lvid, 6, lvparent, lv_parent, "For LVs that are components of another LV, the parent LV.", 0)
+-FIELD(LVSINFOSTATUS, lv, STR, "Attr", lvid, 4, lvstatus, lv_attr, "Various attributes - see man page.", 0)
++FIELD(LVS, lv, STR, "Path", lvid, 0, lvpath, lv_path, "Full pathname for LV. Blank for internal LVs.", 0)
++FIELD(LVS, lv, STR, "DMPath", lvid, 0, lvdmpath, lv_dm_path, "Internal device-mapper pathname for LV (in /dev/mapper directory).", 0)
++FIELD(LVS, lv, STR, "Parent", lvid, 0, lvparent, lv_parent, "For LVs that are components of another LV, the parent LV.", 0)
++FIELD(LVSINFOSTATUS, lv, STR, "Attr", lvid, 0, lvstatus, lv_attr, "Various attributes - see man page.", 0)
+ FIELD(LVS, lv, STR_LIST, "Layout", lvid, 10, lvlayout, lv_layout, "LV layout.", 0)
+ FIELD(LVS, lv, STR_LIST, "Role", lvid, 10, lvrole, lv_role, "LV role.", 0)
+ FIELD(LVS, lv, BIN, "InitImgSync", lvid, 10, lvinitialimagesync, lv_initial_image_sync, "Set if mirror/RAID images underwent initial resynchronization.", 0)
+ FIELD(LVS, lv, BIN, "ImgSynced", lvid, 10, lvimagesynced, lv_image_synced, "Set if mirror/RAID image is synchronized.", 0)
+ FIELD(LVS, lv, BIN, "Merging", lvid, 10, lvmerging, lv_merging, "Set if snapshot LV is being merged to origin.", 0)
+-FIELD(LVS, lv, BIN, "Converting", lvid, 10, lvconverting, lv_converting, "Set if LV is being converted.", 0)
++FIELD(LVS, lv, BIN, "Converting", lvid, 0, lvconverting, lv_converting, "Set if LV is being converted.", 0)
+ FIELD(LVS, lv, STR, "AllocPol", lvid, 10, lvallocationpolicy, lv_allocation_policy, "LV allocation policy.", 0)
+ FIELD(LVS, lv, BIN, "AllocLock", lvid, 10, lvallocationlocked, lv_allocation_locked, "Set if LV is locked against allocation changes.", 0)
+ FIELD(LVS, lv, BIN, "FixMin", lvid, 10, lvfixedminor, lv_fixed_minor, "Set if LV has fixed minor number assigned.", 0)
+@@ -52,163 +52,160 @@ FIELD(LVS, lv, BIN, "MergeFailed", lvid, 15, lvmergefailed, lv_merge_failed, "Se
+ FIELD(LVS, lv, BIN, "SnapInvalid", lvid, 15, lvsnapshotinvalid, lv_snapshot_invalid, "Set if snapshot LV is invalid.", 0)
+ FIELD(LVS, lv, BIN, "SkipAct", lvid, 15, lvskipactivation, lv_skip_activation, "Set if LV is skipped on activation.", 0)
+ FIELD(LVS, lv, STR, "WhenFull", lvid, 15, lvwhenfull, lv_when_full, "For thin pools, behavior when full.", 0)
+-FIELD(LVS, lv, STR, "Active", lvid, 6, lvactive, lv_active, "Active state of the LV.", 0)
++FIELD(LVS, lv, STR, "Active", lvid, 0, lvactive, lv_active, "Active state of the LV.", 0)
+ FIELD(LVS, lv, BIN, "ActLocal", lvid, 10, lvactivelocally, lv_active_locally, "Set if the LV is active locally.", 0)
+ FIELD(LVS, lv, BIN, "ActRemote", lvid, 10, lvactiveremotely, lv_active_remotely, "Set if the LV is active remotely.", 0)
+ FIELD(LVS, lv, BIN, "ActExcl", lvid, 10, lvactiveexclusively, lv_active_exclusively, "Set if the LV is active exclusively.", 0)
+-FIELD(LVS, lv, SNUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
+-FIELD(LVS, lv, SNUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
+-FIELD(LVS, lv, SIZ, "Rahead", lvid, 6, lvreadahead, lv_read_ahead, "Read ahead setting in current units.", 0)
+-FIELD(LVS, lv, SIZ, "LSize", size, 5, size64, lv_size, "Size of LV in current units.", 0)
+-FIELD(LVS, lv, SIZ, "MSize", lvid, 6, lvmetadatasize, lv_metadata_size, "For thin and cache pools, the size of the LV that holds the metadata.", 0)
+-FIELD(LVS, lv, NUM, "#Seg", lvid, 4, lvsegcount, seg_count, "Number of segments in LV.", 0)
+-FIELD(LVS, lv, STR, "Origin", lvid, 6, origin, origin, "For snapshots, the origin device of this LV.", 0)
++FIELD(LVS, lv, SNUM, "Maj", major, 0, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
++FIELD(LVS, lv, SNUM, "Min", minor, 0, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
++FIELD(LVS, lv, SIZ, "Rahead", lvid, 0, lvreadahead, lv_read_ahead, "Read ahead setting in current units.", 0)
++FIELD(LVS, lv, SIZ, "LSize", size, 0, size64, lv_size, "Size of LV in current units.", 0)
++FIELD(LVS, lv, SIZ, "MSize", lvid, 0, lvmetadatasize, lv_metadata_size, "For thin and cache pools, the size of the LV that holds the metadata.", 0)
++FIELD(LVS, lv, NUM, "#Seg", lvid, 0, lvsegcount, seg_count, "Number of segments in LV.", 0)
++FIELD(LVS, lv, STR, "Origin", lvid, 0, origin, origin, "For snapshots, the origin device of this LV.", 0)
+ FIELD(LVS, lv, STR, "Origin UUID", lvid, 38, originuuid, origin_uuid, "For snapshots, the UUID of origin device of this LV.", 0)
+-FIELD(LVS, lv, SIZ, "OSize", lvid, 5, originsize, origin_size, "For snapshots, the size of the origin device of this LV.", 0)
+-FIELD(LVS, lv, STR_LIST, "Ancestors", lvid, 12, lvancestors, lv_ancestors, "LV ancestors ignoring any stored history of the ancestry chain.", 0)
+-FIELD(LVS, lv, STR_LIST, "FAncestors", lvid, 12, lvfullancestors, lv_full_ancestors, "LV ancestors including stored history of the ancestry chain.", 0)
+-FIELD(LVS, lv, STR_LIST, "Descendants", lvid, 12, lvdescendants, lv_descendants, "LV descendants ignoring any stored history of the ancestry chain.", 0)
+-FIELD(LVS, lv, STR_LIST, "FDescendants", lvid, 12, lvfulldescendants, lv_full_descendants, "LV descendants including stored history of the ancestry chain.", 0)
++FIELD(LVS, lv, SIZ, "OSize", lvid, 0, originsize, origin_size, "For snapshots, the size of the origin device of this LV.", 0)
++FIELD(LVS, lv, STR_LIST, "Ancestors", lvid, 0, lvancestors, lv_ancestors, "LV ancestors ignoring any stored history of the ancestry chain.", 0)
++FIELD(LVS, lv, STR_LIST, "FAncestors", lvid, 0, lvfullancestors, lv_full_ancestors, "LV ancestors including stored history of the ancestry chain.", 0)
++FIELD(LVS, lv, STR_LIST, "Descendants", lvid, 0, lvdescendants, lv_descendants, "LV descendants ignoring any stored history of the ancestry chain.", 0)
++FIELD(LVS, lv, STR_LIST, "FDescendants", lvid, 0, lvfulldescendants, lv_full_descendants, "LV descendants including stored history of the ancestry chain.", 0)
+ FIELD(LVS, lv, PCT, "Data%", lvid, 6, datapercent, data_percent, "For snapshot and thin pools and volumes, the percentage full if LV is active.", 0)
+ FIELD(LVS, lv, PCT, "Snap%", lvid, 6, snpercent, snap_percent, "For snapshots, the percentage full if LV is active.", 0)
+ FIELD(LVS, lv, PCT, "Meta%", lvid, 6, metadatapercent, metadata_percent, "For thin pools, the percentage of metadata full if LV is active.", 0)
+-FIELD(LVS, lv, PCT, "Cpy%Sync", lvid, 8, copypercent, copy_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
+-FIELD(LVS, lv, PCT, "Cpy%Sync", lvid, 8, copypercent, sync_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
+-FIELD(LVS, lv, NUM, "Mismatches", lvid, 10, raidmismatchcount, raid_mismatch_count, "For RAID, number of mismatches found or repaired.", 0)
+-FIELD(LVS, lv, STR, "SyncAction", lvid, 10, raidsyncaction, raid_sync_action, "For RAID, the current synchronization action being performed.", 0)
+-FIELD(LVS, lv, NUM, "WBehind", lvid, 7, raidwritebehind, raid_write_behind, "For RAID1, the number of outstanding writes allowed to writemostly devices.", 0)
+-FIELD(LVS, lv, NUM, "MinSync", lvid, 7, raidminrecoveryrate, raid_min_recovery_rate, "For RAID1, the minimum recovery I/O load in kiB/sec/disk.", 0)
+-FIELD(LVS, lv, NUM, "MaxSync", lvid, 7, raidmaxrecoveryrate, raid_max_recovery_rate, "For RAID1, the maximum recovery I/O load in kiB/sec/disk.", 0)
+-FIELD(LVS, lv, STR, "Move", lvid, 4, movepv, move_pv, "For pvmove, Source PV of temporary LV created by pvmove.", 0)
++FIELD(LVS, lv, PCT, "Cpy%Sync", lvid, 0, copypercent, copy_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
++FIELD(LVS, lv, PCT, "Cpy%Sync", lvid, 0, copypercent, sync_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
++FIELD(LVS, lv, NUM, "Mismatches", lvid, 0, raidmismatchcount, raid_mismatch_count, "For RAID, number of mismatches found or repaired.", 0)
++FIELD(LVS, lv, STR, "SyncAction", lvid, 0, raidsyncaction, raid_sync_action, "For RAID, the current synchronization action being performed.", 0)
++FIELD(LVS, lv, NUM, "WBehind", lvid, 0, raidwritebehind, raid_write_behind, "For RAID1, the number of outstanding writes allowed to writemostly devices.", 0)
++FIELD(LVS, lv, NUM, "MinSync", lvid, 0, raidminrecoveryrate, raid_min_recovery_rate, "For RAID1, the minimum recovery I/O load in kiB/sec/disk.", 0)
++FIELD(LVS, lv, NUM, "MaxSync", lvid, 0, raidmaxrecoveryrate, raid_max_recovery_rate, "For RAID1, the maximum recovery I/O load in kiB/sec/disk.", 0)
++FIELD(LVS, lv, STR, "Move", lvid, 0, movepv, move_pv, "For pvmove, Source PV of temporary LV created by pvmove.", 0)
+ FIELD(LVS, lv, STR, "Move UUID", lvid, 38, movepvuuid, move_pv_uuid, "For pvmove, the UUID of Source PV of temporary LV created by pvmove.", 0)
+-FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
+-FIELD(LVS, lv, STR, "Convert", lvid, 38, convertlvuuid, convert_lv_uuid, "For lvconvert, UUID of temporary LV created by lvconvert.", 0)
+-FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, mirror_log, "For mirrors, the LV holding the synchronisation log.", 0)
++FIELD(LVS, lv, STR, "Convert", lvid, 0, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
++FIELD(LVS, lv, STR, "Convert UUID", lvid, 38, convertlvuuid, convert_lv_uuid, "For lvconvert, UUID of temporary LV created by lvconvert.", 0)
++FIELD(LVS, lv, STR, "Log", lvid, 0, loglv, mirror_log, "For mirrors, the LV holding the synchronisation log.", 0)
+ FIELD(LVS, lv, STR, "Log UUID", lvid, 38, loglvuuid, mirror_log_uuid, "For mirrors, the UUID of the LV holding the synchronisation log.", 0)
+-FIELD(LVS, lv, STR, "Data", lvid, 4, datalv, data_lv, "For thin and cache pools, the LV holding the associated data.", 0)
++FIELD(LVS, lv, STR, "Data", lvid, 0, datalv, data_lv, "For thin and cache pools, the LV holding the associated data.", 0)
+ FIELD(LVS, lv, STR, "Data UUID", lvid, 38, datalvuuid, data_lv_uuid, "For thin and cache pools, the UUID of the LV holding the associated data.", 0)
+-FIELD(LVS, lv, STR, "Meta", lvid, 4, metadatalv, metadata_lv, "For thin and cache pools, the LV holding the associated metadata.", 0)
++FIELD(LVS, lv, STR, "Meta", lvid, 0, metadatalv, metadata_lv, "For thin and cache pools, the LV holding the associated metadata.", 0)
+ FIELD(LVS, lv, STR, "Meta UUID", lvid, 38, metadatalvuuid, metadata_lv_uuid, "For thin and cache pools, the UUID of the LV holding the associated metadata.", 0)
+-FIELD(LVS, lv, STR, "Pool", lvid, 4, poollv, pool_lv, "For thin volumes, the thin pool LV for this volume.", 0)
++FIELD(LVS, lv, STR, "Pool", lvid, 0, poollv, pool_lv, "For thin volumes, the thin pool LV for this volume.", 0)
+ FIELD(LVS, lv, STR, "Pool UUID", lvid, 38, poollvuuid, pool_lv_uuid, "For thin volumes, the UUID of the thin pool LV for this volume.", 0)
+-FIELD(LVS, lv, STR_LIST, "LV Tags", tags, 7, tags, lv_tags, "Tags, if any.", 0)
+-FIELD(LVS, lv, STR, "LProfile", lvid, 8, lvprofile, lv_profile, "Configuration profile attached to this LV.", 0)
+-FIELD(LVS, lv, STR, "Lock Args", lvid, 9, lvlockargs, lv_lockargs, "Lock args of the LV used by lvmlockd.", 0)
++FIELD(LVS, lv, STR_LIST, "LV Tags", tags, 0, tags, lv_tags, "Tags, if any.", 0)
++FIELD(LVS, lv, STR, "LProfile", lvid, 0, lvprofile, lv_profile, "Configuration profile attached to this LV.", 0)
++FIELD(LVS, lv, STR, "LLockArgs", lvid, 0, lvlockargs, lv_lockargs, "Lock args of the LV used by lvmlockd.", 0)
+ FIELD(LVS, lv, TIM, "CTime", lvid, 26, lvtime, lv_time, "Creation time of the LV, if known", 0)
+ FIELD(LVS, lv, TIM, "RTime", lvid, 26, lvtimeremoved, lv_time_removed, "Removal time of the LV, if known", 0)
+ FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
+-FIELD(LVS, lv, STR_LIST, "Modules", lvid, 7, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
+-FIELD(LVS, lv, BIN, "Historical", lvid, 8, lvhistorical, lv_historical, "Set if the LV is historical.", 0)
++FIELD(LVS, lv, STR_LIST, "Modules", lvid, 0, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
++FIELD(LVS, lv, BIN, "Historical", lvid, 0, lvhistorical, lv_historical, "Set if the LV is historical.", 0)
+ 
+-FIELD(LVSINFO, lv, SNUM, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
+-FIELD(LVSINFO, lv, SNUM, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
+-FIELD(LVSINFO, lv, SIZ, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
++FIELD(LVSINFO, lv, SNUM, "KMaj", lvid, 0, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
++FIELD(LVSINFO, lv, SNUM, "KMin", lvid, 0, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
++FIELD(LVSINFO, lv, SIZ, "KRahead", lvid, 0, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
+ FIELD(LVSINFO, lv, STR, "LPerms", lvid, 8, lvpermissions, lv_permissions, "LV permissions.", 0)
+ FIELD(LVSINFO, lv, BIN, "Suspended", lvid, 10, lvsuspended, lv_suspended, "Set if LV is suspended.", 0)
+ FIELD(LVSINFO, lv, BIN, "LiveTable", lvid, 20, lvlivetable, lv_live_table, "Set if LV has live table present.", 0)
+ FIELD(LVSINFO, lv, BIN, "InactiveTable", lvid, 20, lvinactivetable, lv_inactive_table, "Set if LV has inactive table present.", 0)
+ FIELD(LVSINFO, lv, BIN, "DevOpen", lvid, 10, lvdeviceopen, lv_device_open, "Set if LV device is open.", 0)
+ 
+-FIELD(LVSSTATUS, lv, NUM, "CacheTotalBlocks", lvid, 16, cache_total_blocks, cache_total_blocks, "Total cache blocks.", 0)
++FIELD(LVSSTATUS, lv, NUM, "CacheTotalBlocks", lvid, 0, cache_total_blocks, cache_total_blocks, "Total cache blocks.", 0)
+ FIELD(LVSSTATUS, lv, NUM, "CacheUsedBlocks", lvid, 16, cache_used_blocks, cache_used_blocks, "Used cache blocks.", 0)
+-FIELD(LVSSTATUS, lv, NUM, "CacheDirtyBlocks", lvid, 16, cache_dirty_blocks, cache_dirty_blocks, "Dirty cache blocks.", 0)
++FIELD(LVSSTATUS, lv, NUM, "CacheDirtyBlocks", lvid, 0, cache_dirty_blocks, cache_dirty_blocks, "Dirty cache blocks.", 0)
+ FIELD(LVSSTATUS, lv, NUM, "CacheReadHits", lvid, 16, cache_read_hits, cache_read_hits, "Cache read hits.", 0)
+ FIELD(LVSSTATUS, lv, NUM, "CacheReadMisses", lvid, 16, cache_read_misses, cache_read_misses, "Cache read misses.", 0)
+ FIELD(LVSSTATUS, lv, NUM, "CacheWriteHits", lvid, 16, cache_write_hits, cache_write_hits, "Cache write hits.", 0)
+-FIELD(LVSSTATUS, lv, NUM, "CacheWriteMisses", lvid, 16, cache_write_misses, cache_write_misses, "Cache write misses.", 0)
+-FIELD(LVSSTATUS, lv, STR_LIST, "KCache Settings", lvid, 18, kernel_cache_settings, kernel_cache_settings, "Cache settings/parameters as set in kernel, including default values (cached segments only).", 0)
+-FIELD(LVSSTATUS, lv, STR, "KCache Policy", lvid, 18, kernel_cache_policy, kernel_cache_policy, "Cache policy used in kernel.", 0)
++FIELD(LVSSTATUS, lv, NUM, "CacheWriteMisses", lvid, 0, cache_write_misses, cache_write_misses, "Cache write misses.", 0)
++FIELD(LVSSTATUS, lv, STR_LIST, "KCacheSettings", lvid, 18, kernel_cache_settings, kernel_cache_settings, "Cache settings/parameters as set in kernel, including default values (cached segments only).", 0)
++FIELD(LVSSTATUS, lv, STR, "KCachePolicy", lvid, 18, kernel_cache_policy, kernel_cache_policy, "Cache policy used in kernel.", 0)
+ FIELD(LVSSTATUS, lv, STR, "Health", lvid, 15, lvhealthstatus, lv_health_status, "LV health status.", 0)
+-FIELD(LVSSTATUS, lv, STR, "KDiscards", lvid, 8, kdiscards, kernel_discards, "For thin pools, how discards are handled in kernel.", 0)
++FIELD(LVSSTATUS, lv, STR, "KDiscards", lvid, 0, kdiscards, kernel_discards, "For thin pools, how discards are handled in kernel.", 0)
+ FIELD(LVSSTATUS, lv, BIN, "CheckNeeded", lvid, 15, lvcheckneeded, lv_check_needed, "For thin pools, whether metadata check is needed.", 0)
+ 
+-FIELD(LABEL, label, STR, "Fmt", type, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
++FIELD(LABEL, label, STR, "Fmt", type, 0, pvfmt, pv_fmt, "Type of metadata.", 0)
+ FIELD(LABEL, label, STR, "PV UUID", type, 38, pvuuid, pv_uuid, "Unique identifier.", 0)
+-FIELD(LABEL, label, SIZ, "DevSize", dev, 7, devsize, dev_size, "Size of underlying device in current units.", 0)
++FIELD(LABEL, label, SIZ, "DevSize", dev, 0, devsize, dev_size, "Size of underlying device in current units.", 0)
+ FIELD(LABEL, label, STR, "PV", dev, 10, dev_name, pv_name, "Name.", 0)
+ FIELD(LABEL, label, SIZ, "PMdaFree", type, 9, pvmdafree, pv_mda_free, "Free metadata area space on this device in current units.", 0)
+ FIELD(LABEL, label, SIZ, "PMdaSize", type, 9, pvmdasize, pv_mda_size, "Size of smallest metadata area on this device in current units.", 0)
+-FIELD(LABEL, label, NUM, "PExtVsn", type, 7, pvextvsn, pv_ext_vsn, "PV header extension version.", 0)
++FIELD(LABEL, label, NUM, "PExtVsn", type, 0, pvextvsn, pv_ext_vsn, "PV header extension version.", 0)
+ 
+ FIELD(PVS, pv, NUM, "1st PE", pe_start, 7, size64, pe_start, "Offset to the start of data on the underlying device.", 0)
+-FIELD(PVS, pv, SIZ, "PSize", id, 5, pvsize, pv_size, "Size of PV in current units.", 0)
+-FIELD(PVS, pv, SIZ, "PFree", id, 5, pvfree, pv_free, "Total amount of unallocated space in current units.", 0)
+-FIELD(PVS, pv, SIZ, "Used", id, 4, pvused, pv_used, "Total amount of allocated space in current units.", 0)
+-FIELD(PVS, pv, STR, "Attr", id, 4, pvstatus, pv_attr, "Various attributes - see man page.", 0)
+-FIELD(PVS, pv, BIN, "Allocatable", id, 10, pvallocatable, pv_allocatable, "Set if this device can be used for allocation.", 0)
++FIELD(PVS, pv, SIZ, "PSize", id, 0, pvsize, pv_size, "Size of PV in current units.", 0)
++FIELD(PVS, pv, SIZ, "PFree", id, 0, pvfree, pv_free, "Total amount of unallocated space in current units.", 0)
++FIELD(PVS, pv, SIZ, "Used", id, 0, pvused, pv_used, "Total amount of allocated space in current units.", 0)
++FIELD(PVS, pv, STR, "Attr", id, 0, pvstatus, pv_attr, "Various attributes - see man page.", 0)
++FIELD(PVS, pv, BIN, "Allocatable", id, 0, pvallocatable, pv_allocatable, "Set if this device can be used for allocation.", 0)
+ FIELD(PVS, pv, BIN, "Exported", id, 10, pvexported, pv_exported, "Set if this device is exported.", 0)
+ FIELD(PVS, pv, BIN, "Missing", id, 10, pvmissing, pv_missing, "Set if this device is missing in system.", 0)
+ FIELD(PVS, pv, NUM, "PE", pe_count, 3, uint32, pv_pe_count, "Total number of Physical Extents.", 0)
+-FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 5, uint32, pv_pe_alloc_count, "Total number of allocated Physical Extents.", 0)
+-FIELD(PVS, pv, STR_LIST, "PV Tags", tags, 7, tags, pv_tags, "Tags, if any.", 0)
+-FIELD(PVS, pv, NUM, "#PMda", id, 5, pvmdas, pv_mda_count, "Number of metadata areas on this device.", 0)
+-FIELD(PVS, pv, NUM, "#PMdaUse", id, 8, pvmdasused, pv_mda_used_count, "Number of metadata areas in use on this device.", 0)
+-FIELD(PVS, pv, SIZ, "BA start", ba_start, 8, size64, pv_ba_start, "Offset to the start of PV Bootloader Area on the underlying device in current units.", 0)
+-FIELD(PVS, pv, SIZ, "BA size", ba_size, 7, size64, pv_ba_size, "Size of PV Bootloader Area in current units.", 0)
+-FIELD(PVS, pv, BIN, "PInUse", id, 6, pvinuse, pv_in_use, "Set if PV is used.", 0)
++FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 0, uint32, pv_pe_alloc_count, "Total number of allocated Physical Extents.", 0)
++FIELD(PVS, pv, STR_LIST, "PV Tags", tags, 0, tags, pv_tags, "Tags, if any.", 0)
++FIELD(PVS, pv, NUM, "#PMda", id, 0, pvmdas, pv_mda_count, "Number of metadata areas on this device.", 0)
++FIELD(PVS, pv, NUM, "#PMdaUse", id, 0, pvmdasused, pv_mda_used_count, "Number of metadata areas in use on this device.", 0)
++FIELD(PVS, pv, SIZ, "BA Start", ba_start, 0, size64, pv_ba_start, "Offset to the start of PV Bootloader Area on the underlying device in current units.", 0)
++FIELD(PVS, pv, SIZ, "BA Size", ba_size, 0, size64, pv_ba_size, "Size of PV Bootloader Area in current units.", 0)
++FIELD(PVS, pv, BIN, "PInUse", id, 0, pvinuse, pv_in_use, "Set if PV is used.", 0)
+ 
+-FIELD(VGS, vg, STR, "Fmt", cmd, 3, vgfmt, vg_fmt, "Type of metadata.", 0)
++FIELD(VGS, vg, STR, "Fmt", cmd, 0, vgfmt, vg_fmt, "Type of metadata.", 0)
+ FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, vg_uuid, "Unique identifier.", 0)
+ FIELD(VGS, vg, STR, "VG", name, 4, string, vg_name, "Name.", 0)
+ FIELD(VGS, vg, STR, "Attr", cmd, 5, vgstatus, vg_attr, "Various attributes - see man page.", 0)
+ FIELD(VGS, vg, STR, "VPerms", cmd, 10, vgpermissions, vg_permissions, "VG permissions.", 0)
+-FIELD(VGS, vg, BIN, "Extendable", cmd, 10, vgextendable, vg_extendable, "Set if VG is extendable.", 0)
++FIELD(VGS, vg, BIN, "Extendable", cmd, 0, vgextendable, vg_extendable, "Set if VG is extendable.", 0)
+ FIELD(VGS, vg, BIN, "Exported", cmd, 10, vgexported, vg_exported, "Set if VG is exported.", 0)
+ FIELD(VGS, vg, BIN, "Partial", cmd, 10, vgpartial, vg_partial, "Set if VG is partial.", 0)
+ FIELD(VGS, vg, STR, "AllocPol", cmd, 10, vgallocationpolicy, vg_allocation_policy, "VG allocation policy.", 0)
+ FIELD(VGS, vg, BIN, "Clustered", cmd, 10, vgclustered, vg_clustered, "Set if VG is clustered.", 0)
+-FIELD(VGS, vg, SIZ, "VSize", cmd, 5, vgsize, vg_size, "Total size of VG in current units.", 0)
+-FIELD(VGS, vg, SIZ, "VFree", cmd, 5, vgfree, vg_free, "Total amount of free space in current units.", 0)
+-FIELD(VGS, vg, STR, "SYS ID", cmd, 6, vgsystemid, vg_sysid, "System ID of the VG indicating which host owns it.", 0)
+-FIELD(VGS, vg, STR, "System ID", cmd, 9, vgsystemid, vg_systemid, "System ID of the VG indicating which host owns it.", 0)
+-FIELD(VGS, vg, STR, "Lock Type", cmd, 9, vglocktype, vg_locktype, "Lock type of the VG used by lvmlockd.", 0)
+-FIELD(VGS, vg, STR, "Lock Args", cmd, 9, vglockargs, vg_lockargs, "Lock args of the VG used by lvmlockd.", 0)
+-FIELD(VGS, vg, SIZ, "Ext", extent_size, 3, size32, vg_extent_size, "Size of Physical Extents in current units.", 0)
+-FIELD(VGS, vg, NUM, "#Ext", extent_count, 4, uint32, vg_extent_count, "Total number of Physical Extents.", 0)
+-FIELD(VGS, vg, NUM, "Free", free_count, 4, uint32, vg_free_count, "Total number of unallocated Physical Extents.", 0)
+-FIELD(VGS, vg, NUM, "MaxLV", max_lv, 5, uint32, max_lv, "Maximum number of LVs allowed in VG or 0 if unlimited.", 0)
+-FIELD(VGS, vg, NUM, "MaxPV", max_pv, 5, uint32, max_pv, "Maximum number of PVs allowed in VG or 0 if unlimited.", 0)
+-FIELD(VGS, vg, NUM, "#PV", pv_count, 3, uint32, pv_count, "Number of PVs in VG.", 0)
+-FIELD(VGS, vg, NUM, "#PV Missing", cmd, 11, vgmissingpvcount, vg_missing_pv_count, "Number of PVs in VG which are missing.", 0)
+-FIELD(VGS, vg, NUM, "#LV", cmd, 3, lvcount, lv_count, "Number of LVs.", 0)
+-FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, snap_count, "Number of snapshots.", 0)
+-FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, vg_seqno, "Revision number of internal metadata.  Incremented whenever it changes.", 0)
+-FIELD(VGS, vg, STR_LIST, "VG Tags", tags, 7, tags, vg_tags, "Tags, if any.", 0)
+-FIELD(VGS, vg, STR, "VProfile", cmd, 8, vgprofile, vg_profile, "Configuration profile attached to this VG.", 0)
+-FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, vg_mda_count, "Number of metadata areas on this VG.", 0)
+-FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 8, vgmdasused, vg_mda_used_count, "Number of metadata areas in use on this VG.", 0)
++FIELD(VGS, vg, SIZ, "VSize", cmd, 0, vgsize, vg_size, "Total size of VG in current units.", 0)
++FIELD(VGS, vg, SIZ, "VFree", cmd, 0, vgfree, vg_free, "Total amount of free space in current units.", 0)
++FIELD(VGS, vg, STR, "SYS ID", cmd, 0, vgsystemid, vg_sysid, "System ID of the VG indicating which host owns it.", 0)
++FIELD(VGS, vg, STR, "System ID", cmd, 0, vgsystemid, vg_systemid, "System ID of the VG indicating which host owns it.", 0)
++FIELD(VGS, vg, STR, "LockType", cmd, 0, vglocktype, vg_lock_type, "Lock type of the VG used by lvmlockd.", 0)
++FIELD(VGS, vg, STR, "VLockArgs", cmd, 0, vglockargs, vg_lock_args, "Lock args of the VG used by lvmlockd.", 0)
++FIELD(VGS, vg, SIZ, "Ext", extent_size, 0, size32, vg_extent_size, "Size of Physical Extents in current units.", 0)
++FIELD(VGS, vg, NUM, "#Ext", extent_count, 0, uint32, vg_extent_count, "Total number of Physical Extents.", 0)
++FIELD(VGS, vg, NUM, "Free", free_count, 0, uint32, vg_free_count, "Total number of unallocated Physical Extents.", 0)
++FIELD(VGS, vg, NUM, "MaxLV", max_lv, 0, uint32, max_lv, "Maximum number of LVs allowed in VG or 0 if unlimited.", 0)
++FIELD(VGS, vg, NUM, "MaxPV", max_pv, 0, uint32, max_pv, "Maximum number of PVs allowed in VG or 0 if unlimited.", 0)
++FIELD(VGS, vg, NUM, "#PV", pv_count, 0, uint32, pv_count, "Number of PVs in VG.", 0)
++FIELD(VGS, vg, NUM, "#PV Missing", cmd, 0, vgmissingpvcount, vg_missing_pv_count, "Number of PVs in VG which are missing.", 0)
++FIELD(VGS, vg, NUM, "#LV", cmd, 0, lvcount, lv_count, "Number of LVs.", 0)
++FIELD(VGS, vg, NUM, "#SN", cmd, 0, snapcount, snap_count, "Number of snapshots.", 0)
++FIELD(VGS, vg, NUM, "Seq", seqno, 0, uint32, vg_seqno, "Revision number of internal metadata.  Incremented whenever it changes.", 0)
++FIELD(VGS, vg, STR_LIST, "VG Tags", tags, 0, tags, vg_tags, "Tags, if any.", 0)
++FIELD(VGS, vg, STR, "VProfile", cmd, 0, vgprofile, vg_profile, "Configuration profile attached to this VG.", 0)
++FIELD(VGS, vg, NUM, "#VMda", cmd, 0, vgmdas, vg_mda_count, "Number of metadata areas on this VG.", 0)
++FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 0, vgmdasused, vg_mda_used_count, "Number of metadata areas in use on this VG.", 0)
+ FIELD(VGS, vg, SIZ, "VMdaFree", cmd, 9, vgmdafree, vg_mda_free, "Free metadata area space for this VG in current units.", 0)
+ FIELD(VGS, vg, SIZ, "VMdaSize", cmd, 9, vgmdasize, vg_mda_size, "Size of smallest metadata area for this VG in current units.", 0)
+-FIELD(VGS, vg, NUM, "#VMdaCps", cmd, 8, vgmdacopies, vg_mda_copies, "Target number of in use metadata areas in the VG.", 1)
++FIELD(VGS, vg, NUM, "#VMdaCps", cmd, 0, vgmdacopies, vg_mda_copies, "Target number of in use metadata areas in the VG.", 1)
+ 
+-FIELD(SEGS, seg, STR, "Type", list, 4, segtype, segtype, "Type of LV segment.", 0)
+-FIELD(SEGS, seg, NUM, "#Str", area_count, 4, uint32, stripes, "Number of stripes or mirror legs.", 0)
+-FIELD(SEGS, seg, SIZ, "Stripe", stripe_size, 6, size32, stripesize, "For stripes, amount of data placed on one device before switching to the next.", 0)
+-FIELD(SEGS, seg, SIZ, "Stripe", stripe_size, 6, size32, stripe_size, "For stripes, amount of data placed on one device before switching to the next.", 0)
+-FIELD(SEGS, seg, SIZ, "Region", region_size, 6, size32, regionsize, "For mirrors, the unit of data copied when synchronising devices.", 0)
+-FIELD(SEGS, seg, SIZ, "Region", region_size, 6, size32, region_size, "For mirrors, the unit of data copied when synchronising devices.", 0)
+-FIELD(SEGS, seg, SIZ, "Chunk", list, 5, chunksize, chunksize, "For snapshots, the unit of data used when tracking changes.", 0)
+-FIELD(SEGS, seg, SIZ, "Chunk", list, 5, chunksize, chunk_size, "For snapshots, the unit of data used when tracking changes.", 0)
+-FIELD(SEGS, seg, NUM, "#Thins", list, 4, thincount, thin_count, "For thin pools, the number of thin volumes in this pool.", 0)
+-FIELD(SEGS, seg, STR, "Discards", list, 8, discards, discards, "For thin pools, how discards are handled.", 0)
+-FIELD(SEGS, seg, STR, "Cachemode", list, 9, cachemode, cachemode, "For cache pools, how writes are cached.", 0)
+-FIELD(SEGS, seg, BIN, "Zero", list, 4, thinzero, zero, "For thin pools, if zeroing is enabled.", 0)
+-FIELD(SEGS, seg, NUM, "TransId", list, 4, transactionid, transaction_id, "For thin pools, the transaction id.", 0)
+-FIELD(SEGS, seg, NUM, "ThId", list, 4, thinid, thin_id, "For thin volume, the thin device id.", 0)
+-FIELD(SEGS, seg, SIZ, "Start", list, 5, segstart, seg_start, "Offset within the LV to the start of the segment in current units.", 0)
+-FIELD(SEGS, seg, NUM, "Start", list, 5, segstartpe, seg_start_pe, "Offset within the LV to the start of the segment in physical extents.", 0)
+-FIELD(SEGS, seg, SIZ, "SSize", list, 5, segsize, seg_size, "Size of segment in current units.", 0)
+-FIELD(SEGS, seg, SIZ, "SSize", list, 5, segsizepe, seg_size_pe, "Size of segment in physical extents.", 0)
+-FIELD(SEGS, seg, STR_LIST, "Seg Tags", tags, 8, tags, seg_tags, "Tags, if any.", 0)
+-FIELD(SEGS, seg, STR_LIST, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format (deprecated, use seg_le_ranges for common format).", 0)
+-FIELD(SEGS, seg, STR_LIST, "LE Ranges", list, 9, leranges, seg_le_ranges, "Ranges of Logical Extents of underlying devices in command line format.", 0)
+-FIELD(SEGS, seg, STR_LIST, "Metadata LE Ranges", list, 18, metadataleranges, seg_metadata_le_ranges, "Ranges of Logical Extents of underlying metadata devices in command line format.", 0)
+-FIELD(SEGS, seg, STR_LIST, "Devices", list, 7, devices, devices, "Underlying devices used with starting extent numbers.", 0)
+-FIELD(SEGS, seg, STR_LIST, "Metadata Devs", list, 13, metadatadevices, metadata_devices, "Underlying metadata devices used with starting extent numbers.", 0)
+-FIELD(SEGS, seg, STR, "Monitor", list, 7, segmonitor, seg_monitor, "Dmeventd monitoring status of the segment.", 0)
+-FIELD(SEGS, seg, STR, "Cache Policy", list, 12, cache_policy, cache_policy, "The cache policy (cached segments only).", 0)
+-FIELD(SEGS, seg, STR_LIST, "Cache Settings", list, 14, cache_settings, cache_settings, "Cache settings/parameters (cached segments only).", 0)
++FIELD(SEGS, seg, STR, "Type", list, 0, segtype, segtype, "Type of LV segment.", 0)
++FIELD(SEGS, seg, NUM, "#Str", area_count, 0, uint32, stripes, "Number of stripes or mirror legs.", 0)
++FIELD(SEGS, seg, SIZ, "Stripe", stripe_size, 0, size32, stripe_size, "For stripes, amount of data placed on one device before switching to the next.", 0)
++FIELD(SEGS, seg, SIZ, "Region", region_size, 0, size32, region_size, "For mirrors, the unit of data copied when synchronising devices.", 0)
++FIELD(SEGS, seg, SIZ, "Chunk", list, 0, chunksize, chunk_size, "For snapshots, the unit of data used when tracking changes.", 0)
++FIELD(SEGS, seg, NUM, "#Thins", list, 0, thincount, thin_count, "For thin pools, the number of thin volumes in this pool.", 0)
++FIELD(SEGS, seg, STR, "Discards", list, 0, discards, discards, "For thin pools, how discards are handled.", 0)
++FIELD(SEGS, seg, STR, "CacheMode", list, 0, cachemode, cache_mode, "For cache pools, how writes are cached.", 0)
++FIELD(SEGS, seg, BIN, "Zero", list, 0, thinzero, zero, "For thin pools, if zeroing is enabled.", 0)
++FIELD(SEGS, seg, NUM, "TransId", list, 0, transactionid, transaction_id, "For thin pools, the transaction id.", 0)
++FIELD(SEGS, seg, NUM, "ThId", list, 0, thinid, thin_id, "For thin volume, the thin device id.", 0)
++FIELD(SEGS, seg, SIZ, "Start", list, 0, segstart, seg_start, "Offset within the LV to the start of the segment in current units.", 0)
++FIELD(SEGS, seg, NUM, "Start", list, 0, segstartpe, seg_start_pe, "Offset within the LV to the start of the segment in physical extents.", 0)
++FIELD(SEGS, seg, SIZ, "SSize", list, 0, segsize, seg_size, "Size of segment in current units.", 0)
++FIELD(SEGS, seg, SIZ, "SSize", list, 0, segsizepe, seg_size_pe, "Size of segment in physical extents.", 0)
++FIELD(SEGS, seg, STR_LIST, "Seg Tags", tags, 0, tags, seg_tags, "Tags, if any.", 0)
++FIELD(SEGS, seg, STR_LIST, "PE Ranges", list, 0, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format (deprecated, use seg_le_ranges for common format).", 0)
++FIELD(SEGS, seg, STR_LIST, "LE Ranges", list, 0, leranges, seg_le_ranges, "Ranges of Logical Extents of underlying devices in command line format.", 0)
++FIELD(SEGS, seg, STR_LIST, "Metadata LE Ranges", list, 0, metadataleranges, seg_metadata_le_ranges, "Ranges of Logical Extents of underlying metadata devices in command line format.", 0)
++FIELD(SEGS, seg, STR_LIST, "Devices", list, 0, devices, devices, "Underlying devices used with starting extent numbers.", 0)
++FIELD(SEGS, seg, STR_LIST, "Metadata Devs", list, 0, metadatadevices, metadata_devices, "Underlying metadata devices used with starting extent numbers.", 0)
++FIELD(SEGS, seg, STR, "Monitor", list, 0, segmonitor, seg_monitor, "Dmeventd monitoring status of the segment.", 0)
++FIELD(SEGS, seg, STR, "CachePolicy", list, 0, cache_policy, cache_policy, "The cache policy (cached segments only).", 0)
++FIELD(SEGS, seg, STR_LIST, "CacheSettings", list, 0, cache_settings, cache_settings, "Cache settings/parameters (cached segments only).", 0)
+ 
+-FIELD(PVSEGS, pvseg, NUM, "Start", pe, 5, uint32, pvseg_start, "Physical Extent number of start of segment.", 0)
+-FIELD(PVSEGS, pvseg, NUM, "SSize", len, 5, uint32, pvseg_size, "Number of extents in segment.", 0)
++FIELD(PVSEGS, pvseg, NUM, "Start", pe, 0, uint32, pvseg_start, "Physical Extent number of start of segment.", 0)
++FIELD(PVSEGS, pvseg, NUM, "SSize", len, 0, uint32, pvseg_size, "Number of extents in segment.", 0)
+ /* *INDENT-ON* */
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 92e30c9..62c81b9 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -398,10 +398,10 @@ GET_VG_STR_PROPERTY_FN(vg_sysid, vg_system_id_dup(vg))
+ #define _vg_sysid_set prop_not_implemented_set
+ GET_VG_STR_PROPERTY_FN(vg_systemid, vg_system_id_dup(vg))
+ #define _vg_systemid_set prop_not_implemented_set
+-GET_VG_STR_PROPERTY_FN(vg_locktype, vg_lock_type_dup(vg))
+-#define _vg_locktype_set prop_not_implemented_set
+-GET_VG_STR_PROPERTY_FN(vg_lockargs, vg_lock_args_dup(vg))
+-#define _vg_lockargs_set prop_not_implemented_set
++GET_VG_STR_PROPERTY_FN(vg_lock_type, vg_lock_type_dup(vg))
++#define _vg_lock_type_set prop_not_implemented_set
++GET_VG_STR_PROPERTY_FN(vg_lock_args, vg_lock_args_dup(vg))
++#define _vg_lock_args_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_extent_size, (SECTOR_SIZE * vg->extent_size))
+ #define _vg_extent_size_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_extent_count, vg->extent_count)
+@@ -442,16 +442,10 @@ GET_LVSEG_STR_PROPERTY_FN(segtype, lvseg_segtype_dup(lvseg->lv->vg->vgmem, lvseg
+ #define _segtype_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(stripes, lvseg->area_count)
+ #define _stripes_set prop_not_implemented_set
+-GET_LVSEG_NUM_PROPERTY_FN(stripesize, (SECTOR_SIZE * lvseg->stripe_size))
+-#define _stripesize_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(stripe_size, (SECTOR_SIZE * lvseg->stripe_size))
+ #define _stripe_size_set prop_not_implemented_set
+-GET_LVSEG_NUM_PROPERTY_FN(regionsize, (SECTOR_SIZE * lvseg->region_size))
+-#define _regionsize_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(region_size, (SECTOR_SIZE * lvseg->region_size))
+ #define _region_size_set prop_not_implemented_set
+-GET_LVSEG_NUM_PROPERTY_FN(chunksize, (SECTOR_SIZE * lvseg_chunksize(lvseg)))
+-#define _chunksize_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(chunk_size, (SECTOR_SIZE * lvseg_chunksize(lvseg)))
+ #define _chunk_size_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(thin_count, dm_list_size(&lvseg->lv->segs_using_this_lv))
+@@ -466,8 +460,8 @@ GET_LVSEG_STR_PROPERTY_FN(discards, lvseg_discards_dup(lvseg->lv->vg->vgmem, lvs
+ #define _discards_set prop_not_implemented_set
+ GET_LVSEG_STR_PROPERTY_FN(kernel_discards, lvseg_kernel_discards_dup(lvseg->lv->vg->vgmem, lvseg))
+ #define _kernel_discards_set prop_not_implemented_set
+-GET_LVSEG_STR_PROPERTY_FN(cachemode, lvseg_cachemode_dup(lvseg->lv->vg->vgmem, lvseg))
+-#define _cachemode_set prop_not_implemented_set
++GET_LVSEG_STR_PROPERTY_FN(cache_mode, lvseg_cachemode_dup(lvseg->lv->vg->vgmem, lvseg))
++#define _cache_mode_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(seg_start, (SECTOR_SIZE * lvseg_start(lvseg)))
+ #define _seg_start_set prop_not_implemented_set
+ GET_LVSEG_NUM_PROPERTY_FN(seg_start_pe, lvseg->le)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 1a4ce42..9ec3381 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -3660,7 +3660,7 @@ static const struct dm_report_object_type _devtypes_report_types[] = {
+ #define STR_LIST DM_REPORT_FIELD_TYPE_STRING_LIST
+ #define SNUM DM_REPORT_FIELD_TYPE_NUMBER
+ #define FIELD(type, strct, sorttype, head, field, width, func, id, desc, writeable) \
+-	{type, sorttype, offsetof(type_ ## strct, field), width, \
++	{type, sorttype, offsetof(type_ ## strct, field), width ? : sizeof(head) - 1, \
+ 	 #id, head, &_ ## func ## _disp, desc},
+ 
+ typedef struct physical_volume type_pv;
 
 
