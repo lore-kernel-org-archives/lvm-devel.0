@@ -1,92 +1,40 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Tue,  8 Mar 2016 22:22:29 +0000 (UTC)
-Subject: master - lvmdbus: Fix deprecated warnings for GObject use
-Message-ID: <20160308222229.9EBC460F6E@fedorahosted.org>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Wed,  9 Mar 2016 10:10:30 +0000 (UTC)
+Subject: master - test: Update kernels to skip thin-flags with
+Message-ID: <20160309101030.DC29960D36@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6d19c14c28b24dded999d4bf50a4638581c649f5
-Commit:        6d19c14c28b24dded999d4bf50a4638581c649f5
-Parent:        3f5629302abd2cfae97ef821da274384806d085a
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Mar 8 16:04:44 2016 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Mar 8 16:07:35 2016 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2cf13b701aba8b9c23509c91d49dd7ba5b1f4273
+Commit:        2cf13b701aba8b9c23509c91d49dd7ba5b1f4273
+Parent:        6d19c14c28b24dded999d4bf50a4638581c649f5
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Mar 8 09:46:34 2016 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Mar 9 10:09:29 2016 +0100
 
-lvmdbus:  Fix deprecated warnings for GObject use
+test: Update kernels to skip thin-flags with
 
-While running on F24 a number of warnings were being emitted from using the
-deprecated GObject instead of GLib.  Tested on python 3.4 and 3.5.
-
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+See ed5e5c38b5ac4b7c8cb7e809d9d35c72f087e29e
 ---
- daemons/lvmdbusd/main.py    |    5 ++---
- daemons/lvmdbusd/request.py |    6 +++---
- 2 files changed, 5 insertions(+), 6 deletions(-)
+ test/lib/aux.sh |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index 92006d0..aa16a2e 100644
---- a/daemons/lvmdbusd/main.py
-+++ b/daemons/lvmdbusd/main.py
-@@ -18,7 +18,7 @@ import signal
- import dbus
- from . import lvmdb
- # noinspection PyUnresolvedReferences
--from gi.repository import GObject
-+from gi.repository import GLib
- from .fetch import load
- from .manager import Manager
- from .background import background_reaper
-@@ -123,7 +123,6 @@ def main():
- 			pass
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index e517bc0..5911eaf 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1153,6 +1153,8 @@ raid456_replace_works() {
+ thin_pool_error_works_32() {
+ 	case "$(uname -r)" in
+ 	  2.6.32-618.*.i686) return 1 ;;
++	  2.6.32-623.*.i686) return 1 ;;
++	  2.6.32-573.1[28].1.el6.i686) return 1 ;;
+ 	esac
+ }
  
- 	dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
--	GObject.threads_init()
- 	dbus.mainloop.glib.threads_init()
- 
- 	if use_session:
-@@ -148,7 +147,7 @@ def main():
- 	thread_list.append(threading.Thread(target=process_request))
- 
- 	cfg.load(refresh=False, emit_signal=False)
--	cfg.loop = GObject.MainLoop()
-+	cfg.loop = GLib.MainLoop()
- 
- 	for process in thread_list:
- 		process.damon = True
-diff --git a/daemons/lvmdbusd/request.py b/daemons/lvmdbusd/request.py
-index 6836131..cf258f1 100644
---- a/daemons/lvmdbusd/request.py
-+++ b/daemons/lvmdbusd/request.py
-@@ -9,7 +9,7 @@
- 
- import threading
- # noinspection PyUnresolvedReferences
--from gi.repository import GObject
-+from gi.repository import GLib
- from .job import Job
- from . import cfg
- import traceback
-@@ -40,7 +40,7 @@ class RequestEntry(object):
- 		elif tmo == 0:
- 			self._return_job()
- 		else:
--			self.timer_id = GObject.timeout_add_seconds(
-+			self.timer_id = GLib.timeout_add_seconds(
- 				tmo, RequestEntry._request_timeout, self)
- 
- 	@staticmethod
-@@ -93,7 +93,7 @@ class RequestEntry(object):
- 			self.done = True
- 			if self.timer_id != -1:
- 				# Try to prevent the timer from firing
--				GObject.source_remove(self.timer_id)
-+				GLib.source_remove(self.timer_id)
- 
- 			self._result = result
- 			self._rc = error_rc
 
 
