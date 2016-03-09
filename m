@@ -1,154 +1,123 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu,  3 Mar 2016 17:09:46 +0000 (UTC)
-Subject: master - man: Add some information about historical LVs.
-Message-ID: <20160303170946.6FB4260EEA@fedorahosted.org>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Wed,  9 Mar 2016 10:10:39 +0000 (UTC)
+Subject: master - test: Add prepare_lvmdbusd
+Message-ID: <20160309101039.6A21B607B5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5764c484ea1eeef1c2726347ba2f93bb21fa4121
-Commit:        5764c484ea1eeef1c2726347ba2f93bb21fa4121
-Parent:        9a78c258ba8da349059138618858856f66cb7fed
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Mar 3 17:09:25 2016 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Mar 3 17:09:25 2016 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e655ccb418d942889aae5c83af25ca8d085825b8
+Commit:        e655ccb418d942889aae5c83af25ca8d085825b8
+Parent:        d7ca164597ec5f334c061ffbad78677c4b36f281
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Mar 1 11:49:05 2016 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Mar 9 10:58:21 2016 +0100
 
-man: Add some information about historical LVs.
+test: Add prepare_lvmdbusd
 
+- Check for running lvmdbusd at start
+- Add teardown for lvmdbusd
 ---
- man/lvm.8.in      |   17 ++++++++++++++++-
- man/lvremove.8.in |   18 ++++++++++++++++++
- man/lvs.8.in      |   16 +++++++++++-----
- 3 files changed, 45 insertions(+), 6 deletions(-)
+ test/api/dbustest.sh |   12 +++++++++++-
+ test/lib/aux.sh      |   40 ++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 51 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvm.8.in b/man/lvm.8.in
-index fe30b75..fd25001 100644
---- a/man/lvm.8.in
-+++ b/man/lvm.8.in
-@@ -482,7 +482,18 @@ The valid characters for VG and LV names are:
- .BR 0 - 9
- .BR "+ _ . -"
- .P
--VG and LV names cannot begin with a hyphen.
-+VG names cannot begin with a hyphen.
-+The name of a new LV also cannot begin with a hyphen.  However, if the
-+configuration setting \fBmetadata/record_lvs_history\fP is enabled then an LV
-+name with a hyphen as a prefix indicates that, although the LV was
-+removed, it is still being tracked because it forms part of the history of at
-+least one LV that is still present.  This helps to record the ancestry of
-+thin snapshots even after some links in the chain have been removed.
-+A reference to the historical LV 'lvol1' in VG 'vg00' would be 'vg00/-lvol1'
-+or just '-lvol1' if the VG is already set.  (The latter form must be preceded
-+by '--' to terminate command line option processing before reaching this
-+argument.)
-+.P
- There are also various reserved names that are used internally by lvm that can
- not be used as LV or VG names. A VG cannot be called anything that exists in
- \fI/dev/\fP at the time of creation, nor can it be called '.' or '..'.
-@@ -501,6 +512,7 @@ Other software and scripts should use the
- amendment when the software is updated.  Should you need to process the node
- names in /dev/mapper, you may use \fBdmsetup splitname\fP to separate out the
- original VG, LV and internal layer names.
-+.P
- .
- .SH UNIQUE NAMES
- .
-@@ -522,6 +534,9 @@ An exception is if all but one of the VGs with the shared name is foreign
- .BR lvmsystemid (7).)
- In this case, the one VG that is not foreign is assumed to be the intended
- VG and is processed.
-+.P
-+LV names are unique within a VG.  The name of an historical LV cannot be
-+reused until the historical LV has itself been removed or renamed.
+diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
+index ba3173e..0ef9a95 100644
+--- a/test/api/dbustest.sh
++++ b/test/api/dbustest.sh
+@@ -30,6 +30,13 @@ fi
+ # Setup the python path so we can run
+ export PYTHONPATH=$abs_top_builddir/daemons
  
- .
- .SH ALLOCATION
-diff --git a/man/lvremove.8.in b/man/lvremove.8.in
-index 8cf1bf3..433c277 100644
---- a/man/lvremove.8.in
-+++ b/man/lvremove.8.in
-@@ -9,6 +9,7 @@ lvremove \(em remove a logical volume
- .IR ProfileName ]
- .RB [ \-d | \-\-debug ]
- .RB [ \-h | \-\-help ]
-+.RB [ \-\-nohistory ]
- .RB [ \-S | \-\-select
- .IR Selection ]
- .RB [ \-t | \-\-test ]
-@@ -27,6 +28,18 @@ Removing an origin logical volume will also remove all dependent snapshots.
- If the logical volume is clustered then it must be deactivated on all
- nodes in the cluster before it can be removed. A single lvchange command
- issued from one node can do this.
-+.sp
-+If the configuration setting \fBmetadata/record_lvs_history\fP is enabled 
-+and the logical volume being removed forms part of the history of at least
-+one logical volume that is still present then a simplified representation of
-+the logical volume will be retained.  This includes the time of removal
-+(\fBlv_time_removed\fP reporting field), creation time (\fBlv_time\fP), name
-+(\fBlv_name\fP), LV uuid (\fBlv_uuid\fP) and VG name (\fBvg_name\fP) and
-+allows you to see the ancestry chain of thin snapshot volumes even after
-+some intermediate logical volumes have been removed.
-+The names of such historical logical volumes acquire a hyphen as a prefix
-+(e.g. '-lvol1') and cannot be reactivated.  Use lvremove a second time,
-+with the hyphen, to remove the record of the former logical volume completely.
- .SH OPTIONS
- See \fBlvm\fP(8) for common options.
- .TP
-@@ -35,6 +48,11 @@ Remove active logical volumes without confirmation.
- Tool will try to deactivate \fIunused\fP volume.
- To proceed with damaged pools use \-ff
- .TP
-+.B \-\-nohistory
-+Disable the recording of history of logical volumes which are being removed.
-+(This has no effect unless the configuration setting
-+\fBmetadata/record_lvs_history\fP is enabled.)
-+.TP
- .B \-\-noudevsync
- Disable udev synchronisation. The
- process will not wait for notification from udev.
-diff --git a/man/lvs.8.in b/man/lvs.8.in
-index df61497..d4bc7f2 100644
---- a/man/lvs.8.in
-+++ b/man/lvs.8.in
-@@ -10,6 +10,7 @@ lvs \(em report information about logical volumes
- .IR ProfileName ]
- .RB [ \-d | \-\-debug ]
- .RB [ \-h | \-? | \-\-help ]
-+.RB [ \-H | \-\-history ]
- .RB [ \-\-ignorelockingfailure ]
- .RB [ \-\-ignoreskippedcluster ]
- .RB [ \-\-nameprefixes ]
-@@ -60,6 +61,11 @@ in the output.  For example, after creating a mirror using
- , this option will reveal three internal Logical
- Volumes, with suffixes mimage_0, mimage_1, and mlog.
- .TP
-+.B \-H ", " \-\-history
-+Include historical logical volumes in the output.
-+(This has no effect unless logical volumes were removed while the configuration
-+setting \fBmetadata/record_lvs_history\fP was enabled.)
-+.TP
- .B \-\-nameprefixes
- Add an "LVM2_" prefix plus the field name to the output.  Useful
- with \fB\-\-noheadings\fP to produce a list of field=value pairs that can
-@@ -166,11 +172,11 @@ changes, for example during
- .IP 4 3
- fixed (m)inor
- .IP 5 3
--State: (a)ctive, (s)uspended, (I)nvalid snapshot, invalid (S)uspended snapshot,
--snapshot (m)erge failed, suspended snapshot (M)erge failed,
--mapped (d)evice present without tables, mapped device present with (i)nactive table,
--thin-pool (c)heck needed, suspended thin-pool (C)heck needed,
--(X) unknown
-+State: (a)ctive, (h)istorical, (s)uspended, (I)nvalid snapshot,
-+invalid (S)uspended snapshot, snapshot (m)erge failed,
-+suspended snapshot (M)erge failed, mapped (d)evice present without tables,
-+mapped device present with (i)nactive table, thin-pool (c)heck needed,
-+suspended thin-pool (C)heck needed, (X) unknown
- .IP 6 3
- device (o)pen, (X) unknown
- .IP 7 3
++if true; then
++
++aux prepare_lvmdbusd
++$abs_top_builddir/test/dbus/lvmdbustest.py -v
++
++else
++
+ # Start the dbus service
+ $abs_top_builddir/daemons/lvmdbusd/lvmdbusd --debug --udev > debug.log_lvmdbusd 2>&1 &
+ 
+@@ -39,9 +46,10 @@ sleep 1
+ 
+ LVM_DBUS_PID=$(ps aux | grep lvmdbus[d] |  awk '{print $2}')
+ if [ "CHK${LVM_DBUS_PID}" == "CHK" ];then
+-	echo "Failed to start lsmdbusd daemon"
++	echo "Failed to start lvmdbusd daemon"
+ 	exit 1
+ fi
++END
+ 
+ # Run all the unit tests
+ $abs_top_builddir/test/dbus/lvmdbustest.py -v || fail=$?
+@@ -57,3 +65,5 @@ kill $LVM_DBUS_PID || {
+ wait
+ 
+ exit ${fail:-"0"}
++
++fi
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 021eb81..af6b25a 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -300,6 +300,42 @@ lvmpolld_dump() {
+ 	(echo 'request="dump"'; echo '##') | lvmpolld_talk "$@"
+ }
+ 
++prepare_lvmdbusd() {
++	rm -f debug.log_LVMDBUSD_out
++
++	echo "checking lvmdbusd is NOT running..."
++	if ps -elf | grep lvmdbusd | grep python3; then
++		echo "Cannot run while existing lvmdbusd process exists"
++		return 1
++	fi
++	echo ok
++
++	# skip if we don't have our own lvmdbusd...
++        # TODO: lvmdbusd is not in PATH
++	#(which lvmdbusd 2>/dev/null | grep "$abs_builddir") || skip
++	[[ -x $abs_top_builddir/daemons/lvmdbusd/lvmdbusd ]] || skip
++
++	kill_sleep_kill_ LOCAL_LVMDBUSD 0
++
++	echo "preparing lvmdbusd..."
++	$abs_top_builddir/daemons/lvmdbusd/lvmdbusd --debug --udev > debug.log_LVMDBUSD_out 2>&1 &
++	local pid=$!
++
++	sleep 1
++	echo "checking lvmdbusd IS running..."
++	if ! ps -elf | grep lvmdbusd | grep python3; then
++		echo "Failed to start lvmdbusd daemon"
++		return 1
++	fi
++	# TODO: Is there a better check than wait 1 second and check pid?
++	if ! ps -p $pid -o comm= >/dev/null || [[ $(ps -p $pid -o comm=) != python3 ]]; then
++		echo "Failed to start lvmdbusd daemon"
++		return 1
++	fi
++	echo $pid > LOCAL_LVMDBUSD
++	echo ok
++}
++
+ teardown_devs_prefixed() {
+ 	local prefix=$1
+ 	local stray=${2:-0}
+@@ -464,6 +500,10 @@ teardown() {
+ 		fi
+ 	}
+ 
++	kill_sleep_kill_ LOCAL_LVMDBUSD 0
++
++	echo -n .
++
+ 	kill_sleep_kill_ LOCAL_LVMPOLLD ${LVM_VALGRIND_LVMPOLLD:-0}
+ 
+ 	echo -n .
 
 
