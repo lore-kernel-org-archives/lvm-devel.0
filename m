@@ -1,155 +1,133 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 10 Mar 2016 17:40:25 +0000 (UTC)
-Subject: master - tests: uncache with missing PV
-Message-ID: <20160310174025.E40AF60DFD@fedorahosted.org>
+Date: Thu, 10 Mar 2016 17:40:28 +0000 (UTC)
+Subject: master - lvconvert: update --help
+Message-ID: <20160310174028.0231D60DFD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5bfc0edd12d1f4e31fcd3813edd8de99816ec6c3
-Commit:        5bfc0edd12d1f4e31fcd3813edd8de99816ec6c3
-Parent:        00e641ef37a977129acc503f3fa1b67f556ac5eb
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f4451193b8db4bd9c894248f50da9319704293e
+Commit:        9f4451193b8db4bd9c894248f50da9319704293e
+Parent:        5bfc0edd12d1f4e31fcd3813edd8de99816ec6c3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 8 10:56:36 2016 +0100
+AuthorDate:    Sat Mar 5 21:02:30 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 10 18:38:54 2016 +0100
 
-tests: uncache with missing PV
+lvconvert: update --help
 
-For now repair of cache with missing PVs via usage of --uncache.
-More will follow later.
+Use  <>  around user entered option parameters to make it visually
+different (just like we use Italic style in man page).
+
+TODO:
+
+In the future we should consistently provide such notation and
+possibly generate it automagically from some internal data structures.
+
+Preferably for man pages as well so we report actual set of supported
+options.
 ---
- test/shell/lvconvert-repair-cache.sh |  121 ++++++++++++++++++++++++++++++++++
- 1 files changed, 121 insertions(+), 0 deletions(-)
+ tools/commands.h |   42 +++++++++++++++++++++---------------------
+ 1 files changed, 21 insertions(+), 21 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-cache.sh b/test/shell/lvconvert-repair-cache.sh
-new file mode 100644
-index 0000000..9ef8716
---- /dev/null
-+++ b/test/shell/lvconvert-repair-cache.sh
-@@ -0,0 +1,121 @@
-+#!/bin/sh
-+
-+# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Test repairing of broken cached LV
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+MKFS=mkfs.ext4
-+FSCK=fsck
-+
-+which "$MKFS" || skip
-+which "$FSCK" || skip
-+
-+#
-+# Main
-+#
-+aux have_cache 1 3 0 || skip
-+
-+aux prepare_vg 4
-+
-+#if [ 1 -eq 0 ] ; then
-+#############################
-+###### WRITETHROUGH #########
-+#############################
-+
-+# Create cached LV
-+lvcreate --type cache-pool -L10 $vg/cpool "$dev1"
-+lvcreate -H -L20 --cachemode writethrough -n $lv1 $vg/cpool "$dev2"
-+
-+"$MKFS" "$DM_DEV_DIR/$vg/$lv1"
-+sync
-+
-+aux disable_dev "$dev1"
-+
-+#lvchange -an $vg
-+
-+# Check it is prompting fro confirmation
-+not lvconvert --uncache $vg/$lv1
-+# --yes to drop when Check its prompting
-+lvconvert --yes --uncache $vg/$lv1
-+
-+"$FSCK" -n "$DM_DEV_DIR/$vg/$lv1"
-+
-+aux enable_dev "$dev1"
-+
-+##################
-+
-+lvcreate --type cache-pool -L10 $vg/cpool "$dev1"
-+lvconvert -H --cachemode writethrough --cachepool $vg/cpool $lv1
-+
-+aux disable_dev "$dev2"
-+
-+# Check it is prompting for confirmation
-+not lvconvert --uncache $vg/$lv1
-+# --yes to drop when Check its prompting
-+lvconvert --yes --uncache $vg/$lv1
-+
-+#lvconvert --repair $vg/$lv1 -vvvvv
-+#/$lv1
-+
-+#lvchange -ay $vg
-+
-+aux enable_dev "$dev2"
-+lvremove -ff $vg
-+
-+##########################
-+###### WRITEBACK #########
-+##########################
-+#fi
-+
-+# Create cached LV  so metadata is on dev1 and data on dev2
-+lvcreate -L5 -n meta $vg "$dev1"
-+lvcreate -L10 -n cpool $vg "$dev2"
-+lvconvert --yes --poolmetadata $vg/meta  --cachepool $vg/cpool
-+
-+lvcreate -H -L20 --cachemode writeback -n $lv1 $vg/cpool "$dev3"
-+
-+lvs -a -o+seg_pe_ranges,cachemode $vg
-+
-+"$MKFS" "$DM_DEV_DIR/$vg/$lv1"
-+sync
-+
-+# Seriously damage cache metadata
-+aux error_dev  "$dev1" 2054:2
-+
-+# Here we usually for the 1st. notice needs_check
-+check lv_attr_bit state $vg/$lv1 "c"
-+
-+sleep .1
-+
-+# And now cache is finaly Failed
-+check lv_attr_bit health $vg/$lv1 "F"
-+check lv_field $vg/$lv1 lv_health_status "failed"
-+
-+aux disable_dev "$dev1"
-+
-+# Check it is prompting for confirmation
-+not lvconvert --uncache $vg/$lv1
-+# Check --yes is not enought to drop writethrough caching
-+not lvconvert --yes --uncache $vg/$lv1
-+# --force needs --yes to drop when Check its prompting
-+not lvconvert --force --uncache $vg/$lv1
-+
-+lvconvert --force --yes --uncache $vg/$lv1
-+
-+not "$FSCK" -n "$DM_DEV_DIR/$vg/$lv1"
-+
-+aux enable_dev "$dev1"
-+
-+vgremove -ff $vg
+diff --git a/tools/commands.h b/tools/commands.h
+index f676bbe..aba5b40 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -197,28 +197,28 @@ xx(lvchange,
+    test_ARG, writebehind_ARG, writemostly_ARG, zero_ARG)
+ 
+ #define COMMON_OPTS \
+-	"\t[--commandprofile ProfileName] [-d|--debug] [-h|-?|--help]\n" \
++	"\t[--commandprofile <ProfileName>] [-d|--debug] [-h|-?|--help]\n" \
+ 	"\t[--noudevsync] [-t|--test] [-v|--verbose] [--version] [-y|--yes]\n"
+ 
+ xx(lvconvert,
+    "Change logical volume layout",
+    0,
+    "lvconvert "
+-   "[-m|--mirrors Mirrors [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
+-   "\t[--type SegmentType]\n"
++   "[-m|--mirrors <Mirrors> [--mirrorlog {disk|core|mirrored}|--corelog]]\n"
++   "\t[--type <SegmentType>]\n"
+    "\t[--repair [--use-policies]]\n"
+    "\t[--replace PhysicalVolume]\n"
+-   "\t[-R|--regionsize MirrorLogRegionSize]\n"
+-   "\t[--alloc AllocationPolicy]\n"
++   "\t[-R|--regionsize <MirrorLogRegionSize>]\n"
++   "\t[--alloc <AllocationPolicy>]\n"
+    "\t[-b|--background]\n"
+    "\t[-f|--force]\n"
+-   "\t[-i|--interval seconds]\n"
+-   "\t[--stripes Stripes [-I|--stripesize StripeSize]]\n"
++   "\t[-i|--interval <Seconds>]\n"
++   "\t[--stripes <Stripes> [-I|--stripesize <StripeSize>]]\n"
+    COMMON_OPTS
+    "\tLogicalVolume[Path] [PhysicalVolume[Path]...]\n\n"
+ 
+    "lvconvert "
+-   "[--splitmirrors Images --trackchanges]\n"
++   "[--splitmirrors <Images> --trackchanges]\n"
+    "\t[--splitmirrors Images --name SplitLogicalVolumeName]\n"
+    COMMON_OPTS
+    "\tLogicalVolume[Path] [SplittablePhysicalVolume[Path]...]\n\n"
+@@ -246,7 +246,7 @@ xx(lvconvert,
+ 
+    "lvconvert "
+    "[--type snapshot|-s|--snapshot]\n"
+-   "\t[-c|--chunksize]\n"
++   "\t[-c|--chunksize <ChunkSize>]\n"
+    "\t[-Z|--zero {y|n}]\n"
+    COMMON_OPTS
+    "\tOriginalLogicalVolume[Path] SnapshotLogicalVolume[Path]\n\n"
+@@ -254,20 +254,20 @@ xx(lvconvert,
+    "lvconvert "
+    "--merge\n"
+    "\t[-b|--background]\n"
+-   "\t[-i|--interval seconds]\n"
++   "\t[-i|--interval <Seconds>]\n"
+    COMMON_OPTS
+    "\tLogicalVolume[Path]\n\n"
+ 
+    "lvconvert "
+    "[--type thin[-pool]|-T|--thin]\n"
+    "\t[--thinpool ThinPoolLogicalVolume[Path]]\n"
+-   "\t[--chunksize size]\n"
++   "\t[--chunksize <ChunkSize>]\n"
+    "\t[--discards {ignore|nopassdown|passdown}]\n"
+    "\t[--poolmetadataspare {y|n}]\n"
+-   "\t[{--poolmetadata ThinMetadataLogicalVolume[Path] |\n"
+-   "\t --poolmetadatasize size}]\n"
+-   "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
+-   "\t[--stripes Stripes [-I|--stripesize StripeSize]]]\n"
++   "\t[--poolmetadata ThinMetadataLogicalVolume[Path] |\n"
++   "\t --poolmetadatasize <MetadataSize>]\n"
++   "\t[-r|--readahead <ReadAheadSectors>|auto|none]\n"
++   "\t[--stripes <Stripes> [-I|--stripesize <StripeSize>]]]\n"
+    "\t[--originname NewExternalOriginVolumeName]]\n"
+    "\t[-Z|--zero {y|n}]\n"
+    COMMON_OPTS
+@@ -276,13 +276,13 @@ xx(lvconvert,
+    "lvconvert "
+    "[--type cache[-pool]|-H|--cache]\n"
+    "\t[--cachepool CacheDataLogicalVolume[Path]]\n"
+-   "\t[--cachemode CacheMode]\n"
+-   "\t[--cachepolicy policy]\n"
+-   "\t[--cachesettings key=value]\n"
+-   "\t[--chunksize size]\n"
++   "\t[--cachemode <CacheMode>]\n"
++   "\t[--cachepolicy <CachePolicy>]\n"
++   "\t[--cachesettings <Key>=<Value>]\n"
++   "\t[--chunksize <ChunkSize>]\n"
++   "\t[--poolmetadata CacheMetadataLogicalVolume[Path] |\n"
++   "\t --poolmetadatasize <MetadataSize>]\n"
+    "\t[--poolmetadataspare {y|n}]]\n"
+-   "\t[{--poolmetadata CacheMetadataLogicalVolume[Path] |\n"
+-   "\t --poolmetadatasize size}]\n"
+    COMMON_OPTS
+    "\t[Cache|CacheDataPool]LogicalVolume[Path] [PhysicalVolumePath...]\n\n",
+ 
 
 
