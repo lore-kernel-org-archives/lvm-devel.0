@@ -1,50 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 10 Mar 2016 17:40:15 +0000 (UTC)
-Subject: master - topology: handle reported sizes smaller then sector
-Message-ID: <20160310174015.7537560EB1@fedorahosted.org>
+Date: Thu, 10 Mar 2016 17:40:17 +0000 (UTC)
+Subject: master - gcc: cast time_t to 64bit
+Message-ID: <20160310174017.855C460EB1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5aade9c402e2195bc1742509300983b0d77f33e8
-Commit:        5aade9c402e2195bc1742509300983b0d77f33e8
-Parent:        a494d85ef6cf00a6a61707e5bc41aa59bb17b7e6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8e9deb2e701d495819d0a8c75f3a5e6c4240ad48
+Commit:        8e9deb2e701d495819d0a8c75f3a5e6c4240ad48
+Parent:        5aade9c402e2195bc1742509300983b0d77f33e8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 3 20:53:08 2016 +0100
+AuthorDate:    Mon Mar 7 18:12:26 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 10 18:38:54 2016 +0100
 
-topology: handle reported sizes smaller then sector
+gcc: cast time_t to 64bit
 
-Recent kernel (4.4) start to report values smaller then sector size
-(but in reporting size for SSD which support data zeroing on discard).
-
-For now log warning and assume it really means 1 sector.
-
-Addressing RHBZ:
-https://bugzilla.redhat.com/show_bug.cgi?id=1313377
+Value is printed as uint64, so make sure right type is passed on all
+platforms. Fixes gcc warning on some 32bit platforms.
 ---
- lib/device/dev-type.c |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+ lib/format_text/export.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index a6223dc..689809a 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -853,6 +853,12 @@ static unsigned long _dev_topology_attribute(struct dev_types *dt,
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 90fb044..c0af3fa 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -664,7 +664,7 @@ static int _print_timestamp(struct formatter *f,
+ 			      "%Y-%m-%d %T %z", local_tm))
+ 			buf[0] = 0;
  
- 	result = value >> SECTOR_SHIFT;
+-		outfc(f, buf, "%s = %" PRIu64, name, ts);
++		outfc(f, buf, "%s = %" PRIu64, name, (uint64_t) ts);
+ 	}
  
-+	if (!result && value) {
-+		log_warn("WARNING: Device %s: %s is %lu and is unexpectedly less then sector.",
-+			 dev_name(dev), attribute, value);
-+		result = 1;
-+	}
-+
- out_close:
- 	if (fclose(fp))
- 		log_sys_debug("fclose", path);
+ 	return 1;
 
 
