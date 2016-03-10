@@ -1,64 +1,96 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 10 Mar 2016 12:12:55 +0000 (UTC)
-Subject: master - metadata: do not issue warning message about PV dev size being 0 when the device has gone just after VG read
-Message-ID: <20160310121255.0EB3760EB3@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 10 Mar 2016 17:40:00 +0000 (UTC)
+Subject: master - libdm: parse more info from cache status
+Message-ID: <20160310174000.D547860EAA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9918d95490d46dee12768494dcc8afe784dd19c0
-Commit:        9918d95490d46dee12768494dcc8afe784dd19c0
-Parent:        8f01ee3035cf5ede72a8653fd1dca2987db29475
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Mar 10 13:02:38 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Mar 10 13:11:15 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=29d1533a497be922dc114524b83e926cbb63c34a
+Commit:        29d1533a497be922dc114524b83e926cbb63c34a
+Parent:        9918d95490d46dee12768494dcc8afe784dd19c0
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Mar 9 18:00:57 2016 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Mar 10 18:38:53 2016 +0100
 
-metadata: do not issue warning message about PV dev size being 0 when the device has gone just after VG read
+libdm: parse more info from cache status
 
-There's a window between doing VG read and checking PV device size
-against real device size. If the device is removed in this window,
-the dev cache still holds struct device and pv->dev still references
-that and that PV is not marked as missing. However, if we're trying
-to get size for such device, the open fails because that device
-doesn't exists anymore.
-
-We called existing pv_dev_size in _check_pv_dev_sizes fn. But
-pv_dev_size assigned a size of 0 if the dev_get_size it called failed
-(because the device is gone).
-
-So call the dev_get_size directly and check for the return code
-in _check_pv_dev_sizes and go further only if we really know the
-device size. This is to avoid confusing warning messages like:
-
-  Device /dev/sdd1 has size of 0 sectors which is smaller than corresponding PV size of 31455207 sectors. Was device resized?
-  One or more devices used as PVs in VG helter_skelter have changed sizes.
+Parse Fail/Error/need_check/ro status info from cache.
 ---
- lib/metadata/metadata.c |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdevmapper.h  |    8 +++++++-
+ libdm/libdm-targets.c |   18 ++++++++++++++++++
+ 3 files changed, 26 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 1330cc0..d04adb6 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -680,8 +680,14 @@ static int _check_pv_dev_sizes(struct volume_group *vg)
- 	dm_list_iterate_items(pvl, &vg->pvs) {
- 		if (is_missing_pv(pvl->pv))
- 			continue;
--
--		dev_size = pv_dev_size(pvl->pv);
-+		/*
-+		 * Don't compare the sizes if we're not able
-+		 * to determine the real dev_size. This may
-+		 * happen if the device has gone since we did
-+		 * VG read.
-+		 */
-+		if (!dev_get_size(pvl->pv->dev, &dev_size))
-+			continue;
- 		size = pv_size(pvl->pv);
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 4cdd97c..274d1b9 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.120 - 
+ =================================
++  Improve parsing of cache status and report Fail, Error, needs_check, ro.
  
- 		if (dev_size < size) {
+ Version 1.02.119 - 4th March 2016
+ =================================
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 0b7d5ba..ac79a57 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -361,8 +361,14 @@ struct dm_status_cache {
+ 	char **core_argv;
+ 
+ 	char *policy_name;
+-	int   policy_argc;
++	int policy_argc;
+ 	char **policy_argv;
++
++	unsigned error : 1;		/* detected error (switches to fail soon) */
++	unsigned fail : 1;		/* all I/O fails */
++	unsigned needs_check : 1;	/* metadata needs check */
++	unsigned read_only : 1;		/* metadata may not be changed */
++	uint32_t reserved : 28;
+ };
+ 
+ int dm_get_status_cache(struct dm_pool *mem, const char *params,
+diff --git a/libdm/libdm-targets.c b/libdm/libdm-targets.c
+index 7428eba..bd6e5e2 100644
+--- a/libdm/libdm-targets.c
++++ b/libdm/libdm-targets.c
+@@ -194,6 +194,17 @@ int dm_get_status_cache(struct dm_pool *mem, const char *params,
+ 	if (!(s = dm_pool_zalloc(mem, sizeof(struct dm_status_cache))))
+ 		return_0;
+ 
++	if (strstr(params, "Error")) {
++		s->error = 1;
++		s->fail = 1; /*  This is also I/O fail state */
++		goto out;
++	}
++
++	if (strstr(params, "Fail")) {
++		s->fail = 1;
++		goto out;
++	}
++
+ 	/* Read in args that have definitive placement */
+ 	if (sscanf(params,
+ 		   " %" PRIu32
+@@ -258,6 +269,13 @@ int dm_get_status_cache(struct dm_pool *mem, const char *params,
+ 	     (dm_split_words(str, s->policy_argc, 0, s->policy_argv) != s->policy_argc)))
+ 		goto bad;
+ 
++	/* TODO: improve this parser */
++	if (strstr(p, " ro"))
++		s->read_only = 1;
++
++	if (strstr(p, " needs_check"))
++		s->needs_check = 1;
++out:
+ 	*status = s;
+ 	return 1;
+ 
 
 
