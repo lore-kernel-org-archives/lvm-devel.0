@@ -1,101 +1,69 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 10 Mar 2016 17:40:07 +0000 (UTC)
-Subject: master - lvconvert: improve vg parameter parsing
-Message-ID: <20160310174007.2C80060804@fedorahosted.org>
+Date: Thu, 10 Mar 2016 17:40:09 +0000 (UTC)
+Subject: master - makefiles: avoid using vpath for rules files
+Message-ID: <20160310174009.40E1360804@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=70cbd8f1a5cc6abb418a90529bc12a2813806f13
-Commit:        70cbd8f1a5cc6abb418a90529bc12a2813806f13
-Parent:        5c415afd852b6d39021f97f63401a37e6408bf70
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86a23b2145e4abde3086a22ceb15438515b0053d
+Commit:        86a23b2145e4abde3086a22ceb15438515b0053d
+Parent:        70cbd8f1a5cc6abb418a90529bc12a2813806f13
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 8 10:13:38 2016 +0100
+AuthorDate:    Wed Mar 9 17:52:29 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 10 18:38:53 2016 +0100
 
-lvconvert: improve vg parameter parsing
+makefiles: avoid using vpath for rules files
 
-Commit abd9618dd8b77ca1974074ae76fa6a08f1a687d9 tried to improve
-parsing of vg name from logical path - but still missed couple
-corner cases.
+Fixing vpath usage as it has been checking for existance of
+generated file also in the $(scrdir) e.g.:
 
-This patch further improves the logic and reuses
-validate_lvname_param() for parsing of lv_name.
+No need to remake target '10-dm.rules.in'; using VPATH name '...'
 
-Also explicitly checks for LVM_VG_NAME in the right case.
+If the $(srcdir) had been also $(builddir) and contained already
+generated rules file, it's been used instead generating new
+one.
 
-So now also properly parses cases like:
-  'lvconvert --repairt vg/'
-and will provide correct error message.
+(See: http://make.mad-scientist.net/papers/how-not-to-use-vpath/)
 ---
- WHATS_NEW         |    1 +
- tools/lvconvert.c |   25 ++++++++++---------------
- 2 files changed, 11 insertions(+), 15 deletions(-)
+ WHATS_NEW        |    1 +
+ udev/Makefile.in |    3 +--
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index e5b28bb..eab40b1 100644
+index eab40b1..d348cbc 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.146 - 
  =================================
-+  Another attempt to improve VG name parsing for lvconvert (2.02.144).
++  Fix makefile vpath in /udev when generating udev rules files.
+   Another attempt to improve VG name parsing for lvconvert (2.02.144).
    Use new cache status info and skip flushing for failed cache.
    Support --uncache with missing PVs.
-   Tidy report field names, headings and widths.
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 2b5080f..dc6cb48 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -115,9 +115,6 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
- 				  struct cmd_context *cmd,
- 				  int *pargc, char ***pargv)
- {
--	char *ptr;
--	const char *vg_name = NULL;
--
- 	if (lp->merge) {
- 		if (!*pargc) {
- 			log_error("Please specify a logical volume path.");
-@@ -174,26 +171,24 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
- 	if (!validate_restricted_lvname_param(cmd, &lp->vg_name, &lp->lv_split_name))
- 		return_0;
+diff --git a/udev/Makefile.in b/udev/Makefile.in
+index d23eb7d..cb968df 100644
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -16,7 +16,6 @@ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
  
--	if ((vg_name = extract_vgname(cmd, lp->lv_name_full)) &&
--	    lp->vg_name && strcmp(vg_name, lp->vg_name)) {
--		log_error("Please use a single volume group name "
--			  "(\"%s\" or \"%s\")", vg_name, lp->vg_name);
--		return 0;
-+	if (!lp->vg_name && !strchr(lp->lv_name_full, '/')) {
-+		/* Check for $LVM_VG_NAME */
-+		if (!(lp->vg_name = extract_vgname(cmd, NULL))) {
-+			log_error("Please specify a logical volume path.");
-+			return 0;
-+		}
- 	}
+ include $(top_builddir)/make.tmpl
+-vpath %.rules $(srcdir)
  
--	if (!lp->vg_name)
--		lp->vg_name = vg_name;
-+	if (!validate_lvname_param(cmd, &lp->vg_name, &lp->lv_name_full))
-+		return_0;
-+
-+	lp->lv_name = lp->lv_name_full;
+ DM_RULES=10-dm.rules 13-dm-disk.rules 95-dm-notify.rules
+ LVM_RULES=11-dm-lvm.rules
+@@ -52,7 +51,7 @@ else
+ PVSCAN_RULE=RUN\+\=\"$(LVM_EXEC)/lvm pvscan --background --cache --activate ay --major \$$major --minor \$$minor\", ENV{LVM_SCANNED}=\"1\"
+ endif
  
- 	if (!validate_name(lp->vg_name)) {
- 		log_error("Please provide a valid volume group name");
- 		return 0;
- 	}
+-%.rules: %.rules.in
++%.rules: $(srcdir)/%.rules.in
+ 	$(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(PVSCAN_RULE)+$(PVSCAN_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
  
--	if ((ptr = strrchr(lp->lv_name_full, '/')))
--		lp->lv_name = ptr + 1;
--	else
--		lp->lv_name = lp->lv_name_full;
--
- 	if (!lp->merge_mirror &&
- 	    !lp->repair &&
- 	    !arg_count(cmd, splitmirrors_ARG) &&
+ %_install: %.rules
 
 
