@@ -1,65 +1,90 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 11 Mar 2016 00:24:03 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20160311002403.D863560D52@fedorahosted.org>
+Date: Fri, 11 Mar 2016 00:24:14 +0000 (UTC)
+Subject: v2_02_146 annotated tag has been created
+Message-ID: <20160311002414.5DACB60D6C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a78e6960704a42ceadcda89b624137cb7bb7c72e
-Commit:        a78e6960704a42ceadcda89b624137cb7bb7c72e
-Parent:        2159a1429d65adb824e67a1577625663d910516e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eddd448869573ca03e49c009e80cd4440fb0193f
+Commit:        eddd448869573ca03e49c009e80cd4440fb0193f
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Mar 11 00:21:53 2016 +0000
+AuthorDate:    2016-03-11 00:19 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Mar 11 00:21:53 2016 +0000
+CommitterDate: 2016-03-11 00:19 +0000
 
-post-release
+annotated tag: v2_02_146 has been created
+	    at eddd448869573ca03e49c009e80cd4440fb0193f (tag)
+       tagging 2159a1429d65adb824e67a1577625663d910516e (commit)
+      replaces v2_02_145
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Release 2.02.146.
 
-diff --git a/VERSION b/VERSION
-index dc1b9ea..f56f978 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.146(2)-git (2016-03-11)
-+2.02.147(2)-git (2016-03-11)
-diff --git a/VERSION_DM b/VERSION_DM
-index 1678ddf..c66683d 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.120-git (2016-03-11)
-+1.02.121-git (2016-03-11)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 27abb4a..50cf318 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.147 - 
-+==================================
-+
- Version 2.02.146 - 11th March 2016
- ==================================
-   More man page cleanups in lvconvert.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index ec27a19..9ddf5e1 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.121 - 
-+==================================
-+
- Version 1.02.120 - 11th March 2016
- ==================================
-   Improve parsing of cache status and report Fail, Error, needs_check, ro.
+Another development checkpoint - all recent API changes are still not frozen.
+
+67 files changed, 985 insertions(+), 365 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAlbiDyAACgkQIoGRwVZ+LBcntwCg804fiwvLyCirQp1bAu/L6zNj
+9OoAn25XIxRQzSELiLobHEHRrG68QCBC
+=LtBU
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (3):
+      post-release
+      report: Tidy some field names, widths and headings.
+      pre-release
+
+David Teigland (6):
+      dbus: add notification from commands
+      vgscan: add --notifydbus to send a notification
+      toollib: always process in use pvs
+      remove unused define
+      pvchange, pvresize: move exported VG check
+      man: vgcreate shared
+
+Heinz Mauelshagen (1):
+      raid_manip: allow for raid leg to be replaced when not both data and metadata image are on pvs
+
+Marian Csontos (7):
+      test: Update kernels to skip thin-flags with
+      test: Move udev-lvmlockd-test to check_system
+      test: Comment out incorrect lockd setup
+      spec: Add missing dependency for dbusd
+      test: Add prepare_lvmdbusd
+      spec: Fix gobject dependency
+      test: Remove work-in-progress code from dbustest
+
+Ondrej Kozina (2):
+      test: fix inverted condition
+      test: skip unrelated tests while testing lvmpolld
+
+Peter Rajnoha (2):
+      coverity: fix possible resource leak in _print_historical_lv function
+      metadata: do not issue warning message about PV dev size being 0 when the device has gone just after VG read
+
+Tony Asleson (2):
+      lvmdbus: Fix exception during exception handling
+      lvmdbus:  Fix deprecated warnings for GObject use
+
+Zdenek Kabelac (14):
+      libdm: parse more info from cache status
+      lvconvert: uncache handles missing PV
+      cache: check for cache fail during flush
+      lvconvert: improve vg parameter parsing
+      makefiles: avoid using vpath for rules files
+      man: updates
+      man: drop extra braces
+      topology: handle reported sizes smaller then sector
+      gcc: cast time_t to 64bit
+      cleanup: add backtrace
+      cleanup: reoder lines
+      cleanup: display_lvname
+      tests: uncache with missing PV
+      lvconvert: update --help
 
 
