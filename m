@@ -1,39 +1,53 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 14 Mar 2016 09:31:36 +0000 (UTC)
-Subject: master - report: Use default vg_name field width too.
-Message-ID: <20160314093136.2CC28603F7@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 14 Mar 2016 22:46:54 +0000 (UTC)
+Subject: master - lvconvert: fix error path test
+Message-ID: <20160314224654.48EBE6105F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a39563c0b08a281f170f7e70ec571aa6ef2d9147
-Commit:        a39563c0b08a281f170f7e70ec571aa6ef2d9147
-Parent:        a78e6960704a42ceadcda89b624137cb7bb7c72e
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Mar 14 09:30:51 2016 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Mar 14 09:30:51 2016 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7daba90fa3c2cec085170b1c18f63d7877e483da
+Commit:        7daba90fa3c2cec085170b1c18f63d7877e483da
+Parent:        a39563c0b08a281f170f7e70ec571aa6ef2d9147
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Mar 14 23:19:22 2016 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Mar 14 23:37:42 2016 +0100
 
-report: Use default  vg_name field width too.
+lvconvert: fix error path test
 
+lvremove_single toollib function returns
+ECMD_FAILED or ECMD_PROCESSED.
 ---
- lib/report/columns.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 1abc4c8..4439047 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -149,7 +149,7 @@ FIELD(PVS, pv, BIN, "PInUse", id, 0, pvinuse, pv_in_use, "Set if PV is used.", 0
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 50cf318..23d8787 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.147 - 
+ ==================================
++  Fix test for lvremove failure in lvconvert --uncache (2.02.146).
  
- FIELD(VGS, vg, STR, "Fmt", cmd, 0, vgfmt, vg_fmt, "Type of metadata.", 0)
- FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, vg_uuid, "Unique identifier.", 0)
--FIELD(VGS, vg, STR, "VG", name, 4, string, vg_name, "Name.", 0)
-+FIELD(VGS, vg, STR, "VG", name, 0, string, vg_name, "Name.", 0)
- FIELD(VGS, vg, STR, "Attr", cmd, 5, vgstatus, vg_attr, "Various attributes - see man page.", 0)
- FIELD(VGS, vg, STR, "VPerms", cmd, 10, vgpermissions, vg_permissions, "VG permissions.", 0)
- FIELD(VGS, vg, BIN, "Extendable", cmd, 0, vgextendable, vg_extendable, "Set if VG is extendable.", 0)
+ Version 2.02.146 - 11th March 2016
+ ==================================
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index d80292a..f7a3df6 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2043,7 +2043,7 @@ static int _lvconvert_uncache(struct cmd_context *cmd,
+ 		}
+ 	}
+ 
+-	if (!lvremove_single(cmd, remove_lv, NULL))
++	if (lvremove_single(cmd, remove_lv, NULL) != ECMD_PROCESSED)
+ 		return_0;
+ 
+ 	if (remove_lv != lv)
 
 
