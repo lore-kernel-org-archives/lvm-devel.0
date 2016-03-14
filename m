@@ -1,39 +1,60 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 14 Mar 2016 22:46:56 +0000 (UTC)
-Subject: master - tests: use own PID path for lvmetad checking
-Message-ID: <20160314224656.66A8B60702@fedorahosted.org>
+Date: Mon, 14 Mar 2016 22:46:58 +0000 (UTC)
+Subject: master - tests: update lvconvert test
+Message-ID: <20160314224658.955676112A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0d5b9deff21991f0b26240ae4395ee12e76096c5
-Commit:        0d5b9deff21991f0b26240ae4395ee12e76096c5
-Parent:        7daba90fa3c2cec085170b1c18f63d7877e483da
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=746f8af2a836e662e5588a37feb29c27ed02261b
+Commit:        746f8af2a836e662e5588a37feb29c27ed02261b
+Parent:        0d5b9deff21991f0b26240ae4395ee12e76096c5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 14 23:16:45 2016 +0100
+AuthorDate:    Mon Mar 14 23:22:19 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 14 23:45:45 2016 +0100
+CommitterDate: Mon Mar 14 23:46:08 2016 +0100
 
-tests: use own PID path for lvmetad checking
+tests: update lvconvert test
 
-Do not try to check PID of running lvmetad and use own path.
 ---
- test/lib/inittest.sh |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ test/shell/lvconvert-repair-cache.sh |    9 ++++++++-
+ 1 files changed, 8 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index a2dcf01..a453ee6 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -114,6 +114,7 @@ if test -n "$LVM_TEST_LVMETAD" ; then
- 	aux prepare_lvmetad
- else
- 	# lvmetad prepares its own lvmconf
-+	export LVM_LVMETAD_PIDFILE="$TESTDIR/non-existing-file"
- 	aux lvmconf
- 	aux prepare_clvmd
- fi
+diff --git a/test/shell/lvconvert-repair-cache.sh b/test/shell/lvconvert-repair-cache.sh
+index 9ef8716..60b0b5d 100644
+--- a/test/shell/lvconvert-repair-cache.sh
++++ b/test/shell/lvconvert-repair-cache.sh
+@@ -61,6 +61,10 @@ lvconvert -H --cachemode writethrough --cachepool $vg/cpool $lv1
+ 
+ aux disable_dev "$dev2"
+ 
++# Deactivate before remove
++# FIXME: handle this while LV is alive
++lvchange -an $vg/$lv1
++
+ # Check it is prompting for confirmation
+ not lvconvert --uncache $vg/$lv1
+ # --yes to drop when Check its prompting
+@@ -72,6 +76,9 @@ lvconvert --yes --uncache $vg/$lv1
+ #lvchange -ay $vg
+ 
+ aux enable_dev "$dev2"
++
++# FIXME: temporary workaround
++lvcreate -L1 -n $lv5 $vg
+ lvremove -ff $vg
+ 
+ ##########################
+@@ -92,7 +99,7 @@ lvs -a -o+seg_pe_ranges,cachemode $vg
+ sync
+ 
+ # Seriously damage cache metadata
+-aux error_dev  "$dev1" 2054:2
++aux error_dev "$dev1" 2054:2
+ 
+ # Here we usually for the 1st. notice needs_check
+ check lv_attr_bit state $vg/$lv1 "c"
 
 
