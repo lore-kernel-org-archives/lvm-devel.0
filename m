@@ -1,60 +1,119 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 14 Mar 2016 22:46:58 +0000 (UTC)
-Subject: master - tests: update lvconvert test
-Message-ID: <20160314224658.955676112A@fedorahosted.org>
+Date: Tue, 15 Mar 2016 22:23:44 +0000 (UTC)
+Subject: master - lvresize: fix stacked resize
+Message-ID: <20160315222344.D88C260D3A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=746f8af2a836e662e5588a37feb29c27ed02261b
-Commit:        746f8af2a836e662e5588a37feb29c27ed02261b
-Parent:        0d5b9deff21991f0b26240ae4395ee12e76096c5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=51ed48f8551cf32539765b5057bb20cc8d9a8777
+Commit:        51ed48f8551cf32539765b5057bb20cc8d9a8777
+Parent:        746f8af2a836e662e5588a37feb29c27ed02261b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 14 23:22:19 2016 +0100
+AuthorDate:    Tue Mar 15 23:13:28 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 14 23:46:08 2016 +0100
+CommitterDate: Tue Mar 15 23:21:16 2016 +0100
 
-tests: update lvconvert test
+lvresize: fix stacked resize
 
+Commit b64703401da1f4bef60579a0b3766c087fcfe96a cause regression
+when handling stacked resize of pool metadata volume that would
+be a raid LV.
+
+Fix it by properly setting up size also for layer extension.
 ---
- test/shell/lvconvert-repair-cache.sh |    9 ++++++++-
- 1 files changed, 8 insertions(+), 1 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |   43 ++++++++++++++++++++++++++++---------------
+ 2 files changed, 29 insertions(+), 15 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-cache.sh b/test/shell/lvconvert-repair-cache.sh
-index 9ef8716..60b0b5d 100644
---- a/test/shell/lvconvert-repair-cache.sh
-+++ b/test/shell/lvconvert-repair-cache.sh
-@@ -61,6 +61,10 @@ lvconvert -H --cachemode writethrough --cachepool $vg/cpool $lv1
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 23d8787..d49e935 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.147 - 
+ ==================================
++  Fix resize of stacked raid thin data volume (2.02.141).
+   Fix test for lvremove failure in lvconvert --uncache (2.02.146).
  
- aux disable_dev "$dev2"
+ Version 2.02.146 - 11th March 2016
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 91a010c..1baf548 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1704,6 +1704,28 @@ static int _log_parallel_areas(struct dm_pool *mem, struct dm_list *parallel_are
+ 	return 1;
+ }
  
-+# Deactivate before remove
-+# FIXME: handle this while LV is alive
-+lvchange -an $vg/$lv1
++/* Handles also stacking */
++static int _setup_lv_size(struct logical_volume *lv, uint32_t extents)
++{
++	struct lv_segment *thin_pool_seg;
 +
- # Check it is prompting for confirmation
- not lvconvert --uncache $vg/$lv1
- # --yes to drop when Check its prompting
-@@ -72,6 +76,9 @@ lvconvert --yes --uncache $vg/$lv1
- #lvchange -ay $vg
- 
- aux enable_dev "$dev2"
++	lv->le_count = extents;
++	lv->size = (uint64_t) extents * lv->vg->extent_size;
 +
-+# FIXME: temporary workaround
-+lvcreate -L1 -n $lv5 $vg
- lvremove -ff $vg
++	if (lv_is_thin_pool_data(lv)) {
++		if (!(thin_pool_seg = get_only_segment_using_this_lv(lv)))
++			return_0;
++
++		/* Update thin pool segment from the layered LV */
++		thin_pool_seg->lv->le_count =
++			thin_pool_seg->len =
++			thin_pool_seg->area_len = lv->le_count;
++		thin_pool_seg->lv->size = lv->size;
++	}
++
++	return 1;
++}
++
+ static int _setup_alloced_segment(struct logical_volume *lv, uint64_t status,
+ 				  uint32_t area_count,
+ 				  uint32_t stripe_size,
+@@ -1712,7 +1734,7 @@ static int _setup_alloced_segment(struct logical_volume *lv, uint64_t status,
+ 				  uint32_t region_size)
+ {
+ 	uint32_t s, extents, area_multiple;
+-	struct lv_segment *seg, *thin_pool_seg;
++	struct lv_segment *seg;
  
- ##########################
-@@ -92,7 +99,7 @@ lvs -a -o+seg_pe_ranges,cachemode $vg
- sync
+ 	area_multiple = _calc_area_multiple(segtype, area_count, 0);
+ 	extents = aa[0].len * area_multiple;
+@@ -1732,19 +1754,9 @@ static int _setup_alloced_segment(struct logical_volume *lv, uint64_t status,
+ 	dm_list_add(&lv->segments, &seg->list);
  
- # Seriously damage cache metadata
--aux error_dev  "$dev1" 2054:2
-+aux error_dev "$dev1" 2054:2
+ 	extents = aa[0].len * area_multiple;
+-	lv->le_count += extents;
+-	lv->size += (uint64_t) extents * lv->vg->extent_size;
+-
+-	if (lv_is_thin_pool_data(lv)) {
+-		if (!(thin_pool_seg = get_only_segment_using_this_lv(lv)))
+-			return_0;
  
- # Here we usually for the 1st. notice needs_check
- check lv_attr_bit state $vg/$lv1 "c"
+-		/* Update thin pool segment from the layered LV */
+-		thin_pool_seg->lv->le_count =
+-			thin_pool_seg->len =
+-			thin_pool_seg->area_len = lv->le_count;
+-		thin_pool_seg->lv->size = lv->size;
+-	}
++	if (!_setup_lv_size(lv, lv->le_count + extents))
++		return_0;
+ 
+ 	return 1;
+ }
+@@ -3875,8 +3887,9 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
+ 
+ 	seg->area_len += extents;
+ 	seg->len += extents;
+-	lv->le_count += extents;
+-	lv->size += (uint64_t) extents * lv->vg->extent_size;
++
++	if (!_setup_lv_size(lv, lv->le_count + extents))
++		return_0;
+ 
+ 	/*
+ 	 * The MD bitmap is limited to being able to track 2^21 regions.
 
 
