@@ -1,111 +1,108 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  4 Mar 2016 09:28:15 +0000 (UTC)
-Subject: master - commands: lvdisplay: recognize -H|--history switch
-Message-ID: <20160304092815.CE39260C9B@fedorahosted.org>
+Date: Fri, 18 Mar 2016 12:45:27 +0000 (UTC)
+Subject: master - fsadm: if available, use /proc/self/mountinfo to detect mounted volume
+Message-ID: <20160318124527.0D90C609D2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b114b4d723129998b1578410b0b054bebfef1817
-Commit:        b114b4d723129998b1578410b0b054bebfef1817
-Parent:        ad9cbe271458741f87dca834c16078f181612d76
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2879eff86edb944874c7a1bf580b851286c4da46
+Commit:        2879eff86edb944874c7a1bf580b851286c4da46
+Parent:        464ebe04db33ac105f5278dbbb244a9f84d582f8
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Mar 4 10:27:45 2016 +0100
+AuthorDate:    Fri Mar 18 13:42:06 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Mar 4 10:27:45 2016 +0100
+CommitterDate: Fri Mar 18 13:42:06 2016 +0100
 
-commands: lvdisplay: recognize -H|--history switch
+fsadm: if available, use /proc/self/mountinfo to detect mounted volume
 
+The /proc/self/mountinfo is not bound to device names like /proc/mounts
+and it uses major:minor pairs instead.
+
+This fixes a situation in which a volume is mounted and then renamed
+later on - that makes /proc/mounts unreliable when detecting mounted
+volumes.
+
+See also https://bugzilla.redhat.com/show_bug.cgi?id=1196910.
 ---
- lib/display/display.c |   31 +++++++++++++++++++++++++++++++
- tools/commands.h      |   10 ++++++----
- 2 files changed, 37 insertions(+), 4 deletions(-)
+ WHATS_NEW        |    1 +
+ scripts/fsadm.sh |   29 +++++++++++++++++++++++++----
+ 2 files changed, 26 insertions(+), 4 deletions(-)
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index 2b7ea52..a6387c6 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -332,6 +332,34 @@ void lvdisplay_colons(const struct logical_volume *lv)
- 		  inkernel ? info.major : -1, inkernel ? info.minor : -1);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d49e935..96023c8 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.147 - 
+ ==================================
++  If available, use /proc/self/mountinfo to detect mounted volume in fsadm.
+   Fix resize of stacked raid thin data volume (2.02.141).
+   Fix test for lvremove failure in lvconvert --uncache (2.02.146).
+ 
+diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
+index fc85988..4dee15c 100755
+--- a/scripts/fsadm.sh
++++ b/scripts/fsadm.sh
+@@ -76,6 +76,7 @@ MOUNTPOINT=
+ MOUNTED=
+ REMOUNT=
+ PROCMOUNTS="/proc/mounts"
++PROCSELFMOUNTINFO="/proc/self/mountinfo"
+ NULL="$DM_DEV_DIR/null"
+ 
+ IFS_OLD=$IFS
+@@ -188,6 +189,7 @@ detect_fs() {
+           # hardcoded /dev  since udev does not create these entries elsewhere
+ 	  /dev/dm-[0-9]*)
+ 		read </sys/block/${RVOLUME#/dev/}/dm/name SYSVOLUME 2>&1 && VOLUME="$DM_DEV_DIR/mapper/$SYSVOLUME"
++		read </sys/block/${RVOLUME#/dev/}/dev MAJORMINOR 2>&1 || error "Cannot get major:minor for \"$VOLUME\""
+ 		;;
+ 	esac
+ 	# use null device as cache file to be sure about the result
+@@ -198,11 +200,18 @@ detect_fs() {
+ 	verbose "\"$FSTYPE\" filesystem found on \"$VOLUME\""
  }
  
-+static int _lvdisplay_historical_full(struct cmd_context *cmd,
-+				      const struct logical_volume *lv)
-+{
-+	char uuid[64] __attribute__((aligned(8)));
-+	int lvm1compat = find_config_tree_bool(cmd, global_lvdisplay_shows_full_device_path_CFG, NULL);
-+	struct historical_logical_volume *hlv = lv->this_glv->historical;
+-# check if the given device is already mounted and where
+-# FIXME: resolve swap usage and device stacking
+-detect_mounted()  {
+-	test -e "$PROCMOUNTS" || error "Cannot detect mounted device \"$VOLUME\""
++detect_mounted_with_proc_self_mountinfo()  {
++	MOUNTED=$("$GREP" "^[0-9]* [0-9]* $MAJORMINOR " "$PROCSELFMOUNTINFO")
 +
-+	if (!id_write_format(&hlv->lvid.id[1], uuid, sizeof(uuid)))
-+		return_0;
++	# extract 5th field which is mount point
++	# echo -e translates \040 to spaces
++	MOUNTED=$(echo ${MOUNTED} | cut -d " " -f 5)
++	MOUNTED=$(echo -n -e ${MOUNTED})
 +
-+	log_print("--- Historical Logical volume ---");
-+
-+	if (lvm1compat)
-+		/* /dev/vgname/lvname doen't actually exist for historical devices */
-+		log_print("LV Name                %s%s/%s",
-+			  hlv->vg->cmd->dev_dir, hlv->vg->name, hlv->name);
++	test -n "$MOUNTED"
++}
+ 
++detect_mounted_with_proc_mounts()  {
+ 	MOUNTED=$("$GREP" "^$VOLUME[ \t]" "$PROCMOUNTS")
+ 
+ 	# for empty string try again with real volume name
+@@ -224,6 +233,18 @@ detect_mounted()  {
+ 	test -n "$MOUNTED"
+ }
+ 
++# check if the given device is already mounted and where
++# FIXME: resolve swap usage and device stacking
++detect_mounted()  {
++	if test -e "$PROCSELFMOUNTINFO"; then
++		detect_mounted_with_proc_self_mountinfo
++	elif test -e "$PROCMOUNTS"; then
++		detect_mounted_with_proc_mounts
 +	else
-+		log_print("LV Name                %s%s", HISTORICAL_LV_PREFIX, hlv->name);
-+
-+	log_print("VG Name                %s", hlv->vg->name);
-+	log_print("LV UUID                %s", uuid);
-+	log_print("LV Creation time       %s", lv_creation_time_dup(cmd->mem, lv, 1));
-+	log_print("LV Removal time        %s", lv_removal_time_dup(cmd->mem, lv, 1));
-+
-+	log_print(" ");
-+	return 1;
++		error "Cannot detect mounted device \"$VOLUME\""
++	fi
 +}
 +
- int lvdisplay_full(struct cmd_context *cmd,
- 		   const struct logical_volume *lv,
- 		   void *handle __attribute__((unused)))
-@@ -349,6 +377,9 @@ int lvdisplay_full(struct cmd_context *cmd,
- 	int thin_active = 0;
- 	dm_percent_t thin_percent;
- 
-+	if (lv_is_historical(lv))
-+		return _lvdisplay_historical_full(cmd, lv);
-+
- 	if (!id_write_format(&lv->lvid.id[1], uuid, sizeof(uuid)))
- 		return_0;
- 
-diff --git a/tools/commands.h b/tools/commands.h
-index bc5eb92..b3627dd 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -409,6 +409,7 @@ xx(lvdisplay,
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|--help]\n"
-+   "\t[-H|--history]\n"
-    "\t[--ignorelockingfailure]\n"
-    "\t[--ignoreskippedcluster]\n"
-    "\t[-m|--maps]\n"
-@@ -429,6 +430,7 @@ xx(lvdisplay,
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|--help]\n"
-+   "\t[-H|--history]\n"
-    "\t[--ignorelockingfailure]\n"
-    "\t[--ignoreskippedcluster]\n"
-    "\t[--noheadings]\n"
-@@ -447,10 +449,10 @@ xx(lvdisplay,
-    "\t[LogicalVolume[Path] [LogicalVolume[Path]...]]\n",
- 
-     aligned_ARG, all_ARG, binary_ARG, colon_ARG, columns_ARG, foreign_ARG,
--    ignorelockingfailure_ARG, ignoreskippedcluster_ARG, maps_ARG,
--    noheadings_ARG, nosuffix_ARG, options_ARG, sort_ARG, partial_ARG,
--    readonly_ARG, segments_ARG, select_ARG, separator_ARG, shared_ARG,
--    unbuffered_ARG, units_ARG)
-+    history_ARG, ignorelockingfailure_ARG, ignoreskippedcluster_ARG,
-+    maps_ARG, noheadings_ARG, nosuffix_ARG, options_ARG, sort_ARG,
-+    partial_ARG, readonly_ARG, segments_ARG, select_ARG, separator_ARG,
-+    shared_ARG, unbuffered_ARG, units_ARG)
- 
- xx(lvextend,
-    "Add space to a logical volume",
+ # get the full size of device in bytes
+ detect_device_size() {
+ 	# check if blockdev supports getsize64
 
 
