@@ -1,56 +1,126 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 21 Mar 2016 15:21:47 +0000 (UTC)
-Subject: master - tests: add vg-check-devs-used.sh
-Message-ID: <20160321152147.E3F21605F9@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Mon, 21 Mar 2016 22:33:59 +0000 (UTC)
+Subject: master - lvmdbusd: Allow PV devices to be referenced by symlink(s)
+Message-ID: <20160321223359.E65986072A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cc57cd39ab0e47a3e0fc6fc81c378c4d4d292093
-Commit:        cc57cd39ab0e47a3e0fc6fc81c378c4d4d292093
-Parent:        8fad9b9e5d219861fc1f758216fb446cffe3817f
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Mar 21 16:21:30 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Mar 21 16:21:30 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a0c7875c547fb8a420d789271f5e6660210e749f
+Commit:        a0c7875c547fb8a420d789271f5e6660210e749f
+Parent:        86e9d12b6f06c741ada66cd417f3fa82ea0364b6
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Mon Mar 21 17:19:38 2016 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Mon Mar 21 17:28:51 2016 -0500
 
-tests: add vg-check-devs-used.sh
+lvmdbusd: Allow PV devices to be referenced by symlink(s)
 
+See: https://bugzilla.redhat.com/show_bug.cgi?id=1318754
+
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- test/shell/vg-check-devs-used.sh |   24 ++++++++++++++++++++++++
- 1 files changed, 24 insertions(+), 0 deletions(-)
+ daemons/lvmdbusd/lvmdb.py         |    6 ++++++
+ daemons/lvmdbusd/objectmanager.py |   31 +++++++++++++++++++++++--------
+ 2 files changed, 29 insertions(+), 8 deletions(-)
 
-diff --git a/test/shell/vg-check-devs-used.sh b/test/shell/vg-check-devs-used.sh
-new file mode 100644
-index 0000000..b368227
---- /dev/null
-+++ b/test/shell/vg-check-devs-used.sh
-@@ -0,0 +1,24 @@
-+#!/bin/sh
-+# Copyright (C) 2008-2012 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+diff --git a/daemons/lvmdbusd/lvmdb.py b/daemons/lvmdbusd/lvmdb.py
+index 132bee7..be37868 100755
+--- a/daemons/lvmdbusd/lvmdb.py
++++ b/daemons/lvmdbusd/lvmdb.py
+@@ -12,6 +12,7 @@
+ from collections import OrderedDict
+ 
+ import pprint as prettyprint
++import os
+ 
+ try:
+ 	from . import cmdhandler
+@@ -309,6 +310,11 @@ class DataStore(object):
+ 		else:
+ 			rc = []
+ 			for s in pv_name:
++				# Ths user could be using a symlink instead of the actual
++				# block device, make sure we are using actual block device file
++				# if the pv name isn't in the lookup
++				if s not in self.pv_path_to_uuid:
++					s = os.path.realpath(s)
+ 				rc.append(self.pvs[self.pv_path_to_uuid[s]])
+ 			return rc
+ 
+diff --git a/daemons/lvmdbusd/objectmanager.py b/daemons/lvmdbusd/objectmanager.py
+index e2f1e0a..f28c5c8 100644
+--- a/daemons/lvmdbusd/objectmanager.py
++++ b/daemons/lvmdbusd/objectmanager.py
+@@ -11,6 +11,7 @@ import sys
+ import threading
+ import traceback
+ import dbus
++import os
+ from . import cfg
+ from .utils import log_debug
+ from .automatedproperties import AutomatedProperties
+@@ -184,13 +185,13 @@ class ObjectManager(AutomatedProperties):
+ 				return self.get_object_by_path(self._id_to_object_path[lvm_id])
+ 			return None
+ 
+-	def _uuid_verify(self, path, lvm_id, uuid):
++	def _uuid_verify(self, path, uuid, lvm_id):
+ 		"""
+ 		Ensure uuid is present for a successful lvm_id lookup
+ 		NOTE: Internal call, assumes under object manager lock
+ 		:param path: 		Path to object we looked up
+-		:param lvm_id:		lvm_id used to find object
+ 		:param uuid: 		lvm uuid to verify
++		:param lvm_id:		lvm_id used to find object
+ 		:return: None
+ 		"""
+ 		# This gets called when we found an object based on lvm_id, ensure
+@@ -200,6 +201,17 @@ class ObjectManager(AutomatedProperties):
+ 				obj = self.get_object_by_path(path)
+ 				self._lookup_add(obj, path, lvm_id, uuid)
+ 
++	def _return_lookup(self, uuid, lvm_identifier):
++		"""
++		We found an identifier, so lets return the path to the found object
++		:param uuid:	The lvm uuid
++		:param lvm_identifier: The lvm_id used to find object
++		:return:
++		"""
++		path = self._id_to_object_path[lvm_identifier]
++		self._uuid_verify(path, uuid, lvm_identifier)
++		return path
 +
-+SKIP_WITH_LVMPOLLD=1
+ 	def get_object_path_by_lvm_id(self, uuid, lvm_id, path_create=None,
+ 								gen_new=True):
+ 		"""
+@@ -221,16 +233,19 @@ class ObjectManager(AutomatedProperties):
+ 			path = None
+ 
+ 			if lvm_id in self._id_to_object_path:
+-				path = self._id_to_object_path[lvm_id]
+-				self._uuid_verify(path, lvm_id, uuid)
+-				return path
++				self._return_lookup(uuid, lvm_id)
 +
-+. lib/inittest
-+
-+aux prepare_devs 3 8
-+
-+vgcreate $vg $dev1 $dev2
-+lvcreate -l100%FREE -n $lv $vg
-+dd if="$dev1" of="$dev3" bs=1M
-+pvs --config "devices/global_filter = [ \"a|$dev2|\", \"a|$dev3|\", \"r|.*|\" ]" 2>err
-+grep "WARNING: Device mismatch detected for $vg/$lv which is accessing $dev1 instead of $dev3" err
-+
-+vgremove -ff $vg
+ 			if "/" in lvm_id:
+ 				vg, lv = lvm_id.split("/", 1)
+ 				int_lvm_id = vg + "/" + ("[%s]" % lv)
+ 				if int_lvm_id in self._id_to_object_path:
+-					path = self._id_to_object_path[int_lvm_id]
+-					self._uuid_verify(path, int_lvm_id, uuid)
+-					return path
++					self._return_lookup(uuid, int_lvm_id)
++				elif lvm_id.startswith('/'):
++					# We could have a pv device path lookup that failed,
++					# lets try canonical form and try again.
++					canonical = os.path.realpath(lvm_id)
++					if canonical in self._id_to_object_path:
++						self._return_lookup(uuid, canonical)
+ 
+ 			if uuid and uuid in self._id_to_object_path:
+ 				# If we get here it indicates that we found the object, but
 
 
