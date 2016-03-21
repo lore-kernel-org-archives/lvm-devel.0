@@ -1,40 +1,56 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Mon, 21 Mar 2016 14:38:24 +0000 (UTC)
-Subject: master - test: Turn on dbus test
-Message-ID: <20160321143824.C8E7260DC8@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 21 Mar 2016 14:50:39 +0000 (UTC)
+Subject: master - dev: be safer when reading sysfs properties
+Message-ID: <20160321145039.39FFA60E41@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ca7bac53cf0b3b64bdfa375085fc1535589ab1eb
-Commit:        ca7bac53cf0b3b64bdfa375085fc1535589ab1eb
-Parent:        f231bdb20bdc885460dfc49db744147bb1bc90da
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Feb 23 09:00:35 2016 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Mon Mar 21 15:22:58 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8fad9b9e5d219861fc1f758216fb446cffe3817f
+Commit:        8fad9b9e5d219861fc1f758216fb446cffe3817f
+Parent:        ca7bac53cf0b3b64bdfa375085fc1535589ab1eb
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Mar 21 15:48:36 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Mar 21 15:50:32 2016 +0100
 
-test: Turn on dbus test
+dev: be safer when reading sysfs properties
 
-(cherry picked from commit f1ea96c6c1dc6414169bda1a18cf14cd9ebb1493)
+Check if the value we read from sysfs is not blank and replace the '\n'
+at the end only when needed ('\n' should usually be there for sysfs values,
+but better check this).
 ---
- test/api/dbustest.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/device/dev-cache.c |    9 ++++++++-
+ 1 files changed, 8 insertions(+), 1 deletions(-)
 
-diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
-index 039689d..dd9b23d 100644
---- a/test/api/dbustest.sh
-+++ b/test/api/dbustest.sh
-@@ -17,7 +17,7 @@ SKIP_WITH_CLVMD=1
- . lib/inittest
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 490cec3..d912dea 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -365,6 +365,7 @@ static int _add_alias(struct device *dev, const char *path)
+ static int _get_sysfs_value(const char *path, char *buf, size_t buf_size)
+ {
+ 	FILE *fp;
++	size_t len;
  
- # Will default to skip until we can get this reviewed
--skip
-+#skip
+ 	if (!(fp = fopen(path, "r"))) {
+ 		log_sys_error("fopen", path);
+@@ -378,7 +379,13 @@ static int _get_sysfs_value(const char *path, char *buf, size_t buf_size)
+ 		return 0;
+ 	}
  
- aux prepare_pvs 6
+-	buf[strlen(buf) - 1] = '\0';
++	if (!(len = strlen(buf))) {
++		log_error("_get_sysfs_value: %s: no value", path);
++		return 0;
++	}
++
++	if (buf[len - 1] == '\n')
++		buf[len - 1] = '\0';
  
+ 	if (fclose(fp))
+ 		log_sys_error("fclose", path);
 
 
