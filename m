@@ -1,58 +1,55 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 24 Mar 2016 11:43:50 +0000 (UTC)
-Subject: master - monitoring: sync /dev content before contacting dmeventd for monitor/unmonitor
-Message-ID: <20160324114350.CA802610F7@fedorahosted.org>
+Date: Thu, 24 Mar 2016 13:07:26 +0000 (UTC)
+Subject: master - revert: 6129d2e64d14047169048775dc7081135c0fcc50
+Message-ID: <20160324130726.26CDB60D25@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6129d2e64d14047169048775dc7081135c0fcc50
-Commit:        6129d2e64d14047169048775dc7081135c0fcc50
-Parent:        82d92009ae37bea3cd6a3f754c25d56b12959676
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=109b7e2095a7bc5603bf79db0224b8399463af7c
+Commit:        109b7e2095a7bc5603bf79db0224b8399463af7c
+Parent:        37b548c6b5106315943454df8c5392c9bd604368
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Mar 24 11:13:21 2016 +0100
+AuthorDate:    Thu Mar 24 14:04:43 2016 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Mar 24 12:40:19 2016 +0100
+CommitterDate: Thu Mar 24 14:06:12 2016 +0100
 
-monitoring: sync /dev content before contacting dmeventd for monitor/unmonitor
+revert: 6129d2e64d14047169048775dc7081135c0fcc50
 
-dmeventd daemon may call further code itself that looks at /dev, e.g.
-via dmeventd_lvm2_command call. We need to have a consistent view of
-the /dev content at that time. Therefore, sync /dev content before
-calling monitoring hook which contacts dmeventd.
-
-This problem was quite hidden before, but now it has manifested itself
-because of recent additions to dev-cache code where we started looking
-at device holders as seen in sysfs. What happened here was that the
-device was already in sysfs, but not yet under /dev and this triggered
-the new error message sometimes:
-
-  log_error("%s: failed to find associated device structure for holder %s.", devname, devpath);
-
-This problem has manifested recently in our api/pytest.sh test from
-testsuite where we create thin pool LVs and thin LVs and hence it also
-causes dmeventd to be used as well and these error messages were
-visible there.
+Unfortunately, commit 6129d2e64d14047169048775dc7081135c0fcc50 may
+cause performance issue. There's going to be a better fix...
 ---
- lib/activate/activate.c |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+ WHATS_NEW               |    1 -
+ lib/activate/activate.c |    6 ------
+ 2 files changed, 0 insertions(+), 7 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 652b24f..32528a2 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,5 @@
+ Version 2.02.148 - 
+ ==================================
+-  Fix missing /dev sync in lvm2 command before dmeventd monitor/unmonitor.
+   Replace hard-coded module and target names with macros.
+   Add pv_major and pv_minor report fields.
+   Detect and warn about mismatch between devices used and assumed for an LV.
 diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 2eb24d4..7dce0da 100644
+index 7dce0da..2eb24d4 100644
 --- a/lib/activate/activate.c
 +++ b/lib/activate/activate.c
-@@ -1746,6 +1746,12 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
+@@ -1746,12 +1746,6 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
  		if (test_mode())
  			continue;
  
-+		/*
-+		 * Sync all queued device names/symlinks so dmeventd
-+		 * has consistent view during possible device scan.
-+		 */
-+		fs_unlock();
-+
+-		/*
+-		 * Sync all queued device names/symlinks so dmeventd
+-		 * has consistent view during possible device scan.
+-		 */
+-		fs_unlock();
+-
  		/* FIXME specify events */
  		if (!monitor_fn(seg, 0)) {
  			log_error("%s: %s segment monitoring function failed.",
