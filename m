@@ -1,49 +1,67 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  4 Mar 2016 11:08:26 +0000 (UTC)
-Subject: master - WHATS_NEW: historical LVs
-Message-ID: <20160304110826.94A65603B4@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Sat, 26 Mar 2016 09:34:01 +0000 (UTC)
+Subject: master - pre-release
+Message-ID: <20160326093401.070FA601DD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=418b7c6be8e553c04eeeb8a96d6b3d4b1da1bb9a
-Commit:        418b7c6be8e553c04eeeb8a96d6b3d4b1da1bb9a
-Parent:        e447ab87e904799dac89f70d32733d4368563d91
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Mar 4 12:08:02 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Mar 4 12:08:02 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b9d07f7a12991ce7437630d2362fcc1a44a37e98
+Commit:        b9d07f7a12991ce7437630d2362fcc1a44a37e98
+Parent:        a5d53aec839e7fbe558b26e3195a8a18d3451ab5
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Sat Mar 26 09:04:50 2016 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Sat Mar 26 09:04:50 2016 +0000
 
-WHATS_NEW: historical LVs
+pre-release
 
 ---
- WHATS_NEW |   13 +++++++++++++
- 1 files changed, 13 insertions(+), 0 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    3 ++-
+ WHATS_NEW_DM |    3 ++-
+ 4 files changed, 6 insertions(+), 4 deletions(-)
 
+diff --git a/VERSION b/VERSION
+index 5482ec4..6c9e9b0 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.148(2)-git (2016-03-19)
++2.02.148(2)-git (2016-03-26)
+diff --git a/VERSION_DM b/VERSION_DM
+index 156b4b5..837c459 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.121-git (2016-03-19)
++1.02.121-git (2016-03-26)
 diff --git a/WHATS_NEW b/WHATS_NEW
-index f623226..cbdd14f 100644
+index 32528a2..ad2dc98 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,5 +1,18 @@
- Version 2.02.145 - 
- =====================================
-+  Make it possible to use lvremove and lvrename on historical LVs.
-+  For historical LVs, report 'none' for lv_layout and 'history' for lv_role.
-+  Add full_{ancestors,descendants} fields to report LV ancestry with history.
-+  Report (h)istorical state within 5th bit (State) of the lv_attr field.
-+  Add lv_historical reporting field to report if LV is historical or not.
-+  Add lv_time_removed reporting field to display removal time for hist. LVs.
-+  Report lv_name, lv_uuid, vg_name, lv_time for historical LVs.
-+  Add --nohistory switch to lvremove to disable history recording on demand.
-+  Add -H|--history switch to lvs and lvdisplay to include historical LVs.
-+  Create historical LVs out of removed thin snapshot LVs and record in history.
-+  Add metadata/lvs_history_retention_time for automatic removal of hist. LVs.
-+  Add metadata/record_lvs_history config for switching LV history recording.
-+  Add support and infrastructure for tracking historical LVs.
-   Improve lvconvert man page.
-   Add kernel_cache_policy lvs field.
-   Display [unknown] instead of 'unknown device' in pvs output.
+@@ -1,5 +1,6 @@
+-Version 2.02.148 - 
++Version 2.02.148 - 26th March 2016
+ ==================================
++  Introduce TARGET_NAME and MODULE NAME macros.
+   Replace hard-coded module and target names with macros.
+   Add pv_major and pv_minor report fields.
+   Detect and warn about mismatch between devices used and assumed for an LV.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 9ddf5e1..3f044da 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+-Version 1.02.121 - 
++Version 1.02.121 - 26th March 2016
+ ==================================
++  Adjust raid status function.
+ 
+ Version 1.02.120 - 11th March 2016
+ ==================================
 
 
