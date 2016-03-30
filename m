@@ -1,133 +1,128 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Wed, 30 Mar 2016 13:54:41 +0800
-Subject: [PATCH] dev-type: add support for checking sgi/sun partition table
-Message-ID: <1459317281-15471-1-git-send-email-lwang@suse.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 30 Mar 2016 10:52:23 +0000 (UTC)
+Subject: master - dev-cache: handle situation where device is referenced in sysfs, but the node is not yet in dev dir
+Message-ID: <20160330105223.58BD060FFB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The code is based on libfdisk and pass my tests.
----
- lib/device/dev-type.c | 73 ++++++++++++++++++++++++++++++++++++++++++---------
- 1 file changed, 61 insertions(+), 12 deletions(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=91bb202ded059a4109ff4351825c77c1fcf9197b
+Commit:        91bb202ded059a4109ff4351825c77c1fcf9197b
+Parent:        bc0372cf9d0f7537c537b46b20703db21bc4a165
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Mar 30 10:29:35 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Mar 30 10:56:46 2016 +0200
 
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index e1243bd..c45738f 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -265,11 +265,13 @@ int major_is_scsi_device(struct dev_types *dt, int major)
- 	return (dt->dev_type_array[major].flags & PARTITION_SCSI_DEVICE) ? 1 : 0;
- }
+dev-cache: handle situation where device is referenced in sysfs, but the node is not yet in dev dir
+
+It's possible that while a device is already referenced in sysfs, the node
+is not yet in /dev directory.
+
+This may happen in some rare cases right after LVs get created - we sync
+with udev (or alternatively we create /dev content ourselves) while VG
+lock is held. However, dev scan is done without VG lock so devices may
+already be in sysfs, but /dev may not be updated yet if we call LVM command
+right after LV creation (so the fact that fs_unlock is done within VG
+lock is not usable here much). This is not a problem with devtmpfs as
+there's at least kernel name for device in /dev as soon as the sysfs
+item exists, but we still support environments without devtmpfs or
+where different directory for dev nodes is used (e.g. our test suite).
+
+This patch covers these situations by tracking such devices in
+_cache.sysfs_only_names helper hash for the vgid/lvid check to work still.
+
+This also resolves commit 6129d2e64d14047169048775dc7081135c0fcc50
+which was then reverted by commit 109b7e2095a7bc5603bf79db0224b8399463af7c
+due to performance issues it may have brought (...and it didn't resolve
+the problem fully anyway).
+---
+ WHATS_NEW              |    1 +
+ lib/device/dev-cache.c |   38 +++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 38 insertions(+), 1 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 3e4152f..ca6077b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.149 - 
+ ==================================
++  Fix holder device not being found in /dev while sysfs has it during dev scan.
  
-+
-+#define DEFAULT_SECTOR_SIZE 512
- /* See linux/genhd.h and fs/partitions/msdos */
-+/* For msdos/gpt */
- #define PART_MAGIC 0xAA55
- #define PART_MAGIC_OFFSET UINT64_C(0x1FE)
- #define PART_OFFSET UINT64_C(0x1BE)
--
- struct partition {
- 	uint8_t boot_ind;
- 	uint8_t head;
-@@ -283,6 +285,42 @@ struct partition {
- 	uint32_t nr_sects;
- } __attribute__((packed));
+ Version 2.02.148 - 26th March 2016
+ ==================================
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index c0267a9..b3d45b3 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -40,6 +40,7 @@ struct dir_list {
+ static struct {
+ 	struct dm_pool *mem;
+ 	struct dm_hash_table *names;
++	struct dm_hash_table *sysfs_only_names; /* see comments in _get_device_for_sysfs_dev_name_using_devno */
+ 	struct dm_hash_table *vgid_index;
+ 	struct dm_hash_table *lvid_index;
+ 	struct btree *devices;
+@@ -433,6 +434,8 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
+ 	char path[PATH_MAX];
+ 	char buf[PATH_MAX];
+ 	int major, minor;
++	dev_t devno;
++	struct device *dev;
  
-+typedef struct {
-+	uint8_t skip[PART_OFFSET];
-+	struct partition part[4];
-+	uint16_t magic;
-+} __attribute__((packed)) msdos_disklabel; /* sizeof() == SECTOR_SIZE */
-+
-+/*For sun*/
-+/* See util-linux/include/pt-sun.h */
-+#define SUN_SKIP UINT64_C(0x1BC)
-+#define SUN_LABEL_MAGIC 0xDABE
-+#define SUN_MAX_PARTITIONS  8
-+typedef struct {
-+	uint8_t skip[SUN_SKIP];
-+	struct sun_partition {
-+		uint32_t start_cylinder;
-+		uint32_t num_sectors;
-+	} __attribute__((packed)) partitions[8];
-+	uint16_t magic;
-+} __attribute__((packed)) sun_disklabel;
-+
-+/*For sgi*/
-+/* See util-linux/include/pt-sgi.h */
-+#define SGI_SKIP UINIT64_C(0x134)
-+#define SGI_LABEL_MAGIC 0x0BE5A941 
-+#define SGI_MAX_PARTITIONS  16
-+typedef struct {
-+	uint32_t magic;
-+	uint8_t skip[SGI_SKIP];
-+	struct sgi_partition {
-+		uint32_t num_blocks;
-+		uint32_t first_block;
-+		uint32_t type;
-+	} __attribute__((packed)) partitions[16];
-+} __attribute__((packed)) sgi_disklabel;
-+
-+
- static int _is_partitionable(struct dev_types *dt, struct device *dev)
- {
- 	int parts = major_max_partitions(dt, MAJOR(dev->dev));
-@@ -303,29 +341,40 @@ static int _is_partitionable(struct dev_types *dt, struct device *dev)
- static int _has_partition_table(struct device *dev)
- {
- 	int ret = 0;
-+	char buf[DEFAULT_SECTOR_SIZE];
- 	unsigned p;
--	struct {
--		uint8_t skip[PART_OFFSET];
--		struct partition part[4];
--		uint16_t magic;
--	} __attribute__((packed)) buf; /* sizeof() == SECTOR_SIZE */
-+	msdos_disklabel *msl;
-+	sun_disklabel *sunl;
-+	sgi_disklabel *sgil;
- 
- 	if (!dev_read(dev, UINT64_C(0), sizeof(buf), &buf))
- 		return_0;
- 
--	/* FIXME Check for other types of partition table too */
--
--	/* Check for msdos partition table */
--	if (buf.magic == xlate16(PART_MAGIC)) {
-+	/* Currently it supports for msdos/gpt/sgi/sun partition table */
-+	if ((msl = (msdos_disklabel *)buf) && msl.magic == xlate16(PART_MAGIC)) {
- 		for (p = 0; p < 4; ++p) {
- 			/* Table is invalid if boot indicator not 0 or 0x80 */
--			if (buf.part[p].boot_ind & 0x7f) {
-+			if (msl->part[p].boot_ind & 0x7f) {
- 				ret = 0;
- 				break;
- 			}
- 			/* Must have at least one non-empty partition */
--			if (buf.part[p].nr_sects)
-+			if (msl->part[p].nr_sects)
-+				ret = 1;
-+		}
-+	} else if ((sgi = (sgi_disklabel *)buf) && xlate32(sgi->magic) == SGI_LABEL_MAGIC) {
-+		for (i = 0;i < SGI_MAX_PARTITIONS;i++) {
-+			if (xlate32(sgi->partitions[i].num_blocks)) {
- 				ret = 1;
-+				break;
-+			}
-+		}
-+	} else if ((sun = (sun_disklabel *)buf) && xlate16(sun->magic) == SUN_LABEL_MAGIC) {
-+		for (i = 0;i < SUN_MAX_PARTITIONS;i++) {
-+			if (sun->partitions[i].num_sectors) {
-+				ret = 1;
-+				break;
-+			}
- 		}
+ 	if (dm_snprintf(path, sizeof(path), "%sblock/%s/dev", dm_sysfs_dir(), devname) < 0) {
+ 		log_error("_get_device_for_non_dm_dev: %s: dm_snprintf failed", devname);
+@@ -447,7 +450,37 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
+ 		return NULL;
  	}
  
--- 
-1.8.4.5
+-	return (struct device *) btree_lookup(_cache.devices, (uint32_t) MKDEV(major, minor));
++	devno = MKDEV(major, minor);
++	if (!(dev = (struct device *) btree_lookup(_cache.devices, (uint32_t) devno))) {
++		/*
++		 * If we get here, it means the device is referenced in sysfs, but it's not yet in /dev.
++		 * This may happen in some rare cases right after LVs get created - we sync with udev
++		 * (or alternatively we create /dev content ourselves) while VG lock is held. However,
++		 * dev scan is done without VG lock so devices may already be in sysfs, but /dev may
++		 * not be updated yet if we call LVM command right after LV creation. This is not a
++		 * problem with devtmpfs as there's@least kernel name for device in /dev as soon
++		 * as the sysfs item exists, but we still support environments without devtmpfs or
++		 * where different directory for dev nodes is used (e.g. our test suite). So track
++		 * such devices in _cache.sysfs_only_names hash for the vgid/lvid check to work still.
++		 */
++		if (!_cache.sysfs_only_names) {
++			if (!(_cache.sysfs_only_names = dm_hash_create(32))) {
++				log_error("Failed to create hash in dev cache for sysfs-only devices.");
++				return NULL;
++			}
++		}
++
++		if (!(dev = (struct device *) dm_hash_lookup(_cache.sysfs_only_names, devname))) {
++			if (!(dev = _dev_create(devno)))
++				return_NULL;
++			if (!dm_hash_insert(_cache.sysfs_only_names, devname, dev)) {
++				log_error("Couldn't add device to sysfs-only hash in dev cache.");
++				return NULL;
++			}
++		}
++	}
++
++	return dev;
+ }
+ 
+ #define NOT_LVM_UUID "-"
+@@ -1092,6 +1125,9 @@ int dev_cache_exit(void)
+ 	if (_cache.names)
+ 		dm_hash_destroy(_cache.names);
+ 
++	if (_cache.sysfs_only_names)
++		dm_hash_destroy(_cache.sysfs_only_names);
++
+ 	if (_cache.vgid_index)
+ 		dm_hash_destroy(_cache.vgid_index);
+ 
 
 
