@@ -1,156 +1,99 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 30 Mar 2016 10:52:25 +0000 (UTC)
-Subject: master - dev-cache: also index VGIDs and LVIDs if using persistent .cache file
-Message-ID: <20160330105225.6F25A60FFB@fedorahosted.org>
+Date: Wed, 30 Mar 2016 10:52:27 +0000 (UTC)
+Subject: master - dev-cache: remove spurious error msg if no value found in /sys/dev/block/<major>:<minor>/dm/uuid during dev scan
+Message-ID: <20160330105227.854C460FFB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8c27c5274980dddf64283602bc23b89a5623da0a
-Commit:        8c27c5274980dddf64283602bc23b89a5623da0a
-Parent:        91bb202ded059a4109ff4351825c77c1fcf9197b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=52e0d0db4460d90172e9bd45b9ef30e7f4f75ae7
+Commit:        52e0d0db4460d90172e9bd45b9ef30e7f4f75ae7
+Parent:        8c27c5274980dddf64283602bc23b89a5623da0a
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Mar 30 10:39:30 2016 +0200
+AuthorDate:    Wed Mar 30 11:11:37 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Mar 30 11:00:01 2016 +0200
+CommitterDate: Wed Mar 30 11:30:09 2016 +0200
 
-dev-cache: also index VGIDs and LVIDs if using persistent .cache file
+dev-cache: remove spurious error msg if no value found in /sys/dev/block/<major>:<minor>/dm/uuid during dev scan
 
-If we're using persistent .cache file, we're reading this file instead
-of traversing the /dev content. Fix missing indexing by VGID and LVID
-here - hook this into persistent_filter_load where we populate device
-cache from persistent .cache file instead of scanning /dev.
+It's correct to have a DM device that has no DM UUID assigned
+so no need to issue error message in this case. Also, if the
+device doesn't have DM UUID, it's also clear it's not an LVM LV
+(...when looking for VGID/LVID while creating VGID/LVID indices
+in dev cache).
 
-For example, inducing situation in which we warn about different device
-actually used than what LVM thinks should be used based on metadata:
+For example:
 
-$ lsblk -s /dev/vg/lvol0
-NAME     MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
-vg-lvol0 253:4    0  124M  0 lvm
-`-loop1    7:1    0  128M  0 loop
+$ dmsetup create test --table "0 1 linear /dev/sda 0"
+And there's no PV in the system.
 
-$ lvmconfig --type diff
-
-global {
-	use_lvmetad=0
-}
-devices {
-	obtain_device_list_from_udev=0
-}
-
-(obtain_device_list_from_udev=0 also means the persistent .cache file is used)
-
-Before this patch - pvs is fine as it does the dev scan, but lvs relies
-on persistent .cache file and it misses the VGID/LVID indices to check
-and warn about incorrect devices used:
-
+Before this patch (spurious error message issued):
 $ pvs
-  Found duplicate PV B9gXTHkIdEIiMVwcOoT2LX3Ywh4YIHgR: using /dev/loop0 not /dev/loop1
-  Using duplicate PV /dev/loop0 without holders, ignoring /dev/loop1
-  WARNING: Device mismatch detected for vg/lvol0 which is accessing /dev/loop1 instead of /dev/loop0.
-  PV          VG Fmt  Attr PSize   PFree
-  /dev/loop0 vg lvm2 a--  124.00m    0
+  _get_sysfs_value: /sys/dev/block/253:2/dm/uuid: no value
 
-$ lvs
-  Found duplicate PV B9gXTHkIdEIiMVwcOoT2LX3Ywh4YIHgR: using /dev/loop0 not /dev/loop1
-  Using duplicate PV /dev/loop0 without holders, ignoring /dev/loop1
-  LV    VG Attr       LSize
-  lvol0 vg -wi-a----- 124.00m
-
-With this patch applied - both pvs and lvs is fine - the indices are
-always created correctly (lvs just an example here, other LVM commands
-that rely on persistent .cache file are fixed with this patch too):
-
+With this patch applied (no spurious error message):
 $ pvs
-  Found duplicate PV B9gXTHkIdEIiMVwcOoT2LX3Ywh4YIHgR: using /dev/loop0 not /dev/loop1
-  Using duplicate PV /dev/loop0 without holders, ignoring /dev/loop1
-  WARNING: Device mismatch detected for vg/lvol0 which is accessing /dev/loop1 instead of /dev/loop0.
-  PV          VG Fmt  Attr PSize   PFree
-  /dev/loop0 vg lvm2 a--  124.00m    0
-
-$ lvs
-  Found duplicate PV B9gXTHkIdEIiMVwcOoT2LX3Ywh4YIHgR: using /dev/loop0 not /dev/loop1
-  Using duplicate PV /dev/loop0 without holders, ignoring /dev/loop1
-  WARNING: Device mismatch detected for vg/lvol0 which is accessing /dev/loop1 instead of /dev/loop0.
-  LV    VG Attr       LSize
-  lvol0 vg -wi-a----- 124.00m
 ---
- WHATS_NEW                       |    1 +
- lib/device/dev-cache.c          |    8 ++++++--
- lib/device/dev-cache.h          |    1 +
- lib/filters/filter-persistent.c |    2 ++
- 4 files changed, 10 insertions(+), 2 deletions(-)
+ WHATS_NEW              |    1 +
+ lib/device/dev-cache.c |   12 +++++++-----
+ 2 files changed, 8 insertions(+), 5 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index ca6077b..b389926 100644
+index b389926..dae6a10 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.149 - 
  ==================================
-+  Fix device mismatch detection for LV if persistent .cache file is used.
++  Remove spurious error about no value in /sys/dev/block/major:minor/dm/uuid.
+   Fix device mismatch detection for LV if persistent .cache file is used.
    Fix holder device not being found in /dev while sysfs has it during dev scan.
  
- Version 2.02.148 - 26th March 2016
 diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index b3d45b3..9989066 100644
+index 9989066..1729aba 100644
 --- a/lib/device/dev-cache.c
 +++ b/lib/device/dev-cache.c
-@@ -527,6 +527,10 @@ static int _index_dev_by_vgid_and_lvid(struct device *dev)
- 	struct device_list *dl_vgid, *dl_lvid;
- 	int r = 0;
- 
-+	if (dev->vgid)
-+		/* already indexed */
-+		return 1;
-+
- 	/* Get holders for device. */
- 	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/holders/", dm_sysfs_dir(), (int) MAJOR(dev->dev), (int) MINOR(dev->dev)) < 0) {
- 		log_error("%s: dm_snprintf failed for path to holders directory.", devname);
-@@ -848,7 +852,7 @@ bad:
- 	return 0;
+@@ -363,7 +363,7 @@ static int _add_alias(struct device *dev, const char *path)
+ 	return 1;
  }
  
--static int _add_devs_to_index(void)
-+int dev_cache_index_devs(void)
+-static int _get_sysfs_value(const char *path, char *buf, size_t buf_size)
++static int _get_sysfs_value(const char *path, char *buf, size_t buf_size, int error_if_no_value)
  {
- 	struct btree_iter *iter = btree_first(_cache.devices);
- 	struct device *dev;
-@@ -887,7 +891,7 @@ static void _insert_dirs(struct dm_list *dirs)
- 				       "device cache fully", dl->dir);
+ 	FILE *fp;
+ 	size_t len;
+@@ -380,8 +380,10 @@ static int _get_sysfs_value(const char *path, char *buf, size_t buf_size)
  	}
  
--	(void) _add_devs_to_index();
-+	(void) dev_cache_index_devs();
+ 	if (!(len = strlen(buf)) || (len == 1 && buf[0] == '\n')) {
+-		log_error("_get_sysfs_value: %s: no value", path);
+-		goto out;
++		if (error_if_no_value) {
++			log_error("_get_sysfs_value: %s: no value", path);
++			goto out;
++		}
+ 	}
+ 
+ 	if (buf[len - 1] == '\n')
+@@ -404,7 +406,7 @@ static int _get_dm_uuid_from_sysfs(char *buf, size_t buf_size, int major, int mi
+ 		return 0;
+ 	}
+ 
+-	return _get_sysfs_value(path, buf, buf_size);
++	return _get_sysfs_value(path, buf, buf_size, 0);
  }
  
- #else	/* UDEV_SYNC_SUPPORT */
-diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
-index d21f521..0406970 100644
---- a/lib/device/dev-cache.h
-+++ b/lib/device/dev-cache.h
-@@ -31,6 +31,7 @@ struct dev_filter {
- 	unsigned use_count;
- };
- 
-+int dev_cache_index_devs(void);
- struct dm_list *dev_cache_get_dev_list_for_vgid(const char *vgid);
- struct dm_list *dev_cache_get_dev_list_for_lvid(const char *lvid);
- 
-diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
-index ed7956c..4e8161e 100644
---- a/lib/filters/filter-persistent.c
-+++ b/lib/filters/filter-persistent.c
-@@ -129,6 +129,8 @@ int persistent_filter_load(struct dev_filter *f, struct dm_config_tree **cft_out
- 	if (dm_hash_get_num_entries(pf->devices)) {
- 		/* We populated dev_cache ourselves */
- 		dev_cache_scan(0);
-+		if (!dev_cache_index_devs())
-+			stack;
- 		r = 1;
+ static struct dm_list *_get_or_add_list_by_index_key(struct dm_hash_table *idx, const char *key)
+@@ -442,7 +444,7 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
+ 		return NULL;
  	}
  
+-	if (!_get_sysfs_value(path, buf, sizeof(buf)))
++	if (!_get_sysfs_value(path, buf, sizeof(buf), 1))
+ 		return_NULL;
+ 
+ 	if (sscanf(buf, "%d:%d", &major, &minor) != 2) {
 
 
