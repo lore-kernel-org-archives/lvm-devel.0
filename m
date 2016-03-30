@@ -1,40 +1,133 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Tue, 29 Mar 2016 06:26:17 +0000 (UTC)
-Subject: master - test: Add missing directory
-Message-ID: <20160329062617.06B7160DD2@fedorahosted.org>
+From: Liuhua Wang <lwang@suse.com>
+Date: Wed, 30 Mar 2016 13:54:41 +0800
+Subject: [PATCH] dev-type: add support for checking sgi/sun partition table
+Message-ID: <1459317281-15471-1-git-send-email-lwang@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bc0372cf9d0f7537c537b46b20703db21bc4a165
-Commit:        bc0372cf9d0f7537c537b46b20703db21bc4a165
-Parent:        d6e8f18e4d97ec8dc7ee5af98df10dffbcb25848
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Mar 29 08:24:52 2016 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Mar 29 08:24:52 2016 +0200
-
-test: Add missing directory
-
-Fix commit bb93a28bc1
+The code is based on libfdisk and pass my tests.
 ---
- test/Makefile.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/device/dev-type.c | 73 ++++++++++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 61 insertions(+), 12 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index ded155d..d4c6b95 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -201,7 +201,7 @@ LIB_SHARED = check aux inittest utils get lvm-wrapper
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index e1243bd..c45738f 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -265,11 +265,13 @@ int major_is_scsi_device(struct dev_types *dt, int major)
+ 	return (dt->dev_type_array[major].flags & PARTITION_SCSI_DEVICE) ? 1 : 0;
+ }
  
- install: .tests-stamp lib/paths-installed
- 	@echo $(srcdir)
--	$(INSTALL_DIR) $(DATADIR)/{shell,api,lib} $(EXECDIR)
-+	$(INSTALL_DIR) $(DATADIR)/{shell,api,lib,dbus} $(EXECDIR)
- 	$(INSTALL_DATA) shell/*.sh $(DATADIR)/shell
- 	$(INSTALL_DATA) api/*.sh $(DATADIR)/api
- 	$(INSTALL_PROGRAM) api/*.{t,py} $(DATADIR)/api
++
++#define DEFAULT_SECTOR_SIZE 512
+ /* See linux/genhd.h and fs/partitions/msdos */
++/* For msdos/gpt */
+ #define PART_MAGIC 0xAA55
+ #define PART_MAGIC_OFFSET UINT64_C(0x1FE)
+ #define PART_OFFSET UINT64_C(0x1BE)
+-
+ struct partition {
+ 	uint8_t boot_ind;
+ 	uint8_t head;
+@@ -283,6 +285,42 @@ struct partition {
+ 	uint32_t nr_sects;
+ } __attribute__((packed));
+ 
++typedef struct {
++	uint8_t skip[PART_OFFSET];
++	struct partition part[4];
++	uint16_t magic;
++} __attribute__((packed)) msdos_disklabel; /* sizeof() == SECTOR_SIZE */
++
++/*For sun*/
++/* See util-linux/include/pt-sun.h */
++#define SUN_SKIP UINT64_C(0x1BC)
++#define SUN_LABEL_MAGIC 0xDABE
++#define SUN_MAX_PARTITIONS  8
++typedef struct {
++	uint8_t skip[SUN_SKIP];
++	struct sun_partition {
++		uint32_t start_cylinder;
++		uint32_t num_sectors;
++	} __attribute__((packed)) partitions[8];
++	uint16_t magic;
++} __attribute__((packed)) sun_disklabel;
++
++/*For sgi*/
++/* See util-linux/include/pt-sgi.h */
++#define SGI_SKIP UINIT64_C(0x134)
++#define SGI_LABEL_MAGIC 0x0BE5A941 
++#define SGI_MAX_PARTITIONS  16
++typedef struct {
++	uint32_t magic;
++	uint8_t skip[SGI_SKIP];
++	struct sgi_partition {
++		uint32_t num_blocks;
++		uint32_t first_block;
++		uint32_t type;
++	} __attribute__((packed)) partitions[16];
++} __attribute__((packed)) sgi_disklabel;
++
++
+ static int _is_partitionable(struct dev_types *dt, struct device *dev)
+ {
+ 	int parts = major_max_partitions(dt, MAJOR(dev->dev));
+@@ -303,29 +341,40 @@ static int _is_partitionable(struct dev_types *dt, struct device *dev)
+ static int _has_partition_table(struct device *dev)
+ {
+ 	int ret = 0;
++	char buf[DEFAULT_SECTOR_SIZE];
+ 	unsigned p;
+-	struct {
+-		uint8_t skip[PART_OFFSET];
+-		struct partition part[4];
+-		uint16_t magic;
+-	} __attribute__((packed)) buf; /* sizeof() == SECTOR_SIZE */
++	msdos_disklabel *msl;
++	sun_disklabel *sunl;
++	sgi_disklabel *sgil;
+ 
+ 	if (!dev_read(dev, UINT64_C(0), sizeof(buf), &buf))
+ 		return_0;
+ 
+-	/* FIXME Check for other types of partition table too */
+-
+-	/* Check for msdos partition table */
+-	if (buf.magic == xlate16(PART_MAGIC)) {
++	/* Currently it supports for msdos/gpt/sgi/sun partition table */
++	if ((msl = (msdos_disklabel *)buf) && msl.magic == xlate16(PART_MAGIC)) {
+ 		for (p = 0; p < 4; ++p) {
+ 			/* Table is invalid if boot indicator not 0 or 0x80 */
+-			if (buf.part[p].boot_ind & 0x7f) {
++			if (msl->part[p].boot_ind & 0x7f) {
+ 				ret = 0;
+ 				break;
+ 			}
+ 			/* Must have at least one non-empty partition */
+-			if (buf.part[p].nr_sects)
++			if (msl->part[p].nr_sects)
++				ret = 1;
++		}
++	} else if ((sgi = (sgi_disklabel *)buf) && xlate32(sgi->magic) == SGI_LABEL_MAGIC) {
++		for (i = 0;i < SGI_MAX_PARTITIONS;i++) {
++			if (xlate32(sgi->partitions[i].num_blocks)) {
+ 				ret = 1;
++				break;
++			}
++		}
++	} else if ((sun = (sun_disklabel *)buf) && xlate16(sun->magic) == SUN_LABEL_MAGIC) {
++		for (i = 0;i < SUN_MAX_PARTITIONS;i++) {
++			if (sun->partitions[i].num_sectors) {
++				ret = 1;
++				break;
++			}
+ 		}
+ 	}
+ 
+-- 
+1.8.4.5
 
 
