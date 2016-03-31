@@ -1,57 +1,58 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 31 Mar 2016 10:22:22 +0000 (UTC)
-Subject: master - tests: fixed cache target reacts faster
-Message-ID: <20160331102222.3543060E7E@fedorahosted.org>
+From: mulhern <amulhern@redhat.com>
+Date: Thu, 31 Mar 2016 15:25:31 -0400
+Subject: [PATCH] Remove examples which require an implicit parse of DM_UUID value.
+Message-ID: <1459452331-28229-1-git-send-email-amulhern@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c57798463078325a7b7b1221d154312a20678e93
-Commit:        c57798463078325a7b7b1221d154312a20678e93
-Parent:        bc5376b151f4a5993c223de51f0218aa95184471
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 31 12:00:20 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 31 12:21:40 2016 +0200
+According to comments (https://bugzilla.redhat.com/show_bug.cgi?id=1322110)
+the dm subsystems, e.g., kpartx, multipath, lvm, are at liberty to change
+the format of the value after the subsystem prefix at will. This format
+is not part of the public interface. The removed examples treat the format
+of the values as if it is part of the public interface.
+The remaining examples only treat the _prefix_ as if it is part of the
+public interface.
 
-tests: fixed cache target reacts faster
-
-After kernel fixed in 4.6 cache target reacts promptly
-and switches to Fail-ed state when disk error is detected.
-
-Handle both cases in test...
+Signed-off-by: mulhern <amulhern@redhat.com>
 ---
- test/shell/lvconvert-repair-cache.sh |   16 +++++++++-------
- 1 files changed, 9 insertions(+), 7 deletions(-)
+ udev/12-dm-permissions.rules | 15 ---------------
+ 1 file changed, 15 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-cache.sh b/test/shell/lvconvert-repair-cache.sh
-index 60b0b5d..1fdfd3f 100644
---- a/test/shell/lvconvert-repair-cache.sh
-+++ b/test/shell/lvconvert-repair-cache.sh
-@@ -101,13 +101,15 @@ sync
- # Seriously damage cache metadata
- aux error_dev "$dev1" 2054:2
+diff --git a/udev/12-dm-permissions.rules b/udev/12-dm-permissions.rules
+index a9d4c32..e8f9fda 100644
+--- a/udev/12-dm-permissions.rules
++++ b/udev/12-dm-permissions.rules
+@@ -50,26 +50,11 @@ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
+ # ENV{DM_VG_NAME}!="VolGroup00", OWNER:="root", GROUP:="root", MODE:="660"
  
--# Here we usually for the 1st. notice needs_check
--check lv_attr_bit state $vg/$lv1 "c"
--
--sleep .1
--
--# And now cache is finaly Failed
--check lv_attr_bit health $vg/$lv1 "F"
-+# On fixed kernel we get instant Fail here
-+get lv_field  $vg/$lv1 lv_attr | tee out
-+grep "Cwi-a-C-F-" out || {
-+	# while on older unfixed we just notice needs_check
-+	grep "Cwi-c-C---" out
-+	sleep .1
-+	# And now cache is finaly Failed
-+	check lv_attr_bit health $vg/$lv1 "F"
-+}
- check lv_field $vg/$lv1 lv_health_status "failed"
  
- aux disable_dev "$dev1"
+-# ENCRYPTED DEVICES (using cryptsetup >= 1.1)
+-#
+-# Set permissions for all encrypted devices created by cryptsetup (plain devices)
+-# ENV{DM_UUID}=="CRYPT-PLAIN-?*", OWNER:="root", GROUP:="root", MODE:="660"
+-
+-# Set permissions for all encrypted devices created by cryptsetup (LUKS extension)
+-# ENV{DM_UUID}=="CRYPT-LUKS1-?*", OWNER:="root", GROUP:="root", MODE:="660"
+-
+-# Set permissions for an encrypted device created by cryptsetup and having an exact luks UUID
+-# ENV{DM_UUID}=="CRYPT-LUKS1-22fce5c8313c43c68d84b50a3b0fee78-?*", OWNER:="root", GROUP:="root", MODE:="660"
+-
+-
+ # MULTIPATH DEVICES
+ #
+ # Set permissions for all multipath devices
+ # ENV{DM_UUID}=="mpath-?*", OWNER:="root", GROUP:="root", MODE:="660"
+ 
+-# Set permissions for first two partitions created on a multipath device (and detected by kpartx)
+-# ENV{DM_UUID}=="part[1-2]-mpath-?*", OWNER:="root", GROUP:="root", MODE:="660"
+-
+ 
+ # ...you can use any combination of the comparisons with the environment variables
+ # listed at the beginning of this file (udev provides simple pattern matching by
+-- 
+2.4.3
 
 
