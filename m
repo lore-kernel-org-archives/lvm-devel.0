@@ -1,67 +1,57 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  4 Mar 2016 14:19:15 +0000 (UTC)
-Subject: master - cleanup: previous patch with libdm config node buffer size
-Message-ID: <20160304141915.611DF61042@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 31 Mar 2016 10:22:22 +0000 (UTC)
+Subject: master - tests: fixed cache target reacts faster
+Message-ID: <20160331102222.3543060E7E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=67c5006e12c9e3bf888db0fbaa78a50efcbfa9b2
-Commit:        67c5006e12c9e3bf888db0fbaa78a50efcbfa9b2
-Parent:        967a0889a024e2cc3f3afb3469e1b0657ebb85bc
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Mar 4 15:19:09 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Mar 4 15:19:09 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c57798463078325a7b7b1221d154312a20678e93
+Commit:        c57798463078325a7b7b1221d154312a20678e93
+Parent:        bc5376b151f4a5993c223de51f0218aa95184471
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Mar 31 12:00:20 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Mar 31 12:21:40 2016 +0200
 
-cleanup: previous patch with libdm config node buffer size
+tests: fixed cache target reacts faster
 
+After kernel fixed in 4.6 cache target reacts promptly
+and switches to Fail-ed state when disk error is detected.
+
+Handle both cases in test...
 ---
- libdm/libdm-config.c |   12 +++++++-----
- 1 files changed, 7 insertions(+), 5 deletions(-)
+ test/shell/lvconvert-repair-cache.sh |   16 +++++++++-------
+ 1 files changed, 9 insertions(+), 7 deletions(-)
 
-diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
-index a7f4096..5fa06a1 100644
---- a/libdm/libdm-config.c
-+++ b/libdm/libdm-config.c
-@@ -222,7 +222,7 @@ __attribute__ ((format(printf, 2, 3)))
- static int _line_append(struct config_output *out, const char *fmt, ...)
- {
- 	char buf[4096];
--	char *final_buf;
-+	char *dyn_buf = NULL;
- 	va_list ap;
- 	int n;
+diff --git a/test/shell/lvconvert-repair-cache.sh b/test/shell/lvconvert-repair-cache.sh
+index 60b0b5d..1fdfd3f 100644
+--- a/test/shell/lvconvert-repair-cache.sh
++++ b/test/shell/lvconvert-repair-cache.sh
+@@ -101,13 +101,15 @@ sync
+ # Seriously damage cache metadata
+ aux error_dev "$dev1" 2054:2
  
-@@ -246,21 +246,23 @@ static int _line_append(struct config_output *out, const char *fmt, ...)
- 		 * so try dynamically allocated buffer now...
- 		 */
- 		va_start(ap, fmt);
--		n = dm_vasprintf(&final_buf, fmt, ap);
-+		n = dm_vasprintf(&dyn_buf, fmt, ap);
- 		va_end(ap);
+-# Here we usually for the 1st. notice needs_check
+-check lv_attr_bit state $vg/$lv1 "c"
+-
+-sleep .1
+-
+-# And now cache is finaly Failed
+-check lv_attr_bit health $vg/$lv1 "F"
++# On fixed kernel we get instant Fail here
++get lv_field  $vg/$lv1 lv_attr | tee out
++grep "Cwi-a-C-F-" out || {
++	# while on older unfixed we just notice needs_check
++	grep "Cwi-c-C---" out
++	sleep .1
++	# And now cache is finaly Failed
++	check lv_attr_bit health $vg/$lv1 "F"
++}
+ check lv_field $vg/$lv1 lv_health_status "failed"
  
- 		if (n < 0) {
- 			log_error("dm_vasprintf failed for config line");
- 			return 0;
- 		}
--	} else
--		final_buf = buf;
-+	}
- 
--	if (!dm_pool_grow_object(out->mem, final_buf, strlen(final_buf))) {
-+	if (!dm_pool_grow_object(out->mem, dyn_buf ? : buf, 0)) {
- 		log_error("dm_pool_grow_object failed for config line");
-+		dm_free(dyn_buf);
- 		return 0;
- 	}
- 
-+	dm_free(dyn_buf);
-+
- 	return 1;
- }
- 
+ aux disable_dev "$dev1"
 
 
