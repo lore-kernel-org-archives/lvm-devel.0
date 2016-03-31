@@ -1,40 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 31 Mar 2016 10:22:13 +0000 (UTC)
-Subject: master - cleanup: debug message fix
-Message-ID: <20160331102213.E348260DEB@fedorahosted.org>
+Date: Thu, 31 Mar 2016 10:22:16 +0000 (UTC)
+Subject: master - cleanup: use TARGET define
+Message-ID: <20160331102216.027AF60DEB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86db143307effaa0f606e301ec6e1a8d8db5b716
-Commit:        86db143307effaa0f606e301ec6e1a8d8db5b716
-Parent:        fc7dacaa4c6bf0af4c5a457c098da26d7cc71f9c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b10253ab4d932565dc69e5b3b6715177bb593ba8
+Commit:        b10253ab4d932565dc69e5b3b6715177bb593ba8
+Parent:        86db143307effaa0f606e301ec6e1a8d8db5b716
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 29 15:57:12 2016 +0200
+AuthorDate:    Wed Mar 30 10:15:47 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 31 12:21:25 2016 +0200
+CommitterDate: Thu Mar 31 12:21:40 2016 +0200
 
-cleanup: debug message fix
+cleanup: use TARGET define
 
-Reported-by: Ming-Hung Tsai <mingnus gmail com>
 ---
- lib/activate/activate.c |    2 +-
+ lib/activate/dev_manager.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 2eb24d4..a3b2379 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1160,7 +1160,7 @@ int lv_thin_pool_transaction_id(const struct logical_volume *lv,
- 	if (!lv_info(lv->vg->cmd, lv, 1, NULL, 0, 0))
- 		return 0;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 40e4086..de07f96 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1438,7 +1438,7 @@ int dev_manager_thin_percent(struct dev_manager *dm,
+ 		return_0;
  
--	log_debug_activation("Checking thin-pool percent for LV %s.",
-+	log_debug_activation("Checking thin-pool transaction id for LV %s.",
- 			     display_lvname(lv));
+ 	log_debug_activation("Getting device status percentage for %s", name);
+-	if (!(_percent(dm, name, dlid, "thin", 0,
++	if (!(_percent(dm, name, dlid, TARGET_NAME_THIN, 0,
+ 		       (mapped) ? NULL : lv, percent, NULL, 1)))
+ 		return_0;
  
- 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
 
 
