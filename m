@@ -1,90 +1,89 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  1 Apr 2016 12:51:19 +0000 (UTC)
-Subject: master - refactor: dev-cache: use btree instead of hash table for sysfs-only devices
-Message-ID: <20160401125119.99B4860E4F@fedorahosted.org>
+Date: Fri,  1 Apr 2016 12:51:21 +0000 (UTC)
+Subject: master - refactor: dev-cache: move code adding sysfs-only device into separate fn
+Message-ID: <20160401125121.B486060E50@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0e774d5ae77fb67c7a015d9bb8e4c289dd8fa2e4
-Commit:        0e774d5ae77fb67c7a015d9bb8e4c289dd8fa2e4
-Parent:        c57798463078325a7b7b1221d154312a20678e93
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=91d32f9d1ba1ff3bed0f47104721e97960df3878
+Commit:        91d32f9d1ba1ff3bed0f47104721e97960df3878
+Parent:        0e774d5ae77fb67c7a015d9bb8e4c289dd8fa2e4
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Mar 31 15:14:01 2016 +0200
+AuthorDate:    Fri Apr 1 09:41:41 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Apr 1 11:42:25 2016 +0200
+CommitterDate: Fri Apr 1 11:47:06 2016 +0200
 
-refactor: dev-cache: use btree instead of hash table for sysfs-only devices
+refactor: dev-cache: move code adding sysfs-only device into separate fn
 
-major:minor btree is more convenient and more suitable than dev name
-hash table here.
 ---
- lib/device/dev-cache.c |   25 ++++++++++---------------
- 1 files changed, 10 insertions(+), 15 deletions(-)
+ lib/device/dev-cache.c |   31 +++++++++++++++++++++----------
+ 1 files changed, 21 insertions(+), 10 deletions(-)
 
 diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 12d0d56..d99352b 100644
+index d99352b..12dcceb 100644
 --- a/lib/device/dev-cache.c
 +++ b/lib/device/dev-cache.c
-@@ -40,9 +40,9 @@ struct dir_list {
- static struct {
- 	struct dm_pool *mem;
- 	struct dm_hash_table *names;
--	struct dm_hash_table *sysfs_only_names; /* see comments in _get_device_for_sysfs_dev_name_using_devno */
- 	struct dm_hash_table *vgid_index;
- 	struct dm_hash_table *lvid_index;
-+	struct btree *sysfs_only_devices; /* see comments in _get_device_for_sysfs_dev_name_using_devno */
- 	struct btree *devices;
- 	struct dm_regex *preferred_names_matcher;
- 	const char *dev_dir;
-@@ -463,20 +463,13 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
- 		 * problem with devtmpfs as there's at least kernel name for device in /dev as soon
- 		 * as the sysfs item exists, but we still support environments without devtmpfs or
+@@ -431,6 +431,22 @@ static struct dm_list *_get_or_add_list_by_index_key(struct dm_hash_table *idx,
+ 	return list;
+ }
+ 
++static struct device *_insert_sysfs_dev(dev_t devno, const char *devname)
++{
++	struct device *dev;
++
++	if (!(dev = _dev_create(devno)))
++		return_NULL;
++
++	if (!btree_insert(_cache.sysfs_only_devices, (uint32_t) devno, dev)) {
++		log_error("Couldn't add device to binary tree of sysfs-only devices in dev cache.");
++		_free(dev);
++		return NULL;
++	}
++
++	return dev;
++}
++
+ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *devname)
+ {
+ 	char path[PATH_MAX];
+@@ -440,7 +456,7 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
+ 	struct device *dev;
+ 
+ 	if (dm_snprintf(path, sizeof(path), "%sblock/%s/dev", dm_sysfs_dir(), devname) < 0) {
+-		log_error("_get_device_for_non_dm_dev: %s: dm_snprintf failed", devname);
++		log_error("_get_device_for_sysfs_dev_name_using_devno: %s: dm_snprintf failed", devname);
+ 		return NULL;
+ 	}
+ 
+@@ -448,7 +464,7 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
+ 		return_NULL;
+ 
+ 	if (sscanf(buf, "%d:%d", &major, &minor) != 2) {
+-		log_error("_get_device_for_non_dm_dev: %s: failed to get major and minor number", devname);
++		log_error("_get_device_for_sysfs_dev_name_using_devno: %s: failed to get major and minor number", devname);
+ 		return NULL;
+ 	}
+ 
+@@ -465,14 +481,9 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
  		 * where different directory for dev nodes is used (e.g. our test suite). So track
--		 * such devices in _cache.sysfs_only_names hash for the vgid/lvid check to work still.
-+		 * such devices in _cache.sysfs_only_devices hash for the vgid/lvid check to work still.
+ 		 * such devices in _cache.sysfs_only_devices hash for the vgid/lvid check to work still.
  		 */
--		if (!_cache.sysfs_only_names) {
--			if (!(_cache.sysfs_only_names = dm_hash_create(32))) {
--				log_error("Failed to create hash in dev cache for sysfs-only devices.");
+-		if (!(dev = (struct device *) btree_lookup(_cache.sysfs_only_devices, (uint32_t) devno))) {
+-			if (!(dev = _dev_create(devno)))
+-				return_NULL;
+-			if (!btree_insert(_cache.sysfs_only_devices, (uint32_t) devno, dev)) {
+-				log_error("Couldn't add device to binary tree of sysfs-only devices in dev cache.");
 -				return NULL;
 -			}
 -		}
--
--		if (!(dev = (struct device *) dm_hash_lookup(_cache.sysfs_only_names, devname))) {
-+		if (!(dev = (struct device *) btree_lookup(_cache.sysfs_only_devices, (uint32_t) devno))) {
- 			if (!(dev = _dev_create(devno)))
- 				return_NULL;
--			if (!dm_hash_insert(_cache.sysfs_only_names, devname, dev)) {
--				log_error("Couldn't add device to sysfs-only hash in dev cache.");
-+			if (!btree_insert(_cache.sysfs_only_devices, (uint32_t) devno, dev)) {
-+				log_error("Couldn't add device to binary tree of sysfs-only devices in dev cache.");
- 				return NULL;
- 			}
- 		}
-@@ -1068,6 +1061,11 @@ int dev_cache_init(struct cmd_context *cmd)
- 		goto bad;
++		if (!(dev = (struct device *) btree_lookup(_cache.sysfs_only_devices, (uint32_t) devno)) &&
++		    !(dev = _insert_sysfs_dev(devno, devname)))
++			return_NULL;
  	}
  
-+	if (!(_cache.sysfs_only_devices = btree_create(_cache.mem))) {
-+		log_error("Couldn't create binary tree for sysfs-only devices in dev cache.");
-+		goto bad;
-+	}
-+
- 	if (!(_cache.dev_dir = _strdup(cmd->dev_dir))) {
- 		log_error("strdup dev_dir failed.");
- 		goto bad;
-@@ -1131,9 +1129,6 @@ int dev_cache_exit(void)
- 	if (_cache.names)
- 		dm_hash_destroy(_cache.names);
- 
--	if (_cache.sysfs_only_names)
--		dm_hash_destroy(_cache.sysfs_only_names);
--
- 	if (_cache.vgid_index)
- 		dm_hash_destroy(_cache.vgid_index);
- 
+ 	return dev;
 
 
