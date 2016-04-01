@@ -1,74 +1,102 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  1 Apr 2016 13:37:46 +0000 (UTC)
-Subject: master - fix: make udev_get_library_context available also for non-udev compilations
-Message-ID: <20160401133746.08C4660D55@fedorahosted.org>
+Date: Fri,  1 Apr 2016 15:10:59 +0000 (UTC)
+Subject: master - dev-cache: skip VGID/LVID indexing if /sys/dev/block is not present
+Message-ID: <20160401151059.A3C7261006@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f28eb4c20ecb772f1b8a912c43f243d63a7e5f3
-Commit:        9f28eb4c20ecb772f1b8a912c43f243d63a7e5f3
-Parent:        15d1824facce1ac38c2669b17c8c0965b8c18f3e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=42f04a0f77ee94b01d652d6c11d10e85aa46a897
+Commit:        42f04a0f77ee94b01d652d6c11d10e85aa46a897
+Parent:        9f28eb4c20ecb772f1b8a912c43f243d63a7e5f3
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Apr 1 15:35:13 2016 +0200
+AuthorDate:    Fri Apr 1 17:04:11 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Apr 1 15:35:22 2016 +0200
+CommitterDate: Fri Apr 1 17:09:15 2016 +0200
 
-fix: make udev_get_library_context available also for non-udev compilations
+dev-cache: skip VGID/LVID indexing if /sys/dev/block is not present
 
-If compiling without udev_sync support, udev_get_library_context simply
-returns NULL so we don't need to remember putting ifdef UDEV_SYNC_SUPPORT
-in the code all the time we just need to check whether there's any udev
-context initialized or not.
+/sys/dev/block is available since kernel version 2.2.26 (~ 2008):
+https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-dev
+
+The VGID/LVID indexing code relies on this feature so skip indexing
+if it's not available to avoid error messages about inability to open
+/sys/dev/block directory.
+
+We're not going to provide fallback code to read the /sys/block/
+instead in this case as that's not that efficient - it needs extra
+reads for getting major:minor and reading partitions would also
+pose further reads and that's not worth it.
 ---
- lib/misc/lvm-wrappers.c |    7 ++++++-
- lib/misc/lvm-wrappers.h |    6 +-----
- 2 files changed, 7 insertions(+), 6 deletions(-)
+ lib/device/dev-cache.c |   35 +++++++++++++++++++++++++++--------
+ 1 files changed, 27 insertions(+), 8 deletions(-)
 
-diff --git a/lib/misc/lvm-wrappers.c b/lib/misc/lvm-wrappers.c
-index e8e2e92..e2b14aa 100644
---- a/lib/misc/lvm-wrappers.c
-+++ b/lib/misc/lvm-wrappers.c
-@@ -66,7 +66,7 @@ bad:
- 	return 0;
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 84bd85b..8461f40 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -818,9 +818,8 @@ static int _dev_cache_iterate_devs_for_index(void)
+ 	return r;
  }
  
--struct udev* udev_get_library_context(void)
-+void *udev_get_library_context(void)
+-static int _dev_cache_iterate_sysfs_for_index(void)
++static int _dev_cache_iterate_sysfs_for_index(const char *path)
  {
- 	return _udev;
- }
-@@ -78,6 +78,11 @@ int udev_init_library_context(void)
- 	return 1;
- }
+-	char path[PATH_MAX];
+ 	char devname[PATH_MAX];
+ 	DIR *d;
+ 	struct dirent *dirent;
+@@ -830,11 +829,6 @@ static int _dev_cache_iterate_sysfs_for_index(void)
+ 	int partial_failure = 0;
+ 	int r = 0;
  
-+void *udev_get_library_context(void)
-+{
-+	return NULL;
-+}
-+
- void udev_fin_library_context(void)
- {
- }
-diff --git a/lib/misc/lvm-wrappers.h b/lib/misc/lvm-wrappers.h
-index c2d5123..3c45aff 100644
---- a/lib/misc/lvm-wrappers.h
-+++ b/lib/misc/lvm-wrappers.h
-@@ -16,12 +16,8 @@
- #ifndef _LVM_WRAPPERS_H
- #define _LVM_WRAPPERS_H
- 
--#ifdef UDEV_SYNC_SUPPORT
--struct udev;
--struct udev *udev_get_library_context(void);
--#endif
+-	if (dm_snprintf(path, sizeof(path), "%sdev/block", dm_sysfs_dir()) < 0) {
+-		log_error("_dev_cache_iterate_sysfs_for_index: dm_snprintf failed.");
+-		return 0;
+-	}
 -
- int udev_init_library_context(void);
-+void *udev_get_library_context(void);
- void udev_fin_library_context(void);
- int udev_is_running(void);
+ 	if (!(d = opendir(path))) {
+ 		log_sys_error("opendir", path);
+ 		return 0;
+@@ -876,11 +870,36 @@ static int _dev_cache_iterate_sysfs_for_index(void)
  
+ int dev_cache_index_devs(void)
+ {
++	static int sysfs_has_dev_block = -1;
++	char path[PATH_MAX];
++
++	if (dm_snprintf(path, sizeof(path), "%sdev/block", dm_sysfs_dir()) < 0) {
++		log_error("dev_cache_index_devs: dm_snprintf failed.");
++		return 0;
++	}
++
++	/* Skip indexing if /sys/dev/block is not available.*/
++	if (sysfs_has_dev_block == -1) {
++		struct stat info;
++		if (stat(path, &info) == 0)
++			sysfs_has_dev_block = 1;
++		else {
++			if (errno == ENOENT) {
++				sysfs_has_dev_block = 0;
++				return 1;
++			} else {
++				log_sys_error("stat", path);
++				return 0;
++			}
++		}
++	} else if (!sysfs_has_dev_block)
++		return 1;
++
+ 	int with_udev = obtain_device_list_from_udev() &&
+ 			udev_get_library_context();
+ 
+ 	return with_udev ? _dev_cache_iterate_devs_for_index()
+-			 : _dev_cache_iterate_sysfs_for_index();
++			 : _dev_cache_iterate_sysfs_for_index(path);
+ }
+ 
+ #ifdef UDEV_SYNC_SUPPORT
 
 
