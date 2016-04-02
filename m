@@ -1,69 +1,60 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  1 Apr 2016 19:36:52 +0000 (UTC)
-Subject: v2_02_149 annotated tag has been created
-Message-ID: <20160401193652.A045160E73@fedorahosted.org>
+From: James Johnston <johnstonj.public@codenest.com>
+Date: Sat, 2 Apr 2016 04:20:13 -0000
+Subject: [PATCH] RAID: fix incorrect exit status from lvchange --syncaction
+Message-ID: <009201d18c96$f56c3ef0$e044bcd0$@codenest.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7a02139d22551405d4317671a312ef5cc20c2db0
-Commit:        7a02139d22551405d4317671a312ef5cc20c2db0
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2016-04-01 19:30 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2016-04-01 19:30 +0000
+Hi,
 
-annotated tag: v2_02_149 has been created
-	    at 7a02139d22551405d4317671a312ef5cc20c2db0 (tag)
-       tagging 2d0d58b8679f0d071c194db34660a112ae0f3204 (commit)
-      replaces v2_02_148
+This patch fixes a bug where lvchange --syncaction returns a successful exit
+status even when it actually failed.
 
-Release 2.02.149.
+Test case:
 
-A small development release including fixes for some recent changes.
+$ lvchange --syncaction repair VG/DataCache
+$ lvchange --syncaction repair VG/DataCache
+  VG/DataCache is currently "repair".  Unable to switch to "repair".
+$ echo $?
+0
 
-21 files changed, 265 insertions(+), 77 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
+Since it gave an error, I'd expect the exit status to be non-zero.
 
-iEYEABECAAYFAlb+zK8ACgkQIoGRwVZ+LBc/SQCfVsGYacni96Ps6N01aXCdqgFU
-EHUAn25BkfYNAAbt5Ob6PIEVIaGjmzD+
-=DzKi
------END PGP SIGNATURE-----
+>From 2f12e1f2aa933dca100a9dc505c1a6adfb7b99fd Mon Sep 17 00:00:00 2001
+From: James Johnston <johnstonj.public@codenest.com>
+Date: Sat, 2 Apr 2016 04:04:59 +0000
+Subject: [PATCH] RAID: fix incorrect exit status from lvchange --syncaction
 
-Alasdair G Kergon (3):
-      post-commit
-      Revert "thin: display highest mapped sector"
-      pre-release
+Some of the possible errors from lvchange don't return a non-zero
+exit status: for example, if a repair is already in progress.
 
-Marian Csontos (1):
-      test: Add missing directory
+This is because lv_raid_message erroneously sets the return value to
+success prematurely, and it's not subsequently reset to a failing
+value.
 
-Peter Rajnoha (13):
-      dev-cache: handle situation where device is referenced in sysfs, but the node is not yet in dev dir
-      dev-cache: also index VGIDs and LVIDs if using persistent .cache file
-      dev-cache: remove spurious error msg if no value found in /sys/dev/block/<major>:<minor>/dm/uuid during dev scan
-      dev-cache: dev_cache_index_devs fn is available unconditionally
-      doc: describe lvmlockd/lvmpolld features as available if LVM compiled with lockd/polld support
-      dev-cache: fix check for already indexed dev in _index_dev_by_vgid_and_lvid
-      tests: vg-check-devs-used requires driver version 4.15 at least
-      refactor: dev-cache: use btree instead of hash table for sysfs-only devices
-      refactor: dev-cache: move code adding sysfs-only device into separate fn
-      dev-cache: also add dev name for device found in sysfs only
-      dev-cache: iterate devices in sysfs for VGID/LVID index if obtain_device_list_from_udev=0
-      fix: make udev_get_library_context available also for non-udev compilations
-      dev-cache: skip VGID/LVID indexing if /sys/dev/block is not present
+Signed-off-by: James Johnston <johnstonj.public@codenest.com>
+---
+ lib/activate/activate.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-Zdenek Kabelac (7):
-      thin: no thin-pool flush when reading metadata status
-      thin: display highest mapped sector
-      cleanup: debug message fix
-      cleanup: use TARGET define
-      cleanup: use local var to read struct
-      tests: do not test settings when MQ is emulated by SMQ
-      tests: fixed cache target reacts faster
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index a3b2379..1713b8c 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1013,7 +1013,7 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
+ 		return_0;
+ 
+-	if (!(r = dev_manager_raid_status(dm, lv, &status))) {
++	if (!dev_manager_raid_status(dm, lv, &status)) {
+ 		log_error("Failed to retrieve status of %s.",
+ 			  display_lvname(lv));
+ 		goto out;
+-- 
+1.9.5.msysgit.1
+
 
 
