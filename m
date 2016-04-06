@@ -1,60 +1,69 @@
-From: James Johnston <johnstonj.public@codenest.com>
-Date: Sat, 2 Apr 2016 04:20:13 -0000
-Subject: [PATCH] RAID: fix incorrect exit status from lvchange --syncaction
-Message-ID: <009201d18c96$f56c3ef0$e044bcd0$@codenest.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed,  6 Apr 2016 09:55:32 +0000 (UTC)
+Subject: master - mirror: fix flushing for mirror target
+Message-ID: <20160406095532.370CE6112E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d4c03cf7b21279ad28b8b9944d0281a55692efcc
+Commit:        d4c03cf7b21279ad28b8b9944d0281a55692efcc
+Parent:        76fc41fb9d06519d7410f0054c279ea3a8dccc37
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Apr 5 21:34:42 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Apr 6 11:31:02 2016 +0200
 
-This patch fixes a bug where lvchange --syncaction returns a successful exit
-status even when it actually failed.
+mirror: fix flushing for mirror target
 
-Test case:
+Fix regression caused by commit ba41ee1dc94264f7ac8e61f8b1d56b10225b0d2f.
+The idea was to use no_flush for changed device only for thin volumes
+and thin pools but also to merge this with change made in commit
+844b00958492224c448b30f89ae5532bb6591fd2.
 
-$ lvchange --syncaction repair VG/DataCache
-$ lvchange --syncaction repair VG/DataCache
-  VG/DataCache is currently "repair".  Unable to switch to "repair".
-$ echo $?
-0
+However the resulting condition has caused misbehavior for the mirror
+suspend - as that has been before the ONLY allowed target type
+that could have been suspended with noflush.
 
-Since it gave an error, I'd expect the exit status to be non-zero.
+Result was badly working repair for --type mirror that has been
+passing 'flush' to the repaired mirror target whenever preload
+wrongly set flush_required.
 
->From 2f12e1f2aa933dca100a9dc505c1a6adfb7b99fd Mon Sep 17 00:00:00 2001
-From: James Johnston <johnstonj.public@codenest.com>
-Date: Sat, 2 Apr 2016 04:04:59 +0000
-Subject: [PATCH] RAID: fix incorrect exit status from lvchange --syncaction
+The origin code has required the flush_required to be set whenever
+deivce size is changed.
 
-Some of the possible errors from lvchange don't return a non-zero
-exit status: for example, if a repair is already in progress.
+Now it first detects if device size got smaller
+'dm_tree_node_size_changed(root) < 0' - this requires flush.
+Otherwise it checks device is not thin volume nor thin pool and its
+size has changed (got bigger) and requires flush.
 
-This is because lv_raid_message erroneously sets the return value to
-success prematurely, and it's not subsequently reset to a failing
-value.
-
-Signed-off-by: James Johnston <johnstonj.public@codenest.com>
+This mean upsize of thin-pool or thin volume will not require flush.
 ---
- lib/activate/activate.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/activate/dev_manager.c |    9 ++++-----
+ 1 files changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index a3b2379..1713b8c 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1013,7 +1013,7 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
- 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
- 		return_0;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 3563d5a..22331c3 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -3044,12 +3044,11 @@ static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
  
--	if (!(r = dev_manager_raid_status(dm, lv, &status))) {
-+	if (!dev_manager_raid_status(dm, lv, &status)) {
- 		log_error("Failed to retrieve status of %s.",
- 			  display_lvname(lv));
- 		goto out;
--- 
-1.9.5.msysgit.1
-
+ 		if ((dm_tree_node_size_changed(root) < 0))
+ 			dm->flush_required = 1;
+-
+ 		/* Currently keep the code require flush for any
+-		 * non 'thin pool/volume, mirror' or with any size change */
+-		if (!lv_is_thin_volume(lv) &&
+-		    !lv_is_thin_pool(lv) &&
+-		    (!lv_is_mirror(lv) || dm_tree_node_size_changed(root)))
++		 * non 'thin pool/volume' and  size increase */
++		else if (!lv_is_thin_volume(lv) &&
++			 !lv_is_thin_pool(lv) &&
++			 dm_tree_node_size_changed(root))
+ 			dm->flush_required = 1;
+ 
+ 		if (action == ACTIVATE) {
 
 
