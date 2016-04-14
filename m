@@ -1,39 +1,42 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 14 Apr 2016 21:56:01 +0000 (UTC)
-Subject: master - WHATS_NEW for lvmetad scanning changes
-Message-ID: <20160414215601.80DBF61C4D@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 14 Apr 2016 22:43:09 +0000 (UTC)
+Subject: master - activation: Log when pending snap merge postponed.
+Message-ID: <20160414224309.4C64E61C20@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7ae5f6fc5c300413e740d4fa537090f0a4be5d2c
-Commit:        7ae5f6fc5c300413e740d4fa537090f0a4be5d2c
-Parent:        ff09bda7d585bbf743048965142e5b0ec881b896
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Apr 14 16:55:34 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Apr 14 16:55:34 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=150cff9cce019e3211d99dbdceaccf77db1e503a
+Commit:        150cff9cce019e3211d99dbdceaccf77db1e503a
+Parent:        7ae5f6fc5c300413e740d4fa537090f0a4be5d2c
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Apr 14 23:42:56 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Apr 14 23:42:56 2016 +0100
 
-WHATS_NEW for lvmetad scanning changes
+activation: Log when pending snap merge postponed.
 
 ---
- WHATS_NEW |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ lib/activate/dev_manager.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 69ced16..8c58c8d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,8 @@
- Version 2.02.151 -
- =================================
-+  Improve retrying lvmetad requests while lvmetad is being updated.
-+  Read devices instead of using the lvmetad cache if rescan fails.
-+  Move lvmetad token/filter check and device rescan to the start of commands.
-   Don't try deactivating fictional internal LV before snapshot merge. (2.02.105)
-   When not obtaining devs from udev, check they exist before caching them.
-   Detect device mismatch also when compiling without udev support.
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index a0e05ad..d25c07e 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -2700,8 +2700,10 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		     dinfo->open_count)) {
+ 			if (seg_is_thin_volume(seg) ||
+ 			    /* FIXME Is there anything simpler to check for instead? */
+-			    !lv_has_target_type(dm->mem, lv, NULL, TARGET_NAME_SNAPSHOT_MERGE))
++			    !lv_has_target_type(dm->mem, lv, NULL, TARGET_NAME_SNAPSHOT_MERGE)) {
++				log_debug_activation("Postponing pending snapshot merge for origin LV %s.", display_lvname(lv));
+ 				laopts->no_merging = 1;
++			}
+ 		}
+ 	}
+ 
 
 
