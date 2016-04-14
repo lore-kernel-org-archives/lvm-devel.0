@@ -1,41 +1,65 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 14 Apr 2016 16:22:14 +0000 (UTC)
-Subject: master - toollib: Fix misleading message when forking.
-Message-ID: <20160414162214.8015E60B46@fedorahosted.org>
+Date: Thu, 14 Apr 2016 21:37:08 +0000 (UTC)
+Subject: master - snapshot: Don't deactivate fictional snapshot LV.
+Message-ID: <20160414213708.2026460DEC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c68fb55ac104079e4708d9b869ef8edd9d1202c4
-Commit:        c68fb55ac104079e4708d9b869ef8edd9d1202c4
-Parent:        3f6e7f90cac72bd248c068f2893ef851d29cf1b9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f0179fac315b630aa4c475d2441dd3b5b12f0c6d
+Commit:        f0179fac315b630aa4c475d2441dd3b5b12f0c6d
+Parent:        c68fb55ac104079e4708d9b869ef8edd9d1202c4
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Apr 14 17:21:02 2016 +0100
+AuthorDate:    Thu Apr 14 20:48:28 2016 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Apr 14 17:21:02 2016 +0100
+CommitterDate: Thu Apr 14 22:32:26 2016 +0100
 
-toollib: Fix misleading message when forking.
+snapshot: Don't deactivate fictional snapshot LV.
 
-Commands like pvscan --background run entirely in the background,
-but others fork only for polling.
+Commit 971ab733b74e0ffecc3f9f60af48628cd3fba1db ("thin: activation of
+merging thin snapshot") also added an incorrect deactivation attempt
+for non-thin LVs: find_snapshot(lv)->lv is not designed to be
+activated and any attempt to deactivate it is incorrect.
 ---
- tools/toollib.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW       |    3 ++-
+ tools/toollib.c |    4 +++-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f4eb6ad..69ced16 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+-Version 2.02.151
++Version 2.02.151 -
+ =================================
++  Don't try deactivating fictional internal LV before snapshot merge. (2.02.105)
+   When not obtaining devs from udev, check they exist before caching them.
+   Detect device mismatch also when compiling without udev support.
+ 
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 2ff5a3b..ce49773 100644
+index ce49773..b1225cd 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -54,7 +54,7 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
- 		.sa_flags = SA_NOCLDSTOP,
- 	};
+@@ -1022,6 +1022,7 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
+ 		       activation_change_t activate)
+ {
+ 	int r = 1;
++	struct logical_volume *snapshot_lv;
  
--	log_verbose("Forking background process: %s", cmd->cmd_line);
-+	log_verbose("Forking background process from command: %s", cmd->cmd_line);
- 
- 	sigaction(SIGCHLD, &act, NULL);
- 
+ 	if (lv_is_cache_pool(lv)) {
+ 		if (is_change_activating(activate)) {
+@@ -1053,7 +1054,8 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
+ 		 * User could retry to deactivate it with another
+ 		 * deactivation of origin, which is the only visible LV
+ 		 */
+-		if (!deactivate_lv(cmd, find_snapshot(lv)->lv)) {
++		snapshot_lv = find_snapshot(lv)->lv;
++		if (lv_is_thin_type(snapshot_lv) && !deactivate_lv(cmd, snapshot_lv)) {
+ 			if (is_change_activating(activate)) {
+ 				log_error("Refusing to activate merging \"%s\" while snapshot \"%s\" is still active.",
+ 					  lv->name, find_snapshot(lv)->lv->name);
 
 
