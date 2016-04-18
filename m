@@ -1,56 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 18 Apr 2016 10:59:08 +0000 (UTC)
-Subject: master - debug: update message in libdm
-Message-ID: <20160418105908.053B861B7F@fedorahosted.org>
+Date: Mon, 18 Apr 2016 10:59:10 +0000 (UTC)
+Subject: master - debug: use display_lvname
+Message-ID: <20160418105910.2850B61B7F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e2ceb90095ab008c13a3d0db0bbf1bc2bd8557f2
-Commit:        e2ceb90095ab008c13a3d0db0bbf1bc2bd8557f2
-Parent:        f5cf6cc9ed756ec1e98d62a31aba803577443ad7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d1c1f60047bb6973eee432ea14f93058a836faac
+Commit:        d1c1f60047bb6973eee432ea14f93058a836faac
+Parent:        e2ceb90095ab008c13a3d0db0bbf1bc2bd8557f2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 17 14:51:58 2016 +0200
+AuthorDate:    Mon Apr 18 11:04:06 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Apr 18 12:32:56 2016 +0200
 
-debug: update message in libdm
+debug: use display_lvname
 
-When dm_tree_find_node_by_uuid() fails to find passed uuid,
-report in lof_debug the complete original uuid,
-not the one stripped of LVM- prefix.
-
-TODO: inspect manipulation with LVM- prefix here.
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ tools/toollib.c |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 08d7d45..e2301ea 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.122 - 9th April 2016
- =================================
-+  Do not strip LVM- when debug reporting not found uuid.
-   Change log_debug ioctl flags from single characters into words.
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b1225cd..5e9b4d8 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1057,13 +1057,15 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
+ 		snapshot_lv = find_snapshot(lv)->lv;
+ 		if (lv_is_thin_type(snapshot_lv) && !deactivate_lv(cmd, snapshot_lv)) {
+ 			if (is_change_activating(activate)) {
+-				log_error("Refusing to activate merging \"%s\" while snapshot \"%s\" is still active.",
+-					  lv->name, find_snapshot(lv)->lv->name);
++				log_error("Refusing to activate merging volume %s while "
++					  "snapshot volume %s is still active.",
++					  display_lvname(lv), display_lvname(snapshot_lv));
+ 				return 0;
+ 			}
  
- Version 1.02.121 - 26th March 2016
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index f8b6d89..6f18ae2 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -599,7 +599,7 @@ static struct dm_tree_node *_find_dm_tree_node_by_uuid(struct dm_tree *dtree,
- 		return node;
+-			log_error("Cannot fully deactivate merging origin \"%s\" while snapshot \"%s\" is still active.",
+-				  lv->name, find_snapshot(lv)->lv->name);
++			log_error("Cannot fully deactivate merging origin volume %s while "
++				  "snapshot volume %s is still active.",
++				  display_lvname(lv), display_lvname(snapshot_lv));
+ 			r = 0; /* and continue to deactivate origin... */
+ 		}
  	}
- 
--	log_debug("Not matched uuid %s in deptree.", uuid + default_uuid_prefix_len);
-+	log_debug("Not matched uuid %s in deptree.", uuid);
- 	return NULL;
- }
- 
 
 
