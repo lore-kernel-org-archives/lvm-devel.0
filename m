@@ -1,47 +1,56 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 18 Apr 2016 10:59:05 +0000 (UTC)
-Subject: master - debug: fix error message
-Message-ID: <20160418105905.DA82A61B7F@fedorahosted.org>
+Date: Mon, 18 Apr 2016 10:59:08 +0000 (UTC)
+Subject: master - debug: update message in libdm
+Message-ID: <20160418105908.053B861B7F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f5cf6cc9ed756ec1e98d62a31aba803577443ad7
-Commit:        f5cf6cc9ed756ec1e98d62a31aba803577443ad7
-Parent:        9cccf5245a97a64f900f253fcf948edd5d7ba8c0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e2ceb90095ab008c13a3d0db0bbf1bc2bd8557f2
+Commit:        e2ceb90095ab008c13a3d0db0bbf1bc2bd8557f2
+Parent:        f5cf6cc9ed756ec1e98d62a31aba803577443ad7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 17 14:44:13 2016 +0200
+AuthorDate:    Sun Apr 17 14:51:58 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Apr 18 12:32:56 2016 +0200
 
-debug: fix error message
+debug: update message in libdm
 
-log_error is replaced with warn since the result
-of function is not result in command error.
+When dm_tree_find_node_by_uuid() fails to find passed uuid,
+report in lof_debug the complete original uuid,
+not the one stripped of LVM- prefix.
+
+TODO: inspect manipulation with LVM- prefix here.
 ---
- lib/activate/dev_manager.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 2b108c9..b155039 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -766,11 +766,11 @@ static const struct dm_info *_cached_dm_info(struct dm_pool *mem,
- 		return_NULL;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 08d7d45..e2301ea 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.122 - 9th April 2016
+ =================================
++  Do not strip LVM- when debug reporting not found uuid.
+   Change log_debug ioctl flags from single characters into words.
  
- 	if (!(dnode = dm_tree_find_node_by_uuid(dtree, dlid)))
--		goto_out;
-+		goto out;
- 
- 	if (!(dinfo = dm_tree_node_get_info(dnode))) {
--		log_error("Failed to get info from tree node for %s.",
--			  display_lvname(lv));
-+		log_warn("WARNING: Cannot get info from tree node for %s.",
-+			 display_lvname(lv));
- 		goto out;
+ Version 1.02.121 - 26th March 2016
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index f8b6d89..6f18ae2 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -599,7 +599,7 @@ static struct dm_tree_node *_find_dm_tree_node_by_uuid(struct dm_tree *dtree,
+ 		return node;
  	}
+ 
+-	log_debug("Not matched uuid %s in deptree.", uuid + default_uuid_prefix_len);
++	log_debug("Not matched uuid %s in deptree.", uuid);
+ 	return NULL;
+ }
  
 
 
