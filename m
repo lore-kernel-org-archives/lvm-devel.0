@@ -1,116 +1,116 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 19 Apr 2016 16:49:27 +0000 (UTC)
-Subject: master - test: update lvm1 test
-Message-ID: <20160419164927.149286108B@fedorahosted.org>
+Date: Tue, 19 Apr 2016 16:49:29 +0000 (UTC)
+Subject: master - test: update lvmetad-disabled
+Message-ID: <20160419164929.2F68961005@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9cf85f606d14bcffdbdfaf19e0fa3a8e8b2a5d3
-Commit:        c9cf85f606d14bcffdbdfaf19e0fa3a8e8b2a5d3
-Parent:        2a17610899f6dc5d5e5acf5f0a4b427f2cdfeea8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a5722ed7e7b382f3bbb87c5e88c4a78e9ec4cf90
+Commit:        a5722ed7e7b382f3bbb87c5e88c4a78e9ec4cf90
+Parent:        c9cf85f606d14bcffdbdfaf19e0fa3a8e8b2a5d3
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Apr 19 09:18:31 2016 -0500
+AuthorDate:    Mon Apr 18 13:07:11 2016 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 19 11:45:19 2016 -0500
+CommitterDate: Tue Apr 19 11:45:24 2016 -0500
 
-test: update lvm1 test
+test: update lvmetad-disabled
 
-Make it a generic lvm1 test, which should work
-with or without lvmetad now that lvmetad is just
-disabled when lvm1 is used.
+Update the check about lvmetad running but not used.
+
+Also add tests related to the new lvmetad disabled state.
+lvm1 metadata is used here to test the disabled state
+because lvm1 metadata is the first condition using the
+disabled state.
 ---
- test/shell/lvm1-basic.sh   |   35 +++++++++++++++++++++++++++++++++++
- test/shell/lvmetad-lvm1.sh |   39 ---------------------------------------
- 2 files changed, 35 insertions(+), 39 deletions(-)
+ test/shell/lvmetad-disabled.sh |   66 +++++++++++++++++++++++++++++++++++++---
+ 1 files changed, 61 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvm1-basic.sh b/test/shell/lvm1-basic.sh
-new file mode 100644
-index 0000000..8884bc1
---- /dev/null
-+++ b/test/shell/lvm1-basic.sh
-@@ -0,0 +1,35 @@
-+#!/bin/sh
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITHOUT_LVMETAD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
+diff --git a/test/shell/lvmetad-disabled.sh b/test/shell/lvmetad-disabled.sh
+index 60cd2ff..e905ba7 100644
+--- a/test/shell/lvmetad-disabled.sh
++++ b/test/shell/lvmetad-disabled.sh
+@@ -15,18 +15,74 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
 +aux prepare_devs 2
-+pvcreate --metadatatype 1 "$dev1"
-+pvs | tee out
-+grep "$dev1" out
-+vgcreate --metadatatype 1 $vg1 "$dev1"
-+vgs | tee out
-+grep $vg1 out
-+pvs | tee out
-+grep "$dev1" out
 +
-+# check for RHBZ 1080189 -- SEGV in lvremove/vgremove
-+pvcreate -ff -y --metadatatype 1 "$dev1" "$dev2"
-+vgcreate --metadatatype 1 $vg1 "$dev1" "$dev2"
-+lvcreate -l1 $vg1
-+pvremove -ff -y "$dev2"
-+vgchange -an $vg1
-+not lvremove $vg1
-+not vgremove -ff -y $vg1
-diff --git a/test/shell/lvmetad-lvm1.sh b/test/shell/lvmetad-lvm1.sh
-deleted file mode 100644
-index 824c1d5..0000000
---- a/test/shell/lvmetad-lvm1.sh
-+++ /dev/null
-@@ -1,39 +0,0 @@
--#!/bin/sh
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--# lvmetad does not support lvm1 format
--
--aux prepare_devs 2
--pvcreate --metadatatype 1 "$dev1"
--should not vgscan --cache
--pvs | tee out
--not grep "$dev1" out
--vgcreate --metadatatype 1 $vg1 "$dev1"
--should not vgscan --cache
--vgs | tee out
--not grep $vg1 out
--pvs | tee out
--not grep "$dev1" out
--
--# check for RHBZ 1080189 -- SEGV in lvremove/vgremove
--pvcreate -ff -y --metadatatype 1 "$dev1" "$dev2"
--vgcreate --metadatatype 1 $vg1 "$dev1" "$dev2"
--lvcreate -l1 $vg1
--pvremove -ff -y "$dev2"
--vgchange -an $vg1
--not lvremove $vg1
--not vgremove -ff -y $vg1
+ kill $(< LOCAL_LVMETAD)
+ while test -e "$TESTDIR/lvmetad.socket"; do echo -n .; sleep .1; done # wait for the socket close
+ test ! -e "$LVM_LVMETAD_PIDFILE"
+ 
++aux lvmconf "global/use_lvmetad = 0"
++
++pvcreate --metadatatype 1 "$dev1"
++pvcreate "$dev2"
++vgcreate -M1 $vg1 "$dev1"
++vgcreate $vg2 "$dev2"
++
++pvs 2>&1 | tee out
++grep "$dev1" out
++grep "$dev2" out
++
++vgs 2>&1 | tee out
++grep $vg1 out
++grep $vg2 out
++
++aux lvmconf "global/use_lvmetad = 1"
+ lvmetad
+ while ! test -e "$TESTDIR/lvmetad.socket"; do echo -n .; sleep .1; done # wait for the socket
+ test -e "$LVM_LVMETAD_PIDFILE"
+ cp "$LVM_LVMETAD_PIDFILE" LOCAL_LVMETAD
+ 
+-pvs 2>&1 | not grep "lvmetad is running"
+-aux lvmconf "global/use_lvmetad = 0"
+-pvs 2>&1 | grep "lvmetad is running"
++not pvscan --cache 2>&1 | tee out
++grep "WARNING: Disabling lvmetad cache" out
++
++pvs  2>&1 | tee out
++grep "$dev1" out
++grep "$dev2" out
++grep "WARNING: Not using lvmetad" out
++
++vgs  2>&1 | tee out
++grep $vg1 out
++grep $vg2 out
++grep "WARNING: Not using lvmetad" out
++
++vgremove $vg1 2>&1 | tee out
++grep "WARNING: Not using lvmetad" out
++
++pvremove "$dev1" 2>&1 | tee out
++grep "WARNING: Not using lvmetad" out
++
++pvscan --cache  2>&1 | tee out
++not grep "WARNING: Disabling lvmetad cache" out
++
++pvs 2>&1 | tee out
++not grep "$dev1" out
++grep "$dev2" out
++not grep "WARNING: Not using lvmetad" out
++
++vgs 2>&1 | tee out
++not grep $vg1 out
++grep $vg2 out
++not grep "WARNING: Not using lvmetad" out
++
++pvs --config 'global/use_lvmetad=0' 2>&1 | tee out
++not grep "$dev1" out
++grep "$dev2" out
++grep "WARNING: Not using lvmetad" out
++grep "use_lvmetad=0" out
++
++vgs --config 'global/use_lvmetad=0' 2>&1 | tee out
++not grep $vg1 out
++grep $vg2 out
++grep "WARNING: Not using lvmetad" out
++grep "use_lvmetad=0" out
+ 
+-kill $(< "$LVM_LVMETAD_PIDFILE")
+-not ls "$LVM_LVMETAD_PIDFILE"
 
 
