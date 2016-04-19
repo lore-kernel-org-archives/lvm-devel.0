@@ -1,46 +1,59 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 19 Apr 2016 14:37:03 +0000 (UTC)
-Subject: master - metadata: don't repair shared VGs
-Message-ID: <20160419143703.40D7361BD4@fedorahosted.org>
+Date: Tue, 19 Apr 2016 14:40:49 +0000 (UTC)
+Subject: master - toollib: remove unneeded call in process_each_pv
+Message-ID: <20160419144049.36D9961C5B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a6a32a7c0e6ed9ef9e61e82b2d1353a1c06a9dd3
-Commit:        a6a32a7c0e6ed9ef9e61e82b2d1353a1c06a9dd3
-Parent:        a400eba1740c335ed715c67b978dd0ed8228d73a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e41ee70accbc604e3a7daea0ab10f9405e95a531
+Commit:        e41ee70accbc604e3a7daea0ab10f9405e95a531
+Parent:        a6a32a7c0e6ed9ef9e61e82b2d1353a1c06a9dd3
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Apr 14 16:40:26 2016 -0500
+AuthorDate:    Thu Apr 7 13:45:26 2016 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 19 09:19:32 2016 -0500
+CommitterDate: Tue Apr 19 09:40:24 2016 -0500
 
-metadata: don't repair shared VGs
+toollib: remove unneeded call in process_each_pv
 
-When the in-use flag looks like it needs to be repaired.
+process_each_pv was doing:
+
+1. lvmcache_seed_infos_from_lvmetad()
+   sends pv_list request to lvmetad.
+
+2. get_vgnameids()
+   sends vg_list request to lvmetad.
+
+3. _get_all_devices()
+   first calls lvmcache_seed_infos_from_lvmetad(),
+   which is a no-op if it's already been called.
+
+Because get_vgnameids() does not use the information
+from lvmcache_seed_infos_from_lvmetad(), it does not
+need to be called prior to get_all_devices where
+it is actually needed.
 ---
- lib/metadata/metadata.c |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ tools/toollib.c |    6 ------
+ 1 files changed, 0 insertions(+), 6 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index ecdb5af..782235e 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4037,6 +4037,14 @@ static int _check_or_repair_pv_ext(struct cmd_context *cmd,
- 					    "VG %s but not marked as used.",
- 					    pv_dev_name(pvl->pv), vg->name);
- 				*inconsistent_pvs = 1;
-+			} else if (is_lockd_type(vg->lock_type)) {
-+				/*
-+				 * FIXME: decide how to handle repair for shared VGs.
-+				 */
-+				log_warn("Skip repair of PV %s that is in shared "
-+					    "VG %s but not marked as used.",
-+					    pv_dev_name(pvl->pv), vg->name);
-+				*inconsistent_pvs = 1;
- 			} else {
- 				log_warn("WARNING: Repairing Physical Volume %s that is "
- 					 "in Volume Group %s but not marked as used.",
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b9db9cb..ac2a57a 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -3372,12 +3372,6 @@ int process_each_pv(struct cmd_context *cmd,
+ 		dev_cache_full_scan(cmd->full_filter);
+ 	}
+ 
+-	/*
+-	 * Need pvid's set on all PVs before processing so that pvid's
+-	 * can be compared to find duplicates while processing.
+-	 */
+-	lvmcache_seed_infos_from_lvmetad(cmd);
+-
+ 	if (!get_vgnameids(cmd, &all_vgnameids, only_this_vgname, 1)) {
+ 		stack;
+ 		return ret;
 
 
