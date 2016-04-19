@@ -1,305 +1,136 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 19 Apr 2016 16:49:20 +0000 (UTC)
-Subject: master - lvmetad: use the disabled flag in commands
-Message-ID: <20160419164920.C1A506107E@fedorahosted.org>
+Date: Tue, 19 Apr 2016 16:49:22 +0000 (UTC)
+Subject: master - lvmetad: clear the disabled flag in lvmetad
+Message-ID: <20160419164922.D6C0E6107E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04a83148cea3b3c7ec7f6ffccb4d84e2372c3f4a
-Commit:        04a83148cea3b3c7ec7f6ffccb4d84e2372c3f4a
-Parent:        ff867c2ef6b0717c26f2073f0b79041156a6af58
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1e380864e5b6e0773ddf48189b6563c3033e6354
+Commit:        1e380864e5b6e0773ddf48189b6563c3033e6354
+Parent:        04a83148cea3b3c7ec7f6ffccb4d84e2372c3f4a
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Apr 6 15:31:15 2016 -0500
+AuthorDate:    Wed Apr 6 15:37:52 2016 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Tue Apr 19 09:41:18 2016 -0500
 
-lvmetad: use the disabled flag in commands
+lvmetad: clear the disabled flag in lvmetad
 
-Commands already check if the lvmetad token is valid,
-and if not, they rescan devices to repopulate lvmetad
-before running.  Now, in addition to checking the
-lvmetad token, they also check if the lvmetad disabled
-flag is set.  If so, they do not use the lvmetad cache
-and revert to disk scanning.
+After a device rescan that repopulates lvmetad,
+if no reason for disabling lvmetad was seen
+(lvm1 metadata or duplicate PVs), then clear
+the disabled flag in lvmetad.  This allows
+commands to resume using the lvmetad cache
+after the cause for disabling it has been removed.
 ---
- lib/cache/lvmetad.c |    7 +++++++
- tools/lvmcmdline.c  |   13 ++++++++++++-
- tools/lvscan.c      |    9 ++++++++-
- tools/pvscan.c      |   48 +++++++++++++++++++++++++++++++++++++++++++++++-
- tools/vgimport.c    |    7 +++++++
- tools/vgscan.c      |   43 ++++++++++++++++++++++++++++++++++++++++++-
- 6 files changed, 123 insertions(+), 4 deletions(-)
+ lib/cache/lvmetad.c |   37 +++++++++++++++++++++++++++++++++++++
+ lib/cache/lvmetad.h |    2 ++
+ 2 files changed, 39 insertions(+), 0 deletions(-)
 
 diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 642a407..dba7e5b 100644
+index dba7e5b..bcf6f93 100644
 --- a/lib/cache/lvmetad.c
 +++ b/lib/cache/lvmetad.c
-@@ -2119,6 +2119,7 @@ void lvmetad_validate_global_cache(struct cmd_context *cmd, int force)
- {
- 	struct dm_list pvc_before; /* pv_cache_list */
- 	struct dm_list pvc_after; /* pv_cache_list */
-+	const char *reason = NULL;
+@@ -37,6 +37,8 @@ static char *_lvmetad_token = NULL;
+ static const char *_lvmetad_socket = NULL;
+ static struct cmd_context *_lvmetad_cmd = NULL;
+ 
++static int _found_lvm1_metadata = 0;
++
+ static struct volume_group *lvmetad_pvscan_vg(struct cmd_context *cmd, struct volume_group *vg);
+ 
+ static uint64_t _monotonic_seconds(void)
+@@ -1597,6 +1599,7 @@ static struct volume_group *lvmetad_pvscan_vg(struct cmd_context *cmd, struct vo
+ 			lvmcache_fmt(info)->ops->destroy_instance(baton.fid);
+ 			log_warn("WARNING: Disabling lvmetad cache which does not support obsolete metadata.");
+ 			lvmetad_set_disabled(cmd, "LVM1");
++			_found_lvm1_metadata = 1;
+ 			return NULL;
+ 		}
+ 
+@@ -1720,6 +1723,7 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
+ 
+ 		log_warn("WARNING: Disabling lvmetad cache which does not support obsolete metadata.");
+ 		lvmetad_set_disabled(cmd, "LVM1");
++		_found_lvm1_metadata = 1;
+ 
+ 		if (ignore_obsolete)
+ 			return 1;
+@@ -1795,6 +1799,7 @@ static int _lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler
  	daemon_reply reply;
- 	int global_invalid;
+ 	int r = 1;
+ 	char *future_token;
++	const char *reason;
+ 	int was_silent;
+ 	int replacing_other_update = 0;
+ 	int replaced_update = 0;
+@@ -1880,6 +1885,16 @@ static int _lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler
+ 	if (!_token_update(NULL))
+ 		return 0;
  
-@@ -2183,6 +2184,12 @@ void lvmetad_validate_global_cache(struct cmd_context *cmd, int force)
- 		return;
- 	}
- 
-+	if (lvmetad_is_disabled(cmd, &reason)) {
-+		log_warn("WARNING: Not using lvmetad because %s.", reason);
-+		lvmetad_set_active(cmd, 0);
-+		return;
++	/*
++	 * If lvmetad is disabled, and no lvm1 metadata was seen and no
++	 * duplicate PVs were seen, then re-enable lvmetad.
++	 */
++	if (lvmetad_is_disabled(cmd, &reason) &&
++	    !lvmcache_found_duplicate_pvs() && !_found_lvm1_metadata) {
++		log_debug_lvmetad("Enabling lvmetad which was previously disabled.");
++		lvmetad_clear_disabled(cmd);
 +	}
 +
- 	/*
- 	 * Clear the global_invalid flag in lvmetad.
- 	 * Subsequent local commands that read global state
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 48c660b..404c835 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1475,6 +1475,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- {
- 	struct dm_config_tree *config_string_cft;
- 	struct dm_config_tree *config_profile_command_cft, *config_profile_metadata_cft;
-+	const char *reason = NULL;
- 	int ret = 0;
- 	int locking_type;
- 	int monitoring;
-@@ -1625,7 +1626,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 
- 		if (lvmetad_used()) {
- 			lvmetad_set_active(cmd, 0);
--			log_verbose("Disabling use of lvmetad because read-only is set.");
-+			log_verbose("Not using lvmetad because read-only is set.");
- 		}
- 	} else if (arg_count(cmd, nolocking_ARG))
- 		locking_type = 0;
-@@ -1655,6 +1656,11 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	 * - Another local command may have run with a different global filter
- 	 *   which changed the content of lvmetad from what we want (recognized
- 	 *   by different token values.)
-+	 *
-+	 * lvmetad may have been previously disabled (or disabled during the
-+	 * rescan done here) because duplicate devices or lvm1 metadata were seen.
-+	 * In this case, disable the *use* of lvmetad by this command, reverting to
-+	 * disk scanning.
- 	 */
- 	if (lvmetad_used() && !(cmd->command->flags & NO_LVMETAD_AUTOSCAN)) {
- 		if (cmd->include_foreign_vgs || !lvmetad_token_matches(cmd)) {
-@@ -1663,6 +1669,11 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 				lvmetad_set_active(cmd, 0);
- 			}
- 		}
-+
-+		if (lvmetad_used() && lvmetad_is_disabled(cmd, &reason)) {
-+			log_warn("WARNING: Not using lvmetad because %s.", reason);
-+			lvmetad_set_active(cmd, 0);
-+		}
- 	}
- 
- 	/*
-diff --git a/tools/lvscan.c b/tools/lvscan.c
-index 666626c..4f13587 100644
---- a/tools/lvscan.c
-+++ b/tools/lvscan.c
-@@ -91,6 +91,8 @@ static int lvscan_single(struct cmd_context *cmd, struct logical_volume *lv,
- 
- int lvscan(struct cmd_context *cmd, int argc, char **argv)
- {
-+	const char *reason = NULL;
-+
- 	if (argc && !arg_count(cmd, cache_long_ARG)) {
- 		log_error("No additional command line arguments allowed");
- 		return EINVALID_CMD_LINE;
-@@ -100,12 +102,17 @@ int lvscan(struct cmd_context *cmd, int argc, char **argv)
- 		log_verbose("Ignoring lvscan --cache because lvmetad is not in use.");
- 
- 	/* Needed because this command has NO_LVMETAD_AUTOSCAN. */
--	if (lvmetad_used() && !lvmetad_token_matches(cmd)) {
-+	if (lvmetad_used() && (!lvmetad_token_matches(cmd) || lvmetad_is_disabled(cmd, &reason))) {
- 		if (lvmetad_used() && !lvmetad_pvscan_all_devs(cmd, NULL, 0)) {
- 			log_warn("WARNING: Not using lvmetad because cache update failed.");
- 			lvmetad_set_active(cmd, 0);
- 		}
- 
-+		if (lvmetad_used() && lvmetad_is_disabled(cmd, &reason)) {
-+			log_warn("WARNING: Not using lvmetad because %s.", reason);
-+			lvmetad_set_active(cmd, 0);
-+		}
-+
- 		/*
- 		 * FIXME: doing lvscan --cache after a full scan is pointless.
- 		 * Should the cache case just exit here?
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 10297a3..44e7737 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -386,10 +386,51 @@ out:
- 	return ret;
+ 	return r;
  }
  
-+/*
-+ * Three main pvscan cases related to lvmetad usage:
-+ * 1. pvscan
-+ * 2. pvscan --cache
-+ * 3. pvscan --cache <dev>
-+ *
-+ * 1. The 'pvscan' command (without --cache) may or may not attempt to
-+ * repopulate the lvmetad cache, and may or may not use the lvmetad
-+ * cache to display PV info:
-+ *
-+ * i. If lvmetad is being used and is in a normal state, then 'pvscan'
-+ * will simply read and display PV info from the lvmetad cache.
-+ *
-+ * ii. If lvmetad is not being used, 'pvscan' will read all devices to
-+ * display the PV info.
-+ *
-+ * iii. If lvmetad is being used, but has been disabled (because of
-+ * duplicate devs or lvm1 metadata), or has a non-matching token
-+ * (because the device filter is different from the device filter last
-+ * used to populate lvmetad), then 'pvscan' will begin by rescanning
-+ * devices to repopulate lvmetad.  If lvmetad is enabled after the
-+ * rescan, then 'pvscan' will simply read and display PV info from the
-+ * lvmetad cache (like case i).  If lvmetad is disabled after the
-+ * rescan, then 'pvscan' will read all devices to display PV info
-+ * (like case ii).
-+ *
-+ * 2. The 'pvscan --cache' command (without named devs) will always
-+ * attempt to repopulate the lvmetad cache by rescanning all devs
-+ * (regardless of whether lvmetad was previously disabled or had an
-+ * unmatching token.)  lvmetad may be enabled or disabled after the
-+ * rescan (depending on whether duplicate devs or lvm1 metadata was
-+ * found).
-+ *
-+ * 3. The 'pvscan --cache <dev>' command will attempt to repopulate the
-+ * lvmetad cache by rescanning all devs if lvmetad has a non-matching
-+ * token (e.g. because it has not yet been populated, see FIXME above).
-+ * Otherwise, the command will only rescan the named <dev> and send
-+ * their metadata to lvmetad.
-+ */
-+
- int pvscan(struct cmd_context *cmd, int argc, char **argv)
- {
- 	struct pvscan_params params = { 0 };
- 	struct processing_handle *handle = NULL;
-+	const char *reason = NULL;
- 	int ret;
- 
- 	if (arg_count(cmd, cache_long_ARG))
-@@ -421,11 +462,16 @@ int pvscan(struct cmd_context *cmd, int argc, char **argv)
- 			  "of exported volume group(s)" : "in no volume group");
- 
- 	/* Needed because this command has NO_LVMETAD_AUTOSCAN. */
--	if (lvmetad_used() && !lvmetad_token_matches(cmd)) {
-+	if (lvmetad_used() && (!lvmetad_token_matches(cmd) || lvmetad_is_disabled(cmd, &reason))) {
- 		if (lvmetad_used() && !lvmetad_pvscan_all_devs(cmd, NULL, 0)) {
- 			log_warn("WARNING: Not using lvmetad because cache update failed.");
- 			lvmetad_set_active(cmd, 0);
- 		}
-+
-+		if (lvmetad_used() && lvmetad_is_disabled(cmd, &reason)) {
-+			log_warn("WARNING: Not using lvmetad because %s.", reason);
-+			lvmetad_set_active(cmd, 0);
-+		}
- 	}
- 
- 	if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_WRITE, NULL)) {
-diff --git a/tools/vgimport.c b/tools/vgimport.c
-index 3c08876..f5980a1 100644
---- a/tools/vgimport.c
-+++ b/tools/vgimport.c
-@@ -61,6 +61,8 @@ bad:
- 
- int vgimport(struct cmd_context *cmd, int argc, char **argv)
- {
-+	const char *reason = NULL;
-+
- 	if (!argc && !arg_count(cmd, all_ARG) && !arg_is_set(cmd, select_ARG)) {
- 		log_error("Please supply volume groups or -S for selection or use -a for all.");
- 		return EINVALID_CMD_LINE;
-@@ -98,6 +100,11 @@ int vgimport(struct cmd_context *cmd, int argc, char **argv)
- 			log_warn("WARNING: Not using lvmetad because cache update failed.");
- 			lvmetad_set_active(cmd, 0);
- 		}
-+
-+		if (lvmetad_used() && lvmetad_is_disabled(cmd, &reason)) {
-+			log_warn("WARNING: Not using lvmetad because %s.", reason);
-+			lvmetad_set_active(cmd, 0);
-+		}
- 	}
- 
- 	return process_each_vg(cmd, argc, argv, NULL,
-diff --git a/tools/vgscan.c b/tools/vgscan.c
-index 9dc0000..78048c0 100644
---- a/tools/vgscan.c
-+++ b/tools/vgscan.c
-@@ -28,8 +28,44 @@ static int vgscan_single(struct cmd_context *cmd, const char *vg_name,
- 	return ECMD_PROCESSED;
+@@ -2285,6 +2300,28 @@ void lvmetad_set_disabled(struct cmd_context *cmd, const char *reason)
+ 	daemon_reply_destroy(reply);
  }
  
-+/*
-+ * Two main vgscan cases related to lvmetad usage:
-+ * 1. vgscan
-+ * 2. vgscan --cache
-+ *
-+ * 1. The 'vgscan' command (without --cache) may or may not attempt to
-+ * repopulate the lvmetad cache, and may or may not use the lvmetad
-+ * cache to display VG info:
-+ *
-+ * i. If lvmetad is being used and is in a normal state, then 'vgscan'
-+ * will simply read and display VG info from the lvmetad cache.
-+ *
-+ * ii. If lvmetad is not being used, 'vgscan' will read all devices to
-+ * display the VG info.
-+ *
-+ * iii. If lvmetad is being used, but has been disabled (because of
-+ * duplicate devs or lvm1 metadata), or has a non-matching token
-+ * (because the device filter is different from the device filter last
-+ * used to populate lvmetad), then 'vgscan' will begin by rescanning
-+ * devices to repopulate lvmetad.  If lvmetad is enabled after the
-+ * rescan, then 'vgscan' will simply read and display VG info from the
-+ * lvmetad cache (like case i).  If lvmetad is disabled after the
-+ * rescan, then 'vgscan' will read all devices to display VG info
-+ * (like case ii).
-+ *
-+ * 2. The 'vgscan --cache' command will always attempt to repopulate
-+ * the lvmetad cache by rescanning all devs (regardless of whether
-+ * lvmetad was previously disabled or had an unmatching token.)
-+ * lvmetad may be enabled or disabled after the rescan (depending
-+ * on whether duplicate devs or lvm1 metadata was found).
-+ * If enabled, then it will simply read and display VG info from the
-+ * lvmetad cache (like case 1.i.).  If disabled, then it will
-+ * read all devices to display VG info (like case 1.ii.)
-+ */
++void lvmetad_clear_disabled(struct cmd_context *cmd)
++{
++	daemon_reply reply;
 +
- int vgscan(struct cmd_context *cmd, int argc, char **argv)
++	if (!_lvmetad_use)
++		return;
++
++	log_debug_lvmetad("lvmetad send disabled 0");
++
++	reply = daemon_send_simple(_lvmetad, "set_global_info",
++				   "token = %s", "skip",
++				   "global_disable = " FMTd64, (int64_t)0,
++				   NULL);
++	if (reply.error)
++		log_error("Failed to send message to lvmetad %d", reply.error);
++
++	if (strcmp(daemon_reply_str(reply, "response", ""), "OK"))
++		log_error("Failed response from lvmetad.");
++
++	daemon_reply_destroy(reply);
++}
++
+ int lvmetad_is_disabled(struct cmd_context *cmd, const char **reason)
  {
-+	const char *reason = NULL;
- 	int maxret, ret;
+ 	daemon_reply reply;
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index 76e8fd2..9ae3f26 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -174,6 +174,7 @@ int lvmetad_vg_is_foreign(struct cmd_context *cmd, const char *vgname, const cha
  
- 	if (argc) {
-@@ -64,11 +100,16 @@ int vgscan(struct cmd_context *cmd, int argc, char **argv)
- 	if (!lvmetad_used() && arg_is_set(cmd, cache_long_ARG))
- 		log_verbose("Ignoring vgscan --cache command because lvmetad is not in use.");
+ int lvmetad_is_disabled(struct cmd_context *cmd, const char **reason);
+ void lvmetad_set_disabled(struct cmd_context *cmd, const char *reason);
++void lvmetad_clear_disabled(struct cmd_context *cmd);
  
--	if (lvmetad_used() && (arg_is_set(cmd, cache_long_ARG) || !lvmetad_token_matches(cmd))) {
-+	if (lvmetad_used() && (arg_is_set(cmd, cache_long_ARG) || !lvmetad_token_matches(cmd) || lvmetad_is_disabled(cmd, &reason))) {
- 		if (lvmetad_used() && !lvmetad_pvscan_all_devs(cmd, NULL, arg_is_set(cmd, cache_long_ARG))) {
- 			log_warn("WARNING: Not using lvmetad because cache update failed.");
- 			lvmetad_set_active(cmd, 0);
- 		}
-+
-+		if (lvmetad_used() && lvmetad_is_disabled(cmd, &reason)) {
-+			log_warn("WARNING: Not using lvmetad because %s.", reason);
-+			lvmetad_set_active(cmd, 0);
-+		}
- 	}
+ #  else		/* LVMETAD_SUPPORT */
  
- 	if (!lvmetad_used())
+@@ -207,6 +208,7 @@ void lvmetad_set_disabled(struct cmd_context *cmd, const char *reason);
+ #    define lvmetad_token_matches(cmd) (1)
+ #    define lvmetad_is_disabled(cmd, reason) (0)
+ #    define lvmetad_set_disabled(cmd, reason) do { } while (0)
++#    define lvmetad_clear_disabled(cmd) do { } while (0)
+ 
+ #  endif	/* LVMETAD_SUPPORT */
+ 
 
 
