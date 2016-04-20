@@ -1,131 +1,78 @@
-From: Mike Frysinger <vapier@gentoo.org>
-Date: Tue, 19 Apr 2016 23:54:02 -0400
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 20 Apr 2016 15:24:39 +0200
 Subject: [PATCH] convert major/minor/makedev handling
-Message-ID: <1461124442-31152-1-git-send-email-vapier@gentoo.org>
+In-Reply-To: <1461124442-31152-1-git-send-email-vapier@gentoo.org>
+References: <1461124442-31152-1-git-send-email-vapier@gentoo.org>
+Message-ID: <57178317.6040401@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Most of the files in here use MAJOR/MINOR/MKDEV macros, but a few
-missed it.  Update the defines in those files to match them.
----
- daemons/cmirrord/functions.c                          | 16 ++++++++++++----
- daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c | 12 ++++++++++--
- lib/filters/filter-sysfs.c                            |  6 ++++--
- 3 files changed, 26 insertions(+), 8 deletions(-)
+On 20.4.2016 05:54, Mike Frysinger wrote:
+> Most of the files in here use MAJOR/MINOR/MKDEV macros, but a few
+> missed it.  Update the defines in those files to match them.
 
-diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
-index e9d3c09..5b3cb38 100644
---- a/daemons/cmirrord/functions.c
-+++ b/daemons/cmirrord/functions.c
-@@ -20,6 +20,14 @@
- #include <time.h>
- #include <unistd.h>
- 
-+#ifdef __linux__
-+#  include "kdev_t.h"
-+#else
-+#  define MAJOR(x) major((x))
-+#  define MINOR(x) minor((x))
-+#  define MKDEV(x,y) makedev((x),(y))
-+#endif
-+
- #define BYTE_SHIFT 3
- 
- /*
-@@ -333,8 +341,8 @@ static int find_disk_path(char *major_minor_str, char *path_rtn, int *unlink_pat
- 			continue;
- 		}
- 		if (S_ISBLK(statbuf.st_mode) &&
--		    (major(statbuf.st_rdev) == major) &&
--		    (minor(statbuf.st_rdev) == minor)) {
-+		    (MAJOR(statbuf.st_rdev) == major) &&
-+		    (MINOR(statbuf.st_rdev) == minor)) {
- 			LOG_DBG("  %s: YES", dep->d_name);
- 			if (closedir(dp))
- 				LOG_DBG("Unable to closedir /dev/mapper %s",
-@@ -1451,7 +1459,7 @@ static int disk_status_info(struct log_c *lc, struct dm_ulog_request *rq)
- 	}
- 
- 	r = sprintf(data, "3 clustered-disk %d:%d %c",
--		    major(statbuf.st_rdev), minor(statbuf.st_rdev),
-+		    MAJOR(statbuf.st_rdev), MINOR(statbuf.st_rdev),
- 		    (lc->log_dev_failed) ? 'D' : 'A');
- 	if (r < 0)
- 		return r;
-@@ -1514,7 +1522,7 @@ static int disk_status_table(struct log_c *lc, struct dm_ulog_request *rq)
- 	}
- 
- 	r = sprintf(data, "clustered-disk %d:%d %u %s%s ",
--		    major(statbuf.st_rdev), minor(statbuf.st_rdev),
-+		    MAJOR(statbuf.st_rdev), MINOR(statbuf.st_rdev),
- 		    lc->region_size,
- 		    (lc->sync == DEFAULTSYNC) ? "" :
- 		    (lc->sync == NOSYNC) ? "nosync " : "sync ",
-diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-index 7b060ed..4098203 100644
---- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-+++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-@@ -20,6 +20,14 @@
- #include <stdarg.h>
- #include <pthread.h>
- 
-+#ifdef __linux__
-+#  include "kdev_t.h"
-+#else
-+#  define MAJOR(x) major((x))
-+#  define MINOR(x) minor((x))
-+#  define MKDEV(x,y) makedev((x),(y))
-+#endif
-+
- /* First warning when snapshot is 80% full. */
- #define WARNING_THRESH	(DM_PERCENT_1 * 80)
- /* Run a check every 5%. */
-@@ -148,8 +156,8 @@ static void _umount(const char *device, int major, int minor)
- 			continue; /* can't stat, skip this one */
- 
- 		if (S_ISBLK(st.st_mode) &&
--		    (int) major(st.st_rdev) == major &&
--		    (int) minor(st.st_rdev) == minor) {
-+		    (int) MAJOR(st.st_rdev) == major &&
-+		    (int) MINOR(st.st_rdev) == minor) {
- 			log_error("Unmounting invalid snapshot %s from %s.", device, words[1]);
- 			if (!_run(UMOUNT_COMMAND, "-fl", words[1], NULL))
- 				log_error("Failed to umount snapshot %s from %s: %s.",
-diff --git a/lib/filters/filter-sysfs.c b/lib/filters/filter-sysfs.c
-index 3115f86..5f76e8b 100644
---- a/lib/filters/filter-sysfs.c
-+++ b/lib/filters/filter-sysfs.c
-@@ -19,6 +19,8 @@
- 
- #include <dirent.h>
- 
-+#include "kdev_t.h"
-+
- static int _locate_sysfs_blocks(const char *sysfs_dir, char *path, size_t len,
- 				unsigned *sysfs_depth)
- {
-@@ -120,7 +122,7 @@ static struct dev_set *_dev_set_create(struct dm_pool *mem,
- 
- static unsigned _hash_dev(dev_t dev)
- {
--	return (major(dev) ^ minor(dev)) & (SET_BUCKETS - 1);
-+	return (MAJOR(dev) ^ MINOR(dev)) & (SET_BUCKETS - 1);
- }
- 
- /*
-@@ -171,7 +173,7 @@ static int _parse_dev(const char *file, FILE *fp, dev_t *result)
- 		return 0;
- 	}
- 
--	*result = makedev(major, minor);
-+	*result = MKDEV(major, minor);
- 	return 1;
- }
- 
--- 
-2.7.4
+Hi
+
+Unfortunately - it's more tricky then it may look at the first sight, so ATM 
+NACK  - as that needs some extra thinking.
+
+Basic issue is -   glibc   major()/minor() is different then kernel MAJOR/MINOR.
+
+lvm2/dm IOCTLS do work with kernel  MAJOR/MINOR, while glibc functions are 
+operating with glibc logic - which is unfortunately not bit match for kernel 
+logic.
+
+Don't ask me what would have happened if there would be a mismatch ;), but the 
+logic should be - whenever working with kernel parameters for ioctl - use 
+MAJOR/MINOR, when dealing with outputs form  i.e. 'stat()' glibc calls - use 
+major()/minor() lib functions.
+
+All of this has different types and signs...
+(glibc deploys unsigned long long)
+
+
+
+> ---
+>   daemons/cmirrord/functions.c                          | 16 ++++++++++++----
+>   daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c | 12 ++++++++++--
+>   lib/filters/filter-sysfs.c                            |  6 ++++--
+>   3 files changed, 26 insertions(+), 8 deletions(-)
+>
+> diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
+> index e9d3c09..5b3cb38 100644
+> --- a/daemons/cmirrord/functions.c
+> +++ b/daemons/cmirrord/functions.c
+> @@ -20,6 +20,14 @@
+>   #include <time.h>
+>   #include <unistd.h>
+>
+> +#ifdef __linux__
+> +#  include "kdev_t.h"
+> +#else
+> +#  define MAJOR(x) major((x))
+> +#  define MINOR(x) minor((x))
+> +#  define MKDEV(x,y) makedev((x),(y))
+> +#endif
+> +
+>   #define BYTE_SHIFT 3
+>
+>   /*
+> @@ -333,8 +341,8 @@ static int find_disk_path(char *major_minor_str, char *path_rtn, int *unlink_pat
+>   			continue;
+>   		}
+>   		if (S_ISBLK(statbuf.st_mode) &&
+> -		    (major(statbuf.st_rdev) == major) &&
+> -		    (minor(statbuf.st_rdev) == minor)) {
+> +		    (MAJOR(statbuf.st_rdev) == major) &&
+> +		    (MINOR(statbuf.st_rdev) == minor)) {
+
+i.e. dealing with  glibc output  ->  major()/minor()
+
+Regards
+
+Zdenek
 
 
