@@ -1,49 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 20 Apr 2016 22:35:54 +0000 (UTC)
-Subject: master - tests: minor update
-Message-ID: <20160420223554.18797608FD@fedorahosted.org>
+Date: Wed, 20 Apr 2016 22:35:56 +0000 (UTC)
+Subject: master - lvmetad: fix compilation without lvmetad#
+Message-ID: <20160420223556.2CB5C61027@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7ce486e881a96db24a1f46a99110b0eb7009b0de
-Commit:        7ce486e881a96db24a1f46a99110b0eb7009b0de
-Parent:        545b58542cec657af5125d16125732b424274982
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2763b928de9b79ed9e144950446e59c0cac36a03
+Commit:        2763b928de9b79ed9e144950446e59c0cac36a03
+Parent:        7ce486e881a96db24a1f46a99110b0eb7009b0de
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 20 23:21:03 2016 +0200
+AuthorDate:    Thu Apr 21 00:16:17 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Apr 21 00:34:01 2016 +0200
 
-tests: minor update
+lvmetad: fix compilation without lvmetad#
 
 ---
- test/shell/pvmove-background.sh |   10 +++++++---
- 1 files changed, 7 insertions(+), 3 deletions(-)
+ lib/cache/lvmetad.h |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/pvmove-background.sh b/test/shell/pvmove-background.sh
-index 000de1c..26970d4 100644
---- a/test/shell/pvmove-background.sh
-+++ b/test/shell/pvmove-background.sh
-@@ -21,11 +21,15 @@ for mode in "--atomic" ""
- do
- lvcreate -aey -l1 -n $lv1 $vg "$dev1"
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index 82371d9..699c9a4 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -154,8 +154,8 @@ void lvmetad_clear_disabled(struct cmd_context *cmd);
+ #  else		/* LVMETAD_SUPPORT */
  
--lvs -o +devices | grep "$dev1"
-+lvs -o +devices | tee out
-+grep "$dev1" out
-+
- LVM_TEST_TAG="kill_me_$PREFIX" pvmove $mode -i 1 -b "$dev1" "$dev2"
- sleep 5 # arbitrary...
--lvs -o +devices | not grep "pvmove"
--lvs -o +devices | grep "$dev2"
-+lvs -o +devices | tee out
-+not grep "pvmove" out
-+lvs -o +devices | tee out
-+grep "$dev2" out
- 
- lvremove -ff $vg
- done
+ #    define lvmetad_disconnect()	do { } while (0)
+-#    define lvmetad_connect(cmd)	do { } while (0)
+-#    define lvmetad_make_unused()	do { } while (0)
++#    define lvmetad_connect(cmd)	(0)
++#    define lvmetad_make_unused(cmd)	do { } while (0)
+ #    define lvmetad_used()		(0)
+ #    define lvmetad_set_socket(a)	do { } while (0)
+ #    define lvmetad_socket_present()	(0)
+@@ -175,7 +175,7 @@ void lvmetad_clear_disabled(struct cmd_context *cmd);
+ #    define lvmetad_pvscan_single(cmd, dev, handler, ignore_obsolete)	(0)
+ #    define lvmetad_pvscan_all_devs(cmd, handler, do_wait)	(0)
+ #    define lvmetad_pvscan_foreign_vgs(cmd, handler)	(0)
+-#    define lvmetad_vg_clear_outdated_pvs(vg)           (1)
++#    define lvmetad_vg_clear_outdated_pvs(vg)           do { } while (0)
+ #    define lvmetad_validate_global_cache(cmd, force)	do { } while (0)
+ #    define lvmetad_vg_is_foreign(cmd, vgname, vgid) (0)
+ #    define lvmetad_token_matches(cmd) (1)
 
 
