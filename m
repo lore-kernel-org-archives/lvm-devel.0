@@ -1,175 +1,87 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 19 Apr 2016 16:49:36 +0000 (UTC)
-Subject: master - test: lvmetad-warning
-Message-ID: <20160419164936.06017610F0@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 20 Apr 2016 22:35:43 +0000 (UTC)
+Subject: master - configure: detect for /var/lock dir
+Message-ID: <20160420223543.6451B61EA6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa904a844f7129c39e15ce5e3dc310854646fb87
-Commit:        fa904a844f7129c39e15ce5e3dc310854646fb87
-Parent:        6b1c0a4190082728de1be2f2d19c1ef46c7f2d5c
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Apr 18 16:49:22 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 19 11:45:24 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=600d7ca15f410c8abf41cee0195bc575148253b4
+Commit:        600d7ca15f410c8abf41cee0195bc575148253b4
+Parent:        5c104c5de9b019f5cf9b93ff2ee5468e1f0641d1
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Apr 20 23:15:00 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Apr 20 23:32:51 2016 +0200
 
-test: lvmetad-warning
+configure: detect for /var/lock dir
 
-The test was a weak attempt at verifying the special
-combination of lvchange/vgchange -aay --sysinit, but
-was only looking for lvmetad connection warnings.
-
-Update the warning checks, and check the LV activation
-state directly which is the main point.
-
-Rename the test to reflect its purpose of checking
-the -aay --sysinit combination.
+Detecs systems with /run/lock dir and use such path directly instead
+of /var/lock.
 ---
- test/shell/lvmetad-sysinit.sh |   91 +++++++++++++++++++++++++++++++++++++++++
- test/shell/lvmetad-warning.sh |   36 ----------------
- 2 files changed, 91 insertions(+), 36 deletions(-)
+ WHATS_NEW    |    1 +
+ configure    |    9 +++++++--
+ configure.in |    8 ++++++--
+ 3 files changed, 14 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/lvmetad-sysinit.sh b/test/shell/lvmetad-sysinit.sh
-new file mode 100644
-index 0000000..442f728
---- /dev/null
-+++ b/test/shell/lvmetad-sysinit.sh
-@@ -0,0 +1,91 @@
-+#!/bin/sh
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITHOUT_LVMETAD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux prepare_pvs 2
-+
-+#
-+# lvchange/vgchange -aay --sysinit should not activate LVs
-+# if lvmetad is configured and running.
-+#
-+
-+vgcreate $vg1 "$dev1" "$dev2"
-+lvcreate -an -l1 --zero n -n $lv1 $vg1
-+
-+#
-+# lvmetad is configured and running
-+#
-+
-+lvchange -ay $vg1 2>&1 | tee out
-+not grep "WARNING: Failed to connect" out
-+not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
-+check active $vg1 $lv1
-+lvchange -an $vg1
-+check inactive $vg1 $lv1
-+
-+lvchange -aay --sysinit $vg1 2>&1 | tee out
-+not grep "WARNING: Failed to connect" out
-+grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
-+check inactive $vg1 $lv1
-+
-+lvchange -ay --sysinit $vg1 2>&1 | tee out
-+not grep "WARNING: Failed to connect" out
-+not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
-+check active $vg1 $lv1
-+lvchange -an $vg1
-+check inactive $vg1 $lv1
-+
-+#
-+# lvmetad is configured and not running
-+#
-+
-+kill $(< LOCAL_LVMETAD)
-+
-+lvchange -ay $vg1 2>&1 | tee out
-+grep "WARNING: Failed to connect" out
-+not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
-+check active $vg1 $lv1
-+lvchange -an $vg1
-+check inactive $vg1 $lv1
-+
-+lvchange -aay --sysinit $vg1 2>&1 | tee out
-+grep "WARNING: Failed to connect" out
-+not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
-+check active $vg1 $lv1
-+lvchange -an $vg1
-+check inactive $vg1 $lv1
-+
-+#
-+# lvmetad is not configured and not running
-+#
-+
-+aux lvmconf 'global/use_lvmetad = 0'
-+
-+lvchange -ay $vg1 2>&1 | tee out
-+not grep "WARNING: Failed to connect" out
-+not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
-+check active $vg1 $lv1
-+lvchange -an $vg1
-+check inactive $vg1 $lv1
-+
-+lvchange -aay $vg1 --sysinit 2>&1 | tee out
-+not grep "WARNING: Failed to connect"
-+not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
-+check active $vg1 $lv1
-+lvchange -an $vg1
-+check inactive $vg1 $lv1
-+
-+vgremove -ff $vg1
-diff --git a/test/shell/lvmetad-warning.sh b/test/shell/lvmetad-warning.sh
-deleted file mode 100644
-index e631f9c..0000000
---- a/test/shell/lvmetad-warning.sh
-+++ /dev/null
-@@ -1,36 +0,0 @@
--#!/bin/sh
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--vgcreate $vg1 "$dev1" "$dev2"
--lvchange -ay $vg1 2>&1 | not grep "Failed to connect"
--
--kill $(< LOCAL_LVMETAD)
--lvchange -ay $vg1 2>&1 | grep "Failed to connect"
--lvchange -aay $vg1 --sysinit 2>&1 | tee sysinit.txt
--not grep "Failed to connect" sysinit.txt
--
--aux lvmconf 'global/use_lvmetad = 0'
--lvchange -ay $vg1 2>&1 | not grep "Failed to connect"
--lvchange -ay $vg1 --sysinit 2>&1 | not grep "Failed to connect"
--
--aux prepare_lvmetad
--lvchange -ay $vg1 2>&1 | not grep "Failed to connect"
--lvchange -ay $vg1 --sysinit 2>&1 | not grep "Failed to connect"
--
--vgremove -ff $vg1
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 4a435bb..10f688d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.151 -
+ =================================
++  Autodetect and use /run/lock dir when available instead of /var/lock.
+   lvchange --refresh for merging thin origin will retry to deactivate snapshot.
+   Recognize in-progress snapshot merge for thin volumes from dm table.
+   Avoid deciding to initiate a pending snapshot merge during resume.
+diff --git a/configure b/configure
+index eb55243..c2de9a8 100755
+--- a/configure
++++ b/configure
+@@ -1820,7 +1820,7 @@ Optional Packages:
+   --with-default-cache-subdir=SUBDIR
+                           default metadata cache subdir [cache]
+   --with-default-locking-dir=DIR
+-                          default locking directory [/var/lock/lvm]
++                          default locking directory [autodetect_lock_dir/lvm]
+   --with-default-data-alignment=NUM
+                           set the default data alignment in MiB [1]
+   --with-interface=IFACE  choose kernel interface (ioctl) [ioctl]
+@@ -15113,7 +15113,12 @@ _ACEOF
+ if test "${with_default_locking_dir+set}" = set; then :
+   withval=$with_default_locking_dir; DEFAULT_LOCK_DIR=$withval
+ else
+-  DEFAULT_LOCK_DIR="/var/lock/lvm"
++  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for default lock directory" >&5
++$as_echo_n "checking for default lock directory... " >&6; }
++	     DEFAULT_LOCK_DIR="$RUN_DIR/lock/lvm"
++	     test -d "$RUN_DIR/lock" || DEFAULT_LOCK_DIR="/var/lock/lvm"
++	     { $as_echo "$as_me:${as_lineno-$LINENO}: result: $DEFAULT_LOCK_DIR" >&5
++$as_echo "$DEFAULT_LOCK_DIR" >&6; }
+ fi
+ 
+ 
+diff --git a/configure.in b/configure.in
+index 33cd0fe..4161df7 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1933,8 +1933,12 @@ AC_DEFINE_UNQUOTED(DEFAULT_CACHE_SUBDIR, ["$DEFAULT_CACHE_SUBDIR"],
+ 
+ AC_ARG_WITH(default-locking-dir,
+ 	    AC_HELP_STRING([--with-default-locking-dir=DIR],
+-			   [default locking directory [/var/lock/lvm]]),
+-	    DEFAULT_LOCK_DIR=$withval, DEFAULT_LOCK_DIR="/var/lock/lvm")
++			   [default locking directory [autodetect_lock_dir/lvm]]),
++	    DEFAULT_LOCK_DIR=$withval,
++	    [AC_MSG_CHECKING(for default lock directory)
++	     DEFAULT_LOCK_DIR="$RUN_DIR/lock/lvm"
++	     test -d "$RUN_DIR/lock" || DEFAULT_LOCK_DIR="/var/lock/lvm"
++	     AC_MSG_RESULT($DEFAULT_LOCK_DIR)])
+ AC_DEFINE_UNQUOTED(DEFAULT_LOCK_DIR, ["$DEFAULT_LOCK_DIR"],
+ 		   [Name of default locking directory.])
+ 
 
 
