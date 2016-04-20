@@ -1,78 +1,45 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 20 Apr 2016 15:24:39 +0200
-Subject: [PATCH] convert major/minor/makedev handling
-In-Reply-To: <1461124442-31152-1-git-send-email-vapier@gentoo.org>
-References: <1461124442-31152-1-git-send-email-vapier@gentoo.org>
-Message-ID: <57178317.6040401@redhat.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 20 Apr 2016 14:07:32 +0000 (UTC)
+Subject: master - lvmetad: connect from forked polling process
+Message-ID: <20160420140732.798E261E55@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 20.4.2016 05:54, Mike Frysinger wrote:
-> Most of the files in here use MAJOR/MINOR/MKDEV macros, but a few
-> missed it.  Update the defines in those files to match them.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5c104c5de9b019f5cf9b93ff2ee5468e1f0641d1
+Commit:        5c104c5de9b019f5cf9b93ff2ee5468e1f0641d1
+Parent:        955326067348d29aa7b42159f43b119ce7d8c491
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Apr 19 17:07:22 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Apr 20 09:04:39 2016 -0500
 
-Hi
+lvmetad: connect from forked polling process
 
-Unfortunately - it's more tricky then it may look at the first sight, so ATM 
-NACK  - as that needs some extra thinking.
+With commit 5e9e43074a6c, lvmetad connections are
+now made explicitly, so a new connection must be
+created from a child created for polling.
+---
+ tools/polldaemon.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-Basic issue is -   glibc   major()/minor() is different then kernel MAJOR/MINOR.
-
-lvm2/dm IOCTLS do work with kernel  MAJOR/MINOR, while glibc functions are 
-operating with glibc logic - which is unfortunately not bit match for kernel 
-logic.
-
-Don't ask me what would have happened if there would be a mismatch ;), but the 
-logic should be - whenever working with kernel parameters for ioctl - use 
-MAJOR/MINOR, when dealing with outputs form  i.e. 'stat()' glibc calls - use 
-major()/minor() lib functions.
-
-All of this has different types and signs...
-(glibc deploys unsigned long long)
-
-
-
-> ---
->   daemons/cmirrord/functions.c                          | 16 ++++++++++++----
->   daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c | 12 ++++++++++--
->   lib/filters/filter-sysfs.c                            |  6 ++++--
->   3 files changed, 26 insertions(+), 8 deletions(-)
->
-> diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
-> index e9d3c09..5b3cb38 100644
-> --- a/daemons/cmirrord/functions.c
-> +++ b/daemons/cmirrord/functions.c
-> @@ -20,6 +20,14 @@
->   #include <time.h>
->   #include <unistd.h>
->
-> +#ifdef __linux__
-> +#  include "kdev_t.h"
-> +#else
-> +#  define MAJOR(x) major((x))
-> +#  define MINOR(x) minor((x))
-> +#  define MKDEV(x,y) makedev((x),(y))
-> +#endif
-> +
->   #define BYTE_SHIFT 3
->
->   /*
-> @@ -333,8 +341,8 @@ static int find_disk_path(char *major_minor_str, char *path_rtn, int *unlink_pat
->   			continue;
->   		}
->   		if (S_ISBLK(statbuf.st_mode) &&
-> -		    (major(statbuf.st_rdev) == major) &&
-> -		    (minor(statbuf.st_rdev) == minor)) {
-> +		    (MAJOR(statbuf.st_rdev) == major) &&
-> +		    (MINOR(statbuf.st_rdev) == minor)) {
-
-i.e. dealing with  glibc output  ->  major()/minor()
-
-Regards
-
-Zdenek
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 71d6b3e..c2211d7 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -596,6 +596,11 @@ static int _poll_daemon(struct cmd_context *cmd, struct poll_operation_id *id,
+ 			parms->progress_display = 0; /* Child */
+ 		/* FIXME Use wait_event (i.e. interval = 0) and */
+ 		/*       fork one daemon per copy? */
++
++		if (daemon_mode == 1) {
++			if (!lvmetad_connect(cmd))
++				log_warn("WARNING: lvm polling process %d cannot connect to lvmetad.", getpid());
++		}
+ 	}
+ 
+ 	/*
 
 
