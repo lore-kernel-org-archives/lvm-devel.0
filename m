@@ -1,61 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 21 Apr 2016 23:18:42 +0000 (UTC)
-Subject: master - coverity: return non-null string with internal error
-Message-ID: <20160421231842.D9EC3616D8@fedorahosted.org>
+Date: Thu, 21 Apr 2016 23:18:44 +0000 (UTC)
+Subject: master - coverity: avoid using signed types for single bits
+Message-ID: <20160421231844.ED305616D8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=412f09ca332c644e08421e289a3e8d54890971ba
-Commit:        412f09ca332c644e08421e289a3e8d54890971ba
-Parent:        447daa9179d94f86a972598e42eaab8b6913f3f7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0bf55186263de96c0f7377c631d27d9679d4df27
+Commit:        0bf55186263de96c0f7377c631d27d9679d4df27
+Parent:        412f09ca332c644e08421e289a3e8d54890971ba
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 21 20:53:22 2016 +0200
+AuthorDate:    Thu Apr 21 20:54:54 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 22 01:12:34 2016 +0200
 
-coverity: return non-null string with internal error
+coverity: avoid using signed types for single bits
 
-While we return internal error we should not let tool crash on NULL
-access, so return valid string for such case.
 ---
- lib/metadata/cache_manip.c |   18 +++++++++---------
- 1 files changed, 9 insertions(+), 9 deletions(-)
+ lib/metadata/lv.h |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 3962247..1c51f66 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -41,19 +41,19 @@ int cache_mode_is_set(const struct lv_segment *seg)
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index da81419..08fc090 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -94,8 +94,8 @@ struct historical_logical_volume {
+ 	uint64_t timestamp_removed;
+ 	struct generic_logical_volume *indirect_origin;
+ 	struct dm_list indirect_glvs; /* list of struct generic_logical_volume */
+-	int checked:1; /* set if this historical LV has been checked for validity */
+-	int valid:1;   /* historical LV is valid if there's at least one live LV among ancestors */
++	unsigned checked:1; /* set if this historical LV has been checked for validity */
++	unsigned valid:1;   /* historical LV is valid if there's at least one live LV among ancestors */
+ };
  
- const char *get_cache_mode_name(const struct lv_segment *seg)
- {
--	if (seg->feature_flags & DM_CACHE_FEATURE_WRITEBACK)
--		return "writeback";
--
--	if (seg->feature_flags & DM_CACHE_FEATURE_WRITETHROUGH)
--		return "writethrough";
--
- 	if (seg->feature_flags & DM_CACHE_FEATURE_PASSTHROUGH)
- 		return "passthrough";
- 
--	log_error(INTERNAL_ERROR "LV %s has uknown feature flags %" PRIu64 ".",
--		  display_lvname(seg->lv), seg->feature_flags);
-+	if (seg->feature_flags & DM_CACHE_FEATURE_WRITEBACK)
-+		return "writeback";
-+
-+	if (!seg->feature_flags & DM_CACHE_FEATURE_WRITETHROUGH) {
-+		log_error(INTERNAL_ERROR "LV %s has uknown feature flags %" PRIu64 ", "
-+			  "returning writethrough instead.",
-+			  display_lvname(seg->lv), seg->feature_flags);
-+	}
- 
--	return NULL;
-+	return "writethrough";
- }
- 
- int cache_set_mode(struct lv_segment *seg, const char *str)
+ struct generic_logical_volume {
 
 
