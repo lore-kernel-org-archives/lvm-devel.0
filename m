@@ -1,43 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 22 Apr 2016 12:16:16 +0000 (UTC)
-Subject: master - coverity: is_used_pv needs valid pv pointer
-Message-ID: <20160422121616.BE9A361BBE@fedorahosted.org>
+Date: Fri, 22 Apr 2016 12:16:18 +0000 (UTC)
+Subject: master - coverity: keep expression using 64bit
+Message-ID: <20160422121618.D082160DFC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d564d9f39c73bdbb32413256586991993ad869ef
-Commit:        d564d9f39c73bdbb32413256586991993ad869ef
-Parent:        2dc6b9785658d7bf0cf97170e8e1467b522bded6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d12ba022c8082de2d804010992c6ee1076b9f571
+Commit:        d12ba022c8082de2d804010992c6ee1076b9f571
+Parent:        d564d9f39c73bdbb32413256586991993ad869ef
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 21 20:23:13 2016 +0200
+AuthorDate:    Fri Apr 22 14:05:03 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 22 14:15:36 2016 +0200
 
-coverity: is_used_pv needs valid pv pointer
+coverity: keep expression using 64bit
 
+Use 64bit input to remain with whole evaluation in 64bit.
 ---
- lib/report/report.c |    5 ++---
- 1 files changed, 2 insertions(+), 3 deletions(-)
+ daemons/lvmlockd/lvmlockd-sanlock.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 08a6097..abf6a9e 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -3827,10 +3827,9 @@ int report_object(void *handle, int selection_only, const struct volume_group *v
- 			_dummy_fid.fmt = pv->fmt;
- 	}
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index c6534d8..b47c7f0 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -206,7 +206,7 @@ int lm_data_size_sanlock(void)
+ #define VG_LOCK_BEGIN UINT64_C(66)
+ #define LV_LOCK_BEGIN UINT64_C(67)
  
--	if (vg && is_orphan_vg(vg->name) && is_used_pv(pv)) {
-+	if (vg && is_orphan_vg(vg->name) && pv && is_used_pv(pv)) {
- 		obj.vg = &_unknown_vg;
--		if (pv)
--			_dummy_fid.fmt = pv->fmt;
-+		_dummy_fid.fmt = pv->fmt;
- 	}
+-static unsigned int daemon_test_lv_count;
++static uint64_t daemon_test_lv_count;
  
- 	return sh ? dm_report_object_is_selected(sh->selection_rh, &obj, 0, &sh->selected)
+ static int lock_lv_name_from_args(char *vg_args, char *lock_lv_name)
+ {
 
 
