@@ -1,62 +1,44 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Fri, 22 Apr 2016 09:42:41 +0000 (UTC)
-Subject: master - libdm-stats: check for empty region and area lists
-Message-ID: <20160422094241.2D91361E7A@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 22 Apr 2016 10:54:38 +0000 (UTC)
+Subject: master - cache: fix previous change and correct ()
+Message-ID: <20160422105438.ADD2E61B98@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=17ad8848361aa16ff227038068c3d0771771f095
-Commit:        17ad8848361aa16ff227038068c3d0771771f095
-Parent:        69c2f560053c0a5217592d571aa9ea03a6dbc267
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Fri Apr 22 10:35:07 2016 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Fri Apr 22 10:35:07 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4ddf5a11cf333fdcf45eec907e12e10c41a9d578
+Commit:        4ddf5a11cf333fdcf45eec907e12e10c41a9d578
+Parent:        17ad8848361aa16ff227038068c3d0771771f095
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Apr 22 12:31:02 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Apr 22 12:52:53 2016 +0200
 
-libdm-stats: check for empty region and area lists
+cache: fix previous change and correct ()
 
-Check that @stats_list and @stats_print returned data in the
-_stats_parse_list() and _stats_parse_region() functions before
-attempting to operate on region and area values.
-
-This avoids a coverity warning since fgets() could potentially
-return no data from the memory buffer returned by the ioctl.
-
-In both cases the ioctl would return an error, preventing these
-functions from running, however it is cleaner to test for the
-condition explicitly and fail in those cases.
+412f09ca332c644e08421e289a3e8d54890971ba missed parentheses.
 ---
- libdm/libdm-stats.c |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ lib/metadata/cache_manip.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 1dce3eb..f1c0560 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -680,6 +680,10 @@ static int _stats_parse_list(struct dm_stats *dms, const char *resp)
- 		nr_regions++;
- 	}
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 1c51f66..46cb6a8 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -47,11 +47,10 @@ const char *get_cache_mode_name(const struct lv_segment *seg)
+ 	if (seg->feature_flags & DM_CACHE_FEATURE_WRITEBACK)
+ 		return "writeback";
  
-+	if (!nr_regions)
-+		/* no region data read from @stats_list */
-+		goto bad;
-+
- 	dms->nr_regions = nr_regions;
- 	dms->max_region = max_region - 1;
- 	dms->regions = dm_pool_end_object(mem);
-@@ -936,6 +940,10 @@ static int _stats_parse_region(struct dm_stats *dms, const char *resp,
- 		}
- 	}
+-	if (!seg->feature_flags & DM_CACHE_FEATURE_WRITETHROUGH) {
++	if (!(seg->feature_flags & DM_CACHE_FEATURE_WRITETHROUGH))
+ 		log_error(INTERNAL_ERROR "LV %s has uknown feature flags %" PRIu64 ", "
+ 			  "returning writethrough instead.",
+ 			  display_lvname(seg->lv), seg->feature_flags);
+-	}
  
-+	if (region->start == UINT64_MAX)
-+		/* no area data read from @stats_print */
-+		goto bad;
-+
- 	region->len = (start + len) - region->start;
- 	region->timescale = timescale;
- 	region->counters = dm_pool_end_object(mem);
+ 	return "writethrough";
+ }
 
 
