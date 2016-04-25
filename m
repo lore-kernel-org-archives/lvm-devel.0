@@ -1,62 +1,62 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 25 Apr 2016 09:48:54 +0000 (UTC)
-Subject: master - cleanup: do not mention segment in warning message if device not found for a PV when checking used/assumed devs for an LV
-Message-ID: <20160425094854.E35B261072@fedorahosted.org>
+Date: Mon, 25 Apr 2016 12:56:34 +0000 (UTC)
+Subject: master - udev: rules: remove mpath from 10-dm.rules, superseded by 11-dm-mpath.rules (mpath>=0.6.0)
+Message-ID: <20160425125634.B0B8D61BF4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=379874a2d0ff51cdbfbc1cc723b41e06bcdfd277
-Commit:        379874a2d0ff51cdbfbc1cc723b41e06bcdfd277
-Parent:        9d976c0002f06e97c50bca7dad35d647848ed60f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2bb33aaf556134b0217b822755383245ac678527
+Commit:        2bb33aaf556134b0217b822755383245ac678527
+Parent:        379874a2d0ff51cdbfbc1cc723b41e06bcdfd277
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Apr 25 11:41:36 2016 +0200
+AuthorDate:    Mon Apr 25 14:48:46 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Apr 25 11:44:24 2016 +0200
+CommitterDate: Mon Apr 25 14:55:54 2016 +0200
 
-cleanup: do not mention segment in warning message if device not found for a PV when checking used/assumed devs for an LV
+udev: rules: remove mpath from 10-dm.rules, superseded by 11-dm-mpath.rules (mpath>=0.6.0)
 
-[0] fedora/~ # pvs --config 'devices/filter=["a|/dev/sda|", "r|.*|"]'
-  WARNING: Device for PV Qcxpcy-XgtP-UD3s-PmG0-qLyE-Z0ho-DYsxoz not found or rejected by a filter.
-  WARNING: Device for PV Qcxpcy-XgtP-UD3s-PmG0-qLyE-Z0ho-DYsxoz not found or rejected by a filter.
-  WARNING: Couldn't find device for segment belonging to fedora/root while checking used and assumed devices.
-  WARNING: Couldn't find device for segment belonging to fedora/swap while checking used and assumed devices.
-  PV         VG     Fmt  Attr PSize   PFree
-  /dev/sda          lvm2 ---  128.00m 128.00m
-  [unknown]  fedora lvm2 a-m   19.49g      0
+Multipath 0.6.0 contains new 11-dm-mpath.rules which supersede the rule
+that was in 10-dm.rules. The 11-dm-mpath.rules are also more complete,
+fixing several other issues. Using the new 11-dm-mpath.rules from
+multipath-tools >= 0.6.0 is strongly recommended for proper
+DM multipath functionality!
 
-Probably not worth mentioning "segments" here, just state that devices
-for an LV can't be all found during the check - it's less mysterious for
-user then:
-
-[0] fedora/~ # pvs --config 'devices/filter=["a|/dev/sda|", "r|.*|"]'
-  WARNING: Device for PV Qcxpcy-XgtP-UD3s-PmG0-qLyE-Z0ho-DYsxoz not found or rejected by a filter.
-  WARNING: Device for PV Qcxpcy-XgtP-UD3s-PmG0-qLyE-Z0ho-DYsxoz not found or rejected by a filter.
-  WARNING: Couldn't find all devices for LV fedora/root while checking used and assumed devices.
-  WARNING: Couldn't find all devices for LV fedora/swap while checking used and assumed devices.
-  PV         VG     Fmt  Attr PSize   PFree
-  /dev/sda          lvm2 ---  128.00m 128.00m
-  [unknown]  fedora lvm2 a-m   19.49g      0
+See also:
+  http://christophe.varoqui.free.fr
+  http://git.opensvc.com/gitweb.cgi?p=multipath-tools/.git;a=blob;f=multipath/11-dm-mpath.rules
 ---
- lib/metadata/metadata.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW           |    1 +
+ udev/10-dm.rules.in |    4 ----
+ 2 files changed, 1 insertions(+), 4 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 1ceed68..6d101e0 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4631,8 +4631,8 @@ static int _check_devs_used_correspond_with_lv(struct dm_pool *mem, struct dm_li
- 			if (seg_type(seg, s) == AREA_PV) {
- 				if (!(dev = seg_dev(seg, s))) {
- 					if (!warned_about_no_dev) {
--						log_warn("WARNING: Couldn't find device for segment belonging "
--							 "to %s while checking used and assumed devices.",
-+						log_warn("WARNING: Couldn't find all devices for LV %s "
-+							 "while checking used and assumed devices.",
- 							  display_lvname(lv));
- 						warned_about_no_dev = 1;
- 					}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 961bae7..1aa335e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.152 - 
+ ==================================
++  Remove mpath from 10-dm.rules, superseded by 11-dm-mpath.rules (mpath>=0.6.0).
+ 
+ Version 2.02.151 - 23rd April 2016
+ ==================================
+diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
+index 2755530..8d7a8ca 100644
+--- a/udev/10-dm.rules.in
++++ b/udev/10-dm.rules.in
+@@ -120,10 +120,6 @@ ENV{DM_UDEV_RULES_VSN}="2"
+ 
+ ENV{DM_UDEV_DISABLE_DM_RULES_FLAG}!="1", ENV{DM_NAME}=="?*", SYMLINK+="(DM_DIR)/$env{DM_NAME}"
+ 
+-# We have to ignore further rule application for inappropriate events
+-# and devices. But still send the notification if cookie exists.
+-ENV{DM_UUID}=="mpath-?*", ENV{DM_ACTION}=="PATH_FAILED", GOTO="dm_disable"
+-
+ # Avoid processing and scanning a DM device in the other (foreign)
+ # rules if it is in suspended state. However, we still keep 'disk'
+ # and 'DM subsystem' related rules enabled in this case.
 
 
