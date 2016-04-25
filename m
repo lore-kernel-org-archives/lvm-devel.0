@@ -1,126 +1,118 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 22 Apr 2016 23:47:41 +0000 (UTC)
-Subject: v2_02_151 annotated tag has been created
-Message-ID: <20160422234741.834F860DE4@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 25 Apr 2016 09:27:45 +0000 (UTC)
+Subject: master - metadata: log warning instead of error if device not found while checking used and assumed devs
+Message-ID: <20160425092745.BB6D260DA3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba03e128dc63fcd94f73bb786542c2afdda65c42
-Commit:        ba03e128dc63fcd94f73bb786542c2afdda65c42
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2016-04-22 23:42 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2016-04-22 23:42 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9d976c0002f06e97c50bca7dad35d647848ed60f
+Commit:        9d976c0002f06e97c50bca7dad35d647848ed60f
+Parent:        eb8edccd58a4ac2b313800f4d1839df336e3cab9
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Apr 25 11:15:44 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Apr 25 11:27:28 2016 +0200
 
-annotated tag: v2_02_151 has been created
-	    at ba03e128dc63fcd94f73bb786542c2afdda65c42 (tag)
-       tagging 546b2006dd4bc888a08631d6cb66245b0374eab2 (commit)
-      replaces v2_02_150
+metadata: log warning instead of error if device not found while checking used and assumed devs
 
-Release 2.02.151
+When checking assumed PVs against real devices used for LVs and if
+there's no device assigned for an assumed PV (e.g. due to filters),
+do log_warn instead of log_error and continue checking LV segments
+and associated assumed PVs further, just like we do log_warn elsewhere
+in this situation.
 
-Another bug fix release.
+This way user will see the warning for each LV which couldn't be
+checked completely against real PVs used. Before, we logged only
+the very first occurence of missing device for an LV in a VG and we
+returned from the function doing this check for all the LVs in VG
+immediately which may be a bit misleading because it didn't tell
+user about all the other LVs and whether they could be checked
+or not.
 
-77 files changed, 1867 insertions(+), 683 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
+For example, we have this setup:
 
-iEYEABECAAYFAlcatvMACgkQIoGRwVZ+LBcvPwCdGzBIjpI94AufS4l/13um/33+
-/iQAnjBghsd72CZBumkBNgLK+sO4iq0I
-=ZlBY
------END PGP SIGNATURE-----
+[0] fedora/~ # pvs
+  PV         VG     Fmt  Attr PSize   PFree
+  /dev/sda          lvm2 ---  128.00m 128.00m
+  /dev/vda2  fedora lvm2 a--   19.49g      0
 
-Alasdair G Kergon (9):
-      post-release
-      toollib: Fix misleading message when forking.
-      snapshot: Don't deactivate fictional snapshot LV.
-      activation: Add LV name to a debug message.
-      activation: Log when pending snap merge postponed.
-      activate: Improve snapshot merge initiation
-      display: Avoid internal snapshot LV names in msgs.
-      activate: Hide errors when snapshot merge delayed.
-      pre-release
+[0] fedora/~ # lvs -o+devices
+  LV   VG     Attr       LSize   Devices
+  root fedora -wi-ao----  19.00g /dev/vda2(0)
+  swap fedora -wi-ao---- 500.00m /dev/vda2(4864)
 
-Bryn M. Reeves (1):
-      libdm-stats: check for empty region and area lists
+Before this patch (only the very first LV in a VG is logged to have a
+problem while checking used and assumed devices):
 
-David Teigland (29):
-      rename function read_vgname to read_vgsummary
-      lvmetad: preemptively check and rescan in commands
-      lvmetad: add FIXME to comment
-      tests: lvmetad-lvm1 fix
-      WHATS_NEW for lvmetad scanning changes
-      tests: fix check_lvmlockd_test
-      lvmlockd: skip unnecessary lvmetad cache update
-      metadata: don't repair shared VGs
-      toollib: remove unneeded call in process_each_pv
-      lvmetad: add disabled state
-      lvmetad: set disabled flag in lvmetad if lvm1 metadata is found
-      lvmetad: use the disabled flag in commands
-      lvmetad: clear the disabled flag in lvmetad
-      lvmetad: disable if command uses lvm1
-      test: update lvm1 test
-      test: update lvmetad-disabled
-      test: lvmetad-no-cluster
-      test: lvmetad-override
-      test: lvmetad-warning
-      lvmetad: use defines for disabled reason strings
-      lvmetad: rework command connection setup and checking
-      test: lvmetad-override
-      lvmetad: connect from forked polling process
-      lvmetad: check for socket in connect
-      lvmetad: check pid for warning case
-      lvmetad: fix compile without lvmetad
-      lvmetad: warn about making changes while not using lvmetad
-      poll daemon: only call lvmetad_connect when needed
-      WHATS_NEW: disable lvmetad for lvm1
+[0] fedora/~ # pvs --config 'devices/filter=["a|/dev/sda|", "r|.*|"]'
+  WARNING: Device for PV Qcxpcy-XgtP-UD3s-PmG0-qLyE-Z0ho-DYsxoz not found or rejected by a filter.
+  WARNING: Device for PV Qcxpcy-XgtP-UD3s-PmG0-qLyE-Z0ho-DYsxoz not found or rejected by a filter.
+  Couldn't find device for segment belonging to fedora/root while checking used and assumed devices.
+  PV         VG     Fmt  Attr PSize   PFree
+  /dev/sda          lvm2 ---  128.00m 128.00m
+  [unknown]  fedora lvm2 a-m   19.49g      0
 
-Peter Rajnoha (1):
-      refactor: factor out vg/lv/pv handling part from report_for_selection fn
+With this patch applied (all LVs where we hit problem while checking
+used and assumed devices are logged and it's warning, not error):
 
-Zdenek Kabelac (39):
-      devcache: index devices also without udev
-      devcache: do not insert devices without device node
-      cleanup: avoid declaring var in the middle of code
-      cleanup: gcc warn about comparing int with uint
-      debug: unify some tracing messages
-      thin: check runtime table line for merging
-      thin: improve recognizing of merge in progress
-      debug: fix error message
-      debug: update message in libdm
-      debug: use display_lvname
-      snapshot: improve merge
-      lvchange: improve refresh for merging thin volume
-      tests: use bigger raid size
-      tests: use should for failing test
-      configure: detect for /var/lock dir
-      configure: respect --disable-lvmetad/lvmpolld
-      debug: move misplaced log_debug
-      tests: document make parametr for tracing aux scripts
-      tests: still show systems stas when command has not produced debug.log file
-      tests: minor update
-      lvmetad: fix compilation without lvmetad#
-      tests: GLIBC decided to obsolete readdir_r
-      cleanup: simplify code
-      cleanup: use kdev_t header in lvm tree
-      coverity: fix memory access
-      coverity: fix error paths
-      coverity: drop unused header file
-      coverity: use wider type for whole expression
-      coverity: return non-null string with internal error
-      coverity: avoid using signed types for single bits
-      coverity: drop abadoing object
-      tests: keep using [] for hidden volumes
-      cache: fix previous change and correct ()
-      tests: make test independent on usage [] for hidden LVs
-      coverity: is_used_pv needs valid pv pointer
-      coverity: keep expression using 64bit
-      coverity: ignore some dm_strncpy results
-      coverity: check for sys error in clock call
-      tests: drop cluster testing with pvmove
+[0] fedora/~ # pvs --config 'devices/filter=["a|/dev/sda|", "r|.*|"]'
+  WARNING: Device for PV Qcxpcy-XgtP-UD3s-PmG0-qLyE-Z0ho-DYsxoz not found or rejected by a filter.
+  WARNING: Device for PV Qcxpcy-XgtP-UD3s-PmG0-qLyE-Z0ho-DYsxoz not found or rejected by a filter.
+  WARNING: Couldn't find device for segment belonging to fedora/root while checking used and assumed devices.
+  WARNING: Couldn't find device for segment belonging to fedora/swap while checking used and assumed devices.
+  PV         VG     Fmt  Attr PSize   PFree
+  /dev/sda          lvm2 ---  128.00m 128.00m
+  [unknown]  fedora lvm2 a-m   19.49g      0
+---
+ lib/metadata/metadata.c |   17 ++++++++++-------
+ 1 files changed, 10 insertions(+), 7 deletions(-)
+
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index f9ce080..1ceed68 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4597,6 +4597,7 @@ static int _check_devs_used_correspond_with_lv(struct dm_pool *mem, struct dm_li
+ 	struct device *dev;
+ 	struct lv_segment *seg;
+ 	uint32_t s;
++	int warned_about_no_dev = 0;
+ 	char *used_devnames = NULL, *assumed_devnames = NULL;
+ 
+ 	if (!(list = dev_cache_get_dev_list_for_lvid(lv->lvid.s + ID_LEN)))
+@@ -4629,10 +4630,13 @@ static int _check_devs_used_correspond_with_lv(struct dm_pool *mem, struct dm_li
+ 		for (s = 0; s < seg->area_count; s++) {
+ 			if (seg_type(seg, s) == AREA_PV) {
+ 				if (!(dev = seg_dev(seg, s))) {
+-					log_error("Couldn't find device for segment belonging to "
+-						  "%s while checking used and assumed devices.",
+-						  display_lvname(lv));
+-					return 0;
++					if (!warned_about_no_dev) {
++						log_warn("WARNING: Couldn't find device for segment belonging "
++							 "to %s while checking used and assumed devices.",
++							  display_lvname(lv));
++						warned_about_no_dev = 1;
++					}
++					continue;
+ 				}
+ 				if (!(dev->flags & DEV_USED_FOR_LV)) {
+ 					if (!found_inconsistent) {
+@@ -4653,11 +4657,10 @@ static int _check_devs_used_correspond_with_lv(struct dm_pool *mem, struct dm_li
+ 		if (!dm_pool_grow_object(mem, "\0", 1))
+ 			return_0;
+ 		assumed_devnames = dm_pool_end_object(mem);
++		log_warn("WARNING: Device mismatch detected for %s which is accessing %s instead of %s.",
++			 display_lvname(lv), used_devnames, assumed_devnames);
+ 	}
+ 
+-	log_warn("WARNING: Device mismatch detected for %s which is accessing %s instead of %s.",
+-		 display_lvname(lv), used_devnames, assumed_devnames);
+-
+ 	return 1;
+ }
+ 
 
 
