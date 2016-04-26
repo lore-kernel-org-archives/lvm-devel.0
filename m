@@ -1,43 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 26 Apr 2016 21:31:42 +0000 (UTC)
-Subject: master - man: lvcreate doc passthrough
-Message-ID: <20160426213142.BA5616096D@fedorahosted.org>
+Date: Tue, 26 Apr 2016 22:01:52 +0000 (UTC)
+Subject: master - cleanup: smaller timeout
+Message-ID: <20160426220152.2A3A760971@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=07d92322c13e942b8a47b4370a82b70d33a6f0c8
-Commit:        07d92322c13e942b8a47b4370a82b70d33a6f0c8
-Parent:        d90d99b23d94dea41b65166f8bb19cb2883e527c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c81005dcc46bc55d0d4e5094f6ef99e36cecd486
+Commit:        c81005dcc46bc55d0d4e5094f6ef99e36cecd486
+Parent:        07d92322c13e942b8a47b4370a82b70d33a6f0c8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 25 13:38:24 2016 +0200
+AuthorDate:    Tue Apr 26 23:59:20 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 26 23:29:58 2016 +0200
+CommitterDate: Tue Apr 26 23:59:20 2016 +0200
 
-man: lvcreate doc passthrough
+cleanup: smaller timeout
 
-Add few more words about passthough mode.
+1s -> 0.5s
+Also indent fix.
 ---
- man/lvcreate.8.in |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ lib/metadata/cache_manip.c |   11 ++++++-----
+ 1 files changed, 6 insertions(+), 5 deletions(-)
 
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index f6bb14f..fd8b3a7 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -219,7 +219,10 @@ If \fBwritethough\fP is specified, a write is considered complete only
- when it has been stored in the cache pool LV and on the origin LV.
- While \fBwritethrough\fP may be slower for writes, it is more
- resilient if something should happen to a device associated with the
--cache pool LV.
-+cache pool LV. With \fBpassthrough\fP mode, all reads are served
-+from origin LV (all reads miss the cache) and all writes are
-+forwarded to the origin LV; additionally, write hits cause cache
-+block invalidates. See \fBlvmcache(7)\fP for more details.
- .
- .HP
- .BR \-\-cachepolicy
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index bf3d405..e998670 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -314,10 +314,11 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
+ 			break;
+ 
+ 		if (cleaner_policy) {
+-		    log_print_unless_silent(FMTu64 " blocks must still be flushed.",
+-					    dirty_blocks);
+-		    sleep(1);
+-                    continue;
++			log_print_unless_silent(FMTu64 " blocks must still be flushed.",
++						dirty_blocks);
++			/* TODO: Use centralized place */
++			usleep(500000);
++			continue;
+ 		}
+ 
+ 		/* Switch to cleaner policy to flush the cache */
+@@ -326,7 +327,7 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
+ 		cache_seg->cleaner_policy = 1;
+ 		/* Reaload kernel with "cleaner" policy */
+ 		if (!lv_update_and_reload_origin(cache_lv))
+-		    return_0;
++			return_0;
+ 	}
+ 
+ 	*is_clean = 1;
 
 
