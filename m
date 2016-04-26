@@ -1,166 +1,80 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 26 Apr 2016 21:31:30 +0000 (UTC)
-Subject: master - cache: check for clean cache as separete function
-Message-ID: <20160426213130.3278260509@fedorahosted.org>
+Date: Tue, 26 Apr 2016 21:31:32 +0000 (UTC)
+Subject: master - thin: zero and transaction_id also with thin volumes
+Message-ID: <20160426213132.45A7660509@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8b5967e1e3313e8f9caa8065e170dd35ada8e57a
-Commit:        8b5967e1e3313e8f9caa8065e170dd35ada8e57a
-Parent:        588455d03ea40ffa37f466023691b0ec2bdf5e82
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=84a5b19539483e5f06b4a1405bb76e46ce9226b2
+Commit:        84a5b19539483e5f06b4a1405bb76e46ce9226b2
+Parent:        8b5967e1e3313e8f9caa8065e170dd35ada8e57a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 26 21:45:48 2016 +0200
+AuthorDate:    Sat Apr 23 21:08:46 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 26 23:24:17 2016 +0200
+CommitterDate: Tue Apr 26 23:24:51 2016 +0200
 
-cache: check for clean cache as separete function
+thin: zero and transaction_id also with thin volumes
 
+Show trasaction_id when thin volume was created.
+Also show zeroing state of thin-pool with thin volume (so user
+doesn't need to lookup thin-pool).
 ---
- lib/metadata/cache_manip.c       |   98 ++++++++++++++++++++++----------------
- lib/metadata/metadata-exported.h |    1 +
- 2 files changed, 58 insertions(+), 41 deletions(-)
+ WHATS_NEW            |    1 +
+ lib/report/columns.h |    4 ++--
+ lib/report/report.c  |    5 ++++-
+ 3 files changed, 7 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 46cb6a8..bf3d405 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -279,6 +279,61 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool_lv,
- }
- 
- /*
-+ * Checks cache status and loops until there are not dirty blocks
-+ * Set 1 to *is_clean when there are no dirty blocks on return.
-+ */
-+int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
-+{
-+	struct lv_segment *cache_seg = first_seg(cache_lv);
-+	struct lv_status_cache *status;
-+	int cleaner_policy;
-+	uint64_t dirty_blocks;
-+
-+	*is_clean = 0;
-+
-+	//FIXME: use polling to do this...
-+	for (;;) {
-+		if (!lv_cache_status(cache_lv, &status))
-+			return_0;
-+		if (status->cache->fail) {
-+			dm_pool_destroy(status->mem);
-+			log_warn("WARNING: Skippping flush for failed cache.");
-+			return 1;
-+		}
-+
-+		cleaner_policy = !strcmp(status->cache->policy_name, "cleaner");
-+		dirty_blocks = status->cache->dirty_blocks;
-+
-+		/* No clear policy and writeback mode means dirty */
-+		if (!cleaner_policy &&
-+		    (status->cache->feature_flags & DM_CACHE_FEATURE_WRITEBACK))
-+			dirty_blocks++;
-+		dm_pool_destroy(status->mem);
-+
-+		if (!dirty_blocks)
-+			break;
-+
-+		if (cleaner_policy) {
-+		    log_print_unless_silent(FMTu64 " blocks must still be flushed.",
-+					    dirty_blocks);
-+		    sleep(1);
-+                    continue;
-+		}
-+
-+		/* Switch to cleaner policy to flush the cache */
-+		log_print_unless_silent("Flushing cache for %s.",
-+					display_lvname(cache_lv));
-+		cache_seg->cleaner_policy = 1;
-+		/* Reaload kernel with "cleaner" policy */
-+		if (!lv_update_and_reload_origin(cache_lv))
-+		    return_0;
-+	}
-+
-+	*is_clean = 1;
-+
-+	return 1;
-+}
-+/*
-  * lv_cache_remove
-  * @cache_lv
-  *
-@@ -291,12 +346,10 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool_lv,
-  */
- int lv_cache_remove(struct logical_volume *cache_lv)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 4b33913..b6d9fd2 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.152 - 
+ ==================================
++  Show creation transaction_id and zeroing state of pool with thin volume.
+   Stop checking for dm_cache_mq policy with cache target 1.9 (alias to smq).
+   Check first /sys/module/dm_* dir existance before using modprobe.
+   Remove mpath from 10-dm.rules, superseded by 11-dm-mpath.rules (mpath>=0.6.0).
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 7f5e11d..b31b3f1 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -191,8 +191,8 @@ FIELD(SEGS, seg, SIZ, "Chunk", list, 0, chunksize, chunk_size, "For snapshots, t
+ FIELD(SEGS, seg, NUM, "#Thins", list, 0, thincount, thin_count, "For thin pools, the number of thin volumes in this pool.", 0)
+ FIELD(SEGS, seg, STR, "Discards", list, 0, discards, discards, "For thin pools, how discards are handled.", 0)
+ FIELD(SEGS, seg, STR, "CacheMode", list, 0, cachemode, cache_mode, "For cache pools, how writes are cached.", 0)
+-FIELD(SEGS, seg, BIN, "Zero", list, 0, thinzero, zero, "For thin pools, if zeroing is enabled.", 0)
+-FIELD(SEGS, seg, NUM, "TransId", list, 0, transactionid, transaction_id, "For thin pools, the transaction id.", 0)
++FIELD(SEGS, seg, BIN, "Zero", list, 0, thinzero, zero, "For thin pools and volumes, if zeroing is enabled.", 0)
++FIELD(SEGS, seg, NUM, "TransId", list, 0, transactionid, transaction_id, "For thin pools, the transaction id and creation transaction id for thins.", 0)
+ FIELD(SEGS, seg, NUM, "ThId", list, 0, thinid, thin_id, "For thin volume, the thin device id.", 0)
+ FIELD(SEGS, seg, SIZ, "Start", list, 0, segstart, seg_start, "Offset within the LV to the start of the segment in current units.", 0)
+ FIELD(SEGS, seg, NUM, "Start", list, 0, segstartpe, seg_start_pe, "Offset within the LV to the start of the segment in physical extents.", 0)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index abf6a9e..016d41d 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -2446,7 +2446,7 @@ static int _transactionid_disp(struct dm_report *rh, struct dm_pool *mem,
  {
--	int is_cleaner;
--	uint64_t dirty_blocks;
- 	struct lv_segment *cache_seg = first_seg(cache_lv);
- 	struct logical_volume *corigin_lv;
- 	struct logical_volume *cache_pool_lv;
--	struct lv_status_cache *status;
-+	int is_clear;
+ 	const struct lv_segment *seg = (const struct lv_segment *) data;
  
- 	if (!lv_is_cache(cache_lv)) {
- 		log_error(INTERNAL_ERROR "LV %s is not cache volume.",
-@@ -356,45 +409,8 @@ int lv_cache_remove(struct logical_volume *cache_lv)
- 	 * remove the cache_pool then without waiting for the flush to
- 	 * complete.
- 	 */
--	if (!lv_cache_status(cache_lv, &status))
-+	if (!lv_cache_wait_for_clean(cache_lv, &is_clear))
- 		return_0;
--	if (!status->cache->fail) {
--		is_cleaner = !strcmp(status->cache->policy_name, "cleaner");
--		dirty_blocks = status->cache->dirty_blocks;
--		if (!(status->cache->feature_flags & DM_CACHE_FEATURE_WRITETHROUGH))
--			dirty_blocks++; /* Not writethrough - always dirty */
--	} else {
--		log_warn("WARNING: Skippping flush for failed cache.");
--		is_cleaner = 0;
--		dirty_blocks = 0;
--	}
--	dm_pool_destroy(status->mem);
--
--	if (dirty_blocks && !is_cleaner) {
--		/* Switch to cleaner policy to flush the cache */
--		log_print_unless_silent("Flushing cache for %s.", cache_lv->name);
--		cache_seg->cleaner_policy = 1;
--		/* update the kernel to put the cleaner policy in place */
--		if (!lv_update_and_reload_origin(cache_lv))
--			return_0;
--	}
--
--	//FIXME: use polling to do this...
--	while (dirty_blocks) {
--		if (!lv_cache_status(cache_lv, &status))
--			return_0;
--		if (status->cache->fail) {
--			log_warn("WARNING: Flushing of failing cache skipped.");
--			break;
--		}
--		dirty_blocks = status->cache->dirty_blocks;
--		dm_pool_destroy(status->mem);
--		if (dirty_blocks) {
--			log_print_unless_silent(FMTu64 " blocks must still be flushed.",
--						dirty_blocks);
--			sleep(1);
--		}
--	}
+-	if (seg_is_thin_pool(seg))
++	if (seg_is_thin_pool(seg) || seg_is_thin_volume(seg))
+ 		return dm_report_field_uint64(rh, field, &seg->transaction_id);
  
- 	cache_pool_lv = cache_seg->pool_lv;
- 	if (!detach_pool_lv(cache_seg))
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 039708e..8c4dfc3 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1226,6 +1226,7 @@ int validate_lv_cache_create_pool(const struct logical_volume *pool_lv);
- int validate_lv_cache_create_origin(const struct logical_volume *origin_lv);
- struct logical_volume *lv_cache_create(struct logical_volume *pool,
- 				       struct logical_volume *origin);
-+int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean);
- int lv_cache_remove(struct logical_volume *cache_lv);
- int wipe_cache_pool(struct logical_volume *cache_pool_lv);
- /* --  metadata/cache_manip.c */
+ 	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64));
+@@ -3478,6 +3478,9 @@ static int _thinzero_disp(struct dm_report *rh, struct dm_pool *mem,
+ {
+ 	const struct lv_segment *seg = (const struct lv_segment *) data;
+ 
++	if (seg_is_thin_volume(seg))
++		seg = first_seg(seg->pool_lv);
++
+ 	if (seg_is_thin_pool(seg))
+ 		return _binary_disp(rh, mem, field, seg->zero_new_blocks, GET_FIRST_RESERVED_NAME(zero_y), private);
+ 
 
 
