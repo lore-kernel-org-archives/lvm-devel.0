@@ -1,62 +1,51 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 25 Apr 2016 12:56:34 +0000 (UTC)
-Subject: master - udev: rules: remove mpath from 10-dm.rules, superseded by 11-dm-mpath.rules (mpath>=0.6.0)
-Message-ID: <20160425125634.B0B8D61BF4@fedorahosted.org>
+Date: Tue, 26 Apr 2016 10:58:18 +0000 (UTC)
+Subject: master - udev: rules: add comments explaining subsystem-specific rules
+Message-ID: <20160426105818.4865C60E4C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2bb33aaf556134b0217b822755383245ac678527
-Commit:        2bb33aaf556134b0217b822755383245ac678527
-Parent:        379874a2d0ff51cdbfbc1cc723b41e06bcdfd277
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ecae76c713bd4fa6c9d8f2a2c990625e4f38b504
+Commit:        ecae76c713bd4fa6c9d8f2a2c990625e4f38b504
+Parent:        2bb33aaf556134b0217b822755383245ac678527
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Apr 25 14:48:46 2016 +0200
+AuthorDate:    Tue Apr 26 12:51:06 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Apr 25 14:55:54 2016 +0200
+CommitterDate: Tue Apr 26 12:57:37 2016 +0200
 
-udev: rules: remove mpath from 10-dm.rules, superseded by 11-dm-mpath.rules (mpath>=0.6.0)
+udev: rules: add comments explaining subsystem-specific rules
 
-Multipath 0.6.0 contains new 11-dm-mpath.rules which supersede the rule
-that was in 10-dm.rules. The 11-dm-mpath.rules are also more complete,
-fixing several other issues. Using the new 11-dm-mpath.rules from
-multipath-tools >= 0.6.0 is strongly recommended for proper
-DM multipath functionality!
-
-See also:
-  http://christophe.varoqui.free.fr
-  http://git.opensvc.com/gitweb.cgi?p=multipath-tools/.git;a=blob;f=multipath/11-dm-mpath.rules
 ---
- WHATS_NEW           |    1 +
- udev/10-dm.rules.in |    4 ----
- 2 files changed, 1 insertions(+), 4 deletions(-)
+ udev/10-dm.rules.in |   14 ++++++++++++++
+ 1 files changed, 14 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 961bae7..1aa335e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.152 - 
- ==================================
-+  Remove mpath from 10-dm.rules, superseded by 11-dm-mpath.rules (mpath>=0.6.0).
- 
- Version 2.02.151 - 23rd April 2016
- ==================================
 diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
-index 2755530..8d7a8ca 100644
+index 8d7a8ca..b4fa52a 100644
 --- a/udev/10-dm.rules.in
 +++ b/udev/10-dm.rules.in
-@@ -120,10 +120,6 @@ ENV{DM_UDEV_RULES_VSN}="2"
+@@ -13,6 +13,20 @@
+ #   DM_UUID - UUID set for DM device (blank if not specified)
+ #   DM_SUSPENDED - suspended state of DM device (0 or 1)
+ #   DM_UDEV_RULES_VSN - DM udev rules version
++#
++# These rules cover only basic device-mapper functionality in udev.
++#
++# Various DM subsystems may contain further subsystem-specific rules
++# in 11-dm-<subsystem_name>.rules which should be installed together
++# with the DM subsystem and which extend these basic rules.
++# For example:
++#   11-dm-lvm.rules for LVM subsystem
++#   11-dm-mpath.rules for multipath subsystem (since version 0.6.0, recommended!)
++#
++# Even more specific rules may be required by subsystems so always
++# check subsystem's upstream repository for recent set of rules.
++# Also, keep in mind that recent rules may also require recent
++# subsystem-specific binaries.
  
- ENV{DM_UDEV_DISABLE_DM_RULES_FLAG}!="1", ENV{DM_NAME}=="?*", SYMLINK+="(DM_DIR)/$env{DM_NAME}"
+ KERNEL=="device-mapper", NAME="(DM_DIR)/control"
  
--# We have to ignore further rule application for inappropriate events
--# and devices. But still send the notification if cookie exists.
--ENV{DM_UUID}=="mpath-?*", ENV{DM_ACTION}=="PATH_FAILED", GOTO="dm_disable"
--
- # Avoid processing and scanning a DM device in the other (foreign)
- # rules if it is in suspended state. However, we still keep 'disk'
- # and 'DM subsystem' related rules enabled in this case.
 
 
