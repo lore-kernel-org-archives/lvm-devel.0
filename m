@@ -1,72 +1,66 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 26 Apr 2016 21:31:26 +0000 (UTC)
-Subject: master - modprobe: check /sys/module entry first
-Message-ID: <20160426213126.1101E60663@fedorahosted.org>
+Date: Tue, 26 Apr 2016 21:31:28 +0000 (UTC)
+Subject: master - cache: with cache target 1.9 mq is alias to smq
+Message-ID: <20160426213128.2280860509@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aa91fe3d3c3e6c2d8d96f5c0766b58375a44daa9
-Commit:        aa91fe3d3c3e6c2d8d96f5c0766b58375a44daa9
-Parent:        ecae76c713bd4fa6c9d8f2a2c990625e4f38b504
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=588455d03ea40ffa37f466023691b0ec2bdf5e82
+Commit:        588455d03ea40ffa37f466023691b0ec2bdf5e82
+Parent:        aa91fe3d3c3e6c2d8d96f5c0766b58375a44daa9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 26 21:41:04 2016 +0200
+AuthorDate:    Tue Apr 26 21:43:41 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 26 23:23:03 2016 +0200
+CommitterDate: Tue Apr 26 23:24:05 2016 +0200
 
-modprobe: check /sys/module entry first
+cache: with cache target 1.9 mq is alias to smq
 
-Before executing modprobe for given module name, just check
-if the module is not already present in /sys/module.
-
-Useful when checking dm-cache-policy modules as we do not
-having matching interface like for targets.
+Avoid useless check for mq policy, it's loaded as smq
+and aliased.
 ---
- WHATS_NEW               |    1 +
- lib/activate/activate.c |   17 +++++++++++++++++
- 2 files changed, 18 insertions(+), 0 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/cache_segtype/cache.c |    7 +++++--
+ 2 files changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 1aa335e..2a4fdd5 100644
+index 2a4fdd5..4b33913 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.152 - 
  ==================================
-+  Check first /sys/module/dm_* dir existance before using modprobe.
++  Stop checking for dm_cache_mq policy with cache target 1.9 (alias to smq).
+   Check first /sys/module/dm_* dir existance before using modprobe.
    Remove mpath from 10-dm.rules, superseded by 11-dm-mpath.rules (mpath>=0.6.0).
  
- Version 2.02.151 - 23rd April 2016
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 76afc3d..f554f19 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -603,7 +603,24 @@ int module_present(struct cmd_context *cmd, const char *target_name)
- #ifdef MODPROBE_CMD
- 	char module[128];
- 	const char *argv[] = { MODPROBE_CMD, module, NULL };
-+#endif
-+	struct stat st;
-+	char path[PATH_MAX];
-+	int i = dm_snprintf(path, (sizeof(path) - 1), "%smodule/dm_%s",
-+			    dm_sysfs_dir(), target_name);
-+
-+	if (i > 0) {
-+		while (path[--i] != '/')  /* stop on dm_ */
-+			if (path[i] == '-')
-+				path[i] = '_'; /* replace '-' with '_' */
-+
-+		if ((lstat(path, &st) == 0) && S_ISDIR(st.st_mode)) {
-+			log_debug("Module directory %s exists.", path);
-+			return 1;
-+		}
-+	}
- 
-+#ifdef MODPROBE_CMD
- 	if (dm_snprintf(module, sizeof(module), "dm-%s", target_name) < 0) {
- 		log_error("module_present module name too long: %s",
- 			  target_name);
+diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
+index a65892e..be9a57e 100644
+--- a/lib/cache_segtype/cache.c
++++ b/lib/cache_segtype/cache.c
+@@ -211,8 +211,9 @@ static int _target_present(struct cmd_context *cmd,
+ 		const char feature[12];
+ 		const char module[12]; /* check dm-%s */
+ 	} _features[] = {
+-		{ 1, 3, CACHE_FEATURE_POLICY_MQ, "policy_mq", "cache-mq" },
++		{ 1, 9, CACHE_FEATURE_POLICY_SMQ | CACHE_FEATURE_POLICY_MQ, "policy_smq", "cache-smq" },
+ 		{ 1, 8, CACHE_FEATURE_POLICY_SMQ, "policy_smq", "cache-smq" },
++		{ 1, 3, CACHE_FEATURE_POLICY_MQ, "policy_mq", "cache-mq" },
+ 	};
+ 	static const char _lvmconf[] = "global/cache_disabled_features";
+ 	static unsigned _attrs = 0;
+@@ -249,7 +250,9 @@ static int _target_present(struct cmd_context *cmd,
+ 		for (i = 0; i < DM_ARRAY_SIZE(_features); ++i) {
+ 			if (((maj > _features[i].maj) ||
+ 			     (maj == _features[i].maj && min >= _features[i].min)) &&
+-			    (!_features[i].module[0] || module_present(cmd, _features[i].module)))
++			    (!_features[i].module[0] ||
++			     (_attrs & _features[i].cache_feature) || /* already present */
++			     module_present(cmd, _features[i].module)))
+ 				_attrs |= _features[i].cache_feature;
+ 			else
+ 				log_very_verbose("Target %s does not support %s.",
 
 
