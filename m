@@ -1,60 +1,57 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 26 Apr 2016 22:21:02 +0000 (UTC)
-Subject: master - cache: better support for alias check
-Message-ID: <20160426222102.E38BB60733@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 27 Apr 2016 17:23:06 +0000 (UTC)
+Subject: master - metadata: fix segfault when filters reject devices
+Message-ID: <20160427172306.75B3A60EE4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=49f32e4859017104555ba0297fa0384d4aa3d5f2
-Commit:        49f32e4859017104555ba0297fa0384d4aa3d5f2
-Parent:        2a2efab0b11b7bfeef1a60b6cfd61c8bceb67164
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 27 00:19:04 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Apr 27 00:20:37 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3c53acb378478f23acf624be8836c0cb24c2724e
+Commit:        3c53acb378478f23acf624be8836c0cb24c2724e
+Parent:        49f32e4859017104555ba0297fa0384d4aa3d5f2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Apr 27 12:13:26 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Apr 27 12:13:26 2016 -0500
 
-cache: better support for alias check
+metadata: fix segfault when filters reject devices
 
-To still support disabling of policies for test we need
-better logic for alias detection introduced in
-588455d03ea40ffa37f466023691b0ec2bdf5e82.
+Checking for devices uses is_missing_pv() to check
+if there is a device for the PV.  is_missing_pv()
+is based on the MISSING_PV flag, which does not
+always correspond to !pv->dev.  When using lvmetad,
+a command like:
+
+pvs --config 'devices/filter=["a|/dev/sdb|", "r|.*|"]'
+
+will cause a number of PVs to have NULL pv->dev, but
+not the MISSING_PV flag.  So, NULL pv->dev needs to
+also be checked.
 ---
- lib/cache_segtype/cache.c |   10 ++++++----
- 1 files changed, 6 insertions(+), 4 deletions(-)
+ lib/metadata/metadata.c |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index be9a57e..199bda6 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -208,12 +208,13 @@ static int _target_present(struct cmd_context *cmd,
- 		uint32_t maj;
- 		uint32_t min;
- 		unsigned cache_feature;
-+		unsigned cache_alias;
- 		const char feature[12];
- 		const char module[12]; /* check dm-%s */
- 	} _features[] = {
--		{ 1, 9, CACHE_FEATURE_POLICY_SMQ | CACHE_FEATURE_POLICY_MQ, "policy_smq", "cache-smq" },
--		{ 1, 8, CACHE_FEATURE_POLICY_SMQ, "policy_smq", "cache-smq" },
--		{ 1, 3, CACHE_FEATURE_POLICY_MQ, "policy_mq", "cache-mq" },
-+		{ 1, 9, 0, CACHE_FEATURE_POLICY_MQ, "policy_smq", "cache-smq" },
-+		{ 1, 8, CACHE_FEATURE_POLICY_SMQ, 0, "policy_smq", "cache-smq" },
-+		{ 1, 3, CACHE_FEATURE_POLICY_MQ, 0, "policy_mq", "cache-mq" },
- 	};
- 	static const char _lvmconf[] = "global/cache_disabled_features";
- 	static unsigned _attrs = 0;
-@@ -253,7 +254,8 @@ static int _target_present(struct cmd_context *cmd,
- 			    (!_features[i].module[0] ||
- 			     (_attrs & _features[i].cache_feature) || /* already present */
- 			     module_present(cmd, _features[i].module)))
--				_attrs |= _features[i].cache_feature;
-+				_attrs |= _features[i].cache_feature |
-+					_features[i].cache_alias;
- 			else
- 				log_very_verbose("Target %s does not support %s.",
- 						 _cache_module, _features[i].feature);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 6d101e0..c8237d5 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4682,6 +4682,15 @@ static int _check_devs_used_correspond_with_vg(struct volume_group *vg)
+ 
+ 	/* Mark all PVs in VG as used. */
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
++		/*
++		 * FIXME: It's not clear if the meaning
++		 * of "missing" should always include the
++		 * !pv->dev case, or if "missing" is the
++		 * more narrow case where VG metadata has
++		 * been written with the MISSING flag.
++		 */
++		if (!pvl->pv->dev)
++			continue;
+ 		if (is_missing_pv(pvl->pv))
+ 			continue;
+ 		pvl->pv->dev->flags |= DEV_ASSUMED_FOR_LV;
 
 
