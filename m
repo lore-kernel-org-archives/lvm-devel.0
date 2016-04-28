@@ -1,94 +1,158 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 27 Apr 2016 20:45:57 +0000 (UTC)
-Subject: master - pvscan: autoactivation should ignore some VGs
-Message-ID: <20160427204557.55B0C60535@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 28 Apr 2016 00:00:08 +0000 (UTC)
+Subject: master - libdm: Add dm_udev_wait_immediate.
+Message-ID: <20160428000008.2328460095@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2d2a61339b83de0d48ed6ed15e816773393c6b4
-Commit:        a2d2a61339b83de0d48ed6ed15e816773393c6b4
-Parent:        263c1a4db51184c718e85c1c3fdcef7908dd7c88
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Apr 27 15:33:23 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Apr 27 15:45:38 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=16019b518e287da19c87eb64229f5c3ca057cb05
+Commit:        16019b518e287da19c87eb64229f5c3ca057cb05
+Parent:        a2d2a61339b83de0d48ed6ed15e816773393c6b4
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Apr 28 00:54:27 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Apr 28 00:54:27 2016 +0100
 
-pvscan: autoactivation should ignore some VGs
+libdm: Add dm_udev_wait_immediate.
 
-pvscan autoactivation has its own VG processing implementation,
-so it can't properly handle things like foreign or shared VGs,
-so make it ignore those VG types (or errors from them) as best
-as possible.
-
-Add a FIXME stating that pvscan autoactivation must really be
-moved to the standard VG processing by calling process_each_vg
-to do activation once the scanning / cache update is finished.
+dm_udev_wait() waits inside the library.
+dm_udev_wait_immediate allows the caller to do other things if the
+cookie isn't yet ready to be decremented.
 ---
- tools/pvscan.c |   34 ++++++++++++++++++++++++++++++++--
- 1 files changed, 32 insertions(+), 2 deletions(-)
+ WHATS_NEW_DM                        |    1 +
+ libdm/.exported_symbols.DM_1_02_124 |    1 +
+ libdm/libdevmapper.h                |    9 ++++++
+ libdm/libdm-common.c                |   49 +++++++++++++++++++++++++++++++++-
+ 4 files changed, 58 insertions(+), 2 deletions(-)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 425383a..d93773a 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -132,6 +132,7 @@ static int _auto_activation_handler(struct cmd_context *cmd,
- 	int refresh_done = 0;
- 	struct volume_group *vg;
- 	struct id vgid_raw;
-+	uint32_t read_error;
- 	int r = 0;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 7460a94..b21d7d5 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.124 - 
+ ==================================
++  Add dm_udev_wait_immediate to libdevmapper for waiting outside the library.
  
- 	/* TODO: add support for partial and clustered VGs */
-@@ -141,16 +142,45 @@ static int _auto_activation_handler(struct cmd_context *cmd,
- 	if (!id_read_format(&vgid_raw, vgid))
+ Version 1.02.123 - 23rd April 2016
+ ==================================
+diff --git a/libdm/.exported_symbols.DM_1_02_124 b/libdm/.exported_symbols.DM_1_02_124
+new file mode 100644
+index 0000000..934011a
+--- /dev/null
++++ b/libdm/.exported_symbols.DM_1_02_124
+@@ -0,0 +1 @@
++dm_udev_wait_immediate
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index a90013f..d2f40c9 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -3218,6 +3218,15 @@ int dm_udev_create_cookie(uint32_t *cookie);
+ int dm_udev_complete(uint32_t cookie);
+ int dm_udev_wait(uint32_t cookie);
+ 
++/*
++ * dm_dev_wait_immediate 
++ * If *ready is 1 on return, the wait is complete.
++ * If *ready is 0 on return, the wait is incomplete and either
++ * this function or dm_udev_wait() must be called again.
++ * Returns 0 on error, when neither function should be called again.
++ */
++int dm_udev_wait_immediate(uint32_t cookie, int *ready);
++
+ #define DM_DEV_DIR_UMASK 0022
+ #define DM_CONTROL_NODE_UMASK 0177
+ 
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 2580d94..d67d0bb 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -2082,6 +2082,14 @@ int dm_udev_wait(uint32_t cookie)
+ 	return 1;
+ }
+ 
++int dm_udev_wait_immediate(uint32_t cookie, int *ready)
++{
++	update_devs();
++	*ready = 1;
++
++	return 1;
++}
++
+ #else		/* UDEV_SYNC_SUPPORT */
+ 
+ static int _check_semaphore_is_supported(void)
+@@ -2506,10 +2514,16 @@ int dm_udev_complete(uint32_t cookie)
+ 	return 1;
+ }
+ 
+-static int _udev_wait(uint32_t cookie)
++/*
++ * If *nowait is set, return immediately leaving it set if the semaphore
++ * is not ready to be decremented to 0.  *nowait is cleared if the wait
++ * succeeds.
++ */
++static int _udev_wait(uint32_t cookie, int *nowait)
+ {
+ 	int semid;
+ 	struct sembuf sb = {0, 0, 0};
++	int val;
+ 
+ 	if (!cookie || !dm_udev_get_sync_support())
+ 		return 1;
+@@ -2517,6 +2531,21 @@ static int _udev_wait(uint32_t cookie)
+ 	if (!_get_cookie_sem(cookie, &semid))
  		return_0;
  
-+	/*
-+	 * FIXME: pvscan activation really needs to be changed to use
-+	 * the standard process_each_vg() interface.  It should save
-+	 * a list of VG names that are found during the scan, then
-+	 * call process_each_vg() with that list to do activation.
-+	 */
-+
-+	cmd->vg_read_print_access_error = 0;
-+
- 	/* NB. This is safe because we know lvmetad is running and we won't hit disk. */
- 	vg = vg_read(cmd, vgname, (const char *)&vgid_raw, 0, 0);
--	if (vg_read_error(vg)) {
-+	read_error = vg_read_error(vg);
-+	if (read_error) {
-+		/*
-+		 * foreign VGs: we want to read and update lvmetad, but that's
-+		 * all, we don't want to even attempt to autoactivate.
-+		 *
-+		 * shared VGs: we want to read and update lvmetad, and for now
-+		 * ignore them for autoactivation.  Once pvscan autoactivation
-+		 * uses process_each_vg, then shared VGs could be autoactivated.
-+		 */
-+		if (read_error & (FAILED_SYSTEMID | FAILED_LOCK_TYPE | FAILED_LOCK_MODE)) {
-+			release_vg(vg);
-+			return 1;
++	/* Return immediately if the semaphore value exceeds 1? */
++	if (*nowait) {
++		if ((val = semctl(semid, 0, GETVAL)) < 0) {
++			log_error("semid %d: sem_ctl GETVAL failed for "
++				  "cookie 0x%" PRIx32 ": %s",
++				  semid, cookie, strerror(errno));
++			return 0;		
 +		}
 +
- 		log_error("Failed to read Volume Group \"%s\" (%s) during autoactivation.", vgname, vgid);
- 		release_vg(vg);
- 		return 0;
- 	}
- 
-+	if (is_lockd_type(vg->lock_type)) {
-+		r = 1;
-+		goto out;
++		if (val > 1)
++			return 1;
++
++		*nowait = 0;
 +	}
 +
- 	if (vg_is_clustered(vg)) {
--		r = 1; goto out;
-+		r = 1;
-+		goto out;
- 	}
+ 	if (!_udev_notify_sem_dec(cookie, semid)) {
+ 		log_error("Failed to set a proper state for notification "
+ 			  "semaphore identified by cookie value %" PRIu32 " (0x%x) "
+@@ -2548,11 +2577,27 @@ repeat_wait:
  
- 	/* FIXME: There's a tiny race when suspending the device which is part
+ int dm_udev_wait(uint32_t cookie)
+ {
+-	int r = _udev_wait(cookie);
++	int nowait = 0;
++	int r = _udev_wait(cookie, &nowait);
+ 
+ 	update_devs();
+ 
+ 	return r;
+ }
+ 
++int dm_udev_wait_immediate(uint32_t cookie, int *ready)
++{
++	int nowait = 1;
++	int r = _udev_wait(cookie, &nowait);
++
++	if (r && nowait) {
++		*ready = 0;
++		return 1;
++	}
++
++	update_devs();
++	*ready = 1;
++
++	return r;
++}
+ #endif		/* UDEV_SYNC_SUPPORT */
 
 
