@@ -1,85 +1,103 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Sun, 15 Dec 2013 16:19:13 +0000 (UTC)
-Subject: master - test: Make the harness optionally less verbose (QUIET=1).
-Message-ID: <20131215161913.ACCBF6104B@fedorahosted.org>
+From: Michael Chapman <mike@very.puzzling.org>
+Date: Sun,  1 May 2016 16:08:18 +1000
+Subject: [PATCH] signals: fix off-by-one when saving whether SIGINT was masked
+Message-ID: <1462082898-20385-1-git-send-email-mike@very.puzzling.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=97fbbbc150cdaea359370912a7b5a9a546490e98
-Commit:        97fbbbc150cdaea359370912a7b5a9a546490e98
-Parent:        d443bfac216a3eedcd752d532f6f90a339681b44
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Dec 15 16:36:24 2013 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Sun Dec 15 16:44:47 2013 +0100
+sigint_allow saves whether SIGINT was masked in the _oldmasked array,
+however an off-by-one in the calculation of the array index leads to the
+wrong signal mask possibly being restored in sigint_restore.
 
-test: Make the harness optionally less verbose (QUIET=1).
+This problem was discovered when the user attempted to use Ctrl+C to
+abort a snapshot creation. The scenario can be recreated in GDB by
+having it raise the signal immediately after the origin volume's
+mappings have been suspended, e.g. when _lv_suspend_lv returns:
 
+  (gdb) handle SIGINT nostop noprint pass
+  SIGINT is used by the debugger.
+  Are you sure you want to change it? (y or n) y
+  Signal        Stop    Print   Pass to program Description
+  SIGINT        No      No      Yes             Interrupt
+
+  (gdb) b _lv_suspend_lv
+  Breakpoint 1 at 0x56bc0: file activate/activate.c, line 1273.
+
+  (gdb) r -s -L 20G -n y /dev/example/x
+  Starting program: /sbin/lvcreate -s -L 20G -n y /dev/example/x
+
+  Breakpoint 1, _lv_suspend_lv (...)
+      at activate/activate.c:1273
+  1273  {
+
+  (gdb) finish
+  Run till exit from #0  _lv_suspend_lv (...) at activate/activate.c:1273
+
+    Suspending example-x (253:20) with filesystem sync with device flush
+    Suspending example-x-real (253:21) with filesystem sync with device flush
+
+  1938                  if (!_lv_suspend_lv(ondisk_lv, laopts, lockfs, flush_required)) {
+  Value returned is $1 = 1
+
+  (gdb) signal SIGINT
+  Continuing with signal SIGINT.
+
+  Program terminated with signal SIGINT, Interrupt.
+  The program no longer exists.
+
+This leaves the mappings suspended:
+
+  # dmsetup info | grep -B1 SUSPENDED
+  Name:              example-x
+  State:             SUSPENDED
+  --
+  Name:              example-x-real
+  State:             SUSPENDED
+
+With this fix the signal remains masked until the snapshot LV has been
+fully created:
+
+  ...
+  (gdb) finish
+  Run till exit from #0  _lv_suspend_lv (...) at activate/activate.c:1273
+
+    Suspending example-x (253:20) with filesystem sync with device flush
+    Suspending example-x-real (253:21) with filesystem sync with device flush
+
+  1938                  if (!_lv_suspend_lv(ondisk_lv, laopts, lockfs, flush_required)) {
+  Value returned is $1 = 1
+
+  (gdb) signal SIGINT
+  Continuing with signal SIGINT.
+
+    Logical volume "y" created.
+
+  Program terminated with signal SIGINT, Interrupt.
+  The program no longer exists.
 ---
- test/lib/harness.c |   13 +++++++++----
- 1 files changed, 9 insertions(+), 4 deletions(-)
 
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index fa174bb..f27fbeb 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -53,6 +53,7 @@ static size_t readbuf_sz = 0, readbuf_used = 0;
- static int die = 0;
- static int verbose = 0; /* >1 with timestamps */
- static int interactive = 0; /* disable all redirections */
-+static int quiet = 0;
- static const char *results;
- static unsigned fullbuffer = 0;
- static int unlimited = 0;
-@@ -298,7 +299,7 @@ static void interrupted(int i, char *f) {
- 	++ s.ninterrupted;
- 	s.status[i] = INTERRUPTED;
- 	printf("\ninterrupted.\n");
--	if (!verbose && fullbuffer) {
-+	if (!quiet && !verbose && fullbuffer) {
- 		printf("-- Interrupted %s ------------------------------------\n", f);
- 		dump();
- 		printf("\n-- Interrupted %s (end) ------------------------------\n", f);
-@@ -309,7 +310,7 @@ static void timeout(int i, char *f) {
- 	++ s.ninterrupted;
- 	s.status[i] = TIMEOUT;
- 	printf("timeout.\n");
--	if (!verbose && readbuf) {
-+	if (!quiet && !verbose && readbuf) {
- 		printf("-- Timed out %s ------------------------------------\n", f);
- 		dump();
- 		printf("\n-- Timed out %s (end) ------------------------------\n", f);
-@@ -333,7 +334,7 @@ static void failed(int i, char *f, int st) {
- 	++ s.nfailed;
- 	s.status[i] = FAILED;
- 	printf("FAILED  (status %d).\n", WEXITSTATUS(st));
--	if (!verbose && readbuf) {
-+	if (!quiet && !verbose && readbuf) {
- 		printf("-- FAILED %s ------------------------------------\n", f);
- 		dump();
- 		printf("-- FAILED %s (end) ------------------------------\n", f);
-@@ -491,7 +492,8 @@ int main(int argc, char **argv) {
- 	char results_list[PATH_MAX];
- 	const char *result;
- 	const char *be_verbose = getenv("VERBOSE"),
--		   *be_interactive = getenv("INTERACTIVE");
-+		   *be_interactive = getenv("INTERACTIVE"),
-+		   *be_quiet = getenv("QUIET");;
- 	time_t start = time(NULL);
- 	int i;
- 	FILE *list;
-@@ -507,6 +509,9 @@ int main(int argc, char **argv) {
- 	if (be_interactive)
- 		interactive = atoi(be_interactive);
+Please keep me CCed on any correspondence as I am not subscribed to this list.
+
+ lib/misc/lvm-signal.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/misc/lvm-signal.c b/lib/misc/lvm-signal.c
+index 7e78407..30bdc01 100644
+--- a/lib/misc/lvm-signal.c
++++ b/lib/misc/lvm-signal.c
+@@ -85,7 +85,7 @@ void sigint_allow(void)
+ 	if (sigprocmask(0, NULL, &sigs))
+ 		log_sys_debug("sigprocmask", "");
  
-+	if (be_quiet)
-+		quiet = atoi(be_quiet);
-+
- 	results = getenv("LVM_TEST_RESULTS") ? : "results";
- 	unlimited = getenv("LVM_TEST_UNLIMITED") ? 1 : 0;
- 	(void) snprintf(results_list, sizeof(results_list), "%s/list", results);
+-	if ((_oldmasked[_handler_installed] = sigismember(&sigs, SIGINT))) {
++	if ((_oldmasked[_handler_installed - 1] = sigismember(&sigs, SIGINT))) {
+ 		sigdelset(&sigs, SIGINT);
+ 		if (sigprocmask(SIG_SETMASK, &sigs, NULL))
+ 			log_sys_debug("sigprocmask", "SIG_SETMASK");
+-- 
+2.5.5
 
 
