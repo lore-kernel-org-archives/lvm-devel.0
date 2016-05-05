@@ -1,90 +1,99 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 May 2016 22:01:20 +0000 (UTC)
-Subject: master - cache: add cache_set_params function
-Message-ID: <20160505220120.D708860C56@fedorahosted.org>
+Date: Thu,  5 May 2016 22:01:22 +0000 (UTC)
+Subject: master - cleanup: gather version info with single check
+Message-ID: <20160505220122.EEA9D60C56@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=def65507e6beab7d1830622492772cc89abe4ccb
-Commit:        def65507e6beab7d1830622492772cc89abe4ccb
-Parent:        ae805eea50b1033115a18b8a0c9931c2c917b8b2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4d116d7a28974648183623c46014b9dcff48748d
+Commit:        4d116d7a28974648183623c46014b9dcff48748d
+Parent:        def65507e6beab7d1830622492772cc89abe4ccb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 5 21:30:15 2016 +0200
+AuthorDate:    Wed Apr 27 11:11:58 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 5 23:30:49 2016 +0200
+CommitterDate: Thu May 5 23:34:30 2016 +0200
 
-cache: add cache_set_params function
+cleanup: gather version info with single check
 
-Wrapping function to handle setup of various cache related params.
-Reusable with lvcreate & lvconvert.
+As we already collect version info anyway, allow to use it through
+a single call (can makes logs shorter and saves ioctl).
 ---
- lib/metadata/cache_manip.c       |   34 ++++++++++++++++++++++++++++++++++
- lib/metadata/metadata-exported.h |    5 +++++
- 2 files changed, 39 insertions(+), 0 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/activate/activate.c |   21 ++++++++++++++-------
+ lib/activate/activate.h |    3 +++
+ 3 files changed, 18 insertions(+), 7 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 5ecfbe2..27a716a 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -632,6 +632,40 @@ out:
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 7291482..d0943f5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.153 - 
+ ==================================
++  Add function to check for target presence and version via 1 ioctl.
+ 
+ Version 2.02.152 - 30th April 2016
+ ==================================
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 5a7e99e..712f86c 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -632,25 +632,32 @@ int module_present(struct cmd_context *cmd, const char *target_name)
+ 	return ret;
  }
  
- /*
-+ * Universal 'wrapper' function  do-it-all
-+ * to update all commonly specified cache parameters
-+ */
-+int cache_set_params(struct lv_segment *seg,
-+		     const char *cache_mode,
-+		     const char *policy_name,
-+		     const struct dm_config_tree *policy_settings,
-+		     uint32_t chunk_size)
-+{
-+	struct lv_segment *pool_seg;
-+
-+	if (!cache_set_mode(seg, cache_mode))
+-int target_present(struct cmd_context *cmd, const char *target_name,
+-		   int use_modprobe)
++int target_present_version(struct cmd_context *cmd, const char *target_name,
++			   int use_modprobe,
++			   uint32_t *maj, uint32_t *min, uint32_t *patchlevel)
+ {
+-	uint32_t maj, min, patchlevel;
+-
+ 	if (!activation())
+-		return 0;
 +		return_0;
-+
-+	if (!cache_set_policy(seg, policy_name, policy_settings))
-+		return_0;
-+
-+	pool_seg = seg_is_cache(seg) ? first_seg(seg->pool_lv) : seg;
-+
-+	if (chunk_size) {
-+		if (!validate_lv_cache_chunk_size(pool_seg->lv, chunk_size))
-+			return_0;
-+		pool_seg->chunk_size = chunk_size;
-+	} else {
-+		/* TODO: some calc_policy solution for cache ? */
-+		if (!recalculate_pool_chunk_size_with_dev_hints(pool_seg->lv, 0,
-+								THIN_CHUNK_SIZE_CALC_METHOD_GENERIC))
-+			return_0;
-+	}
-+
-+	return 1;
+ 
+ #ifdef MODPROBE_CMD
+ 	if (use_modprobe) {
+-		if (target_version(target_name, &maj, &min, &patchlevel))
++		if (target_version(target_name, maj, min, patchlevel))
+ 			return 1;
+ 
+ 		if (!module_present(cmd, target_name))
+ 			return_0;
+ 	}
+ #endif
++	return target_version(target_name, maj, min, patchlevel);
 +}
 +
-+/*
-  * Wipe cache pool metadata area before use.
-  *
-  * Activates metadata volume as 'cache-pool' so regular wiping
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 54c2668..b3f450a 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1216,6 +1216,11 @@ int cache_mode_is_set(const struct lv_segment *seg);
- int cache_set_mode(struct lv_segment *cache_seg, const char *str);
- int cache_set_policy(struct lv_segment *cache_seg, const char *name,
- 		     const struct dm_config_tree *settings);
-+int cache_set_params(struct lv_segment *seg,
-+		     const char *cache_mode,
-+		     const char *policy_name,
-+		     const struct dm_config_tree *policy_settings,
-+		     uint32_t chunk_size);
- void cache_check_for_warns(const struct lv_segment *seg);
- int update_cache_pool_params(const struct segment_type *segtype,
- 			     struct volume_group *vg, unsigned attr,
++int target_present(struct cmd_context *cmd, const char *target_name,
++		   int use_modprobe)
++{
++	uint32_t maj, min, patchlevel;
+ 
+-	return target_version(target_name, &maj, &min, &patchlevel);
++	return target_present_version(cmd, target_name, use_modprobe,
++				      &maj, &min, &patchlevel);
+ }
+ 
+ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv,
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index 089355d..1e8d7a8 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -92,6 +92,9 @@ int library_version(char *version, size_t size);
+ int lvm1_present(struct cmd_context *cmd);
+ 
+ int module_present(struct cmd_context *cmd, const char *target_name);
++int target_present_version(struct cmd_context *cmd, const char *target_name,
++			   int use_modprobe, uint32_t *maj,
++			   uint32_t *min, uint32_t *patchlevel);
+ int target_present(struct cmd_context *cmd, const char *target_name,
+ 		   int use_modprobe);
+ int target_version(const char *target_name, uint32_t *maj,
 
 
