@@ -1,69 +1,90 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 May 2016 22:01:18 +0000 (UTC)
-Subject: master - cache: add validate_lv_cache_chunk_size
-Message-ID: <20160505220118.BAC7060C56@fedorahosted.org>
+Date: Thu,  5 May 2016 22:01:20 +0000 (UTC)
+Subject: master - cache: add cache_set_params function
+Message-ID: <20160505220120.D708860C56@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ae805eea50b1033115a18b8a0c9931c2c917b8b2
-Commit:        ae805eea50b1033115a18b8a0c9931c2c917b8b2
-Parent:        00dfca034c7478b88874d43bc36633e3176d1866
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=def65507e6beab7d1830622492772cc89abe4ccb
+Commit:        def65507e6beab7d1830622492772cc89abe4ccb
+Parent:        ae805eea50b1033115a18b8a0c9931c2c917b8b2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 3 21:50:04 2016 +0200
+AuthorDate:    Thu May 5 21:30:15 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu May 5 23:30:49 2016 +0200
 
-cache: add validate_lv_cache_chunk_size
+cache: add cache_set_params function
 
+Wrapping function to handle setup of various cache related params.
+Reusable with lvcreate & lvconvert.
 ---
- lib/metadata/cache_manip.c       |   19 +++++++++++++++++++
- lib/metadata/metadata-exported.h |    1 +
- 2 files changed, 20 insertions(+), 0 deletions(-)
+ lib/metadata/cache_manip.c       |   34 ++++++++++++++++++++++++++++++++++
+ lib/metadata/metadata-exported.h |    5 +++++
+ 2 files changed, 39 insertions(+), 0 deletions(-)
 
 diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index a514828..5ecfbe2 100644
+index 5ecfbe2..27a716a 100644
 --- a/lib/metadata/cache_manip.c
 +++ b/lib/metadata/cache_manip.c
-@@ -184,6 +184,25 @@ int update_cache_pool_params(const struct segment_type *segtype,
+@@ -632,6 +632,40 @@ out:
  }
  
  /*
-+ * Validate if existing cache-pool can be used with given chunk size
-+ * i.e. cache-pool metadata size fits all info.
++ * Universal 'wrapper' function  do-it-all
++ * to update all commonly specified cache parameters
 + */
-+int validate_lv_cache_chunk_size(struct logical_volume *pool_lv, uint32_t chunk_size)
++int cache_set_params(struct lv_segment *seg,
++		     const char *cache_mode,
++		     const char *policy_name,
++		     const struct dm_config_tree *policy_settings,
++		     uint32_t chunk_size)
 +{
-+	uint64_t min_size = _cache_min_metadata_size(pool_lv->size, chunk_size);
++	struct lv_segment *pool_seg;
 +
-+	if (min_size > first_seg(pool_lv)->metadata_lv->size) {
-+		log_error("Cannot use chunk size %s with cache pool %s. "
-+			  "Minimal required size for metadata is %s.",
-+			  display_size(pool_lv->vg->cmd, chunk_size),
-+			  display_lvname(pool_lv),
-+			  display_size(pool_lv->vg->cmd, min_size));
-+		return 0;
++	if (!cache_set_mode(seg, cache_mode))
++		return_0;
++
++	if (!cache_set_policy(seg, policy_name, policy_settings))
++		return_0;
++
++	pool_seg = seg_is_cache(seg) ? first_seg(seg->pool_lv) : seg;
++
++	if (chunk_size) {
++		if (!validate_lv_cache_chunk_size(pool_seg->lv, chunk_size))
++			return_0;
++		pool_seg->chunk_size = chunk_size;
++	} else {
++		/* TODO: some calc_policy solution for cache ? */
++		if (!recalculate_pool_chunk_size_with_dev_hints(pool_seg->lv, 0,
++								THIN_CHUNK_SIZE_CALC_METHOD_GENERIC))
++			return_0;
 +	}
 +
 +	return 1;
 +}
++
 +/*
-  * Validate arguments for converting origin into cached volume with given cache pool.
+  * Wipe cache pool metadata area before use.
   *
-  * Always validates origin_lv, and when it is known also cache pool_lv
+  * Activates metadata volume as 'cache-pool' so regular wiping
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 8c4dfc3..54c2668 100644
+index 54c2668..b3f450a 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -1222,6 +1222,7 @@ int update_cache_pool_params(const struct segment_type *segtype,
- 			     int passed_args, uint32_t pool_data_extents,
- 			     uint32_t *pool_metadata_extents,
- 			     int *chunk_size_calc_method, uint32_t *chunk_size);
-+int validate_lv_cache_chunk_size(struct logical_volume *pool_lv, uint32_t chunk_size);
- int validate_lv_cache_create_pool(const struct logical_volume *pool_lv);
- int validate_lv_cache_create_origin(const struct logical_volume *origin_lv);
- struct logical_volume *lv_cache_create(struct logical_volume *pool,
+@@ -1216,6 +1216,11 @@ int cache_mode_is_set(const struct lv_segment *seg);
+ int cache_set_mode(struct lv_segment *cache_seg, const char *str);
+ int cache_set_policy(struct lv_segment *cache_seg, const char *name,
+ 		     const struct dm_config_tree *settings);
++int cache_set_params(struct lv_segment *seg,
++		     const char *cache_mode,
++		     const char *policy_name,
++		     const struct dm_config_tree *policy_settings,
++		     uint32_t chunk_size);
+ void cache_check_for_warns(const struct lv_segment *seg);
+ int update_cache_pool_params(const struct segment_type *segtype,
+ 			     struct volume_group *vg, unsigned attr,
 
 
