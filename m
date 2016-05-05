@@ -1,47 +1,42 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 May 2016 22:01:39 +0000 (UTC)
-Subject: master - tests: check for thin tools
-Message-ID: <20160505220139.CFB9560C97@fedorahosted.org>
+Date: Thu,  5 May 2016 22:01:41 +0000 (UTC)
+Subject: master - tests: check default policy is used when unspecified
+Message-ID: <20160505220141.E37CE60C97@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=95f0e25601155755baf4ea1649cd241949120185
-Commit:        95f0e25601155755baf4ea1649cd241949120185
-Parent:        673d4f745322d6d9ca274697148267114058beec
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7bb39af03630beb91acd457b9d949f7ecfa0e75e
+Commit:        7bb39af03630beb91acd457b9d949f7ecfa0e75e
+Parent:        95f0e25601155755baf4ea1649cd241949120185
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 5 23:14:38 2016 +0200
+AuthorDate:    Thu May 5 21:35:19 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu May 5 23:55:20 2016 +0200
 
-tests: check for thin tools
+tests: check default policy is used when unspecified
 
-Test needs repair utils to be available.
+If the policy is not given with policy settings we assume
+the default one is going to be used - it's users responsibility
+to pair them properly.
 ---
- test/shell/lvconvert-repair-thin-raid.sh |    9 +++++++++
- 1 files changed, 9 insertions(+), 0 deletions(-)
+ test/shell/lvcreate-cache.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-thin-raid.sh b/test/shell/lvconvert-repair-thin-raid.sh
-index a895e08..7afceef 100644
---- a/test/shell/lvconvert-repair-thin-raid.sh
-+++ b/test/shell/lvconvert-repair-thin-raid.sh
-@@ -21,6 +21,15 @@ aux have_thin 1 0 0 || skip
- aux have_raid 1 4 0 || skip
+diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
+index 8f35f93..fbea5b8 100644
+--- a/test/shell/lvcreate-cache.sh
++++ b/test/shell/lvcreate-cache.sh
+@@ -229,7 +229,7 @@ fail lvcreate -H -L10 --chunksize 16M $vg/cpool4
+ lvremove -f $vg
  
- #
-+# To continue this test - we need real tools available
-+# When they are not present mark test as skipped, but still
-+# let proceed initial part which should work even without tools
-+#
-+aux have_tool_at_least "$LVM_TEST_THIN_CHECK_CMD" 0 3 1 || skip
-+aux have_tool_at_least "$LVM_TEST_THIN_DUMP_CMD" 0 3 1 || skip
-+aux have_tool_at_least "$LVM_TEST_THIN_REPAIR_CMD" 0 3 1 || skip
-+
-+#
- # Main
- #
- 
+ lvcreate --type cache-pool -L10 $vg/cpool
+-lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg --cachepolicy mq --cachesettings migration_threshold=233
++lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg --cachesettings migration_threshold=233
+ dmsetup status | grep $vg
+ dmsetup status | grep $vg-corigin | grep 'migration_threshold 233'
+ lvchange -an $vg
 
 
