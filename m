@@ -1,65 +1,90 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  6 May 2016 23:58:14 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20160506235814.08F6A607AE@fedorahosted.org>
+Date: Fri,  6 May 2016 23:59:44 +0000 (UTC)
+Subject: v2_02_153 annotated tag has been created
+Message-ID: <20160506235944.B6B9B61BB2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04987e7f49b7e4752b9716f04a0a10221f2ada8b
-Commit:        04987e7f49b7e4752b9716f04a0a10221f2ada8b
-Parent:        e4caf0beebd3718bf77a04905ed2f65712707a5d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7cab5766ada282979c83db33d0384ad212888f13
+Commit:        7cab5766ada282979c83db33d0384ad212888f13
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat May 7 00:48:40 2016 +0100
+AuthorDate:    2016-05-06 23:37 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat May 7 00:48:40 2016 +0100
+CommitterDate: 2016-05-06 23:37 +0000
 
-post-release
+annotated tag: v2_02_153 has been created
+	    at 7cab5766ada282979c83db33d0384ad212888f13 (tag)
+       tagging e4caf0beebd3718bf77a04905ed2f65712707a5d (commit)
+      replaces v2_02_152
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Release 2.02.153.
 
-diff --git a/VERSION b/VERSION
-index 7909645..ebf6c49 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.153(2)-git (2016-05-07)
-+2.02.154(2)-git (2016-05-07)
-diff --git a/VERSION_DM b/VERSION_DM
-index 17bcab0..5f973c5 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.124-git (2016-05-07)
-+1.02.125-git (2016-05-07)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 721d8b7..89fa681 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.154 - 
-+===============================
-+
- Version 2.02.153 - 7th May 2016
- ===============================
-   Change warning messages related to duplicate PVs.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 24561d4..f6392ef 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.125 - 
-+==================================
-+
- Version 1.02.124 - 30th April 2016
- ==================================
-   Add dm_udev_wait_immediate to libdevmapper for waiting outside the library.
+A development release with improvements in duplicate PV detection and
+handling.  Duplicate PVs might be different paths to the same device or
+cloned devices and these two cases need to be treated differently.  If
+the code couldn't tell, it used to assume multipath rather than clones,
+but now it wants you to resolve the problem yourself - run multipath or
+vgimportclone or configure filters to hide devices.
+(A configuration setting lets you return to something close to the
+previous behaviour.)
+
+44 files changed, 1641 insertions(+), 839 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAlctLSgACgkQIoGRwVZ+LBfz6ACfVeFy36HH+9c7qNDH+Q3CJYhq
+ursAoOn0v+XSEoy4nxr2WFd0GLzUBwdS
+=Qs4F
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (2):
+      post-release
+      pre-release
+
+David Teigland (20):
+      pvcreate, pvremove: translate arg name to device once
+      pvcreate: improve debug message
+      pvscan: fix errors for single dev scan while lvmetad is disabled
+      lvmetad: set disabled flag in lvmetad if duplicate PVs are found
+      lvmetad: set disabled flag when duplicate PVs are seen
+      lvmetad: remove client side altdev code
+      lvmcache: improve duplicate PV handling
+      lvmcache: process duplicate PVs directly
+      pvs: new attr and field for unchosen duplicate device
+      lvmcache: use active LVs and device sizes to choose between duplicates
+      lvmetad: disable if device scan fails
+      lvmetad: add duplicate resolution advice
+      test: process-each-duplicate-pvs
+      test: pv-duplicate-uuid
+      test: lvmetad-ambiguous
+      test: vgsplit-usage
+      test: vgcfgbackup-usage
+      test: vgcfgbackup-lvm1
+      metadata: move warning message about repairing VG
+      WHATS_NEW: duplicate PVs
+
+Zdenek Kabelac (18):
+      cache: function for min metadata size estimation
+      cache: add validate_lv_cache_chunk_size
+      cache: add cache_set_params function
+      cleanup: gather version info with single check
+      cache: use target_present_version
+      debug: enhance debug msg for cache
+      lvcreate: check for lv type and created segtype
+      lvcreate: improve --chunksize support for cached volume.
+      cleanup: just switch error path
+      cleanup: enhance warning message
+      cleanup: use unsigned with EPOCH printf format
+      tests: check for thin tools
+      tests: check default policy is used when unspecified
+      tests: update aux raid support
+      tests: do not use EPOCH for get wrapper
+      segtype: check for activation2
+      cleanup: drop tracing
+      activation: activation check is mandatory
 
 
