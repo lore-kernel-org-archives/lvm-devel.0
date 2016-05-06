@@ -1,189 +1,177 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Fri,  6 May 2016 14:00:54 +0000 (UTC)
-Subject: master - lvmcache: use active LVs and device sizes to choose between duplicates
-Message-ID: <20160506140054.9344B60722@fedorahosted.org>
+Date: Fri,  6 May 2016 14:00:56 +0000 (UTC)
+Subject: master - lvmetad: disable if device scan fails
+Message-ID: <20160506140056.CA85860722@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=49d9582bed338dc555b616bcc9de20fafd00ce2d
-Commit:        49d9582bed338dc555b616bcc9de20fafd00ce2d
-Parent:        d4e434d1e6082ff4d448f4fbc03962c6f0926da4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b1ea27b1e210274dfb9c7100cf0f9714397eec3b
+Commit:        b1ea27b1e210274dfb9c7100cf0f9714397eec3b
+Parent:        49d9582bed338dc555b616bcc9de20fafd00ce2d
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Mar 29 13:29:39 2016 -0500
+AuthorDate:    Fri Apr 15 14:19:46 2016 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri May 6 09:00:00 2016 -0500
 
-lvmcache: use active LVs and device sizes to choose between duplicates
+lvmetad: disable if device scan fails
 
-If duplicate devices exist for a PV, and one device's
-size matches the PV size, but the other doesn't, then
-prefer the matching device.
-
-If one device is used by an active LV, prefer that device.
+If a command begins repopulating the lvmetad cache,
+and fails part way through, it should set the disabled
+state in lvmetad so other commands don't use bad data.
+If a subsequent scan succeeds, the disabled state is
+cleared.
 ---
- lib/cache/lvmcache.c |   90 ++++++++++++++++++++++++++++++++++++++++++--------
- 1 files changed, 76 insertions(+), 14 deletions(-)
+ daemons/lvmetad/lvmetad-client.h |    1 +
+ daemons/lvmetad/lvmetad-core.c   |   10 +++++++---
+ lib/cache/lvmetad.c              |   27 +++++++++++++++------------
+ 3 files changed, 23 insertions(+), 15 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index f04f7ea..fe2ad07 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -816,15 +816,19 @@ static void _choose_preferred_devs(struct cmd_context *cmd,
- 				   struct dm_list *add_cache_devs)
- {
- 	char uuid[64] __attribute__((aligned(8)));
-+	const char *reason = "none";
- 	struct dm_list altdevs;
- 	struct dev_types *dt = cmd->dev_types;
- 	struct device_list *devl, *devl_safe, *alt, *del;
- 	struct lvmcache_info *info;
- 	struct device *dev1, *dev2;
- 	uint32_t dev1_major, dev1_minor, dev2_major, dev2_minor;
-+	uint64_t info_size, dev1_size, dev2_size;
- 	int in_subsys1, in_subsys2;
- 	int is_dm1, is_dm2;
- 	int has_fs1, has_fs2;
-+	int has_lv1, has_lv2;
-+	int same_size1, same_size2;
- 	int change;
+diff --git a/daemons/lvmetad/lvmetad-client.h b/daemons/lvmetad/lvmetad-client.h
+index dce8a7e..1376e6b 100644
+--- a/daemons/lvmetad/lvmetad-client.h
++++ b/daemons/lvmetad/lvmetad-client.h
+@@ -22,6 +22,7 @@
+ #define LVMETAD_DISABLE_REASON_DIRECT		"DIRECT"
+ #define LVMETAD_DISABLE_REASON_LVM1		"LVM1"
+ #define LVMETAD_DISABLE_REASON_DUPLICATES	"DUPLICATES"
++#define LVMETAD_DISABLE_REASON_SCANERROR	"SCANERROR"
  
- 	/*
-@@ -880,6 +884,14 @@ next:
- 		dev2_major = MAJOR(dev2->dev);
- 		dev2_minor = MINOR(dev2->dev);
+ struct volume_group;
  
-+		if (!dev_get_size(dev1, &dev1_size))
-+			dev1_size = 0;
-+		if (!dev_get_size(dev2, &dev2_size))
-+			dev2_size = 0;
-+
-+		has_lv1 = (dev1->flags & DEV_USED_FOR_LV) ? 1 : 0;
-+		has_lv2 = (dev2->flags & DEV_USED_FOR_LV) ? 1 : 0;
-+
- 		in_subsys1 = dev_subsystem_part_major(dt, dev1);
- 		in_subsys2 = dev_subsystem_part_major(dt, dev2);
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index 188c9b9..54ecd4a 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -202,8 +202,9 @@ struct vg_info {
+ #define GLFL_DISABLE_REASON_DIRECT     0x00000004
+ #define GLFL_DISABLE_REASON_LVM1       0x00000008
+ #define GLFL_DISABLE_REASON_DUPLICATES 0x00000010
++#define GLFL_DISABLE_REASON_SCANERROR  0x00000020
  
-@@ -889,44 +901,94 @@ next:
- 		has_fs1 = dm_device_has_mounted_fs(dev1_major, dev1_minor);
- 		has_fs2 = dm_device_has_mounted_fs(dev2_major, dev2_minor);
+-#define GLFL_DISABLE_REASON_ALL (GLFL_DISABLE_REASON_DIRECT | GLFL_DISABLE_REASON_LVM1 | GLFL_DISABLE_REASON_DUPLICATES)
++#define GLFL_DISABLE_REASON_ALL (GLFL_DISABLE_REASON_DIRECT | GLFL_DISABLE_REASON_LVM1 | GLFL_DISABLE_REASON_DUPLICATES | GLFL_DISABLE_REASON_SCANERROR)
  
--		log_debug_cache("PV %s compare duplicates %s and %s",
--				devl->dev->pvid, dev_name(dev1), dev_name(dev2));
--
--		log_debug_cache("dup dev1 %s subsys %d dm %d fs %d",
--				dev_name(dev1), in_subsys1, is_dm1, has_fs1);
--		log_debug_cache("dup dev2 %s subsys %d dm %d fs %d",
--				dev_name(dev2), in_subsys2, is_dm2, has_fs2);
-+		info_size = info->device_size >> SECTOR_SHIFT;
-+		same_size1 = (dev1_size == info_size);
-+		same_size2 = (dev2_size == info_size);
-+
-+		log_debug_cache("PV %s compare duplicates: %s %u:%u. %s %u:%u.",
-+				devl->dev->pvid,
-+				dev_name(dev1), dev1_major, dev1_minor,
-+				dev_name(dev2), dev2_major, dev2_minor);
-+
-+		log_debug_cache("PV %s: wants size %llu. %s is %llu. %s is %llu.",
-+				devl->dev->pvid,
-+				(unsigned long long)info_size,
-+				dev_name(dev1), (unsigned long long)dev1_size,
-+				dev_name(dev2), (unsigned long long)dev2_size);
-+
-+		log_debug_cache("PV %s: %s %s subsystem. %s %s subsystem.",
-+				devl->dev->pvid,
-+				dev_name(dev1), in_subsys1 ? "is in" : "is not in",
-+				dev_name(dev2), in_subsys2 ? "is in" : "is not in");
-+
-+		log_debug_cache("PV %s: %s %s dm. %s %s dm.",
-+				devl->dev->pvid,
-+				dev_name(dev1), is_dm1 ? "is" : "is not",
-+				dev_name(dev2), is_dm2 ? "is" : "is not");
-+
-+		log_debug_cache("PV %s: %s %s mounted fs. %s %s mounted fs.",
-+				devl->dev->pvid,
-+				dev_name(dev1), has_fs1 ? "has" : "has no",
-+				dev_name(dev2), has_fs2 ? "has" : "has no");
-+
-+		log_debug_cache("PV %s: %s %s LV. %s %s LV.",
-+				devl->dev->pvid,
-+				dev_name(dev1), has_lv1 ? "is used for" : "is not used for",
-+				dev_name(dev2), has_lv2 ? "is used for" : "is not used for");
+ #define VGFL_INVALID 0x00000001
  
- 		change = 0;
- 
--		if (has_fs1 && !has_fs2) {
-+		if (has_lv1 && !has_lv2) {
- 			/* keep 1 */
-+			reason = "device is used by LV";
-+		} else if (has_lv2 && !has_lv1) {
-+			/* change to 2 */
-+			change = 1;
-+			reason = "device is used by LV";
-+		} else if (same_size1 && !same_size2) {
-+			/* keep 1 */
-+			reason = "device size is correct";
-+		} else if (same_size2 && !same_size1) {
-+			/* change to 2 */
-+			change = 1;
-+			reason = "device size is correct";
-+		} else if (has_fs1 && !has_fs2) {
-+			/* keep 1 */
-+			reason = "device has fs mounted";
- 		} else if (has_fs2 && !has_fs1) {
- 			/* change to 2 */
- 			change = 1;
-+			reason = "device has fs mounted";
- 		} else if (is_dm1 && !is_dm2) {
- 			/* keep 1 */
-+			reason = "device is in dm subsystem";
- 		} else if (is_dm2 && !is_dm1) {
- 			/* change to 2 */
- 			change = 1;
-+			reason = "device is in dm subsystem";
- 		} else if (in_subsys1 && !in_subsys2) {
- 			/* keep 1 */
-+			reason = "device is in subsystem";
- 		} else if (in_subsys2 && !in_subsys1) {
- 			/* change to 2 */
- 			change = 1;
-+			reason = "device is in subsystem";
-+		} else {
-+			reason = "device was seen first";
- 		}
- 
- 		if (change) {
- 			dev1 = dev2;
- 			alt = devl;
- 		}
--	}
- 
--	id_write_format((const struct id *)info->dev->pvid, uuid, sizeof(uuid));
-+		id_write_format((const struct id *)dev1->pvid, uuid, sizeof(uuid));
-+		log_warn("WARNING: PV %s prefers device %s because %s.", uuid, dev_name(dev1), reason);
-+	}
- 
- 	if (dev1 != info->dev) {
--		log_warn("PV %s is using preferred device %s, changed from %s",
--			 uuid, dev_name(dev1), dev_name(info->dev));
-+		log_debug_cache("PV %s: switching to device %s instead of device %s.",
-+				 dev1->pvid, dev_name(dev1), dev_name(info->dev));
- 		/*
- 		 * Move the preferred device from altdevs to add_cache_devs.
- 		 * Create a del_cache_devs entry for the current lvmcache
-@@ -939,9 +1001,9 @@ next:
- 			del->dev = info->dev;
- 			dm_list_add(del_cache_devs, &del->list);
- 		}
-+
- 	} else {
--		log_warn("PV %s is using preferred device %s",
--			 uuid, dev_name(info->dev));
-+		log_debug_cache("PV %s: keeping current device %s.", dev1->pvid, dev_name(info->dev));
+@@ -2512,6 +2513,8 @@ static response set_global_info(lvmetad_state *s, request r)
+ 			reason_flags |= GLFL_DISABLE_REASON_LVM1;
+ 		if (strstr(reason, LVMETAD_DISABLE_REASON_DUPLICATES))
+ 			reason_flags |= GLFL_DISABLE_REASON_DUPLICATES;
++		if (strstr(reason, LVMETAD_DISABLE_REASON_SCANERROR))
++			reason_flags |= GLFL_DISABLE_REASON_SCANERROR;
  	}
  
+ 	if (global_invalid != -1) {
+@@ -2565,10 +2568,11 @@ static response get_global_info(lvmetad_state *s, request r)
+ 	memset(reason, 0, sizeof(reason));
+ 
+ 	if (s->flags & GLFL_DISABLE) {
+-		snprintf(reason, REASON_BUF_SIZE - 1, "%s%s%s",
++		snprintf(reason, REASON_BUF_SIZE - 1, "%s%s%s%s",
+ 			 (s->flags & GLFL_DISABLE_REASON_DIRECT)     ? LVMETAD_DISABLE_REASON_DIRECT "," : "",
+ 			 (s->flags & GLFL_DISABLE_REASON_LVM1)       ? LVMETAD_DISABLE_REASON_LVM1 "," : "",
+-			 (s->flags & GLFL_DISABLE_REASON_DUPLICATES) ? LVMETAD_DISABLE_REASON_DUPLICATES "," : "");
++			 (s->flags & GLFL_DISABLE_REASON_DUPLICATES) ? LVMETAD_DISABLE_REASON_DUPLICATES "," : "",
++			 (s->flags & GLFL_DISABLE_REASON_SCANERROR)  ? LVMETAD_DISABLE_REASON_SCANERROR "," : "");
+ 	}
+ 
+ 	if (!reason[0])
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 86ccd59..391cbc4 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1700,11 +1700,6 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
+ 	if (!baton.vg)
+ 		lvmcache_fmt(info)->ops->destroy_instance(baton.fid);
+ 
+-	/*
+-	 * NB. If this command failed and we are relying on lvmetad to have an
+-	 * *exact* image of the system, the lvmetad instance that went out of
+-	 * sync needs to be killed.
+-	 */
+ 	if (!lvmetad_pv_found((const struct id *) &dev->pvid, dev, lvmcache_fmt(info),
+ 			      label->sector, baton.vg, handler)) {
+ 		release_vg(baton.vg);
+@@ -1749,13 +1744,13 @@ static int _lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler
+ 	struct dev_iter *iter;
+ 	struct device *dev;
+ 	daemon_reply reply;
+-	int r = 1;
+ 	char *future_token;
+ 	const char *reason;
+ 	int was_silent;
+ 	int replacing_other_update = 0;
+ 	int replaced_update = 0;
+ 	int retries = 0;
++	int ret = 1;
+ 
+ 	if (!lvmetad_used()) {
+ 		log_error("Cannot proceed since lvmetad is not active.");
+@@ -1813,7 +1808,7 @@ static int _lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler
+ 	log_debug_lvmetad("Telling lvmetad to clear its cache");
+ 	reply = _lvmetad_send(cmd, "pv_clear_all", NULL);
+ 	if (!_lvmetad_handle_reply(reply, "pv_clear_all", "", NULL))
+-		r = 0;
++		ret = 0;
+ 	daemon_reply_destroy(reply);
+ 
+ 	was_silent = silent_mode();
+@@ -1821,33 +1816,38 @@ static int _lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler
+ 
+ 	while ((dev = dev_iter_get(iter))) {
+ 		if (sigint_caught()) {
+-			r = 0;
++			ret = 0;
+ 			stack;
+ 			break;
+ 		}
+ 		if (!lvmetad_pvscan_single(cmd, dev, handler, ignore_obsolete))
+-			r = 0;
++			ret = 0;
+ 	}
+ 
+ 	init_silent(was_silent);
+ 
+ 	dev_iter_destroy(iter);
+ 
++	if (!ret)
++		lvmetad_set_disabled(cmd, LVMETAD_DISABLE_REASON_SCANERROR);
++
+ 	_lvmetad_token = future_token;
+-	if (!_token_update(NULL))
++	if (!_token_update(NULL)) {
++		log_error("Failed to update lvmetad token after device scan.");
+ 		return 0;
++	}
+ 
  	/*
+ 	 * If lvmetad is disabled, and no lvm1 metadata was seen and no
+ 	 * duplicate PVs were seen, then re-enable lvmetad.
+ 	 */
+-	if (lvmetad_is_disabled(cmd, &reason) &&
++	if (ret && lvmetad_is_disabled(cmd, &reason) &&
+ 	    !lvmcache_found_duplicate_pvs() && !_found_lvm1_metadata) {
+ 		log_debug_lvmetad("Enabling lvmetad which was previously disabled.");
+ 		lvmetad_clear_disabled(cmd);
+ 	}
+ 
+-	return r;
++	return ret;
+ }
+ 
+ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler, int do_wait)
+@@ -2451,6 +2451,9 @@ int lvmetad_is_disabled(struct cmd_context *cmd, const char **reason)
+ 		} else if (strstr(reply_reason, LVMETAD_DISABLE_REASON_DUPLICATES)) {
+ 			*reason = "duplicate PVs were found";
+ 
++		} else if (strstr(reply_reason, LVMETAD_DISABLE_REASON_SCANERROR)) {
++			*reason = "scanning devices failed";
++
+ 		} else {
+ 			*reason = "<unknown>";
+ 		}
 
 
