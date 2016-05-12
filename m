@@ -1,79 +1,53 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 12 May 2016 00:07:06 +0000 (UTC)
-Subject: master - device: Retry open without O_NOATIME if it fails.
-Message-ID: <20160512000706.9509660DCD@fedorahosted.org>
+Date: Thu, 12 May 2016 00:15:06 +0000 (UTC)
+Subject: master - libdm: Show lib vsn even if driver vsn unavailable.
+Message-ID: <20160512001506.8357C61B56@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b5314c2a6ae5fe4f802e82a4f31cf2fad398ded9
-Commit:        b5314c2a6ae5fe4f802e82a4f31cf2fad398ded9
-Parent:        f3d508630d7acdd638afae700973f1d68e43cbcc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6cafdad3608f58bc0cea6a73b16d9728fb92181
+Commit:        e6cafdad3608f58bc0cea6a73b16d9728fb92181
+Parent:        b5314c2a6ae5fe4f802e82a4f31cf2fad398ded9
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu May 12 01:05:52 2016 +0100
+AuthorDate:    Thu May 12 01:14:25 2016 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu May 12 01:05:52 2016 +0100
+CommitterDate: Thu May 12 01:14:25 2016 +0100
 
-device:  Retry open without O_NOATIME if it fails.
+libdm: Show lib vsn even if driver vsn unavailable.
 
 ---
- WHATS_NEW           |    1 +
- lib/device/dev-io.c |   13 ++++++++++++-
- lib/device/device.h |    1 +
- 3 files changed, 14 insertions(+), 1 deletions(-)
+ WHATS_NEW_DM              |    1 +
+ libdm/ioctl/libdm-iface.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 89fa681..e11a40a 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index f6392ef..a1d935e 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.154 - 
- ===============================
-+  Retry open without O_NOATIME if it fails (not file owner/CAP_FOWNER).
+ Version 1.02.125 - 
+ ==================================
++  Show library version in message even if dm driver version is unavailable.
  
- Version 2.02.153 - 7th May 2016
- ===============================
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index 9bf6d2e..a9a2374 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -494,11 +494,22 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
+ Version 1.02.124 - 30th April 2016
+ ==================================
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 0c798f5..390daa1 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -570,9 +570,9 @@ int dm_check_version(void)
  
- #ifdef O_NOATIME
- 	/* Don't update atime on device inodes */
--	if (!(dev->flags & DEV_REGULAR))
-+	if (!(dev->flags & DEV_REGULAR) && !(dev->flags & DEV_NOT_O_NOATIME))
- 		flags |= O_NOATIME;
- #endif
+ 	compat = "(compat)";
  
- 	if ((dev->fd = open(name, flags, 0777)) < 0) {
-+#ifdef O_NOATIME
-+		if ((errno == EPERM) && (flags & O_NOATIME)) {
-+			flags &= ~O_NOATIME;
-+			dev->flags |= DEV_NOT_O_NOATIME;
-+			if ((dev->fd = open(name, flags, 0777)) >= 0) {
-+				log_debug_devs("%s: Not using O_NOATIME", name);
-+				goto opened;
-+			}
-+		}
-+#endif
-+
- #ifdef O_DIRECT_SUPPORT
- 		if (direct && !(dev->flags & DEV_O_DIRECT_TESTED)) {
- 			flags &= ~O_DIRECT;
-diff --git a/lib/device/device.h b/lib/device/device.h
-index aaa009f..fa03f10 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -30,6 +30,7 @@
- #define DEV_OPEN_FAILURE	0x00000080	/* Has last open failed? */
- #define DEV_USED_FOR_LV		0x00000100	/* Is device used for an LV */
- #define DEV_ASSUMED_FOR_LV	0x00000200	/* Is device assumed for an LV */
-+#define DEV_NOT_O_NOATIME	0x00000400	/* Don't use O_NOATIME */
++      bad:
+ 	dm_get_library_version(libversion, sizeof(libversion));
  
- /*
-  * Support for external device info.
+-      bad:
+ 	log_error("Incompatible libdevmapper %s%s and kernel driver %s.",
+ 		  *libversion ? libversion : "(unknown version)", compat,
+ 		  *dmversion ? dmversion : "(unknown version)");
 
 
