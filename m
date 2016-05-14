@@ -1,31 +1,70 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Sat, 14 May 2016 00:44:29 +0100
-Subject: LVM RAID man page (lvmraid.7)
-In-Reply-To: <5ECBB141-6118-4C80-8710-7D7243CA38AB@redhat.com>
-References: <5ECBB141-6118-4C80-8710-7D7243CA38AB@redhat.com>
-Message-ID: <20160513234429.GA2767@agk-dp.fab.redhat.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Sat, 14 May 2016 01:12:31 +0000 (UTC)
+Subject: master - pre-release
+Message-ID: <20160514011231.2DFC560FCF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, May 13, 2016 at 06:23:52PM -0500, Jon Brassow wrote:
-> +"mirror" segment type.  (The "raid1" segment type became the default in
-> +LVM version 2.02.100.)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=15ca5883fb7911d231a3931d085cc593eab95a39
+Commit:        15ca5883fb7911d231a3931d085cc593eab95a39
+Parent:        87d9406725b23e6c01e55014606ff047d7375951
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Sat May 14 01:57:42 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Sat May 14 01:57:42 2016 +0100
 
-Integration of further md raid features is under active development.
+pre-release
 
-> +subLVs are normally "hidden", that is, not reported when displaying
-> +logical volumes using 'lvs' without the '-a' option.
+---
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    6 ++++--
+ WHATS_NEW_DM |    4 ++--
+ 4 files changed, 8 insertions(+), 6 deletions(-)
 
-Shown as [hidden]
-
-Explain naming conventions, suffices with examples.
-
-Also review the mdadm man page for any topics missing and provide a 
-mapping between the two sets of terminology?
-
-Alasdair
+diff --git a/VERSION b/VERSION
+index ebf6c49..2380bd8 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.154(2)-git (2016-05-07)
++2.02.154(2)-git (2016-05-14)
+diff --git a/VERSION_DM b/VERSION_DM
+index 5f973c5..41b15b7 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.125-git (2016-05-07)
++1.02.125-git (2016-05-14)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e11a40a..8ab4800 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,8 @@
+-Version 2.02.154 - 
+-===============================
++Version 2.02.154 - 14th May 2016
++================================
++  Fix liblvm segfault after failure initialising lvmetad connection.
+   Retry open without O_NOATIME if it fails (not file owner/CAP_FOWNER).
++  Split _report into one fn for options and arguments and one for processing.
+ 
+ Version 2.02.153 - 7th May 2016
+ ===============================
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index a1d935e..beb3d46 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.125 - 
+-==================================
++Version 1.02.125 - 14th May 2016
++================================
+   Show library version in message even if dm driver version is unavailable.
+ 
+ Version 1.02.124 - 30th April 2016
 
 
