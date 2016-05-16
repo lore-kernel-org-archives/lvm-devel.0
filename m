@@ -1,51 +1,84 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sat, 14 May 2016 01:12:47 +0000 (UTC)
-Subject: v2_02_154 annotated tag has been created
-Message-ID: <20160514011247.DD38B60FDB@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 16 May 2016 19:37:38 +0000 (UTC)
+Subject: master - python: move lvm_init
+Message-ID: <20160516193738.F380D60EE0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=243e28d50aa071ed05774c4cd8b0187b3a087311
-Commit:        243e28d50aa071ed05774c4cd8b0187b3a087311
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2016-05-14 01:01 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2016-05-14 01:01 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7ef152c07290c79f47a64b0fc81975ae52554919
+Commit:        7ef152c07290c79f47a64b0fc81975ae52554919
+Parent:        57e9df7dc535bcba6124fce814323b63c6a0d779
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed May 11 13:42:00 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon May 16 14:36:55 2016 -0500
 
-annotated tag: v2_02_154 has been created
-	    at 243e28d50aa071ed05774c4cd8b0187b3a087311 (tag)
-       tagging 15ca5883fb7911d231a3931d085cc593eab95a39 (commit)
-      replaces v2_02_153
+python: move lvm_init
 
-Release 2.02.154.
+Only call lvm_init() when it's needed so that simply
+loading the lvm python code in another program doesn't
+make that program do lvm initialization.
 
-A tiny update this week with a few fixes to some error paths.
+The version call doesn't need a handle.
 
-12 files changed, 248 insertions(+), 197 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
+The garbage collection can just do lvm_quit to destroy
+the command.  The next call that needs lvm_init will
+do it first.
+---
+ python/liblvm.c |   17 ++++++-----------
+ 1 files changed, 6 insertions(+), 11 deletions(-)
 
-iEYEABECAAYFAlc2eZkACgkQIoGRwVZ+LBcHCwCfUs34MeFDPf6L29ALrJfBCpPi
-3F8AoNK9Rv7Igk66hfHnuakTQ3B2OJ0o
-=aSIl
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (5):
-      post-release
-      device:  Retry open without O_NOATIME if it fails.
-      libdm: Show lib vsn even if driver vsn unavailable.
-      lvmetad: Fix client error when socket access fails.
-      pre-release
-
-David Teigland (2):
-      test: process-each-duplicate-pvs
-      lib: fix init error handling
-
-Peter Rajnoha (1):
-      refactor: separate original _report fn into _report and _do_report fn
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 089abb3..1b3534e 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -93,6 +93,9 @@ static PyObject *_LibLVMError;
+ 
+ #define LVM_VALID(ptr) \
+ 	do { \
++		if (!_libh) { \
++			_libh = lvm_init(NULL); \
++		} \
+ 		if (ptr && _libh) { \
+ 			if (ptr != _libh) { \
+ 				PyErr_SetString(PyExc_UnboundLocalError, "LVM handle reference stale"); \
+@@ -175,8 +178,6 @@ static PyObject *_liblvm_get_last_error(void)
+ 
+ static PyObject *_liblvm_library_get_version(void)
+ {
+-	LVM_VALID(NULL);
+-
+ 	return Py_BuildValue("s", lvm_library_get_version());
+ }
+ 
+@@ -184,13 +185,9 @@ static const char _gc_doc[] = "Garbage collect the C library";
+ 
+ static PyObject *_liblvm_lvm_gc(void)
+ {
+-	LVM_VALID(NULL);
+-
+-	lvm_quit(_libh);
+-
+-	if (!(_libh = lvm_init(NULL))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
++	if (_libh) {
++		lvm_quit(_libh);
++		_libh = NULL;
+ 	}
+ 
+ 	Py_INCREF(Py_None);
+@@ -2047,8 +2044,6 @@ PyMODINIT_FUNC initlvm(void)
+ {
+ 	PyObject *m;
+ 
+-	_libh = lvm_init(NULL);
+-
+ 	if (PyType_Ready(&_LibLVMvgType) < 0)
+ 		MODINITERROR;
+ 	if (PyType_Ready(&_LibLVMlvType) < 0)
 
 
