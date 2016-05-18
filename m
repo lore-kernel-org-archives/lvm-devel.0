@@ -1,148 +1,42 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 18 May 2016 14:06:58 +0000 (UTC)
-Subject: master - liblvm: allow config settings to be read without full lvm cmd
-Message-ID: <20160518140658.31B5760EEE@fedorahosted.org>
+Date: Wed, 18 May 2016 14:21:07 +0000 (UTC)
+Subject: master - WHATS_NEW: include recent changes
+Message-ID: <20160518142107.1360C60614@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7fd4119d24eee55323e888dd78c70257d7c97a15
-Commit:        7fd4119d24eee55323e888dd78c70257d7c97a15
-Parent:        ba9b7b69d9200d9d977089a0b813f508961fcbee
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e694e0896bd4d320f5d5017411763583698b28dc
+Commit:        e694e0896bd4d320f5d5017411763583698b28dc
+Parent:        591ef307b30c2d828b2a0c59918203f970974bbb
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue May 17 11:54:13 2016 -0500
+AuthorDate:    Wed May 18 09:20:37 2016 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 18 09:04:25 2016 -0500
+CommitterDate: Wed May 18 09:20:52 2016 -0500
 
-liblvm: allow config settings to be read without full lvm cmd
+WHATS_NEW: include recent changes
 
-A program may be using liblvm2app for simply checking a config
-setting in lvm.conf.  In this case, a full lvm context is not
-needed, only cmd->cft (which are the config settings read from
-lvm.conf).
-
-lvm_config_find_bool() can now be passed a NULL lvm context
-in which case it will only create cmd->cft, check the config
-setting asked for, and destroy the cmd.
 ---
- lib/commands/toolcontext.c |   43 +++++++++++++++++++++++++++++++++++++++++++
- lib/commands/toolcontext.h |    8 ++++++++
- liblvm/lvm_base.c          |   23 ++++++++++++++++++++---
- 3 files changed, 71 insertions(+), 3 deletions(-)
+ WHATS_NEW |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 90e5d5a..1e3f14a 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1776,6 +1776,49 @@ bad:
- 	return 0;
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 618e3dc..9b9265c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,11 @@
+ Version 2.02.155 - 
+ ================================
++  Fix liblvm2app error handling when setting up context.
++  Delay liblvm2app init in python code until it is needed.
++  Simplify thread locking in lvmetad to fix locking problems.
++  Allow pvremove -ff to remove a duplicate PV.
++  Fix lvm2-activation-generator to read lvm.conf without full command setup.
++  Allow a minimal context to be used in lvm2app for reading lvm.conf.
  
-+void destroy_config_context(struct cmd_context *cmd)
-+{
-+	_destroy_config(cmd);
-+
-+	if (cmd->mem)
-+		dm_pool_destroy(cmd->mem);
-+	if (cmd->libmem)
-+		dm_pool_destroy(cmd->libmem);
-+
-+	dm_free(cmd);
-+}
-+
-+/*
-+ * A "config context" is a very light weight toolcontext that
-+ * is only used for reading config settings from lvm.conf.
-+ */
-+struct cmd_context *create_config_context(void)
-+{
-+	struct cmd_context *cmd;
-+
-+	if (!(cmd = dm_zalloc(sizeof(*cmd))))
-+		goto_out;
-+
-+	strcpy(cmd->system_dir, DEFAULT_SYS_DIR);
-+
-+	if (!_get_env_vars(cmd))
-+		goto_out;
-+
-+	if (!(cmd->libmem = dm_pool_create("library", 4 * 1024)))
-+		goto_out;
-+
-+	dm_list_init(&cmd->config_files);
-+
-+	if (!_init_lvm_conf(cmd))
-+		goto_out;
-+
-+	return cmd;
-+out:
-+	if (cmd)
-+		destroy_config_context(cmd);
-+	return NULL;
-+}
-+
- /* Entry point */
- struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 				       const char *system_dir,
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index c3b9b2e..2cecf27 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -218,6 +218,14 @@ int init_lvmcache_orphans(struct cmd_context *cmd);
- int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache);
- int init_connections(struct cmd_context *cmd);
- 
-+/*
-+ * A config context is a very light weight cmd struct that
-+ * is only used for reading config settings from lvm.conf,
-+ * which are at cmd->cft.
-+ */
-+struct cmd_context *create_config_context(void);
-+void destroy_config_context(struct cmd_context *cmd);
-+
- struct format_type *get_format_by_name(struct cmd_context *cmd, const char *format);
- 
- const char *system_id_from_string(struct cmd_context *cmd, const char *str);
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index 8b4def2..fce994c 100644
---- a/liblvm/lvm_base.c
-+++ b/liblvm/lvm_base.c
-@@ -126,14 +126,31 @@ int lvm_config_override(lvm_t libh, const char *config_settings)
- 	return rc;
- }
- 
-+/*
-+ * When full lvm connection is not being used, libh can be NULL
-+ * and this command will internally create a single-use, light-weight
-+ * cmd struct that only has cmd->cft populated from lvm.conf.
-+ */
- int lvm_config_find_bool(lvm_t libh, const char *config_path, int fail)
- {
- 	int rc = 0;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
-+	struct cmd_context *cmd;
-+	struct saved_env e;
-+
-+	if (libh) {
-+		cmd = (struct cmd_context *)libh;
-+		e = store_user_env((struct cmd_context *)libh);
-+	} else {
-+		if (!(cmd = create_config_context()))
-+			return 0;
-+	}
- 
- 	rc = dm_config_tree_find_bool(cmd->cft, config_path, fail);
--	restore_user_env(&e);
-+
-+	if (libh)
-+		restore_user_env(&e);
-+	else
-+		destroy_config_context(cmd);
- 	return rc;
- }
- 
+ Version 2.02.154 - 14th May 2016
+ ================================
 
 
