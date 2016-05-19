@@ -1,65 +1,103 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 19 May 2016 16:41:36 +0000 (UTC)
-Subject: master - debug: use display_lvname
-Message-ID: <20160519164136.2D0A3606EF@fedorahosted.org>
+Date: Thu, 19 May 2016 16:41:38 +0000 (UTC)
+Subject: master - tests: test change of cache mode
+Message-ID: <20160519164138.560AA606EF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c083d34af0bc3ce690b3086714dd812c6a15193
-Commit:        9c083d34af0bc3ce690b3086714dd812c6a15193
-Parent:        197066c863607a884c0eef2f16d969aa00adcab1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6247364caf69cce766efcc79d972f70b175c5938
+Commit:        6247364caf69cce766efcc79d972f70b175c5938
+Parent:        9c083d34af0bc3ce690b3086714dd812c6a15193
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 18 15:22:26 2016 +0200
+AuthorDate:    Thu May 19 18:21:07 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu May 19 18:40:14 2016 +0200
 
-debug: use display_lvname
+tests: test change of cache mode
 
-Add some tracing message
 ---
- lib/activate/dev_manager.c    |    2 ++
- lib/format_text/import_vsn1.c |    5 ++++-
- 2 files changed, 6 insertions(+), 1 deletions(-)
+ test/shell/lvchange-cache-mode.sh |   71 +++++++++++++++++++++++++++++++++++++
+ 1 files changed, 71 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index c07af2d..f6cc0be 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -2154,6 +2154,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 		dm_list_iterate(snh, &lv->snapshot_segs)
- 			if (!_add_lv_to_dtree(dm, dtree, dm_list_struct_base(snh, struct lv_segment, origin_list)->cow, 0))
- 				return_0;
+diff --git a/test/shell/lvchange-cache-mode.sh b/test/shell/lvchange-cache-mode.sh
+new file mode 100644
+index 0000000..8a056d6
+--- /dev/null
++++ b/test/shell/lvchange-cache-mode.sh
+@@ -0,0 +1,71 @@
++#!/bin/sh
++# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
- 	if (dm->activation && !origin_only && lv_is_merging_origin(lv) &&
- 	    !_add_lv_to_dtree(dm, dtree, find_snapshot(lv)->lv, 1))
- 		return_0;
-@@ -3104,6 +3105,7 @@ static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
- 	/* Some targets may build bigger tree for activation */
- 	dm->activation = ((action == PRELOAD) || (action == ACTIVATE));
- 	dm->suspend = (action == SUSPEND_WITH_LOCKFS) || (action == SUSPEND);
++# Exercise changing of caching mode on both cache pool and cached LV.
 +
- 	if (!(dtree = _create_partial_dtree(dm, lv, laopts->origin_only)))
- 		return_0;
- 
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index f9a1040..d2219e4 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -569,8 +569,11 @@ static int _read_lvnames(struct format_instance *fid __attribute__((unused)),
- 	if (!(lv->name = dm_pool_strdup(mem, lvn->key)))
- 		return_0;
- 
-+	log_debug_metadata("Importing logical volume %s.", display_lvname(lv));
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
 +
- 	if (!(lvn = lvn->child)) {
--		log_error("Empty logical volume section.");
-+		log_error("Empty logical volume section for %s.",
-+			  display_lvname(lv));
- 		return 0;
- 	}
- 
++. lib/inittest
++
++aux have_cache 1 3 0 || skip
++
++aux prepare_vg 2
++
++lvcreate --type cache-pool -L18 -n cpool $vg "$dev1"
++lvcreate -H -L14 -n $lv1 --cachemode writeback --cachesettings migration_threshold=204800 --cachepool $vg/cpool $vg "$dev2"
++
++#cat "$DM_DEV_DIR/$vg/$lv1"  >/dev/null
++#aux delay_dev "$dev2"  300 1000 $(get first_extent_sector "$dev2"):
++
++#dmsetup status $vg-$lv1
++#dmsetup table $vg-$lv1
++
++for i in $(seq 1 10) ; do 
++echo 3 >/proc/sys/vm/drop_caches
++dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv1" bs=64K count=20 conv=fdatasync || true
++echo 3 >/proc/sys/vm/drop_caches
++dd if="$DM_DEV_DIR/$vg/$lv1" of=/dev/null bs=64K count=20 || true
++done
++
++lvs -o+cache_dirty_blocks,cache_read_hits,cache_read_misses,cache_write_hits,cache_write_misses $vg/$lv1
++
++vgcfgbackup -f /tmp/ooo $vg
++
++
++#
++# Drop later, code loading dm tables directly without lvm
++# RHBZ 1337588
++#
++#dmsetup table
++#echo "STATUS before cleaner"
++#dmsetup status
++#dmsetup load --table "0 28672 cache 253:4 253:3 253:5 128 1 writethrough cleaner 0" $vg-$lv1
++#dmsetup resume $vg-$lv1
++#sleep 1
++#dmsetup table
++#echo "STATUS after cleaner 1sec"
++#dmsetup status --noflush
++#dmsetup suspend --noflush $vg-$lv1
++#dmsetup resume $vg-$lv1
++
++#dmsetup load --table "0 28672 cache 253:4 253:3 253:5 128 1 passthrough smq 2 migration_threshold 204800" $vg-$lv1
++#dmsetup resume $vg-$lv1
++
++check lv_field $vg/$lv1 cache_mode "writeback"
++lvchange --cachemode passthrough $vg/$lv1
++check lv_field  $vg/$lv1 cache_mode "passthrough"
++lvchange --cachemode writethrough $vg/$lv1
++check lv_field  $vg/$lv1 cache_mode "writethrough"
++lvchange --cachemode writeback $vg/$lv1
++check lv_field  $vg/$lv1 cache_mode "writeback"
++
++vgremove -f $vg
 
 
