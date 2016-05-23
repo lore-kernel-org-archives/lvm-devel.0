@@ -1,39 +1,41 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 23 May 2016 17:05:17 +0000 (UTC)
-Subject: master - test: lvmetad-disabled
-Message-ID: <20160523170517.4DC4D60D7B@fedorahosted.org>
+From: Daniel Golle <daniel@makrotopia.org>
+Date: Mon, 23 May 2016 21:45:06 +0200
+Subject: [PATCH] device: include goto label also for O_NOATIME
+In-Reply-To: <20160520210951.GC2110@agk-dp.fab.redhat.com>
+References: <20160520043805.GA19157@makrotopia.org>
+	<20160520110256.GB2110@agk-dp.fab.redhat.com>
+	<20160520165626.GA2268@makrotopia.org>
+	<20160520210951.GC2110@agk-dp.fab.redhat.com>
+Message-ID: <20160523194505.GA4648@makrotopia.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=757f7d55082844a17372e4e83c6a95884c2550a8
-Commit:        757f7d55082844a17372e4e83c6a95884c2550a8
-Parent:        3d3efd7ab80f200148f8c133521320642aa9d221
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 5 15:44:27 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon May 23 12:01:11 2016 -0500
+Hi again!
 
-test: lvmetad-disabled
+On Fri, May 20, 2016 at 10:09:51PM +0100, Alasdair G Kergon wrote:
+> On Fri, May 20, 2016 at 06:56:27PM +0200, Daniel Golle wrote:
+> > The musl libc [1] apparently doesn't support O_DIRECT.
+> > Alpine Linux [2], LEDE [3] and OpenWrt [4] are affected.
+>  
+> So that's still widespread enough that we need to continue to support this 
+> and should probably add it to our upstream test matrix.
 
----
- test/shell/lvmetad-disabled.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Neither you nor anyone else made any comments on the patch itself.
+I'd be happy to see it being reviewed and, if possible, merged as it
+fixes an obvious semantical error in the existing code.
 
-diff --git a/test/shell/lvmetad-disabled.sh b/test/shell/lvmetad-disabled.sh
-index e905ba7..41f1126 100644
---- a/test/shell/lvmetad-disabled.sh
-+++ b/test/shell/lvmetad-disabled.sh
-@@ -42,7 +42,7 @@ while ! test -e "$TESTDIR/lvmetad.socket"; do echo -n .; sleep .1; done # wait f
- test -e "$LVM_LVMETAD_PIDFILE"
- cp "$LVM_LVMETAD_PIDFILE" LOCAL_LVMETAD
- 
--not pvscan --cache 2>&1 | tee out
-+pvscan --cache 2>&1 | tee out
- grep "WARNING: Disabling lvmetad cache" out
- 
- pvs  2>&1 | tee out
+Some more work is needed to be fully compatible with musl, see
+https://github.com/openwrt/packages/tree/master/utils/lvm2/patches
+or patches in
+http://git.alpinelinux.org/cgit/aports/tree/main/lvm2?h=master
+
+
+Cheers
+
+
+Daniel
 
 
