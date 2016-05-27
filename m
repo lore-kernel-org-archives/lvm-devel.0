@@ -1,183 +1,156 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 11 Aug 2021 15:39:35 +0000 (GMT)
-Subject: v2_03_13 annotated tag has been created
-Message-ID: <20210811153935.EDBA03857413@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 27 May 2016 13:47:49 +0000 (UTC)
+Subject: master - lv: introduce lvseg_percent_with_info_and_seg_status
+Message-ID: <20160527134749.8B5436075A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=91a82455813bebce0949cb681369f370ce3105d5
-Commit:        91a82455813bebce0949cb681369f370ce3105d5
-Parent:        0000000000000000000000000000000000000000
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    2021-08-11 15:36 +0000
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: 2021-08-11 15:36 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=92eba53a797a011d1ce6fbd7bef88eab41af2072
+Commit:        92eba53a797a011d1ce6fbd7bef88eab41af2072
+Parent:        f7f395667ee5446e9127fe772deb46f3e4f3812e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 25 16:18:38 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri May 27 15:47:24 2016 +0200
 
-annotated tag: v2_03_13 has been created
-	    at 91a82455813bebce0949cb681369f370ce3105d5 (tag)
-       tagging 67a853f3376059dc7022b544b7b6dae6a5e262d3 (commit)
-      replaces v2_03_12
+lv: introduce lvseg_percent_with_info_and_seg_status
 
-Test Release 2.03.13
+Add function to obtain percentage value for cache lv_seg_status.
+This API is rather evolving 'middle' step as the ultimate goal
+is segment API fuctionality.
 
-WARNING: This release is intended mainly for testing.
+But first we need to be clear at reporting level which values
+are needed to be reported for which LVs and segments.
+---
+ WHATS_NEW         |    1 +
+ lib/metadata/lv.c |   82 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/metadata/lv.h |    9 ++++++
+ 3 files changed, 92 insertions(+), 0 deletions(-)
 
-Less reliance on udev:
-- Users suffering from udev timeouts are sometimes recommended to change the
-  obtain_device_list_from_udev configuration option to 0. This is now default
-  and /dev is read instead of udev.
-- Use of multipath wwids file to quick check if device is multipath.
-
-See devices/external_device_info_source, devices/obtain_device_list_from_udev,
-and devices/multipath_wwids_file help in lvm.conf
-
-Other changes worth highlighting:
-
-- Refactoring of archive() and backup() internal calls.
-- New vdoimport tool to convert VDO volumes to LVs (requires updated kernel and
-  vdo tools.)
-
-And many fixes, improvements, and clean ups.
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.22 (GNU/Linux)
-
-iQIcBAABAgAGBQJhE+6bAAoJELkRJDHlCQOf18MQAPrVDEvyF5dj6q/agq9+Za2B
-LS3xlfZjrbUip16W9TJ2JBHiLSNe4U+CLC30XMy/CH9lWQ5zkuP5dpUiRt6YDrL8
-5WWGqQpR7wSj1noNyElBcObOzGhKBpQtGx4IoiKrbaZYxOgDm3j0oo5IH6uxNy3e
-Ku2x0CvYZYbO0q1fOTXv67YzIUQrheEMr2sn+/4g9MkozAddsfRQYphKsHEkXuVH
-YHWadDxYHSGvNNb4dPVXDKIPtFFMwaX5QzTPjW0QEtjGSh4JKtW0dknHY0y78R2G
-ePvSO9g9W/msF5wGR4agHhVOJqPuEQ8HdHAlqQXyZEiJbfD2WpdfZ91oBT8Xl59S
-8B3WpM58L/f4QCLbwR39F4ntfoWw1k9IZ4bnoktgOYcX+kVSgSl7IskrFrk4qchZ
-rzaqvcNjdcyH4GLEJdW9pfiSBhGkChql0wkgp1qOJalMOQVDaJtH7oocxyK1U7VA
-Ra+TI4NyMYCbM5stcrZiIa24Cqo49i+hfrEKj0nRIU2kuSAWFJPocDuil/1BYZ8c
-kMlIILoE3qODXXdxV9HQ2xxEHGsoA8RC5/uwwRXWv6VrFXbbn/p1VZSyg4Vlocjq
-PNGglK6f5ALjZq9q+FmK3cLU4EGHwnU+YlDbW3+FFmSiMgs9Fr5faGPfWt/EqscX
-I2UcqsgeWk9pJKR+rMk6
-=nu52
------END PGP SIGNATURE-----
-
-David Teigland (36):
-      enable command syntax for thin and writecache
-      lvremove: fix removing thin pool with writecache on data
-      writecache: fix lv_on_pmem
-      writecache: don't pvmove device used by writecache
-      pvchange: fix file locking deadlock
-      fix empty mem pool leak
-      tests: writecache-blocksize add dm-cache tests
-      tests: rename test
-      tests: add writecache-cache-blocksize-2
-      devices: don't use deleted loop backing file for device id
-      man/help: fix common option listing
-      lvmdevices: add deviceidtype option
-      tests: add some LVM_TEST_LOCK_TYPE_IDM
-      tests: fix skip in stress_single_thread.sh
-      coverity cleanups
-      lvconvert: allow writecache with other thinpool command syntax
-      device_id: handle scsi_debug wwid
-      writecache: use block size 4096 when no fs is found
-      device_id: handle qemu wwid
-      tests: skip tests that require blkid BLOCK_SIZE
-      scan: don't hold bcache block during scan
-      scan: retry reading metadata on error
-      scan: move metadata vgname check
-      pvscan: skip indexing devices used by LVs
-      skip indexing devices used by LVs in more commands
-      devices: rework libudev usage
-      filter-usable: remove udev dev size check
-      fix multipath component detection for multiple holders
-      pvscan: do nothing for device removal and event_activation=0
-      pvscan: narrow the previous commit slightly
-      writecache: fix missing sync_dev_names when attaching cache
-      writecache: use block size 512 for thin pool data
-      cov: lvmlockd path copy
-      devices file: limit warnings about devices file entries not found
-      devices file: avoid updating entry dev names in some cases
-      pvscan: only match devices file for command args
-
-Heming Zhao (1):
-      toolcontext: fix double free (core dumped) issue
-
-Leo Yan (26):
-      lvmlockd: idm: Introduce new locking scheme
-      lvmlockd: idm: Hook Seagate IDM wrapper APIs
-      lib: locking: Add new type "idm"
-      lib: locking: Parse PV list for IDM locking
-      tools: Add support for "idm" lock type
-      configure: Add macro LOCKDIDM_SUPPORT
-      tests: Enable the testing for IDM locking scheme
-      tests: Support multiple backing devices
-      tests: Cleanup idm context when prepare devices
-      tests: Add checking for lvmlockd log
-      tests: stress: Add single thread stress testing
-      tests: stress: Add multi-threads stress testing for VG/LV
-      tests: stress: Add multi-threads stress testing for PV/VG/LV
-      tests: Support idm failure injection
-      tests: Add testing for lvmlockd failure
-      tests: idm: Add testing for the fabric failure
-      tests: idm: Add testing for the fabric failure and timeout
-      tests: idm: Add testing for the fabric's half brain failure
-      tests: idm: Add testing for IDM lock manager failure
-      tests: multi-hosts: Add VG testing
-      tests: multi-hosts: Add LV testing
-      tests: multi-hosts: Test lease timeout with LV exclusive mode
-      tests: multi-hosts: Test lease timeout with LV shareable mode
-      lvmlockd: Fix the compilation warning
-      tests: stress: Change to use $SHARED for vgcreate
-      tests: Fix building for IDM program
-
-Marian Csontos (4):
-      post-release
-      spec: Add vdoimport man page
-      WHATS_NEW: update
-      pre-release
-
-Tony Asleson (4):
-      lvmdbusd: Don't setup search key unless needed
-      lvmdbusd: Defer dbus object removal
-      lvmdbusd: Handle arbitrary amounts stdout & stderr
-      lvmdbusd: Wrap json.load in try/except
-
-Wu Guanghao (1):
-      pvck: add lock_global() before clean_hint_file()
-
-Zdenek Kabelac (32):
-      vdo: fix preload of kvdo
-      archiving: take archive automatically
-      backup: automatically store data on vg_unlock
-      archive: avoid abuse of internal flag
-      config_settings: typo fix
-      lvconvert: fix vdo virtual size when specified
-      vdo: rename variable vdo_pool_zero
-      vdo: support vdo_pool_header_size
-      make: generate
-      WHATS_NEW: update
-      configure: updates
-      vdo: add vdoimport support
-      man: vdoimport page
-      thin: fix component detection of external origin
-      vgremove: remove forgotten pmspare
-      vgsplit: add support for option --poolmetadataspare
-      test
-      vgmerge: remove one of merge pmspare LVs
-      vgmerge: support option --poolmetadataspare
-      tests: extend vgmerge testing
-      cov: pvck fix memleak
-      pvck: ensure buffer is 0 terminated
-      cov: memleak dir descriptor
-      cov: remove unneeded includes
-      cov: add internal error for missing arg
-      cov: ensure bufffe size is at least 5
-      cov: guard index
-      cov: dev-mpath: check config_wwids_file
-      cov: raid: no more checks with missing areas
-      cov: add explicit check for vg existence
-      cov: add initilizer
-      debug: stack tracing on error path
-
-root (1):
-      make: generate
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2265c9b..9f270c6 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.155 - 
+ ================================
++  Add lvseg_percent_with_info_and_seg_status() for percent retrieval.
+   Enhance internal seg_status handling to understand snapshots better.
+   When refresh failed in suspend, call resume upon error path.
+   Support passthrough cache mode when waiting for clean cache.
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 0a531cf..92ea3a9 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -345,6 +345,88 @@ uint64_t lvseg_size(const struct lv_segment *seg)
+ 	return (uint64_t) seg->len * seg->lv->vg->extent_size;
+ }
+ 
++dm_percent_t lvseg_percent_with_info_and_seg_status(const struct lv_with_info_and_seg_status *lvdm,
++						    percent_get_t type)
++{
++	dm_percent_t p;
++	uint64_t csize;
++	const struct lv_segment *seg;
++	const struct lv_seg_status *s = &lvdm->seg_status;
++
++	/*
++	 * TODO:
++	 *   Later move to segment methods, instead of using single place.
++	 *   Also handle logic for mirror segments and it total_* summing
++	 *   Esentially rework  _target_percent API for segtype.
++	 */
++	switch (s->type) {
++	case SEG_STATUS_CACHE:
++		if (s->cache->fail || s->cache->error)
++			p = DM_PERCENT_INVALID;
++		else {
++			switch (type) {
++			case PERCENT_GET_DIRTY:
++				p = dm_make_percent(s->cache->dirty_blocks,
++						    s->cache->used_blocks);
++				break;
++			case PERCENT_GET_METADATA:
++				p = dm_make_percent(s->cache->metadata_used_blocks,
++						    s->cache->metadata_total_blocks);
++				break;
++			default:
++				p = dm_make_percent(s->cache->used_blocks,
++						    s->cache->total_blocks);
++			}
++		}
++		break;
++	case SEG_STATUS_SNAPSHOT:
++		if (s->snapshot->invalid || s->snapshot->merge_failed)
++			p = DM_PERCENT_INVALID;
++		else if (s->snapshot->has_metadata_sectors &&
++			 (s->snapshot->used_sectors == s->snapshot->metadata_sectors))
++			p = DM_PERCENT_0;
++		else
++			p = dm_make_percent(s->snapshot->used_sectors,
++					    s->snapshot->total_sectors);
++		break;
++	case SEG_STATUS_THIN_POOL:
++		if (s->thin_pool->fail || s->thin_pool->error)
++			p = DM_PERCENT_INVALID;
++		else if (type == PERCENT_GET_METADATA)
++			p = dm_make_percent(s->thin_pool->used_metadata_blocks,
++					    s->thin_pool->total_metadata_blocks);
++		else
++			p = dm_make_percent(s->thin_pool->used_data_blocks,
++					    s->thin_pool->total_data_blocks);
++		break;
++	case SEG_STATUS_THIN:
++		if (s->thin->fail || (type != PERCENT_GET_DATA))
++			/* TODO: expose highest mapped sector */
++			p = DM_PERCENT_INVALID;
++		else {
++			seg = first_seg(lvdm->lv);
++			/* Pool allocates whole chunk so round-up to nearest one */
++			csize = first_seg(seg->pool_lv)->chunk_size;
++			csize = ((seg->lv->size + csize - 1) / csize) * csize;
++			if (s->thin->mapped_sectors <= csize)
++				p = dm_make_percent(s->thin->mapped_sectors, csize);
++			else {
++				log_warn("WARNING: Thin volume %s maps %s while the size is only %s.",
++					 display_lvname(seg->lv),
++					 display_size(lvdm->lv->vg->cmd, s->thin->mapped_sectors),
++					 display_size(lvdm->lv->vg->cmd, csize));
++				/* Don't show nonsense numbers like i.e. 1000% full */
++				p = DM_PERCENT_100;
++			}
++		}
++		break;
++	default:
++		p = DM_PERCENT_INVALID;
++	}
++
++	return p;
++}
++
+ uint32_t lv_kernel_read_ahead(const struct logical_volume *lv)
+ {
+ 	struct lvinfo info;
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index 08fc090..9f871d6 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -197,4 +197,13 @@ char *lv_profile_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_lock_args_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lvseg_kernel_discards_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_with_info_and_seg_status *lvdm);
+ char *lv_time_dup(struct dm_pool *mem, const struct logical_volume *lv, int iso_mode);
++
++typedef enum {
++	PERCENT_GET_DATA = 0,
++	PERCENT_GET_METADATA,
++	PERCENT_GET_DIRTY
++} percent_get_t;
++dm_percent_t lvseg_percent_with_info_and_seg_status(const struct lv_with_info_and_seg_status *lvdm,
++						    percent_get_t type);
++
+ #endif /* _LVM_LV_H */
 
 
