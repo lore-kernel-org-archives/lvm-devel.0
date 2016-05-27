@@ -1,40 +1,152 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 31 Aug 2021 20:06:08 +0000 (GMT)
-Subject: main - vdo: fix conversion of large virtual sizes
-Message-ID: <20210831200608.139B63858400@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 27 May 2016 13:47:58 +0000 (UTC)
+Subject: master - debug: use display_lvname
+Message-ID: <20160527134758.372E4607A7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4afe872fd6c43fcfcd519c862574d010cdbda653
-Commit:        4afe872fd6c43fcfcd519c862574d010cdbda653
-Parent:        88360b0c512d96dfe05c11362ff389ef6bfec6b4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=090ecaabed9df1ead8781c6d504e1fe38ebcf7a4
+Commit:        090ecaabed9df1ead8781c6d504e1fe38ebcf7a4
+Parent:        04003cf1ff1c4d00c0d155de6387cdd83478f812
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Aug 30 18:12:59 2021 +0200
+AuthorDate:    Fri May 20 11:28:23 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 31 22:05:47 2021 +0200
+CommitterDate: Fri May 27 15:47:24 2016 +0200
 
-vdo: fix conversion of large virtual sizes
+debug: use display_lvname
 
-Properly accept virtual sizes above 2TiB.
 ---
- tools/lvconvert.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/metadata/cache_manip.c |    5 ++++-
+ lib/metadata/lv_manip.c    |   34 +++++++++++++++++-----------------
+ 2 files changed, 21 insertions(+), 18 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 83dfe5c71..d73e16e3a 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -5428,7 +5428,7 @@ static int _lvconvert_to_vdopool_single(struct cmd_context *cmd,
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 4d84fe1..275696e 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -340,6 +340,7 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
+ 	for (;;) {
+ 		if (!lv_cache_status(cache_lv, &status))
+ 			return_0;
++
+ 		if (status->cache->fail) {
+ 			dm_pool_destroy(status->mem);
+ 			log_warn("WARNING: Skippping flush for failed cache %s.",
+@@ -422,7 +423,8 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	if (!lv_is_active_locally(cache_lv)) {
+ 		/* Give up any remote locks */
+ 		if (!deactivate_lv(cache_lv->vg->cmd, cache_lv)) {
+-			log_error("Cannot deactivate remotely active cache lv.");
++			log_error("Cannot deactivate remotely active cache volume %s.",
++				  display_lvname(cache_lv));
+ 			return 0;
+ 		}
+ 
+@@ -497,6 +499,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 
+ 	if (!(cache_seg->areas = dm_pool_zalloc(cache_lv->vg->vgmem, sizeof(*cache_seg->areas))))
+ 		return_0;
++
+ 	if (!set_lv_segment_area_lv(cache_seg, 0, cache_lv, 0, 0))
  		return_0;
  
- 	lvc.virtual_extents = extents_from_size(cmd,
--						arg_uint_value(cmd, virtualsize_ARG, 0),
-+						arg_uint64_value(cmd, virtualsize_ARG, UINT64_C(0)),
- 						vg->extent_size);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index fdf0c86..b31676d 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5771,39 +5771,39 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return_0;
  
- 	if (!(lvc.segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_VDO)))
+ 	if (lv_is_origin(lv)) {
+-		log_error("Can't remove logical volume \"%s\" under snapshot",
+-			  lv->name);
++		log_error("Can't remove logical volume %s under snapshot.",
++			  display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+ 	if (lv_is_external_origin(lv)) {
+-		log_error("Can't remove external origin logical volume \"%s\".",
+-			  lv->name);
++		log_error("Can't remove external origin logical volume %s.",
++			  display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+ 	if (lv_is_mirror_image(lv)) {
+-		log_error("Can't remove logical volume %s used by a mirror",
+-			  lv->name);
++		log_error("Can't remove logical volume %s used by a mirror.",
++			  display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+ 	if (lv_is_mirror_log(lv)) {
+-		log_error("Can't remove logical volume %s used as mirror log",
+-			  lv->name);
++		log_error("Can't remove logical volume %s used as mirror log.",
++			  display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+ 	if (lv_is_raid_metadata(lv) || lv_is_raid_image(lv)) {
+-		log_error("Can't remove logical volume %s used as RAID device",
+-			  lv->name);
++		log_error("Can't remove logical volume %s used as RAID device.",
++			  display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+ 	if (lv_is_thin_pool_data(lv) || lv_is_thin_pool_metadata(lv) ||
+ 	    lv_is_cache_pool_data(lv) || lv_is_cache_pool_metadata(lv)) {
+ 		log_error("Can't remove logical volume %s used by a pool.",
+-			  lv->name);
++			  display_lvname(lv));
+ 		return 0;
+ 	} else if (lv_is_thin_volume(lv)) {
+ 		if (!(pool_lv = first_seg(lv)->pool_lv)) {
+@@ -5815,7 +5815,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	}
+ 
+ 	if (lv_is_locked(lv)) {
+-		log_error("Can't remove locked LV %s", lv->name);
++		log_error("Can't remove locked logical volume %s.", display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+@@ -5838,8 +5838,8 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 					  "%slogical volume %s? [y/n]: ",
+ 					  ask_discard ? " and DISCARD" : "",
+ 					  vg_is_clustered(vg) ? "clustered " : "",
+-					  lv->name) == 'n') {
+-				log_error("Logical volume %s not removed", lv->name);
++					  display_lvname(lv)) == 'n') {
++				log_error("Logical volume %s not removed.", display_lvname(lv));
+ 				return 0;
+ 			} else {
+ 				ask_discard = 0;
+@@ -5850,8 +5850,8 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	if (!lv_is_historical(lv) && (force == PROMPT) && ask_discard &&
+ 	    yes_no_prompt("Do you really want to remove and DISCARD "
+ 			  "logical volume %s? [y/n]: ",
+-			  lv->name) == 'n') {
+-		log_error("Logical volume %s not removed", lv->name);
++			  display_lvname(lv)) == 'n') {
++		log_error("Logical volume %s not removed.", display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+@@ -5907,7 +5907,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		if (!(lv->vg->fid->fmt->features & FMT_MDAS))
+ 			format1_origin = origin_from_cow(lv);
+ 
+-		log_verbose("Removing snapshot %s", lv->name);
++		log_verbose("Removing snapshot volume %s.", display_lvname(lv));
+ 		/* vg_remove_snapshot() will preload origin/former snapshots */
+ 		if (!vg_remove_snapshot(lv))
+ 			return_0;
 
 
