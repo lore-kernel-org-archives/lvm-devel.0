@@ -1,50 +1,83 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 27 Aug 2021 19:50:08 +0000 (GMT)
-Subject: main - pvremove: apply devices file
-Message-ID: <20210827195008.0FB443857C6F@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 27 May 2016 13:47:56 +0000 (UTC)
+Subject: master - cache: add log_error on error path
+Message-ID: <20160527134756.23F6C607A7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=350f8845bd39dd7aaf5a52ad5deff6859fd06568
-Commit:        350f8845bd39dd7aaf5a52ad5deff6859fd06568
-Parent:        12ba43ccd0cac480b4da0fb8457db83b4b50b722
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Aug 27 14:48:33 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Aug 27 14:48:33 2021 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04003cf1ff1c4d00c0d155de6387cdd83478f812
+Commit:        04003cf1ff1c4d00c0d155de6387cdd83478f812
+Parent:        ecfb90de7405e55d79239d70838a31c66f2e926a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 25 16:27:12 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri May 27 15:47:24 2016 +0200
 
-pvremove: apply devices file
+cache: add log_error on error path
 
-pvremove was wrongly allowed to operate on a device
-not listed in the devices file.
+Validate and report error when lv_cache_status is called
+for inactive LV, or pending delete or unused cache_pool.
 ---
- tools/toollib.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ lib/activate/activate.c |   22 ++++++++++++++++------
+ tools/lvchange.c        |    3 ++-
+ 2 files changed, 18 insertions(+), 7 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 6d61f49e6..9d488c5a7 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -5333,7 +5333,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 2b22eec..1260b10 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1131,19 +1131,29 @@ int lv_cache_status(const struct logical_volume *cache_lv,
+ 	struct dev_manager *dm;
+ 	struct lv_segment *cache_seg;
  
- 	cmd->use_full_md_check = 1;
+-	if (lv_is_cache_pool(cache_lv) && !dm_list_empty(&cache_lv->segs_using_this_lv)) {
+-		if (!(cache_seg = get_only_segment_using_this_lv(cache_lv)))
+-			return_0;
++	if (lv_is_cache_pool(cache_lv)) {
++		if (dm_list_empty(&cache_lv->segs_using_this_lv) ||
++		    !(cache_seg = get_only_segment_using_this_lv(cache_lv))) {
++			log_error(INTERNAL_ERROR "Cannot check status for unused cache pool %s.",
++				  display_lvname(cache_lv));
++			return 0;
++		}
+ 		cache_lv = cache_seg->lv;
+ 	}
  
--	if (cmd->enable_devices_file)
-+	if (cmd->enable_devices_file && !pp->is_remove)
- 		cmd->filter_deviceid_skip = 1;
+-	if (lv_is_pending_delete(cache_lv))
++	if (lv_is_pending_delete(cache_lv)) {
++		log_error("Cannot check status for deleted cache volume %s.",
++			  display_lvname(cache_lv));
+ 		return 0;
++	}
  
- 	log_debug("Scanning and filtering device args (%u).", dm_list_size(&scan_devs));
-@@ -5559,7 +5559,7 @@ do_command:
- 	dm_list_iterate_items(devl, &rescan_devs)
- 		cmd->filter->wipe(cmd, cmd->filter, devl->dev, NULL);
+-	if (!lv_info(cache_lv->vg->cmd, cache_lv, 0, NULL, 0, 0))
++	if (!lv_info(cache_lv->vg->cmd, cache_lv, 0, NULL, 0, 0)) {
++		log_error("Cannot check status for locally inactive cache volume %s.",
++			  display_lvname(cache_lv));
+ 		return 0;
++	}
  
--	if (cmd->enable_devices_file)
-+	if (cmd->enable_devices_file && !pp->is_remove)
- 		cmd->filter_deviceid_skip = 1;
+-	log_debug_activation("Checking cache status for LV %s.",
++	log_debug_activation("Checking status for cache volume %s.",
+ 			     display_lvname(cache_lv));
  
- 	log_debug("Rescanning and filtering device args with exclusive open");
+ 	if (!(dm = dev_manager_create(cache_lv->vg->cmd, cache_lv->vg->name, 1)))
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index ad27786..16ede56 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -702,7 +702,8 @@ static int _lvchange_cache(struct cmd_context *cmd, struct logical_volume *lv)
+ 		goto_out;
+ 
+ 	if ((mode != CACHE_MODE_UNDEFINED) &&
+-	    (mode != pool_seg->cache_mode)) {
++	    (mode != pool_seg->cache_mode) &&
++	    lv_is_cache(lv)) {
+ 		if (!lv_cache_wait_for_clean(lv, &is_clean))
+ 			return_0;
+ 		if (!is_clean) {
 
 
