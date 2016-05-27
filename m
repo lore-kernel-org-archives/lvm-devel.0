@@ -1,104 +1,108 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 31 May 2016 08:19:45 +0000 (UTC)
-Subject: master - coverity: fix warnings about missing return value check for sscanf
-Message-ID: <20160531081945.CBD9760B3C@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 27 May 2016 13:47:43 +0000 (UTC)
+Subject: master - cleanup: drop cmd and constify lv for lv_refresh_suspend_resume()
+Message-ID: <20160527134743.3F44060642@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d333e5a296eba8ba2858ca007699fe70ec8083e
-Commit:        3d333e5a296eba8ba2858ca007699fe70ec8083e
-Parent:        48877e215d882f89294396d79f5d8d71395e427d
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue May 31 10:06:19 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue May 31 10:06:25 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=98b41db324a432db5860cb7dbea697a09bc4321e
+Commit:        98b41db324a432db5860cb7dbea697a09bc4321e
+Parent:        cb49ceeabaa011f51aa20c1a66c85ecbcb2c36a7
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri May 20 10:55:05 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri May 27 15:47:24 2016 +0200
 
-coverity: fix warnings about missing return value check for sscanf
+cleanup: drop cmd and constify lv for lv_refresh_suspend_resume()
 
-All the variables for sscanf in lvmlockctl.c and lvmlockd-sanlock.c are
-zeroed before sscanf call so the failure is detected by seeing the zero
-value instead of proper one in subsequent code - so use (void) for
-sscanf calls to ignore return value here.
+Like with most other lv_manip* functions take just LV arg and get cmd
+from embeded pointer when needed.
 ---
- daemons/lvmlockd/lvmlockctl.c       |   12 ++++++------
- daemons/lvmlockd/lvmlockd-sanlock.c |    4 ++--
- 2 files changed, 8 insertions(+), 8 deletions(-)
+ lib/locking/lvmlockd.c           |    2 +-
+ lib/metadata/cache_manip.c       |    2 +-
+ lib/metadata/lv_manip.c          |    4 +++-
+ lib/metadata/metadata-exported.h |    4 ++--
+ tools/toollib.c                  |    2 +-
+ 5 files changed, 8 insertions(+), 6 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
-index 4f559cf..7d4e072 100644
---- a/daemons/lvmlockd/lvmlockctl.c
-+++ b/daemons/lvmlockd/lvmlockctl.c
-@@ -77,7 +77,7 @@ static void save_client_info(char *line)
- 	uint32_t client_id = 0;
- 	char name[MAX_NAME+1] = { 0 };
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index c55f2b5..d718ac9 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -391,7 +391,7 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
  
--	sscanf(line, "info=client pid=%u fd=%d pi=%d id=%u name=%s",
-+	(void) sscanf(line, "info=client pid=%u fd=%d pi=%d id=%u name=%s",
- 	       &pid, &fd, &pi, &client_id, name);
- 
- 	clients[num_clients].client_id = client_id;
-@@ -110,7 +110,7 @@ static void format_info_ls(char *line)
- 	char lock_args[MAX_ARGS+1] = { 0 };
- 	char lock_type[MAX_NAME+1] = { 0 };
- 
--	sscanf(line, "info=ls ls_name=%s vg_name=%s vg_uuid=%s vg_sysid=%s vg_args=%s lm_type=%s",
-+	(void) sscanf(line, "info=ls ls_name=%s vg_name=%s vg_uuid=%s vg_sysid=%s vg_args=%s lm_type=%s",
- 	       ls_name, vg_name, vg_uuid, vg_sysid, lock_args, lock_type);
- 
- 	if (!first_ls)
-@@ -131,7 +131,7 @@ static void format_info_ls_action(char *line)
- 	uint32_t pid = 0;
- 	char cl_name[MAX_NAME+1] = { 0 };
- 
--	sscanf(line, "info=ls_action client_id=%u %s %s op=%s",
-+	(void) sscanf(line, "info=ls_action client_id=%u %s %s op=%s",
- 	       &client_id, flags, version, op);
- 
- 	find_client_info(client_id, &pid, cl_name);
-@@ -147,7 +147,7 @@ static void format_info_r(char *line, char *r_name_out, char *r_type_out)
- 	char sh_count[MAX_NAME+1] = { 0 };
- 	uint32_t ver = 0;
- 
--	sscanf(line, "info=r name=%s type=%s mode=%s %s version=%u",
-+	(void) sscanf(line, "info=r name=%s type=%s mode=%s %s version=%u",
- 	       r_name, r_type, mode, sh_count, &ver);
- 
- 	strcpy(r_name_out, r_name);
-@@ -185,7 +185,7 @@ static void format_info_lk(char *line, char *r_name, char *r_type)
- 		return;
+ static int _refresh_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
+ {
+-	if (!lv_refresh_suspend_resume(cmd, vg->sanlock_lv)) {
++	if (!lv_refresh_suspend_resume(vg->sanlock_lv)) {
+ 		log_error("Failed to refresh %s.", vg->sanlock_lv->name);
+ 		return 0;
+ 	}
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 3e8c5c7..4d84fe1 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -379,7 +379,7 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
+ 	 * ATM this is workaround for missing cache sync when cache gets clean
+ 	 */
+ 	if (1) {
+-		if (!lv_refresh_suspend_resume(lock_lv->vg->cmd, lock_lv))
++		if (!lv_refresh_suspend_resume(lock_lv))
+ 			return_0;
  	}
  
--	sscanf(line, "info=lk mode=%s version=%u %s client_id=%u",
-+	(void) sscanf(line, "info=lk mode=%s version=%u %s client_id=%u",
- 	       mode, &ver, flags, &client_id);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index b941979..625cea6 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1373,8 +1373,10 @@ int replace_lv_with_error_segment(struct logical_volume *lv)
+ 	return 1;
+ }
  
- 	find_client_info(client_id, &pid, cl_name);
-@@ -221,7 +221,7 @@ static void format_info_r_action(char *line, char *r_name, char *r_type)
- 		return;
+-int lv_refresh_suspend_resume(struct cmd_context *cmd, struct logical_volume *lv)
++int lv_refresh_suspend_resume(const struct logical_volume *lv)
+ {
++	struct cmd_context *cmd = lv->vg->cmd;
++
+ 	if (!cmd->partial_activation && lv_is_partial(lv)) {
+ 		log_error("Refusing refresh of partial LV %s."
+ 			  " Use '--activationmode partial' to override.",
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 1a9d5d9..a88ba1e 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2016 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -801,7 +801,7 @@ int lv_empty(struct logical_volume *lv);
+ /* Empty an LV and add error segment */
+ int replace_lv_with_error_segment(struct logical_volume *lv);
+ 
+-int lv_refresh_suspend_resume(struct cmd_context *cmd, struct logical_volume *lv);
++int lv_refresh_suspend_resume(const struct logical_volume *lv);
+ 
+ /* Entry point for all LV extent allocations */
+ int lv_extend(struct logical_volume *lv,
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 12dddc8..2f03a91 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1099,7 +1099,7 @@ int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
+ 						display_lvname(lv), display_lvname(snapshot_lv));
  	}
  
--	sscanf(line, "info=r_action client_id=%u %s %s op=%s rt=%s mode=%s %s %s %s",
-+	(void) sscanf(line, "info=r_action client_id=%u %s %s op=%s rt=%s mode=%s %s %s %s",
- 	       &client_id, flags, version, op, rt, mode, lm, result, lm_rv);
+-	if (!lv_refresh_suspend_resume(cmd, lv))
++	if (!lv_refresh_suspend_resume(lv))
+ 		return_0;
  
- 	find_client_info(client_id, &pid, cl_name);
-diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
-index b47c7f0..e344cb1 100644
---- a/daemons/lvmlockd/lvmlockd-sanlock.c
-+++ b/daemons/lvmlockd/lvmlockd-sanlock.c
-@@ -276,8 +276,8 @@ static int read_host_id_file(void)
- 		*sep = '\0';
- 		memset(key_str, 0, sizeof(key_str));
- 		memset(val_str, 0, sizeof(val_str));
--		sscanf(key, "%s", key_str);
--		sscanf(val, "%s", val_str);
-+		(void) sscanf(key, "%s", key_str);
-+		(void) sscanf(val, "%s", val_str);
- 
- 		if (!strcmp(key_str, "host_id")) {
- 			host_id = atoi(val_str);
+ 	/*
 
 
