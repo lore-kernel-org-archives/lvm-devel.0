@@ -1,149 +1,104 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 31 May 2016 08:19:43 +0000 (UTC)
-Subject: master - coverity: missing check for id_write_format return value
-Message-ID: <20160531081943.B7AF160B3C@fedorahosted.org>
+Date: Tue, 31 May 2016 08:19:45 +0000 (UTC)
+Subject: master - coverity: fix warnings about missing return value check for sscanf
+Message-ID: <20160531081945.CBD9760B3C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48877e215d882f89294396d79f5d8d71395e427d
-Commit:        48877e215d882f89294396d79f5d8d71395e427d
-Parent:        5b3a4a95956fe467a2c5fe1cce3925e67366d4fe
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d333e5a296eba8ba2858ca007699fe70ec8083e
+Commit:        3d333e5a296eba8ba2858ca007699fe70ec8083e
+Parent:        48877e215d882f89294396d79f5d8d71395e427d
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue May 31 09:56:10 2016 +0200
+AuthorDate:    Tue May 31 10:06:19 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue May 31 09:56:10 2016 +0200
+CommitterDate: Tue May 31 10:06:25 2016 +0200
 
-coverity: missing check for id_write_format return value
+coverity: fix warnings about missing return value check for sscanf
 
+All the variables for sscanf in lvmlockctl.c and lvmlockd-sanlock.c are
+zeroed before sscanf call so the failure is detected by seeing the zero
+value instead of proper one in subsequent code - so use (void) for
+sscanf calls to ignore return value here.
 ---
- daemons/lvmetad/testclient.c |    5 ++++-
- lib/cache/lvmcache.c         |    6 ++++--
- lib/format_pool/disk_rep.c   |    9 ++++++---
- lib/uuid/uuid.c              |    2 ++
- tools/toollib.c              |   11 ++++++-----
- 5 files changed, 22 insertions(+), 11 deletions(-)
+ daemons/lvmlockd/lvmlockctl.c       |   12 ++++++------
+ daemons/lvmlockd/lvmlockd-sanlock.c |    4 ++--
+ 2 files changed, 8 insertions(+), 8 deletions(-)
 
-diff --git a/daemons/lvmetad/testclient.c b/daemons/lvmetad/testclient.c
-index 56940d9..c9efbe6 100644
---- a/daemons/lvmetad/testclient.c
-+++ b/daemons/lvmetad/testclient.c
-@@ -75,7 +75,10 @@ int scan(daemon_handle h, char *fn) {
+diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
+index 4f559cf..7d4e072 100644
+--- a/daemons/lvmlockd/lvmlockctl.c
++++ b/daemons/lvmlockd/lvmlockctl.c
+@@ -77,7 +77,7 @@ static void save_client_info(char *line)
+ 	uint32_t client_id = 0;
+ 	char name[MAX_NAME+1] = { 0 };
+ 
+-	sscanf(line, "info=client pid=%u fd=%d pi=%d id=%u name=%s",
++	(void) sscanf(line, "info=client pid=%u fd=%d pi=%d id=%u name=%s",
+ 	       &pid, &fd, &pi, &client_id, name);
+ 
+ 	clients[num_clients].client_id = client_id;
+@@ -110,7 +110,7 @@ static void format_info_ls(char *line)
+ 	char lock_args[MAX_ARGS+1] = { 0 };
+ 	char lock_type[MAX_NAME+1] = { 0 };
+ 
+-	sscanf(line, "info=ls ls_name=%s vg_name=%s vg_uuid=%s vg_sysid=%s vg_args=%s lm_type=%s",
++	(void) sscanf(line, "info=ls ls_name=%s vg_name=%s vg_uuid=%s vg_sysid=%s vg_args=%s lm_type=%s",
+ 	       ls_name, vg_name, vg_uuid, vg_sysid, lock_args, lock_type);
+ 
+ 	if (!first_ls)
+@@ -131,7 +131,7 @@ static void format_info_ls_action(char *line)
+ 	uint32_t pid = 0;
+ 	char cl_name[MAX_NAME+1] = { 0 };
+ 
+-	sscanf(line, "info=ls_action client_id=%u %s %s op=%s",
++	(void) sscanf(line, "info=ls_action client_id=%u %s %s op=%s",
+ 	       &client_id, flags, version, op);
+ 
+ 	find_client_info(client_id, &pid, cl_name);
+@@ -147,7 +147,7 @@ static void format_info_r(char *line, char *r_name_out, char *r_type_out)
+ 	char sh_count[MAX_NAME+1] = { 0 };
+ 	uint32_t ver = 0;
+ 
+-	sscanf(line, "info=r name=%s type=%s mode=%s %s version=%u",
++	(void) sscanf(line, "info=r name=%s type=%s mode=%s %s version=%u",
+ 	       r_name, r_type, mode, sh_count, &ver);
+ 
+ 	strcpy(r_name_out, r_name);
+@@ -185,7 +185,7 @@ static void format_info_lk(char *line, char *r_name, char *r_type)
+ 		return;
  	}
  
- 	char uuid[64];
--	id_write_format(dev->pvid, uuid, 64);
-+	if (!id_write_format(dev->pvid, uuid, 64)) {
-+		fprintf(stderr, "[C] Failed to format PV UUID for %s", dev_name(dev));
-+		return;
-+	}
- 	fprintf(stderr, "[C] found PV: %s\n", uuid);
- 	struct lvmcache_info *info = (struct lvmcache_info *) label->info;
- 	struct physical_volume pv = { 0, };
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 0934b20..9e232f6 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -995,7 +995,8 @@ next:
- 			alt = devl;
- 		}
+-	sscanf(line, "info=lk mode=%s version=%u %s client_id=%u",
++	(void) sscanf(line, "info=lk mode=%s version=%u %s client_id=%u",
+ 	       mode, &ver, flags, &client_id);
  
--		id_write_format((const struct id *)dev1->pvid, uuid, sizeof(uuid));
-+		if (!id_write_format((const struct id *)dev1->pvid, uuid, sizeof(uuid)))
-+			stack;
- 		log_warn("WARNING: PV %s prefers device %s because %s.", uuid, dev_name(dev1), reason);
+ 	find_client_info(client_id, &pid, cl_name);
+@@ -221,7 +221,7 @@ static void format_info_r_action(char *line, char *r_name, char *r_type)
+ 		return;
  	}
  
-@@ -2066,7 +2067,8 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller,
+-	sscanf(line, "info=r_action client_id=%u %s %s op=%s rt=%s mode=%s %s %s %s",
++	(void) sscanf(line, "info=r_action client_id=%u %s %s op=%s rt=%s mode=%s %s %s %s",
+ 	       &client_id, flags, version, op, rt, mode, lm, result, lm_rv);
  
- 	strncpy(pvid_s, pvid, sizeof(pvid_s) - 1);
- 	pvid_s[sizeof(pvid_s) - 1] = '\0';
--	id_write_format((const struct id *)&pvid_s, uuid, sizeof(uuid));
-+	if (!id_write_format((const struct id *)&pvid_s, uuid, sizeof(uuid)))
-+		stack;
+ 	find_client_info(client_id, &pid, cl_name);
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index b47c7f0..e344cb1 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -276,8 +276,8 @@ static int read_host_id_file(void)
+ 		*sep = '\0';
+ 		memset(key_str, 0, sizeof(key_str));
+ 		memset(val_str, 0, sizeof(val_str));
+-		sscanf(key, "%s", key_str);
+-		sscanf(val, "%s", val_str);
++		(void) sscanf(key, "%s", key_str);
++		(void) sscanf(val, "%s", val_str);
  
- 	/*
- 	 * Find existing info struct in _pvid_hash or create a new one.
-diff --git a/lib/format_pool/disk_rep.c b/lib/format_pool/disk_rep.c
-index fd11380..0462eb4 100644
---- a/lib/format_pool/disk_rep.c
-+++ b/lib/format_pool/disk_rep.c
-@@ -60,7 +60,8 @@ static void _add_pl_to_list(struct cmd_context *cmd, struct dm_list *head, struc
- 		if (id_equal(&data->pv_uuid, &pl->pv_uuid)) {
- 			char uuid[ID_LEN + 7] __attribute__((aligned(8)));
- 
--			id_write_format(&pl->pv_uuid, uuid, ID_LEN + 7);
-+			if (!id_write_format(&pl->pv_uuid, uuid, ID_LEN + 7))
-+				stack;
- 
- 			if (!dev_subsystem_part_major(cmd->dev_types, data->dev)) {
- 				log_very_verbose("Ignoring duplicate PV %s on "
-@@ -90,11 +91,13 @@ int read_pool_label(struct pool_list *pl, struct labeller *l,
- 	pool_label_in(pd, buf);
- 
- 	get_pool_pv_uuid(&pvid, pd);
--	id_write_format(&pvid, uuid, ID_LEN + 7);
-+	if (!id_write_format(&pvid, uuid, ID_LEN + 7))
-+		stack;
- 	log_debug_metadata("Calculated uuid %s for %s", uuid, dev_name(dev));
- 
- 	get_pool_vg_uuid(&vgid, pd);
--	id_write_format(&vgid, uuid, ID_LEN + 7);
-+	if (!id_write_format(&vgid, uuid, ID_LEN + 7))
-+		stack;
- 	log_debug_metadata("Calculated uuid %s for %s", uuid, pd->pl_pool_name);
- 
- 	if (!(info = lvmcache_add(l, (char *) &pvid, dev, pd->pl_pool_name,
-diff --git a/lib/uuid/uuid.c b/lib/uuid/uuid.c
-index d52353f..aa44dc4 100644
---- a/lib/uuid/uuid.c
-+++ b/lib/uuid/uuid.c
-@@ -171,6 +171,8 @@ int id_write_format(const struct id *id, char *buffer, size_t size)
- 
- 	/* split into groups separated by dashes */
- 	if (size < (32 + 6 + 1)) {
-+		if (size > 0)
-+			buffer[0] = '\0';
- 		log_error("Couldn't write uuid, buffer too small.");
- 		return 0;
- 	}
-diff --git a/tools/toollib.c b/tools/toollib.c
-index b41db0f..0de6ee8 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1858,8 +1858,8 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
- 		skip = 0;
- 		notfound = 0;
- 
--		if (vg_uuid)
--			id_write_format((const struct id*)vg_uuid, uuid, sizeof(uuid));
-+		if (vg_uuid && !id_write_format((const struct id*)vg_uuid, uuid, sizeof(uuid)))
-+			stack;
- 
- 		log_very_verbose("Processing VG %s %s", vg_name, vg_uuid ? uuid : "");
- 
-@@ -1954,7 +1954,8 @@ static int _resolve_duplicate_vgnames(struct cmd_context *cmd,
- 			 * name/vgid and checks system_id in the metadata.
- 			 */
- 			if (lvmcache_vg_is_foreign(cmd, vgnl->vg_name, vgnl->vgid)) {
--				id_write_format((const struct id*)vgnl->vgid, uuid, sizeof(uuid));
-+				if (!id_write_format((const struct id*)vgnl->vgid, uuid, sizeof(uuid)))
-+					stack;
- 				log_warn("WARNING: Ignoring foreign VG with matching name %s UUID %s.",
- 					 vgnl->vg_name, uuid);
- 				dm_list_del(&vgnl->list);
-@@ -2659,8 +2660,8 @@ static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t read_flag
- 			}
- 		}
- 
--		if (vg_uuid)
--			id_write_format((const struct id*)vg_uuid, uuid, sizeof(uuid));
-+		if (vg_uuid && !id_write_format((const struct id*)vg_uuid, uuid, sizeof(uuid)))
-+			stack;
- 
- 		log_very_verbose("Processing VG %s %s", vg_name, vg_uuid ? uuid : "");
- 
+ 		if (!strcmp(key_str, "host_id")) {
+ 			host_id = atoi(val_str);
 
 
