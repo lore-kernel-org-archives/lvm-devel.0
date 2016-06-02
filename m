@@ -1,41 +1,38 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 20 Jun 2016 16:19:30 +0000 (UTC)
-Subject: master - vgscan: fix process_each args
-Message-ID: <20160620161930.3E0E560FC7@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu,  2 Jun 2016 12:07:18 +0000 (UTC)
+Subject: master - man: lvmconfig: add note about --type diff and --mergedconfig
+Message-ID: <20160602120718.90F656109A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cae6591b9ddc5e94b64c542503d34448babf720f
-Commit:        cae6591b9ddc5e94b64c542503d34448babf720f
-Parent:        d1d3820219f6b0906bc0b3980b6eefcc187999d9
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jun 20 11:18:36 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jun 20 11:18:36 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8012c223e0beb858bc2a6b1ea809c4a98a90a5c1
+Commit:        8012c223e0beb858bc2a6b1ea809c4a98a90a5c1
+Parent:        687bc5cecfe6293ee5556aa4e448459bb5c167e6
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Jun 2 14:07:07 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Jun 2 14:07:07 2016 +0200
 
-vgscan: fix process_each args
+man: lvmconfig: add note about --type diff and --mergedconfig
 
-zero/null args were mixed up.
 ---
- tools/vgscan.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ man/lvmconfig.8.in |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/tools/vgscan.c b/tools/vgscan.c
-index 45a2d7e..dfb1d46 100644
---- a/tools/vgscan.c
-+++ b/tools/vgscan.c
-@@ -117,8 +117,7 @@ int vgscan(struct cmd_context *cmd, int argc, char **argv)
- 	else
- 		log_print_unless_silent("Reading volume groups from cache.");
- 
--	maxret = process_each_vg(cmd, argc, argv, NULL, NULL, 0, NULL, 0,
--				 &vgscan_single);
-+	maxret = process_each_vg(cmd, argc, argv, NULL, NULL, 0, 0, NULL, &vgscan_single);
- 
- 	if (arg_count(cmd, mknodes_ARG)) {
- 		ret = vgmknodes(cmd, argc, argv);
+diff --git a/man/lvmconfig.8.in b/man/lvmconfig.8.in
+index 257029e..f4b6abd 100644
+--- a/man/lvmconfig.8.in
++++ b/man/lvmconfig.8.in
+@@ -71,6 +71,7 @@ Display all possible configuration settings with default values assigned.
+ .IP \fBdiff\fP 3
+ Display all configuration settings for which the values used differ from defaults.
+ The value assigned for each configuration setting is the value currently used.
++Using this type also implies the use of \fB\-\-mergedconfig\fP option.
+ This is actually minimal LVM configuration which can be used without
+ a change to current configured behaviour.
+ .IP \fBfull\fP 3
 
 
