@@ -1,75 +1,48 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 21 Jun 2016 16:43:06 +0000 (UTC)
-Subject: master - vgcfgrestore: rescan to reenable lvmetad on error path
-Message-ID: <20160621164306.A4FE46114C@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 2 Jun 2016 14:19:05 +0200
+Subject: CLVMD in defunct mode
+In-Reply-To: <732E8F3F83F60D458B9DD31DDDBA2A2374396A@FCEXSEXM030P.dcl.int.dexwired.net>
+References: <732E8F3F83F60D458B9DD31DDDBA2A2374396A@FCEXSEXM030P.dcl.int.dexwired.net>
+Message-ID: <5e0f8108-7a1a-1068-49ec-8d82def15c22@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c269e639a121329fc035685f944816a763b23cf
-Commit:        6c269e639a121329fc035685f944816a763b23cf
-Parent:        f96de674905cd9f109cd19e03ba5e92ac84104b8
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 21 11:40:42 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jun 21 11:40:42 2016 -0500
+Dne 2.6.2016 v 10:30 PALAMEDE LP Ludovic (Exterieur.DCL) napsal(a):
+> Hello,
+>
+> We experience a RHEL 5.8 Cluster LVM problem these days on our four nodes
+> cluster which are sharing 55 services (mainly oracle databases). We use to
+> make all our LVM duties from the first node and we manage our services (with
+> clusvcadm ?e RESSOURCE for example) from any node where it is lying at.
+>
+>
+>
+> root     29727     1  0 May23 ?        00:10:54 [clvmd] <defunct>
+>
+>
+>
+> Can you explain us if there is a way to avoid these issues? We do not want to
+> reboot our entire cluster and we are not able to do no pvdisplay or vgdisplay
+> or others LVMs duties right now. Can we remove the /var/lock/subsys/clvmd to
+> use our LVM commands? Is a migration to the RHEL 6.8 a cure ? Please let us
+> know what are the root cause of this problem and what would we apply to avoid
+> this type of incident in the future.
+>
+>
 
-vgcfgrestore: rescan to reenable lvmetad on error path
+Hi
 
-In commit 6ae22125, vgcfgrestore began disabling lvmetad
-while running, and rescanned to enable it again at the end,
-but missed the rescanning/enabling in the error case.
----
- tools/vgcfgrestore.c |   11 ++++++++---
- 1 files changed, 8 insertions(+), 3 deletions(-)
+Certainly  6.8 clvmd is way better then 5.X whatever.
 
-diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
-index 54e382c..77c007c 100644
---- a/tools/vgcfgrestore.c
-+++ b/tools/vgcfgrestore.c
-@@ -20,6 +20,7 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
- {
- 	const char *vg_name = NULL;
- 	int lvmetad_rescan = 0;
-+	int ret;
- 
- 	if (argc == 1) {
- 		vg_name = skip_dev_dir(cmd, argv[0], NULL);
-@@ -83,20 +84,24 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
- 		unlock_vg(cmd, VG_ORPHANS);
- 		unlock_vg(cmd, vg_name);
- 		log_error("Restore failed.");
--		return ECMD_FAILED;
-+		ret = ECMD_FAILED;
-+		goto rescan;
- 	}
- 
-+	ret = ECMD_PROCESSED;
- 	log_print_unless_silent("Restored volume group %s", vg_name);
- 
- 	unlock_vg(cmd, VG_ORPHANS);
- 	unlock_vg(cmd, vg_name);
--
-+rescan:
- 	if (lvmetad_rescan) {
- 		if (!lvmetad_connect(cmd)) {
- 			log_warn("WARNING: Failed to connect to lvmetad.");
- 			log_warn("WARNING: Update lvmetad with pvscan --cache.");
- 			goto out;
- 		}
-+		if (!refresh_filters(cmd))
-+			stack;
- 		if (!lvmetad_pvscan_all_devs(cmd, 1)) {
- 			log_warn("WARNING: Failed to scan devices.");
- 			log_warn("WARNING: Update lvmetad with pvscan --cache.");
-@@ -104,5 +109,5 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
- 		}
- 	}
- out:
--	return ECMD_PROCESSED;
-+	return ret;
- }
+Crashed  clvmd usually means 'deeper' problem and without knowing deep 
+internal details it's hardly solvable without reboot.
+
+Regard
+
+Zdenek
+
 
 
