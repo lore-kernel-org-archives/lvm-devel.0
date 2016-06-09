@@ -1,82 +1,89 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue,  7 Jun 2016 20:22:58 +0000 (UTC)
-Subject: master - vgcreate, pvcreate, vgextend: don't use a device with duplicates
-Message-ID: <20160607202258.9857360D29@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu,  9 Jun 2016 11:54:49 +0000 (UTC)
+Subject: master - lvmdump: also collect output from lsblk command when running lvmdump -s
+Message-ID: <20160609115449.427FD60F20@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86f92714574487cce6a9de785ba2ff93b23a98f7
-Commit:        86f92714574487cce6a9de785ba2ff93b23a98f7
-Parent:        199b7b55c21270d62ce35f32b16df200417dc41c
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jun 6 15:39:51 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jun 7 15:21:07 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cfdc87b62331875c2f10cca2c41f486d40b2a67c
+Commit:        cfdc87b62331875c2f10cca2c41f486d40b2a67c
+Parent:        86f92714574487cce6a9de785ba2ff93b23a98f7
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Jun 9 13:51:09 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Jun 9 13:54:15 2016 +0200
 
-vgcreate, pvcreate, vgextend: don't use a device with duplicates
+lvmdump: also collect output from lsblk command when running lvmdump -s
 
-If duplicate orphan PVs exist, don't allow one of them to be
-used for vgcreate/pvcreate/vgextend.
+lsblk provides nice and quick overview of the storage/sysfs structure
+that is useful for debugging - collect its output when running lvmdump -s.
 ---
- lib/cache/lvmcache.c |   10 ++++++++++
- lib/cache/lvmcache.h |    2 ++
- tools/toollib.c      |    9 +++++++++
- 3 files changed, 21 insertions(+), 0 deletions(-)
+ WHATS_NEW          |    1 +
+ man/lvmdump.8.in   |    9 +++++----
+ scripts/lvmdump.sh |   11 ++++++++++-
+ 3 files changed, 16 insertions(+), 5 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 87b25f1..9d89b80 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1519,6 +1519,16 @@ const char *lvmcache_pvid_from_devname(struct cmd_context *cmd,
- 	return dev->pvid;
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2e7e138..0afd527 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.156 - 
+ ================================
++  If available, also collect output from lsblk command when running lvmdump -s.
+   Fix regression in blkdeactivate causing dm and md devices to be skipped. (2.02.155)
  
-+int lvmcache_pvid_in_unchosen_duplicates(const char *pvid)
-+{
-+	struct device_list *devl;
+ Version 2.02.155 - 3rd June 2016
+diff --git a/man/lvmdump.8.in b/man/lvmdump.8.in
+index f9c2284..d0e102e 100644
+--- a/man/lvmdump.8.in
++++ b/man/lvmdump.8.in
+@@ -85,10 +85,11 @@ history for all yet uncollected results of polling operations already finished
+ including reason.
+ .TP
+ .B \-s
+-Gather system info and context. Currently, this encompasses systemd info
+-and context only: overall state of systemd units present in the system,
+-more detailed status of units controlling LVM functionality and the content
+-of systemd journal for current boot.
++Gather system info and context. Currently, this encompasses info gathered
++by calling lsblk command and various systemd info and context: overall state
++of systemd units present in the system, more detailed status of units
++controlling LVM functionality and the content of systemd journal for
++current boot.
+ .TP
+ .B \-u
+ Gather udev info and context: /etc/udev/udev.conf file, udev daemon version
+diff --git a/scripts/lvmdump.sh b/scripts/lvmdump.sh
+index a813537..bfe79d9 100755
+--- a/scripts/lvmdump.sh
++++ b/scripts/lvmdump.sh
+@@ -252,13 +252,22 @@ if (( $sysreport )); then
+ 
+ 	SYSTEMCTL=$(which systemctl 2>> $log)
+ 	JOURNALCTL=$(which journalctl 2>> $log)
++	LSBLK=$(which lsblk 2>> $log)
 +
-+	dm_list_iterate_items(devl, &_unused_duplicate_devs) {
-+		if (!strncmp(devl->dev->pvid, pvid, ID_LEN))
-+			return 1;
-+	}
-+	return 0;
-+}
- 
- static int _free_vginfo(struct lvmcache_vginfo *vginfo)
- {
-diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 5f85b03..4b8b942 100644
---- a/lib/cache/lvmcache.h
-+++ b/lib/cache/lvmcache.h
-@@ -213,4 +213,6 @@ int lvmcache_dev_is_unchosen_duplicate(struct device *dev);
- 
- void lvmcache_remove_unchosen_duplicate(struct device *dev);
- 
-+int lvmcache_pvid_in_unchosen_duplicates(const char *pvid);
++	log "$MKDIR -p \"$sysreport_dir\""
 +
- #endif
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 7cde806..9353814 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3908,6 +3908,15 @@ static int _pvcreate_check_single(struct cmd_context *cmd,
- 	}
++	if test -z "LSBLK"; then
++		myecho "WARNING: lsblk not found"
++	else
++		log "$LSBLK -O >> \"$sysreport_dir/lsblk\""
++		log "$LSBLK -s >> \"$sysreport_dir/lsblk_s\""
++	fi
  
- 	/*
-+	 * Don't allow using a device with duplicates.
-+	 */
-+	if (lvmcache_pvid_in_unchosen_duplicates(pd->dev->pvid)) {
-+		log_error("Cannot use device %s with duplicates.", pd->name);
-+		dm_list_move(&pp->arg_fail, &pd->list);
-+		return 1;
-+	}
-+
-+	/*
- 	 * What kind of device is this: an orphan PV, an uninitialized/unused
- 	 * device, a PV used in a VG.
- 	 */
+ 	if test -z "$SYSTEMCTL"; then
+ 		myecho "WARNING: systemctl not found"
+ 	elif test -z "$JOURNALCTL"; then
+ 		myecho "WARNING: journalctl not found"
+ 	else
+-		log "$MKDIR -p \"$sysreport_dir\""
+ 		log "$JOURNALCTL -b --no-pager -o short-precise > \"$sysreport_dir/journal_content\" 2>> \"$log\""
+ 		log "$SYSTEMCTL status -l --no-pager -n $log_lines -o short-precise dm-event.socket dm-event.service \
+ 						   lvm2-monitor.service \
 
 
