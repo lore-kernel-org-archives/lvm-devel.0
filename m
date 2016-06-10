@@ -1,65 +1,70 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 10 Jun 2016 23:16:04 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20160610231604.B37EA61F24@fedorahosted.org>
+Date: Fri, 10 Jun 2016 23:16:13 +0000 (UTC)
+Subject: v2_02_156 annotated tag has been created
+Message-ID: <20160610231613.E215D61F24@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=49a8d1a85eb035a0dfb1febd76e3ae4fa5e976d5
-Commit:        49a8d1a85eb035a0dfb1febd76e3ae4fa5e976d5
-Parent:        f2d1f5e9273232fccc05cc819b28ea47f7da7ff9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dc2a9aaa637ffc7b38829dba86a30ddd22fe4c75
+Commit:        dc2a9aaa637ffc7b38829dba86a30ddd22fe4c75
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Jun 11 00:14:00 2016 +0100
+AuthorDate:    2016-06-10 23:08 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Jun 11 00:14:00 2016 +0100
+CommitterDate: 2016-06-10 23:08 +0000
 
-post-release
+annotated tag: v2_02_156 has been created
+	    at dc2a9aaa637ffc7b38829dba86a30ddd22fe4c75 (tag)
+       tagging f2d1f5e9273232fccc05cc819b28ea47f7da7ff9 (commit)
+      replaces v2_02_155
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Release 2.02.156.
 
-diff --git a/VERSION b/VERSION
-index 0802557..a7628a4 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.156(2)-git (2016-06-11)
-+2.02.157(2)-git (2016-06-11)
-diff --git a/VERSION_DM b/VERSION_DM
-index 35c3a63..a1416c0 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.127-git (2016-06-11)
-+1.02.128-git (2016-06-11)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 046f77a..61b58b4 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.157 - 
-+=================================
-+
- Version 2.02.156 - 11th June 2016
- =================================
-   Don't allow duplicate orphan PVs to be used with vgcreate/vgextend/pvcreate.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 1135a62..bd17f1b 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.128 - 
-+=================================
-+
- Version 1.02.127 - 11th June 2016
- =================================
-  Fix blkdeactivate regression causing skipping of dm + md devices. (1.02.126)
+Another development release with an assortment of bug fixes and some
+extensions to the not-yet-finalised D-Bus support.
+
+29 files changed, 939 insertions(+), 307 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAldbSQgACgkQIoGRwVZ+LBd0HwCeIcQOovZtM4ES7zipS5Tdeb3l
+iLoAn0o/0C1bkpTIOcm0F1CBtrOkr6nB
+=gbnf
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (2):
+      post-release
+      pre-release
+
+David Teigland (7):
+      lvmetad: define special update in progress string
+      lvmetad: remove disabled case for "scan error"
+      lvmetad: handle update failures
+      lvmcache: add optional dev arg to lvmcache_info_from_pvid
+      lvmcache: fix duplicate handling with multiple scans
+      vgcreate, pvcreate, vgextend: don't use a device with duplicates
+      WHATS_NEW: add recent changes
+
+Peter Rajnoha (2):
+      blkdeactivate: fix regression in blkdeactivate causing dm and md devices to be skipped.
+      lvmdump: also collect output from lsblk command when running lvmdump -s
+
+Tony Asleson (9):
+      lvmdbusd: Add roles property to LV common interface
+      lvmdbusd: Add data_lv and metadata_lv to cache pool interface
+      lvmdbusd: Bug fix for missing LV properties
+      lvmdbusd: Change print statement to py3 syntax
+      lvmdbusd: Rename get_object_path_by_lvm_id
+      lvmdbusd: Add method get_object_path_by_lvm_id
+      lvmdbusd: Create correct LV object type
+      lvmdbusd: Add test for DataLv & MetaDataLv
+      lvmdbusd: Remove duplicate test code
+
+Zdenek Kabelac (2):
+      display: yes no prompt improvement
+      cleanup: typo in WHATS_NEW_DM
 
 
