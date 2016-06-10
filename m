@@ -1,112 +1,101 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Fri, 10 Jun 2016 21:06:37 +0000 (UTC)
-Subject: master - lvmdbusd: Add test for DataLv & MetaDataLv
-Message-ID: <20160610210637.C773060E6D@fedorahosted.org>
+Date: Fri, 10 Jun 2016 21:06:39 +0000 (UTC)
+Subject: master - lvmdbusd: Remove duplicate test code
+Message-ID: <20160610210639.D782F60E6D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a1febff85783b46b5b044bce6f29ece8413ce934
-Commit:        a1febff85783b46b5b044bce6f29ece8413ce934
-Parent:        cdf06044e189ec1adeaba101a21598c31752b9cd
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2d384954adf6355364257045738c9bd6c5dedad5
+Commit:        2d384954adf6355364257045738c9bd6c5dedad5
+Parent:        a1febff85783b46b5b044bce6f29ece8413ce934
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Jun 10 13:36:53 2016 -0500
+AuthorDate:    Fri Jun 10 13:45:59 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Fri Jun 10 16:05:03 2016 -0500
 
-lvmdbusd: Add test for DataLv & MetaDataLv
+lvmdbusd: Remove duplicate test code
 
-Added tests which expose an issue found with these properties.
 ---
- test/dbus/lvmdbustest.py |   60 +++++++++++++++++++++++++++++++++++++++++++--
- 1 files changed, 57 insertions(+), 3 deletions(-)
+ test/dbus/lvmdbustest.py |   30 ++++--------------------------
+ 1 files changed, 4 insertions(+), 26 deletions(-)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 4c58552..0cb3bb6 100755
+index 0cb3bb6..4443b0c 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -158,6 +158,58 @@ class TestDbusService(unittest.TestCase):
+@@ -158,8 +158,7 @@ class TestDbusService(unittest.TestCase):
  		self.assertTrue(rc == '/')
  		self.assertEqual(self._refresh(), 0)
  
-+
-+	def _create_raid5_thin_pool(self, vg = None):
-+
-+		if not vg:
-+			pv_paths = []
-+			for pp in self.objs[PV_INT]:
-+				pv_paths.append(pp.object_path)
-+
-+			vg = self._vg_create(pv_paths).Vg
-+
-+		lv_meta_path = vg.LvCreateRaid(
-+			"meta_r5", "raid5", mib(4), 0, 0, -1, {})[0]
-+
-+		lv_data_path = vg.LvCreateRaid(
-+			"data_r5", "raid5", mib(16), 0, 0, -1, {})[0]
-+
-+		thin_pool_path = vg.CreateThinPool(
-+			lv_meta_path, lv_data_path, -1, {})[0]
-+
-+		# Get thin pool client proxy
-+		thin_pool = ClientProxy(self.bus, thin_pool_path)
-+
-+		return vg, thin_pool
-+
-+	def test_meta_lv_data_lv_props(self):
-+		# Ensure that metadata lv and data lv for thin pools and cache pools
-+		# point to a valid LV
-+		(vg, thin_pool) = self._create_raid5_thin_pool()
-+
-+		# Check properties on thin pool
-+		self.assertTrue(thin_pool.ThinPool.DataLv != '/')
-+		self.assertTrue(thin_pool.ThinPool.MetaDataLv != '/')
-+
-+		(vg, cache_pool) = self._create_cache_pool(vg)
-+
-+		self.assertTrue(cache_pool.CachePool.DataLv != '/')
-+		self.assertTrue(cache_pool.CachePool.MetaDataLv != '/')
-+
-+		# Cache the thin pool
-+		cached_thin_pool_path = cache_pool.\
-+			CachePool.CacheLv(thin_pool.object_path, -1, {})[0]
-+
-+
-+		# Get object proxy for cached thin pool
-+		cached_thin_pool_object = ClientProxy(self.bus, cached_thin_pool_path)
-+
-+		# Check properties on cache pool
-+		self.assertTrue(cached_thin_pool_object.ThinPool.DataLv != '/')
-+		self.assertTrue(cached_thin_pool_object.ThinPool.MetaDataLv != '/')
-+
-+		self.assertTrue(cached_thin_pool_path != '/')
-+
+-
+-	def _create_raid5_thin_pool(self, vg = None):
++	def _create_raid5_thin_pool(self, vg=None):
+ 
+ 		if not vg:
+ 			pv_paths = []
+@@ -200,7 +199,6 @@ class TestDbusService(unittest.TestCase):
+ 		cached_thin_pool_path = cache_pool.\
+ 			CachePool.CacheLv(thin_pool.object_path, -1, {})[0]
+ 
+-
+ 		# Get object proxy for cached thin pool
+ 		cached_thin_pool_object = ClientProxy(self.bus, cached_thin_pool_path)
+ 
+@@ -208,8 +206,6 @@ class TestDbusService(unittest.TestCase):
+ 		self.assertTrue(cached_thin_pool_object.ThinPool.DataLv != '/')
+ 		self.assertTrue(cached_thin_pool_object.ThinPool.MetaDataLv != '/')
+ 
+-		self.assertTrue(cached_thin_pool_path != '/')
+-
  	def _lookup(self, lvm_id):
  		return self.objs[MANAGER_INT][0].Manager.LookUpByLvmId(lvm_id)
  
-@@ -974,8 +1026,10 @@ class TestDbusService(unittest.TestCase):
- 		self.assertTrue(job_path != '/')
- 		self._wait_for_job(job_path)
+@@ -258,9 +254,10 @@ class TestDbusService(unittest.TestCase):
+ 		mgr = self.objs[MANAGER_INT][0].Manager
  
--	def _create_cache_pool(self):
--		vg = self._vg_create().Vg
-+	def _create_cache_pool(self, vg=None):
+ 		# Do a vg lookup
+-		path = self.objs[MANAGER_INT][0].Manager.LookUpByLvmId(vg.Name)
++		path = mgr.LookUpByLvmId(vg.Name)
+ 
+ 		vg_name_start = vg.Name
 +
-+		if not vg:
-+			vg = self._vg_create().Vg
+ 		prev_path = path
+ 		self.assertTrue(path != '/', "%s" % (path))
  
- 		md = self._create_lv(size=(mib(8)), vg=vg)
- 		data = self._create_lv(size=(mib(8)), vg=vg)
-@@ -985,7 +1039,7 @@ class TestDbusService(unittest.TestCase):
+@@ -317,30 +314,11 @@ class TestDbusService(unittest.TestCase):
  
- 		cp = ClientProxy(self.bus, cache_pool_path)
+ 	def test_vg_rename_with_thin_pool(self):
  
--		return (vg, cp)
-+		return vg, cp
+-		pv_paths = []
+-		for pp in self.objs[PV_INT]:
+-			pv_paths.append(pp.object_path)
+-
+-		vg = self._vg_create(pv_paths).Vg
++		(vg, thin_pool) = self._create_raid5_thin_pool()
  
- 	def test_cache_pool_create(self):
+ 		vg_name_start = vg.Name
+-
+ 		mgr = self.objs[MANAGER_INT][0].Manager
+ 
+-		# Let's create a thin pool which uses a raid 5 meta and raid5 data
+-		# areas
+-		lv_meta_path = vg.LvCreateRaid(
+-			"meta_r5", "raid5", mib(4), 0, 0, -1, {})[0]
+-
+-		lv_data_path = vg.LvCreateRaid(
+-			"data_r5", "raid5", mib(16), 0, 0, -1, {})[0]
+-
+-		thin_pool_path = vg.CreateThinPool(
+-			lv_meta_path, lv_data_path, -1, {})[0]
+-
+-		# Lets create some thin LVs
+-		thin_pool = ClientProxy(self.bus, thin_pool_path)
+-
+ 		# noinspection PyTypeChecker
+ 		self._verify_hidden_lookups(thin_pool.LvCommon, vg_name_start)
  
 
 
