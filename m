@@ -1,93 +1,64 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 16 Jun 2016 17:08:31 +0000 (UTC)
-Subject: master - pvscan: don't activate LVs when use_lvmetad=0
-Message-ID: <20160616170831.11BC96061D@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 17 Jun 2016 11:29:52 +0000 (UTC)
+Subject: master - tools: add missing destroy_processing_handle in pvscan and vgreduce code
+Message-ID: <20160617112952.2994960D5F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f77fe436afb76ddb798d236d34daf50413a184f6
-Commit:        f77fe436afb76ddb798d236d34daf50413a184f6
-Parent:        944ae4d2df0f15afb29ac0a68d0dd012d9df9acf
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jun 16 12:04:05 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jun 16 12:04:05 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a23655ab3bea4dfe9409c8c6b238787da9b457e1
+Commit:        a23655ab3bea4dfe9409c8c6b238787da9b457e1
+Parent:        f77fe436afb76ddb798d236d34daf50413a184f6
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Jun 17 13:29:33 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Jun 17 13:29:33 2016 +0200
 
-pvscan: don't activate LVs when use_lvmetad=0
+tools: add missing destroy_processing_handle in pvscan and vgreduce code
 
-commit 15da467b was meant to address the case where
-use_lvmetad=1 in lvm.conf, and lvmetad is not available,
-in which case, pvscan --cache -aay should activate LVs.
-
-But the commit unintentionally also changed the case
-where use_lvmetad=0 in lvm.conf, in which case
-pvscan --cache -aay should not activate LVs, so fix
-that here.
 ---
- tools/pvscan.c |   31 ++++++++++++++++++++-----------
- 1 files changed, 20 insertions(+), 11 deletions(-)
+ tools/pvscan.c   |    1 +
+ tools/vgreduce.c |    7 +++++--
+ 2 files changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 78dad82..73a97be 100644
+index 73a97be..9b50374 100644
 --- a/tools/pvscan.c
 +++ b/tools/pvscan.c
-@@ -306,7 +306,7 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
- 	int devno_args = 0;
- 	struct arg_value_group_list *current_group;
- 	dev_t devno;
--	int do_activate = 0;
-+	int do_activate;
- 	int all_vgs = 0;
- 	int remove_errors = 0;
- 	int add_errors = 0;
-@@ -315,17 +315,21 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
- 	dm_list_init(&found_vgnames);
- 	dm_list_init(&pp.changed_vgnames);
+@@ -655,6 +655,7 @@ int pvscan(struct cmd_context *cmd, int argc, char **argv)
  
--	if (!lvmetad_used() && !arg_is_set(cmd, activate_ARG)) {
--		log_verbose("Ignoring pvscan --cache command because lvmetad is not in use.");
-+	do_activate = arg_is_set(cmd, activate_ARG);
-+
-+	if (!lvmetad_used() && !do_activate) {
-+		log_verbose("Ignoring pvscan --cache because lvmetad is not in use.");
- 		return ret;
- 	}
+ out:
+ 	unlock_vg(cmd, VG_GLOBAL);
++	destroy_processing_handle(cmd, handle);
  
--	if (arg_is_set(cmd, activate_ARG)) {
--		if (arg_uint_value(cmd, activate_ARG, CHANGE_AAY) != CHANGE_AAY) {
--			log_error("Only --activate ay allowed with pvscan.");
--			return 0;
--		}
--		do_activate = 1;
-+	if (do_activate && (arg_uint_value(cmd, activate_ARG, CHANGE_AAY) != CHANGE_AAY)) {
-+		log_error("Only --activate ay allowed with pvscan.");
-+		return 0;
+ 	return ret;
+ }
+diff --git a/tools/vgreduce.c b/tools/vgreduce.c
+index a10e12c..19a0bb0 100644
+--- a/tools/vgreduce.c
++++ b/tools/vgreduce.c
+@@ -237,8 +237,10 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
+ 	vp.force = arg_count(cmd, force_ARG);
+ 
+ 	/* Needed to change the set of orphan PVs. */
+-	if (!lockd_gl(cmd, "ex", 0))
+-		return_ECMD_FAILED;
++	if (!lockd_gl(cmd, "ex", 0)) {
++		ret = ECMD_FAILED;
++		goto_out;
 +	}
-+
-+	if (!lvmetad_used() && do_activate && !find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
-+		log_verbose("Ignoring pvscan --cache -aay because lvmetad is not in use.");
-+		return ret;
- 	}
+ 	cmd->lockd_gl_disable = 1;
  
- 	if (arg_count(cmd, major_ARG) + arg_count(cmd, minor_ARG))
-@@ -341,8 +345,13 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_FAILED;
- 	}
+ 	cmd->handles_missing_pvs = 1;
+@@ -259,6 +261,7 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
+ 		ret = ECMD_FAILED;
+ out:
+ 	init_ignore_suspended_devices(saved_ignore_suspended_devices);
++	destroy_processing_handle(cmd, handle);
  
--	if (!lvmetad_used() && do_activate) {
--		log_verbose("Activating all VGs without lvmetad running.");
-+	/*
-+	 * This a special case where use_lvmetad=1 in lvm.conf but pvscan
-+	 * cannot use lvmetad for some reason.  In this case pvscan should
-+	 * still activate LVs even though it's not updating the cache.
-+	 */
-+	if (do_activate && !lvmetad_used()) {
-+		log_verbose("Activating all VGs without lvmetad.");
- 		all_vgs = 1;
- 		devno_args = 0;
- 		goto activate;
+ 	return ret;
+ }
 
 
