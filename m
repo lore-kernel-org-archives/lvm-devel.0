@@ -1,372 +1,350 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 20 Jun 2016 09:41:01 +0000 (UTC)
-Subject: master - toollib: make it possible to also process internal VGs, add 'include_internal' switch to process_each_vg fn
-Message-ID: <20160620094101.11E5060FE1@fedorahosted.org>
+Date: Mon, 20 Jun 2016 09:41:03 +0000 (UTC)
+Subject: master - log: log warnings and errors via report if set; add log_set_report* fns
+Message-ID: <20160620094103.3082E60FE1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8cfc385491484e71d66e5991e09c3d0a47570a13
-Commit:        8cfc385491484e71d66e5991e09c3d0a47570a13
-Parent:        31aaa3be71597ec53262177bea76365605e9199f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7d4a15e53a19dcc073b7037638d811eba3a85edf
+Commit:        7d4a15e53a19dcc073b7037638d811eba3a85edf
+Parent:        8cfc385491484e71d66e5991e09c3d0a47570a13
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue May 3 11:46:28 2016 +0200
+AuthorDate:    Tue May 3 11:46:52 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Mon Jun 20 11:33:42 2016 +0200
 
-toollib: make it possible to also process internal VGs, add 'include_internal' switch to process_each_vg fn
+log: log warnings and errors via report if set; add log_set_report* fns
 
-The lvm fullreport works per VG and as such, the vg, lv, pv, seg and
-pvseg subreport is done for each VG. However, if the PV is not part of
-any VG yet, we still want to display pv and pvseg subreports for these
-"orphan" PVs - so enable this for lvm fullreport's process_each_vg call.
+This patch adds structures and functions to reroute error and warning
+logs to log report, if it's set.
+
+There are 5 new functions:
+  - log_set_report
+    Set log report where logging will be rerouted.
+
+  - log_set_report_context
+    Set context globally so any report_cmdlog call will use it.
+
+  - log_set_report_object_type
+    Set object type globally so any report_cmdlog call will use it.
+
+  - log_set_report_object_name_and_id
+    Set object ID and name globally so any report_cmdlog call will use it.
+
+  - log_set_report_object_group_and_group_id
+    Set object group ID and name globally so any report_cmdlog call will use it.
+
+These functions will be called during LVM command processing so any logs
+which are rerouted to log report contain proper information about current
+processing state.
 ---
- WHATS_NEW           |    1 +
- tools/lvcreate.c    |    2 +-
- tools/lvrename.c    |    2 +-
- tools/lvresize.c    |    2 +-
- tools/polldaemon.c  |    4 ++--
- tools/pvscan.c      |    2 +-
- tools/reporter.c    |   10 +++++-----
- tools/toollib.c     |    6 ++++--
- tools/toollib.h     |    1 +
- tools/vgcfgbackup.c |    2 +-
- tools/vgchange.c    |    2 +-
- tools/vgck.c        |    2 +-
- tools/vgconvert.c   |    2 +-
- tools/vgdisplay.c   |    2 +-
- tools/vgexport.c    |    2 +-
- tools/vgextend.c    |    2 +-
- tools/vgimport.c    |    2 +-
- tools/vgreduce.c    |    2 +-
- tools/vgremove.c    |    2 +-
- tools/vgrename.c    |    2 +-
- tools/vgscan.c      |    2 +-
- 21 files changed, 29 insertions(+), 25 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/log/log.c         |  101 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ lib/log/lvm-logging.h |   37 ++++++++++++++++++
+ lib/report/report.h   |    3 +-
+ tools/reporter.c      |    8 +++-
+ tools/toollib.c       |    8 +++-
+ tools/toollib.h       |    1 +
+ 7 files changed, 154 insertions(+), 5 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 01d6bbc..edbc0f3 100644
+index edbc0f3..88e785a 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.158 - 
  =================================
-+  Make it possible to iterate over internal 'orphan' VGs in process_each_vg fn.
++  Log warnings and errors via report during cmd processing if this is enabled.
+   Make it possible to iterate over internal 'orphan' VGs in process_each_vg fn.
    Make -S|--select option groupable that allows this option to be repeated.
    Make -O|--sort option groupable that allows this option to be repeated.
-   Add --configreport option to select report for which next options are applied.
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index fb28dc5..88518d2 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -1564,7 +1564,7 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 7b0026f..3181fdd 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -17,6 +17,7 @@
+ #include "device.h"
+ #include "memlock.h"
+ #include "defaults.h"
++#include "report.h"
  
- 	handle->custom_handle = &pp;
+ #include <stdio.h>
+ #include <stdarg.h>
+@@ -47,6 +48,15 @@ static size_t _lvm_errmsg_size = 0;
+ static size_t _lvm_errmsg_len = 0;
+ #define MAX_ERRMSG_LEN (512 * 1024)  /* Max size of error buffer 512KB */
  
--	ret = process_each_vg(cmd, 0, NULL, lp.vg_name, NULL, READ_FOR_UPDATE, handle,
-+	ret = process_each_vg(cmd, 0, NULL, lp.vg_name, NULL, READ_FOR_UPDATE, 0, handle,
- 			      &_lvcreate_single);
++static log_report_t _log_report = {
++	.report = NULL,
++	.context = LOG_REPORT_CONTEXT_NULL,
++	.object_type = LOG_REPORT_OBJECT_TYPE_NULL,
++	.object_id = NULL,
++	.object_name = NULL,
++	.object_group = NULL
++};
++
+ void init_log_fn(lvm2_log_fn_t log_fn)
+ {
+ 	_lvm2_log_fn = log_fn;
+@@ -260,6 +270,38 @@ void reset_log_duplicated(void) {
+ 	}
+ }
  
- 	_destroy_lvcreate_params(&lp);
-diff --git a/tools/lvrename.c b/tools/lvrename.c
-index 4dfcda2..74248ee 100644
---- a/tools/lvrename.c
-+++ b/tools/lvrename.c
-@@ -217,7 +217,7 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
++static const char *_get_log_level_name(int level)
++{
++	static const char *log_level_names[] = {"",      /* unassigned */
++						"",      /* unassigned */
++						"fatal", /* _LOG_FATAL */
++						"error", /* _LOG_ERROR */
++						"warn",  /* _LOG_WARN */
++						"notice" /* _LOG_NOTICE */
++						"info",  /* _LOG_INFO */
++						"debug"  /* _LOG_DEBUG */
++						};
++	level &= ~_LOG_STDERR;
++	return log_level_names[level];
++}
++
++const char *log_get_report_context_name(log_report_context_t context)
++{
++	static const char *log_context_names[LOG_REPORT_CONTEXT_COUNT] = {[LOG_REPORT_CONTEXT_NULL] = "",
++									  [LOG_REPORT_CONTEXT_PROCESSING] = "processing"};
++	return log_context_names[context];
++}
++
++
++const char *log_get_report_object_type_name(log_report_object_type_t object_type)
++{
++	static const char *log_object_type_names[LOG_REPORT_OBJECT_TYPE_COUNT] = {[LOG_REPORT_OBJECT_TYPE_NULL] = "",
++										  [LOG_REPORT_OBJECT_TYPE_PV] = "pv",
++										  [LOG_REPORT_OBJECT_TYPE_VG] = "vg",
++										  [LOG_REPORT_OBJECT_TYPE_LV] = "lv"};
++	return log_object_type_names[object_type];
++}
++
+ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 	       const char *format, ...)
+ {
+@@ -277,6 +319,8 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 	static int _abort_on_internal_errors_env_present = -1;
+ 	static int _abort_on_internal_errors_env = 0;
+ 	char *env_str;
++	struct dm_report *orig_report;
++	int logged_via_report = 0;
  
- 	handle->custom_handle = &lp;
+ 	level &= ~(_LOG_STDERR|_LOG_ONCE);
  
--	ret = process_each_vg(cmd, 0, NULL, vg_name, NULL, READ_FOR_UPDATE, handle,
-+	ret = process_each_vg(cmd, 0, NULL, vg_name, NULL, READ_FOR_UPDATE, 0, handle,
- 			      _lvrename_single);
+@@ -309,6 +353,7 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
  
- 	destroy_processing_handle(cmd, handle);
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 05e386f..38ad98f 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -223,7 +223,7 @@ int lvresize(struct cmd_context *cmd, int argc, char **argv)
+ 	if (_lvm2_log_fn ||
+ 	    (_store_errmsg && (level <= _LOG_ERR)) ||
++	    (_log_report.report && (use_stderr || (level <=_LOG_ERR))) ||
+ 	    log_once) {
+ 		va_start(ap, format);
+ 		n = vsnprintf(message, sizeof(message), trformat, ap);
+@@ -356,6 +401,23 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 		}
+ 	}
  
- 	handle->custom_handle = &lp;
++	if (_log_report.report && (use_stderr || (level <= _LOG_ERR))) {
++		orig_report = _log_report.report;
++		_log_report.report = NULL;
++
++		if (!report_cmdlog(orig_report, _get_log_level_name(level),
++				   log_get_report_context_name(_log_report.context),
++				   log_get_report_object_type_name(_log_report.object_type),
++				   _log_report.object_name, _log_report.object_id,
++				   _log_report.object_group, _log_report.object_group_id,
++				   message, _lvm_errno, 0))
++			fprintf(stderr, _("failed to report cmdstatus"));
++		else
++			logged_via_report = 1;
++
++		_log_report.report = orig_report;
++	}
++
+ 	if (_lvm2_log_fn) {
+ 		_lvm2_log_fn(level, file, line, 0, message);
+ 		if (fatal_internal_error)
+@@ -364,7 +426,7 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 	}
  
--	ret = process_each_vg(cmd, 0, NULL, lp.vg_name, NULL, READ_FOR_UPDATE, handle,
-+	ret = process_each_vg(cmd, 0, NULL, lp.vg_name, NULL, READ_FOR_UPDATE, 0, handle,
- 			      &_lvresize_single);
+       log_it:
+-	if ((verbose_level() >= level) && !_log_suppress) {
++	if (!logged_via_report && ((verbose_level() >= level) && !_log_suppress)) {
+ 		if (verbose_level() > _LOG_DEBUG) {
+ 			(void) dm_snprintf(buf, sizeof(buf), "#%s:%d ",
+ 					   file, line);
+@@ -462,3 +524,40 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 		_already_logging = 0;
+ 	}
+ }
++
++log_report_t log_get_report_state(void)
++{
++	return _log_report;
++}
++
++void log_restore_report_state(log_report_t log_report)
++{
++	_log_report = log_report;
++}
++
++void log_set_report(struct dm_report *report)
++{
++	_log_report.report = report;
++}
++
++void log_set_report_context(log_report_context_t context)
++{
++	_log_report.context = context;
++}
++
++void log_set_report_object_type(log_report_object_type_t object_type)
++{
++	_log_report.object_type = object_type;
++}
++
++void log_set_report_object_group_and_group_id(const char *group, const char *id)
++{
++	_log_report.object_group = group;
++	_log_report.object_group_id = id;
++}
++
++void log_set_report_object_name_and_id(const char *name, const char *id)
++{
++	_log_report.object_name = name;
++	_log_report.object_id = id;
++}
+diff --git a/lib/log/lvm-logging.h b/lib/log/lvm-logging.h
+index 56e95ff..5789c0b 100644
+--- a/lib/log/lvm-logging.h
++++ b/lib/log/lvm-logging.h
+@@ -65,4 +65,41 @@ int log_suppress(int suppress);
+ /* Suppress messages to syslog */
+ void syslog_suppress(int suppress);
  
- 	destroy_processing_handle(cmd, handle);
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index e12a694..2b64c4e 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -364,7 +364,7 @@ static void _poll_for_all_vgs(struct cmd_context *cmd,
++/* Hooks to handle logging through report. */
++typedef enum {
++	LOG_REPORT_CONTEXT_NULL,
++	LOG_REPORT_CONTEXT_PROCESSING,
++	LOG_REPORT_CONTEXT_COUNT
++} log_report_context_t;
++
++typedef enum {
++	LOG_REPORT_OBJECT_TYPE_NULL,
++	LOG_REPORT_OBJECT_TYPE_PV,
++	LOG_REPORT_OBJECT_TYPE_VG,
++	LOG_REPORT_OBJECT_TYPE_LV,
++	LOG_REPORT_OBJECT_TYPE_COUNT
++} log_report_object_type_t;
++
++typedef struct log_report {
++	struct dm_report *report;
++	log_report_context_t context;
++	log_report_object_type_t object_type;
++	const char *object_name;
++	const char *object_id;
++	const char *object_group;
++	const char *object_group_id;
++} log_report_t;
++
++log_report_t log_get_report_state(void);
++void log_restore_report_state(log_report_t log_report);
++
++void log_set_report(struct dm_report *report);
++void log_set_report_context(log_report_context_t context);
++void log_set_report_object_type(log_report_object_type_t object_type);
++void log_set_report_object_group_and_group_id(const char *group, const char *group_id);
++void log_set_report_object_name_and_id(const char *name, const char *id);
++
++const char *log_get_report_context_name(log_report_context_t context);
++const char *log_get_report_object_type_name(log_report_object_type_t object_type);
++
+ #endif
+diff --git a/lib/report/report.h b/lib/report/report.h
+index f5df51e..37e1061 100644
+--- a/lib/report/report.h
++++ b/lib/report/report.h
+@@ -82,7 +82,8 @@ typedef int (*field_report_fn) (struct report_handle * dh, struct field * field,
+ 				const void *data);
  
- 	while (1) {
- 		parms->outstanding_count = 0;
--		process_each_vg(cmd, 0, NULL, NULL, NULL, READ_FOR_UPDATE, handle, _poll_vg);
-+		process_each_vg(cmd, 0, NULL, NULL, NULL, READ_FOR_UPDATE, 0, handle, _poll_vg);
- 		if (!parms->outstanding_count)
- 			break;
- 		if (parms->interval)
-@@ -508,7 +508,7 @@ static void _lvmpolld_poll_for_all_vgs(struct cmd_context *cmd,
+ int report_format_init(struct cmd_context *cmd, dm_report_group_type_t *report_group_type,
+-		       struct dm_report_group **report_group, struct dm_report **log_rh);
++		       struct dm_report_group **report_group, struct dm_report **log_rh,
++		       log_report_t *saved_log_report_state);
  
- 	handle->custom_handle = &lpdp;
- 
--	process_each_vg(cmd, 0, NULL, NULL, NULL, 0, handle, _lvmpolld_init_poll_vg);
-+	process_each_vg(cmd, 0, NULL, NULL, NULL, 0, 0, handle, _lvmpolld_init_poll_vg);
- 
- 	first = dm_list_first(&lpdp.idls);
- 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index db678d1..a1f5ef3 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -287,7 +287,7 @@ static int _pvscan_autoactivate(struct cmd_context *cmd, struct pvscan_aa_params
- 
- 	dev_cache_full_scan(cmd->full_filter);
- 
--	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, 0, handle, _pvscan_autoactivate_single);
-+	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, 0, 0, handle, _pvscan_autoactivate_single);
- 
- 	destroy_processing_handle(cmd, handle);
- 
+ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
+ 		  report_type_t *report_type, const char *separator,
 diff --git a/tools/reporter.c b/tools/reporter.c
-index 1fcb338..0509c88 100644
+index 0509c88..d376947 100644
 --- a/tools/reporter.c
 +++ b/tools/reporter.c
-@@ -1084,8 +1084,8 @@ static int _do_report(struct cmd_context *cmd, struct processing_handle *handle,
- 			if (args->full_report_vg)
- 				r = _report_all_in_vg(cmd, handle, args->full_report_vg, VGS, lv_info_needed, lv_segment_status_needed);
- 			else
--				r = process_each_vg(cmd, args->argc, args->argv, NULL, NULL, 0,
--						    handle, &_vgs_single);
-+				r = process_each_vg(cmd, args->argc, args->argv, NULL, NULL,
-+						    0, 0, handle, &_vgs_single);
- 			break;
- 		case LABEL:
- 			r = process_each_label(cmd, args->argc, args->argv,
-@@ -1101,7 +1101,7 @@ static int _do_report(struct cmd_context *cmd, struct processing_handle *handle,
- 							    handle, &_pvs_single);
- 				else
- 					r = process_each_vg(cmd, args->argc, args->argv, NULL, NULL,
--							    0, handle, &_pvs_in_vg);
-+							    0, 0, handle, &_pvs_in_vg);
- 			}
- 			break;
- 		case SEGS:
-@@ -1128,7 +1128,7 @@ static int _do_report(struct cmd_context *cmd, struct processing_handle *handle,
- 												 &_pvsegs_single);
- 				else
- 					r = process_each_vg(cmd, args->argc, args->argv, NULL, NULL,
--							    0, handle, &_pvsegs_in_vg);
-+							    0, 0, handle, &_pvsegs_in_vg);
- 			}
- 			break;
- 		case FULL:
-@@ -1367,7 +1367,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv, report_type_t
+@@ -1418,7 +1418,8 @@ int devtypes(struct cmd_context *cmd, int argc, char **argv)
+ #define REPORT_FORMAT_NAME_JSON "json"
  
- 	if (single_args->report_type == FULL) {
- 		handle->custom_handle = &args;
--		r = process_each_vg(cmd, argc, argv, NULL, NULL, 0, handle, &_full_report_single);
-+		r = process_each_vg(cmd, argc, argv, NULL, NULL, 0, 1, handle, &_full_report_single);
- 	} else
- 		r = _do_report(cmd, handle, &args, single_args);
- 
+ int report_format_init(struct cmd_context *cmd, dm_report_group_type_t *report_group_type,
+-		       struct dm_report_group **report_group, struct dm_report **log_rh)
++		       struct dm_report_group **report_group, struct dm_report **log_rh,
++		       log_report_t *saved_log_report_state)
+ {
+ 	int config_set = find_config_tree_node(cmd, report_output_format_CFG, NULL) != NULL;
+ 	const char *config_format_str = find_config_tree_str(cmd, report_output_format_CFG, NULL);
+@@ -1483,6 +1484,11 @@ int report_format_init(struct cmd_context *cmd, dm_report_group_type_t *report_g
+ 	*report_group = new_report_group;
+ 	if (tmp_log_rh)
+ 		*log_rh = tmp_log_rh;
++
++	if (saved_log_report_state) {
++		*saved_log_report_state = log_get_report_state();
++		log_set_report(*log_rh);
++	}
+ 	return 1;
+ bad:
+ 	if (!dm_report_group_destroy(new_report_group))
 diff --git a/tools/toollib.c b/tools/toollib.c
-index e67e47a..925157d 100644
+index 925157d..fe162d1 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -1875,7 +1875,8 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
- 		skip = 0;
- 		notfound = 0;
+@@ -1729,11 +1729,12 @@ struct processing_handle *init_processing_handle(struct cmd_context *cmd, struct
  
--		if (vg_uuid && !id_write_format((const struct id*)vg_uuid, uuid, sizeof(uuid)))
-+		if (vg_uuid && !is_orphan_vg(vg_name) &&
-+		    !id_write_format((const struct id*)vg_uuid, uuid, sizeof(uuid)))
+ 	if (!parent_handle) {
+ 		if (!report_format_init(cmd, &handle->report_group_type, &handle->report_group,
+-					&handle->log_rh)) {
++					&handle->log_rh, &handle->saved_log_report_state)) {
+ 			dm_pool_free(cmd->mem, handle);
+ 			return NULL;
+ 		}
+-	}
++	} else
++		handle->saved_log_report_state = log_get_report_state();
+ 
+ 	return handle;
+ }
+@@ -1767,6 +1768,9 @@ void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle
+ 	if (handle) {
+ 		if (handle->selection_handle && handle->selection_handle->selection_rh)
+ 			dm_report_free(handle->selection_handle->selection_rh);
++
++		log_restore_report_state(handle->saved_log_report_state);
++
+ 		if (!dm_report_group_destroy(handle->report_group))
  			stack;
- 
- 		log_very_verbose("Processing VG %s %s", vg_name, vg_uuid ? uuid : "");
-@@ -2091,6 +2092,7 @@ int process_each_vg(struct cmd_context *cmd,
- 		    const char *one_vgname,
- 		    struct dm_list *use_vgnames,
- 		    uint32_t read_flags,
-+		    int include_internal,
- 		    struct processing_handle *handle,
- 		    process_single_vg_fn_t process_single_vg)
- {
-@@ -2158,7 +2160,7 @@ int process_each_vg(struct cmd_context *cmd,
- 	 */
- 	log_debug("Get list of VGs on system");
- 
--	if (!get_vgnameids(cmd, &vgnameids_on_system, NULL, 0)) {
-+	if (!get_vgnameids(cmd, &vgnameids_on_system, NULL, include_internal)) {
- 		ret_max = ECMD_FAILED;
- 		goto_out;
- 	}
+ 		if (handle->log_rh)
 diff --git a/tools/toollib.h b/tools/toollib.h
-index 8cd9087..179efe5 100644
+index 179efe5..1144793 100644
 --- a/tools/toollib.h
 +++ b/tools/toollib.h
-@@ -106,6 +106,7 @@ int process_each_vg(struct cmd_context *cmd,
- 		    const char *one_vgname,
- 		    struct dm_list *use_vgnames,
- 		    uint32_t flags,
-+		    int include_internal,
- 		    struct processing_handle *handle,
- 		    process_single_vg_fn_t process_single_vg);
+@@ -76,6 +76,7 @@ struct processing_handle {
+ 	dm_report_group_type_t report_group_type;
+ 	struct dm_report_group *report_group;
+ 	struct dm_report *log_rh;
++	log_report_t saved_log_report_state;
+ 	void *custom_handle;
+ };
  
-diff --git a/tools/vgcfgbackup.c b/tools/vgcfgbackup.c
-index c47c1ef..34fe08f 100644
---- a/tools/vgcfgbackup.c
-+++ b/tools/vgcfgbackup.c
-@@ -94,7 +94,7 @@ int vgcfgbackup(struct cmd_context *cmd, int argc, char **argv)
- 
- 	init_pvmove(1);
- 
--	ret = process_each_vg(cmd, argc, argv, NULL, NULL, READ_ALLOW_INCONSISTENT,
-+	ret = process_each_vg(cmd, argc, argv, NULL, NULL, READ_ALLOW_INCONSISTENT, 0,
- 			      handle, &vg_backup_single);
- 
- 	dm_free(last_filename);
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index bbd9e1f..4f6d847 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -1216,7 +1216,7 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 	if (arg_is_set(cmd, lockstart_ARG) || arg_is_set(cmd, lockstop_ARG))
- 		flags |= READ_ALLOW_EXPORTED;
- 
--	ret = process_each_vg(cmd, argc, argv, NULL, NULL, flags, NULL, &vgchange_single);
-+	ret = process_each_vg(cmd, argc, argv, NULL, NULL, flags, 0, NULL, &vgchange_single);
- 
- 	/* Wait for lock-start ops that were initiated in vgchange_lockstart. */
- 
-diff --git a/tools/vgck.c b/tools/vgck.c
-index 27a1d00..54bc9d6 100644
---- a/tools/vgck.c
-+++ b/tools/vgck.c
-@@ -38,6 +38,6 @@ static int vgck_single(struct cmd_context *cmd __attribute__((unused)),
- int vgck(struct cmd_context *cmd, int argc, char **argv)
- {
- 	lvmetad_make_unused(cmd);
--	return process_each_vg(cmd, argc, argv, NULL, NULL, 0, NULL,
-+	return process_each_vg(cmd, argc, argv, NULL, NULL, 0, 0, NULL,
- 			       &vgck_single);
- }
-diff --git a/tools/vgconvert.c b/tools/vgconvert.c
-index 6ae675f..846db05 100644
---- a/tools/vgconvert.c
-+++ b/tools/vgconvert.c
-@@ -181,6 +181,6 @@ int vgconvert(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	return process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE, NULL,
-+	return process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE, 0, NULL,
- 			       &vgconvert_single);
- }
-diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
-index c805e68..e9482df 100644
---- a/tools/vgdisplay.c
-+++ b/tools/vgdisplay.c
-@@ -89,7 +89,7 @@ int vgdisplay(struct cmd_context *cmd, int argc, char **argv)
- 	}
- **********/
- 
--	return process_each_vg(cmd, argc, argv, NULL, NULL, 0, NULL,
-+	return process_each_vg(cmd, argc, argv, NULL, NULL, 0, 0, NULL,
- 			       vgdisplay_single);
- 
- /******** FIXME Need to count number processed
-diff --git a/tools/vgexport.c b/tools/vgexport.c
-index afe9a14..592e145 100644
---- a/tools/vgexport.c
-+++ b/tools/vgexport.c
-@@ -80,6 +80,6 @@ int vgexport(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	return process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE, NULL,
-+	return process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE, 0, NULL,
- 			       &vgexport_single);
- }
-diff --git a/tools/vgextend.c b/tools/vgextend.c
-index 8f44672..1c3743b 100644
---- a/tools/vgextend.c
-+++ b/tools/vgextend.c
-@@ -198,7 +198,7 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
- 	handle->custom_handle = &vp;
- 
- 	ret = process_each_vg(cmd, 0, NULL, vg_name, NULL,
--			      READ_FOR_UPDATE, handle,
-+			      READ_FOR_UPDATE, 0, handle,
- 			      restoremissing ? &_vgextend_restoremissing : &_vgextend_single);
- 
- 	destroy_processing_handle(cmd, handle);
-diff --git a/tools/vgimport.c b/tools/vgimport.c
-index 1f2e14d..07a889b 100644
---- a/tools/vgimport.c
-+++ b/tools/vgimport.c
-@@ -109,6 +109,6 @@ int vgimport(struct cmd_context *cmd, int argc, char **argv)
- 
- 	return process_each_vg(cmd, argc, argv, NULL, NULL,
- 			       READ_FOR_UPDATE | READ_ALLOW_EXPORTED,
--			       NULL,
-+			       0, NULL,
- 			       &vgimport_single);
- }
-diff --git a/tools/vgreduce.c b/tools/vgreduce.c
-index ae86a67..bae2b3e 100644
---- a/tools/vgreduce.c
-+++ b/tools/vgreduce.c
-@@ -247,7 +247,7 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
- 
- 	process_each_vg(cmd, 0, NULL, vg_name, NULL,
- 			READ_FOR_UPDATE | READ_ALLOW_EXPORTED,
--			handle, &_vgreduce_repair_single);
-+			0, handle, &_vgreduce_repair_single);
- 
- 	if (vp.already_consistent) {
- 		log_print_unless_silent("Volume group \"%s\" is already consistent", vg_name);
-diff --git a/tools/vgremove.c b/tools/vgremove.c
-index 1d1a40f..f0da2f8 100644
---- a/tools/vgremove.c
-+++ b/tools/vgremove.c
-@@ -110,7 +110,7 @@ int vgremove(struct cmd_context *cmd, int argc, char **argv)
- 
- 	cmd->handles_missing_pvs = 1;
- 	ret = process_each_vg(cmd, argc, argv, NULL, NULL,
--			      READ_FOR_UPDATE,
-+			      READ_FOR_UPDATE, 0,
- 			      NULL, &vgremove_single);
- 
- 	return ret;
-diff --git a/tools/vgrename.c b/tools/vgrename.c
-index 3dceeab..2006193 100644
---- a/tools/vgrename.c
-+++ b/tools/vgrename.c
-@@ -246,7 +246,7 @@ int vgrename(struct cmd_context *cmd, int argc, char **argv)
- 
- 	ret = process_each_vg(cmd, 0, NULL, vg_name_old, NULL,
- 			      READ_FOR_UPDATE | READ_ALLOW_EXPORTED,
--			      handle, _vgrename_single);
-+			      0, handle, _vgrename_single);
- 
- 	/* Needed if process_each_vg returns error before calling _single. */
- 	if (vp.unlock_new_name)
-diff --git a/tools/vgscan.c b/tools/vgscan.c
-index 688e361..45a2d7e 100644
---- a/tools/vgscan.c
-+++ b/tools/vgscan.c
-@@ -117,7 +117,7 @@ int vgscan(struct cmd_context *cmd, int argc, char **argv)
- 	else
- 		log_print_unless_silent("Reading volume groups from cache.");
- 
--	maxret = process_each_vg(cmd, argc, argv, NULL, NULL, 0, NULL,
-+	maxret = process_each_vg(cmd, argc, argv, NULL, NULL, 0, NULL, 0,
- 				 &vgscan_single);
- 
- 	if (arg_count(cmd, mknodes_ARG)) {
 
 
