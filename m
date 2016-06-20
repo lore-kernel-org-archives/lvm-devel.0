@@ -1,91 +1,107 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 20 Jun 2016 18:26:10 +0000 (UTC)
-Subject: master - lvmetad: process new connections after shutdown signal
-Message-ID: <20160620182610.8FF0D60CD7@fedorahosted.org>
+Date: Mon, 20 Jun 2016 19:02:15 +0000 (UTC)
+Subject: master - lvmlockd: always try to connect to lvmetad
+Message-ID: <20160620190215.534F361487@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b12961e7ebd6fb29d760daafd3c16e4ba3e54e80
-Commit:        b12961e7ebd6fb29d760daafd3c16e4ba3e54e80
-Parent:        6ae22125c62ddea4340916a5e255d55844bfd087
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47a29f6b2eb78a71ba6eafa9f47c7519a629155f
+Commit:        47a29f6b2eb78a71ba6eafa9f47c7519a629155f
+Parent:        b12961e7ebd6fb29d760daafd3c16e4ba3e54e80
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jun 20 13:19:02 2016 -0500
+AuthorDate:    Mon Jun 20 13:47:26 2016 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jun 20 13:19:02 2016 -0500
+CommitterDate: Mon Jun 20 14:01:46 2016 -0500
 
-lvmetad: process new connections after shutdown signal
+lvmlockd: always try to connect to lvmetad
 
-Currently, a shutdown signal will cause lvmetad to quit
-responding to new connections, but not actually exit until
-all connections are gone.  If a program is maintaining a
-long running connection (e.g. lvmlockd, or even an lvm
-command) when lvmetad gets a shutdown signal, then all
-further commands will hang indefinately waiting for a
-response that won't be sent.
-
-With this patch, make lvmetad continue handling new
-connections even after a shutdown signal.  It will exit
-once all connections are gone.
+Reconnect to lvmetad if either the send fails (e.g. lvmetad
+was restarted since lvmlockd last connected), or if no
+lvmetad connection exists (e.g. lvmetad was started after
+lvmlockd so no previous connection existed.)
 ---
- libdaemon/server/daemon-server.c |   16 +++++++++++-----
- 1 files changed, 11 insertions(+), 5 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c |   32 ++++++++++++++++++--------------
+ 1 files changed, 18 insertions(+), 14 deletions(-)
 
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index d18bd4b..7911dd6 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -490,8 +490,10 @@ static int handle_connect(daemon_state s)
- 	socklen_t sl = sizeof(sockaddr);
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index f92ca01..f61939a 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -1013,6 +1013,7 @@ static daemon_reply send_lvmetad(const char *id, ...)
+ 	daemon_reply reply;
+ 	va_list ap;
+ 	int retries = 0;
++	int err;
  
- 	client.socket_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
--	if (client.socket_fd < 0)
-+	if (client.socket_fd < 0) {
-+		ERROR(&s, "Failed to accept connection.");
- 		return 0;
-+	}
+ 	va_start(ap, id);
  
- 	 if (fcntl(client.socket_fd, F_SETFD, FD_CLOEXEC))
- 		WARN(&s, "setting CLOEXEC on client socket fd %d failed", client.socket_fd);
-@@ -510,8 +512,10 @@ static int handle_connect(daemon_state s)
- 	ts->s = s;
- 	ts->client = client;
- 
--	if (pthread_create(&ts->client.thread_id, NULL, client_thread, ts))
-+	if (pthread_create(&ts->client.thread_id, NULL, client_thread, ts)) {
-+		ERROR(&s, "Failed to create client thread.");
- 		return 0;
-+	}
- 
- 	return 1;
- }
-@@ -622,7 +626,7 @@ void daemon_start(daemon_state s)
- 		if (!s.daemon_init(&s))
- 			failed = 1;
- 
--	while (!_shutdown_requested && !failed) {
-+	while (!failed) {
- 		_reset_timeout(s);
- 		FD_ZERO(&in);
- 		FD_SET(s.socket_fd, &in);
-@@ -630,12 +634,14 @@ void daemon_start(daemon_state s)
- 			perror("select error");
- 		if (FD_ISSET(s.socket_fd, &in)) {
- 			timeout_count = 0;
--			if (!_shutdown_requested && !handle_connect(s))
--				ERROR(&s, "Failed to handle a client connection.");
-+			handle_connect(s);
+@@ -1022,20 +1023,27 @@ static daemon_reply send_lvmetad(const char *id, ...)
+ 	 */
+ 	pthread_mutex_lock(&lvmetad_mutex);
+ retry:
+-	reply = daemon_send_simple_v(lvmetad_handle, id, ap);
+-
+-	/* lvmetad may have been restarted */
+-	if ((reply.error == ECONNRESET) && (retries < 2)) {
+-		daemon_close(lvmetad_handle);
+-		lvmetad_connected = 0;
+-
++	if (!lvmetad_connected) {
+ 		lvmetad_handle = lvmetad_open(NULL);
+ 		if (lvmetad_handle.error || lvmetad_handle.socket_fd < 0) {
+-			log_error("lvmetad_open reconnect error %d", lvmetad_handle.error);
++			err = lvmetad_handle.error ?: lvmetad_handle.socket_fd;
++			pthread_mutex_unlock(&lvmetad_mutex);
++			log_error("lvmetad_open reconnect error %d", err);
++			memset(&reply, 0, sizeof(reply));
++			reply.error = err;
++			return reply;
+ 		} else {
+ 			log_debug("lvmetad reconnected");
+ 			lvmetad_connected = 1;
  		}
- 
- 		reap(s, 0);
- 
-+		if (_shutdown_requested && !s.threads->next)
-+			break;
++	}
 +
- 		/* s.idle == NULL equals no shutdown on timeout */
- 		if (_is_idle(s)) {
- 			DEBUGLOG(&s, "timeout occured");
++	reply = daemon_send_simple_v(lvmetad_handle, id, ap);
++
++	/* lvmetad may have been restarted */
++	if ((reply.error == ECONNRESET) && (retries < 2)) {
++		daemon_close(lvmetad_handle);
++		lvmetad_connected = 0;
+ 		retries++;
+ 		goto retry;
+ 	}
+@@ -1240,10 +1248,6 @@ static int res_lock(struct lockspace *ls, struct resource *r, struct action *act
+ 		rv = -EREMOVED;
+ 	}
+ 
+-	if (!lvmetad_connected && inval_meta)
+-		log_debug("S %s R %s res_lock no lvmetad connection to invalidate",
+-			  ls->name, r->name);
+-
+ 	/*
+ 	 * r is vglk: tell lvmetad to set the vg invalid
+ 	 * flag, and provide the new r_version.  If lvmetad finds
+@@ -1259,7 +1263,7 @@ static int res_lock(struct lockspace *ls, struct resource *r, struct action *act
+ 	 * caches, and tell lvmetad to set global invalid to 0.
+ 	 */
+ 
+-	if (lvmetad_connected && inval_meta && (r->type == LD_RT_VG)) {
++	if (inval_meta && (r->type == LD_RT_VG)) {
+ 		daemon_reply reply;
+ 		char *uuid;
+ 
+@@ -1283,7 +1287,7 @@ static int res_lock(struct lockspace *ls, struct resource *r, struct action *act
+ 		daemon_reply_destroy(reply);
+ 	}
+ 
+-	if (lvmetad_connected && inval_meta && (r->type == LD_RT_GL)) {
++	if (inval_meta && (r->type == LD_RT_GL)) {
+ 		daemon_reply reply;
+ 
+ 		log_debug("S %s R %s res_lock set lvmetad global invalid",
 
 
