@@ -1,75 +1,134 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 20 Jun 2016 12:06:17 +0000 (UTC)
-Subject: master - report: compare --configreport value with basic report type
-Message-ID: <20160620120617.BF72A60F60@fedorahosted.org>
+Date: Mon, 20 Jun 2016 12:06:19 +0000 (UTC)
+Subject: master - log: add 'label' log report object type; annotate process_each_label with log_set_report_object_{type, id_and_name} and report_log_ret_code
+Message-ID: <20160620120619.D531260F60@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db6b4c1eef733769a3ca9f2f01c29c77cf83cc24
-Commit:        db6b4c1eef733769a3ca9f2f01c29c77cf83cc24
-Parent:        2593cab5c4f6cd05edab521b0ae997077790234b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a77732c18089a12fa7c009a02cc1f1d6636a4284
+Commit:        a77732c18089a12fa7c009a02cc1f1d6636a4284
+Parent:        db6b4c1eef733769a3ca9f2f01c29c77cf83cc24
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jun 20 13:15:33 2016 +0200
+AuthorDate:    Mon Jun 20 13:46:35 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jun 20 14:04:37 2016 +0200
+CommitterDate: Mon Jun 20 14:05:13 2016 +0200
 
-report: compare --configreport value with basic report type
+log: add 'label' log report object type; annotate process_each_label with log_set_report_object_{type, id_and_name} and report_log_ret_code
 
-Reporting commands can be of different types (even if the command name
-is the same):
-  - pvs command can be either of PVS, PVSEGS or LABEL report type,
-  - vgs command is of VGS report type,
-  - lvs command is of LVS or SEGS report type.
-
-Use basic report type when looking for report prefix used for
---configreport option.
-
-This means that:
-  - 'pvs --configreport pv' applies to PVS, PVSEGS or LABEL report type
-  - 'vgs --configreport vg' applies to VGS report type
-  - 'lvs --configreport lv' applies to LVS and SEGS report type
 ---
- tools/reporter.c |   18 ++++++++++++++----
- 1 files changed, 14 insertions(+), 4 deletions(-)
+ lib/log/log.c         |    1 +
+ lib/log/lvm-logging.h |    1 +
+ tools/toollib.c       |   21 ++++++++++++++++++---
+ 3 files changed, 20 insertions(+), 3 deletions(-)
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index c7dee20..8d213cd 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -747,6 +747,14 @@ static report_idx_t _get_report_idx_from_name(report_type_t report_type, const c
- 	if (!name || !*name)
- 		return REPORT_IDX_NULL;
+diff --git a/lib/log/log.c b/lib/log/log.c
+index e8793c6..0d253e7 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -300,6 +300,7 @@ const char *log_get_report_object_type_name(log_report_object_type_t object_type
+ 	static const char *log_object_type_names[LOG_REPORT_OBJECT_TYPE_COUNT] = {[LOG_REPORT_OBJECT_TYPE_NULL] = "",
+ 										  [LOG_REPORT_OBJECT_TYPE_ORPHAN] = "orphan",
+ 										  [LOG_REPORT_OBJECT_TYPE_PV] = "pv",
++										  [LOG_REPORT_OBJECT_TYPE_LABEL] = "label",
+ 										  [LOG_REPORT_OBJECT_TYPE_VG] = "vg",
+ 										  [LOG_REPORT_OBJECT_TYPE_LV] = "lv"};
+ 	return log_object_type_names[object_type];
+diff --git a/lib/log/lvm-logging.h b/lib/log/lvm-logging.h
+index e5b8b63..59ed7ac 100644
+--- a/lib/log/lvm-logging.h
++++ b/lib/log/lvm-logging.h
+@@ -76,6 +76,7 @@ typedef enum {
+ 	LOG_REPORT_OBJECT_TYPE_NULL,
+ 	LOG_REPORT_OBJECT_TYPE_ORPHAN,
+ 	LOG_REPORT_OBJECT_TYPE_PV,
++	LOG_REPORT_OBJECT_TYPE_LABEL,
+ 	LOG_REPORT_OBJECT_TYPE_VG,
+ 	LOG_REPORT_OBJECT_TYPE_LV,
+ 	LOG_REPORT_OBJECT_TYPE_COUNT
+diff --git a/tools/toollib.c b/tools/toollib.c
+index fe9f9c0..833d6ce 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1456,6 +1456,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 		       struct processing_handle *handle,
+ 		       process_single_label_fn_t process_single_label)
+ {
++	log_report_t saved_log_report_state = log_get_report_state();
+ 	struct label *label;
+ 	struct dev_iter *iter;
+ 	struct device *dev;
+@@ -1464,6 +1465,8 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 	int ret;
+ 	int opt = 0;
  
-+	/* Change to basic report type for comparison. */
-+	if (report_type == LABEL)
-+		report_type = PVS;
-+	else if (report_type == SEGS)
-+		report_type = LVS;
-+	else if (report_type == PVSEGS)
-+		report_type = PVSEGS;
++	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LABEL);
 +
- 	if (!strcasecmp(name, "log"))
- 		idx = REPORT_IDX_LOG;
- 	else if (!strcasecmp(name, "vg"))
-@@ -755,10 +763,12 @@ static report_idx_t _get_report_idx_from_name(report_type_t report_type, const c
- 		idx = _get_report_idx(report_type, PVS);
- 	else if (!strcasecmp(name, "lv"))
- 		idx = _get_report_idx(report_type, LVS);
--	else if (!strcasecmp(name, "pvseg"))
--		idx = _get_report_idx(report_type, PVSEGS);
--	else if (!strcasecmp(name, "seg"))
--		idx = _get_report_idx(report_type, SEGS);
-+	else if (!strcasecmp(name, "pvseg")) {
-+		idx = (report_type == FULL) ? _get_report_idx(report_type, PVSEGS)
-+					    : _get_report_idx(report_type, PVS);
-+	} else if (!strcasecmp(name, "seg"))
-+		idx = (report_type == FULL) ? _get_report_idx(report_type, SEGS)
-+					    : _get_report_idx(report_type, LVS);
- 	else {
- 		idx = REPORT_IDX_NULL;
- 		log_error("Unknonwn report specifier in "
+ 	if (argc) {
+ 		for (; opt < argc; opt++) {
+ 			if (!(dev = dev_cache_get(argv[opt], cmd->full_filter))) {
+@@ -1473,6 +1476,8 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 				continue;
+ 			}
+ 
++			log_set_report_object_name_and_id(dev_name(dev), NULL);
++
+ 			if (!label_read(dev, &label, 0)) {
+ 				log_error("No physical volume label read from %s.",
+ 					  argv[opt]);
+@@ -1481,20 +1486,24 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 			}
+ 
+ 			ret = process_single_label(cmd, label, handle);
++			report_log_ret_code(ret);
+ 
+ 			if (ret > ret_max)
+ 				ret_max = ret;
+ 
++			log_set_report_object_name_and_id(NULL, NULL);
++
+ 			if (sigint_caught())
+ 				break;
+ 		}
+ 
+-		return ret_max;
++		goto out;
+ 	}
+ 
+ 	if (!(iter = dev_iter_create(cmd->full_filter, 1))) {
+ 		log_error("dev_iter creation failed.");
+-		return ECMD_FAILED;
++		ret_max = ECMD_FAILED;
++		goto out;
+ 	}
+ 
+ 	while ((dev = dev_iter_get(iter)))
+@@ -1502,17 +1511,23 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 		if (!label_read(dev, &label, 0))
+ 			continue;
+ 
++		log_set_report_object_name_and_id(dev_name(label->dev), NULL);
++
+ 		ret = process_single_label(cmd, label, handle);
++		report_log_ret_code(ret);
+ 
+ 		if (ret > ret_max)
+ 			ret_max = ret;
+ 
++		log_set_report_object_name_and_id(NULL, NULL);
++
+ 		if (sigint_caught())
+ 			break;
+ 	}
+ 
+ 	dev_iter_destroy(iter);
+-
++out:
++	log_restore_report_state(saved_log_report_state);
+ 	return ret_max;
+ }
+ 
 
 
