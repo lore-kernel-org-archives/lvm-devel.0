@@ -1,183 +1,75 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 20 Jun 2016 09:57:37 +0000 (UTC)
-Subject: master - commands: add --configreport arg for all relevant commands
-Message-ID: <20160620095737.D0B2761032@fedorahosted.org>
+Date: Mon, 20 Jun 2016 12:06:17 +0000 (UTC)
+Subject: master - report: compare --configreport value with basic report type
+Message-ID: <20160620120617.BF72A60F60@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2593cab5c4f6cd05edab521b0ae997077790234b
-Commit:        2593cab5c4f6cd05edab521b0ae997077790234b
-Parent:        083e538030e8ee5f8a888d11ddc7f06cd793678c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db6b4c1eef733769a3ca9f2f01c29c77cf83cc24
+Commit:        db6b4c1eef733769a3ca9f2f01c29c77cf83cc24
+Parent:        2593cab5c4f6cd05edab521b0ae997077790234b
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jun 20 11:57:24 2016 +0200
+AuthorDate:    Mon Jun 20 13:15:33 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jun 20 11:57:24 2016 +0200
+CommitterDate: Mon Jun 20 14:04:37 2016 +0200
 
-commands: add --configreport arg for all relevant commands
+report: compare --configreport value with basic report type
 
+Reporting commands can be of different types (even if the command name
+is the same):
+  - pvs command can be either of PVS, PVSEGS or LABEL report type,
+  - vgs command is of VGS report type,
+  - lvs command is of LVS or SEGS report type.
+
+Use basic report type when looking for report prefix used for
+--configreport option.
+
+This means that:
+  - 'pvs --configreport pv' applies to PVS, PVSEGS or LABEL report type
+  - 'vgs --configreport vg' applies to VGS report type
+  - 'lvs --configreport lv' applies to LVS and SEGS report type
 ---
- tools/commands.h |   69 ++++++++++++++++++++++++++++++-----------------------
- 1 files changed, 39 insertions(+), 30 deletions(-)
+ tools/reporter.c |   18 ++++++++++++++----
+ 1 files changed, 14 insertions(+), 4 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index 4bebcd4..c0b3f3b 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -144,6 +144,7 @@ xx(fullreport,
-    "\t[--binary]\n"
-    "\t[-a|--all]\n"
-    "\t[--commandprofile ProfileName]\n"
-+   "\t[--configreport ReportName]\n"
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|--help]\n"
-@@ -169,11 +170,12 @@ xx(fullreport,
-    "\t[--version]\n"
-    "\t[VolumeGroupName [VolumeGroupName...]]\n",
+diff --git a/tools/reporter.c b/tools/reporter.c
+index c7dee20..8d213cd 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -747,6 +747,14 @@ static report_idx_t _get_report_idx_from_name(report_type_t report_type, const c
+ 	if (!name || !*name)
+ 		return REPORT_IDX_NULL;
  
--   aligned_ARG, all_ARG, binary_ARG, foreign_ARG, ignorelockingfailure_ARG,
--   ignoreskippedcluster_ARG, logonly_ARG, nameprefixes_ARG, noheadings_ARG,
--   nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG, readonly_ARG,
--   reportformat_ARG, rows_ARG, select_ARG, separator_ARG, shared_ARG,
--   sort_ARG, trustcache_ARG, unbuffered_ARG, units_ARG, unquoted_ARG)
-+   aligned_ARG, all_ARG, binary_ARG, configreport_ARG, foreign_ARG,
-+   ignorelockingfailure_ARG, ignoreskippedcluster_ARG, logonly_ARG,
-+   nameprefixes_ARG, noheadings_ARG, nolocking_ARG, nosuffix_ARG,
-+   options_ARG, partial_ARG, readonly_ARG, reportformat_ARG, rows_ARG,
-+   select_ARG, separator_ARG, shared_ARG, sort_ARG, trustcache_ARG,
-+   unbuffered_ARG, units_ARG, unquoted_ARG)
- 
- xx(lastlog,
-    "Display last command's log report",
-@@ -481,6 +483,7 @@ xx(lvdisplay,
-    "\t[-a|--all]\n"
-    "\t[--binary]\n"
-    "\t[--commandprofile ProfileName]\n"
-+   "\t[--configreport ReportName]\n"
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|--help]\n"
-@@ -504,11 +507,12 @@ xx(lvdisplay,
-    "\t[--version]\n"
-    "\t[LogicalVolume[Path] [LogicalVolume[Path]...]]\n",
- 
--    aligned_ARG, all_ARG, binary_ARG, colon_ARG, columns_ARG, foreign_ARG,
--    history_ARG, ignorelockingfailure_ARG, ignoreskippedcluster_ARG,
--    logonly_ARG, maps_ARG, noheadings_ARG, nosuffix_ARG, options_ARG, sort_ARG,
--    partial_ARG, readonly_ARG, reportformat_ARG, segments_ARG, select_ARG,
--    separator_ARG, shared_ARG, unbuffered_ARG, units_ARG)
-+    aligned_ARG, all_ARG, binary_ARG, colon_ARG, columns_ARG,
-+    configreport_ARG< foreign_ARG, history_ARG, ignorelockingfailure_ARG,
-+    ignoreskippedcluster_ARG, logonly_ARG, maps_ARG, noheadings_ARG,
-+    nosuffix_ARG, options_ARG, sort_ARG, partial_ARG, readonly_ARG,
-+    reportformat_ARG, segments_ARG, select_ARG, separator_ARG,
-+    shared_ARG, unbuffered_ARG, units_ARG)
- 
- xx(lvextend,
-    "Add space to a logical volume",
-@@ -916,6 +920,7 @@ xx(pvdisplay,
-    "\t[-a|--all]\n"
-    "\t[--binary]\n"
-    "\t[--commandprofile ProfileName]\n"
-+   "\t[--configreport ReportName]\n"
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|--help]\n"
-@@ -936,11 +941,11 @@ xx(pvdisplay,
-    "\t[--version]\n"
-    "\t[PhysicalVolumePath [PhysicalVolumePath...]]\n",
- 
--   aligned_ARG, all_ARG, binary_ARG, colon_ARG, columns_ARG, foreign_ARG,
--   ignorelockingfailure_ARG, ignoreskippedcluster_ARG, logonly_ARG, maps_ARG,
--   noheadings_ARG, nosuffix_ARG, options_ARG, readonly_ARG, reportformat_ARG,
--   select_ARG, separator_ARG, shared_ARG, short_ARG, sort_ARG, unbuffered_ARG,
--   units_ARG)
-+   aligned_ARG, all_ARG, binary_ARG, colon_ARG, columns_ARG, configreport_ARG,
-+   foreign_ARG, ignorelockingfailure_ARG, ignoreskippedcluster_ARG,
-+   logonly_ARG, maps_ARG, noheadings_ARG, nosuffix_ARG, options_ARG,
-+   readonly_ARG, reportformat_ARG, select_ARG, separator_ARG, shared_ARG,
-+   short_ARG, sort_ARG, unbuffered_ARG, units_ARG)
- 
- /* ALL_VGS_IS_DEFAULT is for polldaemon to find pvmoves in-progress using process_each_vg. */
- 
-@@ -1013,6 +1018,7 @@ xx(pvs,
-    "\t[--aligned]\n"
-    "\t[--binary]\n"
-    "\t[--commandprofile ProfileName]\n"
-+   "\t[--configreport ReportName]\n"
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|-?|--help]\n"
-@@ -1039,12 +1045,12 @@ xx(pvs,
-    "\t[--version]\n"
-    "\t[PhysicalVolume [PhysicalVolume...]]\n",
- 
--   aligned_ARG, all_ARG, binary_ARG, foreign_ARG, ignorelockingfailure_ARG,
--   ignoreskippedcluster_ARG, logonly_ARG, nameprefixes_ARG, noheadings_ARG,
--   nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG, readonly_ARG,
--   reportformat_ARG, rows_ARG, segments_ARG, select_ARG, separator_ARG,
--   shared_ARG, sort_ARG, trustcache_ARG, unbuffered_ARG, units_ARG,
--   unquoted_ARG)
-+   aligned_ARG, all_ARG, binary_ARG, configreport_ARG, foreign_ARG,
-+   ignorelockingfailure_ARG, ignoreskippedcluster_ARG, logonly_ARG,
-+   nameprefixes_ARG, noheadings_ARG, nolocking_ARG, nosuffix_ARG,
-+   options_ARG, partial_ARG, readonly_ARG, reportformat_ARG, rows_ARG,
-+   segments_ARG, select_ARG, separator_ARG, shared_ARG, sort_ARG,
-+   trustcache_ARG, unbuffered_ARG, units_ARG, unquoted_ARG)
- 
- xx(pvscan,
-    "List all physical volumes",
-@@ -1266,6 +1272,7 @@ xx(vgdisplay,
-    "\t[--aligned]\n"
-    "\t[--binary]\n"
-    "\t[--commandprofile ProfileName]\n"
-+   "\t[--configreport ReportName]\n"
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|--help]\n"
-@@ -1288,10 +1295,10 @@ xx(vgdisplay,
-    "\t[VolumeGroupName [VolumeGroupName...]]\n",
- 
-    activevolumegroups_ARG, aligned_ARG, binary_ARG, colon_ARG, columns_ARG,
--   foreign_ARG, ignorelockingfailure_ARG, ignoreskippedcluster_ARG,
--   logonly_ARG, noheadings_ARG, nosuffix_ARG, options_ARG, partial_ARG,
--   readonly_ARG, reportformat_ARG, select_ARG, shared_ARG, short_ARG,
--   separator_ARG, sort_ARG, unbuffered_ARG, units_ARG)
-+   configreport_ARG, foreign_ARG, ignorelockingfailure_ARG,
-+   ignoreskippedcluster_ARG, logonly_ARG, noheadings_ARG, nosuffix_ARG,
-+   options_ARG, partial_ARG, readonly_ARG, reportformat_ARG, select_ARG,
-+   shared_ARG, short_ARG, separator_ARG, sort_ARG, unbuffered_ARG, units_ARG)
- 
- xx(vgexport,
-    "Unregister volume group(s) from the system",
-@@ -1448,6 +1455,7 @@ xx(vgs,
-    "\t[--binary]\n"
-    "\t[-a|--all]\n"
-    "\t[--commandprofile ProfileName]\n"
-+   "\t[--configreport ReportName]\n"
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|--help]\n"
-@@ -1473,11 +1481,12 @@ xx(vgs,
-    "\t[--version]\n"
-    "\t[VolumeGroupName [VolumeGroupName...]]\n",
- 
--   aligned_ARG, all_ARG, binary_ARG, foreign_ARG, ignorelockingfailure_ARG,
--   ignoreskippedcluster_ARG, logonly_ARG, nameprefixes_ARG, noheadings_ARG,
--   nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG, readonly_ARG,
--   reportformat_ARG, rows_ARG, select_ARG, separator_ARG, shared_ARG,
--   sort_ARG, trustcache_ARG, unbuffered_ARG, units_ARG, unquoted_ARG)
-+   aligned_ARG, all_ARG, binary_ARG, configreport_ARG, foreign_ARG,
-+   ignorelockingfailure_ARG, ignoreskippedcluster_ARG, logonly_ARG,
-+   nameprefixes_ARG, noheadings_ARG, nolocking_ARG, nosuffix_ARG,
-+   options_ARG, partial_ARG, readonly_ARG, reportformat_ARG, rows_ARG,
-+   select_ARG, separator_ARG, shared_ARG, sort_ARG, trustcache_ARG,
-+   unbuffered_ARG, units_ARG, unquoted_ARG)
- 
- xx(vgscan,
-    "Search for all volume groups",
++	/* Change to basic report type for comparison. */
++	if (report_type == LABEL)
++		report_type = PVS;
++	else if (report_type == SEGS)
++		report_type = LVS;
++	else if (report_type == PVSEGS)
++		report_type = PVSEGS;
++
+ 	if (!strcasecmp(name, "log"))
+ 		idx = REPORT_IDX_LOG;
+ 	else if (!strcasecmp(name, "vg"))
+@@ -755,10 +763,12 @@ static report_idx_t _get_report_idx_from_name(report_type_t report_type, const c
+ 		idx = _get_report_idx(report_type, PVS);
+ 	else if (!strcasecmp(name, "lv"))
+ 		idx = _get_report_idx(report_type, LVS);
+-	else if (!strcasecmp(name, "pvseg"))
+-		idx = _get_report_idx(report_type, PVSEGS);
+-	else if (!strcasecmp(name, "seg"))
+-		idx = _get_report_idx(report_type, SEGS);
++	else if (!strcasecmp(name, "pvseg")) {
++		idx = (report_type == FULL) ? _get_report_idx(report_type, PVSEGS)
++					    : _get_report_idx(report_type, PVS);
++	} else if (!strcasecmp(name, "seg"))
++		idx = (report_type == FULL) ? _get_report_idx(report_type, SEGS)
++					    : _get_report_idx(report_type, LVS);
+ 	else {
+ 		idx = REPORT_IDX_NULL;
+ 		log_error("Unknonwn report specifier in "
 
 
