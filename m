@@ -1,89 +1,139 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 20 Jun 2016 09:40:31 +0000 (UTC)
-Subject: master - toollib: add report_group and log_rh to processing_handle and initialize cmd processing log report
-Message-ID: <20160620094031.A8AAE6031C@fedorahosted.org>
+Date: Mon, 20 Jun 2016 09:40:35 +0000 (UTC)
+Subject: master - report: add current report to existing group
+Message-ID: <20160620094035.D0E5D6031C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c099f531fbb1702ea0aed16e5deec0368e7e7250
-Commit:        c099f531fbb1702ea0aed16e5deec0368e7e7250
-Parent:        213434d426622b34f2fd7bc2e74f6e5ca0c6c125
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10a1b9e18248f08f11af2bb0214fa857d0c9d6fc
+Commit:        10a1b9e18248f08f11af2bb0214fa857d0c9d6fc
+Parent:        f752a953022387cc7e5c4da11d118c12e3716ce4
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon May 23 10:16:29 2016 +0200
+AuthorDate:    Mon May 2 14:37:16 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Mon Jun 20 11:33:41 2016 +0200
 
-toollib: add report_group and log_rh to processing_handle and initialize cmd processing log report
+report: add current report to existing group
 
-Wire up report group creation with log report in struct
-processing_handle and call report_format_init during processing handle
-initialization (init_processing_handle fn) and destroy it while
-destroing processing handle (destroy_processing_handle fn).
-
-This way, all the LVM command processing using processing handle
-has access to log report via which the current command log
-can be reported as items are processed.
+Add any report (pvs/vgs/lvs) currently processed to current report group
+which is part of processing handle and which already contains log
+report. This way both log report and pvs/vgs/lvs report will be
+reported as a whole within a group, thus having same output format as
+selected by --reportformat option.
 ---
- WHATS_NEW       |    1 +
- tools/toollib.c |   10 ++++++++++
- tools/toollib.h |    3 +++
- 3 files changed, 14 insertions(+), 0 deletions(-)
+ tools/reporter.c |   54 +++++++++++++++++++++++++++++++++++++++++++++---------
+ 1 files changed, 45 insertions(+), 9 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ebddfd0..349bd30 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.158 - 
- =================================
-+  Integrate report group handling and cmd log report into cmd processing code.
-   Add log/report_command_log to lvm.conf to enable or disable cmd log report.
-   Add log/report_output_format to lvm.conf for default report output format.
-   Recognize --reportformat {basic|json} option to select report output format.
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 9353814..e091467 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1725,6 +1725,12 @@ struct processing_handle *init_processing_handle(struct cmd_context *cmd)
- 	handle->internal_report_for_select = arg_is_set(cmd, select_ARG);
- 	handle->include_historical_lvs = cmd->include_historical_lvs;
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 7bd5d36..9f4f95a 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -26,6 +26,8 @@ typedef enum {
  
-+	if (!report_format_init(cmd, &handle->report_group_type, &handle->report_group,
-+				&handle->log_rh)) {
-+		dm_pool_free(cmd->mem, handle);
-+		return NULL;
-+	}
-+
- 	return handle;
+ struct single_report_args {
+ 	report_type_t report_type;
++	char report_prefix[32];
++	const char *report_name;
+ 	int args_are_pvs;
+ 	const char *keys;
+ 	const char *options;
+@@ -822,6 +824,32 @@ static int _get_report_selection(struct cmd_context *cmd,
+ 	return r;
  }
  
-@@ -1754,6 +1760,10 @@ void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle
- 	if (handle) {
- 		if (handle->selection_handle && handle->selection_handle->selection_rh)
- 			dm_report_free(handle->selection_handle->selection_rh);
-+		if (!dm_report_group_destroy(handle->report_group))
-+			stack;
-+		if (handle->log_rh)
-+			dm_report_free(handle->log_rh);
- 		/*
- 		 * TODO: think about better alternatives:
- 		 * handle mempool, dm_alloc for handle memory...
-diff --git a/tools/toollib.h b/tools/toollib.h
-index 06d0ef9..622badc 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -72,6 +72,9 @@ struct processing_handle {
- 	int internal_report_for_select;
- 	int include_historical_lvs;
- 	struct selection_handle *selection_handle;
-+	dm_report_group_type_t report_group_type;
-+	struct dm_report_group *report_group;
-+	struct dm_report *log_rh;
- 	void *custom_handle;
- };
++static int _set_report_prefix_and_name(struct single_report_args *single_args)
++{
++	const char *report_prefix;
++	size_t len;
++
++	report_prefix = report_get_field_prefix(single_args->report_type);
++	len = strlen(report_prefix);
++	if (report_prefix[len - 1] == '_')
++		len--;
++
++	if (!len) {
++		log_error(INTERNAL_ERROR "_set_report_prefix_and_name: no prefix "
++			  "found for report type 0x%x", single_args->report_type);
++		return 0;
++	}
++
++	if (!dm_strncpy(single_args->report_prefix, report_prefix, sizeof(single_args->report_prefix))) {
++		log_error("_set_report_prefix_and_name: dm_strncpy failed");
++		return 0;
++	}
++	single_args->report_prefix[len] = '\0';
++	single_args->report_name = single_args->report_prefix;
++
++	return 1;
++}
++
+ static int _do_report(struct cmd_context *cmd, struct report_args *args, struct single_report_args *single_args)
+ {
+ 	struct processing_handle *handle = NULL;
+@@ -851,6 +879,9 @@ static int _do_report(struct cmd_context *cmd, struct report_args *args, struct
+ 				    &report_type))
+ 		goto_out;
  
++	if (!dm_report_group_push(handle->report_group, report_handle, (void *) single_args->report_name))
++		goto_out;
++
+ 	/*
+ 	 * We lock VG_GLOBAL to enable use of metadata cache.
+ 	 * This can pause alongide pvscan or vgscan process for a while.
+@@ -959,6 +990,9 @@ static int _config_report(struct cmd_context *cmd, struct report_args *args, str
+ 	/* Check PV specifics and do extra changes/actions if needed. */
+ 	_check_pv_list(cmd, args, single_args);
+ 
++	if (!_set_report_prefix_and_name(single_args))
++		return_0;
++
+ 	switch (single_args->report_type) {
+ 		case DEVTYPES:
+ 			single_args->keys = find_config_tree_str(cmd, report_devtypes_sort_CFG, NULL);
+@@ -1141,10 +1175,10 @@ int report_format_init(struct cmd_context *cmd, dm_report_group_type_t *report_g
+ 	}
+ 
+ 	if (report_command_log) {
+-		if (!*log_rh) {
+-			single_args = &args.single_args[REPORT_IDX_LOG];
+-			single_args->report_type = CMDLOG;
++		single_args = &args.single_args[REPORT_IDX_LOG];
++		single_args->report_type = CMDLOG;
+ 
++		if (!*log_rh) {
+ 			if (!_config_report(cmd, &args, single_args))
+ 				goto_bad;
+ 
+@@ -1155,19 +1189,21 @@ int report_format_init(struct cmd_context *cmd, dm_report_group_type_t *report_g
+ 				log_error("Failed to create log report.");
+ 				goto bad;
+ 			}
++		} else {
++			/*
++			 * We reusing existing log report handle.
++			 * Just get report's name and prefix now.
++			 */
++			if (!_set_report_prefix_and_name(single_args))
++				goto_bad;
+ 		}
+ 
+-		if (!(dm_report_group_push(new_report_group, *log_rh ? : tmp_log_rh, log_report_name))) {
++		if (!(dm_report_group_push(new_report_group, tmp_log_rh ? : *log_rh, (void *) single_args->report_name))) {
+ 			log_error("Failed to add log report to report group.");
+ 			goto bad;
+ 		}
+ 	}
+ 
+-	if (!(dm_report_group_push(new_report_group, tmp_log_rh ? : *log_rh, log_report_name))) {
+-		log_error("Failed to add log report to report group.");
+-		goto bad;
+-	}
+-
+ 	*report_group = new_report_group;
+ 	if (tmp_log_rh)
+ 		*log_rh = tmp_log_rh;
 
 
