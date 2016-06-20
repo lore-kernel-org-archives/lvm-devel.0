@@ -1,66 +1,161 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  1 Jun 2016 15:42:24 +0000 (UTC)
-Subject: master - cleanup: use display_name
-Message-ID: <20160601154224.AE23360F20@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 20 Jun 2016 09:40:56 +0000 (UTC)
+Subject: master - report: recognize selection (-S|--select) for each subreport; make -S|--select groupable
+Message-ID: <20160620094056.D46E060FE1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21cefd3f07f4c6408d5c59c5afd41d3056706513
-Commit:        21cefd3f07f4c6408d5c59c5afd41d3056706513
-Parent:        a5d65b4a513b322def4b6da1d498e4491c9da6d0
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 1 17:40:26 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 1 17:40:26 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b864a062217cf31d86343f37ecbefeeeb15610cf
+Commit:        b864a062217cf31d86343f37ecbefeeeb15610cf
+Parent:        e081203f3e2ee5e3270c7f5f2753ed446d8b72cb
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu May 26 15:20:27 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Jun 20 11:33:42 2016 +0200
 
-cleanup: use display_name
+report: recognize selection (-S|--select) for each subreport; make -S|--select groupable
 
 ---
- lib/locking/lvmlockd.c  |    7 +++----
- lib/metadata/lv_manip.c |    2 +-
- 2 files changed, 4 insertions(+), 5 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/report/report.h |    1 +
+ tools/args.h        |    2 +-
+ tools/reporter.c    |   54 ++++++++++++++++++++++++++++++++++++++++++++++----
+ tools/toollib.c     |    7 ++++-
+ 5 files changed, 57 insertions(+), 8 deletions(-)
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index d718ac9..9eb7f92 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -369,18 +369,17 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
- 	struct lvresize_params lp = {
- 		.lv_name = vg->sanlock_lv->name,
- 		.sign = SIGN_NONE,
-+		.size = lv->size + ((extend_mb * 1024 * 1024) / SECTOR_SIZE),
- 		.percent = PERCENT_NONE,
- 		.resize = LV_EXTEND,
- 		.ac_force = 1,
- 		.sizeargs = 1,
- 	};
+diff --git a/WHATS_NEW b/WHATS_NEW
+index fb5d3e7..01d6bbc 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.158 - 
+ =================================
++  Make -S|--select option groupable that allows this option to be repeated.
+   Make -O|--sort option groupable that allows this option to be repeated.
+   Add --configreport option to select report for which next options are applied.
+   Add support for priorities on grouping command arguments.
+diff --git a/lib/report/report.h b/lib/report/report.h
+index 20ccd99..f5df51e 100644
+--- a/lib/report/report.h
++++ b/lib/report/report.h
+@@ -88,6 +88,7 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
+ 		  report_type_t *report_type, const char *separator,
+ 		  int aligned, int buffered, int headings, int field_prefixes,
+ 		  int quoted, int columns_as_rows, const char *selection);
++int report_get_single_selection(struct cmd_context *cmd, const char **selection);
+ void *report_init_for_selection(struct cmd_context *cmd, report_type_t *report_type,
+ 				const char *selection);
+ const char *report_get_field_prefix(report_type_t report_type);
+diff --git a/tools/args.h b/tools/args.h
+index 985f5d1..b7b2262 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -206,7 +206,7 @@ arg(physicalextentsize_ARG, 's', "physicalextentsize", size_mb_arg, 0, 0)
+ arg(snapshot_ARG, 's', "snapshot", NULL, 0, 0)
+ arg(short_ARG, 's', "short", NULL, 0, 0)
+ arg(stdin_ARG, 's', "stdin", NULL, 0, 0)
+-arg(select_ARG, 'S', "select", string_arg, 0, 0)
++arg(select_ARG, 'S', "select", string_arg, ARG_GROUPABLE, 0)
+ arg(test_ARG, 't', "test", NULL, 0, 0)
+ arg(thin_ARG, 'T', "thin", NULL, 0, 0)
+ arg(uuid_ARG, 'u', "uuid", NULL, 0, 0)
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 8165288..9dd302a 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -915,16 +915,60 @@ out:
+ 	return r;
+ }
  
--	lp.size = lv->size + ((extend_mb * 1024 * 1024) / SECTOR_SIZE);
++static int _do_report_get_selection(struct cmd_context *cmd,
++				    struct report_args *args,
++				    struct single_report_args *single_args,
++				    report_idx_t expected_idxs[],
++				    const char **ret_selection)
++{
++	struct arg_value_group_list *current_group;
++	const char *final_selection = "", *selection = NULL;
++	const char *report_name = NULL;
++	report_idx_t idx = REPORT_IDX_SINGLE;
++	int i;
++
++	dm_list_iterate_items(current_group, &cmd->arg_value_groups) {
++		if (!grouped_arg_is_set(current_group->arg_values, select_ARG))
++			continue;
++
++		if (grouped_arg_is_set(current_group->arg_values, configreport_ARG)) {
++			report_name = grouped_arg_str_value(current_group->arg_values, configreport_ARG, NULL);
++			if ((idx = _get_report_idx_from_name(single_args->report_type, report_name)) == REPORT_IDX_NULL)
++				return_0;
++		}
++
++		selection = grouped_arg_str_value(current_group->arg_values, select_ARG, NULL);
++
++		if (single_args) {
++			if (!_should_process_report_idx(single_args->report_type, idx))
++				continue;
++			args->single_args[idx].selection = selection;
++			final_selection = selection;
++		} else {
++			for (i = 0; expected_idxs[i] != REPORT_IDX_NULL; i++) {
++				if (idx == expected_idxs[i])
++					final_selection = selection;
++			}
++		}
++	}
++
++	if (ret_selection)
++		*ret_selection = final_selection;
++
++	return 1;
++}
++
+ static int _get_report_selection(struct cmd_context *cmd,
+ 				 struct report_args *args,
+ 				 struct single_report_args *single_args)
+ {
+-	int r = ECMD_PROCESSED;
 -
- 	if (!lv_resize_prepare(cmd, lv, &lp, &vg->pvs) ||
- 	    !lv_resize(cmd, lv, &lp, &vg->pvs)) {
--		log_error("Extend LV %s/%s to size %llu failed.",
--			  vg->name, lv->name, (unsigned long long)lp.size);
-+		log_error("Extend LV %s to size %s failed.",
-+			  display_lvname(lv), display_size(cmd, lp.size));
+-	if (arg_count(cmd, select_ARG))
+-		single_args->selection = arg_str_value(cmd, select_ARG, NULL);
++	return _do_report_get_selection(cmd, args, single_args, NULL, NULL) ? ECMD_PROCESSED : ECMD_FAILED;
++}
+ 
+-	return r;
++int report_get_single_selection(struct cmd_context *cmd, const char **selection)
++{
++	report_idx_t expected_idxs[] = {REPORT_IDX_SINGLE, REPORT_IDX_NULL};
++	return _do_report_get_selection(cmd, NULL, NULL, expected_idxs, selection);
+ }
+ 
+ static int _set_report_prefix_and_name(struct single_report_args *single_args)
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 3b2ad6a..e67e47a 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1742,15 +1742,18 @@ int init_selection_handle(struct cmd_context *cmd, struct processing_handle *han
+ 			  report_type_t initial_report_type)
+ {
+ 	struct selection_handle *sh;
++	const char *selection;
+ 
+ 	if (!(sh = dm_pool_zalloc(cmd->mem, sizeof(struct selection_handle)))) {
+ 		log_error("_init_selection_handle: failed to allocate memory for selection handle");
  		return 0;
  	}
  
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index b31676d..a908e1e 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5410,7 +5410,7 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
- 	return 1;
- bad:
- 	if (inactive && !deactivate_lv(cmd, lock_lv))
--		log_error("Problem deactivating %s.", lock_lv->name);
-+		log_error("Problem deactivating %s.", display_lvname(lock_lv));
- 
- 	return 0;
- }
++	if (!report_get_single_selection(cmd, &selection))
++		return_0;
++
+ 	sh->report_type = initial_report_type;
+-	if (!(sh->selection_rh = report_init_for_selection(cmd, &sh->report_type,
+-					arg_str_value(cmd, select_ARG, NULL)))) {
++	if (!(sh->selection_rh = report_init_for_selection(cmd, &sh->report_type, selection))) {
+ 		dm_pool_free(cmd->mem, sh);
+ 		return_0;
+ 	}
 
 
