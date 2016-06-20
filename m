@@ -1,87 +1,99 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 20 Jun 2016 09:41:09 +0000 (UTC)
-Subject: master - libdm: report: remember special field to display selection status in struct row's field_sel_status variable
-Message-ID: <20160620094109.6369C60D3F@fedorahosted.org>
+Date: Mon, 20 Jun 2016 09:41:11 +0000 (UTC)
+Subject: master - refactor: move field width calculation and sort preparation from _do_report_object to dm_report_output
+Message-ID: <20160620094111.73E2560FFF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=102cc4c1e241ee7c3f6cc8c863a06dd29f373fbc
-Commit:        102cc4c1e241ee7c3f6cc8c863a06dd29f373fbc
-Parent:        f50d4011cdd3ef38c15b9dea05e73321592d93c2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0ba5f4b8e977a6f2f45f95777da508b42d84c01a
+Commit:        0ba5f4b8e977a6f2f45f95777da508b42d84c01a
+Parent:        102cc4c1e241ee7c3f6cc8c863a06dd29f373fbc
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu May 12 14:03:32 2016 +0200
+AuthorDate:    Thu May 12 14:07:05 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Mon Jun 20 11:33:42 2016 +0200
 
-libdm: report: remember special field to display selection status in struct row's field_sel_status variable
+refactor: move field width calculation and sort preparation from _do_report_object to dm_report_output
 
-This allows for moving parts of the code from dm_report_object to
-dm_report_output which is important for subsequent patches that allow
-for repeated dm_report_output, not destroying rows on each
-dm_report_output call.
+This also prepares code for repeated dm_report_output calls.
 ---
- libdm/libdm-report.c |   13 +++++++------
- 1 files changed, 7 insertions(+), 6 deletions(-)
+ WHATS_NEW_DM         |    1 +
+ libdm/libdm-report.c |   28 ++++++++++++++++------------
+ 2 files changed, 17 insertions(+), 12 deletions(-)
 
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index fa4b9e6..7e98e1f 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.128 -
+ =================================
++  Move field width handling/sort init from dm_report_object to dm_report_output.
+   Add _LOG_BYPASS_REPORT flag for bypassing any log report currently set.
+   Introduce DM_REPORT_GROUP_JSON for report group with JSON output format.
+   Introduce DM_REPORT_GROUP_BASIC for report group with basic report output.
 diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 3fa596e..13f2027 100644
+index 13f2027..7a5d6e5 100644
 --- a/libdm/libdm-report.c
 +++ b/libdm/libdm-report.c
-@@ -254,6 +254,7 @@ struct row {
- 	struct dm_list fields;			  /* Fields in display order */
- 	struct dm_report_field *(*sort_fields)[]; /* Fields in sort order */
- 	int selected;
-+	struct dm_report_field *field_sel_status;
- };
- 
- /*
-@@ -1910,7 +1911,7 @@ static int _do_report_object(struct dm_report *rh, void *object, int do_output,
- 	const struct dm_report_field_type *fields;
- 	struct field_properties *fp;
+@@ -1913,7 +1913,6 @@ static int _do_report_object(struct dm_report *rh, void *object, int do_output,
  	struct row *row = NULL;
--	struct dm_report_field *field, *field_sel_status = NULL;
-+	struct dm_report_field *field;
+ 	struct dm_report_field *field;
  	void *data = NULL;
- 	int len;
+-	int len;
  	int r = 0;
-@@ -1962,7 +1963,7 @@ static int _do_report_object(struct dm_report *rh, void *object, int do_output,
- 		if (fp->implicit) {
- 			fields = _implicit_report_fields;
- 			if (!strcmp(fields[fp->field_num].id, SPECIAL_FIELD_SELECTED_ID))
--				field_sel_status = field;
-+				row->field_sel_status = field;
- 		} else
- 			fields = rh->fields;
  
-@@ -1994,7 +1995,7 @@ static int _do_report_object(struct dm_report *rh, void *object, int do_output,
- 	if (!_check_report_selection(rh, &row->fields)) {
- 		row->selected = 0;
+ 	if (!rh) {
+@@ -2021,17 +2020,6 @@ static int _do_report_object(struct dm_report *rh, void *object, int do_output,
  
--		if (!field_sel_status)
-+		if (!row->field_sel_status)
- 			goto out;
+ 	dm_list_add(&rh->rows, &row->list);
  
- 		/*
-@@ -2004,14 +2005,14 @@ static int _do_report_object(struct dm_report *rh, void *object, int do_output,
- 		 * The "selected" field reports the result
- 		 * of the selection.
- 		 */
--		_implicit_report_fields[field_sel_status->props->field_num].report_fn(rh,
--						rh->mem, field_sel_status, row, rh->private);
-+		_implicit_report_fields[row->field_sel_status->props->field_num].report_fn(rh,
-+						rh->mem, row->field_sel_status, row, rh->private);
- 		/*
- 		 * If the "selected" field is not displayed, e.g.
- 		 * because it is part of the sort field list,
- 		 * skip the display of the row as usual.
- 		 */
--		if (field_sel_status->props->flags & FLD_HIDDEN)
-+		if (row->field_sel_status->props->flags & FLD_HIDDEN)
- 			goto out;
+-	dm_list_iterate_items(field, &row->fields) {
+-		len = (int) strlen(field->report_string);
+-		if ((len > field->props->width))
+-			field->props->width = len;
+-
+-		if ((rh->flags & RH_SORT_REQUIRED) &&
+-		    (field->props->flags & FLD_SORT_KEY)) {
+-			(*row->sort_fields)[field->props->sort_posn] = field;
+-		}
+-	}
+-
+ 	if (!(rh->flags & DM_REPORT_OUTPUT_BUFFERED))
+ 		return dm_report_output(rh);
+ out:
+@@ -4627,6 +4615,9 @@ static int _print_basic_report_header(struct dm_report *rh)
+ 
+ int dm_report_output(struct dm_report *rh)
+ {
++	struct row *row;
++	struct dm_report_field *field;
++	size_t len;
+ 	int r = 0;
+ 
+ 	if (_is_json_report(rh) &&
+@@ -4638,6 +4629,19 @@ int dm_report_output(struct dm_report *rh)
+ 		goto out;
  	}
+ 
++	dm_list_iterate_items(row, &rh->rows) {
++		dm_list_iterate_items(field, &row->fields) {
++			len = (int) strlen(field->report_string);
++			if ((len > field->props->width))
++				field->props->width = len;
++
++			if ((rh->flags & RH_SORT_REQUIRED) &&
++			    (field->props->flags & FLD_SORT_KEY)) {
++				(*row->sort_fields)[field->props->sort_posn] = field;
++			}
++		}
++	}
++
+ 	if ((rh->flags & RH_SORT_REQUIRED))
+ 		_sort_rows(rh);
  
 
 
