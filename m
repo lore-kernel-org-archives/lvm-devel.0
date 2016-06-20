@@ -1,72 +1,80 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 20 Jun 2016 09:40:48 +0000 (UTC)
-Subject: master - args: add --configreport arg
-Message-ID: <20160620094048.6B3036031C@fedorahosted.org>
+Date: Mon, 20 Jun 2016 09:40:50 +0000 (UTC)
+Subject: master - report: add _get_report_idx_from_name and _should_process_report_idx helper fns
+Message-ID: <20160620094050.91C7460F36@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=28b4c48e2ae66b87bbb5d8fd29b761edba63a90e
-Commit:        28b4c48e2ae66b87bbb5d8fd29b761edba63a90e
-Parent:        d23c5b93183675199ff78ff288e4bbd12f935515
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=80ffaefb88917f77eafdf36dd4f882cc65706050
+Commit:        80ffaefb88917f77eafdf36dd4f882cc65706050
+Parent:        28b4c48e2ae66b87bbb5d8fd29b761edba63a90e
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jun 16 15:49:18 2016 +0200
+AuthorDate:    Thu May 26 15:50:52 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Mon Jun 20 11:33:42 2016 +0200
 
-args: add --configreport arg
+report: add _get_report_idx_from_name and _should_process_report_idx helper fns
 
+Prepare for recognition of cmd line options for each subreport within
+one command.
 ---
- WHATS_NEW        |    1 +
- tools/args.h     |    1 +
- tools/commands.h |    3 ++-
- 3 files changed, 4 insertions(+), 1 deletions(-)
+ tools/reporter.c |   41 +++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 41 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 626851e..8afc577 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.158 - 
- =================================
-+  Add --configreport option to select report for which next options are applied.
-   Add support for priorities on grouping command arguments.
-   Add report/{pvs,vgs,lvs,pvsegs,segs}_{cols,sort}_full to lvm.conf.
-   Add lvm fullreport command for joined PV, VG, LV and segment report per VG.
-diff --git a/tools/args.h b/tools/args.h
-index 8d66809..c0e0864 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -31,6 +31,7 @@ arg(cachemode_ARG, '\0', "cachemode", cachemode_arg, 0, 0)
- arg(cachepool_ARG, '\0', "cachepool", string_arg, 0, 0)
- arg(commandprofile_ARG, '\0', "commandprofile", string_arg, 0, 0)
- arg(config_ARG, '\0', "config", string_arg, 0, 0)
-+arg(configreport_ARG, '\0', "configreport", string_arg, ARG_GROUPABLE, 1)
- arg(configtype_ARG, '\0', "type", string_arg, 0, 0)
- arg(corelog_ARG, '\0', "corelog", NULL, 0, 0)
- arg(dataalignment_ARG, '\0', "dataalignment", size_kb_arg, 0, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index a9e4be5..3f0fff5 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -714,6 +714,7 @@ xx(lvs,
-    "\t[--aligned]\n"
-    "\t[--binary]\n"
-    "\t[--commandprofile ProfileName]\n"
-+   "\t[--configreport ReportName]\n"
-    "\t[-d|--debug]\n"
-    "\t[--foreign]\n"
-    "\t[-h|--help]\n"
-@@ -740,7 +741,7 @@ xx(lvs,
-    "\t[--version]\n"
-    "\t[LogicalVolume[Path] [LogicalVolume[Path]...]]\n",
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 408d410..103ae2c 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -723,6 +723,47 @@ static void _del_option_from_list(struct dm_list *sll, const char *prefix,
+ 	}
+ }
  
--   aligned_ARG, all_ARG, binary_ARG, foreign_ARG, history_ARG,
-+   aligned_ARG, all_ARG, binary_ARG, configreport_ARG, foreign_ARG, history_ARG,
-    ignorelockingfailure_ARG, ignoreskippedcluster_ARG, nameprefixes_ARG,
-    noheadings_ARG, nolocking_ARG, nosuffix_ARG, options_ARG, partial_ARG,
-    readonly_ARG, reportformat_ARG, rows_ARG, segments_ARG, select_ARG,
++#define _get_report_idx(report_type,single_report_type) \
++	(((report_type != FULL) && (report_type == single_report_type)) ? REPORT_IDX_SINGLE : REPORT_IDX_FULL_ ## single_report_type)
++
++static report_idx_t _get_report_idx_from_name(report_type_t report_type, const char *name)
++{
++	report_idx_t idx;
++
++	if (!name || !*name)
++		return REPORT_IDX_NULL;
++
++	if (!strcasecmp(name, "log"))
++		idx = REPORT_IDX_LOG;
++	else if (!strcasecmp(name, "vg"))
++		idx = _get_report_idx(report_type, VGS);
++	else if (!strcasecmp(name, "pv"))
++		idx = _get_report_idx(report_type, PVS);
++	else if (!strcasecmp(name, "lv"))
++		idx = _get_report_idx(report_type, LVS);
++	else if (!strcasecmp(name, "pvseg"))
++		idx = _get_report_idx(report_type, PVSEGS);
++	else if (!strcasecmp(name, "seg"))
++		idx = _get_report_idx(report_type, SEGS);
++	else {
++		idx = REPORT_IDX_NULL;
++		log_error("Unknonwn report specifier in "
++			  "report option list: %s.", name);
++	}
++
++	return idx;
++}
++
++static int _should_process_report_idx(report_type_t report_type, report_idx_t idx)
++{
++	if (((idx == REPORT_IDX_LOG) && (report_type != CMDLOG)) ||
++	    ((idx == REPORT_IDX_SINGLE) && ((report_type == FULL) || (report_type == CMDLOG))) ||
++	    ((idx > REPORT_IDX_LOG) && report_type != FULL))
++		return 0;
++
++	return 1;
++}
++
+ static int _get_report_options(struct cmd_context *cmd,
+ 			       struct report_args *args,
+ 			       struct single_report_args *single_args)
 
 
