@@ -1,85 +1,56 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri,  3 Jun 2016 15:02:24 +0000 (UTC)
-Subject: master - pvmove: disallow tag args
-Message-ID: <20160603150224.EC1A260C85@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 23 Jun 2016 13:01:26 +0000 (UTC)
+Subject: master - activation: switch to warning
+Message-ID: <20160623130126.B350D605CD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b321d2b1b9a3b6a1f8d67888a04c7318aa3148c2
-Commit:        b321d2b1b9a3b6a1f8d67888a04c7318aa3148c2
-Parent:        68e097972462e3c7c208ac34c62e737b161dd3c4
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jun 3 09:56:48 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jun 3 09:56:48 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=af36f5ad369ebf4c1d768145a827436ccef22f63
+Commit:        af36f5ad369ebf4c1d768145a827436ccef22f63
+Parent:        751163a74375cc3bfc9f338f1317f14a23798812
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jun 21 15:16:03 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jun 23 14:53:59 2016 +0200
 
-pvmove: disallow tag args
+activation: switch to warning
 
-pvmove began processing tags unintentionally from commit,
-6d7dc87cb pvmove: use toollib
-
-pvmove works on a single PV, but tags can match multiple PVs.
-If we allowed tags, but processed only the first matching PV,
-then the resulting PV would be unpredictable.
-
-Also, the current processing code does not allow us to simply
-report an error and do nothing if more than one PV matches the tag,
-because the command starts processing PVs as they are found,
-so it's too late to do nothing if a second PV matches.
+Since this function does not have a way to return error use correct
+reporting level as warning.
 ---
- tools/commands.h |    4 +++-
- tools/toollib.c  |    5 +++++
- tools/tools.h    |    2 ++
- 3 files changed, 10 insertions(+), 1 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/activate/activate.c |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index da432a7..888f3a2 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -874,9 +874,11 @@ xx(pvdisplay,
-    select_ARG, separator_ARG, shared_ARG, short_ARG, sort_ARG, unbuffered_ARG,
-    units_ARG)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ce77b6c..6788e6a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.158 - 
+ =================================
++  Switch to log_warn() for failing activation status query.
+   Refactor lvconvert argument handling code.
+   Add --logonly option to report only cmd log for a command, not other reports.
+   Add log/command_log_selection to configure default selection used on cmd log.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 089af53..8892a2a 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1454,9 +1454,9 @@ static int _lv_is_active(const struct logical_volume *lv,
+ 	 * Old users of this function will never be affected by this,
+ 	 * since they are only concerned about active vs. not active.
+ 	 * New users of this function who specifically ask for 'exclusive'
+-	 * will be given an error message.
++	 * will be given a warning message.
+ 	 */
+-	log_error("Unable to determine exclusivity of %s.", display_lvname(lv));
++	log_warn("WARNING: Unable to determine exclusivity of %s.", display_lvname(lv));
  
-+/* ALL_VGS_IS_DEFAULT is for polldaemon to find pvmoves in-progress using process_each_vg. */
-+
- xx(pvmove,
-    "Move extents from one physical volume to another",
--   ALL_VGS_IS_DEFAULT,	/* For polldaemon to find pvmoves in-progress using process_each_vg. */
-+   ALL_VGS_IS_DEFAULT | DISALLOW_TAG_ARGS,
-    "pvmove\n"
-    "\t[--abort]\n"
-    "\t[--alloc AllocationPolicy]\n"
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 0de6ee8..0563fea 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3375,6 +3375,11 @@ int process_each_pv(struct cmd_context *cmd,
- 		return ret;
- 	}
+ 	e = 0;
  
-+	if ((cmd->command->flags & DISALLOW_TAG_ARGS) && !dm_list_empty(&arg_tags)) {
-+		log_error("Tags cannot be used with this command.");
-+		return ECMD_FAILED;
-+	}
-+
- 	orphans_locked = lvmcache_vgname_is_locked(VG_ORPHANS);
- 
- 	process_all_pvs = dm_list_empty(&arg_pvnames) && dm_list_empty(&arg_tags);
-diff --git a/tools/tools.h b/tools/tools.h
-index 2abc750..8704749 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -114,6 +114,8 @@ struct arg_value_group_list {
- #define NO_LVMETAD_AUTOSCAN      0x00000200
- /* Command should process unused duplicate devices. */
- #define ENABLE_DUPLICATE_DEVS    0x00000400
-+/* Command does not accept tags as args. */
-+#define DISALLOW_TAG_ARGS        0x00000800
-  
- /* a register of the lvm commands */
- struct command {
 
 
