@@ -1,136 +1,133 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Jun 2016 13:02:06 +0000 (UTC)
-Subject: master - tests: aux prepare_thin_metadata
-Message-ID: <20160623130206.5844060975@fedorahosted.org>
+Date: Thu, 23 Jun 2016 13:02:02 +0000 (UTC)
+Subject: master - cleanup: remove unused code
+Message-ID: <20160623130202.29C046090A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a67a5d465576d4a7c17b22a737725d6dee059e18
-Commit:        a67a5d465576d4a7c17b22a737725d6dee059e18
-Parent:        83d483269de367facc14eee9072b79ffabdcaf82
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e5b7ebcddabb885dd8a2f4cb5b5a0a32af834076
+Commit:        e5b7ebcddabb885dd8a2f4cb5b5a0a32af834076
+Parent:        5a919e48053079670e6318fe862783e720dd2aea
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 13 14:35:09 2016 +0200
+AuthorDate:    Fri Jun 17 15:22:27 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jun 23 14:59:29 2016 +0200
 
-tests:  aux prepare_thin_metadata
+cleanup: remove unused code
 
 ---
- test/lib/aux.sh                  |   23 +++++++++++++++++++++++
- test/shell/lvextend-thin-full.sh |   18 +-----------------
- test/shell/thin-flags.sh         |   20 +-------------------
- 3 files changed, 25 insertions(+), 36 deletions(-)
+ lib/metadata/lv_manip.c          |   83 --------------------------------------
+ lib/metadata/metadata-exported.h |    1 -
+ 2 files changed, 0 insertions(+), 84 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index d51a65c..8653149 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -354,6 +354,29 @@ prepare_lvmdbusd() {
- 	echo ok
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 46815e3..8f07267 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4549,89 +4549,6 @@ static uint32_t lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
+ 	return 0;
  }
  
-+#
-+# Temporary solution to create some occupied thin metadata
-+# This heavily depends on thin metadata output format to stay as is.
-+# Currently it expects 2MB thin metadata and 200MB data volume size
-+# Argument specifies how many devices should be created.
-+#
-+prepare_thin_metadata() {
-+	local devices=$1
-+	local transaction_id=${2:-0}
-+	local data_block_size=${3:-128}
-+	local nr_data_blocks=${4:-3200}
-+	local i
-+
-+	echo '<superblock uuid="" time="1" transaction="'$transaction_id'" data_block_size="'$data_block_size'" nr_data_blocks="'$nr_data_blocks'">'
-+	for i in $(seq 1 $devices)
-+	do
-+		echo ' <device dev_id="'$i'" mapped_blocks="37" transaction="'$i'" creation_time="0" snap_time="1">'
-+		echo '  <range_mapping origin_begin="0" data_begin="0" length="37" time="0"/>'
-+		echo ' </device>'
-+	done
-+	echo "</superblock>"
-+}
-+
- teardown_devs_prefixed() {
- 	local prefix=$1
- 	local stray=${2:-0}
-diff --git a/test/shell/lvextend-thin-full.sh b/test/shell/lvextend-thin-full.sh
-index cd4705d..8fc89a8 100644
---- a/test/shell/lvextend-thin-full.sh
-+++ b/test/shell/lvextend-thin-full.sh
-@@ -25,22 +25,6 @@ aux have_thin 1 0 0 || skip
- test -n "$LVM_TEST_THIN_RESTORE_CMD" || LVM_TEST_THIN_RESTORE_CMD=$(which thin_restore) || skip
- "$LVM_TEST_THIN_RESTORE_CMD" -V || skip
- 
--#
--# Temporary solution to create some occupied thin metadata
--# This heavily depends on thin metadata output format to stay as is.
--# Currently it expects 2MB thin metadata and 200MB data volume size
--# Argument specifies how many devices should be created.
--fake_metadata_() {
--	echo '<superblock uuid="" time="1" transaction="'$2'" data_block_size="128" nr_data_blocks="3200">'
--	for i in $(seq 1 $1)
--	do
--		echo ' <device dev_id="'$i'" mapped_blocks="37" transaction="0" creation_time="0" snap_time="1">'
--		echo '  <range_mapping origin_begin="0" data_begin="0" length="37" time="0"/>'
--		echo ' </device>'
--	done
--	echo "</superblock>"
+-static int _lvresize_poolmetadata_prepare(struct logical_volume *pool_lv,
+-					  struct lvresize_params *lp)
+-{
+-	uint32_t extents;
+-	struct logical_volume *lv = first_seg(pool_lv)->metadata_lv;
+-	struct volume_group *vg = pool_lv->vg;
+-
+-	lp->poolmetadataextents = 0;
+-
+-	if (!thin_pool_feature_supported(pool_lv, THIN_FEATURE_METADATA_RESIZE)) {
+-		log_error("Support for online metadata resize not detected.");
+-		return 0;
+-	}
+-
+-	if (lp->poolmetadata_size % vg->extent_size) {
+-		lp->poolmetadata_size += vg->extent_size -
+-			(lp->poolmetadata_size % vg->extent_size);
+-		log_print_unless_silent("Rounding pool metadata size to boundary between physical extents: %s",
+-					display_size(vg->cmd, lp->poolmetadata_size));
+-	}
+-
+-	if (!(extents = extents_from_size(vg->cmd, lp->poolmetadata_size,
+-					  vg->extent_size)))
+-		return_0;
+-
+-	if (lp->poolmetadata_sign == SIGN_PLUS) {
+-		if (extents >= (MAX_EXTENT_COUNT - lv->le_count)) {
+-			log_error("Unable to extend %s by %u extents, exceeds limit (%u).",
+-				  lv->name, lv->le_count, MAX_EXTENT_COUNT);
+-			return 0;
+-		}
+-		extents += lv->le_count;
+-	}
+-
+-	if ((uint64_t)extents * vg->extent_size > DM_THIN_MAX_METADATA_SIZE) {
+-		log_print_unless_silent("Rounding size to maximum supported size 16GiB "
+-					"for metadata volume %s.", lv->name);
+-		extents = (DM_THIN_MAX_METADATA_SIZE + vg->extent_size - 1) /
+-			vg->extent_size;
+-	}
+-
+-	/* FIXME Split here and move validation code earlier alongside rest of validation code */
+-	if (extents == lv->le_count) {
+-		log_print_unless_silent("Metadata volume %s has already %s.",
+-					display_lvname(lv), display_size(vg->cmd, lv->size));
+-		return 2;
+-	}
+-
+-	lp->poolmetadataextents = extents;
+-
+-	return 1;
 -}
 -
- aux have_thin 1 10 0 || skip
- 
- aux prepare_pvs 3 256
-@@ -50,7 +34,7 @@ vgcreate -s 1M $vg $(cat DEVICES)
- aux lvmconf 'activation/thin_pool_autoextend_percent = 30' \
- 	    'activation/thin_pool_autoextend_threshold = 70'
- 
--fake_metadata_ 400 0 >data
-+aux prepare_thin_metadata 400 0 | tee data
- lvcreate -L200 -T $vg/pool
- lvchange -an $vg
- 
-diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
-index 3fcafb2..395b98d 100644
---- a/test/shell/thin-flags.sh
-+++ b/test/shell/thin-flags.sh
-@@ -16,24 +16,6 @@ SKIP_WITH_LVMPOLLD=1
- 
- export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
- 
+-static int _lvresize_poolmetadata(struct logical_volume *pool_lv,
+-				  struct lvresize_params *lp,
+-				  struct dm_list *pvh)
+-{
+-	struct logical_volume *lv = first_seg(pool_lv)->metadata_lv;
+-	struct volume_group *vg = lv->vg;
+-	alloc_policy_t alloc = lp->alloc ? : lv->alloc;
+-	struct lv_segment *mseg = last_seg(lv);
+-	uint32_t seg_mirrors = lv_mirror_count(lv);
 -
--# TODO - aux/get support for this....
--fake_metadata_() {
--	echo '<superblock uuid="" time="0" transaction="'$2'" data_block_size="128" nr_data_blocks="3200">'
--	echo ' <device dev_id="1" mapped_blocks="0" transaction="0" creation_time="0" snap_time="0">'
--	echo ' </device>'
--	for i in $(seq 10 $1)
--	do
--		echo ' <device dev_id="'$i'" mapped_blocks="30" transaction="0" creation_time="0" snap_time="0">'
--		echo '  <range_mapping origin_begin="0" data_begin="0" length="29" time="0"/>'
--		echo ' </device>'
--		set +x
--	done
--	echo "</superblock>"
--	set -x
+-	if (!archive(vg))
+-		return_0;
+-
+-	log_print_unless_silent("Extending logical volume %s to %s.",
+-				display_lvname(lv),
+-				display_size(vg->cmd, (uint64_t) lp->poolmetadataextents *
+-					     vg->extent_size));
+-	if (!lv_extend(lv,
+-		       mseg->segtype,
+-		       mseg->area_count / seg_mirrors,
+-		       mseg->stripe_size,
+-		       seg_mirrors,
+-		       mseg->region_size,
+-		       lp->poolmetadataextents - lv->le_count,
+-		       pvh, alloc, 0))
+-		return_0;
+-
+-	return 1;
 -}
 -
--
- . lib/inittest
+ static int _lvresize_check(struct logical_volume *lv,
+ 			   struct lvresize_params *lp)
+ {
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index b8275d6..f47fa1d 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -609,7 +609,6 @@ struct lvresize_params {
  
- #
-@@ -85,7 +67,7 @@ aux lvmconf 'global/thin_check_executable = ""'
+ 	uint64_t poolmetadata_size;
+ 	sign_t poolmetadata_sign;
+-	uint32_t poolmetadataextents;
  
- # Prepare some fake metadata prefilled to ~100%
- lvcreate -L2 -n $lv1 $vg # tmp for metadata
--fake_metadata_ 500 1 >data
-+aux prepare_thin_metadata 500 1 | tee data
- "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+ 	/* Per LV applied parameters */
  
- # Swap volume with restored fake metadata
 
 
