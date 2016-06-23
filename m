@@ -1,56 +1,58 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Jun 2016 13:01:26 +0000 (UTC)
-Subject: master - activation: switch to warning
-Message-ID: <20160623130126.B350D605CD@fedorahosted.org>
+Date: Thu, 23 Jun 2016 13:01:32 +0000 (UTC)
+Subject: master - locking: trace errors from dir creation
+Message-ID: <20160623130132.EE0B5605CD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=af36f5ad369ebf4c1d768145a827436ccef22f63
-Commit:        af36f5ad369ebf4c1d768145a827436ccef22f63
-Parent:        751163a74375cc3bfc9f338f1317f14a23798812
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa69ed0bc845df3d2c7ae68d03cdd4a3dec339d8
+Commit:        fa69ed0bc845df3d2c7ae68d03cdd4a3dec339d8
+Parent:        dc8c5c1886ea7c090a3bfa96de8f22ca060614ec
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 21 15:16:03 2016 +0200
+AuthorDate:    Thu Jun 16 11:54:24 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 23 14:53:59 2016 +0200
+CommitterDate: Thu Jun 23 14:57:06 2016 +0200
 
-activation: switch to warning
+locking: trace errors from dir creation
 
-Since this function does not have a way to return error use correct
-reporting level as warning.
 ---
- WHATS_NEW               |    1 +
- lib/activate/activate.c |    4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/locking/file_locking.c |    6 ++++--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index ce77b6c..6788e6a 100644
+index e61fbb2..5e2cb5a 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.158 - 
  =================================
-+  Switch to log_warn() for failing activation status query.
-   Refactor lvconvert argument handling code.
-   Add --logonly option to report only cmd log for a command, not other reports.
-   Add log/command_log_selection to configure default selection used on cmd log.
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 089af53..8892a2a 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1454,9 +1454,9 @@ static int _lv_is_active(const struct logical_volume *lv,
- 	 * Old users of this function will never be affected by this,
- 	 * since they are only concerned about active vs. not active.
- 	 * New users of this function who specifically ask for 'exclusive'
--	 * will be given an error message.
-+	 * will be given a warning message.
- 	 */
--	log_error("Unable to determine exclusivity of %s.", display_lvname(lv));
-+	log_warn("WARNING: Unable to determine exclusivity of %s.", display_lvname(lv));
++  Log system error when locking dir cannot be accessed.
+   Preserve monitoring status when updating thin-pool metadata.
+   Rerurn 0 (inactive) when status cannot be queried in _lv_active().
+   Switch to log_warn() for failing activation status query.
+diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
+index 230303b..390f49f 100644
+--- a/lib/locking/file_locking.c
++++ b/lib/locking/file_locking.c
+@@ -158,11 +158,13 @@ int init_file_locking(struct locking_type *locking, struct cmd_context *cmd,
+ 	(void) dm_prepare_selinux_context(NULL, 0);
  
- 	e = 0;
+ 	if (!r)
+-		return 0;
++		return_0;
  
+ 	/* Trap a read-only file system */
+-	if ((access(_lock_dir, R_OK | W_OK | X_OK) == -1) && (errno == EROFS))
++	if ((access(_lock_dir, R_OK | W_OK | X_OK) == -1) && (errno == EROFS)) {
++		log_sys_error("access", _lock_dir);
+ 		return 0;
++	}
+ 
+ 	return 1;
+ }
 
 
