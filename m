@@ -1,69 +1,39 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 10 Jun 2009 16:14:40 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20090610161440.6464.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 23 Jun 2016 23:03:26 +0000 (UTC)
+Subject: master - tests: smaller number of devs created to fill metadata
+Message-ID: <20160623230326.C06C2609D8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-06-10 16:14:40
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc174f6b74ee1d0fc12cca9fe5c392621acf069f
+Commit:        fc174f6b74ee1d0fc12cca9fe5c392621acf069f
+Parent:        1c212371fa6e65c783d7df50eab0108acb7b0cf8
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jun 24 00:35:42 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 24 00:39:14 2016 +0200
 
-Modified files:
-	lib/metadata   : metadata.c 
+tests: smaller number of devs created to fill metadata
 
-Log message:
-	In the new _vg_read_for_update(), we always do the check for CLUSTERED vg
-	status flag after reading the volume group.  Thus, no need to set the flag
-	in vg_read() or clear it later before calling _vg_bad_status_bits().
-	
-	Also, add back in the !lockingfailed() as part of the CLUSTERED flag check.
-	It's unclear why it was removed when the check was moved from
-	_vg_bad_status_bits() to inside _vg_lock_and_read().
-	There was an open question about the last check in the 'if' stmt for
-	lockingfailed() with a previous patch submitted.  However, I would
-	defer that right now as it is a separate item and this patch should
-	be no functional change by including the !lockingfailed().
-	
-	Petr acked this patch on 5/26 I just forgot to check it in.
-	
-	Acked-by: Petr Rockai <prockai@redhat.com>
+---
+ test/shell/thin-flags.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.225&r2=1.226
-
---- LVM2/lib/metadata/metadata.c	2009/06/09 14:29:10	1.225
-+++ LVM2/lib/metadata/metadata.c	2009/06/10 16:14:40	1.226
-@@ -2772,7 +2772,8 @@
- 		goto_bad;
- 	}
+diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
+index 395b98d..7d87553 100644
+--- a/test/shell/thin-flags.sh
++++ b/test/shell/thin-flags.sh
+@@ -67,7 +67,7 @@ aux lvmconf 'global/thin_check_executable = ""'
  
--	if (vg_is_clustered(vg) && !locking_is_clustered()) {
-+	if (vg_is_clustered(vg) && !locking_is_clustered() &&
-+	    !lockingfailed()) {
- 		log_error("Skipping clustered volume group %s", vg->name);
- 		failure |= FAILED_CLUSTERED;
- 		goto_bad;
-@@ -2790,7 +2791,7 @@
- 	}
- 	
+ # Prepare some fake metadata prefilled to ~100%
+ lvcreate -L2 -n $lv1 $vg # tmp for metadata
+-aux prepare_thin_metadata 500 1 | tee data
++aux prepare_thin_metadata 490 1 | tee data
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
  
--	failure |= _vg_bad_status_bits(vg, status_flags & ~CLUSTERED);
-+	failure |= _vg_bad_status_bits(vg, status_flags);
- 	if (failure)
- 		goto_bad;
- 
-@@ -2837,7 +2838,7 @@
- vg_t *vg_read(struct cmd_context *cmd, const char *vg_name,
- 	      const char *vgid, uint32_t flags)
- {
--	uint32_t status = CLUSTERED;
-+	uint32_t status = 0;
- 	uint32_t lock_flags = LCK_VG_READ;
- 
- 	if (flags & READ_FOR_UPDATE) {
+ # Swap volume with restored fake metadata
 
 
