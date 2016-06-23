@@ -1,91 +1,55 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Jun 2016 13:02:00 +0000 (UTC)
-Subject: master - cleanup: remove unused sizearg variable
-Message-ID: <20160623130200.0FD3A6090A@fedorahosted.org>
+Date: Thu, 23 Jun 2016 13:02:04 +0000 (UTC)
+Subject: master - cleanup: drop setting lv_name
+Message-ID: <20160623130204.3E2F860975@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a919e48053079670e6318fe862783e720dd2aea
-Commit:        5a919e48053079670e6318fe862783e720dd2aea
-Parent:        4de15aa58d2cd25075d3b17c3d3d9ad06b4bb493
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=83d483269de367facc14eee9072b79ffabdcaf82
+Commit:        83d483269de367facc14eee9072b79ffabdcaf82
+Parent:        e5b7ebcddabb885dd8a2f4cb5b5a0a32af834076
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 17 13:25:56 2016 +0200
+AuthorDate:    Wed Jun 15 14:55:37 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jun 23 14:59:29 2016 +0200
 
-cleanup: remove unused sizearg variable
+cleanup: drop setting lv_name
 
-It's not used for anything now.
+lv_name arg is only used without known LV for resolving '*lv'.
+Once we know *lv, never use  lv_name ever again.
+
+So setting it when passing *lv has not needed.
 ---
- lib/locking/lvmlockd.c           |    1 -
- lib/metadata/lv_manip.c          |    1 -
- lib/metadata/metadata-exported.h |    1 -
- liblvm/lvm_lv.c                  |    1 -
- tools/lvresize.c                 |    1 -
- 5 files changed, 0 insertions(+), 5 deletions(-)
+ lib/locking/lvmlockd.c |    1 -
+ liblvm/lvm_lv.c        |    1 -
+ 2 files changed, 0 insertions(+), 2 deletions(-)
 
 diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index e865c10..f9d215a 100644
+index f9d215a..e025428 100644
 --- a/lib/locking/lvmlockd.c
 +++ b/lib/locking/lvmlockd.c
-@@ -373,7 +373,6 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
+@@ -367,7 +367,6 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
+ {
+ 	struct logical_volume *lv = vg->sanlock_lv;
+ 	struct lvresize_params lp = {
+-		.lv_name = vg->sanlock_lv->name,
+ 		.sign = SIGN_NONE,
+ 		.size = lv->size + ((extend_mb * 1024 * 1024) / SECTOR_SIZE),
  		.percent = PERCENT_NONE,
- 		.resize = LV_EXTEND,
- 		.force = 1,
--		.sizeargs = 1,
- 	};
- 
- 	if (!lv_resize(lv, &lp, &vg->pvs)) {
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 70969e8..46815e3 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5004,7 +5004,6 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
- 				seg_size = lp->extents - existing_logical_extents;	// Recalculate
- 				if (lp->extents == existing_logical_extents) {
- 					/* Signal that normal resizing is not required */
--					lp->sizeargs = 0;
- 					return 1;
- 				}
- 			}
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index d2c9db2..b8275d6 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -607,7 +607,6 @@ struct lvresize_params {
- 
- 	const struct segment_type *segtype;
- 
--	int sizeargs;
- 	uint64_t poolmetadata_size;
- 	sign_t poolmetadata_sign;
- 	uint32_t poolmetadataextents;
 diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index d732ed7..ccdc340 100644
+index ccdc340..05dd482 100644
 --- a/liblvm/lvm_lv.c
 +++ b/liblvm/lvm_lv.c
-@@ -463,7 +463,6 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
+@@ -457,7 +457,6 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
+ {
+ 	int rc = 0;
+ 	struct lvresize_params lp = {
+-		.lv_name = lv->name,
+ 		.sign = SIGN_NONE,
+ 		.percent = PERCENT_NONE,
  		.resize = LV_ANY,
- 		.size = new_size >> SECTOR_SHIFT,
- 		.force = 1,	/* Assume the user has a good backup? */
--		.sizeargs = 1,
- 	};
- 	struct saved_env e = store_user_env(lv->vg->cmd);
- 
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 1258f14..45d3558 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -55,7 +55,6 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
- 		 * If only --poolmetadatasize is specified with list of PVs,
- 		 * then metadata will be extended there.
- 		 */
--		lp->sizeargs = arg_is_set(cmd, extents_ARG) + arg_is_set(cmd, size_ARG);
- 		if ((lp->extents = arg_uint_value(cmd, extents_ARG, 0))) {
- 			lp->sign = arg_sign_value(cmd, extents_ARG, SIGN_NONE);
- 			lp->percent = arg_percent_value(cmd, extents_ARG, PERCENT_NONE);
 
 
