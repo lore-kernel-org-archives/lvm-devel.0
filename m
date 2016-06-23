@@ -1,122 +1,91 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Jun 2016 13:01:57 +0000 (UTC)
-Subject: master - lvresize: return 0/1
-Message-ID: <20160623130157.E57EA6090A@fedorahosted.org>
+Date: Thu, 23 Jun 2016 13:02:00 +0000 (UTC)
+Subject: master - cleanup: remove unused sizearg variable
+Message-ID: <20160623130200.0FD3A6090A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4de15aa58d2cd25075d3b17c3d3d9ad06b4bb493
-Commit:        4de15aa58d2cd25075d3b17c3d3d9ad06b4bb493
-Parent:        7092c6ba1084dcc029ffef918c0419ebdd41b5f4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a919e48053079670e6318fe862783e720dd2aea
+Commit:        5a919e48053079670e6318fe862783e720dd2aea
+Parent:        4de15aa58d2cd25075d3b17c3d3d9ad06b4bb493
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 17 11:29:28 2016 +0200
+AuthorDate:    Fri Jun 17 13:25:56 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jun 23 14:59:29 2016 +0200
 
-lvresize: return 0/1
+cleanup: remove unused sizearg variable
 
-Returning locking LV is no longer used from here, so return 1/0.
+It's not used for anything now.
 ---
- lib/metadata/lv_manip.c |   34 +++++++++++-----------------------
- 1 files changed, 11 insertions(+), 23 deletions(-)
+ lib/locking/lvmlockd.c           |    1 -
+ lib/metadata/lv_manip.c          |    1 -
+ lib/metadata/metadata-exported.h |    1 -
+ liblvm/lvm_lv.c                  |    1 -
+ tools/lvresize.c                 |    1 -
+ 5 files changed, 0 insertions(+), 5 deletions(-)
 
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index e865c10..f9d215a 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -373,7 +373,6 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 		.percent = PERCENT_NONE,
+ 		.resize = LV_EXTEND,
+ 		.force = 1,
+-		.sizeargs = 1,
+ 	};
+ 
+ 	if (!lv_resize(lv, &lp, &vg->pvs)) {
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 17e44cc..70969e8 100644
+index 70969e8..46815e3 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -5197,13 +5197,12 @@ static int _lvresize_check_type(const struct logical_volume *lv,
- 	return 1;
- }
- 
--static struct logical_volume *_lvresize_volume(struct logical_volume *lv,
--					       struct lvresize_params *lp,
--					       struct dm_list *pvh)
-+static int _lvresize_volume(struct logical_volume *lv,
-+			    struct lvresize_params *lp,
-+			    struct dm_list *pvh)
- {
- 	struct volume_group *vg = lv->vg;
- 	struct cmd_context *cmd = vg->cmd;
--	struct logical_volume *lock_lv = NULL;
- 	uint32_t old_extents;
- 	int status;
- 	alloc_policy_t alloc = lp->alloc ? : lv->alloc;
-@@ -5214,14 +5213,14 @@ static struct logical_volume *_lvresize_volume(struct logical_volume *lv,
- 	/* Request confirmation before operations that are often mistakes. */
- 	if ((lp->resizefs || (lp->resize == LV_REDUCE)) &&
- 	    !_request_confirmation(lv, lp))
--		return_NULL;
-+		return_0;
- 
- 	if (lp->resizefs) {
- 		if (!lp->nofsck &&
- 		    !_fsadm_cmd(FSADM_CMD_CHECK, lv, 0, lp->force, &status)) {
- 			if (status != FSADM_CHECK_FAILS_FOR_MOUNTED) {
- 				log_error("Filesystem check failed.");
--				return NULL;
-+				return 0;
+@@ -5004,7 +5004,6 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
+ 				seg_size = lp->extents - existing_logical_extents;	// Recalculate
+ 				if (lp->extents == existing_logical_extents) {
+ 					/* Signal that normal resizing is not required */
+-					lp->sizeargs = 0;
+ 					return 1;
+ 				}
  			}
- 			/* some filesystems support online resize */
- 		}
-@@ -5230,12 +5229,12 @@ static struct logical_volume *_lvresize_volume(struct logical_volume *lv,
- 		if ((lp->resize == LV_REDUCE) &&
- 		    !_fsadm_cmd(FSADM_CMD_RESIZE, lv, lp->extents, lp->force, NULL)) {
- 			log_error("Filesystem resize failed.");
--			return NULL;
-+			return 0;
- 		}
- 	}
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index d2c9db2..b8275d6 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -607,7 +607,6 @@ struct lvresize_params {
  
- 	if (!archive(vg))
--		return_NULL;
-+		return_0;
+ 	const struct segment_type *segtype;
  
- 	old_extents = lv->le_count;
- 	log_verbose("%sing logical volume %s to %s%s",
-@@ -5245,18 +5244,18 @@ static struct logical_volume *_lvresize_volume(struct logical_volume *lv,
+-	int sizeargs;
+ 	uint64_t poolmetadata_size;
+ 	sign_t poolmetadata_sign;
+ 	uint32_t poolmetadataextents;
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index d732ed7..ccdc340 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -463,7 +463,6 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
+ 		.resize = LV_ANY,
+ 		.size = new_size >> SECTOR_SHIFT,
+ 		.force = 1,	/* Assume the user has a good backup? */
+-		.sizeargs = 1,
+ 	};
+ 	struct saved_env e = store_user_env(lv->vg->cmd);
  
- 	if (lp->resize == LV_REDUCE) {
- 		if (!lv_reduce(lv, lv->le_count - lp->extents))
--			return_NULL;
-+			return_0;
- 	} else if ((lp->extents > lv->le_count) && /* Ensure we extend */
- 		   !lv_extend(lv, lp->segtype,
- 			      lp->stripes, lp->stripe_size,
- 			      lp->mirrors, first_seg(lv)->region_size,
- 			      lp->extents - lv->le_count,
- 			      pvh, alloc, lp->approx_alloc))
--		return_NULL;
-+		return_0;
- 	/* Check for over provisioning only when lv_extend() passed,
- 	 * ATM this check does not fail */
- 	else if (!pool_check_overprovisioning(lv))
--		return_NULL;
-+		return_0;
- 
- 	if (old_extents == lv->le_count)
- 		log_print_unless_silent("Size of logical volume %s unchanged from %s (%" PRIu32 " extents).",
-@@ -5268,18 +5267,7 @@ static struct logical_volume *_lvresize_volume(struct logical_volume *lv,
- 					display_size(cmd, (uint64_t) old_extents * vg->extent_size), old_extents,
- 					display_size(cmd, (uint64_t) lv->le_count * vg->extent_size), lv->le_count);
- 
--	if (lock_lv) {
--	/* If thin metadata, must suspend thin pool */
--	} else if (lv_is_thin_pool_metadata(lv)) {
--		if (!(lock_lv = find_pool_lv(lv)))
--			return_NULL;
--	/* If snapshot, must suspend all associated devices */
--	} else if (lv_is_cow(lv))
--		lock_lv = origin_from_cow(lv);
--	else
--		lock_lv = lv;
--
--	return lock_lv;
-+	return 1;
- }
- 
- static int _lvresize_prepare(struct logical_volume **lv,
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index 1258f14..45d3558 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -55,7 +55,6 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
+ 		 * If only --poolmetadatasize is specified with list of PVs,
+ 		 * then metadata will be extended there.
+ 		 */
+-		lp->sizeargs = arg_is_set(cmd, extents_ARG) + arg_is_set(cmd, size_ARG);
+ 		if ((lp->extents = arg_uint_value(cmd, extents_ARG, 0))) {
+ 			lp->sign = arg_sign_value(cmd, extents_ARG, SIGN_NONE);
+ 			lp->percent = arg_percent_value(cmd, extents_ARG, PERCENT_NONE);
 
 
