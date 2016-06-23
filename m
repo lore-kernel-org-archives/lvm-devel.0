@@ -1,59 +1,48 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Jun 2016 13:01:41 +0000 (UTC)
-Subject: master - cleanup: code lines reodered
-Message-ID: <20160623130141.4988060612@fedorahosted.org>
+Date: Thu, 23 Jun 2016 13:01:37 +0000 (UTC)
+Subject: master - lvresize: inform about ignored args with --use-polices
+Message-ID: <20160623130137.2675B60612@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0a525832f9902f6268d155f22975653f27877816
-Commit:        0a525832f9902f6268d155f22975653f27877816
-Parent:        3a4107c982e706dd97117e7e182bf9cbf7e85cac
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d578d8d3a1bbf5d20151ed8bc33caa307e2c7292
+Commit:        d578d8d3a1bbf5d20151ed8bc33caa307e2c7292
+Parent:        58d414f7f5d998e32234e7a6c2d6c9d0ad38f996
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 15 11:35:16 2016 +0200
+AuthorDate:    Tue Jun 14 13:40:57 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jun 23 14:57:08 2016 +0200
 
-cleanup: code lines reodered
+lvresize: inform about ignored args with --use-polices
 
+When --use-polices is specified, all size args are meaningless,
+as the resize is based upon policy. So just keep user informed.
 ---
- tools/lvresize.c |   16 +++++++---------
- 1 files changed, 7 insertions(+), 9 deletions(-)
+ tools/lvresize.c |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
 diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 9fb35bd..ee6678f 100644
+index fe200d4..9fb35bd 100644
 --- a/tools/lvresize.c
 +++ b/tools/lvresize.c
-@@ -18,21 +18,19 @@
- static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
- 			    struct lvresize_params *lp)
- {
--	const char *cmd_name;
-+	const char *cmd_name = command_name(cmd);
- 	char *st;
--	int use_policy = arg_is_set(cmd, usepolicies_ARG);
- 
--	lp->sign = SIGN_NONE;
--	lp->poolmetadatasign = SIGN_NONE;
--	lp->resize = LV_ANY;
--
--	cmd_name = command_name(cmd);
- 	if (!strcmp(cmd_name, "lvreduce"))
- 		lp->resize = LV_REDUCE;
--	if (!strcmp(cmd_name, "lvextend"))
-+	else if (!strcmp(cmd_name, "lvextend"))
- 		lp->resize = LV_EXTEND;
-+	else
-+		lp->resize = LV_ANY;
-+
-+	lp->sign = lp->poolmetadatasign = SIGN_NONE;
- 
--	if (use_policy) {
-+	if ((lp->ac_policy = arg_is_set(cmd, usepolicies_ARG))) {
- 		/* do nothing; _lvresize will handle --use-policies itself */
+@@ -37,6 +37,15 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
  		lp->extents = 0;
  		lp->sign = SIGN_PLUS;
+ 		lp->percent = PERCENT_LV;
++
++		if (arg_from_list_is_set(cmd, NULL,
++					 chunksize_ARG, extents_ARG,
++					 poolmetadatasize_ARG,
++					 regionsize_ARG,
++					 size_ARG,
++					 stripes_ARG, stripesize_ARG,
++					 -1))
++			log_print_unless_silent("Ignoring size parameters with --use-policies.");
+ 	} else {
+ 		/*
+ 		 * Allow omission of extents and size if the user has given us
 
 
