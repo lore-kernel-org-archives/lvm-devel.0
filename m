@@ -1,101 +1,64 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 28 Jun 2016 01:33:15 +0000 (UTC)
-Subject: master - coverity: fix issues detected in recent code
-Message-ID: <20160628013315.E25E260E26@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu, 23 Jun 2016 23:03:28 +0000 (UTC)
+Subject: master - tests: update test for modified output
+Message-ID: <20160623230328.D240460734@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f0768f636edb8da08e46b029380779fd623399de
-Commit:        f0768f636edb8da08e46b029380779fd623399de
-Parent:        a46f5242471018faca5d20204d0bab5fb2d6b9cd
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jun 27 10:12:41 2016 +0200
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jun 28 02:26:54 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5070e7fcf79a3bcb21982d219c6f8dd484e523ea
+Commit:        5070e7fcf79a3bcb21982d219c6f8dd484e523ea
+Parent:        fc174f6b74ee1d0fc12cca9fe5c392621acf069f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jun 23 22:35:51 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 24 00:39:15 2016 +0200
 
-coverity: fix issues detected in recent code
+tests: update test for modified output
 
-Uninitialized variables  (UNINIT) /safe/guest2/covscan/LVM2.2.02.158/tools/toollib.c: 3520 in _process_pvs_in_vgs()
-Uninitialized variables  (UNINIT) Using uninitialized value "do_report_ret_code".
-
-Null pointer dereferences  (REVERSE_INULL) /safe/guest2/covscan/LVM2.2.02.158/libdm/libdm-report.c: 4745 in dm_report_output()
-Null pointer dereferences  (REVERSE_INULL) Null-checking "rh" suggests that it may be null, but it has already been dereferenced on all paths leading to the check.
-
-Incorrect expression  (MISSING_COMMA) /safe/guest2/covscan/LVM2.2.02.158/lib/log/log.c: 280 in _get_log_level_name()
-Incorrect expression  (MISSING_COMMA) In the initialization of "log_level_names", a suspicious concatenated string ""noticeinfo"" is produced.
-
-Null pointer dereferences  (FORWARD_NULL) /safe/guest2/covscan/LVM2.2.02.158/tools/reporter.c: 816 in_get_report_options()
-Null pointer dereferences  (FORWARD_NULL) Comparing "mem" to null implies that "mem" might be null.
+We now print  vg/lv  for lv resized volume
 ---
- lib/log/log.c        |    2 +-
- libdm/libdm-report.c |    4 ++--
- tools/reporter.c     |    2 +-
- tools/toollib.c      |    2 +-
- 4 files changed, 5 insertions(+), 5 deletions(-)
+ test/shell/lvextend-percent-extents.sh |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index b3453dc..30d71ef 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -277,7 +277,7 @@ static const char *_get_log_level_name(int use_stderr, int level)
- 						"fatal", /* _LOG_FATAL */
- 						"error", /* _LOG_ERROR */
- 						"warn",  /* _LOG_WARN */
--						"notice" /* _LOG_NOTICE */
-+						"notice",/* _LOG_NOTICE */
- 						"info",  /* _LOG_INFO */
- 						"debug"  /* _LOG_DEBUG */
- 						};
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 6bea34c..ad03c6e 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -4001,7 +4001,7 @@ static int _report_set_selection(struct dm_report *rh, const char *selection, in
- 			goto_bad;
- 	}
+diff --git a/test/shell/lvextend-percent-extents.sh b/test/shell/lvextend-percent-extents.sh
+index e2666e9..67c36b2 100644
+--- a/test/shell/lvextend-percent-extents.sh
++++ b/test/shell/lvextend-percent-extents.sh
+@@ -30,8 +30,8 @@ not lvextend -l 10 -L 64m $vg/$lv "$dev1" 2>err
+ grep "Please specify either size or extents but not both." err
  
--	if (!selection || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
-+	if (!selection || !selection[0] || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
- 		return 1;
+ # 'lvextend accepts no size or extents but one PV - bz154691'
+-lvextend $vg/$lv "$dev1" >out
+-grep "Logical volume $lv successfully resized" out
++lvextend $vg/$lv "$dev1" | tee out
++grep "Logical volume $vg/$lv successfully resized" out
+ check pv_field "$dev1" pv_free "0"
  
- 	rh->selection->add_new_fields = add_new_fields;
-@@ -4742,7 +4742,7 @@ int dm_report_output(struct dm_report *rh)
- 	else
- 		r = _output_as_columns(rh);
- out:
--	if (r && rh && rh->group_item)
-+	if (r && rh->group_item)
- 		rh->group_item->output_done = 1;
- 	return r;
- }
-diff --git a/tools/reporter.c b/tools/reporter.c
-index ee2d251..40d449c 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -815,7 +815,7 @@ static int _get_report_options(struct cmd_context *cmd,
+ lvremove -f $vg/$lv
+@@ -47,8 +47,8 @@ lvremove -f $vg/$lv
+ lvcreate -L 64m -n $lv $vg
  
- 	if (!(mem = dm_pool_create("report_options", 128))) {
- 		log_error("Failed to create temporary mempool to process report options.");
--		goto out;
-+		return ECMD_FAILED;
- 	}
+ # 'lvextend accepts no size but extents 100%PVS and two PVs - bz154691'
+-lvextend -l +100%PVS $vg/$lv "$dev1" "$dev2" >out
+-grep "Logical volume $lv successfully resized" out
++lvextend -l +100%PVS $vg/$lv "$dev1" "$dev2" | tee out
++grep "Logical volume $vg/$lv successfully resized" out
+ check pv_field "$dev1" pv_free "0"
+ check pv_field "$dev2" pv_free "0"
  
- 	if (single_args->report_type == CMDLOG) {
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 5c61ddd..80d0f32 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3439,7 +3439,7 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
- 	int skip;
- 	int notfound;
- 	int already_locked;
--	int do_report_ret_code;
-+	int do_report_ret_code = 1;
+@@ -80,8 +80,8 @@ check lv_field $vg/$lv lv_size "48.00m"
  
- 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_VG);
+ # 'lvextend with partially allocated PVs and extents 100%PVS with PE ranges'
+ extend_pvs=$(for i in $(seq 0 6 18); do echo -n "$dev1:$i-$(($i + 2)) "; done)
+-lvextend -l +100%PVS $vg/$lv $extend_pvs >out
+-grep "Logical volume $lv successfully resized" out
++lvextend -l +100%PVS $vg/$lv $extend_pvs | tee out
++grep "Logical volume $vg/$lv successfully resized" out
+ check lv_field $vg/$lv lv_size "72.00m"
  
+ # Simple seg_count validation; initially create the LV with half the # of
 
 
