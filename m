@@ -1,66 +1,33 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Tue, 28 Jun 2016 19:24:35 +0000 (UTC)
-Subject: master - lvmdbusd: Clean up ws
-Message-ID: <20160628192435.8BF5661253@fedorahosted.org>
+From: Liuhua Wang <lwang@suse.com>
+Date: Fri, 24 Jun 2016 17:32:12 +0800
+Subject: [PATCH] dev-type: add support for checking sgi/sun partition table
+In-Reply-To: <20160505015849.GB24139@agk-dp.fab.redhat.com>
+References: <1459317281-15471-1-git-send-email-lwang@suse.com>
+	<20160505013823.GA6535@wlh-host.lab.bej.apac.novell.com>
+	<20160505015849.GB24139@agk-dp.fab.redhat.com>
+Message-ID: <20160624093212.GA12218@wlh-host.bej.suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9e3ad37828a14924dd12f65e62194bef286a16f0
-Commit:        9e3ad37828a14924dd12f65e62194bef286a16f0
-Parent:        c11003c860fe9242f49ba6ccffadd964501f1d1f
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Jun 28 12:45:28 2016 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Jun 28 12:45:28 2016 -0500
+Hi Alasdair,
 
-lvmdbusd: Clean up ws
+Sorry for late reply.
 
----
- daemons/lvmdbusd/cmdhandler.py    |    2 +-
- daemons/lvmdbusd/lvmdb.py         |    1 -
- daemons/lvmdbusd/objectmanager.py |    2 +-
- 3 files changed, 2 insertions(+), 3 deletions(-)
+On Thu, May 05, 2016 at 02:58:49AM +0100, Alasdair G Kergon wrote:
+> On Thu, May 05, 2016 at 09:38:23AM +0800, Liuhua Wang wrote:
+> > Would you please review my patch?
+> 
+> Do you have a few different genuine dumps taken from systems where this
+> is needed (i.e. created with native tools, not linux ones) that can be
+> used as test data in a test script added to test/shell/ ?
+Sorry we don't have. I just used fdisk to create sgi/sun typed partitions.
+and did some tests. Do you have any suggestion as for the automatical test?
+Thank you very much!
 
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index 138142f..560b389 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -448,7 +448,7 @@ def lvm_full_report_json():
- 					'vg_uuid']
- 
- 	pv_seg_columns = ['pvseg_start', 'pvseg_size', 'segtype',
--					  'pv_uuid', 'lv_uuid', 'pv_name']
-+						'pv_uuid', 'lv_uuid', 'pv_name']
- 
- 	vg_columns = ['vg_name', 'vg_uuid', 'vg_fmt', 'vg_size', 'vg_free',
- 					'vg_sysid', 'vg_extent_size', 'vg_extent_count',
-diff --git a/daemons/lvmdbusd/lvmdb.py b/daemons/lvmdbusd/lvmdb.py
-index 51794d5..2dc593b 100755
---- a/daemons/lvmdbusd/lvmdb.py
-+++ b/daemons/lvmdbusd/lvmdb.py
-@@ -234,7 +234,6 @@ class DataStore(object):
- 
- 		return DataStore._parse_lvs_common(c_lvs, c_lv_full_lookup)
- 
--
- 	@staticmethod
- 	def _parse_lvs_json(_all):
- 
-diff --git a/daemons/lvmdbusd/objectmanager.py b/daemons/lvmdbusd/objectmanager.py
-index c93f207..178003e 100644
---- a/daemons/lvmdbusd/objectmanager.py
-+++ b/daemons/lvmdbusd/objectmanager.py
-@@ -224,7 +224,7 @@ class ObjectManager(AutomatedProperties):
- 		return path
- 
- 	def get_object_path_by_uuid_lvm_id(self, uuid, lvm_id, path_create=None,
--									   gen_new=True):
-+										gen_new=True):
- 		"""
- 		For a given lvm asset return the dbus object registered to it.  If the
- 		object is not found and gen_new == True and path_create is a valid
+Best,
+Liuhua
 
 
