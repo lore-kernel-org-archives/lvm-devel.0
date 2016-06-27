@@ -1,70 +1,141 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Jun 2016 23:03:20 +0000 (UTC)
-Subject: master - lvresize: fixes for recent commit
-Message-ID: <20160623230320.71D8960CAD@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 27 Jun 2016 18:00:54 +0000 (UTC)
+Subject: master - lvmetad: two phase vg_remove
+Message-ID: <20160627180054.6EDD860529@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1bb7a155d169c3fc115533658206c242f43bdd0c
-Commit:        1bb7a155d169c3fc115533658206c242f43bdd0c
-Parent:        e99a31c9502a2081c6608a831b601081008cc3b0
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 24 00:24:26 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 24 00:39:14 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f8e17d9af660fbfec9baadc4b05652e3dcc2a345
+Commit:        f8e17d9af660fbfec9baadc4b05652e3dcc2a345
+Parent:        886da20c4dce3f3ab5c9fdc22580a98b49c6e269
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jun 8 16:02:45 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Jun 27 11:22:26 2016 -0500
 
-lvresize: fixes for recent commit
+lvmetad: two phase vg_remove
 
-Merging process and patch rework missed some bits - fix them.
+Apply the same idea as vg_update.
+Before doing the VG remove on disk, invalidate
+the VG in lvmetad.  After the VG is removed,
+remove the VG in lvmetad.  If the command fails
+after removing the VG on disk, but before removing
+the VG metadata from lvmetad, then a subsequent
+command will see the INVALID flag and not use the
+stale metadata from lvmetad.
 ---
- lib/metadata/lv_manip.c |    7 +++++--
- tools/lvresize.c        |    6 +-----
- 2 files changed, 6 insertions(+), 7 deletions(-)
+ lib/cache/lvmetad.c     |   36 ++++++++++++++++++++++++++++++++----
+ lib/cache/lvmetad.h     |    6 ++++--
+ lib/metadata/metadata.c |    8 ++++++--
+ 3 files changed, 42 insertions(+), 8 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 8f07267..40c1c1a 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4452,7 +4452,7 @@ static uint32_t _adjust_amount(dm_percent_t percent, int policy_threshold, int p
- 	percent = (percent / policy_threshold + (DM_PERCENT_1 - 1) / 100) / (DM_PERCENT_1 / 100) - 100;
- 
- 	/* Use it if current policy amount is smaller */
--	return (policy_amount < percent) ? (uint32_t) policy_amount : (uint32_t) percent;
-+	return (policy_amount < percent) ? (uint32_t) percent : (uint32_t) policy_amount;
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 784a529..94059dd 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -648,10 +648,9 @@ static int _lvmetad_handle_reply(daemon_reply reply, const char *id, const char
+ 		action = "set VG info";
+ 	else if (!strcmp(id, "vg_update"))
+ 		action = "update VG";
+-	else if (!strcmp(id, "vg_remove")) {
++	else if (!strcmp(id, "vg_remove"))
+ 		action = "remove VG";
+-		action_modifies = 1;
+-	} else if (!strcmp(id, "pv_found")) {
++	else if (!strcmp(id, "pv_found")) {
+ 		action = "update PV";
+ 		action_modifies = 1;
+ 	} else if (!strcmp(id, "pv_gone")) {
+@@ -1272,7 +1271,36 @@ int lvmetad_vg_update_finish(struct volume_group *vg)
+ 	return 1;
  }
  
- static int _lvresize_adjust_policy(const struct logical_volume *lv,
-@@ -5241,7 +5241,10 @@ int lv_resize(struct logical_volume *lv,
- 		return_0;
- 
- 	if (lp->use_policies) {
--		lp->percent = SIGN_PLUS;
-+		lp->extents = 0;
-+		lp->sign = SIGN_PLUS;
-+		lp->percent = PERCENT_LV;
+-int lvmetad_vg_remove(struct volume_group *vg)
++int lvmetad_vg_remove_pending(struct volume_group *vg)
++{
++	char uuid[64] __attribute__((aligned(8)));
++	daemon_reply reply;
 +
- 		aux_lp = *lp;
- 		if (!_lvresize_adjust_policy(lv, &lp->extents, &aux_lp.extents))
- 			return_0;
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 45d3558..35b7044 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -34,11 +34,7 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
- 	lp->sign = lp->poolmetadata_sign = SIGN_NONE;
++	if (!lvmetad_used() || test_mode())
++		return 1; /* fake it */
++
++	if (!id_write_format(&vg->id, uuid, sizeof(uuid)))
++		return_0;
++
++	/* Sending version/seqno 0 in set_vg_info will set the INVALID flag. */
++
++	log_debug_lvmetad("Sending lvmetad pending remove VG %s", vg->name);
++	reply = _lvmetad_send(vg->cmd, "set_vg_info",
++			      "name = %s", vg->name,
++			      "uuid = %s", uuid,
++			      "version = %d", 0,
++			      NULL);
++
++	if (!_lvmetad_handle_reply(reply, "set_vg_info", vg->name, NULL)) {
++		daemon_reply_destroy(reply);
++		return_0;
++	}
++
++	daemon_reply_destroy(reply);
++	return 1;
++}
++
++int lvmetad_vg_remove_finish(struct volume_group *vg)
+ {
+ 	char uuid[64];
+ 	daemon_reply reply;
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index 9ee4e2d..d47ce41 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -86,7 +86,8 @@ int lvmetad_vg_update_finish(struct volume_group *vg);
+  * only needed during vgremove, which does not wipe PV labels and therefore
+  * cannot mark the PVs as gone.
+  */
+-int lvmetad_vg_remove(struct volume_group *vg);
++int lvmetad_vg_remove_pending(struct volume_group *vg);
++int lvmetad_vg_remove_finish(struct volume_group *vg);
  
- 	if ((lp->use_policies = arg_is_set(cmd, usepolicies_ARG))) {
--		/* do nothing; _lvresize will handle --use-policies itself */
--		lp->extents = 0;
--		lp->sign = SIGN_PLUS;
--		lp->percent = PERCENT_LV;
--
-+		/* do nothing; lv_resize will handle --use-policies itself */
- 		if (arg_from_list_is_set(cmd, NULL,
- 					 chunksize_ARG, extents_ARG,
- 					 poolmetadatasize_ARG,
+ /*
+  * Notify lvmetad that a PV has been found. It is not an error if the PV is
+@@ -174,7 +175,8 @@ void lvmetad_clear_disabled(struct cmd_context *cmd);
+ #    define lvmetad_vg_update(vg)	(1)
+ #    define lvmetad_vg_update_pending(vg)	(1)
+ #    define lvmetad_vg_update_finish(vg)	(1)
+-#    define lvmetad_vg_remove(vg)	(1)
++#    define lvmetad_vg_remove_pending(vg)	(1)
++#    define lvmetad_vg_remove_finish(vg)	(1)
+ #    define lvmetad_pv_found(cmd, pvid, dev, fmt, label_sector, vg, found_vgnames, changed_vgnames)	(1)
+ #    define lvmetad_pv_gone(devno, pv_name)	(1)
+ #    define lvmetad_pv_gone_by_dev(dev)	(1)
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index e100bc6..d8bb726 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -568,6 +568,11 @@ int vg_remove_direct(struct volume_group *vg)
+ 	struct pv_list *pvl;
+ 	int ret = 1;
+ 
++	if (!lvmetad_vg_remove_pending(vg)) {
++		log_error("Failed to update lvmetad for pending remove.");
++		return 0;
++	}
++
+ 	if (!vg_remove_mdas(vg)) {
+ 		log_error("vg_remove_mdas %s failed", vg->name);
+ 		return 0;
+@@ -599,8 +604,7 @@ int vg_remove_direct(struct volume_group *vg)
+ 		}
+ 	}
+ 
+-	/* FIXME Handle partial failures from above. */
+-	if (!lvmetad_vg_remove(vg))
++	if (!lvmetad_vg_remove_finish(vg))
+ 		stack;
+ 
+ 	lockd_vg_update(vg);
 
 
