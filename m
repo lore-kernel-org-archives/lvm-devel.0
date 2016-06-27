@@ -1,100 +1,101 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 1 Jun 2009 15:55:08 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c test/ ...
-Message-ID: <20090601155508.29546.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 27 Jun 2016 09:51:38 +0000 (UTC)
+Subject: master - coverity: fix issues detected in recent code
+Message-ID: <20160627095138.04F1460994@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-06-01 15:55:07
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
+Commit:        82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
+Parent:        15b932a70e4a29f386ea57e1b845d637780b463b
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Jun 27 10:12:41 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Jun 27 11:22:29 2016 +0200
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
-	test           : t-lvcreate-usage.sh 
+coverity: fix issues detected in recent code
 
-Log message:
-	Fix rename of active snapshot with virtual origin.
-	
-	Code must suspend/resume virtual origin too when renaming
-	snaphsot otherwise in kernel old name remains.
+Uninitialized variables  (UNINIT) /safe/guest2/covscan/LVM2.2.02.158/tools/toollib.c: 3520 in _process_pvs_in_vgs()
+Uninitialized variables  (UNINIT) Using uninitialized value "do_report_ret_code".
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1137&r2=1.1138
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.179&r2=1.180
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+Null pointer dereferences  (REVERSE_INULL) /safe/guest2/covscan/LVM2.2.02.158/libdm/libdm-report.c: 4745 in dm_report_output()
+Null pointer dereferences  (REVERSE_INULL) Null-checking "rh" suggests that it may be null, but it has already been dereferenced on all paths leading to the check.
 
---- LVM2/WHATS_NEW	2009/06/01 14:43:27	1.1137
-+++ LVM2/WHATS_NEW	2009/06/01 15:55:06	1.1138
-@@ -1,5 +1,6 @@
- Version 2.02.48 - 
- ===============================
-+  Fix rename of active snapshot with virtual origin.
-   Fix convert polling to ignore LV with different UUID.
-   Cache underlying device readahead only before activation calls.
-   Fix segfault when calculating readahead on missing device in vgreduce.
---- LVM2/lib/metadata/lv_manip.c	2009/06/01 14:23:38	1.179
-+++ LVM2/lib/metadata/lv_manip.c	2009/06/01 15:55:07	1.180
-@@ -1765,6 +1765,8 @@
- {
- 	struct volume_group *vg = lv->vg;
- 	struct lv_names lv_names;
-+	DM_LIST_INIT(lvs_changed);
-+	struct lv_list lvl, lvl2;
- 	int r = 0;
- 
- 	/* rename is not allowed on sub LVs */
-@@ -1799,22 +1801,27 @@
- 		return 0;
+Incorrect expression  (MISSING_COMMA) /safe/guest2/covscan/LVM2.2.02.158/lib/log/log.c: 280 in _get_log_level_name()
+Incorrect expression  (MISSING_COMMA) In the initialization of "log_level_names", a suspicious concatenated string ""noticeinfo"" is produced.
+
+Null pointer dereferences  (FORWARD_NULL) /safe/guest2/covscan/LVM2.2.02.158/tools/reporter.c: 816 in_get_report_options()
+Null pointer dereferences  (FORWARD_NULL) Comparing "mem" to null implies that "mem" might be null.
+---
+ lib/log/log.c        |    2 +-
+ libdm/libdm-report.c |    4 ++--
+ tools/reporter.c     |    2 +-
+ tools/toollib.c      |    2 +-
+ 4 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/lib/log/log.c b/lib/log/log.c
+index b3453dc..30d71ef 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -277,7 +277,7 @@ static const char *_get_log_level_name(int use_stderr, int level)
+ 						"fatal", /* _LOG_FATAL */
+ 						"error", /* _LOG_ERROR */
+ 						"warn",  /* _LOG_WARN */
+-						"notice" /* _LOG_NOTICE */
++						"notice",/* _LOG_NOTICE */
+ 						"info",  /* _LOG_INFO */
+ 						"debug"  /* _LOG_DEBUG */
+ 						};
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 6bea34c..ad03c6e 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -4001,7 +4001,7 @@ static int _report_set_selection(struct dm_report *rh, const char *selection, in
+ 			goto_bad;
  	}
  
-+	lvl.lv = lv;
-+	dm_list_add(&lvs_changed, &lvl.list);
-+
-+	/* rename active virtual origin too */
-+	if (lv_is_cow(lv) && lv_is_virtual_origin(lvl2.lv = origin_from_cow(lv)))
-+		dm_list_add(&lvs_changed, &lvl2.list);
-+
- 	log_verbose("Writing out updated volume group");
- 	if (!vg_write(vg))
- 		return 0;
+-	if (!selection || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
++	if (!selection || !selection[0] || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
+ 		return 1;
  
--	if (!suspend_lv(cmd, lv)) {
-+
-+	if (!suspend_lvs(cmd, &lvs_changed)) {
- 		vg_revert(vg);
- 		goto_out;
- 	}
- 
--	if (!vg_commit(vg)) {
--		resume_lv(cmd, lv);
--		goto_out;
--	}
-+	if (!(r = vg_commit(vg)))
-+		stack;
- 
--	resume_lv(cmd, lv);
--	r = 1;
-+	resume_lvs(cmd, &lvs_changed);
+ 	rh->selection->add_new_fields = add_new_fields;
+@@ -4742,7 +4742,7 @@ int dm_report_output(struct dm_report *rh)
+ 	else
+ 		r = _output_as_columns(rh);
  out:
- 	backup(vg);
+-	if (r && rh && rh->group_item)
++	if (r && rh->group_item)
+ 		rh->group_item->output_done = 1;
  	return r;
---- LVM2/test/t-lvcreate-usage.sh	2009/05/13 21:29:10	1.13
-+++ LVM2/test/t-lvcreate-usage.sh	2009/06/01 15:55:07	1.14
-@@ -116,3 +116,10 @@
- check_lv_field_ $vg/$lv regionsize "4.00M"
- lvremove -ff $vg
+ }
+diff --git a/tools/reporter.c b/tools/reporter.c
+index ee2d251..40d449c 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -815,7 +815,7 @@ static int _get_report_options(struct cmd_context *cmd,
  
-+# snapshot with virtual origin works
-+lvcreate -s --virtualoriginsize 64M -L 32M -n $lv1 $vg
-+lvrename $vg/$lv1 $vg/$lv2
-+lvcreate -s --virtualoriginsize 64M -L 32M -n $lv1 $vg
-+lvchange -a n $vg/$lv1
-+lvremove $vg/$lv1
-+lvremove -ff $vg
+ 	if (!(mem = dm_pool_create("report_options", 128))) {
+ 		log_error("Failed to create temporary mempool to process report options.");
+-		goto out;
++		return ECMD_FAILED;
+ 	}
+ 
+ 	if (single_args->report_type == CMDLOG) {
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 5c61ddd..80d0f32 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -3439,7 +3439,7 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
+ 	int skip;
+ 	int notfound;
+ 	int already_locked;
+-	int do_report_ret_code;
++	int do_report_ret_code = 1;
+ 
+ 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_VG);
+ 
 
 
