@@ -1,36 +1,46 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 10 Jun 2009 11:21:11 -0000
-Subject: LVM2/tools vgsplit.c
-Message-ID: <20090610112111.14693.qmail@sourceware.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 27 Jun 2016 18:00:50 +0000 (UTC)
+Subject: master - lvmetad: remove unused code for other format types
+Message-ID: <20160627180050.1855A60529@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-06-10 11:21:10
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6c376ee2dae4539b1cc38ed6d9c5430777d2753
+Commit:        e6c376ee2dae4539b1cc38ed6d9c5430777d2753
+Parent:        8eebb4bfb901caa5330676697557943fdb9733a5
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jun 7 16:09:45 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Jun 27 11:16:35 2016 -0500
 
-Modified files:
-	tools          : vgsplit.c 
+lvmetad: remove unused code for other format types
 
-Log message:
-	Fix compiler warning.
+lvmetad is no longer used at all with the lvm1 format,
+so the text format is the only one that uses lvmetad.
+---
+ lib/metadata/metadata.c |    7 -------
+ 1 files changed, 0 insertions(+), 7 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
-
---- LVM2/tools/vgsplit.c	2009/06/09 14:31:20	1.75
-+++ LVM2/tools/vgsplit.c	2009/06/10 11:21:10	1.76
-@@ -281,7 +281,7 @@
- 	char *vg_name_from, *vg_name_to;
- 	struct volume_group *vg_to = NULL, *vg_from = NULL;
- 	int opt;
--	int existing_vg;
-+	int existing_vg = 0;
- 	int consistent;
- 	int r = ECMD_FAILED;
- 	const char *lv_name;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 9b1fd31..e55463b 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3546,13 +3546,6 @@ int vg_write(struct volume_group *vg)
+ 	if (!_vg_update_vg_precommitted(vg)) /* prepare precommited */
+ 		return_0;
+ 
+-	/*
+-	 * If precommit is not supported, changes take effect immediately.
+-	 * FIXME Replace with a more-accurate FMT_COMMIT flag.
+-	 */
+-	if (!(vg->fid->fmt->features & FMT_PRECOMMIT) && !lvmetad_vg_update(vg))
+-		return_0;
+-
+ 	lockd_vg_update(vg);
+ 
+ 	return 1;
 
 
