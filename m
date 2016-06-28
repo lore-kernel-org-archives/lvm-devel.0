@@ -1,43 +1,46 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 28 Jun 2016 01:33:24 +0000 (UTC)
-Subject: master - WHATS_NEW: add recent changes
-Message-ID: <20160628013324.47D3360237@fedorahosted.org>
+Date: Tue, 28 Jun 2016 01:33:26 +0000 (UTC)
+Subject: master - lvmetad: remove unused code for other format types
+Message-ID: <20160628013326.63A1E60237@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a327755b4cfe45b35863a2b4177a6b32c17642f
-Commit:        5a327755b4cfe45b35863a2b4177a6b32c17642f
-Parent:        17ad29ebba4ba1a9361cd424ad1f58e89418a986
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cc3e7c7c31de8d69d9f1eb610181584482ee90a3
+Commit:        cc3e7c7c31de8d69d9f1eb610181584482ee90a3
+Parent:        5a327755b4cfe45b35863a2b4177a6b32c17642f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jun 27 11:10:58 2016 -0500
+AuthorDate:    Tue Jun 7 16:09:45 2016 -0500
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jun 28 02:28:57 2016 +0100
+CommitterDate: Tue Jun 28 02:30:25 2016 +0100
 
-WHATS_NEW: add recent changes
+lvmetad: remove unused code for other format types
 
+lvmetad is no longer used at all with the lvm1 format,
+so the text format is the only one that uses lvmetad.
 ---
- WHATS_NEW |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+ lib/metadata/metadata.c |    7 -------
+ 1 files changed, 0 insertions(+), 7 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4b074a6..cfa707f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -3,6 +3,12 @@ Version 2.02.159 -
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 9b1fd31..e55463b 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3546,13 +3546,6 @@ int vg_write(struct volume_group *vg)
+ 	if (!_vg_update_vg_precommitted(vg)) /* prepare precommited */
+ 		return_0;
  
- Version 2.02.158 - 25th June 2016
- =================================
-+  Add a more efficient native vgimportclone command to replace the script.
-+  Make lvmlockd always attempt to connect to lvmetad if no connection exists.
-+  Let lvmetad handle new connections after shutdown signal.
-+  Disable lvmetad when vgcfgrestore begins and enable it again after.
-+  Make pvscan do activation if lvmetad is configured but not running.
-+  Fix rescanning the PVs for a single VG when using lvmetad.
-   Pool metadata lvresize uses now same code as resize of normal volume.
-   Preserve monitoring status when updating thin-pool metadata.
-   Return 0 (inactive) when status cannot be queried in _lv_active().
+-	/*
+-	 * If precommit is not supported, changes take effect immediately.
+-	 * FIXME Replace with a more-accurate FMT_COMMIT flag.
+-	 */
+-	if (!(vg->fid->fmt->features & FMT_PRECOMMIT) && !lvmetad_vg_update(vg))
+-		return_0;
+-
+ 	lockd_vg_update(vg);
+ 
+ 	return 1;
 
 
