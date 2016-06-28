@@ -1,47 +1,51 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue, 28 Jun 2016 19:24:43 +0000 (UTC)
-Subject: master - lvmdbustest: Comment out refresh check for LV create
-Message-ID: <20160628192443.EE2F16030D@fedorahosted.org>
+Date: Tue, 28 Jun 2016 19:24:41 +0000 (UTC)
+Subject: master - lvmdbusd: Add --nojson command line option
+Message-ID: <20160628192441.D991D6030D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6f216692b47b38f480e50d213de5c513a309d9e0
-Commit:        6f216692b47b38f480e50d213de5c513a309d9e0
-Parent:        1d3532d0a7d458550b53218a6b21798eab30b68e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1d3532d0a7d458550b53218a6b21798eab30b68e
+Commit:        1d3532d0a7d458550b53218a6b21798eab30b68e
+Parent:        e6e5c3d3ecb7de18ec2d103df8e5b0229df9ce1c
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Jun 28 13:36:32 2016 -0500
+AuthorDate:    Tue Jun 28 13:32:39 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Jun 28 13:36:32 2016 -0500
+CommitterDate: Tue Jun 28 13:32:39 2016 -0500
 
-lvmdbustest: Comment out refresh check for LV create
+lvmdbusd: Add --nojson command line option
 
-When we test Vg.LvCreateRaid some of the hidden LVs volume type go from
-'I' to 'i' between the time it takes us to create the LV and
-the time it takes to call into refresh to verify the service is up to date.
-This is a fairly rare occurance.
+Add ability to not use the JSON output even if available.
 ---
- test/dbus/lvmdbustest.py |    6 +++++-
+ daemons/lvmdbusd/main.py |    6 +++++-
  1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 4443b0c..457db96 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -373,7 +373,11 @@ class TestDbusService(unittest.TestCase):
- 			lv = ClientProxy(self.bus, path)
- 			# TODO verify object properties
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index aa16a2e..f28b402 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -101,6 +101,10 @@ def main():
+ 						help="Dump debug messages", default=False,
+ 						dest='debug')
  
--		self.assertEqual(self._refresh(), 0)
-+		# We are quick enough now that we can get VolumeType changes from
-+		# 'I' to 'i' between the time it takes to create a RAID and it returns
-+		# and when we refresh state here.  Not sure how we can handle this as
-+		# we cannot just sit and poll all the time for changes...
-+		# self.assertEqual(self._refresh(), 0)
- 		return lv
++	parser.add_argument("--nojson", action='store_false',
++						help="Do not use LVM JSON output", default=None,
++						dest='use_json')
++
+ 	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
  
- 	def test_lv_create(self):
+ 	# Ensure that we get consistent output for parsing stdout/stderr
+@@ -137,7 +141,7 @@ def main():
+ 
+ 	cfg.load = load
+ 
+-	cfg.db = lvmdb.DataStore()
++	cfg.db = lvmdb.DataStore(args.use_json)
+ 
+ 	# Start up thread to monitor pv moves
+ 	thread_list.append(
 
 
