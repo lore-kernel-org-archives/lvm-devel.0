@@ -1,40 +1,50 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue, 28 Jun 2016 19:24:29 +0000 (UTC)
-Subject: master - lvmdbusd: request.py, initialize _job to None
-Message-ID: <20160628192429.479F360FC2@fedorahosted.org>
+Date: Tue, 28 Jun 2016 19:24:33 +0000 (UTC)
+Subject: master - lvmdbusd: Remove unused imports and function parameter
+Message-ID: <20160628192433.74DA7611B3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5274c2f11b9e262588c1dec86609e829618d2e76
-Commit:        5274c2f11b9e262588c1dec86609e829618d2e76
-Parent:        4f26eae40f07399f11a2abe675aef850b0dd5239
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c11003c860fe9242f49ba6ccffadd964501f1d1f
+Commit:        c11003c860fe9242f49ba6ccffadd964501f1d1f
+Parent:        dd5d865020acd545712d4bcc0f3236143de4d76d
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Jun 28 11:45:05 2016 -0500
+AuthorDate:    Tue Jun 28 12:44:45 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Jun 28 12:09:28 2016 -0500
+CommitterDate: Tue Jun 28 12:44:45 2016 -0500
 
-lvmdbusd: request.py, initialize _job to None
+lvmdbusd: Remove unused imports and function parameter
 
-_job is a job object, not a boolean so initialize it to None instead.
 ---
- daemons/lvmdbusd/request.py |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/lvmdbusd/background.py |    6 ++----
+ 1 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/lvmdbusd/request.py b/daemons/lvmdbusd/request.py
-index 02f8c88..3e29b82 100644
---- a/daemons/lvmdbusd/request.py
-+++ b/daemons/lvmdbusd/request.py
-@@ -29,7 +29,7 @@ class RequestEntry(object):
- 		self.lock = threading.RLock()
- 		self.done = False
- 		self._result = None
--		self._job = False
-+		self._job = None
- 		self._rc = 0
- 		self._rc_error = None
- 		self._return_tuple = return_tuple
+diff --git a/daemons/lvmdbusd/background.py b/daemons/lvmdbusd/background.py
+index ca3d60e..2c719fc 100644
+--- a/daemons/lvmdbusd/background.py
++++ b/daemons/lvmdbusd/background.py
+@@ -13,9 +13,7 @@ from . import cfg
+ import time
+ from .cmdhandler import options_to_cli_args
+ import dbus
+-from .job import Job, JobState
+-from .utils import pv_range_append, pv_dest_ranges, log_debug, log_error
+-from .request import RequestEntry
++from .utils import pv_range_append, pv_dest_ranges, log_error
+ import traceback
+ 
+ _rlock = threading.RLock()
+@@ -125,7 +123,7 @@ def background_reaper():
+ 		time.sleep(3)
+ 
+ 
+-def background_execute(command, background_job, skip_first_line=False):
++def background_execute(command, background_job):
+ 
+ 	# Wrap this whole operation in an exception handler, otherwise if we
+ 	# hit a code bug we will silently exit this thread without anyone being
 
 
