@@ -1,233 +1,112 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 Jun 2016 22:46:00 +0000 (UTC)
-Subject: master - dmeventd: thin plugin umount over 95%
-Message-ID: <20160630224600.B5DCD611BD@fedorahosted.org>
+Date: Thu, 30 Jun 2016 22:46:02 +0000 (UTC)
+Subject: master - thin: fix link validation for unused thin-pool
+Message-ID: <20160630224602.CE990609F7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2f638e07e814617152d617a2ca7c8acdae41968a
-Commit:        2f638e07e814617152d617a2ca7c8acdae41968a
-Parent:        103c188681fce748ef193115c126bfbbc65fbab9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=458918b31953943a3cc44976388f008ca850c124
+Commit:        458918b31953943a3cc44976388f008ca850c124
+Parent:        2f638e07e814617152d617a2ca7c8acdae41968a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 29 15:56:29 2016 +0200
+AuthorDate:    Thu Jun 30 15:54:27 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jul 1 00:43:45 2016 +0200
+CommitterDate: Fri Jul 1 00:44:46 2016 +0200
 
-dmeventd: thin plugin umount over 95%
+thin: fix link validation for unused thin-pool
 
-Run umount code only when either thin data or metadata are
-above 95% - so if there are resize failures with 60%.
-system fill keep running.
+This patch fixes link validation for used thin-pool.
+Udev rules correctly creates symlinks only for unused new thin-pool.
+Such thin-pool can be used by foreing apps (like Docker) thus
+has  /dev/vg/lv link.
+However when thin-pool becomes used by thinLV - this link is no
+longer exposed to user - but internal verfication missed this
+and caused messages like this to be printed upon 'vgchange -ay':
 
-Also umount will only be tried with lvm2 LVs.
-Foreign users are ATM unsuppored.
+The link /dev/vg/pool should have been created by udev but it was not
+found. Falling back to direct link creation.
+
+And same with 'vgchange -an':
+The link /dev/vg/pool should have been removed by udev but it is still
+present. Falling back to direct link removal.
+
+This patch ensures only unused thin-pool has this link.
 ---
- WHATS_NEW_DM                                  |    1 +
- daemons/dmeventd/plugins/thin/dmeventd_thin.c |   99 ++++++++++++++++++++++---
- 2 files changed, 89 insertions(+), 11 deletions(-)
+ WHATS_NEW                           |    1 +
+ lib/activate/dev_manager.c          |   10 ++++++++--
+ test/shell/thin-overprovisioning.sh |    4 ++++
+ 3 files changed, 13 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 5043c23..30d6d82 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a73744e..4d71ea8 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.129 - 
+ Version 2.02.159 - 
  =================================
-+  Thin dmeventd plugin umounts lvm2 volume only when pool is 95% or more.
++  Fix created link for a used pool for vgmknode.
+   Introduce and use is_power_of_2 macro.
+   Support conversions between striped and raid0 segment types.
+   Add infrastructure for raid takeover lvconvert options.
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 51f1a9a..233a216 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1599,6 +1599,12 @@ static int _dev_manager_lv_rmnodes(const struct logical_volume *lv)
+ 	return fs_del_lv(lv);
+ }
  
- Version 1.02.128 - 25th June 2016
- =================================
-diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-index 0cef168..c27cf50 100644
---- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-+++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2011-2015 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2011-2016 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -30,6 +30,9 @@
- 
- /* First warning when thin data or metadata is 80% full. */
- #define WARNING_THRESH	(DM_PERCENT_1 * 80)
-+/* Umount thin LVs when thin data or metadata LV is >=
-+ * and lvextend --use-policies has failed. */
-+#define UMOUNT_THRESH	(DM_PERCENT_1 * 95)
- /* Run a check every 5%. */
- #define CHECK_STEP	(DM_PERCENT_1 *  5)
- /* Do not bother checking thin data or metadata is less than 50% full. */
-@@ -53,6 +56,53 @@ struct dso_state {
- 
- DM_EVENT_LOG_FN("thin")
- 
-+#define UUID_PREFIX "LVM-"
-+
-+/* Figure out device UUID has LVM- prefix and is OPEN */
-+static int _has_unmountable_prefix(int major, int minor)
++static int _lv_has_mknode(const struct logical_volume *lv)
 +{
-+	struct dm_task *dmt;
-+	struct dm_info info;
-+	const char *uuid;
-+	int r = 0;
-+
-+	if (!(dmt = dm_task_create(DM_DEVICE_INFO)))
-+		return_0;
-+
-+	if (!dm_task_set_major_minor(dmt, major, minor, 1))
-+		goto_out;
-+
-+	if (!dm_task_no_flush(dmt))
-+		stack;
-+
-+	if (!dm_task_run(dmt))
-+		goto out;
-+
-+	if (!dm_task_get_info(dmt, &info))
-+		goto out;
-+
-+	if (!info.exists || !info.open_count)
-+		goto out; /* Not open -> not mounted */
-+
-+	if (!(uuid = dm_task_get_uuid(dmt)))
-+		goto out;
-+
-+	/* Check it's public mountable LV
-+	 * has prefix  LVM-  and UUID size is 68 chars */
-+	if (memcmp(uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1) ||
-+	    strlen(uuid) != 68)
-+		goto out;
-+
-+#if THIN_DEBUG
-+	log_debug("Found LV (%u:%u) %s.",  major, minor, uuid);
-+#endif
-+	r = 1;
-+out:
-+	dm_task_destroy(dmt);
-+
-+	return r;
++	return (lv_is_visible(lv) &&
++		(!lv_is_thin_pool(lv) || lv_is_new_thin_pool(lv)));
 +}
 +
- /* Get dependencies for device, and try to find matching device */
- static int _has_deps(const char *name, int tp_major, int tp_minor, int *dev_minor)
+ int dev_manager_mknodes(const struct logical_volume *lv)
  {
-@@ -90,6 +140,9 @@ static int _has_deps(const char *name, int tp_major, int tp_minor, int *dev_mino
+ 	struct dm_info dminfo;
+@@ -1610,7 +1616,7 @@ int dev_manager_mknodes(const struct logical_volume *lv)
  
- 	*dev_minor = info.minor;
+ 	if ((r = _info_run(MKNODES, name, NULL, &dminfo, NULL, NULL, 0, 0, 0, 0))) {
+ 		if (dminfo.exists) {
+-			if (lv_is_visible(lv))
++			if (_lv_has_mknode(lv))
+ 				r = _dev_manager_lv_mknodes(lv);
+ 		} else
+ 			r = _dev_manager_lv_rmnodes(lv);
+@@ -2993,7 +2999,7 @@ static int _create_lv_symlinks(struct dev_manager *dm, struct dm_tree_node *root
+ 				r = 0;
+ 			continue;
+ 		}
+-		if (lv_is_visible(lvlayer->lv)) {
++		if (_lv_has_mknode(lvlayer->lv)) {
+ 			if (!_dev_manager_lv_mknodes(lvlayer->lv))
+ 				r = 0;
+ 			continue;
+diff --git a/test/shell/thin-overprovisioning.sh b/test/shell/thin-overprovisioning.sh
+index 8a396b6..07c74cc 100644
+--- a/test/shell/thin-overprovisioning.sh
++++ b/test/shell/thin-overprovisioning.sh
+@@ -24,6 +24,8 @@ aux have_thin 1 3 0 || skip
+ aux prepare_vg 2 33
  
-+	if (!_has_unmountable_prefix(major, info.minor))
-+		goto out;
-+
- #if THIN_DEBUG
- 	{
- 		char dev_name[PATH_MAX];
-@@ -206,7 +259,7 @@ static int _umount_device(char *buffer, unsigned major, unsigned minor,
- }
+ lvcreate -L32 -T $vg/pool
++# check there is link node for UNUSED thin-pool
++test -e "$DM_DEV_DIR/$vg/pool"
  
- /*
-- * Find all thin pool users and try to umount them.
-+ * Find all thin pool LV users and try to umount them.
-  * TODO: work with read-only thin pool support
-  */
- static void _umount(struct dm_task *dmt)
-@@ -240,7 +293,7 @@ out:
- 		dm_bitset_destroy(data.minors);
- }
+ # leave 12M free space
+ lvcreate -an -n $lv1 -L16 $vg 2>&1 | tee out
+@@ -31,6 +33,8 @@ vgs $vg
  
--static void _use_policy(struct dm_task *dmt, struct dso_state *state)
-+static int _use_policy(struct dm_task *dmt, struct dso_state *state)
- {
- #if THIN_DEBUG
- 	log_info("dmeventd executes: %s.", state->cmd_str);
-@@ -248,10 +301,12 @@ static void _use_policy(struct dm_task *dmt, struct dso_state *state)
- 	if (!dmeventd_lvm2_run_with_lock(state->cmd_str)) {
- 		log_error("Failed to extend thin pool %s.",
- 			  dm_task_get_name(dmt));
--		_umount(dmt);
- 		state->fails++;
--	} else
--		state->fails = 0;
-+		return 0;
-+	}
-+
-+	state->fails = 0;
-+	return 1;
- }
+ lvcreate -n thin1 -V30 $vg/pool 2>&1 | tee out
+ not grep "WARNING: Sum" out
++# check again link node is now gone for a USED thin-pool
++test ! -e "$DM_DEV_DIR/$vg/pool"
  
- void process_event(struct dm_task *dmt,
-@@ -267,6 +322,13 @@ void process_event(struct dm_task *dmt,
- 	char *target_type = NULL;
- 	char *params;
- 	int needs_policy = 0;
-+	int needs_umount = 0;
-+
-+#if THIN_DEBUG
-+	log_debug("Watch for tp-data:%.2f%%  tp-metadata:%.2f%%.",
-+		  dm_percent_to_float(state->data_percent_check),
-+		  dm_percent_to_float(state->metadata_percent_check));
-+#endif
- 
- #if 0
- 	/* No longer monitoring, waiting for remove */
-@@ -275,8 +337,10 @@ void process_event(struct dm_task *dmt,
- #endif
- 	if (event & DM_EVENT_DEVICE_ERROR) {
- 		/* Error -> no need to check and do instant resize */
--		_use_policy(dmt, state);
--		goto out;
-+		if (_use_policy(dmt, state))
-+			goto out;
-+
-+		stack;
- 	}
- 
- 	dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
-@@ -288,7 +352,7 @@ void process_event(struct dm_task *dmt,
- 
- 	if (!dm_get_status_thin_pool(state->mem, params, &tps)) {
- 		log_error("Failed to parse status.");
--		_umount(dmt);
-+		needs_umount = 1;
- 		goto out;
- 	}
- 
-@@ -323,6 +387,9 @@ void process_event(struct dm_task *dmt,
- 			log_warn("WARNING: Thin pool %s metadata is now %.2f%% full.",
- 				 device, dm_percent_to_float(percent));
- 		needs_policy = 1;
-+
-+		if (percent >= UMOUNT_THRESH)
-+			needs_umount = 1;
- 	}
- 
- 	percent = dm_make_percent(tps->used_data_blocks, tps->total_data_blocks);
-@@ -337,11 +404,21 @@ void process_event(struct dm_task *dmt,
- 			log_warn("WARNING: Thin pool %s data is now %.2f%% full.",
- 				 device, dm_percent_to_float(percent));
- 		needs_policy = 1;
-+
-+		if (percent >= UMOUNT_THRESH)
-+			needs_umount = 1;
- 	}
- 
--	if (needs_policy)
--		_use_policy(dmt, state);
-+	if (needs_policy &&
-+	    _use_policy(dmt, state))
-+		needs_umount = 0; /* No umount when command was successful */
- out:
-+	if (needs_umount) {
-+		_umount(dmt);
-+		/* Until something changes, do not retry any more actions */
-+		state->data_percent_check = state->metadata_percent_check = (DM_PERCENT_1 * 101);
-+	}
-+
- 	if (tps)
- 		dm_pool_free(state->mem, tps);
- 
+ # Pool gets overprovisioned
+ lvcreate -an -n thin2 -V4 $vg/pool 2>&1 | tee out
 
 
