@@ -1,61 +1,138 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 Jun 2016 22:46:11 +0000 (UTC)
-Subject: master - cleanup: warns from older gcc
-Message-ID: <20160630224611.5E883611AA@fedorahosted.org>
+Date: Thu, 30 Jun 2016 22:46:13 +0000 (UTC)
+Subject: master - tests: test foreign users of thin-pool
+Message-ID: <20160630224613.6D138611AA@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=37a33d7414b85e4ce69a2ab6727522faba8a86eb
-Commit:        37a33d7414b85e4ce69a2ab6727522faba8a86eb
-Parent:        3fd458488649c27f18f1ddb993ba9360f259d47b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b0d8a524a2c1d9ccf191392bf47a2023087ae362
+Commit:        b0d8a524a2c1d9ccf191392bf47a2023087ae362
+Parent:        37a33d7414b85e4ce69a2ab6727522faba8a86eb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 27 11:13:43 2016 +0200
+AuthorDate:    Thu Jun 30 16:21:03 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jul 1 00:44:48 2016 +0200
+CommitterDate: Fri Jul 1 00:44:49 2016 +0200
 
-cleanup: warns from older gcc
+tests: test foreign users of thin-pool
 
+Note: dmeventd should not need any notification and automatically
+try to resize again when there is some metadata change.
 ---
- lib/cache/lvmcache.c  |    3 +--
- lib/display/display.c |    2 +-
- 2 files changed, 2 insertions(+), 3 deletions(-)
+ test/shell/thin-foreign-dmeventd.sh |  104 +++++++++++++++++++++++++++++++++++
+ 1 files changed, 104 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 9d89b80..6ce778d 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -2137,7 +2137,6 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller,
- 	char pvid_s[ID_LEN + 1] __attribute__((aligned(8)));
- 	char uuid[64] __attribute__((aligned(8)));
- 	struct lvmcache_vgsummary vgsummary = { 0 };
--	const struct format_type *fmt = labeller->fmt;
- 	struct lvmcache_info *info;
- 	struct lvmcache_info *info_lookup;
- 	struct device_list *devl;
-@@ -2178,7 +2177,7 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller,
- 
- 			if (!_found_duplicate_pvs && lvmetad_used()) {
- 				log_warn("WARNING: Disabling lvmetad cache which does not support duplicate PVs."); 
--				lvmetad_set_disabled(fmt->cmd, LVMETAD_DISABLE_REASON_DUPLICATES);
-+				lvmetad_set_disabled(labeller->fmt->cmd, LVMETAD_DISABLE_REASON_DUPLICATES);
- 			}
- 			_found_duplicate_pvs = 1;
- 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index 19421e7..f8dd338 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -843,7 +843,7 @@ char yes_no_prompt(const char *prompt, ...)
- 	static const char _no[] = "no";
- 	const char *answer = NULL;
- 	int c = silent_mode() ? EOF : 0;
--	int i, ret = 0, sig = 0;
-+	int i = 0, ret = 0, sig = 0;
- 	char buf[12];
- 	va_list ap;
- 
+diff --git a/test/shell/thin-foreign-dmeventd.sh b/test/shell/thin-foreign-dmeventd.sh
+new file mode 100644
+index 0000000..a96b206
+--- /dev/null
++++ b/test/shell/thin-foreign-dmeventd.sh
+@@ -0,0 +1,104 @@
++#!/bin/sh
++
++# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++# test foreing user of thin-pool
++
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++MOUNT_DIR=mnt
++
++cleanup_mounted_and_teardown()
++{
++	umount "$MOUNT_DIR" || true
++	dmsetup remove $THIN
++	vgremove -ff $vg
++	aux teardown
++}
++
++percent_() {
++	get lv_field $vg/pool data_percent | cut -d. -f1
++}
++
++#
++# Main
++#
++aux have_thin 1 0 0 || skip
++which mkfs.ext4 || skip
++
++aux prepare_dmeventd
++aux prepare_pvs 2 64
++
++vgcreate $vg -s 64K $(cat DEVICES)
++
++# Create named pool only
++lvcreate --errorwhenfull y -L2100K -T $vg/pool
++
++POOL="$vg-pool"
++THIN="${PREFIX}_thin"
++
++# Foreing user is using own ioctl command to create thin devices
++dmsetup message $POOL 0 "create_thin 0"
++dmsetup message $POOL 0 "set_transaction_id 0 1"
++
++dmsetup status
++# Once the transaction id has changed, lvm2 shall not be able to create thinLV
++fail lvcreate -V10 $vg/pool
++
++trap 'cleanup_mounted_and_teardown' EXIT
++
++# 20M thin device
++dmsetup create $THIN --table "0 40960 thin $DM_DEV_DIR/mapper/$POOL 0"
++
++dmsetup table
++dmsetup info -c
++
++mkdir "$MOUNT_DIR"
++# This mkfs fills 2.2MB pool over 95%
++# no autoresize is configured
++mkfs.ext4 "$DM_DEV_DIR/mapper/$THIN"
++test $(percent_) -gt 95
++mount "$DM_DEV_DIR/mapper/$THIN" "$MOUNT_DIR"
++
++pvchange -x n "$dev1" "$dev2"
++
++test $(percent_) -gt 95
++# Configure autoresize
++aux lvmconf 'activation/thin_pool_autoextend_percent = 10' \
++	    'activation/thin_pool_autoextend_threshold = 75'
++
++# Give it some time to left dmeventd do some work
++sleep 20
++
++# And check foreign thin device is still mounted
++mount | grep "$MOUNT_DIR" | grep "$THIN"
++test $(percent_) -gt 95
++
++pvchange -x y "$dev1" "$dev2"
++
++# FIXME: ATM tell dmeventd explicitely we've changed metadata
++#        however dmeventd shall be aware of any metadata change
++#        and automagically retry resize operation after that.
++lvchange --refresh $vg/pool
++
++# Give it some time and let dmeventd do some work
++for i in $(seq 1 15) ; do
++	test $(percent_) -ge 75 || break
++	sleep 1
++done
++
++test $(percent_) -lt 75
++
++# And check foreign thin device is still mounted
++mount | grep "$MOUNT_DIR" | grep "$THIN"
 
 
