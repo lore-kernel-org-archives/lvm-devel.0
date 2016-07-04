@@ -1,63 +1,51 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  4 Jul 2016 15:41:55 +0000 (UTC)
-Subject: master - dmeventd: improved logged messages from thin plugin
-Message-ID: <20160704154155.C7D99611CF@fedorahosted.org>
+Date: Mon,  4 Jul 2016 15:41:57 +0000 (UTC)
+Subject: master - cleanup: drop unused header files
+Message-ID: <20160704154157.DC25A60E3A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=adc1fe4b3f84b341383d9737162397426e1a1295
-Commit:        adc1fe4b3f84b341383d9737162397426e1a1295
-Parent:        52be93c54bfedf16bb86472c03b6833d2be0efd1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0a505b0bb4eb6584bfea54b526ce38bdfcfa838
+Commit:        c0a505b0bb4eb6584bfea54b526ce38bdfcfa838
+Parent:        adc1fe4b3f84b341383d9737162397426e1a1295
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 4 17:30:27 2016 +0200
+AuthorDate:    Mon Jul 4 15:37:31 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 4 17:40:24 2016 +0200
 
-dmeventd: improved logged messages from thin plugin
+cleanup: drop unused header files
 
-Show better names in logged messages.
 ---
- daemons/dmeventd/plugins/thin/dmeventd_thin.c |   15 ++++++++++-----
- 1 files changed, 10 insertions(+), 5 deletions(-)
+ lib/format_text/archiver.c |    1 -
+ lib/metadata/lv_manip.c    |    1 -
+ 2 files changed, 0 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-index c27cf50..622910f 100644
---- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-+++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-@@ -94,7 +94,7 @@ static int _has_unmountable_prefix(int major, int minor)
- 		goto out;
+diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
+index 2acd8f5..92799e4 100644
+--- a/lib/format_text/archiver.c
++++ b/lib/format_text/archiver.c
+@@ -22,7 +22,6 @@
+ #include "memlock.h"
+ #include "toolcontext.h"
+ #include "locking.h"
+-#include "lvmetad-client.h"
  
- #if THIN_DEBUG
--	log_debug("Found LV (%u:%u) %s.",  major, minor, uuid);
-+	log_debug("Found logical volume %s (%u:%u).", uuid, major, minor);
- #endif
- 	r = 1;
- out:
-@@ -246,13 +246,18 @@ static int _umount_device(char *buffer, unsigned major, unsigned minor,
- 			  char *target, void *cb_data)
- {
- 	struct mountinfo_s *data = cb_data;
-+	char *words[10];
+ #include <unistd.h>
  
- 	if ((major == data->info.major) && dm_bit(data->minors, minor)) {
--		log_info("Unmounting thin volume %s from %s.",
--			 data->device, target);
-+		if (dm_split_words(buffer, DM_ARRAY_SIZE(words), 0, words) < DM_ARRAY_SIZE(words))
-+			words[9] = NULL; /* just don't show device name */
-+		log_info("Unmounting thin %s (%d:%d) of thin-pool %s (%u:%u) from mount point \"%s\".",
-+			 words[9] ? : "", major, minor, data->device,
-+			 data->info.major, data->info.minor,
-+			 target);
- 		if (!_run(UMOUNT_COMMAND, "-fl", target, NULL))
--			log_error("Failed to umount thin %s from %s: %s.",
--				  data->device, target, strerror(errno));
-+			log_error("Failed to lazy umount thin %s (%d:%d) from %s: %s.",
-+				  words[9], major, minor, target, strerror(errno));
- 	}
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 6f02b16..5cf9618 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -28,7 +28,6 @@
+ #include "str_list.h"
+ #include "defaults.h"
+ #include "lvm-exec.h"
+-#include "lvm-signal.h"
+ #include "memlock.h"
+ #include "lvmlockd.h"
  
- 	return 1;
 
 
