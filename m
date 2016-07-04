@@ -1,42 +1,41 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon,  4 Jul 2016 11:17:14 +0000 (UTC)
-Subject: master - docs: remove obsolete note from dmstats.8.in
-Message-ID: <20160704111714.6BC9761D92@fedorahosted.org>
+Date: Mon,  4 Jul 2016 11:17:16 +0000 (UTC)
+Subject: master - dmstats: fix RgStart and RgSize field widths
+Message-ID: <20160704111716.7F9226072E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f27e95b25a639ca5cf8329f6f26f6a040706bf57
-Commit:        f27e95b25a639ca5cf8329f6f26f6a040706bf57
-Parent:        d8c2677ab92c3c3bd35ccab0d486ebce8db4fbb4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=62dce13c7a00a71c73926340e05053b7ebee48e9
+Commit:        62dce13c7a00a71c73926340e05053b7ebee48e9
+Parent:        f27e95b25a639ca5cf8329f6f26f6a040706bf57
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Sun Jun 19 21:48:29 2016 +0100
+AuthorDate:    Mon Jun 27 12:41:58 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Jul 4 12:16:50 2016 +0100
+CommitterDate: Mon Jul 4 12:16:51 2016 +0100
 
-docs: remove obsolete note from dmstats.8.in
+dmstats: fix RgStart and RgSize field widths
 
 ---
- man/dmstats.8.in |    5 -----
- 1 files changed, 0 insertions(+), 5 deletions(-)
+ tools/dmsetup.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/man/dmstats.8.in b/man/dmstats.8.in
-index 9776aa7..1b7a499 100644
---- a/man/dmstats.8.in
-+++ b/man/dmstats.8.in
-@@ -192,11 +192,6 @@ The second argument is the \fIdevice name\fP,
- Further options permit the selection of regions, output format
- control, and reporting behaviour.
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index b61b42f..03e2519 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -4189,8 +4189,8 @@ FIELD_F(STATS, NUM, "Interval", 8, dm_stats_sample_interval, "interval", "Sampli
  
--When the program is run using the '\fBdmstats\fP' alias, the command
--\fBmust\fP be the first argument and any switches and options should be
--specified following the command itself. This limitation is not present
--when run as '\fBdmsetup stats\fP'.
--
- When no device argument is given dmstats will by default operate on all
- device-mapper devices present. The \fBcreate\fP and \fBdelete\fP
- commands require the use of \fB\-\-alldevices\fP when used in this way.
+ /* Stats report meta-fields */
+ FIELD_F(STATS_META, NUM, "RgID", 4, dm_stats_region_id, "region_id", "Region ID.")
+-FIELD_F(STATS_META, SIZ, "RgStart", 5, dm_stats_region_start, "region_start", "Region start.")
+-FIELD_F(STATS_META, SIZ, "RgSize", 5, dm_stats_region_len, "region_len", "Region length.")
++FIELD_F(STATS_META, SIZ, "RgStart", 7, dm_stats_region_start, "region_start", "Region start.")
++FIELD_F(STATS_META, SIZ, "RgSize", 6, dm_stats_region_len, "region_len", "Region length.")
+ FIELD_F(STATS_META, NUM, "ArID", 4, dm_stats_area_id, "area_id", "Area ID.")
+ FIELD_F(STATS_META, SIZ, "ArStart", 7, dm_stats_area_start, "area_start", "Area offset from start of device.")
+ FIELD_F(STATS_META, SIZ, "ArSize", 6, dm_stats_area_len, "area_len", "Area length.")
 
 
