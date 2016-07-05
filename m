@@ -1,101 +1,217 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue,  5 Jul 2016 13:45:07 +0000 (UTC)
-Subject: master - coverity: fix issues detected in recent code
-Message-ID: <20160705134507.EC0436092B@fedorahosted.org>
+Date: Tue,  5 Jul 2016 13:45:10 +0000 (UTC)
+Subject: master - reporter: simplify --configreport handling for -S|--select and fix an issue reported by coverity
+Message-ID: <20160705134510.227356092B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
-Commit:        82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
-Parent:        15b932a70e4a29f386ea57e1b845d637780b463b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05196373bec81dcaad490a889388c57e7af1331a
+Commit:        05196373bec81dcaad490a889388c57e7af1331a
+Parent:        82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jun 27 10:12:41 2016 +0200
+AuthorDate:    Mon Jun 27 10:14:17 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jun 27 11:22:29 2016 +0200
+CommitterDate: Mon Jun 27 11:26:38 2016 +0200
 
-coverity: fix issues detected in recent code
+reporter: simplify --configreport handling for -S|--select and fix an issue reported by coverity
 
-Uninitialized variables  (UNINIT) /safe/guest2/covscan/LVM2.2.02.158/tools/toollib.c: 3520 in _process_pvs_in_vgs()
-Uninitialized variables  (UNINIT) Using uninitialized value "do_report_ret_code".
+Simplify code around _do_get_report_selection - remove "expected_idxs[]"
+argument which is superfluous and add "allow_single" switch instead to
+allow for recognition of "--configreport <report_name> -S" as well as
+single "-S" if needed.
 
-Null pointer dereferences  (REVERSE_INULL) /safe/guest2/covscan/LVM2.2.02.158/libdm/libdm-report.c: 4745 in dm_report_output()
-Null pointer dereferences  (REVERSE_INULL) Null-checking "rh" suggests that it may be null, but it has already been dereferenced on all paths leading to the check.
-
-Incorrect expression  (MISSING_COMMA) /safe/guest2/covscan/LVM2.2.02.158/lib/log/log.c: 280 in _get_log_level_name()
-Incorrect expression  (MISSING_COMMA) In the initialization of "log_level_names", a suspicious concatenated string ""noticeinfo"" is produced.
-
-Null pointer dereferences  (FORWARD_NULL) /safe/guest2/covscan/LVM2.2.02.158/tools/reporter.c: 816 in_get_report_options()
-Null pointer dereferences  (FORWARD_NULL) Comparing "mem" to null implies that "mem" might be null.
+Null pointer dereferences  (FORWARD_NULL) /safe/guest2/covscan/LVM2.2.02.158/tools/reporter.c: 961 in _do_report_get_selection()
+Null pointer dereferences  (FORWARD_NULL) Dereferencing null pointer "single_args".
 ---
- lib/log/log.c        |    2 +-
- libdm/libdm-report.c |    4 ++--
- tools/reporter.c     |    2 +-
- tools/toollib.c      |    2 +-
- 4 files changed, 5 insertions(+), 5 deletions(-)
+ lib/report/report.h |    2 +-
+ tools/reporter.c    |   60 +++++++++++++++++++++++----------------------------
+ tools/toollib.c     |    2 +-
+ 3 files changed, 29 insertions(+), 35 deletions(-)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index b3453dc..30d71ef 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -277,7 +277,7 @@ static const char *_get_log_level_name(int use_stderr, int level)
- 						"fatal", /* _LOG_FATAL */
- 						"error", /* _LOG_ERROR */
- 						"warn",  /* _LOG_WARN */
--						"notice" /* _LOG_NOTICE */
-+						"notice",/* _LOG_NOTICE */
- 						"info",  /* _LOG_INFO */
- 						"debug"  /* _LOG_DEBUG */
- 						};
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 6bea34c..ad03c6e 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -4001,7 +4001,7 @@ static int _report_set_selection(struct dm_report *rh, const char *selection, in
- 			goto_bad;
- 	}
- 
--	if (!selection || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
-+	if (!selection || !selection[0] || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
- 		return 1;
- 
- 	rh->selection->add_new_fields = add_new_fields;
-@@ -4742,7 +4742,7 @@ int dm_report_output(struct dm_report *rh)
- 	else
- 		r = _output_as_columns(rh);
- out:
--	if (r && rh && rh->group_item)
-+	if (r && rh->group_item)
- 		rh->group_item->output_done = 1;
- 	return r;
- }
+diff --git a/lib/report/report.h b/lib/report/report.h
+index b9028fe..ba3a8fa 100644
+--- a/lib/report/report.h
++++ b/lib/report/report.h
+@@ -90,7 +90,7 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
+ 		  int aligned, int buffered, int headings, int field_prefixes,
+ 		  int quoted, int columns_as_rows, const char *selection,
+ 		  int multiple_output);
+-int report_get_single_selection(struct cmd_context *cmd, const char **selection);
++int report_get_single_selection(struct cmd_context *cmd, report_type_t report_type, const char **selection);
+ void *report_init_for_selection(struct cmd_context *cmd, report_type_t *report_type,
+ 				const char *selection);
+ int report_get_prefix_and_desc(report_type_t report_type_id,
 diff --git a/tools/reporter.c b/tools/reporter.c
-index ee2d251..40d449c 100644
+index 40d449c..6f8ed8f 100644
 --- a/tools/reporter.c
 +++ b/tools/reporter.c
-@@ -815,7 +815,7 @@ static int _get_report_options(struct cmd_context *cmd,
+@@ -29,6 +29,8 @@ typedef enum {
+ 	REPORT_IDX_COUNT
+ } report_idx_t;
  
- 	if (!(mem = dm_pool_create("report_options", 128))) {
- 		log_error("Failed to create temporary mempool to process report options.");
--		goto out;
-+		return ECMD_FAILED;
++#define REPORT_IDX_FULL_START REPORT_IDX_FULL_VGS
++
+ struct single_report_args {
+ 	report_type_t report_type;
+ 	char report_prefix[32];
+@@ -748,12 +750,10 @@ static report_idx_t _get_report_idx_from_name(report_type_t report_type, const c
+ 		return REPORT_IDX_NULL;
+ 
+ 	/* Change to basic report type for comparison. */
+-	if (report_type == LABEL)
++	if ((report_type == LABEL) || (report_type == PVSEGS))
+ 		report_type = PVS;
+ 	else if (report_type == SEGS)
+ 		report_type = LVS;
+-	else if (report_type == PVSEGS)
+-		report_type = PVSEGS;
+ 
+ 	if (!strcasecmp(name, "log"))
+ 		idx = REPORT_IDX_LOG;
+@@ -778,11 +778,11 @@ static report_idx_t _get_report_idx_from_name(report_type_t report_type, const c
+ 	return idx;
+ }
+ 
+-static int _should_process_report_idx(report_type_t report_type, report_idx_t idx)
++static int _should_process_report_idx(report_type_t report_type, int allow_single, report_idx_t idx)
+ {
+ 	if (((idx == REPORT_IDX_LOG) && (report_type != CMDLOG)) ||
+-	    ((idx == REPORT_IDX_SINGLE) && ((report_type == FULL) || (report_type == CMDLOG))) ||
+-	    ((idx > REPORT_IDX_LOG) && report_type != FULL))
++	    ((idx == REPORT_IDX_SINGLE) && !allow_single) ||
++	    ((idx >= REPORT_IDX_FULL_START) && report_type != FULL))
+ 		return 0;
+ 
+ 	return 1;
+@@ -867,7 +867,7 @@ static int _get_report_options(struct cmd_context *cmd,
+ 				action = OPTS_REPLACE;
+ 		}
+ 
+-		if (!_should_process_report_idx(single_args->report_type, idx))
++		if (!_should_process_report_idx(single_args->report_type, !(single_args->report_type & (CMDLOG | FULL)), idx))
+ 			continue;
+ 
+ 		if ((action != OPTS_COMPACT) &&
+@@ -932,6 +932,9 @@ static int _get_report_keys(struct cmd_context *cmd,
+ 				goto_out;
+ 		}
+ 
++		if (!_should_process_report_idx(single_args->report_type, !(single_args->report_type & (CMDLOG | FULL)), idx))
++			continue;
++
+ 		args->single_args[idx].keys = grouped_arg_str_value(current_group->arg_values, sort_ARG, NULL);
  	}
  
- 	if (single_args->report_type == CMDLOG) {
+@@ -941,16 +944,15 @@ out:
+ }
+ 
+ static int _do_report_get_selection(struct cmd_context *cmd,
++				    report_type_t report_type,
++				    int allow_single,
+ 				    struct report_args *args,
+-				    struct single_report_args *single_args,
+-				    report_idx_t expected_idxs[],
+-				    const char **ret_selection)
++				    const char **last_selection)
+ {
+ 	struct arg_value_group_list *current_group;
+-	const char *final_selection = "", *selection = NULL;
++	const char *final_selection = NULL, *selection = NULL;
+ 	const char *report_name = NULL;
+ 	report_idx_t idx = REPORT_IDX_SINGLE;
+-	int i;
+ 
+ 	dm_list_iterate_items(current_group, &cmd->arg_value_groups) {
+ 		if (!grouped_arg_is_set(current_group->arg_values, select_ARG))
+@@ -958,27 +960,21 @@ static int _do_report_get_selection(struct cmd_context *cmd,
+ 
+ 		if (grouped_arg_is_set(current_group->arg_values, configreport_ARG)) {
+ 			report_name = grouped_arg_str_value(current_group->arg_values, configreport_ARG, NULL);
+-			if ((idx = _get_report_idx_from_name(single_args->report_type, report_name)) == REPORT_IDX_NULL)
++			if ((idx = _get_report_idx_from_name(report_type, report_name)) == REPORT_IDX_NULL)
+ 				return_0;
+ 		}
+ 
+ 		selection = grouped_arg_str_value(current_group->arg_values, select_ARG, NULL);
+ 
+-		if (single_args) {
+-			if (!_should_process_report_idx(single_args->report_type, idx))
+-				continue;
++		if (!_should_process_report_idx(report_type, allow_single, idx))
++			continue;
++		if (args)
+ 			args->single_args[idx].selection = selection;
+-			final_selection = selection;
+-		} else {
+-			for (i = 0; expected_idxs[i] != REPORT_IDX_NULL; i++) {
+-				if (idx == expected_idxs[i])
+-					final_selection = selection;
+-			}
+-		}
++		final_selection = selection;
+ 	}
+ 
+-	if (ret_selection)
+-		*ret_selection = final_selection;
++	if (last_selection)
++		*last_selection = final_selection;
+ 
+ 	return 1;
+ }
+@@ -987,13 +983,13 @@ static int _get_report_selection(struct cmd_context *cmd,
+ 				 struct report_args *args,
+ 				 struct single_report_args *single_args)
+ {
+-	return _do_report_get_selection(cmd, args, single_args, NULL, NULL) ? ECMD_PROCESSED : ECMD_FAILED;
++	return _do_report_get_selection(cmd, single_args->report_type, !(single_args->report_type & (CMDLOG | FULL)),
++					args, NULL) ? ECMD_PROCESSED : ECMD_FAILED;
+ }
+ 
+-int report_get_single_selection(struct cmd_context *cmd, const char **selection)
++int report_get_single_selection(struct cmd_context *cmd, report_type_t report_type, const char **selection)
+ {
+-	report_idx_t expected_idxs[] = {REPORT_IDX_SINGLE, REPORT_IDX_NULL};
+-	return _do_report_get_selection(cmd, NULL, NULL, expected_idxs, selection);
++	return _do_report_get_selection(cmd, report_type, 1, NULL, selection);
+ }
+ 
+ static int _set_report_prefix_and_name(struct report_args *args,
+@@ -1525,9 +1521,8 @@ bad:
+ 
+ int lastlog(struct cmd_context *cmd, int argc, char **argv)
+ {
+-	static report_idx_t expected_idxs[] = {REPORT_IDX_SINGLE, REPORT_IDX_LOG, REPORT_IDX_NULL};
+ 	struct dm_report_group *report_group = NULL;
+-	const char *selection = NULL;
++	const char *selection;
+ 	int r = ECMD_FAILED;
+ 
+ 	if (!cmd->log_rh) {
+@@ -1538,8 +1533,7 @@ int lastlog(struct cmd_context *cmd, int argc, char **argv)
+ 	if (!report_format_init(cmd, NULL, &report_group, &cmd->log_rh, NULL, NULL))
+ 		goto_out;
+ 
+-	if (arg_is_set(cmd, select_ARG) &&
+-	    !_do_report_get_selection(cmd, NULL, NULL, expected_idxs, &selection))
++	if (!_do_report_get_selection(cmd, CMDLOG, 1, NULL, &selection))
+ 		goto_out;
+ 
+ 	if (!dm_report_set_selection(cmd->log_rh, selection)) {
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 5c61ddd..80d0f32 100644
+index 80d0f32..4c24b16 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -3439,7 +3439,7 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
- 	int skip;
- 	int notfound;
- 	int already_locked;
--	int do_report_ret_code;
-+	int do_report_ret_code = 1;
+@@ -1771,7 +1771,7 @@ int init_selection_handle(struct cmd_context *cmd, struct processing_handle *han
+ 		return 0;
+ 	}
  
- 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_VG);
+-	if (!report_get_single_selection(cmd, &selection))
++	if (!report_get_single_selection(cmd, initial_report_type, &selection))
+ 		return_0;
  
+ 	sh->report_type = initial_report_type;
 
 
