@@ -1,60 +1,131 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 22 Jul 2016 12:42:35 +0000 (UTC)
-Subject: master - tests: check thin resize of raid10
-Message-ID: <20160722124235.D0C7160FAC@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Tue,  5 Jul 2016 18:54:27 +0000 (UTC)
+Subject: master - libdm: cache dm name in stats handle
+Message-ID: <20160705185427.C306360D29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7fc1617819236d4d6f8b0ffbcd4980fcc5bc5de6
-Commit:        7fc1617819236d4d6f8b0ffbcd4980fcc5bc5de6
-Parent:        5bb113c20469aa5027098465ddeaa3c652d4f8e5
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jul 22 11:07:54 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jul 22 14:41:47 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=69f808ac8d25e3c7ef39bd2de66fed1efd290bbe
+Commit:        69f808ac8d25e3c7ef39bd2de66fed1efd290bbe
+Parent:        4a66f02f8876edf6bbbc127d2888a0f50f8be611
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Fri Jun 17 12:17:33 2016 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Tue Jul 5 19:53:16 2016 +0100
 
-tests: check thin resize of raid10
+libdm: cache dm name in stats handle
 
+Cache the device-mapper name of a bound device in the dm_stats
+handle.
+
+This will be used by stats groups to report a device name or
+user defined alias for groups.
 ---
- test/shell/lvextend-thin-raid.sh |   18 +++++++++++++++++-
- 1 files changed, 17 insertions(+), 1 deletions(-)
+ libdm/libdm-stats.c |   44 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 44 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-raid.sh b/test/shell/lvextend-thin-raid.sh
-index 7014985..1688ffb 100644
---- a/test/shell/lvextend-thin-raid.sh
-+++ b/test/shell/lvextend-thin-raid.sh
-@@ -19,7 +19,7 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
- aux have_thin 1 0 0 || skip
- aux have_raid 1 3 0 || skip
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 58f8951..99e4d72 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -81,6 +81,7 @@ struct dm_stats {
+ 	char *bind_name; /* device-mapper device name */
+ 	char *bind_uuid; /* device-mapper UUID */
+ 	char *program_id; /* default program_id for this handle */
++	const char *name; /* cached device_name used for reporting */
+ 	struct dm_pool *mem; /* memory pool for region and counter tables */
+ 	struct dm_pool *hist_mem; /* separate pool for histogram tables */
+ 	uint64_t nr_regions; /* total number of present regions */
+@@ -167,6 +168,8 @@ struct dm_stats *dm_stats_create(const char *program_id)
+ 	dms->bind_name = NULL;
+ 	dms->bind_uuid = NULL;
  
--aux prepare_vg 3
-+aux prepare_vg 6
++	dms->name = NULL;
++
+ 	/* by default all regions use msec precision */
+ 	dms->timescale = NSEC_PER_MSEC;
+ 	dms->precise = 0;
+@@ -267,9 +270,12 @@ static void _stats_clear_binding(struct dm_stats *dms)
+ 		dm_pool_free(dms->mem, dms->bind_name);
+ 	if (dms->bind_uuid)
+ 		dm_pool_free(dms->mem, dms->bind_uuid);
++	if (dms->name)
++		dm_free((char *) dms->name);
  
- lvcreate --type raid1 -l2 --nosync -n pool $vg
- lvconvert --yes --thinpool $vg/pool "$dev3"
-@@ -32,4 +32,20 @@ lvextend -l+3 $vg/pool
- check lv_field $vg/pool seg_size_pe "5"
- check lv_field $vg/pool_tdata seg_size_pe "5" -a
+ 	dms->bind_name = dms->bind_uuid = NULL;
+ 	dms->bind_major = dms->bind_minor = -1;
++	dms->name = NULL;
+ }
  
-+lvremove -f $vg
+ int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor)
+@@ -446,6 +452,38 @@ bad:
+ }
+ 
+ /*
++ * Cache the dm device_name for the device bound to dms.
++ */
++static int _stats_set_name_cache(struct dm_stats *dms)
++{
++	struct dm_task *dmt;
 +
-+# check 'raid10' resize works for pool metadata resize
-+# https://bugzilla.redhat.com/1075644
-+lvcreate --type raid10 -m1 -L5 -i3 --nosync -n pool $vg
-+lvcreate --type raid10 -m1 -L3 -i3 --nosync -n meta $vg
-+lvconvert --yes --thinpool $vg/pool --poolmetadata $vg/meta
++	if (dms->name)
++		return 1;
 +
-+check lv_field $vg/pool_tdata lv_size "6.00m" -a
-+check lv_field $vg/pool_tmeta lv_size "3.00m" -a
++	if (!(dmt = dm_task_create(DM_DEVICE_INFO)))
++		return_0;
 +
-+lvextend --poolmetadatasize +1 --size +1 $vg/pool
++	if (!_set_stats_device(dms, dmt))
++		goto_bad;
 +
-+check lv_field $vg/pool_tdata lv_size "7.50m" -a
-+check lv_field $vg/pool_tmeta lv_size "4.50m" -a
++	if (!dm_task_run(dmt))
++		goto_bad;
 +
- vgremove -ff $vg
++	if (!(dms->name = dm_strdup(dm_task_get_name(dmt))))
++		goto_bad;
++
++	dm_task_destroy(dmt);
++
++	return 1;
++
++bad:
++	log_error("Could not retrieve device-mapper name for device.");
++	dm_task_destroy(dmt);
++	return 0;
++}
++
++/*
+  * Parse a histogram specification returned by the kernel in a
+  * @stats_list response.
+  */
+@@ -714,6 +752,9 @@ int dm_stats_list(struct dm_stats *dms, const char *program_id)
+ 	if (!program_id)
+ 		program_id = dms->program_id;
+ 
++	if (!_stats_set_name_cache(dms))
++		return_0;
++
+ 	r = dm_snprintf(msg, sizeof(msg), "@stats_list %s", program_id);
+ 
+ 	if (r < 0) {
+@@ -1347,6 +1388,8 @@ int dm_stats_populate(struct dm_stats *dms, const char *program_id,
+ 	if (all_regions && !dm_stats_list(dms, program_id)) {
+ 		log_error("Could not parse @stats_list response.");
+ 		goto bad;
++	} else if (!_stats_set_name_cache(dms)) {
++		goto_bad;
+ 	}
+ 
+ 	/* successful list but no regions registered */
+@@ -1391,6 +1434,7 @@ void dm_stats_destroy(struct dm_stats *dms)
+ 	dm_pool_destroy(dms->mem);
+ 	dm_pool_destroy(dms->hist_mem);
+ 	dm_free(dms->program_id);
++	dm_free((char *) dms->name);
+ 	dm_free(dms);
+ }
+ 
 
 
