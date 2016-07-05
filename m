@@ -1,157 +1,101 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  4 Jul 2016 15:42:06 +0000 (UTC)
-Subject: master - tests: using mkfs config file
-Message-ID: <20160704154206.293B060E3A@fedorahosted.org>
+From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
+Date: Tue,  5 Jul 2016 13:45:07 +0000 (UTC)
+Subject: master - coverity: fix issues detected in recent code
+Message-ID: <20160705134507.EC0436092B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e5d1f3d6c5433e8b118e572a507f121c45729715
-Commit:        e5d1f3d6c5433e8b118e572a507f121c45729715
-Parent:        2063d6bb0640c54d0356dff3618a1239357a55ae
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 4 17:39:17 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 4 17:41:10 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
+Commit:        82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
+Parent:        15b932a70e4a29f386ea57e1b845d637780b463b
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Jun 27 10:12:41 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Jun 27 11:22:29 2016 +0200
 
-tests: using  mkfs config file
+coverity: fix issues detected in recent code
 
-Use more predictable local config when creating ext4.
+Uninitialized variables  (UNINIT) /safe/guest2/covscan/LVM2.2.02.158/tools/toollib.c: 3520 in _process_pvs_in_vgs()
+Uninitialized variables  (UNINIT) Using uninitialized value "do_report_ret_code".
+
+Null pointer dereferences  (REVERSE_INULL) /safe/guest2/covscan/LVM2.2.02.158/libdm/libdm-report.c: 4745 in dm_report_output()
+Null pointer dereferences  (REVERSE_INULL) Null-checking "rh" suggests that it may be null, but it has already been dereferenced on all paths leading to the check.
+
+Incorrect expression  (MISSING_COMMA) /safe/guest2/covscan/LVM2.2.02.158/lib/log/log.c: 280 in _get_log_level_name()
+Incorrect expression  (MISSING_COMMA) In the initialization of "log_level_names", a suspicious concatenated string ""noticeinfo"" is produced.
+
+Null pointer dereferences  (FORWARD_NULL) /safe/guest2/covscan/LVM2.2.02.158/tools/reporter.c: 816 in_get_report_options()
+Null pointer dereferences  (FORWARD_NULL) Comparing "mem" to null implies that "mem" might be null.
 ---
- test/shell/thin-autoumount-dmeventd.sh |   34 +++++++++++++++++++++----------
- test/shell/thin-foreign-dmeventd.sh    |   10 ++++++--
- 2 files changed, 30 insertions(+), 14 deletions(-)
+ lib/log/log.c        |    2 +-
+ libdm/libdm-report.c |    4 ++--
+ tools/reporter.c     |    2 +-
+ tools/toollib.c      |    2 +-
+ 4 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/thin-autoumount-dmeventd.sh b/test/shell/thin-autoumount-dmeventd.sh
-index dd0884e..3729e18 100644
---- a/test/shell/thin-autoumount-dmeventd.sh
-+++ b/test/shell/thin-autoumount-dmeventd.sh
-@@ -16,6 +16,17 @@ SKIP_WITH_LVMPOLLD=1
+diff --git a/lib/log/log.c b/lib/log/log.c
+index b3453dc..30d71ef 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -277,7 +277,7 @@ static const char *_get_log_level_name(int use_stderr, int level)
+ 						"fatal", /* _LOG_FATAL */
+ 						"error", /* _LOG_ERROR */
+ 						"warn",  /* _LOG_WARN */
+-						"notice" /* _LOG_NOTICE */
++						"notice",/* _LOG_NOTICE */
+ 						"info",  /* _LOG_INFO */
+ 						"debug"  /* _LOG_DEBUG */
+ 						};
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 6bea34c..ad03c6e 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -4001,7 +4001,7 @@ static int _report_set_selection(struct dm_report *rh, const char *selection, in
+ 			goto_bad;
+ 	}
  
- export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
+-	if (!selection || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
++	if (!selection || !selection[0] || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
+ 		return 1;
  
-+mntdir="${PREFIX}mnt with space"
-+mntusedir="${PREFIX}mntuse"
-+
-+cleanup_mounted_and_teardown()
-+{
-+	umount "$mntdir" 2>/dev/null || true
-+	umount "$mntusedir" 2>/dev/null || true
-+	vgremove -ff $vg
-+	aux teardown
-+}
-+
- is_lv_opened_()
- {
- 	test $(get lv_field "$1" lv_device_open --binary) = "1"
-@@ -26,7 +37,8 @@ is_lv_opened_()
- #
- # Main
- #
--which mkfs.ext2 || skip
-+which mkfs.ext4 || skip
-+export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
- 
- aux have_thin 1 0 0 || skip
- 
-@@ -38,18 +50,17 @@ aux lvmconf "activation/thin_pool_autoextend_percent = 0" \
- 
- aux prepare_vg 2
- 
--mntdir="${PREFIX}mnt with space"
--mntusedir="${PREFIX}mntuse"
- 
- lvcreate -L8M -V8M -n $lv1 -T $vg/pool
- lvcreate -V8M -n $lv2 -T $vg/pool
- 
--mkfs.ext2 "$DM_DEV_DIR/$vg/$lv1"
--mkfs.ext2 "$DM_DEV_DIR/$vg/$lv2"
-+mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
-+mkfs.ext4 "$DM_DEV_DIR/$vg/$lv2"
- 
- lvchange --monitor y $vg/pool
- 
- mkdir "$mntdir" "$mntusedir"
-+trap 'cleanup_mounted_and_teardown' EXIT
- mount "$DM_DEV_DIR/mapper/$vg-$lv1" "$mntdir"
- mount "$DM_DEV_DIR/mapper/$vg-$lv2" "$mntusedir"
- 
-@@ -64,8 +75,10 @@ sync
- sleep 60 < "$mntusedir/file$$" &
- PID_SLEEP=$!
- 
--# Fill pool above 70%
--dd if=/dev/zero of="$mntdir/file$$" bs=1M count=6 conv=fdatasync
-+lvs -a $vg
-+# Fill pool above 95%  (to cause 'forced lazy umount)
-+dd if=/dev/zero of="$mntdir/file$$" bs=256K count=20 conv=fdatasync
-+sync
- lvs -a $vg
- 
- # Could loop here for a few secs so dmeventd can do some work
-@@ -77,6 +90,8 @@ for i in $(seq 1 12) ; do
- 	sleep 1
- done
- 
-+lvs -a $vg
-+
- is_lv_opened_ "$vg/$lv2" || \
- 	die "$mntusedir is not mounted here (sleep already expired??)"
- 
-@@ -84,10 +99,7 @@ is_lv_opened_ "$vg/$lv2" || \
- kill $PID_SLEEP
- wait
- 
--is_lv_opened_ "$vg/$lv2" && {
-+not is_lv_opened_ "$vg/$lv2" || {
- 	mount
- 	die "$mntusedir should have been unmounted by dmeventd!"
+ 	rh->selection->add_new_fields = add_new_fields;
+@@ -4742,7 +4742,7 @@ int dm_report_output(struct dm_report *rh)
+ 	else
+ 		r = _output_as_columns(rh);
+ out:
+-	if (r && rh && rh->group_item)
++	if (r && rh->group_item)
+ 		rh->group_item->output_done = 1;
+ 	return r;
  }
--
--vgremove -f $vg
--
-diff --git a/test/shell/thin-foreign-dmeventd.sh b/test/shell/thin-foreign-dmeventd.sh
-index a96b206..5d7488e 100644
---- a/test/shell/thin-foreign-dmeventd.sh
-+++ b/test/shell/thin-foreign-dmeventd.sh
-@@ -37,13 +37,17 @@ percent_() {
- aux have_thin 1 0 0 || skip
- which mkfs.ext4 || skip
+diff --git a/tools/reporter.c b/tools/reporter.c
+index ee2d251..40d449c 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -815,7 +815,7 @@ static int _get_report_options(struct cmd_context *cmd,
  
-+# Use our mkfs config file to get approximately same results
-+# TODO: maybe use it for all test via some 'prepare' function
-+export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
-+
- aux prepare_dmeventd
- aux prepare_pvs 2 64
+ 	if (!(mem = dm_pool_create("report_options", 128))) {
+ 		log_error("Failed to create temporary mempool to process report options.");
+-		goto out;
++		return ECMD_FAILED;
+ 	}
  
- vgcreate $vg -s 64K $(cat DEVICES)
+ 	if (single_args->report_type == CMDLOG) {
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 5c61ddd..80d0f32 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -3439,7 +3439,7 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
+ 	int skip;
+ 	int notfound;
+ 	int already_locked;
+-	int do_report_ret_code;
++	int do_report_ret_code = 1;
  
- # Create named pool only
--lvcreate --errorwhenfull y -L2100K -T $vg/pool
-+lvcreate --errorwhenfull y -L2 -T $vg/pool
+ 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_VG);
  
- POOL="$vg-pool"
- THIN="${PREFIX}_thin"
-@@ -65,7 +69,7 @@ dmsetup table
- dmsetup info -c
- 
- mkdir "$MOUNT_DIR"
--# This mkfs fills 2.2MB pool over 95%
-+# This mkfs should fill 2MB pool over 95%
- # no autoresize is configured
- mkfs.ext4 "$DM_DEV_DIR/mapper/$THIN"
- test $(percent_) -gt 95
-@@ -78,7 +82,7 @@ test $(percent_) -gt 95
- aux lvmconf 'activation/thin_pool_autoextend_percent = 10' \
- 	    'activation/thin_pool_autoextend_threshold = 75'
- 
--# Give it some time to left dmeventd do some work
-+# Give it some time to left dmeventd do some (failing to resize) work
- sleep 20
- 
- # And check foreign thin device is still mounted
 
 
