@@ -1,49 +1,43 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue,  5 Jul 2016 18:55:09 +0000 (UTC)
-Subject: master - dmstats: convert 'delete' to dm_stats_foreach_region()
-Message-ID: <20160705185509.7B46E61399@fedorahosted.org>
+Date: Tue,  5 Jul 2016 18:55:11 +0000 (UTC)
+Subject: master - dmstats: use 'statsname' and 'groupid' in default fields
+Message-ID: <20160705185511.8A5A2613E3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b0964acadf47aca1769138607338c5ea56570398
-Commit:        b0964acadf47aca1769138607338c5ea56570398
-Parent:        01cc11d9f85dc624ee2536120d7e1e1fabeadbe5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c014425b6f6d1f963cddfbea362141f0815c1837
+Commit:        c014425b6f6d1f963cddfbea362141f0815c1837
+Parent:        b0964acadf47aca1769138607338c5ea56570398
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Tue Jul 5 11:26:24 2016 +0100
+AuthorDate:    Tue Jul 5 12:10:47 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Tue Jul 5 19:53:16 2016 +0100
+CommitterDate: Tue Jul 5 19:53:17 2016 +0100
 
-dmstats: convert 'delete' to dm_stats_foreach_region()
+dmstats: use 'statsname' and 'groupid' in default fields
 
+Replace the 'name' field with 'statsname' in order to report alias
+names for groups, and include the 'group_id' field between statsname
+and the 'region_id' field to make it clear to the user when groups
+are in use.
 ---
- tools/dmsetup.c |    6 ++----
- 1 files changed, 2 insertions(+), 4 deletions(-)
+ tools/dmsetup.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 9d3d0a5..6900ba2 100644
+index 6900ba2..be6a276 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -5029,16 +5029,14 @@ static int _stats_delete(CMD_ARGS)
- 			goto out;
- 		}
- 	} else if (_switches[ALL_REGIONS_ARG]) {
--		dm_stats_walk_init(dms, DM_STATS_WALK_REGION);
--		dm_stats_walk_do(dms) {
-+		dm_stats_foreach_region(dms) {
- 			region_id = dm_stats_get_current_region(dms);
- 			if (!dm_stats_delete_region(dms, region_id)) {
- 				log_error("Could not delete statistics region.");
- 				goto out;
- 			}
- 			log_info("Deleted statistics region %" PRIu64, region_id);
--			dm_stats_walk_next(dms);
--		} dm_stats_walk_while(dms);
-+		}
- 	} else {
- 		dm_stats_delete_region(dms, region_id);
- 		log_info("Deleted statistics region " FMTu64 ".\n", region_id);
+@@ -4312,7 +4312,7 @@ static const char *splitname_report_options = "vg_name,lv_name,lv_layer";
+ 		"await,read_await,write_await"
+ 
+ /* Device, region and area metadata. */
+-#define STATS_DEV_INFO "name,region_id"
++#define STATS_DEV_INFO "statsname,group_id,region_id"
+ #define STATS_AREA_INFO "area_id,area_start,area_len"
+ #define STATS_AREA_INFO_FULL STATS_DEV_INFO ",region_start,region_len,area_count,area_id,area_start,area_len"
+ #define STATS_REGION_INFO STATS_DEV_INFO ",region_start,region_len,area_count,area_len"
 
 
