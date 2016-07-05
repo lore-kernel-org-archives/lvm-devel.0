@@ -1,61 +1,46 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue,  5 Jul 2016 18:54:31 +0000 (UTC)
-Subject: master - libdm: rename 'region' to 'skip_region' in _stats_walk_next
-Message-ID: <20160705185431.E601860DC8@fedorahosted.org>
+Date: Tue,  5 Jul 2016 18:55:30 +0000 (UTC)
+Subject: master - dmstats: fix <backtrace> in _display_info_cols()
+Message-ID: <20160705185530.5E041613E7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4cd3dcbbc20d0cd97a87d0e584dd91baea1ff34d
-Commit:        4cd3dcbbc20d0cd97a87d0e584dd91baea1ff34d
-Parent:        82e57660623c6b131632a5ec37deef3428de5399
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e9c6fd3cff806344f1d32bc16daadd732d0acef6
+Commit:        e9c6fd3cff806344f1d32bc16daadd732d0acef6
+Parent:        0f64f2d5fcf6cc9fa6529bde918938755b644128
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Jun 20 17:12:38 2016 +0100
+AuthorDate:    Tue Jul 5 18:42:29 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Tue Jul 5 19:53:16 2016 +0100
+CommitterDate: Tue Jul 5 19:53:17 2016 +0100
 
-libdm: rename 'region' to 'skip_region' in _stats_walk_next
+dmstats: fix <backtrace> in _display_info_cols()
 
-In libdm-stats.c 'region' usually refers to a 'struct region*'.
-Rename the argument to _stats_walk_start to avoid confusion.
+Remove a false <backtrace> in _display_info_cols(): it is not an
+error if there are no regions to display.
+
+Fixes commit e6724f03.
 ---
- libdm/libdm-stats.c |    7 +++----
- 1 files changed, 3 insertions(+), 4 deletions(-)
+ tools/dmsetup.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index e89f3d6..dc97346 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -1003,7 +1003,7 @@ bad:
- 	return 0;
- }
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 3ee9ed8..ed03c2b 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -884,9 +884,9 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
+ 		if (!dm_stats_list(obj.stats, _program_id))
+ 			goto_out;
  
--static void _stats_walk_next(const struct dm_stats *dms, int region,
-+static void _stats_walk_next(const struct dm_stats *dms, int skip_region,
- 			     uint64_t *cur_r, uint64_t *cur_a)
- {
- 	struct dm_stats_region *cur;
-@@ -1015,17 +1015,16 @@ static void _stats_walk_next(const struct dm_stats *dms, int region,
- 	cur = dms->regions + *cur_r;
- 	present = _stats_region_present(cur);
- 
--	if (region && present)
-+	if (skip_region && present)
- 		*cur_a = _nr_areas_region(cur);
- 
--	if (region || !present || ++(*cur_a) == _nr_areas_region(cur)) {
-+	if (skip_region || !present || ++(*cur_a) == _nr_areas_region(cur)) {
- 		*cur_a = 0;
- 		while(!dm_stats_region_present(dms, ++(*cur_r))
- 		      && *cur_r < dms->max_region)
- 			; /* keep walking until a present region is found
- 			   * or the end of the table is reached. */
+-		/* No regions to report */
++		/* No regions to report is not an error */
+ 		if (!dm_stats_get_nr_regions(obj.stats))
+-			goto_out;
++			goto out;
  	}
--
- }
  
- static void _stats_walk_start(const struct dm_stats *dms,
+ 	/* group report with no groups? */
 
 
