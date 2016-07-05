@@ -1,147 +1,131 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue,  5 Jul 2016 18:34:41 +0000 (UTC)
-Subject: master - libdm: rename dm_stats name, devno and uuid members
-Message-ID: <20160705183441.8A83460787@fedorahosted.org>
+Date: Tue,  5 Jul 2016 18:34:43 +0000 (UTC)
+Subject: master - libdm: cache dm name in stats handle
+Message-ID: <20160705183443.A844661207@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ea2fb03750f0cb413d4fd9e2b6819df2278528a3
-Commit:        ea2fb03750f0cb413d4fd9e2b6819df2278528a3
-Parent:        f883bca41b425d8eed1cbace2b9cdc67331f4e57
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f6a999b4371d506a5daa306dd6ae65e5bde8828a
+Commit:        f6a999b4371d506a5daa306dd6ae65e5bde8828a
+Parent:        ea2fb03750f0cb413d4fd9e2b6819df2278528a3
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Mar 10 16:51:02 2016 +0000
+AuthorDate:    Fri Jun 17 12:17:33 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Tue Jul 5 19:29:49 2016 +0100
+CommitterDate: Tue Jul 5 19:29:50 2016 +0100
 
-libdm: rename dm_stats name, devno and uuid members
+libdm: cache dm name in stats handle
 
-The device-mapper name, device numbers and uuid stored in the
-dm_stats handle are used only to bind the handle to a specific
-device in order to issue ioctls.
+Cache the device-mapper name of a bound device in the dm_stats
+handle.
 
-Rename them to "bind_*" to reflect this usage in preparation
-for caching the device-mapper name of the bound device in the
-dm_stats handle.
-
-This will be used to allow optional aliases to be set for
-dmstats groups.
+This will be used by stats groups to report a device name or
+user defined alias for groups.
 ---
- libdm/libdm-stats.c |   52 +++++++++++++++++++++++++-------------------------
- 1 files changed, 26 insertions(+), 26 deletions(-)
+ libdm/libdm-stats.c |   44 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 44 insertions(+), 0 deletions(-)
 
 diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 3d53755..58f8951 100644
+index 58f8951..99e4d72 100644
 --- a/libdm/libdm-stats.c
 +++ b/libdm/libdm-stats.c
-@@ -76,10 +76,10 @@ struct dm_stats_region {
- 
- struct dm_stats {
- 	/* device binding */
--	int major;  /* device major that this dm_stats object is bound to */
--	int minor;  /* device minor that this dm_stats object is bound to */
--	char *name; /* device-mapper device name */
--	char *uuid; /* device-mapper UUID */
-+	int bind_major;  /* device major that this dm_stats object is bound to */
-+	int bind_minor;  /* device minor that this dm_stats object is bound to */
-+	char *bind_name; /* device-mapper device name */
-+	char *bind_uuid; /* device-mapper UUID */
+@@ -81,6 +81,7 @@ struct dm_stats {
+ 	char *bind_name; /* device-mapper device name */
+ 	char *bind_uuid; /* device-mapper UUID */
  	char *program_id; /* default program_id for this handle */
++	const char *name; /* cached device_name used for reporting */
  	struct dm_pool *mem; /* memory pool for region and counter tables */
  	struct dm_pool *hist_mem; /* separate pool for histogram tables */
-@@ -162,10 +162,10 @@ struct dm_stats *dm_stats_create(const char *program_id)
- 		goto bad;
- 	}
+ 	uint64_t nr_regions; /* total number of present regions */
+@@ -167,6 +168,8 @@ struct dm_stats *dm_stats_create(const char *program_id)
+ 	dms->bind_name = NULL;
+ 	dms->bind_uuid = NULL;
  
--	dms->major = -1;
--	dms->minor = -1;
--	dms->name = NULL;
--	dms->uuid = NULL;
-+	dms->bind_major = -1;
-+	dms->bind_minor = -1;
-+	dms->bind_name = NULL;
-+	dms->bind_uuid = NULL;
- 
++	dms->name = NULL;
++
  	/* by default all regions use msec precision */
  	dms->timescale = NSEC_PER_MSEC;
-@@ -242,19 +242,19 @@ static void _stats_regions_destroy(struct dm_stats *dms)
+ 	dms->precise = 0;
+@@ -267,9 +270,12 @@ static void _stats_clear_binding(struct dm_stats *dms)
+ 		dm_pool_free(dms->mem, dms->bind_name);
+ 	if (dms->bind_uuid)
+ 		dm_pool_free(dms->mem, dms->bind_uuid);
++	if (dms->name)
++		dm_free((char *) dms->name);
  
- static int _set_stats_device(struct dm_stats *dms, struct dm_task *dmt)
- {
--	if (dms->name)
--		return dm_task_set_name(dmt, dms->name);
--	if (dms->uuid)
--		return dm_task_set_uuid(dmt, dms->uuid);
--	if (dms->major > 0)
--		return dm_task_set_major(dmt, dms->major)
--			&& dm_task_set_minor(dmt, dms->minor);
-+	if (dms->bind_name)
-+		return dm_task_set_name(dmt, dms->bind_name);
-+	if (dms->bind_uuid)
-+		return dm_task_set_uuid(dmt, dms->bind_uuid);
-+	if (dms->bind_major > 0)
-+		return dm_task_set_major(dmt, dms->bind_major)
-+			&& dm_task_set_minor(dmt, dms->bind_minor);
- 	return_0;
- }
- 
- static int _stats_bound(struct dm_stats *dms)
- {
--	if (dms->major > 0 || dms->name || dms->uuid)
-+	if (dms->bind_major > 0 || dms->bind_name || dms->bind_uuid)
- 		return 1;
- 	/* %p format specifier expects a void pointer. */
- 	log_debug("Stats handle at %p is not bound.", (void *) dms);
-@@ -263,13 +263,13 @@ static int _stats_bound(struct dm_stats *dms)
- 
- static void _stats_clear_binding(struct dm_stats *dms)
- {
--	if (dms->name)
--		dm_pool_free(dms->mem, dms->name);
--	if (dms->uuid)
--		dm_pool_free(dms->mem, dms->uuid);
-+	if (dms->bind_name)
-+		dm_pool_free(dms->mem, dms->bind_name);
-+	if (dms->bind_uuid)
-+		dm_pool_free(dms->mem, dms->bind_uuid);
- 
--	dms->name = dms->uuid = NULL;
--	dms->major = dms->minor = -1;
-+	dms->bind_name = dms->bind_uuid = NULL;
-+	dms->bind_major = dms->bind_minor = -1;
+ 	dms->bind_name = dms->bind_uuid = NULL;
+ 	dms->bind_major = dms->bind_minor = -1;
++	dms->name = NULL;
  }
  
  int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor)
-@@ -277,8 +277,8 @@ int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor)
- 	_stats_clear_binding(dms);
- 	_stats_regions_destroy(dms);
- 
--	dms->major = major;
--	dms->minor = minor;
-+	dms->bind_major = major;
-+	dms->bind_minor = minor;
- 
- 	return 1;
+@@ -446,6 +452,38 @@ bad:
  }
-@@ -288,7 +288,7 @@ int dm_stats_bind_name(struct dm_stats *dms, const char *name)
- 	_stats_clear_binding(dms);
- 	_stats_regions_destroy(dms);
  
--	if (!(dms->name = dm_pool_strdup(dms->mem, name)))
-+	if (!(dms->bind_name = dm_pool_strdup(dms->mem, name)))
- 		return_0;
+ /*
++ * Cache the dm device_name for the device bound to dms.
++ */
++static int _stats_set_name_cache(struct dm_stats *dms)
++{
++	struct dm_task *dmt;
++
++	if (dms->name)
++		return 1;
++
++	if (!(dmt = dm_task_create(DM_DEVICE_INFO)))
++		return_0;
++
++	if (!_set_stats_device(dms, dmt))
++		goto_bad;
++
++	if (!dm_task_run(dmt))
++		goto_bad;
++
++	if (!(dms->name = dm_strdup(dm_task_get_name(dmt))))
++		goto_bad;
++
++	dm_task_destroy(dmt);
++
++	return 1;
++
++bad:
++	log_error("Could not retrieve device-mapper name for device.");
++	dm_task_destroy(dmt);
++	return 0;
++}
++
++/*
+  * Parse a histogram specification returned by the kernel in a
+  * @stats_list response.
+  */
+@@ -714,6 +752,9 @@ int dm_stats_list(struct dm_stats *dms, const char *program_id)
+ 	if (!program_id)
+ 		program_id = dms->program_id;
  
- 	return 1;
-@@ -299,7 +299,7 @@ int dm_stats_bind_uuid(struct dm_stats *dms, const char *uuid)
- 	_stats_clear_binding(dms);
- 	_stats_regions_destroy(dms);
++	if (!_stats_set_name_cache(dms))
++		return_0;
++
+ 	r = dm_snprintf(msg, sizeof(msg), "@stats_list %s", program_id);
  
--	if (!(dms->uuid = dm_pool_strdup(dms->mem, uuid)))
-+	if (!(dms->bind_uuid = dm_pool_strdup(dms->mem, uuid)))
- 		return_0;
+ 	if (r < 0) {
+@@ -1347,6 +1388,8 @@ int dm_stats_populate(struct dm_stats *dms, const char *program_id,
+ 	if (all_regions && !dm_stats_list(dms, program_id)) {
+ 		log_error("Could not parse @stats_list response.");
+ 		goto bad;
++	} else if (!_stats_set_name_cache(dms)) {
++		goto_bad;
+ 	}
  
- 	return 1;
+ 	/* successful list but no regions registered */
+@@ -1391,6 +1434,7 @@ void dm_stats_destroy(struct dm_stats *dms)
+ 	dm_pool_destroy(dms->mem);
+ 	dm_pool_destroy(dms->hist_mem);
+ 	dm_free(dms->program_id);
++	dm_free((char *) dms->name);
+ 	dm_free(dms);
+ }
+ 
 
 
