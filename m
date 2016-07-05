@@ -1,42 +1,39 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue,  5 Jul 2016 18:35:30 +0000 (UTC)
-Subject: master - dmstats: rename 'type' field to 'obj_type'
-Message-ID: <20160705183530.2AE1F61253@fedorahosted.org>
+Date: Tue,  5 Jul 2016 18:35:32 +0000 (UTC)
+Subject: master - dmstats: add 'statsname' and 'obj_type' to default stats fields
+Message-ID: <20160705183532.3DE2E61253@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c2e043f0c188953e0d6fac91c0d08a4dfbc7fd23
-Commit:        c2e043f0c188953e0d6fac91c0d08a4dfbc7fd23
-Parent:        59a3705577c0533c12834ba97c8a83ea8bf8c997
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cc6177284a4c08e115368c938f03899b443b5edf
+Commit:        cc6177284a4c08e115368c938f03899b443b5edf
+Parent:        c2e043f0c188953e0d6fac91c0d08a4dfbc7fd23
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Tue Jul 5 12:27:46 2016 +0100
+AuthorDate:    Tue Jul 5 12:29:13 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Tue Jul 5 19:29:51 2016 +0100
 
-dmstats: rename 'type' field to 'obj_type'
+dmstats: add 'statsname' and 'obj_type' to default stats fields
 
-Rename the field and remove whitespace from the column heading:
-
-  "Object Type" -> "ObjType"
 ---
  tools/dmsetup.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index be6a276..c543972 100644
+index c543972..e0cade0 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -4284,7 +4284,7 @@ FIELD_F(STATS_META, STR, "#Bins", 9, dm_stats_hist_bins, "hist_bins", "The numbe
- FIELD_F(STATS_META, STR, "Histogram Bounds", 16, dm_stats_hist_bounds, "hist_bounds", "Latency histogram bin boundaries.")
- FIELD_F(STATS_META, STR, "Histogram Ranges", 16, dm_stats_hist_ranges, "hist_ranges", "Latency histogram bin ranges.")
- FIELD_F(STATS_META, STR, "Name", 16, dm_stats_name, "stats_name", "Stats name of current object.")
--FIELD_F(STATS_META, STR, "Object Type", 11, dm_stats_object_type, "type", "Type of stats object being reported.")
-+FIELD_F(STATS_META, STR, "ObjType", 11, dm_stats_object_type, "obj_type", "Type of stats object being reported.")
- {0, 0, 0, 0, "", "", NULL, NULL},
- /* *INDENT-ON* */
- };
+@@ -4312,7 +4312,7 @@ static const char *splitname_report_options = "vg_name,lv_name,lv_layer";
+ 		"await,read_await,write_await"
+ 
+ /* Device, region and area metadata. */
+-#define STATS_DEV_INFO "statsname,group_id,region_id"
++#define STATS_DEV_INFO "statsname,group_id,region_id,obj_type"
+ #define STATS_AREA_INFO "area_id,area_start,area_len"
+ #define STATS_AREA_INFO_FULL STATS_DEV_INFO ",region_start,region_len,area_count,area_id,area_start,area_len"
+ #define STATS_REGION_INFO STATS_DEV_INFO ",region_start,region_len,area_count,area_len"
 
 
