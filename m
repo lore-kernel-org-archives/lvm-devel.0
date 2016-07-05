@@ -1,85 +1,62 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue,  5 Jul 2016 18:54:46 +0000 (UTC)
-Subject: master - dmstats: add group alias support
-Message-ID: <20160705185446.A1F47612CA@fedorahosted.org>
+Date: Tue,  5 Jul 2016 18:54:48 +0000 (UTC)
+Subject: master - dmstats: add stats_name field
+Message-ID: <20160705185448.B154C61253@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b55daa28e89ebc19da1292baaeeed437501aaeec
-Commit:        b55daa28e89ebc19da1292baaeeed437501aaeec
-Parent:        0761863e28ec3184c0884b8f11f42f10a1374b9e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=402d840aa726277a10ed026c7c3a660800669b6d
+Commit:        402d840aa726277a10ed026c7c3a660800669b6d
+Parent:        b55daa28e89ebc19da1292baaeeed437501aaeec
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Mar 7 18:16:22 2016 +0000
+AuthorDate:    Mon Jun 13 14:28:37 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Tue Jul 5 19:53:16 2016 +0100
 
-dmstats: add group alias support
+dmstats: add stats_name field
 
+To allow the names used to describe statistics report objects to
+change (for e.g to support groups and region and group aliases)
+introduce a new "stats_name" field that evaluates to the correct
+name for the object being reported.
 ---
- tools/dmsetup.c |   13 +++++++++++--
- 1 files changed, 11 insertions(+), 2 deletions(-)
+ tools/dmsetup.c |   14 ++++++++++++++
+ 1 files changed, 14 insertions(+), 0 deletions(-)
 
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 36058c8..9f63608 100644
+index 9f63608..f7a3f74 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -156,6 +156,7 @@ enum {
- 	READ_ONLY = 0,
- 	ADD_NODE_ON_CREATE_ARG,
- 	ADD_NODE_ON_RESUME_ARG,
-+	ALIAS_ARG,
- 	ALL_DEVICES_ARG,
- 	ALL_PROGRAMS_ARG,
- 	ALL_REGIONS_ARG,
-@@ -5092,7 +5093,7 @@ out:
+@@ -3462,6 +3462,19 @@ static int _dm_stats_aux_data_disp(struct dm_report *rh,
+ 	return dm_report_field_string(rh, field, (const char * const *) &aux_data);
+ }
  
- static int _stats_group(CMD_ARGS)
- {
--	char *name, *regions = NULL;
-+	char *name, *alias = NULL, *regions = NULL;
- 	struct dm_stats *dms;
- 	uint64_t group_id;
- 	int r = 0;
-@@ -5124,6 +5125,9 @@ static int _stats_group(CMD_ARGS)
- 		name = argv[0];
- 	}
- 
-+	if (_switches[ALIAS_ARG])
-+		alias = _string_args[ALIAS_ARG];
++static int _dm_stats_name_disp(struct dm_report *rh,
++			       struct dm_pool *mem __attribute__((unused)),
++			       struct dm_report_field *field, const void *data,
++			       void *private __attribute__((unused)))
++{
++	const struct dm_stats *dms = (const struct dm_stats *) data;
++	const char *stats_name;
++	if (!(stats_name = dm_stats_get_alias(dms, DM_STATS_REGION_CURRENT)))
++		return_0;
 +
- 	if (!(dms = dm_stats_create(DM_STATS_PROGRAM_ID)))
- 		return_0;
- 
-@@ -5133,7 +5137,7 @@ static int _stats_group(CMD_ARGS)
- 	if (!dm_stats_list(dms, NULL))
- 		goto_out;
- 
--	if(!dm_stats_create_group(dms, regions, NULL, &group_id)) {
-+	if(!dm_stats_create_group(dms, regions, alias, &group_id)) {
- 		log_error("Could not create group on %s: %s", name, regions);
- 		goto out;
- 	}
-@@ -5841,6 +5845,7 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
- #ifdef HAVE_GETOPTLONG
- 	static struct option long_options[] = {
- 		{"readonly", 0, &ind, READ_ONLY},
-+		{"alias", 1, &ind, ALIAS_ARG},
- 		{"alldevices", 0, &ind, ALL_DEVICES_ARG},
- 		{"allprograms", 0, &ind, ALL_PROGRAMS_ARG},
- 		{"allregions", 0, &ind, ALL_REGIONS_ARG},
-@@ -5979,6 +5984,10 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
- 	optind = OPTIND_INIT;
- 	while ((ind = -1, c = GETOPTLONG_FN(*argcp, *argvp, "cCfG:hj:m:M:no:O:rS:u:U:vy",
- 					    long_options, NULL)) != -1) {
-+		if (ind == ALIAS_ARG) {
-+			_switches[ALIAS_ARG]++;
-+			_string_args[ALIAS_ARG] = optarg;
-+		}
- 		if (ind == ALL_DEVICES_ARG)
- 			_switches[ALL_DEVICES_ARG]++;
- 		if (ind == ALL_PROGRAMS_ARG)
++	return dm_report_field_string(rh, field, (const char * const *) &stats_name);
++}
++
+ static int _dm_stats_precise_disp(struct dm_report *rh,
+ 				  struct dm_pool *mem __attribute__((unused)),
+ 				  struct dm_report_field *field, const void *data,
+@@ -4229,6 +4242,7 @@ FIELD_F(STATS_META, STR, "Precise", 7, dm_stats_precise, "precise", "Set if nano
+ FIELD_F(STATS_META, STR, "#Bins", 9, dm_stats_hist_bins, "hist_bins", "The number of histogram bins configured.")
+ FIELD_F(STATS_META, STR, "Histogram Bounds", 16, dm_stats_hist_bounds, "hist_bounds", "Latency histogram bin boundaries.")
+ FIELD_F(STATS_META, STR, "Histogram Ranges", 16, dm_stats_hist_ranges, "hist_ranges", "Latency histogram bin ranges.")
++FIELD_F(STATS, STR, "Name", 16, dm_stats_name, "stats_name", "Stats name of current row.")
+ {0, 0, 0, 0, "", "", NULL, NULL},
+ /* *INDENT-ON* */
+ };
 
 
