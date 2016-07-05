@@ -1,159 +1,77 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue,  5 Jul 2016 13:45:12 +0000 (UTC)
-Subject: master - libdm: report: fix field width calculation when using dm_report_column_headings
-Message-ID: <20160705134512.3ABF66052A@fedorahosted.org>
+Date: Tue,  5 Jul 2016 13:45:14 +0000 (UTC)
+Subject: master - Merge branch 'master' of ssh://git.fedorahosted.org/git/lvm2
+Message-ID: <20160705134514.5150B6096F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c86d942193e35077537753de91970afbcb0acdd
-Commit:        6c86d942193e35077537753de91970afbcb0acdd
-Parent:        05196373bec81dcaad490a889388c57e7af1331a
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jun 27 14:27:43 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jun 27 14:33:28 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7cec710e37271999950d67faaf802e1598278fac
+Commit:        7cec710e37271999950d67faaf802e1598278fac
+Parent:        6c86d942193e35077537753de91970afbcb0acdd eac0706761e628532ffcd27f3e4d7fa559a5f818
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Wed Jun 29 16:34:42 2016 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Wed Jun 29 16:34:42 2016 +0200
 
-libdm: report: fix field width calculation when using dm_report_column_headings
+Merge branch 'master' of ssh://git.fedorahosted.org/git/lvm2
 
-This fixes commit 0ba5f4b8e977a6f2f45f95777da508b42d84c01a which moved
-field recalculation (field width and sort position) from
-dm_report_object to dm_report_output but it didn't handle the case when
-dm_report_column_headings was used separately to report headings (before
-dm_report_outpout call) and hence we ended up with intial widths for
-fields in the headings.
 
-If we're using dm_report_column_headings, we need to recalculate
-fields if we haven't done so yet, the same way as we do in
-dm_report_output.
----
- libdm/libdm-report.c |   65 +++++++++++++++++++++++++++++++------------------
- 1 files changed, 41 insertions(+), 24 deletions(-)
-
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index ad03c6e..8993201 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -25,7 +25,8 @@
-  */
- #define RH_SORT_REQUIRED	0x00000100
- #define RH_HEADINGS_PRINTED	0x00000200
--#define RH_ALREADY_REPORTED	0x00000400
-+#define RH_FIELD_CALC_NEEDED	0x00000400
-+#define RH_ALREADY_REPORTED	0x00000800
- 
- struct selection {
- 	struct dm_pool *mem;
-@@ -1282,6 +1283,8 @@ struct dm_report *dm_report_init(uint32_t *report_types,
- 	if (output_flags & DM_REPORT_OUTPUT_BUFFERED)
- 		rh->flags |= RH_SORT_REQUIRED;
- 
-+	rh->flags |= RH_FIELD_CALC_NEEDED;
-+
- 	dm_list_init(&rh->field_props);
- 	dm_list_init(&rh->rows);
- 
-@@ -4032,6 +4035,7 @@ static void _reset_field_props(struct dm_report *rh)
- 	struct field_properties *fp;
- 	dm_list_iterate_items(fp, &rh->field_props)
- 		fp->width = fp->initial_width;
-+	rh->flags |= RH_FIELD_CALC_NEEDED;
- }
- 
- int dm_report_set_selection(struct dm_report *rh, const char *selection)
-@@ -4188,11 +4192,45 @@ static int _report_headings(struct dm_report *rh)
- 	return 0;
- }
- 
-+static int _should_display_row(struct row *row)
-+{
-+	return row->field_sel_status || row->selected;
-+}
-+
-+static void _recalculate_fields(struct dm_report *rh)
-+{
-+	struct row *row;
-+	struct dm_report_field *field;
-+	size_t len;
-+
-+	dm_list_iterate_items(row, &rh->rows) {
-+		dm_list_iterate_items(field, &row->fields) {
-+			if ((rh->flags & RH_SORT_REQUIRED) &&
-+			    (field->props->flags & FLD_SORT_KEY)) {
-+				(*row->sort_fields)[field->props->sort_posn] = field;
-+			}
-+
-+			if (_should_display_row(row)) {
-+				len = (int) strlen(field->report_string);
-+				if ((len > field->props->width))
-+					field->props->width = len;
-+
-+			}
-+		}
-+	}
-+
-+	rh->flags &= ~RH_FIELD_CALC_NEEDED;
-+}
-+
- int dm_report_column_headings(struct dm_report *rh)
- {
- 	/* Columns-as-rows does not use _report_headings. */
- 	if (rh->flags & DM_REPORT_OUTPUT_COLUMNS_AS_ROWS)
- 		return 1;
-+
-+	if (rh->flags & RH_FIELD_CALC_NEEDED)
-+		_recalculate_fields(rh);
-+
- 	return _report_headings(rh);
- }
- 
-@@ -4246,11 +4284,6 @@ static int _row_compare(const void *a, const void *b)
- 	return 0;		/* Identical */
- }
- 
--static int _should_display_row(struct row *row)
--{
--	return row->field_sel_status || row->selected;
--}
--
- static int _sort_rows(struct dm_report *rh)
- {
- 	struct row *(*rows)[];
-@@ -4701,9 +4734,6 @@ static int _print_basic_report_header(struct dm_report *rh)
- 
- int dm_report_output(struct dm_report *rh)
- {
--	struct row *row;
--	struct dm_report_field *field;
--	size_t len;
- 	int r = 0;
- 
- 	if (_is_json_report(rh) &&
-@@ -4715,21 +4745,8 @@ int dm_report_output(struct dm_report *rh)
- 		goto out;
- 	}
- 
--	dm_list_iterate_items(row, &rh->rows) {
--		dm_list_iterate_items(field, &row->fields) {
--			if ((rh->flags & RH_SORT_REQUIRED) &&
--			    (field->props->flags & FLD_SORT_KEY)) {
--				(*row->sort_fields)[field->props->sort_posn] = field;
--			}
--
--			if (_should_display_row(row)) {
--				len = (int) strlen(field->report_string);
--				if ((len > field->props->width))
--					field->props->width = len;
--
--			}
--		}
--	}
-+	if (rh->flags & RH_FIELD_CALC_NEEDED)
-+		_recalculate_fields(rh);
- 
- 	if ((rh->flags & RH_SORT_REQUIRED))
- 		_sort_rows(rh);
+ VERSION                           |    2 +-
+ VERSION_DM                        |    2 +-
+ WHATS_NEW                         |   16 +-
+ WHATS_NEW_DM                      |    5 +-
+ daemons/lvmdbusd/background.py    |   83 +--
+ daemons/lvmdbusd/cmdhandler.py    |   59 ++-
+ daemons/lvmdbusd/job.py           |    2 +-
+ daemons/lvmdbusd/lv.py            |   36 +-
+ daemons/lvmdbusd/lvmdb.py         |  171 +++++-
+ daemons/lvmdbusd/main.py          |    6 +-
+ daemons/lvmdbusd/objectmanager.py |    2 +-
+ daemons/lvmdbusd/request.py       |    7 +-
+ daemons/lvmdbusd/vg.py            |   19 +-
+ daemons/lvmetad/lvmetad-core.c    |    9 +-
+ daemons/lvmlockd/lvmlockd-core.c  |    1 +
+ lib/cache/lvmetad.c               |  147 +++++-
+ lib/cache/lvmetad.h               |   11 +-
+ lib/config/defaults.h             |    3 +-
+ lib/format_text/archiver.c        |    1 +
+ lib/locking/locking.h             |    6 +-
+ lib/metadata/lv.c                 |   30 +-
+ lib/metadata/lv_manip.c           |    3 +-
+ lib/metadata/metadata-exported.h  |    1 -
+ lib/metadata/metadata.c           |   50 +-
+ lib/metadata/metadata.h           |    4 +
+ lib/metadata/pv_manip.c           |    2 +-
+ lib/metadata/raid_manip.c         | 1097 ++++++++++++++++++++++++++++++++++---
+ lib/metadata/replicator_manip.c   |    1 +
+ lib/metadata/segtype.c            |   13 +
+ lib/metadata/segtype.h            |    2 +
+ lib/metadata/takeover_matrix.h    |  120 ++++
+ lib/metadata/vg.c                 |    1 +
+ lib/metadata/vg.h                 |    1 +
+ lib/misc/util.h                   |    2 +
+ libdm/libdm-file.c                |    6 +-
+ liblvm/lvm_pv.c                   |    5 +-
+ liblvm/lvm_vg.c                   |    7 +-
+ test/dbus/lvmdbustest.py          |    6 +-
+ tools/lvconvert.c                 |    7 +-
+ tools/pvchange.c                  |    2 +-
+ tools/pvcreate.c                  |    2 +-
+ tools/pvdisplay.c                 |    2 +-
+ tools/pvremove.c                  |    2 +-
+ tools/pvscan.c                    |    4 +-
+ tools/reporter.c                  |    2 +-
+ tools/toollib.c                   |   10 +-
+ tools/vgcfgrestore.c              |   10 +-
+ tools/vgcreate.c                  |   10 +-
+ tools/vgextend.c                  |    2 +-
+ tools/vgimportclone.c             |    4 +-
+ tools/vgrename.c                  |    6 +-
+ tools/vgscan.c                    |    2 +-
+ tools/vgsplit.c                   |    6 +
+ 53 files changed, 1720 insertions(+), 290 deletions(-)
 
 
