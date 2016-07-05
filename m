@@ -1,162 +1,140 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue,  5 Jul 2016 18:35:38 +0000 (UTC)
-Subject: master - dmstats: rename 'aux_data' to 'user_data'
-Message-ID: <20160705183538.6D03F60FC0@fedorahosted.org>
+Date: Tue,  5 Jul 2016 18:35:40 +0000 (UTC)
+Subject: master - dmstats: rename --auxdata to --userdata
+Message-ID: <20160705183540.8510561277@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6fb39fce2189476fd77ad8259c7664c208748571
-Commit:        6fb39fce2189476fd77ad8259c7664c208748571
-Parent:        d4d9da6207a144a43ae8d441da5f8caed2285f5a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ced707df28a5950c26af9d5529a3c05e10bf217e
+Commit:        ced707df28a5950c26af9d5529a3c05e10bf217e
+Parent:        6fb39fce2189476fd77ad8259c7664c208748571
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Tue Jul 5 15:30:31 2016 +0100
+AuthorDate:    Tue Jul 5 15:54:02 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Tue Jul 5 19:29:51 2016 +0100
 
-dmstats: rename 'aux_data' to 'user_data'
+dmstats: rename --auxdata to --userdata
 
-Make it clear that the "aux data" presented in reports is the user
-data stored in the field (and does not include any library-internal
-state such as group descriptors) by renaming the field to user_data
-and changing the heading to "UserData".
 ---
- man/dmstats.8.in |   16 +++++++++-------
- tools/dmsetup.c  |   26 +++++++++++++-------------
- 2 files changed, 22 insertions(+), 20 deletions(-)
+ man/dmstats.8.in |    8 ++++----
+ tools/dmsetup.c  |   20 ++++++++++----------
+ 2 files changed, 14 insertions(+), 14 deletions(-)
 
 diff --git a/man/dmstats.8.in b/man/dmstats.8.in
-index 5d8e910..2175097 100644
+index 2175097..8530cae 100644
 --- a/man/dmstats.8.in
 +++ b/man/dmstats.8.in
-@@ -271,8 +271,10 @@ optional suffix selects units of:
- .BR \-\-auxdata
- .IR aux_data
- .br
--Specify auxilliary data (a string) to be stored with a new region.
--.
-+Specify user data (a word) to be stored with a new region. The value
-+is added to any internal auxilliary data (for example, group
-+information), and stored with the region in the aux_data field provided
-+by the kernel. Whitespace is not permitted.
+@@ -87,8 +87,8 @@ dmstats \(em device-mapper statistics management
+ .  IR start_sector
+ .  BR \-\-length
+ .  IR length | \fB\-\-segments ]
+-.  RB \%[ \-\-auxdata
+-.  IR data ]
++.  RB \%[ \-\-userdata
++.  IR user_data ]
+ .  RB [ \-\-programid
+ .  IR id ]
+ .  ad b
+@@ -268,8 +268,8 @@ optional suffix selects units of:
+ .HELP_UNITS
+ .
  .HP
- .BR \-\-clear
+-.BR \-\-auxdata
+-.IR aux_data
++.BR \-\-userdata
++.IR user_data
  .br
-@@ -501,9 +503,9 @@ one milisecond can only be used when precise timestamps are enabled: if
- \fB\-\-precise\fP is not given and values less than one milisecond are
- used it will be enabled automatically.
- 
--An optional \fBprogram_id\fP or \fBaux_data\fP string may be associated
-+An optional \fBprogram_id\fP or \fBuser_data\fP string may be associated
- with the region. A \fBprogram_id\fP may then be used to select regions
--for subsequent list, print, and report operations. The \fBaux_data\fP
-+for subsequent list, print, and report operations. The \fBuser_data\fP
- stores an arbitrary string and is not used by dmstats or the
- device-mapper kernel statistics subsystem.
- 
-@@ -724,7 +726,7 @@ when this value is close to 100%.
- Meta fields provide information about the groups, regions, or areas that
- the statistics values relate to. This includes the region and area
- identifier, start, length, and counts, as well as the program ID and
--auxiliary data values.
-+user data values.
- .TP
- .B region_id
- Region identifier. This is a non-negative integer returned by the kernel
-@@ -761,8 +763,8 @@ The number of areas in this region.
- .B program_id
- The program ID value associated with this region.
- .TP
--.B aux_data
--The auxiliary data value associated with this region.
-+.B user_data
-+The user data value associated with this region.
- .TP
- .B group_id
- Group identifier. This is a non-negative integer returned by the dmstats
+ Specify user data (a word) to be stored with a new region. The value
+ is added to any internal auxilliary data (for example, group
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index d48e423..b468fee 100644
+index b468fee..3ee9ed8 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -3482,16 +3482,16 @@ static int _dm_stats_program_id_disp(struct dm_report *rh,
- 	return dm_report_field_string(rh, field, (const char * const *) &program_id);
- }
- 
--static int _dm_stats_aux_data_disp(struct dm_report *rh,
--				     struct dm_pool *mem __attribute__((unused)),
--				     struct dm_report_field *field, const void *data,
--				     void *private __attribute__((unused)))
-+static int _dm_stats_user_data_disp(struct dm_report *rh,
-+				    struct dm_pool *mem __attribute__((unused)),
-+				    struct dm_report_field *field, const void *data,
-+				    void *private __attribute__((unused)))
- {
- 	const struct dm_stats *dms = (const struct dm_stats *) data;
--	const char *aux_data;
--	if (!(aux_data = dm_stats_get_current_region_aux_data(dms)))
-+	const char *user_data;
-+	if (!(user_data = dm_stats_get_current_region_aux_data(dms)))
- 		return_0;
--	return dm_report_field_string(rh, field, (const char * const *) &aux_data);
-+	return dm_report_field_string(rh, field, (const char * const *) &user_data);
- }
- 
- static int _dm_stats_name_disp(struct dm_report *rh,
-@@ -4280,7 +4280,7 @@ FIELD_F(STATS_META, SIZ, "ArOff", 5, dm_stats_area_offset, "area_offset", "Area
- FIELD_F(STATS_META, NUM, "#Areas", 6, dm_stats_area_count, "area_count", "Area count.")
- FIELD_F(STATS_META, NUM, "GrpID", 5, dm_stats_group_id, "group_id", "Group ID.")
- FIELD_F(STATS_META, STR, "ProgID", 6, dm_stats_program_id, "program_id", "Program ID.")
--FIELD_F(STATS_META, STR, "AuxDat", 6, dm_stats_aux_data, "aux_data", "Auxiliary data.")
-+FIELD_F(STATS_META, STR, "UserData", 8, dm_stats_user_data, "user_data", "Auxiliary data.")
- FIELD_F(STATS_META, STR, "Precise", 7, dm_stats_precise, "precise", "Set if nanosecond precision counters are enabled.")
- FIELD_F(STATS_META, STR, "#Bins", 9, dm_stats_hist_bins, "hist_bins", "The number of histogram bins configured.")
- FIELD_F(STATS_META, STR, "Histogram Bounds", 16, dm_stats_hist_bounds, "hist_bounds", "Latency histogram bin boundaries.")
-@@ -4760,7 +4760,7 @@ static int _do_stats_create_regions(struct dm_stats *dms,
- 				    uint64_t len, int64_t step,
- 				    int segments,
- 				    const char *program_id,
--				    const char *aux_data)
-+				    const char *user_data)
- {
- 	uint64_t this_start = 0, this_len = len, region_id = UINT64_C(0);
- 	const char *devname = NULL, *histogram = _string_args[BOUNDS_ARG];
-@@ -4821,7 +4821,7 @@ static int _do_stats_create_regions(struct dm_stats *dms,
- 			if (!dm_stats_create_region(dms, &region_id,
- 						    this_start, this_len, step,
- 						    precise, bounds,
--						    program_id, aux_data)) {
-+						    program_id, user_data)) {
- 				log_error("%s: Could not create statistics region.",
- 					  devname);
- 				goto out;
-@@ -4844,7 +4844,7 @@ out:
- static int _stats_create(CMD_ARGS)
- {
- 	struct dm_stats *dms;
--	const char *name, *aux_data = "", *program_id = DM_STATS_PROGRAM_ID;
-+	const char *name, *user_data = "", *program_id = DM_STATS_PROGRAM_ID;
- 	uint64_t start = 0, len = 0, areas = 0, area_size = 0;
- 	int64_t step = 0;
- 
-@@ -4926,7 +4926,7 @@ static int _stats_create(CMD_ARGS)
+@@ -163,7 +163,6 @@ enum {
+ 	AREA_ARG,
+ 	AREAS_ARG,
+ 	AREA_SIZE_ARG,
+-	AUX_DATA_ARG,
+ 	BOUNDS_ARG,
+ 	CHECKS_ARG,
+ 	CLEAR_ARG,
+@@ -220,6 +219,7 @@ enum {
+ 	UNBUFFERED_ARG,
+ 	UNITS_ARG,
+ 	UNQUOTED_ARG,
++	USER_DATA_ARG,
+ 	UUID_ARG,
+ 	VERBOSE_ARG,
+ 	VERIFYUDEV_ARG,
+@@ -4925,8 +4925,8 @@ static int _stats_create(CMD_ARGS)
+ 	if (!strlen(program_id) && !_switches[FORCE_ARG])
  		program_id = DM_STATS_PROGRAM_ID;
  
- 	if (_switches[AUX_DATA_ARG])
--		aux_data = _string_args[AUX_DATA_ARG];
-+		user_data = _string_args[AUX_DATA_ARG];
+-	if (_switches[AUX_DATA_ARG])
+-		user_data = _string_args[AUX_DATA_ARG];
++	if (_switches[USER_DATA_ARG])
++		user_data = _string_args[USER_DATA_ARG];
  
  	if (!(dms = dm_stats_create(DM_STATS_PROGRAM_ID)))
  		return_0;
-@@ -4956,7 +4956,7 @@ static int _stats_create(CMD_ARGS)
+@@ -5327,7 +5327,7 @@ static int _stats_help(CMD_ARGS);
+  *    clear [--regionid id] <device_name>
+  *    create [--areas nr_areas] [--areasize size]
+  *           [ [--start start] [--length len] | [--segments]]
+- *           [--auxdata data] [--programid id] [<device_name>]
++ *           [--userdata data] [--programid id] [<device_name>]
+  *    delete [--regionid] <device_name>
+  *    delete_all [--programid id]
+  *    group [--alias name] [--alldevices] [--regions <regions>] [<device_name>]
+@@ -5340,7 +5340,7 @@ static int _stats_help(CMD_ARGS);
  
- 	return _do_stats_create_regions(dms, name, start, len, step,
- 					_switches[SEGMENTS_ARG],
--					program_id, aux_data);
-+					program_id, user_data);
- 
- bad:
- 	dm_stats_destroy(dms);
+ #define AREA_OPTS "[--areas <nr_areas>] [--areasize <size>] "
+ #define CREATE_OPTS "[--start <start> [--length <len>]]\n\t\t" AREA_OPTS
+-#define ID_OPTS "[--programid <id>] [--auxdata <data> ] "
++#define ID_OPTS "[--programid <id>] [--userdata <data> ] "
+ #define SELECT_OPTS "[--programid <id>] [--regionid <id>] "
+ #define PRINT_OPTS "[--clear] " SELECT_OPTS
+ #define REPORT_OPTS "[--interval <seconds>] [--count <cnt>]\n\t\t[--units <u>]" SELECT_OPTS
+@@ -5429,7 +5429,7 @@ static void _stats_usage(FILE *out)
+ 	fprintf(out, "        [-h|--help]\n");
+ 	fprintf(out, "        [-v|--verbose [-v|--verbose ...]]\n");
+ 	fprintf(out, "        [--areas <nr_areas>] [--areasize <size>]\n");
+-	fprintf(out, "        [--auxdata <data>] [--clear]\n");
++	fprintf(out, "        [--userdata <data>] [--clear]\n");
+ 	fprintf(out, "        [--count <count>] [--interval <seconds>]\n");
+ 	fprintf(out, "        [-o <fields>] [-O|--sort <sort_fields>]\n");
+ 	fprintf(out, "	      [--programid <id>]\n");
+@@ -5973,7 +5973,6 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
+ 		{"area", 0, &ind, AREA_ARG},
+ 		{"areas", 1, &ind, AREAS_ARG},
+ 		{"areasize", 1, &ind, AREA_SIZE_ARG},
+-		{"auxdata", 1, &ind, AUX_DATA_ARG},
+ 		{"bounds", 1, &ind, BOUNDS_ARG},
+ 		{"checks", 0, &ind, CHECKS_ARG},
+ 		{"clear", 0, &ind, CLEAR_ARG},
+@@ -6031,6 +6030,7 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
+ 		{"uuid", 1, &ind, UUID_ARG},
+ 		{"unbuffered", 0, &ind, UNBUFFERED_ARG},
+ 		{"unquoted", 0, &ind, UNQUOTED_ARG},
++		{"userdata", 1, &ind, USER_DATA_ARG},
+ 		{"verbose", 1, &ind, VERBOSE_ARG},
+ 		{"verifyudev", 0, &ind, VERIFYUDEV_ARG},
+ 		{"version", 0, &ind, VERSION_ARG},
+@@ -6128,9 +6128,9 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
+ 			_switches[AREA_SIZE_ARG]++;
+ 			_string_args[AREA_SIZE_ARG] = optarg;
+ 		}
+-		if (ind == AUX_DATA_ARG) {
+-			_switches[AUX_DATA_ARG]++;
+-			_string_args[AUX_DATA_ARG] = optarg;
++		if (ind == USER_DATA_ARG) {
++			_switches[USER_DATA_ARG]++;
++			_string_args[USER_DATA_ARG] = optarg;
+ 		}
+ 		if (c == ':' || c == '?')
+ 			return_0;
 
 
