@@ -1,190 +1,147 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue,  5 Jul 2016 18:54:23 +0000 (UTC)
-Subject: master - libdm: add dm_bitset_parse_list()
-Message-ID: <20160705185423.83E3460D29@fedorahosted.org>
+Date: Tue,  5 Jul 2016 18:54:25 +0000 (UTC)
+Subject: master - libdm: rename dm_stats name, devno and uuid members
+Message-ID: <20160705185425.A0B0860D29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=81fad9e853c45a5c3e56b2bede3a3fc7d7bed30b
-Commit:        81fad9e853c45a5c3e56b2bede3a3fc7d7bed30b
-Parent:        d382e660356f1095040b8a84b54a0c1db0ab78b1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a66f02f8876edf6bbbc127d2888a0f50f8be611
+Commit:        4a66f02f8876edf6bbbc127d2888a0f50f8be611
+Parent:        81fad9e853c45a5c3e56b2bede3a3fc7d7bed30b
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Feb 18 16:14:43 2016 +0000
+AuthorDate:    Thu Mar 10 16:51:02 2016 +0000
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Tue Jul 5 19:53:16 2016 +0100
 
-libdm: add dm_bitset_parse_list()
+libdm: rename dm_stats name, devno and uuid members
 
-Add a function to parse a list of integer values and ranges into
-a dm_bitset representation. Individual values signify that that bit
-is set in the resulting mask and ranges are given as a pair of
-start and end values, M-N, such that M and N are the first and
-last members of the range (inclusive).
+The device-mapper name, device numbers and uuid stored in the
+dm_stats handle are used only to bind the handle to a specific
+device in order to issue ioctls.
 
-The implementation is based on the kernel's __bitmap_parselist()
-that is used for cpumasks and other set configuration passed in
-string form from user space.
+Rename them to "bind_*" to reflect this usage in preparation
+for caching the device-mapper name of the bound device in the
+dm_stats handle.
+
+This will be used to allow optional aliases to be set for
+dmstats groups.
 ---
- WHATS_NEW_DM                        |    1 +
- libdm/.exported_symbols.DM_1_02_129 |    1 +
- libdm/datastruct/bitset.c           |   98 +++++++++++++++++++++++++++++++++++
- libdm/libdevmapper.h                |   10 ++++
- 4 files changed, 110 insertions(+), 0 deletions(-)
+ libdm/libdm-stats.c |   52 +++++++++++++++++++++++++-------------------------
+ 1 files changed, 26 insertions(+), 26 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 30d6d82..28999f1 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.129 - 
- =================================
-+  Add dm_bitset_parse_list() to parse a string representation of a bitset.
-   Thin dmeventd plugin umounts lvm2 volume only when pool is 95% or more.
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 3d53755..58f8951 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -76,10 +76,10 @@ struct dm_stats_region {
  
- Version 1.02.128 - 25th June 2016
-diff --git a/libdm/.exported_symbols.DM_1_02_129 b/libdm/.exported_symbols.DM_1_02_129
-new file mode 100644
-index 0000000..fbd2a57
---- /dev/null
-+++ b/libdm/.exported_symbols.DM_1_02_129
-@@ -0,0 +1 @@
-+dm_bitset_parse_list
-diff --git a/libdm/datastruct/bitset.c b/libdm/datastruct/bitset.c
-index 5aaa887..2f84ea4 100644
---- a/libdm/datastruct/bitset.c
-+++ b/libdm/datastruct/bitset.c
-@@ -15,6 +15,8 @@
+ struct dm_stats {
+ 	/* device binding */
+-	int major;  /* device major that this dm_stats object is bound to */
+-	int minor;  /* device minor that this dm_stats object is bound to */
+-	char *name; /* device-mapper device name */
+-	char *uuid; /* device-mapper UUID */
++	int bind_major;  /* device major that this dm_stats object is bound to */
++	int bind_minor;  /* device minor that this dm_stats object is bound to */
++	char *bind_name; /* device-mapper device name */
++	char *bind_uuid; /* device-mapper UUID */
+ 	char *program_id; /* default program_id for this handle */
+ 	struct dm_pool *mem; /* memory pool for region and counter tables */
+ 	struct dm_pool *hist_mem; /* separate pool for histogram tables */
+@@ -162,10 +162,10 @@ struct dm_stats *dm_stats_create(const char *program_id)
+ 		goto bad;
+ 	}
  
- #include "dmlib.h"
+-	dms->major = -1;
+-	dms->minor = -1;
+-	dms->name = NULL;
+-	dms->uuid = NULL;
++	dms->bind_major = -1;
++	dms->bind_minor = -1;
++	dms->bind_name = NULL;
++	dms->bind_uuid = NULL;
  
-+#include <ctype.h>
-+
- /* FIXME: calculate this. */
- #define INT_SHIFT 5
+ 	/* by default all regions use msec precision */
+ 	dms->timescale = NSEC_PER_MSEC;
+@@ -242,19 +242,19 @@ static void _stats_regions_destroy(struct dm_stats *dms)
  
-@@ -103,3 +105,99 @@ int dm_bit_get_first(dm_bitset_t bs)
+ static int _set_stats_device(struct dm_stats *dms, struct dm_task *dmt)
  {
- 	return dm_bit_get_next(bs, -1);
+-	if (dms->name)
+-		return dm_task_set_name(dmt, dms->name);
+-	if (dms->uuid)
+-		return dm_task_set_uuid(dmt, dms->uuid);
+-	if (dms->major > 0)
+-		return dm_task_set_major(dmt, dms->major)
+-			&& dm_task_set_minor(dmt, dms->minor);
++	if (dms->bind_name)
++		return dm_task_set_name(dmt, dms->bind_name);
++	if (dms->bind_uuid)
++		return dm_task_set_uuid(dmt, dms->bind_uuid);
++	if (dms->bind_major > 0)
++		return dm_task_set_major(dmt, dms->bind_major)
++			&& dm_task_set_minor(dmt, dms->bind_minor);
+ 	return_0;
  }
-+
-+/*
-+ * Based on the Linux kernel __bitmap_parselist from lib/bitmap.c
-+ */
-+dm_bitset_t dm_bitset_parse_list(const char *str, struct dm_pool *mem)
-+{
-+	unsigned a, b;
-+	int c, old_c, totaldigits, ndigits, nmaskbits;
-+	int at_start, in_range;
-+	dm_bitset_t mask = NULL;
-+	const char *start = str;
-+	size_t len;
-+
-+scan:
-+	len = strlen(str);
-+	totaldigits = c = 0;
-+	nmaskbits = 0;
-+	do {
-+		at_start = 1;
-+		in_range = 0;
-+		a = b = 0;
-+		ndigits = totaldigits;
-+
-+		/* Get the next value or range of values */
-+		while (len) {
-+			old_c = c;
-+			c = *str++;
-+			len--;
-+			if (isspace(c))
-+				continue;
-+
-+			/* A '\0' or a ',' signal the end of a value or range */
-+			if (c == '\0' || c == ',')
-+				break;
-+			/*
-+			* whitespaces between digits are not allowed,
-+			* but it's ok if whitespaces are on head or tail.
-+			* when old_c is whilespace,
-+			* if totaldigits == ndigits, whitespace is on head.
-+			* if whitespace is on tail, it should not run here.
-+			* as c was ',' or '\0',
-+			* the last code line has broken the current loop.
-+			*/
-+			if ((totaldigits != ndigits) && isspace(old_c))
-+				goto_bad;
-+
-+			if (c == '-') {
-+				if (at_start || in_range)
-+					return_0;
-+				b = 0;
-+				in_range = 1;
-+				at_start = 1;
-+				continue;
-+			}
-+
-+			if (!isdigit(c))
-+				goto_bad;
-+
-+			b = b * 10 + (c - '0');
-+			if (!in_range)
-+				a = b;
-+			at_start = 0;
-+			totaldigits++;
-+		}
-+		if (ndigits == totaldigits)
-+			continue;
-+		/* if no digit is after '-', it's wrong */
-+		if (at_start && in_range)
-+			goto_bad;
-+		if (!(a <= b))
-+			goto_bad;
-+		if (b >= nmaskbits)
-+			nmaskbits = b + 1;
-+		while ((a <= b) && mask) {
-+			dm_bit_set(mask, a);
-+			a++;
-+		}
-+	} while (len && c == ',');
-+
-+	if (!mask) {
-+		if (!(mask = dm_bitset_create(mem, nmaskbits)))
-+			goto_bad;
-+		str = start;
-+		goto scan;
-+	}
-+
-+	return mask;
-+bad:
-+	if (mask) {
-+		if (mem)
-+			dm_pool_free(mem, mask);
-+		else
-+			dm_bitset_destroy(mask);
-+	}
-+	return NULL;
-+}
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 7fd765c..3668188 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1843,6 +1843,16 @@ int dm_bit_get_next(dm_bitset_t bs, int last_bit);
- #define dm_bit_copy(bs1, bs2) \
-    memcpy((bs1) + 1, (bs2) + 1, ((*(bs1) / DM_BITS_PER_INT) + 1) * sizeof(int))
  
-+/*
-+ * Parse a string representation of a bitset into a dm_bitset_t. The
-+ * notation used is identical to the kernel bitmap parser (cpuset etc.)
-+ * and supports both lists ("1,2,3") and ranges ("1-2,5-8"). If the mem
-+ * parameter is NULL memory for the bitset will be allocated using
-+ * dm_malloc(). Otherwise the bitset will be allocated using the supplied
-+ * dm_pool.
-+ */
-+dm_bitset_t dm_bitset_parse_list(const char *str, struct dm_pool *mem);
-+
- /* Returns number of set bits */
- static inline unsigned hweight32(uint32_t i)
+ static int _stats_bound(struct dm_stats *dms)
  {
+-	if (dms->major > 0 || dms->name || dms->uuid)
++	if (dms->bind_major > 0 || dms->bind_name || dms->bind_uuid)
+ 		return 1;
+ 	/* %p format specifier expects a void pointer. */
+ 	log_debug("Stats handle at %p is not bound.", (void *) dms);
+@@ -263,13 +263,13 @@ static int _stats_bound(struct dm_stats *dms)
+ 
+ static void _stats_clear_binding(struct dm_stats *dms)
+ {
+-	if (dms->name)
+-		dm_pool_free(dms->mem, dms->name);
+-	if (dms->uuid)
+-		dm_pool_free(dms->mem, dms->uuid);
++	if (dms->bind_name)
++		dm_pool_free(dms->mem, dms->bind_name);
++	if (dms->bind_uuid)
++		dm_pool_free(dms->mem, dms->bind_uuid);
+ 
+-	dms->name = dms->uuid = NULL;
+-	dms->major = dms->minor = -1;
++	dms->bind_name = dms->bind_uuid = NULL;
++	dms->bind_major = dms->bind_minor = -1;
+ }
+ 
+ int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor)
+@@ -277,8 +277,8 @@ int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor)
+ 	_stats_clear_binding(dms);
+ 	_stats_regions_destroy(dms);
+ 
+-	dms->major = major;
+-	dms->minor = minor;
++	dms->bind_major = major;
++	dms->bind_minor = minor;
+ 
+ 	return 1;
+ }
+@@ -288,7 +288,7 @@ int dm_stats_bind_name(struct dm_stats *dms, const char *name)
+ 	_stats_clear_binding(dms);
+ 	_stats_regions_destroy(dms);
+ 
+-	if (!(dms->name = dm_pool_strdup(dms->mem, name)))
++	if (!(dms->bind_name = dm_pool_strdup(dms->mem, name)))
+ 		return_0;
+ 
+ 	return 1;
+@@ -299,7 +299,7 @@ int dm_stats_bind_uuid(struct dm_stats *dms, const char *uuid)
+ 	_stats_clear_binding(dms);
+ 	_stats_regions_destroy(dms);
+ 
+-	if (!(dms->uuid = dm_pool_strdup(dms->mem, uuid)))
++	if (!(dms->bind_uuid = dm_pool_strdup(dms->mem, uuid)))
+ 		return_0;
+ 
+ 	return 1;
 
 
