@@ -1,65 +1,53 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed,  6 Jul 2016 16:04:28 +0000 (UTC)
-Subject: master - post-release
-Message-ID: <20160706160428.1D84860EEF@fedorahosted.org>
+Date: Wed,  6 Jul 2016 16:04:35 +0000 (UTC)
+Subject: v2_02_160 annotated tag has been created
+Message-ID: <20160706160435.4F8BF6147C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f6b98ec7cac4ce2c4022057eddf6c1e49a2f7748
-Commit:        f6b98ec7cac4ce2c4022057eddf6c1e49a2f7748
-Parent:        8ca874bc1f958cc2138bf13cbed492de5daff0c3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3bd5bad869cebc622a73087ebb665f4b5ee66a43
+Commit:        3bd5bad869cebc622a73087ebb665f4b5ee66a43
+Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Jul 6 17:04:25 2016 +0100
+AuthorDate:    2016-07-06 15:56 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Jul 6 17:04:25 2016 +0100
+CommitterDate: 2016-07-06 15:56 +0000
 
-post-release
+annotated tag: v2_02_160 has been created
+	    at 3bd5bad869cebc622a73087ebb665f4b5ee66a43 (tag)
+       tagging 8ca874bc1f958cc2138bf13cbed492de5daff0c3 (commit)
+      replaces v2_02_159
 
----
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+Release 2.02.160.
 
-diff --git a/VERSION b/VERSION
-index 35fe6dd..822a2c2 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.160(2)-git (2016-07-06)
-+2.02.161(2)-git (2016-07-06)
-diff --git a/VERSION_DM b/VERSION_DM
-index f0b4784..4dea605 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.130-git (2016-07-06)
-+1.02.131-git (2016-07-06)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 3780a41..5be0449 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.161 - 
-+================================
-+
- Version 2.02.160 - 6th July 2016
- ================================
-   Minor fixes from coverity.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index de24fc1..6a4a919 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.131 -
-+================================
-+
- Version 1.02.130 - 6th July 2016
- ================================
-   Minor fixes from coverity.
+Minor fixes from coverity.
+
+9 files changed, 66 insertions(+), 20 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEABECAAYFAld9Ki4ACgkQIoGRwVZ+LBd00wCg8A73SQ/fyjwvyueby0gx+COk
+x40An1WpY9HmMbK6fc2u8aeOFv9+4Ucr
+=yurb
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (3):
+      post-release
+      coverity: Fixes for recent changes.
+      pre-release
+
+Bryn M. Reeves (9):
+      libdm: fix mask leak in dm_bitset_parse_list
+      libdm: restore missing braces in _stats_walk_end_areas
+      libdm: test for zero interval_ns in _utilization() (Coverity)
+      libdm: check non-zero io count in _average_{rd,wr}_wait_time (Coverity)
+      dmstats: fix 'obj_type' field width
+      dmstats: simplify nr_areas calculation (CWE-561)
+      libdm: do not permit grouping regions with histograms
+      libdm: use log_err_once() for group histogram message
+      libdm: check for empty aux_data in _parse_aux_data_group()
 
 
