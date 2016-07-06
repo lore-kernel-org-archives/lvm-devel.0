@@ -1,53 +1,61 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed,  6 Jul 2016 16:04:35 +0000 (UTC)
-Subject: v2_02_160 annotated tag has been created
-Message-ID: <20160706160435.4F8BF6147C@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed,  6 Jul 2016 16:36:52 +0000 (UTC)
+Subject: master - man: clarify lvcreate size in extents
+Message-ID: <20160706163652.6FA5760FB5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3bd5bad869cebc622a73087ebb665f4b5ee66a43
-Commit:        3bd5bad869cebc622a73087ebb665f4b5ee66a43
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2016-07-06 15:56 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2016-07-06 15:56 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=351bcf5f82a76b897cd431e3709759507566ee7b
+Commit:        351bcf5f82a76b897cd431e3709759507566ee7b
+Parent:        f6b98ec7cac4ce2c4022057eddf6c1e49a2f7748
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jul 6 11:35:50 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jul 6 11:35:50 2016 -0500
 
-annotated tag: v2_02_160 has been created
-	    at 3bd5bad869cebc622a73087ebb665f4b5ee66a43 (tag)
-       tagging 8ca874bc1f958cc2138bf13cbed492de5daff0c3 (commit)
-      replaces v2_02_159
+man: clarify lvcreate size in extents
 
-Release 2.02.160.
+---
+ man/lvcreate.8.in |   23 +++++++++++------------
+ 1 files changed, 11 insertions(+), 12 deletions(-)
 
-Minor fixes from coverity.
-
-9 files changed, 66 insertions(+), 20 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
-
-iEYEABECAAYFAld9Ki4ACgkQIoGRwVZ+LBd00wCg8A73SQ/fyjwvyueby0gx+COk
-x40An1WpY9HmMbK6fc2u8aeOFv9+4Ucr
-=yurb
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (3):
-      post-release
-      coverity: Fixes for recent changes.
-      pre-release
-
-Bryn M. Reeves (9):
-      libdm: fix mask leak in dm_bitset_parse_list
-      libdm: restore missing braces in _stats_walk_end_areas
-      libdm: test for zero interval_ns in _utilization() (Coverity)
-      libdm: check non-zero io count in _average_{rd,wr}_wait_time (Coverity)
-      dmstats: fix 'obj_type' field width
-      dmstats: simplify nr_areas calculation (CWE-561)
-      libdm: do not permit grouping regions with histograms
-      libdm: use log_err_once() for group histogram message
-      libdm: check for empty aux_data in _parse_aux_data_group()
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index 3e2bf32..da308fa 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -329,19 +329,18 @@ is specified.
+ .IR LogicalExtentsNumber \c
+ .RB [ % { VG | PVS | FREE | ORIGIN }]
+ .br
+-Gives the number of logical extents to allocate for the new
+-logical volume.  The total number of physical extents allocated will be
+-greater than this, for example, if the volume is mirrored.
+-The number can also be expressed as a percentage of the total space
+-in the Volume Group with the suffix \fB%VG\fP, as a percentage of the
+-remaining free space in the Volume Group with the suffix \fB%FREE\fP, as a
+-percentage of the remaining free space for the specified
++The size of the new LV in logical extents.  The number of physical extents
++allocated may be different, and depends on the LV type, e.g.  mirroring.
++The number of logical extents can also be expressed as a percentage of the
++total space in the Volume Group with the suffix \fB%VG\fP, as a percentage
++of the remaining free space in the Volume Group with the suffix
++\fB%FREE\fP, as a percentage of the remaining free space for the specified
+ PhysicalVolume(s) with the suffix \fB%PVS\fP, or (for a snapshot) as a
+-percentage of the total space in the Origin Logical Volume with the
+-suffix \fB%ORIGIN\fP (i.e. \fB100%ORIGIN\fP provides space for the whole origin).
+-When expressed as a percentage, the number is treated
+-as an approximate upper limit for the number of physical extents
+-to be allocated (including extents used by any mirrors, for example).
++percentage of the total space in the Origin Logical Volume with the suffix
++\fB%ORIGIN\fP (i.e. \fB100%ORIGIN\fP provides space for the whole origin).
++When expressed as a percentage, the number is treated as an approximate
++upper limit, and the actual size of the LV (in logical extents) may be
++less.
+ .
+ .HP
+ .BR \-j | \-\-major
 
 
