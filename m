@@ -1,47 +1,53 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Wed,  6 Jul 2016 08:06:25 +0000 (UTC)
-Subject: master - libdm: restore missing braces in _stats_walk_end_areas
-Message-ID: <20160706080625.D16E16036F@fedorahosted.org>
+Date: Wed,  6 Jul 2016 08:15:32 +0000 (UTC)
+Subject: master - libdm: test for zero interval_ns in _utilization() (Coverity)
+Message-ID: <20160706081532.574B661CF5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5d3b136d38db40a6d26b8a09e7a4b504fa2f85d1
-Commit:        5d3b136d38db40a6d26b8a09e7a4b504fa2f85d1
-Parent:        69c721dd68a6ac517d7962f927f3f59f9e05d9c4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03e03e9c11f5731c225d6cb99a1f36d4d8b699f6
+Commit:        03e03e9c11f5731c225d6cb99a1f36d4d8b699f6
+Parent:        5d3b136d38db40a6d26b8a09e7a4b504fa2f85d1
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Jul 6 09:04:13 2016 +0100
+AuthorDate:    Wed Jul 6 09:12:51 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Jul 6 09:04:13 2016 +0100
+CommitterDate: Wed Jul 6 09:14:43 2016 +0100
 
-libdm: restore missing braces in _stats_walk_end_areas
+libdm: test for zero interval_ns in _utilization() (Coverity)
 
-Jumping to the end of the region table must only happen if there
-are no more present, non-skipped regions, and no group walk is
-configured to begin.
+It's possible for interval_ns to be zero if the interval is not
+set or the clock is misconfigured. Test for this before using the
+value as the divisor in the utilisation calculation.
 ---
- libdm/libdm-stats.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ libdm/libdm-stats.c |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
 diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 07503a5..057bbcc 100644
+index 057bbcc..c0ef38f 100644
 --- a/libdm/libdm-stats.c
 +++ b/libdm/libdm-stats.c
-@@ -1479,11 +1479,12 @@ static void _stats_walk_end_areas(const struct dm_stats *dms, uint64_t *flags,
- 		*cur_a = DM_STATS_WALK_REGION;
- 		*cur_r = DM_STATS_REGION_NOT_PRESENT;
- 		_stats_walk_next_present(dms, flags, cur_r, cur_a, cur_g);
--		if (!_stats_walk_any_unskipped(dms, flags, cur_r, cur_a))
-+		if (!_stats_walk_any_unskipped(dms, flags, cur_r, cur_a)) {
- 			/* no more regions */
- 			*flags &= ~DM_STATS_WALK_REGION;
- 			if (!(*flags & DM_STATS_WALK_GROUP))
- 				*cur_r = dms->max_region;
-+		}
- 	}
+@@ -2656,10 +2656,19 @@ static int _utilization(const struct dm_stats *dms, double *util,
+ 	 * for the last interval; do not allow a value > 100% utilization
+ 	 * to be passed to a dm_make_percent() call. We expect to see these
+ 	 * at startup if counters have not been cleared before the first read.
++	 *
++	 * A zero interval_ns is also an error since metrics cannot be
++	 * calculated without a defined interval - return zero and emit a
++	 * backtrace in this case.
+ 	 */
+ 	io_nsecs = dm_stats_get_counter(dms, DM_STATS_IO_NSECS,
+ 					region_id, area_id);
  
- 	if (*flags & DM_STATS_WALK_REGION)
++	if (!interval_ns) {
++		*util = 0.0;
++		return_0;
++	}
++
+ 	io_nsecs = ((io_nsecs < interval_ns) ? io_nsecs : interval_ns);
+ 
+ 	*util = (double) io_nsecs / (double) interval_ns;
 
 
