@@ -1,66 +1,41 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Wed,  6 Jul 2016 08:25:05 +0000 (UTC)
-Subject: master - libdm: check non-zero io count in _average_{rd, wr}_wait_time (Coverity)
-Message-ID: <20160706082505.18AFE60DDB@fedorahosted.org>
+Date: Wed,  6 Jul 2016 08:38:40 +0000 (UTC)
+Subject: master - dmstats: fix 'obj_type' field width
+Message-ID: <20160706083840.E5F8D61259@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=95ef0cdb461dfb7b7e6ac8e2484564fe0b5ec0ed
-Commit:        95ef0cdb461dfb7b7e6ac8e2484564fe0b5ec0ed
-Parent:        03e03e9c11f5731c225d6cb99a1f36d4d8b699f6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21b946dfb75c893827ce5caafd16cb09be4fbeeb
+Commit:        21b946dfb75c893827ce5caafd16cb09be4fbeeb
+Parent:        95ef0cdb461dfb7b7e6ac8e2484564fe0b5ec0ed
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Jul 6 09:20:05 2016 +0100
+AuthorDate:    Wed Jul 6 09:37:59 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Jul 6 09:23:13 2016 +0100
+CommitterDate: Wed Jul 6 09:37:59 2016 +0100
 
-libdm: check non-zero io count in _average_{rd,wr}_wait_time (Coverity)
+dmstats: fix 'obj_type' field width
 
-Although a non-zero value for the number of ticks spent doing IO
-should imply a non-zero number of IOs in the interval test for
-this explicitly to avoid a divide-by-zero in the event of bad
-counter data.
+The header for 'obj_type' was changed from 'Object Type' to
+'ObjType': update the minimum field width to match this change.
 ---
- libdm/libdm-stats.c |   15 ++++++++++++---
- 1 files changed, 12 insertions(+), 3 deletions(-)
+ tools/dmsetup.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index c0ef38f..c669b51 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -2600,11 +2600,15 @@ static int _average_rd_wait_time(const struct dm_stats *dms, double *await,
- 
- 	rd_io_ticks = dm_stats_get_counter(dms, DM_STATS_READ_NSECS,
- 					   region_id, area_id);
--
- 	nr_rd_ios = dm_stats_get_counter(dms, DM_STATS_READS_COUNT,
- 					 region_id, area_id);
- 
--	if (rd_io_ticks > 0)
-+	/*
-+	 * If rd_io_ticks is > 0 this should imply that nr_rd_ios is
-+	 * also > 0 (unless a kernel bug exists). Test for both here
-+	 * before using the IO count as a divisor (Coverity).
-+	 */
-+	if (rd_io_ticks > 0 && nr_rd_ios > 0)
- 		*await = (double) rd_io_ticks / (double) nr_rd_ios;
- 	else
- 		*await = 0.0;
-@@ -2622,7 +2626,12 @@ static int _average_wr_wait_time(const struct dm_stats *dms, double *await,
- 	nr_wr_ios = dm_stats_get_counter(dms, DM_STATS_WRITES_COUNT,
- 					 region_id, area_id);
- 
--	if (wr_io_ticks > 0)
-+	/*
-+	 * If wr_io_ticks is > 0 this should imply that nr_wr_ios is
-+	 * also > 0 (unless a kernel bug exists). Test for both here
-+	 * before using the IO count as a divisor (Coverity).
-+	 */
-+	if (wr_io_ticks > 0 && nr_wr_ios > 0)
- 		*await = (double) wr_io_ticks / (double) nr_wr_ios;
- 	else
- 		*await = 0.0;
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index ed03c2b..4d9bb07 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -4286,7 +4286,7 @@ FIELD_F(STATS_META, STR, "#Bins", 9, dm_stats_hist_bins, "hist_bins", "The numbe
+ FIELD_F(STATS_META, STR, "Histogram Bounds", 16, dm_stats_hist_bounds, "hist_bounds", "Latency histogram bin boundaries.")
+ FIELD_F(STATS_META, STR, "Histogram Ranges", 16, dm_stats_hist_ranges, "hist_ranges", "Latency histogram bin ranges.")
+ FIELD_F(STATS_META, STR, "Name", 16, dm_stats_name, "stats_name", "Stats name of current object.")
+-FIELD_F(STATS_META, STR, "ObjType", 11, dm_stats_object_type, "obj_type", "Type of stats object being reported.")
++FIELD_F(STATS_META, STR, "ObjType", 7, dm_stats_object_type, "obj_type", "Type of stats object being reported.")
+ {0, 0, 0, 0, "", "", NULL, NULL},
+ /* *INDENT-ON* */
+ };
 
 
