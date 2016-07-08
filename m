@@ -1,47 +1,38 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Fri,  8 Jul 2016 18:27:03 +0000 (UTC)
-Subject: master - doc: mention --segments grouping in dmstats.8.in
-Message-ID: <20160708182703.C9483610EC@fedorahosted.org>
+Date: Fri,  8 Jul 2016 18:27:05 +0000 (UTC)
+Subject: master - WHATS_NEW_DM: add --segments grouping and resource leak fix
+Message-ID: <20160708182705.E76A2610EC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6cb0c7bb5c41c4fa2bdc1604e86154efa946c600
-Commit:        6cb0c7bb5c41c4fa2bdc1604e86154efa946c600
-Parent:        bd1f4987eb954705e6ba8997ac37de025074e539
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=008c57714ae81986fbac0a2c5574b9891a481906
+Commit:        008c57714ae81986fbac0a2c5574b9891a481906
+Parent:        6cb0c7bb5c41c4fa2bdc1604e86154efa946c600
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Jul 7 15:10:07 2016 +0100
+AuthorDate:    Thu Jul 7 14:37:49 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Fri Jul 8 17:27:52 2016 +0100
 
-doc: mention --segments grouping in dmstats.8.in
+WHATS_NEW_DM: add --segments grouping and resource leak fix
 
 ---
- man/dmstats.8.in |   10 +++++++---
- 1 files changed, 7 insertions(+), 3 deletions(-)
+ WHATS_NEW_DM |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/man/dmstats.8.in b/man/dmstats.8.in
-index def83ca..96aca01 100644
---- a/man/dmstats.8.in
-+++ b/man/dmstats.8.in
-@@ -460,9 +460,13 @@ optional suffix selects units of:
- .HP
- .BR \-\-segments
- .br
--Create a new statistics region for each target contained in the target
--device. This causes a separate region to be allocated for each segment
--of the device.
-+When used with \fBcreate\fP, create a new statistics region for each
-+target contained in the given device(s). This causes a separate region
-+to be allocated for each segment of the device.
-+
-+The newly created regions are automatically placed into a group unless
-+the \fB\-\-nogroup\fP option is given. When grouping is enabled a group
-+alias may be specified using the \fB\-\-alias\fP option.
- .
- .HP
- .BR \-\-statstype
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 86d000b..40452a1 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,7 @@
+ Version 1.02.131 -
+ ================================
++  Automatically group regions with 'create --segments' unless --nogroup.
++  Fix resource leak when deleting the first member of a group.
+   Allow --bounds with 'create --filemap' for dmstats.
+   Enable creation of filemap regions with histograms.
+   Enable histogram aggregation for regions with more than one area.
 
 
