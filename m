@@ -1,77 +1,71 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Fri,  8 Jul 2016 18:26:55 +0000 (UTC)
-Subject: master - libdm: enable creation of filemap regions with histograms
-Message-ID: <20160708182655.5576A610E4@fedorahosted.org>
+Date: Fri,  8 Jul 2016 18:26:57 +0000 (UTC)
+Subject: master - dmstats: allow --bounds with 'create --filemap'
+Message-ID: <20160708182657.69465610E4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4bb57341bd99a7d1af1a6a9ed84122369f362ba0
-Commit:        4bb57341bd99a7d1af1a6a9ed84122369f362ba0
-Parent:        c3caf4b80bbade402ba57c32090222214a9bc177
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bce1bc4ca34a72389f78e10e968417c8d60ef856
+Commit:        bce1bc4ca34a72389f78e10e968417c8d60ef856
+Parent:        4bb57341bd99a7d1af1a6a9ed84122369f362ba0
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Jul 7 09:47:19 2016 +0100
+AuthorDate:    Thu Jul 7 09:48:09 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Fri Jul 8 17:27:52 2016 +0100
 
-libdm: enable creation of filemap regions with histograms
+dmstats: allow --bounds with 'create --filemap'
 
 ---
- libdm/libdm-stats.c |   19 ++++++++++---------
- 1 files changed, 10 insertions(+), 9 deletions(-)
+ tools/dmsetup.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 55f1010..6504289 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -4247,6 +4247,7 @@ static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 637a82a..b31788c 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -4882,7 +4882,9 @@ static char *_get_abspath(const char *path)
+ static int _stats_create_file(CMD_ARGS)
  {
- 	struct _extent *extents = NULL;
- 	uint64_t *regions = NULL, i;
-+	char *hist_arg = NULL;
- 	struct statfs fsbuf;
- 	struct stat buf;
- 
-@@ -4279,6 +4280,12 @@ static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
- 	if (!(extents = _stats_get_extents_for_file(dms->mem, fd, count)))
- 		return_0;
- 
-+        if (bounds) {
-+                /* _build_histogram_arg enables precise if vals < 1ms. */
-+                if (!(hist_arg = _build_histogram_arg(bounds, &precise)))
-+                        goto_out;
-+        }
-+
- 	/* make space for end-of-table marker */
- 	if (!(regions = dm_malloc((1 + *count) * sizeof(*regions)))) {
- 		log_error("Could not allocate memory for region IDs.");
-@@ -4286,9 +4293,9 @@ static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
+ 	const char *alias, *program_id = DM_STATS_PROGRAM_ID;
++	const char *histogram = _string_args[BOUNDS_ARG];
+ 	uint64_t *regions, *region, count = 0;
++	struct dm_histogram *bounds = NULL;
+ 	char *path, *abspath = NULL;
+ 	int group, fd, precise;
+ 	struct dm_stats *dms;
+@@ -4907,11 +4909,6 @@ static int _stats_create_file(CMD_ARGS)
+ 		return 0;
  	}
  
- 	for (i = 0; i < *count; i++) {
--		if (!_stats_create_region(dms, regions + i,
--					  extents[i].start, extents[i].len, -1,
--					  precise, NULL, dms->program_id, "")) {
-+		if (!_stats_create_region(dms, regions + i, extents[i].start,
-+					  extents[i].len, -1, precise, hist_arg,
-+					  dms->program_id, "")) {
- 			log_error("Failed to create region " FMTu64 " of "
- 				  FMTu64 " at " FMTu64 ".", i, *count,
- 				  extents[i].start);
-@@ -4321,12 +4328,6 @@ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
- {
- 	uint64_t *regions, count = 0;
- 
--	if (bounds) {
--		log_error("File mapped groups with histograms are not "
--			  "yet supported.");
--		return NULL;
+-	if (_switches[BOUNDS_ARG]) {
+-		log_error("--bounds is not yet supported with --filemap.");
+-		return 0;
 -	}
 -
- 	if (alias && !group) {
- 		log_error("Cannot set alias without grouping regions.");
- 		return NULL;
+ 	/* _stats_create_file does not use _process_all() */
+ 	if (names) {
+ 		log_error("Device argument not compatible with --filemap.");
+@@ -4945,6 +4942,9 @@ static int _stats_create_file(CMD_ARGS)
+ 		}
+ 	}
+ 
++	if (histogram && !(bounds = dm_histogram_bounds_from_string(histogram)))
++		return_0;
++
+ 	if (_switches[PROGRAM_ID_ARG])
+ 		program_id = _string_args[PROGRAM_ID_ARG];
+ 	if (!strlen(program_id) && !_switches[FORCE_ARG])
+@@ -4988,7 +4988,7 @@ static int _stats_create_file(CMD_ARGS)
+ 	}
+ 
+ 	regions = dm_stats_create_regions_from_fd(dms, fd, group, precise,
+-						  NULL, alias);
++						  bounds, alias);
+ 
+ 	if (close(fd))
+ 		log_error("Error closing %s", path);
 
 
