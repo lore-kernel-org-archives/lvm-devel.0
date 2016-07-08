@@ -1,77 +1,86 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Fri,  8 Jul 2016 18:27:10 +0000 (UTC)
-Subject: master - dmstats: use canonical path when reporting errors
-Message-ID: <20160708182710.21759610EC@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Fri,  8 Jul 2016 19:34:42 +0000 (UTC)
+Subject: master - lvconvert: don't show aliases in error output
+Message-ID: <20160708193442.C371C6105E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5cd39f1dc4013d5d9b150abe544187413daeaac9
-Commit:        5cd39f1dc4013d5d9b150abe544187413daeaac9
-Parent:        17cbcc85bdd31d6b1e0d3af8e43c39a8c58561b5
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Fri Jul 8 17:06:35 2016 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Fri Jul 8 17:27:52 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=39921284a03fd2d2c3f3ac22c3e69cba913494bf
+Commit:        39921284a03fd2d2c3f3ac22c3e69cba913494bf
+Parent:        5cd39f1dc4013d5d9b150abe544187413daeaac9
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Jul 8 13:29:19 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Jul 8 14:34:36 2016 -0500
 
-dmstats: use canonical path when reporting errors
+lvconvert: don't show aliases in error output
 
-When a 'dmstats create --filemap' operation fails (e.g. during
-open(2), close(2), or dm_stats_create_regions_from_fd()), use the
-canonical version of the path. This avoids cryptic/confusing error
-messages when symbolic links exist in the path argument given:
-
-  # findmnt /var/lib/libvirt/images -otarget,source
-  TARGET                  SOURCE
-  /var/lib/libvirt/images /dev/mapper/vg_hex-lv_images
-
-  # readlink /var/lib/libvirt/images/my.img
-  /boot/my.img
-
-  # dmstats create --filemap /var/lib/libvirt/images/my.img
-  Cannot map file: not a device-mapper device.
-  Could not create regions from file /var/lib/libvirt/images/my.img
-  Command failed
-
-Using the canonical path the error is immediately obvious:
-
-  # dmstats create --filemap /var/lib/libvirt/images/my.img
-  Cannot map file: not a device-mapper device.
-  Could not create regions from file /boot/my.img
-  Command failed
+We want to consistently use the standard command form.
+The aliases are now mentioned in the man page for reference.
 ---
- tools/dmsetup.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ tools/lvconvert.c |   24 ++++++++++++------------
+ 1 files changed, 12 insertions(+), 12 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index eb7c83a..34e33d3 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -5034,7 +5034,7 @@ static int _stats_create_file(CMD_ARGS)
- 	fd = open(abspath, O_RDONLY);
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index ce858ae..0009270 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4076,9 +4076,9 @@ static int _convert_thin_pool(struct cmd_context *cmd, struct logical_volume *lv
  
- 	if (fd < 0) {
--		log_error("Could not open %s for reading", path);
-+		log_error("Could not open %s for reading", abspath);
- 		goto bad;
- 	}
+ 	log_error("Operation not permitted on thin pool LV %s", display_lvname(lv));
+ 	log_error("Operations permitted on a thin pool LV are:\n"
+-		  "  --splitcache           (operates on cache sub LV)\n"
+-		  "  --uncache              (operates on cache sub LV)\n"
+-		  "  --type cache | --cache (operates on data sub LV)\n"
++		  "  --splitcache  (operates on cache sub LV)\n"
++		  "  --uncache     (operates on cache sub LV)\n"
++		  "  --type cache  (operates on data sub LV)\n"
+ 		  "  --repair\n");
+ 	return 0;
+ }
+@@ -4137,7 +4137,7 @@ static int _convert_cache_pool(struct cmd_context *cmd, struct logical_volume *l
  
-@@ -5060,12 +5060,12 @@ static int _stats_create_file(CMD_ARGS)
- 						  bounds, alias);
+ 	log_error("Operation not permitted on cache pool LV %s", display_lvname(lv));
+ 	log_error("Operations permitted on a cache pool LV are:\n"
+-		  "  --splitcache        (operates on cache LV)\n");
++		  "  --splitcache    (operates on cache LV)\n");
+ 	return 0;
+ }
  
- 	if (close(fd))
--		log_error("Error closing %s", path);
-+		log_error("Error closing %s", abspath);
- 
- 	fd = -1;
- 
- 	if (!regions) {
--		log_error("Could not create regions from file %s", path);
-+		log_error("Could not create regions from file %s", abspath);
- 		goto bad;
- 	}
+@@ -4255,9 +4255,9 @@ static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
+ 		  "  --merge\n"
+ 		  "  --repair\n"
+ 		  "  --replace\n"
+-		  "  --type snapshot | --snapshot\n"
+-		  "  --type thin | --thin\n"
+-		  "  --type cache | --cache\n"
++		  "  --type snapshot\n"
++		  "  --type thin\n"
++		  "  --type cache\n"
+ 		  "  --type thin-pool\n"
+ 		  "  --type cache-pool\n"
+ 		  "  --type raid*\n"
+@@ -4316,13 +4316,13 @@ static int _convert_striped(struct cmd_context *cmd, struct logical_volume *lv,
+ 	log_error("Operation not permitted on striped or linear LV %s", display_lvname(lv));
+ 	log_error("Operations permitted on a striped or linear LV are:\n"
+ 		  "  --merge\n"
+-		  "  --type snapshot | --snapshot\n"
+-		  "  --type thin | --thin\n"
+-		  "  --type cache | --cache\n"
++		  "  --type snapshot\n"
++		  "  --type thin\n"
++		  "  --type cache\n"
+ 		  "  --type thin-pool\n"
+ 		  "  --type cache-pool\n"
+-		  "  --type mirror | --mirrors\n"
+-		  "  --type raid* | --mirrors\n");
++		  "  --type mirror\n"
++		  "  --type raid*\n");
+ 	return 0;
+ }
  
 
 
