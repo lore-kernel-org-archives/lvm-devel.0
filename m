@@ -1,48 +1,40 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  7 Jul 2016 22:21:15 +0000 (UTC)
-Subject: master - man: more lvcreate size rewording
-Message-ID: <20160707222115.D7DCB60C84@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Fri,  8 Jul 2016 11:31:34 +0000 (UTC)
+Subject: master - libdm: fix resource leak in dm_stats_set_alias()
+Message-ID: <20160708113134.6E8EC60EEF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6233bcf52d98d9d0a3c87b22cb7700521b5358a2
-Commit:        6233bcf52d98d9d0a3c87b22cb7700521b5358a2
-Parent:        589b752eeb6b442f2987b1cd1736f8f461c9aa95
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jul 7 17:21:05 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jul 7 17:21:05 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=059a383cf8d3198ba6c77a18cea09c4a0a40032a
+Commit:        059a383cf8d3198ba6c77a18cea09c4a0a40032a
+Parent:        5e06b33c51e2b264ad8a48b61f18bf3bff37c992
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Fri Jul 8 10:51:19 2016 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Fri Jul 8 11:14:29 2016 +0100
 
-man: more lvcreate size rewording
+libdm: fix resource leak in dm_stats_set_alias()
 
+When we fail to update aux_data the newly allocated group->alias must
+be freed before reinstating old_alias.
 ---
- man/lvcreate.8.in |    9 +++++----
- 1 files changed, 5 insertions(+), 4 deletions(-)
+ libdm/libdm-stats.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index b7ad7bb..1bc2a91 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -336,12 +336,13 @@ metadata.  An alternate syntax allows the size to be determined indirectly
- as a percentage of the size of a related VG, LV, or set of PVs.  The
- suffix \fB%VG\fP denotes the total size of the VG, the suffix \fB%FREE\fP
- the remaining free space in the VG, and the suffix \fB%PVS\fP the free
--space in the specified Physical Volumes.  For a snapshot, the upper bound
-+space in the specified Physical Volumes.  For a snapshot, the size
- can be expressed as a percentage of the total size of the Origin Logical
- Volume with the suffix \fB%ORIGIN\fP (\fB100%ORIGIN\fP provides space for
--the whole origin).  When expressed as a percentage, the number is treated
--as an approximate upper limit, and the final size of the LV is not known
--until the command is complete.
-+the whole origin).
-+When expressed as a percentage, the size defines an upper limit for the
-+number of logical extents in the new LV. The precise number of logical
-+extents in the new LV is not determined until the command has completed.
- .
- .HP
- .BR \-j | \-\-major
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index e979b34..d89f77a 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -3106,6 +3106,7 @@ int dm_stats_set_alias(struct dm_stats *dms, uint64_t group_id, const char *alia
+ 	return 1;
+ 
+ bad:
++	dm_free((char *) group->alias);
+ 	group->alias = old_alias;
+ 	return 0;
+ }
 
 
