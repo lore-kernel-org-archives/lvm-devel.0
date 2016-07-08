@@ -1,55 +1,80 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Fri,  8 Jul 2016 11:31:32 +0000 (UTC)
-Subject: master - libdm: enclose dm_stats_walk_do/while() body in do..while
-Message-ID: <20160708113132.40F1360EE5@fedorahosted.org>
+Date: Fri,  8 Jul 2016 11:31:36 +0000 (UTC)
+Subject: master - libdm: improve comments in stats grouping functions
+Message-ID: <20160708113136.83D3760F50@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e06b33c51e2b264ad8a48b61f18bf3bff37c992
-Commit:        5e06b33c51e2b264ad8a48b61f18bf3bff37c992
-Parent:        6233bcf52d98d9d0a3c87b22cb7700521b5358a2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cc4f036d36a89a57f60dc87acfca5046f74c3f7d
+Commit:        cc4f036d36a89a57f60dc87acfca5046f74c3f7d
+Parent:        059a383cf8d3198ba6c77a18cea09c4a0a40032a
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Jul 7 21:28:35 2016 +0100
+AuthorDate:    Fri Jul 8 11:05:38 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Fri Jul 8 11:14:22 2016 +0100
+CommitterDate: Fri Jul 8 11:16:12 2016 +0100
 
-libdm: enclose dm_stats_walk_do/while() body in do..while
+libdm: improve comments in stats grouping functions
 
-The call to dm_stats_walk_start() before the do statement makes
-dm_stats_walk_do() behave inconsistently depending on context;
-wrap them in an additional do { } while (0) so that the macro
-always expands to a valid statement.
+Add more detailed comments to dm_stats_create_group() and
+_stats_group_check_overlap().
 ---
- libdm/libdevmapper.h |    8 +++++---
- 1 files changed, 5 insertions(+), 3 deletions(-)
+ libdm/libdm-stats.c |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 415928c..ec64426 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1146,15 +1146,17 @@ for (dm_stats_walk_init((dms), DM_STATS_WALK_GROUP),		\
-  * empty.
-  */
- #define dm_stats_walk_do(dms)					\
--dm_stats_walk_start((dms));					\
--do
-+do {								\
-+	dm_stats_walk_start((dms));				\
-+	do
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index d89f77a..9b55813 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -3686,6 +3686,7 @@ static int _stats_group_check_overlap(const struct dm_stats *dms,
+ 		return 0;
+ 	}
  
- /*
-  * Start a 'while' style loop or end a 'do..while' loop iterating over the
-  * regions contained in dm_stats handle 'dms'.
-  */
- #define dm_stats_walk_while(dms)				\
--while(!dm_stats_walk_end((dms)))
-+	while(!dm_stats_walk_end((dms)));			\
-+} while (0)
++	/* build a table of extents in order of region_id */
+ 	for (id = dm_bit_get_first(regions); id >= 0;
+ 	     id = dm_bit_get_next(regions, id)) {
+ 		dm_list_init(&map[i].list);
+@@ -3695,6 +3696,7 @@ static int _stats_group_check_overlap(const struct dm_stats *dms,
+ 		i++;
+ 	}
  
- /*
-  * Cursor relative property methods
++	/* sort by extent.start */
+ 	qsort(map, count, sizeof(*map), _extent_start_compare);
+ 
+ 	for (i = 0; i < count; i++)
+@@ -3724,6 +3726,7 @@ merge:
+ 			overlap = merged = 1;
+ 		}
+ 	}
++	/* continue until no merge candidates remain */
+ 	if (merged)
+ 		goto merge;
+ 
+@@ -3757,6 +3760,11 @@ int dm_stats_create_group(struct dm_stats *dms, const char *members,
+ 		goto bad;
+ 	}
+ 
++	/*
++	 * Check that each region_id in the bitmap meets the group
++	 * constraints: present, not already grouped, and if any
++	 * histogram is present that they all have the same bounds.
++	 */
+ 	for (i = dm_bit_get_first(regions); i >= 0;
+ 	     i = dm_bit_get_next(regions, i)) {
+ 		if (!dm_stats_region_present(dms, i)) {
+@@ -3828,9 +3836,11 @@ int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id,
+ 		}
+ 	}
+ 
++	/* clear group and mark as not present */
+ 	_stats_clear_group_regions(dms, group_id);
+ 	_stats_group_destroy(&dms->groups[group_id]);
+ 
++	/* delete leader or clear aux_data */
+ 	if (remove_regions)
+ 		return dm_stats_delete_region(dms, group_id);
+ 	else if (!_stats_set_aux(dms, group_id, leader->aux_data))
 
 
