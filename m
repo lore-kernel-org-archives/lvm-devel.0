@@ -1,86 +1,48 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Fri,  8 Jul 2016 19:34:42 +0000 (UTC)
-Subject: master - lvconvert: don't show aliases in error output
-Message-ID: <20160708193442.C371C6105E@fedorahosted.org>
+Date: Fri,  8 Jul 2016 19:34:44 +0000 (UTC)
+Subject: master - lvconvert: allow splitcache on hidden/used cache pool
+Message-ID: <20160708193444.D83FA60FCD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=39921284a03fd2d2c3f3ac22c3e69cba913494bf
-Commit:        39921284a03fd2d2c3f3ac22c3e69cba913494bf
-Parent:        5cd39f1dc4013d5d9b150abe544187413daeaac9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3951ca93204742d23b56f8d253230d33f322aad5
+Commit:        3951ca93204742d23b56f8d253230d33f322aad5
+Parent:        39921284a03fd2d2c3f3ac22c3e69cba913494bf
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 8 13:29:19 2016 -0500
+AuthorDate:    Fri Jul 8 14:08:55 2016 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Jul 8 14:34:36 2016 -0500
 
-lvconvert: don't show aliases in error output
+lvconvert: allow splitcache on hidden/used cache pool
 
-We want to consistently use the standard command form.
-The aliases are now mentioned in the man page for reference.
+lvconvert --splitcache VG/CachePool_corig
+
+Allow the split via the hidden/used cache pool for the time being,
+since the new lvconvert code did intend to allow it, but was just
+missing the exception in the list of hidden LVs that were allowed.
+
+The preferred method for splitcache is to run it on the visible
+cache LV, not the hidden cache pool.  That may eventually become
+the only method since we try to avoid running commands on
+hidden LVs.
 ---
- tools/lvconvert.c |   24 ++++++++++++------------
- 1 files changed, 12 insertions(+), 12 deletions(-)
+ tools/lvconvert.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index ce858ae..0009270 100644
+index 0009270..0319601 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -4076,9 +4076,9 @@ static int _convert_thin_pool(struct cmd_context *cmd, struct logical_volume *lv
- 
- 	log_error("Operation not permitted on thin pool LV %s", display_lvname(lv));
- 	log_error("Operations permitted on a thin pool LV are:\n"
--		  "  --splitcache           (operates on cache sub LV)\n"
--		  "  --uncache              (operates on cache sub LV)\n"
--		  "  --type cache | --cache (operates on data sub LV)\n"
-+		  "  --splitcache  (operates on cache sub LV)\n"
-+		  "  --uncache     (operates on cache sub LV)\n"
-+		  "  --type cache  (operates on data sub LV)\n"
- 		  "  --repair\n");
- 	return 0;
- }
-@@ -4137,7 +4137,7 @@ static int _convert_cache_pool(struct cmd_context *cmd, struct logical_volume *l
- 
- 	log_error("Operation not permitted on cache pool LV %s", display_lvname(lv));
- 	log_error("Operations permitted on a cache pool LV are:\n"
--		  "  --splitcache        (operates on cache LV)\n");
-+		  "  --splitcache    (operates on cache LV)\n");
- 	return 0;
- }
- 
-@@ -4255,9 +4255,9 @@ static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
- 		  "  --merge\n"
- 		  "  --repair\n"
- 		  "  --replace\n"
--		  "  --type snapshot | --snapshot\n"
--		  "  --type thin | --thin\n"
--		  "  --type cache | --cache\n"
-+		  "  --type snapshot\n"
-+		  "  --type thin\n"
-+		  "  --type cache\n"
- 		  "  --type thin-pool\n"
- 		  "  --type cache-pool\n"
- 		  "  --type raid*\n"
-@@ -4316,13 +4316,13 @@ static int _convert_striped(struct cmd_context *cmd, struct logical_volume *lv,
- 	log_error("Operation not permitted on striped or linear LV %s", display_lvname(lv));
- 	log_error("Operations permitted on a striped or linear LV are:\n"
- 		  "  --merge\n"
--		  "  --type snapshot | --snapshot\n"
--		  "  --type thin | --thin\n"
--		  "  --type cache | --cache\n"
-+		  "  --type snapshot\n"
-+		  "  --type thin\n"
-+		  "  --type cache\n"
- 		  "  --type thin-pool\n"
- 		  "  --type cache-pool\n"
--		  "  --type mirror | --mirrors\n"
--		  "  --type raid* | --mirrors\n");
-+		  "  --type mirror\n"
-+		  "  --type raid*\n");
- 	return 0;
- }
- 
+@@ -4372,6 +4372,7 @@ static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
+ 		    !lv_is_cache_pool_data(lv) &&
+ 		    !lv_is_thin_pool_metadata(lv) &&
+ 		    !lv_is_thin_pool_data(lv) &&
++		    !lv_is_used_cache_pool(lv) &&
+ 		    !lv_is_raid_image(lv)) {
+ 			log_error("Cannot convert internal LV %s.", display_lvname(lv));
+ 			ret = 0;
 
 
