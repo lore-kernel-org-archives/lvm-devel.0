@@ -1,57 +1,74 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 11 Jul 2016 13:48:02 +0000 (UTC)
-Subject: master - tests: increase max lines for clvmd
-Message-ID: <20160711134802.6A58160CB3@fedorahosted.org>
+Date: Mon, 11 Jul 2016 13:48:04 +0000 (UTC)
+Subject: master - tests: reduce amount of pvcreates
+Message-ID: <20160711134804.8D7CB60B68@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8756297a8d39d33766f1f19060749b9570d76b1a
-Commit:        8756297a8d39d33766f1f19060749b9570d76b1a
-Parent:        34c55d98eefd88f85476c0f62f0649c706bde6f0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6336b5dedf2a7adbc32fb7ae4f7f7aa1d9cda75a
+Commit:        6336b5dedf2a7adbc32fb7ae4f7f7aa1d9cda75a
+Parent:        8756297a8d39d33766f1f19060749b9570d76b1a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 11 14:45:25 2016 +0200
+AuthorDate:    Mon Jul 11 15:29:28 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 11 14:45:25 2016 +0200
+CommitterDate: Mon Jul 11 15:29:28 2016 +0200
 
-tests: increase max lines for clvmd
+tests: reduce amount of pvcreates
 
-Clvmd is a bit more verbose long time running process so
-let it live with more logged lines.
+Reduce number of evualted pvcreate commands.
+Since 0 is default value used to fill missing params,
+and 0 is also 1st. value in array, it's being tested.
 
-Also fix typo in warn message from last commit.
+Drop unused data_alignment_offset.
 ---
- lib/log/log.c   |    2 +-
- test/lib/aux.sh |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ test/api/python_lvm_unit.py |   21 +++------------------
+ 1 files changed, 3 insertions(+), 18 deletions(-)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index 434b8d0..6d5fc59 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -116,7 +116,7 @@ void init_log_file(const char *log_file, int append)
+diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
+index d715231..75c370e 100755
+--- a/test/api/python_lvm_unit.py
++++ b/test/api/python_lvm_unit.py
+@@ -906,7 +906,6 @@ class TestLvm(unittest.TestCase):
+ 		pvmeta_copies = [0, 1, 2]
+ 		pvmeta_size = [0, 255, 512, 1024]
+ 		data_alignment = [0, 2048, 4096]
+-		data_alignment_offset = [1, 1, 1]
+ 		zero = [0, 1]
  
- 		if ((env = getenv("LVM_LOG_FILE_MAX_LINES"))) {
- 			if (sscanf(env, FMTu64, &_log_file_max_lines) != 1) {
--				log_warn("WARNING: Ingnoring incorrect LVM_LOG_MAX_LINES envvar \"%s\".", env);
-+				log_warn("WARNING: Ignoring invalid LVM_LOG_MAX_LINES envvar \"%s\".", env);
- 				_log_file_max_lines = 0;
- 			}
- 			_log_file_lines = 0;
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 7724723..90f2ab1 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -169,7 +169,7 @@ prepare_clvmd() {
- 	rm -f "$CLVMD_PIDFILE"
- 	echo "<======== Starting CLVMD ========>"
- 	# lvs is executed from clvmd - use our version
--	LVM_LOG_FILE_EPOCH=CLVMD LVM_BINARY=$(which lvm) $run_valgrind clvmd -Isinglenode -d 1 -f &
-+	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 LVM_BINARY=$(which lvm) $run_valgrind clvmd -Isinglenode -d 1 -f &
- 	echo $! > LOCAL_CLVMD
+ 		device_names = TestLvm._get_pv_device_names()
+@@ -927,27 +926,13 @@ class TestLvm(unittest.TestCase):
  
- 	for i in {1..100} ; do
+ 		#Try a number of combinations and permutations
+ 		for s in size:
+-			lvm.pvCreate(d, s)
+-			lvm.pvRemove(d)
+ 			for copies in pvmeta_copies:
+-				lvm.pvCreate(d, s, copies)
+-				lvm.pvRemove(d)
+ 				for pv_size in pvmeta_size:
+-					lvm.pvCreate(d, s, copies, pv_size)
+-					lvm.pvRemove(d)
+ 					for align in data_alignment:
+-						lvm.pvCreate(d, s, copies, pv_size, align)
+-						lvm.pvRemove(d)
+-						for align_offset in data_alignment_offset:
+-							lvm.pvCreate(
+-								d, s, copies, pv_size, align,
+-								align * align_offset)
++						for z in zero:
++							lvm.pvCreate(d, s, copies, pv_size, align,
++								     align, z)
+ 							lvm.pvRemove(d)
+-							for z in zero:
+-								lvm.pvCreate(
+-									d, s, copies, pv_size, align,
+-									align * align_offset, z)
+-								lvm.pvRemove(d)
+ 
+ 		#Restore
+ 		for d in device_names:
 
 
