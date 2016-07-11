@@ -1,74 +1,51 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 11 Jul 2016 13:48:04 +0000 (UTC)
-Subject: master - tests: reduce amount of pvcreates
-Message-ID: <20160711134804.8D7CB60B68@fedorahosted.org>
+Date: Mon, 11 Jul 2016 13:48:06 +0000 (UTC)
+Subject: master - tests: skip some tests for older cache driver
+Message-ID: <20160711134806.A218F60B68@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6336b5dedf2a7adbc32fb7ae4f7f7aa1d9cda75a
-Commit:        6336b5dedf2a7adbc32fb7ae4f7f7aa1d9cda75a
-Parent:        8756297a8d39d33766f1f19060749b9570d76b1a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=06a9dab730f5b1636c19ffd47124d76e60447efd
+Commit:        06a9dab730f5b1636c19ffd47124d76e60447efd
+Parent:        6336b5dedf2a7adbc32fb7ae4f7f7aa1d9cda75a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 11 15:29:28 2016 +0200
+AuthorDate:    Mon Jul 11 15:45:28 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 11 15:29:28 2016 +0200
+CommitterDate: Mon Jul 11 15:45:28 2016 +0200
 
-tests: reduce amount of pvcreates
+tests: skip some tests for older cache driver
 
-Reduce number of evualted pvcreate commands.
-Since 0 is default value used to fill missing params,
-and 0 is also 1st. value in array, it's being tested.
-
-Drop unused data_alignment_offset.
+Cache target 1.4 on f19 kernel shows error, skipping some tests...
 ---
- test/api/python_lvm_unit.py |   21 +++------------------
- 1 files changed, 3 insertions(+), 18 deletions(-)
+ test/shell/lvchange-cache.sh |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
-index d715231..75c370e 100755
---- a/test/api/python_lvm_unit.py
-+++ b/test/api/python_lvm_unit.py
-@@ -906,7 +906,6 @@ class TestLvm(unittest.TestCase):
- 		pvmeta_copies = [0, 1, 2]
- 		pvmeta_size = [0, 255, 512, 1024]
- 		data_alignment = [0, 2048, 4096]
--		data_alignment_offset = [1, 1, 1]
- 		zero = [0, 1]
+diff --git a/test/shell/lvchange-cache.sh b/test/shell/lvchange-cache.sh
+index 06d2f09..25c59b1 100644
+--- a/test/shell/lvchange-cache.sh
++++ b/test/shell/lvchange-cache.sh
+@@ -68,6 +68,10 @@ grep 'migration_threshold=2048' out
+ grep 'sequential_threshold=13' out
+ grep 'random_threshold=4' out
  
- 		device_names = TestLvm._get_pv_device_names()
-@@ -927,27 +926,13 @@ class TestLvm(unittest.TestCase):
++# Skip these test on older cache driver as it shows errors with these lvchanges
++# device-mapper: space map common: index_check failed: blocknr 17179869216 != wanted 11
++if aux have_cache 1 5 0 ; then
++
+ lvchange --cachesettings migration_threshold=233 --cachesettings sequential_threshold=13 --cachesettings random_threshold=1 $vg/corigin
+ get lv_field $vg/corigin kernel_cache_settings | tee out
+ grep 'migration_threshold=233' out
+@@ -80,6 +84,8 @@ grep 'migration_threshold=2048' out
+ grep 'sequential_threshold=13' out
+ grep 'random_threshold=4' out
  
- 		#Try a number of combinations and permutations
- 		for s in size:
--			lvm.pvCreate(d, s)
--			lvm.pvRemove(d)
- 			for copies in pvmeta_copies:
--				lvm.pvCreate(d, s, copies)
--				lvm.pvRemove(d)
- 				for pv_size in pvmeta_size:
--					lvm.pvCreate(d, s, copies, pv_size)
--					lvm.pvRemove(d)
- 					for align in data_alignment:
--						lvm.pvCreate(d, s, copies, pv_size, align)
--						lvm.pvRemove(d)
--						for align_offset in data_alignment_offset:
--							lvm.pvCreate(
--								d, s, copies, pv_size, align,
--								align * align_offset)
-+						for z in zero:
-+							lvm.pvCreate(d, s, copies, pv_size, align,
-+								     align, z)
- 							lvm.pvRemove(d)
--							for z in zero:
--								lvm.pvCreate(
--									d, s, copies, pv_size, align,
--									align * align_offset, z)
--								lvm.pvRemove(d)
- 
- 		#Restore
- 		for d in device_names:
++fi
++
+ else
+ # When MQ is emulated by SMQ policy it does not hold settings.
+ # So just skip testing of param changes when sequential_threshold=0
 
 
