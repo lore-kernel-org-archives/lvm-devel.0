@@ -1,71 +1,50 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue, 12 Jul 2016 15:23:10 +0000 (UTC)
-Subject: master - lvchange: resync attempts on raid0 cause segfaults
-Message-ID: <20160712152310.18DA060B3C@fedorahosted.org>
+Date: Tue, 12 Jul 2016 15:55:28 +0000 (UTC)
+Subject: master - raid_manip: 'vgreduce --removemissing --force ...' segfaults on raid0 LV
+Message-ID: <20160712155528.36B5761142@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c77c59f3d9a97b43cd2bd9be1c5892aea384f857
-Commit:        c77c59f3d9a97b43cd2bd9be1c5892aea384f857
-Parent:        dcbcc65dc2177c55c4a7286e6e95d9a740c731c7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c2757349370cb0b098fb3a3d137107543818fd7
+Commit:        9c2757349370cb0b098fb3a3d137107543818fd7
+Parent:        c77c59f3d9a97b43cd2bd9be1c5892aea384f857
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Jul 12 17:20:38 2016 +0200
+AuthorDate:    Tue Jul 12 17:55:01 2016 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Jul 12 17:23:05 2016 +0200
+CommitterDate: Tue Jul 12 17:55:01 2016 +0200
 
-lvchange: resync attempts on raid0 cause segfaults
+raid_manip: 'vgreduce --removemissing --force ...' segfaults on raid0 LV
 
-Resync attempts on raid0/raid0_meta via 'lvchange --resync ...'
-cause segfaults.
+An unconditional access to the non-existing MetaLV of a raid0 LV in
+lv_raid_remove_missing() was causing the segfault.
 
-'lvchange --syncaction ...' doesn't get rejected either.
+Only call log_debug() on replacements of existing MetaLVs.
 
-Prohibit both on raid0/raid0_meta LVs.
-
-- resolves rhbz1354656
+- resolves rhbz1354646
 ---
- tools/lvchange.c |   19 ++++++++++++++-----
- 1 files changed, 14 insertions(+), 5 deletions(-)
+ lib/metadata/raid_manip.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index c5461f9..4b02ba9 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -326,8 +326,9 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 9ac061f..2ef47b2 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -3090,8 +3090,11 @@ int lv_raid_remove_missing(struct logical_volume *lv)
+ 		    (!seg->meta_areas || !seg_metalv(seg, s) || !lv_is_partial(seg_metalv(seg, s))))
+ 			continue;
  
- 	dm_list_init(&device_list);
- 
--	if (!seg_is_mirror(seg) && !seg_is_raid(seg)) {
--		log_error("Unable to resync %s.  It is not RAID or mirrored.",
-+	if (seg_is_any_raid0(seg) ||
-+	    (!seg_is_mirror(seg) && !seg_is_raid(seg))) {
-+		log_error("Unable to resync %s.  It is not RAID4/5/6/10 or mirrored.",
- 			  display_lvname(lv));
- 		return 0;
- 	}
-@@ -1179,9 +1180,17 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	    !_lvchange_resync(cmd, lv))
- 		return_ECMD_FAILED;
- 
--	if (arg_is_set(cmd, syncaction_ARG) &&
--	    !lv_raid_message(lv, arg_str_value(cmd, syncaction_ARG, NULL)))
--		return_ECMD_FAILED;
-+	if (arg_is_set(cmd, syncaction_ARG)) {
-+		struct lv_segment *seg = first_seg(lv);
-+
-+		if (seg_is_any_raid0(seg)) {
-+			log_error("Unable to sync raid0 LV %s.", display_lvname(lv));
-+			return_ECMD_FAILED;
-+		}
-+		
-+		if (!lv_raid_message(lv, arg_str_value(cmd, syncaction_ARG, NULL)))
-+			return_ECMD_FAILED;
-+	}
- 
- 	/* activation change */
- 	if (arg_is_set(cmd, activate_ARG)) {
+-		log_debug("Replacing %s and %s segments with error target",
+-			  seg_lv(seg, s)->name, seg_metalv(seg, s)->name);
++		log_debug("Replacing %s segments with error target",
++			  display_lvname(seg_lv(seg, s)));
++		if (seg->meta_areas && seg_metalv(seg, s))
++			log_debug("Replacing %s segments with error target",
++				  display_lvname(seg_metalv(seg, s)));
+ 		if (!replace_lv_with_error_segment(seg_lv(seg, s))) {
+ 			log_error("Failed to replace %s's extents with error target.",
+ 				  display_lvname(seg_lv(seg, s)));
 
 
