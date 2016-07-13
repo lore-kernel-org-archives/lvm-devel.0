@@ -1,45 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 13 Jul 2016 19:56:21 +0000 (UTC)
-Subject: master - coverity: easier to follow set-up of vsn variable
-Message-ID: <20160713195621.67E6C60370@fedorahosted.org>
+Date: Wed, 13 Jul 2016 19:56:23 +0000 (UTC)
+Subject: master - coverity: cleaning some PW.NOT_COMPATIBLE_WITH_PREVIOUS_DECL
+Message-ID: <20160713195623.881A56036E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bbf574ab90a82f636a5f5e66c9523484492da946
-Commit:        bbf574ab90a82f636a5f5e66c9523484492da946
-Parent:        0b773eecd967599b38214fe321fc7e493046c880
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4661c6b6fb7adc01a3fd42b5e802051b92d15d9d
+Commit:        4661c6b6fb7adc01a3fd42b5e802051b92d15d9d
+Parent:        bbf574ab90a82f636a5f5e66c9523484492da946
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jul 12 16:41:25 2016 +0200
+AuthorDate:    Tue Jul 12 16:42:14 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jul 13 21:52:14 2016 +0200
 
-coverity: easier to follow set-up of vsn variable
+coverity: cleaning some PW.NOT_COMPATIBLE_WITH_PREVIOUS_DECL
 
-Helping coverity to see 'vsn' really can't be NULL.
+Some very low-prio warns....
 ---
- tools/dumpconfig.c |    7 ++-----
- 1 files changed, 2 insertions(+), 5 deletions(-)
+ libdaemon/client/config-util.h   |    2 +-
+ libdaemon/client/daemon-client.h |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
-index 3da04f0..e387e60 100644
---- a/tools/dumpconfig.c
-+++ b/tools/dumpconfig.c
-@@ -20,11 +20,8 @@ static int _get_vsn(struct cmd_context *cmd, uint16_t *version_int)
- 	const char *vsn;
- 	unsigned int major, minor, patchlevel;
+diff --git a/libdaemon/client/config-util.h b/libdaemon/client/config-util.h
+index 64cce8b..38f36af 100644
+--- a/libdaemon/client/config-util.h
++++ b/libdaemon/client/config-util.h
+@@ -26,7 +26,7 @@ int buffer_append_f(struct buffer *buf, ...);
+ int buffer_append(struct buffer *buf, const char *string);
+ void buffer_init(struct buffer *buf);
+ void buffer_destroy(struct buffer *buf);
+-int buffer_realloc(struct buffer *buf, int required);
++int buffer_realloc(struct buffer *buf, int needed);
  
--	if (arg_is_set(cmd, atversion_ARG))
--		vsn = arg_str_value(cmd, atversion_ARG, NULL);
--	else if (arg_is_set(cmd, sinceversion_ARG))
--		vsn = arg_str_value(cmd, sinceversion_ARG, NULL);
--	else
-+	if (!(vsn = arg_str_value(cmd, atversion_ARG, NULL)) &&
-+	    !(vsn = arg_str_value(cmd, sinceversion_ARG, NULL)))
- 		vsn = LVM_VERSION;
+ int buffer_line(const char *line, void *baton);
  
- 	if (sscanf(vsn, "%u.%u.%u", &major, &minor, &patchlevel) != 3) {
+diff --git a/libdaemon/client/daemon-client.h b/libdaemon/client/daemon-client.h
+index 173ea89..5235bea 100644
+--- a/libdaemon/client/daemon-client.h
++++ b/libdaemon/client/daemon-client.h
+@@ -78,7 +78,7 @@ daemon_handle daemon_open(daemon_info i);
+  * be ignored even if non-NULL). If the buffer is NULL, the cft is required to
+  * be a valid pointer, and is used to build up the request.
+  */
+-daemon_reply daemon_send(daemon_handle h, daemon_request r);
++daemon_reply daemon_send(daemon_handle h, daemon_request rq);
+ 
+ /*
+  * A simple interface to daemon_send. This function just takes the command id
 
 
