@@ -1,66 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 13 Jul 2016 19:56:19 +0000 (UTC)
-Subject: master - tests: skip more cache tests for older driver
-Message-ID: <20160713195619.4172660370@fedorahosted.org>
+Date: Wed, 13 Jul 2016 19:56:21 +0000 (UTC)
+Subject: master - coverity: easier to follow set-up of vsn variable
+Message-ID: <20160713195621.67E6C60370@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0b773eecd967599b38214fe321fc7e493046c880
-Commit:        0b773eecd967599b38214fe321fc7e493046c880
-Parent:        07587c2699b04058b6dd044adb69c854a6458e24
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bbf574ab90a82f636a5f5e66c9523484492da946
+Commit:        bbf574ab90a82f636a5f5e66c9523484492da946
+Parent:        0b773eecd967599b38214fe321fc7e493046c880
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 13 16:13:29 2016 +0200
+AuthorDate:    Tue Jul 12 16:41:25 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jul 13 21:52:14 2016 +0200
 
-tests: skip more cache tests for older driver
+coverity: easier to follow set-up of vsn variable
 
+Helping coverity to see 'vsn' really can't be NULL.
 ---
- test/shell/lvchange-cache.sh |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ tools/dumpconfig.c |    7 ++-----
+ 1 files changed, 2 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvchange-cache.sh b/test/shell/lvchange-cache.sh
-index fa7d24c..385fcf4 100644
---- a/test/shell/lvchange-cache.sh
-+++ b/test/shell/lvchange-cache.sh
-@@ -33,16 +33,16 @@ not lvchange --cachesettings foo=bar $vg/noncache
- lvchange --cachepolicy cleaner $vg/corigin
- check lv_field  $vg/corigin kernel_cache_policy "cleaner"
+diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
+index 3da04f0..e387e60 100644
+--- a/tools/dumpconfig.c
++++ b/tools/dumpconfig.c
+@@ -20,11 +20,8 @@ static int _get_vsn(struct cmd_context *cmd, uint16_t *version_int)
+ 	const char *vsn;
+ 	unsigned int major, minor, patchlevel;
  
-+# Skip these test on older cache driver as it shows errors with these lvchanges
-+# device-mapper: space map common: index_check failed: blocknr 17179869216 != wanted 11
-+if aux have_cache 1 5 0 ; then
-+
- lvchange --cachepolicy mq --cachesettings migration_threshold=333 $vg/corigin
+-	if (arg_is_set(cmd, atversion_ARG))
+-		vsn = arg_str_value(cmd, atversion_ARG, NULL);
+-	else if (arg_is_set(cmd, sinceversion_ARG))
+-		vsn = arg_str_value(cmd, sinceversion_ARG, NULL);
+-	else
++	if (!(vsn = arg_str_value(cmd, atversion_ARG, NULL)) &&
++	    !(vsn = arg_str_value(cmd, sinceversion_ARG, NULL)))
+ 		vsn = LVM_VERSION;
  
- # TODO once mq->smq happens we will get here some 0 for mq settings
- check lv_field $vg/corigin kernel_cache_policy "mq"
- get lv_field $vg/corigin kernel_cache_settings | grep 'migration_threshold=333'
- 
--# Skip these test on older cache driver as it shows errors with these lvchanges
--# device-mapper: space map common: index_check failed: blocknr 17179869216 != wanted 11
--if aux have_cache 1 5 0 ; then
--
- lvchange --refresh $vg/corigin
- get lv_field $vg/corigin kernel_cache_settings | grep 'migration_threshold=333'
- lvchange -an $vg
-@@ -84,12 +84,12 @@ grep 'migration_threshold=2048' out
- grep 'sequential_threshold=13' out
- grep 'random_threshold=4' out
- 
--fi
--
- else
- # When MQ is emulated by SMQ policy it does not hold settings.
- # So just skip testing of param changes when sequential_threshold=0
- grep 'sequential_threshold=0' out
- fi
- 
-+fi  # have_cache 1 5 0
-+
- vgremove -f $vg
+ 	if (sscanf(vsn, "%u.%u.%u", &major, &minor, &patchlevel) != 3) {
 
 
