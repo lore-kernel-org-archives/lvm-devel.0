@@ -1,88 +1,126 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 15 Jul 2016 20:08:15 +0000 (UTC)
-Subject: master - man: drop lvmraid references from lvconvert
-Message-ID: <20160715200815.33B6860DF9@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 15 Jul 2016 21:02:53 +0000 (UTC)
+Subject: master - Revert "lvcreate: raid0 needs default number of stripes"
+Message-ID: <20160715210253.1E40A60F8C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=081e569e14cbf3f3c73aedf0e107b8b3a2c69455
-Commit:        081e569e14cbf3f3c73aedf0e107b8b3a2c69455
-Parent:        e96d1ad3efea51448f0cdd39e7c84db05d3c6cbf
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 15 15:08:02 2016 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jul 15 15:08:02 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c425cdd115d56a0f0ec7779934f194af88487905
+Commit:        c425cdd115d56a0f0ec7779934f194af88487905
+Parent:        081e569e14cbf3f3c73aedf0e107b8b3a2c69455
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Jul 15 21:53:37 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Jul 15 21:53:37 2016 +0100
 
-man: drop lvmraid references from lvconvert
+Revert "lvcreate: raid0 needs default number of stripes"
 
+This reverts commit 3928c96a37941d765bf467d82502cd2aec7fd809.
+
+A new setting is required in lvm.conf to control this.
 ---
- man/lvconvert.8.in |   16 ++++------------
- 1 files changed, 4 insertions(+), 12 deletions(-)
+ tools/lvcreate.c |   64 +++++++++++++++++++++++++++---------------------------
+ 1 files changed, 32 insertions(+), 32 deletions(-)
 
-diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
-index 5f15f34..95f7095 100644
---- a/man/lvconvert.8.in
-+++ b/man/lvconvert.8.in
-@@ -205,9 +205,6 @@ The
- type refers to one of many raid levels, e.g.
- .B raid1,
- .B raid5.
--See
--.BR lvmraid (7)
--for a full list.
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 6eca8f2..0dd9b1e 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -458,28 +458,16 @@ static int _read_mirror_params(struct cmd_context *cmd,
+ static int _read_raid_params(struct cmd_context *cmd,
+ 			     struct lvcreate_params *lp)
+ {
+-	if (lp->stripes < 2) {
+-		if (segtype_is_raid10(lp->segtype)) {
+-			if (arg_is_set(cmd, stripes_ARG)) {
+-				/* User supplied the bad argument */
+-				log_error("Segment type 'raid10' requires 2 or more stripes.");
+-				return 0;
+-			}
+-			/* No stripe argument was given - default to 2 */
+-			/* FIXME: this needs to change to 3 once we support odd numbers of stripes */
+-			lp->stripes = 2;
+-		} else if (segtype_is_any_raid6(lp->segtype))
+-			lp->stripes = 3;
+-		else if (segtype_is_raid4(lp->segtype) ||
+-			 segtype_is_any_raid5(lp->segtype) ||
+-			 segtype_is_any_raid0(lp->segtype))
+-			lp->stripes = 2;
+-		else
+-			lp->stripes = 1;
+-	}
+-
+-	if (lp->stripes > 1)
++	if ((lp->stripes < 2) && segtype_is_raid10(lp->segtype)) {
++		if (arg_is_set(cmd, stripes_ARG)) {
++			/* User supplied the bad argument */
++			log_error("Segment type 'raid10' requires 2 or more stripes.");
++			return 0;
++		}
++		/* No stripe argument was given - default to 2 */
++		lp->stripes = 2;
+ 		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
++	}
  
- .SS LV layers
+ 	/*
+ 	 * RAID1 does not take a stripe arg
+@@ -1231,31 +1219,43 @@ static int _check_raid_parameters(struct volume_group *vg,
+ 				  struct lvcreate_params *lp,
+ 				  struct lvcreate_cmdline_params *lcp)
+ {
++	unsigned devs = lcp->pv_count ? : dm_list_size(&vg->pvs);
+ 	struct cmd_context *cmd = vg->cmd;
  
-@@ -328,7 +325,7 @@ VG/StripedLV
- Convert StripedLV to type raid*.
- .br
- \[bu]
--Required options depend on the raid level, see lvmraid(7).
-+Required options depend on the raid level.
+ 	if (!seg_is_mirrored(lp) && !lp->stripe_size)
+ 		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
  
- .SS Operations on RaidLV with type raid*:
+-	if (segtype_is_any_raid0(lp->segtype) ||
+-	    segtype_is_raid4(lp->segtype) ||
+-	    segtype_is_any_raid5(lp->segtype)) {
++	if (seg_is_any_raid0(lp)) {
+ 		if (lp->stripes < 2) {
+-			log_error("Segment type \'%s\' requires 2 or more stripes.", lp->segtype->name);
++			log_error("Segment type 'raid0' requires 2 or more stripes.");
+ 			return 0;
+ 		}
+-	} else if (segtype_is_any_raid6(lp->segtype)) {
+-		if (lp->stripes < 3) {
+-			log_error("Segment type \'%s\' requires 3 or more stripes.", lp->segtype->name);
++	} else if (!seg_is_mirrored(lp)) {
++		/*
++		 * If number of devices was not supplied, we can infer from
++		 * the PVs given.
++		 */
++		if (!arg_is_set(cmd, stripes_ARG) &&
++		    (devs > 2 * lp->segtype->parity_devs))
++			lp->stripes = devs - lp->segtype->parity_devs;
++
++		if (lp->stripes <= lp->segtype->parity_devs) {
++			log_error("Number of stripes must be at least %d for %s",
++				  lp->segtype->parity_devs + 1,
++				  lp->segtype->name);
+ 			return 0;
+ 		}
+-	} else if (segtype_is_raid10(lp->segtype)) {
++	} else if (segtype_is_any_raid0(lp->segtype) ||
++		   segtype_is_raid10(lp->segtype)) {
++		if (!arg_is_set(cmd, stripes_ARG))
++			lp->stripes = devs / lp->mirrors;
+ 		if (lp->stripes < 2) {
+-			log_error("Unable to create %s LV: "
+-				  "insufficient number of devices.", lp->segtype->name);
++			log_error("Unable to create RAID(1)0 LV: "
++				  "insufficient number of devices.");
+ 			return 0;
+ 		}
+ 	}
+-	/* 'mirrors' defaults to 2 */
++	/* 'mirrors' defaults to 2 - not the number of PVs supplied */
  
-@@ -453,7 +450,7 @@ VG/RaidLV
- Convert RaidLV to use a different raid level.
- .br
- \[bu]
--Required options depend on the raid level, see lvmraid(7).
-+Required options depend on the raid level.
- 
- .B lvconvert \-\-type striped
- VG/RaidLV
-@@ -514,7 +511,7 @@ VG/MirrorLV
- Convert MirrorLV to type raid*.
- .br
- \[bu]
--Required options depend on the raid level, see lvmraid(7).
-+Required options depend on the raid level.
- 
- .SS Operations on CachePoolLV with type cache\-pool:
- 
-@@ -918,8 +915,6 @@ Use \fB\-f\fP if you do not want any replacement.  You may use
- \fB\-\-use\-policies\fP to use the device replacement policy specified in
- \fBlvm.conf\fP(5), see \fBactivation/mirror_log_fault_policy\fP or
- \fBactivation/mirror_device_fault_policy\fP.
--Also see
--.BR lvmraid (7).
- 
- When used with a thin pool LV, this option automates the use of the
- \fBthin_repair\fP(8) tool on the thin pool.  This repairs a very limitted
-@@ -937,10 +932,7 @@ Also see
- Remove the specified device \fIPhysicalVolume\fP and replace it with one
- that is available in the VG, or from a specific list of PVs specified on
- the command line following the LV name. This option may be repeated multiple
--times depending on the RaidLV type.  See
--.BR lvmraid (7)
--for specific limits on device replacement for each raid level.
--(This option only applies to \fBraid*\fP LV types.)
-+times depending on the RaidLV type.
- .
- .HP
- .BR \-s ,
+ 	return 1;
+ }
 
 
