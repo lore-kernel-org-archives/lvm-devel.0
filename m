@@ -1,126 +1,104 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 15 Jul 2016 21:02:53 +0000 (UTC)
-Subject: master - Revert "lvcreate: raid0 needs default number of stripes"
-Message-ID: <20160715210253.1E40A60F8C@fedorahosted.org>
+Date: Fri, 15 Jul 2016 21:02:55 +0000 (UTC)
+Subject: master - pre-release
+Message-ID: <20160715210255.424AA60F8C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c425cdd115d56a0f0ec7779934f194af88487905
-Commit:        c425cdd115d56a0f0ec7779934f194af88487905
-Parent:        081e569e14cbf3f3c73aedf0e107b8b3a2c69455
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d717b52c144699ec1ad096f71088b455cd87faf
+Commit:        3d717b52c144699ec1ad096f71088b455cd87faf
+Parent:        c425cdd115d56a0f0ec7779934f194af88487905
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jul 15 21:53:37 2016 +0100
+AuthorDate:    Fri Jul 15 21:55:38 2016 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jul 15 21:53:37 2016 +0100
+CommitterDate: Fri Jul 15 21:55:38 2016 +0100
 
-Revert "lvcreate: raid0 needs default number of stripes"
+pre-release
 
-This reverts commit 3928c96a37941d765bf467d82502cd2aec7fd809.
-
-A new setting is required in lvm.conf to control this.
 ---
- tools/lvcreate.c |   64 +++++++++++++++++++++++++++---------------------------
- 1 files changed, 32 insertions(+), 32 deletions(-)
+ VERSION                          |    2 +-
+ VERSION_DM                       |    2 +-
+ WHATS_NEW                        |   10 +++++++---
+ WHATS_NEW_DM                     |    4 ++--
+ libdaemon/server/daemon-server.c |    2 +-
+ man/lvm.8.in                     |    5 ++---
+ 6 files changed, 14 insertions(+), 11 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 6eca8f2..0dd9b1e 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -458,28 +458,16 @@ static int _read_mirror_params(struct cmd_context *cmd,
- static int _read_raid_params(struct cmd_context *cmd,
- 			     struct lvcreate_params *lp)
- {
--	if (lp->stripes < 2) {
--		if (segtype_is_raid10(lp->segtype)) {
--			if (arg_is_set(cmd, stripes_ARG)) {
--				/* User supplied the bad argument */
--				log_error("Segment type 'raid10' requires 2 or more stripes.");
--				return 0;
--			}
--			/* No stripe argument was given - default to 2 */
--			/* FIXME: this needs to change to 3 once we support odd numbers of stripes */
--			lp->stripes = 2;
--		} else if (segtype_is_any_raid6(lp->segtype))
--			lp->stripes = 3;
--		else if (segtype_is_raid4(lp->segtype) ||
--			 segtype_is_any_raid5(lp->segtype) ||
--			 segtype_is_any_raid0(lp->segtype))
--			lp->stripes = 2;
--		else
--			lp->stripes = 1;
--	}
--
--	if (lp->stripes > 1)
-+	if ((lp->stripes < 2) && segtype_is_raid10(lp->segtype)) {
-+		if (arg_is_set(cmd, stripes_ARG)) {
-+			/* User supplied the bad argument */
-+			log_error("Segment type 'raid10' requires 2 or more stripes.");
-+			return 0;
-+		}
-+		/* No stripe argument was given - default to 2 */
-+		lp->stripes = 2;
- 		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
-+	}
+diff --git a/VERSION b/VERSION
+index 822a2c2..2468807 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.161(2)-git (2016-07-06)
++2.02.161(2)-git (2016-07-15)
+diff --git a/VERSION_DM b/VERSION_DM
+index 4dea605..4cdbea7 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.131-git (2016-07-06)
++1.02.131-git (2016-07-15)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 3ed398c..cbd0ceb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,10 @@
+-Version 2.02.161 - 
+-================================
+-  Fix lvresize of filesystem when LV has already right size (2.02.141).
++Version 2.02.161 - 15th July 2016
++=================================
++  Prohibit some lvchange/lvresize that were failing on raid0 volumes.
++  Fix segfaults in complex vgsplits. (2.02.159)
++  Reformat unwieldy lvconvert man page.
++  Allow --force to be passed through to pvcreate from vgcreate. (2.02.144)
++  Fix lvresize of filesystem when LV has already right size (2.02.141)
+   New LVM_LOG_FILE_MAX_LINES env var to limit max size of created logs.
  
- 	/*
- 	 * RAID1 does not take a stripe arg
-@@ -1231,31 +1219,43 @@ static int _check_raid_parameters(struct volume_group *vg,
- 				  struct lvcreate_params *lp,
- 				  struct lvcreate_cmdline_params *lcp)
- {
-+	unsigned devs = lcp->pv_count ? : dm_list_size(&vg->pvs);
- 	struct cmd_context *cmd = vg->cmd;
+ Version 2.02.160 - 6th July 2016
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index a1d41b4..c02cb3f 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.131 -
+-================================
++Version 1.02.131 - 15th July 2016
++=================================
+   Disable queueing on mpath devs in blk-availability systemd service/initscript.
+   Add new -m|--mpathoption disablequeueing to blkdeactivate.
+   Automatically group regions with 'create --segments' unless --nogroup.
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index c3402a0..4d65466 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -662,7 +662,7 @@ out:
  
- 	if (!seg_is_mirrored(lp) && !lp->stripe_size)
- 		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
+ 	if (s.socket_fd >= 0)
+ 		if (close(s.socket_fd))
+-			perror("scoket close");
++			perror("socket close");
  
--	if (segtype_is_any_raid0(lp->segtype) ||
--	    segtype_is_raid4(lp->segtype) ||
--	    segtype_is_any_raid5(lp->segtype)) {
-+	if (seg_is_any_raid0(lp)) {
- 		if (lp->stripes < 2) {
--			log_error("Segment type \'%s\' requires 2 or more stripes.", lp->segtype->name);
-+			log_error("Segment type 'raid0' requires 2 or more stripes.");
- 			return 0;
- 		}
--	} else if (segtype_is_any_raid6(lp->segtype)) {
--		if (lp->stripes < 3) {
--			log_error("Segment type \'%s\' requires 3 or more stripes.", lp->segtype->name);
-+	} else if (!seg_is_mirrored(lp)) {
-+		/*
-+		 * If number of devices was not supplied, we can infer from
-+		 * the PVs given.
-+		 */
-+		if (!arg_is_set(cmd, stripes_ARG) &&
-+		    (devs > 2 * lp->segtype->parity_devs))
-+			lp->stripes = devs - lp->segtype->parity_devs;
-+
-+		if (lp->stripes <= lp->segtype->parity_devs) {
-+			log_error("Number of stripes must be at least %d for %s",
-+				  lp->segtype->parity_devs + 1,
-+				  lp->segtype->name);
- 			return 0;
- 		}
--	} else if (segtype_is_raid10(lp->segtype)) {
-+	} else if (segtype_is_any_raid0(lp->segtype) ||
-+		   segtype_is_raid10(lp->segtype)) {
-+		if (!arg_is_set(cmd, stripes_ARG))
-+			lp->stripes = devs / lp->mirrors;
- 		if (lp->stripes < 2) {
--			log_error("Unable to create %s LV: "
--				  "insufficient number of devices.", lp->segtype->name);
-+			log_error("Unable to create RAID(1)0 LV: "
-+				  "insufficient number of devices.");
- 			return 0;
- 		}
- 	}
--	/* 'mirrors' defaults to 2 */
-+	/* 'mirrors' defaults to 2 - not the number of PVs supplied */
- 
- 	return 1;
- }
+ 	if (s.daemon_fini)
+ 		if (!s.daemon_fini(&s))
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 82d0558..f0d094d 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -779,9 +779,8 @@ this format string "_%s_%d_%llu".  When set, each process logs to a
+ separate file.
+ .TP
+ .B LVM_LOG_FILE_MAX_LINES
+-A max number of lines to be printed to log file before
+-the application aborts. Useful for testing to prevent creation
+-of too big log files from spinning command.
++If more than this number of lines are sent to the log file, the command gets
++aborted.  Automated tests use this to terminate looping commands.
+ .TP
+ .B LVM_EXPECTED_EXIT_STATUS
+ The status anticipated when the process exits.  Use ">N" to match any
 
 
