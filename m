@@ -1,111 +1,88 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Jul 2016 13:49:37 +0000 (UTC)
-Subject: master - cleanup: local static functions with _
-Message-ID: <20160715134937.0EBAB60E26@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Fri, 15 Jul 2016 20:08:15 +0000 (UTC)
+Subject: master - man: drop lvmraid references from lvconvert
+Message-ID: <20160715200815.33B6860DF9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e96d1ad3efea51448f0cdd39e7c84db05d3c6cbf
-Commit:        e96d1ad3efea51448f0cdd39e7c84db05d3c6cbf
-Parent:        4de7a843ebc5c9ed4c54225a1a062cf40534edaf
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jul 15 13:20:35 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jul 15 15:49:01 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=081e569e14cbf3f3c73aedf0e107b8b3a2c69455
+Commit:        081e569e14cbf3f3c73aedf0e107b8b3a2c69455
+Parent:        e96d1ad3efea51448f0cdd39e7c84db05d3c6cbf
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Jul 15 15:08:02 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Jul 15 15:08:02 2016 -0500
 
-cleanup: local static functions with _
+man: drop lvmraid references from lvconvert
 
 ---
- libdaemon/server/daemon-server.c |   18 +++++++++---------
- 1 files changed, 9 insertions(+), 9 deletions(-)
+ man/lvconvert.8.in |   16 ++++------------
+ 1 files changed, 4 insertions(+), 12 deletions(-)
 
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index e4d7ce2..c3402a0 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -319,7 +319,7 @@ error:
- 	goto out;
- }
+diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
+index 5f15f34..95f7095 100644
+--- a/man/lvconvert.8.in
++++ b/man/lvconvert.8.in
+@@ -205,9 +205,6 @@ The
+ type refers to one of many raid levels, e.g.
+ .B raid1,
+ .B raid5.
+-See
+-.BR lvmraid (7)
+-for a full list.
  
--static void remove_lockfile(const char *file)
-+static void _remove_lockfile(const char *file)
- {
- 	if (unlink(file))
- 		perror("unlink failed");
-@@ -418,7 +418,7 @@ end:
- 	return res;
- }
+ .SS LV layers
  
--static response builtin_handler(daemon_state s, client_handle h, request r)
-+static response _builtin_handler(daemon_state s, client_handle h, request r)
- {
- 	const char *rq = daemon_request_str(r, "request", "NONE");
- 	response res = { .error = EPROTO };
-@@ -432,7 +432,7 @@ static response builtin_handler(daemon_state s, client_handle h, request r)
- 	return res;
- }
+@@ -328,7 +325,7 @@ VG/StripedLV
+ Convert StripedLV to type raid*.
+ .br
+ \[bu]
+-Required options depend on the raid level, see lvmraid(7).
++Required options depend on the raid level.
  
--static void *client_thread(void *state)
-+static void *_client_thread(void *state)
- {
- 	thread_state *ts = state;
- 	request req;
-@@ -451,7 +451,7 @@ static void *client_thread(void *state)
- 		else
- 			daemon_log_cft(ts->s.log, DAEMON_LOG_WIRE, "<- ", req.cft->root);
+ .SS Operations on RaidLV with type raid*:
  
--		res = builtin_handler(ts->s, ts->client, req);
-+		res = _builtin_handler(ts->s, ts->client, req);
+@@ -453,7 +450,7 @@ VG/RaidLV
+ Convert RaidLV to use a different raid level.
+ .br
+ \[bu]
+-Required options depend on the raid level, see lvmraid(7).
++Required options depend on the raid level.
  
- 		if (res.error == EPROTO) /* Not a builtin, delegate to the custom handler. */
- 			res = ts->s.handler(ts->s, ts->client, req);
-@@ -512,7 +512,7 @@ static int handle_connect(daemon_state s)
- 	ts->s = s;
- 	ts->client = client;
+ .B lvconvert \-\-type striped
+ VG/RaidLV
+@@ -514,7 +511,7 @@ VG/MirrorLV
+ Convert MirrorLV to type raid*.
+ .br
+ \[bu]
+-Required options depend on the raid level, see lvmraid(7).
++Required options depend on the raid level.
  
--	if (pthread_create(&ts->client.thread_id, NULL, client_thread, ts)) {
-+	if (pthread_create(&ts->client.thread_id, NULL, _client_thread, ts)) {
- 		ERROR(&s, "Failed to create client thread.");
- 		return 0;
- 	}
-@@ -520,7 +520,7 @@ static int handle_connect(daemon_state s)
- 	return 1;
- }
+ .SS Operations on CachePoolLV with type cache\-pool:
  
--static void reap(daemon_state s, int waiting)
-+static void _reap(daemon_state s, int waiting)
- {
- 	thread_state *last = s.threads, *ts = last->next;
- 	void *rv;
-@@ -637,7 +637,7 @@ void daemon_start(daemon_state s)
- 			handle_connect(s);
- 		}
+@@ -918,8 +915,6 @@ Use \fB\-f\fP if you do not want any replacement.  You may use
+ \fB\-\-use\-policies\fP to use the device replacement policy specified in
+ \fBlvm.conf\fP(5), see \fBactivation/mirror_log_fault_policy\fP or
+ \fBactivation/mirror_device_fault_policy\fP.
+-Also see
+-.BR lvmraid (7).
  
--		reap(s, 0);
-+		_reap(s, 0);
- 
- 		if (_shutdown_requested && !s.threads->next)
- 			break;
-@@ -653,7 +653,7 @@ void daemon_start(daemon_state s)
- 	}
- 
- 	INFO(&s, "%s waiting for client threads to finish", s.name);
--	reap(s, 1);
-+	_reap(s, 1);
- out:
- 	/* If activated by systemd, do not unlink the socket - systemd takes care of that! */
- 	if (!_systemd_activation && s.socket_fd >= 0)
-@@ -672,7 +672,7 @@ out:
- 
- 	closelog(); /* FIXME */
- 	if (s.pidfile)
--		remove_lockfile(s.pidfile);
-+		_remove_lockfile(s.pidfile);
- 	if (failed)
- 		exit(1);
- }
+ When used with a thin pool LV, this option automates the use of the
+ \fBthin_repair\fP(8) tool on the thin pool.  This repairs a very limitted
+@@ -937,10 +932,7 @@ Also see
+ Remove the specified device \fIPhysicalVolume\fP and replace it with one
+ that is available in the VG, or from a specific list of PVs specified on
+ the command line following the LV name. This option may be repeated multiple
+-times depending on the RaidLV type.  See
+-.BR lvmraid (7)
+-for specific limits on device replacement for each raid level.
+-(This option only applies to \fBraid*\fP LV types.)
++times depending on the RaidLV type.
+ .
+ .HP
+ .BR \-s ,
 
 
