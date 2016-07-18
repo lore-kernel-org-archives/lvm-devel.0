@@ -1,47 +1,69 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon, 18 Jul 2016 17:49:57 +0000 (UTC)
-Subject: master - libdm: free hist_arg in _stats_create_file_regions() (Coverity)
-Message-ID: <20160718174957.B3B3F60158@fedorahosted.org>
+Date: Mon, 18 Jul 2016 17:49:59 +0000 (UTC)
+Subject: master - dmstats: free bounds string in _stats_create_file() (Coverity)
+Message-ID: <20160718174959.CA47A60158@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4ef1f345498045b6757247dc64baad8252260583
-Commit:        4ef1f345498045b6757247dc64baad8252260583
-Parent:        4b4d4670042db3edb1270097f4d6046a6a827bac
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=da146ae9b90b90607324672207d1be37f16b0e7a
+Commit:        da146ae9b90b90607324672207d1be37f16b0e7a
+Parent:        4ef1f345498045b6757247dc64baad8252260583
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Jul 18 18:08:51 2016 +0100
+AuthorDate:    Mon Jul 18 18:17:42 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Jul 18 18:09:21 2016 +0100
+CommitterDate: Mon Jul 18 18:48:34 2016 +0100
 
-libdm: free hist_arg in _stats_create_file_regions() (Coverity)
+dmstats: free bounds string in _stats_create_file() (Coverity)
 
 ---
- libdm/libdm-stats.c |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ tools/dmsetup.c |   17 +++++++++--------
+ 1 files changed, 9 insertions(+), 8 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 57ef11d..1c2e19b 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -4323,6 +4323,8 @@ static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index e21d195..a282572 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -5012,8 +5012,15 @@ static int _stats_create_file(CMD_ARGS)
+ 		}
  	}
- 	regions[*count] = DM_STATS_REGION_NOT_PRESENT;
  
-+	if (bounds)
-+		dm_free(hist_arg);
- 	dm_pool_free(dms->mem, extents);
- 	return regions;
+-	if (histogram && !(bounds = dm_histogram_bounds_from_string(histogram)))
++	if (!(abspath = _get_abspath(path))) {
++		log_error("Could not canonicalize file name: %s", path);
++		return 0;
++	}
++
++	if (histogram && !(bounds = dm_histogram_bounds_from_string(histogram))) {
++		dm_free(abspath);
+ 		return_0;
++	}
  
-@@ -4335,6 +4337,7 @@ out_remove:
+ 	if (_switches[PROGRAM_ID_ARG])
+ 		program_id = _string_args[PROGRAM_ID_ARG];
+@@ -5023,11 +5030,6 @@ static int _stats_create_file(CMD_ARGS)
+ 	precise = _int_args[PRECISE_ARG];
+ 	group = !_switches[NOGROUP_ARG];
  
- out:
- 	dm_pool_free(dms->mem, extents);
-+	dm_free(hist_arg);
- 	dm_free(regions);
- 	return NULL;
- }
+-	if (!(abspath = _get_abspath(path))) {
+-		log_error("Could not canonicalize file name: %s", path);
+-		return 0;
+-	}
+-
+ 	if (!(dms = dm_stats_create(DM_STATS_PROGRAM_ID)))
+ 		return_0;
+ 
+@@ -5089,8 +5091,7 @@ static int _stats_create_file(CMD_ARGS)
+ 	return 1;
+ 
+ bad:
+-	if (abspath)
+-		dm_free(abspath);
++	dm_free(abspath);
+ 
+ 	if ((fd > -1) && close(fd))
+ 		log_error("Error closing %s", path);
 
 
