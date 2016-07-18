@@ -1,41 +1,74 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon, 18 Jul 2016 17:50:01 +0000 (UTC)
-Subject: master - libdm: document use of dm_free() with histogram bounds
-Message-ID: <20160718175001.ECE0C60158@fedorahosted.org>
+Date: Mon, 18 Jul 2016 17:50:04 +0000 (UTC)
+Subject: master - dmstats: check uuid, major, and alldevices before argc (Coverity)
+Message-ID: <20160718175004.0AC7260158@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=252952ff339bd928cc4e5ed34958d2845365b397
-Commit:        252952ff339bd928cc4e5ed34958d2845365b397
-Parent:        da146ae9b90b90607324672207d1be37f16b0e7a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d2bf6742f845df13bae39ae157cfabf44252c570
+Commit:        d2bf6742f845df13bae39ae157cfabf44252c570
+Parent:        252952ff339bd928cc4e5ed34958d2845365b397
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Jul 18 18:20:01 2016 +0100
+AuthorDate:    Mon Jul 18 18:28:07 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Mon Jul 18 18:48:34 2016 +0100
 
-libdm: document use of dm_free() with histogram bounds
+dmstats: check uuid, major, and alldevices before argc (Coverity)
 
+The --uuid, --major and --alldevices arguments were incorrectly tested
+after confirming argc is > 0, in a branch that only executes if argc
+== 0 (i.e. they were unreachable).
+
+Move all device checks before the test for argc and log an appropriate
+error before returning.
 ---
- libdm/libdevmapper.h |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ tools/dmsetup.c |   26 +++++++++++++-------------
+ 1 files changed, 13 insertions(+), 13 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 0f61f9c..2270016 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -805,6 +805,10 @@ int dm_stats_get_region_nr_histogram_bins(const struct dm_stats *dms,
-  * magnitude is one milisecond: attempting to use a histogram with a
-  * boundary less than one milisecond when creating a region will cause
-  * the region to be created with the precise_timestamps feature enabled.
-+ *
-+ * On sucess a pointer to the struct dm_histogram representing the
-+ * bounds values is returned, or NULL in the case of error. The returned
-+ * pointer should be freed using dm_free() when no longer required.
-  */
- struct dm_histogram *dm_histogram_bounds_from_string(const char *bounds_str);
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index a282572..985f63b 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -4978,24 +4978,24 @@ static int _stats_create_file(CMD_ARGS)
+ 		return 0;
+ 	}
  
++	if (_switches[UUID_ARG] || _switches[MAJOR_ARG]) {
++		log_error("--uuid and --major are incompatible with --filemap.");
++		return 0;
++	}
++
++	if (_switches[ALL_DEVICES_ARG]) {
++		log_error("--alldevices is incompatible with --filemap.");
++		return 0;
++	}
++
+ 	/* _stats_create_file does not use _process_all() */
+-	if (names || !argc) {
++	if (!argc) {
+ 		log_error("--filemap requires a file path argument");
+ 		return 0;
+-	} else {
+-		if (argc)
+-			path = argv[0];
+-		else {
+-			if (_switches[UUID_ARG] || _switches[MAJOR_ARG])
+-				log_error("--uuid and --major are incompatible "
+-					  "with --filemap.");
+-			if (_switches[ALL_DEVICES_ARG])
+-				log_error("--alldevices is incompatible with "
+-					  "--filemap.");
+-			return 0;
+-		}
+ 	}
+ 
++	path = argv[0];
++
+ 	if (_switches[PRECISE_ARG]) {
+ 		if (!dm_stats_driver_supports_precise()) {
+ 			log_error("Using --precise requires driver version "
 
 
