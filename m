@@ -1,118 +1,41 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Tue,  5 Jul 2016 18:54:40 +0000 (UTC)
-Subject: master - libdm: allow deleting regions with dm_stats_delete_group()
-Message-ID: <20160705185440.6939161375@fedorahosted.org>
+Date: Mon, 18 Jul 2016 17:50:01 +0000 (UTC)
+Subject: master - libdm: document use of dm_free() with histogram bounds
+Message-ID: <20160718175001.ECE0C60158@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cda1622fef6c2160f92c88f4eab0200e4864d781
-Commit:        cda1622fef6c2160f92c88f4eab0200e4864d781
-Parent:        f1f2df7bc0a219afebb86823513516e002a2916f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=252952ff339bd928cc4e5ed34958d2845365b397
+Commit:        252952ff339bd928cc4e5ed34958d2845365b397
+Parent:        da146ae9b90b90607324672207d1be37f16b0e7a
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Fri Jul 1 13:14:41 2016 +0100
+AuthorDate:    Mon Jul 18 18:20:01 2016 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Tue Jul 5 19:53:16 2016 +0100
+CommitterDate: Mon Jul 18 18:48:34 2016 +0100
 
-libdm: allow deleting regions with dm_stats_delete_group()
+libdm: document use of dm_free() with histogram bounds
 
-Add a flag to dm_stats_delete_group() to allow optional deletion
-of all regions belonging to the group being removed.
 ---
- WHATS_NEW_DM         |    1 +
- libdm/libdevmapper.h |    7 +++++--
- libdm/libdm-stats.c  |   27 ++++++++++++++++++++++++---
- 3 files changed, 30 insertions(+), 5 deletions(-)
+ libdm/libdevmapper.h |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 04ba142..79ac489 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.129 - 
- =================================
-+  Allow dm_stats_delete_group() to optionally delete all group members.
-   Add dm_stats_get_object_type() to return the type of object present.
-   Add dm_stats_walk_init() allowing control of objects visited by walks.
-   Add dm_stats_get_group_descriptor() to return the member list as a string.
 diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index a1db12a..2fd8061 100644
+index 0f61f9c..2270016 100644
 --- a/libdm/libdevmapper.h
 +++ b/libdm/libdevmapper.h
-@@ -1205,9 +1205,12 @@ int dm_stats_create_group(struct dm_stats *dms, const char *group,
- 			  const char *alias, uint64_t *group_id);
- 
- /*
-- * Remove the specified group_id.
-+ * Remove the specified group_id. If the remove argument is zero the
-+ * group will be removed but the regions that it contained will remain.
-+ * If remove is non-zero then all regions that belong to the group will
-+ * also be removed.
+@@ -805,6 +805,10 @@ int dm_stats_get_region_nr_histogram_bins(const struct dm_stats *dms,
+  * magnitude is one milisecond: attempting to use a histogram with a
+  * boundary less than one milisecond when creating a region will cause
+  * the region to be created with the precise_timestamps feature enabled.
++ *
++ * On sucess a pointer to the struct dm_histogram representing the
++ * bounds values is returned, or NULL in the case of error. The returned
++ * pointer should be freed using dm_free() when no longer required.
   */
--int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id);
-+int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id, int remove);
- 
- /*
-  * Set an alias for this group or region. The alias will be returned
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 4911b62..e1f05c7 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -1969,8 +1969,8 @@ static int _stats_remove_region_id_from_group(struct dm_stats *dms,
- 					      uint64_t region_id)
- {
- 	struct dm_stats_region *region = &dms->regions[region_id];
--	dm_bitset_t regions = dms->groups[region_id].regions;
- 	uint64_t group_id = region->group_id;
-+	dm_bitset_t regions = dms->groups[group_id].regions;
- 
- 	if (!_stats_region_is_grouped(dms, region_id))
- 		return_0;
-@@ -3770,8 +3770,13 @@ bad:
- /*
-  * Remove the specified group_id.
-  */
--int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id)
-+int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id,
-+			  int remove_regions)
- {
-+	struct dm_stats_region *leader;
-+	dm_bitset_t regions;
-+	uint64_t i;
-+
- 	if (group_id > dms->max_region) {
- 		log_error("Invalid group ID: " FMTu64, group_id);
- 		return 0;
-@@ -3782,11 +3787,27 @@ int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id)
- 		return 0;
- 	}
- 
-+	regions = dms->groups[group_id].regions;
-+	leader = &dms->regions[group_id];
-+
-+	/* delete all but the group leader */
-+	for (i = (*regions - 1); i > leader->region_id; i--) {
-+		if (dm_bit(regions, i)) {
-+			dm_bit_clear(regions, i);
-+			if (remove_regions && !dm_stats_delete_region(dms, i))
-+				log_warn("Failed to delete region "
-+					 FMTu64 " on %s.", i, dms->name);
-+		}
-+	}
-+
- 	_stats_clear_group_regions(dms, group_id);
- 	_stats_group_destroy(&dms->groups[group_id]);
- 
--	if (!_stats_set_aux(dms, group_id, dms->regions[group_id].aux_data))
-+	if (remove_regions)
-+		return dm_stats_delete_region(dms, group_id);
-+	else if (!_stats_set_aux(dms, group_id, leader->aux_data))
- 		return 0;
-+
- 	return 1;
- }
+ struct dm_histogram *dm_histogram_bounds_from_string(const char *bounds_str);
  
 
 
