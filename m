@@ -1,267 +1,105 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Wed, 20 Jul 2016 15:21:01 +0000 (UTC)
-Subject: master - lvcreate: raid0 needs default number of stripes
-Message-ID: <20160720152101.F36A8605B2@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 20 Jul 2016 15:25:27 +0000 (UTC)
+Subject: master - lvmetad: fix use committed metadata to update
+Message-ID: <20160720152527.88C666109A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7eb79091937d01eec51fc6a034879a6fe607231d
-Commit:        7eb79091937d01eec51fc6a034879a6fe607231d
-Parent:        19e652b182099ca06c678394eccd1988967dacf9
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Jul 20 17:20:15 2016 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Jul 20 17:20:15 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6ea250e2d05aeb55c883aafa0a98e97660dfd633
+Commit:        6ea250e2d05aeb55c883aafa0a98e97660dfd633
+Parent:        7eb79091937d01eec51fc6a034879a6fe607231d
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jul 20 10:18:58 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jul 20 10:25:26 2016 -0500
 
-lvcreate: raid0 needs default number of stripes
+lvmetad: fix use committed metadata to update
 
-Commit 3928c96a37941d765bf467d82502cd2aec7fd809 introduced
-new defaults for raid number of stripes, which may cause
-backwards compatibility issues with customer scripts.
-
-Adding configurable option 'raid_stripe_all_devices' defaulting
-to '0' (i.e. off = new behaviour) to select the old behaviour
-of using all PVs in the VG or those provided on the command line.
-
-In case any scripts rely on the old behaviour, just set
-'raid_strip_all_devices = 1'.
-
-- resolves rhbz1354650
+In some cases, the command will update VG metadata
+in lvmetad without writing it.  In these cases there
+is no vg->vg_committed and it should use 'vg' directly.
+This happens when the command finds that the lvmetad
+VG has been invalidated, rereads the metadata from disk,
+then updates lvmetad with that metadata.  This happens
+often with lvmlockd or foreign VGs, and can happen without
+lvmlockd if a previous command fails after invalidating
+the VG in lvmetad.
 ---
- conf/example.conf.in         |    7 ++
- lib/config/config_settings.h |    5 ++
- lib/config/defaults.h        |    1 +
- tools/lvcreate.c             |  126 ++++++++++++++++++++++++-----------------
- 4 files changed, 87 insertions(+), 52 deletions(-)
+ lib/cache/lvmetad.c |   30 ++++++++++++++++++------------
+ 1 files changed, 18 insertions(+), 12 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index f7cebf9..8b79d7d 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -472,6 +472,13 @@ allocation {
- 	# Default physical extent size in KiB to use for new VGs.
- 	# This configuration option has an automatic default value.
- 	# physical_extent_size = 4096
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 401df7c..0503d91 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1199,7 +1199,7 @@ int lvmetad_vg_update_finish(struct volume_group *vg)
+ 	struct dm_hash_node *n;
+ 	struct metadata_area *mda;
+ 	char mda_id[128], *num;
+-	struct volume_group *vgc;
++	struct volume_group *vgu;
+ 	struct dm_config_tree *vgmeta;
+ 	struct pv_list *pvl;
+ 	struct lvmcache_info *info;
+@@ -1219,11 +1219,19 @@ int lvmetad_vg_update_finish(struct volume_group *vg)
+ 
+ 	/*
+ 	 * vg->vg_committted is the state of the VG metadata when vg_commit()
+-	 * was called.  Since then, vg-> may have been partially modified and
++	 * was called.  Since then, 'vg' may have been partially modified and
+ 	 * not committed.  We only want to send committed metadata to lvmetad.
++	 *
++	 * lvmetad is sometimes updated in cases where the VG is not written
++	 * (no vg_committed).  In those cases 'vg' has just been read from
++	 * disk, and we can send 'vg' to lvmetad.  This happens when the
++	 * command finds the lvmetad cache invalid, so the VG has been read
++	 * from disk and is then sent to lvmetad.
+ 	 */
+ 
+-	if (!(vgmeta = export_vg_to_config_tree(vg->vg_committed))) {
++	vgu = vg->vg_committed ? vg->vg_committed : vg;
 +
-+	# Configuration option striping across all PVs when RAID stripes are not specified.
-+	# If enabled, all PVs in the VG or on the command line are used for raid0/4/5/6/10
-+	# when the command does not specify the number of stripes to use.
-+	#
-+	# This configuration option has an automatic default value.
-+	# raid_stripe_all_devices = 0
- }
- 
- # Configuration section log.
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 25914ea..8b9932e 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -461,6 +461,11 @@ cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separa
- 	"Mirror logs and images will always use different PVs.\n"
- 	"The default setting changed in version 2.02.85.\n")
- 
-+cfg(allocation_raid_stripe_all_devices_CFG, "raid_stripe_all_devices", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ALLOCATION_STRIPE_ALL_DEVICES, vsn(2, 2, 162), NULL, 0, NULL,
-+	"Stripe across all PVs when RAID stripes are not specified.\n"
-+	"If enabled, all PVs in the VG or on the command line are used for raid0/4/5/6/10\n"
-+	"when the command does not specify the number of stripes to use.\n")
-+
- cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 106), NULL, 0, NULL,
- 	"Cache pool metadata and data will always use different PVs.\n")
- 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index addb14f..f1f1700 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -68,6 +68,7 @@
- #define DEFAULT_MIRROR_MAX_IMAGES 8 /* limited by kernel DM_KCOPYD_MAX_REGIONS */
- // FIXME Increase this to 64
- #define DEFAULT_RAID_MAX_IMAGES 8 /* limited by kernel failed devices bitfield in superblock (raid4/5/6 max 253) */
-+#define DEFAULT_ALLOCATION_STRIPE_ALL_DEVICES 0 /* Don't stripe across all devices if not -i/--stripes given */
- 
- #define DEFAULT_RAID_FAULT_POLICY "warn"
- 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 0dd9b1e..8436365 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -458,26 +458,46 @@ static int _read_mirror_params(struct cmd_context *cmd,
- static int _read_raid_params(struct cmd_context *cmd,
- 			     struct lvcreate_params *lp)
- {
--	if ((lp->stripes < 2) && segtype_is_raid10(lp->segtype)) {
--		if (arg_is_set(cmd, stripes_ARG)) {
--			/* User supplied the bad argument */
--			log_error("Segment type 'raid10' requires 2 or more stripes.");
-+	if (seg_is_mirrored(lp)) {
-+		if (segtype_is_raid10(lp->segtype)) {
-+			if (lp->stripes < 2) {
-+				/*
-+				 * RAID10 needs@least 4 stripes
-+				 */
-+				log_warn("Adjusting stripes to the minimum of 2 for %s.",
-+					 lp->segtype->name);
-+				lp->stripes = 2;
-+			}
-+
-+			/*
-+			 * FIXME: _check_raid_parameters devides by 2, which
-+			 *	  needs to change if we start supporting
-+			 *	  odd numbers of stripes with raid10
-+			 */
-+			lp->stripes *= 2;
-+
-+		} else if (lp->stripes > 1) {
-+			/*
-+			 * RAID1 does not take a stripe arg
-+			 */
-+			log_error("Stripe argument cannot be used with segment type, %s",
-+				  lp->segtype->name);
- 			return 0;
- 		}
--		/* No stripe argument was given - default to 2 */
--		lp->stripes = 2;
--		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
--	}
- 
--	/*
--	 * RAID1 does not take a stripe arg
--	 */
--	if ((lp->stripes > 1) && seg_is_mirrored(lp) &&
--	    !segtype_is_raid10(lp->segtype)) {
--		log_error("Stripe argument cannot be used with segment type, %s",
--			  lp->segtype->name);
--		return 0;
--	}
-+	} else if (lp->stripes < 2)
-+		/* No stripe argument was given */
-+		lp->stripes = seg_is_any_raid6(lp) ? 3 : 2;
-+
-+	if (seg_is_raid1(lp)) {
-+		if (lp->stripe_size) {
-+			log_error("Stripe size argument cannot be used with segment type, %s",
-+				  lp->segtype->name);
-+			return 0;
-+		}
-+
-+	} else if (!lp->stripe_size)
-+		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
- 
- 	if (arg_is_set(cmd, mirrors_ARG) && segtype_is_raid(lp->segtype) &&
- 	    !segtype_is_raid1(lp->segtype) && !segtype_is_raid10(lp->segtype)) {
-@@ -486,13 +506,15 @@ static int _read_raid_params(struct cmd_context *cmd,
++	if (!(vgmeta = export_vg_to_config_tree(vgu))) {
+ 		log_error("Failed to export VG to config tree.");
  		return 0;
  	}
+@@ -1249,13 +1257,11 @@ int lvmetad_vg_update_finish(struct volume_group *vg)
  
--	/* Rates are recorded in kiB/sec/disk, not sectors/sec/disk */
--	lp->min_recovery_rate = arg_uint_value(cmd, minrecoveryrate_ARG, 0) / 2;
--	lp->max_recovery_rate = arg_uint_value(cmd, maxrecoveryrate_ARG, 0) / 2;
-+	if (!seg_is_any_raid0(lp)) {
-+		/* Rates are recorded in kiB/sec/disk, not sectors/sec/disk */
-+		lp->min_recovery_rate = arg_uint_value(cmd, minrecoveryrate_ARG, 0) / 2;
-+		lp->max_recovery_rate = arg_uint_value(cmd, maxrecoveryrate_ARG, 0) / 2;
+ 	daemon_reply_destroy(reply);
  
--	if (lp->min_recovery_rate > lp->max_recovery_rate) {
--		log_error("Minimum recovery rate cannot be higher than maximum.");
--		return 0;
-+		if (lp->min_recovery_rate > lp->max_recovery_rate) {
-+			log_error("Minimum recovery rate cannot be higher than maximum.");
-+			return 0;
-+		}
- 	}
- 
- 	return 1;
-@@ -547,13 +569,6 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
- 		/* Default to 2 mirrored areas if '--type mirror|raid1|raid10' */
- 		lp->mirrors = seg_is_mirrored(lp) ? 2 : 1;
- 
--	if (lp->stripes < 2 && segtype_is_any_raid0(lp->segtype))
--		if (arg_count(cmd, stripes_ARG)) {
--			/* User supplied the bad argument */
--			log_error("Segment type %s requires 2 or more stripes.", lp->segtype->name);
--			return 0;
--		}
+-	vgc = vg->vg_committed;
 -
- 	lp->nosync = arg_is_set(cmd, nosync_ARG);
- 
- 	if (!(lp->region_size = arg_uint_value(cmd, regionsize_ARG, 0)) &&
-@@ -562,6 +577,8 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
- 		return 0;
+-	n = (vgc->fid && vgc->fid->metadata_areas_index) ?
+-		dm_hash_get_first(vgc->fid->metadata_areas_index) : NULL;
++	n = (vgu->fid && vgu->fid->metadata_areas_index) ?
++		dm_hash_get_first(vgu->fid->metadata_areas_index) : NULL;
+ 	while (n) {
+-		mda = dm_hash_get_data(vgc->fid->metadata_areas_index, n);
+-		(void) dm_strncpy(mda_id, dm_hash_get_key(vgc->fid->metadata_areas_index, n), sizeof(mda_id));
++		mda = dm_hash_get_data(vgu->fid->metadata_areas_index, n);
++		(void) dm_strncpy(mda_id, dm_hash_get_key(vgu->fid->metadata_areas_index, n), sizeof(mda_id));
+ 		if ((num = strchr(mda_id, '_'))) {
+ 			*num = 0;
+ 			++num;
+@@ -1266,13 +1272,13 @@ int lvmetad_vg_update_finish(struct volume_group *vg)
+ 				lvmcache_foreach_mda(info, _fixup_ignored, &baton);
+ 			}
+ 		}
+-		n = dm_hash_get_next(vgc->fid->metadata_areas_index, n);
++		n = dm_hash_get_next(vgu->fid->metadata_areas_index, n);
  	}
  
-+	lp->stripe_size = arg_uint_value(cmd, stripesize_ARG, 0);
-+
- 	if (!is_power_of_2(lp->region_size)) {
- 		log_error("Region size (%" PRIu32 ") must be a power of 2",
- 			  lp->region_size);
-@@ -1221,39 +1238,44 @@ static int _check_raid_parameters(struct volume_group *vg,
- {
- 	unsigned devs = lcp->pv_count ? : dm_list_size(&vg->pvs);
- 	struct cmd_context *cmd = vg->cmd;
-+	int old_stripes = !arg_is_set(cmd, stripes_ARG) &&
-+			  find_config_tree_bool(cmd, allocation_raid_stripe_all_devices_CFG, NULL);
- 
--	if (!seg_is_mirrored(lp) && !lp->stripe_size)
--		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
-+	/*
-+	 * If we requested the previous behaviour by setting
-+	 * "allocation/raid_stripe_all_devices = 1" and the
-+	 * number of devices was not supplied, we can infer
-+	 * from the PVs given.
-+	 */
-+	if (old_stripes && seg_is_raid(lp) && !seg_is_raid1(lp))
-+		lp->stripes = devs;
-+
-+	if (seg_is_raid10(lp)) {
-+		lp->stripes /= lp->mirrors;
- 
--	if (seg_is_any_raid0(lp)) {
- 		if (lp->stripes < 2) {
--			log_error("Segment type 'raid0' requires 2 or more stripes.");
-+			log_error("Unable to create RAID(1)0 LV: "
-+				  "insufficient number of devices.");
+-	dm_list_iterate_items(pvl, &vgc->pvs) {
++	dm_list_iterate_items(pvl, &vgu->pvs) {
+ 		/* NB. the PV fmt pointer is sometimes wrong during vgconvert */
+ 		if (pvl->pv->dev && !lvmetad_pv_found(vg->cmd, &pvl->pv->id, pvl->pv->dev,
+-						      vgc->fid ? vgc->fid->fmt : pvl->pv->fmt,
++						      vgu->fid ? vgu->fid->fmt : pvl->pv->fmt,
+ 						      pvl->pv->label_sector, NULL, NULL, NULL))
  			return 0;
- 		}
--	} else if (!seg_is_mirrored(lp)) {
--		/*
--		 * If number of devices was not supplied, we can infer from
--		 * the PVs given.
--		 */
--		if (!arg_is_set(cmd, stripes_ARG) &&
--		    (devs > 2 * lp->segtype->parity_devs))
--			lp->stripes = devs - lp->segtype->parity_devs;
- 
--		if (lp->stripes <= lp->segtype->parity_devs) {
-+	} else if (!seg_is_mirrored(lp)) {
-+		if (old_stripes &&
-+		    lp->segtype->parity_devs &&
-+		    devs > 2 * lp->segtype->parity_devs)
-+			lp->stripes -= lp->segtype->parity_devs;
-+
-+		if (seg_is_any_raid0(lp)) {
-+			if (lp->stripes < 2) {
-+				log_error("Segment type 'raid0' requires 2 or more stripes.");
-+				return 0;
-+			}
-+		} else if (lp->stripes <= lp->segtype->parity_devs) {
- 			log_error("Number of stripes must be at least %d for %s",
- 				  lp->segtype->parity_devs + 1,
- 				  lp->segtype->name);
- 			return 0;
- 		}
--	} else if (segtype_is_any_raid0(lp->segtype) ||
--		   segtype_is_raid10(lp->segtype)) {
--		if (!arg_is_set(cmd, stripes_ARG))
--			lp->stripes = devs / lp->mirrors;
--		if (lp->stripes < 2) {
--			log_error("Unable to create RAID(1)0 LV: "
--				  "insufficient number of devices.");
--			return 0;
--		}
  	}
- 	/* 'mirrors' defaults to 2 - not the number of PVs supplied */
- 
 
 
