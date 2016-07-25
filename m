@@ -1,98 +1,136 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sat, 30 Jul 2016 17:20:58 +0000 (UTC)
-Subject: master - lvconvert: Set lp->segtype in only one place.
-Message-ID: <20160730172058.8180560324@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 25 Jul 2016 19:49:32 +0000 (UTC)
+Subject: master - lvmlockd: improve error message about missing global lock
+Message-ID: <20160725194932.C4A9460ED3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d0df1ff995f3270232ec5179057482c558119a92
-Commit:        d0df1ff995f3270232ec5179057482c558119a92
-Parent:        1ce958bc5ea2827fdb945b2177616e8f253486a1
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Jul 30 18:12:57 2016 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Jul 30 18:20:04 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d0e15b86b53bd4960a7c15a7771548ab4aface8b
+Commit:        d0e15b86b53bd4960a7c15a7771548ab4aface8b
+Parent:        1efb1c23432f504db685c4ff9f2c08a5ba74e68f
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Jul 25 14:45:11 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Jul 25 14:49:01 2016 -0500
 
-lvconvert: Set lp->segtype in only one place.
+lvmlockd: improve error message about missing global lock
 
+If the VG holding the global lock is removed, we can indicate
+that as the reason for not being able to acquire the global
+lock in subsequent error messages, and can suggest enabling
+the global lock in another VG.  (This helpful error message
+will go away if the global lock is enabled in another VG,
+or if lvmlockd is restarted.)
 ---
- tools/lvconvert.c |   30 ++++++++++++++----------------
- 1 files changed, 14 insertions(+), 16 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c     |    9 +++++++--
+ daemons/lvmlockd/lvmlockd-internal.h |    1 +
+ lib/locking/lvmlockd.c               |   17 ++++++++++++++++-
+ 3 files changed, 24 insertions(+), 3 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index ed3bd88..dd0102f 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -331,6 +331,7 @@ static int _read_pool_params(struct cmd_context *cmd, int *pargc, char ***pargv,
- {
- 	int cachepool = 0;
- 	int thinpool = 0;
-+	struct segment_type *segtype;
- 
- 	if ((lp->pool_data_name = arg_str_value(cmd, cachepool_ARG, NULL))) {
- 		if (lp->type_str[0] &&
-@@ -388,10 +389,10 @@ static int _read_pool_params(struct cmd_context *cmd, int *pargc, char ***pargv,
- 					 splitmirrors_ARG, splitsnapshot_ARG, -1))
- 			return_0;
- 
--		if (!(lp->segtype = get_segtype_from_string(cmd, lp->type_str)))
-+		if (!(segtype = get_segtype_from_string(cmd, lp->type_str)))
- 			return_0;
- 
--		if (!get_pool_params(cmd, lp->segtype, &lp->passed_args,
-+		if (!get_pool_params(cmd, segtype, &lp->passed_args,
- 				     &lp->pool_metadata_size,
- 				     &lp->poolmetadataspare,
- 				     &lp->chunk_size, &lp->discards,
-@@ -528,7 +529,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 		lp->type_str = SEG_TYPE_NAME_THIN;
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index b561529..8fcbdec 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -1654,6 +1654,9 @@ static int res_able(struct lockspace *ls, struct resource *r,
  	}
  
--	/* May set lp->segtype */
- 	if (!_read_pool_params(cmd, &argc, &argv, lp))
- 		return_0;
+ 	rv = lm_able_gl_sanlock(ls, act->op == LD_OP_ENABLE);
++
++	if (!rv && (act->op == LD_OP_ENABLE))
++		gl_vg_removed = 0;
+ out:
+ 	return rv;
+ }
+@@ -2627,8 +2630,10 @@ out_act:
  
-@@ -797,17 +797,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 	lp->pv_count = argc;
- 	lp->pvs = argv;
+ 	if (free_vg && ls->sanlock_gl_enabled && act_op_free) {
+ 		pthread_mutex_lock(&lockspaces_mutex);
+-		if (other_sanlock_vgs_exist(ls))
++		if (other_sanlock_vgs_exist(ls)) {
+ 			act_op_free->flags |= LD_AF_WARN_GL_REMOVED;
++			gl_vg_removed = 1;
++		}
+ 		pthread_mutex_unlock(&lockspaces_mutex);
+ 	}
  
--	/* If we have type_str, set up the segtype to match. */
--	if (*lp->type_str && !(lp->segtype = get_segtype_from_string(cmd, lp->type_str)))
--		return_0;
--
--	if (activation() && lp->segtype && lp->segtype->ops->target_present &&
--	    !lp->segtype->ops->target_present(cmd, NULL, &lp->target_attr)) {
--		log_error("%s: Required device-mapper target(s) not "
--			  "detected in your kernel.", lp->segtype->name);
--		return 0;
--	}
--
- 	return 1;
+@@ -3668,7 +3673,7 @@ static int client_send_result(struct client *cl, struct action *act)
+ 	if (act->flags & LD_AF_DUP_GL_LS)
+ 		strcat(result_flags, "DUP_GL_LS,");
+ 
+-	if (act->flags & LD_AF_WARN_GL_REMOVED)
++	if ((act->flags & LD_AF_WARN_GL_REMOVED) || gl_vg_removed)
+ 		strcat(result_flags, "WARN_GL_REMOVED,");
+ 	
+ 	if (act->op == LD_OP_INIT) {
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index 2e21981..a2280b8 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -320,6 +320,7 @@ static inline int list_empty(const struct list_head *head)
+ EXTERN int gl_type_static;
+ EXTERN int gl_use_dlm;
+ EXTERN int gl_use_sanlock;
++EXTERN int gl_vg_removed;
+ EXTERN char gl_lsname_dlm[MAX_NAME+1];
+ EXTERN char gl_lsname_sanlock[MAX_NAME+1];
+ EXTERN int global_dlm_lockspace_exists;
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 03d0014..8acf69c 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -969,6 +969,7 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_i
+ {
+ 	char uuid[64] __attribute__((aligned(8)));
+ 	daemon_reply reply;
++	uint32_t lockd_flags = 0;
+ 	int host_id = 0;
+ 	int result;
+ 	int ret;
+@@ -1018,13 +1019,16 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_i
+ 				"opts = %s", start_init ? "start_init" : "none",
+ 				NULL);
+ 
+-	if (!_lockd_result(reply, &result, NULL)) {
++	if (!_lockd_result(reply, &result, &lockd_flags)) {
+ 		ret = 0;
+ 		result = -ELOCKD;
+ 	} else {
+ 		ret = (result < 0) ? 0 : 1;
+ 	}
+ 
++	if (lockd_flags & LD_RF_WARN_GL_REMOVED)
++		cmd->lockd_gl_removed = 1;
++
+ 	switch (result) {
+ 	case 0:
+ 		log_print_unless_silent("VG %s starting %s lockspace", vg->name, vg->lock_type);
+@@ -1140,6 +1144,11 @@ int lockd_start_wait(struct cmd_context *cmd)
+ 
+ 	daemon_reply_destroy(reply);
+ 
++	if (cmd->lockd_gl_removed) {
++		log_error("Missing global lock: global lock was lost by removing a previous VG.");
++		log_error("To enable the global lock in another VG, see lvmlockctl --gl-enable.");
++	}
++
+ 	return ret;
  }
  
-@@ -4372,9 +4361,18 @@ static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
+@@ -1556,6 +1565,12 @@ int lockd_gl(struct cmd_context *cmd, const char *def_mode, uint32_t flags)
+ 			goto allow;
  		}
- 	}
  
--	/* If we don't have a specific new segtype to use, keep the existing one. */
--	if (!lp->segtype)
-+	/* Set up segtype either from type_str or else to match the existing one. */
-+	if (!*lp->type_str)
- 		lp->segtype = seg->segtype;
-+	else if (!(lp->segtype = get_segtype_from_string(cmd, lp->type_str)))
-+		return_0;
++		if ((lockd_flags & LD_RF_NO_GL_LS) && (lockd_flags & LD_RF_WARN_GL_REMOVED)) {
++			log_warn("Skipping global lock: VG with global lock was removed");
++			force_cache_update = 1;
++			goto allow;
++		}
 +
-+	if (activation() && lp->segtype && lp->segtype->ops->target_present &&
-+	    !lp->segtype->ops->target_present(cmd, NULL, &lp->target_attr)) {
-+		log_error("%s: Required device-mapper target(s) not "
-+			  "detected in your kernel.", lp->segtype->name);
-+		return 0;
-+	}
- 
- 	/* Process striping parameters */
- 	/* FIXME This is incomplete */
+ 		if ((lockd_flags & LD_RF_NO_GL_LS) || (lockd_flags & LD_RF_NO_LOCKSPACES)) {
+ 			log_warn("Skipping global lock: lockspace not found or started");
+ 			force_cache_update = 1;
 
 
