@@ -1,45 +1,68 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 May 2017 09:41:42 -0400
-Subject: master - tests: better skip
-Message-ID: <201705101341.v4ADfgTq005488@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 25 Jul 2016 16:03:19 +0000 (UTC)
+Subject: master - lvconvert: remove warnings about deprecated split option
+Message-ID: <20160725160319.A6990606DB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b817cc5746ef3bd3105a73e43aaf4b2ccd134335
-Commit:        b817cc5746ef3bd3105a73e43aaf4b2ccd134335
-Parent:        a1a9ae0aa5fe337935091320b6f27fb053381ff5
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 21 12:18:56 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 10 15:40:32 2017 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7b1daa248ffdc473e016b9694c1f85a827334c89
+Commit:        7b1daa248ffdc473e016b9694c1f85a827334c89
+Parent:        70bad99894003c9e2fcec5db2b1f39cf09f75077
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Jul 25 11:01:56 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Jul 25 11:01:56 2016 -0500
 
-tests: better skip
+lvconvert: remove warnings about deprecated split option
 
+A warning seems too severe for this message, so leave it
+out until there's a better idea.
 ---
- test/shell/thin-resize-match.sh |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ tools/lvconvert.c |   12 +++---------
+ 1 files changed, 3 insertions(+), 9 deletions(-)
 
-diff --git a/test/shell/thin-resize-match.sh b/test/shell/thin-resize-match.sh
-index c78842f..46b4531 100644
---- a/test/shell/thin-resize-match.sh
-+++ b/test/shell/thin-resize-match.sh
-@@ -12,13 +12,12 @@
- # ensure there is no data loss during thin-pool resize
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 5d29cc4..c31a8a3 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4047,10 +4047,8 @@ static int _convert_thin_pool(struct cmd_context *cmd, struct logical_volume *lv
+ 	if (arg_is_set(cmd, splitcache_ARG))
+ 		return _convert_thin_pool_splitcache(cmd, lv, lp);
  
- SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
+-	if (arg_is_set(cmd, split_ARG)) {
+-		log_warn("WARNING: Using --splitcache which has replaced the --split option.");
++	if (arg_is_set(cmd, split_ARG))
+ 		return _convert_thin_pool_splitcache(cmd, lv, lp);
+-	}
  
- export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
+ 	if (arg_is_set(cmd, uncache_ARG))
+ 		return _convert_thin_pool_uncache(cmd, lv, lp);
+@@ -4084,10 +4082,8 @@ static int _convert_cache_volume(struct cmd_context *cmd, struct logical_volume
+ 	if (arg_is_set(cmd, splitcache_ARG))
+ 		return _convert_cache_volume_splitcache(cmd, lv, lp);
  
- . lib/inittest
+-	if (arg_is_set(cmd, split_ARG)) {
+-		log_warn("WARNING: Using --splitcache which has replaced the --split option.");
++	if (arg_is_set(cmd, split_ARG))
+ 		return _convert_cache_volume_splitcache(cmd, lv, lp);
+-	}
  
--test -e LOCAL_LVMPOLLD && skip
--
- which md5sum || skip
+ 	if (arg_is_set(cmd, uncache_ARG))
+ 		return _convert_cache_volume_uncache(cmd, lv, lp);
+@@ -4117,10 +4113,8 @@ static int _convert_cache_pool(struct cmd_context *cmd, struct logical_volume *l
+ 	if (arg_is_set(cmd, splitcache_ARG))
+ 		return _convert_cache_pool_splitcache(cmd, lv, lp);
  
- aux have_thin 1 0 0 || skip
+-	if (arg_is_set(cmd, split_ARG)) {
+-		log_warn("WARNING: Using --splitcache which has replaced the --split option.");
++	if (arg_is_set(cmd, split_ARG))
+ 		return _convert_cache_pool_splitcache(cmd, lv, lp);
+-	}
+ 
+ 	/* FIXME: swapping the cache pool metadata LV needs a specific option like --swapmetadata */
+ 	if (arg_is_set(cmd, poolmetadata_ARG))
 
 
