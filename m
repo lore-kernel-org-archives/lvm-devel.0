@@ -1,78 +1,158 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Thu, 28 Jul 2016 15:35:42 +0000 (UTC)
-Subject: master - man: lvcreate correction on --stripes explanation and examples with respect to the changed, configurable default behaviour introduced with commit 7eb79091937d.
-Message-ID: <20160728153542.3136C6090A@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 25 Jul 2016 18:33:15 +0000 (UTC)
+Subject: master - lvconvert: --trackchanges requires --splitmirrors
+Message-ID: <20160725183315.4A5BA60C57@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8d959b6c75a6cc98691413ec4eab5b01e992d6c1
-Commit:        8d959b6c75a6cc98691413ec4eab5b01e992d6c1
-Parent:        02ddd48c1148052175ac2178f3f762ca0629d6e9
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Jul 28 17:34:42 2016 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Jul 28 17:34:42 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1efb1c23432f504db685c4ff9f2c08a5ba74e68f
+Commit:        1efb1c23432f504db685c4ff9f2c08a5ba74e68f
+Parent:        7b1daa248ffdc473e016b9694c1f85a827334c89
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Jul 25 19:32:10 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Jul 25 19:32:10 2016 +0100
 
-man: lvcreate correction on --stripes explanation and examples      with respect to the changed, configurable default behaviour      introduced with commit 7eb79091937d.
+lvconvert: --trackchanges requires --splitmirrors
 
-     E.g. raid default of 2 stripes rather than number of PVs in the VG
-     or on the command line minus one.
 ---
- man/lvcreate.8.in |   29 +++++++++++++++++++++--------
- 1 files changed, 21 insertions(+), 8 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |   39 ++++++++++++++++++++++++---------------
+ 2 files changed, 25 insertions(+), 15 deletions(-)
 
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index 1cce0b6..34b6523 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -603,14 +603,24 @@ for online conversion to thin volumes with external origin.
- .br
- Gives the number of stripes.
- This is equal to the number of physical volumes to scatter
--the logical volume.  When creating a RAID 4/5/6 logical volume,
-+the logical volume data.  When creating a RAID 4/5/6 logical volume,
- the extra devices which are necessary for parity are
- internally accounted for.  Specifying \fB\-i 3\fP
--would use 3 devices for striped logical volumes,
--4 devices for RAID 4/5, and 5 devices for RAID 6.  Alternatively,
--RAID 4/5/6 will stripe across all PVs in the volume group or
--all of the PVs specified if the \fB\-i\fP
--argument is omitted.
-+would cause 3 devices for striped and RAID 0 logical volumes,
-+4 devices for RAID 4/5, 5 devices for RAID 6 and 6 devices for RAID 10.
-+Alternatively, RAID 0 will stripe across 2 devices,
-+RAID 4/5 across 3 PVs, RAID 6 across 5 PVs and RAID 10 across
-+4 PVs in the volume group if the \fB\-i\fP argument is omitted.
-+In order to stripe across all PVs of the VG if the \fB\-i\fP argument is
-+omitted, set raid_stripe_all_devices=1 in the allocation
-+section of \fBlvm.conf (5)\fP or add
-+.br
-+\fB\-\-config allocation/raid_stripe_all_devices=1\fP
-+.br
-+to the command.
-+.br
-+Note the current limitation of 8 stripes total in any RaidLV including parity devices.
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f5b8306..b80d189 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.162 - 
+ =================================
++  Improve lvconvert --trackchanges validation to require --splitmirrors.
+   Add note about lastlog built-in command to lvm man page.
+   Fix unrecognised segtype flag message.
+   lvconvert reuse cachepool metadade now ONLY with -Zn and clear otherwise.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index c31a8a3..91765d6 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -59,6 +59,8 @@ struct lvconvert_params {
+ 	int merge_snapshot;	/* merge is also set */
+ 	int merge_mirror;	/* merge is also set */
+ 
++	int track_changes;	/* keep_mimages is also set (--splitmirrors) */
 +
- Two implementations of basic striping are available in the kernel.
- The original device-mapper implementation is the default and should
- normally be used.  The alternative implementation using MD, available
-@@ -801,9 +811,12 @@ a parity drive for a total of 4 devices) and a stripesize of 64KiB:
- .B lvcreate \-\-type raid5 \-L 5G \-i 3 \-I 64 \-n my_lv vg00
+ 	int poolmetadataspare;
+ 	int force;
+ 	int yes;
+@@ -77,7 +79,7 @@ struct lvconvert_params {
  
- Creates a RAID5 logical volume "vg00/my_lv", using all of the free
--space in the VG and spanning all the PVs in the VG:
-+space in the VG and spanning all the PVs in the VG (note that the command
-+will fail if there's more than 8 PVs in the VG in which case \fB\-i 7\fP
-+has to be used to get to the currently possible maximum of
-+8 devices including parity for RaidLVs):
- .sp
--.B lvcreate \-\-type raid5 \-l 100%FREE \-n my_lv vg00
-+.B lvcreate \-\-config allocation/raid_stripe_all_devices=1 \-\-type raid5 \-l 100%FREE \-n my_lv vg00
+ 	uint32_t mirrors;
+ 	sign_t mirrors_sign;
+-	uint32_t keep_mimages;
++	uint32_t keep_mimages;	/* --splitmirrors */
+ 	uint32_t stripes;
+ 	uint32_t stripe_size;
+ 	uint32_t read_ahead;
+@@ -335,7 +337,7 @@ static int _read_pool_params(struct cmd_context *cmd, int *pargc, char ***pargv,
+ 		    strcmp(lp->type_str, "cache") &&
+ 		    strcmp(lp->type_str, "cache-pool")) {
+ 			log_error("--cachepool argument is only valid with "
+-				  " the cache or cache-pool segment type.");
++				  "the cache or cache-pool segment type.");
+ 			return 0;
+ 		}
+ 		cachepool = 1;
+@@ -347,7 +349,7 @@ static int _read_pool_params(struct cmd_context *cmd, int *pargc, char ***pargv,
+ 		    strcmp(lp->type_str, "thin") &&
+ 		    strcmp(lp->type_str, "thin-pool")) {
+ 			log_error("--thinpool argument is only valid with "
+-				  " the thin or thin-pool segment type.");
++				  "the thin or thin-pool segment type.");
+ 			return 0;
+ 		}
+ 		thinpool = 1;
+@@ -542,6 +544,9 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 		lp->snapshot = 1;
+ 	}
  
- Creates a 5GiB RAID10 logical volume "vg00/my_lv", with 2 stripes on
- 2 2-way mirrors.  Note that the \fB-i\fP and \fB-m\fP arguments behave
++	if (arg_is_set(cmd, trackchanges_ARG))
++		lp->track_changes = 1;
++
+ 	if (lp->split) {
+ 		lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL);
+ 
+@@ -557,8 +562,8 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 				  "mutually exclusive.");
+ 			return 0;
+ 		}
+-		if (!arg_is_set(cmd, name_ARG) &&
+-		    !arg_is_set(cmd, trackchanges_ARG)) {
++
++		if (!arg_is_set(cmd, name_ARG) && !lp->track_changes) {
+ 			log_error("Please name the new logical volume using '--name'");
+ 			return 0;
+ 		}
+@@ -567,10 +572,15 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 		lp->keep_mimages = 1;
+ 		lp->mirrors = arg_uint_value(cmd, splitmirrors_ARG, 0);
+ 		lp->mirrors_sign = SIGN_MINUS;
+-	} else if (arg_is_set(cmd, name_ARG)) {
+-		log_error("The 'name' argument is only valid"
+-			  " with --splitmirrors");
+-		return 0;
++	} else {
++		if (lp->track_changes) {
++			log_error("--trackchanges is only valid with --splitmirrors.");
++			return 0;
++		}
++		if (arg_is_set(cmd, name_ARG)) {
++			log_error("The 'name' argument is only valid with --splitmirrors");
++			return 0;
++		}
+ 	}
+ 
+ 	if (arg_is_set(cmd, merge_ARG))
+@@ -1504,7 +1514,7 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
+ 
+ 		/* Reduce number of mirrors */
+ 		if (lp->keep_mimages) {
+-			if (arg_is_set(cmd, trackchanges_ARG)) {
++			if (lp->track_changes) {
+ 				log_error("--trackchanges is not available "
+ 					  "to 'mirror' segment type.");
+ 				return 0;
+@@ -1889,7 +1899,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 	if (lp->merge_mirror)
+ 		return lv_raid_merge(lv);
+ 
+-	if (arg_is_set(cmd, trackchanges_ARG))
++	if (lp->track_changes)
+ 		return lv_raid_split_and_track(lv, lp->pvh);
+ 
+ 	if (lp->keep_mimages)
+@@ -1933,8 +1943,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 		}
+ 
+ 		if (sync_percent != DM_PERCENT_100) {
+-			log_warn("WARNING: %s is not in-sync.",
+-				 display_lvname(lv));
++			log_warn("WARNING: %s is not in-sync.", display_lvname(lv));
+ 			log_warn("WARNING: Portions of the array may be unrecoverable.");
+ 
+ 			/*
+@@ -1957,8 +1966,8 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 				return 0;
+ 			}
+ 
+-			log_print_unless_silent("Faulty devices in %s successfully"
+-						" replaced.", display_lvname(lv));
++			log_print_unless_silent("Faulty devices in %s successfully replaced.",
++						display_lvname(lv));
+ 			return 1;
+ 		}
+ 
 
 
