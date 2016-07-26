@@ -1,67 +1,95 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 25 Jul 2016 20:16:41 +0000 (UTC)
-Subject: master - lvconvert: --trackchanges requires --splitmirrors 1
-Message-ID: <20160725201641.7BFD161C79@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 26 Jul 2016 10:30:08 +0000 (UTC)
+Subject: master - libdm: report: fix json reporting to escape '"' character that may appear in reported string
+Message-ID: <20160726103008.F385260254@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d180bf63119580073235191c3527c9c8ee9cacbb
-Commit:        d180bf63119580073235191c3527c9c8ee9cacbb
-Parent:        d0e15b86b53bd4960a7c15a7771548ab4aface8b
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Jul 25 21:15:25 2016 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Jul 25 21:15:25 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f9697ea0067ef574aff09f1c8f25e1c7fab74c17
+Commit:        f9697ea0067ef574aff09f1c8f25e1c7fab74c17
+Parent:        d180bf63119580073235191c3527c9c8ee9cacbb
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Jul 26 12:27:41 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Jul 26 12:27:41 2016 +0200
 
-lvconvert: --trackchanges requires --splitmirrors 1
+libdm: report: fix json reporting to escape '"' character that may appear in reported string
 
 ---
- WHATS_NEW         |    2 +-
- tools/lvconvert.c |   10 ++++++++--
- 2 files changed, 9 insertions(+), 3 deletions(-)
+ WHATS_NEW_DM         |    1 +
+ libdm/libdm-report.c |   32 +++++++++++++++++++++++++++++---
+ 2 files changed, 30 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b80d189..c96b5be 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,6 +1,6 @@
- Version 2.02.162 - 
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 53d0388..00f897a 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.132 - 
  =================================
--  Improve lvconvert --trackchanges validation to require --splitmirrors.
-+  Improve lvconvert --trackchanges validation to require --splitmirrors 1.
-   Add note about lastlog built-in command to lvm man page.
-   Fix unrecognised segtype flag message.
-   lvconvert reuse cachepool metadade now ONLY with -Zn and clear otherwise.
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 91765d6..c0838d1 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1894,6 +1894,13 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
- 				  lp->keep_mimages ? "split" : "reduce");
- 			return 0;
- 		}
++  Fix json reporting to escape '"' character that may appear in reported string.
+ 
+ Version 1.02.131 - 15th July 2016
+ =================================
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 8993201..02fead5 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -4320,6 +4320,7 @@ static int _sort_rows(struct dm_report *rh)
+ #define JSON_OBJECT_END        "}"
+ #define JSON_ARRAY_START       "["
+ #define JSON_ARRAY_END         "]"
++#define JSON_ESCAPE_CHAR       "\\"
+ 
+ #define UNABLE_TO_EXTEND_OUTPUT_LINE_MSG "dm_report: Unable to extend output line"
+ 
+@@ -4346,6 +4347,7 @@ static int _output_field(struct dm_report *rh, struct dm_report_field *field)
+ 	int32_t width;
+ 	uint32_t align;
+ 	const char *repstr;
++	const char *p1_repstr, *p2_repstr;
+ 	char *buf = NULL;
+ 	size_t buf_size = 0;
+ 
+@@ -4393,9 +4395,33 @@ static int _output_field(struct dm_report *rh, struct dm_report_field *field)
+ 	repstr = field->report_string;
+ 	width = field->props->width;
+ 	if (!(rh->flags & DM_REPORT_OUTPUT_ALIGNED)) {
+-		if (!dm_pool_grow_object(rh->mem, repstr, 0)) {
+-			log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
+-			return 0;
++		if (_is_json_report(rh)) {
++			/* Escape any JSON_QUOTE that may appear in reported string. */
++			p1_repstr = repstr;
++			while ((p2_repstr = strstr(p1_repstr, JSON_QUOTE))) {
++				if (p2_repstr > p1_repstr) {
++					if (!dm_pool_grow_object(rh->mem, p1_repstr, p2_repstr - p1_repstr)) {
++						log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
++						return 0;
++					}
++				}
++				if (!dm_pool_grow_object(rh->mem, JSON_ESCAPE_CHAR, 1) ||
++				    !dm_pool_grow_object(rh->mem, JSON_QUOTE, 1)) {
++					log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
++					return 0;
++				}
++				p1_repstr = p2_repstr + 1;
++			}
 +
-+		/* --trackchanges requires --splitmirrors which always has SIGN_MINUS */
-+		if (lp->track_changes && lp->mirrors != 1) {
-+                        log_error("Exactly one image must be split off from %s when tracking changes.",
-+				  display_lvname(lv));
-+                        return 0;
-+                }
- 	}
- 
- 	if (lp->merge_mirror)
-@@ -1903,8 +1910,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
- 		return lv_raid_split_and_track(lv, lp->pvh);
- 
- 	if (lp->keep_mimages)
--		return lv_raid_split(lv, lp->lv_split_name,
--				     image_count, lp->pvh);
-+		return lv_raid_split(lv, lp->lv_split_name, image_count, lp->pvh);
- 
- 	if (lp->mirrors_supplied)
- 		return lv_raid_change_image_count(lv, image_count, lp->pvh);
++			if (!dm_pool_grow_object(rh->mem, p1_repstr, 0)) {
++				log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
++				return 0;
++			}
++		} else {
++			if (!dm_pool_grow_object(rh->mem, repstr, 0)) {
++				log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
++				return 0;
++			}
+ 		}
+ 	} else {
+ 		if (!(align = field->props->flags & DM_REPORT_FIELD_ALIGN_MASK))
 
 
