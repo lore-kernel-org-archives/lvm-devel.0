@@ -1,95 +1,149 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 26 Jul 2016 10:30:08 +0000 (UTC)
-Subject: master - libdm: report: fix json reporting to escape '"' character that may appear in reported string
-Message-ID: <20160726103008.F385260254@fedorahosted.org>
+Date: Tue, 26 Jul 2016 14:23:19 +0000 (UTC)
+Subject: master - metadata: fix automatic updates of PV extension headers to newest version
+Message-ID: <20160726142319.2CE00609D2@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f9697ea0067ef574aff09f1c8f25e1c7fab74c17
-Commit:        f9697ea0067ef574aff09f1c8f25e1c7fab74c17
-Parent:        d180bf63119580073235191c3527c9c8ee9cacbb
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=070c0d31ab3847240081e7593f959b03e716923d
+Commit:        070c0d31ab3847240081e7593f959b03e716923d
+Parent:        f9697ea0067ef574aff09f1c8f25e1c7fab74c17
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jul 26 12:27:41 2016 +0200
+AuthorDate:    Tue Jul 26 15:46:36 2016 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jul 26 12:27:41 2016 +0200
+CommitterDate: Tue Jul 26 16:22:55 2016 +0200
 
-libdm: report: fix json reporting to escape '"' character that may appear in reported string
+metadata: fix automatic updates of PV extension headers to newest version
 
+Before, the automatic update from older to newer version of PV extension
+header happened within vg_write call. This may have caused problems under
+some circumnstances where there's a code in between vg_write and vg_commit
+which may have failed. In such situation, we reverted precommitted metadata
+and put back the state to working version of VG metadata.
+
+However, we don't have revert for PV write operation at the moment. So
+if we updated PV headers already and we reverted vg_write due to failure
+in subsequent code (before vg_commit), we ended up with lost VG metadata
+(because old metadata pointers got reset by the PV write operation).
+
+To minimize problematic situations here, we should put vg_write and
+vg_commit that is done after PV header rewrites as close to each
+other as possible.
+
+This patch moves the automatic PV header rewrite for new extension
+header part from vg_write to _vg_read where it's done the same way
+as we do any other VG repairs if detected during VG read operation
+(under VG write lock).
 ---
- WHATS_NEW_DM         |    1 +
- libdm/libdm-report.c |   32 +++++++++++++++++++++++++++++---
- 2 files changed, 30 insertions(+), 3 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/metadata.c |   43 +++++++++++++++++++++++++++++++++----------
+ 2 files changed, 34 insertions(+), 10 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 53d0388..00f897a 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c96b5be..4f24476 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.132 - 
+ Version 2.02.162 - 
  =================================
-+  Fix json reporting to escape '"' character that may appear in reported string.
++  Fix automatic updates of PV extension headers to newest version.
+   Improve lvconvert --trackchanges validation to require --splitmirrors 1.
+   Add note about lastlog built-in command to lvm man page.
+   Fix unrecognised segtype flag message.
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 8a9a1b2..a32649f 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3297,7 +3297,7 @@ static int _pv_in_pv_list(struct physical_volume *pv, struct dm_list *head)
+  * Check if any of the PVs in VG still contain old PV headers
+  * and if yes, schedule them for PV header update.
+  */
+-static int _check_old_pv_ext_for_vg(struct volume_group *vg)
++static int _vg_update_old_pv_ext_if_needed(struct volume_group *vg)
+ {
+ 	struct pv_list *pvl, *new_pvl;
+ 	int pv_needs_rewrite;
+@@ -3330,9 +3330,17 @@ static int _check_old_pv_ext_for_vg(struct volume_group *vg)
+ 			}
+ 			new_pvl->pv = pvl->pv;
+ 			dm_list_add(&vg->pv_write_list, &new_pvl->list);
++			log_debug("PV %s has old extension header, updating to newest version.",
++				  pv_dev_name(pvl->pv));
+ 		}
+ 	}
  
- Version 1.02.131 - 15th July 2016
- =================================
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 8993201..02fead5 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -4320,6 +4320,7 @@ static int _sort_rows(struct dm_report *rh)
- #define JSON_OBJECT_END        "}"
- #define JSON_ARRAY_START       "["
- #define JSON_ARRAY_END         "]"
-+#define JSON_ESCAPE_CHAR       "\\"
++	if (!dm_list_empty(&vg->pv_write_list) &&
++	    (!vg_write(vg) || !vg_commit(vg))) {
++		log_error("Failed to update old PV extension headers in VG %s.", vg->name);
++		return 0;
++	}
++
+ 	return 1;
+ }
  
- #define UNABLE_TO_EXTEND_OUTPUT_LINE_MSG "dm_report: Unable to extend output line"
+@@ -3463,11 +3471,6 @@ int vg_write(struct volume_group *vg)
+ 		return 0;
+ 	}
  
-@@ -4346,6 +4347,7 @@ static int _output_field(struct dm_report *rh, struct dm_report_field *field)
- 	int32_t width;
- 	uint32_t align;
- 	const char *repstr;
-+	const char *p1_repstr, *p2_repstr;
- 	char *buf = NULL;
- 	size_t buf_size = 0;
+-	if (!(_check_old_pv_ext_for_vg(vg))) {
+-		log_error("Failed to schedule physical volume header update.");
+-		return 0;
+-	}
+-
+ 	if (!drop_cached_metadata(vg)) {
+ 		log_error("Unable to drop cached metadata for VG %s.", vg->name);
+ 		return 0;
+@@ -4139,6 +4142,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 	int inconsistent_mdas = 0;
+ 	int inconsistent_mda_count = 0;
+ 	int strip_historical_lvs = *consistent;
++	int update_old_pv_ext = *consistent;
+ 	unsigned use_precommitted = precommitted;
+ 	struct dm_list *pvids;
+ 	struct pv_list *pvl;
+@@ -4175,8 +4179,18 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+                         }
+ 		}
  
-@@ -4393,9 +4395,33 @@ static int _output_field(struct dm_report *rh, struct dm_report_field *field)
- 	repstr = field->report_string;
- 	width = field->props->width;
- 	if (!(rh->flags & DM_REPORT_OUTPUT_ALIGNED)) {
--		if (!dm_pool_grow_object(rh->mem, repstr, 0)) {
--			log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
--			return 0;
-+		if (_is_json_report(rh)) {
-+			/* Escape any JSON_QUOTE that may appear in reported string. */
-+			p1_repstr = repstr;
-+			while ((p2_repstr = strstr(p1_repstr, JSON_QUOTE))) {
-+				if (p2_repstr > p1_repstr) {
-+					if (!dm_pool_grow_object(rh->mem, p1_repstr, p2_repstr - p1_repstr)) {
-+						log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
-+						return 0;
-+					}
-+				}
-+				if (!dm_pool_grow_object(rh->mem, JSON_ESCAPE_CHAR, 1) ||
-+				    !dm_pool_grow_object(rh->mem, JSON_QUOTE, 1)) {
-+					log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
-+					return 0;
-+				}
-+				p1_repstr = p2_repstr + 1;
+-		if (correct_vg && strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg))
+-			return_NULL;
++
++		if (correct_vg) {
++			if (update_old_pv_ext && !_vg_update_old_pv_ext_if_needed(correct_vg)) {
++				release_vg(correct_vg);
++				return_NULL;
 +			}
 +
-+			if (!dm_pool_grow_object(rh->mem, p1_repstr, 0)) {
-+				log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
-+				return 0;
++			if (strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg)) {
++				release_vg(correct_vg);
++				return_NULL;
 +			}
-+		} else {
-+			if (!dm_pool_grow_object(rh->mem, repstr, 0)) {
-+				log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
-+				return 0;
-+			}
- 		}
- 	} else {
- 		if (!(align = field->props->flags & DM_REPORT_FIELD_ALIGN_MASK))
++		}
+ 
+ 		return correct_vg;
+ 	}
+@@ -4616,8 +4630,17 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 
+ 	*consistent = !inconsistent_pvs;
+ 
+-	if (*consistent && correct_vg && strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg))
+-		return_NULL;
++	if (correct_vg && *consistent) {
++		if (update_old_pv_ext && !_vg_update_old_pv_ext_if_needed(correct_vg)) {
++			release_vg(correct_vg);
++			return_NULL;
++		}
++
++		if (strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg)) {
++			release_vg(correct_vg);
++			return_NULL;
++		}
++	}
+ 
+ 	return correct_vg;
+ }
 
 
