@@ -1,53 +1,71 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 25 Jul 2016 13:05:12 +0000 (UTC)
-Subject: master - man: add note about 'lastlog' built-in command
-Message-ID: <20160725130512.674C060D3C@fedorahosted.org>
+From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
+Date: Wed, 27 Jul 2016 16:21:14 +0000 (UTC)
+Subject: master - lvcreate.c: respect DEFAULT_RAID_MAX_IMAGES on creation of any RaidLV
+Message-ID: <20160727162114.8086960BDC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=94141c7797caabe23607a554fa7c6f44a4d570fc
-Commit:        94141c7797caabe23607a554fa7c6f44a4d570fc
-Parent:        5397837a9f334fa91973e36acf38655a19b88b28
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jul 25 15:05:08 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jul 25 15:05:08 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c7b2654c25b8953c55638e7fab2cd0268845cbb3
+Commit:        c7b2654c25b8953c55638e7fab2cd0268845cbb3
+Parent:        8f62b7bfe56c25efbbff5fea26ce29ac6378f08a
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Wed Jul 27 18:20:48 2016 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Wed Jul 27 18:20:48 2016 +0200
 
-man: add note about 'lastlog' built-in command
+lvcreate.c: respect DEFAULT_RAID_MAX_IMAGES on creation of any RaidLV
 
 ---
- WHATS_NEW    |    1 +
- man/lvm.8.in |    4 ++++
- 2 files changed, 5 insertions(+), 0 deletions(-)
+ tools/lvcreate.c |   23 ++++++++---------------
+ 1 files changed, 8 insertions(+), 15 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ca12e8c..f5b8306 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.162 - 
- =================================
-+  Add note about lastlog built-in command to lvm man page.
-   Fix unrecognised segtype flag message.
-   lvconvert reuse cachepool metadade now ONLY with -Zn and clear otherwise.
-   Enabled lvconvert --uncache to work with partial VG.
-diff --git a/man/lvm.8.in b/man/lvm.8.in
-index f0d094d..0215783 100644
---- a/man/lvm.8.in
-+++ b/man/lvm.8.in
-@@ -68,6 +68,10 @@ Display recognised metadata formats.
- .B help
- Display the help text.
- .TP
-+.B lastlog
-+Display log report of last command run in LVM shell
-+if command log reporting is enabled.
-+.TP
- .B lvpoll
- Complete lvmpolld operations (Internal command).
- .TP
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 88e43e4..1ed39e2 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -529,25 +529,12 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
+ 					struct lvcreate_params *lp)
+ {
+ 	int pagesize = lvm_getpagesize();
+-	unsigned max_images;
+-	const char *segtype_name;
++	unsigned max_images = segtype_is_raid(lp->segtype) ? DEFAULT_RAID_MAX_IMAGES :
++							     DEFAULT_MIRROR_MAX_IMAGES;
+ 
+ 	/* Common mirror and raid params */
+ 	if (arg_is_set(cmd, mirrors_ARG)) {
+ 		lp->mirrors = arg_uint_value(cmd, mirrors_ARG, 0) + 1;
+-		if (segtype_is_raid1(lp->segtype)) {
+-			segtype_name = SEG_TYPE_NAME_RAID1;
+-			max_images = DEFAULT_RAID_MAX_IMAGES;
+-		} else {
+-			segtype_name = SEG_TYPE_NAME_MIRROR;
+-			max_images = DEFAULT_MIRROR_MAX_IMAGES;
+-		}
+-
+-		if (lp->mirrors > max_images) {
+-			log_error("Only up to %u images in %s supported currently.",
+-				  max_images, segtype_name);
+-			return 0;
+-		}
+ 
+ 		if ((lp->mirrors > 2) && segtype_is_raid10(lp->segtype)) {
+ 			/*
+@@ -571,6 +558,12 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
+ 		/* Default to 2 mirrored areas if '--type mirror|raid1|raid10' */
+ 		lp->mirrors = seg_is_mirrored(lp) ? 2 : 1;
+ 
++	if (max(lp->mirrors, lp->stripes) > max_images) {
++		log_error("Only up to %u images in %s supported currently.",
++			  max_images, lp->segtype->name);
++		return 0;
++	}
++
+ 	lp->nosync = arg_is_set(cmd, nosync_ARG);
+ 
+ 	if (!(lp->region_size = arg_uint_value(cmd, regionsize_ARG, 0)) &&
 
 
