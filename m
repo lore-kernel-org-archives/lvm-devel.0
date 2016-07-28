@@ -1,54 +1,111 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 28 Jul 2016 14:39:13 +0000 (UTC)
-Subject: master - config: keep new setting commented out
-Message-ID: <20160728143913.1E1F560C98@fedorahosted.org>
+Date: Thu, 28 Jul 2016 14:39:15 +0000 (UTC)
+Subject: master - tests: updates for new raid allocation logic
+Message-ID: <20160728143915.36590605F3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=edb5d12463b60b22ba6683cd9e2fd12b07f09fcf
-Commit:        edb5d12463b60b22ba6683cd9e2fd12b07f09fcf
-Parent:        43f455589377cb5e3b21434a58226a7365fe1d6f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=02ddd48c1148052175ac2178f3f762ca0629d6e9
+Commit:        02ddd48c1148052175ac2178f3f762ca0629d6e9
+Parent:        edb5d12463b60b22ba6683cd9e2fd12b07f09fcf
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 28 15:08:11 2016 +0200
+AuthorDate:    Thu Jul 28 16:37:20 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 28 15:08:11 2016 +0200
+CommitterDate: Thu Jul 28 16:37:20 2016 +0200
 
-config: keep new setting commented out
+tests: updates for new raid allocation logic
 
+(with backward compatible settings user as well to check old logic
+is still available when needed).
 ---
- conf/example.conf.in         |    3 ++-
- lib/config/config_settings.h |    2 +-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ test/shell/lvcreate-raid.sh   |   18 +++++++++++++++++-
+ test/shell/lvcreate-raid10.sh |   26 +++++++++++++++++++++-----
+ 2 files changed, 38 insertions(+), 6 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 1dcbf52..4ac09e2 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -381,7 +381,8 @@ allocation {
- 	# Stripe across all PVs when RAID stripes are not specified.
- 	# If enabled, all PVs in the VG or on the command line are used for raid0/4/5/6/10
- 	# when the command does not specify the number of stripes to use.
--	raid_stripe_all_devices = 0
-+	# This configuration option has an automatic default value.
-+	# raid_stripe_all_devices = 0
+diff --git a/test/shell/lvcreate-raid.sh b/test/shell/lvcreate-raid.sh
+index 19c8c61..66434b0 100644
+--- a/test/shell/lvcreate-raid.sh
++++ b/test/shell/lvcreate-raid.sh
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011-2016 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -178,6 +178,22 @@ lv_devices $vg raid6 5
+ lvremove -ff $vg
  
- 	# Configuration option allocation/cache_pool_metadata_require_separate_pvs.
- 	# Cache pool metadata and data will always use different PVs.
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 8b9932e..1e4b689 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -461,7 +461,7 @@ cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separa
- 	"Mirror logs and images will always use different PVs.\n"
- 	"The default setting changed in version 2.02.85.\n")
+ # Implicit count comes from total #PVs in VG (always 2 for mirror though)
++# Defaults -i2 even though more PVs listed
++lvcreate --type raid1 -l1 -an -Zn -n raid1 $vg
++lv_devices $vg raid1 2
++lvcreate --type raid5 -l2 -an -Zn -n raid5 $vg
++lv_devices $vg raid5 3
++lvcreate --type raid6 -l3 -an -Zn -n raid6 $vg
++lv_devices $vg raid6 5
++lvremove -ff $vg
++
++
++########################################################
++# Try again with backward compatible old logic applied #
++########################################################
++aux lvmconf 'allocation/raid_stripe_all_devices = 1'
++
++# Implicit count comes from total #PVs in VG (always 2 for mirror though)
+ lvcreate --type raid1 -l1 -an -Zn -n raid1 $vg
+ lv_devices $vg raid1 2
+ lvcreate --type raid5 -l2 -an -Zn -n raid5 $vg
+diff --git a/test/shell/lvcreate-raid10.sh b/test/shell/lvcreate-raid10.sh
+index 2cd5ac0..bebe221 100644
+--- a/test/shell/lvcreate-raid10.sh
++++ b/test/shell/lvcreate-raid10.sh
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2012-2016 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -67,16 +67,32 @@ lvremove -ff $vg
+ not lvcreate --type raid10 -l2 $vg "$dev1" "$dev2" "$dev3"
  
--cfg(allocation_raid_stripe_all_devices_CFG, "raid_stripe_all_devices", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ALLOCATION_STRIPE_ALL_DEVICES, vsn(2, 2, 162), NULL, 0, NULL,
-+cfg(allocation_raid_stripe_all_devices_CFG, "raid_stripe_all_devices", allocation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_ALLOCATION_STRIPE_ALL_DEVICES, vsn(2, 2, 162), NULL, 0, NULL,
- 	"Stripe across all PVs when RAID stripes are not specified.\n"
- 	"If enabled, all PVs in the VG or on the command line are used for raid0/4/5/6/10\n"
- 	"when the command does not specify the number of stripes to use.\n")
+ # Implicit count comes from #PVs given (always 2-way mirror)
++# Defaults -i2, which works with 4 PVs listed
+ lvcreate --type raid10 -l2 -an -Zn -n raid10 $vg "$dev1" "$dev2" "$dev3" "$dev4"
+ lv_devices $vg raid10 4
+-lvremove -ff $vg
+ 
+-# Implicit count comes from total #PVs in VG (always 2 for mirror though)
+-lvcreate --type raid10 -l2 -an -Zn -n raid10 $vg
+-lv_devices $vg raid10 6
++# Defaults -i2 even though more PVs listed
++lvcreate --type raid10 -l2 -an -Zn -n raid10_6 $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
++lv_devices $vg raid10_6 4
++
+ lvremove -ff $vg
+ 
+ #
+ # FIXME: Add tests that specify particular PVs to use for creation
+ #
++
++
++########################################################
++# Try again with backward compatible old logic applied #
++########################################################
++aux lvmconf 'allocation/raid_stripe_all_devices = 1'
++
++# Implicit count comes from #PVs given (always 2-way mirror)
++lvcreate --type raid10 -l2 -an -Zn -n raid10 $vg "$dev1" "$dev2" "$dev3" "$dev4"
++lv_devices $vg raid10 4
++
++# Implicit count comes from total #PVs in VG (always 2 for mirror though)
++lvcreate --type raid10 -l2 -an -Zn -n raid10_vg $vg
++lv_devices $vg raid10_vg 6
++
+ vgremove -ff $vg
 
 
