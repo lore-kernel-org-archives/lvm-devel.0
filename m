@@ -1,41 +1,40 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sat, 30 Jul 2016 03:16:41 +0000 (UTC)
-Subject: master - tools: Also recognise segtype with thin and cache.
-Message-ID: <20160730031641.ED51460DA9@fedorahosted.org>
+Date: Sat, 30 Jul 2016 14:19:12 +0000 (UTC)
+Subject: master - lvconvert: Fix --type thin recognition.
+Message-ID: <20160730141912.8C42E60F5B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=52d2fa7022c48791d003554e5e656a94c5970af8
-Commit:        52d2fa7022c48791d003554e5e656a94c5970af8
-Parent:        d1ff254c3cca0eed959095aa02ef9bfe36481065
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48d9c46daabd73c694404c48d3820c2a229f1ad2
+Commit:        48d9c46daabd73c694404c48d3820c2a229f1ad2
+Parent:        52d2fa7022c48791d003554e5e656a94c5970af8
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Jul 30 04:12:58 2016 +0100
+AuthorDate:    Sat Jul 30 15:08:50 2016 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Jul 30 04:12:58 2016 +0100
+CommitterDate: Sat Jul 30 15:08:50 2016 +0100
 
-tools: Also recognise segtype with thin and cache.
+lvconvert: Fix --type thin recognition.
 
-(--type thin still needs this for lvcreate - more logic should be
-shared between lvcreate and lvconvert)
+lp->thin already holds the result of the cmdline arg resolution.
 ---
- lib/metadata/segtype.h |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ tools/lvconvert.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
-index 2fc7a12..bf7c5eb 100644
---- a/lib/metadata/segtype.h
-+++ b/lib/metadata/segtype.h
-@@ -133,6 +133,8 @@ struct dev_manager;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index b9aef53..822df53 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4273,7 +4273,7 @@ static int _convert_striped(struct cmd_context *cmd, struct logical_volume *lv,
+ 	if (!strcmp(lp->type_str, SEG_TYPE_NAME_SNAPSHOT) || arg_is_set(cmd, snapshot_ARG))
+ 		return _convert_striped_snapshot(cmd, lv, lp);
  
- #define segtype_supports_stripe_size(segtype)	\
- 	((segtype_is_striped(segtype) || segtype_is_mirror(segtype) || \
-+	  segtype_is_cache(segtype) || segtype_is_cache_pool(segtype) || \
-+	  segtype_is_thin(segtype) || segtype_is_snapshot(segtype) || \
- 	  (segtype_is_raid(segtype) && !segtype_is_raid1(segtype))) ? 1 : 0)
+-	if (!strcmp(lp->type_str, SEG_TYPE_NAME_THIN) || arg_is_set(cmd, thin_ARG))
++	if (!strcmp(lp->type_str, SEG_TYPE_NAME_THIN) || lp->thin)
+ 		return _convert_striped_thin(cmd, lv, lp);
  
- #define seg_is_cache(seg)	segtype_is_cache((seg)->segtype)
+ 	if (!strcmp(lp->type_str, SEG_TYPE_NAME_CACHE) || arg_is_set(cmd, cache_ARG))
 
 
