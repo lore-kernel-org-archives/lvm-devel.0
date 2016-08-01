@@ -1,106 +1,45 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 May 2013 15:36:55 +0000 (UTC)
-Subject: master - snapshot: add cow_max_extents
-Message-ID: <20130530153655.8A79161429@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon,  1 Aug 2016 15:47:23 +0000 (UTC)
+Subject: master - Revert "thin: when converting a thin pool data or metadata LV from"
+Message-ID: <20160801154723.8E60160B61@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eb7e206a73a4fae5b93ffcdf96640675f7a72a73
-Commit:        eb7e206a73a4fae5b93ffcdf96640675f7a72a73
-Parent:        59962d8d3e1c402da02f7bf1b09978f570fd09d5
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 29 12:44:54 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 17:30:15 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c490be9134a3c571636ab67d99ffeeac27d9b56f
+Commit:        c490be9134a3c571636ab67d99ffeeac27d9b56f
+Parent:        d0df1ff995f3270232ec5179057482c558119a92
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Aug 1 15:17:44 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Aug 1 15:17:44 2016 +0100
 
-snapshot: add cow_max_extents
+Revert "thin: when converting a thin pool data or metadata LV from"
 
-Add more precise calculation of the maximum usable snapshot size.
-Using only percentage fails for small size of snapshot and extents.
+This reverts commit 237f84e0383c7e3003050be7c072ee0a092fd426.
+
+This case failed:
+    lvcreate --type raid1 -m1 -l2 vg99
+    lvcreate -aey -l2 -s vg99/lvol0
+    lvconvert -m2 vg99/lvol0
 ---
- WHATS_NEW                        |    1 +
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/snapshot_manip.c    |   40 +++++++++++++++++++++++++++++++++++--
- 3 files changed, 39 insertions(+), 3 deletions(-)
+ lib/metadata/raid_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 256adec..c7eb82a 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Add cow_max_extents() to calc extents for 100% origin coverage.
-   For creation of snapshot require size for at least 3 chunks.
-   Fix lvresize --use-policies of VALID but 100% full snapshot.
-   Do not accept size parameters bigger then 16EiB.
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index f698b33..7ef4220 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -717,6 +717,7 @@ int lv_is_virtual_origin(const struct logical_volume *lv);
- int lv_is_cow(const struct logical_volume *lv);
- int lv_is_merging_origin(const struct logical_volume *origin);
- int lv_is_merging_cow(const struct logical_volume *snapshot);
-+uint32_t cow_max_extents(const struct logical_volume *origin, uint32_t chunk_size);
- int lv_is_cow_covering_origin(const struct logical_volume *lv);
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 6ac7450..0364f2f 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -862,7 +862,7 @@ to be left for these sub-lvs.
+ 	dm_list_iterate_items(lvl, &data_lvs)
+ 		lv_set_hidden(lvl->lv);
  
- /* Test if given LV is visible from user's perspective */
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index a7f57a6..c3d1112 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -31,11 +31,45 @@ int lv_is_cow(const struct logical_volume *lv)
- 	return (!lv_is_origin(lv) && lv->snapshot) ? 1 : 0;
- }
+-	if (!lv_update_and_reload(lv))
++	if (!lv_update_and_reload_origin(lv))
+ 		return_0;
  
-+static uint64_t _cow_max_size(uint64_t origin_size, uint32_t chunk_size)
-+{
-+	/* Snapshot disk layout:
-+	 *    COW is divided into chunks
-+	 *        1st. chunk is reserved for header
-+	 *        2nd. chunk is the 1st. metadata chunk
-+	 *        3rd. chunk is the 1st. data chunk
-+	 */
-+
-+	/* Size of metadata for snapshot in sectors */
-+	uint64_t mdata_size = ((origin_size + chunk_size - 1) / chunk_size * 16 + 511) >> SECTOR_SHIFT;
-+
-+	/* Sum all chunks - header + metadata size + origin size (aligned on chunk boundary) */
-+	uint64_t size = chunk_size +
-+		((mdata_size + chunk_size - 1) & ~(uint64_t)(chunk_size - 1)) +
-+		((origin_size + chunk_size - 1) & ~(uint64_t)(chunk_size - 1));
-+
-+	/* Does not overflow since size is in sectors (9 bits) */
-+	return size;
-+}
-+
-+uint32_t cow_max_extents(const struct logical_volume *origin, uint32_t chunk_size)
-+{
-+	uint64_t size = _cow_max_size(origin->size, chunk_size);
-+	uint32_t extent_size = origin->vg->extent_size;
-+
-+	if (size % extent_size)
-+		size += extent_size - size % extent_size;
-+
-+	if (size > UINT32_MAX)
-+		size = UINT32_MAX; /* Origin is too big for 100% snapshot anyway */
-+
-+	return (uint32_t) (size / extent_size);
-+}
-+
- int lv_is_cow_covering_origin(const struct logical_volume *lv)
- {
--	/* TODO: we need less then 1% of origin size, depends on chunk size */
--	return lv_is_cow(lv) ?
--		(origin_from_cow(lv)->size * UINT64_C(101) <= lv->size * UINT64_C(100)) : 0;
-+	return lv_is_cow(lv) &&
-+		(lv->size >= _cow_max_size(origin_from_cow(lv)->size, find_cow(lv)->chunk_size));
- }
- 
- int lv_is_visible(const struct logical_volume *lv)
+ 	/*
 
 
