@@ -1,76 +1,62 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 May 2013 15:36:57 +0000 (UTC)
-Subject: master - lvcreate: reduce too large cow
-Message-ID: <20130530153657.9EEBF61145@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue,  2 Aug 2016 15:25:11 +0000 (UTC)
+Subject: master - lvconvert: Treat --repair as an independent case.
+Message-ID: <20160802152511.EC6FE60E7B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bd3ece0128926cc156b7fcb6409acc1a2afb16db
-Commit:        bd3ece0128926cc156b7fcb6409acc1a2afb16db
-Parent:        eb7e206a73a4fae5b93ffcdf96640675f7a72a73
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 29 21:43:46 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 17:35:14 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6361bc4734f2227f049cb6ef0335f30468c2775d
+Commit:        6361bc4734f2227f049cb6ef0335f30468c2775d
+Parent:        804a397643a38b9c82d22eacaca2138f2af57bec
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Aug 2 16:21:34 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Aug 2 16:22:12 2016 +0100
 
-lvcreate: reduce too large cow
+lvconvert: Treat --repair as an independent case.
 
-Detect maximum usable size of snapshot COW device,
-and do not waste more space for such LV then needed.
 ---
- WHATS_NEW        |    1 +
- tools/lvcreate.c |   18 ++++++++++++++++++
- 2 files changed, 19 insertions(+), 0 deletions(-)
+ tools/lvconvert.c |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index c7eb82a..d757e2b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Creation of snapshot takes at most 100% origin coverage.
-   Add cow_max_extents() to calc extents for 100% origin coverage.
-   For creation of snapshot require size for at least 3 chunks.
-   Fix lvresize --use-policies of VALID but 100% full snapshot.
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 7580155..497c474 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -241,6 +241,7 @@ static int _update_extents_params(struct volume_group *vg,
- 	struct logical_volume *origin = NULL;
- 	uint32_t size_rest;
- 	uint32_t stripesize_extents;
-+	uint32_t extents;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 80760c6..6c57191 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -626,7 +626,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
  
- 	if (lcp->size &&
- 	    !(lp->extents = extents_from_size(vg->cmd, lcp->size,
-@@ -299,6 +300,23 @@ static int _update_extents_params(struct volume_group *vg,
- 			break;
+ 	/* We should have caught all these cases already. */
+ 	if (lp->merge + lp->splitsnapshot + lp->splitcache + lp->split + lp->uncache +
+-	    lp->cache + lp->thin + lp->keep_mimages + lp->snapshot + lp->replace > 1) {
++	    lp->cache + lp->thin + lp->keep_mimages + lp->snapshot + lp->replace + lp->repair > 1) {
+ 		log_error(INTERNAL_ERROR "Unexpected combination of incompatible options selected.");
+ 		return 0;
  	}
- 
-+	if (lp->snapshot && lp->origin) {
-+		if (!origin && !(origin = find_lv(vg, lp->origin))) {
-+			log_error("Couldn't find origin volume '%s'.",
-+				  lp->origin);
-+			return 0;
-+		}
-+
-+		extents = cow_max_extents(origin, lp->chunk_size);
-+
-+		if (extents < lp->extents) {
-+				log_print_unless_silent("Reducing COW size %s down to maximum usable size %s.",
-+						display_size(vg->cmd, (uint64_t) vg->extent_size * lp->extents),
-+						display_size(vg->cmd, (uint64_t) vg->extent_size * extents));
-+			lp->extents = extents;
-+		}
-+	}
-+
- 	if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
- 		stripesize_extents = 1;
- 
+@@ -643,7 +643,8 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 	 *   lp->keep_mimages
+ 	 *   lp->snapshot
+ 	 *   lp->replace
+-	 *   --type mirror|raid  lp->repair lp->mirrorlog lp->corelog
++	 *   lp->repair
++	 *   --type mirror|raid  lp->mirrorlog lp->corelog
+ 	 *   --type raid0|striped
+ 	 */
+ 	if (lp->merge) {	/* Snapshot or mirror merge */
+@@ -722,8 +723,10 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 								    tmp_str)))
+ 				return_0;
+ 		}
+-	} else if (_mirror_or_raid_type_requested(cmd, lp->type_str) ||
+-		   lp->repair || lp->mirrorlog || lp->corelog) { /* Mirrors (and some RAID functions) */
++	} else if (lp->repair)
++		;
++	else if (_mirror_or_raid_type_requested(cmd, lp->type_str) ||
++		   lp->mirrorlog || lp->corelog) { /* Mirrors (and some RAID functions) */
+ 		if (arg_is_set(cmd, chunksize_ARG)) {
+ 			log_error("--chunksize is only available with snapshots or pools.");
+ 			return 0;
 
 
