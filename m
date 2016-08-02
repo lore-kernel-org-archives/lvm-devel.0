@@ -1,39 +1,50 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue,  2 Aug 2016 13:27:25 +0000 (UTC)
-Subject: master - vg_validate: correct min_recovery_rate check message
-Message-ID: <20160802132725.B8A4460F5B@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue,  2 Aug 2016 14:59:51 +0000 (UTC)
+Subject: master - lvconvert: Forbid stripe parameters with --repair.
+Message-ID: <20160802145951.DFF7A60B3C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d0d03f315bd988bab50e45c4907ab626a780e600
-Commit:        d0d03f315bd988bab50e45c4907ab626a780e600
-Parent:        5765a2845600b827eab782e02250060eb4520c81
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Aug 2 15:27:13 2016 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Aug 2 15:27:13 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=804a397643a38b9c82d22eacaca2138f2af57bec
+Commit:        804a397643a38b9c82d22eacaca2138f2af57bec
+Parent:        d0d03f315bd988bab50e45c4907ab626a780e600
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Aug 2 15:57:45 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Aug 2 15:59:12 2016 +0100
 
-vg_validate: correct min_recovery_rate check message
+lvconvert: Forbid stripe parameters with --repair.
 
 ---
- lib/metadata/merge.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    1 -
+ 2 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index be491e3..05cef17 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -121,7 +121,7 @@ static void _check_raid_region_recovery(struct lv_segment *seg, int *error_count
- 	/* min/max recovery rate may be zero but min may not be larger than max if set */
- 	if (seg->max_recovery_rate &&
- 	    seg->min_recovery_rate > seg->max_recovery_rate)
--		raid_seg_error_val("min recovery larger than max recovery larger", seg->min_recovery_rate);
-+		raid_seg_error_val("min recovery larger than max recovery", seg->min_recovery_rate);
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2e81ab0..aa839bd 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.163 - 
+ =================================
++  Forbid stripe parameters with lvconvert --repair.
+   Unify stripe size validation into get_stripe_params to catch missing cases.
+   Further lvconvert validation logic refactoring.
  
- /* Check raid1 segment properties in @seg */
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index dd0102f..80760c6 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -449,7 +449,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 		if (arg_outside_list_is_set(cmd, "cannot be used with --repair",
+ 					    repair_ARG,
+ 					    alloc_ARG, usepolicies_ARG,
+-					    stripes_long_ARG, stripesize_ARG,
+ 					    force_ARG, noudevsync_ARG, test_ARG,
+ 					    -1))
+ 			return_0;
 
 
