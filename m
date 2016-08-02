@@ -1,42 +1,39 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Mon,  1 Aug 2016 20:42:44 +0000 (UTC)
-Subject: master - vg_validate: new RAID segment checks in check_lv_segments() introduced with commit 8f62b7bfe56c rely on complete defintions of the relations between the LVs of a VG. Hence only run these checks when the complete_vg flag is set on calls to check_lv_segments().
-Message-ID: <20160801204244.0AAFB60FE3@fedorahosted.org>
+Date: Tue,  2 Aug 2016 13:27:25 +0000 (UTC)
+Subject: master - vg_validate: correct min_recovery_rate check message
+Message-ID: <20160802132725.B8A4460F5B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5765a2845600b827eab782e02250060eb4520c81
-Commit:        5765a2845600b827eab782e02250060eb4520c81
-Parent:        c490be9134a3c571636ab67d99ffeeac27d9b56f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d0d03f315bd988bab50e45c4907ab626a780e600
+Commit:        d0d03f315bd988bab50e45c4907ab626a780e600
+Parent:        5765a2845600b827eab782e02250060eb4520c81
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Aug 1 22:42:05 2016 +0200
+AuthorDate:    Tue Aug 2 15:27:13 2016 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Aug 1 22:42:05 2016 +0200
+CommitterDate: Tue Aug 2 15:27:13 2016 +0200
 
-vg_validate: new RAID segment checks in check_lv_segments()              introduced with commit 8f62b7bfe56c rely on complete              defintions of the relations between the LVs of a VG.              Hence only run these checks when the complete_vg flag              is set on calls to check_lv_segments().
+vg_validate: correct min_recovery_rate check message
 
-             lvconvert failed in test lvconvert-thin-raid.sh when
-             calling check_lv_segments() from _read_segments() without
-             providing a complete definition.
 ---
  lib/metadata/merge.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index 12c3829..be491e3 100644
+index be491e3..05cef17 100644
 --- a/lib/metadata/merge.c
 +++ b/lib/metadata/merge.c
-@@ -391,7 +391,7 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
- 	dm_list_iterate_items(seg, &lv->segments) {
- 		seg_count++;
+@@ -121,7 +121,7 @@ static void _check_raid_region_recovery(struct lv_segment *seg, int *error_count
+ 	/* min/max recovery rate may be zero but min may not be larger than max if set */
+ 	if (seg->max_recovery_rate &&
+ 	    seg->min_recovery_rate > seg->max_recovery_rate)
+-		raid_seg_error_val("min recovery larger than max recovery larger", seg->min_recovery_rate);
++		raid_seg_error_val("min recovery larger than max recovery", seg->min_recovery_rate);
+ }
  
--		if (seg_is_raid(seg))
-+		if (complete_vg && seg_is_raid(seg))
- 			 _check_raid_seg(seg, &error_count);
- 		
- 		if (seg->le != le) {
+ /* Check raid1 segment properties in @seg */
 
 
