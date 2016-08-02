@@ -1,78 +1,94 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  2 Aug 2016 18:52:37 +0000 (UTC)
-Subject: master - lvconvert: Preserve mirror region size with --repair.
-Message-ID: <20160802185237.8277860FE7@fedorahosted.org>
+Date: Tue,  2 Aug 2016 22:52:10 +0000 (UTC)
+Subject: master - lvconvert: Pass region_size to lv_raid_convert.
+Message-ID: <20160802225210.0634E61074@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a234cebbed19657058cdba87a5e2c23d50ff05fe
-Commit:        a234cebbed19657058cdba87a5e2c23d50ff05fe
-Parent:        415c5fd5d8e58b34fd016ba1e45dc43c6ed10e18
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fdc3fcbfceb6282312e79200286be29ae08a5765
+Commit:        fdc3fcbfceb6282312e79200286be29ae08a5765
+Parent:        a234cebbed19657058cdba87a5e2c23d50ff05fe
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Aug 2 19:50:04 2016 +0100
+AuthorDate:    Tue Aug 2 23:51:20 2016 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Aug 2 19:50:04 2016 +0100
+CommitterDate: Tue Aug 2 23:51:20 2016 +0100
 
-lvconvert: Preserve mirror region size with --repair.
+lvconvert: Pass region_size to lv_raid_convert.
 
 ---
- WHATS_NEW         |    1 +
- tools/lvconvert.c |   10 ++++++----
- 2 files changed, 7 insertions(+), 4 deletions(-)
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/raid_manip.c        |    8 ++++++--
+ tools/lvconvert.c                |    3 ++-
+ 3 files changed, 9 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index aa839bd..3a64bbd 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.163 - 
- =================================
-+  Preserve existing mirror region size when using --repair.
-   Forbid stripe parameters with lvconvert --repair.
-   Unify stripe size validation into get_stripe_params to catch missing cases.
-   Further lvconvert validation logic refactoring.
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index a8cbfa2..531fa03 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1201,6 +1201,7 @@ int lv_raid_convert(struct logical_volume *lv,
+ 		    int yes, int force,
+ 		    const unsigned stripes,
+ 		    const unsigned new_stripe_size,
++		    const uint32_t new_region_size,
+ 		    struct dm_list *allocate_pvs);
+ int lv_raid_replace(struct logical_volume *lv, struct dm_list *remove_pvs,
+ 		    struct dm_list *allocate_pvs);
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 0364f2f..9da05e5 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -2231,6 +2231,7 @@ static struct lv_segment *_convert_striped_to_raid0(struct logical_volume *lv,
+ 	unsigned new_image_count,		\
+ 	const unsigned new_stripes,		\
+ 	uint32_t new_stripe_size,		\
++	const uint32_t new_region_size,		\
+ 	struct dm_list *allocate_pvs
+ 
+ typedef int (*takeover_fn_t)(TAKEOVER_FN_ARGS);
+@@ -2737,6 +2738,7 @@ int lv_raid_convert(struct logical_volume *lv,
+ 		    int yes, int force,
+ 		    const unsigned new_stripes,
+ 		    const unsigned new_stripe_size,
++		    const uint32_t new_region_size,
+ 		    struct dm_list *allocate_pvs)
+ {
+ 	struct lv_segment *seg = first_seg(lv);
+@@ -2765,7 +2767,8 @@ int lv_raid_convert(struct logical_volume *lv,
+ 
+ 	/* Exit without doing activation checks if the combination isn't possible */
+ 	if (_takeover_not_possible(takeover_fn))
+-		return takeover_fn(lv, new_segtype, yes, force, new_image_count, new_stripes, stripe_size, allocate_pvs);
++		return takeover_fn(lv, new_segtype, yes, force, new_image_count, new_stripes, stripe_size,
++				   new_region_size, allocate_pvs);
+ 
+ 	log_verbose("Converting %s from %s to %s.",
+ 		    display_lvname(lv), lvseg_name(first_seg(lv)),
+@@ -2795,7 +2798,8 @@ int lv_raid_convert(struct logical_volume *lv,
+ 		return 0;
+ 	}
+ 
+-	return takeover_fn(lv, new_segtype, yes, force, new_image_count, new_stripes, stripe_size, allocate_pvs);
++	return takeover_fn(lv, new_segtype, yes, force, new_image_count, new_stripes, stripe_size,
++			   new_region_size, allocate_pvs);
+ }
+ 
+ static int _remove_partial_multi_segment_image(struct logical_volume *lv,
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 8444b35..c01eec9 100644
+index c01eec9..d5eaee4 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -1365,7 +1365,7 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
- 				  uint32_t new_log_count)
- {
- 	uint32_t region_size;
--	struct lv_segment *seg;
-+	struct lv_segment *seg = first_seg(lv);
- 	struct logical_volume *layer_lv;
- 	uint32_t old_mimage_count = lv_mirror_count(lv);
- 	uint32_t old_log_count = _get_log_count(lv);
-@@ -1378,14 +1378,12 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
- 
- 	region_size = adjusted_mirror_region_size(lv->vg->extent_size,
- 						  lv->le_count,
--						  lp->region_size, 0,
-+						  lp->region_size ? : seg->region_size, 0,
- 						  vg_is_clustered(lv->vg));
- 
- 	if (!operable_pvs)
- 		operable_pvs = lp->pvh;
- 
--	seg = first_seg(lv);
--
- 	/*
- 	 * Up-convert from linear to mirror
- 	 */
-@@ -1605,6 +1603,10 @@ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
- 	failed_mimages = _failed_mirrors_count(lv);
- 	failed_logs = _failed_logs_count(lv);
- 
-+	/* Retain existing region size in case we need it later */
-+	if (!lp->region_size)
-+		lp->region_size = first_seg(lv)->region_size;
-+
- 	if (!mirror_remove_missing(cmd, lv, 0))
- 		return_0;
- 
+@@ -1900,7 +1900,8 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 			log_error("RAID module does not support RAID0.");
+ 			return 0;
+ 		}
+-		if (!lv_raid_convert(lv, lp->segtype, lp->yes, lp->force, lp->stripes, lp->stripe_size, lp->pvh))
++		if (!lv_raid_convert(lv, lp->segtype, lp->yes, lp->force, lp->stripes, lp->stripe_size,
++				     lp->region_size, lp->pvh))
+ 			return_0;
+ 		log_print_unless_silent("Logical volume %s successfully converted.",
+ 					display_lvname(lv));
 
 
