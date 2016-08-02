@@ -1,76 +1,78 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue,  2 Aug 2016 15:46:20 +0000 (UTC)
-Subject: master - lvconvert: Divide into 12 categories.
-Message-ID: <20160802154620.CD33B605CC@fedorahosted.org>
+Date: Tue,  2 Aug 2016 18:52:37 +0000 (UTC)
+Subject: master - lvconvert: Preserve mirror region size with --repair.
+Message-ID: <20160802185237.8277860FE7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=415c5fd5d8e58b34fd016ba1e45dc43c6ed10e18
-Commit:        415c5fd5d8e58b34fd016ba1e45dc43c6ed10e18
-Parent:        6361bc4734f2227f049cb6ef0335f30468c2775d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a234cebbed19657058cdba87a5e2c23d50ff05fe
+Commit:        a234cebbed19657058cdba87a5e2c23d50ff05fe
+Parent:        415c5fd5d8e58b34fd016ba1e45dc43c6ed10e18
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Aug 2 16:40:33 2016 +0100
+AuthorDate:    Tue Aug 2 19:50:04 2016 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Aug 2 16:44:21 2016 +0100
+CommitterDate: Tue Aug 2 19:50:04 2016 +0100
 
-lvconvert: Divide into 12 categories.
+lvconvert: Preserve mirror region size with --repair.
 
 ---
- tools/lvconvert.c |   16 ++++++++++------
- 1 files changed, 10 insertions(+), 6 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |   10 ++++++----
+ 2 files changed, 7 insertions(+), 4 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index aa839bd..3a64bbd 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.163 - 
+ =================================
++  Preserve existing mirror region size when using --repair.
+   Forbid stripe parameters with lvconvert --repair.
+   Unify stripe size validation into get_stripe_params to catch missing cases.
+   Further lvconvert validation logic refactoring.
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 6c57191..8444b35 100644
+index 8444b35..c01eec9 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -38,12 +38,10 @@
-  */
+@@ -1365,7 +1365,7 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
+ 				  uint32_t new_log_count)
+ {
+ 	uint32_t region_size;
+-	struct lv_segment *seg;
++	struct lv_segment *seg = first_seg(lv);
+ 	struct logical_volume *layer_lv;
+ 	uint32_t old_mimage_count = lv_mirror_count(lv);
+ 	uint32_t old_log_count = _get_log_count(lv);
+@@ -1378,14 +1378,12 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
  
- struct lvconvert_params {
--	/* Exactly one of these options is chosen */
-+	/* Exactly one of these 12 command categories is determined */
- 	int merge;		/* Either merge_snapshot or merge_mirror is also set */
- 	int cache;
--	int corelog;
--	int mirrorlog;
--	int mirrors_supplied;	/* When type_str is not set, this may be set with keep_mimages for --splitmirrors */
-+	int keep_mimages;	/* --splitmirrors */
- 	int repair;
- 	int replace;
- 	int snapshot;
-@@ -52,6 +50,12 @@ struct lvconvert_params {
- 	int splitsnapshot;
- 	int thin;
- 	int uncache;
-+	int other_conversion;	/* Everything else */
-+
-+	int corelog;		/* Equivalent to --mirrorlog core */
-+	int mirrorlog;		/* Only one of corelog and mirrorlog may be set */
-+
-+	int mirrors_supplied;	/* When type_str is not set, this may be set with keep_mimages for --splitmirrors */
- 	const char *type_str;	/* When this is set, mirrors_supplied may optionally also be set */
- 				/* Holds what you asked for based on --type or other arguments, else "" */
+ 	region_size = adjusted_mirror_region_size(lv->vg->extent_size,
+ 						  lv->le_count,
+-						  lp->region_size, 0,
++						  lp->region_size ? : seg->region_size, 0,
+ 						  vg_is_clustered(lv->vg));
  
-@@ -80,7 +84,6 @@ struct lvconvert_params {
+ 	if (!operable_pvs)
+ 		operable_pvs = lp->pvh;
  
- 	uint32_t mirrors;
- 	sign_t mirrors_sign;
--	uint32_t keep_mimages;	/* --splitmirrors */
- 	uint32_t stripes;
- 	uint32_t stripe_size;
- 	uint32_t read_ahead;
-@@ -629,7 +632,8 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 	    lp->cache + lp->thin + lp->keep_mimages + lp->snapshot + lp->replace + lp->repair > 1) {
- 		log_error(INTERNAL_ERROR "Unexpected combination of incompatible options selected.");
- 		return 0;
--	}
-+	} else
-+		lp->other_conversion = 1;
- 
+-	seg = first_seg(lv);
+-
  	/*
- 	 * Final checking of each case:
+ 	 * Up-convert from linear to mirror
+ 	 */
+@@ -1605,6 +1603,10 @@ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
+ 	failed_mimages = _failed_mirrors_count(lv);
+ 	failed_logs = _failed_logs_count(lv);
+ 
++	/* Retain existing region size in case we need it later */
++	if (!lp->region_size)
++		lp->region_size = first_seg(lv)->region_size;
++
+ 	if (!mirror_remove_missing(cmd, lv, 0))
+ 		return_0;
+ 
 
 
