@@ -1,7 +1,7 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed,  3 Aug 2016 22:44:05 +0000 (UTC)
+Date: Wed,  3 Aug 2016 22:44:08 +0000 (UTC)
 Subject: master - lvconvert: Improve error message when no -m.
-Message-ID: <20160803224405.EFD0F60FDF@fedorahosted.org>
+Message-ID: <20160803224408.DA5F560A4D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
