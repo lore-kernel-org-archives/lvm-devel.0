@@ -1,60 +1,53 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 May 2013 15:36:59 +0000 (UTC)
-Subject: master - lvresize: check for max snapshot size
-Message-ID: <20130530153659.B188A61145@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed,  3 Aug 2016 22:32:27 +0000 (UTC)
+Subject: master - lvconvert: Improve error message when no -m.
+Message-ID: <20160803223227.6470660B36@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3ced1bf694359a67162cccc7f0e3d94e50929f6e
-Commit:        3ced1bf694359a67162cccc7f0e3d94e50929f6e
-Parent:        bd3ece0128926cc156b7fcb6409acc1a2afb16db
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 29 21:23:02 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 17:35:23 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5de760f00de53c8035a0313f7d19ecf7e93916db
+Commit:        5de760f00de53c8035a0313f7d19ecf7e93916db
+Parent:        be497175e03b5cb51f2972a84528216bba06412a
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Aug 3 23:31:50 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Aug 3 23:31:50 2016 +0100
 
-lvresize: check for max snapshot size
+lvconvert: Improve error message when no -m.
 
-As for lvcreate, lvresize also doesn't need to grow bigger then needed.
 ---
- WHATS_NEW        |    1 +
- tools/lvresize.c |   10 ++++++++++
- 2 files changed, 11 insertions(+), 0 deletions(-)
+ tools/lvconvert.c |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d757e2b..7589f12 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Detect maximum usable size for snapshot for lvresize.
-   Creation of snapshot takes at most 100% origin coverage.
-   Add cow_max_extents() to calc extents for 100% origin coverage.
-   For creation of snapshot require size for at least 3 chunks.
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index b1008ec..a32930e 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -527,6 +527,16 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
- 			return EINVALID_CMD_LINE;
- 		}
- 		lp->extents += lv->le_count;
-+		if (lv_is_cow(lv)) {
-+			extents_used = cow_max_extents(origin_from_cow(lv), find_cow(lv)->chunk_size);
-+			if (extents_used < lp->extents) {
-+				log_print_unless_silent("Reached maximum COW size %s.",
-+							display_size(vg->cmd, (uint64_t) vg->extent_size * extents_used));
-+				lp->extents = extents_used;
-+				if (lp->extents == lv->le_count)
-+					return ECMD_PROCESSED;
-+			}
-+		}
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index b365049..6919493 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1853,7 +1853,12 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
  	}
  
- 	if (lp->sign == SIGN_MINUS) {
+ 	if (seg_is_linear(seg) && !lp->merge_mirror && !lp->mirrors_supplied) {
+-		log_error("Raid conversions require -m/--mirrors.");
++		if (_raid0_type_requested(lp->type_str))
++			log_error("Linear LV %s cannot be converted to %s.",
++				  display_lvname(lv), lp->type_str);
++		else
++			log_error("Raid conversions of LV %s require -m/--mirrors.",
++				  display_lvname(lv));
+ 		goto try_new_takeover_or_reshape;
+ 	}
+ 
+@@ -1898,7 +1903,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 		if (segtype_is_any_raid0(lp->segtype) &&
+ 		    !(lp->target_attr & RAID_FEATURE_RAID0)) {
+ 			log_error("RAID module does not support RAID0.");
+-			return 0;
++			//return 0;
+ 		}
+ 		if (!lv_raid_convert(lv, lp->segtype, lp->yes, lp->force, lp->stripes, lp->stripe_size,
+ 				     lp->region_size, lp->pvh))
 
 
