@@ -1,59 +1,76 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 30 May 2013 15:57:29 +0000 (UTC)
-Subject: master - tests: snapshot needs 3 chunks
-Message-ID: <20130530155729.C94E46111A@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue,  9 Aug 2016 17:39:56 +0000 (UTC)
+Subject: master - refactor: modify original _check_profile fn and rename to config_force_check for general use
+Message-ID: <20160809173956.5AED46072F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=09cc5f65dbe34027c91011907e25ea4c21edfd13
-Commit:        09cc5f65dbe34027c91011907e25ea4c21edfd13
-Parent:        6f9366696c76863662e6cb12de467b5f748c8495
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 30 17:55:44 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 30 17:56:47 2013 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=54bf15555be1808eb292cfc3edeece236a1c9744
+Commit:        54bf15555be1808eb292cfc3edeece236a1c9744
+Parent:        785e2c31f553b0d2e98eb2a0d2087c942da81be7
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Aug 8 12:55:15 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Aug 9 18:49:11 2016 +0200
 
-tests: snapshot needs 3 chunks
+refactor: modify original _check_profile fn and rename to config_force_check for general use
 
 ---
- test/shell/lvcreate-small-snap.sh |   15 ++++++++-------
- 1 files changed, 8 insertions(+), 7 deletions(-)
+ lib/config/config.c |    9 ++++-----
+ lib/config/config.h |    3 +++
+ 2 files changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvcreate-small-snap.sh b/test/shell/lvcreate-small-snap.sh
-index 9b43868..e0e6d1a 100644
---- a/test/shell/lvcreate-small-snap.sh
-+++ b/test/shell/lvcreate-small-snap.sh
-@@ -1,5 +1,5 @@
- #!/bin/sh
--# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2010-2013 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -11,14 +11,15 @@
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 784c4b0..a569444 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -2113,7 +2113,7 @@ bad:
+ 	return NULL;
+ }
  
- . lib/test
+-static int _check_profile(struct cmd_context *cmd, struct profile *profile)
++int config_force_check(struct cmd_context *cmd, config_source_t source, struct dm_config_tree *cft)
+ {
+ 	struct cft_check_handle *handle;
+ 	int r;
+@@ -2124,9 +2124,8 @@ static int _check_profile(struct cmd_context *cmd, struct profile *profile)
+ 	}
  
--aux prepare_pvs 3
-+aux prepare_pvs
+ 	handle->cmd = cmd;
+-	handle->cft = profile->cft;
+-	handle->source = profile->source;
+-	/* the check is compulsory - allow only profilable items in a profile config! */
++	handle->cft = cft;
++	handle->source = source;
+ 	handle->force_check = 1;
+ 	/* provide warning messages only if config/checks=1 */
+ 	handle->suppress_messages = !find_config_tree_bool(cmd, config_checks_CFG, NULL);
+@@ -2252,7 +2251,7 @@ int load_profile(struct cmd_context *cmd, struct profile *profile) {
+ 	 * messages to be suppressed, but the check itself is always done
+ 	 * for profiles!
+ 	 */
+-	if (!_check_profile(cmd, profile)) {
++	if (!config_force_check(cmd, profile->source, profile->cft)) {
+ 		log_error("Ignoring invalid %s %s.",
+ 			  _config_source_names[profile->source], profile->name);
+ 		config_destroy(profile->cft);
+diff --git a/lib/config/config.h b/lib/config/config.h
+index 157cfeb..659b8b0 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -216,7 +216,10 @@ struct cft_check_handle {
+ };
  
--vgcreate -c n -s 1k $vg $(cat DEVICES)
-+vgcreate -s 1k $vg $(cat DEVICES)
+ int config_def_get_path(char *buf, size_t buf_size, int id);
++/* Checks config using given handle - the handle may be reused. */
+ int config_def_check(struct cft_check_handle *handle);
++/* Forces config check and automatically creates a new handle inside with defaults and discards the handle after the check. */
++int config_force_check(struct cmd_context *cmd, config_source_t source, struct dm_config_tree *cft);
  
--lvcreate -n one -l 10 $vg
--lvcreate -s -l 8 -n snapA $vg/one
--lvcreate -s -c 4k -l 8 -n snapX1 $vg/one
--lvcreate -s -c 8k -l 16 -n snapX2 $vg/one
-+# 3 Chunks
-+lvcreate -aey -n one -l 10 $vg
-+lvcreate -s -l 12 -n snapA $vg/one
-+lvcreate -s -c 4k -l 12 -n snapX1 $vg/one
-+lvcreate -s -c 8k -l 24 -n snapX2 $vg/one
- 
- # Check that snapshots that are too small are caught with correct error.
- not lvcreate -s -c 8k -l 8 -n snapX3 $vg/one 2>&1 | tee lvcreate.out
+ int override_config_tree_from_string(struct cmd_context *cmd, const char *config_settings);
+ int override_config_tree_from_profile(struct cmd_context *cmd, struct profile *profile);
 
 
