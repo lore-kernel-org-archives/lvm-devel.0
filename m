@@ -1,167 +1,149 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue,  9 Aug 2016 12:17:51 +0000 (UTC)
-Subject: master - test: add lvconvert-raid-takeover.sh
-Message-ID: <20160809121751.553CA61C16@fedorahosted.org>
+Date: Tue,  9 Aug 2016 15:46:37 +0000 (UTC)
+Subject: master - test: fix lvcreate-large-raid.sh
+Message-ID: <20160809154637.7A60160ACD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d3f62e10acee60bd61a401b76f009a611d22f9e
-Commit:        3d3f62e10acee60bd61a401b76f009a611d22f9e
-Parent:        e5a5fd3669914337f85fc5c12e867680eb3f58a9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48e14390c13d26e86c359532d796258608414cee
+Commit:        48e14390c13d26e86c359532d796258608414cee
+Parent:        3d3f62e10acee60bd61a401b76f009a611d22f9e
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Aug 9 14:17:26 2016 +0200
+AuthorDate:    Tue Aug 9 17:45:37 2016 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Aug 9 14:17:26 2016 +0200
+CommitterDate: Tue Aug 9 17:45:37 2016 +0200
 
-test: add lvconvert-raid-takeover.sh
+test: fix lvcreate-large-raid.sh
 
-Commit 76ef2d15d839106adac4d82005d517be05a657eb introduced
-raid0 <-> raid4 takeover and full mirror <-> raid1 support.
+RAID6 LVs may not be created with --nosync or data corruption
+may occur in case of device failures.  The underlying MD raid6
+personality used to drive the RaidLV performs read-modify-write
+updates on stripes and thus relies on properly written parity
+(P and Q Syndromes) during initial synchronization.
 
-Add tests for these conversions.
-
-Tests exposed a kernel semantics change freezing resynchronization
-on conversions from raid0[_meta] -> raid4 or adding raid1 legs
-because kernel kept the RAID mapped device in 'frozen' state unless
-an 'idle' message was sent or the table was reloaded (kernel patch pending).
+Once on it, enhance test to create/extend more and
+larger RaidLVs and check sync/nosync status.
 ---
- test/shell/lvconvert-raid-takeover.sh |  126 +++++++++++++++++++++++++++++++++
- 1 files changed, 126 insertions(+), 0 deletions(-)
+ test/shell/lvcreate-large-raid.sh |   63 ++++++++++++++++++++++++++++--------
+ 1 files changed, 49 insertions(+), 14 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-takeover.sh b/test/shell/lvconvert-raid-takeover.sh
-new file mode 100644
-index 0000000..2ead582
---- /dev/null
-+++ b/test/shell/lvconvert-raid-takeover.sh
-@@ -0,0 +1,126 @@
-+#!/bin/sh
-+# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+diff --git a/test/shell/lvcreate-large-raid.sh b/test/shell/lvcreate-large-raid.sh
+index 133e517..088d995 100644
+--- a/test/shell/lvcreate-large-raid.sh
++++ b/test/shell/lvcreate-large-raid.sh
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2012,2016 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -21,13 +21,13 @@ aux can_use_16T || skip
+ 
+ aux have_raid 1 3 0 || skip
+ 
+-aux prepare_vg 5
++aux prepare_vg 5 32
+ 
+-lvcreate --type snapshot -s -l 20%FREE -n $lv1 $vg --virtualsize 256T
+-lvcreate --type snapshot -s -l 20%FREE -n $lv2 $vg --virtualsize 256T
+-lvcreate --type snapshot -s -l 20%FREE -n $lv3 $vg --virtualsize 256T
+-lvcreate --type snapshot -s -l 20%FREE -n $lv4 $vg --virtualsize 256T
+-lvcreate --type snapshot -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
++# Fake 5 PiB volume group $vg1 via snapshot LVs
++for device in "$lv1" "$lv2" "$lv3" "$lv4" "$lv5"
++do
++	lvcreate --type snapshot -s -l 20%FREE -n $device $vg --virtualsize 1P
++done
+ 
+ #FIXME this should be 1024T
+ #check lv_field $vg/$lv size "128.00m"
+@@ -35,41 +35,76 @@ lvcreate --type snapshot -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
+ aux extend_filter_LVMTEST
+ 
+ pvcreate "$DM_DEV_DIR"/$vg/$lv[12345]
+-vgcreate $vg1 "$DM_DEV_DIR"/$vg/$lv[12345]
++vgcreate -s 2M $vg1 "$DM_DEV_DIR"/$vg/$lv[12345]
 +
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
++# Delay PVs so that resynchronization doesn't fill
++# the snapshots before removal of the RaidLV
++for device in "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
++do
++	aux delay_dev "$device" 0 1
++done
+ 
+ # bz837927 START
+ 
+ #
+ # Create large RAID LVs
+ #
+-# We need '--nosync' or our virtual devices won't work
 +
-+. lib/inittest
++# 200 TiB raid1
+ lvcreate --type raid1 -m 1 -L 200T -n $lv1 $vg1 --nosync
+ check lv_field $vg1/$lv1 size "200.00t"
++aux check_status_chars $vg1 $lv1 "AA"
++lvremove -ff $vg1
 +
-+aux have_raid 1 9 0 || skip
++# 1 PiB raid1
++lvcreate --type raid1 -m 1 -L 1P -n $lv1 $vg1 --nosync
++check lv_field $vg1/$lv1 size "1.00p"
++aux check_status_chars $vg1 $lv1 "AA"
+ lvremove -ff $vg1
+ 
+-for segtype in raid4 raid5 raid6; do
++# 750 TiB raid4/5
++for segtype in raid4 raid5; do
+         lvcreate --type $segtype -i 3 -L 750T -n $lv1 $vg1 --nosync
+         check lv_field $vg1/$lv1 size "750.00t"
++        aux check_status_chars $vg1 $lv1 "AAAA"
+         lvremove -ff $vg1
+ done
+ 
++# 750 TiB raid6 (with --nosync rejection check)
++[ aux have_raid 1 9 0 ] && not lvcreate --type raid6 -i 3 -L 750T -n $lv1 $vg1 --nosync
++lvcreate --type raid6 -i 3 -L 750T -n $lv1 $vg1
++check lv_field $vg1/$lv1 size "750.00t"
++aux check_status_chars $vg1 $lv1 "aaaaa"
++lvremove -ff $vg1
 +
-+aux prepare_vg 9 288
++# 1 PiB raid6 (with --nosync rejection check), then extend up to 2 PiB
++[ aux have_raid 1 9 0 ] && not lvcreate --type raid6 -i 3 -L -L 1P -n $lv1 $vg1 --nosync
++lvcreate --type raid6 -i 3 -L 1P -n $lv1 $vg1
++check lv_field $vg1/$lv1 size "1.00p"
++aux check_status_chars $vg1 $lv1 "aaaaa"
++lvextend -L +1P $vg1/$lv1
++check lv_field $vg1/$lv1 size "2.00p"
++aux check_status_chars $vg1 $lv1 "aaaaa"
++lvremove -ff $vg1
 +
-+# Delay 1st leg so that rebuilding status characters
-+#  can be read before resync finished too quick.
-+# aux delay_dev "$dev1" 0 1
-+
-+# Create 3-way mirror
-+lvcreate --yes --type mirror -m 2 -L 256M -n $lv1 $vg
-+check lv_field $vg/$lv1 segtype "mirror"
-+check lv_field $vg/$lv1 stripes 3
-+echo y | mkfs -t ext4 /dev/mapper/$vg-$lv1
-+aux wait_for_sync $vg $lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# Convert 3-way to 4-way mirror
-+lvconvert -m 3 $vg/$lv1
-+check lv_field $vg/$lv1 segtype "mirror"
-+check lv_field $vg/$lv1 stripes 4
-+fsck -fn  /dev/mapper/$vg-$lv1
-+aux wait_for_sync $vg $lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# Takeover 4-way mirror to raid1
-+lvconvert --yes --type raid1 $vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid1"
-+check lv_field $vg/$lv1 stripes 4
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+## Convert 4-way raid1 to 5-way
-+lvconvert -m 4 $vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid1"
-+check lv_field $vg/$lv1 stripes 5
-+fsck -fn  /dev/mapper/$vg-$lv1
-+aux wait_for_sync $vg $lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# FIXME: enable once lvconvert rejects early
-+## Try converting 4-way raid1 to 9-way
-+#not lvconvert --yes -m 8 $vg/$lv1
-+#check lv_field $vg/$lv1 segtype "raid1"
-+#check lv_field $vg/$lv1 stripes 4
-+
-+# Convert 5-way raid1 to 2-way
-+lvconvert --yes -m 1 $vg/$lv1
-+lvs $vg/$lv1
-+dmsetup status $vg-$lv1
-+dmsetup table $vg-$lv1
-+check lv_field $vg/$lv1 segtype "raid1"
-+check lv_field $vg/$lv1 stripes 2
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# Convert 2-way raid1 to mirror
-+lvconvert --yes --type mirror $vg/$lv1
-+check lv_field $vg/$lv1 segtype "mirror"
-+check lv_field $vg/$lv1 stripes 2
-+aux wait_for_sync $vg $lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+aux wait_for_sync $vg $lv1
-+
-+# Clean up
-+lvremove --yes $vg/$lv1
-+
-+# Create 3-way raid0
-+lvcreate -y --type raid0 -i 3 -L 256M -n $lv1 $vg
-+check lv_field $vg/$lv1 segtype "raid0"
-+check lv_field $vg/$lv1 stripes 3
-+echo y | mkfs -t ext4 /dev/mapper/$vg-$lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# Convert raid0 -> raid4
-+lvconvert -y --ty raid4 $vg/$lv1
-+lvchange --refresh $vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid4"
-+check lv_field $vg/$lv1 stripes 4
-+fsck -fn  /dev/mapper/$vg-$lv1
-+aux wait_for_sync $vg $lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# Convert raid4 -> raid0_meta
-+lvconvert -y --ty raid0_meta $vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid0_meta"
-+check lv_field $vg/$lv1 stripes 3
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# Convert raid0_meta -> raid4
-+lvconvert -y --ty raid4 $vg/$lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+check lv_field $vg/$lv1 segtype "raid4"
-+check lv_field $vg/$lv1 stripes 4
-+aux wait_for_sync $vg $lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# Convert raid4 -> raid0
-+lvconvert -y --ty raid0 $vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid0"
-+check lv_field $vg/$lv1 stripes 3
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+# Convert raid0 -> raid4
-+lvconvert -y --ty raid4 $vg/$lv1
-+lvchange --refresh $vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid4"
-+check lv_field $vg/$lv1 stripes 4
-+fsck -fn  /dev/mapper/$vg-$lv1
-+aux wait_for_sync $vg $lv1
-+fsck -fn  /dev/mapper/$vg-$lv1
-+
-+vgremove -ff $vg
+ #
+-# Convert large linear to RAID1 (belong in different test script?)
++# Convert large 200 TiB linear to RAID1 (belong in different test script?)
+ #
+ lvcreate -aey -L 200T -n $lv1 $vg1
+-# Need to deactivate or the up-convert will start sync'ing
+-lvchange -an $vg1/$lv1
+ lvconvert --type raid1 -m 1 $vg1/$lv1
+ check lv_field $vg1/$lv1 size "200.00t"
++aux check_status_chars $vg1 $lv1 "aa"
+ lvremove -ff $vg1
+ 
+ #
+-# Extending large RAID LV (belong in different script?)
++# Extending large 200 TiB RAID LV to 400 TiB (belong in different script?)
+ #
+ lvcreate --type raid1 -m 1 -L 200T -n $lv1 $vg1 --nosync
+ check lv_field $vg1/$lv1 size "200.00t"
++aux check_status_chars $vg1 $lv1 "AA"
+ lvextend -L +200T $vg1/$lv1
+ check lv_field $vg1/$lv1 size "400.00t"
++aux check_status_chars $vg1 $lv1 "AA"
+ lvremove -ff $vg1
+ 
+ # bz837927 END
 
 
