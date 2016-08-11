@@ -1,39 +1,46 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 10 Aug 2016 07:11:00 +0000 (UTC)
-Subject: master - lvmcmdline: use long int for number returned by strtol
-Message-ID: <20160810071100.7FEEE60774@fedorahosted.org>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Thu, 11 Aug 2016 13:25:06 +0000 (UTC)
+Subject: master - spec: Add new files
+Message-ID: <20160811132506.79B9460AB5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2fed8d8515644d25c24e8f62b450d80d34911970
-Commit:        2fed8d8515644d25c24e8f62b450d80d34911970
-Parent:        480c1c95993a1a2903e580ca402ba6368088decd
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Aug 10 09:10:28 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Aug 10 09:10:37 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e30fb19030823cd8bb181e2b494488c18c187850
+Commit:        e30fb19030823cd8bb181e2b494488c18c187850
+Parent:        2fed8d8515644d25c24e8f62b450d80d34911970
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Aug 11 14:10:24 2016 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Aug 11 14:10:59 2016 +0200
 
-lvmcmdline: use long int for number returned by strtol
+spec: Add new files
 
 ---
- tools/lvmcmdline.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ spec/packages.inc |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index af38799..9a4deb7 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1853,7 +1853,7 @@ static int _do_get_custom_fd(const char *env_var_name, int *fd)
- {
- 	const char *str;
- 	char *endptr;
--	int tmp_fd;
-+	long int tmp_fd;
- 
- 	*fd = -1;
- 
+diff --git a/spec/packages.inc b/spec/packages.inc
+index 817457b..66946be 100644
+--- a/spec/packages.inc
++++ b/spec/packages.inc
+@@ -115,6 +115,7 @@ fi
+ %{_mandir}/man8/lvmconfig.8.gz
+ %{_mandir}/man8/lvmdiskscan.8.gz
+ %{_mandir}/man8/lvmdump.8.gz
++%{_mandir}/man8/lvm-fullreport.8.gz
+ %{_mandir}/man8/lvmsadc.8.gz
+ %{_mandir}/man8/lvmsar.8.gz
+ %{_mandir}/man8/lvreduce.8.gz
+@@ -179,6 +180,7 @@ fi
+ %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/thin-performance.profile
+ %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/cache-mq.profile
+ %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/cache-smq.profile
++%config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/lvmdbusd.profile
+ %dir %{_sysconfdir}/lvm/backup
+ %dir %{_sysconfdir}/lvm/cache
+ %dir %{_sysconfdir}/lvm/archive
 
 
