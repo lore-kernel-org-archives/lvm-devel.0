@@ -1,58 +1,44 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Fri, 12 Aug 2016 22:20:29 +0000 (UTC)
-Subject: master - raid_manip: pay attention to PVs listed on command line when allocating MetaLVs
-Message-ID: <20160812222029.4297160C1A@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Fri, 12 Aug 2016 19:37:22 +0000 (UTC)
+Subject: master - notify: Fix hang with lvm shell & --enable-notify-dbus
+Message-ID: <20160812193722.7F0BF60F50@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c9b9b276a35dcc6dce8e6a19e7afc01eef451a7
-Commit:        9c9b9b276a35dcc6dce8e6a19e7afc01eef451a7
-Parent:        6d52b17dfcbbbc19d4fee1ba117448bed3759ba8
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Sat Aug 13 00:20:01 2016 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Sat Aug 13 00:20:01 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0973d6e3314cc0f0ff1e5024feb131c2187d97f2
+Commit:        0973d6e3314cc0f0ff1e5024feb131c2187d97f2
+Parent:        a185a2bea27db7cbd8b19df1bb85307fc5c246eb
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Fri Aug 12 14:31:06 2016 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Fri Aug 12 14:36:43 2016 -0500
 
-raid_manip: pay attention to PVs listed on command line when allocating MetaLVs
+notify: Fix hang with lvm shell & --enable-notify-dbus
 
-Adding MetaLVs to given DataLVs (e.g. raid0 -> raid0_meta takeover) wasn't
-paying attention to any PVs listed on the lvconvert command line.
+When lvm is compiled with --enable-notify-dbus and a user uses lvm
+shell, after they issue 200+ commands the lvm shell will hang for
+~30 seconds trying to notify the lvm dbus service that a change
+has occurred.  This appears to be caused by resource exhaustion,
+because the sockets used for dbus communication are not be closed.
 ---
- lib/metadata/raid_manip.c |   19 +++++++++++++++----
- 1 files changed, 15 insertions(+), 4 deletions(-)
+ lib/notify/lvmnotify.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 831b1dd..a7814a8 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1604,10 +1604,21 @@ static int _alloc_rmeta_devs_for_rimage_devs(struct logical_volume *lv,
- 	dm_list_iterate_items(lvl, new_data_lvs) {
- 		log_debug_metadata("Allocating new metadata LV for %s", lvl->lv->name);
+diff --git a/lib/notify/lvmnotify.c b/lib/notify/lvmnotify.c
+index afad93b..e9f8e29 100644
+--- a/lib/notify/lvmnotify.c
++++ b/lib/notify/lvmnotify.c
+@@ -73,7 +73,7 @@ void lvmnotify_send(struct cmd_context *cmd)
+ out:
+ 	sd_bus_error_free(&error);
+ 	sd_bus_message_unref(m);
+-	sd_bus_unref(bus);
++	sd_bus_flush_close_unref(bus);
+ }
  
--		if (!_alloc_rmeta_for_lv(lvl->lv, &lvl_array[a].lv, allocate_pvs)) {
--			log_error("Failed to allocate metadata LV for %s in %s",
--				  lvl->lv->name, lv->vg->name);
--			return 0;
-+		/*
-+		 * Try to collocate with DataLV first and
-+		 * if that fails allocate on different PV.
-+		 */
-+		if (!_alloc_rmeta_for_lv(lvl->lv, &lvl_array[a].lv,
-+					 allocate_pvs != &lv->vg->pvs ? allocate_pvs : NULL)) {
-+			dm_list_iterate_items(lvl1, new_meta_lvs)
-+				if (!_avoid_pvs_with_other_images_of_lv(lvl1->lv, allocate_pvs))
-+					return_0;
-+
-+			if (!_alloc_rmeta_for_lv(lvl->lv, &lvl_array[a].lv, allocate_pvs)) {
-+				log_error("Failed to allocate metadata LV for %s in %s",
-+					  lvl->lv->name, lv->vg->name);
-+				return 0;
-+			}
- 		}
- 
- 		dm_list_add(new_meta_lvs, &lvl_array[a++].list);
+ void set_vg_notify(struct cmd_context *cmd)
 
 
