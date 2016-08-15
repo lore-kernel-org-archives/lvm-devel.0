@@ -1,44 +1,42 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Fri, 12 Aug 2016 19:37:22 +0000 (UTC)
-Subject: master - notify: Fix hang with lvm shell & --enable-notify-dbus
-Message-ID: <20160812193722.7F0BF60F50@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 15 Aug 2016 08:38:49 +0000 (UTC)
+Subject: master - conf: add comment about cfg_runtime
+Message-ID: <20160815083849.D1F6461052@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0973d6e3314cc0f0ff1e5024feb131c2187d97f2
-Commit:        0973d6e3314cc0f0ff1e5024feb131c2187d97f2
-Parent:        a185a2bea27db7cbd8b19df1bb85307fc5c246eb
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Aug 12 14:31:06 2016 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Aug 12 14:36:43 2016 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ff893cd854733de0c9e82edc9e57f55c3d9ce7a
+Commit:        2ff893cd854733de0c9e82edc9e57f55c3d9ce7a
+Parent:        9c9b9b276a35dcc6dce8e6a19e7afc01eef451a7
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Aug 15 10:38:38 2016 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Aug 15 10:38:38 2016 +0200
 
-notify: Fix hang with lvm shell & --enable-notify-dbus
+conf: add comment about cfg_runtime
 
-When lvm is compiled with --enable-notify-dbus and a user uses lvm
-shell, after they issue 200+ commands the lvm shell will hang for
-~30 seconds trying to notify the lvm dbus service that a change
-has occurred.  This appears to be caused by resource exhaustion,
-because the sockets used for dbus communication are not be closed.
 ---
- lib/notify/lvmnotify.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/config/config_settings.h |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/lib/notify/lvmnotify.c b/lib/notify/lvmnotify.c
-index afad93b..e9f8e29 100644
---- a/lib/notify/lvmnotify.c
-+++ b/lib/notify/lvmnotify.c
-@@ -73,7 +73,7 @@ void lvmnotify_send(struct cmd_context *cmd)
- out:
- 	sd_bus_error_free(&error);
- 	sd_bus_message_unref(m);
--	sd_bus_unref(bus);
-+	sd_bus_flush_close_unref(bus);
- }
- 
- void set_vg_notify(struct cmd_context *cmd)
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 1084224..fa6a01e 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -23,6 +23,11 @@
+  * - define a configuration array of one or more types:
+  *   cfg_array(id, name, parent, flags, types, default_value, since_version, unconfigured_default_value, deprecated_since_version, deprecation_comment, comment)
+  *
++ * - define a configuration setting where the default value is evaluated in runtime
++ *   cfg_runtime(id, name, parent, flags, type, since_version, deprecated_since_version, deprecation_comment, comment)
++ *   (for each cfg_runtime, you need to define 'get_default_<name>(struct cmd_context *cmd, struct profile *profile)' function
++ *    to get the default value in runtime - usually, these functions are placed in config.[ch] file)
++ *
+  *
+  * If default value can't be assigned statically because it depends on some
+  * run-time checks or if it depends on other settings already defined,
 
 
