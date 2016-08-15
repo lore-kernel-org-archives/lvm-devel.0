@@ -1,42 +1,68 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Aug 2016 08:38:49 +0000 (UTC)
-Subject: master - conf: add comment about cfg_runtime
-Message-ID: <20160815083849.D1F6461052@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 15 Aug 2016 12:25:25 +0000 (UTC)
+Subject: master - pre-release
+Message-ID: <20160815122525.3D4D260AA6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ff893cd854733de0c9e82edc9e57f55c3d9ce7a
-Commit:        2ff893cd854733de0c9e82edc9e57f55c3d9ce7a
-Parent:        9c9b9b276a35dcc6dce8e6a19e7afc01eef451a7
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Aug 15 10:38:38 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Aug 15 10:38:38 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=829727696700ac509e8e89f669245947e830c8f6
+Commit:        829727696700ac509e8e89f669245947e830c8f6
+Parent:        2ff893cd854733de0c9e82edc9e57f55c3d9ce7a
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Aug 15 13:01:27 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Aug 15 13:17:47 2016 +0100
 
-conf: add comment about cfg_runtime
+pre-release
 
 ---
- lib/config/config_settings.h |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    5 ++++-
+ WHATS_NEW_DM |    3 ---
+ 4 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 1084224..fa6a01e 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -23,6 +23,11 @@
-  * - define a configuration array of one or more types:
-  *   cfg_array(id, name, parent, flags, types, default_value, since_version, unconfigured_default_value, deprecated_since_version, deprecation_comment, comment)
-  *
-+ * - define a configuration setting where the default value is evaluated in runtime
-+ *   cfg_runtime(id, name, parent, flags, type, since_version, deprecated_since_version, deprecation_comment, comment)
-+ *   (for each cfg_runtime, you need to define 'get_default_<name>(struct cmd_context *cmd, struct profile *profile)' function
-+ *    to get the default value in runtime - usually, these functions are placed in config.[ch] file)
-+ *
-  *
-  * If default value can't be assigned statically because it depends on some
-  * run-time checks or if it depends on other settings already defined,
+diff --git a/VERSION b/VERSION
+index 5e46ebc..cce77c2 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.164(2)-git (2016-08-10)
++2.02.164(2)-git (2016-08-15)
+diff --git a/VERSION_DM b/VERSION_DM
+index a5de990..b07196b 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.134-git (2016-08-10)
++1.02.133-git (2016-08-15)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 425729a..61ae56d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,8 @@
+-Version 2.02.164 -
++Version 2.02.164 - 15th August 2016
+ ===================================
++  Fix selection of PVs when allocating raid0_meta.
++  Fix sdbus socket leak leading to hang in lvmnotify.
++  Specify max stripes for raid LV types: raid0:64; 1:10; 4,5:63; 6:62; 10:32.
+   Avoid double suffix when naming _rmeta LV paired with _rimage LV.
+ 
+ Version 2.02.163 - 10th August 2016
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 7bbfd88..2b32d76 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,6 +1,3 @@
+-Version 1.02.134 - 
+-===================================
+-
+ Version 1.02.133 - 10th August 2016
+ ===================================
+   Add dm_report_destroy_rows/dm_report_group_output_and_pop_all for lvm shell.
 
 
