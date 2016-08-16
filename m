@@ -1,54 +1,45 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Tue, 16 Aug 2016 11:40:08 +0000 (UTC)
-Subject: master - lvcreate: better error message creating RAID LV on < 4 KiB VG extent size
-Message-ID: <20160816114008.71EE36056F@fedorahosted.org>
+Date: Tue, 16 Aug 2016 21:57:44 +0000 (UTC)
+Subject: master - vgsplit: fix regression processing thin external origins
+Message-ID: <20160816215744.6D7B660E2D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=73df2aedf9788dcf2dbf09f20f8783c6d2108e75
-Commit:        73df2aedf9788dcf2dbf09f20f8783c6d2108e75
-Parent:        114db6f745a229e1c3bf2dc95cc45c020cbcfca8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0a0eedf2e572b99e40384e68e3d5f8fba6f0ae5
+Commit:        c0a0eedf2e572b99e40384e68e3d5f8fba6f0ae5
+Parent:        73df2aedf9788dcf2dbf09f20f8783c6d2108e75
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Aug 16 13:39:40 2016 +0200
+AuthorDate:    Tue Aug 16 23:57:09 2016 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Aug 16 13:39:40 2016 +0200
+CommitterDate: Tue Aug 16 23:57:09 2016 +0200
 
-lvcreate: better error message creating RAID LV on < 4 KiB VG extent size
+vgsplit: fix regression processing thin external origins
 
-Creating a RaidLV in VGs with very small extent sizes caused
-late failure in the kernel giving a not very informative error
-message. Catch the attempt early and display failure message
-'Unable to create RAID LV: requires minimum VG extent size 4.00 KiB'.
+a579ba2ac27d fixed a regression causing a segfault if no external
+origin existed but broke the logic leading to erroneous error
+messages and creations of split off exported VGs in case the
+external origin and the pool LVs were allocated on different PVs.
 
-- resoves rhbz1179970
+- resolves rhbz1367459
 ---
- tools/lvcreate.c |    7 +++++++
- 1 files changed, 7 insertions(+), 0 deletions(-)
+ tools/vgsplit.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index ccd07f0..a389d79 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -1255,10 +1255,17 @@ static int _check_raid_parameters(struct volume_group *vg,
- 				  struct lvcreate_cmdline_params *lcp)
- {
- 	unsigned devs = lcp->pv_count ? : dm_list_size(&vg->pvs);
-+	uint64_t page_sectors = lvm_getpagesize() >> SECTOR_SHIFT;
- 	struct cmd_context *cmd = vg->cmd;
- 	int old_stripes = !arg_is_set(cmd, stripes_ARG) &&
- 			  find_config_tree_bool(cmd, allocation_raid_stripe_all_devices_CFG, NULL);
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 93161c1..52f603f 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -331,7 +331,7 @@ static int _move_thins(struct volume_group *vg_from,
+ 			data_lv = seg_lv(first_seg(seg->pool_lv), 0);
  
-+	if (vg->extent_size < page_sectors) {
-+		log_error("Unable to create RAID LV: requires minimum VG extent size %s",
-+			  display_size(vg->cmd, page_sectors));
-+		return 0;
-+	}
-+
- 	/*
- 	 * If we requested the previous behaviour by setting
- 	 * "allocation/raid_stripe_all_devices = 1" and the
+ 			/* Ignore, if no allocations on PVs of @vg_to */
+-			if (!lv_is_on_pvs(data_lv, &vg_to->pvs) ||
++			if (!lv_is_on_pvs(data_lv, &vg_to->pvs) &&
+ 			    (seg->external_lv && !lv_is_on_pvs(seg->external_lv, &vg_to->pvs)))
+ 				continue;
+ 
 
 
