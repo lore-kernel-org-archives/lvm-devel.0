@@ -1,40 +1,50 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 19 Aug 2016 23:00:39 +0000 (UTC)
-Subject: master - lvcreate: Never treat raid0 as linear.
-Message-ID: <20160819230039.43DC360AA1@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 17 Aug 2016 19:14:42 +0000 (UTC)
+Subject: master - man: lvconvert change location of sentence
+Message-ID: <20160817191442.4286460F1C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=896912b14d80e49582759d0c5b14b16954b3857d
-Commit:        896912b14d80e49582759d0c5b14b16954b3857d
-Parent:        88e6abc5a091bbe8d826968eafe27936df0e260c
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Aug 19 23:57:30 2016 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Aug 19 23:57:30 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0336b418281b6ea5b7972e90e5b125b624b1793f
+Commit:        0336b418281b6ea5b7972e90e5b125b624b1793f
+Parent:        c0a0eedf2e572b99e40384e68e3d5f8fba6f0ae5
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Aug 17 14:13:17 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Aug 17 14:13:17 2016 -0500
 
-lvcreate: Never treat raid0 as linear.
+man: lvconvert change location of sentence
 
-raid0 and raid0_meta require, or default to, at least 2 stripes.
+The details about each option are explained in the
+section for that option.
 ---
- tools/toollib.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ man/lvconvert.8.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 4f4c315..ec6f2f7 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1281,7 +1281,7 @@ static int _validate_stripe_params(struct cmd_context *cmd, const struct segment
- 	if (!stripe_size_required && *stripe_size) {
- 		log_print_unless_silent("Ignoring stripesize argument for %s devices.", segtype->name);
- 		*stripe_size = 0;
--	} else if (*stripes == 1 && (segtype_is_striped(segtype) || segtype_is_mirror(segtype))) {
-+	} else if (*stripes == 1 && (segtype_is_striped_target(segtype) || segtype_is_mirror(segtype))) {
- 		stripe_size_required = 0;
- 		if (*stripe_size) {
- 			log_print_unless_silent("Ignoring stripesize argument with single stripe.");
+diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
+index 4f4d05e..175a50c 100644
+--- a/man/lvconvert.8.in
++++ b/man/lvconvert.8.in
+@@ -338,8 +338,6 @@ VG/RaidLV
+ \[bu]
+ Change the number of images in raid1 RaidLV.
+ 
+-Note the current maximum is 9 providing 10 raid1 legs.
+-
+ .B lvconvert \-\-splitmirrors
+ Number
+ VG/RaidLV
+@@ -807,6 +805,8 @@ Specifies the number mirror images in addition to the original LV image,
+ e.g. \fB\-\-mirrors 1\fP means two copies of the data, the original and
+ one mirror image.
+ 
++The current maximum is 9 providing 10 raid1 images.
++
+ This option is required when converting an LV to a \fBraid1\fP or
+ \fBmirror\fP LV.
+ 
 
 
