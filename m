@@ -1,51 +1,54 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 31 Jul 2008 15:38:52 -0000
-Subject: LVM2 lib/misc/last-path-component.h tools/lvmc ...
-Message-ID: <20080731153852.20945.qmail@sourceware.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 23 Aug 2016 22:40:47 +0000 (UTC)
+Subject: master - lvconvert: Disallow raid10 mirror conversions.
+Message-ID: <20160823224047.6A51060F23@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-07-31 15:38:52
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7837fbc1c191925ebe6bef74845d61396c1050e6
+Commit:        7837fbc1c191925ebe6bef74845d61396c1050e6
+Parent:        2d65ce9711dace22cebb370b0d93fd7a98213bd8
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Aug 23 23:40:16 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Aug 23 23:40:16 2016 +0100
 
-Modified files:
-	lib/misc       : last-path-component.h 
-	tools          : lvmcmdline.c 
+lvconvert: Disallow raid10 mirror conversions.
 
-Log message:
-	remove now-redundant slash-stripping
+---
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    5 +++++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/last-path-component.h.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.67&r2=1.68
-
---- LVM2/lib/misc/last-path-component.h	2007/10/03 16:10:04	1.1
-+++ LVM2/lib/misc/last-path-component.h	2008/07/31 15:38:51	1.2
-@@ -21,7 +21,8 @@
+diff --git a/WHATS_NEW b/WHATS_NEW
+index fdf63e4..315e7f9 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.165 - 
+ ===================================
++  Disallow segtype and mirror conversions of raid10 volumes.
+   Fix dmeventd unmonitoring when segment type (and dso) changes.
+   Don't allow lvconvert --repair on raid0 devices or attempt to monitor them.
+   No longer adjust incorrect number of raid stripes supplied to lvcreate.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index fefec7c..457724c 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1849,6 +1849,11 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 				  lvseg_name(seg));
+ 			return 0;
+ 		}
++		if (seg_is_raid10(seg)) {
++			log_error("--mirrors/-m cannot be changed with %s.",
++				  lvseg_name(seg));
++			return 0;
++		}
+ 	}
  
- static inline char *last_path_component(char const *name)
- {
--	char const *slash = strrchr (name, '/');
-+	char const *slash = strrchr(name, '/');
- 	char const *res = slash ? slash + 1 : name;
--	return (char *) res;
-+
-+	return (char *)res;
- }
---- LVM2/tools/lvmcmdline.c	2008/06/06 19:28:35	1.67
-+++ LVM2/tools/lvmcmdline.c	2008/07/31 15:38:52	1.68
-@@ -1165,8 +1165,6 @@
- 	_close_stray_fds();
- 
- 	base = last_path_component(argv[0]);
--	while (*base == '/')
--		base++;
- 	if (strcmp(base, "lvm") && strcmp(base, "lvm.static") &&
- 	    strcmp(base, "initrd-lvm"))
- 		alias = 1;
+ 	if (!_lvconvert_validate_thin(lv, lp))
 
 
