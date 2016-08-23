@@ -1,158 +1,176 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 9 Jul 2008 09:59:43 -0000
-Subject: LVM2 ./WHATS_NEW ./configure ./configure.in dm ...
-Message-ID: <20080709095943.17766.qmail@sourceware.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Tue, 23 Aug 2016 01:27:18 +0000 (UTC)
+Subject: master - dmeventd: Fix unmonitoring when segtype changes.
+Message-ID: <20160823012718.D550960D66@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-07-09 09:59:42
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=952e4133283ac4a593d0fa8daccdc55c907379de
+Commit:        952e4133283ac4a593d0fa8daccdc55c907379de
+Parent:        7646741ec67845f47b77eb647ef0fedc78d6b92c
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Aug 23 02:24:30 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Aug 23 02:26:14 2016 +0100
 
-Modified files:
-	.              : WHATS_NEW configure configure.in 
-	dmeventd/mirror: Makefile.in 
-	dmeventd/snapshot: Makefile.in 
+dmeventd: Fix unmonitoring when segtype changes.
 
-Log message:
-	Fix dmeventd regression where mirror and snapshot monitoring libraries
-	failed to link against liblvm2cmd.
-	
-	Dmeventd DSOs *require* lvm2cmd to be linked in.
-	
-	For the future:
-	1) AC_SUBST does not create Makefile variables, only @foo at -style substitutions
-	2) When using `test', whitespace around `=' is essential:
-	test a=b is true, as is test a=a
+When the segment type is being changed, unmonitoring an LV requires
+the existing dso to be specified as a parameter, not the new one.
+---
+ WHATS_NEW               |    1 +
+ lib/activate/activate.c |   90 +++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 89 insertions(+), 2 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.925&r2=1.926
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.73&r2=1.74
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.74&r2=1.75
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/dmeventd/mirror/Makefile.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/dmeventd/snapshot/Makefile.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-
---- LVM2/WHATS_NEW	2008/06/27 22:35:22	1.925
-+++ LVM2/WHATS_NEW	2008/07/09 09:59:41	1.926
-@@ -1,5 +1,7 @@
- Version 2.02.40 - 
- ================================
-+  Fix dmeventd regression where mirror and snapshot monitoring libraries
-+  failed to link against liblvm2cmd.
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0b23018..fdf63e4 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.165 - 
+ ===================================
++  Fix dmeventd unmonitoring when segment type (and dso) changes.
+   Don't allow lvconvert --repair on raid0 devices or attempt to monitor them.
+   No longer adjust incorrect number of raid stripes supplied to lvcreate.
+   Move lcm and gcd to lib/misc.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index d4c297e..908c411 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1548,7 +1548,7 @@ static struct dm_event_handler *_create_dm_event_handler(struct cmd_context *cmd
+ 	if (dm_event_handler_set_dmeventd_path(dmevh, find_config_tree_str(cmd, dmeventd_executable_CFG, NULL)))
+ 		goto_bad;
  
- Version 2.02.39 - 27th June 2008
- ================================
---- LVM2/configure	2008/06/27 19:57:27	1.73
-+++ LVM2/configure	2008/07/09 09:59:41	1.74
-@@ -8726,10 +8726,11 @@
- { echo "$as_me:$LINENO: result: $CMDLIB" >&5
- echo "${ECHO_T}$CMDLIB" >&6; }
+-	if (dm_event_handler_set_dso(dmevh, dso))
++	if (dso && dm_event_handler_set_dso(dmevh, dso))
+ 		goto_bad;
  
--test $CMDLIB=yes \
-+test x$CMDLIB = xyes \
-   && LVM2CMD_LIB=-llvm2cmd \
-   || LVM2CMD_LIB=
+ 	if (dm_event_handler_set_uuid(dmevh, dmuuid))
+@@ -1592,6 +1592,39 @@ static char *_build_target_uuid(struct cmd_context *cmd, const struct logical_vo
+ 	return build_dm_uuid(cmd->mem, lv, layer);
+ }
  
++static int _device_registered_with_dmeventd(struct cmd_context *cmd, const struct logical_volume *lv, int *pending, const char **dso)
++{
++	char *uuid;
++	enum dm_event_mask evmask = 0;
++	struct dm_event_handler *dmevh;
 +
- ################################################################################
- { echo "$as_me:$LINENO: checking whether to install fsadm" >&5
- echo $ECHO_N "checking whether to install fsadm... $ECHO_C" >&6; }
-@@ -8752,12 +8753,21 @@
- { echo "$as_me:$LINENO: result: $DMEVENTD" >&5
- echo "${ECHO_T}$DMEVENTD" >&6; }
- 
--if test x$DMEVENTD = xyes && test x$MIRRORS != xinternal; then
--{ { echo "$as_me:$LINENO: error: --enable-dmeventd currently requires --with-mirrors=internal
--" >&5
-+if test x$DMEVENTD = xyes; then
-+   if test x$MIRRORS != xinternal; then
-+      { { echo "$as_me:$LINENO: error: --enable-dmeventd currently requires --with-mirrors=internal
-+      " >&5
- echo "$as_me: error: --enable-dmeventd currently requires --with-mirrors=internal
--" >&2;}
-+      " >&2;}
-+   { (exit 1); exit 1; }; }
-+   fi
-+   if test x$CMDLIB = xno; then
-+      { { echo "$as_me:$LINENO: error: --enable-dmeventd requires --enable-cmdlib to be used as well
-+      " >&5
-+echo "$as_me: error: --enable-dmeventd requires --enable-cmdlib to be used as well
-+      " >&2;}
-    { (exit 1); exit 1; }; }
-+   fi
- fi
- 
- if test x$DMEVENTD = xyes; then
-@@ -10260,7 +10270,7 @@
-   ac_cv_func_getmntent=yes
- 
- cat >>confdefs.h <<\_ACEOF
--#define HAVE_GETMNTENT
-+#define HAVE_GETMNTENT 1
- _ACEOF
- 
- else
---- LVM2/configure.in	2008/06/27 19:57:27	1.74
-+++ LVM2/configure.in	2008/07/09 09:59:42	1.75
-@@ -366,10 +366,11 @@
- CMDLIB=$enableval, CMDLIB=no)
- AC_MSG_RESULT($CMDLIB)
- AC_SUBST([LVM2CMD_LIB])
--test $CMDLIB=yes \
-+test x$CMDLIB = xyes \
-   && LVM2CMD_LIB=-llvm2cmd \
-   || LVM2CMD_LIB=
- 
++	*pending = 0;
 +
- ################################################################################
- dnl -- Enable fsadm
- AC_MSG_CHECKING(whether to install fsadm)
-@@ -385,10 +386,17 @@
- AC_MSG_RESULT($DMEVENTD)
++	if (!(uuid = _build_target_uuid(cmd, lv)))
++		return_0;
++
++	if (!(dmevh = _create_dm_event_handler(cmd, uuid, NULL, 0, DM_EVENT_ALL_ERRORS)))
++		return_0;
++
++	if (dm_event_get_registered_device(dmevh, 0)) {
++		dm_event_handler_destroy(dmevh);
++		return 0;
++	}
++
++	evmask = dm_event_handler_get_event_mask(dmevh);
++	if (evmask & DM_EVENT_REGISTRATION_PENDING) {
++		*pending = 1;
++		evmask &= ~DM_EVENT_REGISTRATION_PENDING;
++	}
++
++	if (dso && (*dso = dm_event_handler_get_dso(dmevh)) && !(*dso = dm_pool_strdup(cmd->mem, *dso)))
++		log_error("Failed to duplicate dso name.");
++
++	dm_event_handler_destroy(dmevh);
++
++	return evmask;
++}
++
+ int target_registered_with_dmeventd(struct cmd_context *cmd, const char *dso,
+ 				    const struct logical_volume *lv, int *pending)
+ {
+@@ -1657,6 +1690,48 @@ int target_register_events(struct cmd_context *cmd, const char *dso, const struc
  
- dnl -- dmeventd currently requires internal mirror support
--if test x$DMEVENTD = xyes && test x$MIRRORS != xinternal; then
--AC_MSG_ERROR(
----enable-dmeventd currently requires --with-mirrors=internal
--)
-+if test x$DMEVENTD = xyes; then
-+   if test x$MIRRORS != xinternal; then
-+      AC_MSG_ERROR(
-+	--enable-dmeventd currently requires --with-mirrors=internal
-+      )
-+   fi
-+   if test x$CMDLIB = xno; then
-+      AC_MSG_ERROR(
-+        --enable-dmeventd requires --enable-cmdlib to be used as well
-+      )
-+   fi
- fi
+ #endif
  
- if test x$DMEVENTD = xyes; then
---- LVM2/dmeventd/mirror/Makefile.in	2008/06/23 09:25:07	1.6
-+++ LVM2/dmeventd/mirror/Makefile.in	2008/07/09 09:59:42	1.7
-@@ -17,7 +17,7 @@
- VPATH = @srcdir@
++#ifdef DMEVENTD
++/* FIXME Restructure all this code so that unmonitoring works cleanly regardless of current target type. */
++static int _segment_independent_unmonitor(struct cmd_context *cmd, const struct logical_volume *lv, const char *dso)
++{
++	int i, pending = 0, monitored;
++	int r;
++
++	log_verbose("Not monitoring %s with %s%s", display_lvname(lv), dso, test_mode() ? " [Test mode: skipping this]" : "");
++
++	/* FIXME Test mode should really continue a bit further. */
++	if (test_mode())
++		return 1;
++
++	if (!target_register_events(cmd, dso, lv, 0, 0, 0)) {
++		log_error("%s: segment unmonitoring function failed.",
++			  display_lvname(lv));
++			 
++		return 0;
++	}
++
++	/* Check [un]monitor results */
++	/* Try a couple times if pending, but not forever... */
++	for (i = 0; i < 40; i++) {
++		pending = 0;
++		monitored = _device_registered_with_dmeventd(cmd, lv, &pending, NULL);
++		if (pending || monitored)
++			log_very_verbose("%s unmonitoring still pending: waiting...",
++					 display_lvname(lv));
++		else
++			break;
++		usleep(10000 * i);
++	}
++
++	r = !monitored;
++
++	if (!r && !error_message_produced())
++		log_error("Not monitoring %s failed.", display_lvname(lv));
++
++	return r;
++}
++#endif
++
+ /*
+  * Returns 0 if an attempt to (un)monitor the device failed.
+  * Returns 1 otherwise.
+@@ -1674,6 +1749,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
+ 	uint32_t s;
+ 	static const struct lv_activate_opts zlaopts = { 0 };
+ 	struct lvinfo info;
++	const char *dso;
  
- INCLUDES += -I${top_srcdir}/tools
--CLDFLAGS += -L${top_srcdir}/tools -ldevmapper $(LVM2CMD_LIB)
-+CLDFLAGS += -L${top_srcdir}/tools -ldevmapper @LVM2CMD_LIB@
+ 	if (!laopts)
+ 		laopts = &zlaopts;
+@@ -1781,7 +1857,11 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
+ 		    !seg->segtype->ops->target_monitored) /* doesn't support registration */
+ 			continue;
  
- SOURCES = dmeventd_mirror.c
+-		monitored = seg->segtype->ops->target_monitored(seg, &pending);
++		if (!monitor)
++			/* When unmonitoring, obtain existing dso being used. */
++			monitored = _device_registered_with_dmeventd(cmd, seg->lv, &pending, &dso);
++		else
++			monitored = seg->segtype->ops->target_monitored(seg, &pending);
  
---- LVM2/dmeventd/snapshot/Makefile.in	2008/06/23 09:25:08	1.2
-+++ LVM2/dmeventd/snapshot/Makefile.in	2008/07/09 09:59:42	1.3
-@@ -17,7 +17,7 @@
- VPATH = @srcdir@
- 
- INCLUDES += -I${top_srcdir}/tools
--CLDFLAGS += -L${top_srcdir}/tools -ldevmapper $(LVM2CMD_LIB)
-+CLDFLAGS += -L${top_srcdir}/tools -ldevmapper @LVM2CMD_LIB@
- 
- SOURCES = dmeventd_snapshot.c
- 
+ 		/* FIXME: We should really try again if pending */
+ 		monitored = (pending) ? 0 : monitored;
+@@ -1796,6 +1876,12 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
+ 		} else {
+ 			if (!monitored)
+ 				log_verbose("%s already not monitored.", display_lvname(lv));
++			else if (*dso)
++				/*
++				 * Divert unmonitor away from code that depends on the new segment 
++				 * type instead of the existing one if it's changing.
++				 */
++				return _segment_independent_unmonitor(cmd, lv, dso);
+ 			else if (seg->segtype->ops->target_unmonitor_events)
+ 				monitor_fn = seg->segtype->ops->target_unmonitor_events;
+ 		}
 
 
