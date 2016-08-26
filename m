@@ -1,39 +1,53 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 25 Aug 2016 14:25:34 +0000 (UTC)
-Subject: master - tests: also fix typo in report/columns_as_rows in tests
-Message-ID: <20160825142534.67E6760AC8@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 26 Aug 2016 00:28:34 +0000 (UTC)
+Subject: master - lvconvert: Fix --splitmirrors segfault with incorrect PV.
+Message-ID: <20160826002834.236366055C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc93f10892187e20f9553b2d0c953cc420fd379d
-Commit:        fc93f10892187e20f9553b2d0c953cc420fd379d
-Parent:        e758d722c7719fba91ae62122fb0359a395f0327
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Aug 25 16:25:23 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Aug 25 16:25:23 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2fde4399a01a002437d6d882c7faa59221aca93e
+Commit:        2fde4399a01a002437d6d882c7faa59221aca93e
+Parent:        fc93f10892187e20f9553b2d0c953cc420fd379d
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Aug 26 01:21:01 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Aug 26 01:21:01 2016 +0100
 
-tests: also fix typo in report/columns_as_rows in tests
+lvconvert: Fix --splitmirrors segfault with incorrect PV.
 
+Commit 9ee071705b2c35e1132f39f5731861c831a1bb6b misunderstood integer
+promotion, but it's simpler to detect -1 more directly.
 ---
- test/shell/profiles.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/raid_manip.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/profiles.sh b/test/shell/profiles.sh
-index 037b306..562b7b1 100644
---- a/test/shell/profiles.sh
-+++ b/test/shell/profiles.sh
-@@ -59,7 +59,7 @@ aux profileconf valid_cmd_profile 'global/units = "h"' \
-                                   'report/separator = " "' \
-                                   'report/prefixes = 0' \
-                                   'report/quoted = 1' \
--                                  'report/colums_as_rows = 0' \
-+                                  'report/columns_as_rows = 0' \
-                                   'report/devtypes_sort = "devtype_name"' \
-                                   'report/devtypes_cols = "devtype_name,devtype_max_partitions,devtype_description"' \
-                                   'report/devtypes_cols_verbose = "devtype_name,devtype_max_partitions,devtype_description"' \
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 99d31be..1c0bcf4 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.165 - 
+ ===================================
++  Give error not segfault in lvconvert --splitmirrors when PV lies outside LV.
+   Fix typo in report/columns_as_rows config option name recognition (2.02.99).
+   Avoid PV tags when checking allocation against parallel PVs.
+   Disallow mirror conversions of raid10 volumes.
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index d0934f4..e5fdf4f 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -1497,7 +1497,7 @@ int lv_raid_split_and_track(struct logical_volume *lv,
+ 		break;
+ 	}
+ 
+-	if (s >= (int) seg->area_count) {
++	if (s < 0) {
+ 		log_error("Unable to find image to satisfy request");
+ 		return 0;
+ 	}
 
 
