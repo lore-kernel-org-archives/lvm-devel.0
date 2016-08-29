@@ -1,122 +1,74 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 29 Aug 2016 20:29:01 +0000 (UTC)
-Subject: master - lvmdbusd: Correct imports
-Message-ID: <20160829202901.CB6CE60F09@fedorahosted.org>
+Date: Mon, 29 Aug 2016 20:29:03 +0000 (UTC)
+Subject: master - lvmdbusd/lvmdb.py: Make stand alone execution work
+Message-ID: <20160829202903.DDA3860F09@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=96a0604bd036d78af964392460d0309456b58b1a
-Commit:        96a0604bd036d78af964392460d0309456b58b1a
-Parent:        756f51eac8f42c85f091ebbc4dc8bb2f1569a38e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1870b3293a26f6d946e8451a10e8c9762ae9f31c
+Commit:        1870b3293a26f6d946e8451a10e8c9762ae9f31c
+Parent:        96a0604bd036d78af964392460d0309456b58b1a
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Aug 29 14:51:26 2016 -0500
+AuthorDate:    Mon Aug 29 14:52:41 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Mon Aug 29 15:26:56 2016 -0500
 
-lvmdbusd: Correct imports
+lvmdbusd/lvmdb.py: Make stand alone execution work
 
+This was broken when the args were moved to cfg
 ---
- daemons/lvmdbusd/cfg.py             |    6 ++----
- daemons/lvmdbusd/lvm_shell_proxy.py |    9 ++-------
- daemons/lvmdbusd/lvmdb.py           |    8 ++------
- daemons/lvmdbusd/lvmdbusd           |    4 ++--
- daemons/lvmdbusd/utils.py           |    5 +----
- 5 files changed, 9 insertions(+), 23 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |   10 +++++-----
+ daemons/lvmdbusd/utils.py      |    2 +-
+ 2 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/daemons/lvmdbusd/cfg.py b/daemons/lvmdbusd/cfg.py
-index 1d773c3..8965ec7 100644
---- a/daemons/lvmdbusd/cfg.py
-+++ b/daemons/lvmdbusd/cfg.py
-@@ -11,10 +11,8 @@ import os
- import multiprocessing
- import queue
- import itertools
--try:
--	from . import path
--except SystemError:
--	import path
-+
-+from lvmdbusd import path
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 877f17c..9b0c877 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -38,10 +38,6 @@ total_count = 0
+ # at the same time.
+ cmd_lock = threading.RLock()
  
- LVM_CMD = os.getenv('LVM_BINARY', path.LVM_BINARY)
+-# The actual method which gets called to invoke the lvm command, can vary
+-# from forking a new process to using lvm shell
+-_t_call = None
+-
  
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
-index 3455342..910ac2c 100755
---- a/daemons/lvmdbusd/lvm_shell_proxy.py
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py
-@@ -23,18 +23,13 @@ import select
- import copy
+ class LvmExecutionMeta(object):
  
- try:
--	from simplejson.scanner import JSONDecodeError
- 	import simplejson as json
- except ImportError:
- 	import json
+@@ -113,12 +109,16 @@ def call_lvm(command, debug=False):
+ 		_debug_c(command, process.returncode, (stdout_text, stderr_text))
  
+ 	if process.returncode == 0:
+-		if cfg.args.debug and out[1] and len(out[1]) and 'help' not in command:
++		if cfg.args and cfg.args.debug and out[1] and len(out[1]) and \
++				'help' not in command:
+ 			log_error('WARNING: lvm is out-putting text to STDERR on success!')
+ 			_debug_c(command, process.returncode, (stdout_text, stderr_text))
  
--try:
--	from .cfg import LVM_CMD
--	from .utils import log_debug, log_error
--except:
--	from cfg import LVM_CMD
--	from utils import log_debug, log_error
-+from lvmdbusd.cfg import LVM_CMD
-+from lvmdbusd.utils import log_debug, log_error
+ 	return process.returncode, stdout_text, stderr_text
  
- SHELL_PROMPT = "lvm> "
++# The actual method which gets called to invoke the lvm command, can vary
++# from forking a new process to using lvm shell
++_t_call = call_lvm
  
-diff --git a/daemons/lvmdbusd/lvmdb.py b/daemons/lvmdbusd/lvmdb.py
-index 187a930..ac60a80 100755
---- a/daemons/lvmdbusd/lvmdb.py
-+++ b/daemons/lvmdbusd/lvmdb.py
-@@ -15,12 +15,8 @@ import pprint as prettyprint
- import os
- import sys
- 
--try:
--	from . import cmdhandler
--	from .utils import log_debug, log_error
--except SystemError:
--	import cmdhandler
--	from utils import log_debug
-+from lvmdbusd import cmdhandler
-+from lvmdbusd.utils import log_debug, log_error
- 
- 
- class DataStore(object):
-diff --git a/daemons/lvmdbusd/lvmdbusd b/daemons/lvmdbusd/lvmdbusd
-index 7ea243b..73d0f13 100755
---- a/daemons/lvmdbusd/lvmdbusd
-+++ b/daemons/lvmdbusd/lvmdbusd
-@@ -10,7 +10,7 @@
- # along with this program. If not, see <http://www.gnu.org/licenses/>.
- 
- import sys
--import lvmdbusd
-+from lvmdbusd import main
- 
- if __name__ == '__main__':
--	sys.exit(lvmdbusd.main())
-+	sys.exit(main())
+ def _shell_cfg():
+ 	global _t_call
 diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
-index c80290f..06301cd 100644
+index 06301cd..7d217df 100644
 --- a/daemons/lvmdbusd/utils.py
 +++ b/daemons/lvmdbusd/utils.py
-@@ -18,11 +18,8 @@ import datetime
- import dbus
- import dbus.service
- import dbus.mainloop.glib
-+from lvmdbusd import cfg
+@@ -262,7 +262,7 @@ def _common_log(msg, *attributes):
+ # @param msg    Message to output to stdout
+ # @return None
+ def log_debug(msg, *attributes):
+-	if cfg.args.debug:
++	if cfg.args and cfg.args.debug:
+ 		_common_log(msg, *attributes)
  
--try:
--	from . import cfg
--except SystemError:
--	import cfg
- 
- STDOUT_TTY = os.isatty(sys.stdout.fileno())
  
 
 
