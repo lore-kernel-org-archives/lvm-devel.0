@@ -1,46 +1,67 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 29 Aug 2016 20:28:45 +0000 (UTC)
-Subject: master - lvmdbustest.py: Remove '-' from tag ch set
-Message-ID: <20160829202845.036156193A@fedorahosted.org>
+Date: Mon, 29 Aug 2016 20:28:47 +0000 (UTC)
+Subject: master - lvmdbusd: Be more specific on return types for Lv
+Message-ID: <20160829202847.16D166051E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9aed18a57167451b20fa67a80052d39634447064
-Commit:        9aed18a57167451b20fa67a80052d39634447064
-Parent:        0985b2d0d45d82fbaac7112c0c575cb14792d021
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20318e4c6c389b5ee25b8897fb93aaa036878a95
+Commit:        20318e4c6c389b5ee25b8897fb93aaa036878a95
+Parent:        9aed18a57167451b20fa67a80052d39634447064
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Aug 25 18:41:53 2016 -0500
+AuthorDate:    Mon Aug 29 12:32:20 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Mon Aug 29 15:26:55 2016 -0500
+CommitterDate: Mon Aug 29 15:26:56 2016 -0500
 
-lvmdbustest.py: Remove '-' from tag ch set
+lvmdbusd: Be more specific on return types for Lv
 
 ---
- test/dbus/lvmdbustest.py |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/lv.py |   15 +++++++++++----
+ 1 files changed, 11 insertions(+), 4 deletions(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 457db96..ced49a0 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -1107,10 +1107,13 @@ class TestDbusService(unittest.TestCase):
- 				vg_proxy.Vg.LvCreateLinear(r + rs(8, '_lv'),
- 					mib(4), False, -1, {})
+diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
+index 6d994ac..3d0b78c 100644
+--- a/daemons/lvmdbusd/lv.py
++++ b/daemons/lvmdbusd/lv.py
+@@ -103,7 +103,14 @@ class LvState(State):
+ 			(pv_uuid, pv_name, pv_segs) = pv
+ 			pv_obj = cfg.om.get_object_path_by_uuid_lvm_id(
+ 				pv_uuid, pv_name, gen_new=False)
+-			rc.append((pv_obj, pv_segs))
++
++			segs_decorate = []
++			for i in pv_segs:
++				segs_decorate.append((dbus.UInt64(i[0]),
++									dbus.UInt64(i[1]),
++									dbus.String(i[2])))
++
++			rc.append((dbus.ObjectPath(pv_obj), segs_decorate))
  
--	_ALLOWABLE_TAG_CH = string.ascii_letters + string.digits + "._-+/=!:&#"
-+	# Wait until BZ https://bugzilla.redhat.com/show_bug.cgi?id=1370002
-+	# is corrected before we add '-' in the allowable character set
-+	#_ALLOWABLE_TAG_CH = string.ascii_letters + string.digits + "._-+/=!:&#"
-+	_ALLOWABLE_TAG_CH = string.ascii_letters + string.digits + "._+/=!:&#"
+ 		return dbus.Array(rc, signature="(oa(tts))")
  
- 	def _invalid_tag_characters(self):
--		bad_tag_ch_set = set(string.printable) - set(self._ALLOWABLE_TAG_CH)
-+		bad_tag_ch_set = set(string.printable) - set(self._ALLOWABLE_TAG_CH + '-')
- 		return ''.join(bad_tag_ch_set)
+@@ -127,7 +134,7 @@ class LvState(State):
+ 			op = cfg.om.get_object_path_by_uuid_lvm_id(
+ 				l[0], full_name, gen_new=False)
+ 			assert op
+-			rc.append(op)
++			rc.append(dbus.ObjectPath(op))
+ 		return rc
  
- 	def test_invalid_tags(self):
+ 	def __init__(self, Uuid, Name, Path, SizeBytes,
+@@ -140,9 +147,9 @@ class LvState(State):
+ 		# value
+ 		self._segs = dbus.Array([], signature='s')
+ 		if not isinstance(segtypes, list):
+-			self._segs.append(segtypes)
++			self._segs.append(dbus.String(segtypes))
+ 		else:
+-			self._segs.extend(set(segtypes))
++			self._segs.extend([dbus.String(x) for x in set(segtypes)])
+ 
+ 		self.Vg = cfg.om.get_object_path_by_uuid_lvm_id(
+ 			vg_uuid, vg_name, vg_obj_path_generate)
 
 
