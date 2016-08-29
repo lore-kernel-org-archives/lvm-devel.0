@@ -1,330 +1,334 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 29 Aug 2016 20:28:38 +0000 (UTC)
-Subject: master - lvmdbusd: Use udev until ExternalEvent occurs
-Message-ID: <20160829202838.939EB6114E@fedorahosted.org>
+Date: Mon, 29 Aug 2016 20:28:40 +0000 (UTC)
+Subject: master - lvmdbusd: Be more explicit on return values
+Message-ID: <20160829202840.B0272618DE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4902034c895d26423564175c0636cff8ba4112e1
-Commit:        4902034c895d26423564175c0636cff8ba4112e1
-Parent:        2352ff24a55757a70869f443126d67cece0fb0a4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2bb09b4015ec85bb11b68a52e326a01ce3c8f98f
+Commit:        2bb09b4015ec85bb11b68a52e326a01ce3c8f98f
+Parent:        4902034c895d26423564175c0636cff8ba4112e1
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Aug 24 18:29:35 2016 -0500
+AuthorDate:    Wed Aug 24 18:31:15 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Mon Aug 29 15:26:55 2016 -0500
 
-lvmdbusd: Use udev until ExternalEvent occurs
+lvmdbusd: Be more explicit on return values
 
-The normal mode of operation will be to monitor for udev events until an
-ExternalEvent occurs.  In that case the service will disable monitoring
-for udev events and use ExternalEvent exclusively.
-
-Note: User specifies --udev the service will always monitor udev regardless
-if ExternalEvent is being called too.
+The python dbus library tries to make best on what the dbus type is based on
+python data type.  Some times it gets this wrong, so we will be explicit.
 ---
- daemons/lvmdbusd/cfg.py             |   14 +++++++++-----
- daemons/lvmdbusd/cmdhandler.py      |   24 ++++++++++++++++++------
- daemons/lvmdbusd/lvm_shell_proxy.py |    6 ++++++
- daemons/lvmdbusd/main.py            |   28 ++++++++++++++--------------
- daemons/lvmdbusd/manager.py         |    9 ++++++++-
- daemons/lvmdbusd/udevwatch.py       |   25 ++++++++++++++++---------
- daemons/lvmdbusd/utils.py           |    2 +-
- 7 files changed, 72 insertions(+), 36 deletions(-)
+ daemons/lvmdbusd/job.py     |    8 ++++----
+ daemons/lvmdbusd/lv.py      |   40 +++++++++++++++++++++++-----------------
+ daemons/lvmdbusd/manager.py |    4 ++--
+ daemons/lvmdbusd/pv.py      |   22 ++++++++--------------
+ daemons/lvmdbusd/utils.py   |    2 +-
+ daemons/lvmdbusd/vg.py      |   10 ++++------
+ 6 files changed, 42 insertions(+), 44 deletions(-)
 
-diff --git a/daemons/lvmdbusd/cfg.py b/daemons/lvmdbusd/cfg.py
-index 8aec8ae..1d773c3 100644
---- a/daemons/lvmdbusd/cfg.py
-+++ b/daemons/lvmdbusd/cfg.py
-@@ -24,14 +24,18 @@ om = None
- # This is the global bus connection
- bus = None
+diff --git a/daemons/lvmdbusd/job.py b/daemons/lvmdbusd/job.py
+index 520f9a8..7299583 100644
+--- a/daemons/lvmdbusd/job.py
++++ b/daemons/lvmdbusd/job.py
+@@ -121,7 +121,7 @@ class Job(AutomatedProperties):
  
-+# Command line args
-+args = None
-+
-+# Set to true if we are depending on external events for updates
-+ee = False
-+
- # Shared state variable across all processes
- run = multiprocessing.Value('i', 1)
+ 	@property
+ 	def Percent(self):
+-		return self.state.Percent
++		return dbus.Byte(int(self.state.Percent))
  
--# Debug
--DEBUG = True
--
--# Use lvm shell
--USE_SHELL = False
-+# If this is set to true, the current setup support lvm shell and we are
-+# running in that mode of operation
-+SHELL_IN_USE = None
+ 	@Percent.setter
+ 	def Percent(self, value):
+@@ -129,7 +129,7 @@ class Job(AutomatedProperties):
  
- # Lock used by pprint
- stdout_lock = multiprocessing.Lock()
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index 0d35782..5815031 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -13,6 +13,7 @@ import threading
- from itertools import chain
- import collections
- import traceback
-+import os
+ 	@property
+ 	def Complete(self):
+-		return self.state.Complete
++		return dbus.Boolean(self.state.Complete)
  
- try:
- 	from . import cfg
-@@ -101,7 +102,8 @@ def call_lvm(command, debug=False):
- 	# in different locations on the same box
- 	command.insert(0, cfg.LVM_CMD)
+ 	@Complete.setter
+ 	def Complete(self, value):
+@@ -137,7 +137,7 @@ class Job(AutomatedProperties):
  
--	process = Popen(command, stdout=PIPE, stderr=PIPE, close_fds=True)
-+	process = Popen(command, stdout=PIPE, stderr=PIPE, close_fds=True,
-+					env=os.environ)
- 	out = process.communicate()
+ 	@property
+ 	def GetError(self):
+-		return self.state.GetError
++		return dbus.Struct(self.state.GetError, signature="(is)")
  
- 	stdout_text = bytes(out[0]).decode("utf-8")
-@@ -111,7 +113,7 @@ def call_lvm(command, debug=False):
- 		_debug_c(command, process.returncode, (stdout_text, stderr_text))
+ 	def set_result(self, ec, msg):
+ 		self.state.set_result(ec, msg)
+@@ -160,7 +160,7 @@ class Job(AutomatedProperties):
  
- 	if process.returncode == 0:
--		if cfg.DEBUG and out[1] and len(out[1]) and 'help' not in command:
-+		if cfg.args.debug and out[1] and len(out[1]) and 'help' not in command:
- 			log_error('WARNING: lvm is out-putting text to STDERR on success!')
- 			_debug_c(command, process.returncode, (stdout_text, stderr_text))
+ 	@property
+ 	def Result(self):
+-		return self.state.Result
++		return dbus.ObjectPath(self.state.Result)
  
-@@ -123,9 +125,10 @@ def _shell_cfg():
- 	try:
- 		lvm_shell = LVMShellProxy()
- 		_t_call = lvm_shell.call_lvm
--		cfg.USE_SHELL = True
-+		cfg.SHELL_IN_USE = lvm_shell
- 	except Exception:
- 		_t_call = call_lvm
-+		cfg.SHELL_IN_USE = None
- 		log_error(traceback.format_exc())
- 		log_error("Unable to utilize lvm shell, dropping back to fork & exec")
+ 	@property
+ 	def lvm_id(self):
+diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
+index 5658d29..6d994ac 100644
+--- a/daemons/lvmdbusd/lv.py
++++ b/daemons/lvmdbusd/lv.py
+@@ -252,14 +252,16 @@ class LvCommon(AutomatedProperties):
+ 					'V': 'thin Volume', 't': 'thin pool', 'T': 'Thin pool data',
+ 					'e': 'raid or pool metadata or pool metadata spare',
+ 					'-': 'Unspecified'}
+-		return (self.state.Attr[0], type_map[self.state.Attr[0]])
++		return dbus.Struct((self.state.Attr[0], type_map[self.state.Attr[0]]),
++						   signature="as")
  
-@@ -133,6 +136,15 @@ def _shell_cfg():
- def set_execution(shell):
- 	global _t_call
- 	with cmd_lock:
-+		# If the user requested lvm shell and we are currently setup that
-+		# way, just return
-+		if cfg.SHELL_IN_USE and shell:
-+			return
-+		else:
-+			if not shell and cfg.SHELL_IN_USE:
-+				cfg.SHELL_IN_USE.exit_shell()
-+				cfg.SHELL_IN_USE = None
-+
- 		_t_call = call_lvm
- 		if shell:
- 			_shell_cfg()
-@@ -217,7 +229,7 @@ def pv_remove(device, remove_options):
+ 	@property
+ 	def Permissions(self):
+ 		type_map = {'w': 'writable', 'r': 'read-only',
+ 					'R': 'Read-only activation of non-read-only volume',
+ 					'-': 'Unspecified'}
+-		return (self.state.Attr[1], type_map[self.state.Attr[1]])
++		return dbus.Struct((self.state.Attr[1], type_map[self.state.Attr[1]]),
++						   signature="(ss)")
  
- def _qt(tag_name):
- 	# When running in lvm shell you need to quote the tags
--	if cfg.USE_SHELL:
-+	if cfg.SHELL_IN_USE:
- 		return '"%s"' % tag_name
- 	return tag_name
+ 	@property
+ 	def AllocationPolicy(self):
+@@ -268,11 +270,12 @@ class LvCommon(AutomatedProperties):
+ 					'i': 'inherited', 'I': 'inherited locked',
+ 					'l': 'cling', 'L': 'cling locked',
+ 					'n': 'normal', 'N': 'normal locked', '-': 'Unspecified'}
+-		return (self.state.Attr[2], type_map[self.state.Attr[2]])
++		return dbus.Struct((self.state.Attr[2], type_map[self.state.Attr[2]]),
++						   signature="(ss)")
  
-@@ -440,7 +452,7 @@ def supports_json():
- 	cmd = ['help']
- 	rc, out, err = call(cmd)
- 	if rc == 0:
--		if cfg.USE_SHELL:
-+		if cfg.SHELL_IN_USE:
- 			return True
- 		else:
- 			if 'fullreport' in err:
-@@ -488,7 +500,7 @@ def lvm_full_report_json():
- 		# With the current implementation, if we are using the shell then we
- 		# are using JSON and JSON is returned back to us as it was parsed to
- 		# figure out if we completed OK or not
--		if cfg.USE_SHELL:
-+		if cfg.SHELL_IN_USE:
- 			assert(type(out) == dict)
- 			return out
- 		else:
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
-index d4eff86..3455342 100755
---- a/daemons/lvmdbusd/lvm_shell_proxy.py
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py
-@@ -203,6 +203,12 @@ class LVMShellProxy(object):
+ 	@property
+ 	def FixedMinor(self):
+-		return self.state.Attr[3] == 'm'
++		return dbus.Boolean(self.state.Attr[3] == 'm')
  
- 		return rc, json_result, error_msg
+ 	@property
+ 	def State(self):
+@@ -283,29 +286,32 @@ class LvCommon(AutomatedProperties):
+ 					'd': 'mapped device present without  tables',
+ 					'i': 'mapped device present with inactive table',
+ 					'X': 'unknown', '-': 'Unspecified'}
+-		return (self.state.Attr[4], type_map[self.state.Attr[4]])
++		return dbus.Struct((self.state.Attr[4], type_map[self.state.Attr[4]]),
++						   signature="(ss)")
  
-+	def exit_shell(self):
-+		try:
-+			self._write_cmd('exit\n')
-+		except Exception as e:
-+			log_error(str(e))
-+
- 	def __del__(self):
- 		try:
- 			self.lvm_shell.terminate()
-diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index 638323a..d76b5c3 100644
---- a/daemons/lvmdbusd/main.py
-+++ b/daemons/lvmdbusd/main.py
-@@ -92,6 +92,7 @@ def process_request():
+ 	@property
+ 	def TargetType(self):
+ 		type_map = {'C': 'Cache', 'm': 'mirror', 'r': 'raid',
+ 					's': 'snapshot', 't': 'thin', 'u': 'unknown',
+ 					'v': 'virtual', '-': 'Unspecified'}
+-		return (self.state.Attr[6], type_map[self.state.Attr[6]])
++		return dbus.Struct((self.state.Attr[6], type_map[self.state.Attr[6]]),
++						   signature="(ss)")
  
+ 	@property
+ 	def ZeroBlocks(self):
+-		return self.state.Attr[7] == 'z'
++		return dbus.Boolean(self.state.Attr[7] == 'z')
  
- def main():
-+	start = time.time()
- 	# Add simple command line handling
- 	parser = argparse.ArgumentParser()
- 	parser.add_argument("--udev", action='store_true',
-@@ -112,16 +113,13 @@ def main():
- 	# Ensure that we get consistent output for parsing stdout/stderr
- 	os.environ["LC_ALL"] = "C"
+ 	@property
+ 	def Health(self):
+ 		type_map = {'p': 'partial', 'r': 'refresh',
+ 					'm': 'mismatches', 'w': 'writemostly',
+ 					'X': 'X unknown', '-': 'Unspecified'}
+-		return (self.state.Attr[8], type_map[self.state.Attr[8]])
++		return dbus.Struct((self.state.Attr[8], type_map[self.state.Attr[8]]),
++						   signature="(ss)")
  
--	args = parser.parse_args()
-+	cfg.args = parser.parse_args()
+ 	@property
+ 	def SkipActivation(self):
+-		return self.state.Attr[9] == 'k'
++		return dbus.Boolean(self.state.Attr[9] == 'k')
  
--	cfg.DEBUG = args.debug
--	cmdhandler.set_execution(args.use_lvm_shell)
-+	cmdhandler.set_execution(cfg.args.use_lvm_shell)
+ 	def vg_name_lookup(self):
+ 		return self.state.vg_name_lookup()
+@@ -331,15 +337,15 @@ class LvCommon(AutomatedProperties):
  
- 	# List of threads that we start up
- 	thread_list = []
+ 	@property
+ 	def IsThinVolume(self):
+-		return self.state.Attr[0] == 'V'
++		return dbus.Boolean(self.state.Attr[0] == 'V')
  
--	start = time.time()
--
- 	# Install signal handlers
- 	for s in [signal.SIGHUP, signal.SIGINT]:
- 		try:
-@@ -144,7 +142,7 @@ def main():
+ 	@property
+ 	def IsThinPool(self):
+-		return self.state.Attr[0] == 't'
++		return dbus.Boolean(self.state.Attr[0] == 't')
  
- 	cfg.load = load
+ 	@property
+ 	def Active(self):
+-		return self.state.active == "active"
++		return dbus.Boolean(self.state.active == "active")
  
--	cfg.db = lvmdb.DataStore(args.use_json)
-+	cfg.db = lvmdb.DataStore(cfg.args.use_json)
+ 	@dbus.service.method(
+ 		dbus_interface=LV_COMMON_INTERFACE,
+@@ -698,11 +704,11 @@ class LvThinPool(Lv):
  
- 	# Start up thread to monitor pv moves
- 	thread_list.append(
-@@ -160,23 +158,25 @@ def main():
- 		process.damon = True
- 		process.start()
+ 	@property
+ 	def DataLv(self):
+-		return self._data_lv
++		return dbus.ObjectPath(self._data_lv)
  
-+	# Add udev watching
-+	if cfg.args.use_udev:
-+		log_debug('Utilizing udev to trigger updates')
-+
-+	# In all cases we are going to monitor for udev until we get an
-+	# ExternalEvent.  In the case where we get an external event and the user
-+	# didn't specify --udev we will stop monitoring udev
-+	udevwatch.add()
-+
- 	end = time.time()
- 	log_debug(
- 		'Service ready! total time= %.4f, lvm time= %.4f count= %d' %
- 		(end - start, cmdhandler.total_time, cmdhandler.total_count),
- 		'bg_black', 'fg_light_green')
+ 	@property
+ 	def MetaDataLv(self):
+-		return self._metadata_lv
++		return dbus.ObjectPath(self._metadata_lv)
  
--	# Add udev watching
--	if args.use_udev:
--		log_debug('Utilizing udev to trigger updates')
--		udevwatch.add()
--
- 	try:
- 		if cfg.run.value != 0:
- 			cfg.loop.run()
--
--			if args.use_udev:
--				udevwatch.remove()
-+			udevwatch.remove()
+ 	@staticmethod
+ 	def _lv_create(lv_uuid, lv_name, name, size_bytes, create_options):
+@@ -757,11 +763,11 @@ class LvCachePool(Lv):
  
- 			for process in thread_list:
- 				process.join()
+ 	@property
+ 	def DataLv(self):
+-		return self._data_lv
++		return dbus.ObjectPath(self._data_lv)
+ 
+ 	@property
+ 	def MetaDataLv(self):
+-		return self._metadata_lv
++		return dbus.ObjectPath(self._metadata_lv)
+ 
+ 	@staticmethod
+ 	def _cache_lv(lv_uuid, lv_name, lv_object_path, cache_options):
+@@ -826,7 +832,7 @@ class LvCacheLv(Lv):
+ 
+ 	@property
+ 	def CachePool(self):
+-		return self.state.PoolLv
++		return dbus.ObjectPath(self.state.PoolLv)
+ 
+ 	@staticmethod
+ 	def _detach_lv(lv_uuid, lv_name, detach_options, destroy_cache):
 diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
-index 2388d8a..79254fe 100644
+index 79254fe..e0da824 100644
 --- a/daemons/lvmdbusd/manager.py
 +++ b/daemons/lvmdbusd/manager.py
-@@ -17,7 +17,7 @@ from . import cmdhandler
- from .fetch import load_pvs, load_vgs
- from .request import RequestEntry
- from .refresh import event_add
--
-+from . import udevwatch
+@@ -21,7 +21,7 @@ from . import udevwatch
  
  # noinspection PyPep8Naming
  class Manager(AutomatedProperties):
-@@ -181,6 +181,13 @@ class Manager(AutomatedProperties):
- 		in_signature='s', out_signature='i')
- 	def ExternalEvent(self, command):
+-	_Version_meta = ("t", MANAGER_INTERFACE)
++	_Version_meta = ("s", MANAGER_INTERFACE)
  
-+		# If a user didn't explicitly specify udev, we will turn it off now.
-+		if not cfg.args.use_udev:
-+			if udevwatch.remove():
-+				utils.log_debug("ExternalEvent received, disabling "
-+								"udev monitoring")
-+				# We are dependent on external events now to stay current!
-+				cfg.ee = True
- 		event_add((command,))
- 		return dbus.Int32(0)
+ 	def __init__(self, object_path):
+ 		super(Manager, self).__init__(object_path)
+@@ -29,7 +29,7 @@ class Manager(AutomatedProperties):
  
-diff --git a/daemons/lvmdbusd/udevwatch.py b/daemons/lvmdbusd/udevwatch.py
-index c3e6e60..6d56443 100644
---- a/daemons/lvmdbusd/udevwatch.py
-+++ b/daemons/lvmdbusd/udevwatch.py
-@@ -8,10 +8,12 @@
- # along with this program. If not, see <http://www.gnu.org/licenses/>.
+ 	@property
+ 	def Version(self):
+-		return '1.0.0'
++		return dbus.String('1.0.0')
  
- import pyudev
-+import threading
- from .refresh import event_add
- from . import cfg
+ 	@staticmethod
+ 	def _pv_create(device, create_options):
+diff --git a/daemons/lvmdbusd/pv.py b/daemons/lvmdbusd/pv.py
+index bbd76f1..0780179 100644
+--- a/daemons/lvmdbusd/pv.py
++++ b/daemons/lvmdbusd/pv.py
+@@ -69,7 +69,7 @@ class PvState(State):
+ 					lv_uuid, full_name, path_create)
  
- observer = None
-+observer_lock = threading.RLock()
+ 				rc.append((lv_path, segs))
+-		return dbus.Array(rc, signature="(oa(tts))")
++		return rc
  
+ 	# noinspection PyUnusedLocal,PyPep8Naming
+ 	def __init__(self, lvm_path, Uuid, Name,
+@@ -241,26 +241,20 @@ class Pv(AutomatedProperties):
+ 	@property
+ 	def PeSegments(self):
+ 		if len(self.state.pe_segments):
+-			return self.state.pe_segments
+-		return dbus.Array([], '(tt)')
++			return dbus.Array(self.state.pe_segments, signature='(tt)')
++		return dbus.Array([], 'a(tt)')
  
- # noinspection PyUnusedLocal
-@@ -40,15 +42,20 @@ def filter_event(action, device):
+ 	@property
+ 	def Exportable(self):
+-		if self.state.attr[1] == 'x':
+-			return True
+-		return False
++		return dbus.Boolean(self.state.attr[1] == 'x')
  
+ 	@property
+ 	def Allocatable(self):
+-		if self.state.attr[0] == 'a':
+-			return True
+-		return False
++		return dbus.Boolean(self.state.attr[0] == 'a')
  
- def add():
--	global observer
--	context = pyudev.Context()
--	monitor = pyudev.Monitor.from_netlink(context)
--	monitor.filter_by('block')
--	observer = pyudev.MonitorObserver(monitor, filter_event)
--	observer.start()
-+	with observer_lock:
-+		global observer
-+		context = pyudev.Context()
-+		monitor = pyudev.Monitor.from_netlink(context)
-+		monitor.filter_by('block')
-+		observer = pyudev.MonitorObserver(monitor, filter_event)
-+		observer.start()
+ 	@property
+ 	def Missing(self):
+-		if self.state.attr[2] == 'm':
+-			return True
+-		return False
++		return dbus.Boolean(self.state.attr[2] == 'm')
  
+ 	def object_path(self):
+ 		return self._object_path
+@@ -275,8 +269,8 @@ class Pv(AutomatedProperties):
  
- def remove():
--	global observer
--	observer.stop()
--	observer = None
-+	with observer_lock:
-+		global observer
-+		if observer:
-+			observer.stop()
-+			observer = None
-+			return True
-+		return False
+ 	@property
+ 	def Lv(self):
+-		return self.state.lv
++		return dbus.Array(self.state.lv, signature="(oa(tts))")
+ 
+ 	@property
+ 	def Vg(self):
+-		return self.state.vg_path
++		return dbus.ObjectPath(self.state.vg_path)
 diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
-index 9db7857..65668fc 100644
+index 65668fc..c80290f 100644
 --- a/daemons/lvmdbusd/utils.py
 +++ b/daemons/lvmdbusd/utils.py
-@@ -265,7 +265,7 @@ def _common_log(msg, *attributes):
- # @param msg    Message to output to stdout
- # @return None
- def log_debug(msg, *attributes):
--	if cfg.DEBUG:
-+	if cfg.args.debug:
- 		_common_log(msg, *attributes)
+@@ -236,7 +236,7 @@ def parse_tags(tags):
+ 	if len(tags):
+ 		if ',' in tags:
+ 			return tags.split(',')
+-		return sorted([tags])
++		return dbus.Array(sorted([tags]), signature='s')
+ 	return dbus.Array([], signature='s')
  
  
+diff --git a/daemons/lvmdbusd/vg.py b/daemons/lvmdbusd/vg.py
+index 4cc938e..3b35873 100644
+--- a/daemons/lvmdbusd/vg.py
++++ b/daemons/lvmdbusd/vg.py
+@@ -78,7 +78,7 @@ class VgState(State):
+ 			(pv_name, pv_uuid) = p
+ 			rc.append(cfg.om.get_object_path_by_uuid_lvm_id(
+ 				pv_uuid, pv_name, pv_obj_path_generate))
+-		return dbus.Array(rc, signature='o')
++		return rc
+ 
+ 	def __init__(self, Uuid, Name, Fmt,
+ 			SizeBytes, FreeBytes, SysId, ExtentSizeBytes,
+@@ -840,9 +840,7 @@ class Vg(AutomatedProperties):
+ 		cfg.worker_q.put(r)
+ 
+ 	def _attribute(self, pos, ch):
+-		if self.state.attr[pos] == ch:
+-			return True
+-		return False
++		return dbus.Boolean(self.state.attr[pos] == ch)
+ 
+ 	@dbus.service.method(
+ 		dbus_interface=VG_INTERFACE,
+@@ -908,11 +906,11 @@ class Vg(AutomatedProperties):
+ 
+ 	@property
+ 	def Pvs(self):
+-		return self.state.Pvs
++		return dbus.Array(self.state.Pvs, signature='o')
+ 
+ 	@property
+ 	def Lvs(self):
+-		return self.state.Lvs
++		return dbus.Array(self.state.Lvs, signature='o')
+ 
+ 	@property
+ 	def lvm_id(self):
 
 
