@@ -1,73 +1,69 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 31 Aug 2016 09:14:01 +0000 (UTC)
-Subject: master - dmeventd: typo and debug name fix
-Message-ID: <20160831091401.C65B6614B0@fedorahosted.org>
+Date: Wed, 31 Aug 2016 09:14:03 +0000 (UTC)
+Subject: master - tests: skip test for older cache target
+Message-ID: <20160831091403.EDD76614B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b26604c8d84a189fc3ee276d6e8711a49eecd831
-Commit:        b26604c8d84a189fc3ee276d6e8711a49eecd831
-Parent:        16ed726610eca266bc6ef03989a156862ebf3d7a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3a4267ade462e9066fbe70076da0eff679b3cdb6
+Commit:        3a4267ade462e9066fbe70076da0eff679b3cdb6
+Parent:        b26604c8d84a189fc3ee276d6e8711a49eecd831
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 31 11:05:39 2016 +0200
+AuthorDate:    Tue Aug 30 13:28:36 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Aug 31 11:13:59 2016 +0200
 
-dmeventd: typo and debug name fix
+tests: skip test for older cache target
 
-Fix 'raw' -> 'row' fix.
-Consitently use thin pool as a type of monitored device in info message.
+Some test on older can targets are not going to work, and
+since there is no other fix then using newer kernel - skip
+such tests completely.
 ---
- daemons/dmeventd/plugins/thin/dmeventd_thin.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ test/shell/lvconvert-cache-chunks.sh |   16 +++++++++++-----
+ 1 files changed, 11 insertions(+), 5 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-index 622910f..d5a3a59 100644
---- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-+++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-@@ -251,7 +251,7 @@ static int _umount_device(char *buffer, unsigned major, unsigned minor,
- 	if ((major == data->info.major) && dm_bit(data->minors, minor)) {
- 		if (dm_split_words(buffer, DM_ARRAY_SIZE(words), 0, words) < DM_ARRAY_SIZE(words))
- 			words[9] = NULL; /* just don't show device name */
--		log_info("Unmounting thin %s (%d:%d) of thin-pool %s (%u:%u) from mount point \"%s\".",
-+		log_info("Unmounting thin %s (%d:%d) of thin pool %s (%u:%u) from mount point \"%s\".",
- 			 words[9] ? : "", major, minor, data->device,
- 			 data->info.major, data->info.minor,
- 			 target);
-@@ -429,7 +429,7 @@ out:
+diff --git a/test/shell/lvconvert-cache-chunks.sh b/test/shell/lvconvert-cache-chunks.sh
+index 806db0f..4631e0e 100644
+--- a/test/shell/lvconvert-cache-chunks.sh
++++ b/test/shell/lvconvert-cache-chunks.sh
+@@ -10,6 +10,7 @@
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
- 	if (state->fails >= MAX_FAILS) {
- 		log_warn("WARNING: Dropping monitoring of %s. "
--			 "lvm2 command fails too often (%u times in raw).",
-+			 "lvm2 command fails too often (%u times in row).",
- 			 device, state->fails);
- 		pthread_kill(pthread_self(), SIGALRM);
- 	}
-@@ -458,11 +458,11 @@ int register_device(const char *device,
- 	state->data_percent_check = CHECK_MINIMUM;
- 	*user = state;
+ # Exercise number of cache chunks in cache pool
++# Skips creation of real cached device for older cache targets...
  
--	log_info("Monitoring thin %s.", device);
-+	log_info("Monitoring thin pool %s.", device);
+ SKIP_WITH_LVMLOCKD=1
+ SKIP_WITH_LVMPOLLD=1
+@@ -34,8 +35,11 @@ lvcreate -L1M -n $lv1 $vg
+ # Not let pass small chunks when caching origin
+ fail lvconvert -H --chunksize 128K --cachepool $vg/cpool $vg/$lv1
  
- 	return 1;
- bad:
--	log_error("Failed to monitor thin %s.", device);
-+	log_error("Failed to monitor thin pool %s.", device);
+-# Though 2M is valid
+-lvconvert -y -H  --chunksize 2M --cachepool $vg/cpool $vg/$lv1
++# Thought 2M is valid
++if aux have_cache 1 8 0 ; then
++	# Without SMQ we run out of kernel memory easily
++	lvconvert -y -H  --chunksize 2M --cachepool $vg/cpool $vg/$lv1
++fi
  
- 	return 0;
- }
-@@ -476,7 +476,7 @@ int unregister_device(const char *device,
- 	struct dso_state *state = *user;
+ lvremove -f $vg
  
- 	dmeventd_lvm2_exit_with_pool(state);
--	log_info("No longer monitoring thin %s.", device);
-+	log_info("No longer monitoring thin pool %s.", device);
+@@ -46,8 +50,10 @@ lvcreate -L1T -n cpool $vg
+ # Not allowed to create more then 10e6 chunks
+ fail lvconvert -y --type cache-pool --chunksize 128K $vg/cpool
  
- 	return 1;
- }
+-# Let operation pass when max_chunk limit is raised
+-lvconvert -y --type cache-pool --chunksize 128K $vg/cpool \
+-	--config 'allocation/cache_pool_max_chunks=10000000'
++if aux have_cache 1 8 0 ; then
++	# Let operation pass when max_chunk limit is raised
++	lvconvert -y --type cache-pool --chunksize 128K $vg/cpool \
++		--config 'allocation/cache_pool_max_chunks=10000000'
++fi
+ 
+ vgremove -f $vg
 
 
