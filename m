@@ -1,70 +1,67 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  6 Sep 2016 11:22:22 +0000 (UTC)
-Subject: master - dev-type: check for DEVLINKS udev db variable existence if udev_device_get_is_initialized fn is not present
-Message-ID: <20160906112223.0280960678@fedorahosted.org>
+From: Brassow Jonathan <jbrassow@redhat.com>
+Date: Tue, 6 Sep 2016 09:29:14 -0500
+Subject: [PATCH] Allow scrubbing on cache origin sub-LVs - Bug 1169495
+Message-ID: <EA0C3E08-883E-40CB-939D-CA8E389A7DE7@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c8a14a29cdcf7e800af16f9b6a8fa9ed49250d30
-Commit:        c8a14a29cdcf7e800af16f9b6a8fa9ed49250d30
-Parent:        2e4821a847debe9a7c48b9dd0f218eff030dfce2
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Sep 6 13:12:02 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Sep 6 13:21:29 2016 +0200
+Allow RAID scrubbing on cache origin sub-LV
 
-dev-type: check for DEVLINKS udev db variable existence if udev_device_get_is_initialized fn is not present
+This patch adds the ability to perform RAID scrubbing on the cache
+origin sub-LV (https://bugzilla.redhat.com/1169495).  Cache origin
+operations are restricted to non-clustered RAID LVs until there can
+be further testing in a cluster (even for exclusive activation).
 
-Older udev versions (udev < v165), don't have the official
-udev_device_get_is_initialized function available to query for
-device initialization state in udev database. Also, devices don't
-have USEC_INITIALIZED udev db variable set - this is bound to the
-udev_device_get_is_initialized fn functionality.
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
-In this case, check for "DEVLINKS" variable instead - all block devices
-have@least one symlink set for the node (the "/dev/block/<major:minor>".
-This symlink is set by default basic udev rules provided by udev directly.
-We'll use this as an alternative for the check that initial udev
-processing for a device has already finished.
----
- lib/device/dev-ext-udev-constants.h |    3 +++
- lib/device/dev-type.c               |    5 +++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+Index: Work/lvm2/tools/lvchange.c
+===================================================================
+--- Work.orig/lvm2/tools/lvchange.c
++++ Work/lvm2/tools/lvchange.c
+@@ -1056,7 +1056,20 @@ static int _lvchange_single(struct cmd_c
+ 	    !arg_is_set(cmd, setactivationskip_ARG))
+ 	    /* Rest can be changed for stacked thin pool meta/data volumes */
+ 	    ;
+-	else if (!lv_is_visible(lv) && !lv_is_virtual_origin(lv)) {
++	else if (lv_is_cache_origin(lv) && lv_is_raid(lv)) {
++		if (vg_is_clustered(lv->vg)) {
++			log_error("Unable to change internal LV %s directly in a cluster.",
++				  display_lvname(lv));
++			return ECMD_FAILED;
++		}
++		/*
++		 * FIXME:  For now, we don't want to allow all kinds of
++		 * operations on this cache origin sub-LV.  We are going
++		 * to restrict it to non-clustered, RAID.  This way, we
++		 * can change the syncaction as needed (e.g. initiate
++		 * scrubbing).
++		 */
++	} else if (!lv_is_visible(lv) && !lv_is_virtual_origin(lv)) {
+ 		log_error("Unable to change internal LV %s directly.",
+ 			  display_lvname(lv));
+ 		return ECMD_FAILED;
+Index: Work/lvm2/test/shell/lvchange-syncaction-raid.sh
+===================================================================
+--- Work.orig/lvm2/test/shell/lvchange-syncaction-raid.sh
++++ Work/lvm2/test/shell/lvchange-syncaction-raid.sh
+@@ -82,4 +82,15 @@ aux wait_for_sync $vg $lv1
+ # Retest mistmatch exists
+ check lv_field $vg/$lv1 raid_mismatch_count "128"
 
-diff --git a/lib/device/dev-ext-udev-constants.h b/lib/device/dev-ext-udev-constants.h
-index 5b9a096..168f8f1 100644
---- a/lib/device/dev-ext-udev-constants.h
-+++ b/lib/device/dev-ext-udev-constants.h
-@@ -36,6 +36,9 @@
- #define DEV_EXT_UDEV_DEVTYPE			"DEVTYPE"
- #define DEV_EXT_UDEV_DEVTYPE_DISK		"disk"
- 
-+/* the list of symlinks associated with device node */
-+#define DEV_EXT_UDEV_DEVLINKS			"DEVLINKS"
++lvremove -ff $vg
 +
- /*
-  * DEV_EXT_UDEV_MPATH_DEVICE_PATH is set by multipath in udev db
-  * with value either 0 or 1. The same functionality as
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index f1828f4..32471aa 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -1024,8 +1024,13 @@ int udev_dev_is_mpath_component(struct device *dev)
- 			return 0;
- 		}
- 
-+#ifdef HAVE_LIBUDEV_UDEV_DEVICE_GET_IS_INITIALIZED
- 		if ((initialized = udev_device_get_is_initialized(udev_device)))
- 			break;
-+#else
-+		if ((initialized = (udev_device_get_property_value(udev_device, DEV_EXT_UDEV_DEVLINKS) != NULL)))
-+			break;
-+#endif
- 
- 		log_debug("Device %s not initialized in udev database (%u/%u, %u microseconds).", dev_name(dev),
- 			   i + 1, UDEV_DEV_IS_MPATH_COMPONENT_ITERATION_COUNT,
++# Bug 1169495 - RFE: allow raid scrubbing on cache origin raid volumes
++# lvcreate RAID1 origin, lvcreate cache-pool, and lvconvert to cache
++#  then test that the origin can be scrubbed.
++lvcreate --type raid1 -m 1 --nosync -l 2 -n $lv1 $vg
++lvcreate --type cache-pool -l 1 -n ${lv1}_cachepool $vg
++lvconvert --cache -Zy --cachepool $vg/${lv1}_cachepool $vg/$lv1
++lvchange --syncaction check $vg/${lv1}_corig
++# Check may go too quickly to verify with check of syncaction
++
+ vgremove -ff $vg
 
 
