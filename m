@@ -1,46 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Sep 2016 10:26:07 +0000 (UTC)
-Subject: master - tests: not redirect strderr to stdout
-Message-ID: <20160913102607.8A6B7610D9@fedorahosted.org>
+Date: Tue, 13 Sep 2016 10:26:05 +0000 (UTC)
+Subject: master - libdm: cleaner debug message
+Message-ID: <20160913102605.73D50610D5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5314d36f3d186efb05a051e80444332f743194ef
-Commit:        5314d36f3d186efb05a051e80444332f743194ef
-Parent:        a156fc9a5431cef6a3435e796da6eac4d34c905f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a156fc9a5431cef6a3435e796da6eac4d34c905f
+Commit:        a156fc9a5431cef6a3435e796da6eac4d34c905f
+Parent:        5bf1778e33b07a75aeb8a0f2d42737623e9e8699
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 13 11:55:08 2016 +0200
+AuthorDate:    Tue Sep 13 09:24:38 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 13 12:25:06 2016 +0200
+CommitterDate: Tue Sep 13 09:24:38 2016 +0200
 
-tests: not redirect strderr to stdout
+libdm: cleaner debug message
 
-Errors are 'wanted' and expected in this case.
 ---
- test/lib/not.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ libdm/libdm-deptree.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/not.c b/test/lib/not.c
-index a5c52a8..4ce77b6 100644
---- a/test/lib/not.c
-+++ b/test/lib/not.c
-@@ -72,9 +72,12 @@ int main(int args, char **argv) {
- 		fprintf(stderr, "Could not fork\n");
- 		return FAILURE;
- 	} else if (pid == 0) { 	/* child */
--		if (!strcmp(argv[0], "not"))
-+		if (!strcmp(argv[0], "not")) {
- 			val = ">1";
--		else if (!strcmp(argv[0], "invalid"))
-+			/* Redirect 'expected' error output */
-+			fflush(stderr);
-+			dup2(fileno(stdout), fileno(stderr));
-+		} else if (!strcmp(argv[0], "invalid"))
- 			val = "3";
- 		else if (!strcmp(argv[0], "fail"))
- 			val = "5";
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index d74bb9c..cf6a06e 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -1783,7 +1783,7 @@ int dm_tree_suspend_children(struct dm_tree_node *dnode,
+ 			if (!(r = _node_send_messages(child, uuid_prefix, uuid_prefix_len, 1)))
+ 				stack;
+ 			else {
+-				log_debug_activation("Sent messages to thin-pool %s."
++				log_debug_activation("Sent messages to thin-pool %s and "
+ 						     "skipping suspend of its children.",
+ 						     _node_name(child));
+ 				child->props.skip_suspend++;
 
 
