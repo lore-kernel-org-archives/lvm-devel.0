@@ -1,116 +1,826 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 19 Sep 2016 12:01:41 +0000 (UTC)
-Subject: master - tests: check for metadata test working properly
-Message-ID: <20160919120141.010746053F@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Thu, 15 Sep 2016 13:01:38 +0000 (UTC)
+Subject: master - lvmdump: Use O_DIRECT to gather metadata.
+Message-ID: <20160915130138.42C2960661@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1a30adc062b30ef434857eb6d8345d8b66af120a
-Commit:        1a30adc062b30ef434857eb6d8345d8b66af120a
-Parent:        561f773bb47f11d495701e15d234c85cf746e285
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 16 21:55:04 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 19 14:00:56 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5da35d879ad073d9fb0d7ec8bfabe9ae39ac5bc1
+Commit:        5da35d879ad073d9fb0d7ec8bfabe9ae39ac5bc1
+Parent:        d455300d7baff341f1c7fe5776d975369dd3a23a
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Sep 15 13:59:52 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Sep 15 14:00:39 2016 +0100
 
-tests: check for metadata test working properly
+lvmdump: Use O_DIRECT to gather metadata.
 
-Add more tests to check they guard minimum free space in metadata
-for new thin volume creation.
 ---
- test/shell/lvextend-thin-metadata-dmeventd.sh |   68 +++++++++++++++++++++++--
- 1 files changed, 64 insertions(+), 4 deletions(-)
+ WHATS_NEW             |    1 +
+ configure             |    5 +-
+ configure.in          |    2 +
+ scripts/lvmdump.sh    |  356 ------------------------------------------------
+ scripts/lvmdump.sh.in |  362 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 369 insertions(+), 357 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-metadata-dmeventd.sh b/test/shell/lvextend-thin-metadata-dmeventd.sh
-index a892bd4..6d27600 100644
---- a/test/shell/lvextend-thin-metadata-dmeventd.sh
-+++ b/test/shell/lvextend-thin-metadata-dmeventd.sh
-@@ -1,5 +1,5 @@
- #!/bin/sh
--# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2014-2016 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -60,13 +60,73 @@ aux have_thin 1 10 0 || skip
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ba394a4..1ef3dc6 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.166 - 
+ =====================================
++  Use O_DIRECT to gather metadata in lvmdump.
+   Fix possible NULL pointer derefence when checking for monitoring.
+   Add lvmreport(7) man page.
+   Don't install lvmraid(7) man page when raid excluded. (2.02.165)
+diff --git a/configure b/configure
+index 8253bfc..c82a19b 100755
+--- a/configure
++++ b/configure
+@@ -676,6 +676,7 @@ PTHREAD_LIBS
+ M_LIBS
+ POOL
+ PKGCONFIG
++ODIRECT
+ OCFDIR
+ OCF
+ MIRRORS
+@@ -15341,8 +15342,9 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]' '{print $2}'`
  
- aux prepare_dmeventd
  
--aux lvmconf "activation/thin_pool_autoextend_percent = 10" \
--	    "activation/thin_pool_autoextend_threshold = 70"
+ 
++
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile include/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile lib/cache_segtype/Makefile libdaemon/Makefile libdaemon/client/Makefile lib
+ daemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlock
+ ing_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
++ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile include/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile lib/cache_segtype/Makefile libdaemon/Makefile libdaemon/client/Makefile lib
+ daemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlock
+ ing_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
+ 
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -16109,6 +16111,7 @@ do
+     "scripts/lvm2_monitoring_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_monitoring_systemd_red_hat.service" ;;
+     "scripts/lvm2_pvscan_systemd_red_hat at .service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_pvscan_systemd_red_hat at .service" ;;
+     "scripts/lvm2_tmpfiles_red_hat.conf") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_tmpfiles_red_hat.conf" ;;
++    "scripts/lvmdump.sh") CONFIG_FILES="$CONFIG_FILES scripts/lvmdump.sh" ;;
+     "scripts/Makefile") CONFIG_FILES="$CONFIG_FILES scripts/Makefile" ;;
+     "test/Makefile") CONFIG_FILES="$CONFIG_FILES test/Makefile" ;;
+     "test/api/Makefile") CONFIG_FILES="$CONFIG_FILES test/api/Makefile" ;;
+diff --git a/configure.in b/configure.in
+index 33b5c76..cc77aab 100644
+--- a/configure.in
++++ b/configure.in
+@@ -2068,6 +2068,7 @@ AC_SUBST(MIRRORS)
+ AC_SUBST(MSGFMT)
+ AC_SUBST(OCF)
+ AC_SUBST(OCFDIR)
++AC_SUBST(ODIRECT)
+ AC_SUBST(PKGCONFIG)
+ AC_SUBST(POOL)
+ AC_SUBST(M_LIBS)
+@@ -2213,6 +2214,7 @@ scripts/lvm2_monitoring_init_red_hat
+ scripts/lvm2_monitoring_systemd_red_hat.service
+ scripts/lvm2_pvscan_systemd_red_hat at .service
+ scripts/lvm2_tmpfiles_red_hat.conf
++scripts/lvmdump.sh
+ scripts/Makefile
+ test/Makefile
+ test/api/Makefile
+diff --git a/scripts/lvmdump.sh b/scripts/lvmdump.sh
+deleted file mode 100755
+index 85f8e5c..0000000
+--- a/scripts/lvmdump.sh
++++ /dev/null
+@@ -1,356 +0,0 @@
+-#!/bin/bash
+-# We use some bash-isms (getopts?)
 -
- aux prepare_pvs 3 256
- 
- vgcreate -s 1M $vg $(cat DEVICES)
- 
-+# Testing dmeventd does NOT autoresize when default threshold 100% is left
-+lvcreate -L200M -V50M -n thin -T $vg/pool
-+lvcreate -V2M -n thin2 $vg/pool
-+lvcreate -L2M -n $lv1 $vg
-+lvcreate -L32M -n $lv2 $vg
-+lvcreate -L32M -n $lv3 $vg
-+lvchange -an $vg/thin $vg/thin2 $vg/pool
+-# Copyright (C) 2007-2015 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-# lvm_dump: This script is used to collect pertinent information for
+-#           the debugging of lvm issues.
+-
+-# following external commands are used throughout the script
+-# echo and test are internal in bash@least
+-MKDIR=mkdir # need -p
+-TAR=tar # need czf
+-RM=rm # need -rf
+-CP=cp
+-TAIL=tail # we need -n
+-LS=ls # need -la
+-PS=ps # need alx
+-SED=sed
+-DD=dd
+-CUT=cut
+-GREP=grep
+-DATE=date
+-BASENAME=basename
+-UDEVADM=udevadm
+-UNAME=uname
+-TR=tr
+-SOCAT=socat # either socat or nc is needed for dumping lvmetad state
+-NC=nc
+-
+-# user may override lvm and dmsetup location by setting LVM_BINARY
+-# and DMSETUP_BINARY respectively
+-LVM=${LVM_BINARY-lvm}
+-DMSETUP=${DMSETUP_BINARY-dmsetup}
+-LVMETAD_SOCKET=${LVM_LVMETAD_SOCKET-/var/run/lvm/lvmetad.socket}
+-LVMPOLLD_SOCKET=${LVM_LVMPOLLD_SOCKET-/var/run/lvm/lvmpolld.socket}
+-
+-die() {
+-    code=$1; shift
+-    echo "$@" 1>&2
+-    exit $code
+-}
+-
+-"$LVM" version >& /dev/null || die 2 "Could not run lvm binary '$LVM'"
+-"$DMSETUP" version >& /dev/null || DMSETUP=:
+-
+-function usage {
+-	echo "$0 [options]"
+-	echo "    -h print this message"
+-	echo "    -a advanced collection - warning: if lvm is already hung,"
+-	echo "       then this script may hang as well if -a is used"
+-	echo "    -c if running clvmd, gather cluster data as well"
+-	echo "    -d <directory> dump into a directory instead of tarball"
+-	echo "    -l gather lvmetad state if running"
+-	echo "    -p gather lvmpolld state if running"
+-	echo "    -m gather LVM metadata from the PVs"
+-	echo "    -s gather system info and context"
+-	echo "    -u gather udev info and context"
+-	echo ""
+-
+-	exit 1
+-}
+-
+-advanced=0
+-clustered=0
+-metadata=0
+-sysreport=0
+-udev=0
+-while getopts :acd:hlpmus opt; do
+-	case $opt in 
+-		a)	advanced=1 ;;
+-		c)	clustered=1 ;;
+-		d)	userdir=$OPTARG ;;
+-		h)	usage ;;
+-		l)	lvmetad=1 ;;
+-		p)	lvmpolld=1 ;;
+-		m)	metadata=1 ;;
+-		s)      sysreport=1 ;;
+-		u)	udev=1 ;;
+-		:)	echo "$0: $OPTARG requires a value:"; usage ;;
+-		\?)     echo "$0: unknown option $OPTARG"; usage ;;
+-		*)	usage ;;
+-	esac
+-done
+-
+-NOW=`$DATE -u +%G%m%d%k%M%S | $TR -d ' '`
+-if test -n "$userdir"; then
+-	dir="$userdir"
+-else
+-	dirbase="lvmdump-$HOSTNAME-$NOW"
+-	dir="$HOME/$dirbase"
+-fi
+-
+-if test -d $dir ; then
+-	(shopt -s nullglob dotglob; test -r $dir -a -w $dir -a -x $dir && cd $dir && files=(*) && ((! ${#files[@]}))) || \
+-		die 5 "Fatal: directory $dir already exists and is not empty or inaccessible"
+-else
+-	test -e $dir && die 3 "Fatal: $dir already exists"
+-	$MKDIR -p $dir || die 4 "Fatal: could not create $dir"
+-fi
+-
+-log="$dir/lvmdump.log"
+-
+-myecho() {
+-	echo "$@"
+-	echo "$@" >> "$log"
+-}
+-
+-log() {
+-	echo "$@" >> "$log"
+-	eval "$@"
+-}
+-
+-warnings() {
+-	if test "$UID" != "0" && test "$EUID" != "0"; then
+-		myecho "WARNING! Running as non-privileged user, dump is likely incomplete!"
+-	elif test "$DMSETUP" = ":"; then
+-		myecho "WARNING! Could not run dmsetup, dump is likely incomplete."
+-	fi
+-}
+-
+-warnings
+-
+-myecho "Creating dump directory: $dir"
+-echo " "
+-
+-if (( $advanced )); then
+-	myecho "Gathering LVM volume info..."
+-
+-	myecho "  vgscan..."
+-	log "\"$LVM\" vgscan -vvvv >> \"$dir/vgscan\" 2>&1"
+-
+-	myecho "  pvscan..."
+-	log "\"$LVM\" pvscan -v >> \"$dir/pvscan\" 2>> \"$log\""
+-
+-	myecho "  lvs..."
+-	log "\"$LVM\" lvs -a -H -o +devices,kernel_major,kernel_minor >> \"$dir/lvs\" 2>> \"$log\""
+-
+-	myecho "  pvs..."
+-	log "\"$LVM\" pvs -a -o +major,minor -v >> \"$dir/pvs\" 2>> \"$log\""
+-
+-	myecho "  vgs..."
+-	log "\"$LVM\" vgs -v >> \"$dir/vgs\" 2>> \"$log\""
+-fi
+-
+-if (( $clustered )); then
+-	myecho "Gathering cluster info..."
+-
+-	{
+-	for i in nodes status services; do
+-		cap_i=$(echo $i|tr a-z A-Z)
+-		printf "$cap_i:\n----------------------------------\n"
+-		log "cman_tool $i 2>> \"$log\""
+-		echo
+-	done
+-
+-	echo "LOCKS:"
+-	echo "----------------------------------"
+-	if [ -f /proc/cluster/dlm_locks ]
+-	then
+-		echo clvmd > /proc/cluster/dlm_locks
+-		cat /proc/cluster/dlm_locks
+-		echo
+-		echo "RESOURCE DIR:"
+-		cat /proc/cluster/dlm_dir
+-		echo
+-		echo "DEBUG LOG:"
+-		cat /proc/cluster/dlm_debug
+-		echo
+-	fi
+-	if [ -f /debug/dlm/clvmd ]
+-	then
+-		cat /debug/dlm/clvmd
+-		echo
+-		echo "WAITERS:"
+-		cat /debug/dlm/clvmd_waiters
+-		echo
+-		echo "MASTER:"
+-		cat /debug/dlm/clvmd_master
+-	fi
+-	} >> $dir/cluster_info
+-fi
+-
+-myecho "Gathering LVM & device-mapper version info..."
+-echo "LVM VERSION:" >> "$dir/versions"
+-"$LVM" lvs --version >> "$dir/versions" 2>> "$log"
+-echo "DEVICE MAPPER VERSION:" >> "$dir/versions"
+-"$DMSETUP" --version >> "$dir/versions" 2>> "$log"
+-echo "KERNEL VERSION:" >> "$dir/versions"
+-"$UNAME" -a >> "$dir/versions" 2>> "$log"
+-echo "DM TARGETS VERSIONS:" >> "$dir/versions"
+-"$DMSETUP" targets >> "$dir/versions" 2>> "$log"
+-
+-myecho "Gathering dmsetup info..."
+-log "\"$DMSETUP\" info -c >> \"$dir/dmsetup_info\" 2>> \"$log\""
+-log "\"$DMSETUP\" table >> \"$dir/dmsetup_table\" 2>> \"$log\""
+-log "\"$DMSETUP\" status >> \"$dir/dmsetup_status\" 2>> \"$log\""
+-
+-# cat as workaround to avoid tty ioctl (selinux)
+-log "\"$DMSETUP\" ls --tree 2>> \"$log\" | cat >> \"$dir/dmsetup_ls_tree\""
+-
+-myecho "Gathering process info..."
+-log "$PS alx >> \"$dir/ps_info\" 2>> \"$log\""
+-
+-myecho "Gathering console messages..."
+-log "$TAIL -n 75 /var/log/messages >> \"$dir/messages\" 2>> \"$log\""
+-
+-myecho "Gathering /etc/lvm info..."
+-log "$LS -laR /etc/lvm >> \"$dir/etc_lvm_listing\" 2>> \"$log\""
+-log "$CP -RL --preserve=all /etc/lvm \"$dir/lvm\" 2>> \"$log\""
+-log "$LVM dumpconfig --type diff --file \"$dir/config_diff\" 2>> \"$log\""
+-log "$LVM dumpconfig --type missing --file \"$dir/config_missing\" 2>> \"$log\""
+-
+-myecho "Gathering /dev listing..."
+-log "$LS -laR /dev >> \"$dir/dev_listing\" 2>> \"$log\""
+-
+-myecho "Gathering /sys/block listing..."
+-log "$LS -laR /sys/block >> \"$dir/sysblock_listing\"  2>> \"$log\""
+-log "$LS -laR /sys/devices/virtual/block >> \"$dir/sysblock_listing\"  2>> \"$log\""
+-
+-if (( $metadata )); then
+-	myecho "Gathering LVM metadata from Physical Volumes..."
+-
+-	log "$MKDIR -p \"$dir/metadata\""
+-
+-	pvs="$("$LVM" pvs --separator , --noheadings --units s --nosuffix -o \
+-	    name,pe_start 2>> "$log" | $SED -e 's/^ *//')"
+-	for line in $pvs
+-	do
+-		test -z "$line" && continue
+-		pv="$(echo $line | $CUT -d, -f1)"
+-		pe_start="$(echo $line | $CUT -d, -f2)"
+-		name="$($BASENAME "$pv")"
+-		myecho "  $pv"
+-		log "$DD if=$pv \"of=$dir/metadata/$name\" bs=512 count=$pe_start 2>> \"$log\""
+-	done
+-fi
+-
+-if (( $sysreport )); then
+-	myecho "Gathering system info..."
+-
+-	sysreport_dir="$dir/sysreport"
+-	log_lines=10000
+-
+-	SYSTEMCTL=$(which systemctl 2>> $log)
+-	JOURNALCTL=$(which journalctl 2>> $log)
+-	LSBLK=$(which lsblk 2>> $log)
+-
+-	log "$MKDIR -p \"$sysreport_dir\""
+-
+-	if test -z "LSBLK"; then
+-		myecho "WARNING: lsblk not found"
+-	else
+-		if $LSBLK --help | $GREP -- --output-all >/dev/null; then
+-			log "$LSBLK -O >> \"$sysreport_dir/lsblk_O\""
+-		else
+-			log "$LSBLK >> \"$sysreport_dir/lsblk\""
+-		fi
+-		if $LSBLK --help | $GREP -- --inverse >/dev/null; then
+-			log "$LSBLK -s >> \"$sysreport_dir/lsblk_s\""
+-		fi
+-	fi
+-
+-	if test -z "$SYSTEMCTL"; then
+-		myecho "WARNING: systemctl not found"
+-	elif test -z "$JOURNALCTL"; then
+-		myecho "WARNING: journalctl not found"
+-	else
+-		log "$JOURNALCTL -b --no-pager -o short-precise > \"$sysreport_dir/journal_content\" 2>> \"$log\""
+-		log "$SYSTEMCTL status -l --no-pager -n $log_lines -o short-precise dm-event.socket dm-event.service \
+-						   lvm2-monitor.service \
+-						   lvm2-lvmetad.socket lvm2-lvmetad.service \
+-						   lvm2-lvmpolld.socket lvm2-lvmpolld.service \
+-						   lvm2-cluster-activation.service \
+-						   lvm2-clvmd.service \
+-						   lvm2-cmirrord.service \
+-						   lvm2-activation-early.service \
+-						   lvm2-activation.service \
+-						   lvm2-activation-net.service \
+-						   > \"$sysreport_dir/systemd_lvm2_services_status\" 2>> \"$log\""
+-		log "$SYSTEMCTL list-units -l -a --no-legend --no-pager > \"$sysreport_dir/systemd_unit_list\" 2>> \"$log\""
+-		for unit in $(cat $sysreport_dir/systemd_unit_list | $GREP lvm2-pvscan | cut -d " " -f 1); do
+-			log "$SYSTEMCTL status -l --no-pager -n $log_lines -o short-precise $unit >> \"$sysreport_dir/systemd_lvm2_pvscan_service_status\""
+-		done
+-	fi
+-fi
+-
+-if (( $udev )); then
+-	myecho "Gathering udev info..."
+-
+-	udev_dir="$dir/udev"
+-
+-	log "$MKDIR -p \"$udev_dir\""
+-	log "$UDEVADM info --version >> \"$udev_dir/version\" 2>> \"$log\""
+-	log "$UDEVADM info --export-db >> \"$udev_dir/db\" 2>> \"$log\""
+-	log "$CP -a /etc/udev/udev.conf \"$udev_dir/conf\" 2>> \"$log\""
+-	log "$LS -la /lib/udev >> \"$udev_dir/lib_dir\" 2>> \"$log\""
+-	log "$CP -RL --preserve=all /etc/udev/rules.d \"$udev_dir/rules_etc\" 2>> \"$log\""
+-	log "$CP -RL --preserve=all /lib/udev/rules.d \"$udev_dir/rules_lib\" 2>> \"$log\""
+-fi
+-
+-if (( $lvmetad )); then
+-    (echo 'request="dump"'; echo '##') | {
+-	if type -p $SOCAT >& /dev/null; then
+-	    echo "$SOCAT unix-connect:$LVMETAD_SOCKET -" >> "$log"
+-	    $SOCAT "unix-connect:$LVMETAD_SOCKET" - 2>> "$log"
+-	elif echo | $NC -U "$LVMETAD_SOCKET"; then
+-	    echo "$NC -U $LVMETAD_SOCKET" >> "$log"
+-	    $NC -U "$LVMETAD_SOCKET" 2>> "$log"
+-	else
+-	    myecho "WARNING: Neither socat nor nc -U seems to be available." 1>&2
+-	    echo "# DUMP FAILED"
+-	    return 1
+-	fi
+-    } > "$dir/lvmetad.txt"
+-fi
+-
+-if (( $lvmpolld )); then
+-    (echo 'request="dump"'; echo '##') | {
+-	if type -p $SOCAT >& /dev/null; then
+-	    echo "$SOCAT unix-connect:$LVMPOLLD_SOCKET -" >> "$log"
+-	    $SOCAT "unix-connect:$LVMPOLLD_SOCKET" - 2>> "$log"
+-	elif echo | $NC -U "$LVMPOLLD_SOCKET"; then
+-	    echo "$NC -U $LVMPOLLD_SOCKET" >> "$log"
+-	    $NC -U "$LVMPOLLD_SOCKET" 2>> "$log"
+-	else
+-	    myecho "WARNING: Neither socat nor nc -U seems to be available." 1>&2
+-	    echo "# DUMP FAILED"
+-	    return 1
+-	fi
+-    } > "$dir/lvmpolld.txt"
+-fi
+-
+-if test -z "$userdir"; then
+-	lvm_dump="$dirbase.tgz"
+-	myecho "Creating report tarball in $HOME/$lvm_dump..."
+-fi
+-
+-warnings
+-
+-if test -z "$userdir"; then
+-	cd "$HOME"
+-	"$TAR" czf "$lvm_dump" "$dirbase" 2>/dev/null
+-	"$RM" -rf "$dir"
+-fi
+-
+-exit 0
+diff --git a/scripts/lvmdump.sh.in b/scripts/lvmdump.sh.in
+new file mode 100644
+index 0000000..6467863
+--- /dev/null
++++ b/scripts/lvmdump.sh.in
+@@ -0,0 +1,362 @@
++#!/bin/bash
++# We use some bash-isms (getopts?)
 +
-+# Filling 2M metadata volume
-+# (Test for less then 25% free space in metadata)
-+fake_metadata_ 400 2 >data
-+"$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
++# Copyright (C) 2007-2015 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+# Swap volume with restored fake metadata
-+lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv1
++# lvm_dump: This script is used to collect pertinent information for
++#           the debugging of lvm issues.
 +
-+# Not alllowed when thin-pool metadata free space is <75% for 2M meta
-+fail lvcreate -V20 $vg/pool
++# following external commands are used throughout the script
++# echo and test are internal in bash at least
++MKDIR=mkdir # need -p
++TAR=tar # need czf
++RM=rm # need -rf
++CP=cp
++TAIL=tail # we need -n
++LS=ls # need -la
++PS=ps # need alx
++SED=sed
++DD=dd
++CUT=cut
++GREP=grep
++DATE=date
++BASENAME=basename
++UDEVADM=udevadm
++UNAME=uname
++TR=tr
++SOCAT=socat # either socat or nc is needed for dumping lvmetad state
++NC=nc
 +
++if test "@ODIRECT@" = yes; then
++    DDFLAGS='iflag=direct oflag=direct'
++else
++    DDFLAGS=
++fi
 +
-+lvchange -an $vg/pool
++# user may override lvm and dmsetup location by setting LVM_BINARY
++# and DMSETUP_BINARY respectively
++LVM=${LVM_BINARY-lvm}
++DMSETUP=${DMSETUP_BINARY-dmsetup}
++LVMETAD_SOCKET=${LVM_LVMETAD_SOCKET-/var/run/lvm/lvmetad.socket}
++LVMPOLLD_SOCKET=${LVM_LVMPOLLD_SOCKET-/var/run/lvm/lvmpolld.socket}
 +
-+# Consume more then (100% - 4MiB) out of 32MiB metadata volume  (>87.5%)
-+# (Test for less then 4MiB free space in metadata, which is less then 25%)
-+fake_metadata_ 7400 2 >data
-+"$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv2"
-+# Swap volume with restored fake metadata
-+lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv2
-+lvchange -ay $vg/pool
-+# Check generated metadata consume more then 88%
-+test "$(meta_percent_)" -gt "88"
-+lvchange -an $vg/pool
++die() {
++    code=$1; shift
++    echo "$@" 1>&2
++    exit $code
++}
 +
-+# Creation of thin LV is prohibited when metadata are above this value
-+fail lvcreate -V20 $vg/pool 2>&1 | tee out
-+grep "free space" out
-+lvs -a $vg
++"$LVM" version >& /dev/null || die 2 "Could not run lvm binary '$LVM'"
++"$DMSETUP" version >& /dev/null || DMSETUP=:
 +
++function usage {
++	echo "$0 [options]"
++	echo "    -h print this message"
++	echo "    -a advanced collection - warning: if lvm is already hung,"
++	echo "       then this script may hang as well if -a is used"
++	echo "    -c if running clvmd, gather cluster data as well"
++	echo "    -d <directory> dump into a directory instead of tarball"
++	echo "    -l gather lvmetad state if running"
++	echo "    -p gather lvmpolld state if running"
++	echo "    -m gather LVM metadata from the PVs"
++	echo "    -s gather system info and context"
++	echo "    -u gather udev info and context"
++	echo ""
 +
-+# Check that even with 99% threshold policy - metadata will go below 88%
-+lvextend --use-policies --config "\
-+activation/thin_pool_autoextend_percent=1 \
-+activation/thin_pool_autoextend_threshold=99" $vg/pool
-+test "$(meta_percent_)" -lt "88"
++	exit 1
++}
 +
-+# After such operatoin creation of thin LV has to pass
-+lvcreate -V20 $vg/pool
++advanced=0
++clustered=0
++metadata=0
++sysreport=0
++udev=0
++while getopts :acd:hlpmus opt; do
++	case $opt in 
++		a)	advanced=1 ;;
++		c)	clustered=1 ;;
++		d)	userdir=$OPTARG ;;
++		h)	usage ;;
++		l)	lvmetad=1 ;;
++		p)	lvmpolld=1 ;;
++		m)	metadata=1 ;;
++		s)      sysreport=1 ;;
++		u)	udev=1 ;;
++		:)	echo "$0: $OPTARG requires a value:"; usage ;;
++		\?)     echo "$0: unknown option $OPTARG"; usage ;;
++		*)	usage ;;
++	esac
++done
 +
-+# Let's revalidate pool metadata (thin_check upon deactivation/activation)
-+lvchange -an $vg
-+lvchange -ay $vg/pool
++NOW=`$DATE -u +%G%m%d%k%M%S | $TR -d ' '`
++if test -n "$userdir"; then
++	dir="$userdir"
++else
++	dirbase="lvmdump-$HOSTNAME-$NOW"
++	dir="$HOME/$dirbase"
++fi
 +
-+lvremove -f $vg
++if test -d $dir ; then
++	(shopt -s nullglob dotglob; test -r $dir -a -w $dir -a -x $dir && cd $dir && files=(*) && ((! ${#files[@]}))) || \
++		die 5 "Fatal: directory $dir already exists and is not empty or inaccessible"
++else
++	test -e $dir && die 3 "Fatal: $dir already exists"
++	$MKDIR -p $dir || die 4 "Fatal: could not create $dir"
++fi
 +
++log="$dir/lvmdump.log"
 +
++myecho() {
++	echo "$@"
++	echo "$@" >> "$log"
++}
 +
-+#########################################################
-+# Test automatic resize with help of dmeventd DOES work #
-+#########################################################
++log() {
++	echo "$@" >> "$log"
++	eval "$@"
++}
 +
-+aux lvmconf "activation/thin_pool_autoextend_percent = 10" \
-+	    "activation/thin_pool_autoextend_threshold = 70"
++warnings() {
++	if test "$UID" != "0" && test "$EUID" != "0"; then
++		myecho "WARNING! Running as non-privileged user, dump is likely incomplete!"
++	elif test "$DMSETUP" = ":"; then
++		myecho "WARNING! Could not run dmsetup, dump is likely incomplete."
++	fi
++}
 +
- # Testing dmeventd autoresize
- lvcreate -L200M -V500M -n thin -T $vg/pool 2>&1 | tee out
- not grep "WARNING: Sum" out
++warnings
++
++myecho "Creating dump directory: $dir"
++echo " "
++
++if (( $advanced )); then
++	myecho "Gathering LVM volume info..."
++
++	myecho "  vgscan..."
++	log "\"$LVM\" vgscan -vvvv >> \"$dir/vgscan\" 2>&1"
++
++	myecho "  pvscan..."
++	log "\"$LVM\" pvscan -v >> \"$dir/pvscan\" 2>> \"$log\""
++
++	myecho "  lvs..."
++	log "\"$LVM\" lvs -a -H -o +devices,kernel_major,kernel_minor >> \"$dir/lvs\" 2>> \"$log\""
++
++	myecho "  pvs..."
++	log "\"$LVM\" pvs -a -o +major,minor -v >> \"$dir/pvs\" 2>> \"$log\""
++
++	myecho "  vgs..."
++	log "\"$LVM\" vgs -v >> \"$dir/vgs\" 2>> \"$log\""
++fi
++
++if (( $clustered )); then
++	myecho "Gathering cluster info..."
++
++	{
++	for i in nodes status services; do
++		cap_i=$(echo $i|tr a-z A-Z)
++		printf "$cap_i:\n----------------------------------\n"
++		log "cman_tool $i 2>> \"$log\""
++		echo
++	done
++
++	echo "LOCKS:"
++	echo "----------------------------------"
++	if [ -f /proc/cluster/dlm_locks ]
++	then
++		echo clvmd > /proc/cluster/dlm_locks
++		cat /proc/cluster/dlm_locks
++		echo
++		echo "RESOURCE DIR:"
++		cat /proc/cluster/dlm_dir
++		echo
++		echo "DEBUG LOG:"
++		cat /proc/cluster/dlm_debug
++		echo
++	fi
++	if [ -f /debug/dlm/clvmd ]
++	then
++		cat /debug/dlm/clvmd
++		echo
++		echo "WAITERS:"
++		cat /debug/dlm/clvmd_waiters
++		echo
++		echo "MASTER:"
++		cat /debug/dlm/clvmd_master
++	fi
++	} >> $dir/cluster_info
++fi
++
++myecho "Gathering LVM & device-mapper version info..."
++echo "LVM VERSION:" >> "$dir/versions"
++"$LVM" lvs --version >> "$dir/versions" 2>> "$log"
++echo "DEVICE MAPPER VERSION:" >> "$dir/versions"
++"$DMSETUP" --version >> "$dir/versions" 2>> "$log"
++echo "KERNEL VERSION:" >> "$dir/versions"
++"$UNAME" -a >> "$dir/versions" 2>> "$log"
++echo "DM TARGETS VERSIONS:" >> "$dir/versions"
++"$DMSETUP" targets >> "$dir/versions" 2>> "$log"
++
++myecho "Gathering dmsetup info..."
++log "\"$DMSETUP\" info -c >> \"$dir/dmsetup_info\" 2>> \"$log\""
++log "\"$DMSETUP\" table >> \"$dir/dmsetup_table\" 2>> \"$log\""
++log "\"$DMSETUP\" status >> \"$dir/dmsetup_status\" 2>> \"$log\""
++
++# cat as workaround to avoid tty ioctl (selinux)
++log "\"$DMSETUP\" ls --tree 2>> \"$log\" | cat >> \"$dir/dmsetup_ls_tree\""
++
++myecho "Gathering process info..."
++log "$PS alx >> \"$dir/ps_info\" 2>> \"$log\""
++
++myecho "Gathering console messages..."
++log "$TAIL -n 75 /var/log/messages >> \"$dir/messages\" 2>> \"$log\""
++
++myecho "Gathering /etc/lvm info..."
++log "$LS -laR /etc/lvm >> \"$dir/etc_lvm_listing\" 2>> \"$log\""
++log "$CP -RL --preserve=all /etc/lvm \"$dir/lvm\" 2>> \"$log\""
++log "$LVM dumpconfig --type diff --file \"$dir/config_diff\" 2>> \"$log\""
++log "$LVM dumpconfig --type missing --file \"$dir/config_missing\" 2>> \"$log\""
++
++myecho "Gathering /dev listing..."
++log "$LS -laR /dev >> \"$dir/dev_listing\" 2>> \"$log\""
++
++myecho "Gathering /sys/block listing..."
++log "$LS -laR /sys/block >> \"$dir/sysblock_listing\"  2>> \"$log\""
++log "$LS -laR /sys/devices/virtual/block >> \"$dir/sysblock_listing\"  2>> \"$log\""
++
++if (( $metadata )); then
++	myecho "Gathering LVM metadata from Physical Volumes..."
++
++	log "$MKDIR -p \"$dir/metadata\""
++
++	pvs="$("$LVM" pvs --separator , --noheadings --units s --nosuffix -o \
++	    name,pe_start 2>> "$log" | $SED -e 's/^ *//')"
++	for line in $pvs
++	do
++		test -z "$line" && continue
++		pv="$(echo $line | $CUT -d, -f1)"
++		pe_start="$(echo $line | $CUT -d, -f2)"
++		name="$($BASENAME "$pv")"
++		myecho "  $pv"
++		log "$DD if=$pv \"of=$dir/metadata/$name\" $DDFLAGS bs=512 count=$pe_start 2>> \"$log\""
++	done
++fi
++
++if (( $sysreport )); then
++	myecho "Gathering system info..."
++
++	sysreport_dir="$dir/sysreport"
++	log_lines=10000
++
++	SYSTEMCTL=$(which systemctl 2>> $log)
++	JOURNALCTL=$(which journalctl 2>> $log)
++	LSBLK=$(which lsblk 2>> $log)
++
++	log "$MKDIR -p \"$sysreport_dir\""
++
++	if test -z "LSBLK"; then
++		myecho "WARNING: lsblk not found"
++	else
++		if $LSBLK --help | $GREP -- --output-all >/dev/null; then
++			log "$LSBLK -O >> \"$sysreport_dir/lsblk_O\""
++		else
++			log "$LSBLK >> \"$sysreport_dir/lsblk\""
++		fi
++		if $LSBLK --help | $GREP -- --inverse >/dev/null; then
++			log "$LSBLK -s >> \"$sysreport_dir/lsblk_s\""
++		fi
++	fi
++
++	if test -z "$SYSTEMCTL"; then
++		myecho "WARNING: systemctl not found"
++	elif test -z "$JOURNALCTL"; then
++		myecho "WARNING: journalctl not found"
++	else
++		log "$JOURNALCTL -b --no-pager -o short-precise > \"$sysreport_dir/journal_content\" 2>> \"$log\""
++		log "$SYSTEMCTL status -l --no-pager -n $log_lines -o short-precise dm-event.socket dm-event.service \
++						   lvm2-monitor.service \
++						   lvm2-lvmetad.socket lvm2-lvmetad.service \
++						   lvm2-lvmpolld.socket lvm2-lvmpolld.service \
++						   lvm2-cluster-activation.service \
++						   lvm2-clvmd.service \
++						   lvm2-cmirrord.service \
++						   lvm2-activation-early.service \
++						   lvm2-activation.service \
++						   lvm2-activation-net.service \
++						   > \"$sysreport_dir/systemd_lvm2_services_status\" 2>> \"$log\""
++		log "$SYSTEMCTL list-units -l -a --no-legend --no-pager > \"$sysreport_dir/systemd_unit_list\" 2>> \"$log\""
++		for unit in $(cat $sysreport_dir/systemd_unit_list | $GREP lvm2-pvscan | cut -d " " -f 1); do
++			log "$SYSTEMCTL status -l --no-pager -n $log_lines -o short-precise $unit >> \"$sysreport_dir/systemd_lvm2_pvscan_service_status\""
++		done
++	fi
++fi
++
++if (( $udev )); then
++	myecho "Gathering udev info..."
++
++	udev_dir="$dir/udev"
++
++	log "$MKDIR -p \"$udev_dir\""
++	log "$UDEVADM info --version >> \"$udev_dir/version\" 2>> \"$log\""
++	log "$UDEVADM info --export-db >> \"$udev_dir/db\" 2>> \"$log\""
++	log "$CP -a /etc/udev/udev.conf \"$udev_dir/conf\" 2>> \"$log\""
++	log "$LS -la /lib/udev >> \"$udev_dir/lib_dir\" 2>> \"$log\""
++	log "$CP -RL --preserve=all /etc/udev/rules.d \"$udev_dir/rules_etc\" 2>> \"$log\""
++	log "$CP -RL --preserve=all /lib/udev/rules.d \"$udev_dir/rules_lib\" 2>> \"$log\""
++fi
++
++if (( $lvmetad )); then
++    (echo 'request="dump"'; echo '##') | {
++	if type -p $SOCAT >& /dev/null; then
++	    echo "$SOCAT unix-connect:$LVMETAD_SOCKET -" >> "$log"
++	    $SOCAT "unix-connect:$LVMETAD_SOCKET" - 2>> "$log"
++	elif echo | $NC -U "$LVMETAD_SOCKET"; then
++	    echo "$NC -U $LVMETAD_SOCKET" >> "$log"
++	    $NC -U "$LVMETAD_SOCKET" 2>> "$log"
++	else
++	    myecho "WARNING: Neither socat nor nc -U seems to be available." 1>&2
++	    echo "# DUMP FAILED"
++	    return 1
++	fi
++    } > "$dir/lvmetad.txt"
++fi
++
++if (( $lvmpolld )); then
++    (echo 'request="dump"'; echo '##') | {
++	if type -p $SOCAT >& /dev/null; then
++	    echo "$SOCAT unix-connect:$LVMPOLLD_SOCKET -" >> "$log"
++	    $SOCAT "unix-connect:$LVMPOLLD_SOCKET" - 2>> "$log"
++	elif echo | $NC -U "$LVMPOLLD_SOCKET"; then
++	    echo "$NC -U $LVMPOLLD_SOCKET" >> "$log"
++	    $NC -U "$LVMPOLLD_SOCKET" 2>> "$log"
++	else
++	    myecho "WARNING: Neither socat nor nc -U seems to be available." 1>&2
++	    echo "# DUMP FAILED"
++	    return 1
++	fi
++    } > "$dir/lvmpolld.txt"
++fi
++
++if test -z "$userdir"; then
++	lvm_dump="$dirbase.tgz"
++	myecho "Creating report tarball in $HOME/$lvm_dump..."
++fi
++
++warnings
++
++if test -z "$userdir"; then
++	cd "$HOME"
++	"$TAR" czf "$lvm_dump" "$dirbase" 2>/dev/null
++	"$RM" -rf "$dir"
++fi
++
++exit 0
 
 
