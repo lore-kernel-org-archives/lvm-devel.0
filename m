@@ -1,89 +1,66 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Feb 2012 10:48:22 -0000
-Subject: LVM2/lib/mm memlock.c
-Message-ID: <20120201104822.32016.qmail@sourceware.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 16 Sep 2016 01:13:40 +0000 (UTC)
+Subject: master - alloc: Use --alloc normal for mirror logs.
+Message-ID: <20160916011340.EADBA607AF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-01 10:48:22
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c8c8fb63abd1a36b9c448450c9cccfac4c0299e
+Commit:        9c8c8fb63abd1a36b9c448450c9cccfac4c0299e
+Parent:        5da35d879ad073d9fb0d7ec8bfabe9ae39ac5bc1
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Sep 16 02:11:58 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Sep 16 02:11:58 2016 +0100
 
-Modified files:
-	lib/mm         : memlock.c 
+alloc: Use --alloc normal for mirror logs.
 
-Log message:
-	Minor consistency update for debugging messages
-	
-	Use mlock/munlock for debugging lines.
+The existing code doesn't understand that mirror logs should cling to
+parallel LVs (like extending them) instead of avoiding them.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
+As a quick workaround to avoid lvcreate failures, hard-code
+--alloc normal for mirror logs even if the rest of the allocation
+used a stricter policy.
 
---- LVM2/lib/mm/memlock.c	2012/01/25 13:12:59	1.49
-+++ LVM2/lib/mm/memlock.c	2012/02/01 10:48:22	1.50
-@@ -155,6 +155,7 @@
- 	unsigned i;
- 	char fr, fw, fx, fp;
- 	size_t sz;
-+	const char *lock_str = (lock == LVM_MLOCK) ? "mlock" : "munlock";
+https://bugzilla.redhat.com/show_bug.cgi?id=1376532
+---
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    9 +++++++++
+ 2 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1ef3dc6..9c6ba3b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.166 - 
+ =====================================
++  Use --alloc normal for mirror logs even if the mimages were stricter.
+   Use O_DIRECT to gather metadata in lvmdump.
+   Fix possible NULL pointer derefence when checking for monitoring.
+   Add lvmreport(7) man page.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index dcc8d86..d6869e1 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3085,6 +3085,15 @@ static int _allocate(struct alloc_handle *ah,
+ 		if (!_find_max_parallel_space_for_one_policy(ah, &alloc_parms, pvms, &alloc_state))
+ 			goto_out;
  
- 	if (sscanf(line, "%lx-%lx %c%c%c%c%n",
- 		   &from, &to, &fr, &fw, &fx, &fp, &pos) != 6) {
-@@ -164,16 +165,15 @@
- 
- 	/* Select readable maps */
- 	if (fr != 'r') {
--		log_debug("%s area unreadable %s : Skipping.",
--			  (lock == LVM_MLOCK) ? "mlock" : "munlock", line);
-+		log_debug("%s area unreadable %s : Skipping.", lock_str, line);
- 		return 1;
- 	}
- 
- 	/* always ignored areas */
- 	for (i = 0; i < sizeof(_ignore_maps) / sizeof(_ignore_maps[0]); ++i)
- 		if (strstr(line + pos, _ignore_maps[i])) {
--			log_debug("mlock ignore filter '%s' matches '%s': Skipping.",
--				  _ignore_maps[i], line);
-+			log_debug("%s ignore filter '%s' matches '%s': Skipping.",
-+				  lock_str, _ignore_maps[i], line);
- 			return 1;
- 		}
- 
-@@ -182,8 +182,8 @@
- 		/* If no blacklist configured, use an internal set */
- 		for (i = 0; i < sizeof(_blacklist_maps) / sizeof(_blacklist_maps[0]); ++i)
- 			if (strstr(line + pos, _blacklist_maps[i])) {
--				log_debug("mlock default filter '%s' matches '%s': Skipping.",
--					  _blacklist_maps[i], line);
-+				log_debug("%s default filter '%s' matches '%s': Skipping.",
-+					  lock_str, _blacklist_maps[i], line);
- 				return 1;
- 			}
- 	} else {
-@@ -191,8 +191,8 @@
- 			if ((cv->type != DM_CFG_STRING) || !cv->v.str[0])
- 				continue;
- 			if (strstr(line + pos, cv->v.str)) {
--				log_debug("mlock_filter '%s' matches '%s': Skipping.",
--					  cv->v.str, line);
-+				log_debug("%s_filter '%s' matches '%s': Skipping.",
-+					  lock_str, cv->v.str, line);
- 				return 1;
- 			}
- 		}
-@@ -207,8 +207,7 @@
- 
- #endif
- 	*mstats += sz;
--	log_debug("%s %10ldKiB %12lx - %12lx %c%c%c%c%s",
--		  (lock == LVM_MLOCK) ? "mlock" : "munlock",
-+	log_debug("%s %10ldKiB %12lx - %12lx %c%c%c%c%s", lock_str,
- 		  ((long)sz + 1023) / 1024, from, to, fr, fw, fx, fp, line + pos);
- 
- 	if (lock == LVM_MLOCK) {
++		/* As a workaround, if only the log is missing now, fall through and try later policies up to normal. */
++		/* FIXME Change the core algorithm so the log extents cling to parallel LVs instead of avoiding them. */
++		if (alloc_state.allocated == ah->new_extents &&
++		    alloc_state.log_area_count_still_needed &&
++		    ah->alloc < ALLOC_NORMAL) {
++			ah->alloc = ALLOC_NORMAL;
++			continue;
++		}
++
+ 		if ((alloc_state.allocated == ah->new_extents &&
+ 		     !alloc_state.log_area_count_still_needed) ||
+ 		    (!can_split && (alloc_state.allocated != old_allocated)))
 
 
