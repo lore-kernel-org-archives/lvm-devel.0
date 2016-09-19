@@ -1,178 +1,159 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Thu, 22 Sep 2016 21:35:53 +0000 (UTC)
-Subject: master - tests: fix raid rebuild tests to work with older target versions
-Message-ID: <20160922213553.2D32260D1E@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 19 Sep 2016 12:01:34 +0000 (UTC)
+Subject: master - thin: enforce there is some free space in thin pool metadata
+Message-ID: <20160919120134.9074B6050A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f2efd04052c9cdd86d636e77e645db778935fdc8
-Commit:        f2efd04052c9cdd86d636e77e645db778935fdc8
-Parent:        38a6a39daa2967970da0017ac96e40af1c7fbc7b
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Sep 22 23:35:37 2016 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Sep 22 23:35:37 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c2c2721d0082d79fab98875dd20f03d6abf72bea
+Commit:        c2c2721d0082d79fab98875dd20f03d6abf72bea
+Parent:        776d5a25b4ab036103ec99291cb0056fa61490fa
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Sep 16 21:50:14 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Sep 19 14:00:56 2016 +0200
 
-tests: fix raid rebuild tests to work with older target versions
+thin: enforce there is some free space in thin pool metadata
 
-Pre 1.9 dm-raid targets status output was racy, which caused
-the device status chars to be unreliable _during_ synchronization.
-This shows paritcularly with tiny test devices used.
+Unconditionally guard there is at least 1/4 of metadata volume
+free (<16Mib) or 4MiB - whichever value is smaller.
 
-Enhance lvchange-rebuild-raid.sh to not check status
-chars _during_ synchronization. Just check afterwards.
+In case there is not enough free space do not let operation proceed and
+recommend thin-pool metadata resize (in case user has not
+enabled autoresize, manual 'lvextend --poolmetadatasize' is needed).
 ---
- WHATS_NEW                           |    1 +
- test/shell/lvchange-rebuild-raid.sh |   42 ++++++++++++++++++++++++----------
- 2 files changed, 30 insertions(+), 13 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/lv_manip.c   |    6 +++++-
+ lib/metadata/metadata.h   |    1 +
+ lib/metadata/thin_manip.c |   34 +++++++++++++++++++++++++++++++++-
+ man/lvcreate.8.in         |    3 +++
+ 5 files changed, 43 insertions(+), 2 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index aedacee..6a178e6 100644
+index 649607b..ba14c6d 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.166 - 
  =====================================
-+  Fix lvchange-rebuild-raid.sh to cope with older target versions.
-   Use dm_config_parse_without_dup_node_check() to speedup metadata reading.
-   Fix lvconvert --repair regression
-   Fix reported origin lv field for cache volumes. (2.02.133)
-diff --git a/test/shell/lvchange-rebuild-raid.sh b/test/shell/lvchange-rebuild-raid.sh
-index f15c5ef..6b91941 100644
---- a/test/shell/lvchange-rebuild-raid.sh
-+++ b/test/shell/lvchange-rebuild-raid.sh
-@@ -18,7 +18,7 @@ aux have_raid 1 3 2 || skip
++  Enforce 4MiB or 25% metadata free space for thin pool operations.
+   Fix lock-holder device for thin pool with inactive thin volumes.
+   Use --alloc normal for mirror logs even if the mimages were stricter.
+   Use O_DIRECT to gather metadata in lvmdump.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index d6869e1..1ad85ed 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4515,6 +4515,7 @@ static int _lvresize_adjust_policy(const struct logical_volume *lv,
+ {
+ 	struct cmd_context *cmd = lv->vg->cmd;
+ 	dm_percent_t percent;
++	dm_percent_t min_threshold;
+ 	int policy_threshold, policy_amount;
  
- aux prepare_vg 8
+ 	*amount = *meta_amount = 0;
+@@ -4562,7 +4563,10 @@ static int _lvresize_adjust_policy(const struct logical_volume *lv,
+ 		if (!lv_thin_pool_percent(lv, 1, &percent))
+ 			return_0;
  
--# Delay 1st leg so that rebuilding status characters can be read
-+# Delay legs so that rebuilding status characters can be read
- for d in $(< DEVICES)
- do
- 	aux delay_dev "$d" 0 15 $(get first_extent_sector "$d")
-@@ -37,92 +37,108 @@ aux wait_for_sync $vg $lv1
- not lvchange --yes --rebuild "$dev1" --rebuild "$dev2" $vg/$lv1
- not check raid_leg_status $vg $lv1 "aAaAAAAA"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
+-		*meta_amount = _adjust_amount(percent, policy_threshold, policy_amount);
++		/* Resize below the minimal usable value */
++		min_threshold = pool_metadata_min_threshold(first_seg(lv)) / DM_PERCENT_1;
++		*meta_amount = _adjust_amount(percent, (min_threshold < policy_threshold) ?
++					      min_threshold : policy_threshold, policy_amount);
  
--# Rebuild 1st and 3nd device from different mirror groups is fine.
-+# Rebuild 1st and 3rd device from different mirror groups is fine.
- lvchange --yes --rebuild "$dev1" --rebuild "$dev3" $vg/$lv1
--check raid_leg_status $vg $lv1 "aAaAAAAA"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAAAAA"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
+ 		if (!lv_thin_pool_percent(lv, 0, &percent))
+ 			return_0;
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index e6dc14a..a9eceaa 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -501,6 +501,7 @@ int attach_pool_message(struct lv_segment *pool_seg, dm_thin_message_t type,
+ int lv_is_merging_thin_snapshot(const struct logical_volume *lv);
+ int pool_has_message(const struct lv_segment *seg,
+ 		     const struct logical_volume *lv, uint32_t device_id);
++int pool_metadata_min_threshold(const struct lv_segment *pool_seg);
+ int pool_below_threshold(const struct lv_segment *pool_seg);
+ int pool_check_overprovisioning(const struct logical_volume *lv);
+ int create_pool(struct logical_volume *lv, const struct segment_type *segtype,
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 3b92909..a02a7e6 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -215,9 +215,29 @@ int thin_pool_feature_supported(const struct logical_volume *lv, int feature)
+ 	return (attr & feature) ? 1 : 0;
+ }
  
- # Rebuild devices 1, 3, 6 from different mirror groups is fine.
- lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev6" $vg/$lv1
--check raid_leg_status $vg $lv1 "aAaAAaAA"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAAaAA"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
++int pool_metadata_min_threshold(const struct lv_segment *pool_seg)
++{
++	/*
++	 * Hardcoded minimal requirment for thin pool target.
++	 *
++	 * In the metadata LV there should be minimum from either 4MiB of free space
++	 * or@least 25% of free space, which applies when the size of thin pool's
++	 * metadata is less then 16MiB.
++	 */
++	const dm_percent_t meta_min = DM_PERCENT_1 * 25;
++	dm_percent_t meta_free = dm_make_percent(((4096 * 1024) >> SECTOR_SHIFT),
++						pool_seg->metadata_lv->size);
++
++	if (meta_min < meta_free)
++		meta_free = meta_min;
++
++	return DM_PERCENT_100 - meta_free;
++}
++
+ int pool_below_threshold(const struct lv_segment *pool_seg)
+ {
+ 	dm_percent_t percent;
++	dm_percent_t min_threshold = pool_metadata_min_threshold(pool_seg);
+ 	dm_percent_t threshold = DM_PERCENT_1 *
+ 		find_config_tree_int(pool_seg->lv->vg->cmd, activation_thin_pool_autoextend_threshold_CFG,
+ 				     lv_config_profile(pool_seg->lv));
+@@ -226,7 +246,7 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
+ 	if (!lv_thin_pool_percent(pool_seg->lv, 0, &percent))
+ 		return_0;
  
- # Rebuild devices 1, 3, 5 and 6 with 5+6 being
- # being a whole mirror group needs to be rejected.
- not lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev6" --rebuild "$dev5" $vg/$lv1
- not check raid_leg_status $vg $lv1 "aAaAaaAA"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
+-	if (percent > threshold) {
++	if (percent > threshold || percent >= DM_PERCENT_100) {
+ 		log_debug("Threshold configured for free data space in "
+ 			  "thin pool %s has been reached (%.2f%% >= %.2f%%).",
+ 			  display_lvname(pool_seg->lv),
+@@ -239,6 +259,18 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
+ 	if (!lv_thin_pool_percent(pool_seg->lv, 1, &percent))
+ 		return_0;
  
- # Rebuild devices 1, 3, 5 and 7 from different mirror groups is fine.
- lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev5" --rebuild "$dev7" $vg/$lv1
--check raid_leg_status $vg $lv1 "aAaAaAaA"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAaAaA"
- aux wait_for_sync $vg $lv1
- 
- # Rebuild devices 2, 4, 6 and 8 from different mirror groups is fine.
- lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" --rebuild "$dev8" $vg/$lv1
--check raid_leg_status $vg $lv1 "AaAaAaAa"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAaAa"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
- 
- ##############################################
- # Create an 8-legged raid1 and rebuild selected PVs
- lvremove --yes $vg/$lv1
- lvcreate --yes --type raid1 -m 7 -l 2 -n $lv1 $vg
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
- 
- # Rebuilding all raid1 legs needs to be rejected.
- not lvchange --yes --rebuild "$dev1" --rebuild "$dev2" --rebuild "$dev3" --rebuild "$dev4" \
- 		   --rebuild "$dev5" --rebuild "$dev6" --rebuild "$dev7" --rebuild "$dev8" $vg/$lv1
- not check raid_leg_status $vg $lv1 "aaaaaaaa"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
- 
- # Rebuilding all but the raid1 master leg is fine.
- lvchange --yes --rebuild "$dev2" --rebuild "$dev3" --rebuild "$dev4" \
- 	       --rebuild "$dev5" --rebuild "$dev6" --rebuild "$dev7" --rebuild "$dev8" $vg/$lv1
--check raid_leg_status $vg $lv1 "Aaaaaaaa"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "Aaaaaaaa"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
- 
- # Rebuilding the raid1 master leg is fine.
- lvchange --yes --rebuild "$dev1" $vg/$lv1
--check raid_leg_status $vg $lv1 "aAAAAAAA"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAAAAAAA"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
- 
- # Rebuild legs on devices 2, 4, 6 and 8 is fine.
- lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" --rebuild "$dev8" $vg/$lv1
--check raid_leg_status $vg $lv1 "AaAaAaAa"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAaAa"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAAAA"
- 
- ##############################################
- # Create an 6-legged raid6 and rebuild selected PVs
- lvremove --yes $vg/$lv1
- lvcreate --yes --type raid6 -i 4 -l 2 -n $lv1 $vg
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAA"
- 
- # Rebuilding all raid6 stripes needs to be rejected.
- not lvchange --yes --rebuild "$dev1" --rebuild "$dev2" --rebuild "$dev3" \
- 		   --rebuild "$dev4" --rebuild "$dev5" --rebuild "$dev6"  $vg/$lv1
- not check raid_leg_status $vg $lv1 "aaaaaa"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAA"
- 
- # Rebuilding more than 2 raid6 stripes needs to be rejected.
- not lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" $vg/$lv1
- not check raid_leg_status $vg $lv1 "AaAaAa"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAA"
- 
- # Rebuilding any 1 raid6 stripe is fine.
- lvchange --yes --rebuild "$dev2" $vg/$lv1
--check raid_leg_status $vg $lv1 "AaAAAA"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAAAA"
- aux wait_for_sync $vg $lv1
- lvchange --yes --rebuild "$dev5"  $vg/$lv1
--check raid_leg_status $vg $lv1 "AAAAaA"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AAAAaA"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAA"
- 
- # Rebuilding any 2 raid6 stripes is fine.
- lvchange --yes --rebuild "$dev2" --rebuild "$dev4" $vg/$lv1
--check raid_leg_status $vg $lv1 "AaAaAA"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAA"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAA"
- lvchange --yes --rebuild "$dev1" --rebuild "$dev5" $vg/$lv1
--check raid_leg_status $vg $lv1 "aAAAaA"
-+aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAAAaA"
- aux wait_for_sync $vg $lv1
-+check raid_leg_status $vg $lv1 "AAAAAA"
- 
- vgremove -ff $vg
++
++	if (percent >= min_threshold) {
++		log_warn("WARNING: Remaining free space in metadata of thin pool %s "
++			 "is too low (%.2f%% >= %.2f%%). "
++			 "Resize is recommended.",
++			 display_lvname(pool_seg->lv),
++			 dm_percent_to_float(percent),
++			 dm_percent_to_float(min_threshold));
++		return 0;
++	}
++
++
+ 	if (percent > threshold) {
+ 		log_debug("Threshold configured for free metadata space in "
+ 			  "thin pool %s has been reached (%.2f%% > %.2f%%).",
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index bf3c33f..84afbda 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -501,6 +501,9 @@ Supported values are in range between 2MiB and 16GiB for thin pool,
+ and upto 16GiB for cache pool. The minimum value is computed from pool's
+ data size.
+ Default value for thin pool is (Pool_LV_size / Pool_LV_chunk_size * 64b).
++To work with a thin pool, there should be at least 25% of free space
++when the size of metadata is smaller then 16MiB,
++or at least 4MiB of free space otherwise.
+ Default unit is megabytes.
+ .
+ .HP
 
 
