@@ -1,70 +1,117 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 20 Sep 2016 12:34:29 +0000 (UTC)
-Subject: master - cache: restore reported origin field
-Message-ID: <20160920123429.51C7860DAE@fedorahosted.org>
+Date: Tue, 20 Sep 2016 15:11:17 +0000 (UTC)
+Subject: master - tests: kernel message for <3.5 kernels
+Message-ID: <20160920151117.B729560D6D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=67d4b3b7f2be1e15af2d05faa97e8b56ddc9d668
-Commit:        67d4b3b7f2be1e15af2d05faa97e8b56ddc9d668
-Parent:        414d39085c3f248601bec4cea6ce508acfa59283
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a9c2a62939e1c215126fa499a8ed7c0550b21f6a
+Commit:        a9c2a62939e1c215126fa499a8ed7c0550b21f6a
+Parent:        67d4b3b7f2be1e15af2d05faa97e8b56ddc9d668
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 20 14:26:11 2016 +0200
+AuthorDate:    Tue Sep 20 17:09:46 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 20 14:26:11 2016 +0200
+CommitterDate: Tue Sep 20 17:09:46 2016 +0200
 
-cache: restore reported origin field
+tests: kernel message for <3.5 kernels
 
-Commit 199697accff0658a11420e263c1f85fb74cd39d3 rerouted funtion
-for priting cache volume origin to lvm2app app function - which
-however had a bug.  So restore the original functionality
-and print correct LV as cache origin LV.
+Since /dev/kmsg is useless on kernel <3.5 user there automatically
+syslog to obtain traces from kernel log buffer during test.
 ---
- WHATS_NEW                    |    1 +
- lib/metadata/lv.c            |    4 ++--
- test/shell/lvcreate-cache.sh |    1 +
- 3 files changed, 4 insertions(+), 2 deletions(-)
+ test/lib/brick-shelltest.h |   37 ++++++++++++++++++++++++++++++-------
+ test/lib/utils.sh          |    1 +
+ 2 files changed, 31 insertions(+), 7 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 924d7c5..faddb9f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.166 - 
- =====================================
-+  Fix reported origin lv field for cache volumes. (2.02.133)
-   Always specify snapshot cow LV for monitoring not internal LV. (2.02.165)
-   Fix lvchange --discard|--zero for active thin-pool.
-   Enforce 4MiB or 25% metadata free space for thin pool operations.
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 188a255..53a1044 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -537,8 +537,8 @@ struct logical_volume *lv_origin_lv(const struct logical_volume *lv)
+diff --git a/test/lib/brick-shelltest.h b/test/lib/brick-shelltest.h
+index b48253b..a8df900 100644
+--- a/test/lib/brick-shelltest.h
++++ b/test/lib/brick-shelltest.h
+@@ -75,6 +75,7 @@
+ #include <sys/types.h>
+ #include <sys/wait.h>
+ #include <sys/klog.h>
++#include <sys/utsname.h>
+ #include <time.h>
+ #include <unistd.h>
+ #endif
+@@ -484,8 +485,12 @@ struct FileSink : FdSink {
+     }
+ };
  
- 	if (lv_is_cow(lv))
- 		origin = origin_from_cow(lv);
--	else if (lv_is_cache(lv) && first_seg(lv)->origin)
--		origin = first_seg(lv)->origin;
-+	else if (lv_is_cache(lv) && !lv_is_pending_delete(lv))
-+		origin = seg_lv(first_seg(lv), 0);
- 	else if (lv_is_thin_volume(lv) && first_seg(lv)->origin)
- 		origin = first_seg(lv)->origin;
- 	else if (lv_is_thin_volume(lv) && first_seg(lv)->external_lv)
-diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
-index bed3ec2..c38549f 100644
---- a/test/shell/lvcreate-cache.sh
-+++ b/test/shell/lvcreate-cache.sh
-@@ -85,6 +85,7 @@ lvremove -f $vg
- lvcreate --type cache-pool  -L1 $vg/cpool
- lvcreate -H -L4 -n $lv1 $vg/cpool
++#define BRICK_SYSLOG_ACTION_READ           2
++#define BRICK_SYSLOG_ACTION_READ_ALL       3
+ #define BRICK_SYSLOG_ACTION_READ_CLEAR     4
+ #define BRICK_SYSLOG_ACTION_CLEAR          5
++#define BRICK_SYSLOG_ACTION_SIZE_UNREAD    9
++#define BRICK_SYSLOG_ACTION_SIZE_BUFFER   10
  
-+check lv_field $vg/$lv1 origin "[${lv1}_corig]"
- check lv_field $vg/$lv1 copy_percent "0.00"
- # there should be something present (value differs per policy version)
- test -n "$(get lv_field $vg/$lv1 data_percent)"
+ struct Source {
+     int fd;
+@@ -553,10 +558,24 @@ struct FileSource : Source {
+ 
+ struct KMsg : Source {
+     bool can_clear;
++    bool syslog;
++    ssize_t buffer_size;
+ 
+-    KMsg() : can_clear( strcmp(getenv("LVM_TEST_CAN_CLOBBER_DMESG") ? : "0", "0") ) {
++    KMsg() : can_clear( strcmp(getenv("LVM_TEST_CAN_CLOBBER_DMESG") ? : "0", "0") ),
++        buffer_size(128 * 1024)
++    {
+ #ifdef __unix
+-        if ( (fd = open("/dev/kmsg", O_RDONLY | O_NONBLOCK)) < 0 ) {
++        struct utsname uts;
++        unsigned kmaj, kmin, krel;
++
++        // Can't use kmsg on kernels pre 3.5, relay on syslog for that case
++        syslog = ( ( ::uname(&uts) == 0 ) &&
++                   ( ::sscanf( uts.release, "%u.%u.%u", &kmaj, &kmin, &krel ) == 3 ) &&
++                   ( ( kmaj < 3 ) || ( ( kmaj == 3 ) && ( kmin < 5 ) ) ) );
++
++        if ( syslog )
++            buffer_size = klogctl( BRICK_SYSLOG_ACTION_SIZE_BUFFER, NULL, 0 );
++        else if ( (fd = open("/dev/kmsg", O_RDONLY | O_NONBLOCK)) < 0 ) {
+             if (errno != ENOENT) /* Older kernels (<3.5) do not support /dev/kmsg */
+                 perror("opening /dev/kmsg");
+             if ( klogctl( BRICK_SYSLOG_ACTION_CLEAR, 0, 0 ) < 0 )
+@@ -573,14 +592,18 @@ struct KMsg : Source {
+     void sync( Sink *s ) {
+ #ifdef __unix
+         ssize_t sz;
+-        char buf[ 128 * 1024 ];
++        char buf[ buffer_size ];
+ 
+-        if ( dev_kmsg() ) {
+-            while ( (sz = ::read(fd, buf, sizeof(buf) - 1)) > 0 )
++        if ( syslog ) {
++            while ( klogctl(BRICK_SYSLOG_ACTION_SIZE_UNREAD, NULL, 0 ) > 0 &&
++                    ( sz = klogctl( BRICK_SYSLOG_ACTION_READ, buf, ( int ) buffer_size ) ) > 0 )
++                s->push( std::string( buf, sz ) );
++        } else if ( dev_kmsg() ) {
++            while ( (sz = ::read(fd, buf, buffer_size)) > 0 )
+                 s->push( std::string( buf, sz ) );
+         } else if ( can_clear ) {
+-            while ( (sz = klogctl( BRICK_SYSLOG_ACTION_READ_CLEAR, buf,
+-                                   sizeof(buf) - 1 )) > 0 )
++            while ( ( sz = klogctl( BRICK_SYSLOG_ACTION_READ_CLEAR, buf,
++                                   ( int)  buffer_size ) ) > 0 )
+                 s->push( std::string( buf, sz ) );
+             if ( sz < 0 && errno == EPERM )
+                 can_clear = false;
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index a3b5e2e..ce90cdc 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -219,6 +219,7 @@ dm_table() {
+ }
+ 
+ skip() {
++	set +vx # debug off
+ 	if test "$#" -eq 0; then
+ 		stacktrace
+ 	else
 
 
