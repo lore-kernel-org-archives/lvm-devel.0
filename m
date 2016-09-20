@@ -1,45 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 20 Sep 2016 20:48:40 +0000 (UTC)
-Subject: master - tests: show some more device info
-Message-ID: <20160920204840.D398B605CD@fedorahosted.org>
+Date: Tue, 20 Sep 2016 20:51:24 +0000 (UTC)
+Subject: master - tests: correcting kernel version test
+Message-ID: <20160920205124.E155160A2B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f6b0062727e9ef33610880444eaee857de1ab92
-Commit:        9f6b0062727e9ef33610880444eaee857de1ab92
-Parent:        994df22b608c40967c5327d5850af9a2a1b3eea3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=78e0fdb6182e8cae26998510760caf7afe237c39
+Commit:        78e0fdb6182e8cae26998510760caf7afe237c39
+Parent:        9f6b0062727e9ef33610880444eaee857de1ab92
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 20 22:47:14 2016 +0200
+AuthorDate:    Tue Sep 20 22:50:43 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 20 22:47:14 2016 +0200
+CommitterDate: Tue Sep 20 22:50:43 2016 +0200
 
-tests: show some more device info
+tests: correcting  kernel version test
 
-When passdown is not there, look for possible reason.
+Debug force leaked in.
 ---
- test/shell/lvchange-thin.sh |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ test/lib/brick-shelltest.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvchange-thin.sh b/test/shell/lvchange-thin.sh
-index f2b33b7..f943401 100644
---- a/test/shell/lvchange-thin.sh
-+++ b/test/shell/lvchange-thin.sh
-@@ -29,7 +29,12 @@ lvcreate -L10M -T $vg/pool
- # Check change operations on a thin-pool without any thin LV
- #
- # discards_ARG  (default is passdown)
--check grep_dmsetup status $vg-pool " discard_passdown"
-+check grep_dmsetup status $vg-pool " discard_passdown" || {
-+	# trace device layout
-+	grep -r "" /sys/block/*
-+	die "Device was expected to support passdown"
-+}
-+
- lvchange -vvvv --discards nopassdown $vg/pool
- check grep_dmsetup table $vg-pool " no_discard_passdown"
- check grep_dmsetup status $vg-pool " no_discard_passdown"
+diff --git a/test/lib/brick-shelltest.h b/test/lib/brick-shelltest.h
+index 1c9a1f3..7c5b601 100644
+--- a/test/lib/brick-shelltest.h
++++ b/test/lib/brick-shelltest.h
+@@ -571,7 +571,7 @@ struct KMsg : Source {
+         // Can't use kmsg on kernels pre 3.5, read /var/log/messages
+         if ( ( ::uname(&uts) == 0 ) &&
+             ( ::sscanf( uts.release, "%u.%u.%u", &kmaj, &kmin, &krel ) == 3 ) &&
+-            ( ( kmaj < 5 ) || ( ( kmaj == 3 ) && ( kmin < 5 ) ) ) )
++            ( ( kmaj < 3 ) || ( ( kmaj == 3 ) && ( kmin < 5 ) ) ) )
+             can_clear = false, read_msg = "/var/log/messages";
+ 
+         if ( ( fd = open(read_msg, O_RDONLY | O_NONBLOCK)) < 0 ) {
 
 
