@@ -1,129 +1,176 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 21 Sep 2016 16:18:56 +0000 (UTC)
-Subject: master - config: use config_tree_from_string_without_dup_node_check throughout code to construct metadata trees
-Message-ID: <20160921161856.4274060F23@fedorahosted.org>
+Date: Wed, 21 Sep 2016 16:18:50 +0000 (UTC)
+Subject: master - libdm: add dm_config_parse_without_dup_node_check
+Message-ID: <20160921161850.0A50A60F23@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f1cad4c7103ac0edc0b724217b50d062326deb43
-Commit:        f1cad4c7103ac0edc0b724217b50d062326deb43
-Parent:        045772aa30ba1c5ab9dff730ce25ca6346c7150a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7563e69cf13126af5889de147c092b9d2e490648
+Commit:        7563e69cf13126af5889de147c092b9d2e490648
+Parent:        094488ffab4837fa14069b81a15e0a6bdaca8a73
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Sep 21 14:59:14 2016 +0200
+AuthorDate:    Wed Sep 21 14:25:24 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 21 18:18:15 2016 +0200
+CommitterDate: Wed Sep 21 18:15:18 2016 +0200
 
-config: use config_tree_from_string_without_dup_node_check throughout code to construct metadata trees
+libdm: add dm_config_parse_without_dup_node_check
 
+Introduce function for config parsing tree without checking
+for duplicate nodes.
 ---
- WHATS_NEW                        |    1 +
- daemons/lvmetad/lvmetad-core.c   |    2 +-
- daemons/lvmlockd/lvmlockd-core.c |    2 +-
- lib/cache/lvmcache.c             |    2 +-
- lib/format_text/export.c         |    3 ++-
- libdaemon/client/daemon-client.c |    2 +-
- libdaemon/server/daemon-server.c |    2 +-
- 7 files changed, 8 insertions(+), 6 deletions(-)
+ WHATS_NEW_DM                        |    1 +
+ libdm/.exported_symbols.DM_1_02_135 |    1 +
+ libdm/libdevmapper.h                |    1 +
+ libdm/libdm-config.c                |   47 +++++++++++++++++++++++------------
+ 4 files changed, 34 insertions(+), 16 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f7b39b9..aedacee 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index edb1e70..7d32dff 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.166 - 
+ Version 1.02.135 - 
  =====================================
-+  Use dm_config_parse_without_dup_node_check() to speedup metadata reading.
-   Fix lvconvert --repair regression
-   Fix reported origin lv field for cache volumes. (2.02.133)
-   Always specify snapshot cow LV for monitoring not internal LV. (2.02.165)
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index ebaca78..36a5cec 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -599,7 +599,7 @@ static void mark_outdated_pv(lvmetad_state *s, const char *vgid, const char *pvi
++  Introduce new dm_config_parse_without_dup_node_check().
  
- 	outdated_pvs = dm_hash_lookup(s->vgid_to_outdated_pvs, vgid);
- 	if (!outdated_pvs) {
--		if (!(outdated_pvs = dm_config_from_string("outdated_pvs/pv_list = []")) ||
-+		if (!(outdated_pvs = config_tree_from_string_without_dup_node_check("outdated_pvs/pv_list = []")) ||
- 		    !(cft_vgid = make_text_node(outdated_pvs, "vgid", dm_pool_strdup(outdated_pvs->mem, vgid),
- 						outdated_pvs->root, NULL)))
- 			abort();
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 8fcbdec..4d96e67 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -4431,7 +4431,7 @@ static void client_recv_action(struct client *cl)
- 		return;
+ Version 1.02.134 - 7th September 2016
+ =====================================
+diff --git a/libdm/.exported_symbols.DM_1_02_135 b/libdm/.exported_symbols.DM_1_02_135
+new file mode 100644
+index 0000000..dceeb4e
+--- /dev/null
++++ b/libdm/.exported_symbols.DM_1_02_135
+@@ -0,0 +1 @@
++dm_config_parse_without_dup_node_check
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 5790486..97c3e51 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -3333,6 +3333,7 @@ struct dm_config_tree {
+ struct dm_config_tree *dm_config_create(void);
+ struct dm_config_tree *dm_config_from_string(const char *config_settings);
+ int dm_config_parse(struct dm_config_tree *cft, const char *start, const char *end);
++int dm_config_parse_without_dup_node_check(struct dm_config_tree *cft, const char *start, const char *end);
+ 
+ void *dm_config_get_custom(struct dm_config_tree *cft);
+ void dm_config_set_custom(struct dm_config_tree *cft, void *custom);
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index dcb7c3f..90e3405 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -50,6 +50,7 @@ struct parser {
+ 	int line;		/* line number we are on */
+ 
+ 	struct dm_pool *mem;
++	int no_dup_node_check;	/* whether to disable dup node checking */
+ };
+ 
+ struct config_output {
+@@ -170,7 +171,7 @@ static struct dm_config_node *_config_reverse(struct dm_config_node *head)
+ 	return middle;
+ }
+ 
+-int dm_config_parse(struct dm_config_tree *cft, const char *start, const char *end)
++static int _do_dm_config_parse(struct dm_config_tree *cft, const char *start, const char *end, int no_dup_node_check)
+ {
+ 	/* TODO? if (start == end) return 1; */
+ 
+@@ -183,6 +184,7 @@ int dm_config_parse(struct dm_config_tree *cft, const char *start, const char *e
+ 	p->fe = end;
+ 	p->tb = p->te = p->fb;
+ 	p->line = 1;
++	p->no_dup_node_check = no_dup_node_check;
+ 
+ 	_get_token(p, TOK_SECTION_E);
+ 	if (!(cft->root = _file(p)))
+@@ -193,6 +195,16 @@ int dm_config_parse(struct dm_config_tree *cft, const char *start, const char *e
+ 	return 1;
+ }
+ 
++int dm_config_parse(struct dm_config_tree *cft, const char *start, const char *end)
++{
++	return _do_dm_config_parse(cft, start, end, 0);
++}
++
++int dm_config_parse_without_dup_node_check(struct dm_config_tree *cft, const char *start, const char *end)
++{
++	return _do_dm_config_parse(cft, start, end, 1);
++}
++
+ struct dm_config_tree *dm_config_from_string(const char *config_settings)
+ {
+ 	struct dm_config_tree *cft;
+@@ -509,7 +521,8 @@ static struct dm_config_node *_make_node(struct dm_pool *mem,
+ /* when mem is not NULL, we create the path if it doesn't exist yet */
+ static struct dm_config_node *_find_or_make_node(struct dm_pool *mem,
+ 						 struct dm_config_node *parent,
+-						 const char *path)
++						 const char *path,
++						 int no_dup_node_check)
+ {
+ 	const char *e;
+ 	struct dm_config_node *cn = parent ? parent->child : NULL;
+@@ -526,18 +539,20 @@ static struct dm_config_node *_find_or_make_node(struct dm_pool *mem,
+ 		/* hunt for the node */
+ 		cn_found = NULL;
+ 
+-		while (cn) {
+-			if (_tok_match(cn->key, path, e)) {
+-				/* Inefficient */
+-				if (!cn_found)
+-					cn_found = cn;
+-				else
+-					log_warn("WARNING: Ignoring duplicate"
+-						 " config node: %s ("
+-						 "seeking %s)", cn->key, path);
+-			}
++		if (!no_dup_node_check) {
++			while (cn) {
++				if (_tok_match(cn->key, path, e)) {
++					/* Inefficient */
++					if (!cn_found)
++						cn_found = cn;
++					else
++						log_warn("WARNING: Ignoring duplicate"
++							 " config node: %s ("
++							 "seeking %s)", cn->key, path);
++				}
+ 
+-			cn = cn->sib;
++				cn = cn->sib;
++			}
+ 		}
+ 
+ 		if (!cn_found && mem) {
+@@ -588,7 +603,7 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
+ 		return NULL;
  	}
  
--	req.cft = dm_config_from_string(req.buffer.mem);
-+	req.cft = config_tree_from_string_without_dup_node_check(req.buffer.mem);
- 	if (!req.cft) {
- 		log_error("client recv %u config_from_string error", cl->id);
- 		buffer_destroy(&req.buffer);
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 6ce778d..5e402f0 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1275,7 +1275,7 @@ struct volume_group *lvmcache_get_vg(struct cmd_context *cmd, const char *vgname
- 	/* Build config tree from vgmetadata, if not yet cached */
- 	if (!vginfo->cft &&
- 	    !(vginfo->cft =
--	      dm_config_from_string(vginfo->vgmetadata)))
-+	      config_tree_from_string_without_dup_node_check(vginfo->vgmetadata)))
- 		goto_bad;
- 
- 	if (!(vg = import_vg_from_config_tree(vginfo->cft, fid)))
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 810c932..1ecc362 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -22,6 +22,7 @@
- #include "text_export.h"
- #include "lvm-version.h"
- #include "toolcontext.h"
-+#include "config-util.h"
- 
- #include <stdarg.h>
- #include <time.h>
-@@ -1077,7 +1078,7 @@ struct dm_config_tree *export_vg_to_config_tree(struct volume_group *vg)
+-	if (!(root = _find_or_make_node(p->mem, parent, str)))
++	if (!(root = _find_or_make_node(p->mem, parent, str, p->no_dup_node_check)))
  		return_NULL;
- 	}
  
--	if (!(vg_cft = dm_config_from_string(buf))) {
-+	if (!(vg_cft = config_tree_from_string_without_dup_node_check(buf))) {
- 		log_error("Error parsing metadata for VG %s.", vg->name);
- 		dm_free(buf);
- 		return_NULL;
-diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
-index 413d757..5ce1fc0 100644
---- a/libdaemon/client/daemon-client.c
-+++ b/libdaemon/client/daemon-client.c
-@@ -120,7 +120,7 @@ daemon_reply daemon_send(daemon_handle h, daemon_request rq)
- 		reply.error = errno;
+ 	if (p->t == TOK_SECTION_B) {
+@@ -912,7 +927,7 @@ typedef const struct dm_config_node *node_lookup_fn(const void *start, const cha
  
- 	if (buffer_read(h.socket_fd, &reply.buffer)) {
--		reply.cft = dm_config_from_string(reply.buffer.mem);
-+		reply.cft = config_tree_from_string_without_dup_node_check(reply.buffer.mem);
- 		if (!reply.cft)
- 			reply.error = EPROTO;
- 	} else
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 0e37dfb..6af6de9 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -444,7 +444,7 @@ static void *_client_thread(void *state)
- 		if (!buffer_read(ts->client.socket_fd, &req.buffer))
- 			goto fail;
+ static const struct dm_config_node *_find_config_node(const void *start, const char *path) {
+ 	struct dm_config_node dummy = { .child = (void *) start };
+-	return _find_or_make_node(NULL, &dummy, path);
++	return _find_or_make_node(NULL, &dummy, path, 0);
+ }
  
--		req.cft = dm_config_from_string(req.buffer.mem);
-+		req.cft = config_tree_from_string_without_dup_node_check(req.buffer.mem);
- 
- 		if (!req.cft)
- 			fprintf(stderr, "error parsing request:\n %s\n", req.buffer.mem);
+ static const struct dm_config_node *_find_first_config_node(const void *start, const char *path)
+@@ -1395,7 +1410,7 @@ static int _override_path(const char *path, struct dm_config_node *node, void *b
+ 	struct dm_config_tree *cft = baton;
+ 	struct dm_config_node dummy, *target;
+ 	dummy.child = cft->root;
+-	if (!(target = _find_or_make_node(cft->mem, &dummy, path)))
++	if (!(target = _find_or_make_node(cft->mem, &dummy, path, 0)))
+ 		return_0;
+ 	if (!(target->v = _clone_config_value(cft->mem, node->v)))
+ 		return_0;
 
 
