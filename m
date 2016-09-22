@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Thu, 22 Sep 2016 21:10:39 +0000 (UTC)
+Date: Thu, 22 Sep 2016 21:18:22 +0000 (UTC)
 Subject: master - tests: fix raid rebuild tests to work with older target versions
-Message-ID: <20160922211039.3BE25605A2@fedorahosted.org>
+Message-ID: <20160922211822.8E392602D7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0cb8f392178eed9695a57cc7d9c0e684386db445
-Commit:        0cb8f392178eed9695a57cc7d9c0e684386db445
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb4892dd6067da84833d261ffc19fba4f7086fb0
+Commit:        cb4892dd6067da84833d261ffc19fba4f7086fb0
 Parent:        38a6a39daa2967970da0017ac96e40af1c7fbc7b
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Sep 22 23:10:13 2016 +0200
+AuthorDate:    Thu Sep 22 23:18:14 2016 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Sep 22 23:10:13 2016 +0200
+CommitterDate: Thu Sep 22 23:18:14 2016 +0200
 
 tests: fix raid rebuild tests to work with older target versions
 
