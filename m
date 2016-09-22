@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Thu, 22 Sep 2016 21:18:22 +0000 (UTC)
+Date: Thu, 22 Sep 2016 21:35:53 +0000 (UTC)
 Subject: master - tests: fix raid rebuild tests to work with older target versions
-Message-ID: <20160922211822.8E392602D7@fedorahosted.org>
+Message-ID: <20160922213553.2D32260D1E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb4892dd6067da84833d261ffc19fba4f7086fb0
-Commit:        cb4892dd6067da84833d261ffc19fba4f7086fb0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f2efd04052c9cdd86d636e77e645db778935fdc8
+Commit:        f2efd04052c9cdd86d636e77e645db778935fdc8
 Parent:        38a6a39daa2967970da0017ac96e40af1c7fbc7b
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Sep 22 23:18:14 2016 +0200
+AuthorDate:    Thu Sep 22 23:35:37 2016 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Sep 22 23:18:14 2016 +0200
+CommitterDate: Thu Sep 22 23:35:37 2016 +0200
 
 tests: fix raid rebuild tests to work with older target versions
 
@@ -41,7 +41,7 @@ index aedacee..6a178e6 100644
    Fix lvconvert --repair regression
    Fix reported origin lv field for cache volumes. (2.02.133)
 diff --git a/test/shell/lvchange-rebuild-raid.sh b/test/shell/lvchange-rebuild-raid.sh
-index f15c5ef..40d8bc4 100644
+index f15c5ef..6b91941 100644
 --- a/test/shell/lvchange-rebuild-raid.sh
 +++ b/test/shell/lvchange-rebuild-raid.sh
 @@ -18,7 +18,7 @@ aux have_raid 1 3 2 || skip
@@ -63,14 +63,14 @@ index f15c5ef..40d8bc4 100644
 +# Rebuild 1st and 3rd device from different mirror groups is fine.
  lvchange --yes --rebuild "$dev1" --rebuild "$dev3" $vg/$lv1
 -check raid_leg_status $vg $lv1 "aAaAAAAA"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "aAaAAAAA"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAAAAA"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAAAA"
  
  # Rebuild devices 1, 3, 6 from different mirror groups is fine.
  lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev6" $vg/$lv1
 -check raid_leg_status $vg $lv1 "aAaAAaAA"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "aAaAAaAA"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAAaAA"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAAAA"
  
@@ -84,13 +84,13 @@ index f15c5ef..40d8bc4 100644
  # Rebuild devices 1, 3, 5 and 7 from different mirror groups is fine.
  lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev5" --rebuild "$dev7" $vg/$lv1
 -check raid_leg_status $vg $lv1 "aAaAaAaA"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "aAaAaAaA"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAaAaA"
  aux wait_for_sync $vg $lv1
  
  # Rebuild devices 2, 4, 6 and 8 from different mirror groups is fine.
  lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" --rebuild "$dev8" $vg/$lv1
 -check raid_leg_status $vg $lv1 "AaAaAaAa"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "AaAaAaAa"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAaAa"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAAAA"
  
@@ -112,21 +112,21 @@ index f15c5ef..40d8bc4 100644
  lvchange --yes --rebuild "$dev2" --rebuild "$dev3" --rebuild "$dev4" \
  	       --rebuild "$dev5" --rebuild "$dev6" --rebuild "$dev7" --rebuild "$dev8" $vg/$lv1
 -check raid_leg_status $vg $lv1 "Aaaaaaaa"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "Aaaaaaaa"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "Aaaaaaaa"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAAAA"
  
  # Rebuilding the raid1 master leg is fine.
  lvchange --yes --rebuild "$dev1" $vg/$lv1
 -check raid_leg_status $vg $lv1 "aAAAAAAA"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "aAAAAAAA"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAAAAAAA"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAAAA"
  
  # Rebuild legs on devices 2, 4, 6 and 8 is fine.
  lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" --rebuild "$dev8" $vg/$lv1
 -check raid_leg_status $vg $lv1 "AaAaAaAa"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "AaAaAaAa"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAaAa"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAAAA"
  
@@ -153,23 +153,23 @@ index f15c5ef..40d8bc4 100644
  # Rebuilding any 1 raid6 stripe is fine.
  lvchange --yes --rebuild "$dev2" $vg/$lv1
 -check raid_leg_status $vg $lv1 "AaAAAA"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "AaAAAA"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAAAA"
  aux wait_for_sync $vg $lv1
  lvchange --yes --rebuild "$dev5"  $vg/$lv1
 -check raid_leg_status $vg $lv1 "AAAAaA"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "AAAAaA"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AAAAaA"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAA"
  
  # Rebuilding any 2 raid6 stripes is fine.
  lvchange --yes --rebuild "$dev2" --rebuild "$dev4" $vg/$lv1
 -check raid_leg_status $vg $lv1 "AaAaAA"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "AaAaAA"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAA"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAA"
  lvchange --yes --rebuild "$dev1" --rebuild "$dev5" $vg/$lv1
 -check raid_leg_status $vg $lv1 "aAAAaA"
-+aux have_raid 1 8 && check raid_leg_status $vg $lv1 "aAAAaA"
++aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAAAaA"
  aux wait_for_sync $vg $lv1
 +check raid_leg_status $vg $lv1 "AAAAAA"
  
