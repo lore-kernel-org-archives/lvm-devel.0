@@ -1,60 +1,40 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 27 Sep 2016 17:25:02 +0000 (UTC)
-Subject: master - lvconvert: Disable thin pool raid conversion while active.
-Message-ID: <20160927172502.37EA960ED2@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Tue, 27 Sep 2016 18:33:46 +0000 (UTC)
+Subject: master - lvmdbustest.py: Make env variable work
+Message-ID: <20160927183346.45E8E60D9A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1bc546269a7d2cae156827e282715410a4967d51
-Commit:        1bc546269a7d2cae156827e282715410a4967d51
-Parent:        56c90ffa5e7d7c69c5230ac3bbee3ed03e7bae62
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Sep 27 18:22:54 2016 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Sep 27 18:22:54 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ec076b1df239dff91377a6e19ea76a4047b04b32
+Commit:        ec076b1df239dff91377a6e19ea76a4047b04b32
+Parent:        1bc546269a7d2cae156827e282715410a4967d51
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Mon Sep 26 21:52:08 2016 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Tue Sep 27 13:28:45 2016 -0500
 
-lvconvert: Disable thin pool raid conversion while active.
+lvmdbustest.py: Make env variable work
 
-Works if the pool is inactive.
-
-Activation code doesn't notice a new raid dependency in on-disk metadata
-when a thin LV is already active.
-
-https://bugzilla.redhat.com/1365286
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/raid_manip.c |    5 +++++
- 2 files changed, 6 insertions(+), 0 deletions(-)
+ test/dbus/lvmdbustest.py |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index aa6c0c6..b0140be 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.167 - 
- ======================================
-+  Disable lvconvert of thin pool to raid while active.
-   Disable systemd service start rate limiting for lvm2-pvscan at .service.
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 31902c4..7a2c44f 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -1294,7 +1294,8 @@ if __name__ == '__main__':
+ 	# Default to no lvm shell
+ 	set_execution(False)
  
- Version 2.02.166 - 26th September 2016
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index deb88a2..f8a3c46 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -776,6 +776,11 @@ static int _raid_add_images_without_commit(struct logical_volume *lv,
- 		return 0;
- 	}
- 
-+	if (lv_is_active(lv_lock_holder(lv)) && (old_count == 1) && (lv_is_thin_pool_data(lv) || lv_is_thin_pool_metadata(lv))) {
-+		log_error("Can't add image to active thin pool LV %s yet. Deactivate first.", display_lvname(lv));
-+		return 0;
-+	}
-+
- 	if (!archive(lv->vg))
- 		return_0;
- 
+-	if test_shell == 0:
++	if int(test_shell) == 0:
++		print('\n Shortened fork & exec test ***\n')
+ 		unittest.main(exit=True)
+ 	else:
+ 		print('\n *** Testing fork & exec *** \n')
 
 
