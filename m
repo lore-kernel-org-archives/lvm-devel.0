@@ -1,54 +1,86 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 27 Sep 2016 08:50:54 +0000 (UTC)
-Subject: master - systemd: disable service start rate limiting for lvm2-pvscan@.service
-Message-ID: <20160927085054.D4D1960C3A@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Tue, 27 Sep 2016 13:47:33 +0000 (UTC)
+Subject: master - libdm: fix stats walk compatibility with older dmsetup
+Message-ID: <20160927134733.5E5DE60804@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0a480c5c52bd34a1eb8337d59a7f4cc60317d2b1
-Commit:        0a480c5c52bd34a1eb8337d59a7f4cc60317d2b1
-Parent:        397c246fe03876fb6c68cece2d4345e0fd0ca2e3
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Sep 27 10:47:54 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Sep 27 10:48:01 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6ec8854fdb051b092d5e262dc6c6d4c2ea075cd1
+Commit:        6ec8854fdb051b092d5e262dc6c6d4c2ea075cd1
+Parent:        0a480c5c52bd34a1eb8337d59a7f4cc60317d2b1
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Tue Sep 27 14:35:22 2016 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Tue Sep 27 14:46:00 2016 +0100
 
-systemd: disable service start rate limiting for lvm2-pvscan at .service
+libdm: fix stats walk compatibility with older dmsetup
 
-We shouldn't be losing pvscans just because of the fact that the
-underlying device (PV) appears and disappears quickly in the system,
-otherwise lvmetad may not see the device if it appears again (or it may
-still keep the device in cache even it's already gone).
+The current dmsetup.c handles DR_STATS and DR_STATS_META reports
+separately in _display_info_cols(), meaning that the stats walk
+functions are never called for these report types.
+
+Versions before v2.02.159 have a loop using dm_stats_walk_do() and
+dm_stats_walk_while(), that executes once for non-stats reports,
+and once per region, or area, for DR_STATS/DR_STATS_META reports.
+
+This older behaviour relies on the documented behaviour that the
+walk functions will accept a NULL pointer as the struct dm_stats*
+argument.
+
+This was broken by commit f1f2df7b: the NULL test on dms and
+dms->regions were incorrectly moved from the dm_stats_walk_end()
+wrapper to the internal '_stats_walk_end()' helper.
+
+Since the pointer is dereferenced in between these points, using
+an older dmsetup with current libdm results in a segfault when
+running a non-stats report:
+
+  # dmsetup info -c vg00/lvol0
+  Segmentation fault (core dumped)
+
+Restore the NULL checks to the wrapper function as intended.
 ---
- WHATS_NEW                                       |    1 +
- scripts/lvm2_pvscan_systemd_red_hat at .service.in |    1 +
- 2 files changed, 2 insertions(+), 0 deletions(-)
+ WHATS_NEW_DM        |    1 +
+ libdm/libdm-stats.c |    6 +++---
+ 2 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4346de7..aa6c0c6 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 29dbccc..b048f7a 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.167 - 
+ Version 1.02.136 - 
  ======================================
-+  Disable systemd service start rate limiting for lvm2-pvscan at .service.
++  Fix stats walk segfault with dmsetup older than v1.02.129
  
- Version 2.02.166 - 26th September 2016
+ Version 1.02.135 - 26th September 2016
  ======================================
-diff --git a/scripts/lvm2_pvscan_systemd_red_hat at .service.in b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-index 03651d5..0989590 100644
---- a/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-+++ b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
-@@ -2,6 +2,7 @@
- Description=LVM2 PV scan on device %i
- Documentation=man:pvscan(8)
- DefaultDependencies=no
-+StartLimitInterval=0
- BindsTo=dev-block-%i.device
- Requires=lvm2-lvmetad.socket
- After=lvm2-lvmetad.socket lvm2-lvmetad.service
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index ffd349c..75e0144 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -1526,9 +1526,6 @@ static void _stats_walk_end_areas(const struct dm_stats *dms, uint64_t *flags,
+ static int _stats_walk_end(const struct dm_stats *dms, uint64_t *flags,
+ 			   uint64_t *cur_r, uint64_t *cur_a, uint64_t *cur_g)
+ {
+-	if (!dms || !dms->regions)
+-		return 1;
+-
+ 	if (*flags & DM_STATS_WALK_AREA) {
+ 		_stats_walk_end_areas(dms, flags, cur_r, cur_a, cur_g);
+ 		goto out;
+@@ -1553,6 +1550,9 @@ out:
+ 
+ int dm_stats_walk_end(struct dm_stats *dms)
+ {
++	if (!dms || !dms->regions)
++		return 1;
++
+ 	if (_stats_walk_end(dms, &dms->cur_flags,
+ 			    &dms->cur_region, &dms->cur_area,
+ 			    &dms->cur_group)) {
 
 
