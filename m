@@ -1,47 +1,41 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 19 Sep 2016 12:01:38 +0000 (UTC)
-Subject: master - tests: add check grep_dmsetup
-Message-ID: <20160919120138.D11266053F@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Wed, 28 Sep 2016 18:31:38 +0000 (UTC)
+Subject: master - lvmlockd: fix segfault in error path
+Message-ID: <20160928183138.133FC60721@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=561f773bb47f11d495701e15d234c85cf746e285
-Commit:        561f773bb47f11d495701e15d234c85cf746e285
-Parent:        0e8449a5b921e60e6952ac5ff33e81a40abcd23a
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 19 13:46:42 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 19 14:00:56 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=49a1c4d4b0f2c5fbc83a1ad4bfde59a366049b2a
+Commit:        49a1c4d4b0f2c5fbc83a1ad4bfde59a366049b2a
+Parent:        bd96036835e088de6a59811834b5fa0747274a62
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Sep 28 13:29:55 2016 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Sep 28 13:29:55 2016 -0500
 
-tests: add  check grep_dmsetup
+lvmlockd: fix segfault in error path
 
-Add simple helper/wrapper check function to check result
-of dmsetup call i.e.:
-
-check grep_dmsetup table vg-lv  "grep_expected"
-check grep_dmsetup status vg-lv -v "grep_unexpected"
+The log_debug statement was ignoring the NULL vg error case.
 ---
- test/lib/check.sh |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ lib/cache/lvmetad.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index 9dd8635..916d2df 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -400,6 +400,11 @@ raid_leg_status() {
- 		die "$1-$2 status $val != $3  ($st)"
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 727d3d3..8e9bb1f 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -2061,7 +2061,8 @@ scan_more:
+ 		dm_config_destroy(vgmeta_ret);
+ 	}
+ out:
+-	log_debug_lvmetad("Rescan VG %s done (seqno %u).", vg_ret->name, vg_ret->seqno);
++	if (vg_ret)
++		log_debug_lvmetad("Rescan VG %s done (seqno %u).", vg_ret->name, vg_ret->seqno);
+ 	return vg_ret;
  }
  
-+grep_dmsetup() {
-+	dmsetup $1 $2 | tee out
-+	grep "${@:3}" out || die "Expected output from dmsetup $1 not found!"
-+}
-+
- #set -x
- unset LVM_VALGRIND
- "$@"
 
 
