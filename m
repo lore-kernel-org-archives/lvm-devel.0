@@ -1,148 +1,97 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Wed, 28 Sep 2016 17:08:51 +0000 (UTC)
-Subject: master - lvmdbusd: Remove extraneous parameter
-Message-ID: <20160928170851.C1F3360640@fedorahosted.org>
+Date: Wed, 28 Sep 2016 17:08:53 +0000 (UTC)
+Subject: master - lvmdbusd: Use 'pv_missing' column instead of '[unknown]'
+Message-ID: <20160928170853.E928B60640@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=be5eb995d356610b0748b05b65f74c34934526e4
-Commit:        be5eb995d356610b0748b05b65f74c34934526e4
-Parent:        a93616cf66b15591f741dc5f1450c12bc34b3785
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bd96036835e088de6a59811834b5fa0747274a62
+Commit:        bd96036835e088de6a59811834b5fa0747274a62
+Parent:        be5eb995d356610b0748b05b65f74c34934526e4
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Sep 28 11:16:49 2016 -0500
+AuthorDate:    Wed Sep 28 11:18:10 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Sep 28 12:05:44 2016 -0500
+CommitterDate: Wed Sep 28 12:07:48 2016 -0500
 
-lvmdbusd: Remove extraneous parameter
+lvmdbusd: Use 'pv_missing' column instead of '[unknown]'
 
-Remove 'gen_new' parameter as it's not needed, correct documentation.
+Previously using '[unknown]' for PV device path comparison which
+is incorrect as it's not always true.
 ---
- daemons/lvmdbusd/lv.py            |    9 +++------
- daemons/lvmdbusd/manager.py       |    6 ++----
- daemons/lvmdbusd/objectmanager.py |   30 +++++++++++++++++-------------
- 3 files changed, 22 insertions(+), 23 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py    |    4 ++--
+ daemons/lvmdbusd/lvmdb.py         |    7 +++++++
+ daemons/lvmdbusd/objectmanager.py |    8 +++++---
+ 3 files changed, 14 insertions(+), 5 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
-index 455f371..2a8a3fb 100644
---- a/daemons/lvmdbusd/lv.py
-+++ b/daemons/lvmdbusd/lv.py
-@@ -101,8 +101,7 @@ class LvState(State):
- 		rc = []
- 		for pv in sorted(cfg.db.lv_contained_pv(uuid)):
- 			(pv_uuid, pv_name, pv_segs) = pv
--			pv_obj = cfg.om.get_object_path_by_uuid_lvm_id(
--				pv_uuid, pv_name, gen_new=False)
-+			pv_obj = cfg.om.get_object_path_by_uuid_lvm_id(pv_uuid, pv_name)
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index c8c7baa..3cb2cbd 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -469,7 +469,7 @@ def lvm_full_report_json():
+ 					'pv_used', 'dev_size', 'pv_mda_size', 'pv_mda_free',
+ 					'pv_ba_start', 'pv_ba_size', 'pe_start', 'pv_pe_count',
+ 					'pv_pe_alloc_count', 'pv_attr', 'pv_tags', 'vg_name',
+-					'vg_uuid']
++					'vg_uuid', 'pv_missing']
  
- 			segs_decorate = []
- 			for i in pv_segs:
-@@ -131,8 +130,7 @@ class LvState(State):
+ 	pv_seg_columns = ['pvseg_start', 'pvseg_size', 'segtype',
+ 						'pv_uuid', 'lv_uuid', 'pv_name']
+@@ -522,7 +522,7 @@ def pv_retrieve_with_segs(device=None):
+ 				'pv_used', 'dev_size', 'pv_mda_size', 'pv_mda_free',
+ 				'pv_ba_start', 'pv_ba_size', 'pe_start', 'pv_pe_count',
+ 				'pv_pe_alloc_count', 'pv_attr', 'pv_tags', 'vg_name',
+-				'vg_uuid', 'pvseg_start', 'pvseg_size', 'segtype']
++				'vg_uuid', 'pvseg_start', 'pvseg_size', 'segtype', 'pv_missing']
  
- 		for l in cfg.db.hidden_lvs(self.Uuid):
- 			full_name = "%s/%s" % (vg_name, l[1])
--			op = cfg.om.get_object_path_by_uuid_lvm_id(
--				l[0], full_name, gen_new=False)
-+			op = cfg.om.get_object_path_by_uuid_lvm_id(l[0], full_name)
- 			assert op
- 			rc.append(dbus.ObjectPath(op))
- 		return rc
-@@ -160,8 +158,7 @@ class LvState(State):
- 			gen = utils.lv_object_path_method(Name, (Attr, layout, role))
+ 	# Lvm has some issues where it returns failure when querying pvs when other
+ 	# operations are in process, see:
+diff --git a/daemons/lvmdbusd/lvmdb.py b/daemons/lvmdbusd/lvmdb.py
+index ac60a80..9529e03 100755
+--- a/daemons/lvmdbusd/lvmdb.py
++++ b/daemons/lvmdbusd/lvmdb.py
+@@ -433,6 +433,12 @@ class DataStore(object):
+ 				rc.append(self.pvs[self.pv_path_to_uuid[s]])
+ 			return rc
  
- 			self.PoolLv = cfg.om.get_object_path_by_uuid_lvm_id(
--				pool_lv_uuid, '%s/%s' % (vg_name, PoolLv),
--				gen)
-+				pool_lv_uuid, '%s/%s' % (vg_name, PoolLv), gen)
- 		else:
- 			self.PoolLv = '/'
++	def pv_missing(self, pv_uuid):
++		if pv_uuid in self.pvs:
++			if self.pvs[pv_uuid]['pv_missing'] == '':
++				return False
++		return True
++
+ 	def fetch_vgs(self, vg_name):
+ 		if not vg_name:
+ 			return self.vgs.values()
+@@ -516,6 +522,7 @@ if __name__ == "__main__":
+ 	print("PVS")
+ 	for v in ds.pvs.values():
+ 		pp.pprint(v)
++		print('PV missing is %s' % ds.pv_missing(v['pv_uuid']))
  
-diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
-index 0a5fe73..e377442 100644
---- a/daemons/lvmdbusd/manager.py
-+++ b/daemons/lvmdbusd/manager.py
-@@ -37,8 +37,7 @@ class Manager(AutomatedProperties):
- 
- 		# Check to see if we are already trying to create a PV for an existing
- 		# PV
--		pv = cfg.om.get_object_path_by_uuid_lvm_id(
--			device, device, None, False)
-+		pv = cfg.om.get_object_path_by_uuid_lvm_id(device, device)
- 		if pv:
- 			raise dbus.exceptions.DBusException(
- 				MANAGER_INTERFACE, "PV Already exists!")
-@@ -164,8 +163,7 @@ class Manager(AutomatedProperties):
- 		:param key: The lookup value
- 		:return: Return the object path.  If object not found you will get '/'
- 		"""
--		p = cfg.om.get_object_path_by_uuid_lvm_id(
--			key, key, gen_new=False)
-+		p = cfg.om.get_object_path_by_uuid_lvm_id(key, key)
- 		if p:
- 			return p
- 		return '/'
+ 	print("VGS")
+ 	for v in ds.vgs.values():
 diff --git a/daemons/lvmdbusd/objectmanager.py b/daemons/lvmdbusd/objectmanager.py
-index d55ca99..3284e1c 100644
+index 3284e1c..71149a5 100644
 --- a/daemons/lvmdbusd/objectmanager.py
 +++ b/daemons/lvmdbusd/objectmanager.py
-@@ -209,7 +209,7 @@ class ObjectManager(AutomatedProperties):
- 	def get_object_by_uuid_lvm_id(self, uuid, lvm_id):
- 		with self.rlock:
- 			return self.get_object_by_path(
--				self.get_object_path_by_uuid_lvm_id(uuid, lvm_id, None, False))
-+				self.get_object_path_by_uuid_lvm_id(uuid, lvm_id))
+@@ -320,10 +320,12 @@ class ObjectManager(AutomatedProperties):
+ 				# We have a uuid and a lvm_id we can do sanity checks to ensure
+ 				# that they are consistent
  
- 	def get_object_by_lvm_id(self, lvm_id):
- 		"""
-@@ -289,23 +289,27 @@ class ObjectManager(AutomatedProperties):
- 							path = self._id_to_object_path[int_lvm_id]
- 		return path
+-				# If a PV is missing it's device path is '[unknown]'.  When
+-				# we see the lvm_id as such we will re-assign to None
++				# If a PV is missing it's device path is '[unknown]' or some
++				# other text derivation of unknown.  When we find that a PV is
++				# missing we will clear out the lvm_id as it's likely not unique
++				# and thus not useful and potentially harmful for lookups.
+ 				if path_create == pv_obj_path_generate and \
+-						lvm_id == '[unknown]':
++						cfg.db.pv_missing(uuid):
+ 					lvm_id = None
  
--	def get_object_path_by_uuid_lvm_id(self, uuid, lvm_id, path_create=None,
--										gen_new=True):
-+	def get_object_path_by_uuid_lvm_id(self, uuid, lvm_id, path_create=None):
- 		"""
--		For a given lvm asset return the dbus object registered to it.  If the
--		object is not found and gen_new == True and path_create is a valid
--		function we will create a new path, register it and return it.
--		:param uuid: The uuid for the lvm object
--		:param lvm_id: The lvm name
--		:param path_create: If true create an object path if not found
--		:param gen_new: The function used to create the new path
-+		For a given lvm asset return the dbus object path registered for it.
-+		This method first looks up by uuid and then by lvm_id.  You
-+		can search by just one by setting uuid == lvm_id (uuid or lvm_id).
-+		If the object is not found and path_create is a not None, the
-+		path_create function will be called to create a new object path and
-+		register it with the object manager for the specified uuid & lvm_id.
-+		Note: If path create is not None, uuid and lvm_id cannot be equal
-+		:param uuid: The uuid for the lvm object we are searching for
-+		:param lvm_id: The lvm name (eg. pv device path, vg name, lv full name)
-+		:param path_create: If not None, create the path using this function if
-+				we fail to find the object by uuid or lvm_id.
-+		:returns None if lvm asset not found and path_create == None otherwise
-+				a valid dbus object path
- 		"""
- 		with self.rlock:
- 			assert lvm_id
- 			assert uuid
- 
--			if gen_new:
--				assert path_create
-+			if path_create:
- 				assert uuid != lvm_id
- 
- 			# Check for Manager.LookUpByLvmId query, we cannot
-@@ -335,7 +339,7 @@ class ObjectManager(AutomatedProperties):
- 						self._uuid_verify(path, uuid, lvm_id)
- 					else:
- 						# We have exhausted all lookups, let's create if we can
--						if gen_new:
-+						if path_create:
- 							path = path_create()
- 							self._lookup_add(None, path, lvm_id, uuid)
- 
+ 				# Lets check for the uuid first
 
 
