@@ -1,58 +1,84 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  3 Oct 2016 15:51:09 +0000 (UTC)
-Subject: master - cleanup: simplier assign of cmd vars
-Message-ID: <20161003155109.B7C2E60A70@fedorahosted.org>
+Date: Mon,  3 Oct 2016 15:51:11 +0000 (UTC)
+Subject: master - cleanup: drop assign before use
+Message-ID: <20161003155111.C90D760A70@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cea441f4d1e19f170d9161203ef843c59f3fbf70
-Commit:        cea441f4d1e19f170d9161203ef843c59f3fbf70
-Parent:        00f883a4aa10079bac21c294ce5ed34f11af8ac7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9fe4f2337bfaaa30e647ed1d20be7fb76d598559
+Commit:        9fe4f2337bfaaa30e647ed1d20be7fb76d598559
+Parent:        cea441f4d1e19f170d9161203ef843c59f3fbf70
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 3 13:00:50 2016 +0200
+AuthorDate:    Mon Oct 3 13:04:16 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 3 17:49:55 2016 +0200
 
-cleanup: simplier assign of cmd vars
+cleanup: drop assign before use
 
-Directly assign queried args as they provide matching values for
-a setting.
+Drop unneeded assigns singe vars are set later in code before
+their first use (Coverity).
 ---
- tools/lvmcmdline.c |    8 ++------
- 1 files changed, 2 insertions(+), 6 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |    2 +-
+ lib/cache/lvmcache.c           |    2 +-
+ lib/metadata/raid_manip.c      |    2 +-
+ lib/metadata/thin_manip.c      |    2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 9a4deb7..bd29e25 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1049,23 +1049,19 @@ static int _get_settings(struct cmd_context *cmd)
- 	const char *activation_mode;
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index 36a5cec..ee0c52f 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -1249,8 +1249,8 @@ static int _update_metadata(lvmetad_state *s, const char *arg_name, const char *
+ 	const char *old_vgid = NULL;
+ 	const char *new_vgid = NULL;
+ 	const char *new_metadata_vgid;
++	int new_seq;
+ 	int old_seq = -1;
+-	int new_seq = -1;
+ 	int needs_repair = 0;
+ 	int abort_daemon = 0;
+ 	int retval = 0;
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 5e402f0..a15481f 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -858,7 +858,7 @@ static void _choose_preferred_devs(struct cmd_context *cmd,
+ 				   struct dm_list *add_cache_devs)
+ {
+ 	char uuid[64] __attribute__((aligned(8)));
+-	const char *reason = "none";
++	const char *reason;
+ 	struct dm_list altdevs;
+ 	struct dm_list new_unused;
+ 	struct dev_types *dt = cmd->dev_types;
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index f8a3c46..e87a4e5 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -956,7 +956,7 @@ static int _raid_add_images(struct logical_volume *lv,
+ 			    int commit, int use_existing_area_len)
+ {
+ 	int rebuild_flag_cleared = 0;
+-	struct lv_segment *seg = first_seg(lv);
++	struct lv_segment *seg;
+ 	uint32_t s;
  
- 	cmd->current_settings = cmd->default_settings;
-+	cmd->current_settings.verbose = arg_count(cmd, verbose_ARG);
-+	cmd->current_settings.test = arg_is_set(cmd, test_ARG);
+ 	if (!_raid_add_images_without_commit(lv, new_count, pvs, use_existing_area_len))
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index a02a7e6..e7a2c33 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -472,7 +472,7 @@ static int _check_pool_create(const struct logical_volume *lv)
  
- 	if (arg_is_set(cmd, debug_ARG))
- 		cmd->current_settings.debug = _LOG_FATAL +
- 		    (arg_count(cmd, debug_ARG) - 1);
+ int update_pool_lv(struct logical_volume *lv, int activate)
+ {
+-	int monitored = DMEVENTD_MONITOR_IGNORE;
++	int monitored;
+ 	int ret = 1;
  
--	if (arg_is_set(cmd, verbose_ARG))
--		cmd->current_settings.verbose = arg_count(cmd, verbose_ARG);
--
- 	if (arg_is_set(cmd, quiet_ARG)) {
- 		cmd->current_settings.debug = 0;
- 		cmd->current_settings.verbose = 0;
- 		cmd->current_settings.silent = (arg_count(cmd, quiet_ARG) > 1) ? 1 : 0;
- 	}
- 
--	if (arg_is_set(cmd, test_ARG))
--		cmd->current_settings.test = arg_is_set(cmd, test_ARG);
--
- 	if (arg_is_set(cmd, driverloaded_ARG)) {
- 		cmd->current_settings.activation =
- 		    arg_int_value(cmd, driverloaded_ARG,
+ 	if (!lv_is_thin_pool(lv)) {
 
 
