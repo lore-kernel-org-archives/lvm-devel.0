@@ -1,43 +1,73 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Oct 2020 20:34:05 +0000 (GMT)
-Subject: master - tests: extend area covered by error target
-Message-ID: <20201020203405.B6853385782B@sourceware.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Mon,  3 Oct 2016 13:43:06 +0000 (UTC)
+Subject: master - libdm: convert FIEMAP buffer allocation from stack to pool
+Message-ID: <20161003134306.6D3566108D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d2bdad28d1d1ad337a6c876c235797dbf6907886
-Commit:        d2bdad28d1d1ad337a6c876c235797dbf6907886
-Parent:        b50134dc14296bf9bee96f3b4021ba5b123d54c9
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 6 15:45:19 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 19 16:53:18 2020 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ca00a4d4e1c9b9742918e478b1f71310001b91fa
+Commit:        ca00a4d4e1c9b9742918e478b1f71310001b91fa
+Parent:        49a1c4d4b0f2c5fbc83a1ad4bfde59a366049b2a
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Mon Oct 3 14:42:30 2016 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Mon Oct 3 14:42:30 2016 +0100
 
-tests: extend area covered by error target
+libdm: convert FIEMAP buffer allocation from stack to pool
 
-Since 'BLKZEROOUT' streams out more block at once, at can easily
-zero-out larger set of blocks after 1st. failing one.
-
-So the test is adapted to fully 'hide' swap header under error target.
 ---
- test/shell/lvcreate-signature-wiping.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ libdm/libdm-stats.c |   20 +++++++++++++++-----
+ 1 files changed, 15 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvcreate-signature-wiping.sh b/test/shell/lvcreate-signature-wiping.sh
-index 18d7a2f7e..4893d9a66 100644
---- a/test/shell/lvcreate-signature-wiping.sh
-+++ b/test/shell/lvcreate-signature-wiping.sh
-@@ -43,7 +43,7 @@ test_blkid_ || skip
- lvremove -f $vg/$lv1
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index a033861..dc30051 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -4195,9 +4195,9 @@ static int _stats_add_extent(struct dm_pool *mem, struct fiemap_extent *fm_ext,
+ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
+ 						   uint64_t *count)
+ {
+-	uint64_t buf[STATS_FIE_BUF_LEN];
+-	struct fiemap *fiemap = (struct fiemap *)buf;
+-	struct fiemap_extent *fm_ext = &fiemap->fm_extents[0];
++	uint64_t *buf;
++	struct fiemap *fiemap = NULL;
++	struct fiemap_extent *fm_ext = NULL;
+ 	struct fiemap_extent fm_last = {0};
+ 	struct _extent *extents;
+ 	unsigned long long expected = 0;
+@@ -4208,10 +4208,19 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
+ 	int last = 0;
+ 	int rc;
  
- # Zeroing stops the command when there is a failure (write error in this case)
--aux error_dev "$dev1" "$(get first_extent_sector "$dev1"):2"
-+aux error_dev "$dev1" "$(get first_extent_sector "$dev1"):8"
- not lvcreate -l1 -n $lv1 $vg 2>&1 | tee out
- grep "Failed to initialize" out
- aux enable_dev "$dev1"
+-	memset(buf, 0, sizeof(buf));
++
++	buf = dm_pool_zalloc(mem, STATS_FIE_BUF_LEN);
++	if (!buf) {
++		log_error("Could not allocate memory for FIEMAP buffer.");
++		return NULL;
++	}
++
++	/* initialise pointers into the ioctl buffer. */
++	fiemap = (struct fiemap *) buf;
++	fm_ext = &fiemap->fm_extents[0];
+ 
+ 	/* space available per ioctl */
+-	*count = (sizeof(buf) - sizeof(*fiemap))
++	*count = (STATS_FIE_BUF_LEN - sizeof(*fiemap))
+ 		  / sizeof(struct fiemap_extent);
+ 
+ 	/* grow temporary extent table in the pool */
+@@ -4280,6 +4289,7 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
+ 	return dm_pool_end_object(mem);
+ bad:
+ 	dm_pool_abandon_object(mem);
++	dm_pool_free(mem, buf);
+ 	return NULL;
+ }
+ 
 
 
