@@ -1,75 +1,60 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  3 Oct 2016 15:51:18 +0000 (UTC)
-Subject: master - tests: proper wait usage
-Message-ID: <20161003155118.3674160198@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon,  3 Oct 2016 17:17:44 +0000 (UTC)
+Subject: master - Revert "cleanup: simplier assign of cmd vars"
+Message-ID: <20161003171744.E450561B74@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9e33781d95f2fe7d412b97eb48cb8dddd1c07c61
-Commit:        9e33781d95f2fe7d412b97eb48cb8dddd1c07c61
-Parent:        43662fa081ccced622711aecfa21ef8d158a3dc3
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 29 13:18:18 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 3 17:49:56 2016 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c900cf7ed40e541fa8b2eeeb084c1061382e0b1e
+Commit:        c900cf7ed40e541fa8b2eeeb084c1061382e0b1e
+Parent:        9e33781d95f2fe7d412b97eb48cb8dddd1c07c61
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Oct 3 18:14:17 2016 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Oct 3 18:14:17 2016 +0100
 
-tests: proper wait usage
+Revert "cleanup: simplier assign of cmd vars"
 
-Fix missing wait so we have paired waiting.
-Also 'wait' for precise PID to get 'exit' code.
+This reverts commit cea441f4d1e19f170d9161203ef843c59f3fbf70.
 
-Test for 'error' replacing only with newer snapshot targets.
-The old one will wait for resume.
-
-Note: 'wait -n' is not always available so can't be used..
+cmd->default_values is configurable and this code should not make
+any assumptions about values it holds.
 ---
- test/shell/snapshot-remove-dmsetup.sh |   11 ++++++++++-
- 1 files changed, 10 insertions(+), 1 deletions(-)
+ tools/lvmcmdline.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/snapshot-remove-dmsetup.sh b/test/shell/snapshot-remove-dmsetup.sh
-index 609df05..05bf720 100644
---- a/test/shell/snapshot-remove-dmsetup.sh
-+++ b/test/shell/snapshot-remove-dmsetup.sh
-@@ -42,6 +42,7 @@ dmsetup suspend $vg-$lv1
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index bd29e25..9a4deb7 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1049,19 +1049,23 @@ static int _get_settings(struct cmd_context *cmd)
+ 	const char *activation_mode;
  
- # now this should pass without blocking
- dmsetup suspend --noflush --nolockfs $vg1-snap &
-+DMPID=$!
- #dmsetup suspend $vg1-snap &
+ 	cmd->current_settings = cmd->default_settings;
+-	cmd->current_settings.verbose = arg_count(cmd, verbose_ARG);
+-	cmd->current_settings.test = arg_is_set(cmd, test_ARG);
  
- sleep .5
-@@ -55,20 +56,28 @@ dmsetup resume $vg-$lv1
- # otherwise --noudevsync would be needed
- dmsetup resume $vg1-snap
+ 	if (arg_is_set(cmd, debug_ARG))
+ 		cmd->current_settings.debug = _LOG_FATAL +
+ 		    (arg_count(cmd, debug_ARG) - 1);
  
-+# Expecting success from 'dmsetup'
-+wait $DMPID
++	if (arg_is_set(cmd, verbose_ARG))
++		cmd->current_settings.verbose = arg_count(cmd, verbose_ARG);
 +
+ 	if (arg_is_set(cmd, quiet_ARG)) {
+ 		cmd->current_settings.debug = 0;
+ 		cmd->current_settings.verbose = 0;
+ 		cmd->current_settings.silent = (arg_count(cmd, quiet_ARG) > 1) ? 1 : 0;
+ 	}
  
- # Try how force removal works
- dmsetup suspend $vg-$lv1
- # needs to fail as device is still open
- not dmsetup remove --force $vg1-snap &
-+DMPID=$!
- 
-+# on older snapshot target 'remove' will wait till $lv1 is resumed
-+if aux target_at_least dm-snapshot 1 6 0 ; then
- sleep .5
- 
- dmsetup table $vg1-snap | tee out
- should grep -i error out
-+fi
- 
- dmsetup resume $vg-$lv1
- 
--wait
-+# Expecting success from 'not dmsetup'
-+wait $DMPID
- 
- # check it really is now 'error' target
- dmsetup table $vg1-snap | tee out
++	if (arg_is_set(cmd, test_ARG))
++		cmd->current_settings.test = arg_is_set(cmd, test_ARG);
++
+ 	if (arg_is_set(cmd, driverloaded_ARG)) {
+ 		cmd->current_settings.activation =
+ 		    arg_int_value(cmd, driverloaded_ARG,
 
 
