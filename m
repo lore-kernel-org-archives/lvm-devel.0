@@ -1,51 +1,42 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Oct 2020 20:34:17 +0000 (GMT)
-Subject: master - memlock: allocate at most halve of rlimit stack
-Message-ID: <20201020203417.1BC393861893@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  3 Oct 2016 15:51:13 +0000 (UTC)
+Subject: master - cleanup: drop test for NULL
+Message-ID: <20161003155113.EBB9460A70@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fdec4cd3e6fef08b76b410136156dbd487dad8d0
-Commit:        fdec4cd3e6fef08b76b410136156dbd487dad8d0
-Parent:        bd272e3bcea38a12b2b9789cfb9b7d4a9a3d3574
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=77ffd39dfb4145e444fb9ab2394d807207db8083
+Commit:        77ffd39dfb4145e444fb9ab2394d807207db8083
+Parent:        9fe4f2337bfaaa30e647ed1d20be7fb76d598559
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 20 22:26:44 2020 +0200
+AuthorDate:    Mon Oct 3 14:37:08 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 20 22:26:44 2020 +0200
+CommitterDate: Mon Oct 3 17:49:56 2016 +0200
 
-memlock: allocate at most halve of rlimit stack
+cleanup: drop test for NULL
 
-Touch of stack allocation validated given size with rlimit
-and if the reserved_stack was above rlimit, its been completely
-ignored - now we will always touch stack upto rlimit/2 size.
+Since lp->segtype has been already checked for not-being NULL,
+drop this test so Coverity is not later confused it 'can be a NULL'.
 ---
- lib/mm/memlock.c | 11 +++++++----
- 1 file changed, 7 insertions(+), 4 deletions(-)
+ tools/lvconvert.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index 883795d28..0c05038fe 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -167,10 +167,13 @@ static void _allocate_memory(void)
- 	char *areas[max_areas];
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 3607247..2f38c9d 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4460,7 +4460,8 @@ static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
+ 		}
+ 	}
  
- 	/* Check if we could preallocate requested stack */
--	if ((getrlimit (RLIMIT_STACK, &limit) == 0) &&
--	    ((_size_stack * 2) < limit.rlim_cur) &&
--	    ((stack_mem = alloca(_size_stack))))
--		_touch_memory(stack_mem, _size_stack);
-+	if (getrlimit(RLIMIT_STACK, &limit) == 0) {
-+		limit.rlim_cur /= 2;
-+		if (_size_stack > limit.rlim_cur)
-+			_size_stack = limit.rlim_cur;
-+		if ((stack_mem = alloca(_size_stack)))
-+			_touch_memory(stack_mem, _size_stack);
-+	}
- 	/* FIXME else warn user setting got ignored */
- 
-         /*
+-	if (activation() && lp->segtype && lp->segtype->ops->target_present &&
++	/* lv->segtype can't be NULL */
++	if (activation() && lp->segtype->ops->target_present &&
+ 	    !lp->segtype->ops->target_present(cmd, NULL, &lp->target_attr)) {
+ 		log_error("%s: Required device-mapper target(s) not "
+ 			  "detected in your kernel.", lp->segtype->name);
 
 
