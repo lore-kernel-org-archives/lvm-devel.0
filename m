@@ -1,82 +1,58 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon,  3 Oct 2016 14:15:01 +0000 (UTC)
-Subject: master - libdm: convert FIEMAP buffer allocation from stack to dm_zalloc
-Message-ID: <20161003141501.16BD760FFF@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  3 Oct 2016 15:51:03 +0000 (UTC)
+Subject: master - raid: dmeventd plugin use 64bit arithmetic
+Message-ID: <20161003155103.6C51860A70@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e95a2529748c3047f1af33678c74114d71994e05
-Commit:        e95a2529748c3047f1af33678c74114d71994e05
-Parent:        49a1c4d4b0f2c5fbc83a1ad4bfde59a366049b2a
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Oct 3 14:42:30 2016 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Oct 3 15:14:33 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ee04f1fcfd915af927ad19c3952e211158f4df0d
+Commit:        ee04f1fcfd915af927ad19c3952e211158f4df0d
+Parent:        e95a2529748c3047f1af33678c74114d71994e05
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Oct 3 14:58:23 2016 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Oct 3 17:44:25 2016 +0200
 
-libdm: convert FIEMAP buffer allocation from stack to dm_zalloc
+raid: dmeventd plugin use 64bit arithmetic
 
+Coverity suggested to used 64bit unsigned ints instead of signed 32b int.
+Assuming there is no user of >31legs raid array.
 ---
- libdm/libdm-stats.c |   27 +++++++++++++++++++++------
- 1 files changed, 21 insertions(+), 6 deletions(-)
+ WHATS_NEW_DM                                  |    1 +
+ daemons/dmeventd/plugins/raid/dmeventd_raid.c |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index a033861..3cddae4 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -4195,9 +4195,9 @@ static int _stats_add_extent(struct dm_pool *mem, struct fiemap_extent *fm_ext,
- static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
- 						   uint64_t *count)
- {
--	uint64_t buf[STATS_FIE_BUF_LEN];
--	struct fiemap *fiemap = (struct fiemap *)buf;
--	struct fiemap_extent *fm_ext = &fiemap->fm_extents[0];
-+	uint64_t *buf;
-+	struct fiemap *fiemap = NULL;
-+	struct fiemap_extent *fm_ext = NULL;
- 	struct fiemap_extent fm_last = {0};
- 	struct _extent *extents;
- 	unsigned long long expected = 0;
-@@ -4208,10 +4208,18 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
- 	int last = 0;
- 	int rc;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index ed07307..6186737 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.136 - 
+ ======================================
++  Use unsigned math when checking more then 31 legs of raid.
+   Fix 'dmstats delete' with dmsetup older than v1.02.129
+   Fix stats walk segfault with dmsetup older than v1.02.129
  
--	memset(buf, 0, sizeof(buf));
-+	buf = dm_zalloc(STATS_FIE_BUF_LEN);
-+	if (!buf) {
-+		log_error("Could not allocate memory for FIEMAP buffer.");
-+		return NULL;
-+	}
-+
-+	/* initialise pointers into the ioctl buffer. */
-+	fiemap = (struct fiemap *) buf;
-+	fm_ext = &fiemap->fm_extents[0];
+diff --git a/daemons/dmeventd/plugins/raid/dmeventd_raid.c b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+index bec594a..ee18793 100644
+--- a/daemons/dmeventd/plugins/raid/dmeventd_raid.c
++++ b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+@@ -48,11 +48,11 @@ static int _process_raid_event(struct dso_state *state, char *params, const char
+ 	while ((d = strchr(d, 'D'))) {
+ 		uint32_t dev = (uint32_t)(d - status->dev_health);
  
- 	/* space available per ioctl */
--	*count = (sizeof(buf) - sizeof(*fiemap))
-+	*count = (STATS_FIE_BUF_LEN - sizeof(*fiemap))
- 		  / sizeof(struct fiemap_extent);
+-		if (!(state->raid_devs[dev / 64] & (1 << (dev % 64))))
++		if (!(state->raid_devs[dev / 64] & (UINT64_C(1) << (dev % 64))))
+ 			log_error("Device #%u of %s array, %s, has failed.",
+ 				  dev, status->raid_type, device);
  
- 	/* grow temporary extent table in the pool */
-@@ -4277,9 +4285,16 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
- 
- 	/* return total number of extents */
- 	*count = tot_extents;
--	return dm_pool_end_object(mem);
-+	extents = dm_pool_end_object(mem);
-+
-+	/* free FIEMAP buffer. */
-+	dm_free(buf);
-+
-+	return extents;
-+
- bad:
- 	dm_pool_abandon_object(mem);
-+	dm_free(buf);
- 	return NULL;
- }
- 
+-		state->raid_devs[dev / 64] |= (1 << (dev % 64));
++		state->raid_devs[dev / 64] |= (UINT64_C(1) << (dev % 64));
+ 		d++;
+ 		dead = 1;
+ 	}
 
 
