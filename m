@@ -1,49 +1,38 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Oct 2020 20:34:18 +0000 (GMT)
-Subject: master - tests: check dmevent with bigger reserved_stack
-Message-ID: <20201020203418.3E17D395182E@sourceware.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Wed,  5 Oct 2016 20:57:35 +0000 (UTC)
+Subject: master - lvmdbusd: Add LvCommon.DataPercent
+Message-ID: <20161005205735.527CD60DD4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6be29e1179725bcee19ff263635bb2927ef928bc
-Commit:        6be29e1179725bcee19ff263635bb2927ef928bc
-Parent:        fdec4cd3e6fef08b76b410136156dbd487dad8d0
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 20 22:28:58 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 20 22:28:58 2020 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a8bb8dfb08d38cfda5493ca9d35d1cb3bf2d32bf
+Commit:        a8bb8dfb08d38cfda5493ca9d35d1cb3bf2d32bf
+Parent:        d54ffcfcd12981a8e046aca0a82d529221015b30
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Oct 5 15:51:48 2016 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Oct 5 15:55:41 2016 -0500
 
-tests: check dmevent with bigger reserved_stack
+lvmdbusd: Add LvCommon.DataPercent
 
-Check dmeventd remains working when reserved_stack
-is above 300KiB.
 ---
- test/shell/lvextend-thin-data-dmeventd.sh | 9 ++++++---
- 1 file changed, 6 insertions(+), 3 deletions(-)
+ daemons/lvmdbusd/lv.py |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-data-dmeventd.sh b/test/shell/lvextend-thin-data-dmeventd.sh
-index 7dfec4acc..7d37f16b3 100644
---- a/test/shell/lvextend-thin-data-dmeventd.sh
-+++ b/test/shell/lvextend-thin-data-dmeventd.sh
-@@ -30,10 +30,13 @@ test_equal_() {
- 
- aux have_thin 1 10 0 || skip
- 
--aux prepare_dmeventd
--
-+# set reserved stack size above dmeventd 300KiB stack
-+# ATM such value should be simply ignored
- aux lvmconf "activation/thin_pool_autoextend_percent = 10" \
--	    "activation/thin_pool_autoextend_threshold = 75"
-+	    "activation/thin_pool_autoextend_threshold = 75" \
-+	    "activation/reserved_stack = 512"
-+
-+aux prepare_dmeventd
- 
- aux prepare_pvs 3 256
- get_devs
+diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
+index c2312b7..c356799 100644
+--- a/daemons/lvmdbusd/lv.py
++++ b/daemons/lvmdbusd/lv.py
+@@ -232,6 +232,7 @@ class LvState(State):
+ @utils.dbus_property(LV_COMMON_INTERFACE, 'Attr', 's')
+ @utils.dbus_property(LV_COMMON_INTERFACE, 'DataPercent', 'u')
+ @utils.dbus_property(LV_COMMON_INTERFACE, 'SnapPercent', 'u')
++ at utils.dbus_property(LV_COMMON_INTERFACE, 'DataPercent', 'u')
+ @utils.dbus_property(LV_COMMON_INTERFACE, 'MetaDataPercent', 'u')
+ @utils.dbus_property(LV_COMMON_INTERFACE, 'CopyPercent', 'u')
+ @utils.dbus_property(LV_COMMON_INTERFACE, 'SyncPercent', 'u')
 
 
