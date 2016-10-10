@@ -1,71 +1,87 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 10 Oct 2016 21:35:14 +0000 (UTC)
-Subject: master - lvmdbusd: Ensure tmp dir gets cleaned up
-Message-ID: <20161010213514.8149E60640@fedorahosted.org>
+Date: Mon, 10 Oct 2016 21:35:16 +0000 (UTC)
+Subject: master - lvmdbustest.py: Ensure we exit non-zero on fail
+Message-ID: <20161010213516.933D260640@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f0195ec1ec1113695abdb1ada82dc138bc7488b
-Commit:        9f0195ec1ec1113695abdb1ada82dc138bc7488b
-Parent:        2e941beb446e71a9278e38eb4d69e19dc4b284f8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb4e26dcb3aa49128d76eb61495c2ee165974ad9
+Commit:        cb4e26dcb3aa49128d76eb61495c2ee165974ad9
+Parent:        9f0195ec1ec1113695abdb1ada82dc138bc7488b
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Oct 7 13:46:59 2016 -0500
+AuthorDate:    Fri Oct 7 14:55:36 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Mon Oct 10 16:31:00 2016 -0500
 
-lvmdbusd: Ensure tmp dir gets cleaned up
+lvmdbustest.py: Ensure we exit non-zero on fail
 
-Regardless of the outcome of starting up the lvm shell process, lets
-ensure we clean up the temp directory and pipe.
+If you run multiple runs of unittest.main, unless you don't pass exit=true
+the test case always ends with a 0 exit code.  Add ability to store the
+result of each invocation of the test and exit with a non-zero exit code
+if anyone of them fail.
 ---
- daemons/lvmdbusd/lvm_shell_proxy.py |   32 ++++++++++++++++++--------------
- 1 files changed, 18 insertions(+), 14 deletions(-)
+ test/dbus/lvmdbustest.py |   29 ++++++++++++++++++++++++-----
+ 1 files changed, 24 insertions(+), 5 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
-index e615488..6e6d52a 100755
---- a/daemons/lvmdbusd/lvm_shell_proxy.py
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py
-@@ -129,20 +129,24 @@ class LVMShellProxy(object):
- 			[LVM_CMD + " 32>%s" % tmp_file],
- 			stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=local_env,
- 			stderr=subprocess.PIPE, close_fds=True, shell=True)
--		flags = fcntl(self.lvm_shell.stdout, F_GETFL)
--		fcntl(self.lvm_shell.stdout, F_SETFL, flags | os.O_NONBLOCK)
--		flags = fcntl(self.lvm_shell.stderr, F_GETFL)
--		fcntl(self.lvm_shell.stderr, F_SETFL, flags | os.O_NONBLOCK)
--
--		# wait for the first prompt
--		errors = self._read_until_prompt()[2]
--		if errors and len(errors):
--			raise RuntimeError(errors)
--
--		# These will get deleted when the FD count goes to zero so we can be
--		# sure to clean up correctly no matter how we finish
--		os.unlink(tmp_file)
--		os.rmdir(tmp_dir)
-+
-+		try:
-+			flags = fcntl(self.lvm_shell.stdout, F_GETFL)
-+			fcntl(self.lvm_shell.stdout, F_SETFL, flags | os.O_NONBLOCK)
-+			flags = fcntl(self.lvm_shell.stderr, F_GETFL)
-+			fcntl(self.lvm_shell.stderr, F_SETFL, flags | os.O_NONBLOCK)
-+
-+			# wait for the first prompt
-+			errors = self._read_until_prompt()[2]
-+			if errors and len(errors):
-+				raise RuntimeError(errors)
-+		except:
-+			raise
-+		finally:
-+			# These will get deleted when the FD count goes to zero so we can be
-+			# sure to clean up correctly no matter how we finish
-+			os.unlink(tmp_file)
-+			os.rmdir(tmp_dir)
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 819d096..e9b27a0 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -1294,8 +1294,25 @@ class TestDbusService(unittest.TestCase):
+ 		self.assertTrue(tag in vg_proxy.Vg.Tags, "%s not in %s" %
+ 						(tag, str(vg_proxy.Vg.Tags)))
  
- 	def get_error_msg(self):
- 		# We got an error, lets go fetch the error message
++class AggregateResults(object):
++
++	def __init__(self):
++		self.no_errors = True
++
++	def register_result(self, result):
++		if not result.result.wasSuccessful():
++			self.no_errors = False
++
++	def exit_run(self):
++		if self.no_errors:
++			sys.exit(0)
++		sys.exit(1)
++
+ 
+ if __name__ == '__main__':
++
++	r = AggregateResults()
++
+ 	# Test forking & exec new each time
+ 	test_shell = os.getenv('LVM_DBUS_TEST_SHELL', 1)
+ 
+@@ -1304,19 +1321,21 @@ if __name__ == '__main__':
+ 
+ 	if int(test_shell) == 0:
+ 		print('\n Shortened fork & exec test ***\n')
+-		unittest.main(exit=True)
++		r.register_result(unittest.main(exit=False))
+ 	else:
+ 		print('\n *** Testing fork & exec *** \n')
+-		unittest.main(exit=False)
++		r.register_result(unittest.main(exit=False))
+ 		g_tmo = 15
+-		unittest.main(exit=False)
++		r.register_result(unittest.main(exit=False))
+ 		# Test lvm shell
+ 		print('\n *** Testing lvm shell *** \n')
+ 		if set_execution(True):
+ 			g_tmo = 0
+-			unittest.main(exit=False)
++			r.register_result(unittest.main(exit=False))
+ 			g_tmo = 15
+-			unittest.main()
++			r.register_result(unittest.main(exit=False))
+ 		else:
+ 			print("WARNING: Unable to dynamically configure "
+ 				"service to use lvm shell!")
++
++	r.exit_run()
 
 
