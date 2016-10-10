@@ -1,39 +1,56 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Oct 2020 21:25:05 +0000 (GMT)
-Subject: stable-2.02 - lv_manip: add space into message
-Message-ID: <20201020212505.5DE983857C7D@sourceware.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Mon, 10 Oct 2016 21:35:20 +0000 (UTC)
+Subject: master - lvmdbustest.py: Denote failure if set_execution fails
+Message-ID: <20161010213520.D2A2960C40@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8af590b1bbb5796d20c32d41b6e4dcb7d2441fb9
-Commit:        8af590b1bbb5796d20c32d41b6e4dcb7d2441fb9
-Parent:        aa4f1f117a355c7046a348fd217fdfab20242ae6
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 19 10:28:06 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 20 22:41:34 2020 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e45285b403bdcbf744f21eba6d6aa3a70628e71
+Commit:        3e45285b403bdcbf744f21eba6d6aa3a70628e71
+Parent:        0c51f369a49f489d082c5439967eb6ca49e9a7fd
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Fri Oct 7 15:30:18 2016 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Mon Oct 10 16:31:00 2016 -0500
 
-lv_manip: add space into message
+lvmdbustest.py: Denote failure if set_execution fails
 
 ---
- lib/metadata/lv_manip.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/dbus/lvmdbustest.py |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 4b1b4de61..42d18abb8 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -904,7 +904,7 @@ static uint32_t _round_to_stripe_boundary(struct volume_group *vg, uint32_t exte
- 	/* Round up extents to stripe divisible amount */
- 	if ((size_rest = extents % stripes)) {
- 		new_extents += extend ? stripes - size_rest : -size_rest;
--		log_print_unless_silent("Rounding size %s (%u extents) %s to stripe boundary size %s(%u extents).",
-+		log_print_unless_silent("Rounding size %s (%u extents) %s to stripe boundary size %s (%u extents).",
- 					display_size(vg->cmd, (uint64_t) extents * vg->extent_size), extents,
- 					new_extents < extents ? "down" : "up",
- 					display_size(vg->cmd, (uint64_t) new_extents * vg->extent_size), new_extents);
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index ef2c07a..37ce1d4 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -1298,6 +1298,7 @@ class TestDbusService(unittest.TestCase):
+ 		self.assertTrue(tag in vg_proxy.Vg.Tags, "%s not in %s" %
+ 						(tag, str(vg_proxy.Vg.Tags)))
+ 
++
+ class AggregateResults(object):
+ 
+ 	def __init__(self):
+@@ -1307,6 +1308,9 @@ class AggregateResults(object):
+ 		if not result.result.wasSuccessful():
+ 			self.no_errors = False
+ 
++	def register_fail(self):
++		self.no_errors = False
++
+ 	def exit_run(self):
+ 		if self.no_errors:
+ 			sys.exit(0)
+@@ -1339,6 +1343,7 @@ if __name__ == '__main__':
+ 			g_tmo = 15
+ 			r.register_result(unittest.main(exit=False))
+ 		else:
++			r.register_fail()
+ 			std_err_print("ERROR: Unable to dynamically configure "
+ 				"service to use lvm shell!")
+ 
 
 
