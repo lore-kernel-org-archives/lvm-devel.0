@@ -1,47 +1,50 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 10 Oct 2016 21:35:22 +0000 (UTC)
-Subject: master - lvmdbustest.py: Skip test_job_handling_timer on loopback
-Message-ID: <20161010213522.F2E2160C40@fedorahosted.org>
+Date: Mon, 10 Oct 2016 21:35:25 +0000 (UTC)
+Subject: master - lvmdbustest.py: Add profile and path for lvm binary
+Message-ID: <20161010213525.17C1760C40@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=be06fa695ea9833bcc25c09a17c6396cca07be31
-Commit:        be06fa695ea9833bcc25c09a17c6396cca07be31
-Parent:        3e45285b403bdcbf744f21eba6d6aa3a70628e71
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20e74313cd8abaa691fb4f1015a84b34171aa08a
+Commit:        20e74313cd8abaa691fb4f1015a84b34171aa08a
+Parent:        be06fa695ea9833bcc25c09a17c6396cca07be31
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Oct 7 18:18:36 2016 -0500
+AuthorDate:    Mon Oct 10 16:26:38 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Mon Oct 10 16:31:00 2016 -0500
+CommitterDate: Mon Oct 10 16:33:42 2016 -0500
 
-lvmdbustest.py: Skip test_job_handling_timer on loopback
+lvmdbustest.py: Add profile and path for lvm binary
 
-This test never passes on loop back, so we will skip unless the
-pv devices are real devices which contain `/dev/sd`.
-
-We always fail because we need lvm to run slow to get a timer to
-pop, and loopback are too fast.
 ---
- test/dbus/lvmdbustest.py |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ test/api/dbustest.sh |   14 ++++++++++++++
+ 1 files changed, 14 insertions(+), 0 deletions(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 37ce1d4..d222264 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -807,6 +807,11 @@ class TestDbusService(unittest.TestCase):
+diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
+index 8741eb9..16dc186 100644
+--- a/test/api/dbustest.sh
++++ b/test/api/dbustest.sh
+@@ -18,5 +18,19 @@ SKIP_WITH_CLVMD=1
  
- 		yes = False
+ aux prepare_pvs 6
  
-+		for pp in self.objs[PV_INT]:
-+			if '/dev/sd' not in pp.Pv.Name:
-+				std_err_print("Skipping test_job_handling_timer on loopback")
-+				return
++# We need the lvmdbusd.profile for the daemon to utilize JSON
++# output
++mkdir -p $TESTDIR/etc/profile/
++cp -v $TESTOLDPWD/../conf/lvmdbusd.profile $TESTDIR/etc/profile/.
 +
- 		# This may not pass
- 		for i in [48, 64, 128]:
- 			yes = self._test_expired_timer(i)
++# Need to set this up so that the lvmdbusd service knows which
++# binary to be running, which should be the one we just built
++export LVM_BINARY=$TESTOLDPWD/../tools/lvm
++
+ aux prepare_lvmdbusd
++
++# Lets limit testing until the lvm SIGABRT is fixed as
++# we are running into that when using the lvm shell
++export LVM_DBUS_TEST_SHELL=0
++
+ $test_data_dir/dbus/lvmdbustest.py -v
 
 
