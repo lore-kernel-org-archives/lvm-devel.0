@@ -1,47 +1,49 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Oct 2020 21:25:06 +0000 (GMT)
-Subject: stable-2.02 - man: more precise UNIT
-Message-ID: <20201020212506.7D699385DC37@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 11 Oct 2016 11:39:32 +0000 (UTC)
+Subject: master - cleanup: lvconvert drop unused variable
+Message-ID: <20161011113932.4F0CC61152@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=50621533ddb143a41d2dd5f1bd85f8d45c6581fe
-Commit:        50621533ddb143a41d2dd5f1bd85f8d45c6581fe
-Parent:        8af590b1bbb5796d20c32d41b6e4dcb7d2441fb9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6f576483a87aac67037e25914990a77e76c81423
+Commit:        6f576483a87aac67037e25914990a77e76c81423
+Parent:        c8b6c130158e1cc1a639afc21f5fd6306286fdb3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 19 12:32:46 2020 +0200
+AuthorDate:    Tue Oct 11 11:52:07 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 20 22:41:34 2020 +0200
+CommitterDate: Tue Oct 11 13:37:43 2016 +0200
 
-man: more precise UNIT
+cleanup: lvconvert drop unused variable
 
-Since 'kilobytes' could be seen in 2 way - SI as '1000',
-while all programmers sees it as '1024' - switch to
-commonly acceptted  KiB, MiB....
-
-Resolves RHBZ 1496255.
 ---
- tools/command.c | 5 ++---
- 1 file changed, 2 insertions(+), 3 deletions(-)
+ tools/lvconvert.c |    5 +----
+ 1 files changed, 1 insertions(+), 4 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index acb79c9c1..fcb833fa2 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -3233,9 +3233,8 @@ static void _print_man_all_positions_desc(struct command_name *cname)
- 	       "capitalization, e.g. 'k' and 'K' both refer to 1024.\n"
- 	       "The default input unit is specified by letter, followed by |UNIT.\n"
- 	       "UNIT represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n"
--	       "b|B is bytes, s|S is sectors of 512 bytes, k|K is kilobytes,\n"
--	       "m|M is megabytes, g|G is gigabytes, t|T is terabytes,\n"
--	       "p|P is petabytes, e|E is exabytes.\n"
-+	       "b|B is bytes, s|S is sectors of 512 bytes, k|K is KiB,\n"
-+	       "m|M is MiB, g|G is GiB, t|T is TiB, p|P is PiB, e|E is EiB.\n"
- 	       "(This should not be confused with the output control --units, where\n"
- 	       "capital letters mean multiple of 1000.)\n");
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 161062d..78cd7de 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -50,8 +50,6 @@ struct lvconvert_params {
+ 	int splitsnapshot;
+ 	int thin;
+ 	int uncache;
+-	int other_conversion;	/* Everything else */
+-
+ 	int corelog;		/* Equivalent to --mirrorlog core */
+ 	int mirrorlog;		/* Only one of corelog and mirrorlog may be set */
  
+@@ -644,8 +642,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 	    lp->cache + lp->thin + lp->keep_mimages + lp->snapshot + lp->replace + lp->repair > 1) {
+ 		log_error(INTERNAL_ERROR "Unexpected combination of incompatible options selected.");
+ 		return 0;
+-	} else
+-		lp->other_conversion = 1;
++	}
+ 
+ 	/*
+ 	 * Final checking of each case:
 
 
