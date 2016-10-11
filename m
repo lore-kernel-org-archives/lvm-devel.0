@@ -1,60 +1,145 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 11 Oct 2016 11:39:26 +0000 (UTC)
-Subject: master - lvconvert: use _read_conversion_type
-Message-ID: <20161011113926.0113C6027B@fedorahosted.org>
+Date: Tue, 11 Oct 2016 11:39:28 +0000 (UTC)
+Subject: master - cleanup: reorder code
+Message-ID: <20161011113928.13096602BB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=706d3ddf901584d182b5bab49f3d7d4b3476e807
-Commit:        706d3ddf901584d182b5bab49f3d7d4b3476e807
-Parent:        1186cf2ad4bbfef07ead644dc689745d10709789
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f4ae43934a02c5cb90845758804fc278f5fb0edb
+Commit:        f4ae43934a02c5cb90845758804fc278f5fb0edb
+Parent:        706d3ddf901584d182b5bab49f3d7d4b3476e807
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 11 13:19:12 2016 +0200
+AuthorDate:    Tue Oct 11 11:56:15 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 11 13:36:51 2016 +0200
+CommitterDate: Tue Oct 11 13:37:43 2016 +0200
 
-lvconvert: use _read_conversion_type
+cleanup: reorder code
 
-Code reodering and using same pattern for reading and validating arg
-(--type in this case).
+Move some arg test into a single place with sort of alphabetic order
+when possible to make reading easier.
 ---
- tools/lvconvert.c |   13 ++++++++-----
- 1 files changed, 8 insertions(+), 5 deletions(-)
+ tools/lvconvert.c |   63 +++++++++++++++++++++++++++-------------------------
+ 1 files changed, 33 insertions(+), 30 deletions(-)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index a5ef234..05bf51a 100644
+index 05bf51a..499ff1c 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -314,9 +314,14 @@ static int _striped_type_requested(const char *type_str)
- 	return (!strcmp(type_str, SEG_TYPE_NAME_STRIPED) || _linear_type_requested(type_str));
- }
- 
--static int _check_conversion_type(struct cmd_context *cmd, const char *type_str)
-+static int _read_conversion_type(struct cmd_context *cmd,
-+				 struct lvconvert_params *lp)
- {
--	if (!type_str || !*type_str)
-+
-+	const char *type_str = arg_str_value(cmd, type_ARG, "");
-+
-+	lp->type_str =  type_str;
-+	if (!lp->type_str[0])
- 		return 1;
- 
- 	/* FIXME: Check thin-pool and thin more thoroughly! */
-@@ -443,9 +448,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 	int region_size;
- 	int pagesize = lvm_getpagesize();
- 
--	lp->type_str = arg_str_value(cmd, type_ARG, "");
--
--	if (*lp->type_str && !_check_conversion_type(cmd, lp->type_str))
-+	if (!_read_conversion_type(cmd, lp))
+@@ -451,6 +451,30 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 	if (!_read_conversion_type(cmd, lp))
  		return_0;
  
++	if (!arg_is_set(cmd, background_ARG))
++		lp->wait_completion = 1;
++
++	if (arg_is_set(cmd, corelog_ARG))
++		lp->corelog = 1;
++
++	if (arg_is_set(cmd, mirrorlog_ARG)) {
++		if (lp->corelog) {
++			log_error("--mirrorlog and --corelog are incompatible.");
++			return 0;
++		}
++		lp->mirrorlog = 1;
++	}
++
++	if (arg_is_set(cmd, merge_ARG)) {
++		if (arg_outside_list_is_set(cmd, "cannot be used with --merge",
++					    merge_ARG,
++					    background_ARG, interval_ARG,
++					    force_ARG, noudevsync_ARG, test_ARG,
++					    -1))
++			return_0;
++		lp->merge = 1;
++	}
++
  	/* If --repair, check for incompatible args. */
+ 	if (arg_is_set(cmd, repair_ARG)) {
+ 		if (arg_outside_list_is_set(cmd, "cannot be used with --repair",
+@@ -462,15 +486,8 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 		lp->repair = 1;
+ 	}
+ 
+-	if (arg_is_set(cmd, mirrorlog_ARG))
+-		lp->mirrorlog = 1;
+-	if (arg_is_set(cmd, corelog_ARG))
+-		lp->corelog = 1;
+-
+-	if (lp->mirrorlog && lp->corelog) {
+-		log_error("--mirrorlog and --corelog are incompatible.");
+-		return 0;
+-	}
++	if (arg_is_set(cmd, replace_ARG))
++		lp->replace = 1;
+ 
+ 	if (arg_is_set(cmd, split_ARG)) {
+ 		if (arg_outside_list_is_set(cmd, "cannot be used with --split",
+@@ -500,6 +517,9 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 		lp->splitsnapshot = 1;
+ 	}
+ 
++	if (arg_is_set(cmd, trackchanges_ARG))
++		lp->track_changes = 1;
++
+ 	if (arg_is_set(cmd, uncache_ARG)) {
+ 		if (arg_outside_list_is_set(cmd, "cannot be used with --uncache",
+ 					    uncache_ARG,
+@@ -538,11 +558,8 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 	if (!_read_pool_params(cmd, &argc, &argv, lp))
+ 		return_0;
+ 
+-	if (!arg_is_set(cmd, background_ARG))
+-		lp->wait_completion = 1;
+-
+ 	if (_snapshot_type_requested(cmd, lp->type_str)) {
+-		if (arg_is_set(cmd, merge_ARG)) {
++		if (lp->merge) {
+ 			log_error("--snapshot and --merge are mutually exclusive.");
+ 			return 0;
+ 		}
+@@ -550,9 +567,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 		lp->snapshot = 1;
+ 	}
+ 
+-	if (arg_is_set(cmd, trackchanges_ARG))
+-		lp->track_changes = 1;
+-
+ 	if (lp->split) {
+ 		lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL);
+ 
+@@ -589,12 +603,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 		}
+ 	}
+ 
+-	if (arg_is_set(cmd, merge_ARG))
+-		lp->merge = 1;
+-
+-	if (arg_is_set(cmd, replace_ARG))
+-		lp->replace = 1;
+-
+ 	/* If no other case was identified, then use of --stripes means --type striped */
+ 	if (!arg_is_set(cmd, type_ARG) && !*lp->type_str && !lp->merge && !lp->splitsnapshot &&
+ 	    !lp->splitcache && !lp->split && !lp->snapshot && !lp->uncache && !lp->cache && !lp->thin &&
+@@ -655,14 +663,9 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 	 *   --type mirror|raid  lp->mirrorlog lp->corelog
+ 	 *   --type raid0|striped
+ 	 */
+-	if (lp->merge) {	/* Snapshot or mirror merge */
+-		if (arg_outside_list_is_set(cmd, "cannot be used with --merge",
+-					    merge_ARG,
+-					    background_ARG, interval_ARG,
+-					    force_ARG, noudevsync_ARG, test_ARG,
+-					    -1))
+-			return_0;
+-	} else if (lp->splitsnapshot)	/* Destroy snapshot retaining cow as separate LV */
++	if (lp->merge)			/* Snapshot or mirror merge */
++                ;
++	else if (lp->splitsnapshot)	/* Destroy snapshot retaining cow as separate LV */
+ 		;
+ 	else if (lp->splitcache)
+ 		;
 
 
