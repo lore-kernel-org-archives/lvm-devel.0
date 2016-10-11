@@ -1,61 +1,45 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue, 11 Oct 2016 18:18:45 +0000 (UTC)
-Subject: master - lvmdbusd: Disable lvm abort on too much log output
-Message-ID: <20161011181845.507C660DFC@fedorahosted.org>
+Date: Tue, 11 Oct 2016 18:18:47 +0000 (UTC)
+Subject: master - lvmdbusd: Remove log ouput when ec=0 & stderr != 0 bytes
+Message-ID: <20161011181847.659B660DFC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2830f722882d064a6ffbe143f5a580364bcba2e6
-Commit:        2830f722882d064a6ffbe143f5a580364bcba2e6
-Parent:        fe437a6e7d9367eecd977d2504db82469016c780
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4fab8339207fd8846e04e775897a7ba7a3cd074c
+Commit:        4fab8339207fd8846e04e775897a7ba7a3cd074c
+Parent:        2830f722882d064a6ffbe143f5a580364bcba2e6
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Oct 11 09:36:47 2016 -0500
+AuthorDate:    Tue Oct 11 09:42:18 2016 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Tue Oct 11 13:16:57 2016 -0500
 
-lvmdbusd: Disable lvm abort on too much log output
+lvmdbusd: Remove log ouput when ec=0 & stderr != 0 bytes
 
-The commit:
-https://git.fedorahosted.org/cgit/lvm2.git/commit/?id=34c55d98eefd88f85476c0f62f0649c706bde6f0
-
-introduced an abort if lvm logs too much.  In the case of utilizing
-lvm shell this is a pretty normal occurance, so we will disable
-when we use lvm shell.
+lvm likes to log to stderr virtually all the time, this isn't
+helpful.
 ---
- daemons/lvmdbusd/lvm_shell_proxy.py |    4 ++++
- test/api/dbustest.sh                |    4 ----
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |    6 ------
+ 1 files changed, 0 insertions(+), 6 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
-index 6e6d52a..9edf336 100755
---- a/daemons/lvmdbusd/lvm_shell_proxy.py
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py
-@@ -121,6 +121,10 @@ class LVMShellProxy(object):
- 		local_env["LVM_REPORT_FD"] = "32"
- 		local_env["LVM_COMMAND_PROFILE"] = "lvmdbusd"
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 4bdbee5..fa34a7a 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -108,12 +108,6 @@ def call_lvm(command, debug=False):
+ 	if debug or process.returncode != 0:
+ 		_debug_c(command, process.returncode, (stdout_text, stderr_text))
  
-+		# Disable the abort logic if lvm logs too much, which easily happens
-+		# when utilizing the lvm shell.
-+		local_env["LVM_LOG_FILE_MAX_LINES"] = "0"
-+
- 		flags = fcntl(self.report_r, F_GETFL)
- 		fcntl(self.report_r, F_SETFL, flags | os.O_NONBLOCK)
- 
-diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
-index 16dc186..5ffe967 100644
---- a/test/api/dbustest.sh
-+++ b/test/api/dbustest.sh
-@@ -29,8 +29,4 @@ export LVM_BINARY=$TESTOLDPWD/../tools/lvm
- 
- aux prepare_lvmdbusd
- 
--# Lets limit testing until the lvm SIGABRT is fixed as
--# we are running into that when using the lvm shell
--export LVM_DBUS_TEST_SHELL=0
+-	if process.returncode == 0:
+-		if cfg.args and cfg.args.debug and out[1] and len(out[1]) and \
+-				'help' not in command:
+-			log_error('WARNING: lvm is out-putting text to STDERR on success!')
+-			_debug_c(command, process.returncode, (stdout_text, stderr_text))
 -
- $test_data_dir/dbus/lvmdbustest.py -v
+ 	return process.returncode, stdout_text, stderr_text
+ 
+ # The actual method which gets called to invoke the lvm command, can vary
 
 
