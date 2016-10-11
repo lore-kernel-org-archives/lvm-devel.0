@@ -1,49 +1,80 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 11 Oct 2016 11:39:32 +0000 (UTC)
-Subject: master - cleanup: lvconvert drop unused variable
-Message-ID: <20161011113932.4F0CC61152@fedorahosted.org>
+Date: Tue, 11 Oct 2016 11:39:34 +0000 (UTC)
+Subject: master - cleanup: indent
+Message-ID: <20161011113934.6D1DE61152@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6f576483a87aac67037e25914990a77e76c81423
-Commit:        6f576483a87aac67037e25914990a77e76c81423
-Parent:        c8b6c130158e1cc1a639afc21f5fd6306286fdb3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8f300691603c57388a4fa092f18f121d7504e3c4
+Commit:        8f300691603c57388a4fa092f18f121d7504e3c4
+Parent:        6f576483a87aac67037e25914990a77e76c81423
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 11 11:52:07 2016 +0200
+AuthorDate:    Tue Oct 11 11:55:19 2016 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Oct 11 13:37:43 2016 +0200
 
-cleanup: lvconvert drop unused variable
+cleanup: indent
 
 ---
- tools/lvconvert.c |    5 +----
- 1 files changed, 1 insertions(+), 4 deletions(-)
+ tools/lvconvert.c |   10 ++++------
+ 1 files changed, 4 insertions(+), 6 deletions(-)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 161062d..78cd7de 100644
+index 78cd7de..48e8cc8 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -50,8 +50,6 @@ struct lvconvert_params {
- 	int splitsnapshot;
- 	int thin;
- 	int uncache;
--	int other_conversion;	/* Everything else */
+@@ -330,6 +330,7 @@ static int _read_conversion_type(struct cmd_context *cmd,
+ 		return 1;
+ 
+ 	log_error("Conversion using --type %s is not supported.", type_str);
++
+ 	return 0;
+ }
+ 
+@@ -561,7 +562,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 			log_error("--snapshot and --merge are mutually exclusive.");
+ 			return 0;
+ 		}
 -
- 	int corelog;		/* Equivalent to --mirrorlog core */
- 	int mirrorlog;		/* Only one of corelog and mirrorlog may be set */
+ 		lp->snapshot = 1;
+ 	}
  
-@@ -644,8 +642,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 	    lp->cache + lp->thin + lp->keep_mimages + lp->snapshot + lp->replace + lp->repair > 1) {
- 		log_error(INTERNAL_ERROR "Unexpected combination of incompatible options selected.");
- 		return 0;
--	} else
--		lp->other_conversion = 1;
-+	}
+@@ -627,9 +627,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
+ 	}
  
- 	/*
- 	 * Final checking of each case:
+ 	if (arg_is_set(cmd, mirrors_ARG)) {
+-		/*
+-		 * --splitmirrors is the mechanism for detaching and keeping a mimage
+-		 */
++		/* --splitmirrors is the mechanism for detaching and keeping a mimage */
+ 		lp->mirrors_supplied = 1;
+ 		lp->mirrors = arg_uint_value(cmd, mirrors_ARG, 0);
+ 		lp->mirrors_sign = arg_sign_value(cmd, mirrors_ARG, SIGN_NONE);
+@@ -4272,6 +4270,7 @@ static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
+ 			 struct lvconvert_params *lp)
+ {
+ 	/* Permitted convert options on visible or hidden RaidLVs */
++	/* The --thinpool alternative for --type thin-pool is not preferred, so not shown. */
+ 	const char *permitted_options = lv_is_visible(lv) ?
+ 	  	"  --mirrors\n"
+ 	  	"  --splitmirrors\n"
+@@ -4347,13 +4346,12 @@ static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
+ 		if (segtype_is_cache_pool(lp->segtype) ||
+ 		    arg_is_set(cmd, cachepool_ARG))
+ 			return _convert_raid_cache_pool(cmd, lv, lp);
+-
+-		/* The --thinpool alternative for --type thin-pool is not preferred, so not shown. */
+ 	}
+ 
+ out:
+ 	log_error("Operation not permitted on raid LV %s.", display_lvname(lv));
+ 	log_error("Operations permitted on a raid LV are:\n%s", permitted_options);
++
+ 	return 0;
+ }
+ 
 
 
