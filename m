@@ -1,73 +1,55 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Nov 2016 16:00:04 +0000 (UTC)
-Subject: master - tests: update make targets
-Message-ID: <20161111160004.7052A601A6@fedorahosted.org>
+Date: Fri, 11 Nov 2016 16:00:06 +0000 (UTC)
+Subject: master - tests: avoid using polling
+Message-ID: <20161111160006.C7526601A6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a2250f9cea300598fff8dbfee8700ac7aa81f89
-Commit:        4a2250f9cea300598fff8dbfee8700ac7aa81f89
-Parent:        d8fc4d093ee125e3667046b892c14e4a920a8da0
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=de3d054f7803bad12e395cb0bd099c0c9c396668
+Commit:        de3d054f7803bad12e395cb0bd099c0c9c396668
+Parent:        4a2250f9cea300598fff8dbfee8700ac7aa81f89
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 17 11:13:43 2016 +0200
+AuthorDate:    Fri Nov 11 15:56:11 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 11 16:58:20 2016 +0100
 
-tests: update make targets
+tests: avoid using polling
 
-Add  new targets:
-
-make check_lvmpolld
-make check_cluster_lvmpolld
-make check_lvmetad_lvmpolld
-make check_all_lvmpolld
-
-So check_lvmetad runs only base lvmetad test - to much
-logic of remaining targets.
-
-Previous behavior is available via  check_all_lvmpolld.
 ---
- test/Makefile.in |   18 ++++++++++++++++++
- 1 files changed, 18 insertions(+), 0 deletions(-)
+ test/shell/snapshot-merge-stack.sh |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 94b3105..bc501d1 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -77,6 +77,9 @@ help:
- 	@echo "  check_cluster		Run tests with cluster daemon."
- 	@echo "  check_lvmetad		Run tests with lvmetad daemon."
- 	@echo "  check_lvmpolld         Run tests with lvmpolld daemon."
-+	@echo "  check_cluster_lvmpolld Run tests with clvmd and lvmpolld daemon."
-+	@echo "  check_lvmetad_lvmpolld Run tests with lvmetad and lvmpolld daemon."
-+	@echo "  check_all_lvmpolld     Run all tests with lvmpolld daemon."
- 	@echo "  check_lvmlockd_sanlock Run tests with lvmlockd and sanlock."
- 	@echo "  check_lvmlockd_dlm     Run tests with lvmlockd and dlm."
- 	@echo "  check_lvmlockd_test    Run tests with lvmlockd --test."
-@@ -146,6 +149,21 @@ ifeq ("@BUILD_LVMPOLLD@", "yes")
- check_lvmpolld: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir results \
-+		--flavours ndev-lvmpolld --only $(T) --skip $(S)
-+
-+check_cluster_lvmpolld: .tests-stamp
-+	VERBOSE=$(VERBOSE) ./lib/runner \
-+		--testdir . --outdir results \
-+		--flavours ndev-cluster-lvmpolld --only $(T) --skip $(S)
-+
-+check_lvmetad_lvmpolld: .tests-stamp
-+	VERBOSE=$(VERBOSE) ./lib/runner \
-+		--testdir . --outdir results \
-+		--flavours ndev-lvmetad-lvmpolld --only $(T) --skip $(S)
-+
-+check_all_lvmpolld: .tests-stamp
-+	VERBOSE=$(VERBOSE) ./lib/runner \
-+		--testdir . --outdir results \
- 		--flavours ndev-lvmpolld,ndev-cluster-lvmpolld,ndev-lvmetad-lvmpolld --only $(T) --skip $(S)
- endif
+diff --git a/test/shell/snapshot-merge-stack.sh b/test/shell/snapshot-merge-stack.sh
+index 6ed9c95..3ee9eaa 100644
+--- a/test/shell/snapshot-merge-stack.sh
++++ b/test/shell/snapshot-merge-stack.sh
+@@ -40,13 +40,14 @@ snap_and_merge() {
+ 	kill $SLEEP_PID
  
+ 	aux delay_dev "$dev1"  0 200 $(get first_extent_sector "$dev1"):
+-	lvchange --refresh $vg/$lv1
++	lvchange --poll n --refresh $vg/$lv1
+ 	dmsetup table
+ 	lvs -a -o+lv_merging,lv_merge_failed $vg
+ 	sleep 1
+ 	check lv_attr_bit state $vg/$lv1 "a"
+ 	check lv_attr_bit state $vg/$lv2 "a"
+ 	aux error_dev "$dev2" $(get first_extent_sector "$dev2"):
++	aux enable_dev "$dev1"
+ 	# delay to let snapshot merge 'discover' failing COW device
+ 	sleep 1
+ 	sync
+@@ -56,7 +57,7 @@ snap_and_merge() {
+ 	check lv_attr_bit state $vg/$lv2 "m"
+ 
+ 	# device OK and running in full speed
+-	aux enable_dev "$dev1" "$dev2"
++	aux enable_dev "$dev2"
+ 
+ 	# reactivate so merge can finish
+ 	lvchange -an $vg
 
 
