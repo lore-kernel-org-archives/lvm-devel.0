@@ -1,48 +1,56 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Nov 2016 16:00:15 +0000 (UTC)
-Subject: master - cleanup: debug trace and indent change
-Message-ID: <20161111160015.2CD8160255@fedorahosted.org>
+Date: Mon, 14 Nov 2016 11:57:25 +0000 (UTC)
+Subject: master - tests: fix checking for pvmove LV
+Message-ID: <20161114115725.F3D1060DA3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a7691cdebb6333b8f35d6a5a1a7d18aad6536c23
-Commit:        a7691cdebb6333b8f35d6a5a1a7d18aad6536c23
-Parent:        6db5b91231ce7ac84fafd4190bb3b4a079db1f49
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e7da8e7e1f27c2ee193a2dfc20819076c2bd19bf
+Commit:        e7da8e7e1f27c2ee193a2dfc20819076c2bd19bf
+Parent:        a7691cdebb6333b8f35d6a5a1a7d18aad6536c23
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Nov 8 16:20:51 2016 +0100
+AuthorDate:    Mon Nov 14 12:55:43 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 11 16:58:20 2016 +0100
+CommitterDate: Mon Nov 14 12:55:43 2016 +0100
 
-cleanup: debug trace and indent change
+tests: fix checking for pvmove LV
 
+Use consitently egrep.
+
+TODO: make probably aux func
 ---
- lib/activate/dev_manager.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/pvmove-resume-2.sh        |    2 +-
+ test/shell/pvmove-resume-multiseg.sh |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index da66374..1a79c08 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -2305,7 +2305,7 @@ static char *_add_error_or_zero_device(struct dev_manager *dm, struct dm_tree *d
- 		if (!dm_tree_add_dev(dtree, info.major, info.minor)) {
- 			log_error("Failed to add device (%" PRIu32 ":%" PRIu32") to dtree.",
- 				  info.major, info.minor);
--			return_NULL;
-+			return NULL;
- 		}
- 	}
+diff --git a/test/shell/pvmove-resume-2.sh b/test/shell/pvmove-resume-2.sh
+index 3baa6df..29fd2a8 100644
+--- a/test/shell/pvmove-resume-2.sh
++++ b/test/shell/pvmove-resume-2.sh
+@@ -76,7 +76,7 @@ test_pvmove_resume() {
+ 	aux enable_dev "$dev2"
  
-@@ -2833,7 +2833,7 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, lv->name, layer)))
- 		return_0;
+ 	i=0
+-	while get lv_field $vg name -a | grep "^pvmove"; do
++	while get lv_field $vg name -a | egrep "^\[?pvmove"; do
+ 		# wait for 30 secs at max
+ 		test $i -ge 300 && die "Pvmove is too slow or does not progress."
+ 		sleep .1
+diff --git a/test/shell/pvmove-resume-multiseg.sh b/test/shell/pvmove-resume-multiseg.sh
+index c22770f..a2fbf35 100644
+--- a/test/shell/pvmove-resume-multiseg.sh
++++ b/test/shell/pvmove-resume-multiseg.sh
+@@ -89,7 +89,7 @@ test_pvmove_resume() {
+ 	aux enable_dev "$dev5"
  
--        /* Even unused thin-pool still needs to get layered  UUID -suffix */
-+	/* Even unused thin-pool still needs to get layered  UUID -suffix */
- 	if (!layer && lv_is_new_thin_pool(lv))
- 		layer = lv_layer(lv);
- 
+ 	i=0
+-	while get lv_field $vg name -a | grep "^\[?pvmove"; do
++	while get lv_field $vg name -a | egrep "^\[?pvmove"; do
+ 		# wait for 30 secs at max
+ 		test $i -ge 300 && die "Pvmove is too slow or does not progress."
+ 		sleep .1
 
 
