@@ -1,64 +1,39 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu, 17 Nov 2016 20:00:19 +0000 (UTC)
-Subject: master - lvmdbusd: cmdhandler.py, fix imports
-Message-ID: <20161117200019.6AF84602FE@fedorahosted.org>
+Date: Thu, 17 Nov 2016 20:00:21 +0000 (UTC)
+Subject: master - lvmdbusd: Fix source documentation
+Message-ID: <20161117200021.914FD602FE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3a6c78e22aa958254f7ff993329cac3d7202d290
-Commit:        3a6c78e22aa958254f7ff993329cac3d7202d290
-Parent:        19a0bf9df61d2ad58cc1be70cf6132b57cb49c85
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3b4c5a2151a3a121123a0e4d5b9fd20344979a23
+Commit:        3b4c5a2151a3a121123a0e4d5b9fd20344979a23
+Parent:        3a6c78e22aa958254f7ff993329cac3d7202d290
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Nov 17 13:57:44 2016 -0600
+AuthorDate:    Thu Nov 17 13:58:17 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Nov 17 13:57:44 2016 -0600
+CommitterDate: Thu Nov 17 13:58:17 2016 -0600
 
-lvmdbusd: cmdhandler.py, fix imports
+lvmdbusd: Fix source documentation
 
-Use the correct py3 syntax for handling imports.  Also use print instead
-of log_debug which in this context will produce no output.
 ---
- daemons/lvmdbusd/cmdhandler.py |   14 +++++---------
- 1 files changed, 5 insertions(+), 9 deletions(-)
+ daemons/lvmdbusd/manager.py |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index dff91ad..1d5ff4a 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -15,14 +15,9 @@ import collections
- import traceback
- import os
- 
--try:
--	from . import cfg
--	from .utils import pv_dest_ranges, log_debug, log_error
--	from .lvm_shell_proxy import LVMShellProxy
--except SystemError:
--	import cfg
--	from utils import pv_dest_ranges, log_debug, log_error
--	from lvm_shell_proxy import LVMShellProxy
-+from lvmdbusd import cfg
-+from lvmdbusd.utils import pv_dest_ranges, log_debug, log_error
-+from lvmdbusd.lvm_shell_proxy import LVMShellProxy
- 
- try:
- 	import simplejson as json
-@@ -117,6 +112,7 @@ _t_call = call_lvm
- 
- def _shell_cfg():
- 	global _t_call
-+	# noinspection PyBroadException
- 	try:
- 		lvm_shell = LVMShellProxy()
- 		_t_call = lvm_shell.call_lvm
-@@ -750,4 +746,4 @@ if __name__ == '__main__':
- 	pv_data = pv_retrieve_with_segs()
- 
- 	for p in pv_data:
--		log_debug(str(p))
-+		print(str(p))
+diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
+index bdb08f6..3f6f09b 100644
+--- a/daemons/lvmdbusd/manager.py
++++ b/daemons/lvmdbusd/manager.py
+@@ -170,6 +170,8 @@ class Manager(AutomatedProperties):
+ 		"""
+ 		Allow the client to enable/disable lvm shell, used for testing
+ 		:param yes_no:
++		:param cb:	dbus python call back parameter, not client visible
++		:param cbe:	dbus python error call back parameter, not client visible
+ 		:return: Nothing
+ 		"""
+ 		r = RequestEntry(-1, Manager._use_lvm_shell, (yes_no,), cb, cbe, False)
 
 
