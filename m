@@ -1,50 +1,63 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu, 17 Nov 2016 17:36:38 +0000 (UTC)
-Subject: master - lvmdbusd: Add cfg.load to pv remove
-Message-ID: <20161117173638.59C3060D85@fedorahosted.org>
+Date: Thu, 17 Nov 2016 17:36:40 +0000 (UTC)
+Subject: master - lvmdbusd: WS corrections
+Message-ID: <20161117173640.73D4060D85@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dcdef9647b8de6aa958ad988de038c067a1f7199
-Commit:        dcdef9647b8de6aa958ad988de038c067a1f7199
-Parent:        24fd1dd7a3ac3f9692e2a561c8cd10bdd0d32d96
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2fbb90e4033518f2fbd6d2de45125381f01e1cbe
+Commit:        2fbb90e4033518f2fbd6d2de45125381f01e1cbe
+Parent:        dcdef9647b8de6aa958ad988de038c067a1f7199
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Nov 16 10:45:31 2016 -0600
+AuthorDate:    Wed Nov 16 10:46:09 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Nov 17 11:35:16 2016 -0600
 
-lvmdbusd: Add cfg.load to pv remove
+lvmdbusd: WS corrections
 
-The global dbus state does not match lvm with simply removing the pv
-dbus object.
+Fix mixed spaces & tabs and other ws issues.
 ---
- daemons/lvmdbusd/pv.py |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |    4 ++--
+ daemons/lvmdbusd/utils.py      |    2 ++
+ 2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmdbusd/pv.py b/daemons/lvmdbusd/pv.py
-index fa07f98..95047d1 100644
---- a/daemons/lvmdbusd/pv.py
-+++ b/daemons/lvmdbusd/pv.py
-@@ -18,7 +18,7 @@ from .utils import vg_obj_path_generate, n, pv_obj_path_generate, \
- from .loader import common
- from .request import RequestEntry
- from .state import State
--from .utils import round_size, mt_remove_dbus_objects
-+from .utils import round_size
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index fa34a7a..dff91ad 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -732,8 +732,8 @@ def lv_retrieve_with_segments():
+ 				'lv_attr', 'lv_tags', 'vg_uuid', 'lv_active', 'data_lv',
+ 				'metadata_lv', 'seg_pe_ranges', 'segtype', 'lv_parent',
+ 				'lv_role', 'lv_layout',
+-			    'snap_percent', 'metadata_percent', 'copy_percent',
+-			    'sync_percent', 'lv_metadata_size', 'move_pv', 'move_pv_uuid']
++				'snap_percent', 'metadata_percent', 'copy_percent',
++				'sync_percent', 'lv_metadata_size', 'move_pv', 'move_pv_uuid']
  
+ 	cmd = _dc('lvs', ['-a', '-o', ','.join(columns)])
+ 	rc, out, err = call(cmd)
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index 12b797e..561b158 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -17,6 +17,7 @@ import datetime
  
- # noinspection PyUnusedLocal
-@@ -140,7 +140,7 @@ class Pv(AutomatedProperties):
- 		if dbo:
- 			rc, out, err = cmdhandler.pv_remove(pv_name, remove_options)
- 			if rc == 0:
--				mt_remove_dbus_objects((dbo,))
-+				cfg.load()
- 			else:
- 				# Need to work on error handling, need consistent
- 				raise dbus.exceptions.DBusException(
+ import dbus
+ from lvmdbusd import cfg
++# noinspection PyUnresolvedReferences
+ from gi.repository import GLib
+ import threading
+ 
+@@ -508,6 +509,7 @@ def _async_result(call_back, results):
+ 	log_debug('Results = %s' % str(results))
+ 	call_back(results)
+ 
++
+ # Return result in main thread
+ def mt_async_result(call_back, results):
+ 	GLib.idle_add(_async_result, call_back, results)
 
 
