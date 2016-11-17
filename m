@@ -1,59 +1,82 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu, 17 Nov 2016 17:36:50 +0000 (UTC)
-Subject: master - lvmdbusd: Place Manager.UseLvmShell request on queue
-Message-ID: <20161117173650.E5F8D60A54@fedorahosted.org>
+Date: Thu, 17 Nov 2016 17:36:53 +0000 (UTC)
+Subject: master - lvmdbustest: Move std_err_print to testlib
+Message-ID: <20161117173653.012E660C9B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=99806ec7ec88c8cade16838ff1c9155fcc861b7e
-Commit:        99806ec7ec88c8cade16838ff1c9155fcc861b7e
-Parent:        df92d330aaab92445cf93e42db4778757b424792
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bfedeb748149c61caab44957c0a4f54fe57d6823
+Commit:        bfedeb748149c61caab44957c0a4f54fe57d6823
+Parent:        99806ec7ec88c8cade16838ff1c9155fcc861b7e
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Nov 16 17:29:23 2016 -0600
+AuthorDate:    Thu Nov 17 10:32:55 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Nov 17 11:35:16 2016 -0600
 
-lvmdbusd: Place Manager.UseLvmShell request on queue
+lvmdbustest: Move std_err_print to testlib
 
-We need to acquire a lock which can block us which in turn causes
-the dbus request handling to block as well.  Place the request on
-the work queue instead.
+So we can re-use it in the testlib too.
 ---
- daemons/lvmdbusd/manager.py |   12 +++++++++---
- 1 files changed, 9 insertions(+), 3 deletions(-)
+ test/dbus/lvmdbustest.py |    9 ++-------
+ test/dbus/testlib.py     |    6 ++++++
+ 2 files changed, 8 insertions(+), 7 deletions(-)
 
-diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
-index 821c625..bdb08f6 100644
---- a/daemons/lvmdbusd/manager.py
-+++ b/daemons/lvmdbusd/manager.py
-@@ -158,16 +158,22 @@ class Manager(AutomatedProperties):
- 			return p
- 		return '/'
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index c1cfb0f..8b5c4fd 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -14,10 +14,10 @@ import dbus
+ # noinspection PyUnresolvedReferences
+ from dbus.mainloop.glib import DBusGMainLoop
+ import unittest
+-import sys
+ import time
+ import pyudev
+ from testlib import *
++import testlib
  
-+	@staticmethod
-+	def _use_lvm_shell(yes_no):
-+		return dbus.Boolean(cmdhandler.set_execution(yes_no))
+ g_tmo = 0
+ 
+@@ -44,12 +44,7 @@ else:
+ # validation to limit the massive amount of introspection calls we make as
+ # that method prevents things from executing concurrently
+ if pv_device_list:
+-	validate_introspection = False
+-
+-
+-def std_err_print(*args):
+-	sys.stderr.write(' '.join(map(str, args)) + '\n')
+-	sys.stderr.flush()
++	testlib.validate_introspection = False
+ 
+ 
+ def vg_n():
+diff --git a/test/dbus/testlib.py b/test/dbus/testlib.py
+index de61361..e0c26a8 100644
+--- a/test/dbus/testlib.py
++++ b/test/dbus/testlib.py
+@@ -15,6 +15,7 @@ import xml.etree.ElementTree as Et
+ from collections import OrderedDict
+ import dbus
+ import os
++import sys
+ 
+ BUS_NAME = os.getenv('LVM_DBUS_NAME', 'com.redhat.lvmdbus1')
+ BASE_INTERFACE = 'com.redhat.lvmdbus1'
+@@ -43,6 +44,11 @@ def mib(s):
+ 	return 1024 * 1024 * s
+ 
+ 
++def std_err_print(*args):
++	sys.stderr.write(' '.join(map(str, args)) + '\n')
++	sys.stderr.flush()
 +
- 	@dbus.service.method(
- 		dbus_interface=MANAGER_INTERFACE,
--		in_signature='b', out_signature='b')
--	def UseLvmShell(self, yes_no):
-+		in_signature='b', out_signature='b',
-+		async_callbacks=('cb', 'cbe'))
-+	def UseLvmShell(self, yes_no, cb, cbe):
- 		"""
- 		Allow the client to enable/disable lvm shell, used for testing
- 		:param yes_no:
- 		:return: Nothing
- 		"""
--		return dbus.Boolean(cmdhandler.set_execution(yes_no))
-+		r = RequestEntry(-1, Manager._use_lvm_shell, (yes_no,), cb, cbe, False)
-+		cfg.worker_q.put(r)
- 
- 	@dbus.service.method(
- 		dbus_interface=MANAGER_INTERFACE,
++
+ class DbusIntrospection(object):
+ 	@staticmethod
+ 	def introspect(xml_representation):
 
 
