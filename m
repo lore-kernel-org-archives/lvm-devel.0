@@ -1,44 +1,58 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu, 17 Nov 2016 17:36:42 +0000 (UTC)
-Subject: master - lvmdbusd: Remove un-used import
-Message-ID: <20161117173642.8B25960D85@fedorahosted.org>
+Date: Thu, 17 Nov 2016 17:36:46 +0000 (UTC)
+Subject: master - lvmdbusd: Bubble up invalid JSON
+Message-ID: <20161117173646.C5C2C60D85@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4f1171466fc6c18aa22c639a09a98de2e911c16f
-Commit:        4f1171466fc6c18aa22c639a09a98de2e911c16f
-Parent:        2fbb90e4033518f2fbd6d2de45125381f01e1cbe
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a1805cf336fc6608b71c9e74d9f072deb18582be
+Commit:        a1805cf336fc6608b71c9e74d9f072deb18582be
+Parent:        61f6be7d2b56177df4a855c048a954ced055ab0a
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Nov 16 10:46:27 2016 -0600
+AuthorDate:    Wed Nov 16 15:45:05 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Nov 17 11:35:16 2016 -0600
 
-lvmdbusd: Remove un-used import
+lvmdbusd: Bubble up invalid JSON
 
+If we get invalid JSON, lets bubble that up to the user.
 ---
- daemons/lvmdbusd/job.py |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/lvmdbusd/lvm_shell_proxy.py |   20 ++++++++++++++------
+ 1 files changed, 14 insertions(+), 6 deletions(-)
 
-diff --git a/daemons/lvmdbusd/job.py b/daemons/lvmdbusd/job.py
-index 3c3bba0..ec6d6b6 100644
---- a/daemons/lvmdbusd/job.py
-+++ b/daemons/lvmdbusd/job.py
-@@ -8,11 +8,12 @@
- # along with this program. If not, see <http://www.gnu.org/licenses/>.
+diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
+index 9edf336..4cdb717 100755
+--- a/daemons/lvmdbusd/lvm_shell_proxy.py
++++ b/daemons/lvmdbusd/lvm_shell_proxy.py
+@@ -202,12 +202,20 @@ class LVMShellProxy(object):
  
- from .automatedproperties import AutomatedProperties
--from .utils import job_obj_path_generate, mt_async_result, log_debug
-+from .utils import job_obj_path_generate, mt_async_result
- from . import cfg
- from .cfg import JOB_INTERFACE
- import dbus
- import threading
-+# noinspection PyUnresolvedReferences
- from gi.repository import GLib
+ 		# Parse the report to see what happened
+ 		if report and len(report):
+-			json_result = json.loads(report)
+-			if 'log' in json_result:
+-				if json_result['log'][-1:][0]['log_ret_code'] == '1':
+-					rc = 0
+-				else:
+-					error_msg = self.get_error_msg()
++			try:
++				json_result = json.loads(report)
++				if 'log' in json_result:
++					if json_result['log'][-1:][0]['log_ret_code'] == '1':
++						rc = 0
++					else:
++						error_msg = self.get_error_msg()
++			except ValueError:
++				# The json is bad?, lets dump out for debug
++				with open('/tmp/json_bad', 'w') as debug:
++					debug.write(report)
++
++				# Bubble up the invalid json.
++				error_msg = "Invalid json %s" % report
  
- 
+ 		if debug or rc != 0:
+ 			log_error(('CMD: %s' % cmd))
 
 
