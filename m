@@ -1,90 +1,59 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu, 17 Nov 2016 17:36:48 +0000 (UTC)
-Subject: master - lvmdbusd: Extra report FD read on no data
-Message-ID: <20161117173648.D44C5605F8@fedorahosted.org>
+Date: Thu, 17 Nov 2016 17:36:50 +0000 (UTC)
+Subject: master - lvmdbusd: Place Manager.UseLvmShell request on queue
+Message-ID: <20161117173650.E5F8D60A54@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=df92d330aaab92445cf93e42db4778757b424792
-Commit:        df92d330aaab92445cf93e42db4778757b424792
-Parent:        a1805cf336fc6608b71c9e74d9f072deb18582be
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=99806ec7ec88c8cade16838ff1c9155fcc861b7e
+Commit:        99806ec7ec88c8cade16838ff1c9155fcc861b7e
+Parent:        df92d330aaab92445cf93e42db4778757b424792
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Nov 16 15:57:04 2016 -0600
+AuthorDate:    Wed Nov 16 17:29:23 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Nov 17 11:35:16 2016 -0600
 
-lvmdbusd: Extra report FD read on no data
+lvmdbusd: Place Manager.UseLvmShell request on queue
 
-Our expectation was that when using the lvm shell that when the lvm prompt
-was read from stdout, that all other ouput had been written and flushed.
-However, this doesn't appear to be the case.  Add extra read passes to
-retrieve delayed report data.
+We need to acquire a lock which can block us which in turn causes
+the dbus request handling to block as well.  Place the request on
+the work queue instead.
 ---
- daemons/lvmdbusd/lvm_shell_proxy.py |   29 ++++++++++++++++++++++++-----
- 1 files changed, 24 insertions(+), 5 deletions(-)
+ daemons/lvmdbusd/manager.py |   12 +++++++++---
+ 1 files changed, 9 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
-index 4cdb717..193c844 100755
---- a/daemons/lvmdbusd/lvm_shell_proxy.py
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py
-@@ -42,16 +42,19 @@ def _quote_arg(arg):
+diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
+index 821c625..bdb08f6 100644
+--- a/daemons/lvmdbusd/manager.py
++++ b/daemons/lvmdbusd/manager.py
+@@ -158,16 +158,22 @@ class Manager(AutomatedProperties):
+ 			return p
+ 		return '/'
  
- 
- class LVMShellProxy(object):
--	def _read_until_prompt(self):
-+	def _read_until_prompt(self, no_output=False):
- 		stdout = ""
- 		report = ""
- 		stderr = ""
-+		keep_reading = True
-+		extra_passes = 2
- 
- 		# Try reading from all FDs to prevent one from filling up and causing
--		# a hang.  We are also assuming that we won't get the lvm prompt back
-+		# a hang.  We were assuming that we won't get the lvm prompt back
- 		# until we have already received all the output from stderr and the
--		# report descriptor too.
--		while not stdout.endswith(SHELL_PROMPT):
-+		# report descriptor too, this is an incorrect assumption.  Lvm will
-+		# return the prompt before we get the report!
-+		while keep_reading:
- 			try:
- 				rd_fd = [
- 					self.lvm_shell.stdout.fileno(),
-@@ -90,6 +93,22 @@ class LVMShellProxy(object):
- 				if self.lvm_shell.poll():
- 					raise Exception(self.lvm_shell.returncode, "%s" % stderr)
- 
-+				if stdout.endswith(SHELL_PROMPT):
-+					# It appears that lvm doesn't write the report and flush
-+					# that before it writes the shell prompt as occasionally
-+					# we get the prompt with no report.
-+					if no_output:
-+						keep_reading = False
-+					else:
-+						# Most of the time we have data, if we have none lets
-+						# take another spin and hope we get it.
-+						if len(report) != 0:
-+							keep_reading = False
-+						else:
-+							extra_passes -= 1
-+							if extra_passes <= 0:
-+								keep_reading = False
++	@staticmethod
++	def _use_lvm_shell(yes_no):
++		return dbus.Boolean(cmdhandler.set_execution(yes_no))
 +
- 			except IOError as ioe:
- 				log_debug(str(ioe))
- 				pass
-@@ -141,7 +160,7 @@ class LVMShellProxy(object):
- 			fcntl(self.lvm_shell.stderr, F_SETFL, flags | os.O_NONBLOCK)
+ 	@dbus.service.method(
+ 		dbus_interface=MANAGER_INTERFACE,
+-		in_signature='b', out_signature='b')
+-	def UseLvmShell(self, yes_no):
++		in_signature='b', out_signature='b',
++		async_callbacks=('cb', 'cbe'))
++	def UseLvmShell(self, yes_no, cb, cbe):
+ 		"""
+ 		Allow the client to enable/disable lvm shell, used for testing
+ 		:param yes_no:
+ 		:return: Nothing
+ 		"""
+-		return dbus.Boolean(cmdhandler.set_execution(yes_no))
++		r = RequestEntry(-1, Manager._use_lvm_shell, (yes_no,), cb, cbe, False)
++		cfg.worker_q.put(r)
  
- 			# wait for the first prompt
--			errors = self._read_until_prompt()[2]
-+			errors = self._read_until_prompt(no_output=True)[2]
- 			if errors and len(errors):
- 				raise RuntimeError(errors)
- 		except:
+ 	@dbus.service.method(
+ 		dbus_interface=MANAGER_INTERFACE,
 
 
