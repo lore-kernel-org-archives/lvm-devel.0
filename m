@@ -1,41 +1,64 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu, 17 Nov 2016 17:46:10 +0000 (UTC)
-Subject: master - lvmdbusd: Remove debug JSON file
-Message-ID: <20161117174610.1394F60363@fedorahosted.org>
+Date: Thu, 17 Nov 2016 20:00:19 +0000 (UTC)
+Subject: master - lvmdbusd: cmdhandler.py, fix imports
+Message-ID: <20161117200019.6AF84602FE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=19a0bf9df61d2ad58cc1be70cf6132b57cb49c85
-Commit:        19a0bf9df61d2ad58cc1be70cf6132b57cb49c85
-Parent:        bd47b202fb373a93761e038afe39fb6aeee89289
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3a6c78e22aa958254f7ff993329cac3d7202d290
+Commit:        3a6c78e22aa958254f7ff993329cac3d7202d290
+Parent:        19a0bf9df61d2ad58cc1be70cf6132b57cb49c85
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Nov 17 11:45:11 2016 -0600
+AuthorDate:    Thu Nov 17 13:57:44 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Nov 17 11:45:11 2016 -0600
+CommitterDate: Thu Nov 17 13:57:44 2016 -0600
 
-lvmdbusd: Remove debug JSON file
+lvmdbusd: cmdhandler.py, fix imports
 
+Use the correct py3 syntax for handling imports.  Also use print instead
+of log_debug which in this context will produce no output.
 ---
- daemons/lvmdbusd/lvm_shell_proxy.py |    4 ----
- 1 files changed, 0 insertions(+), 4 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |   14 +++++---------
+ 1 files changed, 5 insertions(+), 9 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
-index 193c844..4ab42c5 100755
---- a/daemons/lvmdbusd/lvm_shell_proxy.py
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py
-@@ -229,10 +229,6 @@ class LVMShellProxy(object):
- 					else:
- 						error_msg = self.get_error_msg()
- 			except ValueError:
--				# The json is bad?, lets dump out for debug
--				with open('/tmp/json_bad', 'w') as debug:
--					debug.write(report)
--
- 				# Bubble up the invalid json.
- 				error_msg = "Invalid json %s" % report
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index dff91ad..1d5ff4a 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -15,14 +15,9 @@ import collections
+ import traceback
+ import os
  
+-try:
+-	from . import cfg
+-	from .utils import pv_dest_ranges, log_debug, log_error
+-	from .lvm_shell_proxy import LVMShellProxy
+-except SystemError:
+-	import cfg
+-	from utils import pv_dest_ranges, log_debug, log_error
+-	from lvm_shell_proxy import LVMShellProxy
++from lvmdbusd import cfg
++from lvmdbusd.utils import pv_dest_ranges, log_debug, log_error
++from lvmdbusd.lvm_shell_proxy import LVMShellProxy
+ 
+ try:
+ 	import simplejson as json
+@@ -117,6 +112,7 @@ _t_call = call_lvm
+ 
+ def _shell_cfg():
+ 	global _t_call
++	# noinspection PyBroadException
+ 	try:
+ 		lvm_shell = LVMShellProxy()
+ 		_t_call = lvm_shell.call_lvm
+@@ -750,4 +746,4 @@ if __name__ == '__main__':
+ 	pv_data = pv_retrieve_with_segs()
+ 
+ 	for p in pv_data:
+-		log_debug(str(p))
++		print(str(p))
 
 
