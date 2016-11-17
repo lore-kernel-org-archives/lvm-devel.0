@@ -1,160 +1,391 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu, 17 Nov 2016 17:36:27 +0000 (UTC)
-Subject: master - lvmdbus: Make bus name configurable
-Message-ID: <20161117173627.BADA3605B4@fedorahosted.org>
+Date: Thu, 17 Nov 2016 17:36:29 +0000 (UTC)
+Subject: master - lvmdbusd: Use one thread to fetch state updates
+Message-ID: <20161117173629.DC73E605B4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=affe2cebf51169bff01fe20d9f4f1298bba9e1f9
-Commit:        affe2cebf51169bff01fe20d9f4f1298bba9e1f9
-Parent:        560229178cec9daff0c0f4fe16f59013d566f1d5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa444906bbe5eda22aa5823ef2f9e196b0c15602
+Commit:        fa444906bbe5eda22aa5823ef2f9e196b0c15602
+Parent:        affe2cebf51169bff01fe20d9f4f1298bba9e1f9
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Nov 4 13:26:31 2016 -0500
+AuthorDate:    Thu Nov 10 12:19:48 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Nov 17 11:35:16 2016 -0600
 
-lvmdbus: Make bus name configurable
+lvmdbusd: Use one thread to fetch state updates
 
-Add env LVM_DBUS_NAME to change what the bus name is.
+In preparation to have more than one thread issuing commands to lvm
+at the same time we need to serialize updates to the dbus state and
+retrieving the global lvm state.  To achieve this we have one thread
+handling this with a thread safe queue taking and coalescing requests.
 ---
- daemons/lvmdbusd/cfg.py  |    1 +
- daemons/lvmdbusd/main.py |    4 ++--
- test/dbus/lvmdbustest.py |    5 ++---
- test/dbus/testlib.py     |   34 ++++++++++++++++++----------------
- 4 files changed, 23 insertions(+), 21 deletions(-)
+ daemons/lvmdbusd/cfg.py       |    1 +
+ daemons/lvmdbusd/fetch.py     |  114 ++++++++++++++++++++++++++++++++++++++++-
+ daemons/lvmdbusd/main.py      |   63 +++++-----------------
+ daemons/lvmdbusd/manager.py   |    5 +-
+ daemons/lvmdbusd/refresh.py   |   45 ----------------
+ daemons/lvmdbusd/udevwatch.py |    3 +-
+ 6 files changed, 131 insertions(+), 100 deletions(-)
 
 diff --git a/daemons/lvmdbusd/cfg.py b/daemons/lvmdbusd/cfg.py
-index 8965ec7..e5bd9e2 100644
+index e5bd9e2..0612154 100644
 --- a/daemons/lvmdbusd/cfg.py
 +++ b/daemons/lvmdbusd/cfg.py
-@@ -44,6 +44,7 @@ worker_q = queue.Queue()
- # Main event loop
- loop = None
+@@ -78,6 +78,7 @@ hidden_lv = itertools.count()
  
-+BUS_NAME = os.getenv('LVM_DBUS_NAME', 'com.redhat.lvmdbus1')
- BASE_INTERFACE = 'com.redhat.lvmdbus1'
- PV_INTERFACE = BASE_INTERFACE + '.Pv'
- VG_INTERFACE = BASE_INTERFACE + '.Vg'
+ # Used to prevent circular imports...
+ load = None
++event = None
+ 
+ # Global cached state
+ db = None
+diff --git a/daemons/lvmdbusd/fetch.py b/daemons/lvmdbusd/fetch.py
+index 7626460..409b19d 100644
+--- a/daemons/lvmdbusd/fetch.py
++++ b/daemons/lvmdbusd/fetch.py
+@@ -11,7 +11,10 @@ from .pv import load_pvs
+ from .vg import load_vgs
+ from .lv import load_lvs
+ from . import cfg
+-from .utils import MThreadRunner, log_debug
++from .utils import MThreadRunner, log_debug, log_error
++import threading
++import queue
++import traceback
+ 
+ 
+ def _main_thread_load(refresh=True, emit_signal=True):
+@@ -45,3 +48,112 @@ def load(refresh=True, emit_signal=True, cache_refresh=True, log=True,
+ 		rc = _main_thread_load(refresh, emit_signal)
+ 
+ 	return rc
++
++
++# Even though lvm can handle multiple changes concurrently it really doesn't
++# make sense to make a 1-1 fetch of data for each change of lvm because when
++# we fetch the data once all previous changes are reflected.
++class StateUpdate(object):
++
++	class UpdateRequest(object):
++
++		def __init__(self, refresh, emit_signal, cache_refresh, log,
++						need_main_thread):
++			self.is_done = False
++			self.refresh = refresh
++			self.emit_signal = emit_signal
++			self.cache_refresh = cache_refresh
++			self.log = log
++			self.need_main_thread = need_main_thread
++			self.result = None
++			self.cond = threading.Condition(threading.Lock())
++
++		def done(self):
++			with self.cond:
++				if not self.is_done:
++					self.cond.wait()
++			return self.result
++
++		def set_result(self, result):
++			with self.cond:
++				self.result = result
++				self.is_done = True
++				self.cond.notify_all()
++
++	@staticmethod
++	def update_thread(obj):
++		while cfg.run.value != 0:
++			# noinspection PyBroadException
++			try:
++				queued_requests = []
++				refresh = True
++				emit_signal = True
++				cache_refresh = True
++				log = True
++				need_main_thread = True
++
++				with obj.lock:
++					wait = not obj.deferred
++					obj.deferred = False
++
++				if wait:
++					queued_requests.append(obj.queue.get(True, 2))
++
++				# Ok we have one or the deferred queue has some,
++				# check if any others
++				try:
++					while True:
++						queued_requests.append(obj.queue.get(False))
++
++				except queue.Empty:
++					pass
++
++				log_debug("Processing %d updates!" % len(queued_requests))
++
++				# We have what we can, run the update with the needed options
++				for i in queued_requests:
++					if not i.refresh:
++						refresh = False
++					if not i.emit_signal:
++						emit_signal = False
++					if not i.cache_refresh:
++						cache_refresh = False
++					if not i.log:
++						log = False
++					if not i.need_main_thread:
++						need_main_thread = False
++
++				num_changes = load(refresh, emit_signal, cache_refresh, log,
++									need_main_thread)
++				# Update is done, let everyone know!
++				for i in queued_requests:
++					i.set_result(num_changes)
++
++			except queue.Empty:
++				pass
++			except Exception:
++				st = traceback.format_exc()
++				log_error("update_thread exception: \n%s" % st)
++
++	def __init__(self):
++		self.lock = threading.RLock()
++		self.queue = queue.Queue()
++		self.deferred = False
++
++		# Do initial load
++		load(refresh=False, emit_signal=False, need_main_thread=False)
++
++		self.thread = threading.Thread(target=StateUpdate.update_thread,
++										args=(self,))
++
++	def load(self, refresh=True, emit_signal=True, cache_refresh=True,
++					log=True, need_main_thread=True):
++		# Place this request on the queue and wait for it to be completed
++		req = StateUpdate.UpdateRequest(refresh, emit_signal, cache_refresh,
++										log, need_main_thread)
++		self.queue.put(req)
++		return req.done()
++
++	def event(self):
++		with self.lock:
++			self.deferred = True
 diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index 7d10bc3..80a576a 100644
+index 80a576a..6e782d2 100644
 --- a/daemons/lvmdbusd/main.py
 +++ b/daemons/lvmdbusd/main.py
-@@ -10,7 +10,7 @@
- from . import cfg
- from . import objectmanager
- from . import utils
--from .cfg import BASE_INTERFACE, BASE_OBJ_PATH, MANAGER_OBJ_PATH
-+from .cfg import BUS_NAME, BASE_INTERFACE, BASE_OBJ_PATH, MANAGER_OBJ_PATH
- import threading
- from . import cmdhandler
- import time
-@@ -148,7 +148,7 @@ def main():
- 		cfg.bus = dbus.SystemBus()
- 	# The base name variable needs to exist for things to work.
- 	# noinspection PyUnusedLocal
--	base_name = dbus.service.BusName(BASE_INTERFACE, cfg.bus)
-+	base_name = dbus.service.BusName(BUS_NAME, cfg.bus)
+@@ -20,7 +20,7 @@ import dbus.mainloop.glib
+ from . import lvmdb
+ # noinspection PyUnresolvedReferences
+ from gi.repository import GLib
+-from .fetch import load
++from .fetch import StateUpdate
+ from .manager import Manager
+ import traceback
+ import queue
+@@ -29,7 +29,6 @@ from .utils import log_debug, log_error
+ import argparse
+ import os
+ import sys
+-from .refresh import handle_external_event, event_complete
+ 
+ 
+ class Lvm(objectmanager.ObjectManager):
+@@ -37,54 +36,15 @@ class Lvm(objectmanager.ObjectManager):
+ 		super(Lvm, self).__init__(object_path, BASE_INTERFACE)
+ 
+ 
+-def _discard_pending_refreshes():
+-	# We just handled a refresh, if we have any in the queue they can be
+-	# removed because by definition they are older than the refresh we just did.
+-	# As we limit the number of refreshes getting into the queue
+-	# we should only ever have one to remove.
+-	requests = []
+-	while not cfg.worker_q.empty():
+-		try:
+-			r = cfg.worker_q.get(block=False)
+-			if r.method != handle_external_event:
+-				requests.append(r)
+-			else:
+-				# Make sure we make this event complete even though it didn't
+-				# run, otherwise no other events will get processed
+-				event_complete()
+-				break
+-		except queue.Empty:
+-			break
+-
+-	# Any requests we removed, but did not discard need to be re-queued
+-	for r in requests:
+-		cfg.worker_q.put(r)
+-
+-
+ def process_request():
+ 	while cfg.run.value != 0:
+ 		# noinspection PyBroadException
+ 		try:
+ 			req = cfg.worker_q.get(True, 5)
+-
+-			start = cfg.db.num_refreshes
+-
+ 			log_debug(
+ 				"Running method: %s with args %s" %
+ 				(str(req.method), str(req.arguments)))
+ 			req.run_cmd()
+-
+-			end = cfg.db.num_refreshes
+-
+-			num_refreshes = end - start
+-
+-			if num_refreshes > 0:
+-				_discard_pending_refreshes()
+-
+-				if num_refreshes > 1:
+-					log_debug(
+-						"Inspect method %s for too many refreshes" %
+-						(str(req.method)))
+ 			log_debug("Method complete ")
+ 		except queue.Empty:
+ 			pass
+@@ -152,20 +112,25 @@ def main():
  	cfg.om = Lvm(BASE_OBJ_PATH)
  	cfg.om.register_object(Manager(MANAGER_OBJ_PATH))
  
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 7e3a877..09f1b77 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -17,7 +17,6 @@ import unittest
- import sys
- import time
- import pyudev
--import os
- from testlib import *
- 
- g_tmo = 0
-@@ -56,7 +55,7 @@ def get_objects():
- 		CACHE_POOL_INT: [], CACHE_LV_INT: []}
- 
- 	manager = dbus.Interface(bus.get_object(
--		BUSNAME, "/com/redhat/lvmdbus1"),
-+		BUS_NAME, "/com/redhat/lvmdbus1"),
- 		"org.freedesktop.DBus.ObjectManager")
- 
- 	objects = manager.GetManagedObjects()
-@@ -71,7 +70,7 @@ def get_objects():
- 
- def set_execution(lvmshell):
- 	lvm_manager = dbus.Interface(bus.get_object(
--		BUSNAME, "/com/redhat/lvmdbus1/Manager"),
-+		BUS_NAME, "/com/redhat/lvmdbus1/Manager"),
- 		"com.redhat.lvmdbus1.Manager")
- 	return lvm_manager.UseLvmShell(lvmshell)
- 
-diff --git a/test/dbus/testlib.py b/test/dbus/testlib.py
-index d88ebbd..7f8456f 100644
---- a/test/dbus/testlib.py
-+++ b/test/dbus/testlib.py
-@@ -14,19 +14,21 @@ import functools
- import xml.etree.ElementTree as Et
- from collections import OrderedDict
- import dbus
+-	cfg.load = load
 -
--BUSNAME = "com.redhat.lvmdbus1"
--MANAGER_INT = BUSNAME + '.Manager'
--MANAGER_OBJ = '/' + BUSNAME.replace('.', '/') + '/Manager'
--PV_INT = BUSNAME + ".Pv"
--VG_INT = BUSNAME + ".Vg"
--LV_INT = BUSNAME + ".Lv"
--THINPOOL_INT = BUSNAME + ".ThinPool"
--SNAPSHOT_INT = BUSNAME + ".Snapshot"
--LV_COMMON_INT = BUSNAME + ".LvCommon"
--JOB_INT = BUSNAME + ".Job"
--CACHE_POOL_INT = BUSNAME + ".CachePool"
--CACHE_LV_INT = BUSNAME + ".CachedLv"
-+import os
+ 	cfg.db = lvmdb.DataStore(cfg.args.use_json)
+ 
+ 	# Using a thread to process requests, we cannot hang the dbus library
+ 	# thread that is handling the dbus interface
+ 	thread_list.append(threading.Thread(target=process_request))
+ 
+-	cfg.load(refresh=False, emit_signal=False, need_main_thread=False)
++	# Have a single thread handling updating lvm and the dbus model so we don't
++	# have multiple threads doing this as the same time
++	updater = StateUpdate()
++	thread_list.append(updater.thread)
 +
-+BUS_NAME = os.getenv('LVM_DBUS_NAME', 'com.redhat.lvmdbus1')
-+BASE_INTERFACE = 'com.redhat.lvmdbus1'
-+MANAGER_INT = BASE_INTERFACE + '.Manager'
-+MANAGER_OBJ = '/' + BASE_INTERFACE.replace('.', '/') + '/Manager'
-+PV_INT = BASE_INTERFACE + ".Pv"
-+VG_INT = BASE_INTERFACE + ".Vg"
-+LV_INT = BASE_INTERFACE + ".Lv"
-+THINPOOL_INT = BASE_INTERFACE + ".ThinPool"
-+SNAPSHOT_INT = BASE_INTERFACE + ".Snapshot"
-+LV_COMMON_INT = BASE_INTERFACE + ".LvCommon"
-+JOB_INT = BASE_INTERFACE + ".Job"
-+CACHE_POOL_INT = BASE_INTERFACE + ".CachePool"
-+CACHE_LV_INT = BASE_INTERFACE + ".CachedLv"
++	cfg.load = updater.load
++	cfg.event = updater.event
++
+ 	cfg.loop = GLib.MainLoop()
  
- THINPOOL_LV_PATH = '/' + THINPOOL_INT.replace('.', '/')
+-	for process in thread_list:
+-		process.damon = True
+-		process.start()
++	for thread in thread_list:
++		thread.damon = True
++		thread.start()
  
-@@ -162,7 +164,7 @@ class RemoteObject(object):
- 			for i in range(0, 3):
- 				try:
- 					prop_fetch = dbus.Interface(self.bus.get_object(
--						BUSNAME, self.object_path),
-+						BUS_NAME, self.object_path),
- 						'org.freedesktop.DBus.Properties')
- 					props = prop_fetch.GetAll(self.interface)
- 					break
-@@ -186,7 +188,7 @@ class RemoteObject(object):
- 		self.introspect = introspect
+ 	# Add udev watching
+ 	if cfg.args.use_udev:
+@@ -187,8 +152,8 @@ def main():
+ 			cfg.loop.run()
+ 			udevwatch.remove()
  
- 		self.dbus_method = dbus.Interface(specified_bus.get_object(
--			BUSNAME, self.object_path), self.interface)
-+			BUS_NAME, self.object_path), self.interface)
+-			for process in thread_list:
+-				process.join()
++			for thread in thread_list:
++				thread.join()
+ 	except KeyboardInterrupt:
+ 		utils.handler(signal.SIGINT, None)
+ 	return 0
+diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
+index e81ee1f..821c625 100644
+--- a/daemons/lvmdbusd/manager.py
++++ b/daemons/lvmdbusd/manager.py
+@@ -14,9 +14,7 @@ from .cfg import MANAGER_INTERFACE
+ import dbus
+ from . import cfg
+ from . import cmdhandler
+-from .fetch import load_pvs, load_vgs
+ from .request import RequestEntry
+-from .refresh import event_add
+ from . import udevwatch
  
- 		self._set_props(properties)
  
-@@ -222,7 +224,7 @@ class ClientProxy(object):
+@@ -183,7 +181,8 @@ class Manager(AutomatedProperties):
+ 								"udev monitoring")
+ 				# We are dependent on external events now to stay current!
+ 				cfg.ee = True
+-		event_add((command,))
++		utils.log_debug("ExternalEvent %s" % command)
++		cfg.event()
+ 		return dbus.Int32(0)
  
- 	def __init__(self, specified_bus, object_path, interface=None, props=None):
- 		i = dbus.Interface(specified_bus.get_object(
--			BUSNAME, object_path), 'org.freedesktop.DBus.Introspectable')
-+			BUS_NAME, object_path), 'org.freedesktop.DBus.Introspectable')
+ 	@staticmethod
+diff --git a/daemons/lvmdbusd/refresh.py b/daemons/lvmdbusd/refresh.py
+deleted file mode 100644
+index e29afd6..0000000
+--- a/daemons/lvmdbusd/refresh.py
++++ /dev/null
+@@ -1,45 +0,0 @@
+-# Copyright (C) 2015-2016 Red Hat, Inc. All rights reserved.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program. If not, see <http://www.gnu.org/licenses/>.
+-
+-# Try and minimize the refreshes we do.
+-
+-import threading
+-from .request import RequestEntry
+-from . import cfg
+-from . import utils
+-
+-_rlock = threading.RLock()
+-_count = 0
+-
+-
+-def handle_external_event(command):
+-	utils.log_debug("External event: '%s'" % command)
+-	event_complete()
+-	cfg.load()
+-
+-
+-def event_add(params):
+-	global _rlock
+-	global _count
+-	with _rlock:
+-		if _count == 0:
+-			_count += 1
+-			r = RequestEntry(
+-				-1, handle_external_event,
+-				params, None, None, False)
+-			cfg.worker_q.put(r)
+-
+-
+-def event_complete():
+-	global _rlock
+-	global _count
+-	with _rlock:
+-		if _count > 0:
+-			_count -= 1
+-		return _count
+diff --git a/daemons/lvmdbusd/udevwatch.py b/daemons/lvmdbusd/udevwatch.py
+index 6d56443..e2ac63a 100644
+--- a/daemons/lvmdbusd/udevwatch.py
++++ b/daemons/lvmdbusd/udevwatch.py
+@@ -9,7 +9,6 @@
  
- 		introspection_xml = i.Introspect()
+ import pyudev
+ import threading
+-from .refresh import event_add
+ from . import cfg
  
+ observer = None
+@@ -38,7 +37,7 @@ def filter_event(action, device):
+ 		refresh = True
+ 
+ 	if refresh:
+-		event_add(('udev',))
++		cfg.event()
+ 
+ 
+ def add():
 
 
