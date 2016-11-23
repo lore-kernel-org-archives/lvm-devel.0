@@ -1,115 +1,54 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 23 Nov 2016 16:55:41 +0000 (UTC)
-Subject: master - raid: implement transient status check
-Message-ID: <20161123165541.A520360F9D@fedorahosted.org>
+Date: Wed, 23 Nov 2016 16:55:43 +0000 (UTC)
+Subject: master - raid: lvconvert uses transient check for raid
+Message-ID: <20161123165543.BE44C60F9D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=23809379babf96459ae7135114b9c6302c9a014e
-Commit:        23809379babf96459ae7135114b9c6302c9a014e
-Parent:        2315743dd3826e880898bf62bb205931da8c1450
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=851095a6af7a5a1343d9eb2aa8a5c9e08f9759b3
+Commit:        851095a6af7a5a1343d9eb2aa8a5c9e08f9759b3
+Parent:        23809379babf96459ae7135114b9c6302c9a014e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 21 12:43:18 2016 +0100
+AuthorDate:    Mon Nov 21 14:54:51 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 23 17:45:44 2016 +0100
+CommitterDate: Wed Nov 23 17:46:50 2016 +0100
 
-raid: implement transient status check
+raid: lvconvert uses transient check for raid
 
-Take into acount reported state from 'raid' targets.
-When raid leg is marked with 'D' - take it as missing leg.
+Also check if the raid status isn't teling us there is something wrong
+with any raid image device.
 ---
- WHATS_NEW       |    1 +
- lib/raid/raid.c |   57 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 58 insertions(+), 0 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    3 +++
+ 2 files changed, 4 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 7f8801a..9414b03 100644
+index 9414b03..b7a5e82 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.168 - 
  ====================================
-+  Implement transient status check for raid volumes.
++  Use transient raid check before repairing raid volume.
+   Implement transient status check for raid volumes.
    Only log msg as debug if lvm2-lvmdbusd unit missing for D-Bus notification.
    Missing stripe filler now could be also 'zero'.
-   lvconvert --repair accepts --interval and --background option.
-diff --git a/lib/raid/raid.c b/lib/raid/raid.c
-index 92a96a3..80af61e 100644
---- a/lib/raid/raid.c
-+++ b/lib/raid/raid.c
-@@ -349,6 +349,62 @@ static int _raid_target_percent(void **target_state,
- 	return 1;
- }
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index d6824d8..ceeff2d 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2068,6 +2068,9 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 			return 0;
+ 		}
  
-+static int _raid_transient_status(struct dm_pool *mem,
-+				  struct lv_segment *seg,
-+				  char *params)
-+{
-+	int failed = 0, r = 0;
-+	unsigned i;
-+	struct lvinfo info;
-+	struct logical_volume *lv;
-+	struct dm_status_raid *sr;
++		if (!lv_check_transient(lv)) /* TODO check this in lib for all commands? */
++			stack; /* TODO: break here upon fail or always try to fix it? */
 +
-+	log_debug("Raid transient status %s.", params);
-+
-+	if (!dm_get_status_raid(mem, params, &sr))
-+		return_0;
-+
-+	if (sr->dev_count != seg->area_count) {
-+		log_error("Active raid has a wrong number of raid images!");
-+		log_error("Metadata says %u, kernel says %u.",
-+			  seg->area_count, sr->dev_count);
-+		goto out;
-+	}
-+
-+	if (seg->meta_areas)
-+		for (i = 0; i < seg->area_count; ++i) {
-+			lv = seg_metalv(seg, i);
-+			if (!lv_info(lv->vg->cmd, lv, 0, &info, 0, 0)) {
-+				log_error("Check for existence of raid meta %s failed.",
-+					  display_lvname(lv));
-+				goto out;
-+			}
-+		}
-+
-+	for (i = 0; i < seg->area_count; ++i) {
-+		lv = seg_lv(seg, i);
-+		if (!lv_info(lv->vg->cmd, lv, 0, &info, 0, 0)) {
-+			log_error("Check for existence of raid image %s failed.",
-+				  display_lvname(lv));
-+			goto out;
-+		}
-+		if (sr->dev_health[i] == 'D') {
-+			lv->status |= PARTIAL_LV;
-+			++failed;
-+		}
-+	}
-+
-+	/* Update PARTIAL_LV flags across the VG */
-+	if (failed)
-+		vg_mark_partial_lvs(lv->vg, 0);
-+
-+	r = 1;
-+out:
-+	dm_pool_free(mem, sr);
-+
-+	return r;
-+}
-+
- static int _raid_target_present(struct cmd_context *cmd,
- 				const struct lv_segment *seg __attribute__((unused)),
- 				unsigned *attributes)
-@@ -460,6 +516,7 @@ static struct segtype_handler _raid_ops = {
- #ifdef DEVMAPPER_SUPPORT
- 	.target_percent = _raid_target_percent,
- 	.target_present = _raid_target_present,
-+	.check_transient_status = _raid_transient_status,
- 	.modules_needed = _raid_modules_needed,
- #  ifdef DMEVENTD
- 	.target_monitored = _raid_target_monitored,
+ 		_lvconvert_raid_repair_ask(cmd, lp, &replace);
+ 
+ 		if (replace) {
 
 
