@@ -1,39 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 23 Nov 2016 16:56:03 +0000 (UTC)
-Subject: master - cleanup: use predefined macro for tmp image name
-Message-ID: <20161123165603.4560B60F9E@fedorahosted.org>
+Date: Wed, 23 Nov 2016 16:56:05 +0000 (UTC)
+Subject: master - cleanup: defines
+Message-ID: <20161123165605.5337060F9E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d05668c587348461b1fe86858a7b7044ccf687b1
-Commit:        d05668c587348461b1fe86858a7b7044ccf687b1
-Parent:        c621bc3d36ee4a9fff18e7e83c5c5ac3c1e09d4f
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ae95937af46989dbce992eace2914ace3b001a4a
+Commit:        ae95937af46989dbce992eace2914ace3b001a4a
+Parent:        d05668c587348461b1fe86858a7b7044ccf687b1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 23 10:39:59 2016 +0100
+AuthorDate:    Wed Nov 23 10:54:06 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Nov 23 17:55:03 2016 +0100
 
-cleanup: use predefined macro for tmp image name
+cleanup: defines
 
 ---
- lib/metadata/lv_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/mirror.c |   26 ++++++++++----------------
+ 1 files changed, 10 insertions(+), 16 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 8c8888e..2a02ad2 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6574,7 +6574,7 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
- 	if (lv_is_active_exclusive_locally(lv_where))
- 		exclusive = 1;
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index baa19fa..cb1f8c8 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -793,9 +793,7 @@ static int _split_mirror_images(struct logical_volume *lv,
+ 		detached_log_lv = detach_mirror_log(mirrored_seg);
+ 		if (!remove_layer_from_lv(lv, sub_lv))
+ 			return_0;
+-		lv->status &= ~MIRROR;
+-		lv->status &= ~MIRRORED;
+-		lv->status &= ~LV_NOTSYNCED;
++		lv->status &= ~(MIRROR | MIRRORED | LV_NOTSYNCED);
+ 	}
  
--	if (lv_is_active(lv_where) && strstr(name, "_mimagetmp")) {
-+	if (lv_is_active(lv_where) && strstr(name, MIRROR_SYNC_LAYER)) {
- 		log_very_verbose("Creating transient LV %s for mirror conversion in VG %s.", name, lv_where->vg->name);
- 
- 		segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_ERROR);
+ 	/*
+@@ -965,16 +963,14 @@ static int _remove_mirror_images(struct logical_volume *lv,
+ 			log_error("Failed to add mirror images.");
+ 			return 0;
+ 		}
+-                /*
+-                 * No longer a mirror? Even though new_area_count was 1,
+-                 * _merge_mirror_images may have resulted into lv being still a
+-                 * mirror. Fix up the flags if we only have one image left.
+-                 */
+-                if (lv_mirror_count(lv) == 1) {
+-                    lv->status &= ~MIRROR;
+-                    lv->status &= ~MIRRORED;
+-                    lv->status &= ~LV_NOTSYNCED;
+-                }
++		/*
++		 * No longer a mirror? Even though new_area_count was 1,
++		 * _merge_mirror_images may have resulted into lv being still a
++		 * mirror. Fix up the flags if we only have one image left.
++		 */
++		if (lv_mirror_count(lv) == 1)
++			lv->status &= ~(MIRROR | MIRRORED | LV_NOTSYNCED);
++
+ 		mirrored_seg = first_seg(lv);
+ 		if (remove_log && !detached_log_lv)
+ 			detached_log_lv = detach_mirror_log(mirrored_seg);
+@@ -988,9 +984,7 @@ static int _remove_mirror_images(struct logical_volume *lv,
+ 		/* All mirror images are gone.
+ 		 * It can happen for vgreduce --removemissing. */
+ 		detached_log_lv = detach_mirror_log(mirrored_seg);
+-		lv->status &= ~MIRROR;
+-		lv->status &= ~MIRRORED;
+-		lv->status &= ~LV_NOTSYNCED;
++		lv->status &= ~(MIRROR | MIRRORED | LV_NOTSYNCED);
+ 		if (!replace_lv_with_error_segment(lv))
+ 			return_0;
+ 	} else if (remove_log)
 
 
