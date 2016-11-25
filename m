@@ -1,370 +1,423 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 25 Nov 2016 14:04:04 +0000 (UTC)
-Subject: master - debug: more stacktrace corrections
-Message-ID: <20161125140404.9EB7F60AB3@fedorahosted.org>
+Date: Fri, 25 Nov 2016 14:04:06 +0000 (UTC)
+Subject: master - cleanup: add some dots and use display_lvname
+Message-ID: <20161125140406.B4B52607B8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1d58074d9fc4a01c5ca99af0ba26a5521a541092
-Commit:        1d58074d9fc4a01c5ca99af0ba26a5521a541092
-Parent:        2ad66b4e7bf1c88bd57b6d97f9feb07b99ae3e19
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1a4f13eb6e4de75884f7950a5feeff90614b93cf
+Commit:        1a4f13eb6e4de75884f7950a5feeff90614b93cf
+Parent:        1d58074d9fc4a01c5ca99af0ba26a5521a541092
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 25 13:46:06 2016 +0100
+AuthorDate:    Fri Nov 25 14:08:39 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 25 14:58:28 2016 +0100
+CommitterDate: Fri Nov 25 15:01:27 2016 +0100
 
-debug: more stacktrace corrections
+cleanup: add some dots and use display_lvname
 
-Continue previous patch dropping some unneeded stack traces
-after printed log_error/warn messages.
+Just some more VG/LV printing.
 ---
- lib/activate/dev_manager.c    |    4 ++--
- lib/commands/toolcontext.c    |    2 +-
- lib/config/config.c           |    2 +-
- lib/device/dev-type.c         |    2 +-
- lib/format_text/import_vsn1.c |    2 +-
- lib/metadata/lv_manip.c       |    2 +-
- lib/metadata/metadata.c       |    4 ++--
- lib/metadata/raid_manip.c     |   10 +++++-----
- libdm/libdm-stats.c           |    2 +-
- tools/dmsetup.c               |    6 ++++--
- tools/lvcreate.c              |    2 +-
- tools/pvmove.c                |    4 ++--
- tools/toollib.c               |    8 ++++----
- tools/vgimportclone.c         |   17 ++++++++---------
- 14 files changed, 34 insertions(+), 33 deletions(-)
+ lib/activate/dev_manager.c |    6 ++--
+ lib/metadata/lv_manip.c    |   62 +++++++++++++++++++++++--------------------
+ lib/metadata/metadata.c    |    6 ++--
+ lib/metadata/raid_manip.c  |   12 ++++----
+ tools/lvcreate.c           |    2 +-
+ tools/toollib.c            |   11 +++----
+ tools/vgreduce.c           |   22 ++++++++--------
+ 7 files changed, 62 insertions(+), 59 deletions(-)
 
 diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 1a79c08..642e6a1 100644
+index 642e6a1..b8b1235 100644
 --- a/lib/activate/dev_manager.c
 +++ b/lib/activate/dev_manager.c
-@@ -433,13 +433,13 @@ static int _ignore_suspended_snapshot_component(struct device *dev)
+@@ -424,7 +424,7 @@ static int _ignore_suspended_snapshot_component(struct device *dev)
+ 		return_0;
+ 
+ 	if (!dm_task_run(dmt)) {
+-		log_error("Failed to get state of snapshot or snapshot origin device");
++		log_error("Failed to get state of snapshot or snapshot origin device.");
+ 		goto out;
+ 	}
+ 
+@@ -432,13 +432,13 @@ static int _ignore_suspended_snapshot_component(struct device *dev)
+ 		next = dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
  		if (!target_type || !strcmp(target_type, TARGET_NAME_SNAPSHOT)) {
  			if (!params || sscanf(params, "%d:%d %d:%d", &major1, &minor1, &major2, &minor2) != 4) {
- 				log_error("Incorrect snapshot table found");
--				goto_out;
-+				goto out;
+-				log_error("Incorrect snapshot table found");
++				log_error("Incorrect snapshot table found.");
+ 				goto out;
  			}
  			r = r || _device_is_suspended(major1, minor1) || _device_is_suspended(major2, minor2);
  		} else if (!strcmp(target_type, TARGET_NAME_SNAPSHOT_ORIGIN)) {
  			if (!params || sscanf(params, "%d:%d", &major1, &minor1) != 2) {
- 				log_error("Incorrect snapshot-origin table found");
--				goto_out;
-+				goto out;
+-				log_error("Incorrect snapshot-origin table found");
++				log_error("Incorrect snapshot-origin table found.");
+ 				goto out;
  			}
  			r = r || _device_is_suspended(major1, minor1);
- 		}
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index bfb7c1b..394aa4b 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -997,7 +997,7 @@ static int _init_dev_cache(struct cmd_context *cmd)
- 
- 	if (!(cn = find_config_tree_array(cmd, devices_scan_CFG, NULL))) {
- 		log_error(INTERNAL_ERROR "Unable to find configuration for devices/scan.");
--		return_0;
-+		return 0;
- 	}
- 
- 	for (cv = cn->v; cv; cv = cv->next) {
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 6ad04e5..3e30951 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -389,7 +389,7 @@ int override_config_tree_from_string(struct cmd_context *cmd,
- 	    !config_force_check(cmd, CONFIG_STRING, cft_new)) {
- 		log_error("Ignoring invalid configuration string.");
- 		dm_config_destroy(cft_new);
--		return_0;
-+		return 0;
- 	}
- 
- 	if (!(cs = dm_pool_zalloc(cft_new->mem, sizeof(struct config_source)))) {
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 32471aa..cc6777d 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -1009,7 +1009,7 @@ int udev_dev_is_mpath_component(struct device *dev)
- 
- 	if (!udev_context) {
- 		log_warn("WARNING: No udev context available to check if device %s is multipath component.", dev_name(dev));
--		return_0;
-+		return 0;
- 	}
- 
- 	while (1) {
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index d2219e4..e11b16b 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -732,7 +732,7 @@ static int _read_historical_lvnames(struct format_instance *fid __attribute__((u
- 
- 	if (!(hlvn = hlvn->child)) {
- 		log_error("Empty removed logical volume section.");
--		goto_bad;
-+		goto bad;
- 	}
- 
- 	if (!_read_id(&glv->historical->lvid.id[1], hlvn, "id")) {
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 07ba8ef..e86fb04 100644
+index e86fb04..615632d 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -1014,7 +1014,7 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
- 		*/
- 		if (area_reduction != seg->area_len) {
- 			log_error("Unable to reduce RAID LV - operation not implemented.");
--			return_0;
-+			return 0;
- 		} else {
- 			if (!lv_remove(lv)) {
- 				log_error("Failed to remove RAID image %s",
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index a32649f..78028cf 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -840,13 +840,13 @@ int vg_extend_each_pv(struct volume_group *vg, struct pvcreate_params *pp)
- 						  (const struct volume_group *) vg,
- 						  &max_phys_block_size))) {
- 			log_error("PV %s has wrong block size", pv_dev_name(pvl->pv));
--			return_0;
-+			return 0;
- 		}
- 
- 		if (!add_pv_to_vg(vg, pv_dev_name(pvl->pv), pvl->pv, 0)) {
- 			log_error("PV %s cannot be added to VG %s.",
- 				  pv_dev_name(pvl->pv), vg->name);
--			return_0;
-+			return 0;
+@@ -736,11 +736,11 @@ int add_seg_to_segs_using_this_lv(struct logical_volume *lv,
  		}
  	}
  
+-	log_very_verbose("Adding %s:%" PRIu32 " as an user of %s",
+-			 seg->lv->name, seg->le, lv->name);
++	log_very_verbose("Adding %s:" FMTu32 " as an user of %s.",
++			 display_lvname(seg->lv), seg->le, display_lvname(lv));
+ 
+ 	if (!(sl = dm_pool_zalloc(lv->vg->vgmem, sizeof(*sl)))) {
+-		log_error("Failed to allocate segment list");
++		log_error("Failed to allocate segment list.");
+ 		return 0;
+ 	}
+ 
+@@ -762,16 +762,16 @@ int remove_seg_from_segs_using_this_lv(struct logical_volume *lv,
+ 		if (sl->count > 1)
+ 			sl->count--;
+ 		else {
+-			log_very_verbose("%s:%" PRIu32 " is no longer a user "
+-					 "of %s", seg->lv->name, seg->le,
+-					 lv->name);
++			log_very_verbose("%s:" FMTu32 " is no longer a user of %s.",
++					 display_lvname(seg->lv), seg->le,
++					 display_lvname(lv));
+ 			dm_list_del(&sl->list);
+ 		}
+ 		return 1;
+ 	}
+ 
+-	log_error(INTERNAL_ERROR "Segment %s:%u is not a user of %s.",
+-                  seg->lv->name, seg->le, lv->name);
++	log_error(INTERNAL_ERROR "Segment %s:" FMTu32 " is not a user of %s.",
++		  display_lvname(seg->lv), seg->le, display_lvname(lv));
+ 	return 0;
+ }
+ 
+@@ -798,8 +798,9 @@ struct lv_segment *get_only_segment_using_this_lv(const struct logical_volume *l
+ 
+ 		if (sl->count != 1) {
+ 			log_error("%s is expected to have only one segment using it, "
+-				  "while %s:%" PRIu32 " uses it %d times.",
+-				  display_lvname(lv), sl->seg->lv->name, sl->seg->le, sl->count);
++				  "while %s:" FMTu32 " uses it %d times.",
++				  display_lvname(lv), display_lvname(sl->seg->lv),
++				  sl->seg->le, sl->count);
+ 			return NULL;
+ 		}
+ 
+@@ -890,7 +891,7 @@ static uint32_t _round_to_stripe_boundary(struct volume_group *vg, uint32_t exte
+ 	/* Round up extents to stripe divisible amount */
+ 	if ((size_rest = extents % stripes)) {
+ 		new_extents += extend ? stripes - size_rest : -size_rest;
+-		log_print_unless_silent("Rounding size %s (%d extents) up to stripe boundary size %s (%d extents).",
++		log_print_unless_silent("Rounding size %s (%u extents) up to stripe boundary size %s (%u extents).",
+ 					display_size(vg->cmd, (uint64_t) extents * vg->extent_size), extents,
+ 					display_size(vg->cmd, (uint64_t) new_extents * vg->extent_size), new_extents);
+ 	}
+@@ -1017,8 +1018,8 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
+ 			return 0;
+ 		} else {
+ 			if (!lv_remove(lv)) {
+-				log_error("Failed to remove RAID image %s",
+-					  lv->name);
++				log_error("Failed to remove RAID image %s.",
++					  display_lvname(lv));
+ 				return 0;
+ 			}
+ 		}
+@@ -1027,8 +1028,8 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
+ 		if (seg->meta_areas && seg_metalv(seg, s) && (area_reduction == seg->area_len)) {
+ 			if (!lv_reduce(seg_metalv(seg, s),
+ 				       seg_metalv(seg, s)->le_count)) {
+-				log_error("Failed to remove RAID meta-device %s",
+-					  seg_metalv(seg, s)->name);
++				log_error("Failed to remove RAID meta-device %s.",
++					  display_lvname(seg_metalv(seg, s)));
+ 				return 0;
+ 			}
+ 		}
+@@ -1036,13 +1037,14 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
+ 	}
+ 
+ 	if (area_reduction == seg->area_len) {
+-		log_very_verbose("Remove %s:%" PRIu32 "[%" PRIu32 "] from "
+-				 "the top of LV %s:%" PRIu32,
+-				 seg->lv->name, seg->le, s,
+-				 lv->name, seg_le(seg, s));
++		log_very_verbose("Remove %s:" FMTu32 "[" FMTu32 "] from "
++				 "the top of LV %s:" FMTu32 ".",
++				 display_lvname(seg->lv), seg->le, s,
++				 display_lvname(lv), seg_le(seg, s));
+ 
+ 		if (!remove_seg_from_segs_using_this_lv(lv, seg))
+ 			return_0;
++
+ 		seg_lv(seg, s) = NULL;
+ 		seg_le(seg, s) = 0;
+ 		seg_type(seg, s) = AREA_UNASSIGNED;
+@@ -3480,7 +3482,7 @@ static struct lv_segment *_convert_seg_to_mirror(struct lv_segment *seg,
+ 					seg->area_count, seg->area_len,
+ 					seg->chunk_size, region_size,
+ 					seg->extents_copied, NULL))) {
+-		log_error("Couldn't allocate converted LV segment");
++		log_error("Couldn't allocate converted LV segment.");
+ 		return NULL;
+ 	}
+ 
+@@ -3513,13 +3515,14 @@ int lv_add_segmented_mirror_image(struct alloc_handle *ah,
+ 
+ 	if (!lv_is_pvmove(lv)) {
+ 		log_error(INTERNAL_ERROR
+-			  "Non-pvmove LV, %s, passed as argument", lv->name);
++			  "Non-pvmove LV, %s, passed as argument.",
++			  display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+ 	if (seg_type(first_seg(lv), 0) != AREA_PV) {
+ 		log_error(INTERNAL_ERROR
+-			  "Bad segment type for first segment area");
++			  "Bad segment type for first segment area.");
+ 		return 0;
+ 	}
+ 
+@@ -3530,8 +3533,8 @@ int lv_add_segmented_mirror_image(struct alloc_handle *ah,
+ 	 */
+ 	dm_list_iterate_items(aa, &ah->alloced_areas[0]) {
+ 		if (!(seg = find_seg_by_le(lv, current_le))) {
+-			log_error("Failed to find segment for %s extent %"
+-				  PRIu32, lv->name, current_le);
++			log_error("Failed to find segment for %s extent " FMTu32 ".",
++				  display_lvname(lv), current_le);
+ 			return 0;
+ 		}
+ 
+@@ -3539,7 +3542,8 @@ int lv_add_segmented_mirror_image(struct alloc_handle *ah,
+ 		if (aa[0].len < seg->area_len) {
+ 			if (!lv_split_segment(lv, seg->le + aa[0].len)) {
+ 				log_error("Failed to split segment at %s "
+-					  "extent %" PRIu32, lv->name, le);
++					  "extent " FMTu32 ".",
++					  display_lvname(lv), le);
+ 				return 0;
+ 			}
+ 		}
+@@ -3549,8 +3553,8 @@ int lv_add_segmented_mirror_image(struct alloc_handle *ah,
+ 	current_le = le;
+ 
+ 	if (!insert_layer_for_lv(lv->vg->cmd, lv, PVMOVE, "_mimage_0")) {
+-		log_error("Failed to build pvmove LV-type mirror, %s",
+-			  lv->name);
++		log_error("Failed to build pvmove LV-type mirror %s.",
++			  display_lvname(lv));
+ 		return 0;
+ 	}
+ 	orig_lv = seg_lv(first_seg(lv), 0);
+@@ -3571,8 +3575,8 @@ int lv_add_segmented_mirror_image(struct alloc_handle *ah,
+ 
+ 	dm_list_iterate_items(aa, &ah->alloced_areas[0]) {
+ 		if (!(seg = find_seg_by_le(orig_lv, current_le))) {
+-			log_error("Failed to find segment for %s extent %"
+-				  PRIu32, lv->name, current_le);
++			log_error("Failed to find segment for %s extent " FMTu32 ".",
++				  display_lvname(lv), current_le);
+ 			return 0;
+ 		}
+ 
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 78028cf..ad6cb2a 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -828,18 +828,18 @@ int vg_extend_each_pv(struct volume_group *vg, struct pvcreate_params *pp)
+ 	struct pv_list *pvl;
+ 	unsigned int max_phys_block_size = 0;
+ 
+-	log_debug_metadata("Adding PVs to VG %s", vg->name);
++	log_debug_metadata("Adding PVs to VG %s.", vg->name);
+ 
+ 	if (_vg_bad_status_bits(vg, RESIZEABLE_VG))
+ 		return_0;
+ 
+ 	dm_list_iterate_items(pvl, &pp->pvs) {
+-		log_debug_metadata("Adding PV %s to VG %s", pv_dev_name(pvl->pv), vg->name);
++		log_debug_metadata("Adding PV %s to VG %s.", pv_dev_name(pvl->pv), vg->name);
+ 
+ 		if (!(check_dev_block_size_for_vg(pvl->pv->dev,
+ 						  (const struct volume_group *) vg,
+ 						  &max_phys_block_size))) {
+-			log_error("PV %s has wrong block size", pv_dev_name(pvl->pv));
++			log_error("PV %s has wrong block size.", pv_dev_name(pvl->pv));
+ 			return 0;
+ 		}
+ 
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index e91667e..dfe1adf 100644
+index dfe1adf..0793017 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -1863,14 +1863,14 @@ static int _alloc_and_add_rmeta_devs_for_lv(struct logical_volume *lv, struct dm
- 	log_debug_metadata("Allocating metadata LVs for %s", display_lvname(lv));
+@@ -1860,24 +1860,24 @@ static int _alloc_and_add_rmeta_devs_for_lv(struct logical_volume *lv, struct dm
+ 
+ 	dm_list_init(&meta_lvs);
+ 
+-	log_debug_metadata("Allocating metadata LVs for %s", display_lvname(lv));
++	log_debug_metadata("Allocating metadata LVs for %s.", display_lvname(lv));
  	if (!_alloc_rmeta_devs_for_lv(lv, &meta_lvs, allocate_pvs, &seg_meta_areas)) {
- 		log_error("Failed to allocate metadata LVs for %s", display_lvname(lv));
--		return_0;
-+		return 0;
+-		log_error("Failed to allocate metadata LVs for %s", display_lvname(lv));
++		log_error("Failed to allocate metadata LVs for %s.", display_lvname(lv));
+ 		return 0;
  	}
  
  	/* Metadata LVs must be cleared before being added to the array */
- 	log_debug_metadata("Clearing newly allocated metadata LVs for %s", display_lvname(lv));
+-	log_debug_metadata("Clearing newly allocated metadata LVs for %s", display_lvname(lv));
++	log_debug_metadata("Clearing newly allocated metadata LVs for %s.", display_lvname(lv));
  	if (!_clear_lvs(&meta_lvs)) {
- 		log_error("Failed to initialize metadata LVs for %s", display_lvname(lv));
--		return_0;
-+		return 0;
+-		log_error("Failed to initialize metadata LVs for %s", display_lvname(lv));
++		log_error("Failed to initialize metadata LVs for %s.", display_lvname(lv));
+ 		return 0;
  	}
  
  	/* Set segment areas for metadata sub_lvs */
-@@ -1878,7 +1878,7 @@ static int _alloc_and_add_rmeta_devs_for_lv(struct logical_volume *lv, struct dm
- 	log_debug_metadata("Adding newly allocated metadata LVs to %s", display_lvname(lv));
+ 	seg->meta_areas = seg_meta_areas;
+-	log_debug_metadata("Adding newly allocated metadata LVs to %s", display_lvname(lv));
++	log_debug_metadata("Adding newly allocated metadata LVs to %s.", display_lvname(lv));
  	if (!_add_image_component_list(seg, 1, 0, &meta_lvs, 0)) {
- 		log_error("Failed to add newly allocated metadata LVs to %s", display_lvname(lv));
--		return_0;
-+		return 0;
+-		log_error("Failed to add newly allocated metadata LVs to %s", display_lvname(lv));
++		log_error("Failed to add newly allocated metadata LVs to %s.", display_lvname(lv));
+ 		return 0;
  	}
  
- 	return 1;
-@@ -3663,13 +3663,13 @@ static int _set_convenient_raid456_segtype_to(const struct lv_segment *seg_from,
- 	} else if (seg_is_any_raid5(seg_from) &&
- 		   segtype_is_any_raid6(*segtype)) {
- 			log_error("Conversion not supported.");
--		return_0;
-+		return 0;
- 
- 	/* ... and raid6 -> raid5 */
- 	} else if (seg_is_any_raid6(seg_from) &&
- 		   segtype_is_any_raid5(*segtype)) {
- 			log_error("Conversion not supported.");
--		return_0;
-+		return 0;
- 	}
- 
- 	return 1;
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index ad3e624..2fc00da 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -1841,7 +1841,7 @@ static int _stats_set_aux(struct dm_stats *dms,
- 		if (!group_tag) {
- 			log_error("Could not build group descriptor for "
- 				  "region ID " FMTu64, region_id);
--			goto_bad;
-+			goto bad;
- 		}
- 	}
- 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index e48f0a6..f068293 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -691,9 +691,11 @@ static int _do_usleep_wait(void)
- 	if (usleep(this_interval / NSEC_PER_USEC)) {
- 		if (errno == EINTR)
- 			log_error("Report interval interrupted by signal.");
--		if (errno == EINVAL)
-+		else if (errno == EINVAL)
- 			log_error("Report interval too short.");
--		return_0;
-+		else
-+			stack; /* other reason */
-+		return 0;
- 	}
- 
- 	if (_count == 2) {
 diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index dbc0708..f70984a 100644
+index f70984a..0512585 100644
 --- a/tools/lvcreate.c
 +++ b/tools/lvcreate.c
-@@ -1591,7 +1591,7 @@ static int _lvcreate_single(struct cmd_context *cmd, const char *vg_name,
- 	if (vg->lock_type && !strcmp(vg->lock_type, "sanlock")) {
- 		if (!handle_sanlock_lv(cmd, vg)) {
- 			log_error("No space for sanlock lock, extend the internal lvmlock LV.");
--			goto_out;
-+			goto out;
- 		}
+@@ -1596,7 +1596,7 @@ static int _lvcreate_single(struct cmd_context *cmd, const char *vg_name,
  	}
  
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 3877562..eef5cc1 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -187,12 +187,12 @@ static int _remove_sibling_pvs_from_trim_list(struct logical_volume *lv,
- 
- 	if (!(sublv = find_lv(lv->vg, sublv_name))) {
- 		log_error("Can't find sub LV %s?", sublv_name);
--		return_0;
-+		return 0;
- 	}
- 
- 	if (!get_pv_list_for_lv(lv->vg->cmd->mem, sublv, &untrim_list)) {
- 		log_error("Can't find PVs for sub LV %s?", sublv_name);
--		return_0;
-+		return 0;
- 	}
- 
- 	dm_list_iterate(pvh1, &untrim_list) {
+ 	if (seg_is_thin_volume(lp))
+-		log_verbose("Making thin LV %s in pool %s in VG %s%s%s using segtype %s",
++		log_verbose("Making thin LV %s in pool %s in VG %s%s%s using segtype %s.",
+ 			    lp->lv_name ? : "with generated name",
+ 			    lp->pool_name ? : "with generated name", lp->vg_name,
+ 			    lp->snapshot ? " as snapshot of " : "",
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 9763362..3562937 100644
+index 3562937..8c76291 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -2474,7 +2474,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 		if (!(final_lvl = dm_pool_zalloc(cmd->mem, sizeof(struct lv_list)))) {
- 			log_error("Failed to allocate final LV list item.");
- 			ret_max = ECMD_FAILED;
--			goto_out;
-+			goto out;
- 		}
- 		final_lvl->lv = lvl->lv;
- 		dm_list_add(&final_lvs, &final_lvl->list);
-@@ -4710,7 +4710,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
+@@ -451,17 +451,16 @@ static int _add_pe_range(struct dm_pool *mem, const char *pvname,
+ {
+ 	struct pe_range *per;
  
- 	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
- 		log_error("Can't get lock for orphan PVs.");
--		goto_out;
-+		goto out;
+-	log_debug("Adding PE range: start PE %" PRIu32 " length %" PRIu32
+-		  " on %s.", start, count, pvname);
++	log_debug("Adding PE range: start PE " FMTu32 " length " FMTu32 " on %s.",
++		  start, count, pvname);
+ 
+ 	/* Ensure no overlap with existing areas */
+ 	dm_list_iterate_items(per, pe_ranges) {
+ 		if (((start < per->start) && (start + count - 1 >= per->start)) ||
+ 		    ((start >= per->start) &&
+ 			(per->start + per->count - 1) >= start)) {
+-			log_error("Overlapping PE ranges specified (%" PRIu32
+-				  "-%" PRIu32 ", %" PRIu32 "-%" PRIu32 ")"
+-				  " on %s.",
++			log_error("Overlapping PE ranges specified (" FMTu32
++				  "-" FMTu32 ", " FMTu32 "-" FMTu32 ") on %s.",
+ 				  start, start + count - 1, per->start,
+ 				  per->start + per->count - 1, pvname);
+ 			return 0;
+@@ -637,7 +636,7 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
+ 
+ 	/* Build up list of PVs */
+ 	if (!(r = dm_pool_alloc(mem, sizeof(*r)))) {
+-		log_error("Allocation of list failed");
++		log_error("Allocation of list failed.");
+ 		return NULL;
+ 	}
+ 	dm_list_init(r);
+diff --git a/tools/vgreduce.c b/tools/vgreduce.c
+index 7b9f506..42893df 100644
+--- a/tools/vgreduce.c
++++ b/tools/vgreduce.c
+@@ -26,19 +26,19 @@ static int _remove_pv(struct volume_group *vg, struct pv_list *pvl, int silent)
+ 	char uuid[64] __attribute__((aligned(8)));
+ 
+ 	if (vg->pv_count == 1) {
+-		log_error("Volume Groups must always contain at least one PV");
++		log_error("Volume Groups must always contain at least one PV.");
+ 		return 0;
  	}
  
- 	/*
-@@ -4742,7 +4742,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
+ 	if (!id_write_format(&pvl->pv->id, uuid, sizeof(uuid)))
+ 		return_0;
  
- 	if (dm_list_empty(&pp->arg_process)) {
- 		log_debug("No devices to process.");
--		goto_bad;
-+		goto bad;
+-	log_verbose("Removing PV with UUID %s from VG %s", uuid, vg->name);
++	log_verbose("Removing PV with UUID %s from VG %s.", uuid, vg->name);
+ 
+ 	if (pvl->pv->pe_alloc_count) {
+ 		if (!silent)
+ 			log_error("LVs still present on PV with UUID %s: "
+-				  "Can't remove from VG %s", uuid, vg->name);
++				  "Can't remove from VG %s.", uuid, vg->name);
+ 		return 0;
  	}
  
- do_command:
-@@ -4789,7 +4789,7 @@ do_command:
+@@ -183,33 +183,33 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
  
- 		if (!(orphan_vg = vg_read_internal(cmd, pp->orphan_vg_name, NULL, 0, &consistent))) {
- 			log_error("Cannot read orphans VG %s.", pp->orphan_vg_name);
--			goto_bad;
-+			goto bad;
- 		}
- 
- 		dm_list_iterate_items_safe(pd, pd2, &pp->arg_create) {
-diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
-index 09b3a7c..b23b14e 100644
---- a/tools/vgimportclone.c
-+++ b/tools/vgimportclone.c
-@@ -75,12 +75,12 @@ static int _vgimportclone_vg_single(struct cmd_context *cmd, const char *vg_name
- 
- 	if (vg_is_exported(vg) && !vp->import_vg) {
- 		log_error("VG %s is exported, use the --import option.", vg->name);
--		goto_bad;
-+		goto bad;
+ 	if (!argc && !repairing) {
+ 		log_error("Please give volume group name and "
+-			  "physical volume paths");
++			  "physical volume paths.");
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 	
+ 	if (!argc) { /* repairing */
+-		log_error("Please give volume group name");
++		log_error("Please give volume group name.");
+ 		return EINVALID_CMD_LINE;
  	}
  
- 	if (vg_status(vg) & PARTIAL_VG) {
- 		log_error("VG %s is partial, it must be complete.", vg->name);
--		goto_bad;
-+		goto bad;
+ 	if (arg_is_set(cmd, mirrorsonly_ARG) && !repairing) {
+-		log_error("--mirrorsonly requires --removemissing");
++		log_error("--mirrorsonly requires --removemissing.");
+ 		return EINVALID_CMD_LINE;
  	}
  
- 	/*
-@@ -121,7 +121,7 @@ static int _vgimportclone_vg_single(struct cmd_context *cmd, const char *vg_name
- 			log_error("PV with UUID %s is part of VG %s, but is not included in the devices to import.",
- 				   uuid, vg->name);
- 			log_error("All PVs in the VG must be imported together.");
--			goto_bad;
-+			goto bad;
- 		}
+ 	if (argc == 1 && !arg_is_set(cmd, all_ARG) && !repairing) {
+-		log_error("Please enter physical volume paths or option -a");
++		log_error("Please enter physical volume paths or option -a.");
+ 		return EINVALID_CMD_LINE;
  	}
  
-@@ -130,7 +130,7 @@ static int _vgimportclone_vg_single(struct cmd_context *cmd, const char *vg_name
- 			/* device arg is not in the VG. */
- 			log_error("Device %s was not found in VG %s.", dev_name(vd->dev), vg->name);
- 			log_error("The devices to import must match the devices in the VG.");
--			goto_bad;
-+			goto bad;
- 		}
+ 	if (argc > 1 && arg_is_set(cmd, all_ARG)) {
+ 		log_error("Option -a and physical volume paths mutually "
+-			  "exclusive");
++			  "exclusive.");
+ 		return EINVALID_CMD_LINE;
  	}
  
-@@ -245,7 +245,7 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
- 
- 	if (vp.found_args != argc) {
- 		log_error("Failed to find all devices.");
--		goto_out;
-+		goto out;
+ 	if (argc > 1 && repairing) {
+-		log_error("Please only specify the volume group");
++		log_error("Please only specify the volume group.");
+ 		return EINVALID_CMD_LINE;
  	}
  
- 	/*
-@@ -256,12 +256,12 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
- 	dm_list_iterate_items(vd, &vp.arg_import) {
- 		if (!(info = lvmcache_info_from_pvid(vd->dev->pvid, NULL, 0))) {
- 			log_error("Failed to find PVID for device %s in lvmcache.", dev_name(vd->dev));
--			goto_out;
-+			goto out;
- 		}
+@@ -250,10 +250,10 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
+ 			0, handle, &_vgreduce_repair_single);
  
- 		if (!(vgname = lvmcache_vgname_from_info(info))) {
- 			log_error("Failed to find VG name for device %s in lvmcache.", dev_name(vd->dev));
--			goto_out;
-+			goto out;
- 		}
- 
- 		if (!vp.old_vgname) {
-@@ -270,7 +270,7 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
- 		} else {
- 			if (strcmp(vp.old_vgname, vgname)) {
- 				log_error("Devices must be from the same VG.");
--				goto_out;
-+				goto out;
- 			}
- 		}
- 	}
-@@ -360,4 +360,3 @@ out:
- 
- 	return ret;
- }
--
+ 	if (vp.already_consistent) {
+-		log_print_unless_silent("Volume group \"%s\" is already consistent", vg_name);
++		log_print_unless_silent("Volume group \"%s\" is already consistent.", vg_name);
+ 		ret = ECMD_PROCESSED;
+ 	} else if (vp.fixed) {
+-		log_print_unless_silent("Wrote out consistent volume group %s", vg_name);
++		log_print_unless_silent("Wrote out consistent volume group %s.", vg_name);
+ 		ret = ECMD_PROCESSED;
+ 	} else
+ 		ret = ECMD_FAILED;
 
 
