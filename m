@@ -1,66 +1,47 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Thu, 24 Nov 2016 00:16:44 +0000 (UTC)
-Subject: master - lvmdbusd: Only read whats buffered
-Message-ID: <20161124001644.82CE7608F2@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Fri, 25 Nov 2016 10:32:01 +0000 (UTC)
+Subject: master - scripts: fix comment about blk-availability init script
+Message-ID: <20161125103201.543EE60772@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=064e24bc1e9f5b84a5987febaf0d11e5aeae39e2
-Commit:        064e24bc1e9f5b84a5987febaf0d11e5aeae39e2
-Parent:        a7404b5b830479e9ff7dd634e015c9ebcdb9b20b
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Nov 23 14:49:23 2016 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Nov 23 18:16:11 2016 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2ad66b4e7bf1c88bd57b6d97f9feb07b99ae3e19
+Commit:        2ad66b4e7bf1c88bd57b6d97f9feb07b99ae3e19
+Parent:        064e24bc1e9f5b84a5987febaf0d11e5aeae39e2
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Fri Nov 25 11:30:48 2016 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Fri Nov 25 11:30:55 2016 +0100
 
-lvmdbusd: Only read whats buffered
+scripts: fix comment about blk-availability init script
 
-When reading data from stdout & stderr we were reading until the
-reading until we got None back which really isn't needed as the
-read will return everything that is available.
+The original comment got there as copy-paste error and it wasn't edited
+properly for blk-availability.
 ---
- daemons/lvmdbusd/lvm_shell_proxy.py |   19 ++++++-------------
- 1 files changed, 6 insertions(+), 13 deletions(-)
+ scripts/blk_availability_init_red_hat.in |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
-index 8d15e10..50f2201 100755
---- a/daemons/lvmdbusd/lvm_shell_proxy.py
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py
-@@ -64,13 +64,9 @@ class LVMShellProxy(object):
- 
- 				for r in ready[0]:
- 					if r == self.lvm_shell.stdout.fileno():
--						while True:
--							tmp = self.lvm_shell.stdout.read()
--							if tmp:
--								stdout += tmp.decode("utf-8")
--							else:
--								break
--
-+						tmp = self.lvm_shell.stdout.read()
-+						if tmp:
-+							stdout += tmp.decode("utf-8")
- 					elif r == self.report_r:
- 						while True:
- 							tmp = os.read(self.report_r, 16384)
-@@ -82,12 +78,9 @@ class LVMShellProxy(object):
- 								break
- 
- 					elif r == self.lvm_shell.stderr.fileno():
--						while True:
--							tmp = self.lvm_shell.stderr.read()
--							if tmp:
--								stderr += tmp.decode("utf-8")
--							else:
--								break
-+						tmp = self.lvm_shell.stderr.read()
-+						if tmp:
-+							stderr += tmp.decode("utf-8")
- 
- 				# Check to see if the lvm process died on us
- 				if self.lvm_shell.poll():
+diff --git a/scripts/blk_availability_init_red_hat.in b/scripts/blk_availability_init_red_hat.in
+index a84ffe7..657616e 100644
+--- a/scripts/blk_availability_init_red_hat.in
++++ b/scripts/blk_availability_init_red_hat.in
+@@ -10,10 +10,10 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ #
+-# This file is part of LVM2.
+-# It is required for the proper handling of failures of LVM2 mirror
+-# devices that were created using the -m option of lvcreate.
+-#
++# This script is responsible for executing blkdeactivate at shutdown
++# to properly unmount filesystems and deactivate device stacks containing
++# device-mapper devices (including plain device-mapper devices, LVM2 and
++# multipath devices) and MD devices.
+ #
+ # chkconfig: 12345 25 75
+ # description: Controls availability of block devices
 
 
