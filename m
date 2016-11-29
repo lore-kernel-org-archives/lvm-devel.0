@@ -1,130 +1,138 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 30 Nov 2016 23:22:46 +0000 (UTC)
-Subject: v2_02_168 annotated tag has been created
-Message-ID: <20161130232246.D3CA56096F@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Tue, 29 Nov 2016 22:51:29 +0000 (UTC)
+Subject: master - lvmdbusd: Simplfy reading streams
+Message-ID: <20161129225129.246D1612EC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c09aa3a299201a0cf34485fb8b1738fb81215bfa
-Commit:        c09aa3a299201a0cf34485fb8b1738fb81215bfa
-Parent:        0000000000000000000000000000000000000000
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2016-11-30 23:15 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2016-11-30 23:15 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d882edb32d8695ffb1498759649af93f407f39db
+Commit:        d882edb32d8695ffb1498759649af93f407f39db
+Parent:        25b5413f895bc61357ef4afab255e3125335d4ec
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Tue Nov 29 12:37:59 2016 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Tue Nov 29 16:50:30 2016 -0600
 
-annotated tag: v2_02_168 has been created
-	    at c09aa3a299201a0cf34485fb8b1738fb81215bfa (tag)
-       tagging 57e24817b70cf577eea5e57e30a6c3d21ac550fc (commit)
-      replaces v2_02_167
+lvmdbusd: Simplfy reading streams
 
-Release 2.02.168
+Remove redundant code and make code paths the same for all streams.
+---
+ daemons/lvmdbusd/lvm_shell_proxy.py |   52 +++++++++++++++++------------------
+ 1 files changed, 25 insertions(+), 27 deletions(-)
 
-59 files changed, 1663 insertions(+), 1143 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
-
-iEYEABECAAYFAlg/XeoACgkQIoGRwVZ+LBeBxACfeV5nIv3nXba0q1+KEPrfzHku
-6WMAoPzr6td3KBlnWf0esLqTZB5ydToz
-=rtKi
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (4):
-      post-release
-      lvconvert: Introduce enum to separate cases.
-      raid: Remove fixed FIXME
-      pre-release
-
-Bryn M. Reeves (1):
-      libdm: separate dm_stats_populate() error cases
-
-Heinz Mauelshagen (5):
-      dmsetup: return 0 for [--]{version,help}
-      dmsetup: [v2] return 0 for [--]{version,help}
-      lvchange: allow a transiently failed RaidLV to be refreshed
-      WHATS_NEW: Allow a transiently failed RaidLV to be refreshed
-      raid: fix sync percent on large RaidLVs
-
-Peter Rajnoha (4):
-      dbus: only log msg as debug if lvm2-lvmdbusd unit missing for D-Bus notification
-      dbus: also recognize error state for missing service that comes from original D-Bus
-      man: remove duplicate paragraph about selection criteria from lvm(8) man page
-      scripts: fix comment about blk-availability init script
-
-Tony Asleson (35):
-      lvmdbustest.py: Remove raid4 use
-      lvmdbus: Make bus name configurable
-      lvmdbusd: Use one thread to fetch state updates
-      lvmdbusd: Long running operations use own thread
-      lvmdbustest.py: Support concurrent test runs
-      lvmdbusd: _lv_create, simplify return path
-      lvmdbusd: Add cfg.load to pv remove
-      lvmdbusd: WS corrections
-      lvmdbusd: Remove un-used import
-      lvmdbustest.py: Reduce test client introspection calls
-      lvmdbusd: Bubble up invalid JSON
-      lvmdbusd: Extra report FD read on no data
-      lvmdbusd: Place Manager.UseLvmShell request on queue
-      lvmdbustest: Move std_err_print to testlib
-      lvmdbustest: Reduce dbus object churn
-      lvmdbusd: Remove debug JSON file
-      lvmdbusd: cmdhandler.py, fix imports
-      lvmdbusd: Fix source documentation
-      lvmdbusd: Remove extraneous finally
-      lvmdbusd: Only read whats buffered
-      lvmdbusd: Make lvm shell read more robust
-      lvmdbusd: Simplfy reading streams
-      lvmdbusd: WS fix
-      lvmdbusd: Remove debug log_error
-      lvmdbusd: Remove unused variable
-      lvmdbusd: Add --blackboxsize command line argument
-      lvmdbusd: Supress protected member access warning
-      lvmdbusd: Remove TODO on concurrent access to properties
-      lvmdbusd: Emit signal on Job completion
-      lvmdbustest.py: Re-enable test_vg_uuid_gen
-      lvmdbustest.py: Remove outdated TODOs
-      lvmdbustest.py: Remove redundant import
-      lvmdbustest.py: Rename env test variable
-      WHATS_NEW: New argument --blackboxsize
-      lvmdbusd: Only allow 0..N for --blackboxsize argument
-
-Zdenek Kabelac (34):
-      raid: faster rmeta clearing
-      tests: test raid0_meta type
-      tests: for repair we need neewer version
-      lvconvert: repair accepts interval and background
-      cleanup: skip checking for just assigned string
-      conf: support zero for missing_stripe_filler
-      tests: update make targets
-      tests: avoid using polling
-      tests: do not set zero interval in aux lvm.conf
-      cleanup: add dots to debug messages
-      cleanup: avoid using double __ in extracted image name
-      cleanup: debug trace and indent change
-      tests: fix checking for pvmove LV
-      raid: implement transient status check
-      raid: lvconvert uses transient check for raid
-      mirror: preserve MIRRORED status for temporara image
-      cleanup: use display_lvname and msg cleanup
-      cleanup: make this error an internal error
-      cleanup: use lv_update_and_reload
-      cleanup: hide gcc warning
-      cleanup: single LVM_SYSTEM_DIR string
-      cleanup: add doc for raid status states
-      cleanup: deactivate has builtin check for active lv
-      cleanup: use predefined macro for tmp image name
-      cleanup: defines
-      cleanup: indent changes
-      debug: stack tracing corrections
-      debug: more stacktrace corrections
-      cleanup: add some dots and use display_lvname
-      cleanup: add missing WARNING into log_warn
-      cleanup: indent
-      gcc: quiet warning about unused function
-      makefiles: drop file source and indent
-      tests: ensure there is dbus config file
+diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py b/daemons/lvmdbusd/lvm_shell_proxy.py
+index 464da79..ae8049f 100755
+--- a/daemons/lvmdbusd/lvm_shell_proxy.py
++++ b/daemons/lvmdbusd/lvm_shell_proxy.py
+@@ -43,6 +43,13 @@ def _quote_arg(arg):
+ 
+ class LVMShellProxy(object):
+ 
++	@staticmethod
++	def _read(stream):
++		tmp = stream.read()
++		if tmp:
++			return tmp.decode("utf-8")
++		return ''
++
+ 	# Read until we get prompt back and a result
+ 	# @param: no_output	Caller expects no output to report FD
+ 	# Returns stdout, report, stderr (report is JSON!)
+@@ -62,29 +69,17 @@ class LVMShellProxy(object):
+ 			try:
+ 				rd_fd = [
+ 					self.lvm_shell.stdout.fileno(),
+-					self.report_r,
++					self.report_stream.fileno(),
+ 					self.lvm_shell.stderr.fileno()]
+ 				ready = select.select(rd_fd, [], [], 2)
+ 
+ 				for r in ready[0]:
+ 					if r == self.lvm_shell.stdout.fileno():
+-						tmp = self.lvm_shell.stdout.read()
+-						if tmp:
+-							stdout += tmp.decode("utf-8")
+-					elif r == self.report_r:
+-						while True:
+-							tmp = os.read(self.report_r, 16384)
+-							if tmp:
+-								report += tmp.decode("utf-8")
+-								if len(tmp) != 16384:
+-									break
+-							else:
+-								break
+-
++						stdout += LVMShellProxy._read(self.lvm_shell.stdout)
++					elif r == self.report_stream.fileno():
++						report += LVMShellProxy._read(self.report_stream)
+ 					elif r == self.lvm_shell.stderr.fileno():
+-						tmp = self.lvm_shell.stderr.read()
+-						if tmp:
+-							stderr += tmp.decode("utf-8")
++						stderr += LVMShellProxy._read(self.lvm_shell.stderr)
+ 
+ 				# Check to see if the lvm process died on us
+ 				if self.lvm_shell.poll():
+@@ -131,6 +126,11 @@ class LVMShellProxy(object):
+ 		assert (num_written == len(cmd_bytes))
+ 		self.lvm_shell.stdin.flush()
+ 
++	@staticmethod
++	def _make_non_block(stream):
++		flags = fcntl(stream, F_GETFL)
++		fcntl(stream, F_SETFL, flags | os.O_NONBLOCK)
++
+ 	def __init__(self):
+ 
+ 		# Create a temp directory
+@@ -143,7 +143,10 @@ class LVMShellProxy(object):
+ 		except FileExistsError:
+ 			pass
+ 
+-		self.report_r = os.open(tmp_file, os.O_NONBLOCK)
++		# We have to open non-blocking as the other side isn't open until
++		# we actually fork the process.
++		self.report_fd = os.open(tmp_file, os.O_NONBLOCK)
++		self.report_stream = os.fdopen(self.report_fd, 'rb', 0)
+ 
+ 		# Setup the environment for using our own socket for reporting
+ 		local_env = copy.deepcopy(os.environ)
+@@ -154,9 +157,6 @@ class LVMShellProxy(object):
+ 		# when utilizing the lvm shell.
+ 		local_env["LVM_LOG_FILE_MAX_LINES"] = "0"
+ 
+-		flags = fcntl(self.report_r, F_GETFL)
+-		fcntl(self.report_r, F_SETFL, flags | os.O_NONBLOCK)
+-
+ 		# run the lvm shell
+ 		self.lvm_shell = subprocess.Popen(
+ 			[LVM_CMD + " 32>%s" % tmp_file],
+@@ -164,10 +164,8 @@ class LVMShellProxy(object):
+ 			stderr=subprocess.PIPE, close_fds=True, shell=True)
+ 
+ 		try:
+-			flags = fcntl(self.lvm_shell.stdout, F_GETFL)
+-			fcntl(self.lvm_shell.stdout, F_SETFL, flags | os.O_NONBLOCK)
+-			flags = fcntl(self.lvm_shell.stderr, F_GETFL)
+-			fcntl(self.lvm_shell.stderr, F_SETFL, flags | os.O_NONBLOCK)
++			LVMShellProxy._make_non_block(self.lvm_shell.stdout)
++			LVMShellProxy._make_non_block(self.lvm_shell.stderr)
+ 
+ 			# wait for the first prompt
+ 			errors = self._read_until_prompt(no_output=True)[2]
+@@ -176,8 +174,8 @@ class LVMShellProxy(object):
+ 		except:
+ 			raise
+ 		finally:
+-			# These will get deleted when the FD count goes to zero so we can be
+-			# sure to clean up correctly no matter how we finish
++			# These will get deleted when the FD count goes to zero so we
++			# can be sure to clean up correctly no matter how we finish
+ 			os.unlink(tmp_file)
+ 			os.rmdir(tmp_dir)
+ 
 
 
