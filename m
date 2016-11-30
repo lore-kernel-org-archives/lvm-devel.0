@@ -1,39 +1,37 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 14 Apr 2014 11:06:24 +0000 (UTC)
-Subject: master - cleanup: clvmd drop unused enum state
-Message-ID: <20140414110624.8E53F60CDC@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Wed, 30 Nov 2016 22:48:41 +0000 (UTC)
+Subject: master - WHATS_NEW: New argument --blackboxsize
+Message-ID: <20161130224841.4C9AA607A1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d896abc705d8aedd1d74c6fc01985fc88e7e44ed
-Commit:        d896abc705d8aedd1d74c6fc01985fc88e7e44ed
-Parent:        e2f194952a218562b198c47e78f7337572cfb29e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 9 08:11:49 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 14 13:02:27 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c0a508cfab66049e3953c7cf14c159170a585088
+Commit:        c0a508cfab66049e3953c7cf14c159170a585088
+Parent:        5da10fda4c0b7caa0e9cd221298a8ad475332e36
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Nov 30 16:40:49 2016 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Nov 30 16:47:31 2016 -0600
 
-cleanup: clvmd drop unused enum state
+WHATS_NEW: New argument --blackboxsize
 
 ---
- daemons/clvmd/clvmd.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.h b/daemons/clvmd/clvmd.h
-index 5ecf582..f11c033 100644
---- a/daemons/clvmd/clvmd.h
-+++ b/daemons/clvmd/clvmd.h
-@@ -56,7 +56,7 @@ struct localsock_bits {
- 	int cleanup_needed;     /* helper for cleanup_zombie */
- 	struct local_client *pipe_client;
- 	pthread_t threadid;
--	enum { PRE_COMMAND, POST_COMMAND, QUIT } state;
-+	enum { PRE_COMMAND, POST_COMMAND } state;
- 	pthread_mutex_t mutex;	/* Main thread and worker synchronisation */
- 	pthread_cond_t cond;
- };
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 20f3296..c35a85b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.168 - 
+ ====================================
++  lvmdbusd --blackboxsize <n> added, used to override default size of 16
+   Allow a transiently failed RaidLV to be refreshed
+   Use lv_update_and_reload() inside mirror code where it applies.
+   Preserve mirrored status for temporary layered mirrors.
 
 
