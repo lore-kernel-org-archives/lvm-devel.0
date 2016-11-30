@@ -1,71 +1,54 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 15 Apr 2014 08:15:53 +0000 (UTC)
-Subject: master - profiles: comment out thin_pool_chunk_size in default.profile
-Message-ID: <20140415081553.ED59D60D8A@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Wed, 30 Nov 2016 22:48:43 +0000 (UTC)
+Subject: master - lvmdbusd: Only allow 0..N for --blackboxsize argument
+Message-ID: <20161130224843.6281E607A1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=704609b17ee5c67fec65400ba48841aff70c6d21
-Commit:        704609b17ee5c67fec65400ba48841aff70c6d21
-Parent:        898059251442a89fc039cd49486771b6816df475
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Apr 15 10:09:18 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Apr 15 10:15:38 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9848bb7eaa73c9ac92c47062981f0111d30204a
+Commit:        c9848bb7eaa73c9ac92c47062981f0111d30204a
+Parent:        c0a508cfab66049e3953c7cf14c159170a585088
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Nov 30 16:45:50 2016 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Nov 30 16:47:39 2016 -0600
 
-profiles: comment out thin_pool_chunk_size in default.profile
+lvmdbusd: Only allow 0..N for --blackboxsize argument
 
-By default, the thin_pool_chunk_size is automatically calculated.
-When defined, it disables the automatic calculation. So to be more
-precise here, we should comment it out for the default.profile.
-
-Also, "lvm dumpconfig --type profilable" was used here to generate
-the default.profile content. This will be done automatically in the
-future once we have the infrastructure for this in (see also
-https://bugzilla.redhat.com/show_bug.cgi?id=1073415).
 ---
- conf/default.profile.in |   19 ++++++++-----------
- 1 files changed, 8 insertions(+), 11 deletions(-)
+ daemons/lvmdbusd/main.py |   10 +++++++++-
+ 1 files changed, 9 insertions(+), 1 deletions(-)
 
-diff --git a/conf/default.profile.in b/conf/default.profile.in
-index 527edb2..cc0279b 100644
---- a/conf/default.profile.in
-+++ b/conf/default.profile.in
-@@ -9,24 +9,21 @@
- # Refer to 'man lvm.conf' for further information about profiles and file layout.
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index 9bf0871..17e2175 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -54,6 +54,14 @@ def process_request():
+ 			utils.log_error("process_request exception: \n%s" % st)
  
- allocation {
--	thin_pool_chunk_size_policy = "generic"
--	thin_pool_chunk_size = 64
--	thin_pool_discards = "passdown"
--	thin_pool_zero = 1
-+	thin_pool_zero=1
-+	thin_pool_discards="passdown"
-+	thin_pool_chunk_size_policy="generic"
-+#	thin_pool_chunk_size=64
- }
--
--activation {
--	thin_pool_autoextend_threshold = 100
--	thin_pool_autoextend_percent = 20
--}
--
- global {
- 	units="h"
- 	si_unit_consistency=1
- 	suffix=1
- 	lvdisplay_shows_full_device_path=0
- }
--
-+activation {
-+	thin_pool_autoextend_threshold=100
-+	thin_pool_autoextend_percent=20
-+}
- report {
- 	aligned=1
- 	buffered=1
+ 
++def check_bb_size(value):
++	v = int(value)
++	if v < 0:
++		raise argparse.ArgumentTypeError(
++			"positive integers only ('%s' invalid)" % value)
++	return v
++
++
+ def main():
+ 	start = time.time()
+ 	# Add simple command line handling
+@@ -80,7 +88,7 @@ def main():
+ 		"--blackboxsize",
+ 		help="Size of the black box flight recorder, 0 to disable",
+ 		default=10,
+-		type=int,
++		type=check_bb_size,
+ 		dest='bb_size')
+ 
+ 	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
 
 
