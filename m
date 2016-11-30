@@ -1,62 +1,65 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:55:23 +0000 (UTC)
-Subject: master - cleanup: set _REENTRANT in header
-Message-ID: <20140418145523.3539C60F48@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Wed, 30 Nov 2016 23:22:28 +0000 (UTC)
+Subject: master - post-release
+Message-ID: <20161130232228.CDB6A6035D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20179523e2ab0d0dce757e1a689f30ad4add3f17
-Commit:        20179523e2ab0d0dce757e1a689f30ad4add3f17
-Parent:        451a168bf8ce913eee5c8c055345413a067569cc
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 15 20:20:46 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 18 16:38:50 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bb5eb324e3d503bf6dd8923531f63d3e1933ff0d
+Commit:        bb5eb324e3d503bf6dd8923531f63d3e1933ff0d
+Parent:        57e24817b70cf577eea5e57e30a6c3d21ac550fc
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Wed Nov 30 23:21:11 2016 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Nov 30 23:21:11 2016 +0000
 
-cleanup: set _REENTRANT in header
+post-release
 
-Use same way of setting _REENTRANT as in other
-files - set it in the first included header file
-(clvmd-common.h)
 ---
- daemons/clvmd/Makefile.in    |    1 -
- daemons/clvmd/clvmd-common.h |    3 +--
- 2 files changed, 1 insertions(+), 3 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    3 +++
+ WHATS_NEW_DM |    3 +++
+ 4 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
-index 0da95a7..d51ea3d 100644
---- a/daemons/clvmd/Makefile.in
-+++ b/daemons/clvmd/Makefile.in
-@@ -87,7 +87,6 @@ include $(top_builddir)/make.tmpl
- LVMLIBS += -ldevmapper
- LIBS += $(PTHREAD_LIBS)
- 
--DEFS += -D_REENTRANT
- CFLAGS += -fno-strict-aliasing $(EXTRA_EXEC_CFLAGS)
- LDFLAGS += $(EXTRA_EXEC_LDFLAGS)
- 
-diff --git a/daemons/clvmd/clvmd-common.h b/daemons/clvmd/clvmd-common.h
-index a94edd4..3070e49 100644
---- a/daemons/clvmd/clvmd-common.h
-+++ b/daemons/clvmd/clvmd-common.h
-@@ -20,14 +20,13 @@
- 
- #include "configure.h"
- 
-+#define _REENTRANT
- #define _GNU_SOURCE
- #define _FILE_OFFSET_BITS 64
- 
- #include "libdevmapper.h"
--
- #include "lvm-logging.h"
- 
- #include <unistd.h>
--#include <sys/stat.h>
- 
- #endif
+diff --git a/VERSION b/VERSION
+index a0333ee..014ff40 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.168(2)-git (2016-11-30)
++2.02.169(2)-git (2016-11-30)
+diff --git a/VERSION_DM b/VERSION_DM
+index 26e5e57..6734686 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.137-git (2016-11-30)
++1.02.138-git (2016-11-30)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1219042..3e551ec 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,6 @@
++Version 2.02.169 - 
++=====================================
++
+ Version 2.02.168 - 30th November 2016
+ =====================================
+   Display correct sync_percent on large RaidLVs
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index ee1851a..c6a4902 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,3 +1,6 @@
++Version 1.02.138 - 
++=====================================
++
+ Version 1.02.137 - 30th November 2016
+ =====================================
+   Document raid status values.
 
 
