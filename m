@@ -1,48 +1,108 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  1 Apr 2014 18:56:13 +0000 (UTC)
-Subject: master - debug: add internal error for passed LV
-Message-ID: <20140401185613.B8D9D60CB7@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Wed, 30 Nov 2016 21:59:35 +0000 (UTC)
+Subject: master - lvmdbusd: Add --blackboxsize command line argument
+Message-ID: <20161130215935.E91A46096F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dc5a3c9964229a5b7a23c7ceb76523d662ddbc27
-Commit:        dc5a3c9964229a5b7a23c7ceb76523d662ddbc27
-Parent:        1eaef2b705f82969e0a463f122ddda569676ce13
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 1 20:11:50 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 1 20:54:09 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3bc69cb23c29e8e016282508514ce191c756b89c
+Commit:        3bc69cb23c29e8e016282508514ce191c756b89c
+Parent:        b0757ac96e5c0f50e8d088200eb1ad62e535fcb6
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Tue Nov 29 18:01:56 2016 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Nov 30 15:59:06 2016 -0600
 
-debug: add internal error for passed LV
+lvmdbusd: Add --blackboxsize command line argument
 
-TODO: in fact we should parameter LV.
+Allows the user to override the number of commands that get dumped
+to the log when we encounter a lvm error.  Also useful during
+development when you don't want to see the blackbox output.
 ---
- lib/metadata/lv_manip.c |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |   13 +++++++------
+ daemons/lvmdbusd/main.py       |   16 ++++++++++++++--
+ 2 files changed, 21 insertions(+), 8 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 5d2cdb9..740eef0 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5202,10 +5202,15 @@ int remove_layer_from_lv(struct logical_volume *lv,
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index f221f93..f1591aa 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -55,18 +55,19 @@ class LvmExecutionMeta(object):
  
- 	if (!(parent_seg = get_only_segment_using_this_lv(layer_lv))) {
- 		log_error("Failed to find layer %s in %s",
--		layer_lv->name, lv->name);
-+			  layer_lv->name, lv->name);
- 		return 0;
- 	}
- 	parent = parent_seg->lv;
-+	if (parent != lv) {
-+		log_error(INTERNAL_ERROR "Wrong layer %s in %s",
-+			  layer_lv->name, lv->name);
-+		return 0;
-+	}
+ class LvmFlightRecorder(object):
  
- 	/*
- 	 * Before removal, the layer should be cleaned up,
+-	def __init__(self):
+-		self.queue = collections.deque(maxlen=16)
++	def __init__(self, size=16):
++		self.queue = collections.deque(maxlen=size)
+ 
+ 	def add(self, lvm_exec_meta):
+ 		self.queue.append(lvm_exec_meta)
+ 
+ 	def dump(self):
+ 		with cmd_lock:
+-			log_error("LVM dbus flight recorder START")
+-			for c in self.queue:
+-				log_error(str(c))
+-			log_error("LVM dbus flight recorder END")
++			if len(self.queue):
++				log_error("LVM dbus flight recorder START")
++				for c in self.queue:
++					log_error(str(c))
++				log_error("LVM dbus flight recorder END")
+ 
+ 
+ cfg.blackbox = LvmFlightRecorder()
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index 4b9f94e..9bf0871 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -29,6 +29,7 @@ from .utils import log_debug, log_error
+ import argparse
+ import os
+ import sys
++from .cmdhandler import LvmFlightRecorder
+ 
+ 
+ class Lvm(objectmanager.ObjectManager):
+@@ -75,6 +76,12 @@ def main():
+ 		help="Use the lvm shell, not fork & exec lvm",
+ 		default=False,
+ 		dest='use_lvm_shell')
++	parser.add_argument(
++		"--blackboxsize",
++		help="Size of the black box flight recorder, 0 to disable",
++		default=10,
++		type=int,
++		dest='bb_size')
+ 
+ 	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
+ 
+@@ -83,6 +90,11 @@ def main():
+ 
+ 	cfg.args = parser.parse_args()
+ 
++	# We create a flight recorder in cmdhandler too, but we replace it here
++	# as the user may be specifying a different size.  The default one in
++	# cmdhandler is for when we are running other code with a different main.
++	cfg.blackbox = LvmFlightRecorder(cfg.args.bb_size)
++
+ 	if cfg.args.use_lvm_shell and not cfg.args.use_json:
+ 		log_error("You cannot specify --lvmshell and --nojson")
+ 		sys.exit(1)
+@@ -118,8 +130,8 @@ def main():
+ 	# thread that is handling the dbus interface
+ 	thread_list.append(threading.Thread(target=process_request))
+ 
+-	# Have a single thread handling updating lvm and the dbus model so we don't
+-	# have multiple threads doing this as the same time
++	# Have a single thread handling updating lvm and the dbus model so we
++	# don't have multiple threads doing this as the same time
+ 	updater = StateUpdate()
+ 	thread_list.append(updater.thread)
+ 
 
 
