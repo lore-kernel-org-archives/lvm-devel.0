@@ -1,120 +1,62 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  5 Dec 2016 16:15:18 +0000 (UTC)
-Subject: master - activation: optimize away lv_has_target_type
-Message-ID: <20161205161518.447A1602F6@fedorahosted.org>
+Date: Mon,  5 Dec 2016 16:15:24 +0000 (UTC)
+Subject: master - cleanup: simplify code
+Message-ID: <20161205161524.729496030D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e2c7e0ad1196cc9323b63807ed199bcf4b10807c
-Commit:        e2c7e0ad1196cc9323b63807ed199bcf4b10807c
-Parent:        6fd20be629b6dceb96702c5f875a2e612e6f465d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=69c79ed2f486a9092cdf1586fcf320634e3cd44d
+Commit:        69c79ed2f486a9092cdf1586fcf320634e3cd44d
+Parent:        114f7e62854e7b62f613925881ad321c3d5f6ff3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Dec 5 15:23:18 2016 +0100
+AuthorDate:    Mon Dec 5 14:30:13 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Dec 5 17:10:14 2016 +0100
+CommitterDate: Mon Dec 5 17:12:42 2016 +0100
 
-activation: optimize away lv_has_target_type
+cleanup: simplify code
 
-It's actually not needed to call extra lv_has_target_type() to detect
-snapshot merge is in progress - decode this right during status
-capturing and save even few extra ioctl calls.
+Drop unneeded assignemnt in structs (var is set by called function).
 ---
- WHATS_NEW               |    1 +
- lib/activate/activate.c |   50 ++++++++++++++++++++++++++++------------------
- 2 files changed, 31 insertions(+), 20 deletions(-)
+ lib/metadata/lv.c |   10 +++-------
+ 1 files changed, 3 insertions(+), 7 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a097477..df4c49e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.169 - 
- =====================================
-+  Avoid using lv_has_target_type() call within lv_info_with_seg_status.
-   Simplify internal lv_info_with_seg_status API.
-   Decide which status is needed in one place for lv_info_with_seg_status.
-   Fix matching of LV segment when checking for it info status.
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index afdf518..3128f36 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -757,7 +757,7 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 			    struct lv_with_info_and_seg_status *status,
- 			    int with_open_count, int with_read_ahead)
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 087b564..081df71 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -243,10 +243,7 @@ char *lvseg_kernel_discards_dup(struct dm_pool *mem, const struct lv_segment *se
  {
--	const struct logical_volume *lv = status->lv = lv_seg->lv;
-+	const struct logical_volume *olv, *lv = status->lv = lv_seg->lv;
+ 	char *ret = NULL;
+ 	struct lv_with_info_and_seg_status status = {
+-		.seg_status = {
+-			.type = SEG_STATUS_NONE,
+-			.seg = seg
+-		},
++		.seg_status.type = SEG_STATUS_NONE
+ 	};
  
- 	if (!activation())
- 		return 0;
-@@ -780,36 +780,46 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 				status->info.exists = 0; /* So pool LV is not active */
- 		}
- 		return 1;
--	} else if (lv_is_origin(lv) &&
--		   (!lv_is_merging_origin(lv) ||
--		    !lv_has_target_type(cmd->mem, lv, NULL, TARGET_NAME_SNAPSHOT_MERGE))) {
-+	} else if (lv_is_origin(lv)) {
- 		/* Query segment status for 'layered' (-real) device most of the time,
- 		 * only for merging snapshot, query its progress.
- 		 * TODO: single LV may need couple status to be exposed at once....
- 		 *       but this needs more logical background
- 		 */
--		/* Show INFO for actual origin */
--		if (!_lv_info(cmd, lv, 0, &status->info, NULL, NULL, with_open_count, with_read_ahead))
-+		/* Show INFO for actual origin and grab status for merging origin */
-+		if (!_lv_info(cmd, lv, 0, &status->info, lv_seg,
-+			      lv_is_merging_origin(lv) ? &status->seg_status : NULL,
-+			      with_open_count, with_read_ahead))
- 			return_0;
+ 	if (!lv_is_thin_pool(seg->lv))
+@@ -416,8 +413,8 @@ dm_percent_t lvseg_percent_with_info_and_seg_status(const struct lv_with_info_an
+ 			else {
+ 				log_warn("WARNING: Thin volume %s maps %s while the size is only %s.",
+ 					 display_lvname(seg->lv),
+-					 display_size(lvdm->lv->vg->cmd, s->thin->mapped_sectors),
+-					 display_size(lvdm->lv->vg->cmd, csize));
++					 display_size(seg->lv->vg->cmd, s->thin->mapped_sectors),
++					 display_size(seg->lv->vg->cmd, csize));
+ 				/* Don't show nonsense numbers like i.e. 1000% full */
+ 				p = DM_PERCENT_100;
+ 			}
+@@ -1312,7 +1309,6 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ 	char *ret = NULL;
+ 	struct lv_with_info_and_seg_status status = {
+ 		.seg_status.type = SEG_STATUS_NONE,
+-		.lv = lv
+ 	};
  
--		if (status->info.exists)
-+		if (status->info.exists &&
-+		    (status->seg_status.type != SEG_STATUS_SNAPSHOT)) /* Not merging */
- 			/* Grab STATUS from layered -real */
- 			(void) _lv_info(cmd, lv, 1, NULL, lv_seg, &status->seg_status, 0, 0);
- 		return 1;
- 	} else if (lv_is_cow(lv)) {
--		if (lv_is_merging_cow(lv) &&
--		    lv_has_target_type(cmd->mem, origin_from_cow(lv), NULL, TARGET_NAME_SNAPSHOT_MERGE)) {
--			/*
--			 * When merge is in progress, query merging origin LV instead.
--			 * COW volume is already mapped as error target in this case.
--			 */
--			status->lv = lv = origin_from_cow(lv);
--			lv_seg = first_seg(lv);
--			log_debug_activation("Snapshot merge is in progress, querying status of %s instead.",
--					     display_lvname(lv));
--		} else
--			/* Hadle fictional lvm2 snapshot and query snapshotX volume */
--			lv_seg = find_snapshot(lv);
-+		if (lv_is_merging_cow(lv)) {
-+			olv = origin_from_cow(lv);
-+
-+			if (!_lv_info(cmd, olv, 0, &status->info, first_seg(olv), &status->seg_status,
-+				      with_open_count, with_read_ahead))
-+				return_0;
-+
-+			if (status->seg_status.type == SEG_STATUS_SNAPSHOT) {
-+				log_debug_activation("Snapshot merge is in progress, querying status of %s instead.",
-+						     display_lvname(lv));
-+				/*
-+				 * When merge is in progress, query merging origin LV instead.
-+				 * COW volume is already mapped as error target in this case.
-+				 */
-+				status->lv = olv;
-+				return 1;
-+			}
-+
-+			/* Merge not yet started, still a snapshot... */
-+		}
-+		/* Hadle fictional lvm2 snapshot and query snapshotX volume */
-+		lv_seg = find_snapshot(lv);
- 	}
- 
- 	return _lv_info(cmd, lv, 0, &status->info, lv_seg, &status->seg_status,
+ 	if (!(status.seg_status.mem = dm_pool_create("reporter_pool", 1024)))
 
 
