@@ -1,100 +1,97 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  5 Dec 2016 16:15:07 +0000 (UTC)
-Subject: master - activation: status check switch to warn
-Message-ID: <20161205161507.E3CE060238@fedorahosted.org>
+Date: Mon,  5 Dec 2016 16:15:10 +0000 (UTC)
+Subject: master - activation: improve error handling for status reading
+Message-ID: <20161205161510.0086060238@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4a4b22e11413ac76164fbdd9b3c353151c8dde70
-Commit:        4a4b22e11413ac76164fbdd9b3c353151c8dde70
-Parent:        325c2c5687e42afd2c8611e4cefd73f4fb7fb6ed
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ba2d58d28ace811c33e7e66b777fcca3f42149e
+Commit:        5ba2d58d28ace811c33e7e66b777fcca3f42149e
+Parent:        4a4b22e11413ac76164fbdd9b3c353151c8dde70
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 2 13:57:52 2016 +0100
+AuthorDate:    Thu Dec 1 10:37:03 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Dec 5 17:04:24 2016 +0100
+CommitterDate: Mon Dec 5 17:05:17 2016 +0100
 
-activation: status check switch to warn
+activation: improve error handling for status reading
 
-When we can't parse status, switch to warning as this is not
-considered an errornous case.  LVS is not supposed to return
-error status code when  device is not what it's been expected to
-be - but it should be WARNING a user there is something unexpected.
+When lvm2 wants to see a status, it needs to validate,
+segment for status reading is matching whan lvm2 expects in
+metadata.
+
+Also ensure status failure will not cause '0' from info reading
+when actual info was collected properly.
+Failure in 'status' reading is considered to be
+a 'log_warn()' event only.
 ---
  WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |   29 +++++++++++++++--------------
- 2 files changed, 16 insertions(+), 14 deletions(-)
+ lib/activate/dev_manager.c |   28 +++++++++++++++-------------
+ 2 files changed, 16 insertions(+), 13 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index fbf4f61..3aedebb 100644
+index 3aedebb..0f5ed02 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.169 - 
  =====================================
-+  Report log_warn when status cannot be parsed.
++  Fix matching of LV segment when checking for it info status.
+   Report log_warn when status cannot be parsed.
    Test segment type before accessing segment members when checking status.
    Implement compatible target function for stripe segment.
-   Use status info to report merge failed and snapshot invalid lvs fields.
 diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index b8b1235..8ace08c 100644
+index 8ace08c..56c6d1d 100644
 --- a/lib/activate/dev_manager.c
 +++ b/lib/activate/dev_manager.c
-@@ -126,7 +126,14 @@ static int _get_segment_status_from_target_params(const char *target_name,
- {
- 	struct segment_type *segtype;
+@@ -203,9 +203,8 @@ static int _info_run(info_type_t type, const char *name, const char *dlid,
+ 	struct dm_task *dmt;
+ 	int dmtask;
+ 	void *target = NULL;
+-	uint64_t target_start, target_length;
+-	char *target_name, *target_params, *params_to_process = NULL;
+-	uint32_t extent_size;
++	uint64_t target_start, target_length, start, length;
++	char *target_name, *target_params;
+ 	int with_flush = 1; /* TODO: arg for _info_run */
  
--	seg_status->type = SEG_STATUS_UNKNOWN;
-+	seg_status->type = SEG_STATUS_UNKNOWN; /* Parsing failed */
+ 	switch (type) {
+@@ -240,21 +239,24 @@ static int _info_run(info_type_t type, const char *name, const char *dlid,
+ 	} else if (read_ahead)
+ 		*read_ahead = DM_READ_AHEAD_NONE;
+ 
+-	if (type == STATUS) {
+-		extent_size = seg_status->seg->lv->vg->extent_size;
++	/* Query status only for active device */
++	if ((type == STATUS) && dminfo->exists) {
++		start = length = seg_status->seg->lv->vg->extent_size;
++		start *= seg_status->seg->le;
++		length *= seg_status->seg->len;
 +
-+	if (!params) {
-+		log_warn("WARNING: Cannot find matching %s segment for %s.",
-+			 seg_status->seg->segtype->name,
-+			 display_lvname(seg_status->seg->lv));
-+		return 0;
-+	}
+ 		do {
+ 			target = dm_get_next_target(dmt, target, &target_start,
+ 						    &target_length, &target_name, &target_params);
+-			if (((uint64_t) seg_status->seg->le * extent_size == target_start) &&
+-			    ((uint64_t) seg_status->seg->len * extent_size == target_length)) {
+-				params_to_process = target_params;
+-				break;
+-			}
++
++			if ((start == target_start) && (length == target_length))
++				break; /* Keep target_params when matching segment is found */
++
++			target_params = NULL; /* Marking this target_params unusable */
+ 		} while (target);
  
- 	/*
- 	 * TODO: Add support for other segment types too!
-@@ -141,19 +148,14 @@ static int _get_segment_status_from_target_params(const char *target_name,
- 		if (!(segtype = get_segtype_from_string(seg_status->seg->lv->vg->cmd, TARGET_NAME_SNAPSHOT)))
- 			return_0;
- 	} else {
--		if (strcmp(target_name, TARGET_NAME_CACHE) &&
--		    strcmp(target_name, TARGET_NAME_SNAPSHOT) &&
--		    strcmp(target_name, TARGET_NAME_THIN_POOL) &&
--		    strcmp(target_name, TARGET_NAME_THIN))
--			return 1; /* TODO: Do not know how to handle yet */
--
- 		if (!(segtype = get_segtype_from_string(seg_status->seg->lv->vg->cmd, target_name)))
- 			return_0;
- 
-+		/* Validate segtype from DM table and lvm2 metadata */
- 		if (segtype != seg_status->seg->segtype) {
--			log_error(INTERNAL_ERROR "_get_segment_status_from_target_params: "
--				  "segment type %s found does not match expected segment type %s",
--				  segtype->name, seg_status->seg->segtype->name);
-+			log_warn("WARNING: segment type %s found does not match "
-+				 "expected segment type %s.",
-+				 segtype->name, seg_status->seg->segtype->name);
- 			return 0;
- 		}
+-		if (params_to_process &&
+-		    !_get_segment_status_from_target_params(target_name, params_to_process, seg_status))
+-			goto_out;
++		if (!_get_segment_status_from_target_params(target_name, target_params, seg_status))
++			stack;
  	}
-@@ -178,10 +180,9 @@ static int _get_segment_status_from_target_params(const char *target_name,
- 		if (!dm_get_status_snapshot(seg_status->mem, params, &seg_status->snapshot))
- 			return_0;
- 		seg_status->type = SEG_STATUS_SNAPSHOT;
--	} else {
--		log_error(INTERNAL_ERROR "Unsupported segment type %s.", segtype->name);
--		return 0;
--	}
-+	} else
-+		/* Status not supported */
-+		seg_status->type = SEG_STATUS_NONE;
  
- 	return 1;
- }
+ 	r = 1;
 
 
