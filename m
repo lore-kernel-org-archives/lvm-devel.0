@@ -1,51 +1,89 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  5 Dec 2016 16:15:36 +0000 (UTC)
-Subject: master - tests: more snaps
-Message-ID: <20161205161536.D551760528@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Fri,  9 Dec 2016 10:56:08 +0000 (UTC)
+Subject: master - libdm-stats: fix dm_stats_delete_region() performance
+Message-ID: <20161209105608.1F5C860AB0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0ce9ae3cda9411f8f2a5491b07a6c4f06ab44da1
-Commit:        0ce9ae3cda9411f8f2a5491b07a6c4f06ab44da1
-Parent:        3f6ade4b0d5901bb01bcbdfdb926823415a01703
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Dec 4 22:27:57 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Dec 5 17:12:42 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6dd0bd0255d585feca61000432d2de9552ede4e0
+Commit:        6dd0bd0255d585feca61000432d2de9552ede4e0
+Parent:        0ce9ae3cda9411f8f2a5491b07a6c4f06ab44da1
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Thu Dec 8 20:55:47 2016 +0000
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Fri Dec 9 10:55:39 2016 +0000
 
-tests: more snaps
+libdm-stats: fix dm_stats_delete_region() performance
 
-Check lvs reports 'origin' not openned.
+Fix a silly bug in dm_stats_delete_region() that hugely inflates
+runtimes when deleting a large number of regions.
+
+For ~50,000 regions this change reduces the runtime from 98s to
+6s on my test systems (a ~93% reduction).
+
+The bug exists because dm_stats_delete_region() applies a truth
+test to the return value of dm_stats_get_nr_areas(); this is
+never correct usage - it will walk the entire region table and
+calculate area counts for each region (which is roughly O(n^2)
+in the number of regions, as dm_stats_delete_region() is being
+called inside a region walk).
+
+Although the individual area calculation is not that costly,
+uselessly running anything 2,500,000,000 times over gets a bit
+slow.
+
+A much cheaper test (which is always true if the areas check is
+true) is to just test dm_stats_get_nr_regions() or dms->regions;
+if either is true it implies at least one area exists.
+
+Old:
+
+ Performance counter stats for 'dmstats delete --allregions --alldevices':
+
+      98117.791458      task-clock (msec)         #    1.000 CPUs utilized
+               127      context-switches          #    0.001 K/sec
+                 3      cpu-migrations            #    0.000 K/sec
+             6,631      page-faults               #    0.068 K/sec
+   307,711,724,562      cycles                    #    3.136 GHz
+   544,762,959,577      instructions              #    1.77  insn per cycle
+    84,287,824,115      branches                  #  859.047 M/sec
+         2,538,875      branch-misses             #    0.00% of all branches
+
+      98.119578733 seconds time elapsed
+
+New:
+
+ Performance counter stats for 'dmstats delete --allregions --alldevices':
+
+       6427.251074      task-clock (msec)         #    1.000 CPUs utilized
+                 6      context-switches          #    0.001 K/sec
+                 0      cpu-migrations            #    0.000 K/sec
+             6,634      page-faults               #    0.001 M/sec
+    21,613,018,724      cycles                    #    3.363 GHz
+     3,794,755,445      instructions              #    0.18  insn per cycle
+       852,974,026      branches                  #  132.712 M/sec
+           808,625      branch-misses             #    0.09% of all branches
+
+       6.428953647 seconds time elapsed
 ---
- test/shell/snapshot-merge-stack.sh |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ libdm/libdm-stats.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/snapshot-merge-stack.sh b/test/shell/snapshot-merge-stack.sh
-index 3ee9eaa..bfafe71 100644
---- a/test/shell/snapshot-merge-stack.sh
-+++ b/test/shell/snapshot-merge-stack.sh
-@@ -37,14 +37,17 @@ snap_and_merge() {
- 	lvconvert -b --merge $vg/$lv2
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 2fc00da..411fd80 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -2051,7 +2051,7 @@ int dm_stats_delete_region(struct dm_stats *dms, uint64_t region_id)
+ 		goto bad;
+ 	}
  
- 	lvs -a -o+lv_merging,lv_merge_failed $vg
-+	get lv_field $vg/$lv1 lv_attr | grep "Owi-ao"
-+	get lv_field $vg/$lv2 lv_attr | grep "Swi-a-s---"
- 	kill $SLEEP_PID
- 
- 	aux delay_dev "$dev1"  0 200 $(get first_extent_sector "$dev1"):
- 	lvchange --poll n --refresh $vg/$lv1
- 	dmsetup table
--	lvs -a -o+lv_merging,lv_merge_failed $vg
-+	lvs -av -o+lv_merging,lv_merge_failed $vg
-+	# Origin is closed and snapshot merge could run
-+	get lv_field $vg/$lv1 lv_attr | grep "Owi-a-"
- 	sleep 1
--	check lv_attr_bit state $vg/$lv1 "a"
- 	check lv_attr_bit state $vg/$lv2 "a"
- 	aux error_dev "$dev2" $(get first_extent_sector "$dev2"):
- 	aux enable_dev "$dev1"
+-	if (!dm_stats_get_nr_areas(dms)) {
++	if (!dm_stats_get_nr_regions(dms)) {
+ 		log_error("Could not delete region ID " FMTu64 ": "
+ 			  "no regions found", region_id);
+ 		goto bad;
 
 
