@@ -1,89 +1,73 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Fri,  9 Dec 2016 10:56:08 +0000 (UTC)
-Subject: master - libdm-stats: fix dm_stats_delete_region() performance
-Message-ID: <20161209105608.1F5C860AB0@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri,  9 Dec 2016 14:15:19 +0000 (UTC)
+Subject: master - cleanup: easier code for raid plugin
+Message-ID: <20161209141519.B12FA602B6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6dd0bd0255d585feca61000432d2de9552ede4e0
-Commit:        6dd0bd0255d585feca61000432d2de9552ede4e0
-Parent:        0ce9ae3cda9411f8f2a5491b07a6c4f06ab44da1
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Dec 8 20:55:47 2016 +0000
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Fri Dec 9 10:55:39 2016 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f9c6c115d3cfd203e99561d500293dbfc8662f49
+Commit:        f9c6c115d3cfd203e99561d500293dbfc8662f49
+Parent:        15e4ab3e9375b561880fa83f0a5a3c438e192bcc
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Dec 9 13:58:19 2016 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Dec 9 15:15:02 2016 +0100
 
-libdm-stats: fix dm_stats_delete_region() performance
+cleanup: easier code for raid plugin
 
-Fix a silly bug in dm_stats_delete_region() that hugely inflates
-runtimes when deleting a large number of regions.
-
-For ~50,000 regions this change reduces the runtime from 98s to
-6s on my test systems (a ~93% reduction).
-
-The bug exists because dm_stats_delete_region() applies a truth
-test to the return value of dm_stats_get_nr_areas(); this is
-never correct usage - it will walk the entire region table and
-calculate area counts for each region (which is roughly O(n^2)
-in the number of regions, as dm_stats_delete_region() is being
-called inside a region walk).
-
-Although the individual area calculation is not that costly,
-uselessly running anything 2,500,000,000 times over gets a bit
-slow.
-
-A much cheaper test (which is always true if the areas check is
-true) is to just test dm_stats_get_nr_regions() or dms->regions;
-if either is true it implies at least one area exists.
-
-Old:
-
- Performance counter stats for 'dmstats delete --allregions --alldevices':
-
-      98117.791458      task-clock (msec)         #    1.000 CPUs utilized
-               127      context-switches          #    0.001 K/sec
-                 3      cpu-migrations            #    0.000 K/sec
-             6,631      page-faults               #    0.068 K/sec
-   307,711,724,562      cycles                    #    3.136 GHz
-   544,762,959,577      instructions              #    1.77  insn per cycle
-    84,287,824,115      branches                  #  859.047 M/sec
-         2,538,875      branch-misses             #    0.00% of all branches
-
-      98.119578733 seconds time elapsed
-
-New:
-
- Performance counter stats for 'dmstats delete --allregions --alldevices':
-
-       6427.251074      task-clock (msec)         #    1.000 CPUs utilized
-                 6      context-switches          #    0.001 K/sec
-                 0      cpu-migrations            #    0.000 K/sec
-             6,634      page-faults               #    0.001 M/sec
-    21,613,018,724      cycles                    #    3.363 GHz
-     3,794,755,445      instructions              #    0.18  insn per cycle
-       852,974,026      branches                  #  132.712 M/sec
-           808,625      branch-misses             #    0.09% of all branches
-
-       6.428953647 seconds time elapsed
+Set bits only when then were not yet assigned.
 ---
- libdm/libdm-stats.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/dmeventd/plugins/raid/dmeventd_raid.c |   17 ++++++++++-------
+ 1 files changed, 10 insertions(+), 7 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 2fc00da..411fd80 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -2051,7 +2051,7 @@ int dm_stats_delete_region(struct dm_stats *dms, uint64_t region_id)
- 		goto bad;
+diff --git a/daemons/dmeventd/plugins/raid/dmeventd_raid.c b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+index a207c99..911ae7a 100644
+--- a/daemons/dmeventd/plugins/raid/dmeventd_raid.c
++++ b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+@@ -38,6 +38,7 @@ static int _process_raid_event(struct dso_state *state, char *params, const char
+ 	struct dm_status_raid *status;
+ 	const char *d;
+ 	int dead = 0, r = 1;
++	uint32_t dev;
+ 
+ 	if (!dm_get_status_raid(state->mem, params, &status)) {
+ 		log_error("Failed to process status line for %s.", device);
+@@ -46,24 +47,26 @@ static int _process_raid_event(struct dso_state *state, char *params, const char
+ 
+ 	d = status->dev_health;
+ 	while ((d = strchr(d, 'D'))) {
+-		uint32_t dev = (uint32_t)(d - status->dev_health);
++		dev = (uint32_t)(d - status->dev_health);
+ 
+-		if (!(state->raid_devs[dev / 64] & (UINT64_C(1) << (dev % 64))))
+-			log_error("Device #%u of %s array, %s, has failed.",
+-				  dev, status->raid_type, device);
++		if (!(state->raid_devs[dev / 64] & (UINT64_C(1) << (dev % 64)))) {
++			state->raid_devs[dev / 64] |= (UINT64_C(1) << (dev % 64));
++			log_warn("WARNING: Device #%u of %s array, %s, has failed.",
++				 dev, status->raid_type, device);
++		}
+ 
+-		state->raid_devs[dev / 64] |= (UINT64_C(1) << (dev % 64));
+ 		d++;
+ 		dead = 1;
  	}
  
--	if (!dm_stats_get_nr_areas(dms)) {
-+	if (!dm_stats_get_nr_regions(dms)) {
- 		log_error("Could not delete region ID " FMTu64 ": "
- 			  "no regions found", region_id);
- 		goto bad;
+ 	if (dead) {
+ 		if (status->insync_regions < status->total_regions) {
+-			if (!state->warned)
++			if (!state->warned) {
++				state->warned = 1;
+ 				log_warn("WARNING: waiting for resynchronization to finish "
+ 					 "before initiating repair on RAID device %s.", device);
++			}
+ 
+-			state->warned = 1;
+ 			goto out; /* Not yet done syncing with accessible devices */
+ 		}
+ 
 
 
