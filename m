@@ -1,41 +1,38 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  9 Dec 2016 14:15:23 +0000 (UTC)
-Subject: master - tests: fix missing exclusive activation
-Message-ID: <20161209141523.D39EB602B6@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Fri,  9 Dec 2016 16:04:26 +0000 (UTC)
+Subject: master - libdm-stats: clear dms->regions in _stats_regions_destroy()
+Message-ID: <20161209160426.5E97660C9D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=900d203586faf1fef447002aa2e784cfc9575ad1
-Commit:        900d203586faf1fef447002aa2e784cfc9575ad1
-Parent:        c5aeb210155eff180ad5f1127ed451307bd7b854
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 8 16:27:24 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Dec 9 15:15:02 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cb8c04760f73b0376a909440da9c20f78694ea4e
+Commit:        cb8c04760f73b0376a909440da9c20f78694ea4e
+Parent:        900d203586faf1fef447002aa2e784cfc9575ad1
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Fri Dec 9 15:47:55 2016 +0000
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Fri Dec 9 16:04:13 2016 +0000
 
-tests: fix missing exclusive activation
+libdm-stats: clear dms->regions in _stats_regions_destroy()
 
-For cluster conversion  LV for caching needs to be activated
-exclusively.
 ---
- test/shell/lvs-cache.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdm/libdm-stats.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvs-cache.sh b/test/shell/lvs-cache.sh
-index 2c518d0..74077ae 100644
---- a/test/shell/lvs-cache.sh
-+++ b/test/shell/lvs-cache.sh
-@@ -23,7 +23,7 @@ aux have_cache 1 3 0 || skip
- aux prepare_vg 5 8000
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 411fd80..41adf42 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -347,6 +347,7 @@ static void _stats_regions_destroy(struct dm_stats *dms)
+ 	}
  
- # Use 10M origin size
--lvcreate -L10 -n $lv1 $vg
-+lvcreate -aey -L10 -n $lv1 $vg
- lvcreate -H -L5 $vg/$lv1
+ 	dm_pool_free(mem, dms->regions);
++	dms->regions = NULL;
+ }
  
- # replace 10M size with 5M size of cache device
+ static void _stats_group_destroy(struct dm_stats_group *group)
 
 
