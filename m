@@ -1,52 +1,67 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 11 Dec 2016 22:34:45 +0000 (UTC)
-Subject: master - raid: avoid _ at end of name of extracted metadata LV
-Message-ID: <20161211223445.3C7A26038F@fedorahosted.org>
+Date: Sun, 11 Dec 2016 22:34:47 +0000 (UTC)
+Subject: master - pvmove: fix activation order
+Message-ID: <20161211223447.5CA076038F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=67f9e6b175815d7a91a10ecc3d5098d30dbfed91
-Commit:        67f9e6b175815d7a91a10ecc3d5098d30dbfed91
-Parent:        55ca8043d4bb0ef4435a24728cad34f8b0ff6c8c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3903f915f83634f91946550fda85d60b72ce3a88
+Commit:        3903f915f83634f91946550fda85d60b72ce3a88
+Parent:        67f9e6b175815d7a91a10ecc3d5098d30dbfed91
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Dec 10 14:51:00 2016 +0100
+AuthorDate:    Sun Dec 11 14:26:17 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Dec 11 23:20:51 2016 +0100
+CommitterDate: Sun Dec 11 23:22:36 2016 +0100
 
-raid: avoid _ at end of name of extracted metadata LV
+pvmove: fix activation order
 
-Do not generate @PREFIX at vg/LV1_rmeta_1_extracted_.
+For proper locking we need to gain lock first for mirror which
+needs to be deactivated later to be working in cluster.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/raid_manip.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW           |    1 +
+ tools/pvmove_poll.c |   10 +++++-----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 9e95792..63cdb89 100644
+index 63cdb89..ea15903 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.169 - 
  =====================================
-+  Avoid adding extra '_' at end of raid extracted images or metadata.
++  Fix pvmove leaving -pvmove0 error device in clustered VG.
+   Avoid adding extra '_' at end of raid extracted images or metadata.
    Optimize another _rmeta clearing code.
    Fix deactivation of raid orphan devices for clustered VG.
-   Fix lvconvert raid1 to mirror table reload order.
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 159bfa2..58e3bcf 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1785,7 +1785,7 @@ static int _extract_image_component_error_seg(struct lv_segment *seg,
- 	if (!remove_seg_from_segs_using_this_lv(lv, seg))
- 		return_0;
+diff --git a/tools/pvmove_poll.c b/tools/pvmove_poll.c
+index ea4be24..2cd746b 100644
+--- a/tools/pvmove_poll.c
++++ b/tools/pvmove_poll.c
+@@ -157,17 +157,17 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
+ 		return 0;
+ 	}
  
--	if (!(lv->name = _generate_raid_name(lv, "extracted_", -1)))
-+	if (!(lv->name = _generate_raid_name(lv, "extracted", -1)))
- 		return_0;
++	/* Unsuspend LVs */
++	if (!resume_lvs(cmd, lvs_changed))
++		stack;
++
+ 	/* Release mirror LV.  (No pending I/O because it's been suspended.) */
+-	if (!resume_lv(cmd, lv_mirr)) {
++	if (!activate_lv_excl_local(cmd, lv_mirr)) {
+ 		log_error("Unable to reactivate logical volume \"%s\"",
+ 			  lv_mirr->name);
+ 		r = 0;
+ 	}
  
- 	if (set_error_seg && !replace_lv_with_error_segment(lv))
+-	/* Unsuspend LVs */
+-	if (!resume_lvs(cmd, lvs_changed))
+-		stack;
+-
+ 	/* Deactivate mirror LV */
+ 	if (!deactivate_lv(cmd, lv_mirr)) {
+ 		log_error("ABORTING: Unable to deactivate temporary logical "
 
 
