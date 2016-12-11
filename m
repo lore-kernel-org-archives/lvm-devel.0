@@ -1,54 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 11 Dec 2016 22:35:06 +0000 (UTC)
-Subject: master - tests: remove some leaking device
-Message-ID: <20161211223506.6248060C86@fedorahosted.org>
+Date: Sun, 11 Dec 2016 22:35:08 +0000 (UTC)
+Subject: master - tests: remove unwanted exit
+Message-ID: <20161211223508.7F51560C86@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b902fd08f688c823937fec612a0ea72848289e56
-Commit:        b902fd08f688c823937fec612a0ea72848289e56
-Parent:        bcf59a1b185c07a3f7e10f9de13e83501f9a852b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=273ccb11704075b1876f6931e9e8de19ff2b31a3
+Commit:        273ccb11704075b1876f6931e9e8de19ff2b31a3
+Parent:        b902fd08f688c823937fec612a0ea72848289e56
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Dec 11 10:24:06 2016 +0100
+AuthorDate:    Sun Dec 11 10:21:26 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Dec 11 23:24:19 2016 +0100
 
-tests: remove some leaking device
+tests: remove unwanted exit
 
-These tests leaks devices (known bugs).
-Remove them via dmsetup.
-
-TODO: fix actual commands
+Exit seemes slipped in from local testing in:
+eb6b2a11e3548f7598c726787494be2c3ea4dca1
 ---
- test/shell/lvconvert-repair-cache.sh |    4 ++++
- test/shell/lvcreate-repair.sh        |    3 +++
- 2 files changed, 7 insertions(+), 0 deletions(-)
+ test/shell/lvchange-thin.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-cache.sh b/test/shell/lvconvert-repair-cache.sh
-index 565ebf4..f709813 100644
---- a/test/shell/lvconvert-repair-cache.sh
-+++ b/test/shell/lvconvert-repair-cache.sh
-@@ -132,3 +132,7 @@ not "$FSCK" -n "$DM_DEV_DIR/$vg/$lv1"
- aux enable_dev "$dev1"
- 
- vgremove -ff $vg
+diff --git a/test/shell/lvchange-thin.sh b/test/shell/lvchange-thin.sh
+index b5a6a86..3a8cc52 100644
+--- a/test/shell/lvchange-thin.sh
++++ b/test/shell/lvchange-thin.sh
+@@ -49,7 +49,7 @@ test -n "$no_discard" || check grep_dmsetup status $vg-pool " no_discard_passdow
+ lvchange --discards passdown $vg/pool
+ check grep_dmsetup table $vg-pool -v "passdown"
+ test -n "$no_discard" || check grep_dmsetup status $vg-pool " discard_passdown"
+-exit
 +
-+# FIXME - device should not be here
-+should not dmsetup remove ${vg}-cpool_cmeta-missing_0_0
-+should not dmsetup remove ${vg}-cpool_cdata-missing_0_0
-diff --git a/test/shell/lvcreate-repair.sh b/test/shell/lvcreate-repair.sh
-index 53a6fc1..f3be28a 100644
---- a/test/shell/lvcreate-repair.sh
-+++ b/test/shell/lvcreate-repair.sh
-@@ -100,3 +100,6 @@ vgreduce --removemissing --force $vg
- # Failed to activate new LV.
- 
- should lvcreate -l1 $vg "$dev1"
-+should not dmsetup remove ${vg}-lvol0
-+
-+vgremove -ff $vg
+ # zero_ARG  (default is 'yes')
+ check grep_dmsetup table $vg-pool -v "zeroing"
+ lvchange --zero n $vg/pool
 
 
