@@ -1,83 +1,72 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 11 Dec 2016 22:34:38 +0000 (UTC)
-Subject: master - raid: fix raid1 to mirror conversion
-Message-ID: <20161211223438.CDD2F60C4A@fedorahosted.org>
+Date: Sun, 11 Dec 2016 22:34:40 +0000 (UTC)
+Subject: master - raid: fix delete on clustered vg
+Message-ID: <20161211223440.EC20B60C4A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0c8369099bc6105f39982b3e36dd9a53c347b07a
-Commit:        0c8369099bc6105f39982b3e36dd9a53c347b07a
-Parent:        31564834db7610b37f52040fbba89f4c71de4c34
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8831a541a831a2d25cb96ee09f6739526d29e5c1
+Commit:        8831a541a831a2d25cb96ee09f6739526d29e5c1
+Parent:        0c8369099bc6105f39982b3e36dd9a53c347b07a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Dec 10 20:01:05 2016 +0100
+AuthorDate:    Sat Dec 10 20:00:32 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Dec 11 23:17:22 2016 +0100
+CommitterDate: Sun Dec 11 23:18:22 2016 +0100
 
-raid: fix raid1 to mirror conversion
+raid: fix delete on clustered vg
 
-Fix order of operation when converting raid1 into old mirror.
-Before any later metadata modification are initiated prepare
-mirror_log device with all clearing.
-Then directly convert  raid1 into mirror with mirror_log.
-This convertion now properly see as precommitted metadata
-new 'mirror' and committed old 'raid' and is able to
-preload all LVs.
+For clustered VG ensure lock is grabbed first,
+so later deactivation works.
+
+TODO: fix tree to solve device removal automatically.
 ---
  WHATS_NEW                 |    1 +
- lib/metadata/raid_manip.c |   13 +++++++------
- 2 files changed, 8 insertions(+), 6 deletions(-)
+ lib/metadata/raid_manip.c |   12 ++++++++++++
+ 2 files changed, 13 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 274430f..74627ba 100644
+index 74627ba..b6f74ec 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.169 - 
  =====================================
-+  Fix lvconvert raid1 to mirror table reload order.
++  Fix deactivation of raid orphan devices for clustered VG.
+   Fix lvconvert raid1 to mirror table reload order.
    Add internal function for separate mirror log preparation.
    Fix segfault in lvmetad from missing NULL in daemon_reply_simple.
-   Simplify internal _info_run() and use _setup_task_run() for mknod.
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 7c4ce61..5cbd819 100644
+index 5cbd819..661c39b 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -2207,6 +2207,7 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
- 				    int update_and_reload,
- 				    struct dm_list *removal_lvs)
+@@ -248,6 +248,12 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
  {
-+	struct logical_volume *log_lv;
- 	struct lv_segment *seg = first_seg(lv);
+ 	struct lv_list *lvl;
  
- 	if (!seg_is_raid1(seg)) {
-@@ -2227,7 +2228,10 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
- 		return 0;
- 	}
++	if (vg_is_clustered(vg))
++		/* Need to take lock for proper deactivation */
++		dm_list_iterate_items(lvl, removal_lvs)
++			if (!activate_lv_excl_local(vg->cmd, lvl->lv))
++				return_0;
++
+ 	dm_list_iterate_items(lvl, removal_lvs) {
+ 		if (!deactivate_lv(vg->cmd, lvl->lv))
+ 			return_0;
+@@ -2968,6 +2974,12 @@ static int _clear_meta_lvs(struct logical_volume *lv)
+ 	    !lv_update_and_reload(lv))
+ 		return_0;
  
--	init_mirror_in_sync(new_image_count > seg->area_count ? 0 : 1);
-+	if (!(log_lv = prepare_mirror_log(lv, (new_image_count <= seg->area_count) /* in sync */,
-+					  new_region_size,
-+					  allocate_pvs, lv->vg->alloc)))
-+		return_0; /* TODO remove log_lv on error path */
- 
- 	/* Change image pair count to requested # of images */
- 	if (new_image_count != seg->area_count) {
-@@ -2255,11 +2259,8 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
- 	seg->status &= ~RAID;
- 	lv->status |= (MIRROR | MIRRORED);
- 
--	/* Add mirror_log LV (should happen in wih image allocation */
--	if (!add_mirror_log(lv->vg->cmd, lv, 1, seg->region_size, allocate_pvs, lv->vg->alloc)) {
--		log_error("Unable to add mirror log to %s.", display_lvname(lv));
--		return 0;
--	}
-+	if (!attach_mirror_log(first_seg(lv), log_lv))
-+		return_0;
- 
- 	return update_and_reload ? _lv_update_reload_fns_reset_eliminate_lvs(lv, removal_lvs) : 1;
- }
++	/* Note: detached rmeta are NOT renamed */
++	/* Grab locks first in case of clustered VG */
++	if (vg_is_clustered(lv->vg))
++		dm_list_iterate_items(lvl, &meta_lvs)
++			if (!activate_lv_excl_local(lv->vg->cmd, lvl->lv))
++				return_0;
+ 	/*
+ 	 * Now deactivate the MetaLVs before clearing, so
+ 	 * that _clear_lvs() will activate them visible.
 
 
