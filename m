@@ -1,134 +1,79 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Dec 2016 21:09:43 +0000 (UTC)
-Subject: master - raid: improve table reload sequence
-Message-ID: <20161213210943.659DF60973@fedorahosted.org>
+Date: Tue, 13 Dec 2016 21:09:45 +0000 (UTC)
+Subject: master - segtype: check for seg type instead of status
+Message-ID: <20161213210945.8D0B060973@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=069039204002e5c8514050fe541bbd378c383a02
-Commit:        069039204002e5c8514050fe541bbd378c383a02
-Parent:        7dff632c11e6ddce77dc9cde8f9011bb22970589
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d1e398c474032716679f704008026b5d17e9469a
+Commit:        d1e398c474032716679f704008026b5d17e9469a
+Parent:        069039204002e5c8514050fe541bbd378c383a02
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Dec 13 12:31:28 2016 +0100
+AuthorDate:    Tue Dec 13 14:50:48 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Dec 13 22:07:52 2016 +0100
 
-raid: improve table reload sequence
+segtype: check for seg type instead of status
 
-This is another place for 'common' use pattern or
-reload and activation of deleted devices.
-(Moving the exclusive activation to _deactivate_and_remove_lvs()).
-
-TODO: looks like halve of raid function is reloading
-just 'origin' - and the other full LV.
+RAID is LV property - which has single segment of raid type.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/raid_manip.c |   60 ++++++--------------------------------------
- 2 files changed, 10 insertions(+), 51 deletions(-)
+ WHATS_NEW                |    1 +
+ lib/format_text/export.c |    2 +-
+ lib/metadata/merge.c     |    8 ++++----
+ 3 files changed, 6 insertions(+), 5 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index ea15903..a75183e 100644
+index a75183e..0561074 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.169 - 
  =====================================
-+  Reusing exiting code for raid image removal.
++  Check segtype directly instead of checking RAID in segment status. 
+   Reusing exiting code for raid image removal.
    Fix pvmove leaving -pvmove0 error device in clustered VG.
    Avoid adding extra '_' at end of raid extracted images or metadata.
-   Optimize another _rmeta clearing code.
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 98f30e2..f2c0b26 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -248,11 +248,10 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
- {
- 	struct lv_list *lvl;
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 1ecc362..199c185 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -623,7 +623,7 @@ int out_areas(struct formatter *f, const struct lv_segment *seg,
+ 			break;
+ 		case AREA_LV:
+ 			/* FIXME This helper code should be target-independent! Check for metadata LV property. */
+-			if (!(seg->status & RAID)) {
++			if (!seg_is_raid(seg)) {
+ 				outf(f, "\"%s\", %u%s",
+ 				     seg_lv(seg, s)->name,
+ 				     seg_le(seg, s),
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index bf0d2c0..6d52bc4 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -431,7 +431,7 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
+ 		}
  
--	if (vg_is_clustered(vg))
--		/* Need to take lock for proper deactivation */
--		dm_list_iterate_items(lvl, removal_lvs)
--			if (!activate_lv_excl_local(vg->cmd, lvl->lv))
--				return_0;
-+	/* Need to take lock/resume for proper deactivation */
-+	dm_list_iterate_items(lvl, removal_lvs)
-+		if (!activate_lv_excl_local(vg->cmd, lvl->lv))
-+			return_0;
+ 		if (complete_vg && seg->log_lv &&
+-		    !seg_is_mirrored(seg) && !(seg->status & RAID_IMAGE)) {
++		    !seg_is_mirrored(seg) && lv_is_raid_image(lv)) {
+ 			log_error("LV %s: segment %u log LV %s is not a "
+ 				  "mirror log or a RAID image",
+ 				  lv->name, seg_count, seg->log_lv->name);
+@@ -458,9 +458,9 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
+ 			}
+ 		}
  
- 	dm_list_iterate_items(lvl, removal_lvs) {
- 		if (!deactivate_lv(vg->cmd, lvl->lv))
-@@ -1214,15 +1213,14 @@ static int _raid_remove_images(struct logical_volume *lv,
- 			       struct dm_list *removal_lvs, int commit)
- {
- 	struct dm_list removed_lvs;
--	struct lv_list *lvl;
--
--	dm_list_init(&removed_lvs);
- 
- 	if (!archive(lv->vg))
- 		return_0;
- 
--	if (!removal_lvs)
-+	if (!removal_lvs) {
-+		dm_list_init(&removed_lvs);
- 		removal_lvs = &removed_lvs;
-+	}
- 
- 	if (!_raid_extract_images(lv, 0, new_count, allocate_pvs, 1,
- 				 removal_lvs, removal_lvs)) {
-@@ -1245,48 +1243,8 @@ static int _raid_remove_images(struct logical_volume *lv,
- 	if (!commit)
- 		return 1;
- 
--	if (!vg_write(lv->vg)) {
--		log_error("Failed to write changes for %s.",
--			  display_lvname(lv));
--		return 0;
--	}
--
--	if (!suspend_lv(lv->vg->cmd, lv)) {
--		log_error("Failed to suspend %s before committing changes.",
--			  display_lvname(lv));
--		vg_revert(lv->vg);
--		return 0;
--	}
--
--	if (!vg_commit(lv->vg)) {
--		log_error("Failed to commit changes for %s.",
--			  display_lvname(lv));
--		return 0;
--	}
--
--	/*
--	 * We activate the extracted sub-LVs first so they are renamed
--	 * and won't conflict with the remaining (possibly shifted)
--	 * sub-LVs.
--	 */
--	dm_list_iterate_items(lvl, removal_lvs) {
--		if (!activate_lv_excl_local(lv->vg->cmd, lvl->lv)) {
--			log_error("Failed to resume extracted LVs.");
--			return 0;
--		}
--	}
--
--	if (!resume_lv(lv->vg->cmd, lv)) {
--		log_error("Failed to resume %s after committing changes.",
--			  display_lvname(lv));
--		return 0;
--	}
--
--	if (!sync_local_dev_names(lv->vg->cmd)) {
--		log_error("Failed to sync local devices after committing changes for %s.",
--			  display_lvname(lv));
--		return 0;
--	}
-+	if (!lv_update_and_reload(lv))
-+		return_0;
- 
- 	/*
- 	 * Eliminate the extracted LVs
+-		if (complete_vg && seg->status & MIRROR_IMAGE) {
+-			if (!find_mirror_seg(seg) ||
+-			    !seg_is_mirrored(find_mirror_seg(seg))) {
++		if (complete_vg && lv_is_mirror_image(lv)) {
++			if (!(seg2 = find_mirror_seg(seg)) ||
++			    !seg_is_mirrored(seg2)) {
+ 				log_error("LV %s: segment %u mirror image "
+ 					  "is not mirrored",
+ 					  lv->name, seg_count);
 
 
