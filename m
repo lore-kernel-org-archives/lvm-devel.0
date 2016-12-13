@@ -1,240 +1,177 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Dec 2016 21:09:51 +0000 (UTC)
-Subject: master - cleanup: more lv_is_ usage
-Message-ID: <20161213210952.0017F60C42@fedorahosted.org>
+Date: Tue, 13 Dec 2016 21:09:54 +0000 (UTC)
+Subject: master - cleanup: log message updates
+Message-ID: <20161213210954.2032C607A9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a8f5e1f2744a568779445aa5def423f7e1210ee7
-Commit:        a8f5e1f2744a568779445aa5def423f7e1210ee7
-Parent:        47b96c3537968caf0cfb8ffa3874d64944715bec
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c7da16e5f162193db16f2a1845200fc99ed6ebc3
+Commit:        c7da16e5f162193db16f2a1845200fc99ed6ebc3
+Parent:        a8f5e1f2744a568779445aa5def423f7e1210ee7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Dec 13 00:09:15 2016 +0100
+AuthorDate:    Tue Dec 13 00:10:01 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Dec 13 22:07:52 2016 +0100
 
-cleanup: more  lv_is_  usage
+cleanup: log message updates
 
 ---
- lib/format1/import-export.c     |    2 +-
- lib/format1/import-extents.c    |    2 +-
- lib/format_pool/import_export.c |    2 +-
- lib/format_text/import_vsn1.c   |    2 +-
- lib/locking/lvmlockd.c          |    2 +-
- lib/metadata/lv.c               |    2 +-
- lib/metadata/lv_manip.c         |    7 +++----
- lib/metadata/raid_manip.c       |    2 +-
- lib/metadata/snapshot_manip.c   |    2 +-
- tools/toollib.c                 |    2 +-
- tools/vgchange.c                |    4 ++--
- tools/vgconvert.c               |    2 +-
- tools/vgsplit.c                 |    4 ++--
- 13 files changed, 17 insertions(+), 18 deletions(-)
+ lib/metadata/raid_manip.c |   42 ++++++++++++++++++++++++------------------
+ 1 files changed, 24 insertions(+), 18 deletions(-)
 
-diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
-index 9b7f5ef..146623e 100644
---- a/lib/format1/import-export.c
-+++ b/lib/format1/import-export.c
-@@ -510,7 +510,7 @@ int export_lvs(struct disk_list *dl, struct volume_group *vg,
- 		goto_out;
- 
- 	dm_list_iterate_items(ll, &vg->lvs) {
--		if (ll->lv->status & SNAPSHOT)
-+		if (lv_is_snapshot(ll->lv))
- 			continue;
- 
- 		if (!(lvdl = dm_pool_alloc(dl->mem, sizeof(*lvdl))))
-diff --git a/lib/format1/import-extents.c b/lib/format1/import-extents.c
-index 5cad4f2..3ab3ac4 100644
---- a/lib/format1/import-extents.c
-+++ b/lib/format1/import-extents.c
-@@ -56,7 +56,7 @@ static struct dm_hash_table *_create_lv_maps(struct dm_pool *mem,
- 	}
- 
- 	dm_list_iterate_items(ll, &vg->lvs) {
--		if (ll->lv->status & SNAPSHOT)
-+		if (lv_is_snapshot(ll->lv))
- 			continue;
- 
- 		if (!(lvm = dm_pool_alloc(mem, sizeof(*lvm))))
-diff --git a/lib/format_pool/import_export.c b/lib/format_pool/import_export.c
-index 1529df5..2f0f2eb 100644
---- a/lib/format_pool/import_export.c
-+++ b/lib/format_pool/import_export.c
-@@ -267,7 +267,7 @@ int import_pool_segments(struct dm_list *lvs, struct dm_pool *mem,
- 	dm_list_iterate_items(lvl, lvs) {
- 		lv = lvl->lv;
- 
--		if (lv->status & SNAPSHOT)
-+		if (lv_is_snapshot(lv))
- 			continue;
- 
- 		for (i = 0; i < subpools; i++) {
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index e11b16b..00caf21 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -512,7 +512,7 @@ static int _read_segments(struct logical_volume *lv, const struct dm_config_node
- 			count++;
- 		}
- 		/* FIXME Remove this restriction */
--		if ((lv->status & SNAPSHOT) && count > 1) {
-+		if (lv_is_snapshot(lv) && count > 1) {
- 			log_error("Only one segment permitted for snapshot");
- 			return 0;
- 		}
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index 8acf69c..92a970a 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -2651,7 +2651,7 @@ int lockd_lv_uses_lock(struct logical_volume *lv)
- 	if (lv_is_cow(lv))
- 		return 0;
- 
--	if (lv->status & SNAPSHOT)
-+	if (lv_is_snapshot(lv))
- 		return 0;
- 
- 	/* FIXME: lv_is_virtual_origin ? */
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 8f13f6b..1084149 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -971,7 +971,7 @@ int lv_mirror_image_in_sync(const struct logical_volume *lv)
- 	struct lv_segment *seg = first_seg(lv);
- 	struct lv_segment *mirror_seg;
- 
--	if (!(lv->status & MIRROR_IMAGE) || !seg ||
-+	if (!lv_is_mirror_image(lv) || !seg ||
- 	    !(mirror_seg = find_mirror_seg(seg))) {
- 		log_error(INTERNAL_ERROR "Cannot find mirror segment.");
- 		return 0;
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index fdfee36..211b190 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1139,7 +1139,8 @@ int set_lv_segment_area_lv(struct lv_segment *seg, uint32_t area_num,
- 			 display_lvname(seg->lv), seg->le, area_num,
- 			 display_lvname(lv), le);
- 
--	if (status & RAID_META) {
-+	lv->status |= status;
-+	if (lv_is_raid_metadata(lv)) {
- 		seg->meta_areas[area_num].type = AREA_LV;
- 		seg_metalv(seg, area_num) = lv;
- 		if (le) {
-@@ -1152,7 +1153,6 @@ int set_lv_segment_area_lv(struct lv_segment *seg, uint32_t area_num,
- 		seg_lv(seg, area_num) = lv;
- 		seg_le(seg, area_num) = le;
- 	}
--	lv->status |= status;
- 
- 	if (!add_seg_to_segs_using_this_lv(lv, seg))
- 		return_0;
-@@ -4678,8 +4678,7 @@ static int _lvresize_check(struct logical_volume *lv,
- 
- 	if (lv_is_raid_image(lv) || lv_is_raid_metadata(lv)) {
- 		log_error("Cannot resize a RAID %s directly",
--			  (lv->status & RAID_IMAGE) ? "image" :
--			  "metadata area");
-+			  lv_is_raid_image(lv) ? "image" : "metadata area");
- 		return 0;
- 	}
- 
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index b8a47c0..81e2ac2 100644
+index 81e2ac2..56fe6a7 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -135,7 +135,7 @@ static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
+@@ -1056,8 +1056,10 @@ static int _extract_image_components(struct lv_segment *seg, uint32_t idx,
+ 	struct logical_volume *data_lv = seg_lv(seg, idx);
+ 	struct logical_volume *meta_lv = seg_metalv(seg, idx);
  
- 	*tracking = NULL;
+-	log_very_verbose("Extracting image components %s and %s from %s",
+-			 data_lv->name, meta_lv->name, seg->lv->name);
++	log_very_verbose("Extracting image components %s and %s from %s.",
++			 display_lvname(data_lv),
++			 display_lvname(meta_lv),
++			 display_lvname(seg->lv));
  
--	if (!(lv->status & RAID))
-+	if (!lv_is_raid(lv))
- 		return 0;
- 
- 	for (s = 0; s < seg->area_count; s++)
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index 2f13ac9..b5fb60c 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -121,7 +121,7 @@ int lv_is_visible(const struct logical_volume *lv)
- 	if (lv_is_historical(lv))
- 		return 1;
- 
--	if (lv->status & SNAPSHOT)
-+	if (lv_is_snapshot(lv))
- 		return 0;
- 
- 	if (lv_is_cow(lv)) {
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 9f399b8..235e535 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -2402,7 +2402,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 			goto_out;
+ 	data_lv->status &= ~RAID_IMAGE;
+ 	meta_lv->status &= ~RAID_META;
+@@ -1185,8 +1187,9 @@ static int _raid_extract_images(struct logical_volume *lv,
+ 			}
+ 		}
+ 		if (!_extract_image_components(seg, s, &rmeta_lv, &rimage_lv)) {
+-			log_error("Failed to extract %s from %s",
+-				  seg_lv(seg, s)->name, lv->name);
++			log_error("Failed to extract %s from %s.",
++				  display_lvname(seg_lv(seg, s)),
++				  display_lvname(lv));
+ 			return 0;
  		}
  
--		if (lvl->lv->status & SNAPSHOT)
-+		if (lv_is_snapshot(lvl->lv))
- 			continue;
+@@ -1362,7 +1365,7 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
+ 		if (!lv_is_on_pvs(tracking, splittable_pvs)) {
+ 			log_error("Unable to split additional image from %s "
+ 				  "while tracking changes for %s.",
+-				  display_lvname(lv), tracking->name);
++				  display_lvname(lv), display_lvname(tracking));
+ 			return 0;
+ 		}
  
- 		/* Skip availability change for non-virt snaps when processing all LVs */
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 455f688..ca0f450 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -107,11 +107,11 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 			lv = origin_from_cow(lv);
+@@ -1502,7 +1505,7 @@ int lv_raid_split_and_track(struct logical_volume *lv,
+ 	}
  
- 		/* Only request activation of snapshot origin devices */
--		if ((lv->status & SNAPSHOT) || lv_is_cow(lv))
-+		if (lv_is_snapshot(lv) || lv_is_cow(lv))
- 			continue;
+ 	if (s < 0) {
+-		log_error("Unable to find image to satisfy request");
++		log_error("Unable to find image to satisfy request.");
+ 		return 0;
+ 	}
  
- 		/* Only request activation of mirror LV */
--		if ((lv->status & MIRROR_IMAGE) || (lv->status & MIRROR_LOG))
-+		if (lv_is_mirror_image(lv) || lv_is_mirror_log(lv))
- 			continue;
+@@ -2042,12 +2045,12 @@ static int _adjust_data_lvs(struct logical_volume *lv, enum mirror_raid_conv dir
+ 		dlv = seg_lv(seg, s);
  
- 		/* Only request activation of the first replicator-dev LV */
-diff --git a/tools/vgconvert.c b/tools/vgconvert.c
-index 4f28ba3..2c0ac08 100644
---- a/tools/vgconvert.c
-+++ b/tools/vgconvert.c
-@@ -97,7 +97,7 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
- 	if (cmd->fmt->features & FMT_RESTRICTED_LVIDS) {
- 		dm_list_iterate_items(lvl, &vg->lvs) {
- 			lv = lvl->lv;
--			if (lv->status & SNAPSHOT)
-+			if (lv_is_snapshot(lv))
- 				continue;
- 			if (lvnum_from_lvid(&lv->lvid) < MAX_RESTRICTED_LVS)
- 				continue;
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index 52f603f..e2ba6f7 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -112,7 +112,7 @@ static int _move_lvs(struct volume_group *vg_from, struct volume_group *vg_to)
- 	dm_list_iterate_safe(lvh, lvht, &vg_from->lvs) {
- 		lv = dm_list_item(lvh, struct lv_list)->lv;
+ 		if (!(sublv_name_suffix = first_substring(dlv->name, "_mimage_", "_rimage_", NULL))) {
+-			log_error(INTERNAL_ERROR "name lags image part");
++			log_error(INTERNAL_ERROR "Name %s lags image part.", dlv->name);
+ 			return 0;
+ 		}
  
--		if ((lv->status & SNAPSHOT))
-+		if (lv_is_snapshot(lv))
- 			continue;
+ 		*(sublv_name_suffix + 1) = conv[direction].type_char;
+-		log_debug_metadata("data LV renamed to %s.", display_lvname(dlv));
++		log_debug_metadata("Data LV renamed to %s.", display_lvname(dlv));
  
- 		if (lv_is_raid(lv))
-@@ -193,7 +193,7 @@ static int _move_snapshots(struct volume_group *vg_from,
- 	dm_list_iterate_safe(lvh, lvht, &vg_from->lvs) {
- 		lv = dm_list_item(lvh, struct lv_list)->lv;
+ 		dlv->status &= ~conv[direction].reset_flag;
+ 		dlv->status |= conv[direction].set_flag;
+@@ -3084,7 +3087,7 @@ static int _raid456_to_raid0_or_striped_wrapper(TAKEOVER_FN_ARGS)
+ 	if (!yes && yes_no_prompt("Are you sure you want to convert \"%s\" LV %s to \"%s\" "
+ 				  "type losing all resilience? [y/n]: ",
+ 				  lvseg_name(seg), display_lvname(lv), new_segtype->name) == 'n') {
+-		log_error("Logical volume %s NOT converted to \"%s\"",
++		log_error("Logical volume %s NOT converted to \"%s\".",
+ 			  display_lvname(lv), new_segtype->name);
+ 		return 0;
+ 	}
+@@ -3108,7 +3111,8 @@ static int _raid456_to_raid0_or_striped_wrapper(TAKEOVER_FN_ARGS)
  
--		if (!(lv->status & SNAPSHOT))
-+		if (!lv_is_snapshot(lv))
- 			continue;
+ 		if (segtype_is_any_raid0(new_segtype) &&
+ 		    !(rename_sublvs = _rename_area_lvs(lv, "_"))) {
+-			log_error("Failed to rename %s LV %s MetaLVs", lvseg_name(seg), display_lvname(lv));
++			log_error("Failed to rename %s LV %s MetaLVs.",
++				  lvseg_name(seg), display_lvname(lv));
+ 			return 0;
+ 		}
  
- 		dm_list_iterate_items(seg, &lv->segments) {
+@@ -3138,7 +3142,8 @@ static int _raid456_to_raid0_or_striped_wrapper(TAKEOVER_FN_ARGS)
+ 
+ 	if (rename_sublvs) {
+ 		if (!_rename_area_lvs(lv, NULL)) {
+-			log_error("Failed to rename %s LV %s MetaLVs", lvseg_name(seg), display_lvname(lv));
++			log_error("Failed to rename %s LV %s MetaLVs.",
++				  lvseg_name(seg), display_lvname(lv));
+ 			return 0;
+ 		}
+ 		if (!lv_update_and_reload(lv))
+@@ -3181,19 +3186,19 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
+ 		return _takeover_unsupported_yet(lv, new_stripes, new_segtype);
+ 
+ 	if (new_data_copies > new_image_count) {
+-		log_error("N number of data_copies \"--mirrors N-1\" may not be larger than number of stripes");
++		log_error("N number of data_copies \"--mirrors N-1\" may not be larger than number of stripes.");
+ 		return 0;
+ 	}
+ 
+ 	if (new_stripes && new_stripes != seg->area_count) {
+-		log_error("Can't restripe LV %s during conversion", display_lvname(lv));
++		log_error("Can't restripe LV %s during conversion.", display_lvname(lv));
+ 		return 0;
+ 	}
+ 
+ 	/* FIXME: restricted to raid4 for the time being... */
+ 	if (!segtype_is_raid4(new_segtype)) {
+ 		/* Can't convert striped/raid0* to e.g. raid10_offset */
+-		log_error("Can't convert %s to %s", display_lvname(lv), new_segtype->name);
++		log_error("Can't convert %s to %s.", display_lvname(lv), new_segtype->name);
+ 		return 0;
+ 	}
+ 
+@@ -3211,7 +3216,7 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
+ 
+ 	/* Add metadata LVs */
+ 	if (seg_is_raid0(seg)) {
+-		log_debug_metadata("Adding metadata LVs to %s", display_lvname(lv));
++		log_debug_metadata("Adding metadata LVs to %s.", display_lvname(lv));
+ 		if (!_raid0_add_or_remove_metadata_lvs(lv, 1 /* update_and_reload */, allocate_pvs, NULL))
+ 			return_0;
+ 	/* raid0_meta -> raid4 needs clearing of MetaLVs in order to avoid raid disk role cahnge issues in the kernel */
+@@ -3220,7 +3225,8 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
+ 		return_0;
+ 
+ 	/* Add the additional component LV pairs */
+-	log_debug_metadata("Adding %" PRIu32 " component LV pair(s) to %s", new_image_count - lv_raid_image_count(lv),
++	log_debug_metadata("Adding %" PRIu32 " component LV pair(s) to %s.",
++			   new_image_count - lv_raid_image_count(lv),
+ 			   display_lvname(lv));
+ 	if (!_lv_raid_change_image_count(lv, new_image_count, allocate_pvs, NULL, 0, 1))
+ 		return_0;
+@@ -3228,7 +3234,7 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
+ 	if (segtype_is_raid4(new_segtype) &&
+ 	    (!_shift_parity_dev(seg) ||
+ 	     !_rename_area_lvs(lv, "_"))) {
+-		log_error("Can't convert %s to %s", display_lvname(lv), new_segtype->name);
++		log_error("Can't convert %s to %s.", display_lvname(lv), new_segtype->name);
+ 		return 0;
+ 	}
+ 
+@@ -3239,7 +3245,7 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
+ 
+ 	_check_and_adjust_region_size(lv);
+ 
+-	log_debug_metadata("Updating VG metadata and reloading %s LV %s",
++	log_debug_metadata("Updating VG metadata and reloading %s LV %s.",
+ 			   lvseg_name(seg), display_lvname(lv));
+ 	if (!_lv_update_reload_fns_reset_eliminate_lvs(lv, NULL))
+ 		return_0;
 
 
