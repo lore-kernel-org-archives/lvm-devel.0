@@ -1,71 +1,48 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 13 Dec 2016 21:09:56 +0000 (UTC)
-Subject: master - cleanup: remove wrapping function
-Message-ID: <20161213210956.3E7BB607A9@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Tue, 13 Dec 2016 21:41:54 +0000 (UTC)
+Subject: master - libdm: ensure first extent is always counted
+Message-ID: <20161213214154.1316860CDD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fce7449d7311b49839f339b714c48e953e9a837a
-Commit:        fce7449d7311b49839f339b714c48e953e9a837a
-Parent:        c7da16e5f162193db16f2a1845200fc99ed6ebc3
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Dec 13 12:28:12 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Dec 13 22:07:52 2016 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f4401fe351f63679ae8f4bab448a9283fb631a4a
+Commit:        f4401fe351f63679ae8f4bab448a9283fb631a4a
+Parent:        fce7449d7311b49839f339b714c48e953e9a837a
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Tue Dec 13 21:36:11 2016 +0000
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Tue Dec 13 21:41:31 2016 +0000
 
-cleanup: remove wrapping function
+libdm: ensure first extent is always counted
 
-backup is not 'tested' for success and also it should
-actually happen just when command is finished.
-We do not target to make backups with each inter-step
-metadata change.
+If FIEMAP returns a single extent after the first call, no extent
+boundary is detected and the first extent is not counted by the
+normal mechanism.
+
+In this case, increment nr_extents at the same time the extent is
+added to the region table, before returning.
 ---
- lib/metadata/raid_manip.c |   23 ++++++-----------------
- 1 files changed, 6 insertions(+), 17 deletions(-)
+ libdm/libdm-stats.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 56fe6a7..049102a 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -226,21 +226,6 @@ static void _clear_allocation_prohibited(struct dm_list *pvs)
- 			pvl->pv->status &= ~PV_ALLOCATION_PROHIBITED;
- }
- 
--/* FIXME Move this out */
--/* Write, commit and optionally backup metadata of vg */
--static int _vg_write_commit_backup(struct volume_group *vg)
--{
--	if (!vg_write(vg) || !vg_commit(vg)) {
--		log_error("Failed to commit VG %s metadata.", vg->name);
--		return 0;
--	}
--
--	if (!backup(vg))
--		log_warn("WARNING: Backup of VG %s metadata failed. Continuing.", vg->name);
--
--	return 1;
--}
--
- /*
-  * Deactivate and remove the LVs on removal_lvs list from vg.
-  */
-@@ -1898,8 +1883,12 @@ static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
- 
- 	dm_list_init(removal_lvs);
- 
--	if (vg_write_requested && !_vg_write_commit_backup(vg))
--		return_0;
-+	if (vg_write_requested) {
-+		if (!vg_write(vg) || !vg_commit(vg))
-+			return_0;
-+
-+		backup(vg);
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 02a30dc..8d202d2 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -4286,8 +4286,10 @@ static uint64_t _stats_map_extents(struct dm_pool *mem,
+ 	 * If the file only has a single extent, no boundary is ever
+ 	 * detected to trigger addition of the first extent.
+ 	 */
+-	if (fm_ext[i - 1].fe_logical == 0)
++	if (fm_ext[i - 1].fe_logical == 0) {
+ 		_stats_add_extent(mem, fm_pending, nr_extents);
++		nr_extents++;
 +	}
  
- 	return 1;
- }
+ 	fiemap->fm_start = (fm_ext[i - 1].fe_logical +
+ 			    fm_ext[i - 1].fe_length);
 
 
