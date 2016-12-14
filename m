@@ -1,75 +1,67 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 14 Dec 2016 10:42:40 +0000 (UTC)
-Subject: master - raid: split preserves local exlusive activation
-Message-ID: <20161214104240.2226860C8C@fedorahosted.org>
+Date: Wed, 14 Dec 2016 10:42:42 +0000 (UTC)
+Subject: master - cleanup: use exiting function
+Message-ID: <20161214104242.32A2F60C8C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fecd043cca4b5f4d5a244d715c60ce35ff1b62d7
-Commit:        fecd043cca4b5f4d5a244d715c60ce35ff1b62d7
-Parent:        77e09c3fb4d019ab3a0472059481ef990c64b415
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0f98d5c2e6d103a46bb5eca75ac496622933c475
+Commit:        0f98d5c2e6d103a46bb5eca75ac496622933c475
+Parent:        fecd043cca4b5f4d5a244d715c60ce35ff1b62d7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Dec 14 10:19:25 2016 +0100
+AuthorDate:    Wed Dec 14 11:34:28 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Dec 14 11:40:01 2016 +0100
+CommitterDate: Wed Dec 14 11:41:42 2016 +0100
 
-raid: split preserves local exlusive activation
+cleanup: use exiting function
 
+Reuse existing code and some indent change.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/raid_manip.c |   19 ++-----------------
- 2 files changed, 3 insertions(+), 17 deletions(-)
+ lib/metadata/lv_manip.c   |    4 ++--
+ lib/metadata/raid_manip.c |    9 ++-------
+ 2 files changed, 4 insertions(+), 9 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 60e8fa5..4ac3377 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.169 - 
- =====================================
-+  Always active splitted RAID LV exclusively locally.
-   Do not use LV RAID status bit for segment status.
-   Check segtype directly instead of checking RAID in segment status. 
-   Reusing exiting code for raid image removal.
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index ed48239..b48b959 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -163,22 +163,6 @@ uint32_t lv_raid_image_count(const struct logical_volume *lv)
- 	return seg->area_count;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 211b190..1889998 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6258,12 +6258,12 @@ static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
+ 
+ int lv_update_and_reload(struct logical_volume *lv)
+ {
+-        return _lv_update_and_reload(lv, 0);
++	return _lv_update_and_reload(lv, 0);
  }
  
--static int _activate_sublv_preserving_excl(struct logical_volume *top_lv,
--					   struct logical_volume *sub_lv)
--{
--	struct cmd_context *cmd = top_lv->vg->cmd;
--
--	/* If top RAID was EX, use EX */
--	if (lv_is_active_exclusive_locally(top_lv)) {
--		if (!activate_lv_excl_local(cmd, sub_lv))
+ int lv_update_and_reload_origin(struct logical_volume *lv)
+ {
+-        return _lv_update_and_reload(lv, 1);
++	return _lv_update_and_reload(lv, 1);
+ }
+ 
+ /*
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index b48b959..5ec86a3 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -1464,13 +1464,8 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
+ 	/*
+ 	 * Eliminate the residual LVs
+ 	 */
+-	dm_list_iterate_items(lvl, &removal_lvs) {
+-		if (!deactivate_lv(cmd, lvl->lv))
 -			return_0;
--	} else {
--		if (!activate_lv(cmd, sub_lv))
+-
+-		if (!lv_remove(lvl->lv))
 -			return_0;
 -	}
--	return 1;
--}
--
- /* HM Helper: prohibit allocation on @pv if @lv already has segments allocated on it */
- static int _avoid_pv_of_lv(struct logical_volume *lv, struct physical_volume *pv)
- {
-@@ -1553,7 +1537,8 @@ int lv_raid_split_and_track(struct logical_volume *lv,
- 				display_lvname(lv));
++	if (!_deactivate_and_remove_lvs(lv->vg, &removal_lvs))
++                return_0;
  
- 	/* Activate the split (and tracking) LV */
--	if (!_activate_sublv_preserving_excl(lv, seg_lv(seg, s)))
-+	/* Preserving exclusive local activation also for tracked LV */
-+	if (!activate_lv_excl_local(lv->vg->cmd, seg_lv(seg, s)))
+ 	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
  		return_0;
- 
- 	log_print_unless_silent("Use 'lvconvert --merge %s' to merge back into %s.",
 
 
