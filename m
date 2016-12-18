@@ -1,62 +1,79 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 18 Dec 2016 18:52:02 +0000 (UTC)
-Subject: master - lvs: show status for layer
-Message-ID: <20161218185202.6804760E25@fedorahosted.org>
+Date: Sun, 18 Dec 2016 18:52:04 +0000 (UTC)
+Subject: master - thin: reload external origin with last thin
+Message-ID: <20161218185204.78F4A60E25@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c71fefad8d5e1d9a075553ab69791ddbf6bcb153
-Commit:        c71fefad8d5e1d9a075553ab69791ddbf6bcb153
-Parent:        bdfc96cb089031c6d95dccb0ff66616efdb16783
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7db46c4a39fd945f295a5bd4191bd48828072d24
+Commit:        7db46c4a39fd945f295a5bd4191bd48828072d24
+Parent:        c71fefad8d5e1d9a075553ab69791ddbf6bcb153
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Dec 17 21:54:51 2016 +0100
+AuthorDate:    Sat Dec 17 21:55:02 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Dec 18 19:12:12 2016 +0100
+CommitterDate: Sun Dec 18 19:13:34 2016 +0100
 
-lvs: show status for layer
+thin: reload external origin with last thin
 
-When LV is external origin, show info for LV but
-status for -layer.  So we expose more info to a user
-as otherwise active external origin is only linear
-mapping of -real layer.
+External origin could be activated as stand-alone device.
+When the last thin LV is removed, external origin is no longer
+the external origin and it's layer property was dropped.
 
-We do the same for i.e. old snaphost origin.
+Ensure dm table is correct by reloading external origin
+(when it's active).
 ---
  WHATS_NEW               |    1 +
- lib/activate/activate.c |    7 +++++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |   10 ++++++++++
+ 2 files changed, 11 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index eee6e98..93fc93e 100644
+index 93fc93e..6d36890 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.169 - 
  =====================================
-+  Improve reported lvs status for active external origin volume.
++  Fix dm table when the last user of active external origin is removed.
+   Improve reported lvs status for active external origin volume.
    Fix table load for splitted RAID LV and require explicit activation.
    Always active splitted RAID LV exclusively locally.
-   Do not use LV RAID status bit for segment status.
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index b4c8a2c..c554337 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -784,6 +784,13 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 				status->info.exists = 0; /* So pool LV is not active */
- 		}
- 		return 1;
-+	} else if (lv_is_external_origin(lv)) {
-+		if (!_lv_info(cmd, lv, 0, &status->info, NULL, NULL,
-+			      with_open_count, with_read_ahead))
-+			return_0;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 1889998..92a6d44 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1264,6 +1264,7 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
+ 	uint32_t count = extents;
+ 	uint32_t reduction;
+ 	struct logical_volume *pool_lv;
++	struct logical_volume *external_lv = NULL;
+ 
+ 	if (lv_is_merging_origin(lv)) {
+ 		log_debug_metadata("Dropping snapshot merge of %s to removed origin %s.",
+@@ -1275,6 +1276,9 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
+ 		if (!count)
+ 			break;
+ 
++		if (seg->external_lv)
++			external_lv = seg->external_lv;
 +
-+		(void) _lv_info(cmd, lv, 1, NULL, lv_seg, &status->seg_status, 0, 0);
-+		return 1;
- 	} else if (lv_is_origin(lv)) {
- 		/* Query segment status for 'layered' (-real) device most of the time,
- 		 * only for merging snapshot, query its progress.
+ 		if (seg->len <= count) {
+ 			if (seg->merge_lv) {
+ 				log_debug_metadata("Dropping snapshot merge of removed %s to origin %s.",
+@@ -1341,6 +1345,12 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
+ 		   !lv->vg->fid->fmt->ops->lv_setup(lv->vg->fid, lv))
+ 		return_0;
+ 
++	/* Removal of last user enforces refresh */
++	if (external_lv && !lv_is_external_origin(external_lv) &&
++	    lv_is_active(external_lv) &&
++	    !lv_update_and_reload(external_lv))
++		return_0;
++
+ 	return 1;
+ }
+ 
 
 
