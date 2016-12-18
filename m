@@ -1,165 +1,114 @@
 From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Sun, 18 Dec 2016 13:10:02 +0000 (UTC)
-Subject: master - dmstats: improve tool help output and option coverage
-Message-ID: <20161218131002.1725A60EB3@fedorahosted.org>
+Date: Sun, 18 Dec 2016 13:10:04 +0000 (UTC)
+Subject: master - dmstats: use better interval estimate for usleep() timer
+Message-ID: <20161218131004.3717860EB3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=68ec42ebaf288911b1cb95882678ca778b795953
-Commit:        68ec42ebaf288911b1cb95882678ca778b795953
-Parent:        4f9d901c7142a0f2a73eb0353db992407187a144
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=886b4f755d7f33194f92dafbf2c22517db4de374
+Commit:        886b4f755d7f33194f92dafbf2c22517db4de374
+Parent:        68ec42ebaf288911b1cb95882678ca778b795953
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Sun Dec 18 10:53:27 2016 +0000
+AuthorDate:    Sun Dec 18 12:39:26 2016 +0000
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Sun Dec 18 11:51:13 2016 +0000
+CommitterDate: Sun Dec 18 13:03:44 2016 +0000
 
-dmstats: improve tool help output and option coverage
+dmstats: use better interval estimate for usleep() timer
 
+Although the usleep() interval timer is not used if the Linux
+TIMERFD interface is available it should still provide reasonably
+good timing.
+
+Instead of trying to estimate the error from the duration of the
+last sleep, peg it to the start time of the program, and use the
+value of  ((start_time - now) % interval) to correct the current
+interval duration.
+
+This always pulls us back into sync at the end of each interval,
+rather than relying on trying to incrementally adjust the time
+duration at each interval start.
+
+This greatly reduces drift when the usleep() clock is used.
 ---
- tools/dmsetup.c |  104 +++++++++++++++++++++++++++++++++++++++++--------------
- 1 files changed, 78 insertions(+), 26 deletions(-)
+ tools/dmsetup.c |   20 +++++++++++---------
+ 1 files changed, 11 insertions(+), 9 deletions(-)
 
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index f068293..1be19d5 100644
+index 1be19d5..17c5742 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -5608,48 +5608,100 @@ static int _stats_help(CMD_ARGS);
-  * dmsetup stats <cmd> [options] [device_name]
-  * dmstats <cmd> [options] [device_name]
-  *
-- *    clear [--regionid id] <device_name>
-- *    create [--areas nr_areas] [--areasize size]
-- *           [ [--start start] [--length len] | [--segments]]
-- *           [--userdata data] [--programid id] [<device_name>]
-- *    delete [--regionid] <device_name>
-- *    delete_all [--programid id]
-- *    group [--alias name] [--alldevices] [--regions <regions>] [<device_name>]
-- *    list [--programid id] [<device_name>]
-- *    print [--clear] [--programid id] [--regionid id] [<device_name>]
-- *    report [--interval seconds] [--count count] [--units units] [--regionid id]
-- *           [--programid id] [<device>]
-- *    ungroup [--alldevices] [--groupid id] [<device_name>]
-+ *   clear [--allregions|--regionid id] [--alldevices|<device...>]
-+ *   create [--start <start> [--length <len>]
-+ *       [--areas <nr_areas>] [--areasize <size>]
-+ *       [--programid <id>] [--userdata <data> ]
-+ *       [--bounds histogram_boundaries] [--precise]
-+ *       [--alldevices|<device...>]
-+ *   create --filemap [--nogroup]
-+ *       [--programid <id>] [--userdata <data> ]
-+ *       [--bounds histogram_boundaries] [--precise] [<file_path>]
-+ *   delete [--allprograms|--programid id]
-+ *       [--allregions|--regionid id]
-+ *       [--alldevices|<device...>]
-+ *   group [--alias NAME] --regions <regions>
-+ *       [--allprograms|--programid id] [--alldevices|<device...>]
-+ *   list [--allprograms|--programid id] [--allregions|--regionid id]
-+ *   print [--clear] [--allprograms|--programid id]
-+ *       [--allregions|--regionid id]
-+ *       [--alldevices|<device...>]
-+ *   report [--interval <seconds>] [--count <cnt>]
-+ *       [--units <u>] [--programid <id>] [--regionid <id>]
-+ *       [-o <fields>] [-O|--sort <sort_fields>]
-+ *       [-S|--select <selection>] [--nameprefixes]
-+ *       [--noheadings] [--separator <separator>]
-+ *       [--allprograms|--programid id] [<device...>]
-+ *   ungroup --groupid <id> [--allprograms|--programid id]
-+ *       [--alldevices|<device...>]
-  */
+@@ -282,6 +282,7 @@ const char *_stats_types[] = {
  
-+#define INDENT "\n\t    "
-+/* groups of commonly used options */
- #define AREA_OPTS "[--areas <nr_areas>] [--areasize <size>] "
--#define CREATE_OPTS "[--start <start> [--length <len>]]\n\t\t" AREA_OPTS
-+#define REGION_OPTS "[--start <start> [--length <len>]" INDENT AREA_OPTS
- #define ID_OPTS "[--programid <id>] [--userdata <data> ] "
- #define SELECT_OPTS "[--programid <id>] [--regionid <id>] "
--#define PRINT_OPTS "[--clear] " SELECT_OPTS
--#define REPORT_OPTS "[--interval <seconds>] [--count <cnt>]\n\t\t[--units <u>]" SELECT_OPTS
--#define GROUP_OPTS "[--alias NAME] --regions <regions>"
-+#define HIST_OPTS "[--bounds histogram_boundaries] "
-+#define PRECISE_OPTS "[--precise] "
-+#define SEGMENTS_OPT "[--segments] "
-+#define EXTRA_OPTS HIST_OPTS PRECISE_OPTS
-+#define ALL_PROGS_OPT "[--allprograms|--programid id] "
-+#define ALL_REGIONS_OPT "[--allregions|--regionid id] "
-+#define ALL_DEVICES_OPT "[--alldevices|<device...>] "
-+#define ALL_PROGS_REGIONS_DEVICES ALL_PROGS_OPT INDENT ALL_REGIONS_OPT INDENT ALL_DEVICES_OPT
-+#define FIELD_OPTS "[-o <fields>] [-O|--sort <sort_fields>]"
-+#define DM_REPORT_OPTS FIELD_OPTS INDENT "[-S|--select <selection>] [--nameprefixes]" INDENT \
-+"[--noheadings] [--separator <separator>]"
-+
-+/* command options */
-+#define CREATE_OPTS REGION_OPTS INDENT ID_OPTS INDENT EXTRA_OPTS INDENT SEGMENTS_OPT
-+#define FILEMAP_OPTS "--filemap [--nogroup]" INDENT ID_OPTS INDENT EXTRA_OPTS
-+#define PRINT_OPTS "[--clear] " ALL_PROGS_REGIONS_DEVICES
-+#define REPORT_OPTS "[--interval <seconds>] [--count <cnt>]" INDENT \
-+"[--units <u>] " SELECT_OPTS INDENT DM_REPORT_OPTS INDENT ALL_PROGS_OPT
-+#define GROUP_OPTS "[--alias NAME] --regions <regions>" INDENT ALL_PROGS_OPT ALL_DEVICES_OPT
-+#define UNGROUP_OPTS ALL_PROGS_OPT INDENT ALL_DEVICES_OPT
+ /* report timekeeping */
+ static struct dm_timestamp *_cycle_timestamp = NULL;
++static struct dm_timestamp *_start_timestamp = NULL;
+ static uint64_t _interval = 0; /* configured interval in nsecs */
+ static uint64_t _new_interval = 0; /* flag top-of-interval */
+ static uint64_t _last_interval = 0; /* approx. measured interval in nsecs */
+@@ -650,12 +651,14 @@ static int _do_timer_wait(void)
+ static int _start_usleep_timer(void)
+ {
+ 	log_debug("Using usleep for interval timekeeping.");
++	_start_timestamp = dm_timestamp_alloc();
++	dm_timestamp_get(_start_timestamp);
+ 	return 1;
+ }
  
-+/*
-+ * The 'create' command has two entries in the table, to allow for the
-+ * the fact that 'create' and 'create --filemap' have largely disjoint
-+ * sets of options.
-+ */
- static struct command _stats_subcommands[] = {
- 	{"help", "", 0, 0, 0, 0, _stats_help},
--	{"clear", "--regionid <id> [<device>]", 0, -1, 1, 0, _stats_clear},
--	{"create", CREATE_OPTS "\n\t\t" ID_OPTS "[<device>]", 0, -1, 1, 0, _stats_create},
--	{"delete", "--regionid <id> <device>", 1, -1, 1, 0, _stats_delete},
-+	{"clear", ALL_REGIONS_OPT ALL_DEVICES_OPT, 0, -1, 1, 0, _stats_clear},
-+	{"create", CREATE_OPTS ALL_DEVICES_OPT, 0, -1, 1, 0, _stats_create},
-+	{"create", FILEMAP_OPTS "[<file_path>]", 0, -1, 1, 0, _stats_create},
-+	{"delete", ALL_PROGS_REGIONS_DEVICES, 1, -1, 1, 0, _stats_delete},
- 	{"group", GROUP_OPTS, 1, -1, 1, 0, _stats_group},
--	{"list", "[--programid <id>] [<device>]", 0, -1, 1, 0, _stats_report},
--	{"print", PRINT_OPTS "[<device>]", 0, -1, 1, 0, _stats_print},
--	{"report", REPORT_OPTS "[<device>]", 0, -1, 1, 0, _stats_report},
--	{"ungroup", "--groupid <id> [device]", 1, -1, 1, 0, _stats_ungroup},
-+	{"list", ALL_PROGS_OPT ALL_REGIONS_OPT, 0, -1, 1, 0, _stats_report},
-+	{"print", PRINT_OPTS, 0, -1, 1, 0, _stats_print},
-+	{"report", REPORT_OPTS "[<device...>]", 0, -1, 1, 0, _stats_report},
-+	{"ungroup", "--groupid <id> " UNGROUP_OPTS, 1, -1, 1, 0, _stats_ungroup},
- 	{"version", "", 0, -1, 1, 0, _version},
- 	{NULL, NULL, 0, 0, 0, 0, NULL}
- };
+ static int _do_usleep_wait(void)
+ {
+-	static struct dm_timestamp *_last_sleep, *_now = NULL;
++	static struct dm_timestamp *_now = NULL;
+ 	uint64_t this_interval;
+ 	int64_t delta_t;
  
- #undef AREA_OPTS
--#undef CREATE_OPTS
-+#undef REGION_OPTS
- #undef ID_OPTS
-+#undef SELECT_OPTS
-+#undef HIST_OPTS
-+#undef PRECISE_OPTS
-+#undef EXTRA_OPTS
-+#undef ALL_PROGS_OPT
-+#undef ALL_REGIONS_OPT
-+#undef ALL_DEVICES_OPT
-+#undef ALL_PROGS_REGIONS_DEVICES
-+#undef FIELD_OPTS
-+#undef DM_REPORT_OPTS
-+#undef CREATE_OPTS
-+#undef FILEMAP_OPTS
- #undef PRINT_OPTS
- #undef REPORT_OPTS
--#undef SELECT_OPTS
-+#undef GROUP_OPTS
-+#undef UNGROUP_OPTS
+@@ -664,9 +667,7 @@ static int _do_usleep_wait(void)
+ 	 * message ioctls by keeping track of the last wake time and
+ 	 * adjusting the sleep interval accordingly.
+ 	 */
+-	if (!_last_sleep && !_now) {
+-		if (!(_last_sleep = dm_timestamp_alloc()))
+-			return_0;
++	if (!_now) {
+ 		if (!(_now = dm_timestamp_alloc()))
+ 			return_0;
+ 		dm_timestamp_get(_now);
+@@ -674,19 +675,19 @@ static int _do_usleep_wait(void)
+ 		log_error("Using "FMTu64" as first interval.", this_interval);
+ 	} else {
+ 		dm_timestamp_get(_now);
+-		delta_t = dm_timestamp_delta(_now, _last_sleep);
+-		log_debug("Interval timer delta_t: "FMTi64, delta_t);
++		delta_t = dm_timestamp_delta(_now, _start_timestamp);
++		log_debug("Interval timer drift: "FMTi64,
++			  (delta_t % _interval));
  
- static int _dmsetup_help(CMD_ARGS);
+ 		/* FIXME: usleep timer drift over large counts. */
  
-@@ -5723,7 +5775,7 @@ static void _stats_usage(FILE *out)
- 	for (i = 0; _stats_subcommands[i].name; i++)
- 		fprintf(out, "\t%s %s\n", _stats_subcommands[i].name, _stats_subcommands[i].help);
+ 		/* adjust for time spent populating and reporting */
+-		this_interval = 2 * _interval - delta_t;
++		this_interval = _interval - (delta_t % _interval);
+ 		log_debug("Using "FMTu64" as interval.", this_interval);
+ 	}
  
--	fprintf(out, "<device> may be device name or -u <uuid> or "
-+	fprintf(out, "\n<device> may be device name or -u <uuid> or "
- 		     "-j <major> -m <minor>\n");
- 	fprintf(out, "<fields> are comma-separated.  Use 'help -c' for list.\n");
- 	fprintf(out, "\n");
+ 	/* Signal that a new interval has begun. */
+ 	_new_interval = 1;
+-	dm_timestamp_copy(_last_sleep, _now);
+ 
+ 	if (usleep(this_interval / NSEC_PER_USEC)) {
+ 		if (errno == EINTR)
+@@ -699,8 +700,9 @@ static int _do_usleep_wait(void)
+ 	}
+ 
+ 	if (_count == 2) {
+-		dm_timestamp_destroy(_last_sleep);
++		dm_timestamp_destroy(_start_timestamp);
+ 		dm_timestamp_destroy(_now);
++		_start_timestamp = _now = NULL;
+ 	}
+ 
+ 	return 1;
 
 
