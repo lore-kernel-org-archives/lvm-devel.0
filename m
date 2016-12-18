@@ -1,88 +1,77 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 18 Dec 2016 18:52:08 +0000 (UTC)
-Subject: master - cache: improve wait for cache clear
-Message-ID: <20161218185208.B4F9460E26@fedorahosted.org>
+Date: Sun, 18 Dec 2016 18:52:10 +0000 (UTC)
+Subject: master - cache: prepare status checking for layer
+Message-ID: <20161218185210.C609560E26@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bf157ed833f8732c4e264422bd8be46fdf75673a
-Commit:        bf157ed833f8732c4e264422bd8be46fdf75673a
-Parent:        36f609e513262547aa4d92c2b55d98b1471ba2e2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a24eae6e82f365c66f4faeabc975ead0c476916b
+Commit:        a24eae6e82f365c66f4faeabc975ead0c476916b
+Parent:        bf157ed833f8732c4e264422bd8be46fdf75673a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Dec 18 15:05:57 2016 +0100
+AuthorDate:    Sat Dec 17 21:52:27 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Dec 18 19:22:11 2016 +0100
+CommitterDate: Sun Dec 18 19:23:13 2016 +0100
 
-cache: improve wait for cache clear
+cache: prepare status checking for layer
 
-Avoid printing misleading message about single dirty block.
-Instead properly detect condition where the 'cleaner' policy
-needs to be installed without 'overloading' dirty variable.
-
-Also print warning if we would be clearing read-only volume.
-(it really shouldn't happen).
+To be ready to show status of cache volume, call the status
+with layer.  Layer is automatically detected in this case when
+cache volume is used in 'layered' form (needs -real suffix).
 ---
  WHATS_NEW                  |    1 +
- lib/metadata/cache_manip.c |   17 ++++++++++-------
- 2 files changed, 11 insertions(+), 7 deletions(-)
+ lib/activate/activate.c    |    4 ++--
+ lib/metadata/cache_manip.c |    2 +-
+ 3 files changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 5002308..2e9c953 100644
+index 2e9c953..6b9a310 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.169 - 
  =====================================
-+  Avoid shifting by one number of blocks when clearing dirty cache volume.
++  Support status checking of cache volume used in layer.
+   Avoid shifting by one number of blocks when clearing dirty cache volume.
    Extend metadata validation of external origin LV use count.
    Fix dm table when the last user of active external origin is removed.
-   Improve reported lvs status for active external origin volume.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index c554337..b7009e6 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -770,7 +770,7 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
+ 		/* INFO is not set as cache-pool cannot be active.
+ 		 * STATUS is collected from cache LV */
+ 		lv_seg = get_only_segment_using_this_lv(lv);
+-		(void) _lv_info(cmd, lv_seg->lv, 0, NULL, lv_seg, &status->seg_status, 0, 0);
++		(void) _lv_info(cmd, lv_seg->lv, 1, NULL, lv_seg, &status->seg_status, 0, 0);
+ 		return 1;
+ 	}
+ 
+@@ -1171,7 +1171,7 @@ int lv_cache_status(const struct logical_volume *cache_lv,
+ 		return 0;
+ 	}
+ 
+-	if (!lv_info(cache_lv->vg->cmd, cache_lv, 0, NULL, 0, 0)) {
++	if (!lv_info(cache_lv->vg->cmd, cache_lv, 1, NULL, 0, 0)) {
+ 		log_error("Cannot check status for locally inactive cache volume %s.",
+ 			  display_lvname(cache_lv));
+ 		return 0;
 diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index d73142d..54d907c 100644
+index 54d907c..ed72fae 100644
 --- a/lib/metadata/cache_manip.c
 +++ b/lib/metadata/cache_manip.c
-@@ -383,7 +383,7 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
- 	const struct logical_volume *lock_lv = lv_lock_holder(cache_lv);
- 	struct lv_segment *cache_seg = first_seg(cache_lv);
- 	struct lv_status_cache *status;
--	int cleaner_policy;
-+	int cleaner_policy, writeback;
- 	uint64_t dirty_blocks;
+@@ -475,7 +475,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	}
  
- 	*is_clean = 0;
-@@ -402,14 +402,11 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
- 
- 		cleaner_policy = !strcmp(status->cache->policy_name, "cleaner");
- 		dirty_blocks = status->cache->dirty_blocks;
--
--		/* No clear policy and writeback mode means dirty */
--		if (!cleaner_policy &&
--		    (status->cache->feature_flags & DM_CACHE_FEATURE_WRITEBACK))
--			dirty_blocks++;
-+		writeback = (status->cache->feature_flags & DM_CACHE_FEATURE_WRITEBACK);
- 		dm_pool_destroy(status->mem);
- 
--		if (!dirty_blocks)
-+		/* Only clear when policy is Clear or mode != writeback */
-+		if (!dirty_blocks && (cleaner_policy || !writeback))
- 			break;
- 
- 		log_print_unless_silent("Flushing " FMTu64 " blocks for cache %s.",
-@@ -420,6 +417,12 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
- 			continue;
- 		}
- 
-+		if (!(cache_lv->status & LVM_WRITE)) {
-+			log_warn("WARNING: Dirty blocks found on read-only cache volume %s.",
-+				 display_lvname(cache_lv));
-+			/* TODO: can we actually clean something? */
-+		}
-+
- 		/* Switch to cleaner policy to flush the cache */
- 		cache_seg->cleaner_policy = 1;
- 		/* Reaload kernel with "cleaner" policy */
+ 	/* Localy active volume is needed for writeback */
+-	if (!lv_is_active_locally(cache_lv)) {
++	if (!lv_info(cache_lv->vg->cmd, cache_lv, 1, NULL, 0, 0)) {
+ 		/* Give up any remote locks */
+ 		if (!deactivate_lv(cache_lv->vg->cmd, cache_lv)) {
+ 			log_error("Cannot deactivate remotely active cache volume %s.",
 
 
