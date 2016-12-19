@@ -1,113 +1,178 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 19 Dec 2016 13:42:17 +0000 (UTC)
-Subject: master - cache: support cached origin for snapshot
-Message-ID: <20161219134217.6FABE60FF2@fedorahosted.org>
+Date: Mon, 19 Dec 2016 13:42:19 +0000 (UTC)
+Subject: master - tests: usage of cached volume for snapshot
+Message-ID: <20161219134219.8FA6A60FF9@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0c56eb8f438a17a8c98470f9f6b2222235a7bf59
-Commit:        0c56eb8f438a17a8c98470f9f6b2222235a7bf59
-Parent:        eb3f83357afd2b7462f5be9f409424f588a138c8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f47da0ad234118f4a7a5e64b7a8480f6afd8e1de
+Commit:        f47da0ad234118f4a7a5e64b7a8480f6afd8e1de
+Parent:        0c56eb8f438a17a8c98470f9f6b2222235a7bf59
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Dec 19 14:08:56 2016 +0100
+AuthorDate:    Mon Dec 19 14:05:16 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Dec 19 14:41:42 2016 +0100
+CommitterDate: Mon Dec 19 14:41:43 2016 +0100
 
-cache: support cached origin for snapshot
+tests: usage of cached volume for snapshot
 
-Enable  'lvcreate/lvconvert -s' for cached LV.
-and supported operations:
-
-Create a snapshot of cached LV
-
-Split/Join snapshot LV to cached origin LV.
 ---
- WHATS_NEW                  |    1 +
- lib/metadata/cache_manip.c |    2 +-
- lib/metadata/lv_manip.c    |    2 +-
- tools/lvconvert.c          |   16 +++++++++++++++-
- 4 files changed, 18 insertions(+), 3 deletions(-)
+ test/shell/lvconvert-cache-snapshot.sh |   63 ++++++++++++++++++++++++++++++++
+ test/shell/lvconvert-cache.sh          |    1 -
+ test/shell/lvcreate-cache-snapshot.sh  |   63 ++++++++++++++++++++++++++++++++
+ 3 files changed, 126 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ab113ae..fa8f5c3 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.169 - 
- =====================================
-+  Enable usage of cached volumes as snapshot origin LV.
-   Fix displayed lv name when splitting snapshot (2.02.146).
-   Warn about command not making metadata backup just once per command.
-   Enable usage of cached volume as thin volume's external origin.
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 12b1054..404b1af 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -322,7 +322,7 @@ int validate_lv_cache_create_origin(const struct logical_volume *origin_lv)
- 	if (lv_is_cache_type(origin_lv) ||
- 	    lv_is_mirror_type(origin_lv) ||
- 	    lv_is_thin_volume(origin_lv) || lv_is_thin_pool_metadata(origin_lv) ||
--	    lv_is_origin(origin_lv) || lv_is_merging_origin(origin_lv) ||
-+	    lv_is_merging_origin(origin_lv) ||
- 	    lv_is_cow(origin_lv) || lv_is_merging_cow(origin_lv) ||
- 	    lv_is_virtual(origin_lv)) {
- 		log_error("Cache is not supported with %s segment type of the original logical volume %s.",
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 92a6d44..3862f11 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7428,7 +7428,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 				return NULL;
- 			}
- 
--			if (lv_is_cache_type(origin_lv)) {
-+			if (lv_is_cache_type(origin_lv) && !lv_is_cache(origin_lv)) {
- 				log_error("Snapshots of cache type volume %s "
- 					  "is not supported.", display_lvname(origin_lv));
- 				return NULL;
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 4103995..0f0f0ad 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2336,7 +2336,7 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
- 		return_0;
- 
- 	if (lv_is_locked(org) ||
--	    lv_is_cache_type(org) ||
-+	    (lv_is_cache_type(org) && !lv_is_cache(org)) ||
- 	    lv_is_thin_type(org) ||
- 	    lv_is_pvmove(org) ||
- 	    lv_is_mirrored(org) ||
-@@ -3771,6 +3771,16 @@ static int _convert_cache_volume_thin_pool(struct cmd_context *cmd, struct logic
- }
- 
- /*
-+ * Convert/Recombine  cacheLV to be an origin for snapshot
-+ * lvconvert --type snapshot cacheLV snapshotLV
-+ */
-+static int _convert_cache_volume_snapshot(struct cmd_context *cmd, struct logical_volume *lv,
-+					  struct lvconvert_params *lp)
-+{
-+	return _lvconvert_snapshot(cmd, lv, lp);
-+}
+diff --git a/test/shell/lvconvert-cache-snapshot.sh b/test/shell/lvconvert-cache-snapshot.sh
+new file mode 100644
+index 0000000..8f0ab53
+--- /dev/null
++++ b/test/shell/lvconvert-cache-snapshot.sh
+@@ -0,0 +1,63 @@
++#!/bin/sh
 +
-+/*
-  * Split a cache volume from a cache pool LV.
-  * lvconvert --splitcache LV
-  */
-@@ -4311,6 +4321,10 @@ static int _convert_cache_volume(struct cmd_context *cmd, struct logical_volume
- 	    arg_is_set(cmd, thinpool_ARG))
- 		return _convert_cache_volume_thin_pool(cmd, lv, lp);
- 
-+	if (!strcmp(lp->type_str, SEG_TYPE_NAME_SNAPSHOT) ||
-+	    arg_is_set(cmd, snapshot_ARG))
-+		return _convert_cache_volume_snapshot(cmd, lv, lp);
++# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
- 	/* The --thinpool alternative for --type thin-pool is not preferred, so not shown. */
++# Test various supported conversion of snapshot of cached volume
++
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux have_cache 1 3 0 || skip
++
++aux prepare_vg 1
++
++
++# Prepare cached LV
++lvcreate -aey -L1 -n $lv1 $vg
++lvcreate -H -L2 -n cpool $vg/$lv1
++
++# Prepare snapshot 'cow' LV
++lvcreate -L3 -n cow $vg
++
++# Can't use  'cached'  cow volume
++not lvconvert -s cow $vg/$lv1
++
++# Use cached LV with 'striped' cow volume
++lvconvert -y -s $vg/$lv1 cow
++check lv_field $vg/cow segtype linear
++check lv_field $vg/$lv1 segtype cache
++
++# Drop cache while being in-use origin
++lvconvert --splitcache $vg/$lv1
++check lv_field $vg/$lv1 segtype linear
++
++# Cache existing origin
++lvconvert -y --cache $vg/$lv1 --cachepool $vg/cpool
++check lv_field $vg/$lv1 segtype cache
++
++# Cannot split from 'origin' (being cached LV)
++not lvconvert -y --splitsnapshot $vg/$lv1
++
++lvchange --cachemode writeback $vg/$lv1
++check lv_field  $vg/$lv1 cache_mode "writeback"
++check grep_dmsetup status  ${vg}-${lv1}-real "writeback"
++
++lvchange --cachemode writethrough $vg/$lv1
++check lv_field  $vg/$lv1 cache_mode "writethrough"
++check grep_dmsetup status  ${vg}-${lv1}-real "writethrough"
++
++# Split 'cow'  from cached origin
++lvconvert -y --splitsnapshot $vg/cow
++get lv_field $vg/cow attr | grep "^-wi"
++
++vgremove -f $vg
+diff --git a/test/shell/lvconvert-cache.sh b/test/shell/lvconvert-cache.sh
+index 76116ea..31fe4e8 100644
+--- a/test/shell/lvconvert-cache.sh
++++ b/test/shell/lvconvert-cache.sh
+@@ -23,7 +23,6 @@ aux prepare_vg 5 80
+ lvcreate --type cache-pool -an -v -L 2 -n cpool $vg
+ lvcreate -H -L 4 -n corigin --cachepool $vg/cpool
  
- 	log_error("Operation not permitted on cache LV %s.", display_lvname(lv));
+-fail lvcreate -s -L2 $vg/corigin
+ fail lvcreate -s -L2 $vg/cpool
+ fail lvcreate -s -L2 $vg/cpool_cdata
+ fail lvcreate -s -L2 $vg/cpool_cmeta
+diff --git a/test/shell/lvcreate-cache-snapshot.sh b/test/shell/lvcreate-cache-snapshot.sh
+new file mode 100644
+index 0000000..6b6ef2c
+--- /dev/null
++++ b/test/shell/lvcreate-cache-snapshot.sh
+@@ -0,0 +1,63 @@
++#!/bin/sh
++# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++# Exercise creation of snapshot of cached LV
++
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++which mkfs.ext2 || skip
++which fsck || skip
++
++aux have_cache 1 5 0 || skip
++
++aux prepare_vg 2
++
++lvcreate --type cache-pool -L1 $vg/cpool
++lvcreate -H -L4 -n $lv1 $vg/cpool
++
++lvcreate -s -L2 -n $lv2 $vg/$lv1
++check lv_field $vg/$lv1 segtype cache
++
++
++# Make some 'fs' data in snapshot
++mkfs.ext2 "$DM_DEV_DIR/$vg/$lv2"
++mkdir mnt
++mount "$DM_DEV_DIR/$vg/$lv2" mnt
++touch mnt/test
++umount mnt
++
++sync
++aux udev_wait
++
++# Merge snap to origin
++lvconvert --merge $vg/$lv2
++
++# Check cached origin has no valid fs.
++fsck -n "$DM_DEV_DIR/$vg/$lv1"
++
++# Check deactivation
++lvchange -an $vg
++
++# Check activation
++lvchange -ay $vg
++
++
++lvconvert --uncache $vg/$lv1
++check lv_field $vg/$lv1 segtype linear
++
++# Uncached origin is fine as well
++fsck -n "$DM_DEV_DIR/$vg/$lv1"
++
++
++vgremove -ff $vg
 
 
