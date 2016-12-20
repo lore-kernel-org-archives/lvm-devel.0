@@ -1,48 +1,73 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue, 20 Dec 2016 17:08:14 +0000 (UTC)
-Subject: master - lvmdbusd: Remove un-needed main thread execution
-Message-ID: <20161220170814.9C22A60E29@fedorahosted.org>
+Date: Tue, 20 Dec 2016 17:08:16 +0000 (UTC)
+Subject: master - lvmdbusd: Use cfg.reload() instead of dbo.refresh
+Message-ID: <20161220170816.BCE0660E29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6fe6e8053a136af45174f153c00d404995af6e1c
-Commit:        6fe6e8053a136af45174f153c00d404995af6e1c
-Parent:        f47da0ad234118f4a7a5e64b7a8480f6afd8e1de
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=75568294be01f74ddadbf2c9bacf5d2fce219a44
+Commit:        75568294be01f74ddadbf2c9bacf5d2fce219a44
+Parent:        6fe6e8053a136af45174f153c00d404995af6e1c
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Dec 12 16:13:27 2016 -0600
+AuthorDate:    Mon Dec 12 16:15:12 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Tue Dec 20 11:06:57 2016 -0600
 
-lvmdbusd: Remove un-needed main thread execution
+lvmdbusd: Use cfg.reload() instead of dbo.refresh
 
+We want to update the data and send out any signals as needed, not just
+update the in memory database.
 ---
- daemons/lvmdbusd/request.py |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/lv.py |    4 ++--
+ daemons/lvmdbusd/vg.py |    4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/lvmdbusd/request.py b/daemons/lvmdbusd/request.py
-index a2c2ac9..7c5da46 100644
---- a/daemons/lvmdbusd/request.py
-+++ b/daemons/lvmdbusd/request.py
-@@ -54,12 +54,15 @@ class RequestEntry(object):
- 		r.timer_expired()
- 
- 	def _return_job(self):
-+		# Return job is only called when we create a request object or when
-+		# we pop a timer.  In both cases we are running in the correct context
-+		# and do not need to schedule the call back in main context.
- 		self._job = Job(self, self._job_state)
- 		cfg.om.register_object(self._job, True)
- 		if self._return_tuple:
--			mt_async_result(self.cb, ('/', self._job.dbus_object_path()))
-+			self.cb(('/', self._job.dbus_object_path()))
- 		else:
--			mt_async_result(self.cb, self._job.dbus_object_path())
-+			self.cb(self._job.dbus_object_path())
- 
- 	def run_cmd(self):
- 		try:
+diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
+index 79fff87..fa54322 100644
+--- a/daemons/lvmdbusd/lv.py
++++ b/daemons/lvmdbusd/lv.py
+@@ -618,7 +618,7 @@ class Lv(LvCommon):
+ 			rc, out, err = cmdhandler.activate_deactivate(
+ 				'lvchange', lv_name, activate, control_flags, options)
+ 			if rc == 0:
+-				dbo.refresh()
++				cfg.load()
+ 				return '/'
+ 			else:
+ 				raise dbus.exceptions.DBusException(
+@@ -667,7 +667,7 @@ class Lv(LvCommon):
+ 			rc, out, err = cmdhandler.lv_tag(
+ 				lv_name, tags_add, tags_del, tag_options)
+ 			if rc == 0:
+-				dbo.refresh()
++				cfg.load()
+ 				return '/'
+ 			else:
+ 				raise dbus.exceptions.DBusException(
+diff --git a/daemons/lvmdbusd/vg.py b/daemons/lvmdbusd/vg.py
+index d84bb75..9b1df4e 100644
+--- a/daemons/lvmdbusd/vg.py
++++ b/daemons/lvmdbusd/vg.py
+@@ -727,7 +727,7 @@ class Vg(AutomatedProperties):
+ 			rc, out, err = cmdhandler.vg_tag(
+ 				vg_name, tags_add, tags_del, tag_options)
+ 			if rc == 0:
+-				dbo.refresh()
++				cfg.load()
+ 				return '/'
+ 			else:
+ 				raise dbus.exceptions.DBusException(
+@@ -780,7 +780,7 @@ class Vg(AutomatedProperties):
+ 		if dbo:
+ 			rc, out, err = method(vg_name, value, options)
+ 			if rc == 0:
+-				dbo.refresh()
++				cfg.load()
+ 				return '/'
+ 			else:
+ 				raise dbus.exceptions.DBusException(
 
 
