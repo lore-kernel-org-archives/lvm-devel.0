@@ -1,75 +1,94 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Tue, 20 Dec 2016 17:08:18 +0000 (UTC)
-Subject: master - lvmdbusd: Use timeout_add instead
-Message-ID: <20161220170818.D44C360E29@fedorahosted.org>
+Date: Tue, 20 Dec 2016 17:08:20 +0000 (UTC)
+Subject: master - lvmdbustest: Print messages if timeout value > 10%
+Message-ID: <20161220170820.F23F860E29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a7e1f973ccd1abfc0f868f0b9c2382c2034e1633
-Commit:        a7e1f973ccd1abfc0f868f0b9c2382c2034e1633
-Parent:        75568294be01f74ddadbf2c9bacf5d2fce219a44
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=eacff5c189d0cb3c6ac17a8f0af0fe440f12c4b7
+Commit:        eacff5c189d0cb3c6ac17a8f0af0fe440f12c4b7
+Parent:        a7e1f973ccd1abfc0f868f0b9c2382c2034e1633
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Dec 14 15:30:01 2016 -0600
+AuthorDate:    Wed Dec 14 15:32:08 2016 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Tue Dec 20 11:06:57 2016 -0600
 
-lvmdbusd: Use timeout_add instead
+lvmdbustest: Print messages if timeout value > 10%
 
-The function timeout_add_seconds has quite a bit of variability.  Using
-timeout_add which specifies the timeout in ms instead of seconds.  Testing
-shows that this is much more consistent which should improve clients that
-are using shorter timeouts for the API and the connection.
+We will dump some informational messages if the time to return when we
+specify a timeout exceeds 10% of requested.
 ---
- daemons/lvmdbusd/request.py |   15 +++++++++------
- 1 files changed, 9 insertions(+), 6 deletions(-)
+ test/dbus/testlib.py |   25 ++++++++++++++++++++++---
+ 1 files changed, 22 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmdbusd/request.py b/daemons/lvmdbusd/request.py
-index 7c5da46..78392de 100644
---- a/daemons/lvmdbusd/request.py
-+++ b/daemons/lvmdbusd/request.py
-@@ -19,7 +19,6 @@ from .utils import log_error, mt_async_result
- class RequestEntry(object):
- 	def __init__(self, tmo, method, arguments, cb, cb_error,
- 			return_tuple=True, job_state=None):
--		self.tmo = tmo
- 		self.method = method
- 		self.arguments = arguments
- 		self.cb = cb
-@@ -35,23 +34,27 @@ class RequestEntry(object):
- 		self._return_tuple = return_tuple
- 		self._job_state = job_state
+diff --git a/test/dbus/testlib.py b/test/dbus/testlib.py
+index 89e73d2..34ff33a 100644
+--- a/test/dbus/testlib.py
++++ b/test/dbus/testlib.py
+@@ -16,6 +16,7 @@ from collections import OrderedDict
+ import dbus
+ import os
+ import sys
++import time
  
--		if self.tmo < 0:
-+		if tmo < 0:
- 			# Client is willing to block forever
- 			pass
- 		elif tmo == 0:
- 			self._return_job()
- 		else:
--			self.timer_id = GLib.timeout_add_seconds(
--				tmo, RequestEntry._request_timeout, self)
-+			# Note: using 990 instead of 1000 for second to ms conversion to
-+			# account for overhead.  Goal is to return just before the
-+			# timeout amount has expired.  Better to be a little early than
-+			# late.
-+			self.timer_id = GLib.timeout_add(
-+				tmo * 990, RequestEntry._request_timeout, self)
+ BUS_NAME = os.getenv('LVM_DBUS_NAME', 'com.redhat.lvmdbus1')
+ BASE_INTERFACE = 'com.redhat.lvmdbus1'
+@@ -188,10 +189,15 @@ class RemoteInterface(object):
  
- 	@staticmethod
- 	def _request_timeout(r):
- 		"""
- 		Method which gets called when the timer runs out!
- 		:param r:  RequestEntry which timed out
--		:return: Nothing
-+		:return: Result of timer_expired
- 		"""
--		r.timer_expired()
-+		return r.timer_expired()
+ 	def __init__(
+ 			self, dbus_object, interface, introspect,
+-			properties=None):
++			properties=None, timelimit=-1):
+ 		self.dbus_object = dbus_object
+ 		self.interface = interface
+ 		self.introspect = introspect
++		self.tmo = 0
++
++		if timelimit >= 0:
++			self.tmo = float(timelimit)
++			self.tmo *= 1.10
  
- 	def _return_job(self):
- 		# Return job is only called when we create a request object or when
+ 		self.dbus_interface = dbus.Interface(self.dbus_object, self.interface)
+ 		self._set_props(properties)
+@@ -203,7 +209,19 @@ class RemoteInterface(object):
+ 			return functools.partial(self, item)
+ 
+ 	def _wrapper(self, _method_name, *args, **kwargs):
++
++		# Lets see how long a method takes to execute, in call cases we should
++		# return something when the time limit has been reached.
++		start = time.time()
+ 		result = getattr(self.dbus_interface, _method_name)(*args, **kwargs)
++		end = time.time()
++
++		diff = end - start
++
++		if self.tmo > 0.0:
++			if diff > self.tmo:
++				std_err_print("\n Time exceeded: %f > %f %s" %
++								(diff, self.tmo, _method_name))
+ 
+ 		if self.introspect:
+ 			if 'RETURN_VALUE' in self.introspect[
+@@ -236,13 +254,14 @@ class ClientProxy(object):
+ 		short_name = ClientProxy._intf_short_name(interface)
+ 		self.short_interface_names.append(short_name)
+ 		ro = RemoteInterface(self.dbus_object, interface, introspect,
+-								properties)
++								properties, timelimit=self.tmo)
+ 		setattr(self, short_name, ro)
+ 
+ 	def __init__(self, bus, object_path, interface_prop_hash=None,
+-					interfaces=None):
++					interfaces=None, timelimit=-1):
+ 		self.object_path = object_path
+ 		self.short_interface_names = []
++		self.tmo = timelimit
+ 		self.dbus_object = bus.get_object(
+ 			BUS_NAME, self.object_path, introspect=False)
+ 
 
 
