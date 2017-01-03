@@ -1,68 +1,63 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 19 Nov 2019 12:01:15 -0500
-Subject: master - lvs: disable scanning optimization
-Message-ID: <42306.119111912010905925@us-mta-217.us.mimecast.lan>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue,  3 Jan 2017 13:56:06 +0000 (UTC)
+Subject: master - lvmcmdline: support uint32
+Message-ID: <20170103135606.AB29B6100A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7474440d3b540d20eb4f997efeb31b881cc6ac8e
-Commit:        7474440d3b540d20eb4f997efeb31b881cc6ac8e
-Parent:        f88f7c0fdcdfbefa37df6adb36a637526bd7e93b
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Nov 19 10:27:02 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 19 10:56:12 2019 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f65a3f0c54fc349da279f9a9e8f1b214945489e
+Commit:        9f65a3f0c54fc349da279f9a9e8f1b214945489e
+Parent:        e75f0b7c771ac6b3a2925af92a9f3098fa8381a7
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jan 3 13:02:52 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Jan 3 14:55:16 2017 +0100
 
-lvs: disable scanning optimization
+lvmcmdline: support uint32
 
-The scanning optimization can produce warnings from
-'lvs' when run concurrently with commands modifying LVs,
-so disable the optimization until it can be improved.
+Add simple function to wrap usage for only uint32 numbers.
+Unlike  'int_arg'  which accepts full range of 64bit number
+this function will error on numbers out of this range:
 
-Without the scanning optimization, lvs will always
-read all PVs twice:
-
-1. read metadata from all PVs, saving it in memory
-2. for each VG
-3. lock VG
-4. reread metadata from all PVs in VG, replacing metadata
-   saved from step 1
-5. run command on VG
-6. unlock VG
-
-The optimization would usually cause step 4 to be skipped,
-and PVs would be read only once.
-
-Running the command in step 5 using metadata that was not
-read under the VG lock is usually fine, except for the
-fact that lvs attempts to validate the metadata by comparing
-it to current dm state.  If other commands are modifying dm
-state while lvs is running, lvs may see differences between
-metadata from step 1 and dm state checked during step 5,
-and print warnings.
-
-(A better fix may be to detect the concurrent change and
-fall back to rereading metadata in step 4 only when needed.)
+   <0, UINT32_MAX>
 ---
- tools/commands.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/lvmcmdline.c |    8 ++++++++
+ tools/tools.h      |    1 +
+ 2 files changed, 9 insertions(+), 0 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index c1670ae..77cf1fa 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -99,7 +99,7 @@ xx(lvresize,
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 9a4deb7..ae26957 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -554,6 +554,14 @@ int int_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *
+ 	return 1;
+ }
  
- xx(lvs,
-    "Display information about logical volumes",
--   PERMITTED_READ_ONLY | ALL_VGS_IS_DEFAULT | LOCKD_VG_SH | CAN_USE_ONE_SCAN | ALLOW_HINTS)
-+   PERMITTED_READ_ONLY | ALL_VGS_IS_DEFAULT | LOCKD_VG_SH | ALLOW_HINTS)
- 
- xx(lvscan,
-    "List all logical volumes in all volume groups",
-
++int uint32_arg(struct cmd_context *cmd, struct arg_values *av)
++{
++	if (!int_arg(cmd, av) || (av->ui64_value > UINT32_MAX))
++		return 0;
++
++	return 1;
++}
++
+ int int_arg_with_sign(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
+ {
+ 	char *ptr;
+diff --git a/tools/tools.h b/tools/tools.h
+index f6d224f..1419af9 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -144,6 +144,7 @@ int size_kb_arg(struct cmd_context *cmd, struct arg_values *av);
+ int size_mb_arg(struct cmd_context *cmd, struct arg_values *av);
+ int size_mb_arg_with_percent(struct cmd_context *cmd, struct arg_values *av);
+ int int_arg(struct cmd_context *cmd, struct arg_values *av);
++int uint32_arg(struct cmd_context *cmd, struct arg_values *av);
+ int int_arg_with_sign(struct cmd_context *cmd, struct arg_values *av);
+ int int_arg_with_sign_and_percent(struct cmd_context *cmd, struct arg_values *av);
+ int major_arg(struct cmd_context *cmd, struct arg_values *av);
 
 
