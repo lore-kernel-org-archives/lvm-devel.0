@@ -1,87 +1,60 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  3 Jan 2017 13:56:13 +0000 (UTC)
-Subject: master - cleanup: reuse existing code
-Message-ID: <20170103135613.1197061010@fedorahosted.org>
+Date: Tue,  3 Jan 2017 13:56:15 +0000 (UTC)
+Subject: master - cleanup: defines
+Message-ID: <20170103135615.25ABD6102C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=377288fe0362dd41f2332a6634f8f1f7e6edccbb
-Commit:        377288fe0362dd41f2332a6634f8f1f7e6edccbb
-Parent:        95d5877f7af781c53c7865868745dc683d2b0413
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ee784fd28f70eb35e23da91fe935c601e44648aa
+Commit:        ee784fd28f70eb35e23da91fe935c601e44648aa
+Parent:        377288fe0362dd41f2332a6634f8f1f7e6edccbb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Dec 24 23:10:06 2016 +0100
+AuthorDate:    Sat Dec 24 23:24:37 2016 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Jan 3 14:55:16 2017 +0100
 
-cleanup: reuse existing code
+cleanup: defines
 
 ---
- lib/metadata/metadata.c |   34 ++++++++++++++--------------------
- 1 files changed, 14 insertions(+), 20 deletions(-)
+ lib/metadata/segtype.h |   16 +++++++++++-----
+ 1 files changed, 11 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index c636fe2..1289fec 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -5447,6 +5447,19 @@ int vg_flag_write_locked(struct volume_group *vg)
- 	return 0;
- }
+diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
+index 292b8b6..c20149d 100644
+--- a/lib/metadata/segtype.h
++++ b/lib/metadata/segtype.h
+@@ -144,6 +144,12 @@ struct dev_manager;
+ #define segtype_is_virtual(segtype)	((segtype)->flags & SEG_VIRTUAL ? 1 : 0)
+ #define segtype_is_unknown(segtype)	((segtype)->flags & SEG_UNKNOWN ? 1 : 0)
  
-+static int _access_vg_clustered(struct cmd_context *cmd, const struct volume_group *vg)
-+{
-+	if (vg_is_clustered(vg) && !locking_is_clustered()) {
-+		if (!cmd->ignore_clustered_vgs)
-+			log_error("Skipping clustered volume group %s", vg->name);
-+		else
-+			log_verbose("Skipping clustered volume group %s", vg->name);
-+		return 0;
-+	}
++#define segtype_can_split(segtype)	((segtype)->flags & SEG_CAN_SPLIT ? 1 : 0)
++#define segtype_cannot_be_zeroed(segtype) ((segtype)->flags & SEG_CANNOT_BE_ZEROED ? 1 : 0)
++#define segtype_monitored(segtype)	((segtype)->flags & SEG_MONITORED ? 1 : 0)
++#define segtype_only_exclusive(segtype)	((segtype)->flags & SEG_ONLY_EXCLUSIVE ? 1 : 0)
++#define segtype_can_error_when_full(segtype)	((segtype)->flags & SEG_CAN_ERROR_WHEN_FULL ? 1 : 0)
 +
-+	return 1;
-+}
-+
- /*
-  * Performs a set of checks against a VG according to bits set in status
-  * and returns FAILED_* bits for those that aren't acceptable.
-@@ -5458,15 +5471,9 @@ static uint32_t _vg_bad_status_bits(const struct volume_group *vg,
- {
- 	uint32_t failure = 0;
+ #define segtype_supports_stripe_size(segtype)	\
+ 	((segtype_is_striped(segtype) || segtype_is_mirror(segtype) || \
+ 	  segtype_is_cache(segtype) || segtype_is_cache_pool(segtype) || \
+@@ -188,11 +194,11 @@ struct dev_manager;
+ #define seg_is_thin_volume(seg)	segtype_is_thin_volume((seg)->segtype)
+ #define seg_is_virtual(seg)	segtype_is_virtual((seg)->segtype)
+ #define seg_unknown(seg)	segtype_is_unknown((seg)->segtype)
+-#define seg_can_split(seg)	((seg)->segtype->flags & SEG_CAN_SPLIT ? 1 : 0)
+-#define seg_cannot_be_zeroed(seg) ((seg)->segtype->flags & SEG_CANNOT_BE_ZEROED ? 1 : 0)
+-#define seg_monitored(seg)	((seg)->segtype->flags & SEG_MONITORED ? 1 : 0)
+-#define seg_only_exclusive(seg)	((seg)->segtype->flags & SEG_ONLY_EXCLUSIVE ? 1 : 0)
+-#define seg_can_error_when_full(seg) ((seg)->segtype->flags & SEG_CAN_ERROR_WHEN_FULL ? 1 : 0)
++#define seg_can_split(seg)	segtype_can_split((seg)->segtype)
++#define seg_cannot_be_zeroed(seg)	segtype_cannot_be_zeroed((seg)->segtype)
++#define seg_monitored(seg)	segtype_monitored((seg)->segtype)
++#define seg_only_exclusive(seg)	segtype_only_exclusive((seg)->segtype)
++#define seg_can_error_when_full(seg)	segtype_can_error_when_full((seg)->segtype)
  
--	if ((status & CLUSTERED) &&
--	    (vg_is_clustered(vg)) && !locking_is_clustered()) {
--		if (!vg->cmd->ignore_clustered_vgs)
--			log_error("Skipping clustered volume group %s", vg->name);
--		else
--			log_verbose("Skipping clustered volume group %s", vg->name);
-+	if ((status & CLUSTERED) && !_access_vg_clustered(vg->cmd, vg))
- 		/* Return because other flags are considered undefined. */
- 		return FAILED_CLUSTERED;
--	}
- 
- 	if ((status & EXPORTED_VG) &&
- 	    vg_is_exported(vg)) {
-@@ -5555,19 +5562,6 @@ static int _allow_extra_system_id(struct cmd_context *cmd, const char *system_id
- 	return 0;
- }
- 
--static int _access_vg_clustered(struct cmd_context *cmd, struct volume_group *vg)
--{
--	if (vg_is_clustered(vg) && !locking_is_clustered()) {
--		if (!cmd->ignore_clustered_vgs)
--			log_error("Skipping clustered volume group %s", vg->name);
--		else
--			log_verbose("Skipping clustered volume group %s", vg->name);
--		return 0;
--	}
--
--	return 1;
--}
--
- static int _access_vg_lock_type(struct cmd_context *cmd, struct volume_group *vg,
- 				uint32_t lockd_state, uint32_t *failure)
- {
+ struct segment_type {
+ 	struct dm_list list;		/* Internal */
 
 
