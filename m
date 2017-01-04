@@ -1,49 +1,77 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 20 Nov 2019 09:32:57 -0500
-Subject: stable-2.02 - build: autoconf
-Message-ID: <40294.119112009325300773@us-mta-346.us.mimecast.lan>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Wed, 4 Jan 2017 11:27:48 +0100
+Subject: [lvm2 PATCH] Remove special-case for md in 69-dm-lvm-metadata.rules
+In-Reply-To: <87eg0jmrgz.fsf@notabene.neil.brown.name>
+References: <87eg0jmrgz.fsf@notabene.neil.brown.name>
+Message-ID: <e0225e4c-80fe-359e-462a-5829195ca5b6@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e45ad04b035468bc4ed7a68e654bfa5641f6b2c
-Commit:        9e45ad04b035468bc4ed7a68e654bfa5641f6b2c
-Parent:        245d7fcd590583166f6cdd78a81bac903fea92eb
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed Oct 23 09:22:42 2019 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Nov 20 15:27:42 2019 +0100
+On 01/04/2017 04:30 AM, NeilBrown wrote:
+> 
+> This special casing brings no value.  It appears to attempt to
+> determine if the array is active yet or not, and to skip
+> processing if the array has not yet been started.
 
-build: autoconf
+Hi Neil,
 
----
- configure |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+those rules also have another use which is to not trigger further
+unnecessary actions if the device is already up and running, hence
+avoiding useless resource consumption if it brings no new information.
+Currently, this is applied only for running pvscan on top of newly
+activated MD device (that's why it's part of 69-dm-lvm-metad.rules
+at the moment).
 
-diff --git a/configure b/configure
-index 4d2fb2f..fe0e8e2 100755
---- a/configure
-+++ b/configure
-@@ -12688,7 +12688,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
-   $as_echo_n "(cached) " >&6
- else
- 
--	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
-+	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
- 	  test "$am_cv_pathless_PYTHON" = none && break
- 	  prog="import sys
- # split strings by '.' and convert to numeric.  Append some zeros
-@@ -13256,7 +13256,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
-   $as_echo_n "(cached) " >&6
- else
- 
--	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
-+	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
- 	  test "$am_cv_pathless_PYTHON" = none && break
- 	  prog="import sys
- # split strings by '.' and convert to numeric.  Append some zeros
+So what we also need is to detect the very first CHANGE event
+that makes the device active and to make a difference between this
+first CHANGE event and further CHANGE events which are possibly
+part of the WATCH rule and any other possible CHANGE events which
+do not notify about the device switching from "not ready" to "ready"
+state (of course, counting with possible coldplug events).
 
+> However, if the array hasn't been started, then "blkid" will
+> not have been able to read a signature, so:
+>   ENV{ID_FS_TYPE}!="LVM2_member|LVM1_member", GOTO="lvm_end"
+> will have caused all this code to be skipped.
+> 
+> Further, this code causes incorrect behaviour in at least one case.
+> It assumes that the first "add" event should be ignored, as it will be
+> followed by a "change" event which indicates the array coming on line.
+> This is consistent with how the kernel sends events, but not always
+> consistent with how this script sees event.
+> Specifically: if the initrd has "mdadm" support installed, but not
+> "lvm2" support, then the initial "add" and "change" events will
+> happen while the initrd is in charge and this file is not available.
+> Once the root filesystem is mountd, this file will be available
+> and "udevadm trigger --action=add" will be run.
+> So the first and only event seen by this script for an md device will be
+> "add", and it will incorrectly ignore it.
+> 
+
+Yes, you're right that in this case, it's not behaving correctly when
+the initrd doesn't have this rule while the root FS does.  To fix this
+issue for now, I suggest to separate those rule out of 69-dm-lvm-metad.rules
+and make it a part of MD rules so that rule is always available both in
+initrd and root fs when MD is used (while LVM doesn't need to be
+installed in initrd).
+
+This comes right on time because right at this very moment, I'm working
+on a design for a solution which covers this area - I'll surely pass you
+the design doc once it's more complete (should be in next few days) so
+you we can discuss this problem further. This will cover the *standard*
+notification about when the block device is ready which provides a
+standard way of letting others (rules or any uevent monitors) know when
+the switch from "not ready" to "ready" state happens exactly. This should
+save us lots of unnecessary work that is done at the moment - we don't
+need to fire scans and further inspection of the device for all the
+events all the time. This work also covers identification of spurious
+events coming as a result of the WATCH rule and minimization of its
+impact on uevent processing performance in userspace.
+
+-- 
+Peter
 
 
