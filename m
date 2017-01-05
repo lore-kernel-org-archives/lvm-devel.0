@@ -1,50 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 Jan 2017 14:56:39 +0000 (UTC)
-Subject: master - debug: show proper error message for layer mismatch
-Message-ID: <20170105145639.D735960E29@fedorahosted.org>
+Date: Thu,  5 Jan 2017 14:56:41 +0000 (UTC)
+Subject: master - report: report merged state for inactive LV
+Message-ID: <20170105145641.F3ACB60E3A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d6a74025df1afb3d76bec435bc6a40d649217b42
-Commit:        d6a74025df1afb3d76bec435bc6a40d649217b42
-Parent:        3e9c03cbbcf102029d11f312e1cd1d20284b6d03
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=74969c9a38c286037d499a6ed603b1ae806cd37b
+Commit:        74969c9a38c286037d499a6ed603b1ae806cd37b
+Parent:        d6a74025df1afb3d76bec435bc6a40d649217b42
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 5 15:49:07 2017 +0100
+AuthorDate:    Thu Jan 5 15:52:00 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jan 5 15:54:14 2017 +0100
 
-debug: show proper error message for layer mismatch
+report: report merged state for inactive LV
 
-Show proper internal error for failing command when there are some
-inconsitencies in sizes of LV and its layer instead of rather
-meaningless error code 5.
-
-(Could be hit i.e. if user tried to 'resize' cached LV and then
-uncache such LV.)
+This was missing piece in 77997c7673bfca56f51ae4eb55a50bc76e40fe79.
+When merging origin is inactive (while driver is loaded) we
+could already report merge in progress values as there is
+no way to activate 'old state' now.
 ---
- lib/metadata/lv_manip.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ tools/reporter.c |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index a954bf7..ad400b2 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6537,8 +6537,11 @@ int remove_layer_from_lv(struct logical_volume *lv,
- 	    parent_seg->area_count != 1 ||
- 	    seg_type(parent_seg, 0) != AREA_LV ||
- 	    layer_lv != seg_lv(parent_seg, 0) ||
--	    parent_lv->le_count != layer_lv->le_count)
--		return_0;
-+	    parent_lv->le_count != layer_lv->le_count) {
-+		log_error(INTERNAL_ERROR "Inconsistent sizes of layer %s.",
-+			  display_lvname(lv));
-+		return 0;
-+	}
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 6c5996b..e70fa29 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -136,11 +136,14 @@ static int _check_merging_origin(const struct logical_volume *lv,
+ 	case SEG_STATUS_SNAPSHOT:
+ 		break;
+ 	default:
++		/* When inactive, it's technically merging */
++		if (status->info_ok && !status->info.exists)
++			break;
+ 		return 1;
+ 	}
  
- 	if (!lv_empty(parent_lv))
- 		return_0;
+ 	/* Origin is gone */
+-	log_debug_activation("Merge is progress, reporting merged LV %s.",
++	log_debug_activation("Merge is in progress, reporting merged LV %s.",
+ 			     display_lvname(lv->snapshot->lv));
+ 	*merged = 1;
+ 
 
 
