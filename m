@@ -1,50 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 Jan 2017 14:56:41 +0000 (UTC)
-Subject: master - report: report merged state for inactive LV
-Message-ID: <20170105145641.F3ACB60E3A@fedorahosted.org>
+Date: Thu,  5 Jan 2017 14:56:44 +0000 (UTC)
+Subject: master - tests: drop FIXME
+Message-ID: <20170105145644.1892E60E3A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=74969c9a38c286037d499a6ed603b1ae806cd37b
-Commit:        74969c9a38c286037d499a6ed603b1ae806cd37b
-Parent:        d6a74025df1afb3d76bec435bc6a40d649217b42
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c64f4447d92c4c8bc72d33a9615ef62fcef41168
+Commit:        c64f4447d92c4c8bc72d33a9615ef62fcef41168
+Parent:        74969c9a38c286037d499a6ed603b1ae806cd37b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 5 15:52:00 2017 +0100
+AuthorDate:    Wed Jan 4 11:21:20 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jan 5 15:54:14 2017 +0100
 
-report: report merged state for inactive LV
+tests: drop FIXME
 
-This was missing piece in 77997c7673bfca56f51ae4eb55a50bc76e40fe79.
-When merging origin is inactive (while driver is loaded) we
-could already report merge in progress values as there is
-no way to activate 'old state' now.
+Since we fixed core trouble with sequence of
+suspend/resume/suspend without udev wait
+we can drop 'should' and expect volume is still mounted.
 ---
- tools/reporter.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-thin-external-cache.sh |    7 ++-----
+ 1 files changed, 2 insertions(+), 5 deletions(-)
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 6c5996b..e70fa29 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -136,11 +136,14 @@ static int _check_merging_origin(const struct logical_volume *lv,
- 	case SEG_STATUS_SNAPSHOT:
- 		break;
- 	default:
-+		/* When inactive, it's technically merging */
-+		if (status->info_ok && !status->info.exists)
-+			break;
- 		return 1;
- 	}
+diff --git a/test/shell/lvconvert-thin-external-cache.sh b/test/shell/lvconvert-thin-external-cache.sh
+index dae65a0..c4d7d61 100644
+--- a/test/shell/lvconvert-thin-external-cache.sh
++++ b/test/shell/lvconvert-thin-external-cache.sh
+@@ -50,11 +50,8 @@ not lvconvert --thin --thinpool $vg/tpool $vg/$lv1
+ # Switch to 'writethrough' - this should be supported
+ lvchange --cachemode writethrough $vg/$lv1
  
- 	/* Origin is gone */
--	log_debug_activation("Merge is progress, reporting merged LV %s.",
-+	log_debug_activation("Merge is in progress, reporting merged LV %s.",
- 			     display_lvname(lv->snapshot->lv));
- 	*merged = 1;
+-# FIXME
+-# systemd on fc23 'strikes-in' and unmounts  mnt
+-# ATM the reason is unclear (bug in systemd, bad udev rules?)
+-#   as a workaround mount again and 'WARN' test
+-should not mount "$DM_DEV_DIR/$vg/$lv1" mnt
++# Check $lv1 remains mounted (so it's not been unmounted by systemd)
++not mount "$DM_DEV_DIR/$vg/$lv1" mnt
+ 
+ lvconvert --thin $vg/$lv1 --originname extorg --thinpool $vg/tpool
  
 
 
