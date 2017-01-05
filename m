@@ -1,59 +1,50 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 20 Nov 2019 09:33:01 -0500
-Subject: stable-2.02 - WHATS_NEW: update
-Message-ID: <05208.119112009325601261@us-mta-312.us.mimecast.lan>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Thu,  5 Jan 2017 14:56:39 +0000 (UTC)
+Subject: master - debug: show proper error message for layer mismatch
+Message-ID: <20170105145639.D735960E29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=26f94d91195531730c22eac26c741f1b4d2e0f1e
-Commit:        26f94d91195531730c22eac26c741f1b4d2e0f1e
-Parent:        9e45ad04b035468bc4ed7a68e654bfa5641f6b2c
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed Oct 23 09:32:36 2019 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Nov 20 15:30:34 2019 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d6a74025df1afb3d76bec435bc6a40d649217b42
+Commit:        d6a74025df1afb3d76bec435bc6a40d649217b42
+Parent:        3e9c03cbbcf102029d11f312e1cd1d20284b6d03
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jan 5 15:49:07 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jan 5 15:54:14 2017 +0100
 
-WHATS_NEW: update
+debug: show proper error message for layer mismatch
 
+Show proper internal error for failing command when there are some
+inconsitencies in sizes of LV and its layer instead of rather
+meaningless error code 5.
+
+(Could be hit i.e. if user tried to 'resize' cached LV and then
+uncache such LV.)
 ---
- WHATS_NEW    |    2 ++
- WHATS_NEW_DM |    1 +
- 2 files changed, 3 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 49c31a4..50fd519 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -3,6 +3,7 @@ Version 2.02.187 -
-   Fix resize of thin-pool with data and metadata of different segtype.
-   Fix splitting mirror leg in cluster.
-   Fix activation order when removing merged snapshot.
-+  Add support for DM_DEVICE_GET_TARGET_VERSION into device_mapper.
-   Add lvextend-raid.sh to check on RaidLV extensions synchronization.
-   Fix lvmetad shutdown and avoid lenghty timeouts when rebooting system.
-   Prevent creating VGs with PVs with different logical block sizes.
-@@ -10,6 +11,7 @@ Version 2.02.187 -
-   Activate thin-pool layered volume as 'read-only' device.
-   Ignore crypto devices with UUID signature CRYPT-SUBDEV.
-   Enhance validation for thin and cache pool conversion and swapping.
-+  Fixed activation on boot - lvm2 no longer activates incomplete VGs.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index a954bf7..ad400b2 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6537,8 +6537,11 @@ int remove_layer_from_lv(struct logical_volume *lv,
+ 	    parent_seg->area_count != 1 ||
+ 	    seg_type(parent_seg, 0) != AREA_LV ||
+ 	    layer_lv != seg_lv(parent_seg, 0) ||
+-	    parent_lv->le_count != layer_lv->le_count)
+-		return_0;
++	    parent_lv->le_count != layer_lv->le_count) {
++		log_error(INTERNAL_ERROR "Inconsistent sizes of layer %s.",
++			  display_lvname(lv));
++		return 0;
++	}
  
- Version 2.02.186 - 27th August 2019
- ===================================
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 576ad38..6a909c0 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.166 - 
- ===================================
-+  Add support for DM_DEVICE_GET_TARGET_VERSION.
- 
- Version 1.02.164 - 27th August 2019
- ===================================
-
+ 	if (!lv_empty(parent_lv))
+ 		return_0;
 
 
