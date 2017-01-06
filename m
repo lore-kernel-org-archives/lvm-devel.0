@@ -1,58 +1,62 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  6 Jan 2017 22:40:19 +0000 (UTC)
-Subject: master - vgchange: also -l is uint32
-Message-ID: <20170106224019.2707D60506@fedorahosted.org>
+Date: Fri,  6 Jan 2017 22:40:21 +0000 (UTC)
+Subject: master - raid: postpone archiving until metadata are changed
+Message-ID: <20170106224021.3A20360506@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0d2a9ebec6b7555a09f26aa513b2a2f94fc19027
-Commit:        0d2a9ebec6b7555a09f26aa513b2a2f94fc19027
-Parent:        8a93cde75ef4a4b260d937c5924267d0eab31df3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a4be2be5a441e3a85d50ce5728b9d1b82e7d1fc6
+Commit:        a4be2be5a441e3a85d50ce5728b9d1b82e7d1fc6
+Parent:        0d2a9ebec6b7555a09f26aa513b2a2f94fc19027
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jan 6 21:24:16 2017 +0100
+AuthorDate:    Fri Jan 6 23:36:31 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jan 6 21:51:36 2017 +0100
+CommitterDate: Fri Jan 6 23:39:04 2017 +0100
 
-vgchange: also -l is uint32
+raid: postpone archiving until metadata are changed
 
+Avoid archiving of lvm2 metadata when there is call of 'lvconvert --repair'
+on healthy raid LV.
 ---
- test/shell/vgchange-usage.sh |    5 +++++
- tools/args.h                 |    4 ++--
- 2 files changed, 7 insertions(+), 2 deletions(-)
+ lib/metadata/raid_manip.c |    9 ++++++---
+ 1 files changed, 6 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/vgchange-usage.sh b/test/shell/vgchange-usage.sh
-index 08d8114..44e0fd9 100644
---- a/test/shell/vgchange-usage.sh
-+++ b/test/shell/vgchange-usage.sh
-@@ -63,6 +63,11 @@ check vg_field $vg max_pv 4294967295
- # vgchange -l MaxLogicalVolumes
- check vg_field $vg max_lv 0
- invalid vgchange -l -128 $vg
-+vgchange -l 4294967295 $vg
-+invalid vgchange -l 4294967296 $vg
-+invalid vgchange -l 18446744073709551615 $vg
-+invalid vgchange -l 18446744073709551616 $vg
-+check vg_field $vg max_lv 4294967295
- vgchange -l 128 $vg
- check vg_field $vg max_lv 128
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index bceff79..8c88280 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -3952,9 +3952,6 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
+ 		return 0;
+ 	}
  
-diff --git a/tools/args.h b/tools/args.h
-index d5f1186..a6fc77c 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -178,8 +178,8 @@ arg(interval_ARG, 'i', "interval", int_arg, 0, 0)
- arg(iop_version_ARG, 'i', "iop_version", NULL, 0, 0)
- arg(stripes_ARG, 'i', "stripes", int_arg, 0, 0)
- arg(stripesize_ARG, 'I', "stripesize", size_kb_arg, 0, 0)
--arg(logicalvolume_ARG, 'l', "logicalvolume", int_arg, 0, 0)
--arg(maxlogicalvolumes_ARG, 'l', "maxlogicalvolumes", int_arg, 0, 0)
-+arg(logicalvolume_ARG, 'l', "logicalvolume", uint32_arg, 0, 0)
-+arg(maxlogicalvolumes_ARG, 'l', "maxlogicalvolumes", uint32_arg, 0, 0)
- arg(extents_ARG, 'l', "extents", int_arg_with_sign_and_percent, 0, 0)
- arg(list_ARG, 'l', "list", NULL, 0, 0)
- arg(lvmpartition_ARG, 'l', "lvmpartition", NULL, 0, 0)
+-	if (!archive(lv->vg))
+-		return_0;
+-
+ 	/*
+ 	 * How many sub-LVs are being removed?
+ 	 */
+@@ -3972,6 +3969,9 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
+ 		    lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs)) {
+ 			match_count++;
+ 			if (rebuild) {
++				if ((match_count == 1) &&
++				    !archive(lv->vg))
++					return_0;
+ 				seg_lv(raid_seg, s)->status |= LV_REBUILD;
+ 				seg_metalv(raid_seg, s)->status |= LV_REBUILD;
+ 			}
+@@ -4017,6 +4017,9 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
+ 	if (rebuild)
+ 		goto skip_alloc;
+ 
++	if (!archive(lv->vg))
++		return_0;
++
+ 	/* Prevent any PVs holding image components from being used for allocation */
+ 	if (!_avoid_pvs_with_other_images_of_lv(lv, allocate_pvs)) {
+ 		log_error("Failed to prevent PVs holding image components "
 
 
