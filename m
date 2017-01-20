@@ -1,89 +1,166 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 10 Jan 2017 22:30:32 +0000 (UTC)
-Subject: master - devices: Recognise Veritas Dynamic Multipathing
-Message-ID: <20170110223032.E15A46053A@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Fri, 20 Jan 2017 23:03:55 +0000 (UTC)
+Subject: master - libdm: add human R|readable units
+Message-ID: <20170120230355.15D4B60D66@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6a20b221516fcecda25bc56996028eb50b3250f8
-Commit:        6a20b221516fcecda25bc56996028eb50b3250f8
-Parent:        15e657f110351ab16af8bd79e1716adce9b75beb
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jan 10 22:23:23 2017 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jan 10 22:23:23 2017 +0000
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f8234d6e5f4f82690da61abf03f93ddfb5cff467
+Commit:        f8234d6e5f4f82690da61abf03f93ddfb5cff467
+Parent:        6a20b221516fcecda25bc56996028eb50b3250f8
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jan 9 16:30:49 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jan 20 23:52:17 2017 +0100
 
-devices: Recognise Veritas Dynamic Multipathing
+libdm: add human R|readable units
 
-VxDMP doesn't interact very well with udev so always set
-  devices/obtain_device_list_from_udev = 0
-in lvm.conf on these systems.
+When showing sizes with 'H|human' units we do use standard rounding.
+This however is confusing users from time to time,
+when the printed number uses some biger units i.e. GiB and there is just
+tiny fraction of space missing.
+
+So here is some real-life example with new 'r' unit.
+
+$lvs
+
+  LV    VG Attr       LSize  Pool Origin
+  lvol0 vg -wi-a-----  1.99g
+  lvol1 vg -wi-a----- <2.00g
+  lvol2 vg -wi-a----- <2.01g
+
+Meaning is - lvol1 has 'slightly' less then 2.00g - from sign '<' user
+can be aware the LV doesn't have full 2.00GiB in size so he
+will be less surpriced allocation of 2G volume will not succeed.
+
+$ vgs
+  VG #PV #LV #SN Attr   VSize  VFree
+  vg   2   2   0 wz--n- <6,00g <2,01g
+
+For uses needing  'old'  undecorated human unit simply will continue
+to use 'H|h' units.
+
+The new R|r  may further change when we would recongnize some
+other way how to improve readability.
 ---
- lib/device/dev-type.c     |   10 ++++++++++
- lib/device/dev-type.h     |    1 +
- lib/device/device-types.h |    1 +
- 3 files changed, 12 insertions(+), 0 deletions(-)
+ WHATS_NEW             |    1 +
+ WHATS_NEW_DM          |    1 +
+ conf/example.conf.in  |    2 +-
+ lib/config/defaults.h |    2 +-
+ libdm/libdm-string.c  |   18 ++++++++++++++++--
+ 5 files changed, 20 insertions(+), 4 deletions(-)
 
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index cc6777d..325b66b 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -125,6 +125,10 @@ struct dev_types *create_dev_types(const char *proc_dir,
- 		if (!strncmp("emcpower", line + i, 8) && isspace(*(line + i + 8)))
- 			dt->emcpower_major = line_maj;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 44b1df8..8f0d131 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.169 - 
+ =====================================
++  Use new default units 'r' for displaying sizes.
+   Also unmount mount point on top of MD device if using blkdeactivate -u.
+   Restore check preventing resize of cache type volumes (2.02.158).
+   Add missing udev sync when flushing dirty cache content.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 67aed5e..a8d4105 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.138 - 
+ =====================================
++  Support new R|r human readable units output format.
+   Thin dmeventd plugin reacts faster on lvextend failure path with umount.
+   Add dm_stats_bind_from_fd() to bind a stats handle from a file descriptor.
+   Do not try call callback when reverting activation on error path.
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index b1a2a9c..c3defe5 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -665,7 +665,7 @@ global {
  
-+		/* Look for Veritas Dynamic Multipathing */
-+		if (!strncmp("VxDMP", line + i, 5) && isspace(*(line + i + 5)))
-+			dt->vxdmp_major = line_maj;
+ 	# Configuration option global/units.
+ 	# Default value for --units argument.
+-	units = "h"
++	units = "r"
+ 
+ 	# Configuration option global/si_unit_consistency.
+ 	# Distinguish between powers of 1024 and 1000 bytes.
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index d988779..5479cc5 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -176,7 +176,7 @@
+ #define DEFAULT_INDENT 1
+ #define DEFAULT_ABORT_ON_INTERNAL_ERRORS 0
+ #define DEFAULT_DETECT_INTERNAL_VG_CACHE_CORRUPTION 0
+-#define DEFAULT_UNITS "h"
++#define DEFAULT_UNITS "r"
+ #define DEFAULT_SUFFIX 1
+ #define DEFAULT_HOSTTAGS 0
+ 
+diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
+index 39117f8..d24a474 100644
+--- a/libdm/libdm-string.c
++++ b/libdm/libdm-string.c
+@@ -468,10 +468,12 @@ const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
+ 	unsigned base = BASE_UNKNOWN;
+ 	unsigned s;
+ 	int precision;
++	double d;
+ 	uint64_t byte = UINT64_C(0);
+ 	uint64_t units = UINT64_C(1024);
+ 	char *size_buf = NULL;
+ 	char new_unit_type = '\0', unit_type_buf[2];
++	const char *prefix = "";
+ 	const char * const size_str[][3] = {
+ 		/* BASE_UNKNOWN */
+ 		{"         ", "   ", " "},	/* [0] */
+@@ -570,7 +572,7 @@ const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
+ 		byte = unit_factor;
+ 	} else {
+ 		/* Human-readable style */
+-		if (unit_type == 'H') {
++		if (unit_type == 'H' || unit_type == 'R') {
+ 			units = UINT64_C(1000);
+ 			base = BASE_1000;
+ 		} else {
+@@ -586,6 +588,16 @@ const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
+ 		for (s = 0; s < NUM_UNIT_PREFIXES && size < byte; s++)
+ 			byte /= units;
+ 
++		if ((s < NUM_UNIT_PREFIXES) &&
++		    ((unit_type == 'R') || (unit_type == 'r'))) {
++			/* When the rounding would cause difference, add '<' prefix
++			 * i.e.  2043M is more then 1.9949G prints <2.00G
++			 * This version is for 2 digits fixed precision */
++			d = 100. * (double) size / byte;
++			if (!_close_enough(floorl(d), nearbyintl(d)))
++				prefix = "<";
++		}
 +
- 		if (!strncmp("loop", line + i, 4) && isspace(*(line + i + 4)))
- 			dt->loop_major = line_maj;
+ 		include_suffix = 1;
+ 	}
  
-@@ -218,6 +222,9 @@ int dev_subsystem_part_major(struct dev_types *dt, struct device *dev)
- 	if (MAJOR(dev->dev) == dt->power2_major)
- 		return 1;
+@@ -599,7 +611,7 @@ const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
+ 		precision = 2;
+ 	}
  
-+	if (MAJOR(dev->dev) == dt->vxdmp_major)
-+		return 1;
-+
- 	if ((MAJOR(dev->dev) == dt->blkext_major) &&
- 	    dev_get_primary_dev(dt, dev, &primary_dev) &&
- 	    (MAJOR(primary_dev) == dt->md_major))
-@@ -246,6 +253,9 @@ const char *dev_subsystem_name(struct dev_types *dt, struct device *dev)
- 	if (MAJOR(dev->dev) == dt->power2_major)
- 		return "POWER2";
+-	snprintf(size_buf, SIZE_BUF - 1, "%.*f%s", precision,
++	snprintf(size_buf, SIZE_BUF - 1, "%s%.*f%s", prefix, precision,
+ 		 (double) size / byte, include_suffix ? size_str[base + s][suffix_type] : "");
  
-+	if (MAJOR(dev->dev) == dt->vxdmp_major)
-+		return "VXDMP";
-+
- 	if (MAJOR(dev->dev) == dt->blkext_major)
- 		return "BLKEXT";
- 
-diff --git a/lib/device/dev-type.h b/lib/device/dev-type.h
-index 33622fe..b0adfe2 100644
---- a/lib/device/dev-type.h
-+++ b/lib/device/dev-type.h
-@@ -41,6 +41,7 @@ struct dev_types {
- 	int drbd_major;
- 	int device_mapper_major;
- 	int emcpower_major;
-+	int vxdmp_major;
- 	int power2_major;
- 	int dasd_major;
- 	int loop_major;
-diff --git a/lib/device/device-types.h b/lib/device/device-types.h
-index 2c1e4ac..2834cd1 100644
---- a/lib/device/device-types.h
-+++ b/lib/device/device-types.h
-@@ -63,5 +63,6 @@ static const dev_known_type_t _dev_known_types[] = {
- 	{"bcache", 1, "bcache block device cache"},
- 	{"nvme", 64, "NVM Express"},
- 	{"zvol", 16, "ZFS Zvols"},
-+	{"VxDMP", 16, "Veritas Dynamic Multipathing"},
- 	{"", 0, ""}
- };
+ 	return size_buf;
+@@ -639,6 +651,8 @@ uint64_t dm_units_to_factor(const char *units, char *unit_type,
+ 	switch (*units) {
+ 	case 'h':
+ 	case 'H':
++	case 'r':
++	case 'R':
+ 		multiplier = v = UINT64_C(1);
+ 		*unit_type = *units;
+ 		break;
 
 
