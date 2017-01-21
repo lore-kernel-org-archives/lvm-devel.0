@@ -1,45 +1,50 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 22 Nov 2019 11:32:23 +0100
-Subject: [PATCH] lib/metadata: Print VG name in log message for raid segment errors
-In-Reply-To: <CAMNNMLH-K-fZ2h+xR-hBP6QOiRpOHVyA=6SWq9_iH7GoanmiFw@mail.gmail.com>
-References: <CAMNNMLH-K-fZ2h+xR-hBP6QOiRpOHVyA=6SWq9_iH7GoanmiFw@mail.gmail.com>
-Message-ID: <c94c8361-f20b-d68b-ae78-b2eac4828300@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Sat, 21 Jan 2017 16:46:22 +0000 (UTC)
+Subject: master - tests: enusure units in TiB
+Message-ID: <20170121164622.ABE9B60797@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 22. 11. 19 v 5:07 Nikhil Kshirsagar napsal(a):
-> Signed-off-by: Nikhil Kshirsagar <nkshirsa@redhat.com>
-> ---
-> diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-> index 08f8fbe..d2711f3 100644
-> --- a/lib/metadata/merge.c
-> +++ b/lib/metadata/merge.c
-> @@ -85,8 +85,8 @@ int lv_merge_segments(struct logical_volume *lv)
->    * bogus segment structure setup.
->    */
->   #define raid_seg_error(msg) do { \
-> -       log_error("LV %s invalid: %s for %s segment", \
-> -                 seg->lv->name, (msg), lvseg_name(seg)); \
-> +       log_error("LV %s in VG %s invalid: %s for %s segment", \
-> +                 seg->lv->name, seg->lv->vg ? seg->lv->vg->name :
-> "UNKNOWN", (msg), lvseg_name(seg)); \
->          if ((*error_count)++ > ERROR_MAX) \
->                  return; \
->   } while (0)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=47c11c7b1c364a2d2fd257aaa191816e146d3602
+Commit:        47c11c7b1c364a2d2fd257aaa191816e146d3602
+Parent:        2e0605d6db9723d4bea472b21352d398f29e226e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Jan 21 16:20:41 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat Jan 21 17:42:19 2017 +0100
 
+tests: enusure units in TiB
 
-Hi
+---
+ test/shell/lvcreate-large.sh |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-
-For display of LV names - we use  'display_lvname()' function call
-(which automatically forms string as  vg/lv)
-
-Regards
-
-
-Zdenek
+diff --git a/test/shell/lvcreate-large.sh b/test/shell/lvcreate-large.sh
+index 81c612a..6fc4c5e 100644
+--- a/test/shell/lvcreate-large.sh
++++ b/test/shell/lvcreate-large.sh
+@@ -32,15 +32,15 @@ pvcreate "$DM_DEV_DIR/$vg/$lv"
+ vgcreate $vg1 "$DM_DEV_DIR/$vg/$lv"
+ 
+ lvcreate -l 100%FREE -n $lv1 $vg1
+-check lv_field $vg1/$lv1 size "1024.00t"
++check lv_field $vg1/$lv1 size "1024.00t" --units t
+ lvresize -f -l 72%VG $vg1/$lv1
+-check lv_field $vg1/$lv1 size "737.28t"
++check lv_field $vg1/$lv1 size "737.28t" --units t
+ lvremove -ff $vg1/$lv1
+ 
+ lvcreate -l 100%VG -n $lv1 $vg1
+-check lv_field $vg1/$lv1 size "1024.00t"
++check lv_field $vg1/$lv1 size "1024.00t" --units t
+ lvresize -f -l 72%VG $vg1/$lv1
+-check lv_field $vg1/$lv1 size "737.28t"
++check lv_field $vg1/$lv1 size "737.28t" --units t
+ lvremove -ff $vg1/$lv1
+ 
+ lvremove -ff $vg/$lv
 
 
