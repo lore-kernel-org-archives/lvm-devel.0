@@ -1,61 +1,59 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 23 Jan 2017 13:56:44 +0000 (UTC)
-Subject: master - dmeventd_thind: set LVM_RUN_BY_DMEVENTD
-Message-ID: <20170123135644.AA92660727@fedorahosted.org>
+Date: Mon, 23 Jan 2017 13:56:46 +0000 (UTC)
+Subject: master - toolcontext: action for LVM_RUN_BY_DMEVENTD env var
+Message-ID: <20170123135646.C789360727@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=836eb122cec35c1f00281968d92f9d85e67652d7
-Commit:        836eb122cec35c1f00281968d92f9d85e67652d7
-Parent:        4a7f2155c1d6bd5df1226632c5c5d5631c5abc97
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ec93f37b86977380b59080981fb912ff30dd80ab
+Commit:        ec93f37b86977380b59080981fb912ff30dd80ab
+Parent:        836eb122cec35c1f00281968d92f9d85e67652d7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 23 14:23:24 2017 +0100
+AuthorDate:    Mon Jan 23 14:24:27 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jan 23 14:55:47 2017 +0100
 
-dmeventd_thind: set LVM_RUN_BY_DMEVENTD
+toolcontext: action for LVM_RUN_BY_DMEVENTD env var
 
-Set LVM_RUN_BY_DMEVENTD envvar to expose the command is runing from
-dmeventd environment.
+When LVM_RUN_BY_DMEVENTD is set to 1, ensure there will
+be no interaction with dmeventd.
 ---
- daemons/dmeventd/plugins/thin/dmeventd_thin.c |   14 +++++++++-----
- 1 files changed, 9 insertions(+), 5 deletions(-)
+ lib/commands/toolcontext.c |    3 +++
+ man/lvm.8.in               |    5 +++++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-index a6a534d..f551971 100644
---- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-+++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-@@ -69,19 +69,23 @@ DM_EVENT_LOG_FN("thin")
- 
- static int _run_command(struct dso_state *state)
- {
--	char val[2][36];
--	char *env[] = { val[0], val[1], NULL };
-+	char val[3][36];
-+	char *env[] = { val[0], val[1], val[2], NULL };
- 	int i;
- 
-+	/* Mark for possible lvm2 command we are running from dmeventd
-+	 * lvm2 will not try to talk back to dmeventd while processing it */
-+	(void) dm_snprintf(val[0], sizeof(val[0]), "LVM_RUN_BY_DMEVENTD=1");
-+
- 	if (state->data_percent) {
- 		/* Prepare some known data to env vars for easy use */
--		(void) dm_snprintf(val[0], sizeof(val[0]), "DMEVENTD_THIN_POOL_DATA=%d",
-+		(void) dm_snprintf(val[1], sizeof(val[1]), "DMEVENTD_THIN_POOL_DATA=%d",
- 				   state->data_percent / DM_PERCENT_1);
--		(void) dm_snprintf(val[1], sizeof(val[1]), "DMEVENTD_THIN_POOL_METADATA=%d",
-+		(void) dm_snprintf(val[2], sizeof(val[2]), "DMEVENTD_THIN_POOL_METADATA=%d",
- 				   state->metadata_percent / DM_PERCENT_1);
- 	} else {
- 		/* For an error event it's for a user to check status and decide */
--		env[0] = NULL;
-+		env[1] = NULL;
- 		log_debug("Error event processing");
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 2843bf8..678ee8a 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -192,6 +192,9 @@ static int _get_env_vars(struct cmd_context *cmd)
+ 		}
  	}
  
++	if (strcmp((getenv("LVM_RUN_BY_DMEVENTD") ? : "0"), "1") == 0)
++		init_run_by_dmeventd(cmd);
++
+ 	return 1;
+ }
+ 
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index f1ffc7a..cad724b 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -668,6 +668,11 @@ File descriptor to use for report output from LVM commands.
+ Name of default command profile to use for LVM commands. This profile
+ is overriden by direct use of \fB\-\-commandprofile\fP command line option.
+ .TP
++.B LVM_RUN_BY_DMEVENTD
++This variable is normally set by dmeventd plugin to inform lvm2 command
++it is running from dmeventd plugin so lvm2 takes some extra action
++to avoid comunication and deadlocks with dmeventd.
++.TP
+ .B LVM_SYSTEM_DIR
+ Directory containing \fBlvm.conf\fP(5) and other LVM system files.
+ Defaults to "\fI#DEFAULT_SYS_DIR#\fP".
 
 
