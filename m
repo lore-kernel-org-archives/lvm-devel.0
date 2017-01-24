@@ -1,59 +1,50 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 23 Jan 2017 13:56:46 +0000 (UTC)
-Subject: master - toolcontext: action for LVM_RUN_BY_DMEVENTD env var
-Message-ID: <20170123135646.C789360727@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Tue, 24 Jan 2017 10:04:23 +0000 (UTC)
+Subject: master - libdm: fix stats comment formatting in libdevmapper.h
+Message-ID: <20170124100423.ECA1561006@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ec93f37b86977380b59080981fb912ff30dd80ab
-Commit:        ec93f37b86977380b59080981fb912ff30dd80ab
-Parent:        836eb122cec35c1f00281968d92f9d85e67652d7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 23 14:24:27 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jan 23 14:55:47 2017 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ca427a711a33b02264689dcfca4bc5e5d2f9434e
+Commit:        ca427a711a33b02264689dcfca4bc5e5d2f9434e
+Parent:        ec93f37b86977380b59080981fb912ff30dd80ab
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Tue Jan 24 09:29:08 2017 +0000
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Tue Jan 24 09:29:31 2017 +0000
 
-toolcontext: action for LVM_RUN_BY_DMEVENTD env var
+libdm: fix stats comment formatting in libdevmapper.h
 
-When LVM_RUN_BY_DMEVENTD is set to 1, ensure there will
-be no interaction with dmeventd.
 ---
- lib/commands/toolcontext.c |    3 +++
- man/lvm.8.in               |    5 +++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+ libdm/libdevmapper.h |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 2843bf8..678ee8a 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -192,6 +192,9 @@ static int _get_env_vars(struct cmd_context *cmd)
- 		}
- 	}
- 
-+	if (strcmp((getenv("LVM_RUN_BY_DMEVENTD") ? : "0"), "1") == 0)
-+		init_run_by_dmeventd(cmd);
-+
- 	return 1;
- }
- 
-diff --git a/man/lvm.8.in b/man/lvm.8.in
-index f1ffc7a..cad724b 100644
---- a/man/lvm.8.in
-+++ b/man/lvm.8.in
-@@ -668,6 +668,11 @@ File descriptor to use for report output from LVM commands.
- Name of default command profile to use for LVM commands. This profile
- is overriden by direct use of \fB\-\-commandprofile\fP command line option.
- .TP
-+.B LVM_RUN_BY_DMEVENTD
-+This variable is normally set by dmeventd plugin to inform lvm2 command
-+it is running from dmeventd plugin so lvm2 takes some extra action
-+to avoid comunication and deadlocks with dmeventd.
-+.TP
- .B LVM_SYSTEM_DIR
- Directory containing \fBlvm.conf\fP(5) and other LVM system files.
- Defaults to "\fI#DEFAULT_SYS_DIR#\fP".
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 363cf8e..3c96bd9 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -1320,8 +1320,9 @@ int dm_stats_get_group_descriptor(const struct dm_stats *dms,
+  * On success the function returns a pointer to an array of uint64_t
+  * containing the IDs of the newly created regions. The region_id
+  * array is terminated by the value DM_STATS_REGION_NOT_PRESENT and
+- * should be freed using dm_free() when no longer required. On error
+- * NULL is returned.
++ * should be freed using dm_free() when no longer required.
++ *
++ * On error NULL is returned.
+  *
+  * Following a call to dm_stats_create_regions_from_fd() the handle
+  * is guaranteed to be in a listed state, and to contain any region
+@@ -1329,7 +1330,6 @@ int dm_stats_get_group_descriptor(const struct dm_stats *dms,
+  *
+  * The group_id for the new group is equal to the region_id value in
+  * the first array element.
+- *
+  */
+ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
+ 					  int group, int precise,
 
 
