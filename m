@@ -1,67 +1,91 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu,  2 Feb 2017 16:59:29 +0000 (UTC)
-Subject: master - lvmdbusd: cmdhandler.py, remove duplicate code
-Message-ID: <20170202165929.2596D6024A@fedorahosted.org>
+Date: Thu,  2 Feb 2017 16:59:25 +0000 (UTC)
+Subject: master - lvmdbusd: lvmdb.py, remove duplicate code
+Message-ID: <20170202165925.0180F6024A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=875ce04c61fb40436bf4d6308356c800d08c1f7e
-Commit:        875ce04c61fb40436bf4d6308356c800d08c1f7e
-Parent:        3eccbb4b4713f0d79831e7c146851bff820c94bb
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=945842fa680d6c967b64362fe8b2ce6c3334a52d
+Commit:        945842fa680d6c967b64362fe8b2ce6c3334a52d
+Parent:        681d69c70ae70dffa9d21bfd82e1e9821371ee82
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Feb 1 19:05:41 2017 -0600
+AuthorDate:    Wed Feb 1 18:56:39 2017 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Feb 1 19:05:41 2017 -0600
+CommitterDate: Wed Feb 1 18:56:39 2017 -0600
 
-lvmdbusd: cmdhandler.py, remove duplicate code
+lvmdbusd: lvmdb.py, remove duplicate code
 
 Move similar code to common functions, less is more!
 ---
- daemons/lvmdbusd/cmdhandler.py |   16 +++++++---------
- 1 files changed, 7 insertions(+), 9 deletions(-)
+ daemons/lvmdbusd/lvmdb.py |   39 ++++++++++++++++-----------------------
+ 1 files changed, 16 insertions(+), 23 deletions(-)
 
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index f1591aa..31b7c5c 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -295,7 +295,7 @@ def vg_lv_snapshot(vg_name, snapshot_options, name, size_bytes):
- 	return call(cmd)
+diff --git a/daemons/lvmdbusd/lvmdb.py b/daemons/lvmdbusd/lvmdb.py
+index 9529e03..974e7d7 100755
+--- a/daemons/lvmdbusd/lvmdb.py
++++ b/daemons/lvmdbusd/lvmdb.py
+@@ -69,18 +69,7 @@ class DataStore(object):
+ 			table[key] = record
  
- 
--def vg_lv_create_linear(vg_name, create_options, name, size_bytes, thin_pool):
-+def _vg_lv_create_common_cmd(create_options, size_bytes, thin_pool):
- 	cmd = ['lvcreate']
- 	cmd.extend(options_to_cli_args(create_options))
- 
-@@ -303,20 +303,18 @@ def vg_lv_create_linear(vg_name, create_options, name, size_bytes, thin_pool):
- 		cmd.extend(['--size', str(size_bytes) + 'B'])
- 	else:
- 		cmd.extend(['--thin', '--size', str(size_bytes) + 'B'])
-+	return cmd
-+
-+
-+def vg_lv_create_linear(vg_name, create_options, name, size_bytes, thin_pool):
-+	cmd = _vg_lv_create_common_cmd(create_options, size_bytes, thin_pool)
- 	cmd.extend(['--name', name, vg_name])
- 	return call(cmd)
- 
- 
- def vg_lv_create_striped(vg_name, create_options, name, size_bytes,
- 							num_stripes, stripe_size_kb, thin_pool):
--	cmd = ['lvcreate']
--	cmd.extend(options_to_cli_args(create_options))
+ 	@staticmethod
+-	def _parse_pvs(_pvs):
+-		pvs = sorted(_pvs, key=lambda pk: pk['pv_name'])
 -
--	if not thin_pool:
--		cmd.extend(['--size', str(size_bytes) + 'B'])
--	else:
--		cmd.extend(['--thin', '--size', str(size_bytes) + 'B'])
+-		c_pvs = OrderedDict()
+-		c_lookup = {}
+-		c_pvs_in_vgs = {}
 -
-+	cmd = _vg_lv_create_common_cmd(create_options, size_bytes, thin_pool)
- 	cmd.extend(['--stripes', str(num_stripes)])
+-		for p in pvs:
+-			DataStore._insert_record(
+-				c_pvs, p['pv_uuid'], p,
+-				['pvseg_start', 'pvseg_size', 'segtype'])
+-
++	def _pvs_parse_common(c_pvs, c_pvs_in_vgs, c_lookup):
+ 		for p in c_pvs.values():
+ 			# Capture which PVs are associated with which VG
+ 			if p['vg_uuid'] not in c_pvs_in_vgs:
+@@ -93,6 +82,20 @@ class DataStore(object):
+ 			# Lookup for translating between /dev/<name> and pv uuid
+ 			c_lookup[p['pv_name']] = p['pv_uuid']
  
- 	if stripe_size_kb != 0:
++	@staticmethod
++	def _parse_pvs(_pvs):
++		pvs = sorted(_pvs, key=lambda pk: pk['pv_name'])
++
++		c_pvs = OrderedDict()
++		c_lookup = {}
++		c_pvs_in_vgs = {}
++
++		for p in pvs:
++			DataStore._insert_record(
++				c_pvs, p['pv_uuid'], p,
++				['pvseg_start', 'pvseg_size', 'segtype'])
++
++		DataStore._pvs_parse_common(c_pvs, c_pvs_in_vgs, c_lookup)
+ 		return c_pvs, c_lookup, c_pvs_in_vgs
+ 
+ 	@staticmethod
+@@ -132,17 +135,7 @@ class DataStore(object):
+ 						i['pvseg_size'] = i['pv_pe_count']
+ 						i['segtype'] = 'free'
+ 
+-		for p in c_pvs.values():
+-			# Capture which PVs are associated with which VG
+-			if p['vg_uuid'] not in c_pvs_in_vgs:
+-				c_pvs_in_vgs[p['vg_uuid']] = []
+-
+-			if p['vg_name']:
+-				c_pvs_in_vgs[p['vg_uuid']].append(
+-					(p['pv_name'], p['pv_uuid']))
+-
+-			# Lookup for translating between /dev/<name> and pv uuid
+-			c_lookup[p['pv_name']] = p['pv_uuid']
++		DataStore._pvs_parse_common(c_pvs, c_pvs_in_vgs, c_lookup)
+ 
+ 		return c_pvs, c_lookup, c_pvs_in_vgs
+ 
 
 
