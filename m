@@ -1,125 +1,101 @@
 From: tasleson <tasleson@fedoraproject.org>
-Date: Thu,  2 Feb 2017 16:59:22 +0000 (UTC)
-Subject: master - lvmdbusd: pv.py, remove duplicate code
-Message-ID: <20170202165922.E26606024A@fedorahosted.org>
+Date: Thu,  2 Feb 2017 16:59:27 +0000 (UTC)
+Subject: master - lvmdbusd: manager.py, remove duplicate code
+Message-ID: <20170202165927.127256024A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=681d69c70ae70dffa9d21bfd82e1e9821371ee82
-Commit:        681d69c70ae70dffa9d21bfd82e1e9821371ee82
-Parent:        a010cede6e69fcb9301d0b1f4e282a2b04d15430
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3eccbb4b4713f0d79831e7c146851bff820c94bb
+Commit:        3eccbb4b4713f0d79831e7c146851bff820c94bb
+Parent:        945842fa680d6c967b64362fe8b2ce6c3334a52d
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Feb 1 16:51:00 2017 -0600
+AuthorDate:    Wed Feb 1 18:57:01 2017 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Feb 1 16:51:00 2017 -0600
+CommitterDate: Wed Feb 1 18:57:01 2017 -0600
 
-lvmdbusd: pv.py, remove duplicate code
+lvmdbusd: manager.py, remove duplicate code
 
 Move similar code to common functions, less is more!
 ---
- daemons/lvmdbusd/pv.py |   65 ++++++++++++++++++-----------------------------
- 1 files changed, 25 insertions(+), 40 deletions(-)
+ daemons/lvmdbusd/manager.py |   42 ++++++++++++++++--------------------------
+ 1 files changed, 16 insertions(+), 26 deletions(-)
 
-diff --git a/daemons/lvmdbusd/pv.py b/daemons/lvmdbusd/pv.py
-index 95047d1..fe32143 100644
---- a/daemons/lvmdbusd/pv.py
-+++ b/daemons/lvmdbusd/pv.py
-@@ -135,23 +135,30 @@ class Pv(AutomatedProperties):
- 	def _remove(pv_uuid, pv_name, remove_options):
- 		# Remove the PV, if successful then remove from the model
- 		# Make sure we have a dbus object representing it
--		dbo = cfg.om.get_object_by_uuid_lvm_id(pv_uuid, pv_name)
-+		Pv.validate_dbus_object(pv_uuid, pv_name)
-+		rc, out, err = cmdhandler.pv_remove(pv_name, remove_options)
-+		Pv.handle_execute(rc, out, err)
-+		return '/'
+diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
+index 3f6f09b..41bb22a 100644
+--- a/daemons/lvmdbusd/manager.py
++++ b/daemons/lvmdbusd/manager.py
+@@ -31,6 +31,16 @@ class Manager(AutomatedProperties):
+ 		return dbus.String('1.0.0')
  
--		if dbo:
--			rc, out, err = cmdhandler.pv_remove(pv_name, remove_options)
--			if rc == 0:
--				cfg.load()
--			else:
--				# Need to work on error handling, need consistent
--				raise dbus.exceptions.DBusException(
--					PV_INTERFACE,
--					'Exit code %s, stderr = %s' % (str(rc), err))
-+	@staticmethod
+ 	@staticmethod
 +	def handle_execute(rc, out, err):
 +		if rc == 0:
 +			cfg.load()
- 		else:
++		else:
 +			# Need to work on error handling, need consistent
 +			raise dbus.exceptions.DBusException(
-+				PV_INTERFACE,
++				MANAGER_INTERFACE,
 +				'Exit code %s, stderr = %s' % (str(rc), err))
 +
 +	@staticmethod
-+	def validate_dbus_object(pv_uuid, pv_name):
-+		dbo = cfg.om.get_object_by_uuid_lvm_id(pv_uuid, pv_name)
-+		if not dbo:
- 			raise dbus.exceptions.DBusException(
- 				PV_INTERFACE,
- 				'PV with uuid %s and name %s not present!' %
- 				(pv_uuid, pv_name))
--		return '/'
-+		return dbo
+ 	def _pv_create(device, create_options):
  
- 	@dbus.service.method(
- 		dbus_interface=PV_INTERFACE,
-@@ -168,22 +175,11 @@ class Pv(AutomatedProperties):
- 	@staticmethod
- 	def _resize(pv_uuid, pv_name, new_size_bytes, resize_options):
- 		# Make sure we have a dbus object representing it
--		dbo = cfg.om.get_object_by_uuid_lvm_id(pv_uuid, pv_name)
-+		Pv.validate_dbus_object(pv_uuid, pv_name)
+ 		# Check to see if we are already trying to create a PV for an existing
+@@ -41,15 +51,8 @@ class Manager(AutomatedProperties):
+ 				MANAGER_INTERFACE, "PV Already exists!")
  
--		if dbo:
--			rc, out, err = cmdhandler.pv_resize(pv_name, new_size_bytes,
-+		rc, out, err = cmdhandler.pv_resize(pv_name, new_size_bytes,
- 												resize_options)
--			if rc == 0:
--				cfg.load()
--			else:
--				raise dbus.exceptions.DBusException(
--					PV_INTERFACE,
--					'Exit code %s, stderr = %s' % (str(rc), err))
+ 		rc, out, err = cmdhandler.pv_create(create_options, [device])
+-		if rc == 0:
+-			cfg.load()
+-			created_pv = cfg.om.get_object_path_by_lvm_id(device)
 -		else:
 -			raise dbus.exceptions.DBusException(
--				PV_INTERFACE,
--				'PV with uuid %s and name %s not present!' %
--				(pv_uuid, pv_name))
-+		Pv.handle_execute(rc, out, err)
- 		return '/'
- 
- 	@dbus.service.method(
-@@ -201,21 +197,10 @@ class Pv(AutomatedProperties):
- 	@staticmethod
- 	def _allocation_enabled(pv_uuid, pv_name, yes_no, allocation_options):
- 		# Make sure we have a dbus object representing it
--		dbo = cfg.om.get_object_by_uuid_lvm_id(pv_uuid, pv_name)
+-				MANAGER_INTERFACE,
+-				'Exit code %s, stderr = %s' % (str(rc), err))
 -
--		if dbo:
--			rc, out, err = cmdhandler.pv_allocatable(
--				pv_name, yes_no, allocation_options)
--			if rc == 0:
--				cfg.load()
--			else:
--				raise dbus.exceptions.DBusException(
--					PV_INTERFACE, 'Exit code %s, stderr = %s' % (str(rc), err))
--		else:
--			raise dbus.exceptions.DBusException(
--				PV_INTERFACE,
--				'PV with uuid %s and name %s not present!' %
--				(pv_uuid, pv_name))
-+		Pv.validate_dbus_object(pv_uuid, pv_name)
-+		rc, out, err = cmdhandler.pv_allocatable(
-+			pv_name, yes_no, allocation_options)
-+		Pv.handle_execute(rc, out, err)
- 		return '/'
+-		return created_pv
++		Manager.handle_execute(rc, out, err)
++		return cfg.om.get_object_path_by_lvm_id(device)
  
  	@dbus.service.method(
+ 		dbus_interface=MANAGER_INTERFACE,
+@@ -76,14 +79,8 @@ class Manager(AutomatedProperties):
+ 					MANAGER_INTERFACE, 'object path = %s not found' % p)
+ 
+ 		rc, out, err = cmdhandler.vg_create(create_options, pv_devices, name)
+-
+-		if rc == 0:
+-			cfg.load()
+-			return cfg.om.get_object_path_by_lvm_id(name)
+-		else:
+-			raise dbus.exceptions.DBusException(
+-				MANAGER_INTERFACE,
+-				'Exit code %s, stderr = %s' % (str(rc), err))
++		Manager.handle_execute(rc, out, err)
++		return cfg.om.get_object_path_by_lvm_id(name)
+ 
+ 	@dbus.service.method(
+ 		dbus_interface=MANAGER_INTERFACE,
+@@ -200,15 +197,8 @@ class Manager(AutomatedProperties):
+ 			activate, cache, device_path,
+ 			major_minor, scan_options)
+ 
+-		if rc == 0:
+-			# This could potentially change the state quite a bit, so lets
+-			# update everything to be safe
+-			cfg.load()
+-			return '/'
+-		else:
+-			raise dbus.exceptions.DBusException(
+-				MANAGER_INTERFACE,
+-				'Exit code %s, stderr = %s' % (str(rc), err))
++		Manager.handle_execute(rc, out, err)
++		return '/'
+ 
+ 	@dbus.service.method(
+ 		dbus_interface=MANAGER_INTERFACE,
 
 
