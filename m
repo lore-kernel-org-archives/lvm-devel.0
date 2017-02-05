@@ -1,40 +1,60 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  5 Feb 2017 16:56:43 +0000 (UTC)
-Subject: master - comment: update
-Message-ID: <20170205165643.3D74060C86@fedorahosted.org>
+Date: Sun,  5 Feb 2017 16:56:45 +0000 (UTC)
+Subject: master - debug: add space before uuid
+Message-ID: <20170205165645.5BA0E60C86@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=12bbfbe89de5201f89ebad372ddd5f393142b13a
-Commit:        12bbfbe89de5201f89ebad372ddd5f393142b13a
-Parent:        fb3f4ed72d6be15e99fdfe490049264eecc07997
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9fe8c2da36a42a9cf08ef44ede172e1341033a24
+Commit:        9fe8c2da36a42a9cf08ef44ede172e1341033a24
+Parent:        12bbfbe89de5201f89ebad372ddd5f393142b13a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 4 15:44:25 2017 +0100
+AuthorDate:    Sun Feb 5 17:30:23 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Feb 5 17:55:37 2017 +0100
 
-comment: update
+debug: add space before uuid
 
-Fix can -> cannot.
+With commit 88534625282e8d533ae439ed308a285da10e3ef0 we added
+uuid right after device name. Add space between them.
+(Also fix some indenting)
 ---
- lib/activate/dev_manager.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdm/ioctl/libdm-iface.c |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index d36f113..cde026e 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -3075,7 +3075,7 @@ static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
- 				     (laopts->origin_only) ? " origin-only" : "",
- 				     display_lvname(lv));
- 
--	/* Some LV can be used for top level tree */
-+	/* Some LV cannot be used for top level tree */
- 	/* TODO: add more.... */
- 	if (lv_is_cache_pool(lv) && !dm_list_empty(&lv->segs_using_this_lv)) {
- 		log_error(INTERNAL_ERROR "Cannot create tree for %s.",
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 390daa1..cb3e8dc 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -1851,10 +1851,10 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+ 			dmi->flags &= ~DM_EXISTS_FLAG;	/* FIXME */
+ 		else {
+ 			if (_log_suppress || dmt->ioctl_errno == EINTR)
+-				log_verbose("device-mapper: %s ioctl on %s%s%s%.0d%s%.0d%s%s "
++				log_verbose("device-mapper: %s ioctl on %s %s%s%.0d%s%.0d%s%s "
+ 					    "failed: %s",
+-				    	    _cmd_data_v4[dmt->type].name,
+-					    dmi->name, dmi->uuid, 
++					    _cmd_data_v4[dmt->type].name,
++					    dmi->name, dmi->uuid,
+ 					    dmt->major > 0 ? "(" : "",
+ 					    dmt->major > 0 ? dmt->major : 0,
+ 					    dmt->major > 0 ? ":" : "",
+@@ -1863,10 +1863,10 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+ 					    dmt->major > 0 ? ")" : "",
+ 					    strerror(dmt->ioctl_errno));
+ 			else
+-				log_error("device-mapper: %s ioctl on %s%s%s%.0d%s%.0d%s%s "
++				log_error("device-mapper: %s ioctl on %s %s%s%.0d%s%.0d%s%s "
+ 					  "failed: %s",
+ 					  _cmd_data_v4[dmt->type].name,
+-					  dmi->name, dmi->uuid, 
++					  dmi->name, dmi->uuid,
+ 					  dmt->major > 0 ? "(" : "",
+ 					  dmt->major > 0 ? dmt->major : 0,
+ 					  dmt->major > 0 ? ":" : "",
 
 
