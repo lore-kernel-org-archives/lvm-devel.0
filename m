@@ -1,41 +1,59 @@
-From: okozina <okozina@fedoraproject.org>
-Date: Fri, 10 Feb 2017 13:38:30 +0000 (UTC)
-Subject: dev-okozina - fix
-Message-ID: <20170210133830.5ABF260DC7@fedorahosted.org>
+From: Bryn Reeves <bmr@fedoraproject.org>
+Date: Fri, 10 Feb 2017 17:12:20 +0000 (UTC)
+Subject: master - man: mention dmstats in lvmsar and lvmsadc man pages
+Message-ID: <20170210171220.5E71160640@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b3c00ad1911fa7e8b8d0608985b0dfde567f2dff
-Commit:        b3c00ad1911fa7e8b8d0608985b0dfde567f2dff
-Parent:        90088e4bf4bd084cc355f3cea052851bf40bc423
-Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Fri Feb 10 14:37:02 2017 +0100
-Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Fri Feb 10 14:37:02 2017 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=68ec6940e6897192aec6480a14492a5adc6937d8
+Commit:        68ec6940e6897192aec6480a14492a5adc6937d8
+Parent:        55eaabd1183042b8e03b3a969eadf624623c4b62
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Fri Feb 10 17:07:39 2017 +0000
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Fri Feb 10 17:09:17 2017 +0000
 
-fix
+man: mention dmstats in lvmsar and lvmsadc man pages
 
 ---
- test/shell/dmsetup-keyring.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ man/lvmsadc.8.in |    5 ++++-
+ man/lvmsar.8.in  |    5 ++++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/dmsetup-keyring.sh b/test/shell/dmsetup-keyring.sh
-index b85b576..5ea654e 100644
---- a/test/shell/dmsetup-keyring.sh
-+++ b/test/shell/dmsetup-keyring.sh
-@@ -27,8 +27,8 @@ function _teardown() {
- 	aux teardown_devs_prefixed $PREFIX
- }
+diff --git a/man/lvmsadc.8.in b/man/lvmsadc.8.in
+index e156de2..81d2b66 100644
+--- a/man/lvmsadc.8.in
++++ b/man/lvmsadc.8.in
+@@ -7,7 +7,10 @@ lvmsadc \(em LVM system activity data collector
+ .B lvmsadc
  
--aux target_at_least zero 1 0 0 || skip "missing dm-zero target"
--aux target_at_least crypt 1 15 0 || skip "dm-crypt doesn't support keys in kernel keyring service"
-+aux target_at_least dm-zero 1 0 0 || skip "missing dm-zero target"
-+aux target_at_least dm-crypt 1 15 0 || skip "dm-crypt doesn't support keys in kernel keyring service"
- which keyctl || skip "test requires keyctl utility"
+ .SH "DESCRIPTION"
+-lvmsadc is not currently supported under LVM2.
++lvmsadc is not currently supported under LVM2: the device-mapper statistics
++facility provides similar performance metrics using the \fBdmstats(8)\fP
++command.
  
- keyctl newring $PREFIX-keyring @u
+ .SH "SEE ALSO"
++.BR dmstats (8)
+ .BR lvm (8)
+diff --git a/man/lvmsar.8.in b/man/lvmsar.8.in
+index a9a6132..fca111f 100644
+--- a/man/lvmsar.8.in
++++ b/man/lvmsar.8.in
+@@ -7,7 +7,10 @@ lvmsar \(em LVM system activity reporter
+ .B lvmsar
+ 
+ .SH "DESCRIPTION"
+-lvmsar is not currently supported under LVM2.
++lvmsar is not currently supported under LVM2: the device-mapper statistics
++facility provides similar performance metrics using the \fBdmstats(8)\fP
++command.
+ 
+ .SH "SEE ALSO"
++.BR dmstats (8)
+ .BR lvm (8)
 
 
