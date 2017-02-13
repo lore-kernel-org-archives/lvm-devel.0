@@ -1,268 +1,241 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 13 Feb 2017 18:10:16 +0000 (UTC)
-Subject: master - lvconvert: use command defs for mergemirrors
-Message-ID: <20170213181016.1ED2A6039D@fedorahosted.org>
+Date: Mon, 13 Feb 2017 18:10:18 +0000 (UTC)
+Subject: master - tests: use swapmetadata
+Message-ID: <20170213181018.3BAEF6039D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86d8ab493bbfbc0130a2bbe7717557ecc7fa33fd
-Commit:        86d8ab493bbfbc0130a2bbe7717557ecc7fa33fd
-Parent:        95e38607ecf44fece40dd4a1b078582554c93da1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a801b92b2c81213dddccc9f9a09794208f92bfc9
+Commit:        a801b92b2c81213dddccc9f9a09794208f92bfc9
+Parent:        86d8ab493bbfbc0130a2bbe7717557ecc7fa33fd
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Dec 9 14:39:57 2016 -0600
+AuthorDate:    Fri Dec 9 15:54:59 2016 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Feb 13 08:20:10 2017 -0600
 
-lvconvert: use command defs for mergemirrors
+tests: use swapmetadata
 
-and route the generic --merge to one of the
-specific merge functions
+and some other pool/cache/thin related changes
 ---
- tools/args.h           |    1 +
- tools/command-lines.in |   54 ++++++++++++++---------------------
- tools/lvconvert.c      |   72 ++++++++++++++++++++++++++++++++++++++++++++++++
- tools/lvmcmdline.c     |   20 ++++++++-----
- tools/tools.h          |    4 ++
- 5 files changed, 111 insertions(+), 40 deletions(-)
+ test/shell/lvconvert-cache.sh                 |   42 ++++++++++++------------
+ test/shell/lvconvert-repair-thin.sh           |    8 ++--
+ test/shell/lvextend-thin-full.sh              |    2 +-
+ test/shell/lvextend-thin-metadata-dmeventd.sh |   12 +++---
+ test/shell/thin-flags.sh                      |    2 +-
+ 5 files changed, 33 insertions(+), 33 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index c904609..559bf16 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -60,6 +60,7 @@ arg(locktype_ARG, '\0', "locktype", locktype_VAL, 0, 0)
- arg(logonly_ARG, '\0', "logonly", 0, 0, 0)
- arg(maxrecoveryrate_ARG, '\0', "maxrecoveryrate", sizekb_VAL, 0, 0)
- arg(merge_ARG, '\0', "merge", 0, 0, 0)
-+arg(mergemirrors_ARG, '\0', "mergemirrors", 0, 0, 0)
- arg(mergesnapshot_ARG, '\0', "mergesnapshot", 0, 0, 0)
- arg(mergethin_ARG, '\0', "mergethin", 0, 0, 0)
- arg(mergedconfig_ARG, '\0', "mergedconfig", 0, 0, 0)
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 5804723..a529685 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -373,6 +373,12 @@ OP: PV ...
- ID: lvconvert_split_mirror_images
- DESC: Split images from a raid1 LV and track changes to origin.
+diff --git a/test/shell/lvconvert-cache.sh b/test/shell/lvconvert-cache.sh
+index 31fe4e8..5263028 100644
+--- a/test/shell/lvconvert-cache.sh
++++ b/test/shell/lvconvert-cache.sh
+@@ -60,7 +60,7 @@ check lv_field $vg/$lv2 cache_settings "random_threshold=56,sequential_threshold
+ # Check swap of cache pool metadata
+ lvconvert --yes --type cache-pool --poolmetadata $lv4 $vg/$lv3
+ UUID=$(get lv_field $vg/$lv5 uuid)
+-lvconvert --yes --cachepool $vg/$lv3 --poolmetadata $lv5
++lvconvert --yes --swapmetadata --poolmetadata $lv5 $vg/$lv3
+ check lv_field $vg/${lv3}_cmeta uuid "$UUID"
  
-+lvconvert --mergemirrors LV_linear_raid|VG|Tag ...
-+OO: OO_LVCONVERT
-+ID: lvconvert_merge_mirror_images
-+DESC: Merge LV images that were split from a raid1 LV.
-+RULE: all not lv_is_locked lv_is_pvmove lv_is_merging_origin lv_is_virtual_origin lv_is_external_origin lv_is_merging_cow
-+
- lvconvert --mirrorlog MirrorLog LV_mirror
- OO: OO_LVCONVERT
- OP: PV ...
-@@ -486,37 +492,30 @@ DESC: Swap metadata LV in a thin pool or cache pool (for repair only).
  
- ---
+@@ -108,30 +108,30 @@ lvcreate -an -Zn -L 8 -n $lv4 $vg
+ invalid lvconvert --type cache --poolmetadata $vg/$lv2 $vg/$lv1
  
--# FIXME: lvconvert --merge is an extremely ambiguous command.
-+# lvconvert --merge is an extremely ambiguous command.
- # It can do very different operations, but which one depends
- # on knowing the LV type.  So, the command doesn't know what
- # it's actually doing until quite late, when processing a
--# single LV.
--#
--# Use different option names for different merge operations
--# so that we can have different command definitions,
--# different behaviors, different optional options, etc:
--#
--# lvconvert --merge-mirror LV_linear_striped_raid ...
--# DESC: Merge LV that was previously split from a mirror.
--#
--# lvconvert --merge-thin LV_thin
--# DESC: Merge thin LV into its origin LV.
--#
--# lvconvert --merge-snapshot LV_snapshot
--# DESC: Merge COW snapshot LV into its origin.
--#
--# Then we could add VG|Tag to --merge-mirror arg pos 1, because
--# "lvconvert --merge VG|Tag" is a terrible command.  It will do
--# different operations on each LV it finds, depending on the
--# current LV type.
-+# single LV.  When passed a VG or tag, it will do different
-+# operations on each LV it finds, depending on the current LV type.
+ # Cannot mix with thins
+-invalid lvconvert --type cache --poolmetadata $vg/$lv2 --thinpool $vg/$lv1
+-invalid lvconvert --type cache --thin --poolmetadata $vg/$lv2 $vg/$lv1
++not lvconvert --type cache --poolmetadata $vg/$lv2 --thinpool $vg/$lv1
++not lvconvert --type cache --thin --poolmetadata $vg/$lv2 $vg/$lv1
  
- lvconvert --merge LV_linear_striped_raid_thin_snapshot|VG|Tag ...
- OO: --background, --interval Number, OO_LVCONVERT
- ID: lvconvert_merge
--DESC: Merge LV that was previously split from a mirror.
-+DESC: Merge LV that was split from a mirror (variant, use --mergemirrors).
-+DESC: Merge thin LV into its origin LV (variant, use --mergethin).
-+DESC: Merge COW snapshot LV into its origin (variant, use --mergesnapshot).
-+RULE: all not lv_is_locked lv_is_pvmove lv_is_merging_origin lv_is_virtual_origin lv_is_external_origin lv_is_merging_cow
-+FLAGS: SECONDARY_SYNTAX
-+
-+---
-+
-+lvconvert --mergethin LV_thin ...
-+OO: OO_LVCONVERT
-+ID: lvconvert_merge_thin
- DESC: Merge thin LV into its origin LV.
--DESC: Merge COW snapshot LV into its origin.
- RULE: all not lv_is_locked lv_is_pvmove lv_is_merging_origin lv_is_virtual_origin lv_is_external_origin lv_is_merging_cow
-+RULE: all and lv_is_visible
+ # Undefined cached volume
+-invalid lvconvert --type cache --cachepool $vg/$lv1
+-invalid lvconvert --cache --cachepool $vg/$lv1
++not lvconvert --type cache --cachepool $vg/$lv1
++not lvconvert --cache --cachepool $vg/$lv1
  
- ---
+ # Single vg is required
+-invalid lvconvert --type cache --cachepool $vg/$lv1 --poolmetadata $vg1/$lv2 $vg/$lv3
+-invalid lvconvert --type cache --cachepool $vg/$lv1 --poolmetadata $lv2 $vg1/$lv3
+-invalid lvconvert --type cache --cachepool $vg1/$lv1 --poolmetadata $vg2/$lv2 $vg/$lv3
+-invalid lvconvert --type cache-pool --poolmetadata $vg2/$lv2 $vg1/$lv1
++not lvconvert --type cache --cachepool $vg/$lv1 --poolmetadata $vg1/$lv2 $vg/$lv3
++not lvconvert --type cache --cachepool $vg/$lv1 --poolmetadata $lv2 $vg1/$lv3
++not lvconvert --type cache --cachepool $vg1/$lv1 --poolmetadata $vg2/$lv2 $vg/$lv3
++not lvconvert --type cache-pool --poolmetadata $vg2/$lv2 $vg1/$lv1
  
-@@ -526,7 +525,7 @@ RULE: all not lv_is_locked lv_is_pvmove lv_is_merging_origin lv_is_virtual_origi
- lvconvert --mergesnapshot LV_snapshot ...
- OO: --background, --interval Number, OO_LVCONVERT
- ID: lvconvert_merge_snapshot
--DESC: Merge LV that was previously split from a mirror.
-+DESC: Merge COW snapshot LV into its origin.
- RULE: all not lv_is_locked lv_is_pvmove lv_is_merging_origin lv_is_virtual_origin lv_is_external_origin lv_is_merging_cow
- RULE: all and lv_is_visible
+-invalid lvconvert --cachepool $vg1/$lv1 --poolmetadata $vg2/$lv2
++not lvconvert --cachepool $vg1/$lv1 --poolmetadata $vg2/$lv2
  
-@@ -889,15 +888,6 @@ DESC: (infers --type thin).
+ # Invalid syntax, vg is unknown
+-invalid lvconvert --yes --cachepool $lv3 --poolmetadata $lv4
++not lvconvert --yes --cachepool $lv3 --poolmetadata $lv4
  
- ---
+ # Invalid chunk size is <32KiB >1GiB
+-invalid lvconvert --type cache-pool --chunksize 16 --poolmetadata $lv2 $vg/$lv1
+-invalid lvconvert --type cache-pool --chunksize 2G --poolmetadata $lv2 $vg/$lv1
++not lvconvert --type cache-pool --chunksize 16 --poolmetadata $lv2 $vg/$lv1
++not lvconvert --type cache-pool --chunksize 2G --poolmetadata $lv2 $vg/$lv1
  
--lvconvert --mergethin LV_thin ...
--OO: --background, --interval Number, OO_LVCONVERT
--ID: lvconvert_merge_thin
--DESC: Merge thin LV into its origin LV.
--RULE: all not lv_is_locked lv_is_pvmove lv_is_merging_origin lv_is_virtual_origin lv_is_external_origin lv_is_merging_cow
--RULE: all and lv_is_visible
--
-----
--
- # stripes option is not intuitive when creating a thin LV,
- # but here it applies to creating the new thin pool that
- # is used for the thin LV
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index da70cbd..296d4e2 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -6399,3 +6399,75 @@ int lvconvert_split_cachepool_cmd(struct cmd_context *cmd, int argc, char **argv
- 			       NULL, NULL, &_lvconvert_split_cachepool_single);
- }
+ # Invalid chunk size is bigger then data size, needs to open VG
+-fail lvconvert --yes --type cache-pool --chunksize 16M --poolmetadata $lv2 $vg/$lv1
++not lvconvert --yes --type cache-pool --chunksize 16M --poolmetadata $lv2 $vg/$lv1
  
-+static int _lvconvert_merge_mirror_images_single(struct cmd_context *cmd,
-+					  struct logical_volume *lv,
-+					  struct processing_handle *handle)
-+{
-+	if (!lv_raid_merge(lv))
-+		return ECMD_FAILED;
-+
-+	return ECMD_PROCESSED;
-+}
-+
-+int lvconvert_merge_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv)
-+{
-+	cmd->command->flags &= ~GET_VGNAME_FROM_OPTIONS;
-+
-+	return process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-+			       NULL, NULL, &_lvconvert_merge_mirror_images_single);
-+}
-+
-+static int _lvconvert_merge_generic_single(struct cmd_context *cmd,
-+					 struct logical_volume *lv,
-+					 struct processing_handle *handle)
-+{
-+	int ret;
-+
-+	if (lv_is_cow(lv))
-+		ret = _lvconvert_merge_snapshot_single(cmd, lv, handle);
-+
-+	else if (lv_is_thin_volume(lv))
-+		ret = _lvconvert_merge_thin_single(cmd, lv, handle);
-+
-+	else
-+		ret = _lvconvert_merge_mirror_images_single(cmd, lv, handle);
-+
-+	return ret;
-+}
-+
-+int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv)
-+{
-+	struct processing_handle *handle;
-+	struct lvconvert_result lr = { 0 };
-+	struct convert_poll_id_list *idl;
-+	int ret, poll_ret;
-+
-+	dm_list_init(&lr.poll_idls);
-+
-+	if (!(handle = init_processing_handle(cmd, NULL))) {
-+		log_error("Failed to initialize processing handle.");
-+		return ECMD_FAILED;
-+	}
-+
-+	handle->custom_handle = &lr;
-+
-+	cmd->command->flags &= ~GET_VGNAME_FROM_OPTIONS;
-+
-+	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-+			      handle, NULL, &_lvconvert_merge_generic_single);
-+
-+	/* polling is only used by merge_snapshot */
-+	if (lr.need_polling) {
-+		dm_list_iterate_items(idl, &lr.poll_idls) {
-+			poll_ret = _lvconvert_poll_by_id(cmd, idl->id,
-+						arg_is_set(cmd, background_ARG), 1, 0);
-+			if (poll_ret > ret)
-+				ret = poll_ret;
-+		}
-+	}
-+
-+	destroy_processing_handle(cmd, handle);
-+
-+	return ret;
-+}
-+
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 85fd1b8..c100311 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -146,19 +146,23 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
- 	{ lvconvert_merge_thin_CMD,			lvconvert_merge_thin_cmd },
- 	{ lvconvert_split_and_keep_cachepool_CMD,	lvconvert_split_cachepool_cmd },
- 	{ lvconvert_split_and_remove_cachepool_CMD,	lvconvert_split_cachepool_cmd },
--};
+ lvremove -f $vg
  
-+	/* lvconvert utilities for raid/mirror */
-+	{ lvconvert_merge_mirror_images_CMD,		lvconvert_merge_mirror_images_cmd },
- #if 0
--	/* all raid-related type conversions */
--	{ lvconvert_raid_types_CMD,			lvconvert_raid_types_fn },
-+	{ lvconvert_split_mirror_images_CMD,		lvconvert_split_mirror_images_cmd },
-+	{ lvconvert_change_mirrorlog_CMD,		lvconvert_change_mirrorlog_cmd },
-+#endif
+@@ -142,7 +142,7 @@ lvcreate --type cache-pool -an -v -L 2 -n cpool $vg
+ lvcreate -H -L 4 -n corigin --cachepool $vg/cpool
  
--	/* raid-related utilities (move into lvconvert_raid_types?) */
--	{ lvconvert_split_mirror_images_CMD,		lvconvert_split_mirror_images_fn },
--	{ lvconvert_change_mirrorlog_CMD,		lvconvert_change_mirrorlog_fn },
-+	/* redirected to merge_snapshot/merge_thin/merge_mirrors */
-+	{ lvconvert_merge_CMD, lvconvert_merge_cmd },
+ # unsupported yet
+-fail lvconvert --repair $vg/cpool 2>&1 | tee out
++not lvconvert --repair $vg/cpool 2>&1 | tee out
+ #grep "Cannot convert internal LV" out
  
--	/* directed to one of the other merges (snap,thin,mirror) when all are implemented */
--	{ lvconvert_merge_CMD,				lvconvert_merge_fn },
-+#if 0
-+	/* all raid-related type conversions */
-+	{ lvconvert_raid_types_CMD,			lvconvert_raid_types_cmd },
- #endif
-+};
-+
+ lvremove -f $vg
+@@ -154,13 +154,13 @@ lvcreate --type cache-pool -L10 $vg/$lv1
+ lvcreate --cache -L20 $vg/$lv1
+ lvcreate -L10 -n $lv2 $vg
  
- /* Command line args */
- unsigned arg_count(const struct cmd_context *cmd, int a)
-diff --git a/tools/tools.h b/tools/tools.h
-index 2deded9..4bba46c 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -271,4 +271,8 @@ int lvconvert_swap_pool_metadata_cmd(struct cmd_context *cmd, int argc, char **a
- int lvconvert_merge_thin_cmd(struct cmd_context *cmd, int argc, char **argv);
- int lvconvert_split_cachepool_cmd(struct cmd_context *cmd, int argc, char **argv);
+-fail lvconvert --yes --type cache $vg/$lv2 --cachepool $vg/$lv1
+-fail lvconvert --yes --type cache $vg/$lv1 --cachepool $vg/$lv2
+-fail lvconvert --yes --type cache-pool $vg/$lv1
+-fail lvconvert --yes --type mirror -m1 $vg/$lv1
++not lvconvert --yes --type cache $vg/$lv2 --cachepool $vg/$lv1
++not lvconvert --yes --type cache $vg/$lv1 --cachepool $vg/$lv2
++not lvconvert --yes --type cache-pool $vg/$lv1
++not lvconvert --yes --type mirror -m1 $vg/$lv1
+ not aux have_raid 1 0 0 || fail lvconvert --yes --type raid1 -m1 $vg/$lv1
+-fail lvconvert --yes --type snapshot $vg/$lv1 $vg/$lv2
+-fail lvconvert --yes --type snapshot $vg/$lv2 $vg/$lv1
++not lvconvert --yes --type snapshot $vg/$lv1 $vg/$lv2
++not lvconvert --yes --type snapshot $vg/$lv2 $vg/$lv1
+ not aux have_thin 1 0 0 || fail lvconvert --yes -T --thinpool $vg/$lv2 $vg/$lv1
  
-+int lvconvert_merge_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv);
-+
-+int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv);
-+
- #endif
+ lvremove -f $vg
+diff --git a/test/shell/lvconvert-repair-thin.sh b/test/shell/lvconvert-repair-thin.sh
+index 8930894..923b9c8 100644
+--- a/test/shell/lvconvert-repair-thin.sh
++++ b/test/shell/lvconvert-repair-thin.sh
+@@ -45,7 +45,7 @@ lvchange -an $vg/$lv2 $vg/$lv1 $vg/pool $vg/repair
+ 
+ # Manual repair steps:
+ # Test swapping - swap out thin-pool's metadata with our repair volume
+-lvconvert -y -f --poolmetadata $vg/repair --thinpool $vg/pool
++lvconvert -y -f --swapmetadata --poolmetadata $vg/repair $vg/pool
+ 
+ lvchange -ay $vg/repair
+ 
+@@ -74,7 +74,7 @@ not "$LVM_TEST_THIN_DUMP_CMD" "$DM_DEV_DIR/$vg/repair" | tee dump
+ lvchange -an $vg
+ 
+ # Swap repaired metadata back
+-lvconvert -y -f --poolmetadata $vg/fixed --thinpool $vg/pool
++lvconvert -y -f --swapmetadata --poolmetadata $vg/fixed $vg/pool
+ 
+ # Check pool still preserves its original settings
+ check lv_field $vg/pool chunksize "128.00k"
+@@ -87,7 +87,7 @@ vgchange -ay $vg
+ vgchange -an $vg
+ 
+ # Put back 'broken' metadata
+-lvconvert -y -f --poolmetadata $vg/repair --thinpool $vg/pool
++lvconvert -y -f --swapmetadata --poolmetadata $vg/repair $vg/pool
+ 
+ # Check --repair usage
+ lvconvert -v --repair $vg/pool
+@@ -98,7 +98,7 @@ lvchange -ay $vg/pool
+ vgchange -an $vg
+ 
+ # Restore damaged metadata
+-lvconvert -y -f --poolmetadata $vg/pool_meta0 --thinpool $vg/pool
++lvconvert -y -f --swapmetadata --poolmetadata $vg/pool_meta0 $vg/pool
+ 
+ # Check lvremove -ff works even with damaged pool
+ lvremove -ff $vg
+diff --git a/test/shell/lvextend-thin-full.sh b/test/shell/lvextend-thin-full.sh
+index 3bafad4..5b7b9e7 100644
+--- a/test/shell/lvextend-thin-full.sh
++++ b/test/shell/lvextend-thin-full.sh
+@@ -38,7 +38,7 @@ lvchange -an $vg
+ 
+ lvcreate -L2M -n $lv1 $vg
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+-lvconvert -y --thinpool $vg/pool --poolmetadata $vg/$lv1
++lvconvert -y --swapmetadata --poolmetadata $vg/$lv1 $vg/pool
+ 
+ # Cannot resize if set to 0%
+ not lvextend --use-policies --config 'activation{thin_pool_autoextend_percent = 0}' $vg/pool 2>&1 | tee err
+diff --git a/test/shell/lvextend-thin-metadata-dmeventd.sh b/test/shell/lvextend-thin-metadata-dmeventd.sh
+index 6d27600..2cfa1c3 100644
+--- a/test/shell/lvextend-thin-metadata-dmeventd.sh
++++ b/test/shell/lvextend-thin-metadata-dmeventd.sh
+@@ -78,7 +78,7 @@ fake_metadata_ 400 2 >data
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+ 
+ # Swap volume with restored fake metadata
+-lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv1
++lvconvert -y --chunksize 64k --swapmetadata --poolmetadata $vg/$lv1 $vg/pool
+ 
+ # Not alllowed when thin-pool metadata free space is <75% for 2M meta
+ fail lvcreate -V20 $vg/pool
+@@ -91,7 +91,7 @@ lvchange -an $vg/pool
+ fake_metadata_ 7400 2 >data
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv2"
+ # Swap volume with restored fake metadata
+-lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv2
++lvconvert -y --chunksize 64k --swapmetadata --poolmetadata $vg/$lv2 $vg/pool
+ lvchange -ay $vg/pool
+ # Check generated metadata consume more then 88%
+ test "$(meta_percent_)" -gt "88"
+@@ -138,7 +138,7 @@ lvchange -an $vg/thin $vg/thin2 $vg/pool
+ # Transaction_id is lower by 1 and there are no messages -> ERROR
+ fake_metadata_ 10 0 >data
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+-lvconvert -y --thinpool $vg/pool --poolmetadata $vg/$lv1
++lvconvert -y --swapmetadata --poolmetadata $vg/$lv1 $vg/pool
+ not vgchange -ay $vg 2>&1 | tee out
+ grep expected out
+ 
+@@ -147,7 +147,7 @@ check inactive $vg pool_tmeta
+ # Transaction_id is higher by 1
+ fake_metadata_ 10 3 >data
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+-lvconvert -y --thinpool $vg/pool --poolmetadata $vg/$lv1
++lvconvert -y --swapmetadata --poolmetadata $vg/$lv1 $vg/pool
+ not vgchange -ay $vg 2>&1 | tee out
+ grep expected out
+ 
+@@ -158,7 +158,7 @@ fake_metadata_ 400 2 >data
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+ 
+ # Swap volume with restored fake metadata
+-lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv1
++lvconvert -y --chunksize 64k --swapmetadata --poolmetadata $vg/$lv1 $vg/pool
+ 
+ vgchange -ay $vg
+ 
+@@ -173,7 +173,7 @@ fake_metadata_ 350 2 >data
+ lvchange -ay $vg/$lv1
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+ 
+-lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv1
++lvconvert -y --chunksize 64k --swapmetadata --poolmetadata $vg/$lv1 $vg/pool
+ lvchange -ay $vg/pool  $vg/$lv1
+ lvs -a $vg
+ 
+diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
+index 7d87553..cbf9d19 100644
+--- a/test/shell/thin-flags.sh
++++ b/test/shell/thin-flags.sh
+@@ -71,7 +71,7 @@ aux prepare_thin_metadata 490 1 | tee data
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+ 
+ # Swap volume with restored fake metadata
+-lvconvert -y --thinpool $vg/pool --poolmetadata $vg/$lv1
++lvconvert -y --swapmetadata --poolmetadata $vg/$lv1 $vg/pool
+ 
+ lvchange -ay $vg
+ 
 
 
