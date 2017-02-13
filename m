@@ -1,1445 +1,2110 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 13 Feb 2017 18:10:20 +0000 (UTC)
-Subject: master - lvconvert: use command defs for raid/mirror types
-Message-ID: <20170213181020.516D26039D@fedorahosted.org>
+Date: Mon, 13 Feb 2017 18:10:26 +0000 (UTC)
+Subject: master - args: add man page descriptions
+Message-ID: <20170213181026.96C7F6039D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=46b2599d5c4e01eee66be7c45aa6cf36d7cbc50f
-Commit:        46b2599d5c4e01eee66be7c45aa6cf36d7cbc50f
-Parent:        a801b92b2c81213dddccc9f9a09794208f92bfc9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5c779b323132bfd2ddc5cf639a6fcd3e9b10a309
+Commit:        5c779b323132bfd2ddc5cf639a6fcd3e9b10a309
+Parent:        db26a82f2f464d0f710229c24d67c83818fd8f3c
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Dec 19 15:53:21 2016 -0600
+AuthorDate:    Fri Jan 6 16:56:59 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Feb 13 08:20:10 2017 -0600
 
-lvconvert: use command defs for raid/mirror types
+args: add man page descriptions
 
-All lvconvert functionality has been moved out of the
-previous monolithic lvconvert code, except conversions
-related to raid/mirror/striped/linear.  This switches
-that remaining code to be based on command defs, and
-standard process_each_lv arg processing.  This final
-switch results in quite a bit of dead code that is
-also removed.
 ---
- tools/command-lines.in |    7 +
- tools/lvconvert.c      | 1105 ++++++++++++++----------------------------------
- tools/lvmcmdline.c     |   13 +-
- tools/tools.h          |    3 +
- 4 files changed, 327 insertions(+), 801 deletions(-)
+ tools/args.h            | 1582 ++++++++++++++++++++++++++++++++++++++++-------
+ tools/create-commands.c |  292 +++++++--
+ tools/lvmcmdline.c      |    2 +-
+ tools/tools.h           |    3 +-
+ 4 files changed, 1611 insertions(+), 268 deletions(-)
 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index a529685..ebe7006 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -337,24 +337,28 @@ OO: OO_LVCONVERT_RAID, OO_LVCONVERT
- OP: PV ...
- ID: lvconvert_raid_types
- DESC: Convert LV to striped.
-+RULE: all not lv_is_locked lv_is_pvmove
- 
- lvconvert --type mirror LV
- OO: OO_LVCONVERT_RAID, OO_LVCONVERT, --mirrorlog MirrorLog
- OP: PV ...
- ID: lvconvert_raid_types
- DESC: Convert LV to type mirror (also see type raid1).
-+RULE: all not lv_is_locked lv_is_pvmove
- 
- lvconvert --type raid LV
- OO: OO_LVCONVERT_RAID, OO_LVCONVERT
- OP: PV ...
- ID: lvconvert_raid_types
- DESC: Convert LV to raid.
-+RULE: all not lv_is_locked lv_is_pvmove
- 
- lvconvert --mirrors SNumber LV
- OO: OO_LVCONVERT_RAID, OO_LVCONVERT, --mirrorlog MirrorLog
- OP: PV ...
- ID: lvconvert_raid_types
- DESC: Convert LV to raid1 or mirror, or change number of mirror images.
-+RULE: all not lv_is_locked lv_is_pvmove
- 
- ---
- 
-@@ -366,12 +370,14 @@ OO: OO_LVCONVERT
- OP: PV ...
- ID: lvconvert_split_mirror_images
- DESC: Split images from a raid1 or mirror LV and use them to create a new LV.
-+RULE: all not lv_is_locked lv_is_pvmove
- 
- lvconvert --splitmirrors Number --trackchanges LV_raid1_cache
- OO: OO_LVCONVERT
- OP: PV ...
- ID: lvconvert_split_mirror_images
- DESC: Split images from a raid1 LV and track changes to origin.
-+RULE: all not lv_is_locked lv_is_pvmove
- 
- lvconvert --mergemirrors LV_linear_raid|VG|Tag ...
- OO: OO_LVCONVERT
-@@ -384,6 +390,7 @@ OO: OO_LVCONVERT
- OP: PV ...
- ID: lvconvert_change_mirrorlog
- DESC: Change the type of mirror log used by a mirror LV.
-+RULE: all not lv_is_locked lv_is_pvmove
- 
- ---
- 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 296d4e2..642d6b7 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -39,40 +39,15 @@
+diff --git a/tools/args.h b/tools/args.h
+index 690b4ee..8802cd7 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -17,221 +17,1385 @@
+  * Put all long args that don't have a corresponding short option first.
   */
+ /* *INDENT-OFF* */
+-arg(ARG_UNUSED, '-', "", 0, 0, 0)  /* place holder for unused 0 value */
+-
+-arg(abort_ARG, '\0', "abort", 0, 0, 0)
+-arg(activationmode_ARG, '\0', "activationmode", activationmode_VAL, 0, 0)
+-arg(addtag_ARG, '\0', "addtag", tag_VAL, ARG_GROUPABLE, 0)
+-arg(aligned_ARG, '\0', "aligned", 0, 0, 0)
+-arg(alloc_ARG, '\0', "alloc", alloc_VAL, 0, 0)
+-arg(atomic_ARG, '\0', "atomic", 0, 0, 0)
+-arg(atversion_ARG, '\0', "atversion", string_VAL, 0, 0)
+-arg(binary_ARG, '\0', "binary", 0, 0, 0)
+-arg(bootloaderareasize_ARG, '\0', "bootloaderareasize", sizemb_VAL, 0, 0)
+-arg(cache_long_ARG, '\0', "cache", 0, 0, 0)
+-arg(cachemode_ARG, '\0', "cachemode", cachemode_VAL, 0, 0)
+-arg(cachepool_ARG, '\0', "cachepool", lv_VAL, 0, 0)
+-arg(commandprofile_ARG, '\0', "commandprofile", string_VAL, 0, 0)
+-arg(config_ARG, '\0', "config", string_VAL, 0, 0)
+-arg(configreport_ARG, '\0', "configreport", configreport_VAL, ARG_GROUPABLE, 1)
+-arg(configtype_ARG, '\0', "typeconfig", configtype_VAL, 0, 0)
+-arg(corelog_ARG, '\0', "corelog", 0, 0, 0)
+-arg(dataalignment_ARG, '\0', "dataalignment", sizekb_VAL, 0, 0)
+-arg(dataalignmentoffset_ARG, '\0', "dataalignmentoffset", sizekb_VAL, 0, 0)
+-arg(deltag_ARG, '\0', "deltag", tag_VAL, ARG_GROUPABLE, 0)
+-arg(detachprofile_ARG, '\0', "detachprofile", 0, 0, 0)
+-arg(discards_ARG, '\0', "discards", discards_VAL, 0, 0)
+-arg(driverloaded_ARG, '\0', "driverloaded", bool_VAL, 0, 0)
+-arg(errorwhenfull_ARG, '\0', "errorwhenfull", bool_VAL, 0, 0)
+-arg(force_long_ARG, '\0', "force", 0, ARG_COUNTABLE, 0)
+-arg(foreign_ARG, '\0', "foreign", 0, 0, 0)
+-arg(handlemissingpvs_ARG, '\0', "handlemissingpvs", 0, 0, 0)
+-arg(ignoreadvanced_ARG, '\0', "ignoreadvanced", 0, 0, 0)
+-arg(ignorelocal_ARG, '\0', "ignorelocal", 0, 0, 0)
+-arg(ignorelockingfailure_ARG, '\0', "ignorelockingfailure", 0, 0, 0)
+-arg(ignoremonitoring_ARG, '\0', "ignoremonitoring", 0, 0, 0)
+-arg(ignoreskippedcluster_ARG, '\0', "ignoreskippedcluster", 0, 0, 0)
+-arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", 0, 0, 0)
+-arg(labelsector_ARG, '\0', "labelsector", number_VAL, 0, 0)
+-arg(lockopt_ARG, '\0', "lockopt", string_VAL, 0, 0)
+-arg(lockstart_ARG, '\0', "lockstart", 0, 0, 0)
+-arg(lockstop_ARG, '\0', "lockstop", 0, 0, 0)
+-arg(locktype_ARG, '\0', "locktype", locktype_VAL, 0, 0)
+-arg(logonly_ARG, '\0', "logonly", 0, 0, 0)
+-arg(maxrecoveryrate_ARG, '\0', "maxrecoveryrate", sizekb_VAL, 0, 0)
+-arg(merge_ARG, '\0', "merge", 0, 0, 0)
+-arg(mergemirrors_ARG, '\0', "mergemirrors", 0, 0, 0)
+-arg(mergesnapshot_ARG, '\0', "mergesnapshot", 0, 0, 0)
+-arg(mergethin_ARG, '\0', "mergethin", 0, 0, 0)
+-arg(mergedconfig_ARG, '\0', "mergedconfig", 0, 0, 0)
+-arg(metadatacopies_ARG, '\0', "metadatacopies", metadatacopies_VAL, 0, 0)
+-arg(metadataignore_ARG, '\0', "metadataignore", bool_VAL, 0, 0)
+-arg(metadataprofile_ARG, '\0', "metadataprofile", string_VAL, 0, 0)
+-arg(metadatasize_ARG, '\0', "metadatasize", sizemb_VAL, 0, 0)
+-arg(minor_ARG, '\0', "minor", number_VAL, ARG_GROUPABLE, 0)
+-arg(minrecoveryrate_ARG, '\0', "minrecoveryrate", sizekb_VAL, 0, 0)
+-arg(mirrorlog_ARG, '\0', "mirrorlog", mirrorlog_VAL, 0, 0)
+-arg(mirrorsonly_ARG, '\0', "mirrorsonly", 0, 0, 0)
+-arg(mknodes_ARG, '\0', "mknodes", 0, 0, 0)
+-arg(monitor_ARG, '\0', "monitor", bool_VAL, 0, 0)
+-arg(nameprefixes_ARG, '\0', "nameprefixes", 0, 0, 0)
+-arg(noheadings_ARG, '\0', "noheadings", 0, 0, 0)
+-arg(nohistory_ARG, '\0', "nohistory", 0, 0, 0)
+-arg(nolocking_ARG, '\0', "nolocking", 0, 0, 0)
+-arg(norestorefile_ARG, '\0', "norestorefile", 0, 0, 0)
+-arg(nosuffix_ARG, '\0', "nosuffix", 0, 0, 0)
+-arg(nosync_ARG, '\0', "nosync", 0, 0, 0)
+-arg(notifydbus_ARG, '\0', "notifydbus", 0, 0, 0)
+-arg(noudevsync_ARG, '\0', "noudevsync", 0, 0, 0)
+-arg(originname_ARG, '\0', "originname", lv_VAL, 0, 0)
+-arg(physicalvolumesize_ARG, '\0', "setphysicalvolumesize", sizemb_VAL, 0, 0)
+-arg(poll_ARG, '\0', "poll", bool_VAL, 0, 0)
+-arg(polloperation_ARG, '\0', "polloperation", polloperation_VAL, 0, 0)
+-arg(pooldatasize_ARG, '\0', "pooldatasize", sizemb_VAL, 0, 0)
+-arg(poolmetadata_ARG, '\0', "poolmetadata", lv_VAL, 0, 0)
+-arg(poolmetadatasize_ARG, '\0', "poolmetadatasize", sizemb_VAL, 0, 0)
+-arg(poolmetadataspare_ARG, '\0', "poolmetadataspare", bool_VAL, 0, 0)
+-arg(profile_ARG, '\0', "profile", string_VAL, 0, 0)
+-arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", pvmetadatacopies_VAL, 0, 0)
+-arg(raidrebuild_ARG, '\0', "raidrebuild", pv_VAL, ARG_GROUPABLE, 0)
+-arg(raidmaxrecoveryrate_ARG, '\0', "raidmaxrecoveryrate", sizekb_VAL, 0, 0)
+-arg(raidminrecoveryrate_ARG, '\0', "raidminrecoveryrate", sizekb_VAL, 0, 0)
+-arg(raidsyncaction_ARG, '\0', "raidsyncaction", syncaction_VAL, 0, 0)
+-arg(raidwritebehind_ARG, '\0', "raidwritebehind", number_VAL, 0, 0)
+-arg(raidwritemostly_ARG, '\0', "raidwritemostly", writemostly_VAL, ARG_GROUPABLE, 0)
+-arg(readonly_ARG, '\0', "readonly", 0, 0, 0)
+-arg(refresh_ARG, '\0', "refresh", 0, 0, 0)
+-arg(removemissing_ARG, '\0', "removemissing", 0, 0, 0)
+-arg(rebuild_ARG, '\0', "rebuild", pv_VAL, ARG_GROUPABLE, 0)
+-arg(repair_ARG, '\0', "repair", 0, 0, 0)
+-arg(replace_ARG, '\0', "replace", pv_VAL, ARG_GROUPABLE, 0)
+-arg(reportformat_ARG, '\0', "reportformat", reportformat_VAL, 0, 0)
+-arg(restorefile_ARG, '\0', "restorefile", string_VAL, 0, 0)
+-arg(restoremissing_ARG, '\0', "restoremissing", 0, 0, 0)
+-arg(resync_ARG, '\0', "resync", 0, 0, 0)
+-arg(rows_ARG, '\0', "rows", 0, 0, 0)
+-arg(segments_ARG, '\0', "segments", 0, 0, 0)
+-arg(separator_ARG, '\0', "separator", string_VAL, 0, 0)
+-arg(shared_ARG, '\0', "shared", 0, 0, 0)
+-arg(sinceversion_ARG, '\0', "sinceversion", string_VAL, 0, 0)
+-arg(split_ARG, '\0', "split", 0, 0, 0)
+-arg(splitcache_ARG, '\0', "splitcache", 0, 0, 0)
+-arg(splitmirrors_ARG, '\0', "splitmirrors", number_VAL, 0, 0)
+-arg(splitsnapshot_ARG, '\0', "splitsnapshot", 0, 0, 0)
+-arg(showdeprecated_ARG, '\0', "showdeprecated", 0, 0, 0)
+-arg(showunsupported_ARG, '\0', "showunsupported", 0, 0, 0)
+-arg(startpoll_ARG, '\0', "startpoll", 0, 0, 0)
+-arg(stripes_long_ARG, '\0', "stripes", number_VAL, 0, 0)
+-arg(swapmetadata_ARG, '\0', "swapmetadata", 0, 0, 0)
+-arg(syncaction_ARG, '\0', "syncaction", syncaction_VAL, 0, 0)
+-arg(sysinit_ARG, '\0', "sysinit", 0, 0, 0)
+-arg(systemid_ARG, '\0', "systemid", string_VAL, 0, 0)
+-arg(thinpool_ARG, '\0', "thinpool", lv_VAL, 0, 0)
+-arg(trackchanges_ARG, '\0', "trackchanges", 0, 0, 0)
+-arg(trustcache_ARG, '\0', "trustcache", 0, 0, 0)
+-arg(type_ARG, '\0', "type", segtype_VAL, 0, 0)
+-arg(unbuffered_ARG, '\0', "unbuffered", 0, 0, 0)
+-arg(uncache_ARG, '\0', "uncache", 0, 0, 0)
+-arg(cachepolicy_ARG, '\0', "cachepolicy", string_VAL, 0, 0)
+-arg(cachesettings_ARG, '\0', "cachesettings", string_VAL, ARG_GROUPABLE, 0)
+-arg(unconfigured_ARG, '\0', "unconfigured", 0, 0, 0)
+-arg(units_ARG, '\0', "units", units_VAL, 0, 0)
+-arg(unquoted_ARG, '\0', "unquoted", 0, 0, 0)
+-arg(usepolicies_ARG, '\0', "usepolicies", 0, 0, 0)
+-arg(validate_ARG, '\0', "validate", 0, 0, 0)
+-arg(version_ARG, '\0', "version", 0, 0, 0)
+-arg(vgmetadatacopies_ARG, '\0', "vgmetadatacopies", vgmetadatacopies_VAL, 0, 0)
+-arg(virtualoriginsize_ARG, '\0', "virtualoriginsize", sizemb_VAL, 0, 0)
+-arg(withsummary_ARG, '\0', "withsummary", 0, 0, 0)
+-arg(withcomments_ARG, '\0', "withcomments", 0, 0, 0)
+-arg(withspaces_ARG, '\0', "withspaces", 0, 0, 0)
+-arg(withversions_ARG, '\0', "withversions", 0, 0, 0)
+-arg(writebehind_ARG, '\0', "writebehind", number_VAL, 0, 0)
+-arg(writemostly_ARG, '\0', "writemostly", writemostly_VAL, ARG_GROUPABLE, 0)
++arg(ARG_UNUSED, '-', "", 0, 0, 0, NULL)  /* place holder for unused 0 value */
++
++arg(abort_ARG, '\0', "abort", 0, 0, 0,
++    "#pvmove\n"
++    "Abort any pvmove operations in progress. If a pvmove was started\n"
++    "with the --atomic option, then all LVs will remain on the source PV.\n"
++    "Otherwise, segments that have been moved will remain on the\n"
++    "destination PV, while unmoved segments will remain on the source PV.\n"
++    "#lvpoll\n"
++    "Stop processing a poll operation in lvmpolld.\n")
++
++arg(activationmode_ARG, '\0', "activationmode", activationmode_VAL, 0, 0,
++    "Determines if LV activation is allowed when PVs are missing,\n"
++    "e.g. because of a device failure.\n"
++    "\\fBcomplete\\fP only allows LVs with no missing PVs to be activated,\n"
++    "and is the most restrictive mode.\n"
++    "\\fBdegraded\\fP allows RAID LVs with missing PVs to be activated.\n"
++    "(This does not include the \"mirror\" type, see \"raid1\" instead.)\n"
++    "\\fBpartial\\fP allows any LV with missing PVs to be activated, and\n"
++    "should only be used for recovery or repair.\n"
++    "For default, see lvm.conf/activation_mode.\n")
++
++arg(addtag_ARG, '\0', "addtag", tag_VAL, ARG_GROUPABLE, 0,
++    "Adds a tag to a PV, VG or LV. This option can be repeated to add\n"
++    "multiple tags at once. See lvm(8) for information about tags.\n")
++
++arg(aligned_ARG, '\0', "aligned", 0, 0, 0,
++    "Use with --separator to align the output columns\n")
++
++arg(alloc_ARG, '\0', "alloc", alloc_VAL, 0, 0,
++    "Determines the allocation policy when a command needs to allocate\n"
++    "Physical Extents (PEs) from the VG. Each VG and LV has an allocation policy\n"
++    "which can be changed with vgchange/lvchange, or overriden on the\n"
++    "command line.\n"
++    "\\fBnormal\\fP applies common sense rules such as not placing parallel stripes\n"
++    "on the same PV.\n"
++    "\\fBinherit\\fP applies the VG policy to an LV.\n"
++    "\\fBcontiguous\\fP requires new PEs be placed adjacent to existing PEs.\n"
++    "\\fBcling\\fP places new PEs on the same PV as existing PEs in the same\n"
++    "stripe of the LV.\n"
++    "If there are sufficient PEs for an allocation, but normal does not\n"
++    "use them, \\fBanywhere\\fP will use them even if it reduces performance,\n"
++    "e.g. by placing two stripes on the same PV.\n"
++    "Optional positional PV args on the command line can also be used to limit\n"
++    "which PVs the command will use for allocation.\n"
++    "See lvm(8) for more information about allocation.\n")
++
++arg(atomic_ARG, '\0', "atomic", 0, 0, 0,
++    "Makes a pvmove operation atomic, ensuring that all affected LVs are\n"
++    "moved to the destination PV, or none are if the operation is aborted.\n")
++
++arg(atversion_ARG, '\0', "atversion", string_VAL, 0, 0,
++    "Specify an LVM version in x.y.z format where x is the major version,\n"
++    "the y is the minor version and z is the patchlevel (e.g. 2.2.106).\n"
++    "When configuration is displayed, the configuration settings recognized\n"
++    "at this LVM version will be considered only. This can be used\n"
++    "to display a configuration that a certain LVM version understands and\n"
++    "which does not contain any newer settings for which LVM would\n"
++    "issue a warning message when checking the configuration.\n")
++
++arg(binary_ARG, '\0', "binary", 0, 0, 0,
++    "Use binary values \"0\" or \"1\" instead of descriptive literal values\n"
++    "for columns that have exactly two valid values to report (not counting\n"
++    "the \"unknown\" value which denotes that the value could not be determined).\n")
++
++arg(bootloaderareasize_ARG, '\0', "bootloaderareasize", sizemb_VAL, 0, 0,
++    "Create a separate bootloader area of specified size besides PV's data\n"
++    "area. The bootloader area is an area of reserved space on the PV from\n"
++    "which LVM will not allocate any extents and it's kept untouched. This is\n"
++    "primarily aimed for use with bootloaders to embed their own data or metadata.\n"
++    "The start of the bootloader area is always aligned, see also --dataalignment\n"
++    "and --dataalignmentoffset. The bootloader area size may eventually\n"
++    "end up increased due to the alignment, but it's never less than the\n"
++    "size that is requested. To see the bootloader area start and size of\n"
++    "an existing PV use pvs -o +pv_ba_start,pv_ba_size.\n")
++
++arg(cache_long_ARG, '\0', "cache", 0, 0, 0,
++    "#pvscan\n"
++    "Scan one or more devices and send the metadata to lvmetad.\n"
++    "#vgscan\n"
++    "Scan all devices and send the metadata to lvmetad.\n"
++    "#lvscan\n"
++    "Scan the devices used by an LV and send the metadata to lvmetad.\n")
++
++arg(cachemode_ARG, '\0', "cachemode", cachemode_VAL, 0, 0,
++    "Specifies when writes to a cache LV should be considered complete.\n"
++    "\\fBwriteback\\fP considers a write complete as soon as it is\n"
++    "stored in the cache pool.\n"
++    "\\fBwritethough\\fP considers a write complete only when it has\n"
++    "been stored in both the cache pool and on the origin LV.\n"
++    "While writethrough may be slower for writes, it is more\n"
++    "resilient if something should happen to a device associated with the\n"
++    "cache pool LV. With writethrough, all reads are served\n"
++    "from the origin LV (all reads miss the cache) and all writes are\n"
++    "forwarded to the origin LV; additionally, write hits cause cache\n"
++    "block invalidates. See lvmcache(7) for more information.\n")
++
++arg(cachepool_ARG, '\0', "cachepool", lv_VAL, 0, 0,
++    "The name of a cache pool LV.\n")
++
++arg(commandprofile_ARG, '\0', "commandprofile", string_VAL, 0, 0,
++    "The command profile to use for command configuration.\n"
++    "See lvm.conf(5) for more information about profiles.\n")
++
++arg(config_ARG, '\0', "config", string_VAL, 0, 0,
++    "Config settings for the command. These override lvm.conf settings.\n"
++    "The String arg uses the same format as lvm.conf,\n"
++    "or may use section/field syntax.\n"
++    "See lvm.conf(5) for more information about config.\n")
++
++arg(configreport_ARG, '\0', "configreport", configreport_VAL, ARG_GROUPABLE, 1,
++    "See lvmreport(7).\n")
++
++arg(configtype_ARG, '\0', "typeconfig", configtype_VAL, 0, 0,
++    "See lvmreport(7).\n")
++
++arg(corelog_ARG, '\0', "corelog", 0, 0, 0,
++    "An alias for --mirrorlog core.\n")
++
++arg(dataalignment_ARG, '\0', "dataalignment", sizekb_VAL, 0, 0,
++    "Align the start of the data to a multiple of this number.\n"
++    "Also specify an appropriate Physical Extent size when creating a VG.\n"
++    "To see the location of the first Physical Extent of an existing PV,\n"
++    "use pvs -o +pe_start. In addition, it may be shifted by an alignment offset.\n"
++    "See lvm.conf/data_alignment_offset_detection and --dataalignmentoffset.\n")
++
++arg(dataalignmentoffset_ARG, '\0', "dataalignmentoffset", sizekb_VAL, 0, 0,
++    "Shift the start of the data area by this additional offset.\n")
++
++arg(deltag_ARG, '\0', "deltag", tag_VAL, ARG_GROUPABLE, 0,
++    "Deletes a tag from a PV, VG or LV. This option can be repeated to delete\n"
++    "multiple tags at once. See lvm(8) for information about tags.\n")
++
++arg(detachprofile_ARG, '\0', "detachprofile", 0, 0, 0,
++    "Detaches a metadata profile from a VG or LV.\n"
++    "See lvm.conf(5) for more information about profiles.\n")
++
++arg(discards_ARG, '\0', "discards", discards_VAL, 0, 0,
++    "Specifies how the device-mapper thin pool layer in the kernel should\n"
++    "handle discards.\n"
++    "\\fBignore\\fP causes the thin pool to ignore discards.\n"
++    "\\fBnopassdown\\fP causes the thin pool to process discards itself to\n"
++    "allow reuse of unneeded extents in the thin pool.\n"
++    "\\fBpassdown\\fP causes the thin pool to process discards itself\n"
++    "(like nopassdown) and pass the discards to the underlying device.\n")
++
++arg(driverloaded_ARG, '\0', "driverloaded", bool_VAL, 0, 0,
++    "If set to no, the command will not attempt to use device-mapper.\n"
++    "For testing and debugging.\n")
++
++arg(errorwhenfull_ARG, '\0', "errorwhenfull", bool_VAL, 0, 0,
++    "Specifies thin pool behavior when data space is exhausted.\n"
++    "When yes, device-mapper will immediately return an error\n"
++    "when a thin pool is full and an I/O request requires space.\n"
++    "When no, device-mapper will queue these I/O requests for a\n"
++    "period of time to allow the thin pool to be extended.\n"
++    "Errors are returned if no space is available after the timeout.\n"
++    "(Also see dm-thin-pool kernel module option no_space_timeout.)\n")
++
++arg(force_long_ARG, '\0', "force", 0, ARG_COUNTABLE, 0,
++    "Force metadata restore even with thin pool LVs.\n"
++    "Use with extreme caution. Most changes to thin metadata\n"
++    "cannot be reverted.\n"
++    "You may lose data if you restore metadata that does not match the\n"
++    "thin pool kernel metadata precisely.\n")
++
++arg(foreign_ARG, '\0', "foreign", 0, 0, 0,
++    "Report/display foreign VGs that would otherwise be skipped.\n"
++    "See lvmsystemid(7) for more information about foreign VGs.\n")
++
++arg(handlemissingpvs_ARG, '\0', "handlemissingpvs", 0, 0, 0,
++    "Allows a polling operation to continue when PVs are missing,\n"
++    "e.g. for repairs due to faulty devices.\n")
++
++arg(ignoreadvanced_ARG, '\0', "ignoreadvanced", 0, 0, 0,
++    "Exclude advanced configuration settings from the output.\n")
++
++arg(ignorelocal_ARG, '\0', "ignorelocal", 0, 0, 0,
++    "Ignore local section.\n")
++
++arg(ignorelockingfailure_ARG, '\0', "ignorelockingfailure", 0, 0, 0,
++    "Allows a command to continue with read-only metadata\n"
++    "operations after locking failures.\n")
++
++arg(ignoremonitoring_ARG, '\0', "ignoremonitoring", 0, 0, 0,
++    "Do not interact with dmeventd unless --monitor is specified.\n"
++    "Do not use this if dmeventd is already monitoring a device.\n")
++
++arg(ignoreskippedcluster_ARG, '\0', "ignoreskippedcluster", 0, 0, 0,
++    "Use to avoid exiting with an non-zero status code if the command is run\n"
++    "without clustered locking and clustered VGs are skipped.\n")
++
++arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", 0, 0, 0,
++    "Exclude unsupported configuration settings from the output. These settings are\n"
++    "either used for debugging and development purposes only or their support is not\n"
++    "yet complete and they are not meant to be used in production. The \\fBcurrent\\fP\n"
++    "and \\fBdiff\\fP types include unsupported settings in their output by default,\n"
++    "all the other types ignore unsupported settings.\n")
++
++arg(labelsector_ARG, '\0', "labelsector", number_VAL, 0, 0,
++    "By default the PV is labelled with an LVM2 identifier in its second\n"
++    "sector (sector 1). This lets you use a different sector near the\n"
++    "start of the disk (between 0 and 3 inclusive - see LABEL_SCAN_SECTORS\n"
++    "in the source). Use with care.\n")
++
++arg(lockopt_ARG, '\0', "lockopt", string_VAL, 0, 0,
++    "Used to pass options for special cases to lvmlockd.\n"
++    "See lvmlockd(8) for more information.\n")
++
++arg(lockstart_ARG, '\0', "lockstart", 0, 0, 0,
++    "Start the lockspace of a shared VG in lvmlockd.\n"
++    "lvmlockd locks becomes available for the VG, allowing LVM to use the VG.\n"
++    "See lvmlockd(8) for more information.\n")
++
++arg(lockstop_ARG, '\0', "lockstop", 0, 0, 0,
++    "Stop the lockspace of a shared VG in lvmlockd.\n"
++    "lvmlockd locks become unavailable for the VG, preventing LVM from using the VG.\n"
++    "See lvmlockd(8) for more information.\n")
++
++arg(locktype_ARG, '\0', "locktype", locktype_VAL, 0, 0,
++    "#vgchange\n"
++    "Change the VG lock type to or from a shared lock type used with lvmlockd.\n"
++    "See lvmlockd(8) for more information.\n"
++    "#vgcreate\n"
++    "Specify the VG lock type directly in place of using --shared.\n"
++    "See lvmlockd(8) for more information.\n")
++
++arg(logonly_ARG, '\0', "logonly", 0, 0, 0,
++    "Suppress command report and display only log report.\n")
++
++arg(maxrecoveryrate_ARG, '\0', "maxrecoveryrate", sizekb_VAL, 0, 0,
++    "Sets the maximum recovery rate for a RAID LV.  The rate value\n"
++    "is an amount of data per second for each device in the array.\n"
++    "Setting the rate to 0 means it will be unbounded.\n")
++
++arg(merge_ARG, '\0', "merge", 0, 0, 0,
++    "An alias for --mergethin, --mergemirrors, or --mergesnapshot,\n"
++    "depending on the type of LV.\n")
++
++arg(mergemirrors_ARG, '\0', "mergemirrors", 0, 0, 0,
++    "Merge LV images that were split from a raid1 LV.\n"
++    "See --splitmirrors with --trackchanges.\n")
++
++arg(mergesnapshot_ARG, '\0', "mergesnapshot", 0, 0, 0,
++    "Merge COW snapshot LV into its origin.\n"
++    "When merging a snapshot, if both the origin and snapshot LVs are not open,\n"
++    "the merge will start immediately. Otherwise, the merge will start the\n"
++    "first time either the origin or snapshot LV are activated and both are\n"
++    "closed. Merging a snapshot into an origin that cannot be closed, for\n"
++    "example a root filesystem, is deferred until the next time the origin\n"
++    "volume is activated. When merging starts, the resulting LV will have the\n"
++    "origin's name, minor number and UUID. While the merge is in progress,\n"
++    "reads or writes to the origin appear as being directed to the snapshot\n"
++    "being merged. When the merge finishes, the merged snapshot is removed.\n"
++    "Multiple snapshots may be specified on the command line or a @tag may be\n"
++    "used to specify multiple snapshots be merged to their respective origin.\n")
++
++arg(mergethin_ARG, '\0', "mergethin", 0, 0, 0,
++    "Merge thin LV into its origin LV.\n"
++    "The origin thin LV takes the content of the thin snapshot,\n"
++    "and the thin snapshot LV is removed.\n")
++
++arg(mergedconfig_ARG, '\0', "mergedconfig", 0, 0, 0,
++    "When the command is run with --config\n"
++    "and/or --commandprofile (or using LVM_COMMAND_PROFILE\n"
++    "environment variable), --profile, or --metadataprofile,\n"
++    "merge all the contents of the \"config cascade\" before displaying it.\n"
++    "Without merging, only the configuration at the front of the\n"
++    "cascade is displayed.\n"
++    "See lvm.conf(5) for more information about config.\n")
++
++arg(metadatacopies_ARG, '\0', "metadatacopies", metadatacopies_VAL, 0, 0,
++    "For commands starting with 'pv', this is an alias for --pvmetadatacopies.\n"
++    "For commands starting with 'vg', this is an alias for --vgmetadatacopies.\n")
++
++arg(metadataignore_ARG, '\0', "metadataignore", bool_VAL, 0, 0,
++    "Specifies the metadataignore property of a PV.\n"
++    "If yes, metadata areas on the PV are ignored, and lvm will\n"
++    "not store metadata in the metadata areas of the PV.\n"
++    "If no, lvm will store metadata on the PV.\n")
++
++arg(metadataprofile_ARG, '\0', "metadataprofile", string_VAL, 0, 0,
++    "The metadata profile to use for command configuration.\n"
++    "See lvm.conf(5) for more information about profiles.\n")
++
++arg(metadatasize_ARG, '\0', "metadatasize", sizemb_VAL, 0, 0,
++    "The approximate amount of space used for each VG metadata area.\n"
++    "The size may be rounded.\n")
++
++arg(minor_ARG, '\0', "minor", number_VAL, ARG_GROUPABLE, 0,
++   "#lvcreate\n"
++   "#lvchange\n"
++   "Sets the minor number of an LV block device.\n"
++   "#pvscan\n"
++   "The minor number of a device.\n")
++
++arg(minrecoveryrate_ARG, '\0', "minrecoveryrate", sizekb_VAL, 0, 0,
++    "Sets the minimum recovery rate for a RAID LV.  The rate value\n"
++    "is an amount of data per second for each device in the array.\n"
++    "Setting the rate to 0 means it will be unbounded.\n")
++
++arg(mirrorlog_ARG, '\0', "mirrorlog", mirrorlog_VAL, 0, 0,
++    "Specifies the type of mirror log for LVs with the \"mirror\" type\n"
++    "(does not apply to the \"raid1\" type.)\n"
++    "\\fBdisk\\fP is a persistent log and requires a small amount of\n"
++    "storage space, usually on a separate device from the data being mirrored.\n"
++    "\\fBcore\\fP is not persistent; the log is kept only in memory.\n"
++    "In this case, the mirror must be synchronized (by copying LV data from\n"
++    "the first device to others) each time the LV is activated, e.g. after reboot.\n"
++    "\\fBmirrored\\fP is a persistent log that is itself mirrored.\n")
++
++arg(mirrorsonly_ARG, '\0', "mirrorsonly", 0, 0, 0,
++    "Only remove missing PVs from mirror LVs.\n")
++
++arg(mknodes_ARG, '\0', "mknodes", 0, 0, 0,
++    "Also checks the LVM special files in /dev that are needed for active\n"
++    "LVs and creates any missing ones and removes unused ones.\n")
++
++arg(monitor_ARG, '\0', "monitor", bool_VAL, 0, 0,
++    "Start (yes) or stop (no) monitoring an LV with dmeventd.\n"
++    "dmeventd monitors kernel events for an LV, and performs\n"
++    "automated maintenance for the LV in reponse to specific events.\n"
++    "See dmeventd(8) for more information.\n")
++
++arg(nameprefixes_ARG, '\0', "nameprefixes", 0, 0, 0,
++    "Add an \"LVM2_\" prefix plus the field name to the output. Useful\n"
++    "with --noheadings to produce a list of field=value pairs that can\n"
++    "be used to set environment variables (for example, in udev rules).\n")
++
++arg(noheadings_ARG, '\0', "noheadings", 0, 0, 0,
++    "Suppress the headings line that is normally the first line of output.\n"
++    "Useful if grepping the output.\n")
++
++arg(nohistory_ARG, '\0', "nohistory", 0, 0, 0,
++    "Do not record history of LVs being removed.\n"
++    "This has no effect unless the configuration setting\n"
++    "metadata/record_lvs_history is enabled.\n")
++
++arg(nolocking_ARG, '\0', "nolocking", 0, 0, 0,
++    "Disable locking.\n")
++
++arg(norestorefile_ARG, '\0', "norestorefile", 0, 0, 0,
++    "In conjunction with --uuid, this allows a uuid to be specified\n"
++    "without also requiring that a backup of the metadata be provided.\n")
++
++arg(nosuffix_ARG, '\0', "nosuffix", 0, 0, 0,
++    "Suppress the suffix on output sizes. Use with --units\n"
++    "(except h and H) if processing the output.\n")
++
++arg(nosync_ARG, '\0', "nosync", 0, 0, 0,
++    "Causes the creation of mirror, raid1, raid4, raid5 and raid10 to skip the\n"
++    "initial synchronization. In case of mirror, raid1 and raid10, any data\n"
++    "written afterwards will be mirrored, but the original contents will not be\n"
++    "copied. In case of raid4 and raid5, no parity blocks will be written,\n"
++    "though any data written afterwards will cause parity blocks to be stored.\n"
++    "This is useful for skipping a potentially long and resource intensive initial\n"
++    "sync of an empty mirror/raid1/raid4/raid5 and raid10 LV.\n"
++    "This option is not valid for raid6, because raid6 relies on proper parity\n"
++    "(P and Q Syndromes) being created during initial synchronization in order\n"
++    "to reconstruct proper user date in case of device failures.\n"
++    "raid0 and raid0_meta do not provide any data copies or parity support\n"
++    "and thus do not support initial synchronization.\n")
++
++arg(notifydbus_ARG, '\0', "notifydbus", 0, 0, 0,
++    "Send a notification to D-Bus. The command will exit with an error\n"
++    "if LVM is not built with support for D-Bus notification, or if the\n"
++    "notify_dbus config setting is disabled.\n")
++
++arg(noudevsync_ARG, '\0', "noudevsync", 0, 0, 0,
++    "Disables udev synchronisation. The process will not wait for notification\n"
++    "from udev. It will continue irrespective of any possible udev processing\n"
++    "in the background. Only use this if udev is not running or has rules that\n"
++    "ignore the devices LVM creates.\n")
++
++arg(originname_ARG, '\0', "originname", lv_VAL, 0, 0,
++    "Specifies the name to use for the external origin LV when converting an LV\n"
++    "to a thin LV. The LV being converted becomes a read-only external origin\n"
++    "with this name.\n")
++
++arg(physicalvolumesize_ARG, '\0', "setphysicalvolumesize", sizemb_VAL, 0, 0,
++    "Overrides the automatically detected size of the PV.\n"
++    "Use with care, or prior to reducing the physical size of the device.\n")
++
++arg(poll_ARG, '\0', "poll", bool_VAL, 0, 0,
++    "When yes, start the background transformation of an LV.\n"
++    "An incomplete transformation, e.g. pvmove or lvconvert interrupted\n"
++    "by reboot or crash, can be restarted from the last checkpoint with --poll y.\n"
++    "When no, background transformation of an LV will not occur, and the\n"
++    "transformation will not complete. It may not be appropriate to immediately\n"
++    "poll an LV after activation, in which case --poll n can be used to defer\n"
++    "polling until a later --poll y command.\n")
++
++arg(polloperation_ARG, '\0', "polloperation", polloperation_VAL, 0, 0,
++    "The command to perform from lvmpolld.\n")
++
++/* Not used. */
++arg(pooldatasize_ARG, '\0', "pooldatasize", sizemb_VAL, 0, 0, NULL)
++
++arg(poolmetadata_ARG, '\0', "poolmetadata", lv_VAL, 0, 0,
++    "The name of a an LV to use for storing pool metadata.\n")
++
++arg(poolmetadatasize_ARG, '\0', "poolmetadatasize", sizemb_VAL, 0, 0,
++    "The size of the pool metadata LV created by the command.\n")
++
++arg(poolmetadataspare_ARG, '\0', "poolmetadataspare", bool_VAL, 0, 0,
++    "Enable or disable the automatic creation and management of a\n"
++    "spare pool metadata LV in the VG. A spare metadata LV is reserved\n"
++    "space that can be used when repairing a pool.\n")
++
++arg(profile_ARG, '\0', "profile", string_VAL, 0, 0,
++    "An alias for --commandprofile or --metadataprofile, depending\n"
++    "on the command.\n")
++
++arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", pvmetadatacopies_VAL, 0, 0,
++    "The number of metadata areas to set aside on a PV for storing VG metadata.\n"
++    "When 2, one copy of the VG metadata is stored at the front of the PV\n"
++    "and a second copy is stored at the end.\n"
++    "When 1, one copy of the VG metadata is stored at the front of the PV\n"
++    "(starting in the 5th sector).\n"
++    "When 0, no copies of the VG metadata are stored on the given PV.\n"
++    "This may be useful in VGs containing many PVs (this places limitations\n"
++    "on the ability to use vgsplit later.)\n")
++
++arg(raidrebuild_ARG, '\0', "raidrebuild", pv_VAL, ARG_GROUPABLE, 0,
++    "An alias for --rebuild.\n")
++
++arg(raidmaxrecoveryrate_ARG, '\0', "raidmaxrecoveryrate", sizekb_VAL, 0, 0,
++    "An alias for --maxrecoveryrate.\n")
++
++arg(raidminrecoveryrate_ARG, '\0', "raidminrecoveryrate", sizekb_VAL, 0, 0,
++    "An alias for --minrecoveryrate.\n")
++
++arg(raidsyncaction_ARG, '\0', "raidsyncaction", syncaction_VAL, 0, 0,
++    "An alias for --syncaction.\n")
++
++arg(raidwritebehind_ARG, '\0', "raidwritebehind", number_VAL, 0, 0,
++    "An alias for --writebehind.\n")
++
++arg(raidwritemostly_ARG, '\0', "raidwritemostly", writemostly_VAL, ARG_GROUPABLE, 0,
++    "An alias for --writemostly.\n")
++
++arg(readonly_ARG, '\0', "readonly", 0, 0, 0,
++    "Run the command in a special read-only mode which will read on-disk\n"
++    "metadata without needing to take any locks. This can be used to peek\n"
++    "inside metadata used by a virtual machine image while the virtual\n"
++    "machine is running.\n"
++    "It can also be used to peek inside the metadata of clustered VGs\n"
++    "when clustered locking is not configured or running. No attempt\n"
++    "will be made to communicate with the device-mapper kernel driver, so\n"
++    "this option is unable to report whether or not LVs are\n"
++    "actually in use.\n")
++
++arg(refresh_ARG, '\0', "refresh", 0, 0, 0,
++    "If the LV is active, reload its metadata.\n"
++    "This is not necessary in normal operation, but may be useful\n"
++    "if something has gone wrong, or if some form of manual LV\n"
++    "sharing is being used.\n")
++
++arg(removemissing_ARG, '\0', "removemissing", 0, 0, 0,
++    "Removes all missing PVs from the VG, if there are no LVs allocated\n"
++    "on them. This resumes normal operation of the VG (new LVs may again\n"
++    "be created, changed and so on).\n"
++    "If this is not possible because LVs are referencing the missing PVs,\n"
++    "this option can be combined with --force to have the command remove\n"
++    "any partial LVs. In this case, any LVs and dependent snapshots that\n"
++    "were partly on the missing disks are removed completely, including\n"
++    "those parts on disks that are still present.\n"
++    "If LVs spanned several disks, including ones that are lost, salvaging\n"
++    "some data first may be possible by activating LVs in partial mode.\n")
++
++arg(rebuild_ARG, '\0', "rebuild", pv_VAL, ARG_GROUPABLE, 0,
++    "Selects a PV to rebuild in a raid LV. Multiple PVs can be rebuilt by\n"
++    "repeating this option.\n"
++    "Use this option in place of --resync or --syncaction repair when the\n"
++    "PVs with corrupted data are known, and their data should be reconstructed\n"
++    "rather than reconstructing default (rotating) data.\n")
++
++arg(repair_ARG, '\0', "repair", 0, 0, 0,
++    "Replace failed PVs in a raid or mirror LV, or run a repair\n"
++    "utility on a thin pool.\n")
++
++arg(replace_ARG, '\0', "replace", pv_VAL, ARG_GROUPABLE, 0,
++    "Replace a specific PV in a raid LV with another PV.\n"
++    "The new PV to use can be optionally specified after the LV.\n"
++    "Multiple PVs can be replaced by repeating this option.\n")
++
++arg(reportformat_ARG, '\0', "reportformat", reportformat_VAL, 0, 0,
++    "Overrides current output format for reports which is defined globally by\n"
++    "the report/output_format setting in lvm.conf.\n"
++    "\\fBbasic\\fP is the original format with columns and rows.\n"
++    "If there is more than one report per command, each report is prefixed\n"
++    "with the report name for identification. \\fBjson\\fP produces report\n"
++    "output in JSON format.\n")
++
++arg(restorefile_ARG, '\0', "restorefile", string_VAL, 0, 0,
++    "In conjunction with --uuid, this reads the file (produced by\n"
++    "vgcfgbackup), extracts the location and size of the data on the PV,\n"
++    "and ensures that the metadata produced by the program is consistent\n"
++    "with the contents of the file, i.e. the physical extents will be in\n"
++    "the same place and not be overwritten by new metadata. This provides\n"
++    "a mechanism to upgrade the metadata format or to add/remove metadata\n"
++    "areas. Use with care.\n")
++
++arg(restoremissing_ARG, '\0', "restoremissing", 0, 0, 0,
++    "Add a PV back into a VG after the PV was missing and then returned,\n"
++    "e.g. due to a transient failure. The PV is not reinitialized.\n")
++
++arg(resync_ARG, '\0', "resync", 0, 0, 0,
++    "Initiates mirror synchronization. Synchronization generally happens\n"
++    "automatically, but this option forces it to run.\n"
++    "Also see --rebuild to synchronize a specific PV.\n"
++    "During synchronization, data is read from the primary mirror device\n"
++    "and copied to the others. This can take considerable time, during\n"
++    "which the LV is without a complete redundant copy of the data.\n")
++
++arg(rows_ARG, '\0', "rows", 0, 0, 0,
++    "Output columns as rows.\n")
++
++arg(segments_ARG, '\0', "segments", 0, 0, 0,
++    "#pvs\n"
++    "Produces one line of output for each contiguous allocation of space on each\n"
++    "PV, showing the start (pvseg_start) and length (pvseg_size) in units of\n"
++    "physical extents.\n"
++    "#lvs\n"
++    "Use default columns that emphasize segment information.\n")
++
++arg(separator_ARG, '\0', "separator", string_VAL, 0, 0,
++    "String to use to separate each column. Useful if grepping the output.\n")
++
++arg(shared_ARG, '\0', "shared", 0, 0, 0,
++    "#vgcreate\n"
++    "Create a shared VG using lvmlockd if LVM is compiled with lockd support.\n"
++    "lvmlockd will select lock type sanlock or dlm depending on which lock\n"
++    "manager is running. This allows multiple hosts to share a VG on shared\n"
++    "devices. lvmlockd and a lock manager must be configured and running.\n"
++    "(A shared VG using lvmlockd is different from a clustered VG using clvmd.)\n"
++    "See lvmlockd(8) for more information about shared VGs.\n"
++    "#vgs\n"
++    "#lvs\n"
++    "#pvs\n"
++    "#fullreport\n"
++    "#vgdisplay\n"
++    "#lvdisplay\n"
++    "#pvdisplay\n"
++    "Report/display shared VGs that would otherwise be skipped when\n"
++    "lvmlockd is not being used on the host.\n"
++    "See lvmlockd(8) for more information about shared VGs.\n")
++
++arg(sinceversion_ARG, '\0', "sinceversion", string_VAL, 0, 0,
++    "Specify an LVM version in x.y.z format where x is the major version,\n"
++    "the y is the minor version and z is the patchlevel (e.g. 2.2.106).\n"
++    "This option is currently applicable only with --type new\n"
++    "to display all configuration settings introduced since given version.\n")
++
++/* Not used */
++arg(split_ARG, '\0', "split", 0, 0, 0, NULL)
++
++arg(splitcache_ARG, '\0', "splitcache", 0, 0, 0,
++    "Separates a cache pool from a cache LV, and keeps the unused cache pool LV.\n"
++    "Before the separation, the cache is flushed. Also see --uncache.\n")
++
++arg(splitmirrors_ARG, '\0', "splitmirrors", number_VAL, 0, 0,
++    "Splits the specified number of images from a raid1 or mirror LV\n"
++    "and uses them to create a new LV. If --trackchanges is also specified,\n"
++    "changes to the raid1 LV are tracked while the split LV remains detached.\n")
++
++arg(splitsnapshot_ARG, '\0', "splitsnapshot", 0, 0, 0,
++    "Separates a COW snapshot from its origin LV. The LV that is split off\n"
++    "contains the chunks that differ from the origin LV along with metadata\n"
++    "describing them. This LV can be wiped and then destroyed with lvremove.\n")
++
++arg(showdeprecated_ARG, '\0', "showdeprecated", 0, 0, 0,
++    "Include deprecated configuration settings in the output. These settings\n"
++    "are deprecated after a certain version. If a concrete version is specified\n"
++    "with --atversion, deprecated settings are automatically included\n"
++    "if the specified version is lower than the version in which the settings were\n"
++    "deprecated. The current and diff types include deprecated settings\n"
++    "in their output by default, all the other types ignore deprecated settings.\n")
++
++arg(showunsupported_ARG, '\0', "showunsupported", 0, 0, 0,
++    "Include unsupported configuration settings in the output. These settings\n"
++    "are either used for debugging or development purposes only, or their support\n"
++    "is not yet complete and they are not meant to be used in production. The\n"
++    "current and diff types include unsupported settings in their\n"
++    "output by default, all the other types ignore unsupported settings.\n")
++
++arg(startpoll_ARG, '\0', "startpoll", 0, 0, 0,
++    "Start polling an LV to continue processing a conversion.\n")
++
++arg(stripes_long_ARG, '\0', "stripes", number_VAL, 0, 0,
++    "Specifies the number of stripes in a striped LV. This is the number of\n"
++    "PVs (devices) that a striped LV is spread across. Data that\n"
++    "appears sequential in the LV is spread across multiple devices in units of\n"
++    "the stripe size (see --stripesize). This does not apply to\n"
++    "existing allocated space, only newly allocated space can be striped.\n")
++
++arg(swapmetadata_ARG, '\0', "swapmetadata", 0, 0, 0,
++    "Remove the metadata LV in a pool and replace it with another specified LV.\n"
++    "The removed LV is preserved and given the name of the LV that replaced it.\n"
++    "Used for repair only.\n")
++
++arg(syncaction_ARG, '\0', "syncaction", syncaction_VAL, 0, 0,
++    "Initiate different types of RAID synchronization.\n"
++    "This causes the RAID LV to read all data and parity\n"
++    "blocks in the array and check for discrepancies\n"
++    "(mismatches between mirrors or incorrect parity values).\n"
++    "\\fBcheck\\fP will count but not correct discrepancies.\n"
++    "\\fBrepair\\fP will correct discrepancies.\n"
++    "See lvs for reporting discrepancies found or repaired.\n")
++    
++arg(sysinit_ARG, '\0', "sysinit", 0, 0, 0,
++    "Indicates that vgchange/lvchange is being invoked from early system initialisation\n"
++    "scripts (e.g. rc.sysinit or an initrd), before writable filesystems are\n"
++    "available. As such, some functionality needs to be disabled and this option\n"
++    "acts as a shortcut which selects an appropriate set of options. Currently,\n"
++    "this is equivalent to using --ignorelockingfailure, --ignoremonitoring,\n"
++    "--poll n, and setting env var LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES.\n"
++    "When used in conjunction with lvmetad enabled and running,\n"
++    "vgchange/lvchange skip autoactivation, and defer to pvscan autoactivation.\n")
++
++arg(systemid_ARG, '\0', "systemid", string_VAL, 0, 0,
++    "#vgcreate\n"
++    "Specifies the system ID that will be given to the new VG, overriding the\n"
++    "system ID of the host running the command. A VG is normally created\n"
++    "without this option, in which case the new VG is given the system ID of\n"
++    "the host creating it. Using this option requires caution because the\n"
++    "system ID of the new VG may not match the system ID of the host running\n"
++    "the command, leaving the VG inaccessible to the host.\n"
++    "See lvmsystemid(7) for more information.\n"
++    "#vgchange\n"
++    "Changes the system ID of the VG.  Using this option requires caution\n"
++    "because the VG may become foreign to the host running the command,\n"
++    "leaving the host unable to access it.\n"
++    "See lvmsystemid(7) for more information.\n")
++
++arg(thinpool_ARG, '\0', "thinpool", lv_VAL, 0, 0,
++    "The name of a thin pool LV.\n")
++
++arg(trackchanges_ARG, '\0', "trackchanges", 0, 0, 0,
++    "Can be used with --splitmirrors on a raid1 LV. This causes\n"
++    "changes to the original raid1 LV to be tracked while the split images\n"
++    "remain detached. This allows the read-only detached image(s) to be\n"
++    "merged efficiently back into the raid1 LV later. Only the regions with\n"
++    "changed data are resynchronized during merge. (This option only applies\n"
++    "when using the raid1 LV type.)\n")
++
++/* TODO: hide this? */
++arg(trustcache_ARG, '\0', "trustcache", 0, 0, 0,
++    "Avoids certain device scanning during command processing. Do not use.\n")
++
++arg(type_ARG, '\0', "type", segtype_VAL, 0, 0,
++    "Specifies an LV type, or \"segment type\".\n")
++
++arg(unbuffered_ARG, '\0', "unbuffered", 0, 0, 0,
++    "Produce output immediately without sorting or aligning the columns properly.\n")
++
++arg(uncache_ARG, '\0', "uncache", 0, 0, 0,
++    "Separates a cache pool from a cache LV, and deletes the unused cache pool LV.\n"
++    "Before the separation, the cache is flushed. Also see --splitcache.\n")
++
++arg(cachepolicy_ARG, '\0', "cachepolicy", string_VAL, 0, 0,
++    "Specifies the cache policy for a cache LV.\n"
++    "See lvmcache(7) for more information.\n")
++
++arg(cachesettings_ARG, '\0', "cachesettings", string_VAL, ARG_GROUPABLE, 0,
++    "Specifies tunable values for a cache LV in \"Key = Value\" form.\n"
++    "Repeat this option to specify multiple values.\n"
++    "(The default values should usually be adequate.)\n"
++    "The special string value \\fBdefault\\fP switches\n"
++    "settings back to their default kernel values and removes\n"
++    "them from the list of settings stored in LVM metadata.\n"
++    "See lvmcache(7) for more information.\n")
++
++arg(unconfigured_ARG, '\0', "unconfigured", 0, 0, 0,
++    "Internal option used for generating config file during build.\n")
++
++arg(units_ARG, '\0', "units", units_VAL, 0, 0,
++    "All sizes are output in these units: (h)uman-readable, (b)ytes, (s)ectors,\n"
++    "(k)ilobytes, (m)egabytes, (g)igabytes, (t)erabytes, (p)etabytes, (e)xabytes.\n"
++    "Capitalise to use multiples of 1000 (S.I.) instead of 1024. Can also specify\n"
++    "custom units e.g. --units 3M.\n")
++
++arg(unquoted_ARG, '\0', "unquoted", 0, 0, 0,
++    "When used with --nameprefixes, output values in the field=value\n"
++    "pairs are not quoted.\n")
++
++arg(usepolicies_ARG, '\0', "usepolicies", 0, 0, 0,
++    "Perform an operation according to the policy configured in lvm.conf.\n"
++    "or a profile.\n")
++
++arg(validate_ARG, '\0', "validate", 0, 0, 0,
++    "Validate current configuration used and exit with appropriate\n"
++    "return code. The validation is done only for the configuration\n"
++    "at the front of the \"config cascade\". To validate the whole\n"
++    "merged configuration tree, also use --mergedconfig.\n"
++    "The validation is done even if lvm.conf config/checks is disabled.\n")
++
++arg(version_ARG, '\0', "version", 0, 0, 0,
++    "Display version information.\n")
++
++arg(vgmetadatacopies_ARG, '\0', "vgmetadatacopies", vgmetadatacopies_VAL, 0, 0,
++    "Number of copies of the VG metadata that are kept.\n"
++    "VG metadata is kept in VG metadata areas on PVs in the VG,\n"
++    "i.e. reserved space at the start and/or end of the PVs.\n"
++    "Keeping a copy of the VG metadata on every PV can reduce performance\n"
++    "in VGs containing a large number of PVs.\n"
++    "When this number is set to a non-zero value, LVM will automatically\n"
++    "choose PVs on which to store metadata, using the metadataignore flags\n"
++    "on PVs to achieve the specified number.\n"
++    "The number can also be replaced with special string values:\n"
++    "\\fBunmanaged\\fP causes LVM to not automatically manage the PV\n"
++    "metadataignore flags.\n"
++    "\\fBall\\fP causes LVM to first clear the metadataignore flags on\n"
++    "all PVs, and then to become unmanaged.\n")
++
++arg(virtualoriginsize_ARG, '\0', "virtualoriginsize", sizemb_VAL, 0, 0,
++    "An alias for --virtualsize.\n")
++
++arg(withsummary_ARG, '\0', "withsummary", 0, 0, 0,
++    "Display a one line comment for each configuration node.\n")
++
++arg(withcomments_ARG, '\0', "withcomments", 0, 0, 0,
++    "Display a full comment for each configuration node. For deprecated\n"
++    "settings, also display comments about deprecation.\n")
++
++arg(withspaces_ARG, '\0', "withspaces", 0, 0, 0,
++    "Where appropriate, add more spaces in output for better readability.\n")
++
++arg(withversions_ARG, '\0', "withversions", 0, 0, 0,
++    "Also display a comment containing the version of introduction for\n"
++    "each configuration node. If the setting is deprecated, also display\n"
++    "the version since which it is deprecated.\n")
++
++arg(writebehind_ARG, '\0', "writebehind", number_VAL, 0, 0,
++    "The maximum number of outstanding writes that are allowed to\n"
++    "devices in a RAID1 LV that is marked write-mostly.\n"
++    "Once this value is exceeded, writes become synchronous (i.e. all writes\n"
++    "to the constituent devices must complete before the array signals the\n"
++    "write has completed). Setting the value to zero clears the preference\n"
++    "and allows the system to choose the value arbitrarily.\n")
++
++arg(writemostly_ARG, '\0', "writemostly", writemostly_VAL, ARG_GROUPABLE, 0,
++    "Mark a device in a RAID1 LV as write-mostly.  All reads\n"
++    "to these drives will be avoided unless absolutely necessary. This keeps\n"
++    "the number of I/Os to the drive to a minimum. The default behavior is to\n"
++    "set the write-mostly attribute for the specified PV.\n"
++    "It is also possible to remove the write-mostly flag by adding the\n"
++    "suffix \\fB:n\\fP at the end of the PV name, or to toggle the value with\n"
++    "the suffix \\fB:t\\fP. Repeat this option to change the attribute on\n"
++    "multiple PVs.\n")
  
- typedef enum {
--	/* Merge:
--	 *   If merge_snapshot is also set:
--	 *     merge thin snapshot LV into its origin
--	 *     merge old snapshot COW into its origin
--	 *   or if merge_mirror is also set
--	 *     merge LV previously split from mirror back into mirror
--	 */
--	CONV_MERGE = 1,
--
- 	/* Split:
--	 *   For a snapshot, split it apart into COW and origin for future recombination
--	 *   For a cached LV, split it apart into the cached LV and its pool
- 	 *   For a mirrored or raid LV, split mirror into two mirrors, optionally tracking
- 	 *     future changes to the main mirror to allow future recombination.
- 	 */
--	CONV_SPLIT = 2,
--	CONV_SPLIT_SNAPSHOT = 3,
--	CONV_SPLIT_CACHE = 4,
--	CONV_SPLIT_MIRRORS = 5,
--
--	/* Start to cache an LV */
--	CONV_CACHE = 6,
--
--	/* Destroy the cache attached to a cached LV */
--	CONV_UNCACHE = 7,
--
--	/* Reconstruct a snapshot from its origin and COW */
--	CONV_SNAPSHOT = 8,
--
--	/* Convert normal LV into one in a thin pool */
--	CONV_THIN = 11,
-+	CONV_SPLIT = 1,
-+	CONV_SPLIT_MIRRORS = 2,
+ /* Allow some variations */
+-arg(allocation_ARG, '\0', "allocation", bool_VAL, 0, 0)
+-arg(available_ARG, '\0', "available", activation_VAL, 0, 0)
+-arg(resizable_ARG, '\0', "resizable", bool_VAL, 0, 0)
++arg(allocation_ARG, '\0', "allocation", bool_VAL, 0, 0, NULL)
++arg(available_ARG, '\0', "available", activation_VAL, 0, 0, NULL)
++arg(resizable_ARG, '\0', "resizable", bool_VAL, 0, 0, NULL)
  
- 	/* Every other segment type or mirror log conversion we haven't separated out */
--	CONV_OTHER = 12,
-+	CONV_OTHER = 3,
- } conversion_type_t;
+ /*
+  * ... and now the short args.
+  */
+-arg(activate_ARG, 'a', "activate", activation_VAL, 0, 0)
+-arg(all_ARG, 'a', "all", 0, 0, 0)
+-arg(autobackup_ARG, 'A', "autobackup", bool_VAL, 0, 0)
+-arg(activevolumegroups_ARG, 'A', "activevolumegroups", 0, 0, 0)
+-arg(background_ARG, 'b', "background", 0, 0, 0)
+-arg(backgroundfork_ARG, 'b', "background", 0, 0, 0)
+-arg(basevgname_ARG, 'n', "basevgname", string_VAL, 0, 0)
+-arg(blockdevice_ARG, 'b', "blockdevice", 0, 0, 0)
+-arg(chunksize_ARG, 'c', "chunksize", sizekb_VAL, 0, 0)
+-arg(clustered_ARG, 'c', "clustered", bool_VAL, 0, 0)
+-arg(colon_ARG, 'c', "colon", 0, 0, 0)
+-arg(columns_ARG, 'C', "columns", 0, 0, 0)
+-arg(contiguous_ARG, 'C', "contiguous", bool_VAL, 0, 0)
+-arg(debug_ARG, 'd', "debug", 0, ARG_COUNTABLE, 0)
+-arg(exported_ARG, 'e', "exported", 0, 0, 0)
+-arg(physicalextent_ARG, 'E', "physicalextent", 0, 0, 0)
+-arg(file_ARG, 'f', "file", string_VAL, 0, 0)
+-arg(force_ARG, 'f', "force", 0, ARG_COUNTABLE, 0)
+-arg(full_ARG, 'f', "full", 0, 0, 0)
+-arg(help_ARG, 'h', "help", 0, ARG_COUNTABLE, 0)
+-arg(cache_ARG, 'H', "cache", 0, 0, 0)
+-arg(history_ARG, 'H', "history", 0, 0, 0)
+-arg(help2_ARG, '?', "", 0, 0, 0)
+-arg(import_ARG, 'i', "import", 0, 0, 0)
+-arg(interval_ARG, 'i', "interval", number_VAL, 0, 0)
+-arg(iop_version_ARG, 'i', "iop_version", 0, 0, 0)
+-arg(stripes_ARG, 'i', "stripes", number_VAL, 0, 0)
+-arg(stripesize_ARG, 'I', "stripesize", sizekb_VAL, 0, 0)
+-arg(logicalvolume_ARG, 'l', "logicalvolume", number_VAL, 0, 0)
+-arg(maxlogicalvolumes_ARG, 'l', "maxlogicalvolumes", number_VAL, 0, 0)
+-arg(extents_ARG, 'l', "extents", numsignedper_VAL, 0, 0)
+-arg(list_ARG, 'l', "list", 0, 0, 0)
+-arg(lvmpartition_ARG, 'l', "lvmpartition", 0, 0, 0)
+-arg(size_ARG, 'L', "size", sizemb_VAL, 0, 0)
+-arg(persistent_ARG, 'M', "persistent", bool_VAL, 0, 0)
+-arg(major_ARG, 'j', "major", number_VAL, ARG_GROUPABLE, 0)
+-arg(setactivationskip_ARG, 'k', "setactivationskip", bool_VAL, 0, 0)
+-arg(ignoreactivationskip_ARG, 'K', "ignoreactivationskip", 0, 0, 0)
+-arg(maps_ARG, 'm', "maps", 0, 0, 0)
+-arg(mirrors_ARG, 'm', "mirrors", numsigned_VAL, 0, 0)
+-arg(metadatatype_ARG, 'M', "metadatatype", metadatatype_VAL, 0, 0)
+-arg(name_ARG, 'n', "name", string_VAL, 0, 0)
+-arg(nofsck_ARG, 'n', "nofsck", 0, 0, 0)
+-arg(novolumegroup_ARG, 'n', "novolumegroup", 0, 0, 0)
+-arg(oldpath_ARG, 'n', "oldpath", 0, 0, 0)
+-arg(options_ARG, 'o', "options", string_VAL, ARG_GROUPABLE, 0)
+-arg(sort_ARG, 'O', "sort", string_VAL, ARG_GROUPABLE, 0)
+-arg(maxphysicalvolumes_ARG, 'p', "maxphysicalvolumes", uint32_VAL, 0, 0)
+-arg(permission_ARG, 'p', "permission", permission_VAL, 0, 0)
+-arg(partial_ARG, 'P', "partial", 0, 0, 0)
+-arg(physicalvolume_ARG, 'P', "physicalvolume", 0, 0, 0)
+-arg(quiet_ARG, 'q', "quiet", 0, ARG_COUNTABLE, 0)
+-arg(readahead_ARG, 'r', "readahead", readahead_VAL, 0, 0)
+-arg(resizefs_ARG, 'r', "resizefs", 0, 0, 0)
+-arg(reset_ARG, 'R', "reset", 0, 0, 0)
+-arg(regionsize_ARG, 'R', "regionsize", sizemb_VAL, 0, 0)
+-arg(physicalextentsize_ARG, 's', "physicalextentsize", sizemb_VAL, 0, 0)
+-arg(snapshot_ARG, 's', "snapshot", 0, 0, 0)
+-arg(short_ARG, 's', "short", 0, 0, 0)
+-arg(stdin_ARG, 's', "stdin", 0, 0, 0)
+-arg(select_ARG, 'S', "select", string_VAL, ARG_GROUPABLE, 0)
+-arg(test_ARG, 't', "test", 0, 0, 0)
+-arg(thin_ARG, 'T', "thin", 0, 0, 0)
+-arg(uuid_ARG, 'u', "uuid", 0, 0, 0)
+-arg(uuidstr_ARG, 'u', "uuid", string_VAL, 0, 0)
+-arg(uuidlist_ARG, 'U', "uuidlist", 0, 0, 0)
+-arg(verbose_ARG, 'v', "verbose", 0, ARG_COUNTABLE, 0)
+-arg(volumegroup_ARG, 'V', "volumegroup", 0, 0, 0)
+-arg(virtualsize_ARG, 'V', "virtualsize", sizemb_VAL, 0, 0)
+-arg(wipesignatures_ARG, 'W', "wipesignatures", bool_VAL, 0, 0)
+-arg(allocatable_ARG, 'x', "allocatable", bool_VAL, 0, 0)
+-arg(resizeable_ARG, 'x', "resizeable", bool_VAL, 0, 0)
+-arg(yes_ARG, 'y', "yes", 0, 0, 0)
+-arg(zero_ARG, 'Z', "zero", bool_VAL, 0, 0)
++arg(activate_ARG, 'a', "activate", activation_VAL, 0, 0,
++    "#lvchange\n"
++    "#vgchange\n"
++    "Change the active state of LVs.\n"
++    "An active LV can be used through a block device,\n"
++    "allowing data on the LV to be accessed.\n"
++    "\\fBy\\fP makes LVs active, or available.\n"
++    "\\fBn\\fP makes LVs inactive, or unavailable.\n"
++    "The block device for the LV is added or removed from the system\n"
++    "using device-mapper in the kernel.\n"
++    "A symbolic link /dev/VGName/LVName pointing to the device node is also added/removed.\n"
++    "All software and scripts should access the device through the symbolic\n"
++    "link and present this as the name of the device.\n"
++    "The location and name of the underlying device node may depend on\n"
++    "the distribution, configuration (e.g. udev), or release version.\n"
++    "\\fBay\\fP specifies autoactivation, in which case an LV is activated\n"
++    "only if it matches an item in lvm.conf activation/auto_activation_volume_list.\n"
++    "If the list is not set, all LVs are considered to match, and if\n"
++    "if the list is set but empty, no LVs match.\n"
++    "Autoactivation should be used during system boot to make it possible\n"
++    "to select which LVs should be automatically activated by the system.\n"
++    "See lvmlockd(8) for more information about activation options for shared VGs.\n"
++    "See clvmd(8) for more information about activation options for clustered VGs.\n"
++    "#lvcreate\n"
++    "Controls the active state of the new LV.\n"
++    "\\fBy\\fP makes the LV active, or available.\n"
++    "New LVs are made active by default.\n"
++    "\\fBn\\fP makes the LV inactive, or unavailable, only when possible.\n"
++    "In some cases, creating an LV requires it to be active.\n"
++    "For example, COW snapshots of an active origin LV can only\n"
++    "be created in the active state (this does not apply to thin snapshots.)\n"
++    "The --zero option normally requires the LV to be active.\n"
++    "If autoactivation \\fBay\\fP is used, the LV is only activated\n"
++    "if it matches an item in lvm.conf activation/auto_activation_volume_list.\n"
++    "\\fBay\\fP implies --zero n and --wipesignatures n.\n"
++    "See lvmlockd(8) for more information about activation options for shared VGs.\n"
++    "See clvmd(8) for more information about activation options for clustered VGs.\n")
++
++arg(all_ARG, 'a', "all", 0, 0, 0,
++    "#vgreduce\n"
++    "Removes all empty PVs if none are named on the command line.\n"
++    "#lvscan\n"
++    "#lvdisplay\n"
++    "#lvs\n"
++    "Show information about internal LVs.\n"
++    "These are components of normal LVs, such as mirrors,\n"
++    "which are not independently accessible, e.g. not mountable.\n"
++    "#vgs\n"
++    "List all VGs. Equivalent to not specifying any VGs.\n"
++    "#pvs\n"
++    "#pvdisplay\n"
++    "Show information about devices that have not been initialized\n"
++    "by LVM, i.e. they are not PVs.\n")
++
++arg(autobackup_ARG, 'A', "autobackup", bool_VAL, 0, 0,
++    "Specifies if metadata should be backed up automatically after a change.\n"
++    "Enabling this is strongly advised! See vgcfgbackup(8) for more information.\n")
++
++arg(activevolumegroups_ARG, 'A', "activevolumegroups", 0, 0, 0,
++    "Only select active VGs. The VG is considered active\n"
++    "if at least one of its LVs is active.\n")
++
++/* FIXME: remove background option from pvscan, it's not used */
++
++arg(background_ARG, 'b', "background", 0, 0, 0,
++    "If the operation requires polling, this option causes the command to\n"
++    "return before the operation is complete, and polling is done in the\n"
++    "background.\n")
++
++/* Not used */
++arg(backgroundfork_ARG, 'b', "background", 0, 0, 0, NULL)
++
++arg(basevgname_ARG, 'n', "basevgname", string_VAL, 0, 0,
++    "By default the snapshot VG will be renamed to the original name plus a\n"
++    "numeric suffix to avoid duplicate naming (e.g. 'test_vg' would be renamed\n"
++    "to 'test_vg1'). This option will override the base VG name that is\n"
++    "used for all VG renames. If a VG already exists with the specified name\n"
++    "a numeric suffix will be added (like the previous example) to make it unique.\n")
++
++arg(blockdevice_ARG, 'b', "blockdevice", 0, 0, 0,
++    "No longer used.\n")
++
++arg(chunksize_ARG, 'c', "chunksize", sizekb_VAL, 0, 0,
++    "The size of chunks in a snapshot, cache pool or thin pool.\n"
++    "For snapshots, the value must be a power of 2 between 4KiB and 512KiB\n"
++    "and the default value is 4.\n"
++    "For a cache pool the value must be between 32KiB and 1GiB\n"
++    "and the default value is 64.\n"
++    "For a thin pool the value must be between 64KiB and 1GiB\n"
++    "and the default value starts with 64 and scales up to fit the\n"
++    "pool metadata size within 128MiB, if the pool metadata size is not specified.\n"
++    "The value must be a multiple of 64KiB.\n")
++
++arg(clustered_ARG, 'c', "clustered", bool_VAL, 0, 0,
++    "#vgcreate\n"
++    "Create a clustered VG using clvmd if LVM is compiled with cluster support.\n"
++    "This allows multiple hosts to share a VG on shared devices.\n"
++    "clvmd and a lock manager must be configured and running.\n"
++    "(A clustered VG using clvmd is different from a shared VG using lvmlockd.)\n"
++    "See clvmd(8) for more information about clustered VGs.\n"
++    "#vgchange\n"
++    "Change the clustered property of a VG using clvmd.\n"
++    "See clvmd(8) for more information about clustered VGs.\n"
++    "#vgsplit\n"
++    "Specifies the clustered property of the new VG.\n")
++
++arg(colon_ARG, 'c', "colon", 0, 0, 0,
++    "Generate colon separated output for easier parsing in scripts or programs.\n"
++    "Also see vgs(8) which provides considerably more control over the output.\n")
++
++arg(columns_ARG, 'C', "columns", 0, 0, 0,
++    "Display output in columns, the equivalent of vgs(8).\n"
++    "Options listed are the same as options given in vgs(8).\n")
++
++arg(contiguous_ARG, 'C', "contiguous", bool_VAL, 0, 0,
++    "Sets or resets the contiguous allocation policy for LVs.\n"
++    "Default is no contiguous allocation based on a next free principle.\n"
++    "It is only possible to change a non-contiguous allocation policy\n"
++    "to contiguous if all of the allocated physical extents in the LV\n"
++    "are already contiguous.\n")
++
++arg(debug_ARG, 'd', "debug", 0, ARG_COUNTABLE, 0,
++    "Set debug level. Repeat from 1 to 6 times to increase the detail of\n"
++    "messages sent to the log file and/or syslog (if configured).\n")
++
++arg(exported_ARG, 'e', "exported", 0, 0, 0,
++    "Only show PVs belonging to exported VGs.\n")
++
++/* Not used. */
++arg(physicalextent_ARG, 'E', "physicalextent", 0, 0, 0, NULL)
++
++arg(file_ARG, 'f', "file", string_VAL, 0, 0,
++    "#lvmconfig\n"
++    "#dumpconfig\n"
++    "#config\n"
++    "Write output to the named file.\n"
++    "#vgcfgbackup\n"
++    "Write the backup to the named file.\n"
++    "When backing up more than one VG, the file name is\n"
++    "treated as a template, and %s is replaced by the VG name.\n"
++    "#vgcfgrestore\n"
++    "Read metadata backup from the named file.\n" 
++    "Usually this file was created by vgcfgbackup.\n")
++
++arg(force_ARG, 'f', "force", 0, ARG_COUNTABLE, 0,
++    "Override various checks, confirmations and protections.\n"
++    "Use with extreme caution.\n")
++
++/* Not used. */
++arg(full_ARG, 'f', "full", 0, 0, 0, NULL)
++
++arg(help_ARG, 'h', "help", 0, ARG_COUNTABLE, 0,
++    "Display help text. Repeat this option for more information.\n")
++
++arg(cache_ARG, 'H', "cache", 0, 0, 0,
++    "Specifies the command is handling a cache LV or cache pool.\n"
++    "See --type cache and --type cache-pool.\n"
++    "See lvmcache(7) for more information about LVM caching.\n")
++
++arg(history_ARG, 'H', "history", 0, 0, 0,
++    "Include historical LVs in the output.\n"
++    "(This has no effect unless LVs were removed while\n"
++    "lvm.conf metadata/record_lvs_history was enabled.\n")
++
++/* Not used */
++arg(help2_ARG, '?', "", 0, 0, 0, NULL)
++
++arg(import_ARG, 'i', "import", 0, 0, 0,
++    "Import exported VGs. Otherwise VGs that have been exported\n"
++    "will not be changed (nor will their associated PVs).\n")
++
++arg(interval_ARG, 'i', "interval", number_VAL, 0, 0,
++    "Report progress at regular intervals.\n")
++
++/* Not used */
++arg(iop_version_ARG, 'i', "iop_version", 0, 0, 0, NULL)
++
++arg(stripes_ARG, 'i', "stripes", number_VAL, 0, 0,
++    "Specifies the number of stripes in a striped LV. This is the number of\n"
++    "PVs (devices) that a striped LV is spread across. Data that\n"
++    "appears sequential in the LV is spread across multiple devices in units of\n"
++    "the stripe size (see --stripesize). This does not apply to\n"
++    "existing allocated space, only newly allocated space can be striped.\n"
++    "When creating a RAID 4/5/6 LV, this number does not include the extra\n"
++    "devices that are required for parity. The largest number depends on\n"
++    "the RAID type (raid0: 64, raid10: 32, raid4/5: 63, raid6: 62.)\n"
++    "When unspecified, the default depends on the RAID type\n"
++    "(raid0: 2, raid10: 4, raid4/5: 3, raid6: 5.)\n"
++    "When unspecified, to stripe across all PVs of the VG,\n"
++    "set lvm.conf allocation/raid_stripe_all_devices=1.\n")
++
++arg(stripesize_ARG, 'I', "stripesize", sizekb_VAL, 0, 0,
++    "The amount of data that is written to one device before\n"
++    "moving to the next in a striped LV.\n")
++
++arg(logicalvolume_ARG, 'l', "logicalvolume", number_VAL, 0, 0,
++    "Sets the maximum number of LVs allowed in a VG.\n")
++
++arg(maxlogicalvolumes_ARG, 'l', "maxlogicalvolumes", number_VAL, 0, 0,
++    "Sets the maximum number of LVs allowed in a VG.\n")
++
++arg(extents_ARG, 'l', "extents", numsignedper_VAL, 0, 0,
++    "#lvcreate\n"
++    "Specifies the size of the new LV in logical extents.\n"
++    "The --size and --extents options are alternate methods of specifying size.\n"
++    "The total number of physical extents used will be\n"
++    "greater when redundant data is needed for RAID levels.\n"
++    "An alternate syntax allows the size to be determined indirectly\n"
++    "as a percentage of the size of a related VG, LV, or set of PVs. The\n"
++    "suffix \\fB%VG\\fP denotes the total size of the VG, the suffix \\fB%FREE\\fP\n"
++    "the remaining free space in the VG, and the suffix \\fB%PVS\\fP the free\n"
++    "space in the specified PVs.  For a snapshot, the size\n"
++    "can be expressed as a percentage of the total size of the origin LV\n"
++    "with the suffix \\fB%ORIGIN\\fP (\\fB100%ORIGIN\\fP provides space for\n"
++    "the whole origin).\n"
++    "When expressed as a percentage, the size defines an upper limit for the\n"
++    "number of logical extents in the new LV. The precise number of logical\n"
++    "extents in the new LV is not determined until the command has completed.\n"
++    "#lvreduce\n"
++    "#lvextend\n"
++    "#lvresize\n"
++    "Specifies the new size of the LV in logical extents.\n"
++    "The --size and --extents options are alternate methods of specifying size.\n"
++    "The total number of physical extents used will be\n"
++    "greater when redundant data is needed for RAID levels.\n"
++    "An alternate syntax allows the size to be determined indirectly\n"
++    "as a percentage of the size of a related VG, LV, or set of PVs. The\n"
++    "suffix \\fB%VG\\fP denotes the total size of the VG, the suffix \\fB%FREE\\fP\n"
++    "the remaining free space in the VG, and the suffix \\fB%PVS\\fP the free\n"
++    "space in the specified PVs.  For a snapshot, the size\n"
++    "can be expressed as a percentage of the total size of the origin LV\n"
++    "with the suffix \\fB%ORIGIN\\fP (\\fB100%ORIGIN\\fP provides space for\n"
++    "the whole origin).\n"
++    "When expressed as a percentage, the size defines an upper limit for the\n"
++    "number of logical extents in the new LV. The precise number of logical\n"
++    "extents in the new LV is not determined until the command has completed.\n"
++    "The plus prefix \\fB+\\fP can be used, in which case\n"
++    "the value is added to the current size,\n"
++    "or the minus prefix \\fB-\\fP can be used, in which case\n"
++    "the value is subtracted from the current size.\n")
++
++arg(list_ARG, 'l', "list", 0, 0, 0,
++    "#lvmconfig\n"
++    "#dumpconfig\n"
++    "#config\n"
++    "List config settings with summarizing comment. This is the same as using\n"
++    "options --type list --withsummary.\n"
++    "#vgcfgrestore\n"
++    "List metadata backup and archive files pertaining to the VG.\n"
++    "May be used with --file. Does not restore the VG.\n"
++    "#vgmerge\n"
++    "Display merged destination VG like vgdisplay -v.\n")
++
++arg(lvmpartition_ARG, 'l', "lvmpartition", 0, 0, 0,
++    "Only report PVs.\n")
++
++arg(size_ARG, 'L', "size", sizemb_VAL, 0, 0,
++    "#lvcreate\n"
++    "Specifies the size of the new LV.\n"
++    "The --size and --extents options are alternate methods of specifying size.\n"
++    "The total number of physical extents used will be\n"
++    "greater when redundant data is needed for RAID levels.\n"
++    "A suffix can be chosen from: \\fBbBsSkKmMgGtTpPeE\\fP.\n"
++    "All units are base two values, regardless of letter capitalization:\n"
++    "b|B is bytes, s|S is sectors of 512 bytes,\n"
++    "k|K is kilobytes, m|M is megabytes,\n"
++    "g|G is gigabytes, t|T is terabytes,\n"
++    "p|P is petabytes, e|E is exabytes.\n"
++    "#lvreduce\n"
++    "#lvextend\n"
++    "#lvresize\n"
++    "Specifies the new size of the LV.\n"
++    "The --size and --extents options are alternate methods of specifying size.\n"
++    "The total number of physical extents used will be\n"
++    "greater when redundant data is needed for RAID levels.\n"
++    "A suffix can be chosen from: \\fBbBsSkKmMgGtTpPeE\\fP.\n"
++    "All units are base two values, regardless of letter capitalization:\n"
++    "b|B is bytes, s|S is sectors of 512 bytes,\n"
++    "k|K is kilobytes, m|M is megabytes,\n"
++    "g|G is gigabytes, t|T is terabytes,\n"
++    "p|P is petabytes, e|E is exabytes.\n"
++    "The plus prefix \\fB+\\fP can be used, in which case\n"
++    "the value is added to the current size,\n"
++    "or the minus prefix \\fB-\\fP can be used, in which case\n"
++    "the value is subtracted from the current size.\n")
++
++arg(persistent_ARG, 'M', "persistent", bool_VAL, 0, 0,
++    "When yes, makes the specified minor number persistent.\n")
++
++arg(major_ARG, 'j', "major", number_VAL, ARG_GROUPABLE, 0,
++   "#lvcreate\n"
++   "#lvchange\n"
++   "Sets the major number of an LV block device.\n"
++   "#pvscan\n"
++   "The major number of a device.\n")
++
++arg(setactivationskip_ARG, 'k', "setactivationskip", bool_VAL, 0, 0,
++    "Persistently sets (yes) or clears (no) the \"activation skip\" flag on an LV.\n"
++    "An LV with this flag set is not activated unless the\n"
++    "--ignoreactivationskip option is used by the activation command.\n"
++    "This flag is set by default on new thin snapshot LVs.\n"
++    "The flag is not applied to deactivation.\n"
++    "The current value of the flag is indicated in the lvs lv_attr bits.\n")
++
++arg(ignoreactivationskip_ARG, 'K', "ignoreactivationskip", 0, 0, 0,
++    "Ignore the \"activation skip\" LV flag during activation\n"
++    "to allow LVs with the flag set to be activated.\n")
++
++arg(maps_ARG, 'm', "maps", 0, 0, 0,
++    "#lvdisplay\n"
++    "Display the mapping of logical extents to PVs and physical extents.\n"
++    "To map physical extents to logical extents use:\n"
++    "pvs --segments -o+lv_name,seg_start_pe,segtype\n"
++    "#pvdisplay\n"
++    "Display the mapping of physical extents to LVs and logical extents.\n")
++
++/* FIXME: should the unused mirrors option be removed from lvextend? */
++
++arg(mirrors_ARG, 'm', "mirrors", numsigned_VAL, 0, 0,
++    "#lvcreate\n"
++    "Specifies the number of mirror images in addition to the original LV\n"
++    "image, e.g. --mirrors 1 means there are two images of the data, the\n"
++    "original and one mirror image.\n"
++    "Optional positional PV args on the command line can specify the devices\n"
++    "the images should be placed on.\n"
++    "There are two mirroring implementations: \"raid1\" and \"mirror\".\n"
++    "These are the names of the corresponding LV types, or \"segment types\".\n"
++    "Use the --type option to specify which to use (raid1 is default,\n"
++    "and mirror is legacy)\n"
++    "Use lvm.conf global/mirror_segtype_default and\n"
++    "global/raid10_segtype_default to configure the default types.\n"
++    "See the --nosync option for avoiding initial image synchronization.\n"
++    "#lvconvert\n"
++    "Specifies the number of mirror images in addition to the original LV\n"
++    "image, e.g. --mirrors 1 means there are two images of the data, the\n"
++    "original and one mirror image.\n"
++    "Optional positional PV args on the command line can specify the devices\n"
++    "the images should be placed on.\n"
++    "There are two mirroring implementations: \"raid1\" and \"mirror\".\n"
++    "These are the names of the corresponding LV types, or \"segment types\".\n"
++    "Use the --type option to specify which to use (raid1 is default,\n"
++    "and mirror is legacy)\n"
++    "Use lvm.conf global/mirror_segtype_default and\n"
++    "global/raid10_segtype_default to configure the default types.\n"
++    "The plus prefix \\fB+\\fP can be used, in which case\n"
++    "the number is added to the current number of images,\n"
++    "or the minus prefix \\fB-\\fP can be used, in which case\n"
++    "the number is subtracted from the current number of images.\n"
++    "#lvextend\n"
++    "Not used.\n")
++
++arg(metadatatype_ARG, 'M', "metadatatype", metadatatype_VAL, 0, 0,
++    "Specifies the type of on-disk metadata to use.\n"
++    "\\fBlvm2\\fP (or just \\fB2\\fP) is the current, standard format.\n"
++    "\\fBlvm1\\fP (or just \\fB1\\fP) is a historical format that\n"
++    "can be used for accessing old data.\n")
++
++arg(name_ARG, 'n', "name", string_VAL, 0, 0,
++    "#lvcreate\n"
++    "#lvconvert\n"
++    "Specifies the name of a new LV.\n"
++    "When unspecified, a default name of \"lvol#\" is\n"
++    "generated, where # is a number generated by LVM.\n"
++    "#pvmove\n"
++    "Move only the extents belonging to the named LV.\n"
++    "#vgsplit\n"
++    "Move only PVs used by the named LV.\n")
++
++arg(nofsck_ARG, 'n', "nofsck", 0, 0, 0,
++    "Do not perform fsck before resizing filesystem when filesystem\n"
++    "requires it. You may need to use --force to proceed with\n"
++    "this option.\n")
++
++arg(novolumegroup_ARG, 'n', "novolumegroup", 0, 0, 0,
++    "Only show PVs not belonging to any VG.\n")
++
++/* Not used */
++arg(oldpath_ARG, 'n', "oldpath", 0, 0, 0, NULL)
++
++/*
++ * FIXME: a free-form discussion section and document the
++ * VG/LV/PV attr bits which were previously listed
++ * in the description for -o.
++ */
++
++arg(options_ARG, 'o', "options", string_VAL, ARG_GROUPABLE, 0,
++    "Comma-separated, ordered list of fields to display in columns.\n"
++    "String arg syntax is: [+|-|#]Field1[,Field2 ...]\n"
++    "The prefix \\fB+\\fP will append the specified fields to the default fields,\n"
++    "\\fB-\\fP will remove the specified fields from the default fields, and\n"
++    "\\fB#\\fP will compact specified fields (removing them when empty for all rows.)\n"
++    "Use \\fB-o help\\fP to view the list of all available fields.\n"
++    "The -o option can be repeated, providing several lists.\n"
++    "These lists are evaluated from left to right.\n"
++    "Use field name \\fBlv_all\\fP to view all LV fields,\n"
++    "\\fBvg_all\\fP all VG fields,\n"
++    "\\fBpv_all\\fP all PV fields,\n"
++    "\\fBpvseg_all\\fP all PV segment fields,\n"
++    "\\fBseg_all\\fP all LV segment fields, and\n"
++    "\\fBpvseg_all\\fP all PV segment columns.\n"
++    "See the lvm.conf report section for more config options.\n"
++    "See lvmreport(7) for more information about reporting.\n")
++
++arg(sort_ARG, 'O', "sort", string_VAL, ARG_GROUPABLE, 0,
++    "Comma-separated ordered list of columns to sort by. Replaces the default\n"
++    "selection. Precede any column with \\fB-\\fP for a reverse sort on that column.\n")
++
++arg(maxphysicalvolumes_ARG, 'p', "maxphysicalvolumes", uint32_VAL, 0, 0,
++    "Sets the maximum number of PVs that can belong to the VG.\n"
++    "The value 0 removes any limitation.\n"
++    "For large numbers of PVs, also see options --pvmetadatacopies,\n"
++    "and --vgmetadatacopies for improving performance.\n")
++
++arg(permission_ARG, 'p', "permission", permission_VAL, 0, 0,
++    "Set access permission to read only \\fBr\\fP or read and write \\fBrw\\fP.\n")
++
++/* FIXME: I left out some of the previous description that didn't sound correct. */
++
++arg(partial_ARG, 'P', "partial", 0, 0, 0,
++    "When set, the tools will do their best to provide access to VGs\n"
++    "that are only partially available (one or more PVs belonging\n"
++    "to the VG are missing from the system). Metadata may not be\n"
++    "changed with this option.\n")
++
++/* Not used */
++arg(physicalvolume_ARG, 'P', "physicalvolume", 0, 0, 0, NULL)
++
++arg(quiet_ARG, 'q', "quiet", 0, ARG_COUNTABLE, 0,
++    "Suppress output and log messages. Overrides --debug and --verbose.\n"
++    "Repeat once to also suppress any prompts with answer no.\n")
++
++arg(readahead_ARG, 'r', "readahead", readahead_VAL, 0, 0,
++    "Sets read ahead sector count of an LV.\n"
++    "\\fBauto\\fP is the default which allows the kernel to choose\n"
++    "a suitable value automatically.\n"
++    "\\fBnone\\fP is equivalent to zero.\n")
++
++arg(resizefs_ARG, 'r', "resizefs", 0, 0, 0,
++    "Resize underlying filesystem together with the LV using fsadm(8).\n")
++
++/* Not used */
++arg(reset_ARG, 'R', "reset", 0, 0, 0, NULL)
++
++arg(regionsize_ARG, 'R', "regionsize", sizemb_VAL, 0, 0,
++    "A mirror is divided into regions of this size, and the mirror log\n"
++    "uses this granularity to track which regions are in sync.\n"
++    "(This can be used with the \"mirror\" type, not the \"raid1\" type.)\n")
++
++arg(physicalextentsize_ARG, 's', "physicalextentsize", sizemb_VAL, 0, 0,
++    "#vgcreate\n"
++    "Sets the physical extent size of PVs in the VG.\n"
++    "The value must be either a power of 2 of at least 1 sector\n"
++    "(where the sector size is the largest sector size of the PVs\n"
++    "currently used in the VG), or at least 128KiB.\n"
++    "Once this value has been set, it is difficult to change\n"
++    "without recreating the VG, unless no extents need moving.\n"
++    "#vgchange\n"
++    "Sets the physical extent size of PVs in the VG.\n"
++    "The value must be either a power of 2 of at least 1 sector\n"
++    "(where the sector size is the largest sector size of the PVs\n"
++    "currently used in the VG), or at least 128KiB.\n"
++    "Once this value has been set, it is difficult to change\n"
++    "without recreating the VG, unless no extents need moving.\n"
++    "Before increasing the physical extent size, you might need to use lvresize,\n"
++    "pvresize and/or pvmove so that everything fits. For example, every\n"
++    "contiguous range of extents used in a LV must start and end on an extent boundary.\n")
++
++arg(snapshot_ARG, 's', "snapshot", 0, 0, 0,
++    "#lvcreate\n"
++    "Create a snapshot. Snapshots provide a \"frozen image\" of an origin LV.\n"
++    "The snapshot LV can be used, e.g. for backups, while the origin LV\n"
++    "continues to be used.\n"
++    "This option can create a COW (copy on write) snapshot,\n"
++    "or a thin snapshot (in a thin pool.)\n"
++    "Thin snapshots are created when the origin is a thin LV and\n"
++    "the size option is NOT specified. Thin snapshots share the same blocks\n"
++    "in the thin pool, and do not allocate new space from the VG.\n"
++    "Thin snapshots are created with the \"activation skip\" flag,\n"
++    "see --setactivationskip.\n"
++    "A thin snapshot of a non-thin \"external origin\" LV is created\n"
++    "when a thin pool is specified. Unprovisioned blocks in the thin snapshot\n"
++    "LV are read from the external origin LV. The external origin LV must\n"
++    "be read-only.\n"
++    "See lvmthin(7) for more information about LVM thin provisioning.\n"
++    "COW snapshots are created when a size is specified. The size is allocated\n"
++    "from space in the VG, and is the amount of space that can be used\n"
++    "for saving COW blocks as writes occur to the origin or snapshot.\n"
++    "The size chosen should depend upon the amount of writes that are expected;\n"
++    "often 20% of the origin LV is enough. If COW space runs low, it can\n"
++    "be extended with lvextend (shrinking is also allowed with lvreduce.)\n"
++    "A small amount of the COW snapshot LV size is used to track COW block\n"
++    "locations, so the full size is not available for COW data blocks.\n"
++    "Use lvs to check how much space is used, and see --monitor to\n"
++    "to automatically extend the size to avoid running out of space.\n"
++    "#lvconvert\n"
++    "Combine a former COW snapshot LV with a former origin LV to reverse\n"
++    "a previous --splitsnapshot command.\n")
++
++arg(short_ARG, 's', "short", 0, 0, 0,
++    "#pvdisplay\n"
++    "Only display the size of the given PVs.\n"
++    "#vgdisplay\n"
++    "Give a short listing showing the existence of VGs.\n"
++    "#pvscan\n"
++    "Short listing format.\n")
++
++/* Not used */
++arg(stdin_ARG, 's', "stdin", 0, 0, 0, NULL)
++
++arg(select_ARG, 'S', "select", string_VAL, ARG_GROUPABLE, 0,
++    "Select objects for processing and reporting based on specified criteria.\n"
++    "The criteria syntax is described in lvmreport(7) under Selection.\n"
++    "For reporting commands, display rows that match the criteria.\n"
++    "All rows can be displayed with an additional \"selected\" field (-o selected)\n"
++    "showing 1 if the row matches the selection and 0 otherwise.\n"
++    "For non-reporting commands which process LVM entities, the selection is\n"
++    "used to choose items to process.\n")
++
++arg(test_ARG, 't', "test", 0, 0, 0,
++    "Run in test mode. Commands will not update metadata.\n"
++    "This is implemented by disabling all metadata writing but nevertheless\n"
++    "returning success to the calling function. This may lead to unusual\n"
++    "error messages in multi-stage operations if a tool relies on reading\n"
++    "back metadata it believes has changed but hasn't.\n")
++
++arg(thin_ARG, 'T', "thin", 0, 0, 0,
++    "Specifies the command is handling a thin LV or thin pool.\n"
++    "See --type thin, --type thin-pool, and --virtualsize.\n"
++    "See lvmthin(7) for more information about LVM thin provisioning.\n")
++
++arg(uuid_ARG, 'u', "uuid", 0, 0, 0,
++    "#pvchange\n"
++    "Generate new random UUID for specified PVs.\n"
++    "#pvscan\n"
++    "Show UUIDs in addition to device names.\n"
++    "#vgchange\n"
++    "Generate new random UUID for specified VGs.\n")
++
++arg(uuidstr_ARG, 'u', "uuid", string_VAL, 0, 0,
++    "Specify a UUID for the device.\n"
++    "Without this option, a random UUID is generated.\n"
++    "This option is needed before restoring a backup of LVM metadata\n"
++    "onto a replacement device; see vgcfgrestore(8). As such, use of\n"
++    "--restorefile is compulsory unless the --norestorefile is used.\n"
++    "All PVs must have unique UUIDs, and LVM will prevent certain operations\n"
++    "if multiple devices are seen with the same UUID.\n"
++    "See vgimportclone(8) for more information.\n")
++
++/* Not used */
++arg(uuidlist_ARG, 'U', "uuidlist", 0, 0, 0, NULL)
++
++arg(verbose_ARG, 'v', "verbose", 0, ARG_COUNTABLE, 0,
++    "Set verbose level. Repeat from 1 to 4 times to increase the detail\n"
++    "of messages sent to stdout and stderr.\n")
++
++/* Not used */
++arg(volumegroup_ARG, 'V', "volumegroup", 0, 0, 0, NULL)
++
++arg(virtualsize_ARG, 'V', "virtualsize", sizemb_VAL, 0, 0,
++    "The virtual size of a new thin LV.\n"
++    "See lvmthin(7) for more information about LVM thin provisioning.\n"
++    "Using virtual size (-V) and actual size (-L) together creates\n"
++    "a sparse LV.\n"
++    "lvm.conf global/sparse_segtype_default determines the\n"
++    "default segment type used to create a sparse LV.\n"
++    "Anything written to a sparse LV will be returned when reading from it.\n"
++    "Reading from other areas of the LV will return blocks of zeros.\n"
++    "When using a snapshot to create a sparse LV, a hidden virtual device\n"
++    "is created using the zero target, and the LV has the suffix _vorigin.\n"
++    "Snapshots are less efficient than thin provisioning when creating\n"
++    "large sparse LVs (GiB).\n")
++
++arg(wipesignatures_ARG, 'W', "wipesignatures", bool_VAL, 0, 0,
++    "Controls detection and subsequent wiping of signatures on new LVs.\n"
++    "There is a prompt for each signature detected to confirm its wiping\n"
++    "(unless --yes is used to override confirmations.)\n"
++    "When not specified, signatures are wiped whenever zeroing is done\n"
++    "(see --zero). This behaviour can be configured with\n"
++    "lvm.conf allocation/wipe_signatures_when_zeroing_new_lvs.\n"
++    "If blkid wiping is used (lvm.conf allocation/use_blkid_wiping)\n"
++    "and LVM is compiled with blkid wiping support, then the blkid(8)\n"
++    "library is used to detect the signatures (use blkid -k to list the\n"
++    "signatures that are recognized).\n"
++    "Otherwise, native LVM code is used to detect signatures\n"
++    "(only MD RAID, swap and LUKS signatures are detected in this case.)\n"
++    "The LV is not wiped if the read only flag is set.\n")
++
++arg(allocatable_ARG, 'x', "allocatable", bool_VAL, 0, 0,
++    "Enable or disable allocation of physical extents on this PV.\n")
++
++arg(resizeable_ARG, 'x', "resizeable", bool_VAL, 0, 0,
++    "Enables or disables the addition or removal of PVs to/from a VG\n"
++    "(by vgextend/vgreduce).\n")
++
++arg(yes_ARG, 'y', "yes", 0, 0, 0,
++    "Do not prompt for confirmation interactively but always assume the\n"
++    "answer yes. Use with extreme caution.\n")
++
++arg(zero_ARG, 'Z', "zero", bool_VAL, 0, 0,
++    "#lvchange\n"
++    "Set zeroing mode for thin pool. Note: already provisioned blocks from pool\n"
++    "in non-zero mode are not cleared in unwritten parts when setting --zero y.\n"
++    "#lvconvert\n"
++    "For snapshots, this controls zeroing of the first 4KiB of data in the\n"
++    "snapshot. If the LV is read-only, the snapshot will not be zeroed.\n"
++    "For thin pools, this controls zeroing of provisioned blocks.\n"
++    "Provisioning of large zeroed chunks negatively impacts performance.\n"
++    "#lvcreate\n"
++    "Controls zeroing of the first 4KiB of data in the new LV.\n"
++    "Default is \\fBy\\fP.\n"
++    "Snapshot COW volumes are always zeroed.\n"
++    "LV is not zeroed if the read only flag is set.\n"
++    "Warning: trying to mount an unzeroed LV can cause the system to hang.\n"
++    "#pvcreate\n"
++    "#vgcreate\n"
++    "#vgextend\n"
++    "Controls if the first 4 sectors (2048 bytes) of the device are wiped.\n"
++    "The default is to wipe these sectors unless either or both of\n"
++    "--restorefile or --uuid are specified.\n")
  
- struct lvconvert_params {
-@@ -170,165 +145,6 @@ static void _set_conv_type(struct lvconvert_params *lp, int conv_type)
- 	lp->conv_type = conv_type;
+ /* this should always be last */
+-arg(ARG_COUNT, '-', "", 0, 0, 0)
++arg(ARG_COUNT, '-', "", 0, 0, 0, NULL)
+ /* *INDENT-ON* */
+diff --git a/tools/create-commands.c b/tools/create-commands.c
+index d9f8218..f9ff800 100644
+--- a/tools/create-commands.c
++++ b/tools/create-commands.c
+@@ -68,6 +68,7 @@ struct opt_name {
+ 	int val_enum;           /* xyz_VAL when --foo takes a val like "--foo xyz" */
+ 	uint32_t unused1;
+ 	uint32_t unused2;
++	const char *desc;
+ };
+ 
+ /* also see val_props in tools.h and vals.h */
+@@ -104,7 +105,7 @@ enum {
+ /* create foo_ARG enums for --option's */
+ 
+ enum {
+-#define arg(a, b, c, d, e, f) a ,
++#define arg(a, b, c, d, e, f, g) a ,
+ #include "args.h"
+ #undef arg
+ };
+@@ -136,7 +137,7 @@ static struct val_name val_names[VAL_COUNT + 1] = {
+ /* create table of option names, e.g. --foo, and corresponding enum from args.h */
+ 
+ static struct opt_name opt_names[ARG_COUNT + 1] = {
+-#define arg(a, b, c, d, e, f) { # a, a, b, "", "--" c, d, e, f },
++#define arg(a, b, c, d, e, f, g) { # a, a, b, "", "--" c, d, e, f, g },
+ #include "args.h"
+ #undef arg
+ };
+@@ -180,9 +181,15 @@ static struct cmd_name cmd_names[MAX_CMD_NAMES] = {
+ #undef xx
+ };
+ 
++/* array of pointers into opt_names[] that is sorted alphabetically (by long opt name) */
++
++static struct opt_name *opt_names_alpha[ARG_COUNT + 1];
++
+ #define MAX_LINE 1024
+ #define MAX_LINE_ARGC 256
+ 
++#define DESC_LINE 256
++
+ #define REQUIRED 1  /* required option */
+ #define OPTIONAL 0  /* optional option */
+ #define IGNORE -1   /* ignore option */
+@@ -2050,6 +2057,23 @@ void print_man_usage(struct command *cmd)
+ 	printf("\n");
  }
  
--static int _lvconvert_validate_names(struct lvconvert_params *lp)
--{
--	unsigned i, j;
--	const char *names[] = {
--		(lp->lv_name == lp->pool_data_name) ? NULL : lp->lv_name, "converted",
--		lp->pool_data_name, "pool",
--		lp->pool_metadata_name, "pool metadata",
--		lp->origin_name, "origin",
--	};
--
--	for (i = 0; i < DM_ARRAY_SIZE(names); i += 2)
--		if (names[i])
--			for (j = i + 2; j < DM_ARRAY_SIZE(names); j += 2)
--				if (names[j] && !strcmp(names[i], names[j])) {
--					log_error("Can't use same name %s for %s and %s volume.",
--						  names[i], names[i + 1], names[j + 1]);
--					return 0;
--				}
--
--	return 1;
--}
--
--static int _lvconvert_name_params(struct lvconvert_params *lp,
--				  struct cmd_context *cmd,
--				  int *pargc, char ***pargv)
--{
--	if (lp->merge) {
--		/* FIXME Multiple arguments that mix snap and mirror? */
--		if (!*pargc) {
--			log_error("Please specify a logical volume path.");
--			return 0;
--		}
--
--		if (!strstr((*pargv)[0], "_rimage_")) {	/* Snapshot */
--			lp->type_str = SEG_TYPE_NAME_SNAPSHOT;
--			lp->merge_snapshot = 1;
--
--			return 1;
--		}
--
--		/* Mirror */
--		lp->merge_mirror = 1;
--	}
--
--	if (!*pargc) {
--		if (lp->cache) {
--			log_error("Logical volume name for caching is missing.");
--			return 0;
--		}
--		if (lp->thin) {
--			log_error("Please specify a logical volume to act as "
--				  "the external origin.");
--			return 0;
--		}
--		if (lp->snapshot) {
--			log_error("Please specify a logical volume to act as "
--				  "the snapshot exception store.");
--			return 0;
--		}
--		if (lp->split) {
--			log_error("Logical volume for split is missing.");
--			return 0;
--		}
--		if (lp->splitcache) {
--			log_error("Cache logical volume for split is missing.");
--			return 0;
--		}
--		if (lp->uncache) {
--			log_error("Cache logical volume for uncache is missing.");
--			return 0;
--		}
--		if (!lp->lv_name_full) {
--			log_error("Please provide logical volume path.");
--			return 0;
--		}
--	} else if (!lp->lv_name_full) {
--		lp->lv_name_full = (*pargv)[0];
--		(*pargv)++, (*pargc)--;
--	}
--
--	if (!validate_restricted_lvname_param(cmd, &lp->vg_name, &lp->pool_metadata_name))
--		return_0;
--
--	if (!validate_restricted_lvname_param(cmd, &lp->vg_name, &lp->pool_data_name))
--		return_0;
--
--	if (!validate_restricted_lvname_param(cmd, &lp->vg_name, &lp->origin_name))
--		return_0;
--
--	if (!validate_restricted_lvname_param(cmd, &lp->vg_name, &lp->lv_split_name))
--		return_0;
--
--	if (!lp->vg_name && !strchr(lp->lv_name_full, '/')) {
--		/* Check for $LVM_VG_NAME */
--		if (!(lp->vg_name = extract_vgname(cmd, NULL))) {
--			log_error("Please specify a logical volume path.");
--			return 0;
--		}
--	}
--
--	if (!validate_lvname_param(cmd, &lp->vg_name, &lp->lv_name_full))
--		return_0;
--
--	lp->lv_name = lp->lv_name_full;
--
--	if (!validate_name(lp->vg_name)) {
--		log_error("Please provide a valid volume group name");
--		return 0;
--	}
--
++/*
++ * common options listed in the usage section.
++ *
++ * For commands with only one variant, this is only
++ * the options which are common to all lvm commands
++ * (in lvm_all, see is_lvm_all_opt).
++ *
++ * For commands with more than one variant, this
++ * is the set of options common to all variants
++ * (in cname->common_options), (which obviously
++ * includes the options common to all lvm commands.)
++ *
++ * List ordering:
++ * options with short+long names, alphabetically,
++ * then options with only long names, alphabetically
++ */
++
+ void print_man_usage_common(struct command *cmd)
+ {
+ 	struct cmd_name *cname;
+@@ -2063,23 +2087,17 @@ void print_man_usage_common(struct command *cmd)
+ 	printf(".RS 4\n");
+ 	printf("[");
+ 
 -	/*
--	 * FIXME: avoid this distinct validation out of scope of _convert_*()
--	 *
-- 	 *        We should not rely on namespace here any more!
-- 	 *        It is the duty of lvcreate/lvrename to avoid reserved names.
-- 	 */
--	if (!lp->merge_mirror &&
--	    !lp->keep_mimages &&
--	    !strstr(lp->lv_name, "_tdata") &&
--	    !strstr(lp->lv_name, "_tmeta") &&
--	    !strstr(lp->lv_name, "_cdata") &&
--	    !strstr(lp->lv_name, "_cmeta") &&
--	    !strstr(lp->lv_name, "_corig") &&
--	    !apply_lvname_restrictions(lp->lv_name))
--		return_0;
+-	 * when there's more than one variant, options that
+-	 * are common to all commands with a common name.
+-	 */
 -
--	if (*pargc) {
--		if (lp->snapshot) {
--			log_error("Too many arguments provided for snapshots.");
--			return 0;
--		}
--		if (lp->splitsnapshot) {
--			log_error("Too many arguments provided with --splitsnapshot.");
--			return 0;
--		}
--		if (lp->splitcache) {
--			log_error("Too many arguments provided with --splitcache.");
--			return 0;
--		}
--		if (lp->split) {
--			log_error("Too many arguments provided with --split.");
--			return 0;
--		}
--		if (lp->uncache) {
--			log_error("Too many arguments provided with --uncache.");
--			return 0;
--		}
--		if (lp->pool_data_name && lp->pool_metadata_name) {
--			log_error("Too many arguments provided for pool.");
--			return 0;
--		}
--	}
+-	if (cname->variants < 2)
+-		goto all;
 -
--	if (!_lvconvert_validate_names(lp))
--		return_0;
--
--	return 1;
--}
--
- /* -s/--snapshot and --type snapshot are synonyms */
- static int _snapshot_type_requested(struct cmd_context *cmd, const char *type_str)
- {
-@@ -379,113 +195,9 @@ static int _read_conversion_type(struct cmd_context *cmd,
- 	return 0;
- }
+ 	/* print those with short opts */
+-	for (opt_enum = 0; opt_enum < ARG_COUNT; opt_enum++) {
++	for (i = 0; i < ARG_COUNT; i++) {
++		opt_enum = opt_names_alpha[i]->opt_enum;
++
+ 		if (!cname->common_options[opt_enum])
+ 			continue;
  
--static int _read_pool_params(struct cmd_context *cmd, int *pargc, char ***pargv,
--			     struct lvconvert_params *lp)
--{
--	int cachepool = 0;
--	int thinpool = 0;
--	struct segment_type *segtype;
--
--	if ((lp->pool_data_name = arg_str_value(cmd, cachepool_ARG, NULL))) {
--		if (lp->type_str[0] &&
--		    strcmp(lp->type_str, SEG_TYPE_NAME_CACHE) &&
--		    strcmp(lp->type_str, SEG_TYPE_NAME_CACHE_POOL)) {
--			log_error("--cachepool argument is only valid with "
--				  "the cache or cache-pool segment type.");
--			return 0;
--		}
--		cachepool = 1;
--		lp->type_str = SEG_TYPE_NAME_CACHE_POOL;
--	} else if (!strcmp(lp->type_str, SEG_TYPE_NAME_CACHE_POOL))
--		cachepool = 1;
--	else if ((lp->pool_data_name = arg_str_value(cmd, thinpool_ARG, NULL))) {
--		if (lp->type_str[0] &&
--		    strcmp(lp->type_str, SEG_TYPE_NAME_THIN) &&
--		    strcmp(lp->type_str, SEG_TYPE_NAME_THIN_POOL)) {
--			log_error("--thinpool argument is only valid with "
--				  "the thin or thin-pool segment type.");
--			return 0;
--		}
--		thinpool = 1;
--		lp->type_str = SEG_TYPE_NAME_THIN_POOL;
--	} else if (!strcmp(lp->type_str, SEG_TYPE_NAME_THIN_POOL))
--		thinpool = 1;
--
--	if (lp->cache && !cachepool) {
--		log_error("--cache requires --cachepool.");
--		return 0;
--	}
--
--	if ((lp->cache || cachepool) &&
--	    !get_cache_params(cmd, &lp->cache_mode, &lp->policy_name, &lp->policy_settings)) {
--		log_error("Failed to parse cache policy and/or settings.");
--		return 0;
--	}
--
--	if (thinpool) {
--		lp->discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_PASSDOWN);
--		lp->origin_name = arg_str_value(cmd, originname_ARG, NULL);
--	} else {
--		if (arg_from_list_is_set(cmd, "is valid only with thin pools",
--					 discards_ARG, originname_ARG, thinpool_ARG,
--					 -1))
--			return_0;
--		if (lp->thin) {
--			log_error("--thin requires --thinpool.");
--			return 0;
--		}
--	}
--
--	if (thinpool || cachepool) {
--		if (arg_from_list_is_set(cmd, "is invalid with pools",
--					 merge_ARG, mirrors_ARG, repair_ARG, snapshot_ARG,
--					 splitmirrors_ARG, splitsnapshot_ARG, -1))
--			return_0;
--
--		if (!(segtype = get_segtype_from_string(cmd, lp->type_str)))
--			return_0;
--
--		if (!get_pool_params(cmd, segtype, &lp->passed_args,
--				     &lp->pool_metadata_size,
--				     &lp->poolmetadataspare,
--				     &lp->chunk_size, &lp->discards,
--				     &lp->zero))
--			return_0;
--
--		if ((lp->pool_metadata_name = arg_str_value(cmd, poolmetadata_ARG, NULL)) &&
--		    arg_from_list_is_set(cmd, "is invalid with --poolmetadata",
--					 stripesize_ARG, stripes_long_ARG,
--					 readahead_ARG, -1))
--			return_0;
--
--		if (!lp->pool_data_name) {
--			if (!*pargc) {
--				log_error("Please specify the pool data LV.");
--				return 0;
--			}
--			lp->pool_data_name = (*pargv)[0];
--			(*pargv)++, (*pargc)--;
--		}
--
--		if (!lp->thin && !lp->cache)
--			lp->lv_name_full = lp->pool_data_name;
--
--		/* Hmm _read_activation_params */
--		lp->read_ahead = arg_uint_value(cmd, readahead_ARG,
--						cmd->default_settings.read_ahead);
--
--	} else if (arg_from_list_is_set(cmd, "is valid only with pools",
--					poolmetadatasize_ARG, poolmetadataspare_ARG,
--					zero_ARG,
--					-1))
--		return_0;
--
--	return 1;
--}
--
--static int _read_params(struct cmd_context *cmd, int argc, char **argv,
--			struct lvconvert_params *lp)
-+static int _read_params(struct cmd_context *cmd, struct lvconvert_params *lp)
- {
-+	const char *vg_name = NULL;
- 	int region_size;
- 	int pagesize = lvm_getpagesize();
+ 		if (!opt_names[opt_enum].short_opt)
+ 			continue;
  
-@@ -506,16 +218,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 		lp->mirrorlog = 1;
+-		if (is_lvm_all_opt(opt_enum))
++		if ((cname->variants < 2) && !is_lvm_all_opt(opt_enum))
+ 			continue;
+ 
+ 		if (sep) {
+@@ -2107,14 +2125,16 @@ void print_man_usage_common(struct command *cmd)
  	}
  
--	if (arg_is_set(cmd, merge_ARG)) {
--		if (arg_outside_list_is_set(cmd, "cannot be used with --merge",
--					    merge_ARG,
--					    background_ARG, interval_ARG,
--					    force_ARG, noudevsync_ARG, test_ARG,
--					    -1))
--			return_0;
--		lp->merge = 1;
--		_set_conv_type(lp, CONV_MERGE);
--	} else if (arg_is_set(cmd, split_ARG)) {
-+	if (arg_is_set(cmd, split_ARG)) {
- 		if (arg_outside_list_is_set(cmd, "cannot be used with --split",
- 					    split_ARG,
- 					    name_ARG,
-@@ -524,79 +227,17 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 			return_0;
- 		lp->split = 1;
- 		_set_conv_type(lp, CONV_SPLIT);
--	} else if (arg_is_set(cmd, splitcache_ARG)) {
--		if (arg_outside_list_is_set(cmd, "cannot be used with --splitcache",
--					    splitcache_ARG,
--					    force_ARG, noudevsync_ARG, test_ARG,
--					    -1))
--			return_0;
--		lp->splitcache = 1;
--		_set_conv_type(lp, CONV_SPLIT_CACHE);
--	} else if (arg_is_set(cmd, splitsnapshot_ARG)) {
--		if (arg_outside_list_is_set(cmd, "cannot be used with --splitsnapshot",
--					    splitsnapshot_ARG,
--					    force_ARG, noudevsync_ARG, test_ARG,
--					    -1))
--			return_0;
--		lp->splitsnapshot = 1;
--		_set_conv_type(lp, CONV_SPLIT_SNAPSHOT);
--	} else if (arg_is_set(cmd, uncache_ARG)) {
--		if (arg_outside_list_is_set(cmd, "cannot be used with --uncache",
--					    uncache_ARG,
--					    force_ARG, noudevsync_ARG, test_ARG,
--					    -1))
--			return_0;
--		lp->uncache = 1;
--		_set_conv_type(lp, CONV_UNCACHE);
--	}
--
--	if (arg_is_set(cmd, cache_ARG)) {
--		lp->cache = 1;
--		_set_conv_type(lp, CONV_CACHE);
--	}
--
--	if (!strcmp(lp->type_str, SEG_TYPE_NAME_CACHE))
--		lp->cache = 1;
--	else if (lp->cache) {
--		if (lp->type_str[0]) {
--			log_error("--cache is incompatible with --type %s", lp->type_str);
--			return 0;
--		}
--		lp->type_str = SEG_TYPE_NAME_CACHE;
--	}
--
--	if (arg_is_set(cmd, thin_ARG)) {
--		lp->thin = 1;
--		_set_conv_type(lp, CONV_THIN);
--	}
--
--	if (!strcmp(lp->type_str, SEG_TYPE_NAME_THIN))
--		lp->thin = 1;
--	else if (lp->thin) {
--		if (lp->type_str[0]) {
--			log_error("--thin is incompatible with --type %s", lp->type_str);
--			return 0;
--		}
--		lp->type_str = SEG_TYPE_NAME_THIN;
+ 	/* print those without short opts */
+-	for (opt_enum = 0; opt_enum < ARG_COUNT; opt_enum++) {
++	for (i = 0; i < ARG_COUNT; i++) {
++		opt_enum = opt_names_alpha[i]->opt_enum;
++
+ 		if (!cname->common_options[opt_enum])
+ 			continue;
+ 
+ 		if (opt_names[opt_enum].short_opt)
+ 			continue;
+ 
+-		if (is_lvm_all_opt(opt_enum))
++		if ((cname->variants < 2) && !is_lvm_all_opt(opt_enum))
+ 			continue;
+ 
+ 		if (sep) {
+@@ -2140,67 +2160,108 @@ void print_man_usage_common(struct command *cmd)
+ 			break;
+ 		}
  	}
+- all:
+-	/* options that are common to all lvm commands */
 -
-+	
- 	if (arg_is_set(cmd, trackchanges_ARG))
- 		lp->track_changes = 1;
+-	/* those with short opts */
+-	for (oo = 0; oo < lvm_all.oo_count; oo++) {
+-		opt_enum = lvm_all.optional_opt_args[oo].opt;
  
--	if (!_read_pool_params(cmd, &argc, &argv, lp))
--		return_0;
--
--	if (_snapshot_type_requested(cmd, lp->type_str)) {
--		if (lp->merge) {
--			log_error("--snapshot and --merge are mutually exclusive.");
--			return 0;
-+	if (lp->split) {
-+		if ((lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL))) {
-+			if (!validate_restricted_lvname_param(cmd, &vg_name, &lp->lv_split_name))
-+				return_0;
- 		}
--		lp->snapshot = 1;
--		_set_conv_type(lp, CONV_SNAPSHOT);
--	}
+-		if (!opt_names[opt_enum].short_opt)
+-			continue;
++	printf(" ]\n");
++	return;
++}
  
--	if (lp->split) {
--		lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL);
+-		if (sep) {
+-			printf(",");
+-			printf("\n.br\n");
+-			printf(" ");
+-		}
++/*
++ * Format of description, when different command names have
++ * different descriptions:
++ *
++ * "#cmdname1"
++ * "text foo goes here"
++ * "a second line of text."
++ * "#cmdname2"
++ * "text bar goes here"
++ * "another line of text."
++ *
++ * When called for cmdname2, this function should just print:
++ *
++ * "text bar goes here"
++ * "another line of text."
++ */
  
- 	/*
- 	 * The '--splitmirrors n' argument is equivalent to '--mirrors -n'
-@@ -616,7 +257,11 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 			return 0;
- 		}
+-		printf(" \\fB-%c\\fP|\\fB%s\\fP",
+-			opt_names[opt_enum].short_opt,
+-			man_long_opt_name(cmd->name, opt_enum));
++static void print_man_option_desc(struct cmd_name *cname, int opt_enum)
++{
++	const char *desc = opt_names[opt_enum].desc;
++	char buf[DESC_LINE];
++	int started_cname = 0;
++	int line_count = 0;
++	int di, bi;
  
--		lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL);
-+		if ((lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL))) {
-+			if (!validate_restricted_lvname_param(cmd, &vg_name, &lp->lv_split_name))
-+				return_0;
+-		if (lvm_all.optional_opt_args[oo].def.val_bits) {
+-			printf(" ");
+-			print_def(&lvm_all.optional_opt_args[oo].def, 1);
+-		}
+-		sep = 1;
++	if (desc[0] != '#') {
++		printf("%s", desc);
++		return;
+ 	}
+ 
+-	/* those without short opts */
+-	for (oo = 0; oo < lvm_all.oo_count; oo++) {
+-		opt_enum = lvm_all.optional_opt_args[oo].opt;
++	for (di = 0; di < strlen(desc); di++) {
++		buf[bi++] = desc[di];
+ 
+-		if (opt_names[opt_enum].short_opt)
++		if (bi == DESC_LINE) {
++			printf("print_man_option_desc line too long\n");
++			return;
 +		}
 +
- 		lp->keep_mimages = 1;
- 		_set_conv_type(lp, CONV_SPLIT_MIRRORS);
- 		lp->mirrors = arg_uint_value(cmd, splitmirrors_ARG, 0);
-@@ -633,22 +278,11 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
++		if (buf[bi-1] != '\n')
+ 			continue;
+ 
+-		if (sep) {
+-			printf(",");
+-			printf("\n.br\n");
+-			printf(" ");
++		if (buf[0] != '#') {
++			if (started_cname) {
++				printf("%s", buf);
++				line_count++;
++			}
++
++			memset(buf, 0, sizeof(buf));
++			bi = 0;
++			continue;
+ 		}
+ 
+-		/* space alignment without short opt */
+-		printf("   ");
++		/* Line starting with #cmdname */
+ 
+-		printf(" \\fB%s\\fP", man_long_opt_name(cmd->name, opt_enum));
++		/*
++		 * Must be starting a new command name.
++		 * If no lines have been printed, multiple command names
++		 * are using the same text. If lines have been printed,
++		 * then the start of a new command name means the end
++		 * of text for the current command name.
++		 */
++		if (line_count && started_cname)
++			return;
+ 
+-		if (lvm_all.optional_opt_args[oo].def.val_bits) {
+-			printf(" ");
+-			print_def(&lvm_all.optional_opt_args[oo].def, 1);
++		if (!strncmp(buf + 1, cname->name, strlen(cname->name))) {
++			/* The start of our command name. */
++			started_cname = 1;
++			memset(buf, 0, sizeof(buf));
++			bi = 0;
++		} else {
++			/* The start of another command name. */
++			memset(buf, 0, sizeof(buf));
++			bi = 0;
+ 		}
+-		sep = 1;
+ 	}
+-	printf(" ]\n");
++
++	if (bi && started_cname)
++		printf("%s", buf);
+ }
+ 
+-void print_man_all_options(struct cmd_name *cname)
++/*
++ * Print a list of all options names for a given
++ * command name, listed by:
++ * options with short+long names, alphabetically,
++ * then options with only long names, alphabetically
++ */
++
++void print_man_all_options_list(struct cmd_name *cname)
+ {
+ 	int opt_enum, val_enum;
+ 	int sep = 0;
++	int i;
++
++	/* print those with both short and long opts */
++	for (i = 0; i < ARG_COUNT; i++) {
++		opt_enum = opt_names_alpha[i]->opt_enum;
+ 
+-	/* print those with short opts */
+-	for (opt_enum = 0; opt_enum < ARG_COUNT; opt_enum++) {
+ 		if (!cname->all_options[opt_enum])
+ 			continue;
+ 
+@@ -2232,7 +2293,9 @@ void print_man_all_options(struct cmd_name *cname)
  	}
  
- 	/* If no other case was identified, then use of --stripes means --type striped */
--	if (!arg_is_set(cmd, type_ARG) && !*lp->type_str && !lp->merge && !lp->splitsnapshot &&
--	    !lp->splitcache && !lp->split && !lp->snapshot && !lp->uncache && !lp->cache && !lp->thin &&
--	    !lp->mirrorlog && !lp->corelog &&
-+	if (!arg_is_set(cmd, type_ARG) && !*lp->type_str &&
-+	    !lp->split && !lp->mirrorlog && !lp->corelog &&
- 	    (arg_is_set(cmd, stripes_long_ARG) || arg_is_set(cmd, stripesize_ARG)))
- 		lp->type_str = SEG_TYPE_NAME_STRIPED;
+ 	/* print those without short opts */
+-	for (opt_enum = 0; opt_enum < ARG_COUNT; opt_enum++) {
++	for (i = 0; i < ARG_COUNT; i++) {
++		opt_enum = opt_names_alpha[i]->opt_enum;
++
+ 		if (!cname->all_options[opt_enum])
+ 			continue;
  
--	if ((_snapshot_type_requested(cmd, lp->type_str) || lp->merge) &&
--	    (lp->mirrorlog || _mirror_or_raid_type_requested(cmd, lp->type_str) ||
--	     arg_is_set(cmd, thinpool_ARG) || _raid0_type_requested(lp->type_str) ||
--	     _striped_type_requested(lp->type_str))) {
--		log_error("--snapshot/--type snapshot or --merge argument "
--			  "cannot be mixed with --mirrors/--type mirror/--type raid*/--stripes/--type striped/--type linear, "
--			  "--mirrorlog, --repair or --thinpool.");
--		return 0;
--	}
--
- 	if ((arg_is_set(cmd, stripes_long_ARG) || arg_is_set(cmd, stripesize_ARG)) &&
- 	    !(_mirror_or_raid_type_requested(cmd, lp->type_str) || _striped_type_requested(lp->type_str) ||
- 	      _raid0_type_requested(lp->type_str) || arg_is_set(cmd, thinpool_ARG))) {
-@@ -667,72 +301,22 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 	lp->alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
+@@ -2265,7 +2328,79 @@ void print_man_all_options(struct cmd_name *cname)
+ 	}
+ }
  
- 	/* We should have caught all these cases already. */
--	if (lp->merge + lp->splitsnapshot + lp->splitcache + lp->split + lp->uncache +
--	    lp->cache + lp->thin + lp->keep_mimages + lp->snapshot > 1) {
-+	if (lp->split + lp->keep_mimages > 1) {
- 		log_error(INTERNAL_ERROR "Unexpected combination of incompatible options selected.");
+-#define DESC_LINE 256
++/*
++ * All options used for a given command name, along with descriptions.
++ * listed in order of:
++ * 1. options that are not common to all lvm commands, alphabetically
++ * 2. options common to all lvm commands, alphabetically
++ */
++
++void print_man_all_options_desc(struct cmd_name *cname)
++{
++	int opt_enum, val_enum;
++	int print_common = 0;
++	int sep = 0;
++	int i;
++
++ again:
++	/*
++	 * Loop 1: print options that are not common to all lvm commands.
++	 * Loop 2: print options common to all lvm commands (lvm_all)
++	 */
++
++	for (i = 0; i < ARG_COUNT; i++) {
++		opt_enum = opt_names_alpha[i]->opt_enum;
++
++		if (!cname->all_options[opt_enum])
++			continue;
++
++		if (!print_common && is_lvm_all_opt(opt_enum))
++			continue;
++
++		if (print_common && !is_lvm_all_opt(opt_enum))
++			continue;
++
++		if (sep)
++			printf("\n.br\n");
++
++		printf("\n.TP\n");
++
++		if (opt_names[opt_enum].short_opt) {
++			printf("\\fB-%c\\fP|\\fB%s\\fP",
++			       opt_names[opt_enum].short_opt,
++			       man_long_opt_name(cname->name, opt_enum));
++		} else {
++			printf("\\fB%s\\fP", man_long_opt_name(cname->name, opt_enum));
++		}
++
++		val_enum = opt_names[opt_enum].val_enum;
++
++		if (!val_names[val_enum].fn) {
++			/* takes no arg */
++		} else if (!val_names[val_enum].usage) {
++			printf(" ");
++			printf("\\fI");
++			printf("%s", val_names[val_enum].name);
++			printf("\\fP");
++		} else {
++			printf(" ");
++			print_val_man(val_names[val_enum].usage);
++		}
++
++		if (opt_names[opt_enum].desc) {
++			printf("\n");
++			printf(".br\n");
++			print_man_option_desc(cname, opt_enum);
++		}
++
++		sep = 1;
++	}
++
++	if (!print_common) {
++		print_common = 1;
++		goto again;
++	}
++}
+ 
+ void print_desc_man(const char *desc)
+ {
+@@ -2338,6 +2473,12 @@ void print_man_command(void)
+ 			printf("Common options:\n");
+ 			printf(".\n");
+ 			print_man_usage_common(prev_cmd);
++
++			printf("\n");
++			printf(".SH OPTIONS\n");
++			printf(".br\n");
++			print_man_all_options_desc(cname);
++
+ 			prev_cmd = NULL;
+ 		}
+ 
+@@ -2396,7 +2537,7 @@ void print_man_command(void)
+ 			/* listing them all when there's only 1 or 2 is just repetative */
+ 			if (cname->variants > 2) {
+ 				printf(".P\n");
+-				print_man_all_options(cname);
++				print_man_all_options_list(cname);
+ 				printf("\n");
+ 				printf(".P\n");
+ 				printf("\n");
+@@ -2419,6 +2560,12 @@ void print_man_command(void)
+ 			printf("Common options:\n");
+ 			printf(".\n");
+ 			print_man_usage_common(cmd);
++
++			printf("\n");
++			printf(".SH OPTIONS\n");
++			printf(".br\n");
++			print_man_all_options_desc(cname);
++
+ 		}
+ 
+ 		printf("\n");
+@@ -2730,6 +2877,23 @@ next:
+ 	}
+ }
+ 
++static int long_name_compare(const void *on1, const void *on2)
++{
++	struct opt_name **optname1 = (void *)on1;
++	struct opt_name **optname2 = (void *)on2;
++	return strcmp((*optname1)->long_opt + 2, (*optname2)->long_opt + 2);
++}
++
++static void create_opt_names_alpha(void)
++{
++	int i;
++
++	for (i = 0; i < ARG_COUNT; i++)
++		opt_names_alpha[i] = &opt_names[i];
++
++	qsort(opt_names_alpha, ARG_COUNT, sizeof(long), long_name_compare);
++}
++
+ void print_command_list(void)
+ {
+ 	int i;
+@@ -2754,6 +2918,17 @@ void print_option_list(void)
+ 			opt_names[i].short_opt ? opt_names[i].short_opt : 0);
+ }
+ 
++void print_option_alpha_list(void)
++{
++	int i;
++
++	for (i = 0; i < ARG_COUNT; i++)
++		printf("%d %s %s %c (%d)\n",
++			opt_names_alpha[i]->opt_enum, opt_names_alpha[i]->name,
++			opt_names_alpha[i]->long_opt, opt_names_alpha[i]->short_opt ?: ' ',
++			opt_names_alpha[i]->short_opt ? opt_names_alpha[i]->short_opt : 0);
++}
++
+ static void print_help(int argc, char *argv[])
+ {
+ 	printf("%s [options] --output <format> <filename>\n", argv[0]);
+@@ -2791,9 +2966,12 @@ int main(int argc, char *argv[])
+ 		exit(EXIT_FAILURE);
+ 	}
+ 
++	create_opt_names_alpha();
++
+ 	if (!strcmp(argv[1], "debug")) {
+ 		print_command_list();
+ 		print_option_list();
++		print_option_alpha_list();
  		return 0;
  	}
  
--
- 	/*
- 	 * Final checking of each case:
--	 *   lp->merge
--	 *   lp->splitsnapshot
--	 *   lp->splitcache
- 	 *   lp->split
--	 *   lp->uncache
--	 *   lp->cache
--	 *   lp->thin
- 	 *   lp->keep_mimages
--	 *   lp->snapshot
- 	 *   --type mirror|raid  lp->mirrorlog lp->corelog
- 	 *   --type raid0|striped
- 	 */
- 	switch(lp->conv_type) {
--	case CONV_MERGE:	/* Snapshot or mirror merge */
- 	case CONV_SPLIT:
--	case CONV_SPLIT_CACHE:
- 	case CONV_SPLIT_MIRRORS:
--	case CONV_SPLIT_SNAPSHOT:	/* Destroy snapshot retaining cow as separate LV */
--	case CONV_CACHE:
--	case CONV_UNCACHE:
--	case CONV_THIN:
-                 break;
--	case CONV_SNAPSHOT:	/* Snapshot creation from pre-existing cow */
--		if (!argc) {
--			log_error("Please provide logical volume path for snapshot origin.");
--			return 0;
--		}
--		lp->origin_name = argv[0];
--		argv++, argc--;
--
--		if (arg_is_set(cmd, regionsize_ARG)) {
--			log_error("--regionsize is only available with mirrors");
--			return 0;
--		}
--
--		if (arg_is_set(cmd, stripesize_ARG) || arg_is_set(cmd, stripes_long_ARG)) {
--			log_error("--stripes and --stripesize are only available with striped mirrors");
--			return 0;
--		}
--
--		if (arg_is_set(cmd, chunksize_ARG) &&
--		    (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS)) {
--			log_error("Negative chunk size is invalid.");
--			return 0;
--		}
--
--		lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
--		if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
--		    !is_power_of_2(lp->chunk_size)) {
--			log_error("Chunk size must be a power of 2 in the "
--				  "range 4K to 512K");
--			return 0;
--		}
--		log_verbose("Setting chunk size to %s.", display_size(cmd, lp->chunk_size));
--
--		lp->type_str = SEG_TYPE_NAME_SNAPSHOT;
--		break;
- 
- 	case CONV_OTHER:
- 		if (_mirror_or_raid_type_requested(cmd, lp->type_str) ||
-@@ -803,15 +387,10 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
- 	lp->force = arg_count(cmd, force_ARG);
- 	lp->yes = arg_count(cmd, yes_ARG);
- 
--	if (!_lvconvert_name_params(lp, cmd, &argc, &argv))
--		return_0;
--
--	lp->pv_count = argc;
--	lp->pvs = argv;
--
- 	return 1;
- }
- 
-+
- static struct poll_functions _lvconvert_mirror_fns = {
- 	.poll_progress = poll_mirror_progress,
- 	.finish_copy = lvconvert_mirror_finish,
-@@ -1256,22 +835,6 @@ static int _lvconvert_mirrors_parse_params(struct cmd_context *cmd,
- 	}
- 
- 	/*
--	 * Collapsing a stack of mirrors:
--	 *
--	 * If called with no argument, try collapsing the resync layers
--	 */
--	if (!lp->mirrors_supplied && !lp->mirrorlog &&
--	    !lp->corelog && !arg_is_set(cmd, regionsize_ARG) &&
--	    !lp->keep_mimages) {
--		*new_mimage_count = *old_mimage_count;
--		*new_log_count = *old_log_count;
--
--		if (find_temporary_mirror(lv) || lv_is_converting(lv))
--			lp->need_polling = 1;
--		return 1;
--	}
--
--	/*
- 	 * Adjusting mimage count?
- 	 */
- 	if (!lp->mirrors_supplied && !lp->keep_mimages)
-@@ -4431,7 +3994,7 @@ static int _convert_cache_volume_thin_pool(struct cmd_context *cmd, struct logic
- static int _convert_cache_volume_snapshot(struct cmd_context *cmd, struct logical_volume *lv,
- 					  struct lvconvert_params *lp)
- {
--	return _lvconvert_snapshot(cmd, lv, lp);
-+	return _lvconvert_snapshot(cmd, lv, lp->origin_name);
- }
- 
- /*
-@@ -4969,79 +4532,21 @@ static int _convert_mirror(struct cmd_context *cmd, struct logical_volume *lv,
- 	if (segtype_is_raid(lp->segtype))
- 		return _convert_mirror_raid(cmd, lv, lp);
- 
--	/*
--	 * FIXME: this is here to preserve old behavior, but an
--	 * explicit option should be added to enable this case,
--	 * rather than making it the result of an ambiguous
--	 * "lvconvert vg/lv" command.
--	 * Add 'lvconvert --poll-mirror vg/lv' for this case.
--	 *
--	 * Old behavior was described as:
--	 *   "Collapsing a stack of mirrors.
--	 *    If called with no argument, try collapsing the resync layers"
--	 */
--	log_debug("Checking if LV %s is converting.", display_lvname(lv));
--	if (lv_is_converting(lv)) {
--		lp->need_polling = 1;
--		return 1;
--	}
--
--	log_error("Operation not permitted on mirror LV %s.", display_lvname(lv));
--	log_error("Operations permitted on a mirror LV are:\n"
--		  "  --mirrors\n"
--		  "  --splitmirrors\n"
--		  "  --mirrorlog\n"
--		  "  --repair\n"
--		  "  --type linear\n"
--		  "  --type raid*\n");
--
-+	log_error("Unknown operation on mirror LV %s.", display_lvname(lv));
- 	return 0;
- }
- 
- static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
- 			 struct lvconvert_params *lp)
- {
--	/* Permitted convert options on visible or hidden RaidLVs */
--	/* The --thinpool alternative for --type thin-pool is not preferred, so not shown. */
--	const char *permitted_options = lv_is_visible(lv) ?
--		"  --mirrors\n"
--		"  --splitmirrors\n"
--		"  --merge\n"
--		"  --repair\n"
--		"  --replace\n"
--		"  --type snapshot\n"
--		"  --type thin\n"
--		"  --type cache\n"
--		"  --type thin-pool\n"
--		"  --type cache-pool\n"
--		"  --type raid*\n"
--		"  --type mirror\n"
--		"  --type striped\n"
--		"  --type linear\n"
--		:
--		"  --mirrors\n"
--		"  --splitmirrors\n"
--		"  --repair\n"
--		"  --replace\n"
--		"  --type raid*\n"
--		"  --type mirror\n"
--		"  --type striped\n"
--		"  --type linear\n";
--
--	/* Applicable to any hidden _or_ visible LVs. */
- 	if (arg_is_set(cmd, mirrors_ARG))
- 		return _convert_raid_number(cmd, lv, lp);
- 
- 	if (arg_is_set(cmd, splitmirrors_ARG))
- 		return _convert_raid_splitmirrors(cmd, lv, lp);
- 
--	if (segtype_is_raid(lp->segtype)) {
--		/* Only --type allowed on hidden RaidLV. */
--		if (!lv_is_visible(lv) && !arg_is_set(cmd, type_ARG))
--			goto out;
--
-+	if (segtype_is_raid(lp->segtype))
- 		return _convert_raid_raid(cmd, lv, lp);
--	}
- 
- 	if (segtype_is_mirror(lp->segtype))
- 		return _convert_raid_mirror(cmd, lv, lp);
-@@ -5052,33 +4557,7 @@ static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
- 	if (_linear_type_requested(lp->type_str))
- 		return _convert_raid_linear(cmd, lv, lp);
- 
--	/* Applicable to visible LVs only. */
--	if (lv_is_visible(lv)) {
--		if (lp->merge)
--			return _convert_raid_merge(cmd, lv, lp);
--
--		if (!strcmp(lp->type_str, SEG_TYPE_NAME_SNAPSHOT) || arg_is_set(cmd, snapshot_ARG))
--			return _convert_raid_snapshot(cmd, lv, lp);
--
--		if (lp->thin)
--			return _convert_raid_thin(cmd, lv, lp);
--
--		if (lp->cache)
--			return _convert_raid_cache(cmd, lv, lp);
--
--		if (!strcmp(lp->type_str, SEG_TYPE_NAME_THIN_POOL) ||
--		    arg_is_set(cmd, thinpool_ARG))
--			return _convert_raid_thin_pool(cmd, lv, lp);
--
--		if (!strcmp(lp->type_str, SEG_TYPE_NAME_CACHE_POOL)  ||
--		    arg_is_set(cmd, cachepool_ARG))
--			return _convert_raid_cache_pool(cmd, lv, lp);
--	}
--
--out:
--	log_error("Operation not permitted on raid LV %s.", display_lvname(lv));
--	log_error("Operations permitted on a raid LV are:\n%s", permitted_options);
--
-+	log_error("Unknown operation on raid LV %s.", display_lvname(lv));
- 	return 0;
- }
- 
-@@ -5087,27 +4566,6 @@ static int _convert_striped(struct cmd_context *cmd, struct logical_volume *lv,
- {
- 	const char *mirrors_type = find_config_tree_str(cmd, global_mirror_segtype_default_CFG, NULL);
- 
--	/* FIXME: add --merge-mirror to make this distinct from --merge-snapshot. */
--	if (lp->merge)
--		return _convert_striped_merge(cmd, lv, lp);
--
--	if (lp->snapshot || !strcmp(lp->type_str, SEG_TYPE_NAME_SNAPSHOT))
--		return _convert_striped_snapshot(cmd, lv, lp);
--
--	if (lp->thin)
--		return _convert_striped_thin(cmd, lv, lp);
--
--	if (lp->cache)
--		return _convert_striped_cache(cmd, lv, lp);
--
--	if (!strcmp(lp->type_str, SEG_TYPE_NAME_THIN_POOL) ||
--	    arg_is_set(cmd, thinpool_ARG))
--		return _convert_striped_thin_pool(cmd, lv, lp);
--
--	if (!strcmp(lp->type_str, SEG_TYPE_NAME_CACHE_POOL) ||
--	    arg_is_set(cmd, cachepool_ARG))
--		return _convert_striped_cache_pool(cmd, lv, lp);
--
- 	if (!strcmp(lp->type_str, SEG_TYPE_NAME_MIRROR))
- 		return _convert_striped_mirror(cmd, lv, lp);
- 
-@@ -5122,19 +4580,7 @@ static int _convert_striped(struct cmd_context *cmd, struct logical_volume *lv,
- 	if (arg_is_set(cmd, mirrors_ARG) && mirrors_type && !strcmp(mirrors_type, SEG_TYPE_NAME_RAID1))
- 		return _convert_striped_raid(cmd, lv, lp);
- 
--	/* The --thinpool alternative for --type thin-pool is not preferred, so not shown. */
--
--	log_error("Operation not permitted on striped or linear LV %s.", display_lvname(lv));
--	log_error("Operations permitted on a striped or linear LV are:\n"
--		  "  --merge\n"
--		  "  --type snapshot\n"
--		  "  --type thin\n"
--		  "  --type cache\n"
--		  "  --type thin-pool\n"
--		  "  --type cache-pool\n"
--		  "  --type mirror\n"
--		  "  --type raid*\n");
--
-+	log_error("Unknown operation on striped or linear LV %s.", display_lvname(lv));
- 	return 0;
- }
- 
-@@ -5163,39 +4609,6 @@ static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
- 	struct lv_segment *seg = first_seg(lv);
- 	int ret = 0;
- 
--	/*
--	 * Check some conditions that can never be processed.
--	 */
--
--	if (lv_is_locked(lv)) {
--		log_error("Cannot convert locked LV %s.", display_lvname(lv));
--		goto out;
--	}
--
--	if (lv_is_pvmove(lv)) {
--		log_error("Cannot convert pvmove LV %s.", display_lvname(lv));
--		goto out;
--	}
--
--	if (!lv_is_visible(lv)) {
--		/*
--		 * FIXME: there are some exceptions to the rule of only
--		 * operating on visible LVs.  These should be fixed by running
--		 * the command on the visible LV with an option indicating
--		 * which sub LV is intended rather than naming the !visible LV.
--		 */
--		if (!lv_is_cache_pool_metadata(lv) &&
--		    !lv_is_cache_pool_data(lv) &&
--		    !lv_is_thin_pool_metadata(lv) &&
--		    !lv_is_thin_pool_data(lv) &&
--		    !lv_is_used_cache_pool(lv) &&
--		    !lv_is_mirrored(lv) &&
--		    !lv_is_raid(lv)) {
--			log_error("Cannot convert internal LV %s.", display_lvname(lv));
--			goto out;
--		}
--	}
--
- 	/* Set up segtype either from type_str or else to match the existing one. */
- 	if (!*lp->type_str)
- 		lp->segtype = seg->segtype;
-@@ -5232,45 +4645,16 @@ static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
- 				lp->stripes = 0;
- 	}
- 
--	if (lp->snapshot)
--		lp->zero = (lp->segtype->flags & SEG_CANNOT_BE_ZEROED) ? 0 : arg_int_value(cmd, zero_ARG, 1);
-+	if (lv_is_cache(lv))
-+		lv = seg_lv(first_seg(lv), 0);
- 
--	/*
--	 * Each LV type that can be converted.
--	 * (The existing type of the LV, not a requested type.)
--	 */
--	if (lv_is_cow(lv)) {
--		ret = _convert_cow_snapshot(cmd, lv, lp);
-+	if (lv_is_mirror(lv)) {
-+		ret = _convert_mirror(cmd, lv, lp);
- 		goto out;
- 	}
- 
--	if (lv_is_thin_volume(lv)) {
--		ret = _convert_thin_volume(cmd, lv, lp);
--		goto out;
--	}
--
--	if (lv_is_thin_pool(lv)) {
--		ret = _convert_thin_pool(cmd, lv, lp);
--		goto out;
--	}
--
--	if (lv_is_cache(lv)) {
--		ret = _convert_cache_volume(cmd, lv, lp);
--		goto out;
--	}
--
--	if (lv_is_cache_pool(lv)) {
--		ret = _convert_cache_pool(cmd, lv, lp);
--		goto out;
--	}
--
--	if (lv_is_mirror(lv)) {
--		ret = _convert_mirror(cmd, lv, lp);
--		goto out;
--	}
--
--	if (lv_is_raid(lv)) {
--		ret = _convert_raid(cmd, lv, lp);
-+	if (lv_is_raid(lv)) {
-+		ret = _convert_raid(cmd, lv, lp);
- 		goto out;
- 	}
- 
-@@ -5315,149 +4699,6 @@ static struct convert_poll_id_list* _convert_poll_id_list_create(struct cmd_cont
- 	return idl;
- }
- 
--static int _lvconvert_and_add_to_poll_list(struct cmd_context *cmd,
--					    struct lvconvert_params *lp,
--					    struct logical_volume *lv)
--{
--	int ret;
--	struct lvinfo info;
--	struct convert_poll_id_list *idl;
--
--	/* _lvconvert() call may alter the reference in lp->lv_to_poll */
--	if ((ret = _lvconvert(cmd, lv, lp)) != ECMD_PROCESSED)
--		stack;
--	else if (lp->need_polling) {
--		if (!lv_info(cmd, lp->lv_to_poll, 0, &info, 0, 0) || !info.exists)
--			log_print_unless_silent("Conversion starts after activation.");
--		else {
--			if (!(idl = _convert_poll_id_list_create(cmd, lp->lv_to_poll)))
--				return_ECMD_FAILED;
--			dm_list_add(&lp->idls, &idl->list);
--		}
--	}
--
--	return ret;
--}
--
--static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
--			     struct processing_handle *handle)
--{
--	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
--	struct volume_group *vg = lv->vg;
--
--	if (test_mode() && is_lockd_type(vg->lock_type)) {
--		log_error("Test mode is not yet supported with lock type %s.",
--			  vg->lock_type);
--		return ECMD_FAILED;
--	}
--
--	/*
--	 * lp->pvh holds the list of PVs available for allocation or removal
--	 */
--	if (lp->pv_count) {
--		if (!(lp->pvh = create_pv_list(cmd->mem, vg, lp->pv_count, lp->pvs, 0)))
--			return_ECMD_FAILED;
--	} else
--		lp->pvh = &vg->pvs;
--
--	lp->lv_to_poll = lv;
--
--	return _lvconvert_and_add_to_poll_list(cmd, lp, lv);
--}
--
--static int _lvconvert_merge_single(struct cmd_context *cmd, struct logical_volume *lv,
--				   struct processing_handle *handle)
--{
--	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
--
--	lp->lv_to_poll = lv;
--
--	return _lvconvert_and_add_to_poll_list(cmd, lp, lv);
--}
--
--int lvconvert(struct cmd_context * cmd, int argc, char **argv)
--{
--	int poll_ret, ret;
--	struct convert_poll_id_list *idl;
--	struct lvconvert_params lp = {
--		.conv_type = CONV_OTHER,
--		.target_attr = ~0,
--		.idls = DM_LIST_HEAD_INIT(lp.idls),
--	};
--	struct processing_handle *handle = init_processing_handle(cmd, NULL);
--
--	cmd->command->flags &= ~GET_VGNAME_FROM_OPTIONS;
--
--	if (!handle) {
--		log_error("Failed to initialize processing handle.");
--		return ECMD_FAILED;
--	}
--
--	handle->custom_handle = &lp;
--
--	if (!_read_params(cmd, argc, argv, &lp)) {
--		ret = EINVALID_CMD_LINE;
--		goto_out;
--	}
--
--	if (lp.merge) {
--		ret = process_each_lv(cmd, argc, argv, NULL, NULL,
--				      READ_FOR_UPDATE, handle, NULL, &_lvconvert_merge_single);
--	} else {
--		int saved_ignore_suspended_devices = ignore_suspended_devices();
--
--		if (lp.uncache) {
--			init_ignore_suspended_devices(1);
--			cmd->handles_missing_pvs = 1;
--		}
--
--		ret = process_each_lv(cmd, 0, NULL, lp.vg_name, lp.lv_name,
--				      READ_FOR_UPDATE, handle, NULL, &_lvconvert_single);
--
--		init_ignore_suspended_devices(saved_ignore_suspended_devices);
--	}
--
--	dm_list_iterate_items(idl, &lp.idls) {
--		poll_ret = _lvconvert_poll_by_id(cmd, idl->id,
--						 lp.wait_completion ? 0 : 1U,
--						 idl->is_merging_origin,
--						 idl->is_merging_origin_thin);
--		if (poll_ret > ret)
--			ret = poll_ret;
--	}
--
--out:
--	if (lp.policy_settings)
--		dm_config_destroy(lp.policy_settings);
--
--	destroy_processing_handle(cmd, handle);
--
--	return ret;
--}
--
--/*
-- * Below is code that has transitioned to using command defs.
-- * ----------------------------------------------------------
-- *
-- * This code does not use read_params (or any other param reading
-- * functions associated with it), or the lp struct.  Those have
-- * been primary vehicles for entangling all the lvconvert operations,
-- * so avoiding them is important for untangling.  They were also
-- * heavily used for trying to figure out what the lvconvert operation
-- * was meant to be doing, and that is no longer needed since the
-- * command def provides it.
-- *
-- * All input data is already available from cmd->arg_values and
-- * cmd->position_argv (the --option args in the former, the position
-- * args in the later.)  There is no need to copy these values into
-- * another redundant struct of input values which just obfuscates.
-- *
-- * The new lvconvert_result struct, passed via custom_handle, is
-- * used for *returning* data from processing, not for passing data
-- * into processing.
-- */
--
--
- /*
-  * Data/results accumulated during processing.
-  */
-@@ -6399,9 +5640,274 @@ int lvconvert_split_cachepool_cmd(struct cmd_context *cmd, int argc, char **argv
- 			       NULL, NULL, &_lvconvert_split_cachepool_single);
- }
- 
-+static int _lvconvert_raid_types_single(struct cmd_context *cmd, struct logical_volume *lv,
-+			     struct processing_handle *handle)
-+{
-+	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
-+	struct dm_list *use_pvh;
-+	struct convert_poll_id_list *idl;
-+	struct lvinfo info;
-+	int ret;
-+
-+	if (cmd->position_argc > 1) {
-+		/* First pos arg is required LV, remaining are optional PVs. */
-+		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
-+			return_ECMD_FAILED;
-+		lp->pv_count = cmd->position_argc - 1;
-+	} else
-+		use_pvh = &lv->vg->pvs;
-+
-+	lp->pvh = use_pvh;
-+
-+	lp->lv_to_poll = lv;
-+
-+	ret = _lvconvert(cmd, lv, lp);
-+
-+	if (ret != ECMD_PROCESSED)
-+		return_ECMD_FAILED;
-+
-+	if (lp->need_polling) {
-+		/* _lvconvert() call may alter the reference in lp->lv_to_poll */
-+		if (!lv_info(cmd, lp->lv_to_poll, 0, &info, 0, 0) || !info.exists)
-+			log_print_unless_silent("Conversion starts after activation.");
-+		else {
-+			if (!(idl = _convert_poll_id_list_create(cmd, lp->lv_to_poll)))
-+				return_ECMD_FAILED;
-+			dm_list_add(&lp->idls, &idl->list);
-+		}
-+	}
-+
-+	return ECMD_PROCESSED;
-+}
-+
-+static int _lvconvert_raid_types_check(struct cmd_context *cmd, struct logical_volume *lv,
-+			struct processing_handle *handle,
-+			int lv_is_named_arg)
-+{
-+	int lvt_enum = get_lvt_enum(lv);
-+	struct lv_types *lvtype = get_lv_type(lvt_enum);
-+
-+	if (!lv_is_visible(lv)) {
-+		if (!lv_is_cache_pool_metadata(lv) &&
-+		    !lv_is_cache_pool_data(lv) &&
-+		    !lv_is_thin_pool_metadata(lv) &&
-+		    !lv_is_thin_pool_data(lv) &&
-+		    !lv_is_used_cache_pool(lv) &&
-+		    !lv_is_mirrored(lv) &&
-+		    !lv_is_raid(lv))
-+			goto fail_hidden;
-+	}
-+
-+	/*
-+	 * FIXME: this validation could be done by command defs.
-+	 *
-+	 * Outside the standard linear/striped/mirror/raid LV
-+	 * types, cache is the only special LV type that is handled
-+	 * (the command is redirected to origin).
-+	 */
-+	switch (lvt_enum) {
-+	case thin_LVT:
-+	case thinpool_LVT:
-+	case cachepool_LVT:
-+	case snapshot_LVT:
-+		log_error("Operation not permitted (%s %d) on LV %s type %s.",
-+			  cmd->command->command_line_id, cmd->command->command_line_enum,
-+			  display_lvname(lv), lvtype ? lvtype->name : "unknown");
-+		return 0;
-+	}
-+
-+	return 1;
-+
-+ fail_hidden:
-+	log_error("Operation not permitted (%s %d) on hidden LV %s.",
-+		  cmd->command->command_line_id, cmd->command->command_line_enum,
-+		  display_lvname(lv));
-+	return 0;
-+}
-+
-+int lvconvert_raid_types_cmd(struct cmd_context * cmd, int argc, char **argv)
-+{
-+	int poll_ret, ret;
-+	int saved_ignore_suspended_devices;
-+	struct processing_handle *handle;
-+	struct convert_poll_id_list *idl;
-+	struct lvconvert_params lp = {
-+		.conv_type = CONV_OTHER,
-+		.target_attr = ~0,
-+		.idls = DM_LIST_HEAD_INIT(lp.idls),
-+	};
-+
-+	if (!(handle = init_processing_handle(cmd, NULL))) {
-+		log_error("Failed to initialize processing handle.");
-+		return ECMD_FAILED;
-+	}
-+
-+	handle->custom_handle = &lp;
-+
-+	if (!_read_params(cmd, &lp)) {
-+		ret = EINVALID_CMD_LINE;
-+		goto_out;
-+	}
-+
-+	saved_ignore_suspended_devices = ignore_suspended_devices();
-+
-+	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-+			      handle, &_lvconvert_raid_types_check, &_lvconvert_raid_types_single);
-+
-+	init_ignore_suspended_devices(saved_ignore_suspended_devices);
-+
-+	dm_list_iterate_items(idl, &lp.idls) {
-+		poll_ret = _lvconvert_poll_by_id(cmd, idl->id,
-+						 lp.wait_completion ? 0 : 1U,
-+						 idl->is_merging_origin,
-+						 idl->is_merging_origin_thin);
-+		if (poll_ret > ret)
-+			ret = poll_ret;
-+	}
-+
-+out:
-+	destroy_processing_handle(cmd, handle);
-+
-+	return ret;
-+}
-+
-+/*
-+ * change mirror log
-+ */
-+
-+static int _lvconvert_visible_check(struct cmd_context *cmd, struct logical_volume *lv,
-+			struct processing_handle *handle,
-+			int lv_is_named_arg)
-+{
-+	if (!lv_is_visible(lv)) {
-+		log_error("Operation not permitted (%s %d) on hidden LV %s.",
-+			  cmd->command->command_line_id, cmd->command->command_line_enum,
-+			  display_lvname(lv));
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+static int _lvconvert_change_mirrorlog_single(struct cmd_context *cmd, struct logical_volume *lv,
-+			     struct processing_handle *handle)
-+{
-+	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
-+	struct dm_list *use_pvh;
-+
-+	if (cmd->position_argc > 1) {
-+		/* First pos arg is required LV, remaining are optional PVs. */
-+		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
-+			return_ECMD_FAILED;
-+		lp->pv_count = cmd->position_argc - 1;
-+	} else
-+		use_pvh = &lv->vg->pvs;
-+
-+	lp->pvh = use_pvh;
-+
-+	/* FIXME: extract the mirrorlog functionality out of _lvconvert()? */
-+	return _lvconvert(cmd, lv, lp);
-+}
-+
-+int lvconvert_change_mirrorlog_cmd(struct cmd_context * cmd, int argc, char **argv)
-+{
-+	struct processing_handle *handle;
-+	struct lvconvert_params lp = {
-+		.conv_type = CONV_OTHER,
-+		.target_attr = ~0,
-+		.idls = DM_LIST_HEAD_INIT(lp.idls),
-+	};
-+	int ret;
-+
-+	if (!(handle = init_processing_handle(cmd, NULL))) {
-+		log_error("Failed to initialize processing handle.");
-+		return ECMD_FAILED;
-+	}
-+
-+	handle->custom_handle = &lp;
-+
-+	/* FIXME: extract the relevant bits of read_params and put here. */
-+	if (!_read_params(cmd, &lp)) {
-+		ret = EINVALID_CMD_LINE;
-+		goto_out;
-+	}
-+
-+	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-+			      handle, &_lvconvert_visible_check, &_lvconvert_change_mirrorlog_single);
-+
-+out:
-+	destroy_processing_handle(cmd, handle);
-+
-+	return ret;
-+}
-+
-+/*
-+ * split mirror images
-+ */
-+
-+static int _lvconvert_split_mirror_images_single(struct cmd_context *cmd, struct logical_volume *lv,
-+			     struct processing_handle *handle)
-+{
-+	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
-+	struct dm_list *use_pvh;
-+
-+	if (cmd->position_argc > 1) {
-+		/* First pos arg is required LV, remaining are optional PVs. */
-+		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
-+			return_ECMD_FAILED;
-+		lp->pv_count = cmd->position_argc - 1;
-+	} else
-+		use_pvh = &lv->vg->pvs;
-+
-+	lp->pvh = use_pvh;
-+
-+	/* FIXME: extract the split functionality out of _lvconvert()? */
-+	return _lvconvert(cmd, lv, lp);
-+}
-+
-+int lvconvert_split_mirror_images_cmd(struct cmd_context * cmd, int argc, char **argv)
-+{
-+	struct processing_handle *handle;
-+	struct lvconvert_params lp = {
-+		.conv_type = CONV_OTHER,
-+		.target_attr = ~0,
-+		.idls = DM_LIST_HEAD_INIT(lp.idls),
-+	};
-+	int ret;
-+
-+	if (!(handle = init_processing_handle(cmd, NULL))) {
-+		log_error("Failed to initialize processing handle.");
-+		return ECMD_FAILED;
-+	}
-+
-+	handle->custom_handle = &lp;
-+
-+	/* FIXME: extract the relevant bits of read_params and put here. */
-+	if (!_read_params(cmd, &lp)) {
-+		ret = EINVALID_CMD_LINE;
-+		goto_out;
-+	}
-+
-+	/* FIXME: are there any hidden LVs that should be disallowed? */
-+
-+	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-+			      handle, NULL, &_lvconvert_split_mirror_images_single);
-+
-+out:
-+	destroy_processing_handle(cmd, handle);
-+
-+	return ret;
-+}
-+
-+/*
-+ * merge mirror images
-+ *
-+ * Called from both lvconvert --mergemirrors and lvconvert --merge.
-+ */
-+
- static int _lvconvert_merge_mirror_images_single(struct cmd_context *cmd,
--					  struct logical_volume *lv,
--					  struct processing_handle *handle)
-+                                          struct logical_volume *lv,
-+                                          struct processing_handle *handle)
- {
- 	if (!lv_raid_merge(lv))
- 		return ECMD_FAILED;
-@@ -6411,10 +5917,11 @@ static int _lvconvert_merge_mirror_images_single(struct cmd_context *cmd,
- 
- int lvconvert_merge_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv)
- {
-+	/* arg can be a VG name, which is the standard option usage */
- 	cmd->command->flags &= ~GET_VGNAME_FROM_OPTIONS;
- 
- 	return process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
--			       NULL, NULL, &_lvconvert_merge_mirror_images_single);
-+			       NULL, &_lvconvert_visible_check, &_lvconvert_merge_mirror_images_single);
- }
- 
- static int _lvconvert_merge_generic_single(struct cmd_context *cmd,
-@@ -6471,3 +5978,15 @@ int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv)
- 	return ret;
- }
- 
-+/*
-+ * All lvconvert command defs have their own function,
-+ * so the generic function name is unused.
-+ */
-+
-+int lvconvert(struct cmd_context *cmd, int argc, char **argv)
-+{
-+	log_error(INTERNAL_ERROR "Missing function for command definition %s.",
-+		  cmd->command->command_line_id);
-+	return ECMD_FAILED;
-+}
-+
 diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index c100311..4f1718b 100644
+index 4f1718b..afc941b 100644
 --- a/tools/lvmcmdline.c
 +++ b/tools/lvmcmdline.c
-@@ -147,20 +147,17 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
- 	{ lvconvert_split_and_keep_cachepool_CMD,	lvconvert_split_cachepool_cmd },
- 	{ lvconvert_split_and_remove_cachepool_CMD,	lvconvert_split_cachepool_cmd },
- 
-+	/* lvconvert raid-related type conversions */
-+	{ lvconvert_raid_types_CMD,			lvconvert_raid_types_cmd },
-+
- 	/* lvconvert utilities for raid/mirror */
--	{ lvconvert_merge_mirror_images_CMD,		lvconvert_merge_mirror_images_cmd },
--#if 0
--	{ lvconvert_split_mirror_images_CMD,		lvconvert_split_mirror_images_cmd },
-+	{ lvconvert_split_mirror_images_CMD,		lvconvert_split_mirror_images_cmd},
- 	{ lvconvert_change_mirrorlog_CMD,		lvconvert_change_mirrorlog_cmd },
--#endif
-+	{ lvconvert_merge_mirror_images_CMD,		lvconvert_merge_mirror_images_cmd },
- 
- 	/* redirected to merge_snapshot/merge_thin/merge_mirrors */
- 	{ lvconvert_merge_CMD, lvconvert_merge_cmd },
- 
--#if 0
--	/* all raid-related type conversions */
--	{ lvconvert_raid_types_CMD,			lvconvert_raid_types_cmd },
--#endif
+@@ -64,7 +64,7 @@ static struct val_props _val_props[VAL_COUNT + 1] = {
+  * Table of valid --option's
+  */
+ static struct arg_props _arg_props[ARG_COUNT + 1] = {
+-#define arg(a, b, c, d, e, f) {a, b, "", "--" c, d, e, f},
++#define arg(a, b, c, d, e, f, g) {a, b, "", "--" c, d, e, f, g},
+ #include "args.h"
+ #undef arg
  };
- 
- 
 diff --git a/tools/tools.h b/tools/tools.h
-index 4bba46c..89ee8ad 100644
+index 89ee8ad..392490f 100644
 --- a/tools/tools.h
 +++ b/tools/tools.h
-@@ -271,7 +271,10 @@ int lvconvert_swap_pool_metadata_cmd(struct cmd_context *cmd, int argc, char **a
- int lvconvert_merge_thin_cmd(struct cmd_context *cmd, int argc, char **argv);
- int lvconvert_split_cachepool_cmd(struct cmd_context *cmd, int argc, char **argv);
+@@ -59,7 +59,7 @@ enum {
  
-+int lvconvert_raid_types_cmd(struct cmd_context * cmd, int argc, char **argv);
-+int lvconvert_split_mirror_images_cmd(struct cmd_context * cmd, int argc, char **argv);
- int lvconvert_merge_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv);
-+int lvconvert_change_mirrorlog_cmd(struct cmd_context * cmd, int argc, char **argv);
+ /* define the enums for the command line --options, foo_ARG */
+ enum {
+-#define arg(a, b, c, d, e, f) a ,
++#define arg(a, b, c, d, e, f, g) a ,
+ #include "args.h"
+ #undef arg
+ };
+@@ -109,6 +109,7 @@ struct arg_props {
+ 	int val_enum; /* foo_VAL from vals.h */
+ 	uint32_t flags;
+ 	uint32_t prio;
++	const char *desc;
+ };
  
- int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv);
- 
+ struct arg_value_group_list {
 
 
