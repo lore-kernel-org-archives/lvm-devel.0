@@ -1,127 +1,282 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 13 Feb 2017 09:14:58 +0000 (UTC)
-Subject: master - cleanup: use matching signed number comparation
-Message-ID: <20170213091458.115F260576@fedorahosted.org>
+Date: Mon, 13 Feb 2017 09:15:00 +0000 (UTC)
+Subject: master - tests: fix dev path
+Message-ID: <20170213091500.21FCB60576@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a3579aafc55bb7fb156f89bba38515846b0c26ee
-Commit:        a3579aafc55bb7fb156f89bba38515846b0c26ee
-Parent:        7cbee8f31ae64c023b294524008885e3a054e394
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c3b1f1a07ac4931ee4b7b843741d8ec09d8eea5c
+Commit:        c3b1f1a07ac4931ee4b7b843741d8ec09d8eea5c
+Parent:        a3579aafc55bb7fb156f89bba38515846b0c26ee
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Feb 12 18:18:54 2017 +0100
+AuthorDate:    Sun Feb 12 22:28:40 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 13 10:06:19 2017 +0100
 
-cleanup: use matching signed number comparation
+tests: fix dev path
 
+Use proper device path for test devices.
+Use mkfs.ext4 and drop  'echo y|' to it.
+Use smaller device size to consume less memory and CPU time.
 ---
- lib/metadata/metadata.c |    2 +-
- libdm/libdm-report.c    |    2 +-
- libdm/libdm-stats.c     |    6 +++---
- tools/reporter.c        |    2 +-
- tools/toollib.c         |    2 +-
- tools/vgextend.c        |    2 +-
- 6 files changed, 8 insertions(+), 8 deletions(-)
+ test/shell/lvconvert-raid-regionsize.sh |   21 +++++++-------
+ test/shell/lvconvert-raid-takeover.sh   |   46 +++++++++++++++---------------
+ 2 files changed, 34 insertions(+), 33 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 0731108..b11d306 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -6383,7 +6383,7 @@ int vg_strip_outdated_historical_lvs(struct volume_group *vg) {
- 		 * Removal time in the future? Not likely,
- 		 * but skip this item in any case.
- 		*/
--		if ((current_time) < glvl->glv->historical->timestamp_removed)
-+		if (current_time < (time_t) glvl->glv->historical->timestamp_removed)
- 			continue;
+diff --git a/test/shell/lvconvert-raid-regionsize.sh b/test/shell/lvconvert-raid-regionsize.sh
+index 4f0e90d..7a6c7f0 100644
+--- a/test/shell/lvconvert-raid-regionsize.sh
++++ b/test/shell/lvconvert-raid-regionsize.sh
+@@ -14,6 +14,7 @@ SKIP_WITH_LVMPOLLD=1
  
- 		if ((current_time - glvl->glv->historical->timestamp_removed) > threshold) {
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index f9e261d..7caba98 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -4209,7 +4209,7 @@ static void _recalculate_fields(struct dm_report *rh)
+ . lib/inittest
+ 
++which mkfs.ext4 || skip
+ aux have_raid 1 9 0 || skip
+ 
+ aux prepare_vg 6
+@@ -29,7 +30,7 @@ function _test_regionsize
+ 	lvconvert --type $type --yes -R $regionsize $vg/$lv
+ 	[ $? -ne 0 ] && return 1
+ 	check lv_field $vg/$lv regionsize "$regionsize_str"
+-	fsck -fn  /dev/mapper/$vg-$lv
++	fsck -fn "$DM_DEV_DIR/$vg/$lv"
+ }
+ 
+ function _test_regionsizes
+@@ -47,13 +48,13 @@ function _test_regionsizes
+ }
+ 
+ # Create 3-way raid1
+-lvcreate --yes -aey --type raid1 -m 2 -R64K -L 64M -n $lv1 $vg
++lvcreate --yes -aey --type raid1 -m 2 -R64K -L8M -n $lv1 $vg
+ check lv_field $vg/$lv1 segtype "raid1"
+ check lv_field $vg/$lv1 stripes 3
+ check lv_field $vg/$lv1 regionsize "64.00k"
+-echo y | mkfs -t ext4 /dev/mapper/$vg-$lv1
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
+ aux wait_for_sync $vg $lv1
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
+ 
+ _test_regionsizes raid1
+ 
+@@ -61,14 +62,14 @@ _test_regionsizes raid1
+ lvremove --yes $vg
+ 
+ # Create 5-way raid6
+-lvcreate --yes -aey --type raid6 -i 3 --stripesize 128K -R 256K -L 64M -n $lv1 $vg
++lvcreate --yes -aey --type raid6 -i 3 --stripesize 128K -R 256K -L8M -n $lv1 $vg
+ check lv_field $vg/$lv1 segtype "raid6"
+ check lv_field $vg/$lv1 stripes 5
+ check lv_field $vg/$lv1 stripesize "128.00k"
+ check lv_field $vg/$lv1 regionsize "256.00k"
+-echo y | mkfs -t ext4 /dev/mapper/$vg-$lv1
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
+ aux wait_for_sync $vg $lv1
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
+ 
+ _test_regionsizes raid6
+ 
+@@ -76,14 +77,14 @@ _test_regionsizes raid6
+ lvremove --yes $vg
+ 
+ # Create 6-way raid01
+-lvcreate --yes -aey --type raid10 -i 3 -m 1 --stripesize 128K -R 256K -L 64M -n $lv1 $vg
++lvcreate --yes -aey --type raid10 -i 3 -m 1 --stripesize 128K -R 256K -L8M -n $lv1 $vg
+ check lv_field $vg/$lv1 segtype "raid10"
+ check lv_field $vg/$lv1 stripes 6
+ check lv_field $vg/$lv1 stripesize "128.00k"
+ check lv_field $vg/$lv1 regionsize "256.00k"
+-echo y | mkfs -t ext4 /dev/mapper/$vg-$lv1
++mkfs.ext4 -t ext4 "$DM_DEV_DIR/$vg/$lv1"
+ aux wait_for_sync $vg $lv1
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
+ 
+ _test_regionsizes raid10
+ 
+diff --git a/test/shell/lvconvert-raid-takeover.sh b/test/shell/lvconvert-raid-takeover.sh
+index a219829..aa41dba 100644
+--- a/test/shell/lvconvert-raid-takeover.sh
++++ b/test/shell/lvconvert-raid-takeover.sh
+@@ -14,12 +14,13 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++which mkfs.ext4 || skip
+ aux have_raid 1 9 0 || skip
+ 
+ correct_raid4_layout=0
+ aux have_raid 1 9 1 && correct_raid4_layout=1
+ 
+-aux prepare_vg 8 80
++aux prepare_vg 8
+ 
+ function _lvcreate
  {
- 	struct row *row;
- 	struct dm_report_field *field;
--	size_t len;
-+	int len;
+@@ -33,8 +34,8 @@ function _lvcreate
+ 	lvcreate -y -aey --type $level -i $req_stripes -L $size -n $lv $vg
+ 	check lv_field $vg/$lv segtype "$level"
+ 	check lv_field $vg/$lv stripes $stripes
+-	echo y | mkfs -t ext4 /dev/mapper/$vg-$lv
+-	fsck -fn  /dev/mapper/$vg-$lv
++	mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
++	fsck -fn "$DM_DEV_DIR/$vg/$lv"
+ }
  
- 	dm_list_iterate_items(row, &rh->rows) {
- 		dm_list_iterate_items(field, &row->fields) {
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index b74a470..587c748 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -3294,7 +3294,7 @@ static void _sum_histogram_bins(const struct dm_stats *dms,
- 	struct dm_stats_region *region;
- 	struct dm_histogram_bin *bins;
- 	struct dm_histogram *dmh_cur;
--	uint64_t bin;
-+	int bin;
+ function _lvconvert
+@@ -52,17 +53,16 @@ function _lvconvert
+ 	[ "${level:0:7}" = "striped" ] && wait_and_check=0
+ 	[ "${level:0:5}" = "raid0" ] && wait_and_check=0
  
- 	region = &dms->regions[region_id];
- 	dmh_cur = region->counters[area_id].histogram;
-@@ -4003,7 +4003,7 @@ merge:
- static void _stats_copy_histogram_bounds(struct dm_histogram *to,
- 					 struct dm_histogram *from)
- {
--	uint64_t i;
-+	int i;
+-
+ 	lvconvert -y --ty $req_level $R $vg/$lv
+ 	[ $? -ne 0 ] && return $?
+ 	check lv_field $vg/$lv segtype "$level"
+ 	check lv_field $vg/$lv stripes $stripes
+ 	if [ "$wait_and_check" -eq 1 ]
+ 	then
+-		fsck -fn  /dev/mapper/$vg-$lv
++		fsck -fn "$DM_DEV_DIR/$vg/$lv"
+ 		aux wait_for_sync $vg $lv
+ 	fi
+-	fsck -fn  /dev/mapper/$vg-$lv
++	fsck -fn "$DM_DEV_DIR/$vg/$lv"
+ }
  
- 	to->nr_bins = from->nr_bins;
+ function _invalid_raid5_conversions
+@@ -90,28 +90,28 @@ function _invalid_raid5_conversions
+ # aux delay_dev "$dev1" 1
  
-@@ -4019,7 +4019,7 @@ static void _stats_copy_histogram_bounds(struct dm_histogram *to,
- static int _stats_check_histogram_bounds(struct dm_histogram *h1,
- 					 struct dm_histogram *h2)
- {
--	uint64_t i;
-+	int i;
+ # Create 3-way mirror
+-lvcreate --yes -aey --type mirror -R 64K -m 2 -L 64M -n $lv1 $vg
++lvcreate --yes -aey --type mirror -R 64K -m 2 -L8M -n $lv1 $vg
+ check lv_field $vg/$lv1 segtype "mirror"
+ check lv_field $vg/$lv1 stripes 3
+ check lv_field $vg/$lv1 regionsize "64.00k"
+-echo y | mkfs -t ext4 /dev/mapper/$vg-$lv1
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
+ aux wait_for_sync $vg $lv1
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
  
- 	if (!h1 || !h2)
- 		return 0;
-diff --git a/tools/reporter.c b/tools/reporter.c
-index e70fa29..00606ed 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -707,7 +707,7 @@ int report_for_selection(struct cmd_context *cmd,
+ # Convert 3-way to 4-way mirror
+ lvconvert -m 3 $vg/$lv1
+ check lv_field $vg/$lv1 segtype "mirror"
+ check lv_field $vg/$lv1 stripes 4
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
+ aux wait_for_sync $vg $lv1
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
  
- static void _check_pv_list(struct cmd_context *cmd, struct report_args *args, struct single_report_args *single_args)
- {
--	unsigned i;
-+	int i;
- 	int rescan_done = 0;
+ # Takeover 4-way mirror to raid1
+ lvconvert --yes --type raid1 -R 64k $vg/$lv1
+ check lv_field $vg/$lv1 segtype "raid1"
+ check lv_field $vg/$lv1 stripes 4
+ check lv_field $vg/$lv1 regionsize "64.00k"
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
  
- 	if (!args->argv)
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 235e535..5f3deb7 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -4499,7 +4499,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
- 	int consistent = 0;
- 	int must_use_all = (cmd->command->flags & MUST_USE_ALL_ARGS);
- 	int found;
--	int i;
-+	unsigned i;
+ ## Convert 4-way raid1 to 5-way
+ lvconvert -m 4 -R 128K $vg/$lv1
+@@ -119,9 +119,9 @@ check lv_field $vg/$lv1 segtype "raid1"
+ check lv_field $vg/$lv1 stripes 5
+ # FIXME: once lv_raid_chanage_image_count() supports region_size changes
+ not check lv_field $vg/$lv1 regionsize "128.00k"
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
+ aux wait_for_sync $vg $lv1
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
  
- 	set_pv_notify(cmd);
+ # FIXME: enable once lvconvert rejects early
+ ## Try converting 4-way raid1 to 9-way
+@@ -136,7 +136,7 @@ dmsetup status $vg-$lv1
+ dmsetup table $vg-$lv1
+ check lv_field $vg/$lv1 segtype "raid1"
+ check lv_field $vg/$lv1 stripes 2
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
  
-diff --git a/tools/vgextend.c b/tools/vgextend.c
-index 344dff0..e16316f 100644
---- a/tools/vgextend.c
-+++ b/tools/vgextend.c
-@@ -49,7 +49,7 @@ static int _vgextend_restoremissing(struct cmd_context *cmd __attribute__((unuse
- 	struct vgextend_params *vp = (struct vgextend_params *) handle->custom_handle;
- 	struct pvcreate_params *pp = &vp->pp;
- 	int fixed = 0;
--	int i;
-+	unsigned i;
+ # Convert 2-way raid1 to mirror
+ lvconvert --yes --type mirror -R 32K $vg/$lv1
+@@ -144,7 +144,7 @@ check lv_field $vg/$lv1 segtype "mirror"
+ check lv_field $vg/$lv1 stripes 2
+ check lv_field $vg/$lv1 regionsize "32.00k"
+ aux wait_for_sync $vg $lv1
+-fsck -fn  /dev/mapper/$vg-$lv1
++fsck -fn "$DM_DEV_DIR/$vg/$lv1"
+ aux wait_for_sync $vg $lv1
  
- 	if (!archive(vg))
- 		return_0;
+ # Clean up
+@@ -159,7 +159,7 @@ then
+ #
+ 
+ # Create 3-way striped raid4 (4 legs total)
+-_lvcreate raid4 3 4 64M $vg $lv1
++_lvcreate raid4 3 4 8M $vg $lv1
+ aux wait_for_sync $vg $lv1
+ 
+ # Convert raid4 -> striped
+@@ -272,7 +272,7 @@ _lvconvert striped striped 3 $vg $lv1
+ lvremove -y $vg
+ 
+ # Create + convert 4-way raid5 variations
+-_lvcreate raid5 4 5 64M $vg $lv1
++_lvcreate raid5 4 5 8M $vg $lv1
+ aux wait_for_sync $vg $lv1
+ _invalid_raid5_conversions $vg $lv1
+ not _lvconvert raid6_rs_6 raid6_rs_6 6 $vg $lv1
+@@ -282,7 +282,7 @@ _lvconvert raid6_ls_6 raid6_ls_6 6 $vg $lv1
+ _lvconvert raid5_ls raid5_ls 5 $vg $lv1
+ lvremove -y $vg
+ 
+-_lvcreate raid5_ls 4 5 64M $vg $lv1
++_lvcreate raid5_ls 4 5 8M $vg $lv1
+ aux wait_for_sync $vg $lv1
+ _invalid_raid5_conversions $vg $lv1
+ not _lvconvert raid6_rs_6 raid6_rs_6 6 $vg $lv1
+@@ -292,7 +292,7 @@ _lvconvert raid6_ls_6 raid6_ls_6 6 $vg $lv1
+ _lvconvert raid5_ls raid5_ls 5 $vg $lv1
+ lvremove -y $vg
+ 
+-_lvcreate raid5_rs 4 5 64M $vg $lv1
++_lvcreate raid5_rs 4 5 8M $vg $lv1
+ aux wait_for_sync $vg $lv1
+ _invalid_raid5_conversions $vg $lv1
+ not _lvconvert raid6_ra_6 raid6_ra_6 6 $vg $lv1
+@@ -302,7 +302,7 @@ _lvconvert raid6_rs_6 raid6_rs_6 6 $vg $lv1
+ _lvconvert raid5_rs raid5_rs 5 $vg $lv1
+ lvremove -y $vg
+ 
+-_lvcreate raid5_la 4 5 64M $vg $lv1
++_lvcreate raid5_la 4 5 8M $vg $lv1
+ aux wait_for_sync $vg $lv1
+ _invalid_raid5_conversions $vg $lv1
+ not _lvconvert raid6_ls_6 raid6_ls_6 6 $vg $lv1
+@@ -312,7 +312,7 @@ _lvconvert raid6_la_6 raid6_la_6 6 $vg $lv1
+ _lvconvert raid5_la raid5_la 5 $vg $lv1
+ lvremove -y $vg
+ 
+-_lvcreate raid5_ra 4 5 64M $vg $lv1
++_lvcreate raid5_ra 4 5 8M $vg $lv1
+ aux wait_for_sync $vg $lv1
+ _invalid_raid5_conversions $vg $lv1
+ not _lvconvert raid6_ls_6 raid6_ls_6 6 $vg $lv1
+@@ -324,7 +324,7 @@ lvremove -y $vg
+ 
+ else
+ 
+-not lvcreate -y -aey --type raid4 -i 3 -L 64M -n $lv4 $vg
++not lvcreate -y -aey --type raid4 -i 3 -L8M -n $lv4 $vg
+ not lvconvert -y --ty raid4 $vg/$lv1
+ not lvconvert -y --ty raid4 $vg/$lv2
+ 
 
 
