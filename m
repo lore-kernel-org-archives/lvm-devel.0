@@ -1,75 +1,143 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 13 Feb 2017 18:10:54 +0000 (UTC)
-Subject: master - vgchange: fix uint32 parsing of logicalvolume arg
-Message-ID: <20170213181054.2EED760EFE@fedorahosted.org>
+Date: Mon, 13 Feb 2017 18:10:56 +0000 (UTC)
+Subject: master - lvconvert: add command to change region size of a raid LV
+Message-ID: <20170213181056.49C6560CD7@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8152e4a99ee075c84fab9ec46485b798a1a6525d
-Commit:        8152e4a99ee075c84fab9ec46485b798a1a6525d
-Parent:        2224b6a70158a820de2a9f1fd961a36b0188da51
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=46abc28a480069b3e8b2c5c7c3448ffa25ec17ba
+Commit:        46abc28a480069b3e8b2c5c7c3448ffa25ec17ba
+Parent:        8152e4a99ee075c84fab9ec46485b798a1a6525d
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 6 16:10:09 2017 -0600
+AuthorDate:    Tue Feb 7 11:52:13 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 13 08:20:10 2017 -0600
+CommitterDate: Mon Feb 13 08:21:58 2017 -0600
 
-vgchange: fix uint32 parsing of logicalvolume arg
+lvconvert: add command to change region size of a raid LV
 
 ---
- tools/args.h           |    4 ++--
- tools/command-lines.in |    6 +++---
- 2 files changed, 5 insertions(+), 5 deletions(-)
+ lib/metadata/metadata-exported.h        |    2 ++
+ lib/metadata/raid_manip.c               |    6 ++++++
+ test/shell/lvconvert-raid-regionsize.sh |    2 +-
+ tools/command-lines.in                  |    7 +++++++
+ tools/lvconvert.c                       |   15 +++++++++++++++
+ tools/lvmcmdline.c                      |    1 +
+ tools/tools.h                           |    1 +
+ 7 files changed, 33 insertions(+), 1 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 1d7d6f7..a481bc5 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -964,10 +964,10 @@ arg(stripesize_ARG, 'I', "stripesize", sizekb_VAL, 0, 0,
-     "The amount of data that is written to one device before\n"
-     "moving to the next in a striped LV.\n")
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 420893c..573c09d 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1230,6 +1230,8 @@ uint32_t raid_rmeta_extents_delta(struct cmd_context *cmd,
+ uint32_t raid_rimage_extents(const struct segment_type *segtype,
+ 			     uint32_t extents, uint32_t stripes, uint32_t data_copies);
+ uint32_t raid_ensure_min_region_size(const struct logical_volume *lv, uint64_t raid_size, uint32_t region_size);
++int lv_raid_change_region_size(struct logical_volume *lv,
++                               int yes, int force, uint32_t new_region_size);
+ /* --  metadata/raid_manip.c */
  
--arg(logicalvolume_ARG, 'l', "logicalvolume", number_VAL, 0, 0,
-+arg(logicalvolume_ARG, 'l', "logicalvolume", uint32_VAL, 0, 0,
-     "Sets the maximum number of LVs allowed in a VG.\n")
+ /* ++  metadata/cache_manip.c */
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index eaafd65..cdd7af8 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -4338,6 +4338,12 @@ int lv_raid_convert(struct logical_volume *lv,
+ 			   region_size, allocate_pvs);
+ }
  
--arg(maxlogicalvolumes_ARG, 'l', "maxlogicalvolumes", number_VAL, 0, 0,
-+arg(maxlogicalvolumes_ARG, 'l', "maxlogicalvolumes", uint32_VAL, 0, 0,
-     "Sets the maximum number of LVs allowed in a VG.\n")
++int lv_raid_change_region_size(struct logical_volume *lv,
++		    int yes, int force, uint32_t new_region_size)
++{
++	return _region_size_change_requested(lv, yes, new_region_size);
++}
++
+ static int _remove_partial_multi_segment_image(struct logical_volume *lv,
+ 					       struct dm_list *remove_pvs)
+ {
+diff --git a/test/shell/lvconvert-raid-regionsize.sh b/test/shell/lvconvert-raid-regionsize.sh
+index 7a6c7f0..9baa99a 100644
+--- a/test/shell/lvconvert-raid-regionsize.sh
++++ b/test/shell/lvconvert-raid-regionsize.sh
+@@ -27,7 +27,7 @@ function _test_regionsize
+ 	local vg=$4
+ 	local lv=$5
  
- arg(extents_ARG, 'l', "extents", numsignedper_VAL, 0, 0,
+-	lvconvert --type $type --yes -R $regionsize $vg/$lv
++	lvconvert --yes -R $regionsize $vg/$lv
+ 	[ $? -ne 0 ] && return 1
+ 	check lv_field $vg/$lv regionsize "$regionsize_str"
+ 	fsck -fn "$DM_DEV_DIR/$vg/$lv"
 diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 30573f4..ca5259f 100644
+index ca5259f..6743b79 100644
 --- a/tools/command-lines.in
 +++ b/tools/command-lines.in
-@@ -1339,7 +1339,7 @@ OO_VGCHANGE: --autobackup Bool, --ignoremonitoring, --ignoreskippedcluster,
- # because it can function as a required opt.
+@@ -364,6 +364,13 @@ ID: lvconvert_raid_types
+ DESC: Convert LV to raid1 or mirror, or change number of mirror images.
+ RULE: all not lv_is_locked lv_is_pvmove
  
- OO_VGCHANGE_META: --addtag Tag, --deltag Tag,
----logicalvolume Number, --maxphysicalvolumes Uint32, --alloc Alloc, --uuid,
-+--logicalvolume Uint32, --maxphysicalvolumes Uint32, --alloc Alloc, --uuid,
- --clustered Bool, --pvmetadatacopies MetadataCopiesPV, --vgmetadatacopies MetadataCopiesVG,
- --physicalextentsize SizeMB, --resizeable Bool, --systemid String, --locktype LockType,
- --profile String, --detachprofile, --metadataprofile String
-@@ -1405,7 +1405,7 @@ ID: vgconvert_general
++lvconvert --regionsize SizeMB LV_raid
++OO: OO_LVCONVERT
++ID: lvconvert_change_region_size
++DESC: Change the region size of an LV.
++RULE: all not lv_is_locked lv_is_pvmove
++RULE: all not LV_raid0
++
  ---
  
- vgcreate VG_new PV ...
--OO: --addtag Tag, --alloc Alloc, --autobackup Bool, --clustered Bool, --maxlogicalvolumes Number,
-+OO: --addtag Tag, --alloc Alloc, --autobackup Bool, --clustered Bool, --maxlogicalvolumes Uint32,
- --maxphysicalvolumes Uint32, --metadataprofile String, --metadatatype MetadataType,
- --physicalextentsize SizeMB, --force, --zero Bool, --labelsector Number,
- --metadatasize SizeMB, --pvmetadatacopies MetadataCopiesPV, --vgmetadatacopies MetadataCopiesVG,
-@@ -1539,7 +1539,7 @@ OO_VGSPLIT: --autobackup Bool
+ # lvconvert raid-related utilities
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 75bdcb9..4e86698 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4397,6 +4397,21 @@ out:
+ 	return ret;
+ }
  
- # used only when the destination VG is new
- OO_VGSPLIT_NEW: --alloc Alloc, --clustered Bool,
----maxlogicalvolumes Number, --maxphysicalvolumes Uint32,
-+--maxlogicalvolumes Uint32, --maxphysicalvolumes Uint32,
- --metadatatype MetadataType, --vgmetadatacopies MetadataCopiesVG
++static int _lvconvert_change_region_size_single(struct cmd_context *cmd, struct logical_volume *lv,
++			     struct processing_handle *handle)
++{
++	if (!lv_raid_change_region_size(lv, arg_is_set(cmd, yes_ARG), arg_count(cmd, force_ARG),
++			                arg_int_value(cmd, regionsize_ARG, 0)))
++		return ECMD_FAILED;
++	return ECMD_PROCESSED;
++}
++
++int lvconvert_change_region_size_cmd(struct cmd_context * cmd, int argc, char **argv)
++{
++	return process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
++			      NULL, &_lvconvert_visible_check, &_lvconvert_change_region_size_single);
++}
++
+ /*
+  * split mirror images
+  */
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 121a9dd..4fda356 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -152,6 +152,7 @@ struct command_function command_functions[CMD_COUNT] = {
+ 	{ lvconvert_split_mirror_images_CMD,		lvconvert_split_mirror_images_cmd},
+ 	{ lvconvert_change_mirrorlog_CMD,		lvconvert_change_mirrorlog_cmd },
+ 	{ lvconvert_merge_mirror_images_CMD,		lvconvert_merge_mirror_images_cmd },
++	{ lvconvert_change_region_size_CMD,		lvconvert_change_region_size_cmd },
  
- vgsplit VG VG PV ...
+ 	/* redirected to merge_snapshot/merge_thin/merge_mirrors */
+ 	{ lvconvert_merge_CMD, lvconvert_merge_cmd },
+diff --git a/tools/tools.h b/tools/tools.h
+index 4e1d87f..00476d1 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -284,6 +284,7 @@ int lvconvert_raid_types_cmd(struct cmd_context * cmd, int argc, char **argv);
+ int lvconvert_split_mirror_images_cmd(struct cmd_context * cmd, int argc, char **argv);
+ int lvconvert_merge_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv);
+ int lvconvert_change_mirrorlog_cmd(struct cmd_context * cmd, int argc, char **argv);
++int lvconvert_change_region_size_cmd(struct cmd_context * cmd, int argc, char **argv);
+ 
+ int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv);
+ 
 
 
