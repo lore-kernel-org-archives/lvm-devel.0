@@ -1,57 +1,143 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 14 Feb 2017 21:55:20 +0000 (UTC)
-Subject: master - coverity cleanups
-Message-ID: <20170214215520.60A99610FE@fedorahosted.org>
+Date: Mon, 13 Feb 2017 18:10:30 +0000 (UTC)
+Subject: master - fix lvmcmdline warning
+Message-ID: <20170213181030.C33C16039D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d2c5bb5c7066142930c88275d2fb6c8552559c9a
-Commit:        d2c5bb5c7066142930c88275d2fb6c8552559c9a
-Parent:        1236e0ed293d13bff1205dbd2ac31877278b7a90
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3642deb4f3b7ade1109aeb0ef2cffb38f31ff7c6
+Commit:        3642deb4f3b7ade1109aeb0ef2cffb38f31ff7c6
+Parent:        4d2c3502e79e34a5cf0fdb65c2a4df23aa1b2ecb
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 14 15:53:29 2017 -0600
+AuthorDate:    Thu Jan 12 14:36:31 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Feb 14 15:53:29 2017 -0600
+CommitterDate: Mon Feb 13 08:20:10 2017 -0600
 
-coverity cleanups
+fix lvmcmdline warning
 
+declaration of ???usage??? shadows a globa
 ---
- tools/command.h |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ tools/lvmcmdline.c |   40 ++++++++++++++++++++--------------------
+ 1 files changed, 20 insertions(+), 20 deletions(-)
 
-diff --git a/tools/command.h b/tools/command.h
-index 3d708f0..0c3f9f3 100644
---- a/tools/command.h
-+++ b/tools/command.h
-@@ -69,7 +69,7 @@ struct command_name {
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index afc941b..ddc87f9 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1288,7 +1288,7 @@ static int _command_required_pos_matches(struct cmd_context *cmd, int ci, int rp
  
- static inline int val_bit_is_set(uint64_t val_bits, int val_enum)
+ #define HELP_LINE_SIZE 1024
+ 
+-static void _print_usage(const char *usage, int only_required)
++static void _print_usage(const char *usage_str, int only_required)
  {
--	return (val_bits & (1 << val_enum)) ? 1 : 0;
-+	return (val_bits & (1ULL << val_enum)) ? 1 : 0;
- }
+ 	char buf[HELP_LINE_SIZE];
+ 	int optional_ui = 0;
+@@ -1296,7 +1296,7 @@ static void _print_usage(const char *usage, int only_required)
+ 	int ui;
+ 	int bi;
  
- static inline uint64_t val_enum_to_bit(int val_enum)
-@@ -79,7 +79,7 @@ static inline uint64_t val_enum_to_bit(int val_enum)
+-	if (!usage || !strlen(usage))
++	if (!usage_str || !strlen(usage_str))
+ 		return;
  
- static inline int lvp_bit_is_set(uint64_t lvp_bits, int lvp_enum)
- {
--	return (lvp_bits & (1 << lvp_enum)) ? 1 : 0;
-+	return (lvp_bits & (1ULL << lvp_enum)) ? 1 : 0;
- }
+ 	/*
+@@ -1313,32 +1313,32 @@ static void _print_usage(const char *usage, int only_required)
+ 	memset(buf, 0, sizeof(buf));
+ 	bi = 0;
  
- static inline uint64_t lvp_enum_to_bit(int lvp_enum)
-@@ -89,7 +89,7 @@ static inline uint64_t lvp_enum_to_bit(int lvp_enum)
+-	for (ui = 0; ui < strlen(usage); ui++) {
+-		if (!bi && ((usage[ui] == ' ') || (usage[ui] == '\n')))
++	for (ui = 0; ui < strlen(usage_str); ui++) {
++		if (!bi && ((usage_str[ui] == ' ') || (usage_str[ui] == '\n')))
+ 			continue;
  
- static inline int lvt_bit_is_set(uint64_t lvt_bits, int lvt_enum)
- {
--	return (lvt_bits & (1 << lvt_enum)) ? 1 : 0;
-+	return (lvt_bits & (1ULL << lvt_enum)) ? 1 : 0;
- }
+ 		/* The first "[ " indicates the start of the optional opt_args. */
+-		if ((usage[ui] == '[') && (usage[ui+1] == ' ')) {
++		if ((usage_str[ui] == '[') && (usage_str[ui+1] == ' ')) {
+ 			optional_ui = ui;
+ 			break;
+ 		}
  
- static inline uint64_t lvt_enum_to_bit(int lvt_enum)
+-		if (usage[ui] == '\0')
++		if (usage_str[ui] == '\0')
+ 			break;
+ 
+-		if (usage[ui] == '(') {
++		if (usage_str[ui] == '(') {
+ 			buf[bi++] = '\n';
+ 			buf[bi++] = '\t';
+ 		}
+ 
+-		buf[bi++] = usage[ui];
++		buf[bi++] = usage_str[ui];
+ 
+-		if (usage[ui] == ')') {
++		if (usage_str[ui] == ')') {
+ 			buf[bi++] = '\n';
+ 			buf[bi++] = '\t';
+ 		}
+ 
+-		if (usage[ui] == ',') {
++		if (usage_str[ui] == ',') {
+ 			buf[bi++] = '\n';
+ 			buf[bi++] = '\t';
+ 			buf[bi++] = ' ';
+@@ -1368,25 +1368,25 @@ static void _print_usage(const char *usage, int only_required)
+ 	memset(buf, 0, sizeof(buf));
+ 	bi = 0;
+ 
+-	for (ui = optional_ui; ui < strlen(usage); ui++) {
++	for (ui = optional_ui; ui < strlen(usage_str); ui++) {
+ 
+ 		/* The second "[ " indicates the start of the optional pos_args. */
+-		if ((ui > optional_ui) && (usage[ui] == '[') && (usage[ui+1] == ' ')) {
++		if ((ui > optional_ui) && (usage_str[ui] == '[') && (usage_str[ui+1] == ' ')) {
+ 			optional_pos_ui = ui;
+ 			break;
+ 		}
+ 
+-		if (usage[ui] == '\0')
++		if (usage_str[ui] == '\0')
+ 			break;
+-		if (usage[ui] == '\n')
++		if (usage_str[ui] == '\n')
+ 			break;
+ 
+ 		if (!bi)
+ 			buf[bi++] = '\t';
+ 
+-		buf[bi++] = usage[ui];
++		buf[bi++] = usage_str[ui];
+ 
+-		if (usage[ui] == ',') {
++		if (usage_str[ui] == ',') {
+ 			buf[bi++] = '\n';
+ 			buf[bi++] = '\t';
+ 			buf[bi++] = ' ';
+@@ -1413,16 +1413,16 @@ static void _print_usage(const char *usage, int only_required)
+ 	memset(buf, 0, sizeof(buf));
+ 	bi = 0;
+ 
+-	for (ui = optional_pos_ui; ui < strlen(usage); ui++) {
+-		if (usage[ui] == '\0')
++	for (ui = optional_pos_ui; ui < strlen(usage_str); ui++) {
++		if (usage_str[ui] == '\0')
+ 			break;
+-		if (usage[ui] == '\n')
++		if (usage_str[ui] == '\n')
+ 			break;
+ 
+ 		if (!bi)
+ 			buf[bi++] = '\t';
+ 
+-		buf[bi++] = usage[ui];
++		buf[bi++] = usage_str[ui];
+ 
+ 		if (bi == (HELP_LINE_SIZE - 1))
+ 			break;
 
 
