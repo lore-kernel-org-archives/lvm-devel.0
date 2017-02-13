@@ -1,1126 +1,519 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 13 Feb 2017 18:10:01 +0000 (UTC)
-Subject: master - lvchange: make use of command definitions
-Message-ID: <20170213181001.7B95660EE0@fedorahosted.org>
+Date: Mon, 13 Feb 2017 18:10:03 +0000 (UTC)
+Subject: master - lvconvert: repair and replace: use command definitions
+Message-ID: <20170213181003.8AC2960EE0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=52c60b7e7bba400b2f8fb40f123ca90224c16d27
-Commit:        52c60b7e7bba400b2f8fb40f123ca90224c16d27
-Parent:        9c6c55c314199a9ba26fe1b864306b2ca8a8dbcd
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=35b9d4d6e9406396c90a75574f04a7018f3d6258
+Commit:        35b9d4d6e9406396c90a75574f04a7018f3d6258
+Parent:        52c60b7e7bba400b2f8fb40f123ca90224c16d27
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 16 16:05:47 2016 -0600
+AuthorDate:    Thu Nov 17 15:38:52 2016 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Feb 13 08:20:10 2017 -0600
 
-lvchange: make use of command definitions
+lvconvert: repair and replace: use command definitions
 
-Reorganize the lvchange code to take advantage of
-the command definition, and remove the validation
-that is done by the command definintion rules.
+This lifts the lvconvert --repair and --replace commands
+out of the monolithic lvconvert implementation.  The
+previous calls into repair/replace can no longer be
+reached and will be removed in a separate commit.
 ---
- tools/command-lines.in |   16 +-
- tools/lvchange.c       |  848 +++++++++++++++++++++++-------------------------
- tools/lvmcmdline.c     |    9 +
- tools/tools.h          |    9 +
- 4 files changed, 430 insertions(+), 452 deletions(-)
+ tools/command-lines.in |    2 +-
+ tools/lvconvert.c      |  337 +++++++++++++++++++++++++++++++++++++++++++++--
+ tools/lvmcmdline.c     |    6 +-
+ tools/tools.h          |    3 +
+ 4 files changed, 330 insertions(+), 18 deletions(-)
 
 diff --git a/tools/command-lines.in b/tools/command-lines.in
-index b54f851..c2995c2 100644
+index c2995c2..597ebc5 100644
 --- a/tools/command-lines.in
 +++ b/tools/command-lines.in
-@@ -239,8 +239,12 @@ OO_LVCHANGE_META: --addtag Tag, --deltag Tag,
- --minrecoveryrate SizeKB, --maxrecoveryrate SizeKB,
- --writebehind Number, --writemostly WriteMostlyPV, --persistent n
+@@ -547,7 +547,7 @@ DESC: Combine LV with a previously split snapshot LV.
+ # and the LV type is known.
  
-+# It's unfortunate that activate needs to be optionally allowed here;
-+# it should only be used explicitly, but it's been previously allowed
-+# in combination with unrelated metadata changes.
-+
- lvchange OO_LVCHANGE_META VG|LV|Tag|Select ...
--OO: OO_LVCHANGE
-+OO: --activate Active, OO_LVCHANGE
- ID: lvchange_properties
- DESC: Change a general LV property.
- RULE: all not lv_is_pvmove lv_is_mirror_log lv_is_mirror_image
-@@ -256,8 +260,11 @@ RULE: --permission not lv_is_external_origin lv_is_raid_metadata lv_is_raid_imag
- RULE: --alloc --contiguous --metadataprofile --permission --persistent --profile --readahead not lv_is_thick_origin
- RULE: --alloc --discards --zero --cachemode --cachepolicy --cachesettings not lv_is_partial
- 
-+# It's unfortunate that acativate needs to be optionally allowed here,
-+# like above, it was previouly allowed in combination.
-+
- lvchange --resync VG|LV_raid_mirror|Tag|Select ...
--OO: OO_LVCHANGE
-+OO: --activate Active, OO_LVCHANGE
- ID: lvchange_resync
- DESC: Resyncronize a mirror or raid LV.
- RULE: all not lv_is_pvmove lv_is_locked
-@@ -275,15 +282,14 @@ ID: lvchange_rebuild
- DESC: Reconstruct data on specific PVs of a raid LV.
- RULE: all not LV_raid0
- 
--# try removing the META change options from here?
- lvchange --activate Active VG|LV|Tag|Select ...
- OO: --activationmode ActivationMode, --partial, --ignoreactivationskip,
----ignorelockingfailure, --sysinit, OO_LVCHANGE_META, OO_LVCHANGE
-+--ignorelockingfailure, --sysinit, OO_LVCHANGE
- ID: lvchange_activate
- DESC: Activate or deactivate an LV.
- 
- lvchange --refresh VG|LV|Tag|Select ...
--OO: --partial, OO_LVCHANGE
-+OO: --partial, --poll Bool, OO_LVCHANGE
- ID: lvchange_refresh
- DESC: Reactivate an LV using the latest metadata.
- 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index d75a8ec..b75d058 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -25,12 +25,6 @@ static int _lvchange_permission(struct cmd_context *cmd,
- 
- 	lv_access = arg_uint_value(cmd, permission_ARG, 0);
- 
--	if (lv_is_external_origin(lv)) {
--		log_error("Cannot change permissions of external origin %s.",
--			  display_lvname(lv));
--		return 0;
--	}
--
- 	if (!(lv_access & LVM_WRITE) && !(lv->status & LVM_WRITE)) {
- 		/* Refresh if it's read-only in metadata but read-write in kernel */
- 		if (lv_info(cmd, lv, 0, &info, 0, 0) && info.exists && !info.read_only) {
-@@ -63,20 +57,6 @@ static int _lvchange_permission(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	/* Not allowed to change permissions on RAID sub-LVs directly */
--	if (lv_is_raid_metadata(lv) || lv_is_raid_image(lv)) {
--		log_error("Cannot change permissions of RAID %s %s.",
--			  lv_is_raid_image(lv) ? "image" : "metadata area",
--			  display_lvname(lv));
--		return 0;
--	}
--
--	if (!(lv_access & LVM_WRITE) && lv_is_thin_pool(lv)) {
--		log_error("Change permissions of thin pool %s not yet supported.",
--			  display_lvname(lv));
--		return 0;
--	}
--
- 	if (lv_access & LVM_WRITE) {
- 		lv->status |= LVM_WRITE;
- 		log_verbose("Setting logical volume %s read/write.",
-@@ -100,12 +80,6 @@ static int _lvchange_pool_update(struct cmd_context *cmd,
- 	unsigned val;
- 	thin_discards_t discards;
- 
--	if (!lv_is_thin_pool(lv)) {
--		log_error("Logical volume %s is not a thin pool.",
--			  display_lvname(lv));
--		return 0;
--	}
--
- 	if (arg_is_set(cmd, discards_ARG)) {
- 		discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_IGNORE);
- 		if (discards != first_seg(lv)->discards) {
-@@ -153,10 +127,6 @@ static int _lvchange_monitoring(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	/* do not monitor pvmove lv's */
--	if (lv_is_pvmove(lv))
--		return 1;
--
- 	if ((dmeventd_monitor_mode() != DMEVENTD_MONITOR_IGNORE) &&
- 	    !monitor_dev_for_events(cmd, lv, 0, dmeventd_monitor_mode()))
- 		return_0;
-@@ -280,20 +250,6 @@ static int attach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
- 	return 1;
- }
- 
--/*
-- * lvchange_refresh
-- * @cmd
-- * @lv
-- *
-- * Suspend and resume a logical volume.
-- */
--static int _lvchange_refresh(struct cmd_context *cmd, struct logical_volume *lv)
--{
--	log_verbose("Refreshing logical volume %s (if active).", display_lvname(lv));
--
--	return lv_refresh(cmd, lv);
--}
--
- static int _reactivate_lv(struct logical_volume *lv,
- 			  int active, int exclusive)
+ lvconvert --repair LV_raid_mirror_thinpool
+-OO: --usepolicies, OO_LVCONVERT
++OO: --usepolicies, --interval Number, OO_LVCONVERT
+ OP: PV ...
+ ID: lvconvert_repair_pvs_or_thinpool
+ DESC: Replace failed PVs in a raid or mirror LV.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 132d66d..79b1525 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1421,7 +1421,8 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
+ 				  struct lvconvert_params *lp,
+ 				  struct dm_list *operable_pvs,
+ 				  uint32_t new_mimage_count,
+-				  uint32_t new_log_count)
++				  uint32_t new_log_count,
++				  struct dm_list *pvh)
  {
-@@ -326,23 +282,6 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 	uint32_t region_size;
+ 	struct lv_segment *seg = first_seg(lv);
+@@ -1441,7 +1442,7 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
+ 						  vg_is_clustered(lv->vg));
  
- 	dm_list_init(&device_list);
+ 	if (!operable_pvs)
+-		operable_pvs = lp->pvh;
++		operable_pvs = pvh;
  
--	if (seg_is_any_raid0(seg) ||
--	    (!seg_is_mirror(seg) && !seg_is_raid(seg))) {
--		log_error("Unable to resync %s.  It is not RAID4/5/6/10 or mirrored.",
--			  display_lvname(lv));
--		return 0;
--	}
--
--	if (lv_is_pvmove(lv)) {
--		log_error("Unable to resync pvmove volume %s.", display_lvname(lv));
--		return 0;
--	}
--
--	if (lv_is_locked(lv)) {
--		log_error("Unable to resync locked volume %s.", display_lvname(lv));
--		return 0;
--	}
--
- 	if (lv_is_active_locally(lv)) {
- 		if (!lv_check_not_in_use(lv, 1)) {
- 			log_error("Can't resync open logical volume %s.",
-@@ -691,15 +630,6 @@ static int _lvchange_cache(struct cmd_context *cmd, struct logical_volume *lv)
- 
- 	if (lv_is_cache(lv))
- 		pool_seg = first_seg(pool_seg->pool_lv);
--        else if (!lv_is_cache_pool(lv)) {
--		log_error("LV %s is not a cache LV.", display_lvname(lv));
--		(void) arg_from_list_is_set(cmd, "is supported only with cache or cache pool LVs",
--					    cachemode_ARG,
--					    cachepolicy_ARG,
--					    cachesettings_ARG,
--					    -1);
--		goto out;
--	}
- 
- 	if (!get_cache_params(cmd, &mode, &name, &settings))
- 		goto_out;
-@@ -759,12 +689,6 @@ static int _lvchange_rebuild(struct logical_volume *lv)
- 	struct arg_value_group_list *group;
- 	struct volume_group *vg = lv->vg;
- 	struct cmd_context *cmd = vg->cmd;
--	struct lv_segment *raid_seg = first_seg(lv);
--
--	if (!seg_is_raid(raid_seg) || seg_is_any_raid0(raid_seg)) {
--		log_error("--rebuild can only be used with 'raid4/5/6/10' segment types.");
--		return 0;
--	}
- 
- 	if (!(pv_count = arg_count(cmd, rebuild_ARG))) {
- 		log_error("No --rebuild found!");
-@@ -815,12 +739,6 @@ static int _lvchange_writemostly(struct logical_volume *lv)
- 	struct cmd_context *cmd = lv->vg->cmd;
- 	struct lv_segment *raid_seg = first_seg(lv);
- 
--	if (!seg_is_raid1(raid_seg)) {
--		log_error("--write%s can only be used with 'raid1' segment type.",
--			  arg_is_set(cmd, writemostly_ARG) ? "mostly" : "behind");
--		return 0;
--	}
--
- 	if (arg_is_set(cmd, writebehind_ARG))
- 		raid_seg->writebehind = arg_uint_value(cmd, writebehind_ARG, 0);
- 
-@@ -909,12 +827,6 @@ static int _lvchange_recovery_rate(struct logical_volume *lv)
- 	struct cmd_context *cmd = lv->vg->cmd;
- 	struct lv_segment *raid_seg = first_seg(lv);
- 
--	if (!seg_is_raid(raid_seg)) {
--		log_error("Unable to change the recovery rate of non-RAID "
--			  "logical volume %s.", display_lvname(lv));
--		return 0;
--	}
--
- 	if (arg_is_set(cmd, minrecoveryrate_ARG))
- 		raid_seg->min_recovery_rate =
- 			arg_uint_value(cmd, minrecoveryrate_ARG, 0) / 2;
-@@ -982,114 +894,194 @@ static int _lvchange_activation_skip(struct logical_volume *lv)
- 	return 1;
- }
- 
-+/*
-+ * For each lvchange command definintion:
-+ *
-+ * lvchange_foo_cmd(cmd, argc, argv);
-+ * . set cmd fields that apply to "foo"
-+ * . set any other things that affect behavior of process_each
-+ * . process_each_lv(_lvchange_foo_single);
-+ *
-+ * _lvchange_foo_single(lv);
-+ * . _lvchange_foo(lv);
-+ * . (or all the code could live in the _single fn)
-+ */
- 
--static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
--			    struct processing_handle *handle __attribute__((unused)))
-+static int _lvchange_properties_single(struct cmd_context *cmd,
-+			               struct logical_volume *lv,
-+			               struct processing_handle *handle)
- {
- 	int doit = 0, docmds = 0;
--	struct logical_volume *origin;
--	char snaps_msg[128];
--
--	if (sigint_caught())
--		return_ECMD_FAILED;
-+	int i, opt_enum;
- 
--	if (!(lv->vg->status & LVM_WRITE) &&
--	    arg_from_list_is_set(cmd, NULL,
--				 alloc_ARG,
--				 contiguous_ARG,
--				 discards_ARG,
--				 metadataprofile_ARG,
--				 permission_ARG,
--				 persistent_ARG,
--				 profile_ARG,
--				 readahead_ARG,
--				 zero_ARG,
--				 -1)) {
--		log_error("Only -a permitted with read-only volume group %s.",
--			  lv->vg->name);
-+	/*
-+	 * If a persistent lv lock already exists from activation
-+	 * (with the needed mode or higher), this will be a no-op.
-+	 * Otherwise, the lv lock will be taken as non-persistent
-+	 * and released when this command exits.
-+	 */
-+	if (!lockd_lv(cmd, lv, "ex", 0)) {
-+		stack;
- 		return ECMD_FAILED;
- 	}
- 
--	if (lv_is_origin(lv) && !lv_is_thin_volume(lv) &&
--	    arg_from_list_is_set(cmd, NULL,
--				 alloc_ARG,
--				 contiguous_ARG,
--				 metadataprofile_ARG,
--				 permission_ARG,
--				 persistent_ARG,
--				 profile_ARG,
--				 readahead_ARG,
--				 -1)) {
--		log_error("Can't change logical volume %s under snapshot.",
--			  display_lvname(lv));
--		return ECMD_FAILED;
--	}
-+	for (i = 0; i < cmd->command->ro_count; i++) {
-+		opt_enum = cmd->command->required_opt_args[i].opt;
- 
--	if (lv_is_pvmove(lv)) {
--		log_error("Unable to change pvmove LV %s.", display_lvname(lv));
--		if (arg_is_set(cmd, activate_ARG))
--			log_error("Use 'pvmove --abort' to abandon a pvmove");
--		return ECMD_FAILED;
-+		if (!arg_is_set(cmd, opt_enum))
-+			continue;
-+
-+		if (!archive(lv->vg))
-+			return_ECMD_FAILED;
-+
-+		docmds++;
-+
-+		switch (opt_enum) {
-+		case permission_ARG:
-+			doit += _lvchange_permission(cmd, lv);
-+			break;
-+
-+		case alloc_ARG:
-+		case contiguous_ARG:
-+			doit += _lvchange_alloc(cmd, lv);
-+			break;
-+
-+		case errorwhenfull_ARG:
-+			doit += _lvchange_errorwhenfull(cmd, lv);
-+			break;
-+
-+		case readahead_ARG:
-+			doit += _lvchange_readahead(cmd, lv);
-+			break;
-+
-+		case persistent_ARG:
-+			doit += _lvchange_persistent(cmd, lv);
-+			break;
-+
-+		case discards_ARG:
-+		case zero_ARG:
-+			doit += _lvchange_pool_update(cmd, lv);
-+			break;
-+
-+		case addtag_ARG:
-+		case deltag_ARG:
-+			doit += _lvchange_tag(cmd, lv, opt_enum);
-+			break;
-+
-+		case writemostly_ARG:
-+		case writebehind_ARG:
-+			doit += _lvchange_writemostly(lv);
-+			break;
-+
-+		case minrecoveryrate_ARG:
-+		case maxrecoveryrate_ARG:
-+			doit += _lvchange_recovery_rate(lv);
-+			break;
-+
-+		case profile_ARG:
-+		case metadataprofile_ARG:
-+		case detachprofile_ARG:
-+			doit += _lvchange_profile(lv);
-+			break;
-+
-+		case setactivationskip_ARG:
-+			doit += _lvchange_activation_skip(lv);
-+			break;
-+
-+		case cachemode_ARG:
-+		case cachepolicy_ARG:
-+		case cachesettings_ARG:
-+			doit += _lvchange_cache(cmd, lv);
-+			break;
-+
-+		default:
-+			log_error(INTERNAL_ERROR "Failed to check for option %s",
-+				  arg_long_option_name(i));
-+		}
- 	}
- 
--	if (lv_is_mirror_log(lv)) {
--		log_error("Unable to change mirror log LV %s directly.",
--			  display_lvname(lv));
--		return ECMD_FAILED;
-+	if (doit)
-+		log_print_unless_silent("Logical volume %s changed.", display_lvname(lv));
-+
-+	if (doit != docmds)
-+		return_ECMD_FAILED;
-+
-+	return ECMD_PROCESSED;
-+}
-+
-+static int _lvchange_properties_check(struct cmd_context *cmd,
-+				     struct logical_volume *lv,
-+				     struct processing_handle *handle,
-+				     int lv_is_named_arg)
-+{
-+	if (!lv_is_visible(lv)) {
-+		if (lv_is_named_arg)
-+			log_error("Operation not permitted (%s %d) on hidden LV %s.",
-+				  cmd->command->command_line_id, cmd->command->command_line_enum,
-+				  display_lvname(lv));
-+		return 0;
- 	}
- 
--	if (lv_is_mirror_image(lv)) {
--		log_error("Unable to change mirror image LV %s directly.",
-+	if (vg_is_clustered(lv->vg) && lv_is_cache_origin(lv) && lv_is_raid(lv)) {
-+		log_error("Unable to change internal LV %s directly in a cluster.",
- 			  display_lvname(lv));
--		return ECMD_FAILED;
-+		return 0;
- 	}
- 
--	/* If LV is sparse, activate origin instead */
--	if (arg_is_set(cmd, activate_ARG) && lv_is_cow(lv) &&
--	    lv_is_virtual_origin(origin = origin_from_cow(lv)))
--		lv = origin;
-+	return 1;
-+}
- 
--	/* Use cache origin LV for 'raid' actions */
--	if (lv_is_cache(lv) &&
--	    arg_from_list_is_set(cmd, NULL,
--				 /* FIXME: we want to support more ops here */
--				 //resync_ARG,
--				 syncaction_ARG,
--				 -1)) {
--		lv = seg_lv(first_seg(lv), 0);
--		log_debug("Using cache origin volume %s for lvchange instead.",
--			  display_lvname(lv));
--	}
-+int lvchange_properties_cmd(struct cmd_context *cmd, int argc, char **argv)
-+{
-+	int ret;
- 
--	if ((lv_is_thin_pool_data(lv) || lv_is_thin_pool_metadata(lv) ||
--	     lv_is_cache_pool_data(lv) || lv_is_cache_pool_metadata(lv)) &&
--	    !arg_is_set(cmd, activate_ARG) &&
--	    !arg_is_set(cmd, permission_ARG) &&
--	    !arg_is_set(cmd, setactivationskip_ARG))
--	    /* Rest can be changed for stacked thin pool meta/data volumes */
--	    ;
--	else if (lv_is_cache_origin(lv) && lv_is_raid(lv)) {
--		if (vg_is_clustered(lv->vg)) {
--			log_error("Unable to change internal LV %s directly in a cluster.",
--				  display_lvname(lv));
--			return ECMD_FAILED;
--		}
--		/*
--		 * FIXME:  For now, we don't want to allow all kinds of
--		 * operations on this cache origin sub-LV.  We are going
--		 * to restrict it to non-clustered, RAID.  This way, we
--		 * can change the syncaction as needed (e.g. initiate
--		 * scrubbing).
--		 *
--		 * Later pass all 'cache' actions on cache origin.
--		 */
--	} else if (!lv_is_visible(lv) && !lv_is_virtual_origin(lv)) {
--		log_error("Unable to change internal LV %s directly.",
--			  display_lvname(lv));
--		return ECMD_FAILED;
-+	/*
-+	 * A command def rule allows only some options when LV is partial,
-+	 * so handles_missing_pvs will only affect those.
-+	 */
-+	cmd->handles_missing_pvs = 1;
-+	ret = process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
-+			      NULL, &_lvchange_properties_check, &_lvchange_properties_single);
-+
-+	if (ret != ECMD_PROCESSED)
-+		return ret;
-+
-+	/*
-+	 * Unfortunately, lvchange has previously allowed changing an LV
-+	 * property and changing LV activation in a single command.  This was
-+	 * not a good idea because the behavior/results are hard to predict and
-+	 * not possible to sensibly describe.  It's also unnecessary.  So, this
-+	 * is here for the sake of compatibility.
-+	 *
-+	 * This is extremely ugly; activation should always be done separately.
-+	 * This is not the full-featured lvchange capability, just the basic
-+	 * (the advanced activate options are not provided.)
-+	 *
-+	 * FIXME: wrap this in a config setting that we can disable by default
-+	 * to phase this out?
-+	 */
-+	if (arg_is_set(cmd, activate_ARG)) {
-+		log_warn("WARNING: Combining activation change with other commands is not advised.");
-+		ret = lvchange_activate_cmd(cmd, argc, argv);
- 	}
- 
--	if (lv_is_cow(lv) && arg_is_set(cmd, activate_ARG)) {
-+	return ret;
-+}
-+
-+static int _lvchange_activate_single(struct cmd_context *cmd,
-+				     struct logical_volume *lv,
-+				     struct processing_handle *handle)
-+{
-+	struct logical_volume *origin;
-+	char snaps_msg[128];
-+
-+	/* FIXME: untangle the proper logic for cow / sparse / virtual origin */
-+
-+	/* If LV is sparse, activate origin instead */
-+	if (lv_is_cow(lv) && lv_is_virtual_origin(origin = origin_from_cow(lv)))
-+		lv = origin;
-+
-+	if (lv_is_cow(lv)) {
- 		origin = origin_from_cow(lv);
- 		if (origin->origin_count < 2)
- 			snaps_msg[0] = '\0';
-@@ -1110,329 +1102,291 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		}
- 	}
- 
--	if (arg_is_set(cmd, errorwhenfull_ARG) && !lv_is_thin_pool(lv)) {
--		log_error("Option --errorwhenfull is only supported with thin pools.");
--		return ECMD_FAILED;
-+	/*
-+	 * If --sysinit -aay is used and at the same time lvmetad is used,
-+	 * we want to rely on autoactivation to take place. Also, we
-+	 * need to take special care here as lvmetad service does
-+	 * not neet to be running@this moment yet - it could be
-+	 * just too early during system initialization time.
-+	 */
-+	if (arg_is_set(cmd, sysinit_ARG) && (arg_uint_value(cmd, activate_ARG, 0) == CHANGE_AAY)) {
-+		if (lvmetad_used()) {
-+			log_warn("WARNING: lvmetad is active, skipping direct activation during sysinit.");
-+			return ECMD_PROCESSED;
-+		}
- 	}
- 
--	if (arg_is_set(cmd, persistent_ARG) && lv_is_pool(lv)) {
--		log_error("Persistent major and minor numbers are not supported with pools.");
--		return ECMD_FAILED;
--	}
-+	if (!_lvchange_activate(cmd, lv))
-+		return_ECMD_FAILED;
- 
--	if (!arg_is_set(cmd, activate_ARG) && !arg_is_set(cmd, refresh_ARG)) {
--		/*
--		 * If a persistent lv lock already exists from activation
--		 * (with the needed mode or higher), this will be a no-op.
--		 * Otherwise, the lv lock will be taken as non-persistent
--		 * and released when this command exits.
--		 *
--		 * FIXME: use "sh" if the options imply that the lvchange
--		 * operation does not modify the LV.
--		 */
--		if (!lockd_lv(cmd, lv, "ex", 0)) {
--			stack;
--			return ECMD_FAILED;
--		}
-+	return ECMD_PROCESSED;
-+}
-+
-+static int _lvchange_activate_check(struct cmd_context *cmd,
-+				     struct logical_volume *lv,
-+				     struct processing_handle *handle,
-+				     int lv_is_named_arg)
-+{
-+	if (!lv_is_visible(lv)) {
-+		if (lv_is_named_arg)
-+			log_error("Operation not permitted (%s %d) on hidden LV %s.",
-+				  cmd->command->command_line_id, cmd->command->command_line_enum,
-+				  display_lvname(lv));
-+		return 0;
- 	}
- 
-+	return 1;
-+}
-+
-+int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv)
-+{
-+	cmd->handles_missing_pvs = 1;
-+	cmd->lockd_vg_default_sh = 1;
-+
  	/*
--	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
--	 * If --poll is explicitly provided use it; otherwise polling
--	 * should only be started if the LV is not already active. So:
--	 * 1) change the activation code to say if the LV was actually activated
--	 * 2) make polling of an LV tightly coupled with LV activation
--	 *
--	 * Do not initiate any polling if --sysinit option is used.
-+	 * Include foreign VGs that contain active LVs.
-+	 * That shouldn't happen in general, but if it does by some
-+	 * mistake, then we want to allow those LVs to be deactivated.
- 	 */
--	init_background_polling(arg_is_set(cmd, sysinit_ARG) ? 0 :
--						arg_int_value(cmd, poll_ARG,
--						DEFAULT_BACKGROUND_POLLING));
-+	cmd->include_active_foreign_vgs = 1;
+ 	 * Up-convert from linear to mirror
+@@ -1450,7 +1451,7 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
+ 		/* FIXME Share code with lvcreate */
  
--	/* access permission change */
--	if (arg_is_set(cmd, permission_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_permission(cmd, lv);
--		docmds++;
--	}
-+	/* Allow deactivating if locks fail. */
-+	if (is_change_activating((activation_change_t)arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
-+		cmd->lockd_vg_enforce_sh = 1;
+ 		/*
+-		 * FIXME should we give not only lp->pvh, but also all PVs
++		 * FIXME should we give not only pvh, but also all PVs
+ 		 * currently taken by the mirror? Would make more sense from
+ 		 * user perspective.
+ 		 */
+@@ -1459,7 +1460,7 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
+ 				    lp->alloc, MIRROR_BY_LV))
+ 			return_0;
  
--	/* allocation policy change */
--	if (arg_is_set(cmd, contiguous_ARG) || arg_is_set(cmd, alloc_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_alloc(cmd, lv);
--		docmds++;
--	}
-+	return process_each_lv(cmd, argc, argv, NULL, NULL, 0,
-+			       NULL, &_lvchange_activate_check, &_lvchange_activate_single);
-+}
+-		if (lp->wait_completion)
++		if (!arg_is_set(cmd, background_ARG))
+ 			lp->need_polling = 1;
  
--	/* error when full change */
--	if (arg_is_set(cmd, errorwhenfull_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_errorwhenfull(cmd, lv);
--		docmds++;
--	}
-+static int _lvchange_refresh_single(struct cmd_context *cmd,
-+				    struct logical_volume *lv,
-+				    struct processing_handle *handle)
-+{
-+	log_verbose("Refreshing logical volume %s (if active).", display_lvname(lv));
+ 		goto out;
+@@ -1636,7 +1637,8 @@ int mirror_remove_missing(struct cmd_context *cmd,
+  */
+ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
+ 				     struct logical_volume *lv,
+-				     struct lvconvert_params *lp)
++				     struct lvconvert_params *lp,
++				     struct dm_list *pvh)
+ {
+ 	int failed_logs;
+ 	int failed_mimages;
+@@ -1647,7 +1649,6 @@ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
+ 	uint32_t original_mimages = lv_mirror_count(lv);
+ 	uint32_t original_logs = _get_log_count(lv);
  
--	/* read ahead sector change */
--	if (arg_is_set(cmd, readahead_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_readahead(cmd, lv);
--		docmds++;
--	}
-+	if (!lv_refresh(cmd, lv))
-+		return_ECMD_FAILED;
+-	cmd->handles_missing_pvs = 1;
+ 	cmd->partial_activation = 1;
+ 	lp->need_polling = 0;
  
--	/* persistent device number change */
--	if (arg_is_set(cmd, persistent_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_persistent(cmd, lv);
--		docmds++;
--	}
-+	/*
-+	 * FIXME: In some cases, the lv_refresh() starts polling without
-+	 * checking poll arg.  Pull that out of lv_refresh.
-+	 */
-+	if (arg_is_set(cmd, poll_ARG) &&
-+	    !_lvchange_background_polling(cmd, lv))
-+		return_ECMD_FAILED;
+@@ -1703,7 +1704,7 @@ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
+ 	while (replace_mimages || replace_logs) {
+ 		log_warn("Trying to up-convert to %d images, %d logs.", lp->mirrors, log_count);
+ 		if (_lvconvert_mirrors_aux(cmd, lv, lp, NULL,
+-					   lp->mirrors, log_count))
++					   lp->mirrors, log_count, pvh))
+ 			break;
+ 		if (lp->mirrors > 2)
+ 			--lp->mirrors;
+@@ -1823,10 +1824,10 @@ static int _lvconvert_mirrors(struct cmd_context *cmd,
+ 		return 1;
  
--	if (arg_is_set(cmd, discards_ARG) ||
--	    arg_is_set(cmd, zero_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_pool_update(cmd, lv);
--		docmds++;
--	}
-+	return ECMD_PROCESSED;
-+}
+ 	if (lp->repair)
+-		return _lvconvert_mirrors_repair(cmd, lv, lp);
++		return _lvconvert_mirrors_repair(cmd, lv, lp, lp->pvh);
  
--	/* add tag */
--	if (arg_is_set(cmd, addtag_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_tag(cmd, lv, addtag_ARG);
--		docmds++;
-+static int _lvchange_refresh_check(struct cmd_context *cmd,
-+				       struct logical_volume *lv,
-+				       struct processing_handle *handle,
-+				       int lv_is_named_arg)
-+{
-+	if (!lv_is_visible(lv)) {
-+		if (lv_is_named_arg)
-+			log_error("Operation not permitted (%s %d) on hidden LV %s.",
-+				  cmd->command->command_line_id, cmd->command->command_line_enum,
-+				  display_lvname(lv));
-+		return 0;
+ 	if (!_lvconvert_mirrors_aux(cmd, lv, lp, NULL,
+-				    new_mimage_count, new_log_count))
++				    new_mimage_count, new_log_count, lp->pvh))
+ 		return_0;
+ 
+ 	backup(lv->vg);
+@@ -2614,7 +2615,7 @@ out:
+ 
+ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
+ 				       struct logical_volume *pool_lv,
+-				       struct lvconvert_params *lp)
++				       struct dm_list *pvh, int poolmetadataspare)
+ {
+ 	const char *dmdir = dm_dir();
+ 	const char *thin_dump =
+@@ -2643,7 +2644,7 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
+ 	pmslv = pool_lv->vg->pool_metadata_spare_lv;
+ 
+ 	/* Check we have pool metadata spare LV */
+-	if (!handle_pool_metadata_spare(pool_lv->vg, 0, lp->pvh, 1))
++	if (!handle_pool_metadata_spare(pool_lv->vg, 0, pvh, 1))
+ 		return_0;
+ 
+ 	if (pmslv != pool_lv->vg->pool_metadata_spare_lv) {
+@@ -2768,8 +2769,7 @@ deactivate_pmslv:
  	}
  
--	/* del tag */
--	if (arg_is_set(cmd, deltag_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_tag(cmd, lv, deltag_ARG);
--		docmds++;
--	}
-+	return 1;
-+}
+ 	/* Try to allocate new pool metadata spare LV */
+-	if (!handle_pool_metadata_spare(pool_lv->vg, 0, lp->pvh,
+-					lp->poolmetadataspare))
++	if (!handle_pool_metadata_spare(pool_lv->vg, 0, pvh, poolmetadataspare))
+ 		stack;
  
--	/* rebuild selected PVs */
--	if (arg_is_set(cmd, rebuild_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_rebuild(lv);
--		docmds++;
--	}
-+int lvchange_refresh_cmd(struct cmd_context *cmd, int argc, char **argv)
-+{
-+	cmd->handles_missing_pvs = 1;
-+	cmd->lockd_vg_default_sh = 1;
+ 	if (dm_snprintf(meta_path, sizeof(meta_path), "%s_meta%%d", pool_lv->name) < 0) {
+@@ -3647,7 +3647,7 @@ static int _convert_thin_pool_uncache(struct cmd_context *cmd, struct logical_vo
+ static int _convert_thin_pool_repair(struct cmd_context *cmd, struct logical_volume *lv,
+ 				     struct lvconvert_params *lp)
+ {
+-	return _lvconvert_thin_pool_repair(cmd, lv, lp);
++	return _lvconvert_thin_pool_repair(cmd, lv, lp->pvh, lp->poolmetadataspare);
+ }
  
--	/* change writemostly/writebehind */
--	if (arg_is_set(cmd, writemostly_ARG) || arg_is_set(cmd, writebehind_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_writemostly(lv);
--		docmds++;
--	}
-+	return process_each_lv(cmd, argc, argv, NULL, NULL, 0,
-+			       NULL, &_lvchange_refresh_check, &_lvchange_refresh_single);
-+}
+ /*
+@@ -3881,7 +3881,7 @@ static int _convert_mirror_repair(struct cmd_context *cmd, struct logical_volume
+ 	struct dm_list *failed_pvs;
+ 	int ret;
  
--	/* change [min|max]_recovery_rate */
--	if (arg_is_set(cmd, minrecoveryrate_ARG) ||
--	    arg_is_set(cmd, maxrecoveryrate_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_recovery_rate(lv);
--		docmds++;
--	}
-+static int _lvchange_resync_single(struct cmd_context *cmd,
-+				    struct logical_volume *lv,
-+				    struct processing_handle *handle)
-+{
-+	if (!_lvchange_resync(cmd, lv))
-+		return_ECMD_FAILED;
+-	ret = _lvconvert_mirrors_repair(cmd, lv, lp);
++	ret = _lvconvert_mirrors_repair(cmd, lv, lp, lp->pvh);
  
--	/* change configuration profile */
--	if (arg_is_set(cmd, profile_ARG) || arg_is_set(cmd, metadataprofile_ARG) ||
--	    arg_is_set(cmd, detachprofile_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_profile(lv);
--		docmds++;
--	}
-+	return ECMD_PROCESSED;
-+}
+ 	if (ret && arg_is_set(cmd, usepolicies_ARG)) {
+ 		if ((failed_pvs = _failed_pv_list(lv->vg)))
+@@ -4866,3 +4866,310 @@ out:
  
--	if (arg_is_set(cmd, setactivationskip_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_activation_skip(lv);
--		docmds++;
-+static int _lvchange_resync_check(struct cmd_context *cmd,
-+				       struct logical_volume *lv,
-+				       struct processing_handle *handle,
-+				       int lv_is_named_arg)
-+{
-+	if (!lv_is_visible(lv)) {
-+		if (lv_is_named_arg)
-+			return 1;
-+		return 0;
- 	}
- 
--	if (arg_is_set(cmd, cachemode_ARG) ||
--	    arg_is_set(cmd, cachepolicy_ARG) || arg_is_set(cmd, cachesettings_ARG)) {
--		if (!archive(lv->vg))
--			return_ECMD_FAILED;
--		doit += _lvchange_cache(cmd, lv);
--		docmds++;
-+	return 1;
-+}
+ 	return ret;
+ }
 +
-+int lvchange_resync_cmd(struct cmd_context *cmd, int argc, char **argv)
++/*
++ * Below is code that has transitioned to using command defs.
++ * ----------------------------------------------------------
++ *
++ * This code does not use read_params (or any other param reading
++ * functions associated with it), or the lp struct.  Those have
++ * been primary vehicles for entangling all the lvconvert operations,
++ * so avoiding them is important for untangling.  They were also
++ * heavily used for trying to figure out what the lvconvert operation
++ * was meant to be doing, and that is no longer needed since the
++ * command def provides it.
++ *
++ * All input data is already available from cmd->arg_values and
++ * cmd->position_argv (the --option args in the former, the position
++ * args in the later.)  There is no need to copy these values into
++ * another redundant struct of input values which just obfuscates.
++ *
++ * The new lvconvert_result struct, passed via custom_handle, is
++ * used for *returning* data from processing, not for passing data
++ * into processing.
++ */
++
++
++/*
++ * Data/results accumulated during processing.
++ */
++struct lvconvert_result {
++	int need_polling;
++	struct dm_list poll_idls;
++};
++
++static int _lvconvert_repair_pvs_mirror(struct cmd_context *cmd, struct logical_volume *lv,
++			struct processing_handle *handle,
++			struct dm_list *use_pvh)
 +{
++	struct lvconvert_result *lr = (struct lvconvert_result *) handle->custom_handle;
++	struct lvconvert_params lp = { 0 };
++	struct convert_poll_id_list *idl;
++	struct lvinfo info;
 +	int ret;
 +
-+	ret = process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
-+			      NULL, &_lvchange_resync_check, &_lvchange_resync_single);
-+
-+	if (ret != ECMD_PROCESSED)
-+		return ret;
++	/*
++	 * FIXME: temporary use of lp because _lvconvert_mirrors_repair()
++	 * and _aux() still use lp fields everywhere.
++	 * Migrate them away from using lp (for the most part just use
++	 * local variables, and check arg_values directly).
++	 */
 +
 +	/*
-+	 * Unfortunately, lvchange has previously allowed resync and changing
-+	 * activation to be combined in one command.  activate should be
-+	 * done separately, but this is here to avoid breaking commands that
-+	 * used this.
-+	 *
-+	 * FIXME: wrap this in a config setting that we can disable by default
-+	 * to phase this out?
++	 * Fill in any lp fields here that this fn expects to be set before
++	 * it's called.  It's hard to tell what the old code expects in lp
++	 * for repair; it doesn't take the stripes option, but it seems to
++	 * expect lp.stripes to be set to 1.
 +	 */
-+	if (arg_is_set(cmd, activate_ARG)) {
-+		log_warn("WARNING: Combining activation change with other commands is not advised.");
-+		ret = lvchange_activate_cmd(cmd, argc, argv);
- 	}
- 
--	if (doit)
--		log_print_unless_silent("Logical volume %s changed.", display_lvname(lv));
++	lp.alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
++	lp.stripes = 1;
++
++	ret = _lvconvert_mirrors_repair(cmd, lv, &lp, use_pvh);
++
++	if (lp.need_polling) {
++		if (!lv_info(cmd, lv, 0, &info, 0, 0) || !info.exists)
++			log_print_unless_silent("Conversion starts after activation.");
++		else {
++			if (!(idl = _convert_poll_id_list_create(cmd, lv)))
++				return 0;
++			dm_list_add(&lr->poll_idls, &idl->list);
++		}
++		lr->need_polling = 1;
++	}
++
 +	return ret;
 +}
- 
--	if (arg_is_set(cmd, resync_ARG) &&
--	    !_lvchange_resync(cmd, lv))
-+static int _lvchange_syncaction_single(struct cmd_context *cmd,
-+				       struct logical_volume *lv,
-+				       struct processing_handle *handle)
++
++static void _lvconvert_repair_pvs_raid_ask(struct cmd_context *cmd, int *do_it)
 +{
-+	if (!lv_raid_message(lv, arg_str_value(cmd, syncaction_ARG, NULL)))
- 		return_ECMD_FAILED;
- 
--	if (arg_is_set(cmd, syncaction_ARG)) {
--		struct lv_segment *seg = first_seg(lv);
-+	return ECMD_PROCESSED;
++	const char *dev_policy;
++
++	*do_it = 1;
++
++	if (arg_is_set(cmd, usepolicies_ARG)) {
++		dev_policy = find_config_tree_str(cmd, activation_raid_fault_policy_CFG, NULL);
++
++		if (!strcmp(dev_policy, "allocate") ||
++		    !strcmp(dev_policy, "replace"))
++			return;
++
++		/* else if (!strcmp(dev_policy, "anything_else")) -- no replace */
++		*do_it = 0;
++		return;
++	}
++
++	if (!arg_count(cmd, yes_ARG) &&
++	    yes_no_prompt("Attempt to replace failed RAID images "
++			  "(requires full device resync)? [y/n]: ") == 'n') {
++		*do_it = 0;
++	}
 +}
- 
--		if (seg_is_any_raid0(seg)) {
--			log_error("Unable to sync raid0 LV %s.", display_lvname(lv));
--			return_ECMD_FAILED;
--		}
--		
--		if (!lv_raid_message(lv, arg_str_value(cmd, syncaction_ARG, NULL)))
--			return_ECMD_FAILED;
-+static int _lvchange_syncaction_check(struct cmd_context *cmd,
-+				       struct logical_volume *lv,
-+				       struct processing_handle *handle,
-+				       int lv_is_named_arg)
++
++static int _lvconvert_repair_pvs_raid(struct cmd_context *cmd, struct logical_volume *lv,
++			struct processing_handle *handle,
++			struct dm_list *use_pvh)
 +{
-+	if (!lv_is_visible(lv)) {
-+		if (lv_is_named_arg)
-+			return 1;
++	struct dm_list *failed_pvs;
++	int do_it;
++
++	if (!lv_is_active_exclusive_locally(lv_lock_holder(lv))) {
++		log_error("%s must be active %sto perform this operation.",
++			  display_lvname(lv),
++			  vg_is_clustered(lv->vg) ?
++			  "exclusive locally " : "");
 +		return 0;
- 	}
- 
--	/* activation change */
--	if (arg_is_set(cmd, activate_ARG)) {
--		if (!_lvchange_activate(cmd, lv))
--			return_ECMD_FAILED;
--	} else if (arg_is_set(cmd, refresh_ARG)) {
--		if (!_lvchange_refresh(cmd, lv))
--			return_ECMD_FAILED;
--	} else {
--		if (arg_is_set(cmd, monitor_ARG) &&
--		    !_lvchange_monitoring(cmd, lv))
--			return_ECMD_FAILED;
++	}
++
++	_lvconvert_repair_pvs_raid_ask(cmd, &do_it);
++
++	if (do_it) {
++		if (!(failed_pvs = _failed_pv_list(lv->vg)))
++			return_0;
++
++		if (!lv_raid_replace(lv, arg_count(cmd, force_ARG), failed_pvs, use_pvh)) {
++			log_error("Failed to replace faulty devices in %s.",
++				  display_lvname(lv));
++			return 0;
++		}
++
++		log_print_unless_silent("Faulty devices in %s successfully replaced.",
++					display_lvname(lv));
++		return 1;
++	}
++
++	/* "warn" if policy not set to replace */
++	if (arg_is_set(cmd, usepolicies_ARG))
++		log_warn("Use 'lvconvert --repair %s' to replace "
++			 "failed device.", display_lvname(lv));
 +	return 1;
 +}
- 
--		if (arg_is_set(cmd, poll_ARG) &&
--		    !_lvchange_background_polling(cmd, lv))
--			return_ECMD_FAILED;
--	}
-+int lvchange_syncaction_cmd(struct cmd_context *cmd, int argc, char **argv)
++
++static int _lvconvert_repair_pvs(struct cmd_context *cmd, struct logical_volume *lv,
++			struct processing_handle *handle)
 +{
-+	return process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
-+			       NULL, &_lvchange_syncaction_check, &_lvchange_syncaction_single);
++	struct dm_list *failed_pvs;
++	struct dm_list *use_pvh;
++	int ret;
++
++	if (cmd->position_argc > 1) {
++		/* First pos arg is required LV, remaining are optional PVs. */
++		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
++			return_ECMD_FAILED;
++	} else
++		use_pvh = &lv->vg->pvs;
++
++	if (lv_is_raid(lv))
++		ret = _lvconvert_repair_pvs_raid(cmd, lv, handle, use_pvh);
++	else if (lv_is_mirror(lv))
++		ret = _lvconvert_repair_pvs_mirror(cmd, lv, handle, use_pvh);
++	else
++		ret = 0;
++
++	if (ret && arg_is_set(cmd, usepolicies_ARG)) {
++		if ((failed_pvs = _failed_pv_list(lv->vg)))
++			_remove_missing_empty_pv(lv->vg, failed_pvs);
++	}
++
++	return ret ? ECMD_PROCESSED : ECMD_FAILED;
 +}
- 
--	if (doit != docmds)
-+static int _lvchange_rebuild_single(struct cmd_context *cmd,
-+				    struct logical_volume *lv,
-+				    struct processing_handle *handle)
++
++static int _lvconvert_repair_thinpool(struct cmd_context *cmd, struct logical_volume *lv,
++			struct processing_handle *handle)
 +{
-+	if (!_lvchange_rebuild(lv))
- 		return_ECMD_FAILED;
- 
- 	return ECMD_PROCESSED;
- }
- 
--int lvchange(struct cmd_context *cmd, int argc, char **argv)
-+static int _lvchange_rebuild_check(struct cmd_context *cmd,
-+				     struct logical_volume *lv,
-+				     struct processing_handle *handle,
-+				     int lv_is_named_arg)
- {
--	/*
--	 * Options that update metadata should be listed in one of
--	 * the two lists below (i.e. options other than -a, --refresh,
--	 * --monitor or --poll).
--	 */
--	int update_partial_safe = /* options safe to update if partial */
--		arg_from_list_is_set(cmd, NULL,
--				     addtag_ARG,
--				     contiguous_ARG,
--				     deltag_ARG,
--				     detachprofile_ARG,
--				     metadataprofile_ARG,
--				     permission_ARG,
--				     persistent_ARG,
--				     profile_ARG,
--				     readahead_ARG,
--				     setactivationskip_ARG,
--				     -1);
--	int update_partial_unsafe =
--		arg_from_list_is_set(cmd, NULL,
--				     alloc_ARG,
--				     cachemode_ARG,
--				     cachepolicy_ARG,
--				     cachesettings_ARG,
--				     discards_ARG,
--				     errorwhenfull_ARG,
--				     maxrecoveryrate_ARG,
--				     minrecoveryrate_ARG,
--				     rebuild_ARG,
--				     resync_ARG,
--				     syncaction_ARG,
--				     writebehind_ARG,
--				     writemostly_ARG,
--				     zero_ARG,
--				     -1);
--	int update = update_partial_safe || update_partial_unsafe;
--
--	if (!update &&
--	    !arg_is_set(cmd, activate_ARG) && !arg_is_set(cmd, refresh_ARG) &&
--	    !arg_is_set(cmd, monitor_ARG) && !arg_is_set(cmd, poll_ARG)) {
--		log_error("Need 1 or more of -a, -C, -M, -p, -r, -Z, "
--			  "--resync, --refresh, --alloc, --addtag, --deltag, "
--			  "--monitor, --poll or --discards");
--		return EINVALID_CMD_LINE;
-+	if (!lv_is_visible(lv)) {
-+		if (lv_is_named_arg)
-+			return 1;
-+		return 0;
- 	}
- 
--	if ((arg_is_set(cmd, profile_ARG) || arg_is_set(cmd, metadataprofile_ARG)) &&
--	     arg_is_set(cmd, detachprofile_ARG)) {
--		log_error("Only one of --metadataprofile and --detachprofile permitted.");
--		return EINVALID_CMD_LINE;
--	}
-+	return 1;
++	int poolmetadataspare = arg_int_value(cmd, poolmetadataspare_ARG, DEFAULT_POOL_METADATA_SPARE);
++	struct dm_list *use_pvh;
++	int ret;
++
++	if (cmd->position_argc > 1) {
++		/* First pos arg is required LV, remaining are optional PVs. */
++		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
++			return_ECMD_FAILED;
++	} else
++		use_pvh = &lv->vg->pvs;
++
++	ret = _lvconvert_thin_pool_repair(cmd, lv, use_pvh, poolmetadataspare);
++
++	return ret ? ECMD_PROCESSED : ECMD_FAILED;
 +}
- 
--	if (arg_is_set(cmd, activate_ARG) && arg_is_set(cmd, refresh_ARG)) {
--		log_error("Only one of -a and --refresh permitted.");
--		return EINVALID_CMD_LINE;
--	}
-+int lvchange_rebuild_cmd(struct cmd_context *cmd, int argc, char **argv)
++
++static int _lvconvert_repair_pvs_or_thinpool_single(struct cmd_context *cmd, struct logical_volume *lv,
++			struct processing_handle *handle)
 +{
-+	return process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
-+			       NULL, &_lvchange_rebuild_check, &_lvchange_rebuild_single);
-+}
- 
--	if ((arg_is_set(cmd, ignorelockingfailure_ARG) ||
--	     arg_is_set(cmd, sysinit_ARG)) && update) {
--		log_error("Only -a permitted with --ignorelockingfailure and --sysinit");
--		return EINVALID_CMD_LINE;
--	}
-+static int _lvchange_monitor_poll_single(struct cmd_context *cmd,
-+				         struct logical_volume *lv,
-+				         struct processing_handle *handle)
-+{
-+	if (arg_is_set(cmd, monitor_ARG) &&
-+	    !_lvchange_monitoring(cmd, lv))
++	if (lv_is_thin_pool(lv))
++		return _lvconvert_repair_thinpool(cmd, lv, handle);
++	else if (lv_is_raid(lv) || lv_is_mirror(lv))
++		return _lvconvert_repair_pvs(cmd, lv, handle);
++	else
 +		return_ECMD_FAILED;
- 
--	if (!update || !update_partial_unsafe)
--		cmd->handles_missing_pvs = 1;
-+	if (arg_is_set(cmd, poll_ARG) &&
-+	    !_lvchange_background_polling(cmd, lv))
-+		return_ECMD_FAILED;
- 
--	if (!argc && !arg_is_set(cmd, select_ARG)) {
--		log_error("Please give logical volume path(s) or use --select for selection.");
--		return EINVALID_CMD_LINE;
--	}
-+	return ECMD_PROCESSED;
 +}
- 
--	if ((arg_is_set(cmd, minor_ARG) || arg_is_set(cmd, major_ARG)) &&
--	    !arg_is_set(cmd, persistent_ARG)) {
--		log_error("--major and --minor require -My.");
--		return EINVALID_CMD_LINE;
-+static int _lvchange_monitor_poll_check(struct cmd_context *cmd,
-+				     struct logical_volume *lv,
-+				     struct processing_handle *handle,
-+				     int lv_is_named_arg)
++
++/*
++ * FIXME: add option --repair-pvs to call _lvconvert_repair_pvs() directly,
++ * and option --repair-thinpool to call _lvconvert_repair_thinpool().
++ */
++int lvconvert_repair_pvs_or_thinpool_cmd(struct cmd_context *cmd, int argc, char **argv)
 +{
-+	if (!lv_is_visible(lv)) {
-+		if (lv_is_named_arg)
-+			return 1;
-+		return 0;
- 	}
- 
--	if (arg_is_set(cmd, minor_ARG) && argc != 1) {
--		log_error("Only give one logical volume when specifying minor.");
--		return EINVALID_CMD_LINE;
--	}
-+	return 1;
-+}
- 
--	if (arg_is_set(cmd, contiguous_ARG) && arg_is_set(cmd, alloc_ARG)) {
--		log_error("Only one of --alloc and --contiguous permitted.");
--		return EINVALID_CMD_LINE;
--	}
-+int lvchange_monitor_poll_cmd(struct cmd_context *cmd, int argc, char **argv)
-+{
++	struct processing_handle *handle;
++	struct lvconvert_result lr = { 0 };
++	struct convert_poll_id_list *idl;
++	int saved_ignore_suspended_devices;
++	int ret, poll_ret;
++
++	dm_list_init(&lr.poll_idls);
++
++	if (!(handle = init_processing_handle(cmd, NULL))) {
++		log_error("Failed to initialize processing handle.");
++		return ECMD_FAILED;
++	}
++
++	handle->custom_handle = &lr;
++
++	saved_ignore_suspended_devices = ignore_suspended_devices();
++	init_ignore_suspended_devices(1);
++
 +	cmd->handles_missing_pvs = 1;
-+	return process_each_lv(cmd, argc, argv, NULL, NULL, 0,
-+			       NULL, &_lvchange_monitor_poll_check, &_lvchange_monitor_poll_single);
++
++	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
++			      handle, NULL, &_lvconvert_repair_pvs_or_thinpool_single);
++
++	init_ignore_suspended_devices(saved_ignore_suspended_devices);
++
++	if (lr.need_polling) {
++		dm_list_iterate_items(idl, &lr.poll_idls)
++			poll_ret = _lvconvert_poll_by_id(cmd, idl->id,
++						arg_is_set(cmd, background_ARG), 0, 0);
++		if (poll_ret > ret)
++			ret = poll_ret;
++	}
++
++	destroy_processing_handle(cmd, handle);
++
++	return ret;
 +}
- 
--	if (arg_is_set(cmd, poll_ARG) && arg_is_set(cmd, sysinit_ARG)) {
--		log_error("Only one of --poll and --sysinit permitted.");
--		return EINVALID_CMD_LINE;
--	}
-+static int _lvchange_persistent_single(struct cmd_context *cmd,
-+				       struct logical_volume *lv,
-+				       struct processing_handle *handle)
++
++static int _lvconvert_replace_pv_single(struct cmd_context *cmd, struct logical_volume *lv,
++			struct processing_handle *handle)
 +{
-+	if (!_lvchange_persistent(cmd, lv))
++	struct arg_value_group_list *group;
++	const char *tmp_str;
++	struct dm_list *use_pvh;
++	struct dm_list *replace_pvh;
++	char **replace_pvs;
++	int replace_pv_count;
++	int i;
++
++	if (cmd->position_argc > 1) {
++		/* First pos arg is required LV, remaining are optional PVs. */
++		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
++			return_ECMD_FAILED;
++	} else
++		use_pvh = &lv->vg->pvs;
++
++	if (!(replace_pv_count = arg_count(cmd, replace_ARG)))
 +		return_ECMD_FAILED;
- 
--	/*
--	 * If --sysinit -aay is used and at the same time lvmetad is used,
--	 * we want to rely on autoactivation to take place. Also, we
--	 * need to take special care here as lvmetad service does
--	 * not neet to be running at this moment yet - it could be
--	 * just too early during system initialization time.
--	 */
--	if (arg_is_set(cmd, sysinit_ARG) && (arg_uint_value(cmd, activate_ARG, 0) == CHANGE_AAY)) {
--		if (lvmetad_used()) {
--			log_warn("WARNING: lvmetad is active, skipping direct activation during sysinit.");
--			return ECMD_PROCESSED;
--		}
++
++	if (!(replace_pvs = dm_pool_alloc(cmd->mem, sizeof(char *) * replace_pv_count)))
++		return_ECMD_FAILED;
++
++	i = 0;
++	dm_list_iterate_items(group, &cmd->arg_value_groups) {
++		if (!grouped_arg_is_set(group->arg_values, replace_ARG))
++			continue;
++		if (!(tmp_str = grouped_arg_str_value(group->arg_values, replace_ARG, NULL))) {
++			log_error("Failed to get '--replace' argument");
++			return_ECMD_FAILED;
++		}
++		if (!(replace_pvs[i++] = dm_pool_strdup(cmd->mem, tmp_str)))
++			return_ECMD_FAILED;
++	}
++
++	if (!(replace_pvh = create_pv_list(cmd->mem, lv->vg, replace_pv_count, replace_pvs, 0)))
++		return_ECMD_FAILED;
++
++	if (!lv_raid_replace(lv, arg_count(cmd, force_ARG), replace_pvh, use_pvh))
++		return_ECMD_FAILED;
++
 +	return ECMD_PROCESSED;
 +}
 +
-+static int _lvchange_persistent_check(struct cmd_context *cmd,
-+				     struct logical_volume *lv,
-+				     struct processing_handle *handle,
-+				     int lv_is_named_arg)
++int lvconvert_replace_pv_cmd(struct cmd_context *cmd, int argc, char **argv)
 +{
-+	if (!lv_is_visible(lv)) {
-+		if (lv_is_named_arg)
-+			log_error("Operation not permitted (%s %d) on hidden LV %s.",
-+				  cmd->command->command_line_id, cmd->command->command_line_enum,
-+				  display_lvname(lv));
-+		return 0;
- 	}
- 
--	/*
--	 * Include foreign VGs that contain active LVs.
--	 * That shouldn't happen in general, but if it does by some
--	 * mistake, then we want to allow those LVs to be deactivated.
--	 */
--	if (arg_is_set(cmd, activate_ARG))
--		cmd->include_active_foreign_vgs = 1;
-+	return 1;
++	struct processing_handle *handle;
++	struct lvconvert_result lr = { 0 };
++	int ret;
++
++	if (!(handle = init_processing_handle(cmd, NULL))) {
++		log_error("Failed to initialize processing handle.");
++		return ECMD_FAILED;
++	}
++
++	handle->custom_handle = &lr;
++
++	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
++			      handle, NULL, &_lvconvert_replace_pv_single);
++
++	destroy_processing_handle(cmd, handle);
++
++	return ret;
 +}
- 
--	/*
--	 * The default vg lock mode for lvchange is ex, but these options
--	 * are cases where lvchange does not modify the vg, so they can use
--	 * the sh lock mode.
--	 */
--	if (arg_is_set(cmd, activate_ARG) || arg_is_set(cmd, refresh_ARG)) {
--		cmd->lockd_vg_default_sh = 1;
--		/* Allow deactivating if locks fail. */
--		if (is_change_activating((activation_change_t)arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
--			cmd->lockd_vg_enforce_sh = 1;
--	}
-+int lvchange_persistent_cmd(struct cmd_context *cmd, int argc, char **argv)
-+{
-+	cmd->handles_missing_pvs = 1;
-+	return process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
-+			       NULL, &_lvchange_persistent_check, &_lvchange_persistent_single);
-+}
- 
--	return process_each_lv(cmd, argc, argv, NULL, NULL,
--			       update ? READ_FOR_UPDATE : 0, NULL,
--			       NULL, &_lvchange_single);
-+int lvchange(struct cmd_context *cmd, int argc, char **argv)
-+{
-+	log_error(INTERNAL_ERROR "Missing function for command definition %s.",
-+		  cmd->command->command_line_id);
-+	return ECMD_FAILED;
- }
 +
 diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 231ef68..d1613e1 100644
+index d1613e1..866b2ae 100644
 --- a/tools/lvmcmdline.c
 +++ b/tools/lvmcmdline.c
-@@ -113,6 +113,15 @@ static struct cmdline_context _cmdline;
-  */
- struct command_function command_functions[COMMAND_ID_COUNT] = {
- 	{ lvmconfig_general_CMD, lvmconfig },
-+	{ lvchange_properties_CMD, lvchange_properties_cmd },
-+	{ lvchange_resync_CMD, lvchange_resync_cmd },
-+	{ lvchange_syncaction_CMD, lvchange_syncaction_cmd },
-+	{ lvchange_rebuild_CMD, lvchange_rebuild_cmd },
-+	{ lvchange_activate_CMD, lvchange_activate_cmd },
-+	{ lvchange_refresh_CMD, lvchange_refresh_cmd },
-+	{ lvchange_monitor_CMD, lvchange_monitor_poll_cmd },
-+	{ lvchange_poll_CMD, lvchange_monitor_poll_cmd },
-+	{ lvchange_persistent_CMD, lvchange_persistent_cmd },
+@@ -122,6 +122,10 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
+ 	{ lvchange_monitor_CMD, lvchange_monitor_poll_cmd },
+ 	{ lvchange_poll_CMD, lvchange_monitor_poll_cmd },
+ 	{ lvchange_persistent_CMD, lvchange_persistent_cmd },
++
++	/* lvconvert utilities related to snapshots and repair. */
++	{ lvconvert_repair_pvs_or_thinpool_CMD,	lvconvert_repair_pvs_or_thinpool_cmd },
++	{ lvconvert_replace_pv_CMD, lvconvert_replace_pv_cmd },
  };
  #if 0
  	/* all raid-related type conversions */
+@@ -147,8 +151,6 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
+ 
+ 	{ lvconvert_merge_CMD,				lvconvert_merge_fn },
+ 	{ lvconvert_combine_split_snapshot_CMD,		lvconvert_combine_split_snapshot_fn },
+-	{ lvconvert_repair_pvs_or_thinpool_CMD,		lvconvert_repair_pvs_or_thinpool_fn },
+-	{ lvconvert_replace_pv_CMD,			lvconvert_replace_pv_fn },
+ 	{ lvconvert_split_cow_snapshot_CMD,		lvconvert_split_cow_snapshot_fn },
+ 	{ lvconvert_poll_start_CMD,			lvconvert_poll_start_fn },
+ 
 diff --git a/tools/tools.h b/tools/tools.h
-index dbf8a17..c42119c 100644
+index c42119c..9be1233 100644
 --- a/tools/tools.h
 +++ b/tools/tools.h
-@@ -242,4 +242,13 @@ int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg
- struct lv_props *get_lv_prop(int lvp_enum);
- struct lv_types *get_lv_type(int lvt_enum);
+@@ -251,4 +251,7 @@ int lvchange_rebuild_cmd(struct cmd_context *cmd, int argc, char **argv);
+ int lvchange_monitor_poll_cmd(struct cmd_context *cmd, int argc, char **argv);
+ int lvchange_persistent_cmd(struct cmd_context *cmd, int argc, char **argv);
  
-+int lvchange_properties_cmd(struct cmd_context *cmd, int argc, char **argv);
-+int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv);
-+int lvchange_refresh_cmd(struct cmd_context *cmd, int argc, char **argv);
-+int lvchange_resync_cmd(struct cmd_context *cmd, int argc, char **argv);
-+int lvchange_syncaction_cmd(struct cmd_context *cmd, int argc, char **argv);
-+int lvchange_rebuild_cmd(struct cmd_context *cmd, int argc, char **argv);
-+int lvchange_monitor_poll_cmd(struct cmd_context *cmd, int argc, char **argv);
-+int lvchange_persistent_cmd(struct cmd_context *cmd, int argc, char **argv);
++int lvconvert_repair_pvs_or_thinpool_cmd(struct cmd_context *cmd, int argc, char **argv);
++int lvconvert_replace_pv_cmd(struct cmd_context *cmd, int argc, char **argv);
 +
  #endif
 
