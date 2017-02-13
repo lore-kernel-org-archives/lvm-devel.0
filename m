@@ -1,75 +1,97 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 13 Feb 2017 18:10:58 +0000 (UTC)
-Subject: master - lvconvert: remove code for changing region size
-Message-ID: <20170213181058.686CF60CD7@fedorahosted.org>
+Date: Mon, 13 Feb 2017 18:10:24 +0000 (UTC)
+Subject: master - args: use uint32 arg for maxphysicalvolumes
+Message-ID: <20170213181024.7AEFE6039D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a1386dcca024b51019c1f3be6b153249df06dbac
-Commit:        a1386dcca024b51019c1f3be6b153249df06dbac
-Parent:        46abc28a480069b3e8b2c5c7c3448ffa25ec17ba
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=db26a82f2f464d0f710229c24d67c83818fd8f3c
+Commit:        db26a82f2f464d0f710229c24d67c83818fd8f3c
+Parent:        041c2fef88ab2e546555625039a17ccbb7b1c9c5
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 7 15:01:30 2017 -0600
+AuthorDate:    Tue Jan 3 15:52:27 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 13 08:21:58 2017 -0600
+CommitterDate: Mon Feb 13 08:20:10 2017 -0600
 
-lvconvert: remove code for changing region size
+args: use uint32 arg for maxphysicalvolumes
 
-from the generic raid type conversion code.
 ---
- tools/lvconvert.c |   16 ++++------------
- 1 files changed, 4 insertions(+), 12 deletions(-)
+ tools/args.h            |    2 +-
+ tools/command-lines.in  |    6 +++---
+ tools/create-commands.c |    1 +
+ tools/vals.h            |    1 +
+ 4 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 4e86698..4d6b1c9 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1402,13 +1402,13 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
- 			return 1;
- 		}
- 		goto try_new_takeover_or_reshape;
--	} else if (!arg_is_set(cmd, regionsize_ARG) && (!*lp->type_str || seg->segtype == lp->segtype)) {
-+	} else if (!*lp->type_str || seg->segtype == lp->segtype) {
- 		log_error("Conversion operation not yet supported.");
- 		return 0;
- 	}
+diff --git a/tools/args.h b/tools/args.h
+index 559bf16..690b4ee 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -204,7 +204,7 @@ arg(novolumegroup_ARG, 'n', "novolumegroup", 0, 0, 0)
+ arg(oldpath_ARG, 'n', "oldpath", 0, 0, 0)
+ arg(options_ARG, 'o', "options", string_VAL, ARG_GROUPABLE, 0)
+ arg(sort_ARG, 'O', "sort", string_VAL, ARG_GROUPABLE, 0)
+-arg(maxphysicalvolumes_ARG, 'p', "maxphysicalvolumes", number_VAL, 0, 0)
++arg(maxphysicalvolumes_ARG, 'p', "maxphysicalvolumes", uint32_VAL, 0, 0)
+ arg(permission_ARG, 'p', "permission", permission_VAL, 0, 0)
+ arg(partial_ARG, 'P', "partial", 0, 0, 0)
+ arg(physicalvolume_ARG, 'P', "physicalvolume", 0, 0, 0)
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index ebe7006..f99cb8c 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -1335,7 +1335,7 @@ OO_VGCHANGE: --autobackup Bool, --ignoremonitoring, --ignoreskippedcluster,
+ # because it can function as a required opt.
  
- 	if ((seg_is_linear(seg) || seg_is_striped(seg) || seg_is_mirrored(seg) || lv_is_raid(lv)) &&
--	    ((lp->type_str && lp->type_str[0]) || arg_is_set(cmd, regionsize_ARG))) {
-+	    (lp->type_str && lp->type_str[0])) {
- 		/* Activation is required later which precludes existing supported raid0 segment */
- 		if ((seg_is_any_raid0(seg) || segtype_is_any_raid0(lp->segtype)) &&
- 		    !(lp->target_attr & RAID_FEATURE_RAID0)) {
-@@ -1430,12 +1430,8 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
- 		if (!arg_is_set(cmd, stripes_long_ARG))
- 			lp->stripes = 0;
+ OO_VGCHANGE_META: --addtag Tag, --deltag Tag,
+---logicalvolume Number, --maxphysicalvolumes Number, --alloc Alloc, --uuid,
++--logicalvolume Number, --maxphysicalvolumes Uint32, --alloc Alloc, --uuid,
+ --clustered Bool, --pvmetadatacopies MetadataCopiesPV, --vgmetadatacopies MetadataCopiesVG,
+ --physicalextentsize SizeMB, --resizeable Bool, --systemid String, --locktype LockType,
+ --profile String, --detachprofile, --metadataprofile String
+@@ -1402,7 +1402,7 @@ ID: vgconvert_general
  
--		/*
--		 * FIXME: arg_is_set() workaround for region size until the cli validation patches got merged;
--		 *	 i needs "--type raid*", because lp->region_size isn't set w/o it
--		 */
- 		if (!lv_raid_convert(lv, lp->segtype, lp->yes, lp->force, lp->stripes, lp->stripe_size_supplied, lp->stripe_size,
--				     arg_is_set(cmd, regionsize_ARG) ? lp->region_size : 0, lp->pvh))
-+				     lp->region_size, lp->pvh))
- 			return_0;
+ vgcreate VG_new PV ...
+ OO: --addtag Tag, --alloc Alloc, --autobackup Bool, --clustered Bool, --maxlogicalvolumes Number,
+---maxphysicalvolumes Number, --metadataprofile String, --metadatatype MetadataType,
++--maxphysicalvolumes Uint32, --metadataprofile String, --metadatatype MetadataType,
+ --physicalextentsize SizeMB, --force, --zero Bool, --labelsector Number,
+ --metadatasize SizeMB, --pvmetadatacopies MetadataCopiesPV, --vgmetadatacopies MetadataCopiesVG,
+ --reportformat ReportFmt, --dataalignment SizeKB, --dataalignmentoffset SizeKB,
+@@ -1535,7 +1535,7 @@ OO_VGSPLIT: --autobackup Bool
  
- 		log_print_unless_silent("Logical volume %s successfully converted.",
-@@ -1456,12 +1452,8 @@ try_new_takeover_or_reshape:
- 	if (lp->type_str && lp->type_str[0] && lp->segtype != seg->segtype &&
- 	    ((seg_is_raid4(seg) && seg_is_striped(lp) && lp->stripes > 1) ||
- 	     (seg_is_striped(seg) && seg->area_count > 1 && seg_is_raid4(lp)))) {
--		/*
--		 * FIXME: arg_is_set() workaround for region size until the cli validation patches got merged;
--		 *	 i needs "--type raid*", because lp->region_size isn't set w/o it
--		 */
- 		if (!lv_raid_convert(lv, lp->segtype, lp->yes, lp->force, lp->stripes, lp->stripe_size_supplied, lp->stripe_size,
--				     arg_is_set(cmd, regionsize_ARG) ? lp->region_size : 0, lp->pvh))
-+				     lp->region_size, lp->pvh))
- 			return_0;
+ # used only when the destination VG is new
+ OO_VGSPLIT_NEW: --alloc Alloc, --clustered Bool,
+---maxlogicalvolumes Number, --maxphysicalvolumes Number,
++--maxlogicalvolumes Number, --maxphysicalvolumes Uint32,
+ --metadatatype MetadataType, --vgmetadatacopies MetadataCopiesVG
  
- 		log_print_unless_silent("Logical volume %s successfully converted.",
+ vgsplit VG VG PV ...
+diff --git a/tools/create-commands.c b/tools/create-commands.c
+index 704ec47..d9f8218 100644
+--- a/tools/create-commands.c
++++ b/tools/create-commands.c
+@@ -34,6 +34,7 @@ int size_kb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ int size_mb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ int size_mb_arg_with_percent(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ int int_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
++int uint32_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ int int_arg_with_sign(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ int int_arg_with_sign_and_percent(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ int major_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+diff --git a/tools/vals.h b/tools/vals.h
+index c8c998f..12d315f 100644
+--- a/tools/vals.h
++++ b/tools/vals.h
+@@ -99,6 +99,7 @@ val(conststr_VAL, NULL, "ConstString", "ERR")  /* used only for command defs */
+ val(constnum_VAL, NULL, "ConstNumber", "ERR")  /* used only for command defs */
+ val(bool_VAL, yes_no_arg, "Bool", "y|n")
+ val(number_VAL, int_arg, "Number", NULL)
++val(uint32_VAL, uint32_arg, "Uint32", "Number")
+ val(string_VAL, string_arg, "String", NULL)
+ val(vg_VAL, string_arg, "VG", NULL)
+ val(lv_VAL, string_arg, "LV", NULL)
 
 
