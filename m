@@ -1,132 +1,170 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 13 Feb 2017 18:10:47 +0000 (UTC)
-Subject: master - lvconvert: remove unused code
-Message-ID: <20170213181047.C360E60EFC@fedorahosted.org>
+Date: Mon, 13 Feb 2017 18:10:45 +0000 (UTC)
+Subject: master - args: split is a synonym for splitcache
+Message-ID: <20170213181045.A3C60601DD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=942dc07402747d00946c5e80d890d535c0cbd125
-Commit:        942dc07402747d00946c5e80d890d535c0cbd125
-Parent:        f067c0ad78cc894a2d620c38af4d74b679d5c316
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f067c0ad78cc894a2d620c38af4d74b679d5c316
+Commit:        f067c0ad78cc894a2d620c38af4d74b679d5c316
+Parent:        c3e1838382122e254aaf9bda6159bc5e95303309
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 10 11:34:12 2017 -0600
+AuthorDate:    Thu Jan 19 13:47:24 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Feb 13 08:20:10 2017 -0600
 
-lvconvert: remove unused code
+args: split is a synonym for splitcache
 
-For "split" which is not an alias for splitmirrors.
+also tidy the other synonyms
 ---
- tools/lvconvert.c |   46 +++++++---------------------------------------
- 1 files changed, 7 insertions(+), 39 deletions(-)
+ tools/args.h           |   59 +++++++++++++++++++++--------------------------
+ tools/command-lines.in |    1 +
+ tools/lvmcmdline.c     |    4 +++
+ 3 files changed, 31 insertions(+), 33 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 1d7dc1b..2ccf264 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -24,7 +24,6 @@ typedef enum {
- 	 *   For a mirrored or raid LV, split mirror into two mirrors, optionally tracking
- 	 *     future changes to the main mirror to allow future recombination.
- 	 */
--	CONV_SPLIT = 1,
- 	CONV_SPLIT_MIRRORS = 2,
+diff --git a/tools/args.h b/tools/args.h
+index 8802cd7..1d7d6f7 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -133,9 +133,6 @@ arg(configreport_ARG, '\0', "configreport", configreport_VAL, ARG_GROUPABLE, 1,
+ arg(configtype_ARG, '\0', "typeconfig", configtype_VAL, 0, 0,
+     "See lvmreport(7).\n")
  
- 	/* Every other segment type or mirror log conversion we haven't separated out */
-@@ -33,7 +32,6 @@ typedef enum {
- 
- struct lvconvert_params {
- 	/* Exactly one of these 12 command categories is determined */
--	int split;		/* 1 */
- 	int keep_mimages;	/* 2 */	/* --splitmirrors */
- 	/* other */		/* 3 */
- 
-@@ -169,34 +167,21 @@ static int _read_params(struct cmd_context *cmd, struct lvconvert_params *lp)
- 		lp->mirrorlog = 1;
- 	}
- 
--	if (arg_is_set(cmd, split_ARG)) {
--		if (arg_outside_list_is_set(cmd, "cannot be used with --split",
--					    split_ARG,
--					    name_ARG,
--					    force_ARG, noudevsync_ARG, test_ARG,
--					    -1))
--			return_0;
--		lp->split = 1;
--		_set_conv_type(lp, CONV_SPLIT);
--	}
--	
- 	if (arg_is_set(cmd, trackchanges_ARG))
- 		lp->track_changes = 1;
- 
--	if (lp->split) {
--		if ((lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL))) {
--			if (!validate_restricted_lvname_param(cmd, &vg_name, &lp->lv_split_name))
--				return_0;
--		}
+-arg(corelog_ARG, '\0', "corelog", 0, 0, 0,
+-    "An alias for --mirrorlog core.\n")
 -
+ arg(dataalignment_ARG, '\0', "dataalignment", sizekb_VAL, 0, 0,
+     "Align the start of the data to a multiple of this number.\n"
+     "Also specify an appropriate Physical Extent size when creating a VG.\n"
+@@ -288,10 +285,6 @@ arg(mergedconfig_ARG, '\0', "mergedconfig", 0, 0, 0,
+     "cascade is displayed.\n"
+     "See lvm.conf(5) for more information about config.\n")
+ 
+-arg(metadatacopies_ARG, '\0', "metadatacopies", metadatacopies_VAL, 0, 0,
+-    "For commands starting with 'pv', this is an alias for --pvmetadatacopies.\n"
+-    "For commands starting with 'vg', this is an alias for --vgmetadatacopies.\n")
 -
- 	/*
- 	 * The '--splitmirrors n' argument is equivalent to '--mirrors -n'
- 	 * (note the minus sign), except that it signifies the additional
- 	 * intent to keep the mimage that is detached, rather than
- 	 * discarding it.
- 	 */
--	} else if (arg_is_set(cmd, splitmirrors_ARG)) {
-+	if (arg_is_set(cmd, splitmirrors_ARG)) {
-+		if ((lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL))) {
-+			if (!validate_restricted_lvname_param(cmd, &vg_name, &lp->lv_split_name))
-+				return_0;
-+		}
+ arg(metadataignore_ARG, '\0', "metadataignore", bool_VAL, 0, 0,
+     "Specifies the metadataignore property of a PV.\n"
+     "If yes, metadata areas on the PV are ignored, and lvm will\n"
+@@ -440,24 +433,6 @@ arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", pvmetadatacopies_VAL, 0, 0,
+     "This may be useful in VGs containing many PVs (this places limitations\n"
+     "on the ability to use vgsplit later.)\n")
+ 
+-arg(raidrebuild_ARG, '\0', "raidrebuild", pv_VAL, ARG_GROUPABLE, 0,
+-    "An alias for --rebuild.\n")
+-
+-arg(raidmaxrecoveryrate_ARG, '\0', "raidmaxrecoveryrate", sizekb_VAL, 0, 0,
+-    "An alias for --maxrecoveryrate.\n")
+-
+-arg(raidminrecoveryrate_ARG, '\0', "raidminrecoveryrate", sizekb_VAL, 0, 0,
+-    "An alias for --minrecoveryrate.\n")
+-
+-arg(raidsyncaction_ARG, '\0', "raidsyncaction", syncaction_VAL, 0, 0,
+-    "An alias for --syncaction.\n")
+-
+-arg(raidwritebehind_ARG, '\0', "raidwritebehind", number_VAL, 0, 0,
+-    "An alias for --writebehind.\n")
+-
+-arg(raidwritemostly_ARG, '\0', "raidwritemostly", writemostly_VAL, ARG_GROUPABLE, 0,
+-    "An alias for --writemostly.\n")
+-
+ arg(readonly_ARG, '\0', "readonly", 0, 0, 0,
+     "Run the command in a special read-only mode which will read on-disk\n"
+     "metadata without needing to take any locks. This can be used to peek\n"
+@@ -571,9 +546,6 @@ arg(sinceversion_ARG, '\0', "sinceversion", string_VAL, 0, 0,
+     "This option is currently applicable only with --type new\n"
+     "to display all configuration settings introduced since given version.\n")
+ 
+-/* Not used */
+-arg(split_ARG, '\0', "split", 0, 0, 0, NULL)
+-
+ arg(splitcache_ARG, '\0', "splitcache", 0, 0, 0,
+     "Separates a cache pool from a cache LV, and keeps the unused cache pool LV.\n"
+     "Before the separation, the cache is flushed. Also see --uncache.\n")
+@@ -732,9 +704,6 @@ arg(vgmetadatacopies_ARG, '\0', "vgmetadatacopies", vgmetadatacopies_VAL, 0, 0,
+     "\\fBall\\fP causes LVM to first clear the metadataignore flags on\n"
+     "all PVs, and then to become unmanaged.\n")
+ 
+-arg(virtualoriginsize_ARG, '\0', "virtualoriginsize", sizemb_VAL, 0, 0,
+-    "An alias for --virtualsize.\n")
+-
+ arg(withsummary_ARG, '\0', "withsummary", 0, 0, 0,
+     "Display a one line comment for each configuration node.\n")
+ 
+@@ -768,10 +737,34 @@ arg(writemostly_ARG, '\0', "writemostly", writemostly_VAL, ARG_GROUPABLE, 0,
+     "the suffix \\fB:t\\fP. Repeat this option to change the attribute on\n"
+     "multiple PVs.\n")
+ 
+-/* Allow some variations */
++/*
++ * Synonyms of other options.
++ *
++ * Only the standard option names are used in command definitions.
++ *
++ * If used on the command line, lvm automatically translates them
++ * to the standard option name.
++ *
++ * The generated help and man output does not include
++ * these variants.  The description of the standard option names
++ * can mention a synonym, or in some cases the man page generation
++ * recognizes some of these and prints the option name to include
++ * the variant, e.g. man page generation prints --[raid]writebehind.
++ */
++arg(corelog_ARG, '\0', "corelog", 0, 0, 0, NULL)
++arg(resizable_ARG, '\0', "resizable", bool_VAL, 0, 0, NULL)
+ arg(allocation_ARG, '\0', "allocation", bool_VAL, 0, 0, NULL)
+ arg(available_ARG, '\0', "available", activation_VAL, 0, 0, NULL)
+-arg(resizable_ARG, '\0', "resizable", bool_VAL, 0, 0, NULL)
++arg(raidrebuild_ARG, '\0', "raidrebuild", pv_VAL, ARG_GROUPABLE, 0, NULL)
++arg(raidsyncaction_ARG, '\0', "raidsyncaction", syncaction_VAL, 0, 0, NULL)
++arg(raidwritemostly_ARG, '\0', "raidwritemostly", writemostly_VAL, ARG_GROUPABLE, 0, NULL)
++arg(raidminrecoveryrate_ARG, '\0', "raidminrecoveryrate", sizekb_VAL, 0, 0, NULL)
++arg(raidmaxrecoveryrate_ARG, '\0', "raidmaxrecoveryrate", sizekb_VAL, 0, 0, NULL)
++arg(raidwritebehind_ARG, '\0', "raidwritebehind", number_VAL, 0, 0, NULL)
++arg(virtualoriginsize_ARG, '\0', "virtualoriginsize", sizemb_VAL, 0, 0, NULL)
++arg(split_ARG, '\0', "split", 0, 0, 0, NULL)
++arg(metadatacopies_ARG, '\0', "metadatacopies", metadatacopies_VAL, 0, 0, NULL)
 +
- 		if (_mirror_or_raid_type_requested(cmd, lp->type_str)) {
- 			log_error("--mirrors/--type mirror/--type raid* and --splitmirrors are "
- 				  "mutually exclusive.");
-@@ -217,20 +202,11 @@ static int _read_params(struct cmd_context *cmd, struct lvconvert_params *lp)
- 		_set_conv_type(lp, CONV_SPLIT_MIRRORS);
- 		lp->mirrors = arg_uint_value(cmd, splitmirrors_ARG, 0);
- 		lp->mirrors_sign = SIGN_MINUS;
--	} else {
--		if (lp->track_changes) {
--			log_error("--trackchanges is only valid with --splitmirrors.");
--			return 0;
--		}
--		if (arg_is_set(cmd, name_ARG)) {
--			log_error("The 'name' argument is only valid with --splitmirrors");
--			return 0;
--		}
- 	}
  
- 	/* If no other case was identified, then use of --stripes means --type striped */
- 	if (!arg_is_set(cmd, type_ARG) && !*lp->type_str &&
--	    !lp->split && !lp->mirrorlog && !lp->corelog &&
-+	    !lp->mirrorlog && !lp->corelog &&
- 	    (arg_is_set(cmd, stripes_long_ARG) || arg_is_set(cmd, stripesize_ARG)))
- 		lp->type_str = SEG_TYPE_NAME_STRIPED;
- 
-@@ -251,21 +227,13 @@ static int _read_params(struct cmd_context *cmd, struct lvconvert_params *lp)
- 
- 	lp->alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
- 
--	/* We should have caught all these cases already. */
--	if (lp->split + lp->keep_mimages > 1) {
--		log_error(INTERNAL_ERROR "Unexpected combination of incompatible options selected.");
--		return 0;
--	}
--
- 	/*
- 	 * Final checking of each case:
--	 *   lp->split
- 	 *   lp->keep_mimages
- 	 *   --type mirror|raid  lp->mirrorlog lp->corelog
- 	 *   --type raid0|striped
- 	 */
- 	switch(lp->conv_type) {
--	case CONV_SPLIT:
- 	case CONV_SPLIT_MIRRORS:
-                 break;
- 
+ /*
+  * ... and now the short args.
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 81c70ba..4cc51fe 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -106,6 +106,7 @@
+ # maxrecoveryrate (raidmaxrecoveryrate)
+ # writebehind (raidwritebehind)
+ # virtualsize (virtualoriginsize)
++# splitcache (split)
+ # vgmetadatacopies (metadatacopies)
+ # pvmetadatacopies (metadatacopies)
+ #
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index dda4b16..4039dd9 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -940,6 +940,8 @@ static int _opt_standard_to_synonym(const char *cmd_name, int opt)
+ 		return raidwritebehind_ARG;
+ 	case virtualsize_ARG:
+ 		return virtualoriginsize_ARG;
++	case splitcache_ARG:
++		return split_ARG;
+ 	case pvmetadatacopies_ARG:
+ 		if (!strncmp(cmd_name, "pv", 2))
+ 			return metadatacopies_ARG;
+@@ -977,6 +979,8 @@ static int _opt_synonym_to_standard(const char *cmd_name, int opt)
+ 		return writebehind_ARG;
+ 	case virtualoriginsize_ARG:
+ 		return virtualsize_ARG;
++	case split_ARG:
++		return splitcache_ARG;
+ 	case metadatacopies_ARG:
+ 		if (!strncmp(cmd_name, "pv", 2))
+ 			return pvmetadatacopies_ARG;
 
 
