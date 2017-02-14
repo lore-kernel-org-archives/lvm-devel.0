@@ -1,60 +1,123 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 14 Feb 2017 09:25:42 +0000 (UTC)
-Subject: master - makefiles: missing deps
-Message-ID: <20170214092542.0AF1C608FD@fedorahosted.org>
+Date: Tue, 14 Feb 2017 09:25:39 +0000 (UTC)
+Subject: master - makefiles: use configure vars
+Message-ID: <20170214092539.EC83F608FD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22457ed4d97e0fdb13b15b44facf21521e8a1549
-Commit:        22457ed4d97e0fdb13b15b44facf21521e8a1549
-Parent:        fc0e49297d6a6818b82169d1059084770c29b9d6
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc0e49297d6a6818b82169d1059084770c29b9d6
+Commit:        fc0e49297d6a6818b82169d1059084770c29b9d6
+Parent:        3350eb67cc66dcd2c6ee6456a3524bc723aa4e38
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 14 10:24:25 2017 +0100
+AuthorDate:    Tue Feb 14 09:48:24 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 14 10:24:56 2017 +0100
 
-makefiles: missing deps
+makefiles: use configure vars
 
+Use binaries found in configure.
 ---
- Makefile.in       |    1 +
- tools/Makefile.in |    3 +--
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ make.tmpl.in      |    9 +++++++--
+ test/Makefile.in  |    4 ++--
+ tools/Makefile.in |    9 ++-------
+ udev/Makefile.in  |    2 +-
+ 4 files changed, 12 insertions(+), 12 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index 52441f1..e0a30f3 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -59,6 +59,7 @@ liblvm: lib
- daemons: lib libdaemon tools
- tools: lib libdaemon device-mapper
- po: tools daemons
-+man: tools
- scripts: liblvm libdm
+diff --git a/make.tmpl.in b/make.tmpl.in
+index d418cfb..2e7c1ba 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -40,6 +40,11 @@ SED = @SED@
+ CFLOW_CMD = @CFLOW_CMD@
+ AWK = @AWK@
+ CHMOD = @CHMOD@
++EGREP = @EGREP@
++GREP = @GREP@
++SORT = @SORT@
++WC = @WC@
++
+ PYTHON2 = @PYTHON2@
+ PYTHON3 = @PYTHON3@
+ PYCOMPILE = $(top_srcdir)/autoconf/py-compile
+@@ -512,9 +517,9 @@ ifeq (,$(firstword $(EXPORTED_SYMBOLS)))
+ 		 ) > $@
+ else
+ 	set -e;\
+-	R=$$(sort $^ | uniq -u);\
++	R=$$($(SORT) $^ | uniq -u);\
+ 	test -z "$$R" || { echo "Mismatch between symbols in shared library and lists in .exported_symbols.* files: $$R"; false; } ;\
+-	( for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | sort -rnt_ -k5 ); do\
++	( for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | $(SORT) -rnt_ -k5 ); do\
+ 		echo "$${i##*.} {"; echo "	global:";\
+ 		$(SED) "s/^/		/;s/$$/;/" $$i;\
+ 		echo "};";\
+diff --git a/test/Makefile.in b/test/Makefile.in
+index f152868..3cb0f18 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -39,7 +39,7 @@ S ?= @ # never match anything by default
+ VERBOSE ?= 0
+ ALL := $(shell find -L $(srcdir) \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) | sort)
+ comma = ,
+-RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | sort)
++RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | ($SORT))
+ RUN_BASE = $(subst $(srcdir)/,,$(RUN))
  
- lib.device-mapper: include.device-mapper
+ ifeq ("@BUILD_LVMETAD@", "yes")
+@@ -267,7 +267,7 @@ lib/%: lib/%.o .lib-dir-stamp
+ 
+ lib/%: $(srcdir)/lib/%.sh .lib-dir-stamp
+ 	cp $< $@
+-	chmod +x $@
++	$(CHMOD) +x $@
+ 
+ lib/flavour-%: $(srcdir)/lib/flavour-%.sh .lib-dir-stamp
+ 	cp $< $@
 diff --git a/tools/Makefile.in b/tools/Makefile.in
-index ed359ea..9e1ccba 100644
+index 5aaba2f..ed359ea 100644
 --- a/tools/Makefile.in
 +++ b/tools/Makefile.in
-@@ -175,8 +175,6 @@ liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION): liblvm2cmd.$(LIB_SUFFIX)
- 	$(CC) -E -P $(srcdir)/cmdnames.h 2> /dev/null | \
- 		$(EGREP) -v '^ *(|#.*|config|devtypes|dumpconfig|formats|fullreport|help|lastlog|lvpoll|pvdata|segtypes|systemid|tags|version) *$$' > .commands
+@@ -173,15 +173,10 @@ liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION): liblvm2cmd.$(LIB_SUFFIX)
  
--.DELETE_ON_ERROR:
+ .commands: $(srcdir)/commands.h $(srcdir)/cmdnames.h Makefile
+ 	$(CC) -E -P $(srcdir)/cmdnames.h 2> /dev/null | \
+-		egrep -v '^ *(|#.*|config|devtypes|dumpconfig|formats|fullreport|help|lastlog|lvpoll|pvdata|segtypes|systemid|tags|version) *$$' > .commands
++		$(EGREP) -v '^ *(|#.*|config|devtypes|dumpconfig|formats|fullreport|help|lastlog|lvpoll|pvdata|segtypes|systemid|tags|version) *$$' > .commands
+ 
+ .DELETE_ON_ERROR:
+ 
+-# move properly to configure
+-WC = /usr/bin/wc
+-GREP = /bin/grep
+-SORT = /bin/sort
 -
  command-count.h: $(srcdir)/command-lines.in Makefile
  	set -o pipefail && \
  	( cat $(top_srcdir)/doc/license.txt && \
-@@ -204,6 +202,7 @@ command-lines-input.h: $(srcdir)/command-lines.in Makefile
+@@ -204,7 +199,7 @@ command-lines-input.h: $(srcdir)/command-lines.in Makefile
+ 	( cat $(top_srcdir)/doc/license.txt && \
+ 	  echo "/* Do not edit. This file is generated by the Makefile. */" && \
+ 	  echo -en "const char _command_input[] =\n\n\"" && \
+-	  $(GREP) -Ev '^#|\-\-\-|^$$' $(srcdir)/command-lines.in | $(AWK) 'BEGIN {ORS = "\\n\"\n\""} //' && \
++	  $(EGREP) -v '^#|\-\-\-|^$$' $(srcdir)/command-lines.in | $(AWK) 'BEGIN {ORS = "\\n\"\n\""} //' && \
+ 	  echo "\\n\";" \
  	) > $@
  
- $(SOURCES:%.c=%.d) $(SOURCES2:%.c=%.d): command-lines-input.h command-count.h cmds.h
-+$(SOURCES:%.c=%.o) $(SOURCES2:%.c=%.o): command-lines-input.h command-count.h cmds.h
+diff --git a/udev/Makefile.in b/udev/Makefile.in
+index cb968df..c498aa8 100644
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -23,7 +23,7 @@ ifeq ("@BUILD_LVMETAD@", "yes")
+ LVM_RULES+=69-dm-lvm-metad.rules
+ endif
  
- ifneq ("$(CFLOW_CMD)", "")
- CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES))
+-DM_DIR=$(shell grep "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | awk '{print $$3}')
++DM_DIR=$(shell $(GREP) "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | $(AWK) '{print $$3}')
+ 
+ ifeq ("@UDEV_RULE_EXEC_DETECTION@", "yes")
+ SBIN=\$$env{DM_SBIN_PATH}
 
 
