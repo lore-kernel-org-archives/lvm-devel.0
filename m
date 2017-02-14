@@ -1,242 +1,107 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 13 Feb 2017 23:06:10 +0000 (UTC)
-Subject: master - configure: update
-Message-ID: <20170213230610.01D3860D36@fedorahosted.org>
+Date: Tue, 14 Feb 2017 09:25:37 +0000 (UTC)
+Subject: master - libdm: move code for _stats_resize_group
+Message-ID: <20170214092537.C679560ED1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6118b0fb93502e1ba06e5a4a696a264c0e4af0ed
-Commit:        6118b0fb93502e1ba06e5a4a696a264c0e4af0ed
-Parent:        65b82a80720b137e24077c29f9c52d6ad43f93a5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3350eb67cc66dcd2c6ee6456a3524bc723aa4e38
+Commit:        3350eb67cc66dcd2c6ee6456a3524bc723aa4e38
+Parent:        6118b0fb93502e1ba06e5a4a696a264c0e4af0ed
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 13 22:55:30 2017 +0100
+AuthorDate:    Tue Feb 14 09:53:13 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 14 00:05:04 2017 +0100
+CommitterDate: Tue Feb 14 10:24:56 2017 +0100
 
-configure: update
+libdm: move code for _stats_resize_group
 
+Code is only needed when "fiemap.h" so keep it under single #ifdef.
 ---
- configure |  198 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 198 insertions(+), 0 deletions(-)
+ libdm/libdm-stats.c |   62 +++++++++++++++++++++++++-------------------------
+ 1 files changed, 31 insertions(+), 31 deletions(-)
 
-diff --git a/configure b/configure
-index 1cb4b54..9b69964 100755
---- a/configure
-+++ b/configure
-@@ -821,6 +821,8 @@ HAVE_PIE
- POW_LIB
- LIBOBJS
- ALLOCA
-+SORT
-+WC
- CHMOD
- CSCOPE_CMD
- CFLOW_CMD
-@@ -5234,6 +5236,202 @@ else
-   CHMOD="$ac_cv_path_CHMOD"
- fi
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 587c748..3f6730e 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -3868,37 +3868,6 @@ static int _extent_start_compare(const void *p1, const void *p2)
+ 	return 1;
+ }
  
-+if test -n "$ac_tool_prefix"; then
-+  # Extract the first word of "${ac_tool_prefix}wc", so it can be a program name with args.
-+set dummy ${ac_tool_prefix}wc; ac_word=$2
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-+$as_echo_n "checking for $ac_word... " >&6; }
-+if ${ac_cv_path_WC+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  case $WC in
-+  [\\/]* | ?:[\\/]*)
-+  ac_cv_path_WC="$WC" # Let the user override the test with a path.
-+  ;;
-+  *)
-+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-+for as_dir in $PATH
-+do
-+  IFS=$as_save_IFS
-+  test -z "$as_dir" && as_dir=.
-+    for ac_exec_ext in '' $ac_executable_extensions; do
-+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-+    ac_cv_path_WC="$as_dir/$ac_word$ac_exec_ext"
-+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-+    break 2
-+  fi
-+done
-+  done
-+IFS=$as_save_IFS
-+
-+  ;;
-+esac
-+fi
-+WC=$ac_cv_path_WC
-+if test -n "$WC"; then
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $WC" >&5
-+$as_echo "$WC" >&6; }
-+else
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
-+
-+
-+fi
-+if test -z "$ac_cv_path_WC"; then
-+  ac_pt_WC=$WC
-+  # Extract the first word of "wc", so it can be a program name with args.
-+set dummy wc; ac_word=$2
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-+$as_echo_n "checking for $ac_word... " >&6; }
-+if ${ac_cv_path_ac_pt_WC+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  case $ac_pt_WC in
-+  [\\/]* | ?:[\\/]*)
-+  ac_cv_path_ac_pt_WC="$ac_pt_WC" # Let the user override the test with a path.
-+  ;;
-+  *)
-+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-+for as_dir in $PATH
-+do
-+  IFS=$as_save_IFS
-+  test -z "$as_dir" && as_dir=.
-+    for ac_exec_ext in '' $ac_executable_extensions; do
-+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-+    ac_cv_path_ac_pt_WC="$as_dir/$ac_word$ac_exec_ext"
-+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-+    break 2
-+  fi
-+done
-+  done
-+IFS=$as_save_IFS
-+
-+  ;;
-+esac
-+fi
-+ac_pt_WC=$ac_cv_path_ac_pt_WC
-+if test -n "$ac_pt_WC"; then
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_WC" >&5
-+$as_echo "$ac_pt_WC" >&6; }
-+else
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
-+
-+  if test "x$ac_pt_WC" = x; then
-+    WC=""
-+  else
-+    case $cross_compiling:$ac_tool_warned in
-+yes:)
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
-+$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
-+ac_tool_warned=yes ;;
-+esac
-+    WC=$ac_pt_WC
-+  fi
-+else
-+  WC="$ac_cv_path_WC"
-+fi
-+
-+if test -n "$ac_tool_prefix"; then
-+  # Extract the first word of "${ac_tool_prefix}sort", so it can be a program name with args.
-+set dummy ${ac_tool_prefix}sort; ac_word=$2
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-+$as_echo_n "checking for $ac_word... " >&6; }
-+if ${ac_cv_path_SORT+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  case $SORT in
-+  [\\/]* | ?:[\\/]*)
-+  ac_cv_path_SORT="$SORT" # Let the user override the test with a path.
-+  ;;
-+  *)
-+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-+for as_dir in $PATH
-+do
-+  IFS=$as_save_IFS
-+  test -z "$as_dir" && as_dir=.
-+    for ac_exec_ext in '' $ac_executable_extensions; do
-+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-+    ac_cv_path_SORT="$as_dir/$ac_word$ac_exec_ext"
-+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-+    break 2
-+  fi
-+done
-+  done
-+IFS=$as_save_IFS
-+
-+  ;;
-+esac
-+fi
-+SORT=$ac_cv_path_SORT
-+if test -n "$SORT"; then
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $SORT" >&5
-+$as_echo "$SORT" >&6; }
-+else
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
-+
-+
-+fi
-+if test -z "$ac_cv_path_SORT"; then
-+  ac_pt_SORT=$SORT
-+  # Extract the first word of "sort", so it can be a program name with args.
-+set dummy sort; ac_word=$2
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-+$as_echo_n "checking for $ac_word... " >&6; }
-+if ${ac_cv_path_ac_pt_SORT+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  case $ac_pt_SORT in
-+  [\\/]* | ?:[\\/]*)
-+  ac_cv_path_ac_pt_SORT="$ac_pt_SORT" # Let the user override the test with a path.
-+  ;;
-+  *)
-+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-+for as_dir in $PATH
-+do
-+  IFS=$as_save_IFS
-+  test -z "$as_dir" && as_dir=.
-+    for ac_exec_ext in '' $ac_executable_extensions; do
-+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-+    ac_cv_path_ac_pt_SORT="$as_dir/$ac_word$ac_exec_ext"
-+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-+    break 2
-+  fi
-+done
-+  done
-+IFS=$as_save_IFS
-+
-+  ;;
-+esac
-+fi
-+ac_pt_SORT=$ac_cv_path_ac_pt_SORT
-+if test -n "$ac_pt_SORT"; then
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_SORT" >&5
-+$as_echo "$ac_pt_SORT" >&6; }
-+else
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
-+
-+  if test "x$ac_pt_SORT" = x; then
-+    SORT=""
-+  else
-+    case $cross_compiling:$ac_tool_warned in
-+yes:)
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
-+$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
-+ac_tool_warned=yes ;;
-+esac
-+    SORT=$ac_pt_SORT
-+  fi
-+else
-+  SORT="$ac_cv_path_SORT"
-+fi
-+
+-/*
+- * Resize the group bitmap corresponding to group_id so that it can
+- * contain at least num_regions members.
+- */
+-static int _stats_resize_group(struct dm_stats_group *group, int num_regions)
+-{
+-	int last_bit = dm_bit_get_last(group->regions);
+-	dm_bitset_t new, old;
+-
+-	if (last_bit >= num_regions) {
+-		log_error("Cannot resize group bitmap to %d with bit %d set.",
+-			  num_regions, last_bit);
+-		return 0;
+-	}
+-
+-	log_very_verbose("Resizing group bitmap from %d to %d (last_bit: %d).",
+-			 group->regions[0], num_regions, last_bit);
+-
+-	new = dm_bitset_create(NULL, num_regions);
+-	if (!new) {
+-		log_error("Could not allocate memory for new group bitmap.");
+-		return 0;
+-	}
+-
+-	old = group->regions;
+-	dm_bit_copy(new, old);
+-	group->regions = new;
+-	dm_bitset_destroy(old);
+-	return 1;
+-}
+-
+ static int _stats_create_group(struct dm_stats *dms, dm_bitset_t regions,
+ 			       const char *alias, uint64_t *group_id)
+ {
+@@ -4203,6 +4172,37 @@ int dm_stats_get_group_descriptor(const struct dm_stats *dms,
  
- ################################################################################
- ac_header_dirent=no
+ #ifdef HAVE_LINUX_FIEMAP_H
+ /*
++ * Resize the group bitmap corresponding to group_id so that it can
++ * contain at least num_regions members.
++ */
++static int _stats_resize_group(struct dm_stats_group *group, int num_regions)
++{
++	int last_bit = dm_bit_get_last(group->regions);
++	dm_bitset_t new, old;
++
++	if (last_bit >= num_regions) {
++		log_error("Cannot resize group bitmap to %d with bit %d set.",
++			  num_regions, last_bit);
++		return 0;
++	}
++
++	log_very_verbose("Resizing group bitmap from %d to %d (last_bit: %d).",
++			 group->regions[0], num_regions, last_bit);
++
++	new = dm_bitset_create(NULL, num_regions);
++	if (!new) {
++		log_error("Could not allocate memory for new group bitmap.");
++		return 0;
++	}
++
++	old = group->regions;
++	dm_bit_copy(new, old);
++	group->regions = new;
++	dm_bitset_destroy(old);
++	return 1;
++}
++
++/*
+  * Group a table of region_ids corresponding to the extents of a file.
+  */
+ static int _stats_group_file_regions(struct dm_stats *dms, uint64_t *region_ids,
 
 
