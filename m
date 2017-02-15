@@ -1,106 +1,53 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 14 Feb 2017 22:12:50 +0000 (UTC)
-Subject: master - Revert "lvconvert: enable previous syntax to swap metadata"
-Message-ID: <20170214221250.1209261122@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 15 Feb 2017 09:49:50 +0100
+Subject: master - man-generator: fix compiler warnings
+In-Reply-To: <20170214162911.2B370611BD@fedorahosted.org>
+References: <20170214162911.2B370611BD@fedorahosted.org>
+Message-ID: <89121305-c694-80d0-39a0-86d4e00c26f9@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7417c8acfa0e9274fbfcf3220630ac3b66e88fb4
-Commit:        7417c8acfa0e9274fbfcf3220630ac3b66e88fb4
-Parent:        d2c5bb5c7066142930c88275d2fb6c8552559c9a
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 14 16:02:54 2017 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Feb 14 16:02:54 2017 -0600
+Dne 14.2.2017 v 17:29 David Teigland napsal(a):
+> Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1236e0ed293d13bff1205dbd2ac31877278b7a90
+> Commit:        1236e0ed293d13bff1205dbd2ac31877278b7a90
+> Parent:        1dddb068c90d553957dd8668b76c3eb9734b2e95
+> Author:        David Teigland <teigland@redhat.com>
+> AuthorDate:    Tue Feb 14 10:28:52 2017 -0600
+> Committer:     David Teigland <teigland@redhat.com>
+> CommitterDate: Tue Feb 14 10:28:52 2017 -0600
+>
+> man-generator: fix compiler warnings
+>
+> ---
+>  tools/command.c |    7 +++----
+>  1 files changed, 3 insertions(+), 4 deletions(-)
+>
+> diff --git a/tools/command.c b/tools/command.c
+> index b655abe..aa33d5c 100644
+> --- a/tools/command.c
+> +++ b/tools/command.c
+> @@ -2181,7 +2181,7 @@ void print_man_usage(char *lvmname, struct command *cmd)
+>  void print_man_usage_common(struct command *cmd)
+>  {
+>  	struct command_name *cname;
+> -	int i, sep, ro, rp, oo, op, opt_enum;
+> +	int i, sep, rp, oo, op, opt_enum;
+>
+>  	if (!(cname = find_command_name(cmd->name)))
+>  		return;
+> @@ -2569,7 +2569,7 @@ static void include_description_file(char *name, char *des_file)
+>  	if (fd < 0)
+>  		return;
+>
+> -	read(fd, buf, sizeof(buf));
+> +	(void)read(fd, buf, sizeof(buf));
 
-Revert "lvconvert: enable previous syntax to swap metadata"
+I'd say this is not the best approach how to handle any read failure.
 
-This reverts commit 717363bb9427c02addeb22ef77396132cb30c782.
+Z.
 
-These alternate forms for swapping metadata cannot be
-distinguished from the command for creating a pool.
-If we were to add these alternate forms for swapping
-metadata, we would need to overload the pool creation
-command defs, making those definitions ambiguous.
----
- tools/command-lines.in |   14 --------------
- tools/lvconvert.c      |    2 ++
- tools/lvmcmdline.c     |    2 --
- tools/tools.h          |    1 -
- 4 files changed, 2 insertions(+), 17 deletions(-)
-
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index b6aa1d1..377e536 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -508,20 +508,6 @@ OO: --chunksize SizeKB, OO_LVCONVERT
- ID: lvconvert_swap_pool_metadata
- DESC: Swap metadata LV in a thin pool or cache pool (for repair only).
- 
--lvconvert --poolmetadata LV --thinpool LV_thinpool
--OO: --chunksize SizeKB, OO_LVCONVERT
--ID: lvconvert_swap_thinpool_metadata
--DESC: Swap metadata LV in a thin pool (for repair only).
--DESC: (variant, use --swapmetadata).
--FLAGS: SECONDARY_SYNTAX
--
--lvconvert --poolmetadata LV --cachepool LV_cachepool
--OO: --chunksize SizeKB, OO_LVCONVERT
--ID: lvconvert_swap_cachepool_metadata
--DESC: Swap metadata LV in a cache pool (for repair only).
--DESC: (variant, use --swapmetadata).
--FLAGS: SECONDARY_SYNTAX
--
- ---
- 
- # lvconvert --merge is an extremely ambiguous command.
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 3897602..502d614 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -4040,6 +4040,7 @@ int lvconvert_swap_pool_metadata_cmd(struct cmd_context *cmd, int argc, char **a
- 			       NULL, NULL, &_lvconvert_swap_pool_metadata_single);
- }
- 
-+#if 0
- int lvconvert_swap_pool_metadata_noarg_cmd(struct cmd_context *cmd, int argc, char **argv)
- {
- 	struct command *new_command;
-@@ -4071,6 +4072,7 @@ int lvconvert_swap_pool_metadata_noarg_cmd(struct cmd_context *cmd, int argc, ch
- 
- 	return lvconvert_swap_pool_metadata_cmd(cmd, argc, argv);
- }
-+#endif
- 
- static int _lvconvert_merge_thin_single(struct cmd_context *cmd,
- 					 struct logical_volume *lv,
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 65f80c8..02aaff2 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -141,8 +141,6 @@ struct command_function command_functions[CMD_COUNT] = {
- 	{ lvconvert_to_thin_with_external_CMD,		lvconvert_to_thin_with_external_cmd },
- 	{ lvconvert_to_cache_vol_CMD,			lvconvert_to_cache_vol_cmd },
- 	{ lvconvert_swap_pool_metadata_CMD,		lvconvert_swap_pool_metadata_cmd },
--	{ lvconvert_swap_thinpool_metadata_CMD,		lvconvert_swap_pool_metadata_noarg_cmd },
--	{ lvconvert_swap_cachepool_metadata_CMD,	lvconvert_swap_pool_metadata_noarg_cmd },
- 	{ lvconvert_merge_thin_CMD,			lvconvert_merge_thin_cmd },
- 	{ lvconvert_split_and_keep_cachepool_CMD,	lvconvert_split_cachepool_cmd },
- 	{ lvconvert_split_and_remove_cachepool_CMD,	lvconvert_split_cachepool_cmd },
-diff --git a/tools/tools.h b/tools/tools.h
-index 2f2a0fd..b3858a0 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -278,7 +278,6 @@ int lvconvert_to_pool_noarg_cmd(struct cmd_context *cmd, int argc, char **argv);
- int lvconvert_to_cache_vol_cmd(struct cmd_context *cmd, int argc, char **argv);
- int lvconvert_to_thin_with_external_cmd(struct cmd_context *cmd, int argc, char **argv);
- int lvconvert_swap_pool_metadata_cmd(struct cmd_context *cmd, int argc, char **argv);
--int lvconvert_swap_pool_metadata_noarg_cmd(struct cmd_context *cmd, int argc, char **argv);
- int lvconvert_merge_thin_cmd(struct cmd_context *cmd, int argc, char **argv);
- int lvconvert_split_cachepool_cmd(struct cmd_context *cmd, int argc, char **argv);
- 
 
 
