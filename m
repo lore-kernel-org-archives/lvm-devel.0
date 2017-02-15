@@ -1,137 +1,180 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 15 Feb 2017 21:31:14 +0000 (UTC)
-Subject: master - commands: use existing vg/lv name parsing functions
-Message-ID: <20170215213114.DD41760727@fedorahosted.org>
+Date: Wed, 15 Feb 2017 21:50:03 +0000 (UTC)
+Subject: master - commands: use dm wrappers for malloc/free
+Message-ID: <20170215215003.D9B5360E0E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6a5c9ba34902193ac9d03fe30976d259391905b3
-Commit:        6a5c9ba34902193ac9d03fe30976d259391905b3
-Parent:        2556498ee191cc9eaa505c611c5570937ff32315
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=81c0ed9fc6d598ef221e2089e1fd125990a7a626
+Commit:        81c0ed9fc6d598ef221e2089e1fd125990a7a626
+Parent:        6a5c9ba34902193ac9d03fe30976d259391905b3
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 15 15:06:52 2017 -0600
+AuthorDate:    Wed Feb 15 15:49:18 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Feb 15 15:28:54 2017 -0600
+CommitterDate: Wed Feb 15 15:49:18 2017 -0600
 
-commands: use existing vg/lv name parsing functions
+commands: use dm wrappers for malloc/free
 
-inside the new lv arg parsing function.
-
-This includes getting the VG name from the env var,
-and some added checks on the format of the vg/lv string.
 ---
- tools/toollib.c |   45 +++++++++++++++++++++++++++++----------------
- 1 files changed, 29 insertions(+), 16 deletions(-)
+ tools/command.c |   38 +++++++++++++++++++++-----------------
+ 1 files changed, 21 insertions(+), 17 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 6e0a4f1..842f67c 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3362,10 +3362,10 @@ static int _get_arg_lvnames(struct cmd_context *cmd,
-  * came up with its own inconsistent approach.
-  *
-  * In this case, when the position arg is a single name, it is treated as an LV
-- * name (not a VG name).  This leaves the VG unknown.  So, other option values
-- * must be searched for a VG name.  If one of those option values contains a
-- * vgname/lvname value, then the VG name is extracted and used for the LV
-- * position arg.
-+ * name (not a VG name).  This leaves the VG unknown.  So, other option values,
-+ * or env var, must be searched for a VG name.  If one of the option values
-+ * contains a vgname/lvname value, then the VG name is extracted and used for
-+ * the LV position arg.  Or, if the env var has the VG name, that is used.
-  *
-  * Other option values that are searched for a VG name are:
-  * --thinpool, --cachepool.
-@@ -3375,21 +3375,21 @@ static int _get_arg_lvnames(struct cmd_context *cmd,
-  *  . add vg/lv1 to arg_lvnames
-  *
-  *  command lv1
-- *  . error: no vg name
-+ *  . error: no vg name (unless LVM_VG_NAME)
-  *
-- *  command --option vg/lv1 vg/lv2
-+ *  command --option=vg/lv1 vg/lv2
-  *  . verify both vg names match
-  *  . add vg to arg_vgnames
-  *  . add vg/lv2 to arg_lvnames
-  *
-- *  command --option lv1 lv2
-- *  . error: no vg name
-+ *  command --option=lv1 lv2
-+ *  . error: no vg name (unless LVM_VG_NAME)
-  *
-- *  command --option vg/lv1 lv2
-+ *  command --option=vg/lv1 lv2
-  *  . add vg to arg_vgnames
-  *  . add vg/lv2 to arg_lvnames
-  *
-- *  command --option lv1 vg/lv2
-+ *  command --option=lv1 vg/lv2
-  *  . add vg to arg_vgnames
-  *  . add vg/lv2 to arg_lvnames
-  */
-@@ -3405,6 +3405,7 @@ static int _get_arg_lvnames_using_options(struct cmd_context *cmd,
- 	const char *pos_vgname = NULL;
- 	const char *opt_vgname = NULL;
- 	const char *pos_lvname = NULL;
-+	const char *env_vgname = NULL;
- 	const char *use_vgname = NULL;
- 	char *tmp_name;
- 	char *split;
-@@ -3440,9 +3441,12 @@ static int _get_arg_lvnames_using_options(struct cmd_context *cmd,
- 	}
+diff --git a/tools/command.c b/tools/command.c
+index aa33d5c..ac72c49 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -45,6 +45,10 @@ do { \
+ 	printf(fmt "\n", ##args); \
+ } while (0)
  
- 	if ((split = strchr(pos_name, '/'))) {
--		pos_vgname = pos_name;
--		pos_lvname = split + 1;
--		*split = '\0';
-+		/*
-+		 * This splits pos_name 'x/y' into pos_vgname 'x' and pos_lvname 'y'
-+		 * It skips repeated '/', e.g. x//y
-+		 * It also checks and fails for extra '/', e.g. x/y/z
-+		 */
-+		pos_vgname = _extract_vgname(cmd, pos_name, &pos_lvname);
- 	} else {
- 		pos_lvname = pos_name;
- 		pos_vgname = NULL;
-@@ -3453,7 +3457,9 @@ static int _get_arg_lvnames_using_options(struct cmd_context *cmd,
- 	else if (arg_is_set(cmd, cachepool_ARG))
- 		arg_name = arg_str_value(cmd, cachepool_ARG, NULL);
- 
--	if (!pos_vgname && !arg_name) {
-+	env_vgname = _default_vgname(cmd);
++#define dm_malloc malloc
++#define dm_free free
++#define dm_strdup strdup
 +
-+	if (!pos_vgname && !arg_name && !env_vgname) {
- 		log_error("Cannot find VG name for LV %s.", pos_lvname);
- 		return ECMD_FAILED;
- 	}
-@@ -3479,7 +3485,7 @@ static int _get_arg_lvnames_using_options(struct cmd_context *cmd,
- 		opt_vgname = NULL;
+ /* needed to include args.h */
+ #define ARG_COUNTABLE 0x00000001
+ #define ARG_GROUPABLE 0x00000002
+@@ -680,7 +684,7 @@ static void set_opt_def(struct command *cmd, char *str, struct arg_def *def)
+ 			def->num = (uint64_t)atoi(name);
+ 
+ 		if (val_enum == conststr_VAL)
+-			def->str = strdup(name);
++			def->str = dm_strdup(name);
+ 
+ 		if (val_enum == lv_VAL) {
+ 			if (strstr(name, "_"))
+@@ -714,7 +718,7 @@ static void add_oo_definition_line(const char *name, const char *line)
+ 	char *start;
+ 
+ 	oo = &oo_lines[oo_line_count++];
+-	oo->name = strdup(name);
++	oo->name = dm_strdup(name);
+ 
+ 	if ((colon = strstr(oo->name, ":")))
+ 		*colon = '\0';
+@@ -724,7 +728,7 @@ static void add_oo_definition_line(const char *name, const char *line)
  	}
  
--	if (!pos_vgname && !opt_vgname) {
-+	if (!pos_vgname && !opt_vgname && !env_vgname) {
- 		log_error("Cannot find VG name for LV %s.", pos_lvname);
- 		return ECMD_FAILED;
- 	}
-@@ -3490,7 +3496,14 @@ static int _get_arg_lvnames_using_options(struct cmd_context *cmd,
- 		return ECMD_FAILED; 
+ 	start = strstr(line, ":") + 2;
+-	oo->line = strdup(start);
++	oo->line = dm_strdup(start);
+ }
+ 
+ /* Support OO_FOO: continuing on multiple lines. */
+@@ -742,7 +746,7 @@ static void append_oo_definition_line(const char *new_line)
+ 
+ 	/* +2 = 1 space between old and new + 1 terminating \0 */
+ 	len = strlen(old_line) + strlen(new_line) + 2;
+-	line = malloc(len);
++	line = dm_malloc(len);
+ 	if (!line) {
+ 		log_error("Parsing command defs: no memory");
+ 		exit(EXIT_FAILURE);
+@@ -753,7 +757,7 @@ static void append_oo_definition_line(const char *new_line)
+ 	strcat(line, " ");
+ 	strcat(line, new_line);
+ 
+-	free(oo->line);
++	dm_free(oo->line);
+ 	oo->line = line;
+ }
+ 
+@@ -800,12 +804,12 @@ static void include_optional_opt_args(struct command *cmd, const char *str)
+ 		exit(EXIT_FAILURE);
  	}
  
--	use_vgname = pos_vgname ? pos_vgname : opt_vgname;
-+	if (pos_vgname)
-+		use_vgname = pos_vgname;
-+	else if (opt_vgname)
-+		use_vgname = opt_vgname;
-+	else if (env_vgname)
-+		use_vgname = env_vgname;
-+	else
-+		return_ECMD_FAILED; 
+-	if (!(line = strdup(oo_line)))
++	if (!(line = dm_strdup(oo_line)))
+ 		exit(EXIT_FAILURE);
  
- 	if (!str_list_add(cmd->mem, arg_vgnames, dm_pool_strdup(cmd->mem, use_vgname))) {
- 		log_error("strlist allocation failed.");
+ 	split_line(line, &line_argc, line_argv, ' ');
+ 	add_optional_opt_line(cmd, line_argc, line_argv);
+-	free(line);
++	dm_free(line);
+ }
+ 
+ /*
+@@ -1027,12 +1031,12 @@ static void include_required_opt_args(struct command *cmd, char *str)
+ 		exit(EXIT_FAILURE);
+ 	}
+ 
+-	if (!(line = strdup(oo_line)))
++	if (!(line = dm_strdup(oo_line)))
+ 		exit(EXIT_FAILURE);
+ 
+ 	split_line(line, &line_argc, line_argv, ' ');
+ 	add_required_opt_line(cmd, line_argc, line_argv);
+-	free(line);
++	dm_free(line);
+ }
+ 
+ /* Process what follows command_name, which are required opt/pos args. */
+@@ -1128,7 +1132,7 @@ static void add_rule(struct command *cmd, char *line)
+ 
+ 		else if (!strncmp(arg, "--", 2)) {
+ 			if (!rule->opts) {
+-				if (!(rule->opts = malloc(MAX_RULE_OPTS * sizeof(int)))) {
++				if (!(rule->opts = dm_malloc(MAX_RULE_OPTS * sizeof(int)))) {
+ 					log_error("Parsing command defs: no mem");
+ 					exit(EXIT_FAILURE);
+ 				}
+@@ -1136,7 +1140,7 @@ static void add_rule(struct command *cmd, char *line)
+ 			}
+ 
+ 			if (!rule->check_opts) {
+-				if (!(rule->check_opts = malloc(MAX_RULE_OPTS * sizeof(int)))) {
++				if (!(rule->check_opts = dm_malloc(MAX_RULE_OPTS * sizeof(int)))) {
+ 					log_error("Parsing command defs: no mem");
+ 					exit(EXIT_FAILURE);
+ 				}
+@@ -1343,7 +1347,7 @@ int define_commands(char *run_name)
+ 			cmd = &commands[cmd_count];
+ 			cmd->command_index = cmd_count;
+ 			cmd_count++;
+-			cmd->name = strdup(name);
++			cmd->name = dm_strdup(name);
+ 
+ 			if (run_name && strcmp(run_name, name)) {
+ 				skip = 1;
+@@ -1368,15 +1372,15 @@ int define_commands(char *run_name)
+ 		 */
+ 
+ 		if (is_desc_line(line_argv[0]) && !skip) {
+-			char *desc = strdup(line_orig);
++			char *desc = dm_strdup(line_orig);
+ 			if (cmd->desc) {
+ 				int newlen = strlen(cmd->desc) + strlen(desc) + 2;
+-				char *newdesc = malloc(newlen);
++				char *newdesc = dm_malloc(newlen);
+ 				if (newdesc) {
+ 					memset(newdesc, 0, newlen);
+ 					snprintf(newdesc, newlen, "%s %s", cmd->desc, desc);
+ 					cmd->desc = newdesc;
+-					free(desc);
++					dm_free(desc);
+ 				}
+ 			} else
+ 				cmd->desc = desc;
+@@ -1394,7 +1398,7 @@ int define_commands(char *run_name)
+ 		}
+ 
+ 		if (is_id_line(line_argv[0])) {
+-			cmd->command_id = strdup(line_argv[1]);
++			cmd->command_id = dm_strdup(line_argv[1]);
+ 			continue;
+ 		}
+ 
+@@ -1757,7 +1761,7 @@ static void print_val_man(const char *str)
+ 
+ 	if (strstr(str, "|")) {
+ 		int len = strlen(str);
+-		line = strdup(str);
++		line = dm_strdup(str);
+ 		split_line(line, &line_argc, line_argv, '|');
+ 		for (i = 0; i < line_argc; i++) {
+ 			if (i) {
 
 
