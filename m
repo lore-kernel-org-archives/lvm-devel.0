@@ -1,108 +1,82 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 15 Feb 2017 21:54:12 +0000 (UTC)
-Subject: master - help/man: remove commas from list of options
-Message-ID: <20170215215412.CE9BA60D22@fedorahosted.org>
+Date: Thu, 16 Feb 2017 15:38:10 +0000 (UTC)
+Subject: master - commands: avoid factoring options until needed
+Message-ID: <20170216153810.3E93360F99@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=22bee4fbdbf3cf52ac6a390b3c1ae983b5350760
-Commit:        22bee4fbdbf3cf52ac6a390b3c1ae983b5350760
-Parent:        81c0ed9fc6d598ef221e2089e1fd125990a7a626
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=15f51bc42113494bfb49fbc0d6a1913f68fb80a8
+Commit:        15f51bc42113494bfb49fbc0d6a1913f68fb80a8
+Parent:        22bee4fbdbf3cf52ac6a390b3c1ae983b5350760
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 15 14:00:09 2017 -0600
+AuthorDate:    Thu Feb 16 09:36:55 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Feb 15 15:51:46 2017 -0600
+CommitterDate: Thu Feb 16 09:37:28 2017 -0600
 
-help/man: remove commas from list of options
+commands: avoid factoring options until needed
 
-Using commas between options does not seem to
-be done anywhere else, so remove them.
 ---
- tools/command.c |   13 ++++---------
- 1 files changed, 4 insertions(+), 9 deletions(-)
+ tools/command.c |   21 +++++++++++++--------
+ 1 files changed, 13 insertions(+), 8 deletions(-)
 
 diff --git a/tools/command.c b/tools/command.c
-index ac72c49..9f2256b 100644
+index 9f2256b..6814a54 100644
 --- a/tools/command.c
 +++ b/tools/command.c
-@@ -1624,7 +1624,7 @@ void print_usage(struct command *cmd)
- 			if (first)
- 				printf("\n\t[");
- 			else
--				printf(",\n\t ");
-+				printf("\n\t ");
- 			first = 0;
+@@ -1197,6 +1197,10 @@ static void factor_common_options(void)
+ 		if (!command_names[cn].name)
+ 			break;
  
- 			printf(" %s", opt_names[opt_enum].long_opt);
-@@ -1637,7 +1637,7 @@ void print_usage(struct command *cmd)
- 		if (first)
- 			printf("\n\t[");
- 		else
--			printf(",\n\t ");
-+			printf("\n\t ");
- 		printf(" COMMON_OPTIONS ]");
- 	}
++		/* already factored */
++		if (command_names[cn].variants)
++			continue;
++
+ 		for (ci = 0; ci < COMMAND_COUNT; ci++) {
+ 			cmd = &commands[ci];
  
-@@ -1687,7 +1687,7 @@ void print_usage_common(struct command_name *cname, struct command *cmd)
- 		if (first)
- 			printf("\n\t[");
- 		else
--			printf(",\n\t ");
-+			printf("\n\t ");
- 		first = 0;
+@@ -1457,17 +1461,10 @@ int define_commands(char *run_name)
  
- 		for (oo = 0; oo < cmd->oo_count; oo++) {
-@@ -1712,7 +1712,7 @@ void print_usage_common(struct command_name *cname, struct command *cmd)
- 		if (first)
- 			printf("\n\t[");
- 		else
--			printf(",\n\t ");
-+			printf("\n\t ");
- 		first = 0;
+ 	/*
+ 	 * For usage.
+-	 * Looks@all variants of each command name and figures out
+-	 * which options are common to all variants (for compact output)
+-	 */
+-        factor_common_options();
+-
+-	/*
+-	 * For usage.
+ 	 * Predefined string of options common to all commands
+ 	 * (for compact output)
+ 	 */
+-        include_optional_opt_args(&lvm_all, "OO_USAGE_COMMON");
++	include_optional_opt_args(&lvm_all, "OO_USAGE_COMMON");
  
- 		printf(" %s", opt_names[opt_enum].long_opt);
-@@ -2081,7 +2081,6 @@ void print_man_usage(char *lvmname, struct command *cmd)
- 				continue;
+ 	return 1;
+ }
+@@ -1564,6 +1561,12 @@ void print_usage(struct command *cmd)
+ 	int onereq = (cmd->cmd_flags & CMD_FLAG_ONE_REQUIRED_OPT) ? 1 : 0;
+ 	int ro, rp, oo, op, opt_enum, first;
  
- 			if (sep) {
--				printf(",");
- 				printf("\n.br\n");
- 				printf(" ");
- 			}
-@@ -2112,7 +2111,6 @@ void print_man_usage(char *lvmname, struct command *cmd)
- 				continue;
++	/*
++	 * Looks at all variants of each command name and figures out
++	 * which options are common to all variants (for compact output)
++	 */
++	factor_common_options();
++
+ 	if (cmd->desc)
+ 		_print_usage_description(cmd);
  
- 			if (sep) {
--				printf(",");
- 				printf("\n.br\n");
- 				printf(" ");
- 			}
-@@ -2130,7 +2128,6 @@ void print_man_usage(char *lvmname, struct command *cmd)
- 		}
+@@ -2717,6 +2720,8 @@ int main(int argc, char *argv[])
  
- 		if (sep) {
--			printf(",");
- 			printf("\n.br\n");
- 			printf(" ");
- 			/* space alignment without short opt */
-@@ -2209,7 +2206,6 @@ void print_man_usage_common(struct command *cmd)
- 			continue;
+ 	define_commands(NULL);
  
- 		if (sep) {
--			printf(",");
- 			printf("\n.br\n");
- 			printf(" ");
- 		}
-@@ -2246,7 +2242,6 @@ void print_man_usage_common(struct command *cmd)
- 			continue;
++	factor_common_options();
++
+ 	print_man(argv[1], (argc > 2) ? argv[2] : NULL, 1, 1);
  
- 		if (sep) {
--			printf(",");
- 			printf("\n.br\n");
- 			printf(" ");
- 		}
+ 	return 0;
 
 
