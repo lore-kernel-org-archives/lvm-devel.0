@@ -1,100 +1,71 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 17 Feb 2017 12:25:31 +0000 (UTC)
-Subject: master - commands: cheap optimisation for parser
-Message-ID: <20170217122531.704C060DCC@fedorahosted.org>
+Date: Fri, 17 Feb 2017 12:25:33 +0000 (UTC)
+Subject: master - commands: use dm_strncpy
+Message-ID: <20170217122533.9F05760DCC@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=80b717af0c1c0602537a6e4d5fad76e09733f028
-Commit:        80b717af0c1c0602537a6e4d5fad76e09733f028
-Parent:        298b11aed1f1517329dc6e5ead661855b1abfb05
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=582a272b3f401e1bb6eafaa52d0ed1d318d04a9f
+Commit:        582a272b3f401e1bb6eafaa52d0ed1d318d04a9f
+Parent:        80b717af0c1c0602537a6e4d5fad76e09733f028
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Feb 17 11:52:37 2017 +0100
+AuthorDate:    Fri Feb 17 09:59:29 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Feb 17 13:00:05 2017 +0100
+CommitterDate: Fri Feb 17 13:11:33 2017 +0100
 
-commands: cheap optimisation for parser
+commands: use dm_strncpy
 
-Some low-hanging fruits to cut of signification number of strcmp calls.
+Easier code using dm_strncpy() an dm_snprintf().
 ---
- tools/command.c |   38 ++++++++++++++++++--------------------
- 1 files changed, 18 insertions(+), 20 deletions(-)
+ tools/command.c |   13 ++++---------
+ 1 files changed, 4 insertions(+), 9 deletions(-)
 
 diff --git a/tools/command.c b/tools/command.c
-index 5b31b4e..f1b9d8e 100644
+index f1b9d8e..e5a4640 100644
 --- a/tools/command.c
 +++ b/tools/command.c
-@@ -495,31 +495,32 @@ static struct command_name *find_command_name(const char *name)
+@@ -330,13 +330,13 @@ static char *split_line(char *buf, int *argc, char **argv, char sep)
+ 
+ static int val_str_to_num(char *str)
  {
+-	char name[32] = { 0 };
++	char name[32];
+ 	char *new;
  	int i;
  
-+	if (!islower(name[0]))
-+		return NULL; /* Commands starts with lower-case */
-+
- 	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
- 		if (!command_names[i].name)
- 			break;
- 		if (!strcmp(command_names[i].name, name))
- 			return &command_names[i];
+ 	/* compare the name before any suffix like _new or _<lvtype> */
+ 
+-	strncpy(name, str, 31);
++	dm_strncpy(name, str, sizeof(name));
+ 	if ((new = strstr(name, "_")))
+ 		*new = '\0';
+ 
+@@ -757,12 +757,8 @@ static void append_oo_definition_line(struct command *cmd, const char *new_line)
+ 		cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
+ 		return;
  	}
-+
- 	return NULL;
+-	memset(line, 0, len);
+-
+-	strcat(line, old_line);
+-	strcat(line, " ");
+-	strcat(line, new_line);
+ 
++	(void) dm_snprintf(line, len, "%s %s", old_line, new_line);
+ 	dm_free(oo->line);
+ 	oo->line = line;
  }
+@@ -778,8 +774,7 @@ static char *get_oo_line(const char *str)
+ 	char str2[OO_NAME_LEN];
+ 	int i;
  
- static const char *is_command_name(char *str)
- {
--	int i;
-+	const struct command_name *c;
-+
-+	if ((c = find_command_name(str)))
-+		return c->name;
- 
--	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
--		if (!command_names[i].name)
--			break;
--		if (!strcmp(command_names[i].name, str))
--			return command_names[i].name;
--	}
- 	return NULL;
- }
- 
- static int is_opt_name(char *str)
- {
--	if (!strncmp(str, "--", 2))
-+	if ((str[0] == '-') && (str[1] == '-'))
- 		return 1;
- 
- 	if ((str[0] == '-') && (str[1] != '-'))
-@@ -535,18 +536,15 @@ static int is_opt_name(char *str)
- 
- static int is_pos_name(char *str)
- {
--	if (!strncmp(str, "VG", 2))
--		return 1;
--	if (!strncmp(str, "LV", 2))
--		return 1;
--	if (!strncmp(str, "PV", 2))
--		return 1;
--	if (!strncmp(str, "Tag", 3))
--		return 1;
--	if (!strncmp(str, "String", 6))
--		return 1;
--	if (!strncmp(str, "Select", 6))
--		return 1;
-+	switch (str[0]) {
-+	case 'V': return (str[1] == 'G'); /* VG */
-+	case 'L': return (str[1] == 'V'); /* LV */
-+	case 'P': return (str[1] == 'V'); /* PV */
-+	case 'T': return (strncmp(str, "Tag", 3) == 0);
-+	case 'S': return ((strncmp(str, "String", 6) == 0) ||
-+			  (strncmp(str, "Select", 6) == 0));
-+	}
-+
- 	return 0;
- }
- 
+-	memset(str2, 0, sizeof(str2));
+-	strncpy(str2, str, OO_NAME_LEN-1);
++	dm_strncpy(str2, str, sizeof(str2));
+ 	if ((end = strstr(str2, ":")))
+ 		*end = '\0';
+ 	if ((end = strstr(str2, ",")))
 
 
