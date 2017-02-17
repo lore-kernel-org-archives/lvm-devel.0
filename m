@@ -1,91 +1,135 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 17 Feb 2017 21:34:15 +0000 (UTC)
-Subject: master - man: mention force behavior in various places
-Message-ID: <20170217213415.36AFF60E2D@fedorahosted.org>
+Date: Fri, 17 Feb 2017 21:34:17 +0000 (UTC)
+Subject: master - man pvmove: move details to notes
+Message-ID: <20170217213417.4B3F660E2D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6064b0359a7f3fbc07e56dd7094732ea184c199e
-Commit:        6064b0359a7f3fbc07e56dd7094732ea184c199e
-Parent:        50e0345f9d245cdcb29e4988760e788defa5e88e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=87fe9328d30660e2eecd990bfce893ae65817f44
+Commit:        87fe9328d30660e2eecd990bfce893ae65817f44
+Parent:        6064b0359a7f3fbc07e56dd7094732ea184c199e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 17 15:11:19 2017 -0600
+AuthorDate:    Fri Feb 17 15:28:00 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 17 15:11:19 2017 -0600
+CommitterDate: Fri Feb 17 15:28:00 2017 -0600
 
-man: mention force behavior in various places
+man pvmove: move details to notes
 
 ---
- man/lvremove.8.des     |    5 +++++
- man/pvcreate.8.des     |    3 +++
- man/pvremove.8.des     |    5 +++++
- man/vgcfgrestore.8.des |    3 +++
- man/vgremove.8.des     |    3 +++
- 5 files changed, 19 insertions(+), 0 deletions(-)
+ man/pvmove.8.des |   45 ---------------------------------------------
+ man/pvmove.8.end |   47 +++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 47 insertions(+), 45 deletions(-)
 
-diff --git a/man/lvremove.8.des b/man/lvremove.8.des
-index d049c63..14587c1 100644
---- a/man/lvremove.8.des
-+++ b/man/lvremove.8.des
-@@ -6,6 +6,11 @@ removal.  LVs cannot be deactivated or removed while they are open (e.g.
- if they contain a mounted filesystem). Removing an origin LV will also
- remove all dependent snapshots.
+diff --git a/man/pvmove.8.des b/man/pvmove.8.des
+index 5286ef4..c003c5e 100644
+--- a/man/pvmove.8.des
++++ b/man/pvmove.8.des
+@@ -14,48 +14,3 @@ More than one pvmove can run concurrently if they are moving data from
+ different source PVs, but additional pvmoves will ignore any LVs already
+ in the process of being changed, so some data might not get moved.
  
-+When a single force option is used, LVs are removed without confirmation,
-+and the command will try to deactivate unused LVs.
+-pvmove works as follows:
+-
+-1. A temporary 'pvmove' LV is created to store details of all the data
+-movements required.
+-
+-2. Every LV in the VG is searched for contiguous data that need moving
+-according to the command line arguments.
+-For each piece of data found, a new segment is added to the end of the
+-pvmove LV.
+-This segment takes the form of a temporary mirror to copy the data 
+-from the original location to a newly allocated location.
+-The original LV is updated to use the new temporary mirror segment
+-in the pvmove LV instead of accessing the data directly.
+-
+-3. The VG metadata is updated on disk.
+-
+-4. The first segment of the pvmove LV is activated and starts to mirror
+-the first part of the data.  Only one segment is mirrored at once as this
+-is usually more efficient.
+-
+-5. A daemon repeatedly checks progress at the specified time interval.
+-When it detects that the first temporary mirror is in sync, it breaks that
+-mirror so that only the new location for that data gets used and writes a
+-checkpoint into the VG metadata on disk.  Then it activates the mirror for
+-the next segment of the pvmove LV.
+-
+-6. When there are no more segments left to be mirrored, the temporary LV
+-is removed and the VG metadata is updated so that the LVs reflect the new
+-data locations.
+-
+-Note that this new process cannot support the original LVM1
+-type of on-disk metadata.  Metadata can be converted using
+-\fBvgconvert\fP(8).
+-
+-If the \fB\-\-atomic\fP option is used, a slightly different approach is
+-used for the move.  Again, a temporary 'pvmove' LV is created to store the
+-details of all the data movements required.  This temporary LV contains
+-all the segments of the various LVs that need to be moved.  However, in
+-this case, an identical LV is allocated that contains the same number of
+-segments and a mirror is created to copy the contents from the first
+-temporary LV to the second.  After a complete copy is made, the temporary
+-LVs are removed, leaving behind the segments on the destination PV.  If an
+-abort is issued during the move, all LVs being moved will remain on the
+-source PV.
+-
+diff --git a/man/pvmove.8.end b/man/pvmove.8.end
+index 9dd3adc..906606d 100644
+--- a/man/pvmove.8.end
++++ b/man/pvmove.8.end
+@@ -1,3 +1,50 @@
++.SH NOTES
 +
-+To remove damaged LVs, two force options may be required (\fB-ff\fP).
++pvmove works as follows:
 +
- \fBHistorical LVs\fP
++1. A temporary 'pvmove' LV is created to store details of all the data
++movements required.
++
++2. Every LV in the VG is searched for contiguous data that need moving
++according to the command line arguments.
++For each piece of data found, a new segment is added to the end of the
++pvmove LV.
++This segment takes the form of a temporary mirror to copy the data
++from the original location to a newly allocated location.
++The original LV is updated to use the new temporary mirror segment
++in the pvmove LV instead of accessing the data directly.
++
++3. The VG metadata is updated on disk.
++
++4. The first segment of the pvmove LV is activated and starts to mirror
++the first part of the data.  Only one segment is mirrored at once as this
++is usually more efficient.
++
++5. A daemon repeatedly checks progress at the specified time interval.
++When it detects that the first temporary mirror is in sync, it breaks that
++mirror so that only the new location for that data gets used and writes a
++checkpoint into the VG metadata on disk.  Then it activates the mirror for
++the next segment of the pvmove LV.
++
++6. When there are no more segments left to be mirrored, the temporary LV
++is removed and the VG metadata is updated so that the LVs reflect the new
++data locations.
++
++Note that this new process cannot support the original LVM1
++type of on-disk metadata.  Metadata can be converted using
++\fBvgconvert\fP(8).
++
++If the \fB\-\-atomic\fP option is used, a slightly different approach is
++used for the move.  Again, a temporary 'pvmove' LV is created to store the
++details of all the data movements required.  This temporary LV contains
++all the segments of the various LVs that need to be moved.  However, in
++this case, an identical LV is allocated that contains the same number of
++segments and a mirror is created to copy the contents from the first
++temporary LV to the second.  After a complete copy is made, the temporary
++LVs are removed, leaving behind the segments on the destination PV.  If an
++abort is issued during the move, all LVs being moved will remain on the
++source PV.
++
+ .SH EXAMPLES
  
- If the configuration setting \fBmetadata/record_lvs_history\fP is enabled
-diff --git a/man/pvcreate.8.des b/man/pvcreate.8.des
-index 3dfddbc..1b00e9e 100644
---- a/man/pvcreate.8.des
-+++ b/man/pvcreate.8.des
-@@ -16,3 +16,6 @@ data on that disk. This can be done by zeroing the first sector with:
- Use \fBvgcreate\fP(8) to create a new VG on the PV, or \fBvgextend\fP(8)
- to add the PV to existing VG.
- 
-+The force option will create a PV without confirmation.  Repeating the
-+force option (\fB-ff\fP) will forcibly create a PV, overriding checks that
-+normally prevent it, e.g. if the PV is already in a VG.
-diff --git a/man/pvremove.8.des b/man/pvremove.8.des
-index f12b76e..cc84148 100644
---- a/man/pvremove.8.des
-+++ b/man/pvremove.8.des
-@@ -1,2 +1,7 @@
- pvremove wipes the label on a device so that LVM will no longer recognise
- it as a PV.
-+
-+A PV cannot be removed from a VG while it is used by an active LV.
-+
-+Repeat the force option (\fB-ff\fP) to forcibly remove a PV belonging to
-+an existing VG. Normally, \fBvgreduce\fP(8) should be used instead.
-diff --git a/man/vgcfgrestore.8.des b/man/vgcfgrestore.8.des
-index cb7867d..ee3a99e 100644
---- a/man/vgcfgrestore.8.des
-+++ b/man/vgcfgrestore.8.des
-@@ -6,3 +6,6 @@ A back up file can be specified with \fB\-\-file\fP.  If no backup file is
- specified, the most recent one is used. Use \fB\-\-list\fP for a list of
- the available back up and archive files of a VG.
- 
-+WARNING: When a VG contains thin pools, changes to thin metadata cannot be
-+reverted, and data loss may occur if thin metadata has changed. The force
-+option is required to restore in this case.
-diff --git a/man/vgremove.8.des b/man/vgremove.8.des
-index 04dc0e3..6414c73 100644
---- a/man/vgremove.8.des
-+++ b/man/vgremove.8.des
-@@ -4,3 +4,6 @@ to confirm LV removal.
- If one or more PVs in the VG are lost, consider
- \fBvgreduce \-\-removemissing\fP to make the VG
- metadata consistent again.
-+
-+Repeat the force option (\fB-ff\fP) to forcibly remove LVs in the VG
-+without confirmation.
+ Move all physical extents that are used by simple LVs on the specified PV to
 
 
