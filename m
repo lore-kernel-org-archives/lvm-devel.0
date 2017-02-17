@@ -1,44 +1,45 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 17 Feb 2017 21:34:19 +0000 (UTC)
-Subject: master - man: print space before built-in name
-Message-ID: <20170217213419.66CB260DC2@fedorahosted.org>
+Date: Fri, 17 Feb 2017 21:44:51 +0000 (UTC)
+Subject: master - man/help: fix description of r|R unit
+Message-ID: <20170217214451.B3E08602D6@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fab0d63121f0ac59996526db40b70cb1efceb306
-Commit:        fab0d63121f0ac59996526db40b70cb1efceb306
-Parent:        87fe9328d30660e2eecd990bfce893ae65817f44
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=13944738d49ee420cb8b6b9eab4984b0a01b700d
+Commit:        13944738d49ee420cb8b6b9eab4984b0a01b700d
+Parent:        fab0d63121f0ac59996526db40b70cb1efceb306
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 17 15:33:04 2017 -0600
+AuthorDate:    Fri Feb 17 15:44:26 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 17 15:33:35 2017 -0600
+CommitterDate: Fri Feb 17 15:44:26 2017 -0600
 
-man: print space before built-in name
+man/help: fix description of r|R unit
 
-print 'lvm config' not 'lvm-config'
 ---
- tools/command.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ tools/args.h |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 2897c65..0ec5176 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -2636,8 +2636,11 @@ void print_man(char *name, char *des_file, int include_primary, int include_seco
- 	char *lvmname = name;
- 	int i;
+diff --git a/tools/args.h b/tools/args.h
+index 0575a2f..e7a1ab2 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -673,12 +673,11 @@ arg(unconfigured_ARG, '\0', "unconfigured", 0, 0, 0,
  
--	if (!strncmp(name, "lvm-", 4))
-+	if (!strncmp(name, "lvm-", 4)) {
-+		char *space = strchr(lvmname, '-');
-+		*space = ' ';
- 		name += 4;
-+	}
+ arg(units_ARG, '\0', "units", units_VAL, 0, 0,
+     "All sizes are output in these units:\n"
+-    "human-(r)eadable with rounding,\n"
++    "human-(r)eadable with '<' rounding indicator,\n"
+     "(h)uman-readable, (b)ytes, (s)ectors, (k)ilobytes, (m)egabytes,\n"
+     "(g)igabytes, (t)erabytes, (p)etabytes, (e)xabytes.\n"
+     "Capitalise to use multiples of 1000 (S.I.) instead of 1024.\n"
+-    "Custom units can be specified, e.g. --units 3M.\n"
+-    "r|R rounds numbers and displays the '<' prefix before rounded values.\n")
++    "Custom units can be specified, e.g. --units 3M.\n")
  
- 	cname = find_command_name(name);
- 
+ arg(unquoted_ARG, '\0', "unquoted", 0, 0, 0,
+     "When used with --nameprefixes, output values in the field=value\n"
 
 
