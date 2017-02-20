@@ -1,39 +1,48 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Fri, 24 Feb 2017 06:32:04 +0000 (UTC)
-Subject: master - raid: typo
-Message-ID: <20170224063204.DFE1A60AA7@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 20 Feb 2017 23:06:36 +0000 (UTC)
+Subject: master - man lvcreate: add special option notes at the start
+Message-ID: <20170220230636.32E676134D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c1865b0a864e0623b2395c96e7853e4637e46772
-Commit:        c1865b0a864e0623b2395c96e7853e4637e46772
-Parent:        b499d96215a67711220b44fcb88693221c6d7ef5
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Feb 24 01:29:37 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Feb 24 05:20:58 2017 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2d2cd8777ea0f387383743ba2739007ef1b3baf
+Commit:        a2d2cd8777ea0f387383743ba2739007ef1b3baf
+Parent:        2396c506890e62da5d13c4f3bcd1f715272ab382
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Feb 20 15:17:10 2017 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Feb 20 15:36:30 2017 -0600
 
-raid: typo
+man lvcreate: add special option notes at the start
 
+The --name, --size, --extents options deserve a special
+note at the start of the man page, before appearing in
+the usage section.
 ---
- lib/metadata/raid_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ man/lvcreate.8.des |   11 +++++++++++
+ 1 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 9c94b24..70e0a55 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -434,7 +434,7 @@ static int _lv_update_and_reload_list(struct logical_volume *lv, int origin_only
- 			  display_lvname(lock_lv));
- 		vg_revert(vg);
- 	} else if (!(r = vg_commit(vg)))
--		stack; /* !vg_commit() has implict vg_revert() */
-+		stack; /* !vg_commit() has implicit vg_revert() */
+diff --git a/man/lvcreate.8.des b/man/lvcreate.8.des
+index e18affe..488dab4 100644
+--- a/man/lvcreate.8.des
++++ b/man/lvcreate.8.des
+@@ -26,3 +26,14 @@ virtual size rather than a physical size. A cache LV is the combination of
+ a standard LV with a cache pool, used to cache active portions of the LV
+ to improve performance.
  
- 	if (r && lv_list) {
- 		dm_list_iterate_items(lvl, lv_list) {
++.SS Usage notes
++
++In the usage section below, \fB--size\fP \fINumber\fP can be replaced
++in each case with \fB--extents\fP \fINumberExtents\fP.  Also see both
++descriptions the options section.
++
++In the usage section below, \fB--name\fP is omitted from the required
++options, even though it is typically used.  When the name is not
++specified, a new LV name is generated with the "lvol" prefix and a unique
++numeric suffix.  Also see the description in the options section.
++
 
 
