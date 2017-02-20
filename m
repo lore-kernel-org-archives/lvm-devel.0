@@ -1,60 +1,41 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Fri, 24 Feb 2017 06:32:26 +0000 (UTC)
-Subject: master - lvconvert: add infrastructure for RaidLV reshaping support
-Message-ID: <20170224063226.1FF4360AC5@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Mon, 20 Feb 2017 23:06:40 +0000 (UTC)
+Subject: master - man/help: print general raid type as "raid"
+Message-ID: <20170220230640.733F061383@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f79bd30a8be0d189c417a76d1ca6b64f70a8832e
-Commit:        f79bd30a8be0d189c417a76d1ca6b64f70a8832e
-Parent:        1784cc990e6941e93cfcf1204526cec75d287a89
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Feb 24 04:00:17 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Feb 24 05:20:58 2017 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e13639053b0d413624fb10baab535fde2c2c5bd5
+Commit:        e13639053b0d413624fb10baab535fde2c2c5bd5
+Parent:        d22cccdf631576d4fd0504ffd17812d778f9d37b
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Feb 20 15:41:24 2017 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Feb 20 15:41:24 2017 -0600
 
-lvconvert: add infrastructure for RaidLV reshaping support
+man/help: print general raid type as "raid"
 
-In order to support striped raid5/6/10 LV reshaping (change
-of LV type, stripesize or number of legs), this patch
-introduces more local infrastructure to raid_manip.c
-used by followup patches.
-
-Change:
-- allow raid_rimage_extents() to calculate raid10
-- remove an __unused__ attribute
-
-Related: rhbz834579
-Related: rhbz1191935
-Related: rhbz1191978
+Instead of printing "raid*".  There are already
+notes mentioning that "raid" refers to "raid<N>"
 ---
- lib/metadata/raid_manip.c |    4 +---
- 1 files changed, 1 insertions(+), 3 deletions(-)
+ tools/vals.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 40bc45e..c465bd4 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1135,8 +1135,7 @@ uint32_t raid_rimage_extents(const struct segment_type *segtype,
- 	uint64_t r;
- 
- 	if (!extents ||
--	    segtype_is_mirror(segtype) ||
--	    segtype_is_raid1(segtype))
-+	    segtype_is_striped_raid(segtype))
- 		return extents;
- 
- 	r = extents;
-@@ -1576,7 +1575,6 @@ static int _lv_free_reshape_space_with_status(struct logical_volume *lv, enum al
- 	return 1;
- }
- 
--__attribute__ ((__unused__))
- static int _lv_free_reshape_space(struct logical_volume *lv)
- {
- 	return _lv_free_reshape_space_with_status(lv, NULL);
+diff --git a/tools/vals.h b/tools/vals.h
+index 88c446e..4dc3a61 100644
+--- a/tools/vals.h
++++ b/tools/vals.h
+@@ -123,7 +123,7 @@ val(numsignedper_VAL, int_arg_with_sign_and_percent, "SNumberP", "[+|-]Number[%V
+ val(permission_VAL, permission_arg, "Permission", "rw|r")
+ val(metadatatype_VAL, metadatatype_arg, "MetadataType", "lvm2|lvm1")
+ val(units_VAL, string_arg, "Units", "r|R|h|H|b|B|s|S|k|K|m|M|g|G|t|T|p|P|e|E")
+-val(segtype_VAL, segtype_arg, "SegType", "linear|striped|snapshot|mirror|raid*|thin|cache|thin-pool|cache-pool")
++val(segtype_VAL, segtype_arg, "SegType", "linear|striped|snapshot|mirror|raid|thin|cache|thin-pool|cache-pool")
+ val(alloc_VAL, alloc_arg, "Alloc", "contiguous|cling|cling_by_tags|normal|anywhere|inherit")
+ val(locktype_VAL, locktype_arg, "LockType", "sanlock|dlm|none")
+ val(readahead_VAL, readahead_arg, "Readahead", "auto|none|NumberSectors")
 
 
