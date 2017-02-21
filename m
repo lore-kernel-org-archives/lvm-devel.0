@@ -1,79 +1,40 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 28 Feb 2017 14:49:28 -0500
-Subject: master - commands: include lvconvert cache options as group
-Message-ID: <201702281949.v1SJnSSl017499@int-mx14.intmail.prod.int.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue, 21 Feb 2017 00:01:16 +0000 (UTC)
+Subject: master - tests: use exclusive activation for mirror
+Message-ID: <20170221000116.C96AD60B92@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=21456dcf7fc062518202f133ad27594eda4278fb
-Commit:        21456dcf7fc062518202f133ad27594eda4278fb
-Parent:        89661981e829d2cb228e3db6f8127d14526ea025
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 28 13:47:46 2017 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Feb 28 13:47:46 2017 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=921d5972e8bfa778f7389c4abdaa8691ce432c70
+Commit:        921d5972e8bfa778f7389c4abdaa8691ce432c70
+Parent:        86a660be7b31809500488792a93670a703e12a27
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Feb 20 23:50:27 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Feb 21 00:52:05 2017 +0100
 
-commands: include lvconvert cache options as group
+tests: use exclusive activation for mirror
 
+Test suite does not support clustered mirroring.
 ---
- tools/command-lines.in |   15 +++++++--------
- 1 files changed, 7 insertions(+), 8 deletions(-)
+ test/shell/lvresize-usage.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 26c2deb..1727bbb 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -310,6 +310,9 @@ OO_LVCONVERT_RAID: --mirrors SNumber, --stripes_long Number,
- OO_LVCONVERT_POOL: --poolmetadata LV, --poolmetadatasize SizeMB,
- --poolmetadataspare Bool, --readahead Readahead, --chunksize SizeKB
+diff --git a/test/shell/lvresize-usage.sh b/test/shell/lvresize-usage.sh
+index 35f6e57..30cb8d5 100644
+--- a/test/shell/lvresize-usage.sh
++++ b/test/shell/lvresize-usage.sh
+@@ -42,7 +42,7 @@ not lvreduce -L 32M $vg/lv
  
-+OO_LVCONVERT_CACHE: --cachemode CacheMode, --cachepolicy String,
-+--cachesettings String, --zero Bool
-+
- OO_LVCONVERT: --alloc Alloc, --background, --force, --noudevsync
+ lvremove -ff $vg
  
- ---
-@@ -434,16 +437,14 @@ RULE: all not lv_is_locked
- ---
- 
- lvconvert --type cache --cachepool LV LV_linear_striped_raid_thinpool
--OO: --cache, --cachemode CacheMode, --cachepolicy String,
----cachesettings String, --zero Bool, OO_LVCONVERT_POOL, OO_LVCONVERT
-+OO: --cache, OO_LVCONVERT_CACHE, OO_LVCONVERT_POOL, OO_LVCONVERT
- ID: lvconvert_to_cache_vol
- DESC: Convert LV to type cache.
- RULE: all and lv_is_visible
- 
- # alternate form of lvconvert --type cache
- lvconvert --cache --cachepool LV LV_linear_striped_raid_thinpool
--OO: --type cache, --cachemode CacheMode, --cachepolicy String,
----cachesettings String, --zero Bool, OO_LVCONVERT_POOL, OO_LVCONVERT
-+OO: --type cache, OO_LVCONVERT_CACHE, OO_LVCONVERT_POOL, OO_LVCONVERT
- ID: lvconvert_to_cache_vol
- DESC: Convert LV to type cache (variant, infers --type cache).
- FLAGS: SECONDARY_SYNTAX
-@@ -494,8 +495,7 @@ FLAGS: PREVIOUS_SYNTAX
- ---
- 
- lvconvert --type cache-pool LV_linear_striped_raid
--OO: OO_LVCONVERT_POOL, OO_LVCONVERT,
----cachemode CacheMode, --cachepolicy String, --cachesettings String
-+OO: OO_LVCONVERT_CACHE, OO_LVCONVERT_POOL, OO_LVCONVERT
- OP: PV ...
- ID: lvconvert_to_cachepool
- DESC: Convert LV to type cache-pool.
-@@ -523,8 +523,7 @@ DESC: Convert LV to type cache-pool.
- # of creating a pool or swapping metadata should be used.
- 
- lvconvert --cachepool LV_linear_striped_raid_cachepool
--OO: --type cache-pool, OO_LVCONVERT_POOL, OO_LVCONVERT,
----cachemode CacheMode, --cachepolicy String, --cachesettings String
-+OO: --type cache-pool, OO_LVCONVERT_CACHE, OO_LVCONVERT_POOL, OO_LVCONVERT
- OP: PV ...
- ID: lvconvert_to_cachepool_or_swap_metadata
- DESC: Convert LV to type cache-pool (variant, use --type cache-pool).
+-lvcreate --type mirror -L 4 -n $lv1 $vg
++lvcreate --type mirror -aey -L 4 -n $lv1 $vg
+ # Incorrent name for resized LV
+ not lvextend --type mirror -L 10 -n $lv1 $vg
+ # Same size
 
 
