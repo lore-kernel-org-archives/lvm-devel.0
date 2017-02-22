@@ -1,58 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 19 Feb 2017 23:47:11 +0000 (UTC)
-Subject: master - tests: update lvresize testing
-Message-ID: <20170219234711.01DE160563@fedorahosted.org>
+Date: Wed, 22 Feb 2017 14:41:07 +0000 (UTC)
+Subject: master - WHATS_NEW: add entry
+Message-ID: <20170222144107.E742360D19@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5f2639d01d8e1ac6e95ad7855abb93b5cd260a22
-Commit:        5f2639d01d8e1ac6e95ad7855abb93b5cd260a22
-Parent:        13dd1ca757ab861bcd8f761f60e3c17384ae6326
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6716f5a2f46f034f24d01918cc1dc78cd7bac9be
+Commit:        6716f5a2f46f034f24d01918cc1dc78cd7bac9be
+Parent:        263050bc073e509f84de4c4da160887f412376fc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Feb 19 22:59:21 2017 +0100
+AuthorDate:    Wed Feb 22 15:20:23 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 20 00:44:12 2017 +0100
+CommitterDate: Wed Feb 22 15:20:52 2017 +0100
 
-tests: update lvresize testing
+WHATS_NEW: add entry
 
-Add missing tests for some lvresize acceptable options.
 ---
- test/shell/lvresize-usage.sh |   17 +++++++++++++++++
- 1 files changed, 17 insertions(+), 0 deletions(-)
+ WHATS_NEW       |    1 +
+ tools/toollib.c |    1 -
+ 2 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvresize-usage.sh b/test/shell/lvresize-usage.sh
-index a136147..35f6e57 100644
---- a/test/shell/lvresize-usage.sh
-+++ b/test/shell/lvresize-usage.sh
-@@ -34,9 +34,26 @@ lvremove -ff $vg
- 
- lvcreate -L 10M -n lv $vg "$dev1"
- lvextend -L +10M $vg/lv "$dev2"
-+lvextend --type striped -m0 -L +10M $vg/lv "$dev2"
- 
- # Attempt to reduce with lvextend and vice versa:
- not lvextend -L 16M $vg/lv
- not lvreduce -L 32M $vg/lv
- 
- lvremove -ff $vg
-+
-+lvcreate --type mirror -L 4 -n $lv1 $vg
-+# Incorrent name for resized LV
-+not lvextend --type mirror -L 10 -n $lv1 $vg
-+# Same size
-+not lvextend --type mirror -L 4 $vg/$lv1
-+# Cannot use any '-' or '+'  sign for --mirror arg
-+not lvextend --type mirror -L+2 -m-1 $vg/$lv1
-+not lvextend --type mirror -L+2 -m+1 $vg/$lv1
-+
-+lvextend --type mirror -L+4 -m1 $vg/$lv1
-+
-+lvs -a $vg
-+check  lv_field $vg/$lv1 size "8.00m"
-+
-+lvremove -ff $vg
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c8b7fdc..b0768cd 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.169 - 
+ =====================================
++  Fix regression of accepting options --type and -m with lvresize (2.02.158).
+   Add lvconvert --swapmetadata, new specific way to swap pool metadata LVs.
+   Add lvconvert --startpoll, new specific way to start polling conversions.
+   Add lvconvert --mergethin, new specific way to merge thin snapshots.
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 842f67c..0e45d80 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -5755,4 +5755,3 @@ bad:
+ out:
+ 	return 0;
+ }
+-
 
 
