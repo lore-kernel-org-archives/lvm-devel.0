@@ -1,258 +1,112 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 20 Feb 2017 23:06:34 +0000 (UTC)
-Subject: master - man: add variables descriptions
-Message-ID: <20170220230634.099466134D@fedorahosted.org>
+Date: Thu, 23 Feb 2017 20:28:23 +0000 (UTC)
+Subject: master - man/help: change syntax to UNIT
+Message-ID: <20170223202823.182826108C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2396c506890e62da5d13c4f3bcd1f715272ab382
-Commit:        2396c506890e62da5d13c4f3bcd1f715272ab382
-Parent:        4d29d9afb21a4571b45fe18d16cc4b57cd7ec187
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3fd3c9430d5f0b3291c0111ddcd4ddd524dd26ed
+Commit:        3fd3c9430d5f0b3291c0111ddcd4ddd524dd26ed
+Parent:        8ab072507706fb826eee05eb369429ad0a7a406a
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 20 15:09:02 2017 -0600
+AuthorDate:    Thu Feb 23 14:24:28 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 20 15:36:10 2017 -0600
+CommitterDate: Thu Feb 23 14:24:28 2017 -0600
 
-man: add variables descriptions
+man/help: change syntax to UNIT
 
-Add a section describing variables.
+(Change to recent commit 3f4ecaf8c2.)
 
-In the full options list, include common
-options in the alphabetical listing instead
-of at the end.
+Use --foo Number[k|UNIT] to indicate that
+the default units of the number is k, but other
+units listed below are also accepted.
+
+Previously, underlined/italic Unit was used,
+like other of variables, but this UNIT is more
+like a shortcut than an actual variable.
 ---
- tools/command.c |  172 ++++++++++++++++++++++++++++++++++++++++++++++++-------
- 1 files changed, 152 insertions(+), 20 deletions(-)
+ tools/command.c |   18 ++++++++++--------
+ tools/vals.h    |   10 +++++-----
+ 2 files changed, 15 insertions(+), 13 deletions(-)
 
 diff --git a/tools/command.c b/tools/command.c
-index 06dcc77..b1fdc1b 100644
+index c3c1960..04b44ad 100644
 --- a/tools/command.c
 +++ b/tools/command.c
-@@ -2484,35 +2484,20 @@ void print_man_all_options_list(struct command_name *cname)
- /*
-  * All options used for a given command name, along with descriptions.
-  * listed in order of:
-- * 1. options that are not common to all lvm commands, alphabetically
-- * 2. options common to all lvm commands, alphabetically
-  */
- 
- void print_man_all_options_desc(struct command_name *cname)
- {
- 	int opt_enum, val_enum;
--	int print_common = 0;
- 	int sep = 0;
+@@ -1786,19 +1786,19 @@ static void print_val_man(const char *str)
  	int i;
  
-- again:
--	/*
--	 * Loop 1: print options that are not common to all lvm commands.
--	 * Loop 2: print options common to all lvm commands (lvm_all)
--	 */
--
- 	for (i = 0; i < ARG_COUNT; i++) {
- 		opt_enum = opt_names_alpha[i]->opt_enum;
+ 	/*
+-	 * Doing bold k before underlined Unit creates a lot of
++	 * Doing bold k before UNIT creates a lot of
+ 	 * visual "noise" that makes the text hard to read.
+ 	 * The extra markup in this case doesn't add anything
+ 	 * that isn't already obvious.
+ 	 */
  
- 		if (!cname->all_options[opt_enum])
- 			continue;
- 
--		if (!print_common && is_lvm_all_opt(opt_enum))
--			continue;
--
--		if (print_common && !is_lvm_all_opt(opt_enum))
--			continue;
--
- 		printf("\n.TP\n");
- 
- 		if (opt_names[opt_enum].short_opt) {
-@@ -2545,11 +2530,153 @@ void print_man_all_options_desc(struct command_name *cname)
- 
- 		sep = 1;
+-	if (!strcmp(str, "Number[k|Unit]")) {
+-		printf("\\fINumber\\fP[k|\\fIUnit\\fP]");
++	if (!strcmp(str, "Number[k|UNIT]")) {
++		printf("\\fINumber\\fP[k|UNIT]");
+ 		return;
  	}
-+}
  
--	if (!print_common) {
--		print_common = 1;
--		goto again;
-+void print_man_all_positions_desc(struct command_name *cname)
-+{
-+	struct command *cmd;
-+	int ci, rp, op;
-+	int has_vg_val = 0;
-+	int has_lv_val = 0;
-+	int has_pv_val = 0;
-+	int has_tag_val = 0;
-+	int has_select_val = 0;
-+	int has_lv_type = 0;
-+
-+	for (ci = 0; ci < COMMAND_COUNT; ci++) {
-+		cmd = &commands[ci];
-+
-+		if (strcmp(cmd->name, cname->name))
-+			continue;
-+
-+		for (rp = 0; rp < cmd->rp_count; rp++) {
-+			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(vg_VAL))
-+				has_vg_val = 1;
-+
-+			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(lv_VAL)) {
-+				has_lv_val = 1;
-+				if (cmd->required_pos_args[rp].def.lvt_bits)
-+					has_lv_type = 1;
-+			}
-+
-+			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(pv_VAL))
-+				has_pv_val = 1;
-+
-+			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(tag_VAL))
-+				has_tag_val = 1;
-+
-+			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(select_VAL))
-+				has_select_val = 1;
-+		}
-+
-+		for (op = 0; op < cmd->op_count; op++) {
-+			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(vg_VAL))
-+				has_vg_val = 1;
-+
-+			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(lv_VAL)) {
-+				has_lv_val = 1;
-+				if (cmd->optional_pos_args[op].def.lvt_bits)
-+					has_lv_type = 1;
-+			}
-+
-+			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(pv_VAL))
-+				has_pv_val = 1;
-+
-+			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(tag_VAL))
-+				has_tag_val = 1;
-+
-+			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(select_VAL))
-+				has_select_val = 1;
-+		}
-+	}
-+
-+	if (has_vg_val) {
-+		printf("\n.TP\n");
-+
-+		printf("\\fI%s\\fP", val_names[vg_VAL].name);
-+		printf("\n");
-+		printf(".br\n");
-+		printf("Volume Group name.  See \\fBlvm\\fP(8) for valid names.\n");
-+
-+		if (!strcmp(cname->name, "lvcreate"))
-+			printf("For lvcreate, the required VG positional arg may be\n"
-+			       "omitted when the VG name is included in another option,\n"
-+			       "e.g. --name VG/LV.\n");
+-	if (!strcmp(str, "Number[m|Unit]")) {
+-		printf("\\fINumber\\fP[m|\\fIUnit\\fP]");
++	if (!strcmp(str, "Number[m|UNIT]")) {
++		printf("\\fINumber\\fP[m|UNIT]");
+ 		return;
  	}
-+
-+	if (has_lv_val) {
-+		printf("\n.TP\n");
-+
-+		printf("\\fI%s\\fP", val_names[lv_VAL].name);
-+		printf("\n");
-+		printf(".br\n");
-+		printf("Logical Volume name.  See \\fBlvm\\fP(8) for valid names.\n"
-+		       "An LV positional arg generally includes the VG name and LV name, e.g. VG/LV.\n");
-+
-+		if (has_lv_type)
-+			printf("LV followed by _<type> indicates that an LV of the\n"
-+			       "given type is required. (raid represents raid<N> type)\n");
-+	}
-+
-+	if (has_pv_val) {
-+		printf("\n.TP\n");
-+
-+		printf("\\fI%s\\fP", val_names[pv_VAL].name);
-+		printf("\n");
-+		printf(".br\n");
-+		printf("Physical Volume name, a device path under /dev.\n"
-+		       "For commands managing physical extents, a PV positional arg\n"
-+		       "generally accepts a suffix indicating a range of physical extents.\n"
-+		       "Start and end range (inclusive): \\fIPV\\fP[:\\fIPE\\fP[-\\fIPE\\fP].\n"
-+		       "Start and length range (counting from 0): \\fIPV\\fP[:\\fIPE\\fP[+\\fIPE\\fP].\n");
-+	}
-+
-+	if (has_tag_val) {
-+		printf("\n.TP\n");
-+
-+		printf("\\fI%s\\fP", val_names[tag_VAL].name);
-+		printf("\n");
-+		printf(".br\n");
-+		printf("Tag name.  See \\fBlvm\\fP(8) for information about tag names and using tags\n"
-+		       "in place of a VG, LV or PV.\n");
-+	}
-+
-+	if (has_select_val) {
-+		printf("\n.TP\n");
-+
-+		printf("\\fI%s\\fP", val_names[select_VAL].name);
-+		printf("\n");
-+		printf(".br\n");
-+		printf("Select indicates that a required positional parameter can\n"
-+		       "be omitted if the \\fB--select\\fP option is used.\n"
-+		       "No arg appears in this position.\n");
-+	}
-+
-+	/* Every command uses a string arg somewhere. */
-+
-+	printf("\n.TP\n");
-+	printf("\\fI%s\\fP", val_names[string_VAL].name);
-+	printf("\n");
-+	printf(".br\n");
-+	printf("See the option description for information about the string content.\n");
-+
-+	/* Nearly every command uses a number arg somewhere. */
-+
-+	printf("\n.TP\n");
-+	printf("\\fINumber\\fP, \\fISize\\fP");
-+	printf("\n");
-+	printf(".br\n");
-+	printf("Input units are always treated as base two values, regardless of unit\n"
-+	       "capitalization, e.g. 'k' and 'K' both refer to 1024.\n"
-+	       "The default input unit is specified by letter, followed by |unit which\n"
-+	       "represents other possible input units: bBsSkKmMgGtTpPeE.\n");
-+
-+	printf("\n.TP\n");
-+	printf("Environment");
-+	printf("\n");
-+	printf(".br\n");
-+	printf("See \\fBlvm\\fP(8) for information about environment variables used by lvm.\n"
-+	       "For example, LVM_VG_NAME can generally be substituted for a required VG parameter.\n");
- }
  
- void print_desc_man(const char *desc)
-@@ -2641,7 +2768,7 @@ void print_man(char *name, char *des_file, int include_primary, int include_seco
+@@ -2798,13 +2798,15 @@ void print_man_all_positions_desc(struct command_name *cname)
+ 	/* Nearly every command uses a number arg somewhere. */
  
- 	cname = find_command_name(name);
+ 	printf("\n.HP\n");
+-	printf("\\fINumber\\fP, \\fIUnit\\fP");
++	printf("\\fINumber\\fP, UNIT");
+ 	printf("\n");
+ 	printf(".br\n");
+ 	printf("Input units are always treated as base two values, regardless of unit\n"
+ 	       "capitalization, e.g. 'k' and 'K' both refer to 1024.\n"
+-	       "The default input unit is specified by letter, followed by |\\fIUnit\\fP\n"
+-	       "which represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n");
++	       "The default input unit is specified by letter, followed by |UNIT\n"
++	       "which represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n"
++	       "(This should not be confused with the output control --units, where\n"
++	       "capital letters mean multiple of 1000.)\n");
  
--	printf(".TH %s 8 \"LVM TOOLS #VERSION#\" \"Sistina Software UK\"\n",
-+	printf(".TH %s 8 \"LVM TOOLS #VERSION#\" \"Red Hat, Inc.\"\n",
- 		upper_command_name(lvmname));
- 
- 	for (i = 0; i < COMMAND_COUNT; i++) {
-@@ -2657,6 +2784,9 @@ void print_man(char *name, char *des_file, int include_primary, int include_seco
- 			printf(".SH OPTIONS\n");
- 			printf(".br\n");
- 			print_man_all_options_desc(cname);
-+			printf(".SH VARIABLES\n");
-+			printf(".br\n");
-+			print_man_all_positions_desc(cname);
- 
- 			prev_cmd = NULL;
- 		}
-@@ -2752,7 +2882,9 @@ void print_man(char *name, char *des_file, int include_primary, int include_seco
- 			printf(".SH OPTIONS\n");
- 			printf(".br\n");
- 			print_man_all_options_desc(cname);
--
-+			printf(".SH VARIABLES\n");
-+			printf(".br\n");
-+			print_man_all_positions_desc(cname);
- 		}
- 
- 		printf("\n");
+ 	printf("\n.HP\n");
+ 	printf("Environment");
+diff --git a/tools/vals.h b/tools/vals.h
+index 3eb27e9..a94f81b 100644
+--- a/tools/vals.h
++++ b/tools/vals.h
+@@ -85,8 +85,8 @@
+  * output, and doesn't indicate which unit is the default.
+  * "Number[Units]" would be cleaner, as would a subset of
+  * common units, e.g. "Number[kmg...]", but neither helps
+- * with default.  "Number[k|Unit]" and "Number[m|Unit]" show
+- * the default, and "Unit" indicates that other units
++ * with default.  "Number[k|UNIT]" and "Number[m|UNIT]" show
++ * the default, and "UNIT" indicates that other units
+  * are possible without listing them all.  This also
+  * suggests using the preferred lower case letters, because
+  * --size and other option args treat upper/lower letters
+@@ -115,9 +115,9 @@ val(activation_VAL, activation_arg, "Active", "y|n|ay")
+ val(cachemode_VAL, cachemode_arg, "CacheMode", "writethrough|writeback")
+ val(discards_VAL, discards_arg, "Discards", "passdown|nopassdown|ignore")
+ val(mirrorlog_VAL, mirrorlog_arg, "MirrorLog", "core|disk")
+-val(sizekb_VAL, size_kb_arg, "SizeKB", "Number[k|Unit]")
+-val(sizemb_VAL, size_mb_arg, "SizeMB", "Number[m|Unit]")
+-val(regionsize_VAL, regionsize_arg, "RegionSize", "Number[m|Unit]")
++val(sizekb_VAL, size_kb_arg, "SizeKB", "Number[k|UNIT]")
++val(sizemb_VAL, size_mb_arg, "SizeMB", "Number[m|UNIT]")
++val(regionsize_VAL, regionsize_arg, "RegionSize", "Number[m|UNIT]")
+ val(numsigned_VAL, int_arg_with_sign, "SNumber", "[+|-]Number")
+ val(numsignedper_VAL, int_arg_with_sign_and_percent, "SNumberP", "[+|-]Number[%VG|%PVS|%FREE]")
+ val(permission_VAL, permission_arg, "Permission", "rw|r")
 
 
