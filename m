@@ -1,118 +1,174 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Wed, 22 Feb 2017 23:01:20 +0000 (UTC)
-Subject: master - man/help: improve the style of units indicator
-Message-ID: <20170222230120.ADD3660575@fedorahosted.org>
+From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
+Date: Thu, 23 Feb 2017 14:16:35 +0000 (UTC)
+Subject: master - lvchange: reject writemostly/writebehind on raid1 during resync
+Message-ID: <20170223141635.C4F9F61123@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3f4ecaf8c2b3146e81bcb32bd4f0321beee1192a
-Commit:        3f4ecaf8c2b3146e81bcb32bd4f0321beee1192a
-Parent:        da634bfc8933619a70284077b499c82802f04ceb
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 22 16:50:30 2017 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Feb 22 16:50:30 2017 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8ab072507706fb826eee05eb369429ad0a7a406a
+Commit:        8ab072507706fb826eee05eb369429ad0a7a406a
+Parent:        3f4ecaf8c2b3146e81bcb32bd4f0321beee1192a
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Thu Feb 23 15:09:29 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Feb 23 15:09:29 2017 +0100
 
-man/help: improve the style of units indicator
+lvchange: reject writemostly/writebehind on raid1 during resync
 
-We use --foo Number[k|Units] to indicate that
-the default units of the number is k, but other
-units listed below are also accepted.
+The MD kernel raid1 personality does no use any writemostly leg as the primary.
 
-Capitalize and underline Units so it is consistent
-with other variables, and reference it at the end.
+In case a previous linear LV holding data gets upconverted to
+raid1 it becomes the primary leg of the new raid1 LV and a full
+resynchronization is started to update the new legs.
 
-Technically, the k should be bold, but this
-tends to make the text visually hard to read
-because of the excessive highlights scattered
-everywhere.  So it's left normal text for now
-(it's unlikely to confuse anyone.)
+No writemostly and/or writebehind setting may be allowed during
+this initial, full synchronization period of this new raid1 LV
+(using the lvchange(8) command), because that would change the
+primary (i.e the previous linear LV) thus causing data loss.
+
+lvchange has a bug not preventing this scenario.
+
+Fix rejects setting writemostly and/or writebehind on resychronizing raid1 LVs.
+
+Once we have status in the lvm2 metadata about the linear -> raid upconversion,
+we may relax this constraint for other types of resynchronization
+(e.g. for user requested "lvchange --resync ").
+
+New lvchange-raid1-writemostly.sh test is added to the test suite.
+
+Resolves: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=855895
 ---
- tools/command.c |   19 +++++++++----------
- tools/vals.h    |   12 ++++++------
- 2 files changed, 15 insertions(+), 16 deletions(-)
+ WHATS_NEW                                |    1 +
+ lib/metadata/metadata-exported.h         |    1 +
+ lib/metadata/raid_manip.c                |    8 +++++-
+ test/shell/lvchange-raid1-writemostly.sh |   41 ++++++++++++++++++++++++++++++
+ tools/lvchange.c                         |   15 +++++++++++
+ 5 files changed, 65 insertions(+), 1 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 1a5fbb5..c3c1960 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -1786,20 +1786,19 @@ static void print_val_man(const char *str)
- 	int i;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 722b6f6..14109fb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.169 - 
+ =====================================
++  Reject writemostly/writebehind in lvchange during resynchronization.
+   Deactivate active origin first before removal for improved workflow.
+   Fix regression of accepting options --type and -m with lvresize (2.02.158).
+   Add lvconvert --swapmetadata, new specific way to swap pool metadata LVs.
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 573c09d..e4d2267 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1232,6 +1232,7 @@ uint32_t raid_rimage_extents(const struct segment_type *segtype,
+ uint32_t raid_ensure_min_region_size(const struct logical_volume *lv, uint64_t raid_size, uint32_t region_size);
+ int lv_raid_change_region_size(struct logical_volume *lv,
+                                int yes, int force, uint32_t new_region_size);
++int lv_raid_in_sync(const struct logical_volume *lv);
+ /* --  metadata/raid_manip.c */
  
- 	/*
--	 * The suffix [k|unit] is just printed in plain text.
--	 * Doing bold k and underlined unit creates a lot of
--	 * visual "noise" that is choppy and hard to read.
-+	 * Doing bold k before underlined Unit creates a lot of
-+	 * visual "noise" that makes the text hard to read.
- 	 * The extra markup in this case doesn't add anything
- 	 * that isn't already obvious.
- 	 */
+ /* ++  metadata/cache_manip.c */
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index cdd7af8..b6215a2 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -238,7 +238,7 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
+  * Returns: 1 if in-sync, 0 otherwise.
+  */
+ #define _RAID_IN_SYNC_RETRIES  6
+-static int _raid_in_sync(struct logical_volume *lv)
++static int _raid_in_sync(const struct logical_volume *lv)
+ {
+ 	int retries = _RAID_IN_SYNC_RETRIES;
+ 	dm_percent_t sync_percent;
+@@ -269,6 +269,12 @@ static int _raid_in_sync(struct logical_volume *lv)
+ 	return (sync_percent == DM_PERCENT_100) ? 1 : 0;
+ }
  
--	if (!strcmp(str, "Number[k|unit]")) {
--		printf("\\fINumber\\fP[k|unit]");
-+	if (!strcmp(str, "Number[k|Unit]")) {
-+		printf("\\fINumber\\fP[k|\\fIUnit\\fP]");
- 		return;
- 	}
++/* External interface to raid in-sync check */
++int lv_raid_in_sync(const struct logical_volume *lv)
++{
++	return _raid_in_sync(lv);
++}
++
+ /* Check if RaidLV @lv is synced or any raid legs of @lv are not synced */
+ static int _raid_devs_sync_healthy(struct logical_volume *lv)
+ {
+diff --git a/test/shell/lvchange-raid1-writemostly.sh b/test/shell/lvchange-raid1-writemostly.sh
+new file mode 100644
+index 0000000..edf11bd
+--- /dev/null
++++ b/test/shell/lvchange-raid1-writemostly.sh
+@@ -0,0 +1,41 @@
++#!/bin/sh
++# Copyright (C) 2017 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
++
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++which mkfs.ext4 || skip
++aux have_raid 1 3 5 || skip
++
++aux prepare_vg 4
++
++for d in $dev1 $dev2 $dev3 $dev4
++do
++	aux delay_dev $d 1
++done
++
++#
++# Test writemostly prohibited on resyncrhonizing raid1
++#
++
++# Create 4-way striped LV
++lvcreate -aey --ty raid1 -m 3 -L 32M -n $lv1 $vg
++not lvchange -y --writemostly $dev1 $vg/$lv1
++check lv_field $vg/$lv1 segtype "raid1"
++check lv_field $vg/$lv1 stripes 4
++check lv_attr_bit health $vg/${lv1}_rimage_0 "-"
++aux wait_for_sync $vg $lv1
++lvchange -y --writemostly $dev1 $vg/$lv1
++check lv_attr_bit health $vg/${lv1}_rimage_0 "w"
++
++vgremove -ff $vg
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 1c00b76..cba0496 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -739,6 +739,21 @@ static int _lvchange_writemostly(struct logical_volume *lv)
+ 	struct cmd_context *cmd = lv->vg->cmd;
+ 	struct lv_segment *raid_seg = first_seg(lv);
  
--	if (!strcmp(str, "Number[m|unit]")) {
--		printf("\\fINumber\\fP[m|unit]");
-+	if (!strcmp(str, "Number[m|Unit]")) {
-+		printf("\\fINumber\\fP[m|\\fIUnit\\fP]");
- 		return;
- 	}
++	/*
++	 * Prohibit writebehind and writebehind during synchronization.
++	 *
++	 * FIXME: we can do better once we can distingush between
++	 *        an initial sync after a linear -> raid1 upconversion
++	 *        and any later additions of legs, requested resyncs
++	 *        via lvchange or leg repairs/replacements.
++	 */
++	if (!lv_raid_in_sync(lv)) {
++		log_error("Unable to change write%s on %s while it is not in-sync.",
++			  arg_is_set(cmd, writemostly_ARG) ? "mostly" : "behind",
++			  display_lvname(lv));
++		return 0;
++	}
++
+ 	if (arg_is_set(cmd, writebehind_ARG))
+ 		raid_seg->writebehind = arg_uint_value(cmd, writebehind_ARG, 0);
  
-@@ -2799,13 +2798,13 @@ void print_man_all_positions_desc(struct command_name *cname)
- 	/* Nearly every command uses a number arg somewhere. */
- 
- 	printf("\n.HP\n");
--	printf("\\fINumber\\fP");
-+	printf("\\fINumber\\fP, \\fIUnit\\fP");
- 	printf("\n");
- 	printf(".br\n");
- 	printf("Input units are always treated as base two values, regardless of unit\n"
- 	       "capitalization, e.g. 'k' and 'K' both refer to 1024.\n"
--	       "The default input unit is specified by letter, followed by |unit which\n"
--	       "represents other possible input units: bBsSkKmMgGtTpPeE.\n");
-+	       "The default input unit is specified by letter, followed by |\\fIUnit\\fP\n"
-+	       "which represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n");
- 
- 	printf("\n.HP\n");
- 	printf("Environment");
-diff --git a/tools/vals.h b/tools/vals.h
-index 4dc3a61..3eb27e9 100644
---- a/tools/vals.h
-+++ b/tools/vals.h
-@@ -83,10 +83,10 @@
-  * could be "Number[bBsSkKmMgGtTpPeE]" (with implied |),
-  * but repeating this full specification produces cluttered
-  * output, and doesn't indicate which unit is the default.
-- * "Number[units]" would be cleaner, as would a subset of
-+ * "Number[Units]" would be cleaner, as would a subset of
-  * common units, e.g. "Number[kmg...]", but neither helps
-- * with default.  "Number[k|unit]" and "Number[m|unit]" show
-- * the default, and "unit" indicates that other units
-+ * with default.  "Number[k|Unit]" and "Number[m|Unit]" show
-+ * the default, and "Unit" indicates that other units
-  * are possible without listing them all.  This also
-  * suggests using the preferred lower case letters, because
-  * --size and other option args treat upper/lower letters
-@@ -115,9 +115,9 @@ val(activation_VAL, activation_arg, "Active", "y|n|ay")
- val(cachemode_VAL, cachemode_arg, "CacheMode", "writethrough|writeback")
- val(discards_VAL, discards_arg, "Discards", "passdown|nopassdown|ignore")
- val(mirrorlog_VAL, mirrorlog_arg, "MirrorLog", "core|disk")
--val(sizekb_VAL, size_kb_arg, "SizeKB", "Number[k|unit]")
--val(sizemb_VAL, size_mb_arg, "SizeMB", "Number[m|unit]")
--val(regionsize_VAL, regionsize_arg, "RegionSize", "Number[m|unit]")
-+val(sizekb_VAL, size_kb_arg, "SizeKB", "Number[k|Unit]")
-+val(sizemb_VAL, size_mb_arg, "SizeMB", "Number[m|Unit]")
-+val(regionsize_VAL, regionsize_arg, "RegionSize", "Number[m|Unit]")
- val(numsigned_VAL, int_arg_with_sign, "SNumber", "[+|-]Number")
- val(numsignedper_VAL, int_arg_with_sign_and_percent, "SNumberP", "[+|-]Number[%VG|%PVS|%FREE]")
- val(permission_VAL, permission_arg, "Permission", "rw|r")
 
 
