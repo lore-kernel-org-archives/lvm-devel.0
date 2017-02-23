@@ -1,112 +1,287 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 23 Feb 2017 20:28:23 +0000 (UTC)
-Subject: master - man/help: change syntax to UNIT
-Message-ID: <20170223202823.182826108C@fedorahosted.org>
+Date: Thu, 23 Feb 2017 23:08:50 +0000 (UTC)
+Subject: master - man: improve line breaks
+Message-ID: <20170223230850.DAAC3603CD@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3fd3c9430d5f0b3291c0111ddcd4ddd524dd26ed
-Commit:        3fd3c9430d5f0b3291c0111ddcd4ddd524dd26ed
-Parent:        8ab072507706fb826eee05eb369429ad0a7a406a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ffe3ca26e05f9bb10f004bafe6866b189d7ac385
+Commit:        ffe3ca26e05f9bb10f004bafe6866b189d7ac385
+Parent:        3fd3c9430d5f0b3291c0111ddcd4ddd524dd26ed
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 23 14:24:28 2017 -0600
+AuthorDate:    Thu Feb 23 17:06:42 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Feb 23 14:24:28 2017 -0600
+CommitterDate: Thu Feb 23 17:06:42 2017 -0600
 
-man/help: change syntax to UNIT
+man: improve line breaks
 
-(Change to recent commit 3f4ecaf8c2.)
-
-Use --foo Number[k|UNIT] to indicate that
-the default units of the number is k, but other
-units listed below are also accepted.
-
-Previously, underlined/italic Unit was used,
-like other of variables, but this UNIT is more
-like a shortcut than an actual variable.
+Borrow tricks from dmsetup man page to improve
+the line break and indentation using .ad l, .ad b,
+and soft break \%.
 ---
- tools/command.c |   18 ++++++++++--------
- tools/vals.h    |   10 +++++-----
- 2 files changed, 15 insertions(+), 13 deletions(-)
+ tools/command.c |   98 +++++++++++++++++++++++++++++++------------------------
+ 1 files changed, 55 insertions(+), 43 deletions(-)
 
 diff --git a/tools/command.c b/tools/command.c
-index c3c1960..04b44ad 100644
+index 04b44ad..8d5a96b 100644
 --- a/tools/command.c
 +++ b/tools/command.c
-@@ -1786,19 +1786,19 @@ static void print_val_man(const char *str)
- 	int i;
- 
- 	/*
--	 * Doing bold k before underlined Unit creates a lot of
-+	 * Doing bold k before UNIT creates a lot of
- 	 * visual "noise" that makes the text hard to read.
- 	 * The extra markup in this case doesn't add anything
- 	 * that isn't already obvious.
- 	 */
- 
--	if (!strcmp(str, "Number[k|Unit]")) {
--		printf("\\fINumber\\fP[k|\\fIUnit\\fP]");
-+	if (!strcmp(str, "Number[k|UNIT]")) {
-+		printf("\\fINumber\\fP[k|UNIT]");
+@@ -1850,21 +1850,12 @@ static void print_val_man(const char *str)
+ 		line = dm_strdup(str);
+ 		split_line(line, &line_argc, line_argv, '|');
+ 		for (i = 0; i < line_argc; i++) {
+-			if (i) {
++			if (i)
+ 				printf("|");
+-
+-				/* this is a hack to add a line break for
+-				   a long string of opt values */
+-				if ((len > 40) && (i >= (line_argc / 2) + 1)) {
+-					printf("\n");
+-					printf("       ");
+-					len = 0;
+-				}
+-			}
+ 			if (strstr(line_argv[i], "Number"))
+ 				printf("\\fI%s\\fP", line_argv[i]);
+ 			else
+-				printf("\\fB%s\\fP", line_argv[i]);
++				printf("\\%\\fB%s\\fP", line_argv[i]);
+ 		}
  		return;
  	}
+@@ -2016,8 +2007,10 @@ void print_man_usage(char *lvmname, struct command *cmd)
+ 				continue;
  
--	if (!strcmp(str, "Number[m|Unit]")) {
--		printf("\\fINumber\\fP[m|\\fIUnit\\fP]");
-+	if (!strcmp(str, "Number[m|UNIT]")) {
-+		printf("\\fINumber\\fP[m|UNIT]");
- 		return;
+ 			if (sep) {
+-				printf(",");
+-				printf("\n.br\n");
++				printf(",\n");
++				printf(".ad b\n");
++				printf(".br\n");
++				printf(".ad l\n");
+ 				printf(" ");
+ 			}
+ 
+@@ -2046,10 +2039,13 @@ void print_man_usage(char *lvmname, struct command *cmd)
+ 				continue;
+ 
+ 			if (sep) {
+-				printf(",");
+-				printf("\n.br\n");
++				printf(",\n");
++				printf(".ad b\n");
++				printf(".br\n");
++				printf(".ad l\n");
+ 				printf(" ");
+-			}
++			} else
++				printf(".ad l\n");
+ 
+ 			printf("   ");
+ 			printf(" \\fB%s\\fP", man_long_opt_name(cmd->name, opt_enum));
+@@ -2164,9 +2160,9 @@ void print_man_usage(char *lvmname, struct command *cmd)
+ 			if ((cname->variants > 1) && cname->common_options[opt_enum])
+ 				continue;
+ 
+-			if (sep) {
+-				printf("\n.br\n");
+-			}
++			if (sep)
++				printf(".br\n");
++			printf(".ad l\n");
+ 
+ 			printf("[ \\fB-%c\\fP|\\fB%s\\fP",
+ 				opt_names[opt_enum].short_opt,
+@@ -2176,7 +2172,8 @@ void print_man_usage(char *lvmname, struct command *cmd)
+ 				printf(" ");
+ 				print_def_man(&cmd->optional_opt_args[oo].def, 1);
+ 			}
+-			printf(" ]");
++			printf(" ]\n");
++			printf(".ad b\n");
+ 			sep = 1;
+ 		}
+ 
+@@ -2194,9 +2191,9 @@ void print_man_usage(char *lvmname, struct command *cmd)
+ 			if ((cname->variants > 1) && cname->common_options[opt_enum])
+ 				continue;
+ 
+-			if (sep) {
+-				printf("\n.br\n");
+-			}
++			if (sep)
++				printf(".br\n");
++			printf(".ad l\n");
+ 
+ 			/* space alignment without short opt */
+ 			printf("[   ");
+@@ -2207,12 +2204,13 @@ void print_man_usage(char *lvmname, struct command *cmd)
+ 				printf(" ");
+ 				print_def_man(&cmd->optional_opt_args[oo].def, 1);
+ 			}
+-			printf(" ]");
++			printf(" ]\n");
++			printf(".ad b\n");
+ 			sep = 1;
+ 		}
+ 
+ 		if (sep) {
+-			printf("\n.br\n");
++			printf(".br\n");
+ 			/* space alignment without short opt */
+ 			/* printf("   "); */
+ 		}
+@@ -2286,9 +2284,9 @@ void print_man_usage_common_lvm(struct command *cmd)
+ 		if (!is_lvm_all_opt(opt_enum))
+ 			continue;
+ 
+-		if (sep) {
+-			printf("\n.br\n");
+-		}
++		if (sep)
++			printf(".br\n");
++		printf(".ad l\n");
+ 
+ 		for (oo = 0; oo < cmd->oo_count; oo++) {
+ 			if (cmd->optional_opt_args[oo].opt != opt_enum)
+@@ -2302,7 +2300,8 @@ void print_man_usage_common_lvm(struct command *cmd)
+ 				printf(" ");
+ 				print_def_man(&cmd->optional_opt_args[oo].def, 1);
+ 			}
+-			printf(" ]");
++			printf(" ]\n");
++			printf(".ad b\n");
+ 			sep = 1;
+ 			break;
+ 		}
+@@ -2319,9 +2318,9 @@ void print_man_usage_common_lvm(struct command *cmd)
+ 		if (!is_lvm_all_opt(opt_enum))
+ 			continue;
+ 
+-		if (sep) {
+-			printf("\n.br\n");
+-		}
++		if (sep)
++			printf(".br\n");
++		printf(".ad l\n");
+ 
+ 		for (oo = 0; oo < cmd->oo_count; oo++) {
+ 			if (cmd->optional_opt_args[oo].opt != opt_enum)
+@@ -2336,7 +2335,8 @@ void print_man_usage_common_lvm(struct command *cmd)
+ 				printf(" ");
+ 				print_def_man(&cmd->optional_opt_args[oo].def, 1);
+ 			}
+-			printf(" ]");
++			printf(" ]\n");
++			printf(".ad b\n");
+ 			sep = 1;
+ 			break;
+ 		}
+@@ -2381,9 +2381,9 @@ void print_man_usage_common_cmd(struct command *cmd)
+ 		if (is_lvm_all_opt(opt_enum))
+ 			continue;
+ 
+-		if (sep) {
+-			printf("\n.br\n");
+-		}
++		if (sep)
++			printf(".br\n");
++		printf(".ad l\n");
+ 
+ 		for (oo = 0; oo < cmd->oo_count; oo++) {
+ 			if (cmd->optional_opt_args[oo].opt != opt_enum)
+@@ -2397,7 +2397,8 @@ void print_man_usage_common_cmd(struct command *cmd)
+ 				printf(" ");
+ 				print_def_man(&cmd->optional_opt_args[oo].def, 1);
+ 			}
+-			printf(" ]");
++			printf(" ]\n");
++			printf(".ad b\n");
+ 			sep = 1;
+ 			break;
+ 		}
+@@ -2421,9 +2422,9 @@ void print_man_usage_common_cmd(struct command *cmd)
+ 		if (is_lvm_all_opt(opt_enum))
+ 			continue;
+ 
+-		if (sep) {
+-			printf("\n.br\n");
+-		}
++		if (sep)
++			printf(".br\n");
++		printf(".ad l\n");
+ 
+ 		for (oo = 0; oo < cmd->oo_count; oo++) {
+ 			if (cmd->optional_opt_args[oo].opt != opt_enum)
+@@ -2438,7 +2439,8 @@ void print_man_usage_common_cmd(struct command *cmd)
+ 				printf(" ");
+ 				print_def_man(&cmd->optional_opt_args[oo].def, 1);
+ 			}
+-			printf(" ]");
++			printf(" ]\n");
++			printf(".ad b\n");
+ 			sep = 1;
+ 			break;
+ 		}
+@@ -2555,7 +2557,8 @@ void print_man_all_options_list(struct command_name *cname)
+ 			continue;
+ 
+ 		if (sep)
+-			printf("\n.br\n");
++			printf(".br\n");
++		printf(".ad l\n");
+ 
+ 		printf(" \\fB-%c\\fP|\\fB%s\\fP",
+ 			opt_names[opt_enum].short_opt,
+@@ -2575,6 +2578,8 @@ void print_man_all_options_list(struct command_name *cname)
+ 			print_val_man(val_names[val_enum].usage);
+ 		}
+ 
++		printf("\n.ad b\n");
++
+ 		sep = 1;
  	}
  
-@@ -2798,13 +2798,15 @@ void print_man_all_positions_desc(struct command_name *cname)
- 	/* Nearly every command uses a number arg somewhere. */
+@@ -2589,7 +2594,8 @@ void print_man_all_options_list(struct command_name *cname)
+ 			continue;
  
- 	printf("\n.HP\n");
--	printf("\\fINumber\\fP, \\fIUnit\\fP");
-+	printf("\\fINumber\\fP, UNIT");
- 	printf("\n");
- 	printf(".br\n");
- 	printf("Input units are always treated as base two values, regardless of unit\n"
- 	       "capitalization, e.g. 'k' and 'K' both refer to 1024.\n"
--	       "The default input unit is specified by letter, followed by |\\fIUnit\\fP\n"
--	       "which represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n");
-+	       "The default input unit is specified by letter, followed by |UNIT\n"
-+	       "which represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n"
-+	       "(This should not be confused with the output control --units, where\n"
-+	       "capital letters mean multiple of 1000.)\n");
+ 		if (sep)
+-			printf("\n.br\n");
++			printf(".br\n");
++		printf(".ad l\n");
  
- 	printf("\n.HP\n");
- 	printf("Environment");
-diff --git a/tools/vals.h b/tools/vals.h
-index 3eb27e9..a94f81b 100644
---- a/tools/vals.h
-+++ b/tools/vals.h
-@@ -85,8 +85,8 @@
-  * output, and doesn't indicate which unit is the default.
-  * "Number[Units]" would be cleaner, as would a subset of
-  * common units, e.g. "Number[kmg...]", but neither helps
-- * with default.  "Number[k|Unit]" and "Number[m|Unit]" show
-- * the default, and "Unit" indicates that other units
-+ * with default.  "Number[k|UNIT]" and "Number[m|UNIT]" show
-+ * the default, and "UNIT" indicates that other units
-  * are possible without listing them all.  This also
-  * suggests using the preferred lower case letters, because
-  * --size and other option args treat upper/lower letters
-@@ -115,9 +115,9 @@ val(activation_VAL, activation_arg, "Active", "y|n|ay")
- val(cachemode_VAL, cachemode_arg, "CacheMode", "writethrough|writeback")
- val(discards_VAL, discards_arg, "Discards", "passdown|nopassdown|ignore")
- val(mirrorlog_VAL, mirrorlog_arg, "MirrorLog", "core|disk")
--val(sizekb_VAL, size_kb_arg, "SizeKB", "Number[k|Unit]")
--val(sizemb_VAL, size_mb_arg, "SizeMB", "Number[m|Unit]")
--val(regionsize_VAL, regionsize_arg, "RegionSize", "Number[m|Unit]")
-+val(sizekb_VAL, size_kb_arg, "SizeKB", "Number[k|UNIT]")
-+val(sizemb_VAL, size_mb_arg, "SizeMB", "Number[m|UNIT]")
-+val(regionsize_VAL, regionsize_arg, "RegionSize", "Number[m|UNIT]")
- val(numsigned_VAL, int_arg_with_sign, "SNumber", "[+|-]Number")
- val(numsignedper_VAL, int_arg_with_sign_and_percent, "SNumberP", "[+|-]Number[%VG|%PVS|%FREE]")
- val(permission_VAL, permission_arg, "Permission", "rw|r")
+ 		/* space alignment without short opt */
+ 		printf("   ");
+@@ -2610,6 +2616,8 @@ void print_man_all_options_list(struct command_name *cname)
+ 			print_val_man(val_names[val_enum].usage);
+ 		}
+ 
++		printf("\n.ad b\n");
++
+ 		sep = 1;
+ 	}
+ }
+@@ -2632,6 +2640,8 @@ void print_man_all_options_desc(struct command_name *cname)
+ 
+ 		printf("\n.HP\n");
+ 
++		printf(".ad l\n");
++
+ 		if (opt_names[opt_enum].short_opt) {
+ 			printf("\\fB-%c\\fP|\\fB%s\\fP",
+ 			       opt_names[opt_enum].short_opt,
+@@ -2663,6 +2673,8 @@ void print_man_all_options_desc(struct command_name *cname)
+ 			print_man_option_desc(cname, opt_enum);
+ 		}
+ 
++		printf(".ad b\n");
++
+ 		sep = 1;
+ 	}
+ }
 
 
