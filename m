@@ -1,77 +1,40 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 24 Feb 2017 20:19:43 +0000 (UTC)
-Subject: master - lvconvert: fix handling args in combining snapshots
-Message-ID: <20170224201943.0CF2260257@fedorahosted.org>
+Date: Fri, 24 Feb 2017 21:14:59 +0000 (UTC)
+Subject: master - man: add ENVIRONMENT VARIABLES section
+Message-ID: <20170224211459.DC07160FC5@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=84cceaf9b9f0f323c78e9818c2b54c97d71b392f
-Commit:        84cceaf9b9f0f323c78e9818c2b54c97d71b392f
-Parent:        74ba326007205ebbb5afca7c8f74a8b19e9dcb50
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5f6bdf707db24e882b3c3f86f8a5f2e2d2007c98
+Commit:        5f6bdf707db24e882b3c3f86f8a5f2e2d2007c98
+Parent:        84cceaf9b9f0f323c78e9818c2b54c97d71b392f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 24 14:17:58 2017 -0600
+AuthorDate:    Fri Feb 24 15:05:17 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 24 14:17:58 2017 -0600
+CommitterDate: Fri Feb 24 15:05:17 2017 -0600
 
-lvconvert: fix handling args in combining snapshots
+man: add ENVIRONMENT VARIABLES section
 
-Fixes commit 286d39ee3c433, which was correct except
-for a reversed strstr.  Now uses strchr, and modifies
-a copy of the name so the original argv is preserved.
 ---
- tools/lvconvert.c |   22 ++++++++++++++--------
- 1 files changed, 14 insertions(+), 8 deletions(-)
+ tools/command.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 183421a..c82dab2 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3668,8 +3668,9 @@ static int _lvconvert_combine_split_snapshot_single(struct cmd_context *cmd,
- int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
- {
- 	const char *vgname = NULL;
--	const char *lvname1;
--	const char *lvname2;
-+	const char *lvname1_orig;
-+	const char *lvname2_orig;
-+	const char *lvname1_split;
- 	char *vglv;
- 	int vglv_sz;
+diff --git a/tools/command.c b/tools/command.c
+index 4e7c009..5dd0298 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -2825,8 +2825,7 @@ void print_man_all_positions_desc(struct command_name *cname)
+ 	       "(This should not be confused with the output control --units, where\n"
+ 	       "capital letters mean multiple of 1000.)\n");
  
-@@ -3687,20 +3688,25 @@ int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char
- 	 * This is the only instance in all commands.
- 	 */
- 
--	lvname1 = cmd->position_argv[0];
--	lvname2 = cmd->position_argv[1];
-+	lvname1_orig = cmd->position_argv[0];
-+	lvname2_orig = cmd->position_argv[1];
- 
--	if (strstr("/", lvname1) && !strstr("/", lvname2) && !getenv("LVM_VG_NAME")) {
--		if (!validate_lvname_param(cmd, &vgname, &lvname1))
-+	if (strchr(lvname1_orig, '/') && !strchr(lvname2_orig, '/') && !getenv("LVM_VG_NAME")) {
-+		if (!(lvname1_split = dm_pool_strdup(cmd->mem, lvname1_orig)))
- 			return_ECMD_FAILED;
- 
--		vglv_sz = strlen(vgname) + strlen(lvname2) + 2;
-+		if (!validate_lvname_param(cmd, &vgname, &lvname1_split))
-+			return_ECMD_FAILED;
-+
-+		vglv_sz = strlen(vgname) + strlen(lvname2_orig) + 2;
- 		if (!(vglv = dm_pool_alloc(cmd->mem, vglv_sz)) ||
--		    dm_snprintf(vglv, vglv_sz, "%s/%s", vgname, lvname2) < 0) {
-+		    dm_snprintf(vglv, vglv_sz, "%s/%s", vgname, lvname2_orig) < 0) {
-        			log_error("vg/lv string alloc failed.");
- 			return_ECMD_FAILED;
- 		}
- 
-+		/* vglv is now vgname/lvname2 and replaces lvname2_orig */
-+
- 		cmd->position_argv[1] = vglv;
- 	}
- 
+-	printf("\n.HP\n");
+-	printf("Environment");
++	printf(".SH ENVIRONMENT VARIABLES");
+ 	printf("\n");
+ 	printf(".br\n");
+ 	printf("See \\fBlvm\\fP(8) for information about environment variables used by lvm.\n"
 
 
