@@ -1,278 +1,172 @@
-From: Heinz Mauelshagen <mauelsha@fedoraproject.org>
-Date: Fri, 24 Feb 2017 06:32:40 +0000 (UTC)
-Subject: master - lvconvert: impose region size constraints
-Message-ID: <20170224063240.C26EE60B26@fedorahosted.org>
+From: David Teigland <teigland@fedoraproject.org>
+Date: Fri, 24 Feb 2017 19:45:09 +0000 (UTC)
+Subject: master - man: use Size variable for a number with unit
+Message-ID: <20170224194509.AF40960228@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=189fa647931834b0d9cb30c20d16785b8e8923c9
-Commit:        189fa647931834b0d9cb30c20d16785b8e8923c9
-Parent:        3bdc4045c2abbf9ea11000b76eeefab9fed16033
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Feb 24 07:27:43 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Feb 24 07:27:43 2017 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=74ba326007205ebbb5afca7c8f74a8b19e9dcb50
+Commit:        74ba326007205ebbb5afca7c8f74a8b19e9dcb50
+Parent:        189fa647931834b0d9cb30c20d16785b8e8923c9
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Feb 24 13:44:05 2017 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Feb 24 13:44:05 2017 -0600
 
-lvconvert: impose region size constraints
+man: use Size variable for a number with unit
 
-When requesting a regionsize change during conversions, check
-for constraints or the command may fail in the kernel n case
-the region size is too smalle or too large thus leaving any
-new SubLVs behind.
-
-Related: rhbz834579
-Related: rhbz1191935
-Related: rhbz1191978
+Define a separate variable type Size to represent
+a number that takes an optional UNIT.
 ---
- lib/metadata/raid_manip.c |   86 +++++++++++++++++++++++++++++++-------------
- tools/lvconvert.c         |    2 +
- 2 files changed, 62 insertions(+), 26 deletions(-)
+ tools/args.h       |    2 +-
+ tools/command.c    |   25 +++++++++++++++----------
+ tools/lvmcmdline.c |    4 ++--
+ tools/tools.h      |    2 +-
+ tools/vals.h       |   22 +++++++++++-----------
+ 5 files changed, 30 insertions(+), 25 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 34567bd..34e8856 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -94,6 +94,27 @@ uint32_t raid_ensure_min_region_size(const struct logical_volume *lv, uint64_t r
- 	return region_size;
- }
+diff --git a/tools/args.h b/tools/args.h
+index 036aa87..dd25007 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -987,7 +987,7 @@ arg(logicalvolume_ARG, 'l', "logicalvolume", uint32_VAL, 0, 0,
+ arg(maxlogicalvolumes_ARG, 'l', "maxlogicalvolumes", uint32_VAL, 0, 0,
+     "Sets the maximum number of LVs allowed in a VG.\n")
  
-+/* check constraints on region size vs. stripe and LV size on @lv */
-+static int _check_region_size_constraints(struct logical_volume *lv,
-+					  const struct segment_type *segtype,
-+					  uint32_t region_size,
-+					  uint32_t stripe_size)
-+{
-+	if (region_size < stripe_size) {
-+		log_error("Regionsize may not be smaller than stripe size on %s LV %s.",
-+			  segtype->name, display_lvname(lv));
-+		return 0;
-+	}
-+
-+	if (region_size * 8 > lv->size) {
-+		log_error("Regionsize too large for %s LV %s.",
-+			   segtype->name, display_lvname(lv));
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
- /*
-  * Check for maximum number of raid devices.
-  * Constrained by kernel MD maximum device limits _and_ dm-raid superblock
-@@ -2142,6 +2163,9 @@ static int _raid_reshape(struct logical_volume *lv,
- 	if (!_check_max_raid_devices(new_image_count))
- 		return_0;
+-arg(extents_ARG, 'l', "extents", numsignedper_VAL, 0, 0,
++arg(extents_ARG, 'l', "extents", extents_VAL, 0, 0,
+     "#lvcreate\n"
+     "Specifies the size of the new LV in logical extents.\n"
+     "The --size and --extents options are alternate methods of specifying size.\n"
+diff --git a/tools/command.c b/tools/command.c
+index 8d5a96b..4e7c009 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -79,7 +79,7 @@ static inline int size_mb_arg_with_percent(struct cmd_context *cmd, struct arg_v
+ static inline int int_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ static inline int uint32_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ static inline int int_arg_with_sign(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+-static inline int int_arg_with_sign_and_percent(struct cmd_context *cmd, struct arg_values *av) { return 0; }
++static inline int extents_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ static inline int major_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ static inline int minor_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+ static inline int string_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
+@@ -1792,13 +1792,13 @@ static void print_val_man(const char *str)
+ 	 * that isn't already obvious.
+ 	 */
  
-+	if (!_check_region_size_constraints(lv, new_segtype, new_region_size, new_stripe_size))
-+		return 0;
-+
- 	if (!_raid_in_sync(lv)) {
- 		log_error("Unable to convert %s while it is not in-sync.",
- 			  display_lvname(lv));
-@@ -4772,6 +4796,9 @@ static int _takeover_downconvert_wrapper(TAKEOVER_FN_ARGS)
- 		return 0;
+-	if (!strcmp(str, "Number[k|UNIT]")) {
+-		printf("\\fINumber\\fP[k|UNIT]");
++	if (!strcmp(str, "Size[k|UNIT]")) {
++		printf("\\fISize\\fP[k|UNIT]");
+ 		return;
  	}
  
-+	if (!_check_region_size_constraints(lv, new_segtype, new_region_size, new_stripe_size))
-+		return 0;
-+
- 	if (seg_is_any_raid10(seg) && (seg->area_count % seg->data_copies)) {
- 		log_error("Can't convert %s LV %s to %s with odd number of stripes.",
- 			  lvseg_name(seg), display_lvname(lv), new_segtype->name);
-@@ -4853,7 +4880,8 @@ static int _takeover_downconvert_wrapper(TAKEOVER_FN_ARGS)
- 		seg->region_size = 0;
- 		if (!(seg->segtype = get_segtype_from_flag(lv->vg->cmd, SEG_RAID0_META)))
- 			return_0;
--	}
-+	} else
-+		seg->region_size = new_region_size;
- 
- 	if (segtype_is_striped_target(new_segtype)) {
- 		if (!_convert_raid0_to_striped(lv, 0, &removal_lvs))
-@@ -5035,6 +5063,11 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
- 			new_stripe_size = 128;
+-	if (!strcmp(str, "Number[m|UNIT]")) {
+-		printf("\\fINumber\\fP[m|UNIT]");
++	if (!strcmp(str, "Size[m|UNIT]")) {
++		printf("\\fISize\\fP[m|UNIT]");
+ 		return;
  	}
  
-+	region_size = seg->region_size;
-+
-+	if (!_check_region_size_constraints(lv, new_segtype, new_region_size, new_stripe_size))
-+		return 0;
-+
- 	/* Archive metadata */
- 	if (!archive(lv->vg))
- 		return_0;
-@@ -5065,7 +5098,6 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
+@@ -2807,16 +2807,21 @@ void print_man_all_positions_desc(struct command_name *cname)
+ 	printf(".br\n");
+ 	printf("See the option description for information about the string content.\n");
  
+-	/* Nearly every command uses a number arg somewhere. */
++	/*
++	 * We could possibly check if the command accepts any option that
++	 * uses Size, and only print this in those cases, but this seems
++	 * so common that we should probably always print it.
++	 */
  
- 	extents_copied = seg->extents_copied;
--	region_size = seg->region_size;
- 	seg_len = seg->len;
- 	stripe_size = seg->stripe_size;
+ 	printf("\n.HP\n");
+-	printf("\\fINumber\\fP, UNIT");
++	printf("\\fISize\\fP[UNIT]");
+ 	printf("\n");
+ 	printf(".br\n");
+-	printf("Input units are always treated as base two values, regardless of unit\n"
++	printf("Size is an input number that accepts an optional unit.\n"
++	       "Input units are always treated as base two values, regardless of\n"
+ 	       "capitalization, e.g. 'k' and 'K' both refer to 1024.\n"
+-	       "The default input unit is specified by letter, followed by |UNIT\n"
+-	       "which represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n"
++	       "The default input unit is specified by letter, followed by |UNIT.\n"
++	       "UNIT represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n"
+ 	       "(This should not be confused with the output control --units, where\n"
+ 	       "capital letters mean multiple of 1000.)\n");
  
-@@ -5221,21 +5253,24 @@ static int _takeover_from_raid0_to_raid10(TAKEOVER_FN_ARGS)
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 02266c9..9b20d9f 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -672,8 +672,8 @@ int int_arg_with_sign(struct cmd_context *cmd __attribute__((unused)), struct ar
+ 	return 1;
+ }
+ 
+-int int_arg_with_sign_and_percent(struct cmd_context *cmd __attribute__((unused)),
+-				  struct arg_values *av)
++int extents_arg(struct cmd_context *cmd __attribute__((unused)),
++		struct arg_values *av)
  {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 					   first_seg(lv)->area_count * 2 /* new_image_count */,
--					   2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+					   2 /* data_copies */, 0, new_stripe_size,
-+					   new_region_size, allocate_pvs);
- }
+ 	char *ptr;
  
- static int _takeover_from_raid0_to_raid45(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 					   first_seg(lv)->area_count + 1 /* new_image_count */,
--					   2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+					   2 /* data_copies */, 0, new_stripe_size,
-+					   new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid0_to_raid6(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 					   first_seg(lv)->area_count + 2 /* new_image_count */,
--					   3 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+					   3 /* data_copies */, 0, new_stripe_size,
-+					   new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid0_to_striped(TAKEOVER_FN_ARGS)
-@@ -5273,21 +5308,24 @@ static int _takeover_from_raid0_meta_to_raid10(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 						      first_seg(lv)->area_count * 2 /* new_image_count */,
--						      2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+						      2 /* data_copies */, 0, new_stripe_size,
-+						      new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid0_meta_to_raid45(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 						      first_seg(lv)->area_count + 1 /* new_image_count */,
--						      2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+						      2 /* data_copies */, 0, new_stripe_size,
-+						      new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid0_meta_to_raid6(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 						      first_seg(lv)->area_count + 2 /* new_image_count */,
--						      3 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+						      3 /* data_copies */, 0, new_stripe_size,
-+						      new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid0_meta_to_striped(TAKEOVER_FN_ARGS)
-@@ -5332,7 +5370,8 @@ static int _takeover_from_raid1_to_raid5(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 					   first_seg(lv)->area_count /* unchanged new_image_count */,
--					   2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+					   2 /* data_copies */, 0, new_stripe_size,
-+					   new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid1_to_striped(TAKEOVER_FN_ARGS)
-@@ -5369,7 +5408,7 @@ static int _takeover_from_raid5_to_raid1(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_downconvert_wrapper(lv, new_segtype, yes, force,
- 					     first_seg(lv)->area_count,
--					     2 /* data_copies */, 0, 0, 0, allocate_pvs);
-+					     2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid45_to_raid54(TAKEOVER_FN_ARGS)
-@@ -5390,7 +5429,8 @@ static int _takeover_from_raid45_to_raid6(TAKEOVER_FN_ARGS)
- 	}
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 					   first_seg(lv)->area_count + 1 /* new_image_count */,
--					   3 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+					   3 /* data_copies */, 0, new_stripe_size,
-+					   new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid45_to_striped(TAKEOVER_FN_ARGS)
-@@ -5411,14 +5451,14 @@ static int _takeover_from_raid6_to_raid0_meta(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_downconvert_wrapper(lv, new_segtype, yes, force,
- 					     first_seg(lv)->area_count - 2,
--					    1 /* data_copies */, 0, 0, 0, allocate_pvs);
-+					     1 /* data_copies */, 0, 0, 0, allocate_pvs);
- }
- 
- static int _takeover_from_raid6_to_raid45(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_downconvert_wrapper(lv, new_segtype, yes, force,
- 					     first_seg(lv)->area_count - 1,
--					    2 /* data_copies */, 0, 0, 0, allocate_pvs);
-+					     2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_raid6_to_striped(TAKEOVER_FN_ARGS)
-@@ -5453,20 +5493,23 @@ static int _takeover_from_striped_to_raid10(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 					   first_seg(lv)->area_count * 2 /* new_image_count */,
--					   2 /* FIXME: variable data_copies */, 0, 0, new_region_size, allocate_pvs);
-+					   2 /* FIXME: variable data_copies */, 0, new_stripe_size,
-+					   new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_striped_to_raid45(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force, first_seg(lv)->area_count + 1,
--					   2 /* data_copies*/, 0, 0, new_region_size, allocate_pvs);
-+					   2 /* data_copies*/, 0, new_stripe_size,
-+					   new_region_size, allocate_pvs);
- }
- 
- static int _takeover_from_striped_to_raid6(TAKEOVER_FN_ARGS)
- {
- 	return _takeover_upconvert_wrapper(lv, new_segtype, yes, force,
- 					   first_seg(lv)->area_count + 2 /* new_image_count */,
--					   3 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
-+					   3 /* data_copies */, 0, new_stripe_size,
-+					   new_region_size, allocate_pvs);
- }
- 
- /*
-@@ -5725,17 +5768,8 @@ static int _region_size_change_requested(struct logical_volume *lv, int yes, con
- 		return 1;
- 	}
- 
--	if (region_size * 8 > lv->size) {
--		log_error("Requested region size too large for LV %s size %s.",
--			  display_lvname(lv), display_size(lv->vg->cmd, lv->size));
-+	if (!_check_region_size_constraints(lv, seg->segtype, region_size, seg->stripe_size))
- 		return 0;
--	}
--
--	if (region_size < seg->stripe_size) {
--		log_error("Requested region size for LV %s is smaller than stripe size.",
--			  display_lvname(lv));
--		return 0;
--	}
- 
- 	if (!_raid_in_sync(lv)) {
- 		log_error("Unable to change region size on %s LV %s while it is not in-sync.",
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 0db10cb..183421a 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1401,6 +1401,8 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
- 			lp->stripes = 0;
- 		if (!arg_is_set(cmd, type_ARG))
- 		       lp->segtype = NULL;
-+		if (!arg_is_set(cmd, regionsize_ARG))
-+		       lp->region_size = 0;
- 
- 		if (!lv_raid_convert(lv, lp->segtype,
- 				     lp->yes, lp->force, lp->stripes, lp->stripe_size_supplied, lp->stripe_size,
+diff --git a/tools/tools.h b/tools/tools.h
+index 62db506..1e1e7f1 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -188,7 +188,7 @@ int size_mb_arg_with_percent(struct cmd_context *cmd, struct arg_values *av);
+ int int_arg(struct cmd_context *cmd, struct arg_values *av);
+ int uint32_arg(struct cmd_context *cmd, struct arg_values *av);
+ int int_arg_with_sign(struct cmd_context *cmd, struct arg_values *av);
+-int int_arg_with_sign_and_percent(struct cmd_context *cmd, struct arg_values *av);
++int extents_arg(struct cmd_context *cmd, struct arg_values *av);
+ int major_arg(struct cmd_context *cmd, struct arg_values *av);
+ int minor_arg(struct cmd_context *cmd, struct arg_values *av);
+ int string_arg(struct cmd_context *cmd, struct arg_values *av);
+diff --git a/tools/vals.h b/tools/vals.h
+index a94f81b..d485926 100644
+--- a/tools/vals.h
++++ b/tools/vals.h
+@@ -79,13 +79,13 @@
+  * options included in the usage text below that should
+  * be removed?  Should "lvm1" be removed?
+  *
+- * For Number args that take optional units, a full usage
+- * could be "Number[bBsSkKmMgGtTpPeE]" (with implied |),
+- * but repeating this full specification produces cluttered
+- * output, and doesn't indicate which unit is the default.
+- * "Number[Units]" would be cleaner, as would a subset of
+- * common units, e.g. "Number[kmg...]", but neither helps
+- * with default.  "Number[k|UNIT]" and "Number[m|UNIT]" show
++ * Size is a Number that takes an optional unit.
++ * A full usage could be "Size[b|B|s|S|k|K|m|M|g|G|t|T|p|P|e|E]"
++ * but repeating this full specification produces long and
++ * cluttered output, and doesn't indicate which unit is the default.
++ * "Size[Units]" would be cleaner, as would a subset of
++ * common units, e.g. "Size[kmg...]", but neither helps
++ * with default.  "Size[k|UNIT]" and "Size[m|UNIT]" show
+  * the default, and "UNIT" indicates that other units
+  * are possible without listing them all.  This also
+  * suggests using the preferred lower case letters, because
+@@ -115,11 +115,11 @@ val(activation_VAL, activation_arg, "Active", "y|n|ay")
+ val(cachemode_VAL, cachemode_arg, "CacheMode", "writethrough|writeback")
+ val(discards_VAL, discards_arg, "Discards", "passdown|nopassdown|ignore")
+ val(mirrorlog_VAL, mirrorlog_arg, "MirrorLog", "core|disk")
+-val(sizekb_VAL, size_kb_arg, "SizeKB", "Number[k|UNIT]")
+-val(sizemb_VAL, size_mb_arg, "SizeMB", "Number[m|UNIT]")
+-val(regionsize_VAL, regionsize_arg, "RegionSize", "Number[m|UNIT]")
++val(sizekb_VAL, size_kb_arg, "SizeKB", "Size[k|UNIT]")
++val(sizemb_VAL, size_mb_arg, "SizeMB", "Size[m|UNIT]")
++val(regionsize_VAL, regionsize_arg, "RegionSize", "Size[m|UNIT]")
+ val(numsigned_VAL, int_arg_with_sign, "SNumber", "[+|-]Number")
+-val(numsignedper_VAL, int_arg_with_sign_and_percent, "SNumberP", "[+|-]Number[%VG|%PVS|%FREE]")
++val(extents_VAL, extents_arg, "Extents", "[+|-]Number[%VG|%PVS|%FREE]")
+ val(permission_VAL, permission_arg, "Permission", "rw|r")
+ val(metadatatype_VAL, metadatatype_arg, "MetadataType", "lvm2|lvm1")
+ val(units_VAL, string_arg, "Units", "r|R|h|H|b|B|s|S|k|K|m|M|g|G|t|T|p|P|e|E")
 
 
