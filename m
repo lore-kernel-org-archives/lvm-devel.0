@@ -1,111 +1,77 @@
 From: David Teigland <teigland@fedoraproject.org>
-Date: Mon, 20 Feb 2017 23:10:36 +0000 (UTC)
-Subject: master - man: use .HP instead of .TP
-Message-ID: <20170220231037.0180760E60@fedorahosted.org>
+Date: Fri, 24 Feb 2017 20:19:43 +0000 (UTC)
+Subject: master - lvconvert: fix handling args in combining snapshots
+Message-ID: <20170224201943.0CF2260257@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86a660be7b31809500488792a93670a703e12a27
-Commit:        86a660be7b31809500488792a93670a703e12a27
-Parent:        e13639053b0d413624fb10baab535fde2c2c5bd5
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=84cceaf9b9f0f323c78e9818c2b54c97d71b392f
+Commit:        84cceaf9b9f0f323c78e9818c2b54c97d71b392f
+Parent:        74ba326007205ebbb5afca7c8f74a8b19e9dcb50
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 20 17:10:11 2017 -0600
+AuthorDate:    Fri Feb 24 14:17:58 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 20 17:10:11 2017 -0600
+CommitterDate: Fri Feb 24 14:17:58 2017 -0600
 
-man: use .HP instead of .TP
+lvconvert: fix handling args in combining snapshots
 
+Fixes commit 286d39ee3c433, which was correct except
+for a reversed strstr.  Now uses strchr, and modifies
+a copy of the name so the original argv is preserved.
 ---
- tools/command.c |   18 +++++++++---------
- 1 files changed, 9 insertions(+), 9 deletions(-)
+ tools/lvconvert.c |   22 ++++++++++++++--------
+ 1 files changed, 14 insertions(+), 8 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index b1fdc1b..fe8c1f6 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -2498,7 +2498,7 @@ void print_man_all_options_desc(struct command_name *cname)
- 		if (!cname->all_options[opt_enum])
- 			continue;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 183421a..c82dab2 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3668,8 +3668,9 @@ static int _lvconvert_combine_split_snapshot_single(struct cmd_context *cmd,
+ int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	const char *vgname = NULL;
+-	const char *lvname1;
+-	const char *lvname2;
++	const char *lvname1_orig;
++	const char *lvname2_orig;
++	const char *lvname1_split;
+ 	char *vglv;
+ 	int vglv_sz;
  
--		printf("\n.TP\n");
-+		printf("\n.HP\n");
+@@ -3687,20 +3688,25 @@ int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char
+ 	 * This is the only instance in all commands.
+ 	 */
  
- 		if (opt_names[opt_enum].short_opt) {
- 			printf("\\fB-%c\\fP|\\fB%s\\fP",
-@@ -2591,7 +2591,7 @@ void print_man_all_positions_desc(struct command_name *cname)
+-	lvname1 = cmd->position_argv[0];
+-	lvname2 = cmd->position_argv[1];
++	lvname1_orig = cmd->position_argv[0];
++	lvname2_orig = cmd->position_argv[1];
+ 
+-	if (strstr("/", lvname1) && !strstr("/", lvname2) && !getenv("LVM_VG_NAME")) {
+-		if (!validate_lvname_param(cmd, &vgname, &lvname1))
++	if (strchr(lvname1_orig, '/') && !strchr(lvname2_orig, '/') && !getenv("LVM_VG_NAME")) {
++		if (!(lvname1_split = dm_pool_strdup(cmd->mem, lvname1_orig)))
+ 			return_ECMD_FAILED;
+ 
+-		vglv_sz = strlen(vgname) + strlen(lvname2) + 2;
++		if (!validate_lvname_param(cmd, &vgname, &lvname1_split))
++			return_ECMD_FAILED;
++
++		vglv_sz = strlen(vgname) + strlen(lvname2_orig) + 2;
+ 		if (!(vglv = dm_pool_alloc(cmd->mem, vglv_sz)) ||
+-		    dm_snprintf(vglv, vglv_sz, "%s/%s", vgname, lvname2) < 0) {
++		    dm_snprintf(vglv, vglv_sz, "%s/%s", vgname, lvname2_orig) < 0) {
+        			log_error("vg/lv string alloc failed.");
+ 			return_ECMD_FAILED;
+ 		}
+ 
++		/* vglv is now vgname/lvname2 and replaces lvname2_orig */
++
+ 		cmd->position_argv[1] = vglv;
  	}
  
- 	if (has_vg_val) {
--		printf("\n.TP\n");
-+		printf("\n.HP\n");
- 
- 		printf("\\fI%s\\fP", val_names[vg_VAL].name);
- 		printf("\n");
-@@ -2605,7 +2605,7 @@ void print_man_all_positions_desc(struct command_name *cname)
- 	}
- 
- 	if (has_lv_val) {
--		printf("\n.TP\n");
-+		printf("\n.HP\n");
- 
- 		printf("\\fI%s\\fP", val_names[lv_VAL].name);
- 		printf("\n");
-@@ -2619,7 +2619,7 @@ void print_man_all_positions_desc(struct command_name *cname)
- 	}
- 
- 	if (has_pv_val) {
--		printf("\n.TP\n");
-+		printf("\n.HP\n");
- 
- 		printf("\\fI%s\\fP", val_names[pv_VAL].name);
- 		printf("\n");
-@@ -2632,7 +2632,7 @@ void print_man_all_positions_desc(struct command_name *cname)
- 	}
- 
- 	if (has_tag_val) {
--		printf("\n.TP\n");
-+		printf("\n.HP\n");
- 
- 		printf("\\fI%s\\fP", val_names[tag_VAL].name);
- 		printf("\n");
-@@ -2642,7 +2642,7 @@ void print_man_all_positions_desc(struct command_name *cname)
- 	}
- 
- 	if (has_select_val) {
--		printf("\n.TP\n");
-+		printf("\n.HP\n");
- 
- 		printf("\\fI%s\\fP", val_names[select_VAL].name);
- 		printf("\n");
-@@ -2654,7 +2654,7 @@ void print_man_all_positions_desc(struct command_name *cname)
- 
- 	/* Every command uses a string arg somewhere. */
- 
--	printf("\n.TP\n");
-+	printf("\n.HP\n");
- 	printf("\\fI%s\\fP", val_names[string_VAL].name);
- 	printf("\n");
- 	printf(".br\n");
-@@ -2662,7 +2662,7 @@ void print_man_all_positions_desc(struct command_name *cname)
- 
- 	/* Nearly every command uses a number arg somewhere. */
- 
--	printf("\n.TP\n");
-+	printf("\n.HP\n");
- 	printf("\\fINumber\\fP, \\fISize\\fP");
- 	printf("\n");
- 	printf(".br\n");
-@@ -2671,7 +2671,7 @@ void print_man_all_positions_desc(struct command_name *cname)
- 	       "The default input unit is specified by letter, followed by |unit which\n"
- 	       "represents other possible input units: bBsSkKmMgGtTpPeE.\n");
- 
--	printf("\n.TP\n");
-+	printf("\n.HP\n");
- 	printf("Environment");
- 	printf("\n");
- 	printf(".br\n");
 
 
