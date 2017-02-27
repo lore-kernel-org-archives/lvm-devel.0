@@ -1,76 +1,121 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 27 Feb 2017 15:42:55 -0500
-Subject: master - lvconvert: limit libdm to maximum of 64 RAID devices
-Message-ID: <201702272042.v1RKgtSB020335@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 27 Feb 2017 15:46:18 -0500
+Subject: master - commands: fixes for recent raid changes
+Message-ID: <201702272046.v1RKkIaM020796@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=27384c52cf6a55ec7c8d64deecff2a81536193c7
-Commit:        27384c52cf6a55ec7c8d64deecff2a81536193c7
-Parent:        c41e99948819e896d9d06b4a8192ec7a63facf65
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Feb 27 21:42:15 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Feb 27 21:42:15 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8d0df0c011f23095cf028c556db15b531ca91ea5
+Commit:        8d0df0c011f23095cf028c556db15b531ca91ea5
+Parent:        27384c52cf6a55ec7c8d64deecff2a81536193c7
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Feb 24 16:43:05 2017 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Feb 27 14:44:00 2017 -0600
 
-lvconvert: limit libdm to maximum of 64 RAID devices
+commands: fixes for recent raid changes
 
-Commit 64a2fad5d6c6 raised the maximum number of RAID devices to 64.
+- Combine the equivalent lvconvert --type raid defs.
+  (Two cmd defs must be different without relying
+  on LV type, which are not known at the time the
+  cmd def is matched.)
 
-Commit e2354ea344c2 introduced RAID_BITMAP_SIZE as 4 to have
-256 bits (4 * 64 bit array members), thus changing the libdm API
-unnecessarilly for the time being.
+- Remove unused optional options from lvconvert --stripes,
+  and lvconvert --stripesize.
 
-To not change the API, reduce RAID_BITMAP_SIZE to 1.
-Remove an unneeded definition of it from libdm-common.h.
+- Use Number for --stripes_long val type.
 
-If we ever decide to raise past 64, we'll version the API.
-
-Related: rhbz834579
-Related: rhbz1191935
-Related: rhbz1191978
+- Combine the cmd def for raid reshape cleanup into the
+  existing start_poll cmd def (they were duplicate defs).
+  Calls into the raid code from a poll opertion will be
+  added.
 ---
- libdm/libdevmapper.h |   11 ++++++++++-
- libdm/libdm-common.h |    2 --
- 2 files changed, 10 insertions(+), 3 deletions(-)
+ tools/command-lines.in |   30 ++++++++++--------------------
+ 1 files changed, 10 insertions(+), 20 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 7fccac5..7136261 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1739,7 +1739,16 @@ int dm_tree_node_add_raid_target(struct dm_tree_node *node,
-  */
- #define DM_CACHE_METADATA_MAX_SECTORS DM_THIN_METADATA_MAX_SECTORS
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index c3d684e..f8e0db7 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -338,19 +338,16 @@ ID: lvconvert_raid_types
+ DESC: Convert LV to type mirror (also see type raid1).
+ RULE: all not lv_is_locked lv_is_pvmove
  
--#define	RAID_BITMAP_SIZE 4
-+/*
-+ * Define number of elements in rebuild and writemostly arrays
-+ * 'of struct dm_tree_node_raid_params'.
-+ *
-+ * Set to one to keep the current libdm API!
-+ *
-+ * If we ever raise the maximum number of RAID devices past 64 thus
-+ * changing the API, we have to version it for backwards API compatibility.
-+ */
-+#define	RAID_BITMAP_SIZE 1
- 
- struct dm_tree_node_raid_params {
- 	const char *raid_type;
-diff --git a/libdm/libdm-common.h b/libdm/libdm-common.h
-index a064db8..4dc1870 100644
---- a/libdm/libdm-common.h
-+++ b/libdm/libdm-common.h
-@@ -23,8 +23,6 @@
- #define DEV_NAME(dmt) (dmt->mangled_dev_name ? : dmt->dev_name)
- #define DEV_UUID(DMT) (dmt->mangled_uuid ? : dmt->uuid)
- 
--#define RAID_BITMAP_SIZE	4
++# When LV is already raid, this changes the raid layout
++# (changing layout of raid0 and raid1 not allowed.)
++
+ lvconvert --type raid LV
+ OO: OO_LVCONVERT_RAID, OO_LVCONVERT
+ OP: PV ...
+ ID: lvconvert_raid_types
+-DESC: Convert LV to raid.
+-RULE: all not lv_is_locked lv_is_pvmove
 -
- int mangle_string(const char *str, const char *str_name, size_t len,
- 		  char *buf, size_t buf_len, dm_string_mangling_t mode);
+-lvconvert --type raid LV_raid
+-OO: OO_LVCONVERT_RAID, OO_LVCONVERT
+-ID: lvconvert_raid_types
+-DESC: Convert raid LV to different layout algorithm.
++DESC: Convert LV to raid or change raid layout.
+ RULE: all not lv_is_locked lv_is_pvmove
+-RULE: all not LV_raid0 LV_raid1
++RULE: LV_raid not LV_raid0 LV_raid1
  
+ lvconvert --mirrors SNumber LV
+ OO: OO_LVCONVERT_RAID, OO_LVCONVERT, --mirrorlog MirrorLog
+@@ -359,8 +356,8 @@ ID: lvconvert_raid_types
+ DESC: Convert LV to raid1 or mirror, or change number of mirror images.
+ RULE: all not lv_is_locked lv_is_pvmove
+ 
+-lvconvert --stripes_long SNumber LV_raid
+-OO: OO_LVCONVERT_RAID, OO_LVCONVERT
++lvconvert --stripes_long Number LV_raid
++OO: OO_LVCONVERT, --interval Number, --regionsize RegionSize, --stripesize SizeKB
+ OP: PV ...
+ ID: lvconvert_raid_types
+ DESC: Convert raid LV to change number of stripe images.
+@@ -368,7 +365,7 @@ RULE: all not lv_is_locked lv_is_pvmove
+ RULE: all not LV_raid0 LV_raid1
+ 
+ lvconvert --stripesize SizeKB LV_raid
+-OO: OO_LVCONVERT_RAID, OO_LVCONVERT
++OO: OO_LVCONVERT, --interval Number, --regionsize RegionSize
+ ID: lvconvert_raid_types
+ DESC: Convert raid LV to change the stripe size.
+ RULE: all not lv_is_locked lv_is_pvmove
+@@ -381,13 +378,6 @@ DESC: Change the region size of an LV.
+ RULE: all not lv_is_locked lv_is_pvmove
+ RULE: all not LV_raid0
+ 
+-lvconvert LV_mirror_raid
+-OO: OO_LVCONVERT
+-ID: lvconvert_raid_types
+-DESC: Remove out-of-place reshape space
+-RULE: all not lv_is_locked lv_is_pvmove
+-RULE: all not LV_raid0 LV_raid1
+-
+ ---
+ 
+ # lvconvert raid-related utilities
+@@ -677,7 +667,7 @@ RULE: all not lv_is_locked lv_is_pvmove
+ # This command just (re)starts the polling process on the LV
+ # to continue a previous conversion.
+ 
+-lvconvert --startpoll LV_mirror
++lvconvert --startpoll LV_mirror_raid
+ OO: OO_LVCONVERT
+ ID: lvconvert_start_poll
+ DESC: Poll LV to continue conversion.
+@@ -685,7 +675,7 @@ RULE: all and lv_is_converting
+ 
+ # alternate form of lvconvert --startpoll, this is only kept
+ # for compat since this was how it used to be done.
+-lvconvert LV_mirror
++lvconvert LV_mirror_raid
+ OO: OO_LVCONVERT
+ ID: lvconvert_start_poll
+ DESC: Poll LV to continue conversion.
 
 
