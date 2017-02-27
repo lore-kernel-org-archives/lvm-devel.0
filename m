@@ -1,119 +1,76 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Fri, 24 Feb 2017 21:15:02 +0000 (UTC)
-Subject: master - man: change option sorting in synopsis
-Message-ID: <20170224211502.0909960FC8@fedorahosted.org>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Mon, 27 Feb 2017 09:06:38 -0500
+Subject: master - git: Upstream repository moved to sourceware.org
+Message-ID: <201702271406.v1RE6cdL014774@int-mx11.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4f7631b4adb9c6fff5cd47b5bd733ee716d05c8f
-Commit:        4f7631b4adb9c6fff5cd47b5bd733ee716d05c8f
-Parent:        5f6bdf707db24e882b3c3f86f8a5f2e2d2007c98
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 24 15:11:18 2017 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 24 15:11:18 2017 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c41e99948819e896d9d06b4a8192ec7a63facf65
+Commit:        c41e99948819e896d9d06b4a8192ec7a63facf65
+Parent:        4f7631b4adb9c6fff5cd47b5bd733ee716d05c8f
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Feb 27 13:52:51 2017 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Feb 27 14:05:50 2017 +0000
 
-man: change option sorting in synopsis
+git: Upstream repository moved to sourceware.org
 
-The options list was sorted as:
-- options with both long and short forms, alphabetically
-- options with only long form, alphabetically
+The fedorahosted git repository shuts down tomorrow:
+  https://communityblog.fedoraproject.org/fedorahosted-sunset-2017-02-28/
 
-This was done only for the visual effect.  Change to
-sort alphabetically by long opt, without regard to
-short forms.
+Our upstream git repository has moved back to sourceware.org.
+Mailing list hosting is not changing.
+
+Gitweb:
+  https://www.sourceware.org/git/?p=lvm2
+
+Git:
+  git://sourceware.org/git/lvm2.git
+  ssh://sourceware.org/git/lvm2.git
+  http://sourceware.org/git/lvm2.git
+
+Example command to change the origin of a repository clone:
+  Public:
+    git remote set-url origin git://sourceware.org/git/lvm2.git
+  Committers:
+    git remote set-url origin git+ssh://sourceware.org/git/lvm2.git
 ---
- tools/command.c |   55 +++++++------------------------------------------------
- 1 files changed, 7 insertions(+), 48 deletions(-)
+ README    |    5 +++--
+ WHATS_NEW |    1 +
+ 2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 5dd0298..59818f9 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -2533,10 +2533,7 @@ static void print_man_option_desc(struct command_name *cname, int opt_enum)
- }
+diff --git a/README b/README
+index a0e3c9e..c7e267e 100644
+--- a/README
++++ b/README
+@@ -6,11 +6,12 @@ Installation instructions are in INSTALL.
+ There is no warranty - see COPYING and COPYING.LIB.
  
- /*
-- * Print a list of all options names for a given
-- * command name, listed by:
-- * options with short+long names, alphabetically,
-- * then options with only long names, alphabetically
-+ * Print a list of all options names for a given command name.
-  */
+ Tarballs are available from:
++  ftp://sourceware.org/pub/lvm2/
+   ftp://sources.redhat.com/pub/lvm2/
  
- void print_man_all_options_list(struct command_name *cname)
-@@ -2545,63 +2542,25 @@ void print_man_all_options_list(struct command_name *cname)
- 	int sep = 0;
- 	int i;
+ The source code is stored in git:
+-  http://git.fedorahosted.org/git/lvm2.git
+-  git clone git://git.fedorahosted.org/git/lvm2.git
++  https://sourceware.org/git/?p=lvm2.git
++  git clone git://sourceware.org/git/lvm2.git
  
--	/* print those with both short and long opts */
- 	for (i = 0; i < ARG_COUNT; i++) {
- 		opt_enum = opt_names_alpha[i]->opt_enum;
- 
--
- 		if (!cname->all_options[opt_enum])
- 			continue;
- 
--		if (!opt_names[opt_enum].short_opt)
--			continue;
--
- 		if (sep)
- 			printf(".br\n");
- 		printf(".ad l\n");
- 
--		printf(" \\fB-%c\\fP|\\fB%s\\fP",
--			opt_names[opt_enum].short_opt,
--			man_long_opt_name(cname->name, opt_enum));
--
--		val_enum = opt_names[opt_enum].val_enum;
--
--		if (!val_names[val_enum].fn) {
--			/* takes no arg */
--		} else if (!val_names[val_enum].usage) {
--			printf(" ");
--			printf("\\fI");
--			printf("%s", val_names[val_enum].name);
--			printf("\\fP");
-+		if (opt_names[opt_enum].short_opt) {
-+			printf(" \\fB-%c\\fP|\\fB%s\\fP",
-+				opt_names[opt_enum].short_opt,
-+				man_long_opt_name(cname->name, opt_enum));
- 		} else {
--			printf(" ");
--			print_val_man(val_names[val_enum].usage);
-+			/* spaces for alignment without short opt */
-+			printf("    \\fB%s\\fP", man_long_opt_name(cname->name, opt_enum));
- 		}
- 
--		printf("\n.ad b\n");
--
--		sep = 1;
--	}
--
--	/* print those without short opts */
--	for (i = 0; i < ARG_COUNT; i++) {
--		opt_enum = opt_names_alpha[i]->opt_enum;
--
--		if (!cname->all_options[opt_enum])
--			continue;
--
--		if (opt_names[opt_enum].short_opt)
--			continue;
--
--		if (sep)
--			printf(".br\n");
--		printf(".ad l\n");
--
--		/* space alignment without short opt */
--		printf("   ");
--
--		printf(" \\fB%s\\fP", man_long_opt_name(cname->name, opt_enum));
--
- 		val_enum = opt_names[opt_enum].val_enum;
- 
- 		if (!val_names[val_enum].fn) {
+ Mailing list for general discussion related to LVM2:
+   linux-lvm at redhat.com
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d2e750b..63cc2d2 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.169 - 
+ =====================================
++  Upstream git moved to https://sourceware.org/git/?p=lvm2
+   Support conversion of raid type, stripesize and number of disks
+   Reject writemostly/writebehind in lvchange during resynchronization.
+   Deactivate active origin first before removal for improved workflow.
 
 
