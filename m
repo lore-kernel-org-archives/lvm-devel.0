@@ -1,14 +1,14 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Mon, 27 Feb 2017 09:06:38 -0500
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 27 Feb 2017 14:07:44 +0000 (UTC)
 Subject: master - git: Upstream repository moved to sourceware.org
-Message-ID: <201702271406.v1RE6cdL014774@int-mx11.intmail.prod.int.phx2.redhat.com>
+Message-ID: <20170227140744.CD2D760CE3@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c41e99948819e896d9d06b4a8192ec7a63facf65
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c41e99948819e896d9d06b4a8192ec7a63facf65
 Commit:        c41e99948819e896d9d06b4a8192ec7a63facf65
 Parent:        4f7631b4adb9c6fff5cd47b5bd733ee716d05c8f
 Author:        Alasdair G Kergon <agk@redhat.com>
