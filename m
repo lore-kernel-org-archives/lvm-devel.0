@@ -1,39 +1,45 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 28 Feb 2017 16:58:22 -0500
-Subject: master - help: print full usage for lvm help all
-Message-ID: <201702282158.v1SLwMG0028452@int-mx13.intmail.prod.int.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Tue, 28 Feb 2017 17:10:57 -0500
+Subject: master - lvconvert: adjust mininum region size check
+Message-ID: <201702282210.v1SMAuH5017578@int-mx11.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1828822bd8ad773d57d90841cb4036b49f3653b1
-Commit:        1828822bd8ad773d57d90841cb4036b49f3653b1
-Parent:        ce1e5b99915cf45530e25628f02537136045c938
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 28 15:57:30 2017 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Feb 28 15:58:14 2017 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=964114950ce3ce0539a47b966494868285679ef8
+Commit:        964114950ce3ce0539a47b966494868285679ef8
+Parent:        1828822bd8ad773d57d90841cb4036b49f3653b1
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Feb 28 23:09:30 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Feb 28 23:10:37 2017 +0100
 
-help: print full usage for lvm help all
+lvconvert: adjust mininum region size check
 
+The imposed minimum region size can cause rejection on
+disk removing reshapes.  Lower it to avoid that.
+
+Related: rhbz834579
+Related: rhbz1191935
+Related: rhbz1191978
 ---
- tools/lvmcmdline.c |    2 +-
+ lib/metadata/raid_manip.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 9b20d9f..d440987 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1732,7 +1732,7 @@ static void _usage_all(void)
- 	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
- 		if (!command_names[i].name)
- 			break;
--		_usage(command_names[i].name, 0);
-+		_usage(command_names[i].name, 1);
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 34e8856..b8447a0 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -106,7 +106,7 @@ static int _check_region_size_constraints(struct logical_volume *lv,
+ 		return 0;
  	}
- }
  
+-	if (region_size * 8 > lv->size) {
++	if (region_size > lv->size) {
+ 		log_error("Regionsize too large for %s LV %s.",
+ 			   segtype->name, display_lvname(lv));
+ 		return 0;
 
 
