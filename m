@@ -1,40 +1,41 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 27 Feb 2017 18:08:58 -0500
-Subject: master - commands: remove lvconvert raid rule
-Message-ID: <201702272308.v1RN8wSB022460@int-mx13.intmail.prod.int.phx2.redhat.com>
+Date: Tue, 28 Feb 2017 14:49:24 -0500
+Subject: master - man: fix syntax for PV ranges
+Message-ID: <201702281949.v1SJnOHO011015@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a14617dc4413911b3af0cfea38cd5c2fe45afa8
-Commit:        4a14617dc4413911b3af0cfea38cd5c2fe45afa8
-Parent:        f9d28f1aeccaa923dfe31fda982d2a5fd5ef0f2d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89661981e829d2cb228e3db6f8127d14526ea025
+Commit:        89661981e829d2cb228e3db6f8127d14526ea025
+Parent:        4a14617dc4413911b3af0cfea38cd5c2fe45afa8
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 27 17:06:08 2017 -0600
+AuthorDate:    Tue Feb 28 12:22:12 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 27 17:06:08 2017 -0600
+CommitterDate: Tue Feb 28 12:22:12 2017 -0600
 
-commands: remove lvconvert raid rule
+man: fix syntax for PV ranges
 
-A raid0 LV also needs to be converted to other
-raid levels, so this rule should be removed entirely.
 ---
- tools/command-lines.in |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ tools/command.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 3105966..26c2deb 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -347,7 +347,6 @@ OP: PV ...
- ID: lvconvert_raid_types
- DESC: Convert LV to raid or change raid layout.
- RULE: all not lv_is_locked lv_is_pvmove
--RULE: LV_raid not LV_raid0
+diff --git a/tools/command.c b/tools/command.c
+index 59818f9..a8c38ba 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -2733,8 +2733,8 @@ void print_man_all_positions_desc(struct command_name *cname)
+ 		printf("Physical Volume name, a device path under /dev.\n"
+ 		       "For commands managing physical extents, a PV positional arg\n"
+ 		       "generally accepts a suffix indicating a range of physical extents.\n"
+-		       "Start and end range (inclusive): \\fIPV\\fP[:\\fIPE\\fP[-\\fIPE\\fP].\n"
+-		       "Start and length range (counting from 0): \\fIPV\\fP[:\\fIPE\\fP[+\\fIPE\\fP].\n");
++		       "Start and end range (inclusive): \\fIPV\\fP[\\fB:\\fP\\fIPE\\fP[\\fB-\\fP\\fIPE\\fP]].\n"
++		       "Start and length range (counting from 0): \\fIPV\\fP[\\fB:\\fP\\fIPE\\fP[\\fB+\\fP\\fIPE\\fP]].\n");
+ 	}
  
- lvconvert --mirrors SNumber LV
- OO: OO_LVCONVERT_RAID, OO_LVCONVERT, --mirrorlog MirrorLog
+ 	if (has_tag_val) {
 
 
