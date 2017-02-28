@@ -1,45 +1,47 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 28 Feb 2017 17:10:57 -0500
-Subject: master - lvconvert: adjust mininum region size check
-Message-ID: <201702282210.v1SMAuH5017578@int-mx11.intmail.prod.int.phx2.redhat.com>
+Date: Tue, 28 Feb 2017 17:29:35 -0500
+Subject: master - lvconvert: add missing reshape_len initialization
+Message-ID: <201702282229.v1SMTZFa019130@int-mx09.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=964114950ce3ce0539a47b966494868285679ef8
-Commit:        964114950ce3ce0539a47b966494868285679ef8
-Parent:        1828822bd8ad773d57d90841cb4036b49f3653b1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7a064303fe1a14e205a50abc5a54e38467fcb455
+Commit:        7a064303fe1a14e205a50abc5a54e38467fcb455
+Parent:        964114950ce3ce0539a47b966494868285679ef8
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Feb 28 23:09:30 2017 +0100
+AuthorDate:    Tue Feb 28 23:29:03 2017 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Feb 28 23:10:37 2017 +0100
+CommitterDate: Tue Feb 28 23:29:03 2017 +0100
 
-lvconvert: adjust mininum region size check
+lvconvert: add missing reshape_len initialization
 
-The imposed minimum region size can cause rejection on
-disk removing reshapes.  Lower it to avoid that.
+An initialization was missing when converting striped to raid0(_meta)
+causing unitialized reshape_len in the new component LVs first segment.
 
 Related: rhbz834579
 Related: rhbz1191935
 Related: rhbz1191978
 ---
- lib/metadata/raid_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/raid_manip.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 34e8856..b8447a0 100644
+index b8447a0..6cc1c12 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -106,7 +106,7 @@ static int _check_region_size_constraints(struct logical_volume *lv,
- 		return 0;
- 	}
+@@ -4166,6 +4166,10 @@ static struct lv_segment *_convert_striped_to_raid0(struct logical_volume *lv,
+ 	if (alloc_metadata_devs && !_raid0_add_or_remove_metadata_lvs(lv, 0, allocate_pvs, NULL))
+ 		return NULL;
  
--	if (region_size * 8 > lv->size) {
-+	if (region_size > lv->size) {
- 		log_error("Regionsize too large for %s LV %s.",
- 			   segtype->name, display_lvname(lv));
- 		return 0;
++	/* Initialize reshape len properly after adding the image component list */
++	if (!_lv_set_reshape_len(lv, 0))
++		return_0;
++
+ 	if (update_and_reload && !lv_update_and_reload(lv))
+ 		return NULL;
+ 
 
 
