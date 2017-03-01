@@ -1,237 +1,233 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 29 Feb 2012 02:35:41 -0000
-Subject: LVM2/lib cache/lvmetad.c format1/format1.c for ...
-Message-ID: <20120229023541.16547.qmail@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 1 Mar 2017 11:23:21 -0500
+Subject: master - commands: SECONDARY flag changes in cmd defs
+Message-ID: <201703011623.v21GNLNP031495@int-mx10.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-29 02:35:37
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eb9586bd3bc6741a3819147b35546ae35f363de1
+Commit:        eb9586bd3bc6741a3819147b35546ae35f363de1
+Parent:        d6dd700bf75d218a6f7627451d020232d3d88c31
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Feb 28 16:15:11 2017 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Mar 1 10:22:48 2017 -0600
 
-Modified files:
-	lib/cache      : lvmetad.c 
-	lib/format1    : format1.c 
-	lib/format_pool: format_pool.c 
-	lib/format_text: archiver.c format-text.c import-export.h 
-	                 import.c 
-	lib/metadata   : metadata.c metadata.h 
+commands: SECONDARY flag changes in cmd defs
 
-Log message:
-	Pass 'single_device' parameter down to suppress 'Can't find uuid' messages
-	when reading VG text metadate and called from pvscan --lvmetad.
-	
-	(Longer-term, that check needs moving outside of that code.)
+Add/remove the SECONDARY_SYNTAX flag to cmd defs.
+cmd defs with this flag will be listed under the
+ADVANCED USAGE man page section, so that the main
+USAGE section contains the most common commands
+without distraction.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmetad.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/format1.c.diff?cvsroot=lvm2&r1=1.149&r2=1.150
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_pool/format_pool.c.diff?cvsroot=lvm2&r1=1.54&r2=1.55
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.197&r2=1.198
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import-export.h.diff?cvsroot=lvm2&r1=1.28&r2=1.29
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.493&r2=1.494
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.267&r2=1.268
+- When multiple cmd defs do the same thing, one variant
+  can be displayed in the first list.
+- Very advanced, unusual or uncommon commands should be
+  in the second list.
+---
+ tools/command-lines.in |   26 ++++++++++++++------------
+ 1 files changed, 14 insertions(+), 12 deletions(-)
 
---- LVM2/lib/cache/lvmetad.c	2012/02/28 18:23:56	1.9
-+++ LVM2/lib/cache/lvmetad.c	2012/02/29 02:35:35	1.10
-@@ -588,15 +588,18 @@
- static int _pvscan_lvmetad_single(struct metadata_area *mda, void *baton)
- {
- 	struct _pvscan_lvmetad_baton *b = baton;
--	struct volume_group *this = mda->ops->vg_read(b->fid, "", mda);
-+	struct volume_group *this = mda->ops->vg_read(b->fid, "", mda, 1);
-+
- 	if (!b->vg || this->seqno > b->vg->seqno)
- 		b->vg = this;
- 	else if (b->vg)
- 		release_vg(this);
-+
- 	return 1;
- }
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 1727bbb..5f65093 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -340,6 +340,7 @@ OP: PV ...
+ ID: lvconvert_raid_types
+ DESC: Convert LV to type mirror (also see type raid1).
+ RULE: all not lv_is_locked lv_is_pvmove
++FLAGS: SECONDARY_SYNTAX
  
--static dev_t _parse_devt(const char *str) { /* Oh. */
-+static dev_t _parse_devt(const char *str)
-+{	/* Oh. */
- 	char *where = (char *) str;
- 	int major = strtol(str, &where, 10);
- 	int minor;
---- LVM2/lib/format1/format1.c	2012/02/27 11:23:15	1.149
-+++ LVM2/lib/format1/format1.c	2012/02/29 02:35:35	1.150
-@@ -179,7 +179,8 @@
+ # When LV is already raid, this changes the raid layout
+ # (changing layout of raid0 and raid1 not allowed.)
+@@ -379,6 +380,7 @@ ID: lvconvert_change_region_size
+ DESC: Change the region size of an LV.
+ RULE: all not lv_is_locked lv_is_pvmove
+ RULE: all not LV_raid0
++FLAGS: SECONDARY_SYNTAX
  
- static struct volume_group *_format1_vg_read(struct format_instance *fid,
- 				     const char *vg_name,
--				     struct metadata_area *mda __attribute__((unused)))
-+				     struct metadata_area *mda __attribute__((unused)),
-+				     int single_device __attribute__((unused)))
- {
- 	struct volume_group *vg;
- 	struct disk_list *dl;
---- LVM2/lib/format_pool/format_pool.c	2012/02/27 11:23:15	1.54
-+++ LVM2/lib/format_pool/format_pool.c	2012/02/29 02:35:36	1.55
-@@ -100,7 +100,8 @@
+ ---
  
- static struct volume_group *_pool_vg_read(struct format_instance *fid,
- 					  const char *vg_name,
--					  struct metadata_area *mda __attribute__((unused)))
-+					  struct metadata_area *mda __attribute__((unused)),
-+					  int single_device __attribute__((unused)))
- {
- 	struct volume_group *vg;
- 	struct user_subpool *usp;
---- LVM2/lib/format_text/archiver.c	2012/02/27 11:35:59	1.51
-+++ LVM2/lib/format_text/archiver.c	2012/02/29 02:35:36	1.52
-@@ -288,7 +288,7 @@
- 	}
+@@ -411,6 +413,7 @@ OP: PV ...
+ ID: lvconvert_change_mirrorlog
+ DESC: Change the type of mirror log used by a mirror LV.
+ RULE: all not lv_is_locked lv_is_pvmove
++FLAGS: SECONDARY_SYNTAX
  
- 	dm_list_iterate_items(mda, &tf->metadata_areas_in_use) {
--		if (!(vg = mda->ops->vg_read(tf, vg_name, mda)))
-+		if (!(vg = mda->ops->vg_read(tf, vg_name, mda, 0)))
- 			stack;
- 		break;
- 	}
---- LVM2/lib/format_text/format-text.c	2012/02/28 10:11:36	1.197
-+++ LVM2/lib/format_text/format-text.c	2012/02/29 02:35:36	1.198
-@@ -483,7 +483,8 @@
- static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
- 					      const char *vgname,
- 					      struct device_area *area,
--					      int precommitted)
-+					      int precommitted,
-+					      int single_device)
- {
- 	struct volume_group *vg = NULL;
- 	struct raw_locn *rlocn;
-@@ -510,7 +511,7 @@
- 	}
+ ---
  
- 	/* FIXME 64-bit */
--	if (!(vg = text_vg_import_fd(fid, NULL, area->dev,
-+	if (!(vg = text_vg_import_fd(fid, NULL, single_device, area->dev, 
- 				     (off_t) (area->start + rlocn->offset),
- 				     (uint32_t) (rlocn->size - wrap),
- 				     (off_t) (area->start + MDA_HEADER_SIZE),
-@@ -531,7 +532,8 @@
+@@ -543,6 +546,7 @@ lvconvert --uncache LV_cache_thinpool
+ OO: OO_LVCONVERT
+ ID: lvconvert_split_and_remove_cachepool
+ DESC: Separate and delete the cache pool from a cache LV.
++FLAGS: SECONDARY_SYNTAX
  
- static struct volume_group *_vg_read_raw(struct format_instance *fid,
- 					 const char *vgname,
--					 struct metadata_area *mda)
-+					 struct metadata_area *mda,
-+					 int single_device)
- {
- 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
- 	struct volume_group *vg;
-@@ -539,7 +541,7 @@
- 	if (!dev_open_readonly(mdac->area.dev))
- 		return_NULL;
+ ---
  
--	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 0);
-+	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 0, single_device);
+@@ -550,6 +554,7 @@ lvconvert --swapmetadata --poolmetadata LV LV_thinpool_cachepool
+ OO: --chunksize SizeKB, OO_LVCONVERT
+ ID: lvconvert_swap_pool_metadata
+ DESC: Swap metadata LV in a thin pool or cache pool (for repair only).
++FLAGS: SECONDARY_SYNTAX
  
- 	if (!dev_close(mdac->area.dev))
- 		stack;
-@@ -557,7 +559,7 @@
- 	if (!dev_open_readonly(mdac->area.dev))
- 		return_NULL;
+ ---
  
--	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 1);
-+	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 1, 0);
+@@ -597,6 +602,7 @@ OO: OO_LVCONVERT
+ ID: lvconvert_split_cow_snapshot
+ DESC: Separate a COW snapshot from its origin LV.
+ RULE: all not lv_is_locked lv_is_pvmove lv_is_origin lv_is_external_origin lv_is_merging_cow
++FLAGS: SECONDARY_SYNTAX
  
- 	if (!dev_close(mdac->area.dev))
- 		stack;
-@@ -869,7 +871,8 @@
+ ---
  
- static struct volume_group *_vg_read_file(struct format_instance *fid,
- 					  const char *vgname,
--					  struct metadata_area *mda)
-+					  struct metadata_area *mda,
-+					  int single_device __attribute__((unused)))
- {
- 	struct text_context *tc = (struct text_context *) mda->metadata_locn;
+@@ -614,9 +620,9 @@ OO: --snapshot, --chunksize SizeKB, --zero Bool, OO_LVCONVERT
+ ID: lvconvert_combine_split_snapshot
+ DESC: Combine a former COW snapshot (second arg) with a former
+ DESC: origin LV (first arg) to reverse a splitsnapshot command.
+-FLAGS: SECONDARY_SYNTAX
+ RULE: all not lv_is_locked lv_is_pvmove
+ RULE: all and lv_is_visible
++FLAGS: SECONDARY_SYNTAX
  
-@@ -1235,7 +1238,7 @@
- 		if ((scanned_vgname = vgname_from_mda(fmt, mdah,
- 					      &rl->dev_area, &vgid, &vgstatus,
- 					      NULL, NULL))) {
--			vg = _vg_read_raw_area(&fid, scanned_vgname, &rl->dev_area, 0);
-+			vg = _vg_read_raw_area(&fid, scanned_vgname, &rl->dev_area, 0, 0);
- 			if (vg)
- 				lvmcache_update_vg(vg, 0);
+ lvconvert --snapshot LV LV_linear
+ OO: --type snapshot, --chunksize SizeKB, --zero Bool, OO_LVCONVERT
+@@ -625,6 +631,7 @@ DESC: Combine a former COW snapshot (second arg) with a former
+ DESC: origin LV (first arg) to reverse a splitsnapshot command.
+ RULE: all not lv_is_locked lv_is_pvmove
+ RULE: all and lv_is_visible
++FLAGS: SECONDARY_SYNTAX
  
---- LVM2/lib/format_text/import-export.h	2011/09/01 10:25:22	1.28
-+++ LVM2/lib/format_text/import-export.h	2012/02/29 02:35:36	1.29
-@@ -71,6 +71,7 @@
- 					 time_t *when, char **desc);
- struct volume_group *text_vg_import_fd(struct format_instance *fid,
- 				       const char *file,
-+				       int single_device,
- 				       struct device *dev,
- 				       off_t offset, uint32_t size,
- 				       off_t offset2, uint32_t size2,
---- LVM2/lib/format_text/import.c	2011/12/18 21:56:04	1.56
-+++ LVM2/lib/format_text/import.c	2012/02/29 02:35:36	1.57
-@@ -78,6 +78,7 @@
+ ---
  
- struct volume_group *text_vg_import_fd(struct format_instance *fid,
- 				       const char *file,
-+				       int single_device,
- 				       struct device *dev,
- 				       off_t offset, uint32_t size,
- 				       off_t offset2, uint32_t size2,
-@@ -111,7 +112,7 @@
- 		if (!(*vsn)->check_version(cft))
- 			continue;
+@@ -745,6 +752,7 @@ OO: --stripes Number, --stripesize SizeKB, OO_LVCREATE
+ OP: PV ...
+ ID: lvcreate_striped
+ DESC: Create a striped LV.
++FLAGS: SECONDARY_SYNTAX
  
--		if (!(vg = (*vsn)->read_vg(fid, cft, 0)))
-+		if (!(vg = (*vsn)->read_vg(fid, cft, single_device)))
- 			goto_out;
+ lvcreate --stripes Number --size SizeMB VG
+ OO: --type striped, --stripesize SizeKB, OO_LVCREATE
+@@ -759,6 +767,7 @@ OO: --mirrors SNumber, --mirrorlog MirrorLog, --regionsize RegionSize, --stripes
+ OP: PV ...
+ ID: lvcreate_mirror
+ DESC: Create a mirror LV (also see --type raid1).
++FLAGS: SECONDARY_SYNTAX
  
- 		(*vsn)->read_desc(vg->vgmem, cft, when, desc);
-@@ -127,7 +128,7 @@
- 					 const char *file,
- 					 time_t *when, char **desc)
- {
--	return text_vg_import_fd(fid, file, NULL, (off_t)0, 0, (off_t)0, 0, NULL, 0,
-+	return text_vg_import_fd(fid, file, 0, NULL, (off_t)0, 0, (off_t)0, 0, NULL, 0,
- 				 when, desc);
- }
+ # alternate form of lvcreate --type raid1|mirror
+ lvcreate --mirrors SNumber --size SizeMB VG
+@@ -816,6 +825,7 @@ OO: --type snapshot, --chunksize SizeKB, OO_LVCREATE
+ OP: PV ...
+ ID: lvcreate_cow_snapshot_with_virtual_origin
+ DESC: Create a sparse COW snapshot LV of a virtual origin LV.
++FLAGS: SECONDARY_SYNTAX
  
---- LVM2/lib/metadata/metadata.c	2012/02/29 00:19:14	1.493
-+++ LVM2/lib/metadata/metadata.c	2012/02/29 02:35:36	1.494
-@@ -3017,7 +3017,7 @@
- 		if ((use_precommitted &&
- 		     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda))) ||
- 		    (!use_precommitted &&
--		     !(vg = mda->ops->vg_read(fid, vgname, mda)))) {
-+		     !(vg = mda->ops->vg_read(fid, vgname, mda, 0)))) {
- 			inconsistent = 1;
- 			release_vg(vg);
- 			continue;
-@@ -3197,7 +3197,7 @@
- 			     !(vg = mda->ops->vg_read_precommit(fid, vgname,
- 								mda))) ||
- 			    (!use_precommitted &&
--			     !(vg = mda->ops->vg_read(fid, vgname, mda)))) {
-+			     !(vg = mda->ops->vg_read(fid, vgname, mda, 0)))) {
- 				inconsistent = 1;
- 				continue;
- 			}
---- LVM2/lib/metadata/metadata.h	2012/02/23 13:11:10	1.267
-+++ LVM2/lib/metadata/metadata.h	2012/02/29 02:35:36	1.268
-@@ -77,7 +77,8 @@
- 	struct dm_list list;
- 	struct volume_group *(*vg_read) (struct format_instance * fi,
- 					 const char *vg_name,
--					 struct metadata_area * mda);
-+					 struct metadata_area * mda,
-+					 int single_device);
- 	struct volume_group *(*vg_read_precommit) (struct format_instance * fi,
- 					 const char *vg_name,
- 					 struct metadata_area * mda);
+ ---
+ 
+@@ -877,6 +887,7 @@ OO: --thin, OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+ IO: --mirrors 0
+ ID: lvcreate_thin_vol
+ DESC: Create a thin LV in a thin pool.
++FLAGS: SECONDARY_SYNTAX
+ 
+ # alternate form of lvcreate --type thin
+ lvcreate --type thin --virtualsize SizeMB LV_thinpool
+@@ -896,7 +907,6 @@ OO: --type thin, --thin, OO_LVCREATE_THIN, OO_LVCREATE
+ IO: --mirrors 0
+ ID: lvcreate_thin_vol
+ DESC: Create a thin LV in a thin pool (variant, infers --type thin).
+-FLAGS: SECONDARY_SYNTAX
+ 
+ # alternate form of lvcreate --type thin
+ lvcreate --virtualsize SizeMB LV_thinpool
+@@ -915,6 +925,7 @@ OO: --thin, OO_LVCREATE_THIN, OO_LVCREATE
+ IO: --mirrors 0
+ ID: lvcreate_thin_snapshot
+ DESC: Create a thin LV that is a snapshot of an existing thin LV.
++FLAGS: SECONDARY_SYNTAX
+ 
+ # alternate form of lvcreate --type thin
+ lvcreate --thin LV_thin
+@@ -946,6 +957,7 @@ IO: --mirrors 0
+ ID: lvcreate_thin_snapshot_of_external
+ DESC: Create a thin LV that is a snapshot of an external origin LV
+ DESC: (infers --type thin).
++FLAGS: SECONDARY_SYNTAX
+ 
+ ---
+ 
+@@ -1153,7 +1165,6 @@ OO: --alloc Alloc, --autobackup Bool, --force, --mirrors SNumber,
+ --type SegType
+ ID: lvextend_by_pv
+ DESC: Extend an LV by specified PV extents.
+-FLAGS: SECONDARY_SYNTAX
+ 
+ lvextend --poolmetadatasize SizeMB LV_thinpool
+ OO: --alloc Alloc, --autobackup Bool, --force, --mirrors SNumber,
+@@ -1226,7 +1237,6 @@ OO: --alloc Alloc, --autobackup Bool, --force,
+ --type SegType
+ ID: lvresize_by_pv
+ DESC: Resize an LV by specified PV extents.
+-FLAGS: SECONDARY_SYNTAX
+ 
+ lvresize --poolmetadatasize SizeMB LV_thinpool
+ OO: --alloc Alloc, --autobackup Bool, --force,
+@@ -1504,7 +1514,6 @@ vgexport --all
+ OO: OO_VGEXPORT
+ ID: vgexport_all
+ DESC: Export all VGs.
+-FLAGS: SECONDARY_SYNTAX
+ 
+ ---
+ 
+@@ -1628,14 +1637,12 @@ config
+ OO: OO_CONFIG
+ OP: String ...
+ ID: lvmconfig_general
+-FLAGS: SECONDARY_SYNTAX
+ 
+ # use lvmconfig
+ dumpconfig
+ OO: OO_CONFIG
+ OP: String ...
+ ID: lvmconfig_general
+-FLAGS: SECONDARY_SYNTAX
+ 
+ devtypes
+ OO: --aligned, --binary, --nameprefixes, --noheadings,
+@@ -1669,7 +1676,6 @@ ID: version_general
+ # deprecated
+ pvdata
+ ID: pvdata_general
+-FLAGS: SECONDARY_SYNTAX
+ 
+ segtypes
+ ID: segtypes_general
+@@ -1683,22 +1689,18 @@ ID: tags_general
+ # deprecated
+ lvmchange
+ ID: lvmchange_general
+-FLAGS: SECONDARY_SYNTAX
+ 
+ # deprecated
+ lvmdiskscan
+ OO: --lvmpartition, --readonly
+ ID: lvmdiskscan_general
+-FLAGS: SECONDARY_SYNTAX
+ 
+ # deprecated
+ lvmsadc
+ ID: lvmsadc_general
+-FLAGS: SECONDARY_SYNTAX
+ 
+ # deprecated
+ lvmsar
+ OO: --full, --stdin
+ ID: lvmsar_general
+-FLAGS: SECONDARY_SYNTAX
+ 
 
 
