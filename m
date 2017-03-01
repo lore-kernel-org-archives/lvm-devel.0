@@ -1,142 +1,127 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 1 Mar 2017 18:58:38 -0500
-Subject: master - lvmdbustest.py: Use _lookup function
-Message-ID: <201703012358.v21NwcAm024422@int-mx10.intmail.prod.int.phx2.redhat.com>
+Date: Wed, 1 Mar 2017 18:58:42 -0500
+Subject: master - lvmdbustest.py: Verify lookups work immediately after vg create
+Message-ID: <201703012358.v21NwgAV009958@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=157948b5a5f6f651fa56ec45f71b031c1a132c15
-Commit:        157948b5a5f6f651fa56ec45f71b031c1a132c15
-Parent:        c25b95e2ef01874e67048f96b1e4928ec12fdb4e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=10c3d94159e3a740e22bb3c72fef18cb26bfc19f
+Commit:        10c3d94159e3a740e22bb3c72fef18cb26bfc19f
+Parent:        157948b5a5f6f651fa56ec45f71b031c1a132c15
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Mar 1 09:35:01 2017 -0600
+AuthorDate:    Wed Mar 1 11:09:51 2017 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Wed Mar 1 17:47:04 2017 -0600
 
-lvmdbustest.py: Use _lookup function
+lvmdbustest.py: Verify lookups work immediately after vg create
 
-Be consistent in using this helper function for dbus object lookups.
 ---
- test/dbus/lvmdbustest.py |   28 ++++++++++++----------------
- 1 files changed, 12 insertions(+), 16 deletions(-)
+ test/dbus/lvmdbustest.py |   25 ++++++++++++++++++++-----
+ 1 files changed, 20 insertions(+), 5 deletions(-)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index af4fef1..20bf38e 100755
+index 20bf38e..7ee4a49 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -339,7 +339,8 @@ class TestDbusService(unittest.TestCase):
- 		self.assertTrue(cached_thin_pool_object.ThinPool.MetaDataLv != '/')
+@@ -229,6 +229,7 @@ class TestDbusService(unittest.TestCase):
+ 				dbus.Int32(g_tmo),
+ 				EOD))
  
- 	def _lookup(self, lvm_id):
--		return self.objs[MANAGER_INT][0].Manager.LookUpByLvmId(lvm_id)
-+		return self.objs[MANAGER_INT][0].\
-+			Manager.LookUpByLvmId(dbus.String(lvm_id))
++		self._validate_vg_lookup(vg_name, vg_path)
+ 		self.assertTrue(vg_path is not None and len(vg_path) > 0)
+ 		return ClientProxy(self.bus, vg_path, interfaces=(VG_INT, ))
  
+@@ -342,6 +343,10 @@ class TestDbusService(unittest.TestCase):
+ 		return self.objs[MANAGER_INT][0].\
+ 			Manager.LookUpByLvmId(dbus.String(lvm_id))
+ 
++	def _validate_vg_lookup(self, vg_name, object_path):
++		t = self._lookup(vg_name)
++		self.assertTrue(object_path == t, "%s != %s" % (object_path, t))
++
  	def test_lookup_by_lvm_id(self):
  		# For the moment lets just lookup what we know about which is PVs
-@@ -392,10 +393,8 @@ class TestDbusService(unittest.TestCase):
- 	def test_vg_rename(self):
- 		vg = self._vg_create().Vg
+ 		# When we start testing VGs and LVs we will test lookups for those
+@@ -926,7 +931,8 @@ class TestDbusService(unittest.TestCase):
+ 		self.assertTrue(vg_path == '/')
+ 		self.assertTrue(vg_job and len(vg_job) > 0)
  
--		mgr = self.objs[MANAGER_INT][0].Manager
--
- 		# Do a vg lookup
--		path = mgr.LookUpByLvmId(dbus.String(vg.Name))
-+		path = self._lookup(vg.Name)
+-		self._wait_for_job(vg_job)
++		vg_path = self._wait_for_job(vg_job)
++		self._validate_vg_lookup(vg_name, vg_path)
  
- 		vg_name_start = vg.Name
+ 	def _test_expired_timer(self, num_lvs):
+ 		rc = False
+@@ -1508,12 +1514,14 @@ class TestDbusService(unittest.TestCase):
+ 						EOD))
  
-@@ -406,7 +405,7 @@ class TestDbusService(unittest.TestCase):
- 		for i in range(0, 5):
- 			lv_t = self._create_lv(size=mib(4), vg=vg)
- 			full_name = "%s/%s" % (vg_name_start, lv_t.LvCommon.Name)
--			lv_path = mgr.LookUpByLvmId(dbus.String(full_name))
-+			lv_path = self._lookup(full_name)
- 			self.assertTrue(lv_path == lv_t.object_path)
+ 		# Create a VG and try to create LVs with different bad names
++		vg_name = vg_n()
+ 		vg_path = self.handle_return(
+ 			mgr.VgCreate(
+-				dbus.String(vg_n()),
++				dbus.String(vg_name),
+ 				dbus.Array(pv_paths, 'o'),
+ 				dbus.Int32(g_tmo),
+ 				EOD))
++		self._validate_vg_lookup(vg_name, vg_path)
  
- 		new_name = 'renamed_' + vg.Name
-@@ -417,7 +416,7 @@ class TestDbusService(unittest.TestCase):
- 		self._check_consistency()
+ 		vg_proxy = ClientProxy(self.bus, vg_path, interfaces=(VG_INT, ))
  
- 		# Do a vg lookup
--		path = mgr.LookUpByLvmId(dbus.String(new_name))
-+		path = self._lookup(new_name)
- 		self.assertTrue(path != '/', "%s" % (path))
- 		self.assertTrue(prev_path == path, "%s != %s" % (prev_path, path))
+@@ -1559,13 +1567,16 @@ class TestDbusService(unittest.TestCase):
+ 	def test_invalid_tags(self):
+ 		mgr = self.objs[MANAGER_INT][0].Manager
+ 		pv_paths = [self.objs[PV_INT][0].object_path]
++		vg_name = vg_n()
  
-@@ -435,14 +434,12 @@ class TestDbusService(unittest.TestCase):
- 				lv_proxy.Vg == vg.object_path, "%s != %s" %
- 				(lv_proxy.Vg, vg.object_path))
- 			full_name = "%s/%s" % (new_name, lv_proxy.Name)
--			lv_path = mgr.LookUpByLvmId(dbus.String(full_name))
-+			lv_path = self._lookup(full_name)
- 			self.assertTrue(
- 				lv_path == lv_proxy.object_path, "%s != %s" %
- 				(lv_path, lv_proxy.object_path))
+ 		vg_path = self.handle_return(
+ 			mgr.VgCreate(
+-				dbus.String(vg_n()),
++				dbus.String(vg_name),
+ 				dbus.Array(pv_paths, 'o'),
+ 				dbus.Int32(g_tmo),
+ 				EOD))
++		self._validate_vg_lookup(vg_name, vg_path)
++
+ 		vg_proxy = ClientProxy(self.bus, vg_path, interfaces=(VG_INT, ))
  
- 	def _verify_hidden_lookups(self, lv_common_object, vgname):
--		mgr = self.objs[MANAGER_INT][0].Manager
--
- 		hidden_lv_paths = lv_common_object.HiddenLvs
+ 		for c in self._invalid_tag_characters():
+@@ -1587,13 +1598,15 @@ class TestDbusService(unittest.TestCase):
+ 	def test_tag_names(self):
+ 		mgr = self.objs[MANAGER_INT][0].Manager
+ 		pv_paths = [self.objs[PV_INT][0].object_path]
++		vg_name = vg_n()
  
- 		for h in hidden_lv_paths:
-@@ -454,7 +451,7 @@ class TestDbusService(unittest.TestCase):
+ 		vg_path = self.handle_return(
+ 			mgr.VgCreate(
+-				dbus.String(vg_n()),
++				dbus.String(vg_name),
+ 				dbus.Array(pv_paths, 'o'),
+ 				dbus.Int32(g_tmo),
+ 				EOD))
++		self._validate_vg_lookup(vg_name, vg_path)
+ 		vg_proxy = ClientProxy(self.bus, vg_path, interfaces=(VG_INT, ))
  
- 			full_name = "%s/%s" % (vgname, h_lv.Name)
- 			# print("Hidden check %s" % (full_name))
--			lookup_path = mgr.LookUpByLvmId(dbus.String(full_name))
-+			lookup_path = self._lookup(full_name)
- 			self.assertTrue(lookup_path != '/')
- 			self.assertTrue(lookup_path == h_lv.object_path)
+ 		for i in range(1, 64):
+@@ -1618,13 +1631,15 @@ class TestDbusService(unittest.TestCase):
+ 	def test_tag_regression(self):
+ 		mgr = self.objs[MANAGER_INT][0].Manager
+ 		pv_paths = [self.objs[PV_INT][0].object_path]
++		vg_name = vg_n()
  
-@@ -462,7 +459,7 @@ class TestDbusService(unittest.TestCase):
- 			full_name = "%s/%s" % (vgname, h_lv.Name[1:-1])
- 			# print("Hidden check %s" % (full_name))
+ 		vg_path = self.handle_return(
+ 			mgr.VgCreate(
+-				dbus.String(vg_n()),
++				dbus.String(vg_name),
+ 				dbus.Array(pv_paths, 'o'),
+ 				dbus.Int32(g_tmo),
+ 				EOD))
++		self._validate_vg_lookup(vg_name, vg_path)
+ 		vg_proxy = ClientProxy(self.bus, vg_path, interfaces=(VG_INT, ))
  
--			lookup_path = mgr.LookUpByLvmId(dbus.String(full_name))
-+			lookup_path = self._lookup(full_name)
- 			self.assertTrue(lookup_path != '/')
- 			self.assertTrue(lookup_path == h_lv.object_path)
- 
-@@ -490,7 +487,7 @@ class TestDbusService(unittest.TestCase):
- 
- 			full_name = "%s/%s" % (vg_name_start, lv_name)
- 
--			lookup_lv_path = mgr.LookUpByLvmId(dbus.String(full_name))
-+			lookup_lv_path = self._lookup(full_name)
- 			self.assertTrue(
- 				thin_lv_path == lookup_lv_path,
- 				"%s != %s" % (thin_lv_path, lookup_lv_path))
-@@ -518,7 +515,7 @@ class TestDbusService(unittest.TestCase):
- 				(lv_proxy.Vg, vg.object_path))
- 			full_name = "%s/%s" % (new_name, lv_proxy.Name)
- 			# print('Full Name %s' % (full_name))
--			lv_path = mgr.LookUpByLvmId(dbus.String(full_name))
-+			lv_path = self._lookup(full_name)
- 			self.assertTrue(
- 				lv_path == lv_proxy.object_path, "%s != %s" %
- 				(lv_path, lv_proxy.object_path))
-@@ -643,7 +640,7 @@ class TestDbusService(unittest.TestCase):
- 		# Rename a regular LV
- 		lv = self._create_lv()
- 
--		path = self.objs[MANAGER_INT][0].Manager.LookUpByLvmId(lv.LvCommon.Name)
-+		path = self._lookup(lv.LvCommon.Name)
- 		prev_path = path
- 
- 		new_name = 'renamed_' + lv.LvCommon.Name
-@@ -651,8 +648,7 @@ class TestDbusService(unittest.TestCase):
- 		self.handle_return(lv.Lv.Rename(dbus.String(new_name),
- 										dbus.Int32(g_tmo), EOD))
- 
--		path = self.objs[MANAGER_INT][0].Manager.LookUpByLvmId(
--			dbus.String(new_name))
-+		path = self._lookup(new_name)
- 
- 		self._check_consistency()
- 		self.assertTrue(prev_path == path, "%s != %s" % (prev_path, path))
+ 		tag = '--h/K.6g0A4FOEatf3+k_nI/Yp&L_u2oy-=j649x:+dUcYWPEo6.IWT0c'
 
 
