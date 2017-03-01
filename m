@@ -1,233 +1,210 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 1 Mar 2017 11:23:21 -0500
-Subject: master - commands: SECONDARY flag changes in cmd defs
-Message-ID: <201703011623.v21GNLNP031495@int-mx10.intmail.prod.int.phx2.redhat.com>
+Date: Wed, 1 Mar 2017 11:23:26 -0500
+Subject: master - man: put some commands into advanced usage section
+Message-ID: <201703011623.v21GNQvm016349@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eb9586bd3bc6741a3819147b35546ae35f363de1
-Commit:        eb9586bd3bc6741a3819147b35546ae35f363de1
-Parent:        d6dd700bf75d218a6f7627451d020232d3d88c31
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=62abae1525cec51279c39c5127afaced8f0463e2
+Commit:        62abae1525cec51279c39c5127afaced8f0463e2
+Parent:        eb9586bd3bc6741a3819147b35546ae35f363de1
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 28 16:15:11 2017 -0600
+AuthorDate:    Tue Feb 28 17:04:46 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Wed Mar 1 10:22:48 2017 -0600
 
-commands: SECONDARY flag changes in cmd defs
+man: put some commands into advanced usage section
 
-Add/remove the SECONDARY_SYNTAX flag to cmd defs.
-cmd defs with this flag will be listed under the
-ADVANCED USAGE man page section, so that the main
-USAGE section contains the most common commands
-without distraction.
-
-- When multiple cmd defs do the same thing, one variant
-  can be displayed in the first list.
-- Very advanced, unusual or uncommon commands should be
-  in the second list.
+and separate commands with --
 ---
- tools/command-lines.in |   26 ++++++++++++++------------
- 1 files changed, 14 insertions(+), 12 deletions(-)
+ man/Makefile.in    |    4 +-
+ tools/command.c    |  106 ++++++++++++++++++++++++++++++++++++++++++++++++----
+ tools/lvmcmdline.c |    2 +-
+ 3 files changed, 101 insertions(+), 11 deletions(-)
 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 1727bbb..5f65093 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -340,6 +340,7 @@ OP: PV ...
- ID: lvconvert_raid_types
- DESC: Convert LV to type mirror (also see type raid1).
- RULE: all not lv_is_locked lv_is_pvmove
-+FLAGS: SECONDARY_SYNTAX
+diff --git a/man/Makefile.in b/man/Makefile.in
+index ca2249c..3ae00d9 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -144,12 +144,12 @@ Makefile: Makefile.in
  
- # When LV is already raid, this changes the raid layout
- # (changing layout of raid0 and raid1 not allowed.)
-@@ -379,6 +380,7 @@ ID: lvconvert_change_region_size
- DESC: Change the region size of an LV.
- RULE: all not lv_is_locked lv_is_pvmove
- RULE: all not LV_raid0
-+FLAGS: SECONDARY_SYNTAX
+ man-generator:
+ 	$(CC) -DMAN_PAGE_GENERATOR -I$(top_builddir)/tools $(CFLAGS) $(top_srcdir)/tools/command.c -o $@
+-	- ./man-generator lvmconfig > test.gen
++	- ./man-generator --primary lvmconfig > test.gen
+ 	if [ ! -s test.gen ] ; then cp genfiles/*.gen $(top_builddir)/man; fi;
  
- ---
+ $(MAN8GEN): man-generator
+ 	echo "Generating $@" ;
+-	if [ ! -e $@.gen ]; then ./man-generator $(basename $@) $(top_srcdir)/man/$@.des > $@.gen; fi
++	if [ ! -e $@.gen ]; then ./man-generator --primary $(basename $@) $(top_srcdir)/man/$@.des > $@.gen; ./man-generator --secondary $(basename $@) >> $@.gen; fi
+ 	if [ -f $(top_srcdir)/man/$@.end ]; then cat $(top_srcdir)/man/$@.end >> $@.gen; fi;
+ 	cat $(top_srcdir)/man/see_also.end >> $@.gen
+ 	$(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;s+#DEFAULT_RUN_DIR#+ at DEFAULT_RUN_DIR@+;s+#DEFAULT_PID_DIR#+ at DEFAULT_PID_DIR@+;s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+;s+#DEFAULT_MANGLING#+$(DEFAULT_MANGLING)+;" $@.gen > $@
+diff --git a/tools/command.c b/tools/command.c
+index a8c38ba..7c5bf7c 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -2866,7 +2866,7 @@ static void include_description_file(char *name, char *des_file)
+ 	close(fd);
+ }
  
-@@ -411,6 +413,7 @@ OP: PV ...
- ID: lvconvert_change_mirrorlog
- DESC: Change the type of mirror log used by a mirror LV.
- RULE: all not lv_is_locked lv_is_pvmove
-+FLAGS: SECONDARY_SYNTAX
+-void print_man(char *name, char *des_file, int include_primary, int include_secondary)
++void print_man(char *name, char *des_file, int secondary)
+ {
+ 	struct command_name *cname;
+ 	struct command *cmd, *prev_cmd = NULL;
+@@ -2905,10 +2905,7 @@ void print_man(char *name, char *des_file, int include_primary, int include_seco
+ 		if (cmd->cmd_flags & CMD_FLAG_PREVIOUS_SYNTAX)
+ 			continue;
  
- ---
+-		if ((cmd->cmd_flags & CMD_FLAG_SECONDARY_SYNTAX) && !include_secondary)
+-			continue;
+-
+-		if (!(cmd->cmd_flags & CMD_FLAG_SECONDARY_SYNTAX) && !include_primary)
++		if ((cmd->cmd_flags & CMD_FLAG_SECONDARY_SYNTAX) && !secondary)
+ 			continue;
  
-@@ -543,6 +546,7 @@ lvconvert --uncache LV_cache_thinpool
- OO: OO_LVCONVERT
- ID: lvconvert_split_and_remove_cachepool
- DESC: Separate and delete the cache pool from a cache LV.
-+FLAGS: SECONDARY_SYNTAX
+ 		if (strcmp(name, cmd->name))
+@@ -2995,6 +2992,12 @@ void print_man(char *name, char *des_file, int include_primary, int include_seco
+ 			printf(".SH VARIABLES\n");
+ 			printf(".br\n");
+ 			print_man_all_positions_desc(cname);
++		} else {
++			if (cname->variants > 2) {
++				printf("--\n");
++				printf("\n");
++				printf(".br\n");
++			}
+ 		}
  
- ---
+ 		printf("\n");
+@@ -3002,20 +3005,107 @@ void print_man(char *name, char *des_file, int include_primary, int include_seco
+ 	}
+ }
  
-@@ -550,6 +554,7 @@ lvconvert --swapmetadata --poolmetadata LV LV_thinpool_cachepool
- OO: --chunksize SizeKB, OO_LVCONVERT
- ID: lvconvert_swap_pool_metadata
- DESC: Swap metadata LV in a thin pool or cache pool (for repair only).
-+FLAGS: SECONDARY_SYNTAX
++void print_man_secondary(char *name)
++{
++	struct command *cmd;
++	char *lvmname = name;
++	int header = 0;
++	int i;
++
++	if (!strncmp(name, "lvm-", 4)) {
++		name[3] = ' ';
++		name += 4;
++	}
++
++	for (i = 0; i < COMMAND_COUNT; i++) {
++
++		cmd = &commands[i];
++
++		if (cmd->cmd_flags & CMD_FLAG_PREVIOUS_SYNTAX)
++			continue;
++
++		if (!(cmd->cmd_flags & CMD_FLAG_SECONDARY_SYNTAX))
++			continue;
++
++		if (strcmp(name, cmd->name))
++			continue;
++
++		if (!header) {
++			printf(".SH ADVANCED USAGE\n");
++			printf("Alternate command forms, advanced command usage, and listing of all valid syntax for completeness.\n");
++			printf(".P\n");
++			header = 1;
++		}
++
++		if (cmd->desc) {
++			print_desc_man(cmd->desc);
++			printf(".P\n");
++		}
++
++		print_man_usage(lvmname, cmd);
++
++		printf("--\n");
++		printf("\n");
++		printf(".br\n");
++
++		printf("\n");
++	}
++}
++
+ int main(int argc, char *argv[])
+ {
++	char *cmdname = NULL;
++	char *desfile = NULL;
++	int primary = 0;
++	int secondary = 0;
++
+ 	memset(&commands, 0, sizeof(commands));
  
- ---
+-	if (argc < 2) {
+-		log_error("Usage: %s <command> [/path/to/description-file]", argv[0]);
++	static struct option long_options[] = {
++		{"primary", no_argument, 0, 'p' },
++		{"secondary", no_argument, 0, 's' },
++		{0, 0, 0, 0 }
++	};
++
++	while (1) {
++		int c;
++		int option_index = 0;
++
++		c = getopt_long(argc, argv, "ps", long_options, &option_index);
++		if (c == -1)
++			break;
++
++		switch (c) {
++		case '0':
++			break;
++		case 'p':
++			primary = 1;
++			break;
++		case 's':
++			secondary = 1;
++			break;
++		}
++	}
++
++	if (!primary && !secondary) {
++		log_error("Usage: %s --primary|--secondary <command> [/path/to/description-file]", argv[0]);
+ 		exit(EXIT_FAILURE);
+ 	}
  
-@@ -597,6 +602,7 @@ OO: OO_LVCONVERT
- ID: lvconvert_split_cow_snapshot
- DESC: Separate a COW snapshot from its origin LV.
- RULE: all not lv_is_locked lv_is_pvmove lv_is_origin lv_is_external_origin lv_is_merging_cow
-+FLAGS: SECONDARY_SYNTAX
++	if (optind < argc)
++		cmdname = strdup(argv[optind++]);
++
++	if (optind < argc)
++		desfile = argv[optind++];
++
+ 	define_commands(NULL);
  
- ---
+ 	factor_common_options();
  
-@@ -614,9 +620,9 @@ OO: --snapshot, --chunksize SizeKB, --zero Bool, OO_LVCONVERT
- ID: lvconvert_combine_split_snapshot
- DESC: Combine a former COW snapshot (second arg) with a former
- DESC: origin LV (first arg) to reverse a splitsnapshot command.
--FLAGS: SECONDARY_SYNTAX
- RULE: all not lv_is_locked lv_is_pvmove
- RULE: all and lv_is_visible
-+FLAGS: SECONDARY_SYNTAX
+-	print_man(argv[1], (argc > 2) ? argv[2] : NULL, 1, 1);
++	if (primary)
++		print_man(cmdname, desfile, secondary);
++	else if (secondary)
++		print_man_secondary(cmdname);
  
- lvconvert --snapshot LV LV_linear
- OO: --type snapshot, --chunksize SizeKB, --zero Bool, OO_LVCONVERT
-@@ -625,6 +631,7 @@ DESC: Combine a former COW snapshot (second arg) with a former
- DESC: origin LV (first arg) to reverse a splitsnapshot command.
- RULE: all not lv_is_locked lv_is_pvmove
- RULE: all and lv_is_visible
-+FLAGS: SECONDARY_SYNTAX
+ 	return 0;
+ }
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index d440987..e2be7c7 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1720,7 +1720,7 @@ static int _usage(const char *name, int longhelp)
+ 		print_usage_common_cmd(cname, cmd);
+ 		print_usage_common_lvm(cname, cmd);
+ 	} else
+-		log_print("Use --longhelp to show all options.");
++		log_print("Use --longhelp to show all options and advanced commands.");
  
- ---
- 
-@@ -745,6 +752,7 @@ OO: --stripes Number, --stripesize SizeKB, OO_LVCREATE
- OP: PV ...
- ID: lvcreate_striped
- DESC: Create a striped LV.
-+FLAGS: SECONDARY_SYNTAX
- 
- lvcreate --stripes Number --size SizeMB VG
- OO: --type striped, --stripesize SizeKB, OO_LVCREATE
-@@ -759,6 +767,7 @@ OO: --mirrors SNumber, --mirrorlog MirrorLog, --regionsize RegionSize, --stripes
- OP: PV ...
- ID: lvcreate_mirror
- DESC: Create a mirror LV (also see --type raid1).
-+FLAGS: SECONDARY_SYNTAX
- 
- # alternate form of lvcreate --type raid1|mirror
- lvcreate --mirrors SNumber --size SizeMB VG
-@@ -816,6 +825,7 @@ OO: --type snapshot, --chunksize SizeKB, OO_LVCREATE
- OP: PV ...
- ID: lvcreate_cow_snapshot_with_virtual_origin
- DESC: Create a sparse COW snapshot LV of a virtual origin LV.
-+FLAGS: SECONDARY_SYNTAX
- 
- ---
- 
-@@ -877,6 +887,7 @@ OO: --thin, OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
- IO: --mirrors 0
- ID: lvcreate_thin_vol
- DESC: Create a thin LV in a thin pool.
-+FLAGS: SECONDARY_SYNTAX
- 
- # alternate form of lvcreate --type thin
- lvcreate --type thin --virtualsize SizeMB LV_thinpool
-@@ -896,7 +907,6 @@ OO: --type thin, --thin, OO_LVCREATE_THIN, OO_LVCREATE
- IO: --mirrors 0
- ID: lvcreate_thin_vol
- DESC: Create a thin LV in a thin pool (variant, infers --type thin).
--FLAGS: SECONDARY_SYNTAX
- 
- # alternate form of lvcreate --type thin
- lvcreate --virtualsize SizeMB LV_thinpool
-@@ -915,6 +925,7 @@ OO: --thin, OO_LVCREATE_THIN, OO_LVCREATE
- IO: --mirrors 0
- ID: lvcreate_thin_snapshot
- DESC: Create a thin LV that is a snapshot of an existing thin LV.
-+FLAGS: SECONDARY_SYNTAX
- 
- # alternate form of lvcreate --type thin
- lvcreate --thin LV_thin
-@@ -946,6 +957,7 @@ IO: --mirrors 0
- ID: lvcreate_thin_snapshot_of_external
- DESC: Create a thin LV that is a snapshot of an external origin LV
- DESC: (infers --type thin).
-+FLAGS: SECONDARY_SYNTAX
- 
- ---
- 
-@@ -1153,7 +1165,6 @@ OO: --alloc Alloc, --autobackup Bool, --force, --mirrors SNumber,
- --type SegType
- ID: lvextend_by_pv
- DESC: Extend an LV by specified PV extents.
--FLAGS: SECONDARY_SYNTAX
- 
- lvextend --poolmetadatasize SizeMB LV_thinpool
- OO: --alloc Alloc, --autobackup Bool, --force, --mirrors SNumber,
-@@ -1226,7 +1237,6 @@ OO: --alloc Alloc, --autobackup Bool, --force,
- --type SegType
- ID: lvresize_by_pv
- DESC: Resize an LV by specified PV extents.
--FLAGS: SECONDARY_SYNTAX
- 
- lvresize --poolmetadatasize SizeMB LV_thinpool
- OO: --alloc Alloc, --autobackup Bool, --force,
-@@ -1504,7 +1514,6 @@ vgexport --all
- OO: OO_VGEXPORT
- ID: vgexport_all
- DESC: Export all VGs.
--FLAGS: SECONDARY_SYNTAX
- 
- ---
- 
-@@ -1628,14 +1637,12 @@ config
- OO: OO_CONFIG
- OP: String ...
- ID: lvmconfig_general
--FLAGS: SECONDARY_SYNTAX
- 
- # use lvmconfig
- dumpconfig
- OO: OO_CONFIG
- OP: String ...
- ID: lvmconfig_general
--FLAGS: SECONDARY_SYNTAX
- 
- devtypes
- OO: --aligned, --binary, --nameprefixes, --noheadings,
-@@ -1669,7 +1676,6 @@ ID: version_general
- # deprecated
- pvdata
- ID: pvdata_general
--FLAGS: SECONDARY_SYNTAX
- 
- segtypes
- ID: segtypes_general
-@@ -1683,22 +1689,18 @@ ID: tags_general
- # deprecated
- lvmchange
- ID: lvmchange_general
--FLAGS: SECONDARY_SYNTAX
- 
- # deprecated
- lvmdiskscan
- OO: --lvmpartition, --readonly
- ID: lvmdiskscan_general
--FLAGS: SECONDARY_SYNTAX
- 
- # deprecated
- lvmsadc
- ID: lvmsadc_general
--FLAGS: SECONDARY_SYNTAX
- 
- # deprecated
- lvmsar
- OO: --full, --stdin
- ID: lvmsar_general
--FLAGS: SECONDARY_SYNTAX
- 
+ 	return 1;
+ }
 
 
