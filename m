@@ -1,44 +1,52 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 6 Mar 2017 12:28:50 -0500
-Subject: master - man lvextend: mention segment type
-Message-ID: <201703061728.v26HSosK021270@int-mx11.intmail.prod.int.phx2.redhat.com>
+Date: Mon, 6 Mar 2017 13:20:53 -0500
+Subject: master - man/help: improve stripes option wording
+Message-ID: <201703061820.v26IKrtR030590@int-mx11.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ef97360866d8a9221eb8d9b2d0e2f7e366bbd8ef
-Commit:        ef97360866d8a9221eb8d9b2d0e2f7e366bbd8ef
-Parent:        17838e6439f7cabfa4609dbfb48197d5a33138f8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0b019c5406c27edfd00b502a95cb57e198c949a8
+Commit:        0b019c5406c27edfd00b502a95cb57e198c949a8
+Parent:        ef97360866d8a9221eb8d9b2d0e2f7e366bbd8ef
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Mar 6 11:27:56 2017 -0600
+AuthorDate:    Mon Mar 6 12:01:11 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Mar 6 11:27:56 2017 -0600
+CommitterDate: Mon Mar 6 12:20:33 2017 -0600
 
-man lvextend: mention segment type
+man/help: improve stripes option wording
 
 ---
- man/lvextend.8.des |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+ tools/args.h |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/man/lvextend.8.des b/man/lvextend.8.des
-index 346bd23..4c0575d 100644
---- a/man/lvextend.8.des
-+++ b/man/lvextend.8.des
-@@ -1,7 +1,10 @@
- lvextend extends the size of an LV. This requires allocating logical
--extents from the VG's free physical extents. A copy\-on\-write snapshot LV
--can also be extended to provide more space to hold COW blocks. Use
--\fBlvconvert\fP(8) to change the number of data images in a RAID or
-+extents from the VG's free physical extents. If the extension adds a new
-+LV segment, the new segment will use the existing segment type of the LV.
-+
-+Extending a copy\-on\-write snapshot LV adds space for COW blocks.
-+
-+Use \fBlvconvert\fP(8) to change the number of data images in a RAID or
- mirrored LV.
+diff --git a/tools/args.h b/tools/args.h
+index 7c44256..7bb177d 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -974,15 +974,15 @@ arg(stripes_ARG, 'i', "stripes", number_VAL, 0, 0,
+     "Specifies the number of stripes in a striped LV. This is the number of\n"
+     "PVs (devices) that a striped LV is spread across. Data that\n"
+     "appears sequential in the LV is spread across multiple devices in units of\n"
+-    "the stripe size (see --stripesize). This does not apply to\n"
+-    "existing allocated space, only newly allocated space can be striped.\n"
++    "the stripe size (see --stripesize). This does not change existing\n"
++    "allocated space, but only applies to space being allocated by the command.\n"
+     "When creating a RAID 4/5/6 LV, this number does not include the extra\n"
+     "devices that are required for parity. The largest number depends on\n"
+-    "the RAID type (raid0: 64, raid10: 32, raid4/5: 63, raid6: 62.)\n"
+-    "When unspecified, the default depends on the RAID type\n"
++    "the RAID type (raid0: 64, raid10: 32, raid4/5: 63, raid6: 62), and\n"
++    "when unspecified, the default depends on the RAID type\n"
+     "(raid0: 2, raid10: 4, raid4/5: 3, raid6: 5.)\n"
+-    "When unspecified, to stripe across all PVs of the VG,\n"
+-    "set lvm.conf allocation/raid_stripe_all_devices=1.\n")
++    "To stripe a new raid LV across all PVs by default,\n"
++    "see lvm.conf allocation/raid_stripe_all_devices.\n")
  
- In the usage section below, \fB--size\fP \fISize\fP can be replaced
+ arg(stripesize_ARG, 'I', "stripesize", sizekb_VAL, 0, 0,
+     "The amount of data that is written to one device before\n"
 
 
