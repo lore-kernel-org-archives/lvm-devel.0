@@ -1,52 +1,38 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 6 Mar 2017 13:20:53 -0500
-Subject: master - man/help: improve stripes option wording
-Message-ID: <201703061820.v26IKrtR030590@int-mx11.intmail.prod.int.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Mon, 6 Mar 2017 13:33:54 -0500
+Subject: master - man lvs: describe new 'R' volume health character
+Message-ID: <201703061833.v26IXs4x003992@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0b019c5406c27edfd00b502a95cb57e198c949a8
-Commit:        0b019c5406c27edfd00b502a95cb57e198c949a8
-Parent:        ef97360866d8a9221eb8d9b2d0e2f7e366bbd8ef
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Mar 6 12:01:11 2017 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Mar 6 12:20:33 2017 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=872932a0fb31af4bb52b575157bc7f93025bfd59
+Commit:        872932a0fb31af4bb52b575157bc7f93025bfd59
+Parent:        0b019c5406c27edfd00b502a95cb57e198c949a8
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Mon Mar 6 19:33:10 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Mon Mar 6 19:33:10 2017 +0100
 
-man/help: improve stripes option wording
+man lvs: describe new 'R' volume health character
 
 ---
- tools/args.h |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ man/lvs.8.end |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 7c44256..7bb177d 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -974,15 +974,15 @@ arg(stripes_ARG, 'i', "stripes", number_VAL, 0, 0,
-     "Specifies the number of stripes in a striped LV. This is the number of\n"
-     "PVs (devices) that a striped LV is spread across. Data that\n"
-     "appears sequential in the LV is spread across multiple devices in units of\n"
--    "the stripe size (see --stripesize). This does not apply to\n"
--    "existing allocated space, only newly allocated space can be striped.\n"
-+    "the stripe size (see --stripesize). This does not change existing\n"
-+    "allocated space, but only applies to space being allocated by the command.\n"
-     "When creating a RAID 4/5/6 LV, this number does not include the extra\n"
-     "devices that are required for parity. The largest number depends on\n"
--    "the RAID type (raid0: 64, raid10: 32, raid4/5: 63, raid6: 62.)\n"
--    "When unspecified, the default depends on the RAID type\n"
-+    "the RAID type (raid0: 64, raid10: 32, raid4/5: 63, raid6: 62), and\n"
-+    "when unspecified, the default depends on the RAID type\n"
-     "(raid0: 2, raid10: 4, raid4/5: 3, raid6: 5.)\n"
--    "When unspecified, to stripe across all PVs of the VG,\n"
--    "set lvm.conf allocation/raid_stripe_all_devices=1.\n")
-+    "To stripe a new raid LV across all PVs by default,\n"
-+    "see lvm.conf allocation/raid_stripe_all_devices.\n")
- 
- arg(stripesize_ARG, 'I', "stripesize", sizekb_VAL, 0, 0,
-     "The amount of data that is written to one device before\n"
+diff --git a/man/lvs.8.end b/man/lvs.8.end
+index d71f7c1..ff92148 100644
+--- a/man/lvs.8.end
++++ b/man/lvs.8.end
+@@ -56,6 +56,7 @@ Inconsistencies are detected by initiating a "check" on a RAID logical volume.
+ (The scrubbing operations, "check" and "repair", can be performed on a RAID
+ logical volume via the 'lvchange' command.)  (w)ritemostly signifies the
+ devices in a RAID 1 logical volume that have been marked write-mostly.
++(R)emove after reshape signifies freed striped raid images to be removed.
+ .IP
+ Related to Thin pool Logical Volumes: (F)ailed, out of (D)ata space,
+ (M)etadata read only.
 
 
