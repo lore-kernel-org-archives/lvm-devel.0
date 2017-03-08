@@ -1,64 +1,122 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 8 Mar 2017 09:14:34 -0500
-Subject: master - metadata: comments
-Message-ID: <201703081414.v28EEYui022293@int-mx11.intmail.prod.int.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 8 Mar 2017 12:04:29 -0500
+Subject: master - help: avoid end notes repetition in lvm help all
+Message-ID: <201703081704.v28H4Tvq027876@int-mx14.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ed58672029567858709113b67337e4dfaf31d210
-Commit:        ed58672029567858709113b67337e4dfaf31d210
-Parent:        3a5561e5ab5c916df8f90cc880ce2acb04ee2ecb
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Mar 8 15:13:59 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Mar 8 15:13:59 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f48e6b2690c43120ec87e4fa913b2bd952a53511
+Commit:        f48e6b2690c43120ec87e4fa913b2bd952a53511
+Parent:        ed58672029567858709113b67337e4dfaf31d210
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Mar 7 12:01:06 2017 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Mar 8 11:03:02 2017 -0600
 
-metadata: comments
+help: avoid end notes repetition in lvm help all
 
-log_count,nosync,stripes,stripe_size,,...  are also used for raid.
 ---
- lib/metadata/metadata-exported.h |   16 ++++++++--------
- 1 files changed, 8 insertions(+), 8 deletions(-)
+ tools/command.c    |    6 +++---
+ tools/command.h    |    2 +-
+ tools/lvmcmdline.c |   15 ++++++++++-----
+ 3 files changed, 14 insertions(+), 9 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 4d02d04..4960499 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -916,8 +916,8 @@ struct lvcreate_params {
- 	int wipe_signatures; /* all */
- 	int32_t major; /* all */
- 	int32_t minor; /* all */
--	int log_count; /* mirror */
--	int nosync; /* mirror */
-+	int log_count; /* mirror/RAID */
-+	int nosync; /* mirror/RAID */
- 	int pool_metadata_spare; /* pools */
- 	int type;   /* type arg is given */
- 	int temporary; /* temporary LV */
-@@ -948,15 +948,15 @@ struct lvcreate_params {
- #define PASS_ARG_ZERO			0x08
- 	int passed_args;
+diff --git a/tools/command.c b/tools/command.c
+index 5fc5ff3..d184208 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -1989,9 +1989,9 @@ void print_usage_common_cmd(struct command_name *cname, struct command *cmd)
+ 	printf("\n\n");
+ }
  
--	uint32_t stripes; /* striped */
--	uint32_t stripe_size; /* striped */
-+	uint32_t stripes; /* striped/RAID */
-+	uint32_t stripe_size; /* striped/RAID */
- 	uint32_t chunk_size; /* snapshot */
--	uint32_t region_size; /* mirror */
-+	uint32_t region_size; /* mirror/RAID */
+-void print_usage_notes(struct command_name *cname, struct command *cmd)
++void print_usage_notes(struct command_name *cname)
+ {
+-	if (command_has_alternate_extents(cname->name)) {
++	if (cname && command_has_alternate_extents(cname->name)) {
+ 		printf("  Special options for command:\n");
+ 		printf("        [ --extents Number[PERCENT] ]\n"
+ 		       "        The --extents option can be used in place of --size.\n"
+@@ -1999,7 +1999,7 @@ void print_usage_notes(struct command_name *cname, struct command *cmd)
+ 		printf("\n");
+ 	}
  
--	unsigned stripes_supplied; /* striped */
--	unsigned stripe_size_supplied; /* striped */
-+	unsigned stripes_supplied; /* striped/RAID */
-+	unsigned stripe_size_supplied; /* striped/RAID */
+-	if (!strcmp(cname->name, "lvcreate")) {
++	if (cname && !strcmp(cname->name, "lvcreate")) {
+ 		printf("        [ --name String ]\n"
+ 		       "        The --name option is not required but is typically used.\n"
+ 		       "        When a name is not specified, a new LV name is generated\n"
+diff --git a/tools/command.h b/tools/command.h
+index 0109853..2e4dba3 100644
+--- a/tools/command.h
++++ b/tools/command.h
+@@ -216,7 +216,7 @@ int command_id_to_enum(const char *str);
+ void print_usage(struct command *cmd, int longhelp, int desc_first);
+ void print_usage_common_cmd(struct command_name *cname, struct command *cmd);
+ void print_usage_common_lvm(struct command_name *cname, struct command *cmd);
+-void print_usage_notes(struct command_name *cname, struct command *cmd);
++void print_usage_notes(struct command_name *cname);
+ void factor_common_options(void);
+ int command_has_alternate_extents(const char *name);
  
--	uint32_t mirrors; /* mirror */
-+	uint32_t mirrors; /* mirror/RAID */
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 53856ce..ad638af 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1694,7 +1694,7 @@ static void _short_usage(const char *name)
+ 	log_error("Run `%s --help' for more information.", name);
+ }
  
- 	uint32_t min_recovery_rate; /* RAID */
- 	uint32_t max_recovery_rate; /* RAID */
+-static int _usage(const char *name, int longhelp)
++static int _usage(const char *name, int longhelp, int skip_notes)
+ {
+ 	struct command_name *cname = find_command_name(name);
+ 	struct command *cmd;
+@@ -1739,8 +1739,11 @@ static int _usage(const char *name, int longhelp)
+ 		print_usage_common_lvm(cname, cmd);
+ 	}
+ 
++	if (skip_notes)
++		return 1;
++
+ 	if (longhelp)
+-		print_usage_notes(cname, cmd);
++		print_usage_notes(cname);
+ 	else
+ 		log_print("Use --longhelp to show all options and advanced commands.");
+ 
+@@ -1754,8 +1757,10 @@ static void _usage_all(void)
+ 	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
+ 		if (!command_names[i].name)
+ 			break;
+-		_usage(command_names[i].name, 1);
++		_usage(command_names[i].name, 1, 1);
+ 	}
++
++	print_usage_notes(NULL);
+ }
+ 
+ /*
+@@ -2202,7 +2207,7 @@ static int _process_common_commands(struct cmd_context *cmd)
+ 	if (arg_is_set(cmd, help_ARG) ||
+ 	    arg_is_set(cmd, longhelp_ARG) ||
+ 	    arg_is_set(cmd, help2_ARG)) {
+-		_usage(cmd->name, arg_is_set(cmd, longhelp_ARG));
++		_usage(cmd->name, arg_is_set(cmd, longhelp_ARG), 0);
+ 		return ECMD_PROCESSED;
+ 	}
+ 
+@@ -2240,7 +2245,7 @@ int help(struct cmd_context *cmd __attribute__((unused)), int argc, char **argv)
+ 	else {
+ 		int i;
+ 		for (i = 0; i < argc; i++)
+-			if (!_usage(argv[i], 0))
++			if (!_usage(argv[i], 0, 0))
+ 				ret = EINVALID_CMD_LINE;
+ 	}
+ 
 
 
