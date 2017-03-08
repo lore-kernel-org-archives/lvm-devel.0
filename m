@@ -1,41 +1,37 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 8 Mar 2017 16:01:20 -0500
-Subject: master - help: fix missing required option
-Message-ID: <201703082101.v28L1K5h009077@int-mx09.intmail.prod.int.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Wed, 8 Mar 2017 18:11:15 -0500
+Subject: master - test: Copyright
+Message-ID: <201703082311.v28NBFt6009044@int-mx10.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b4e78b26f53194ef8b3b1e623715c96db1046e42
-Commit:        b4e78b26f53194ef8b3b1e623715c96db1046e42
-Parent:        4d0172ff15c8af6e5df22afca1c8dc9725c3684f
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Mar 8 15:00:27 2017 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Mar 8 15:00:27 2017 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=00b8c2bebc274ba783f6b0f0b27f07ec858c7310
+Commit:        00b8c2bebc274ba783f6b0f0b27f07ec858c7310
+Parent:        b4e78b26f53194ef8b3b1e623715c96db1046e42
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Thu Mar 9 00:10:55 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Mar 9 00:10:55 2017 +0100
 
-help: fix missing required option
+test: Copyright
 
-Fix for previous commit 4d0172ff15c.
 ---
- tools/command.c |    3 ---
- 1 files changed, 0 insertions(+), 3 deletions(-)
+ test/shell/relative-sign-options.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index d001f94..1f31468 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -1701,9 +1701,6 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
- 		for (ro = 0; ro < cmd->ro_count; ro++) {
- 			opt_enum = cmd->required_opt_args[ro].opt;
- 
--			if (!opt_names[opt_enum].short_opt)
--				continue;
--
- 			if ((opt_enum == size_ARG) && command_has_alternate_extents(cmd->name))
- 				include_extents = 1;
- 
+diff --git a/test/shell/relative-sign-options.sh b/test/shell/relative-sign-options.sh
+index 00f5791..314f6b1 100644
+--- a/test/shell/relative-sign-options.sh
++++ b/test/shell/relative-sign-options.sh
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2017 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
 
 
