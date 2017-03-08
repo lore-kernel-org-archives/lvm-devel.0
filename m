@@ -1,367 +1,386 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 8 Mar 2017 12:04:46 -0500
-Subject: master - commands: combine duplicate arrays for lv types and props
-Message-ID: <201703081704.v28H4klC031188@int-mx09.intmail.prod.int.phx2.redhat.com>
+Date: Wed, 8 Mar 2017 12:04:47 -0500
+Subject: master - commands: combine duplicate arrays for opt and val
+Message-ID: <201703081704.v28H4hcM031155@int-mx09.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=11f1556d5dbfb843f894b64d1e0cd2ff6197851a
-Commit:        11f1556d5dbfb843f894b64d1e0cd2ff6197851a
-Parent:        690f60473352e9909df95fae96a5d99b8b0c9db7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=690f60473352e9909df95fae96a5d99b8b0c9db7
+Commit:        690f60473352e9909df95fae96a5d99b8b0c9db7
+Parent:        f48e6b2690c43120ec87e4fa913b2bd952a53511
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Mar 7 12:08:23 2017 -0600
+AuthorDate:    Tue Mar 7 11:47:44 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Wed Mar 8 11:03:02 2017 -0600
 
-commands: combine duplicate arrays for lv types and props
+commands: combine duplicate arrays for opt and val
 
-Like opt and val arrays in previous commit, combine duplicate
-arrays for lv types and props in command.c and lvmcmdline.c.
-Also move the command_names array to be defined in command.c
-so it's consistent with the others.
+command.c and lvmcmdline.c each had a full array defining
+all options and values.  This duplication was not removed
+when the command.c code was merged into the run time.
 ---
- tools/command.c    |   48 ++++++++++++++++++++----------------------------
- tools/command.h    |   19 +++++++++++++++++++
- tools/lvconvert.c  |    8 ++++----
- tools/lvmcmdline.c |   26 +++++++-------------------
- tools/toollib.c    |   12 ++++++------
- tools/tools.h      |   19 ++-----------------
- 6 files changed, 58 insertions(+), 74 deletions(-)
+ tools/command.c     |   25 -------------------
+ tools/command.h     |   24 ++++++++++++++++++
+ tools/lvm.c         |    8 +++---
+ tools/lvm2cmdline.h |    2 +-
+ tools/lvmcmdline.c  |   66 ++++++++++++++++++++++----------------------------
+ tools/tools.h       |   20 ---------------
+ tools/vals.h        |    2 +-
+ 7 files changed, 59 insertions(+), 88 deletions(-)
 
 diff --git a/tools/command.c b/tools/command.c
-index 71056bf..bfd3d7d 100644
+index d184208..71056bf 100644
 --- a/tools/command.c
 +++ b/tools/command.c
-@@ -167,22 +167,6 @@ enum {
+@@ -167,31 +167,6 @@ enum {
  #include "command.h"       /* defines struct command */
  #include "command-count.h" /* defines COMMAND_COUNT */
  
--/* see lvp_names[] below, also see lv_props[] in tools.h and lv_props.h */
 -
--struct lvp_name {
--	const char *enum_name; /* "is_foo_LVP" */
--	int lvp_enum;          /* is_foo_LVP */
--	const char *name;      /* "lv_is_foo" */
+-/* see opt_names[] below, also see arg_props[] in tools.h and args.h */
+-
+-struct opt_name {
+-	const char *name;       /* "foo_ARG" */
+-	int opt_enum;           /* foo_ARG */
+-	const char short_opt;   /* -f */
+-	char _padding[7];
+-	const char *long_opt;   /* --foo */
+-	int val_enum;           /* xyz_VAL when --foo takes a val like "--foo xyz" */
+-	uint32_t flags;
+-	uint32_t prio;
+-	const char *desc;
 -};
 -
--/* see lvt_names[] below, also see lv_types[] in tools.h and lv_types.h */
+-/* see val_names[] below, also see val_props[] in tools.h and vals.h */
 -
--struct lvt_name {
--	const char *enum_name; /* "foo_LVT" */
--	int lvt_enum;          /* foo_LVT */
--	const char *name;      /* "foo" */
+-struct val_name {
+-	const char *enum_name;  /* "foo_VAL" */
+-	int val_enum;           /* foo_VAL */
+-	int (*fn) (struct cmd_context *cmd, struct arg_values *av); /* foo_arg() */
+-	const char *name;       /* FooVal */
+-	const char *usage;
 -};
 -
- /* see cmd_names[] below, one for each unique "ID" in command-lines.in */
+ /* see lvp_names[] below, also see lv_props[] in tools.h and lv_props.h */
  
- struct cmd_name {
-@@ -209,16 +193,16 @@ struct opt_name opt_names[ARG_COUNT + 1] = {
- 
- /* create table of lv property names, e.g. lv_is_foo, and corresponding enum from lv_props.h */
- 
--struct lvp_name lvp_names[LVP_COUNT + 1] = {
--#define lvp(a, b, c) { # a, a, b },
-+struct lv_prop lv_props[LVP_COUNT + 1] = {
-+#define lvp(a, b, c) { # a, a, b, c },
- #include "lv_props.h"
- #undef lvp
- };
- 
- /* create table of lv type names, e.g. linear and corresponding enum from lv_types.h */
- 
--struct lvt_name lvt_names[LVT_COUNT + 1] = {
--#define lvt(a, b, c) { # a, a, b },
-+struct lv_type lv_types[LVT_COUNT + 1] = {
-+#define lvt(a, b, c) { # a, a, b, c },
- #include "lv_types.h"
- #undef lvt
- };
-@@ -237,16 +221,24 @@ struct cmd_name cmd_names[CMD_COUNT + 1] = {
-  */
- 
- #ifdef MAN_PAGE_GENERATOR
-+
- struct command_name command_names[MAX_COMMAND_NAMES] = {
- #define xx(a, b, c...) { # a, b, c },
- #include "commands.h"
- #undef xx
- };
- struct command commands[COMMAND_COUNT];
--#else
--extern struct command_name command_names[MAX_COMMAND_NAMES]; /* defined in lvmcmdline.c */
-+
-+#else /* MAN_PAGE_GENERATOR */
-+
-+struct command_name command_names[MAX_COMMAND_NAMES] = {
-+#define xx(a, b, c...) { # a, b, c, a},
-+#include "commands.h"
-+#undef xx
-+};
- extern struct command commands[COMMAND_COUNT]; /* defined in lvmcmdline.c */
--#endif
-+
-+#endif /* MAN_PAGE_GENERATOR */
- 
- /* array of pointers into opt_names[] that is sorted alphabetically (by long opt name) */
- 
-@@ -422,8 +414,8 @@ static int lvp_name_to_enum(struct command *cmd, char *str)
- 	int i;
- 
- 	for (i = 1; i < LVP_COUNT; i++) {
--		if (!strcmp(str, lvp_names[i].name))
--			return lvp_names[i].lvp_enum;
-+		if (!strcmp(str, lv_props[i].name))
-+			return lv_props[i].lvp_enum;
- 	}
- 
- 	log_error("Parsing command defs: unknown lv property %s", str);
-@@ -438,8 +430,8 @@ static int lvt_name_to_enum(struct command *cmd, char *str)
- 	int i;
- 
- 	for (i = 1; i < LVT_COUNT; i++) {
--		if (!strcmp(str, lvt_names[i].name))
--			return lvt_names[i].lvt_enum;
-+		if (!strcmp(str, lv_types[i].name))
-+			return lv_types[i].lvt_enum;
- 	}
- 
- 	log_error("Parsing command defs: unknown lv type %s", str);
-@@ -1525,7 +1517,7 @@ int define_commands(char *run_name)
- 
- static const char *lvt_enum_to_name(int lvt_enum)
- {
--	return lvt_names[lvt_enum].name;
-+	return lv_types[lvt_enum].name;
- }
- 
- static void _print_usage_description(struct command *cmd)
+ struct lvp_name {
 diff --git a/tools/command.h b/tools/command.h
-index 7652d74..891349a 100644
+index 2e4dba3..7652d74 100644
 --- a/tools/command.h
 +++ b/tools/command.h
-@@ -235,6 +235,25 @@ struct val_name {
- 	const char *usage;
+@@ -211,6 +211,30 @@ struct command {
+ 	int pos_count; /* temp counter used by create-command */
  };
  
-+/* see global lv_props[] */
++/* see global opt_names[] */
 +
-+struct lv_prop {
-+	const char *enum_name; /* "is_foo_LVP" */
-+	int lvp_enum;          /* is_foo_LVP */
-+	const char *name;      /* "lv_is_foo" */
-+	int (*fn) (struct cmd_context *cmd, struct logical_volume *lv); /* lv_is_foo() */
++struct opt_name {
++	const char *name;       /* "foo_ARG" */
++	int opt_enum;           /* foo_ARG */
++	const char short_opt;   /* -f */
++	char _padding[7];
++	const char *long_opt;   /* --foo */
++	int val_enum;           /* xyz_VAL when --foo takes a val like "--foo xyz" */
++	uint32_t flags;
++	uint32_t prio;
++	const char *desc;
 +};
 +
-+/* see global lv_types[] */
++/* see global val_names[] */
 +
-+struct lv_type {
-+	const char *enum_name; /* "foo_LVT" */
-+	int lvt_enum;          /* foo_LVT */
-+	const char *name;      /* "foo" */
-+	int (*fn) (struct cmd_context *cmd, struct logical_volume *lv); /* lv_is_foo() */
++struct val_name {
++	const char *enum_name;  /* "foo_VAL" */
++	int val_enum;           /* foo_VAL */
++	int (*fn) (struct cmd_context *cmd, struct arg_values *av); /* foo_arg() */
++	const char *name;       /* FooVal */
++	const char *usage;
 +};
-+
 +
  int define_commands(char *run_name);
  int command_id_to_enum(const char *str);
  void print_usage(struct command *cmd, int longhelp, int desc_first);
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index c82dab2..97d17e4 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2523,7 +2523,7 @@ static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
- 	struct volume_group *vg = lv->vg;
- 	struct logical_volume *prev_metadata_lv;
- 	struct lv_segment *seg;
--	struct lv_types *lvtype;
-+	struct lv_type *lvtype;
- 	char meta_name[NAME_LEN];
- 	const char *swap_name;
- 	uint32_t chunk_size;
-@@ -3841,7 +3841,7 @@ static int _lvconvert_to_cache_vol_single(struct cmd_context *cmd,
+diff --git a/tools/lvm.c b/tools/lvm.c
+index 5fd9918..0554007 100644
+--- a/tools/lvm.c
++++ b/tools/lvm.c
+@@ -97,8 +97,8 @@ static char *_list_args(const char *text, int state)
+ 		while (match_no < cname->num_args) {
+ 			char s[3];
+ 			char c;
+-			if (!(c = (_cmdline->arg_props +
+-				   cname->valid_args[match_no++])->short_arg))
++			if (!(c = (_cmdline->opt_names +
++				   cname->valid_args[match_no++])->short_opt))
+ 				continue;
  
- 	if (!lv_is_cache_pool(cachepool_lv)) {
- 		int lvt_enum = get_lvt_enum(cachepool_lv);
--		struct lv_types *lvtype = get_lv_type(lvt_enum);
-+		struct lv_type *lvtype = get_lv_type(lvt_enum);
+ 			sprintf(s, "-%c", c);
+@@ -113,8 +113,8 @@ static char *_list_args(const char *text, int state)
  
- 		if (lvt_enum != striped_LVT && lvt_enum != linear_LVT && lvt_enum != raid_LVT) {
- 			log_error("LV %s with type %s cannot be converted to a cache pool.",
-@@ -3950,7 +3950,7 @@ static int _lvconvert_to_thin_with_external_single(struct cmd_context *cmd,
+ 	while (match_no - cname->num_args < cname->num_args) {
+ 		const char *l;
+-		l = (_cmdline->arg_props +
+-		     cname->valid_args[match_no++ - cname->num_args])->long_arg;
++		l = (_cmdline->opt_names +
++		     cname->valid_args[match_no++ - cname->num_args])->long_opt;
+ 		if (*(l + 2) && !strncmp(text, l, len))
+ 			return strdup(l);
+ 	}
+diff --git a/tools/lvm2cmdline.h b/tools/lvm2cmdline.h
+index 5c5eaee..7353c7a 100644
+--- a/tools/lvm2cmdline.h
++++ b/tools/lvm2cmdline.h
+@@ -19,7 +19,7 @@
+ struct cmd_context;
  
- 	if (!lv_is_thin_pool(thinpool_lv)) {
- 		int lvt_enum = get_lvt_enum(thinpool_lv);
--		struct lv_types *lvtype = get_lv_type(lvt_enum);
-+		struct lv_type *lvtype = get_lv_type(lvt_enum);
- 
- 		if (lvt_enum != striped_LVT && lvt_enum != linear_LVT && lvt_enum != raid_LVT) {
- 			log_error("LV %s with type %s cannot be converted to a thin pool.",
-@@ -4274,7 +4274,7 @@ static int _lvconvert_raid_types_check(struct cmd_context *cmd, struct logical_v
- 			int lv_is_named_arg)
- {
- 	int lvt_enum = get_lvt_enum(lv);
--	struct lv_types *lvtype = get_lv_type(lvt_enum);
-+	struct lv_type *lvtype = get_lv_type(lvt_enum);
- 
- 	if (!lv_is_visible(lv)) {
- 		if (!lv_is_cache_pool_metadata(lv) &&
+ struct cmdline_context {
+-	struct arg_props *arg_props;
++	struct opt_name *opt_names;
+ 	struct command *commands;
+ 	int num_commands;
+ 	struct command_name *command_names;
 diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 404641f..f46e283 100644
+index ad638af..404641f 100644
 --- a/tools/lvmcmdline.c
 +++ b/tools/lvmcmdline.c
-@@ -63,29 +63,17 @@ extern struct opt_name opt_names[ARG_COUNT + 1];
+@@ -53,20 +53,12 @@ extern char *optarg;
+ /*
+  * Table of valid --option values.
+  */
+-static struct val_props _val_props[VAL_COUNT + 1] = {
+-#define val(a, b, c, d) {a, b, c, d},
+-#include "vals.h"
+-#undef val
+-};
++extern struct val_name val_names[VAL_COUNT + 1];
+ 
+ /*
+  * Table of valid --option's
+  */
+-static struct arg_props _arg_props[ARG_COUNT + 1] = {
+-#define arg(a, b, c, d, e, f, g) {a, b, "", "--" c, d, e, f, g},
+-#include "args.h"
+-#undef arg
+-};
++extern struct opt_name opt_names[ARG_COUNT + 1];
+ 
  /*
   * Table of LV properties
-  */
--static struct lv_props _lv_props[LVP_COUNT + 1] = {
--#define lvp(a, b, c) {a, b, c},
--#include "lv_props.h"
--#undef lvp
--};
-+extern struct lv_prop lv_props[LVP_COUNT + 1];
+@@ -277,7 +269,7 @@ unsigned grouped_arg_is_set(const struct arg_values *av, int a)
  
- /*
-  * Table of LV types
-  */
--static struct lv_types _lv_types[LVT_COUNT + 1] = {
--#define lvt(a, b, c) {a, b, c},
--#include "lv_types.h"
--#undef lvt
--};
-+extern struct lv_type lv_types[LVT_COUNT + 1];
- 
- /*
-  * Table of command names
-  */
--struct command_name command_names[MAX_COMMAND_NAMES] = {
--#define xx(a, b, c...) { # a, b, c, a},
--#include "commands.h"
--#undef xx
--};
-+extern struct command_name command_names[MAX_COMMAND_NAMES];
- 
- /*
-  * Table of commands (as defined in command-lines.in)
-@@ -1197,18 +1185,18 @@ int lvm_register_commands(char *name)
- 	return 1;
+ const char *arg_long_option_name(int a)
+ {
+-	return _cmdline.arg_props[a].long_arg;
++	return _cmdline.opt_names[a].long_opt;
  }
  
--struct lv_props *get_lv_prop(int lvp_enum)
-+struct lv_prop *get_lv_prop(int lvp_enum)
+ const char *arg_value(const struct cmd_context *cmd, int a)
+@@ -316,7 +308,7 @@ int32_t first_grouped_arg_int_value(const struct cmd_context *cmd, int a, const
+ 
+ int32_t arg_int_value(const struct cmd_context *cmd, int a, const int32_t def)
  {
- 	if (!lvp_enum)
- 		return NULL;
--	return &_lv_props[lvp_enum];
-+	return &lv_props[lvp_enum];
+-	return (_cmdline.arg_props[a].flags & ARG_GROUPABLE) ?
++	return (_cmdline.opt_names[a].flags & ARG_GROUPABLE) ?
+ 		first_grouped_arg_int_value(cmd, a, def) : (arg_is_set(cmd, a) ? cmd->opt_arg_values[a].i_value : def);
  }
  
--struct lv_types *get_lv_type(int lvt_enum)
-+struct lv_type *get_lv_type(int lvt_enum)
- {
- 	if (!lvt_enum)
- 		return NULL;
--	return &_lv_types[lvt_enum];
-+	return &lv_types[lvt_enum];
- }
+@@ -1088,7 +1080,7 @@ static void _set_valid_args_for_command_name(int ci)
  
- struct command *get_command(int cmd_enum)
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 0e45d80..f2951a7 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -2366,7 +2366,7 @@ void opt_array_to_str(struct cmd_context *cmd, int *opts, int count,
+ 	for (i = 0; i < ARG_COUNT; i++) {
+ 		if (all_args[i]) {
+-			opt_enum = _cmdline.arg_props[i].arg_enum;
++			opt_enum = _cmdline.opt_names[i].opt_enum;
  
- static void lvp_bits_to_str(uint64_t bits, char *buf, int len)
- {
--	struct lv_props *prop;
-+	struct lv_prop *prop;
- 	int lvp_enum;
- 	int pos = 0;
- 	int ret;
-@@ -2387,7 +2387,7 @@ static void lvp_bits_to_str(uint64_t bits, char *buf, int len)
+ 			command_names[ci].valid_args[num_args] = opt_enum;
+ 			num_args++;
+@@ -1789,12 +1781,12 @@ static void _usage_all(void)
+  * can't have more than 'a' long arguments.
+  */
  
- static void lvt_bits_to_str(uint64_t bits, char *buf, int len)
+-static void _add_getopt_arg(int arg_enum, char **optstrp, struct option **longoptsp)
++static void _add_getopt_arg(int opt_enum, char **optstrp, struct option **longoptsp)
  {
--	struct lv_types *type;
-+	struct lv_type *type;
- 	int lvt_enum;
- 	int pos = 0;
- 	int ret;
-@@ -2593,7 +2593,7 @@ int get_lvt_enum(struct logical_volume *lv)
- static int _lv_types_match(struct cmd_context *cmd, struct logical_volume *lv, uint64_t lvt_bits,
- 			   uint64_t *match_bits, uint64_t *unmatch_bits)
- {
--	struct lv_types *type;
-+	struct lv_type *type;
- 	int lvt_enum;
- 	int found_a_match = 0;
- 	int match;
-@@ -2642,7 +2642,7 @@ static int _lv_types_match(struct cmd_context *cmd, struct logical_volume *lv, u
- static int _lv_props_match(struct cmd_context *cmd, struct logical_volume *lv, uint64_t lvp_bits,
- 			   uint64_t *match_bits, uint64_t *unmatch_bits)
- {
--	struct lv_props *prop;
-+	struct lv_prop *prop;
- 	int lvp_enum;
- 	int found_a_mismatch = 0;
- 	int match;
-@@ -2697,7 +2697,7 @@ static int _check_lv_types(struct cmd_context *cmd, struct logical_volume *lv, i
- 	ret = _lv_types_match(cmd, lv, cmd->command->required_pos_args[pos-1].def.lvt_bits, NULL, NULL);
- 	if (!ret) {
- 		int lvt_enum = get_lvt_enum(lv);
--		struct lv_types *type = get_lv_type(lvt_enum);
-+		struct lv_type *type = get_lv_type(lvt_enum);
- 		log_warn("Operation on LV %s which has invalid type %s.",
- 			 display_lvname(lv), type ? type->name : "unknown");
+-	struct arg_props *a = _cmdline.arg_props + arg_enum;
++	struct opt_name *a = _cmdline.opt_names + opt_enum;
+ 
+-	if (a->short_arg) {
+-		*(*optstrp)++ = a->short_arg;
++	if (a->short_opt) {
++		*(*optstrp)++ = a->short_opt;
+ 
+ 		if (a->val_enum)
+ 			*(*optstrp)++ = ':';
+@@ -1802,8 +1794,8 @@ static void _add_getopt_arg(int arg_enum, char **optstrp, struct option **longop
+ #ifdef HAVE_GETOPTLONG
+ 	/* long_arg is "--foo", so +2 is the offset of the name after "--" */
+ 
+-	if (*(a->long_arg + 2)) {
+-		(*longoptsp)->name = a->long_arg + 2;
++	if (*(a->long_opt + 2)) {
++		(*longoptsp)->name = a->long_opt + 2;
+ 		(*longoptsp)->has_arg = a->val_enum ? 1 : 0;
+ 		(*longoptsp)->flag = NULL;
+ 
+@@ -1820,10 +1812,10 @@ static void _add_getopt_arg(int arg_enum, char **optstrp, struct option **longop
+ 		 * (11 is the enum value for --cachepool, so 11+128)
+ 		 */
+ 
+-		if (a->short_arg)
+-			(*longoptsp)->val = a->short_arg;
++		if (a->short_opt)
++			(*longoptsp)->val = a->short_opt;
+ 		else
+-			(*longoptsp)->val = arg_enum + 128;
++			(*longoptsp)->val = opt_enum + 128;
+ 		(*longoptsp)++;
  	}
-@@ -2711,7 +2711,7 @@ static int _check_lv_rules(struct cmd_context *cmd, struct logical_volume *lv)
+ #endif
+@@ -1856,14 +1848,14 @@ static int _find_arg(const char *cmd_name, int goval)
+ 	for (i = 0; i < cname->num_args; i++) {
+ 		arg_enum = cname->valid_args[i];
+ 
+-		/* assert arg_enum == _cmdline.arg_props[arg_enum].arg_enum */
++		/* assert arg_enum == _cmdline.opt_names[arg_enum].arg_enum */
+ 
+ 		/* the value returned by getopt matches the ascii value of single letter option */
+-		if (_cmdline.arg_props[arg_enum].short_arg && (goval == _cmdline.arg_props[arg_enum].short_arg))
++		if (_cmdline.opt_names[arg_enum].short_opt && (goval == _cmdline.opt_names[arg_enum].short_opt))
+ 			return arg_enum;
+ 
+ 		/* the value returned by getopt matches the enum value plus 128 */
+-		if (!_cmdline.arg_props[arg_enum].short_arg && (goval == (arg_enum + 128)))
++		if (!_cmdline.opt_names[arg_enum].short_opt && (goval == (arg_enum + 128)))
+ 			return arg_enum;
+ 	}
+ 
+@@ -1874,7 +1866,7 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
  {
- 	char buf[64];
- 	struct cmd_rule *rule;
--	struct lv_types *lvtype = NULL;
-+	struct lv_type *lvtype = NULL;
- 	uint64_t lv_props_match_bits, lv_props_unmatch_bits;
- 	uint64_t lv_types_match_bits, lv_types_unmatch_bits;
- 	int opts_match_count, opts_unmatch_count;
+ 	char str[((ARG_COUNT + 1) * 2) + 1], *ptr = str;
+ 	struct option opts[ARG_COUNT + 1], *o = opts;
+-	struct arg_props *a;
++	struct opt_name *a;
+ 	struct arg_values *av;
+ 	struct arg_value_group_list *current_group = NULL;
+ 	struct command_name *cname;
+@@ -1893,7 +1885,7 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
+ 	/*
+ 	 * create the short-form character array (str) and the long-form option
+ 	 * array (opts) to pass to the getopt_long() function.  IOW we generate
+-	 * the arguments to pass to getopt_long() from the args.h/arg_props data.
++	 * the arguments to pass to getopt_long() from the opt_names data.
+ 	 */
+ 	for (i = 0; i < cname->num_args; i++)
+ 		_add_getopt_arg(cname->valid_args[i], &ptr, &o);
+@@ -1917,7 +1909,7 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
+ 			return 0;
+ 		}
+ 
+-		a = _cmdline.arg_props + arg_enum;
++		a = _cmdline.opt_names + arg_enum;
+ 
+ 		av = &cmd->opt_arg_values[arg_enum];
+ 
+@@ -1947,10 +1939,10 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
+ 
+ 		if (av->count && !(a->flags & ARG_COUNTABLE)) {
+ 			log_error("Option%s%c%s%s may not be repeated.",
+-				  a->short_arg ? " -" : "",
+-				  a->short_arg ? : ' ',
+-				  (a->short_arg && a->long_arg) ?
+-				  "/" : "", a->long_arg ? : "");
++				  a->short_opt ? " -" : "",
++				  a->short_opt ? : ' ',
++				  (a->short_opt && a->long_opt) ?
++				  "/" : "", a->long_opt ? : "");
+ 			return 0;
+ 		}
+ 
+@@ -1962,8 +1954,8 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
+ 
+ 			av->value = optarg;
+ 
+-			if (!_val_props[a->val_enum].fn(cmd, av)) {
+-				log_error("Invalid argument for %s: %s", a->long_arg, optarg);
++			if (!val_names[a->val_enum].fn(cmd, av)) {
++				log_error("Invalid argument for %s: %s", a->long_opt, optarg);
+ 				return 0;
+ 			}
+ 		}
+@@ -1997,12 +1989,12 @@ static int _merge_synonym(struct cmd_context *cmd, int oldarg, int newarg)
+ 
+ 	if (arg_is_set(cmd, oldarg) && arg_is_set(cmd, newarg)) {
+ 		log_error("%s and %s are synonyms.  Please only supply one.",
+-			  _cmdline.arg_props[oldarg].long_arg, _cmdline.arg_props[newarg].long_arg);
++			  _cmdline.opt_names[oldarg].long_opt, _cmdline.opt_names[newarg].long_opt);
+ 		return 0;
+ 	}
+ 
+ 	/* Not groupable? */
+-	if (!(_cmdline.arg_props[oldarg].flags & ARG_GROUPABLE)) {
++	if (!(_cmdline.opt_names[oldarg].flags & ARG_GROUPABLE)) {
+ 		if (arg_is_set(cmd, oldarg))
+ 			_copy_arg_values(cmd->opt_arg_values, oldarg, newarg);
+ 		return 1;
+@@ -3085,7 +3077,7 @@ struct cmd_context *init_lvm(unsigned set_connections, unsigned set_filters)
+ 		return_NULL;
+ 	}
+ 
+-	_cmdline.arg_props = &_arg_props[0];
++	_cmdline.opt_names = &opt_names[0];
+ 
+ 	if (stored_errno()) {
+ 		destroy_toolcontext(cmd);
 diff --git a/tools/tools.h b/tools/tools.h
-index cb3ffa0..fe3699e 100644
+index f2c926f..cb3ffa0 100644
 --- a/tools/tools.h
 +++ b/tools/tools.h
-@@ -114,21 +114,6 @@ struct arg_value_group_list {
+@@ -108,32 +108,12 @@ struct arg_values {
+ /*	void *ptr; // Currently not used. */
+ };
+ 
+-/* a global table of possible --option's */
+-struct arg_props {
+-	int arg_enum; /* foo_ARG from args.h */
+-	const char short_arg;
+-	char _padding[7];
+-	const char *long_arg;
+-	int val_enum; /* foo_VAL from vals.h */
+-	uint32_t flags;
+-	uint32_t prio;
+-	const char *desc;
+-};
+-
+ struct arg_value_group_list {
+         struct dm_list list;
+         struct arg_values arg_values[0];
  	uint32_t prio;
  };
  
--/* a global table of possible LV properties */
--struct lv_props {
--	int lvp_enum; /* is_foo_LVP from lv_props.h */
--	const char *name; /* "lv_is_foo" used in command-lines.in */
--	int (*fn) (struct cmd_context *cmd, struct logical_volume *lv); /* lv_is_foo() */
+-/* a global table of possible --option values */
+-struct val_props {
+-	int val_enum; /* foo_VAL from vals.h */
+-	int (*fn) (struct cmd_context *cmd, struct arg_values *av);
+-	const char *name;
+-	const char *usage;
 -};
 -
--/* a global table of possible LV types */
--/* (as exposed externally in command line interface, not exactly as internal segtype is used) */
--struct lv_types {
--	int lvt_enum; /* is_foo_LVT from lv_types.h */
--	const char *name; /* "foo" used in command-lines.in, i.e. LV_foo */
--	int (*fn) (struct cmd_context *cmd, struct logical_volume *lv); /* lv_is_foo() */
--};
--
- #define CACHE_VGMETADATA	0x00000001
- #define PERMITTED_READ_ONLY 	0x00000002
- /* Process all VGs if none specified on the command line. */
-@@ -232,8 +217,8 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
- 
- int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg);
- 
--struct lv_props *get_lv_prop(int lvp_enum);
--struct lv_types *get_lv_type(int lvt_enum);
-+struct lv_prop *get_lv_prop(int lvp_enum);
-+struct lv_type *get_lv_type(int lvt_enum);
- struct command *get_command(int cmd_enum);
- 
- int lvchange_properties_cmd(struct cmd_context *cmd, int argc, char **argv);
+ /* a global table of possible LV properties */
+ struct lv_props {
+ 	int lvp_enum; /* is_foo_LVP from lv_props.h */
+diff --git a/tools/vals.h b/tools/vals.h
+index ed572ee..4c70640 100644
+--- a/tools/vals.h
++++ b/tools/vals.h
+@@ -63,7 +63,7 @@
+  * then also be added to the usage string for the val type here.
+  * It would be nice if the accepted values could be defined in a
+  * more consistent way, and perhaps in a single place, perhaps in
+- * struct val_props.
++ * struct val_names.
+  *
+  * The usage text for an option is not always the full
+  * set of words accepted for an option, but may be a
 
 
