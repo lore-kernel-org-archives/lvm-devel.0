@@ -1,22 +1,22 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 8 Mar 2017 21:59:35 -0500
-Subject: master - test: raid split and track tests
-Message-ID: <201703090259.v292xZKE032602@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 8 Mar 2017 22:02:08 -0500
+Subject: master - test: raid1 down convert to linear / split and track tests
+Message-ID: <201703090302.v29328jF002059@int-mx14.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=37f452c8c158c2016124f534ef979a6c5802b791
-Commit:        37f452c8c158c2016124f534ef979a6c5802b791
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3d1df10af381bd1ae87be2209b1a7ff0d1167793
+Commit:        3d1df10af381bd1ae87be2209b1a7ff0d1167793
 Parent:        d250aa7208a6211d54cb2264b767fc3d2063eff8
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Mar 9 03:59:01 2017 +0100
+AuthorDate:    Thu Mar 9 04:01:47 2017 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Mar 9 03:59:01 2017 +0100
+CommitterDate: Thu Mar 9 04:01:47 2017 +0100
 
-test: raid split and track tests
+test: raid1 down convert to linear / split and track tests
 
 Add/adjust tests for commits d250aa7208a6 and 7fbe6ef16bfb.
 ---
