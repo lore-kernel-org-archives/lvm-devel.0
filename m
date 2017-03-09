@@ -1,66 +1,39 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 9 Mar 2017 10:51:45 -0500
-Subject: master - lvresize: poolmetadatasize cannot use minus
-Message-ID: <201703091551.v29FpjA6002674@int-mx13.intmail.prod.int.phx2.redhat.com>
+Date: Thu, 9 Mar 2017 11:44:19 -0500
+Subject: master - tests relative-sign-options.sh: skip without thin
+Message-ID: <201703091644.v29GiJns013367@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa312722234621b7917e6cd51a39a323eb777079
-Commit:        aa312722234621b7917e6cd51a39a323eb777079
-Parent:        6dfe1ce251b1e2d01779817255d3beb3b9cfe2e9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=43bcd7393ca6d45583d2e64c9a6fcf8a7ed06487
+Commit:        43bcd7393ca6d45583d2e64c9a6fcf8a7ed06487
+Parent:        aa312722234621b7917e6cd51a39a323eb777079
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 9 09:49:33 2017 -0600
+AuthorDate:    Thu Mar 9 10:43:41 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Mar 9 09:51:24 2017 -0600
+CommitterDate: Thu Mar 9 10:43:41 2017 -0600
 
-lvresize: poolmetadatasize cannot use minus
+tests relative-sign-options.sh: skip without thin
 
 ---
- tools/command-lines.in |    4 ++--
- tools/command.c        |    4 ++--
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ test/shell/relative-sign-options.sh |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 150f572..3a449ef 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -1221,7 +1221,7 @@ ID: lvrename_lv_lv
- lvresize --size SSizeMB LV
- OO: --alloc Alloc, --autobackup Bool, --force,
- --nofsck, --nosync, --noudevsync, --reportformat ReportFmt, --resizefs,
----stripes Number, --stripesize SizeKB, --poolmetadatasize SSizeMB,
-+--stripes Number, --stripesize SizeKB, --poolmetadatasize PSizeMB,
- --type SegType
- OP: PV ...
- ID: lvresize_by_size
-@@ -1235,7 +1235,7 @@ OO: --alloc Alloc, --autobackup Bool, --force,
- ID: lvresize_by_pv
- DESC: Resize an LV by specified PV extents.
+diff --git a/test/shell/relative-sign-options.sh b/test/shell/relative-sign-options.sh
+index 314f6b1..f1dab45 100644
+--- a/test/shell/relative-sign-options.sh
++++ b/test/shell/relative-sign-options.sh
+@@ -17,6 +17,8 @@ export LVM_TEST_LVMETAD_DEBUG_OPTS=${LVM_TEST_LVMETAD_DEBUG_OPTS-}
  
--lvresize --poolmetadatasize SSizeMB LV_thinpool
-+lvresize --poolmetadatasize PSizeMB LV_thinpool
- OO: --alloc Alloc, --autobackup Bool, --force,
- --nofsck, --nosync, --noudevsync,
- --reportformat ReportFmt, --stripes Number, --stripesize SizeKB,
-diff --git a/tools/command.c b/tools/command.c
-index 1f31468..88b7216 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -1534,10 +1534,10 @@ int define_commands(char *run_name)
- void configure_command_option_values(const char *name)
- {
- 	if (!strcmp(name, "lvresize")) {
--		/* relative +|- allowed */
-+		/* relative +|- allowed for LV, + allowed for metadata */
- 		opt_names[size_ARG].val_enum = ssizemb_VAL;
- 		opt_names[extents_ARG].val_enum = sextents_VAL;
--		opt_names[poolmetadatasize_ARG].val_enum = ssizemb_VAL;
-+		opt_names[poolmetadatasize_ARG].val_enum = psizemb_VAL;
- 		return;
- 	}
+ . lib/inittest
  
++aux have_thin 1 0 0 || skip
++
+ aux prepare_vg 1 256
+ 
+ lvcreate -an -n $lv1 -l4 $vg
 
 
