@@ -1,39 +1,43 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 8 Mar 2017 20:16:29 -0500
-Subject: master - raid: fix function description
-Message-ID: <201703090116.v291GTYa023818@int-mx13.intmail.prod.int.phx2.redhat.com>
+Date: Wed, 8 Mar 2017 20:36:21 -0500
+Subject: master - test: "lvconvert --repair" after vgreduce
+Message-ID: <201703090136.v291aLW9004905@int-mx09.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=90ed3d5e8c977d632911746c2faf09f60ddbeacc
-Commit:        90ed3d5e8c977d632911746c2faf09f60ddbeacc
-Parent:        921b496fff51822a851447d3e8f3b93a192b4aea
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8daad1166608cd99beca7fb23223a9ed66353e40
+Commit:        8daad1166608cd99beca7fb23223a9ed66353e40
+Parent:        90ed3d5e8c977d632911746c2faf09f60ddbeacc
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Mar 9 02:16:03 2017 +0100
+AuthorDate:    Thu Mar 9 02:35:57 2017 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Mar 9 02:16:03 2017 +0100
+CommitterDate: Thu Mar 9 02:35:57 2017 +0100
 
-raid: fix function description
+test: "lvconvert --repair" after vgreduce
 
+Add test for commit 921b496fff51.
 ---
- lib/metadata/raid_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-repair-raid.sh |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 2f30252..68b1b85 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -2087,7 +2087,7 @@ static int _activate_sub_lvs_excl_local(struct logical_volume *lv, uint32_t star
- 	return 1;
- }
+diff --git a/test/shell/lvconvert-repair-raid.sh b/test/shell/lvconvert-repair-raid.sh
+index 3052f5c..b25d861 100644
+--- a/test/shell/lvconvert-repair-raid.sh
++++ b/test/shell/lvconvert-repair-raid.sh
+@@ -72,9 +72,10 @@ delay 0
+ lvcreate --type raid5 -i 2 -L $RAID_SIZE -n $lv1 $vg "$dev1" "$dev2" "$dev3"
+ aux wait_for_sync $vg $lv1
+ aux disable_dev "$dev3"
++vgreduce --removemissing -f $vg
+ lvconvert -y --repair $vg/$lv1
+-vgreduce --removemissing $vg
+ aux enable_dev "$dev3"
++pvcreate -yff "$dev3"
+ vgextend $vg "$dev3"
+ lvremove -ff $vg/$lv1
  
--/* Helper: function to activate any sub LVs of @lv exclusively local starting with area indexed by @start_idx */
-+/* Helper: function to activate any LVs on @lv_list */
- static int _activate_sub_lvs_excl_local_list(struct logical_volume *lv, struct dm_list *lv_list)
- {
- 	int r = 1;
 
 
