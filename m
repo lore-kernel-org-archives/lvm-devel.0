@@ -1,91 +1,72 @@
 From: Bryn Reeves <bmr@sourceware.org>
-Date: Thu, 9 Mar 2017 13:54:13 -0500
-Subject: master - man: add dmfilemapd options to dmstats.8.in
-Message-ID: <201703091854.v29IsDID020503@int-mx14.intmail.prod.int.phx2.redhat.com>
+Date: Thu, 9 Mar 2017 13:54:18 -0500
+Subject: master - man: add FILE MAPPING section to dmstats.8.in
+Message-ID: <201703091854.v29IsIkn029866@int-mx11.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b5c8accdf2d503102cd701c2e2104ef67ce0f6db
-Commit:        b5c8accdf2d503102cd701c2e2104ef67ce0f6db
-Parent:        baa8a9be4adb3e1d57b4b135178e7f77d8580902
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=67ddc0c29289c454fbe6203473790bbcd12e3619
+Commit:        67ddc0c29289c454fbe6203473790bbcd12e3619
+Parent:        b5c8accdf2d503102cd701c2e2104ef67ce0f6db
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Sat Dec 17 16:41:00 2016 +0000
+AuthorDate:    Sun Dec 18 18:14:04 2016 +0000
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Thu Mar 9 18:50:15 2017 +0000
 
-man: add dmfilemapd options to dmstats.8.in
+man: add FILE MAPPING section to dmstats.8.in
 
-Add descriptions of --follow and --nomonitor, and the behaviour
-of create and update_filemap when starting dmfilemapd.
+Add a section to explain file mapping, outside of the individual
+command descriptions, and to describe the limitations of the
+current update strategy.
 ---
- man/dmstats.8.in |   85 ++++++++++++++++++++++++++++++++++++++++++++++++++---
- 1 files changed, 80 insertions(+), 5 deletions(-)
+ man/dmstats.8.in |   87 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 87 insertions(+), 0 deletions(-)
 
 diff --git a/man/dmstats.8.in b/man/dmstats.8.in
-index ba828dc..b9bc781 100644
+index b9bc781..682f01d 100644
 --- a/man/dmstats.8.in
 +++ b/man/dmstats.8.in
-@@ -14,6 +14,9 @@
- .  RB [ \-\-region ]
- .  RB [ \-\-group ]
- ..
-+.de OPT_FOREGROUND
-+.  RB [ \-\-foreground ]
-+..
+@@ -825,6 +825,93 @@ containing device.
+ The \fBgroup_id\fP should be treated as an opaque identifier used to
+ reference the group.
  .
- .\" Print units suffix, use with arg to print human
- .\" man2html can't handle too many changes per command
-@@ -89,6 +92,10 @@ dmstats \(em device-mapper statistics management
- .  RB [ \-\-bounds
- .  IR \%histogram_boundaries ]
- .  RB [ \-\-filemap ]
-+.  RB [ \-\-follow
-+.  IR follow_mode ]
-+.  OPT_FOREGROUND
-+.  RB [ \-\-nomonitor ]
- .  RB [ \-\-nogroup ]
- .  RB [ \-\-precise ]
- .  RB [ \-\-start
-@@ -215,6 +222,9 @@ dmstats \(em device-mapper statistics management
- .  IR file_path
- .  RB [ \-\-groupid
- .  IR id ]
-+.  RB [ \-\-follow
-+.  IR follow_mode ]
-+.  OPT_FOREGROUND
- .  ad b
- ..
- .CMD_UPDATE_FILEMAP
-@@ -314,6 +324,60 @@ create regions corresponding to the locations of the on-disk extents
- allocated to the file(s).
- .
- .HP
-+.BR \-\-nomonitor
-+.br
-+Disable the \fBdmfilemapd\fP daemon when creating new file mapped
-+groups. Normally the device-mapper filemap monitoring daemon,
-+\fBdmfilemapd\fP, is started for each file mapped group to update the
-+set of regions as the file changes on-disk: use of this option
-+disables this behaviour.
-+
-+Regions in the group may still be updated with the
-+\fBupdate_filemap\fP command, or by starting the daemon manually.
++.SH FILE MAPPING
 +.
-+.HP
-+.BR \-\-follow
-+.IR follow_mode
-+.br
-+Specify the \fBdmfilemapd\fP file following mode. The file map
-+monitoring daemon can monitor files in two distinct ways: the mode
-+affects the behaviour of the daemon when a file under monitoring is
-+renamed or unlinked, and the conditions which cause the daemon to
-+terminate.
++Using \fB\-\-filemap\fP, it is possible to create regions that
++correspond to the extents of a file in the file system. This allows
++IO statistics to be monitored on a per-file basis, for example to
++observe large database files, virtual machine images, or other files
++of interest.
 +
-+The \fBfollow_mode\fP argument is either "inode", for follow-inode
-+mode, or "path", for follow-path.
++To be able to use file mapping, the file must be backed by a
++device-mapper device, and in a file system that supports the FIEMAP
++ioctl (and which returns data describing the physical location of
++extents). This currently includes \fBxfs(5)\fP and \fBext4(5)\fP.
++
++By default the regions making up a file are placed together in a
++group, and the group alias is set to the \fBbasename(3)\fP of the
++file. This allows statistics to be reported for the file as a whole,
++aggregating values for the regions making up the group. To see only
++the whole file (group) when using the \fBlist\fP and \fBreport\fP
++commands, use \fB\-\-group\fP.
++
++Since it is possible for the file to change after the initial
++group of regions is created, the \fBupdate_filemap\fP command, and
++\fBdmfilemapd\fP daemon are provided to update file mapped groups
++either manually or automatically.
++.
++.P
++.B File follow modes
++.P
++The file map monitoring daemon can monitor files in two distinct ways:
++follow-inode mode, and follow-path mode.
++
++The mode affects the behaviour of the daemon when a file under
++monitoring is renamed or unlinked, and the conditions which cause the
++daemon to terminate.
 +
 +If follow-inode mode is used, the daemon will hold the file open, and
 +continue to update regions from the same file descriptor. This means
@@ -104,62 +85,43 @@ index ba828dc..b9bc781 100644
 +via unlink and rename.
 +
 +In follow-path mode, the daemon will exit if the file is removed and
-+not replaced within a brief tolerance interval.
++not replaced within a brief tolerance interval (one second).
 +
-+In either mode, the daemon exits automatically if the monitored group
-+is removed.
++To stop the daemon, delete the group containing the mapped regions:
++the daemon will automatically shut down.
++
++The daemon can also be safely killed at any time and the group kept:
++if the file is still being allocated the mapping will become
++progressively out-of-date as extents are added and removed (in this
++case the daemon can be re-started or the group updated manually with
++the \fBupdate_filemap\fP command).
++
++See the \fBcreate\fP command and \fB\-\-filemap\fP, \fB\-\-follow\fP,
++and \fB\-\-nomonitor\fP options for further information.
 +.
-+.HP
-+.BR \-\-foreground
-+.br
-+Specify that the \fBdmfilemapd\fP daemon should run in the foreground.
-+The daemon will not fork into the background, and will replace the
-+\fBdmstats\fP command that started it.
++.P
++.B Limitations
++.P
++The daemon attempts to maintain good synchronisation between the file
++extents and the regions contained in the group, however, since it can
++only react to new allocations once they have been written, there are
++inevitably some IO events that cannot be counted when a file is
++growing, particularly if the file is being extended by a single thread
++writing beyond end-of-file (for example, the \fBdd\fP program).
++
++There is a further loss of events in that there is currently no way
++to atomically resize a \fBdmstats\fP region and preserve its current
++counter values. This affects files when they grow by extending the
++final extent, rather than allocating a new extent: any events that
++had accumulated in the region between any prior operation and the
++resize are lost.
++
++File mapping is currently most effective in cases where the majority
++of IO does not trigger extent allocation. Future updates may address
++these limitations when kernel support is available.
 +.
-+.HP
- .BR \-\-groupid
- .IR id
- .br
-@@ -568,6 +632,11 @@ By default regions that map a file are placed into a group and the
- group alias is set to the basename of the file. This behaviour can be
- overridden with the \fB\-\-alias\fP and \fB\-\-nogroup\fP options.
- 
-+Creating a group that maps a file automatically starts a daemon,
-+\fBdmfilemapd\fP to monitor the file and update the mapping as the
-+extents allocated to the file change. This behaviour can be disabled
-+using the \fB\-\-nomonitor\fP option.
-+
- Use the \fB\-\-group\fP option to only display information for groups
- when listing and reporting.
+ .SH REPORT FIELDS
  .
-@@ -678,17 +747,23 @@ The group to be removed is specified using \fB\-\-groupid\fP.
- .CMD_UPDATE_FILEMAP
- .br
- Update a group of \fBdmstats\fP regions specified by \fBgroup_id\fP,
--that were previously created with \fB\-\-filemap\fP. This will add
--and remove regions to reflect changes in the allocated extents of
--the file on-disk, since the time that it was crated or last updated.
-+that were previously created with \fB\-\-filemap\fP, either directly,
-+or by starting the monitoring daemon, \fBdmfilemapd\fP.
-+
-+This will add and remove regions to reflect changes in the allocated
-+extents of the file on-disk, since the time that it was crated or last
-+updated.
- 
- Use of this command is not normally needed since the \fBdmfilemapd\fP
- daemon will automatically monitor filemap groups and perform these
- updates when required.
- 
--If a filemapped group was created with \fB\-\-nominitor\fP, or the
-+If a filemapped group was created with \fB\-\-nomonitor\fP, or the
- daemon has been killed, the \fBupdate_filemap\fP can be used to
--manually force an update.
-+manually force an update or start a new daemon.
-+
-+Use \fB\-\-nomonitor\fP to force a direct update and disable starting
-+the monitoring daemon.
- .
- .SH REGIONS, AREAS, AND GROUPS
- .
+ The dmstats report provides several types of field that may be added to
 
 
