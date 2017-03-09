@@ -1,51 +1,45 @@
-From: Christian Brauner <christian.brauner@canonical.com>
-Date: Sat, 11 Mar 2017 01:08:43 +0100
-Subject: [PATCH] lvmetad: fix segfault on i386
-Message-ID: <20170311000843.9263-1-christian.brauner@ubuntu.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Thu, 9 Mar 2017 17:41:17 -0500
+Subject: master - lvmdbusd: Add FlightRecorderDump
+Message-ID: <201703092241.v29MfH5W011839@int-mx10.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Sending %d as format argument in lvmetad_vg_remove_pending() will cause
-segfaults in config_make_nodes_v() when va_arg() casts to int64_t. Also, it is
-clearly advertised in the lvm source code that using plain %d is prohibited, so
-let's switch to FMTd64.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=470a1f1c5031590823f8a58e641873da76dc1f46
+Commit:        470a1f1c5031590823f8a58e641873da76dc1f46
+Parent:        f2d7a48418df7ce6071e4276a4a2cf0dd47570d4
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Mar 8 13:32:20 2017 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Mar 9 16:39:47 2017 -0600
 
-Signed-off-by: Christian Brauner <christian.brauner@ubuntu.com>
+lvmdbusd: Add FlightRecorderDump
+
+Diagnostic method for dumping flight recorder to syslog.
 ---
- lib/cache/lvmetad.c            | 2 +-
- libdaemon/client/config-util.c | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/manager.py |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 8e9bb1fd3..843e1c3e8 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -1304,7 +1304,7 @@ int lvmetad_vg_remove_pending(struct volume_group *vg)
- 	reply = _lvmetad_send(vg->cmd, "set_vg_info",
- 			      "name = %s", vg->name,
- 			      "uuid = %s", uuid,
--			      "version = %d", 0,
-+			      "version = %"PRId64, (int64_t)0,
- 			      NULL);
+diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
+index 41bb22a..5575e39 100644
+--- a/daemons/lvmdbusd/manager.py
++++ b/daemons/lvmdbusd/manager.py
+@@ -133,6 +133,13 @@ class Manager(AutomatedProperties):
+ 		cfg.worker_q.put(r)
  
- 	if (!_lvmetad_handle_reply(reply, "set_vg_info", vg->name, NULL)) {
-diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
-index 93f3d0a93..5b6cfb82a 100644
---- a/libdaemon/client/config-util.c
-+++ b/libdaemon/client/config-util.c
-@@ -260,7 +260,7 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
- 		key[fmt - next] = '\0';
- 		fmt += 2;
- 
--		if (!strcmp(fmt, "%d") || !strcmp(fmt, FMTd64)) {
-+		if (!strcmp(fmt, FMTd64)) {
- 			int64_t value = va_arg(ap, int64_t);
- 			if (!(cn = make_int_node(cft, key, value, parent, pre_sib)))
- 				return 0;
--- 
-2.11.0
+ 	@dbus.service.method(
++		dbus_interface=MANAGER_INTERFACE)
++	def FlightRecorderDump(self):
++		"""
++		Dump the flight recorder to syslog
++		"""
++		cfg.blackbox.dump()
++	@dbus.service.method(
+ 		dbus_interface=MANAGER_INTERFACE,
+ 		in_signature='s',
+ 		out_signature='o')
 
 
