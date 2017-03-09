@@ -1,59 +1,70 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 9 Mar 2017 14:41:33 -0500
-Subject: master - dmeventd: (workaround) fix mirror DSO to work with lvmetad
-Message-ID: <201703091941.v29JfXKV026985@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 9 Mar 2017 16:18:52 -0500
+Subject: master - raid: add missing lv_merge_segments() call
+Message-ID: <201703092118.v29LIqgY002406@int-mx10.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=76f6951c3e8f0933df9730a42e9c46f273d1da24
-Commit:        76f6951c3e8f0933df9730a42e9c46f273d1da24
-Parent:        67ddc0c29289c454fbe6203473790bbcd12e3619
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=66fff1d7748f8251c8781830fa984f34d1492310
+Commit:        66fff1d7748f8251c8781830fa984f34d1492310
+Parent:        76f6951c3e8f0933df9730a42e9c46f273d1da24
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Mar 9 20:41:07 2017 +0100
+AuthorDate:    Thu Mar 9 22:18:34 2017 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Mar 9 20:41:07 2017 +0100
+CommitterDate: Thu Mar 9 22:18:34 2017 +0100
 
-dmeventd: (workaround) fix mirror DSO to work with lvmetad
+raid: add missing lv_merge_segments() call
 
-Automatic dmeventd repair of mirrors with active lvmetad configured
-(mirror_image_fault_policy = "allocate") fails because the lvscan
-run before the repair in the mirror DSO does not update the
-lvmetad cache properly thus "lvconvert --repair ..." fails.
+On conversion from striped to raid0, data LVs are created
+and all segments and their respective areas of the striped
+LV are moved across to new segments allocated for the raid0
+image LVs.  This can cause non-canonical segments to be added
+to the image LVs.
 
-Need to scan the mirror LV before and after the repair
-to have proper cache content after the repair finished.
-The cache can't be relied on or the repair will fail.
+Add a call to lv_merge_segments() once all segments have been
+added to an image LV to compensate for that.  This avoids
+unsafe table loads on activation.
 
-Resolves: rhbz1380521
+Fix comments.
 ---
- daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ lib/metadata/raid_manip.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-index 4ec348f..181b839 100644
---- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-+++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-@@ -111,6 +111,9 @@ static int _remove_failed_devices(const char *cmd_lvscan, const char *cmd_lvconv
- 		return 0;
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 515e4b8..0906916 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -3986,6 +3986,10 @@ static int _striped_to_raid0_move_segs_to_raid0_lvs(struct logical_volume *lv,
+ 		dlv->le_count = le;
+ 		dlv->size = (uint64_t) le * lv->vg->extent_size;
+ 		s++;
++
++		/* Try merging raid0 rimage sub LV segments */
++		if (!lv_merge_segments(dlv))
++			return_0;
  	}
  
-+	if (!dmeventd_lvm2_run_with_lock(cmd_lvscan))
-+		log_warn("WARNING: Re-scan of mirrored device %s failed.", device);
-+
- 	log_info("Repair of mirrored device %s finished successfully.", device);
+ 	/* Remove the empty segments from the striped LV */
+@@ -5122,7 +5126,7 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
+ 	if (!_lv_free_reshape_space(lv))
+ 		return_0;
  
- 	return 1;
-@@ -188,7 +191,7 @@ int register_device(const char *device,
- 		goto_bad;
+-	/* This helper can be used to convert from striped/raid0* -> raid10 too */
++	/* This helper can be used to convert from striped/raid0* -> raid10_near too */
+ 	if (seg_is_striped_target(seg)) {
+ 		log_debug_metadata("Converting LV %s from %s to %s.",
+ 				   display_lvname(lv), SEG_TYPE_NAME_STRIPED, SEG_TYPE_NAME_RAID0);
+@@ -5179,7 +5183,7 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
+ 	} else if (segtype_is_raid10_near(new_segtype)) {
+ 		uint32_t s;
  
- 	if (!dmeventd_lvm2_command(state->mem, state->cmd_lvconvert, sizeof(state->cmd_lvconvert),
--				   "lvconvert --repair --use-policies", device))
-+				   "lvconvert --config global{use_lvmetad = 0}' --repair --use-policies", device))
- 		goto_bad;
- 
- 	*user = state;
+-		log_debug_metadata("Reordering areas for raid0 -> raid10 takeover.");
++		log_debug_metadata("Reordering areas for raid0 -> raid10_near takeover.");
+ 		if (!_reorder_raid10_near_seg_areas(seg, reorder_to_raid10_near))
+ 			return 0;
+ 		/* Set rebuild flags accordingly */
 
 
