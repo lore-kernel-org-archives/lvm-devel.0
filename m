@@ -1,57 +1,53 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 9 Mar 2017 17:41:57 -0500
-Subject: master - lvmdbustest.py: Add unit test for external PV create
-Message-ID: <201703092241.v29MfviA010752@int-mx09.intmail.prod.int.phx2.redhat.com>
+Date: Thu, 9 Mar 2017 17:42:03 -0500
+Subject: master - lvmdbusd: Add debug message to lvm ID lookup
+Message-ID: <201703092242.v29Mg30e014263@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=28754145d8cdad50bfa003fb13fc46af1cbadae8
-Commit:        28754145d8cdad50bfa003fb13fc46af1cbadae8
-Parent:        e06e4d9355a314acc82eb568829f9696d7969b89
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=00143753ee4aec09eb40176ada5d34c3bde91884
+Commit:        00143753ee4aec09eb40176ada5d34c3bde91884
+Parent:        28754145d8cdad50bfa003fb13fc46af1cbadae8
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Mar 8 15:52:48 2017 -0600
+AuthorDate:    Thu Mar 9 16:03:20 2017 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Mar 9 16:39:47 2017 -0600
 
-lvmdbustest.py: Add unit test for external PV create
+lvmdbusd: Add debug message to lvm ID lookup
 
-Ensure a PV created outside of the dbus service is immediately found by
-service user.
 ---
- test/dbus/lvmdbustest.py |   18 ++++++++++++++++++
- 1 files changed, 18 insertions(+), 0 deletions(-)
+ daemons/lvmdbusd/manager.py |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index c2ac7df..2a65466 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -1760,6 +1760,24 @@ class TestDbusService(unittest.TestCase):
- 		cmd = ['lvcreate', '-L4M', '-n', lv_name, vg.Name]
- 		self._verify_existence(cmd, cmd[0], full_name)
+diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
+index 3c2bfcb..433473f 100644
+--- a/daemons/lvmdbusd/manager.py
++++ b/daemons/lvmdbusd/manager.py
+@@ -6,7 +6,7 @@
+ #
+ # You should have received a copy of the GNU General Public License
+ # along with this program. If not, see <http://www.gnu.org/licenses/>.
+-
++from utils import log_debug
+ from .automatedproperties import AutomatedProperties
  
-+	def test_external_pv_create(self):
-+		# Lets create a PV outside of service and see if we correctly handle
-+		# it's inclusion
-+		target = self.objs[PV_INT][0]
-+
-+		# Remove the PV
-+		rc = self._pv_remove(target)
-+		self.assertTrue(rc == '/')
-+		self._check_consistency()
-+
-+		# Make sure the PV we removed no longer exists
-+		self.assertTrue(self._lookup(target.Pv.Name) == '/')
-+
-+		# Add it back with external command line
-+		cmd = ['pvcreate', target.Pv.Name]
-+		self._verify_existence(cmd, cmd[0], target.Pv.Name)
-+
-+
- class AggregateResults(object):
+ from . import utils
+@@ -143,9 +143,10 @@ class Manager(AutomatedProperties):
+ 	@staticmethod
+ 	def _lookup_by_lvm_id(key):
+ 		p = cfg.om.get_object_path_by_uuid_lvm_id(key, key)
+-		if p:
+-			return p
+-		return '/'
++		if not p:
++			p = '/'
++		log_debug('LookUpByLvmId: key = %s, result = %s' % (key, p))
++		return p
  
- 	def __init__(self):
+ 	@dbus.service.method(
+ 		dbus_interface=MANAGER_INTERFACE,
 
 
