@@ -1,92 +1,41 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 10 Mar 2017 13:35:30 -0500
-Subject: master - cache: set chunk_size as first param
-Message-ID: <201703101835.v2AIZUOg004117@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 10 Mar 2017 12:50:49 -0500
+Subject: master - commands: fix missing skip condition in coverity fixes
+Message-ID: <201703101750.v2AHoniW023399@int-mx09.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2d11fc695e7c2baff1b919fb9f92e491e49d5db1
-Commit:        2d11fc695e7c2baff1b919fb9f92e491e49d5db1
-Parent:        41843319654c671ce4419443a73f3cf87bb15199
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 9 15:54:30 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 10 19:33:00 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=43388f12208be07191b80a5ed328a87790ecd64a
+Commit:        43388f12208be07191b80a5ed328a87790ecd64a
+Parent:        a9341b18ef6cb20245a74fc97aa28dd7283804f3
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Mar 10 11:49:24 2017 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Mar 10 11:50:00 2017 -0600
 
-cache: set chunk_size as first param
+commands: fix missing skip condition in coverity fixes
 
+Fix for commit 5e6ea4b7
 ---
- lib/metadata/cache_manip.c       |    4 ++--
- lib/metadata/lv_manip.c          |    8 ++++----
- lib/metadata/metadata-exported.h |    4 ++--
- 3 files changed, 8 insertions(+), 8 deletions(-)
+ tools/command.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 1e93127..eb4ebfe 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -756,10 +756,10 @@ out:
-  * to update all commonly specified cache parameters
-  */
- int cache_set_params(struct lv_segment *seg,
-+		     uint32_t chunk_size,
- 		     cache_mode_t mode,
- 		     const char *policy_name,
--		     const struct dm_config_tree *policy_settings,
--		     uint32_t chunk_size)
-+		     const struct dm_config_tree *policy_settings)
- {
- 	struct lv_segment *pool_seg;
- 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index cb9ba68..6528811 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7672,10 +7672,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 
- 	if (lv_is_cache_pool(lv)) {
- 		if (!cache_set_params(first_seg(lv),
-+				      lp->chunk_size,
- 				      lp->cache_mode,
- 				      lp->policy_name,
--				      lp->policy_settings,
--				      lp->chunk_size)) {
-+				      lp->policy_settings)) {
- 			stack;
- 			goto revert_new_lv;
+diff --git a/tools/command.c b/tools/command.c
+index aacc647..9594284 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -1506,7 +1506,8 @@ int define_commands(char *run_name)
+ 			continue;
  		}
-@@ -7881,10 +7881,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		lv = tmp_lv;
  
- 		if (!cache_set_params(first_seg(lv),
-+				      lp->chunk_size,
- 				      lp->cache_mode,
- 				      lp->policy_name,
--				      lp->policy_settings,
--				      (lp->passed_args & PASS_ARG_CHUNK_SIZE) ? lp->chunk_size : 0))
-+				      lp->policy_settings))
- 			return_NULL; /* revert? */
+-		log_error("Parsing command defs: can't process input line %s", line_orig);
++		if (!skip)
++			log_error("Parsing command defs: can't process input line %s", line_orig);
+ 	}
  
- 		cache_check_for_warns(first_seg(lv));
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 7f9bbfe..c0b6359 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1276,10 +1276,10 @@ int cache_set_cache_mode(struct lv_segment *cache_seg, cache_mode_t mode);
- int cache_set_policy(struct lv_segment *cache_seg, const char *name,
- 		     const struct dm_config_tree *settings);
- int cache_set_params(struct lv_segment *seg,
-+		     uint32_t chunk_size,
- 		     cache_mode_t mode,
- 		     const char *policy_name,
--		     const struct dm_config_tree *policy_settings,
--		     uint32_t chunk_size);
-+		     const struct dm_config_tree *policy_settings);
- void cache_check_for_warns(const struct lv_segment *seg);
- int update_cache_pool_params(const struct segment_type *segtype,
- 			     struct volume_group *vg, unsigned attr,
+ 	for (i = 0; i < COMMAND_COUNT; i++) {
 
 
