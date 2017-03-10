@@ -1,65 +1,120 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 10 Mar 2017 13:25:11 -0500
-Subject: master - raid: enhance lv_convert_raid() header relative to reshaping
-Message-ID: <201703101825.v2AIPB7h021680@int-mx10.intmail.prod.int.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 10 Mar 2017 13:36:33 -0500
+Subject: master - cleanup: minor cosmetics
+Message-ID: <201703101836.v2AIaXEr021860@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d9849f84b7c599953f54824bf66a8a168447e048
-Commit:        d9849f84b7c599953f54824bf66a8a168447e048
-Parent:        2fcbe34fe85fa57e1e2835dfba95fa21387377b6
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Mar 10 19:24:46 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Mar 10 19:24:46 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a9b78d26b13fb759d3dbf2834c3ce365aaba44b2
+Commit:        a9b78d26b13fb759d3dbf2834c3ce365aaba44b2
+Parent:        21c265adcffa5a2a8b5f308556e53dbe46c242d7
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Feb 28 12:31:36 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Mar 10 19:33:01 2017 +0100
 
-raid: enhance lv_convert_raid() header relative to reshaping
+cleanup: minor cosmetics
 
+Update some return value to match return type.
+Drop unused function and declaration.
 ---
- lib/metadata/raid_manip.c |   25 ++++++++++++++++++++++++-
- 1 files changed, 24 insertions(+), 1 deletions(-)
+ conf/cache-smq.profile           |    2 +-
+ lib/metadata/lv_manip.c          |    2 +-
+ lib/metadata/metadata-exported.h |   10 ----------
+ lib/metadata/pool_manip.c        |   32 --------------------------------
+ 4 files changed, 2 insertions(+), 44 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 2e31bf7..9954133 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -5910,10 +5910,33 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
-  * Convert lv from one RAID type (or striped/mirror segtype) to new_segtype,
-  * or add/remove LVs to/from a RAID LV.
-  *
-- * Non dm-raid changes e.g. mirror/striped functions are also called from here.
-+ * Non RAID (i.e. dm-raid target relative) changes e.g. mirror/striped
-+ * functions are also called from here.  This supports e.g. conversions
-+ * from existing striped LVs to raid4/5/6/10 and vice versa.
-  *
-  * Takeover is defined as a switch from one raid level to another, potentially
-  * involving the addition of one or more image component pairs and rebuild.
-+ *
-+ * Complementing takeover, reshaping is defined as changing properties of
-+ * a RaidLV keeping the RAID level.  These properties are the RAID layout
-+ * algorithm (e.g. raid5_ls vs. raid5_ra), the stripe size (e.g. 64K vs. 128K)
-+ * and the number of images.
-+ *
-+ * RAID level specific MD kernel constraints apply to reshaping:
-+ *
-+ * raid4/5/6 can vary all aforementioned properties within their respective
-+ * redundancy * constraints (raid4/5 minimum of 3 images and raid6 minimum
-+ * of 4 images;  the latter is enforced to be 5 by lvm2.
-+ *
-+ * raid10 doesn't support the removal of images at all.  It can only add them.
-+ *
-+ * For all levels raid4/5/6/10, the stripe size
-+ * may not be larger than the region size.
-+ *
-+ * The maximum supported image count the MD kernel supports is 253;
-+ * lvm2 may enforce smaller numbers via
-+ * DEFAULT_RAID_MAX_IMAGES and DEFAULT_RAID1_MAX_IMAGES.
-+ *
-  */
- int lv_raid_convert(struct logical_volume *lv,
- 		    const struct segment_type *new_segtype,
+diff --git a/conf/cache-smq.profile b/conf/cache-smq.profile
+index c0d6266..c457481 100644
+--- a/conf/cache-smq.profile
++++ b/conf/cache-smq.profile
+@@ -9,6 +9,6 @@ allocation {
+ 	cache_mode = "writethrough"
+ 	cache_policy = "smq"
+ 	cache_settings {
+-	        # currently no settins for "smq" policy
++	        # currently no settings for "smq" policy
+ 	}
+ }
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 5475e7a..5068788 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7425,7 +7425,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 				if (!activate_lv_excl_local(cmd, pool_lv)) {
+ 					log_error("Aborting. Failed to locally activate thin pool %s.",
+ 						  display_lvname(pool_lv));
+-					return 0;
++					return NULL;
+ 				}
+ 				if (!pool_below_threshold(first_seg(pool_lv))) {
+ 					log_error("Cannot create new thin volume, free space in "
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 28dd2a6..3486902 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -857,16 +857,6 @@ int validate_cache_chunk_size(struct cmd_context *cmd, uint32_t chunk_size);
+ int validate_thin_pool_chunk_size(struct cmd_context *cmd, uint32_t chunk_size);
+ int validate_pool_chunk_size(struct cmd_context *cmd, const struct segment_type *segtype, uint32_t chunk_size);
+ int update_pool_lv(struct logical_volume *lv, int activate);
+-int update_pool_params(const struct segment_type *segtype,
+-		       struct volume_group *vg, unsigned target_attr,
+-		       int passed_args, uint32_t pool_data_extents,
+-		       uint32_t *pool_metadata_extents,
+-		       int *chunk_size_calc_policy, uint32_t *chunk_size,
+-		       thin_discards_t *discards, int *zero);
+-int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profile,
+-				  int passed_args, int *chunk_size_calc_method,
+-				  uint32_t *chunk_size, thin_discards_t *discards,
+-				  int *zero);
+ int get_default_allocation_thin_pool_chunk_size(struct cmd_context *cmd, struct profile *profile,
+ 						uint32_t *chunk_size, int *chunk_size_calc_method);
+ int update_thin_pool_params(struct cmd_context *cmd,
+diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
+index 3c938c1..18e4e65 100644
+--- a/lib/metadata/pool_manip.c
++++ b/lib/metadata/pool_manip.c
+@@ -467,38 +467,6 @@ int recalculate_pool_chunk_size_with_dev_hints(struct logical_volume *pool_lv,
+ 	return 1;
+ }
+ 
+-#if 0
+-int update_pool_params(const struct segment_type *segtype,
+-		       struct volume_group *vg, unsigned target_attr,
+-		       int passed_args, uint32_t pool_data_extents,
+-		       uint32_t *pool_metadata_extents,
+-		       int *chunk_size_calc_policy, uint32_t *chunk_size,
+-		       thin_discards_t *discards, int *zero)
+-{
+-	if (segtype_is_cache_pool(segtype) || segtype_is_cache(segtype)) {
+-		if (!update_cache_pool_params(segtype, vg, target_attr, passed_args,
+-					      pool_data_extents, pool_metadata_extents,
+-					      chunk_size_calc_policy, chunk_size))
+-			return_0;
+-	} else if (!update_thin_pool_params(segtype, vg, target_attr, passed_args,
+-					    pool_data_extents, pool_metadata_extents,
+-					    chunk_size_calc_policy, chunk_size,
+-					    discards, zero)) /* thin-pool */
+-			return_0;
+-
+-	if ((uint64_t) *chunk_size > (uint64_t) pool_data_extents * vg->extent_size) {
+-		log_error("Size of %s data volume cannot be smaller than chunk size %s.",
+-			  segtype->name, display_size(vg->cmd, *chunk_size));
+-		return 0;
+-	}
+-
+-	log_verbose("Preferred pool metadata size %s.",
+-		    display_size(vg->cmd, (uint64_t)*pool_metadata_extents * vg->extent_size));
+-
+-	return 1;
+-}
+-#endif
+-
+ int create_pool(struct logical_volume *pool_lv,
+ 		const struct segment_type *segtype,
+ 		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size)
 
 
