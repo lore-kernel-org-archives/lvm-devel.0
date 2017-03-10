@@ -1,59 +1,58 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 13 Mar 2017 15:54:58 -0400
-Subject: master - lvmetad: fix segfault on i386
-Message-ID: <201703131954.v2DJswLr000699@int-mx09.intmail.prod.int.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 10 Mar 2017 13:34:58 -0500
+Subject: master - cache: properly translate DM_THIN_DISCARDS
+Message-ID: <201703101834.v2AIYw9g020296@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=46b735c937ce68e72d08997635321bf30240325d
-Commit:        46b735c937ce68e72d08997635321bf30240325d
-Parent:        5f2c942000b9e59105441eeaea7233b6c9c4f493
-Author:        Christian Brauner <christian.brauner@canonical.com>
-AuthorDate:    Sat Mar 11 01:08:43 2017 +0100
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Mar 13 13:37:07 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=50441f243387bb5fb0e27ebc7a859f5bdcbc4c60
+Commit:        50441f243387bb5fb0e27ebc7a859f5bdcbc4c60
+Parent:        f221ba97c99c4369714755d636093aa9c6276791
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Mar 7 23:55:08 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Mar 10 19:33:00 2017 +0100
 
-lvmetad: fix segfault on i386
+cache: properly translate DM_THIN_DISCARDS
 
-Sending %d as format argument in lvmetad_vg_remove_pending() will cause
-segfaults in config_make_nodes_v() when va_arg() casts to int64_t. Also, it is
-clearly advertised in the lvm source code that using plain %d is prohibited, so
-let's switch to FMTd64.
-
-Signed-off-by: Christian Brauner <christian.brauner@ubuntu.com>
+DM status uses DM defines which need to be translated to LVM enum.
 ---
- lib/cache/lvmetad.c            |    2 +-
- libdaemon/client/config-util.c |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/lv.c |   17 ++++++++++++++---
+ 1 files changed, 14 insertions(+), 3 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 8e9bb1f..843e1c3 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -1304,7 +1304,7 @@ int lvmetad_vg_remove_pending(struct volume_group *vg)
- 	reply = _lvmetad_send(vg->cmd, "set_vg_info",
- 			      "name = %s", vg->name,
- 			      "uuid = %s", uuid,
--			      "version = %d", 0,
-+			      "version = %"PRId64, (int64_t)0,
- 			      NULL);
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index a7e1dcd..8c33a5e 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -227,12 +227,23 @@ char *lvseg_kernel_discards_dup_with_info_and_seg_status(struct dm_pool *mem, co
+ {
+ 	const char *s = "";
+ 	char *ret;
++	thin_discards_t d;
  
- 	if (!_lvmetad_handle_reply(reply, "set_vg_info", vg->name, NULL)) {
-diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
-index 93f3d0a..5b6cfb8 100644
---- a/libdaemon/client/config-util.c
-+++ b/libdaemon/client/config-util.c
-@@ -260,7 +260,7 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
- 		key[fmt - next] = '\0';
- 		fmt += 2;
+-	if (lvdm->seg_status.type == SEG_STATUS_THIN_POOL)
+-		s = get_pool_discards_name(lvdm->seg_status.thin_pool->discards);
++	if (lvdm->seg_status.type == SEG_STATUS_THIN_POOL) {
++		switch (lvdm->seg_status.thin_pool->discards) {
++		case DM_THIN_DISCARDS_IGNORE: d = THIN_DISCARDS_IGNORE; break;
++		case DM_THIN_DISCARDS_NO_PASSDOWN: d = THIN_DISCARDS_NO_PASSDOWN; break;
++		case DM_THIN_DISCARDS_PASSDOWN: d = THIN_DISCARDS_PASSDOWN; break;
++		default:
++			log_error("Kernel reports unknown discards status %u.",
++				  lvdm->seg_status.thin_pool->discards);
++			return 0;
++		}
++		s = get_pool_discards_name(d);
++	}
  
--		if (!strcmp(fmt, "%d") || !strcmp(fmt, FMTd64)) {
-+		if (!strcmp(fmt, FMTd64)) {
- 			int64_t value = va_arg(ap, int64_t);
- 			if (!(cn = make_int_node(cft, key, value, parent, pre_sib)))
- 				return 0;
+ 	if (!(ret = dm_pool_strdup(mem, s))) {
+-		log_error("lvseg_kernel_discards_dup_with_info_and_seg_status: dm_pool_strdup failed");
++		log_error("lvseg_kernel_discards_dup_with_info_and_seg_status: dm_pool_strdup failed.");
+ 		return NULL;
+ 	}
+ 
 
 
