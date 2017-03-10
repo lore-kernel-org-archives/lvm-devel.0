@@ -1,65 +1,67 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 10 Mar 2017 13:26:17 -0500
-Subject: master - raid: enhance lv_raid_convert() header relative to reshaping
-Message-ID: <201703101826.v2AIQHHE013111@int-mx09.intmail.prod.int.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 10 Mar 2017 13:37:10 -0500
+Subject: master - cache: use DM_CACHE_FEATURE_METADATA2 with libdm
+Message-ID: <201703101837.v2AIbAwR022131@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd2881f277ab1ecb6510520b1504e17ad73c486c
-Commit:        dd2881f277ab1ecb6510520b1504e17ad73c486c
-Parent:        2fcbe34fe85fa57e1e2835dfba95fa21387377b6
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Mar 10 19:26:02 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Mar 10 19:26:02 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=825c16e57e0e05bbffda9a32ea245c0e6acfb081
+Commit:        825c16e57e0e05bbffda9a32ea245c0e6acfb081
+Parent:        518b814cdb806f70f99aaa168fca45495b18a4cf
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Feb 25 12:49:55 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Mar 10 19:33:01 2017 +0100
 
-raid: enhance lv_raid_convert() header relative to reshaping
+cache: use DM_CACHE_FEATURE_METADATA2 with libdm
 
+Call libdm  with new feature flag when metadata format 2 is selected
+and available in kernel cache target.
 ---
- lib/metadata/raid_manip.c |   25 ++++++++++++++++++++++++-
- 1 files changed, 24 insertions(+), 1 deletions(-)
+ lib/cache_segtype/cache.c |   21 +++++++++++++++++++++
+ 1 files changed, 21 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 2e31bf7..9954133 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -5910,10 +5910,33 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
-  * Convert lv from one RAID type (or striped/mirror segtype) to new_segtype,
-  * or add/remove LVs to/from a RAID LV.
-  *
-- * Non dm-raid changes e.g. mirror/striped functions are also called from here.
-+ * Non RAID (i.e. dm-raid target relative) changes e.g. mirror/striped
-+ * functions are also called from here.  This supports e.g. conversions
-+ * from existing striped LVs to raid4/5/6/10 and vice versa.
-  *
-  * Takeover is defined as a switch from one raid level to another, potentially
-  * involving the addition of one or more image component pairs and rebuild.
-+ *
-+ * Complementing takeover, reshaping is defined as changing properties of
-+ * a RaidLV keeping the RAID level.  These properties are the RAID layout
-+ * algorithm (e.g. raid5_ls vs. raid5_ra), the stripe size (e.g. 64K vs. 128K)
-+ * and the number of images.
-+ *
-+ * RAID level specific MD kernel constraints apply to reshaping:
-+ *
-+ * raid4/5/6 can vary all aforementioned properties within their respective
-+ * redundancy * constraints (raid4/5 minimum of 3 images and raid6 minimum
-+ * of 4 images;  the latter is enforced to be 5 by lvm2.
-+ *
-+ * raid10 doesn't support the removal of images at all.  It can only add them.
-+ *
-+ * For all levels raid4/5/6/10, the stripe size
-+ * may not be larger than the region size.
-+ *
-+ * The maximum supported image count the MD kernel supports is 253;
-+ * lvm2 may enforce smaller numbers via
-+ * DEFAULT_RAID_MAX_IMAGES and DEFAULT_RAID1_MAX_IMAGES.
-+ *
-  */
- int lv_raid_convert(struct logical_volume *lv,
- 		    const struct segment_type *new_segtype,
+diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
+index 985af68..3129783 100644
+--- a/lib/cache_segtype/cache.c
++++ b/lib/cache_segtype/cache.c
+@@ -445,6 +445,7 @@ static int _cache_add_target_line(struct dev_manager *dm,
+ 	struct lv_segment *cache_pool_seg;
+ 	char *metadata_uuid, *data_uuid, *origin_uuid;
+ 	uint64_t feature_flags = 0;
++	unsigned attr;
+ 
+ 	if (!seg->pool_lv || !seg_is_cache(seg)) {
+ 		log_error(INTERNAL_ERROR "Passed segment is not cache.");
+@@ -472,6 +473,26 @@ static int _cache_add_target_line(struct dev_manager *dm,
+ 			break;
+ 		}
+ 
++	switch (cache_pool_seg->cache_metadata_format) {
++	case CACHE_METADATA_FORMAT_1: break;
++	case CACHE_METADATA_FORMAT_2:
++		if (!_target_present(cmd, NULL, &attr))
++			return_0;
++
++		if (!(attr & CACHE_FEATURE_METADATA2)) {
++			log_error("LV %s has metadata format %u unsuported by kernel.",
++				  display_lvname(seg->lv), cache_pool_seg->cache_metadata_format);
++			return 0;
++		}
++		feature_flags |= DM_CACHE_FEATURE_METADATA2;
++		log_debug_activation("Using metadata2 format for %s.", display_lvname(seg->lv));
++		break;
++	default:
++		log_error(INTERNAL_ERROR "LV %s has unknown metadata format %u.",
++			  display_lvname(seg->lv), cache_pool_seg->cache_metadata_format);
++		return 0;
++	}
++
+ 	if (!(metadata_uuid = build_dm_uuid(mem, cache_pool_seg->metadata_lv, NULL)))
+ 		return_0;
+ 
 
 
