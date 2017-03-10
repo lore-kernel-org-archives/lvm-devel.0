@@ -1,154 +1,65 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 10 Mar 2017 13:37:07 -0500
-Subject: master - cache: LV supports cache segs with metadata format
-Message-ID: <201703101837.v2AIb7bk019819@int-mx09.intmail.prod.int.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 10 Mar 2017 13:26:17 -0500
+Subject: master - raid: enhance lv_raid_convert() header relative to reshaping
+Message-ID: <201703101826.v2AIQHHE013111@int-mx09.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=518b814cdb806f70f99aaa168fca45495b18a4cf
-Commit:        518b814cdb806f70f99aaa168fca45495b18a4cf
-Parent:        4a394f410d571d8c8ef7c9f87df781df0f7988bd
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 1 12:26:56 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 10 19:33:01 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd2881f277ab1ecb6510520b1504e17ad73c486c
+Commit:        dd2881f277ab1ecb6510520b1504e17ad73c486c
+Parent:        2fcbe34fe85fa57e1e2835dfba95fa21387377b6
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Mar 10 19:26:02 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Mar 10 19:26:02 2017 +0100
 
-cache: LV supports cache segs with metadata format
+raid: enhance lv_raid_convert() header relative to reshaping
 
-Cache pool read/writes metadata_format within its segment type..
-
-For CachePoolLV unselected metadata format is NOT stored in metadata.
-
-For CacheLV when metadata format is not present/selected in lvm2 metadata,
-it's automatically assumed to be the version 1 (backward compatible).
-
-To ensure older lvm2 will not 'miss-read' metadata with new version 2,
-such LV is marked with METADATA_FORMAT status flag (segment is
-specifying metadata format). So when cache uses metadata format 2,
-it will become inaccesible on older system without such support.
-(kernel dm cache < 1.10,  lvm2 < 2.02.169).
 ---
- WHATS_NEW                        |    1 +
- lib/cache_segtype/cache.c        |   35 +++++++++++++++++++++++++++++++++++
- lib/format_text/flags.c          |    1 +
- lib/metadata/metadata-exported.h |    5 ++++-
- 4 files changed, 41 insertions(+), 1 deletions(-)
+ lib/metadata/raid_manip.c |   25 ++++++++++++++++++++++++-
+ 1 files changed, 24 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d1efed0..4a5b0f6 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.169 - 
- =====================================
-+  Support cache segment with configurable metadata format.
-   Add allocation/cache_metadata_format profilable setttings.
-   Use function cache_set_params() for both lvcreate and lvconvert.
-   Skip rounding on cache chunk size boudary when create cache LV.
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index c378eda..985af68 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -52,6 +52,12 @@ static void _fix_missing_defaults(struct lv_segment *cpool_seg)
- 			    cpool_seg->policy_name);
- 	}
- 
-+	if (cpool_seg->cache_metadata_format == CACHE_METADATA_FORMAT_UNSELECTED) {
-+		cpool_seg->cache_metadata_format = CACHE_METADATA_FORMAT_1;
-+		log_verbose("Cache pool %s uses implicit metadata format %u.",
-+			    display_lvname(cpool_seg->lv), cpool_seg->cache_metadata_format);
-+	}
-+
- 	if (cpool_seg->cache_mode == CACHE_MODE_UNSELECTED) {
- 		cpool_seg->cache_mode = CACHE_MODE_WHEN_MISSING;
- 		log_verbose("Cache pool %s is missing cache mode, using %s.",
-@@ -107,6 +113,16 @@ static int _cache_pool_text_import(struct lv_segment *seg,
- 			return SEG_LOG_ERROR("Failed to duplicate policy in");
- 	}
- 
-+	if (dm_config_has_node(sn, "metadata_format")) {
-+		if (!dm_config_get_uint32(sn, "metadata_format", &seg->cache_metadata_format) ||
-+		    ((seg->cache_metadata_format != CACHE_METADATA_FORMAT_1) &&
-+		     (seg->cache_metadata_format != CACHE_METADATA_FORMAT_2)))
-+			return SEG_LOG_ERROR("Unknown cache metadata format %u number in",
-+					     seg->cache_metadata_format);
-+		if (seg->cache_metadata_format == CACHE_METADATA_FORMAT_2)
-+			seg->lv->status |= LV_METADATA_FORMAT;
-+	}
-+
- 	/*
- 	 * Read in policy args:
- 	 *   policy_settings {
-@@ -164,6 +180,25 @@ static int _cache_pool_text_export(const struct lv_segment *seg,
- 	outf(f, "metadata = \"%s\"", seg->metadata_lv->name);
- 	outf(f, "chunk_size = %" PRIu32, seg->chunk_size);
- 
-+	switch (seg->cache_metadata_format) {
-+	case CACHE_METADATA_FORMAT_UNSELECTED:
-+		/* Unselected format is not printed */
-+		break;
-+	case CACHE_METADATA_FORMAT_1:
-+		/* If format 1 was already specified with cache pool, store it,
-+		 * otherwise format gets stored when LV is cached.
-+		 * NB: format 1 could be lost anytime, it's a default format.
-+		 * Older lvm2 tool can easily drop it.
-+		 */
-+	case CACHE_METADATA_FORMAT_2: /* more in future ? */
-+		outf(f, "metadata_format = " FMTu32, seg->cache_metadata_format);
-+		break;
-+	default:
-+		log_error(INTERNAL_ERROR "LV %s is using unknown cache metadada format %u.",
-+			  display_lvname(seg->lv), seg->cache_metadata_format);
-+		return 0;
-+	}
-+
- 	/*
- 	 * Cache pool used by a cache LV holds data. Not ideal,
- 	 * but not worth to break backward compatibility, by shifting
-diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-index 716e632..a9f81f5 100644
---- a/lib/format_text/flags.c
-+++ b/lib/format_text/flags.c
-@@ -67,6 +67,7 @@ static const struct flag _lv_flags[] = {
- 	{LV_WRITEMOSTLY, "WRITEMOSTLY", STATUS_FLAG},
- 	{LV_ACTIVATION_SKIP, "ACTIVATION_SKIP", COMPATIBLE_FLAG},
- 	{LV_ERROR_WHEN_FULL, "ERROR_WHEN_FULL", COMPATIBLE_FLAG},
-+	{LV_METADATA_FORMAT, "METADATA_FORMAT", STATUS_FLAG},
- 	{LV_NOSCAN, NULL, 0},
- 	{LV_TEMPORARY, NULL, 0},
- 	{POOL_METADATA_SPARE, NULL, 0},
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 5c84bdf..c11899d 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -141,7 +141,8 @@
- #define LV_RESHAPE_DELTA_DISKS_MINUS		UINT64_C(0x0200000000000000)    /* LV reshape flag delta disks minus image(s) */
- 
- #define LV_REMOVE_AFTER_RESHAPE	UINT64_C(0x0400000000000000)	/* LV needs to be removed after a shrinking reshape */
--/* Next unused flag:		UINT64_C(0x0800000000000000)    */
-+#define LV_METADATA_FORMAT	UINT64_C(0x0800000000000000)    /* LV has segments with metadata format */
-+/* Next unused flag:		UINT64_C(0x1000000000000000)    */
- 
- /* Format features flags */
- #define FMT_SEGMENTS		0x00000001U	/* Arbitrary segment params? */
-@@ -503,6 +504,7 @@ struct lv_segment {
- 	struct logical_volume *pool_lv;		/* For thin, cache */
- 	uint32_t device_id;			/* For thin, 24bit */
- 
-+	cache_metadata_format_t cache_metadata_format;/* For cache_pool */
- 	cache_mode_t cache_mode;		/* For cache_pool */
- 	const char *policy_name;		/* For cache_pool */
- 	struct dm_config_node *policy_settings;	/* For cache_pool */
-@@ -964,6 +966,7 @@ struct lvcreate_params {
- 	uint32_t min_recovery_rate; /* RAID */
- 	uint32_t max_recovery_rate; /* RAID */
- 
-+	cache_metadata_format_t cache_metadata_format; /* cache */
- 	cache_mode_t cache_mode; /* cache */
- 	const char *policy_name; /* cache */
- 	struct dm_config_tree *policy_settings; /* cache */
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 2e31bf7..9954133 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -5910,10 +5910,33 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
+  * Convert lv from one RAID type (or striped/mirror segtype) to new_segtype,
+  * or add/remove LVs to/from a RAID LV.
+  *
+- * Non dm-raid changes e.g. mirror/striped functions are also called from here.
++ * Non RAID (i.e. dm-raid target relative) changes e.g. mirror/striped
++ * functions are also called from here.  This supports e.g. conversions
++ * from existing striped LVs to raid4/5/6/10 and vice versa.
+  *
+  * Takeover is defined as a switch from one raid level to another, potentially
+  * involving the addition of one or more image component pairs and rebuild.
++ *
++ * Complementing takeover, reshaping is defined as changing properties of
++ * a RaidLV keeping the RAID level.  These properties are the RAID layout
++ * algorithm (e.g. raid5_ls vs. raid5_ra), the stripe size (e.g. 64K vs. 128K)
++ * and the number of images.
++ *
++ * RAID level specific MD kernel constraints apply to reshaping:
++ *
++ * raid4/5/6 can vary all aforementioned properties within their respective
++ * redundancy * constraints (raid4/5 minimum of 3 images and raid6 minimum
++ * of 4 images;  the latter is enforced to be 5 by lvm2.
++ *
++ * raid10 doesn't support the removal of images at all.  It can only add them.
++ *
++ * For all levels raid4/5/6/10, the stripe size
++ * may not be larger than the region size.
++ *
++ * The maximum supported image count the MD kernel supports is 253;
++ * lvm2 may enforce smaller numbers via
++ * DEFAULT_RAID_MAX_IMAGES and DEFAULT_RAID1_MAX_IMAGES.
++ *
+  */
+ int lv_raid_convert(struct logical_volume *lv,
+ 		    const struct segment_type *new_segtype,
 
 
