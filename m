@@ -1,82 +1,46 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 10 Mar 2017 13:35:59 -0500
-Subject: master - lvcreate: do not round cache volumes on cache chunks
-Message-ID: <201703101835.v2AIZxMw028299@int-mx10.intmail.prod.int.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 10 Mar 2017 12:57:25 -0500
+Subject: master - lvcreate: fix "striped" limit
+Message-ID: <201703101757.v2AHvPOx011041@int-mx14.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=298d12c4590ccca26b92e1457c72c6369a32d3e9
-Commit:        298d12c4590ccca26b92e1457c72c6369a32d3e9
-Parent:        f24a1f06b2a9856c2bde0f8ee740bb9c3c695c35
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 9 17:15:56 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 10 19:33:00 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2fcbe34fe85fa57e1e2835dfba95fa21387377b6
+Commit:        2fcbe34fe85fa57e1e2835dfba95fa21387377b6
+Parent:        43388f12208be07191b80a5ed328a87790ecd64a
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Mar 10 18:57:06 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Mar 10 18:57:06 2017 +0100
 
-lvcreate: do not round cache volumes on cache chunks
+lvcreate: fix "striped" limit
 
-Since cache chunk might be huge and there is no technical need
-to enforce rounding and there is actually more 'real' VG space
-used then necessary - keep rounding on 'chunk' bounrary only
-for thin volumes - where it's the space used anyway.
+Fix regression limiting number of stripes to 8.
+Raise back to 128 as before.
 
-NB: we support conversion of any-size 'existing' LV into cached LV.
+Resolves: rhbz1389546
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   25 ++++++++++++-------------
- 2 files changed, 13 insertions(+), 13 deletions(-)
+ tools/lvcreate.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 00465cc..61b01b6 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.169 - 
- =====================================
-+  Skip rounding on cache chunk size boudary when create cache LV.
-   Improve cache_set_params support for chunk_size selection.
-   Fix metadata profile allocation/cache_[mode|policy] setting.
-   Fix missing support for using allocation/cache_pool_chunk_size setting.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 5ef9d73..120eb58 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7402,21 +7402,20 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 			return NULL;
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index cd31c99..ed56757 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -558,8 +558,10 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
+ 			else if (seg_is_any_raid6(lp))
+ 				max_images -= 2;
  		}
+-	} else
++	} else if (seg_is_mirrored(lp))
+ 		max_images = DEFAULT_MIRROR_MAX_IMAGES;
++	else
++		max_images = MAX_STRIPES;
  
--		/* Validate volume size to to aling on chunk for small extents */
--		/* Cache chunk size is always set */
--		size = first_seg(pool_lv)->chunk_size;
--		if (size > vg->extent_size) {
--			/* Align extents on chunk boundary size */
--			size = ((uint64_t)vg->extent_size * lp->extents + size - 1) /
--				size * size / vg->extent_size;
--			if (size != lp->extents) {
--				log_print_unless_silent("Rounding size (%d extents) up to chunk boundary "
--							"size (%d extents).", lp->extents, size);
--				lp->extents = size;
-+		if (seg_is_thin_volume(lp)) {
-+			/* Validate volume size to to aling on chunk for small extents */
-+			size = first_seg(pool_lv)->chunk_size;
-+			if (size > vg->extent_size) {
-+				/* Align extents on chunk boundary size */
-+				size = ((uint64_t)vg->extent_size * lp->extents + size - 1) /
-+					size * size / vg->extent_size;
-+				if (size != lp->extents) {
-+					log_print_unless_silent("Rounding size (%d extents) up to chunk boundary "
-+								"size (%d extents).", lp->extents, size);
-+					lp->extents = size;
-+				}
- 			}
--		}
- 
--		if (seg_is_thin_volume(lp)) {
- 			thin_pool_was_active = lv_is_active(pool_lv);
- 			if (lv_is_new_thin_pool(pool_lv)) {
- 				if (!check_new_thin_pool(pool_lv))
+ 	/* Common mirror and raid params */
+ 	if (arg_is_set(cmd, mirrors_ARG)) {
 
 
