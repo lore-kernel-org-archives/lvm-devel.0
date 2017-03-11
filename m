@@ -1,39 +1,51 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 10 Mar 2017 16:48:39 -0500
-Subject: master - man: fix typo
-Message-ID: <201703102148.v2ALmdI5031384@int-mx11.intmail.prod.int.phx2.redhat.com>
+From: Christian Brauner <christian.brauner@canonical.com>
+Date: Sat, 11 Mar 2017 01:08:43 +0100
+Subject: [PATCH] lvmetad: fix segfault on i386
+Message-ID: <20170311000843.9263-1-christian.brauner@ubuntu.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=66760f9673659f0b3d52e9d7013bc69147101d9b
-Commit:        66760f9673659f0b3d52e9d7013bc69147101d9b
-Parent:        09ad36fb9b3bc7cda7aa946c39a387ad69317be7
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Mar 10 22:48:16 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Mar 10 22:48:16 2017 +0100
+Sending %d as format argument in lvmetad_vg_remove_pending() will cause
+segfaults in config_make_nodes_v() when va_arg() casts to int64_t. Also, it is
+clearly advertised in the lvm source code that using plain %d is prohibited, so
+let's switch to FMTd64.
 
-man: fix typo
-
+Signed-off-by: Christian Brauner <christian.brauner@ubuntu.com>
 ---
- man/lvmraid.7.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/cache/lvmetad.c            | 2 +-
+ libdaemon/client/config-util.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/man/lvmraid.7.in b/man/lvmraid.7.in
-index e5a2dc5..dc07f2e 100644
---- a/man/lvmraid.7.in
-+++ b/man/lvmraid.7.in
-@@ -1339,7 +1339,7 @@ From striped we can convert to raid10
- raid10 allows to add stripes but can't remove them.
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 8e9bb1fd3..843e1c3e8 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1304,7 +1304,7 @@ int lvmetad_vg_remove_pending(struct volume_group *vg)
+ 	reply = _lvmetad_send(vg->cmd, "set_vg_info",
+ 			      "name = %s", vg->name,
+ 			      "uuid = %s", uuid,
+-			      "version = %d", 0,
++			      "version = %"PRId64, (int64_t)0,
+ 			      NULL);
  
+ 	if (!_lvmetad_handle_reply(reply, "set_vg_info", vg->name, NULL)) {
+diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
+index 93f3d0a93..5b6cfb82a 100644
+--- a/libdaemon/client/config-util.c
++++ b/libdaemon/client/config-util.c
+@@ -260,7 +260,7 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
+ 		key[fmt - next] = '\0';
+ 		fmt += 2;
  
--A more ellaborate example to convert from linear to striped
-+A more elaborate example to convert from linear to striped
- with interim conversions to raid1 then raid5 followed
- by restripe (4 steps).
- 
+-		if (!strcmp(fmt, "%d") || !strcmp(fmt, FMTd64)) {
++		if (!strcmp(fmt, FMTd64)) {
+ 			int64_t value = va_arg(ap, int64_t);
+ 			if (!(cn = make_int_node(cft, key, value, parent, pre_sib)))
+ 				return 0;
+-- 
+2.11.0
 
 
