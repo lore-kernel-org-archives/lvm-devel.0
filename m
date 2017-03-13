@@ -1,43 +1,47 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 9 Mar 2017 17:42:25 -0500
-Subject: master - lvmdbustest.py: Correct debug & assert order
-Message-ID: <201703092242.v29MgPJu018272@int-mx14.intmail.prod.int.phx2.redhat.com>
+From: Bryn Reeves <bmr@sourceware.org>
+Date: Mon, 13 Mar 2017 07:49:34 -0400
+Subject: master - dmfilemapd: return error for wrong number of args
+Message-ID: <201703131149.v2DBnYIY015276@int-mx13.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=97b6486b2703d8b4d7584caf24f16686dbb9dde2
-Commit:        97b6486b2703d8b4d7584caf24f16686dbb9dde2
-Parent:        ee7946ed82e11b5d22b02b67821661ff3e3a0993
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Mar 9 16:07:14 2017 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Mar 9 16:39:47 2017 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9b0aba5fe9e6b22b85d7f6ff9f8fdef09db61bce
+Commit:        9b0aba5fe9e6b22b85d7f6ff9f8fdef09db61bce
+Parent:        66760f9673659f0b3d52e9d7013bc69147101d9b
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Mon Mar 13 11:09:11 2017 +0000
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Mon Mar 13 11:09:11 2017 +0000
 
-lvmdbustest.py: Correct debug & assert order
+dmfilemapd: return error for wrong number of args
 
-If we do the assert first we won't get to the print statement.
+The initial check on argc incorrectly returns 1 when the wrong
+number of arguments are present, causing a segfault in main()
+when no arguments are given:
+
+  # dmfilemapd
+  Wrong number of arguments.
+  usage: dmfilemapd <fd> <group_id> <path> <mode> [<foreground>[<log_level>]]
+  Segmentation fault (core dumped)
 ---
- test/dbus/lvmdbustest.py |    2 +-
+ daemons/dmfilemapd/dmfilemapd.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 6c928e2..f8a1918 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -1734,10 +1734,10 @@ class TestDbusService(unittest.TestCase):
- 			path = self._lookup(resource_name)
- 			self.assertTrue(path != '/')
- 		else:
--			self.assertTrue(ec == 0, "%s exit code = %d" % (operation, ec))
- 			std_err_print(
- 				"%s failed with stdout= %s, stderr= %s" %
- 				(operation, stdout, stderr))
-+			self.assertTrue(ec == 0, "%s exit code = %d" % (operation, ec))
+diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
+index 6d7c09f..4f20466 100644
+--- a/daemons/dmfilemapd/dmfilemapd.c
++++ b/daemons/dmfilemapd/dmfilemapd.c
+@@ -255,7 +255,7 @@ static int _parse_args(int argc, char **argv, struct filemap_monitor *fm)
+ 	if (argc < 5) {
+ 		_early_log("Wrong number of arguments.");
+ 		_early_log("usage: %s", _usage);
+-		return 1;
++		return 0;
+ 	}
  
- 	def test_external_vg_create(self):
- 		# We need to ensure that if a user creates something outside of lvm
+ 	memset(fm, 0, sizeof(*fm));
 
 
