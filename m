@@ -1,68 +1,59 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 13 Mar 2017 15:14:55 -0400
-Subject: master - commands: fix command matching for unused options
-Message-ID: <201703131914.v2DJEtCH020664@int-mx11.intmail.prod.int.phx2.redhat.com>
+Date: Mon, 13 Mar 2017 15:54:58 -0400
+Subject: master - lvmetad: fix segfault on i386
+Message-ID: <201703131954.v2DJswLr000699@int-mx09.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=38292ca1d0a78aa6b06a4180b8e87cb9dd417a22
-Commit:        38292ca1d0a78aa6b06a4180b8e87cb9dd417a22
-Parent:        49cd54fc3a4cfbe785ba387a3c748362f74ea52f
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Mar 13 12:54:56 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=46b735c937ce68e72d08997635321bf30240325d
+Commit:        46b735c937ce68e72d08997635321bf30240325d
+Parent:        5f2c942000b9e59105441eeaea7233b6c9c4f493
+Author:        Christian Brauner <christian.brauner@canonical.com>
+AuthorDate:    Sat Mar 11 01:08:43 2017 +0100
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Mar 13 13:37:07 2017 -0500
 
-commands: fix command matching for unused options
+lvmetad: fix segfault on i386
 
-When a given command:
+Sending %d as format argument in lvmetad_vg_remove_pending() will cause
+segfaults in config_make_nodes_v() when va_arg() casts to int64_t. Also, it is
+clearly advertised in the lvm source code that using plain %d is prohibited, so
+let's switch to FMTd64.
 
-- matches command definition A based on required options,
-  but uses optional options that are not accepted by A.
-
-- matches command definition B based on required options,
-  (but fewer required items than A), and uses no
-  unaccepted optional options.
-
-then B is the correct choice.  Command A would fail because
-of the unaccepted optional options.  The logic was mistakenly
-letting A win because it had a greater number of required option
-matches, without accounting for the optional option mismatches.
+Signed-off-by: Christian Brauner <christian.brauner@ubuntu.com>
 ---
- tools/lvmcmdline.c |   12 +++++++++---
- 1 files changed, 9 insertions(+), 3 deletions(-)
+ lib/cache/lvmetad.c            |    2 +-
+ libdaemon/client/config-util.c |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index d1399c9..baf5d3b 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1643,15 +1643,21 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path,
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 8e9bb1f..843e1c3 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1304,7 +1304,7 @@ int lvmetad_vg_remove_pending(struct volume_group *vg)
+ 	reply = _lvmetad_send(vg->cmd, "set_vg_info",
+ 			      "name = %s", vg->name,
+ 			      "uuid = %s", uuid,
+-			      "version = %d", 0,
++			      "version = %"PRId64, (int64_t)0,
+ 			      NULL);
  
- 		/*
- 		 * Choose the best match, which in general is the command with
--		 * the most matching required_{opt,pos}.
-+		 * the most matching required_{opt,pos}, but it could be a
-+		 * command with fewer required_{opt,pos} matches in the case
-+		 * where cmddef1 has more required matches, but a match_unused
-+		 * and cmddef2 has fewer required matches, but zero match_unused.
- 		 *
- 		 * A match is better if:
- 		 * . more required opt/pos args match
- 		 * . type arg matches when other doesn't
--		 * . those being equal, less unused options
-+		 * . less unused options
- 		 */
+ 	if (!_lvmetad_handle_reply(reply, "set_vg_info", vg->name, NULL)) {
+diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
+index 93f3d0a..5b6cfb8 100644
+--- a/libdaemon/client/config-util.c
++++ b/libdaemon/client/config-util.c
+@@ -260,7 +260,7 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
+ 		key[fmt - next] = '\0';
+ 		fmt += 2;
  
--		if (!best_required || (match_required > best_required) || (match_type > best_type) ||
-+		if (!best_required ||
-+		    ((match_required > best_required) && !match_unused) ||
-+		    (match_unused < best_unused) ||
-+		    (match_type > best_type) ||
- 		    ((match_required == best_required) && (match_type == best_type) && (match_unused < best_unused))) {
- 			/* log_warn("best %d has match_required %d match_ro %d match_rp %d",
- 				 i, match_required, match_ro, match_rp); */
+-		if (!strcmp(fmt, "%d") || !strcmp(fmt, FMTd64)) {
++		if (!strcmp(fmt, FMTd64)) {
+ 			int64_t value = va_arg(ap, int64_t);
+ 			if (!(cn = make_int_node(cft, key, value, parent, pre_sib)))
+ 				return 0;
 
 
