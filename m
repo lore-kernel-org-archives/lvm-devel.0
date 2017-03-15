@@ -1,66 +1,39 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Tue, 14 Mar 2017 21:32:57 -0400
-Subject: master - make: Support for 'make -R'.
-Message-ID: <201703150132.v2F1WvcB032246@int-mx11.intmail.prod.int.phx2.redhat.com>
+Date: Tue, 14 Mar 2017 21:37:47 -0400
+Subject: master - man: specify man-generator path
+Message-ID: <201703150137.v2F1blxP007802@int-mx14.intmail.prod.int.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1dc1a1cedb5ba3d9f48d2d5915145c3fdabf6cb7
-Commit:        1dc1a1cedb5ba3d9f48d2d5915145c3fdabf6cb7
-Parent:        531d7c97e7e48a3874448794e724c814ad662114
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f536c53aee3e64495ab71d625426f4f965713e77
+Commit:        f536c53aee3e64495ab71d625426f4f965713e77
+Parent:        1dc1a1cedb5ba3d9f48d2d5915145c3fdabf6cb7
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Mar 15 01:31:11 2017 +0000
+AuthorDate:    Wed Mar 15 01:36:12 2017 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Mar 15 01:31:11 2017 +0000
+CommitterDate: Wed Mar 15 01:36:12 2017 +0000
 
-make: Support for 'make -R'.
+man: specify man-generator path
 
-Aim to be self-sufficient.
 ---
- make.tmpl.in |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ man/Makefile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 2e7c1ba..2af1b1c 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -44,6 +44,8 @@ EGREP = @EGREP@
- GREP = @GREP@
- SORT = @SORT@
- WC = @WC@
-+AR = ar
-+RM = rm -f
+diff --git a/man/Makefile.in b/man/Makefile.in
+index e7020cd..ae1739e 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -112,7 +112,7 @@ MAN5DIR=$(mandir)/man5
+ MAN7DIR=$(mandir)/man7
+ MAN8DIR=$(mandir)/man8
  
- PYTHON2 = @PYTHON2@
- PYTHON3 = @PYTHON3@
-@@ -156,6 +158,7 @@ INSTALL_ROOT_DIR = $(INSTALL) -m 700 -d
- INSTALL_ROOT_DATA = $(INSTALL) -m 600
- INSTALL_SCRIPT = $(INSTALL) -p $(M_INSTALL_PROGRAM)
+-MANGENERATOR=man-generator
++MANGENERATOR=./man-generator
+ TESTMAN=test.gen
  
-+.SUFFIXES:
- .SUFFIXES: .c .cpp .d .o .so .a .po .pot .mo .dylib
- 
- WFLAGS +=\
-@@ -410,6 +413,8 @@ cflow: $(CFLOW_TARGET).cflow $(CFLOW_TARGET).tree $(CFLOW_TARGET).rxref $(CFLOW_
- endif
- endif
- 
-+.LIBPATTERNS = lib%.so lib%.a
-+
- %.o: %.c
- 	$(CC) -c $(INCLUDES) $(DEFS) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
- 
-@@ -461,7 +466,7 @@ endif
- 
- $(LIB_STATIC): $(OBJECTS)
- 	$(RM) $@
--	$(AR) rs $@ $(OBJECTS)
-+	$(AR) rsv $@ $(OBJECTS)
- 
- %.d: %.c $(INC_LNS)
- 	$(MKDIR_P) $(dir $@); \
+ include $(top_builddir)/make.tmpl
 
 
