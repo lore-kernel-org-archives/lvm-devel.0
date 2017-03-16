@@ -1,64 +1,46 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Mar 2017 20:02:49 -0400
-Subject: master - raid: use 64bit arithmetic
-Message-ID: <201703160002.v2G02nBE017678@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 15 Mar 2017 20:19:37 -0400
+Subject: master - mirror: revert 76f6951c3e8f0933df9730a42e9c46f273d1da24
+Message-ID: <201703160019.v2G0JbtD019152@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a727a3ccd178d4762f0b7a8a48a24f7667e8c51
-Commit:        4a727a3ccd178d4762f0b7a8a48a24f7667e8c51
-Parent:        e3a51537c57f8ebe2ecb49f3d221710cd59163ae
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=07ded8059cbd36a8104491dc81907325f3413919
+Commit:        07ded8059cbd36a8104491dc81907325f3413919
+Parent:        4a727a3ccd178d4762f0b7a8a48a24f7667e8c51
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 16 00:51:52 2017 +0100
+AuthorDate:    Thu Mar 16 01:17:57 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 16 01:02:10 2017 +0100
+CommitterDate: Thu Mar 16 01:17:57 2017 +0100
 
-raid: use 64bit arithmetic
+mirror: revert 76f6951c3e8f0933df9730a42e9c46f273d1da24
 
-Coverity - keep  multiplication for size cals in 64bit
-(otherwise it's just 32b x 32b)
+Effectively revert whole  76f6951c3e8f0933df9730a42e9c46f273d1da24.
+We need to figure out some other solution.
+
+At this moment usage of --config  with 'repair' of blocked mirror
+is 'freezing' combination.
 ---
- lib/metadata/raid_manip.c |    4 ++--
- lib/report/report.c       |    2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 9f0de4c..720337b 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1690,7 +1690,7 @@ static int _reshape_adjust_to_size(struct logical_volume *lv,
+diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+index 35224b5..e99b7a2 100644
+--- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
++++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+@@ -186,8 +186,9 @@ int register_device(const char *device,
+ 	if (!dmeventd_lvm2_init_with_pool("mirror_state", state))
+ 		goto_bad;
  
- 	/* Externally visible LV size w/o reshape space */
- 	lv->le_count = seg->len = new_le_count;
--	lv->size = (lv->le_count - new_image_count * _reshape_len_per_dev(seg)) * lv->vg->extent_size;
-+	lv->size = (uint64_t) (lv->le_count - new_image_count * _reshape_len_per_dev(seg)) * lv->vg->extent_size;
- 	/* seg->area_len does not change */
++        /* CANNOT use --config as this disables cached content */
+ 	if (!dmeventd_lvm2_command(state->mem, state->cmd_lvconvert, sizeof(state->cmd_lvconvert),
+-				   "lvconvert --config global{use_lvmetad = 0}' --repair --use-policies", device))
++				   "lvconvert --repair --use-policies", device))
+ 		goto_bad;
  
- 	if (old_image_count < new_image_count) {
-@@ -1861,7 +1861,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
- 
- 		reduced_le_count -= seg->reshape_len * _data_rimages_count(seg, new_image_count);
- 		current_le_count = lv->le_count - seg->reshape_len * _data_rimages_count(seg, old_image_count);
--		extend_le_count = current_le_count * current_le_count / reduced_le_count;
-+		extend_le_count = (uint32_t)((uint64_t) current_le_count * current_le_count / reduced_le_count);
- 		log_warn("WARNING: Removing stripes from active%s logical "
- 			 "volume %s will shrink it from %s to %s!",
- 			 info.open_count ? " and open" : "", display_lvname(lv),
-diff --git a/lib/report/report.c b/lib/report/report.c
-index fcb9e33..1421b31 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -2582,7 +2582,7 @@ static int _segdata_offset(struct dm_report *rh, struct dm_pool *mem,
- 
- 		if (lv_raid_data_offset(lv, &data_offset)) {
- 			if (new_data_offset && !lv_raid_image_in_sync(seg->lv))
--				data_offset = data_offset ? 0 : seg->reshape_len * lv->vg->extent_size;
-+				data_offset = data_offset ? 0 : (uint64_t) seg->reshape_len * lv->vg->extent_size;
- 
- 			return dm_report_field_uint64(rh, field, &data_offset);
- 		}
+ 	*user = state;
 
 
