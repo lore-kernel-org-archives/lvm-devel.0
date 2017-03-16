@@ -1,65 +1,64 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Mar 2017 20:02:44 -0400
-Subject: master - coverity: make sure segtype pointer is valid
-Message-ID: <201703160002.v2G02iSf017663@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 15 Mar 2017 20:02:49 -0400
+Subject: master - raid: use 64bit arithmetic
+Message-ID: <201703160002.v2G02nBE017678@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e3a51537c57f8ebe2ecb49f3d221710cd59163ae
-Commit:        e3a51537c57f8ebe2ecb49f3d221710cd59163ae
-Parent:        42b970d4f34a0cf70ac07d551852cbd7b924079f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a727a3ccd178d4762f0b7a8a48a24f7667e8c51
+Commit:        4a727a3ccd178d4762f0b7a8a48a24f7667e8c51
+Parent:        e3a51537c57f8ebe2ecb49f3d221710cd59163ae
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 16 00:46:48 2017 +0100
+AuthorDate:    Thu Mar 16 00:51:52 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 16 01:02:10 2017 +0100
 
-coverity: make sure segtype pointer is valid
+raid: use 64bit arithmetic
 
+Coverity - keep  multiplication for size cals in 64bit
+(otherwise it's just 32b x 32b)
 ---
- lib/metadata/raid_manip.c |    6 +++---
- tools/lvconvert.c         |    3 ++-
- 2 files changed, 5 insertions(+), 4 deletions(-)
+ lib/metadata/raid_manip.c |    4 ++--
+ lib/report/report.c       |    2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index b2ea241..9f0de4c 100644
+index 9f0de4c..720337b 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -1023,6 +1023,7 @@ static int _alloc_image_components(struct logical_volume *lv,
- 	struct alloc_handle *ah = NULL;
- 	struct dm_list *parallel_areas;
- 	struct lv_list *lvl_array;
-+	const char *raid_segtype;
+@@ -1690,7 +1690,7 @@ static int _reshape_adjust_to_size(struct logical_volume *lv,
  
- 	if (!(lvl_array = dm_pool_alloc(lv->vg->vgmem,
- 					sizeof(*lvl_array) * count * 2)))
-@@ -1036,9 +1037,8 @@ static int _alloc_image_components(struct logical_volume *lv,
- 	else
- 		region_size = seg->region_size;
+ 	/* Externally visible LV size w/o reshape space */
+ 	lv->le_count = seg->len = new_le_count;
+-	lv->size = (lv->le_count - new_image_count * _reshape_len_per_dev(seg)) * lv->vg->extent_size;
++	lv->size = (uint64_t) (lv->le_count - new_image_count * _reshape_len_per_dev(seg)) * lv->vg->extent_size;
+ 	/* seg->area_len does not change */
  
--	if (seg_is_raid(seg))
--		segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_RAID0_META);
--	else if (!(segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_RAID1)))
-+	raid_segtype = seg_is_raid(seg) ? SEG_TYPE_NAME_RAID0_META : SEG_TYPE_NAME_RAID1;
-+	if (!(segtype = get_segtype_from_string(lv->vg->cmd, raid_segtype)))
- 		return_0;
+ 	if (old_image_count < new_image_count) {
+@@ -1861,7 +1861,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
  
- 	/*
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 41d32df..a37dc25 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2704,7 +2704,8 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ 		reduced_le_count -= seg->reshape_len * _data_rimages_count(seg, new_image_count);
+ 		current_le_count = lv->le_count - seg->reshape_len * _data_rimages_count(seg, old_image_count);
+-		extend_le_count = current_le_count * current_le_count / reduced_le_count;
++		extend_le_count = (uint32_t)((uint64_t) current_le_count * current_le_count / reduced_le_count);
+ 		log_warn("WARNING: Removing stripes from active%s logical "
+ 			 "volume %s will shrink it from %s to %s!",
+ 			 info.open_count ? " and open" : "", display_lvname(lv),
+diff --git a/lib/report/report.c b/lib/report/report.c
+index fcb9e33..1421b31 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -2582,7 +2582,7 @@ static int _segdata_offset(struct dm_report *rh, struct dm_pool *mem,
  
- 	pool_segtype = get_segtype_from_string(cmd, str_seg_type);
+ 		if (lv_raid_data_offset(lv, &data_offset)) {
+ 			if (new_data_offset && !lv_raid_image_in_sync(seg->lv))
+-				data_offset = data_offset ? 0 : seg->reshape_len * lv->vg->extent_size;
++				data_offset = data_offset ? 0 : (uint64_t) seg->reshape_len * lv->vg->extent_size;
  
--	if (!pool_segtype->ops->target_present(cmd, NULL, &target_attr)) {
-+	if (!pool_segtype ||
-+	    !pool_segtype->ops->target_present(cmd, NULL, &target_attr)) {
- 		log_error("%s: Required device-mapper target(s) not detected in your kernel.",
- 			  pool_segtype->name);
- 		return 0;
+ 			return dm_report_field_uint64(rh, field, &data_offset);
+ 		}
 
 
