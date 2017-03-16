@@ -1,44 +1,39 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Wed, 15 Mar 2017 22:25:53 -0400
-Subject: master - tools: Drop unused e2fsadm refs (replaced by fsadm).
-Message-ID: <201703160225.v2G2Prb0003129@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 16 Mar 2017 03:53:25 -0400
+Subject: master - tests: add missing --yes
+Message-ID: <201703160753.v2G7rPZI009704@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9b5a455e1ce1eebcf949be20c1dd282fdb00d75
-Commit:        e9b5a455e1ce1eebcf949be20c1dd282fdb00d75
-Parent:        8ef93c756eecc2036f0c945c80972902f27970ca
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Mar 16 02:24:39 2017 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Mar 16 02:24:39 2017 +0000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7fa08ae4e80e37e102d77f8fe02902a68bf52d9c
+Commit:        7fa08ae4e80e37e102d77f8fe02902a68bf52d9c
+Parent:        e9b5a455e1ce1eebcf949be20c1dd282fdb00d75
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Mar 16 08:44:44 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Mar 16 08:44:44 2017 +0100
 
-tools: Drop unused e2fsadm refs (replaced by fsadm).
+tests: add missing --yes
 
 ---
- tools/stub.h |    7 -------
- 1 files changed, 0 insertions(+), 7 deletions(-)
+ test/shell/lvconvert-cache-chunks.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/stub.h b/tools/stub.h
-index a98346a..f03e5d3 100644
---- a/tools/stub.h
-+++ b/tools/stub.h
-@@ -13,13 +13,6 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
+diff --git a/test/shell/lvconvert-cache-chunks.sh b/test/shell/lvconvert-cache-chunks.sh
+index 918b55d..7fa5b72 100644
+--- a/test/shell/lvconvert-cache-chunks.sh
++++ b/test/shell/lvconvert-cache-chunks.sh
+@@ -33,7 +33,7 @@ test $(get lv_field $vg/cpool chunk_size --units s --nosuffix) -gt 1000
+ lvcreate -L1M -n $lv1 $vg
  
--/*
--#define unimplemented \
--	log_error("Command not implemented yet."); return ECMD_FAILED
--
--int e2fsadm(struct cmd_context *cmd, int argc, char **argv) unimplemented
--*/
--
- int lvmsadc(struct cmd_context *cmd __attribute__((unused)),
- 	    int argc __attribute__((unused)),
- 	    char **argv __attribute__((unused)))
+ # Not let pass small chunks when caching origin
+-fail lvconvert -H --chunksize 128K --cachepool $vg/cpool $vg/$lv1 >out 2>&1
++fail lvconvert -y -H --chunksize 128K --cachepool $vg/cpool $vg/$lv1 >out 2>&1
+ cat out
+ grep "too small chunk size" out
+ 
 
 
