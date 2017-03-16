@@ -1,41 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Mar 2017 20:02:35 -0400
-Subject: master - thin: remove unneeed test for NULL
-Message-ID: <201703160002.v2G02ZHX017642@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 15 Mar 2017 20:02:38 -0400
+Subject: master - libdm: fix endless loop
+Message-ID: <201703160002.v2G02c34017652@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2a139993b40c4497536a2a0b6d826c73213b332d
-Commit:        2a139993b40c4497536a2a0b6d826c73213b332d
-Parent:        0dcb928d1e7fb75d6481923effe509237de119de
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=42b970d4f34a0cf70ac07d551852cbd7b924079f
+Commit:        42b970d4f34a0cf70ac07d551852cbd7b924079f
+Parent:        2a139993b40c4497536a2a0b6d826c73213b332d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 16 00:34:31 2017 +0100
+AuthorDate:    Thu Mar 16 00:36:06 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 16 01:02:10 2017 +0100
 
-thin: remove unneeed test for NULL
+libdm: fix endless loop
 
-In this API NULL is not valid parameter so do not check for it.
+Coverity noticed endless loop (i not being changed).
+
+TODO: test coverage
 ---
- lib/metadata/thin_manip.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ libdm/libdm-stats.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index d1259b4..71f9cc0 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -649,8 +649,7 @@ int update_thin_pool_params(struct cmd_context *cmd,
- 			return_0;
- 	}
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 559920e..e977f08 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -678,7 +678,7 @@ static void _check_group_regions_present(struct dm_stats *dms,
  
--	if (zero_new_blocks &&
--	    (*zero_new_blocks == THIN_ZERO_UNSELECTED) &&
-+	if ((*zero_new_blocks == THIN_ZERO_UNSELECTED) &&
- 	    find_config_tree_node(cmd, allocation_thin_pool_zero_CFG, profile))
- 		*zero_new_blocks = find_config_tree_bool(cmd, allocation_thin_pool_zero_CFG, profile)
- 			? THIN_ZERO_YES : THIN_ZERO_NO;
+ 	group_id = i = dm_bit_get_first(regions);
+ 
+-	for (; i > 0; dm_bit_get_next(regions, i))
++	for (; i > 0; i = dm_bit_get_next(regions, i))
+ 		if (!_stats_region_present(&dms->regions[i])) {
+ 			log_warn("Group descriptor " FMTi64 " contains "
+ 				 "non-existent region_id " FMTi64 ".",
 
 
