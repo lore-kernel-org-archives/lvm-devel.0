@@ -1,119 +1,40 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 17 Mar 2017 12:25:34 -0400
-Subject: master - help: align option list in pv/lv/vgchange cases
-Message-ID: <201703171625.v2HGPYEo005651@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 17 Mar 2017 12:55:15 -0400
+Subject: master - man: advise against mirrored mirror log
+Message-ID: <201703171655.v2HGtFnA009114@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8d7be8f5df2787354bb6cf40b6436047b82cfb58
-Commit:        8d7be8f5df2787354bb6cf40b6436047b82cfb58
-Parent:        fec2ea76cf30f6333ff4dc6afb8a40b84d7abf7b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=07040942ed02455cf168ba6cf40264a644627553
+Commit:        07040942ed02455cf168ba6cf40264a644627553
+Parent:        8d7be8f5df2787354bb6cf40b6436047b82cfb58
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Mar 17 11:20:51 2017 -0500
+AuthorDate:    Fri Mar 17 11:54:39 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Mar 17 11:23:38 2017 -0500
+CommitterDate: Fri Mar 17 11:54:39 2017 -0500
 
-help: align option list in pv/lv/vgchange cases
+man: advise against mirrored mirror log
 
-Align one-required options like is done for
-optional options.
 ---
- tools/command.c |   64 ++++++++++++++++++++++++++++++++++++++++++++++--------
- 1 files changed, 54 insertions(+), 10 deletions(-)
+ tools/args.h |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index e14291d..a344e55 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -1708,22 +1708,69 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
+diff --git a/tools/args.h b/tools/args.h
+index 9d839b5..b81e2c9 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -331,7 +331,8 @@ arg(mirrorlog_ARG, '\0', "mirrorlog", mirrorlog_VAL, 0, 0,
+     "\\fBcore\\fP is not persistent; the log is kept only in memory.\n"
+     "In this case, the mirror must be synchronized (by copying LV data from\n"
+     "the first device to others) each time the LV is activated, e.g. after reboot.\n"
+-    "\\fBmirrored\\fP is a persistent log that is itself mirrored.\n")
++    "\\fBmirrored\\fP is a persistent log that is itself mirrored, but\n"
++    "should be avoided. Instead, use the raid1 type for log redundancy.\n")
  
- 	printf("  %s", cmd->name);
- 
--	if (cmd->ro_count) {
-+	if (onereq && cmd->ro_count) {
-+		/* one required option in a set */
- 		first = 1;
- 
-+		/* options with short and long */
-+		for (ro = 0; ro < cmd->ro_count; ro++) {
-+			opt_enum = cmd->required_opt_args[ro].opt;
-+
-+			if (!opt_names[opt_enum].short_opt)
-+				continue;
-+
-+			if ((opt_enum == size_ARG) && command_has_alternate_extents(cmd->name))
-+				include_extents = 1;
-+
-+			if (first)
-+				printf("\n\t(");
-+			else
-+				printf(",\n\t ");
-+			first = 0;
-+
-+			printf(" -%c|%s", opt_names[opt_enum].short_opt, opt_names[opt_enum].long_opt);
-+
-+			if (cmd->required_opt_args[ro].def.val_bits) {
-+				printf(" ");
-+				print_usage_def(cmd, opt_enum, &cmd->required_opt_args[ro].def);
-+			}
-+		}
-+
-+		/* options with only long */
- 		for (ro = 0; ro < cmd->ro_count; ro++) {
- 			opt_enum = cmd->required_opt_args[ro].opt;
- 
-+			if (opt_names[opt_enum].short_opt)
-+				continue;
-+
- 			if ((opt_enum == size_ARG) && command_has_alternate_extents(cmd->name))
- 				include_extents = 1;
- 
--			if (onereq) {
--				if (first)
--					printf("\n\t(");
--				else
--					printf(",\n\t ");
--				first = 0;
-+			if (first)
-+				printf("\n\t(");
-+			else
-+				printf(",\n\t ");
-+			first = 0;
-+
-+			printf("    %s", opt_names[opt_enum].long_opt);
-+
-+			if (cmd->required_opt_args[ro].def.val_bits) {
-+				printf(" ");
-+				print_usage_def(cmd, opt_enum, &cmd->required_opt_args[ro].def);
- 			}
-+		}
-+
-+		printf(" )\n");
-+	}
-+
-+	if (!onereq && cmd->ro_count) {
-+		first = 1;
-+
-+		for (ro = 0; ro < cmd->ro_count; ro++) {
-+			opt_enum = cmd->required_opt_args[ro].opt;
-+
-+			if ((opt_enum == size_ARG) && command_has_alternate_extents(cmd->name))
-+				include_extents = 1;
- 
- 			if (opt_names[opt_enum].short_opt)
- 				printf(" -%c|%s", opt_names[opt_enum].short_opt, opt_names[opt_enum].long_opt);
-@@ -1735,9 +1782,6 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
- 				print_usage_def(cmd, opt_enum, &cmd->required_opt_args[ro].def);
- 			}
- 		}
--
--		if (onereq)
--			printf(" )\n");
- 	}
- 
- 	if (cmd->rp_count) {
+ arg(mirrorsonly_ARG, '\0', "mirrorsonly", 0, 0, 0,
+     "Only remove missing PVs from mirror LVs.\n")
 
 
