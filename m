@@ -1,20 +1,20 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 18 Mar 2017 16:23:05 -0400
+Date: Mon, 20 Mar 2017 09:19:31 -0400
 Subject: master - tests: early detect leaking error dev
-Message-ID: <201703182023.v2IKN5ef015807@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201703201319.v2KDJVU6010432@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a7590e31e6008dde6c226ec14b97adcb5331299
-Commit:        3a7590e31e6008dde6c226ec14b97adcb5331299
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=17b56a4aed90806eac03c32f013f552440b2f596
+Commit:        17b56a4aed90806eac03c32f013f552440b2f596
 Parent:        07040942ed02455cf168ba6cf40264a644627553
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 18 19:39:48 2017 +0100
+AuthorDate:    Mon Mar 20 14:18:50 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 18 19:42:36 2017 +0100
+CommitterDate: Mon Mar 20 14:18:50 2017 +0100
 
 tests: early detect leaking error dev
 
@@ -23,18 +23,9 @@ lvconvert should not leak 'error' device.
 (This patch is not fix the problem, just makes it more easily visible
 instead of more confusing 'clvmd' trace).
 ---
- D/test/shell/pvmove-background.sh     |    1 +
  test/shell/lvconvert-raid-takeover.sh |   28 +++++++++++++++++++++++++++-
- 2 files changed, 28 insertions(+), 1 deletions(-)
+ 1 files changed, 27 insertions(+), 1 deletions(-)
 
-diff --git a/D/test/shell/pvmove-background.sh b/D/test/shell/pvmove-background.sh
-new file mode 120000
-index 0000000..479c5b0
---- /dev/null
-+++ b/D/test/shell/pvmove-background.sh
-@@ -0,0 +1 @@
-+/home/kabi/export/lvm2/test/shell/pvmove-background.sh
-\ No newline at end of file
 diff --git a/test/shell/lvconvert-raid-takeover.sh b/test/shell/lvconvert-raid-takeover.sh
 index 0e8e880..e1b1d98 100644
 --- a/test/shell/lvconvert-raid-takeover.sh
