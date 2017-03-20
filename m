@@ -1,53 +1,43 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 20 Mar 2017 11:10:52 -0400
-Subject: master - lvmdbusd: Call add_no_notify for *move commands
-Message-ID: <201703201510.v2KFAqY7025691@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 20 Mar 2017 11:10:58 -0400
+Subject: master - lvmdbusd: Update state during pv move
+Message-ID: <201703201510.v2KFAwp5025702@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7eeb093fdd314063eff7f14b8b6338523e0dd840
-Commit:        7eeb093fdd314063eff7f14b8b6338523e0dd840
-Parent:        2dc71fc291b3ac861298b4dd7b25963dd9325a4d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b65a9230a359de82cb4b5b2e802a493b72d46c4f
+Commit:        b65a9230a359de82cb4b5b2e802a493b72d46c4f
+Parent:        3ead4fb7ac3006a4c4377a88da22c22e6d426035
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Mar 15 10:58:41 2017 -0500
+AuthorDate:    Wed Mar 15 14:19:55 2017 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Mon Mar 20 10:08:38 2017 -0500
+CommitterDate: Mon Mar 20 10:08:39 2017 -0500
 
-lvmdbusd: Call add_no_notify for *move commands
+lvmdbusd: Update state during pv move
 
-Missed this in change when "add_no_notify" was added.  This was causing
-extra external events to process when we did moves.
+Periodically update the state during pv move so that all the different
+dbus objects reflect something close to reality during the process.
 ---
- daemons/lvmdbusd/background.py |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ daemons/lvmdbusd/background.py |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
 diff --git a/daemons/lvmdbusd/background.py b/daemons/lvmdbusd/background.py
-index 19a2e6c..e870c05 100644
+index e870c05..f7f77d5 100644
 --- a/daemons/lvmdbusd/background.py
 +++ b/daemons/lvmdbusd/background.py
-@@ -11,7 +11,8 @@ import subprocess
- from . import cfg
- from .cmdhandler import options_to_cli_args
- import dbus
--from .utils import pv_range_append, pv_dest_ranges, log_error, log_debug
-+from .utils import pv_range_append, pv_dest_ranges, log_error, log_debug,\
-+	add_no_notify
- import os
- import threading
- 
-@@ -42,6 +43,10 @@ def _move_merge(interface_name, command, job_state):
- 	# the command always as we will be getting periodic output from them on
- 	# the status of the long running operation.
- 	command.insert(0, cfg.LVM_CMD)
+@@ -64,6 +64,10 @@ def _move_merge(interface_name, command, job_state):
+ 				(device, ignore, percentage) = line_str.split(':')
+ 				job_state.Percent = round(
+ 					float(percentage.strip()[:-1]), 1)
 +
-+	# Instruct lvm to not register an event with us
-+	command = add_no_notify(command)
-+
- 	process = subprocess.Popen(command, stdout=subprocess.PIPE,
- 								env=os.environ,
- 								stderr=subprocess.PIPE, close_fds=True)
++				# While the move is in progress we need to periodically update
++				# the state to reflect where everything is at.
++				cfg.load()
+ 		except ValueError:
+ 			log_error("Trying to parse percentage which failed for %s" %
+ 				line_str)
 
 
