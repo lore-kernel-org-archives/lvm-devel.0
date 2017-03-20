@@ -1,43 +1,84 @@
 From: Tony Asleson <tasleson@sourceware.org>
 Date: Mon, 20 Mar 2017 11:10:58 -0400
-Subject: master - lvmdbusd: Update state during pv move
-Message-ID: <201703201510.v2KFAwp5025702@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - lvmdbusd: Limit state refreshes for udev events
+Message-ID: <201703201510.v2KFAw1p025707@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b65a9230a359de82cb4b5b2e802a493b72d46c4f
-Commit:        b65a9230a359de82cb4b5b2e802a493b72d46c4f
-Parent:        3ead4fb7ac3006a4c4377a88da22c22e6d426035
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ead4fb7ac3006a4c4377a88da22c22e6d426035
+Commit:        3ead4fb7ac3006a4c4377a88da22c22e6d426035
+Parent:        7eeb093fdd314063eff7f14b8b6338523e0dd840
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Mar 15 14:19:55 2017 -0500
+AuthorDate:    Wed Mar 15 13:08:19 2017 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Mon Mar 20 10:08:39 2017 -0500
 
-lvmdbusd: Update state during pv move
+lvmdbusd: Limit state refreshes for udev events
 
-Periodically update the state during pv move so that all the different
-dbus objects reflect something close to reality during the process.
+Udev events can come in like a flood when something changes.  It really
+doesn't do us any good to refresh the state of the service numerous times
+when 1 would suffice.  We had something like this before, but it was
+removed when we added the refresh thread.  However, we have since learned
+that we need to sequence events in the correct order and block dbus
+operations if we believe the state has been affected, thus udev events are
+being processed on the main work queue.  This change limits spurious
+work items from getting to the queue.
 ---
- daemons/lvmdbusd/background.py |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ daemons/lvmdbusd/udevwatch.py |   29 +++++++++++++++++++++++++----
+ 1 files changed, 25 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/lvmdbusd/background.py b/daemons/lvmdbusd/background.py
-index e870c05..f7f77d5 100644
---- a/daemons/lvmdbusd/background.py
-+++ b/daemons/lvmdbusd/background.py
-@@ -64,6 +64,10 @@ def _move_merge(interface_name, command, job_state):
- 				(device, ignore, percentage) = line_str.split(':')
- 				job_state.Percent = round(
- 					float(percentage.strip()[:-1]), 1)
+diff --git a/daemons/lvmdbusd/udevwatch.py b/daemons/lvmdbusd/udevwatch.py
+index eaf31df..b53b180 100644
+--- a/daemons/lvmdbusd/udevwatch.py
++++ b/daemons/lvmdbusd/udevwatch.py
+@@ -16,9 +16,33 @@ from . import utils
+ observer = None
+ observer_lock = threading.RLock()
+ 
++_udev_lock = threading.RLock()
++_udev_count = 0
 +
-+				# While the move is in progress we need to periodically update
-+				# the state to reflect where everything is at.
-+				cfg.load()
- 		except ValueError:
- 			log_error("Trying to parse percentage which failed for %s" %
- 				line_str)
++
++def udev_add():
++	global _udev_count
++	with _udev_lock:
++		if _udev_count == 0:
++			_udev_count += 1
++
++			# Place this on the queue so any other operations will sequence
++			# behind it
++			r = RequestEntry(
++				-1, _udev_event, (), None, None, False)
++			cfg.worker_q.put(r)
++
++
++def udev_complete():
++	global _udev_count
++	with _udev_lock:
++		if _udev_count > 0:
++			_udev_count -= 1
++
+ 
+ def _udev_event():
+ 	utils.log_debug("Processing udev event")
++	udev_complete()
+ 	cfg.load()
+ 
+ 
+@@ -44,10 +68,7 @@ def filter_event(action, device):
+ 		refresh = True
+ 
+ 	if refresh:
+-		# Place this on the queue so any other operations will sequence behind it
+-		r = RequestEntry(
+-			-1, _udev_event, (), None, None, False)
+-		cfg.worker_q.put(r)
++		udev_add()
+ 
+ 
+ def add():
 
 
