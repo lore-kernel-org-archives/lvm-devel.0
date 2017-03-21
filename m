@@ -1,24 +1,24 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 21 Mar 2017 13:17:07 -0400
+Date: Tue, 21 Mar 2017 13:18:12 -0400
 Subject: master - raid: adjust to misordered raid table line output
-Message-ID: <201703211717.v2LHH7kK029603@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201703211718.v2LHICP0029713@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4dcc3bd38ca945da8b5ab9a49c0d03fabc5fdfaa
-Commit:        4dcc3bd38ca945da8b5ab9a49c0d03fabc5fdfaa
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1e4462dbfbd2bbe3590936df24b3ccd83110b158
+Commit:        1e4462dbfbd2bbe3590936df24b3ccd83110b158
 Parent:        642d682d8ddcc3152f68b3ec8518902a0ef448ac
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Mar 21 18:15:59 2017 +0100
+AuthorDate:    Tue Mar 21 18:17:42 2017 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Mar 21 18:15:59 2017 +0100
+CommitterDate: Tue Mar 21 18:17:42 2017 +0100
 
 raid: adjust to misordered raid table line output
 
-the libdevmapper interface compares existing table line retrieved from
+The libdevmapper interface compares existing table line retrieved from
 the kernel to new table line created to decide if it can suppress a reload.
 Any difference between input and output of the table line is taken to be a
 change thus causing a table reload.
