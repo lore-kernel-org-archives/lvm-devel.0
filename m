@@ -1,37 +1,40 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 24 Mar 2017 09:42:26 -0400
-Subject: master - WHATS_NEW: man-generator escape '-'
-Message-ID: <201703241342.v2ODgQAA006284@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 24 Mar 2017 10:18:48 -0400
+Subject: master - man/help: avoid escaping of '-' with --help
+Message-ID: <201703241418.v2OEImQs010961@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9433a9de9953171033e10bad9cf9689bd978313
-Commit:        e9433a9de9953171033e10bad9cf9689bd978313
-Parent:        9354ce6045fa968fc23b310397d66a5ef57d548d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4046f9bd956fec51769dc9d43afcd899d2c117b4
+Commit:        4046f9bd956fec51769dc9d43afcd899d2c117b4
+Parent:        e9433a9de9953171033e10bad9cf9689bd978313
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Mar 24 14:31:19 2017 +0100
+AuthorDate:    Fri Mar 24 15:14:21 2017 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Mar 24 14:31:19 2017 +0100
+CommitterDate: Fri Mar 24 15:14:21 2017 +0100
 
-WHATS_NEW: man-generator escape '-'
+man/help: avoid escaping of '-' with --help
 
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ tools/command.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b06effe..6c66631 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.169 - 
- =====================================
-+  man-generator - escape '-'
-   Add configuration command line to 'lvm version' output.
-   Adjust to misordered raid parameters
-   Conditionally reject raid convert to striped/raid0* after reshape
+diff --git a/tools/command.c b/tools/command.c
+index 58cd17d..66d5711 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -1613,7 +1613,8 @@ static void _print_usage_description(struct command *cmd)
+ 		if (!bi && desc[di] == ' ')
+ 			continue;
+ 
+-		buf[bi++] = desc[di];
++		if (desc[di] != '\\')
++			buf[bi++] = desc[di];
+ 
+ 		if (bi == (MAX_LINE - 1))
+ 			break;
 
 
