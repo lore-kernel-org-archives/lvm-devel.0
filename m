@@ -1,98 +1,93 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 27 Mar 2017 14:51:00 -0400
-Subject: master - build: fix x32 arch
-Message-ID: <201703271851.v2RIp0Ah004582@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 27 Mar 2017 14:51:02 -0400
+Subject: master - cleanup: use more common FMTd64 type
+Message-ID: <201703271851.v2RIp2pC004592@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=78d004efa8a1809cea68283e6204edfa9d7c1091
-Commit:        78d004efa8a1809cea68283e6204edfa9d7c1091
-Parent:        36cac41115cca875f5d120631933b5dfb3c3c524
-Author:        Mikulas Patocka <mpatocka@redhat.com>
-AuthorDate:    Wed Feb 15 11:01:49 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e3a3cf01eb51cb528ecf6d90548f29a781510557
+Commit:        e3a3cf01eb51cb528ecf6d90548f29a781510557
+Parent:        78d004efa8a1809cea68283e6204edfa9d7c1091
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Mar 27 20:32:21 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 27 20:50:19 2017 +0200
 
-build: fix x32 arch
+cleanup: use more common FMTd64 type
 
-This patch fixed lvm2 compilation running on x32 arch.
-(Using 64bit x86 cpu features but running on 32b address space,
-so consuming less mem in VM).
-
-On x32 arch 'time_t' is 64bit while 'long' is 32bit.
+We use 'd' for plain singed integers.
 ---
- lib/format1/import-export.c |    4 ++--
- lib/format_text/export.c    |    2 +-
- lib/report/report.c         |   10 +++++-----
- 3 files changed, 8 insertions(+), 8 deletions(-)
+ lib/cache/lvmetad.c |    2 +-
+ libdm/libdm-stats.c |    6 +++---
+ tools/dmsetup.c     |    2 +-
+ tools/pvscan.c      |    2 +-
+ 4 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
-index c174031..c29527b 100644
---- a/lib/format1/import-export.c
-+++ b/lib/format1/import-export.c
-@@ -128,8 +128,8 @@ int import_pv(const struct format_type *fmt, struct dm_pool *mem,
- int generate_lvm1_system_id(struct cmd_context *cmd, char *s, const char *prefix)
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index e67fe31..531e01c 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -66,7 +66,7 @@ static int _log_debug_inequality(const char *name, struct dm_config_node *a, str
+ 					log_debug_lvmetad("VG %s metadata inequality at %s / %s: %s / %s",
+ 							  name, a->key, b->key, av->v.str, bv->v.str);
+ 				else if (a->v->type == DM_CFG_INT && b->v->type == DM_CFG_INT)
+-					log_debug_lvmetad("VG %s metadata inequality at %s / %s: " FMTi64 " / " FMTi64,
++					log_debug_lvmetad("VG %s metadata inequality at %s / %s: " FMTd64 " / " FMTd64,
+ 							  name, a->key, b->key, av->v.i, bv->v.i);
+ 				else
+ 					log_debug_lvmetad("VG %s metadata inequality at %s / %s: type %d / type %d",
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index e977f08..fa865a1 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -680,8 +680,8 @@ static void _check_group_regions_present(struct dm_stats *dms,
+ 
+ 	for (; i > 0; i = dm_bit_get_next(regions, i))
+ 		if (!_stats_region_present(&dms->regions[i])) {
+-			log_warn("Group descriptor " FMTi64 " contains "
+-				 "non-existent region_id " FMTi64 ".",
++			log_warn("Group descriptor " FMTd64 " contains "
++				 "non-existent region_id " FMTd64 ".",
+ 				 group_id, i);
+ 			dm_bit_clear(regions, i);
+ 		}
+@@ -4563,7 +4563,7 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
+ 		log_error("Could not finalize region extent table.");
+ 		goto out;
+ 	}
+-	log_very_verbose("Kept " FMTi64 " of " FMTi64 " old extents",
++	log_very_verbose("Kept " FMTd64 " of " FMTd64 " old extents",
+ 			 nr_kept, nr_old);
+ 	log_very_verbose("Found " FMTu64 " new extents",
+ 			 *count - nr_kept);
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 1e22cf1..94787dc 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -689,7 +689,7 @@ static int _do_usleep_wait(void)
+ 	} else {
+ 		dm_timestamp_get(_now);
+ 		delta_t = dm_timestamp_delta(_now, _start_timestamp);
+-		log_debug("Interval timer drift: "FMTi64,
++		log_debug("Interval timer drift: "FMTd64,
+ 			  (delta_t % _interval));
+ 
+ 		/* FIXME: usleep timer drift over large counts. */
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index ca33a2a..6581990 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -130,7 +130,7 @@ static int _lvmetad_clear_dev(dev_t devno, int32_t major, int32_t minor)
  {
+ 	char buf[24];
  
--	if (dm_snprintf(s, NAME_LEN, "%s%s%lu",
--			 prefix, cmd->hostname, time(NULL)) < 0) {
-+	if (dm_snprintf(s, NAME_LEN, "%s%s" FMTu64,
-+			prefix, cmd->hostname, (uint64_t)time(NULL)) < 0) {
- 		log_error("Generated LVM1 format system_id too long");
- 		return 0;
- 	}
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 899ff45..473275d 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -350,7 +350,7 @@ static int _print_header(struct cmd_context *cmd, struct formatter *f,
- 	     _utsname.version, _utsname.machine);
- 	if (cmd->system_id && *cmd->system_id)
- 		outf(f, "creation_host_system_id = \"%s\"", cmd->system_id);
--	outf(f, "creation_time = %lu\t# %s", t, ctime(&t));
-+	outf(f, "creation_time = " FMTu64 "\t# %s", (uint64_t)t, ctime(&t));
+-	(void) dm_snprintf(buf, sizeof(buf), FMTi32 ":" FMTi32, major, minor);
++	(void) dm_snprintf(buf, sizeof(buf), FMTd32 ":" FMTd32, major, minor);
  
- 	return 1;
- }
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 1421b31..d9880b2 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1008,7 +1008,7 @@ static int _translate_time_items(struct dm_report *rh, struct time_info *info,
- 	dm_pool_free(info->mem, info->ti_list);
- 	info->ti_list = NULL;
- 
--	if (dm_snprintf(buf, sizeof(buf), "@%ld:@%ld", t1, t2) == -1) {
-+	if (dm_snprintf(buf, sizeof(buf), "@" FMTd64 ":@" FMTd64, (int64_t)t1, (int64_t)t2) == -1) {
- 		log_error("_translate_time_items: dm_snprintf failed");
- 		return 0;
- 	}
-@@ -1063,10 +1063,10 @@ static void *_lv_time_handler_get_dynamic_value(struct dm_report *rh,
- 						struct dm_pool *mem,
- 						const char *data_in)
- {
--	time_t t1, t2;
-+	int64_t t1, t2;
- 	time_t *result;
- 
--	if (sscanf(data_in, "@%ld:@%ld", &t1, &t2) != 2) {
-+	if (sscanf(data_in, "@" FMTd64 ":@" FMTd64, &t1, &t2) != 2) {
- 		log_error("Failed to get value for parsed time specification.");
- 		return NULL;
- 	}
-@@ -1076,8 +1076,8 @@ static void *_lv_time_handler_get_dynamic_value(struct dm_report *rh,
- 		return NULL;
- 	}
- 
--	result[0] = t1;
--	result[1] = t2;
-+	result[0] = (time_t) t1; /* Validate range for 32b arch ? */
-+	result[1] = (time_t) t2;
- 
- 	return result;
- }
+ 	if (!lvmetad_pv_gone(devno, buf))
+ 		return_0;
 
 
