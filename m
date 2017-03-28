@@ -1,22 +1,22 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 28 Mar 2017 11:50:50 -0400
-Subject: master - man: regexp readability / use
-Message-ID: <201703281550.v2SFooNj024293@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 28 Mar 2017 11:51:39 -0400
+Subject: master - man: regexp readability / use $(SED)
+Message-ID: <201703281551.v2SFpdft024663@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0bc1af3fd1d53b378840f50e42824c811d06ad10
-Commit:        0bc1af3fd1d53b378840f50e42824c811d06ad10
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3aab8731990605182d88d4f3d141b05d6f0e71e6
+Commit:        3aab8731990605182d88d4f3d141b05d6f0e71e6
 Parent:        0c2f7ed49a611c31ad8d304b6f5cb9cd851c5e3c
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Mar 28 17:50:22 2017 +0200
+AuthorDate:    Tue Mar 28 17:51:22 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Mar 28 17:50:22 2017 +0200
+CommitterDate: Tue Mar 28 17:51:22 2017 +0200
 
-man: regexp readability / use
+man: regexp readability / use $(SED)
 
 ---
  man/Makefile.in |   41 +++++++++++++++++++++++++++--------------
