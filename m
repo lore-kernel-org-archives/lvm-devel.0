@@ -1,39 +1,80 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 28 Mar 2017 15:53:25 -0400
-Subject: master - dmfilemapd: Fix install target
-Message-ID: <201703281953.v2SJrPQn022763@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 28 Mar 2017 15:53:29 -0400
+Subject: master - spec: Add dmfilemapd
+Message-ID: <201703281953.v2SJrTm2022768@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a41d5b6491e197a690cb18fa1a0c28ea6ccb029e
-Commit:        a41d5b6491e197a690cb18fa1a0c28ea6ccb029e
-Parent:        3aab8731990605182d88d4f3d141b05d6f0e71e6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=162552041f58be8ee3fd79accc742568781b56d5
+Commit:        162552041f58be8ee3fd79accc742568781b56d5
+Parent:        a41d5b6491e197a690cb18fa1a0c28ea6ccb029e
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Mar 28 21:27:30 2017 +0200
+AuthorDate:    Tue Mar 28 21:35:46 2017 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Mar 28 21:52:30 2017 +0200
+CommitterDate: Tue Mar 28 21:52:50 2017 +0200
 
-dmfilemapd: Fix install target
+spec: Add dmfilemapd
 
 ---
- daemons/dmfilemapd/Makefile.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ spec/build.inc    |    1 +
+ spec/packages.inc |    4 ++++
+ spec/source.inc   |    7 +++++++
+ 3 files changed, 12 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/dmfilemapd/Makefile.in b/daemons/dmfilemapd/Makefile.in
-index 28326d2..53dc09b 100644
---- a/daemons/dmfilemapd/Makefile.in
-+++ b/daemons/dmfilemapd/Makefile.in
-@@ -60,7 +60,7 @@ install_dmfilemapd_dynamic: dmfilemapd
- install_dmfilemapd_static: dmfilemapd.static
- 	$(INSTALL_PROGRAM) -D $< $(staticdir)/$(<F)
+diff --git a/spec/build.inc b/spec/build.inc
+index cd58f3b..88846c6 100644
+--- a/spec/build.inc
++++ b/spec/build.inc
+@@ -34,6 +34,7 @@
+ %enableif %{enable_python3} python3-bindings
+ %enableif %{enable_python} applib
+ %enableif %{enable_dbusd} dbus-service
++%enableif %{enable_dmfilemapd} dmfilemapd
  
--install_dmfilemapd: $(INSTALL_DMEVENTD_TARGETS)
-+install_dmfilemapd: $(INSTALL_DMFILEMAPD_TARGETS)
+ %build
  
- install: install_dmfilemapd
+diff --git a/spec/packages.inc b/spec/packages.inc
+index cfe6736..74c4270 100644
+--- a/spec/packages.inc
++++ b/spec/packages.inc
+@@ -539,6 +539,10 @@ for the kernel device-mapper.
+ %{_sbindir}/dmstats
+ %{_mandir}/man8/dmsetup.8.gz
+ %{_mandir}/man8/dmstats.8.gz
++%if %{enable_dmfilemapd}
++%{_sbindir}/dmfilemapd
++%{_mandir}/man8/dmfilemapd.8.gz
++%endif
+ %if %{enable_udev}
+ %doc udev/12-dm-permissions.rules
+ %dir %{_udevbasedir}
+diff --git a/spec/source.inc b/spec/source.inc
+index 30a706c..a49b454 100644
+--- a/spec/source.inc
++++ b/spec/source.inc
+@@ -15,6 +15,7 @@
+ %global enable_lvmlockd 1
+ %global enable_lvmetad 1
+ %global enable_lvmpolld 1
++%global enable_dmfilemapd 0
+ #%global enable_lockd_dlm 0
+ #%global enable_lockd_sanlock 0
  
+@@ -93,6 +94,12 @@
+ 
+ ##############################################################
+ 
++%if %{rhel} >= 7 || %{fedora} >= 25
++  %global enable_dmfilemapd 1
++%endif
++
++##############################################################
++
+ %if %{rhel} >= 8 || %{fedora} >= 23
+   %if %{enable_python3}
+     %global enable_dbusd 1
 
 
