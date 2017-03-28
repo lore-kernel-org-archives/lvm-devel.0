@@ -1,35 +1,35 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 28 Mar 2017 18:19:58 -0400
+Date: Tue, 28 Mar 2017 18:22:43 -0400
 Subject: master - man: de-duplicate lvmconfig, lvm-config and lvm-dumpconfig manuals
-Message-ID: <201703282219.v2SMJwBW007376@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201703282222.v2SMMhan007836@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=961bdaf7478b65b9f1d4c23427d347447ed3bf38
-Commit:        961bdaf7478b65b9f1d4c23427d347447ed3bf38
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6742137964757356ec25b8daad86d71ea0dbe357
+Commit:        6742137964757356ec25b8daad86d71ea0dbe357
 Parent:        162552041f58be8ee3fd79accc742568781b56d5
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Mar 29 00:18:59 2017 +0200
+AuthorDate:    Wed Mar 29 00:22:15 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Mar 29 00:18:59 2017 +0200
+CommitterDate: Wed Mar 29 00:22:15 2017 +0200
 
 man: de-duplicate lvmconfig, lvm-config and lvm-dumpconfig manuals
 
 ---
- man/Makefile.in             |   43 ++++-
+ man/Makefile.in             |   38 +++-
  man/lvm-config.8_des        |    5 -
  man/lvm-config.8_pregen     |  471 -------------------------------------------
  man/lvm-dumpconfig.8_des    |    5 -
  man/lvm-dumpconfig.8_pregen |  471 -------------------------------------------
  man/lvmconfig.8_des         |    3 +-
  man/lvmconfig.8_pregen      |    3 +-
- 7 files changed, 41 insertions(+), 960 deletions(-)
+ 7 files changed, 37 insertions(+), 959 deletions(-)
 
 diff --git a/man/Makefile.in b/man/Makefile.in
-index 6b7e35c..1593ec8 100644
+index 6b7e35c..105512c 100644
 --- a/man/Makefile.in
 +++ b/man/Makefile.in
 @@ -32,8 +32,8 @@ LVMRAIDMAN = lvmraid.7
@@ -74,19 +74,7 @@ index 6b7e35c..1593ec8 100644
  
  # Test whether or not the man page generator works
  $(TESTMAN): $(MANGENERATOR) Makefile
-@@ -191,7 +192,10 @@ endef
- # - multiple (>= 2)
- # - in ' -'
- # - in (cache|thin)-*
--# - in numerical ranges
-+# - in ranges
-+# - in "$vg-$lv"
-+# - in middle of options (e.g. '--use-policies')
-+# - in symbolic use (e.g. '->')
- # - in single one in '\\f.-'
- define ESCAPEHYPHENS
- $(SED) -i -e "s+\([^\\]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
-@@ -207,6 +211,17 @@ $(SED) -i -e "s+\([^\\]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
+@@ -207,6 +208,17 @@ $(SED) -i -e "s+\([^\\]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
  	  -e "s+\([0-9]\)-\([0-9]\)+\1\\\-\2+g" \
  	  -e "s+\(\\\f.\)-\([^-]\)+\1\\\-\2+g" \
  	  -e "s+\([[:digit:]]\{4\}\)\\\-\([[:digit:]]\{2\}\)\\\-\([[:digit:]]\{2\}\)+\1-\2-\3+g" $@
@@ -104,7 +92,7 @@ index 6b7e35c..1593ec8 100644
  endef
  
  %.5: $(srcdir)/%.5_main
-@@ -225,6 +240,22 @@ endef
+@@ -225,6 +237,22 @@ endef
  	$(SUBSTVARS)
  	$(ESCAPEHYPHENS)
  
