@@ -1,22 +1,22 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 28 Mar 2017 19:43:23 -0400
-Subject: master - man: simplify by avoiding different headers on de-duplication of lvmconfig, lvm-config and lvm-dumpcong
-Message-ID: <201703282343.v2SNhNqA016556@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 28 Mar 2017 19:44:21 -0400
+Subject: master - man: simplify by avoiding different headers on de-duplication of lvmconfig, lvm-config and lvm-dumpconfig
+Message-ID: <201703282344.v2SNiLCT016598@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=258817a01e0940776e45243da97bddef564f0613
-Commit:        258817a01e0940776e45243da97bddef564f0613
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4af09a94bd44693e5a40a4f895599601d8233d69
+Commit:        4af09a94bd44693e5a40a4f895599601d8233d69
 Parent:        6742137964757356ec25b8daad86d71ea0dbe357
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Mar 29 01:36:39 2017 +0200
+AuthorDate:    Wed Mar 29 01:44:09 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Mar 29 01:36:39 2017 +0200
+CommitterDate: Wed Mar 29 01:44:09 2017 +0200
 
-man: simplify by avoiding different headers on de-duplication of lvmconfig, lvm-config and lvm-dumpcong
+man: simplify by avoiding different headers on de-duplication of lvmconfig, lvm-config and lvm-dumpconfig
 
 ---
  man/Makefile.in     |   36 ++++++------------------------------
