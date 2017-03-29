@@ -1,83 +1,47 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 29 Mar 2017 18:46:12 -0400
-Subject: master - man: use variable in Makefile / regexp
-Message-ID: <201703292246.v2TMkCo7016897@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 29 Mar 2017 18:46:15 -0400
+Subject: master - man: Copyright
+Message-ID: <201703292246.v2TMkFdK016907@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9921ffd333692e8262ec511328dc97a5fc42ba6
-Commit:        e9921ffd333692e8262ec511328dc97a5fc42ba6
-Parent:        2f1fd1584efc46e69453a38788ad22470f73698a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b6724fa423803f175c66b5b8406a06262013be71
+Commit:        b6724fa423803f175c66b5b8406a06262013be71
+Parent:        e9921ffd333692e8262ec511328dc97a5fc42ba6
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Mar 30 00:41:24 2017 +0200
+AuthorDate:    Thu Mar 30 00:42:44 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
 CommitterDate: Thu Mar 30 00:44:35 2017 +0200
 
-man: use variable in Makefile / regexp
+man: Copyright
 
 ---
- man/Makefile.in |   37 +++++++++++++++++++++----------------
- 1 files changed, 21 insertions(+), 16 deletions(-)
+ man/lvm.8_main      |    2 +-
+ man/lvm.conf.5_main |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/man/Makefile.in b/man/Makefile.in
-index dd170ac..a391e90 100644
---- a/man/Makefile.in
-+++ b/man/Makefile.in
-@@ -198,23 +198,28 @@ endef
- # - in symbolic use (e.g. '->')
- # - in single one in '\\f.-'
- define ESCAPEHYPHENS
--$(SED) -i -e "s+\([^\\]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
--	  -e "s+\([^\\]\)-\{6\}+\1\\\-\\\-\\\-\\\-\\\-\\\-+g" \
--	  -e "s+\([^\\]\)-\{5\}+\1\\\-\\\-\\\-\\\-\\\-+g" \
--	  -e "s+\([^\\]\)-\{4\}+\1\\\-\\\-\\\-\\\-+g" \
--	  -e "s+\([^\\]\)-\{3\}+\1\\\-\\\-\\\-+g" \
--	  -e "s+\([^\\]\)-\{2\}+\1\\\-\\\-+g" \
--	  -e "s+^-\{2\}+\\\-\\\-+g" \
--	  -e "s+ -\([[:alnum:]]\)+ \\\-\1+g" \
--	  -e "s+\(cache\)-\([[:alpha:]]\{1,\}\)+\1\\\-\2+g" \
--	  -e "s+\(thin\)-\([[:alpha:]]\{1,\}\)+\1\\\-\2+g" \
--	  -e "s+\([ :\[][[:alnum:]]\{1,\}\)-\([[:alnum:]]\{1,\}[[ ]\)+\1\\\-\2+g" \
--	  -e "s+\([[:alnum:]]\{2,\}\)-\([[:alnum:]]\{2,\}\)-\([[:alnum:]]\{2,\}\)+\1\\\-\2\\\-\3+g" \
--	  -e "s+\([[:alnum:]]\{2,\}\)-\([[:alnum:]]\{2,\}\)+\1\\\-\2+g" \
-+$(SED) -i -e "s+\([ [:alpha:]]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
-+	  -e "s+\([ [:alpha:]]\)-\{6\}+\1\\\-\\\-\\\-\\\-\\\-\\\-+g" \
-+	  -e "s+\([ [:alpha:]]\)-\{5\}+\1\\\-\\\-\\\-\\\-\\\-+g" \
-+	  -e "s+\([ [:alpha:]]\)-\{4\}+\1\\\-\\\-\\\-\\\-+g" \
-+	  -e "s+\([ [:alpha:]]\)-\{3\}+\1\\\-\\\-\\\-+g" \
-+	  -e "s+\([ [:alpha:]]\)-\{2\}+\1\\\-\\\-+g" \
-+	  -e "s+\([^\]\)-\([[:alnum:]\?]\)+\1\\\-\2+g" \
-+	  -e "s+ --+\\\-\\\-+g" \
-+	  -e "s+|-|+|\\\-|+g" \
-+	  -e "s+ -\"+ \\\-\"+g" \
-+	  -e "s+'--'+'\\\-\\\-'+g" \
-+	  -e "s+^--+\\\-\\\-+g" \
-+	  -e "s+\([[:alnum:]]\) - \([[:alnum:]]\)+\1 \\\- \2+g" \
- 	  -e "s+\(<\)-+\1\\\-+g" \
- 	  -e "s+[^\\]-\(>\)+\\\-\1+g" \
--	  -e "s+\(\\\f.\)-\([^-]\)+\1\\\-\2+g" \
--	  -e "s+\([[:digit:]]\{4\}\).*-\([[:digit:]]\{2\}\).*-\([[:digit:]]\{2\}\)+\1-\2-\3+g" $@
-+	  -e "s+\([[:alnum:]]\{2,\}\)\\\-\([[:alnum:]]\{2,\}\)+\1-\2+g" \
-+	  -e "s+\(\\\-\\\-[[:alnum:]]\{2,\}\)-+\1\\\-+g" \
-+	  -e "s+\(lvm2\-activation\)+lvm2\\\-activation+" \
-+	  -e "s+\([[:digit:]]\)-\([[:digit:]]\)+\1\\\-\2+g" \
-+	  -e "s+\\\-git+\-git+g" \
-+	  -e "s+\(vg.*\)\-lv+\1\\\-lv+g" \
-+	  -e "s+\([[:digit:]]\{4\}\)\\\-\([[:digit:]]\{2\}\)\\\-\([[:digit:]]\{2\}\)+\1-\2-\3+g" $@
- endef
- 
- %.5: $(srcdir)/%.5_main
-@@ -233,7 +238,7 @@ endef
- 	$(SUBSTVARS)
- 	$(ESCAPEHYPHENS)
- 
--lvm-config.8 lvm-dumpconfig.8: lvmconfig.8
-+$(MAN8SO): lvmconfig.8
- 	echo ".so $<" > $@
- 
- install_man5: $(MAN5)
+diff --git a/man/lvm.8_main b/man/lvm.8_main
+index 977a0fd..31c4d7e 100644
+--- a/man/lvm.8_main
++++ b/man/lvm.8_main
+@@ -1,4 +1,4 @@
+-.TH LVM 8 "LVM TOOLS #VERSION#" "Sistina Software UK" \" -*- nroff -*-
++.TH LVM 8 "LVM TOOLS #VERSION#" "Red Hat, Inc." \" -*- nroff -*-
+ .
+ .SH NAME
+ .
+diff --git a/man/lvm.conf.5_main b/man/lvm.conf.5_main
+index 74526e6..7b777af 100644
+--- a/man/lvm.conf.5_main
++++ b/man/lvm.conf.5_main
+@@ -1,4 +1,4 @@
+-.TH LVM.CONF 5 "LVM TOOLS #VERSION#" "Sistina Software UK" \" -*- nroff -*-
++.TH LVM.CONF 5 "LVM TOOLS #VERSION#" "Red Hat, Inc." \" -*- nroff -*-
+ .SH NAME
+ lvm.conf \(em Configuration file for LVM2
+ .SH SYNOPSIS
 
 
