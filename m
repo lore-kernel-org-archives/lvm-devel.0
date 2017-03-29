@@ -1,41 +1,46 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 29 Mar 2017 18:46:06 -0400
-Subject: master - man-generator: catch missing command name
-Message-ID: <201703292246.v2TMk6JJ016884@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Bryn Reeves <bmr@sourceware.org>
+Date: Wed, 29 Mar 2017 16:16:27 -0400
+Subject: master - dmfilemapd: fix off-by-one in fd comparison (coverity)
+Message-ID: <201703292016.v2TKGRlb000791@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2f1fd1584efc46e69453a38788ad22470f73698a
-Commit:        2f1fd1584efc46e69453a38788ad22470f73698a
-Parent:        df86ee8c2198abfbc8429813614636511be66402
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Mar 30 00:39:26 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Mar 30 00:44:34 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f66bc3dab07f3394150536819943a5c31ce793bf
+Commit:        f66bc3dab07f3394150536819943a5c31ce793bf
+Parent:        8658bbe3eed38183554643f93f4c23718fd24827
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Wed Mar 29 17:25:20 2017 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Wed Mar 29 18:34:19 2017 +0100
 
-man-generator: catch missing command name
+dmfilemapd: fix off-by-one in fd comparison (coverity)
 
+The function _filemap_monitor_check_file_unlinked() attempts to
+test whether a fd value should be closed by comparison to zero:
+
+        if ((fd > 0) && close(fd))
+                log_error("Error closing fd %d", fd);
+
+The test should be '>=' since 0 is a valid file descriptor.
 ---
- tools/command.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ daemons/dmfilemapd/dmfilemapd.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 8a739f0..9a80812 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -3439,6 +3439,10 @@ int main(int argc, char *argv[])
+diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
+index 0f3780b..2fa51ee 100644
+--- a/daemons/dmfilemapd/dmfilemapd.c
++++ b/daemons/dmfilemapd/dmfilemapd.c
+@@ -603,7 +603,7 @@ check_unlinked:
+ 	else
+ 		same = _filemap_monitor_check_same_file(fm->fd, fd);
  
- 	if (optind < argc)
- 		cmdname = strdup(argv[optind++]);
-+	else {
-+		log_error("Missing command name");
-+		exit(EXIT_FAILURE);
-+	}
+-	if ((fd > 0) && close(fd))
++	if ((fd >= 0) && close(fd))
+ 		log_error("Error closing fd %d", fd);
  
- 	if (optind < argc)
- 		desfile = argv[optind++];
+ 	if (same < 0)
 
 
