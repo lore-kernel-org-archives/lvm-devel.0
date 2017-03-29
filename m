@@ -1,55 +1,41 @@
-From: Bryn Reeves <bmr@sourceware.org>
-Date: Wed, 29 Mar 2017 16:16:25 -0400
-Subject: master - dmfilemapd: always close link check file descriptor (coverity)
-Message-ID: <201703292016.v2TKGPRn000780@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 29 Mar 2017 18:39:23 -0400
+Subject: master - man: fix type
+Message-ID: <201703292239.v2TMdNIm016004@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8658bbe3eed38183554643f93f4c23718fd24827
-Commit:        8658bbe3eed38183554643f93f4c23718fd24827
-Parent:        7db51a6bed8704ec634b44b4c5bd1dc35fdae86b
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Mar 29 17:22:18 2017 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Mar 29 18:34:11 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a66411bd7acd129a61f6b3dde4c8ac448e27e4c7
+Commit:        a66411bd7acd129a61f6b3dde4c8ac448e27e4c7
+Parent:        dfdd6ccf3be73a2b22743ea1df31cd3d7e3c9095
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Mar 30 00:35:46 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Mar 30 00:38:41 2017 +0200
 
-dmfilemapd: always close link check file descriptor (coverity)
+man: fix type
 
-Similar to 40fb91a, but for the file descriptor opened using the
-link path reported by /proc/<self>/fd/<fd>.
-
-The daemon opens a new file descriptor from /proc/<self>/fd when
-checking for an unlinked file with mode=inode. Ensure that it is
-always closed even if the same file test fails.
+With commit 4af09a94bd44693e5a40a4f895599601d8233d69 unwanted rename  of
+target happened - restore it.
 ---
- daemons/dmfilemapd/dmfilemapd.c |    8 +++++---
- 1 files changed, 5 insertions(+), 3 deletions(-)
+ man/Makefile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
-index 6e25c5c..0f3780b 100644
---- a/daemons/dmfilemapd/dmfilemapd.c
-+++ b/daemons/dmfilemapd/dmfilemapd.c
-@@ -600,13 +600,15 @@ check_unlinked:
- 	 */
- 	if ((fd = open(link_buf, O_RDONLY)) < 0)
- 		fm->deleted = 1;
--
--	if ((same = _filemap_monitor_check_same_file(fm->fd, fd)) < 0)
--		return 0;
-+	else
-+		same = _filemap_monitor_check_same_file(fm->fd, fd);
+diff --git a/man/Makefile.in b/man/Makefile.in
+index 2421116..dd170ac 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -260,7 +260,7 @@ install_device-mapper: $(MAN8DM)
+ 	$(INSTALL) -d $(MAN8DIR)
+ 	$(INSTALL_DATA) $(MAN8DM) $(MAN8DIR)/
  
- 	if ((fd > 0) && close(fd))
- 		log_error("Error closing fd %d", fd);
+-install_systemdgenerators: $(MAN8SYSTEMD_GENERATORS)
++install_systemd_generators: $(MAN8SYSTEMD_GENERATORS)
+ 	$(INSTALL) -d $(MAN8DIR)
+ 	$(INSTALL_DATA) $(MAN8SYSTEMD_GENERATORS) $(MAN8DIR)/
  
-+	if (same < 0)
-+		return 0;
-+
- 	/* Should not happen with normal /proc. */
- 	if ((fd > 0) && !same) {
- 		log_error("File descriptor mismatch: %d and %s (read from %s) "
 
 
