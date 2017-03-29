@@ -1,40 +1,42 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 30 Mar 2017 12:13:39 -0400
-Subject: master - raid: favour dm_list_first()
-Message-ID: <201703301613.v2UGDddB013423@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Bryn Reeves <bmr@sourceware.org>
+Date: Wed, 29 Mar 2017 16:16:41 -0400
+Subject: master - libdm: abort filemap update if pool allocation fails (coverity)
+Message-ID: <201703292016.v2TKGfNm000850@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c34ab29ec6c3e737b65a1b589ef4091944a5127d
-Commit:        c34ab29ec6c3e737b65a1b589ef4091944a5127d
-Parent:        2d75ef3b057fac5df66dee97b1cf93a582258582
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Mar 30 18:13:27 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Mar 30 18:13:27 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f86c1f5d0a38afc9d174e59af4bab83127e4b2b8
+Commit:        f86c1f5d0a38afc9d174e59af4bab83127e4b2b8
+Parent:        bc5d67884fd489682c0267002474e9089e368fe2
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Wed Mar 29 17:39:31 2017 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Wed Mar 29 18:34:38 2017 +0100
 
-raid: favour dm_list_first()
+libdm: abort filemap update if pool allocation fails (coverity)
 
 ---
- lib/metadata/raid_manip.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ libdm/libdm-stats.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index ed0f4c1..8e5b1a8 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -3091,8 +3091,7 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
- 	}
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 5041d61..94696fb 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -4540,8 +4540,9 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
+ 			ext.id = i;
+ 			nr_kept++;
  
- 	/* Get first item */
--	dm_list_iterate_items(lvl, &data_list)
--		break;
-+	lvl = (struct lv_list *) dm_list_first(&data_list);
- 
- 	lvl->lv->name = split_name;
+-			dm_pool_grow_object(mem, &ext,
+-					    sizeof(ext));
++			if (!dm_pool_grow_object(mem, &ext, sizeof(ext)))
++				goto out;
++
+ 			log_very_verbose("Kept region " FMTu64, i);
+ 		} else {
  
 
 
