@@ -1,49 +1,52 @@
 From: Bryn Reeves <bmr@sourceware.org>
-Date: Thu, 30 Mar 2017 05:04:10 -0400
-Subject: master - dmfilemapd: use log_sys_error in _filemap_monitor_set_notify
-Message-ID: <201703300904.v2U94AmD019937@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 29 Mar 2017 16:16:57 -0400
+Subject: master - dmsetup: always close fd when leaving _stats_update_file() (coverity)
+Message-ID: <201703292016.v2TKGvJc000887@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=834574cc27851266bd288163cddcab36b4db22cb
-Commit:        834574cc27851266bd288163cddcab36b4db22cb
-Parent:        bfc880994c80a798f28d51558ee120f70d65dd0f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5994ed9df218d4201415855b9bd6defa6f371c74
+Commit:        5994ed9df218d4201415855b9bd6defa6f371c74
+Parent:        11749e7adbafc36452451de0f73a6a5197c73810
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Mar 29 20:29:20 2017 +0100
+AuthorDate:    Wed Mar 29 18:27:11 2017 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Thu Mar 30 10:01:57 2017 +0100
+CommitterDate: Wed Mar 29 18:34:57 2017 +0100
 
-dmfilemapd: use log_sys_error in _filemap_monitor_set_notify
+dmsetup: always close fd when leaving _stats_update_file() (coverity)
 
-Since _filemap_monitor_set_notify() is only called after daemon
-start up it should not use the _early_log() macros. Instead, use
-log_sys_error to log errors from the two syscalls in the function.
 ---
- daemons/dmfilemapd/dmfilemapd.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ tools/dmsetup.c |    8 +++-----
+ 1 files changed, 3 insertions(+), 5 deletions(-)
 
-diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
-index 3e691e8..7939c48 100644
---- a/daemons/dmfilemapd/dmfilemapd.c
-+++ b/daemons/dmfilemapd/dmfilemapd.c
-@@ -409,13 +409,13 @@ static int _filemap_monitor_set_notify(struct filemap_monitor *fm)
- 	 * and does not fork or exec.
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index a6ed172..5f07ab6 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -5730,11 +5730,6 @@ fallback:
  	 */
- 	if ((inotify_fd = inotify_init1(IN_NONBLOCK)) < 0) {
--		_early_log("Failed to initialise inotify.");
-+		log_sys_error("inotify_init1", "IN_NONBLOCK");
- 		return 0;
- 	}
+ 	regions = dm_stats_update_regions_from_fd(dms, fd, group_id);
  
- 	if ((watch_fd = inotify_add_watch(inotify_fd, fm->path,
- 					  IN_MODIFY | IN_DELETE_SELF)) < 0) {
--		_early_log("Failed to add inotify watch.");
-+		log_sys_error("inotify_add_watch", fm->path);
- 		return 0;
- 	}
- 	fm->inotify_fd = inotify_fd;
+-	if (close(fd))
+-		log_error("Error closing %s", abspath);
+-
+-	fd = -1;
+-
+ 	if (!regions) {
+ 		log_error("Could not update regions from file %s", abspath);
+ 		goto bad;
+@@ -5753,6 +5748,9 @@ fallback:
+ 	       path, group_id, count);
+ 
+ out:
++	if (close(fd))
++		log_error("Error closing %s", abspath);
++
+ 	dm_free(regions);
+ 	dm_free(abspath);
+ 	dm_stats_destroy(dms);
 
 
