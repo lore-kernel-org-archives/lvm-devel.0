@@ -1,52 +1,48 @@
 From: Bryn Reeves <bmr@sourceware.org>
-Date: Wed, 29 Mar 2017 16:16:57 -0400
-Subject: master - dmsetup: always close fd when leaving _stats_update_file() (coverity)
-Message-ID: <201703292016.v2TKGvJc000887@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 29 Mar 2017 16:41:36 -0400
+Subject: master - libdm: use log_sys_error if dmfilemapd exec fails
+Message-ID: <201703292041.v2TKfamc003574@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5994ed9df218d4201415855b9bd6defa6f371c74
-Commit:        5994ed9df218d4201415855b9bd6defa6f371c74
-Parent:        11749e7adbafc36452451de0f73a6a5197c73810
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4b3d71212fb07c945acebb074820a63e970504e5
+Commit:        4b3d71212fb07c945acebb074820a63e970504e5
+Parent:        5994ed9df218d4201415855b9bd6defa6f371c74
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Mar 29 18:27:11 2017 +0100
+AuthorDate:    Wed Mar 29 21:27:11 2017 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Mar 29 18:34:57 2017 +0100
+CommitterDate: Wed Mar 29 21:38:15 2017 +0100
 
-dmsetup: always close fd when leaving _stats_update_file() (coverity)
+libdm: use log_sys_error if dmfilemapd exec fails
 
+Use log_sys_error rather than log_error if execvp() fails:
+
+  /mnt/redhat/xdoio.13752.XIORQ: Created new group with 2 region(s) as group ID 0.
+  # execvp() failed.
+
+vs:
+
+  /var/lib/libvirt/images/rhel7-vm1.qcow2: Created new group with 884 region(s) as group ID 0.
+  dmfilemapd: execvp failed: No such file or directory
 ---
- tools/dmsetup.c |    8 +++-----
- 1 files changed, 3 insertions(+), 5 deletions(-)
+ libdm/libdm-stats.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index a6ed172..5f07ab6 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -5730,11 +5730,6 @@ fallback:
- 	 */
- 	regions = dm_stats_update_regions_from_fd(dms, fd, group_id);
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 3e2983d..290097f 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -5032,7 +5032,7 @@ int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
+ 	}
  
--	if (close(fd))
--		log_error("Error closing %s", abspath);
--
--	fd = -1;
--
- 	if (!regions) {
- 		log_error("Could not update regions from file %s", abspath);
- 		goto bad;
-@@ -5753,6 +5748,9 @@ fallback:
- 	       path, group_id, count);
- 
- out:
-+	if (close(fd))
-+		log_error("Error closing %s", abspath);
-+
- 	dm_free(regions);
- 	dm_free(abspath);
- 	dm_stats_destroy(dms);
+ 	execvp(args[0], args);
+-	log_error("execvp() failed.");
++	log_sys_error("execvp", args[0]);
+ 	if (!foreground)
+ 		_exit(127);
+ 	return 0;
 
 
