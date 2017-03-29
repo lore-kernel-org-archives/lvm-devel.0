@@ -1,46 +1,83 @@
-From: Bryn Reeves <bmr@sourceware.org>
-Date: Wed, 29 Mar 2017 16:16:27 -0400
-Subject: master - dmfilemapd: fix off-by-one in fd comparison (coverity)
-Message-ID: <201703292016.v2TKGRlb000791@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Wed, 29 Mar 2017 18:46:12 -0400
+Subject: master - man: use variable in Makefile / regexp
+Message-ID: <201703292246.v2TMkCo7016897@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f66bc3dab07f3394150536819943a5c31ce793bf
-Commit:        f66bc3dab07f3394150536819943a5c31ce793bf
-Parent:        8658bbe3eed38183554643f93f4c23718fd24827
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Mar 29 17:25:20 2017 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Mar 29 18:34:19 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9921ffd333692e8262ec511328dc97a5fc42ba6
+Commit:        e9921ffd333692e8262ec511328dc97a5fc42ba6
+Parent:        2f1fd1584efc46e69453a38788ad22470f73698a
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Thu Mar 30 00:41:24 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Mar 30 00:44:35 2017 +0200
 
-dmfilemapd: fix off-by-one in fd comparison (coverity)
+man: use variable in Makefile / regexp
 
-The function _filemap_monitor_check_file_unlinked() attempts to
-test whether a fd value should be closed by comparison to zero:
-
-        if ((fd > 0) && close(fd))
-                log_error("Error closing fd %d", fd);
-
-The test should be '>=' since 0 is a valid file descriptor.
 ---
- daemons/dmfilemapd/dmfilemapd.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ man/Makefile.in |   37 +++++++++++++++++++++----------------
+ 1 files changed, 21 insertions(+), 16 deletions(-)
 
-diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
-index 0f3780b..2fa51ee 100644
---- a/daemons/dmfilemapd/dmfilemapd.c
-+++ b/daemons/dmfilemapd/dmfilemapd.c
-@@ -603,7 +603,7 @@ check_unlinked:
- 	else
- 		same = _filemap_monitor_check_same_file(fm->fd, fd);
+diff --git a/man/Makefile.in b/man/Makefile.in
+index dd170ac..a391e90 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -198,23 +198,28 @@ endef
+ # - in symbolic use (e.g. '->')
+ # - in single one in '\\f.-'
+ define ESCAPEHYPHENS
+-$(SED) -i -e "s+\([^\\]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
+-	  -e "s+\([^\\]\)-\{6\}+\1\\\-\\\-\\\-\\\-\\\-\\\-+g" \
+-	  -e "s+\([^\\]\)-\{5\}+\1\\\-\\\-\\\-\\\-\\\-+g" \
+-	  -e "s+\([^\\]\)-\{4\}+\1\\\-\\\-\\\-\\\-+g" \
+-	  -e "s+\([^\\]\)-\{3\}+\1\\\-\\\-\\\-+g" \
+-	  -e "s+\([^\\]\)-\{2\}+\1\\\-\\\-+g" \
+-	  -e "s+^-\{2\}+\\\-\\\-+g" \
+-	  -e "s+ -\([[:alnum:]]\)+ \\\-\1+g" \
+-	  -e "s+\(cache\)-\([[:alpha:]]\{1,\}\)+\1\\\-\2+g" \
+-	  -e "s+\(thin\)-\([[:alpha:]]\{1,\}\)+\1\\\-\2+g" \
+-	  -e "s+\([ :\[][[:alnum:]]\{1,\}\)-\([[:alnum:]]\{1,\}[[ ]\)+\1\\\-\2+g" \
+-	  -e "s+\([[:alnum:]]\{2,\}\)-\([[:alnum:]]\{2,\}\)-\([[:alnum:]]\{2,\}\)+\1\\\-\2\\\-\3+g" \
+-	  -e "s+\([[:alnum:]]\{2,\}\)-\([[:alnum:]]\{2,\}\)+\1\\\-\2+g" \
++$(SED) -i -e "s+\([ [:alpha:]]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
++	  -e "s+\([ [:alpha:]]\)-\{6\}+\1\\\-\\\-\\\-\\\-\\\-\\\-+g" \
++	  -e "s+\([ [:alpha:]]\)-\{5\}+\1\\\-\\\-\\\-\\\-\\\-+g" \
++	  -e "s+\([ [:alpha:]]\)-\{4\}+\1\\\-\\\-\\\-\\\-+g" \
++	  -e "s+\([ [:alpha:]]\)-\{3\}+\1\\\-\\\-\\\-+g" \
++	  -e "s+\([ [:alpha:]]\)-\{2\}+\1\\\-\\\-+g" \
++	  -e "s+\([^\]\)-\([[:alnum:]\?]\)+\1\\\-\2+g" \
++	  -e "s+ --+\\\-\\\-+g" \
++	  -e "s+|-|+|\\\-|+g" \
++	  -e "s+ -\"+ \\\-\"+g" \
++	  -e "s+'--'+'\\\-\\\-'+g" \
++	  -e "s+^--+\\\-\\\-+g" \
++	  -e "s+\([[:alnum:]]\) - \([[:alnum:]]\)+\1 \\\- \2+g" \
+ 	  -e "s+\(<\)-+\1\\\-+g" \
+ 	  -e "s+[^\\]-\(>\)+\\\-\1+g" \
+-	  -e "s+\(\\\f.\)-\([^-]\)+\1\\\-\2+g" \
+-	  -e "s+\([[:digit:]]\{4\}\).*-\([[:digit:]]\{2\}\).*-\([[:digit:]]\{2\}\)+\1-\2-\3+g" $@
++	  -e "s+\([[:alnum:]]\{2,\}\)\\\-\([[:alnum:]]\{2,\}\)+\1-\2+g" \
++	  -e "s+\(\\\-\\\-[[:alnum:]]\{2,\}\)-+\1\\\-+g" \
++	  -e "s+\(lvm2\-activation\)+lvm2\\\-activation+" \
++	  -e "s+\([[:digit:]]\)-\([[:digit:]]\)+\1\\\-\2+g" \
++	  -e "s+\\\-git+\-git+g" \
++	  -e "s+\(vg.*\)\-lv+\1\\\-lv+g" \
++	  -e "s+\([[:digit:]]\{4\}\)\\\-\([[:digit:]]\{2\}\)\\\-\([[:digit:]]\{2\}\)+\1-\2-\3+g" $@
+ endef
  
--	if ((fd > 0) && close(fd))
-+	if ((fd >= 0) && close(fd))
- 		log_error("Error closing fd %d", fd);
+ %.5: $(srcdir)/%.5_main
+@@ -233,7 +238,7 @@ endef
+ 	$(SUBSTVARS)
+ 	$(ESCAPEHYPHENS)
  
- 	if (same < 0)
+-lvm-config.8 lvm-dumpconfig.8: lvmconfig.8
++$(MAN8SO): lvmconfig.8
+ 	echo ".so $<" > $@
+ 
+ install_man5: $(MAN5)
 
 
