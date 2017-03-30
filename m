@@ -1,57 +1,45 @@
 From: Bryn Reeves <bmr@sourceware.org>
-Date: Wed, 29 Mar 2017 16:16:36 -0400
-Subject: master - libdm: do not leak FIEMAP extent buffer if pool allocation fails (coverity)
-Message-ID: <201703292016.v2TKGasD000839@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 30 Mar 2017 05:33:16 -0400
+Subject: master - libdm: fix incorrect format specifier in _stats_resize_group()
+Message-ID: <201703300933.v2U9XGef023021@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bc5d67884fd489682c0267002474e9089e368fe2
-Commit:        bc5d67884fd489682c0267002474e9089e368fe2
-Parent:        13426092e9681d13acfa9eae505b20537c236340
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e8d5e05ff57a327053f140f2fed4c12f8fe7e076
+Commit:        e8d5e05ff57a327053f140f2fed4c12f8fe7e076
+Parent:        b8b2b1efd84fb1e96500d86f2ada3c2efa1338f3
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Mar 29 17:37:10 2017 +0100
+AuthorDate:    Thu Mar 30 10:31:36 2017 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Mar 29 18:34:30 2017 +0100
+CommitterDate: Thu Mar 30 10:31:36 2017 +0100
 
-libdm: do not leak FIEMAP extent buffer if pool allocation fails (coverity)
+libdm: fix incorrect format specifier in _stats_resize_group()
 
+The bitmap size in dm_bitset_t[0] is a uint32_t, not uint64_t: use
+%u instead of FMTu64.
 ---
- libdm/libdm-stats.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ libdm/libdm-stats.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index fa865a1..5041d61 100644
+index b69302f..78aa566 100644
 --- a/libdm/libdm-stats.c
 +++ b/libdm/libdm-stats.c
-@@ -4401,10 +4401,14 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
- 	unsigned long flags = 0;
- 	uint64_t *buf;
- 
-+	/* grow temporary extent table in the pool */
-+	if (!dm_pool_begin_object(mem, sizeof(*extents)))
-+		return NULL;
-+
- 	buf = dm_zalloc(STATS_FIE_BUF_LEN);
- 	if (!buf) {
- 		log_error("Could not allocate memory for FIEMAP buffer.");
--		return NULL;
-+		goto bad;
+@@ -4193,9 +4193,9 @@ static int _stats_resize_group(struct dm_stats_group *group,
+ 		return 0;
  	}
  
- 	/* initialise pointers into the ioctl buffer. */
-@@ -4415,10 +4419,6 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
- 	*count = (STATS_FIE_BUF_LEN - sizeof(*fiemap))
- 		  / sizeof(struct fiemap_extent);
+-	log_very_verbose("Resizing group bitmap from " FMTu64
+-			 " to " FMTu64 " (last_bit: " FMTu64 ").",
+-			 group->regions[0], num_regions, last_bit);
++	log_very_verbose("Resizing group bitmap from %u to " FMTu64
++			 " (last_bit: " FMTu64 ").", group->regions[0],
++			 num_regions, last_bit);
  
--	/* grow temporary extent table in the pool */
--	if (!dm_pool_begin_object(mem, sizeof(*extents)))
--		return NULL;
--
- 	flags = FIEMAP_FLAG_SYNC;
- 
- 	do {
+ 	new = dm_bitset_create(NULL, (unsigned) num_regions);
+ 	if (!new) {
 
 
