@@ -1,79 +1,191 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 30 Mar 2017 12:43:40 -0400
-Subject: master - raid: more coverity issues
-Message-ID: <201703301643.v2UGhehm016369@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 30 Mar 2017 13:56:05 -0400
+Subject: master - man-generator: don't ignore description file errors
+Message-ID: <201703301756.v2UHu5oA025500@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=980e4f673eb9189f9fe2dd5844a56f107d078f40
-Commit:        980e4f673eb9189f9fe2dd5844a56f107d078f40
-Parent:        c34ab29ec6c3e737b65a1b589ef4091944a5127d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0da040b1ebfd4796f9a649f469ebbeb012c7ea1c
+Commit:        0da040b1ebfd4796f9a649f469ebbeb012c7ea1c
+Parent:        980e4f673eb9189f9fe2dd5844a56f107d078f40
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Mar 30 18:39:04 2017 +0200
+AuthorDate:    Thu Mar 30 19:51:35 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Mar 30 18:39:04 2017 +0200
+CommitterDate: Thu Mar 30 19:51:35 2017 +0200
 
-raid: more coverity issues
+man-generator: don't ignore description file errors
 
+In case we provide a description file it has to
+succeed opening and reading.  Dynamically allocate
+buffer space for it whilst on it.
 ---
- lib/metadata/raid_manip.c |   14 ++++++++------
- 1 files changed, 8 insertions(+), 6 deletions(-)
+ tools/command.c |   75 ++++++++++++++++++++++++++++++++++++-------------------
+ 1 files changed, 49 insertions(+), 26 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 8e5b1a8..63a2a6c 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -751,6 +751,11 @@ static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_rai
- 	uint32_t *idx, stripes = seg->area_count;
- 	unsigned i = 0;
+diff --git a/tools/command.c b/tools/command.c
+index 0eecb24..4c65e6b 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -3215,29 +3215,51 @@ static char *upper_command_name(char *str)
  
-+	if (!stripes) {
-+		log_error(INTERNAL_ERROR "stripes may not be 0.");
+ #define MAX_MAN_DESC (1024 * 1024)
+ 
+-static void include_description_file(char *name, char *des_file)
++static int include_description_file(char *name, char *des_file)
+ {
+-	char buf[MAX_MAN_DESC];
+-	int fd;
++	char *buf;
++	int fd, r = 0;
++	ssize_t sz;
++	struct stat stat;
+ 
+-	memset(buf, 0, sizeof(buf));
+-	
+-	fd = open(des_file, O_RDONLY);
++	if ((fd = open(des_file, O_RDONLY)) < 0) {
++		log_error("Failed to open description file %s.", des_file);
 +		return 0;
 +	}
+ 
+-	if (fd < 0)
+-		return;
++	if (fstat(fd, &stat) < 0) {
++		log_error("Failed to stat description file %s.", des_file);
++		goto out_close;
++	}
 +
- 	/* Internal sanity checks... */
- 	if (!(conv == reorder_to_raid10_near || conv == reorder_from_raid10_near))
- 		return_0;
-@@ -2082,7 +2087,7 @@ static int _activate_sub_lvs_excl_local(struct logical_volume *lv, uint32_t star
- 			   display_lvname(lv));
- 	for (s = start_idx; s < seg->area_count; s++)
- 		if (!_activate_sub_lv_excl_local(seg_lv(seg, s)) ||
--		    !_activate_sub_lv_excl_local(seg_metalv(seg, s)))
-+		    (seg->meta_areas && !_activate_sub_lv_excl_local(seg_metalv(seg, s))))
- 			return 0;
++	if (stat.st_size > MAX_MAN_DESC) {
++		log_error("Description file %s is too large.", des_file);
++		goto out_close;
++	}
  
- 	return 1;
-@@ -4598,7 +4603,7 @@ static int _clear_meta_lvs(struct logical_volume *lv)
- 	struct lv_segment_area *tmp_areas;
- 	const struct segment_type *tmp_segtype;
- 	struct dm_list meta_lvs;
--	struct lv_list *lvl_array, *lvl;
-+	struct lv_list *lvl;
- 	int is_raid45n10 = seg_is_raid4(seg) || seg_is_raid5_n(seg) || seg_is_raid10(seg);
+-	(void)read(fd, buf, sizeof(buf));
++	if (!(buf = dm_malloc(stat.st_size + 1))) {
++		log_error("Failed to allocate buffer for description file %s.", des_file);
++		goto out_close;
++	}
  
- 	/* Reject non-raid0_meta/raid4/raid5_n segment types cautiously */
-@@ -4606,9 +4611,6 @@ static int _clear_meta_lvs(struct logical_volume *lv)
- 	    (!seg_is_raid0_meta(seg) && !is_raid45n10))
- 		return_0;
+-	buf[MAX_MAN_DESC-1] = '\0';
++	if ((sz = read(fd, buf, stat.st_size)) < 0) {
++		log_error("Failed to read description file %s.", des_file);
++		goto out_free;
++	}
  
--	if (!(lvl_array = dm_pool_alloc(lv->vg->vgmem, seg->area_count * sizeof(*lvl_array))))
--		return_0;
+-	printf(".SH DESCRIPTION\n");
+-	printf("%s", buf);
++	buf[sz] = '\0';
++	printf(".SH DESCRIPTION\n%s", buf);
++	r = 1;
+ 
++out_free:
++	dm_free(buf);
++out_close:
+ 	close(fd);
++
++	return r;
+ }
+ 
+-static void _print_man(char *name, char *des_file, int secondary)
++static int _print_man(char *name, char *des_file, int secondary)
+ {
+ 	struct command_name *cname;
+ 	struct command *cmd, *prev_cmd = NULL;
+@@ -3291,7 +3313,7 @@ static void _print_man(char *name, char *des_file, int secondary)
+ 			prev_cmd = cmd;
+ 
+ 			if (!(cname = find_command_name(cmd->name)))
+-				return;
++				return 0;
+ 
+ 			if (cname->variant_has_ro && cname->variant_has_rp)
+ 				printf("\\fB%s\\fP \\fIoption_args\\fP \\fIposition_args\\fP\n", lvmname);
+@@ -3320,9 +3342,8 @@ static void _print_man(char *name, char *des_file, int secondary)
+ 				_print_man_all_options_list(cname);
+ 			}
+ 
+-			if (des_file) {
+-				include_description_file(lvmname, des_file);
+-			}
++			if (des_file && !include_description_file(lvmname, des_file))
++				return 0;
+ 
+ 			printf(".SH USAGE\n");
+ 		}
+@@ -3351,6 +3372,8 @@ static void _print_man(char *name, char *des_file, int secondary)
+ 		printf("\n");
+ 		continue;
+ 	}
++
++	return 1;
+ }
+ 
+ static void _print_man_secondary(char *name)
+@@ -3360,10 +3383,8 @@ static void _print_man_secondary(char *name)
+ 	int header = 0;
+ 	int i;
+ 
+-	if (!strncmp(name, "lvm-", 4)) {
+-		name[3] = ' ';
++	if (!strncmp(name, "lvm-", 4))
+ 		name += 4;
+-	}
+ 
+ 	for (i = 0; i < COMMAND_COUNT; i++) {
+ 
+@@ -3403,8 +3424,7 @@ int main(int argc, char *argv[])
+ 	char *desfile = NULL;
+ 	int primary = 0;
+ 	int secondary = 0;
 -
- 	dm_list_init(&meta_lvs);
- 	tmp_segtype = seg->segtype;
- 	tmp_areas = seg->meta_areas;
-@@ -5894,7 +5896,7 @@ int lv_raid_convert(struct logical_volume *lv,
- 	struct lv_segment *seg = first_seg(lv);
- 	uint32_t stripes = new_stripes, stripe_size;
- 	uint32_t new_image_count = seg->area_count;
--	uint32_t region_size = new_region_size;
-+	uint32_t region_size;
- 	uint32_t data_copies = seg->data_copies;
- 	uint32_t available_slvs, removed_slvs;
- 	takeover_fn_t takeover_fn;
+-	memset(&commands, 0, sizeof(commands));
++	int r = 1;
+ 
+ 	static struct option long_options[] = {
+ 		{"primary", no_argument, 0, 'p' },
+@@ -3412,6 +3432,8 @@ int main(int argc, char *argv[])
+ 		{0, 0, 0, 0 }
+ 	};
+ 
++	memset(&commands, 0, sizeof(commands));
++
+ 	while (1) {
+ 		int c;
+ 		int option_index = 0;
+@@ -3434,14 +3456,14 @@ int main(int argc, char *argv[])
+ 
+ 	if (!primary && !secondary) {
+ 		log_error("Usage: %s --primary|--secondary <command> [/path/to/description-file].", argv[0]);
+-		exit(EXIT_FAILURE);
++		goto out;
+ 	}
+ 
+ 	if (optind < argc)
+ 		cmdname = strdup(argv[optind++]);
+ 	else {
+ 		log_error("Missing command name.");
+-		exit(EXIT_FAILURE);
++		goto out;
+ 	}
+ 
+ 	if (optind < argc)
+@@ -3454,11 +3476,12 @@ int main(int argc, char *argv[])
+ 	factor_common_options();
+ 
+ 	if (primary)
+-		_print_man(cmdname, desfile, secondary);
++		r = _print_man(cmdname, desfile, secondary);
+ 	else if (secondary)
+ 		_print_man_secondary(cmdname);
+ 
+-	return 0;
++out:
++	exit(r ? EXIT_SUCCESS: EXIT_FAILURE);
+ }
+ 
+ #endif
 
 
