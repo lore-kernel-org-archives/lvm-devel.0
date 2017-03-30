@@ -1,38 +1,61 @@
 From: Bryn Reeves <bmr@sourceware.org>
-Date: Wed, 29 Mar 2017 16:16:17 -0400
-Subject: master - dmfilemapd: always terminate link buffer after readlink(2) (coverity)
-Message-ID: <201703292016.v2TKGHw7000769@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 30 Mar 2017 05:03:56 -0400
+Subject: master - dmsetup: simplify branching in _stats_update_file()
+Message-ID: <201703300903.v2U93uB6019879@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7db51a6bed8704ec634b44b4c5bd1dc35fdae86b
-Commit:        7db51a6bed8704ec634b44b4c5bd1dc35fdae86b
-Parent:        70bb72667889a2d6f250437e5db247eb111ca1aa
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fe0922b8a6632456d9f20085f1c67d2ddb5b2d88
+Commit:        fe0922b8a6632456d9f20085f1c67d2ddb5b2d88
+Parent:        803b1775ba06218ad193402a13e6da4b3406511a
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Mar 29 17:16:34 2017 +0100
+AuthorDate:    Wed Mar 29 18:30:16 2017 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Mar 29 18:34:05 2017 +0100
+CommitterDate: Thu Mar 30 09:57:58 2017 +0100
 
-dmfilemapd: always terminate link buffer after readlink(2) (coverity)
+dmsetup: simplify branching in _stats_update_file()
 
+The fallback branch in _stats_update_file() is redundant (since the
+branch taken when the daemon starts successfully must jump to the
+'out' label anyway): remove it and re-order the conditions to
+improve readability.
 ---
- daemons/dmfilemapd/dmfilemapd.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ tools/dmsetup.c |   17 +++++++++--------
+ 1 files changed, 9 insertions(+), 8 deletions(-)
 
-diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
-index 3fd76b7..6e25c5c 100644
---- a/daemons/dmfilemapd/dmfilemapd.c
-+++ b/daemons/dmfilemapd/dmfilemapd.c
-@@ -593,6 +593,7 @@ check_unlinked:
- 			  getpid(), fm->fd);
- 		return 0;
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 5f07ab6..d25b3bd 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -5716,17 +5716,18 @@ static int _stats_update_file(CMD_ARGS)
+ 	 * If starting the daemon fails, fall back to a direct update.
+ 	 */
+ 	if (!_switches[NOMONITOR_ARG]) {
+-		if (!dm_stats_start_filemapd(fd, group_id, abspath, mode,
+-					     foreground, verbose)) {
+-			log_warn("Failed to start filemap monitoring daemon.");
+-			goto fallback;
+-		}
+-		goto out;
++		if (dm_stats_start_filemapd(fd, group_id, abspath, mode,
++					    foreground, verbose))
++			goto out;
++
++		log_warn("Failed to start filemap monitoring daemon.");
++
++		/* fall back to one-shot update */
  	}
-+	link_buf[len] = '\0';
  
+-fallback:
  	/*
- 	 * Try to re-open the file, from the path now reported in /proc/pid/fd.
+-	 * --nomonitor case - perform a one-shot update directly from dmstats.
++	 * --nomonitor and fall back case - perform a one-shot update directly
++	 *  from dmsetup.
+ 	 */
+ 	regions = dm_stats_update_regions_from_fd(dms, fd, group_id);
+ 
 
 
