@@ -1,61 +1,40 @@
 From: Bryn Reeves <bmr@sourceware.org>
-Date: Thu, 30 Mar 2017 05:03:56 -0400
-Subject: master - dmsetup: simplify branching in _stats_update_file()
-Message-ID: <201703300903.v2U93uB6019879@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 30 Mar 2017 05:03:57 -0400
+Subject: master - libdm: use DM_STATS_GROUP_* constants in dm_stats_create_regions_from_fd
+Message-ID: <201703300903.v2U93vE7019884@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fe0922b8a6632456d9f20085f1c67d2ddb5b2d88
-Commit:        fe0922b8a6632456d9f20085f1c67d2ddb5b2d88
-Parent:        803b1775ba06218ad193402a13e6da4b3406511a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ac6089ee8dce83bd61d90344bf67aeef8f319f41
+Commit:        ac6089ee8dce83bd61d90344bf67aeef8f319f41
+Parent:        fe0922b8a6632456d9f20085f1c67d2ddb5b2d88
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Mar 29 18:30:16 2017 +0100
+AuthorDate:    Wed Mar 29 20:02:26 2017 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
 CommitterDate: Thu Mar 30 09:57:58 2017 +0100
 
-dmsetup: simplify branching in _stats_update_file()
+libdm: use DM_STATS_GROUP_* constants in dm_stats_create_regions_from_fd
 
-The fallback branch in _stats_update_file() is redundant (since the
-branch taken when the daemon starts successfully must jump to the
-'out' label anyway): remove it and re-order the conditions to
-improve readability.
 ---
- tools/dmsetup.c |   17 +++++++++--------
- 1 files changed, 9 insertions(+), 8 deletions(-)
+ libdm/libdm-stats.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 5f07ab6..d25b3bd 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -5716,17 +5716,18 @@ static int _stats_update_file(CMD_ARGS)
- 	 * If starting the daemon fails, fall back to a direct update.
- 	 */
- 	if (!_switches[NOMONITOR_ARG]) {
--		if (!dm_stats_start_filemapd(fd, group_id, abspath, mode,
--					     foreground, verbose)) {
--			log_warn("Failed to start filemap monitoring daemon.");
--			goto fallback;
--		}
--		goto out;
-+		if (dm_stats_start_filemapd(fd, group_id, abspath, mode,
-+					    foreground, verbose))
-+			goto out;
-+
-+		log_warn("Failed to start filemap monitoring daemon.");
-+
-+		/* fall back to one-shot update */
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 290097f..b553da5 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -4777,7 +4777,8 @@ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
  	}
  
--fallback:
- 	/*
--	 * --nomonitor case - perform a one-shot update directly from dmstats.
-+	 * --nomonitor and fall back case - perform a one-shot update directly
-+	 *  from dmsetup.
- 	 */
- 	regions = dm_stats_update_regions_from_fd(dms, fd, group_id);
+ 	if (!(regions = _stats_map_file_regions(dms, fd, bounds, precise,
+-						-1, &count, &regroup)))
++						DM_STATS_GROUP_NOT_PRESENT,
++						&count, &regroup)))
+ 		return NULL;
  
+ 	if (!group)
 
 
