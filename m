@@ -1,39 +1,41 @@
 From: Bryn Reeves <bmr@sourceware.org>
-Date: Wed, 29 Mar 2017 16:16:33 -0400
-Subject: master - dmfilemapd: free region table at end of _update_regions() (coverity)
-Message-ID: <201703292016.v2TKGXi6000829@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 30 Mar 2017 05:04:02 -0400
+Subject: master - dmfilemapd: fix len type in _filemap_monitor_check_file_unlinked()
+Message-ID: <201703300904.v2U9422i019916@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=13426092e9681d13acfa9eae505b20537c236340
-Commit:        13426092e9681d13acfa9eae505b20537c236340
-Parent:        f66bc3dab07f3394150536819943a5c31ce793bf
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=76b6cbea60b6af6a89d3fc40486486c97df28fcc
+Commit:        76b6cbea60b6af6a89d3fc40486486c97df28fcc
+Parent:        660bd4fe3e86cc68d269ad707919f040b163f164
 Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Mar 29 17:33:23 2017 +0100
+AuthorDate:    Wed Mar 29 20:26:39 2017 +0100
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Mar 29 18:34:24 2017 +0100
+CommitterDate: Thu Mar 30 09:57:58 2017 +0100
 
-dmfilemapd: free region table at end of _update_regions() (coverity)
+dmfilemapd: fix len type in _filemap_monitor_check_file_unlinked()
 
+Make 'len' a size_t to match the return type of readlink(2).
 ---
- daemons/dmfilemapd/dmfilemapd.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/dmfilemapd/dmfilemapd.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
 diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
-index 2fa51ee..dd1db03 100644
+index 225335c..2c80d42 100644
 --- a/daemons/dmfilemapd/dmfilemapd.c
 +++ b/daemons/dmfilemapd/dmfilemapd.c
-@@ -687,7 +687,7 @@ static int _update_regions(struct dm_stats *dms, struct filemap_monitor *fm)
- 			 fm->group_id, regions[0]);
- 		fm->group_id = regions[0];
- 	}
--
-+	dm_free(regions);
- 	fm->nr_regions = nr_regions;
- 	return 1;
- }
+@@ -559,7 +559,8 @@ static int _filemap_monitor_check_file_unlinked(struct filemap_monitor *fm)
+ {
+ 	char path_buf[PATH_MAX];
+ 	char link_buf[PATH_MAX];
+-	int same, fd, len;
++	int same, fd;
++	ssize_t len;
+ 
+ 	fm->deleted = 0;
+ 
 
 
