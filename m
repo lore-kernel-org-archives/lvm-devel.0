@@ -1,109 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 31 Mar 2017 11:12:54 -0400
-Subject: master - cache: scan kallsyms for kernel symbols
-Message-ID: <201703311512.v2VFCskw008477@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 31 Mar 2017 11:12:59 -0400
+Subject: master - tests: fix LD_LIBRARY_PATH
+Message-ID: <201703311512.v2VFCxX3008488@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=970df59f914733b9ade15d9cb48e758b08140d42
-Commit:        970df59f914733b9ade15d9cb48e758b08140d42
-Parent:        13ca11cc1472fe5689e63555780acfb40cb3bcd9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fb1f38a6f677c0127807e6ee403af21c6d6e25da
+Commit:        fb1f38a6f677c0127807e6ee403af21c6d6e25da
+Parent:        970df59f914733b9ade15d9cb48e758b08140d42
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 31 17:07:21 2017 +0200
+AuthorDate:    Fri Mar 31 15:27:58 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Mar 31 17:12:00 2017 +0200
 
-cache: scan kallsyms for kernel symbols
+tests: fix LD_LIBRARY_PATH
 
-With monolithic kernels we can't actually modprobe
-for cache modules as they are already compiled-in
-and policy modules do not export version symbol.
-
-Reported issue on list:
-https://www.redhat.com/archives/dm-devel/2017-March/msg00061.html
-
-Fix will try to look for explicit kernel symbols first before
-calling modprobe.
+Use only selected paths for finding .so in builddir.
+So if builddir constains some embeded subdirs with some more
+occurences of project (i.e.  'make rpm' build subdir)
+those library paths will not get into list.
 ---
- lib/cache_segtype/cache.c |   45 ++++++++++++++++++++++++++++++++++++++++-----
- 1 files changed, 40 insertions(+), 5 deletions(-)
+ test/lib/utils.sh |   11 +++++------
+ 1 files changed, 5 insertions(+), 6 deletions(-)
 
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index 55b4c6e..da23dae 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -258,6 +258,39 @@ static void _destroy(struct segment_type *segtype)
- }
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index ce90cdc..60979cc 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -258,12 +258,11 @@ if test -z "${installed_testsuite+varset}"; then
+     case "$PATH" in
+     *"$abs_top_builddir/test/lib"*) ;;
+     *)
+-	    PATH="$abs_top_builddir/test/lib":"$abs_top_builddir/test/api":$PATH
+-	    for i in `find $abs_top_builddir -name \*.so`; do
+-		    p=`dirname $i`
+-		    LD_LIBRARY_PATH="$p":$LD_LIBRARY_PATH
+-	    done
+-            export PATH LD_LIBRARY_PATH ;;
++	PATH="$abs_top_builddir/test/lib":"$abs_top_builddir/test/api":$PATH
++	LD_LIBRARY_PATH=$(find -L "$abs_top_builddir/libdm/" "$abs_top_builddir/tools/"\
++		"$abs_top_builddir/daemons/" "$abs_top_builddir/liblvm/"\
++		-name "*.so" -printf "%h:")"$LD_LIBRARY_PATH"
++	export PATH LD_LIBRARY_PATH ;;
+     esac
+ fi
  
- #ifdef DEVMAPPER_SUPPORT
-+/*
-+ * Parse and look for kernel symbol in /proc/kallsyms
-+ * this could be our only change to figure out there is
-+ * cache policy symbol already in the monolithic kernel
-+ * where 'modprobe dm-cache-smq' will simply not work
-+ */
-+static int _lookup_kallsyms(const char *symbol)
-+{
-+	static const char _syms[] = "/proc/kallsyms";
-+	int ret = 0;
-+	char *line = NULL;
-+	size_t len;
-+	FILE *s;
-+
-+	if (!(s = fopen(_syms, "r")))
-+		log_sys_debug("fopen", _syms);
-+	else {
-+		while (getline(&line, &len, s) != -1)
-+			if (strstr(line, symbol)) {
-+				ret = 1; /* Found symbol */
-+				log_debug("Found kernel symbol%s.", symbol); /* space is in symbol */
-+				break;
-+			}
-+
-+		free(line);
-+		if (fclose(s))
-+			log_sys_debug("fclose", _syms);
-+	}
-+
-+	return ret;
-+}
-+
-+
- static int _target_present(struct cmd_context *cmd,
- 			   const struct lv_segment *seg __attribute__((unused)),
- 			   unsigned *attributes __attribute__((unused)))
-@@ -270,14 +303,15 @@ static int _target_present(struct cmd_context *cmd,
- 		unsigned cache_alias;
- 		const char feature[12];
- 		const char module[12]; /* check dm-%s */
-+		const char ksymbol[12]; /* check for kernel symbol */
- 		const char *aliasing;
- 	} _features[] = {
--		/* Assumption: cache >=1.9 always aliases MQ policy */
- 		{ 1, 10, CACHE_FEATURE_METADATA2, 0, "metadata2" },
-+		/* Assumption: cache >=1.9 always aliases MQ policy */
- 		{ 1, 9, CACHE_FEATURE_POLICY_SMQ, CACHE_FEATURE_POLICY_MQ, "policy_smq", "cache-smq",
--		" and aliases cache-mq" },
--		{ 1, 8, CACHE_FEATURE_POLICY_SMQ, 0, "policy_smq", "cache-smq" },
--		{ 1, 3, CACHE_FEATURE_POLICY_MQ, 0, "policy_mq", "cache-mq" },
-+		 " smq_exit", " and aliases cache-mq" },
-+		{ 1, 8, CACHE_FEATURE_POLICY_SMQ, 0, "policy_smq", "cache-smq", " smq_exit" },
-+		{ 1, 3, CACHE_FEATURE_POLICY_MQ, 0, "policy_mq", "cache-mq", " mq_init" },
- 	};
- 	static const char _lvmconf[] = "global/cache_disabled_features";
- 	static unsigned _attrs = 0;
-@@ -323,7 +357,8 @@ static int _target_present(struct cmd_context *cmd,
- 			}
- 			if (((maj > _features[i].maj) ||
- 			     (maj == _features[i].maj && min >= _features[i].min)) &&
--			    module_present(cmd, _features[i].module)) {
-+			    ((_features[i].ksymbol[0] && _lookup_kallsyms(_features[i].ksymbol)) ||
-+			     module_present(cmd, _features[i].module))) {
- 				log_debug_activation("Cache policy %s is available%s.",
- 						     _features[i].module,
- 						     _features[i].aliasing ? : "");
 
 
