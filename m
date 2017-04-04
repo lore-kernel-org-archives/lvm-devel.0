@@ -1,47 +1,38 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 4 Apr 2017 17:48:59 -0400
-Subject: master - lvconvert: fix converting hidden lv to pool
-Message-ID: <201704042148.v34Lmxic016012@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Tue, 4 Apr 2017 17:53:44 -0400
+Subject: master - man: '-pool' regexp
+Message-ID: <201704042153.v34Lri4n016471@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=76b70d5058cbbe41b60b99f11cda5e698b3c62e9
-Commit:        76b70d5058cbbe41b60b99f11cda5e698b3c62e9
-Parent:        b951d0433765d3ed7b0507906dec1894053cef4f
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Apr 4 16:47:47 2017 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 4 16:47:47 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e7ec9aab8a9a546e1b6ef7dc49e8012373691c3b
+Commit:        e7ec9aab8a9a546e1b6ef7dc49e8012373691c3b
+Parent:        76b70d5058cbbe41b60b99f11cda5e698b3c62e9
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Apr 4 23:53:28 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Apr 4 23:53:28 2017 +0200
 
-lvconvert: fix converting hidden lv to pool
+man: '-pool' regexp
 
-A hidden LV can not be converted to a thin pool or cache pool.
 ---
- tools/command-lines.in |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ man/Makefile.in |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index b2682fa..fe98cc6 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -495,6 +495,7 @@ ID: lvconvert_to_thinpool_or_swap_metadata
- DESC: Convert LV to type thin-pool (variant, use \\-\\-type thin-pool).
- DESC: Swap metadata LV in a thin pool (variant, use \\-\\-swapmetadata).
- FLAGS: PREVIOUS_SYNTAX
-+RULE: all and lv_is_visible
- 
- ---
- 
-@@ -533,6 +534,7 @@ ID: lvconvert_to_cachepool_or_swap_metadata
- DESC: Convert LV to type cache-pool (variant, use \\-\\-type cache-pool).
- DESC: Swap metadata LV in a cache pool (variant, use \\-\\-swapmetadata).
- FLAGS: PREVIOUS_SYNTAX
-+RULE: all and lv_is_visible
- 
- ---
- 
+diff --git a/man/Makefile.in b/man/Makefile.in
+index defa9b3..25b1c95 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -216,6 +216,7 @@ $(SED) -i -e "s+\([ [:alpha:]]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
+ 	  -e "s+\([[:alnum:]]\{2,\}\)\\\-\([[:alnum:]]\{2,\}\)+\1-\2+g" \
+ 	  -e "s+\(\\\-\\\-[[:alnum:]]\{2,\}\)-+\1\\\-+g" \
+ 	  -e "s+\(lvm2\-activation\)+lvm2\\\-activation+" \
++	  -e "s+\([^\\]\)-pool+\1\\\-pool+g" \
+ 	  -e "s+\([[:digit:]]\)-\([[:digit:]]\)+\1\\\-\2+g" \
+ 	  -e "s+\\\-git+\-git+g" \
+ 	  -e "s+\(vg.*\)\-lv+\1\\\-lv+g" \
 
 
