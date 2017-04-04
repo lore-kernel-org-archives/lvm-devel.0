@@ -1,53 +1,47 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 3 Apr 2017 17:42:43 -0400
-Subject: master - help: print all options in abbreviated help output
-Message-ID: <201704032142.v33LghZ6001094@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 4 Apr 2017 17:48:59 -0400
+Subject: master - lvconvert: fix converting hidden lv to pool
+Message-ID: <201704042148.v34Lmxic016012@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b951d0433765d3ed7b0507906dec1894053cef4f
-Commit:        b951d0433765d3ed7b0507906dec1894053cef4f
-Parent:        29161a145e9c1c50157dca30c17957e4699826d6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=76b70d5058cbbe41b60b99f11cda5e698b3c62e9
+Commit:        76b70d5058cbbe41b60b99f11cda5e698b3c62e9
+Parent:        b951d0433765d3ed7b0507906dec1894053cef4f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Apr 3 16:36:04 2017 -0500
+AuthorDate:    Tue Apr 4 16:47:47 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Apr 3 16:36:04 2017 -0500
+CommitterDate: Tue Apr 4 16:47:47 2017 -0500
 
-help: print all options in abbreviated help output
+lvconvert: fix converting hidden lv to pool
 
-Don't abbreviate the --help output quite as much
-when there are many command defs.  Print all the
-options in the cmd defs that are shown.  --longhelp
-output is unchanged and includes everything.
+A hidden LV can not be converted to a thin pool or cache pool.
 ---
- tools/lvmcmdline.c |    8 +++-----
- 1 files changed, 3 insertions(+), 5 deletions(-)
+ tools/command-lines.in |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index bb107d4..280a052 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1835,15 +1835,13 @@ static int _usage(const char *name, int longhelp, int skip_notes)
- 			         _cmdline.commands[i].command_enum,
- 			         _cmdline.commands[i].command_id);
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index b2682fa..fe98cc6 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -495,6 +495,7 @@ ID: lvconvert_to_thinpool_or_swap_metadata
+ DESC: Convert LV to type thin-pool (variant, use \\-\\-type thin-pool).
+ DESC: Swap metadata LV in a thin pool (variant, use \\-\\-swapmetadata).
+ FLAGS: PREVIOUS_SYNTAX
++RULE: all and lv_is_visible
  
--		print_usage(&_cmdline.commands[i], show_full, 1);
-+		print_usage(&_cmdline.commands[i], 1, 1);
- 		cmd = &_cmdline.commands[i];
- 	}
+ ---
  
- 	/* Common options are printed once for all variants of a command name. */
--	if (show_full) {
--		print_usage_common_cmd(cname, cmd);
--		print_usage_common_lvm(cname, cmd);
--	}
-+	print_usage_common_cmd(cname, cmd);
-+	print_usage_common_lvm(cname, cmd);
+@@ -533,6 +534,7 @@ ID: lvconvert_to_cachepool_or_swap_metadata
+ DESC: Convert LV to type cache-pool (variant, use \\-\\-type cache-pool).
+ DESC: Swap metadata LV in a cache pool (variant, use \\-\\-swapmetadata).
+ FLAGS: PREVIOUS_SYNTAX
++RULE: all and lv_is_visible
  
- 	if (skip_notes)
- 		return 1;
+ ---
+ 
 
 
