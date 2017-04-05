@@ -1,40 +1,58 @@
-From: David Teigland <teigland@redhat.com>
-Date: Mon, 13 Jan 2020 11:15:42 -0600
-Subject: Question: lvmlockd adopts orphan locks
-In-Reply-To: <20200109081953.GA24047@leoy-ThinkPad-X240s>
-References: <20200109081953.GA24047@leoy-ThinkPad-X240s>
-Message-ID: <20200113171542.GB23041@redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Wed, 5 Apr 2017 18:35:29 -0400
+Subject: master - man: lvmraid.7 raid6_n_6 fix
+Message-ID: <201704052235.v35MZTeS004371@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Jan 09, 2020 at 04:19:53PM +0800, Leo Yan wrote:
-> Hi all,
-> 
-> Since the commit 117160b27e51 ("Remove lvmetad") has been merged into
-> lvm2 git repository, lvmetad is removed.
-> 
-> As side effect, in lvmlockd the function get_lockd_vgs() returns -1.
-> Thus it's no chance for lvmlockd to adopt orphan locks after the
-> lvmlockd exits abnormal and relaunch.   If we connect with the sanlock
-> lock manager, its daemon keeps running on the host and renew all
-> locks, this would be safe for the in used LV on the host; but on the
-> other hand, lvmlockd cannot adopt the locks, thus we have no chance to
-> release related LVM locks anymore.
-> 
-> For this case, I understand we can release locks by directly use low
-> level sanlock commands, just wander if we have more smooth approach for
-> lvmlockd to adopt locks and release the locks gracefully after lvmlockd
-> failure?  Or do I miss anything?
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a8d5ada452570e1c9b0c6e0ae0a311870056896a
+Commit:        a8d5ada452570e1c9b0c6e0ae0a311870056896a
+Parent:        d23cad16c9210f6b01994a5e4c0637584dba80f9
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Thu Apr 6 00:35:12 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Apr 6 00:35:12 2017 +0200
 
-You are correct.  I have not yet replaced the lock-adoption code in
-lvmlockd because it was not clear that anyone was using it.  I'm happy
-to hear that it was useful for you, and sorry that it's been disabled.
-I hope to have it replaced in the coming year, and would be happy to
-help anyone interested in working on it.
+man: lvmraid.7 raid6_n_6 fix
 
-Dave
+---
+ man/lvmraid.7_main |   14 ++------------
+ 1 files changed, 2 insertions(+), 12 deletions(-)
+
+diff --git a/man/lvmraid.7_main b/man/lvmraid.7_main
+index 7a3235b..d000687 100644
+--- a/man/lvmraid.7_main
++++ b/man/lvmraid.7_main
+@@ -1554,7 +1554,8 @@ raid6_n_6
+ RAID6 last parity devices
+ .br
+ \[bu]
+-Dedicated last parity devices used for striped/raid0 conversions
++Fixed dedicated last devices (P-Syndrome N-1 and Q-Syndrome N)
++with striped data used for striped/raid0 conversions
+ \[bu]
+ Used for RAID Takeover
+ 
+@@ -1566,17 +1567,6 @@ RAID6 last parity device
+ \[bu]
+ Dedicated last parity device used for conversions from/to raid5_{ls,rs,la,ra}
+ 
+-raid6_n_6
+-.br
+-\[bu]
+-RAID6 N continue
+-.br
+-\[bu]
+-Fixed P-Syndrome N-1 and Q-Syndrome N with striped data
+-.br
+-\[bu]
+-Used for RAID Takeover
+-
+ raid6_ls_6
+ .br
+ \[bu]
 
 
