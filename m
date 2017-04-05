@@ -1,105 +1,177 @@
-From: Eric Wheeler <lvm-devel@lists.ewheeler.net>
-Date: Wed, 5 Apr 2017 10:53:48 -0700 (PDT)
-Subject: [BISECT] Regression: SEGV: 9156c5d dmeventd rework locking code
-In-Reply-To: <2c30ac68-b531-9fd2-985e-05cf31f7beb0@redhat.com>
-References: <alpine.LRH.2.11.1703311519160.19447@mail.ewheeler.net>
-	<916b3fa0-e99f-a5de-2d86-f7539c7f2ca7@redhat.com>
-	<alpine.LRH.2.11.1704041618560.4709@mail.ewheeler.net>
-	<2c30ac68-b531-9fd2-985e-05cf31f7beb0@redhat.com>
-Message-ID: <alpine.LRH.2.11.1704051038340.2942@mail.ewheeler.net>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 5 Apr 2017 17:48:33 -0400
+Subject: master - lvchange/lvconvert: fix missing lvmlockd LV locks
+Message-ID: <201704052148.v35LmXd8030317@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 5 Apr 2017, Zdenek Kabelac wrote:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7ccb4825c7c5f40e93afea065100105f3d5f3551
+Commit:        7ccb4825c7c5f40e93afea065100105f3d5f3551
+Parent:        c9bc1c1c8ccd624762b59a46689467573bc2933e
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Apr 5 15:05:32 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Apr 5 16:46:38 2017 -0500
 
-> Dne 5.4.2017 v 01:22 Eric Wheeler napsal(a):
-> > On Sat, 1 Apr 2017, Zdenek Kabelac wrote:
-> >
-> > > Dne 1.4.2017 v 00:19 Eric Wheeler napsal(a):
-> 
-> > > > (gdb) bt
-> > > > #0  _touch_memory (size=<optimized out>, mem=<optimized out>) at
-> > > > mm/memlock.c:141
-> > > > #1  _allocate_memory () at mm/memlock.c:163
-> > >
-> > >
-> > > Hi
-> > >
-> > > Hmm few theories -  from your gdb backtrace it suggests it has failed on
-> > > libc
-> > > syscall  (getpagesize()) ??
-> > > So have you upgraded all related packages ?  (device-mapper*,  kernel*)
-> > > or it's some 'mixture' in use ?
-> > >
-> > > Also don't you have some large/changed values of 'reserved_stack'   or
-> > > 'reserved_memory' in your lvm.conf ?
-> >
-> > Yes! Actually, reserved_stack was the problem. By trial and error we found
-> > that when reserved_stack is 290 or more, dmeventd will segfault. We tried
-> > on servers with far fewer logical volumes and did not have a problem, so
-> > while I am not going to try and figure out how many logical volumes hit
-> > this stack limit, this is the problem!
-> >
-> > Is there some kind of hard limit to reserved_stack that should be
-> > enforced?
-> >
-> > I seem to recall increasing these values because lvcreate (or lvchange or
-> > something) suggested that the values were too small.
-> >
-> > Do you still want a bugzilla report?
-> 
-> 
-> Hi
-> 
-> Yep - so this explains it. Not clear we need BZ yet.
-> I'll explain the reason of limitation.
-> 
-> Dmeventd is using threads - and to minimize the RAM usage by memlocked process
-> with number of threads - we picked 'relatively' low value for pthread_stack
-> with assumption noone will ever need bigger value than this :)
-> 
-> Now lvm.conf does defined 'reserved_stack' amount - and this stack is then
-> 'mapped' in dmeventd lvm plugin thread.  However this is after 'dmeventd' has
-> created thread with 128K stack limit (dmeventd itself doesn't 'see/use'
-> lvm.conf so can't create threads with different settings)
-> 
-> So clearly a logical problem we can't really solve in any easy way.
-> We limited amount of stack used by lvm2 code - so current defaults should be
-> rather good enough for almost every possible use-case.
-> 
-> So before we start to fix this  'catch 42' case - could you check and
-> eventually describe which use-case was not working well we 'default'
-> reserved_stack  so you had to raise the value to 290 to make it work ?
-> 
-> Otherwise I think the best solution would be to simply internally limit
-> the 'accepted' value and ignore any higher setting and just document it.
+lvchange/lvconvert: fix missing lvmlockd LV locks
 
-I don't recall the reason that we needed to increase the defaults, that 
-was a long time ago probably in 7.0 . Now it seems to work fine with 
-default values, so internally limiting the value is probably a good idea 
-to prevent others from having such an issue.
+lvchange/lvconvert operations that do not require the LV
+to already be active need to acquire a transient LV lock
+before changing/converting the LV to ensure the LV is not
+active on another host.  If the LV is already active,
+a persistent LV lock already exists on the host and the
+transient LV lock request is a no-op.
 
-It might be a good idea to gracefully accept and warn about any higher 
-limit but cap it to the internal maximum instead of giving an error in 
-case users have lvm.conf inside of initrds---we definitely don't want to 
-break peoples' bootup processes.
+Some lvmlockd locks in lvchange were lost in the cmd def
+changes.  The lvmlockd locks in lvconvert seem to have
+been missed from the start.
+---
+ tools/lvchange.c  |   29 +++++++++++++++++++----------
+ tools/lvconvert.c |   26 ++++++++++++++++++++++++++
+ 2 files changed, 45 insertions(+), 10 deletions(-)
 
---
-Eric Wheeler
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index a35891e..660570a 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -1056,16 +1056,9 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
+ 	int i, opt_enum;
+ 	uint32_t mr = 0;
  
+-	/*
+-	 * If a persistent lv lock already exists from activation
+-	 * (with the needed mode or higher), this will be a no-op.
+-	 * Otherwise, the lv lock will be taken as non-persistent
+-	 * and released when this command exits.
+-	 */
+-	if (!lockd_lv(cmd, lv, "ex", 0)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return_ECMD_FAILED;
  
-> Regards
-> 
-> Zdenek
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
-> 
-> 
+ 	/* First group of options which allow for one metadata commit/update for the whole group */
+ 	for (i = 0; i < cmd->command->ro_count; i++) {
+@@ -1451,6 +1444,10 @@ static int _lvchange_resync_single(struct cmd_context *cmd,
+ 				    struct logical_volume *lv,
+ 				    struct processing_handle *handle)
+ {
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return_ECMD_FAILED;
++
+ 	if (!_lvchange_resync(cmd, lv))
+ 		return_ECMD_FAILED;
+ 
+@@ -1502,6 +1499,10 @@ static int _lvchange_syncaction_single(struct cmd_context *cmd,
+ 				       struct logical_volume *lv,
+ 				       struct processing_handle *handle)
+ {
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return_ECMD_FAILED;
++
+ 	if (!lv_raid_message(lv, arg_str_value(cmd, syncaction_ARG, NULL)))
+ 		return_ECMD_FAILED;
+ 
+@@ -1532,6 +1533,10 @@ static int _lvchange_rebuild_single(struct cmd_context *cmd,
+ 				    struct logical_volume *lv,
+ 				    struct processing_handle *handle)
+ {
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return_ECMD_FAILED;
++
+ 	if (!_lvchange_rebuild(lv))
+ 		return_ECMD_FAILED;
+ 
+@@ -1601,6 +1606,10 @@ static int _lvchange_persistent_single(struct cmd_context *cmd,
+ {
+ 	uint32_t mr = 0;
+ 
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return_ECMD_FAILED;
++
+ 	if (!_lvchange_persistent(cmd, lv, &mr))
+ 		return_ECMD_FAILED;
+ 
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index a37dc25..c28a75f 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1685,6 +1685,10 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume
+ 	struct lv_segment *seg = first_seg(lv);
+ 	int ret = 0;
+ 
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return_ECMD_FAILED;
++
+ 	/* Set up segtype either from type_str or else to match the existing one. */
+ 	if (!*lp->type_str)
+ 		lp->segtype = seg->segtype;
+@@ -2734,6 +2738,10 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return 0;
++
+ 	/*
+ 	 * If an existing LV is to be used as the metadata LV,
+ 	 * verify that it's in a usable state.  These checks are
+@@ -2789,6 +2797,10 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ 				  display_lvname(metadata_lv));
+ 			return 0;
+ 		}
++
++		/* If LV is inactive here, ensure it's not active elsewhere. */
++		if (!lockd_lv(cmd, metadata_lv, "ex", 0))
++			return 0;
+ 	}
+ 
+ 	if (!get_pool_params(cmd, pool_segtype,
+@@ -3135,6 +3147,10 @@ static int _lvconvert_to_cache_vol(struct cmd_context *cmd,
+ 	struct dm_config_tree *policy_settings = NULL;
+ 	int r = 0;
+ 
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return_0;
++
+ 	if (!validate_lv_cache_create_pool(cachepool_lv))
+ 		return_0;
+ 
+@@ -3958,6 +3974,12 @@ static int _lvconvert_swap_pool_metadata_single(struct cmd_context *cmd,
+ 	struct logical_volume *metadata_lv;
+ 	const char *metadata_name;
+ 
++	if (is_lockd_type(lv->vg->lock_type)) {
++		/* FIXME: need to swap locks betwen LVs? */
++		log_error("Unable to swap pool metadata in VG with lock_type %s", lv->vg->lock_type);
++		goto out;
++	}
++
+ 	if (!(metadata_name = arg_str_value(cmd, poolmetadata_ARG, NULL)))
+ 		goto_out;
+ 
+@@ -4133,6 +4155,10 @@ static int _lvconvert_split_cachepool_single(struct cmd_context *cmd,
+ 		return ECMD_FAILED;
+ 	}
+ 
++	/* If LV is inactive here, ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, cache_lv, "ex", 0))
++		return_0;
++
+ 	switch (cmd->command->command_enum) {
+ 	case lvconvert_split_and_keep_cachepool_CMD:
+ 		ret = _lvconvert_split_and_keep_cachepool(cmd, cache_lv, cachepool_lv);
 
 
