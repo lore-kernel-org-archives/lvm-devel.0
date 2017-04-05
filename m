@@ -1,163 +1,105 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 5 Apr 2017 11:30:49 -0400
-Subject: master - lvchange: tidy switch code in _lvchange_properties_single()
-Message-ID: <201704051530.v35FUnWn014301@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Wheeler <lvm-devel@lists.ewheeler.net>
+Date: Wed, 5 Apr 2017 10:53:48 -0700 (PDT)
+Subject: [BISECT] Regression: SEGV: 9156c5d dmeventd rework locking code
+In-Reply-To: <2c30ac68-b531-9fd2-985e-05cf31f7beb0@redhat.com>
+References: <alpine.LRH.2.11.1703311519160.19447@mail.ewheeler.net>
+	<916b3fa0-e99f-a5de-2d86-f7539c7f2ca7@redhat.com>
+	<alpine.LRH.2.11.1704041618560.4709@mail.ewheeler.net>
+	<2c30ac68-b531-9fd2-985e-05cf31f7beb0@redhat.com>
+Message-ID: <alpine.LRH.2.11.1704051038340.2942@mail.ewheeler.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c9bc1c1c8ccd624762b59a46689467573bc2933e
-Commit:        c9bc1c1c8ccd624762b59a46689467573bc2933e
-Parent:        6fdc391baec1129d0c70913f116c04f928d083fa
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Apr 5 17:29:31 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Apr 5 17:29:31 2017 +0200
+On Wed, 5 Apr 2017, Zdenek Kabelac wrote:
 
-lvchange: tidy switch code in _lvchange_properties_single()
+> Dne 5.4.2017 v 01:22 Eric Wheeler napsal(a):
+> > On Sat, 1 Apr 2017, Zdenek Kabelac wrote:
+> >
+> > > Dne 1.4.2017 v 00:19 Eric Wheeler napsal(a):
+> 
+> > > > (gdb) bt
+> > > > #0  _touch_memory (size=<optimized out>, mem=<optimized out>) at
+> > > > mm/memlock.c:141
+> > > > #1  _allocate_memory () at mm/memlock.c:163
+> > >
+> > >
+> > > Hi
+> > >
+> > > Hmm few theories -  from your gdb backtrace it suggests it has failed on
+> > > libc
+> > > syscall  (getpagesize()) ??
+> > > So have you upgraded all related packages ?  (device-mapper*,  kernel*)
+> > > or it's some 'mixture' in use ?
+> > >
+> > > Also don't you have some large/changed values of 'reserved_stack'   or
+> > > 'reserved_memory' in your lvm.conf ?
+> >
+> > Yes! Actually, reserved_stack was the problem. By trial and error we found
+> > that when reserved_stack is 290 or more, dmeventd will segfault. We tried
+> > on servers with far fewer logical volumes and did not have a problem, so
+> > while I am not going to try and figure out how many logical volumes hit
+> > this stack limit, this is the problem!
+> >
+> > Is there some kind of hard limit to reserved_stack that should be
+> > enforced?
+> >
+> > I seem to recall increasing these values because lvcreate (or lvchange or
+> > something) suggested that the values were too small.
+> >
+> > Do you still want a bugzilla report?
+> 
+> 
+> Hi
+> 
+> Yep - so this explains it. Not clear we need BZ yet.
+> I'll explain the reason of limitation.
+> 
+> Dmeventd is using threads - and to minimize the RAM usage by memlocked process
+> with number of threads - we picked 'relatively' low value for pthread_stack
+> with assumption noone will ever need bigger value than this :)
+> 
+> Now lvm.conf does defined 'reserved_stack' amount - and this stack is then
+> 'mapped' in dmeventd lvm plugin thread.  However this is after 'dmeventd' has
+> created thread with 128K stack limit (dmeventd itself doesn't 'see/use'
+> lvm.conf so can't create threads with different settings)
+> 
+> So clearly a logical problem we can't really solve in any easy way.
+> We limited amount of stack used by lvm2 code - so current defaults should be
+> rather good enough for almost every possible use-case.
+> 
+> So before we start to fix this  'catch 42' case - could you check and
+> eventually describe which use-case was not working well we 'default'
+> reserved_stack  so you had to raise the value to 290 to make it work ?
+> 
+> Otherwise I think the best solution would be to simply internally limit
+> the 'accepted' value and ignore any higher setting and just document it.
 
----
- tools/lvchange.c |   91 +++++++++++++++++++++++++++++++++++-------------------
- 1 files changed, 59 insertions(+), 32 deletions(-)
+I don't recall the reason that we needed to increase the defaults, that 
+was a long time ago probably in 7.0 . Now it seems to work fine with 
+default values, so internally limiting the value is probably a good idea 
+to prevent others from having such an issue.
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 1778b52..a35891e 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -974,6 +974,58 @@ static int _commit_reload(struct logical_volume *lv, uint32_t mr)
- 	return 1;
- }
+It might be a good idea to gracefully accept and warn about any higher 
+limit but cap it to the internal maximum instead of giving an error in 
+case users have lvm.conf inside of initrds---we definitely don't want to 
+break peoples' bootup processes.
+
+--
+Eric Wheeler
  
-+/* Helper: check @opt_num is listed in @opts array */
-+static int _is_option_listed(int opt_enum, int *options)
-+{
-+	int i;
-+
-+	for (i = 0; options[i] != -1; i++)
-+		if (opt_enum == options[i])
-+			return 1;
-+	return 0;
-+}
-+
-+/* Check @opt_enum is an option allowing group commit/reload */
-+static int _option_allows_group_commit(int opt_enum)
-+{
-+	int options[] = {
-+		permission_ARG,
-+		alloc_ARG,
-+		contiguous_ARG,
-+		errorwhenfull_ARG,
-+		readahead_ARG,
-+		persistent_ARG,
-+		addtag_ARG,
-+		deltag_ARG,
-+		writemostly_ARG,
-+		writebehind_ARG,
-+		minrecoveryrate_ARG,
-+		maxrecoveryrate_ARG,
-+		profile_ARG,
-+		metadataprofile_ARG,
-+		detachprofile_ARG,
-+		setactivationskip_ARG,
-+		-1
-+	};
-+
-+	return _is_option_listed(opt_enum, options);
-+}
-+
-+/* Check @opt_enum requires direct commit/reload */
-+static int _option_requires_direct_commit(int opt_enum)
-+{
-+	int options[] = {
-+		discards_ARG,
-+		zero_ARG,
-+		cachemode_ARG,
-+		cachepolicy_ARG,
-+		cachesettings_ARG,
-+		-1
-+	};
-+
-+	return _is_option_listed(opt_enum, options);
-+}
-+
- /*
-  * For each lvchange command definintion:
-  *
-@@ -1022,20 +1074,13 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
- 		if (!arg_is_set(cmd, opt_enum))
- 			continue;
  
--		switch (opt_enum) {
- 		/*
--		 * Skip options requiring per option commit/reload
-+		 * Skip options requiring direct commit/reload
- 		 * to process them in the second step.
- 		 */
--		case discards_ARG:
--		case zero_ARG:
--		case cachemode_ARG:
--		case cachepolicy_ARG:
--		case cachesettings_ARG:
-+		if (_option_requires_direct_commit(opt_enum)) {
- 			second_group++;
- 			continue;
--		default:
--			break;
- 		}
- 
- 		/* Archive will only happen once per run. */
-@@ -1141,28 +1186,9 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
- 		if (!arg_is_set(cmd, opt_enum))
- 			continue;
- 
--		switch (opt_enum) {
--		/* Skip any of the already processed options */
--		case permission_ARG:
--		case alloc_ARG:
--		case contiguous_ARG:
--		case errorwhenfull_ARG:
--		case readahead_ARG:
--		case persistent_ARG:
--		case addtag_ARG:
--		case deltag_ARG:
--		case writemostly_ARG:
--		case writebehind_ARG:
--		case minrecoveryrate_ARG:
--		case maxrecoveryrate_ARG:
--		case profile_ARG:
--		case metadataprofile_ARG:
--		case detachprofile_ARG:
--		case setactivationskip_ARG:
-+		/* Skip any of the already processed options which allowed for group commit/reload */
-+		if (_option_allows_group_commit(opt_enum))
- 			continue;
--		default:
--			break;
--		}
- 
- 		/* Archive will only happen once per run */
- 		if (!archive(lv->vg))
-@@ -1170,8 +1196,8 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
- 
- 		mr = 0;
- 
-+		/* Run commit and reload after processing each of the following options */
- 		switch (opt_enum) {
--		/* Process the following options which need per option metadata commit and reload */
- 		case discards_ARG:
- 		case zero_ARG:
- 			docmds++;
-@@ -1186,7 +1212,8 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
- 			break;
- 
- 		default:
--			break;
-+			log_error(INTERNAL_ERROR "Failed to check for option %s",
-+				  arg_long_option_name(i));
- 		}
- 
- 		/* Display any logical volume change unless already displayed in step 1. */
+> Regards
+> 
+> Zdenek
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
+> 
+> 
 
 
