@@ -1,94 +1,83 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 6 Apr 2017 14:00:42 -0400
-Subject: master - lvconvert: cleanup prompting
-Message-ID: <201704061800.v36I0gS6015011@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Apr 2017 12:16:37 -0400
+Subject: master - signals: fix SIGINT blocking flaw causing inconsistent metadata
+Message-ID: <201704101616.v3AGGbVA026560@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ef3e1013aa8d7797fa432e2da219255178b8ede3
-Commit:        ef3e1013aa8d7797fa432e2da219255178b8ede3
-Parent:        eb6302c8cb6bfd1d9831e5ff3d76ecbb49613178
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9a689fb8f0a6b1675a4e819f4837bf2e0269832f
+Commit:        9a689fb8f0a6b1675a4e819f4837bf2e0269832f
+Parent:        ef3e1013aa8d7797fa432e2da219255178b8ede3
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Apr 6 19:59:57 2017 +0200
+AuthorDate:    Mon Apr 10 18:16:09 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Apr 6 19:59:57 2017 +0200
+CommitterDate: Mon Apr 10 18:16:09 2017 +0200
 
-lvconvert: cleanup prompting
+signals: fix SIGINT blocking flaw causing inconsistent metadata
 
+SIGINT isn't blocked properly after a sigint_allow(),
+sigint_restore() cycle leading to illicit interruptable
+metadata updates.  These can leave corrupted metadata behind.
+
+Issues addressed in this commit:
+
+sigint_allow() fails to set _oldmasked[] members properly due
+to an offset by one bug on indexing the members of the array.
+
+It bails out prematurely comparing to MAX_SIGINTS causing nesting
+depths to be one less than MAX_SIGINTS.  Fix the comparision.
+
+Correct the related comparison flaw in sigint_restore().
+
+Initialize all sig_atomic_t variables consequently.
+
+Resolves: rhbz1440766
 ---
- lib/metadata/raid_manip.c |   29 ++++++++++++-----------------
- 1 files changed, 12 insertions(+), 17 deletions(-)
+ lib/misc/lvm-signal.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 922eea7..93c3c30 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1989,8 +1989,8 @@ static int _raid_reshape_keep_images(struct logical_volume *lv,
- 	if (seg->segtype != new_segtype)
- 		log_print_unless_silent("Converting %s LV %s to %s.",
- 					lvseg_name(seg), display_lvname(lv), new_segtype->name);
--	if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s? [y/n]: ",
--				  lvseg_name(seg), display_lvname(lv)) == 'n') {
-+	if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s to %s? [y/n]: ",
-+				  lvseg_name(seg), display_lvname(lv), new_segtype->name) == 'n') {
- 			log_error("Logical volume %s NOT converted.", display_lvname(lv));
- 			return 0;
- 	}
-@@ -4577,7 +4577,7 @@ static int _raid1_to_mirrored_wrapper(TAKEOVER_FN_ARGS)
- 	if (!_raid_in_sync(lv))
- 		return_0;
+diff --git a/lib/misc/lvm-signal.c b/lib/misc/lvm-signal.c
+index 7e78407..15d8a6f 100644
+--- a/lib/misc/lvm-signal.c
++++ b/lib/misc/lvm-signal.c
+@@ -22,7 +22,7 @@
+ static sigset_t _oldset;
+ static int _signals_blocked = 0;
+ static volatile sig_atomic_t _sigint_caught = 0;
+-static volatile sig_atomic_t _handler_installed;
++static volatile sig_atomic_t _handler_installed = 0;
  
--	if (!yes && yes_no_prompt("Are you sure you want to convert %s back to the older \"%s\" type? [y/n]: ",
-+	if (!yes && yes_no_prompt("Are you sure you want to convert %s back to the older %s type? [y/n]: ",
- 				  display_lvname(lv), SEG_TYPE_NAME_MIRROR) == 'n') {
- 		log_error("Logical volume %s NOT converted to \"%s\".",
- 			  display_lvname(lv), SEG_TYPE_NAME_MIRROR);
-@@ -4888,13 +4888,6 @@ static int _takeover_downconvert_wrapper(TAKEOVER_FN_ARGS)
- 	} else
- 		*res_str = '\0';
+ /* Support 3 level nesting, increase if needed more */
+ #define MAX_SIGINTS 3
+@@ -67,7 +67,7 @@ void sigint_allow(void)
+ 	 * Do not overwrite the backed-up handler data -
+ 	 * just increase nesting count.
+ 	 */
+-	if (++_handler_installed >= MAX_SIGINTS)
++	if (++_handler_installed > MAX_SIGINTS)
+ 		return;
  
--	if (!yes && yes_no_prompt("Are you sure you want to convert \"%s\" LV %s to \"%s\" type%s? [y/n]: ",
--				  lvseg_name(seg), display_lvname(lv), new_segtype->name, res_str) == 'n') {
--		log_error("Logical volume %s NOT converted to \"%s\"",
--			  display_lvname(lv), new_segtype->name);
--		return 0;
--	}
--
- 	/* Archive metadata */
- 	if (!archive(lv->vg))
- 		return_0;
-@@ -5737,13 +5730,6 @@ replaced:
- 	if (segtype_sav != *segtype)
- 		log_warn("Replaced LV type %s with possible type %s.",
- 			 segtype_sav->name, (*segtype)->name);
--	if (!yes && yes_no_prompt("Do you want to convert %s LV %s to %s? [y/n]: ",
--				  lvseg_name(seg_from), display_lvname(seg_from->lv),
--				  (*segtype)->name) == 'n') {
--		log_error("Logical volume %s NOT converted.", display_lvname(seg_from->lv));
--		return 0;
--	}
--
- 	return 1;
- }
+ 	/* Grab old sigaction for SIGINT: shall not fail. */
+@@ -85,7 +85,7 @@ void sigint_allow(void)
+ 	if (sigprocmask(0, NULL, &sigs))
+ 		log_sys_debug("sigprocmask", "");
  
-@@ -5855,6 +5841,15 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
- 		r = 0;
- 	}
+-	if ((_oldmasked[_handler_installed] = sigismember(&sigs, SIGINT))) {
++	if ((_oldmasked[_handler_installed - 1] = sigismember(&sigs, SIGINT))) {
+ 		sigdelset(&sigs, SIGINT);
+ 		if (sigprocmask(SIG_SETMASK, &sigs, NULL))
+ 			log_sys_debug("sigprocmask", "SIG_SETMASK");
+@@ -98,7 +98,7 @@ void sigint_restore(void)
+ 		return;
  
-+	if (r &&
-+	    strcmp((*segtype_to)->name, SEG_TYPE_NAME_MIRROR) && /* "mirror" is prompted for later */
-+	    !yes && yes_no_prompt("Are you sure you want to convert %s LV %s to %s type? [y/n]: ",
-+				  lvseg_name(seg_from), display_lvname(seg_from->lv),
-+				  (*segtype_to)->name) == 'n') {
-+		log_error("Logical volume %s NOT converted.", display_lvname(seg_from->lv));
-+		r = 0;
-+	}
-+
- 	return r;
- }
+ 	if (!_handler_installed ||
+-	    --_handler_installed >= MAX_SIGINTS)
++	    --_handler_installed > MAX_SIGINTS)
+ 		return;
  
+ 	/* Nesting count went below MAX_SIGINTS. */
 
 
