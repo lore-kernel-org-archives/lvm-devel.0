@@ -1,153 +1,139 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 12 Apr 2017 15:39:01 -0400
-Subject: master - fsadm: support configurable full path
-Message-ID: <201704121939.v3CJd1L3012276@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 12 Apr 2017 15:39:14 -0400
+Subject: master - tests: test for new supported commands
+Message-ID: <201704121939.v3CJdEtt012316@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3018cdcaa7aa258a432738b95077098985fb0c74
-Commit:        3018cdcaa7aa258a432738b95077098985fb0c74
-Parent:        109532290138d3b8b535457150052b6bda4f797c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=56704383bfded631ea16707e598e38df93dfaab5
+Commit:        56704383bfded631ea16707e598e38df93dfaab5
+Parent:        f8034e14e6c8012dbd51dc3c5e5fc1c0036e00a0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Apr 8 19:43:20 2017 +0200
+AuthorDate:    Wed Apr 12 15:01:12 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Apr 12 21:34:08 2017 +0200
 
-fsadm: support configurable full path
+tests: test for new supported commands
 
-Just like with other tools lvm2 is using allow to define
-fully configurable path.
+New tests for:
 
-Default is selected by $PREFIX/sbin/fsadm
+lvconvert --regionsize | --swapmetadata | --startpoll |
+          --mergesnapshot | mergethin
 ---
- WHATS_NEW                    |    1 +
- configure                    |    8 ++++++++
- configure.in                 |    4 ++++
- include/configure.h.in       |    3 +++
- lib/config/config_settings.h |    4 ++++
- lib/config/defaults.h        |    2 ++
- lib/metadata/lv_manip.c      |    8 ++++----
- 7 files changed, 26 insertions(+), 4 deletions(-)
+ test/shell/lvconvert-cache.sh           |    4 ++++
+ test/shell/lvconvert-mirror.sh          |   15 +++++++++++++++
+ test/shell/lvconvert-raid-regionsize.sh |    5 ++++-
+ test/shell/lvconvert-thin.sh            |    4 ++++
+ test/shell/snapshot-merge.sh            |    3 +++
+ test/shell/thin-merge.sh                |    7 +++++++
+ 6 files changed, 37 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index bc958e2..b0fc86f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.170 - 
- ==================================
-+  Introduce global/fsadm_executable to make fsadm path configurable.
-   Look for limited thin pool metadata size when using 16G metadata.
-   Add lvconvert pool creation rule disallowing options with poolmetadata.
-   Fix lvconvert when the same LV is incorrectly reused in options.
-diff --git a/configure b/configure
-index c3901d4..e691805 100755
---- a/configure
-+++ b/configure
-@@ -15319,6 +15319,14 @@ cat >>confdefs.h <<_ACEOF
- _ACEOF
+diff --git a/test/shell/lvconvert-cache.sh b/test/shell/lvconvert-cache.sh
+index 6a8daa3..b1ac154 100644
+--- a/test/shell/lvconvert-cache.sh
++++ b/test/shell/lvconvert-cache.sh
+@@ -63,6 +63,10 @@ UUID=$(get lv_field $vg/$lv5 uuid)
+ lvconvert --yes --cachepool $vg/$lv3 --poolmetadata $lv5
+ check lv_field $vg/${lv3}_cmeta uuid "$UUID"
  
++# Check swap of cache pool metadata with --swapmetadata
++# (should swap back to lv5)
++lvconvert --yes --swapmetadata $vg/$lv3 --poolmetadata $lv5
++check lv_field $vg/$lv5 uuid "$UUID"
  
-+
-+FSADM_PATH="$lvm_exec_prefix/sbin/fsadm"
-+
-+cat >>confdefs.h <<_ACEOF
-+#define FSADM_PATH "$FSADM_PATH"
-+_ACEOF
-+
-+
- ################################################################################
- if test "$BUILD_DMEVENTD" = yes; then
+ #fail lvconvert --cachepool $vg/$lv1 --poolmetadata $vg/$lv2
+ #lvconvert --yes --type cache-pool --poolmetadata $vg/$lv2 $vg/$lv1
+diff --git a/test/shell/lvconvert-mirror.sh b/test/shell/lvconvert-mirror.sh
+index 7e8d663..86ae0e3 100644
+--- a/test/shell/lvconvert-mirror.sh
++++ b/test/shell/lvconvert-mirror.sh
+@@ -216,6 +216,21 @@ check mirror_no_temporaries $vg $lv1
+ check mirror_legs $vg $lv1 2
+ lvremove -ff $vg
  
-diff --git a/configure.in b/configure.in
-index 42ec52f..9c1dabe 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1895,6 +1895,10 @@ test "$prefix" != NONE && clvmd_prefix=$prefix
- CLVMD_PATH="$clvmd_prefix/sbin/clvmd"
- AC_DEFINE_UNQUOTED(CLVMD_PATH, ["$CLVMD_PATH"], [Path to clvmd binary.])
- 
++# Check the same with new --startpool lvconvert command option
++lvcreate -aey -l2 --type mirror -m1 -n $lv1 $vg "$dev1" "$dev2" "$dev3:$DEVRANGE"
++LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -m+1 -b $vg/$lv1 "$dev4"
++# FIXME: Extra wait here for mirror upconvert synchronization
++# otherwise we may fail her on parallel upconvert and downconvert
++# lvconvert-mirror-updown.sh tests this errornous case separately
++should lvconvert --startpoll $vg/$lv1
++lvconvert -m-1 $vg/$lv1 "$dev2"
++should lvconvert --startpoll $vg/$lv1
 +
-+FSADM_PATH="$lvm_exec_prefix/sbin/fsadm"
-+AC_DEFINE_UNQUOTED(FSADM_PATH, ["$FSADM_PATH"], [Path to fsadm binary.])
++check mirror $vg $lv1 "$dev3"
++check mirror_no_temporaries $vg $lv1
++check mirror_legs $vg $lv1 2
++lvremove -ff $vg
 +
- ################################################################################
- dnl -- dmeventd pidfile and executable path
- if test "$BUILD_DMEVENTD" = yes; then
-diff --git a/include/configure.h.in b/include/configure.h.in
-index 04e7f4b..5172650 100644
---- a/include/configure.h.in
-+++ b/include/configure.h.in
-@@ -148,6 +148,9 @@
- /* Library version */
- #undef DM_LIB_VERSION
+ # ---------------------------------------------------------------------
  
-+/* Path to fsadm binary. */
-+#undef FSADM_PATH
+ # "rhbz440405: lvconvert -m0 incorrectly fails if all PEs allocated"
+diff --git a/test/shell/lvconvert-raid-regionsize.sh b/test/shell/lvconvert-raid-regionsize.sh
+index 7a6c7f0..9884c1b 100644
+--- a/test/shell/lvconvert-raid-regionsize.sh
++++ b/test/shell/lvconvert-raid-regionsize.sh
+@@ -28,8 +28,11 @@ function _test_regionsize
+ 	local lv=$5
+ 
+ 	lvconvert --type $type --yes -R $regionsize $vg/$lv
+-	[ $? -ne 0 ] && return 1
+ 	check lv_field $vg/$lv regionsize "$regionsize_str"
 +
- /* Define to 1 if you have the `alarm' function. */
- #undef HAVE_ALARM
- 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index b701722..3b0eebb 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -1035,6 +1035,10 @@ cfg_array(global_cache_check_options_CFG, "cache_check_options", global_CFG_SECT
- cfg_array(global_cache_repair_options_CFG, "cache_repair_options", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_CACHE_REPAIR_OPTIONS_CONFIG, vsn(2, 2, 108), NULL, 0, NULL,
- 	"List of options passed to the cache_repair command.\n")
- 
-+cfg(global_fsadm_executable_CFG, "fsadm_executable", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_FSADM_PATH, vsn(2, 2, 170), "@FSADM_PATH@", 0, NULL,
-+	"The full path to the fsadm command.\n"
-+	"LVM uses this command to help with lvresize -r operations.\n")
++	not lvconvert --regionsize $regionsize $vg/$lv 2>err
++	grep "is already" err
 +
- cfg(global_system_id_source_CFG, "system_id_source", global_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_SYSTEM_ID_SOURCE, vsn(2, 2, 117), NULL, 0, NULL,
- 	"The method LVM uses to set the local system ID.\n"
- 	"Volume Groups can also be given a system ID (by vgcreate, vgchange,\n"
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 2340636..b5d9983 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -135,6 +135,8 @@
- #define DEFAULT_CACHE_METADATA_FORMAT CACHE_METADATA_FORMAT_UNSELECTED /* Autodetect */
- #define DEFAULT_CACHE_MODE "writethrough"
- 
-+#define DEFAULT_FSADM_PATH FSADM_PATH
-+
- #define DEFAULT_UMASK 0077
- 
- #define DEFAULT_FORMAT "lvm2"
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 0dfbad4..50f5167 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4567,13 +4567,13 @@ static int _request_confirmation(const struct logical_volume *lv,
+ 	fsck -fn "$DM_DEV_DIR/$vg/$lv"
  }
  
- enum fsadm_cmd_e { FSADM_CMD_CHECK, FSADM_CMD_RESIZE };
--#define FSADM_CMD "fsadm"
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index c73c648..c08b95a 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -88,6 +88,10 @@ fail lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $lv2
+ lvchange -an $vg
+ lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $lv2
+ check lv_field $vg/${lv1}_tmeta uuid "$UUID"
 +
- #define FSADM_CMD_MAX_ARGS 6
- #define FSADM_CHECK_FAILS_FOR_MOUNTED 3 /* shell exist status code */
++# and swap again with new command --swapmetadata
++lvconvert --yes --swapmetadata $vg/$lv1 --poolmetadata $lv2
++check lv_field $vg/$lv2 uuid "$UUID"
+ lvremove -f $vg
  
- /*
-- * FSADM_CMD --dry-run --verbose --force check lv_path
-- * FSADM_CMD --dry-run --verbose --force resize lv_path size
-+ * fsadm --dry-run --verbose --force check lv_path
-+ * fsadm --dry-run --verbose --force resize lv_path size
-  */
- static int _fsadm_cmd(enum fsadm_cmd_e fcmd,
- 		      struct logical_volume *lv,
-@@ -4588,7 +4588,7 @@ static int _fsadm_cmd(enum fsadm_cmd_e fcmd,
- 	const char *argv[FSADM_CMD_MAX_ARGS + 2];
- 	unsigned i = 0;
  
--	argv[i++] = FSADM_CMD;
-+	argv[i++] = find_config_tree_str(cmd, global_fsadm_executable_CFG, NULL);
+diff --git a/test/shell/snapshot-merge.sh b/test/shell/snapshot-merge.sh
+index a301d22..bdbbdba 100644
+--- a/test/shell/snapshot-merge.sh
++++ b/test/shell/snapshot-merge.sh
+@@ -56,6 +56,9 @@ not lvconvert --merge
+ lvconvert --merge $vg/$(snap_lv_name_ $lv1)
+ lvremove -f $vg/$lv1
  
- 	if (test_mode())
- 		argv[i++] = "--dry-run";
++setup_merge_ $vg $lv1
++lvconvert --mergesnapshot $vg/$(snap_lv_name_ $lv1)
++lvremove -f $vg/$lv1
+ 
+ # test that an actively merging snapshot may not be removed
+ setup_merge_ $vg $lv1
+diff --git a/test/shell/thin-merge.sh b/test/shell/thin-merge.sh
+index f044f57..9955aab 100644
+--- a/test/shell/thin-merge.sh
++++ b/test/shell/thin-merge.sh
+@@ -109,5 +109,12 @@ check lv_not_exists $vg oldsnapof_${lv1}
+ lvcreate -s -L10 -n oldsnapof_snap $vg/snap
+ lvconvert --merge $vg/snap
+ lvremove -f $vg/oldsnapof_snap
++check lv_field  $vg/$lv1 thin_id "3"
++
++# Check --mergethin
++lvcreate -s -n snap $vg/$lv1
++check lv_field  $vg/snap thin_id "4"
++lvconvert --mergethin $vg/snap
++check lv_field  $vg/$lv1 thin_id "4"
+ 
+ vgremove -ff $vg
 
 
