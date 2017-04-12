@@ -1,86 +1,81 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 12 Apr 2017 08:40:07 -0400
-Subject: master - lvconvert: fix failing valid regionsize change
-Message-ID: <201704121240.v3CCe7B6022022@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Jonathan Brassow <jbrassow@sourceware.org>
+Date: Wed, 12 Apr 2017 11:35:37 -0400
+Subject: master - Typo: change loose to lose
+Message-ID: <201704121535.v3CFZbuM013701@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=532388fad510c7ba706ecbd4b5fbd2643134d63b
-Commit:        532388fad510c7ba706ecbd4b5fbd2643134d63b
-Parent:        01b5820d03c41516222675eb458ce6eb3dff53a7
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Apr 12 14:38:49 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Apr 12 14:38:49 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ba12a2e81a319c22353c8e52bf29f55c924b2d9f
+Commit:        ba12a2e81a319c22353c8e52bf29f55c924b2d9f
+Parent:        532388fad510c7ba706ecbd4b5fbd2643134d63b
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed Apr 12 10:28:19 2017 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Apr 12 10:28:19 2017 -0500
 
-lvconvert: fix failing valid regionsize change
+Typo: change loose to lose
 
-Reshape check failed when regionsize changed and current raid type
-was provided with no other change requested (stripes or stripesize).
+loose (v): set free; release
+lose (v) : be deprived of or cease to have or retain
 
-E.g. "lvconvert --type raid6 --regionsize 256K" on a raid6 LV
-with != 256K regionsize.
-
-Enable --type in test script.
+We 'lose' redundancy or 'lose' meaning.
 ---
- lib/metadata/raid_manip.c               |   10 ++++------
- test/shell/lvconvert-raid-regionsize.sh |    2 +-
- 2 files changed, 5 insertions(+), 7 deletions(-)
+ daemons/cmirrord/cluster.c |    2 +-
+ lib/metadata/raid_manip.c  |   10 +++++-----
+ 2 files changed, 6 insertions(+), 6 deletions(-)
 
+diff --git a/daemons/cmirrord/cluster.c b/daemons/cmirrord/cluster.c
+index e196eb2..94be563 100644
+--- a/daemons/cmirrord/cluster.c
++++ b/daemons/cmirrord/cluster.c
+@@ -182,7 +182,7 @@ int cluster_send(struct clog_request *rq)
+ 	}
+ 
+ 	/*
+-	 * Once the request heads for the cluster, the luid looses
++	 * Once the request heads for the cluster, the luid loses
+ 	 * all its meaning.
+ 	 */
+ 	rq->u_rq.luid = 0;
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index f99788f..9614179 100644
+index 9614179..b58ba2d 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -2389,7 +2389,7 @@ static int _reshape_requested(const struct logical_volume *lv, const struct segm
- 	if (seg_is_any_raid10(seg) && seg->area_count > 2 &&
- 	    stripes && stripes < seg->area_count - seg->segtype->parity_devs) {
- 		log_error("Can't remove stripes from raid10");
--		goto err;
-+		return 2;
+@@ -2932,7 +2932,7 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
+ 
+ 	/* Convert to linear? */
+ 	if (new_count == 1) {
+-		if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s to type %s loosing all resilience? [y/n]: ",
++		if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s to type %s losing all resilience? [y/n]: ",
+ 					  lvseg_name(first_seg(lv)), display_lvname(lv), SEG_TYPE_NAME_LINEAR) == 'n') {
+ 			log_error("Logical volume %s NOT converted to \"%s\".",
+ 				  display_lvname(lv), SEG_TYPE_NAME_LINEAR);
+@@ -3072,9 +3072,9 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
+ 		return 0;
  	}
  
- 	if (data_copies != seg->data_copies) {
-@@ -2400,22 +2400,20 @@ static int _reshape_requested(const struct logical_volume *lv, const struct segm
- 	/* Change layout (e.g. raid5_ls -> raid5_ra) keeping # of stripes */
- 	if (seg->segtype != segtype) {
- 		if (stripes && stripes != _data_rimages_count(seg, seg->area_count))
--			goto err;
-+			return 2;
- 
- 		return 1;
+-	/* Split on a 2-legged raid1 LV causes loosing all resilience */
++	/* Split on a 2-legged raid1 LV causes losing all resilience */
+ 	if (new_count == 1 &&
+-	    !yes && yes_no_prompt("Are you sure you want to split %s LV %s loosing all resilience? [y/n]: ",
++	    !yes && yes_no_prompt("Are you sure you want to split %s LV %s losing all resilience? [y/n]: ",
+ 				  lvseg_name(first_seg(lv)), display_lvname(lv)) == 'n') {
+ 		log_error("Logical volume %s NOT split.", display_lvname(lv));
+ 		return 0;
+@@ -3214,9 +3214,9 @@ int lv_raid_split_and_track(struct logical_volume *lv,
+ 		return 0;
  	}
  
- 	if (stripes && stripes == _data_rimages_count(seg, seg->area_count) &&
--	    stripe_size == seg->stripe_size) {
-+	    stripe_size == seg->stripe_size &&
-+	    region_size == seg->region_size) {
- 		log_error("LV %s already has %u stripes.",
- 			  display_lvname(lv), stripes);
- 		return 2;
- 	}
- 
- 	return (stripes || stripe_size) ? 1 : 0;
--
--err:
--	return 2;
- }
- 
- /*
-diff --git a/test/shell/lvconvert-raid-regionsize.sh b/test/shell/lvconvert-raid-regionsize.sh
-index 9baa99a..7a6c7f0 100644
---- a/test/shell/lvconvert-raid-regionsize.sh
-+++ b/test/shell/lvconvert-raid-regionsize.sh
-@@ -27,7 +27,7 @@ function _test_regionsize
- 	local vg=$4
- 	local lv=$5
- 
--	lvconvert --yes -R $regionsize $vg/$lv
-+	lvconvert --type $type --yes -R $regionsize $vg/$lv
- 	[ $? -ne 0 ] && return 1
- 	check lv_field $vg/$lv regionsize "$regionsize_str"
- 	fsck -fn "$DM_DEV_DIR/$vg/$lv"
+-	/* Split and track changes on a 2-legged raid1 LV causes loosing resilience for newly written data. */
++	/* Split and track changes on a 2-legged raid1 LV causes losing resilience for newly written data. */
+ 	if (seg->area_count == 2 &&
+-	    !yes && yes_no_prompt("Are you sure you want to split and track %s LV %s loosing resilience for any newly written data? [y/n]: ",
++	    !yes && yes_no_prompt("Are you sure you want to split and track %s LV %s losing resilience for any newly written data? [y/n]: ",
+ 				  lvseg_name(seg), display_lvname(lv)) == 'n') {
+ 		log_error("Logical volume %s NOT split.", display_lvname(lv));
+ 		return 0;
 
 
