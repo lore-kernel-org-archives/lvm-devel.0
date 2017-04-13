@@ -1,194 +1,180 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 10 Sep 2014 22:02:06 +0000 (UTC)
-Subject: master - lv_rename: fix snapshot rename
-Message-ID: <20140910220206.69D9A6115D@fedorahosted.org>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Wed, 12 Apr 2017 21:21:27 -0400
+Subject: v2_02_170 annotated tag has been created
+Message-ID: <201704130121.v3D1LRrQ020601@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=413fc9d3e699206ec493a70c6baf98bc87b83a9f
-Commit:        413fc9d3e699206ec493a70c6baf98bc87b83a9f
-Parent:        319f67b1abd8b391958c8cd6d396c590bb5225be
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 9 18:47:27 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 9 19:15:24 2014 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b369397f21869b3e1bb0fc8d005599d444ae2c8e
+Commit:        b369397f21869b3e1bb0fc8d005599d444ae2c8e
+Parent:        0000000000000000000000000000000000000000
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    2017-04-12 23:43 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: 2017-04-12 23:43 +0000
 
-lv_rename: fix snapshot rename
+annotated tag: v2_02_170 has been created
+	    at b369397f21869b3e1bb0fc8d005599d444ae2c8e (tag)
+       tagging b9a16fe73bdbed8a9bece3fb33fb754d62ffb8d4 (commit)
+      replaces v2_02_169
 
-Fix rename operation for snapshot (cow) LV.
-Only the snapshot's origin has the lock and by mistake suspend
-and resume has been called for the snapshot LV.
-This further made volumes unusable in cluster.
+Version 2.02.170
 
-So instead of suspend and resuming list of LVs,
-we need to just suspend and resume origin.
+Another development checkpoint release.  We have stopped adding
+features as we work towards the next stable release, but please still
+only use this release for testing purposes.
 
-As the sequence write/suspend/commit/resume
-is widely used in lvm2 code base - move it to
-new lv_update_and_reload function.
----
- WHATS_NEW                        |    2 +
- lib/metadata/lv_manip.c          |   96 +++++++++++++++++++++----------------
- lib/metadata/metadata-exported.h |    4 ++
- 3 files changed, 60 insertions(+), 42 deletions(-)
+88 files changed, 1657 insertions(+), 1902 deletions(-)
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index bf929f6..2175d29 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.02.112 - 
- =====================================
-+  Introduce common code to modify metadate and reload updated LV.
-+  Fix rename of active snapshot volume in cluster.
-   Make sure shared libraries are built with RELRO option.
- 
- Version 2.02.111 - 1st September 2014
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 60aa6f8..7374484 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -3940,10 +3940,7 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 		     const char *new_name, int update_mda)
- {
- 	struct volume_group *vg = lv->vg;
--	struct lv_names lv_names;
--	DM_LIST_INIT(lvs_changed);
--	struct lv_list lvl, lvl2, *lvlp;
--	int r = 0;
-+	struct lv_names lv_names = { .old = lv->name };
- 
- 	/* rename is not allowed on sub LVs */
- 	if (!lv_is_visible(lv)) {
-@@ -3965,51 +3962,21 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 	if (update_mda && !archive(vg))
- 		return_0;
- 
-+	if (!(lv_names.new = dm_pool_strdup(cmd->mem, new_name))) {
-+		log_error("Failed to allocate space for new name.");
-+		return 0;
-+	}
- 	/* rename sub LVs */
--	lv_names.old = lv->name;
--	lv_names.new = new_name;
- 	if (!for_each_sub_lv(lv, _rename_cb, (void *) &lv_names))
- 		return_0;
- 
- 	/* rename main LV */
--	if (!(lv->name = dm_pool_strdup(cmd->mem, new_name))) {
--		log_error("Failed to allocate space for new name");
--		return 0;
--	}
-+	lv->name = lv_names.new;
- 
--	if (!update_mda)
--		return 1;
--
--	lvl.lv = lv;
--	dm_list_add(&lvs_changed, &lvl.list);
--
--	/* rename active virtual origin too */
--	if (lv_is_cow(lv) && lv_is_virtual_origin(lvl2.lv = origin_from_cow(lv)))
--		dm_list_add_h(&lvs_changed, &lvl2.list);
--
--	log_verbose("Writing out updated volume group");
--	if (!vg_write(vg))
--		return 0;
--
--	if (!suspend_lvs(cmd, &lvs_changed, vg))
--		goto_out;
--
--	if (!(r = vg_commit(vg)))
--		stack;
-+	if (update_mda && !lv_update_and_reload(lv))
-+		return_0;
- 
--	/*
--	 * FIXME: resume LVs in reverse order to prevent memory
--	 * lock imbalance when resuming virtual snapshot origin
--	 * (resume of snapshot resumes origin too)
--	 */
--	dm_list_iterate_back_items(lvlp, &lvs_changed)
--		if (!resume_lv(cmd, lvlp->lv)) {
--			r = 0;
--			stack;
--		}
--out:
--	backup(vg);
--	return r;
-+	return 1;
- }
- 
- /*
-@@ -5739,6 +5706,51 @@ no_remove:
- 	return 0;
- }
- 
-+static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
-+{
-+	struct volume_group *vg = lv->vg;
-+	int do_backup = 0, r = 0;
-+
-+	log_very_verbose("Updating logical volume %s on disk(s).",
-+			 display_lvname(lv));
-+
-+	if (!vg_write(vg))
-+		return_0;
-+
-+	if (!(origin_only ? suspend_lv_origin(vg->cmd, lv) : suspend_lv(vg->cmd, lv))) {
-+		log_error("Failed to lock logical volume %s.",
-+			  display_lvname(lv));
-+		vg_revert(vg);
-+	} else if (!(r = vg_commit(vg)))
-+		stack; /* !vg_commit() has implict vg_revert() */
-+	else
-+		do_backup = 1;
-+
-+	log_very_verbose("Updating logical volume %s in kernel.",
-+			 display_lvname(lv));
-+
-+	if (!(origin_only ? resume_lv_origin(vg->cmd, lv) : resume_lv(vg->cmd, lv))) {
-+		log_error("Problem reactivating logical volume %s.",
-+			  display_lvname(lv));
-+		r = 0;
-+	}
-+
-+	if (do_backup)
-+		backup(vg);
-+
-+	return r;
-+}
-+
-+int lv_update_and_reload(struct logical_volume *lv)
-+{
-+        return _lv_update_and_reload(lv, 0);
-+}
-+
-+int lv_update_and_reload_origin(struct logical_volume *lv)
-+{
-+        return _lv_update_and_reload(lv, 1);
-+}
-+
- /*
-  * insert_layer_for_segments_on_pv() inserts a layer segment for a segment area.
-  * However, layer modification could split the underlying layer segment.
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 0db4334..b0ca632 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -700,6 +700,10 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
- int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 		     const char *new_name, int update_mda);
- 
-+/* Updates and reloads metadata for given lv */
-+int lv_update_and_reload(struct logical_volume *lv);
-+int lv_update_and_reload_origin(struct logical_volume *lv);
-+
- uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
- 			   uint32_t extent_size);
- 
+iEYEABECAAYFAljuveMACgkQIoGRwVZ+LBd71gCfVV7uj+tMPu+shH+830v6lsGT
+cMEAnAqwkwI1SUnuA2NUuzIK9bMun80h
+=B/vY
+-----END PGP SIGNATURE-----
+
+Alasdair G Kergon (4):
+      post-release
+      make generate
+      autoconf
+      pre-release
+
+Bryn M. Reeves (30):
+      dmfilemapd: log closedir errors with log_sys_error()
+      dmfilemapd: do not closdir(pid_d) unless it is open
+      dmfilemapd: pass correct dirp to closedir()
+      dmfilemapd: use *argv[0] when testing for absolute path (coverity)
+      dmfilemapd: always close check file descriptor (coverity)
+      dmfilemapd: always terminate link buffer after readlink(2) (coverity)
+      dmfilemapd: always close link check file descriptor (coverity)
+      dmfilemapd: fix off-by-one in fd comparison (coverity)
+      dmfilemapd: free region table at end of _update_regions() (coverity)
+      libdm: do not leak FIEMAP extent buffer if pool allocation fails (coverity)
+      libdm: abort filemap update if pool allocation fails (coverity)
+      libdm: do not attempt filemap cleanup if dm_stats_list() fails (coverity)
+      dmsetup: do not start dmfilemapd if region creation fails (coverity)
+      dmsetup: always close fd when leaving _stats_update_file() (coverity)
+      libdm: use log_sys_error if dmfilemapd exec fails
+      dmsetup: simplify branching in _stats_update_file()
+      libdm: use DM_STATS_GROUP_* constants in dm_stats_create_regions_from_fd
+      dmfilemapd: make filemap_monitor->nr_regions uint64_t
+      dmfilemapd: fix len type in _filemap_monitor_check_file_unlinked()
+      dmfilemapd: cast sysconf() return value to int
+      dmfilemapd: use log_sys_error in _filemap_monitor_set_notify
+      dmfilemapd: cast return value of strto* functions when needed
+      libdm: make _find_extent() nr_extents argument uint64_t
+      libdm: make _stats_resize_group() num_regions argument uint64_t
+      libdm: use size_t for buflen in _stats_group_file_regions()
+      libdm: use uint64_t where possible in filemap routines
+      libdm: fix incorrect format specifier in _stats_resize_group()
+      libdm: use correct FMTu32 format specifier for uint32_t
+      dmsetup: replace (f)printf("
+") with putchar/putc
+      WHATS_NEW_DM: add recent dmsetup and dmfilemapd entries
+
+David Teigland (26):
+      lvchange: refresh command missing activationmode option
+      man: fix description of --partial option
+      commands: ignore partial option in most cases
+      commands: recognize ignored options
+      help: include cmd def info in verbose output
+      commands: missing comma in cmd def option list
+      help: print all options in abbreviated help output
+      lvconvert: fix converting hidden lv to pool
+      vgchange/lvchange: fix poll and monitor use
+      lvchange: fix --poll value when set from option
+      commands: fix misspelling of option value
+      lvchange: fix missing return value
+      lvchange/lvconvert: fix missing lvmlockd LV locks
+      commands: check required option value when matching command
+      man lvcreate/lvconvert: minor clean up rewording
+      lvconvert: validate vg name prefix for pool metadata name
+      man lvmraid: improve text layout
+      lvconvert: prevent duplicate use of metadata lv
+      lvconvert: require different LV for pool
+      man lvmraid: use same style as generated pages
+      man lvmraid: fix line wrapping in examples
+      raid_manip: fix typo warning message
+      man lvmraid: wrap long lines
+      commands: add rule for lvconvert commands that create pools
+      WHATS_NEW: add items since last release
+      commands: improve error message for option rules
+
+Heinz Mauelshagen (40):
+      man: regexp readability / use $(SED)
+      man: de-duplicate lvmconfig, lvm-config and lvm-dumpconfig manuals
+      man: simplify by avoiding different headers on de-duplication of lvmconfig, lvm-config and lvm-dumpconfig
+      man: ranges/LV names/symbolic use regexp
+      man-generator: catch missing command name
+      man: use variable in Makefile / regexp
+      man: Copyright
+      man: raid cleanup
+      man: add minor regexp
+      man-generator: add '.' to all messages
+      raid: address coverity issues
+      raid: favour dm_list_first()
+      raid: more coverity issues
+      man-generator: don't ignore description file errors
+      man-generator: enhance performance
+      man-generator: shutdown stdout buffer
+      man: pregen file change
+      lvchange: persistent major/minor processing regression
+      lvchange: persistent major/minor processing regression
+      lvchange: avoid multiple metadata updates/reloads/backups
+      man: '-pool' regexp
+      lvchange: enhance avoiding multiple metadata updates/reloads/backups
+      lvchange: tidy switch code in _lvchange_properties_single()
+      lvconvert: allow --type with --regionsize
+      raid: tidying
+      man: lvmraid.7 raid6_n_6 fix
+      raid: reload on removing images
+      lvconvert: prompt on raid1 image changes
+      lvconvert: avoid error message on raid1 -> raid4 conversion
+      lvconvert: raid1 -> linear prompt
+      lvconvert: fixe conversion message
+      lvconvert: cleanup prompting
+      signals: fix SIGINT blocking flaw causing inconsistent metadata
+      signals: fix comparison flaw
+      raid: handle insufficent PVs on takeover from striped/raid0
+      lvconvert: add segment type raid10_near
+      lvconvert: fix failing valid regionsize change
+      lvconvert: better message on --regionsize
+      WHATS_NEW: add recent RAID entries
+      lvconvert: return error without conversion
+
+Jonathan Brassow (1):
+      Typo: change loose to lose
+
+Marian Csontos (3):
+      dmfilemapd: Fix install target
+      spec: Add dmfilemapd
+      dmstats: Fix path to static dmstats
+
+Nir Soffer (1):
+      dmsetup: Flush ouptut when using --interval
+
+Peter Rajnoha (1):
+      lvmconf: fix systemd unit existence check for lvmconf --services --startstopservices
+
+Zdenek Kabelac (16):
+      vgrename: use long enough buffer for path
+      man: fix type
+      tests: fix typo in makefile
+      cache: scan kallsyms for kernel symbols
+      tests: fix LD_LIBRARY_PATH
+      dmfilemapd: keep 1 byte for 
+      dmfilemapd: free path
+      libdm: set min,maj
+      cmdline: ensure command struct is defined
+      thin: properly check for status for max sizes metadata
+      fsadm: support configurable full path
+      tests: restore some test changes
+      tests: test for new supported commands
+      raid: use log_error
+      tests: aux defines fsadm path
+      tests: use egrep to check for message
 
 
