@@ -1,39 +1,37 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Fri, 28 Apr 2017 09:35:00 -0400
-Subject: master - WHATS_NEW: pvcreate --setphysicalvolumesize
-Message-ID: <201704281335.v3SDZ00v026092@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Thu, 13 Apr 2017 11:50:15 -0400
+Subject: master - WHATS_NEW: raise region_size default
+Message-ID: <201704131550.v3DFoF6W030297@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1764524b063b226aa715d17a22ed271add514538
-Commit:        1764524b063b226aa715d17a22ed271add514538
-Parent:        86b9c23dbe4a5033eea6667c0274655e7c0c8e68
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Apr 28 14:34:26 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Apr 28 14:34:26 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b81b4aad24807d2aa4968aa9fc7d970a65623620
+Commit:        b81b4aad24807d2aa4968aa9fc7d970a65623620
+Parent:        c6a6ce6cd5a80e78094aa6420e3cb53a478eef76
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Thu Apr 13 17:49:58 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Apr 13 17:49:58 2017 +0200
 
-WHATS_NEW: pvcreate --setphysicalvolumesize
+WHATS_NEW: raise region_size default
 
 ---
- WHATS_NEW |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index c746bac..6ec5df1 100644
+index 56ad0ca..e59024b 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,7 +1,7 @@
+@@ -1,5 +1,6 @@
  Version 2.02.171 - 
  ==================================
-   lvconvert - preserve region size on raid1 image count changes
--  Adjust pvresize messages and add prompt if underlying dev size differs.
-+  Adjust pvresize/pvcreate messages and prompt if underlying dev size differs.
-   raid - sanely handle insufficient space on takeover.
-   Fix configure --enable-notify-dbus status message.
-   Change configure option name prefix from --enable-lockd to --enable-lvmlockd.
++  lvcreate - raise mirror/raid default regionsize to 2MiB
+   Add missing configurable prefix to configuration file installation directory.
+ 
+ Version 2.02.170 - 13th April 2017
 
 
