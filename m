@@ -1,37 +1,39 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 18 Apr 2017 13:58:43 -0400
-Subject: master - WHATS_NEW: configure option enable-lvmlockd
-Message-ID: <201704181758.v3IHwh42001621@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 18 Apr 2017 16:57:05 -0400
+Subject: master - man: quote the word no
+Message-ID: <201704182057.v3IKv5Vc024471@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2d9097e9ca2c07cff1870349bd15e30e151e709e
-Commit:        2d9097e9ca2c07cff1870349bd15e30e151e709e
-Parent:        a5256d1353ef60a3f29a7af1a9d1389bc7d64104
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b9d10857b26533dcd52c4d482af0a9291670858e
+Commit:        b9d10857b26533dcd52c4d482af0a9291670858e
+Parent:        658d524d26f2cff9bde31142ecab6d17fd2c54dd
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Apr 18 12:58:18 2017 -0500
+AuthorDate:    Tue Apr 18 15:55:57 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 18 12:58:18 2017 -0500
+CommitterDate: Tue Apr 18 15:56:48 2017 -0500
 
-WHATS_NEW: configure option enable-lvmlockd
+man: quote the word no
 
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ tools/args.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e59024b..39ad2af 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.171 - 
- ==================================
-+  Change configure option names from enable-lockd to enable-lvmlockd.
-   lvcreate - raise mirror/raid default regionsize to 2MiB
-   Add missing configurable prefix to configuration file installation directory.
+diff --git a/tools/args.h b/tools/args.h
+index 24e3918..be1711b 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -1234,7 +1234,7 @@ arg(physicalvolume_ARG, 'P', "physicalvolume", 0, 0, 0, NULL)
  
+ arg(quiet_ARG, 'q', "quiet", 0, ARG_COUNTABLE, 0,
+     "Suppress output and log messages. Overrides --debug and --verbose.\n"
+-    "Repeat once to also suppress any prompts with answer no.\n")
++    "Repeat once to also suppress any prompts with answer 'no'.\n")
+ 
+ arg(readahead_ARG, 'r', "readahead", readahead_VAL, 0, 0,
+     "Sets read ahead sector count of an LV.\n"
 
 
