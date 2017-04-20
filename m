@@ -1,70 +1,72 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Wed, 12 Apr 2017 21:21:03 -0400
-Subject: master - conf: Add missing prefix to installation directory.
-Message-ID: <201704130121.v3D1L3TV020266@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Thu, 20 Apr 2017 19:22:36 -0400
+Subject: master - test: Adjust previous commit
+Message-ID: <201704202322.v3KNMaTZ005430@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4547218a7dcee0508f61561e3e319428651e8951
-Commit:        4547218a7dcee0508f61561e3e319428651e8951
-Parent:        ae7f696d535143be88aa8aa564fad9c1851cebd9
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Apr 13 02:17:27 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Apr 13 02:17:27 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a004cceed2ce050514fe9b4bd66fc948a2b72bc2
+Commit:        a004cceed2ce050514fe9b4bd66fc948a2b72bc2
+Parent:        18bf954801e0ea3aff4b85e9511b1bbf03a07c2d
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Apr 21 01:21:24 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Apr 21 01:21:24 2017 +0200
 
-conf: Add missing prefix to installation directory.
+test: Adjust previous commit
 
-Our Makefiles also support systems that set the installation prefix
-at configuration time - the use of DESTDIR is not required.
+Change have_single_core to  have_multi_core and go back to || logic in related test scripts.
 ---
- WHATS_NEW        |    1 +
- conf/Makefile.in |    4 ++--
- make.tmpl.in     |    3 ++-
- 3 files changed, 5 insertions(+), 3 deletions(-)
+ test/lib/aux.sh                                    |    4 ++--
+ .../lvconvert-raid-reshape-linear_to_striped.sh    |    3 +--
+ .../lvconvert-raid-reshape-striped_to_linear.sh    |    2 +-
+ 3 files changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 766bf32..56ad0ca 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.171 - 
- ==================================
-+  Add missing configurable prefix to configuration file installation directory.
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index b05c59d..6217c4c 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1490,9 +1490,9 @@ have_readline() {
+ 	echo version | lvm &>/dev/null
+ }
  
- Version 2.02.170 - 13th April 2017
- ==================================
-diff --git a/conf/Makefile.in b/conf/Makefile.in
-index db8e99f..c8fee3e 100644
---- a/conf/Makefile.in
-+++ b/conf/Makefile.in
-@@ -48,8 +48,8 @@ install_localconf: $(CONFLOCAL)
- 	fi
+-have_single_core() {
++have_multi_core() {
+ 	which nproc &>/dev/null || return 0
+-	[ $(nproc) -eq 1 ] && return 1
++	[ $(nproc) -ne 1 ]
+ }
  
- install_profiles: $(PROFILES)
--	$(INSTALL_DIR) $(DESTDIR)$(DEFAULT_PROFILE_DIR)
--	$(INSTALL_DATA) $(PROFILES) $(DESTDIR)$(DEFAULT_PROFILE_DIR)/
-+	$(INSTALL_DIR) $(profiledir)
-+	$(INSTALL_DATA) $(PROFILES) $(profiledir)/
+ dmsetup_wrapped() {
+diff --git a/test/shell/lvconvert-raid-reshape-linear_to_striped.sh b/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
+index 879c33c..042cb33 100644
+--- a/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
++++ b/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
+@@ -19,8 +19,7 @@ aux have_raid 1 10 1 || skip
  
- install_lvm2: install_conf install_localconf install_profiles
+ # Temporarily skip reshape tests on single-core CPUs until there's a fix for
+ # https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
+-aux have_single_core && skip
+-
++aux have_multi_core || skip
+ aux prepare_vg 5
  
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 8148fb5..c3e6c8c 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -82,7 +82,8 @@ udev_prefix = @udev_prefix@
- sysconfdir = @sysconfdir@
- rootdir = $(DESTDIR)/
- bindir = $(DESTDIR)@bindir@
--confdir = $(DESTDIR)@CONFDIR@/lvm
-+confdir = $(DESTDIR)$(exec_prefix)@CONFDIR@/lvm
-+profiledir = $(confdir)/@DEFAULT_PROFILE_SUBDIR@
- includedir = $(DESTDIR)@includedir@
- libdir = $(DESTDIR)@libdir@
- libexecdir = $(DESTDIR)@libexecdir@
+ #
+diff --git a/test/shell/lvconvert-raid-reshape-striped_to_linear.sh b/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
+index 4c12dd7..4051862 100644
+--- a/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
++++ b/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
+@@ -19,7 +19,7 @@ aux have_raid 1 10 1 || skip
+ 
+ # Temporarily skip reshape tests on single-core CPUs until there's a fix for
+ # https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
+-aux have_single_core && skip
++aux have_multi_core || skip
+ 
+ aux prepare_vg 5
+ 
 
 
