@@ -1,41 +1,51 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 27 Apr 2017 09:58:26 -0400
-Subject: master - test: add -y to raid1 up conversions
-Message-ID: <201704271358.v3RDwQ9E001751@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Thu, 27 Apr 2017 10:01:00 -0400
+Subject: master - pvresize: Missing a message on error path.
+Message-ID: <201704271401.v3RE10d4001902@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=33afe2ca76e4bddcfa33aafa2fed28d4ca60e08e
-Commit:        33afe2ca76e4bddcfa33aafa2fed28d4ca60e08e
-Parent:        05164479781486dbe2486c0439d42ed03e4483e8
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Apr 27 15:56:58 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Apr 27 15:56:58 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0e3c16af5699c000f1824c42c596fec58d019dfa
+Commit:        0e3c16af5699c000f1824c42c596fec58d019dfa
+Parent:        33afe2ca76e4bddcfa33aafa2fed28d4ca60e08e
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Apr 27 14:59:40 2017 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Apr 27 15:00:41 2017 +0100
 
-test: add -y to raid1 up conversions
+pvresize: Missing a message on error path.
 
 ---
- test/shell/lvconvert-raid-allocation.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/pv_manip.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-allocation.sh b/test/shell/lvconvert-raid-allocation.sh
-index b23644c..1a768b6 100644
---- a/test/shell/lvconvert-raid-allocation.sh
-+++ b/test/shell/lvconvert-raid-allocation.sh
-@@ -22,8 +22,8 @@ vgcreate -s 256k $vg $(cat DEVICES)
- # Start with linear on 2 PV and ensure that converting to
- # RAID is not allowed to reuse PVs for different images.  (Bug 1113180)
- lvcreate -aey -l 4 -n $lv1 $vg "$dev1:0-1" "$dev2:0-1"
--not lvconvert --type raid1 -m 1 $vg/$lv1 "$dev1" "$dev2"
--not lvconvert --type raid1 -m 1 $vg/$lv1 "$dev1" "$dev3:0-2"
-+not lvconvert -y --type raid1 -m 1 $vg/$lv1 "$dev1" "$dev2"
-+not lvconvert -y --type raid1 -m 1 $vg/$lv1 "$dev1" "$dev3:0-2"
- lvconvert -y --type raid1 -m 1 $vg/$lv1 "$dev3"
- not lvconvert -m 0 $vg/$lv1
- lvconvert -y -m 0 $vg/$lv1
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index 6ee4828..a8cd763 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -648,14 +648,18 @@ int pv_resize_single(struct cmd_context *cmd,
+ 				 pv_name, display_size(cmd, (uint64_t) size));
+ 			if (!yes && yes_no_prompt("%s: Requested size %s exceeds real size %s. Proceed?  [y/n]: ",
+ 						  pv_name, display_size(cmd, (uint64_t) new_size),
+-						  display_size(cmd, (uint64_t) size)) == 'n')
++						  display_size(cmd, (uint64_t) size)) == 'n') {
++				log_error("Physical Volume %s not resized.", pv_name);
+ 				goto_out;
++			}
+ 
+ 		}  else if (new_size < size)
+ 			if (!yes && yes_no_prompt("%s: Requested size %s is less than real size %s. Proceed?  [y/n]: ",
+ 						  pv_name, display_size(cmd, (uint64_t) new_size),
+-						  display_size(cmd, (uint64_t) size)) == 'n')
++						  display_size(cmd, (uint64_t) size)) == 'n') {
++				log_error("Physical Volume %s not resized.", pv_name);
+ 				goto_out;
++			}
+ 
+ 		if (new_size == size)
+ 			log_verbose("%s: Size is already %s (%" PRIu64 " sectors).",
 
 
