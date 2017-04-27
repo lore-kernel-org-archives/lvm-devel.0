@@ -1,138 +1,486 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Wed, 26 Apr 2017 21:49:49 -0400
-Subject: master - pvresize: Prompt when non-default size supplied.
-Message-ID: <201704270149.v3R1nnbP004566@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 26 Apr 2017 21:58:48 -0400
+Subject: master - test: Add -y to pvresize --setphysicalvolumesize
+Message-ID: <201704270158.v3R1wmvP005598@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cbc69f8c693edf0d1307c9447e2e66d07a04bfe9
-Commit:        cbc69f8c693edf0d1307c9447e2e66d07a04bfe9
-Parent:        78a0b4a08a7178250b9d0b3be7f975440975d9d4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=813bcb24f0cfd664e539d4508ab3586c9b927ab3
+Commit:        813bcb24f0cfd664e539d4508ab3586c9b927ab3
+Parent:        cbc69f8c693edf0d1307c9447e2e66d07a04bfe9
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Apr 27 02:36:34 2017 +0100
+AuthorDate:    Thu Apr 27 02:57:59 2017 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Apr 27 02:36:34 2017 +0100
+CommitterDate: Thu Apr 27 02:57:59 2017 +0100
 
-pvresize: Prompt when non-default size supplied.
+test: Add -y to pvresize --setphysicalvolumesize
 
-Seek confirmation before changing the PV size to one that differs
-from the underlying block device.
 ---
- WHATS_NEW                        |    1 +
- lib/metadata/metadata-exported.h |    3 ++-
- lib/metadata/pv_manip.c          |   30 +++++++++++++++++++++++-------
- liblvm/lvm_pv.c                  |    2 +-
- tools/pvresize.c                 |    2 +-
- 5 files changed, 28 insertions(+), 10 deletions(-)
+ test/shell/covercmd.sh                   |    6 +-
+ test/shell/process-each-duplicate-pvs.sh |    4 +-
+ test/shell/process-each-pvresize.sh      |  138 +++++++++++++++---------------
+ test/shell/pvresize-mdas.sh              |    2 +-
+ 4 files changed, 75 insertions(+), 75 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index efcddd5..f8efd87 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.171 - 
- ==================================
-+  Adjust pvresize messages and add prompt if underlying dev size differs.
-   lvconvert - preserve region size on raid1 image count changes
-   raid - sanely handle insufficient space on takeover
-   Fix configure --enable-notify-dbus status message.
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 8e03e20..8b4310b 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -748,7 +748,8 @@ int pvremove_many(struct cmd_context *cmd, struct dm_list *pv_names,
- int pv_resize_single(struct cmd_context *cmd,
- 			     struct volume_group *vg,
- 			     struct physical_volume *pv,
--			     const uint64_t new_size);
-+			     const uint64_t new_size,
-+			     int yes);
+diff --git a/test/shell/covercmd.sh b/test/shell/covercmd.sh
+index 69ff8d6..00b1781 100644
+--- a/test/shell/covercmd.sh
++++ b/test/shell/covercmd.sh
+@@ -58,10 +58,10 @@ vgremove -f $vg
+ # missing params
+ not pvresize
+ # negative size
+-not pvresize --setphysicalvolumesize -10M "$dev1"
++not pvresize --setphysicalvolumesize -10M -y "$dev1"
+ # not existing device
+-not pvresize --setphysicalvolumesize 10M "$dev7"
+-pvresize --setphysicalvolumesize 10M "$dev1"
++not pvresize --setphysicalvolumesize 10M -y "$dev7"
++pvresize --setphysicalvolumesize 10M -y "$dev1"
+ pvresize "$dev1"
  
- int pv_analyze(struct cmd_context *cmd, const char *pv_name,
- 	       uint64_t label_sector);
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index 5689a11..6ee4828 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -604,7 +604,7 @@ static int pv_resize(struct physical_volume *pv,
  
- 		log_verbose("Resizing physical volume %s from %" PRIu32
- 			    " to %" PRIu32 " extents.",
--			    pv_dev_name(pv), pv->pe_count, new_pe_count);
-+			    pv_dev_name(pv), old_pe_count, new_pe_count);
+diff --git a/test/shell/process-each-duplicate-pvs.sh b/test/shell/process-each-duplicate-pvs.sh
+index 9ab98dc..270fc52 100644
+--- a/test/shell/process-each-duplicate-pvs.sh
++++ b/test/shell/process-each-duplicate-pvs.sh
+@@ -26,7 +26,7 @@ pvcreate "$dev1"
+ pvcreate "$dev2"
+ vgcreate $vg1 "$dev1"
+ vgcreate $vg2 "$dev2"
+-pvresize --setphysicalvolumesize 8m "$dev2"
++pvresize --setphysicalvolumesize 8m -y "$dev2"
+ lvcreate -an -l1 -n $lv1 $vg1
  
- 		if (new_pe_count > old_pe_count)
- 			return _extend_pv(pv, vg, old_pe_count, new_pe_count);
-@@ -618,7 +618,8 @@ static int pv_resize(struct physical_volume *pv,
- int pv_resize_single(struct cmd_context *cmd,
- 		     struct volume_group *vg,
- 		     struct physical_volume *pv,
--		     const uint64_t new_size)
-+		     const uint64_t new_size,
-+		     int yes)
- {
- 	uint64_t size = 0;
- 	int r = 0;
-@@ -642,11 +643,26 @@ int pv_resize_single(struct cmd_context *cmd,
- 	}
+ # Both devs are shown and used by the VG
+@@ -275,7 +275,7 @@ pvremove -ff -y "$dev2"
  
- 	if (new_size) {
--		if (new_size > size)
--			log_warn("WARNING: %s: Overriding real size. "
--				  "You could lose data.", pv_name);
--		log_verbose("%s: Pretending size is %" PRIu64 " not %" PRIu64
--			    " sectors.", pv_name, new_size, pv_size(pv));
-+		if (new_size > size) {
-+			log_warn("WARNING: %s: Overriding real size %s. You could lose data.",
-+				 pv_name, display_size(cmd, (uint64_t) size));
-+			if (!yes && yes_no_prompt("%s: Requested size %s exceeds real size %s. Proceed?  [y/n]: ",
-+						  pv_name, display_size(cmd, (uint64_t) new_size),
-+						  display_size(cmd, (uint64_t) size)) == 'n')
-+				goto_out;
-+
-+		}  else if (new_size < size)
-+			if (!yes && yes_no_prompt("%s: Requested size %s is less than real size %s. Proceed?  [y/n]: ",
-+						  pv_name, display_size(cmd, (uint64_t) new_size),
-+						  display_size(cmd, (uint64_t) size)) == 'n')
-+				goto_out;
-+
-+		if (new_size == size)
-+			log_verbose("%s: Size is already %s (%" PRIu64 " sectors).",
-+				    pv_name, display_size(cmd, (uint64_t) new_size), new_size);
-+		else
-+			log_warn("WARNING: %s: Pretending size is %" PRIu64 " not %" PRIu64 " sectors.",
-+				 pv_name, new_size, size);
- 		size = new_size;
- 	}
+ pvcreate "$dev3"
+ pvcreate "$dev4"
+-pvresize --setphysicalvolumesize 8m "$dev4"
++pvresize --setphysicalvolumesize 8m -y "$dev4"
  
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index 3dd8433..26e3cf1 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -312,7 +312,7 @@ static int _lvm_pv_resize(const pv_t pv, uint64_t new_size)
- 	if (!vg_check_write_mode(pv->vg))
- 		return -1;
+ UUID3=$(pvs --noheadings -o uuid $dev3 | xargs)
+ UUID4=$(pvs --noheadings -o uuid $dev4 | xargs)
+diff --git a/test/shell/process-each-pvresize.sh b/test/shell/process-each-pvresize.sh
+index 86c2a7d..e1e4af3 100644
+--- a/test/shell/process-each-pvresize.sh
++++ b/test/shell/process-each-pvresize.sh
+@@ -78,7 +78,7 @@ old_reduced="28.00m"
+ new_request="20.00m"
+ new_reduced="16.00m"
  
--	if (!pv_resize_single(pv->vg->cmd, pv->vg, pv, size)) {
-+	if (!pv_resize_single(pv->vg->cmd, pv->vg, pv, size, 1)) {
- 		log_error("PV re-size failed!");
- 		return -1;
- 	}
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index ddff520..1de1709 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -52,7 +52,7 @@ static int _pvresize_single(struct cmd_context *cmd,
- 		cmd->lockd_gl_disable = 1;
- 	}
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ check pv_field "$dev10" pv_size $old_reduced
+ check pv_field "$dev2" pv_size $old_reduced
+ check pv_field "$dev3" pv_size $old_reduced
+@@ -90,7 +90,7 @@ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
  
--	if (!pv_resize_single(cmd, vg, pv, params->new_size))
-+	if (!pv_resize_single(cmd, vg, pv, params->new_size, arg_is_set(cmd, yes_ARG)))
- 		return_ECMD_FAILED;
+ # one pv
+-pvresize --setphysicalvolumesize $new_request "$dev10"
++pvresize --setphysicalvolumesize $new_request -y "$dev10"
+ check pv_field "$dev10" pv_size $new_reduced
+ # unchanged
+ check pv_field "$dev2" pv_size $old_reduced
+@@ -102,10 +102,10 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
  
- 	params->done++;
+ # two pvs in separate vgs
+-pvresize --setphysicalvolumesize $new_request "$dev2" "$dev6"
++pvresize --setphysicalvolumesize $new_request -y "$dev2" "$dev6"
+ check pv_field "$dev2" pv_size $new_reduced
+ check pv_field "$dev6" pv_size $new_reduced
+ # unchanged
+@@ -117,10 +117,10 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ 
+ # one tag on one pv
+-pvresize --setphysicalvolumesize $new_request @V2D4
++pvresize --setphysicalvolumesize $new_request -y @V2D4
+ check pv_field "$dev4" pv_size $new_reduced
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -132,10 +132,10 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ 
+ # one tag on all pvs in one vg
+-pvresize --setphysicalvolumesize $new_request @V3
++pvresize --setphysicalvolumesize $new_request -y @V3
+ check pv_field "$dev6" pv_size $new_reduced
+ check pv_field "$dev7" pv_size $new_reduced
+ check pv_field "$dev8" pv_size $new_reduced
+@@ -147,10 +147,10 @@ check pv_field "$dev3" pv_size $old_reduced
+ check pv_field "$dev4" pv_size $old_reduced
+ check pv_field "$dev5" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ 
+ # one tag on some pvs in one vg
+-pvresize --setphysicalvolumesize $new_request @V2D45
++pvresize --setphysicalvolumesize $new_request -y @V2D45
+ check pv_field "$dev4" pv_size $new_reduced
+ check pv_field "$dev5" pv_size $new_reduced
+ # unchanged
+@@ -162,11 +162,11 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ 
+ # one tag on multiple pvs in separate vgs
+ pvchange --addtag V12 "$dev10" "$dev2" "$dev3" "$dev4" "$dev5"
+-pvresize --setphysicalvolumesize $new_request @V12
++pvresize --setphysicalvolumesize $new_request -y @V12
+ check pv_field "$dev10" pv_size $new_reduced
+ check pv_field "$dev2" pv_size $new_reduced
+ check pv_field "$dev3" pv_size $new_reduced
+@@ -178,10 +178,10 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ 
+ # one pv and one tag on different pv
+-pvresize --setphysicalvolumesize $new_request "$dev10" @V3D9
++pvresize --setphysicalvolumesize $new_request -y "$dev10" @V3D9
+ check pv_field "$dev10" pv_size $new_reduced
+ check pv_field "$dev9" pv_size $new_reduced
+ # unchanged
+@@ -193,10 +193,10 @@ check pv_field "$dev6" pv_size $old_reduced
+ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ 
+ # redundant pv and tag
+-pvresize --setphysicalvolumesize $new_request "$dev9" @V3D9
++pvresize --setphysicalvolumesize $new_request -y "$dev9" @V3D9
+ check pv_field "$dev9" pv_size $new_reduced
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -208,10 +208,10 @@ check pv_field "$dev6" pv_size $old_reduced
+ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ 
+ # two tags on pvs in separate vgs
+-pvresize --setphysicalvolumesize $new_request @V3D9 @V2D3
++pvresize --setphysicalvolumesize $new_request -y @V3D9 @V2D3
+ check pv_field "$dev9" pv_size $new_reduced
+ check pv_field "$dev3" pv_size $new_reduced
+ # unchanged
+@@ -223,7 +223,7 @@ check pv_field "$dev6" pv_size $old_reduced
+ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+ 
+ 
+ #
+@@ -237,8 +237,8 @@ new_request="20.00m"
+ new_reduced="16.00m"
+ new_orphan="20.00m"
+ 
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ check pv_field "$dev10" pv_size $old_reduced
+ check pv_field "$dev2" pv_size $old_reduced
+ check pv_field "$dev3" pv_size $old_reduced
+@@ -252,7 +252,7 @@ check pv_field "$dev11" pv_size $old_orphan
+ check pv_field "$dev14" pv_size $old_orphan
+ 
+ # one orphan
+-pvresize --setphysicalvolumesize $new_request "$dev11"
++pvresize --setphysicalvolumesize $new_request -y "$dev11"
+ check pv_field "$dev11" pv_size $new_orphan
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -266,11 +266,11 @@ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ check pv_field "$dev14" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # two orphans
+-pvresize --setphysicalvolumesize $new_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $new_request -y "$dev11" "$dev14"
+ check pv_field "$dev11" pv_size $new_orphan
+ check pv_field "$dev14" pv_size $new_orphan
+ # unchanged
+@@ -284,11 +284,11 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one orphan, one tag
+-pvresize --setphysicalvolumesize $new_request @V3D9 "$dev14"
++pvresize --setphysicalvolumesize $new_request -y @V3D9 "$dev14"
+ check pv_field "$dev9" pv_size $new_reduced
+ check pv_field "$dev14" pv_size $new_orphan
+ # unchanged
+@@ -302,11 +302,11 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one pv, one orphan, one tag
+-pvresize --setphysicalvolumesize $new_request @V3D9 "$dev14" "$dev10"
++pvresize --setphysicalvolumesize $new_request -y @V3D9 "$dev14" "$dev10"
+ check pv_field "$dev9" pv_size $new_reduced
+ check pv_field "$dev10" pv_size $new_reduced
+ check pv_field "$dev14" pv_size $new_orphan
+@@ -320,8 +320,8 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ 
+ #
+@@ -329,7 +329,7 @@ pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
+ #
+ 
+ # one dev (non-pv)
+-not pvresize --setphysicalvolumesize $new_request "$dev13"
++not pvresize --setphysicalvolumesize $new_request -y "$dev13"
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+ check pv_field "$dev2" pv_size $old_reduced
+@@ -344,7 +344,7 @@ check pv_field "$dev11" pv_size $old_orphan
+ check pv_field "$dev14" pv_size $old_orphan
+ 
+ # one orphan and one dev (non-pv)
+-not pvresize --setphysicalvolumesize $new_request "$dev14" "$dev13"
++not pvresize --setphysicalvolumesize $new_request -y "$dev14" "$dev13"
+ check pv_field "$dev14" pv_size $new_orphan
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -358,11 +358,11 @@ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one pv and one dev (non-pv)
+-not pvresize --setphysicalvolumesize $new_request "$dev9" "$dev13"
++not pvresize --setphysicalvolumesize $new_request -y "$dev9" "$dev13"
+ check pv_field "$dev9" pv_size $new_reduced
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -376,11 +376,11 @@ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ check pv_field "$dev14" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one tag and one dev (non-pv)
+-not pvresize --setphysicalvolumesize $new_request @V3D9 "$dev13"
++not pvresize --setphysicalvolumesize $new_request -y @V3D9 "$dev13"
+ check pv_field "$dev9" pv_size $new_reduced
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -394,11 +394,11 @@ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ check pv_field "$dev14" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one pv, one orphan, one tag, one dev
+-not pvresize --setphysicalvolumesize $new_request @V3D9 "$dev13" "$dev14" "$dev10"
++not pvresize --setphysicalvolumesize $new_request -y @V3D9 "$dev13" "$dev14" "$dev10"
+ check pv_field "$dev9" pv_size $new_reduced
+ check pv_field "$dev10" pv_size $new_reduced
+ check pv_field "$dev14" pv_size $new_orphan
+@@ -412,16 +412,16 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ 
+ #
+ # pvresize including pvs without mdas
+ #
+ 
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ check pv_field "$dev10" pv_size $old_reduced
+ check pv_field "$dev2" pv_size $old_reduced
+ check pv_field "$dev3" pv_size $old_reduced
+@@ -435,7 +435,7 @@ check pv_field "$dev11" pv_size $old_orphan
+ check pv_field "$dev14" pv_size $old_orphan
+ 
+ # one pv without mda
+-pvresize --setphysicalvolumesize $new_request "$dev2"
++pvresize --setphysicalvolumesize $new_request -y "$dev2"
+ check pv_field "$dev2" pv_size $new_reduced
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -449,11 +449,11 @@ check pv_field "$dev9" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ check pv_field "$dev14" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # two pvs without mdas
+-pvresize --setphysicalvolumesize $new_request "$dev6" "$dev7"
++pvresize --setphysicalvolumesize $new_request -y "$dev6" "$dev7"
+ check pv_field "$dev6" pv_size $new_reduced
+ check pv_field "$dev7" pv_size $new_reduced
+ # unchanged
+@@ -467,11 +467,11 @@ check pv_field "$dev9" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ check pv_field "$dev14" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one pv with mda and one pv without mda
+-pvresize --setphysicalvolumesize $new_request "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $new_request -y "$dev8" "$dev9"
+ check pv_field "$dev8" pv_size $new_reduced
+ check pv_field "$dev9" pv_size $new_reduced
+ # unchanged
+@@ -485,11 +485,11 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ check pv_field "$dev14" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one orphan with mda
+-pvresize --setphysicalvolumesize $new_request "$dev11"
++pvresize --setphysicalvolumesize $new_request -y "$dev11"
+ check pv_field "$dev11" pv_size $new_orphan
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -503,11 +503,11 @@ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ check pv_field "$dev14" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one orphan without mda
+-pvresize --setphysicalvolumesize $new_request "$dev14"
++pvresize --setphysicalvolumesize $new_request -y "$dev14"
+ check pv_field "$dev14" pv_size $new_orphan
+ # unchanged
+ check pv_field "$dev10" pv_size $old_reduced
+@@ -521,11 +521,11 @@ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ check pv_field "$dev11" pv_size $old_orphan
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one orphan with mda and one orphan without mda
+-pvresize --setphysicalvolumesize $new_request "$dev14" "$dev11"
++pvresize --setphysicalvolumesize $new_request -y "$dev14" "$dev11"
+ check pv_field "$dev11" pv_size $new_orphan
+ check pv_field "$dev14" pv_size $new_orphan
+ # unchanged
+@@ -539,12 +539,12 @@ check pv_field "$dev7" pv_size $old_reduced
+ check pv_field "$dev8" pv_size $old_reduced
+ check pv_field "$dev9" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+ 
+ # one pv with mda and one pv without mda, and
+ # one orphan with mda and one orphan without mda
+-pvresize --setphysicalvolumesize $new_request "$dev8" "$dev9" "$dev14" "$dev11"
++pvresize --setphysicalvolumesize $new_request -y "$dev8" "$dev9" "$dev14" "$dev11"
+ check pv_field "$dev8" pv_size $new_reduced
+ check pv_field "$dev9" pv_size $new_reduced
+ check pv_field "$dev11" pv_size $new_orphan
+@@ -558,5 +558,5 @@ check pv_field "$dev5" pv_size $old_reduced
+ check pv_field "$dev6" pv_size $old_reduced
+ check pv_field "$dev7" pv_size $old_reduced
+ # reset back to old size
+-pvresize --setphysicalvolumesize $old_request "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
+-pvresize --setphysicalvolumesize $old_request "$dev11" "$dev14"
++pvresize --setphysicalvolumesize $old_request -y "$dev10" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6" "$dev7" "$dev8" "$dev9"
++pvresize --setphysicalvolumesize $old_request -y "$dev11" "$dev14"
+diff --git a/test/shell/pvresize-mdas.sh b/test/shell/pvresize-mdas.sh
+index f7fdfc2..c2571f1 100644
+--- a/test/shell/pvresize-mdas.sh
++++ b/test/shell/pvresize-mdas.sh
+@@ -21,7 +21,7 @@ check pv_field "$dev1" pv_size 8.00m
+ check pv_field "$dev1" pv_mda_count 2
+ pvs "$dev1"
+ 
+-pvresize --setphysicalvolumesize 4m "$dev1"
++pvresize --setphysicalvolumesize 4m -y "$dev1"
+ check pv_field "$dev1" pv_size 4.00m
+ check pv_field "$dev1" pv_mda_count 2
+ pvs "$dev1"
 
 
