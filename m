@@ -1,40 +1,41 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 3 May 2017 16:39:56 -0400
-Subject: master - man pvscan: add description for --activate
-Message-ID: <201705032039.v43KduED000997@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 3 May 2017 17:26:25 -0400
+Subject: master - pvscan: define command as taking only -aay
+Message-ID: <201705032126.v43LQPn7006741@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b869db30ac9d22fbdf17218d6bdc9356922e397c
-Commit:        b869db30ac9d22fbdf17218d6bdc9356922e397c
-Parent:        892f3b1002837abeed5c0a239de107678c6fb794
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5de3870662688ca2a81a94f7f0422dea15949566
+Commit:        5de3870662688ca2a81a94f7f0422dea15949566
+Parent:        b869db30ac9d22fbdf17218d6bdc9356922e397c
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed May 3 15:37:48 2017 -0500
+AuthorDate:    Wed May 3 15:46:49 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 3 15:38:53 2017 -0500
+CommitterDate: Wed May 3 15:46:49 2017 -0500
 
-man pvscan: add description for --activate
+pvscan: define command as taking only -aay
 
+The fact that -an and -ay are not accepted can be
+stated in the command definition.
 ---
- tools/args.h |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ tools/command-lines.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 704b4e7..2dc738f 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -808,6 +808,9 @@ arg(metadatacopies_ARG, '\0', "metadatacopies", metadatacopies_VAL, 0, 0, NULL)
-  * ... and now the short args.
-  */
- arg(activate_ARG, 'a', "activate", activation_VAL, 0, 0,
-+    "#pvscan\n"
-+    "Auto-activate LVs in a VG when the PVs scanned have completed the VG.\n"
-+    "(Only \\fBay\\fP is applicable.)\n"
-     "#lvchange\n"
-     "#vgchange\n"
-     "Change the active state of LVs.\n"
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 2d9e48e..7f9c31f 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -1417,7 +1417,7 @@ DESC: Display PV information.
+ 
+ pvscan --cache_long
+ OO: --ignorelockingfailure, --reportformat ReportFmt, --background,
+---activate Active, --major Number, --minor Number
++--activate ay, --major Number, --minor Number
+ OP: PV|String ...
+ ID: pvscan_cache
+ DESC: Populate the lvmetad cache by scanning PVs.
 
 
