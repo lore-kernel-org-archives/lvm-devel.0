@@ -1,39 +1,45 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 May 2017 09:41:32 -0400
-Subject: master - fsadm: all path define MAJOR MINOR
-Message-ID: <201705101341.v4ADfWGd005127@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 10 May 2017 09:41:42 -0400
+Subject: master - tests: better skip
+Message-ID: <201705101341.v4ADfgTq005488@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a1a9ae0aa5fe337935091320b6f27fb053381ff5
-Commit:        a1a9ae0aa5fe337935091320b6f27fb053381ff5
-Parent:        8ea33b633a1d856a4347f6ecf98a50c1d2b60d76
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b817cc5746ef3bd3105a73e43aaf4b2ccd134335
+Commit:        b817cc5746ef3bd3105a73e43aaf4b2ccd134335
+Parent:        a1a9ae0aa5fe337935091320b6f27fb053381ff5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 10 15:23:54 2017 +0200
+AuthorDate:    Fri Apr 21 12:18:56 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed May 10 15:40:32 2017 +0200
 
-fsadm: all path define MAJOR MINOR
+tests: better skip
 
 ---
- scripts/fsadm.sh |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ test/shell/thin-resize-match.sh |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 5574143..534aac1 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -191,6 +191,8 @@ detect_fs() {
- 	  /dev/dm-[0-9]*)
- 		read </sys/block/${RVOLUME#/dev/}/dm/name SYSVOLUME 2>&1 && VOLUME="$DM_DEV_DIR/mapper/$SYSVOLUME"
- 		read </sys/block/${RVOLUME#/dev/}/dev MAJORMINOR 2>&1 || error "Cannot get major:minor for \"$VOLUME\"."
-+		MAJOR=${MAJORMINOR%%:*}
-+		MINOR=${MAJORMINOR##*:}
- 		;;
- 	  *)
- 		STAT=$(stat --format "MAJOR=\$((0x%t)) MINOR=\$((0x%T))" ${RVOLUME})
+diff --git a/test/shell/thin-resize-match.sh b/test/shell/thin-resize-match.sh
+index c78842f..46b4531 100644
+--- a/test/shell/thin-resize-match.sh
++++ b/test/shell/thin-resize-match.sh
+@@ -12,13 +12,12 @@
+ # ensure there is no data loss during thin-pool resize
+ 
+ SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
+ 
+ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
+ 
+ . lib/inittest
+ 
+-test -e LOCAL_LVMPOLLD && skip
+-
+ which md5sum || skip
+ 
+ aux have_thin 1 0 0 || skip
 
 
