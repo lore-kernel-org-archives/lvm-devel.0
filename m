@@ -1,53 +1,63 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 12 May 2017 10:57:28 -0400
-Subject: master - config: keep description lines under 80
-Message-ID: <201705121457.v4CEvSVX025367@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 15 May 2017 12:00:14 -0400
+Subject: master - lvchange: allow changing properties on thin pool data lv
+Message-ID: <201705151600.v4FG0EDB010094@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dfc58c637b4e7fe48c28c73cd53eb62611b9309a
-Commit:        dfc58c637b4e7fe48c28c73cd53eb62611b9309a
-Parent:        2583732165b72d616dc1c08cb7e9bc74fb5a6e6d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5406191cb9112dea6d8a618ae1da815f816291f6
+Commit:        5406191cb9112dea6d8a618ae1da815f816291f6
+Parent:        dfc58c637b4e7fe48c28c73cd53eb62611b9309a
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri May 12 09:55:16 2017 -0500
+AuthorDate:    Mon May 15 10:57:49 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri May 12 09:55:16 2017 -0500
+CommitterDate: Mon May 15 10:59:48 2017 -0500
 
-config: keep description lines under 80
+lvchange: allow changing properties on thin pool data lv
 
-As far as possible, it's nice to keep the config
-description lines from going over 80 columns.
+Add an exception to not allowing lvchange to change properties
+on hidden LVs.  When a thin pool data LV is a cache LV, we
+need to allow changing cache properties on the tdata sublv of
+the thin pool.
 ---
- lib/config/config_settings.h |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvchange.c |   10 ++++++++++
+ 2 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 3b0eebb..40b64ab 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -469,8 +469,9 @@ cfg(allocation_mirror_logs_require_separate_pvs_CFG, "mirror_logs_require_separa
- 
- cfg(allocation_raid_stripe_all_devices_CFG, "raid_stripe_all_devices", allocation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_ALLOCATION_STRIPE_ALL_DEVICES, vsn(2, 2, 162), NULL, 0, NULL,
- 	"Stripe across all PVs when RAID stripes are not specified.\n"
--	"If enabled, all PVs in the VG or on the command line are used for raid0/4/5/6/10\n"
--	"when the command does not specify the number of stripes to use.\n"
-+	"If enabled, all PVs in the VG or on the command line are used for\n"
-+	"raid0/4/5/6/10 when the command does not specify the number of\n"
-+	"stripes to use.\n"
- 	"This was the default behaviour until release 2.02.162.\n")
- 
- cfg(allocation_cache_pool_metadata_require_separate_pvs_CFG, "cache_pool_metadata_require_separate_pvs", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA, CFG_TYPE_BOOL, DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS, vsn(2, 2, 106), NULL, 0, NULL,
-@@ -934,7 +935,7 @@ cfg(global_use_lvmetad_CFG, "use_lvmetad", global_CFG_SECTION, 0, CFG_TYPE_BOOL,
- 	"devices/global_filter.\n")
- 
- cfg(global_lvmetad_update_wait_time_CFG, "lvmetad_update_wait_time", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_LVMETAD_UPDATE_WAIT_TIME, vsn(2, 2, 151), NULL, 0, NULL,
--	"The number of seconds a command will wait for lvmetad update to finish.\n"
-+	"Number of seconds a command will wait for lvmetad update to finish.\n"
- 	"After waiting for this period, a command will not use lvmetad, and\n"
- 	"will revert to disk scanning.\n")
- 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index abe4641..5097c1b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.172 - 
+ ===============================
++  Allow lvchange to change properties on a thin pool data sub LV.
+   Fix lvcreate extent percentage calculation for mirrors.
+   Don't reinstate still-missing devices when correcting inconsistent metadata.
+   Properly handle subshell return codes in fsadm.
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 660570a..92161e2 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -1238,6 +1238,16 @@ static int _lvchange_properties_check(struct cmd_context *cmd,
+ 				     int lv_is_named_arg)
+ {
+ 	if (!lv_is_visible(lv)) {
++		/*
++		 * Exceptions where we allow lvchange properties on
++		 * a hidden sub lv.
++		 *
++		 * lv_is_thin_pool_data: e.g. needed when the data sublv
++		 * is a cache lv and we need to change cache properties.
++		 */
++		if (lv_is_thin_pool_data(lv))
++			return 1;
++
+ 		if (lv_is_named_arg)
+ 			log_error("Operation not permitted on hidden LV %s.", display_lvname(lv));
+ 		return 0;
 
 
