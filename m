@@ -1,111 +1,174 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 18 May 2017 10:21:04 -0400
-Subject: master - lvconvert: fix logic in automatic settings of possible (raid) LV types
-Message-ID: <201705181421.v4IEL4PB032230@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 18 May 2017 17:49:07 -0400
+Subject: master - man lvmraid: indirect conversions
+Message-ID: <201705182149.v4ILn7dq026151@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2bf01c2f3797d52f1ace72e32028912337918223
-Commit:        2bf01c2f3797d52f1ace72e32028912337918223
-Parent:        8e99a46d09ef21e9a1741eb333e16aaa08ac50f1
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu May 18 16:11:52 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu May 18 16:20:39 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a29e7843b1b9fe10af0e5bef8304c65a176e394f
+Commit:        a29e7843b1b9fe10af0e5bef8304c65a176e394f
+Parent:        2bf01c2f3797d52f1ace72e32028912337918223
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu May 18 16:47:37 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu May 18 16:47:37 2017 -0500
 
-lvconvert: fix logic in automatic settings of possible (raid) LV types
+man lvmraid: indirect conversions
 
-Commit 5fe07d3574ddce3d194f0fa57af9028348a91008 failed to set raid5 types
-properly on conversions from raid6.  It always enforced raid6_ls_6
-for types raid6/raid6_zr/raid6_nr/raid6_nc, thus requiring 3 conversions
-instead of 2 when asking for raid5_{la,rs,ra,n}.
+Start documenting multi-step conversions.
 
-Related: rhbz1439403
+Don't number examples.
 ---
- lib/metadata/raid_manip.c |   33 +++++++++++++++++++--------------
- 1 files changed, 19 insertions(+), 14 deletions(-)
+ man/lvmraid.7_main |   81 +++++++++++++++++++++++++--------------------------
+ 1 files changed, 40 insertions(+), 41 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index d913301..005075c 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -5792,27 +5792,33 @@ static uint64_t _r5_to_r6[][2] = {
+diff --git a/man/lvmraid.7_main b/man/lvmraid.7_main
+index f0d28f5..6e0287a 100644
+--- a/man/lvmraid.7_main
++++ b/man/lvmraid.7_main
+@@ -896,7 +896,7 @@ between linear and raid1.
+ .IP \(bu 3
+ between mirror and raid1.
+ .IP \(bu 3
+-between 2-legged raid1 and raid4/5.
++between raid1 with two images and raid4/5.
+ .IP \(bu 3
+ between striped/raid0 and raid4.
+ .IP \(bu 3
+@@ -912,39 +912,46 @@ between striped/raid0 and raid10.
+ .IP \(bu 3
+ between striped and raid4.
  
+-.SS Examples
++.SS Indirect conversions
  
- /* Return segment type flag for raid5 -> raid6 conversions */
--static uint64_t _get_r56_flag(const struct lv_segment *seg, unsigned idx)
-+static uint64_t _get_r56_flag(const struct segment_type *segtype, unsigned idx)
- {
- 	unsigned elems = ARRAY_SIZE(_r5_to_r6);
+-1. Converting an LV from \fBlinear\fP to \fBraid1\fP.
++Converting from one raid level to another may require multiple steps,
++converting first to intermediate raid levels.
  
- 	while (elems--)
--		if (seg->segtype->flags & _r5_to_r6[elems][idx])
-+		if (segtype->flags & _r5_to_r6[elems][idx])
- 			return _r5_to_r6[elems][!idx];
+-.nf
+-# lvs -a -o name,segtype,size vg
+-  LV   Type   LSize
+-  lv   linear 300.00g
++.B linear to raid6
  
- 	return 0;
- }
+-# lvconvert --type raid1 --mirrors 1 vg/lv
++To convert an LV from linear to raid6:
++.br
++1. convert to raid1 with two images
++.br
++2. convert to raid5 (internally raid5_ls) with two images
++.br
++3. convert to raid5 with three or more stripes (reshape)
++.br
++4. convert to raid6 (internally raid6_ls_6)
++.br
++5. convert to raid6 (internally raid6_zr, reshape)
  
--/* Return segment type flag for raid5 -> raid6 conversions */
-+/* Return segment type flag of @seg for raid5 -> raid6 conversions */
- static uint64_t _raid_seg_flag_5_to_6(const struct lv_segment *seg)
- {
--	return _get_r56_flag(seg, 0);
-+	return _get_r56_flag(seg->segtype, 0);
- }
+-# lvs -a -o name,segtype,size vg
+-  LV            Type   LSize
+-  lv            raid1  300.00g
+-  [lv_rimage_0] linear 300.00g
+-  [lv_rimage_1] linear 300.00g
+-  [lv_rmeta_0]  linear   3.00m
+-  [lv_rmeta_1]  linear   3.00m
+-.fi
++The commands to perform the steps above are:
++.br
++1. lvconvert --type raid1 --mirrors 1 LV
++.br
++2. lvconvert --type raid5 LV
++.br
++3. lvconvert --stripes 3 LV
++.br
++4. lvconvert --type raid6 LV
++.br
++5. lvconvert --type raid6 LV
  
--/* Return segment type flag for raid6 -> raid5 conversions */
-+/* Return segment type flag of @seg for raid6 -> raid5 conversions */
- static uint64_t _raid_seg_flag_6_to_5(const struct lv_segment *seg)
- {
--	return _get_r56_flag(seg, 1);
-+	return _get_r56_flag(seg->segtype, 1);
-+}
-+
-+/* Return segment type flag of @segtype for raid5 -> raid6 conversions */
-+static uint64_t _raid_segtype_flag_5_to_6(const struct segment_type *segtype)
-+{
-+	return _get_r56_flag(segtype, 0);
- }
+-2. Converting an LV from \fBmirror\fP to \fBraid1\fP.
++The final conversion from raid6_ls_6 to raid6_zr is done to avoid the
++potential write/recovery performance reduction in raid6_ls_6 because of
++the dedicated parity device.  raid6_zr rotates data and parity blocks to
++avoid this.
  
- /* Change segtype for raid* for convenience where necessary. */
-@@ -5892,17 +5898,16 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
+-.nf
+-# lvs -a -o name,segtype,size vg
+-  LV            Type   LSize
+-  lv            mirror 100.00g
+-  [lv_mimage_0] linear 100.00g
+-  [lv_mimage_1] linear 100.00g
+-  [lv_mlog]     linear   3.00m
  
- 			} else if (seg_is_raid4(seg_from) && !segtype_is_raid6_n_6(*segtype))
- 				seg_flag = SEG_RAID6_N_6;
+ .SS Examples
+ 
+-1. Converting an LV from \fBlinear\fP to \fBraid1\fP.
++Converting an LV from \fBlinear\fP to \fBraid1\fP.
+ 
+ .nf
+ # lvs -a -o name,segtype,size vg
+@@ -962,7 +969,7 @@ between striped and raid4.
+   [lv_rmeta_1]  linear   3.00m
+ .fi
+ 
+-2. Converting an LV from \fBmirror\fP to \fBraid1\fP.
++Converting an LV from \fBmirror\fP to \fBraid1\fP.
+ 
+ .nf
+ # lvs -a -o name,segtype,size vg
+@@ -983,28 +990,17 @@ between striped and raid4.
+   [lv_rmeta_1]  linear   3.00m
+ .fi
+ 
+-3. Converting an LV from \fBlinear\fP to \fBraid1\fP (with 3 images).
++Converting an LV from \fBlinear\fP to \fBraid1\fP (with 3 images).
+ 
+ .nf
+-Start with a linear LV:
 -
--			else if (!(seg_flag = _raid_seg_flag_5_to_6(seg_from)))
--				seg_flag = SEG_RAID5_N;
-+			else
-+				seg_flag = _raid_seg_flag_5_to_6(seg_from);
- 		}
+-# lvcreate -L1G -n lv vg
+-
+-Convert the linear LV to raid1 with three images
+-(original linear image plus 2 mirror images):
+-
+ # lvconvert --type raid1 --mirrors 2 vg/lv
+ .fi
  
- 	/* raid6 -> striped/raid0/raid5/raid10 */
- 	} else if (seg_is_any_raid6(seg_from)) {
- 		if (segtype_is_raid1(*segtype)) {
- 			/* No result for raid6_{zr,nr,nc} */
--			if (!((seg_flag = _raid_seg_flag_6_to_5(seg_from)) ||
--			      !(seg_flag & (*segtype)->flags)))
-+			if (!(seg_flag = _raid_seg_flag_6_to_5(seg_from)) ||
-+			    !(seg_flag & (*segtype)->flags))
- 				seg_flag = SEG_RAID6_LS_6;
+-4. Converting an LV from \fBstriped\fP (with 4 stripes) to \fBraid6_n_6\fP.
++Converting an LV from \fBstriped\fP (with 4 stripes) to \fBraid6_n_6\fP.
  
- 		} else if (segtype_is_any_raid10(*segtype)) {
-@@ -5917,9 +5922,9 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
+ .nf
+-Start with a striped LV:
+-
+ # lvcreate --stripes 4 -L64M -n lv vg
  
- 		} else if (segtype_is_any_raid5(*segtype))
- 			/* No result for raid6_{zr,nr,nc} */
--			if (!((seg_flag = _raid_seg_flag_6_to_5(seg_from)) ||
--			      !(seg_flag & (*segtype)->flags)))
--				seg_flag = SEG_RAID6_N_6;
-+			if (!(seg_flag = _raid_seg_flag_6_to_5(seg_from)) ||
-+			    !(seg_flag & (*segtype)->flags))
-+				seg_flag = _raid_segtype_flag_5_to_6(*segtype);
+-Convert the striped LV to raid6_n_6:
+-
+ # lvconvert --type raid6 vg/lv
  
- 	/* -> raid1 */
- 	} else if (!seg_is_mirror(seg_from) && segtype_is_raid1(*segtype)) {
+ # lvs -a -o lv_name,segtype,sync_percent,data_copies
+@@ -1051,7 +1047,9 @@ that is done, the new stripe is unquiesced and used.)
+ 
+ .SS Examples
+ 
+-1. Converting raid6_n_6 to raid6_nr with rotating data/parity.
++(Command output shown in examples may change.)
++
++Converting raid6_n_6 to raid6_nr with rotating data/parity.
+ 
+ This conversion naturally follows a previous conversion from striped/raid0
+ to raid6_n_6 (shown above).  It completes the transition to a more
+@@ -1318,7 +1316,8 @@ In case the RaidLV should be converted to striped:
+ .nf
+ # lvconvert --type striped vg/lv
+   Unable to convert LV vg/lv from raid6_nr to striped.
+-  Converting vg/lv from raid6_nr is directly possible to the following layouts:
++  Converting vg/lv from raid6_nr is directly possible to the \
++  following layouts:
+     raid6_nc
+     raid6_zr
+     raid6_la_6
 
 
