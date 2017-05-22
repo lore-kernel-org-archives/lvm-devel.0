@@ -1,132 +1,112 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 22 May 2017 09:13:51 -0400
-Subject: master - tests: catch some fsadm tricky paths
-Message-ID: <201705221313.v4MDDpRI030350@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 22 May 2017 15:29:44 -0400
+Subject: master - man lvmraid: add more indirect conversion info
+Message-ID: <201705221929.v4MJTiJm014577@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3877ef0e43a8dec17b35ede5824b561a13f6db46
-Commit:        3877ef0e43a8dec17b35ede5824b561a13f6db46
-Parent:        9e04e0483f033d131f52a86b7f28300a761c3634
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 22 14:43:30 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 22 15:12:31 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ca241964914fc151a9a2f370b1567b4a1ef5cb48
+Commit:        ca241964914fc151a9a2f370b1567b4a1ef5cb48
+Parent:        3877ef0e43a8dec17b35ede5824b561a13f6db46
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon May 22 14:28:04 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon May 22 14:28:24 2017 -0500
 
-tests: catch some fsadm tricky paths
+man lvmraid: add more indirect conversion info
 
-When user is renaming a device, we are getting into troubles.
-We needs to recognize which case is actually supportable by fsadm.
 ---
- test/shell/fsadm-renamed.sh |   98 +++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 98 insertions(+), 0 deletions(-)
+ man/lvmraid.7_main |   53 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 51 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
-new file mode 100644
-index 0000000..b2c3e0f
---- /dev/null
-+++ b/test/shell/fsadm-renamed.sh
-@@ -0,0 +1,98 @@
-+#!/bin/sh
-+# Copyright (C) 2017 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/man/lvmraid.7_main b/man/lvmraid.7_main
+index 6e0287a..c27f1fa 100644
+--- a/man/lvmraid.7_main
++++ b/man/lvmraid.7_main
+@@ -948,6 +948,50 @@ potential write/recovery performance reduction in raid6_ls_6 because of
+ the dedicated parity device.  raid6_zr rotates data and parity blocks to
+ avoid this.
+ 
++.B linear to striped
 +
-+test_description='Exercise fsadm operation on renamed device'
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
++To convert an LV from linear to striped:
++.br
++1. convert to raid1 with two images
++.br
++2. convert to raid5_n
++.br
++3. convert to raid5_n with five 128k stripes (reshape)
++.br
++4. convert raid5_n to striped
 +
-+. lib/inittest
++The commands to perform the steps above are:
++.br
++1. lvconvert --type raid1 --mirrors 1 LV
++.br
++2. lvconvert --type raid5_n LV
++.br
++3. lvconvert --stripes 5 --stripesize 128k LV
++.br
++4. lvconvert --type striped LV
 +
-+aux prepare_vg 1 80
++The raid5_n type in step 2 is used because it has dedicated parity SubLVs
++at the end, and can be converted to striped directly.  The stripe size is
++increased in step 3 to add extra space for the conversion process.  This
++step grows the LV size by a factor of five.  After conversion, this extra
++space can be reduced (or used to grow the file system using the LV).
 +
-+vg_lv=$vg/$lv1
-+vg_lv_ren=${vg_lv}_renamed
++Reversing these steps will convert a striped LV to linear.
 +
-+dev_vg_lv="$DM_DEV_DIR/$vg_lv"
-+dev_vg_lv_ren="$DM_DEV_DIR/$vg_lv_ren"
++.B raid6 to striped
 +
-+mount_dir="mnt"
-+mount_space_dir="mnt space dir"
-+mount_dolar_dir="mnt \$SPACE dir"
-+# for recursive call
-+export LVM_BINARY=$(which lvm)
++To convert an LV from raid6_nr to striped:
++.br
++1. convert to raid6_n_6
++.br
++2. convert to striped
 +
-+test ! -d "$mount_dir" && mkdir "$mount_dir"
-+test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
-+test ! -d "$mount_dolar_dir" && mkdir "$mount_dolar_dir"
++The commands to perform the steps above are:
++.br
++1. lvconvert --type raid6_n_6 LV
++.br
++2. lvconvert --type striped LV
 +
-+cleanup_mounted_and_teardown()
-+{
-+	umount "$mount_dir" || true
-+	umount "$mount_space_dir" || true
-+	umount "$mount_dolar_dir" || true
-+	aux teardown
-+}
-+
-+# Test for block sizes != 1024 (rhbz #480022)
-+trap 'cleanup_mounted_and_teardown' EXIT
-+
-+# Iterate over supported filesystems
-+for i in mkfs.ext3 mkfs.xfs mkfs.reiserfs
-+do
-+
-+if not which "$i" ; then
-+	echo "Skipping tests for missing $i"
-+	continue
-+fi
-+
-+lvcreate -n $lv1 -L20M $vg
-+
-+case "$i" in
-+*ext3)		MKFS_ARGS="-b1024 -j" ;;
-+*xfs)		MKFS_ARGS="-l internal,size=1000b -f" ;;
-+*reiserfs)	MKFS_ARGS="-s 513 -f" ;;
-+esac
-+
-+echo "$i"
-+"$i" $MKFS_ARGS "$dev_vg_lv"
-+
-+mount "$dev_vg_lv" "$mount_dir"
-+
-+lvrename $vg_lv $vg_lv_ren
-+
-+mount | grep $vg
-+
-+# fails on renamed LV
-+fail lvresize -L+10M -r $vg_lv_ren
-+
-+# fials on unknown mountpoint  (FIXME: umount)
-+not umount "$dev_vg_lv"
-+
-+lvcreate -L20 -n $lv1 $vg
-+"$i" $MKFS_ARGS "$dev_vg_lv"
-+
-+mount "$dev_vg_lv" "$mount_dolar_dir"
-+
-+cat /proc/self/mountinfo
-+
-+not lvresize -L+10M -r $vg_lv_ren
-+
-+umount "$mount_dir"
-+
-+lvresize -L+10M -r $vg_lv
-+
-+umount "$mount_dolar_dir"
-+
-+lvremove -ff $vg
-+
-+done
-+
-+vgremove -ff $vg
+ 
+ .SS Examples
+ 
+@@ -1316,7 +1360,7 @@ In case the RaidLV should be converted to striped:
+ .nf
+ # lvconvert --type striped vg/lv
+   Unable to convert LV vg/lv from raid6_nr to striped.
+-  Converting vg/lv from raid6_nr is directly possible to the \
++  Converting vg/lv from raid6_nr is directly possible to the \\
+   following layouts:
+     raid6_nc
+     raid6_zr
+@@ -1620,7 +1664,9 @@ RAID6 last parity devices
+ .br
+ \[bu]
+ Fixed dedicated last devices (P-Syndrome N-1 and Q-Syndrome N)
++.RS 2
+ with striped data used for striped/raid0 conversions
++.RE
+ .br
+ \[bu]
+ Used for RAID Takeover
+@@ -1631,7 +1677,10 @@ raid6_{ls,rs,la,ra}_6
+ RAID6 last parity device
+ .br
+ \[bu]
+-Dedicated last parity device used for conversions from/to raid5_{ls,rs,la,ra}
++Dedicated last parity device used for conversions from/to
++.RS 2
++raid5_{ls,rs,la,ra}
++.RE
+ 
+ raid6_ls_6
+ .br
 
 
