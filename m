@@ -1,52 +1,40 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 29 May 2017 10:20:35 -0400
-Subject: master - lvmetad: store MISSSING flag properly
-Message-ID: <201705291420.v4TEKZ4U014914@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Mon, 22 May 2017 20:52:05 -0400
+Subject: master - raid: Drop unnecessary/incorrect use of dm_pool_free
+Message-ID: <201705230052.v4N0q5HB021949@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=148ad25f4c14274d920af477b1ca7084874eb615
-Commit:        148ad25f4c14274d920af477b1ca7084874eb615
-Parent:        4141409eb09e78aef030346995f1722fb40956d8
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 29 16:18:29 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon May 29 16:20:00 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=57492a609410c39809960a6f32bf67e1eddb7064
+Commit:        57492a609410c39809960a6f32bf67e1eddb7064
+Parent:        fbe7464df5018d8ab85dd312fae8c13796eca59d
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue May 23 01:51:04 2017 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue May 23 01:51:04 2017 +0100
 
-lvmetad: store MISSSING flag properly
+raid: Drop unnecessary/incorrect use of dm_pool_free
 
-PV MISSING flag is compatible flag, not a status (incompatible) flag.
 ---
- WHATS_NEW                      |    1 +
- daemons/lvmetad/lvmetad-core.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ lib/metadata/raid_manip.c |    3 ---
+ 1 files changed, 0 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 878aa7a..0743c1f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.172 - 
- ===============================
-+  Store MISSING PV in proper field in lvmetad.
-   Cache format2 flag is now using segment name type field.
-   Support storing status flags via segtype name field.
-   Stop using '--yes' mode when fsadm runs without terminal.
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index af5d429..242df98 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -360,7 +360,7 @@ static int update_pv_status(lvmetad_state *s,
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 005075c..e0e988c 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -4781,9 +4781,6 @@ static int _rename_area_lvs(struct logical_volume *lv, const char *suffix)
+ 			return_0;
+ 	}
  
- 		pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, uuid);
+-	for (s = 0; s < SLV_COUNT; s++)
+-		dm_pool_free(lv->vg->cmd->mem, sfx[s]);
+-
+ 	return 1;
+ }
  
--		set_flag(cft, pv, "status", "MISSING", !pvmeta);
-+		set_flag(cft, pv, "flags", "MISSING", !pvmeta);
- 
- 		if (pvmeta) {
- 			if (!(pvmeta_cn = dm_config_clone_node(cft, pvmeta->root->child, 1))) {
 
 
