@@ -1,75 +1,58 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 31 May 2017 08:01:44 -0400
-Subject: master - tests: add some extra udev waits
-Message-ID: <201705311201.v4VC1igD028376@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 23 May 2017 08:03:22 -0400
+Subject: master - tests: fix test for fsadm
+Message-ID: <201705231203.v4NC3Mbi009017@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=42b87c23e2e5745eba0f66328319b541303db3aa
-Commit:        42b87c23e2e5745eba0f66328319b541303db3aa
-Parent:        091c55a13fbd385f5ea230bcc9bc2b2f0e29af9f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e8beb4023642eb3aabee0b9f9e54047044b0cb8
+Commit:        5e8beb4023642eb3aabee0b9f9e54047044b0cb8
+Parent:        1fe4f80e45a6bfcceed5aaab97fc0e27dfcf2b88
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 31 13:23:34 2017 +0200
+AuthorDate:    Tue May 23 13:59:29 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 31 13:23:34 2017 +0200
+CommitterDate: Tue May 23 14:02:43 2017 +0200
 
-tests: add some extra udev waits
+tests: fix test for fsadm
 
-To get less random results on older systems with systemd (i.e. fc23)
-put few extra udev wait operations to avoid any udev event collision.
+Avoid mountinfo
+Pass 'y'  - since ATM lvresize cannot pass --yes to fsadm.
 ---
- test/shell/fsadm-renamed.sh |   18 +++++++++++++++++-
- 1 files changed, 17 insertions(+), 1 deletions(-)
+ test/shell/fsadm-renamed.sh |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
-index 5142e51..9f3cd3c 100644
+index b2c3e0f..3444840 100644
 --- a/test/shell/fsadm-renamed.sh
 +++ b/test/shell/fsadm-renamed.sh
-@@ -64,8 +64,19 @@ esac
- echo "$i"
- "$i" $MKFS_ARGS "$dev_vg_lv"
+@@ -73,7 +73,7 @@ mount | grep $vg
+ # fails on renamed LV
+ fail lvresize -L+10M -r $vg_lv_ren
  
-+# Adding couple udev wait ops as some older systemd
-+# might get confused and was 'randomly/racy' umounting
-+# devices  just mounted.
-+# 
-+# See for explanation: 
-+#   https://github.com/systemd/systemd/commit/628c89cc68ab96fce2de7ebba5933725d147aecc
-+#   https://github.com/systemd/systemd/pull/2017
-+aux udev_wait
-+
- mount "$dev_vg_lv" "$mount_dir"
+-# fials on unknown mountpoint  (FIXME: umount)
++# fails on unknown mountpoint  (FIXME: umount)
+ not umount "$dev_vg_lv"
  
-+aux udev_wait
-+
- lvrename $vg_lv $vg_lv_ren
- 
- mount | tee out
-@@ -80,9 +91,12 @@ not umount "$dev_vg_lv"
  lvcreate -L20 -n $lv1 $vg
- "$i" $MKFS_ARGS "$dev_vg_lv"
+@@ -81,13 +81,14 @@ lvcreate -L20 -n $lv1 $vg
  
-+aux udev_wait
-+
  mount "$dev_vg_lv" "$mount_dolar_dir"
  
--mount | grep $vg
-+mount | tee out
-+grep $vg out
+-cat /proc/self/mountinfo
++mount | grep $vg
  
  not lvresize -L+10M -r $vg_lv_ren
  
-@@ -91,6 +105,8 @@ umount "$mount_dir"
- # FIXME:  lvresize  CANNOT handle/propagage '--yes' to fsadm
- echo y | lvresize -L+10M -r $vg_lv
+ umount "$mount_dir"
  
-+aux udev_wait
-+
+-lvresize -L+10M -r $vg_lv
++# FIXME:  lvresize  CANNOT handle/propagage '--yes' to fsadm
++echo y | lvresize -L+10M -vvvv -r $vg_lv
+ 
  umount "$mount_dolar_dir"
  
- lvremove -ff $vg
 
 
