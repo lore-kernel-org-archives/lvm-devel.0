@@ -1,47 +1,39 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 10 Sep 2008 17:22:52 -0500
-Subject: [PATCH] Fix mirror -> mirror up-converts
-Message-ID: <1221085372.16141.13.camel@hydrogen>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Wed, 24 May 2017 07:48:09 -0400
+Subject: master - Fix typo
+Message-ID: <201705241148.v4OBm9XD028273@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Please refer to the following previous threads for history on this
-subject:
-https://www.redhat.com/archives/lvm-devel/2008-July/msg00026.html
-https://www.redhat.com/archives/lvm-devel/2008-February/msg00007.html
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3da5cdc5dc5cca04dae105c5a33c87d1c99a5b6c
+Commit:        3da5cdc5dc5cca04dae105c5a33c87d1c99a5b6c
+Parent:        7a0f46e2f87f28e17c0ea6b6d58ffd90b37bc6f0
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Wed May 24 13:47:45 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Wed May 24 13:47:45 2017 +0200
 
-Associated Bug:
-https://bugzilla.redhat.com/show_bug.cgi?id=455670
-(potentially others, including 460222)
+Fix typo
 
-The main issue is that with the current code, it is possible to activate
-2 device-mapper tables that evaluate to the same thing... meaning you
-can have 2 uncoordinated recovery processes happening at the same time
-in conjunction with I/O streams.  (I.e.  corruption is a distinct
-possibility.)  The attached patches prevent this "double activation".
+---
+ lib/metadata/merge.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-There are 2 patches attached - one device-mapper patch adding the
-'preload, but don't resume' function and another with the required LVM
-changes.  (Please note that I've disallowed the resizing of LVs while
-they have the 'CONVERTING' flag.)
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index 3d82a05..e642459 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -222,7 +222,7 @@ static void _check_non_raid_seg_members(struct lv_segment *seg, int *error_count
+ }
+ 
+ /*
+- * Check RAID segment sruct members of @seg for acceptable
++ * Check RAID segment struct members of @seg for acceptable
+  * properties and increment @error_count for any bogus ones.
+  */
+ static void _check_raid_seg(struct lv_segment *seg, int *error_count)
 
- brassow
 
-
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: dm-fix-mirror-to-mirror-upconvert.patch
-Type: text/x-patch
-Size: 2842 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080910/89284be2/attachment.bin>
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-convert-fix.patch
-Type: text/x-patch
-Size: 2322 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080910/89284be2/attachment-0001.bin>
