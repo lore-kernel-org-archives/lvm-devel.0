@@ -1,606 +1,161 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 30 Sep 2008 17:56:54 -0000
-Subject: LVM2/test t-vgsplit-operation.sh
-Message-ID: <20080930175654.20355.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 29 May 2017 08:55:28 -0400
+Subject: master - cleanup: separate type and mask
+Message-ID: <201705291255.v4TCtScl002349@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-09-30 17:56:54
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=966d1130dbf1e9da5ae0b432296741ba4ad35b6a
+Commit:        966d1130dbf1e9da5ae0b432296741ba4ad35b6a
+Parent:        8e0bc73eba4db74cb92fe884687f1cbfd4b20930
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri May 26 15:47:17 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon May 29 14:47:26 2017 +0200
 
-Modified files:
-	test           : t-vgsplit-operation.sh 
+cleanup: separate type and mask
 
-Log message:
-	Conversion of t-vgsplit-operation.sh by jstava.
+Split misused 'enum' into 2 fields - one for type
+of PV, VG, LV and other for mask.
+---
+ lib/format_text/export.c        |    5 +++--
+ lib/format_text/flags.c         |   15 ++++++++-------
+ lib/format_text/import-export.h |   13 +++++++------
+ lib/format_text/import_vsn1.c   |    4 ++--
+ 4 files changed, 20 insertions(+), 17 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-operation.sh.diff?cvsroot=lvm2&r1=1.21&r2=1.22
-
---- LVM2/test/t-vgsplit-operation.sh	2008/04/11 14:06:16	1.21
-+++ LVM2/test/t-vgsplit-operation.sh	2008/09/30 17:56:54	1.22
-@@ -9,323 +9,282 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index f530ec9..829b46d 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -358,11 +358,12 @@ static int _print_header(struct cmd_context *cmd, struct formatter *f,
+ static int _print_flag_config(struct formatter *f, uint64_t status, int type)
+ {
+ 	char buffer[4096];
+-	if (!print_flags(status, type | STATUS_FLAG, buffer, sizeof(buffer)))
++
++	if (!print_flags(buffer, sizeof(buffer), type, STATUS_FLAG, status))
+ 		return_0;
+ 	outf(f, "status = %s", buffer);
  
--test_description='Test vgsplit operation, including different LV types'
--privileges_required_=1
-+# Test vgsplit operation, including different LV types
+-	if (!print_flags(status, type, buffer, sizeof(buffer)))
++	if (!print_flags(buffer, sizeof(buffer), type, COMPATIBLE_FLAG, status))
+ 		return_0;
+ 	outf(f, "flags = %s", buffer);
  
--. ./test-lib.sh
-+. ./test-utils.sh
+diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
+index 41f3608..4e49963 100644
+--- a/lib/format_text/flags.c
++++ b/lib/format_text/flags.c
+@@ -101,9 +101,9 @@ static const struct flag _lv_flags[] = {
+ 	{0, NULL, 0}
+ };
  
--cleanup_()
--{
--  test -n "$d1" && losetup -d "$d1"
--  test -n "$d2" && losetup -d "$d2"
--  test -n "$d3" && losetup -d "$d3"
--  test -n "$d4" && losetup -d "$d4"
--  test -n "$d5" && losetup -d "$d5"
--  rm -f "$f1" "$f2" "$f3" "$f4" "$f5"
-+COMM() {  
-+	LAST_TEST="$@"
+-static const struct flag *_get_flags(int type)
++static const struct flag *_get_flags(enum pv_vg_lv_e type)
+ {
+-	switch (type & ~STATUS_FLAG) {
++	switch (type) {
+ 	case VG_FLAGS:
+ 		return _vg_flags;
+ 
+@@ -123,7 +123,7 @@ static const struct flag *_get_flags(int type)
+  * using one of the tables defined at the top of
+  * the file.
+  */
+-int print_flags(uint64_t status, int type, char *buffer, size_t size)
++int print_flags(char *buffer, size_t size, enum pv_vg_lv_e type, int mask, uint64_t status)
+ {
+ 	int f, first = 1;
+ 	const struct flag *flags;
+@@ -167,9 +167,9 @@ int print_flags(uint64_t status, int type, char *buffer, size_t size)
+ 	return 1;
  }
  
-+prepare_pvs 5 257
- # FIXME: paramaterize lvm1 vs lvm2 metadata; most of these tests should run
- # fine with lvm1 metadata as well; for now, just add disks 5 and 6 as lvm1
- # metadata
--test_expect_success \
--  'set up temp files, loopback devices, PVs, vgnames' \
--  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
--   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
--   f3=$(pwd)/3 && d3=$(loop_setup_ "$f3") &&
--   f4=$(pwd)/4 && d4=$(loop_setup_ "$f4") &&
--   f5=$(pwd)/5 && d5=$(loop_setup_ "$f5") &&
--   vg1=$(this_test_)-test-vg1-$$          &&
--   vg2=$(this_test_)-test-vg2-$$          &&
--   lv1=$(this_test_)-test-lv1-$$          &&
--   lv2=$(this_test_)-test-lv2-$$          &&
--   lv3=$(this_test_)-test-lv3-$$          &&
--   pvcreate $d1 $d2 $d3 $d4 $d5'
+-int read_flags(uint64_t *status, int type, const struct dm_config_value *cv)
++int read_flags(uint64_t *status, enum pv_vg_lv_e type, int mask, const struct dm_config_value *cv)
+ {
+-	int f;
++	unsigned f;
+ 	uint64_t s = UINT64_C(0);
+ 	const struct flag *flags;
  
- #
- # vgsplit can be done into a new or existing VG
- #
- for i in new existing
- do
--#
--# We can have PVs or LVs on the cmdline
--#
--for j in PV LV
--do
--test_expect_success \
--  "vgsplit correctly splits single linear LV into $i VG ($j args)" \
--  'vgcreate $vg1 $d1 $d2 &&
--   if [ $i == existing ]; then
--      vgcreate $vg2 $d3 $d4
--   fi &&
--   lvcreate -l 4 -n $lv1 $vg1 $d1 &&
--   vgchange -an $vg1 &&
--   if [ $j == PV ]; then
--     vgsplit $vg1 $vg2 $d1
--   else
--     vgsplit -n $lv1 $vg1 $vg2
--   fi &&
--   vg_validate_pvlv_counts_ $vg1 1 0 0 &&
--   if [ $i == existing ]; then
--      vg_validate_pvlv_counts_ $vg2 3 1 0
--   else
--      vg_validate_pvlv_counts_ $vg2 1 1 0
--   fi &&
--   lvremove -f $vg2/$lv1 &&
--   vgremove -f $vg2 &&
--   vgremove -f $vg1'
--
--test_expect_success \
--  "vgsplit correctly splits single striped LV into $i VG ($j args)" \
--  'vgcreate $vg1 $d1 $d2 &&
--   if [ $i == existing ]; then
--      vgcreate $vg2 $d3 $d4
--   fi &&
--   lvcreate -l 4 -i 2 -n $lv1 $vg1 $d1 $d2 &&
--   vgchange -an $vg1 &&
--   if [ $j == PV ]; then
--     vgsplit $vg1 $vg2 $d1 $d2
--   else
--     vgsplit -n $lv1 $vg1 $vg2
--   fi &&
--   if [ $i == existing ]; then
--     vg_validate_pvlv_counts_ $vg2 4 1 0
--   else
--     vg_validate_pvlv_counts_ $vg2 2 1 0
--   fi &&
--   lvremove -f $vg2/$lv1 &&
--   vgremove -f $vg2'
--
--test_expect_success \
--  "vgsplit correctly splits mirror LV into $i VG ($j args)" \
--  'vgcreate $vg1 $d1 $d2 $d3 &&
--   if [ $i == existing ]; then
--     vgcreate $vg2 $d4
--   fi &&
--   lvcreate -l 64 -m1 -n $lv1 $vg1 $d1 $d2 $d3 &&
--   vgchange -an $vg1 &&
--   if [ $j == PV ]; then
--     vgsplit $vg1 $vg2 $d1 $d2 $d3
--   else
--     vgsplit -n $lv1 $vg1 $vg2
--   fi &&
--   if [ $i == existing ]; then
--     vg_validate_pvlv_counts_ $vg2 4 1 0
--   else
--     vg_validate_pvlv_counts_ $vg2 3 1 0
--   fi &&
--   lvremove -f $vg2/$lv1 &&
--   vgremove -f $vg2'
--
--test_expect_success \
--  "vgsplit correctly splits origin and snapshot LV into $i VG ($j args)" \
--  'vgcreate $vg1 $d1 $d2 &&
--   if [ $i == existing ]; then
--     vgcreate $vg2 $d3 $d4
--   fi &&
--   lvcreate -l 64 -i 2 -n $lv1 $vg1 $d1 $d2 &&
--   lvcreate -l 4 -i 2 -s -n $lv2 $vg1/$lv1 &&
--   vgchange -an $vg1 &&
--   if [ $j == PV ]; then
--     vgsplit $vg1 $vg2 $d1 $d2
--   else
--     vgsplit -n $lv1 $vg1 $vg2
--   fi &&
--   if [ $i == existing ]; then
--     vg_validate_pvlv_counts_ $vg2 4 2 1
--   else
--     vg_validate_pvlv_counts_ $vg2 2 2 1
--   fi &&
--   lvremove -f $vg2/$lv2 &&
--   lvremove -f $vg2/$lv1 &&
--   vgremove -f $vg2'
--
--test_expect_success \
--  "vgsplit correctly splits linear LV but not snap+origin LV into $i VG ($j args)" \
--  'vgcreate $vg1 $d1 $d2 &&
--   if [ $i == existing ]; then
--     vgcreate $vg2 $d3
--   fi &&
--   lvcreate -l 64 -i 2 -n $lv1 $vg1 &&
--   lvcreate -l 4 -i 2 -s -n $lv2 $vg1/$lv1 &&
--   vgextend $vg1 $d4 &&
--   lvcreate -l 64 -n $lv3 $vg1 $d4 &&
--   vgchange -an $vg1 &&
--   if [ $j == PV ]; then
--     vgsplit $vg1 $vg2 $d4
--   else
--     vgsplit -n $lv3 $vg1 $vg2
--   fi &&
--   if [ $i == existing ]; then
--     vg_validate_pvlv_counts_ $vg2 2 1 0
--     vg_validate_pvlv_counts_ $vg1 2 2 1
--   else
--     vg_validate_pvlv_counts_ $vg2 1 1 0
--     vg_validate_pvlv_counts_ $vg1 2 2 1
--   fi &&
--   lvremove -f $vg1/$lv2 &&
--   lvremove -f $vg1/$lv1 &&
--   lvremove -f $vg2/$lv3 &&
--   vgremove -f $vg1 &&
--   vgremove -f $vg2'
--
--test_expect_success \
--  "vgsplit correctly splits linear LV but not mirror LV into $i VG ($j args)" \
--  'vgcreate $vg1 $d1 $d2 $d3 &&
--   if [ $i == existing ]; then
--     vgcreate $vg2 $d5
--   fi &&
--   lvcreate -l 64 -m1 -n $lv1 $vg1 $d1 $d2 $d3 &&
--   vgextend $vg1 $d4 &&
--   lvcreate -l 64 -n $lv2 $vg1 $d4 &&
--   vgchange -an $vg1 &&
--   if [ $j == PV ]; then
--     vgsplit $vg1 $vg2 $d4
--   else
--     vgsplit -n $lv2 $vg1 $vg2
--   fi &&
--   if [ $i == existing ]; then
--     vg_validate_pvlv_counts_ $vg1 3 2 0
--     vg_validate_pvlv_counts_ $vg2 2 1 0
--   else
--     vg_validate_pvlv_counts_ $vg1 3 2 0
--     vg_validate_pvlv_counts_ $vg2 1 1 0
--   fi &&
--   lvremove -f $vg1/$lv1 &&
--   lvremove -f $vg2/$lv2 &&
--   vgremove -f $vg1 &&
--   vgremove -f $vg2'
-+	#
-+	# We can have PVs or LVs on the cmdline
-+	#
-+	for j in PV LV
-+	do
-+COMM "vgsplit correctly splits single linear LV into $i VG ($j args)"
-+		vgcreate $vg1 $dev1 $dev2 
-+		if [ $i == existing ]; then
-+		   vgcreate $vg2 $dev3 $dev4
-+		fi 
-+		lvcreate -l 4 -n $lv1 $vg1 $dev1 
-+		vgchange -an $vg1 
-+		if [ $j == PV ]; then
-+		  vgsplit $vg1 $vg2 $dev1
-+		else
-+		  vgsplit -n $lv1 $vg1 $vg2
-+		fi 
-+		vg_validate_pvlv_counts_ $vg1 1 0 0 
-+		if [ $i == existing ]; then
-+		   aux vg_validate_pvlv_counts_ $vg2 3 1 0
-+		else
-+		   aux vg_validate_pvlv_counts_ $vg2 1 1 0
-+		fi 
-+		lvremove -f $vg2/$lv1 
-+		vgremove -f $vg2 
-+		vgremove -f $vg1
-+
-+COMM "vgsplit correctly splits single striped LV into $i VG ($j args)"
-+		vgcreate $vg1 $dev1 $dev2 
-+		if [ $i == existing ]; then
-+		   vgcreate $vg2 $dev3 $dev4
-+		fi 
-+		lvcreate -l 4 -i 2 -n $lv1 $vg1 $dev1 $dev2 
-+		vgchange -an $vg1 
-+		if [ $j == PV ]; then
-+		  vgsplit $vg1 $vg2 $dev1 $dev2
-+		else
-+		  vgsplit -n $lv1 $vg1 $vg2
-+		fi 
-+		if [ $i == existing ]; then
-+		  aux vg_validate_pvlv_counts_ $vg2 4 1 0
-+		else
-+		  aux vg_validate_pvlv_counts_ $vg2 2 1 0
-+		fi 
-+		lvremove -f $vg2/$lv1 
-+		vgremove -f $vg2
-+
-+COMM "vgsplit correctly splits mirror LV into $i VG ($j args)" 
-+		vgcreate $vg1 $dev1 $dev2 $dev3 
-+		if [ $i == existing ]; then
-+		  vgcreate $vg2 $dev4
-+		fi 
-+		lvcreate -l 64 -m1 -n $lv1 $vg1 $dev1 $dev2 $dev3 
-+		vgchange -an $vg1 
-+		if [ $j == PV ]; then
-+		  vgsplit $vg1 $vg2 $dev1 $dev2 $dev3
-+		else
-+		  vgsplit -n $lv1 $vg1 $vg2
-+		fi 
-+		if [ $i == existing ]; then
-+		  aux vg_validate_pvlv_counts_ $vg2 4 1 0
-+		else
-+		  aux vg_validate_pvlv_counts_ $vg2 3 1 0
-+		fi 
-+		lvremove -f $vg2/$lv1 
-+		vgremove -f $vg2
-+
-+COMM "vgsplit correctly splits origin and snapshot LV into $i VG ($j args)" 
-+		vgcreate $vg1 $dev1 $dev2 
-+		if [ $i == existing ]; then
-+		  vgcreate $vg2 $dev3 $dev4
-+		fi 
-+		lvcreate -l 64 -i 2 -n $lv1 $vg1 $dev1 $dev2 
-+		lvcreate -l 4 -i 2 -s -n $lv2 $vg1/$lv1 
-+		vgchange -an $vg1 
-+		if [ $j == PV ]; then
-+		  vgsplit $vg1 $vg2 $dev1 $dev2
-+		else
-+		  vgsplit -n $lv1 $vg1 $vg2
-+		fi 
-+		if [ $i == existing ]; then
-+		  aux vg_validate_pvlv_counts_ $vg2 4 2 1
-+		else
-+		  aux vg_validate_pvlv_counts_ $vg2 2 2 1
-+		fi 
-+		lvremove -f $vg2/$lv2 
-+		lvremove -f $vg2/$lv1 
-+		vgremove -f $vg2
-+
-+COMM "vgsplit correctly splits linear LV but not snap+origin LV into $i VG ($j args)" 
-+		vgcreate $vg1 $dev1 $dev2 
-+		if [ $i == existing ]; then
-+		  vgcreate $vg2 $dev3
-+		fi 
-+		lvcreate -l 64 -i 2 -n $lv1 $vg1 
-+		lvcreate -l 4 -i 2 -s -n $lv2 $vg1/$lv1 
-+		vgextend $vg1 $dev4 
-+		lvcreate -l 64 -n $lv3 $vg1 $dev4 
-+		vgchange -an $vg1 
-+		if [ $j == PV ]; then
-+		  vgsplit $vg1 $vg2 $dev4
-+		else
-+		  vgsplit -n $lv3 $vg1 $vg2
-+		fi 
-+		if [ $i == existing ]; then
-+		  aux vg_validate_pvlv_counts_ $vg2 2 1 0
-+		  aux vg_validate_pvlv_counts_ $vg1 2 2 1
-+		else
-+		  aux vg_validate_pvlv_counts_ $vg2 1 1 0
-+		  aux vg_validate_pvlv_counts_ $vg1 2 2 1
-+		fi 
-+		lvremove -f $vg1/$lv2 
-+		lvremove -f $vg1/$lv1 
-+		lvremove -f $vg2/$lv3 
-+		vgremove -f $vg1 
-+		vgremove -f $vg2
-+
-+COMM "vgsplit correctly splits linear LV but not mirror LV into $i VG ($j args)" 
-+		vgcreate $vg1 $dev1 $dev2 $dev3 
-+		if [ $i == existing ]; then
-+		  vgcreate $vg2 $dev5
-+		fi 
-+		lvcreate -l 64 -m1 -n $lv1 $vg1 $dev1 $dev2 $dev3 
-+		vgextend $vg1 $dev4 
-+		lvcreate -l 64 -n $lv2 $vg1 $dev4 
-+		vgchange -an $vg1 
-+		vgs
-+		lvs 
-+		pvs
-+		if [ $j == PV ]; then
-+		  vgsplit $vg1 $vg2 $dev4
-+		else
-+		  vgsplit -n $lv2 $vg1 $vg2
-+		fi 
-+		if [ $i == existing ]; then
-+		  aux vg_validate_pvlv_counts_ $vg1 3 1 0
-+		  aux vg_validate_pvlv_counts_ $vg2 2 1 0
-+		else
-+		vgs
-+		lvs 
-+		pvs
-+		  aux vg_validate_pvlv_counts_ $vg1 3 1 0
-+		  aux vg_validate_pvlv_counts_ $vg2 1 1 0
-+		fi 
-+		lvremove -f $vg1/$lv1 
-+		lvremove -f $vg2/$lv2 
-+		vgremove -f $vg1 
-+		vgremove -f $vg2
+@@ -186,7 +186,8 @@ int read_flags(uint64_t *status, int type, const struct dm_config_value *cv)
+ 		}
  
--done
-+	done
- done
+ 		for (f = 0; flags[f].description; f++)
+-			if (!strcmp(flags[f].description, cv->v.str)) {
++			if ((flags[f].kind & mask) &&
++			    !strcmp(flags[f].description, cv->v.str)) {
+ 				s |= flags[f].mask;
+ 				break;
+ 			}
+@@ -200,7 +201,7 @@ int read_flags(uint64_t *status, int type, const struct dm_config_value *cv)
+ 			 * by this case.
+ 			 */
+ 			s |= PARTIAL_VG;
+-		} else if (!flags[f].description && (type & STATUS_FLAG)) {
++		} else if (!flags[f].description && (mask & STATUS_FLAG)) {
+ 			log_error("Unknown status flag '%s'.", cv->v.str);
+ 			return 0;
+ 		}
+diff --git a/lib/format_text/import-export.h b/lib/format_text/import-export.h
+index c081c51..ddad50f 100644
+--- a/lib/format_text/import-export.h
++++ b/lib/format_text/import-export.h
+@@ -35,14 +35,15 @@
+  * VGs, PVs and LVs all have status bitsets, we gather together
+  * common code for reading and writing them.
+  */
+-enum {
+-	COMPATIBLE_FLAG = 0x0,
++enum pv_vg_lv_e {
++	PV_FLAGS = 1,
+ 	VG_FLAGS,
+-	PV_FLAGS,
+ 	LV_FLAGS,
+-	STATUS_FLAG = 0x8,
+ };
  
- #
- # Test more complex setups where the code has to find associated PVs and
- # LVs to split the VG correctly
- # 
--test_expect_success \
--  "vgsplit fails splitting 3 striped LVs into VG when only 1 LV specified" \
--  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
--   lvcreate -l 4 -n $lv1 -i 2 $vg1 $d1 $d2 &&
--   lvcreate -l 4 -n $lv2 -i 2 $vg1 $d2 $d3 &&
--   lvcreate -l 4 -n $lv3 -i 2 $vg1 $d3 $d4 &&
--   vgchange -an $vg1 &&
--   vgsplit -n $lv1 $vg1 $vg2;
--   status=$?; echo status=$status; test $status = 5 &&
--   vgremove -ff $vg1'
--
--test_expect_success \
--  "vgsplit fails splitting one LV with 2 snapshots, only origin LV specified" \
--  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
--   lvcreate -l 16 -n $lv1 $vg1 $d1 $d2 &&
--   lvcreate -l 4 -n $lv2 -s $vg1/$lv1 &&
--   lvcreate -l 4 -n $lv3 -s $vg1/$lv1 &&
--   vg_validate_pvlv_counts_ $vg1 4 3 2 &&
--   vgchange -an $vg1 &&
--   vgsplit -n $lv1 $vg1 $vg2;
--   status=$?; echo status=$status; test $status = 5 &&
--   lvremove -f $vg1/$lv2 &&
--   lvremove -f $vg1/$lv3 &&
--   lvremove -f $vg1/$lv1 &&
--   vgremove -ff $vg1'
--
--test_expect_success \
--  "vgsplit fails splitting one LV with 2 snapshots, only snapshot LV specified" \
--  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
--   lvcreate -l 16 -n $lv1 $vg1 $d1 $d2 &&
--   lvcreate -l 4 -n $lv2 -s $vg1/$lv1 &&
--   lvcreate -l 4 -n $lv3 -s $vg1/$lv1 &&
--   vg_validate_pvlv_counts_ $vg1 4 3 2 &&
--   vgchange -an $vg1 &&
--   vgsplit -n $lv2 $vg1 $vg2;
--   status=$?; echo status=$status; test $status = 5 &&
--   lvremove -f $vg1/$lv2 &&
--   lvremove -f $vg1/$lv3 &&
--   lvremove -f $vg1/$lv1 &&
--   vgremove -ff $vg1'
--
--test_expect_success \
--  "vgsplit fails splitting one mirror LV, only one PV specified" \
--  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
--   lvcreate -l 16 -n $lv1 -m1 $vg1 $d1 $d2 $d3 &&
--   vg_validate_pvlv_counts_ $vg1 4 4 0 &&
--   vgchange -an $vg1 &&
--   vgsplit $vg1 $vg2 $d2 &&
--   status=$?; echo status=$status; test $status = 5 &&
--   vgremove -ff $vg1'
--
--test_expect_success \
--  "vgsplit fails splitting 1 mirror + 1 striped LV, only striped LV specified" \
--  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
--   lvcreate -l 16 -n $lv1 -m1 $vg1 $d1 $d2 $d3 &&
--   lvcreate -l 16 -n $lv2 -i 2 $vg1 $d3 $d4 &&
--   vg_validate_pvlv_counts_ $vg1 4 2 0 &&
--   vgchange -an $vg1 &&
--   vgsplit -n $lv2 $vg1 $vg2 2>err;
--   status=$?; echo status=$status; test $status = 5 &&
--   vgremove -ff $vg1'
-+COMM "vgsplit fails splitting 3 striped LVs into VG when only 1 LV specified" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 $dev4 
-+lvcreate -l 4 -n $lv1 -i 2 $vg1 $dev1 $dev2 
-+lvcreate -l 4 -n $lv2 -i 2 $vg1 $dev2 $dev3 
-+lvcreate -l 4 -n $lv3 -i 2 $vg1 $dev3 $dev4 
-+vgchange -an $vg1 
-+not vgsplit -n $lv1 $vg1 $vg2
-+vgremove -ff $vg1
++#define COMPATIBLE_FLAG	0x01
++#define STATUS_FLAG	0x02
 +
-+COMM "vgsplit fails splitting one LV with 2 snapshots, only origin LV specified" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 $dev4 
-+lvcreate -l 16 -n $lv1 $vg1 $dev1 $dev2 
-+lvcreate -l 4 -n $lv2 -s $vg1/$lv1 
-+lvcreate -l 4 -n $lv3 -s $vg1/$lv1 
-+vg_validate_pvlv_counts_ $vg1 4 3 2 
-+vgchange -an $vg1 
-+not vgsplit -n $lv1 $vg1 $vg2;
-+lvremove -f $vg1/$lv2 
-+lvremove -f $vg1/$lv3 
-+lvremove -f $vg1/$lv1 
-+vgremove -ff $vg1
-+
-+COMM "vgsplit fails splitting one LV with 2 snapshots, only snapshot LV specified" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 $dev4 
-+lvcreate -l 16 -n $lv1 $vg1 $dev1 $dev2 
-+lvcreate -l 4 -n $lv2 -s $vg1/$lv1 
-+lvcreate -l 4 -n $lv3 -s $vg1/$lv1 
-+vg_validate_pvlv_counts_ $vg1 4 3 2 
-+vgchange -an $vg1 
-+not vgsplit -n $lv2 $vg1 $vg2
-+lvremove -f $vg1/$lv2 
-+lvremove -f $vg1/$lv3 
-+lvremove -f $vg1/$lv1 
-+vgremove -ff $vg1
-+
-+COMM "vgsplit fails splitting one mirror LV, only one PV specified" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 $dev4 
-+lvcreate -l 16 -n $lv1 -m1 $vg1 $dev1 $dev2 $dev3 
-+vg_validate_pvlv_counts_ $vg1 4 1 0 
-+vgchange -an $vg1 
-+not vgsplit $vg1 $vg2 $dev2 
-+vgremove -ff $vg1
-+
-+COMM "vgsplit fails splitting 1 mirror + 1 striped LV, only striped LV specified" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 $dev4 
-+lvcreate -l 16 -n $lv1 -m1 $vg1 $dev1 $dev2 $dev3 
-+lvcreate -l 16 -n $lv2 -i 2 $vg1 $dev3 $dev4 
-+vg_validate_pvlv_counts_ $vg1 4 2 0 
-+vgchange -an $vg1 
-+not vgsplit -n $lv2 $vg1 $vg2 2>err
-+vgremove -ff $vg1
+ struct text_vg_version_ops {
+ 	int (*check_version) (const struct dm_config_tree * cf);
+ 	struct volume_group *(*read_vg) (struct format_instance * fid,
+@@ -58,8 +59,8 @@ struct text_vg_version_ops {
  
- #
- # Verify vgsplit rejects active LVs only when active LVs involved in split
- #
--test_expect_success \
--  "vgsplit fails, active mirror involved in split" \
--  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
--   lvcreate -l 16 -n $lv1 -m1 $vg1 $d1 $d2 $d3 &&
--   lvcreate -l 16 -n $lv2 $vg1 $d4 &&
--   lvchange -an $vg1/$lv2 &&
--   vg_validate_pvlv_counts_ $vg1 4 2 0 &&
--   vgsplit -n $lv1 $vg1 $vg2;
--   status=$?; echo status=$status; test $status = 5 &&
--   vg_validate_pvlv_counts_ $vg1 4 2 0 &&
--   vgremove -ff $vg1'
--
--test_expect_success \
--  "vgsplit succeeds, active mirror not involved in split" \
--  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
--   lvcreate -l 16 -n $lv1 -m1 $vg1 $d1 $d2 $d3 &&
--   lvcreate -l 16 -n $lv2 $vg1 $d4 &&
--   lvchange -an $vg1/$lv2 &&
--   vg_validate_pvlv_counts_ $vg1 4 2 0 &&
--   vgsplit -n $lv2 $vg1 $vg2 &&
--   vg_validate_pvlv_counts_ $vg1 3 1 0 &&
--   vg_validate_pvlv_counts_ $vg2 1 1 0 &&
--   vgremove -ff $vg1 &&
--   vgremove -ff $vg2'
--
--test_expect_success \
--  "vgsplit fails, active snapshot involved in split" \
--  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
--   lvcreate -l 64 -i 2 -n $lv1 $vg1 $d1 $d2 &&
--   lvcreate -l 4 -i 2 -s -n $lv2 $vg1/$lv1 &&
--   lvcreate -l 64 -i 2 -n $lv3 $vg1 $d3 $d4 &&
--   lvchange -an $vg1/$lv3 &&
--   vg_validate_pvlv_counts_ $vg1 4 3 1 &&
--   vgsplit -n $lv2 $vg1 $vg2;
--   status=$?; echo status=$status; test $status = 5 &&
--   vg_validate_pvlv_counts_ $vg1 4 3 1 &&
--   lvremove -f $vg1/$lv2 &&
--   vgremove -ff $vg1'
--
--test_expect_success \
--  "vgsplit succeeds, active snapshot not involved in split" \
--  'vgcreate $vg1 $d1 $d2 $d3 &&
--   lvcreate -l 64 -i 2 -n $lv1 $vg1 $d1 $d2 &&
--   lvcreate -l 4 -s -n $lv2 $vg1/$lv1 &&
--   vgextend $vg1 $d4 &&
--   lvcreate -l 64 -n $lv3 $vg1 $d4 &&
--   lvchange -an $vg1/$lv3 &&
--   vg_validate_pvlv_counts_ $vg1 4 3 1 &&
--   vgsplit -n $lv3 $vg1 $vg2 &&
--   vg_validate_pvlv_counts_ $vg1 3 2 1 &&
--   vg_validate_pvlv_counts_ $vg2 1 1 0 &&
--   vgchange -an $vg1 &&
--   lvremove -f $vg1/$lv2 &&
--   vgremove -ff $vg1 &&
--   vgremove -ff $vg2'
--
--
--test_done
--
--# Local Variables:
--# indent-tabs-mode: nil
--# End:
-+COMM "vgsplit fails, active mirror involved in split" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 $dev4 
-+lvcreate -l 16 -n $lv1 -m1 $vg1 $dev1 $dev2 $dev3 
-+lvcreate -l 16 -n $lv2 $vg1 $dev4 
-+lvchange -an $vg1/$lv2 
-+vg_validate_pvlv_counts_ $vg1 4 2 0 
-+not vgsplit -n $lv1 $vg1 $vg2;
-+vg_validate_pvlv_counts_ $vg1 4 2 0 
-+vgremove -ff $vg1
-+
-+COMM "vgsplit succeeds, active mirror not involved in split" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 $dev4 
-+lvcreate -l 16 -n $lv1 -m1 $vg1 $dev1 $dev2 $dev3 
-+lvcreate -l 16 -n $lv2 $vg1 $dev4 
-+lvchange -an $vg1/$lv2 
-+vg_validate_pvlv_counts_ $vg1 4 2 0 
-+vgsplit -n $lv2 $vg1 $vg2 
-+vg_validate_pvlv_counts_ $vg1 3 1 0 
-+vg_validate_pvlv_counts_ $vg2 1 1 0 
-+vgremove -ff $vg1 
-+vgremove -ff $vg2
-+
-+COMM "vgsplit fails, active snapshot involved in split" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 $dev4 
-+lvcreate -l 64 -i 2 -n $lv1 $vg1 $dev1 $dev2 
-+lvcreate -l 4 -i 2 -s -n $lv2 $vg1/$lv1 
-+lvcreate -l 64 -i 2 -n $lv3 $vg1 $dev3 $dev4 
-+lvchange -an $vg1/$lv3 
-+vg_validate_pvlv_counts_ $vg1 4 3 1 
-+not vgsplit -n $lv2 $vg1 $vg2;
-+vg_validate_pvlv_counts_ $vg1 4 3 1 
-+lvremove -f $vg1/$lv2 
-+vgremove -ff $vg1
-+
-+COMM "vgsplit succeeds, active snapshot not involved in split" 
-+vgcreate $vg1 $dev1 $dev2 $dev3 
-+lvcreate -l 64 -i 2 -n $lv1 $vg1 $dev1 $dev2 
-+lvcreate -l 4 -s -n $lv2 $vg1/$lv1 
-+vgextend $vg1 $dev4 
-+lvcreate -l 64 -n $lv3 $vg1 $dev4 
-+lvchange -an $vg1/$lv3 
-+vg_validate_pvlv_counts_ $vg1 4 3 1 
-+vgsplit -n $lv3 $vg1 $vg2 
-+vg_validate_pvlv_counts_ $vg1 3 2 1 
-+vg_validate_pvlv_counts_ $vg2 1 1 0 
-+vgchange -an $vg1 
-+lvremove -f $vg1/$lv2 
-+vgremove -ff $vg1 
-+vgremove -ff $vg2
-+
+ struct text_vg_version_ops *text_vg_vsn1_init(void);
+ 
+-int print_flags(uint64_t status, int type, char *buffer, size_t size);
+-int read_flags(uint64_t *status, int type, const struct dm_config_value *cv);
++int print_flags(char *buffer, size_t size, enum pv_vg_lv_e type, int mask, uint64_t status);
++int read_flags(uint64_t *status, enum pv_vg_lv_e type, int mask, const struct dm_config_value *cv);
+ 
+ int text_vg_export_file(struct volume_group *vg, const char *desc, FILE *fp);
+ size_t text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf);
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index e545008..6acfe1d 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -140,13 +140,13 @@ static int _read_flag_config(const struct dm_config_node *n, uint64_t *status, i
+ 		return 0;
+ 	}
+ 
+-	if (!(read_flags(status, type | STATUS_FLAG, cv))) {
++	if (!(read_flags(status, type, STATUS_FLAG, cv))) {
+ 		log_error("Could not read status flags.");
+ 		return 0;
+ 	}
+ 
+ 	if (dm_config_get_list(n, "flags", &cv)) {
+-		if (!(read_flags(status, type, cv))) {
++		if (!(read_flags(status, type, COMPATIBLE_FLAG, cv))) {
+ 			log_error("Could not read flags.");
+ 			return 0;
+ 		}
 
 
