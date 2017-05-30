@@ -1,64 +1,66 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 May 2017 08:03:19 -0400
-Subject: master - fsadm: avoid hidden --yes
-Message-ID: <201705231203.v4NC3Ji6008985@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Tue, 30 May 2017 12:44:47 -0400
+Subject: master - tmp
+Message-ID: <201705301644.v4UGilUK014275@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1fe4f80e45a6bfcceed5aaab97fc0e27dfcf2b88
-Commit:        1fe4f80e45a6bfcceed5aaab97fc0e27dfcf2b88
-Parent:        57492a609410c39809960a6f32bf67e1eddb7064
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 23 13:58:12 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue May 23 14:02:41 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a54d21ccd156a38a8cbc71ee77e0752c26e4ee7f
+Commit:        a54d21ccd156a38a8cbc71ee77e0752c26e4ee7f
+Parent:        c245996d700458f6ab159a387483736f1c1a6fbf
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Wed May 24 22:55:01 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue May 30 18:43:56 2017 +0200
 
-fsadm: avoid hidden --yes
+tmp
 
-When 'fsadm' was running without terminal (i.e. pipe), it's been
-automatically working like in '--yes'.
-
-Detect terminal and only accept empty "" input in this mode.
 ---
- WHATS_NEW        |    1 +
- scripts/fsadm.sh |    9 +++++++--
- 2 files changed, 8 insertions(+), 2 deletions(-)
+ tools/lvconvert.c |   22 +++++++++++++++++++++-
+ 1 files changed, 21 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 82397a9..f38c23c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.172 - 
- ===============================
-+  Stop using '--yes' mode when fsadm runs without terminal.
-   Extend validation of filesystems resized by fsadm.
-   Enhance lvconvert automatic settings of possible (raid) LV types.
-   Allow lvchange to change properties on a thin pool data sub LV.
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index bd54a26..ea14efe 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -401,10 +401,15 @@ yes_no() {
- 
- 	while read -r -s -n 1 ANS ; do
- 		case "$ANS" in
--		 "y" | "Y" | "") echo y ; return 0 ;;
--		 "n" | "N") echo n ; return 1 ;;
-+		 "y" | "Y" ) echo y ; return 0 ;;
-+		 "" ) if [ -t 1 ] ; then
-+			echo y ; return 0
-+		      fi ;;
- 		esac
- 	done
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 821146f..3423428 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1293,6 +1293,20 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
+ 		if (!seg_is_mirrored(seg) && !seg_is_linear(seg)) {
+ 			log_error("--mirrors/-m is not compatible with %s.",
+ 				  lvseg_name(seg));
++			log_error("You can convert %s LV %s to %s indirectly.",
++				  lvseg_name(seg), display_lvname(lv), lp->type_str);
++			if (seg_is_any_raid5(seg)) {
++				if (seg->area_count == 2)
++					log_error("Convert %s LV %s to raid1.",
++						  lvseg_name(seg), display_lvname(lv));
++				else
++					log_error("Convert %s LV %s to 2 stripes, then to raid1 and to linear.",
++						  lvseg_name(seg), display_lvname(lv));
++			} else
++				log_error("Convert %s LV %s to raid5 with 2 stripes and then to raid1.",
++					  lvseg_name(seg), display_lvname(lv));
 +
-+	echo n
-+	return 1
++			log_error("Mind to extend the LV before removing stripes to avoid data loss.");
+ 			return 0;
+ 		}
+ 		if (seg_is_raid10(seg)) {
+@@ -1442,7 +1456,13 @@ try_new_takeover_or_reshape:
+ 		return 1;
+ 	}
+ 
+-	log_error("Conversion operation not yet supported.");
++	if (seg_is_mirror(seg) || seg_is_linear(seg)) {
++		log_error("Convert %s LV %s to raid1 with 2 images (i.e. --mirrors 1) first.",
++			  lvseg_name(seg), display_lvname(lv));
++		log_error("Conversion operation failed.");
++	} else
++		log_error("Conversion operation not yet supported.");
++
+ 	return 0;
  }
  
- try_umount() {
 
 
