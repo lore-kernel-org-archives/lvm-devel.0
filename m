@@ -1,84 +1,59 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 30 May 2017 12:44:28 -0400
-Subject: master - flags: improve unknown flags logic
-Message-ID: <201705301644.v4UGiSmb014227@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 30 May 2017 12:44:33 -0400
+Subject: master - tests: also check new flag with segtype
+Message-ID: <201705301644.v4UGiXtg014237@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fb86bddda2e2944699d9c0705a16642ed1dc99b5
-Commit:        fb86bddda2e2944699d9c0705a16642ed1dc99b5
-Parent:        d1ac6108c39ff8a3496624508a0e709c503d7d9f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7c84c5c421806d5ee3fbe885862839a27df7b36a
+Commit:        7c84c5c421806d5ee3fbe885862839a27df7b36a
+Parent:        fb86bddda2e2944699d9c0705a16642ed1dc99b5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 30 15:59:42 2017 +0200
+AuthorDate:    Tue May 30 16:10:22 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue May 30 18:43:45 2017 +0200
+CommitterDate: Tue May 30 18:43:56 2017 +0200
 
-flags: improve unknown flags logic
+tests: also check new flag with segtype
 
-Use same logic as with unknown segment type - so preserve such
-name fully with all flags just with UNKNOWN segment type bits.
+Make sure new unknown flag is having same behavior as old unknown segtype.
 ---
- lib/format_text/flags.c |   34 ++++++++++++++++++++++------------
- 1 files changed, 22 insertions(+), 12 deletions(-)
+ test/shell/unknown-segment.sh |    9 ++++++---
+ 1 files changed, 6 insertions(+), 3 deletions(-)
 
-diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-index 2b934da..d86ceb7 100644
---- a/lib/format_text/flags.c
-+++ b/lib/format_text/flags.c
-@@ -229,16 +229,22 @@ int read_segtype_lvflags(uint64_t *status, char *segtype_str)
- 	unsigned i;
- 	const struct flag *flags = _lv_flags;
- 	char *delim;
--	char *flag;
-+	char *flag, *buffer, *str;
+diff --git a/test/shell/unknown-segment.sh b/test/shell/unknown-segment.sh
+index 27cea88..20fc920 100644
+--- a/test/shell/unknown-segment.sh
++++ b/test/shell/unknown-segment.sh
+@@ -18,9 +18,10 @@ aux prepare_vg 4
  
--	if (!(delim = strchr(segtype_str, '+')))
-+	if (!(str = strchr(segtype_str, '+')))
- 		return 1; /* No flags */
+ lvcreate -an -Zn -l 1 -n $lv1 $vg
+ lvcreate -an -Zn -l 2 --type mirror -m 1 -n $lv2 $vg
++lvcreate -an -Zn --type zero -l 1 -n $lv3 $vg
  
--	*delim = '\0'; /* Cut away 1st. '+' */
-+	if (!(buffer = dm_strdup(str + 1))) {
-+		log_error("Cannot duplicate segment string.");
-+		return 0;
-+	}
+ vgcfgbackup -f bak0 $vg
+-sed -e 's,striped,unstriped,;s,mirror,unmirror,' -i.orig bak0
++sed -e 's,striped,unstriped,;s,mirror,unmirror,;s,zero,zero+NEWFLAG,' -i.orig bak0
+ vgcfgrestore -f bak0 $vg
+ 
+ # we have on-disk metadata with unknown segments now
+@@ -28,11 +29,13 @@ not lvchange -aey $vg/$lv1 # check that activation is refused
+ 
+ # try once more to catch invalid memory access with valgrind
+ # when clvmd flushes cmd mem pool
+-not lvchange -aey $vg/$lv1 # check that activation is refused
++not lvchange -aey $vg/$lv2 # check that activation is refused
 +
-+	delim = buffer;
-+
- 	do {
--		flag = delim + 1;
--		if ((delim = strchr(segtype_str, '+')))
--			*delim = '\0';
-+		flag = delim;
-+		if ((delim = strchr(delim, '+')))
-+			*delim++ = '\0';
++not lvchange -aey $vg/$lv3 # check that activation is refused
  
- 		for (i = 0; flags[i].description; i++)
- 			if ((flags[i].kind & SEGTYPE_FLAG) &&
-@@ -247,12 +253,16 @@ int read_segtype_lvflags(uint64_t *status, char *segtype_str)
- 				break;
- 			}
+ vgcfgbackup -f bak1 $vg
+ cat bak1
+-sed -e 's,unstriped,striped,;s,unmirror,mirror,' -i.orig bak1
++sed -e 's,unstriped,striped,;s,unmirror,mirror,;s,zero+NEWFLAG,zero,' -i.orig bak1
+ vgcfgrestore -f bak1 $vg
+ vgcfgbackup -f bak2 $vg
  
--		if (!flags[i].description) {
--			log_error("Unknown flag %s passed with segment type %s.",
--				  flag, segtype_str);
--			return 0; /* Unknown flag is incompatible */
--		}
--	} while (delim); /* Till no more flags in type appear */
-+	} while (delim && flags[i].description); /* Till no more flags in type appear */
-+
-+	if (!flags[i].description)
-+		/* Unknown flag is incompatible - returns unmodified segtype_str */
-+		log_warn("WARNING: Unrecognised flag %s in segment type %s.",
-+			 flag, segtype_str);
-+	else
-+		*str = '\0'; /* Cut away 1st. '+' */
-+
-+	dm_free(buffer);
- 
- 	return 1;
- }
 
 
