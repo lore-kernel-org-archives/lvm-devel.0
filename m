@@ -1,59 +1,50 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 30 May 2017 12:44:52 -0400
-Subject: master - tests: also check new flag with segtype
-Message-ID: <201705301644.v4UGiqCB014296@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 30 May 2017 12:45:00 -0400
+Subject: master - tests: drop extra debug vvvv
+Message-ID: <201705301645.v4UGj0Hf014313@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7c84c5c421806d5ee3fbe885862839a27df7b36a
-Commit:        7c84c5c421806d5ee3fbe885862839a27df7b36a
-Parent:        fb86bddda2e2944699d9c0705a16642ed1dc99b5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b876e8c915a9434fa947ceb447dab32d5ecc74d3
+Commit:        b876e8c915a9434fa947ceb447dab32d5ecc74d3
+Parent:        7c84c5c421806d5ee3fbe885862839a27df7b36a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 30 16:10:22 2017 +0200
+AuthorDate:    Tue May 30 12:58:32 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
 CommitterDate: Tue May 30 18:43:56 2017 +0200
 
-tests: also check new flag with segtype
+tests: drop extra debug vvvv
 
-Make sure new unknown flag is having same behavior as old unknown segtype.
+Also show output of mount so when it fails we can check the state.
 ---
- test/shell/unknown-segment.sh |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+ test/shell/fsadm-renamed.sh |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/unknown-segment.sh b/test/shell/unknown-segment.sh
-index 27cea88..20fc920 100644
---- a/test/shell/unknown-segment.sh
-+++ b/test/shell/unknown-segment.sh
-@@ -18,9 +18,10 @@ aux prepare_vg 4
+diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
+index 3444840..5142e51 100644
+--- a/test/shell/fsadm-renamed.sh
++++ b/test/shell/fsadm-renamed.sh
+@@ -68,7 +68,8 @@ mount "$dev_vg_lv" "$mount_dir"
  
- lvcreate -an -Zn -l 1 -n $lv1 $vg
- lvcreate -an -Zn -l 2 --type mirror -m 1 -n $lv2 $vg
-+lvcreate -an -Zn --type zero -l 1 -n $lv3 $vg
+ lvrename $vg_lv $vg_lv_ren
  
- vgcfgbackup -f bak0 $vg
--sed -e 's,striped,unstriped,;s,mirror,unmirror,' -i.orig bak0
-+sed -e 's,striped,unstriped,;s,mirror,unmirror,;s,zero,zero+NEWFLAG,' -i.orig bak0
- vgcfgrestore -f bak0 $vg
+-mount | grep $vg
++mount | tee out
++grep $vg out
  
- # we have on-disk metadata with unknown segments now
-@@ -28,11 +29,13 @@ not lvchange -aey $vg/$lv1 # check that activation is refused
+ # fails on renamed LV
+ fail lvresize -L+10M -r $vg_lv_ren
+@@ -88,7 +89,7 @@ not lvresize -L+10M -r $vg_lv_ren
+ umount "$mount_dir"
  
- # try once more to catch invalid memory access with valgrind
- # when clvmd flushes cmd mem pool
--not lvchange -aey $vg/$lv1 # check that activation is refused
-+not lvchange -aey $vg/$lv2 # check that activation is refused
-+
-+not lvchange -aey $vg/$lv3 # check that activation is refused
+ # FIXME:  lvresize  CANNOT handle/propagage '--yes' to fsadm
+-echo y | lvresize -L+10M -vvvv -r $vg_lv
++echo y | lvresize -L+10M -r $vg_lv
  
- vgcfgbackup -f bak1 $vg
- cat bak1
--sed -e 's,unstriped,striped,;s,unmirror,mirror,' -i.orig bak1
-+sed -e 's,unstriped,striped,;s,unmirror,mirror,;s,zero+NEWFLAG,zero,' -i.orig bak1
- vgcfgrestore -f bak1 $vg
- vgcfgbackup -f bak2 $vg
+ umount "$mount_dolar_dir"
  
 
 
