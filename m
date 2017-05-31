@@ -1,59 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 31 May 2017 08:01:58 -0400
-Subject: master - tests: longer delay
-Message-ID: <201705311201.v4VC1w1q028671@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 31 May 2017 08:02:01 -0400
+Subject: master - tests: skip reshaping raid10
+Message-ID: <201705311202.v4VC211W028705@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=743ffb1962ef272e5023c1ac652c5bcde86ff5fd
-Commit:        743ffb1962ef272e5023c1ac652c5bcde86ff5fd
-Parent:        42b87c23e2e5745eba0f66328319b541303db3aa
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=091c55a13fbd385f5ea230bcc9bc2b2f0e29af9f
+Commit:        091c55a13fbd385f5ea230bcc9bc2b2f0e29af9f
+Parent:        3719f4bc5441cb5f29ad4beb91ccaa6b234ea8e1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 31 13:58:19 2017 +0200
+AuthorDate:    Wed May 31 12:59:53 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 31 13:59:42 2017 +0200
+CommitterDate: Wed May 31 12:59:53 2017 +0200
 
-tests: longer delay
+tests: skip reshaping raid10
 
-Slower sync a bit more and use bigger raid arrays to
-be more sure we will catch raid being sychronized.
+Needs newer target  >= 1.10.1 for reshaping of raid10 LVs.
 ---
- test/shell/lvcreate-raid-nosync.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ test/shell/lvconvert-raid-regionsize.sh |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvcreate-raid-nosync.sh b/test/shell/lvcreate-raid-nosync.sh
-index 1f01f47..bd7ec81 100644
---- a/test/shell/lvcreate-raid-nosync.sh
-+++ b/test/shell/lvcreate-raid-nosync.sh
-@@ -35,7 +35,7 @@ _sync() {
+diff --git a/test/shell/lvconvert-raid-regionsize.sh b/test/shell/lvconvert-raid-regionsize.sh
+index 762dada..d2c8a54 100644
+--- a/test/shell/lvconvert-raid-regionsize.sh
++++ b/test/shell/lvconvert-raid-regionsize.sh
+@@ -64,7 +64,7 @@ _test_regionsizes raid1
+ # Clean up
+ lvremove --yes $vg
  
- # Delay 1st leg so that rebuilding status characters
- #  can be read before resync finished too quick.
--aux delay_dev "$dev1" 0 90 $(get first_extent_sector "$dev1")
-+aux delay_dev "$dev1" 0 100 $(get first_extent_sector "$dev1")
+-if aux have_raid 1 10 0; then
++if aux have_raid 1 10 1; then
+ # Create 5-way raid6
+ lvcreate --yes -aey --type raid6 -i 3 --stripesize 128K -R 256K -L8M -n $lv1 $vg
+ check lv_field $vg/$lv1 segtype "raid6"
+@@ -83,6 +83,7 @@ else
+   echo "Skipping RAID6 tests"
+ fi
  
- # raid0/raid0_meta don't support resynchronization
- for r in raid0 raid0_meta
-@@ -58,7 +58,7 @@ lvremove --yes $vg/$lv1
- for r in $segtypes
- do
- 	# raid4/5 support resynchronization
--	lvcreate --type $r -Zn -i 3 -l 4 -n $lv1 $vg
-+	lvcreate --type $r -Zn -i 3 -L10 -n $lv1 $vg
- 	check raid_leg_status $vg $lv1 "aaaa"
- 	_sync "AAAA"
++if aux have_raid 1 10 1; then
+ # Create 6-way raid01
+ lvcreate --yes -aey --type raid10 -i 3 -m 1 --stripesize 128K -R 256K -L8M -n $lv1 $vg
+ check lv_field $vg/$lv1 segtype "raid10"
+@@ -94,5 +95,8 @@ aux wait_for_sync $vg $lv1
+ fsck -fn "$DM_DEV_DIR/$vg/$lv1"
  
-@@ -77,7 +77,7 @@ _sync "AAAAA"
- not lvcreate --type raid6 --nosync -Zn -i 3 -l 1 -n $lv1 $vg
+ _test_regionsizes raid10
++else
++  echo "Skipping RAID10 tests"
++fi
  
- # raid10 supports resynchronization
--lvcreate --type raid10 -m 1 -Zn -i 3 -l 4 -n $lv1 $vg
-+lvcreate --type raid10 -m 1 -Zn -i 3 -L10 -n $lv1 $vg
- check raid_leg_status $vg $lv1 "aaaaaa"
- _sync "AAAAAA"
- 
+ vgremove -ff $vg
 
 
