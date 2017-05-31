@@ -1,58 +1,59 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 May 2017 08:03:22 -0400
-Subject: master - tests: fix test for fsadm
-Message-ID: <201705231203.v4NC3Mbi009017@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 31 May 2017 08:01:58 -0400
+Subject: master - tests: longer delay
+Message-ID: <201705311201.v4VC1w1q028671@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e8beb4023642eb3aabee0b9f9e54047044b0cb8
-Commit:        5e8beb4023642eb3aabee0b9f9e54047044b0cb8
-Parent:        1fe4f80e45a6bfcceed5aaab97fc0e27dfcf2b88
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=743ffb1962ef272e5023c1ac652c5bcde86ff5fd
+Commit:        743ffb1962ef272e5023c1ac652c5bcde86ff5fd
+Parent:        42b87c23e2e5745eba0f66328319b541303db3aa
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 23 13:59:29 2017 +0200
+AuthorDate:    Wed May 31 13:58:19 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue May 23 14:02:43 2017 +0200
+CommitterDate: Wed May 31 13:59:42 2017 +0200
 
-tests: fix test for fsadm
+tests: longer delay
 
-Avoid mountinfo
-Pass 'y'  - since ATM lvresize cannot pass --yes to fsadm.
+Slower sync a bit more and use bigger raid arrays to
+be more sure we will catch raid being sychronized.
 ---
- test/shell/fsadm-renamed.sh |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+ test/shell/lvcreate-raid-nosync.sh |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
-index b2c3e0f..3444840 100644
---- a/test/shell/fsadm-renamed.sh
-+++ b/test/shell/fsadm-renamed.sh
-@@ -73,7 +73,7 @@ mount | grep $vg
- # fails on renamed LV
- fail lvresize -L+10M -r $vg_lv_ren
+diff --git a/test/shell/lvcreate-raid-nosync.sh b/test/shell/lvcreate-raid-nosync.sh
+index 1f01f47..bd7ec81 100644
+--- a/test/shell/lvcreate-raid-nosync.sh
++++ b/test/shell/lvcreate-raid-nosync.sh
+@@ -35,7 +35,7 @@ _sync() {
  
--# fials on unknown mountpoint  (FIXME: umount)
-+# fails on unknown mountpoint  (FIXME: umount)
- not umount "$dev_vg_lv"
+ # Delay 1st leg so that rebuilding status characters
+ #  can be read before resync finished too quick.
+-aux delay_dev "$dev1" 0 90 $(get first_extent_sector "$dev1")
++aux delay_dev "$dev1" 0 100 $(get first_extent_sector "$dev1")
  
- lvcreate -L20 -n $lv1 $vg
-@@ -81,13 +81,14 @@ lvcreate -L20 -n $lv1 $vg
+ # raid0/raid0_meta don't support resynchronization
+ for r in raid0 raid0_meta
+@@ -58,7 +58,7 @@ lvremove --yes $vg/$lv1
+ for r in $segtypes
+ do
+ 	# raid4/5 support resynchronization
+-	lvcreate --type $r -Zn -i 3 -l 4 -n $lv1 $vg
++	lvcreate --type $r -Zn -i 3 -L10 -n $lv1 $vg
+ 	check raid_leg_status $vg $lv1 "aaaa"
+ 	_sync "AAAA"
  
- mount "$dev_vg_lv" "$mount_dolar_dir"
+@@ -77,7 +77,7 @@ _sync "AAAAA"
+ not lvcreate --type raid6 --nosync -Zn -i 3 -l 1 -n $lv1 $vg
  
--cat /proc/self/mountinfo
-+mount | grep $vg
- 
- not lvresize -L+10M -r $vg_lv_ren
- 
- umount "$mount_dir"
- 
--lvresize -L+10M -r $vg_lv
-+# FIXME:  lvresize  CANNOT handle/propagage '--yes' to fsadm
-+echo y | lvresize -L+10M -vvvv -r $vg_lv
- 
- umount "$mount_dolar_dir"
+ # raid10 supports resynchronization
+-lvcreate --type raid10 -m 1 -Zn -i 3 -l 4 -n $lv1 $vg
++lvcreate --type raid10 -m 1 -Zn -i 3 -L10 -n $lv1 $vg
+ check raid_leg_status $vg $lv1 "aaaaaa"
+ _sync "AAAAAA"
  
 
 
