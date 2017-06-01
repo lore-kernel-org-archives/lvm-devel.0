@@ -1,88 +1,90 @@
-From: Eric Ren <zren@suse.com>
-Date: Thu, 1 Jun 2017 09:54:16 +0800
-Subject: [PATCH] clvmd: try to refresh device cache on the first failure
-In-Reply-To: <2be87d73-a516-9daf-b645-89bf962741ec@redhat.com>
-References: <20170524084519.12204-1-zren@suse.com>
-	<dafc93b4-0f3b-57a5-9055-4c9409d8fcf0@redhat.com>
-	<f531f11d-a36c-4c51-6713-bec5d55a7c9c@suse.com>
-	<14fb2bba-34b0-716e-7995-8f52626671a3@suse.com>
-	<1bf46b88-9b26-4437-446c-25e879b3ac3a@redhat.com>
-	<ce16334a-1d86-1f5a-65d5-867f8ee6f1ff@suse.com>
-	<2be87d73-a516-9daf-b645-89bf962741ec@redhat.com>
-Message-ID: <6bd491f9-8aab-8e2c-cd82-a0b2002bdc07@suse.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 1 Jun 2017 10:53:31 -0400
+Subject: master - disable repairing in-use flag on orphan PVs
+Message-ID: <201706011453.v51ErVJx013196@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi!
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f3c90e90f8466b5c2fe336e9a1947307c92c9e59
+Commit:        f3c90e90f8466b5c2fe336e9a1947307c92c9e59
+Parent:        743ffb1962ef272e5023c1ac652c5bcde86ff5fd
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri May 26 13:26:09 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Jun 1 09:53:14 2017 -0500
 
-On 05/31/2017 08:15 PM, Zdenek Kabelac wrote:
-> [...snip...]
->> Thanks for your information:-P
->>
->> Unfortunately, I still failed to tell the problem clearly. Since this problem can be 
->> reproduced easily, I debugged it step by step using
->> gdb, and read most of code paths relative to this problem. It's indeed a problem that 
->> "device cache" in clvmd is not updated as needed.
->
-> And as was already mentioned - this is a documented and the only supported logic in clvmd.
->
-> If user  runs  WITHOUT  obtain_device_list_from_udev == 1 (i.e. command does scan and 
-> manually discover device and maintains .cache file)  it's admin responsibility to refresh 
-> device cache when ANY new device appears.
->
-> It's seen counterproductive to NOT use udev and yet want udev to update .cache.
->
-> So the only issue we care here is - user has   obtain == 1 and yet clvmd does NOT work 
-> correctly  -  doing any code analysis is premature here...
+disable repairing in-use flag on orphan PVs
 
-This problem can be reproduced no matter 'obtain_device_list_from_udev == 1' or 'obtain_xx 
-== 0'.
+A PV holding VG metadata that lvm can't understand
+(e.g. damaged, checksum error, unrecognized flag)
+will appear as an in-use orphan, and will be cleared
+by this repair code.  Disable this repair until the
+code can keep track of these problematic PVs, and
+distinguish them from actual in-use orphans.
+---
+ WHATS_NEW               |    1 +
+ lib/metadata/metadata.c |   17 +++++++++++++++++
+ 2 files changed, 18 insertions(+), 0 deletions(-)
 
-The reason why I mention 'obtain...' here is,  several days ago on IRC,  when I tried 
-'obtain... == 0' following your
-instructions, the problem *disappeared*,  so I thought, yes, udev has something wrong! But, 
-as mentioned previously,
-I was cheated because do_refresh_cache() will be called if lvm.conf is *changed*.
-
->
->> 4. What is the problem?
->> clvmd missed a chance to update its device cache when a MD device is assembled, because 
->> 'pvscan' triggered by udev rules exits
->> too early to call lock_vol(..., VG_GLOBAL, ...).
->
-> pvscan in UDEV rules is ONLY for  'lvmetad'  nothing else and certainly not for clvmd.
-
-Yeah, this is the problem. So, do_refresh_cache() won't be called when underlying device 
-changes.
-
->
->> Hope I make this issue understood this time. But, I have to admit that this fix in pvscan 
->> tool looks nasty:-/
->>
->
->
-> So if you still see reproducible problem feel free to regular community bugzilla at:
->
-> https://bugzilla.redhat.com/enter_bug.cgi?product=LVM%20and%20device-mapper
-
-Thanks, will do.
-
-Regards,
-Eric
-
->
->
-> Regards
->
-> Zdenek
->
-> -- 
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
->
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 878aa7a..10d845f 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.172 - 
+ ===============================
++  Disable automatic clearing of PVs that look like in-use orphans.
+   Cache format2 flag is now using segment name type field.
+   Support storing status flags via segtype name field.
+   Stop using '--yes' mode when fsadm runs without terminal.
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index c5a41fe..cb02ecf 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3741,6 +3741,7 @@ struct _vg_read_orphan_baton {
+  * by pvcreate, and are displayed with a special flag by 'pvs'.
+  */
+ 
++#if 0
+ static int _check_or_repair_orphan_pv_ext(struct physical_volume *pv,
+ 					  struct lvmcache_info *info,
+ 					  struct _vg_read_orphan_baton *b)
+@@ -3794,6 +3795,7 @@ static int _check_or_repair_orphan_pv_ext(struct physical_volume *pv,
+ 
+ 	return 1;
+ }
++#endif
+ 
+ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
+ {
+@@ -3815,10 +3817,25 @@ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
+ 	pvl->pv = pv;
+ 	add_pvl_to_vgs(b->vg, pvl);
+ 
++	/*
++	 * FIXME: this bit of code that does the auto repair is disabled
++	 * until we can distinguish cases where the repair should not
++	 * happen, i.e. the VG metadata could not be read/parsed.
++	 *
++	 * A PV holding VG metadata that lvm can't understand
++	 * (e.g. damaged, checksum error, unrecognized flag)
++	 * will appear as an in-use orphan, and would be cleared
++	 * by this repair code.  Disable this repair until the
++	 * code can keep track of these problematic PVs, and
++	 * distinguish them from actual in-use orphans.
++	 */
++
++	/*
+ 	if (!_check_or_repair_orphan_pv_ext(pv, info, baton)) {
+ 		stack;
+ 		return 0;
+ 	}
++	*/
+ 
+ 	return 1;
+ }
 
 
