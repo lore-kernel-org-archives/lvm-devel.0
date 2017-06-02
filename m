@@ -1,55 +1,107 @@
 From: Tony Asleson <tasleson@sourceware.org>
 Date: Fri, 2 Jun 2017 13:51:13 -0400
-Subject: master - lvmdbusd: cmdhandler.py vg_reduce, remove extranous '--all'
-Message-ID: <201706021751.v52HpDNw024383@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - lvmdbusd: Add background command to flight recorder
+Message-ID: <201706021751.v52HpDdW024393@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=192d142e1cd38c1593ec76502d8424997ec01ec8
-Commit:        192d142e1cd38c1593ec76502d8424997ec01ec8
-Parent:        3217e0cfeaed313332a0b69437ee87ca1f4b9e5e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=699ccc05cacc32b4707bf12dba4ccbb994469048
+Commit:        699ccc05cacc32b4707bf12dba4ccbb994469048
+Parent:        192d142e1cd38c1593ec76502d8424997ec01ec8
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Jun 2 12:22:24 2017 -0500
+AuthorDate:    Fri Jun 2 12:25:01 2017 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Jun 2 12:32:43 2017 -0500
+CommitterDate: Fri Jun 2 12:32:51 2017 -0500
 
-lvmdbusd: cmdhandler.py vg_reduce, remove extranous '--all'
+lvmdbusd: Add background command to flight recorder
 
-vgreduce previously allowed --all and --removemissing together even though
-it only actual did the remove missing.  The lvm dbus daemon was passing
---all anytime there was no entries in pv_object_paths.  This change supplies
---all if and only if we are not removing missing and the pv_object_paths
-is empty.
-
-Vgreduce has and continues to enforce the invalid combination of supplying a
-device list when you specify --all or --removemissing so we do not need
-to check for that invalid combination explicitly in the lvm dbus service as
-it's already covered.
-
-Ref: https://bugzilla.redhat.com/show_bug.cgi?id=1455471
+We were not adding background tasks to flight recorder.  Add the meta
+data to the flight recorder when we start the command and update the meta
+data when the command is finished.  Locking was added to meta data to
+prevent concurrent update and returning string representation as these can
+happen in two different threads.
 ---
- daemons/lvmdbusd/cmdhandler.py |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/background.py |   13 ++++++++++++-
+ daemons/lvmdbusd/cmdhandler.py |   14 ++++++++------
+ 2 files changed, 20 insertions(+), 7 deletions(-)
 
+diff --git a/daemons/lvmdbusd/background.py b/daemons/lvmdbusd/background.py
+index f7f77d5..90e8b68 100644
+--- a/daemons/lvmdbusd/background.py
++++ b/daemons/lvmdbusd/background.py
+@@ -9,12 +9,13 @@
+ 
+ import subprocess
+ from . import cfg
+-from .cmdhandler import options_to_cli_args
++from .cmdhandler import options_to_cli_args, LvmExecutionMeta
+ import dbus
+ from .utils import pv_range_append, pv_dest_ranges, log_error, log_debug,\
+ 	add_no_notify
+ import os
+ import threading
++import time
+ 
+ 
+ def pv_move_lv_cmd(move_options, lv_full_name,
+@@ -47,6 +48,11 @@ def _move_merge(interface_name, command, job_state):
+ 	# Instruct lvm to not register an event with us
+ 	command = add_no_notify(command)
+ 
++	#(self, start, ended, cmd, ec, stdout_txt, stderr_txt)
++	meta = LvmExecutionMeta(time.time(), 0, command, -1000, None, None)
++
++	cfg.blackbox.add(meta)
++
+ 	process = subprocess.Popen(command, stdout=subprocess.PIPE,
+ 								env=os.environ,
+ 								stderr=subprocess.PIPE, close_fds=True)
+@@ -74,6 +80,11 @@ def _move_merge(interface_name, command, job_state):
+ 
+ 	out = process.communicate()
+ 
++	with meta.lock:
++		meta.ended = time.time()
++		meta.ec = process.returncode
++		meta.stderr_txt = out[1]
++
+ 	if process.returncode == 0:
+ 		job_state.Percent = 100
+ 	else:
 diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index 8ed38cb..a883f1e 100644
+index a883f1e..4fb1670 100644
 --- a/daemons/lvmdbusd/cmdhandler.py
 +++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -618,10 +618,10 @@ def vg_reduce(vg_name, missing, pv_devices, reduce_options):
- 	cmd = ['vgreduce']
- 	cmd.extend(options_to_cli_args(reduce_options))
+@@ -37,6 +37,7 @@ cmd_lock = threading.RLock()
+ class LvmExecutionMeta(object):
  
--	if len(pv_devices) == 0:
--		cmd.append('--all')
- 	if missing:
- 		cmd.append('--removemissing')
-+	elif len(pv_devices) == 0:
-+		cmd.append('--all')
+ 	def __init__(self, start, ended, cmd, ec, stdout_txt, stderr_txt):
++		self.lock = threading.RLock()
+ 		self.start = start
+ 		self.ended = ended
+ 		self.cmd = cmd
+@@ -45,12 +46,13 @@ class LvmExecutionMeta(object):
+ 		self.stderr_txt = stderr_txt
  
- 	cmd.append(vg_name)
- 	cmd.extend(pv_devices)
+ 	def __str__(self):
+-		return "EC= %d for %s\n" \
+-			"STARTED: %f, ENDED: %f\n" \
+-			"STDOUT=%s\n" \
+-			"STDERR=%s\n" % \
+-			(self.ec, str(self.cmd), self.start, self.ended, self.stdout_txt,
+-			self.stderr_txt)
++		with self.lock:
++			return "EC= %d for %s\n" \
++				"STARTED: %f, ENDED: %f\n" \
++				"STDOUT=%s\n" \
++				"STDERR=%s\n" % \
++				(self.ec, str(self.cmd), self.start, self.ended, self.stdout_txt,
++				self.stderr_txt)
+ 
+ 
+ class LvmFlightRecorder(object):
 
 
