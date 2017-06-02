@@ -1,42 +1,55 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 2 Jun 2017 08:31:40 -0400
-Subject: master - lvconvert: choose direct path to desired raid level
-Message-ID: <201706021231.v52CVeYv013719@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heiko Becker <heirecka@exherbo.org>
+Date: Fri, 2 Jun 2017 14:29:07 +0200
+Subject: [PATCH] configure: Search for (a possibly prefixed) ar
+In-Reply-To: <20170413070749.29364-1-heirecka@exherbo.org>
+References: <20170413070749.29364-1-heirecka@exherbo.org>
+Message-ID: <5bb61d19-f140-b7a9-ea1a-01323af37b4e@exherbo.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3217e0cfeaed313332a0b69437ee87ca1f4b9e5e
-Commit:        3217e0cfeaed313332a0b69437ee87ca1f4b9e5e
-Parent:        c98a25aab1659a5640ac473517bb6af97d696588
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Jun 2 14:30:57 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Jun 2 14:30:57 2017 +0200
+Ping? Not sure if the mailing list is the right place to submit patches.
+Would be nice if somebody could point me to the proper place otherwise.
 
-lvconvert: choose direct path to desired raid level
+Regards,
+Heiko
 
-Remove superfluous raid5_n interim LV type from raid4 -> raid10 conversion.
-
-Resolves: rhbz1458006
----
- lib/metadata/raid_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 80541fd..8c9069c 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -5897,7 +5897,7 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
- 				return 0;
- 			}
- 
--			seg_flag = seg_is_raid5_n(seg_from) ? SEG_RAID0_META : SEG_RAID5_N;
-+			seg_flag = SEG_RAID0_META;
- 
- 		} else if (segtype_is_any_raid6(*segtype)) {
- 			if (seg_from->area_count < 4) {
+On 04/13/17 09:07, Heiko Becker wrote:
+> e.g. when cross compiling.
+> 
+> Signed-off-by: Heiko Becker <heirecka@exherbo.org>
+> ---
+>  configure.in | 1 +
+>  make.tmpl.in | 2 +-
+>  2 files changed, 2 insertions(+), 1 deletion(-)
+> 
+> diff --git a/configure.in b/configure.in
+> index 42ec52f95..d99a6e7b4 100644
+> --- a/configure.in
+> +++ b/configure.in
+> @@ -84,6 +84,7 @@ AC_PROG_LN_S
+>  AC_PROG_MAKE_SET
+>  AC_PROG_MKDIR_P
+>  AC_PROG_RANLIB
+> +AC_CHECK_TOOL(AR, ar)
+>  AC_PATH_TOOL(CFLOW_CMD, cflow)
+>  AC_PATH_TOOL(CSCOPE_CMD, cscope)
+>  AC_PATH_TOOL(CHMOD, chmod)
+> diff --git a/make.tmpl.in b/make.tmpl.in
+> index 8148fb551..5eeda2869 100644
+> --- a/make.tmpl.in
+> +++ b/make.tmpl.in
+> @@ -44,7 +44,7 @@ EGREP = @EGREP@
+>  GREP = @GREP@
+>  SORT = @SORT@
+>  WC = @WC@
+> -AR = ar
+> +AR = @AR@
+>  RM = rm -f
+>  
+>  PYTHON2 = @PYTHON2@
+> 
 
 
