@@ -1,74 +1,123 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Fri, 2 Jun 2017 13:51:18 -0400
-Subject: master - lvmdbusd: Prevent stall when update thread gets exception
-Message-ID: <201706021751.v52HpIMg024404@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Ren <zren@suse.com>
+Date: Tue, 6 Jun 2017 11:27:51 +0800
+Subject: Asking for help with LVM testing
+Message-ID: <80696c5c-d275-7306-36f0-c64c23885a83@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=61420309ee34bb77318bf3913eb539b8f85adbda
-Commit:        61420309ee34bb77318bf3913eb539b8f85adbda
-Parent:        699ccc05cacc32b4707bf12dba4ccbb994469048
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Jun 2 12:29:27 2017 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Jun 2 12:39:04 2017 -0500
+Hi Zdenek and all,
 
-lvmdbusd: Prevent stall when update thread gets exception
+I'm facing some problems with using LVM test code.  Please help give confirmation,
+or suggestion on questions below:
 
-If during the process of fetching current lvm state we experience an
-exception we fail to call set_result on the queued_requests we were
-processing.  When this happens those threads block forever which causes
-the service to stall infinitely.  Only clear the queued_requests after
-we have called set_result.
----
- daemons/lvmdbusd/fetch.py |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+1. Is upstream running LVM testsuite upon every new commit?
 
-diff --git a/daemons/lvmdbusd/fetch.py b/daemons/lvmdbusd/fetch.py
-index 78c3a4b..c053685 100644
---- a/daemons/lvmdbusd/fetch.py
-+++ b/daemons/lvmdbusd/fetch.py
-@@ -82,10 +82,10 @@ class StateUpdate(object):
- 
- 	@staticmethod
- 	def update_thread(obj):
-+		queued_requests = []
- 		while cfg.run.value != 0:
- 			# noinspection PyBroadException
- 			try:
--				queued_requests = []
- 				refresh = True
- 				emit_signal = True
- 				cache_refresh = True
-@@ -96,7 +96,7 @@ class StateUpdate(object):
- 					wait = not obj.deferred
- 					obj.deferred = False
- 
--				if wait:
-+				if len(queued_requests) == 0 and wait:
- 					queued_requests.append(obj.queue.get(True, 2))
- 
- 				# Ok we have one or the deferred queue has some,
-@@ -131,11 +131,17 @@ class StateUpdate(object):
- 				for i in queued_requests:
- 					i.set_result(num_changes)
- 
-+				# Only clear out the requests after we have given them a result
-+				# otherwise we can orphan the waiting threads and they never
-+				# wake up if we get an exception
-+				queued_requests = []
-+
- 			except queue.Empty:
- 				pass
- 			except Exception:
- 				st = traceback.format_exc()
- 				log_error("update_thread exception: \n%s" % st)
-+				cfg.blackbox.dump()
- 
- 	def __init__(self):
- 		self.lock = threading.RLock()
+I hope I can setup a CI testing machine for upstream code. Unfortunately,
+I cannot even successfully run testsuite from source code as follows:
+
+=========
+# ./configure
+...  no errors ...
+# make
+... no errors ...
+# make install
+... no errors ...
+# make -C test
+... no errors...
+# make -C test install
+...
+/usr/bin/install -c -m 755 -d /usr/share/lvm2-testsuite/{shell,api,lib,dbus} 
+/libexec/lvm2-testsuite
+/usr/bin/install -c -p -m 444 shell/*.sh /usr/share/lvm2-testsuite/shell
+/usr/bin/install -c -p -m 444 api/*.sh /usr/share/lvm2-testsuite/api
+/usr/bin/install -c -p -m 444 lib/mke2fs.conf /usr/share/lvm2-testsuite/lib
+/usr/bin/install -c -m 555  api/*.{t,py} /usr/share/lvm2-testsuite/api
+/usr/bin/install: cannot stat ?api/*.t?: No such file or directory
+make: *** [install] Error 1
+make: Leaving directory `/root/lvm2/test'
+# lvm2-testsuite
+lvm2-testsuite: /lib64/libstdc++.so.6: version `CXXABI_1.3.9' not found (required by 
+lvm2-testsuite)
+lvm2-testsuite: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found (required by 
+lvm2-testsuite)
+# cat /etc/centos-release
+CentOS Linux release 7.3.1611 (Core)
+========
+
+or
+
+=======
+# ./configure --help|grep test
+   --enable-testing        enable testing targets in the makefile
+[root at centos1 lvm2]# ./configure --enable-testing
+...
+checking for CUNIT... no
+configure: error: Package requirements (cunit >= 2.0) were not met:
+
+No package 'cunit' found
+# yum search cunit
+Warning: No matches found for: cunit
+=======
+
+Is this a known issue?  I'm likely doing something wrong...
+
+2. Are all LVM testcases passed for upstream code now?
+
+I found many failed testcases on Tumbleweed 20170602:
+
+======
+# rpm -qa | grep lvm2
+lvm2-2.02.170-3.2.x86_64
+lvm2-testsuite-2.02.170-3.2.x86_64
+
+# lvm2-testsuite --flavours udev-lvmetad
+....
+### 277 tests: 227 passed, 26 skipped, 0 timed out, 6 warned, 18 failed
+
+# cat list | grep failed
+udev-lvmetad:shell/fsadm.sh failed
+udev-lvmetad:shell/lvchange-cache-old.sh failed
+udev-lvmetad:shell/lvchange-cache.sh failed
+udev-lvmetad:shell/lvchange-raid.sh failed
+udev-lvmetad:shell/lvconvert-cache-thin.sh failed
+udev-lvmetad:shell/lvconvert-raid-takeover.sh failed
+udev-lvmetad:shell/lvconvert-thin-external-cache.sh failed
+udev-lvmetad:shell/lvcreate-cache-snapshot.sh failed
+udev-lvmetad:shell/lvcreate-cache.sh failed
+udev-lvmetad:shell/lvcreate-usage.sh failed
+udev-lvmetad:shell/lvmetad-pvscan-nomda-bg.sh failed
+udev-lvmetad:shell/lvmetad-pvscan-nomda.sh failed
+udev-lvmetad:shell/lvrename-cache-thin.sh failed
+udev-lvmetad:shell/lvresize-full.sh failed
+udev-lvmetad:shell/metadata.sh failed
+udev-lvmetad:shell/pvmove-cache-segtypes.sh failed
+udev-lvmetad:shell/read-ahead.sh failed
+udev-lvmetad:shell/thin-overprovisioning.sh failed
+=====
+
+Curiously, some of them failed caused by, like lvcreate-usage.sh failed:
+
+======
+field="lv_kernel_read_ahead", actual="512.00k", expected="128.00k"
+But, on openSUSE:
+# cat /sys/dev/block/253\:8/bdi/read_ahead_kb
+512
+On centos 7.3.1611:
+# cat /sys/dev/block/253\:2/bdi/read_ahead_kb
+4096
+======
+
+some of failed cases disappeared when manually testing individually...
+
+So, I'm wondering if upstream code also has some of the issues. That's why I want to
+directly run testcases from source code, more than RPMs :-P
+
+Regards,
+Eric
+
+
 
 
