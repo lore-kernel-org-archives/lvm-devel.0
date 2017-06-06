@@ -1,95 +1,67 @@
 From: Jonathan Brassow <jbrassow@sourceware.org>
-Date: Tue, 6 Jun 2017 11:45:14 -0400
-Subject: master - lvconvert: Don't require a 'force' option during RAID repair.
-Message-ID: <201706061545.v56FjE9p005020@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 6 Jun 2017 11:45:18 -0400
+Subject: master - lvconvert: linear -> raid1 upconvert should cause "recover" not "resync"
+Message-ID: <201706061545.v56FjIEB005051@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=acaf3a5d47fd65b2e385a516544f8e6ec8d89b2d
-Commit:        acaf3a5d47fd65b2e385a516544f8e6ec8d89b2d
-Parent:        88e649628863e78b101c584c513053fc9461c24d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=88e649628863e78b101c584c513053fc9461c24d
+Commit:        88e649628863e78b101c584c513053fc9461c24d
+Parent:        61420309ee34bb77318bf3913eb539b8f85adbda
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Jun 6 10:43:49 2017 -0500
+AuthorDate:    Tue Jun 6 10:43:12 2017 -0500
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Jun 6 10:43:49 2017 -0500
+CommitterDate: Tue Jun 6 10:43:12 2017 -0500
 
-lvconvert:  Don't require a 'force' option during RAID repair.
+lvconvert:  linear -> raid1 upconvert should cause "recover" not "resync"
 
-Previously, we were treating non-RAID to RAID up-converts as a "resync"
-operation.  (The most common example being 'linear -> RAID1'.)  RAID to
-RAID up-converts or rebuilds of specific RAID images are properly treated
-as a "recover" operation.
+Two of the sync actions performed by the kernel (aka MD runtime) are
+"resync" and "recover".  The "resync" refers to when an entirely new array
+is going through the process of initializing (or resynchronizing after an
+unexpected shutdown).  The "recover" is the process of initializing a new
+member device to the array.  So, a brand new array with all new devices
+will undergo "resync".  An array with replaced or added sub-LVs will undergo
+"recover".
 
-Since we were treating some up-convert operations as "resync", it was
-possible to have scenarios where data corruption or data loss were
-possibilities if the RAID hadn't been able to sync completely before a
-loss of the primary source devices.  In order to ensure that the user took
-the proper precautions in such scenarios, we required a '--force' option
-to be present.  Unfortuneately, the force option was rendered useless
-because there was no way to distiguish the failure state of a potentially
-destructive repair from a nominal one - making the '--force' option a
-requirement for any repair!
+These two states are treated very differently when failures happen.  If any
+device is lost or replaced while "resync", there are no worries.  This is
+because any writes created from the inception of the array have occurred to
+all the devices and can be safely recovered.  Even though non-initialized
+portions will still be resync'ed with uninitialized data, it is ok.  However,
+if a pre-existing device is lost (aka, the original linear device in a
+linear -> raid1 convert) during a "recover", data loss can be the result.
+Thus, writes are errored by the kernel and recovery is halted.  The failed
+device must be restored or removed.  This is the correct behavior.
 
-We now treat non-RAID to RAID up-converts properly as "recover" operations.
-This eliminates the scenarios that can potentially cause data loss or
-data corruption; and this eliminates the need for the '--force' requirement.
-This patch removes the requirement to specify '--force' for RAID repairs.
+Unfortunately, we were treating an up-convert from linear as a "resync"
+when we should have been treating it as a "recover".  This patch
+removes the special case for linear upconvert.  It allows each new image
+sub-LV to be marked with a rebuild flag and treats the array as 'in-sync'.
+This has the correct effect of causing the upconvert to be treated as a
+"recover" rather than a "resync".  There is no need to flag these two states
+differently in LVM metadata, because they are already considered differently
+by the kernel RAID metadata.  (Any activation/deactivation will properly
+resume the "recover" process and not a "resync" process.)
 ---
- lib/metadata/raid_manip.c |   31 +------------------------------
- 1 files changed, 1 insertions(+), 30 deletions(-)
+ lib/metadata/raid_manip.c |    3 ---
+ 1 files changed, 0 insertions(+), 3 deletions(-)
 
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 7e55530..08df32c 100644
+index 8c9069c..7e55530 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -379,23 +379,6 @@ int lv_raid_in_sync(const struct logical_volume *lv)
- 	return _raid_in_sync(lv);
- }
- 
--/* Check if RaidLV @lv is synced or any raid legs of @lv are not synced */
--static int _raid_devs_sync_healthy(struct logical_volume *lv)
--{
--	char *raid_health;
+@@ -2559,9 +2559,6 @@ static int _raid_add_images_without_commit(struct logical_volume *lv,
+ 	 * LV to accompany it.
+ 	 */
+ 	if (seg_is_linear(seg)) {
+-		/* A complete resync will be done, no need to mark each sub-lv */
+-		status_mask = ~(LV_REBUILD);
 -
--	if (!_raid_in_sync(lv))
--		return 0;
--
--	if (!seg_is_raid1(first_seg(lv)))
--		return 1;
--
--	if (!lv_raid_dev_health(lv, &raid_health))
--		return_0;
--
--	return (strchr(raid_health, 'a') || strchr(raid_health, 'D')) ? 0 : 1;
--}
--
- /*
-  * _raid_remove_top_layer
-  * @lv
-@@ -2908,20 +2891,8 @@ static int _raid_extract_images(struct logical_volume *lv,
- 			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) &&
- 			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
- 				continue;
--
--			/*
--			 * Kernel may report raid LV in-sync but still
--			 * image devices may not be in-sync or faulty.
--			 */
--			if (!_raid_devs_sync_healthy(lv) &&
--			    (!seg_is_mirrored(seg) || (s == 0 && !force))) {
--				log_error("Unable to extract %sRAID image"
--					  " while RAID array is not in-sync%s.",
--					  seg_is_mirrored(seg) ? "primary " : "",
--					  seg_is_mirrored(seg) ? " (use --force option to replace)" : "");
--				return 0;
--			}
- 		}
-+
- 		if (!_extract_image_components(seg, s, &rmeta_lv, &rimage_lv)) {
- 			log_error("Failed to extract %s from %s.",
- 				  display_lvname(seg_lv(seg, s)),
+ 		/* FIXME: allow setting region size on upconvert from linear */
+ 		seg->region_size = get_default_region_size(lv->vg->cmd);
+ 		/* MD's bitmap is limited to tracking 2^21 regions */
 
 
