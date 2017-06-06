@@ -1,96 +1,95 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 22 Sep 2010 17:06:31 -0400
-Subject: [PATCH 19/20] Add lvm_pv_get_property() generic function to obtain value of any pv property.
-In-Reply-To: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
-References: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1285189592-26525-20-git-send-email-dwysocha@redhat.com>
+From: Jonathan Brassow <jbrassow@sourceware.org>
+Date: Tue, 6 Jun 2017 11:45:14 -0400
+Subject: master - lvconvert: Don't require a 'force' option during RAID repair.
+Message-ID: <201706061545.v56FjE9p005020@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=acaf3a5d47fd65b2e385a516544f8e6ec8d89b2d
+Commit:        acaf3a5d47fd65b2e385a516544f8e6ec8d89b2d
+Parent:        88e649628863e78b101c584c513053fc9461c24d
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Jun 6 10:43:49 2017 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Jun 6 10:43:49 2017 -0500
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+lvconvert:  Don't require a 'force' option during RAID repair.
+
+Previously, we were treating non-RAID to RAID up-converts as a "resync"
+operation.  (The most common example being 'linear -> RAID1'.)  RAID to
+RAID up-converts or rebuilds of specific RAID images are properly treated
+as a "recover" operation.
+
+Since we were treating some up-convert operations as "resync", it was
+possible to have scenarios where data corruption or data loss were
+possibilities if the RAID hadn't been able to sync completely before a
+loss of the primary source devices.  In order to ensure that the user took
+the proper precautions in such scenarios, we required a '--force' option
+to be present.  Unfortuneately, the force option was rendered useless
+because there was no way to distiguish the failure state of a potentially
+destructive repair from a nominal one - making the '--force' option a
+requirement for any repair!
+
+We now treat non-RAID to RAID up-converts properly as "recover" operations.
+This eliminates the scenarios that can potentially cause data loss or
+data corruption; and this eliminates the need for the '--force' requirement.
+This patch removes the requirement to specify '--force' for RAID repairs.
 ---
- liblvm/lvm2app.h |   26 ++++++++++++++++++++++++++
- liblvm/lvm_pv.c  |   18 ++++++++++++++++++
- 2 files changed, 44 insertions(+), 0 deletions(-)
+ lib/metadata/raid_manip.c |   31 +------------------------------
+ 1 files changed, 1 insertions(+), 30 deletions(-)
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index cc839a6..634394a 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -1222,6 +1222,32 @@ uint64_t lvm_pv_get_size(const pv_t pv);
- uint64_t lvm_pv_get_free(const pv_t pv);
- 
- /**
-+ * Get the value of a PV property
-+ *
-+ * \memberof pv_t
-+ *
-+ * The memory allocated for a string property value is tied to the vg_t
-+ * handle and will be released when lvm_vg_close() is called.
-+ *
-+ * Example:
-+ *      lvm_property_value value;
-+ *
-+ *      if (lvm_pv_get_property(pv, "pv_mda_count", &value) < 0) {
-+ *              // handle error
-+ *      }
-+ *      if (value.is_string)
-+ *           printf(", value = %s\n", value.u.s_val);
-+ *	else
-+ *           printf(", value = %"PRIu64"\n", value.u.n_val);
-+ *
-+ *
-+ * \return
-+ * 0 (success) or -1 (failure).
-+ */
-+int lvm_pv_get_property(pv_t pv, const char *name,
-+			struct lvm_property_value *value);
-+
-+/**
-  * Resize physical volume to new_size bytes.
-  *
-  * \memberof pv_t
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index 0b6b6b1..af70710 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -16,6 +16,7 @@
- #include "lvm2app.h"
- #include "metadata.h"
- #include "lvm-string.h"
-+#include "properties.h"
- 
- const char *lvm_pv_get_uuid(const pv_t pv)
- {
-@@ -48,6 +49,23 @@ uint64_t lvm_pv_get_free(const pv_t pv)
- 	return (uint64_t) SECTOR_SIZE * pv_free(pv);
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 7e55530..08df32c 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -379,23 +379,6 @@ int lv_raid_in_sync(const struct logical_volume *lv)
+ 	return _raid_in_sync(lv);
  }
  
-+int lvm_pv_get_property(pv_t pv, const char *name,
-+			struct lvm_property_value *value)
-+{
-+	struct lvm_property_type prop;
+-/* Check if RaidLV @lv is synced or any raid legs of @lv are not synced */
+-static int _raid_devs_sync_healthy(struct logical_volume *lv)
+-{
+-	char *raid_health;
+-
+-	if (!_raid_in_sync(lv))
+-		return 0;
+-
+-	if (!seg_is_raid1(first_seg(lv)))
+-		return 1;
+-
+-	if (!lv_raid_dev_health(lv, &raid_health))
+-		return_0;
+-
+-	return (strchr(raid_health, 'a') || strchr(raid_health, 'D')) ? 0 : 1;
+-}
+-
+ /*
+  * _raid_remove_top_layer
+  * @lv
+@@ -2908,20 +2891,8 @@ static int _raid_extract_images(struct logical_volume *lv,
+ 			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) &&
+ 			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
+ 				continue;
+-
+-			/*
+-			 * Kernel may report raid LV in-sync but still
+-			 * image devices may not be in-sync or faulty.
+-			 */
+-			if (!_raid_devs_sync_healthy(lv) &&
+-			    (!seg_is_mirrored(seg) || (s == 0 && !force))) {
+-				log_error("Unable to extract %sRAID image"
+-					  " while RAID array is not in-sync%s.",
+-					  seg_is_mirrored(seg) ? "primary " : "",
+-					  seg_is_mirrored(seg) ? " (use --force option to replace)" : "");
+-				return 0;
+-			}
+ 		}
 +
-+	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
-+	if (!pv_get_property(pv, &prop))
-+		return -1;
-+	value->is_writeable = prop.is_writeable;
-+	value->is_string = prop.is_string;
-+	if (value->is_string)
-+		value->v.s_val = prop.v.s_val;
-+	else
-+		value->v.n_val = prop.v.n_val;
-+	return 0;
-+}
-+
- int lvm_pv_resize(const pv_t pv, uint64_t new_size)
- {
- 	/* FIXME: add pv resize code here */
--- 
-1.7.2.2
+ 		if (!_extract_image_components(seg, s, &rmeta_lv, &rimage_lv)) {
+ 			log_error("Failed to extract %s from %s.",
+ 				  display_lvname(seg_lv(seg, s)),
 
 
