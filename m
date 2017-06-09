@@ -1,146 +1,102 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 9 Jun 2017 16:23:18 -0400
-Subject: master - raid: add reshape segtype flag support
-Message-ID: <201706092023.v59KNI4j014089@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 9 Jun 2017 16:56:35 -0400
+Subject: master - configure: warn about older version of cache_check
+Message-ID: <201706092056.v59KuZka018621@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1c916ec5ffd37cfb7be2101b93a2dc91aa2ef7f0
-Commit:        1c916ec5ffd37cfb7be2101b93a2dc91aa2ef7f0
-Parent:        305513178474d15adcba4785871c3f0321576fbe
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Jun 9 21:31:09 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Jun 9 22:23:04 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=358eee15f30778bc20c2723532bffdf1d8176684
+Commit:        358eee15f30778bc20c2723532bffdf1d8176684
+Parent:        1c916ec5ffd37cfb7be2101b93a2dc91aa2ef7f0
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jun 9 22:30:23 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 9 22:32:12 2017 +0200
 
-raid: add reshape segtype flag support
+configure: warn about older version of cache_check
 
-Prohibit activation of reshaping RaidLVs on incompatible
-lvm2 runtime by storing e.g. 'raid5+RESHAPE' segment type
-strings in the lvm2 metadata.  Incompatible runtime not
-supporting reshaping won't be able to activate those thus
-avoiding potential data corruption.
+For proper usage of Cache kernel metadata format V2,
+new cache_check tool is basically mandatory.
 
-Any new non-reshaping lvconvert command will reset the
-segment type string from 'raid5+RESHAPE' to 'raid5'.
-
-See commits
-0299a7af1ec1eeb11388ed15c4c78f224fee76b2 and
-4141409eb09e78aef030346995f1722fb40956d8
-for segtype flag support.
+Print warning during configure time about this problem.
 ---
- lib/format_text/flags.c          |    1 +
- lib/metadata/metadata-exported.h |    5 ++++-
- lib/metadata/raid_manip.c        |   17 ++++++++++++++++-
- 3 files changed, 21 insertions(+), 2 deletions(-)
+ configure    |   15 +++++++++++++--
+ configure.in |   10 +++++++++-
+ 2 files changed, 22 insertions(+), 3 deletions(-)
 
-diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-index d86ceb7..a9548e0 100644
---- a/lib/format_text/flags.c
-+++ b/lib/format_text/flags.c
-@@ -62,6 +62,7 @@ static const struct flag _lv_flags[] = {
- 	{LOCKED, "LOCKED", STATUS_FLAG},
- 	{LV_NOTSYNCED, "NOTSYNCED", STATUS_FLAG},
- 	{LV_REBUILD, "REBUILD", STATUS_FLAG},
-+	{LV_RESHAPE, "RESHAPE", SEGTYPE_FLAG},
- 	{LV_RESHAPE_DELTA_DISKS_PLUS, "RESHAPE_DELTA_DISKS_PLUS", STATUS_FLAG},
- 	{LV_RESHAPE_DELTA_DISKS_MINUS, "RESHAPE_DELTA_DISKS_MINUS", STATUS_FLAG},
- 	{LV_REMOVE_AFTER_RESHAPE, "REMOVE_AFTER_RESHAPE", STATUS_FLAG},
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 8b4310b..c4bebd0 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -142,7 +142,10 @@
+diff --git a/configure b/configure
+index 28b0488..9d0d97c 100755
+--- a/configure
++++ b/configure
+@@ -9256,6 +9256,11 @@ $as_echo "$as_me: WARNING: $CACHE_CHECK_CMD: Old version \"$CACHE_CHECK_VSN\" fo
+ 				CACHE_CHECK_VERSION_WARN=y
+ 				CACHE_CHECK_NEEDS_CHECK=no
+ 			fi
++			if test "$CACHE_CHECK_VSN_MINOR" -lt 7 ; then
++				{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $CACHE_CHECK_CMD: Old version \"$CACHE_CHECK_VSN\" does not support new cache format V2" >&5
++$as_echo "$as_me: WARNING: $CACHE_CHECK_CMD: Old version \"$CACHE_CHECK_VSN\" does not support new cache format V2" >&2;}
++				CACHE_CHECK_VERSION_WARN=y
++			fi
+ 		fi
+ 	fi
+ 	# Empty means a config way to ignore cache dumping
+@@ -17044,8 +17049,8 @@ $as_echo "$as_me: WARNING: Support for thin provisioning is limited since some t
+ fi
  
- #define LV_REMOVE_AFTER_RESHAPE	UINT64_C(0x0400000000000000)	/* LV needs to be removed after a shrinking reshape */
- #define LV_METADATA_FORMAT	UINT64_C(0x0800000000000000)    /* LV has segments with metadata format */
--/* Next unused flag:		UINT64_C(0x1000000000000000)    */
+ if test -n "$THIN_CHECK_VERSION_WARN"; then :
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning" >&5
+-$as_echo "$as_me: WARNING: You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning" >&2;}
++  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: You should also install latest thin_check vsn 0.7.0 (or later) for lvm2 thin provisioning" >&5
++$as_echo "$as_me: WARNING: You should also install latest thin_check vsn 0.7.0 (or later) for lvm2 thin provisioning" >&2;}
+ fi
+ 
+ if test -n "$CACHE_CONFIGURE_WARN"; then :
+@@ -17053,6 +17058,12 @@ if test -n "$CACHE_CONFIGURE_WARN"; then :
+ $as_echo "$as_me: WARNING: Support for cache is limited since some cache tools are missing!" >&2;}
+ fi
+ 
++if test -n "$CACHE_CHECK_VERSION_WARN"; then :
++  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: You should install latest cache_check vsn 0.7.0 to use lvm2 cache metadata format 2" >&5
++$as_echo "$as_me: WARNING: You should install latest cache_check vsn 0.7.0 to use lvm2 cache metadata format 2" >&2;}
++fi
 +
-+#define LV_RESHAPE		UINT64_C(0x1000000000000000)    /* Ongoing reshape (number of stripes, stripesize or raid algorithm change):
-+								   used as SEGTYPE_FLAG to prevent activation on old runtime */
-+/* Next unused flag:		UINT64_C(0x2000000000000000)    */
- 
- /* Format features flags */
- #define FMT_SEGMENTS		0x00000001U	/* Arbitrary segment params? */
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 5db4a8e..fd51964 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1637,6 +1637,8 @@ static int _lv_free_reshape_space_with_status(struct logical_volume *lv, enum al
- 	} else if (where_it_was)
- 		*where_it_was = alloc_none;
- 
-+	lv->status &= ~LV_RESHAPE;
 +
- 	return 1;
- }
+ if test "$ODIRECT" != yes; then :
+   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&5
+ $as_echo "$as_me: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&2;}
+diff --git a/configure.in b/configure.in
+index 8603a12..0ca6b43 100644
+--- a/configure.in
++++ b/configure.in
+@@ -617,6 +617,10 @@ case "$CACHE" in
+ 				CACHE_CHECK_VERSION_WARN=y
+ 				CACHE_CHECK_NEEDS_CHECK=no
+ 			fi
++			if test "$CACHE_CHECK_VSN_MINOR" -lt 7 ; then
++				AC_MSG_WARN([$CACHE_CHECK_CMD: Old version "$CACHE_CHECK_VSN" does not support new cache format V2])
++				CACHE_CHECK_VERSION_WARN=y
++			fi
+ 		fi
+ 	fi
+ 	# Empty means a config way to ignore cache dumping
+@@ -2256,10 +2260,14 @@ AS_IF([test -n "$THIN_CONFIGURE_WARN"],
+       [AC_MSG_WARN([Support for thin provisioning is limited since some thin provisioning tools are missing!])])
  
-@@ -1844,6 +1846,9 @@ static int _raid_reshape_add_images(struct logical_volume *lv,
+ AS_IF([test -n "$THIN_CHECK_VERSION_WARN"],
+-      [AC_MSG_WARN([You should also install thin_check vsn 0.3.2 (or later) to use lvm2 thin provisioning])])
++      [AC_MSG_WARN([You should also install latest thin_check vsn 0.7.0 (or later) for lvm2 thin provisioning])])
  
- 	seg->stripe_size = new_stripe_size;
+ AS_IF([test -n "$CACHE_CONFIGURE_WARN"],
+       [AC_MSG_WARN([Support for cache is limited since some cache tools are missing!])])
  
-+	/* Define image adding reshape (used as SEGTYPE_FLAG to avoid incompatible activations on old runtime) */
-+	lv->status |= LV_RESHAPE;
++AS_IF([test -n "$CACHE_CHECK_VERSION_WARN"],
++      [AC_MSG_WARN([You should install latest cache_check vsn 0.7.0 to use lvm2 cache metadata format 2])])
 +
- 	return 1;
- }
- 
-@@ -1943,6 +1948,8 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
- 		if (seg_is_any_raid5(seg) && new_image_count == 2)
- 			seg->data_copies = 2;
- 
-+		/* Define image removing reshape (used as SEGTYPE_FLAG to avoid incompatible activations on old runtime) */
-+		lv ->status |= LV_RESHAPE;
- 		break;
- 
- 	case 1:
-@@ -1981,7 +1988,6 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
- 			return 0;
- 
- 		seg->area_count = new_image_count;
--
- 		break;
- 
- 	default:
-@@ -2054,6 +2060,9 @@ static int _raid_reshape_keep_images(struct logical_volume *lv,
- 
- 	seg->segtype = new_segtype;
- 
-+	/* Define stripesize/raid algorithm reshape (used as SEGTYPE_FLAG to avoid incompatible activations on old runtime) */
-+	lv->status |= LV_RESHAPE;
 +
- 	return 1;
- }
- 
-@@ -2237,6 +2246,8 @@ static int _raid_reshape(struct logical_volume *lv,
- 		return 0;
- 	}
- 
-+	lv->status &= ~LV_RESHAPE; /* Reset any reshaping segtype flag */
-+
- 	dm_list_init(&removal_lvs);
- 
- 	/* No change in layout requested ? */
-@@ -6040,6 +6051,8 @@ static int _region_size_change_requested(struct logical_volume *lv, int yes, con
- 		return 0;
- 	}
- 
-+	lv->status &= ~LV_RESHAPE;
-+
- 	if (!lv_update_and_reload_origin(lv))
- 		return_0;
- 
-@@ -6291,6 +6304,8 @@ int lv_raid_convert(struct logical_volume *lv,
- 		return 0;
- 	}
- 
-+	lv->status &= ~LV_RESHAPE;
-+
- 	return takeover_fn(lv, new_segtype, yes, force, new_image_count, 0, new_stripes, stripe_size,
- 			   region_size, allocate_pvs);
- }
+ AS_IF([test "$ODIRECT" != yes],
+       [AC_MSG_WARN([O_DIRECT disabled: low-memory pvmove may lock up])])
 
 
