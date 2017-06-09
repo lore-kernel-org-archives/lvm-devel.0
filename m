@@ -1,113 +1,85 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 22 Sep 2010 17:06:32 -0400
-Subject: [PATCH 20/20] Add pv_get_property to interactive test.
-In-Reply-To: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
-References: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1285189592-26525-21-git-send-email-dwysocha@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 9 Jun 2017 07:04:49 -0400
+Subject: master - cache: lvcreate --cachepool checks for cache pool
+Message-ID: <201706091104.v59B4n3u003837@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b3ef051e0637ac7f72ab245342e5a29394071c24
+Commit:        b3ef051e0637ac7f72ab245342e5a29394071c24
+Parent:        f91ea96b4f221894008d196c1f87b93527c51311
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jun 9 10:59:37 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 9 10:59:37 2017 +0200
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+cache: lvcreate --cachepool checks for cache pool
+
+Code path missed validation of lvcreate --cachepool argument.
+If the non cache-pool LV was passed in, code has still continued
+further work and failed later on internal error.  Validate this
+condition at right place now.
 ---
- test/api/test.c |   52 +++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 files changed, 51 insertions(+), 1 deletions(-)
+ WHATS_NEW                    |    1 +
+ test/shell/lvcreate-cache.sh |    6 ++++++
+ tools/lvcreate.c             |    7 +++++++
+ 3 files changed, 14 insertions(+), 0 deletions(-)
 
-diff --git a/test/api/test.c b/test/api/test.c
-index 4560655..2579ff0 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -93,6 +93,8 @@ static void _show_help(void)
- 	       "List the tags of a VG\n");
- 	printf("'vg_get_property vgname property_name': "
- 	       "Display the value of VG property\n");
-+	printf("'pv_get_property pvname property_name': "
-+	       "Display the value of PV property\n");
- 	printf("'lv_get_tags vgname lvname': "
- 	       "List the tags of a LV\n");
- 	printf("'vg_{add|remove}_tag vgname tag': "
-@@ -182,6 +184,23 @@ static vg_t _lookup_vg_by_name(char **argv, int argc)
- 	}
- 	return vg;
- }
-+
-+static pv_t _lookup_pv_by_name(char **argv, int argc)
-+{
-+	pv_t pv;
-+
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return NULL;
-+	}
-+	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
-+		printf ("Can't find %s in open PVs - run vg_open first\n",
-+			argv[1]);
-+		return NULL;
-+	}
-+	return pv;
-+}
-+
- static void _add_lvs_to_lvname_hash(struct dm_list *lvs)
- {
- 	struct lvm_lv_list *lvl;
-@@ -548,6 +567,35 @@ static void _vg_tag(char **argv, int argc, int add)
- 	       add ? "adding":"removing", argv[2], argv[1]);
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index fcf3148..cdd401e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.172 - 
+ ===============================
++  Improve lvcreate --cachepool arg validation.
+   Limit maximal size of thin-pool for specific chunk size.
+   Print a warning about in-use PVs with no VG using them.
+   Disable automatic clearing of PVs that look like in-use orphans.
+diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
+index faa78b2..410e105 100644
+--- a/test/shell/lvcreate-cache.sh
++++ b/test/shell/lvcreate-cache.sh
+@@ -26,6 +26,7 @@ aux prepare_vg 5 80000
  
-+static void _pv_get_property(char **argv, int argc)
-+{
-+	pv_t pv;
-+	struct lvm_property_value value;
-+	int rc;
+ aux lvmconf 'global/cache_disabled_features = [ "policy_smq" ]'
+ 
 +
-+	if (argc < 3) {
-+		printf("Please enter vgname, field_id\n");
-+		return;
-+	}
-+	if (!(pv = _lookup_pv_by_name(argv, argc)))
-+		return;
-+	rc = lvm_pv_get_property(pv, argv[2], &value);
-+	if (rc)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("obtaining value of property %s in VG %s",
-+	       argv[2], argv[1]);
-+	if (rc) {
-+		printf("\n");
-+		return;
-+	}
-+	if (value.is_string)
-+		printf(", value = %s\n", value.v.s_val);
-+	else
-+		printf(", value = %"PRIu64"\n", value.v.n_val);
-+}
+ #######################
+ # Cache_Pool creation #
+ #######################
+@@ -62,6 +63,11 @@ grep "No command with matching syntax recognised" err
+ # Check nothing has been created yet
+ check vg_field $vg lv_count 0
+ 
++# Checks that argument passed with --cachepool is really a cache-pool
++lvcreate -an -l 1 -n $lv1 $vg
++# Hint: nice way to 'tee' only stderr.log so we can check it's log_error()
++fail lvcreate -L10 --cachepool $vg/$lv1 2> >(tee -a stderr.log >&2)
++grep "not a cache pool" stderr.log
+ 
+ # With --type cache-pool we are clear which segtype has to be created
+ lvcreate -l 1 --type cache-pool $vg/pool1
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index e83c130..f464896 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -1193,6 +1193,13 @@ static int _determine_cache_argument(struct volume_group *vg,
+ 		lp->create_pool = 0;
+ 		lp->origin_name = NULL;
+ 	} else if (lv) {
++		if (arg_is_set(cmd, cachepool_ARG)) {
++			/* Argument of --cachepool has to be a cache-pool */
++			log_error("Logical volume %s is not a cache pool.",
++				  display_lvname(lv));
++			return 0;
++		}
 +
- static void _vg_get_property(char **argv, int argc)
- {
- 	vg_t vg;
-@@ -565,7 +613,7 @@ static void _vg_get_property(char **argv, int argc)
- 		printf("Error ");
- 	else
- 		printf("Success ");
--	printf("Obtaining value of property %s in VG %s",
-+	printf("obtaining value of property %s in VG %s",
- 	       argv[2], argv[1]);
- 	if (rc) {
- 		printf("\n");
-@@ -829,6 +877,8 @@ static int lvmapi_test_shell(lvm_t libh)
- 			_vg_get_tags(argv, argc);
- 		} else if (!strcmp(argv[0], "vg_get_property")) {
- 			_vg_get_property(argv, argc);
-+		} else if (!strcmp(argv[0], "pv_get_property")) {
-+			_pv_get_property(argv, argc);
- 		} else if (!strcmp(argv[0], "lv_add_tag")) {
- 			_lv_tag(argv, argc, 1);
- 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
--- 
-1.7.2.2
+ 		/* Origin exists, create cache pool volume */
+ 		if (!validate_lv_cache_create_origin(lv))
+ 			return_0;
 
 
