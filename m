@@ -1,39 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 9 Jun 2017 15:50:35 -0400
-Subject: master - cleanup: update message
-Message-ID: <201706091950.v59JoZ5H010286@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 9 Jun 2017 15:50:40 -0400
+Subject: master - indent: properly indent goto
+Message-ID: <201706091950.v59JoeIu010297@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=57379157f4209acc72e943e26209b084575f811c
-Commit:        57379157f4209acc72e943e26209b084575f811c
-Parent:        db5938a4f8b5f13f5bc804f0d8e931f36dcbbef3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=305513178474d15adcba4785871c3f0321576fbe
+Commit:        305513178474d15adcba4785871c3f0321576fbe
+Parent:        57379157f4209acc72e943e26209b084575f811c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 9 21:31:02 2017 +0200
+AuthorDate:    Fri Jun 9 14:52:40 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Jun 9 21:49:19 2017 +0200
 
-cleanup: update message
+indent: properly indent goto
 
 ---
- lib/metadata/thin_manip.c |    2 +-
+ tools/reporter.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 7f7d314..ad45ce9 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -718,7 +718,7 @@ int update_thin_pool_params(struct cmd_context *cmd,
- 		return 0;
- 	}
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 912d3ab..b9c4153 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -240,7 +240,7 @@ static int _do_segs_with_info_and_status_single(struct cmd_context *cmd,
  
--	log_print_unless_silent("Thin pool data with chunk size %s can address at most %s of data.",
-+	log_print_unless_silent("Thin pool volume with chunk size %s can address at most %s of data.",
- 				display_size(cmd, *chunk_size), display_size(cmd, max_pool_data_size));
+ 	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
+ 			   seg->lv->vg, seg->lv, NULL, seg, NULL, &status, NULL))
+-	goto_out;
++		goto_out;
  
- 	if (!validate_thin_pool_chunk_size(cmd, *chunk_size))
+ 	r = ECMD_PROCESSED;
+ out:
 
 
