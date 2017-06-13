@@ -1,65 +1,60 @@
-From: Bryn Reeves <bmr@sourceware.org>
-Date: Tue, 13 Jun 2017 14:47:56 -0400
-Subject: master - dmfilemapd: do not wait if file has been truncated
-Message-ID: <201706131847.v5DIluCO028922@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Tue, 13 Jun 2017 17:16:18 -0400
+Subject: master - lvconvert: fix detached SubLV deactivation in cluster
+Message-ID: <201706132116.v5DLGIk2016344@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9a094350e044100fdfb2270a18085e42e6f5ba3a
-Commit:        9a094350e044100fdfb2270a18085e42e6f5ba3a
-Parent:        0cb628dfe2980b45fb7db5edd2f197d23905b02e
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Wed Jun 7 19:29:16 2017 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Tue Jun 13 19:46:41 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=08079ec42062944eadcd4e5625edafe45b36c55c
+Commit:        08079ec42062944eadcd4e5625edafe45b36c55c
+Parent:        9a094350e044100fdfb2270a18085e42e6f5ba3a
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Jun 13 23:15:51 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Jun 13 23:15:51 2017 +0200
 
-dmfilemapd: do not wait if file has been truncated
+lvconvert: fix detached SubLV deactivation in cluster
 
+On conversion from raid10 to raid0 (takeover), all rmeta
+devices and the rimage devices of mirrored stripes are
+detached from the raid10 LV. The remaining rimage areas
+are being shifted down into the slots of the detached
+ones hence requiring renames to show proper _N suffix
+sequences (e.g. 0,1,2,3 instead of 0,2,4,6).  Only the
+top-level raid10 LV has a cluster lock, not the detached
+SubLVs thus their deactivation is impossible and e.g the
+rename from *_rimage_6 to *_rimage_3 will fail.  Fix by
+activating exclusively before deactivating and removing.
+
+Resolves: rhbz1448123
 ---
- daemons/dmfilemapd/dmfilemapd.c |   16 +++++++++-------
- 1 files changed, 9 insertions(+), 7 deletions(-)
+ lib/metadata/raid_manip.c |   11 +++++++++++
+ 1 files changed, 11 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
-index 0dbdefc..43ae970 100644
---- a/daemons/dmfilemapd/dmfilemapd.c
-+++ b/daemons/dmfilemapd/dmfilemapd.c
-@@ -686,7 +686,10 @@ static int _update_regions(struct dm_stats *dms, struct filemap_monitor *fm)
- 	for (region = regions; *region != DM_STATS_REGIONS_ALL; region++)
- 		nr_regions++;
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index fd51964..a19a7e9 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -285,6 +285,17 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
+ 	struct lv_list *lvl;
  
--	if (regions[0] != fm->group_id) {
-+	if (!nr_regions)
-+		log_warn("File contains no extents: exiting.");
+ 	dm_list_iterate_items(lvl, removal_lvs) {
++		if (!lv_is_visible(lvl->lv)) {
++			log_error(INTERNAL_ERROR
++				  "LVs must be set visible before removing.");
++			return 0;
++		}
++		/* Got to get any cluster lock an SubLVs to be removed. */
++		if (!activate_lv_excl_local(vg->cmd, lvl->lv))
++			return_0;
++	}
 +
-+	if (nr_regions && (regions[0] != fm->group_id)) {
- 		log_warn("group_id changed from " FMTu64 " to " FMTu64,
- 			 fm->group_id, regions[0]);
- 		fm->group_id = regions[0];
-@@ -753,17 +756,16 @@ static int _dmfilemapd(struct filemap_monitor *fm)
- 		if ((check = _filemap_fd_check_changed(fm)) < 0)
- 			goto bad;
- 
--		if (!check)
--			goto wait;
--
--		if (!_update_regions(dms, fm))
-+		if (check && !_update_regions(dms, fm))
- 			goto bad;
- 
-+		running = !!fm->nr_regions;
-+		if (!running)
-+			continue;
-+
- wait:
- 		_filemap_monitor_wait(FILEMAPD_WAIT_USECS);
- 
--		running = !!fm->nr_regions;
--
- 		/* mode=inode termination condions */
- 		if (fm->mode == DM_FILEMAPD_FOLLOW_INODE) {
- 			if (!_filemap_monitor_check_file_unlinked(fm))
++	dm_list_iterate_items(lvl, removal_lvs) {
+ 		if (!deactivate_lv(vg->cmd, lvl->lv))
+ 			return_0;
+ 		if (!lv_remove(lvl->lv))
 
 
