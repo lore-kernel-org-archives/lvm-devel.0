@@ -1,45 +1,64 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 14 Jun 2017 09:02:03 -0400
-Subject: master - raid: change reshape segtype flags
-Message-ID: <201706141302.v5ED23W5005819@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: 张欢 <zhanghuan@chinac.com>
+Date: Wed, 14 Jun 2017 20:07:52 +0800
+Subject: [patch review] miss adopt orphaned resources
+Message-ID: <1875A7DA-A097-4AB9-AF6B-A55EADFB479E@chinac.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=14d563accc7692dfd827a4db91912c9ab498ca1f
-Commit:        14d563accc7692dfd827a4db91912c9ab498ca1f
-Parent:        08079ec42062944eadcd4e5625edafe45b36c55c
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Jun 14 15:01:19 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Jun 14 15:01:19 2017 +0200
+commit afcabe14eab9eb9722ab0715aec15f0375416a35
+Author: Huan Zhang <zhanghuan@chinac.com>
+Date:   Wed Jun 14 19:51:07 2017 +0800
 
-raid: change reshape segtype flags
+    miss adopt orphaned resources
 
-Commit 1c916ec5ffd37cfb7be2101b93a2dc91aa2ef7f0
-missed new reshape flags.
----
- lib/format_text/flags.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+    1. dm_uuid is 68 byte length, but buf is 64 which
+       will cause miss match uuid from lv lock manager
+    2. no lv lock_type path in dm config, use lock_args instead
 
-diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-index a9548e0..88fb091 100644
---- a/lib/format_text/flags.c
-+++ b/lib/format_text/flags.c
-@@ -63,9 +63,9 @@ static const struct flag _lv_flags[] = {
- 	{LV_NOTSYNCED, "NOTSYNCED", STATUS_FLAG},
- 	{LV_REBUILD, "REBUILD", STATUS_FLAG},
- 	{LV_RESHAPE, "RESHAPE", SEGTYPE_FLAG},
--	{LV_RESHAPE_DELTA_DISKS_PLUS, "RESHAPE_DELTA_DISKS_PLUS", STATUS_FLAG},
--	{LV_RESHAPE_DELTA_DISKS_MINUS, "RESHAPE_DELTA_DISKS_MINUS", STATUS_FLAG},
--	{LV_REMOVE_AFTER_RESHAPE, "REMOVE_AFTER_RESHAPE", STATUS_FLAG},
-+	{LV_RESHAPE_DELTA_DISKS_PLUS, "RESHAPE_DELTA_DISKS_PLUS", SEGTYPE_FLAG},
-+	{LV_RESHAPE_DELTA_DISKS_MINUS, "RESHAPE_DELTA_DISKS_MINUS", SEGTYPE_FLAG},
-+	{LV_REMOVE_AFTER_RESHAPE, "REMOVE_AFTER_RESHAPE", SEGTYPE_FLAG},
- 	{LV_WRITEMOSTLY, "WRITEMOSTLY", STATUS_FLAG},
- 	{LV_ACTIVATION_SKIP, "ACTIVATION_SKIP", COMPATIBLE_FLAG},
- 	{LV_ERROR_WHEN_FULL, "ERROR_WHEN_FULL", COMPATIBLE_FLAG},
+    Signed-off-by: Zhang Huan <zhanghuan@chinac.com>
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 4d96e67..b6f3df9 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -4907,14 +4907,10 @@ static int get_lockd_vgs(struct list_head *vg_lockd)
+                                continue;
+
+                        for (lv_cn = md_cn->child; lv_cn; lv_cn = lv_cn->sib) {
+-                               snprintf(find_str_path, PATH_MAX, "%s/lock_type", lv_cn->key);
+-                               lock_type = dm_config_find_str(lv_cn, find_str_path, NULL);
+-
+-                               if (!lock_type)
+-                                       continue;
+-
+                                snprintf(find_str_path, PATH_MAX, "%s/lock_args", lv_cn->key);
+                                lock_args = dm_config_find_str(lv_cn, find_str_path, NULL);
++                               if (!lock_args)
++                                       continue;
+
+                                snprintf(find_str_path, PATH_MAX, "%s/id", lv_cn->key);
+                                lv_uuid = dm_config_find_str(lv_cn, find_str_path, NULL);
+@@ -4960,7 +4956,7 @@ out:
+        return rv;
+ }
+
+-static char _dm_uuid[64];
++static char _dm_uuid[72];
+
+ static char *get_dm_uuid(char *dm_name)
+ {
+> ??
+> ???????
+> ??: 17798706680
 
 
+
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20170614/8ca288c6/attachment.htm>
