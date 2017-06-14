@@ -1,60 +1,45 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 13 Jun 2017 17:16:18 -0400
-Subject: master - lvconvert: fix detached SubLV deactivation in cluster
-Message-ID: <201706132116.v5DLGIk2016344@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 14 Jun 2017 09:02:03 -0400
+Subject: master - raid: change reshape segtype flags
+Message-ID: <201706141302.v5ED23W5005819@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=08079ec42062944eadcd4e5625edafe45b36c55c
-Commit:        08079ec42062944eadcd4e5625edafe45b36c55c
-Parent:        9a094350e044100fdfb2270a18085e42e6f5ba3a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=14d563accc7692dfd827a4db91912c9ab498ca1f
+Commit:        14d563accc7692dfd827a4db91912c9ab498ca1f
+Parent:        08079ec42062944eadcd4e5625edafe45b36c55c
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Jun 13 23:15:51 2017 +0200
+AuthorDate:    Wed Jun 14 15:01:19 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Jun 13 23:15:51 2017 +0200
+CommitterDate: Wed Jun 14 15:01:19 2017 +0200
 
-lvconvert: fix detached SubLV deactivation in cluster
+raid: change reshape segtype flags
 
-On conversion from raid10 to raid0 (takeover), all rmeta
-devices and the rimage devices of mirrored stripes are
-detached from the raid10 LV. The remaining rimage areas
-are being shifted down into the slots of the detached
-ones hence requiring renames to show proper _N suffix
-sequences (e.g. 0,1,2,3 instead of 0,2,4,6).  Only the
-top-level raid10 LV has a cluster lock, not the detached
-SubLVs thus their deactivation is impossible and e.g the
-rename from *_rimage_6 to *_rimage_3 will fail.  Fix by
-activating exclusively before deactivating and removing.
-
-Resolves: rhbz1448123
+Commit 1c916ec5ffd37cfb7be2101b93a2dc91aa2ef7f0
+missed new reshape flags.
 ---
- lib/metadata/raid_manip.c |   11 +++++++++++
- 1 files changed, 11 insertions(+), 0 deletions(-)
+ lib/format_text/flags.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index fd51964..a19a7e9 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -285,6 +285,17 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
- 	struct lv_list *lvl;
- 
- 	dm_list_iterate_items(lvl, removal_lvs) {
-+		if (!lv_is_visible(lvl->lv)) {
-+			log_error(INTERNAL_ERROR
-+				  "LVs must be set visible before removing.");
-+			return 0;
-+		}
-+		/* Got to get any cluster lock an SubLVs to be removed. */
-+		if (!activate_lv_excl_local(vg->cmd, lvl->lv))
-+			return_0;
-+	}
-+
-+	dm_list_iterate_items(lvl, removal_lvs) {
- 		if (!deactivate_lv(vg->cmd, lvl->lv))
- 			return_0;
- 		if (!lv_remove(lvl->lv))
+diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
+index a9548e0..88fb091 100644
+--- a/lib/format_text/flags.c
++++ b/lib/format_text/flags.c
+@@ -63,9 +63,9 @@ static const struct flag _lv_flags[] = {
+ 	{LV_NOTSYNCED, "NOTSYNCED", STATUS_FLAG},
+ 	{LV_REBUILD, "REBUILD", STATUS_FLAG},
+ 	{LV_RESHAPE, "RESHAPE", SEGTYPE_FLAG},
+-	{LV_RESHAPE_DELTA_DISKS_PLUS, "RESHAPE_DELTA_DISKS_PLUS", STATUS_FLAG},
+-	{LV_RESHAPE_DELTA_DISKS_MINUS, "RESHAPE_DELTA_DISKS_MINUS", STATUS_FLAG},
+-	{LV_REMOVE_AFTER_RESHAPE, "REMOVE_AFTER_RESHAPE", STATUS_FLAG},
++	{LV_RESHAPE_DELTA_DISKS_PLUS, "RESHAPE_DELTA_DISKS_PLUS", SEGTYPE_FLAG},
++	{LV_RESHAPE_DELTA_DISKS_MINUS, "RESHAPE_DELTA_DISKS_MINUS", SEGTYPE_FLAG},
++	{LV_REMOVE_AFTER_RESHAPE, "REMOVE_AFTER_RESHAPE", SEGTYPE_FLAG},
+ 	{LV_WRITEMOSTLY, "WRITEMOSTLY", STATUS_FLAG},
+ 	{LV_ACTIVATION_SKIP, "ACTIVATION_SKIP", COMPATIBLE_FLAG},
+ 	{LV_ERROR_WHEN_FULL, "ERROR_WHEN_FULL", COMPATIBLE_FLAG},
 
 
