@@ -1,86 +1,70 @@
-From: Marian Csontos <mcsontos@redhat.com>
-Date: Thu, 15 Jun 2017 12:55:00 +0200
-Subject: master - lvconvert: Disallow removal of primary when up-converting (recovering)
-In-Reply-To: <201706141342.v5EDg1in012800@lists01.pubmisc.prod.ext.phx2.redhat.com>
-References: <201706141342.v5EDg1in012800@lists01.pubmisc.prod.ext.phx2.redhat.com>
-Message-ID: <dbd7cec1-0abc-82ce-491b-3338ac24ebe7@redhat.com>
+From: Jonathan Brassow <jbrassow@sourceware.org>
+Date: Thu, 15 Jun 2017 12:08:57 -0400
+Subject: master - test: New test file for validating kernel status during sync ops
+Message-ID: <201706151608.v5FG8v9U027525@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 06/14/2017 03:42 PM, Jonathan Brassow wrote:
-> Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ddb14b6b05e0f75a97ab8ab1ed99091268c239ba
-> Commit:        ddb14b6b05e0f75a97ab8ab1ed99091268c239ba
-> Parent:        4c0e908b0ac012a5517e61420ea1eccc6193c00a
-> Author:        Jonathan Brassow <jbrassow@redhat.com>
-> AuthorDate:    Wed Jun 14 08:41:05 2017 -0500
-> Committer:     Jonathan Brassow <jbrassow@redhat.com>
-> CommitterDate: Wed Jun 14 08:41:05 2017 -0500
-> 
-> lvconvert: Disallow removal of primary when up-converting (recovering)
-> 
-> This patch ensures that under normal conditions (i.e. not during repair
-> operations) that users are prevented from removing devices that would
-> cause data loss.
-> 
-> When a RAID1 is undergoing its initial sync, it is ok to remove all but
-> one of the images because they have all existed since creation and
-> contain all the data written since the array was created.  OTOH, if the
-> RAID1 was created as a result of an up-convert from linear, it is very
-> important not to let the user remove the primary image (the source of
-> all the data).  They should be allowed to remove any devices they want
-> and as many as they want as long as one original (primary) device is left
-> during a "recover" (aka up-convert).
-> 
-> This fixes bug 1461187 and includes the necessary regression tests.
-> ---
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3592243afb4bd1b54926b7d8bfef3a0213ca4908
+Commit:        3592243afb4bd1b54926b7d8bfef3a0213ca4908
+Parent:        6c4b2a6aa16cdb4aff2bd80909dcf43032348a3a
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Thu Jun 15 11:06:08 2017 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Thu Jun 15 11:06:08 2017 -0500
 
-...
-> diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-> index e173d66..fba7864 100644
-> --- a/test/shell/lvconvert-raid.sh
-> +++ b/test/shell/lvconvert-raid.sh
-> @@ -223,6 +223,67 @@ for i in 1 2 3 ; do
->   done
->   
->   ###########################################
-> +# Upconverted RAID1 should not allow loss of primary
-> +#  - don't allow removal of primary while syncing
-> +#  - DO allow removal of secondaries while syncing
-> +###########################################
-> +aux delay_dev $dev2 0 100
-> +lvcreate -aey -l 2 -n $lv1 $vg $dev1 $dev2
-> +lvconvert -y -m 1 $vg/$lv1 \
-> +	--config 'global { mirror_segtype_default = "raid1" }'
-> +lvs --noheadings -o attr $vg/$lv1 | grep '^[[:space:]]*r'
+test: New test file for validating kernel status during sync ops
 
-Seems there is still some problem.
+First test in this file checks whether 'aa' is ever spotted during
+a "recover" operation (it should not be).  More tests should follow
+in this file to look for oddities in status output - especially as
+it relates to the sync_ratio, dev_health, and sync_action fields.
+---
+ test/shell/lvconvert-raid-status-validation.sh |   34 ++++++++++++++++++++++++
+ 1 files changed, 34 insertions(+), 0 deletions(-)
 
-The following lvconvert is prohibited only with some kernels:
-
-> +not lvconvert --yes -m 0 $vg/$lv1 $dev1
-
-This test correctly passes on RHEL-7.4,
-
-As expected fails on older kernels (e.g. RHEL6) - I suggest to use 
-`should not` instead of plain `not` for these, or skip the primary leg 
-extraction.
-
-But surprisingly(?) fails, also on rawhide running 4.12-rc5:
-
-#lvconvert-raid.sh:235+ not lvconvert --yes -m 0 @PREFIX at vg/LV1 
-@TESTDIR@/dev/mapper/@PREFIX at pv1
-
-   WARNING: This metadata update is NOT backed up.
-   Logical volume @PREFIX at vg/LV1 successfully converted.
-
-dmesg saying:
-
-md: recovery of RAID array mdX
-md: mdX: recovery interrupted.
-
--- Martian
+diff --git a/test/shell/lvconvert-raid-status-validation.sh b/test/shell/lvconvert-raid-status-validation.sh
+new file mode 100644
+index 0000000..0da0b7a
+--- /dev/null
++++ b/test/shell/lvconvert-raid-status-validation.sh
+@@ -0,0 +1,34 @@
++#######################################################################
++# This series of tests is meant to validate the correctness of
++# 'dmsetup status' for RAID LVs - especially during various sync action
++# transitions, like: recover, resync, check, repair, idle, reshape, etc
++#######################################################################
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++export LVM_TEST_LVMETAD_DEBUG_OPTS=${LVM_TEST_LVMETAD_DEBUG_OPTS-}
++
++. lib/inittest
++
++# check for version 1.9.0
++# - it is the point at which linear->raid1 uses "recover"
++aux have_raid 1 9 0 || skip
++
++aux prepare_pvs 9
++vgcreate -s 2m $vg $(cat DEVICES)
++
++###########################################
++# Upconverted RAID1 should never have all 'a's in status output
++###########################################
++aux delay_dev $dev2 0 100
++lvcreate -aey -l 2 -n $lv1 $vg $dev1
++lvconvert --type raid1 -y -m 1 $vg/$lv1 $dev2
++while ! check in_sync $vg $lv1; do
++        a=( $(dmsetup status $vg-$lv1) ) || die "Unable to get status of $vg/$lv1"
++	[ ${a[5]} != "aa" ]
++        sleep .1
++done
++aux enable_dev $dev2
++lvremove -ff $vg
++
++vgremove -ff $vg
 
 
