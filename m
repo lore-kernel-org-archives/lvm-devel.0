@@ -1,20 +1,20 @@
 From: Jonathan Brassow <jbrassow@sourceware.org>
-Date: Fri, 16 Jun 2017 11:14:39 -0400
+Date: Fri, 16 Jun 2017 11:16:32 -0400
 Subject: master - test: New test file for validating kernel status during sync ops
-Message-ID: <201706161514.v5GFEdxb011354@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201706161516.v5GFGWGj011444@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7cdac3cef9d6ac57ff1dd21be49e01b542625fe7
-Commit:        7cdac3cef9d6ac57ff1dd21be49e01b542625fe7
-Parent:        40e0dcf70d5a719671916aa88adf9a8f18e096c6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=915d20d0e64e8bf7a91f01c21cb8c30428ddb1e1
+Commit:        915d20d0e64e8bf7a91f01c21cb8c30428ddb1e1
+Parent:        dd866a67f44ad44512388cf2e073511d88b9c19c
 Author:        Jonathan Brassow <jbrassow@redhat.com>
 AuthorDate:    Fri Jun 16 10:11:58 2017 -0500
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Fri Jun 16 10:11:58 2017 -0500
+CommitterDate: Fri Jun 16 10:16:07 2017 -0500
 
 test: New test file for validating kernel status during sync ops
 
