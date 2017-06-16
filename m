@@ -1,59 +1,46 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 16 Jun 2017 10:01:15 -0400
-Subject: master - Revert "lvconvert: reject changing number of stripes on single core
-Message-ID: <201706161401.v5GE1F0X000497@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 16 Jun 2017 10:01:23 -0400
+Subject: master - raid: adjust reshape feature flag check
+Message-ID: <201706161401.v5GE1NWW000509@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ddf2a1d6564800f6d7f87e91cb8a7dfaa0edac1f
-Commit:        ddf2a1d6564800f6d7f87e91cb8a7dfaa0edac1f
-Parent:        3592243afb4bd1b54926b7d8bfef3a0213ca4908
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=40e0dcf70d5a719671916aa88adf9a8f18e096c6
+Commit:        40e0dcf70d5a719671916aa88adf9a8f18e096c6
+Parent:        ddf2a1d6564800f6d7f87e91cb8a7dfaa0edac1f
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Jun 16 15:43:23 2017 +0200
+AuthorDate:    Fri Jun 16 15:58:47 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Jun 16 15:43:23 2017 +0200
+CommitterDate: Fri Jun 16 15:58:47 2017 +0200
 
-Revert "lvconvert: reject changing number of stripes on single core
+raid: adjust reshape feature flag check
 
-This reverts commit 3719f4bc5441cb5f29ad4beb91ccaa6b234ea8e1
-to allow for single core testing on kernels with deadlock
-fixes relative to rhbz1443999."
+Relative to last comit ddf2a1d6564800f6d7f87e91cb8a7dfaa0edac1f:
+
+adjust the dm-raid target version to 1.12.0 which shows
+mandatory kernel MD deadlock fixes related to reshaping
+are presant in the kernel.
+
+Related: rhbz1443999
 ---
- lib/metadata/raid_manip.c |   12 ------------
- 1 files changed, 0 insertions(+), 12 deletions(-)
+ lib/raid/raid.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index ade27e6..214aa19 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -2346,12 +2346,6 @@ static int _raid_reshape(struct logical_volume *lv,
+diff --git a/lib/raid/raid.c b/lib/raid/raid.c
+index 8a53d7e..969007c 100644
+--- a/lib/raid/raid.c
++++ b/lib/raid/raid.c
+@@ -475,7 +475,7 @@ static int _raid_target_present(struct cmd_context *cmd,
+ 		{ 1, 7, 0, RAID_FEATURE_RAID0, SEG_TYPE_NAME_RAID0 },
+ 		{ 1, 9, 0, RAID_FEATURE_SHRINK, "shrinking" },
+ 		{ 1, 9, 0, RAID_FEATURE_NEW_DEVICES_ACCEPT_REBUILD, "rebuild+emptymeta" },
+-		{ 1, 10, 1, RAID_FEATURE_RESHAPE, "reshaping" },
++		{ 1, 12, 0, RAID_FEATURE_RESHAPE, "reshaping" },
+ 	};
  
- 	/* Handle disk addition reshaping */
- 	if (old_image_count < new_image_count) {
--		/* FIXME: remove once MD kernel rhbz1443999 got fixed. */
--		if (sysconf(_SC_NPROCESSORS_ONLN) < 2) {
--			log_error("Can't add stripes to LV %s on single core.", display_lvname(lv));
--			return 0;
--		}
--
- 		if (!_raid_reshape_add_images(lv, new_segtype, yes,
- 					      old_image_count, new_image_count,
- 					      new_stripes, new_stripe_size, allocate_pvs))
-@@ -2359,12 +2353,6 @@ static int _raid_reshape(struct logical_volume *lv,
- 
- 	/* Handle disk removal reshaping */
- 	} else if (old_image_count > new_image_count) {
--		/* FIXME: remove once MD kernel rhbz1443999 got fixed. */
--		if (sysconf(_SC_NPROCESSORS_ONLN) < 2) {
--			log_error("Can't remove stripes from LV %s on single core.", display_lvname(lv));
--			return 0;
--		}
--
- 		if (!_raid_reshape_remove_images(lv, new_segtype, yes, force,
- 						 old_image_count, new_image_count,
- 						 new_stripes, new_stripe_size,
+ 	static int _raid_checked = 0;
 
 
