@@ -1,46 +1,81 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 16 Jun 2017 10:01:23 -0400
-Subject: master - raid: adjust reshape feature flag check
-Message-ID: <201706161401.v5GE1NWW000509@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 16 Jun 2017 11:13:20 -0400
+Subject: master - libdm: workarounds reported raid status info
+Message-ID: <201706161513.v5GFDKdT011159@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=40e0dcf70d5a719671916aa88adf9a8f18e096c6
-Commit:        40e0dcf70d5a719671916aa88adf9a8f18e096c6
-Parent:        ddf2a1d6564800f6d7f87e91cb8a7dfaa0edac1f
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Jun 16 15:58:47 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Jun 16 15:58:47 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=529dcaf6a3c4fea4a15baf13cf057d2333860c05
+Commit:        529dcaf6a3c4fea4a15baf13cf057d2333860c05
+Parent:        40e0dcf70d5a719671916aa88adf9a8f18e096c6
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jun 16 13:20:47 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 16 17:04:00 2017 +0200
 
-raid: adjust reshape feature flag check
+libdm: workarounds reported raid status info
 
-Relative to last comit ddf2a1d6564800f6d7f87e91cb8a7dfaa0edac1f:
+Current existing kernels reports status sometimes in weird form.
 
-adjust the dm-raid target version to 1.12.0 which shows
-mandatory kernel MD deadlock fixes related to reshaping
-are presant in the kernel.
+Instead of showing what is the exact progress, we need to estimate
+this in-sync state from several surrounding states.
 
-Related: rhbz1443999
+Main reason here is to never report 100% sync state for a raid device
+which will be undergoing i.e. recovery.
 ---
- lib/raid/raid.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-targets.c |   18 ++++++++++++++++++
+ 2 files changed, 19 insertions(+), 0 deletions(-)
 
-diff --git a/lib/raid/raid.c b/lib/raid/raid.c
-index 8a53d7e..969007c 100644
---- a/lib/raid/raid.c
-+++ b/lib/raid/raid.c
-@@ -475,7 +475,7 @@ static int _raid_target_present(struct cmd_context *cmd,
- 		{ 1, 7, 0, RAID_FEATURE_RAID0, SEG_TYPE_NAME_RAID0 },
- 		{ 1, 9, 0, RAID_FEATURE_SHRINK, "shrinking" },
- 		{ 1, 9, 0, RAID_FEATURE_NEW_DEVICES_ACCEPT_REBUILD, "rebuild+emptymeta" },
--		{ 1, 10, 1, RAID_FEATURE_RESHAPE, "reshaping" },
-+		{ 1, 12, 0, RAID_FEATURE_RESHAPE, "reshaping" },
- 	};
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 5718ab7..581cd42 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.141 - 
+ ===============================
++  dm_get_status_raid() handle better some incosistent md statuses.
+   Accept truncated files in calls to dm_stats_update_regions_from_fd().
+   Restore Warning by 5% increment when thin-pool is over 80% (1.02.138).
  
- 	static int _raid_checked = 0;
+diff --git a/libdm/libdm-targets.c b/libdm/libdm-targets.c
+index 1709c2b..6577f07 100644
+--- a/libdm/libdm-targets.c
++++ b/libdm/libdm-targets.c
+@@ -99,6 +99,7 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
+ 	unsigned num_fields;
+ 	const char *p, *pp, *msg_fields = "";
+ 	struct dm_status_raid *s = NULL;
++	unsigned a = 0;
+ 
+ 	if ((num_fields = _count_fields(params)) < 4)
+ 		goto_bad;
+@@ -168,6 +169,23 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
+ out:
+ 	*status = s;
+ 
++	if (s->insync_regions == s->total_regions) {
++		/* FIXME: kernel gives misleading info here
++		 * Trying to recognize a true state */
++		while (i-- > 0)
++			if (s->dev_health[i] == 'a')
++				a++; /* Count number of 'a' */
++
++		if (a && a < s->dev_count) {
++			/* SOME legs are in 'a' */
++			if (!strcasecmp(s->sync_action, "recover")
++			    || !strcasecmp(s->sync_action, "idle"))
++				/* Kernel may possibly start some action
++				 * in near-by future, do not report 100% */
++				s->insync_regions--;
++		}
++	}
++
+ 	return 1;
+ 
+ bad:
 
 
