@@ -1,68 +1,141 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Jun 2017 11:13:55 -0400
-Subject: master - tests: use exclusive activation
-Message-ID: <201706161513.v5GFDtEK011250@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Jonathan Brassow <jbrassow@sourceware.org>
+Date: Fri, 16 Jun 2017 11:14:39 -0400
+Subject: master - test: New test file for validating kernel status during sync ops
+Message-ID: <201706161514.v5GFEdxb011354@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd866a67f44ad44512388cf2e073511d88b9c19c
-Commit:        dd866a67f44ad44512388cf2e073511d88b9c19c
-Parent:        fbb3bffb221f3c0275bafef4f2cc7ea299214ef4
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 14 13:59:11 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 16 17:04:02 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7cdac3cef9d6ac57ff1dd21be49e01b542625fe7
+Commit:        7cdac3cef9d6ac57ff1dd21be49e01b542625fe7
+Parent:        40e0dcf70d5a719671916aa88adf9a8f18e096c6
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri Jun 16 10:11:58 2017 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Fri Jun 16 10:11:58 2017 -0500
 
-tests: use exclusive activation
+test: New test file for validating kernel status during sync ops
 
-Conversion needs exlusively active LV for clustered testing.
+New tests to add checking for '100%' in-sync at start of "recover"
+process (it shouldn't happen, but I've seen it before).  Also,
+check status over the whole cycle of various sync processes ("resync"
+and "recover").
 ---
- .../shell/lvconvert-raid-takeover-alloc-failure.sh |    9 +++++----
- 1 files changed, 5 insertions(+), 4 deletions(-)
+ test/shell/lvconvert-raid-status-validation.sh |   95 +++++++++++++++++++++++-
+ 1 files changed, 94 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-takeover-alloc-failure.sh b/test/shell/lvconvert-raid-takeover-alloc-failure.sh
-index 3870c35..cf926a1 100644
---- a/test/shell/lvconvert-raid-takeover-alloc-failure.sh
-+++ b/test/shell/lvconvert-raid-takeover-alloc-failure.sh
-@@ -48,7 +48,7 @@ function check_no_sub_lvs
- # Check takover upconversion fails allocation errors nicely without leaving image pair remnants behind
+diff --git a/test/shell/lvconvert-raid-status-validation.sh b/test/shell/lvconvert-raid-status-validation.sh
+index 0da0b7a..d705cc2 100644
+--- a/test/shell/lvconvert-raid-status-validation.sh
++++ b/test/shell/lvconvert-raid-status-validation.sh
+@@ -20,7 +20,7 @@ vgcreate -s 2m $vg $(cat DEVICES)
+ ###########################################
+ # Upconverted RAID1 should never have all 'a's in status output
+ ###########################################
+-aux delay_dev $dev2 0 100
++aux delay_dev $dev2 0 50
+ lvcreate -aey -l 2 -n $lv1 $vg $dev1
+ lvconvert --type raid1 -y -m 1 $vg/$lv1 $dev2
+ while ! check in_sync $vg $lv1; do
+@@ -31,4 +31,97 @@ done
+ aux enable_dev $dev2
+ lvremove -ff $vg
  
- # 6-way striped: neither conversion to raid5 nor raid6 possible
--lvcreate --yes --stripes 6 --size 4M --name $lv1 $vg
-+lvcreate -aey --yes --stripes 6 --size 4M --name $lv1 $vg
- not lvconvert --yes --type raid4 $vg/$lv1
- check lv_field $vg/$lv1 segtype "striped"
- check_no_sub_lvs $vg $lv1 0 5
-@@ -69,7 +69,7 @@ check_sub_lvs $vg $lv1 0 5
- lvremove -y $vg
- 
- # 5-way striped: conversion to raid5 possible but not to raid6
--lvcreate --yes --stripes 5 --size 4M --name $lv1 $vg
-+lvcreate -aey --stripes 5 --size 4M --name $lv1 $vg
- not lvconvert --yes --type raid6 $vg/$lv1
- check lv_field $vg/$lv1 segtype "striped"
- check_no_sub_lvs $vg $lv1 0 5
-@@ -83,7 +83,7 @@ check_sub_lvs $vg $lv1 0 5
- lvremove -y $vg
- 
- # 4-way striped: conversion to raid5 and raid6 possible
--lvcreate --yes --stripes 4 --size 4M --name $lv1 $vg
-+lvcreate -aey --stripes 4 --size 4M --name $lv1 $vg
- lvconvert --yes --type raid5 $vg/$lv1
- check lv_field $vg/$lv1 segtype "raid5_n"
- check lv_field $vg/$lv1 stripes 5
-@@ -92,7 +92,8 @@ check_sub_lvs $vg $lv1 0 4
- check_no_sub_lvs $vg $lv1 5 5
- 
- lvremove -y $vg
--lvcreate --yes --stripes 4 --size 4M --name $lv1 $vg
++###########################################
++# Upconverted RAID1 should not be at 100% right after upconvert
++###########################################
++aux delay_dev $dev2 0 50
++lvcreate -aey -l 2 -n $lv1 $vg $dev1
++lvconvert --type raid1 -y -m 1 $vg/$lv1 $dev2
++a=( $(dmsetup status $vg-$lv1) ) || die "Unable to get status of $vg/$lv1"
++b=( $(echo ${a[6]} | sed s:/:' ':) )
++[ ${b[0]} -ne ${b[1]} ]
++aux enable_dev $dev2
++lvremove -ff $vg
 +
-+lvcreate -aey --stripes 4 --size 4M --name $lv1 $vg
- lvconvert --yes --type raid6 $vg/$lv1
- check lv_field $vg/$lv1 segtype "raid6_n_6"
- check lv_field $vg/$lv1 stripes 6
++###########################################
++# Catch anything suspicious with linear -> RAID1 upconvert
++###########################################
++aux delay_dev $dev2 0 50
++lvcreate -aey -l 2 -n $lv1 $vg $dev1
++lvconvert --type raid1 -y -m 1 $vg/$lv1 $dev2
++while true; do
++        a=( $(dmsetup status $vg-$lv1) ) || die "Unable to get status of $vg/$lv1"
++	b=( $(echo ${a[6]} | sed s:/:' ':) )
++	if [ ${b[0]} -ne ${b[1]} ]; then
++		# If the sync operation ("recover" in this case) is not
++		# finished, then it better be as follows:
++		[ ${a[5]} == "Aa" ]
++		[ ${a[7]} == "recover" ]
++	else
++		# Tough to tell the INVALID case,
++		#   Before starting sync thread: "Aa X/X recover"
++		# from the valid case,
++		#   Just finished sync thread: "Aa X/X recover"
++		# We'll just put "should" for now
++		should [ ${a[5]} == "AA" ]
++		should [ ${a[7]} == "idle" ]
++		break
++	fi
++        sleep .1
++done
++aux enable_dev $dev2
++lvremove -ff $vg
++
++###########################################
++# Catch anything suspicious with RAID1 2-way -> 3-way upconvert
++###########################################
++aux delay_dev $dev3 0 50
++lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg $dev1 $dev2
++lvconvert -y -m +1 $vg/$lv1 $dev3
++while true; do
++        a=( $(dmsetup status $vg-$lv1) ) || die "Unable to get status of $vg/$lv1"
++	b=( $(echo ${a[6]} | sed s:/:' ':) )
++	if [ ${b[0]} -ne ${b[1]} ]; then
++		# If the sync operation ("recover" in this case) is not
++		# finished, then it better be as follows:
++		[ ${a[5]} == "AAa" ]
++		[ ${a[7]} == "recover" ]
++	else
++		# Tough to tell the INVALID case,
++		#   Before starting sync thread: "Aa X/X recover"
++		# from the valid case,
++		#   Just finished sync thread: "Aa X/X recover"
++		# We'll just put "should" for now
++		should [ ${a[5]} == "AAA" ]
++		should [ ${a[7]} == "idle" ]
++		break
++	fi
++        sleep .1
++done
++aux enable_dev $dev3
++lvremove -ff $vg
++
++###########################################
++# Catch anything suspicious with RAID1 initial resync
++###########################################
++aux delay_dev $dev2 0 50
++lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg $dev1 $dev2
++while true; do
++        a=( $(dmsetup status $vg-$lv1) ) || die "Unable to get status of $vg/$lv1"
++	b=( $(echo ${a[6]} | sed s:/:' ':) )
++	if [ ${b[0]} -ne ${b[1]} ]; then
++		# If the sync operation ("resync" in this case) is not
++		# finished, then it better be as follows:
++		[ ${a[5]} == "aa" ]
++		[ ${a[7]} == "resync" ]
++	else
++		should [ ${a[5]} == "AA" ]
++		should [ ${a[7]} == "idle" ]
++		break
++	fi
++        sleep .1
++done
++aux enable_dev $dev2
++lvremove -ff $vg
++
+ vgremove -ff $vg
 
 
