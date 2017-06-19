@@ -1,41 +1,47 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 19 Jun 2017 06:46:48 -0400
-Subject: master - fsadm: restore no answer
-Message-ID: <201706191046.v5JAkmbT025203@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Mon, 19 Jun 2017 14:40:13 -0400
+Subject: master - lvconvert: disable reshaping of RAID LVs in the cluster
+Message-ID: <201706191840.v5JIeDUp028447@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1c212b8a43750ea48b9e96da75c1349682c81454
-Commit:        1c212b8a43750ea48b9e96da75c1349682c81454
-Parent:        915d20d0e64e8bf7a91f01c21cb8c30428ddb1e1
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 19 12:37:40 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jun 19 12:40:03 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=76a327f084705fafa9374e6256ad7143668adc80
+Commit:        76a327f084705fafa9374e6256ad7143668adc80
+Parent:        1c212b8a43750ea48b9e96da75c1349682c81454
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Mon Jun 19 20:01:01 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Mon Jun 19 20:01:01 2017 +0200
 
-fsadm: restore no answer
+lvconvert: disable reshaping of RAID LVs in the cluster
 
-Commit 1fe4f80e45a6bfcceed5aaab97fc0e27dfcf2b88 in current version
-introduced regression for a terminal user, as he could not enter 'n'
-as answer. Add missing break for this case (No whats_new).
+Disable until we have a proper fix for reshape space allocation,
+switching it to begin/end of rimages and activation in the cluster.
+
+Related: rhbz1461526
 ---
- scripts/fsadm.sh |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ lib/metadata/raid_manip.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index ea14efe..adf9b55 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -402,6 +402,7 @@ yes_no() {
- 	while read -r -s -n 1 ANS ; do
- 		case "$ANS" in
- 		 "y" | "Y" ) echo y ; return 0 ;;
-+		 "n" | "N") break ;;
- 		 "" ) if [ -t 1 ] ; then
- 			echo y ; return 0
- 		      fi ;;
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 5c3f9ef..6abf482 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -6319,6 +6319,12 @@ int lv_raid_convert(struct logical_volume *lv,
+ 	case 0:
+ 		break;
+ 	case 1:
++		/* Conversion of reshapable raids is the cluster is not supported yet. */
++		if (locking_is_clustered()) {
++			log_error("Conversion of %s not supported in the cluster.", display_lvname(lv));
++			return 0;
++		}
++
+ 		if (!_raid_reshape(lv, new_segtype, yes, force,
+ 				   data_copies, region_size,
+ 				   stripes, stripe_size, allocate_pvs)) {
 
 
