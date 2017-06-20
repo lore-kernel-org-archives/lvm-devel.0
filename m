@@ -1,84 +1,100 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 19 Jun 2017 17:31:28 -0400
-Subject: master - tests: check conversion of thin-pool
-Message-ID: <201706192131.v5JLVSgP019743@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Tue, 20 Jun 2017 11:28:31 -0400
+Subject: master - lvconvert: enhance disable reshaping of open RAID LV
+Message-ID: <201706201528.v5KFSV5J025895@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=31cd01c9b31c2c4e63797edd673fca8dc53da022
-Commit:        31cd01c9b31c2c4e63797edd673fca8dc53da022
-Parent:        19cc03fa5275fa6d00a1f726bae40141559e2913
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 19 23:15:46 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jun 19 23:30:11 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=601ad1c73faa5fe3d74ff5b06cc47073b40a1850
+Commit:        601ad1c73faa5fe3d74ff5b06cc47073b40a1850
+Parent:        31cd01c9b31c2c4e63797edd673fca8dc53da022
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Jun 20 17:27:58 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Jun 20 17:27:58 2017 +0200
 
-tests: check conversion of thin-pool
+lvconvert: enhance disable reshaping of open RAID LV
 
+Enhance commit 9e9163618ab36a6b046b6380d6ef58429b219ef8
+to use dev_open_flags/dev_close API.
+
+Related: rhbz1447812
 ---
- test/shell/lvconvert-raid-takeover-thin.sh |   52 ++++++++++++++++++++++++++++
- 1 files changed, 52 insertions(+), 0 deletions(-)
+ lib/metadata/raid_manip.c |   36 +++++++++++++++++++++++++-----------
+ 1 files changed, 25 insertions(+), 11 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-takeover-thin.sh b/test/shell/lvconvert-raid-takeover-thin.sh
-new file mode 100644
-index 0000000..93d887d
---- /dev/null
-+++ b/test/shell/lvconvert-raid-takeover-thin.sh
-@@ -0,0 +1,52 @@
-+#!/bin/sh
-+# Copyright (C) 2017 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 56cc592..f787ad0 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -6210,6 +6210,26 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
+ 	return r;
+ }
+ 
++/* BZ1447812: try opening LV exclusively */
++static int _lv_open_excl(struct logical_volume *lv, struct device **dev) {
++	char *dev_path;
++	size_t sz = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) + strlen(lv->name) + 2;
 +
-+# check we may convert thin-pool to raid1/raid10 and back
-+# RHBZ#1365286
++	*dev = NULL;
++	if (!(dev_path = dm_pool_alloc(lv->vg->cmd->mem, sz)))
++		return_0;
++	if (dm_snprintf(dev_path, sz, "%s%s/%s", lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0)
++		return_0;
++	if (!(*dev = dev_create_file(dev_path, NULL, NULL, 0)))
++		return_0;
++	if (!dev_open_flags(*dev, O_EXCL, 1, 1)) {
++		log_error("Reshape of open %s not supported.", display_lvname(lv));
++		return 0;
++	}
 +
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
++	return 1;
++}
 +
-+. lib/inittest
-+
-+aux have_thin 1 0 0 || skip
-+aux have_raid 1 9 0 || skip
-+
-+aux prepare_vg 6
-+
-+lvcreate -L4  -i3 -T  $vg/pool  -V10
-+
-+for i in 1 2 ; do
-+lvconvert --type raid10 -y  $vg/pool_tdata
-+check grep_dmsetup table $vg-pool_tdata "raid10"
-+aux wait_for_sync $vg pool_tdata
-+
-+lvconvert --type striped -y $vg/pool_tdata
-+check grep_dmsetup table $vg-pool_tdata "striped"
-+done
-+
-+lvremove -f $vg
-+
-+lvcreate -L4  -T $vg/pool -V10
-+
-+for j in data meta ; do
-+  LV=pool_t${j}
-+  for i in 1 2 ; do
-+    lvconvert --type raid1 -m1 -y  $vg/$LV
-+    check grep_dmsetup table $vg-${LV} "raid1"
-+    aux wait_for_sync $vg $LV
-+
-+    lvconvert --type raid1 -m0 -y  $vg/$LV
-+    check grep_dmsetup table ${vg}-${LV} "linear"
-+  done
-+done
-+
-+vgremove -ff $vg
+ /*
+  * lv_raid_convert
+  *
+@@ -6259,8 +6279,7 @@ int lv_raid_convert(struct logical_volume *lv,
+ 	uint32_t region_size;
+ 	uint32_t data_copies = seg->data_copies;
+ 	uint32_t available_slvs, removed_slvs;
+-	char *dev_path;
+-	size_t sz;
++	struct device *dev;
+ 	takeover_fn_t takeover_fn;
+ 
+ 	/* FIXME If not active, prompt and activate */
+@@ -6331,24 +6350,19 @@ int lv_raid_convert(struct logical_volume *lv,
+ 			return 0;
+ 		}
+ 
+-		/* BZ1447812 */
+-		sz = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) + strlen(lv->name) + 2;
+-		if (!(dev_path = dm_pool_alloc(lv->vg->cmd->mem, sz)))
+-			return_0;
+-		if (dm_snprintf(dev_path, sz, "%s%s/%s", lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0)
+-			return_0;
+-		if (open(dev_path, O_RDONLY|O_EXCL) && errno) {
+-			log_error("Reshape of open %s not supported.", display_lvname(lv));
++		/* BZ1447812: reject reshape on open LV */
++		if (!_lv_open_excl(lv, &dev))
+ 			return 0;
+-		}
+ 
+ 		if (!_raid_reshape(lv, new_segtype, yes, force,
+ 				   data_copies, region_size,
+ 				   stripes, stripe_size, allocate_pvs)) {
++			dev_close(dev);
+ 			log_error("Reshape request failed on LV %s.", display_lvname(lv));
+ 			return 0;
+ 		}
+ 
++		dev_close(dev);
+ 		return 1;
+ 	case 2:
+ 		log_error("Invalid conversion request on %s.", display_lvname(lv));
 
 
