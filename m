@@ -1,40 +1,40 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 29 Jun 2017 16:28:51 -0400
-Subject: master - tests: check.sh eliminate useless cat
-Message-ID: <201706292028.v5TKSpOo026868@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Wed, 21 Jun 2017 18:57:42 -0400
+Subject: master - mirror: reformat conditional
+Message-ID: <201706212257.v5LMvgcZ015593@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b45ca523ecbba006d2982ae085140c69edbe084e
-Commit:        b45ca523ecbba006d2982ae085140c69edbe084e
-Parent:        51237cb5047a93382f8d239e9aa9d3899154300f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 29 11:56:47 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 29 22:23:17 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2df9a786845af2ce34cb3942dc2b16342e359a2c
+Commit:        2df9a786845af2ce34cb3942dc2b16342e359a2c
+Parent:        64fac77e8a551f4dfe8f4cfaaf1ca984c9b5146c
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Thu Jun 22 00:57:16 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Jun 22 00:57:16 2017 +0200
 
-tests: check.sh eliminate useless cat
+mirror: reformat conditional
 
-Useless cat. Consider 'cmd < file | ..' or 'cmd file | ..' instead.
 ---
- test/lib/check.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/mirror.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index 64019da..a43aef7 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -49,7 +49,7 @@ mirror_images_redundant() {
- 
- 	(grep -v ^# check.tmp.all || true) | sort | uniq -d > check.tmp
- 
--	test "$(cat check.tmp | wc -l)" -eq 0 || \
-+	test "$(wc -l < check.tmp)" -eq 0 || \
- 		die "mirror images of $lv expected redundant, but are not:" \
- 			"$(cat check.tmp.all)"
- }
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index 9dee0ab..52e1488 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1459,7 +1459,8 @@ int remove_mirrors_from_segments(struct logical_volume *lv,
+ 			log_error("Segment is not mirrored: %s:%" PRIu32,
+ 				  lv->name, seg->le);
+ 			return 0;
+-		} if ((seg->status & status_mask) != status_mask) {
++		}
++		if ((seg->status & status_mask) != status_mask) {
+ 			log_error("Segment status does not match: %s:%" PRIu32
+ 				  " status:0x%" PRIx64 "/0x%" PRIx64, lv->name, seg->le,
+ 				  seg->status, status_mask);
 
 
