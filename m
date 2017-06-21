@@ -1,49 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 29 Jun 2017 16:27:12 -0400
-Subject: master - vgimportclone.sh: add -r to read
-Message-ID: <201706292027.v5TKRC4P026588@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 21 Jun 2017 08:04:17 -0400
+Subject: master - raid: update path for repair
+Message-ID: <201706211204.v5LC4HCI005856@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=16a38dede95cbcd7bfd80bb2124ce205a20c5a2f
-Commit:        16a38dede95cbcd7bfd80bb2124ce205a20c5a2f
-Parent:        588b12e71d7f050ca14e6f9332e7a0ec6b66a4b8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=48f06005ab53420241e0c1da3a56a8f5c1a28974
+Commit:        48f06005ab53420241e0c1da3a56a8f5c1a28974
+Parent:        5f4cfa7c4a6da707354f8c1c059531dac5287192
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 28 20:26:23 2017 +0200
+AuthorDate:    Wed Jun 21 13:57:22 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 29 22:23:16 2017 +0200
+CommitterDate: Wed Jun 21 14:00:50 2017 +0200
 
-vgimportclone.sh: add -r to read
+raid: update path for repair
 
-read without -r will mangle backslashes.
+Updating path from commit 61980bcf0624790bfdc07d371fd510d1c4079fb5.
+
+When repair is running, no removing PVS are given so it shall return
+success in such case.
 ---
- scripts/vgimportclone.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/raid_manip.c |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
-index 26e4c1f..48ac6ce 100755
---- a/scripts/vgimportclone.sh
-+++ b/scripts/vgimportclone.sh
-@@ -259,7 +259,7 @@ NOVGDEVLIST=$("$LVM" pvs -a -o pv_name --select vg_name="" --noheadings)
- checkvalue $? "Failed to collect information for PV check"
- if [ -n "${NOVGDEVLIST}" ]; then
-     FOLLOWLIST=""
--    while read PVNAME; do
-+    while read -r PVNAME; do
-         FOLLOW=$("$READLINK" "$PVNAME")
-         FOLLOWLIST="$FOLLOWLIST $FOLLOW"
-     done <<< "$(echo "$NOVGDEVLIST")"
-@@ -272,7 +272,7 @@ fi
- VGLIST=$("$LVM" vgs -o vg_name,vg_exported,vg_missing_pv_count --noheadings --binary)
- checkvalue $? "Failed to collect VG information"
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 34545b4..9e4f3a3 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -6661,9 +6661,14 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
+ 	}
  
--while read VGNAME VGEXPORTED VGMISSINGPVCOUNT; do
-+while read -r VGNAME VGEXPORTED VGMISSINGPVCOUNT; do
-     if [ "$VGMISSINGPVCOUNT" -gt 0 ]; then
-         echo "Volume Group ${VGNAME} has unknown PV(s), skipping."
-         echo "- Were all associated PV(s) supplied as arguments?"
+ 	if (!match_count) {
+-		log_error("Logical volume %s does not contain devices specified to %s.",
+-			  display_lvname(lv), action_str);
+-		return 0;
++		if (remove_pvs && !dm_list_empty(remove_pvs)) {
++			log_error("Logical volume %s does not contain devices specified to %s.",
++				  display_lvname(lv), action_str);
++			return 0;
++		}
++		log_print_unless_silent("%s does not contain devices specified to %s.",
++					display_lvname(lv), action_str);
++		return 1;
+ 	} else if (match_count == raid_seg->area_count) {
+ 		log_error("Unable to %s all PVs from %s at once.",
+ 			  action_str, display_lvname(lv));
 
 
