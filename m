@@ -1,84 +1,63 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 20 Jun 2017 11:59:51 -0400
-Subject: master - lvconvert: check open count to disable reshaping of open RAID LV
-Message-ID: <201706201559.v5KFxpOt029306@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 22 Jun 2017 14:18:25 -0400
+Subject: master - cache: fix lvdisplay output
+Message-ID: <201706221818.v5MIIPLo006618@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e611c700ba1032ffb71bf0cdd33e062e5e16439
-Commit:        5e611c700ba1032ffb71bf0cdd33e062e5e16439
-Parent:        601ad1c73faa5fe3d74ff5b06cc47073b40a1850
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Jun 20 17:59:10 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Jun 20 17:59:10 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=58e075f5fb12d8bce4ebb1c19c9f20b10d984e57
+Commit:        58e075f5fb12d8bce4ebb1c19c9f20b10d984e57
+Parent:        732928dda8eaf20ab2375e27ae641d58db08b8f4
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jun 22 20:05:26 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jun 22 20:17:18 2017 +0200
 
-lvconvert: check open count to disable reshaping of open RAID LV
+cache: fix lvdisplay output
 
-Also check LV open count in addition to opening the RaidLV
-exclusively as of commit 601ad1c73faa5fe3d74ff5b06cc47073b40a1850.
-
-Related: rhbz1447812
+Unused cache pool may have lots of fields actually undefined,
+so avoid printing them, if they are not specified in metadata.
 ---
- lib/metadata/raid_manip.c |   27 +++++++++++++++++++++++++++
- 1 files changed, 27 insertions(+), 0 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/cache_segtype/cache.c |   12 +++++++++---
+ 2 files changed, 10 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index f787ad0..93895fe 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -75,6 +75,23 @@ static int _rebuild_with_emptymeta_is_supported(struct cmd_context *cmd,
- 	return 1;
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 12368dd..f1f354d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.172 - 
+ ===============================
++  Do not lvdisplay --maps unset settings of cache pool.
+   Fix lvdisplay --maps for cache pool without policy settings.
+   Avoid using origin_only manipulation with cached device.
+   Support aborting of flushing cache LV.
+diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
+index 7461b21..26f3e32 100644
+--- a/lib/cache_segtype/cache.c
++++ b/lib/cache_segtype/cache.c
+@@ -51,9 +51,15 @@ static void _cache_display(const struct lv_segment *seg)
  
-+/* BZ1447812: check open count of @lv vs. @open_count */
-+static int _check_lv_open_count(struct logical_volume *lv, int open_count) {
-+	struct lvinfo info = { 0 };
+ 	log_print("  Chunk size\t\t%s",
+ 		  display_size(seg->lv->vg->cmd, pool_seg->chunk_size));
+-	log_print("  Metadata format\t%u", pool_seg->cache_metadata_format);
+-	log_print("  Mode\t\t%s", get_cache_mode_name(pool_seg));
+-	log_print("  Policy\t\t%s", pool_seg->policy_name);
 +
-+	if (!lv_info(lv->vg->cmd, lv, 0, &info, 1, 0)) {
-+		log_error("lv_info failed: aborting.");
-+		return 0;
-+	}
-+	if (info.open_count != open_count) {
-+		log_error("Reshape of open %s not supported.", display_lvname(lv));
-+		return 0;
-+	}
++	if (pool_seg->cache_metadata_format != CACHE_METADATA_FORMAT_UNSELECTED)
++		log_print("  Metadata format\t%u", pool_seg->cache_metadata_format);
 +
-+	return 1;
-+}
++	if (pool_seg->cache_mode != CACHE_MODE_UNSELECTED)
++		log_print("  Mode\t\t%s", get_cache_mode_name(pool_seg));
 +
-+
- /*
-  * Ensure region size exceeds the minimum for @lv because
-  * MD's bitmap is limited to tracking 2^21 regions.
-@@ -2371,6 +2388,10 @@ static int _raid_reshape(struct logical_volume *lv,
++	if (pool_seg->policy_name)
++		log_print("  Policy\t\t%s", pool_seg->policy_name);
  
- 	seg->region_size = new_region_size;
- 
-+	/* BZ1447812: also check open count */
-+	if (!_check_lv_open_count(lv, 1))
-+		return 0;
-+
- 	if (seg->area_count != 2 || old_image_count != seg->area_count) {
- 		if (!_lv_update_reload_fns_reset_eliminate_lvs(lv, 0, &removal_lvs,
- 							       _post_raid_reshape, NULL,
-@@ -6351,8 +6372,14 @@ int lv_raid_convert(struct logical_volume *lv,
- 		}
- 
- 		/* BZ1447812: reject reshape on open LV */
-+		if (!_check_lv_open_count(lv, 0))
-+			return 0;
- 		if (!_lv_open_excl(lv, &dev))
- 			return 0;
-+		if (!_check_lv_open_count(lv, 1)) {
-+			dev_close(dev);
-+			return 0;
-+		}
- 
- 		if (!_raid_reshape(lv, new_segtype, yes, force,
- 				   data_copies, region_size,
+ 	if (pool_seg->policy_settings &&
+ 	    (n = pool_seg->policy_settings->child))
 
 
