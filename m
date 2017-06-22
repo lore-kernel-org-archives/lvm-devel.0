@@ -1,63 +1,71 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 22 Jun 2017 14:18:25 -0400
-Subject: master - cache: fix lvdisplay output
-Message-ID: <201706221818.v5MIIPLo006618@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 22 Jun 2017 14:18:32 -0400
+Subject: master - debug: show message only when origin_only was set
+Message-ID: <201706221818.v5MIIWq5006629@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=58e075f5fb12d8bce4ebb1c19c9f20b10d984e57
-Commit:        58e075f5fb12d8bce4ebb1c19c9f20b10d984e57
-Parent:        732928dda8eaf20ab2375e27ae641d58db08b8f4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=41c10034aa0db3c63f18ff78b64af3a799c154a1
+Commit:        41c10034aa0db3c63f18ff78b64af3a799c154a1
+Parent:        58e075f5fb12d8bce4ebb1c19c9f20b10d984e57
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 22 20:05:26 2017 +0200
+AuthorDate:    Thu Jun 22 17:14:47 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 22 20:17:18 2017 +0200
+CommitterDate: Thu Jun 22 20:17:20 2017 +0200
 
-cache: fix lvdisplay output
+debug: show message only when origin_only was set
 
-Unused cache pool may have lots of fields actually undefined,
-so avoid printing them, if they are not specified in metadata.
 ---
- WHATS_NEW                 |    1 +
- lib/cache_segtype/cache.c |   12 +++++++++---
- 2 files changed, 10 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c   |    2 +-
+ lib/metadata/raid_manip.c |    6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 12368dd..f1f354d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.172 - 
- ===============================
-+  Do not lvdisplay --maps unset settings of cache pool.
-   Fix lvdisplay --maps for cache pool without policy settings.
-   Avoid using origin_only manipulation with cached device.
-   Support aborting of flushing cache LV.
-diff --git a/lib/cache_segtype/cache.c b/lib/cache_segtype/cache.c
-index 7461b21..26f3e32 100644
---- a/lib/cache_segtype/cache.c
-+++ b/lib/cache_segtype/cache.c
-@@ -51,9 +51,15 @@ static void _cache_display(const struct lv_segment *seg)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index c431868..1a584f2 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6372,7 +6372,7 @@ static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
+ 	if (!vg_write(vg))
+ 		return_0;
  
- 	log_print("  Chunk size\t\t%s",
- 		  display_size(seg->lv->vg->cmd, pool_seg->chunk_size));
--	log_print("  Metadata format\t%u", pool_seg->cache_metadata_format);
--	log_print("  Mode\t\t%s", get_cache_mode_name(pool_seg));
--	log_print("  Policy\t\t%s", pool_seg->policy_name);
-+
-+	if (pool_seg->cache_metadata_format != CACHE_METADATA_FORMAT_UNSELECTED)
-+		log_print("  Metadata format\t%u", pool_seg->cache_metadata_format);
-+
-+	if (pool_seg->cache_mode != CACHE_MODE_UNSELECTED)
-+		log_print("  Mode\t\t%s", get_cache_mode_name(pool_seg));
-+
-+	if (pool_seg->policy_name)
-+		log_print("  Policy\t\t%s", pool_seg->policy_name);
+-	if (lock_lv != lv) {
++	if (origin_only && (lock_lv != lv)) {
+ 		log_debug_activation("Dropping origin_only for %s as lock holds %s",
+ 				     display_lvname(lv), display_lvname(lock_lv));
+ 		origin_only = 0;
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 66fc2bd..08347f9 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -557,7 +557,7 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv,
+ 	va_start(ap, origin_only);
+ 	removal_lvs = va_arg(ap, struct dm_list *);
  
- 	if (pool_seg->policy_settings &&
- 	    (n = pool_seg->policy_settings->child))
+-	if (lock_lv != lv) {
++	if (origin_only && (lock_lv != lv)) {
+ 		log_debug_activation("Dropping origin_only for %s as lock holds %s",
+ 				     display_lvname(lv), display_lvname(lock_lv));
+ 		origin_only = 0;
+@@ -649,7 +649,7 @@ static int _lv_update_and_reload_list(struct logical_volume *lv, int origin_only
+ 	struct lv_list *lvl;
+ 	int r;
+ 
+-	if (lock_lv != lv) {
++	if (origin_only && (lock_lv != lv)) {
+ 		log_debug_activation("Dropping origin_only for %s as lock holds %s",
+ 				     display_lvname(lv), display_lvname(lock_lv));
+ 		origin_only = 0;
+@@ -2120,7 +2120,7 @@ static int _vg_write_lv_suspend_commit_backup(struct volume_group *vg,
+ 	const struct logical_volume *lock_lv = lv_lock_holder(lv);
+ 	int r = 1;
+ 
+-	if (lock_lv != lv) {
++	if (origin_only && (lock_lv != lv)) {
+ 		log_debug_activation("Dropping origin_only for %s as lock holds %s",
+ 				     display_lvname(lv), display_lvname(lock_lv));
+ 		origin_only = 0;
 
 
