@@ -1,67 +1,45 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Jun 2017 12:49:15 -0400
-Subject: master - cache: restore origin only reload
-Message-ID: <201706231649.v5NGnFc0019874@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 23 Jun 2017 12:49:18 -0400
+Subject: master - debug: add missing internal error message
+Message-ID: <201706231649.v5NGnIBD019885@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1bdcd156fdbd007bc6c31ec4077d8215baf5a0af
-Commit:        1bdcd156fdbd007bc6c31ec4077d8215baf5a0af
-Parent:        63ecbcd1b701b15e43e141f6ab2001dff7622e88
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a7c7d53543c37e9a3366b88399d4f7c8be2ddf58
+Commit:        a7c7d53543c37e9a3366b88399d4f7c8be2ddf58
+Parent:        1bdcd156fdbd007bc6c31ec4077d8215baf5a0af
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 23 17:05:24 2017 +0200
+AuthorDate:    Fri Jun 23 14:41:10 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Jun 23 18:44:01 2017 +0200
 
-cache: restore origin only reload
+debug: add missing internal error message
 
-Basically reverting commit 58a9f88b8c021a5e056b883053f257f1a898adf7.
-We can use origin_only  in case we are snapshot's origin,
-as we do support this stack.
-
-So when we are 'uncaching'  origin+snaps - we do need to reload only
-origin and we do not need to play with snaps.
+Do not just 'return_0'  log error would need to be shown.
 ---
- WHATS_NEW                  |    1 -
- lib/metadata/cache_manip.c |    4 ++--
- 2 files changed, 2 insertions(+), 3 deletions(-)
+ lib/metadata/raid_manip.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index f1f354d..19f7a31 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -2,7 +2,6 @@ Version 2.02.172 -
- ===============================
-   Do not lvdisplay --maps unset settings of cache pool.
-   Fix lvdisplay --maps for cache pool without policy settings.
--  Avoid using origin_only manipulation with cached device.
-   Support aborting of flushing cache LV.
-   Reenable conversion of data and metadata thin-pool volumes to raid.
-   Improve raid status reporting with lvs.
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 057d043..5e0e5c4 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -440,7 +440,7 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
- 			if (cache_seg->cleaner_policy) {
- 				cache_seg->cleaner_policy = 0;
- 				/* Restore normal table */
--				if (!lv_update_and_reload(cache_lv))
-+				if (!lv_update_and_reload_origin(cache_lv))
- 					stack;
- 			}
- 			return 0;
-@@ -485,7 +485,7 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
- 		/* Switch to cleaner policy to flush the cache */
- 		cache_seg->cleaner_policy = 1;
- 		/* Reload cache volume with "cleaner" policy */
--		if (!lv_update_and_reload(cache_lv))
-+		if (!lv_update_and_reload_origin(cache_lv))
- 			return_0;
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 6bd0fb2..74fafa3 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -6090,8 +6090,11 @@ static int _region_size_change_requested(struct logical_volume *lv, int yes, con
+ 		return_0;
  
- 		if (!sync_local_dev_names(cache_lv->vg->cmd)) {
+ 	/* CLI validation provides the check but be caucious... */
+-	if (!lv_is_raid(lv) || !seg || seg_is_any_raid0(seg))
+-		return_0;
++	if (!lv_is_raid(lv) || !seg || seg_is_any_raid0(seg)) {
++		log_error(INTERNAL_ERROR "Cannot change region size of %s.",
++			  display_lvname(lv));
++		return 0;
++	}
+ 
+ 	if (region_size == seg->region_size) {
+ 		log_error("Region size is already %s on %s LV %s.",
 
 
