@@ -1,107 +1,118 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 24 Jun 2017 11:59:38 -0400
-Subject: master - display: add display_percent function
-Message-ID: <201706241559.v5OFxcFE026758@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 24 Jun 2017 11:59:40 -0400
+Subject: master - libdm: implement dm_percent_to_round_float
+Message-ID: <201706241559.v5OFxeXS026768@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=07eec06f5d7f7a9589b8555df7e67d211dcd3257
-Commit:        07eec06f5d7f7a9589b8555df7e67d211dcd3257
-Parent:        feed61f3fa17a94140ba91ae5df844ee4ad34248
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2ef8da61eb968acb3c5c51cdfdc997e8bed90352
+Commit:        2ef8da61eb968acb3c5c51cdfdc997e8bed90352
+Parent:        0016b79c8b3223de7155fb4ec5fa799f7af1c811
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jun 24 16:03:21 2017 +0200
+AuthorDate:    Sat Jun 24 13:24:26 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Jun 24 17:44:42 2017 +0200
+CommitterDate: Sat Jun 24 17:44:40 2017 +0200
 
-display: add display_percent function
+libdm: implement dm_percent_to_round_float
 
-Add universal function to print dm_percent_t values via single
-code path.
+Add function to adjust printing of percent values in better way.
+Rounding here is going along following rules:
 
-TODO: extend with configurale precision of printed values.
+0% & 100% are always clearly reported with  .0 decimal points.
+
+Values slightly above 0% we make sure a nearest bigger
+non zero value with given precission is printed
+(i.e. 0.01  for  %.2f  will be shown)
+
+For values closely approaching 100% we again detect and adjust value
+that is less then 100 when printed.
+(i.e. 99.99  for %.2f will be shown).
+
+For other values we are leaving them with standard rounding mechanism
+since we care mainly about corner values 0 & 100 which need to be
+printed precisely.
 ---
- WHATS_NEW             |    1 +
- lib/display/display.c |   26 +++++++++++++++++++++++++-
- lib/display/display.h |    4 +++-
- 3 files changed, 29 insertions(+), 2 deletions(-)
+ WHATS_NEW_DM                        |    1 +
+ libdm/.exported_symbols.DM_1_02_141 |    1 +
+ libdm/libdevmapper.h                |   10 ++++++++++
+ libdm/libdm-report.c                |   23 +++++++++++++++++++++++
+ 4 files changed, 35 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index fa51f67..6a60f0b 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 83df7cc..89f4a00 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.172 - 
+ Version 1.02.141 - 
  ===============================
-+  Add display_percent helper function for printing percent values.
-   Lvconvert --repair handles failing raid legs (present but marked 'D'ead).
-   Do not lvdisplay --maps unset settings of cache pool.
-   Fix lvdisplay --maps for cache pool without policy settings.
-diff --git a/lib/display/display.c b/lib/display/display.c
-index a8bb5cc..5940cf0 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -152,6 +152,30 @@ const char *display_lvname(const struct logical_volume *lv)
- 	return name;
++  Add dm_percent_to_round_float for adjusted percentage rounding.
+   Reset array with dead rimage devices once raid gets in sync.
+   Drop unneeded --config option from raid dmeventd plugin.
+   dm_get_status_raid() handle better some incosistent md statuses.
+diff --git a/libdm/.exported_symbols.DM_1_02_141 b/libdm/.exported_symbols.DM_1_02_141
+new file mode 100644
+index 0000000..8187642
+--- /dev/null
++++ b/libdm/.exported_symbols.DM_1_02_141
+@@ -0,0 +1 @@
++dm_percent_to_round_float
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 4bd32b4..5e77906 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -2836,6 +2836,16 @@ typedef enum {
+ typedef int32_t dm_percent_t;
+ 
+ float dm_percent_to_float(dm_percent_t percent);
++/*
++ * Return adjusted/rounded float for better percent value printing.
++ * Function ensures for given precision of digits:
++ * 100.0% returns only when the value is DM_PERCENT_100
++ *        for close smaller values rounds to nearest smaller value
++ * 0.0% returns only for value DM_PERCENT_0
++ *        for close bigger values rounds to nearest bigger value
++ * In all other cases returns same value as dm_percent_to_float()
++ */
++float dm_percent_to_round_float(dm_percent_t percent, unsigned digits);
+ dm_percent_t dm_make_percent(uint64_t numerator, uint64_t denominator);
+ 
+ /********************
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 7caba98..0a5d464 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -2425,6 +2425,29 @@ float dm_percent_to_float(dm_percent_t percent)
+ 	return (float) percent / DM_PERCENT_1 + 0.f;
  }
  
-+/* Display percentage with (TODO) configurable precision */
-+const char *display_percent(struct cmd_context *cmd, dm_percent_t percent)
++float dm_percent_to_round_float(dm_percent_t percent, unsigned digits)
 +{
-+	char *buf;
-+	int r;
++	static const float power10[] = {
++		1.f, .1f, .01f, .001f, .0001f, .00001f, .000001f,
++		.0000001f, .00000001f, .000000001f,
++		.0000000001f
++	};
++	float r;
++	float f = dm_percent_to_float(percent);
 +
-+        /* Reusing same  ring buffer we use for displaying LV names */
-+	if ((cmd->display_lvname_idx + NAME_LEN) >= sizeof((cmd->display_buffer)))
-+		cmd->display_lvname_idx = 0;
++	if (digits >= DM_ARRAY_SIZE(power10))
++		digits = DM_ARRAY_SIZE(power10) - 1; /* no better precision */
 +
-+	buf = cmd->display_buffer + cmd->display_lvname_idx;
-+	/* TODO: Make configurable hardcoded 2 digits */
-+	r = dm_snprintf(buf, NAME_LEN, "%.2f", dm_percent_to_round_float(percent, 2));
++	r = DM_PERCENT_1 * power10[digits];
 +
-+	if (r < 0) {
-+		log_error("Percentage %d does not fit.", percent);
-+		return NULL;
-+	}
++	if ((percent < r) && (percent > DM_PERCENT_0))
++		f = power10[digits];
++	else if ((percent > (DM_PERCENT_100 - r)) && (percent < DM_PERCENT_100))
++		f = (float) (DM_PERCENT_100 - r) / DM_PERCENT_1;
 +
-+	cmd->display_lvname_idx += r + 1;
-+
-+	return buf;
++	return f;
 +}
 +
- /* Size supplied in sectors */
- static const char *_display_size(const struct cmd_context *cmd,
- 				 uint64_t size, dm_size_suffix_t suffix_type)
-diff --git a/lib/display/display.h b/lib/display/display.h
-index 1fc9079..9f9afe9 100644
---- a/lib/display/display.h
-+++ b/lib/display/display.h
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -24,6 +24,8 @@
- 
- const char *display_lvname(const struct logical_volume *lv);
- 
-+const char *display_percent(struct cmd_context *cmd, dm_percent_t percent);
-+
- /* Specify size in KB */
- const char *display_size(const struct cmd_context *cmd, uint64_t size);
- const char *display_size_long(const struct cmd_context *cmd, uint64_t size);
+ dm_percent_t dm_make_percent(uint64_t numerator, uint64_t denominator)
+ {
+ 	dm_percent_t percent;
 
 
