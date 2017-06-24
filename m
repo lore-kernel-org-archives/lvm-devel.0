@@ -1,46 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 24 Jun 2017 17:03:35 -0400
-Subject: master - tests: slightly longer delay
-Message-ID: <201706242103.v5OL3ZuA031857@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 24 Jun 2017 17:03:39 -0400
+Subject: master - tests: show more debug info
+Message-ID: <201706242103.v5OL3dWW031867@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1b9bf5ce9e65c22e5e06025ca9700cecd8addc68
-Commit:        1b9bf5ce9e65c22e5e06025ca9700cecd8addc68
-Parent:        c465ca6a3acd2b01ddacac2275bd965bde2b4167
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0cc49bda15c041dc6e53b17a10b9306abd7d1a93
+Commit:        0cc49bda15c041dc6e53b17a10b9306abd7d1a93
+Parent:        1b9bf5ce9e65c22e5e06025ca9700cecd8addc68
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jun 24 22:58:08 2017 +0200
+AuthorDate:    Sat Jun 24 23:01:26 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Jun 24 22:58:08 2017 +0200
+CommitterDate: Sat Jun 24 23:02:42 2017 +0200
 
-tests: slightly longer delay
+tests: show more debug info
 
-Try to avoid race with slightly longer delay.
+Helpful for analysis (revert later).
 ---
- test/shell/lvconvert-cache-abort.sh |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-repair-raid-dmeventd.sh |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-cache-abort.sh b/test/shell/lvconvert-cache-abort.sh
-index 899fa42..17b5d27 100644
---- a/test/shell/lvconvert-cache-abort.sh
-+++ b/test/shell/lvconvert-cache-abort.sh
-@@ -39,11 +39,13 @@ done
- # Delay dev to ensure we have some time to 'capture' interrupt in flush
- aux delay_dev "$dev1" 0 500 $(get first_extent_sector "$dev1"):
+diff --git a/test/shell/lvconvert-repair-raid-dmeventd.sh b/test/shell/lvconvert-repair-raid-dmeventd.sh
+index 84b0591..5b5bdcc 100644
+--- a/test/shell/lvconvert-repair-raid-dmeventd.sh
++++ b/test/shell/lvconvert-repair-raid-dmeventd.sh
+@@ -33,4 +33,7 @@ mkfs.ext3 "$DM_DEV_DIR/$vg/4way"
+ sleep 5 # FIXME: need a "poll" utility, akin to "check"
+ aux enable_dev "$dev2" "$dev4"
  
-+lvdisplay --maps $vg
-+sync
- dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv1" bs=4k count=100 conv=fdatasync
- 
- LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -v --splitcache $vg/$lv1 >log 2>&1 &
- PID_CONVERT=$!
--sleep 0.1
-+sleep 0.2
- kill -INT $PID_CONVERT
- aux enable_dev "$dev1"
- wait
+-vgremove -ff $vg
++dmsetup table
++dmsetup status
++dmsetup info -c
++vgremove -vvvv -ff $vg
 
 
