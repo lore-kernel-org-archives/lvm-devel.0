@@ -1,75 +1,48 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 26 Jun 2017 14:08:31 -0400
-Subject: master - cmdline: fix missing NULL at end of array of args
-Message-ID: <201706261808.v5QI8VpX008712@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 26 Jun 2017 18:29:24 -0400
+Subject: master - raid: fix write_commit_backup
+Message-ID: <201706262229.v5QMTORr010100@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=52f4042f1a3b21054041298d7e50ded7ae366f44
-Commit:        52f4042f1a3b21054041298d7e50ded7ae366f44
-Parent:        4e4067dd94f52f90f0aaae30c522102ccbaa2826
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b1e21cf9ed585796cd2d265c3bda50b7960b0478
+Commit:        b1e21cf9ed585796cd2d265c3bda50b7960b0478
+Parent:        52f4042f1a3b21054041298d7e50ded7ae366f44
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 26 20:03:05 2017 +0200
+AuthorDate:    Mon Jun 26 23:25:24 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jun 26 20:07:21 2017 +0200
+CommitterDate: Tue Jun 27 00:27:25 2017 +0200
 
-cmdline: fix missing NULL at end of array of args
+raid: fix write_commit_backup
 
-lvm_run needs to place NULL as the last element into argv[].
-Otherwise we get:
+With commit 41c10034aa0db3c63f18ff78b64af3a799c154a1 we actually
+do require LV to be used with _vg_write_lv_suspend_commit_backup().
 
-Conditional jump or move depends on uninitialised value(s)
- _command_required_pos_matches (lvmcmdline.c:1443)
- _find_command (lvmcmdline.c:1610)
- lvm_run_command (lvmcmdline.c:2770)
- lvm2_run (lvmcmdlib.c:91)
+So write a proper separte single wrapper for write && commit && backup.
 ---
- WHATS_NEW          |    1 +
- test/api/test.c    |    3 +++
- tools/lvmcmdline.c |    3 +++
- 3 files changed, 7 insertions(+), 0 deletions(-)
+ lib/metadata/raid_manip.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 6a60f0b..2872dbb 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.172 - 
- ===============================
-+  Add missing NULL to argv array when spliting cmdline arguments.
-   Add display_percent helper function for printing percent values.
-   Lvconvert --repair handles failing raid legs (present but marked 'D'ead).
-   Do not lvdisplay --maps unset settings of cache pool.
-diff --git a/test/api/test.c b/test/api/test.c
-index 1413030..a79afc1 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -51,6 +51,9 @@ static int lvm_split(char *str, int *argc, char **argv, int max)
- 			break;
- 	}
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 2d735ed..158bcf2 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -2155,7 +2155,12 @@ static int _vg_write_lv_suspend_commit_backup(struct volume_group *vg,
  
-+	if (*argc < max)
-+		argv[*argc] = NULL;
+ static int _vg_write_commit_backup(struct volume_group *vg)
+ {
+-	return _vg_write_lv_suspend_commit_backup(vg, NULL, 1, 1);
++	if (!vg_write(vg) || !vg_commit(vg))
++		return_0;
 +
- 	return *argc;
++	backup(vg);
++
++	return 1;
  }
  
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 9e77d48..0aca37a 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -3045,6 +3045,9 @@ int lvm_split(char *str, int *argc, char **argv, int max)
- 			break;
- 	}
- 
-+	if (*argc < max)
-+		argv[*argc] = NULL;
-+
- 	return *argc;
- }
- 
+ __attribute__ ((__unused__))
 
 
