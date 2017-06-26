@@ -1,40 +1,78 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 24 Jun 2017 17:03:39 -0400
-Subject: master - tests: show more debug info
-Message-ID: <201706242103.v5OL3dWW031867@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 26 Jun 2017 14:08:26 -0400
+Subject: master - libdm: fix initialization of head for reused structure
+Message-ID: <201706261808.v5QI8QmB008701@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0cc49bda15c041dc6e53b17a10b9306abd7d1a93
-Commit:        0cc49bda15c041dc6e53b17a10b9306abd7d1a93
-Parent:        1b9bf5ce9e65c22e5e06025ca9700cecd8addc68
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4e4067dd94f52f90f0aaae30c522102ccbaa2826
+Commit:        4e4067dd94f52f90f0aaae30c522102ccbaa2826
+Parent:        0cc49bda15c041dc6e53b17a10b9306abd7d1a93
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jun 24 23:01:26 2017 +0200
+AuthorDate:    Mon Jun 26 18:22:40 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Jun 24 23:02:42 2017 +0200
+CommitterDate: Mon Jun 26 19:45:11 2017 +0200
 
-tests: show more debug info
+libdm: fix initialization of head for reused structure
 
-Helpful for analysis (revert later).
+Dmeventd reuses  'dm_task' struct for some STATUS operation, but due to
+missing reinitization of dm_task target list, it has caused misprocesing
+of recieved events as the parsed target has been simply added to the
+list of existing status and cause multiple actions being called for
+single event.
 ---
- test/shell/lvconvert-repair-raid-dmeventd.sh |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ WHATS_NEW_DM              |    1 +
+ libdm/ioctl/libdm-iface.c |   10 +++++++++-
+ 2 files changed, 10 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-raid-dmeventd.sh b/test/shell/lvconvert-repair-raid-dmeventd.sh
-index 84b0591..5b5bdcc 100644
---- a/test/shell/lvconvert-repair-raid-dmeventd.sh
-+++ b/test/shell/lvconvert-repair-raid-dmeventd.sh
-@@ -33,4 +33,7 @@ mkfs.ext3 "$DM_DEV_DIR/$vg/4way"
- sleep 5 # FIXME: need a "poll" utility, akin to "check"
- aux enable_dev "$dev2" "$dev4"
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 89f4a00..2e31b9a 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.141 - 
+ ===============================
++  Fix reusing of dm_task structure for status reading (used by dmeventd).
+   Add dm_percent_to_round_float for adjusted percentage rounding.
+   Reset array with dead rimage devices once raid gets in sync.
+   Drop unneeded --config option from raid dmeventd plugin.
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index cb3e8dc..65e75f6 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -467,7 +467,7 @@ static void _dm_zfree_dmi(struct dm_ioctl *dmi)
+ 	}
+ }
  
--vgremove -ff $vg
-+dmsetup table
-+dmsetup status
-+dmsetup info -c
-+vgremove -vvvv -ff $vg
+-void dm_task_destroy(struct dm_task *dmt)
++static void _dm_task_free_targets(struct dm_task *dmt)
+ {
+ 	struct target *t, *n;
+ 
+@@ -478,6 +478,12 @@ void dm_task_destroy(struct dm_task *dmt)
+ 		dm_free(t);
+ 	}
+ 
++	dmt->head = dmt->tail = NULL;
++}
++
++void dm_task_destroy(struct dm_task *dmt)
++{
++	_dm_task_free_targets(dmt);
+ 	_dm_zfree_dmi(dmt->dmi.v4);
+ 	dm_free(dmt->dev_name);
+ 	dm_free(dmt->mangled_dev_name);
+@@ -652,6 +658,8 @@ static int _unmarshal_status(struct dm_task *dmt, struct dm_ioctl *dmi)
+ 	uint32_t i;
+ 	struct dm_target_spec *spec;
+ 
++	_dm_task_free_targets(dmt);
++
+ 	for (i = 0; i < dmi->target_count; i++) {
+ 		spec = (struct dm_target_spec *) outptr;
+ 		if (!dm_task_add_target(dmt, spec->sector_start,
 
 
