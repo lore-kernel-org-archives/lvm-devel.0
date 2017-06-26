@@ -1,78 +1,75 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 26 Jun 2017 14:08:26 -0400
-Subject: master - libdm: fix initialization of head for reused structure
-Message-ID: <201706261808.v5QI8QmB008701@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 26 Jun 2017 14:08:31 -0400
+Subject: master - cmdline: fix missing NULL at end of array of args
+Message-ID: <201706261808.v5QI8VpX008712@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4e4067dd94f52f90f0aaae30c522102ccbaa2826
-Commit:        4e4067dd94f52f90f0aaae30c522102ccbaa2826
-Parent:        0cc49bda15c041dc6e53b17a10b9306abd7d1a93
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=52f4042f1a3b21054041298d7e50ded7ae366f44
+Commit:        52f4042f1a3b21054041298d7e50ded7ae366f44
+Parent:        4e4067dd94f52f90f0aaae30c522102ccbaa2826
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 26 18:22:40 2017 +0200
+AuthorDate:    Mon Jun 26 20:03:05 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jun 26 19:45:11 2017 +0200
+CommitterDate: Mon Jun 26 20:07:21 2017 +0200
 
-libdm: fix initialization of head for reused structure
+cmdline: fix missing NULL at end of array of args
 
-Dmeventd reuses  'dm_task' struct for some STATUS operation, but due to
-missing reinitization of dm_task target list, it has caused misprocesing
-of recieved events as the parsed target has been simply added to the
-list of existing status and cause multiple actions being called for
-single event.
+lvm_run needs to place NULL as the last element into argv[].
+Otherwise we get:
+
+Conditional jump or move depends on uninitialised value(s)
+ _command_required_pos_matches (lvmcmdline.c:1443)
+ _find_command (lvmcmdline.c:1610)
+ lvm_run_command (lvmcmdline.c:2770)
+ lvm2_run (lvmcmdlib.c:91)
 ---
- WHATS_NEW_DM              |    1 +
- libdm/ioctl/libdm-iface.c |   10 +++++++++-
- 2 files changed, 10 insertions(+), 1 deletions(-)
+ WHATS_NEW          |    1 +
+ test/api/test.c    |    3 +++
+ tools/lvmcmdline.c |    3 +++
+ 3 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 89f4a00..2e31b9a 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 6a60f0b..2872dbb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.141 - 
+ Version 2.02.172 - 
  ===============================
-+  Fix reusing of dm_task structure for status reading (used by dmeventd).
-   Add dm_percent_to_round_float for adjusted percentage rounding.
-   Reset array with dead rimage devices once raid gets in sync.
-   Drop unneeded --config option from raid dmeventd plugin.
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index cb3e8dc..65e75f6 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -467,7 +467,7 @@ static void _dm_zfree_dmi(struct dm_ioctl *dmi)
++  Add missing NULL to argv array when spliting cmdline arguments.
+   Add display_percent helper function for printing percent values.
+   Lvconvert --repair handles failing raid legs (present but marked 'D'ead).
+   Do not lvdisplay --maps unset settings of cache pool.
+diff --git a/test/api/test.c b/test/api/test.c
+index 1413030..a79afc1 100644
+--- a/test/api/test.c
++++ b/test/api/test.c
+@@ -51,6 +51,9 @@ static int lvm_split(char *str, int *argc, char **argv, int max)
+ 			break;
  	}
+ 
++	if (*argc < max)
++		argv[*argc] = NULL;
++
+ 	return *argc;
  }
  
--void dm_task_destroy(struct dm_task *dmt)
-+static void _dm_task_free_targets(struct dm_task *dmt)
- {
- 	struct target *t, *n;
- 
-@@ -478,6 +478,12 @@ void dm_task_destroy(struct dm_task *dmt)
- 		dm_free(t);
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 9e77d48..0aca37a 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -3045,6 +3045,9 @@ int lvm_split(char *str, int *argc, char **argv, int max)
+ 			break;
  	}
  
-+	dmt->head = dmt->tail = NULL;
-+}
++	if (*argc < max)
++		argv[*argc] = NULL;
 +
-+void dm_task_destroy(struct dm_task *dmt)
-+{
-+	_dm_task_free_targets(dmt);
- 	_dm_zfree_dmi(dmt->dmi.v4);
- 	dm_free(dmt->dev_name);
- 	dm_free(dmt->mangled_dev_name);
-@@ -652,6 +658,8 @@ static int _unmarshal_status(struct dm_task *dmt, struct dm_ioctl *dmi)
- 	uint32_t i;
- 	struct dm_target_spec *spec;
+ 	return *argc;
+ }
  
-+	_dm_task_free_targets(dmt);
-+
- 	for (i = 0; i < dmi->target_count; i++) {
- 		spec = (struct dm_target_spec *) outptr;
- 		if (!dm_task_add_target(dmt, spec->sector_start,
 
 
