@@ -1,51 +1,42 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 27 Jun 2017 06:20:28 -0400
-Subject: master - coverity: model few more functions
-Message-ID: <201706271020.v5RAKSnW003946@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Tue, 27 Jun 2017 07:46:50 -0400
+Subject: master - log: fix message prefix truncation
+Message-ID: <201706271146.v5RBkoGS015233@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3fe67217d46d2bb496b5c09b0314c7260ed6c24f
-Commit:        3fe67217d46d2bb496b5c09b0314c7260ed6c24f
-Parent:        5ff6260071ef2465ba33ce6dd9b7c7b3168f4c88
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 27 09:23:22 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jun 27 12:17:16 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7f1ec681d65001ed3c74a7c7239efa98a8507d88
+Commit:        7f1ec681d65001ed3c74a7c7239efa98a8507d88
+Parent:        3fe67217d46d2bb496b5c09b0314c7260ed6c24f
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Jun 27 12:41:59 2017 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Jun 27 12:41:59 2017 +0100
 
-coverity: model few more functions
+log: fix message prefix truncation
 
-Reduce amount of FP.
+Restore the 29-character prefix limit that commit
+e907535ab977ea29319aeb015cec6c06729f7ce4 ("coverity: use better
+function") accidentally reduced to 28 characters.
 ---
- coverity/coverity_model.c |   13 +++++++++++++
- 1 files changed, 13 insertions(+), 0 deletions(-)
+ lib/log/log.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/coverity/coverity_model.c b/coverity/coverity_model.c
-index 250aadf..24a6afe 100644
---- a/coverity/coverity_model.c
-+++ b/coverity/coverity_model.c
-@@ -41,6 +41,19 @@ struct lv_segment *last_seg(const struct logical_volume *lv)
- 	return ((struct lv_segment **)lv)[0];
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 8f52623..8ca60e4 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -376,7 +376,7 @@ void fin_syslog(void)
+ void init_msg_prefix(const char *prefix)
+ {
+ 	if (prefix)
+-		dm_strncpy(_msg_prefix, prefix, sizeof(_msg_prefix) - 1);
++		dm_strncpy(_msg_prefix, prefix, sizeof(_msg_prefix));
  }
  
-+const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile *profile)
-+{
-+	return "STRING";
-+}
-+
-+struct logical_volume *origin_from_cow(const struct logical_volume *lv)
-+{
-+	if (lv)
-+		return lv;
-+
-+	__coverity_panic__();
-+}
-+
- /* simple_memccpy() from glibc */
- void *memccpy(void *dest, const void *src, int c, size_t n)
- {
+ void init_indent(int indent)
 
 
