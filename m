@@ -1,52 +1,59 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 21 Jun 2017 08:04:17 -0400
-Subject: master - raid: update path for repair
-Message-ID: <201706211204.v5LC4HCI005856@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 29 Jun 2017 16:27:21 -0400
+Subject: master - vgimportclone.sh: use well defined tests
+Message-ID: <201706292027.v5TKRLBm026619@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=48f06005ab53420241e0c1da3a56a8f5c1a28974
-Commit:        48f06005ab53420241e0c1da3a56a8f5c1a28974
-Parent:        5f4cfa7c4a6da707354f8c1c059531dac5287192
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ef4506069a1a29cd00532e36c24df9a01cd32600
+Commit:        ef4506069a1a29cd00532e36c24df9a01cd32600
+Parent:        8dc29d7cc7e86295116a4fb401315896b6793fa8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 21 13:57:22 2017 +0200
+AuthorDate:    Wed Jun 28 20:35:34 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 21 14:00:50 2017 +0200
+CommitterDate: Thu Jun 29 22:23:16 2017 +0200
 
-raid: update path for repair
+vgimportclone.sh: use well defined tests
 
-Updating path from commit 61980bcf0624790bfdc07d371fd510d1c4079fb5.
-
-When repair is running, no removing PVS are given so it shall return
-success in such case.
+Prefer [ p ] && [ q ] as [ p -a q ] is not well defined.
+Prefer [ p ] || [ q ] as [ p -o q ] is not well defined.
 ---
- lib/metadata/raid_manip.c |   11 ++++++++---
- 1 files changed, 8 insertions(+), 3 deletions(-)
+ scripts/vgimportclone.sh |    8 +++-----
+ 1 files changed, 3 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 34545b4..9e4f3a3 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -6661,9 +6661,14 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
- 	}
+diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
+index ac52f01..7d3118f 100755
+--- a/scripts/vgimportclone.sh
++++ b/scripts/vgimportclone.sh
+@@ -95,8 +95,7 @@ function cleanup {
+ SCRIPTNAME=$("$BASENAME" "$0")
  
- 	if (!match_count) {
--		log_error("Logical volume %s does not contain devices specified to %s.",
--			  display_lvname(lv), action_str);
--		return 0;
-+		if (remove_pvs && !dm_list_empty(remove_pvs)) {
-+			log_error("Logical volume %s does not contain devices specified to %s.",
-+				  display_lvname(lv), action_str);
-+			return 0;
-+		}
-+		log_print_unless_silent("%s does not contain devices specified to %s.",
-+					display_lvname(lv), action_str);
-+		return 1;
- 	} else if (match_count == raid_seg->area_count) {
- 		log_error("Unable to %s all PVs from %s at once.",
- 			  action_str, display_lvname(lv));
+ 
+-if [ "$UID" != "0" -a "$EUID" != "0" ]
+-then
++if [ "$UID" != 0 ] && [ "$EUID" != 0 ]; then
+     die 3 "${SCRIPTNAME} must be run as root."
+ fi
+ 
+@@ -183,14 +182,13 @@ do
+ done
+ 
+ # turn on DEBUG (special case associated with -v use)
+-if [ -z "$DEBUG" -a $VERBOSE_COUNT -gt 3 ]; then
++if [ -z "$DEBUG" ] && [ "$VERBOSE_COUNT" -gt 3 ]; then
+     DEBUG="-d"
+     set -x
+ fi
+ 
+ # setup LVM_OPTS
+-if [ -n "${DEBUG}" -o -n "${VERBOSE}" ]
+-then
++if [ -n "$DEBUG" ] || [ -n "$VERBOSE" ]; then
+     LVM_OPTS="${LVM_OPTS} ${DEBUG} ${VERBOSE}"
+ fi
+ 
 
 
