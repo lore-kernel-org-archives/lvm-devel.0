@@ -1,112 +1,118 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 21 Jun 2017 08:04:20 -0400
-Subject: master - lvresize: support passing --yes to fsadm
-Message-ID: <201706211204.v5LC4K30005870@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 29 Jun 2017 16:27:52 -0400
+Subject: master - tests: aux.sh drop unnecessary $
+Message-ID: <201706292027.v5TKRqnN026699@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e3f63693a4ea76975fb01f8456f1f263b029b07f
-Commit:        e3f63693a4ea76975fb01f8456f1f263b029b07f
-Parent:        48f06005ab53420241e0c1da3a56a8f5c1a28974
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=44e530b919d72005e10970c13699c7fbfd736ce9
+Commit:        44e530b919d72005e10970c13699c7fbfd736ce9
+Parent:        474e3cd66d7be358f54674f1ea449adf47ab1a61
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 21 14:02:57 2017 +0200
+AuthorDate:    Thu Jun 29 00:17:59 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 21 14:03:29 2017 +0200
+CommitterDate: Thu Jun 29 22:23:16 2017 +0200
 
-lvresize: support passing --yes to fsadm
+tests: aux.sh drop unnecessary $
 
-Since fsadm now needs --yes to pass prompting operations,
-we need to pass --yes from  lvresize to fsadm.
+$/${} is unnecessary on arithmetic variables.
 ---
- lib/metadata/lv_manip.c          |   12 ++++++++----
- lib/metadata/metadata-exported.h |    1 +
- tools/lvresize.c                 |    1 +
- 3 files changed, 10 insertions(+), 4 deletions(-)
+ test/lib/aux.sh |   30 +++++++++++++++---------------
+ 1 files changed, 15 insertions(+), 15 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 9e98ee3..c431868 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4578,6 +4578,7 @@ enum fsadm_cmd_e { FSADM_CMD_CHECK, FSADM_CMD_RESIZE };
- static int _fsadm_cmd(enum fsadm_cmd_e fcmd,
- 		      struct logical_volume *lv,
- 		      uint32_t extents,
-+		      int yes,
- 		      int force,
- 		      int *status)
- {
-@@ -4585,7 +4586,7 @@ static int _fsadm_cmd(enum fsadm_cmd_e fcmd,
- 	struct cmd_context *cmd = vg->cmd;
- 	char lv_path[PATH_MAX];
- 	char size_buf[SIZE_BUF];
--	const char *argv[FSADM_CMD_MAX_ARGS + 2];
-+	const char *argv[FSADM_CMD_MAX_ARGS + 4];
- 	unsigned i = 0;
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 863f3da..816de9a 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -481,7 +481,7 @@ kill_sleep_kill_() {
+ 		wait=0
+ 		while ps "$pid" > /dev/null && test "$wait" -le 10; do
+ 			sleep .5
+-			wait=$(($wait + 1))
++			wait=$(( wait + 1 ))
+ 		done
+ 	fi
+ }
+@@ -513,7 +513,7 @@ kill_tagged_processes() {
+ 	for pid in $pids ; do
+ 		while ps "$pid" > /dev/null && test "$wait" -le 10; do
+ 			sleep .2
+-			wait=$(($wait + 1))
++			wait=$(( wait + 1 ))
+ 		done
+ 		test "$wait" -le 10 || kill -KILL "$pid" 2>/dev/null || true
+ 	done
+@@ -619,7 +619,7 @@ prepare_loop() {
  
- 	argv[i++] = find_config_tree_str(cmd, global_fsadm_executable_CFG, NULL);
-@@ -4596,6 +4597,9 @@ static int _fsadm_cmd(enum fsadm_cmd_e fcmd,
- 	if (verbose_level() >= _LOG_NOTICE)
- 		argv[i++] = "--verbose";
+ 	local LOOPFILE="$PWD/test.img"
+ 	rm -f "$LOOPFILE"
+-	dd if=/dev/zero of="$LOOPFILE" bs=$((1024*1024)) count=0 seek=$(($size + 1)) 2> /dev/null
++	dd if=/dev/zero of="$LOOPFILE" bs=$((1024*1024)) count=0 seek=$(( size + 1 )) 2> /dev/null
+ 	if LOOP=$(losetup ${losetup_params} -s -f "$LOOPFILE" 2>/dev/null); then
+ 		:
+ 	elif LOOP=$(losetup -f) && losetup ${losetup_params} "$LOOP" "$LOOPFILE"; then
+@@ -792,12 +792,12 @@ prepare_devs() {
+ 	fi
  
-+	if (yes)
-+		argv[i++] = "--yes";
-+
- 	if (force)
- 		argv[i++] = "--force";
+ 	touch DEVICES
+-	prepare_backing_dev $(($n*$devsize))
++	prepare_backing_dev $(( n * devsize ))
+ 	# shift start of PV devices on /dev/loopXX by 1M
+ 	not diff LOOP BACKING_DEV >/dev/null 2>&1 || shift=2048
+ 	echo -n "## preparing $n devices..."
  
-@@ -5498,7 +5502,7 @@ int lv_resize(struct logical_volume *lv,
+-	local size=$(($devsize*2048)) # sectors
++	local size=$(( devsize * 2048 )) # sectors
+ 	local count=0
+ 	rm -f CREATE_FAILED
+ 	init_udev_transaction
+@@ -805,8 +805,8 @@ prepare_devs() {
+ 		local name="${PREFIX}$pvname$i"
+ 		local dev="$DM_DEV_DIR/mapper/$name"
+ 		DEVICES[$count]=$dev
+-		count=$(( $count + 1 ))
+-		echo 0 $size linear "$BACKING_DEV" $((($i-1)*$size + $shift)) > "$name.table"
++		count=$((  count + 1 ))
++		echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + shift )) > "$name.table"
+ 		dmsetup create -u "TEST-$name" "$name" "$name.table" || touch CREATE_FAILED &
+ 		test -f CREATE_FAILED && break;
+ 	done
+@@ -881,25 +881,25 @@ common_dev_() {
+ 	for fromlen in "${offsets[@]}"; do
+ 		from=${fromlen%%:*}
+ 		len=${fromlen##*:}
+-		test -n "$len" || len=$(($size - $from))
+-		diff=$(($from - $pos))
++		test -n "$len" || len=$(( size - from ))
++		diff=$(( from - pos ))
+ 		if test $diff -gt 0 ; then
+-			echo "$pos $diff $type $pvdev $(($pos + $offset))"
+-			pos=$(($pos + $diff))
++			echo "$pos $diff $type $pvdev $(( pos + offset ))"
++			pos=$(( pos + diff ))
+ 		elif test $diff -lt 0 ; then
+ 			die "Position error"
+ 		fi
  
- 	if (lp->resizefs) {
- 		if (!lp->nofsck &&
--		    !_fsadm_cmd(FSADM_CMD_CHECK, lv, 0, lp->force, &status)) {
-+		    !_fsadm_cmd(FSADM_CMD_CHECK, lv, 0, lp->yes, lp->force, &status)) {
- 			if (status != FSADM_CHECK_FAILS_FOR_MOUNTED) {
- 				log_error("Filesystem check failed.");
- 				return 0;
-@@ -5508,7 +5512,7 @@ int lv_resize(struct logical_volume *lv,
+ 		case "$tgtype" in
+ 		delay)
+-			echo "$from $len delay $pvdev $(($pos + $offset)) $read_ms $pvdev $(($pos + $offset)) $write_ms" ;;
++			echo "$from $len delay $pvdev $(( pos + offset )) $read_ms $pvdev $(( pos + offset )) $write_ms" ;;
+ 		error|zero)
+ 			echo "$from $len $tgtype" ;;
+ 		esac
+-		pos=$(($pos + $len))
++		pos=$(( pos + len ))
+ 	done > "$name.devtable"
+-	diff=$(($size - $pos))
+-	test "$diff" -gt 0 && echo "$pos $diff $type $pvdev $(($pos + $offset))" >>"$name.devtable"
++	diff=$(( size - pos ))
++	test "$diff" -gt 0 && echo "$pos $diff $type $pvdev $(( pos + offset ))" >>"$name.devtable"
  
- 		/* FIXME forks here */
- 		if ((lp->resize == LV_REDUCE) &&
--		    !_fsadm_cmd(FSADM_CMD_RESIZE, lv, lp->extents, lp->force, NULL)) {
-+		    !_fsadm_cmd(FSADM_CMD_RESIZE, lv, lp->extents, lp->yes, lp->force, NULL)) {
- 			log_error("Filesystem resize failed.");
- 			return 0;
- 		}
-@@ -5589,7 +5593,7 @@ out:
- 				display_lvname(lv));
- 
- 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
--	    !_fsadm_cmd(FSADM_CMD_RESIZE, lv, lp->extents, lp->force, NULL))
-+	    !_fsadm_cmd(FSADM_CMD_RESIZE, lv, lp->extents, lp->yes, lp->force, NULL))
- 		return_0;
- 
- 	ret = 1;
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index c4bebd0..6c3d8d7 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -649,6 +649,7 @@ struct lvresize_params {
- 	int use_policies;
- 
- 	alloc_policy_t alloc;
-+	int yes;
- 	int force;
- 	int nosync;
- 	int nofsck;
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 1d59239..9b061ac 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -147,6 +147,7 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
- 	lp->argv = ++argv;
- 
- 	lp->alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, 0);
-+	lp->yes = arg_is_set(cmd, yes_ARG);
- 	lp->force = arg_is_set(cmd, force_ARG);
- 	lp->nofsck = arg_is_set(cmd, nofsck_ARG);
- 	lp->nosync = arg_is_set(cmd, nosync_ARG);
+ 	init_udev_transaction
+ 	dmsetup load "$name" "$name.devtable"
 
 
