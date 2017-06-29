@@ -1,89 +1,101 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 22 Jun 2017 14:18:10 -0400
-Subject: master - cache: make syncing abortable by user
-Message-ID: <201706221818.v5MIIAu9006586@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 29 Jun 2017 16:29:36 -0400
+Subject: master - tests: get.sh declare and assign separately
+Message-ID: <201706292029.v5TKTajc026988@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ca9e6cec619e242fe6283fc5acbf773f763c1f5a
-Commit:        ca9e6cec619e242fe6283fc5acbf773f763c1f5a
-Parent:        2df9a786845af2ce34cb3942dc2b16342e359a2c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3d90c7fffc3c7e5fa0a02d829909c204fa0d6bfb
+Commit:        3d90c7fffc3c7e5fa0a02d829909c204fa0d6bfb
+Parent:        834b82b0cd8dfb4867b7eb65e9608e96cf2ba08e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 22 17:08:47 2017 +0200
+AuthorDate:    Thu Jun 29 10:26:28 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 22 20:11:43 2017 +0200
+CommitterDate: Thu Jun 29 22:23:17 2017 +0200
 
-cache: make syncing abortable by user
+tests: get.sh declare and assign separately
 
-When user runs command like 'lvconvert --splitcache' the operation
-might be actually either slow or not making any progress in kernel,
-so lets give user a chance to abort such operation.
+Declare and assign separately to avoid masking return values.
 
-When user press 'Ctrl+C' device table is restored to pre-flushing state.
+Also comment-out currently unused  orig variable.
 ---
- WHATS_NEW                  |    1 +
- lib/metadata/cache_manip.c |   18 ++++++++++++++++++
- 2 files changed, 19 insertions(+), 0 deletions(-)
+ test/lib/get.sh |   27 ++++++++++++++++++---------
+ 1 files changed, 18 insertions(+), 9 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e60380a..25571cc 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.172 - 
- ===============================
-+  Support aborting of flushing cache LV.
-   Reenable conversion of data and metadata thin-pool volumes to raid.
-   Improve raid status reporting with lvs.
-   No longer necessary to '--force' a repair for RAID1
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index e7da899..cc3482b 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -22,6 +22,7 @@
- #include "activate.h"
- #include "defaults.h"
- #include "lv_alloc.h"
-+#include "lvm-signal.h"
+diff --git a/test/lib/get.sh b/test/lib/get.sh
+index 0608bc9..88144c1 100644
+--- a/test/lib/get.sh
++++ b/test/lib/get.sh
+@@ -28,32 +28,38 @@ trim_() {
+ }
  
- /* https://github.com/jthornber/thin-provisioning-tools/blob/master/caching/cache_metadata_size.cc */
- #define DM_TRANSACTION_OVERHEAD		4096  /* KiB */
-@@ -431,6 +432,20 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
+ pv_field() {
+-	local r=$(pvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
++	local r
++	r=$(pvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
+ 	trim_ "$r"
+ }
  
- 	//FIXME: use polling to do this...
- 	for (;;) {
-+		sigint_allow();
-+		sigint_restore();
-+		if (sigint_caught()) {
-+			sigint_clear();
-+			log_error("Flushing of %s aborted.", display_lvname(cache_lv));
-+			if (cache_seg->cleaner_policy) {
-+				cache_seg->cleaner_policy = 0;
-+				/* Restore normal table */
-+				if (!lv_update_and_reload(cache_lv))
-+					stack;
-+			}
-+			return 0;
-+		}
-+
- 		if (!lv_cache_status(cache_lv, &status))
- 			return_0;
+ vg_field() {
+-	local r=$(vgs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
++	local r
++	r=$(vgs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
+ 	trim_ "$r"
+ }
  
-@@ -452,9 +467,12 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
+ lv_field() {
+-	local r=$(lvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
++	local r
++	r=$(lvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
+ 	trim_ "$r"
+ }
  
- 		log_print_unless_silent("Flushing " FMTu64 " blocks for cache %s.",
- 					dirty_blocks, display_lvname(cache_lv));
-+
- 		if (cleaner_policy) {
- 			/* TODO: Use centralized place */
-+			sigint_allow();
- 			usleep(500000);
-+			sigint_restore();
- 			continue;
- 		}
+ lv_first_seg_field() {
+-	local r=$(lvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1" | head -1)
++	local r
++	r=$(lvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1" | head -1)
+ 	trim_ "$r"
+ }
  
+ lvh_field() {
+-	local r=$(lvs -H --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
++	local r
++	r=$(lvs -H --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
+ 	trim_ "$r"
+ }
+ 
+ lva_field() {
+-	local r=$(lvs -a --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
++	local r
++	r=$(lvs -a --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
+ 	trim_ "$r"
+ }
+ 
+@@ -67,8 +73,10 @@ lv_field_lv_() {
+ 
+ lv_tree_devices_() {
+ 	local lv="$1/$2"
+-	local type=$(lv_field "$lv" segtype -a --unbuffered | head -n 1)
+-	local orig=$(lv_field_lv_ "$lv" origin)
++	local type
++	type=$(lv_field "$lv" segtype -a --unbuffered | head -n 1)
++	#local orig
++	#orig=$(lv_field_lv_ "$lv" origin)
+ 	# FIXME: should we count in also origins ?
+ 	#test -z "$orig" || lv_tree_devices_ $1 $orig
+ 	case "$type" in
+@@ -76,7 +84,8 @@ lv_tree_devices_() {
+ 		lv_devices "$lv"
+ 		;;
+ 	mirror|raid*)
+-		local log=$(lv_field_lv_ "$lv" mirror_log)
++		local log
++		log=$(lv_field_lv_ "$lv" mirror_log)
+ 		test -z "$log" || lv_tree_devices_ "$1" "$log"
+ 		for i in $(lv_devices "$lv")
+ 			do lv_tree_devices_ "$1" "$i"; done
 
 
