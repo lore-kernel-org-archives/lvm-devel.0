@@ -1,40 +1,55 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 21 Jun 2017 18:57:42 -0400
-Subject: master - mirror: reformat conditional
-Message-ID: <201706212257.v5LMvgcZ015593@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 29 Jun 2017 16:28:56 -0400
+Subject: master - tests: inittest.sh double quote and mixing string
+Message-ID: <201706292028.v5TKSuSv026883@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2df9a786845af2ce34cb3942dc2b16342e359a2c
-Commit:        2df9a786845af2ce34cb3942dc2b16342e359a2c
-Parent:        64fac77e8a551f4dfe8f4cfaaf1ca984c9b5146c
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Jun 22 00:57:16 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Jun 22 00:57:16 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=32be18959d7899822d80c715fd271410f05462f1
+Commit:        32be18959d7899822d80c715fd271410f05462f1
+Parent:        b45ca523ecbba006d2982ae085140c69edbe084e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jun 29 10:38:06 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jun 29 22:23:17 2017 +0200
 
-mirror: reformat conditional
+tests: inittest.sh  double quote and mixing string
 
 ---
- lib/metadata/mirror.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ test/lib/inittest.sh |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 9dee0ab..52e1488 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -1459,7 +1459,8 @@ int remove_mirrors_from_segments(struct logical_volume *lv,
- 			log_error("Segment is not mirrored: %s:%" PRIu32,
- 				  lv->name, seg->le);
- 			return 0;
--		} if ((seg->status & status_mask) != status_mask) {
-+		}
-+		if ((seg->status & status_mask) != status_mask) {
- 			log_error("Segment status does not match: %s:%" PRIu32
- 				  " status:0x%" PRIx64 "/0x%" PRIx64, lv->name, seg->le,
- 				  seg->status, status_mask);
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index b75eddc..f959b71 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+-# Copyright (C) 2011-2015 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011-2017 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -10,7 +10,7 @@
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ 
+ initskip() {
+-	test "$#" -eq 0 || echo "TEST SKIPPED: $@"
++	test "$#" -eq 0 || echo "TEST SKIPPED: " "$@"
+ 	exit 200
+ }
+ 
+@@ -26,7 +26,7 @@ PS4='#${BASH_SOURCE[0]##*/}:${LINENO}+ '
+ export TESTNAME PS4
+ 
+ if test -n "$LVM_TEST_FLAVOUR"; then
+-	. lib/flavour-$LVM_TEST_FLAVOUR
++	. "lib/flavour-$LVM_TEST_FLAVOUR"
+ fi
+ 
+ test -n "$SKIP_WITHOUT_CLVMD" && test "$LVM_TEST_LOCKING" -ne 3 && initskip
 
 
