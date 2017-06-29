@@ -1,38 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 21 Jun 2017 08:04:22 -0400
-Subject: master - tests: lvresize needs --yes
-Message-ID: <201706211204.v5LC4MUY005884@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 29 Jun 2017 16:28:13 -0400
+Subject: master - tests: aux.sh add -r to read
+Message-ID: <201706292028.v5TKSDjN026748@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93fbfa2ed397d7b87d4088e19303748c242f24d1
-Commit:        93fbfa2ed397d7b87d4088e19303748c242f24d1
-Parent:        e3f63693a4ea76975fb01f8456f1f263b029b07f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=96fcf82dddd7bcc7b5c09de09d49d70a04ae8b12
+Commit:        96fcf82dddd7bcc7b5c09de09d49d70a04ae8b12
+Parent:        ec02307e952ef29d4a28fe134c807ac79a61908a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 21 13:58:55 2017 +0200
+AuthorDate:    Thu Jun 29 20:50:06 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 21 14:03:29 2017 +0200
+CommitterDate: Thu Jun 29 22:23:17 2017 +0200
 
-tests: lvresize needs --yes
+tests: aux.sh add -r to read
 
 ---
- test/shell/fsadm.sh |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
-index ac43900..6eff24a 100644
---- a/test/shell/fsadm.sh
-+++ b/test/shell/fsadm.sh
-@@ -131,6 +131,7 @@ if check_missing ext3; then
- 	not fsadm -y --lvresize resize $vg_lv 4M
- 	echo n | not lvresize -L4M -r -n $vg_lv
- 	lvresize -L+20M -r -n $vg_lv
-+	lvresize -L-10M -r -y $vg_lv
- 	umount "$mount_dir"
- 	umount "$mount_space_dir"
- 	fscheck_ext3
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 5e7340e..f39d400 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -877,7 +877,7 @@ common_dev_() {
+ 	local pvdev
+ 	local offset
+ 
+-	read pos size type pvdev offset < "$name.table"
++	read -r pos size type pvdev offset < "$name.table"
+ 
+ 	for fromlen in "${offsets[@]}"; do
+ 		from=${fromlen%%:*}
 
 
