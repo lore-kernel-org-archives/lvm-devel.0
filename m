@@ -1,62 +1,72 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 30 Jun 2017 06:14:04 -0400
-Subject: master - tests: aux do not specify bitmap for raid0
-Message-ID: <201706301014.v5UAE4Yp020380@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 30 Jun 2017 06:14:08 -0400
+Subject: master - tests: aux prepares lvmdbusd
+Message-ID: <201706301014.v5UAE8XO020392@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=674a93ffe3db8a21534c9b10d6fcb407258e191a
-Commit:        674a93ffe3db8a21534c9b10d6fcb407258e191a
-Parent:        596cf2c6fabefb67c4d42d8aad055272b7c452b6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9348ad4f164a2d8806b08f28a937aaa1041b4f6b
+Commit:        9348ad4f164a2d8806b08f28a937aaa1041b4f6b
+Parent:        674a93ffe3db8a21534c9b10d6fcb407258e191a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 30 11:45:07 2017 +0200
+AuthorDate:    Fri Jun 30 12:07:30 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 30 12:09:10 2017 +0200
+CommitterDate: Fri Jun 30 12:12:16 2017 +0200
 
-tests: aux do not specify bitmap for raid0
+tests: aux prepares lvmdbusd
 
+Correctly skip the test when lvmdbusd is found already running.
+For pgrep usage we need to add '-f -l' options to get python3 name
+printed.
+Remove no longer used 'pids' local var.
 ---
- test/lib/aux.sh |   11 +++++++----
- 1 files changed, 7 insertions(+), 4 deletions(-)
+ test/lib/aux.sh |   10 ++++------
+ 1 files changed, 4 insertions(+), 6 deletions(-)
 
 diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 4e2b246..99e8a6d 100644
+index 99e8a6d..ed969e2 100644
 --- a/test/lib/aux.sh
 +++ b/test/lib/aux.sh
-@@ -697,7 +697,8 @@ prepare_md_dev() {
- 	local level=$1
- 	local rchunk=$2
- 	local rdevs=$3
--
-+	local with_bitmap="--bitmap=internal"
-+	local coption="--chunk"
- 	local maj
- 	local mddev
- 	maj=$(mdadm --version 2>&1) || skip "mdadm tool is missing!"
-@@ -706,8 +707,10 @@ prepare_md_dev() {
+@@ -309,9 +309,8 @@ prepare_lvmdbusd() {
  
- 	rm -f debug.log strace.log MD_DEV MD_DEV_PV MD_DEVICES
+         # FIXME: This is not correct! Daemon is auto started.
+ 	echo "checking lvmdbusd is NOT running..."
+-	if pgrep lvmdbusd | grep python3; then
+-		echo "Cannot run while existing lvmdbusd process exists"
+-		return 1
++	if pgrep -f -l lvmdbusd | grep python3 ; then
++		skip "Cannot run while existing lvmdbusd process exists"
+ 	fi
+ 	echo ok
  
--	coption="--chunk"
--	test "$level" = "1" && coption="--bitmap-chunk"
-+	case "$level" in
-+	"1")  coption="--bitmap-chunk" ;;
-+	"0")  unset with_bitmap ;;
-+	esac
- 	# Have MD use a non-standard name to avoid colliding with an existing MD device
- 	# - mdadm >= 3.0 requires that non-standard device names be in /dev/md/
- 	# - newer mdadm _completely_ defers to udev to create the associated device node
-@@ -717,7 +720,7 @@ prepare_md_dev() {
- 		mddev=/dev/md/md_lvm_test0 || \
- 		mddev=/dev/md_lvm_test0
+@@ -320,7 +319,7 @@ prepare_lvmdbusd() {
+ 		# NOTE: this is always present - additional checks are needed:
+ 		daemon="$abs_top_builddir/daemons/lvmdbusd/lvmdbusd"
+ 		# Setup the python path so we can run
+-		export PYTHONPATH=$abs_top_builddir/daemons
++		export PYTHONPATH="$abs_top_builddir/daemons"
+ 	else
+ 		daemon=$(which lvmdbusd || :)
+ 	fi
+@@ -343,7 +342,7 @@ prepare_lvmdbusd() {
  
--	mdadm --create --metadata=1.0 "$mddev" --auto=md --level "$level" --bitmap=internal "$coption"="$rchunk" --raid-devices="$rdevs" "${@:4}" || {
-+	mdadm --create --metadata=1.0 "$mddev" --auto=md --level "$level" $with_bitmap "$coption"="$rchunk" --raid-devices="$rdevs" "${@:4}" || {
- 		# Some older 'mdadm' version managed to open and close devices internaly
- 		# and reporting non-exclusive access on such device
- 		# let's just skip the test if this happens.
+ 	sleep 1
+ 	echo "checking lvmdbusd IS running..."
+-	if ! pgrep lvmdbusd | grep python3; then
++	if ! pgrep -f -l lvmdbusd | grep python3; then
+ 		echo "Failed to start lvmdbusd daemon"
+ 		return 1
+ 	fi
+@@ -496,7 +495,6 @@ count_processes_with_tag() {
+ 
+ kill_tagged_processes() {
+ 	local pid
+-	local pids
+ 	local wait
+ 
+ 	# read uses all vars within pipe subshell
 
 
