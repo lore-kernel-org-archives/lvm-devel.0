@@ -1,45 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 30 Jun 2017 11:10:32 -0400
-Subject: master - tests: aux.sh use subshell for simple redirection
-Message-ID: <201706301510.v5UFAW4C017073@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 30 Jun 2017 15:13:50 -0400
+Subject: master - raid: ensure enum is defined
+Message-ID: <201706301913.v5UJDoFJ030818@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c31614eccc41746734e712143d0f86c96f95dd4c
-Commit:        c31614eccc41746734e712143d0f86c96f95dd4c
-Parent:        57779e39eccf456344fa4a51ddfc49cee41a40d7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ad286a32275283f018adabbf96d569d5c1fd065a
+Commit:        ad286a32275283f018adabbf96d569d5c1fd065a
+Parent:        c31614eccc41746734e712143d0f86c96f95dd4c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 30 14:35:42 2017 +0200
+AuthorDate:    Fri Jun 30 19:34:52 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 30 17:08:47 2017 +0200
+CommitterDate: Fri Jun 30 20:39:02 2017 +0200
 
-tests: aux.sh use subshell for simple redirection
+raid: ensure enum is defined
 
+Just making sure enum is always defined.
+
+TODO: code path using this enum needs closer inspection.
 ---
- test/lib/utils.sh |    8 +++++---
- 1 files changed, 5 insertions(+), 3 deletions(-)
+ lib/metadata/raid_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 2b5b782..f4c52ad 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -131,9 +131,11 @@ STACKTRACE() {
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 110a7d3..df7e062 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -2232,7 +2232,7 @@ static int _raid_reshape(struct logical_volume *lv,
+ 	int force_repair = 0, r, too_few = 0;
+ 	unsigned devs_health, devs_in_sync;
+ 	uint32_t new_image_count, old_image_count;
+-	enum alloc_where where_it_was;
++	enum alloc_where where_it_was = alloc_none;
+ 	struct lv_segment *seg = first_seg(lv);
+ 	struct dm_list removal_lvs;
  
- 	# Get backtraces from coredumps
- 	if which gdb &>/dev/null; then
--		echo bt full > gdb_commands.txt
--		echo l >> gdb_commands.txt
--		echo quit >> gdb_commands.txt
-+		{
-+			echo bt full
-+			echo l
-+			echo quit
-+		} > gdb_commands.txt
- 		# TODO: use sysctl to get 'core' position in system
- 		for i in core*; do
- 			test -f "$i" || break   # empty globbing
 
 
