@@ -1,44 +1,61 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Jul 2017 15:45:46 -0400
-Subject: master - lvmlockd: fix revert in lvcreate
-Message-ID: <201707071945.v67JjkQe013246@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 7 Jul 2017 16:01:20 -0400
+Subject: master - lvmlockd: miss adopt orphaned resources
+Message-ID: <201707072001.v67K1KTp015469@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3797f47ecf23c41d4476e2cce0f210b48b32923d
-Commit:        3797f47ecf23c41d4476e2cce0f210b48b32923d
-Parent:        a0f6135e5c53af8bb361932ebe8fec55a1804cc9
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jul 7 14:42:25 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bffae6c9855033a22893b28a79d5e7952504b95e
+Commit:        bffae6c9855033a22893b28a79d5e7952504b95e
+Parent:        3797f47ecf23c41d4476e2cce0f210b48b32923d
+Author:        Huan Zhang <zhanghuan@chinac.com>
+AuthorDate:    Fri Jul 7 14:53:16 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jul 7 14:42:25 2017 -0500
+CommitterDate: Fri Jul 7 14:58:14 2017 -0500
 
-lvmlockd: fix revert in lvcreate
+lvmlockd: miss adopt orphaned resources
 
-If the activation step in lvcreate fails (e.g. the specified
-minor number is already used), then the lvcreate is reverted,
-but the LV lock in lvmlockd was not being unlocked or properly
-freed.
+1. dm_uuid is 68 byte length, but buf is 64 which
+   will cause miss match uuid from lv lock manager
+2. no lv lock_type path in dm config, use lock_args instead
+
+Signed-off-by: Zhang Huan <zhanghuan@chinac.com>
 ---
- lib/metadata/lv_manip.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c |   10 +++-------
+ 1 files changed, 3 insertions(+), 7 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index f75cf51..fbe0aed 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7983,7 +7983,8 @@ deactivate_and_revert_new_lv:
- 	}
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 4d96e67..b6f3df9 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -4907,14 +4907,10 @@ static int get_lockd_vgs(struct list_head *vg_lockd)
+ 				continue;
  
- revert_new_lv:
--	lockd_free_lv(vg->cmd, vg, lp->lv_name, &lv->lvid.id[1], lp->lock_args);
-+	lockd_lv(cmd, lv, "un", LDLV_PERSISTENT);
-+	lockd_free_lv(vg->cmd, vg, lp->lv_name, &lv->lvid.id[1], lv->lock_args);
+ 			for (lv_cn = md_cn->child; lv_cn; lv_cn = lv_cn->sib) {
+-				snprintf(find_str_path, PATH_MAX, "%s/lock_type", lv_cn->key);
+-				lock_type = dm_config_find_str(lv_cn, find_str_path, NULL);
+-
+-				if (!lock_type)
+-					continue;
+-
+ 				snprintf(find_str_path, PATH_MAX, "%s/lock_args", lv_cn->key);
+ 				lock_args = dm_config_find_str(lv_cn, find_str_path, NULL);
++				if (!lock_args)
++					continue;
  
- 	/* FIXME Better to revert to backup of metadata? */
- 	if (!lv_remove(lv) || !vg_write(vg) || !vg_commit(vg))
+ 				snprintf(find_str_path, PATH_MAX, "%s/id", lv_cn->key);
+ 				lv_uuid = dm_config_find_str(lv_cn, find_str_path, NULL);
+@@ -4960,7 +4956,7 @@ out:
+ 	return rv;
+ }
+ 
+-static char _dm_uuid[64];
++static char _dm_uuid[72];
+ 
+ static char *get_dm_uuid(char *dm_name)
+ {
 
 
