@@ -1,64 +1,45 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Thu, 6 Jul 2017 09:55:15 -0400
-Subject: master - lvmetad: Suppress accept error on clean shutdown
-Message-ID: <201707061355.v66DtFQL021872@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 7 Jul 2017 13:11:13 -0400
+Subject: master - lvmlockd: use lock on thin pool when command names tdata
+Message-ID: <201707071711.v67HBD02021715@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fdd00ecdd1fd51605be1b616d712a2220ced8875
-Commit:        fdd00ecdd1fd51605be1b616d712a2220ced8875
-Parent:        70c340dbc25523de18195a7916f27aa37b051e43
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jul 6 14:53:10 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jul 6 14:53:10 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a0f6135e5c53af8bb361932ebe8fec55a1804cc9
+Commit:        a0f6135e5c53af8bb361932ebe8fec55a1804cc9
+Parent:        fdd00ecdd1fd51605be1b616d712a2220ced8875
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Jul 7 12:06:53 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Jul 7 12:06:53 2017 -0500
 
-lvmetad: Suppress accept error on clean shutdown
+lvmlockd: use lock on thin pool when command names tdata
 
-Also fix error message after pthread_create() error in handle_connect().
+Some lvconvert commands can be used directly on the data sublv:
+lvconvert ... vg/pool_tdata
+
+The correct LV lock to use in lvmlockd is the one on the pool LV.
 ---
- WHATS_NEW                        |    1 +
- libdaemon/server/daemon-server.c |    7 ++++---
- 2 files changed, 5 insertions(+), 3 deletions(-)
+ lib/locking/lvmlockd.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 3e72d83..062a440 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.173 - 
- =================================
-+  Suppress error message from accept() on clean lvmetad shutdown.
-   Tidy clvmd client list processing and fix segfaults.
-   Protect clvmd debug log messages with mutex and add client id.
-   Fix shellcheck reported issues for script files.
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 10cc8f7..6fdf195 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -491,7 +491,8 @@ static int handle_connect(daemon_state s)
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 92a970a..34b3882 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -2077,6 +2077,10 @@ static int _lockd_lv_thin(struct cmd_context *cmd, struct logical_volume *lv,
+ 	} else if (lv_is_thin_pool(lv)) {
+ 		pool_lv = lv;
  
- 	client.socket_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
- 	if (client.socket_fd < 0) {
--		ERROR(&s, "Failed to accept connection errno %d.", errno);
-+		if (errno != EAGAIN || !_shutdown_requested)
-+			ERROR(&s, "Failed to accept connection: %s.", strerror(errno));
- 		return 0;
- 	}
- 
-@@ -512,8 +513,8 @@ static int handle_connect(daemon_state s)
- 	ts->s = s;
- 	ts->client = client;
- 
--	if (pthread_create(&ts->client.thread_id, NULL, _client_thread, ts)) {
--		ERROR(&s, "Failed to create client thread errno %d.", errno);
-+	if ((errno = pthread_create(&ts->client.thread_id, NULL, _client_thread, ts))) {
-+		ERROR(&s, "Failed to create client thread: %s.", strerror(errno));
- 		return 0;
- 	}
- 
++	} else if (lv_is_thin_pool_data(lv)) {
++		/* FIXME: there should be a function to get pool lv from data lv. */
++		pool_lv = lv_parent(lv);
++
+ 	} else {
+ 		/* This should not happen AFAIK. */
+ 		log_error("Lock on incorrect thin lv type %s/%s",
 
 
