@@ -1,44 +1,34 @@
 From: Eric Ren <zren@suse.com>
-Date: Sun,  9 Jul 2017 01:15:51 +0800
-Subject: [PATCH 3/3] man: specify slow device when creating origin LV
-In-Reply-To: <20170708171551.19421-1-zren@suse.com>
-References: <20170708171551.19421-1-zren@suse.com>
-Message-ID: <20170708171551.19421-3-zren@suse.com>
+Date: Sun,  9 Jul 2017 01:15:49 +0800
+Subject: [PATCH 1/3] trivial: fix a comment mistake
+Message-ID: <20170708171551.19421-1-zren@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Also make the slow device name consistent everywhere.
+Comments "the pool was originally inactive, deactivate it",
+should be "...orginally ative".
 
 Signed-off-by: Eric Ren <zren@suse.com>
 ---
- man/lvmcache.7_main | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/man/lvmcache.7_main b/man/lvmcache.7_main
-index 1f29185..6672ad3 100644
---- a/man/lvmcache.7_main
-+++ b/man/lvmcache.7_main
-@@ -41,7 +41,7 @@ Create an LV or identify an existing LV to be the origin LV.
- 
- .I Example
- .br
--# lvcreate -n lvol0 -L 100G vg
-+# lvcreate -n lvol0 -L 100G vg /dev/slow
- 
- 
- .SS 1. create CacheDataLV
-@@ -199,7 +199,7 @@ pool sub-LVs redundant.
- .I Example
- .nf
- 0. Create an origin LV we wish to cache
--# lvcreate -L 10G -n lv1 vg /dev/slow_devs
-+# lvcreate -L 10G -n lv1 vg /dev/slow
- 
- 1. Create a 2-way RAID1 cache data LV
- # lvcreate --type raid1 -m 1 -L 1G -n cache1 vg \\
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index fbe0aed..9a2548f 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7310,7 +7310,7 @@ static int _vg_check_features(struct volume_group *vg,
+  * If lp->thin OR lp->activate is AY*, activate the pool if not already active.
+  * If lp->thin, create thin LV within the pool - as a snapshot if lp->snapshot.
+  *   If lp->activate is AY*, activate it.
+- *   If lp->activate was AN* and the pool was originally inactive, deactivate it.
++ *   If lp->activate is AN* and the pool was originally active, deactivate it.
+  */
+ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 					       struct lvcreate_params *lp,
 -- 
 2.10.2
 
