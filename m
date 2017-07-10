@@ -1,50 +1,56 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Jul 2017 08:34:26 -0400
-Subject: master - tests: fix possible misspelling
-Message-ID: <201707101234.v6ACYQQh022942@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jul 2017 08:37:27 -0400
+Subject: master - tests: check mirror_images_on fixed
+Message-ID: <201707101237.v6ACbRHB023397@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eba96a9720add0120b029a34fe8641297cd1e904
-Commit:        eba96a9720add0120b029a34fe8641297cd1e904
-Parent:        d4345220cc85a803b8c029adb472fc4d9f580659
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fdbb680531b08e03dba2dc3d2f22381bf55abbb0
+Commit:        fdbb680531b08e03dba2dc3d2f22381bf55abbb0
+Parent:        91d6a62fc594152964ea25c44691c02ae23cdb9a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 6 20:08:53 2017 +0200
+AuthorDate:    Fri Jul 7 21:17:03 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: fix possible misspelling
+tests: check mirror_images_on fixed
 
-Possible misspelling: FAILED_MIXED_STR may not be assigned, but FAIL_MIXED_STR is.
-Possible misspelling: FAILED_MULTI_STR may not be assigned, but FAIL_MULTI_STR is.
-Possible misspelling: FAILED_BLACK_STR may not be assigned, but FAIL_BLACK_STR is.
+Fix mirror_images_on() to actually report something useful (thought
+it might be tuned later).
+
+So for now the function got through all '_mimages_' and compares
+where the order of them is matching given list of devices.
 ---
- test/shell/name-mangling.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ test/lib/check.sh |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/name-mangling.sh b/test/shell/name-mangling.sh
-index 80e7b6c..3e67587 100644
---- a/test/shell/name-mangling.sh
-+++ b/test/shell/name-mangling.sh
-@@ -76,13 +76,13 @@ function check_create_and_remove()
+diff --git a/test/lib/check.sh b/test/lib/check.sh
+index 603f334..76015b8 100644
+--- a/test/lib/check.sh
++++ b/test/lib/check.sh
+@@ -90,12 +90,18 @@ lv_tree_on() {
+ 	lv_on_diff_ devs[@] "$@"
+ }
  
- 	if [ "$dm_name" = "FAIL_MIXED" ]; then
- 		r=0
--		grep "$FAILED_MIXED_STR" err || r=1
-+		grep "$FAIL_MIXED_STR" err || r=1
- 	elif [ "$dm_name" = "FAIL_MULTI" ]; then
- 		r=0
--		grep "$FAILED_MULTI_STR" err || r=1
-+		grep "$FAIL_MULTI_STR" err || r=1
- 	elif [ "$dm_name" = "FAIL_BLACK" ]; then
- 		r=0
--		grep "$FAILED_BLACK_STR" err || r=1
-+		grep "$FAIL_BLACK_STR" err || r=1
- 	fi
- 
- 	return $r
++# Test if all mimage_X LV legs are sitting on given ordered list of PVs
++# When LV is composed of imagetmp, such leg is decomposed so only
++# real _mimage LVs are always checked
+ mirror_images_on() {
+ 	local vg=$1
+ 	local lv=$2
+ 	shift 2
+-	for i in $(lvdevices "$lv"); do
+-		lv_on "$vg" "$lv" "$1"
++	local mimages=()
++	readarray -t mimages <<< "$(get lv_field_lv_ "$vg" lv_name -a | grep "${lv}_mimage_" )"
++
++	for i in  "${mimages[@]}"; do
++		lv_on "$vg" "$i" "$1"
+ 		shift
+ 	done
+ }
 
 
