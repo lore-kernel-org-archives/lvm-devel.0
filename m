@@ -1,39 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Jul 2017 08:33:25 -0400
-Subject: master - tests: use read -r
-Message-ID: <201707101233.v6ACXPvB022818@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jul 2017 08:33:27 -0400
+Subject: master - tests: aux.sh use grep -E
+Message-ID: <201707101233.v6ACXRsJ022828@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=74ef5f07d0940a1ce784d569ce7d0bbeef74db87
-Commit:        74ef5f07d0940a1ce784d569ce7d0bbeef74db87
-Parent:        7a8f87d28b3ccd3fc4890606c3edf83896d6624e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=928a49a7c8f78dff4add340107ecc46e6a1b8587
+Commit:        928a49a7c8f78dff4add340107ecc46e6a1b8587
+Parent:        5bd09cb79dc66eac7515b93b8991eded8ac25afd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 10 10:39:18 2017 +0200
+AuthorDate:    Sat Jul 1 09:41:14 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: use read -r
+tests: aux.sh use grep -E
 
+egrep is nonstandard.
 ---
- test/shell/clvmd-restart.sh |    2 +-
+ test/lib/aux.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/clvmd-restart.sh b/test/shell/clvmd-restart.sh
-index e3c9d5f..7e3257a 100644
---- a/test/shell/clvmd-restart.sh
-+++ b/test/shell/clvmd-restart.sh
-@@ -21,7 +21,7 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 21c94ac..6ac57d4 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -545,7 +545,7 @@ teardown() {
  
- # only clvmd based test, skip otherwise
--read LOCAL_CLVMD < LOCAL_CLVMD
-+read -r LOCAL_CLVMD < LOCAL_CLVMD
+ 	kill_sleep_kill_ LOCAL_LVMETAD "${LVM_VALGRIND_LVMETAD:-0}"
  
- # TODO read from build, for now hardcoded
- CLVMD_SOCKET="/var/run/lvm/clvmd.sock"
+-	dm_table | not egrep -q "$vg|$vg1|$vg2|$vg3|$vg4" || {
++	dm_table | not grep -E -q "$vg|$vg1|$vg2|$vg3|$vg4" || {
+ 		# Avoid activation of dmeventd if there is no pid
+ 		cfg=$(test -s LOCAL_DMEVENTD || echo "--config activation{monitoring=0}")
+ 		if dm_info suspended,name | grep -q "^Suspended:.*$prefix" ; then
 
 
