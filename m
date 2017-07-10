@@ -1,50 +1,71 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Mon, 10 Jul 2017 08:32:38 -0400
-Subject: master - tests: aux.sh drop useless echo
-Message-ID: <201707101232.v6ACWc6I022629@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - tests: drop useless literal
+Message-ID: <201707101232.v6ACWc60022630@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5bd09cb79dc66eac7515b93b8991eded8ac25afd
-Commit:        5bd09cb79dc66eac7515b93b8991eded8ac25afd
-Parent:        6be61bf04408855da89f2117d268f1dbe1b98279
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ff2242036b9719c51a7f000dcb91f3ad5aa2580a
+Commit:        ff2242036b9719c51a7f000dcb91f3ad5aa2580a
+Parent:        5214e62f095909da03fac49d2a9e4fa7dabf7244
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jul 1 09:28:06 2017 +0200
+AuthorDate:    Thu Jul 6 19:45:41 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: aux.sh drop useless echo
+tests: drop useless literal
 
-Simply trim on space.
+Here was usage of '\' unneeded.
 ---
- test/lib/aux.sh |    5 ++---
- 1 files changed, 2 insertions(+), 3 deletions(-)
+ test/shell/vgchange-many.sh |   32 ++++++++++++++++----------------
+ 1 files changed, 16 insertions(+), 16 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index c5944c2..21c94ac 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -548,7 +548,7 @@ teardown() {
- 	dm_table | not egrep -q "$vg|$vg1|$vg2|$vg3|$vg4" || {
- 		# Avoid activation of dmeventd if there is no pid
- 		cfg=$(test -s LOCAL_DMEVENTD || echo "--config activation{monitoring=0}")
--		if echo "$(dm_info suspended,name)" | grep -q "^Suspended:.*$prefix" ; then
-+		if dm_info suspended,name | grep -q "^Suspended:.*$prefix" ; then
- 			echo "Skipping vgremove, suspended devices detected."
- 		else
- 			vgremove -ff "$cfg"  \
-@@ -1207,8 +1207,7 @@ EOF
+diff --git a/test/shell/vgchange-many.sh b/test/shell/vgchange-many.sh
+index 72dcc0c..2c73e48 100644
+--- a/test/shell/vgchange-many.sh
++++ b/test/shell/vgchange-many.sh
+@@ -30,23 +30,23 @@ vgcreate -s 128K $vg $(cat DEVICES)
+ vgcfgbackup -f data $vg
  
- 	# read sequential list and put into associative array
- 	while IFS=$IFS_NL read -r v; do
--		# trim white-space-chars via echo when inserting
--		CONF["$(echo ${v%%[={]*})"]=${v#*/}
-+		CONF["${v%%[={ ]*}"]=${v#*/}
- 	done < "$config_values"
- 
- 	# sort by section and iterate through them
+ # Generate a lot of devices (size of 1 extent)
+-awk -v DEVICES=$DEVICES '/^\t\}/ { \
+-    printf("\t}\n\tlogical_volumes {\n");\
++awk -v DEVICES=$DEVICES '/^\t\}/ {
++    printf("\t}\n\tlogical_volumes {\n");
+     cnt=0;
+-    for (i = 0; i < DEVICES; i++) { \
+-	printf("\t\tlvol%06d  {\n", i);\
+-	printf("\t\t\tid = \"%06d-1111-2222-3333-2222-1111-%06d\"\n", i, i); \
+-	print "\t\t\tstatus = [\"READ\", \"WRITE\", \"VISIBLE\"]"; \
+-	print "\t\t\tsegment_count = 1"; \
+-	print "\t\t\tsegment1 {"; \
+-	print "\t\t\t\tstart_extent = 0"; \
+-	print "\t\t\t\textent_count = 1"; \
+-	print "\t\t\t\ttype = \"striped\""; \
+-	print "\t\t\t\tstripe_count = 1"; \
+-	print "\t\t\t\tstripes = ["; \
+-	print "\t\t\t\t\t\"pv0\", " cnt++; \
+-	printf("\t\t\t\t]\n\t\t\t}\n\t\t}\n"); \
+-      } \
++    for (i = 0; i < DEVICES; i++) {
++	printf("\t\tlvol%06d  {\n", i);
++	printf("\t\t\tid = \"%06d-1111-2222-3333-2222-1111-%06d\"\n", i, i);
++	print "\t\t\tstatus = [\"READ\", \"WRITE\", \"VISIBLE\"]";
++	print "\t\t\tsegment_count = 1";
++	print "\t\t\tsegment1 {";
++	print "\t\t\t\tstart_extent = 0";
++	print "\t\t\t\textent_count = 1";
++	print "\t\t\t\ttype = \"striped\"";
++	print "\t\t\t\tstripe_count = 1";
++	print "\t\t\t\tstripes = [";
++	print "\t\t\t\t\t\"pv0\", " cnt++;
++	printf("\t\t\t\t]\n\t\t\t}\n\t\t}\n");
++      }
+   }
+   {print}
+ ' data >data_new
 
 
