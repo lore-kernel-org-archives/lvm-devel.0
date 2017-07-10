@@ -1,95 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Jul 2017 08:37:32 -0400
-Subject: master - tests: fix array usage
-Message-ID: <201707101237.v6ACbW49023408@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jul 2017 08:37:35 -0400
+Subject: master - tests: improve loop
+Message-ID: <201707101237.v6ACbZfh023449@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f818a83a1dea3d67ad4bc710ed0552a7175b38d7
-Commit:        f818a83a1dea3d67ad4bc710ed0552a7175b38d7
-Parent:        85e5a8803cee25aa676d30b478e9a3bd02c7d9ca
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4ed3f1bee3fca0b27ace8bfe593aa6aee15a3a19
+Commit:        4ed3f1bee3fca0b27ace8bfe593aa6aee15a3a19
+Parent:        e68d986cd5374edc5b6884fc1c3dcc197c954b46
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jul 8 22:29:50 2017 +0200
+AuthorDate:    Fri Jul 7 10:10:36 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: fix array usage
+tests: improve loop
 
-Use bash arrays to pass devs.
 ---
- test/shell/lvchange-raid-transient-failures.sh |    6 +++---
- test/shell/lvconvert-raid.sh                   |   15 ++++++++-------
- 2 files changed, 11 insertions(+), 10 deletions(-)
+ test/shell/lvconvert-raid-takeover.sh |   24 +++++++++++-------------
+ 1 files changed, 11 insertions(+), 13 deletions(-)
 
-diff --git a/test/shell/lvchange-raid-transient-failures.sh b/test/shell/lvchange-raid-transient-failures.sh
-index a478204..2ac14b0 100644
---- a/test/shell/lvchange-raid-transient-failures.sh
-+++ b/test/shell/lvchange-raid-transient-failures.sh
-@@ -32,14 +32,14 @@ function _check_raid
- 	shift
- 	local good=$1
- 	shift
--	local devs=$*
-+	local devs=( "$@" )
+diff --git a/test/shell/lvconvert-raid-takeover.sh b/test/shell/lvconvert-raid-takeover.sh
+index c9b45e9..2fb0e5a 100644
+--- a/test/shell/lvconvert-raid-takeover.sh
++++ b/test/shell/lvconvert-raid-takeover.sh
+@@ -28,19 +28,17 @@ detect_error_leak_()
+ {
+ 	local err
  
- 	aux wait_for_sync $vg $lv
--	aux disable_dev --error --silent "$devs"
-+	aux disable_dev --error --silent "${devs[@]}"
- 	mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
- 	fsck.ext4 -fn "$DM_DEV_DIR/$vg/$lv"
- 	check raid_leg_status $vg $lv "$fail"
--	aux enable_dev --silent "$devs"
-+	aux enable_dev --silent "${devs[@]}"
- 	lvs -a -o +devices $vg | tee out
- 	not grep unknown out
- 	lvchange --refresh $vg/$lv
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index b4ba4c9..c5e6159 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -21,10 +21,10 @@ export LVM_TEST_LVMETAD_DEBUG_OPTS=${LVM_TEST_LVMETAD_DEBUG_OPTS-}
- 
- get_image_pvs() {
- 	local d
--	local images
-+	local images=()
- 
--	images=$(dmsetup ls | grep "${1}-${2}_.image_.*" | cut -f1 | sed -e s:-:/:)
--	lvs --noheadings -a -o devices "$images" | sed s/\(.\)//
-+	images=( $(dmsetup ls | grep "${1}-${2}_.image_.*" | cut -f1 | sed -e s:-:/:) )
-+	lvs --noheadings -a -o devices "${images[@]}" | sed s/\(.\)//
+-	dmsetup info -c -o name --noheadings | tee out
+-	if grep $vg out ; then
+-		for i in $(grep $vg out) ; do
+-			if dmsetup table $i | grep "error "; then
+-				err="$err $i"
+-			fi
+-		done
+-		test -z "$err" || {
+-			dmsetup table | grep $vg
+-			dmsetup ls --tree
+-			die "Device(s) $err should not be here."
+-		}
+-	fi
++	for i in $(dmsetup info -c -o name --noheadings) ; do
++		case "$i" in
++		"$vg*") (dmsetup table "$i" | grep "error ") && err="$err $i" ;;
++		esac
++	done
++
++	test -z "$err" || {
++		dmsetup table | grep $vg
++		dmsetup ls --tree
++		die "Device(s) $err should not be here."
++	}
  }
  
- ########################################################
-@@ -296,21 +296,22 @@ for i in {1..3}; do
- 
- 	for j in $(seq $(( i + 1 ))); do # The number of devs to replace at once
- 	for o in $(seq 0 $i); do        # The offset into the device list
--		replace=""
-+		replace=()
- 
- 		devices=( $(get_image_pvs $vg $lv1) )
- 
- 		for k in $(seq "$j"); do
- 			index=$(( ( k +  o ) % ( i + 1 ) ))
--			replace="$replace --replace ${devices[$index]}"
-+			replace+=( "--replace" )
-+			replace+=( "${devices[$index]}" )
- 		done
- 		aux wait_for_sync $vg $lv1
- 
- 		if [ "$j" -ge $(( i + 1 )) ]; then
- 			# Can't replace all at once.
--			not lvconvert "$replace" $vg/$lv1
-+			not lvconvert "${replace[@]}" $vg/$lv1
- 		else
--			lvconvert "$replace" $vg/$lv1
-+			lvconvert "${replace[@]}" $vg/$lv1
- 		fi
- 	done
- 	done
+ function _lvcreate
 
 
