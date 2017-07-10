@@ -1,39 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Jul 2017 08:33:21 -0400
-Subject: master - tests: get.sh use simplier tr
-Message-ID: <201707101233.v6ACXLu7022802@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jul 2017 08:33:25 -0400
+Subject: master - tests: use read -r
+Message-ID: <201707101233.v6ACXPvB022818@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f21d81212797c56ed49b6371adc88316e436ca69
-Commit:        f21d81212797c56ed49b6371adc88316e436ca69
-Parent:        d426d7e7099b23d169e396292a25ab97cbfc2000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=74ef5f07d0940a1ce784d569ce7d0bbeef74db87
+Commit:        74ef5f07d0940a1ce784d569ce7d0bbeef74db87
+Parent:        7a8f87d28b3ccd3fc4890606c3edf83896d6624e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 10 11:56:38 2017 +0200
+AuthorDate:    Mon Jul 10 10:39:18 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: get.sh use simplier tr
+tests: use read -r
 
 ---
- test/lib/get.sh |    2 +-
+ test/shell/clvmd-restart.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/get.sh b/test/lib/get.sh
-index 88144c1..e7139dc 100644
---- a/test/lib/get.sh
-+++ b/test/lib/get.sh
-@@ -68,7 +68,7 @@ lv_devices() {
- }
+diff --git a/test/shell/clvmd-restart.sh b/test/shell/clvmd-restart.sh
+index e3c9d5f..7e3257a 100644
+--- a/test/shell/clvmd-restart.sh
++++ b/test/shell/clvmd-restart.sh
+@@ -21,7 +21,7 @@ SKIP_WITH_LVMPOLLD=1
+ . lib/inittest
  
- lv_field_lv_() {
--	lv_field "$1" "$2" -a --unbuffered | sed 's/\[//; s/]//'
-+	lv_field "$1" "$2" -a --unbuffered | tr -d []
- }
+ # only clvmd based test, skip otherwise
+-read LOCAL_CLVMD < LOCAL_CLVMD
++read -r LOCAL_CLVMD < LOCAL_CLVMD
  
- lv_tree_devices_() {
+ # TODO read from build, for now hardcoded
+ CLVMD_SOCKET="/var/run/lvm/clvmd.sock"
 
 
