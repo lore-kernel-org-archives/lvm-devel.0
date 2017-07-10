@@ -1,42 +1,50 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Jul 2017 08:34:15 -0400
-Subject: master - tests: fix tests variable
-Message-ID: <201707101234.v6ACYF2M022921@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jul 2017 08:34:26 -0400
+Subject: master - tests: fix possible misspelling
+Message-ID: <201707101234.v6ACYQQh022942@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=270e526734ee6f97412adf52c52194c46ac9ae21
-Commit:        270e526734ee6f97412adf52c52194c46ac9ae21
-Parent:        38917ee51c4024e9562cba18bc4ed98188f6818c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eba96a9720add0120b029a34fe8641297cd1e904
+Commit:        eba96a9720add0120b029a34fe8641297cd1e904
+Parent:        d4345220cc85a803b8c029adb472fc4d9f580659
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 6 20:37:48 2017 +0200
+AuthorDate:    Thu Jul 6 20:08:53 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: fix tests variable
+tests: fix possible misspelling
 
-Actually check $r instead or 'r' for test failure.
+Possible misspelling: FAILED_MIXED_STR may not be assigned, but FAIL_MIXED_STR is.
+Possible misspelling: FAILED_MULTI_STR may not be assigned, but FAIL_MULTI_STR is.
+Possible misspelling: FAILED_BLACK_STR may not be assigned, but FAIL_BLACK_STR is.
 ---
- test/shell/name-mangling.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/name-mangling.sh |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/test/shell/name-mangling.sh b/test/shell/name-mangling.sh
-index 3e67587..3b699a2 100644
+index 80e7b6c..3e67587 100644
 --- a/test/shell/name-mangling.sh
 +++ b/test/shell/name-mangling.sh
-@@ -197,8 +197,8 @@ ln -s "$DM_DEV_DIR/mapper/${PREFIX}abc" "$DM_DEV_DIR/${PREFIX}xyz"
- aux dmsetup status "$DM_DEV_DIR/${PREFIX}xyz" || r=1
- rm -f "$DM_DEV_DIR/${PREFIX}xyz"
- remove_dm_dev auto "abc"
--if [ r = 1 ]; then
--	exit 1
-+if [ "$r" = 1 ]; then
-+	return "$r"
- fi
+@@ -76,13 +76,13 @@ function check_create_and_remove()
  
- ### ALL WHITELISTED CHARACTERS ###
+ 	if [ "$dm_name" = "FAIL_MIXED" ]; then
+ 		r=0
+-		grep "$FAILED_MIXED_STR" err || r=1
++		grep "$FAIL_MIXED_STR" err || r=1
+ 	elif [ "$dm_name" = "FAIL_MULTI" ]; then
+ 		r=0
+-		grep "$FAILED_MULTI_STR" err || r=1
++		grep "$FAIL_MULTI_STR" err || r=1
+ 	elif [ "$dm_name" = "FAIL_BLACK" ]; then
+ 		r=0
+-		grep "$FAILED_BLACK_STR" err || r=1
++		grep "$FAIL_BLACK_STR" err || r=1
+ 	fi
+ 
+ 	return $r
 
 
