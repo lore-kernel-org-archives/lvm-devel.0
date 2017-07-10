@@ -1,47 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Jul 2017 08:27:03 -0400
-Subject: master - tests: drop unneeded cat
-Message-ID: <201707101227.v6ACR39m021622@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jul 2017 08:27:15 -0400
+Subject: master - tests: drop unneeded check
+Message-ID: <201707101227.v6ACRFRR021644@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2d96b758e4d127d144fdeb92b487cdc5f86de340
-Commit:        2d96b758e4d127d144fdeb92b487cdc5f86de340
-Parent:        eba96a9720add0120b029a34fe8641297cd1e904
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c3d8ee4da215444832a0b969945f332e84821b9f
+Commit:        c3d8ee4da215444832a0b969945f332e84821b9f
+Parent:        4a5eea77581181ee9ddff0c4e3575bc3a73d2585
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 6 19:42:15 2017 +0200
+AuthorDate:    Sun Jul 9 13:35:40 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: drop unneeded cat
+tests: drop unneeded check
 
+Test should actually fail in this condition as it's testing lvmetad.
 ---
- test/shell/snapshot-autoumount-dmeventd.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/lvmetad-dump.sh |    3 ---
+ 1 files changed, 0 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/snapshot-autoumount-dmeventd.sh b/test/shell/snapshot-autoumount-dmeventd.sh
-index 5ef3969..8e2781e 100644
---- a/test/shell/snapshot-autoumount-dmeventd.sh
-+++ b/test/shell/snapshot-autoumount-dmeventd.sh
-@@ -38,7 +38,7 @@ mount -o errors=remount-ro "$DM_DEV_DIR/mapper/$vg-snap" "$mntdir"
+diff --git a/test/shell/lvmetad-dump.sh b/test/shell/lvmetad-dump.sh
+index ecda3ed..3260b73 100644
+--- a/test/shell/lvmetad-dump.sh
++++ b/test/shell/lvmetad-dump.sh
+@@ -16,9 +16,6 @@ SKIP_WITH_LVMPOLLD=1
  
- test "$(dmsetup info -c --noheadings -o open $vg-snap)" -eq 1
+ . lib/inittest
  
--cat /proc/mounts | grep "$mntdir"
-+grep "$mntdir" /proc/mounts
- 
- # overfill 4M snapshot (with metadata)
- not dd if=/dev/zero of="$mntdir/file$1" bs=1M count=4 conv=fdatasync
-@@ -52,6 +52,6 @@ for i in {1..100}; do
- 	test "$(dmsetup info -c --noheadings -o open $vg-snap)" -eq 0 && break
- done
- 
--cat /proc/mounts | not grep "$mntdir"
-+not grep "$mntdir" /proc/mounts
- 
- vgremove -f $vg
+-# check we can talk to lvmetad
+-(echo | aux lvmetad_talk) || skip
+-
+ aux prepare_pvs 2
+ vgcreate $vg1 "$dev1" "$dev2"
+ lvcreate -n bar -l 1 $vg1
 
 
