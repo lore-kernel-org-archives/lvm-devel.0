@@ -1,71 +1,47 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Jul 2017 08:26:56 -0400
-Subject: master - tests: avoid masking return values
-Message-ID: <201707101226.v6ACQudL021611@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jul 2017 08:27:03 -0400
+Subject: master - tests: drop unneeded cat
+Message-ID: <201707101227.v6ACR39m021622@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d4345220cc85a803b8c029adb472fc4d9f580659
-Commit:        d4345220cc85a803b8c029adb472fc4d9f580659
-Parent:        146bfb2417de3e6cd719b5aef900bf927a39a0cd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2d96b758e4d127d144fdeb92b487cdc5f86de340
+Commit:        2d96b758e4d127d144fdeb92b487cdc5f86de340
+Parent:        eba96a9720add0120b029a34fe8641297cd1e904
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 6 19:30:19 2017 +0200
+AuthorDate:    Thu Jul 6 19:42:15 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: avoid masking return values
+tests: drop unneeded cat
 
-Declare and assign separately to avoid masking return values.
 ---
- test/shell/fsadm-renamed.sh |    3 ++-
- test/shell/fsadm.sh         |    3 ++-
- test/shell/lvresize-full.sh |    3 ++-
- 3 files changed, 6 insertions(+), 3 deletions(-)
+ test/shell/snapshot-autoumount-dmeventd.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
-index ed7b743..7f3a9fd 100644
---- a/test/shell/fsadm-renamed.sh
-+++ b/test/shell/fsadm-renamed.sh
-@@ -28,7 +28,8 @@ mount_dir="mnt"
- mount_space_dir="mnt space dir"
- mount_dolar_dir="mnt \$SPACE dir"
- # for recursive call
--export LVM_BINARY=$(which lvm)
-+LVM_BINARY=$(which lvm)
-+export LVM_BINARY
+diff --git a/test/shell/snapshot-autoumount-dmeventd.sh b/test/shell/snapshot-autoumount-dmeventd.sh
+index 5ef3969..8e2781e 100644
+--- a/test/shell/snapshot-autoumount-dmeventd.sh
++++ b/test/shell/snapshot-autoumount-dmeventd.sh
+@@ -38,7 +38,7 @@ mount -o errors=remount-ro "$DM_DEV_DIR/mapper/$vg-snap" "$mntdir"
  
- test ! -d "$mount_dir" && mkdir "$mount_dir"
- test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
-diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
-index 351a179..fed7eb4 100644
---- a/test/shell/fsadm.sh
-+++ b/test/shell/fsadm.sh
-@@ -45,7 +45,8 @@ dev_vg_lv2="$DM_DEV_DIR/$vg_lv2"
- mount_dir="mnt"
- mount_space_dir="mnt space dir"
- # for recursive call
--export LVM_BINARY=$(which lvm)
-+LVM_BINARY=$(which lvm)
-+export LVM_BINARY
+ test "$(dmsetup info -c --noheadings -o open $vg-snap)" -eq 1
  
- test ! -d "$mount_dir" && mkdir "$mount_dir"
- test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
-diff --git a/test/shell/lvresize-full.sh b/test/shell/lvresize-full.sh
-index b518bb7..c497781 100644
---- a/test/shell/lvresize-full.sh
-+++ b/test/shell/lvresize-full.sh
-@@ -21,7 +21,8 @@ SKIP_WITH_LVMPOLLD=1
- FSCK=${FSCK-fsck}
- MKFS=${MKFS-mkfs.ext3}
- RESIZEFS=${RESIZEFS-resize2fs}
--export LVM_BINARY=$(which lvm)
-+LVM_BINARY=$(which lvm)
-+export LVM_BINARY
+-cat /proc/mounts | grep "$mntdir"
++grep "$mntdir" /proc/mounts
  
- which $FSCK || skip
- which $MKFS || skip
+ # overfill 4M snapshot (with metadata)
+ not dd if=/dev/zero of="$mntdir/file$1" bs=1M count=4 conv=fdatasync
+@@ -52,6 +52,6 @@ for i in {1..100}; do
+ 	test "$(dmsetup info -c --noheadings -o open $vg-snap)" -eq 0 && break
+ done
+ 
+-cat /proc/mounts | not grep "$mntdir"
++not grep "$mntdir" /proc/mounts
+ 
+ vgremove -f $vg
 
 
