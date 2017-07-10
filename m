@@ -1,92 +1,104 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Mon, 10 Jul 2017 08:32:44 -0400
-Subject: master - tests: export many shell vars with 1 command
-Message-ID: <201707101232.v6ACWiOP022668@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - tests: use bash array
+Message-ID: <201707101232.v6ACWi6b022667@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c87e1afa0327c60621075f581bffb30b33735442
-Commit:        c87e1afa0327c60621075f581bffb30b33735442
-Parent:        c48149cf80c6582c2369bc7f8a33d794021d9dae
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bdd95051ed6a71e447474e96f770b2d79baf4889
+Commit:        bdd95051ed6a71e447474e96f770b2d79baf4889
+Parent:        efcbad25ee85c2f672ba8f4e30be9fe07d6c34a7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 10 13:33:55 2017 +0200
+AuthorDate:    Mon Jul 3 20:36:27 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 10 14:23:53 2017 +0200
 
-tests: export many shell vars with 1 command
+tests: use bash array
 
 ---
- test/Makefile.in     |   36 ++++++++++++++++++++----------------
- test/lib/inittest.sh |    7 ++++---
- 2 files changed, 24 insertions(+), 19 deletions(-)
+ test/shell/mirror-names.sh |   26 ++++++++++++++++----------
+ 1 files changed, 16 insertions(+), 10 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index c399596..eee9bf2 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -273,22 +273,26 @@ lib/flavour-%: $(srcdir)/lib/flavour-%.sh .lib-dir-stamp
- 	cp $< $@
+diff --git a/test/shell/mirror-names.sh b/test/shell/mirror-names.sh
+index f3bfe41..899d63d 100644
+--- a/test/shell/mirror-names.sh
++++ b/test/shell/mirror-names.sh
+@@ -22,27 +22,33 @@ SKIP_WITH_LVMLOCKD=1
  
- lib/paths-common: $(srcdir)/Makefile.in .lib-dir-stamp Makefile
--	echo 'export DM_UDEV_SYNCHRONISATION=$(dm_udev_synchronisation)' >> $@-t
--	echo 'export THIN=@THIN@' >> $@-t
--	echo 'export RAID=@RAID@' >> $@-t
--	echo 'export CACHE=@CACHE@' >> $@-t
--	echo 'export LVMETAD_PIDFILE="@LVMETAD_PIDFILE@"' >> $@-t
--	echo 'export LVMPOLLD_PIDFILE="@LVMPOLLD_PIDFILE@"' >> $@-t
--	echo 'export DMEVENTD_PIDFILE="@DMEVENTD_PIDFILE@"' >> $@-t
--	echo 'export CLVMD_PIDFILE="@CLVMD_PIDFILE@"' >> $@-t
--	echo 'export LVM_TEST_THIN_CHECK_CMD=$${LVM_TEST_THIN_CHECK_CMD- at THIN_CHECK_CMD@}' >> $@-t
--	echo 'export LVM_TEST_THIN_DUMP_CMD=$${LVM_TEST_THIN_DUMP_CMD- at THIN_DUMP_CMD@}' >> $@-t
--	echo 'export LVM_TEST_THIN_REPAIR_CMD=$${LVM_TEST_THIN_REPAIR_CMD- at THIN_REPAIR_CMD@}' >> $@-t
--	echo 'export LVM_TEST_THIN_RESTORE_CMD=$${LVM_TEST_THIN_RESTORE_CMD- at THIN_RESTORE_CMD@}' >> $@-t
--	echo 'export LVM_TEST_CACHE_CHECK_CMD=$${LVM_TEST_CACHE_CHECK_CMD- at CACHE_CHECK_CMD@}' >> $@-t
--	echo 'export LVM_TEST_CACHE_DUMP_CMD=$${LVM_TEST_CACHE_DUMP_CMD- at CACHE_DUMP_CMD@}' >> $@-t
--	echo 'export LVM_TEST_CACHE_REPAIR_CMD=$${LVM_TEST_CACHE_REPAIR_CMD- at CACHE_REPAIR_CMD@}' >> $@-t
--	echo 'export LVM_TEST_CACHE_RESTORE_CMD=$${LVM_TEST_CACHE_RESTORE_CMD- at CACHE_RESTORE_CMD@}' >> $@-t
-+	echo 'DM_UDEV_SYNCHRONISATION=$(dm_udev_synchronisation)' >> $@-t
-+	echo 'THIN=@THIN@' >> $@-t
-+	echo 'RAID=@RAID@' >> $@-t
-+	echo 'CACHE=@CACHE@' >> $@-t
-+	echo 'LVMETAD_PIDFILE="@LVMETAD_PIDFILE@"' >> $@-t
-+	echo 'LVMPOLLD_PIDFILE="@LVMPOLLD_PIDFILE@"' >> $@-t
-+	echo 'DMEVENTD_PIDFILE="@DMEVENTD_PIDFILE@"' >> $@-t
-+	echo 'CLVMD_PIDFILE="@CLVMD_PIDFILE@"' >> $@-t
-+	echo 'LVM_TEST_THIN_CHECK_CMD=$${LVM_TEST_THIN_CHECK_CMD- at THIN_CHECK_CMD@}' >> $@-t
-+	echo 'LVM_TEST_THIN_DUMP_CMD=$${LVM_TEST_THIN_DUMP_CMD- at THIN_DUMP_CMD@}' >> $@-t
-+	echo 'LVM_TEST_THIN_REPAIR_CMD=$${LVM_TEST_THIN_REPAIR_CMD- at THIN_REPAIR_CMD@}' >> $@-t
-+	echo 'LVM_TEST_THIN_RESTORE_CMD=$${LVM_TEST_THIN_RESTORE_CMD- at THIN_RESTORE_CMD@}' >> $@-t
-+	echo 'LVM_TEST_CACHE_CHECK_CMD=$${LVM_TEST_CACHE_CHECK_CMD- at CACHE_CHECK_CMD@}' >> $@-t
-+	echo 'LVM_TEST_CACHE_DUMP_CMD=$${LVM_TEST_CACHE_DUMP_CMD- at CACHE_DUMP_CMD@}' >> $@-t
-+	echo 'LVM_TEST_CACHE_REPAIR_CMD=$${LVM_TEST_CACHE_REPAIR_CMD- at CACHE_REPAIR_CMD@}' >> $@-t
-+	echo 'LVM_TEST_CACHE_RESTORE_CMD=$${LVM_TEST_CACHE_RESTORE_CMD- at CACHE_RESTORE_CMD@}' >> $@-t
-+	echo 'export DM_UDEV_SYNCHRONISATION THIN RAID CACHE\' >> $@-t
-+	echo ' LVMETAD_PIDFILE LVMPOLLD_PIDFILE DMEVENTD_PIDFILE CLVMD_PIDFILE\' >> $@-t
-+	echo ' LVM_TEST_THIN_CHECK_CMD LVM_TEST_THIN_DUMP_CMD LVM_TEST_THIN_REPAIR_CMD LVM_TEST_THIN_RESTORE_CMD\' >> $@-t
-+	echo ' LVM_TEST_CACHE_CHECK_CMD LVM_TEST_CACHE_DUMP_CMD LVM_TEST_CACHE_REPAIR_CMD LVM_TEST_CACHE_RESTORE_CMD' >> $@-t
- 	mv $@-t $@
+ lv_devices_() {
+ 	local d
++	local i
+ 	local lv=$1
+ 	shift
+-	local devices=$@
++	local devices=( "$@" )
+ 	local devs
  
- lib/paths-installed: lib/paths-common
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index f959b71..d3844b4 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -57,9 +57,10 @@ TESTDIR=$(mkdtemp "${LVM_TEST_DIR:-/tmp}" "$PREFIX.XXXXXXXXXX") || \
- RUNNING_DMEVENTD=$(pgrep dmeventd || true)
+ 	devs=$(get lv_devices "$lv")
  
- export TESTOLDPWD TESTDIR COMMON_PREFIX PREFIX RUNNING_DMEVENTD
--export LVM_LOG_FILE_EPOCH=DEBUG
--export LVM_LOG_FILE_MAX_LINES=100000
--export LVM_EXPECTED_EXIT_STATUS=1
-+LVM_LOG_FILE_EPOCH=DEBUG
-+LVM_LOG_FILE_MAX_LINES=100000
-+LVM_EXPECTED_EXIT_STATUS=1
-+export LVM_LOG_FILE_EPOCH LVM_LOG_FILE_MAX_LINES LVM_EXPECTED_EXIT_STATUS
+ 	for d in $devs; do
+-		(echo "$devices" | grep "$d") || return 1
+-		devices=$(echo "$devices" | sed "s/$d//")
++		(echo "${devices[@]}" | grep "$d") || return 1
++		for i in "${!devices[@]}"; do
++			if [ "${devices[i]}" = "$d" ] ; then
++				unset "devices[i]"
++			fi
++		done
+ 	done
  
- test -n "$BASH" && trap 'set +vx; STACKTRACE; set -vx' ERR
- trap 'aux teardown' EXIT # don't forget to clean up
+-	test -z "$(echo $devices | sed 's/ //g')"
++	test "${#devices[@]}" -eq 0 ||
++		die "Left devices " "${devices[@]}"
+ }
+ 
+ lv_mirror_log_() {
+-	get lv_field $1 mirror_log | tr -d []
++	get lv_field "$1" mirror_log | tr -d []
+ }
+ 
+ lv_convert_lv_() {
+-	get lv_field $1 convert_lv | tr -d []
++	get lv_field "$1" convert_lv | tr -d []
+ }
+ 
+ enable_devs() {
+@@ -84,7 +90,7 @@ lvcreate -an -Zn -l2 --type mirror -m1 -n $lv1 $vg
+ lv_devices_ $vg/$lv1 ${lv1}_mimage_0 ${lv1}_mimage_1
+ 
+ #COMM "mirror log is ${lv1}_mlog"
+-test $(lv_mirror_log_ $vg/$lv1) = ${lv1}_mlog
++test "$(lv_mirror_log_ $vg/$lv1)" = "${lv1}_mlog"
+ 
+ # "cleanup"
+ check_and_cleanup_lvs_
+@@ -119,13 +125,13 @@ lvcreate -aey -l2 --type mirror -m1 -n $lv1 $vg
+ delay_devs
+ LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -m+1 -i+40 -b $vg/$lv1
+ convlv=$(lv_convert_lv_ $vg/$lv1)
+-test $convlv = ${lv1}_mimagetmp_2
++test "$convlv" = "${lv1}_mimagetmp_2"
+ lv_devices_ $vg/$lv1 $convlv ${lv1}_mimage_2
+ lv_devices_ $vg/$convlv ${lv1}_mimage_0 ${lv1}_mimage_1
+ lv_mirror_log_ $vg/$convlv ${lv1}_mlog
+ enable_devs
+ 
+-#COMM "mirror log name after re-adding is ${lv1}_mlog" \
++#COMM "mirror log name after re-adding is ${lv1}_mlog"
+ lvconvert -f --mirrorlog core $vg/$lv1
+ lvconvert --mirrorlog disk $vg/$lv1
+ convlv=$(lv_convert_lv_ $vg/$lv1)
+@@ -133,7 +139,7 @@ lv_devices_ $vg/$lv1 $convlv ${lv1}_mimage_2
+ lv_devices_ $vg/$convlv ${lv1}_mimage_0 ${lv1}_mimage_1
+ lv_mirror_log_ $vg/$convlv ${lv1}_mlog
+ 
+-#COMM "renamed converting mirror names: $lv1 to $lv2" \
++#COMM "renamed converting mirror names: $lv1 to $lv2"
+ lvrename $vg/$lv1 $vg/$lv2
+ convlv=$(lv_convert_lv_ $vg/$lv2)
+ lv_devices_ $vg/$lv2 $convlv ${lv2}_mimage_2
 
 
