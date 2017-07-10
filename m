@@ -1,45 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Jul 2017 08:38:56 -0400
-Subject: master - tests: assign path
-Message-ID: <201707101238.v6ACcuxT023874@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jul 2017 08:59:45 -0400
+Subject: master - comment: update
+Message-ID: <201707101259.v6ACxjxR027851@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dafeb0274acae432054faf729510133780db9439
-Commit:        dafeb0274acae432054faf729510133780db9439
-Parent:        f818a83a1dea3d67ad4bc710ed0552a7175b38d7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Jul 9 15:54:43 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4c943710059e51b3730fea385b7bd8ef34beecb2
+Commit:        4c943710059e51b3730fea385b7bd8ef34beecb2
+Parent:        d23a475c98fae1a24111a0b4667bdaf5166ccde2
+Author:        Eric Ren <zren@suse.com>
+AuthorDate:    Sun Jul 9 01:15:49 2017 +0800
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 10 14:23:53 2017 +0200
+CommitterDate: Mon Jul 10 14:58:01 2017 +0200
 
-tests: assign path
+comment: update
 
+Use 'is' for both forms.
 ---
- test/shell/lvconvert-repair-mirror.sh |    6 ++----
- 1 files changed, 2 insertions(+), 4 deletions(-)
+ lib/metadata/lv_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-mirror.sh b/test/shell/lvconvert-repair-mirror.sh
-index dcd8d07..0277221 100644
---- a/test/shell/lvconvert-repair-mirror.sh
-+++ b/test/shell/lvconvert-repair-mirror.sh
-@@ -13,12 +13,10 @@
- SKIP_WITH_LVMLOCKD=1
- SKIP_WITH_LVMPOLLD=1
- 
--MKFS=mkfs.ext3
--MOUNT_DIR=mnt
--
- . lib/inittest
- 
--which "$MKFS" || skp
-+MOUNT_DIR=mnt
-+MKFS=$(which mkfs.ext3) || skip
- 
- cleanup_mounted_and_teardown()
- {
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index fbe0aed..0b90705 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7310,7 +7310,7 @@ static int _vg_check_features(struct volume_group *vg,
+  * If lp->thin OR lp->activate is AY*, activate the pool if not already active.
+  * If lp->thin, create thin LV within the pool - as a snapshot if lp->snapshot.
+  *   If lp->activate is AY*, activate it.
+- *   If lp->activate was AN* and the pool was originally inactive, deactivate it.
++ *   If lp->activate is AN* and the pool was originally not active, deactivate it.
+  */
+ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 					       struct lvcreate_params *lp,
 
 
