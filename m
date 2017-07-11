@@ -1,40 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 11 Jul 2017 19:22:56 -0400
-Subject: master - tests: drop type
-Message-ID: <201707112322.v6BNMuUE010856@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 11 Jul 2017 19:52:21 -0400
+Subject: master - tests: bounds still more vars
+Message-ID: <201707112352.v6BNqLCd014740@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ec9b845aaa6f155fc30951e7f479327402e287f0
-Commit:        ec9b845aaa6f155fc30951e7f479327402e287f0
-Parent:        a1ed9bc1452129ca0553d76d890049d5873dd91f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0f2dccc60176dffcf98fdd69734e3e1309095aeb
+Commit:        0f2dccc60176dffcf98fdd69734e3e1309095aeb
+Parent:        ec9b845aaa6f155fc30951e7f479327402e287f0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 12 01:20:22 2017 +0200
+AuthorDate:    Wed Jul 12 01:37:29 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 12 01:21:44 2017 +0200
+CommitterDate: Wed Jul 12 01:37:29 2017 +0200
 
-tests: drop type
+tests: bounds still more vars
 
-Assuming test wanted to check $lv3 does not exists.
 ---
- test/shell/process-each-lv.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/api/pytest.sh                  |    2 +-
+ test/shell/inconsistent-metadata.sh |    1 +
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/process-each-lv.sh b/test/shell/process-each-lv.sh
-index 14cb110..e9cea81 100644
---- a/test/shell/process-each-lv.sh
-+++ b/test/shell/process-each-lv.sh
-@@ -295,7 +295,7 @@ vgchange --addtag V5  $vg5
- lvremove $vg1/$lv1 @V35
- check lv_not_exists $vg1 $lv1
- check lv_not_exists $vg3 $lv1 $lv2 $lv3
--check lv_not_exists $vg5 $lv1 $lv2 $lv3not $lv4 $lv5
-+check lv_not_exists $vg5 $lv1 $lv2 $lv3 $lv4 $lv5
- # verify unremoved exist
- check lv_exists $vg2 $lv1 $lv2
+diff --git a/test/api/pytest.sh b/test/api/pytest.sh
+index e4e0994..ea53dbd 100644
+--- a/test/api/pytest.sh
++++ b/test/api/pytest.sh
+@@ -43,7 +43,7 @@ if [[ -n "$abs_top_builddir" ]]; then
+     fi
+   fi
  
+-  PYTHONPATH=$(dirname "${python_lib[*]}"):$PYTHONPATH
++  PYTHONPATH=$(dirname "${python_lib[*]}"):${PYTHONPATH-}
+   export PYTHONPATH
+ elif rpm -q lvm2-python-libs &>/dev/null; then
+   true
+diff --git a/test/shell/inconsistent-metadata.sh b/test/shell/inconsistent-metadata.sh
+index 36d7038..358ffcb 100644
+--- a/test/shell/inconsistent-metadata.sh
++++ b/test/shell/inconsistent-metadata.sh
+@@ -32,6 +32,7 @@ init() {
+ }
+ 
+ # vgscan fixes up metadata (needs --cache option for direct scan if lvmetad is used)
++cache=""
+ test -e LOCAL_LVMETAD && cache="--cache"
+ init
+ vgscan $cache 2>&1 | tee cmd.out
 
 
