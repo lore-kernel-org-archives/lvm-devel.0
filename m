@@ -1,74 +1,39 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Mon, 10 Jul 2017 20:44:07 -0400
-Subject: master - commands: fix lvm shell segfaults
-Message-ID: <201707110044.v6B0i7KH012459@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 11 Jul 2017 11:22:12 -0400
+Subject: master - cleanup: whitespace
+Message-ID: <201707111522.v6BFMCw0015452@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3cd492cd599262872b212a4fc9eefc7050ce1517
-Commit:        3cd492cd599262872b212a4fc9eefc7050ce1517
-Parent:        56768ce36be4a63cda0fec1d06ca061d39288135
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jul 11 01:42:06 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jul 11 01:42:06 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2c3d9a07cbaa49275d24c40c6a4fa2480b1ac3d8
+Commit:        2c3d9a07cbaa49275d24c40c6a4fa2480b1ac3d8
+Parent:        3cd492cd599262872b212a4fc9eefc7050ce1517
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jul 11 11:21:18 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Jul 11 16:26:12 2017 +0200
 
-commands: fix lvm shell segfaults
+cleanup: whitespace
 
-Don't check for -h/--help if argc is 1.
 ---
- WHATS_NEW          |    1 +
- tools/lvmcmdline.c |   24 +++++++++++++-----------
- 2 files changed, 14 insertions(+), 11 deletions(-)
+ lib/misc/crc.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 062a440..29678f4 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.173 - 
- =================================
-+  Accept 'lvm -h' and 'lvm --help' as well as 'lvm help' for help.
-   Suppress error message from accept() on clean lvmetad shutdown.
-   Tidy clvmd client list processing and fix segfaults.
-   Protect clvmd debug log messages with mutex and add client id.
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 70371d0..700593c 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -3430,17 +3430,19 @@ int lvm2_main(int argc, char **argv)
- 			log_sys_error("unsetenv", "LVM_DID_EXEC");
- 	}
- 
--	/* "version" command is simple enough so it doesn't need any complex init */
--	if (!alias && argc > 1 && !strcmp(argv[1], "version"))
--		return lvm_return_code(version(NULL, argc, argv));
--
--	/* turn 'lvm -h' and 'lvm --help' into 'lvm help' */
--	if (!alias && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")))
--		argv[1] = (char *)"help";
--
--	if (!alias && (*argv[1] == '-')) {
--		log_error("Specify options after a command: lvm [command] [options].");
--		return -1;
-+	if (!alias && argc > 1) {
-+		/* "version" command is simple enough so it doesn't need any complex init */
-+		if (!strcmp(argv[1], "version"))
-+			return lvm_return_code(version(NULL, argc, argv));
+diff --git a/lib/misc/crc.c b/lib/misc/crc.c
+index fc4d3f0..aacd82d 100644
+--- a/lib/misc/crc.c
++++ b/lib/misc/crc.c
+@@ -63,7 +63,7 @@ static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, uint32_t siz
+ 	const uint32_t *start = (const uint32_t *) buf;
+ 	const uint32_t *end = (const uint32_t *) (buf + (size & 0xfffffffc));
+ 	uint32_t crc = initial;
+-   
 +
-+		/* turn 'lvm -h' and 'lvm --help' into 'lvm help' */
-+		if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))
-+			argv[1] = (char *)"help";
-+
-+		if (*argv[1] == '-') {
-+			log_error("Specify options after a command: lvm [command] [options].");
-+			return -1;
-+		}
- 	}
- 
- 	if (!(cmd = init_lvm(0, 0)))
+ 	/* Process 4 bytes per iteration */
+ 	while (start < end) {
+ 		crc = crc ^ xlate32(*start++);
 
 
