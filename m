@@ -1,54 +1,106 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 12 Jul 2017 07:53:29 -0400
-Subject: master - tests: properly check variables were defined
-Message-ID: <201707121153.v6CBrTFe012176@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 12 Jul 2017 11:55:08 -0400
+Subject: master - pvs: use dummy structs in duplicate processing
+Message-ID: <201707121555.v6CFt8JU020519@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c4b6df94b4a39335369c439eb3110a06649378e5
-Commit:        c4b6df94b4a39335369c439eb3110a06649378e5
-Parent:        1daa1cc3a98b8812912875773ad3be1b9b173c4c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 12 13:51:16 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 12 13:51:16 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e329da173f51c6b1c2af1fc144a52a740955f445
+Commit:        e329da173f51c6b1c2af1fc144a52a740955f445
+Parent:        c4b6df94b4a39335369c439eb3110a06649378e5
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jul 12 10:51:54 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jul 12 10:51:54 2017 -0500
 
-tests: properly check variables were defined
+pvs: use dummy structs in duplicate processing
 
-When test suite is installed some vars are not defined.
+Use the same dummy struct approach from report.c
+when a pv needs to be processed without a real vg.
 ---
- test/api/pytest.sh   |    2 +-
- test/lib/inittest.sh |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ tools/toollib.c |   50 ++++++++++++++++++++++++++++++++------------------
+ 1 files changed, 32 insertions(+), 18 deletions(-)
 
-diff --git a/test/api/pytest.sh b/test/api/pytest.sh
-index ea53dbd..2581768 100644
---- a/test/api/pytest.sh
-+++ b/test/api/pytest.sh
-@@ -30,7 +30,7 @@ aux prepare_dmeventd
- # gdb -ex r --args python FULL_PATH/lvm2/test/api/python_lvm_unit.py -v TestLvm.test_lv_active_inactive
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 452c8b0..2836aeb 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -4024,18 +4024,36 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
+ 				  struct processing_handle *handle,
+ 				  process_single_pv_fn_t process_single_pv)
+ {
+-	struct physical_volume pv_dummy;
+-	struct physical_volume *pv;
+ 	struct device_id_list *dil;
+ 	struct device_list *devl;
+ 	struct dm_list unused_duplicate_devs;
+ 	struct lvmcache_info *info;
+-	struct volume_group *vg = NULL;
+-	const char *vgname = NULL;
+-	const char *vgid = NULL;
++	const char *vgname;
++	const char *vgid;
+ 	int ret_max = ECMD_PROCESSED;
+ 	int ret = 0;
  
- #Locate the python binding library to use.
--if [[ -n "$abs_top_builddir" ]]; then
-+if [[ -n "${abs_top_builddir+varset}" ]]; then
-   python_lib=($(find "$abs_top_builddir" -name lvm.so))
-   if [[ ${#python_lib[*]} -ne 1 ]]; then
-     if [[ ${#python_lib[*]} -gt 1 ]]; then
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index c0f3e6b..f13b386 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -91,7 +91,7 @@ cd "$TESTDIR"
- mkdir lib
++	struct physical_volume dummy_pv = {
++		.tags = DM_LIST_HEAD_INIT(dummy_pv.tags),
++		.segments= DM_LIST_HEAD_INIT(dummy_pv.segments),
++	};
++
++	struct format_instance dummy_fid = {
++		.metadata_areas_in_use = DM_LIST_HEAD_INIT(dummy_fid.metadata_areas_in_use),
++		.metadata_areas_ignored = DM_LIST_HEAD_INIT(dummy_fid.metadata_areas_ignored),
++	};
++
++	struct volume_group dummy_vg = {
++		.fid = &dummy_fid,
++		.name = "",
++		.system_id = (char *) "",
++		.lvm1_system_id = (char *) "",
++		.pvs = DM_LIST_HEAD_INIT(dummy_vg.pvs),
++		.lvs = DM_LIST_HEAD_INIT(dummy_vg.lvs),
++		.historical_lvs = DM_LIST_HEAD_INIT(dummy_vg.historical_lvs),
++		.tags = DM_LIST_HEAD_INIT(dummy_vg.tags),
++	};
++
+ 	dm_list_init(&unused_duplicate_devs);
  
- # Setting up symlink from $i to $TESTDIR/lib
--test -n "$abs_top_builddir" && \
-+test -n "${abs_top_builddir+varset}" && \
-     find "$abs_top_builddir/daemons/dmeventd/plugins/" -name '*.so' \
-     -exec ln -s -t lib "{}" +
- find "$TESTOLDPWD/lib" ! \( -name '*.sh' -o -name '*.[cdo]' \
+ 	if (!lvmcache_get_unused_duplicate_devs(cmd, &unused_duplicate_devs))
+@@ -4085,22 +4103,18 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
+ 		}
+ 
+ 		vgname = lvmcache_vgname_from_info(info);
+-		if (vgname)
+-			vgid = lvmcache_vgid_from_vgname(cmd, vgname);
+-		if (vgid)
+-			vg = lvmcache_get_vg(cmd, vgname, vgid, 0);
++		vgid = vgname ? lvmcache_vgid_from_vgname(cmd, vgname) : NULL;
+ 
+-		memset(&pv_dummy, 0, sizeof(pv_dummy));
+-		dm_list_init(&pv_dummy.tags);
+-		dm_list_init(&pv_dummy.segments);
+-		pv_dummy.dev = devl->dev;
+-		pv_dummy.fmt = lvmcache_fmt_from_info(info);
+-		pv = &pv_dummy;
++		dummy_pv.dev = devl->dev;
++		dummy_pv.fmt = lvmcache_fmt_from_info(info);
++		dummy_vg.name = vgname ?: "";
+ 
+-		ret = process_single_pv(cmd, vg, pv, handle);
++		if (vgid)
++			memcpy(&dummy_vg.id, vgid, ID_LEN);
++		else
++			memset(&dummy_vg.id, 0, sizeof(dummy_vg.id));
+ 
+-		if (vg)
+-			release_vg(vg);
++		ret = process_single_pv(cmd, &dummy_vg, &dummy_pv, handle);
+ 
+ 		if (ret > ret_max)
+ 			ret_max = ret;
 
 
