@@ -1,106 +1,57 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 12 Jul 2017 11:55:08 -0400
-Subject: master - pvs: use dummy structs in duplicate processing
-Message-ID: <201707121555.v6CFt8JU020519@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 12 Jul 2017 12:19:29 -0400
+Subject: master - tests: fix for new hardened bash
+Message-ID: <201707121619.v6CGJTfB027932@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e329da173f51c6b1c2af1fc144a52a740955f445
-Commit:        e329da173f51c6b1c2af1fc144a52a740955f445
-Parent:        c4b6df94b4a39335369c439eb3110a06649378e5
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jul 12 10:51:54 2017 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jul 12 10:51:54 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c838e79cd2e1dc3c6054e661e6a2f65c0d5c6144
+Commit:        c838e79cd2e1dc3c6054e661e6a2f65c0d5c6144
+Parent:        e329da173f51c6b1c2af1fc144a52a740955f445
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jul 12 18:03:10 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jul 12 18:05:56 2017 +0200
 
-pvs: use dummy structs in duplicate processing
+tests: fix for new hardened bash
 
-Use the same dummy struct approach from report.c
-when a pv needs to be processed without a real vg.
+Add missing get_devs.
+When $7 is not given use empty string.
+See if we can live with less RAM disk for PVs.
+Drop limitation on single core as presence 1.12 should address this.
 ---
- tools/toollib.c |   50 ++++++++++++++++++++++++++++++++------------------
- 1 files changed, 32 insertions(+), 18 deletions(-)
+ test/shell/lvconvert-raid-reshape.sh |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 452c8b0..2836aeb 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -4024,18 +4024,36 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
- 				  struct processing_handle *handle,
- 				  process_single_pv_fn_t process_single_pv)
- {
--	struct physical_volume pv_dummy;
--	struct physical_volume *pv;
- 	struct device_id_list *dil;
- 	struct device_list *devl;
- 	struct dm_list unused_duplicate_devs;
- 	struct lvmcache_info *info;
--	struct volume_group *vg = NULL;
--	const char *vgname = NULL;
--	const char *vgid = NULL;
-+	const char *vgname;
-+	const char *vgid;
- 	int ret_max = ECMD_PROCESSED;
- 	int ret = 0;
+diff --git a/test/shell/lvconvert-raid-reshape.sh b/test/shell/lvconvert-raid-reshape.sh
+index 4f4f7c2..c93d79b 100644
+--- a/test/shell/lvconvert-raid-reshape.sh
++++ b/test/shell/lvconvert-raid-reshape.sh
+@@ -20,9 +20,11 @@ aux have_raid 1 12 0 || skip
  
-+	struct physical_volume dummy_pv = {
-+		.tags = DM_LIST_HEAD_INIT(dummy_pv.tags),
-+		.segments= DM_LIST_HEAD_INIT(dummy_pv.segments),
-+	};
-+
-+	struct format_instance dummy_fid = {
-+		.metadata_areas_in_use = DM_LIST_HEAD_INIT(dummy_fid.metadata_areas_in_use),
-+		.metadata_areas_ignored = DM_LIST_HEAD_INIT(dummy_fid.metadata_areas_ignored),
-+	};
-+
-+	struct volume_group dummy_vg = {
-+		.fid = &dummy_fid,
-+		.name = "",
-+		.system_id = (char *) "",
-+		.lvm1_system_id = (char *) "",
-+		.pvs = DM_LIST_HEAD_INIT(dummy_vg.pvs),
-+		.lvs = DM_LIST_HEAD_INIT(dummy_vg.lvs),
-+		.historical_lvs = DM_LIST_HEAD_INIT(dummy_vg.historical_lvs),
-+		.tags = DM_LIST_HEAD_INIT(dummy_vg.tags),
-+	};
-+
- 	dm_list_init(&unused_duplicate_devs);
+ # Temporarily skip reshape tests on single-core CPUs until there's a fix for
+ # https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
+-aux have_multi_core || skip
++#aux have_multi_core || skip
++# dropping single-core limitation with  1.12 target
  
- 	if (!lvmcache_get_unused_duplicate_devs(cmd, &unused_duplicate_devs))
-@@ -4085,22 +4103,18 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
- 		}
+-aux prepare_pvs 65 64
++aux prepare_pvs 65 32
++get_devs
  
- 		vgname = lvmcache_vgname_from_info(info);
--		if (vgname)
--			vgid = lvmcache_vgid_from_vgname(cmd, vgname);
--		if (vgid)
--			vg = lvmcache_get_vg(cmd, vgname, vgid, 0);
-+		vgid = vgname ? lvmcache_vgid_from_vgname(cmd, vgname) : NULL;
+ vgcreate -s 1M "$vg" "${DEVICES[@]}"
  
--		memset(&pv_dummy, 0, sizeof(pv_dummy));
--		dm_list_init(&pv_dummy.tags);
--		dm_list_init(&pv_dummy.segments);
--		pv_dummy.dev = devl->dev;
--		pv_dummy.fmt = lvmcache_fmt_from_info(info);
--		pv = &pv_dummy;
-+		dummy_pv.dev = devl->dev;
-+		dummy_pv.fmt = lvmcache_fmt_from_info(info);
-+		dummy_vg.name = vgname ?: "";
+@@ -51,7 +53,7 @@ function _lvconvert
+ 	local stripes=$4
+ 	local vg=$5
+ 	local lv=$6
+-	local region_size=$7
++	local region_size=${7-}
+ 	local wait_and_check=1
+ 	local R=""
  
--		ret = process_single_pv(cmd, vg, pv, handle);
-+		if (vgid)
-+			memcpy(&dummy_vg.id, vgid, ID_LEN);
-+		else
-+			memset(&dummy_vg.id, 0, sizeof(dummy_vg.id));
- 
--		if (vg)
--			release_vg(vg);
-+		ret = process_single_pv(cmd, &dummy_vg, &dummy_pv, handle);
- 
- 		if (ret > ret_max)
- 			ret_max = ret;
 
 
