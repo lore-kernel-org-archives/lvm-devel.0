@@ -1,51 +1,60 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Thu, 13 Jul 2017 12:10:15 -0400
-Subject: master - format_text: Extend FIXME to reduce label scans
-Message-ID: <201707131610.v6DGAFKU014161@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 13 Jul 2017 15:12:54 -0400
+Subject: master - tests: add some delay after dmsetup
+Message-ID: <201707131912.v6DJCsZf013566@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5027c3c7eea0791a9a80b0622b43c8a493e2a8a7
-Commit:        5027c3c7eea0791a9a80b0622b43c8a493e2a8a7
-Parent:        c2de4b9747fcaf4c3735dc68318a28c80a939374
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jul 13 17:05:49 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jul 13 17:05:49 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=490e6e9ef1bbc30dff81873e9eeb99924688004e
+Commit:        490e6e9ef1bbc30dff81873e9eeb99924688004e
+Parent:        5027c3c7eea0791a9a80b0622b43c8a493e2a8a7
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jul 13 21:06:04 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jul 13 21:11:16 2017 +0200
 
-format_text: Extend FIXME to reduce label scans
+tests: add some delay after dmsetup
 
-It's unnecessarily scanning all invalid labels even when nothing changed
-instead of first just scanning the ones under the lock.
+When we want to squash as much device as possible,
+it's better to give it some delay, so devices have
+some time to release it's resouces for next removal.
+
+Also drop surrounding cookie processing and let each
+dmsetup call run on its own.
 ---
- lib/format_text/format-text.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ test/lib/aux.sh |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 5d731ca..9e99c85 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -2002,6 +2002,9 @@ static int _create_vg_text_instance(struct format_instance *fid,
- 			 */
- 			if (!critical_section())
- 				/* Scan PVs in VG for any further MDAs */
-+				/*
-+				 * FIXME Only scan PVs believed to be in the VG.
-+ 				 */
- 				lvmcache_label_scan(fid->fmt->cmd);
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index a8b6bea..9e0ca2c 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -416,13 +416,12 @@ teardown_devs_prefixed() {
+ 	#local listdevs=( $(dm_info name,open --sort open,name | grep "$prefix.*:0") )
+ 	#dmsetup remove --deferred ${listdevs[@]%%:0} || touch REMOVE_FAILED
  
- 			if (!(vginfo = lvmcache_vginfo_from_vgname(vg_name, vg_id)))
-@@ -2010,7 +2013,7 @@ static int _create_vg_text_instance(struct format_instance *fid,
- 				goto_out;
- 		}
+-	init_udev_transaction
+ 	for dm in $(dm_info name --sort open,name | grep "$prefix"); do
+ 		dmsetup remove "$dm" &>/dev/null || touch REMOVE_FAILED &
+ 		need_udev_wait=1
++		sleep 1 # give 'dmsetup' some time to proceed with removal
+ 	done
+ 	wait
+-	finish_udev_transaction
+ 	test "$need_udev_wait" -eq 0 || udev_wait
  
--		/* FIXME Check raw metadata area count - rescan if required */
-+		/* FIXME If PV list or raw metadata area count are not as expected rescan */
- 	}
+ 	if test -f REMOVE_FAILED; then
+@@ -1214,7 +1213,7 @@ EOF
+ 	local last_sec
  
- out:
+ 	# read sequential list and put into associative array
+-	while IFS=$IFS_NL read -r v; do
++	while IFS= read -r v; do
+ 		CONF["${v%%[={ ]*}"]=${v#*/}
+ 	done < "$config_values"
+ 
 
 
