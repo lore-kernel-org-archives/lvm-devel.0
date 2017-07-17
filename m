@@ -1,64 +1,56 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 14 Jul 2017 18:52:01 -0400
-Subject: master - raid: add validation checks for segment data_offset member
-Message-ID: <201707142252.v6EMq1AX015559@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 17 Jul 2017 07:40:10 -0400
+Subject: master - devcache: correct logging severity for connection
+Message-ID: <201707171140.v6HBeAlH022477@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fb641c342343ac48cc623c8079900b1f4f395a69
-Commit:        fb641c342343ac48cc623c8079900b1f4f395a69
-Parent:        c64e2a85cb1c76413cf2eee49873bfb9ee24393f
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Sat Jul 15 00:50:19 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Sat Jul 15 00:51:43 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ea96a9d68eadd3505330db73856418c253080dba
+Commit:        ea96a9d68eadd3505330db73856418c253080dba
+Parent:        919fa89482b85eb467ecd9561c89c1dfdaae7217
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Jul 16 18:23:41 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Jul 17 12:28:51 2017 +0200
 
-raid: add validation checks for segment data_offset member
+devcache: correct logging severity for connection
 
-Commit 34504855a70772e1de3f117a9a610860ead80981 introduced
-flag LV_RESHAPE_DATA_OFFSET and used it to avoid incompatible
-activation on older runtime.
+Switch from warn to log_error since this generated
+failing return code for command so printing log_error()
+is mandatory.
 
-Enhance vg_validate() raid checking functions with checks for it.
+Happens with i.e. pvscan --cache meets crashing lvmetad.
 ---
- lib/metadata/merge.c |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/cache/lvmetad.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index e642459..dbe0d58 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -119,6 +119,8 @@ static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
- 		raid_seg_error_val("non-zero min recovery rate", seg->min_recovery_rate);
- 	if (seg->max_recovery_rate)
- 		raid_seg_error_val("non-zero max recovery rate", seg->max_recovery_rate);
-+	if (seg->lv->status & LV_RESHAPE_DATA_OFFSET)
-+		raid_seg_error_val("data_offset", seg->data_offset);
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2fece12..818458c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.173 - 
+ =================================
++  Log error instad of warn when noticing connection problem with lvmetad.
+   Fix memory leak in lvmetad when working with duplicates.
+   Accept 'lvm -h' and 'lvm --help' as well as 'lvm help' for help.
+   Suppress error message from accept() on clean lvmetad shutdown.
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 531e01c..5490675 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -662,7 +662,7 @@ static int _lvmetad_handle_reply(daemon_reply reply, const char *id, const char
+ 	}
  
- /* Check RAID @seg for non-zero, power of 2 region size and min recovery rate <= max */
-@@ -141,6 +143,8 @@ static void _check_raid1_seg(struct lv_segment *seg, int *error_count)
- 		raid_seg_error("no meta areas");
- 	if (seg->stripe_size)
- 		raid_seg_error_val("non-zero stripe size", seg->stripe_size);
-+	if (seg->lv->status & LV_RESHAPE_DATA_OFFSET)
-+		raid_seg_error_val("data_offset", seg->data_offset);
- 	_check_raid_region_recovery(seg, error_count);
- }
+ 	if (reply.error) {
+-		log_warn("WARNING: lvmetad cannot be used due to error: %s", strerror(reply.error));
++		log_error("lvmetad cannot be used due to error: %s", strerror(reply.error));
+ 		goto fail;
+ 	}
  
-@@ -165,6 +169,10 @@ static void _check_raid45610_seg(struct lv_segment *seg, int *error_count)
- 	_check_raid_region_recovery(seg, error_count);
- 	/* END: checks applying to any raid4/5/6/10 */
- 
-+	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) &&
-+	    (seg->data_offset & (seg->lv->vg->extent_size - 1)))
-+		raid_seg_error_val("data_offset", seg->data_offset);
-+
- 	/* Specific checks per raid level */
- 	if (seg_is_raid4(seg) ||
- 	    seg_is_any_raid5(seg)) {
 
 
