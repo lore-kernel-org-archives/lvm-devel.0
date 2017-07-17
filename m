@@ -1,58 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 17 Jul 2017 07:40:17 -0400
-Subject: master - clvmd: fix valgrind memory report
-Message-ID: <201707171140.v6HBeHkO022512@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 17 Jul 2017 07:40:23 -0400
+Subject: master - lvmcmdline: validate size as double
+Message-ID: <201707171140.v6HBeNt6022526@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=28e319ddc0cf3f60ee200a2c4a0bab971e1490c8
-Commit:        28e319ddc0cf3f60ee200a2c4a0bab971e1490c8
-Parent:        d7f92ea8ee71997027007088beaf342c625abb44
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=94838b4df06c4f5a47c4cb51d5949d8e7b4684e7
+Commit:        94838b4df06c4f5a47c4cb51d5949d8e7b4684e7
+Parent:        28e319ddc0cf3f60ee200a2c4a0bab971e1490c8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 17 12:25:05 2017 +0200
+AuthorDate:    Sun Jul 16 09:53:49 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 17 12:30:01 2017 +0200
+CommitterDate: Mon Jul 17 12:32:18 2017 +0200
 
-clvmd: fix valgrind memory report
+lvmcmdline: validate size as double
 
-Avoid reading already released memory and do a continue directly.
-
-Invalid read of size 1
-   at 0x1201B0: main_loop (clvmd.c:931)
-   by 0x11F640: main (clvmd.c:666)
- Address 0x72ddef0 is 32 bytes inside a block of size 224 free'd
-   at 0x4C30D18: free (vg_replace_malloc.c:530)
-   by 0x54D6FD1: dm_free_wrapper (dbg_malloc.c:357)
-   by 0x122E6E: process_work_item (clvmd.c:2034)
-   by 0x123003: lvm_thread_fn (clvmd.c:2085)
-   by 0x590A3A8: start_thread (pthread_create.c:465)
-   by 0x5C3C7FE: clone (in /usr/lib64/libc-2.25.90.so)
- Block was alloc'd at
-   at 0x4C2FB6B: malloc (vg_replace_malloc.c:299)
-   by 0x54D6EF1: dm_malloc_aux (dbg_malloc.c:286)
-   by 0x54D6F1C: dm_zalloc_aux (dbg_malloc.c:291)
-   by 0x54D6F96: dm_zalloc_wrapper (dbg_malloc.c:345)
-   by 0x11F89C: local_rendezvous_callback (clvmd.c:731)
-   by 0x1203D2: main_loop (clvmd.c:964)
-   by 0x11F640: main (clvmd.c:666)
+Since we are reading size as (double) we can get way bigger
+number then just plain int64. So to make this check actually
+more valid and usable do a maxsize compare in 'double'.
 ---
- daemons/clvmd/clvmd.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ WHATS_NEW          |    1 +
+ tools/lvmcmdline.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 0832f4a..7506dca 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -925,6 +925,7 @@ static void main_loop(int cmd_timeout)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 477d4ea..48ec679 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.173 - 
+ =================================
++  Improve --size args validation and report more detailed error message.
+   Initialize debugging mutex before any debug message in clvmd.
+   Log error instad of warn when noticing connection problem with lvmetad.
+   Fix memory leak in lvmetad when working with duplicates.
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 700593c..d3523be 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -617,7 +617,8 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
+ 	} else
+ 		v *= factor;
  
- 				/* Queue cleanup, this also frees the client struct */
- 				add_to_lvmqueue(thisfd, NULL, 0, NULL);
-+				continue;
- 			}
- 
- 			if (thisfd->removeme)
+-	if ((uint64_t) v >= (UINT64_MAX >> SECTOR_SHIFT)) {
++	/* Compare (double) */
++	if (v >= (double) (UINT64_MAX >> SECTOR_SHIFT)) {
+ 		log_error("Size is too big (>=16EiB).");
+ 		return 0;
+ 	}
 
 
