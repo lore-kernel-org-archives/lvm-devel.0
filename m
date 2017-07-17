@@ -1,67 +1,66 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 17 Jul 2017 14:57:20 -0400
-Subject: master - lvmcmdline: restore digit check
-Message-ID: <201707171857.v6HIvKZW030334@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 17 Jul 2017 15:27:52 -0400
+Subject: master - lvmcmdline: enhance locales check
+Message-ID: <201707171927.v6HJRqsr002680@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=864017710c65e07a19d70bc226b2522a6b1907dc
-Commit:        864017710c65e07a19d70bc226b2522a6b1907dc
-Parent:        fde23f7ce1a7e567fce3f1d33387f110f81d1fef
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4fa739faf2d30beea5a8423806594f506644a540
+Commit:        4fa739faf2d30beea5a8423806594f506644a540
+Parent:        864017710c65e07a19d70bc226b2522a6b1907dc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 17 20:36:39 2017 +0200
+AuthorDate:    Mon Jul 17 21:25:50 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 17 20:54:42 2017 +0200
+CommitterDate: Mon Jul 17 21:25:50 2017 +0200
 
-lvmcmdline: restore digit check
+lvmcmdline: enhance locales check
 
-Commit 9b4b5d449ef7045d33b8d8d7e69011d16f4bb8ab started to accept
-rather way to wide set of strings we do not want to take for size.
-i.e.  lvresize -t vg0/lvol0 -LNaNM
-
-Restore check for 'digit ||  locales defined 'dot' |  '.'
-(as we tend to take '.' even if locales uses ',')
+Make check for 'radixchar' more readable and logical.
+Also avoid reread of number of locale is already using '.' as radixchar.
 ---
- tools/lvmcmdline.c |   10 ++++++++++
- 1 files changed, 10 insertions(+), 0 deletions(-)
+ tools/lvmcmdline.c |   11 ++++-------
+ 1 files changed, 4 insertions(+), 7 deletions(-)
 
 diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 3ff0d1d..c62c776 100644
+index c62c776..a952c8c 100644
 --- a/tools/lvmcmdline.c
 +++ b/tools/lvmcmdline.c
-@@ -32,6 +32,7 @@
- #include <dirent.h>
- #include <paths.h>
- #include <locale.h>
-+#include <langinfo.h>
- 
- #ifdef HAVE_VALGRIND
- #include <valgrind.h>
-@@ -543,6 +544,7 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
+@@ -544,7 +544,7 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
  	char *val;
  	double v;
  	uint64_t v_tmp, adjustment;
-+	char *radixchar = nl_langinfo(RADIXCHAR);
+-	char *radixchar = nl_langinfo(RADIXCHAR);
++	const char *radixchar = nl_langinfo(RADIXCHAR) ? : ".";
  
  	av->percent = PERCENT_NONE;
  
-@@ -565,6 +567,14 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
+@@ -567,10 +567,7 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
  		return 0;
  	}
  
-+
-+	if (!isdigit(*val) &&
-+	    (*val != '.') &&
-+	    (radixchar && (*val != radixchar[0]))) {
-+		log_error("Size requires number argument.");
-+		return 0;
-+	}
-+
+-
+-	if (!isdigit(*val) &&
+-	    (*val != '.') &&
+-	    (radixchar && (*val != radixchar[0]))) {
++	if (!isdigit(*val) && (*val != '.') && (*val != radixchar[0])) {
+ 		log_error("Size requires number argument.");
+ 		return 0;
+ 	}
+@@ -578,10 +575,10 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
  	errno = 0;
  	v = strtod(val, &ptr);
  
+-	if (*ptr == '.') {
++	if (*ptr == '.' && radixchar[0] != '.') {
+ 		/*
+ 		 * Maybe user has non-C locale with different decimal point ?
+-		 * Lets be toleran and retry with standard C locales
++		 * Lets be tolerant and retry with standard C locales
+ 		 */
+ 		if (setlocale(LC_ALL, "C")) {
+ 			errno = 0;
 
 
