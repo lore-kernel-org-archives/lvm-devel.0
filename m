@@ -1,80 +1,118 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 17 Jul 2017 09:03:47 -0400
-Subject: master - tests: aux.sh some backward compatible updates
-Message-ID: <201707171303.v6HD3lGX005044@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 17 Jul 2017 14:57:13 -0400
+Subject: master - tests: better support for unbound vars for older shell
+Message-ID: <201707171857.v6HIvD7h030323@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5a5553bcec2141382407d27781cbade2f6966fe1
-Commit:        5a5553bcec2141382407d27781cbade2f6966fe1
-Parent:        3c32883cec807a8759dfa98bf258ed6e10ca997f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fde23f7ce1a7e567fce3f1d33387f110f81d1fef
+Commit:        fde23f7ce1a7e567fce3f1d33387f110f81d1fef
+Parent:        5a5553bcec2141382407d27781cbade2f6966fe1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 17 15:01:44 2017 +0200
+AuthorDate:    Mon Jul 17 20:32:48 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 17 15:01:44 2017 +0200
+CommitterDate: Mon Jul 17 20:32:48 2017 +0200
 
-tests: aux.sh some backward compatible updates
+tests: better support for unbound vars for older shell
 
-Older bash does not take empty array as bounded variable
-(except for $@)
 ---
- test/lib/aux.sh |   12 +++++++-----
- 1 files changed, 7 insertions(+), 5 deletions(-)
+ test/lib/aux.sh |   43 ++++++++++++++++++-------------------------
+ 1 files changed, 18 insertions(+), 25 deletions(-)
 
 diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index da367aa..b385129 100644
+index b385129..20a8a1e 100644
 --- a/test/lib/aux.sh
 +++ b/test/lib/aux.sh
-@@ -526,6 +526,8 @@ kill_tagged_processes() {
- 		pids+=( "$pid" )
- 	done < <(print_procs_by_tag_ "$@")
+@@ -272,7 +272,7 @@ prepare_lvmpolld() {
+ 	check_daemon_in_builddir lvmetad
+ 	lvmconf "global/use_lvmpolld = 1"
  
-+	test ${#pids[@]} -eq 0 && return
-+
- 	# wait if process exited and eventually -KILL
- 	wait=0
- 	for pid in "${pids[@]}" ; do
-@@ -619,7 +621,7 @@ teardown() {
+-	local run_valgrind
++	local run_valgrind=""
+ 	test "${LVM_VALGRIND_LVMPOLLD:-0}" -eq 0 || run_valgrind="run_valgrind"
  
- prepare_loop() {
- 	local size=${1=32}
--	local losetup_params=( ${@:2} )
-+	shift # all other params are directly passed to all 'losetup' calls
- 	local i
- 	local slash
+ 	kill_sleep_kill_ LOCAL_LVMPOLLD "${LVM_VALGRIND_LVMPOLLD:-0}"
+@@ -881,23 +881,22 @@ prepare_devs() {
  
-@@ -644,9 +646,9 @@ prepare_loop() {
- 	local LOOPFILE="$PWD/test.img"
- 	rm -f "$LOOPFILE"
- 	dd if=/dev/zero of="$LOOPFILE" bs=$((1024*1024)) count=0 seek=$(( size + 1 )) 2> /dev/null
--	if LOOP=$(losetup "${losetup_params[@]}" -s -f "$LOOPFILE" 2>/dev/null); then
-+	if LOOP=$(losetup "$@" -s -f "$LOOPFILE" 2>/dev/null); then
- 		:
--	elif LOOP=$(losetup -f) && losetup "${losetup_params[@]}" "$LOOP" "$LOOPFILE"; then
-+	elif LOOP=$(losetup -f) && losetup "$@" "$LOOP" "$LOOPFILE"; then
- 		# no -s support
- 		:
- 	else
-@@ -657,7 +659,7 @@ prepare_loop() {
- 				local dev="$DM_DEV_DIR/loop$slash$i"
- 				! losetup "$dev" >/dev/null 2>&1 || continue
- 				# got a free
--				losetup "${losetup_params[@]}" "$dev" "$LOOPFILE"
-+				losetup "$@" "$dev" "$LOOPFILE"
- 				LOOP=$dev
- 				break
- 			done
-@@ -1215,7 +1217,7 @@ EOF
- 			echo "$s {"
- 			local k
- 			for k in $(grep ^"$s"/ "$config_values" | cut -f1 -d= | sed -e 's, *$,,' | sort | uniq); do
--				grep "^$k" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ,"
-+				grep "^$k" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ," || true
- 			done
- 			echo "}"
- 			echo
+ common_dev_() {
+ 	local tgtype=$1
+-	local name=${2##*/}
+-	local offsets
+-	local read_ms
+-	local write_ms
++	local dev=$2
++	local name=${dev##*/}
++	shift 2
++	local read_ms=${1-0}
++	local write_ms=${2-0}
+ 
+ 	case "$tgtype" in
+ 	delay)
+-		read_ms=${3:-0}
+-		write_ms=${4:-0}
+-		offsets=( ${@:5} )
+-		if test "$read_ms" -eq 0 && test "$write_ms" -eq 0 ; then
+-			offsets=( )
+-		else
+-			test -z "${offsets[@]}" && offsets=( "0:" )
+-		fi ;;
+-	error|zero)  offsets=( ${@:3} )
+-		test -z "${offsets[@]}" && offsets=( "0:" ) ;;
++		test "$read_ms" -eq 0 && test "$write_ms" -eq 0 && {
++			# zero delay is just equivalent to 'enable_dev'
++			enable_dev "$dev"
++			return
++		}
++		shift 2
++		;;
++	# error|zero target does not take read_ms & write_ms only offset list
+ 	esac
+ 
+ 	local pos
+@@ -908,7 +907,7 @@ common_dev_() {
+ 
+ 	read -r pos size type pvdev offset < "$name.table"
+ 
+-	for fromlen in "${offsets[@]}"; do
++	for fromlen in "${@-0:}"; do
+ 		from=${fromlen%%:*}
+ 		len=${fromlen##*:}
+ 		test -n "$len" || len=$(( size - from ))
+@@ -931,11 +930,7 @@ common_dev_() {
+ 	diff=$(( size - pos ))
+ 	test "$diff" -gt 0 && echo "$pos $diff $type $pvdev $(( pos + offset ))" >>"$name.devtable"
+ 
+-	init_udev_transaction
+-	dmsetup load "$name" "$name.devtable"
+-	# TODO: add support for resume without udev rescan
+-	dmsetup resume "$name"
+-	finish_udev_transaction
++	restore_from_devtable "$dev"
+ }
+ 
+ # Replace linear PV device with its 'delayed' version
+@@ -1001,8 +996,7 @@ enable_dev() {
+ 	rm -f debug.log strace.log
+ 	init_udev_transaction
+ 	for dev in "$@"; do
+-		local name
+-		name=$(echo "$dev" | sed -e 's,.*/,,')
++		local name=${dev##*/}
+ 		dmsetup create -u "TEST-$name" "$name" "$name.table" 2>/dev/null || \
+ 			dmsetup load "$name" "$name.table"
+ 		# using device name (since device path does not exists yes with udev)
+@@ -1029,8 +1023,7 @@ restore_from_devtable() {
+ 	rm -f debug.log strace.log
+ 	init_udev_transaction
+ 	for dev in "$@"; do
+-		local name
+-		name=$(echo "$dev" | sed -e 's,.*/,,')
++		local name=${dev##*/}
+ 		dmsetup load "$name" "$name.devtable"
+ 		dmsetup resume "$name"
+ 	done
 
 
