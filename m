@@ -1,89 +1,80 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 17 Jul 2017 07:41:29 -0400
-Subject: master - test: repeat rediscovery few times
-Message-ID: <201707171141.v6HBfTjb022695@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 17 Jul 2017 09:03:47 -0400
+Subject: master - tests: aux.sh some backward compatible updates
+Message-ID: <201707171303.v6HD3lGX005044@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3c32883cec807a8759dfa98bf258ed6e10ca997f
-Commit:        3c32883cec807a8759dfa98bf258ed6e10ca997f
-Parent:        f293d469463ad26cbd5e1aefce6e939afceb36ff
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5a5553bcec2141382407d27781cbade2f6966fe1
+Commit:        5a5553bcec2141382407d27781cbade2f6966fe1
+Parent:        3c32883cec807a8759dfa98bf258ed6e10ca997f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Jul 16 18:29:20 2017 +0200
+AuthorDate:    Mon Jul 17 15:01:44 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 17 13:38:31 2017 +0200
+CommitterDate: Mon Jul 17 15:01:44 2017 +0200
 
-test: repeat rediscovery few times
+tests: aux.sh some backward compatible updates
 
-Avoid using 'aux' shell when setting dmsetup cookie.
-Do not user '--force' when using external cookie.
+Older bash does not take empty array as bounded variable
+(except for $@)
 ---
- test/shell/lvmetad-ambiguous.sh |   44 +++++++++++++++++++++++++++++++++++---
- 1 files changed, 40 insertions(+), 4 deletions(-)
+ test/lib/aux.sh |   12 +++++++-----
+ 1 files changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvmetad-ambiguous.sh b/test/shell/lvmetad-ambiguous.sh
-index 71677c8..4b69c13 100644
---- a/test/shell/lvmetad-ambiguous.sh
-+++ b/test/shell/lvmetad-ambiguous.sh
-@@ -19,12 +19,32 @@ SKIP_WITH_LVMPOLLD=1
- aux prepare_pvs 2
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index da367aa..b385129 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -526,6 +526,8 @@ kill_tagged_processes() {
+ 		pids+=( "$pid" )
+ 	done < <(print_procs_by_tag_ "$@")
  
- # flip the devices around
--aux init_udev_transaction
--dmsetup remove -f "$dev1"
--dmsetup remove -f "$dev2"
-+init_udev_transaction
-+dmsetup remove "$dev1"
-+dmsetup remove "$dev2"
-+dmsetup create -u TEST-${PREFIX}pv1 ${PREFIX}pv2 ${PREFIX}pv2.table
-+dmsetup create -u TEST-${PREFIX}pv2 ${PREFIX}pv1 ${PREFIX}pv1.table
-+finish_udev_transaction
-+dmsetup info -c
++	test ${#pids[@]} -eq 0 && return
 +
-+# re-scan them
-+pvscan --cache "$dev1" || true
-+pvscan --cache "$dev2" || true
-+
-+# expect both to be there
-+pvs -a -o name | tee out
-+grep "$dev1" out
-+grep "$dev2" out
-+
-+aux lvmetad_dump
-+
-+# flip the devices 2nd. time around
-+init_udev_transaction
-+dmsetup remove "$dev1"
-+dmsetup remove "$dev2"
- dmsetup create -u TEST-${PREFIX}pv2 ${PREFIX}pv2 ${PREFIX}pv2.table
- dmsetup create -u TEST-${PREFIX}pv1 ${PREFIX}pv1 ${PREFIX}pv1.table
--aux finish_udev_transaction
-+finish_udev_transaction
+ 	# wait if process exited and eventually -KILL
+ 	wait=0
+ 	for pid in "${pids[@]}" ; do
+@@ -619,7 +621,7 @@ teardown() {
  
- # re-scan them
- pvscan --cache "$dev1" || true
-@@ -35,3 +55,19 @@ pvs -a -o name | tee out
- grep "$dev1" out
- grep "$dev2" out
+ prepare_loop() {
+ 	local size=${1=32}
+-	local losetup_params=( ${@:2} )
++	shift # all other params are directly passed to all 'losetup' calls
+ 	local i
+ 	local slash
  
-+aux lvmetad_dump
-+
-+# flip the devices 2nd. time around
-+dmsetup remove -f "$dev1"
-+dmsetup remove -f "$dev2"
-+dmsetup create -u TEST-${PREFIX}pv1 ${PREFIX}pv2 ${PREFIX}pv2.table
-+dmsetup create -u TEST-${PREFIX}pv2 ${PREFIX}pv1 ${PREFIX}pv1.table
-+
-+# re-scan them
-+pvscan --cache "$dev1" || true
-+pvscan --cache "$dev2" || true
-+
-+# expect both to be there
-+pvs -a -o name | tee out
-+grep "$dev1" out
-+grep "$dev2" out
+@@ -644,9 +646,9 @@ prepare_loop() {
+ 	local LOOPFILE="$PWD/test.img"
+ 	rm -f "$LOOPFILE"
+ 	dd if=/dev/zero of="$LOOPFILE" bs=$((1024*1024)) count=0 seek=$(( size + 1 )) 2> /dev/null
+-	if LOOP=$(losetup "${losetup_params[@]}" -s -f "$LOOPFILE" 2>/dev/null); then
++	if LOOP=$(losetup "$@" -s -f "$LOOPFILE" 2>/dev/null); then
+ 		:
+-	elif LOOP=$(losetup -f) && losetup "${losetup_params[@]}" "$LOOP" "$LOOPFILE"; then
++	elif LOOP=$(losetup -f) && losetup "$@" "$LOOP" "$LOOPFILE"; then
+ 		# no -s support
+ 		:
+ 	else
+@@ -657,7 +659,7 @@ prepare_loop() {
+ 				local dev="$DM_DEV_DIR/loop$slash$i"
+ 				! losetup "$dev" >/dev/null 2>&1 || continue
+ 				# got a free
+-				losetup "${losetup_params[@]}" "$dev" "$LOOPFILE"
++				losetup "$@" "$dev" "$LOOPFILE"
+ 				LOOP=$dev
+ 				break
+ 			done
+@@ -1215,7 +1217,7 @@ EOF
+ 			echo "$s {"
+ 			local k
+ 			for k in $(grep ^"$s"/ "$config_values" | cut -f1 -d= | sed -e 's, *$,,' | sort | uniq); do
+-				grep "^$k" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ,"
++				grep "^$k" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ," || true
+ 			done
+ 			echo "}"
+ 			echo
 
 
