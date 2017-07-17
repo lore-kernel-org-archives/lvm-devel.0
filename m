@@ -1,74 +1,70 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 17 Jul 2017 07:40:11 -0400
-Subject: master - lvmetad: fix memory leaks
-Message-ID: <201707171140.v6HBeBIF022482@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 17 Jul 2017 07:40:13 -0400
+Subject: master - clvmd: fix valgrind warning
+Message-ID: <201707171140.v6HBeDNV022498@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=919fa89482b85eb467ecd9561c89c1dfdaae7217
-Commit:        919fa89482b85eb467ecd9561c89c1dfdaae7217
-Parent:        fb641c342343ac48cc623c8079900b1f4f395a69
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d7f92ea8ee71997027007088beaf342c625abb44
+Commit:        d7f92ea8ee71997027007088beaf342c625abb44
+Parent:        ea96a9d68eadd3505330db73856418c253080dba
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Jul 16 10:20:37 2017 +0200
+AuthorDate:    Mon Jul 17 12:23:37 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 17 12:27:53 2017 +0200
+CommitterDate: Mon Jul 17 12:29:57 2017 +0200
 
-lvmetad: fix memory leaks
+clvmd: fix valgrind warning
 
-Hash tables need to release no longer needed inserted data.
+Initialize mutex upfront any debugging and fix this report:
+
+Mutex reinitialization: mutex 0x485d20, recursion count 0, owner 1.
+   at 0x4C38480: pthread_mutex_init_intercept (drd_pthread_intercepts.c:821)
+   by 0x4C38480: pthread_mutex_init (drd_pthread_intercepts.c:830)
+   by 0x11F359: main (clvmd.c:562)
+mutex 0x485d20 was first observed at:
+   at 0x4C38F63: pthread_mutex_lock_intercept (drd_pthread_intercepts.c:885)
+   by 0x4C38F63: pthread_mutex_lock (drd_pthread_intercepts.c:898)
+   by 0x11E920: debuglog (clvmd.c:254)
+   by 0x11F1D8: main (clvmd.c:527)
 ---
- WHATS_NEW                      |    1 +
- daemons/lvmetad/lvmetad-core.c |   17 +++++++++++++++++
- 2 files changed, 18 insertions(+), 0 deletions(-)
+ WHATS_NEW             |    1 +
+ daemons/clvmd/clvmd.c |    3 +--
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 29678f4..2fece12 100644
+index 818458c..477d4ea 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.173 - 
  =================================
-+  Fix memory leak in lvmetad when working with duplicates.
++  Initialize debugging mutex before any debug message in clvmd.
+   Log error instad of warn when noticing connection problem with lvmetad.
+   Fix memory leak in lvmetad when working with duplicates.
    Accept 'lvm -h' and 'lvm --help' as well as 'lvm help' for help.
-   Suppress error message from accept() on clean lvmetad shutdown.
-   Tidy clvmd client list processing and fix segfaults.
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index af5d429..8910bd4 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -258,6 +258,21 @@ static void destroy_metadata_hashes(lvmetad_state *s)
- 	dm_hash_iterate(n, s->pvid_to_pvmeta)
- 		dm_config_destroy(dm_hash_get_data(s->pvid_to_pvmeta, n));
- 
-+	dm_hash_iterate(n, s->vgid_to_vgname)
-+		dm_free(dm_hash_get_data(s->vgid_to_vgname, n));
-+
-+	dm_hash_iterate(n, s->vgname_to_vgid)
-+		dm_free(dm_hash_get_data(s->vgname_to_vgid, n));
-+
-+	dm_hash_iterate(n, s->vgid_to_info)
-+		dm_free(dm_hash_get_data(s->vgid_to_info, n));
-+
-+	dm_hash_iterate(n, s->device_to_pvid)
-+		dm_free(dm_hash_get_data(s->device_to_pvid, n));
-+
-+	dm_hash_iterate(n, s->pvid_to_vgid)
-+		dm_free(dm_hash_get_data(s->pvid_to_vgid, n));
-+
- 	dm_hash_destroy(s->pvid_to_pvmeta);
- 	dm_hash_destroy(s->vgid_to_metadata);
- 	dm_hash_destroy(s->vgid_to_vgname);
-@@ -2111,6 +2126,8 @@ static response pv_found(lvmetad_state *s, request r)
- 				DEBUGLOG(s, "pv_found ignore duplicate device %" PRIu64 " of existing PV for pvid %s",
- 				         arg_device, arg_pvid);
- 				dm_config_destroy(new_pvmeta);
-+				/* device_to_pvid no longer references prev_pvid_lookup */
-+				dm_free((void*)prev_pvid_on_dev);
- 				s->flags |= GLFL_DISABLE;
- 				s->flags |= GLFL_DISABLE_REASON_DUPLICATES;
- 				return reply_fail("Ignore duplicate PV");
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 881a931..0832f4a 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -124,7 +124,7 @@ static const size_t STACK_SIZE = 128 * 1024;
+ static pthread_attr_t stack_attr;
+ static int lvm_thread_exit = 0;
+ static pthread_mutex_t lvm_thread_mutex;
+-static pthread_mutex_t _debuglog_mutex;
++static pthread_mutex_t _debuglog_mutex = PTHREAD_MUTEX_INITIALIZER;
+ static pthread_cond_t lvm_thread_cond;
+ static pthread_barrier_t lvm_start_barrier;
+ static struct dm_list lvm_cmd_head;
+@@ -559,7 +559,6 @@ int main(int argc, char *argv[])
+ 		exit(1);
+ 	}
+ 	pthread_mutex_init(&lvm_thread_mutex, NULL);
+-	pthread_mutex_init(&_debuglog_mutex, NULL);
+ 	pthread_cond_init(&lvm_thread_cond, NULL);
+ 	pthread_barrier_init(&lvm_start_barrier, NULL, 2);
+ 	init_lvhash();
 
 
