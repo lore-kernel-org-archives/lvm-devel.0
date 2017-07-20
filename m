@@ -1,64 +1,80 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 20 Jul 2017 06:19:21 -0400
-Subject: master - tests: aus.sh fix md teardown
-Message-ID: <201707201019.v6KAJLY3016567@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 20 Jul 2017 07:54:05 -0400
+Subject: master - raid: move syncing with udev into function
+Message-ID: <201707201154.v6KBs5LO032067@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7b048f6b43a7cb752bae44fbed0da8508b24b959
-Commit:        7b048f6b43a7cb752bae44fbed0da8508b24b959
-Parent:        48ce8c7a49a963a3d1357ad2b964f46902a2c163
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c78316b7a5341aa9259c118988e659d38ef862f2
+Commit:        c78316b7a5341aa9259c118988e659d38ef862f2
+Parent:        7b048f6b43a7cb752bae44fbed0da8508b24b959
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 20 12:15:06 2017 +0200
+AuthorDate:    Thu Jul 20 13:46:39 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 20 12:16:27 2017 +0200
+CommitterDate: Thu Jul 20 13:52:18 2017 +0200
 
-tests: aus.sh fix md teardown
+raid: move syncing with udev into function
 
-Commit 8a912d6dbcc34ce2b76a0104c39de7aa0480c512 missed the wrong logic,
-we use 2 vars 'dev' & 'mddev' and their usage can't be mixed.
+Since _deactivate_and_remove_lvs() is used in more then one place,
+move the needed udev synchronization into this function so other
+users automatically get correct fs state before next dm manipulation.
 
-So correctly separate them so mddev keeps name of MD device.
+Assumption here is that this udev synchronization 'delay' may also
+prevent to 'early' table reloads which might cause kernel problems
+for md-core - but we may need more generic time-limited reload
+frequency for raid devices.
+
+Note: on udev-less system there will be almost no delay.
 ---
- test/lib/aux.sh |   11 ++++++-----
- 1 files changed, 6 insertions(+), 5 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/raid_manip.c |   14 +++++++-------
+ 2 files changed, 8 insertions(+), 7 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index e620e81..b8a0cc0 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -778,10 +778,11 @@ cleanup_md_dev() {
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 48ec679..c587a9c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.173 - 
+ =================================
++  Add synchornization points with udev during conversion of raid LVs.
+   Improve --size args validation and report more detailed error message.
+   Initialize debugging mutex before any debug message in clvmd.
+   Log error instad of warn when noticing connection problem with lvmetad.
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 895bb73..e275da1 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -329,6 +329,13 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
+ 			return_0;
+ 	}
  
- 	local IFS=$IFS_NL
- 	local dev
--	dev=$(< MD_DEV)
-+	local mddev
-+	mddev=$(< MD_DEV)
- 	udev_wait
--	mdadm --stop "$dev" || true
--	test "$DM_DEV_DIR" != "/dev" && rm -f "$DM_DEV_DIR/$(basename "$dev")"
-+	mdadm --stop "$mddev" || true
-+	test "$DM_DEV_DIR" != "/dev" && rm -f "$DM_DEV_DIR/$(basename "$mddev")"
- 	notify_lvmetad "$(< MD_DEV_PV)"
- 	udev_wait  # wait till events are process, not zeroing to early
- 	for dev in $(< MD_DEVICES); do
-@@ -789,12 +790,12 @@ cleanup_md_dev() {
- 		notify_lvmetad "$dev"
- 	done
- 	udev_wait
--	if [ -b "$dev" ]; then
-+	if [ -b "$mddev" ]; then
- 		# mdadm doesn't always cleanup the device node
- 		# sleeps offer hack to defeat: 'md: md127 still in use'
- 		# see: https://bugzilla.redhat.com/show_bug.cgi?id=509908#c25
- 		sleep 2
--		rm -f "$dev"
-+		rm -f "$mddev"
- 	fi
- 	rm -f MD_DEV MD_DEVICES MD_DEV_PV
++	/* Wait for events following any deactivation. */
++	if (!sync_local_dev_names(vg->cmd)) {
++		log_error("Failed to sync local devices after removing %u LVs in VG %s.",
++			  dm_list_size(removal_lvs), vg->name);
++		return 0;
++	}
++
+ 	return 1;
  }
+ 
+@@ -3852,13 +3859,6 @@ static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
+ 	if (!_deactivate_and_remove_lvs(vg, removal_lvs))
+ 		return_0;
+ 
+-	/* Wait for events following any deactivation. */
+-	if (!sync_local_dev_names(vg->cmd)) {
+-		log_error("Failed to sync local devices after removing %u LVs in VG %s.",
+-			  dm_list_size(removal_lvs), vg->name);
+-		return 0;
+-	}
+-
+ 	dm_list_init(removal_lvs);
+ 
+ 	if (vg_write_requested) {
 
 
