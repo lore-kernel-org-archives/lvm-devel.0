@@ -1,53 +1,39 @@
-From: Germano Percossi <germano.percossi@citrix.com>
-Date: Mon, 31 Jul 2017 10:22:18 +0100
-Subject: Batch/queue LVM operations
-In-Reply-To: <d703293c-192c-c448-f2cb-cf1f5e374cbe@redhat.com>
-References: <alpine.LRH.2.11.1707281919050.9683@mail.ewheeler.net>
-	<fcfc34d4-eb7e-ce89-b83f-39d4fff56cbb@citrix.com>
-	<d703293c-192c-c448-f2cb-cf1f5e374cbe@redhat.com>
-Message-ID: <ac02fc91-130a-8407-153c-8b371c4b1327@citrix.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 20 Jul 2017 06:19:15 -0400
+Subject: master - tidy: name all parameters
+Message-ID: <201707201019.v6KAJFOr016540@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-OK, good to know.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a2994b7b1ff4a09f250f6389894a3072d7e3acd
+Commit:        4a2994b7b1ff4a09f250f6389894a3072d7e3acd
+Parent:        1fd8785ff30261d25cce2f98a8e5c566d34d3151
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Jul 20 10:30:00 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jul 20 11:20:26 2017 +0200
 
-It was in non-production code, anyway.
+tidy: name all parameters
 
-Thanks,
-Germano
+---
+ lib/metadata/metadata.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-On 07/31/2017 10:19 AM, Zdenek Kabelac wrote:
-> Dne 31.7.2017 v 11:01 Germano Percossi napsal(a):
->> Hi,
->>
->> Not sure if it an option for you but the Python bindings
->> allow you to instantiate a VG object that will hold the
->> lock and then issue all the commands you want before
->> flushing the metadata at the very end.
-> 
-> 
-> Hi
-> 
-> Please avoid using these Python binding or lvm2app.
-> Those 2 things are not being developed and are mostly left
-> there purely for backward compatibility reasons. So no new APP should
-> ever use it - and old APPs will simple face lots of troubles....
-> 
-> It's in general unsupportable to lvm2 this way (API was badly designed and
-> we even figured later we really can't support it ).
-> And it's even less usable to workaround locking across bunch of commands...
-> 
-> What is now being tested is dBus integration - but this has still long
-> way to go.  So whenever you can - please use  lvm2 commands with is
-> documented
-> and well tested API.
-> 
-> 
-> Regards
-> 
-> Zdenek
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index d8f993c..ce2e3cc 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2389,7 +2389,7 @@ struct _lv_postorder_baton {
+ 	void *data;
+ };
+ 
+-static int _lv_postorder_visit(struct logical_volume *,
++static int _lv_postorder_visit(struct logical_volume *lv,
+ 			       int (*fn)(struct logical_volume *lv, void *data),
+ 			       void *data);
+ 
 
 
