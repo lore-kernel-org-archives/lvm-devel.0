@@ -1,39 +1,35 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 20 Jul 2017 06:19:15 -0400
-Subject: master - tidy: name all parameters
-Message-ID: <201707201019.v6KAJFOr016540@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Bryn M. Reeves <bmr@redhat.com>
+Date: Mon, 31 Jul 2017 13:16:42 +0100
+Subject: Batch/queue LVM operations
+In-Reply-To: <32ff399c-7a79-5beb-abd5-d5dbad1486db@redhat.com>
+References: <alpine.LRH.2.11.1707281919050.9683@mail.ewheeler.net>
+	<32ff399c-7a79-5beb-abd5-d5dbad1486db@redhat.com>
+Message-ID: <20170731121641.GA22625@localhost.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a2994b7b1ff4a09f250f6389894a3072d7e3acd
-Commit:        4a2994b7b1ff4a09f250f6389894a3072d7e3acd
-Parent:        1fd8785ff30261d25cce2f98a8e5c566d34d3151
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jul 20 10:30:00 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jul 20 11:20:26 2017 +0200
+On Fri, Jul 28, 2017 at 09:43:50PM +0200, Zdenek Kabelac wrote:
+> Dne 28.7.2017 v 21:22 Eric Wheeler napsal(a):
+> > Hello,
+> > 
+> > Is there an option to batch LVM operations?
+> > 
+> > For example, I would like to delete 100 thin snapshots without updating
+> > the vgmeta 100 times.
+> 
+> You could possibly use --select feature to handle all removals with
+> just one lvremove command.
 
-tidy: name all parameters
+Couldn't you also feed a sequence of commands to the lvm shell ('lvm')?
 
----
- lib/metadata/metadata.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Iiirc that also does (or did) some caching of state between subsequent
+invocations in the same shell?
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index d8f993c..ce2e3cc 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2389,7 +2389,7 @@ struct _lv_postorder_baton {
- 	void *data;
- };
- 
--static int _lv_postorder_visit(struct logical_volume *,
-+static int _lv_postorder_visit(struct logical_volume *lv,
- 			       int (*fn)(struct logical_volume *lv, void *data),
- 			       void *data);
+Regards,
+Bryn.
  
 
 
