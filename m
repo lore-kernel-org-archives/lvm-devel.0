@@ -1,41 +1,65 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 1 Aug 2017 12:34:40 -0400
-Subject: master - makefiles: script executable missed dynamic
-Message-ID: <201708011634.v71GYecD018047@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 1 Aug 2017 12:59:31 -0400
+Subject: master - tests: update makefiles
+Message-ID: <201708011659.v71GxVqf022960@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ad44543e8166d7068c8db1222aa06c786dcf58b3
-Commit:        ad44543e8166d7068c8db1222aa06c786dcf58b3
-Parent:        9dc1f51d2825c5e48da06e20a9c7a570fbef09a3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=19bd65207e2aec48a8d6194aefac9be05a13d944
+Commit:        19bd65207e2aec48a8d6194aefac9be05a13d944
+Parent:        3232b210ab750bb21b9032d41cf20aee2bb33288
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 1 18:19:12 2017 +0200
+AuthorDate:    Tue Aug 1 18:53:25 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 1 18:32:16 2017 +0200
+CommitterDate: Tue Aug 1 18:53:25 2017 +0200
 
-makefiles: script executable missed dynamic
+tests: update makefiles
 
-Add missing  ELDFLAGS when linking binary.
-Also pass CFLAGS for cases where we build code coverage compilation.
 ---
- scripts/Makefile.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/Makefile.in     |    4 ++--
+ test/api/Makefile.in |    4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/scripts/Makefile.in b/scripts/Makefile.in
-index b0d72c6..d06766f 100644
---- a/scripts/Makefile.in
-+++ b/scripts/Makefile.in
-@@ -89,7 +89,7 @@ endif
- CFLAGS_lvm2_activation_generator_systemd_red_hat.o += $(EXTRA_EXEC_CFLAGS)
+diff --git a/test/Makefile.in b/test/Makefile.in
+index eee9bf2..c3285e4 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -256,14 +256,14 @@ lib/fail: lib/not
+ 	$(LN_S) -f not lib/fail
  
- lvm2_activation_generator_systemd_red_hat: $(OBJECTS) $(DEPLIBS)
--	$(CC) -o $@ $(OBJECTS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(LVMLIBS)
-+	$(CC) -o $@ $(OBJECTS) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) $(LVMLIBS)
+ lib/runner: lib/runner.o .lib-dir-stamp
+-	$(CXX) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) -o $@ $<
++	$(CXX) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $<
  
- install_systemd_generators:
- 	$(INSTALL_DIR) $(systemd_generator_dir)
+ lib/runner.o: $(wildcard $(srcdir)/lib/*.h)
+ 
+ CFLAGS_runner.o += $(EXTRA_EXEC_CFLAGS)
+ 
+ lib/%: lib/%.o .lib-dir-stamp
+-	$(CC) $(LDFLAGS) -o $@ $<
++	$(CC) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) -o $@ $<
+ 
+ lib/%: $(srcdir)/lib/%.sh .lib-dir-stamp
+ 	cp $< $@
+diff --git a/test/api/Makefile.in b/test/api/Makefile.in
+index cc237df..e953675 100644
+--- a/test/api/Makefile.in
++++ b/test/api/Makefile.in
+@@ -46,10 +46,10 @@ LDFLAGS += -L$(top_builddir)/liblvm -L$(top_builddir)/daemons/dmeventd
+ LIBS += @LVM2APP_LIB@ $(DMEVENT_LIBS) -ldevmapper
+ 
+ %.t: %.o $(DEPLIBS)
+-	$(CC) -o $@ $(<) $(LDFLAGS) $(LIBS)
++	$(CC) -o $@ $(<) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) $(LIBS)
+ 
+ test: $(OBJECTS) $(DEPLIBS)
+-	$(CC) -o $@ $(OBJECTS) $(LDFLAGS) $(LIBS) $(READLINE_LIBS)
++	$(CC) -o $@ $(OBJECTS) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) $(LIBS) $(READLINE_LIBS)
+ 
+ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
+ 	cd $(top_builddir) && $(SHELL) ./config.status test/api/Makefile
 
 
