@@ -1,53 +1,71 @@
-From: Ilya Dryomov <idryomov@gmail.com>
-Date: Thu, 31 Aug 2017 16:10:39 +0200
-Subject: [PATCH] devices: recognise rbd devices
-In-Reply-To: <1502900525-23375-1-git-send-email-idryomov@gmail.com>
-References: <1502900525-23375-1-git-send-email-idryomov@gmail.com>
-Message-ID: <CAOi1vP8PVEOg9P2yw4ARoszE6F+W=uN5kW0KqGBtXa0=08tZOQ@mail.gmail.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 1 Aug 2017 06:01:52 -0400
+Subject: master - man: fix generated paths
+Message-ID: <201708011001.v71A1q0D011546@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Aug 16, 2017 at 6:22 PM, Ilya Dryomov <idryomov@gmail.com> wrote:
-> Under single_major scheme introduced in kernel 3.14, rbd devices
-> support up to 16 partitions.  In pre-single_major mode, rbd driver
-> takes up the whole major.
->
-> Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
-> ---
->  WHATS_NEW                 | 1 +
->  lib/device/device-types.h | 1 +
->  2 files changed, 2 insertions(+)
->
-> diff --git a/WHATS_NEW b/WHATS_NEW
-> index c8f072f3c387..b1f16cb054b5 100644
-> --- a/WHATS_NEW
-> +++ b/WHATS_NEW
-> @@ -1,5 +1,6 @@
->  Version 2.02.174 -
->  =================================
-> +  Recognise RADOS block devices (RBD) in filter.
->    Fix check for 2nd mda at end of disk fits if using pvcreate --restorefile.
->    Use maximum metadataarea size that fits with pvcreate --restorefile.
->    Always clear cached bootloaderarea when wiping label e.g. in pvcreate.
-> diff --git a/lib/device/device-types.h b/lib/device/device-types.h
-> index 2834cd11fd3a..57b430173e56 100644
-> --- a/lib/device/device-types.h
-> +++ b/lib/device/device-types.h
-> @@ -64,5 +64,6 @@ static const dev_known_type_t _dev_known_types[] = {
->         {"nvme", 64, "NVM Express"},
->         {"zvol", 16, "ZFS Zvols"},
->         {"VxDMP", 16, "Veritas Dynamic Multipathing"},
-> +       {"rbd", 16, "RADOS block device (RBD)"},
->         {"", 0, ""}
->  };
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c1b5f38bbe30e14f33a0cd76eed74c48280865ee
+Commit:        c1b5f38bbe30e14f33a0cd76eed74c48280865ee
+Parent:        8256170e6a2dbed15b790e75f5d1026e3de69a16
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Aug 1 11:17:04 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Aug 1 11:53:11 2017 +0200
 
-Ping...  This gained a trivial conflict in WHATS_NEW, should I resend?
+man: fix generated paths
 
-Thanks,
+Use user configured paths instead of some developers paths ;)
+---
+ WHATS_NEW       |    1 +
+ make.tmpl.in    |    1 +
+ man/Makefile.in |    8 ++++----
+ 3 files changed, 6 insertions(+), 4 deletions(-)
 
-                Ilya
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 41ddda7..515b0eb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.174 - 
+ =================================
++  Fix some paths in generated makefiles to respected configured settings.
+   Add warning when creating thin-pool with zeroing and chunk size >= 512KiB.
+   Introduce exit code 4 EINIT_FAILED to replace -1 when initialisation fails.
+   Add synchronization points with udev during reshape of raid LVs.
+diff --git a/make.tmpl.in b/make.tmpl.in
+index cb5953a..2b2ddd1 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -123,6 +123,7 @@ DEFAULT_CACHE_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_CACHE_SUBDIR@
+ DEFAULT_PROFILE_DIR = $(DEFAULT_SYS_DIR)/@DEFAULT_PROFILE_SUBDIR@
+ DEFAULT_LOCK_DIR = @DEFAULT_LOCK_DIR@
+ DEFAULT_RUN_DIR = @DEFAULT_RUN_DIR@
++DEFAULT_PID_DIR = @DEFAULT_PID_DIR@
+ DEFAULT_MANGLING = @MANGLING@
+ 
+ # Setup vpath search paths for some suffixes
+diff --git a/man/Makefile.in b/man/Makefile.in
+index d0efb5d..f88b569 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -179,10 +179,10 @@ $(SED)	-e "s+#VERSION#+$(LVM_VERSION)+" \
+ 	-e "s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+" \
+ 	-e "s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+" \
+ 	-e "s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+" \
+-	-e "s+#CLVMD_PATH#+/data/lvmtest/usr/sbin/clvmd+" \
+-	-e "s+#LVM_PATH#+/data/lvmtest/sbin/lvm+" \
+-	-e "s+#DEFAULT_RUN_DIR#+/var/run/lvm+" \
+-	-e "s+#DEFAULT_PID_DIR#+/var/run+" \
++	-e "s+#CLVMD_PATH#+$(exec_prefix)/clvmd+" \
++	-e "s+#LVM_PATH#+$(exec_prefix)/lvm+" \
++	-e "s+#DEFAULT_RUN_DIR#+$(DEFAULT_RUN_DIR)+" \
++	-e "s+#DEFAULT_PID_DIR#+$(DEFAULT_PID_DIR)+" \
+ 	-e "s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+" \
+ 	-e "s+#DEFAULT_MANGLING#+$(DEFAULT_MANGLING)+" $< > $@
+ endef
 
 
