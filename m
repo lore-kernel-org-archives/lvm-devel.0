@@ -1,43 +1,83 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 23 Aug 2017 12:32:27 -0400
-Subject: master - lvmlockd: fix mutex unlock
-Message-ID: <201708231632.v7NGWR6F013055@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 1 Aug 2017 06:01:20 -0400
+Subject: master - makefiles: RT_LIB
+Message-ID: <201708011001.v71A1KLX011507@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e71c3ff18719f240e92bb641b9b9a01b2619cc93
-Commit:        e71c3ff18719f240e92bb641b9b9a01b2619cc93
-Parent:        46ddd5520cd4d5415ee936b6cbdb6e1936bc7d26
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 23 11:30:55 2017 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Aug 23 11:30:55 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=57727bb4ebffb30cf21b151cc2f66bfd7d924a81
+Commit:        57727bb4ebffb30cf21b151cc2f66bfd7d924a81
+Parent:        2593777f65da806e24d9b1a2c9cab25ff59c5351
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jul 31 23:56:58 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Aug 1 11:53:13 2017 +0200
 
-lvmlockd: fix mutex unlock
+makefiles: RT_LIB
 
-Remove an unwanted pthread_mutex_unlock which would
-lead to a double unlock.
+Link -lrt directly only with  libdevmapper.
+All other users get dependency transiently.
 ---
- daemons/lvmlockd/lvmlockd-core.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ configure         |    2 +-
+ configure.in      |    2 +-
+ libdm/Makefile.in |    2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index da17b71..36d84e2 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -3842,8 +3842,9 @@ static int add_lock_action(struct action *act)
- 	pthread_mutex_lock(&lockspaces_mutex);
- 	if (ls_name[0])
- 		ls = find_lockspace_name(ls_name);
--	pthread_mutex_unlock(&lockspaces_mutex);
- 	if (!ls) {
-+		pthread_mutex_unlock(&lockspaces_mutex);
-+
- 		if (act->op == LD_OP_UPDATE && act->rt == LD_RT_VG) {
- 			log_debug("lockspace \"%s\" not found ignored for vg update", ls_name);
- 			return -ENOLS;
+diff --git a/configure b/configure
+index e1ae0e8..8396e3e 100755
+--- a/configure
++++ b/configure
+@@ -3170,6 +3170,7 @@ fi
+ case "$host_os" in
+ 	linux*)
+ 		CLDFLAGS="$CLDFLAGS -Wl,--version-script,.export.sym"
++		# equivalent to -rdynamic
+ 		ELDFLAGS="-Wl,--export-dynamic"
+ 		# FIXME Generate list and use --dynamic-list=.dlopen.sym
+ 		CLDWHOLEARCHIVE="-Wl,-whole-archive"
+@@ -14363,7 +14364,6 @@ fi
+ 
+ $as_echo "#define HAVE_REALTIME 1" >>confdefs.h
+ 
+-		LIBS="-lrt $LIBS"
+ 		RT_LIB="-lrt"
+ 	else
+ 		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Disabling realtime clock" >&5
+diff --git a/configure.in b/configure.in
+index 2e5e015..4e13679 100644
+--- a/configure.in
++++ b/configure.in
+@@ -31,6 +31,7 @@ AS_IF([test -z "$CFLAGS"], [COPTIMISE_FLAG="-O2"])
+ case "$host_os" in
+ 	linux*)
+ 		CLDFLAGS="$CLDFLAGS -Wl,--version-script,.export.sym"
++		# equivalent to -rdynamic
+ 		ELDFLAGS="-Wl,--export-dynamic"
+ 		# FIXME Generate list and use --dynamic-list=.dlopen.sym
+ 		CLDWHOLEARCHIVE="-Wl,-whole-archive"
+@@ -1675,7 +1676,6 @@ if test "$REALTIME" = yes; then
+ 
+ 	if test "$HAVE_REALTIME" = yes; then
+ 		AC_DEFINE([HAVE_REALTIME], 1, [Define to 1 to include support for realtime clock.])
+-		LIBS="-lrt $LIBS"
+ 		RT_LIB="-lrt"
+ 	else
+ 		AC_MSG_WARN(Disabling realtime clock)
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index 3c9a4ce..5adf992 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -56,7 +56,7 @@ include $(top_builddir)/make.tmpl
+ 
+ CFLAGS += $(UDEV_CFLAGS) $(VALGRIND_CFLAGS)
+ 
+-LIBS += $(SELINUX_LIBS) $(UDEV_LIBS) $(PTHREAD_LIBS) $(M_LIBS)
++LIBS += $(RT_LIB) $(SELINUX_LIBS) $(UDEV_LIBS) $(PTHREAD_LIBS) $(M_LIBS)
+ 
+ device-mapper: all
+ 
 
 
