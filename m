@@ -1,62 +1,41 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 1 Aug 2017 20:39:20 +0200
-Subject: Batch/queue LVM operations
-In-Reply-To: <4c0a5ae7-2da4-7610-5d06-90d990bd41de@redhat.com>
-References: <alpine.LRH.2.11.1707281919050.9683@mail.ewheeler.net>
-	<32ff399c-7a79-5beb-abd5-d5dbad1486db@redhat.com>
-	<alpine.LRH.2.11.1708011720490.9683@mail.ewheeler.net>
-	<4c0a5ae7-2da4-7610-5d06-90d990bd41de@redhat.com>
-Message-ID: <6aac428d-2c55-4d7f-4ad1-ebcd3b6f2ca6@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 1 Aug 2017 18:42:06 -0400
+Subject: master - tests: update checked message
+Message-ID: <201708012242.v71Mg6xh017423@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 1.8.2017 v 19:46 Zdenek Kabelac napsal(a):
-> Dne 1.8.2017 v 19:24 Eric Wheeler napsal(a):
->> On Fri, 28 Jul 2017, Zdenek Kabelac wrote:
->>
->>> Dne 28.7.2017 v 21:22 Eric Wheeler napsal(a):
->>>> Hello,
->>>>
->>>> Is there an option to batch LVM operations?
->>>>
->>>> For example, I would like to delete 100 thin snapshots without updating
->>>> the vgmeta 100 times.
->>>
->>> You could possibly use --select feature to handle all removals with
->>> just one lvremove command.
->>
->> I tried --select, but there is a long pause between removals so it is
->> clearly doing a metadata operation for each removal.
->>
->> Is it possible to do something like this:
->>
->> 1. Hold a lock (how?)
->> 2. vgcfgbackup -f /my-backup/file --ignorelocking-failure
->> 3. Modify /my-backup/file (remove LVs)
->> 4. dmsetup message pool 0 delete ID (each ID)
->> 5. vgcfgrestore --ignorelocking-failure
->> 6. Release lock
->>
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5dd53943c9bee9d55cde9c8fee27a2e3ea031327
+Commit:        5dd53943c9bee9d55cde9c8fee27a2e3ea031327
+Parent:        19bd65207e2aec48a8d6194aefac9be05a13d944
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Aug 2 00:04:35 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Aug 2 00:04:35 2017 +0200
 
+tests: update checked message
 
-Also what is probably worthy exercise:
+---
+ test/shell/lvconvert-thin.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-If you have thinLVs you want to 'remove' -
-
-Deactivate all such LVs in one 'lvchange -an' command upfront.
-Then as next step remove all such LVs with one  'lvremove' command.
-
-Take a timed 'strace -ttt' and measure how much time is spend in actual 
-'ioctl' and compare with the remaining time spend in lvm2 processing.
-
-Then summarize  the output and your time-expectation  - possibly open RFE BZ 
-for it.
-
-Regards
-
-Zdenek
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index 587f922..1f8d2ed 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -80,8 +80,8 @@ lvremove -f $vg
+ lvcreate -L1T -n $lv1 $vg
+ lvcreate -L32 -n $lv2 $vg
+ lvconvert --yes -c 8M --type thin-pool $vg/$lv1 2>&1 | tee err
+-# Check tther is warning for large chunk size and zeroing enabled
+-grep "Pool zeroing and large" err
++# Check there is a warning for large chunk size and zeroing enabled
++grep "WARNING: Pool zeroing and" err
+ UUID=$(get lv_field $vg/$lv2 uuid)
+ # Fail is pool is active
+ # TODO  maybe detect inactive pool and deactivate
 
 
