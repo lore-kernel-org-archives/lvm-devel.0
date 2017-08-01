@@ -1,65 +1,58 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 1 Aug 2017 12:59:31 -0400
-Subject: master - tests: update makefiles
-Message-ID: <201708011659.v71GxVqf022960@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Wheeler <lvm-devel@lists.ewheeler.net>
+Date: Tue, 1 Aug 2017 17:20:42 +0000 (UTC)
+Subject: Batch/queue LVM operations
+In-Reply-To: <d703293c-192c-c448-f2cb-cf1f5e374cbe@redhat.com>
+References: <alpine.LRH.2.11.1707281919050.9683@mail.ewheeler.net>
+	<fcfc34d4-eb7e-ce89-b83f-39d4fff56cbb@citrix.com>
+	<d703293c-192c-c448-f2cb-cf1f5e374cbe@redhat.com>
+Message-ID: <alpine.LRH.2.11.1708011718050.9683@mail.ewheeler.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=19bd65207e2aec48a8d6194aefac9be05a13d944
-Commit:        19bd65207e2aec48a8d6194aefac9be05a13d944
-Parent:        3232b210ab750bb21b9032d41cf20aee2bb33288
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 1 18:53:25 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 1 18:53:25 2017 +0200
+On Mon, 31 Jul 2017, Zdenek Kabelac wrote:
 
-tests: update makefiles
+> Dne 31.7.2017 v 11:01 Germano Percossi napsal(a):
+> > Hi,
+> > 
+> > Not sure if it an option for you but the Python bindings
+> > allow you to instantiate a VG object that will hold the
+> > lock and then issue all the commands you want before
+> > flushing the metadata at the very end.
+> 
+> 
+> Hi
+> 
+> Please avoid using these Python binding or lvm2app.
+> Those 2 things are not being developed and are mostly left
+> there purely for backward compatibility reasons. So no new APP should ever use
+> it - and old APPs will simple face lots of troubles....
+> 
+> It's in general unsupportable to lvm2 this way (API was badly designed and
+> we even figured later we really can't support it ).
+> And it's even less usable to workaround locking across bunch of commands...
+> 
+> What is now being tested is dBus integration - but this has still long way to
+> go.  So whenever you can - please use  lvm2 commands with is documented
+> and well tested API.
 
----
- test/Makefile.in     |    4 ++--
- test/api/Makefile.in |    4 ++--
- 2 files changed, 4 insertions(+), 4 deletions(-)
+Neat!
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index eee9bf2..c3285e4 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -256,14 +256,14 @@ lib/fail: lib/not
- 	$(LN_S) -f not lib/fail
- 
- lib/runner: lib/runner.o .lib-dir-stamp
--	$(CXX) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) -o $@ $<
-+	$(CXX) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $<
- 
- lib/runner.o: $(wildcard $(srcdir)/lib/*.h)
- 
- CFLAGS_runner.o += $(EXTRA_EXEC_CFLAGS)
- 
- lib/%: lib/%.o .lib-dir-stamp
--	$(CC) $(LDFLAGS) -o $@ $<
-+	$(CC) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) -o $@ $<
- 
- lib/%: $(srcdir)/lib/%.sh .lib-dir-stamp
- 	cp $< $@
-diff --git a/test/api/Makefile.in b/test/api/Makefile.in
-index cc237df..e953675 100644
---- a/test/api/Makefile.in
-+++ b/test/api/Makefile.in
-@@ -46,10 +46,10 @@ LDFLAGS += -L$(top_builddir)/liblvm -L$(top_builddir)/daemons/dmeventd
- LIBS += @LVM2APP_LIB@ $(DMEVENT_LIBS) -ldevmapper
- 
- %.t: %.o $(DEPLIBS)
--	$(CC) -o $@ $(<) $(LDFLAGS) $(LIBS)
-+	$(CC) -o $@ $(<) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) $(LIBS)
- 
- test: $(OBJECTS) $(DEPLIBS)
--	$(CC) -o $@ $(OBJECTS) $(LDFLAGS) $(LIBS) $(READLINE_LIBS)
-+	$(CC) -o $@ $(OBJECTS) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) $(LIBS) $(READLINE_LIBS)
- 
- Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
- 	cd $(top_builddir) && $(SHELL) ./config.status test/api/Makefile
+Will dbus support better batch processing times?
+
+--
+Eric Wheeler
+
+	
+
+> 
+> 
+> Regards
+> 
+> Zdenek
+> 
+> 
 
 
