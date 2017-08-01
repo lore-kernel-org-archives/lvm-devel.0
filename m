@@ -1,132 +1,107 @@
-From: Anatoly Pugachev <matorola@gmail.com>
-Date: Mon, 21 Aug 2017 15:05:58 +0300
-Subject: [xfstests, sparc64] git kernel OOPS 4.13.0-rc5+
-In-Reply-To: <CADxRZqwe71WZ2=9Xecash65zdk2HmaRffoiCWjwQCHzub3tdvQ@mail.gmail.com>
-References: <CADxRZqykqGycgPh5O9C1F_Eq0J_rP-95zxesDkSDbkLD=04uYA@mail.gmail.com>
-	<CADxRZqz_m69YL214tiimqCQ-+pYAvc1UFO_HgvTdKKok0_LzXw@mail.gmail.com>
-	<CADxRZqyHkwT+HVTQopDZYiAwkCAkBDvPM0eY-Cqw6e5XuzcZ5Q@mail.gmail.com>
-	<CADxRZqwe71WZ2=9Xecash65zdk2HmaRffoiCWjwQCHzub3tdvQ@mail.gmail.com>
-Message-ID: <CADxRZqyTse068Pt8xsAyehEJoHA7jQ6vPH4WCVyxrzEjYjpA1Q@mail.gmail.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 1 Aug 2017 06:01:15 -0400
+Subject: master - libdm: log_warn
+Message-ID: <201708011001.v71A1Fvg011487@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Aug 21, 2017 at 3:03 PM, Anatoly Pugachev <matorola@gmail.com> wrote:
-> On Mon, Aug 21, 2017 at 1:52 PM, Anatoly Pugachev <matorola@gmail.com> wrote:
->> On Mon, Aug 21, 2017 at 1:26 PM, Anatoly Pugachev <matorola@gmail.com> wrote:
->>> On Sun, Aug 20, 2017 at 1:02 PM, Anatoly Pugachev <matorola@gmail.com> wrote:
->>>>  Hello!
->>>>
->>>> Running xfstests (git) suite , I'm getting git kernel OOPS :
->>>
->>> Just tested on debian kernel
->>>
->>> Linux ttip 4.12.0-1-sparc64-smp #1 SMP Debian 4.12.6-1 (2017-08-12)
->>> sparc64 GNU/Linux
->>>
->>> it does not trigger OOPS, but ends in other way:
->>
->> well, just compiled v4.12 with gcc-7, it triggers OOPS... going to
->> check with gcc-6 now...
->
-> git kernel (4.13.0-rc6), compiled with debian gcc-6.4.0 , no kernel OOPS:
->
-> xfstests-dev# ./check generic/082
-> FSTYP         -- xfs (non-debug)
-> PLATFORM      -- Linux/sparc64 ttip 4.13.0-rc6
-> MKFS_OPTIONS  -- -f -bsize=4096 /dev/loop0
-> MOUNT_OPTIONS -- /dev/loop0 /1/scratch
->
-> generic/082 2s ... 1s
-> Ran: generic/082
-> Passed all 1 tests
->
-> kernel/console logs:
->
-> [   66.022438] XFS (vdiskb1): Mounting V5 Filesystem
-> [   66.105236] XFS (vdiskb1): Ending clean mount
-> [   69.862294] XFS (loop0): Mounting V5 Filesystem
-> [   69.869785] XFS (loop0): Ending clean mount
-> [   69.954562] XFS (vdiskb1): Unmounting Filesystem
-> [   70.243985] XFS (vdiskb1): Mounting V5 Filesystem
-> [   70.266297] XFS (vdiskb1): Ending clean mount
-> [   70.381947] run fstests generic/082 at 2017-08-21 14:58:27
-> [   71.162403] XFS (loop0): Unmounting Filesystem
-> [   71.409342] XFS (loop0): Mounting V5 Filesystem
-> [   71.416942] XFS (loop0): Ending clean mount
-> [   71.418462] XFS (loop0): Quotacheck needed: Please wait.
-> [   71.423380] XFS (loop0): Quotacheck: Done.
-> [   71.525841] XFS (loop0): unknown mount option [nosuchopt].
-> [   71.734429] XFS (vdiskb1): Unmounting Filesystem
-> [   72.017664] XFS (vdiskb1): Mounting V5 Filesystem
-> [   72.035156] XFS (vdiskb1): Ending clean mount
-> [   72.154335] XFS (loop0): Unmounting Filesystem
-> [   72.525197] XFS (loop0): Mounting V5 Filesystem
-> [   72.533368] XFS (loop0): resetting quota flags
-> [   72.533486] XFS (loop0): Ending clean mount
-> [   72.698356] XFS (vdiskb1): Unmounting Filesystem
-> [   72.770753] XFS (loop0): Unmounting Filesystem
->
->
-> I wonder how safe to compile kernel with gcc-7, since it is second bug
-> I found in the kernel, when it's compiled with gcc-7.2.0...
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2593777f65da806e24d9b1a2c9cab25ff59c5351
+Commit:        2593777f65da806e24d9b1a2c9cab25ff59c5351
+Parent:        c1b5f38bbe30e14f33a0cd76eed74c48280865ee
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jul 24 14:40:41 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Aug 1 11:53:12 2017 +0200
 
+libdm: log_warn
 
-OOPS, should be running generic/081 instead of 082 in my previous
-message, but anyway, no OOPS with generic/081:
+No real effect anyway - function returs '1' in all paths,
+but just make sure we do not have 'log_error()' on non-error path.
+---
+ libdm/libdm-deptree.c |   20 ++++++++++----------
+ 1 files changed, 10 insertions(+), 10 deletions(-)
 
-xfstests-dev# ./check generic/081
-FSTYP         -- xfs (non-debug)
-PLATFORM      -- Linux/sparc64 ttip 4.13.0-rc6
-MKFS_OPTIONS  -- -f -bsize=4096 /dev/loop0
-MOUNT_OPTIONS -- /dev/loop0 /1/scratch
-
-generic/081 4s ... 5s
-Ran: generic/081
-Passed all 1 tests
-
-kernel logs:
-
-[  417.447478] XFS (vdiskb1): Ending clean mount
-[  417.535416] run fstests generic/081 at 2017-08-21 15:04:14
-[  418.274997] XFS (loop0): Unmounting Filesystem
-[  419.929533] XFS (dm-4): Mounting V5 Filesystem
-[  419.965193] XFS (dm-4): Ending clean mount
-[  420.030845] device-mapper: snapshots: Invalidating snapshot: Unable
-to allocate exception.
-[  420.062800] Buffer I/O error on dev dm-4, logical block 20, lost
-async page write
-[  420.062887] Buffer I/O error on dev dm-4, logical block 21, lost
-async page write
-[  420.063566] Buffer I/O error on dev dm-4, logical block 22, lost
-async page write
-[  420.063619] Buffer I/O error on dev dm-4, logical block 23, lost
-async page write
-[  420.063684] Buffer I/O error on dev dm-4, logical block 24, lost
-async page write
-[  420.063737] Buffer I/O error on dev dm-4, logical block 25, lost
-async page write
-[  420.063801] Buffer I/O error on dev dm-4, logical block 26, lost
-async page write
-[  420.063853] Buffer I/O error on dev dm-4, logical block 27, lost
-async page write
-[  420.063916] Buffer I/O error on dev dm-4, logical block 28, lost
-async page write
-[  420.063967] Buffer I/O error on dev dm-4, logical block 29, lost
-async page write
-[  420.074043] XFS (dm-4): metadata I/O error: block 0x4002a
-("xlog_iodone") error 5 numblks 64
-[  420.074165] XFS (dm-4): xfs_do_force_shutdown(0x2) called from line
-1210 of file fs/xfs/xfs_log.c.  Return address = 0x00000000103ee854
-[  420.074623] XFS (dm-4): Log I/O Error Detected.  Shutting down filesystem
-[  420.074682] XFS (dm-4): Please umount the filesystem and rectify
-the problem(s)
-[  420.080113] XFS (dm-4): Unmounting Filesystem
-[  422.943129] XFS (vdiskb1): Unmounting Filesystem
-[  423.227362] XFS (vdiskb1): Mounting V5 Filesystem
-[  423.248418] XFS (vdiskb1): Ending clean mount
-[  423.394854] XFS (vdiskb1): Unmounting Filesystem
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index cf4fd62..b0a48f3 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -938,7 +938,7 @@ static int _info_by_dev(uint32_t major, uint32_t minor, int with_open_count,
+ 	}
+ 
+ 	if (!with_open_count && !dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
++		log_warn("WARNING: Failed to disable open_count.");
+ 
+ 	if (!(r = dm_task_run(dmt)))
+ 		goto_out;
+@@ -1053,7 +1053,7 @@ static int _deactivate_node(const char *name, uint32_t major, uint32_t minor,
+ 	}
+ 
+ 	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
++		log_warn("WARNING: Failed to disable open_count.");
+ 
+ 	if (cookie)
+ 		if (!dm_task_set_cookie(dmt, cookie, udev_flags))
+@@ -1343,7 +1343,7 @@ static int _rename_node(const char *old_name, const char *new_name, uint32_t maj
+ 		goto_out;
+ 
+ 	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
++		log_warn("WARNING: Failed to disable open_count.");
+ 
+ 	if (!dm_task_set_cookie(dmt, cookie, udev_flags))
+ 		goto out;
+@@ -1384,10 +1384,10 @@ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
+ 	}
+ 
+ 	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
++		log_warn("WARNING: Failed to disable open_count.");
+ 
+ 	if (!dm_task_set_read_ahead(dmt, read_ahead, read_ahead_flags))
+-		log_error("Failed to set read ahead");
++		log_warn("WARNING: Failed to set read ahead.");
+ 
+ 	if (!dm_task_set_cookie(dmt, cookie, udev_flags))
+ 		goto_out;
+@@ -1430,13 +1430,13 @@ static int _suspend_node(const char *name, uint32_t major, uint32_t minor,
+ 	}
+ 
+ 	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
++		log_warn("WARNING: Failed to disable open_count.");
+ 
+ 	if (skip_lockfs && !dm_task_skip_lockfs(dmt))
+-		log_error("Failed to set skip_lockfs flag.");
++		log_warn("WARNING: Failed to set skip_lockfs flag.");
+ 
+ 	if (no_flush && !dm_task_no_flush(dmt))
+-		log_error("Failed to set no_flush flag.");
++		log_warn("WARNING: Failed to set no_flush flag.");
+ 
+ 	if ((r = dm_task_run(dmt))) {
+ 		inc_suspended();
+@@ -1467,7 +1467,7 @@ static int _thin_pool_get_status(struct dm_tree_node *dnode,
+ 	}
+ 
+ 	if (!dm_task_no_flush(dmt))
+-		log_warn("Can't set no_flush flag."); /* Non fatal */
++		log_warn("WARNING: Can't set no_flush flag."); /* Non fatal */
+ 
+ 	if (!dm_task_run(dmt))
+ 		goto_out;
+@@ -2031,7 +2031,7 @@ static int _create_node(struct dm_tree_node *dnode)
+ 	}
+ 
+ 	if (!dm_task_no_open_count(dmt))
+-		log_error("Failed to disable open_count");
++		log_warn("WARNING: Failed to disable open_count.");
+ 
+ 	if ((r = dm_task_run(dmt))) {
+ 		if (!(r = dm_task_get_info(dmt, &dnode->info)))
 
 
