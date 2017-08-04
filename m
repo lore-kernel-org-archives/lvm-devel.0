@@ -1,355 +1,70 @@
-From: Eric Wheeler <lvm-devel@lists.ewheeler.net>
-Date: Fri, 4 Aug 2017 00:59:59 +0000 (UTC)
-Subject: Batch/queue LVM operations
-In-Reply-To: <6aac428d-2c55-4d7f-4ad1-ebcd3b6f2ca6@redhat.com>
-References: <alpine.LRH.2.11.1707281919050.9683@mail.ewheeler.net>
-	<32ff399c-7a79-5beb-abd5-d5dbad1486db@redhat.com>
-	<alpine.LRH.2.11.1708011720490.9683@mail.ewheeler.net>
-	<4c0a5ae7-2da4-7610-5d06-90d990bd41de@redhat.com>
-	<6aac428d-2c55-4d7f-4ad1-ebcd3b6f2ca6@redhat.com>
-Message-ID: <alpine.LRH.2.11.1708040054310.9683@mail.ewheeler.net>
+From: Eric Ren <zren@suse.com>
+Date: Fri, 4 Aug 2017 15:13:26 +0800
+Subject: [PATCH 0/1] adding Btrfs resizing capability to lvresize/fsadm.sh
+In-Reply-To: <3d78f6d7-dd89-71cb-e754-88a290287404@hostalia.de>
+References: <20170802174235.19869-1-marcus@hostalia.de>
+	<3d78f6d7-dd89-71cb-e754-88a290287404@hostalia.de>
+Message-ID: <bf152578-cca9-b5a1-98a2-4d7a97a21759@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, 1 Aug 2017, Zdenek Kabelac wrote:
+Hi,
 
-> Dne 1.8.2017 v 19:46 Zdenek Kabelac napsal(a):
-> > Dne 1.8.2017 v 19:24 Eric Wheeler napsal(a):
-> > > On Fri, 28 Jul 2017, Zdenek Kabelac wrote:
-> > >
-> > > > Dne 28.7.2017 v 21:22 Eric Wheeler napsal(a):
-> > > > > Hello,
-> > > > >
-> > > > > Is there an option to batch LVM operations?
-> > > > >
-> > > > > For example, I would like to delete 100 thin snapshots without
-> > > > > updating
-> > > > > the vgmeta 100 times.
-> > > >
-> > > > You could possibly use --select feature to handle all removals with
-> > > > just one lvremove command.
-> > >
-> > > I tried --select, but there is a long pause between removals so it is
-> > > clearly doing a metadata operation for each removal.
-> > >
-> > > Is it possible to do something like this:
-> > >
-> > > 1. Hold a lock (how?)
-> > > 2. vgcfgbackup -f /my-backup/file --ignorelocking-failure
-> > > 3. Modify /my-backup/file (remove LVs)
-> > > 4. dmsetup message pool 0 delete ID (each ID)
-> > > 5. vgcfgrestore --ignorelocking-failure
-> > > 6. Release lock
-> > >
-> 
-> 
-> Also what is probably worthy exercise:
-> 
-> If you have thinLVs you want to 'remove' -
-> 
-> Deactivate all such LVs in one 'lvchange -an' command upfront.
-> Then as next step remove all such LVs with one  'lvremove' command.
-> 
-> Take a timed 'strace -ttt' and measure how much time is spend in actual
-> 'ioctl' and compare with the remaining time spend in lvm2 processing.
-> 
-> Then summarize  the output and your time-expectation  - possibly open RFE BZ
-> for it.
+openSUSE has a similar patch [1] for a while. The original author sent 
+it upstream I think,
+but for whatever reason, it was not accepted.
 
-Details below, but to summarize:
+fsadm-add-support-for-btrfs.patch
+[1] 
+https://build.opensuse.org/package/view_file/Base:System/lvm2/fsadm-add-support-for-btrfs.patch?expand=1
 
-Total ioctl time:  0.018542 seconds.  
-Total runtime:    11.922s
+@Upstream experts, please let me know if you are open to merge this patch.
+If so, I can give a close review and testing on it. I'd like see your 
+patch to be accepted.
+Then, I can drop our own patch ;-P
 
-Is this want you were interested to see?  Volumes were deactivated first.
+Regards,
+Eric
 
--Eric
-
-]# time strace -Tttt lvremove -f \
-/dev/data/2017-08-03_17-52-54_manual_ertz_0 \
-/dev/data/2017-08-03_17-52-56_manual_ertz_0 \
-/dev/data/2017-08-03_17-52-57_manual_ertz_0 \
-/dev/data/2017-08-03_17-52-59_manual_ertz_0 \
-/dev/data/2017-08-03_17-53-00_manual_ertz_0 \
-/dev/data/2017-08-03_17-53-02_manual_ertz_0 \
-/dev/data/2017-08-03_17-53-03_manual_ertz_0 2>&1|grep ioctl | tee t.t
-
-1501808046.555959 ioctl(4, BLKGETSIZE64, 107370508288) = 0 <0.000007>
-1501808046.922878 ioctl(6, DM_VERSION, 0x55cfc11000a0) = 0 <0.000008>
-1501808046.922912 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = -1 ENXIO (No such device or address) <0.000011>
-1501808046.923887 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = -1 ENXIO (No such device or address) <0.000021>
-1501808047.098661 ioctl(4, BLKBSZGET, 4096) = 0 <0.000005>
-1501808047.098677 ioctl(4, BLKPBSZGET, 512) = 0 <0.000004>
-1501808047.807246 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = 0 <0.000013>
-1501808047.807287 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = 0 <0.000012>
-1501808047.807329 ioctl(4, BLKRAGET, 8192) = 0 <0.000005>
-1501808047.807662 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000012>
-1501808047.807698 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000016>
-1501808047.807738 ioctl(6, DM_VERSION, 0x55cfc110c750) = 0 <0.000005>
-1501808047.807769 ioctl(6, DM_TABLE_DEPS, 0x55cfc110c750) = 0 <0.000011>
-1501808047.807807 ioctl(6, DM_TABLE_DEPS, 0x55cfc1110760) = 0 <0.000017>
-1501808047.807847 ioctl(6, DM_TABLE_DEPS, 0x55cfc1110760) = 0 <0.000007>
-1501808047.808105 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000012>
-1501808047.808139 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000009>
-1501808047.808172 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000010>
-1501808047.808195 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000009>
-1501808047.808223 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000009>
-1501808047.808245 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000006>
-1501808047.808279 ioctl(6, DM_LIST_VERSIONS, 0x55cfc110c750) = 0 <0.000009>
-1501808047.808309 ioctl(6, DM_LIST_VERSIONS, 0x55cfc110c750) = 0 <0.000028>
-1501808047.808362 ioctl(6, DM_LIST_VERSIONS, 0x55cfc110c750) = 0 <0.000007>
-1501808047.808389 ioctl(6, DM_LIST_VERSIONS, 0x55cfc110c750) = 0 <0.000006>
-1501808047.808560 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000011>
-1501808047.808606 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000018>
-1501808047.808644 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000010>
-1501808047.814204 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000013>
-1501808047.814245 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000013>
-1501808047.814280 ioctl(6, DM_TABLE_DEPS, 0x55cfc11040b0) = 0 <0.000009>
-1501808047.814311 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000010>
-1501808047.814349 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000008>
-1501808047.814734 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000013>
-1501808047.814771 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000018>
-1501808047.814809 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000009>
-1501808047.814840 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000009>
-1501808047.814861 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000010>
-1501808047.814892 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000007>
-1501808047.814918 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000007>
-1501808047.814951 ioctl(6, DM_TABLE_STATUS, 0x55cfc11040b0) = 0 <0.000016>
-1501808047.815030 ioctl(6, DM_TARGET_MSG, 0x55cfc11040b0) = 0 <0.001845>
-1501808047.816897 ioctl(6, DM_TARGET_MSG, 0x55cfc11040b0) = 0 <0.000463>
-1501808047.817379 ioctl(6, DM_TABLE_STATUS, 0x55cfc11040b0) = 0 <0.000010>
-1501808047.817435 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000010>
-1501808048.635303 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = -1 ENXIO (No such device or address) <0.000020>
-1501808048.636528 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = -1 ENXIO (No such device or address) <0.000009>
-1501808049.212219 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = 0 <0.000013>
-1501808049.212259 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = 0 <0.000011>
-1501808049.212305 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000021>
-1501808049.212349 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000006>
-1501808049.212373 ioctl(6, DM_TABLE_DEPS, 0x55cfc110c750) = 0 <0.000010>
-1501808049.212429 ioctl(6, DM_TABLE_DEPS, 0x55cfc1110760) = 0 <0.000019>
-1501808049.212482 ioctl(6, DM_TABLE_DEPS, 0x55cfc1110760) = 0 <0.000009>
-1501808049.212676 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000014>
-1501808049.212730 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000011>
-1501808049.212766 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000014>
-1501808049.212830 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000010>
-1501808049.212864 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000014>
-1501808049.212927 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000008>
-1501808049.213128 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000011>
-1501808049.213181 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000010>
-1501808049.213225 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000011>
-1501808049.218054 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000011>
-1501808049.218090 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000019>
-1501808049.218123 ioctl(6, DM_TABLE_DEPS, 0x55cfc11040b0) = 0 <0.000009>
-1501808049.218151 ioctl(6, DM_TABLE_DEPS, 0x55cfc1cd9a70) = 0 <0.000008>
-1501808049.218176 ioctl(6, DM_TABLE_DEPS, 0x55cfc1cd9a70) = 0 <0.000007>
-1501808049.218474 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000016>
-1501808049.218532 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000016>
-1501808049.218568 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000008>
-1501808049.218606 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000018>
-1501808049.218641 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000009>
-1501808049.218677 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000019>
-1501808049.218730 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000005>
-1501808049.218752 ioctl(6, DM_TABLE_STATUS, 0x55cfc11040b0) = 0 <0.000023>
-1501808049.218807 ioctl(6, DM_TARGET_MSG, 0x55cfc11040b0) = 0 <0.001636>
-1501808049.220475 ioctl(6, DM_TARGET_MSG, 0x55cfc11040b0) = 0 <0.000388>
-1501808049.220885 ioctl(6, DM_TABLE_STATUS, 0x55cfc11040b0) = 0 <0.000012>
-1501808049.220927 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000013>
-1501808050.083300 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = -1 ENXIO (No such device or address) <0.000035>
-1501808050.084510 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = -1 ENXIO (No such device or address) <0.000010>
-1501808050.712333 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = 0 <0.000014>
-1501808050.712401 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = 0 <0.000021>
-1501808050.712460 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000013>
-1501808050.712517 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000009>
-1501808050.712584 ioctl(6, DM_TABLE_DEPS, 0x55cfc110c750) = 0 <0.000021>
-1501808050.712659 ioctl(6, DM_TABLE_DEPS, 0x55cfc1110760) = 0 <0.000024>
-1501808050.712730 ioctl(6, DM_TABLE_DEPS, 0x55cfc1110760) = 0 <0.000019>
-1501808050.713024 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000023>
-1501808050.713086 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000012>
-1501808050.713134 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000011>
-1501808050.713186 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000010>
-1501808050.713224 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000012>
-1501808050.713266 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = -1 ENXIO (No such device or address) <0.000008>
-1501808050.713461 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000021>
-1501808050.713527 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000010>
-1501808050.713588 ioctl(6, DM_TABLE_STATUS, 0x55cfc110c750) = 0 <0.000021>
-1501808050.718627 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000014>
-1501808050.718691 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000015>
-1501808050.718729 ioctl(6, DM_TABLE_DEPS, 0x55cfc11040b0) = 0 <0.000010>
-1501808050.718775 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000010>
-1501808050.718823 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000009>
-1501808050.719186 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000026>
-1501808050.719266 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000010>
-1501808050.719301 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000030>
-1501808050.719373 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000010>
-1501808050.719431 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000012>
-1501808050.719504 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = -1 ENXIO (No such device or address) <0.000008>
-1501808050.719539 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000007>
-1501808050.719598 ioctl(6, DM_TABLE_STATUS, 0x55cfc11040b0) = 0 <0.000017>
-1501808050.719646 ioctl(6, DM_TARGET_MSG, 0x55cfc11040b0) = 0 <0.001759>
-1501808050.721446 ioctl(6, DM_TARGET_MSG, 0x55cfc11040b0) = 0 <0.000378>
-1501808050.721855 ioctl(6, DM_TABLE_STATUS, 0x55cfc11040b0) = 0 <0.000012>
-1501808050.721909 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000009>
-1501808051.469219 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000011>
-1501808051.470353 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000009>
-1501808052.018442 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000032>
-1501808052.018509 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000022>
-1501808052.018556 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000021>
-1501808052.018607 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000015>
-1501808052.018644 ioctl(6, DM_TABLE_DEPS, 0x55cfc11020b0) = 0 <0.000019>
-1501808052.018678 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000008>
-1501808052.018706 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000017>
-1501808052.018931 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000012>
-1501808052.018956 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000008>
-1501808052.018987 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000010>
-1501808052.019011 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000008>
-1501808052.019031 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000009>
-1501808052.019053 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000006>
-1501808052.019181 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000011>
-1501808052.019226 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000007>
-1501808052.019257 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000009>
-1501808052.025155 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = -1 ENXIO (No such device or address) <0.000014>
-1501808052.025229 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = 0 <0.000015>
-1501808052.025269 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000012>
-1501808052.025306 ioctl(6, DM_TABLE_DEPS, 0x55cfc1118770) = 0 <0.000036>
-1501808052.025395 ioctl(6, DM_TABLE_DEPS, 0x55cfc1118770) = 0 <0.000010>
-1501808052.025767 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = 0 <0.000013>
-1501808052.025821 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = -1 ENXIO (No such device or address) <0.000010>
-1501808052.025859 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = -1 ENXIO (No such device or address) <0.000010>
-1501808052.025919 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = 0 <0.000010>
-1501808052.025952 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = -1 ENXIO (No such device or address) <0.000011>
-1501808052.025993 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = -1 ENXIO (No such device or address) <0.000008>
-1501808052.026054 ioctl(6, DM_DEV_STATUS, 0x55cfc1114760) = 0 <0.000007>
-1501808052.026084 ioctl(6, DM_TABLE_STATUS, 0x55cfc1114760) = 0 <0.000015>
-1501808052.026152 ioctl(6, DM_TARGET_MSG, 0x55cfc1114760) = 0 <0.001656>
-1501808052.027845 ioctl(6, DM_TARGET_MSG, 0x55cfc1114760) = 0 <0.000475>
-1501808052.028351 ioctl(6, DM_TABLE_STATUS, 0x55cfc1114760) = 0 <0.000011>
-1501808052.028408 ioctl(6, DM_DEV_STATUS, 0x55cfc110c750) = 0 <0.000011>
-1501808052.767823 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000014>
-1501808052.768984 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000009>
-1501808053.390845 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000014>
-1501808053.390912 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000013>
-1501808053.390960 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000012>
-1501808053.391015 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000008>
-1501808053.391061 ioctl(6, DM_TABLE_DEPS, 0x55cfc11020b0) = 0 <0.000023>
-1501808053.391128 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000009>
-1501808053.391177 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000009>
-1501808053.391377 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000013>
-1501808053.391467 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000020>
-1501808053.391515 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000012>
-1501808053.391556 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000010>
-1501808053.391593 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000010>
-1501808053.391633 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000008>
-1501808053.391830 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000012>
-1501808053.391883 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000010>
-1501808053.391931 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000011>
-1501808053.396991 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000014>
-1501808053.397059 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000014>
-1501808053.397098 ioctl(6, DM_TABLE_DEPS, 0x55cfc14d9a60) = 0 <0.000011>
-1501808053.397134 ioctl(6, DM_TABLE_DEPS, 0x55cfc14dda70) = 0 <0.000010>
-1501808053.397177 ioctl(6, DM_TABLE_DEPS, 0x55cfc14dda70) = 0 <0.000018>
-1501808053.397604 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000014>
-1501808053.397650 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000009>
-1501808053.397695 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000020>
-1501808053.397744 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000009>
-1501808053.397785 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000011>
-1501808053.397851 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000008>
-1501808053.397895 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000008>
-1501808053.397952 ioctl(6, DM_TABLE_STATUS, 0x55cfc14d9a60) = 0 <0.000025>
-1501808053.398050 ioctl(6, DM_TARGET_MSG, 0x55cfc14d9a60) = 0 <0.001691>
-1501808053.399794 ioctl(6, DM_TARGET_MSG, 0x55cfc14d9a60) = 0 <0.000418>
-1501808053.400253 ioctl(6, DM_TABLE_STATUS, 0x55cfc14d9a60) = 0 <0.000012>
-1501808053.400337 ioctl(6, DM_DEV_STATUS, 0x55cfc14d1a50) = 0 <0.000020>
-1501808054.199028 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000023>
-1501808054.200182 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000011>
-1501808054.804640 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000014>
-1501808054.804693 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000012>
-1501808054.804748 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000023>
-1501808054.804806 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000018>
-1501808054.804846 ioctl(6, DM_TABLE_DEPS, 0x55cfc11020b0) = 0 <0.000021>
-1501808054.804925 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000009>
-1501808054.804962 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000009>
-1501808054.805173 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000013>
-1501808054.805235 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000009>
-1501808054.805278 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000010>
-1501808054.805360 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000019>
-1501808054.805429 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000020>
-1501808054.805477 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000007>
-1501808054.805639 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000017>
-1501808054.805689 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000009>
-1501808054.805730 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000016>
-1501808054.811447 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000014>
-1501808054.811483 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000012>
-1501808054.811508 ioctl(6, DM_TABLE_DEPS, 0x55cfc14d9a60) = 0 <0.000010>
-1501808054.811543 ioctl(6, DM_TABLE_DEPS, 0x55cfc14dda70) = 0 <0.000008>
-1501808054.811564 ioctl(6, DM_TABLE_DEPS, 0x55cfc14dda70) = 0 <0.000009>
-1501808054.811948 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000012>
-1501808054.811984 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000018>
-1501808054.812022 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000009>
-1501808054.812051 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000009>
-1501808054.812077 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000013>
-1501808054.812109 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000006>
-1501808054.812136 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000006>
-1501808054.812158 ioctl(6, DM_TABLE_STATUS, 0x55cfc14d9a60) = 0 <0.000017>
-1501808054.812200 ioctl(6, DM_TARGET_MSG, 0x55cfc14d9a60) = 0 <0.001640>
-1501808054.813863 ioctl(6, DM_TARGET_MSG, 0x55cfc14d9a60) = 0 <0.000491>
-1501808054.814372 ioctl(6, DM_TABLE_STATUS, 0x55cfc14d9a60) = 0 <0.000010>
-1501808054.814419 ioctl(6, DM_DEV_STATUS, 0x55cfc14d1a50) = 0 <0.000022>
-1501808055.709981 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000011>
-1501808055.711084 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000007>
-1501808056.293720 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000014>
-1501808056.293796 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000023>
-1501808056.293854 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000013>
-1501808056.293908 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000008>
-1501808056.293953 ioctl(6, DM_TABLE_DEPS, 0x55cfc11020b0) = 0 <0.000020>
-1501808056.294020 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000010>
-1501808056.294075 ioctl(6, DM_TABLE_DEPS, 0x55cfc1114760) = 0 <0.000009>
-1501808056.294261 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000013>
-1501808056.294333 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000011>
-1501808056.294371 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000011>
-1501808056.294438 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = 0 <0.000010>
-1501808056.294477 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000011>
-1501808056.294537 ioctl(6, DM_DEV_STATUS, 0x55cfc11020b0) = -1 ENXIO (No such device or address) <0.000007>
-1501808056.294689 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000021>
-1501808056.294755 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000009>
-1501808056.294797 ioctl(6, DM_TABLE_STATUS, 0x55cfc11020b0) = 0 <0.000011>
-1501808056.300074 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000014>
-1501808056.300148 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000014>
-1501808056.300187 ioctl(6, DM_TABLE_DEPS, 0x55cfc14d9a60) = 0 <0.000012>
-1501808056.300226 ioctl(6, DM_TABLE_DEPS, 0x55cfc14dda70) = 0 <0.000010>
-1501808056.300272 ioctl(6, DM_TABLE_DEPS, 0x55cfc14dda70) = 0 <0.000019>
-1501808056.300772 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000013>
-1501808056.300817 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000010>
-1501808056.300862 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000020>
-1501808056.300911 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000009>
-1501808056.300952 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000011>
-1501808056.301018 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = -1 ENXIO (No such device or address) <0.000008>
-1501808056.301062 ioctl(6, DM_DEV_STATUS, 0x55cfc14d9a60) = 0 <0.000007>
-1501808056.301134 ioctl(6, DM_TABLE_STATUS, 0x55cfc14d9a60) = 0 <0.000026>
-1501808056.301208 ioctl(6, DM_TARGET_MSG, 0x55cfc14d9a60) = 0 <0.001999>
-1501808056.303254 ioctl(6, DM_TARGET_MSG, 0x55cfc14d9a60) = 0 <0.000636>
-1501808056.303932 ioctl(6, DM_TABLE_STATUS, 0x55cfc14d9a60) = 0 <0.000015>
-1501808056.303997 ioctl(6, DM_DEV_STATUS, 0x55cfc14d1a50) = 0 <0.000011>
-
-real	0m11.922s
-user	0m6.312s
-sys	0m4.428s
-
-]# perl -lne '/<([0-9.]+)>/ and $a += $1; END { print "Total: $a" }' < t.t
-Total: 0.018542
-
-
---
-Eric Wheeler
-
-
-
-> 
-> Regards
-> 
-> Zdenek
-> 
+On 08/03/2017 04:44 PM, Marcus M?ller wrote:
+> So,
+>
+> I'll admit that me spontaneously handing in above feature patch
+> yesterday was an act of "let's get this out of my head before I go
+> home". For private purposes, I wanted lvresize -r to deal with BTRFS, too.
+> Am I right here to post feature branches at all? Any copyright
+> assignments I need to take care of?
+>
+> Regarding the patch:
+>
+> BTRFS is a bit special in that one filesystem can spread across multiple
+> physical volumes. In the case of multi-volume BTRFS, we need to specify
+> which specific one needs resizing; hence the whole devid dance.
+> Also: BTRFS needs to be mounted to be resized; mount detection sometimes
+> fails. That is not an issue, since it's safe to multi-mount a filesystem
+> and resize it. So in fact, I was considering skipping the checking for
+> mountedness completely, but then decided against it to keep the resize_*
+> functions as uniform and recognizable as possible.
+>
+> Best regards,
+> Marcus M?ller
+>
+> On 08/02/2017 07:42 PM, Marcus M?ller wrote:
+>> Btrfs support was missing from LVM's volume resize tools.
+>> Fixed that.
+>>
+>> Marcus M?ller (1):
+>>    added resizing for btrfs
+>>
+>>   scripts/fsadm.sh | 69 +++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+>>   1 file changed, 68 insertions(+), 1 deletion(-)
+>>
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
