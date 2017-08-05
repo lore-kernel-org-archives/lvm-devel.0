@@ -1,22 +1,22 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Sat, 5 Aug 2017 11:21:00 -0400
-Subject: master - lvmonfig: Add options to produce file premable.
-Message-ID: <201708051521.v75FL0iU027920@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 5 Aug 2017 11:21:50 -0400
+Subject: master - lvmconfig: Add options to produce file premable.
+Message-ID: <201708051521.v75FLoUD028785@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5c453aef0a84b9a965219bd14402be93836fbca1
-Commit:        5c453aef0a84b9a965219bd14402be93836fbca1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d530cb29d10342226d77fd95c4f2fbc95174a2be
+Commit:        d530cb29d10342226d77fd95c4f2fbc95174a2be
 Parent:        827be01758ec5adb7b9d5ea75b658092adc65534
 Author:        Alasdair G Kergon <agk@redhat.com>
 AuthorDate:    Sat Aug 5 16:18:36 2017 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Aug 5 16:20:08 2017 +0100
+CommitterDate: Sat Aug 5 16:21:24 2017 +0100
 
-lvmonfig: Add options to produce file premable.
+lvmconfig: Add options to produce file premable.
 
 Use --withgeneralpreamble and --withlocalpreamble instead of
 concatenating files.
