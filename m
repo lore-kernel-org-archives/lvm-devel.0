@@ -1,330 +1,264 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Sat, 5 Aug 2017 11:21:50 -0400
-Subject: master - lvmconfig: Add options to produce file premable.
-Message-ID: <201708051521.v75FLoUD028785@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: zren@suse.com <zren@suse.com>
+Date: Sat,  5 Aug 2017 23:19:03 +0800
+Subject: [PATCH v2] lvmconf: add support for enabling/disabling lvmlockd
+Message-ID: <20170805151903.23280-1-zren@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d530cb29d10342226d77fd95c4f2fbc95174a2be
-Commit:        d530cb29d10342226d77fd95c4f2fbc95174a2be
-Parent:        827be01758ec5adb7b9d5ea75b658092adc65534
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Aug 5 16:18:36 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Aug 5 16:21:24 2017 +0100
+From: Eric Ren <zren@suse.com>
 
-lvmconfig: Add options to produce file premable.
+lvmconf is handy when you need to change lvm.conf in script,
+like resource agent in HA cluster. This patch add support
+for enabling/disabling lvmlockd, and also fix some trivial
+issues in the original.
 
-Use --withgeneralpreamble and --withlocalpreamble instead of
-concatenating files.
+Changes since v1:
+"use_lvmlockd =" will appear in lvm.conf when other options
+are used, i.e. lvmconf --enable-cluster. Fix it by checking
+"USE_LVMLOCKD" to avoid unncessary change to use_lvmlockd.
+
+Signed-off-by: Eric Ren <zren@suse.com>
 ---
- WHATS_NEW                    |    3 +-
- conf/Makefile.in             |    4 +-
- conf/example.conf.base       |   23 ---------------------
- conf/lvmlocal.conf.base      |   19 ------------------
- lib/config/config.c          |    6 +++++
- lib/config/config.h          |    3 ++
- lib/config/config_settings.h |   44 ++++++++++++++++++++++++++++++++++++++++++
- man/lvmconfig.8_pregen       |   20 +++++++++++++++++++
- tools/args.h                 |    6 +++++
- tools/command-lines.in       |    2 +-
- tools/dumpconfig.c           |   16 +++++++++++++++
- 11 files changed, 100 insertions(+), 46 deletions(-)
+ man/lvmconf.8_main |  18 +++++++--
+ scripts/lvmconf.sh | 114 ++++++++++++++++++++++++++++++++++++++++-------------
+ 2 files changed, 101 insertions(+), 31 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 46a944b..ebbc7d1 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,6 +1,7 @@
- Version 2.02.174 - 
- =================================
--  Imporove makefiles' linking.
-+  Add --withgeneralpreamble and --withlocalpreamble to lvmconfig.
-+  Improve makefiles' linking.
-   Fix some paths in generated makefiles to respected configured settings.
-   Add warning when creating thin-pool with zeroing and chunk size >= 512KiB.
-   Introduce exit code 4 EINIT_FAILED to replace -1 when initialisation fails.
-diff --git a/conf/Makefile.in b/conf/Makefile.in
-index c8fee3e..5330c07 100644
---- a/conf/Makefile.in
-+++ b/conf/Makefile.in
-@@ -32,8 +32,8 @@ include $(top_builddir)/make.tmpl
- .PHONY: install_conf install_localconf install_profiles
+diff --git a/man/lvmconf.8_main b/man/lvmconf.8_main
+index ca66ae6..698c336 100644
+--- a/man/lvmconf.8_main
++++ b/man/lvmconf.8_main
+@@ -4,8 +4,10 @@
+ lvmconf \(em LVM configuration modifier
+ .SH "SYNOPSIS"
+ .B lvmconf
+-.RB [ --disable-cluster ]
+ .RB [ --enable-cluster ]
++.RB [ --disable-cluster ]
++.RB [ --enable-lvmlockd ]
++.RB [ --disable-lvmlockd ]
+ .RB [ --enable-halvm ]
+ .RB [ --disable-halvm ]
+ .RB [ --file
+@@ -26,13 +28,21 @@ changes in the lvm configuration if needed.
  
- generate:
--	(cat $(top_srcdir)/conf/example.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withcomments --ignorelocal --withspaces) > example.conf.in
--	(cat $(top_srcdir)/conf/lvmlocal.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withcomments --withspaces local) > lvmlocal.conf.in
-+	LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withgeneralpreamble --withcomments --ignorelocal --withspaces > example.conf.in
-+	LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withlocalpreamble --withcomments --withspaces local > lvmlocal.conf.in
+ .SH "OPTIONS"
+ .TP
++.BR --enable-cluster
++Set \fBlocking_type\fR to the default clustered type on this system.
++Also disable lvmetad use as it is not yet supported in clustered environment.
++.TP
+ .BR --disable-cluster
+ Set \fBlocking_type\fR to the default non-clustered type. Also reset
+ lvmetad use to its default.
+ .TP
+-.BR --enable-cluster
+-Set \fBlocking_type\fR to the default clustered type on this system.
+-Also disable lvmetad use as it is not yet supported in clustered environment.
++.BR --enable-lvmlockd
++Set \fBlocking_type=1\fR and \fBuse_lvmlockd=1\fR to use lvmlockd on this system.
++Also enable lvmetad since lvmlockd can work with it.
++.TP
++.BR --disable-lvmlockd
++Set \fBuse_lvmlockd=0\fR to disable lvmlockd, and set \fBlocking_type=1\fR.
++Also reset lvmetad use to its default.
+ .TP
+ .BR --disable-halvm
+ Set \fBlocking_type\fR to the default non-clustered type. Also reset
+diff --git a/scripts/lvmconf.sh b/scripts/lvmconf.sh
+index 8579338..3a986f0 100644
+--- a/scripts/lvmconf.sh
++++ b/scripts/lvmconf.sh
+@@ -19,6 +19,9 @@
+ # cluster with clvmd and/or locking lib?
+ HANDLE_CLUSTER=0
  
- install_conf: $(CONFSRC)
- 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
-diff --git a/conf/example.conf.base b/conf/example.conf.base
-deleted file mode 100644
-index 5c49899..0000000
---- a/conf/example.conf.base
-+++ /dev/null
-@@ -1,23 +0,0 @@
--# This is an example configuration file for the LVM2 system.
--# It contains the default settings that would be used if there was no
--# @DEFAULT_SYS_DIR@/lvm.conf file.
--#
--# Refer to 'man lvm.conf' for further information including the file layout.
--#
--# Refer to 'man lvm.conf' for information about how settings configured in
--# this file are combined with built-in values and command line options to
--# arrive at the final values used by LVM.
--#
--# Refer to 'man lvmconfig' for information about displaying the built-in
--# and configured values used by LVM.
--#
--# If a default value is set in this file (not commented out), then a
--# new version of LVM using this file will continue using that value,
--# even if the new version of LVM changes the built-in default value.
--#
--# To put this file in a different directory and override @DEFAULT_SYS_DIR@ set
--# the environment variable LVM_SYSTEM_DIR before running the tools.
--#
--# N.B. Take care that each setting only appears once if uncommenting
--# example settings in this file.
--
-diff --git a/conf/lvmlocal.conf.base b/conf/lvmlocal.conf.base
-deleted file mode 100644
-index e2a9e2f..0000000
---- a/conf/lvmlocal.conf.base
-+++ /dev/null
-@@ -1,19 +0,0 @@
--# This is a local configuration file template for the LVM2 system
--# which should be installed as @DEFAULT_SYS_DIR@/lvmlocal.conf .
--#
--# Refer to 'man lvm.conf' for information about the file layout.
--#
--# To put this file in a different directory and override
--# @DEFAULT_SYS_DIR@ set the environment variable LVM_SYSTEM_DIR before
--# running the tools.
--#
--# The lvmlocal.conf file is normally expected to contain only the
--# "local" section which contains settings that should not be shared or
--# repeated among different hosts.  (But if other sections are present,
--# they *will* get processed.  Settings in this file override equivalent
--# ones in lvm.conf and are in turn overridden by ones in any enabled
--# lvm_<tag>.conf files.)
--#
--# Please take care that each setting only appears once if uncommenting
--# example settings in this file and never copy this file between hosts.
--
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 04dded7..1f18969 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1880,6 +1880,12 @@ int config_write(struct dm_config_tree *cft,
- 	}
- 
- 	log_verbose("Dumping configuration to %s", file);
++# handle lvmlockd?
++HANDLE_LVMLOCKD=0
 +
-+	if (tree_spec->withgeneralpreamble)
-+		fprintf(baton.fp, CFG_PREAMBLE_GENERAL);
-+	if (tree_spec->withlocalpreamble)
-+		fprintf(baton.fp, CFG_PREAMBLE_LOCAL);
+ # cluster without clvmd?
+ HANDLE_HALVM=0
+ 
+@@ -38,6 +41,8 @@ function usage
+     echo "Commands:"
+     echo "Enable clvm:  --enable-cluster [--lockinglibdir <dir>] [--lockinglib <lib>]"
+     echo "Disable clvm: --disable-cluster"
++    echo "Enable lvmlockd:  --enable-lvmlockd"
++    echo "Disable lvmlockd: --disable-lvmlockd"
+     echo "Enable halvm: --enable-halvm"
+     echo "Disable halvm: --disable-halvm"
+     echo "Set locking library: --lockinglibdir <dir> [--lockinglib <lib>]"
+@@ -55,7 +60,7 @@ function set_default_use_lvmetad_var
+ 	if [ "$?" != 0 ]; then
+ 		USE_LVMETAD=0
+ 	else
+-                USE_LVMETAD=$use_lvmetad
++                USE_LVMETAD=1
+ 	fi
+ }
+ 
+@@ -75,6 +80,20 @@ function parse_args
+                 HANDLE_CLUSTER=1
+                 shift
+                 ;;
++            --enable-lvmlockd)
++                USE_LVMLOCKD=1
++                USE_LVMETAD=1
++                LOCKING_TYPE=1
++                HANDLE_LVMLOCKD=1
++                shift
++                ;;
++            --disable-lvmlockd)
++                USE_LVMLOCKD=0
++                set_default_use_lvmetad_var
++                LOCKING_TYPE=1
++                HANDLE_LVMLOCKD=1
++                shift
++                ;;
+             --enable-halvm)
+                 LOCKING_TYPE=1
+ 		USE_LVMETAD=0
+@@ -155,6 +174,16 @@ function validate_args
+ 	    exit 18
+     fi
+ 
++    if [ "$HANDLE_LVMLOCKD" = 1 ] && [ "$HANDLE_CLUSTER" = 1 ]; then
++            echo "lvmlockd and clvmd cannot be used together"
++	    exit 18
++    fi
 +
- 	if (!argc) {
- 		if (!dm_config_write_node_out(cft->root, &_out_spec, &baton)) {
- 			log_error("Failure while writing to %s", file);
-diff --git a/lib/config/config.h b/lib/config/config.h
-index 8a7d6c3..901994a 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -141,6 +141,7 @@ typedef struct cfg_def_item {
- 	uint16_t deprecated_since_version;				/* version since this item is deprecated */
- 	const char *deprecation_comment;				/* comment about reasons for deprecation and settings that supersede this one */
- 	const char *comment;						/* comment */
-+	const char *file_premable;					/* comment text to use at the start of the file */
- } cfg_def_item_t;
- 
- /* configuration definition tree types */
-@@ -173,6 +174,8 @@ struct config_def_tree_spec {
- 	unsigned withversions:1;		/* include versions */
- 	unsigned withspaces:1;			/* add more spaces in output for better readability */
- 	unsigned unconfigured:1;		/* use unconfigured path strings */
-+	unsigned withgeneralpreamble:1;		/* include preamble for a general config file */
-+	unsigned withlocalpreamble:1;		/* include preamble for a local config file */
- 	uint8_t *check_status;			/* status of last tree check (currently needed for CFG_DEF_TREE_MISSING only) */
- };
- 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 40b64ab..7d800b3 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -121,6 +121,30 @@
- 
- cfg_section(root_CFG_SECTION, "(root)", root_CFG_SECTION, 0, vsn(0, 0, 0), 0, NULL, NULL)
- 
-+#define CFG_PREAMBLE_GENERAL \
-+	"# This is an example configuration file for the LVM2 system.\n" \
-+	"# It contains the default settings that would be used if there was no\n" \
-+	"# @DEFAULT_SYS_DIR@/lvm.conf file.\n" \
-+	"#\n" \
-+	"# Refer to 'man lvm.conf' for further information including the file layout.\n" \
-+	"#\n" \
-+	"# Refer to 'man lvm.conf' for information about how settings configured in\n" \
-+	"# this file are combined with built-in values and command line options to\n" \
-+	"# arrive at the final values used by LVM.\n" \
-+	"#\n" \
-+	"# Refer to 'man lvmconfig' for information about displaying the built-in\n" \
-+	"# and configured values used by LVM.\n" \
-+	"#\n" \
-+	"# If a default value is set in this file (not commented out), then a\n" \
-+	"# new version of LVM using this file will continue using that value,\n" \
-+	"# even if the new version of LVM changes the built-in default value.\n" \
-+	"#\n" \
-+	"# To put this file in a different directory and override @DEFAULT_SYS_DIR@ set\n" \
-+	"# the environment variable LVM_SYSTEM_DIR before running the tools.\n" \
-+	"#\n" \
-+	"# N.B. Take care that each setting only appears once if uncommenting\n" \
-+	"# example settings in this file.\n\n"
++    if [ "$HANDLE_LVMLOCKD" = 1 ] && [ "$HANDLE_HALVM" = 1 ]; then
++            echo "lvmlockd and HA lvm cannot be used together"
++	    exit 18
++    fi
 +
- cfg_section(config_CFG_SECTION, "config", root_CFG_SECTION, 0, vsn(2, 2, 99), 0, NULL,
- 	"How LVM configuration settings are handled.\n")
+     if [ "$HANDLE_SERVICES" = 0 ]; then
+         if [ "$HANDLE_MIRROR_SERVICE" = 1 ]; then
+             echo "--mirrorservice may be used only with --services"
+@@ -211,6 +240,7 @@ have_type=1
+ have_dir=1
+ have_library=1
+ have_use_lvmetad=1
++have_use_lvmlockd=1
+ have_global=1
  
-@@ -161,6 +185,26 @@ cfg_section(tags_CFG_SECTION, "tags", root_CFG_SECTION, CFG_DEFAULT_COMMENTED, v
- cfg_section(local_CFG_SECTION, "local", root_CFG_SECTION, 0, vsn(2, 2, 117), 0, NULL,
- 	"LVM settings that are specific to the local host.\n")
+ grep -q '^[[:blank:]]*locking_type[[:blank:]]*=' "$CONFIGFILE"
+@@ -225,8 +255,12 @@ have_library=$?
+ grep -q '^[[:blank:]]*use_lvmetad[[:blank:]]*=' "$CONFIGFILE"
+ have_use_lvmetad=$?
  
-+#define CFG_PREAMBLE_LOCAL \
-+	"# This is a local configuration file template for the LVM2 system\n" \
-+	"# which should be installed as @DEFAULT_SYS_DIR@/lvmlocal.conf .\n" \
-+	"#\n" \
-+	"# Refer to 'man lvm.conf' for information about the file layout.\n" \
-+	"#\n" \
-+	"# To put this file in a different directory and override\n" \
-+	"# @DEFAULT_SYS_DIR@ set the environment variable LVM_SYSTEM_DIR before\n" \
-+	"# running the tools.\n" \
-+	"#\n" \
-+	"# The lvmlocal.conf file is normally expected to contain only the\n" \
-+	"# \"local\" section which contains settings that should not be shared or\n" \
-+	"# repeated among different hosts.  (But if other sections are present,\n" \
-+	"# they *will* get processed.  Settings in this file override equivalent\n" \
-+	"# ones in lvm.conf and are in turn overridden by ones in any enabled\n" \
-+	"# lvm_<tag>.conf files.)\n" \
-+	"#\n" \
-+	"# Please take care that each setting only appears once if uncommenting\n" \
-+	"# example settings in this file and never copy this file between hosts.\n\n"
++grep -q '^[[:blank:]]*use_lvmlockd[[:blank:]]*=' "$CONFIGFILE"
++have_use_lvmlockd=$?
 +
- cfg(config_checks_CFG, "checks", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 99), NULL, 0, NULL,
- 	"If enabled, any LVM configuration mismatch is reported.\n"
- 	"This implies checking that the configuration key is understood by\n"
-diff --git a/man/lvmconfig.8_pregen b/man/lvmconfig.8_pregen
-index 3c3e25f..c60f899 100644
---- a/man/lvmconfig.8_pregen
-+++ b/man/lvmconfig.8_pregen
-@@ -79,6 +79,14 @@ line settings from --config.
- .ad b
- .br
- .ad l
-+[    \fB--withgeneralpreamble\fP ]
-+.ad b
-+.br
-+.ad l
-+[    \fB--withlocalpreamble\fP ]
-+.ad b
-+.br
-+.ad l
- [    \fB--withspaces\fP ]
- .ad b
- .br
-@@ -389,6 +397,18 @@ settings, also display comments about deprecation.
- .ad b
- .HP
- .ad l
-+\fB--withgeneralpreamble\fP
-+.br
-+Display general file preamble at start of output.
-+.ad b
-+.HP
-+.ad l
-+\fB--withlocalpreamble\fP
-+.br
-+Display local file preamble at start of output.
-+.ad b
-+.HP
-+.ad l
- \fB--withspaces\fP
- .br
- Where appropriate, add more spaces in output for better readability.
-diff --git a/tools/args.h b/tools/args.h
-index f5e864f..89d84b4 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -783,6 +783,12 @@ arg(withcomments_ARG, '\0', "withcomments", 0, 0, 0,
-     "Display a full comment for each configuration node. For deprecated\n"
-     "settings, also display comments about deprecation.\n")
+ # Those options are in section "global {" so we must have one if any are present.
+-if [ "$have_type" = 0 ] || [ "$have_dir" = 0 ] || [ "$have_library" = 0 ] || [ "$have_use_lvmetad" = 0 ]
++if [ "$have_type" = 0 ] || [ "$have_dir" = 0 ] || [ "$have_library" = 0 ] ||
++    [ "$have_use_lvmetad" = 0 ] || [ "$have_use_lvmlockd" = 0 ]
+ then
  
-+arg(withgeneralpreamble_ARG, '\0', "withgeneralpreamble", 0, 0, 0,
-+    "Include general config file preamble.\n")
+     # See if we can find it...
+@@ -253,40 +287,57 @@ then
+     if [ -z "$LOCKING_TYPE" ]; then
+ 	LOCKING_TYPE=1
+     fi
+-    if [ "$LOCKING_TYPE" = 3 ] || [ "$LOCKING_TYPE" = 2 ]; then
+-        cat "$CONFIGFILE" - <<EOF > "$TMPFILE"
 +
-+arg(withlocalpreamble_ARG, '\0', "withlocalpreamble", 0, 0, 0,
-+    "Include local config file preamble.\n")
++    # global begin
++    cat "$CONFIGFILE" - <<EOF > "$TMPFILE"
+ global {
+-    # Enable locking for cluster LVM
+-    locking_type = $LOCKING_TYPE
++EOF
 +
- arg(withspaces_ARG, '\0', "withspaces", 0, 0, 0,
-     "Where appropriate, add more spaces in output for better readability.\n")
- 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 6e9192e..1ef234e 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -206,7 +206,7 @@ OO_REPORT: --aligned, --all, --binary, --configreport ConfigReport, --foreign,
- OO_CONFIG: --atversion String, --typeconfig ConfigType, --file String, --ignoreadvanced,
- --ignoreunsupported, --ignorelocal, --list, --mergedconfig, --metadataprofile String,
- --sinceversion String, --showdeprecated, --showunsupported, --validate, --withsummary,
----withcomments, --withspaces, --unconfigured, --withversions
-+--withcomments, --withgeneralpreamble, --withlocalpreamble, --withspaces, --unconfigured, --withversions
- 
- ---
- 
-diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
-index e387e60..9e4408e 100644
---- a/tools/dumpconfig.c
-+++ b/tools/dumpconfig.c
-@@ -234,6 +234,14 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
- 			log_error("--withcomments has no effect with --type list");
- 			return EINVALID_CMD_LINE;
- 		}
-+		if (arg_is_set(cmd, withlocalpreamble_ARG)) {
-+			log_error("--withlocalpreamble has no effect with --type list");
-+			return EINVALID_CMD_LINE;
-+		}
-+		if (arg_is_set(cmd, withgeneralpreamble_ARG)) {
-+			log_error("--withgeneralpreamble has no effect with --type list");
-+			return EINVALID_CMD_LINE;
-+		}
- 		/* list type does not require status check */
- 	} else if (!strcmp(type, "full")) {
- 		tree_spec.type = CFG_DEF_TREE_FULL;
-@@ -293,14 +301,22 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
- 
- 	if (arg_is_set(cmd, withsummary_ARG) || arg_is_set(cmd, list_ARG))
- 		tree_spec.withsummary = 1;
++    if [ $? != 0 ]; then
++        echo "failed to create temporary config file, $CONFIGFILE not updated"
++	exit 14
++    fi
 +
- 	if (arg_is_set(cmd, withcomments_ARG))
- 		tree_spec.withcomments = 1;
++    if [ "$LOCKING_TYPE" = 3 ] || [ "$LOCKING_TYPE" = 2 ]; then
++        # Disable lvmetad in cluster
++        USE_LVMETAD=0
++    fi
 +
- 	if (arg_is_set(cmd, unconfigured_ARG))
- 		tree_spec.unconfigured = 1;
- 
- 	if (arg_is_set(cmd, withversions_ARG))
- 		tree_spec.withversions = 1;
- 
-+	if (arg_is_set(cmd, withgeneralpreamble_ARG))
-+		tree_spec.withgeneralpreamble = 1;
++    if [ -n "$USE_LVMETAD" ]; then
++	cat - <<EOF >> "$TMPFILE"
++    use_lvmetad = $USE_LVMETAD
++EOF
++    fi
 +
-+	if (arg_is_set(cmd, withlocalpreamble_ARG))
-+		tree_spec.withlocalpreamble = 1;
++    if [ -n "$LOCKINGLIBDIR" ]; then
++	cat - <<EOF >> "$TMPFILE"
+     library_dir = "$LOCKINGLIBDIR"
+-    # Disable lvmetad in cluster
+-    use_lvmetad = 0
+ EOF
+-        if [ $? != 0 ]
+-        then
+-    	    echo "failed to create temporary config file, $CONFIGFILE not updated"
+-	    exit 14
+-        fi
+-	if [ -n "$LOCKINGLIB" ]; then
+-	    cat - <<EOF >> "$TMPFILE"
++    fi
 +
- 	if (arg_is_set(cmd, withspaces_ARG))
- 		tree_spec.withspaces = 1;
++    if [ -n "$LOCKINGLIB" ]; then
++	cat - <<EOF >> "$TMPFILE"
+     locking_library = "$LOCKINGLIB"
+ EOF
+-            if [ $? != 0 ]
+-            then
+-	        echo "failed to create temporary config file, $CONFIGFILE not updated"
+-	        exit 16
+-            fi
+-	fi
++    fi
++
++    if [ -n "$LOCKING_TYPE" ]; then
+ 	cat - <<EOF >> "$TMPFILE"
+-}
++    locking_type = $LOCKING_TYPE
+ EOF
+-    fi # if we aren't setting cluster locking, we don't need to create a global section
++    fi
  
+-    if [ $? != 0 ]
+-    then
+-	echo "failed to create temporary config file, $CONFIGFILE not updated"
+-	exit 17
++    if [ -n "$USE_LVMLOCKD" ]; then
++	cat - <<EOF >> "$TMPFILE"
++    use_lvmlockd = $USE_LVMLOCKD
++EOF
+     fi
++
++    # global end
++    cat - <<EOF >> "$TMPFILE"
++}
++EOF
++
+ else
+     #
+     # We have a "global {" section, so add or replace the
+@@ -327,6 +378,15 @@ else
+         SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ use_lvmetad = $USE_LVMETAD"
+     fi
+ 
++    if [ -n "$USE_LVMLOCKD" ]; then
++        if [ "$have_use_lvmlockd" = 0 ]
++        then
++            SEDCMD="${SEDCMD}\ns'^[[:blank:]]*use_lvmlockd[[:blank:]]*=.*'\ \ \ \ use_lvmlockd = $USE_LVMLOCKD'g"
++        else
++            SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ use_lvmlockd = $USE_LVMLOCKD"
++        fi
++    fi
++
+     echo -e "$SEDCMD" > "$SCRIPTFILE"
+     sed  <"$CONFIGFILE" >"$TMPFILE" -f "$SCRIPTFILE"
+     if [ $? != 0 ]
+-- 
+2.10.2
 
 
