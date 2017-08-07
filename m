@@ -1,41 +1,104 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 7 Aug 2017 11:54:01 -0400
-Subject: master - lvmlockd: global name doesn't apply to sanlock
-Message-ID: <201708071554.v77Fs1sN023315@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 7 Aug 2017 17:54:12 -0400
+Subject: dev-dct-label-scan-10 - scanning: allocate label data struct from mem pool
+Message-ID: <201708072154.v77LsCqD004322@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8ecb5817c7e08a9a95a0172386af61ba3715948d
-Commit:        8ecb5817c7e08a9a95a0172386af61ba3715948d
-Parent:        568c7ed6f1a1df23b9843a54b0bc53816ac5f621
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e30e59ddb4a7723e5c9350137cd80a5b548e46d2
+Commit:        e30e59ddb4a7723e5c9350137cd80a5b548e46d2
+Parent:        70f2ad21bae8a18cfd87cb50d05828b4b064c4d2
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Aug 7 10:43:28 2017 -0500
+AuthorDate:    Mon Aug 7 16:52:14 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Aug 7 10:46:03 2017 -0500
+CommitterDate: Mon Aug 7 16:52:14 2017 -0500
 
-lvmlockd: global name doesn't apply to sanlock
+scanning: allocate label data struct from mem pool
 
-When adopting locks, we shouldn't skip the special
-dlm global lockspace name when using sanlock.
+Use a separate alloc/free loop for ld structs from
+mem pool vs the aio-related structs that are not
+from pool.
 ---
- daemons/lvmlockd/lvmlockd-core.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/label/label.c |   33 +++++++++++++++++++++------------
+ 1 files changed, 21 insertions(+), 12 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 5f08bbf..01259c0 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -5263,7 +5263,7 @@ static void adopt_locks(void)
- 	list_for_each_entry_safe(ls1, l1safe, &ls_found, list) {
+diff --git a/lib/label/label.c b/lib/label/label.c
+index e5c0b78..05ef4f5 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -447,12 +447,15 @@ static void _free_label_read_list(int do_close)
+ {
+ 	struct label_read_data *ld, *ld2;
  
- 		/* The dlm global lockspace is special and doesn't match a VG. */
--		if (!strcmp(ls1->name, gl_lsname_dlm)) {
-+		if ((ls1->lm_type == LD_LM_DLM) && !strcmp(ls1->name, gl_lsname_dlm)) {
- 			list_del(&ls1->list);
- 			free(ls1);
- 			continue;
+-	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
+-		dm_list_del(&ld->list);
++	dm_list_iterate_items(ld, &label_read_list) {
+ 		if (do_close)
+ 			dev_close(ld->dev);
+ 		if (ld->aio)
+ 			dev_async_io_destroy(ld->aio);
++	}
++
++	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
++		dm_list_del(&ld->list);
+ 		free(ld);
+ 	}
+ }
+@@ -645,23 +648,25 @@ int label_scan_async(struct cmd_context *cmd)
+ 		 * of the posix_memalign below.  Try using mem pool to allocate
+ 		 * all the ld structs first, then allocate all aio and aio->buf.
+ 		 */
+-		if (!(ld = malloc(sizeof(*ld))))
++		if (!(ld = dm_malloc(sizeof(*ld))))
+ 			goto_bad;
+ 
+ 		memset(ld, 0, sizeof(*ld));
+ 
+-		if (!(ld->aio = dev_async_io_alloc(buf_len)))
+-			goto_bad;
+-
+ 		ld->dev = dev;
+-		ld->buf = ld->aio->buf;
+-		ld->buf_len = buf_len;
+-
+ 		dm_list_add(&label_read_list, &ld->list);
+ 		dev_count++;
+ 	};
+ 	dev_iter_destroy(iter);
+ 
++	dm_list_iterate_items(ld, &label_read_list) {
++		if (!(ld->aio = dev_async_io_alloc(buf_len)))
++			goto_bad;
++
++		ld->buf = ld->aio->buf;
++		ld->buf_len = buf_len;
++	}
++
+ 	/*
+ 	 * Start the aio reads on each dev.  Flag any that
+ 	 * fail and the next loop will try a sync read for it.
+@@ -748,12 +753,16 @@ bad:
+ 	dev_iter_destroy(iter);
+ 	dev_async_context_destroy(ac);
+ 
+-	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
+-		dm_list_del(&ld->list);
++	dm_list_iterate_items(ld, &label_read_list) {
+ 		dev_close(ld->dev);
+ 		dev_async_io_destroy(ld->aio);
+-		free(ld);
+ 	}
++
++	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
++		dm_list_del(&ld->list);
++		dm_free(ld);
++	}
++
+ 	return 0;
+ }
+ 
 
 
