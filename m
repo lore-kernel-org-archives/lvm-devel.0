@@ -1,82 +1,54 @@
-From: Eric Ren <zren@suse.com>
-Date: Wed, 9 Aug 2017 18:11:24 +0800
-Subject: lvmlockd: adopt locks always failed
-In-Reply-To: <20170808142815.GA29769@redhat.com>
-References: <107b2602-3918-fdbe-6645-da7a2c29e0e9@suse.com>
-	<20170807154739.GB4875@redhat.com>
-	<59570f35-a284-dca3-983b-22bf3addf4f7@suse.com>
-	<20170808142815.GA29769@redhat.com>
-Message-ID: <a2869716-d1c9-868f-0e70-134852b25404@suse.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 9 Aug 2017 10:37:14 -0400
+Subject: master - commands: recognize -? for help
+Message-ID: <201708091437.v79EbEcI007996@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8bc89658476d187a6b1d40018bbbac84d389c5be
+Commit:        8bc89658476d187a6b1d40018bbbac84d389c5be
+Parent:        8ecb5817c7e08a9a95a0172386af61ba3715948d
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Aug 9 09:34:33 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Aug 9 09:34:33 2017 -0500
 
+commands: recognize -? for help
 
-On 08/08/2017 10:28 PM, David Teigland wrote:
-> On Tue, Aug 08, 2017 at 10:03:58AM +0800, Eric Ren wrote:
->> I add a resource agent for lvmlockd. It would be great if you can give some
->> review and comments there ;-P  The PR is here:
->>
->> https://github.com/ClusterLabs/resource-agents/pull/1013
-> Hi, thanks for working on that, resource agents have always seemed mostly
-> redundant to me, so I'm not one to give the best feedback.
+It's not known when this last worked, but there has
+been documentation suggesting it worked, so enable it.
+---
+ tools/lvmcmdline.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
-Yeah, agree. But, many resource agents are still created for daemons
-that already have systemd service though, like dlm, clvm, etc. It seems
-HA software wants to manage these daemons itself. Anyway, just provide
-a another option for HA users who used to stack resource agents ;-P
-
-> You could simplify things by just starting lvmlockd from systemd during
-> system startup using
-> https://sourceware.org/git/?p=lvm2.git;a=blob_plain;f=scripts/lvm2_lvmlockd_systemd_red_hat.service.in;hb=HEAD
->
-> since there's no clustering dependency on doing that, i.e. no problem
-> starting the daemon before clustering components are started.  It doesn't
-> actually do anything until you start shared VGs.
-
-Thanks, I didn't notice this point before.
-
->
-> I think we could make lock-adoption the default during startup.  I may
-> change the default in lvmlockd itself.  You always want to adopt locks if
-> they exist; things aren't going to work if you restart lvmlockd without
-> adopting locks when previous orphaned locks exist.  However, I'm not sure
-> that resource agents will be sophisticated enough to restart lvmlockd and
-> adopt locks after a previous instance failed; they've always seemed eager
-> to just reset the node.
-
-Yes, I also realized that. In the resource agent, I've added "-A 1" when 
-starting the daemon.
-
->
-> Once the clustering system is running (in particular the dlm), you can
-> then start and use shared VGs.  You could use or copy this unit file for
-> that:
->
-> https://sourceware.org/git/?p=lvm2.git;a=blob_plain;f=scripts/lvm2_lvmlocking_systemd_red_hat.service.in;hb=HEAD
->
-> For activation, you need to use vgchange -aay to specify auto-activation.
-
-OK, thanks.  For the resource agent, we can select "-aay" way as 
-default, while providing the option to
-activate all shared VGs when users have many shared VGs and they don't 
-want to add them into
-lvm.conf manually.
-
-> You're also including 's' to activate LVs with a shared lock, but it's
-> only safe to do that if you have a cluster file system on the LV.  If you
-> don't have a way to know that, I've thought in the past that we could add
-> a new lvm.conf list, similar to auto_activation_volume_list, that
-> specifies which LVs should be activated with shared locks.  For
-> deactivation, use -an, (the 'l' was a clvm-ism, and is meaningless with
-> lvmlockd.)
-Got it, thanks. I will change that ;-)
-
-Regards,
-Eric
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 81cc5e0..cc1c297 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -3455,8 +3455,8 @@ int lvm2_main(int argc, char **argv)
+ 		if (!strcmp(argv[1], "version"))
+ 			return lvm_return_code(version(NULL, argc, argv));
+ 
+-		/* turn 'lvm -h' and 'lvm --help' into 'lvm help' */
+-		if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))
++		/* turn 'lvm -h', 'lvm --help', 'lvm -?' into 'lvm help' */
++		if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help") || !strcmp(argv[1], "-?"))
+ 			argv[1] = (char *)"help";
+ 
+ 		if (*argv[1] == '-') {
+@@ -3465,6 +3465,10 @@ int lvm2_main(int argc, char **argv)
+ 		}
+ 	}
+ 
++	/* turn command -? into command -h */
++	if (alias && (argc > 1) && !strcmp(argv[1], "-?"))
++		argv[1] = (char *)"-h";
++
+ 	if (!(cmd = init_lvm(0, 0)))
+ 		return EINIT_FAILED;
+ 
 
 
