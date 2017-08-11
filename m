@@ -1,84 +1,61 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 1 Aug 2017 06:01:07 -0400
-Subject: master - thin: warn about too big chunks size
-Message-ID: <201708011001.v71A17aV011184@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Fri, 11 Aug 2017 15:51:05 -0400
+Subject: master - pvcreate: Use maximum metadata area size with --restorefile
+Message-ID: <201708111951.v7BJp5fm001149@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8256170e6a2dbed15b790e75f5d1026e3de69a16
-Commit:        8256170e6a2dbed15b790e75f5d1026e3de69a16
-Parent:        3654f478e1beab950f9ee91bc2fd759d22552e1c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jul 21 20:58:33 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 1 11:52:27 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=42fa20d0d0136c1aeb3ccdf0654c64beeee05821
+Commit:        42fa20d0d0136c1aeb3ccdf0654c64beeee05821
+Parent:        4fa5add6b1bd4d7f7313f2950021a09e4130ad08
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Aug 11 20:41:37 2017 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Aug 11 20:41:37 2017 +0100
 
-thin: warn about too big chunks size
+pvcreate: Use maximum metadata area size with --restorefile
 
-lvm2 warned about zeroing and too big chunksize (>=512KiB), but
-only during lvconvert, so lvcreate was creating thin-pools
-without any warning about possible slowness of thin provisioning
-because of zeroing.
+If the PV was originally created with a larger-than-default
+metadata area the restored one wasn't and might not even be
+large enough to hold the metadata!
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/thin_manip.c |   13 ++++++++++++-
- tools/lvconvert.c         |    5 -----
- 3 files changed, 13 insertions(+), 6 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/pvcreate.c |    9 +++++++++
+ 2 files changed, 10 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 20da268..41ddda7 100644
+index e05fae2..2e1294e 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.174 - 
  =================================
-+  Add warning when creating thin-pool with zeroing and chunk size >= 512KiB.
-   Introduce exit code 4 EINIT_FAILED to replace -1 when initialisation fails.
-   Add synchronization points with udev during reshape of raid LVs.
++  Use maximum metadataarea size that fits with pvcreate --restorefile.
+   Always clear cached bootloaderarea when wiping label e.g. in pvcreate.
+   Disallow --bootloaderareasize with pvcreate --restorefile.
+   Fix lvmlockd check for running lock managers during lock adoption.
+diff --git a/tools/pvcreate.c b/tools/pvcreate.c
+index 0fe5ad5..9dc50e4 100644
+--- a/tools/pvcreate.c
++++ b/tools/pvcreate.c
+@@ -135,6 +135,15 @@ int pvcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	if (!pvcreate_params_from_args(cmd, &pp))
+ 		return EINVALID_CMD_LINE;
  
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 88dc51a..bd2d2c3 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -752,8 +752,19 @@ int update_thin_pool_params(struct cmd_context *cmd,
- 	    !set_pool_discards(discards, DEFAULT_THIN_POOL_DISCARDS))
- 		return_0;
- 
--	if (*zero_new_blocks == THIN_ZERO_UNSELECTED)
-+	if (*zero_new_blocks == THIN_ZERO_UNSELECTED) {
- 		*zero_new_blocks = (DEFAULT_THIN_POOL_ZERO) ? THIN_ZERO_YES : THIN_ZERO_NO;
-+		log_verbose("%s pool zeroing on default.", (*zero_new_blocks == THIN_ZERO_YES) ?
-+			    "Enabling" : "Disabling");
-+	}
++	/*
++	 * If --metadatasize was not given with --restorefile, set it to pe_start.
++	 * Later code treats this as a maximum size and reduces it to fit.
++	 */
++	if (!arg_is_set(cmd, metadatasize_ARG) && arg_is_set(cmd, restorefile_ARG))
++		pp.pva.pvmetadatasize = pp.pva.pe_start;
 +
-+	if ((*zero_new_blocks == THIN_ZERO_YES) &&
-+	    (*chunk_size >= DEFAULT_THIN_POOL_CHUNK_SIZE_PERFORMANCE * 2)) {
-+		log_warn("WARNING: Pool zeroing and %s large chunk size slows down thin provisioning.",
-+			 display_size(cmd, *chunk_size));
-+		log_warn("WARNING: Consider disabling zeroing (-Zn) or using smaller chunk size (<%s).",
-+			 display_size(cmd, DEFAULT_THIN_POOL_CHUNK_SIZE_PERFORMANCE * 2));
-+	}
++	/* FIXME Also needs to check any 2nd metadata area isn't inside the data area! */
++
+ 	pp.pv_count = argc;
+ 	pp.pv_names = argv;
  
- 	log_verbose("Preferred pool metadata size %s.",
- 		    display_size(cmd, (uint64_t)*pool_metadata_extents * extent_size));
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index d90e675..94dee9d 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3088,11 +3088,6 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		goto_bad;
- 
--	if ((seg->zero_new_blocks == THIN_ZERO_YES) &&
--	    seg->chunk_size >= DEFAULT_THIN_POOL_CHUNK_SIZE_PERFORMANCE * 2)
--		log_warn("WARNING: Pool zeroing and large %s chunk size slows down provisioning.",
--			 display_size(cmd, seg->chunk_size));
--
- 	if (activate_pool && !lockd_lv(cmd, pool_lv, "ex", LDLV_PERSISTENT)) {
- 		log_error("Failed to lock pool LV %s.", display_lvname(pool_lv));
- 		goto out;
 
 
