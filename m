@@ -1,61 +1,98 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Fri, 11 Aug 2017 15:51:05 -0400
-Subject: master - pvcreate: Use maximum metadata area size with --restorefile
-Message-ID: <201708111951.v7BJp5fm001149@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zhang Huan <zhanghuan@huayun.com>
+Date: Mon, 14 Aug 2017 19:09:39 +0800
+Subject: [patch review] reduce io impact for finding sanlock lv free lock offset
+Message-ID: <7E0C252E-B047-47C7-A43E-75F33FC23EF2@huayun.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=42fa20d0d0136c1aeb3ccdf0654c64beeee05821
-Commit:        42fa20d0d0136c1aeb3ccdf0654c64beeee05821
-Parent:        4fa5add6b1bd4d7f7313f2950021a09e4130ad08
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Aug 11 20:41:37 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Aug 11 20:41:37 2017 +0100
+commit 19d8fbd0e142c0d35eb5bcc96671682afb548a23
+Author: Huan Zhang <zhanghuan@chinac.com>
+Date:   Mon Aug 14 18:51:26 2017 +0800
 
-pvcreate: Use maximum metadata area size with --restorefile
+    reduce io impact for finding sanlock lv free lock offset
 
-If the PV was originally created with a larger-than-default
-metadata area the restored one wasn't and might not even be
-large enough to hold the metadata!
----
- WHATS_NEW        |    1 +
- tools/pvcreate.c |    9 +++++++++
- 2 files changed, 10 insertions(+), 0 deletions(-)
+    currently, lvcreate for sanlock find the free lock offset
+    from the beginning of the lvmlock every time.
+    after created thousands of lvs, it will issue thousands of read
+    ios for lvcreate to find free lock offset.
+    remeber the last free lock offset will greatly reduce the impact
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e05fae2..2e1294e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.174 - 
- =================================
-+  Use maximum metadataarea size that fits with pvcreate --restorefile.
-   Always clear cached bootloaderarea when wiping label e.g. in pvcreate.
-   Disallow --bootloaderareasize with pvcreate --restorefile.
-   Fix lvmlockd check for running lock managers during lock adoption.
-diff --git a/tools/pvcreate.c b/tools/pvcreate.c
-index 0fe5ad5..9dc50e4 100644
---- a/tools/pvcreate.c
-+++ b/tools/pvcreate.c
-@@ -135,6 +135,15 @@ int pvcreate(struct cmd_context *cmd, int argc, char **argv)
- 	if (!pvcreate_params_from_args(cmd, &pp))
- 		return EINVALID_CMD_LINE;
- 
-+	/*
-+	 * If --metadatasize was not given with --restorefile, set it to pe_start.
-+	 * Later code treats this as a maximum size and reduces it to fit.
-+	 */
-+	if (!arg_is_set(cmd, metadatasize_ARG) && arg_is_set(cmd, restorefile_ARG))
-+		pp.pva.pvmetadatasize = pp.pva.pe_start;
+    Signed-off-by: Zhang Huan <zhanghuan@huayun.com>
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 01259c0..aefa98a 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -3304,7 +3304,6 @@ static int work_init_lv(struct action *act)
+                lm_type = ls->lm_type;
+                memcpy(vg_args, ls->vg_args, MAX_ARGS);
+                free_offset = ls->free_lock_offset;
+-               ls->free_lock_offset = 0;
+        }
+        pthread_mutex_unlock(&lockspaces_mutex);
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index aedd506..c6c7cc9 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -938,7 +938,9 @@ int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
+        struct lm_sanlock *lms = (struct lm_sanlock *)ls->lm_data;
+        struct sanlk_resourced rd;
+        uint64_t offset;
++       uint64_t start_offset;
+        int rv;
++       int round;
+
+        if (daemon_test) {
+                *free_offset = (1048576 * LV_LOCK_BEGIN) + (1048576 * (daemon_test_lv_count + 1));
+@@ -951,9 +953,22 @@ int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
+        rd.rs.num_disks = 1;
+        strncpy(rd.rs.disks[0].path, lms->ss.host_id_disk.path, SANLK_PATH_LEN-1);
+
+-       offset = lms->align_size * LV_LOCK_BEGIN;
++       if (ls->free_lock_offset)
++               offset = ls->free_lock_offset;
++       else
++               offset = lms->align_size * LV_LOCK_BEGIN;
 +
-+	/* FIXME Also needs to check any 2nd metadata area isn't inside the data area! */
++       start_offset = offset;
+
+        while (1) {
++               if (offset >= start_offset && round) {
++                       /* This indicates the all space are allocated. */
++                       log_debug("S %s init_lv_san read back to start offset %llu",
++                               ls->name, (unsigned long long)offset);
++                       rv = -EMSGSIZE;
++                       return rv;
++               }
 +
- 	pp.pv_count = argc;
- 	pp.pv_names = argv;
- 
+                rd.rs.disks[0].offset = offset;
+
+                memset(rd.rs.name, 0, SANLK_NAME_LEN);
+@@ -963,7 +978,12 @@ int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
+                        /* This indicates the end of the device is reached. */
+                        log_debug("S %s find_free_lock_san read limit offset %llu",
+                                  ls->name, (unsigned long long)offset);
+-                       return -EMSGSIZE;
++                       round = 1;
++                       offset = lms->align_size * LV_LOCK_BEGIN;
++                       rd.rs.disks[0].offset = offset;
++                       memset(rd.rs.name, 0, SANLK_NAME_LEN);
++
++                       rv = sanlock_read_resource(&rd.rs, 0);
+                }
+
+                /*
+
+
+
+Best Regards.
+
+Zhang Huan
+
+
 
 
