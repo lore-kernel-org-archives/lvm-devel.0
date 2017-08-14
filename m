@@ -1,62 +1,69 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 14 Aug 2017 09:07:57 -0400
-Subject: master - raid: more validation checks for segment data_offset member
-Message-ID: <201708141307.v7ED7vsD028193@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Ren <zren@suse.com>
+Date: Mon, 14 Aug 2017 20:56:44 +0800
+Subject: [PATCH 0/1] adding Btrfs resizing capability to lvresize/fsadm.sh
+In-Reply-To: <032e16cc-3e25-04ca-8361-3abb767a0538@redhat.com>
+References: <20170802174235.19869-1-marcus@hostalia.de>
+	<3d78f6d7-dd89-71cb-e754-88a290287404@hostalia.de>
+	<bf152578-cca9-b5a1-98a2-4d7a97a21759@suse.com>
+	<032e16cc-3e25-04ca-8361-3abb767a0538@redhat.com>
+Message-ID: <c4a79796-4695-ad57-d42f-2b83daf0f434@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=222e1e3acee399b0acf31565f784716d67c465a8
-Commit:        222e1e3acee399b0acf31565f784716d67c465a8
-Parent:        42fa20d0d0136c1aeb3ccdf0654c64beeee05821
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Aug 14 15:00:15 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Aug 14 15:00:15 2017 +0200
+Hi Zdenek and Marcus,
 
-raid: more validation checks for segment data_offset member
+On 08/14/2017 08:50 PM, Zdenek Kabelac wrote:
+> [...snip...]
+>
+> Hi
+>
+> From my memory - when we tried to use such patch in past - we've found 
+> too many rough edges on anything  btrfs related.
+>
+> I'm not an expert of btrfs at all - but we noticed lot of troubles in 
+> terms
+> of  btrfs was not even noticing it has got smaller, disk got missing
+> and many other conditions.
+>
+> So to get such  'btrfs resize' patch accepted - it MUST be equipped with
+> lvm2 test suite script - possibly with a new separate test file
+> (so it's not mixed with already complex test/shell/fsadm.sh)
+>
+> It should test fair amount of condition - so we can be at least partially
+> sure  'fsadm' will not totally mess users data just because it has run
+> command on some unexpected variants of 'btrfs' disk layout.
+>
+> In fact it should check for 'known layout' and only let proceed with
+> command on this path   (including for checking minimal version
+> of kernel and btrfs-tools where btrfs is known to be stable enough for 
+> this operation.
+>
+>
+> I do believe that format of /test/shell/*sh is relatively readable.
+> For running the test -
+>
+> do your lvm2 build and then within subdir /test/  run something like:
+>
+> 'make check_local T=fsadm-btrfs.sh VERBOSE=1'
+>
+> to check the tool is doing something useful.
+> If something is unclear - feel free to reach me on freenode #lvm channel
+> to get this working properly.
 
-Upgrade commit fb641c342343ac48cc623c8079900b1f4f395a69 with additional checks.
----
- lib/metadata/merge.c |   10 ++++++----
- 1 files changed, 6 insertions(+), 4 deletions(-)
+Thanks for your detailed feedback!
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index dbe0d58..b0adc5a 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -119,7 +119,7 @@ static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
- 		raid_seg_error_val("non-zero min recovery rate", seg->min_recovery_rate);
- 	if (seg->max_recovery_rate)
- 		raid_seg_error_val("non-zero max recovery rate", seg->max_recovery_rate);
--	if (seg->lv->status & LV_RESHAPE_DATA_OFFSET)
-+	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset)
- 		raid_seg_error_val("data_offset", seg->data_offset);
- }
- 
-@@ -143,7 +143,7 @@ static void _check_raid1_seg(struct lv_segment *seg, int *error_count)
- 		raid_seg_error("no meta areas");
- 	if (seg->stripe_size)
- 		raid_seg_error_val("non-zero stripe size", seg->stripe_size);
--	if (seg->lv->status & LV_RESHAPE_DATA_OFFSET)
-+	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset)
- 		raid_seg_error_val("data_offset", seg->data_offset);
- 	_check_raid_region_recovery(seg, error_count);
- }
-@@ -169,8 +169,10 @@ static void _check_raid45610_seg(struct lv_segment *seg, int *error_count)
- 	_check_raid_region_recovery(seg, error_count);
- 	/* END: checks applying to any raid4/5/6/10 */
- 
--	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) &&
--	    (seg->data_offset & (seg->lv->vg->extent_size - 1)))
-+	if (seg->lv->status & LV_RESHAPE_DATA_OFFSET) {
-+		if (seg->data_offset & (seg->lv->vg->extent_size - 1))
-+			raid_seg_error_val("data_offset", seg->data_offset);
-+	} else if (seg->data_offset)
- 		raid_seg_error_val("data_offset", seg->data_offset);
- 
- 	/* Specific checks per raid level */
+I can try to write such a testcase, and ask you
+for review when it's finished ;-)
+
+Cheers,
+Eric
+>
+> Regards
+>
+> Zdenek
+>
 
 
