@@ -1,85 +1,70 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 14 Aug 2017 14:29:43 +0200
+Date: Mon, 14 Aug 2017 14:36:34 +0200
 Subject: Batch/queue LVM operations
-In-Reply-To: <alpine.LRH.2.11.1708040036410.9683@mail.ewheeler.net>
+In-Reply-To: <alpine.LRH.2.11.1708040054310.9683@mail.ewheeler.net>
 References: <alpine.LRH.2.11.1707281919050.9683@mail.ewheeler.net>
 	<32ff399c-7a79-5beb-abd5-d5dbad1486db@redhat.com>
 	<alpine.LRH.2.11.1708011720490.9683@mail.ewheeler.net>
 	<4c0a5ae7-2da4-7610-5d06-90d990bd41de@redhat.com>
-	<alpine.LRH.2.11.1708040036410.9683@mail.ewheeler.net>
-Message-ID: <1df2fbda-640a-e87b-49f1-f9b1ff8a0fae@redhat.com>
+	<6aac428d-2c55-4d7f-4ad1-ebcd3b6f2ca6@redhat.com>
+	<alpine.LRH.2.11.1708040054310.9683@mail.ewheeler.net>
+Message-ID: <57f54908-4289-0c67-a965-15a8832fd85a@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 4.8.2017 v 02:38 Eric Wheeler napsal(a):
+Dne 4.8.2017 v 02:59 Eric Wheeler napsal(a):
 > On Tue, 1 Aug 2017, Zdenek Kabelac wrote:
 > 
->> Dne 1.8.2017 v 19:24 Eric Wheeler napsal(a):
->>> On Fri, 28 Jul 2017, Zdenek Kabelac wrote:
->>>
->>>> Dne 28.7.2017 v 21:22 Eric Wheeler napsal(a):
->>>>> Hello,
->>>>>
->>>>> Is there an option to batch LVM operations?
->>>>>
->>>>> For example, I would like to delete 100 thin snapshots without updating
->>>>> the vgmeta 100 times.
->>>>
->>>> You could possibly use --select feature to handle all removals with
->>>> just one lvremove command.
->>>
->>> I tried --select, but there is a long pause between removals so it is
->>> clearly doing a metadata operation for each removal.
->>>
->>> Is it possible to do something like this:
->>>
->>> 1. Hold a lock (how?)
->>> 2. vgcfgbackup -f /my-backup/file --ignorelocking-failure
->>> 3. Modify /my-backup/file (remove LVs)
->>> 4. dmsetup message pool 0 delete ID (each ID)
->>> 5. vgcfgrestore --ignorelocking-failure
->>> 6. Release lock
->>>
->>> --
->>> Eric Wheeler
->>>
+>> Dne 1.8.2017 v 19:46 Zdenek Kabelac napsal(a):
+>> Also what is probably worthy exercise:
 >>
->> Hi
+>> If you have thinLVs you want to 'remove' -
 >>
->> Unfortunately this optimization is currently not possible.
+>> Deactivate all such LVs in one 'lvchange -an' command upfront.
+>> Then as next step remove all such LVs with one  'lvremove' command.
+>>
+>> Take a timed 'strace -ttt' and measure how much time is spend in actual
+>> 'ioctl' and compare with the remaining time spend in lvm2 processing.
+>>
+>> Then summarize  the output and your time-expectation  - possibly open RFE BZ
+>> for it.
 > 
-> Well, perhaps not by LVM at the moment, but is the procedure sound if I
-> were to do this myself and accept any errors while deleting thin volumes?
-
-Hi
-
-Yes - surely you can write direct sequence of command to update lvm2 metadata
-in different way -   lvm2 does nothing else then 'read-lvm2-metadata'
-'do-some-work'  and 'write-updated-lvm2-metadata' - clearly between does steps
-there is a lot of validation checking which operation are allowed at each
-individual steps to minimize risk of any data-lose.
-lvm2 however targets 'universal' sequences - so it's getting sub-optimal for 
-certain workloads.
-If you can ensure like 'no LVs' gets activated between you  'hacked' tooling 
-work then you can surely  write a replacement of 'lvm2' work  via usage
-of some 'dmsetup' & 'awk/sed'  work with using of vgcfgbackup/restore.
-But as said - you will lose large chunk of extra protection - but you know 
-what price you pay here...
-
-> Can vgcfgrestore be done hot with existing active volumes?
+> Details below, but to summarize:
 > 
-> Similarly, could I do this for mass renames with the backup/restore?
+> Total ioctl time:  0.018542 seconds.
+> Total runtime:    11.922s
+> 
+> Is this want you were interested to see?  Volumes were deactivated first.
+> 
+> -Eric
+> 
+> ]# time strace -Tttt lvremove -f \
+> /dev/data/2017-08-03_17-52-54_manual_ertz_0 \
+> /dev/data/2017-08-03_17-52-56_manual_ertz_0 \
+> /dev/data/2017-08-03_17-52-57_manual_ertz_0 \
+> /dev/data/2017-08-03_17-52-59_manual_ertz_0 \
+> /dev/data/2017-08-03_17-53-00_manual_ertz_0 \
+> /dev/data/2017-08-03_17-53-02_manual_ertz_0 \
+> /dev/data/2017-08-03_17-53-03_manual_ertz_0 2>&1|grep ioctl | tee t.t
+> 
+> 1501808047.817379 ioctl(6, DM_TABLE_STATUS, 0x55cfc11040b0) = 0 <0.000010>
+> 1501808047.817435 ioctl(6, DM_DEV_STATUS, 0x55cfc11040b0) = 0 <0.000010>
+> 1501808048.635303 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = -1 ENXIO (No such device or address) <0.000020>
+> 1501808048.636528 ioctl(6, DM_DEV_STATUS, 0x55cfc11000a0) = -1 ENXIO (No such device or address) <0.000009>
 
-Yep - rename is typically easier to do - here lvm2 is able to protect you on 
-'vgcfgrestore' at least against bad names..
-Just be aware if you rename LVs to some 'existing' live/running names you can 
-make such LVs inaccessible/unsable for lvm2.
+Looking at this trace - it seems to be stack at full commit point since lvm2 
+is using flushing status - this has been (assuming) mostly fixed with recent
+lvm2 releases (unless I've overlooked something).
+
+Can you please try to do similar trace with lvm2 >= 2.02.172 - these version 
+should avoid using  'status' with flushing.
 
 Regards
 
 Zdenek
+
 
 
