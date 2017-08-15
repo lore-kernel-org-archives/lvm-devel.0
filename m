@@ -1,100 +1,95 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 15 Aug 2017 13:04:10 -0400
-Subject: master - lvmlockd: reduce io impact for finding sanlock lv free lock offset
-Message-ID: <201708151704.v7FH4APj022772@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 15 Aug 2017 13:04:52 -0400
+Subject: master - lvmlockd: zero extended lvmlock LV
+Message-ID: <201708151704.v7FH4qGt023101@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=43305ae8da20ac8ab4390a2aa81618f2973753af
-Commit:        43305ae8da20ac8ab4390a2aa81618f2973753af
-Parent:        aa75ca633285339a8be50ed5e5a661ea1654f8f7
-Author:        Zhang Huan <zhanghuan@huayun.com>
-AuthorDate:    Tue Aug 15 10:42:44 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df5c2964269895b6f5ce16dbdb70edd57c5aa67d
+Commit:        df5c2964269895b6f5ce16dbdb70edd57c5aa67d
+Parent:        43305ae8da20ac8ab4390a2aa81618f2973753af
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Aug 15 11:53:21 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Tue Aug 15 11:56:31 2017 -0500
 
-lvmlockd: reduce io impact for finding sanlock lv free lock offset
+lvmlockd: zero extended lvmlock LV
 
-currently, lvcreate for sanlock find the free lock offset
-from the beginning of the lvmlock every time.
-after created thousands of lvs, it will issue thousands of read
-ios for lvcreate to find free lock offset.
-remeber the last free lock offset will greatly reduce the impact
-
-Signed-off-by: Zhang Huan <zhanghuan@huayun.com>
+After the internal lvmlock LV (holding sanlock leases) is
+extended to hold more leases, it needs to be zeroed.
+sanlock expects to see either zeroed blocks or blocks
+initialized with leases.
 ---
- daemons/lvmlockd/lvmlockd-core.c    |    1 -
- daemons/lvmlockd/lvmlockd-sanlock.c |   26 ++++++++++++++++++++++++--
- 2 files changed, 24 insertions(+), 3 deletions(-)
+ lib/locking/lvmlockd.c |   42 +++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 41 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 01259c0..aefa98a 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -3304,7 +3304,6 @@ static int work_init_lv(struct action *act)
- 		lm_type = ls->lm_type;
- 		memcpy(vg_args, ls->vg_args, MAX_ARGS);
- 		free_offset = ls->free_lock_offset;
--		ls->free_lock_offset = 0;
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 54e3cf6..d85021c 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -365,6 +365,9 @@ static int _remove_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
+ 
+ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg, int extend_mb)
+ {
++	struct device *dev;
++	char path[PATH_MAX];
++	uint64_t old_size_bytes, new_size_bytes;
+ 	struct logical_volume *lv = vg->sanlock_lv;
+ 	struct lvresize_params lp = {
+ 		.sign = SIGN_NONE,
+@@ -374,12 +377,49 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 		.force = 1,
+ 	};
+ 
++	old_size_bytes = lv->size * SECTOR_SIZE;
++
+ 	if (!lv_resize(lv, &lp, &vg->pvs)) {
+-		log_error("Extend LV %s to size %s failed.",
++		log_error("Extend sanlock LV %s to size %s failed.",
+ 			  display_lvname(lv), display_size(cmd, lp.size));
+ 		return 0;
  	}
- 	pthread_mutex_unlock(&lockspaces_mutex);
  
-diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
-index aedd506..a10d02f 100644
---- a/daemons/lvmlockd/lvmlockd-sanlock.c
-+++ b/daemons/lvmlockd/lvmlockd-sanlock.c
-@@ -938,7 +938,9 @@ int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
- 	struct lm_sanlock *lms = (struct lm_sanlock *)ls->lm_data;
- 	struct sanlk_resourced rd;
- 	uint64_t offset;
-+	uint64_t start_offset;
- 	int rv;
-+	int round = 0;
- 
- 	if (daemon_test) {
- 		*free_offset = (1048576 * LV_LOCK_BEGIN) + (1048576 * (daemon_test_lv_count + 1));
-@@ -951,9 +953,22 @@ int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
- 	rd.rs.num_disks = 1;
- 	strncpy(rd.rs.disks[0].path, lms->ss.host_id_disk.path, SANLK_PATH_LEN-1);
- 
--	offset = lms->align_size * LV_LOCK_BEGIN;
-+	if (ls->free_lock_offset)
-+		offset = ls->free_lock_offset;
-+	else
-+		offset = lms->align_size * LV_LOCK_BEGIN;
++	new_size_bytes = lv->size * SECTOR_SIZE;
 +
-+	start_offset = offset;
- 
- 	while (1) {
-+		if (offset >= start_offset && round) {
-+			/* This indicates the all space are allocated. */
-+			log_debug("S %s init_lv_san read back to start offset %llu",
-+				ls->name, (unsigned long long)offset);
-+			rv = -EMSGSIZE;
-+			return rv;
-+		}
++	if (dm_snprintf(path, sizeof(path), "%s/mapper/%s-%s", lv->vg->cmd->dev_dir,
++			lv->vg->name, lv->name) < 0) {
++		log_error("Extend sanlock LV %s name too long - extended size not zeroed.",
++			  display_lvname(lv));
++		return 0;
++	}
 +
- 		rd.rs.disks[0].offset = offset;
- 
- 		memset(rd.rs.name, 0, SANLK_NAME_LEN);
-@@ -963,7 +978,14 @@ int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
- 			/* This indicates the end of the device is reached. */
- 			log_debug("S %s find_free_lock_san read limit offset %llu",
- 				  ls->name, (unsigned long long)offset);
--			return -EMSGSIZE;
++	log_debug("Extend sanlock LV zeroing blocks from offset " FMTu64 " bytes len %u bytes",
++		  old_size_bytes, (uint32_t)(new_size_bytes - old_size_bytes));
 +
-+			/* remember the NO SPACE offset, if no free area left,
-+			 * search from this offset after extend */
-+			*free_offset = offset;
++	log_print("Zeroing %u MiB on extended internal lvmlock LV...", extend_mb);
 +
-+			offset = lms->align_size * LV_LOCK_BEGIN;
-+			round = 1;
-+			continue;
- 		}
++	if (!(dev = dev_cache_get(path, NULL))) {
++		log_error("Extend sanlock LV %s cannot find device.", display_lvname(lv));
++		return 0;
++	}
++
++	if (!dev_open_quiet(dev)) {
++		log_error("Extend sanlock LV %s cannot open device.", display_lvname(lv));
++		return 0;
++	}
++
++	if (!dev_set(dev, old_size_bytes, new_size_bytes - old_size_bytes, 0)) {
++		log_error("Extend sanlock LV %s cannot zero device.", display_lvname(lv));
++		dev_close_immediate(dev);
++		return 0;
++	}
++
++	dev_flush(dev);
++
++	if (!dev_close_immediate(dev))
++		stack;
++
+ 	return 1;
+ }
  
- 		/*
 
 
