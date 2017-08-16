@@ -1,95 +1,46 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 15 Aug 2017 13:04:52 -0400
-Subject: master - lvmlockd: zero extended lvmlock LV
-Message-ID: <201708151704.v7FH4qGt023101@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Ilya Dryomov <idryomov@gmail.com>
+Date: Wed, 16 Aug 2017 18:22:05 +0200
+Subject: [PATCH] devices: recognise rbd devices
+Message-ID: <1502900525-23375-1-git-send-email-idryomov@gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df5c2964269895b6f5ce16dbdb70edd57c5aa67d
-Commit:        df5c2964269895b6f5ce16dbdb70edd57c5aa67d
-Parent:        43305ae8da20ac8ab4390a2aa81618f2973753af
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 15 11:53:21 2017 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Aug 15 11:56:31 2017 -0500
+Under single_major scheme introduced in kernel 3.14, rbd devices
+support up to 16 partitions.  In pre-single_major mode, rbd driver
+takes up the whole major.
 
-lvmlockd: zero extended lvmlock LV
-
-After the internal lvmlock LV (holding sanlock leases) is
-extended to hold more leases, it needs to be zeroed.
-sanlock expects to see either zeroed blocks or blocks
-initialized with leases.
+Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
 ---
- lib/locking/lvmlockd.c |   42 +++++++++++++++++++++++++++++++++++++++++-
- 1 files changed, 41 insertions(+), 1 deletions(-)
+ WHATS_NEW                 | 1 +
+ lib/device/device-types.h | 1 +
+ 2 files changed, 2 insertions(+)
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index 54e3cf6..d85021c 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -365,6 +365,9 @@ static int _remove_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
- 
- static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg, int extend_mb)
- {
-+	struct device *dev;
-+	char path[PATH_MAX];
-+	uint64_t old_size_bytes, new_size_bytes;
- 	struct logical_volume *lv = vg->sanlock_lv;
- 	struct lvresize_params lp = {
- 		.sign = SIGN_NONE,
-@@ -374,12 +377,49 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
- 		.force = 1,
- 	};
- 
-+	old_size_bytes = lv->size * SECTOR_SIZE;
-+
- 	if (!lv_resize(lv, &lp, &vg->pvs)) {
--		log_error("Extend LV %s to size %s failed.",
-+		log_error("Extend sanlock LV %s to size %s failed.",
- 			  display_lvname(lv), display_size(cmd, lp.size));
- 		return 0;
- 	}
- 
-+	new_size_bytes = lv->size * SECTOR_SIZE;
-+
-+	if (dm_snprintf(path, sizeof(path), "%s/mapper/%s-%s", lv->vg->cmd->dev_dir,
-+			lv->vg->name, lv->name) < 0) {
-+		log_error("Extend sanlock LV %s name too long - extended size not zeroed.",
-+			  display_lvname(lv));
-+		return 0;
-+	}
-+
-+	log_debug("Extend sanlock LV zeroing blocks from offset " FMTu64 " bytes len %u bytes",
-+		  old_size_bytes, (uint32_t)(new_size_bytes - old_size_bytes));
-+
-+	log_print("Zeroing %u MiB on extended internal lvmlock LV...", extend_mb);
-+
-+	if (!(dev = dev_cache_get(path, NULL))) {
-+		log_error("Extend sanlock LV %s cannot find device.", display_lvname(lv));
-+		return 0;
-+	}
-+
-+	if (!dev_open_quiet(dev)) {
-+		log_error("Extend sanlock LV %s cannot open device.", display_lvname(lv));
-+		return 0;
-+	}
-+
-+	if (!dev_set(dev, old_size_bytes, new_size_bytes - old_size_bytes, 0)) {
-+		log_error("Extend sanlock LV %s cannot zero device.", display_lvname(lv));
-+		dev_close_immediate(dev);
-+		return 0;
-+	}
-+
-+	dev_flush(dev);
-+
-+	if (!dev_close_immediate(dev))
-+		stack;
-+
- 	return 1;
- }
- 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c8f072f3c387..b1f16cb054b5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.174 - 
+ =================================
++  Recognise RADOS block devices (RBD) in filter.
+   Fix check for 2nd mda at end of disk fits if using pvcreate --restorefile.
+   Use maximum metadataarea size that fits with pvcreate --restorefile.
+   Always clear cached bootloaderarea when wiping label e.g. in pvcreate.
+diff --git a/lib/device/device-types.h b/lib/device/device-types.h
+index 2834cd11fd3a..57b430173e56 100644
+--- a/lib/device/device-types.h
++++ b/lib/device/device-types.h
+@@ -64,5 +64,6 @@ static const dev_known_type_t _dev_known_types[] = {
+ 	{"nvme", 64, "NVM Express"},
+ 	{"zvol", 16, "ZFS Zvols"},
+ 	{"VxDMP", 16, "Veritas Dynamic Multipathing"},
++	{"rbd", 16, "RADOS block device (RBD)"},
+ 	{"", 0, ""}
+ };
+-- 
+2.4.3
 
 
