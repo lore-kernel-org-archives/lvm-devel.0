@@ -1,58 +1,62 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 22 Aug 2017 04:34:02 -0400
-Subject: master - lvmlockd: shorter code
-Message-ID: <201708220834.v7M8Y29H031062@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 22 Aug 2017 04:34:16 -0400
+Subject: master - debug: add stack trace point
+Message-ID: <201708220834.v7M8YGZJ031161@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d4ce98de4d6c7c3ddeca0e380a18bbdc102e6c3a
-Commit:        d4ce98de4d6c7c3ddeca0e380a18bbdc102e6c3a
-Parent:        0e42b31dc3be45c29abd90369c02c077d1763ff0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=539a48a328a7ddd1030dd5809a2f9f0df6c1fe70
+Commit:        539a48a328a7ddd1030dd5809a2f9f0df6c1fe70
+Parent:        c1e3f96c9764b242898914c282fb273803ba89ae
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 16 14:12:48 2017 +0200
+AuthorDate:    Tue Aug 22 10:19:52 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Aug 22 10:23:31 2017 +0200
 
-lvmlockd: shorter code
+debug: add stack trace point
 
-gcc warns here about storring 69 bytes in 64 byte array (losing
-potentially 4 bytes from 'ls->name').
-
-lvmlockd-core.c:2657:36: warning: ???%s??? directive output may be truncated writing up to 64 bytes into a region of size 60 [-Wformat-truncation=]
-  snprintf(tmp_name, MAX_NAME, "REM:%s", ls->name);
-                                    ^~
-lvmlockd-core.c:2657:2: note: ???snprintf??? output between 5 and 69 bytes into a destination of size 64
-  snprintf(tmp_name, MAX_NAME, "REM:%s", ls->name);
-  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Replaced with slightly better code - but it still misses error path what
-to do if the name would be truncated... - so added FIXME.
-
-Also using all bytes for snprintf() buffer size
-(as the size is with \0 included)
 ---
- daemons/lvmlockd/lvmlockd-core.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ lib/cache/lvmetad.c       |    2 +-
+ libdm/ioctl/libdm-iface.c |    4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index aefa98a..6fd4b88 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -2653,9 +2653,9 @@ out_act:
- 	if (ls->lm_type == LD_LM_DLM && !strcmp(ls->name, gl_lsname_dlm))
- 		global_dlm_lockspace_exists = 0;
- 	/* Avoid a name collision of the same lockspace is added again before this thread is cleaned up. */
--	memset(tmp_name, 0, sizeof(tmp_name));
--	snprintf(tmp_name, MAX_NAME, "REM:%s", ls->name);
--	memcpy(ls->name, tmp_name, MAX_NAME);
-+	/* FIXME: detect loss of 4 chars? (use 'size(tmp_name) == (MAX_NAME - 4)' and fail??) */
-+	dm_strncpy(tmp_name, ls->name, sizeof(tmp_name));
-+	snprintf(ls->name, sizeof(ls->name), "REM:%s", tmp_name);
- 	pthread_mutex_unlock(&lockspaces_mutex);
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 2e0ee51..1ba844f 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1281,7 +1281,7 @@ int lvmetad_vg_update_finish(struct volume_group *vg)
+ 		if (pvl->pv->dev && !lvmetad_pv_found(vg->cmd, &pvl->pv->id, pvl->pv->dev,
+ 						      vgu->fid ? vgu->fid->fmt : pvl->pv->fmt,
+ 						      pvl->pv->label_sector, NULL, NULL, NULL))
+-			return 0;
++			return_0;
+ 	}
  
- 	/* worker_thread will join this thread, and free the ls */
+ 	vg->lvmetad_update_pending = 0;
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 63d305b..100d0cc 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -273,7 +273,7 @@ static int _create_control(const char *control, uint32_t major, uint32_t minor)
+ 	 */
+ 	ret = _control_exists(control, major, minor);
+ 	if (ret == -1)
+-		return 0;	/* Failed to unlink existing incorrect node */
++		return_0;	/* Failed to unlink existing incorrect node */
+ 	if (ret)
+ 		return 1;	/* Already exists and correct */
+ 
+@@ -284,7 +284,7 @@ static int _create_control(const char *control, uint32_t major, uint32_t minor)
+ 	(void) dm_prepare_selinux_context(NULL, 0);
+ 
+ 	if (!ret)
+-		return 0;
++		return_0;
+ 
+ 	log_verbose("Creating device %s (%u, %u)", control, major, minor);
+ 
 
 
