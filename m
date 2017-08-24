@@ -1,60 +1,67 @@
-From: Zhen Ren <zren@suse.com>
-Date: Thu, 24 Aug 2017 06:18:54 -0600
-Subject: 答复： Re: [PATCH 1/1] added resizing for btrfs
-In-Reply-To: <f65efe40-1f9b-dd94-5ab3-70802ebce6f1@kit.edu>
-References: <20170802174235.19869-1-marcus@hostalia.de>
-	<20170802174235.19869-2-marcus@hostalia.de>
-	<2c307eee-72f8-7283-6bc0-f7072e652ca2@suse.com>
-	<f65efe40-1f9b-dd94-5ab3-70802ebce6f1@kit.edu>
-Message-ID: <599F50CE020000D40009B179@prv-mh.provo.novell.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 24 Aug 2017 11:25:50 -0400
+Subject: master - man lvmthin: change fsck references
+Message-ID: <201708241525.v7OFPoki015313@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=043ff47b0579bffaa63cb023d8850b0e749eb9ce
+Commit:        043ff47b0579bffaa63cb023d8850b0e749eb9ce
+Parent:        e71c3ff18719f240e92bb641b9b9a01b2619cc93
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Aug 24 10:25:01 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Aug 24 10:25:01 2017 -0500
 
-Sorry for the delay.
+man lvmthin: change fsck references
 
->>> Marcus M?ller <mueller@kit.edu> 2017-8-24 pm 15:25 >>>
-Hi Eric,
+to more generic terms like repair.
+---
+ man/lvmthin.7_main |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
->>ha! Nearly escaped my memory.
-
->>Re: your (justified) objections:
-
-> 1. lack "check" action in your script
-> In patch [1], it uses "btrfs scrub", which I think you can replace it
-> with "btrfs check".
-
->>1. You're right; `btrfs scrub` just checks the file/metadata checksums 
->>on a live system (and can thus correct /file breakage/), whereas `btrfs 
->>check` checks for structural damage.
-
->>I'm not sure `btrfs scrub` is the right thing to do ? certainly, it will 
->>detect corrupted blocks; but as far as I can see, these aren't a problem 
->>at all during resizing; they would be moved untouched.
-
->>I'm, on the other hand, also not sure we should implement anything here 
->>? other filesystem checks are simply skipped if the filesystem is 
->>already mounted (and mounting is a requirement for resizing). `btrfs 
->>check` would take a long time.
-
-Yeah, I overlooked this potential problem. IMHO, fsadm should have a option to
-decide if "check" is required after resize.
-
->>So, either btrfs check or a nop; either is fine with me, what would you 
->>prefer?
-
-Hmm, the SUSE-specific patch was reviewed by btrfs-tools maintainer David Sterba, and tested
-by btrfs guys. I'd suggest to keep the way to check with "btrfs scrub" as in that patch.
-
-Please send v2 after your changes, and I'll get the v2 patch, test it and then send the respective
-test script for Zdenek review.
-
-Thanks!
-Eric
-
+diff --git a/man/lvmthin.7_main b/man/lvmthin.7_main
+index 1ebeb65..251ba12 100644
+--- a/man/lvmthin.7_main
++++ b/man/lvmthin.7_main
+@@ -397,7 +397,7 @@ the pmspare LV.
+ 
+ If thin pool metadata is damaged, it may be repairable.
+ Checking and repairing thin pool metadata is analagous to
+-running fsck on a file system.
++running fsck/repair on a file system.
+ 
+ When a thin pool LV is activated, lvm runs the thin_check command
+ to check the correctness of the metadata on the pool metadata LV.
+@@ -774,7 +774,7 @@ While waiting to be extended, the thin pool will queue writes for up to 60
+ seconds (the default).  If data space has not been extended after this
+ time, the queued writes will return an error to the caller, e.g. the file
+ system.  This can result in file system corruption for non-journaled file
+-systems that may require fsck.  When a thin pool returns errors for writes
++systems that may require repair.  When a thin pool returns errors for writes
+ to a thin LV, any file system is subject to losing unsynced user data.
+ 
+ The 60 second timeout can be changed or disabled with the dm-thin-pool
+@@ -789,7 +789,7 @@ deadlocks.  (The timeout applies to all thin pools on the system.)
+ 
+ Writes to thin LVs immediately return an error, and no writes are queued.
+ In the case of a file system, this can result in corruption that may
+-require fsck (the specific consequences depend on the thin LV user.)
++require fs repair (the specific consequences depend on the thin LV user.)
+ 
+ .I data percent
+ 
+@@ -858,7 +858,7 @@ repair.
+ .br
+    See "Manually manage free metadata space of a thin pool LV".
+ 
+-4. Check and repair file system with fsck.
++4. Check and repair file system.
+ 
+ 
+ .SS Automatic extend settings
 
 
