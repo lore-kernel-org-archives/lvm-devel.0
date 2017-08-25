@@ -1,44 +1,81 @@
-From: Eric Ren <zren@suse.com>
-Date: Fri, 25 Aug 2017 17:44:47 +0800
-Subject: 答复： Re: [PATCH 1/1] added resizing for btrfs
-In-Reply-To: <9939b97d-e6ba-ceeb-0477-041a634a216d@kit.edu>
-References: <20170802174235.19869-1-marcus@hostalia.de>
-	<20170802174235.19869-2-marcus@hostalia.de>
-	<2c307eee-72f8-7283-6bc0-f7072e652ca2@suse.com>
-	<f65efe40-1f9b-dd94-5ab3-70802ebce6f1@kit.edu>
-	<599F50CE020000D40009B179@prv-mh.provo.novell.com>
-	<9939b97d-e6ba-ceeb-0477-041a634a216d@kit.edu>
-Message-ID: <69aaad28-94d9-7fb7-b75d-d458c8d7768c@suse.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 25 Aug 2017 08:23:54 -0400
+Subject: master - locking: avoid descriptor leak for nonblocking mode
+Message-ID: <201708251223.v7PCNs4o005013@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Marcus,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5de944420224f3b629e843f9c190132ed9ff3dca
+Commit:        5de944420224f3b629e843f9c190132ed9ff3dca
+Parent:        043ff47b0579bffaa63cb023d8850b0e749eb9ce
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Aug 25 11:59:19 2017 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Aug 25 14:12:55 2017 +0200
 
+locking: avoid descriptor leak for nonblocking mode
 
-On 08/24/2017 08:49 PM, Marcus M?ller wrote:
-> [...snip...]
->
-> I'm certainly not one to withhold a revised patch, but: If Lidong 
-> Zhong (hi!) got his patch reviewed already from btrfs folks ? I might 
-> personally prefer that
->
-> For example, the mount point detection based on the external `findmnt` 
-> program (didn't know that existed) looks more robust, and precautions 
-> that I didn't take (like setting LC_ALL for calling `btrfs`) indicate 
-> that the best-case modification of my patch would actually be his 
-> patch. I haven't thought of it this way so far.
->
-> Do you still want me to modify my patch?
+When file-locking mode failed on locking, such description was leaked
+(typically not an issue since command usually exists afterwards).
+So shirt close() at the end of function and use it in all error paths.
 
-I noticed that Lidong has posted his patch for you reference. So, feel 
-free to take good points from his patch
-into your v2 patch. Perhaps, you may give him credits by add 
-"signed-off-by" in the patch header along with yours.
+Also make sure, when interrrupt is detected, it's really not holding
+lock and returns 0.
+---
+ WHATS_NEW            |    1 +
+ lib/misc/lvm-flock.c |   13 ++++++++-----
+ 2 files changed, 9 insertions(+), 5 deletions(-)
 
-Thanks,
-Eric
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c8f072f..ac69c16 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.174 - 
+ =================================
++  Fix leaking of file descriptor for non-blocking filebased locking.
+   Fix check for 2nd mda at end of disk fits if using pvcreate --restorefile.
+   Use maximum metadataarea size that fits with pvcreate --restorefile.
+   Always clear cached bootloaderarea when wiping label e.g. in pvcreate.
+diff --git a/lib/misc/lvm-flock.c b/lib/misc/lvm-flock.c
+index 22eb128..4196313 100644
+--- a/lib/misc/lvm-flock.c
++++ b/lib/misc/lvm-flock.c
+@@ -116,17 +116,16 @@ static int _do_flock(const char *file, int *fd, int operation, uint32_t nonblock
+ 		old_errno = errno;
+ 		if (!nonblock) {
+ 			sigint_restore();
+-			if (sigint_caught())
++			if (sigint_caught()) {
+ 				log_error("Giving up waiting for lock.");
++				break;
++			}
+ 		}
+ 
+ 		if (r) {
+ 			errno = old_errno;
+ 			log_sys_error("flock", file);
+-			if (close(*fd))
+-				log_sys_debug("close", file);
+-			*fd = -1;
+-			return 0;
++			break;
+ 		}
+ 
+ 		if (!stat(file, &buf1) && !fstat(*fd, &buf2) &&
+@@ -134,6 +133,10 @@ static int _do_flock(const char *file, int *fd, int operation, uint32_t nonblock
+ 			return 1;
+ 	} while (!nonblock);
+ 
++	if (close(*fd))
++		log_sys_debug("close", file);
++	*fd = -1;
++
+ 	return_0;
+ }
+ 
 
 
