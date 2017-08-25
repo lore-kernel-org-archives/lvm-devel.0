@@ -1,44 +1,101 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 25 Aug 2017 08:24:59 -0400
-Subject: master - cleanup: easier to read code
-Message-ID: <201708251224.v7PCOxtL005111@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Lidong Zhong <Lidong.Zhong@suse.com>
+Date: Fri, 25 Aug 2017 03:25:59 -0600
+Subject: 答复： Re: 答复： Re: [PATCH 1/1] added resizing for btrfs
+In-Reply-To: <9939b97d-e6ba-ceeb-0477-041a634a216d@kit.edu>
+References: <20170802174235.19869-1-marcus@hostalia.de>
+	<20170802174235.19869-2-marcus@hostalia.de>
+	<2c307eee-72f8-7283-6bc0-f7072e652ca2@suse.com>
+	<f65efe40-1f9b-dd94-5ab3-70802ebce6f1@kit.edu>
+	<599F50CE020000D40009B179@prv-mh.provo.novell.com>
+	<9939b97d-e6ba-ceeb-0477-041a634a216d@kit.edu>
+Message-ID: <59A079C7020000790006827F@prv-mh.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c8fdc5c0877b137ed3ca1f217d8ef0fa89299a9a
-Commit:        c8fdc5c0877b137ed3ca1f217d8ef0fa89299a9a
-Parent:        962874bfe2a3c3511e42fe29f0f013c780f65e63
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 25 11:53:26 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Aug 25 14:20:59 2017 +0200
 
-cleanup: easier to read code
-
-Split into lines for better reading.
----
- daemons/clvmd/clvmd-command.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
-
-diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
-index cf19dc2..2971ecb 100644
---- a/daemons/clvmd/clvmd-command.c
-+++ b/daemons/clvmd/clvmd-command.c
-@@ -171,8 +171,10 @@ int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
- 
- 	/* Check the status of the command and return the error text */
- 	if (status) {
--		*retlen = 1 + ((*buf) ? dm_snprintf(*buf, buflen, "%s",
--						    strerror(status)) : -1);
-+		if (*buf)
-+			*retlen = dm_snprintf(*buf, buflen, "%s", strerror(status)) + 1;
-+		else
-+			*retlen = 0;
- 	}
- 
- 	return status;
+ Hi Marcus,
 
 
+I am sending the patch as the attachment, please take for your reference.
+I wrote the patch almost two years ago and it passed my test cases that
+all I knew(I am not a btrfs specialist, so the patch probably solid enough).
+Eric knows the history. He could do more tests with your cooperation.
+
+Regards,
+Lidong
+>>> Marcus M?ller <mueller@kit.edu> 2017-8-25 ?? 16:01 >>>
+On 08/24/2017 02:18 PM, Zhen Ren wrote:
+> Hi,
+>
+> Sorry for the delay.
+>
+>>>> Marcus M?ller <mueller@kit.edu> 2017-8-24 pm 15:25 >>>
+> Hi Eric,
+>
+>>> ha! Nearly escaped my memory.
+>>> Re: your (justified) objections:
+>> 1. lack "check" action in your script
+>> In patch [1], it uses "btrfs scrub", which I think you can replace it
+>> with "btrfs check".
+>>> 1. You're right; `btrfs scrub` just checks the file/metadata checksums
+>>> on a live system (and can thus correct /file breakage/), whereas `btrfs
+>>> check` checks for structural damage.
+>>> I'm not sure `btrfs scrub` is the right thing to do ? certainly, it will
+>>> detect corrupted blocks; but as far as I can see, these aren't a problem
+>>> at all during resizing; they would be moved untouched.
+>>> I'm, on the other hand, also not sure we should implement anything here
+>>> ? other filesystem checks are simply skipped if the filesystem is
+>>> already mounted (and mounting is a requirement for resizing). `btrfs
+>>> check` would take a long time.
+> Yeah, I overlooked this potential problem. IMHO, fsadm should have a option to
+> decide if "check" is required after resize.
+>
+>>> So, either btrfs check or a nop; either is fine with me, what would you
+>>> prefer?
+> Hmm, the SUSE-specific patch was reviewed by btrfs-tools maintainer David Sterba, and tested
+> by btrfs guys. I'd suggest to keep the way to check with "btrfs scrub" as in that patch.
+>
+> Please send v2 after your changes, and I'll get the v2 patch, test it and then send the respective
+> test script for Zdenek review.
+>
+> Thanks!
+> Eric
+>
+>
+
+Hi Zhen,
+
+I'm certainly not one to withhold a revised patch, but: If Lidong Zhong 
+(hi!) got his patch reviewed already from btrfs folks ? I might 
+personally prefer that
+
+For example, the mount point detection based on the external `findmnt` 
+program (didn't know that existed) looks more robust, and precautions 
+that I didn't take (like setting LC_ALL for calling `btrfs`) indicate 
+that the best-case modification of my patch would actually be his patch. 
+I haven't thought of it this way so far.
+
+Do you still want me to modify my patch?
+
+Best regards,
+Marcus
+
+--
+lvm-devel mailing list
+lvm-devel at redhat.com
+https://www.redhat.com/mailman/listinfo/lvm-devel
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20170825/36465207/attachment.htm>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: fsadm-add-support-for-btrfs.patch
+Type: application/octet-stream
+Size: 6321 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20170825/36465207/attachment.obj>
