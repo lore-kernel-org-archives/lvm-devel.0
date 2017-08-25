@@ -1,80 +1,137 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 25 Aug 2017 08:23:54 -0400
-Subject: master - locking: avoid descriptor leak for nonblocking mode
-Message-ID: <201708251223.v7PCNs4o005013@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 25 Aug 2017 08:23:58 -0400
+Subject: master - daemonize: more unified code
+Message-ID: <201708251223.v7PCNwtT005025@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5de944420224f3b629e843f9c190132ed9ff3dca
-Commit:        5de944420224f3b629e843f9c190132ed9ff3dca
-Parent:        043ff47b0579bffaa63cb023d8850b0e749eb9ce
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b3b1e788e16c77f6784f30b8e984f68792f8fa1a
+Commit:        b3b1e788e16c77f6784f30b8e984f68792f8fa1a
+Parent:        5de944420224f3b629e843f9c190132ed9ff3dca
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 25 11:59:19 2017 +0200
+AuthorDate:    Fri Aug 25 11:55:38 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Aug 25 14:12:55 2017 +0200
+CommitterDate: Fri Aug 25 14:20:57 2017 +0200
 
-locking: avoid descriptor leak for nonblocking mode
+daemonize: more unified code
 
-When file-locking mode failed on locking, such description was leaked
-(typically not an issue since command usually exists afterwards).
-So shirt close() at the end of function and use it in all error paths.
+ATM we have several instances of daemonizing code.
+Each has its 'special' logic so not completely easy
+to unify them all into a single routine.
 
-Also make sure, when interrrupt is detected, it's really not holding
-lock and returns 0.
+Start to unify them and use one strategy for rediricting
+all input/outpus to /dev/null - use 'dup2' function for this
+and open /dev/null before fork to make sure it's available.
 ---
- WHATS_NEW            |    1 +
- lib/misc/lvm-flock.c |   13 ++++++++-----
- 2 files changed, 9 insertions(+), 5 deletions(-)
+ daemons/clvmd/clvmd.c            |   26 ++++++++++----------------
+ libdaemon/server/daemon-server.c |   21 +++++++++++++++------
+ 2 files changed, 25 insertions(+), 22 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index c8f072f..ac69c16 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.174 - 
- =================================
-+  Fix leaking of file descriptor for non-blocking filebased locking.
-   Fix check for 2nd mda at end of disk fits if using pvcreate --restorefile.
-   Use maximum metadataarea size that fits with pvcreate --restorefile.
-   Always clear cached bootloaderarea when wiping label e.g. in pvcreate.
-diff --git a/lib/misc/lvm-flock.c b/lib/misc/lvm-flock.c
-index 22eb128..4196313 100644
---- a/lib/misc/lvm-flock.c
-+++ b/lib/misc/lvm-flock.c
-@@ -116,17 +116,16 @@ static int _do_flock(const char *file, int *fd, int operation, uint32_t nonblock
- 		old_errno = errno;
- 		if (!nonblock) {
- 			sigint_restore();
--			if (sigint_caught())
-+			if (sigint_caught()) {
- 				log_error("Giving up waiting for lock.");
-+				break;
-+			}
- 		}
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 79aa939..46f5f44 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -1105,31 +1105,25 @@ static void be_daemon(int timeout)
+ 		break;
  
- 		if (r) {
- 			errno = old_errno;
- 			log_sys_error("flock", file);
--			if (close(*fd))
--				log_sys_debug("close", file);
--			*fd = -1;
--			return 0;
-+			break;
- 		}
+ 	default:       /* Parent */
++		(void) close(devnull);
+ 		(void) close(child_pipe[1]);
+-		wait_for_child(child_pipe[0], timeout);
++		wait_for_child(child_pipe[0], timeout); /* noreturn */
+ 	}
  
- 		if (!stat(file, &buf1) && !fstat(*fd, &buf2) &&
-@@ -134,6 +133,10 @@ static int _do_flock(const char *file, int *fd, int operation, uint32_t nonblock
- 			return 1;
- 	} while (!nonblock);
- 
-+	if (close(*fd))
-+		log_sys_debug("close", file);
-+	*fd = -1;
+ 	/* Detach ourself from the calling environment */
+-	if (close(0) || close(1) || close(2)) {
+-		perror("Error closing terminal FDs");
+-		exit(4);
+-	}
+-	setsid();
++	(void) dup2(devnull, STDIN_FILENO);
++	(void) dup2(devnull, STDOUT_FILENO);
++	(void) dup2(devnull, STDERR_FILENO);
 +
- 	return_0;
++	if (devnull > STDERR_FILENO)
++		(void) close(devnull);
+ 
+-	if (dup2(devnull, 0) < 0 || dup2(devnull, 1) < 0
+-	    || dup2(devnull, 2) < 0) {
+-		perror("Error setting terminal FDs to /dev/null");
+-		log_error("Error setting terminal FDs to /dev/null: %m");
+-		exit(5);
+-	}
+-	if ((devnull > STDERR_FILENO) && close(devnull)) {
+-		log_sys_error("close", "/dev/null");
+-		exit(7);
+-	}
+ 	if (chdir("/")) {
+ 		log_error("Error setting current directory to /: %m");
+ 		exit(6);
+ 	}
++
++	setsid();
+ }
+ 
+ static int verify_message(char *buf, int len)
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 6fdf195..0950c2e 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -334,6 +334,11 @@ static void _daemonise(daemon_state s)
+ 	struct timeval tval;
+ 	sigset_t my_sigset;
+ 
++	if ((fd = open("/dev/null", O_RDWR)) == -1) {
++		fprintf(stderr, "Unable to open /dev/null.\n");
++		exit(EXIT_FAILURE);
++	}
++
+ 	sigemptyset(&my_sigset);
+ 	if (sigprocmask(SIG_SETMASK, &my_sigset, NULL) < 0) {
+ 		fprintf(stderr, "Unable to restore signals.\n");
+@@ -350,6 +355,7 @@ static void _daemonise(daemon_state s)
+ 		break;
+ 
+ 	default:
++		(void) close(fd);
+ 		/* Wait for response from child */
+ 		while (!waitpid(pid, &child_status, WNOHANG) && !_shutdown_requested) {
+ 			tval.tv_sec = 0;
+@@ -374,12 +380,20 @@ static void _daemonise(daemon_state s)
+ 	if (chdir("/"))
+ 		exit(1);
+ 
++	(void) dup2(fd, STDIN_FILENO);
++	(void) dup2(fd, STDOUT_FILENO);
++	(void) dup2(fd, STDERR_FILENO);
++
++	if (fd > STDERR_FILENO)
++		(void) close(fd);
++
++	/* Switch to sysconf(_SC_OPEN_MAX) ?? */
+ 	if (getrlimit(RLIMIT_NOFILE, &rlim) < 0)
+ 		fd = 256; /* just have to guess */
+ 	else
+ 		fd = rlim.rlim_cur;
+ 
+-	for (--fd; fd >= 0; fd--) {
++	for (--fd; fd > STDERR_FILENO; fd--) {
+ #ifdef __linux__
+ 		/* Do not close fds preloaded by systemd! */
+ 		if (_systemd_activation && fd == SD_FD_SOCKET_SERVER)
+@@ -388,11 +402,6 @@ static void _daemonise(daemon_state s)
+ 		(void) close(fd);
+ 	}
+ 
+-	if ((open("/dev/null", O_RDONLY) < 0) ||
+-	    (open("/dev/null", O_WRONLY) < 0) ||
+-	    (open("/dev/null", O_WRONLY) < 0))
+-		exit(1);
+-
+ 	setsid();
  }
  
 
