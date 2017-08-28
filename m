@@ -1,101 +1,98 @@
-From: Lidong Zhong <Lidong.Zhong@suse.com>
-Date: Fri, 25 Aug 2017 03:25:59 -0600
-Subject: 答复： Re: 答复： Re: [PATCH 1/1] added resizing for btrfs
-In-Reply-To: <9939b97d-e6ba-ceeb-0477-041a634a216d@kit.edu>
-References: <20170802174235.19869-1-marcus@hostalia.de>
-	<20170802174235.19869-2-marcus@hostalia.de>
-	<2c307eee-72f8-7283-6bc0-f7072e652ca2@suse.com>
-	<f65efe40-1f9b-dd94-5ab3-70802ebce6f1@kit.edu>
-	<599F50CE020000D40009B179@prv-mh.provo.novell.com>
-	<9939b97d-e6ba-ceeb-0477-041a634a216d@kit.edu>
-Message-ID: <59A079C7020000790006827F@prv-mh.provo.novell.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 28 Aug 2017 17:26:18 -0400
+Subject: master - lvmlockd: print error about starting lock manager
+Message-ID: <201708282126.v7SLQI1e025016@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f847fcd31a41f61dd81b30ac91f3e2720088b8f2
+Commit:        f847fcd31a41f61dd81b30ac91f3e2720088b8f2
+Parent:        c8fdc5c0877b137ed3ca1f217d8ef0fa89299a9a
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Aug 28 16:24:00 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Aug 28 16:24:00 2017 -0500
 
- Hi Marcus,
+lvmlockd: print error about starting lock manager
+
+In the case where lvmlockd is running, but no lock manager
+is running, we should print a specific error message about
+that situation.
+---
+ daemons/lvmlockd/lvmlockd-core.c |    2 +-
+ lib/locking/lvmlockd.c           |   10 ++++++++++
+ lib/locking/lvmlockd.h           |    1 +
+ 3 files changed, 12 insertions(+), 1 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 903da7c..f9d07c1 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -3676,7 +3676,7 @@ static int client_send_result(struct client *cl, struct action *act)
+ 			if (!gl_lsname_dlm[0])
+ 				strcat(result_flags, "NO_GL_LS,");
+ 		} else {
+-			strcat(result_flags, "NO_GL_LS,");
++			strcat(result_flags, "NO_GL_LS,NO_LM");
+ 		}
+ 	}
+ 
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index d85021c..a0e3f03 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -115,6 +115,9 @@ static void _flags_str_to_lockd_flags(const char *flags_str, uint32_t *lockd_fla
+ 	if (strstr(flags_str, "NO_GL_LS"))
+ 		*lockd_flags |= LD_RF_NO_GL_LS;
+ 
++	if (strstr(flags_str, "NO_LM"))
++		*lockd_flags |= LD_RF_NO_LM;
++
+ 	if (strstr(flags_str, "DUP_GL_LS"))
+ 		*lockd_flags |= LD_RF_DUP_GL_LS;
+ 
+@@ -1362,6 +1365,9 @@ int lockd_gl_create(struct cmd_context *cmd, const char *def_mode, const char *v
+ 			log_error("Global lock failed: check that VG holding global lock exists and is started.");
+ 		else
+ 			log_error("Global lock failed: check that global lockspace is started.");
++
++		if (lockd_flags & LD_RF_NO_LM)
++			log_error("Start a lock manager, lvmlockd did not find one running.");
+ 		return 0;
+ 	}
+ 
+@@ -1565,6 +1571,9 @@ int lockd_gl(struct cmd_context *cmd, const char *def_mode, uint32_t flags)
+ 	 * access to lease storage.
+ 	 */
+ 
++	if (result == -ENOLS && (lockd_flags & LD_RF_NO_LM))
++		log_error("Start a lock manager, lvmlockd did not find one running.");
++
+ 	if (result == -ENOLS ||
+ 	    result == -ESTARTING ||
+ 	    result == -EVGKILLED ||
+@@ -1583,6 +1592,7 @@ int lockd_gl(struct cmd_context *cmd, const char *def_mode, uint32_t flags)
+ 				log_error("Global lock failed: storage failed for sanlock leases");
+ 			else
+ 				log_error("Global lock failed: error %d", result);
++
+ 			return 0;
+ 		}
+ 
+diff --git a/lib/locking/lvmlockd.h b/lib/locking/lvmlockd.h
+index 8b282d8..cf23e9b 100644
+--- a/lib/locking/lvmlockd.h
++++ b/lib/locking/lvmlockd.h
+@@ -28,6 +28,7 @@
+ #define LD_RF_NO_GL_LS          0x00000002
+ #define LD_RF_WARN_GL_REMOVED   0x00000004
+ #define LD_RF_DUP_GL_LS         0x00000008
++#define LD_RF_NO_LM		0x00000010
+ 
+ /* lockd_state flags */
+ #define LDST_EX			0x00000001
 
 
-I am sending the patch as the attachment, please take for your reference.
-I wrote the patch almost two years ago and it passed my test cases that
-all I knew(I am not a btrfs specialist, so the patch probably solid enough).
-Eric knows the history. He could do more tests with your cooperation.
-
-Regards,
-Lidong
->>> Marcus M?ller <mueller@kit.edu> 2017-8-25 ?? 16:01 >>>
-On 08/24/2017 02:18 PM, Zhen Ren wrote:
-> Hi,
->
-> Sorry for the delay.
->
->>>> Marcus M?ller <mueller@kit.edu> 2017-8-24 pm 15:25 >>>
-> Hi Eric,
->
->>> ha! Nearly escaped my memory.
->>> Re: your (justified) objections:
->> 1. lack "check" action in your script
->> In patch [1], it uses "btrfs scrub", which I think you can replace it
->> with "btrfs check".
->>> 1. You're right; `btrfs scrub` just checks the file/metadata checksums
->>> on a live system (and can thus correct /file breakage/), whereas `btrfs
->>> check` checks for structural damage.
->>> I'm not sure `btrfs scrub` is the right thing to do ? certainly, it will
->>> detect corrupted blocks; but as far as I can see, these aren't a problem
->>> at all during resizing; they would be moved untouched.
->>> I'm, on the other hand, also not sure we should implement anything here
->>> ? other filesystem checks are simply skipped if the filesystem is
->>> already mounted (and mounting is a requirement for resizing). `btrfs
->>> check` would take a long time.
-> Yeah, I overlooked this potential problem. IMHO, fsadm should have a option to
-> decide if "check" is required after resize.
->
->>> So, either btrfs check or a nop; either is fine with me, what would you
->>> prefer?
-> Hmm, the SUSE-specific patch was reviewed by btrfs-tools maintainer David Sterba, and tested
-> by btrfs guys. I'd suggest to keep the way to check with "btrfs scrub" as in that patch.
->
-> Please send v2 after your changes, and I'll get the v2 patch, test it and then send the respective
-> test script for Zdenek review.
->
-> Thanks!
-> Eric
->
->
-
-Hi Zhen,
-
-I'm certainly not one to withhold a revised patch, but: If Lidong Zhong 
-(hi!) got his patch reviewed already from btrfs folks ? I might 
-personally prefer that
-
-For example, the mount point detection based on the external `findmnt` 
-program (didn't know that existed) looks more robust, and precautions 
-that I didn't take (like setting LC_ALL for calling `btrfs`) indicate 
-that the best-case modification of my patch would actually be his patch. 
-I haven't thought of it this way so far.
-
-Do you still want me to modify my patch?
-
-Best regards,
-Marcus
-
---
-lvm-devel mailing list
-lvm-devel at redhat.com
-https://www.redhat.com/mailman/listinfo/lvm-devel
-
-
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20170825/36465207/attachment.htm>
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: fsadm-add-support-for-btrfs.patch
-Type: application/octet-stream
-Size: 6321 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20170825/36465207/attachment.obj>
