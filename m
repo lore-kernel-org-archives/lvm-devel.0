@@ -1,51 +1,53 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 29 Aug 2017 16:19:23 -0400
-Subject: master - lvmlockd: fix check for no running lock manager
-Message-ID: <201708292019.v7TKJNd7006775@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Ilya Dryomov <idryomov@gmail.com>
+Date: Thu, 31 Aug 2017 16:10:39 +0200
+Subject: [PATCH] devices: recognise rbd devices
+In-Reply-To: <1502900525-23375-1-git-send-email-idryomov@gmail.com>
+References: <1502900525-23375-1-git-send-email-idryomov@gmail.com>
+Message-ID: <CAOi1vP8PVEOg9P2yw4ARoszE6F+W=uN5kW0KqGBtXa0=08tZOQ@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=09c792c20667aa8d7fb2799e484d913a5eb8a147
-Commit:        09c792c20667aa8d7fb2799e484d913a5eb8a147
-Parent:        f847fcd31a41f61dd81b30ac91f3e2720088b8f2
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 29 15:18:12 2017 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Aug 29 15:18:12 2017 -0500
+On Wed, Aug 16, 2017 at 6:22 PM, Ilya Dryomov <idryomov@gmail.com> wrote:
+> Under single_major scheme introduced in kernel 3.14, rbd devices
+> support up to 16 partitions.  In pre-single_major mode, rbd driver
+> takes up the whole major.
+>
+> Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+> ---
+>  WHATS_NEW                 | 1 +
+>  lib/device/device-types.h | 1 +
+>  2 files changed, 2 insertions(+)
+>
+> diff --git a/WHATS_NEW b/WHATS_NEW
+> index c8f072f3c387..b1f16cb054b5 100644
+> --- a/WHATS_NEW
+> +++ b/WHATS_NEW
+> @@ -1,5 +1,6 @@
+>  Version 2.02.174 -
+>  =================================
+> +  Recognise RADOS block devices (RBD) in filter.
+>    Fix check for 2nd mda at end of disk fits if using pvcreate --restorefile.
+>    Use maximum metadataarea size that fits with pvcreate --restorefile.
+>    Always clear cached bootloaderarea when wiping label e.g. in pvcreate.
+> diff --git a/lib/device/device-types.h b/lib/device/device-types.h
+> index 2834cd11fd3a..57b430173e56 100644
+> --- a/lib/device/device-types.h
+> +++ b/lib/device/device-types.h
+> @@ -64,5 +64,6 @@ static const dev_known_type_t _dev_known_types[] = {
+>         {"nvme", 64, "NVM Express"},
+>         {"zvol", 16, "ZFS Zvols"},
+>         {"VxDMP", 16, "Veritas Dynamic Multipathing"},
+> +       {"rbd", 16, "RADOS block device (RBD)"},
+>         {"", 0, ""}
+>  };
 
-lvmlockd: fix check for no running lock manager
+Ping...  This gained a trivial conflict in WHATS_NEW, should I resend?
 
-In some cases it was reporting there was no running
-lock manager when there is.
----
- daemons/lvmlockd/lvmlockd-core.c |   12 +++++++++++-
- 1 files changed, 11 insertions(+), 1 deletions(-)
+Thanks,
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index f9d07c1..a921140 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -3676,7 +3676,17 @@ static int client_send_result(struct client *cl, struct action *act)
- 			if (!gl_lsname_dlm[0])
- 				strcat(result_flags, "NO_GL_LS,");
- 		} else {
--			strcat(result_flags, "NO_GL_LS,NO_LM");
-+			int found_lm = 0;
-+
-+			if (lm_support_dlm() && lm_is_running_dlm())
-+				found_lm++;
-+			if (lm_support_sanlock() && lm_is_running_sanlock())
-+				found_lm++;
-+
-+			if (!found_lm)
-+				strcat(result_flags, "NO_GL_LS,NO_LM");
-+			else
-+				strcat(result_flags, "NO_GL_LS");
- 		}
- 	}
- 
+                Ilya
 
 
