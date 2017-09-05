@@ -1,42 +1,57 @@
-From: Eric Ren <zren@suse.com>
-Date: Mon, 4 Sep 2017 21:55:50 +0800
-Subject: [PATCH 0/1] adding Btrfs resizing capability to lvresize/fsadm.sh
-In-Reply-To: <8D193B56-60C0-4ED0-9A74-FD13573F6F53@hostalia.de>
-References: <20170802174235.19869-1-marcus@hostalia.de>
-	<3d78f6d7-dd89-71cb-e754-88a290287404@hostalia.de>
-	<bf152578-cca9-b5a1-98a2-4d7a97a21759@suse.com>
-	<032e16cc-3e25-04ca-8361-3abb767a0538@redhat.com>
-	<c4a79796-4695-ad57-d42f-2b83daf0f434@suse.com>
-	<8D193B56-60C0-4ED0-9A74-FD13573F6F53@hostalia.de>
-Message-ID: <965e3b12-c44e-36bc-1e9e-6f80aa0c3a20@suse.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 5 Sep 2017 11:29:06 -0400
+Subject: master - lvmlockd: always disallow mirror splitting
+Message-ID: <201709051529.v85FT6BL024201@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello Marcus,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3071837e21fae8907c1d584f9181e0589b9ce7e2
+Commit:        3071837e21fae8907c1d584f9181e0589b9ce7e2
+Parent:        09c792c20667aa8d7fb2799e484d913a5eb8a147
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Sep 5 10:26:58 2017 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Sep 5 10:28:33 2017 -0500
 
-Do you get time to work out a version 2 of your patch based on my 
-feedback and Lidong's patch?
+lvmlockd: always disallow mirror splitting
 
-Feel free to ask anything we can provide for help. I guess we're very 
-close to make this thing into
-upstream.
+lv_raid_split() was correctly prevented in a shared VG,
+but lv_raid_split_and_track() was missing that check.
+---
+ WHATS_NEW                 |    1 +
+ lib/metadata/raid_manip.c |    6 ++++++
+ 2 files changed, 7 insertions(+), 0 deletions(-)
 
-Regards,
-Eric
-
-On 08/14/2017 09:04 PM, Marcus M?ller wrote:
-> Hi Zdenek,
->
-> Thank you for the extensive explanation! I do agree, in this context, 
-> unverified functionality might be worse than none :)
->
-> Hi Eric,
->
-> Please do! And: please don't hesitate to ask for feedback of even 
-> better assistance if necessary - you're solving my problems, I'd like 
-> to help you with that.
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 32bbc41..e6cc18d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.174 - 
+ =================================
++  Prevent raid1 split with trackchanges in a shared VG.
+   Avoid double unlocking of client & lockspace mutexes in lvmlockd.
+   Fix leaking of file descriptor for non-blocking filebased locking.
+   Fix check for 2nd mda at end of disk fits if using pvcreate --restorefile.
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 0432928..72223ca 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -3426,6 +3426,12 @@ int lv_raid_split_and_track(struct logical_volume *lv,
+ 	int s;
+ 	struct lv_segment *seg = first_seg(lv);
+ 
++	if (is_lockd_type(lv->vg->lock_type)) {
++		log_error("Splitting raid image is not allowed with lock_type %s.",
++			  lv->vg->lock_type);
++		return 0;
++	}
++
+ 	if (!seg_is_mirrored(seg)) {
+ 		log_error("Unable to split images from non-mirrored RAID.");
+ 		return 0;
 
 
