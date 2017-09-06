@@ -1,38 +1,90 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 8 Jul 2018 18:36:53 -0400
-Subject: 2018-06-01-stable - WHATS_NEW: update
-Message-ID: <201807082236.w68MarQV017281@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 6 Sep 2017 05:48:42 -0400
+Subject: master - deamonize: restore detection of errors
+Message-ID: <201709060948.v869mgLh003158@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6fcb2ba440ebd40cdbe295b01dbbdea59ce9f895
-Commit:        6fcb2ba440ebd40cdbe295b01dbbdea59ce9f895
-Parent:        b8a7f6ba3de6aed38c2969693b6064a943ea8799
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=03efec27123efb43c3350ceaf5675fd68d8b3f50
+Commit:        03efec27123efb43c3350ceaf5675fd68d8b3f50
+Parent:        3071837e21fae8907c1d584f9181e0589b9ce7e2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 9 00:36:11 2018 +0200
+AuthorDate:    Wed Sep 6 11:47:53 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 9 00:36:11 2018 +0200
+CommitterDate: Wed Sep 6 11:47:53 2017 +0200
 
-WHATS_NEW: update
+deamonize: restore detection of errors
 
+Keep forked environment for daemon more strick and check even
+for nearly impossible to happen errors.
 ---
- WHATS_NEW |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ daemons/clvmd/clvmd.c            |   16 +++++++++++-----
+ libdaemon/server/daemon-server.c |   19 +++++++++++++------
+ 2 files changed, 24 insertions(+), 11 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 99dc056..5c5aac6 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.02.180 - 
- =================================
-+  Never send any discard ioctl with test mode.
-+  Fix thin-pool alloc which needs same PV for data and metadata.
-   Extend list of non-memlocked areas with newly linked libs.
-   Enhance vgcfgrestore to check for active LVs in restored VG.
-   lvconvert: provide possible layouts between linear and striped/raid
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 46f5f44..9dbda89 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -1111,12 +1111,18 @@ static void be_daemon(int timeout)
+ 	}
+ 
+ 	/* Detach ourself from the calling environment */
+-	(void) dup2(devnull, STDIN_FILENO);
+-	(void) dup2(devnull, STDOUT_FILENO);
+-	(void) dup2(devnull, STDERR_FILENO);
++	if ((dup2(devnull, STDIN_FILENO) == -1) ||
++	    (dup2(devnull, STDOUT_FILENO) == -1) ||
++	    (dup2(devnull, STDERR_FILENO) == -1)) {
++		perror("Error setting terminal FDs to /dev/null");
++		log_error("Error setting terminal FDs to /dev/null: %m");
++		exit(5);
++	}
+ 
+-	if (devnull > STDERR_FILENO)
+-		(void) close(devnull);
++	if ((devnull > STDERR_FILENO) && close(devnull)) {
++		log_sys_error("close", "/dev/null");
++		exit(7);
++	}
+ 
+ 	if (chdir("/")) {
+ 		log_error("Error setting current directory to /: %m");
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 0950c2e..2ffdf40 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -377,15 +377,22 @@ static void _daemonise(daemon_state s)
+ 		exit(WEXITSTATUS(child_status));
+ 	}
+ 
+-	if (chdir("/"))
++	if (chdir("/")) {
++		perror("Cannot chdir to /");
+ 		exit(1);
++	}
+ 
+-	(void) dup2(fd, STDIN_FILENO);
+-	(void) dup2(fd, STDOUT_FILENO);
+-	(void) dup2(fd, STDERR_FILENO);
++	if ((dup2(fd, STDIN_FILENO) == -1) ||
++	    (dup2(fd, STDOUT_FILENO) == -1) ||
++	    (dup2(fd, STDERR_FILENO) == -1)) {
++		perror("Error setting terminal FDs to /dev/null");
++		exit(2);
++	}
+ 
+-	if (fd > STDERR_FILENO)
+-		(void) close(fd);
++	if ((fd > STDERR_FILENO) && close(fd)) {
++		perror("Failed to close /dev/null descriptor");
++		exit(3);
++	}
+ 
+ 	/* Switch to sysconf(_SC_OPEN_MAX) ?? */
+ 	if (getrlimit(RLIMIT_NOFILE, &rlim) < 0)
 
 
