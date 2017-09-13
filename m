@@ -1,46 +1,43 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Wed, 13 Sep 2017 15:56:59 -0400
-Subject: v2.02.174 annotated tag has been created
-Message-ID: <201709131956.v8DJuxkI008984@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 13 Sep 2017 15:57:09 -0400
+Subject: v2_02_173 annotated tag has been created
+Message-ID: <201709131957.v8DJv9kZ009319@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=761691e233fabddfbf678b3a988fce99d39591f4
-Commit:        761691e233fabddfbf678b3a988fce99d39591f4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e9d7a481be5042b433bc8986b7e39b6c1dba763
+Commit:        7e9d7a481be5042b433bc8986b7e39b6c1dba763
 Parent:        0000000000000000000000000000000000000000
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2017-09-13 19:38 +0000
+AuthorDate:    2017-07-20 15:59 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2017-09-13 19:38 +0000
+CommitterDate: 2017-07-20 15:59 +0000
 
-annotated tag: v2.02.174 has been created
-	    at 761691e233fabddfbf678b3a988fce99d39591f4 (tag)
-       tagging 918f0a92daef84867e0df4b422c3de2a36997f17 (commit)
+annotated tag: v2_02_173 has been created
+	    at 7e9d7a481be5042b433bc8986b7e39b6c1dba763 (tag)
+       tagging 88f15659374042f7657d73393f73e267d752b4e1 (commit)
       replaces v2_02_172
 
-Release 2.02.174
+Release 2.02.173
 
-Assorted fixes and small improvements, including an extension to
-dmsetup for activating more than one device with a single command.
+A variety of fixes including some important ones for clvmd to avoid some
+reported crashes after machines have gone down.  Work is continuing to
+improve the recently-added raid enhancements and in particular reshaping
+so please continue to use these with caution.
 
-As of this release, we're also pushing the code to github:
-  https://github.com/lvmteam/lvm2
-and will handle any issues reported at
-  https://github.com/lvmteam/lvm2/issues
-
-81 files changed, 1782 insertions(+), 857 deletions(-)
+371 files changed, 3942 insertions(+), 2646 deletions(-)
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v2.0.14 (GNU/Linux)
 
-iEYEABECAAYFAlm5iu8ACgkQIoGRwVZ+LBdCwgCfWI67MvWO3jaZ0/xvgwl5qjU1
-KBwAoM8aCqMfl6N6X8jDEhR8FGDoKJ62
-=oAdS
+iEYEABECAAYFAllw1xQACgkQIoGRwVZ+LBd1XwCgrXO1CO1t7RNxKyA0IkdTSzi9
+R70An0Whqb/fJaxeAyrgzcJ5cDRZ0uYo
+=YeKN
 -----END PGP SIGNATURE-----
 
-Alasdair G Kergon (24):
+Alasdair G Kergon (10):
       post-release
       clvmd: add debuglog mutex
       clvmd: add client id to debug log messages
@@ -51,22 +48,8 @@ Alasdair G Kergon (24):
       format_text: Extend FIXME to reduce label scans
       raid: avoid lv_size compiler warning
       pre-release
-      post-release
-      dmsetup: Add concise table output format.
-      make generate
-      dmsetup: Add minor number to concise table output format.
-      tools: Introduce exit code EINIT_FAILED.
-      toolcontext: Improve invalid units error message.
-      ioctl: Allow minor without major.
-      dmsetup: Add --concise to dmsetup create.
-      lvmconfig: Add options to produce file preamble
-      pvcreate: Disallow --bootloaderareasize with --restorefile.
-      pvcreate: Wipe cached bootloaderarea when wiping label.
-      pvcreate: Use maximum metadata area size with --restorefile
-      README: Include new github links
-      pre-release
 
-David Teigland (24):
+David Teigland (8):
       lvmlockd: use lock on thin pool when command names tdata
       lvmlockd: fix revert in lvcreate
       lvmlockd: use DM_UUID_LEN for buffer size
@@ -75,29 +58,13 @@ David Teigland (24):
       lvm: run help from -h|--help
       lvm: report error if options are set before command
       pvs: use dummy structs in duplicate processing
-      vgchange: separate change locktype and allow recovery
-      vgchange: split out code for lockstart and lockstop
-      vgchange: split out code for systemid
-      man: remove hyphen escapes from source
-      commands: expand comment on configuring option vals
-      lvmlockd: fix lm running check during adoption
-      lvmlockd: global name doesn't apply to sanlock
-      commands: recognize -? for help
-      commands: recognize lvm command -?
-      lvmlockd: zero extended lvmlock LV
-      lvmlockd: add comment about temp ls name
-      lvmlockd: fix mutex unlock
-      man lvmthin: change fsck references
-      lvmlockd: print error about starting lock manager
-      lvmlockd: fix check for no running lock manager
-      lvmlockd: always disallow mirror splitting
 
 Eric Ren (3):
       comment: update
       cleanup: fix some typos
       man: specify slow device when creating origin LV
 
-Heinz Mauelshagen (8):
+Heinz Mauelshagen (7):
       test: return 0 if ignoring 'a' device health chars is requested
       raid: fix allocation/activation of reshape space
       lvconvert: allow reshaping in the cluster and on open devices
@@ -105,7 +72,6 @@ Heinz Mauelshagen (8):
       raid: use return_0 for better backtracking
       raid: add data_offset incompatibility segment type flag
       raid: add validation checks for segment data_offset member
-      raid: more validation checks for segment data_offset member
 
 Huan Zhang (1):
       lvmlockd: miss adopt orphaned resources
@@ -113,12 +79,10 @@ Huan Zhang (1):
 Marian Csontos (1):
       tests: utils.sh six stacktrace
 
-Peter Rajnoha (3):
+Peter Rajnoha (1):
       udev: also create /dev/disk/by-part{label,uuid} and gpt-auto-root symlinks
-      pvcreate: fix check for 2nd mda at end of disk fits if using pvcreate --restorefile
-      test: pvcreate-bootloaderarea: pvcreate --restorefile --bootloaderarea not supported anymore
 
-Zdenek Kabelac (218):
+Zdenek Kabelac (187):
       fsadm: fix shell globbing
       fsadm: remove surrounding $()
       fsadm: split local var dev
@@ -306,39 +270,5 @@ Zdenek Kabelac (218):
       tidy: drop unneeded cast
       tests: aus.sh fix md teardown
       raid: move syncing with udev into function
-      raid: reshape synchronization point
-      tidy: declaration names match implementation
-      thin: warn about too big chunks size
-      man: fix generated paths
-      libdm: log_warn
-      makefiles: RT_LIB
-      makefiles: use gcc warns with gcc only
-      makefiles: fixing linking
-      makefiles: cleanups
-      tests: update makefile
-      configure: improve test for realtime clock
-      configure: tune  BUILD_DMEVENTD
-      makefiles: fix tested vars
-      makefiles: script executable missed dynamic
-      makefiles: add DEFS_$@ for cxx
-      tests: update makefiles
-      tests: update checked message
-      libdm: fix errpath for control node creation
-      lvmlockd: shorter code
-      lvmcache: check for lvmcache_foreach_mda return code
-      debug: add stack trace point
-      locking: avoid descriptor leak for nonblocking mode
-      daemonize: more unified code
-      lvmlockd: avoid double unlock of client_mutex
-      lvmlockctl: fix check for failing close
-      lvmlockd: log pthread_join errno code
-      reporting: validate time parsing with strtol
-      dmsetup: add missing -- for option
-      dmsetup: validate strtol reading
-      cleanup: easier to read code
-      deamonize: restore detection of errors
-
-Zhang Huan (1):
-      lvmlockd: reduce io impact for finding sanlock lv free lock offset
 
 
