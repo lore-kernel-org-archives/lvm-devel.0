@@ -1,81 +1,51 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 14 Sep 2017 13:29:09 -0400
-Subject: master - lvcreate: use cmd defs to deny unspported lockd cases
-Message-ID: <201709141729.v8EHT9bx011388@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 14 Sep 2017 13:39:14 -0500
+Subject: [Patch review 0/1] introduce lvm forcevg option to forcibly deactivate the whole vg
+In-Reply-To: <f74eba33-de77-2b26-31d1-5c103f4ec261@redhat.com>
+References: <64076DFF-B489-4F67-A0EB-F0F41DFBD314@huayun.com>
+	<f74eba33-de77-2b26-31d1-5c103f4ec261@redhat.com>
+Message-ID: <20170914183914.GB31269@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e8755319c8a8848b8bcd830a6341eccf750f798
-Commit:        8e8755319c8a8848b8bcd830a6341eccf750f798
-Parent:        d93a2bb74177397430ec21d6062987cb7da91217
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Sep 14 12:20:29 2017 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Sep 14 12:28:48 2017 -0500
+On Thu, Sep 14, 2017 at 01:24:54PM +0200, Zdenek Kabelac wrote:
+> Dne 14.9.2017 v 09:37 Zhang Huan napsal(a):
+> > Hi all,
+> > 
+> > commit 92ded9af9809dd0f4233bacaafab3e7942a6afff
+> > Author: Huan Zhang <zhanghuan@chinac.com>
+> > Date:   Thu Sep 14 15:25:05 2017 +0800
+> > 
+> >      introduce lvm forcevg option to forcibly deactivate the whole vg
+> 
+> Hi
+> 
+> Coincidentally - I've just opened this BZ today:
+> 
+> https://bugzilla.redhat.com/show_bug.cgi?id=1491609
+> 
+> Mostly likely this BZ can be extended to also support forcible table
+> remove for  'vg/lvchange' command.
 
-lvcreate: use cmd defs to deny unspported lockd cases
+Using an lvm command is a problem for us here because it will read devices
+and may likely get stuck, blocking the script which only has about 40
+seconds to finish in our case.  And this is run precisely because i/o to a
+device is not working.
 
-In a shared VG, lvconvert must be used to create thin pools
-and cache pools, not the lvcreate variants of those commands.
-Deny these cases early in lvcreate using the new command defs.
-Denying these cases deeper in the code was missing some
-cleanup of the partially completed command.
----
- lib/locking/lvmlockd.c |    7 +++++++
- tools/lvcreate.c       |   12 +++++++++++-
- 2 files changed, 18 insertions(+), 1 deletions(-)
+> The solution presented in this patch can interfere with lvm2 commands so I'd
+> be worrying about data correctness.
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index f4047d9..058d4b5 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -2385,6 +2385,10 @@ int lockd_init_lv(struct cmd_context *cmd, struct volume_group *vg, struct logic
- 		return 1;
- 
- 	} else if (seg_is_cache(lp) || seg_is_cache_pool(lp)) {
-+		/*
-+		 * This should not happen because the command defs are
-+		 * checked and excluded for shared VGs early in lvcreate.
-+		 */
- 		log_error("Use lvconvert for cache with lock type %s", vg->lock_type);
- 		return 0;
- 
-@@ -2440,6 +2444,9 @@ int lockd_init_lv(struct cmd_context *cmd, struct volume_group *vg, struct logic
- 			/*
- 			 * Creating a thin pool and a thin lv in it.  We could
- 			 * probably make this work.
-+			 *
-+			 * This should not happen because the command defs are
-+			 * checked and excluded for shared VGs early in lvcreate.
- 			 */
- 			log_error("Create thin pool and thin LV separately with lock type %s",
- 				  vg->lock_type);
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index d2199f5..8aa16f2 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -1634,8 +1634,18 @@ static int _lvcreate_single(struct cmd_context *cmd, const char *vg_name,
- 			    lp->snapshot ? " as snapshot of " : "",
- 			    lp->snapshot ? lp->origin_name : "", lp->segtype->name);
- 
--	if (is_lockd_type(vg->lock_type))
-+	if (is_lockd_type(vg->lock_type)) {
-+		if (cmd->command->command_enum == lvcreate_thin_vol_and_thinpool_CMD ||
-+		    cmd->command->command_enum == lvcreate_cachepool_CMD ||
-+		    cmd->command->command_enum == lvcreate_cache_vol_with_new_origin_CMD ||
-+		    cmd->command->command_enum == lvcreate_thin_vol_with_thinpool_or_sparse_snapshot_CMD ||
-+		    cmd->command->command_enum == lvcreate_cache_vol_with_new_origin_or_convert_to_cache_vol_with_cachepool_CMD) {
-+			log_error("Use lvconvert to create thin pools and cache pools in a shared VG.");
-+			goto out;
-+		}
-+
- 		lp->needs_lockd_init = 1;
-+	}
- 
- 	if (!lv_create_single(vg, lp))
- 		goto_out;
+Our particular use of this is as a helper script that sanlock runs when
+the device holding the leases goes away, and the machine will be
+imminently reset by the watchdog if we can't disable the LVs.  Given those
+unique circumstances, we don't care about other lvm commands.  Is this
+case is so specialized that it should be put in a separate script rather
+than in blkdeactivate?
+
+This is also described in the section "sanlock lease storage failure" in
+http://man7.org/linux/man-pages/man8/lvmlockd.8.html
 
 
