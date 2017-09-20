@@ -1,55 +1,47 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 20 Sep 2017 07:08:48 -0400
-Subject: master - liblvm: Deprecate library and bindings
-Message-ID: <201709201108.v8KB8mGU017003@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 20 Sep 2017 07:08:49 -0400
+Subject: master - liblvm: Add deprecation warning to configure
+Message-ID: <201709201108.v8KB8nGc017008@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4cbacf6bac47227ec3460da1619ab29557f2c89b
-Commit:        4cbacf6bac47227ec3460da1619ab29557f2c89b
-Parent:        5407327bc6fff77dabb6dd55150832373ba163a7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8493df8eddc5a05a2af9a9c4d8e11192f07ec79a
+Commit:        8493df8eddc5a05a2af9a9c4d8e11192f07ec79a
+Parent:        4cbacf6bac47227ec3460da1619ab29557f2c89b
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Sep 19 15:17:01 2017 +0200
+AuthorDate:    Wed Sep 20 10:00:59 2017 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
 CommitterDate: Wed Sep 20 13:07:06 2017 +0200
 
-liblvm: Deprecate library and bindings
+liblvm: Add deprecation warning to configure
 
-It is recommended to use D-Bus API instead of liblvm2app or python
-bindings.
 ---
- liblvm/lvm2app.h |    2 ++
- python/liblvm.c  |    2 ++
- 2 files changed, 4 insertions(+), 0 deletions(-)
+ configure.in |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index be53b2d..f64262d 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -18,6 +18,8 @@
+diff --git a/configure.in b/configure.in
+index 43e8652..e2f448e 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1464,6 +1464,8 @@ AC_SUBST([LVM2APP_LIB])
+ test "$APPLIB" = yes \
+   && LVM2APP_LIB=-llvm2app \
+   || LVM2APP_LIB=
++AS_IF([test "$APPLIB"],
++      [AC_MSG_WARN([Python bindings are deprecated. Use D-Bus API])])
  
- #include <stdint.h>
+ ################################################################################
+ dnl -- Enable cmdlib
+@@ -1546,6 +1548,7 @@ if test "$BUILD_LVMDBUSD" = yes; then
+ fi
  
-+#warning "liblvm2app is deprecated, use D-Bus API instead."
-+
- #ifdef __cplusplus
- extern "C" {
- #endif
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 1b3534e..6d67b8b 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -2085,6 +2085,8 @@ PyMODINIT_FUNC initlvm(void)
- 		PyModule_AddObject(m, "LibLVMError", _LibLVMError);
- 	}
+ if test "$PYTHON_BINDINGS" = yes -o "$PYTHON2_BINDINGS" = yes -o "$PYTHON3_BINDINGS" = yes; then
++	AC_MSG_WARN([Python bindings are deprecated. Use D-Bus API])
+ 	test "$APPLIB" != yes && AC_MSG_ERROR([Python_bindings require --enable-applib])
+ fi
  
-+	PyErr_Warn(PyExc_DeprecationWarning, "Python API is deprecated, use D-Bus API instead.");
-+
- 	Py_AtExit(_liblvm_cleanup);
- #ifdef IS_PY3K
- 	return m;
 
 
