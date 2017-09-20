@@ -1,146 +1,117 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 20 Sep 2017 10:58:43 -0400
-Subject: master - pvmove: require LV name in a shared VG
-Message-ID: <201709201458.v8KEwhir027743@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 20 Sep 2017 12:11:32 -0400
+Subject: master - improve error messages when command rules fail
+Message-ID: <201709201611.v8KGBW6q011703@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f2ee0e7aca6020cf273f22dc5bca20bfa3c89051
-Commit:        f2ee0e7aca6020cf273f22dc5bca20bfa3c89051
-Parent:        518a8e8cfbb672c2bf5e3455f1fe7cd8d94eb5b0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0ab9e4b6a720972cffc8bc465f4d4c3d788d0820
+Commit:        0ab9e4b6a720972cffc8bc465f4d4c3d788d0820
+Parent:        f2ee0e7aca6020cf273f22dc5bca20bfa3c89051
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Sep 19 13:08:41 2017 -0500
+AuthorDate:    Wed Sep 20 10:51:52 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Sep 20 09:56:51 2017 -0500
+CommitterDate: Wed Sep 20 11:10:35 2017 -0500
 
-pvmove: require LV name in a shared VG
+improve error messages when command rules fail
 
-In a shared VG, only allow pvmove with a named LV,
-so that only PE's used by the LV will be moved.
-The LV is then activated exclusively, ensuring that
-the PE's being moved are not used from another host.
-
-Previously, pvmove was mistakenly allowed on a full PV.
-This won't work when LVs using that PV are active on
-other hosts.
+When certain cmd def RULE's fail, the error messages can
+sometimes be confusing.  This expands the error messages
+to help clarify why the rule failed, especially in cases
+where options are used incorrectly.
 ---
- WHATS_NEW             |    1 +
- lib/metadata/mirror.c |    2 +-
- man/lvmlockd.8_main   |    3 +++
- tools/pvmove.c        |   42 ++++++++++++++++++++++++------------------
- 4 files changed, 29 insertions(+), 19 deletions(-)
+ tools/command-lines.in |    2 +-
+ tools/toollib.c        |   34 +++++++++++++++++++++++++---------
+ 2 files changed, 26 insertions(+), 10 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 6d820bd..6b88fc4 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.175 - 
- ======================================
-+  Require LV name with pvmove in a shared VG.
-   Allow shared active mirror LVs with lvmlockd, dlm, and cmirrord.
-   Support lvconvert --repair with cache and cachepool volumes.
-   lvconvert --repair respects --poolmetadataspare option.
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index e775495..238ce37 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -2145,7 +2145,7 @@ int lv_add_mirrors(struct cmd_context *cmd, struct logical_volume *lv,
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index ec02fa4..265bda8 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -677,7 +677,7 @@ DESC: Replace failed PVs in a raid or mirror LV.
+ DESC: Repair a thin pool.
+ DESC: Repair a cache pool.
+ RULE: all not lv_is_locked lv_is_pvmove
+-RULE: --poolmetadataspare Bool and LV_cache LV_cachepool LV_thinpool
++RULE: --poolmetadataspare and LV_cache LV_cachepool LV_thinpool
+ 
+ lvconvert --replace PV LV_raid
+ OO: OO_LVCONVERT
+diff --git a/tools/toollib.c b/tools/toollib.c
+index bf3e9d6..b28167b 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -2819,7 +2819,7 @@ static int _check_lv_rules(struct cmd_context *cmd, struct logical_volume *lv)
+ 		if (rule->check_opts && (rule->rule == RULE_INVALID) && opts_match_count) {
+ 			memset(buf, 0, sizeof(buf));
+ 			opt_array_to_str(cmd, rule->check_opts, rule->check_opts_count, buf, sizeof(buf));
+-			log_warn("Command on LV %s does not accept option %s.",
++			log_warn("Command on LV %s has invalid use of option %s.",
+ 				 display_lvname(lv), buf);
+ 			ret = 0;
+ 		}
+@@ -2837,8 +2837,12 @@ static int _check_lv_rules(struct cmd_context *cmd, struct logical_volume *lv)
+ 		/* Fail if the LV matches any of the invalid LV types. */
+ 
+ 		if (rule->check_lvt_bits && (rule->rule == RULE_INVALID) && lv_types_match_bits) {
+-			log_warn("Command on LV %s does not accept LV type %s.",
+-				 display_lvname(lv), lvtype ? lvtype->name : "unknown");
++			if (rule->opts_count)
++				log_warn("Command on LV %s uses options invalid with LV type %s.",
++				 	 display_lvname(lv), lvtype ? lvtype->name : "unknown");
++			else
++				log_warn("Command on LV %s with invalid LV type %s.",
++				 	 display_lvname(lv), lvtype ? lvtype->name : "unknown");
+ 			ret = 0;
+ 		}
+ 
+@@ -2847,8 +2851,12 @@ static int _check_lv_rules(struct cmd_context *cmd, struct logical_volume *lv)
+ 		if (rule->check_lvt_bits && (rule->rule == RULE_REQUIRE) && !lv_types_match_bits) {
+ 			memset(buf, 0, sizeof(buf));
+ 			lvt_bits_to_str(rule->check_lvt_bits, buf, sizeof(buf));
+-			log_warn("Command on LV %s does not accept LV type %s. Required LV types are %s.",
+-				 display_lvname(lv), lvtype ? lvtype->name : "unknown", buf);
++			if (rule->opts_count)
++				log_warn("Command on LV %s uses options that require LV types %s.",
++					 display_lvname(lv), buf);
++			else
++				log_warn("Command on LV %s does not accept LV type %s. Required LV types are %s.",
++					 display_lvname(lv), lvtype ? lvtype->name : "unknown", buf);
+ 			ret = 0;
+ 		}
+ 
+@@ -2857,8 +2865,12 @@ static int _check_lv_rules(struct cmd_context *cmd, struct logical_volume *lv)
+ 		if (rule->check_lvp_bits && (rule->rule == RULE_INVALID) && lv_props_match_bits) {
+ 			memset(buf, 0, sizeof(buf));
+ 			lvp_bits_to_str(lv_props_match_bits, buf, sizeof(buf));
+-			log_warn("Command on LV %s does not accept LV with properties: %s.",
+-				 display_lvname(lv), buf);
++			if (rule->opts_count)
++				log_warn("Command on LV %s uses options that are invalid with LV properties: %s.",
++				 	 display_lvname(lv), buf);
++			else
++				log_warn("Command on LV %s is invalid on LV with properties: %s.",
++				 	 display_lvname(lv), buf);
+ 			ret = 0;
+ 		}
+ 
+@@ -2867,8 +2879,12 @@ static int _check_lv_rules(struct cmd_context *cmd, struct logical_volume *lv)
+ 		if (rule->check_lvp_bits && (rule->rule == RULE_REQUIRE) && lv_props_unmatch_bits) {
+ 			memset(buf, 0, sizeof(buf));
+ 			lvp_bits_to_str(lv_props_unmatch_bits, buf, sizeof(buf));
+-			log_warn("Command on LV %s requires LV with properties: %s.",
+-				 display_lvname(lv), buf);
++			if (rule->opts_count)
++				log_warn("Command on LV %s uses options that require LV properties: %s.",
++				 	 display_lvname(lv), buf);
++			else
++				log_warn("Command on LV %s requires LV with properties: %s.",
++				 	 display_lvname(lv), buf);
+ 			ret = 0;
  		}
  	}
- 
--	if (lv->vg->lock_type && !strcmp(lv->vg->lock_type, "dlm")) {
-+	if (lv->vg->lock_type && !strcmp(lv->vg->lock_type, "dlm") && cmd->lockd_lv_sh) {
- 		if (!cluster_mirror_is_available(cmd)) {
- 			log_error("Shared cluster mirrors are not available.");
- 			return 0;
-diff --git a/man/lvmlockd.8_main b/man/lvmlockd.8_main
-index 067c60d..b7eba1a 100644
---- a/man/lvmlockd.8_main
-+++ b/man/lvmlockd.8_main
-@@ -826,6 +826,9 @@ using external origins for thin LVs
- splitting mirrors and snapshots from LVs
- .br
- \[bu]
-+pvmove of entire PVs, or under LVs activated with shared locks
-+.br
-+\[bu]
- vgsplit
- .br
- \[bu]
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index eef5cc1..750f08e 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -480,7 +480,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 		 * If the VG is clustered, we are unable to handle
- 		 * snapshots, origins, thin types, RAID or mirror
- 		 */
--		if (vg_is_clustered(vg) &&
-+		if ((vg_is_clustered(vg) || is_lockd_type(vg->lock_type)) &&
- 		    (lv_is_origin(lv) || lv_is_cow(lv) ||
- 		     lv_is_thin_type(lv) || lv_is_raid_type(lv))) {
- 			log_print_unless_silent("Skipping %s LV %s",
-@@ -692,6 +692,7 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
- 	struct dm_list *allocatable_pvs;
- 	struct dm_list *lvs_changed;
- 	struct logical_volume *lv_mirr;
-+	struct logical_volume *lv = NULL;
- 	const char *pv_name = pv_dev_name(pv);
- 	unsigned flags = PVMOVE_FIRST_TIME;
- 	unsigned exclusive;
-@@ -712,27 +713,32 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
- 			pp->setup_result = EINVALID_CMD_LINE;
- 			return ECMD_FAILED;
- 		}
-+
-+		if (!(lv = find_lv(vg, lv_name))) {
-+			log_error("Failed to find LV with name %s", lv_name);
-+			return ECMD_FAILED;
-+		}
- 	}
- 
- 	/*
--	 * We cannot move blocks from under the sanlock leases, so disallow
--	 * pvmoving any PVs used by the lvmlock LV.
-+	 * We would need to avoid any PEs used by LVs that are active (ex) on
-+	 * other hosts.  For LVs that are active on multiple hosts (sh), we
-+	 * would need to used cluster mirrors.
- 	 */
--	if (vg->lock_type && !strcmp(vg->lock_type, "sanlock")) {
--		struct lv_segment *lvseg;
--		struct physical_volume *sanlock_pv;
--		unsigned s;
--
--		dm_list_iterate_items(lvseg, &vg->sanlock_lv->segments) {
--			for (s = 0; s < lvseg->area_count; s++) {
--				if (seg_type(lvseg, s) == AREA_PV) {
--					sanlock_pv = seg_pv(lvseg, s);
--					if (sanlock_pv->dev == pv->dev) {
--						log_error("Cannot pvmove device %s used for sanlock leases.", pv_name);
--						return ECMD_FAILED;
--					}
--				}
--			}
-+	if (is_lockd_type(vg->lock_type)) {
-+		if (!lv) {
-+			log_error("pvmove in a shared VG requires a named LV.");
-+			return ECMD_FAILED;
-+		}
-+
-+		if (lv_is_lockd_sanlock_lv(lv)) {
-+			log_error("pvmove not allowed on internal sanlock LV.");
-+			return ECMD_FAILED;
-+		}
-+
-+		if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT)) {
-+			log_error("pvmove in a shared VG requires exclusive lock on named LV.");
-+			return ECMD_FAILED;
- 		}
- 	}
- 
 
 
