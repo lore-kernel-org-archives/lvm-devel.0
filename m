@@ -1,55 +1,90 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Thu, 21 Sep 2017 11:17:34 -0400
-Subject: master - blkdeactivate: also try to unmount /boot on blkdeactivate -u if on top of supported device
-Message-ID: <201709211517.v8LFHYLs021473@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Thu, 21 Sep 2017 15:36:51 -0400
+Subject: master - lvmdbusd: Fix hang in MThreadRunner
+Message-ID: <201709211936.v8LJap7h015540@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=096fcb5a6e373763bcdf1d182456f206c06cec43
-Commit:        096fcb5a6e373763bcdf1d182456f206c06cec43
-Parent:        584b4ae38bca05c0bbc6a097b549372c39727f3b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Sep 21 15:23:24 2017 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Sep 21 17:15:48 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e3965d392cc1cf1b29c4fcd6f2effb925d8df550
+Commit:        e3965d392cc1cf1b29c4fcd6f2effb925d8df550
+Parent:        096fcb5a6e373763bcdf1d182456f206c06cec43
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Sep 20 15:46:16 2017 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Sep 21 14:35:36 2017 -0500
 
-blkdeactivate: also try to unmount /boot on blkdeactivate -u if on top of supported device
+lvmdbusd: Fix hang in MThreadRunner
 
-There's nothing special about /boot other than it's used during boot.
-But when blkdeactivate is called either on all devices or including a
-device where the /boot is on top, we should also include this mount
-point when doing unmount before deactivation of supported devices.
+When executing in the main thread, if we encounter an exception we
+will bypass the notify_all call on the condition and the calling thread
+never wakes up.
+
+@staticmethod
+    def runner(obj):
+        # noinspection PyProtectedMember
+Exception thrown here
+ ----> obj._run()
+So the following code doesn't run, which causes calling thread to hang
+	with obj.cond:
+            obj.function_complete = True
+            obj.cond.notify_all()
+
+Additionally for some unknown reason the stderr is lost.
+Best guess is it's something to do with scheduling a python function
+into the GLib.idle_add.  That made finding issue quite difficult.
 ---
- WHATS_NEW_DM                |    1 +
- scripts/blkdeactivate.sh.in |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/lvmdbusd/utils.py |   19 ++++++++++++++-----
+ 1 files changed, 14 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index df72a25..5a11e2e 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.144 - 
- ======================================
-+  Also try to unmount /boot on blkdeactivate -u if on top of supported device.
-   Use blkdeactivate -r wait in blk-availability systemd service/initscript.
-   Add blkdeactivate -r wait option to wait for MD resync/recovery/reshape.
-   Fix blkdeactivate regression with failing DM/MD devs deactivation (1.02.142).
-diff --git a/scripts/blkdeactivate.sh.in b/scripts/blkdeactivate.sh.in
-index 71cc241..11b5983 100644
---- a/scripts/blkdeactivate.sh.in
-+++ b/scripts/blkdeactivate.sh.in
-@@ -97,7 +97,7 @@ declare -A SKIP_VG_LIST=()
- # listed here will be added to SKIP_DEVICE_LIST (and SKIP_VG_LIST) automatically.
- # (list is an associative array!)
- #
--declare -A SKIP_UMOUNT_LIST=(["/"]=1 ["/boot"]=1 \
-+declare -A SKIP_UMOUNT_LIST=(["/"]=1 \
-                              ["/lib"]=1 ["/lib64"]=1 \
-                              ["/bin"]=1 ["/sbin"]=1 \
-                              ["/var"]=1 ["/var/log"]=1 \
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index 170824d..98fd017 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -20,7 +20,7 @@ from lvmdbusd import cfg
+ # noinspection PyUnresolvedReferences
+ from gi.repository import GLib
+ import threading
+-
++import traceback
+ 
+ STDOUT_TTY = os.isatty(sys.stdout.fileno())
+ 
+@@ -568,6 +568,7 @@ class MThreadRunner(object):
+ 	def __init__(self, function, *args):
+ 		self.f = function
+ 		self.rc = None
++		self.exception = None
+ 		self.args = args
+ 		self.function_complete = False
+ 		self.cond = threading.Condition(threading.Lock())
+@@ -577,13 +578,21 @@ class MThreadRunner(object):
+ 		with self.cond:
+ 			if not self.function_complete:
+ 				self.cond.wait()
++		if self.exception:
++			raise self.exception
+ 		return self.rc
+ 
+ 	def _run(self):
+-		if len(self.args):
+-			self.rc = self.f(*self.args)
+-		else:
+-			self.rc = self.f()
++		try:
++			if len(self.args):
++				self.rc = self.f(*self.args)
++			else:
++				self.rc = self.f()
++		except BaseException as be:
++			self.exception = be
++			st = traceback.format_exc()
++			log_error("MThreadRunner: exception \n %s" % st)
++			log_error("Exception will be raised in calling thread!")
+ 
+ 
+ def _remove_objects(dbus_objects_rm):
 
 
