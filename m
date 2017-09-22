@@ -1,98 +1,77 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Fri, 22 Sep 2017 05:11:41 -0400
-Subject: master - blkdeactivate: cleanup
-Message-ID: <201709220911.v8M9BfJ3016707@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Fri, 22 Sep 2017 13:35:57 -0400
+Subject: master - vgsplit: Fix intermediate metadata corruption.
+Message-ID: <201709221735.v8MHZvSf010533@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b0f4e0fcec1a50b73fbc4f05bfd2d385895bc3bc
-Commit:        b0f4e0fcec1a50b73fbc4f05bfd2d385895bc3bc
-Parent:        bdccab07f94f6b2e464e2d43d1f91dbb0a9fb2e0
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Sep 22 11:10:57 2017 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Sep 22 11:10:57 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8146548d25e9104f0d530d943290d448c1994c0a
+Commit:        8146548d25e9104f0d530d943290d448c1994c0a
+Parent:        b0f4e0fcec1a50b73fbc4f05bfd2d385895bc3bc
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Sep 22 18:02:58 2017 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Sep 22 18:34:34 2017 +0100
 
-blkdeactivate: cleanup
+vgsplit: Fix intermediate metadata corruption.
 
-Use a different variable for translated name in dm/md_deactivate fn
-Fix dmraidoption/dmraidoptions in man page.
+Changing the VG of a PV uses the same on-disk mechanism as vgrename.
+This relies on recognising both the old and new VG names.  Prior to this
+patch the vgsplit code incorrectly provided the new VG name twice
+instead of the old and new ones.  This lead the low-level mechanism not
+to recognise the device as already belonging to a VG and so paying no
+attention to the location of its existing metadata, sometimes partly
+overwriting it and then later trying to read the corrupt metadata and
+issuing a checksum error.
 ---
- man/blkdeactivate.8_main    |    2 +-
- scripts/blkdeactivate.sh.in |   20 +++++++++++---------
- 2 files changed, 12 insertions(+), 10 deletions(-)
+ WHATS_NEW                     |    1 +
+ lib/format_text/format-text.c |    5 +++--
+ tools/vgsplit.c               |    3 +++
+ 3 files changed, 7 insertions(+), 2 deletions(-)
 
-diff --git a/man/blkdeactivate.8_main b/man/blkdeactivate.8_main
-index 0aa9c2a..f3c19a8 100644
---- a/man/blkdeactivate.8_main
-+++ b/man/blkdeactivate.8_main
-@@ -63,7 +63,7 @@ all the paths are unavailable for any underlying device-mapper multipath
- device.
- .RE
- .TP
--.BR -r ", " --mdraidoption \ \fImdraid_options\fP
-+.BR -r ", " --mdraidoptions \ \fImdraid_options\fP
- Comma-separated list of MD RAID specific options:
- .RS
- .IP \fIwait\fP
-diff --git a/scripts/blkdeactivate.sh.in b/scripts/blkdeactivate.sh.in
-index 11b5983..daa53df 100644
---- a/scripts/blkdeactivate.sh.in
-+++ b/scripts/blkdeactivate.sh.in
-@@ -211,14 +211,15 @@ deactivate_holders () {
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 6b88fc4..b2037a6 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.175 - 
+ ======================================
++  Fix metadata corruption in vgsplit intermediate state.
+   Require LV name with pvmove in a shared VG.
+   Allow shared active mirror LVs with lvmlockd, dlm, and cmirrord.
+   Support lvconvert --repair with cache and cachepool volumes.
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index e974f05..c359c8a 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -448,8 +448,9 @@ static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
+ 	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{'))
+ 		return rlocn;
  
- deactivate_dm () {
--	local name=$(printf "%s" "$name")
--	test -b "$DEV_DIR/mapper/$name" || return 0
-+	local xname
-+	xname=$(printf "%s" "$name")
-+	test -b "$DEV_DIR/mapper/$xname" || return 0
- 	test -z "${SKIP_DEVICE_LIST["$kname"]}" || return 1
+-	log_debug_metadata("Volume group name found in metadata does "
+-			   "not match expected name %s.", vgname);
++	log_debug_metadata("Volume group name found in metadata on %s at %" PRIu64 " does "
++			   "not match expected name %s.", 
++			   dev_name(dev_area->dev), dev_area->start + rlocn->offset, vgname);
  
--	deactivate_holders "$DEV_DIR/mapper/$name" || return 1
-+	deactivate_holders "$DEV_DIR/mapper/$xname" || return 1
+       bad:
+ 	if ((info = lvmcache_info_from_pvid(dev_area->dev->pvid, dev_area->dev, 0)) &&
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index da9b7b1..843738b 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -705,6 +705,9 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 	if (!vg_rename(cmd, vg_to, vg_name_to))
+ 		goto_bad;
  
--	echo -n "  [DM]: deactivating $devtype device $name ($kname)... "
--	if eval "$DMSETUP" $DMSETUP_OPTS remove "$name" "$OUT" "$ERR"; then
-+	echo -n "  [DM]: deactivating $devtype device $xname ($kname)... "
-+	if eval "$DMSETUP" $DMSETUP_OPTS remove "$xname" "$OUT" "$ERR"; then
- 		echo "done"
- 	else
- 		echo "skipping"
-@@ -280,9 +281,10 @@ deactivate_lvm () {
- }
++	/* Set old VG name so the metadata operations recognise that the PVs are in an existing VG */
++	vg_to->old_name = vg_from->name;
++
+ 	/* store it on disks */
+ 	log_verbose("Writing out updated volume groups");
  
- deactivate_md () {
--	local name=$(printf "%s" "$name")
-+	local xname
-+	xname=$(printf "%s" "$name")
- 	local sync_action
--	test -b "$DEV_DIR/$name" || return 0
-+	test -b "$DEV_DIR/$xname" || return 0
- 	test -z "${SKIP_DEVICE_LIST["$kname"]}" || return 1
- 
- 	# Skip MD device deactivation if MD tools missing.
-@@ -291,7 +293,7 @@ deactivate_md () {
- 		return 1
- 	}
- 
--	deactivate_holders "$DEV_DIR/$name" || return 1
-+	deactivate_holders "$DEV_DIR/$xname" || return 1
- 
- 	echo -n "  [MD]: deactivating $devtype device $kname... "
- 
-@@ -307,7 +309,7 @@ deactivate_md () {
- 		}
- 	}
- 
--	if eval "$MDADM" $MDADM_OPTS -S "$name" "$OUT" "$ERR"; then
-+	if eval "$MDADM" $MDADM_OPTS -S "$xname" "$OUT" "$ERR"; then
- 		echo "done"
- 	else
- 		echo "skipping"
 
 
