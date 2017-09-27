@@ -1,77 +1,146 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Fri, 22 Sep 2017 13:35:57 -0400
-Subject: master - vgsplit: Fix intermediate metadata corruption.
-Message-ID: <201709221735.v8MHZvSf010533@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Wed, 27 Sep 2017 08:48:06 -0400
+Subject: master - lvmdbusd: Main thread exception logging
+Message-ID: <201709271248.v8RCm6IF023296@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8146548d25e9104f0d530d943290d448c1994c0a
-Commit:        8146548d25e9104f0d530d943290d448c1994c0a
-Parent:        b0f4e0fcec1a50b73fbc4f05bfd2d385895bc3bc
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Sep 22 18:02:58 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Sep 22 18:34:34 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2074094e778bfc298fb4cb184b6005e40acd1159
+Commit:        2074094e778bfc298fb4cb184b6005e40acd1159
+Parent:        090db98828694a00016395cc6c2a25fa1de953f4
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Fri Sep 22 09:59:50 2017 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Sep 27 07:45:00 2017 -0500
 
-vgsplit: Fix intermediate metadata corruption.
+lvmdbusd: Main thread exception logging
 
-Changing the VG of a PV uses the same on-disk mechanism as vgrename.
-This relies on recognising both the old and new VG names.  Prior to this
-patch the vgsplit code incorrectly provided the new VG name twice
-instead of the old and new ones.  This lead the low-level mechanism not
-to recognise the device as already belonging to a VG and so paying no
-attention to the location of its existing metadata, sometimes partly
-overwriting it and then later trying to read the corrupt metadata and
-issuing a checksum error.
+Make sure that any and all code that executes in the main thread is
+wrapped with a try/except block to ensure that at the very least
+we log when things are going wrong.
 ---
- WHATS_NEW                     |    1 +
- lib/format_text/format-text.c |    5 +++--
- tools/vgsplit.c               |    3 +++
- 3 files changed, 7 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/job.py     |    8 ++++----
+ daemons/lvmdbusd/request.py |    8 ++++----
+ daemons/lvmdbusd/utils.py   |   26 ++++++++++++++++----------
+ 3 files changed, 24 insertions(+), 18 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 6b88fc4..b2037a6 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.175 - 
- ======================================
-+  Fix metadata corruption in vgsplit intermediate state.
-   Require LV name with pvmove in a shared VG.
-   Allow shared active mirror LVs with lvmlockd, dlm, and cmirrord.
-   Support lvconvert --repair with cache and cachepool volumes.
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index e974f05..c359c8a 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -448,8 +448,9 @@ static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
- 	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{'))
- 		return rlocn;
+diff --git a/daemons/lvmdbusd/job.py b/daemons/lvmdbusd/job.py
+index 609b747..988b114 100644
+--- a/daemons/lvmdbusd/job.py
++++ b/daemons/lvmdbusd/job.py
+@@ -8,7 +8,7 @@
+ # along with this program. If not, see <http://www.gnu.org/licenses/>.
  
--	log_debug_metadata("Volume group name found in metadata does "
--			   "not match expected name %s.", vgname);
-+	log_debug_metadata("Volume group name found in metadata on %s at %" PRIu64 " does "
-+			   "not match expected name %s.", 
-+			   dev_name(dev_area->dev), dev_area->start + rlocn->offset, vgname);
+ from .automatedproperties import AutomatedProperties
+-from .utils import job_obj_path_generate, mt_async_result, mt_run_no_wait
++from .utils import job_obj_path_generate, mt_async_call
+ from . import cfg
+ from .cfg import JOB_INTERFACE
+ import dbus
+@@ -30,7 +30,7 @@ class WaitingClient(object):
+ 				# Remove ourselves from waiting client
+ 				wc.job_state.remove_waiting_client(wc)
+ 				wc.timer_id = -1
+-				mt_async_result(wc.cb, wc.job_state.Complete)
++				mt_async_call(wc.cb, wc.job_state.Complete)
+ 				wc.job_state = None
  
-       bad:
- 	if ((info = lvmcache_info_from_pvid(dev_area->dev->pvid, dev_area->dev, 0)) &&
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index da9b7b1..843738b 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -705,6 +705,9 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 	if (!vg_rename(cmd, vg_to, vg_name_to))
- 		goto_bad;
+ 	def __init__(self, job_state, tmo, cb, cbe):
+@@ -55,7 +55,7 @@ class WaitingClient(object):
+ 					GLib.source_remove(self.timer_id)
+ 					self.timer_id = -1
  
-+	/* Set old VG name so the metadata operations recognise that the PVs are in an existing VG */
-+	vg_to->old_name = vg_from->name;
-+
- 	/* store it on disks */
- 	log_verbose("Writing out updated volume groups");
+-				mt_async_result(self.cb, self.job_state.Complete)
++				mt_async_call(self.cb, self.job_state.Complete)
+ 				self.job_state = None
  
+ 
+@@ -188,7 +188,7 @@ class Job(AutomatedProperties):
+ 	@Complete.setter
+ 	def Complete(self, value):
+ 		self.state.Complete = value
+-		mt_run_no_wait(Job._signal_complete, self)
++		mt_async_call(Job._signal_complete, self)
+ 
+ 	@property
+ 	def GetError(self):
+diff --git a/daemons/lvmdbusd/request.py b/daemons/lvmdbusd/request.py
+index 78392de..eaec04c 100644
+--- a/daemons/lvmdbusd/request.py
++++ b/daemons/lvmdbusd/request.py
+@@ -13,7 +13,7 @@ from gi.repository import GLib
+ from .job import Job
+ from . import cfg
+ import traceback
+-from .utils import log_error, mt_async_result
++from .utils import log_error, mt_async_call
+ 
+ 
+ class RequestEntry(object):
+@@ -116,9 +116,9 @@ class RequestEntry(object):
+ 				if error_rc == 0:
+ 					if self.cb:
+ 						if self._return_tuple:
+-							mt_async_result(self.cb, (result, '/'))
++							mt_async_call(self.cb, (result, '/'))
+ 						else:
+-							mt_async_result(self.cb, result)
++							mt_async_call(self.cb, result)
+ 				else:
+ 					if self.cb_error:
+ 						if not error_exception:
+@@ -129,7 +129,7 @@ class RequestEntry(object):
+ 							else:
+ 								error_exception = Exception(error_msg)
+ 
+-						mt_async_result(self.cb_error, error_exception)
++						mt_async_call(self.cb_error, error_exception)
+ 			else:
+ 				# We have a job and it's complete, indicate that it's done.
+ 				self._job.Complete = True
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index c9fbaad..ce2ed22 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -534,20 +534,26 @@ def add_no_notify(cmdline):
+ # ensure all dbus library interaction is done from the same thread!
+ 
+ 
+-def _async_result(call_back, results):
+-	log_debug('Results = %s' % str(results))
+-	call_back(results)
++def _async_handler(call_back, parameters):
++	params_str = ", ".join([str(x) for x in parameters])
++	log_debug('Main thread execution, callback = %s, parameters = (%s)' %
++				(str(call_back), params_str))
+ 
++	try:
++		if parameters:
++			call_back(*parameters)
++		else:
++			call_back()
++	except:
++		st = traceback.format_exc()
++		log_error("mt_async_call: exception (logged, not reported!) \n %s" % st)
+ 
+-# Return result in main thread
+-def mt_async_result(call_back, results):
+-	GLib.idle_add(_async_result, call_back, results)
+ 
++# Execute the function on the main thread with the provided parameters, do
++# not return *any* value or wait for the execution to complete!
++def mt_async_call(function_call_back, *parameters):
++	GLib.idle_add(_async_handler, function_call_back, parameters)
+ 
+-# Take the supplied function and run it on the main thread and not wait for
+-# a result!
+-def mt_run_no_wait(function, param):
+-	GLib.idle_add(function, param)
+ 
+ # Run the supplied function and arguments on the main thread and wait for them
+ # to complete while allowing the ability to get the return value too.
 
 
