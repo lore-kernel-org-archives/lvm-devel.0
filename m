@@ -1,79 +1,67 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 7 Nov 2008 19:23:53 -0000
-Subject: LVM2 ./WHATS_NEW man/lvchange.8.in man/lvcreat ...
-Message-ID: <20081107192353.29450.qmail@sourceware.org>
+From: Thomas Lamprecht <t.lamprecht@proxmox.com>
+Date: Mon,  2 Oct 2017 14:26:36 +0200
+Subject: [RFC] dmeventd: ensure systemd service gets stopped on shutdown
+Message-ID: <20171002122636.20879-1-t.lamprecht@proxmox.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-11-07 19:23:52
+The service pf dmeventd, dm-eventd.service, uses
+'DefaultDependencies=no' as it wants to start up very early in the
+boot process.
+But, this also removed the implicit 'Conflicts' and 'Before' settings
+to the shutdown target, which is in charge of stopping all service
+gracefully on poweroff, reboot or halt.
+This caused that the service was not stopped on shutdown by the
+normal systemd shutdown process, but only once the systemd-shutdown
+service took over the role of PID 1 and sent first a SIGTERM then -
+after DEFAULT_TIMEOUT_USEC (90 seconds) of waiting, a SIGKILL to all
+remaining processes.
+dmeventd only exits if at the next main loop iteration after the time
+where the signal was received all threads are idle, else the exit
+request gets simply ignored (not queued).
 
-Modified files:
-	.              : WHATS_NEW 
-	man            : lvchange.8.in lvcreate.8.in 
+Lets add the shutdown target conflict again, so that it gets stopped
+during the normal systemd shutdown process, previous to reaching
+shutdown.target.
+First, this allows the user o notice more easily the offending
+process as its logged with journald still operating - which isn't the
+case once systemd-shutdown took over the PID 1 role.
+Secondly, at this stage the shutdown of dmeventd seems to succeed
+always, interestingly. This could be explained by the sync which
+systemd-shutdown triggers before broadcasting SIGTERM and SIGKILL.
+This sync could change (meta)data from a monitored dm device and thus
+keep dmeventd from exiting as _idle_since is 0.
 
-Log message:
-	Fix lvhange and lvcreate man pages to properly describe permissions option.
-	
-	James Youngman <jay@gnu.org>
+Signed-off-by: Thomas Lamprecht <t.lamprecht@proxmox.com>
+---
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.991&r2=1.992
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvchange.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+The last part where I try make sense out of the differing behavior if
+systemd-shutdown sends the SIGTERM or systemd previous to that sends
+it is speculation, albeit not complete unreasonable one.
+RFC for that matter and for the matter that I do not yet have in-depth
+knowledge of dmeventd and its users.
 
---- LVM2/WHATS_NEW	2008/11/07 19:02:47	1.991
-+++ LVM2/WHATS_NEW	2008/11/07 19:23:52	1.992
-@@ -1,5 +1,6 @@
- Version 2.02.43 -
- ===================================
-+  Fix lvchange and lvcreate man pages permissions option.
-   Fix vgdisplay return code and exit status.
-   Move list.c into libdevmapper and rename functions.
-   Rename a couple of variables that matched function names.
---- LVM2/man/lvchange.8.in	2008/10/08 12:50:13	1.1
-+++ LVM2/man/lvchange.8.in	2008/11/07 19:23:52	1.2
-@@ -14,7 +14,7 @@
- [\-\-monitor {y|n}]
- [\-M/\-\-persistent y/n] [\-\-minor minor]
- [\-P/\-\-partial]
--[\-p/\-\-permission r/w] [\-r/\-\-readahead ReadAheadSectors|auto|none]
-+[\-p/\-\-permission r|rw] [\-r/\-\-readahead ReadAheadSectors|auto|none]
- [\-\-refresh]
- [\-t/\-\-test]
- [\-v/\-\-verbose] LogicalVolumePath [LogicalVolumePath...]
-@@ -69,7 +69,7 @@
- .I \-M, \-\-persistent y/n
- Set to y to make the minor number specified persistent.
- .TP
--.I \-p, \-\-permission r/w
-+.I \-p, \-\-permission r|rw
- Change access permission to read-only or read/write.
- .TP
- .I \-r, \-\-readahead ReadAheadSectors|auto|none
---- LVM2/man/lvcreate.8.in	2008/10/08 12:50:13	1.1
-+++ LVM2/man/lvcreate.8.in	2008/11/07 19:23:52	1.2
-@@ -14,7 +14,7 @@
- [\-m/\-\-mirrors Mirrors [\-\-nosync] [\-\-mirrorlog {disk|core}] [\-\-corelog]
- [\-R/\-\-regionsize MirrorLogRegionSize]]
- [\-n/\-\-name LogicalVolumeName]
--[\-p/\-\-permission r/rw] [\-r/\-\-readahead ReadAheadSectors|auto|none]
-+[\-p/\-\-permission r|rw] [\-r/\-\-readahead ReadAheadSectors|auto|none]
- [\-t/\-\-test]
- [\-v/\-\-verbose] [\-Z/\-\-zero y/n]
- VolumeGroupName [PhysicalVolumePath...]
-@@ -113,7 +113,7 @@
- Without this option a default names of "lvol#" will be generated where
- # is the LVM internal number of the logical volume.
- .TP
--.I \-p, \-\-permission r/w
-+.I \-p, \-\-permission r|rw
- Set access permissions to read only or read and write.
- .br
- Default is read and write.
+ scripts/dm_event_systemd_red_hat.service.in | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/scripts/dm_event_systemd_red_hat.service.in b/scripts/dm_event_systemd_red_hat.service.in
+index 7c607aaf2..a3284c810 100644
+--- a/scripts/dm_event_systemd_red_hat.service.in
++++ b/scripts/dm_event_systemd_red_hat.service.in
+@@ -4,6 +4,8 @@ Documentation=man:dmeventd(8)
+ Requires=dm-event.socket
+ After=dm-event.socket
+ Before=local-fs-pre.target
++Before=shutdown.target
++Conflicts=shutdown.target
+ DefaultDependencies=no
+ 
+ [Service]
+-- 
+2.11.0
+
 
 
