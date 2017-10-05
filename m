@@ -1,57 +1,66 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Thu, 5 Oct 2017 07:03:02 -0400
-Subject: master - dmeventd: ensure systemd service gets stopped on shutdown
-Message-ID: <201710051103.v95B325p015066@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Thu, 5 Oct 2017 13:04:48 +0200
+Subject: [RFC] dmeventd: ensure systemd service gets stopped on shutdown
+In-Reply-To: <d4c4afc8-0cdf-9d4d-a784-5d7b28f6cfa7@proxmox.com>
+References: <20171002122636.20879-1-t.lamprecht@proxmox.com>
+	<b910924e-d7a9-73f9-32a6-3422ec992a5c@redhat.com>
+	<d4c4afc8-0cdf-9d4d-a784-5d7b28f6cfa7@proxmox.com>
+Message-ID: <38193cff-6520-a3b0-1e1e-c6d34fb2ab63@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a781b1c1788461595f382918bb1fc210d248d444
-Commit:        a781b1c1788461595f382918bb1fc210d248d444
-Parent:        3ae8adce928d4ce6ef36c87c2a0bb8aa737346b8
-Author:        Thomas Lamprecht <t.lamprecht@proxmox.com>
-AuthorDate:    Thu Oct 5 12:52:15 2017 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Oct 5 13:01:55 2017 +0200
+On 10/03/2017 05:14 PM, Thomas Lamprecht wrote:
+> On 10/03/2017 03:12 PM, Peter Rajnoha wrote:
+>> On 10/02/2017 02:26 PM, Thomas Lamprecht wrote:
+>>> diff --git a/scripts/dm_event_systemd_red_hat.service.in b/scripts/dm_event_systemd_red_hat.service.in
+>>> index 7c607aaf2..a3284c810 100644
+>>> --- a/scripts/dm_event_systemd_red_hat.service.in
+>>> +++ b/scripts/dm_event_systemd_red_hat.service.in
+>>> @@ -4,6 +4,8 @@ Documentation=man:dmeventd(8)
+>>>  Requires=dm-event.socket
+>>>  After=dm-event.socket
+>>>  Before=local-fs-pre.target
+>>> +Before=shutdown.target
+>>> +Conflicts=shutdown.target
+>>>  DefaultDependencies=no
+>>>  
+>>
+>> Hi!
+>>
+>> Yes, we should be able to make cleaner ordering of these services. By
+>> design, the dm-event.service is supposed to be stopped after all the
+>> monitoring clients command dmeventd to unmonitor particular devices
+>> belonging to a subsystem (like LVM with "vgchange --monitor n" that is
+>> part of lvm2-monitor.service).
+>>
+>> At this moment, we just let the dmeventd to get stopped/killed when the
+>> last SIGTERM signal is sent to all remaining processes on shutdown. But
+>> I agree it would be cleaner to do this as part of proper "service stop"
+>> action for dm-event.service (that would be executed as part of
+>> Conflicts: shutdown.target which you reference in your patch).
+>>
+>> Unfortunately, there's a bug which we need to fix first for this to work
+>> correctly, I've filed it here:
+>> https://bugzilla.redhat.com/show_bug.cgi?id=1498080
+>>
+> 
+> I'm running in exactly this bug for a while now quite consistently,
+> this was the cause for my initial investigation and also this patch.
+> 
+The bug is now fixed:
 
-dmeventd: ensure systemd service gets stopped on shutdown
+  https://www.redhat.com/archives/lvm-devel/2017-October/msg00004.html
 
-Add these for dmeventd systemd unit (dm-event.service):
+So I've pushed your patched too:
 
-  Before: shutdown.target
-  Conflicts: shutdown.target
+  https://www.redhat.com/archives/lvm-devel/2017-October/msg00006.html
 
-This will cause the dmeventd to be properly stopped at shutdown (after
-all the dmeventd clients unregistered their devices from monitoring)
-with dm-event.service's stop action (there's no direct action defined
-for the "stop" so systemd sends SIGTERM instead).
+Thanks.
 
-Before, we let dmeventd to get killed only as part of the very last
-SIGTERM/SIGKILL for all the remaining processes late in the shutdown
-sequence so we may have missed some logs if dmeventd encountered an
-error during its shutdown (logging facilities are already off at this
-late time in shutdown sequence).
-
-Ref: https://www.redhat.com/archives/lvm-devel/2017-October/msg00000.html
----
- scripts/dm_event_systemd_red_hat.service.in |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
-
-diff --git a/scripts/dm_event_systemd_red_hat.service.in b/scripts/dm_event_systemd_red_hat.service.in
-index 7c607aa..4924d39 100644
---- a/scripts/dm_event_systemd_red_hat.service.in
-+++ b/scripts/dm_event_systemd_red_hat.service.in
-@@ -3,7 +3,8 @@ Description=Device-mapper event daemon
- Documentation=man:dmeventd(8)
- Requires=dm-event.socket
- After=dm-event.socket
--Before=local-fs-pre.target
-+Before=local-fs-pre.target shutdown.target
-+Conflicts=shutdown.target
- DefaultDependencies=no
- 
- [Service]
+-- 
+Peter
 
 
