@@ -1,96 +1,85 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Fri, 6 Oct 2017 17:30:51 -0400
-Subject: v2_02_175 annotated tag has been created
-Message-ID: <201710062130.v96LUpIq026946@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 6 Oct 2017 18:10:25 -0400
+Subject: master - man: regenerate
+Message-ID: <201710062210.v96MAP26031563@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=79177d1c89d99596d612e79e2b689336dd57cd26
-Commit:        79177d1c89d99596d612e79e2b689336dd57cd26
-Parent:        0000000000000000000000000000000000000000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f005a6e7922d9a95eadfbd433714c80301eba794
+Commit:        f005a6e7922d9a95eadfbd433714c80301eba794
+Parent:        a994fc5e50d2090dcf209f508696551ce0f5b35a
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    2017-10-06 21:12 +0000
+AuthorDate:    Fri Oct 6 23:10:02 2017 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: 2017-10-06 21:12 +0000
+CommitterDate: Fri Oct 6 23:10:02 2017 +0100
 
-annotated tag: v2_02_175 has been created
-	    at 79177d1c89d99596d612e79e2b689336dd57cd26 (tag)
-       tagging 73b72b8331949a1af778ad34491de3c7663c107f (commit)
-      replaces v2_02_174
+man: regenerate
 
-Release 2.02.175.
+---
+ man/lvconvert.8_pregen |   10 ++++++++--
+ man/pvscan.8_pregen    |    7 +++----
+ 2 files changed, 11 insertions(+), 6 deletions(-)
 
-A small release with an assortment of fixes.
-
-Also note that we do not intend to develop lvm2app or the python bindings any
-further, and would like any users to move towards the D-Bus interface.
-(Reference: https://github.com/lvmteam/lvm2/issues/1 )
-
-48 files changed, 712 insertions(+), 194 deletions(-)
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.14 (GNU/Linux)
-
-iEYEABECAAYFAlnX8qcACgkQIoGRwVZ+LBfDMwCfVMlyP3W3510chWCuDHzCjmED
-McoAni9FgeEsWxBxupz3b/G7/1dCRLjs
-=KwpA
------END PGP SIGNATURE-----
-
-Alasdair G Kergon (5):
-      kernel: Refresh dm-ioctl.h
-      dmsetup: Process -S to filter input device lists.
-      vgsplit: Fix intermediate metadata corruption.
-      vgmerge: Fix intermediate metadata corruption
-      pre-release
-
-David Teigland (7):
-      revert tidy: prefer not using else after return
-      lvcreate: use cmd defs to deny unspported lockd cases
-      man pvscan: just write --activate in description
-      toollib: fix parentheses in assignment + comparison
-      lvmlockd: activate mirror LVs in shared mode with cmirrord
-      pvmove: require LV name in a shared VG
-      improve error messages when command rules fail
-
-Heinz Mauelshagen (1):
-      raid: enhance conversion rejection message
-
-Marian Csontos (5):
-      liblvm: Deprecate library and bindings
-      liblvm: Add deprecation warning to configure
-      configure: Update configure
-      configure: Add warning for D-Bus w/o notifications
-      pvmove: Change error message
-
-Peter Rajnoha (6):
-      blkdeactivate: fix --{dm,lvm,mpath}options option name recognition
-      blkdeactivate: fix blkdeactivate regression with failing DM/MD devs deactivation
-      blkdeactivate: add blkdeactivate -r wait option to wait for MD resync/recovery/reshape
-      blk-availability: use blkdeactivate -r wait in blk-availability systemd service/initscript
-      blkdeactivate: also try to unmount /boot on blkdeactivate -u if on top of supported device
-      blkdeactivate: cleanup
-
-Thomas Lamprecht (1):
-      dmeventd: ensure systemd service gets stopped on shutdown
-
-Tony Asleson (6):
-      lvmdbusd: Fix hang in MThreadRunner
-      lvmdbusd: Ensure vg_uuid is present
-      lvmdbusd: Improve args comparison
-      lvmdbusd: Main thread exception logging
-      lvmdbusd: Give threads names
-      lvmdbusd: thread stacks dump support
-
-Zdenek Kabelac (8):
-      lvconvert: repair supports poometadatespare switch
-      lvconvert: support repair of cache/cachepool
-      libdm: fix parentheses in assignment + comparison
-      tests: check for free space in test dir
-      tests: repair of cachepool
-      tests: use portable df output
-      dmeventd: schedule exit on break
-      fsadm: add --help
+diff --git a/man/lvconvert.8_pregen b/man/lvconvert.8_pregen
+index 93a8b27..fb2d869 100644
+--- a/man/lvconvert.8_pregen
++++ b/man/lvconvert.8_pregen
+@@ -753,10 +753,12 @@ Merge COW snapshot LV into its origin.
+ 
+ Replace failed PVs in a raid or mirror LV. 
+ .br
+-Repair a thin pool.
++Repair a thin pool. 
++.br
++Repair a cache pool.
+ .br
+ .P
+-\fBlvconvert\fP \fB--repair\fP \fILV\fP\fI_thinpool_mirror_raid\fP
++\fBlvconvert\fP \fB--repair\fP \fILV\fP\fI_thinpool_cache_cachepool_mirror_raid\fP
+ .br
+ .RS 4
+ .ad l
+@@ -767,6 +769,10 @@ Repair a thin pool.
+ [    \fB--usepolicies\fP ]
+ .ad b
+ .br
++.ad l
++[    \fB--poolmetadataspare\fP \fBy\fP|\fBn\fP ]
++.ad b
++.br
+ [ COMMON_OPTIONS ]
+ .RE
+ .br
+diff --git a/man/pvscan.8_pregen b/man/pvscan.8_pregen
+index 4927fcb..ebd155f 100644
+--- a/man/pvscan.8_pregen
++++ b/man/pvscan.8_pregen
+@@ -76,8 +76,7 @@ When event-driven system services detect a new LVM device, the first step
+ is to automatically scan and cache the metadata from the device.  This is
+ done by pvscan --cache.  A second step is to automatically activate LVs
+ that are present on the new device.  This auto-activation is done by the
+-same pvscan --cache command when the option '-a|--activate ay' is
+-included.
++same pvscan --cache command when the option --activate ay is included.
+ 
+ Auto-activation of VGs or LVs can be enabled/disabled using:
+ .br
+@@ -92,11 +91,11 @@ When this setting is undefined, all LVs are auto-activated (when lvm is
+ fully integrated with the event-driven system services.)
+ 
+ When a VG or LV is not auto-activated, traditional activation using
+-vgchange or lvchange -a|--activate is needed.
++vgchange or lvchange --activate is needed.
+ .IP \[bu] 2
+ pvscan auto-activation can be only done in combination with --cache.
+ .IP \[bu] 2
+-Auto-activation is designated by the "a" argument in '-a|--activate ay'.
++Auto-activation is designated by the "a" argument in --activate ay.
+ This is meant to distinguish system generated commands from explicit user
+ commands, although it can be used in any activation command.  Whenever it
+ is used, the auto_activation_volume_list is applied.
 
 
