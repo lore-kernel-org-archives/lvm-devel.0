@@ -1,67 +1,204 @@
-From: Thomas Lamprecht <t.lamprecht@proxmox.com>
-Date: Thu, 5 Oct 2017 13:10:36 +0200
-Subject: [RFC] dmeventd: ensure systemd service gets stopped on shutdown
-In-Reply-To: <38193cff-6520-a3b0-1e1e-c6d34fb2ab63@redhat.com>
-References: <20171002122636.20879-1-t.lamprecht@proxmox.com>
-	<b910924e-d7a9-73f9-32a6-3422ec992a5c@redhat.com>
-	<d4c4afc8-0cdf-9d4d-a784-5d7b28f6cfa7@proxmox.com>
-	<38193cff-6520-a3b0-1e1e-c6d34fb2ab63@redhat.com>
-Message-ID: <7e4079e3-2580-8329-3aae-52033b04027b@proxmox.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Thu, 5 Oct 2017 21:21:34 -0400
+Subject: master - vgmerge: Fix intermediate metadata corruption
+Message-ID: <201710060121.v961LYRu009702@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/05/2017 01:04 PM, Peter Rajnoha wrote:
-> On 10/03/2017 05:14 PM, Thomas Lamprecht wrote:
->> On 10/03/2017 03:12 PM, Peter Rajnoha wrote:
->>> On 10/02/2017 02:26 PM, Thomas Lamprecht wrote:
->>>> diff --git a/scripts/dm_event_systemd_red_hat.service.in b/scripts/dm_event_systemd_red_hat.service.in
->>>> index 7c607aaf2..a3284c810 100644
->>>> --- a/scripts/dm_event_systemd_red_hat.service.in
->>>> +++ b/scripts/dm_event_systemd_red_hat.service.in
->>>> @@ -4,6 +4,8 @@ Documentation=man:dmeventd(8)
->>>>  Requires=dm-event.socket
->>>>  After=dm-event.socket
->>>>  Before=local-fs-pre.target
->>>> +Before=shutdown.target
->>>> +Conflicts=shutdown.target
->>>>  DefaultDependencies=no
->>>>  
->>>
->>> Hi!
->>>
->>> Yes, we should be able to make cleaner ordering of these services. By
->>> design, the dm-event.service is supposed to be stopped after all the
->>> monitoring clients command dmeventd to unmonitor particular devices
->>> belonging to a subsystem (like LVM with "vgchange --monitor n" that is
->>> part of lvm2-monitor.service).
->>>
->>> At this moment, we just let the dmeventd to get stopped/killed when the
->>> last SIGTERM signal is sent to all remaining processes on shutdown. But
->>> I agree it would be cleaner to do this as part of proper "service stop"
->>> action for dm-event.service (that would be executed as part of
->>> Conflicts: shutdown.target which you reference in your patch).
->>>
->>> Unfortunately, there's a bug which we need to fix first for this to work
->>> correctly, I've filed it here:
->>> https://bugzilla.redhat.com/show_bug.cgi?id=1498080
->>>
->>
->> I'm running in exactly this bug for a while now quite consistently,
->> this was the cause for my initial investigation and also this patch.
->>
-> The bug is now fixed:
-> 
->   https://www.redhat.com/archives/lvm-devel/2017-October/msg00004.html
-> 
-> So I've pushed your patched too:
-> 
->   https://www.redhat.com/archives/lvm-devel/2017-October/msg00006.html
-> 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=486ed108481cfbe4336f0fa590cbae251188ecc6
+Commit:        486ed108481cfbe4336f0fa590cbae251188ecc6
+Parent:        a781b1c1788461595f382918bb1fc210d248d444
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Oct 6 02:12:42 2017 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Oct 6 02:20:45 2017 +0100
 
-Thanks, perfect! 
+vgmerge: Fix intermediate metadata corruption
 
+vgmerge suffers from a similar problem to the one fixed in commit
+8146548d25e9104f0d530d943290d448c1994c0a ("vgsplit: Fix intermediate
+metadata corruption.")
+
+When merging, splitting or renaming VGs, use a new PV status flag
+PV_MOVED_VG to mark the PVs that hold metadata with the old VG name and
+use this to provide PV-level granularity instead of incorrectly assuming
+all PVs in the VG are the same.
+---
+ WHATS_NEW                        |    3 ++-
+ lib/format_text/flags.c          |    1 +
+ lib/format_text/format-text.c    |   15 +++++++++------
+ lib/metadata/metadata-exported.h |    3 ++-
+ lib/metadata/metadata.c          |    6 ++++++
+ tools/vgmerge.c                  |    5 +++++
+ 6 files changed, 25 insertions(+), 8 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0cdd398..bba813d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,7 +1,8 @@
+ Version 2.02.175 - 
+ ======================================
+   Use --help with blockdev when checking for --getsize64 support in fsadm.
+-  Fix metadata corruption in vgsplit intermediate state.
++  Fix metadata corruption in vgsplit and vgmerge intermediate states.
++  Add PV_MOVED_VG PV status flag to mark PVs moving between VGs.
+   Require LV name with pvmove in a shared VG.
+   Allow shared active mirror LVs with lvmlockd, dlm, and cmirrord.
+   Support lvconvert --repair with cache and cachepool volumes.
+diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
+index 156d542..51acc46 100644
+--- a/lib/format_text/flags.c
++++ b/lib/format_text/flags.c
+@@ -48,6 +48,7 @@ static const struct flag _pv_flags[] = {
+ 	{EXPORTED_VG, "EXPORTED", STATUS_FLAG},
+ 	{MISSING_PV, "MISSING", COMPATIBLE_FLAG},
+ 	{MISSING_PV, "MISSING", STATUS_FLAG},
++	{PV_MOVED_VG, NULL, 0},
+ 	{UNLABELLED_PV, NULL, 0},
+ 	{0, NULL, 0}
+ };
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index c359c8a..3e1ca19 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -609,14 +609,17 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 	struct mda_header *mdah;
+ 	struct pv_list *pvl;
+ 	int r = 0;
+-       uint64_t new_wrap = 0, old_wrap = 0, new_end;
++	uint64_t new_wrap = 0, old_wrap = 0, new_end;
+ 	int found = 0;
+ 	int noprecommit = 0;
++	const char *old_vg_name = NULL;
+ 
+ 	/* Ignore any mda on a PV outside the VG. vgsplit relies on this */
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		if (pvl->pv->dev == mdac->area.dev) {
+ 			found = 1;
++			if (pvl->pv->status & PV_MOVED_VG)
++				old_vg_name = vg->old_name;
+ 			break;
+ 		}
+ 	}
+@@ -630,8 +633,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area)))
+ 		goto_out;
+ 
+-	rlocn = _find_vg_rlocn(&mdac->area, mdah,
+-			vg->old_name ? vg->old_name : vg->name, &noprecommit);
++	rlocn = _find_vg_rlocn(&mdac->area, mdah, old_vg_name ? : vg->name, &noprecommit);
+ 	mdac->rlocn.offset = _next_rlocn_offset(rlocn, mdah);
+ 
+ 	if (!fidtc->raw_metadata_buf &&
+@@ -719,11 +721,14 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
+ 	int r = 0;
+ 	int found = 0;
+ 	int noprecommit = 0;
++	const char *old_vg_name = NULL;
+ 
+ 	/* Ignore any mda on a PV outside the VG. vgsplit relies on this */
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		if (pvl->pv->dev == mdac->area.dev) {
+ 			found = 1;
++			if (pvl->pv->status & PV_MOVED_VG)
++				old_vg_name = vg->old_name;
+ 			break;
+ 		}
+ 	}
+@@ -734,9 +739,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
+ 	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area)))
+ 		goto_out;
+ 
+-	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah,
+-				     vg->old_name ? vg->old_name : vg->name,
+-				     &noprecommit))) {
++	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, old_vg_name ? : vg->name, &noprecommit))) {
+ 		mdah->raw_locns[0].offset = 0;
+ 		mdah->raw_locns[0].size = 0;
+ 		mdah->raw_locns[0].checksum = 0;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 92b38de..4a8c519 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -84,6 +84,7 @@
+ #define CONVERTING		UINT64_C(0x0000000000400000)	/* LV */
+ 
+ #define MISSING_PV		UINT64_C(0x0000000000800000)	/* PV */
++#define PV_MOVED_VG		UINT64_C(0x4000000000000000)	/* PV - Moved to a new VG */
+ #define PARTIAL_LV		UINT64_C(0x0000000001000000)	/* LV - derived flag, not
+ 							   written out in metadata*/
+ 
+@@ -146,7 +147,7 @@
+ #define LV_RESHAPE		UINT64_C(0x1000000000000000)    /* Ongoing reshape (number of stripes, stripesize or raid algorithm change):
+ 								   used as SEGTYPE_FLAG to prevent activation on old runtime */
+ #define LV_RESHAPE_DATA_OFFSET	UINT64_C(0x2000000000000000)    /* LV reshape flag data offset (out of place reshaping) */
+-/* Next unused flag:		UINT64_C(0x4000000000000000)    */
++/* Next unused flag:		UINT64_C(0x8000000000000000)    */
+ 
+ /* Format features flags */
+ #define FMT_SEGMENTS		0x00000001U	/* Arbitrary segment params? */
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index bbbf7d0..c50d579 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -520,6 +520,8 @@ int vg_rename(struct cmd_context *cmd, struct volume_group *vg,
+ 				  pv_dev_name(pvl->pv));
+ 			return 0;
+ 		}
++                /* Mark the PVs that still hold metadata with the old VG name */
++                pvl->pv->status |= PV_MOVED_VG;
+ 	}
+ 
+ 	return 1;
+@@ -3616,6 +3618,7 @@ static int _vg_commit_mdas(struct volume_group *vg)
+ int vg_commit(struct volume_group *vg)
+ {
+ 	int cache_updated = 0;
++	struct pv_list *pvl;
+ 
+ 	if (!lvmcache_vgname_is_locked(vg->name)) {
+ 		log_error(INTERNAL_ERROR "Attempt to write new VG metadata "
+@@ -3631,11 +3634,14 @@ int vg_commit(struct volume_group *vg)
+ 		/* Instruct remote nodes to upgrade cached metadata. */
+ 		if (!remote_commit_cached_metadata(vg))
+ 			stack; // FIXME: What should we do?
++
+ 		/*
+ 		 * We need to clear old_name after a successful commit.
+ 		 * The volume_group structure could be reused later.
+ 		 */
+ 		vg->old_name = NULL;
++	        dm_list_iterate_items(pvl, &vg->pvs)
++			pvl->pv->status &= ~PV_MOVED_VG;
+ 
+ 		/* This *is* the original now that it's commited. */
+ 		release_vg(vg->vg_committed);
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index d49e4e1..86c6a48 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -111,6 +111,8 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 		del_pvl_from_vgs(vg_from, pvl);
+ 		add_pvl_to_vgs(vg_to, pvl);
+ 		pvl->pv->vg_name = dm_pool_strdup(cmd->mem, vg_to->name);
++		/* Mark the VGs that still hold metadata for the old VG */
++		pvl->pv->status |= PV_MOVED_VG;
+ 	}
+ 
+ 	/* Fix up LVIDs */
+@@ -168,6 +170,9 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 	vg_to->extent_count += vg_from->extent_count;
+ 	vg_to->free_count += vg_from->free_count;
+ 
++	/* Flag up that some PVs have moved from another VG */
++	vg_to->old_name = vg_from->name;
++
+ 	/* store it on disks */
+ 	log_verbose("Writing out updated volume group");
+ 	if (!vg_write(vg_to) || !vg_commit(vg_to))
 
 
