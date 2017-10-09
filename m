@@ -1,40 +1,48 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 9 Oct 2017 10:03:58 -0400
-Subject: master - raid: fix validation check for raid0 segment data_offset member
-Message-ID: <201710091403.v99E3whc025569@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 9 Oct 2017 10:15:34 -0400
+Subject: master - raid: cleanup raid4/5/6/10 validation check
+Message-ID: <201710091415.v99EFYsZ027715@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=44275c763c9c628152095aee9c99a8e078fc44d6
-Commit:        44275c763c9c628152095aee9c99a8e078fc44d6
-Parent:        5f13e33d541f7af77f586ac55edfed336ad8dcc1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a639d81445a00974c5ccfd877a197adf5607b22
+Commit:        3a639d81445a00974c5ccfd877a197adf5607b22
+Parent:        44275c763c9c628152095aee9c99a8e078fc44d6
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Oct 9 15:21:51 2017 +0200
+AuthorDate:    Mon Oct 9 16:13:45 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Oct 9 16:03:35 2017 +0200
+CommitterDate: Mon Oct 9 16:13:45 2017 +0200
 
-raid: fix validation check for raid0 segment data_offset member
+raid: cleanup raid4/5/6/10 validation check
 
-Commit 2f754b73ffdaa95af4a6d703e31b76d4efbf7a36 missed one.
 ---
- lib/metadata/merge.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/merge.c |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
 
 diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index 5017cf1..711e7e7 100644
+index 711e7e7..9462a36 100644
 --- a/lib/metadata/merge.c
 +++ b/lib/metadata/merge.c
-@@ -119,7 +119,7 @@ static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
- 		raid_seg_error_val("non-zero min recovery rate", seg->min_recovery_rate);
- 	if (seg->max_recovery_rate)
- 		raid_seg_error_val("non-zero max recovery rate", seg->max_recovery_rate);
--	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset)
-+	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset > 1)
- 		raid_seg_error_val("data_offset", seg->data_offset);
- }
+@@ -169,11 +169,13 @@ static void _check_raid45610_seg(struct lv_segment *seg, int *error_count)
+ 	_check_raid_region_recovery(seg, error_count);
+ 	/* END: checks applying to any raid4/5/6/10 */
  
+-	if (seg->lv->status & LV_RESHAPE_DATA_OFFSET) {
+-		if (seg->data_offset > 1 && (seg->data_offset & (seg->lv->vg->extent_size - 1)))
++	if (seg->data_offset > 1) {
++		if (seg->lv->status & LV_RESHAPE_DATA_OFFSET) {
++			if (seg->data_offset & (seg->lv->vg->extent_size - 1))
++				raid_seg_error_val("data_offset", seg->data_offset);
++		} else
+ 			raid_seg_error_val("data_offset", seg->data_offset);
+-	} else if (seg->data_offset)
+-		raid_seg_error_val("data_offset", seg->data_offset);
++	}
+ 
+ 	/* Specific checks per raid level */
+ 	if (seg_is_raid4(seg) ||
 
 
