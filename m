@@ -1,95 +1,66 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Mon, 9 Oct 2017 14:48:46 -0400
-Subject: master - thin: Improve overprovisioning and repair warnings.
-Message-ID: <201710091848.v99ImkSc004018@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Thomas Bechtold <thomasbechtold@jpberlin.de>
+Date: Tue, 10 Oct 2017 10:42:58 +0200
+Subject: [PATCH] config: Enable hosttags by default
+Message-ID: <20171010084258.4694-1-thomasbechtold@jpberlin.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=22789563dec6d470a48e728305e6e0a92ff92a9f
-Commit:        22789563dec6d470a48e728305e6e0a92ff92a9f
-Parent:        3a639d81445a00974c5ccfd877a197adf5607b22
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Oct 9 19:48:00 2017 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Oct 9 19:48:00 2017 +0100
+From: Thomas Bechtold <tbechtold@suse.com>
 
-thin: Improve overprovisioning and repair warnings.
-
+There is currently no way to modify the lvm configuration on a
+specific host without modifiying lvm.conf first due to the current
+default config.
+This is bad for configuration management systems (Chef, Salt, Ansible,
+...) because changing the lvm configuration needs to modify lvm.conf
+which overrides the distro default config then with a template
+provided by the config-mgmt-system.
+Enabling hosttags improves the situation because config-mgmt-systems
+can simply drop a file in /etc/lvm/lvm_$(uname -n).conf without
+modifying /etc/lvm/lvm.conf first.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/thin_manip.c |    9 ++++++---
- tools/lvconvert.c         |    9 +++++----
- 3 files changed, 12 insertions(+), 7 deletions(-)
+ conf/example.conf.in       | 2 +-
+ lib/commands/toolcontext.c | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 7899365..4314c69 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.176 -
- ===================================
-+  Improve thin pool overprovisioning and repair warning messages.
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index b5b0e6af1..4dc89b51c 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -2092,7 +2092,7 @@ dmeventd {
+ 	# Create a host tag using the machine name.
+ 	# The machine name is nodename returned by uname(2).
+ 	# This configuration option has an automatic default value.
+-	# hosttags = 0
++	# hosttags = 1
  
- Version 2.02.175 - 6th October 2017
- ===================================
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index bd2d2c3..3dfbcc1 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -365,16 +365,19 @@ int pool_check_overprovisioning(const struct logical_volume *lv)
+ 	# Configuration section tags/<tag>.
+ 	# Replace this subsection name with a custom tag name.
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 39b300a78..09c75862b 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1863,7 +1863,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 	cmd->handles_unknown_segments = 0;
+ 	cmd->independent_metadata_areas = 0;
+ 	cmd->ignore_clustered_vgs = 0;
+-	cmd->hosttags = 0;
++	cmd->hosttags = 1;
+ 	dm_list_init(&cmd->arg_value_groups);
+ 	dm_list_init(&cmd->formats);
+ 	dm_list_init(&cmd->segtypes);
+@@ -2137,7 +2137,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
  
- 	if (sz != UINT64_C(~0)) {
- 		log_warn("WARNING: Sum of all thin volume sizes (%s) exceeds the "
--			 "size of thin pool%s%s%s (%s)!",
-+			 "size of thin pool%s%s%s (%s).",
- 			 display_size(cmd, thinsum),
- 			 more_pools ? "" : " ",
- 			 more_pools ? "s" : display_lvname(pool_lv),
- 			 txt,
- 			 (sz > 0) ? display_size(cmd, sz) : "no free space in volume group");
-+		if (max_threshold > 99 || !min_percent)
-+			log_print_unless_silent("WARNING: You have not turned on protection against thin pools running out of space.");
- 		if (max_threshold > 99)
--			log_print_unless_silent("For thin pool auto extension activation/thin_pool_autoextend_threshold should be below 100.");
-+			log_print_unless_silent("WARNING: Set activation/thin_pool_autoextend_threshold below 100 to trigger automatic extension of thin pools before they get full.");
- 		if (!min_percent)
--			log_print_unless_silent("For thin pool auto extension activation/thin_pool_autoextend_percent should be above 0.");
-+			log_print_unless_silent("WARNING: Set activation/thin_pool_autoextend_percent above 0 to specify by how much to extend thin pools reaching the threshold.");
-+		/* FIXME Also warn if there isn't sufficient free space for one pool extension to occur? */
- 	}
+ 	cmd->initialized.config = 0;
  
- 	return 1;
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 77d9174..28909dd 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2272,7 +2272,7 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
- 	argv[++args] = NULL;
+-	cmd->hosttags = 0;
++	cmd->hosttags = 1;
  
- 	if (pool_is_active(pool_lv)) {
--		log_error("Only inactive pool can be repaired.");
-+		log_error("Active pools cannot be repaired.  Use lvchange -an first.");
- 		return 0;
- 	}
+ 	cmd->lib_dir = NULL;
  
-@@ -2377,11 +2377,12 @@ deactivate_pmslv:
- 	if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
- 		return_0;
- 
--	log_warn("WARNING: If everything works, remove %s volume.",
-+	log_warn("WARNING: LV %s holds a backup of the unrepaired metadata. Use lvremove when no longer required.",
- 		 display_lvname(mlv));
- 
--	log_warn("WARNING: Use pvmove command to move %s on the best fitting PV.",
--		 display_lvname(first_seg(pool_lv)->metadata_lv));
-+	if (dm_list_size(&pool_lv->vg->pvs) > 1)
-+		log_warn("WARNING: New metadata LV %s might use different PVs.  Move it with pvmove if required.",
-+			 display_lvname(first_seg(pool_lv)->metadata_lv));
- 
- 	return 1;
- }
+-- 
+2.14.2
 
 
