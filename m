@@ -1,278 +1,561 @@
 From: Ondrej Kozina <okozina@sourceware.org>
-Date: Tue, 10 Oct 2017 08:19:29 -0400
-Subject: master - fsadm: add support for crypt devices
-Message-ID: <201710101219.v9ACJTuV031199@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 10 Oct 2017 08:19:40 -0400
+Subject: master - test: add fsadm crypt test
+Message-ID: <201710101219.v9ACJeUG031207@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=30293baaa0f87efeab81f01f9c5d73b26869babf
-Commit:        30293baaa0f87efeab81f01f9c5d73b26869babf
-Parent:        22789563dec6d470a48e728305e6e0a92ff92a9f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=27ef503b35daf63b5cf8c1af3b009abe61335759
+Commit:        27ef503b35daf63b5cf8c1af3b009abe61335759
+Parent:        30293baaa0f87efeab81f01f9c5d73b26869babf
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Fri Oct 6 16:28:35 2017 +0200
+AuthorDate:    Tue Oct 10 13:15:10 2017 +0200
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Tue Oct 10 14:18:57 2017 +0200
+CommitterDate: Tue Oct 10 14:19:07 2017 +0200
 
-fsadm: add support for crypt devices
+test: add fsadm crypt test
 
 ---
- WHATS_NEW        |    1 +
- man/fsadm.8_main |    8 +++-
- scripts/fsadm.sh |  142 ++++++++++++++++++++++++++++++++++++++++++++++++++++--
- 3 files changed, 146 insertions(+), 5 deletions(-)
+ test/shell/fsadm-crypt.sh |  529 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 529 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4314c69..9140858 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.176 -
- ===================================
-+  Support for encrypted devices in fsadm.
-   Improve thin pool overprovisioning and repair warning messages.
- 
- Version 2.02.175 - 6th October 2017
-diff --git a/man/fsadm.8_main b/man/fsadm.8_main
-index c46033c..799cb25 100644
---- a/man/fsadm.8_main
-+++ b/man/fsadm.8_main
-@@ -65,6 +65,11 @@ Be more verbose.
- Answer "yes" at any prompts.
- .
- .HP
-+.BR -c | --cryptresize
-+.br
-+Resize dm-crypt mapping together with filesystem detected on the device. The dm-crypt device must be recognizable by cryptsetup(8).
-+.
-+.HP
- .BR \fInew_size [ B | K | M | G | T | P | E ]
- .br
- Absolute number of filesystem blocks to be in the filesystem,
-@@ -111,4 +116,5 @@ Defaults to "\fI/dev\fP" and must be an absolute path.
- .BR resize_reiserfs (8),
- .BR xfs_info (8),
- .BR xfs_growfs (8),
--.BR xfs_check (8)
-+.BR xfs_check (8),
-+.BR cryptsetup (8)
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 753da2b..da687fd 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -17,7 +17,7 @@
- # Script for resizing devices (usable for LVM resize)
- #
- # Needed utilities:
--#   mount, umount, grep, readlink, blockdev, blkid, fsck, xfs_check
-+#   mount, umount, grep, readlink, blockdev, blkid, fsck, xfs_check, cryptsetup
- #
- # ext2/ext3/ext4: resize2fs, tune2fs
- # reiserfs: resize_reiserfs, reiserfstune
-@@ -56,6 +56,7 @@ FSCK=fsck
- XFS_CHECK=xfs_check
- # XFS_REPAIR -n is used when XFS_CHECK is not found
- XFS_REPAIR=xfs_repair
-+CRYPTSETUP=cryptsetup
- 
- # user may override lvm location by setting LVM_BINARY
- LVM=${LVM_BINARY:-lvm}
-@@ -101,6 +102,7 @@ tool_usage() {
- 	echo "    -f | --force        Bypass sanity checks"
- 	echo "    -n | --dry-run      Print commands without running them"
- 	echo "    -l | --lvresize     Resize given device (if it is LVM device)"
-+	echo "    -c | --cryptresize  Resize given crypt device"
- 	echo "    -y | --yes          Answer \"yes\" at any prompts"
- 	echo
- 	echo "  new_size - Absolute number of filesystem blocks to be in the filesystem,"
-@@ -152,7 +154,7 @@ cleanup() {
- 		export _FSADM_YES _FSADM_EXTOFF
- 		unset FSADM_RUNNING
- 		test -n "$LVM_BINARY" && PATH=$_SAVEPATH
--		dry exec "$LVM" lvresize $VERB $FORCE -r -L"${NEWSIZE}b" "$VOLUME_ORIG"
-+		dry exec "$LVM" lvresize $VERB $FORCE -r -L"${NEWSIZE_ORIG}b" "$VOLUME_ORIG"
- 	fi
- 
- 	# error exit status for break
-@@ -196,7 +198,7 @@ decode_major_minor() {
- # detect filesystem on the given device
- # dereference device name if it is symbolic link
- detect_fs() {
--	VOLUME_ORIG=$1
-+	test -n "$VOLUME_ORIG" || VOLUME_ORIG=$1
- 	VOLUME=${1/#"${DM_DEV_DIR}/"/}
- 	VOLUME=$("$READLINK" $READLINK_E "$DM_DEV_DIR/$VOLUME")
- 	test -n "$VOLUME" || error "Cannot get readlink \"$1\"."
-@@ -520,6 +522,131 @@ resize_xfs() {
- 	fi
- }
- 
-+# Find active LUKS device on original volume
-+# 1) look for LUKS device with well-known UUID format (CRYPT-LUKS[12]-<uuid>-<dmname>)
-+# 2) the dm-crypt device has to be on top of original device (dont't support detached LUKS headers)
-+detect_luks_device() {
-+	local _LUKS_VERSION=
-+	local _LUKS_UUID=
+diff --git a/test/shell/fsadm-crypt.sh b/test/shell/fsadm-crypt.sh
+new file mode 100644
+index 0000000..7f7f3a1
+--- /dev/null
++++ b/test/shell/fsadm-crypt.sh
+@@ -0,0 +1,529 @@
++#!/usr/bin/env bash
 +
-+	CRYPT_NAME=""
-+	CRYPT_DATA_OFFSET=""
++# Copyright (C) 2008-2017 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+	_LUKS_VERSION=$($CRYPTSETUP luksDump $VOLUME 2> /dev/null | $GREP "Version:")
++test_description='Exercise fsadm filesystem resize on crypt devices'
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
 +
-+	if [ -z $_LUKS_VERSION ]; then
-+		verbose "Failed to parse LUKS version on volume \"$VOLUME\""
-+		return
-+	fi
++. lib/inittest
 +
-+	_LUKS_VERSION=${_LUKS_VERSION//[Version:[:space:]]/}
++aux prepare_vg 1 200
 +
-+	_LUKS_UUID=$($CRYPTSETUP luksDump $VOLUME 2> /dev/null | $GREP "UUID:")
++# set to "skip" to avoid testing given fs and test warning result
++# i.e. check_reiserfs=skip
++check_ext2=
++check_ext3=
++check_xfs=
++check_reiserfs=
++check_cryptsetup=
++DROP_SYMLINK=
 +
-+	if [ -z $_LUKS_UUID ]; then
-+		verbose "Failed to parse LUKS UUID on volume \"$VOLUME\""
-+		return
-+	fi
++CRYPT_NAME="$PREFIX-tcrypt"
++CRYPT_DEV="$DM_DEV_DIR/mapper/$CRYPT_NAME"
 +
-+	_LUKS_UUID="CRYPT-LUKS$_LUKS_VERSION-${_LUKS_UUID//[UID:[:space:]-]/}-*"
++CRYPT_NAME2="$PREFIX-tcrypt2"
++CRYPT_DEV2="$DM_DEV_DIR/mapper/$CRYPT_NAME2"
 +
-+	CRYPT_NAME=$(dmsetup info -c --noheadings -S "UUID=~$_LUKS_UUID&&segments=1&&devnos_used='$MAJOR:$MINOR'" -o name)
-+	test -z "$CRYPT_NAME" || CRYPT_DATA_OFFSET=$(dmsetup table $CRYPT_NAME | cut -d ' ' -f 8)
++CRYPT_NAME_PLAIN="$PREFIX-tcryptp"
++CRYPT_DEV_PLAIN="$DM_DEV_DIR/mapper/$CRYPT_NAME_PLAIN"
++
++FORMAT_PARAMS="-i1"
++
++which cryptsetup || check_cryptsetup=${check_cryptsetup:-cryptsetup}
++
++which mkfs.ext2 || check_ext2=${check_ext2:-mkfs.ext2}
++which mkfs.ext3 || check_ext3=${check_ext3:-mkfs.ext3}
++which fsck.ext3 || check_ext3=${check_ext3:-fsck.ext3}
++which mkfs.xfs || check_xfs=${check_xfs:-mkfs.xfs}
++which xfs_check || {
++	which xfs_repair || check_xfs=${check_xfs:-xfs_repair}
 +}
++grep xfs /proc/filesystems || check_xfs=${check_xfs:-no_xfs}
 +
-+######################################
-+# Resize active LUKS device
-+# - LUKS must be active for fs resize
-+######################################
-+resize_luks() {
-+	local NEWFSIZE=
-+	local NEWCBLOCKCOUNT=
-+	local NAME=""
-+	local SHRINK=0
++which mkfs.reiserfs || check_reiserfs=${check_reiserfs:-mkfs.reiserfs}
++which reiserfsck || check_reiserfs=${check_reiserfs:-reiserfsck}
++grep reiserfs /proc/filesystems || check_reiserfs=${check_reiserfs:-no_reiserfs}
 +
-+	detect_luks_device
++vg_lv=$vg/$lv1
++vg_lv2=$vg/${lv1}bar
++vg_lv3=$vg/${lv1}plain
++dev_vg_lv="$DM_DEV_DIR/$vg_lv"
++dev_vg_lv2="$DM_DEV_DIR/$vg_lv2"
++dev_vg_lv3="$DM_DEV_DIR/$vg_lv3"
++mount_dir="mnt"
++# for recursive call
++LVM_BINARY=$(which lvm)
++export LVM_BINARY
 +
-+	# LUKS device must be active and mapped over volume where detected
-+	if [ -z "$CRYPT_NAME" -o -z "$CRYPT_DATA_OFFSET" ]; then
-+		error "Can not find active LUKS device. Unlock \"$VOLUME\" volume first."
-+	fi
++test ! -d "$mount_dir" && mkdir "$mount_dir"
 +
-+	NAME=$CRYPT_NAME
-+
-+	verbose "Found active LUKS device \"$NAME\" for volume \"$VOLUME\""
-+
-+	decode_size "$1" 512
-+
-+	if [ $((NEWSIZE % 512)) -gt 0 ]; then
-+		error "New size is not sector alligned"
-+	fi
-+
-+	NEWCBLOCKCOUNT=$((NEWBLOCKCOUNT - CRYPT_DATA_OFFSET))
-+	NEWFSIZE=$(( NEWCBLOCKCOUNT * 512))
-+
-+	VOLUME="/dev/mapper/$NAME"
-+	detect_device_size
-+
-+	test "$DEVSIZE" -le "$NEWSIZE" || SHRINK=1
-+
-+	if [ $SHRINK -eq 1 ]; then
-+		# shrink fs on LUKS device first
-+		resize "/dev/mapper/$NAME" "$NEWFSIZE"b
-+	fi
-+
-+	# resize LUKS device
-+	dry $CRYPTSETUP resize $NAME --size $NEWCBLOCKCOUNT || error "Failed to resize active LUKS device"
-+
-+	if [ $SHRINK -eq 0 ]; then
-+		# grow fs on top of LUKS device
-+		resize "/dev/mapper/$NAME" "$NEWFSIZE"b
++crypt_close() {
++	cryptsetup close "$1"
++	if [ "$?" -eq 0 -a -n "$DROP_SYMLINK" ]; then
++		rm -f "$DM_DEV_DIR/mapper/$1"
 +	fi
 +}
 +
-+#################################
-+# Resize active crypt device
-+#  (on direct user request only)
-+#################################
-+resize_crypt() {
-+	local CRYPT_TYPE=
-+	local TMP=
-+	local SHRINK=0
-+
-+	which $CRYPTSETUP > /dev/null 2>&1 || error "$CRYPTSETUP utility required to resize LUKS volume"
-+
-+	CRYPT_TYPE=$($CRYPTSETUP status $1 2> /dev/null | $GREP "type:")
-+
-+	test -n "$CRYPT_TYPE" || error "$CRYPTSETUP failed to detect device type on $1."
-+
-+	CRYPT_TYPE=${CRYPT_TYPE##*[[:space:]]}
-+
-+	TMP=$NEWSIZE
-+
-+	decode_size "$2" 512
-+	detect_device_size
-+
-+	if [ "$DEVSIZE" -gt "$NEWSIZE" ]; then
-+		SHRINK=1
-+	fi
-+
-+	NEWSIZE=$TMP
-+
-+	if [ $SHRINK -eq 1 -a -z "$3" ]; then
-+		return
-+	fi
-+
-+	# going to resize, drop the request flag
-+	unset DO_CRYPTRESIZE
-+
-+	case "$CRYPT_TYPE" in
-+	 LUKS[12]|PLAIN)
-+		dry $CRYPTSETUP resize "$1" --size $NEWBLOCKCOUNT || error "Failed to resize device $1"
-+		;;
-+	 *)
-+		error "Unsupported crypt type \"$CRYPT_TYPE\""
-+	esac
++cleanup_mounted_and_teardown()
++{
++	umount "$mount_dir" || true
++	crypt_close $CRYPT_NAME > /dev/null 2>&1 || true
++	crypt_close $CRYPT_NAME2 > /dev/null 2>&1 || true
++	crypt_close $CRYPT_NAME_PLAIN > /dev/null 2>&1 || true
++	aux teardown
 +}
 +
- ####################
- # Resize filesystem
- ####################
-@@ -531,14 +658,19 @@ resize() {
- 	# if the size parameter is missing use device size
- 	#if [ -n "$NEWSIZE" -a $NEWSIZE <
- 	test -z "$NEWSIZE" && NEWSIZE=${DEVSIZE}b
-+	test -n "$NEWSIZE_ORIG" || NEWSIZE_ORIG=$NEWSIZE
- 	IFS=$NL
-+	test -z "$DO_CRYPTRESIZE" || resize_crypt "$VOLUME_ORIG" "$NEWSIZE_ORIG"
- 	case "$FSTYPE" in
- 	  "ext3"|"ext2"|"ext4") resize_ext $NEWSIZE ;;
- 	  "reiserfs") resize_reiser $NEWSIZE ;;
- 	  "xfs") resize_xfs $NEWSIZE ;;
-+	  "crypto_LUKS")
-+		which $CRYPTSETUP > /dev/null 2>&1 || error "$CRYPTSETUP utility required to resize LUKS volume"
-+		resize_luks $NEWSIZE ;;
- 	  *) error "Filesystem \"$FSTYPE\" on device \"$VOLUME\" is not supported by this tool." ;;
- 	esac || error "Resize $FSTYPE failed."
--	cleanup 0
-+	test -z "$DO_CRYPTRESIZE" || resize_crypt "$VOLUME_ORIG" "$NEWSIZE_ORIG" do_shrink
- }
- 
- ####################################
-@@ -641,6 +773,7 @@ do
- 	  "-e"|"--ext-offline") EXTOFF=1 ;;
- 	  "-y"|"--yes") YES="-y" ;;
- 	  "-l"|"--lvresize") DO_LVRESIZE=1 ;;
-+	  "-c"|"--cryptresize") DO_CRYPTRESIZE=1 ;;
- 	  "check") CHECK=$2 ; shift ;;
- 	  "resize") RESIZE=$2 ; NEWSIZE=$3 ; shift 2 ;;
- 	  *) error "Wrong argument \"$1\". (see: $TOOL --help)"
-@@ -656,6 +789,7 @@ if [ -n "$CHECK" ]; then
- elif [ -n "$RESIZE" ]; then
- 	export FSADM_RUNNING="fsadm"
- 	resize "$RESIZE" "$NEWSIZE"
-+	cleanup 0
- else
- 	error "Missing command. (see: $TOOL --help)"
- fi
++fscheck_ext3()
++{
++	fsck.ext3 -p -F -f "$1"
++}
++
++fscheck_xfs()
++{
++	if which xfs_repair ; then
++		xfs_repair -n "$1"
++	else
++		xfs_check "$1"
++	fi
++}
++
++fscheck_reiserfs()
++{
++	reiserfsck --check -p -f "$1" </dev/null
++}
++
++check_missing()
++{
++	local t
++	eval "t=\$check_$1"
++	test -z "$t" && return 0
++	test "$t" = skip && return 1
++	echo "WARNING: fsadm test skipped $1 tests, $t tool is missing."
++	# trick to get test listed with warning
++	# should false;
++	return 1
++}
++
++get_crypt_kname() {
++	lsblk -r -n -o KNAME,NAME | grep "$1" | cut -d ' ' -f 1
++}
++
++
++# $1 device
++# $2 pass
++crypt_format() {
++	echo "$2" | cryptsetup luksFormat "$FORMAT_PARAMS" "$1"
++}
++
++
++# $1 device
++# $2 pass
++# $3 name
++crypt_open() {
++	local kname=
++	echo "$2" | cryptsetup open "$1" "$3"
++	test -L "$DM_DEV_DIR/mapper/$3" || {
++		kname=$(get_crypt_kname $3)
++		ln -s "$DM_DEV_DIR/$kname" "$3"
++		DROP_SYMLINK=1
++	}
++}
++
++# $1 data device
++# $2 pass
++# $3 name
++# $4 header
++crypt_open_detached() {
++	local kname=
++	echo "$2" | cryptsetup open --header "$4" "$1" "$3"
++	test -L "$DM_DEV_DIR/mapper/$3" || {
++		kname=$(get_crypt_kname $3)
++		ln -s "$DM_DEV_DIR/$kname" "$3"
++		DROP_SYMLINK=1
++	}
++}
++
++# $1 device
++# $2 pass
++# $3 name
++crypt_open_plain() {
++	local kname=
++	echo "$2" | cryptsetup open --type plain "$1" "$3"
++	test -L "$DM_DEV_DIR/mapper/$3" || {
++		kname=$(get_crypt_kname $3)
++		ln -s "$DM_DEV_DIR/$kname" "$3"
++		DROP_SYMLINK=1
++	}
++}
++
++# $1 device
++# $2 type
++create_crypt_device()
++{
++	crypt_format "$dev_vg_lv" "aaa"
++	crypt_open "$dev_vg_lv" "aaa" "$CRYPT_NAME"
++
++	crypt_format "$dev_vg_lv2" "bbb"
++}
++
++check_missing cryptsetup || skip
++
++# Test for block sizes != 1024 (rhbz #480022)
++lvcreate -n $lv1 -L25M $vg
++lvcreate -n ${lv1}bar -L35M $vg
++lvcreate -n ${lv1}plain -L35M $vg
++create_crypt_device
++trap 'cleanup_mounted_and_teardown' EXIT
++
++
++# $1 LVM backend (vg/lv name)
++# $2 LVM backend device (/dev/vg/lv)
++# $3 active dm-crypt device (/dev/mapper/some_name )
++test_ext2_resize() {
++	mkfs.ext2 -b4096 -j "$3"
++
++	fsadm --lvresize resize $1 30M
++	# Fails - not enough space for 4M fs
++	not fsadm -y --lvresize resize "$2" 4M
++	lvresize -L+10M -r $1
++	lvreduce -L10M -r $1
++
++	fscheck_ext3 "$3"
++	mount "$3" "$mount_dir"
++	not fsadm -y --lvresize resize $1 4M
++	echo n | not lvresize -L4M -r -n $1
++	lvresize -L+20M -r -n $1
++	umount "$mount_dir"
++	fscheck_ext3 "$3"
++}
++
++test_ext3_resize() {
++	mkfs.ext3 -b4096 -j "$3"
++
++	fsadm --lvresize resize $1 30M
++	# Fails - not enough space for 4M fs
++	not fsadm -y --lvresize resize "$2" 4M
++	lvresize -L+10M -r $1
++	lvreduce -L10M -r $1
++
++	fscheck_ext3 "$3"
++	mount "$3" "$mount_dir"
++	lvresize -L+10M -r $1
++
++	not fsadm -y --lvresize resize $1 4M
++	echo n | not lvresize -L4M -r -n $1
++	lvresize -L+20M -r -n $1
++	lvresize -L-10M -r -y $1
++	umount "$mount_dir"
++}
++
++test_xfs_resize() {
++	mkfs.xfs -l internal,size=1000b -f "$3"
++
++	fsadm --lvresize resize $1 30M
++	# Fails - not enough space for 4M fs
++	lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++
++	fscheck_xfs "$3"
++	mount "$3" "$mount_dir"
++	lvresize -L+10M -r -n $1
++	umount "$mount_dir"
++	fscheck_xfs "$3"
++}
++
++test_reiserfs_resize() {
++	mkfs.reiserfs -s 513 -f "$3"
++
++	fsadm --lvresize resize $1 30M
++	lvresize -L+10M -r $1
++	fsadm --lvresize -y resize $1 10M
++
++	fscheck_reiserfs "$3"
++	mount "$3" "$mount_dir"
++
++	fsadm -y --lvresize resize $1 30M
++	umount "$mount_dir"
++	fscheck_reiserfs "$3"
++}
++
++# $1 LVM backend (vg/lv name)
++# $2 LVM backend device (/dev/vg/lv)
++# $3 active dm-crypt device (/dev/mapper/some_name )
++# $4 active dm-crypt name ( some_name )
++test_ext2_inactive() {
++	crypt_open "$2" "bbb" "$4"
++	mkfs.ext2 -b4096 -j "$3"
++	crypt_close "$4"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++
++	crypt_open "$2" "bbb" "$4"
++	fscheck_ext3 "$3"
++	crypt_close "$4"
++}
++
++test_ext3_inactive() {
++	crypt_open "$2" "bbb" "$4"
++	mkfs.ext3 -b4096 -j "$3"
++	crypt_close "$4"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++
++	crypt_open "$2" "bbb" "$4"
++	fscheck_ext3 "$3"
++	crypt_close "$4"
++}
++
++test_xfs_inactive() {
++	crypt_open "$2" "bbb" "$4"
++	mkfs.xfs -l internal,size=1000b -f "$3"
++	crypt_close "$4"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++
++	crypt_open "$2" "bbb" "$4"
++	fscheck_xfs "$3"
++	crypt_close "$4"
++}
++
++test_reiserfs_inactive() {
++	crypt_open "$2" "bbb" "$4"
++	mkfs.reiserfs -s 513 -f "$3"
++	crypt_close "$4"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++
++	crypt_open "$2" "bbb" "$4"
++	fscheck_reiserfs "$3"
++	crypt_close "$4"
++}
++
++# $1 LVM backend (vg/lv name)
++# $2 LVM backend device (/dev/vg/lv)
++# $3 active dm-crypt device (/dev/mapper/some_name )
++# $4 active dm-crypt name ( some_name )
++test_ext2_plain() {
++	mkfs.ext2 -b4096 -j "$3"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	fscheck_ext3 "$3"
++
++	fsadm --cryptresize resize $3 30M
++	fsadm --cryptresize resize $3 35M
++	fscheck_ext3 "$3"
++
++	mount "$3" "$mount_dir"
++	not fsadm -y --cryptresize resize $3 4M
++	umount "$mount_dir"
++	fscheck_ext3 "$3"
++
++	crypt_close "$4"
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	crypt_open_plain "$2" "ccc" "$4"
++	fscheck_ext3 "$3"
++}
++
++test_ext3_plain() {
++	mkfs.ext3 -b4096 -j "$3"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	fscheck_ext3 "$3"
++
++	fsadm --cryptresize resize $3 30M
++	fsadm --cryptresize resize $3 35M
++	fscheck_ext3 "$3"
++
++	mount "$3" "$mount_dir"
++	not fsadm -y --cryptresize resize $3 4M
++	umount "$mount_dir"
++	fscheck_ext3 "$3"
++
++	crypt_close "$4"
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	crypt_open_plain "$2" "ccc" "$4"
++	fscheck_ext3 "$3"
++}
++
++test_xfs_plain() {
++	mkfs.xfs -l internal,size=1000b -f "$3"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	fscheck_xfs "$3"
++
++	lvresize -f -L+10M $1
++	fsadm --cryptresize resize $3 40M
++	# no shrink support in xfs
++	not fsadm --cryptresize resize $3 35M
++	fscheck_xfs "$3"
++
++	crypt_close "$4"
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	crypt_open_plain "$2" "ccc" "$4"
++	fscheck_xfs "$3"
++
++	lvresize -f -L35M $1
++}
++
++test_reiserfs_plain() {
++	mkfs.reiserfs -s 513 -f "$3"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L-10M -r $1
++	fscheck_reiserfs "$3"
++
++	fsadm --cryptresize resize $3 30M
++	fsadm --cryptresize resize $3 35M
++	fscheck_reiserfs "$3"
++
++	crypt_close "$4"
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	crypt_open_plain "$2" "ccc" "$4"
++	fscheck_reiserfs "$3"
++}
++
++# $1 LVM header backend (vg/lv name)
++# $2 LVM hedaer backend device (/dev/vg/lv)
++# $3 active dm-crypt device (/dev/mapper/some_name )
++# $4 active dm-crypt name ( some_name )a
++test_ext2_detached() {
++	mkfs.ext2 -b4096 -j "$3"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	fscheck_ext3 "$3"
++}
++
++test_ext3_detached() {
++	mkfs.ext3 -b4096 -j "$3"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++	fscheck_ext3 "$3"
++}
++
++test_xfs_detached() {
++	mkfs.xfs -l internal,size=1000b -f "$3"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++
++	fscheck_xfs "$3"
++}
++
++test_reiserfs_detached() {
++	mkfs.reiserfs -s 513 -f "$3"
++
++	not fsadm --lvresize resize $1 30M
++	not lvresize -L+10M -r $1
++	not lvreduce -L10M -r $1
++
++	fscheck_reiserfs "$3"
++}
++
++if check_missing ext2; then
++	test_ext2_resize "$vg_lv" "$dev_vg_lv" "$CRYPT_DEV"
++	lvresize -f -L25M $vg_lv
++	cryptsetup resize $CRYPT_NAME
++
++	test_ext2_inactive "$vg_lv2" "$dev_vg_lv2" "$CRYPT_DEV2" "$CRYPT_NAME2"
++	lvresize -f -L35M $vg_lv2
++
++	crypt_open_plain "$dev_vg_lv3" "ccc" "$CRYPT_NAME_PLAIN"
++	test_ext2_plain "$vg_lv3" "$dev_vg_lv3" "$CRYPT_DEV_PLAIN" "$CRYPT_NAME_PLAIN"
++	crypt_close "$CRYPT_NAME_PLAIN"
++
++	crypt_open_detached "$dev_vg_lv3" "bbb" "$CRYPT_NAME2" "$dev_vg_lv2"
++	test_ext2_detached "$vg_lv2" "$dev_vg_lv2" "$CRYPT_DEV2" "$CRYPT_NAME2"
++	crypt_close "$CRYPT_NAME2"
++fi
++
++if check_missing ext3; then
++	test_ext3_resize "$vg_lv" "$dev_vg_lv" "$CRYPT_DEV"
++	lvresize -f -L25M $vg_lv
++	cryptsetup resize $CRYPT_NAME
++
++	test_ext3_inactive "$vg_lv2" "$dev_vg_lv2" "$CRYPT_DEV2" "$CRYPT_NAME2"
++	lvresize -f -L35M $vg_lv2
++
++	crypt_open_plain "$dev_vg_lv3" "ccc" "$CRYPT_NAME_PLAIN"
++	test_ext3_plain "$vg_lv3" "$dev_vg_lv3" "$CRYPT_DEV_PLAIN" "$CRYPT_NAME_PLAIN"
++	crypt_close "$CRYPT_NAME_PLAIN"
++
++	crypt_open_detached "$dev_vg_lv3" "bbb" "$CRYPT_NAME2" "$dev_vg_lv2"
++	test_ext3_detached "$vg_lv2" "$dev_vg_lv2" "$CRYPT_DEV2" "$CRYPT_NAME2"
++	crypt_close "$CRYPT_NAME2"
++fi
++
++if check_missing xfs; then
++	test_xfs_resize "$vg_lv" "$dev_vg_lv" "$CRYPT_DEV"
++	lvresize -f -L25M $vg_lv
++	cryptsetup resize $CRYPT_NAME
++
++	test_xfs_inactive "$vg_lv2" "$dev_vg_lv2" "$CRYPT_DEV2" "$CRYPT_NAME2"
++	lvresize -f -L35M $vg_lv2
++
++	crypt_open_plain "$dev_vg_lv3" "ccc" "$CRYPT_NAME_PLAIN"
++	test_xfs_plain "$vg_lv3" "$dev_vg_lv3" "$CRYPT_DEV_PLAIN" "$CRYPT_NAME_PLAIN"
++	crypt_close "$CRYPT_NAME_PLAIN"
++
++	crypt_open_detached "$dev_vg_lv3" "bbb" "$CRYPT_NAME2" "$dev_vg_lv2"
++	test_xfs_detached "$vg_lv2" "$dev_vg_lv2" "$CRYPT_DEV2" "$CRYPT_NAME2"
++	crypt_close "$CRYPT_NAME2"
++fi
++
++if check_missing reiserfs; then
++	test_reiserfs_resize "$vg_lv" "$dev_vg_lv" "$CRYPT_DEV"
++	lvresize -f -L25M $vg_lv
++	cryptsetup resize $CRYPT_NAME
++
++	test_reiserfs_inactive "$vg_lv2" "$dev_vg_lv2" "$CRYPT_DEV2" "$CRYPT_NAME2"
++	lvresize -f -L35M $vg_lv2
++
++	crypt_open_plain "$dev_vg_lv3" "ccc" "$CRYPT_NAME_PLAIN"
++	test_reiserfs_plain "$vg_lv3" "$dev_vg_lv3" "$CRYPT_DEV_PLAIN" "$CRYPT_NAME_PLAIN"
++	crypt_close "$CRYPT_NAME_PLAIN"
++
++	crypt_open_detached "$dev_vg_lv3" "bbb" "$CRYPT_NAME2" "$dev_vg_lv2"
++	test_reiserfs_detached "$vg_lv2" "$dev_vg_lv2" "$CRYPT_DEV2" "$CRYPT_NAME2"
++	crypt_close "$CRYPT_NAME2"
++fi
++
++crypt_close "$CRYPT_NAME"
++
++vgremove -ff $vg
 
 
