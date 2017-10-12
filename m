@@ -1,44 +1,51 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 12 Oct 2017 04:55:32 -0400
-Subject: master - test: "Disable" lvconvert-raid-reshape
-Message-ID: <201710120855.v9C8tW8p003328@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Thu, 12 Oct 2017 11:43:48 -0400
+Subject: master - lvcreate: allow 100%FREE creation of "--type mirror" to work
+Message-ID: <201710121543.v9CFhmYl002259@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ae55b1b20a4539be2f9702f5dbf882cf50267a62
-Commit:        ae55b1b20a4539be2f9702f5dbf882cf50267a62
-Parent:        71261ae3747f3810a1cf279098e149bc0f8dd833
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Oct 12 10:53:22 2017 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Oct 12 10:55:02 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cf13a30eaaf9c9d013f03bfcba1c1bc4973ad5d5
+Commit:        cf13a30eaaf9c9d013f03bfcba1c1bc4973ad5d5
+Parent:        ae55b1b20a4539be2f9702f5dbf882cf50267a62
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Thu Oct 12 17:43:24 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Oct 12 17:43:24 2017 +0200
 
-test: "Disable" lvconvert-raid-reshape
+lvcreate: allow 100%FREE creation of "--type mirror" to work
 
-...when running from ramdisk. This causes test failure, so it is kept on
-eyes.
+Fixes the following case with 3PVs and 3 legs "mirror" LV:
+
+# lvcreate -l100%FREE --type mirror -m2 vg3
+  Insufficient free space for log allocation for logical volume .
+  Unable to allocate extents for mirror log.
+
+Related: rhbz1269533
 ---
- test/shell/lvconvert-raid-reshape.sh |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape.sh b/test/shell/lvconvert-raid-reshape.sh
-index c93d79b..b07e1ce 100644
---- a/test/shell/lvconvert-raid-reshape.sh
-+++ b/test/shell/lvconvert-raid-reshape.sh
-@@ -15,6 +15,11 @@ SKIP_WITH_LVMPOLLD=1
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 719fcba..15a08aa 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7701,6 +7701,13 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 		       lp->pvh, lp->alloc, lp->approx_alloc))
+ 		return_NULL;
  
- . lib/inittest
- 
-+if [[ "$TESTDIR" == /dev/shm/* ]]; then
-+	echo "Disabled. This tests is permanently causing /dev/shm exhaustion. RHBZ#1501145"
-+	false
-+fi
++	/* rhbz1269533: allow for 100%FREE allocation to work with "mirror" and a disk log */
++	if (segtype_is_mirror(create_segtype) &&
++	    lp->log_count &&
++	    !vg->free_count &&
++	    lv->le_count > 1)
++		lv_reduce(lv, 1);
 +
- which mkfs.ext4 || skip
- aux have_raid 1 12 0 || skip
+ 	/* Unlock memory if possible */
+ 	memlock_unlock(vg->cmd);
  
 
 
