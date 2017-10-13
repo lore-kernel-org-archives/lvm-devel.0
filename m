@@ -1,39 +1,27 @@
 From: David Teigland <teigland@redhat.com>
-Date: Fri, 13 Oct 2017 10:32:55 -0500
+Date: Fri, 13 Oct 2017 10:39:38 -0500
 Subject: [RFC] lvmetad_is_disabled: check config before connecting to socket
-In-Reply-To: <20171013090842.28186-1-t.lamprecht@proxmox.com>
+In-Reply-To: <0db6e3d2-4255-297f-46e0-72e729ee5da7@redhat.com>
 References: <20171013090842.28186-1-t.lamprecht@proxmox.com>
-Message-ID: <20171013153255.GA3940@redhat.com>
+	<0db6e3d2-4255-297f-46e0-72e729ee5da7@redhat.com>
+Message-ID: <20171013153938.GB3940@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Oct 13, 2017 at 11:08:42AM +0200, Thomas Lamprecht wrote:
-> Else, lvmetad always gets started due to systemds socket auto
-> activation when executing, for example:
->  # pvscan --cache
-> as pvscan uses lvmetad_is_disabled to check if metad is disabled
-> before connecting. 
+On Fri, Oct 13, 2017 at 12:06:49PM +0200, Zdenek Kabelac wrote:
 
-> An alternative approach would be to just guard the lvmetad_is_disabled
-> call in tools/pvscan.c : 412 with the config check - and thus address
-> the FIXME mentioned there.
-> Would be maybe the less intrusive version?
+> The reason why is checked the presence for active service when lvmetad is
+> disable is - we have to print warning that  lvmetad is there, but command is
+> not going to use it/update it....
 
-When lvm.conf has use_lvmetad=0, 'pvscan --cache' should not try to
-connect to lvmetad, it should return here:
+That happens here:
 
-https://sourceware.org/git/?p=lvm2.git;a=blob;f=tools/pvscan.c;h=6581990f8afeb17f4c7f82c6f6b59fe2ed0b990b;hb=HEAD#l323
+https://sourceware.org/git/?p=lvm2.git;a=blob;f=lib/commands/toolcontext.c;h=39b300a78bbceda9f5092604be54e04f6f457584;hb=HEAD#l1706
 
-so I'm not sure it would get to line 412.
-
-This was a little complicated to get working just right in every case, so
-I wouldn't be surprised if it's still off somewhere.  There may be some
-place where we should call lvmetad_used() prior to calling
-lvmetad_is_disabled.  I'm not seeing in your message where exactly
-lvmetad_is_disabled is being called for you.
+and does not involve connecting to lvmetad.
 
 Dave
 
