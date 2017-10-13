@@ -1,80 +1,55 @@
-From: thomasbechtold@jpberlin.de <thomasbechtold@jpberlin.de>
-Date: Fri, 13 Oct 2017 07:25:17 +0200 (CEST)
-Subject: [PATCH] config: Enable hosttags by default
-In-Reply-To: <20171010084258.4694-1-thomasbechtold@jpberlin.de>
-References: <20171010084258.4694-1-thomasbechtold@jpberlin.de>
-Message-ID: <1834194360.13542.1507872318116@office.mailbox.org>
+From: Thomas Lamprecht <t.lamprecht@proxmox.com>
+Date: Fri, 13 Oct 2017 11:08:42 +0200
+Subject: [RFC] lvmetad_is_disabled: check config before connecting to socket
+Message-ID: <20171013090842.28186-1-t.lamprecht@proxmox.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Else, lvmetad always gets started due to systemds socket auto
+activation when executing, for example:
+ # pvscan --cache
+as pvscan uses lvmetad_is_disabled to check if metad is disabled
+before connecting. This is OK for systems where systemd is not used
+but for others, the systemd 'auto activation on socket connect'
+feature causes the start of lvm2-lvmetad.service which is not desired
+when disabled in the config.
 
-I filled now https://bugzilla.redhat.com/show_bug.cgi?id=1501712 for this problem/feature request.
+ref: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=826570
+Signed-off-by: Thomas Lamprecht <t.lamprecht@proxmox.com>
+---
 
-> Thomas Bechtold <thomasbechtold@jpberlin.de> hat am 10. Oktober 2017 um 10:42 geschrieben:
-> 
-> 
-> From: Thomas Bechtold <tbechtold@suse.com>
-> 
-> There is currently no way to modify the lvm configuration on a
-> specific host without modifiying lvm.conf first due to the current
-> default config.
-> This is bad for configuration management systems (Chef, Salt, Ansible,
-> ...) because changing the lvm configuration needs to modify lvm.conf
-> which overrides the distro default config then with a template
-> provided by the config-mgmt-system.
-> Enabling hosttags improves the situation because config-mgmt-systems
-> can simply drop a file in /etc/lvm/lvm_$(uname -n).conf without
-> modifying /etc/lvm/lvm.conf first.
-> ---
->  conf/example.conf.in       | 2 +-
->  lib/commands/toolcontext.c | 4 ++--
->  2 files changed, 3 insertions(+), 3 deletions(-)
-> 
-> diff --git a/conf/example.conf.in b/conf/example.conf.in
-> index b5b0e6af1..4dc89b51c 100644
-> --- a/conf/example.conf.in
-> +++ b/conf/example.conf.in
-> @@ -2092,7 +2092,7 @@ dmeventd {
->  	# Create a host tag using the machine name.
->  	# The machine name is nodename returned by uname(2).
->  	# This configuration option has an automatic default value.
-> -	# hosttags = 0
-> +	# hosttags = 1
->  
->  	# Configuration section tags/<tag>.
->  	# Replace this subsection name with a custom tag name.
-> diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-> index 39b300a78..09c75862b 100644
-> --- a/lib/commands/toolcontext.c
-> +++ b/lib/commands/toolcontext.c
-> @@ -1863,7 +1863,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
->  	cmd->handles_unknown_segments = 0;
->  	cmd->independent_metadata_areas = 0;
->  	cmd->ignore_clustered_vgs = 0;
-> -	cmd->hosttags = 0;
-> +	cmd->hosttags = 1;
->  	dm_list_init(&cmd->arg_value_groups);
->  	dm_list_init(&cmd->formats);
->  	dm_list_init(&cmd->segtypes);
-> @@ -2137,7 +2137,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
->  
->  	cmd->initialized.config = 0;
->  
-> -	cmd->hosttags = 0;
-> +	cmd->hosttags = 1;
->  
->  	cmd->lib_dir = NULL;
->  
-> -- 
-> 2.14.2
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+An alternative approach would be to just guard the lvmetad_is_disabled
+call in tools/pvscan.c : 412 with the config check - and thus address
+the FIXME mentioned there.
+Would be maybe the less intrusive version?
+
+RFC.
+
+ lib/cache/lvmetad.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 1ba844fc8..94fba8979 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -2846,6 +2846,12 @@ int lvmetad_is_disabled(struct cmd_context *cmd, const char **reason)
+ 	const char *reply_reason;
+ 	int ret = 0;
+ 
++	if (!find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
++		*reason = "the disable flag was set directly";
++		ret = 1;
++		goto out;
++	}
++
+ 	reply = daemon_send_simple(_lvmetad, "get_global_info",
+ 				   "token = %s", "skip",
+ 				   "pid = " FMTd64, (int64_t)getpid(),
+-- 
+2.11.0
+
 
 
