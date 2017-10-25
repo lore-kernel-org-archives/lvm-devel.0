@@ -1,314 +1,237 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 25 Oct 2017 16:04:37 -0400
-Subject: master - configure: improve support for sbindir path
-Message-ID: <201710252004.v9PK4bYH029357@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 25 Oct 2017 16:04:57 -0400
+Subject: master - scripts: paths update
+Message-ID: <201710252004.v9PK4vHc029369@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3f59969c3fcbff2a3bb177fc07262f1ea569e134
-Commit:        3f59969c3fcbff2a3bb177fc07262f1ea569e134
-Parent:        f32ef63b6c97fbf95568fee88aad8ef92e732c5a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=34618c2d3061e7f9f563d4c9ad9a185c77935f0e
+Commit:        34618c2d3061e7f9f563d4c9ad9a185c77935f0e
+Parent:        d809fbb541a63002214ed1d77914c7a4c7d02c60
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 25 16:49:17 2017 +0200
+AuthorDate:    Wed Oct 25 17:08:00 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Oct 25 22:02:54 2017 +0200
 
-configure: improve support for sbindir path
+scripts: paths update
 
-Introduce few more AC_SUBST vars for usage in *.in generation.
-
-In some case we want to replace i.e. $sbindir with full path
-instead of current ${exec_prefix}/sbin.
-
-This patch provides:
-
-USRSBINDIR
-SBINDIR
-DEFAULT_SYS_LOCK_DIR
-SYSCONFDIR
-
-At the same time properly use sbindir & usrsbindir with
-lvm, fsadm, clvmd from one primary definition.
+Correct usage of sbindir also for scripts so the path
+no longer needs resolving more vars like exec_prefix & prefix.
 ---
- configure    |   51 +++++++++++++++++++++++++++++++--------------------
- configure.in |   45 ++++++++++++++++++++++++++-------------------
- 2 files changed, 57 insertions(+), 39 deletions(-)
+ scripts/blk_availability_init_red_hat.in      |    8 +++-----
+ scripts/blkdeactivate.sh.in                   |   12 +++++++-----
+ scripts/clvmd_init_red_hat.in                 |   10 +++++-----
+ scripts/cmirrord_init_red_hat.in              |    6 ++++--
+ scripts/lvm2_cluster_activation_red_hat.sh.in |    2 +-
+ scripts/lvm2_lvmetad_init_red_hat.in          |    7 +++----
+ scripts/lvm2_lvmpolld_init_red_hat.in         |    7 +++----
+ scripts/lvm2_monitoring_init_red_hat.in       |   11 +++++------
+ 8 files changed, 31 insertions(+), 32 deletions(-)
 
-diff --git a/configure b/configure
-index e5f8e19..fc0a27a 100755
---- a/configure
-+++ b/configure
-@@ -643,6 +643,7 @@ LVMETAD_PIDFILE
- DMEVENTD_PIDFILE
- WRITE_INSTALL
- VALGRIND_POOL
-+USRSBINDIR
- USE_TRACKING
- UDEV_HAS_BUILTIN_BLKID
- UDEV_RULE_EXEC_DETECTION
-@@ -656,8 +657,10 @@ TESTING
- STATIC_LINK
- STATICDIR
- SNAPSHOTS
-+SYSCONFDIR
- SELINUX_PC
- SELINUX_LIBS
-+SBINDIR
- REPLICATORS
- READLINE_LIBS
- RT_LIBS
-@@ -710,6 +713,7 @@ DEFAULT_USE_LVMLOCKD
- DEFAULT_USE_LVMPOLLD
- DEFAULT_USE_LVMETAD
- DEFAULT_USE_BLKID_WIPING
-+DEFAULT_SYS_LOCK_DIR
- DEFAULT_SYS_DIR
- DEFAULT_SPARSE_SEGTYPE
- DEFAULT_RUN_DIR
-@@ -8238,9 +8242,14 @@ $as_echo "$ac_cv_flag_HAVE_FULL_RELRO" >&6; }
+diff --git a/scripts/blk_availability_init_red_hat.in b/scripts/blk_availability_init_red_hat.in
+index 73d52ac..52399fb 100644
+--- a/scripts/blk_availability_init_red_hat.in
++++ b/scripts/blk_availability_init_red_hat.in
+@@ -31,14 +31,12 @@
  
- ################################################################################
+ . /etc/init.d/functions
  
--if test "$prefix" = NONE; then
--  datarootdir=${ac_default_prefix}/share
--fi
-+
-+################################################################################
-+test "$exec_prefix" = NONE -a "$prefix" = NONE && exec_prefix=""
-+
-+test "x$prefix" = xNONE && prefix=$ac_default_prefix
-+# Let make expand exec_prefix.
-+test "x$exec_prefix" = xNONE && exec_prefix='${prefix}'
-+
- 
- ################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking file owner" >&5
-@@ -12890,7 +12899,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
-   $as_echo_n "(cached) " >&6
- else
- 
--	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
-+	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
- 	  test "$am_cv_pathless_PYTHON" = none && break
- 	  prog="import sys
- # split strings by '.' and convert to numeric.  Append some zeros
-@@ -13458,7 +13467,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
-   $as_echo_n "(cached) " >&6
- else
- 
--	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
-+	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
- 	  test "$am_cv_pathless_PYTHON" = none && break
- 	  prog="import sys
- # split strings by '.' and convert to numeric.  Append some zeros
-@@ -14014,9 +14023,6 @@ fi
- 
- 
- ################################################################################
--test "$exec_prefix" = NONE -a "$prefix" = NONE && exec_prefix=""
+-sbindir=@sbindir@
+ script=blkdeactivate
+-options="-u -l wholevg -m disablequeueing -r wait"
 -
--################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
- $as_echo_n "checking for dlopen in -ldl... " >&6; }
- if ${ac_cv_lib_dl_dlopen+:} false; then :
-@@ -15397,28 +15403,25 @@ _ACEOF
+-LOCK_FILE="/var/lock/subsys/blk-availability"
  
- fi
++sbindir=@SBINDIR@
++options="-u -l wholevg -m disablequeueing -r wait"
  
-+SYSCONFDIR="$(eval echo $(eval echo $sysconfdir))"
+-rtrn=1
++LOCK_FILE="@DEFAULT_LOCK_DIR@/subsys/blk-availability"
  
--lvm_exec_prefix=$exec_prefix
--test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$prefix
--test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$ac_default_prefix
--LVM_PATH="$lvm_exec_prefix/sbin/lvm"
-+SBINDIR="$(eval echo $(eval echo $sbindir))"
-+LVM_PATH="$SBINDIR/lvm"
+ case "$1" in
+   start)
+diff --git a/scripts/blkdeactivate.sh.in b/scripts/blkdeactivate.sh.in
+index daa53df..4680f16 100644
+--- a/scripts/blkdeactivate.sh.in
++++ b/scripts/blkdeactivate.sh.in
+@@ -31,14 +31,16 @@ shopt -s dotglob nullglob
  
- cat >>confdefs.h <<_ACEOF
- #define LVM_PATH "$LVM_PATH"
- _ACEOF
+ TOOL=blkdeactivate
  
- 
--clvmd_prefix=$ac_default_prefix
--test "$prefix" != NONE && clvmd_prefix=$prefix
--CLVMD_PATH="$clvmd_prefix/sbin/clvmd"
-+USRSBINDIR="$(eval echo $(eval echo $usrsbindir))"
-+CLVMD_PATH="$USRSBINDIR/clvmd"
- 
- cat >>confdefs.h <<_ACEOF
- #define CLVMD_PATH "$CLVMD_PATH"
- _ACEOF
- 
- 
--
--FSADM_PATH="$lvm_exec_prefix/sbin/fsadm"
-+FSADM_PATH="$SBINDIR/fsadm"
- 
- cat >>confdefs.h <<_ACEOF
- #define FSADM_PATH "$FSADM_PATH"
-@@ -15448,7 +15451,7 @@ if test "$BUILD_DMEVENTD" = yes; then
- if test "${with_dmeventd_path+set}" = set; then :
-   withval=$with_dmeventd_path; DMEVENTD_PATH=$withval
- else
--  DMEVENTD_PATH="$lvm_exec_prefix/sbin/dmeventd"
-+  DMEVENTD_PATH="$SBINDIR/dmeventd"
- fi
- 
- 
-@@ -15529,6 +15532,11 @@ cat >>confdefs.h <<_ACEOF
- _ACEOF
- 
- 
-+# Select default system locking dir, prefer /run/lock over /var/lock
-+DEFAULT_SYS_LOCK_DIR="$RUN_DIR/lock"
-+test -d "$DEFAULT_SYS_LOCK_DIR" || DEFAULT_SYS_LOCK_DIR="/var/lock"
+-DEV_DIR='/dev'
+-SYS_BLK_DIR='/sys/block'
++sbindir="@SBINDIR@"
 +
-+# Support configurable locking subdir for lvm
++DEV_DIR="/dev"
++SYS_BLK_DIR="/sys/block"
  
- # Check whether --with-default-locking-dir was given.
- if test "${with_default_locking_dir+set}" = set; then :
-@@ -15536,8 +15544,7 @@ if test "${with_default_locking_dir+set}" = set; then :
- else
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for default lock directory" >&5
- $as_echo_n "checking for default lock directory... " >&6; }
--	     DEFAULT_LOCK_DIR="$RUN_DIR/lock/lvm"
--	     test -d "$RUN_DIR/lock" || DEFAULT_LOCK_DIR="/var/lock/lvm"
-+	     DEFAULT_LOCK_DIR="$DEFAULT_SYS_LOCK_DIR/lvm"
- 	     { $as_echo "$as_me:${as_lineno-$LINENO}: result: $DEFAULT_LOCK_DIR" >&5
- $as_echo "$DEFAULT_LOCK_DIR" >&6; }
- fi
-@@ -15766,6 +15773,10 @@ _ACEOF
+ MOUNTPOINT="/bin/mountpoint"
+ UMOUNT="/bin/umount"
+-DMSETUP="@sbindir@/dmsetup"
+-LVM="@sbindir@/lvm"
+-MDADM="@sbindir@/mdadm"
++DMSETUP="$sbindir/dmsetup"
++LVM="$sbindir/lvm"
++MDADM="$sbindir/mdadm"
+ MPATHD="/sbin/multipathd"
  
+ if "$UMOUNT" --help | grep -- "--all-targets" >"$DEV_DIR/null"; then
+diff --git a/scripts/clvmd_init_red_hat.in b/scripts/clvmd_init_red_hat.in
+index d7f3392..e5fbe04 100644
+--- a/scripts/clvmd_init_red_hat.in
++++ b/scripts/clvmd_init_red_hat.in
+@@ -20,8 +20,8 @@
  
+ DAEMON=clvmd
  
+-exec_prefix=@exec_prefix@
+-sbindir=@sbindir@
++sbindir="@SBINDIR@"
++usrsbindir="@USRSBINDIR@"
+ 
+ lvm_vgchange=${sbindir}/vgchange
+ lvm_vgs=${sbindir}/vgs
+@@ -62,7 +62,7 @@ start()
+ {
+ 	if ! rh_status_q; then
+ 		echo -n "Starting $DAEMON: "
+-		$DAEMON $CLVMDOPTS || return $?
++		"$usrsbindir/$DAEMON" $CLVMDOPTS || return $?
+ 		echo
+ 	fi
+ 
+@@ -138,7 +138,7 @@ stop()
+ 
+ reload() {
+ 	rh_status_q || exit 7
+-	action "Reloading $DAEMON configuration: " $DAEMON -R || return $?
++	action "Reloading $DAEMON configuration: " "$usrsbindir/$DAEMON" -R || return $?
+ }
+ 
+ restart() {
+@@ -149,7 +149,7 @@ restart() {
+ 
+ 	# Try to get clvmd to restart itself. This will preserve 
+ 	# exclusive LV locks
+-	action "Restarting $DAEMON: " $DAEMON -S
++	action "Restarting $DAEMON: " "$usrsbindir/$DAEMON" -S
+ 
+ 	# If that fails then do a normal stop & restart
+ 	if  [ $? != 0 ]; then
+diff --git a/scripts/cmirrord_init_red_hat.in b/scripts/cmirrord_init_red_hat.in
+index d4b7e37..7b1df06 100755
+--- a/scripts/cmirrord_init_red_hat.in
++++ b/scripts/cmirrord_init_red_hat.in
+@@ -18,7 +18,9 @@
+ 
+ DAEMON=cmirrord
+ 
+-LOCK_FILE="/var/lock/subsys/$DAEMON"
++usrsbindir="@USRSBINDIR@"
 +
-+
-+
-+
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile include/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile lib/cache_segtype/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaem
- on/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_
- red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
++LOCK_FILE="@DEFAULT_SYS_LOCK_DIR@/subsys/$DAEMON"
  
-diff --git a/configure.in b/configure.in
-index 1366dc4..7d4f5b3 100644
---- a/configure.in
-+++ b/configure.in
-@@ -191,9 +191,15 @@ AC_SUBST(HAVE_FULL_RELRO)
- ################################################################################
- dnl -- Prefix is /usr by default, the exec_prefix default is setup later
- AC_PREFIX_DEFAULT(/usr)
--if test "$prefix" = NONE; then
--  datarootdir=${ac_default_prefix}/share
--fi
-+
-+################################################################################
-+dnl -- Clear default exec_prefix - install into /sbin rather than /usr/sbin
-+test "$exec_prefix" = NONE -a "$prefix" = NONE && exec_prefix=""
-+
-+test "x$prefix" = xNONE && prefix=$ac_default_prefix
-+# Let make expand exec_prefix.
-+test "x$exec_prefix" = xNONE && exec_prefix='${prefix}'
-+
+ start()
+ {
+@@ -26,7 +28,7 @@ start()
+ 	if ! pidof $DAEMON > /dev/null 
+ 	then 
+ 		echo -n "Starting $DAEMON: "
+-		daemon $DAEMON
++		daemon "$usrsbindir/$DAEMON"
+ 		rtrn=$?
+ 		echo
+ 	fi
+diff --git a/scripts/lvm2_cluster_activation_red_hat.sh.in b/scripts/lvm2_cluster_activation_red_hat.sh.in
+index 04d2cc6..6dacf91 100644
+--- a/scripts/lvm2_cluster_activation_red_hat.sh.in
++++ b/scripts/lvm2_cluster_activation_red_hat.sh.in
+@@ -1,6 +1,6 @@
+ #!/bin/bash
  
- ################################################################################
- dnl -- Setup the ownership of the files
-@@ -1599,10 +1605,6 @@ AC_CHECK_LIB(c, canonicalize_file_name,
-     [Define to 1 if canonicalize_file_name is available.]))
+-sbindir=@sbindir@
++sbindir="@SBINDIR@"
  
- ################################################################################
--dnl -- Clear default exec_prefix - install into /sbin rather than /usr/sbin
--test "$exec_prefix" = NONE -a "$prefix" = NONE && exec_prefix=""
--
--################################################################################
- dnl -- Check for dlopen
- AC_CHECK_LIB(dl, dlopen,
- 	     [AC_DEFINE([HAVE_LIBDL], 1, [Define to 1 if dynamic libraries are available.])
-@@ -1874,20 +1876,17 @@ if test -n "$MODPROBE_CMD"; then
- 	AC_DEFINE_UNQUOTED([MODPROBE_CMD], ["$MODPROBE_CMD"], [The path to 'modprobe', if available.])
- fi
+ lvm_vgchange="${sbindir}/vgchange"
+ lvm_vgscan="${sbindir}/vgscan"
+diff --git a/scripts/lvm2_lvmetad_init_red_hat.in b/scripts/lvm2_lvmetad_init_red_hat.in
+index b2f5d50..9a6c4f8 100644
+--- a/scripts/lvm2_lvmetad_init_red_hat.in
++++ b/scripts/lvm2_lvmetad_init_red_hat.in
+@@ -35,10 +35,9 @@
  
-+SYSCONFDIR="$(eval echo $(eval echo $sysconfdir))"
+ DAEMON=lvmetad
  
--lvm_exec_prefix=$exec_prefix
--test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$prefix
--test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$ac_default_prefix
--LVM_PATH="$lvm_exec_prefix/sbin/lvm"
-+SBINDIR="$(eval echo $(eval echo $sbindir))"
-+LVM_PATH="$SBINDIR/lvm"
- AC_DEFINE_UNQUOTED(LVM_PATH, ["$LVM_PATH"], [Path to lvm binary.])
+-exec_prefix=@exec_prefix@
+-sbindir=@sbindir@
++sbindir="@SBINDIR@"
  
--clvmd_prefix=$ac_default_prefix
--test "$prefix" != NONE && clvmd_prefix=$prefix
--CLVMD_PATH="$clvmd_prefix/sbin/clvmd"
-+USRSBINDIR="$(eval echo $(eval echo $usrsbindir))"
-+CLVMD_PATH="$USRSBINDIR/clvmd"
- AC_DEFINE_UNQUOTED(CLVMD_PATH, ["$CLVMD_PATH"], [Path to clvmd binary.])
+-LOCK_FILE="/var/lock/subsys/$DAEMON"
++LOCK_FILE="@DEFAULT_SYS_LOCK_DIR@/subsys/$DAEMON"
+ PID_FILE="@LVMETAD_PIDFILE@"
  
--
--FSADM_PATH="$lvm_exec_prefix/sbin/fsadm"
-+FSADM_PATH="$SBINDIR/fsadm"
- AC_DEFINE_UNQUOTED(FSADM_PATH, ["$FSADM_PATH"], [Path to fsadm binary.])
+ rh_status() {
+@@ -52,7 +51,7 @@ rh_status_q() {
+ start()
+ {
+ 	ret=0
+-	action "Starting LVM metadata daemon:" $DAEMON || ret=$?
++	action "Starting LVM metadata daemon:" "$sbindir/$DAEMON" || ret=$?
+ 	return $ret
+ }
  
- ################################################################################
-@@ -1907,7 +1906,7 @@ if test "$BUILD_DMEVENTD" = yes; then
- 		    AC_HELP_STRING([--with-dmeventd-path=PATH],
- 				   [dmeventd path [EPREFIX/sbin/dmeventd]]),
- 		    DMEVENTD_PATH=$withval,
--		    DMEVENTD_PATH="$lvm_exec_prefix/sbin/dmeventd")
-+		    DMEVENTD_PATH="$SBINDIR/dmeventd")
- 	AC_DEFINE_UNQUOTED(DMEVENTD_PATH, ["$DMEVENTD_PATH"],
- 			   [Path to dmeventd binary.])
- fi
-@@ -1950,13 +1949,17 @@ AC_ARG_WITH(default-cache-subdir,
- AC_DEFINE_UNQUOTED(DEFAULT_CACHE_SUBDIR, ["$DEFAULT_CACHE_SUBDIR"],
- 		   [Name of default metadata cache subdirectory.])
+diff --git a/scripts/lvm2_lvmpolld_init_red_hat.in b/scripts/lvm2_lvmpolld_init_red_hat.in
+index c521955..05f8b08 100644
+--- a/scripts/lvm2_lvmpolld_init_red_hat.in
++++ b/scripts/lvm2_lvmpolld_init_red_hat.in
+@@ -37,10 +37,9 @@
  
-+# Select default system locking dir, prefer /run/lock over /var/lock
-+DEFAULT_SYS_LOCK_DIR="$RUN_DIR/lock"
-+test -d "$DEFAULT_SYS_LOCK_DIR" || DEFAULT_SYS_LOCK_DIR="/var/lock"
-+
-+# Support configurable locking subdir for lvm
- AC_ARG_WITH(default-locking-dir,
- 	    AC_HELP_STRING([--with-default-locking-dir=DIR],
- 			   [default locking directory [autodetect_lock_dir/lvm]]),
- 	    DEFAULT_LOCK_DIR=$withval,
- 	    [AC_MSG_CHECKING(for default lock directory)
--	     DEFAULT_LOCK_DIR="$RUN_DIR/lock/lvm"
--	     test -d "$RUN_DIR/lock" || DEFAULT_LOCK_DIR="/var/lock/lvm"
-+	     DEFAULT_LOCK_DIR="$DEFAULT_SYS_LOCK_DIR/lvm"
- 	     AC_MSG_RESULT($DEFAULT_LOCK_DIR)])
- AC_DEFINE_UNQUOTED(DEFAULT_LOCK_DIR, ["$DEFAULT_LOCK_DIR"],
- 		   [Name of default locking directory.])
-@@ -2051,6 +2054,7 @@ AC_SUBST(DEFAULT_RAID10_SEGTYPE)
- AC_SUBST(DEFAULT_RUN_DIR)
- AC_SUBST(DEFAULT_SPARSE_SEGTYPE)
- AC_SUBST(DEFAULT_SYS_DIR)
-+AC_SUBST(DEFAULT_SYS_LOCK_DIR)
- AC_SUBST(DEFAULT_USE_BLKID_WIPING)
- AC_SUBST(DEFAULT_USE_LVMETAD)
- AC_SUBST(DEFAULT_USE_LVMPOLLD)
-@@ -2115,8 +2119,10 @@ AC_SUBST(SACKPT_CFLAGS)
- AC_SUBST(SACKPT_LIBS)
- AC_SUBST(SALCK_CFLAGS)
- AC_SUBST(SALCK_LIBS)
-+AC_SUBST(SBINDIR)
- AC_SUBST(SELINUX_LIBS)
- AC_SUBST(SELINUX_PC)
-+AC_SUBST(SYSCONFDIR)
- AC_SUBST(SYSTEMD_LIBS)
- AC_SUBST(SNAPSHOTS)
- AC_SUBST(STATICDIR)
-@@ -2139,6 +2145,7 @@ AC_SUBST(UDEV_SYSTEMD_BACKGROUND_JOBS)
- AC_SUBST(UDEV_RULE_EXEC_DETECTION)
- AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
- AC_SUBST(USE_TRACKING)
-+AC_SUBST(USRSBINDIR)
- AC_SUBST(VALGRIND_POOL)
- AC_SUBST(WRITE_INSTALL)
- AC_SUBST(DMEVENTD_PIDFILE)
+ DAEMON=lvmpolld
+ 
+-exec_prefix=@exec_prefix@
+-sbindir=@sbindir@
++sbindir="@SBINDIR@"
+ 
+-LOCK_FILE="/var/lock/subsys/$DAEMON"
++LOCK_FILE="@DEFAULT_LOCK_DIR@/subsys/$DAEMON"
+ PID_FILE="@LVMPOLLD_PIDFILE@"
+ 
+ rh_status() {
+@@ -54,7 +53,7 @@ rh_status_q() {
+ start()
+ {
+ 	ret=0
+-	action "Starting LVM poll daemon:" $DAEMON || ret=$?
++	action "Starting LVM poll daemon:" "$sbindir/$DAEMON" || ret=$?
+ 	return $ret
+ }
+ 
+diff --git a/scripts/lvm2_monitoring_init_red_hat.in b/scripts/lvm2_monitoring_init_red_hat.in
+index de7ff0d..3b0d542 100644
+--- a/scripts/lvm2_monitoring_init_red_hat.in
++++ b/scripts/lvm2_monitoring_init_red_hat.in
+@@ -34,14 +34,13 @@
+ DAEMON=lvm2-monitor
+ DMEVENTD_DAEMON=dmeventd
+ 
+-exec_prefix=@exec_prefix@
+-sbindir=@sbindir@
++sbindir=@SBINDIR@
+ 
+-VGCHANGE=${sbindir}/vgchange
+-VGS=${sbindir}/vgs
+-LVS=${sbindir}/lvs
++VGCHANGE="$sbindir/vgchange"
++VGS="$sbindir/vgs"
++LVS="$sbindir/lvs"
+ 
+-LOCK_FILE="/var/lock/subsys/$DAEMON"
++LOCK_FILE="@DEFAULT_SYS_LOCK_DIR@/subsys/$DAEMON"
+ PID_FILE="@DMEVENTD_PIDFILE@"
+ 
+ WARN=1
 
 
