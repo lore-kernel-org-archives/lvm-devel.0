@@ -1,42 +1,50 @@
-From: Jonathan Brassow <jbrassow@sourceware.org>
-Date: Tue, 24 Oct 2017 15:07:52 -0400
-Subject: master - clean-up: Correct the comment to match the particular test case
-Message-ID: <201710241907.v9OJ7qcK005417@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Ren <zren@suse.com>
+Date: Wed, 25 Oct 2017 16:42:41 +0800
+Subject: [PATCH] clvmd: don't report error on testing connection
+Message-ID: <20171025084241.31511-1-zren@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=38f7fbac64ee8291776c168b32fbd39ce2706bfe
-Commit:        38f7fbac64ee8291776c168b32fbd39ce2706bfe
-Parent:        10c76ce35a294b3d5fc84bc8af3ff118168282d7
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Oct 24 14:06:44 2017 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Oct 24 14:06:44 2017 -0500
+In HA cluster, we have "clvm" resource agent to manage clvmd daemon.
+The agent invokes clvmd like: "clvmd -T90 -d0", which  always prints
+a scaring error message:
 
-clean-up:  Correct the comment to match the particular test case
+"""
+local socket: connect failed: No such file or directory
+"""
 
+When specifed with "-d" option, clvmd tries to check if an instance
+of the clvmd daemon is already running through a testing connection.
+The connect() will fail with this error, which is expected.
+
+I don't see the necessary to print error on testing connection, so
+remove the error.
+
+Signed-off-by: Eric Ren <zren@suse.com>
 ---
- test/shell/lvconvert-raid-status-validation.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/clvmd/clvmd.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-status-validation.sh b/test/shell/lvconvert-raid-status-validation.sh
-index 51c7048..b4140a9 100644
---- a/test/shell/lvconvert-raid-status-validation.sh
-+++ b/test/shell/lvconvert-raid-status-validation.sh
-@@ -101,9 +101,9 @@ while true; do
- 		[ "${a[7]}" = "recover" ]
- 	else
- 		# Tough to tell the INVALID case,
--		#   Before starting sync thread: "Aa X/X recover"
-+		#   Before starting sync thread: "AAa X/X recover"
- 		# from the valid case,
--		#   Just finished sync thread: "Aa X/X recover"
-+		#   Just finished sync thread: "AAa X/X recover"
- 		[ "${a[5]}" = "AAA" ]
- 		[ "${a[7]}" = "idle" ]
- 		break
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 5fbcbd7..467facb 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -2169,10 +2169,8 @@ static int check_local_clvmd(void)
+ 	}
+ 
+ 	if (connect(local_socket,(struct sockaddr *) &sockaddr,
+-		    sizeof(sockaddr))) {
+-		log_sys_error("connect", "local socket");
++		    sizeof(sockaddr)))
+ 		ret = -1;
+-	}
+ 
+ 	if (close(local_socket))
+ 		log_sys_error("close", "local socket");
+-- 
+2.10.2
 
 
