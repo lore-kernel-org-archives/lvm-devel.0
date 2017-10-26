@@ -1,39 +1,37 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 26 Oct 2017 11:25:37 -0400
-Subject: master - lvcreate: error message with dot.
-Message-ID: <201710261525.v9QFPbpF007287@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 26 Oct 2017 12:18:40 -0400
+Subject: master - WHATS_NEW: ignore stripes/stripesize on RAID takover
+Message-ID: <201710261618.v9QGIeWO016023@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=adb80816fbd95215ffc18fdfe5901abed25787c2
-Commit:        adb80816fbd95215ffc18fdfe5901abed25787c2
-Parent:        4a3884245d02bcdad41e4dd99f9201721c60158f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fdcc709ed0e5051f471ee64ac51f6c8e2ed941fc
+Commit:        fdcc709ed0e5051f471ee64ac51f6c8e2ed941fc
+Parent:        adb80816fbd95215ffc18fdfe5901abed25787c2
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Oct 26 17:25:22 2017 +0200
+AuthorDate:    Thu Oct 26 18:18:24 2017 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Oct 26 17:25:22 2017 +0200
+CommitterDate: Thu Oct 26 18:18:24 2017 +0200
 
-lvcreate: error message with dot.
+WHATS_NEW: ignore stripes/stripesize on RAID takover
 
 ---
- tools/lvcreate.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index ff57baf..09bbe10 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -643,7 +643,7 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
- 	}
- 
- 	if ((lp->nosync = arg_is_set(cmd, nosync_ARG)) && seg_is_any_raid6(lp)) {
--		log_error("nosync option prohibited on RAID6");
-+		log_error("nosync option prohibited on RAID6.");
- 		return 0;
- 	}
- 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 55e06f6..fbf8732 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.176 -
+ ===================================
++  Ignore --stripes/--stripesize on RAID takeover
+   Improve used paths for generated systemd units and init shells.
+   Disallow creation of snapshot of mirror/raid subLV (was never supported).
+   Fix regression in more advanced vgname extraction in lvconvert (2.02.169).
 
 
