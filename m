@@ -1,55 +1,98 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 26 Oct 2017 08:06:02 -0400
-Subject: master - tests: better clustering support
-Message-ID: <201710261206.v9QC62Yr008102@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Thu, 26 Oct 2017 11:16:53 -0400
+Subject: master - raid: ignore --stripes/--stripesize on takeover
+Message-ID: <201710261516.v9QFGrec006413@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b765288bf242bbbdc93ef2f76ae4d3f7bdeb5868
-Commit:        b765288bf242bbbdc93ef2f76ae4d3f7bdeb5868
-Parent:        1e80ec892615f9da897da518cb3c55261d2bd51e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 26 14:00:44 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Oct 26 14:04:58 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a3884245d02bcdad41e4dd99f9201721c60158f
+Commit:        4a3884245d02bcdad41e4dd99f9201721c60158f
+Parent:        b765288bf242bbbdc93ef2f76ae4d3f7bdeb5868
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Thu Oct 26 17:16:23 2017 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Thu Oct 26 17:16:23 2017 +0200
 
-tests: better clustering support
+raid: ignore --stripes/--stripesize on takeover
 
-Use exclusive activation for snapshot conversion since we can only
-convert exclusively active volumes.
+Converting from one raid level to another, no changes
+of stripes or stripesize can be requested because those
+are subject to reshaping.  I.e. the process requires to
+takeover first and secondly request raid algorithm,
+stripe or stripesize changes.
+
+Ignore any related changes display warninngs
+and proceed with the takeover.
+
+Without this patch, a takeover requesting
+stripesize change causes data corruption!
 ---
- test/shell/lvconvert-snapshot-cache.sh  |    2 +-
- test/shell/lvconvert-snapshot-mirror.sh |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/raid_manip.c |   25 ++++++++++++++++++++++---
+ 1 files changed, 22 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/lvconvert-snapshot-cache.sh b/test/shell/lvconvert-snapshot-cache.sh
-index 396f431..0d9c9c6 100644
---- a/test/shell/lvconvert-snapshot-cache.sh
-+++ b/test/shell/lvconvert-snapshot-cache.sh
-@@ -28,7 +28,7 @@ vgchange -s 16k $vg
- lvcreate -L1 -n cow $vg
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index f065a4c..f48169e 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -502,7 +502,6 @@ static int _reset_flags_passed_to_kernel(struct logical_volume *lv, int *flags_r
+ 			return 0;
  
- # Thin and snapshot conversion
--lvcreate -L1 -n ch $vg
-+lvcreate -aey -L1 -n ch $vg
- lvcreate -H -L1 -n cpool $vg/ch
+ 		if (slv->status & LV_RESHAPE_DELTA_DISKS_MINUS) {
+-			*flags_reset = 1;
+ 			slv->status |= LV_REMOVE_AFTER_RESHAPE;
+ 			seg_metalv(seg, s)->status |= LV_REMOVE_AFTER_RESHAPE;
+ 		}
+@@ -6293,6 +6292,17 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
+ 		r = 0;
+ 	}
  
- # Cannot create snapshot of cpool
-diff --git a/test/shell/lvconvert-snapshot-mirror.sh b/test/shell/lvconvert-snapshot-mirror.sh
-index 8af9e25..01c19d9 100644
---- a/test/shell/lvconvert-snapshot-mirror.sh
-+++ b/test/shell/lvconvert-snapshot-mirror.sh
-@@ -24,7 +24,7 @@ vgchange -s 16k $vg
- lvcreate -L1 -n cow $vg
++	/* Can't reshape stripes or stripe size when performing a takeover! */
++	if (!_is_same_level(seg_from->segtype, *segtype_to)) {
++		if (stripes && stripes != _data_rimages_count(seg_from, seg_from->area_count))
++			log_warn("WARNING: ignoring --stripes option on takeover of %s (reshape afterwards).",
++				 display_lvname(seg_from->lv));
++
++		if (!seg_is_raid1(seg_from) && new_stripe_size_supplied)
++			log_warn("WARNING: ignoring --stripesize option on takeover of %s (reshape afterwards).",
++				 display_lvname(seg_from->lv));
++	}
++
+ 	if (r &&
+ 	    !yes &&
+ 	    strcmp((*segtype_to)->name, SEG_TYPE_NAME_MIRROR) && /* "mirror" is prompted for later */
+@@ -6465,11 +6475,20 @@ int lv_raid_convert(struct logical_volume *lv,
+ 		return 0;
+ 	}
  
- # Mirror and snapshot conversion
--lvcreate --type mirror -L1 -m1 -n mir $vg
-+lvcreate -aye --type mirror -L1 -m1 -n mir $vg
++	/*
++	 * stripes and stripe_size can only be changed via reshape, not in a takeover!
++	 *
++	 * Ignore any of them here unless a takeover from raid1 to
++	 * raid4/5 is requested when stripe size may be defined.
++	 */
++	stripes = _data_rimages_count(seg, seg->area_count);
++	stripe_size = seg_is_raid1(seg) ? stripe_size : seg->stripe_size;
++
+ 	takeover_fn = _get_takeover_fn(first_seg(lv), new_segtype, new_image_count);
  
- # Cannot create snapshot of mirror leg
- not lvcreate -s -L1 $vg/mir_mimage_0 2>&1 | tee err
+ 	/* Exit without doing activation checks if the combination isn't possible */
+ 	if (_takeover_not_possible(takeover_fn))
+-		return takeover_fn(lv, new_segtype, yes, force, new_image_count, 0, new_stripes, stripe_size,
++		return takeover_fn(lv, new_segtype, yes, force, new_image_count, 0, stripes, stripe_size,
+ 			   region_size, allocate_pvs);
+ 
+ 	/*
+@@ -6498,7 +6517,7 @@ int lv_raid_convert(struct logical_volume *lv,
+ 
+ 	lv->status &= ~LV_RESHAPE;
+ 
+-	return takeover_fn(lv, new_segtype, yes, force, new_image_count, 0, new_stripes, stripe_size,
++	return takeover_fn(lv, new_segtype, yes, force, new_image_count, 0, stripes, stripe_size,
+ 			   region_size, allocate_pvs);
+ }
+ 
 
 
