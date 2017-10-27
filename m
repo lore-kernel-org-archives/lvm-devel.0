@@ -1,229 +1,128 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 27 Oct 2017 11:11:22 -0400
-Subject: master - snapshot: relocate common code validation for snapshot origin
-Message-ID: <201710271511.v9RFBMqH014721@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 27 Oct 2017 11:11:26 -0400
+Subject: master - tests: update checked messages
+Message-ID: <201710271511.v9RFBQOO014732@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=63c50ced89d14f90c3202167e1d07de3514dad60
-Commit:        63c50ced89d14f90c3202167e1d07de3514dad60
-Parent:        0c68c19c322e23242b21885d759ab5ec3bbe8e08
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eb710cced11a290ebe3e365e3b1cc225920b6b99
+Commit:        eb710cced11a290ebe3e365e3b1cc225920b6b99
+Parent:        63c50ced89d14f90c3202167e1d07de3514dad60
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 27 16:48:57 2017 +0200
+AuthorDate:    Fri Oct 27 17:02:22 2017 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 27 17:07:42 2017 +0200
 
-snapshot: relocate common code validation for snapshot origin
+tests: update checked messages
 
-Since both lvcreate and lvconvert needs to check for same
-type of allowed origin for snapshot - move the code into
-a single function.
-
-This way we also fix several inconsitencies where snapshot
-has been allowed by mistake either through lvcreate or
-lvconvert path.
 ---
- lib/metadata/lv_manip.c          |   51 +------------------------------------
- lib/metadata/metadata-exported.h |    3 ++
- lib/metadata/snapshot_manip.c    |   44 ++++++++++++++++++++++++++++++++
- tools/lvconvert.c                |   33 ++++++++----------------
- 4 files changed, 60 insertions(+), 71 deletions(-)
+ test/shell/lvconvert-snapshot-cache.sh  |    6 +++---
+ test/shell/lvconvert-snapshot-mirror.sh |    4 ++--
+ test/shell/lvconvert-snapshot-raid.sh   |    4 ++--
+ test/shell/lvconvert-snapshot-thin.sh   |   13 ++++++++++---
+ 4 files changed, 17 insertions(+), 10 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 4cca5a1..01ba564 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7592,56 +7592,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 					  "Use --virtualsize.");
- 				return NULL;
- 			}
--			if (lv_is_cow(origin_lv)) {
--				log_error("Snapshots of snapshots are not supported.");
--				return NULL;
--			}
--			if (lv_is_locked(origin_lv)) {
--				log_error("Snapshots of locked devices are not supported.");
--				return NULL;
--			}
--			if (lv_is_merging_origin(origin_lv)) {
--				log_error("Snapshots of an origin that has a "
--					  "merging snapshot is not supported");
--				return NULL;
--			}
--
--			if (lv_is_cache_type(origin_lv) && !lv_is_cache(origin_lv)) {
--				log_error("Snapshots of cache type volume %s "
--					  "is not supported.", display_lvname(origin_lv));
--				return NULL;
--			}
+diff --git a/test/shell/lvconvert-snapshot-cache.sh b/test/shell/lvconvert-snapshot-cache.sh
+index 0d9c9c6..d32f4c2 100644
+--- a/test/shell/lvconvert-snapshot-cache.sh
++++ b/test/shell/lvconvert-snapshot-cache.sh
+@@ -58,13 +58,13 @@ grep "lv_is_visible" err
  
--			if (lv_is_thin_type(origin_lv) && !lv_is_thin_volume(origin_lv)) {
--				log_error("Snapshots of thin pool %sdevices "
--					  "are not supported.",
--					  lv_is_thin_pool_data(origin_lv) ? "data " :
--					  lv_is_thin_pool_metadata(origin_lv) ?
--					  "metadata " : "");
--				return NULL;
--			}
--
--			if (lv_is_mirror_type(origin_lv)) {
--				if (!lv_is_mirror(origin_lv)) {
--					log_error("Snapshots of mirror subvolumes are not supported.");
--					return NULL;
--				}
--				log_warn("WARNING: Snapshots of mirrors can deadlock under rare device failures.");
--				log_warn("WARNING: Consider using the raid1 mirror type to avoid this.");
--				log_warn("WARNING: See global/mirror_segtype_default in lvm.conf.");
--			}
--
--			if (lv_is_raid_type(origin_lv) && !lv_is_raid(origin_lv)) {
--				log_error("Snapshots of raid subvolumes are not supported.");
--				return NULL;
--			}
--
--			if (vg_is_clustered(vg) && lv_is_active(origin_lv) &&
--			    !lv_is_active_exclusive_locally(origin_lv)) {
--				log_error("%s must be active exclusively to"
--					  " create snapshot", origin_lv->name);
--				return NULL;
--			}
-+			if (!validate_snapshot_origin(origin_lv))
-+                                return_0;
- 		}
+ # Cannot use thin-pool, _tdata, _tmeta as origin
+ not lvconvert --yes --type snapshot $vg/cpool $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
  
- 		if (!cow_has_min_chunks(vg, lp->extents, lp->chunk_size))
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 85e5838..71df955 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1074,6 +1074,9 @@ int vg_add_snapshot(struct logical_volume *origin, struct logical_volume *cow,
+ not lvconvert --yes --type snapshot $vg/cpool_cdata $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
  
- int vg_remove_snapshot(struct logical_volume *cow);
+ not lvconvert --yes --type snapshot $vg/cpool_cmeta $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
  
-+int validate_snapshot_origin(const struct logical_volume *origin_lv);
+ lvconvert --yes -s $vg/ch $vg/cow
+ 
+diff --git a/test/shell/lvconvert-snapshot-mirror.sh b/test/shell/lvconvert-snapshot-mirror.sh
+index 01c19d9..22f40f7 100644
+--- a/test/shell/lvconvert-snapshot-mirror.sh
++++ b/test/shell/lvconvert-snapshot-mirror.sh
+@@ -42,11 +42,11 @@ grep "lv_is_visible" err
+ 
+ # cannot use _mimage
+ not lvconvert --yes --type snapshot $vg/mir_mimage_0 $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
+ 
+ # cannot use _mlog
+ not lvconvert --yes --type snapshot $vg/mir_mlog $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
+ 
+ lvconvert --yes -s $vg/mir $vg/cow
+ 
+diff --git a/test/shell/lvconvert-snapshot-raid.sh b/test/shell/lvconvert-snapshot-raid.sh
+index 91bcd94..8deb60f 100644
+--- a/test/shell/lvconvert-snapshot-raid.sh
++++ b/test/shell/lvconvert-snapshot-raid.sh
+@@ -44,11 +44,11 @@ grep "lv_is_visible" err
+ 
+ # Cannot use _rimage
+ not lvconvert --yes --type snapshot $vg/rd_rimage_0 $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
+ 
+ # Cannot use _rmeta
+ not lvconvert --yes --type snapshot $vg/rd_rmeta_0 $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
+ 
+ lvconvert --yes -s $vg/rd $vg/cow
+ 
+diff --git a/test/shell/lvconvert-snapshot-thin.sh b/test/shell/lvconvert-snapshot-thin.sh
+index ef1218b..f5da459 100644
+--- a/test/shell/lvconvert-snapshot-thin.sh
++++ b/test/shell/lvconvert-snapshot-thin.sh
+@@ -29,6 +29,7 @@ lvcreate -L1 -n cow $vg
+ 
+ # Thin and snapshot conversion
+ lvcreate -T -L1 -V10 -n th $vg/pool
++eval $(lvs -S 'name=~_pmspare' -a -o name --config 'report/mark_hidden_devices=0' --noheading --nameprefixes $vg)
+ 
+ # Cannot create snapshot of pool's meta
+ not lvcreate -s -L1 $vg/pool_tmeta 2>&1 | tee err
+@@ -45,6 +46,9 @@ grep "not accept" err
+ not lvconvert --yes --type snapshot $vg/cow $vg/pool 2>&1 | tee err
+ grep "not accept" err
+ 
++not lvconvert --yes --type snapshot $vg/cow $vg/$LVM2_LV_NAME 2>&1 | tee err
++grep "lv_is_visible" err
 +
-+
- int vg_check_status(const struct volume_group *vg, uint64_t status);
+ not lvconvert --yes --type snapshot $vg/cow $vg/pool_tdata 2>&1 | tee err
+ grep "lv_is_visible" err
  
- int vg_check_pv_dev_block_sizes(const struct volume_group *vg);
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index 57fbef9..8357ea0 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -386,3 +386,47 @@ int vg_remove_snapshot(struct logical_volume *cow)
+@@ -53,13 +57,16 @@ grep "lv_is_visible" err
  
- 	return 1;
- }
+ # Cannot use thin-pool, _tdata, _tmeta as origin
+ not lvconvert --yes --type snapshot $vg/pool $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
 +
-+/* Check if given LV is usable as snapshot origin LV */
-+int validate_snapshot_origin(const struct logical_volume *origin_lv)
-+{
-+	const char *err = NULL; /* For error string */
-+
-+	if (lv_is_cow(origin_lv))
-+		err = "snapshots";
-+	else if (lv_is_locked(origin_lv))
-+		err = "locked volumes";
-+	else if (lv_is_pvmove(origin_lv))
-+		err = "pvmoved volumes";
-+	else if (!lv_is_visible(origin_lv))
-+		err = "hidden volumes";
-+	else if (lv_is_merging_origin(origin_lv))
-+		err = "an origin that has a merging snapshot";
-+	else if (lv_is_cache_type(origin_lv) && !lv_is_cache(origin_lv))
-+		err = "cache type volumes";
-+	else if (lv_is_thin_type(origin_lv) && !lv_is_thin_volume(origin_lv))
-+		err = "thin pool type volumes";
-+	else if (lv_is_mirror_type(origin_lv)) {
-+		if (!lv_is_mirror(origin_lv))
-+			err = "mirror subvolumes";
-+		else {
-+			log_warn("WARNING: Snapshots of mirrors can deadlock under rare device failures.");
-+			log_warn("WARNING: Consider using the raid1 mirror type to avoid this.");
-+			log_warn("WARNING: See global/mirror_segtype_default in lvm.conf.");
-+		}
-+	} else if (lv_is_raid_type(origin_lv) && !lv_is_raid(origin_lv))
-+		err = "raid subvolumes";
-+
-+	if (err) {
-+		log_error("Snapshots of %s are not supported.", err);
-+		return 0;
-+	}
-+
-+	if (vg_is_clustered(origin_lv->vg) && lv_is_active(origin_lv) &&
-+	    !lv_is_active_exclusive_locally(origin_lv)) {
-+		log_error("Snapshot origin must be active exclusively.");
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index aa61f73..76be5cb 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1909,13 +1909,7 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
- 	uint32_t chunk_size;
- 	int zero;
++not lvconvert --yes --type snapshot $vg/$LVM2_LV_NAME $vg/cow 2>&1 | tee err
++grep "not supported" err
  
--	if (!(org = find_lv(lv->vg, origin_name))) {
--		log_error("Couldn't find origin volume %s in Volume group %s.",
--			  origin_name, lv->vg->name);
--		return 0;
--	}
--
--	if (org == lv) {
-+	if (strcmp(lv->name, origin_name) == 0) {
- 		log_error("Unable to use %s as both snapshot and origin.", snap_name);
- 		return 0;
- 	}
-@@ -1925,34 +1919,29 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
- 		log_error("Chunk size must be a power of 2 in the range 4K to 512K.");
- 		return 0;
- 	}
--	log_verbose("Setting chunk size to %s.", display_size(cmd, chunk_size));
+ not lvconvert --yes --type snapshot $vg/pool_tdata $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
  
- 	if (!cow_has_min_chunks(lv->vg, lv->le_count, chunk_size))
- 		return_0;
+ not lvconvert --yes --type snapshot $vg/pool_tmeta $vg/cow 2>&1 | tee err
+-grep "invalid" err
++grep "not supported" err
  
-+	log_verbose("Setting chunk size to %s.", display_size(cmd, chunk_size));
-+
-+	if (!(org = find_lv(lv->vg, origin_name))) {
-+		log_error("Couldn't find origin volume %s in Volume group %s.",
-+			  origin_name, lv->vg->name);
-+		return 0;
-+	}
-+
- 	/*
- 	 * check_lv_rules() checks cannot be done via command definition
- 	 * rules because this LV is not processed by process_each_lv.
- 	 */
--	if (lv_is_locked(org) || lv_is_pvmove(org)) {
--		log_error("Unable to use LV %s as snapshot origin: LV is %s.",
--			  display_lvname(lv), lv_is_locked(org) ? "locked" : "pvmove");
--		return 0;
--	}
+ lvconvert --yes -s $vg/th $vg/cow
  
- 	/*
- 	 * check_lv_types() checks cannot be done via command definition
- 	 * LV_foo specification because this LV is not processed by process_each_lv.
- 	 */
--	if ((lv_is_cache_type(org) && !lv_is_cache(org)) ||
--	    (lv_is_thin_type(org) && !lv_is_thin_volume(org)) ||
--	    (lv_is_mirror_type(org) && !lv_is_mirror(org)) ||
--	    (lv_is_raid_type(org) && !lv_is_raid(org)) ||
--	    lv_is_cow(org)) {
--		log_error("Unable to use LV %s as snapshot origin: invalid LV type.",
--			  display_lvname(lv));
--		return 0;
--	}
-+	if (!validate_snapshot_origin(org))
-+                return_0;
- 
- 	log_warn("WARNING: Converting logical volume %s to snapshot exception store.",
- 		 snap_name);
 
 
