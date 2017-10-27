@@ -1,128 +1,93 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 27 Oct 2017 11:11:26 -0400
-Subject: master - tests: update checked messages
-Message-ID: <201710271511.v9RFBQOO014732@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Fri, 27 Oct 2017 17:55:39 -0400
+Subject: master - vgsplit: Fix detection of moved PVs.
+Message-ID: <201710272155.v9RLtd9K007401@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eb710cced11a290ebe3e365e3b1cc225920b6b99
-Commit:        eb710cced11a290ebe3e365e3b1cc225920b6b99
-Parent:        63c50ced89d14f90c3202167e1d07de3514dad60
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 27 17:02:22 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 27 17:07:42 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=84aca4201e3588159e75fa8e047e997c2fad13d2
+Commit:        84aca4201e3588159e75fa8e047e997c2fad13d2
+Parent:        eb710cced11a290ebe3e365e3b1cc225920b6b99
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Oct 27 21:38:16 2017 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Oct 27 22:53:43 2017 +0100
 
-tests: update checked messages
+vgsplit: Fix detection of moved PVs.
 
+vgsplit shares the vg_rename code so that must only set the PV_MOVED_VG
+flag introduced in commit 486ed108481cfbe4336f0fa590cbae251188ecc6
+("vgmerge: Fix intermediate metadata corruption") on PVs that moved.
 ---
- test/shell/lvconvert-snapshot-cache.sh  |    6 +++---
- test/shell/lvconvert-snapshot-mirror.sh |    4 ++--
- test/shell/lvconvert-snapshot-raid.sh   |    4 ++--
- test/shell/lvconvert-snapshot-thin.sh   |   13 ++++++++++---
- 4 files changed, 17 insertions(+), 10 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/config/config.c     |    2 +-
+ lib/metadata/metadata.c |    8 +++++++-
+ tools/vgmerge.c         |    1 +
+ 4 files changed, 10 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvconvert-snapshot-cache.sh b/test/shell/lvconvert-snapshot-cache.sh
-index 0d9c9c6..d32f4c2 100644
---- a/test/shell/lvconvert-snapshot-cache.sh
-+++ b/test/shell/lvconvert-snapshot-cache.sh
-@@ -58,13 +58,13 @@ grep "lv_is_visible" err
+diff --git a/WHATS_NEW b/WHATS_NEW
+index fbf8732..3e13d8c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.176 -
+ ===================================
++  Fix detection of moved PVs in vgsplit. (2.02.175)
+   Ignore --stripes/--stripesize on RAID takeover
+   Improve used paths for generated systemd units and init shells.
+   Disallow creation of snapshot of mirror/raid subLV (was never supported).
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 1f18969..e8e330b 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -542,7 +542,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
+ 	if (checksum_fn && checksum !=
+ 	    (checksum_fn(checksum_fn(INITIAL_CRC, (const uint8_t *)fb, size),
+ 			 (const uint8_t *)(fb + size), size2))) {
+-		log_error("%s: Checksum error", dev_name(dev));
++		log_error("%s: Checksum error at offset %" PRIu64, dev_name(dev), (uint64_t) offset);
+ 		goto out;
+ 	}
  
- # Cannot use thin-pool, _tdata, _tmeta as origin
- not lvconvert --yes --type snapshot $vg/cpool $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index bcc23bc..2a9819d 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -512,13 +512,19 @@ int vg_rename(struct cmd_context *cmd, struct volume_group *vg,
+ 	}
  
- not lvconvert --yes --type snapshot $vg/cpool_cdata $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
- 
- not lvconvert --yes --type snapshot $vg/cpool_cmeta $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
- 
- lvconvert --yes -s $vg/ch $vg/cow
- 
-diff --git a/test/shell/lvconvert-snapshot-mirror.sh b/test/shell/lvconvert-snapshot-mirror.sh
-index 01c19d9..22f40f7 100644
---- a/test/shell/lvconvert-snapshot-mirror.sh
-+++ b/test/shell/lvconvert-snapshot-mirror.sh
-@@ -42,11 +42,11 @@ grep "lv_is_visible" err
- 
- # cannot use _mimage
- not lvconvert --yes --type snapshot $vg/mir_mimage_0 $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
- 
- # cannot use _mlog
- not lvconvert --yes --type snapshot $vg/mir_mlog $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
- 
- lvconvert --yes -s $vg/mir $vg/cow
- 
-diff --git a/test/shell/lvconvert-snapshot-raid.sh b/test/shell/lvconvert-snapshot-raid.sh
-index 91bcd94..8deb60f 100644
---- a/test/shell/lvconvert-snapshot-raid.sh
-+++ b/test/shell/lvconvert-snapshot-raid.sh
-@@ -44,11 +44,11 @@ grep "lv_is_visible" err
- 
- # Cannot use _rimage
- not lvconvert --yes --type snapshot $vg/rd_rimage_0 $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
- 
- # Cannot use _rmeta
- not lvconvert --yes --type snapshot $vg/rd_rmeta_0 $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
- 
- lvconvert --yes -s $vg/rd $vg/cow
- 
-diff --git a/test/shell/lvconvert-snapshot-thin.sh b/test/shell/lvconvert-snapshot-thin.sh
-index ef1218b..f5da459 100644
---- a/test/shell/lvconvert-snapshot-thin.sh
-+++ b/test/shell/lvconvert-snapshot-thin.sh
-@@ -29,6 +29,7 @@ lvcreate -L1 -n cow $vg
- 
- # Thin and snapshot conversion
- lvcreate -T -L1 -V10 -n th $vg/pool
-+eval $(lvs -S 'name=~_pmspare' -a -o name --config 'report/mark_hidden_devices=0' --noheading --nameprefixes $vg)
- 
- # Cannot create snapshot of pool's meta
- not lvcreate -s -L1 $vg/pool_tmeta 2>&1 | tee err
-@@ -45,6 +46,9 @@ grep "not accept" err
- not lvconvert --yes --type snapshot $vg/cow $vg/pool 2>&1 | tee err
- grep "not accept" err
- 
-+not lvconvert --yes --type snapshot $vg/cow $vg/$LVM2_LV_NAME 2>&1 | tee err
-+grep "lv_is_visible" err
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
++		/* Skip if VG didn't change e.g. with vgsplit */
++		if (pvl->pv->vg_name && !strcmp(new_name, pvl->pv->vg_name))
++			continue;
 +
- not lvconvert --yes --type snapshot $vg/cow $vg/pool_tdata 2>&1 | tee err
- grep "lv_is_visible" err
- 
-@@ -53,13 +57,16 @@ grep "lv_is_visible" err
- 
- # Cannot use thin-pool, _tdata, _tmeta as origin
- not lvconvert --yes --type snapshot $vg/pool $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
+ 		if (!(pvl->pv->vg_name = dm_pool_strdup(mem, new_name))) {
+ 			log_error("pv->vg_name allocation failed for '%s'",
+ 				  pv_dev_name(pvl->pv));
+ 			return 0;
+ 		}
 +
-+not lvconvert --yes --type snapshot $vg/$LVM2_LV_NAME $vg/cow 2>&1 | tee err
-+grep "not supported" err
+                 /* Mark the PVs that still hold metadata with the old VG name */
+-                pvl->pv->status |= PV_MOVED_VG;
++		log_debug_metadata("Marking PV %s as moved to VG %s", dev_name(pvl->pv->dev), new_name);
++		pvl->pv->status |= PV_MOVED_VG;
+ 	}
  
- not lvconvert --yes --type snapshot $vg/pool_tdata $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
- 
- not lvconvert --yes --type snapshot $vg/pool_tmeta $vg/cow 2>&1 | tee err
--grep "invalid" err
-+grep "not supported" err
- 
- lvconvert --yes -s $vg/th $vg/cow
+ 	return 1;
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 86c6a48..013bef4 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -112,6 +112,7 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 		add_pvl_to_vgs(vg_to, pvl);
+ 		pvl->pv->vg_name = dm_pool_strdup(cmd->mem, vg_to->name);
+ 		/* Mark the VGs that still hold metadata for the old VG */
++		log_debug_metadata("Marking PV %s as moved to VG %s", dev_name(pvl->pv->dev), vg_to->name);
+ 		pvl->pv->status |= PV_MOVED_VG;
+ 	}
  
 
 
