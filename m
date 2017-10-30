@@ -1,123 +1,46 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 30 Oct 2017 06:55:26 -0400
-Subject: master - thin: fix merging messages
-Message-ID: <201710301055.v9UAtQ8D020855@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Ren <zren@suse.com>
+Date: Mon, 30 Oct 2017 20:53:20 +0800
+Subject: [PATCH v2] clvmd: supress ENOENT error on testing connection
+Message-ID: <20171030125320.15509-1-zren@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=af21263cb39bb850d5bf437fe0371e173b8c0246
-Commit:        af21263cb39bb850d5bf437fe0371e173b8c0246
-Parent:        90ee7783b4c2b1b13122e6107cebeb28ca30326d
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 30 11:00:31 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 30 11:53:39 2017 +0100
+In HA cluster, we have "clvm" resource agent to manage clvmd daemon.
+The agent invokes clvmd like: "clvmd -T90 -d0", which  always prints
+a scaring error message:
 
-thin: fix merging messages
+"""
+local socket: connect failed: No such file or directory
+"""
 
-Correct reported message when thin snapshot has been already merged.
-So lvm2 is no longer reporting "Mergins of snapshot X will occur..."
-(even with swapped names).
+When specifed with "-d" option, clvmd tries to check if an instance
+of the clvmd daemon is already running through a testing connection.
+The connect() will fail with this ENOENT error in such case, so supress
+the error message in such case.
+
+Signed-off-by: Eric Ren <zren@suse.com>
 ---
- WHATS_NEW                |    1 +
- test/shell/thin-merge.sh |    6 ++++--
- tools/lvconvert.c        |   24 +++++++++++-------------
- 3 files changed, 16 insertions(+), 15 deletions(-)
+ daemons/clvmd/clvmd.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 961c7e5..e8e6bb0 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.176 -
- ===================================
-+  Fix printed message when thin snapshot was already merged.
-   Remove created spare LV when creation of thin-pool failed.
-   Avoid reading ignored metadata when mda gets used again.
-   Fix detection of moved PVs in vgsplit. (2.02.175)
-diff --git a/test/shell/thin-merge.sh b/test/shell/thin-merge.sh
-index 7baaa55..1841bf7 100644
---- a/test/shell/thin-merge.sh
-+++ b/test/shell/thin-merge.sh
-@@ -45,7 +45,8 @@ touch mntsnap/test_snap
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 9dbda89..fda8f83 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -2170,7 +2170,8 @@ static int check_local_clvmd(void)
  
- lvs -o+tags,thin_id $vg
- 
--lvconvert --merge $vg/snap
-+lvconvert --merge $vg/snap &>out
-+grep "Merging of thin snapshot $vg/snap will occur on next activation of $vg/${lv1}." out
- 
- umount mnt
- 
-@@ -115,7 +116,8 @@ check lv_field  $vg/$lv1 thin_id "3"
- # Check --mergethin
- lvcreate -s -n snap $vg/$lv1
- check lv_field  $vg/snap thin_id "4"
--lvconvert --mergethin $vg/snap
-+lvconvert --mergethin $vg/snap  &>out
-+grep "Volume $vg/snap replaced origin $vg/${lv1}." out
- check lv_field  $vg/$lv1 thin_id "4"
- 
- vgremove -ff $vg
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 76be5cb..3a025c7 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2098,7 +2098,7 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
- static int _lvconvert_merge_thin_snapshot(struct cmd_context *cmd,
- 					  struct logical_volume *lv)
- {
--	int origin_is_active = 0, r = 0;
-+	int origin_is_active = 0;
- 	struct lv_segment *snap_seg = first_seg(lv);
- 	struct logical_volume *origin = snap_seg->origin;
- 
-@@ -2151,16 +2151,18 @@ static int _lvconvert_merge_thin_snapshot(struct cmd_context *cmd,
- 		 * replace the origin LV with its snapshot LV.
- 		 */
- 		if (!thin_merge_finish(cmd, origin, lv))
--			goto_out;
-+			return_0;
-+
-+		log_print_unless_silent("Volume %s replaced origin %s.",
-+					display_lvname(origin), display_lvname(lv));
- 
- 		if (origin_is_active && !activate_lv(cmd, lv)) {
- 			log_error("Failed to reactivate origin %s.",
- 				  display_lvname(lv));
--			goto out;
-+			return 0;
- 		}
- 
--		r = 1;
--		goto out;
-+		return 1;
+ 	if (connect(local_socket,(struct sockaddr *) &sockaddr,
+ 		    sizeof(sockaddr))) {
+-		log_sys_error("connect", "local socket");
++		if (errno != ENOENT)
++			log_sys_error("connect", "local socket");
+ 		ret = -1;
  	}
  
- 	init_snapshot_merge(snap_seg, origin);
-@@ -2169,16 +2171,12 @@ static int _lvconvert_merge_thin_snapshot(struct cmd_context *cmd,
- 	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
- 		return_0;
- 
--	r = 1;
--out:
-+	log_print_unless_silent("Merging of thin snapshot %s will occur on "
-+				"next activation of %s.",
-+				display_lvname(lv), display_lvname(origin));
- 	backup(lv->vg);
- 
--	if (r)
--		log_print_unless_silent("Merging of thin snapshot %s will occur on "
--					"next activation of %s.",
--					display_lvname(lv), display_lvname(origin));
--
--	return r;
-+	return 1;
- }
- 
- static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
+-- 
+2.10.2
 
 
