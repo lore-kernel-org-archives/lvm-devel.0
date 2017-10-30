@@ -1,46 +1,73 @@
-From: Eric Ren <zren@suse.com>
-Date: Mon, 30 Oct 2017 20:53:20 +0800
-Subject: [PATCH v2] clvmd: supress ENOENT error on testing connection
-Message-ID: <20171030125320.15509-1-zren@suse.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 30 Oct 2017 09:39:40 -0400
+Subject: master - devcache: track more udev errors
+Message-ID: <201710301339.v9UDdee0015260@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In HA cluster, we have "clvm" resource agent to manage clvmd daemon.
-The agent invokes clvmd like: "clvmd -T90 -d0", which  always prints
-a scaring error message:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9206fb93dcbc7c07ee7f6c4438f1dbd91c4d73a
+Commit:        e9206fb93dcbc7c07ee7f6c4438f1dbd91c4d73a
+Parent:        af21263cb39bb850d5bf437fe0371e173b8c0246
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Oct 30 13:16:50 2017 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Oct 30 13:16:50 2017 +0100
 
-"""
-local socket: connect failed: No such file or directory
-"""
+devcache: track more udev errors
 
-When specifed with "-d" option, clvmd tries to check if an instance
-of the clvmd daemon is already running through a testing connection.
-The connect() will fail with this ENOENT error in such case, so supress
-the error message in such case.
-
-Signed-off-by: Eric Ren <zren@suse.com>
+Add a bit more details for failing udev function.
 ---
- daemons/clvmd/clvmd.c | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ lib/device/dev-cache.c |   25 +++++++++++++++----------
+ 1 files changed, 15 insertions(+), 10 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 9dbda89..fda8f83 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -2170,7 +2170,8 @@ static int check_local_clvmd(void)
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 83c2b12..dd12da1 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -939,12 +939,20 @@ static int _insert_udev_dir(struct udev *udev, const char *dir)
+ 	struct udev_device *device;
+ 	int r = 1;
  
- 	if (connect(local_socket,(struct sockaddr *) &sockaddr,
- 		    sizeof(sockaddr))) {
--		log_sys_error("connect", "local socket");
-+		if (errno != ENOENT)
-+			log_sys_error("connect", "local socket");
- 		ret = -1;
+-	if (!(udev_enum = udev_enumerate_new(udev)))
+-		goto bad;
++	if (!(udev_enum = udev_enumerate_new(udev))) {
++		log_error("Failed to udev_enumerate_new.");
++		return 0;
++	}
+ 
+-	if (udev_enumerate_add_match_subsystem(udev_enum, "block") ||
+-	    udev_enumerate_scan_devices(udev_enum))
+-		goto bad;
++	if (udev_enumerate_add_match_subsystem(udev_enum, "block")) {
++		log_error("Failed to udev_enumerate_add_match_subsystem.");
++		goto out;
++	}
++
++	if (udev_enumerate_scan_devices(udev_enum)) {
++		log_error("Failed to udev_enumerate_scan_devices.");
++		goto out;
++	}
+ 
+ 	/*
+ 	 * Report any missing information as "log_very_verbose" only, do not
+@@ -981,13 +989,10 @@ static int _insert_udev_dir(struct udev *udev, const char *dir)
+ 		udev_device_unref(device);
  	}
  
--- 
-2.10.2
++out:
+ 	udev_enumerate_unref(udev_enum);
+-	return r;
+ 
+-bad:
+-	log_error("Failed to enumerate udev device list.");
+-	udev_enumerate_unref(udev_enum);
+-	return 0;
++	return r;
+ }
+ 
+ static void _insert_dirs(struct dm_list *dirs)
 
 
