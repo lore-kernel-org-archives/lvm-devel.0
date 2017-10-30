@@ -1,65 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 30 Oct 2017 12:29:04 -0400
-Subject: master - raid: setup LV size earlier
-Message-ID: <201710301629.v9UGT4rp010051@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 30 Oct 2017 12:29:12 -0400
+Subject: master - tests: revert commit change
+Message-ID: <201710301629.v9UGTCVl010061@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2b6391538c53e19a6fccdb4e3638ba9dd221819a
-Commit:        2b6391538c53e19a6fccdb4e3638ba9dd221819a
-Parent:        3efd1f9c6e1e63c70d12cf3bc2f8eadcba47d7e5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e3be7d1ba4c6ae56dd80ec7ae098e9e451de775
+Commit:        7e3be7d1ba4c6ae56dd80ec7ae098e9e451de775
+Parent:        2b6391538c53e19a6fccdb4e3638ba9dd221819a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 30 17:23:56 2017 +0100
+AuthorDate:    Mon Oct 30 17:26:42 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 30 17:23:56 2017 +0100
+CommitterDate: Mon Oct 30 17:27:29 2017 +0100
 
-raid: setup LV size earlier
+tests: revert commit change
 
-New validation code which does require to not store LV with no size
-(no segments) revealed this size setup code needs to happen
-earlier.
+Commit 04244107732feb5274bc24efed428a0d4ddae8f6 by mistake took also
+this unwanted local modification of test - revert it.
 ---
- lib/metadata/lv_manip.c |   18 +++++++++---------
- 1 files changed, 9 insertions(+), 9 deletions(-)
+ test/shell/metadata-balance.sh |   15 +++------------
+ 1 files changed, 3 insertions(+), 12 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index a3634ac..f0e492b 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4028,6 +4028,15 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
- 		fa += stripes;
- 	}
- 
-+	seg->len += extents;
-+	if (seg_is_raid(seg))
-+		seg->area_len = seg->len;
-+	else
-+		seg->area_len += extents / area_multiple;
-+
-+	if (!_setup_lv_size(lv, lv->le_count + extents))
-+		return_0;
-+
- 	if (clear_metadata) {
- 		/*
- 		 * We must clear the metadata areas upon creation.
-@@ -4092,15 +4101,6 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
- 			lv_set_hidden(seg_metalv(seg, s));
- 	}
- 
--	seg->len += extents;
--	if (seg_is_raid(seg))
--		seg->area_len = seg->len;
--	else
--		seg->area_len += extents / area_multiple;
+diff --git a/test/shell/metadata-balance.sh b/test/shell/metadata-balance.sh
+index 1f22b24..fe94aed 100644
+--- a/test/shell/metadata-balance.sh
++++ b/test/shell/metadata-balance.sh
+@@ -189,8 +189,8 @@ done
+ echo Test special situations, vgsplit, vgmerge, etc
+ for mdacp in 1 2; do
+ 	pvcreate --metadatacopies $mdacp "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+-	vgcreate -cy --vgmetadatacopies 2 $vg1 "$dev1" "$dev2" "$dev3"
+-	vgcreate -cy --vgmetadatacopies $(( mdacp * 1 )) $vg2 "$dev4" "$dev5"
++	vgcreate --vgmetadatacopies 2 $vg1 "$dev1" "$dev2" "$dev3"
++	vgcreate --vgmetadatacopies $(( mdacp * 1 )) $vg2 "$dev4" "$dev5"
+ 	echo vgsplit/vgmerge preserves value of metadata copies
+ 	check vg_field $vg1 vg_mda_copies 2
+ 	check vg_field $vg2 vg_mda_copies $(( mdacp * 1 ))
+@@ -200,16 +200,7 @@ for mdacp in 1 2; do
+ 	check vg_field $vg1 vg_mda_copies 2
+ 	check vg_field $vg1 vg_mda_count $(( mdacp * 5 ))
+ 	echo vgsplit into new vg sets proper value of vgmetadatacopies
+-#	echo y | pvchange -y --metadataignore n "$dev3" || true
+-#	echo y | pvchange -y --metadataignore y "$dev4" || true
+-#	echo y | pvchange -y --metadataignore n "$dev5" || true
+-#	echo y | pvchange -y --metadataignore y "$dev1" || true
+-#	echo y | pvchange -y --metadataignore y "$dev2" || true
+-        pvs -o+pv_mda_size,pv_mda_count,pv_mda_used_count,pv_in_use
+-        pvdisplay
 -
--	if (!_setup_lv_size(lv, lv->le_count + extents))
--		return_0;
--
- 	return 1;
- }
- 
+-	#LVM_GDB=1
+-        vgsplit --vgmetadatacopies $(( mdacp * 2 )) $vg1 $vg2 "$dev1" "$dev2"
++	vgsplit --vgmetadatacopies $(( mdacp * 2 )) $vg1 $vg2 "$dev1" "$dev2"
+ 	check vg_field $vg2 vg_mda_copies $(( mdacp * 2 ))
+ 	echo vgchange fails if given both vgmetadatacopies and metadatacopies
+ 	not vgchange --vgmetadatacopies 5 --metadatacopies 7 $vg2
 
 
