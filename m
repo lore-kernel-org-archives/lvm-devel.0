@@ -1,68 +1,65 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 30 Oct 2017 09:39:50 -0400
-Subject: master - lvreduce: check LV has segment
-Message-ID: <201710301339.v9UDdo0O015291@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 30 Oct 2017 12:29:04 -0400
+Subject: master - raid: setup LV size earlier
+Message-ID: <201710301629.v9UGT4rp010051@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=83d5db056ba646ae69135b5f0114d1cc19b26044
-Commit:        83d5db056ba646ae69135b5f0114d1cc19b26044
-Parent:        04244107732feb5274bc24efed428a0d4ddae8f6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2b6391538c53e19a6fccdb4e3638ba9dd221819a
+Commit:        2b6391538c53e19a6fccdb4e3638ba9dd221819a
+Parent:        3efd1f9c6e1e63c70d12cf3bc2f8eadcba47d7e5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 30 14:35:31 2017 +0100
+AuthorDate:    Mon Oct 30 17:23:56 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 30 14:39:16 2017 +0100
+CommitterDate: Mon Oct 30 17:23:56 2017 +0100
 
-lvreduce: check LV has segment
+raid: setup LV size earlier
 
-Before accessing content make sure LV has segment.
-This can be used in case code removes LV without segments
-(i.e. on some error path)
+New validation code which does require to not store LV with no size
+(no segments) revealed this size setup code needs to happen
+earlier.
 ---
- lib/metadata/lv_manip.c |   16 ++++++++++++----
- 1 files changed, 12 insertions(+), 4 deletions(-)
+ lib/metadata/lv_manip.c |   18 +++++++++---------
+ 1 files changed, 9 insertions(+), 9 deletions(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 01ba564..a3634ac 100644
+index a3634ac..f0e492b 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -1315,13 +1315,19 @@ static int _lv_segment_reduce(struct lv_segment *seg, uint32_t reduction)
-  */
- static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
- {
--	struct lv_segment *seg = first_seg(lv);;
-+	struct lv_segment *seg = NULL;
- 	uint32_t count = extents;
- 	uint32_t reduction;
- 	struct logical_volume *pool_lv;
- 	struct logical_volume *external_lv = NULL;
--	int is_raid10 = seg_is_any_raid10(seg) && seg->reshape_len;
--	uint32_t data_copies = seg->data_copies;
-+	int is_raid10 = 0;
-+	uint32_t data_copies = 0;
+@@ -4028,6 +4028,15 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
+ 		fa += stripes;
+ 	}
+ 
++	seg->len += extents;
++	if (seg_is_raid(seg))
++		seg->area_len = seg->len;
++	else
++		seg->area_len += extents / area_multiple;
 +
-+	if (!dm_list_empty(&lv->segments)) {
-+		seg = first_seg(lv);
-+		is_raid10 = seg_is_any_raid10(seg) && seg->reshape_len;
-+		data_copies = seg->data_copies;
-+	}
++	if (!_setup_lv_size(lv, lv->le_count + extents))
++		return_0;
++
+ 	if (clear_metadata) {
+ 		/*
+ 		 * We must clear the metadata areas upon creation.
+@@ -4092,15 +4101,6 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
+ 			lv_set_hidden(seg_metalv(seg, s));
+ 	}
  
- 	if (lv_is_merging_origin(lv)) {
- 		log_debug_metadata("Dropping snapshot merge of %s to removed origin %s.",
-@@ -7660,8 +7666,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		       lp->mirrors,
- 		       segtype_is_pool(create_segtype) ? lp->pool_metadata_extents : lp->region_size,
- 		       segtype_is_thin_volume(create_segtype) ? lp->virtual_extents : lp->extents,
--		       lp->pvh, lp->alloc, lp->approx_alloc))
-+		       lp->pvh, lp->alloc, lp->approx_alloc)) {
-+		unlink_lv_from_vg(lv); /* Keep VG consistent and remove LV without any segment */
- 		return_NULL;
-+	}
+-	seg->len += extents;
+-	if (seg_is_raid(seg))
+-		seg->area_len = seg->len;
+-	else
+-		seg->area_len += extents / area_multiple;
+-
+-	if (!_setup_lv_size(lv, lv->le_count + extents))
+-		return_0;
+-
+ 	return 1;
+ }
  
- 	/* rhbz1269533: allow for 100%FREE allocation to work with "mirror" and a disk log */
- 	if (segtype_is_mirror(create_segtype) &&
 
 
