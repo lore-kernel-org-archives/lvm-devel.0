@@ -1,63 +1,91 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 22 Feb 2016 13:59:57 +0000 (UTC)
-Subject: master - tests: skip thin-flags test on 32bit el6 kernel
-Message-ID: <20160222135957.2F24760D7F@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@sourceware.org>
+Date: Wed, 1 Nov 2017 10:38:58 -0400
+Subject: master - systemd: remove Install sections from socket-activated services
+Message-ID: <201711011438.vA1EcwiW006092@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ed5e5c38b5ac4b7c8cb7e809d9d35c72f087e29e
-Commit:        ed5e5c38b5ac4b7c8cb7e809d9d35c72f087e29e
-Parent:        3178cfc81823589cde16668b90a04a35fe0b758b
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 22 14:52:01 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 22 14:59:28 2016 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=58b763c99cb7620b1cc2313a9f0dccd98def53db
+Commit:        58b763c99cb7620b1cc2313a9f0dccd98def53db
+Parent:        7a394575fbb11aad1ad61f4caa8f16584ae45102
+Author:        Bastian Blank <waldi@debian.org>
+AuthorDate:    Wed Nov 1 15:25:54 2017 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Nov 1 15:37:19 2017 +0100
 
-tests: skip thin-flags test on 32bit el6 kernel
+systemd: remove Install sections from socket-activated services
 
-Until kernel is fixed, stop running test always hitting OOPS there.
+We always preferred and recommended socket activation for our services
+so remove the Install section in related .service units which are unused
+in this case and keep only the Install section in associated .socket
+units.
+
+Signed-off-by: Bastian Blank <waldi@debian.org>
 ---
- test/lib/aux.sh          |   12 ++++++++++++
- test/shell/thin-flags.sh |    1 +
- 2 files changed, 13 insertions(+), 0 deletions(-)
+ WHATS_NEW                                        |    1 +
+ WHATS_NEW_DM                                     |    1 +
+ scripts/dm_event_systemd_red_hat.service.in      |    3 ---
+ scripts/lvm2_lvmetad_systemd_red_hat.service.in  |    3 ---
+ scripts/lvm2_lvmpolld_systemd_red_hat.service.in |    3 ---
+ 5 files changed, 2 insertions(+), 9 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 6250143..12316aa 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -1007,6 +1007,18 @@ raid456_replace_works() {
- 	esac
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ab4f656..ac4053a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.176 -
+ ===================================
++  Keep Install section only in lvm2-{lvmetad,lvmpolld}.socket systemd unit.
+   liblvm: Fix segfault in lvm_pv_remove. (2.02.173)
+   Do not allow storing VG metadata with LV without any segment.
+   Fix printed message when thin snapshot was already merged.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 6475fbd..12cd7f8 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.145 - 
+ ===================================
++  Keep Install section only in dm-event.socket systemd unit.
+   Issue a specific error with dmsetup status if device is unknown.
+   Fix RT_LIBS reference in generated libdevmapper.pc for pkg-config
  
-+#
-+# Some 32bit kernel cannot pass some erroring magic which forces
-+# thin-pool to be falling into Error state.
-+#
-+# Skip test on such kernels (see: https://bugzilla.redhat.com/1310661)
-+#
-+thin_pool_error_works_32() {
-+	case "$(uname -r)" in
-+	  2.6.32-618.*.i686) return 1 ;;
-+	esac
-+}
-+
- udev_wait() {
- 	pgrep udev >/dev/null || return 0
- 	which udevadm &>/dev/null || return 0
-diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
-index 7dd0d6e..95eafa0 100644
---- a/test/shell/thin-flags.sh
-+++ b/test/shell/thin-flags.sh
-@@ -39,6 +39,7 @@ fake_metadata_() {
- # Main
- #
- aux have_thin 1 3 0 || skip
-+aux thin_pool_error_works_32 || skip
- 
- aux prepare_vg 2 256
- 
+diff --git a/scripts/dm_event_systemd_red_hat.service.in b/scripts/dm_event_systemd_red_hat.service.in
+index de9aa52..d2c4cf1 100644
+--- a/scripts/dm_event_systemd_red_hat.service.in
++++ b/scripts/dm_event_systemd_red_hat.service.in
+@@ -13,6 +13,3 @@ ExecStart=@SBINDIR@/dmeventd -f
+ Environment=SD_ACTIVATION=1
+ PIDFile=@DMEVENTD_PIDFILE@
+ OOMScoreAdjust=-1000
+-
+-[Install]
+-WantedBy=sysinit.target
+diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.service.in b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
+index af34d82..92e6d69 100644
+--- a/scripts/lvm2_lvmetad_systemd_red_hat.service.in
++++ b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
+@@ -13,6 +13,3 @@ ExecStart=@SBINDIR@/lvmetad -f
+ Environment=SD_ACTIVATION=1
+ Restart=on-abort
+ PIDFile=@LVMETAD_PIDFILE@
+-
+-[Install]
+-WantedBy=sysinit.target
+diff --git a/scripts/lvm2_lvmpolld_systemd_red_hat.service.in b/scripts/lvm2_lvmpolld_systemd_red_hat.service.in
+index 66fbd91..4ad4e61 100644
+--- a/scripts/lvm2_lvmpolld_systemd_red_hat.service.in
++++ b/scripts/lvm2_lvmpolld_systemd_red_hat.service.in
+@@ -12,6 +12,3 @@ NonBlocking=true
+ ExecStart=@SBINDIR@/lvmpolld -t 60 -f
+ Environment=SD_ACTIVATION=1
+ PIDFile=@LVMPOLLD_PIDFILE@
+-
+-[Install]
+-WantedBy=sysinit.target
 
 
