@@ -1,58 +1,70 @@
-From: Jonathan Brassow <jbrassow@sourceware.org>
-Date: Thu, 2 Nov 2017 11:27:39 -0400
-Subject: master - testsuite: Forgot to pull 'should's after fixing RAID4/5/6 mismatch test
-Message-ID: <201711021527.vA2FRd2a022505@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Fri, 3 Nov 2017 00:43:23 -0400
+Subject: master - pre-release
+Message-ID: <201711030443.vA34hN4K005195@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4129cf5090cd329dceee03df127d6d3644bbaa66
-Commit:        4129cf5090cd329dceee03df127d6d3644bbaa66
-Parent:        9e8dec2f387d8eaf48195ef38ab7699d4a8385ed
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Thu Nov 2 10:25:46 2017 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Thu Nov 2 10:25:46 2017 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29300e72eebe974d90ebd2b55925bd728f81a326
+Commit:        29300e72eebe974d90ebd2b55925bd728f81a326
+Parent:        4129cf5090cd329dceee03df127d6d3644bbaa66
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Nov 3 02:28:55 2017 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Nov 3 02:28:55 2017 +0000
 
-testsuite:  Forgot to pull 'should's after fixing RAID4/5/6 mismatch test
+pre-release
 
-Test will now fail rather than warn if conditions are not met.
 ---
- test/shell/lvchange-raid.sh |   13 +++----------
- 1 files changed, 3 insertions(+), 10 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    6 +++---
+ WHATS_NEW_DM |    4 ++--
+ 4 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/test/shell/lvchange-raid.sh b/test/shell/lvchange-raid.sh
-index 604b7f7..e6626d1 100644
---- a/test/shell/lvchange-raid.sh
-+++ b/test/shell/lvchange-raid.sh
-@@ -184,15 +184,8 @@ run_syncaction_check() {
- 	# 'lvs' should show results
- 	lvchange --syncaction check $vg/$lv
- 	aux wait_for_sync $vg $lv
--        # FIXME: this needs kernel fix in md-raid
--        # currently let just this test to cause 'warning'
--	if ! get lv_field $vg/$lv lv_attr -a | grep '.*m.$'; then
--		dmsetup status | grep $vg
--		# false
--	fi
--        # FIXME: with fixed kernel this should not fail
--        # add 'wrapper' detecting kernel for this
--	should not check lv_field $vg/$lv raid_mismatch_count "0"
-+	check lv_attr_bit health $vg/$lv "m"
-+	not check lv_field $vg/$lv raid_mismatch_count "0"
- 
- 	# "repair" will fix discrepancies
- 	lvchange --syncaction repair $vg/$lv
-@@ -202,7 +195,7 @@ run_syncaction_check() {
- 	# 'lvs' should show results
- 	lvchange --syncaction check $vg/$lv
- 	aux wait_for_sync $vg $lv
--	check lv_attr_bit health $vg/$lv "-" || check lv_attr_bit health $vg/$lv "m"
-+	check lv_attr_bit health $vg/$lv "-"
- 	check lv_field $vg/$lv raid_mismatch_count "0"
- }
- 
+diff --git a/VERSION b/VERSION
+index e6f3580..933eaeb 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.176(2)-git (2017-10-06)
++2.02.176(2)-git (2017-11-03)
+diff --git a/VERSION_DM b/VERSION_DM
+index cb4da47..bddf7fb 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.145-git (2017-10-06)
++1.02.145-git (2017-11-03)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ac4053a..3f71bdd 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,7 +1,7 @@
+-Version 2.02.176 -
+-===================================
++Version 2.02.176 - 3rd November 2017
++====================================
+   Keep Install section only in lvm2-{lvmetad,lvmpolld}.socket systemd unit.
+-  liblvm: Fix segfault in lvm_pv_remove. (2.02.173)
++  Fix segfault in lvm_pv_remove in liblvm. (2.02.173)
+   Do not allow storing VG metadata with LV without any segment.
+   Fix printed message when thin snapshot was already merged.
+   Remove created spare LV when creation of thin-pool failed.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 12cd7f8..bcb3229 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.145 - 
+-===================================
++Version 1.02.145 - 3rd November 2017
++====================================
+   Keep Install section only in dm-event.socket systemd unit.
+   Issue a specific error with dmsetup status if device is unknown.
+   Fix RT_LIBS reference in generated libdevmapper.pc for pkg-config
 
 
