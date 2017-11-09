@@ -1,42 +1,50 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 8 Nov 2017 12:17:59 -0500
-Subject: master - raid: reject message for 2-legged raid4/5 -> striped
-Message-ID: <201711081717.vA8HHxuo027420@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 9 Nov 2017 05:32:48 -0500
+Subject: master - test: Rename test nothing methods
+Message-ID: <201711091032.vA9AWmE8011241@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9958c4192766edb2b0f6cf7b963b72121c50b7ad
-Commit:        9958c4192766edb2b0f6cf7b963b72121c50b7ad
-Parent:        763db8aab02d7df551a3e8500d261ef6c9651bdb
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Nov 8 18:17:26 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Nov 8 18:17:26 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cd3b5e60a82f745030e2a976832a1490494851dc
+Commit:        cd3b5e60a82f745030e2a976832a1490494851dc
+Parent:        9958c4192766edb2b0f6cf7b963b72121c50b7ad
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Nov 9 09:52:36 2017 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Nov 9 11:31:54 2017 +0100
 
-raid: reject message for 2-legged raid4/5 -> striped
+test: Rename test nothing methods
 
-Commit 763db8aab02d7df551a3e8500d261ef6c9651bdb rejects 2-legged
-conversions to striped/raid0 but different messages are displayed
-for raid0 or striped. This commit provides the same rejection messages.
+These two methods might be useful for debugging, but are not testing
+anything.
 ---
- lib/metadata/raid_manip.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/api/python_lvm_unit.py |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 816c6d4..a904666 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -6424,7 +6424,7 @@ int lv_raid_convert(struct logical_volume *lv,
- 	stripe_size = new_stripe_size_supplied ? new_stripe_size : seg->stripe_size;
+diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
+index 3ffb3ad..296ca14 100755
+--- a/test/api/python_lvm_unit.py
++++ b/test/api/python_lvm_unit.py
+@@ -264,7 +264,7 @@ class TestLvm(unittest.TestCase):
+ 		self.assertTrue(found)
  
- 	if (segtype_is_striped(new_segtype))
--		new_image_count = stripes ? : seg->area_count;
-+		new_image_count = stripes > 1 ? stripes : seg->area_count;
+ 	@staticmethod
+-	def test_pv_methods():
++	def _test_pv_methods():
+ 		with AllowedPVS() as pvs:
+ 			for p in pvs:
+ 				p.getName()
+@@ -863,7 +863,7 @@ class TestLvm(unittest.TestCase):
+ 			vg.close()
  
- 	if (!_check_max_raid_devices(new_image_count))
- 		return_0;
+ 	@staticmethod
+-	def test_listing():
++	def _test_listing():
+ 
+ 		env = os.environ
+ 
 
 
