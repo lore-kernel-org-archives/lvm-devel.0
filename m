@@ -1,137 +1,92 @@
 From: Ondrej Kozina <okozina@sourceware.org>
-Date: Fri, 10 Nov 2017 09:23:32 -0500
-Subject: master - dmsetup: hide integrity encryption keys on table output
-Message-ID: <201711101423.vAAENWTd025231@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 10 Nov 2017 09:23:37 -0500
+Subject: master - test: check dmsetup hides integrity encryption keys
+Message-ID: <201711101423.vAAENbxZ025240@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=32e747dd3124a2de6b2d07e0494067dd0147932b
-Commit:        32e747dd3124a2de6b2d07e0494067dd0147932b
-Parent:        512b2adc7773d302895d01dbc1bccfb66dd94d6a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f0d1c8429b9d59959170cd44732d8ff1987a886a
+Commit:        f0d1c8429b9d59959170cd44732d8ff1987a886a
+Parent:        32e747dd3124a2de6b2d07e0494067dd0147932b
 Author:        Ondrej Kozina <okozina@redhat.com>
-AuthorDate:    Fri Nov 10 13:55:04 2017 +0100
+AuthorDate:    Fri Nov 10 15:15:43 2017 +0100
 Committer:     Ondrej Kozina <okozina@redhat.com>
-CommitterDate: Fri Nov 10 15:23:00 2017 +0100
+CommitterDate: Fri Nov 10 15:23:07 2017 +0100
 
-dmsetup: hide integrity encryption keys on table output
+test: check dmsetup hides integrity encryption keys
 
 ---
- WHATS_NEW_DM       |    1 +
- man/dmsetup.8_main |    6 ++--
- tools/dmsetup.c    |   60 ++++++++++++++++++++++++++++++++++++++-------------
- 3 files changed, 48 insertions(+), 19 deletions(-)
+ test/shell/dmsetup-integrity-keys.sh |   60 ++++++++++++++++++++++++++++++++++
+ 1 files changed, 60 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 71ccea7..b7f71ca 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.146 -
- ====================================
-+  Suppress integrity encryption keys in 'table' output unless --showkeys supplied.
- 
- Version 1.02.145 - 3rd November 2017
- ====================================
-diff --git a/man/dmsetup.8_main b/man/dmsetup.8_main
-index 054746c..8317e23 100644
---- a/man/dmsetup.8_main
-+++ b/man/dmsetup.8_main
-@@ -842,10 +842,10 @@ Outputs the current table for the device in a format that can be fed
- back in using the create or load commands.
- With \fB--target\fP, only information relating to the specified target type
- is displayed.
--Real encryption keys are suppressed in the table output for the crypt
--target unless the \fB--showkeys\fP parameter is supplied. Kernel key
-+Real encryption keys are suppressed in the table output for crypt and integrity
-+targets unless the \fB--showkeys\fP parameter is supplied. Kernel key
- references prefixed with \fB:\fP are not affected by the parameter and get
--displayed always.
-+displayed always (crypt target only).
- With \fB--concise\fP, the output is presented concisely on a single line.
- Commas then separate the name, uuid, minor device number, flags ('ro' or 'rw')
- and the table (if present). Semi-colons separate devices. Backslashes escape
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index ced0311..e85680f 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -2375,6 +2375,24 @@ static void _print_string_quoted(const char *s)
- 	}
- }
- 
-+static void hide_key(char *params, const char *name)
-+{
-+	char *c = strstr(params, name);
+diff --git a/test/shell/dmsetup-integrity-keys.sh b/test/shell/dmsetup-integrity-keys.sh
+new file mode 100644
+index 0000000..6a7172f
+--- /dev/null
++++ b/test/shell/dmsetup-integrity-keys.sh
+@@ -0,0 +1,60 @@
++#!/usr/bin/env bash
 +
-+	if (!c)
-+		return;
++# Copyright (C) 2017 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+	c += strlen(name);
++# unrelated to lvm2 daemons
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++SKIP_WITH_CLVMD=1
++SKIP_WITH_LVMETAD=1
 +
-+	/* key is optional */
-+	c = strpbrk(c, " :");
-+	if (!c || *c++ != ':')
-+		return;
++. lib/inittest
 +
-+	while (*c && *c != ' ')
-+		*c++ = '0';
++INTERNAL_HASH_CRYPT="hmac(sha256)"
++INTERNAL_HASH_NOCRYPT=crc32
++JOURNAL_CRYPT="ctr(aes)"
++HEXKEY_32=0102030405060708090a0102030405060102030405060708090a010203040506
++HEXKEY2_32=0102030405060708090a010203040b060102030405060708090a010203040506
++HIDENKEY_32=0000000000000000000000000000000000000000000000000000000000000000
++
++aux target_at_least dm-integrity 1 0 0 || skip "missing dm-integrity target"
++aux target_at_least dm-zero 1 0 0 || skip "missing dm-zero target"
++
++function _teardown() {
++	aux teardown_devs_prefixed "$PREFIX"
 +}
 +
- static int _status(CMD_ARGS)
- {
- 	int r = 0;
-@@ -2480,24 +2498,34 @@ static int _status(CMD_ARGS)
- 			}
- 			/* Next print any target-specific information */
- 			if (target_type) {
--				/* Suppress encryption key */
-+				/* Suppress encryption keys */
- 				if (!_switches[SHOWKEYS_ARG] &&
--				    cmdno == DM_DEVICE_TABLE &&
--				    !strcmp(target_type, "crypt")) {
--					c = params;
--					while (*c && *c != ' ')
--						c++;
--					if (*c)
--						c++;
--					/*
--					 * Do not suppress kernel key references prefixed
--					 * with colon ':'. Displaying those references is
--					 * harmless. crypt target supports kernel keys
--					 * starting with v1.15.0 (merged in kernel 4.10)
--					 */
--					if (*c != ':')
-+				    cmdno == DM_DEVICE_TABLE) {
-+					if (!strcmp(target_type, "crypt")) {
-+						c = params;
- 						while (*c && *c != ' ')
--							*c++ = '0';
-+							c++;
-+						if (*c)
-+							c++;
-+						/*
-+						 * Do not suppress kernel key references prefixed
-+						 * with colon ':'. Displaying those references is
-+						 * harmless. crypt target supports kernel keys
-+						 * starting with v1.15.0 (merged in kernel 4.10)
-+						 */
-+						if (*c != ':')
-+							while (*c && *c != ' ')
-+								*c++ = '0';
-+					} else if (!strcmp(target_type, "integrity")) {
-+						/*
-+						 * "internal_hash", "journal_crypt" and "journal_mac"
-+						 *  params allow keys optionally in hexbyte
-+						 *  representation.
-+						 */
-+						hide_key(params, "internal_hash:");
-+						hide_key(params, "journal_crypt:");
-+						hide_key(params, "journal_mac:");
-+					}
- 				}
- 				if (use_concise)
- 					putchar(',');
++trap '_teardown' EXIT
++
++dmsetup create "$PREFIX-zero" --table "0 10000 zero"
++dmsetup create "$PREFIX-integrity" --table "0 7856 integrity $DM_DEV_DIR/mapper/$PREFIX-zero 0 32 J 7 journal_sectors:88 interleave_sectors:32768 buffer_sectors:128 journal_watermark:50 commit_time:10000 internal_hash:$INTERNAL_HASH_NOCRYPT journal_crypt:$JOURNAL_CRYPT:$HEXKEY_32"
++
++str=$(dmsetup table "$PREFIX-integrity" | cut -d ' ' -f 15)
++test "$str" = "journal_crypt:$JOURNAL_CRYPT:$HIDENKEY_32"
++str=$(dmsetup table --showkeys "$PREFIX-integrity" | cut -d ' ' -f 15)
++test "$str" = "journal_crypt:$JOURNAL_CRYPT:$HEXKEY_32"
++str=$(dmsetup table "$PREFIX-integrity" | cut -d ' ' -f 14)
++test "$str" = "internal_hash:$INTERNAL_HASH_NOCRYPT"
++
++dmsetup remove "$PREFIX-integrity"
++dmsetup create "$PREFIX-integrity" --table "0 7856 integrity $DM_DEV_DIR/mapper/$PREFIX-zero 0 32 J 7 journal_sectors:88 interleave_sectors:32768 buffer_sectors:128 journal_watermark:50 commit_time:10000 internal_hash:$INTERNAL_HASH_CRYPT:$HEXKEY2_32 journal_crypt:$JOURNAL_CRYPT:$HEXKEY_32"
++
++str=$(dmsetup table "$PREFIX-integrity" | cut -d ' ' -f 15)
++test "$str" = "journal_crypt:$JOURNAL_CRYPT:$HIDENKEY_32"
++str=$(dmsetup table --showkeys "$PREFIX-integrity" | cut -d ' ' -f 15)
++test "$str" = "journal_crypt:$JOURNAL_CRYPT:$HEXKEY_32"
++str=$(dmsetup table "$PREFIX-integrity" | cut -d ' ' -f 14)
++test "$str" = "internal_hash:$INTERNAL_HASH_CRYPT:$HIDENKEY_32"
++str=$(dmsetup table --showkeys "$PREFIX-integrity" | cut -d ' ' -f 14)
++test "$str" = "internal_hash:$INTERNAL_HASH_CRYPT:$HEXKEY2_32"
++
++dmsetup remove "$PREFIX-integrity"
++dmsetup remove "$PREFIX-zero"
 
 
