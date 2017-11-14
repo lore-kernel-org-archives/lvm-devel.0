@@ -1,121 +1,167 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Tue, 14 Nov 2017 09:41:57 -0500
-Subject: master - test: avoid have_raid overhead
-Message-ID: <201711141441.vAEEfv8h011702@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 14 Nov 2017 10:40:43 -0500
+Subject: master - metadata: Eliminate redundant nested VG metadata
+Message-ID: <201711141540.vAEFehQO020175@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=97750cd12f2ae47d12881a9c8ee655b4bfb52737
-Commit:        97750cd12f2ae47d12881a9c8ee655b4bfb52737
-Parent:        ebd0fed0ceb982503ac474c2e6579a45a983e305
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Nov 14 14:15:09 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b5f62a143dcc83bcc12910400b177620a8f49b7c
+Commit:        b5f62a143dcc83bcc12910400b177620a8f49b7c
+Parent:        7a5728fb4c748b911f829c5cda0768c6289a4512
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Nov 14 15:38:55 2017 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Nov 14 14:41:15 2017 +0000
+CommitterDate: Tue Nov 14 15:38:55 2017 +0000
 
-test: avoid have_raid overhead
+metadata: Eliminate redundant nested VG metadata
 
+Only lv_committed() now uses vg->vg_committed and it appears redundant
+if its contents match the enclosing VG so don't waste cycles creating it
+when that's known to be true when no write lock is held so the struct
+won't get modified.
 ---
- test/shell/lvchange-rebuild-raid.sh |   26 ++++++++++++++------------
- 1 files changed, 14 insertions(+), 12 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/metadata.c |   64 ++++++++++++++++++++++-------------------------
+ 2 files changed, 31 insertions(+), 34 deletions(-)
 
-diff --git a/test/shell/lvchange-rebuild-raid.sh b/test/shell/lvchange-rebuild-raid.sh
-index 4f535e6..5579106 100644
---- a/test/shell/lvchange-rebuild-raid.sh
-+++ b/test/shell/lvchange-rebuild-raid.sh
-@@ -16,6 +16,8 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1c8838c..04229da 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.177 -
+ ====================================
++  Eliminate redundant nested VG metadata in VG struct.
+   Avoid importing persistent filter in vgscan/pvscan/vgrename.
+   Fix memleak of string buffer when vgcfgbackup runs in secure mode.
+   Do not print error when clvmd cannot find running clvmd.
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 56c11e6..a14dfa6 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -897,46 +897,41 @@ int vgcreate_params_validate(struct cmd_context *cmd,
+ 	return 1;
+ }
  
- aux have_raid 1 3 2 || skip
-+v1_9_0=0
-+aux have_raid 1 9 && v1_9_0=1
++static void _vg_wipe_cached_precommitted(struct volume_group *vg)
++{
++	release_vg(vg->vg_precommitted);
++	vg->vg_precommitted = NULL;
++}
++
++static void _vg_move_cached_precommitted_to_committed(struct volume_group *vg)
++{
++	release_vg(vg->vg_committed);
++	vg->vg_committed = vg->vg_precommitted;
++	vg->vg_precommitted = NULL;
++}
++
+ /*
+  * Update content of precommitted VG
+  *
+  * TODO: Optimize in the future, since lvmetad needs similar
+  *       config tree processing in lvmetad_vg_update().
+  */
+-static int _vg_update_vg_precommitted(struct volume_group *vg)
++static int _vg_update_embedded_copy(struct volume_group *vg, struct volume_group **vg_embedded)
+ {
+-	struct dm_config_tree *cft_precommitted;
++	struct dm_config_tree *cft;
  
- aux prepare_vg 8
- get_devs
-@@ -47,17 +49,17 @@ _sync
- # Rebuild 1st and 2nd device would rebuild a
- # whole mirror group and needs to be rejected.
- not lvchange --yes --rebuild "$dev1" --rebuild "$dev2" $vg/$lv1
--not check raid_leg_status $vg $lv1 "aAaAAAAA"
-+not check raid_leg_status $vg $lv1 "aaAAAAA"
- _sync "AAAAAAAA"
+-	release_vg(vg->vg_precommitted);
+-	vg->vg_precommitted = NULL;
++	_vg_wipe_cached_precommitted(vg);
  
- # Rebuild 1st and 3rd device from different mirror groups is fine.
- lvchange --yes --rebuild "$dev1" --rebuild "$dev3" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAAAAA"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAaAAAAA"
- _sync "AAAAAAAA"
+ 	/* Copy the VG using an export followed by import */
+-	if (!(cft_precommitted = export_vg_to_config_tree(vg)))
++	if (!(cft = export_vg_to_config_tree(vg)))
+ 		return_0;
  
- # Rebuild devices 1, 3, 6 from different mirror groups is fine.
- lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev6" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAAaAA"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAaAAaAA"
- _sync "AAAAAAAA"
+-	if (!(vg->vg_precommitted = import_vg_from_config_tree(cft_precommitted, vg->fid))) {
+-		dm_config_destroy(cft_precommitted);
++	if (!(*vg_embedded = import_vg_from_config_tree(cft, vg->fid))) {
++		dm_config_destroy(cft);
+ 		return_0;
+ 	}
  
- # Rebuild devices 1, 3, 5 and 6 with 5+6 being
-@@ -68,12 +70,12 @@ _sync "AAAAAAAA"
+-	dm_config_destroy(cft_precommitted);
+-
+-	return 1;
+-}
+-
+-static int _vg_update_vg_committed(struct volume_group *vg)
+-{
+-	if (dm_pool_locked(vg->vgmem))
+-		return 1;
+-
+-	if (vg->vg_committed || is_orphan_vg(vg->name)) /* we already have it */
+-		return 1;
+-
+-	if (!_vg_update_vg_precommitted(vg))
+-		return_0;
+-
+-	vg->vg_committed = vg->vg_precommitted;
+-	vg->vg_precommitted = NULL;
++	dm_config_destroy(cft);
  
- # Rebuild devices 1, 3, 5 and 7 from different mirror groups is fine.
- lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev5" --rebuild "$dev7" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAaAaA"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAaAaAaA"
- _sync
+ 	return 1;
+ }
+@@ -949,7 +944,6 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
+ 					    struct volume_group *vg,
+ 					    uint32_t failure)
+ {
+-
+ 	/* Never return a cached VG structure for a failure */
+ 	if (vg && vg->vginfo && failure != SUCCESS) {
+ 		release_vg(vg);
+@@ -961,8 +955,13 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
  
- # Rebuild devices 2, 4, 6 and 8 from different mirror groups is fine.
- lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" --rebuild "$dev8" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAaAa"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAaAaAa"
- _sync "AAAAAAAA"
+ 	vg->read_status = failure;
  
- ##############################################
-@@ -91,17 +93,17 @@ _sync "AAAAAAAA"
- # Rebuilding all but the raid1 master leg is fine.
- lvchange --yes --rebuild "$dev2" --rebuild "$dev3" --rebuild "$dev4" \
- 	       --rebuild "$dev5" --rebuild "$dev6" --rebuild "$dev7" --rebuild "$dev8" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "Aaaaaaaa"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "Aaaaaaaa"
- _sync "AAAAAAAA"
+-	if (vg->fid && !_vg_update_vg_committed(vg))
+-		vg->read_status |= FAILED_ALLOCATION;
++	/*
++	 * If we hold a write lock and might be changing the VG contents, embed a pristine 
++	 * copy of the VG metadata for the activation code to use later
++	 */
++	if (vg->fid && !dm_pool_locked(vg->vgmem) && !vg->vg_committed && !is_orphan_vg(vg->name))
++		if (vg_write_lock_held() && !_vg_update_embedded_copy(vg, &vg->vg_committed))
++			vg->read_status |= FAILED_ALLOCATION;
  
- # Rebuilding the raid1 master leg is fine.
- lvchange --yes --rebuild "$dev1" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAAAAAAA"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAAAAAAA"
- _sync "AAAAAAAA"
+ 	return vg;
+ }
+@@ -3092,7 +3091,7 @@ int vg_write(struct volume_group *vg)
+ 		}
+ 	}
  
- # Rebuild legs on devices 2, 4, 6 and 8 is fine.
- lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" --rebuild "$dev8" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAaAa"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAaAaAa"
- _sync "AAAAAAAA"
+-	if (!_vg_update_vg_precommitted(vg)) /* prepare precommited */
++	if (!_vg_update_embedded_copy(vg, &vg->vg_precommitted)) /* prepare precommited */
+ 		return_0;
  
- ##############################################
-@@ -123,20 +125,20 @@ _sync "AAAAAA"
+ 	lockd_vg_update(vg);
+@@ -3177,9 +3176,7 @@ int vg_commit(struct volume_group *vg)
+ 			pvl->pv->status &= ~PV_MOVED_VG;
  
- # Rebuilding any 1 raid6 stripe is fine.
- lvchange --yes --rebuild "$dev2" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAAAA"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAAAA"
- _sync
+ 		/* This *is* the original now that it's commited. */
+-		release_vg(vg->vg_committed);
+-		vg->vg_committed = vg->vg_precommitted;
+-		vg->vg_precommitted = NULL;
++		_vg_move_cached_precommitted_to_committed(vg);
+ 	}
  
- lvchange --yes --rebuild "$dev5"  $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AAAAaA"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AAAAaA"
- _sync "AAAAAA"
+ 	/* If update failed, remove any cached precommitted metadata. */
+@@ -3212,8 +3209,7 @@ void vg_revert(struct volume_group *vg)
+ 		}
+ 	}
  
- # Rebuilding any 2 raid6 stripes is fine.
- lvchange --yes --rebuild "$dev2" --rebuild "$dev4" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAA"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAaAA"
- _sync "AAAAAA"
+-	release_vg(vg->vg_precommitted);  /* VG is no longer needed */
+-	vg->vg_precommitted = NULL;
++	_vg_wipe_cached_precommitted(vg); /* VG is no longer needed */
  
- lvchange --yes --rebuild "$dev1" --rebuild "$dev5" $vg/$lv1
--aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAAAaA"
-+[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAAAaA"
- _sync "AAAAAA"
- 
- vgremove -ff $vg
+ 	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use) {
+ 		if (mda->ops->vg_revert &&
 
 
