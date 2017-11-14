@@ -1,48 +1,57 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Tue, 14 Nov 2017 09:41:45 -0500
-Subject: master - raid: correct raid6_n_6 -> raid5 convenience type
-Message-ID: <201711141441.vAEEfjb9011690@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 14 Nov 2017 09:41:57 -0500
+Subject: master - test: additional avoid have_raid overhead
+Message-ID: <201711141441.vAEEfv0V011703@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ebd0fed0ceb982503ac474c2e6579a45a983e305
-Commit:        ebd0fed0ceb982503ac474c2e6579a45a983e305
-Parent:        00acae12a4295075f1b93786f60327e5d3c26e70
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7a5728fb4c748b911f829c5cda0768c6289a4512
+Commit:        7a5728fb4c748b911f829c5cda0768c6289a4512
+Parent:        97750cd12f2ae47d12881a9c8ee655b4bfb52737
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Nov 13 18:03:50 2017 +0100
+AuthorDate:    Tue Nov 14 14:17:54 2017 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Nov 14 14:41:06 2017 +0000
+CommitterDate: Tue Nov 14 14:41:44 2017 +0000
 
-raid: correct raid6_n_6 -> raid5 convenience type
+test: additional avoid have_raid overhead
 
-Fix "lvconvert --type raid5 RaidLV" on a "raid6_n_6" LV offering
-false "raid6_ls_6" instead of "raid5_n".
 ---
- lib/metadata/raid_manip.c |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+ test/shell/lvcreate-large-raid.sh |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index a904666..2d8aaed 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -6141,9 +6141,12 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
- 			seg_flag = SEG_RAID6_N_6;
+diff --git a/test/shell/lvcreate-large-raid.sh b/test/shell/lvcreate-large-raid.sh
+index 1082731..3488db4 100644
+--- a/test/shell/lvcreate-large-raid.sh
++++ b/test/shell/lvcreate-large-raid.sh
+@@ -21,6 +21,8 @@ SKIP_WITH_LVMPOLLD=1
+ aux can_use_16T || skip
  
- 		} else if (segtype_is_any_raid5(*segtype))
--			/* No result for raid6_{zr,nr,nc} */
--			if (!(seg_flag = _raid_seg_flag_6_to_5(seg_from)) ||
--			    !(seg_flag & (*segtype)->flags))
-+			if (!(seg_flag = _raid_seg_flag_6_to_5(seg_from)))
-+				/*
-+				 * No result for raid6_{zr,nr,nc}.
-+				 *
-+				 * Offer to convert to corresponding raid6_*_6 type first.
-+				 */
- 				seg_flag = _raid_segtype_flag_5_to_6(*segtype);
+ aux have_raid 1 3 0 || skip
++v1_9_0=0
++aux have_raid 1 9 0 && v1_9_0=1
  
- 	/* -> raid1 */
+ segtypes="raid5"
+ aux have_raid4 && segtypes="raid4 raid5"
+@@ -78,7 +80,7 @@ lvremove -ff $vg1
+ 
+ 
+ # Check --nosync is rejected for raid6
+-if aux have_raid 1 9 0 ; then
++if [ $v1_9_0 -eq 1 ] ; then
+ 	not lvcreate --type raid6 -i 3 -L 750T -n $lv1 $vg1 --nosync
+ fi
+ 
+@@ -103,7 +105,7 @@ lvremove -ff $vg1
+ lvcreate -aey -L 200T -n $lv1 $vg1
+ lvconvert -y --type raid1 -m 1 $vg1/$lv1
+ check lv_field $vg1/$lv1 size "200.00t"
+-if aux have_raid 1 9 0; then
++if [ $v1_9_0 -eq 1 ] ; then
+ 	# The 1.9.0 version of dm-raid is capable of performing
+ 	# linear -> RAID1 upconverts as "recover" not "resync"
+ 	# The LVM code now checks the dm-raid version when
 
 
