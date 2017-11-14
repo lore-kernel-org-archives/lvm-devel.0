@@ -1,57 +1,121 @@
 From: Alasdair Kergon <agk@sourceware.org>
 Date: Tue, 14 Nov 2017 09:41:57 -0500
-Subject: master - test: additional avoid have_raid overhead
-Message-ID: <201711141441.vAEEfv0V011703@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - test: avoid have_raid overhead
+Message-ID: <201711141441.vAEEfv8h011702@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7a5728fb4c748b911f829c5cda0768c6289a4512
-Commit:        7a5728fb4c748b911f829c5cda0768c6289a4512
-Parent:        97750cd12f2ae47d12881a9c8ee655b4bfb52737
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=97750cd12f2ae47d12881a9c8ee655b4bfb52737
+Commit:        97750cd12f2ae47d12881a9c8ee655b4bfb52737
+Parent:        ebd0fed0ceb982503ac474c2e6579a45a983e305
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Nov 14 14:17:54 2017 +0100
+AuthorDate:    Tue Nov 14 14:15:09 2017 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Nov 14 14:41:44 2017 +0000
+CommitterDate: Tue Nov 14 14:41:15 2017 +0000
 
-test: additional avoid have_raid overhead
+test: avoid have_raid overhead
 
 ---
- test/shell/lvcreate-large-raid.sh |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ test/shell/lvchange-rebuild-raid.sh |   26 ++++++++++++++------------
+ 1 files changed, 14 insertions(+), 12 deletions(-)
 
-diff --git a/test/shell/lvcreate-large-raid.sh b/test/shell/lvcreate-large-raid.sh
-index 1082731..3488db4 100644
---- a/test/shell/lvcreate-large-raid.sh
-+++ b/test/shell/lvcreate-large-raid.sh
-@@ -21,6 +21,8 @@ SKIP_WITH_LVMPOLLD=1
- aux can_use_16T || skip
+diff --git a/test/shell/lvchange-rebuild-raid.sh b/test/shell/lvchange-rebuild-raid.sh
+index 4f535e6..5579106 100644
+--- a/test/shell/lvchange-rebuild-raid.sh
++++ b/test/shell/lvchange-rebuild-raid.sh
+@@ -16,6 +16,8 @@ SKIP_WITH_LVMPOLLD=1
+ . lib/inittest
  
- aux have_raid 1 3 0 || skip
+ aux have_raid 1 3 2 || skip
 +v1_9_0=0
-+aux have_raid 1 9 0 && v1_9_0=1
++aux have_raid 1 9 && v1_9_0=1
  
- segtypes="raid5"
- aux have_raid4 && segtypes="raid4 raid5"
-@@ -78,7 +80,7 @@ lvremove -ff $vg1
+ aux prepare_vg 8
+ get_devs
+@@ -47,17 +49,17 @@ _sync
+ # Rebuild 1st and 2nd device would rebuild a
+ # whole mirror group and needs to be rejected.
+ not lvchange --yes --rebuild "$dev1" --rebuild "$dev2" $vg/$lv1
+-not check raid_leg_status $vg $lv1 "aAaAAAAA"
++not check raid_leg_status $vg $lv1 "aaAAAAA"
+ _sync "AAAAAAAA"
  
+ # Rebuild 1st and 3rd device from different mirror groups is fine.
+ lvchange --yes --rebuild "$dev1" --rebuild "$dev3" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAAAAA"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAaAAAAA"
+ _sync "AAAAAAAA"
  
- # Check --nosync is rejected for raid6
--if aux have_raid 1 9 0 ; then
-+if [ $v1_9_0 -eq 1 ] ; then
- 	not lvcreate --type raid6 -i 3 -L 750T -n $lv1 $vg1 --nosync
- fi
+ # Rebuild devices 1, 3, 6 from different mirror groups is fine.
+ lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev6" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAAaAA"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAaAAaAA"
+ _sync "AAAAAAAA"
  
-@@ -103,7 +105,7 @@ lvremove -ff $vg1
- lvcreate -aey -L 200T -n $lv1 $vg1
- lvconvert -y --type raid1 -m 1 $vg1/$lv1
- check lv_field $vg1/$lv1 size "200.00t"
--if aux have_raid 1 9 0; then
-+if [ $v1_9_0 -eq 1 ] ; then
- 	# The 1.9.0 version of dm-raid is capable of performing
- 	# linear -> RAID1 upconverts as "recover" not "resync"
- 	# The LVM code now checks the dm-raid version when
+ # Rebuild devices 1, 3, 5 and 6 with 5+6 being
+@@ -68,12 +70,12 @@ _sync "AAAAAAAA"
+ 
+ # Rebuild devices 1, 3, 5 and 7 from different mirror groups is fine.
+ lvchange --yes --rebuild "$dev1" --rebuild "$dev3" --rebuild "$dev5" --rebuild "$dev7" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAaAaAaA"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAaAaAaA"
+ _sync
+ 
+ # Rebuild devices 2, 4, 6 and 8 from different mirror groups is fine.
+ lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" --rebuild "$dev8" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAaAa"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAaAaAa"
+ _sync "AAAAAAAA"
+ 
+ ##############################################
+@@ -91,17 +93,17 @@ _sync "AAAAAAAA"
+ # Rebuilding all but the raid1 master leg is fine.
+ lvchange --yes --rebuild "$dev2" --rebuild "$dev3" --rebuild "$dev4" \
+ 	       --rebuild "$dev5" --rebuild "$dev6" --rebuild "$dev7" --rebuild "$dev8" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "Aaaaaaaa"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "Aaaaaaaa"
+ _sync "AAAAAAAA"
+ 
+ # Rebuilding the raid1 master leg is fine.
+ lvchange --yes --rebuild "$dev1" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAAAAAAA"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAAAAAAA"
+ _sync "AAAAAAAA"
+ 
+ # Rebuild legs on devices 2, 4, 6 and 8 is fine.
+ lvchange --yes --rebuild "$dev2" --rebuild "$dev4" --rebuild "$dev6" --rebuild "$dev8" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAaAa"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAaAaAa"
+ _sync "AAAAAAAA"
+ 
+ ##############################################
+@@ -123,20 +125,20 @@ _sync "AAAAAA"
+ 
+ # Rebuilding any 1 raid6 stripe is fine.
+ lvchange --yes --rebuild "$dev2" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAAAA"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAAAA"
+ _sync
+ 
+ lvchange --yes --rebuild "$dev5"  $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AAAAaA"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AAAAaA"
+ _sync "AAAAAA"
+ 
+ # Rebuilding any 2 raid6 stripes is fine.
+ lvchange --yes --rebuild "$dev2" --rebuild "$dev4" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "AaAaAA"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAaAA"
+ _sync "AAAAAA"
+ 
+ lvchange --yes --rebuild "$dev1" --rebuild "$dev5" $vg/$lv1
+-aux have_raid 1 9 && check raid_leg_status $vg $lv1 "aAAAaA"
++[ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAAAaA"
+ _sync "AAAAAA"
+ 
+ vgremove -ff $vg
 
 
