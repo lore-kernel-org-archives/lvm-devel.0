@@ -1,89 +1,203 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Nov 2017 15:00:45 -0500
-Subject: master - pvmove: activation changes
-Message-ID: <201711152000.vAFK0jxZ029293@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 15 Nov 2017 15:00:51 -0500
+Subject: master - pvmove: remove unusued code
+Message-ID: <201711152000.vAFK0pWR029304@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b978f505ff05c3581ccc633442b04c5d391add04
-Commit:        b978f505ff05c3581ccc633442b04c5d391add04
-Parent:        a25f9b210692fe5cd164441b76a78b11fb4ee4e5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0f0dc1a2a5f779fbdae7bddd12c3e56397636833
+Commit:        0f0dc1a2a5f779fbdae7bddd12c3e56397636833
+Parent:        b978f505ff05c3581ccc633442b04c5d391add04
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 15 14:26:10 2017 +0100
+AuthorDate:    Fri Nov 10 21:48:33 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 15 21:00:26 2017 +0100
+CommitterDate: Wed Nov 15 21:00:29 2017 +0100
 
-pvmove: activation changes
+pvmove: remove unusued code
 
-Do not use precommitted LV for suspend of pvmoving LVs.
+Support for snapshot and cache LVs should now work.
+Remove protection rejecting pvmove for them.
 ---
- WHATS_NEW               |    1 +
- lib/activate/activate.c |   32 ++++----------------------------
- 2 files changed, 5 insertions(+), 28 deletions(-)
+ lib/locking/locking.c |   61 -------------------------------------------
+ lib/locking/locking.h |    4 ---
+ tools/pvmove.c        |   68 -------------------------------------------------
+ 3 files changed, 0 insertions(+), 133 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b1454a3..ff60758 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.177 -
- ====================================
-+  Avoid using precommitted metadata for suspending pvmove tree.
-   Ehnance pvmove locking.
-   Deactivate activated LVs on error path when pvmove activation fails.
-   Add "io" to log/debug_classes for logging low-level I/O.
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index d6189bb..efcecde 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2214,10 +2214,6 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
- 		/* FIXME Consider aborting here */
- 		stack;
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index acf3327..c68d4c7 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -371,67 +371,6 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
+ 	return 1;
+ }
  
--	critical_section_inc(cmd, "suspending");
--	if (pvmove_lv)
--		critical_section_inc(cmd, "suspending pvmove LV");
+-/* Unlock list of LVs */
+-int resume_lvs(struct cmd_context *cmd, struct dm_list *lvs)
+-{
+-	struct lv_list *lvl;
+-	int r = 1;
 -
- 	if (!laopts->origin_only &&
- 	    (lv_is_origin(lv_pre) || lv_is_cow(lv_pre)))
- 		lockfs = 1;
-@@ -2229,30 +2225,10 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
- 	if (laopts->origin_only && lv_is_thin_volume(lv) && lv_is_thin_volume(lv_pre))
- 		lockfs = 1;
- 
--	/*
--	 * Suspending an LV directly above a PVMOVE LV also
-- 	 * suspends other LVs using that same PVMOVE LV.
--	 * FIXME Remove this and delay the 'clear node' until
-- 	 * after the code knows whether there's a different
-- 	 * inactive table to load or not instead so lv_suspend
-- 	 * can be called separately for each LV safely.
-- 	 */
--	if ((lv_pre->vg->status & PRECOMMITTED) &&
--	    lv_is_locked(lv_pre) && find_pvmove_lv_in_lv(lv_pre)) {
--		if (!_lv_suspend_lv(lv_pre, laopts, lockfs, flush_required)) {
--			critical_section_dec(cmd, "failed precommitted suspend");
--			if (pvmove_lv)
--				critical_section_dec(cmd, "failed precommitted suspend (pvmove)");
--			goto_out;
+-	dm_list_iterate_items(lvl, lvs)
+-		if (!resume_lv(cmd, lvl->lv)) {
+-			r = 0;
+-			stack;
 -		}
--	} else {
--		/* Normal suspend */
--		if (!_lv_suspend_lv(lv, laopts, lockfs, flush_required)) {
--			critical_section_dec(cmd, "failed suspend");
--			if (pvmove_lv)
--				critical_section_dec(cmd, "failed suspend (pvmove)");
--			goto_out;
+-
+-	return r;
+-}
+-
+-/* Unlock and revert list of LVs */
+-int revert_lvs(struct cmd_context *cmd, struct dm_list *lvs)
+-{
+-	struct lv_list *lvl;
+-	int r = 1;
+-
+-	dm_list_iterate_items(lvl, lvs)
+-		if (!revert_lv(cmd, lvl->lv)) {
+-			r = 0;
+-			stack;
 -		}
-+	critical_section_inc(cmd, "suspending");
-+	if (!_lv_suspend_lv(lv, laopts, lockfs, flush_required)) {
-+		critical_section_dec(cmd, "failed suspend");
-+		goto_out;
- 	}
+-
+-	return r;
+-}
+-/*
+- * Lock a list of LVs.
+- * On failure to lock any LV, calls vg_revert() if vg_to_revert is set and 
+- * then unlocks any LVs on the list already successfully locked.
+- */
+-int suspend_lvs(struct cmd_context *cmd, struct dm_list *lvs,
+-		struct volume_group *vg_to_revert)
+-{
+-	struct lv_list *lvl;
+-
+-	dm_list_iterate_items(lvl, lvs) {
+-		if (!suspend_lv(cmd, lvl->lv)) {
+-			log_error("Failed to suspend %s", display_lvname(lvl->lv));
+-			if (vg_to_revert)
+-				vg_revert(vg_to_revert);
+-			/*
+-			 * FIXME Should be
+-			 * 	dm_list_uniterate(lvh, lvs, &lvl->list) {
+-			 *	lvl = dm_list_item(lvh, struct lv_list);
+-			 * but revert would need fixing to use identical tree deps first.
+-			 */
+-			dm_list_iterate_items(lvl, lvs)
+-				if (!revert_lv(cmd, lvl->lv))
+-					stack;
+-
+-			return 0;
+-		}
+-	}
+-
+-	return 1;
+-}
+-
+ /*
+  * First try to activate exclusively locally.
+  * Then if the VG is clustered and the LV is not yet active (e.g. due to 
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index 4b5490e..47841ed 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -262,10 +262,6 @@ int sync_dev_names(struct cmd_context* cmd);
  
- 	r = 1;
+ /* Process list of LVs */
+ struct volume_group;
+-int suspend_lvs(struct cmd_context *cmd, struct dm_list *lvs,
+-		struct volume_group *vg_to_revert);
+-int resume_lvs(struct cmd_context *cmd, struct dm_list *lvs);
+-int revert_lvs(struct cmd_context *cmd, struct dm_list *lvs);
+ int activate_lvs(struct cmd_context *cmd, struct dm_list *lvs);
+ 
+ #endif
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index ff36b55..7bf1713 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -303,32 +303,6 @@ static int _sub_lv_of(struct logical_volume *lv, const char *lv_name)
+ 	return _sub_lv_of(seg->lv, lv_name);
+ }
+ 
+-/*
+- * parent_lv_is_cache_type
+- *
+- * FIXME: This function can be removed when 'pvmove' is supported for
+- *        cache types.
+- *
+- * If this LV is below a cache LV (at any depth), return 1.
+- */
+-static int _parent_lv_is_cache_type(struct logical_volume *lv)
+-{
+-	struct lv_segment *seg;
+-
+-	/* Sub-LVs only ever have one segment using them */
+-	if (dm_list_size(&lv->segs_using_this_lv) != 1)
+-		return 0;
+-
+-	if (!(seg = get_only_segment_using_this_lv(lv)))
+-		return_0;
+-
+-	if (lv_is_cache_type(seg->lv))
+-		return 1;
+-
+-	/* Continue up the tree */
+-	return _parent_lv_is_cache_type(seg->lv);
+-}
+-
+ /* Create new LV with mirror segments for the required copies */
+ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 						struct volume_group *vg,
+@@ -450,48 +424,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 		if (!lv_is_on_pvs(lv, source_pvl))
+ 			continue;
+ 
+-		if (lv_is_cache_type(lv)) {
+-			log_print_unless_silent("Skipping %s LV, %s.",
+-						lv_is_cache(lv) ? "cache" :
+-						lv_is_cache_pool(lv) ?
+-						"cache-pool" : "cache-related",
+-						lv->name);
+-			lv_skipped = 1;
+-			continue;
+-		}
+-
+-		if (_parent_lv_is_cache_type(lv)) {
+-			log_print_unless_silent("Skipping %s because a parent"
+-						" is of cache type.", lv->name);
+-			lv_skipped = 1;
+-			continue;
+-		}
+-
+-		/*
+-		 * If the VG is clustered, we are unable to handle
+-		 * snapshots, origins, thin types, RAID or mirror
+-		 */
+-		if ((vg_is_clustered(vg) || is_lockd_type(vg->lock_type)) &&
+-		    (lv_is_origin(lv) || lv_is_cow(lv) ||
+-		     lv_is_thin_type(lv) || lv_is_raid_type(lv))) {
+-			log_print_unless_silent("Skipping %s LV %s.",
+-						lv_is_origin(lv) ? "origin" :
+-						lv_is_cow(lv) ?
+-						"snapshot-related" :
+-						lv_is_thin_volume(lv) ? "thin" :
+-						lv_is_thin_pool(lv) ?
+-						"thin-pool" :
+-						lv_is_thin_type(lv) ?
+-						"thin-related" :
+-						seg_is_raid(first_seg(lv)) ?
+-						"RAID" :
+-						lv_is_raid_type(lv) ?
+-						"RAID-related" : "",
+-						lv->name);
+-			lv_skipped = 1;
+-			continue;
+-		}
+-
+ 		seg = first_seg(lv);
+ 		if (seg_is_raid(seg) || seg_is_mirrored(seg) ||
+ 		    lv_is_thin_volume(lv) || lv_is_thin_pool(lv)) {
 
 
