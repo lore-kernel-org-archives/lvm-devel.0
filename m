@@ -1,54 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Nov 2017 08:09:34 -0500
-Subject: master - pvmove: snapshots need to go with origin device
-Message-ID: <201711151309.vAFD9Y0r001939@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 15 Nov 2017 08:09:43 -0500
+Subject: master - pvmove: return pvmove itself
+Message-ID: <201711151309.vAFD9htS001952@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=919744375e21856ee6511f5f7185c3773d60da0b
-Commit:        919744375e21856ee6511f5f7185c3773d60da0b
-Parent:        7c5531b4ca2bb261a7a37fd1c895963afb9d80e8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cc854c0617034613b0335e43eaabf4e4ff2a26bd
+Commit:        cc854c0617034613b0335e43eaabf4e4ff2a26bd
+Parent:        919744375e21856ee6511f5f7185c3773d60da0b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 10 21:18:55 2017 +0100
+AuthorDate:    Tue Nov 14 20:44:32 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Nov 15 11:51:53 2017 +0100
 
-pvmove: snapshots need to go with origin device
+pvmove: return pvmove itself
 
-Enable future support for pvmove for COW LVs.
+When find_pvmove_lv_in_lv() get already a 'pvmoving' LV - return it.
 ---
- lib/activate/dev_manager.c |    8 ++++++--
- 1 files changed, 6 insertions(+), 2 deletions(-)
+ lib/metadata/mirror.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 29727df..1ca3baa 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1939,6 +1939,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	struct lv_segment *seg;
- 	struct dm_tree_node *node;
- 	const char *uuid;
-+	const struct logical_volume *plv;
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index 238ce37..c89408c 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1512,6 +1512,9 @@ const struct logical_volume *find_pvmove_lv_in_lv(const struct logical_volume *l
+ 	const struct lv_segment *seg;
+ 	uint32_t s;
  
- 	if (lv_is_cache_pool(lv)) {
- 		if (!dm_list_empty(&lv->segs_using_this_lv)) {
-@@ -2061,9 +2062,12 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	/* Add any LVs referencing a PVMOVE LV unless told not to. */
- 	if (dm->track_pvmove_deps && lv_is_pvmove(lv)) {
- 		dm->track_pvmove_deps = 0;
--		dm_list_iterate_items(sl, &lv->segs_using_this_lv)
--			if (!_add_lv_to_dtree(dm, dtree, sl->seg->lv, origin_only))
-+		dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
-+			/* If LV is snapshot COW - whole snapshot needs reload */
-+			plv = lv_is_cow(sl->seg->lv) ? origin_from_cow(sl->seg->lv) : sl->seg->lv;
-+			if (!_add_lv_to_dtree(dm, dtree, plv, 0))
- 				return_0;
-+		}
- 		dm->track_pvmove_deps = 1;
- 	}
- 
++	if (lv_is_pvmove(lv))
++		return lv;
++
+ 	dm_list_iterate_items(seg, &lv->segments) {
+ 		for (s = 0; s < seg->area_count; s++) {
+ 			if (seg_type(seg, s) != AREA_LV)
 
 
