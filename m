@@ -1,167 +1,108 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Tue, 14 Nov 2017 10:40:43 -0500
-Subject: master - metadata: Eliminate redundant nested VG metadata
-Message-ID: <201711141540.vAEFehQO020175@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 14 Nov 2017 20:03:50 -0500
+Subject: master - log: Add io debug class
+Message-ID: <201711150103.vAF13olo000501@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b5f62a143dcc83bcc12910400b177620a8f49b7c
-Commit:        b5f62a143dcc83bcc12910400b177620a8f49b7c
-Parent:        7a5728fb4c748b911f829c5cda0768c6289a4512
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=02e987666540712a9467025bf36e46e041da2611
+Commit:        02e987666540712a9467025bf36e46e041da2611
+Parent:        b5f62a143dcc83bcc12910400b177620a8f49b7c
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Nov 14 15:38:55 2017 +0000
+AuthorDate:    Wed Nov 15 00:59:30 2017 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Nov 14 15:38:55 2017 +0000
+CommitterDate: Wed Nov 15 01:02:15 2017 +0000
 
-metadata: Eliminate redundant nested VG metadata
+log: Add io debug class
 
-Only lv_committed() now uses vg->vg_committed and it appears redundant
-if its contents match the enclosing VG so don't waste cycles creating it
-when that's known to be true when no write lock is held so the struct
-won't get modified.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/metadata.c |   64 ++++++++++++++++++++++-------------------------
- 2 files changed, 31 insertions(+), 34 deletions(-)
+ WHATS_NEW                    |    1 +
+ lib/commands/toolcontext.c   |    2 ++
+ lib/config/config_settings.h |    4 ++--
+ lib/device/dev-io.c          |    5 +++++
+ lib/log/log.h                |    2 ++
+ 5 files changed, 12 insertions(+), 2 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 1c8838c..04229da 100644
+index 04229da..7db534c 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.177 -
  ====================================
-+  Eliminate redundant nested VG metadata in VG struct.
++  Add "io" to log/debug_classes for logging low-level I/O.
+   Eliminate redundant nested VG metadata in VG struct.
    Avoid importing persistent filter in vgscan/pvscan/vgrename.
    Fix memleak of string buffer when vgcfgbackup runs in secure mode.
-   Do not print error when clvmd cannot find running clvmd.
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 56c11e6..a14dfa6 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -897,46 +897,41 @@ int vgcreate_params_validate(struct cmd_context *cmd,
- 	return 1;
- }
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index e742df5..1985c30 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -283,6 +283,8 @@ static int _parse_debug_classes(struct cmd_context *cmd)
+ 			debug_classes |= LOG_CLASS_LVMPOLLD;
+ 		else if (!strcasecmp(cv->v.str, "dbus"))
+ 			debug_classes |= LOG_CLASS_DBUS;
++		else if (!strcasecmp(cv->v.str, "io"))
++			debug_classes |= LOG_CLASS_IO;
+ 		else
+ 			log_verbose("Unrecognised value for log/debug_classes: %s", cv->v.str);
+ 	}
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 7d800b3..077fb15 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -705,11 +705,11 @@ cfg(log_activation_CFG, "activation", log_CFG_SECTION, 0, CFG_TYPE_BOOL, 0, vsn(
  
-+static void _vg_wipe_cached_precommitted(struct volume_group *vg)
-+{
-+	release_vg(vg->vg_precommitted);
-+	vg->vg_precommitted = NULL;
-+}
+ cfg(log_activate_file_CFG, "activate_file", log_CFG_SECTION, CFG_DEFAULT_UNDEFINED | CFG_UNSUPPORTED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, 0, NULL, NULL)
+ 
+-cfg_array(log_debug_classes_CFG, "debug_classes", log_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, "#Smemory#Sdevices#Sactivation#Sallocation#Slvmetad#Smetadata#Scache#Slocking#Slvmpolld#Sdbus", vsn(2, 2, 99), NULL, 0, NULL,
++cfg_array(log_debug_classes_CFG, "debug_classes", log_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, "#Smemory#Sdevices#Sio#Sactivation#Sallocation#Slvmetad#Smetadata#Scache#Slocking#Slvmpolld#Sdbus", vsn(2, 2, 99), NULL, 0, NULL,
+ 	"Select log messages by class.\n"
+ 	"Some debugging messages are assigned to a class and only appear in\n"
+ 	"debug output if the class is listed here. Classes currently\n"
+-	"available: memory, devices, activation, allocation, lvmetad,\n"
++	"available: memory, devices, io, activation, allocation, lvmetad,\n"
+ 	"metadata, cache, locking, lvmpolld. Use \"all\" to see everything.\n")
+ 
+ cfg(backup_backup_CFG, "backup", backup_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_BACKUP_ENABLED, vsn(1, 0, 0), NULL, 0, NULL,
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index 328ec30..24bc81c 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -72,6 +72,11 @@ static int _io(struct device_area *where, char *buffer, int should_write)
+ 		return 0;
+ 	}
+ 
++	log_debug_io("%s %s:%8" PRIu64 " bytes (sync) at %" PRIu64 "%s",
++		     should_write ? "Write" : "Read ", dev_name(where->dev),
++		     where->size, (uint64_t) where->start,
++		     (should_write && test_mode()) ? " (test mode - suppressed)" : "");
 +
-+static void _vg_move_cached_precommitted_to_committed(struct volume_group *vg)
-+{
-+	release_vg(vg->vg_committed);
-+	vg->vg_committed = vg->vg_precommitted;
-+	vg->vg_precommitted = NULL;
-+}
-+
- /*
-  * Update content of precommitted VG
-  *
-  * TODO: Optimize in the future, since lvmetad needs similar
-  *       config tree processing in lvmetad_vg_update().
-  */
--static int _vg_update_vg_precommitted(struct volume_group *vg)
-+static int _vg_update_embedded_copy(struct volume_group *vg, struct volume_group **vg_embedded)
- {
--	struct dm_config_tree *cft_precommitted;
-+	struct dm_config_tree *cft;
+ 	/*
+ 	 * Skip all writes in test mode.
+ 	 */
+diff --git a/lib/log/log.h b/lib/log/log.h
+index 0ce4fda..256fed0 100644
+--- a/lib/log/log.h
++++ b/lib/log/log.h
+@@ -72,6 +72,7 @@
+ #define LOG_CLASS_LOCKING	0x0080	/* "locking" */
+ #define LOG_CLASS_LVMPOLLD	0x0100	/* "lvmpolld" */
+ #define LOG_CLASS_DBUS		0x0200	/* "dbus" */
++#define LOG_CLASS_IO		0x0400	/* "io" */
  
--	release_vg(vg->vg_precommitted);
--	vg->vg_precommitted = NULL;
-+	_vg_wipe_cached_precommitted(vg);
+ #define log_debug(x...) LOG_LINE(_LOG_DEBUG, x)
+ #define log_debug_mem(x...) LOG_LINE_WITH_CLASS(_LOG_DEBUG, LOG_CLASS_MEM, x)
+@@ -84,6 +85,7 @@
+ #define log_debug_locking(x...) LOG_LINE_WITH_CLASS(_LOG_DEBUG, LOG_CLASS_LOCKING, x)
+ #define log_debug_lvmpolld(x...) LOG_LINE_WITH_CLASS(_LOG_DEBUG, LOG_CLASS_LVMPOLLD, x)
+ #define log_debug_dbus(x...) LOG_LINE_WITH_CLASS(_LOG_DEBUG, LOG_CLASS_DBUS, x)
++#define log_debug_io(x...) LOG_LINE_WITH_CLASS(_LOG_DEBUG, LOG_CLASS_IO, x)
  
- 	/* Copy the VG using an export followed by import */
--	if (!(cft_precommitted = export_vg_to_config_tree(vg)))
-+	if (!(cft = export_vg_to_config_tree(vg)))
- 		return_0;
- 
--	if (!(vg->vg_precommitted = import_vg_from_config_tree(cft_precommitted, vg->fid))) {
--		dm_config_destroy(cft_precommitted);
-+	if (!(*vg_embedded = import_vg_from_config_tree(cft, vg->fid))) {
-+		dm_config_destroy(cft);
- 		return_0;
- 	}
- 
--	dm_config_destroy(cft_precommitted);
--
--	return 1;
--}
--
--static int _vg_update_vg_committed(struct volume_group *vg)
--{
--	if (dm_pool_locked(vg->vgmem))
--		return 1;
--
--	if (vg->vg_committed || is_orphan_vg(vg->name)) /* we already have it */
--		return 1;
--
--	if (!_vg_update_vg_precommitted(vg))
--		return_0;
--
--	vg->vg_committed = vg->vg_precommitted;
--	vg->vg_precommitted = NULL;
-+	dm_config_destroy(cft);
- 
- 	return 1;
- }
-@@ -949,7 +944,6 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
- 					    struct volume_group *vg,
- 					    uint32_t failure)
- {
--
- 	/* Never return a cached VG structure for a failure */
- 	if (vg && vg->vginfo && failure != SUCCESS) {
- 		release_vg(vg);
-@@ -961,8 +955,13 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
- 
- 	vg->read_status = failure;
- 
--	if (vg->fid && !_vg_update_vg_committed(vg))
--		vg->read_status |= FAILED_ALLOCATION;
-+	/*
-+	 * If we hold a write lock and might be changing the VG contents, embed a pristine 
-+	 * copy of the VG metadata for the activation code to use later
-+	 */
-+	if (vg->fid && !dm_pool_locked(vg->vgmem) && !vg->vg_committed && !is_orphan_vg(vg->name))
-+		if (vg_write_lock_held() && !_vg_update_embedded_copy(vg, &vg->vg_committed))
-+			vg->read_status |= FAILED_ALLOCATION;
- 
- 	return vg;
- }
-@@ -3092,7 +3091,7 @@ int vg_write(struct volume_group *vg)
- 		}
- 	}
- 
--	if (!_vg_update_vg_precommitted(vg)) /* prepare precommited */
-+	if (!_vg_update_embedded_copy(vg, &vg->vg_precommitted)) /* prepare precommited */
- 		return_0;
- 
- 	lockd_vg_update(vg);
-@@ -3177,9 +3176,7 @@ int vg_commit(struct volume_group *vg)
- 			pvl->pv->status &= ~PV_MOVED_VG;
- 
- 		/* This *is* the original now that it's commited. */
--		release_vg(vg->vg_committed);
--		vg->vg_committed = vg->vg_precommitted;
--		vg->vg_precommitted = NULL;
-+		_vg_move_cached_precommitted_to_committed(vg);
- 	}
- 
- 	/* If update failed, remove any cached precommitted metadata. */
-@@ -3212,8 +3209,7 @@ void vg_revert(struct volume_group *vg)
- 		}
- 	}
- 
--	release_vg(vg->vg_precommitted);  /* VG is no longer needed */
--	vg->vg_precommitted = NULL;
-+	_vg_wipe_cached_precommitted(vg); /* VG is no longer needed */
- 
- 	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use) {
- 		if (mda->ops->vg_revert &&
+ #define log_info(x...) LOG_LINE(_LOG_INFO, x)
+ #define log_notice(x...) LOG_LINE(_LOG_NOTICE, x)
 
 
