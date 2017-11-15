@@ -1,203 +1,181 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Nov 2017 15:00:51 -0500
-Subject: master - pvmove: remove unusued code
-Message-ID: <201711152000.vAFK0pWR029304@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 15 Nov 2017 15:00:53 -0500
+Subject: master - tests: pvmove supports more cases
+Message-ID: <201711152000.vAFK0re3029314@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0f0dc1a2a5f779fbdae7bddd12c3e56397636833
-Commit:        0f0dc1a2a5f779fbdae7bddd12c3e56397636833
-Parent:        b978f505ff05c3581ccc633442b04c5d391add04
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b0618f90116bb723e568e3aeec6cdcfde342d6b2
+Commit:        b0618f90116bb723e568e3aeec6cdcfde342d6b2
+Parent:        0f0dc1a2a5f779fbdae7bddd12c3e56397636833
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 10 21:48:33 2017 +0100
+AuthorDate:    Sat Nov 11 00:15:15 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Nov 15 21:00:29 2017 +0100
 
-pvmove: remove unusued code
+tests: pvmove supports more cases
 
-Support for snapshot and cache LVs should now work.
-Remove protection rejecting pvmove for them.
+pvmove handles cached LVs as well as snapshots now.
 ---
- lib/locking/locking.c |   61 -------------------------------------------
- lib/locking/locking.h |    4 ---
- tools/pvmove.c        |   68 -------------------------------------------------
- 3 files changed, 0 insertions(+), 133 deletions(-)
+ test/shell/pvmove-cache-segtypes.sh |   37 ++++++++++++----------------------
+ test/shell/pvmove-raid-segtypes.sh  |    1 -
+ test/shell/pvmove-thin-segtypes.sh  |    1 -
+ 3 files changed, 13 insertions(+), 26 deletions(-)
 
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index acf3327..c68d4c7 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -371,67 +371,6 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
- 	return 1;
- }
+diff --git a/test/shell/pvmove-cache-segtypes.sh b/test/shell/pvmove-cache-segtypes.sh
+index f95ba72..b5b341d 100644
+--- a/test/shell/pvmove-cache-segtypes.sh
++++ b/test/shell/pvmove-cache-segtypes.sh
+@@ -12,7 +12,6 @@
  
--/* Unlock list of LVs */
--int resume_lvs(struct cmd_context *cmd, struct dm_list *lvs)
--{
--	struct lv_list *lvl;
--	int r = 1;
--
--	dm_list_iterate_items(lvl, lvs)
--		if (!resume_lv(cmd, lvl->lv)) {
--			r = 0;
--			stack;
--		}
--
--	return r;
--}
--
--/* Unlock and revert list of LVs */
--int revert_lvs(struct cmd_context *cmd, struct dm_list *lvs)
--{
--	struct lv_list *lvl;
--	int r = 1;
--
--	dm_list_iterate_items(lvl, lvs)
--		if (!revert_lv(cmd, lvl->lv)) {
--			r = 0;
--			stack;
--		}
--
--	return r;
--}
--/*
-- * Lock a list of LVs.
-- * On failure to lock any LV, calls vg_revert() if vg_to_revert is set and 
-- * then unlocks any LVs on the list already successfully locked.
-- */
--int suspend_lvs(struct cmd_context *cmd, struct dm_list *lvs,
--		struct volume_group *vg_to_revert)
--{
--	struct lv_list *lvl;
--
--	dm_list_iterate_items(lvl, lvs) {
--		if (!suspend_lv(cmd, lvl->lv)) {
--			log_error("Failed to suspend %s", display_lvname(lvl->lv));
--			if (vg_to_revert)
--				vg_revert(vg_to_revert);
--			/*
--			 * FIXME Should be
--			 * 	dm_list_uniterate(lvh, lvs, &lvl->list) {
--			 *	lvl = dm_list_item(lvh, struct lv_list);
--			 * but revert would need fixing to use identical tree deps first.
--			 */
--			dm_list_iterate_items(lvl, lvs)
--				if (!revert_lv(cmd, lvl->lv))
--					stack;
--
--			return 0;
--		}
--	}
--
--	return 1;
--}
--
- /*
-  * First try to activate exclusively locally.
-  * Then if the VG is clustered and the LV is not yet active (e.g. due to 
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index 4b5490e..47841ed 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -262,10 +262,6 @@ int sync_dev_names(struct cmd_context* cmd);
+ test_description="ensure pvmove works with the cache segment types"
+ SKIP_WITH_LVMLOCKD=1
+-SKIP_WITH_CLVMD=1
  
- /* Process list of LVs */
- struct volume_group;
--int suspend_lvs(struct cmd_context *cmd, struct dm_list *lvs,
--		struct volume_group *vg_to_revert);
--int resume_lvs(struct cmd_context *cmd, struct dm_list *lvs);
--int revert_lvs(struct cmd_context *cmd, struct dm_list *lvs);
- int activate_lvs(struct cmd_context *cmd, struct dm_list *lvs);
+ . lib/inittest
  
- #endif
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index ff36b55..7bf1713 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -303,32 +303,6 @@ static int _sub_lv_of(struct logical_volume *lv, const char *lv_name)
- 	return _sub_lv_of(seg->lv, lv_name);
- }
+@@ -41,28 +40,22 @@ do
  
--/*
-- * parent_lv_is_cache_type
-- *
-- * FIXME: This function can be removed when 'pvmove' is supported for
-- *        cache types.
-- *
-- * If this LV is below a cache LV (at any depth), return 1.
-- */
--static int _parent_lv_is_cache_type(struct logical_volume *lv)
--{
--	struct lv_segment *seg;
--
--	/* Sub-LVs only ever have one segment using them */
--	if (dm_list_size(&lv->segs_using_this_lv) != 1)
--		return 0;
--
--	if (!(seg = get_only_segment_using_this_lv(lv)))
--		return_0;
--
--	if (lv_is_cache_type(seg->lv))
--		return 1;
--
--	/* Continue up the tree */
--	return _parent_lv_is_cache_type(seg->lv);
--}
--
- /* Create new LV with mirror segments for the required copies */
- static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 						struct volume_group *vg,
-@@ -450,48 +424,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 		if (!lv_is_on_pvs(lv, source_pvl))
- 			continue;
+ # Testing pvmove of cache-pool LV (can't check contents though)
+ ###############################################################
+-lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
++lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
+ lvcreate --type cache-pool -n ${lv1}_pool -l 4 $vg "$dev1"
+ check lv_tree_on $vg ${lv1}_foo "$dev1"
+ check lv_tree_on $vg ${lv1}_pool "$dev1"
  
--		if (lv_is_cache_type(lv)) {
--			log_print_unless_silent("Skipping %s LV, %s.",
--						lv_is_cache(lv) ? "cache" :
--						lv_is_cache_pool(lv) ?
--						"cache-pool" : "cache-related",
--						lv->name);
--			lv_skipped = 1;
--			continue;
--		}
+ pvmove $mode "$dev1" "$dev5" 2>&1 | tee out
+-grep "Skipping cache-pool LV, ${lv1}_pool" out
+-grep "Skipping cache-related LV, ${lv1}_pool_cmeta" out
+-grep "Skipping cache-related LV, ${lv1}_pool_cdata" out
++lvs -a -o+devices $vg
++check lv_tree_on $vg ${lv1}_pool "$dev5"
+ check lv_tree_on $vg ${lv1}_foo "$dev5"
+-not check lv_tree_on $vg ${lv1}_pool "$dev5"
 -
--		if (_parent_lv_is_cache_type(lv)) {
--			log_print_unless_silent("Skipping %s because a parent"
--						" is of cache type.", lv->name);
--			lv_skipped = 1;
--			continue;
--		}
--
--		/*
--		 * If the VG is clustered, we are unable to handle
--		 * snapshots, origins, thin types, RAID or mirror
--		 */
--		if ((vg_is_clustered(vg) || is_lockd_type(vg->lock_type)) &&
--		    (lv_is_origin(lv) || lv_is_cow(lv) ||
--		     lv_is_thin_type(lv) || lv_is_raid_type(lv))) {
--			log_print_unless_silent("Skipping %s LV %s.",
--						lv_is_origin(lv) ? "origin" :
--						lv_is_cow(lv) ?
--						"snapshot-related" :
--						lv_is_thin_volume(lv) ? "thin" :
--						lv_is_thin_pool(lv) ?
--						"thin-pool" :
--						lv_is_thin_type(lv) ?
--						"thin-related" :
--						seg_is_raid(first_seg(lv)) ?
--						"RAID" :
--						lv_is_raid_type(lv) ?
--						"RAID-related" : "",
--						lv->name);
--			lv_skipped = 1;
--			continue;
--		}
--
- 		seg = first_seg(lv);
- 		if (seg_is_raid(seg) || seg_is_mirrored(seg) ||
- 		    lv_is_thin_volume(lv) || lv_is_thin_pool(lv)) {
+-#pvmove $mode -n ${lv1}_pool "$dev5" "$dev4"
+-#check lv_tree_on $vg ${lv1}_pool "$dev4"
+-#check lv_tree_on $vg ${lv1}_foo "$dev5"
+ 
+ lvremove -ff $vg
+ dmsetup info -c | not grep $vg
+ 
+ # Testing pvmove of origin LV
+ #############################
+-lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
++lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
+ lvcreate --type cache-pool -n ${lv1}_pool -l 4 $vg "$dev5"
+ lvcreate --type cache -n $lv1 -l 8 $vg/${lv1}_pool "$dev1"
+ 
+@@ -72,11 +65,10 @@ check lv_tree_on $vg ${lv1} "$dev1"
+ 
+ aux mkdev_md5sum $vg $lv1
+ pvmove $mode "$dev1" "$dev3" 2>&1 | tee out
+-grep "Skipping cache LV, ${lv1}" out
+ check lv_tree_on $vg ${lv1}_foo "$dev3"
+ #check lv_tree_on $vg ${lv1}_pool "$dev5"
+ lvs -a -o name,attr,devices $vg
+-not check lv_tree_on $vg ${lv1} "$dev3"
++check lv_tree_on $vg ${lv1} "$dev3"
+ #check dev_md5sum $vg $lv1
+ 
+ #pvmove $mode -n $lv1 "$dev3" "$dev1"
+@@ -89,7 +81,7 @@ dmsetup info -c | not grep $vg
+ 
+ # Testing pvmove of a RAID origin LV
+ ####################################
+-lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
++lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
+ lvcreate --type raid1 -m 1 -l 8 -n $lv1 $vg "$dev1" "$dev2"
+ lvcreate --type cache -l 4 -n ${lv1}_pool $vg/$lv1 "$dev5"
+ check lv_tree_on $vg ${lv1}_foo "$dev1"
+@@ -98,9 +90,9 @@ check lv_tree_on $vg ${lv1}_pool "$dev5"
+ 
+ aux mkdev_md5sum $vg $lv1
+ pvmove $mode "$dev1" "$dev3" 2>&1 | tee out
+-grep "Skipping cache LV, ${lv1}" out
+ check lv_tree_on $vg ${lv1}_foo "$dev3"
+-not check lv_tree_on $vg ${lv1} "$dev2" "$dev3"
++lvs -a -o+devices $vg
++not check lv_tree_on $vg ${lv1} "$dev1"
+ #check lv_tree_on $vg ${lv1}_pool "$dev5"
+ #check dev_md5sum $vg $lv1 -- THIS IS WHERE THINGS FAIL IF PVMOVE NOT DISALLOWED
+ 
+@@ -114,7 +106,7 @@ dmsetup info -c | not grep $vg
+ 
+ # Testing pvmove of a RAID cachepool (metadata and data)
+ ########################################################
+-lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
++lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
+ lvcreate --type raid1 -L 6M -n meta $vg "$dev1" "$dev2"
+ lvcreate --type raid1 -L 4M -n ${lv1}_pool $vg "$dev1" "$dev2"
+ lvconvert --yes --type cache-pool $vg/${lv1}_pool --poolmetadata $vg/meta
+@@ -128,11 +120,8 @@ aux mkdev_md5sum $vg $lv1
+ # This will move ${lv1}_foo and the cache-pool data & meta
+ #  LVs, both of which contain a RAID1 _rimage & _rmeta LV - 5 total LVs
+ pvmove $mode "$dev1" "$dev3" 2>&1 | tee out
+-grep "Skipping cache-pool LV, ${lv1}_pool" out
+-grep "Skipping cache-related LV, ${lv1}_pool_cmeta" out
+-grep "Skipping cache-related LV, ${lv1}_pool_cdata" out
+ check lv_tree_on $vg ${lv1}_foo "$dev3"
+-not check lv_tree_on $vg ${lv1}_pool "$dev2" "$dev3"
++not check lv_tree_on $vg ${lv1}_pool "$dev1"
+ #check lv_tree_on $vg ${lv1} "$dev5"
+ #check dev_md5sum $vg $lv1
+ 
+@@ -146,7 +135,7 @@ dmsetup info -c | not grep $vg
+ 
+ # Testing pvmove of Thin-pool on cache LV on RAID
+ #################################################
+-lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
++lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
+ # RAID for cachepool
+ lvcreate --type raid1 -m 1 -L 6M -n meta $vg "$dev1" "$dev2"
+ lvcreate --type raid1 -m 1 -L 4M -n cachepool $vg "$dev1" "$dev2"
+@@ -156,7 +145,7 @@ lvcreate --type raid1 -m 1 -L 8 -n thinpool $vg "$dev3" "$dev4"
+ # Convert thin pool data to a cached LV
+ lvconvert --type cache -Zy $vg/thinpool --cachepool $vg/cachepool
+ # Create simple thin pool meta
+-lvcreate -L 2M -n meta $vg "$dev1"
++lvcreate -aey -L 2M -n meta $vg "$dev1"
+ # Use thin pool data LV to build a thin pool
+ lvconvert --yes --thinpool $vg/thinpool --poolmetadata $vg/meta
+ # Create a thin lv for fun
+@@ -172,7 +161,7 @@ lvs -a -o name,attr,devices $vg
+ pvmove $mode "$dev1" "$dev5" 2>&1 | tee out
+ lvs -a -o name,attr,devices $vg
+ check lv_tree_on $vg ${lv1}_foo "$dev5"
+-not check lv_tree_on $vg cachepool "$dev5" "$dev2"
++not check lv_tree_on $vg cachepool "$dev1"
+ check lv_tree_on $vg thinpool "$dev3" "$dev4" "$dev5" # Move non-cache tmeta
+ #check dev_md5sum $vg/thin_lv
+ 
+diff --git a/test/shell/pvmove-raid-segtypes.sh b/test/shell/pvmove-raid-segtypes.sh
+index 667c7d9..be41547 100644
+--- a/test/shell/pvmove-raid-segtypes.sh
++++ b/test/shell/pvmove-raid-segtypes.sh
+@@ -12,7 +12,6 @@
+ 
+ test_description="ensure pvmove works with raid segment types"
+ SKIP_WITH_LVMLOCKD=1
+-SKIP_WITH_CLVMD=1
+ 
+ . lib/inittest
+ 
+diff --git a/test/shell/pvmove-thin-segtypes.sh b/test/shell/pvmove-thin-segtypes.sh
+index 28f5233..01d98b4 100644
+--- a/test/shell/pvmove-thin-segtypes.sh
++++ b/test/shell/pvmove-thin-segtypes.sh
+@@ -12,7 +12,6 @@
+ 
+ test_description="ensure pvmove works with thin segment types"
+ SKIP_WITH_LVMLOCKD=1
+-SKIP_WITH_CLVMD=1
+ 
+ . lib/inittest
+ 
 
 
