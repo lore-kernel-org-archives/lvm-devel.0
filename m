@@ -1,181 +1,75 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Nov 2017 15:00:53 -0500
-Subject: master - tests: pvmove supports more cases
-Message-ID: <201711152000.vAFK0re3029314@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Wed, 15 Nov 2017 15:25:17 -0500
+Subject: master - raid: add validation checks for reshape flags
+Message-ID: <201711152025.vAFKPHYn000539@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b0618f90116bb723e568e3aeec6cdcfde342d6b2
-Commit:        b0618f90116bb723e568e3aeec6cdcfde342d6b2
-Parent:        0f0dc1a2a5f779fbdae7bddd12c3e56397636833
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Nov 11 00:15:15 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 15 21:00:29 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93c02e2532c71f5afe91605442a8acc059df982c
+Commit:        93c02e2532c71f5afe91605442a8acc059df982c
+Parent:        b0618f90116bb723e568e3aeec6cdcfde342d6b2
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Wed Nov 15 21:24:44 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Wed Nov 15 21:24:44 2017 +0100
 
-tests: pvmove supports more cases
+raid: add validation checks for reshape flags
 
-pvmove handles cached LVs as well as snapshots now.
+Enhance vg_validate() raid checking functions to check for
+flags  LV_RESHAPE and LV_RESHAPE_DELTA_DISKS_(MINUS|PLUS).
 ---
- test/shell/pvmove-cache-segtypes.sh |   37 ++++++++++++----------------------
- test/shell/pvmove-raid-segtypes.sh  |    1 -
- test/shell/pvmove-thin-segtypes.sh  |    1 -
- 3 files changed, 13 insertions(+), 26 deletions(-)
+ lib/metadata/merge.c |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/pvmove-cache-segtypes.sh b/test/shell/pvmove-cache-segtypes.sh
-index f95ba72..b5b341d 100644
---- a/test/shell/pvmove-cache-segtypes.sh
-+++ b/test/shell/pvmove-cache-segtypes.sh
-@@ -12,7 +12,6 @@
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index d5024cf..f0da2fe 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -98,6 +98,14 @@ int lv_merge_segments(struct logical_volume *lv)
+ 		return; \
+ }
  
- test_description="ensure pvmove works with the cache segment types"
- SKIP_WITH_LVMLOCKD=1
--SKIP_WITH_CLVMD=1
++/* Check segment LV for reshape flags. */
++static int _check_raid_seg_reshape_flags(struct lv_segment *seg)
++{
++	return ((seg->lv->status & LV_RESHAPE) ||
++		(seg->lv->status & LV_RESHAPE_DELTA_DISKS_MINUS) ||
++		(seg->lv->status & LV_RESHAPE_DELTA_DISKS_PLUS));
++}
++
+ /* Check raid0 segment properties in @seg */
+ static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
+ {
+@@ -121,6 +129,8 @@ static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
+ 		raid_seg_error_val("non-zero max recovery rate", seg->max_recovery_rate);
+ 	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset > 1)
+ 		raid_seg_error_val("data_offset", seg->data_offset);
++	if (_check_raid_seg_reshape_flags(seg))
++		raid_seg_error("reshape");
+ }
  
- . lib/inittest
+ /* Check RAID @seg for non-zero, power of 2 region size and min recovery rate <= max */
+@@ -145,6 +155,8 @@ static void _check_raid1_seg(struct lv_segment *seg, int *error_count)
+ 		raid_seg_error_val("non-zero stripe size", seg->stripe_size);
+ 	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset > 1)
+ 		raid_seg_error_val("data_offset", seg->data_offset);
++	if (_check_raid_seg_reshape_flags(seg))
++		raid_seg_error("reshape");
+ 	_check_raid_region_recovery(seg, error_count);
+ }
  
-@@ -41,28 +40,22 @@ do
+@@ -388,6 +400,9 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
  
- # Testing pvmove of cache-pool LV (can't check contents though)
- ###############################################################
--lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
- lvcreate --type cache-pool -n ${lv1}_pool -l 4 $vg "$dev1"
- check lv_tree_on $vg ${lv1}_foo "$dev1"
- check lv_tree_on $vg ${lv1}_pool "$dev1"
+ 	if (seg_is_raid(seg))
+ 		_check_raid_seg(seg, error_count);
++	else if (!lv_is_raid_type(lv) &&
++		 _check_raid_seg_reshape_flags(seg))
++		seg_error("reshape");
  
- pvmove $mode "$dev1" "$dev5" 2>&1 | tee out
--grep "Skipping cache-pool LV, ${lv1}_pool" out
--grep "Skipping cache-related LV, ${lv1}_pool_cmeta" out
--grep "Skipping cache-related LV, ${lv1}_pool_cdata" out
-+lvs -a -o+devices $vg
-+check lv_tree_on $vg ${lv1}_pool "$dev5"
- check lv_tree_on $vg ${lv1}_foo "$dev5"
--not check lv_tree_on $vg ${lv1}_pool "$dev5"
--
--#pvmove $mode -n ${lv1}_pool "$dev5" "$dev4"
--#check lv_tree_on $vg ${lv1}_pool "$dev4"
--#check lv_tree_on $vg ${lv1}_foo "$dev5"
- 
- lvremove -ff $vg
- dmsetup info -c | not grep $vg
- 
- # Testing pvmove of origin LV
- #############################
--lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
- lvcreate --type cache-pool -n ${lv1}_pool -l 4 $vg "$dev5"
- lvcreate --type cache -n $lv1 -l 8 $vg/${lv1}_pool "$dev1"
- 
-@@ -72,11 +65,10 @@ check lv_tree_on $vg ${lv1} "$dev1"
- 
- aux mkdev_md5sum $vg $lv1
- pvmove $mode "$dev1" "$dev3" 2>&1 | tee out
--grep "Skipping cache LV, ${lv1}" out
- check lv_tree_on $vg ${lv1}_foo "$dev3"
- #check lv_tree_on $vg ${lv1}_pool "$dev5"
- lvs -a -o name,attr,devices $vg
--not check lv_tree_on $vg ${lv1} "$dev3"
-+check lv_tree_on $vg ${lv1} "$dev3"
- #check dev_md5sum $vg $lv1
- 
- #pvmove $mode -n $lv1 "$dev3" "$dev1"
-@@ -89,7 +81,7 @@ dmsetup info -c | not grep $vg
- 
- # Testing pvmove of a RAID origin LV
- ####################################
--lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
- lvcreate --type raid1 -m 1 -l 8 -n $lv1 $vg "$dev1" "$dev2"
- lvcreate --type cache -l 4 -n ${lv1}_pool $vg/$lv1 "$dev5"
- check lv_tree_on $vg ${lv1}_foo "$dev1"
-@@ -98,9 +90,9 @@ check lv_tree_on $vg ${lv1}_pool "$dev5"
- 
- aux mkdev_md5sum $vg $lv1
- pvmove $mode "$dev1" "$dev3" 2>&1 | tee out
--grep "Skipping cache LV, ${lv1}" out
- check lv_tree_on $vg ${lv1}_foo "$dev3"
--not check lv_tree_on $vg ${lv1} "$dev2" "$dev3"
-+lvs -a -o+devices $vg
-+not check lv_tree_on $vg ${lv1} "$dev1"
- #check lv_tree_on $vg ${lv1}_pool "$dev5"
- #check dev_md5sum $vg $lv1 -- THIS IS WHERE THINGS FAIL IF PVMOVE NOT DISALLOWED
- 
-@@ -114,7 +106,7 @@ dmsetup info -c | not grep $vg
- 
- # Testing pvmove of a RAID cachepool (metadata and data)
- ########################################################
--lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
- lvcreate --type raid1 -L 6M -n meta $vg "$dev1" "$dev2"
- lvcreate --type raid1 -L 4M -n ${lv1}_pool $vg "$dev1" "$dev2"
- lvconvert --yes --type cache-pool $vg/${lv1}_pool --poolmetadata $vg/meta
-@@ -128,11 +120,8 @@ aux mkdev_md5sum $vg $lv1
- # This will move ${lv1}_foo and the cache-pool data & meta
- #  LVs, both of which contain a RAID1 _rimage & _rmeta LV - 5 total LVs
- pvmove $mode "$dev1" "$dev3" 2>&1 | tee out
--grep "Skipping cache-pool LV, ${lv1}_pool" out
--grep "Skipping cache-related LV, ${lv1}_pool_cmeta" out
--grep "Skipping cache-related LV, ${lv1}_pool_cdata" out
- check lv_tree_on $vg ${lv1}_foo "$dev3"
--not check lv_tree_on $vg ${lv1}_pool "$dev2" "$dev3"
-+not check lv_tree_on $vg ${lv1}_pool "$dev1"
- #check lv_tree_on $vg ${lv1} "$dev5"
- #check dev_md5sum $vg $lv1
- 
-@@ -146,7 +135,7 @@ dmsetup info -c | not grep $vg
- 
- # Testing pvmove of Thin-pool on cache LV on RAID
- #################################################
--lvcreate -l 2 -n ${lv1}_foo $vg "$dev1"
-+lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
- # RAID for cachepool
- lvcreate --type raid1 -m 1 -L 6M -n meta $vg "$dev1" "$dev2"
- lvcreate --type raid1 -m 1 -L 4M -n cachepool $vg "$dev1" "$dev2"
-@@ -156,7 +145,7 @@ lvcreate --type raid1 -m 1 -L 8 -n thinpool $vg "$dev3" "$dev4"
- # Convert thin pool data to a cached LV
- lvconvert --type cache -Zy $vg/thinpool --cachepool $vg/cachepool
- # Create simple thin pool meta
--lvcreate -L 2M -n meta $vg "$dev1"
-+lvcreate -aey -L 2M -n meta $vg "$dev1"
- # Use thin pool data LV to build a thin pool
- lvconvert --yes --thinpool $vg/thinpool --poolmetadata $vg/meta
- # Create a thin lv for fun
-@@ -172,7 +161,7 @@ lvs -a -o name,attr,devices $vg
- pvmove $mode "$dev1" "$dev5" 2>&1 | tee out
- lvs -a -o name,attr,devices $vg
- check lv_tree_on $vg ${lv1}_foo "$dev5"
--not check lv_tree_on $vg cachepool "$dev5" "$dev2"
-+not check lv_tree_on $vg cachepool "$dev1"
- check lv_tree_on $vg thinpool "$dev3" "$dev4" "$dev5" # Move non-cache tmeta
- #check dev_md5sum $vg/thin_lv
- 
-diff --git a/test/shell/pvmove-raid-segtypes.sh b/test/shell/pvmove-raid-segtypes.sh
-index 667c7d9..be41547 100644
---- a/test/shell/pvmove-raid-segtypes.sh
-+++ b/test/shell/pvmove-raid-segtypes.sh
-@@ -12,7 +12,6 @@
- 
- test_description="ensure pvmove works with raid segment types"
- SKIP_WITH_LVMLOCKD=1
--SKIP_WITH_CLVMD=1
- 
- . lib/inittest
- 
-diff --git a/test/shell/pvmove-thin-segtypes.sh b/test/shell/pvmove-thin-segtypes.sh
-index 28f5233..01d98b4 100644
---- a/test/shell/pvmove-thin-segtypes.sh
-+++ b/test/shell/pvmove-thin-segtypes.sh
-@@ -12,7 +12,6 @@
- 
- test_description="ensure pvmove works with thin segment types"
- SKIP_WITH_LVMLOCKD=1
--SKIP_WITH_CLVMD=1
- 
- . lib/inittest
- 
+ 	if (seg_is_pool(seg)) {
+ 		if ((seg->area_count != 1) || (seg_type(seg, 0) != AREA_LV)) {
 
 
