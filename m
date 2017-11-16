@@ -1,75 +1,73 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 15 Nov 2017 15:25:17 -0500
-Subject: master - raid: add validation checks for reshape flags
-Message-ID: <201711152025.vAFKPHYn000539@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Thu, 16 Nov 2017 14:13:33 -0500
+Subject: master - lvmdiskscan: Remove unnecessary read.
+Message-ID: <201711161913.vAGJDXMs031643@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93c02e2532c71f5afe91605442a8acc059df982c
-Commit:        93c02e2532c71f5afe91605442a8acc059df982c
-Parent:        b0618f90116bb723e568e3aeec6cdcfde342d6b2
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Nov 15 21:24:44 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Nov 15 21:24:44 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=efb0e7ac6f5d4f12628f47c53c1a635b5e51dee5
+Commit:        efb0e7ac6f5d4f12628f47c53c1a635b5e51dee5
+Parent:        93c02e2532c71f5afe91605442a8acc059df982c
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Thu Nov 16 19:13:03 2017 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Thu Nov 16 19:13:03 2017 +0000
 
-raid: add validation checks for reshape flags
+lvmdiskscan: Remove unnecessary read.
 
-Enhance vg_validate() raid checking functions to check for
-flags  LV_RESHAPE and LV_RESHAPE_DELTA_DISKS_(MINUS|PLUS).
+dev_get_size will open the device itself.
 ---
- lib/metadata/merge.c |   15 +++++++++++++++
- 1 files changed, 15 insertions(+), 0 deletions(-)
+ WHATS_NEW           |    1 +
+ tools/lvmdiskscan.c |   15 +--------------
+ 2 files changed, 2 insertions(+), 14 deletions(-)
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index d5024cf..f0da2fe 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -98,6 +98,14 @@ int lv_merge_segments(struct logical_volume *lv)
- 		return; \
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ff60758..03d1e04 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.177 -
+ ====================================
++  Remove unnecessary single read from lvmdiskscan.
+   Avoid using precommitted metadata for suspending pvmove tree.
+   Ehnance pvmove locking.
+   Deactivate activated LVs on error path when pvmove activation fails.
+diff --git a/tools/lvmdiskscan.c b/tools/lvmdiskscan.c
+index bd0d705..cb688b5 100644
+--- a/tools/lvmdiskscan.c
++++ b/tools/lvmdiskscan.c
+@@ -69,28 +69,15 @@ static void _print(struct cmd_context *cmd, const struct device *dev,
  
-+/* Check segment LV for reshape flags. */
-+static int _check_raid_seg_reshape_flags(struct lv_segment *seg)
-+{
-+	return ((seg->lv->status & LV_RESHAPE) ||
-+		(seg->lv->status & LV_RESHAPE_DELTA_DISKS_MINUS) ||
-+		(seg->lv->status & LV_RESHAPE_DELTA_DISKS_PLUS));
-+}
-+
- /* Check raid0 segment properties in @seg */
- static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
+ static int _check_device(struct cmd_context *cmd, struct device *dev)
  {
-@@ -121,6 +129,8 @@ static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
- 		raid_seg_error_val("non-zero max recovery rate", seg->max_recovery_rate);
- 	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset > 1)
- 		raid_seg_error_val("data_offset", seg->data_offset);
-+	if (_check_raid_seg_reshape_flags(seg))
-+		raid_seg_error("reshape");
+-	char buffer;
+ 	uint64_t size;
+ 
+-	if (!dev_open_readonly(dev))
+-		return_0;
+-
+-	if (!dev_read(dev, UINT64_C(0), (size_t) 1, &buffer)) {
+-		stack;
+-		if (!dev_close(dev))
+-			stack;
+-		return 0;
+-	}
+ 	if (!dev_get_size(dev, &size)) {
+ 		log_error("Couldn't get size of \"%s\"", dev_name(dev));
+ 		size = 0;
+ 	}
+ 	_print(cmd, dev, size, NULL);
+ 	_count(dev, &disks_found, &parts_found);
+-	if (!dev_close(dev)) {
+-		log_error("dev_close on \"%s\" failed", dev_name(dev));
+-		return 0;
+-	}
++
+ 	return 1;
  }
  
- /* Check RAID @seg for non-zero, power of 2 region size and min recovery rate <= max */
-@@ -145,6 +155,8 @@ static void _check_raid1_seg(struct lv_segment *seg, int *error_count)
- 		raid_seg_error_val("non-zero stripe size", seg->stripe_size);
- 	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset > 1)
- 		raid_seg_error_val("data_offset", seg->data_offset);
-+	if (_check_raid_seg_reshape_flags(seg))
-+		raid_seg_error("reshape");
- 	_check_raid_region_recovery(seg, error_count);
- }
- 
-@@ -388,6 +400,9 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
- 
- 	if (seg_is_raid(seg))
- 		_check_raid_seg(seg, error_count);
-+	else if (!lv_is_raid_type(lv) &&
-+		 _check_raid_seg_reshape_flags(seg))
-+		seg_error("reshape");
- 
- 	if (seg_is_pool(seg)) {
- 		if ((seg->area_count != 1) || (seg_type(seg, 0) != AREA_LV)) {
 
 
