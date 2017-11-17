@@ -1,69 +1,160 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 17 Nov 2017 11:59:32 -0500
-Subject: master - lvmlockd: retry on other sanlock errors
-Message-ID: <201711171659.vAHGxW36016213@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 17 Nov 2017 11:59:34 -0500
+Subject: master - lvmlockd: override unknown lock manager error numbers
+Message-ID: <201711171659.vAHGxYb3016224@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e52d2e3bd86a006bcc322649ac9cb7c52117b787
-Commit:        e52d2e3bd86a006bcc322649ac9cb7c52117b787
-Parent:        115e66e9bedaa5d6edfd436fb78aba2c753deeb7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bbaaf4f1d34a1a097c20dca1f36a0f6a50c5d066
+Commit:        bbaaf4f1d34a1a097c20dca1f36a0f6a50c5d066
+Parent:        e52d2e3bd86a006bcc322649ac9cb7c52117b787
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 15 15:34:42 2017 -0600
+AuthorDate:    Wed Nov 15 16:00:41 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Nov 17 10:59:12 2017 -0600
 
-lvmlockd: retry on other sanlock errors
+lvmlockd: override unknown lock manager error numbers
 
-These less common errors returned from sanlock should
-also cause sanlock to retry the lock acquire:
-
-- i/o timeout occurs during sanlock_acquire().
-  other i/o on the same disk as the leases can cause
-  sanlock i/o timeouts.
-
-- low level disk paxos contention between hosts naturally
-  causes one host to not acquire the lease.  There are a
-  couple special error numbers associated with these cases
-  that should just be recognized as a normal failure to
-  acquire the lease.
+When sanlock or dlm lock managers return an error number
+that we don't recognize, replace it with a generic -ELMERR
+which is defined in the set of special lvmlockd error
+numbers.  Otherwise, an unknown lock manager error number
+could be misinterpreted for something else if it happened
+to overlap another set of error numbers (which they have
+not thus far.)
 ---
- daemons/lvmlockd/lvmlockd-sanlock.c |   20 ++++++++++++++++++++
- 1 files changed, 20 insertions(+), 0 deletions(-)
+ daemons/lvmlockd/lvmlockd-client.h  |    1 +
+ daemons/lvmlockd/lvmlockd-dlm.c     |    4 +++-
+ daemons/lvmlockd/lvmlockd-sanlock.c |   24 +++++++++++++++++++++++-
+ 3 files changed, 27 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
-index 0e81915..acec7dc 100644
---- a/daemons/lvmlockd/lvmlockd-sanlock.c
-+++ b/daemons/lvmlockd/lvmlockd-sanlock.c
-@@ -1528,6 +1528,26 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
- 		return -EAGAIN;
+diff --git a/daemons/lvmlockd/lvmlockd-client.h b/daemons/lvmlockd/lvmlockd-client.h
+index 1d42338..bc90596 100644
+--- a/daemons/lvmlockd/lvmlockd-client.h
++++ b/daemons/lvmlockd/lvmlockd-client.h
+@@ -49,5 +49,6 @@ static inline void lvmlockd_close(daemon_handle h)
+ #define ELOCKIO   218 /* sanlock io errors during lock op, may be transient. */
+ #define EREMOVED  219
+ #define EDEVOPEN  220 /* sanlock failed to open lvmlock LV */
++#define ELMERR    221
+ 
+ #endif	/* _LVM_LVMLOCKD_CLIENT_H */
+diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
+index 280cf2b..9440821 100644
+--- a/daemons/lvmlockd/lvmlockd-dlm.c
++++ b/daemons/lvmlockd/lvmlockd-dlm.c
+@@ -508,7 +508,7 @@ lockrv:
+ 	}
+ 	if (rv < 0) {
+ 		log_error("S %s R %s lock_dlm acquire error %d errno %d", ls->name, r->name, rv, errno);
+-		return rv;
++		return -ELMERR;
  	}
  
-+	if (rv == SANLK_AIO_TIMEOUT) {
-+		/*
-+		 * sanlock got an i/o timeout when trying to acquire the
-+		 * lease on disk.
-+		 */
-+		log_debug("S %s R %s lock_san acquire mode %d rv %d", ls->name, r->name, ld_mode, rv);
-+		*retry = 0;
-+		return -EAGAIN;
-+	}
+ 	if (rdd->vb) {
+@@ -581,6 +581,7 @@ int lm_convert_dlm(struct lockspace *ls, struct resource *r,
+ 	}
+ 	if (rv < 0) {
+ 		log_error("S %s R %s convert_dlm error %d", ls->name, r->name, rv);
++		rv = -ELMERR;
+ 	}
+ 	return rv;
+ }
+@@ -654,6 +655,7 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
+ 			      0, NULL, NULL, NULL);
+ 	if (rv < 0) {
+ 		log_error("S %s R %s unlock_dlm error %d", ls->name, r->name, rv);
++		rv = -ELMERR;
+ 	}
+ 
+ 	return rv;
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index acec7dc..358c588 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -1460,6 +1460,12 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 
+ 	rv = sanlock_acquire(lms->sock, -1, flags, 1, &rs, &opt);
+ 
++	/*
++	 * errors: translate the sanlock error number to an lvmlockd error.
++	 * We don't want to return an sanlock-specific error number from
++	 * this function to code that doesn't recognize sanlock error numbers.
++	 */
 +
-+	if (rv == SANLK_DBLOCK_LVER || rv == SANLK_DBLOCK_MBAL) {
-+		/*
-+		 * There was contention with another host for the lease,
-+		 * and we lost.
-+		 */
-+		log_debug("S %s R %s lock_san acquire mode %d rv %d", ls->name, r->name, ld_mode, rv);
-+		*retry = 0;
-+		return -EAGAIN;
-+	}
-+
- 	if (rv == SANLK_ACQUIRE_OWNED_RETRY) {
+ 	if (rv == -EAGAIN) {
  		/*
- 		 * The lock is held by a failed host, and will eventually
+ 		 * It appears that sanlock_acquire returns EAGAIN when we request
+@@ -1598,15 +1604,25 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 		if (rv == -ENOSPC)
+ 			rv = -ELOCKIO;
+ 
+-		return rv;
++		/*
++		 * generic error number for sanlock errors that we are not
++		 * catching above.
++		 */
++		return -ELMERR;
+ 	}
+ 
++	/*
++	 * sanlock acquire success (rv 0)
++	 */
++
+ 	if (rds->vb) {
+ 		rv = sanlock_get_lvb(0, rs, (char *)&vb, sizeof(vb));
+ 		if (rv < 0) {
+ 			log_error("S %s R %s lock_san get_lvb error %d", ls->name, r->name, rv);
+ 			memset(rds->vb, 0, sizeof(struct val_blk));
+ 			memset(vb_out, 0, sizeof(struct val_blk));
++			/* the lock is still acquired, the vb values considered invalid */
++			rv = 0;
+ 			goto out;
+ 		}
+ 
+@@ -1659,6 +1675,7 @@ int lm_convert_sanlock(struct lockspace *ls, struct resource *r,
+ 		if (rv < 0) {
+ 			log_error("S %s R %s convert_san set_lvb error %d",
+ 				  ls->name, r->name, rv);
++			rv = -ELMERR;
+ 		}
+ 	}
+ 
+@@ -1679,6 +1696,7 @@ int lm_convert_sanlock(struct lockspace *ls, struct resource *r,
+ 	}
+ 	if (rv < 0) {
+ 		log_error("S %s R %s convert_san convert error %d", ls->name, r->name, rv);
++		rv = -ELMERR;
+ 	}
+ 
+ 	return rv;
+@@ -1715,6 +1733,7 @@ static int release_rename(struct lockspace *ls, struct resource *r)
+ 	rv = sanlock_release(lms->sock, -1, SANLK_REL_RENAME, 2, res_args);
+ 	if (rv < 0) {
+ 		log_error("S %s R %s unlock_san release rename error %d", ls->name, r->name, rv);
++		rv = -ELMERR;
+ 	}
+ 
+ 	free(res_args);
+@@ -1771,6 +1790,7 @@ int lm_unlock_sanlock(struct lockspace *ls, struct resource *r,
+ 		if (rv < 0) {
+ 			log_error("S %s R %s unlock_san set_lvb error %d",
+ 				  ls->name, r->name, rv);
++			rv = -ELMERR;
+ 		}
+ 	}
+ 
+@@ -1789,6 +1809,8 @@ int lm_unlock_sanlock(struct lockspace *ls, struct resource *r,
+ 
+ 	if (rv == -EIO)
+ 		rv = -ELOCKIO;
++	else if (rv < 0)
++		rv = -ELMERR;
+ 
+ 	return rv;
+ }
 
 
