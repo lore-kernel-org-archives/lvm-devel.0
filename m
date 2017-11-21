@@ -1,160 +1,124 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 17 Nov 2017 11:59:34 -0500
-Subject: master - lvmlockd: override unknown lock manager error numbers
-Message-ID: <201711171659.vAHGxYb3016224@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 21 Nov 2017 11:38:32 -0500
+Subject: master - man: lvmlockd steps for changing lock type
+Message-ID: <201711211638.vALGcWjl025008@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bbaaf4f1d34a1a097c20dca1f36a0f6a50c5d066
-Commit:        bbaaf4f1d34a1a097c20dca1f36a0f6a50c5d066
-Parent:        e52d2e3bd86a006bcc322649ac9cb7c52117b787
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ea0463791dcc68082ecf0b6b6681e82becaffb40
+Commit:        ea0463791dcc68082ecf0b6b6681e82becaffb40
+Parent:        bbaaf4f1d34a1a097c20dca1f36a0f6a50c5d066
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 15 16:00:41 2017 -0600
+AuthorDate:    Tue Nov 21 10:37:00 2017 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Nov 17 10:59:12 2017 -0600
+CommitterDate: Tue Nov 21 10:37:00 2017 -0600
 
-lvmlockd: override unknown lock manager error numbers
+man: lvmlockd steps for changing lock type
 
-When sanlock or dlm lock managers return an error number
-that we don't recognize, replace it with a generic -ELMERR
-which is defined in the set of special lvmlockd error
-numbers.  Otherwise, an unknown lock manager error number
-could be misinterpreted for something else if it happened
-to overlap another set of error numbers (which they have
-not thus far.)
+were not quite correct
 ---
- daemons/lvmlockd/lvmlockd-client.h  |    1 +
- daemons/lvmlockd/lvmlockd-dlm.c     |    4 +++-
- daemons/lvmlockd/lvmlockd-sanlock.c |   24 +++++++++++++++++++++++-
- 3 files changed, 27 insertions(+), 2 deletions(-)
+ man/lvmlockd.8_main |   45 +++++++++++++++++++++++++++++++++++++--------
+ 1 files changed, 37 insertions(+), 8 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-client.h b/daemons/lvmlockd/lvmlockd-client.h
-index 1d42338..bc90596 100644
---- a/daemons/lvmlockd/lvmlockd-client.h
-+++ b/daemons/lvmlockd/lvmlockd-client.h
-@@ -49,5 +49,6 @@ static inline void lvmlockd_close(daemon_handle h)
- #define ELOCKIO   218 /* sanlock io errors during lock op, may be transient. */
- #define EREMOVED  219
- #define EDEVOPEN  220 /* sanlock failed to open lvmlock LV */
-+#define ELMERR    221
+diff --git a/man/lvmlockd.8_main b/man/lvmlockd.8_main
+index b7eba1a..fbcdc87 100644
+--- a/man/lvmlockd.8_main
++++ b/man/lvmlockd.8_main
+@@ -706,19 +706,24 @@ To change the dlm cluster name in the VG when the VG is still used by the
+ original cluster:
  
- #endif	/* _LVM_LVMLOCKD_CLIENT_H */
-diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index 280cf2b..9440821 100644
---- a/daemons/lvmlockd/lvmlockd-dlm.c
-+++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -508,7 +508,7 @@ lockrv:
- 	}
- 	if (rv < 0) {
- 		log_error("S %s R %s lock_dlm acquire error %d errno %d", ls->name, r->name, rv, errno);
--		return rv;
-+		return -ELMERR;
- 	}
- 
- 	if (rdd->vb) {
-@@ -581,6 +581,7 @@ int lm_convert_dlm(struct lockspace *ls, struct resource *r,
- 	}
- 	if (rv < 0) {
- 		log_error("S %s R %s convert_dlm error %d", ls->name, r->name, rv);
-+		rv = -ELMERR;
- 	}
- 	return rv;
- }
-@@ -654,6 +655,7 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
- 			      0, NULL, NULL, NULL);
- 	if (rv < 0) {
- 		log_error("S %s R %s unlock_dlm error %d", ls->name, r->name, rv);
-+		rv = -ELMERR;
- 	}
- 
- 	return rv;
-diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
-index acec7dc..358c588 100644
---- a/daemons/lvmlockd/lvmlockd-sanlock.c
-+++ b/daemons/lvmlockd/lvmlockd-sanlock.c
-@@ -1460,6 +1460,12 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
- 
- 	rv = sanlock_acquire(lms->sock, -1, flags, 1, &rs, &opt);
- 
-+	/*
-+	 * errors: translate the sanlock error number to an lvmlockd error.
-+	 * We don't want to return an sanlock-specific error number from
-+	 * this function to code that doesn't recognize sanlock error numbers.
-+	 */
+ .IP \[bu] 2
+-Stop the VG on all hosts:
++Start the VG on the host changing the lock type
++.br
++vgchange --lock-start <vgname>
 +
- 	if (rv == -EAGAIN) {
- 		/*
- 		 * It appears that sanlock_acquire returns EAGAIN when we request
-@@ -1598,15 +1604,25 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
- 		if (rv == -ENOSPC)
- 			rv = -ELOCKIO;
++.IP \[bu] 2
++Stop the VG on all other hosts:
+ .br
+ vgchange --lock-stop <vgname>
  
--		return rv;
-+		/*
-+		 * generic error number for sanlock errors that we are not
-+		 * catching above.
-+		 */
-+		return -ELMERR;
- 	}
+ .IP \[bu] 2
+-Change the VG lock type to none:
++Change the VG lock type to none on the host where the VG is started:
+ .br
+ vgchange --lock-type none <vgname>
  
-+	/*
-+	 * sanlock acquire success (rv 0)
-+	 */
+ .IP \[bu] 2
+-Change the dlm cluster name on the host or move the VG to the new cluster.
+-The new dlm cluster must now be active on the host.  Verify the new name
+-by:
++Change the dlm cluster name on the hosts or move the VG to the new
++cluster.  The new dlm cluster must now be running on the host.  Verify the
++new name by:
+ .br
+ cat /sys/kernel/config/dlm/cluster/cluster_name
+ 
+@@ -735,13 +740,14 @@ vgchange --lock-start <vgname>
+ .P
+ 
+ To change the dlm cluster name in the VG when the dlm cluster name has
+-already changed, or the VG has already moved to a different cluster:
++already been changed on the hosts, or the VG has already moved to a
++different cluster:
+ 
+ .IP \[bu] 2
+ Ensure the VG is not being used by any hosts.
+ 
+ .IP \[bu] 2
+-The new dlm cluster must be active on the host making the change.
++The new dlm cluster must be running on the host making the change.
+ The current dlm cluster name can be seen by:
+ .br
+ cat /sys/kernel/config/dlm/cluster/cluster_name
+@@ -768,21 +774,44 @@ All LVs must be inactive to change the lock type.
+ 
+ lvmlockd must be configured and running as described in USAGE.
+ 
++.IP \[bu] 2
+ Change a local VG to a lockd VG with the command:
+ .br
+ vgchange --lock-type sanlock|dlm <vgname>
+ 
++.IP \[bu] 2
+ Start the VG on hosts to use it:
+ .br
+ vgchange --lock-start <vgname>
+ 
++.P
+ 
+ .SS changing a lockd VG to a local VG
+ 
+-Stop the lockd VG on all hosts, then run:
++All LVs must be inactive to change the lock type.
 +
- 	if (rds->vb) {
- 		rv = sanlock_get_lvb(0, rs, (char *)&vb, sizeof(vb));
- 		if (rv < 0) {
- 			log_error("S %s R %s lock_san get_lvb error %d", ls->name, r->name, rv);
- 			memset(rds->vb, 0, sizeof(struct val_blk));
- 			memset(vb_out, 0, sizeof(struct val_blk));
-+			/* the lock is still acquired, the vb values considered invalid */
-+			rv = 0;
- 			goto out;
- 		}
++.IP \[bu] 2
++Start the VG on the host making the change:
++.br
++vgchange --lock-start <vgname>
++
++.IP \[bu] 2
++Stop the VG on all other hosts:
++.br
++vgchange --lock-stop <vgname>
++
++.IP \[bu] 2
++Change the VG lock type to none on the host where the VG is started:
+ .br
+ vgchange --lock-type none <vgname>
  
-@@ -1659,6 +1675,7 @@ int lm_convert_sanlock(struct lockspace *ls, struct resource *r,
- 		if (rv < 0) {
- 			log_error("S %s R %s convert_san set_lvb error %d",
- 				  ls->name, r->name, rv);
-+			rv = -ELMERR;
- 		}
- 	}
++.P
++
++If the VG cannot be started with the previous lock type, then the lock
++type can be forcibly changed to none with:
++
++vgchange --lock-type none --lock-opt force <vgname>
++
+ To change a VG from one lockd type to another (i.e. between sanlock and
+ dlm), first change it to a local VG, then to the new type.
  
-@@ -1679,6 +1696,7 @@ int lm_convert_sanlock(struct lockspace *ls, struct resource *r,
- 	}
- 	if (rv < 0) {
- 		log_error("S %s R %s convert_san convert error %d", ls->name, r->name, rv);
-+		rv = -ELMERR;
- 	}
- 
- 	return rv;
-@@ -1715,6 +1733,7 @@ static int release_rename(struct lockspace *ls, struct resource *r)
- 	rv = sanlock_release(lms->sock, -1, SANLK_REL_RENAME, 2, res_args);
- 	if (rv < 0) {
- 		log_error("S %s R %s unlock_san release rename error %d", ls->name, r->name, rv);
-+		rv = -ELMERR;
- 	}
- 
- 	free(res_args);
-@@ -1771,6 +1790,7 @@ int lm_unlock_sanlock(struct lockspace *ls, struct resource *r,
- 		if (rv < 0) {
- 			log_error("S %s R %s unlock_san set_lvb error %d",
- 				  ls->name, r->name, rv);
-+			rv = -ELMERR;
- 		}
- 	}
- 
-@@ -1789,6 +1809,8 @@ int lm_unlock_sanlock(struct lockspace *ls, struct resource *r,
- 
- 	if (rv == -EIO)
- 		rv = -ELOCKIO;
-+	else if (rv < 0)
-+		rv = -ELMERR;
- 
- 	return rv;
- }
 
 
