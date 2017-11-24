@@ -1,63 +1,53 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 24 Nov 2017 10:10:50 -0500
-Subject: master - resume: secure critical section
-Message-ID: <201711241510.vAOFAolk000336@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 24 Nov 2017 10:10:51 -0500
+Subject: master - locking: pvmove is locking holding LV
+Message-ID: <201711241510.vAOFApEO000341@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8cf10948bd3acce7ae03f16982f0acbc4cde4fee
-Commit:        8cf10948bd3acce7ae03f16982f0acbc4cde4fee
-Parent:        ae6beda12ddd203b806c565faabb5715379eaf85
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b5be7420d947b9bfe52da73078955ed241765875
+Commit:        b5be7420d947b9bfe52da73078955ed241765875
+Parent:        8cf10948bd3acce7ae03f16982f0acbc4cde4fee
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 24 13:53:02 2017 +0100
+AuthorDate:    Fri Nov 24 13:55:57 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 24 16:05:21 2017 +0100
 
-resume: secure critical section
+locking: pvmove is locking holding LV
 
-Only  thin-pool with origin_only suspend is allowed to be not suspending anything.
-In such case pairing resume will 'decrement' critical section counter.
+As we do get lock for pvmove LV - it's lockholder ATM.
 ---
- WHATS_NEW               |    1 +
- lib/activate/activate.c |    8 +++++++-
- 2 files changed, 8 insertions(+), 1 deletions(-)
+ WHATS_NEW         |    1 +
+ lib/metadata/lv.c |    3 +++
+ 2 files changed, 4 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 5ffe0ed..6ff4ccd 100644
+index 6ff4ccd..f29a498 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.177 -
  ====================================
-+  Do not change critical section counter on resume path without real resume.
++  Make a pvmove LV locking holder.
+   Do not change critical section counter on resume path without real resume.
    Enhance activation code to automatically suspend pvmove participants.
    Remove unnecessary single read from lvmdiskscan.
-   Avoid using precommitted metadata for suspending pvmove tree.
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index fe2fcc6..17bbe15 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2353,11 +2353,17 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
- 		if (error_if_not_active)
- 			goto_out;
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 4d35efe..630880f 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -1604,6 +1604,9 @@ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv)
+ 	if ((lv_is_raid_image(lv) || lv_is_raid_metadata(lv)) && lv_is_visible(lv))
+ 		return lv;
  
++	if (lv_is_pvmove(lv))
++		return lv;
 +
-+		/* ATM only thin-pool with origin-only suspend does not really suspend anything
-+		 * it's used only for message passing to thin-pool */
-+		if (laopts->origin_only && lv_is_thin_pool(lv))
-+			critical_section_dec(cmd, "resumed");
-+
- 		if (!info.suspended && critical_section()) {
- 			/* check if any subLV is suspended */
- 			if ((r = for_each_sub_lv((struct logical_volume *)lv, &_check_suspended_lv, NULL))) {
- 				/* Everything seems resumed */
--				critical_section_dec(cmd, "already resumed");
-+				log_debug_activation("LV %s not suspended.", display_lvname(lv));
- 				goto out;
- 			}
- 		} else {
+ 	/* For other types, by default look for the first user */
+ 	dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
+ 		/* FIXME: complete this exception list */
 
 
