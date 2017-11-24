@@ -1,62 +1,85 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 24 Nov 2017 10:10:54 -0500
-Subject: master - libdm: preload propagates delayed resume
-Message-ID: <201711241510.vAOFAsMf000361@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 24 Nov 2017 10:11:01 -0500
+Subject: master - mirror: use lv_update_and_reload_origin
+Message-ID: <201711241511.vAOFB1F3000372@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa68b898ff9c51dcbd87c6be34632e33f0299a18
-Commit:        aa68b898ff9c51dcbd87c6be34632e33f0299a18
-Parent:        b5be7420d947b9bfe52da73078955ed241765875
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ddbe763eb81c5f9608ca9ff192bd33d9d37acd77
+Commit:        ddbe763eb81c5f9608ca9ff192bd33d9d37acd77
+Parent:        aa68b898ff9c51dcbd87c6be34632e33f0299a18
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 24 13:57:22 2017 +0100
+AuthorDate:    Fri Nov 24 13:58:23 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 24 16:05:21 2017 +0100
 
-libdm: preload propagates delayed resume
+mirror: use lv_update_and_reload_origin
 
-Propagate delayed resume at least for preload case in a simple way.
-Currently  PVMOVE depends on internal logic where 'mirror' with
-corelog is 'possible' PVMOVE. In such case resume of 'created'
-node is 'delayed'.
-
-This is mostly an ugly internal hack - but for the moment being when we
-add propagation for preload - it does work reasonable.
-
-TODO: provide standard API and avoid this internal 'guessing'.
+Replace complex code with standard lv_update_and_reload_origin().
+Extra suspend should not be necessary.
+(If they would be - dependency tree would have bug for fixing).
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |    4 ++++
- 2 files changed, 5 insertions(+), 0 deletions(-)
+ lib/metadata/mirror.c |   44 +-------------------------------------------
+ 1 files changed, 1 insertions(+), 43 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index b7f71ca..9cec953 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.146 -
- ====================================
-+  Propagate delayed resume for pvmove subvolumes.
-   Suppress integrity encryption keys in 'table' output unless --showkeys supplied.
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index c89408c..327ce99 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1038,50 +1038,8 @@ static int _remove_mirror_images(struct logical_volume *lv,
+ 	 * remove the LVs from the mirror set, commit that metadata
+ 	 * then deactivate and remove them fully.
+ 	 */
+-	if (!vg_write(mirrored_seg->lv->vg)) {
+-		log_error("intermediate VG write failed.");
+-		return 0;
+-	}
+-
+-	if (!suspend_lv_origin(mirrored_seg->lv->vg->cmd, mirrored_seg->lv)) {
+-		log_error("Failed to lock %s.", display_lvname(mirrored_seg->lv));
+-		vg_revert(mirrored_seg->lv->vg);
+-		return 0;
+-	}
+-
+-	/* FIXME: second suspend should not be needed
+-	 * Explicitly suspend temporary LV.
+-	 * This balances critical_section_inc() calls with critical_section_dec()
+-	 * in resume (both local and cluster) and also properly propagates precommitted
+-	 * metadata into dm table on other nodes.
+-	 * FIXME: check propagation of suspend with visible flag
+-	 */
+-	if (temp_layer_lv && !suspend_lv(temp_layer_lv->vg->cmd, temp_layer_lv))
+-		log_error("Problem suspending temporary LV %s.", display_lvname(temp_layer_lv));
+-
+-	if (!vg_commit(mirrored_seg->lv->vg)) {
+-		if (!resume_lv(mirrored_seg->lv->vg->cmd, mirrored_seg->lv))
+-			stack;
++	if (!lv_update_and_reload_origin(mirrored_seg->lv))
+ 		return_0;
+-	}
+-
+-	log_very_verbose("Updating %s in kernel.", display_lvname(mirrored_seg->lv));
+-
+-	/*
+-	 * Avoid having same mirror target loaded twice simultaneously by first
+-	 * resuming the removed LV which now contains an error segment.
+-	 * As it's now detached from mirrored_seg->lv we must resume it
+-	 * explicitly.
+-	 */
+-	if (temp_layer_lv && !resume_lv(temp_layer_lv->vg->cmd, temp_layer_lv)) {
+-		log_error("Problem resuming temporary LV %s.", display_lvname(temp_layer_lv));
+-		return 0;
+-	}
+-
+-	if (!resume_lv_origin(mirrored_seg->lv->vg->cmd, mirrored_seg->lv)) {
+-		log_error("Problem reactivating %s.", display_lvname(mirrored_seg->lv));
+-		return 0;
+-	}
  
- Version 1.02.145 - 3rd November 2017
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index b0a48f3..547904f 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -2962,6 +2962,10 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 
- 	/* Preload children first */
- 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
-+		/* Propagate delay of resume from parent node */
-+		if (dnode->props.delay_resume_if_new)
-+			child->props.delay_resume_if_new = 1;
-+
- 		/* Skip existing non-device-mapper devices */
- 		if (!child->info.exists && child->info.major)
- 			continue;
+ 	/* Save or delete the 'orphan' LVs */
+ 	reactivate = lv_is_active(lv_lock_holder(lv));
 
 
