@@ -1,53 +1,62 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 24 Nov 2017 10:10:51 -0500
-Subject: master - locking: pvmove is locking holding LV
-Message-ID: <201711241510.vAOFApEO000341@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 24 Nov 2017 10:10:54 -0500
+Subject: master - libdm: preload propagates delayed resume
+Message-ID: <201711241510.vAOFAsMf000361@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b5be7420d947b9bfe52da73078955ed241765875
-Commit:        b5be7420d947b9bfe52da73078955ed241765875
-Parent:        8cf10948bd3acce7ae03f16982f0acbc4cde4fee
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa68b898ff9c51dcbd87c6be34632e33f0299a18
+Commit:        aa68b898ff9c51dcbd87c6be34632e33f0299a18
+Parent:        b5be7420d947b9bfe52da73078955ed241765875
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 24 13:55:57 2017 +0100
+AuthorDate:    Fri Nov 24 13:57:22 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 24 16:05:21 2017 +0100
 
-locking: pvmove is locking holding LV
+libdm: preload propagates delayed resume
 
-As we do get lock for pvmove LV - it's lockholder ATM.
+Propagate delayed resume at least for preload case in a simple way.
+Currently  PVMOVE depends on internal logic where 'mirror' with
+corelog is 'possible' PVMOVE. In such case resume of 'created'
+node is 'delayed'.
+
+This is mostly an ugly internal hack - but for the moment being when we
+add propagation for preload - it does work reasonable.
+
+TODO: provide standard API and avoid this internal 'guessing'.
 ---
- WHATS_NEW         |    1 +
- lib/metadata/lv.c |    3 +++
- 2 files changed, 4 insertions(+), 0 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |    4 ++++
+ 2 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 6ff4ccd..f29a498 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index b7f71ca..9cec953 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.177 -
+ Version 1.02.146 -
  ====================================
-+  Make a pvmove LV locking holder.
-   Do not change critical section counter on resume path without real resume.
-   Enhance activation code to automatically suspend pvmove participants.
-   Remove unnecessary single read from lvmdiskscan.
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 4d35efe..630880f 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -1604,6 +1604,9 @@ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv)
- 	if ((lv_is_raid_image(lv) || lv_is_raid_metadata(lv)) && lv_is_visible(lv))
- 		return lv;
++  Propagate delayed resume for pvmove subvolumes.
+   Suppress integrity encryption keys in 'table' output unless --showkeys supplied.
  
-+	if (lv_is_pvmove(lv))
-+		return lv;
+ Version 1.02.145 - 3rd November 2017
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index b0a48f3..547904f 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -2962,6 +2962,10 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 
+ 	/* Preload children first */
+ 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
++		/* Propagate delay of resume from parent node */
++		if (dnode->props.delay_resume_if_new)
++			child->props.delay_resume_if_new = 1;
 +
- 	/* For other types, by default look for the first user */
- 	dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
- 		/* FIXME: complete this exception list */
+ 		/* Skip existing non-device-mapper devices */
+ 		if (!child->info.exists && child->info.major)
+ 			continue;
 
 
