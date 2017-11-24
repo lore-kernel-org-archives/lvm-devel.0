@@ -1,134 +1,94 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 24 Nov 2017 10:11:21 -0500
-Subject: master - cleanup: reduce couple debug lines
-Message-ID: <201711241511.vAOFBL3c000758@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 24 Nov 2017 10:11:28 -0500
+Subject: master - cleanup: using max args consistently
+Message-ID: <201711241511.vAOFBSDi000770@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=54741aeac5e45abbad26343776a6205dab85b0fb
-Commit:        54741aeac5e45abbad26343776a6205dab85b0fb
-Parent:        5e88d3a89b353ad4d286d453dcc24042b09efaf9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b0398f42ad125ca084e2b6942e23cacaafabd98e
+Commit:        b0398f42ad125ca084e2b6942e23cacaafabd98e
+Parent:        54741aeac5e45abbad26343776a6205dab85b0fb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 17 00:01:45 2017 +0100
+AuthorDate:    Tue Nov 21 17:36:09 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 24 16:09:59 2017 +0100
 
-cleanup: reduce couple debug lines
+cleanup: using max args consistently
 
+Define and use MAX_PDATA_ARGS for thin_repair and cache_repair consistently.
 ---
- lib/cache/lvmetad.c |   29 +++++++++++++++++------------
- 1 files changed, 17 insertions(+), 12 deletions(-)
+ tools/lvconvert.c |   14 ++++++++------
+ 1 files changed, 8 insertions(+), 6 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 1fd9091..6755ed6 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -551,6 +551,7 @@ static int _token_update(int *replaced_update)
- 	daemon_reply reply;
- 	const char *token_expected;
- 	const char *prev_token;
-+	const char *reply_str;
- 	int update_pid;
- 	int ending_our_update;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index ed1a130..d5491a7 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -18,6 +18,8 @@
+ #include "lv_alloc.h"
+ #include "lvconvert_poll.h"
  
-@@ -567,13 +568,14 @@ static int _token_update(int *replaced_update)
- 	}
- 
- 	update_pid = (int)daemon_reply_int(reply, "update_pid", 0);
-+	reply_str = daemon_reply_str(reply, "response", "");
- 
- 	/*
- 	 * A mismatch can only happen when this command attempts to set the
- 	 * token to filter:<hash> at the end of its update, but the update has
- 	 * been preempted in lvmetad by a new one (from update_pid).
- 	 */
--	if (!strcmp(daemon_reply_str(reply, "response", ""), "token_mismatch")) {
-+	if (!strcmp(reply_str, "token_mismatch")) {
- 		token_expected = daemon_reply_str(reply, "expected", "");
- 
- 		ending_our_update = strcmp(_lvmetad_token, LVMETAD_TOKEN_UPDATE_IN_PROGRESS);
-@@ -599,7 +601,7 @@ static int _token_update(int *replaced_update)
++#define MAX_PDATA_ARGS	10	/* Max number of accepted args for d-m-p-d tools */
++
+ typedef enum {
+ 	/* Split:
+ 	 *   For a mirrored or raid LV, split mirror into two mirrors, optionally tracking
+@@ -2204,7 +2206,7 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
+ 	const struct dm_config_value *cv;
+ 	int ret = 0, status;
+ 	int args = 0;
+-	const char *argv[19]; /* Max supported 10 args */
++	const char *argv[MAX_PDATA_ARGS + 7]; /* Max supported args */
+ 	char *dm_name, *trans_id_str;
+ 	char meta_path[PATH_MAX];
+ 	char pms_path[PATH_MAX];
+@@ -2250,7 +2252,7 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
  		return 0;
  	}
  
--	if (strcmp(daemon_reply_str(reply, "response", ""), "OK")) {
-+	if (strcmp(reply_str, "OK")) {
- 		log_error("Failed response from lvmetad for token update.");
- 		daemon_reply_destroy(reply);
+-	for (cv = cn->v; cv && args < 16; cv = cv->next) {
++	for (cv = cn->v; cv && args < MAX_PDATA_ARGS; cv = cv->next) {
+ 		if (cv->type != DM_CFG_STRING) {
+ 			log_error("Invalid string in config file: "
+ 				  "global/thin_repair_options");
+@@ -2259,7 +2261,7 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
+ 		argv[++args] = cv->v.str;
+ 	}
+ 
+-	if (args == 10) {
++	if (args >= MAX_PDATA_ARGS) {
+ 		log_error("Too many options for thin repair command.");
  		return 0;
-@@ -626,6 +628,7 @@ static int _lvmetad_handle_reply(daemon_reply reply, const char *id, const char
- {
- 	const char *token_expected;
- 	const char *action;
-+	const char *reply_str;
- 	int action_modifies = 0;
- 	int daemon_in_update;
- 	int we_are_in_update;
-@@ -670,8 +673,8 @@ static int _lvmetad_handle_reply(daemon_reply reply, const char *id, const char
- 	/*
- 	 * Errors related to token mismatch.
- 	 */
--
--	if (!strcmp(daemon_reply_str(reply, "response", ""), "token_mismatch")) {
-+	reply_str = daemon_reply_str(reply, "response", "");
-+	if (!strcmp(reply_str, "token_mismatch")) {
- 
- 		token_expected = daemon_reply_str(reply, "expected", "");
- 		update_pid = (int)daemon_reply_int(reply, "update_pid", 0);
-@@ -769,14 +772,14 @@ static int _lvmetad_handle_reply(daemon_reply reply, const char *id, const char
- 	 */
- 
- 	/* All OK? */
--	if (!strcmp(daemon_reply_str(reply, "response", ""), "OK")) {
-+	if (!strcmp(reply_str, "OK")) {
- 		if (found)
- 			*found = 1;
- 		return 1;
+ 	}
+@@ -2401,7 +2403,7 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
+ 	const struct dm_config_value *cv;
+ 	int ret = 0, status;
+ 	int args = 0;
+-	const char *argv[19]; /* Max supported 10 args */
++	const char *argv[MAX_PDATA_ARGS + 7]; /* Max supported args */
+ 	char *dm_name;
+ 	char meta_path[PATH_MAX];
+ 	char pms_path[PATH_MAX];
+@@ -2448,7 +2450,7 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
+ 		return 0;
  	}
  
- 	/* Unknown device permitted? */
--	if (found && !strcmp(daemon_reply_str(reply, "response", ""), "unknown")) {
-+	if (found && !strcmp(reply_str, "unknown")) {
- 		log_very_verbose("Request to %s %s%sin lvmetad did not find any matching object.",
- 				 action, object, *object ? " " : "");
- 		*found = 0;
-@@ -784,7 +787,7 @@ static int _lvmetad_handle_reply(daemon_reply reply, const char *id, const char
+-	for (cv = cn->v; cv && args < 16; cv = cv->next) {
++	for (cv = cn->v; cv && args < MAX_PDATA_ARGS; cv = cv->next) {
+ 		if (cv->type != DM_CFG_STRING) {
+ 			log_error("Invalid string in config file: "
+ 				  "global/cache_repair_options");
+@@ -2457,7 +2459,7 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
+ 		argv[++args] = cv->v.str;
  	}
  
- 	/* Multiple VGs with the same name were found. */
--	if (found && !strcmp(daemon_reply_str(reply, "response", ""), "multiple")) {
-+	if (found && !strcmp(reply_str, "multiple")) {
- 		log_very_verbose("Request to %s %s%sin lvmetad found multiple matching objects.",
- 				 action, object, *object ? " " : "");
- 		if (found)
-@@ -1607,7 +1610,7 @@ int lvmetad_pv_found(struct cmd_context *cmd, const struct id *pvid, struct devi
- 	struct dm_config_tree *pvmeta, *vgmeta;
- 	const char *status = NULL, *vgname = NULL;
- 	int64_t changed = 0;
--	int result;
-+	int result, seqno_after;
- 
- 	if (!lvmetad_used() || test_mode())
- 		return 1;
-@@ -1672,10 +1675,12 @@ int lvmetad_pv_found(struct cmd_context *cmd, const struct id *pvid, struct devi
- 
- 	result = _lvmetad_handle_reply(reply, "pv_found", uuid, NULL);
- 
--	if (vg && result &&
--	    (daemon_reply_int(reply, "seqno_after", -1) != vg->seqno ||
--	     daemon_reply_int(reply, "seqno_after", -1) != daemon_reply_int(reply, "seqno_before", -1)))
--		log_warn("WARNING: Inconsistent metadata found for VG %s", vg->name);
-+	if (vg && result) {
-+		seqno_after = daemon_reply_int(reply, "seqno_after", -1);
-+		if ((seqno_after != vg->seqno) ||
-+		    (seqno_after != daemon_reply_int(reply, "seqno_before", -1)))
-+			log_warn("WARNING: Inconsistent metadata found for VG %s", vg->name);
-+	}
- 
- 	if (result && found_vgnames) {
- 		status = daemon_reply_str(reply, "status", NULL);
+-	if (args == 10) {
++	if (args >= MAX_PDATA_ARGS) {
+ 		log_error("Too many options for cache repair command.");
+ 		return 0;
+ 	}
 
 
