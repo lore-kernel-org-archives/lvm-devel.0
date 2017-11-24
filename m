@@ -1,94 +1,87 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 24 Nov 2017 10:11:28 -0500
-Subject: master - cleanup: using max args consistently
-Message-ID: <201711241511.vAOFBSDi000770@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 24 Nov 2017 10:11:32 -0500
+Subject: master - cleanup: update error messages
+Message-ID: <201711241511.vAOFBWo9000781@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b0398f42ad125ca084e2b6942e23cacaafabd98e
-Commit:        b0398f42ad125ca084e2b6942e23cacaafabd98e
-Parent:        54741aeac5e45abbad26343776a6205dab85b0fb
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7bffbe0e2f7f43acf9cdb93f9d24cfb8638c7e7b
+Commit:        7bffbe0e2f7f43acf9cdb93f9d24cfb8638c7e7b
+Parent:        b0398f42ad125ca084e2b6942e23cacaafabd98e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Nov 21 17:36:09 2017 +0100
+AuthorDate:    Tue Nov 21 15:33:29 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 24 16:09:59 2017 +0100
 
-cleanup: using max args consistently
+cleanup: update error messages
 
-Define and use MAX_PDATA_ARGS for thin_repair and cache_repair consistently.
+Correct printed lv names in error messages
+and add missing trace for return.
 ---
- tools/lvconvert.c |   14 ++++++++------
- 1 files changed, 8 insertions(+), 6 deletions(-)
+ tools/lvconvert.c   |   18 +++++++++---------
+ tools/pvmove_poll.c |    2 +-
+ 2 files changed, 10 insertions(+), 10 deletions(-)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index ed1a130..d5491a7 100644
+index d5491a7..deb7cc9 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -18,6 +18,8 @@
- #include "lv_alloc.h"
- #include "lvconvert_poll.h"
- 
-+#define MAX_PDATA_ARGS	10	/* Max number of accepted args for d-m-p-d tools */
-+
- typedef enum {
- 	/* Split:
- 	 *   For a mirrored or raid LV, split mirror into two mirrors, optionally tracking
-@@ -2204,7 +2206,7 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
- 	const struct dm_config_value *cv;
- 	int ret = 0, status;
- 	int args = 0;
--	const char *argv[19]; /* Max supported 10 args */
-+	const char *argv[MAX_PDATA_ARGS + 7]; /* Max supported args */
- 	char *dm_name, *trans_id_str;
- 	char meta_path[PATH_MAX];
- 	char pms_path[PATH_MAX];
-@@ -2250,7 +2252,7 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
- 		return 0;
+@@ -2328,15 +2328,15 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
+ deactivate_mlv:
+ 	if (!deactivate_lv(cmd, mlv)) {
+ 		log_error("Cannot deactivate thin pool metadata volume %s.",
+-			  mlv->name);
+-		return 0;
++			  display_lvname(mlv));
++		ret = 0;
  	}
  
--	for (cv = cn->v; cv && args < 16; cv = cv->next) {
-+	for (cv = cn->v; cv && args < MAX_PDATA_ARGS; cv = cv->next) {
- 		if (cv->type != DM_CFG_STRING) {
- 			log_error("Invalid string in config file: "
- 				  "global/thin_repair_options");
-@@ -2259,7 +2261,7 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
- 		argv[++args] = cv->v.str;
+ deactivate_pmslv:
+ 	if (!deactivate_lv(cmd, pmslv)) {
+-		log_error("Cannot deactivate thin pool metadata volume %s.",
+-			  mlv->name);
+-		return 0;
++		log_error("Cannot deactivate pool metadata spare volume %s.",
++			  display_lvname(pmslv));
++		ret = 0;
  	}
  
--	if (args == 10) {
-+	if (args >= MAX_PDATA_ARGS) {
- 		log_error("Too many options for thin repair command.");
- 		return 0;
- 	}
-@@ -2401,7 +2403,7 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
- 	const struct dm_config_value *cv;
- 	int ret = 0, status;
- 	int args = 0;
--	const char *argv[19]; /* Max supported 10 args */
-+	const char *argv[MAX_PDATA_ARGS + 7]; /* Max supported args */
- 	char *dm_name;
- 	char meta_path[PATH_MAX];
- 	char pms_path[PATH_MAX];
-@@ -2448,7 +2450,7 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
- 		return 0;
+ 	if (!ret)
+@@ -2500,15 +2500,15 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
+ deactivate_mlv:
+ 	if (!deactivate_lv(cmd, mlv)) {
+ 		log_error("Cannot deactivate pool metadata volume %s.",
+-			  mlv->name);
+-		return 0;
++			  display_lvname(mlv));
++		ret = 0;
  	}
  
--	for (cv = cn->v; cv && args < 16; cv = cv->next) {
-+	for (cv = cn->v; cv && args < MAX_PDATA_ARGS; cv = cv->next) {
- 		if (cv->type != DM_CFG_STRING) {
- 			log_error("Invalid string in config file: "
- 				  "global/cache_repair_options");
-@@ -2457,7 +2459,7 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
- 		argv[++args] = cv->v.str;
+ deactivate_pmslv:
+ 	if (!deactivate_lv(cmd, pmslv)) {
+ 		log_error("Cannot deactivate pool metadata spare volume %s.",
+-			  mlv->name);
+-		return 0;
++			  display_lvname(pmslv));
++		ret = 0;
  	}
  
--	if (args == 10) {
-+	if (args >= MAX_PDATA_ARGS) {
- 		log_error("Too many options for cache repair command.");
- 		return 0;
+ 	if (!ret)
+diff --git a/tools/pvmove_poll.c b/tools/pvmove_poll.c
+index 982bf96..f573eb9 100644
+--- a/tools/pvmove_poll.c
++++ b/tools/pvmove_poll.c
+@@ -64,7 +64,7 @@ static int _detach_pvmove_mirror(struct cmd_context *cmd,
+ 	if (!lv_remove_mirrors(cmd, lv_mirr, 1, 0, _is_pvmove_image_removable, &mimage_to_remove, PVMOVE) ||
+ 	    !remove_layers_for_segments_all(cmd, lv_mirr, PVMOVE,
+ 					    &lvs_completed)) {
+-		return 0;
++		return_0;
  	}
+ 
+ 	dm_list_iterate_items(lvl, &lvs_completed)
 
 
