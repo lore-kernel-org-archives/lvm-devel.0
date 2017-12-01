@@ -1,82 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 1 Dec 2017 06:20:27 -0500
-Subject: master - activation: extend resume validation
-Message-ID: <201712011120.vB1BKRjT029446@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 1 Dec 2017 06:20:32 -0500
+Subject: master - activation: avoid rechecking pvmove node
+Message-ID: <201712011120.vB1BKWtv029463@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e4db42e4769823aceb59698cef9811c11e330b7b
-Commit:        e4db42e4769823aceb59698cef9811c11e330b7b
-Parent:        c086dfadc389551b9a2d7b4c26931e5e74ada8d6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e794b7748a84d2e8f48012b6c31ba50992c8ac1
+Commit:        7e794b7748a84d2e8f48012b6c31ba50992c8ac1
+Parent:        e4db42e4769823aceb59698cef9811c11e330b7b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Nov 28 23:11:20 2017 +0100
+AuthorDate:    Thu Nov 30 13:26:44 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Dec 1 12:19:09 2017 +0100
 
-activation: extend resume validation
+activation: avoid rechecking pvmove node
 
-Check also all snapshosts when resume is requested,
-the origin volume is already resume, but possibly
-some subLV or snapshot LV could be suspended if
-we are still in critical_section.
+Use new 3rd. state of trace_pvmove_deps == 2.
+In this state we know, we have already seen the node and can skip futher
+testing.   Remainging value 1 signals we want to track, and value 0
+is for ignoring tracking, but node is still checking in this case.
+
+Reduces large amount of duplicate ioctl queries.
 ---
- lib/activate/activate.c |   21 +++++++++++++++------
- 1 files changed, 15 insertions(+), 6 deletions(-)
+ lib/activate/dev_manager.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 17bbe15..eacf638 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2311,6 +2311,11 @@ static int _check_suspended_lv(struct logical_volume *lv, void *data)
- 		return 0; /* There is suspended subLV in the tree */
- 	}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 429f4f6..9f19912 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -2059,6 +2059,9 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 	const char *uuid;
+ 	const struct logical_volume *plv;
  
-+	if (lv_layer(lv) && lv_info(lv->vg->cmd, lv, 1, &info, 0, 0) && info.exists && info.suspended) {
-+		log_debug("Found suspended layered LV %s in critical section().", display_lvname(lv));
-+		return 0; /* There is suspended subLV in the tree */
-+	}
++	if (lv_is_pvmove(lv) && (dm->track_pvmove_deps == 2))
++		return 1; /* Avoid rechecking of already seen pvmove LV */
 +
- 	return 1;
- }
+ 	if (lv_is_cache_pool(lv)) {
+ 		if (!dm_list_empty(&lv->segs_using_this_lv)) {
+ 			if (!_add_lv_to_dtree(dm, dtree, seg_lv(first_seg(lv), 0), 0))
+@@ -2178,8 +2181,8 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		return_0;
  
-@@ -2319,6 +2324,7 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
- 	              const struct logical_volume *lv)
- {
- 	const struct logical_volume *lv_to_free = NULL;
-+	struct dm_list *snh;
- 	struct lvinfo info;
- 	int r = 0;
- 
-@@ -2360,18 +2366,21 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
- 			critical_section_dec(cmd, "resumed");
- 
- 		if (!info.suspended && critical_section()) {
--			/* check if any subLV is suspended */
--			if ((r = for_each_sub_lv((struct logical_volume *)lv, &_check_suspended_lv, NULL))) {
--				/* Everything seems resumed */
--				log_debug_activation("LV %s not suspended.", display_lvname(lv));
--				goto out;
-+			/* Validation check if any subLV is suspended */
-+			if (!laopts->origin_only && lv_is_origin(lv)) {
-+				/* Check all snapshots for this origin LV */
-+				dm_list_iterate(snh, &lv->snapshot_segs)
-+					if (!_check_suspended_lv(dm_list_struct_base(snh, struct lv_segment, origin_list)->cow, NULL))
-+						goto needs_resume; /* Found suspended snapshot */
- 			}
-+			if ((r = for_each_sub_lv((struct logical_volume *)lv, &_check_suspended_lv, NULL)))
-+				goto out; /* Nothing was found suspended */
- 		} else {
- 			r = 1;
- 			goto out;
- 		}
- 	}
--
-+needs_resume:
- 	laopts->read_only = _passes_readonly_filter(cmd, lv);
- 	laopts->resuming = 1;
- 
+ 	/* Add any LVs referencing a PVMOVE LV unless told not to. */
+-	if (dm->track_pvmove_deps && lv_is_pvmove(lv)) {
+-		dm->track_pvmove_deps = 0;
++	if ((dm->track_pvmove_deps == 1) && lv_is_pvmove(lv)) {
++		dm->track_pvmove_deps = 2; /* Mark as already seen */
+ 		dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
+ 			/* If LV is snapshot COW - whole snapshot needs reload */
+ 			plv = lv_is_cow(sl->seg->lv) ? origin_from_cow(sl->seg->lv) : sl->seg->lv;
 
 
