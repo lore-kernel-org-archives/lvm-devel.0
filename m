@@ -1,110 +1,145 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Thu, 7 Dec 2017 20:20:59 -0500
-Subject: master - format_text: Use explicit alignment in wrapping calc.
-Message-ID: <201712080120.vB81KxHS015312@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 1 Dec 2017 12:57:43 -0500
+Subject: master - test: add large tests skip option
+Message-ID: <201712011757.vB1HvhC6029501@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=14b1e5270dbca71870a79b37d6614e2cb96b180f
-Commit:        14b1e5270dbca71870a79b37d6614e2cb96b180f
-Parent:        4c88c4626d9870d4fa146f7596a37853cf965a39
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Dec 8 01:11:34 2017 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Dec 8 01:18:46 2017 +0000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=053314f2954dd94f707ef4a6ae9967ecd69fad6e
+Commit:        053314f2954dd94f707ef4a6ae9967ecd69fad6e
+Parent:        7aef59c6c332e5b9a983f5559acfa13834b2d064
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Dec 1 18:50:55 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Dec 1 18:50:55 2017 +0100
 
-format_text: Use explicit alignment in wrapping calc.
+test: add large tests skip option
 
-Expand out the metadata wrapping calculations to prepare
-to support a larger alignment.
+The lvm2 test suite aims at small test resource footprints
+(few PVs, small PV sizes) to run on tmpfs backed loop device.
 
-The current alignment is 512 bytes so
-(mdac_area_start + rlocn->offset) % alignment is zero.
+OTOH, lvconvert-reshape-raid.sh aims to test the maxima of
+supported total stripes of 64.  This patch adds a prerequisite
+conditional to skip tests using more than 14 stripes.
+
+It requires the target version 1.13.1 to avoid deadlocks.
 ---
- lib/format_text/format-text.c |   29 +++++++++++++++++------------
- lib/format_text/layout.h      |    1 +
- 2 files changed, 18 insertions(+), 12 deletions(-)
+ test/shell/lvconvert-raid-reshape.sh |   60 ++++++++++++++++++++-------------
+ 1 files changed, 36 insertions(+), 24 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 09ce693..c96fad9 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -472,19 +472,24 @@ static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
- /*
-  * Determine offset for uncommitted metadata
-  */
--static uint64_t _next_rlocn_offset(struct raw_locn *rlocn,
--				   struct mda_header *mdah)
-+static uint64_t _next_rlocn_offset(struct raw_locn *rlocn, struct mda_header *mdah, uint64_t mdac_area_start, uint64_t alignment)
- {
-+	uint64_t new_start_offset;
-+
- 	if (!rlocn)
- 		/* Find an empty slot */
- 		/* FIXME Assume only one VG per mdah for now */
--		return MDA_HEADER_SIZE;
-+		return alignment;
-+
-+	/* Calculate new start position within buffer rounded up to absolute alignment */
-+	new_start_offset = rlocn->offset + rlocn->size +
-+			   (alignment - (mdac_area_start + rlocn->offset + rlocn->size) % alignment);
+diff --git a/test/shell/lvconvert-raid-reshape.sh b/test/shell/lvconvert-raid-reshape.sh
+index b07e1ce..28bff0d 100644
+--- a/test/shell/lvconvert-raid-reshape.sh
++++ b/test/shell/lvconvert-raid-reshape.sh
+@@ -13,22 +13,25 @@
+ SKIP_WITH_LVMLOCKD=1
+ SKIP_WITH_LVMPOLLD=1
  
--	/* Start of free space - round up to next sector; circular */
--	return ((rlocn->offset + rlocn->size +
--		(SECTOR_SIZE - rlocn->size % SECTOR_SIZE) -
--		MDA_HEADER_SIZE) % (mdah->size - MDA_HEADER_SIZE))
--	       + MDA_HEADER_SIZE;
-+	/* If new location is beyond the end of the buffer, wrap around back to start of circular buffer */
-+	if (new_start_offset > mdah->size - MDA_HEADER_SIZE)
-+		new_start_offset -= (mdah->size - MDA_HEADER_SIZE);
+-. lib/inittest
++LVM_SKIP_LARGE_TESTS=0
+ 
+-if [[ "$TESTDIR" == /dev/shm/* ]]; then
+-	echo "Disabled. This tests is permanently causing /dev/shm exhaustion. RHBZ#1501145"
+-	false
+-fi
++. lib/inittest
+ 
+ which mkfs.ext4 || skip
+-aux have_raid 1 12 0 || skip
++aux have_raid 1 13 1 || skip # needed to address RHBZ#1501145
+ 
+ # Temporarily skip reshape tests on single-core CPUs until there's a fix for
+ # https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
+ #aux have_multi_core || skip
+ # dropping single-core limitation with  1.12 target
+ 
+-aux prepare_pvs 65 32
++if [ $LVM_SKIP_LARGE_TESTS -eq 0 ]
++then
++	aux prepare_pvs 65 9
++else
++	aux prepare_pvs 20 9
++fi
 +
-+	return new_start_offset;
- }
+ get_devs
  
- static int _raw_holds_vgname(struct format_instance *fid,
-@@ -643,9 +648,6 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda))))
- 		goto_out;
+ vgcreate -s 1M "$vg" "${DEVICES[@]}"
+@@ -66,7 +69,7 @@ function _lvconvert
+ 	[ "${level:0:7}" = "striped" ] && wait_and_check=0
+ 	[ "${level:0:5}" = "raid0" ] && wait_and_check=0
  
--	rlocn = _find_vg_rlocn(&mdac->area, mdah, mda_is_primary(mda), old_vg_name ? : vg->name, &noprecommit);
--	mdac->rlocn.offset = _next_rlocn_offset(rlocn, mdah);
+-	lvconvert -y --ty $req_level $R $vg/$lv || return $?
++	lvconvert -y --ty $req_level $R "$DM_DEV_DIR/$vg/$lv" || return $?
+ 
+ 	check lv_first_seg_field $vg/$lv segtype "$level"
+ 	check lv_first_seg_field $vg/$lv data_stripes $data_stripes
+@@ -97,7 +100,7 @@ function _reshape_layout
+ 
+ 	[[ "$opts" =~ "--stripes" ]] && ignore_a_chars=1
+ 
+-	lvconvert -vvvv -y --ty $type $opts $vg/$lv
++	lvconvert -y --ty $type $opts "$DM_DEV_DIR/$vg/$lv"
+ 	check lv_first_seg_field $vg/$lv segtype "$type"
+ 	check lv_first_seg_field $vg/$lv data_stripes $data_stripes
+ 	check lv_first_seg_field $vg/$lv stripes $stripes
+@@ -114,6 +117,7 @@ function _reshape_layout
+ #
+ 
+ # Create 3-way striped raid5 (4 legs total)
++# _lvcreate raid5_ls 3 4 16M $vg $lv1
+ _lvcreate raid5_ls 3 4 16M $vg $lv1
+ check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
+ aux wait_for_sync $vg $lv1
+@@ -149,24 +153,32 @@ _reshape_layout raid5_ls 9 10 $vg $lv1 --stripes 9
+ # Convert raid5_ls to 14 stripes
+ _reshape_layout raid5_ls 14 15 $vg $lv1 --stripes 14
+ 
+-# Convert raid5_ls to 63 stripes
+-_reshape_layout raid5_ls 63 64 $vg $lv1 --stripes 63
 -
- 	if (!fidtc->raw_metadata_buf &&
- 	    !(fidtc->raw_metadata_buf_size =
- 			text_vg_export_raw(vg, "", &fidtc->raw_metadata_buf))) {
-@@ -653,6 +655,9 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 		goto out;
- 	}
- 
-+	rlocn = _find_vg_rlocn(&mdac->area, mdah, mda_is_primary(mda), old_vg_name ? : vg->name, &noprecommit);
+-# Convert raid5_ls back to 27 stripes
+-_reshape_layout raid5_ls 27 64 $vg $lv1 --stripes 27 --force
+-_reshape_layout raid5_ls 27 28 $vg $lv1 --stripes 27
+-
+-# Convert raid5_ls back to 4 stripes checking
+-# conversion to striped/raid* gets rejected
+-# with existing LVs to be removed afer reshape
+-_reshape_layout raid5_ls 4 28 $vg $lv1 --stripes 4 --force
++if [ $LVM_SKIP_LARGE_TESTS -eq 0 ]
++then
++	# Convert raid5_ls to 63 stripes
++	_reshape_layout raid5_ls 63 64 $vg $lv1 --stripes 63
 +
-+	mdac->rlocn.offset = _next_rlocn_offset(rlocn, mdah, mdac->area.start, MDA_ORIGINAL_ALIGNMENT);
- 	mdac->rlocn.size = fidtc->raw_metadata_buf_size;
++	# Convert raid5_ls back to 27 stripes
++	_reshape_layout raid5_ls 27 64 $vg $lv1 --stripes 27 --force
++	_reshape_layout raid5_ls 27 28 $vg $lv1 --stripes 27
++
++	# Convert raid5_ls back to 4 stripes checking
++	# conversion to striped/raid* gets rejected
++	# with existing LVs to be removed afer reshape
++	_reshape_layout raid5_ls 4 28 $vg $lv1 --stripes 4 --force
++else
++	# Convert raid5_ls back to 4 stripes checking
++	# conversion to striped/raid* gets rejected
++	# with existing LVs to be removed afer reshape
++	_reshape_layout raid5_ls 4 15 $vg $lv1 --stripes 4 --force
++fi
  
- 	if (mdac->rlocn.offset + mdac->rlocn.size > mdah->size)
-@@ -683,7 +688,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 		goto_out;
+ # No we got the data reshaped and the freed SubLVs still present
+ # -> check takeover request gets rejected
+-not lvconvert --yes --type striped $vg/$lv1
+-not lvconvert --yes --type raid0 $vg/$lv1
+-not lvconvert --yes --type raid0_meta $vg/$lv1
+-not lvconvert --yes --type raid6 $vg/$lv1
++not lvconvert --yes --type striped "$DM_DEV_DIR/$vg/$lv1"
++not lvconvert --yes --type raid0 "$DM_DEV_DIR/$vg/$lv1"
++not lvconvert --yes --type "$DM_DEV_DIR/raid0_meta $vg/$lv1"
++not lvconvert --yes --type "$DM_DEV_DIR/raid6 $vg/$lv1"
+ # Remove the freed SubLVs
+ _reshape_layout raid5_ls 4 5 $vg $lv1 --stripes 4
  
- 	if (new_wrap) {
--		log_debug_metadata("Writing metadata to %s at %" PRIu64 " len %" PRIu64,
-+		log_debug_metadata("Writing wrapped metadata to %s at %" PRIu64 " len %" PRIu64,
- 				  dev_name(mdac->area.dev), mdac->area.start +
- 				  MDA_HEADER_SIZE, new_wrap);
- 
-diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
-index c88812f..1746b9c 100644
---- a/lib/format_text/layout.h
-+++ b/lib/format_text/layout.h
-@@ -102,6 +102,7 @@ struct mda_context {
- #define MDA_HEADER_SIZE 512
- #define LVM2_LABEL "LVM2 001"
- #define MDA_SIZE_MIN (8 * (unsigned) lvm_getpagesize())
-+#define MDA_ORIGINAL_ALIGNMENT 512	/* Original alignment used for start of VG metadata content */
- 
- int vgname_from_mda(const struct format_type *fmt, struct mda_header *mdah, int primary_mda, 
- 		    struct device_area *dev_area, struct lvmcache_vgsummary *vgsummary,
 
 
