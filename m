@@ -1,66 +1,66 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Thu, 7 Dec 2017 11:24:51 -0500
-Subject: master - lvmetad: drop stray underscore
-Message-ID: <201712071624.vB7GOp3E005516@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 1 Dec 2017 12:57:39 -0500
+Subject: master - test: reduce pv sizes, fix comment and stripe size
+Message-ID: <201712011757.vB1HvdGp029491@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2166d7be72c7371f0f94934625252646c5164a2c
-Commit:        2166d7be72c7371f0f94934625252646c5164a2c
-Parent:        d591d041033ce66f092becb285fc43f6fef63ee8
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Dec 7 16:24:14 2017 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Dec 7 16:24:14 2017 +0000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7aef59c6c332e5b9a983f5559acfa13834b2d064
+Commit:        7aef59c6c332e5b9a983f5559acfa13834b2d064
+Parent:        16fa9d9ed5569ac6b8f87375c2902de8280eefe4
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Dec 1 18:42:37 2017 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Dec 1 18:42:37 2017 +0100
 
-lvmetad: drop stray underscore
+test: reduce pv sizes, fix comment and stripe size
 
 ---
- lib/cache/lvmetad.c |    8 ++++----
+ .../lvconvert-raid-reshape-striped_to_linear.sh    |    8 ++++----
  1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 6755ed6..e1f829c 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -1519,7 +1519,7 @@ int lvmetad_vg_list_to_lvmcache(struct cmd_context *cmd)
- 	return 1;
- }
+diff --git a/test/shell/lvconvert-raid-reshape-striped_to_linear.sh b/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
+index ba90f57..5230b2b 100644
+--- a/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
++++ b/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
+@@ -22,7 +22,7 @@ aux have_raid 1 12 0 || skip
+ # https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
+ aux have_multi_core || skip
  
--struct _extract_dl_baton {
-+struct extract_dl_baton {
- 	int i;
- 	struct dm_config_tree *cft;
- 	struct dm_config_node *pre_sib;
-@@ -1527,7 +1527,7 @@ struct _extract_dl_baton {
+-aux prepare_vg 5
++aux prepare_vg 5 20
  
- static int _extract_mda(struct metadata_area *mda, void *baton)
- {
--	struct _extract_dl_baton *b = baton;
-+	struct extract_dl_baton *b = baton;
- 	struct dm_config_node *cn;
- 	char id[32];
+ #
+ # Test single step linear -> striped conversion
+@@ -69,7 +69,7 @@ fsck -fn $DM_DEV_DIR/$vg/$lv1
+ check lv_first_seg_field $vg/$lv1 segtype "raid5_n"
+ check lv_first_seg_field $vg/$lv1 data_stripes 1
+ check lv_first_seg_field $vg/$lv1 stripes 5
+-check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
++check lv_first_seg_field $vg/$lv1 stripesize "32.00k"
+ check lv_first_seg_field $vg/$lv1 regionsize "1.00m"
+ check lv_first_seg_field $vg/$lv1 reshape_len_le 10
+ # for slv in {0..4}
+@@ -84,7 +84,7 @@ lvconvert -y --stripes 1 $vg/$lv1
+ check lv_first_seg_field $vg/$lv1 segtype "raid5_n"
+ check lv_first_seg_field $vg/$lv1 data_stripes 1
+ check lv_first_seg_field $vg/$lv1 stripes 2
+-check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
++check lv_first_seg_field $vg/$lv1 stripesize "32.00k"
+ check lv_first_seg_field $vg/$lv1 regionsize "1.00m"
+ check lv_first_seg_field $vg/$lv1 reshape_len_le 4
  
-@@ -1548,7 +1548,7 @@ static int _extract_mda(struct metadata_area *mda, void *baton)
+@@ -98,7 +98,7 @@ check lv_first_seg_field $vg/$lv1 stripesize "0"
+ check lv_first_seg_field $vg/$lv1 regionsize "1.00m"
+ check lv_first_seg_field $vg/$lv1 reshape_len_le ""
  
- static int _extract_disk_location(const char *name, struct disk_locn *dl, void *baton)
- {
--	struct _extract_dl_baton *b = baton;
-+	struct extract_dl_baton *b = baton;
- 	struct dm_config_node *cn;
- 	char id[32];
- 
-@@ -1583,7 +1583,7 @@ static int _extract_ba(struct disk_locn *ba, void *baton)
- static int _extract_mdas(struct lvmcache_info *info, struct dm_config_tree *cft,
- 			 struct dm_config_node *pre_sib)
- {
--	struct _extract_dl_baton baton = { .cft = cft };
-+	struct extract_dl_baton baton = { .cft = cft };
- 
- 	if (!lvmcache_foreach_mda(info, &_extract_mda, &baton))
- 		return 0;
+-# Convert raid5_n -> linear
++# Convert raid1 -> linear
+ lvconvert -y --type linear $vg/$lv1
+ fsck -fn $DM_DEV_DIR/$vg/$lv1
+ check lv_first_seg_field $vg/$lv1 segtype "linear"
 
 
