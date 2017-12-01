@@ -1,59 +1,68 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 1 Dec 2017 06:20:21 -0500
-Subject: master - pvmove: add missing segment merging
-Message-ID: <201712011120.vB1BKL7C029408@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 1 Dec 2017 06:20:23 -0500
+Subject: master - pvmove: move code from tools to lib
+Message-ID: <201712011120.vB1BKNw7029420@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c489dd2e1764216de07be80d36b1025fb4f6fc85
-Commit:        c489dd2e1764216de07be80d36b1025fb4f6fc85
-Parent:        fbd8b456dbc963bbc306e5b3c643d0f67d3a2d6c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fbd8b456dbc963bbc306e5b3c643d0f67d3a2d6c
+Commit:        fbd8b456dbc963bbc306e5b3c643d0f67d3a2d6c
+Parent:        94d3878efb7cec344681bf4a2b28774ffebda3ba
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 29 22:19:46 2017 +0100
+AuthorDate:    Wed Nov 29 22:19:05 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Dec 1 12:19:09 2017 +0100
+CommitterDate: Fri Dec 1 12:18:32 2017 +0100
 
-pvmove: add missing segment merging
+pvmove: move code from tools to lib
 
-When pvmove is finished and metadata are updated, the code missed
-to merge possible mergable segments - so add explicit merging
-call after pvmoved volumes are unlocked.
-
-This avoids weird results where i.e. lvs could have been reporting
-non-matching segments as lvs upon metadata read is doing silent segment
-merging while dm table left after pvmove was still preserving
-non-merged segments.
+Move code manipulating with locking flags into /lib part of lvm.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |    2 ++
- 2 files changed, 3 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |    6 ++++++
+ tools/pvmove_poll.c     |    5 -----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 32ed3c9..093fc95 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.177 -
- ====================================
-+  Merge segments when pvmove is finished.
-   Remove label_verify that has never been used.
-   Ensure very large numbers used as arguments are not casted to lower values. 
-   Enhance reading and validation of options stripes and stripes_size.
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d4a4b8b..fb152ac 100644
+index 33a4f7d..d4a4b8b 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -6637,6 +6637,8 @@ int remove_layers_for_segments_all(struct cmd_context *cmd,
- 	dm_list_iterate_items(lvl, lvs_changed) {
- 		/* FIXME Assumes only one pvmove at a time! */
- 		lvl->lv->status &= ~LOCKED;
-+		if (!lv_merge_segments(lvl->lv))
-+			return_0;
+@@ -6633,6 +6633,12 @@ int remove_layers_for_segments_all(struct cmd_context *cmd,
+ 	if (!lv_empty(layer_lv))
+ 		return_0;
+ 
++	/* Assumes only used by PVMOVE ATM when unlocking LVs */
++	dm_list_iterate_items(lvl, lvs_changed) {
++		/* FIXME Assumes only one pvmove at a time! */
++		lvl->lv->status &= ~LOCKED;
++	}
++
+ 	return 1;
+ }
+ 
+diff --git a/tools/pvmove_poll.c b/tools/pvmove_poll.c
+index f573eb9..e50747c 100644
+--- a/tools/pvmove_poll.c
++++ b/tools/pvmove_poll.c
+@@ -52,7 +52,6 @@ static int _detach_pvmove_mirror(struct cmd_context *cmd,
+ {
+ 	uint32_t mimage_to_remove = 0;
+ 	struct dm_list lvs_completed;
+-	struct lv_list *lvl;
+ 
+ 	/* Update metadata to remove mirror segments and break dependencies */
+ 	dm_list_init(&lvs_completed);
+@@ -67,10 +66,6 @@ static int _detach_pvmove_mirror(struct cmd_context *cmd,
+ 		return_0;
  	}
  
+-	dm_list_iterate_items(lvl, &lvs_completed)
+-		/* FIXME Assumes only one pvmove at a time! */
+-		lvl->lv->status &= ~LOCKED;
+-
  	return 1;
+ }
+ 
 
 
