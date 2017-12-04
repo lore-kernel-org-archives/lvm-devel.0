@@ -1,20 +1,20 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Mon, 4 Dec 2017 18:23:41 -0500
+Date: Mon, 4 Dec 2017 18:47:24 -0500
 Subject: master - device: categorise block i/o
-Message-ID: <201712042323.vB4NNf8Q012083@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201712042347.vB4NlOfZ014749@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9cefef041a46bff9521e6f22556e1b95f726e33e
-Commit:        9cefef041a46bff9521e6f22556e1b95f726e33e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e4805e48830c66e5fdcabf162a09cc27d6b73bc1
+Commit:        e4805e48830c66e5fdcabf162a09cc27d6b73bc1
 Parent:        698483b5a1bc71e3f48581e2e0bbc269e7d237a9
 Author:        Alasdair G Kergon <agk@redhat.com>
 AuthorDate:    Mon Dec 4 23:18:56 2017 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Dec 4 23:18:56 2017 +0000
+CommitterDate: Mon Dec 4 23:45:26 2017 +0000
 
 device: categorise block i/o
 
@@ -327,7 +327,7 @@ index 05e5bef..9608146 100644
  		return 0;
  	}
 diff --git a/lib/device/device.h b/lib/device/device.h
-index fa03f10..550b9bc 100644
+index fa03f10..254edfe 100644
 --- a/lib/device/device.h
 +++ b/lib/device/device.h
 @@ -79,6 +79,20 @@ struct device {
@@ -338,10 +338,10 @@ index fa03f10..550b9bc 100644
 + * All I/O is annotated with the reason it is performed.
 + */
 +typedef enum dev_io_reason {
-+	DEV_IO_SIGNATURES = 0,  /* Scanning device signatures */
++	DEV_IO_SIGNATURES = 0,	/* Scanning device signatures */
 +	DEV_IO_LABEL,		/* LVM PV disk label */
-+	DEV_IO_MDA_HEADER,      /* Text format metadata area header */
-+	DEV_IO_MDA_CONTENT,     /* Text format metadata area content */
++	DEV_IO_MDA_HEADER,	/* Text format metadata area header */
++	DEV_IO_MDA_CONTENT,	/* Text format metadata area content */
 +	DEV_IO_FMT1,		/* Original LVM1 metadata format */
 +	DEV_IO_POOL,		/* Pool metadata format */
 +	DEV_IO_LV,		/* Content written to an LV */
@@ -673,7 +673,7 @@ index 6b2d1f1..70dc2d9 100644
  	}
  
 diff --git a/lib/metadata/metadata-liblvm.c b/lib/metadata/metadata-liblvm.c
-index 4202950..0ea84e1 100644
+index 4202950..a4284bc 100644
 --- a/lib/metadata/metadata-liblvm.c
 +++ b/lib/metadata/metadata-liblvm.c
 @@ -71,7 +71,7 @@ static int _pvcreate_write(struct cmd_context *cmd, struct pv_to_write *pvw)
@@ -681,12 +681,12 @@ index 4202950..0ea84e1 100644
  			}
  
 -			if (!dev_set(dev, UINT64_C(0), (size_t) 2048, 0)) {
-+			if (!dev_set(dev, UINT64_C(0), (size_t) 2048, DEV_IO_LV, 0)) {
++			if (!dev_set(dev, UINT64_C(0), (size_t) 2048, DEV_IO_LABEL, 0)) {
  				log_error("%s not wiped: aborting", pv_name);
  				if (!dev_close(dev))
  					stack;
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index a14dfa6..d17db92 100644
+index a14dfa6..56b5b13 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
 @@ -1456,7 +1456,7 @@ static int _pvcreate_write(struct cmd_context *cmd, struct pv_to_write *pvw)
@@ -694,7 +694,7 @@ index a14dfa6..d17db92 100644
  			}
  
 -			if (!dev_set(dev, UINT64_C(0), (size_t) 2048, 0)) {
-+			if (!dev_set(dev, UINT64_C(0), (size_t) 2048, DEV_IO_LV, 0)) {
++			if (!dev_set(dev, UINT64_C(0), (size_t) 2048, DEV_IO_LABEL, 0)) {
  				log_error("%s not wiped: aborting", pv_name);
  				if (!dev_close(dev))
  					stack;
