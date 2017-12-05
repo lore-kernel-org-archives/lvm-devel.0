@@ -1,65 +1,50 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 5 Dec 2017 12:48:41 -0500
-Subject: master - deactivate_lvs: deactivate any missing RaidLV legs
-Message-ID: <201712051748.vB5HmfOH019439@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 5 Dec 2017 12:56:11 -0500
+Subject: master - lvmlockd: avoid blocking in sanlock_convert
+Message-ID: <201712051756.vB5HuBD5020231@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=94632eb155a0a1814e69b1baa0516323cbbae648
-Commit:        94632eb155a0a1814e69b1baa0516323cbbae648
-Parent:        7195df5acace29e77add6aa2f3df9c684e44694a
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Dec 5 18:48:06 2017 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Dec 5 18:48:06 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bd893348b415d4e604a7f9a503f17623d485e76e
+Commit:        bd893348b415d4e604a7f9a503f17623d485e76e
+Parent:        94632eb155a0a1814e69b1baa0516323cbbae648
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Nov 29 14:59:11 2017 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Dec 5 11:53:03 2017 -0600
 
-deactivate_lvs: deactivate any missing RaidLV legs
+lvmlockd: avoid blocking in sanlock_convert
 
-In case of failed legs, raid replaces those with
-e.g. "vg-lv_rimage_0-missing_0_0" mapped to an error target.
-
-Those errouneously remain on deactivation.
-
-Fix by removing them on deactivation/removal of the RaidLV.
+Use the same flag as sanlock_acquire() for the
+same purpose.  sanlock_convert can block like
+acquire when doing a sh to ex conversion.
 ---
- lib/activate/activate.c |   14 +++++++++++---
- 1 files changed, 11 insertions(+), 3 deletions(-)
+ daemons/lvmlockd/lvmlockd-sanlock.c |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index e7653a2..4c69af7 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2506,6 +2506,16 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 358c588..079e952 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -1688,6 +1688,16 @@ int lm_convert_sanlock(struct lockspace *ls, struct resource *r,
+ 	if (daemon_test)
+ 		return 0;
  
- 	critical_section_inc(cmd, "deactivating");
- 	r = _lv_deactivate(lv);
-+
 +	/*
-+	 * Remove any transiently activated error
-+	 * devices which arean't used any more.
++	 * Don't block waiting for a failed lease to expire since it causes
++	 * sanlock_convert to block for a long time, which would prevent this
++	 * thread from processing other lock requests.
++	 *
++	 * FIXME: SANLK_CONVERT_OWNER_NOWAIT is the same as SANLK_ACQUIRE_OWNER_NOWAIT.
++	 * Change to use the CONVERT define when the latest sanlock version has it.
 +	 */
-+	if (r && lv_is_raid(lv) && !lv_deactivate_any_missing_subdevs(lv)) {
-+		log_error("Failed to remove temporary SubLVs from %s",
-+			  display_lvname(lv));
-+		r = 0;
-+	}
- 	critical_section_dec(cmd, "deactivated");
- 
- 	if (!lv_info(cmd, lv, 0, &info, 0, 0) || info.exists) {
-@@ -2735,10 +2745,8 @@ static int _lv_remove_any_missing_subdevs(struct logical_volume *lv)
- 		struct lv_segment *seg;
- 
- 		dm_list_iterate_items(seg, &lv->segments) {
--			if (seg->area_count != 1)
--				return_0;
- 			if (dm_snprintf(name, sizeof(name), "%s-%s-missing_%u_0", seg->lv->vg->name, seg->lv->name, seg_no) < 0)
--				return 0;
-+				return_0;
- 			if (!_remove_dm_dev_by_name(name))
- 				return 0;
- 
++	flags |= SANLK_ACQUIRE_OWNER_NOWAIT;
++
+ 	rv = sanlock_convert(lms->sock, -1, flags, rs);
+ 	if (rv == -EAGAIN) {
+ 		/* FIXME: When could this happen?  Should something different be done? */
 
 
