@@ -1,94 +1,117 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 7 Dec 2017 15:03:47 -0500
-Subject: master - libdm: drop extra structure copy
-Message-ID: <201712072003.vB7K3ljc005645@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 7 Dec 2017 15:03:50 -0500
+Subject: master - cleanup: reorder calling of pool checking tools
+Message-ID: <201712072003.vB7K3oMf005657@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=820b1b98fce4a370e9b54ffbc8cbe4b3d0e962f3
-Commit:        820b1b98fce4a370e9b54ffbc8cbe4b3d0e962f3
-Parent:        82ae02bc6a6788aabb10ac8a95287feea37ab88c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f173274fe4888cc73eb573cf2c6913f54641c1aa
+Commit:        f173274fe4888cc73eb573cf2c6913f54641c1aa
+Parent:        820b1b98fce4a370e9b54ffbc8cbe4b3d0e962f3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 7 17:47:06 2017 +0100
+AuthorDate:    Thu Dec 7 17:49:15 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Dec 7 21:00:39 2017 +0100
 
-libdm: drop extra structure copy
+cleanup: reorder calling of pool checking tools
 
-When doing resume, directly pass location where new updated info
-needs to be stored.
-
-_resume_node() ensures the info is ONLY updated when the function
-is successful and never changes it on error path.
+Test for zero header before even starting to create argument list for
+execution of thin/cache_check tool.
 ---
- libdm/libdm-deptree.c |   13 +++----------
- 1 files changed, 3 insertions(+), 10 deletions(-)
+ lib/activate/dev_manager.c |   70 ++++++++++++++++++++++---------------------
+ 1 files changed, 36 insertions(+), 34 deletions(-)
 
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 745fec3..6ba20a4 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -1848,7 +1848,6 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
- 	int resolvable_name_conflict, awaiting_peer_rename = 0;
- 	void *handle = NULL;
- 	struct dm_tree_node *child = dnode;
--	struct dm_info newinfo;
- 	const char *name;
- 	const char *uuid;
- 	int priority;
-@@ -1913,14 +1912,11 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index c050f34..ced50fa 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1912,11 +1912,42 @@ static int _pool_callback(struct dm_tree_node *node,
+ 	const struct logical_volume *mlv = first_seg(pool_lv)->metadata_lv;
+ 	long buf[64 / sizeof(long)]; /* buffer for short disk header (64B) */
+ 	int args = 0;
+-	const char *argv[19] = { /* Max supported 15 args */
+-		find_config_tree_str_allow_empty(pool_lv->vg->cmd, data->exec, NULL) /* argv[0] */
+-	};
++	char *mpath;
++	const char *argv[19] = { 0 }; /* Max supported 15 args */
++
++	if (!(mpath = lv_dmpath_dup(data->dm->mem, mlv))) {
++		log_error("Failed to build device path for checking pool metadata %s.",
++			  display_lvname(mlv));
++		return 0;
++	}
++
++	if (data->skip_zero) {
++		if ((fd = open(mpath, O_RDONLY)) < 0) {
++			log_sys_error("open", mpath);
++			return 0;
++		}
++		/* let's assume there is no problem to read 64 bytes */
++		if (read(fd, buf, sizeof(buf)) < (int)sizeof(buf)) {
++			log_sys_error("read", mpath);
++			if (close(fd))
++				log_sys_error("close", mpath);
++			return 0;
++		}
++		for (ret = 0; ret < (int) DM_ARRAY_SIZE(buf); ++ret)
++			if (buf[ret])
++				break;
++
++		if (close(fd))
++			log_sys_error("close", mpath);
++
++		if (ret == (int) DM_ARRAY_SIZE(buf)) {
++			log_debug_activation("Metadata checking skipped, detected empty disk header on %s.",
++					     mpath);
++			return 1;
++		}
++	}
  
- 			if (!_resume_node(child->name, child->info.major, child->info.minor,
- 					  child->props.read_ahead, child->props.read_ahead_flags,
--					  &newinfo, &child->dtree->cookie, child->udev_flags, child->info.suspended)) {
-+					  &child->info, &child->dtree->cookie, child->udev_flags, child->info.suspended)) {
- 				log_error("Unable to resume %s.", _node_name(child));
- 				r = 0;
- 				continue;
- 			}
+-	if (!*argv[0])
++	if (!(argv[0] = find_config_tree_str_allow_empty(pool_lv->vg->cmd, data->exec, NULL)))
+ 		return 1; /* Checking disabled */
+ 
+ 	if (!(cn = find_config_tree_array(mlv->vg->cmd, data->opts, NULL))) {
+@@ -1939,36 +1970,7 @@ static int _pool_callback(struct dm_tree_node *node,
+ 		return 0;
+ 	}
+ 
+-	if (!(argv[++args] = lv_dmpath_dup(data->dm->mem, mlv))) {
+-		log_error("Failed to build pool metadata path.");
+-		return 0;
+-	}
 -
--			/* Update cached info */
--			child->info = newinfo;
- 		}
- 		if (awaiting_peer_rename)
- 			priority--; /* redo priority level */
-@@ -2814,7 +2810,6 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 	int r = 1, node_created = 0;
- 	void *handle = NULL;
- 	struct dm_tree_node *child;
--	struct dm_info newinfo;
- 	int update_devs_flag = 0;
+-	if (data->skip_zero) {
+-		if ((fd = open(argv[args], O_RDONLY)) < 0) {
+-			log_sys_error("open", argv[args]);
+-			return 0;
+-		}
+-		/* let's assume there is no problem to read 64 bytes */
+-		if (read(fd, buf, sizeof(buf)) < (int)sizeof(buf)) {
+-			log_sys_error("read", argv[args]);
+-			if (close(fd))
+-				log_sys_error("close", argv[args]);
+-			return 0;
+-		}
+-		for (ret = 0; ret < (int) DM_ARRAY_SIZE(buf); ++ret)
+-			if (buf[ret])
+-				break;
+-
+-		if (close(fd))
+-			log_sys_error("close", argv[args]);
+-
+-		if (ret == (int) DM_ARRAY_SIZE(buf)) {
+-			log_debug_activation("%s skipped, detect empty disk header on %s.",
+-					     argv[0], argv[args]);
+-			return 1;
+-		}
+-	}
++	argv[++args] = mpath;
  
- 	/* Preload children first */
-@@ -2870,7 +2865,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 
- 		if (!_resume_node(child->name, child->info.major, child->info.minor,
- 				  child->props.read_ahead, child->props.read_ahead_flags,
--				  &newinfo, &child->dtree->cookie, child->udev_flags,
-+				  &child->info, &child->dtree->cookie, child->udev_flags,
- 				  child->info.suspended)) {
- 			log_error("Unable to resume %s.", _node_name(child));
- 			/* If the device was not previously active, we might as well remove this node. */
-@@ -2883,7 +2878,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 			continue;
- 		}
- 
--		if (!child->info.live_table) {
-+		if (node_created) {
- 			/* Collect newly introduced devices for revert */
- 			dm_list_add_h(&dnode->activated, &child->activated_list);
- 
-@@ -2900,8 +2895,6 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 			}
- 		}
- 
--		/* Update cached info */
--		child->info = newinfo;
- 		/*
- 		 * Prepare for immediate synchronization with udev and flush all stacked
- 		 * dev node operations if requested by immediate_dev_node property. But
+ 	if (!(ret = exec_cmd(pool_lv->vg->cmd, (const char * const *)argv,
+ 			     &status, 0))) {
 
 
