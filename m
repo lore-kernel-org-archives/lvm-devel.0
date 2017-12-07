@@ -1,87 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 7 Dec 2017 15:03:53 -0500
-Subject: master - cleanup: use log_warn
-Message-ID: <201712072003.vB7K3r4R005668@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 7 Dec 2017 15:04:00 -0500
+Subject: master - debug: update debug msg
+Message-ID: <201712072004.vB7K40Et005678@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=717714b24ffbf648a1b22e9306484944a514c565
-Commit:        717714b24ffbf648a1b22e9306484944a514c565
-Parent:        f173274fe4888cc73eb573cf2c6913f54641c1aa
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4c88c4626d9870d4fa146f7596a37853cf965a39
+Commit:        4c88c4626d9870d4fa146f7596a37853cf965a39
+Parent:        717714b24ffbf648a1b22e9306484944a514c565
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 7 10:42:30 2017 +0100
+AuthorDate:    Thu Dec 7 17:54:41 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Dec 7 21:00:39 2017 +0100
 
-cleanup: use log_warn
+debug: update debug msg
 
+Use _node_name.
 ---
- libdm/libdm-common.c |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ libdm/libdm-deptree.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index f5c6062..2ab5bd1 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -1917,13 +1917,13 @@ int dm_device_has_holders(uint32_t major, uint32_t minor)
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 6ba20a4..98dda44 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -2786,9 +2786,9 @@ static int _dm_tree_revert_activated(struct dm_tree_node *parent)
+ 	struct dm_tree_node *child;
  
- 	if (dm_snprintf(sysfs_path, PATH_MAX, "%sdev/block/%" PRIu32
- 			":%" PRIu32 "/holders", _sysfs_dir, major, minor) < 0) {
--		log_error("sysfs_path dm_snprintf failed");
-+		log_warn("WARNING: sysfs_path dm_snprintf failed.");
- 		return 0;
- 	}
- 
- 	if (stat(sysfs_path, &st)) {
- 		if (errno != ENOENT)
--			log_sys_error("stat", sysfs_path);
-+			log_sys_debug("stat", sysfs_path);
- 		return 0;
- 	}
- 
-@@ -1939,13 +1939,13 @@ static int _mounted_fs_on_device(const char *kernel_dev_name)
- 	int r = 0;
- 
- 	if (dm_snprintf(sysfs_path, PATH_MAX, "%sfs", _sysfs_dir) < 0) {
--		log_error("sysfs_path dm_snprintf failed");
-+		log_warn("WARNING: sysfs_path dm_snprintf failed.");
- 		return 0;
- 	}
- 
- 	if (!(d = opendir(sysfs_path))) {
- 		if (errno != ENOENT)
--			log_sys_error("opendir", sysfs_path);
-+			log_sys_debug("opendir", sysfs_path);
- 		return 0;
- 	}
- 
-@@ -1955,7 +1955,7 @@ static int _mounted_fs_on_device(const char *kernel_dev_name)
- 
- 		if (dm_snprintf(sysfs_path, PATH_MAX, "%sfs/%s/%s",
- 				_sysfs_dir, dirent->d_name, kernel_dev_name) < 0) {
--			log_error("sysfs_path dm_snprintf failed");
-+			log_warn("WARNING: sysfs_path dm_snprintf failed.");
- 			break;
+ 	dm_list_iterate_items_gen(child, &parent->activated, activated_list) {
+-		log_debug_activation("Reverting %s.", child->name);
++		log_debug_activation("Reverting %s.", _node_name(child));
+ 		if (child->callback) {
+-			log_debug_activation("Dropping callback for %s.", child->name);
++			log_debug_activation("Dropping callback for %s.", _node_name(child));
+ 			child->callback = NULL;
  		}
- 
-@@ -1965,13 +1965,13 @@ static int _mounted_fs_on_device(const char *kernel_dev_name)
- 			break;
- 		}
- 		else if (errno != ENOENT) {
--			log_sys_error("stat", sysfs_path);
-+			log_sys_debug("stat", sysfs_path);
- 			break;
- 		}
- 	}
- 
- 	if (closedir(d))
--		log_error("_fs_present_on_device: %s: closedir failed", kernel_dev_name);
-+		log_sys_debug("closedir", kernel_dev_name);
- 
- 	return r;
- }
+ 		if (!_deactivate_node(child->name, child->info.major, child->info.minor,
 
 
