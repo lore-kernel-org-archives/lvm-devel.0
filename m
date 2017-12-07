@@ -1,121 +1,94 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 7 Dec 2017 15:03:42 -0500
-Subject: master - libdm: add help func _get_last_load_segment
-Message-ID: <201712072003.vB7K3gJE005630@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 7 Dec 2017 15:03:47 -0500
+Subject: master - libdm: drop extra structure copy
+Message-ID: <201712072003.vB7K3ljc005645@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a4ea47f709287444f3b0d8e0581ce17e730ef4c
-Commit:        4a4ea47f709287444f3b0d8e0581ce17e730ef4c
-Parent:        c3e224ad0ebd473268b171204c8985c9c642f590
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=820b1b98fce4a370e9b54ffbc8cbe4b3d0e962f3
+Commit:        820b1b98fce4a370e9b54ffbc8cbe4b3d0e962f3
+Parent:        82ae02bc6a6788aabb10ac8a95287feea37ab88c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Dec 6 13:23:37 2017 +0100
+AuthorDate:    Thu Dec 7 17:47:06 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 7 20:59:37 2017 +0100
+CommitterDate: Thu Dec 7 21:00:39 2017 +0100
 
-libdm: add help func _get_last_load_segment
+libdm: drop extra structure copy
 
-Share code for same functionality.
+When doing resume, directly pass location where new updated info
+needs to be stored.
+
+_resume_node() ensures the info is ONLY updated when the function
+is successful and never changes it on error path.
 ---
- libdm/libdm-deptree.c |   40 ++++++++++++++++++++++++----------------
- 1 files changed, 24 insertions(+), 16 deletions(-)
+ libdm/libdm-deptree.c |   13 +++----------
+ 1 files changed, 3 insertions(+), 10 deletions(-)
 
 diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 1ef1700..ef5da59 100644
+index 745fec3..6ba20a4 100644
 --- a/libdm/libdm-deptree.c
 +++ b/libdm/libdm-deptree.c
-@@ -1485,6 +1485,16 @@ out:
- 	return r;
- }
- 
-+static struct load_segment *_get_last_load_segment(struct dm_tree_node *node)
-+{
-+	if (dm_list_empty(&node->props.segs)) {
-+		log_error("Node %s is missing a segment.", _node_name(node));
-+		return NULL;
-+	}
-+
-+	return dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
-+}
-+
- /* For preload pass only validate pool's transaction_id */
- static int _node_send_messages(struct dm_tree_node *dnode,
- 			       const char *uuid_prefix,
-@@ -1497,10 +1507,12 @@ static int _node_send_messages(struct dm_tree_node *dnode,
+@@ -1848,7 +1848,6 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 	int resolvable_name_conflict, awaiting_peer_rename = 0;
+ 	void *handle = NULL;
+ 	struct dm_tree_node *child = dnode;
+-	struct dm_info newinfo;
+ 	const char *name;
  	const char *uuid;
- 	int have_messages;
+ 	int priority;
+@@ -1913,14 +1912,11 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
  
--	if (!dnode->info.exists || (dm_list_size(&dnode->props.segs) != 1))
-+	if (!dnode->info.exists)
- 		return 1;
- 
--	seg = dm_list_item(dm_list_last(&dnode->props.segs), struct load_segment);
-+	if (!(seg = _get_last_load_segment(dnode)))
-+		return_0;
-+
- 	if (seg->type != SEG_THIN_POOL)
- 		return 1;
- 
-@@ -3146,12 +3158,8 @@ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
- 	struct dm_tree_node *log_node = NULL;
- 	struct load_segment *seg;
- 
--	if (!node->props.segment_count) {
--		log_error(INTERNAL_ERROR "Attempt to add target area to missing segment.");
--		return 0;
--	}
+ 			if (!_resume_node(child->name, child->info.major, child->info.minor,
+ 					  child->props.read_ahead, child->props.read_ahead_flags,
+-					  &newinfo, &child->dtree->cookie, child->udev_flags, child->info.suspended)) {
++					  &child->info, &child->dtree->cookie, child->udev_flags, child->info.suspended)) {
+ 				log_error("Unable to resume %s.", _node_name(child));
+ 				r = 0;
+ 				continue;
+ 			}
 -
--	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
-+	if (!(seg = _get_last_load_segment(node)))
-+		return_0;
+-			/* Update cached info */
+-			child->info = newinfo;
+ 		}
+ 		if (awaiting_peer_rename)
+ 			priority--; /* redo priority level */
+@@ -2814,7 +2810,6 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 	int r = 1, node_created = 0;
+ 	void *handle = NULL;
+ 	struct dm_tree_node *child;
+-	struct dm_info newinfo;
+ 	int update_devs_flag = 0;
  
- 	if (log_uuid) {
- 		if (!(seg->uuid = dm_pool_strdup(node->dtree->mem, log_uuid))) {
-@@ -3429,13 +3437,16 @@ static struct load_segment *_get_single_load_segment(struct dm_tree_node *node,
- {
- 	struct load_segment *seg;
+ 	/* Preload children first */
+@@ -2870,7 +2865,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
  
-+	if (!(seg = _get_last_load_segment(node)))
-+		return_NULL;
-+
-+	/* Never used past _load_node(), so can test segment_count */
- 	if (node->props.segment_count != 1) {
- 		log_error("Node %s must have only one segment.",
- 			  _dm_segtypes[type].target);
- 		return NULL;
- 	}
+ 		if (!_resume_node(child->name, child->info.major, child->info.minor,
+ 				  child->props.read_ahead, child->props.read_ahead_flags,
+-				  &newinfo, &child->dtree->cookie, child->udev_flags,
++				  &child->info, &child->dtree->cookie, child->udev_flags,
+ 				  child->info.suspended)) {
+ 			log_error("Unable to resume %s.", _node_name(child));
+ 			/* If the device was not previously active, we might as well remove this node. */
+@@ -2883,7 +2878,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 			continue;
+ 		}
  
--	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
- 	if (seg->type != type) {
- 		log_error("Node %s has segment type %s.",
- 			  _dm_segtypes[type].target,
-@@ -3741,12 +3752,8 @@ int dm_tree_node_add_target_area(struct dm_tree_node *node,
- 			return_0;
- 	}
+-		if (!child->info.live_table) {
++		if (node_created) {
+ 			/* Collect newly introduced devices for revert */
+ 			dm_list_add_h(&dnode->activated, &child->activated_list);
  
--	if (!node->props.segment_count) {
--		log_error(INTERNAL_ERROR "Attempt to add target area to missing segment.");
--		return 0;
--	}
--
--	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
-+	if (!(seg = _get_last_load_segment(node)))
-+		return_0;
+@@ -2900,8 +2895,6 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 			}
+ 		}
  
- 	if (!_add_area(node, seg, dev_node, offset))
- 		return_0;
-@@ -3758,7 +3765,8 @@ int dm_tree_node_add_null_area(struct dm_tree_node *node, uint64_t offset)
- {
- 	struct load_segment *seg;
- 
--	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
-+	if (!(seg = _get_last_load_segment(node)))
-+		return_0;
- 
- 	switch (seg->type) {
- 	case SEG_RAID0:
+-		/* Update cached info */
+-		child->info = newinfo;
+ 		/*
+ 		 * Prepare for immediate synchronization with udev and flush all stacked
+ 		 * dev node operations if requested by immediate_dev_node property. But
 
 
