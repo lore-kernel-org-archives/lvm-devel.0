@@ -1,144 +1,121 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Thu, 7 Dec 2017 15:03:42 -0500
-Subject: master - libdm: use delay_resume_if_extended
-Message-ID: <201712072003.vB7K3grM005625@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - libdm: add help func _get_last_load_segment
+Message-ID: <201712072003.vB7K3gJE005630@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=82ae02bc6a6788aabb10ac8a95287feea37ab88c
-Commit:        82ae02bc6a6788aabb10ac8a95287feea37ab88c
-Parent:        297d5915c3c927cba3a63bc9d6d1747271d06641
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a4ea47f709287444f3b0d8e0581ce17e730ef4c
+Commit:        4a4ea47f709287444f3b0d8e0581ce17e730ef4c
+Parent:        c3e224ad0ebd473268b171204c8985c9c642f590
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 7 20:28:03 2017 +0100
+AuthorDate:    Wed Dec 6 13:23:37 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 7 21:00:39 2017 +0100
+CommitterDate: Thu Dec 7 20:59:37 2017 +0100
 
-libdm: use delay_resume_if_extended
+libdm: add help func _get_last_load_segment
 
-Update the logic towards more explicit logic.
-
-Preload tree normally does not want to resume, only
-in certain cases of extension or new loaded nodes can be
-resumed. So introduce new internal variable delay_resume_if_extended
-controlable by target.
-
-Patch itself is not changing current existing behaviour,
-and rather documents existing problem in more readable way.
-
-lvm2 needs to introduce explicit mechanism how to support more
-fain-grained (and safe) logic to i.e. resize thin-pool which
-can be sitting on cached raid volume.
+Share code for same functionality.
 ---
- libdm/libdm-deptree.c |   55 ++++++++++++++++++++++++++++--------------------
- 1 files changed, 32 insertions(+), 23 deletions(-)
+ libdm/libdm-deptree.c |   40 ++++++++++++++++++++++++----------------
+ 1 files changed, 24 insertions(+), 16 deletions(-)
 
 diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index f463eab..745fec3 100644
+index 1ef1700..ef5da59 100644
 --- a/libdm/libdm-deptree.c
 +++ b/libdm/libdm-deptree.c
-@@ -233,6 +233,19 @@ struct load_properties {
- 	unsigned delay_resume_if_new;
+@@ -1485,6 +1485,16 @@ out:
+ 	return r;
+ }
  
- 	/*
-+	 * Preload tree normally only loads and not resume, but there is
-+	 * automatic resume when target is extended, as it's believed
-+	 * there can be no i/o flying to this 'new' extedend space
-+	 * from any device above. Reason is that preloaded target above
-+	 * may actually need to see its bigger subdevice before it
-+	 * gets suspended. As long as devices are simple linears
-+	 * there is no problem to resume bigger device in preload (before commit).
-+	 * However complex targets like thin-pool (raid,cache...)
-+	 * they shall not be resumed before their commit.
-+	 */
-+	unsigned delay_resume_if_extended;
++static struct load_segment *_get_last_load_segment(struct dm_tree_node *node)
++{
++	if (dm_list_empty(&node->props.segs)) {
++		log_error("Node %s is missing a segment.", _node_name(node));
++		return NULL;
++	}
 +
-+	/*
- 	 * Call node_send_messages(), set to 2 if there are messages
- 	 * When != 0, it validates matching transaction id, thus thin-pools
- 	 * where transation_id is passed as 0 are never validated, this
-@@ -2745,6 +2758,18 @@ static int _load_node(struct dm_tree_node *dnode)
- 					     PRIu64 " for %s.%s", existing_table_size,
- 					     seg_start, _node_name(dnode),
- 					     dnode->props.size_changed ? "" : " (Ignoring.)");
++	return dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
++}
 +
-+			/*
-+			 * FIXME: code here has known design problem.
-+			 *  LVM2 does NOT resize thin-pool on top of other LV in 2 steps -
-+			 *  where raid would be resized with 1st. transaction
-+			 *  followed by 2nd. thin-pool resize - RHBZ #1285063
-+			 */
-+			if (existing_table_size && dnode->props.delay_resume_if_extended) {
-+				log_debug_activation("Resume of table of extended device %s delayed.",
-+						     _node_name(dnode));
-+				dnode->props.size_changed = 0;
-+			}
- 		}
+ /* For preload pass only validate pool's transaction_id */
+ static int _node_send_messages(struct dm_tree_node *dnode,
+ 			       const char *uuid_prefix,
+@@ -1497,10 +1507,12 @@ static int _node_send_messages(struct dm_tree_node *dnode,
+ 	const char *uuid;
+ 	int have_messages;
+ 
+-	if (!dnode->info.exists || (dm_list_size(&dnode->props.segs) != 1))
++	if (!dnode->info.exists)
+ 		return 1;
+ 
+-	seg = dm_list_item(dm_list_last(&dnode->props.segs), struct load_segment);
++	if (!(seg = _get_last_load_segment(dnode)))
++		return_0;
++
+ 	if (seg->type != SEG_THIN_POOL)
+ 		return 1;
+ 
+@@ -3146,12 +3158,8 @@ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
+ 	struct dm_tree_node *log_node = NULL;
+ 	struct load_segment *seg;
+ 
+-	if (!node->props.segment_count) {
+-		log_error(INTERNAL_ERROR "Attempt to add target area to missing segment.");
+-		return 0;
+-	}
+-
+-	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
++	if (!(seg = _get_last_load_segment(node)))
++		return_0;
+ 
+ 	if (log_uuid) {
+ 		if (!(seg->uuid = dm_pool_strdup(node->dtree->mem, log_uuid))) {
+@@ -3429,13 +3437,16 @@ static struct load_segment *_get_single_load_segment(struct dm_tree_node *node,
+ {
+ 	struct load_segment *seg;
+ 
++	if (!(seg = _get_last_load_segment(node)))
++		return_NULL;
++
++	/* Never used past _load_node(), so can test segment_count */
+ 	if (node->props.segment_count != 1) {
+ 		log_error("Node %s must have only one segment.",
+ 			  _dm_segtypes[type].target);
+ 		return NULL;
  	}
  
-@@ -2791,7 +2816,6 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 	struct dm_tree_node *child;
- 	struct dm_info newinfo;
- 	int update_devs_flag = 0;
--	struct load_segment *seg;
- 
- 	/* Preload children first */
- 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
-@@ -2816,6 +2840,10 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 		if (!child->info.exists && !(node_created = _create_node(child)))
+-	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
+ 	if (seg->type != type) {
+ 		log_error("Node %s has segment type %s.",
+ 			  _dm_segtypes[type].target,
+@@ -3741,12 +3752,8 @@ int dm_tree_node_add_target_area(struct dm_tree_node *node,
  			return_0;
+ 	}
  
-+		/* Propagate delayed resume from exteded child node */
-+		if (child->props.delay_resume_if_extended)
-+			dnode->props.delay_resume_if_extended = 1;
-+
- 		if (!child->info.inactive_table &&
- 		    child->props.segment_count &&
- 		    !_load_node(child)) {
-@@ -2833,32 +2861,10 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 			return_0;
- 		}
- 
--		/* Propagate device size change change */
--		if (child->props.size_changed > 0 && !dnode->props.size_changed)
--			dnode->props.size_changed = 1;
--		else if (child->props.size_changed < 0)
--			dnode->props.size_changed = -1;
+-	if (!node->props.segment_count) {
+-		log_error(INTERNAL_ERROR "Attempt to add target area to missing segment.");
+-		return 0;
+-	}
 -
- 		/* No resume for a device without parents or with unchanged or smaller size */
- 		if (!dm_tree_node_num_children(child, 1) || (child->props.size_changed <= 0))
- 			continue;
+-	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
++	if (!(seg = _get_last_load_segment(node)))
++		return_0;
  
--		if (!node_created && (dm_list_size(&child->props.segs) == 1)) {
--			/* If thin-pool child nodes were preloaded WITH changed size
--			 * skip device resume, as this is likely resize of data or
--			 * metadata device and so thin pool needs suspend before
--			 * resume operation.
--			 * Note: child->props.segment_count is already 0 here
--			 */
--			seg = dm_list_item(dm_list_last(&child->props.segs),
--					   struct load_segment);
--			if (seg->type == SEG_THIN_POOL) {
--				log_debug_activation("Skipping resume of thin-pool %s.",
--						     child->name);
--				continue;
--			}
--		}
--
- 		if (!child->info.inactive_table && !child->info.suspended)
- 			continue;
+ 	if (!_add_area(node, seg, dev_node, offset))
+ 		return_0;
+@@ -3758,7 +3765,8 @@ int dm_tree_node_add_null_area(struct dm_tree_node *node, uint64_t offset)
+ {
+ 	struct load_segment *seg;
  
-@@ -3527,6 +3533,9 @@ int dm_tree_node_add_thin_pool_target(struct dm_tree_node *node,
- 	seg->metadata->props.delay_resume_if_new = 0;
- 	seg->pool->props.delay_resume_if_new = 0;
+-	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
++	if (!(seg = _get_last_load_segment(node)))
++		return_0;
  
-+	/* Preload must not resume extended running thin-pool before it's committed */
-+	node->props.delay_resume_if_extended = 1;
-+
- 	/* Validate only transaction_id > 0 when activating thin-pool */
- 	node->props.send_messages = transaction_id ? 1 : 0;
- 	seg->transaction_id = transaction_id;
+ 	switch (seg->type) {
+ 	case SEG_RAID0:
 
 
