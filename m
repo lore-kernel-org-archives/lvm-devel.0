@@ -1,53 +1,54 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 8 Dec 2017 07:22:02 -0500
-Subject: master - vgchange: drop extra counting
-Message-ID: <201712081222.vB8CM2go007320@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 8 Dec 2017 07:22:06 -0500
+Subject: master - activation: keep priority till memlock_unlock
+Message-ID: <201712081222.vB8CM6pA007351@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4e8af1d3aa136eae8dbb66186bfc331b0b2887e6
-Commit:        4e8af1d3aa136eae8dbb66186bfc331b0b2887e6
-Parent:        14b1e5270dbca71870a79b37d6614e2cb96b180f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=455b26b8dbdd05ec773a84da2ef64b669c80e194
+Commit:        455b26b8dbdd05ec773a84da2ef64b669c80e194
+Parent:        4e8af1d3aa136eae8dbb66186bfc331b0b2887e6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 8 13:17:34 2017 +0100
+AuthorDate:    Fri Dec 8 13:11:35 2017 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Dec 8 13:21:14 2017 +0100
+CommitterDate: Fri Dec 8 13:21:15 2017 +0100
 
-vgchange: drop extra counting
+activation: keep priority till memlock_unlock
 
-As the loop for background polling _poll_lvs_in_vg checks for active LVs,
-avoid doing unnecessary extra check before.
+Although it doesn't look like it can be a measurable problem
+and costs some time to flip priorities outside of activation window.
+
+So just like with memory locking preserve priority until call
+memlock_unlock() appears.
+
+(addition to commit c086dfadc389551b9a2d7b4c26931e5e74ada8d6).
 ---
- WHATS_NEW        |    1 +
- tools/vgchange.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ lib/mm/memlock.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4659d55..db256b0 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.177 -
- ====================================
-+  Reduce checks for active LVs in vgchange before background polling.
-   Ensure _node_send_message always uses clean status of thin pool.
-   Fix lvmlockd to use pool lock when accessing _tmeta volume.
-   Report expected sanlock_convert errors only when retries fail.
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index ae97a4a..48e64c5 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -178,7 +178,7 @@ int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg
- {
- 	int polled;
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index f72b86c..897bf10 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -627,8 +627,6 @@ void critical_section_dec(struct cmd_context *cmd, const char *reason)
+ 		log_debug_activation("Leaving critical section (%s).", reason);
+ 	} else
+ 		log_debug_activation("Leaving section (%s).", reason);
+-
+-	_restore_priority_if_possible(cmd);
+ }
  
--	if (lvs_in_vg_activated(vg) && background_polling()) {
-+	if (background_polling()) {
- 	        polled = _poll_lvs_in_vg(cmd, vg);
- 		if (polled)
- 			log_print_unless_silent("Background polling started for %d logical volume(s) "
+ int critical_section(void)
+@@ -683,6 +681,7 @@ void memlock_reset(void)
+ void memlock_unlock(struct cmd_context *cmd)
+ {
+ 	_unlock_mem_if_possible(cmd);
++	_restore_priority_if_possible(cmd);
+ }
+ 
+ int memlock_count_daemon(void)
 
 
