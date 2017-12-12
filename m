@@ -1,67 +1,53 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 14 Dec 2017 10:53:28 -0500
-Subject: master - lvm2app: Suppress deprecation warnings for our builds
-Message-ID: <201712141553.vBEFrSIQ011451@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 12 Dec 2017 08:19:42 -0500
+Subject: master - test: Fix condition when detecting lvmdbusd
+Message-ID: <201712121319.vBCDJgWC014616@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=83e1a0bad836f8950cb1e38924bf2600f118861e
-Commit:        83e1a0bad836f8950cb1e38924bf2600f118861e
-Parent:        c957d46f1d73891e3a7e9c1482c1d4a39ca0e79a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=15ccea71116f4c0a587aaa0ed25dc1d8d98c0c7f
+Commit:        15ccea71116f4c0a587aaa0ed25dc1d8d98c0c7f
+Parent:        c5ef76bf27337406d48990acbfdaa869fd30f47b
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Dec 14 13:49:33 2017 +0100
+AuthorDate:    Tue Dec 12 14:18:27 2017 +0100
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Dec 14 16:45:53 2017 +0100
+CommitterDate: Tue Dec 12 14:19:22 2017 +0100
 
-lvm2app: Suppress deprecation warnings for our builds
+test: Fix condition when detecting lvmdbusd
 
 ---
- liblvm/lvm2app.h |    2 ++
- make.tmpl.in     |    2 ++
- python/liblvm.c  |    1 +
- 3 files changed, 5 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index f64262d..10ecd2e 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -18,7 +18,9 @@
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index a436f84..6bc7bd4 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -324,10 +324,13 @@ prepare_lvmdbusd() {
+ 	echo ok
  
- #include <stdint.h>
- 
-+#ifndef _BUILDING_LVM
- #warning "liblvm2app is deprecated, use D-Bus API instead."
-+#endif
- 
- #ifdef __cplusplus
- extern "C" {
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 65362d8..bdf2349 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -261,6 +261,8 @@ endif
- # end of fPIC protection
- endif
- 
-+DEFS += -D_BUILDING_LVM
-+
- LDFLAGS += -L$(top_builddir)/libdm -L$(top_builddir)/lib
- CLDFLAGS += -L$(top_builddir)/libdm -L$(top_builddir)/lib
- 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 6d67b8b..06120e6 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -22,6 +22,7 @@
-  */
- 
- #include <Python.h>
-+#define _BUILDING_LVM
- #include "lvm2app.h"
- #include "defaults.h"
- 
+ 	# skip if we don't have our own lvmdbusd...
++	echo -n "## find lvmdbusd to use..."
+ 	if test -z "${installed_testsuite+varset}"; then
+ 		# NOTE: this is always present - additional checks are needed:
+ 		daemon="$abs_top_builddir/daemons/lvmdbusd/lvmdbusd"
+-		if ! test -x "$daemon" && chmod ugo+x "$daemon"; then
++		if test -x "$daemon" || chmod ugo+x "$daemon"; then
++			echo "$daemon"
++		else
+ 			echo "Failed to make '$daemon' executable">&2
+ 			return 1
+ 		fi
+@@ -335,6 +338,7 @@ prepare_lvmdbusd() {
+ 		export PYTHONPATH="$abs_top_builddir/daemons"
+ 	else
+ 		daemon=$(which lvmdbusd || :)
++		echo "$daemon"
+ 	fi
+ 	test -x "$daemon" || skip "The lvmdbusd daemon is missing"
+ 	which python3 >/dev/null || skip "Missing python3"
 
 
