@@ -1,34 +1,48 @@
-From: Eric Ren <zren@suse.com>
-Date: Wed, 27 Dec 2017 16:48:03 +0800
-Subject: [PATCH 0/2] LVM2: fix lvmetad udev rules for CHANGE events
-In-Reply-To: <b041c704-6f2a-b20f-c33e-a93e7504ad4d@suse.com>
-References: <20171221115705.5055-1-mwilck@suse.com>
-	<1513943697.4257.14.camel@suse.com>
-	<b041c704-6f2a-b20f-c33e-a93e7504ad4d@suse.com>
-Message-ID: <d9c8ba0b-26b0-00c4-ff7f-12f660a763f9@suse.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Tue, 12 Dec 2017 13:04:34 -0500
+Subject: master - device: Fix an unpaired device close.
+Message-ID: <201712121804.vBCI4Yj9027301@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Martin,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e932c5da50a22e585a3cd08edb3d849e7715e244
+Commit:        e932c5da50a22e585a3cd08edb3d849e7715e244
+Parent:        b96862ee11e0291cc1101ff4e17e54f9fe8da666
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Dec 12 17:56:58 2017 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Tue Dec 12 17:56:58 2017 +0000
 
-> - very-confusing-result-with-patches.txt on x86_64
-> This patches fixed the issue on the second testing, but re-occurs at the
-> third testing. After that, I cannot get the PV back again.
->
-> @Martin, can you try to repeat the steps more than 2 times on your 
-> testing
-> machine?
+device: Fix an unpaired device close.
 
-I tried more times. The problem doesn't occur any more. I suspect maybe it's
-because there's something wrong during my manual testing - it's easy to 
-mistake
-following all those steps. I will try to put all steps into a testing 
-script for more testing.
+dev_open_flags contains an unpaired dev_close_immediate so increment
+open_count before calling it.
+---
+ lib/device/dev-io.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-Thanks,
-Eric
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index dc9ad13..c321e61 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -491,11 +491,12 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
+ 			return 1;
+ 		}
+ 
+-		if (dev->open_count && !need_excl) {
++		if (dev->open_count && !need_excl)
+ 			log_debug_devs("%s: Already opened read-only. Upgrading "
+ 				       "to read-write.", dev_name(dev));
+-			dev->open_count++;
+-		}
++
++		/* dev_close_immediate will decrement this */
++		dev->open_count++;
+ 
+ 		dev_close_immediate(dev);
+ 		// FIXME: dev with DEV_ALLOCED is released
 
 
