@@ -1,42 +1,94 @@
-From: Marian Csontos <mcsontos@redhat.com>
-Date: Thu, 14 Dec 2017 17:01:03 +0100
-Subject: [PATCH] make: Fix typo in M_INSTALL_SCRIPT
-In-Reply-To: <1513267078-9452-1-git-send-email-mcsontos@redhat.com>
-References: <1513267078-9452-1-git-send-email-mcsontos@redhat.com>
-Message-ID: <8fa9d7a6-6f11-6797-62ab-b41485a0b909@redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 14 Dec 2017 10:53:23 -0500
+Subject: master - docs: Add TESTING file
+Message-ID: <201712141553.vBEFrNB2011442@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 12/14/2017 04:57 PM, mcsontos at redhat.com wrote:
-> From: Marian Csontos <mcsontos@redhat.com>
-> 
-> - M_INSTALL_SCRIPT is unused, should be M_INSTALL_PROGRAM
-> ---
->   make.tmpl.in | 2 +-
->   1 file changed, 1 insertion(+), 1 deletion(-)
-> 
-> diff --git a/make.tmpl.in b/make.tmpl.in
-> index bdf2349..98bd217 100644
-> --- a/make.tmpl.in
-> +++ b/make.tmpl.in
-> @@ -147,7 +147,7 @@ endif
->   # Handle installation of files
->   ifeq ("@WRITE_INSTALL@", "yes")
->   # leaving defaults
-> -M_INSTALL_SCRIPT =
-> +M_INSTALL_PROGRAM =
->   M_INSTALL_DATA = -m 644
->   else
->   M_INSTALL_PROGRAM = -m 555
-> 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c48d22bd3cddfe540413ed591ea18399c571a852
+Commit:        c48d22bd3cddfe540413ed591ea18399c571a852
+Parent:        584ff361dff9dc27a05839ac179899a80007b56e
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Dec 14 15:42:34 2017 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Dec 14 16:45:47 2017 +0100
 
-Alasdair, I think this is a typo. Is that right?
+docs: Add TESTING file
 
-M_INSTALL_SCRIPT was actually never used.
+---
+ TESTING |   62 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 62 insertions(+), 0 deletions(-)
 
--- Martian
+diff --git a/TESTING b/TESTING
+new file mode 100644
+index 0000000..57932f5
+--- /dev/null
++++ b/TESTING
+@@ -0,0 +1,62 @@
++LVM2 Test Suite
++===============
++
++The codebase contains many tests in the test subdirectory.
++
++Before running tests
++--------------------
++
++Keep in mind the testsuite MUST run under root user.
++
++It is recommended not to use LVM on the test machine, especially when running
++tests with udev (`make check_system`.)
++
++You MUST disable (or mask) any LVM daemons:
++
++- lvmetad
++- dmeventd
++- lvmpolld
++- lvmdbusd
++- lvmlockd
++- clvmd
++- cmirrord
++
++For running cluster tests, we are using singlenode locking. Pass
++`--with-clvmd=singlenode` to configure.
++
++NOTE: This is useful only for testing, and should not be used in produciton
++code.
++
++To run D-Bus daemon tests, existing D-Bus session is required.
++
++Running tests
++-------------
++
++As root run:
++
++    make check
++
++To run only tests matching a string:
++
++    make check T=test
++
++To skip tests matching a string:
++
++    make check S=test
++
++There are other targets and many environment variables can be used to tweak the
++testsuite - for full list and description run `make -C test help`.
++
++Installing testsuite
++--------------------
++
++It is possible to install and run a testsuite against installed LVM. Run the
++following:
++
++    make -C test install
++
++Then lvm2-testsuite binary can be executed to test installed binaries.
++
++See `lvm2-testsuite --help` for options. The same environment variables can be
++used as with `make check`.
++
 
 
