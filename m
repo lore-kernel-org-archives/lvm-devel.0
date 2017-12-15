@@ -1,152 +1,148 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Fri, 15 Dec 2017 10:01:34 -0500
-Subject: master - format_text: Supply mempool directly to raw_read_mda_header.
-Message-ID: <201712151501.vBFF1Y2R025130@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 15 Dec 2017 16:18:33 -0500
+Subject: master - format_text: Separate out code paths for buffer wraparound
+Message-ID: <201712152118.vBFLIXsv015351@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=145ded10c29a2e76ea12aab98a797e79135d6d44
-Commit:        145ded10c29a2e76ea12aab98a797e79135d6d44
-Parent:        83e1a0bad836f8950cb1e38924bf2600f118861e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=beee9940a503dd6165afd73835d3a6935afcce60
+Commit:        beee9940a503dd6165afd73835d3a6935afcce60
+Parent:        145ded10c29a2e76ea12aab98a797e79135d6d44
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Dec 15 14:57:05 2017 +0000
+AuthorDate:    Fri Dec 15 21:12:19 2017 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Dec 15 14:57:05 2017 +0000
+CommitterDate: Fri Dec 15 21:12:19 2017 +0000
 
-format_text: Supply mempool directly to raw_read_mda_header.
+format_text: Separate out code paths for buffer wraparound
 
+The creation of wrapped around metadata - where the start of metadata is
+written up to the end of the buffer and the remainder follows back at
+the start of the buffer - is now restricted to cases where writing the
+metadata in one piece wouldn't fit.  This shouldn't happen in 'normal'
+usage so let's begin treating the code for this as a special case that
+can be ignored when optimising 'normal' cases.
 ---
- lib/format_text/format-text.c |   21 ++++++++++-----------
- lib/format_text/layout.h      |    3 +--
- lib/format_text/text_label.c  |    3 ++-
- 3 files changed, 13 insertions(+), 14 deletions(-)
+ lib/config/config.c           |   27 +++++++++++++++++++--------
+ lib/device/dev-io.c           |    9 +--------
+ lib/format_text/format-text.c |   10 ++++++++--
+ 3 files changed, 28 insertions(+), 18 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 1aa91c7..ab610ad 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -196,7 +196,7 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
- 	if (!dev_open_readonly(area->dev))
- 		return_0;
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 8fca372..f634e5b 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -504,6 +504,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
+ 	int use_mmap = 1;
+ 	off_t mmap_offset = 0;
+ 	char *buf = NULL;
++	unsigned circular = size2 ? 1 : 0;	/* Wrapped around end of disk metadata buffer? */
+ 	struct config_source *cs = dm_config_get_custom(cft);
  
--	if (!(mdah = raw_read_mda_header(fmt, area, mda_is_primary(mda))))
-+	if (!(mdah = raw_read_mda_header(fmt->cmd->mem, area, mda_is_primary(mda))))
- 		goto_out;
+ 	if (!_is_file_based_config_source(cs->type)) {
+@@ -514,7 +515,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
+ 	}
  
- 	rlocn = mdah->raw_locns;
-@@ -370,18 +370,17 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
- 	return 1;
+ 	/* Only use mmap with regular files */
+-	if (!(dev->flags & DEV_REGULAR) || size2)
++	if (!(dev->flags & DEV_REGULAR) || circular)
+ 		use_mmap = 0;
+ 
+ 	if (use_mmap) {
+@@ -528,13 +529,23 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
+ 		}
+ 		fb = fb + mmap_offset;
+ 	} else {
+-		if (!(buf = dm_malloc(size + size2))) {
+-			log_error("Failed to allocate circular buffer.");
+-			return 0;
+-		}
+-		if (!dev_read_circular(dev, (uint64_t) offset, size,
+-				       (uint64_t) offset2, size2, reason, buf)) {
+-			goto out;
++		if (circular) {
++			if (!(buf = dm_malloc(size + size2))) {
++				log_error("Failed to allocate circular buffer.");
++				return 0;
++			}
++			if (!dev_read_circular(dev, (uint64_t) offset, size,
++					       (uint64_t) offset2, size2, reason, buf)) {
++				goto out;
++			}
++		} else {
++			if (!(buf = dm_malloc(size))) {
++				log_error("Failed to allocate buffer for metadata read.");
++				return 0;
++			}
++			if (!dev_read(dev, (uint64_t) offset, size, reason, buf)) {
++				goto out;
++			}
+ 		}
+ 		fb = buf;
+ 	}
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index c321e61..1adf2ad 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -745,7 +745,7 @@ int dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t re
  }
  
--struct mda_header *raw_read_mda_header(const struct format_type *fmt,
--				       struct device_area *dev_area, int primary_mda)
-+struct mda_header *raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda)
- {
- 	struct mda_header *mdah;
- 
--	if (!(mdah = dm_pool_alloc(fmt->cmd->mem, MDA_HEADER_SIZE))) {
-+	if (!(mdah = dm_pool_alloc(mem, MDA_HEADER_SIZE))) {
- 		log_error("struct mda_header allocation failed");
- 		return NULL;
+ /*
+- * Read from 'dev' into 'buf', possibly in 2 distinct regions, denoted
++ * Read from 'dev' into 'buf' in 2 distinct regions, denoted
+  * by (offset,len) and (offset2,len2).  Thus, the total size of
+  * 'buf' should be len+len2.
+  */
+@@ -757,13 +757,6 @@ int dev_read_circular(struct device *dev, uint64_t offset, size_t len,
+ 		return 0;
  	}
  
- 	if (!_raw_read_mda_header(mdah, dev_area, primary_mda)) {
--		dm_pool_free(fmt->cmd->mem, mdah);
-+		dm_pool_free(mem, mdah);
- 		return NULL;
- 	}
+-	/*
+-	 * The second region is optional, and allows for
+-	 * a circular buffer on the device.
+-	 */
+-	if (!len2)
+-		return 1;
+-
+ 	if (!dev_read(dev, offset2, len2, reason, buf + len)) {
+ 		log_error("Circular read from %s failed",
+ 			  dev_name(dev));
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index ab610ad..ebc2dbb 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -185,6 +185,7 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
+ 	char *buf=NULL;
+ 	struct device_area *area;
+ 	struct mda_context *mdac;
++	unsigned circular = 0;
+ 	int r=0;
  
-@@ -529,7 +528,7 @@ static int _raw_holds_vgname(struct format_instance *fid,
- 	if (!dev_open_readonly(dev_area->dev))
- 		return_0;
+ 	mdac = (struct mda_context *) mda->metadata_locn;
+@@ -236,7 +237,12 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
+ 		if (!(buf = dm_malloc(size + size2)))
+ 			goto_out;
  
--	if (!(mdah = raw_read_mda_header(fid->fmt, dev_area, 0)))
-+	if (!(mdah = raw_read_mda_header(fid->fmt->cmd->mem, dev_area, 0)))
- 		return_0;
+-		if (!dev_read_circular(area->dev, offset, size, offset2, size2, MDA_CONTENT_REASON(mda_is_primary(mda)), buf))
++		circular = size2 ? 1 : 0;
++
++		if (circular) {
++			if (!dev_read_circular(area->dev, offset, size, offset2, size2, MDA_CONTENT_REASON(mda_is_primary(mda)), buf))
++				goto_out;
++		} else if (!dev_read(area->dev, offset, size, MDA_CONTENT_REASON(mda_is_primary(mda)), buf))
+ 			goto_out;
  
- 	if (_find_vg_rlocn(dev_area, mdah, 0, vgname, &noprecommit))
-@@ -556,7 +555,7 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
- 	char *desc;
- 	uint32_t wrap = 0;
+ 		/*
+@@ -708,7 +714,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 	int found = 0;
+ 	int noprecommit = 0;
+ 	const char *old_vg_name = NULL;
+-	uint64_t new_size_rounded;
++	uint64_t new_size_rounded = 0;
  
--	if (!(mdah = raw_read_mda_header(fid->fmt, area, primary_mda)))
-+	if (!(mdah = raw_read_mda_header(fid->fmt->cmd->mem, area, primary_mda)))
- 		goto_out;
- 
- 	if (!(rlocn = _find_vg_rlocn(area, mdah, primary_mda, vgname, &precommitted))) {
-@@ -733,7 +732,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 	if (!dev_open(mdac->area.dev))
- 		return_0;
- 
--	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda))))
-+	if (!(mdah = raw_read_mda_header(fid->fmt->cmd->mem, &mdac->area, mda_is_primary(mda))))
- 		goto_out;
- 
- 	/* Following space is zero-filled up to the next MDA_ALIGNMENT boundary */
-@@ -865,7 +864,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
- 	if (!found)
- 		return 1;
- 
--	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda))))
-+	if (!(mdah = raw_read_mda_header(fid->fmt->cmd->mem, &mdac->area, mda_is_primary(mda))))
- 		goto_out;
- 
- 	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, mda_is_primary(mda), old_vg_name ? : vg->name, &noprecommit))) {
-@@ -985,7 +984,7 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
- 	if (!dev_open(mdac->area.dev))
- 		return_0;
- 
--	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda))))
-+	if (!(mdah = raw_read_mda_header(fid->fmt->cmd->mem, &mdac->area, mda_is_primary(mda))))
- 		goto_out;
- 
- 	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, mda_is_primary(mda), vg->name, &noprecommit))) {
-@@ -1414,7 +1413,7 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
- 			continue;
- 		}
- 
--		if (!(mdah = raw_read_mda_header(fmt, &rl->dev_area, 0))) {
-+		if (!(mdah = raw_read_mda_header(fmt->cmd->mem, &rl->dev_area, 0))) {
- 			stack;
- 			goto close_dev;
- 		}
-diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
-index bc25597..c0906a6 100644
---- a/lib/format_text/layout.h
-+++ b/lib/format_text/layout.h
-@@ -81,8 +81,7 @@ struct mda_header {
- 	struct raw_locn raw_locns[0];	/* NULL-terminated list */
- } __attribute__ ((packed));
- 
--struct mda_header *raw_read_mda_header(const struct format_type *fmt,
--				       struct device_area *dev_area, int primary_mda);
-+struct mda_header *raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda);
- 
- struct mda_lists {
- 	struct dm_list dirs;
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 7058f70..d5e4820 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -19,6 +19,7 @@
- #include "label.h"
- #include "xlate.h"
- #include "lvmcache.h"
-+#include "toolcontext.h"
- 
- #include <sys/stat.h>
- #include <fcntl.h>
-@@ -344,7 +345,7 @@ static int _update_mda(struct metadata_area *mda, void *baton)
- 		return 1;
- 	}
- 
--	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, mda_is_primary(mda)))) {
-+	if (!(mdah = raw_read_mda_header(fmt->cmd->mem, &mdac->area, mda_is_primary(mda)))) {
- 		stack;
- 		goto close_dev;
- 	}
+ 	/* Ignore any mda on a PV outside the VG. vgsplit relies on this */
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
 
 
