@@ -1,54 +1,91 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 19 Dec 2017 09:32:29 -0500
-Subject: master - tests: sleep first
-Message-ID: <201712191432.vBJEWTDn018851@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Martin Wilck <mwilck@suse.com>
+Date: Thu, 21 Dec 2017 12:57:04 +0100
+Subject: [PATCH 1/2] lvm2: 69-dm-lvm-metad.rules: explicit pvscan rule
+In-Reply-To: <20171221115705.5055-1-mwilck@suse.com>
+References: <20171221115705.5055-1-mwilck@suse.com>
+Message-ID: <20171221115705.5055-2-mwilck@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0bf1cc2320cb96cde9be742bed2aa391c998588a
-Commit:        0bf1cc2320cb96cde9be742bed2aa391c998588a
-Parent:        3a841515af623b86be0628ef6568ff74009ea643
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Dec 13 16:17:56 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Dec 19 15:28:07 2017 +0100
+Make the distinction between the cases with and without systemd
+background jobs explicit in 69-dm-lvm-metad.rules rather than
+substituting the rule from the Makefile. At this stage,
+this improves only readibility, at the cost of one GOTO statement.
 
-tests: sleep first
+The next patch will add more differences between the two cases (mostly
+comments), which are practically impossible to generate with the current
+string subsitution approach.
 
-Sleep a bit before checking /sys/block dir so the kernel has a moment to
-actually put scsi debug device in it...
+This patch introduces no functional change to the udev rules.
 
-Some quite old kernels are in troubles with this plain searching grep
-without sleep (namely 2.6.32)
-
-modprobe scsi_debug
- <sleep .1>
-grep -H scsi_debug /sys/block/*/device/model
-modprobe -r scsi_debug
+Signed-off-by: Martin Wilck <mwilck@suse.com>
 ---
- test/lib/aux.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ udev/69-dm-lvm-metad.rules.in | 19 ++++++++++++++++++-
+ udev/Makefile.in              |  7 ++++---
+ 2 files changed, 22 insertions(+), 4 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 6bc7bd4..fa9a1a2 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -703,10 +703,10 @@ prepare_scsi_debug_dev() {
- 	modprobe scsi_debug dev_size_mb="$DEV_SIZE" "$@" num_tgts=1 || skip
+diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+index bd75fc8efcd5..38687f443e0c 100644
+--- a/udev/69-dm-lvm-metad.rules.in
++++ b/udev/69-dm-lvm-metad.rules.in
+@@ -88,6 +88,23 @@ LABEL="lvm_scan"
+ #  loop  |          |      X      |       X*       |                   |
+ #  other |    X     |             |       X        |                   |   X
+ ENV{SYSTEMD_READY}="1"
+-(PVSCAN_RULE)
++
++# The method for invoking pvscan is selected at build time with the option
++# --(enable|disable)-udev-systemd-background-jobs to "configure".
++# On modern distributions with recent systemd, it's "systemd_background";
++# on others, "direct_pvscan".
++GOTO="(PVSCAN_RULE)"
++
++LABEL="systemd_background"
++
++ACTION!="remove", ENV{LVM_PV_GONE}=="1", RUN+="(BINDIR)/systemd-run (LVM_EXEC)/lvm pvscan --cache $major:$minor", GOTO="lvm_end"
++ENV{SYSTEMD_ALIAS}="/dev/block/$major:$minor"
++ENV{ID_MODEL}="LVM PV $env{ID_FS_UUID_ENC} on /dev/$name"
++ENV{SYSTEMD_WANTS}+="lvm2-pvscan@$major:$minor.service"
++GOTO="lvm_end"
++
++LABEL="direct_pvscan"
++
++RUN+="(LVM_EXEC)/lvm pvscan --background --cache --activate ay --major $major --minor $minor", ENV{LVM_SCANNED}="1"
  
- 	for i in {1..20} ; do
--		DEBUG_DEV="/dev/$(grep -H scsi_debug /sys/block/*/device/model | cut -f4 -d /)"
--		test -b "$DEBUG_DEV" && break
- 		sleep .1 # allow for async Linux SCSI device registration
--        done
-+		DEBUG_DEV="/dev/$(grep -H scsi_debug /sys/block/sd*/device/model | cut -f4 -d /)"
-+		test -b "$DEBUG_DEV" && break
-+	done
- 	test -b "$DEBUG_DEV" || return 1 # should not happen
+ LABEL="lvm_end"
+diff --git a/udev/Makefile.in b/udev/Makefile.in
+index c498aa8388c5..9b2e2c34c518 100644
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -25,6 +25,7 @@ endif
  
- 	# Create symlink to scsi_debug device in $DM_DEV_DIR
+ DM_DIR=$(shell $(GREP) "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | $(AWK) '{print $$3}')
+ 
++BINDIR=@bindir@
+ ifeq ("@UDEV_RULE_EXEC_DETECTION@", "yes")
+ SBIN=\$$env{DM_SBIN_PATH}
+ DM_EXEC_RULE=ENV{DM_SBIN_PATH}=\"\/sbin\"\\nTEST!=\"\$$env{DM_SBIN_PATH}\/dmsetup\", ENV{DM_SBIN_PATH}=\"\/usr\/sbin\"
+@@ -46,13 +47,13 @@ BLKID_RULE=IMPORT{program}=\"${SBIN}\/blkid -o udev -p \$$tempnode\"
+ endif
+ 
+ ifeq ("@UDEV_SYSTEMD_BACKGROUND_JOBS@", "yes")
+-PVSCAN_RULE=ACTION\!=\"remove\", ENV{LVM_PV_GONE}==\"1\", RUN\+=\"@bindir@/systemd-run $(LVM_EXEC)\/lvm pvscan --cache \$$major\:\$$minor\", GOTO=\"lvm_end\"\nENV{SYSTEMD_ALIAS}=\"\/dev\/block\/\$$major:\$$minor\"\nENV{ID_MODEL}=\"LVM PV \$$env{ID_FS_UUID_ENC} on \/dev\/\$$name\"\nENV{SYSTEMD_WANTS}\+=\"lvm2-pvscan@\$$major:\$$minor.service\"
++PVSCAN_RULE=systemd_background
+ else
+-PVSCAN_RULE=RUN\+\=\"$(LVM_EXEC)/lvm pvscan --background --cache --activate ay --major \$$major --minor \$$minor\", ENV{LVM_SCANNED}=\"1\"
++PVSCAN_RULE=direct_pvscan
+ endif
+ 
+ %.rules: $(srcdir)/%.rules.in
+-	$(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(PVSCAN_RULE)+$(PVSCAN_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
++	$(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BINDIR)+$(BINDIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(PVSCAN_RULE)+$(PVSCAN_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
+ 
+ %_install: %.rules
+ 	$(INSTALL_DATA) -D $< $(udevdir)/$(<F)
+-- 
+2.15.1
 
 
