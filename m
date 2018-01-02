@@ -1,62 +1,80 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Tue, 2 Jan 2018 13:20:16 -0500
-Subject: master - label: Add mempool.
-Message-ID: <201801021820.w02IKGEa014755@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 2 Jan 2018 13:20:19 -0500
+Subject: master - label: Move setting result of label_read into separate fn.
+Message-ID: <201801021820.w02IKJpA014770@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e6b4b41881b6070b24353496dd32cccc270fe9ce
-Commit:        e6b4b41881b6070b24353496dd32cccc270fe9ce
-Parent:        0bf1cc2320cb96cde9be742bed2aa391c998588a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4f4ddb806d9e27f141d76b4b80113948da012426
+Commit:        4f4ddb806d9e27f141d76b4b80113948da012426
+Parent:        e6b4b41881b6070b24353496dd32cccc270fe9ce
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jan 2 13:37:12 2018 +0000
+AuthorDate:    Tue Jan 2 14:19:20 2018 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Jan 2 13:37:12 2018 +0000
+CommitterDate: Tue Jan 2 14:19:20 2018 +0000
 
-label: Add mempool.
+label: Move setting result of label_read into separate fn.
 
 ---
- lib/label/label.c |   10 ++++++++++
- 1 files changed, 10 insertions(+), 0 deletions(-)
+ lib/label/label.c |   22 ++++++++++++++++------
+ 1 files changed, 16 insertions(+), 6 deletions(-)
 
 diff --git a/lib/label/label.c b/lib/label/label.c
-index b90fff3..fa44f2c 100644
+index fa44f2c..04db752 100644
 --- a/lib/label/label.c
 +++ b/lib/label/label.c
-@@ -26,6 +26,8 @@
- 
- /* FIXME Allow for larger labels?  Restricted to single sector currently */
- 
-+static struct dm_pool *_labeller_mem;
-+
- /*
-  * Internal labeller struct.
-  */
-@@ -58,7 +60,13 @@ static struct labeller_i *_alloc_li(const char *name, struct labeller *l)
- 
- int label_init(void)
- {
-+	if (!(_labeller_mem = dm_pool_create("label scan", 128))) {
-+		log_error("Labeller pool creation failed.");
-+		return 0;
-+	}
-+
- 	dm_list_init(&_labellers);
-+
- 	return 1;
+@@ -119,6 +119,14 @@ static void _update_lvmcache_orphan(struct lvmcache_info *info)
+ 		stack;
  }
  
-@@ -73,6 +81,8 @@ void label_exit(void)
++static void _set_label_read_result(struct device *dev, uint64_t sector, struct label **result)
++{
++	if (result && *result) {
++		(*result)->dev = dev;
++		(*result)->sector = sector;
++	}
++}
++
+ static struct labeller *_find_labeller(struct device *dev, char *labelbuf,
+ 				       uint64_t *label_sector,
+ 				       uint64_t scan_sector)
+@@ -277,8 +285,7 @@ int label_remove(struct device *dev)
+ 	return r;
+ }
+ 
+-int label_read(struct device *dev, struct label **result,
+-		uint64_t scan_sector)
++static int _label_read(struct device *dev, struct label **result, uint64_t scan_sector)
+ {
+ 	char buf[LABEL_SIZE] __attribute__((aligned(8)));
+ 	struct labeller *l;
+@@ -304,10 +311,8 @@ int label_read(struct device *dev, struct label **result,
  	}
  
- 	dm_list_init(&_labellers);
-+
-+	dm_pool_destroy(_labeller_mem);
+ 	if ((l = _find_labeller(dev, buf, &sector, scan_sector)))
+-		if ((r = (l->ops->read)(l, dev, buf, result)) && result && *result) {
+-			(*result)->dev = dev;
+-			(*result)->sector = sector;
+-		}
++		if ((r = (l->ops->read)(l, dev, buf, result)))
++			_set_label_read_result(dev, sector, result);
+ 
+ 	if (!dev_close(dev))
+ 		stack;
+@@ -315,6 +320,11 @@ int label_read(struct device *dev, struct label **result,
+ 	return r;
  }
  
- int label_register_handler(struct labeller *handler)
++int label_read(struct device *dev, struct label **result, uint64_t scan_sector)
++{
++	return _label_read(dev, result, scan_sector);
++}
++
+ /* Caller may need to use label_get_handler to create label struct! */
+ int label_write(struct device *dev, struct label *label)
+ {
 
 
