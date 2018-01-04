@@ -1,174 +1,242 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Thu, 4 Jan 2018 13:40:28 -0500
-Subject: master - format_text: Split out raw_read_mda_header processing
-Message-ID: <201801041840.w04IeSlL014182@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 4 Jan 2018 16:26:01 -0500
+Subject: master - format_text: Split vgname_from_mda into three pieces.
+Message-ID: <201801042126.w04LQ16w020429@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d61b1369d0764841522494ef3ba0ef4b5e89c723
-Commit:        d61b1369d0764841522494ef3ba0ef4b5e89c723
-Parent:        139209ef42f8ea986c22fb3c889dbf893da7160b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c70c9f65659df846dbc590053569a80935e09d2f
+Commit:        c70c9f65659df846dbc590053569a80935e09d2f
+Parent:        d61b1369d0764841522494ef3ba0ef4b5e89c723
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jan 4 15:52:59 2018 +0000
+AuthorDate:    Thu Jan 4 21:13:44 2018 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jan 4 15:52:59 2018 +0000
+CommitterDate: Thu Jan 4 21:13:44 2018 +0000
 
-format_text: Split out raw_read_mda_header processing
+format_text: Split vgname_from_mda into three pieces.
 
 ---
- lib/format_text/format-text.c |   67 ++++++++++++++++++++++++++++------------
- 1 files changed, 47 insertions(+), 20 deletions(-)
+ lib/format_text/format-text.c |  165 +++++++++++++++++++++++++++--------------
+ 1 files changed, 110 insertions(+), 55 deletions(-)
 
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index c57ffd2..4404c04 100644
+index 4404c04..798fd66 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
-@@ -226,6 +226,7 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
- 							prev_sector);
- 		if (prev_sector > prev_sector2)
- 			goto_out;
-+
- 		/*
- 		 * FIXME: for some reason, the whole metadata region from
- 		 * area->start to area->start+area->size is not used.
-@@ -241,7 +242,7 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
- 			if (!(buf = dev_read_circular(area->dev, offset, size, offset2, size2, MDA_CONTENT_REASON(mda_is_primary(mda)))))
- 				goto_out;
- 		} else if (!(buf = dev_read(area->dev, offset, size, MDA_CONTENT_REASON(mda_is_primary(mda)))))
--				goto_out;
-+			goto_out;
- 
- 		/*
- 		 * FIXME: We could add more sophisticated metadata detection
-@@ -325,19 +326,19 @@ static void _xlate_mdah(struct mda_header *mdah)
- 	}
+@@ -1328,41 +1328,68 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
+ 	return 1;
  }
  
--static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev_area, int primary_mda)
--{
--	if (!dev_open_readonly(dev_area->dev))
--		return_0;
-+struct process_raw_mda_header_params {
+-int vgname_from_mda(const struct format_type *fmt,
+-		    struct mda_header *mdah, int primary_mda, struct device_area *dev_area,
+-		    struct lvmcache_vgsummary *vgsummary, uint64_t *mda_free_sectors)
++struct vgname_from_mda_params{
++	const struct format_type *fmt;
 +	struct mda_header *mdah;
-+	struct device_area dev_area;
++	struct device_area *dev_area;
++	int primary_mda;
++	struct lvmcache_vgsummary *vgsummary;
++	uint64_t *mda_free_sectors;
++	uint32_t wrap;
++	unsigned used_cached_metadata;
 +};
- 
--	if (!dev_read_buf(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, MDA_HEADER_REASON(primary_mda), mdah)) {
--		if (!dev_close(dev_area->dev))
--			stack;
--		return_0;
--	}
-+static int _process_raw_mda_header(struct process_raw_mda_header_params *prmp)
-+{
-+	struct mda_header *mdah = prmp->mdah;
-+	struct device_area *dev_area = &prmp->dev_area;
++
++static int _vgname_from_mda_process(struct vgname_from_mda_params *vfmp)
+ {
+-	struct raw_locn *rlocn;
+-	uint32_t wrap = 0;
+-	unsigned int len = 0;
+-	char buf[NAME_LEN + 1] __attribute__((aligned(8)));
++	struct mda_header *mdah = vfmp->mdah;
++	struct device_area *dev_area = vfmp->dev_area;
++	struct lvmcache_vgsummary *vgsummary = vfmp->vgsummary;
++	uint64_t *mda_free_sectors = vfmp->mda_free_sectors;
++	struct raw_locn *rlocn = mdah->raw_locns;
+ 	uint64_t buffer_size, current_usage;
+-	unsigned used_cached_metadata = 0;
 +	int r = 0;
  
- 	if (!dev_close(dev_area->dev))
--		return_0;
+-	if (mda_free_sectors)
+-		*mda_free_sectors = ((dev_area->size - MDA_HEADER_SIZE) / 2) >> SECTOR_SHIFT;
++	/* Ignore this entry if the characters aren't permissible */
++	if (!validate_name(vgsummary->vgname))
 +		goto_out;
  
- 	if (mdah->checksum_xl != xlate32(calc_crc(INITIAL_CRC, (uint8_t *)mdah->magic,
- 						  MDA_HEADER_SIZE -
-@@ -345,7 +346,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
- 		log_error("Incorrect metadata area header checksum on %s"
- 			  " at offset " FMTu64, dev_name(dev_area->dev),
- 			  dev_area->start);
+-	if (!mdah) {
+-		log_error(INTERNAL_ERROR "vgname_from_mda called with NULL pointer for mda_header");
 -		return 0;
-+		goto out;
+-	}
++	log_debug_metadata("%s: %s metadata at " FMTu64 " size " FMTu64 " with wrap " FMTu32
++			   " (in area at " FMTu64 " size " FMTu64
++			   ") for %s (" FMTVGID ")",
++			   dev_name(dev_area->dev),
++			   vfmp->used_cached_metadata ? "Using cached" : "Found",
++			   dev_area->start + rlocn->offset,
++			   rlocn->size, vfmp->wrap, dev_area->start, dev_area->size, vgsummary->vgname,
++			   (char *)&vgsummary->vgid);
+ 
+-	/* FIXME Cope with returning a list */
+-	rlocn = mdah->raw_locns;
++	if (mda_free_sectors) {
++		current_usage = ALIGN_ABSOLUTE(rlocn->size, dev_area->start + rlocn->offset, MDA_ALIGNMENT);
+ 
+-	/*
+-	 * If no valid offset, do not try to search for vgname
+-	 */
+-	if (!rlocn->offset) {
+-		log_debug("%s: found metadata with offset 0.",
+-			  dev_name(dev_area->dev));
+-		return 0;
++		buffer_size = mdah->size - MDA_HEADER_SIZE;
++
++		if (current_usage * 2 >= buffer_size)
++			*mda_free_sectors = UINT64_C(0);
++		else
++			*mda_free_sectors = ((buffer_size - 2 * current_usage) / 2) >> SECTOR_SHIFT;
  	}
  
- 	_xlate_mdah(mdah);
-@@ -354,43 +355,70 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
- 		log_error("Wrong magic number in metadata area header on %s"
- 			  " at offset " FMTu64, dev_name(dev_area->dev),
- 			  dev_area->start);
--		return 0;
-+		goto out;
- 	}
- 
- 	if (mdah->version != FMTT_VERSION) {
- 		log_error("Incompatible metadata area header version: %d on %s"
- 			  " at offset " FMTu64, mdah->version,
- 			  dev_name(dev_area->dev), dev_area->start);
--		return 0;
-+		goto out;
- 	}
- 
- 	if (mdah->start != dev_area->start) {
- 		log_error("Incorrect start sector in metadata area header: "
- 			  FMTu64 " on %s at offset " FMTu64, mdah->start,
- 			  dev_name(dev_area->dev), dev_area->start);
--		return 0;
-+		goto out;
- 	}
- 
--	return 1;
+-	/* Do quick check for a vgname */
+-	if (!dev_read_buf(dev_area->dev, dev_area->start + rlocn->offset,
+-			  NAME_LEN, MDA_CONTENT_REASON(primary_mda), buf))
+-		return_0;
 +	r = 1;
 +
 +out:
 +	return r;
- }
- 
--struct mda_header *raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda)
-+static struct mda_header *_raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda)
- {
- 	struct mda_header *mdah;
-+	struct process_raw_mda_header_params *prmp;
- 
- 	if (!(mdah = dm_pool_alloc(mem, MDA_HEADER_SIZE))) {
- 		log_error("struct mda_header allocation failed");
- 		return NULL;
- 	}
- 
--	if (!_raw_read_mda_header(mdah, dev_area, primary_mda)) {
-+	if (!(prmp = dm_pool_zalloc(mem, sizeof (*prmp)))) {
-+		log_error("struct process_raw_mda_header_params allocation failed");
- 		dm_pool_free(mem, mdah);
- 		return NULL;
- 	}
- 
-+	if (!dev_open_readonly(dev_area->dev)) {
-+		dm_pool_free(mem, mdah);
-+		return_NULL;
-+	}
-+
-+	prmp->mdah = mdah;
-+	prmp->dev_area = *dev_area;
-+
-+	if (!dev_read_buf(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, MDA_HEADER_REASON(primary_mda), mdah)) {
-+		if (!dev_close(dev_area->dev))
-+			stack;
-+		return_NULL;
-+	}
-+
-+	if (!_process_raw_mda_header(prmp))
-+		return_NULL;
-+
- 	return mdah;
- }
- 
-+struct mda_header *raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda)
-+{
-+	return _raw_read_mda_header(mem, dev_area, primary_mda);
 +}
 +
- static int _raw_write_mda_header(const struct format_type *fmt,
- 				 struct device *dev, int primary_mda,
- 				 uint64_t start_byte, struct mda_header *mdah)
-@@ -1899,9 +1927,8 @@ static int _mda_export_text_raw(struct metadata_area *mda,
- 				struct dm_config_node *parent)
- {
- 	struct mda_context *mdc = (struct mda_context *) mda->metadata_locn;
--	char mdah[MDA_HEADER_SIZE]; /* temporary */
++static int _vgname_from_mda_validate(struct vgname_from_mda_params *vfmp, char *buffer)
++{
++	const struct format_type *fmt = vfmp->fmt;
++	struct mda_header *mdah = vfmp->mdah;
++	struct device_area *dev_area = vfmp->dev_area;
++	struct lvmcache_vgsummary *vgsummary = vfmp->vgsummary;
++	struct raw_locn *rlocn = mdah->raw_locns;
++	unsigned len = 0;
++	char buf[NAME_LEN + 1] __attribute__((aligned(8)));
++
++	memcpy(buf, buffer, NAME_LEN + 1);
  
--	if (!mdc || !_raw_read_mda_header((struct mda_header *)mdah, &mdc->area, mda_is_primary(mda)))
-+	if (!mdc || !_raw_read_mda_header(cft->mem, &mdc->area, mda_is_primary(mda)))
- 		return 1; /* pretend the MDA does not exist */
+ 	while (buf[len] && !isspace(buf[len]) && buf[len] != '{' &&
+ 	       len < (NAME_LEN - 1))
+@@ -1372,16 +1399,16 @@ int vgname_from_mda(const struct format_type *fmt,
  
- 	return config_make_nodes(cft, parent, NULL,
+ 	/* Ignore this entry if the characters aren't permissible */
+ 	if (!validate_name(buf))
+-		return_0;
++		goto_out;
+ 
+ 	/* We found a VG - now check the metadata */
+ 	if (rlocn->offset + rlocn->size > mdah->size)
+-		wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
++		vfmp->wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
+ 
+-	if (wrap > rlocn->offset) {
++	if (vfmp->wrap > rlocn->offset) {
+ 		log_error("%s: metadata (" FMTu64 " bytes) too large for circular buffer (" FMTu64 " bytes)",
+ 			  dev_name(dev_area->dev), rlocn->size, mdah->size - MDA_HEADER_SIZE);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	/* Did we see this metadata before? */
+@@ -1389,42 +1416,70 @@ int vgname_from_mda(const struct format_type *fmt,
+ 	vgsummary->mda_size = rlocn->size;
+ 
+ 	if (lvmcache_lookup_mda(vgsummary))
+-		used_cached_metadata = 1;
++		vfmp->used_cached_metadata = 1;
+ 
+ 	/* FIXME 64-bit */
+-	if (!text_vgsummary_import(fmt, dev_area->dev, MDA_CONTENT_REASON(primary_mda),
++	if (!text_vgsummary_import(fmt, dev_area->dev, MDA_CONTENT_REASON(vfmp->primary_mda),
+ 				(off_t) (dev_area->start + rlocn->offset),
+-				(uint32_t) (rlocn->size - wrap),
++				(uint32_t) (rlocn->size - vfmp->wrap),
+ 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
+-				wrap, calc_crc, vgsummary->vgname ? 1 : 0,
++				vfmp->wrap, calc_crc, vgsummary->vgname ? 1 : 0,
+ 				vgsummary))
+-		return_0;
++		goto_out;
+ 
+-	/* Ignore this entry if the characters aren't permissible */
+-	if (!validate_name(vgsummary->vgname))
+-		return_0;
++	return _vgname_from_mda_process(vfmp);
+ 
+-	log_debug_metadata("%s: %s metadata at " FMTu64 " size " FMTu64 " with wrap " FMTu32
+-			   " (in area at " FMTu64 " size " FMTu64
+-			   ") for %s (" FMTVGID ")",
+-			   dev_name(dev_area->dev),
+-			   used_cached_metadata ? "Using cached" : "Found",
+-			   dev_area->start + rlocn->offset,
+-			   rlocn->size, wrap, dev_area->start, dev_area->size, vgsummary->vgname,
+-			   (char *)&vgsummary->vgid);
++out:
++	return 0;
++}
+ 
+-	if (mda_free_sectors) {
+-		current_usage = ALIGN_ABSOLUTE(rlocn->size, dev_area->start + rlocn->offset, MDA_ALIGNMENT);
++int vgname_from_mda(const struct format_type *fmt,
++		    struct mda_header *mdah, int primary_mda, struct device_area *dev_area,
++		    struct lvmcache_vgsummary *vgsummary, uint64_t *mda_free_sectors)
++{
++	struct raw_locn *rlocn;
++	char buf[NAME_LEN + 1] __attribute__((aligned(8)));
++	struct vgname_from_mda_params *vfmp;
+ 
+-		buffer_size = mdah->size - MDA_HEADER_SIZE;
++	if (mda_free_sectors)
++		*mda_free_sectors = ((dev_area->size - MDA_HEADER_SIZE) / 2) >> SECTOR_SHIFT;
+ 
+-		if (current_usage * 2 >= buffer_size)
+-			*mda_free_sectors = UINT64_C(0);
+-		else
+-			*mda_free_sectors = ((buffer_size - 2 * current_usage) / 2) >> SECTOR_SHIFT;
++	if (!mdah) {
++		log_error(INTERNAL_ERROR "vgname_from_mda called with NULL pointer for mda_header");
++		return 0;
+ 	}
+ 
+-	return 1;
++	/* FIXME Cope with returning a list */
++	rlocn = mdah->raw_locns;
++
++	/*
++	 * If no valid offset, do not try to search for vgname
++	 */
++	if (!rlocn->offset) {
++		log_debug("%s: found metadata with offset 0.",
++			  dev_name(dev_area->dev));
++		return 0;
++	}
++
++	if (!(vfmp = dm_pool_zalloc(fmt->cmd->mem, sizeof(*vfmp)))) {
++		log_error("vgname_from_mda_params allocation failed");
++		return 0;
++	}
++
++	vfmp->fmt = fmt;
++	vfmp->mdah = mdah;
++	vfmp->dev_area = dev_area;
++	vfmp->vgsummary = vgsummary;
++	vfmp->primary_mda = primary_mda;
++	vfmp->mda_free_sectors = mda_free_sectors;
++
++	/* Do quick check for a vgname */
++	/* We cannot read the full metadata here because the name has to be validated before we use the size field */
++	if (!dev_read_buf(dev_area->dev, dev_area->start + rlocn->offset,
++			  NAME_LEN, MDA_CONTENT_REASON(primary_mda), buf))
++		return_0;
++
++	return _vgname_from_mda_validate(vfmp, buf);
+ }
+ 
+ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribute__((unused)))
 
 
