@@ -1,20 +1,20 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Wed, 3 Jan 2018 20:55:37 -0500
+Date: Thu, 4 Jan 2018 07:25:58 -0500
 Subject: master - format_text: Split up _update_mda.
-Message-ID: <201801040155.w041tbou019180@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201801041225.w04CPwoY022848@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=59e8e2c6cb989dbf9cf161ceb30350441561b02b
-Commit:        59e8e2c6cb989dbf9cf161ceb30350441561b02b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=139209ef42f8ea986c22fb3c889dbf893da7160b
+Commit:        139209ef42f8ea986c22fb3c889dbf893da7160b
 Parent:        111a9fcff5ace7391a9247678c8257da60cc37e6
 Author:        Alasdair G Kergon <agk@redhat.com>
 AuthorDate:    Thu Jan 4 00:56:34 2018 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jan 4 01:40:18 2018 +0000
+CommitterDate: Thu Jan 4 12:25:24 2018 +0000
 
 format_text: Split up _update_mda.
 
@@ -29,7 +29,7 @@ to process it.
  1 files changed, 69 insertions(+), 30 deletions(-)
 
 diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 42cf5b3..f02597c 100644
+index 42cf5b3..5e370d4 100644
 --- a/lib/format_text/text_label.c
 +++ b/lib/format_text/text_label.c
 @@ -325,13 +325,74 @@ struct update_mda_baton {
@@ -38,7 +38,7 @@ index 42cf5b3..f02597c 100644
  
 +struct process_mda_header_params {
 +	struct update_mda_baton *umb;
-+	struct metadata_area mda;
++	struct metadata_area *mda;
 +	struct device *dev;
 +	struct lvmcache_vgsummary vgsummary;
 +};
@@ -65,7 +65,7 @@ index 42cf5b3..f02597c 100644
 +{
 +	struct update_mda_baton *umb = pmp->umb;
 +	const struct format_type *fmt = umb->label->labeller->fmt;
-+	struct metadata_area *mda = &pmp->mda;
++	struct metadata_area *mda = pmp->mda;
 +	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 +
 +	mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
@@ -120,7 +120,7 @@ index 42cf5b3..f02597c 100644
  
 -	mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
 +	pmp->umb = umb;
-+	pmp->mda = *mda;
++	pmp->mda = mda;
  
 -	if (mda_is_ignored(mda)) {
 -		log_debug_metadata("Ignoring mda on device %s at offset " FMTu64,
