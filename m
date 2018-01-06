@@ -1,349 +1,394 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Fri, 5 Jan 2018 21:43:29 -0500
-Subject: master - device: Introduce dev_read_callback
-Message-ID: <201801060243.w062hTWB013322@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 6 Jan 2018 18:27:25 -0500
+Subject: master - label: Add callback fns (partially)
+Message-ID: <201801062327.w06NRPLv006235@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e7d3ad749d3de735ba213ad64637182afec2586
-Commit:        5e7d3ad749d3de735ba213ad64637182afec2586
-Parent:        946f07af3e8f97b0e48752ce1cd8de87d3456540
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a9fe4886ba08771b3bc013516857109818822c6a
+Commit:        a9fe4886ba08771b3bc013516857109818822c6a
+Parent:        5e7d3ad749d3de735ba213ad64637182afec2586
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Jan 6 00:33:09 2018 +0000
+AuthorDate:    Sat Jan 6 02:43:54 2018 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Jan 6 02:40:12 2018 +0000
+CommitterDate: Sat Jan 6 04:14:51 2018 +0000
 
-device: Introduce dev_read_callback
+label: Add callback fns (partially)
 
-If it obtains the data, it passes it into the supplied callback function
-and returns 1.  Otherwise the callback receives failed = 1.
-
-Updated config_file_read_fd to use this and similarly return the data
-via a callback fn of its own.
 ---
- WHATS_NEW                |    1 +
- lib/config/config.c      |   72 ++++++++++++++++++++++++++--------------------
- lib/config/config.h      |    4 ++-
- lib/device/dev-io.c      |   27 +++++++++++++++++
- lib/device/device.h      |    8 ++++-
- lib/format_text/import.c |   39 +++++++++++++-----------
- 6 files changed, 100 insertions(+), 51 deletions(-)
+ lib/format1/lvm1-label.c      |   16 ++++++++---
+ lib/format_pool/pool_label.c  |   10 +++++--
+ lib/format_text/format-text.c |   61 ++++++++++++++++++++++++++---------------
+ lib/format_text/layout.h      |    2 +
+ lib/format_text/text_label.c  |   28 ++++++++++++++-----
+ lib/label/label.c             |   10 +++---
+ lib/label/label.h             |    4 +-
+ 7 files changed, 88 insertions(+), 43 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index fa79068..345c472 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.178 - 
- =====================================
-+  Refactor metadata reading code to use callback functions.
-   Move memory allocation for the key dev_reads into the device layer.
+diff --git a/lib/format1/lvm1-label.c b/lib/format1/lvm1-label.c
+index 3b8a655..6a2ec49 100644
+--- a/lib/format1/lvm1-label.c
++++ b/lib/format1/lvm1-label.c
+@@ -54,8 +54,8 @@ static int _lvm1_write(struct label *label __attribute__((unused)), void *buf __
+ 	return 0;
+ }
  
- Version 2.02.177 - 18th December 2017
-diff --git a/lib/config/config.c b/lib/config/config.c
-index bffee06..7217cd9 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -500,16 +500,21 @@ struct process_config_file_params {
- 	uint32_t checksum;
- 	int checksum_only;
- 	int no_dup_node_check;
-+	int use_mmap;
-+	lvm_callback_fn_t config_file_read_fd_callback;
-+	void *config_file_read_fd_context;
- 	int ret;
- };
- 
- static void _process_config_file_buffer(int failed, void *context, void *data)
+-static int _lvm1_read(struct labeller *l, struct device *dev, void *buf,
+-		 struct label **label)
++static int _lvm1_read(struct labeller *l, struct device *dev, void *buf, struct label **label,
++		      lvm_callback_fn_t read_label_callback_fn, void *read_label_callback_context)
  {
- 	struct process_config_file_params *pcfp = context;
--	char *buffer = data;
--	char *fb, *fe;
-+	char *fb = data, *fe;
+ 	struct pv_disk *pvd = (struct pv_disk *) buf;
+ 	struct vg_disk vgd;
+@@ -63,6 +63,7 @@ static int _lvm1_read(struct labeller *l, struct device *dev, void *buf,
+ 	const char *vgid = FMT_LVM1_ORPHAN_VG_NAME;
+ 	const char *vgname = FMT_LVM1_ORPHAN_VG_NAME;
+ 	unsigned exported = 0;
++	int r;
  
--	fb = buffer;
-+	if (failed) {
-+		pcfp->ret = 0;
+ 	munge_pvd(dev, pvd);
+ 
+@@ -76,7 +77,8 @@ static int _lvm1_read(struct labeller *l, struct device *dev, void *buf,
+ 
+ 	if (!(info = lvmcache_add(l, (char *)pvd->pv_uuid, dev, vgname, vgid,
+ 				  exported)))
+-		return_0;
 +		goto_out;
-+	}
- 
- 	if (pcfp->checksum_fn && pcfp->checksum !=
- 	    (pcfp->checksum_fn(pcfp->checksum_fn(INITIAL_CRC, (const uint8_t *)fb, pcfp->size),
-@@ -529,7 +534,11 @@ static void _process_config_file_buffer(int failed, void *context, void *data)
- 	}
- 
- out:
--	;
-+	if (!failed && !pcfp->use_mmap)
-+		dm_free(data);
 +
-+	if (pcfp->config_file_read_fd_callback)
-+		pcfp->config_file_read_fd_callback(!pcfp->ret, pcfp->config_file_read_fd_context, NULL);
- }
+ 	*label = lvmcache_get_label(info);
  
- /*
-@@ -540,11 +549,11 @@ out:
- int config_file_read_fd(struct dm_pool *mem, struct dm_config_tree *cft, struct device *dev, dev_io_reason_t reason,
- 			off_t offset, size_t size, off_t offset2, size_t size2,
- 			checksum_fn_t checksum_fn, uint32_t checksum,
--			int checksum_only, int no_dup_node_check)
-+			int checksum_only, int no_dup_node_check,
-+			lvm_callback_fn_t config_file_read_fd_callback, void *config_file_read_fd_context)
- {
- 	char *fb;
- 	int r = 0;
--	int use_mmap = 1;
- 	off_t mmap_offset = 0;
- 	char *buf = NULL;
- 	unsigned circular = size2 ? 1 : 0;	/* Wrapped around end of disk metadata buffer? */
-@@ -555,12 +564,12 @@ int config_file_read_fd(struct dm_pool *mem, struct dm_config_tree *cft, struct
- 		log_error(INTERNAL_ERROR "config_file_read_fd: expected file, special file "
- 					 "or profile config source, found %s config source.",
- 					 _config_source_names[cs->type]);
--		return 0;
-+		goto bad;
- 	}
+ 	lvmcache_set_device_size(info, ((uint64_t)xlate32(pvd->pv_size)) << SECTOR_SHIFT);
+@@ -86,7 +88,13 @@ static int _lvm1_read(struct labeller *l, struct device *dev, void *buf,
+ 	lvmcache_del_bas(info);
+ 	lvmcache_make_valid(info);
  
- 	if (!(pcfp = dm_pool_zalloc(mem, sizeof(*pcfp)))) {
- 		log_debug("config_file_read_fd: process_config_file_params struct allocation failed");
--		return 0;
-+		goto bad;
- 	}
- 
- 	pcfp->cft = cft;
-@@ -573,48 +582,49 @@ int config_file_read_fd(struct dm_pool *mem, struct dm_config_tree *cft, struct
- 	pcfp->checksum = checksum;
- 	pcfp->checksum_only = checksum_only;
- 	pcfp->no_dup_node_check = no_dup_node_check;
-+	pcfp->config_file_read_fd_callback = config_file_read_fd_callback;
-+	pcfp->config_file_read_fd_context = config_file_read_fd_context;
-+	pcfp->use_mmap = 1;
- 	pcfp->ret = 1;
- 
- 	/* Only use mmap with regular files */
- 	if (!(dev->flags & DEV_REGULAR) || circular)
--		use_mmap = 0;
-+		pcfp->use_mmap = 0;
- 
--	if (use_mmap) {
-+	if (pcfp->use_mmap) {
- 		mmap_offset = offset % lvm_getpagesize();
- 		/* memory map the file */
- 		fb = mmap((caddr_t) 0, size + mmap_offset, PROT_READ,
- 			  MAP_PRIVATE, dev_fd(dev), offset - mmap_offset);
- 		if (fb == (caddr_t) (-1)) {
- 			log_sys_error("mmap", dev_name(dev));
--			goto out;
-+			goto bad;
-+		}
-+		_process_config_file_buffer(0, pcfp, fb + mmap_offset);
-+		r = pcfp->ret;
-+		/* unmap the file */
-+		if (munmap(fb, size + mmap_offset)) {
-+			log_sys_error("munmap", dev_name(dev));
-+			r = 0;
- 		}
--		fb = fb + mmap_offset;
- 	} else {
- 		if (circular) {
- 			if (!(buf = dev_read_circular(dev, (uint64_t) offset, size, (uint64_t) offset2, size2, reason)))
- 				goto_out;
--		} else {
--			if (!(buf = dev_read(dev, (uint64_t) offset, size, reason)))
--				goto_out;
--		}
--		fb = buf;
-+			_process_config_file_buffer(0, pcfp, buf);
-+		} else if (!dev_read_callback(dev, (uint64_t) offset, size, reason, _process_config_file_buffer, pcfp))
-+			goto_out;
-+		r = pcfp->ret;
- 	}
- 
--	_process_config_file_buffer(0, pcfp, fb);
--	r = pcfp->ret;
-+out:
-+	return r;
- 
--      out:
--	if (!use_mmap)
--		dm_free(buf);
--	else {
--		/* unmap the file */
--		if (munmap(fb - mmap_offset, size + mmap_offset)) {
--			log_sys_error("munmap", dev_name(dev));
--			r = 0;
--		}
--	}
-+bad:
-+	if (config_file_read_fd_callback)
-+		config_file_read_fd_callback(1, config_file_read_fd_context, NULL);
- 
--	return r;
-+	return 0;
- }
- 
- int config_file_read(struct dm_pool *mem, struct dm_config_tree *cft)
-@@ -646,7 +656,7 @@ int config_file_read(struct dm_pool *mem, struct dm_config_tree *cft)
- 	}
- 
- 	r = config_file_read_fd(mem, cft, cf->dev, DEV_IO_MDA_CONTENT, 0, (size_t) info.st_size, 0, 0,
--				(checksum_fn_t) NULL, 0, 0, 0);
-+				(checksum_fn_t) NULL, 0, 0, 0, NULL, NULL);
- 
- 	if (!cf->keep_open) {
- 		if (!dev_close(cf->dev))
-diff --git a/lib/config/config.h b/lib/config/config.h
-index 5c8844a..9901003 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -242,7 +242,9 @@ struct dm_config_tree *config_open(config_source_t source, const char *filename,
- int config_file_read_fd(struct dm_pool *mem, struct dm_config_tree *cft, struct device *dev, dev_io_reason_t reason,
- 			off_t offset, size_t size, off_t offset2, size_t size2,
- 			checksum_fn_t checksum_fn, uint32_t checksum,
--			int skip_parse, int no_dup_node_check);
-+			int skip_parse, int no_dup_node_check,
-+			lvm_callback_fn_t config_file_read_fd_callback, void *config_file_read_fd_context);
-+
- int config_file_read(struct dm_pool *mem, struct dm_config_tree *cft);
- struct dm_config_tree *config_file_open_and_read(const char *config_file, config_source_t source,
- 						 struct cmd_context *cmd);
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index 72d6768..22a0d4c 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -763,6 +763,33 @@ char *dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t
- 	return buf;
- }
- 
-+/* Callback fn is responsible for dm_free */
-+int dev_read_callback(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t reason,
-+		      lvm_callback_fn_t dev_read_callback_fn, void *callback_context)
-+{
-+	char *buf;
-+	int r = 0;
-+
-+	if (!(buf = dm_malloc(len))) {
-+		log_error("Buffer allocation failed for device read.");
-+		goto out;
-+	}
-+
-+	if (!_dev_read(dev, offset, len, reason, buf)) {
-+		log_error("Read from %s failed", dev_name(dev));
-+		dm_free(buf);
-+		goto out;
-+	}
-+
+-	return 1;
 +	r = 1;
 +
 +out:
-+	if (dev_read_callback_fn)
-+		dev_read_callback_fn(!r, callback_context, buf);
++        if (read_label_callback_fn)
++                read_label_callback_fn(!r, read_label_callback_context, NULL);
 +
 +	return r;
-+}
-+
- /* Read into supplied retbuf */
- int dev_read_buf(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t reason, void *retbuf)
- {
-diff --git a/lib/device/device.h b/lib/device/device.h
-index 04117d2..4349222 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -33,7 +33,9 @@
- #define DEV_NOT_O_NOATIME	0x00000400	/* Don't use O_NOATIME */
- 
- /*
-- * Standard format for callback functions
-+ * Standard format for callback functions.
-+ * When provided, callback functions are called exactly once.
-+ * If failed is set, data cannot be accessed.
-  */
- typedef void (*lvm_callback_fn_t)(int failed, void *context, void *data);
- 
-@@ -155,6 +157,10 @@ char *dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t
- char *dev_read_circular(struct device *dev, uint64_t offset, size_t len,
- 			uint64_t offset2, size_t len2, dev_io_reason_t reason);
- 
-+/* Passes the data to dev_read_callback_fn */
-+int dev_read_callback(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t reason,
-+		      lvm_callback_fn_t dev_read_callback_fn, void *callback_context);
-+
- /* Read data and copy it into a supplied private buffer. */
- /* Only use for tiny reads or on unimportant code paths. */
- int dev_read_buf(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t reason, void *retbuf);
-diff --git a/lib/format_text/import.c b/lib/format_text/import.c
-index 64ef2be..a295b78 100644
---- a/lib/format_text/import.c
-+++ b/lib/format_text/import.c
-@@ -46,6 +46,11 @@ static void _import_vgsummary(int failed, void *context, void *data)
- 	struct import_vgsummary_params *ivsp = context;
- 	struct text_vg_version_ops **vsn;
- 
-+	if (failed) {
-+		ivsp->ret = 0;
-+		goto_out;
-+	}
-+
- 	if (ivsp->checksum_only)
- 		/* Checksum matches already-cached content - no need to reparse. */
- 		goto out;
-@@ -100,23 +105,20 @@ int text_vgsummary_import(const struct format_type *fmt,
- 	ivsp->vgsummary = vgsummary;
- 	ivsp->ret = 1;
- 
--	if (!dev && !config_file_read(fmt->cmd->mem, ivsp->cft)) {
--		log_error("Couldn't read volume group metadata.");
--		config_destroy(ivsp->cft);
--		return 0;
--	}
--
--	if (dev && !config_file_read_fd(fmt->cmd->mem, ivsp->cft, dev, reason, offset, size,
-+	if (!dev) {
-+		if (!config_file_read(fmt->cmd->mem, ivsp->cft)) {
-+			log_error("Couldn't read volume group metadata.");
-+			ivsp->ret = 0;
-+		}
-+		_import_vgsummary(!ivsp->ret, ivsp, NULL);
-+	} else if (!config_file_read_fd(fmt->cmd->mem, ivsp->cft, dev, reason, offset, size,
- 					offset2, size2, checksum_fn,
- 					vgsummary->mda_checksum,
--					checksum_only, 1)) {
-+					checksum_only, 1, &_import_vgsummary, ivsp)) {
- 		log_error("Couldn't read volume group metadata.");
--		config_destroy(ivsp->cft);
- 		return 0;
- 	}
- 
--	_import_vgsummary(0, ivsp, NULL);
--
- 	return ivsp->ret;
  }
  
-@@ -229,14 +231,15 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
- 		return_NULL;
+ static int _lvm1_initialise_label(struct labeller *l __attribute__((unused)), struct label *label)
+diff --git a/lib/format_pool/pool_label.c b/lib/format_pool/pool_label.c
+index 2e30a7b..cd6c82a 100644
+--- a/lib/format_pool/pool_label.c
++++ b/lib/format_pool/pool_label.c
+@@ -55,12 +55,16 @@ static int _pool_write(struct label *label __attribute__((unused)), void *buf __
+ 	return 0;
+ }
+ 
+-static int _pool_read(struct labeller *l, struct device *dev, void *buf,
+-		 struct label **label)
++static int _pool_read(struct labeller *l, struct device *dev, void *buf, struct label **label,
++		      lvm_callback_fn_t read_label_callback_fn, void *read_label_callback_context)
+ {
+ 	struct pool_list pl;
++	int r;
+ 
+-	return read_pool_label(&pl, l, dev, buf, label);
++	r = read_pool_label(&pl, l, dev, buf, label);
++
++	if (read_label_callback_fn)
++		read_label_callback_fn(!r, read_label_callback_context, NULL);
+ }
+ 
+ static int _pool_initialise_label(struct labeller *l __attribute__((unused)), struct label *label)
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index a0aff4d..2158b5f 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -329,6 +329,8 @@ static void _xlate_mdah(struct mda_header *mdah)
+ struct process_raw_mda_header_params {
+ 	struct mda_header *mdah;
+ 	struct device_area dev_area;
++	lvm_callback_fn_t mdah_callback_fn;
++	void *mdah_callback_context;
+ 	int ret;
+ };
+ 
+@@ -338,10 +340,13 @@ static void _process_raw_mda_header(int failed, void *context, void *data)
+ 	struct mda_header *mdah = prmp->mdah;
+ 	struct device_area *dev_area = &prmp->dev_area;
+ 
+-	if (!dev_close(dev_area->dev)) {
+-		prmp->ret = 0;
++	if (!dev_close(dev_area->dev))
+ 		goto_out;
+-	}
++
++	if (failed)
++		goto_bad;
++
++	memcpy(mdah, data, MDA_HEADER_SIZE);
+ 
+ 	if (mdah->checksum_xl != xlate32(calc_crc(INITIAL_CRC, (uint8_t *)mdah->magic,
+ 						  MDA_HEADER_SIZE -
+@@ -349,8 +354,7 @@ static void _process_raw_mda_header(int failed, void *context, void *data)
+ 		log_error("Incorrect metadata area header checksum on %s"
+ 			  " at offset " FMTu64, dev_name(dev_area->dev),
+ 			  dev_area->start);
+-		prmp->ret = 0;
+-		goto out;
++		goto bad;
  	}
  
--	if (dev && !config_file_read_fd(fid->mem, ivp->cft, dev, MDA_CONTENT_REASON(primary_mda), offset, size,
-+	if (dev) {
-+		if (!config_file_read_fd(fid->mem, ivp->cft, dev, MDA_CONTENT_REASON(primary_mda), offset, size,
- 					offset2, size2, checksum_fn, checksum,
--					ivp->skip_parse, 1)) {
--		config_destroy(ivp->cft);
+ 	_xlate_mdah(mdah);
+@@ -359,31 +363,37 @@ static void _process_raw_mda_header(int failed, void *context, void *data)
+ 		log_error("Wrong magic number in metadata area header on %s"
+ 			  " at offset " FMTu64, dev_name(dev_area->dev),
+ 			  dev_area->start);
+-		prmp->ret = 0;
+-		goto out;
++		goto bad;
+ 	}
+ 
+ 	if (mdah->version != FMTT_VERSION) {
+ 		log_error("Incompatible metadata area header version: %d on %s"
+ 			  " at offset " FMTu64, mdah->version,
+ 			  dev_name(dev_area->dev), dev_area->start);
+-		prmp->ret = 0;
+-		goto out;
++		goto bad;
+ 	}
+ 
+ 	if (mdah->start != dev_area->start) {
+ 		log_error("Incorrect start sector in metadata area header: "
+ 			  FMTu64 " on %s at offset " FMTu64, mdah->start,
+ 			  dev_name(dev_area->dev), dev_area->start);
+-		prmp->ret = 0;
+-		goto out;
++		goto bad;
+ 	}
+ 
++	goto out;
++
++bad:
++	prmp->ret = 0;
+ out:
+-	;
++	if (!failed)
++		dm_free(data);
++
++	if (prmp->mdah_callback_fn)
++		prmp->mdah_callback_fn(!prmp->ret, prmp->mdah_callback_context, mdah);
+ }
+ 
+-static struct mda_header *_raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda)
++static struct mda_header *_raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda,
++					       lvm_callback_fn_t mdah_callback_fn, void *mdah_callback_context)
+ {
+ 	struct mda_header *mdah;
+ 	struct process_raw_mda_header_params *prmp;
+@@ -406,15 +416,13 @@ static struct mda_header *_raw_read_mda_header(struct dm_pool *mem, struct devic
+ 
+ 	prmp->mdah = mdah;
+ 	prmp->dev_area = *dev_area;
++	prmp->mdah_callback_fn = mdah_callback_fn;
++	prmp->mdah_callback_context = mdah_callback_context;
+ 	prmp->ret = 1;
+ 
+-	if (!dev_read_buf(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, MDA_HEADER_REASON(primary_mda), mdah)) {
+-		if (!dev_close(dev_area->dev))
+-			stack;
 -		return_NULL;
 -	}
 -
--	_import_vg(0, ivp, NULL);
-+					ivp->skip_parse, 1, &_import_vg, ivp)) {
-+			config_destroy(ivp->cft);
-+			return_NULL;
-+		}
-+	} else
-+		_import_vg(0, ivp, NULL);
+-	_process_raw_mda_header(0, prmp, NULL);
++	if (!dev_read_callback(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, MDA_HEADER_REASON(primary_mda),
++			       _process_raw_mda_header, prmp))
++		stack;
  
- 	return ivp->vg;
+ 	if (!prmp->ret)
+ 		return_NULL;
+@@ -424,7 +432,16 @@ static struct mda_header *_raw_read_mda_header(struct dm_pool *mem, struct devic
+ 
+ struct mda_header *raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda)
+ {
+-	return _raw_read_mda_header(mem, dev_area, primary_mda);
++	return _raw_read_mda_header(mem, dev_area, primary_mda, NULL, NULL);
++}
++
++int raw_read_mda_header_callback(struct dm_pool *mem, struct device_area *dev_area, int primary_mda,
++				 lvm_callback_fn_t mdah_callback_fn, void *mdah_callback_context)
++{
++	if (!_raw_read_mda_header(mem, dev_area, primary_mda, mdah_callback_fn, mdah_callback_context))
++		return_0;
++
++	return 1;
  }
+ 
+ static int _raw_write_mda_header(const struct format_type *fmt,
+@@ -2002,7 +2019,7 @@ static int _mda_export_text_raw(struct metadata_area *mda,
+ {
+ 	struct mda_context *mdc = (struct mda_context *) mda->metadata_locn;
+ 
+-	if (!mdc || !_raw_read_mda_header(cft->mem, &mdc->area, mda_is_primary(mda)))
++	if (!mdc || !_raw_read_mda_header(cft->mem, &mdc->area, mda_is_primary(mda), NULL, NULL))
+ 		return 1; /* pretend the MDA does not exist */
+ 
+ 	return config_make_nodes(cft, parent, NULL,
+diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
+index c0906a6..3320b0c 100644
+--- a/lib/format_text/layout.h
++++ b/lib/format_text/layout.h
+@@ -82,6 +82,8 @@ struct mda_header {
+ } __attribute__ ((packed));
+ 
+ struct mda_header *raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda);
++int raw_read_mda_header_callback(struct dm_pool *mem, struct device_area *dev_area, int primary_mda,
++				 lvm_callback_fn_t mdah_callback_fn, void *mdah_callback_context);
+ 
+ struct mda_lists {
+ 	struct dm_list dirs;
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index 05e1626..3f090b4 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -322,6 +322,9 @@ static int _text_initialise_label(struct labeller *l __attribute__((unused)),
+ struct update_mda_baton {
+ 	struct lvmcache_info *info;
+ 	struct label *label;
++	int nr_outstanding_mdas;
++	lvm_callback_fn_t read_label_callback_fn;
++	void *read_label_callback_context;
+ 	int ret;
+ };
+ 
+@@ -338,6 +341,8 @@ static void _process_vgsummary(int failed, void *context, void *data)
+ 	struct process_mda_header_params *pmp = context;
+ 	struct lvmcache_vgsummary *vgsummary = data;
+ 
++	--pmp->umb->nr_outstanding_mdas;
++
+ 	if (!lvmcache_update_vgname_and_id(pmp->umb->info, vgsummary)) {
+ 		pmp->umb->ret = 0;
+ 		pmp->ret = 0;
+@@ -388,7 +393,6 @@ static int _update_mda(struct metadata_area *mda, void *baton)
+ 	const struct format_type *fmt = umb->label->labeller->fmt;
+ 	struct dm_pool *mem = umb->label->labeller->fmt->cmd->mem;
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
+-	struct mda_header *mdah;
+ 
+ 	if (!(pmp = dm_pool_zalloc(mem, sizeof(*pmp)))) {
+ 		log_error("struct process_mda_header_params allocation failed");
+@@ -408,25 +412,25 @@ static int _update_mda(struct metadata_area *mda, void *baton)
+ 		return 1;
+ 	}
+ 
++	umb->nr_outstanding_mdas++;
+ 	pmp->dev = mdac->area.dev;
+ 
+ 	pmp->umb = umb;
+ 	pmp->mda = mda;
+ 	pmp->ret = 1;
+ 
+-	if (!(mdah = raw_read_mda_header(fmt->cmd->mem, &mdac->area, mda_is_primary(mda)))) {
++	if (!raw_read_mda_header_callback(fmt->cmd->mem, &mdac->area, mda_is_primary(mda), _process_mda_header, pmp)) {
+ 		stack;
+ 		if (!dev_close(pmp->dev))
+ 			stack;
+ 		return 1;
+ 	}
+ 
+-	_process_mda_header(0, pmp, mdah);
+-
+ 	return pmp->ret;
+ }
+ 
+-static int _text_read(struct labeller *l, struct device *dev, void *buf, struct label **label)
++static int _text_read(struct labeller *l, struct device *dev, void *buf, struct label **label,
++		      lvm_callback_fn_t read_label_callback_fn, void *read_label_callback_context)
+ {
+ 	struct label_header *lh = (struct label_header *) buf;
+ 	struct pv_header *pvhdr;
+@@ -503,17 +507,27 @@ out:
+ 
+ 	umb->info = info;
+ 	umb->label = *label;
++	umb->read_label_callback_fn = read_label_callback_fn;
++	umb->read_label_callback_context = read_label_callback_context;
++	umb->nr_outstanding_mdas = 1;
++
+ 	umb->ret = 1;
+ 
+ 	if (!lvmcache_foreach_mda(info, _update_mda, umb))
+ 		return_0;
+ 
+-	if (umb->ret)
+-		lvmcache_make_valid(info);
++	if (!--umb->nr_outstanding_mdas)
++		if (umb->ret)
++			lvmcache_make_valid(info);
++
++	if (umb->read_label_callback_fn)
++		umb->read_label_callback_fn(!umb->ret, umb->read_label_callback_context, NULL);
+ 
+ 	return 1;
+ 
+ bad:
++	if (umb->read_label_callback_fn)
++		umb->read_label_callback_fn(1, umb->read_label_callback_context, NULL);
+ 	return 0;
+ }
+ 
+diff --git a/lib/label/label.c b/lib/label/label.c
+index a187bad..0ed5c6a 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -129,8 +129,9 @@ struct find_labeller_params {
+ 	int ret;
+ };
+ 
+-static void _set_label_read_result(int failed, struct find_labeller_params *flp)
++static void _set_label_read_result(int failed, void *context, void *data)
+ {
++	struct find_labeller_params *flp = context;
+ 	struct label **result = flp->result;
+ 
+ 	if (failed)
+@@ -219,10 +220,9 @@ static void _find_labeller(int failed, void *context, void *data)
+ 			_update_lvmcache_orphan(info);
+ 		log_very_verbose("%s: No label detected", dev_name(dev));
+ 		flp->ret = 0;
++		_set_label_read_result(1, flp, NULL);
+ 	} else
+-		flp->ret = (l->ops->read)(l, dev, labelbuf, result);
+-
+-	_set_label_read_result(!flp->ret, flp);
++		flp->ret = (l->ops->read)(l, dev, labelbuf, result, &_set_label_read_result, flp);
+ }
+ 
+ /* FIXME Also wipe associated metadata area headers? */
+@@ -339,7 +339,7 @@ static int _label_read(struct device *dev, uint64_t scan_sector, struct label **
+ 
+ 	if (!(readbuf = dev_read(dev, scan_sector << SECTOR_SHIFT, LABEL_SCAN_SIZE, DEV_IO_LABEL))) {
+ 		log_debug_devs("%s: Failed to read label area", dev_name(dev));
+-		_set_label_read_result(1, flp);
++		_set_label_read_result(1, flp, NULL);
+ 		return 0;
+ 	}
+ 
+diff --git a/lib/label/label.h b/lib/label/label.h
+index ea11290..984acce 100644
+--- a/lib/label/label.h
++++ b/lib/label/label.h
+@@ -62,8 +62,8 @@ struct label_ops {
+ 	/*
+ 	 * Read a label from a volume.
+ 	 */
+-	int (*read) (struct labeller * l, struct device * dev,
+-		     void *buf, struct label ** label);
++	int (*read) (struct labeller *l, struct device *dev, void *buf, struct label **label,
++		     lvm_callback_fn_t label_read_callback_fn, void *label_read_callback_context);
+ 
+ 	/*
+ 	 * Populate label_type etc.
 
 
