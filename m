@@ -1,32 +1,32 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Sat, 6 Jan 2018 18:27:25 -0500
+Date: Mon, 8 Jan 2018 12:48:36 -0500
 Subject: master - label: Add callback fns (partially)
-Message-ID: <201801062327.w06NRPLv006235@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201801081748.w08Hma5S020489@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a9fe4886ba08771b3bc013516857109818822c6a
-Commit:        a9fe4886ba08771b3bc013516857109818822c6a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6d322e68f302e5406e93ec7649f537776f78f641
+Commit:        6d322e68f302e5406e93ec7649f537776f78f641
 Parent:        5e7d3ad749d3de735ba213ad64637182afec2586
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Jan 6 02:43:54 2018 +0000
+AuthorDate:    Sun Jan 7 03:43:25 2018 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Jan 6 04:14:51 2018 +0000
+CommitterDate: Mon Jan 8 17:04:56 2018 +0000
 
 label: Add callback fns (partially)
 
 ---
- lib/format1/lvm1-label.c      |   16 ++++++++---
- lib/format_pool/pool_label.c  |   10 +++++--
- lib/format_text/format-text.c |   61 ++++++++++++++++++++++++++---------------
+ lib/format1/lvm1-label.c      |   16 ++++++++--
+ lib/format_pool/pool_label.c  |   12 ++++++--
+ lib/format_text/format-text.c |   63 ++++++++++++++++++++++++++---------------
  lib/format_text/layout.h      |    2 +
- lib/format_text/text_label.c  |   28 ++++++++++++++-----
+ lib/format_text/text_label.c  |   35 ++++++++++++++++++----
  lib/label/label.c             |   10 +++---
  lib/label/label.h             |    4 +-
- 7 files changed, 88 insertions(+), 43 deletions(-)
+ 7 files changed, 98 insertions(+), 44 deletions(-)
 
 diff --git a/lib/format1/lvm1-label.c b/lib/format1/lvm1-label.c
 index 3b8a655..6a2ec49 100644
@@ -77,10 +77,10 @@ index 3b8a655..6a2ec49 100644
  
  static int _lvm1_initialise_label(struct labeller *l __attribute__((unused)), struct label *label)
 diff --git a/lib/format_pool/pool_label.c b/lib/format_pool/pool_label.c
-index 2e30a7b..cd6c82a 100644
+index 2e30a7b..451d7d0 100644
 --- a/lib/format_pool/pool_label.c
 +++ b/lib/format_pool/pool_label.c
-@@ -55,12 +55,16 @@ static int _pool_write(struct label *label __attribute__((unused)), void *buf __
+@@ -55,12 +55,18 @@ static int _pool_write(struct label *label __attribute__((unused)), void *buf __
  	return 0;
  }
  
@@ -97,11 +97,13 @@ index 2e30a7b..cd6c82a 100644
 +
 +	if (read_label_callback_fn)
 +		read_label_callback_fn(!r, read_label_callback_context, NULL);
++
++	return r;
  }
  
  static int _pool_initialise_label(struct labeller *l __attribute__((unused)), struct label *label)
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index a0aff4d..2158b5f 100644
+index a0aff4d..c2d6294 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
 @@ -329,6 +329,8 @@ static void _xlate_mdah(struct mda_header *mdah)
@@ -119,9 +121,10 @@ index a0aff4d..2158b5f 100644
  
 -	if (!dev_close(dev_area->dev)) {
 -		prmp->ret = 0;
-+	if (!dev_close(dev_area->dev))
- 		goto_out;
+-		goto_out;
 -	}
++	if (!dev_close(dev_area->dev))
++		goto_bad;
 +
 +	if (failed)
 +		goto_bad;
@@ -176,8 +179,8 @@ index a0aff4d..2158b5f 100644
 +	if (!failed)
 +		dm_free(data);
 +
-+	if (prmp->mdah_callback_fn)
-+		prmp->mdah_callback_fn(!prmp->ret, prmp->mdah_callback_context, mdah);
++	if (prmp->ret && prmp->mdah_callback_fn)
++		prmp->mdah_callback_fn(0, prmp->mdah_callback_context, mdah);
  }
  
 -static struct mda_header *_raw_read_mda_header(struct dm_pool *mem, struct device_area *dev_area, int primary_mda)
@@ -248,7 +251,7 @@ index c0906a6..3320b0c 100644
  struct mda_lists {
  	struct dm_list dirs;
 diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 05e1626..3f090b4 100644
+index 05e1626..60ce5db 100644
 --- a/lib/format_text/text_label.c
 +++ b/lib/format_text/text_label.c
 @@ -322,6 +322,9 @@ static int _text_initialise_label(struct labeller *l __attribute__((unused)),
@@ -270,7 +273,32 @@ index 05e1626..3f090b4 100644
  	if (!lvmcache_update_vgname_and_id(pmp->umb->info, vgsummary)) {
  		pmp->umb->ret = 0;
  		pmp->ret = 0;
-@@ -388,7 +393,6 @@ static int _update_mda(struct metadata_area *mda, void *baton)
+@@ -358,12 +363,16 @@ static void _process_mda_header(int failed, void *context, void *data)
+ 	struct metadata_area *mda = pmp->mda;
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
+ 
++	if (failed)
++		return;
++
+ 	mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
+ 
+ 	if (mda_is_ignored(mda)) {
+ 		log_debug_metadata("Ignoring mda on device %s at offset " FMTu64,
+ 				   dev_name(mdac->area.dev),
+ 				   mdac->area.start);
++		--pmp->umb->nr_outstanding_mdas;
+ 		if (!dev_close(pmp->dev))
+ 			stack;
+ 		return;
+@@ -373,6 +382,7 @@ static void _process_mda_header(int failed, void *context, void *data)
+ 			     &mdac->free_sectors)) {
+ 		/* FIXME Separate fatal and non-fatal error cases? */
+ 		stack;
++		--pmp->umb->nr_outstanding_mdas;
+ 		if (!dev_close(pmp->dev))
+ 			stack;
+ 		return;
+@@ -388,7 +398,6 @@ static int _update_mda(struct metadata_area *mda, void *baton)
  	const struct format_type *fmt = umb->label->labeller->fmt;
  	struct dm_pool *mem = umb->label->labeller->fmt->cmd->mem;
  	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
@@ -278,7 +306,7 @@ index 05e1626..3f090b4 100644
  
  	if (!(pmp = dm_pool_zalloc(mem, sizeof(*pmp)))) {
  		log_error("struct process_mda_header_params allocation failed");
-@@ -408,25 +412,25 @@ static int _update_mda(struct metadata_area *mda, void *baton)
+@@ -408,25 +417,26 @@ static int _update_mda(struct metadata_area *mda, void *baton)
  		return 1;
  	}
  
@@ -292,6 +320,7 @@ index 05e1626..3f090b4 100644
 -	if (!(mdah = raw_read_mda_header(fmt->cmd->mem, &mdac->area, mda_is_primary(mda)))) {
 +	if (!raw_read_mda_header_callback(fmt->cmd->mem, &mdac->area, mda_is_primary(mda), _process_mda_header, pmp)) {
  		stack;
++		--pmp->umb->nr_outstanding_mdas;
  		if (!dev_close(pmp->dev))
  			stack;
  		return 1;
@@ -308,7 +337,7 @@ index 05e1626..3f090b4 100644
  {
  	struct label_header *lh = (struct label_header *) buf;
  	struct pv_header *pvhdr;
-@@ -503,17 +507,27 @@ out:
+@@ -503,17 +513,28 @@ out:
  
  	umb->info = info;
  	umb->label = *label;
@@ -333,8 +362,9 @@ index 05e1626..3f090b4 100644
  	return 1;
  
  bad:
-+	if (umb->read_label_callback_fn)
-+		umb->read_label_callback_fn(1, umb->read_label_callback_context, NULL);
++	if (read_label_callback_fn)
++		read_label_callback_fn(1, read_label_callback_context, NULL);
++
  	return 0;
  }
  
