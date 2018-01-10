@@ -1,367 +1,226 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Wed, 10 Jan 2018 10:53:30 -0500
-Subject: master - device: Keep the last data buffer read off each device.
-Message-ID: <201801101553.w0AFrURA004737@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 10 Jan 2018 10:53:37 -0500
+Subject: master - device: Remove some data copying between buffers.
+Message-ID: <201801101553.w0AFrbJF004751@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bd0967a4b1ac3dc6402b0e9ad8bc2f85f4f7af1c
-Commit:        bd0967a4b1ac3dc6402b0e9ad8bc2f85f4f7af1c
-Parent:        bacc94233368cf136b55e2574e969e7f53b31c6c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dcb2a5a6116ed4853933e1a72e185a8109aab9cc
+Commit:        dcb2a5a6116ed4853933e1a72e185a8109aab9cc
+Parent:        4d568b709cec5f84c8a8a278747b997a75b4c463
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Jan 10 02:09:06 2018 +0000
+AuthorDate:    Wed Jan 10 13:18:56 2018 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
 CommitterDate: Wed Jan 10 15:48:03 2018 +0000
 
-device: Keep the last data buffer read off each device.
+device: Remove some data copying between buffers.
 
-If there's a second metadata area on device, we record that separately.
-
-Note that the memory requirements aren't restricted yet.
+Callers that read larger amounts of data now get a pointer to read-only
+data directly without copying it through an intermediate buffer.  This
+data is owned by the device layer so the callers no longer free it.
 ---
- lib/device/dev-cache.c |   10 +++
- lib/device/dev-io.c    |  156 +++++++++++++++++++++++++++++++-----------------
- lib/device/device.h    |   31 ++++++++--
- 3 files changed, 137 insertions(+), 60 deletions(-)
+ lib/config/config.c           |    4 +---
+ lib/device/dev-io.c           |   38 ++++++++++++++++++--------------------
+ lib/device/device.h           |    1 +
+ lib/format_text/format-text.c |    6 +-----
+ lib/label/label.c             |    2 --
+ 5 files changed, 21 insertions(+), 30 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 2cd38f4..3d57735 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -1247,12 +1247,22 @@ int dev_cache_check_for_open_devices(void)
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 7217cd9..9dd8a61 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -534,9 +534,6 @@ static void _process_config_file_buffer(int failed, void *context, void *data)
+ 	}
  
- int dev_cache_exit(void)
- {
-+	struct btree_iter *b;
- 	int num_open = 0;
- 
- 	if (_cache.names)
- 		if ((num_open = _check_for_open_devices(1)) > 0)
- 			log_error(INTERNAL_ERROR "%d device(s) were left open and have been closed.", num_open);
- 
-+	if (_cache.devices) {
-+		/* FIXME Replace with structured devbuf cache */
-+		b = btree_first(_cache.devices);
-+		while (b) {
-+			devbufs_release(btree_get_data(b));
-+			b = btree_next(b);
-+		}
-+	}
-+
- 	if (_cache.mem)
- 		dm_pool_destroy(_cache.mem);
- 
+ out:
+-	if (!failed && !pcfp->use_mmap)
+-		dm_free(data);
+-
+ 	if (pcfp->config_file_read_fd_callback)
+ 		pcfp->config_file_read_fd_callback(!pcfp->ret, pcfp->config_file_read_fd_context, NULL);
+ }
+@@ -612,6 +609,7 @@ int config_file_read_fd(struct dm_pool *mem, struct dm_config_tree *cft, struct
+ 			if (!(buf = dev_read_circular(dev, (uint64_t) offset, size, (uint64_t) offset2, size2, reason)))
+ 				goto_out;
+ 			_process_config_file_buffer(0, pcfp, buf);
++			dm_free(buf);
+ 		} else if (!dev_read_callback(dev, (uint64_t) offset, size, reason, _process_config_file_buffer, pcfp))
+ 			goto_out;
+ 		r = pcfp->ret;
 diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index ee4a0a5..47d3ad9 100644
+index 18a09d1..30e4235 100644
 --- a/lib/device/dev-io.c
 +++ b/lib/device/dev-io.c
-@@ -74,38 +74,33 @@ static const char *_reason_text(dev_io_reason_t reason)
- 	return _reasons[(unsigned) reason];
- }
- 
-+/*
-+ * Release the memory holding the last data we read
-+ */
-+static void _release_devbuf(struct device_buffer *devbuf)
-+{
-+	dm_free(devbuf->malloc_address);
-+	devbuf->malloc_address = NULL;
-+}
-+
-+void devbufs_release(struct device *dev)
-+{
-+	_release_devbuf(&dev->last_devbuf);
-+	_release_devbuf(&dev->last_extra_devbuf);
-+}
-+
- /*-----------------------------------------------------------------
-  * The standard io loop that keeps submitting an io until it's
-  * all gone.
-  *---------------------------------------------------------------*/
--static int _io(struct device_area *where, char *buffer, int should_write, dev_io_reason_t reason)
-+static int _io_sync(struct device_buffer *devbuf)
- {
-+	struct device_area *where = &devbuf->where;
- 	int fd = dev_fd(where->dev);
-+	char *buffer = devbuf->buf;
- 	ssize_t n = 0;
- 	size_t total = 0;
- 
--	if (fd < 0) {
--		log_error("Attempt to read an unopened device (%s).",
--			  dev_name(where->dev));
--		return 0;
--	}
--
--	log_debug_io("%s %s:%8" PRIu64 " bytes (sync) at %" PRIu64 "%s (for %s)",
--		     should_write ? "Write" : "Read ", dev_name(where->dev),
--		     where->size, (uint64_t) where->start,
--		     (should_write && test_mode()) ? " (test mode - suppressed)" : "", _reason_text(reason));
--
--	/*
--	 * Skip all writes in test mode.
--	 */
--	if (should_write && test_mode())
--		return 1;
--
--	if (where->size > SSIZE_MAX) {
--		log_error("Read size too large: %" PRIu64, where->size);
--		return 0;
--	}
--
- 	if (lseek(fd, (off_t) where->start, SEEK_SET) == (off_t) -1) {
- 		log_error("%s: lseek %" PRIu64 " failed: %s",
- 			  dev_name(where->dev), (uint64_t) where->start,
-@@ -115,7 +110,7 @@ static int _io(struct device_area *where, char *buffer, int should_write, dev_io
- 
- 	while (total < (size_t) where->size) {
- 		do
--			n = should_write ?
-+			n = devbuf->write ?
- 			    write(fd, buffer, (size_t) where->size - total) :
- 			    read(fd, buffer, (size_t) where->size - total);
- 		while ((n < 0) && ((errno == EINTR) || (errno == EAGAIN)));
-@@ -123,7 +118,7 @@ static int _io(struct device_area *where, char *buffer, int should_write, dev_io
- 		if (n < 0)
- 			log_error_once("%s: %s failed after %" PRIu64 " of %" PRIu64
- 				       "@%" PRIu64 ": %s", dev_name(where->dev),
--				       should_write ? "write" : "read",
-+				       devbuf->write ? "write" : "read",
- 				       (uint64_t) total,
- 				       (uint64_t) where->size,
- 				       (uint64_t) where->start, strerror(errno));
-@@ -138,6 +133,36 @@ static int _io(struct device_area *where, char *buffer, int should_write, dev_io
- 	return (total == (size_t) where->size);
- }
- 
-+static int _io(struct device_buffer *devbuf, dev_io_reason_t reason)
-+{
-+	struct device_area *where = &devbuf->where;
-+	int fd = dev_fd(where->dev);
-+
-+	if (fd < 0) {
-+		log_error("Attempt to read an unopened device (%s).",
-+			  dev_name(where->dev));
-+		return 0;
-+	}
-+
-+	log_debug_io("%s %s(fd %d):%8" PRIu64 " bytes (sync) at %" PRIu64 "%s (for %s)",
-+		     devbuf->write ? "Write" : "Read ", dev_name(where->dev), fd,
-+		     where->size, (uint64_t) where->start,
-+		     (devbuf->write && test_mode()) ? " (test mode - suppressed)" : "", _reason_text(reason));
-+
-+	/*
-+	 * Skip all writes in test mode.
-+	 */
-+	if (devbuf->write && test_mode())
-+		return 1;
-+
-+	if (where->size > SSIZE_MAX) {
-+		log_error("Read size too large: %" PRIu64, where->size);
-+		return 0;
-+	}
-+
-+	return _io_sync(devbuf);
-+}
-+
- /*-----------------------------------------------------------------
-  * LVM2 uses O_DIRECT when performing metadata io, which requires
-  * block size aligned accesses.  If any io is not aligned we have
-@@ -230,12 +255,13 @@ static void _widen_region(unsigned int block_size, struct device_area *region,
- static int _aligned_io(struct device_area *where, char *buffer,
- 		       int should_write, dev_io_reason_t reason)
- {
--	char *bounce, *bounce_buf;
-+	char *bounce, *bounce_buf = NULL;
- 	unsigned int physical_block_size = 0;
- 	unsigned int block_size = 0;
- 	unsigned buffer_was_widened = 0;
- 	uintptr_t mask;
- 	struct device_area widened;
-+	struct device_buffer *devbuf;
- 	int r = 0;
- 
- 	if (!(where->dev->flags & DEV_REGULAR) &&
-@@ -253,59 +279,81 @@ static int _aligned_io(struct device_area *where, char *buffer,
- 		buffer_was_widened = 1;
- 		log_debug_io("Widening request for %" PRIu64 " bytes at %" PRIu64 " to %" PRIu64 " bytes at %" PRIu64 " on %s (for %s)",
+@@ -284,7 +284,7 @@ static int _aligned_io(struct device_area *where, char *buffer,
  			     where->size, (uint64_t) where->start, widened.size, (uint64_t) widened.start, dev_name(where->dev), _reason_text(reason));
--	} else if (!((uintptr_t) buffer & mask))
--		/* Perform the I/O directly. */
--		return _io(where, buffer, should_write, reason);
-+	} 
+ 	} 
  
-+	if (!buffer_was_widened && !((uintptr_t) buffer & mask))
-+		/* Perform the I/O directly. */
-+		bounce = buffer;
+-	if (!buffer_was_widened && !((uintptr_t) buffer & mask))
++	if (should_write && !buffer_was_widened && !((uintptr_t) buffer & mask))
+ 		/* Perform the I/O directly. */
+ 		bounce = buffer;
  #ifndef DEBUG_MEM
--	/* Allocate a bounce buffer with an extra block */
--	if (!(bounce_buf = bounce = dm_malloc_aligned((size_t) widened.size, 0))) {
-+	else if (!(bounce_buf = bounce = dm_malloc_aligned((size_t) widened.size, 0))) {
- 		log_error("Bounce buffer malloc failed");
- 		return 0;
+@@ -308,7 +308,7 @@ static int _aligned_io(struct device_area *where, char *buffer,
  	}
- #else
--	/* Allocate a bounce buffer with an extra block */
--	if (!(bounce_buf = bounce = dm_malloc((size_t) widened.size + block_size))) {
--		log_error("Bounce buffer malloc failed");
--		return 0;
--	}
-+	else {
-+		/* Allocate a bounce buffer with an extra block */
-+		if (!(bounce_buf = bounce = dm_malloc((size_t) widened.size + block_size))) {
-+			log_error("Bounce buffer malloc failed");
-+			return 0;
-+		}
- 
--	/*
--	 * Realign start of bounce buffer (using the extra sector)
--	 */
--	if (((uintptr_t) bounce) & mask)
--		bounce = (char *) ((((uintptr_t) bounce) + mask) & ~mask);
-+		/*
-+		 * Realign start of bounce buffer (using the extra sector)
-+		 */
-+		if (((uintptr_t) bounce) & mask)
-+			bounce = (char *) ((((uintptr_t) bounce) + mask) & ~mask);
-+	}
  #endif
  
-+	devbuf = EXTRA_IO(reason) ? &where->dev->last_extra_devbuf : &where->dev->last_devbuf;
-+ 	_release_devbuf(devbuf);
-+	devbuf->malloc_address = bounce_buf;
-+	devbuf->buf = bounce;
-+	devbuf->where.dev = where->dev;
-+	devbuf->where.start = widened.start;
-+	devbuf->where.size = widened.size;
-+	devbuf->write = 0;
-+
- 	/* Do we need to read into the bounce buffer? */
- 	if ((!should_write || buffer_was_widened) &&
--	    !_io(&widened, bounce, 0, reason)) {
-+	    !_io(devbuf, reason)) {
- 		if (!should_write)
--			goto_out;
-+			goto_bad;
- 		/* FIXME Handle errors properly! */
- 		/* FIXME pre-extend the file */
- 		memset(bounce, '\n', widened.size);
+-	devbuf = EXTRA_IO(reason) ? &where->dev->last_extra_devbuf : &where->dev->last_devbuf;
++	devbuf = DEV_DEVBUF(where->dev, reason);
+  	_release_devbuf(devbuf);
+ 	devbuf->malloc_address = bounce_buf;
+ 	devbuf->buf = bounce;
+@@ -345,9 +345,6 @@ static int _aligned_io(struct device_area *where, char *buffer,
  	}
  
- 	if (should_write) {
--		memcpy(bounce + (where->start - widened.start), buffer,
+ 	/* read */
+-	if (bounce_buf)
+-		memcpy(buffer, bounce + (where->start - widened.start),
 -		       (size_t) where->size);
-+		if (bounce_buf) {
-+			memcpy(bounce + (where->start - widened.start), buffer,
-+			       (size_t) where->size);
-+			log_debug_io("Overwriting %" PRIu64 " bytes at %" PRIu64 " (for %s)", where->size,
-+				     (uint64_t) where->start, _reason_text(reason));
-+		}
  
- 		/* ... then we write */
--		if (!(r = _io(&widened, bounce, 1, reason)))
--			stack;
-+		devbuf->write = 1;
-+		if (!(r = _io(devbuf, reason)))
-+			goto_bad;
- 			
--		goto out;
-+		_release_devbuf(devbuf);
-+		return 1;
- 	}
- 
--	memcpy(buffer, bounce + (where->start - widened.start),
--	       (size_t) where->size);
-+	/* read */
-+	if (bounce_buf)
-+		memcpy(buffer, bounce + (where->start - widened.start),
-+		       (size_t) where->size);
- 
--	r = 1;
-+	/* We store what we just read as it often also satisfies the next request */
-+	devbuf->data = bounce + (where->start - widened.start);
- 
--out:
--	dm_free(bounce_buf);
--	return r;
-+	return 1;
-+
-+bad:
-+	_release_devbuf(devbuf);
-+	return 0;
+ 	/* We store what we just read as it often also satisfies the next request */
+ 	devbuf->data = bounce + (where->start - widened.start);
+@@ -782,7 +779,10 @@ static void _dev_inc_error_count(struct device *dev)
+ 			 dev->max_error_count, dev_name(dev));
  }
  
- static int _dev_get_size_file(struct device *dev, uint64_t *size)
+-static int _dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t reason, char *buf)
++/*
++ * Data is returned (read-only) at dev->last_[extra_]devbuf->data
++ */
++static int _dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t reason)
+ {
+ 	struct device_area where;
+ 	int ret;
+@@ -797,7 +797,7 @@ static int _dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_rea
+ 	where.start = offset;
+ 	where.size = len;
+ 
+-	ret = _aligned_io(&where, buf, 0, reason);
++	ret = _aligned_io(&where, NULL, 0, reason);
+ 	if (!ret)
+ 		_dev_inc_error_count(dev);
+ 
+@@ -814,30 +814,24 @@ char *dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t
+ 		return NULL;
+ 	}
+ 
+-	if (!_dev_read(dev, offset, len, reason, buf)) {
++	if (!_dev_read(dev, offset, len, reason)) {
+ 		log_error("Read from %s failed", dev_name(dev));
+ 		dm_free(buf);
+ 		return NULL;
+ 	}
+ 
++	memcpy(buf, DEV_DEVBUF(dev, reason)->data, len);
++
+ 	return buf;
+ }
+ 
+-/* Callback fn is responsible for dm_free */
+ int dev_read_callback(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t reason,
+ 		      lvm_callback_fn_t dev_read_callback_fn, void *callback_context)
+ {
+-	char *buf;
+ 	int r = 0;
+ 
+-	if (!(buf = dm_malloc(len))) {
+-		log_error("Buffer allocation failed for device read.");
+-		goto out;
+-	}
+-
+-	if (!_dev_read(dev, offset, len, reason, buf)) {
++	if (!_dev_read(dev, offset, len, reason)) {
+ 		log_error("Read from %s failed", dev_name(dev));
+-		dm_free(buf);
+ 		goto out;
+ 	}
+ 
+@@ -845,7 +839,7 @@ int dev_read_callback(struct device *dev, uint64_t offset, size_t len, dev_io_re
+ 
+ out:
+ 	if (dev_read_callback_fn)
+-		dev_read_callback_fn(!r, callback_context, buf);
++		dev_read_callback_fn(!r, callback_context, DEV_DEVBUF(dev, reason)->data);
+ 
+ 	return r;
+ }
+@@ -879,18 +873,22 @@ char *dev_read_circular(struct device *dev, uint64_t offset, size_t len,
+ 		return NULL;
+ 	}
+ 
+-	if (!_dev_read(dev, offset, len, reason, buf)) {
++	if (!_dev_read(dev, offset, len, reason)) {
+ 		log_error("Read from %s failed", dev_name(dev));
+ 		dm_free(buf);
+ 		return NULL;
+ 	}
+ 
+-	if (!_dev_read(dev, offset2, len2, reason, buf + len)) {
++	memcpy(buf, DEV_DEVBUF(dev, reason)->data, len);
++
++	if (!_dev_read(dev, offset2, len2, reason)) {
+ 		log_error("Circular read from %s failed", dev_name(dev));
+ 		dm_free(buf);
+ 		return NULL;
+ 	}
+ 
++	memcpy(buf + len, DEV_DEVBUF(dev, reason)->data, len2);
++
+ 	return buf;
+ }
+ 
 diff --git a/lib/device/device.h b/lib/device/device.h
-index 4349222..1728596 100644
+index 1728596..cf44362 100644
 --- a/lib/device/device.h
 +++ b/lib/device/device.h
-@@ -56,6 +56,22 @@ struct dev_ext {
- 	void *handle;
- };
+@@ -124,6 +124,7 @@ typedef enum dev_io_reason {
+  * Is this I/O for a device's extra metadata area?
+  */
+ #define EXTRA_IO(reason) ((reason) == DEV_IO_MDA_EXTRA_HEADER || (reason) == DEV_IO_MDA_EXTRA_CONTENT)
++#define DEV_DEVBUF(dev, reason) (EXTRA_IO((reason)) ? &(dev)->last_extra_devbuf : &(dev)->last_devbuf)
  
-+struct device_area {
-+	struct device *dev;
-+	uint64_t start;		/* Bytes */
-+	uint64_t size;		/* Bytes */
-+};
-+
-+struct device_buffer {
-+	void *data;             /* Location of start of requested data (inside buf) */
-+
-+	/* Private */
-+	void *malloc_address;   /* Start of allocated memory */
-+	void *buf;              /* Aligned buffer that contains data within it */
-+	struct device_area where;       /* Location of buf */
-+	unsigned write:1;       /* 1 if write; 0 if read */
-+};
-+
- /*
-  * All devices in LVM will be represented by one of these.
-  * pointer comparisons are valid.
-@@ -78,6 +94,8 @@ struct device {
- 	uint64_t end;
- 	struct dm_list open_list;
- 	struct dev_ext ext;
-+	struct device_buffer last_devbuf;       /* Last data buffer read from the device */
-+	struct device_buffer last_extra_devbuf; /* Last data buffer read from the device for extra metadata area */
- 
- 	const char *vgid; /* if device is an LV */
- 	const char *lvid; /* if device is an LV */
-@@ -102,17 +120,16 @@ typedef enum dev_io_reason {
- 	DEV_IO_LOG		/* Logging messages */
- } dev_io_reason_t;
- 
-+/*
-+ * Is this I/O for a device's extra metadata area?
-+ */
-+#define EXTRA_IO(reason) ((reason) == DEV_IO_MDA_EXTRA_HEADER || (reason) == DEV_IO_MDA_EXTRA_CONTENT)
-+
  struct device_list {
  	struct dm_list list;
- 	struct device *dev;
- };
- 
--struct device_area {
--	struct device *dev;
--	uint64_t start;		/* Bytes */
--	uint64_t size;		/* Bytes */
--};
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 7e80a11..26a5007 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -385,9 +385,6 @@ static void _process_raw_mda_header(int failed, void *context, void *data)
+ bad:
+ 	prmp->ret = 0;
+ out:
+-	if (!failed)
+-		dm_free(data);
 -
- /*
-  * Support for external device info.
-  */
-@@ -174,6 +191,8 @@ struct device *dev_create_file(const char *filename, struct device *dev,
- 			       struct dm_str_list *alias, int use_malloc);
- void dev_destroy_file(struct device *dev);
+ 	if (prmp->ret && prmp->mdah_callback_fn)
+ 		prmp->mdah_callback_fn(0, prmp->mdah_callback_context, mdah);
+ }
+@@ -1474,8 +1471,7 @@ static void _vgname_from_mda_validate(int failed, void *context, void *data)
+ 	}
  
-+void devbufs_release(struct device *dev);
-+
- /* Return a valid device name from the alias list; NULL otherwise */
- const char *dev_name_confirmed(struct device *dev, int quiet);
+ out:
+-	if (!failed)
+-		dm_free(data);
++	;
+ }
  
+ int vgname_from_mda(const struct format_type *fmt,
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 362a1b0..919a507 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -226,8 +226,6 @@ static void _find_labeller(int failed, void *context, void *data)
+ 		}
+ 	}
+ 
+-	dm_free(readbuf);
+-
+ 	if (!l) {
+ 		if ((info = lvmcache_info_from_pvid(dev->pvid, dev, 0)))
+ 			_update_lvmcache_orphan(info);
 
 
