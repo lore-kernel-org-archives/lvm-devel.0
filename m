@@ -1,66 +1,54 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Wed, 10 Jan 2018 10:53:07 -0500
-Subject: master - label: Rename a variable
-Message-ID: <201801101553.w0AFr7O3004676@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 10 Jan 2018 10:53:22 -0500
+Subject: master - allocation: Avoid exceeding array bounds in allocation tag code
+Message-ID: <201801101553.w0AFrMOU004702@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b65246499bb126097ca8a81c3de0ca39f4f56320
-Commit:        b65246499bb126097ca8a81c3de0ca39f4f56320
-Parent:        ea96381534360d6a893f0a48db8dd15fcb9ced33
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bacc94233368cf136b55e2574e969e7f53b31c6c
+Commit:        bacc94233368cf136b55e2574e969e7f53b31c6c
+Parent:        e2438b5b9ff526cae8fa29ca7023b43995f00647
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Jan 9 21:13:46 2018 +0000
+AuthorDate:    Wed Jan 10 02:03:32 2018 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
 CommitterDate: Wed Jan 10 15:48:03 2018 +0000
 
-label: Rename a variable
+allocation: Avoid exceeding array bounds in allocation tag code
 
+If _limit_to_one_area_per_tag() changes nothing it writes beyond
+the array.
 ---
- lib/label/label.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index ccee95d..362a1b0 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -248,7 +248,7 @@ int label_remove(struct device *dev)
- 	struct labeller_i *li;
- 	struct label_header *lh;
- 	struct lvmcache_info *info;
--	char *buf = NULL;
-+	char *readbuf = NULL;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 345c472..897576c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.178 - 
+ =====================================
++  Avoid exceeding array bounds in allocation tag processing.
+   Refactor metadata reading code to use callback functions.
+   Move memory allocation for the key dev_reads into the device layer.
  
- 	memset(labelbuf, 0, LABEL_SIZE);
- 
-@@ -263,7 +263,7 @@ int label_remove(struct device *dev)
- 	 */
- 	dev_flush(dev);
- 
--	if (!(buf = dev_read(dev, UINT64_C(0), LABEL_SCAN_SIZE, DEV_IO_LABEL))) {
-+	if (!(readbuf = dev_read(dev, UINT64_C(0), LABEL_SCAN_SIZE, DEV_IO_LABEL))) {
- 		log_debug_devs("%s: Failed to read label area", dev_name(dev));
- 		goto out;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 70dc2d9..ac30dad 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -2737,7 +2737,8 @@ static int _limit_to_one_area_per_tag(struct alloc_handle *ah, struct alloc_stat
+ 		s++;
  	}
-@@ -271,7 +271,7 @@ int label_remove(struct device *dev)
- 	/* Scan first few sectors for anything looking like a label */
- 	for (sector = 0; sector < LABEL_SCAN_SECTORS;
- 	     sector += LABEL_SIZE >> SECTOR_SHIFT) {
--		lh = (struct label_header *) (buf + (sector << SECTOR_SHIFT));
-+		lh = (struct label_header *) (readbuf + (sector << SECTOR_SHIFT));
  
- 		wipe = 0;
+-	alloc_state->areas[u].pva = NULL;
++	if (u < alloc_state->areas_size)
++		alloc_state->areas[u].pva = NULL;
  
-@@ -309,7 +309,7 @@ int label_remove(struct device *dev)
- 	if (!dev_close(dev))
- 		stack;
- 
--	dm_free(buf);
-+	dm_free(readbuf);
- 	return r;
+ 	return 1;
  }
- 
 
 
