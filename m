@@ -1,40 +1,66 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 10 Jan 2018 10:19:03 -0500
-Subject: master - man lvmlockd: remove lv resizing comment
-Message-ID: <201801101519.w0AFJ3f9030923@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Alasdair Kergon <agk@sourceware.org>
+Date: Wed, 10 Jan 2018 10:53:07 -0500
+Subject: master - label: Rename a variable
+Message-ID: <201801101553.w0AFr7O3004676@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=943b21779770f1cd93e73925e62f108e2efbd6cc
-Commit:        943b21779770f1cd93e73925e62f108e2efbd6cc
-Parent:        51340888aab5e1b8630c7d8083e621ca0f4e4264
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jan 10 09:15:52 2018 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jan 10 09:17:57 2018 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b65246499bb126097ca8a81c3de0ca39f4f56320
+Commit:        b65246499bb126097ca8a81c3de0ca39f4f56320
+Parent:        ea96381534360d6a893f0a48db8dd15fcb9ced33
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Tue Jan 9 21:13:46 2018 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Wed Jan 10 15:48:03 2018 +0000
 
-man lvmlockd: remove lv resizing comment
+label: Rename a variable
 
 ---
- man/lvmlockd.8_main |    3 ---
- 1 files changed, 0 insertions(+), 3 deletions(-)
+ lib/label/label.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/man/lvmlockd.8_main b/man/lvmlockd.8_main
-index bb45871..6f982bd 100644
---- a/man/lvmlockd.8_main
-+++ b/man/lvmlockd.8_main
-@@ -862,9 +862,6 @@ vgsplit
- .br
- \[bu]
- vgmerge
--.br
--\[bu]
--resizing an LV that is active in the shared mode on multiple hosts
+diff --git a/lib/label/label.c b/lib/label/label.c
+index ccee95d..362a1b0 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -248,7 +248,7 @@ int label_remove(struct device *dev)
+ 	struct labeller_i *li;
+ 	struct label_header *lh;
+ 	struct lvmcache_info *info;
+-	char *buf = NULL;
++	char *readbuf = NULL;
  
+ 	memset(labelbuf, 0, LABEL_SIZE);
  
- .SS lvmlockd changes from clvmd
+@@ -263,7 +263,7 @@ int label_remove(struct device *dev)
+ 	 */
+ 	dev_flush(dev);
+ 
+-	if (!(buf = dev_read(dev, UINT64_C(0), LABEL_SCAN_SIZE, DEV_IO_LABEL))) {
++	if (!(readbuf = dev_read(dev, UINT64_C(0), LABEL_SCAN_SIZE, DEV_IO_LABEL))) {
+ 		log_debug_devs("%s: Failed to read label area", dev_name(dev));
+ 		goto out;
+ 	}
+@@ -271,7 +271,7 @@ int label_remove(struct device *dev)
+ 	/* Scan first few sectors for anything looking like a label */
+ 	for (sector = 0; sector < LABEL_SCAN_SECTORS;
+ 	     sector += LABEL_SIZE >> SECTOR_SHIFT) {
+-		lh = (struct label_header *) (buf + (sector << SECTOR_SHIFT));
++		lh = (struct label_header *) (readbuf + (sector << SECTOR_SHIFT));
+ 
+ 		wipe = 0;
+ 
+@@ -309,7 +309,7 @@ int label_remove(struct device *dev)
+ 	if (!dev_close(dev))
+ 		stack;
+ 
+-	dm_free(buf);
++	dm_free(readbuf);
+ 	return r;
+ }
+ 
 
 
