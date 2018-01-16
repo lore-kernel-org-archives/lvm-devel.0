@@ -1,120 +1,107 @@
 From: Alasdair Kergon <agk@sourceware.org>
-Date: Mon, 15 Jan 2018 22:17:03 -0500
-Subject: master - command: Skip some memory zeroing.
-Message-ID: <201801160317.w0G3H3Mq025327@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 15 Jan 2018 22:17:06 -0500
+Subject: master - device: Reorder device.h before change.
+Message-ID: <201801160317.w0G3H6HS025339@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=da37cbd24fc0073f3f00a3b7aac7807d2185b829
-Commit:        da37cbd24fc0073f3f00a3b7aac7807d2185b829
-Parent:        e4e2abc8bc2f257c2d0f9458bab7c87d34626be3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=61d3296f2aae134a9215a9c9c2f3146a75fddc19
+Commit:        61d3296f2aae134a9215a9c9c2f3146a75fddc19
+Parent:        da37cbd24fc0073f3f00a3b7aac7807d2185b829
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Jan 13 03:36:53 2018 +0000
+AuthorDate:    Mon Jan 15 19:24:01 2018 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Jan 13 03:44:15 2018 +0000
+CommitterDate: Mon Jan 15 19:24:01 2018 +0000
 
-command: Skip some memory zeroing.
+device: Reorder device.h before change.
 
-commands[] is in bss, its content wouldn't change if reinitialised
-and unregister has no memory to free so don't bother.
 ---
- tools/command.c    |   11 ++++++-----
- tools/lvmcmdline.c |   12 ------------
- 2 files changed, 6 insertions(+), 17 deletions(-)
+ lib/device/device.h |   56 ++++++++++++++++++++++++--------------------------
+ 1 files changed, 27 insertions(+), 29 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 1a712cc..5a5f351 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -1356,13 +1356,11 @@ static void _create_opt_names_alpha(void)
- 	qsort(opt_names_alpha, ARG_COUNT, sizeof(long), _long_name_compare);
- }
+diff --git a/lib/device/device.h b/lib/device/device.h
+index 926d24a..6280138 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -56,6 +56,28 @@ struct dev_ext {
+ 	void *handle;
+ };
  
--static int _copy_line(char *line, int max_line, int *position)
-+static int _copy_line(char *line, int max_line, int *position, int *len)
- {
- 	int p = *position;
- 	int i = 0;
++/*
++ * All I/O is annotated with the reason it is performed.
++ */
++typedef enum dev_io_reason {
++	DEV_IO_SIGNATURES = 0,	/* Scanning device signatures */
++	DEV_IO_LABEL,		/* LVM PV disk label */
++	DEV_IO_MDA_HEADER,	/* Text format metadata area header */
++	DEV_IO_MDA_CONTENT,	/* Text format metadata area content */
++	DEV_IO_MDA_EXTRA_HEADER,	/* Header of any extra metadata areas on device */
++	DEV_IO_MDA_EXTRA_CONTENT,	/* Content of any extra metadata areas on device */
++	DEV_IO_FMT1,		/* Original LVM1 metadata format */
++	DEV_IO_POOL,		/* Pool metadata format */
++	DEV_IO_LV,		/* Content written to an LV */
++	DEV_IO_LOG		/* Logging messages */
++} dev_io_reason_t;
++
++/*
++ * Is this I/O for a device's extra metadata area?
++ */
++#define EXTRA_IO(reason) ((reason) == DEV_IO_MDA_EXTRA_HEADER || (reason) == DEV_IO_MDA_EXTRA_CONTENT)
++#define DEV_DEVBUF(dev, reason) (EXTRA_IO((reason)) ? &(dev)->last_extra_devbuf : &(dev)->last_devbuf)
++
+ struct device_area {
+ 	struct device *dev;
+ 	uint64_t start;		/* Bytes */
+@@ -63,13 +85,11 @@ struct device_area {
+ };
  
--	memset(line, 0, max_line);
+ struct device_buffer {
+-	const void *data;             /* Location of start of requested data (inside buf) */
 -
- 	while (1) {
- 		line[i] = _command_input[p];
- 		i++;
-@@ -1376,7 +1374,9 @@ static int _copy_line(char *line, int max_line, int *position)
- 		if (i == (max_line - 1))
- 			break;
- 	}
-+	line[i] = '\0';
- 	*position = p;
-+	*len = i + 1;
- 	return 1;
- }
+-	/* Private */
+-	void *malloc_address;   /* Start of allocated memory */
+-	void *buf;              /* Aligned buffer that contains data within it */
+-	struct device_area where;       /* Location of buf */
+-	unsigned write:1;       /* 1 if write; 0 if read */
++	const void *data;	/* Location of start of requested data (inside buf) */
++	void *malloc_address;	/* Start of allocated memory */
++	void *buf;		/* Aligned buffer that contains data within it */
++	struct device_area where;	/* Location of buf */
++	unsigned write:1;	/* 1 if write; 0 if read */
+ };
  
-@@ -1394,6 +1394,7 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
- 	int prev_was_oo = 0;
- 	int prev_was_op = 0;
- 	int copy_pos = 0;
-+	int copy_len = 0;
- 	int skip = 0;
- 	int i;
+ /*
+@@ -104,28 +124,6 @@ struct device {
+ 	char _padding[7];
+ };
  
-@@ -1404,14 +1405,14 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
- 
- 	/* Process each line of command-lines-input.h (from command-lines.in) */
- 
--	while (_copy_line(line, MAX_LINE, &copy_pos)) {
-+	while (_copy_line(line, MAX_LINE, &copy_pos, &copy_len)) {
- 		if (line[0] == '\n')
- 			break;
- 
- 		if ((n = strchr(line, '\n')))
- 			*n = '\0';
- 
--		memcpy(line_orig, line, sizeof(line));
-+		memcpy(line_orig, line, copy_len);
- 		_split_line(line, &line_argc, line_argv, ' ');
- 
- 		if (!line_argc)
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 6be4bcd..246d332 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1262,15 +1262,6 @@ static const struct command_function *_find_command_id_function(int command_enum
- 	return NULL;
- }
- 
--static void _unregister_commands(void)
--{
--	_cmdline.commands = NULL;
--	_cmdline.num_commands = 0;
--	_cmdline.command_names = NULL;
--	_cmdline.num_command_names = 0;
--	memset(&commands, 0, sizeof(commands));
--}
+-/*
+- * All I/O is annotated with the reason it is performed.
+- */
+-typedef enum dev_io_reason {
+-	DEV_IO_SIGNATURES = 0,	/* Scanning device signatures */
+-	DEV_IO_LABEL,		/* LVM PV disk label */
+-	DEV_IO_MDA_HEADER,	/* Text format metadata area header */
+-	DEV_IO_MDA_CONTENT,	/* Text format metadata area content */
+-	DEV_IO_MDA_EXTRA_HEADER,	/* Header of any extra metadata areas on device */
+-	DEV_IO_MDA_EXTRA_CONTENT,	/* Content of any extra metadata areas on device */
+-	DEV_IO_FMT1,		/* Original LVM1 metadata format */
+-	DEV_IO_POOL,		/* Pool metadata format */
+-	DEV_IO_LV,		/* Content written to an LV */
+-	DEV_IO_LOG		/* Logging messages */
+-} dev_io_reason_t;
 -
- int lvm_register_commands(struct cmd_context *cmd, const char *run_name)
- {
- 	int i;
-@@ -1279,8 +1270,6 @@ int lvm_register_commands(struct cmd_context *cmd, const char *run_name)
- 	if (_cmdline.commands)
- 		return 1;
- 
--	memset(&commands, 0, sizeof(commands));
+-/*
+- * Is this I/O for a device's extra metadata area?
+- */
+-#define EXTRA_IO(reason) ((reason) == DEV_IO_MDA_EXTRA_HEADER || (reason) == DEV_IO_MDA_EXTRA_CONTENT)
+-#define DEV_DEVBUF(dev, reason) (EXTRA_IO((reason)) ? &(dev)->last_extra_devbuf : &(dev)->last_devbuf)
 -
- 	/*
- 	 * populate commands[] array with command definitions
- 	 * by parsing command-lines.in/command-lines-input.h
-@@ -3335,7 +3324,6 @@ struct cmd_context *init_lvm(unsigned set_connections, unsigned set_filters)
- 
- void lvm_fin(struct cmd_context *cmd)
- {
--	_unregister_commands();
- 	destroy_toolcontext(cmd);
- 	udev_fin_library_context();
- }
+ struct device_list {
+ 	struct dm_list list;
+ 	struct device *dev;
 
 
