@@ -1,64 +1,75 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Jan 2018 08:46:53 -0500
-Subject: master - tests: check preserved exclusivness of snapshot merge
-Message-ID: <201801171346.w0HDkrmM030061@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 17 Jan 2018 08:47:02 -0500
+Subject: master - tests: longer startup timeout for daemons with valgrind
+Message-ID: <201801171347.w0HDl24Z030078@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8ebd45fde759c438e854d6b4f02f0e9803094fea
-Commit:        8ebd45fde759c438e854d6b4f02f0e9803094fea
-Parent:        8c7ec44bf0fb23e2c5e426c5d07b02e3d25f5b59
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5baf2de8986ceeb353c39ccf0503f9fefcb6eb92
+Commit:        5baf2de8986ceeb353c39ccf0503f9fefcb6eb92
+Parent:        8ebd45fde759c438e854d6b4f02f0e9803094fea
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 15 13:29:14 2018 +0100
+AuthorDate:    Mon Jan 15 16:26:34 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jan 17 14:45:48 2018 +0100
 
-tests: check preserved exclusivness of snapshot merge
+tests: longer startup timeout for daemons with valgrind
 
-Detect if origin remains exclusively activated after merging.
+It's getting noticable somewhat slower...
 ---
- test/shell/snapshot-merge.sh |    4 ++++
- test/shell/thin-merge.sh     |    9 +++++++++
- 2 files changed, 13 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |   16 ++++++++--------
+ 1 files changed, 8 insertions(+), 8 deletions(-)
 
-diff --git a/test/shell/snapshot-merge.sh b/test/shell/snapshot-merge.sh
-index 9d0a264..41e7b00 100644
---- a/test/shell/snapshot-merge.sh
-+++ b/test/shell/snapshot-merge.sh
-@@ -54,7 +54,11 @@ setup_merge_ $vg $lv1
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index fa9a1a2..fbba84b 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -180,8 +180,8 @@ prepare_clvmd() {
+ 	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 LVM_BINARY=$(which lvm) $run_valgrind clvmd -Isinglenode -d 1 -f &
+ 	echo $! > LOCAL_CLVMD
  
- # make sure lvconvert --merge requires explicit LV listing
- not lvconvert --merge
-+
-+# check exclusive lock is preserved after merge
-+check lv_field "$vg/$lv1" lv_active_exclusively "active exclusively"
- lvconvert --merge "$vg/$(snap_lv_name_ "$lv1")"
-+check lv_field "$vg/$lv1" lv_active_exclusively "active exclusively"
- lvremove -f $vg/$lv1
+-	for i in {1..100} ; do
+-		test "$i" -eq 100 && die "Startup of clvmd is too slow."
++	for i in {200..0} ; do
++		test "$i" -eq 0 && die "Startup of clvmd is too slow."
+ 		test -e "$CLVMD_PIDFILE" && test -e "${CLVMD_PIDFILE%/*}/lvm/clvmd.sock" && break
+ 		echo -n .
+ 		sleep .1
+@@ -205,8 +205,8 @@ prepare_dmeventd() {
+ 	echo $! > LOCAL_DMEVENTD
  
- setup_merge_ $vg $lv1
-diff --git a/test/shell/thin-merge.sh b/test/shell/thin-merge.sh
-index 3abda40..24dec96 100644
---- a/test/shell/thin-merge.sh
-+++ b/test/shell/thin-merge.sh
-@@ -30,6 +30,15 @@ aux have_thin 1 0 0 || skip
- aux prepare_vg 2
- 
- lvcreate -T -L8M $vg/pool -V10M -n $lv1
-+lvcreate -s -K -n snap $vg/$lv1
-+# check exclusive lock is preserved after merge
-+check lv_field "$vg/$lv1" lv_active_exclusively "active exclusively"
-+lvconvert --merge $vg/snap
-+check lv_field "$vg/$lv1" lv_active_exclusively "active exclusively"
-+lvremove -ff $vg
-+
-+
-+lvcreate -T -L8M $vg/pool -V10M -n $lv1
- lvchange --addtag tagL $vg/$lv1
- 
- mkdir mnt
+ 	# FIXME wait for pipe in /var/run instead
+-	for i in {1..100} ; do
+-		test "$i" -eq 100 && die "Startup of dmeventd is too slow."
++	for i in {200..0} ; do
++		test "$i" -eq 0 && die "Startup of dmeventd is too slow."
+ 		test -e "${DMEVENTD_PIDFILE}" && break
+ 		echo -n .
+ 		sleep .1
+@@ -230,8 +230,8 @@ prepare_lvmetad() {
+ 	$run_valgrind lvmetad -f "$@" -s "$TESTDIR/lvmetad.socket" \
+ 		${LVM_TEST_LVMETAD_DEBUG_OPTS--l all} &
+ 	echo $! > LOCAL_LVMETAD
+-	for i in {1..100} ; do
+-		test "$i" -eq 100 && die "Startup of lvmetad is too slow."
++	for i in {200..0} ; do
++		test "$i" -eq 0 && die "Startup of lvmetad is too slow."
+ 		test -e "$TESTDIR/lvmetad.socket" && break
+ 		echo -n .
+ 		sleep .1;
+@@ -280,8 +280,8 @@ prepare_lvmpolld() {
+ 	echo -n "## preparing lvmpolld..."
+ 	$run_valgrind lvmpolld -f "$@" -s "$TESTDIR/lvmpolld.socket" -B "$TESTDIR/lib/lvm" -l all &
+ 	echo $! > LOCAL_LVMPOLLD
+-	for i in {1..100} ; do
+-		test "$i" -eq 100 && die "Startup of lvmpolld is too slow."
++	for i in {200..0} ; do
++		test "$i" -eq 0 && die "Startup of lvmpolld is too slow."
+ 		test -e "$TESTDIR/lvmpolld.socket" && break
+ 		echo -n .;
+ 		sleep .1;
 
 
