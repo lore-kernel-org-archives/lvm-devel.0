@@ -1,41 +1,65 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Jan 2018 05:46:26 -0500
-Subject: master - python: some LVs do need exclusive activation
-Message-ID: <201801231046.w0NAkQS4026871@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 23 Jan 2018 05:46:32 -0500
+Subject: master - debug: drop DEBUG_MEM path
+Message-ID: <201801231046.w0NAkWpi027010@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2ee105089a261f5db2ba8b93c30708ba66dd1a01
-Commit:        2ee105089a261f5db2ba8b93c30708ba66dd1a01
-Parent:        9194610f42901c88a3393b679afabbdca7145268
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6e9148e7ab8d073c448ed56c5e2e019751feff88
+Commit:        6e9148e7ab8d073c448ed56c5e2e019751feff88
+Parent:        2ee105089a261f5db2ba8b93c30708ba66dd1a01
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 22 11:39:05 2018 +0100
+AuthorDate:    Tue Jan 23 11:41:53 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Jan 23 11:45:18 2018 +0100
 
-python: some LVs do need exclusive activation
+debug: drop DEBUG_MEM path
 
+Memory is not allocated so no DEBUG_MEM part is needed.
 ---
- liblvm/lvm_lv.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ lib/device/dev-io.c |   18 +-----------------
+ 1 files changed, 1 insertions(+), 17 deletions(-)
 
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 20ceda3..e5a35c4 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -304,7 +304,9 @@ static int _lvm_lv_activate(lv_t lv)
- 		return -1;
- 	}
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index 0137d5d..c466612 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -303,7 +303,7 @@ static int _aligned_io(struct device_area *where, char *write_buffer,
+ 	} 
  
--	if (lv_is_origin(lv)) {
-+	if (lv_is_origin(lv) ||
-+	    lv_is_pvmove(lv) ||
-+	    seg_only_exclusive(first_seg(lv))) {
- 		log_verbose("Activating logical volume \"%s\" "
- 			    "exclusively", lv->name);
- 		if (!activate_lv_excl(lv->vg->cmd, lv)) {
+ 	devbuf = DEV_DEVBUF(where->dev, reason);
+- 	_release_devbuf(devbuf);
++	_release_devbuf(devbuf);
+ 	devbuf->where.dev = where->dev;
+ 	devbuf->where.start = widened.start;
+ 	devbuf->where.size = widened.size;
+@@ -317,24 +317,8 @@ static int _aligned_io(struct device_area *where, char *write_buffer,
+ 		/* Perform the I/O directly. */
+ 		devbuf->buf = write_buffer;
+ 	else
+-#ifndef DEBUG_MEM
+ 		/* Postpone buffer allocation until we're about to issue the I/O */
+ 		devbuf->buf = NULL;
+-#else
+-	else {
+-		/* Allocate a bounce buffer with an extra block */
+-		if (!(devbuf->malloc_address = devbuf->buf = dm_malloc((size_t) devbuf->where.size + block_size))) {
+-			log_error("Bounce buffer malloc failed");
+-			return 0;
+-		}
+-
+-		/*
+-		 * Realign start of bounce buffer (using the extra sector)
+-		 */
+-		if (((uintptr_t) devbuf->buf) & mask)
+-			devbuf->buf = (char *) ((((uintptr_t) devbuf->buf) + mask) & ~mask);
+-	}
+-#endif
+ 
+ 	devbuf->write = 0;
+ 
 
 
