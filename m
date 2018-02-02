@@ -1,310 +1,182 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 1 Feb 2018 15:58:51 -0500
-Subject: master - configure: ensure path /usr/sbin is checked for some tools
-Message-ID: <201802012058.w11Kwp4x018385@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Ren <zren@suse.com>
+Date: Fri, 2 Feb 2018 22:56:54 +0800
+Subject: [PATCH 2/2] lvm2: 69-dm-lvm-metad.rules: set systemd vars on "change"
+In-Reply-To: <20171221115705.5055-3-mwilck@suse.com>
+References: <20171221115705.5055-1-mwilck@suse.com>
+	<20171221115705.5055-3-mwilck@suse.com>
+Message-ID: <458de616-b66e-77ed-bf4e-52128e52bac4@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e727da6cf111b07b302c08ed479336e4994635b0
-Commit:        e727da6cf111b07b302c08ed479336e4994635b0
-Parent:        4d4d5bf3234e90fbef233a376d6306e08ac6bf8d
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 29 16:20:53 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Feb 1 21:57:05 2018 +0100
+Hi,
 
-configure: ensure path /usr/sbin is checked for some tools
 
-Some tools are typically installed into /usr/sbin (or /sbin) dir.
-And some systems do not add this path to user's $PATH var.
+On 12/21/2017 07:57 PM, Martin Wilck wrote:
+> The current logic that avoids setting SYSTEMD_ALIAS and SYSTEMD_WANTS
+> on "change" events is flawed in the default "systemd background job"
+> configuration. For systemd, it's important that device properties don't
+> change spuriously.
+>
+> If an "add" event starts lvm2-pvscan at .service for a device, and a
+> "change" event follows, removing SYSTEMD_ALIAS and SYSTEMD_WANTS from the
+> udev db, information about unit dependencies between the device and the
+> pvscan service can be lost in systemd, in particular if the daemon
+> configuration is reloaded.
+>
+> Steps to reproduce problem:
+>
+> - create a device with an LVM PV
+> - remove device
+> - add device (generates "add" and "change" uevents for the device)
+>    (at this point SYSTEMD_ALIAS and SYSTEMD_WANTS are clear in udev db)
+> - systemctl daemon-reload
+>    (systemd reloads udev db)
+> - vgchange -a n
+> - remove device
+>
+> => the lvm2-pvscan at .service for the device is still active although the
+> device is gone.
+>
+> - add device again
+>
+> => the PV is not detected, because systemd sees the lvm2-pvscan at .service
+> as active and thus doesn't restart it.
+>
+> The original purpose of this logic was to avoid volumes being scanned
+> over and over again. With systemd background jobs, that isn't necessary,
+> because systemd will not restart the job as long as it's active.
+>
+> Signed-off-by: Martin Wilck <mwilck@suse.com>
 
-Ensure sbin paths are looked through...
----
- WHATS_NEW    |    1 +
- configure    |   37 +++++++++++++++++++------------------
- configure.in |   19 ++++++++++---------
- 3 files changed, 30 insertions(+), 27 deletions(-)
+These changes looks reasonable to? me:
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 75a147b..911a6e3 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.178 - 
- =====================================
-+  Configure ensures /usr/bin dir is checked for dmpd tools.
-   Restore pvmove support for wide-clustered active volumes (2.02.177).
-   Avoid non-exclusive activation of exclusive segment types.
-   Fix trimming sibling PVs when doing a pvmove of raid subLVs.
-diff --git a/configure b/configure
-index d04b9d3..0a5d225 100755
---- a/configure
-+++ b/configure
-@@ -4369,6 +4369,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
- 
- CFLAGS=$save_CFLAGS
- CXXFLAGS=$save_CXXFLAGS
-+PATH_SBIN="$PATH:/usr/sbin:/sbin"
- 
- 
- ac_ext=c
-@@ -8672,7 +8673,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -8715,7 +8716,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -8796,7 +8797,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -8839,7 +8840,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -8903,7 +8904,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -8946,7 +8947,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9010,7 +9011,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9053,7 +9054,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9221,7 +9222,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9264,7 +9265,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9357,7 +9358,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9400,7 +9401,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9464,7 +9465,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9507,7 +9508,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9571,7 +9572,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -9614,7 +9615,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -15310,7 +15311,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-@@ -15353,7 +15354,7 @@ else
-   ;;
-   *)
-   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
-+for as_dir in $PATH_SBIN
- do
-   IFS=$as_save_IFS
-   test -z "$as_dir" && as_dir=.
-diff --git a/configure.in b/configure.in
-index d879408..b8e1623 100644
---- a/configure.in
-+++ b/configure.in
-@@ -77,6 +77,7 @@ AC_PROG_CC
- AC_PROG_CXX
- CFLAGS=$save_CFLAGS
- CXXFLAGS=$save_CXXFLAGS
-+PATH_SBIN="$PATH:/usr/sbin:/sbin"
- 
- dnl probably no longer needed in 2008, but...
- AC_PROG_GCC_TRADITIONAL
-@@ -468,7 +469,7 @@ case "$THIN" in
-   internal|shared)
- 	# Empty means a config way to ignore thin checking
- 	if test "$THIN_CHECK_CMD" = "autodetect"; then
--		AC_PATH_TOOL(THIN_CHECK_CMD, thin_check)
-+		AC_PATH_TOOL(THIN_CHECK_CMD, thin_check, [], [$PATH_SBIN])
- 		if test -z "$THIN_CHECK_CMD"; then
- 			AC_MSG_WARN([thin_check not found in path $PATH])
- 			THIN_CHECK_CMD=/usr/sbin/thin_check
-@@ -492,7 +493,7 @@ case "$THIN" in
- 	fi
- 	# Empty means a config way to ignore thin dumping
- 	if test "$THIN_DUMP_CMD" = "autodetect"; then
--		AC_PATH_TOOL(THIN_DUMP_CMD, thin_dump)
-+		AC_PATH_TOOL(THIN_DUMP_CMD, thin_dump, [], [$PATH_SBIN])
- 		test -z "$THIN_DUMP_CMD" && {
- 			AC_MSG_WARN(thin_dump not found in path $PATH)
- 			THIN_DUMP_CMD=/usr/sbin/thin_dump
-@@ -501,7 +502,7 @@ case "$THIN" in
- 	fi
- 	# Empty means a config way to ignore thin repairing
- 	if test "$THIN_REPAIR_CMD" = "autodetect"; then
--		AC_PATH_TOOL(THIN_REPAIR_CMD, thin_repair)
-+		AC_PATH_TOOL(THIN_REPAIR_CMD, thin_repair, [], [$PATH_SBIN])
- 		test -z "$THIN_REPAIR_CMD" && {
- 			AC_MSG_WARN(thin_repair not found in path $PATH)
- 			THIN_REPAIR_CMD=/usr/sbin/thin_repair
-@@ -510,7 +511,7 @@ case "$THIN" in
- 	fi
- 	# Empty means a config way to ignore thin restoring
- 	if test "$THIN_RESTORE_CMD" = "autodetect"; then
--		AC_PATH_TOOL(THIN_RESTORE_CMD, thin_restore)
-+		AC_PATH_TOOL(THIN_RESTORE_CMD, thin_restore, [], [$PATH_SBIN])
- 		test -z "$THIN_RESTORE_CMD" && {
- 			AC_MSG_WARN(thin_restore not found in path $PATH)
- 			THIN_RESTORE_CMD=/usr/sbin/thin_restore
-@@ -582,7 +583,7 @@ case "$CACHE" in
-   internal|shared)
- 	# Empty means a config way to ignore cache checking
- 	if test "$CACHE_CHECK_CMD" = "autodetect"; then
--		AC_PATH_TOOL(CACHE_CHECK_CMD, cache_check)
-+		AC_PATH_TOOL(CACHE_CHECK_CMD, cache_check, [], [$PATH_SBIN])
- 		if test -z "$CACHE_CHECK_CMD"; then
- 			AC_MSG_WARN([cache_check not found in path $PATH])
- 			CACHE_CHECK_CMD=/usr/sbin/cache_check
-@@ -617,7 +618,7 @@ case "$CACHE" in
- 	fi
- 	# Empty means a config way to ignore cache dumping
- 	if test "$CACHE_DUMP_CMD" = "autodetect"; then
--		AC_PATH_TOOL(CACHE_DUMP_CMD, cache_dump)
-+		AC_PATH_TOOL(CACHE_DUMP_CMD, cache_dump, [], [$PATH_SBIN])
- 		test -z "$CACHE_DUMP_CMD" && {
- 			AC_MSG_WARN(cache_dump not found in path $PATH)
- 			CACHE_DUMP_CMD=/usr/sbin/cache_dump
-@@ -626,7 +627,7 @@ case "$CACHE" in
- 	fi
- 	# Empty means a config way to ignore cache repairing
- 	if test "$CACHE_REPAIR_CMD" = "autodetect"; then
--		AC_PATH_TOOL(CACHE_REPAIR_CMD, cache_repair)
-+		AC_PATH_TOOL(CACHE_REPAIR_CMD, cache_repair, [], [$PATH_SBIN])
- 		test -z "$CACHE_REPAIR_CMD" && {
- 			AC_MSG_WARN(cache_repair not found in path $PATH)
- 			CACHE_REPAIR_CMD=/usr/sbin/cache_repair
-@@ -635,7 +636,7 @@ case "$CACHE" in
- 	fi
- 	# Empty means a config way to ignore cache restoring
- 	if test "$CACHE_RESTORE_CMD" = "autodetect"; then
--		AC_PATH_TOOL(CACHE_RESTORE_CMD, cache_restore)
-+		AC_PATH_TOOL(CACHE_RESTORE_CMD, cache_restore, [], [$PATH_SBIN])
- 		test -z "$CACHE_RESTORE_CMD" && {
- 			AC_MSG_WARN(cache_restore not found in path $PATH)
- 			CACHE_RESTORE_CMD=/usr/sbin/cache_restore
-@@ -1870,7 +1871,7 @@ if test "$BUILD_DMFILEMAPD" = yes; then
- fi
- 
- ################################################################################
--AC_PATH_TOOL(MODPROBE_CMD, modprobe)
-+AC_PATH_TOOL(MODPROBE_CMD, modprobe, [], [$PATH_SBIN])
- 
- if test -n "$MODPROBE_CMD"; then
- 	AC_DEFINE_UNQUOTED([MODPROBE_CMD], ["$MODPROBE_CMD"], [The path to 'modprobe', if available.])
+1. The non-functional changes make the difference between 
+"systemd-backgroud"
+and "direct pvscan" methods more clear/easier to understand. For the 
+"systemd-background"
+method, `man systemd.device` can give further explanation.
+
+2. It fixes a real problem, which is easily reproduced on s390, and we 
+also managed to reproduce
+it on x86.
+
+Tested-by: Eric Ren <zren@suse.com>
+
+Thanks,
+Eric
+
+> ---
+>   udev/69-dm-lvm-metad.rules.in | 56 +++++++++++++++++++++++++++++++------------
+>   udev/Makefile.in              |  4 +++-
+>   2 files changed, 44 insertions(+), 16 deletions(-)
+>
+> diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+> index 38687f443e0c..2ff8ddc3162e 100644
+> --- a/udev/69-dm-lvm-metad.rules.in
+> +++ b/udev/69-dm-lvm-metad.rules.in
+> @@ -68,25 +68,15 @@ ACTION=="change", ENV{LVM_LOOP_PV_ACTIVATED}!="1", TEST=="loop/backing_file", EN
+>   ENV{LVM_LOOP_PV_ACTIVATED}!="1", ENV{SYSTEMD_READY}="0"
+>   GOTO="lvm_end"
+>   
+> -# If the PV is not a special device listed above, scan only after device addition (ADD event)
+> +# If the PV is not a special device listed above, scan only if necessary.
+> +# For "direct_pvscan" mode (see below), this means run rules only an ADD events.
+> +# For "systemd_background" mode, systemd takes care of this by activating
+> +# the lvm2-pvscan at .service only once.
+>   LABEL="next"
+> -ACTION!="add", GOTO="lvm_end"
+> +ACTION!="(PVSCAN_ACTION)", GOTO="lvm_end"
+>   
+>   LABEL="lvm_scan"
+>   
+> -# The table below summarises the situations in which we reach the LABEL="lvm_scan".
+> -# Marked by X, X* means only if the special dev is properly set up.
+> -# The artificial ADD is supported for coldplugging. We avoid running the pvscan
+> -# on artificial CHANGE so there's no unexpected autoactivation when WATCH rule fires.
+> -# N.B. MD and loop never actually  reaches lvm_scan on REMOVE as the PV label is gone
+> -# within a CHANGE event (these are caught by the "LVM_PV_GONE" rule at the beginning).
+> -#
+> -#        | real ADD | real CHANGE | artificial ADD | artificial CHANGE | REMOVE
+> -# =============================================================================
+> -#  DM    |          |      X      |       X*       |                   |   X
+> -#  MD    |          |      X      |       X*       |                   |
+> -#  loop  |          |      X      |       X*       |                   |
+> -#  other |    X     |             |       X        |                   |   X
+>   ENV{SYSTEMD_READY}="1"
+>   
+>   # The method for invoking pvscan is selected at build time with the option
+> @@ -97,6 +87,27 @@ GOTO="(PVSCAN_RULE)"
+>   
+>   LABEL="systemd_background"
+>   
+> +# The table below summarises the situations in which we reach the LABEL="lvm_scan"
+> +# in the "systemd_background" case.
+> +# Marked by X, X* means only if the special dev is properly set up.
+> +# The artificial ADD is supported for coldplugging. We avoid running the pvscan
+> +# on artificial CHANGE so there's no unexpected autoactivation when WATCH rule fires.
+> +# N.B. MD and loop never actually  reaches lvm_scan on REMOVE as the PV label is gone
+> +# within a CHANGE event (these are caught by the "LVM_PV_GONE" rule at the beginning).
+> +#
+> +# In this case, we simply set up the dependency between the device and the pvscan
+> +# job using SYSTEMD_ALIAS (which sets up a simplified device identifier that
+> +# allows using "BindsTo" in the sytemd unit file) and SYSTEMD_WANTS (which tells
+> +# systemd to start the pvscan job once the device is ready).
+> +# We need to set these variables for both "add" and "change" events, otherwise
+> +# systemd may loose information about the device/unit dependencies.
+> +#
+> +#        | real ADD | real CHANGE | artificial ADD | artificial CHANGE | REMOVE
+> +# =============================================================================
+> +#  DM    |          |      X      |       X*       |                   |   X
+> +#  MD    |          |      X      |       X*       |                   |
+> +#  loop  |          |      X      |       X*       |                   |
+> +#  other |    X     |      X      |       X        |                   |   X
+>   ACTION!="remove", ENV{LVM_PV_GONE}=="1", RUN+="(BINDIR)/systemd-run (LVM_EXEC)/lvm pvscan --cache $major:$minor", GOTO="lvm_end"
+>   ENV{SYSTEMD_ALIAS}="/dev/block/$major:$minor"
+>   ENV{ID_MODEL}="LVM PV $env{ID_FS_UUID_ENC} on /dev/$name"
+> @@ -105,6 +116,21 @@ GOTO="lvm_end"
+>   
+>   LABEL="direct_pvscan"
+>   
+> +# The table below summarises the situations in which we reach the LABEL="lvm_scan"
+> +# for the "direct_pvscan" case.
+> +# Marked by X, X* means only if the special dev is properly set up.
+> +# The artificial ADD is supported for coldplugging. We avoid running the pvscan
+> +# on artificial CHANGE so there's no unexpected autoactivation when WATCH rule fires.
+> +#
+> +# In this case, we need to make sure that pvscan is not invoked spuriously, therefore
+> +# we invoke it only for "add" events for "other" devices.
+> +#
+> +#        | real ADD | real CHANGE | artificial ADD | artificial CHANGE | REMOVE
+> +# =============================================================================
+> +#  DM    |          |      X      |       X*       |                   |   X
+> +#  MD    |          |      X      |       X*       |                   |
+> +#  loop  |          |      X      |       X*       |                   |
+> +#  other |    X     |             |       X        |                   |   X
+>   RUN+="(LVM_EXEC)/lvm pvscan --background --cache --activate ay --major $major --minor $minor", ENV{LVM_SCANNED}="1"
+>   
+>   LABEL="lvm_end"
+> diff --git a/udev/Makefile.in b/udev/Makefile.in
+> index 9b2e2c34c518..6f57d46125ce 100644
+> --- a/udev/Makefile.in
+> +++ b/udev/Makefile.in
+> @@ -48,12 +48,14 @@ endif
+>   
+>   ifeq ("@UDEV_SYSTEMD_BACKGROUND_JOBS@", "yes")
+>   PVSCAN_RULE=systemd_background
+> +PVSCAN_ACTION=add|change
+>   else
+>   PVSCAN_RULE=direct_pvscan
+> +PVSCAN_ACTION=add
+>   endif
+>   
+>   %.rules: $(srcdir)/%.rules.in
+> -	$(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BINDIR)+$(BINDIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(PVSCAN_RULE)+$(PVSCAN_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
+> +	$(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BINDIR)+$(BINDIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(PVSCAN_RULE)+$(PVSCAN_RULE)+;s+(PVSCAN_ACTION)+$(PVSCAN_ACTION)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
+>   
+>   %_install: %.rules
+>   	$(INSTALL_DATA) -D $< $(udevdir)/$(<F)
 
 
