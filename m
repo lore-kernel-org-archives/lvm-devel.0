@@ -1,218 +1,140 @@
-From: Eric Ren <zren@suse.com>
-Date: Fri, 9 Feb 2018 10:21:42 +0800
-Subject: master - pvmove: reinstantiate clustered pvmove
-In-Reply-To: <b77058d3-386c-707e-a0e2-ef4f6c3e9ad6@redhat.com>
-References: <201802012058.w11KwnMa018375@lists01.pubmisc.prod.ext.phx2.redhat.com>
-	<5cecc671-dbc2-c0d7-e1a9-64d4bcb68860@suse.com>
-	<d278fca1-00a6-d29b-925f-047aed4c949e@redhat.com>
-	<8bec25ed-2510-a31e-ba01-6bfd26257b52@suse.com>
-	<b77058d3-386c-707e-a0e2-ef4f6c3e9ad6@redhat.com>
-Message-ID: <e26d3670-c6c5-ca07-eaf2-bbb3352bf28f@suse.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 9 Feb 2018 05:01:33 -0500
+Subject: master - toolcontext: do not change stream for pthreaded programs
+Message-ID: <201802091001.w19A1XQ6011094@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Zdeneck,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=83258e33852166a3111a009f1720cc87f62efc73
+Commit:        83258e33852166a3111a009f1720cc87f62efc73
+Parent:        1b6d0346a37d34394471080ec2aff55cea1bdafe
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Feb 9 00:26:22 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Feb 9 10:56:40 2018 +0100
 
-Thanks for your kind response!
->> You mean so far pvmove can only work like this:
->>
->> - pvmove on the node that the LV is _not_active, but the LV can
->> ??be active on another node, so that users will not suffer downtime
->> ??issue
->
->
-> The problem with just locally active LVs is - they can be active on 
-> any node.
->
-> Current logic of PV knows only 2 states:
->
-> 1. Either set of LVs is active exclusively - then pvmove can run in 
-> exclusive (no-clustered) mode locally on 1 node.
+toolcontext: do not change stream for pthreaded programs
 
-Got it. My fault! I meant to use 'vgchange -aey', not 'vgchange -aly'. 
-Yeah, it works:
+With pthreaded daemons like 'dmeventd' using  liblvm via plugin,
+lvm2 actually should not 'play' with streams at all - as there
+could be parallel outputs running.
 
-tw1:~ # vgchange -aey vgtest2
- ??? 2 logical volume(s) in volume group "vgtest2" now active
-tw1:~ # pvmove /dev/vdb1
- ??? Increasing mirror region size from 0??? to 2.00 KiB
- ??? /dev/vdb1: Moved: 4.17%
- ??? /dev/vdb1: Moved: 38.02%
- ??? /dev/vdb1: Moved: 66.67%
- ??? /dev/vdb1: Moved: 79.56%
- ??? /dev/vdb1: Moved: 100.00%
+As a current quick workaround just disable change for pthreaded
+program (gettid() != getpid()).
 
+TODO: it's possible the change of buffering actually doesn't serve us
+any measurable benefit and could be dropped as whole later...
 
->
-> 2. LVs are active on all nodes - then you need cluster-wide pvmove.
+Meanwhile this patch is fixing this occasional valgrind race report:
 
-This is the one that seems not work properly for me. As said in my first 
-reply, it might be a bug:
+Invalid read of size 4
+   at 0x571892C: vfprintf (in /usr/lib64/libc-2.26.9000.so)
+   by 0x57216B3: fprintf (in /usr/lib64/libc-2.26.9000.so)
+   by 0x5042886: dm_event_log (libdevmapper-event.c:925)
+   by 0x10B015: _dmeventd_log (dmeventd.c:125)
+   by 0x10D289: _unregister_for_event (dmeventd.c:1146)
+   by 0x10E52E: _handle_request (dmeventd.c:1583)
+   by 0x10E6D7: _do_process_request (dmeventd.c:1631)
+   by 0x10E7C6: _process_request (dmeventd.c:1660)
+   by 0x1101A4: main (dmeventd.c:2285)
+ Address 0x6264d30 is 192 bytes inside a block of size 552 free'd
+   at 0x4C2ED68: free (vg_replace_malloc.c:530)
+   by 0x573907D: fclose@@GLIBC_2.2.5 (in /usr/lib64/libc-2.26.9000.so)
+   by 0x6AC5C00: reopen_standard_stream (log.c:189)
+   by 0x6A8E62C: destroy_toolcontext (toolcontext.c:2271)
+   by 0x6BA5C22: lvm_fin (lvmcmdline.c:3339)
+   by 0x6BD5EF3: lvm2_exit (lvmcmdlib.c:123)
+   by 0x6856013: dmeventd_lvm2_exit (dmeventd_lvm.c:103)
+   by 0x66535B8: unregister_device (dmeventd_thin.c:432)
+   by 0x10CBBC: _do_unregister_device (dmeventd.c:926)
+   by 0x10CD74: _monitor_unregister (dmeventd.c:979)
+   by 0x10D094: _monitor_thread (dmeventd.c:1066)
+   by 0x54B35E0: start_thread (in /usr/lib64/libpthread-2.26.9000.so)
+   by 0x57C30EE: clone (in /usr/lib64/libc-2.26.9000.so)
+ Block was alloc'd at
+   at 0x4C2DBBB: malloc (vg_replace_malloc.c:299)
+   by 0x573932B: fdopen@@GLIBC_2.2.5 (in /usr/lib64/libc-2.26.9000.so)
+   by 0x6AC5DC2: reopen_standard_stream (log.c:200)
+   by 0x6A8D11D: create_toolcontext (toolcontext.c:1898)
+   by 0x6BA5B6B: init_lvm (lvmcmdline.c:3319)
+   by 0x6BD5BC8: cmdlib_lvm2_init (lvmcmdlib.c:34)
+   by 0x6BD5F04: lvm2_init (lvm2cmd.c:20)
+   by 0x6855EA7: dmeventd_lvm2_init (dmeventd_lvm.c:67)
+   by 0x665305F: register_device (dmeventd_thin.c:352)
+   by 0x10CB7A: _do_register_device (dmeventd.c:916)
+   by 0x10CEE4: _monitor_thread (dmeventd.c:1006)
+   by 0x54B35E0: start_thread (in /usr/lib64/libpthread-2.26.9000.so)
+   by 0x57C30EE: clone (in /usr/lib64/libc-2.26.9000.so)
+....
+Process terminating with default action of signal 6 (SIGABRT): dumping core
+   at 0x570016B: raise (in /usr/lib64/libc-2.26.9000.so)
+   by 0x5701520: abort (in /usr/lib64/libc-2.26.9000.so)
+   by 0x57437D8: __libc_message (in /usr/lib64/libc-2.26.9000.so)
+   by 0x5743831: __libc_fatal (in /usr/lib64/libc-2.26.9000.so)
+   by 0x5744056: _IO_vtable_check (in /usr/lib64/libc-2.26.9000.so)
+   by 0x574751C: __overflow (in /usr/lib64/libc-2.26.9000.so)
+   by 0x574191A: fputc (in /usr/lib64/libc-2.26.9000.so)
+   by 0x50428E3: dm_event_log (libdevmapper-event.c:934)
+   by 0x10B015: _dmeventd_log (dmeventd.c:125)
+   by 0x10D289: _unregister_for_event (dmeventd.c:1146)
+   by 0x10E52E: _handle_request (dmeventd.c:1583)
+   by 0x10E6D7: _do_process_request (dmeventd.c:1631)
+   by 0x10E7C6: _process_request (dmeventd.c:1660)
+   by 0x1101A4: main (dmeventd.c:2285)
+---
+ WHATS_NEW                  |    1 +
+ lib/commands/toolcontext.c |   11 +++++++++--
+ 2 files changed, 10 insertions(+), 2 deletions(-)
 
-"""
-GDB it a little bit. The problem seems because:
-
-_pvmove_target_present(cmd, 1)
-
-
-will always return 0 - "not found".
-
-During one pvmove command, the _pvmove_target_present() is invoked 
-twice. At first call,
-"segtype->ops->target_present()", i.e _mirrored_target_present() will 
-set "_mirrored_checked = 1".
-
-At the second call, _mirrored_target_present() will _not_ go through the 
-following code to get the
-"_mirror_attributes":
-...
-even if it is asked to back the "target attributes" by 
-_pvmove_target_present(cmd, 1).
-As result, _pvmove_target_present(cmd, 1) will always return "0", 
-because the "attributes"
-is empty.
-"""
-
-Could you please have a check there?
-
-Either I used "vgchange -ay vgtest" or "vgchange -asy vgtest" to active 
-the LVs on all nodes. It just doesn't work:
-
-"""
-tw1:~ # vgchange -asy vgtest2
- ??? 2 logical volume(s) in volume group "vgtest2" now active
-tw1:~ # lvs
- ??? LV?? VG????? Attr?????? LSize Pool Origin Data%? Meta%? Move Log 
-Cpy%Sync Convert
- ??? lv1? vgtest2 -wi-a----- 2.00g
- ??? lv2? vgtest2 -wi-a----- 1.00g
-tw1:~ # pvmove /dev/vdb1
- ??? No data to move for vgtest2.
-tw1:~ # pvmove /dev/vdb2
- ??? Cannot move in clustered VG vgtest2, clustered mirror (cmirror) not 
-detected and LVs are activated non-exclusively.
-tw2:~ # lvs
- ??? LV?? VG????? Attr?????? LSize Pool Origin Data%? Meta%? Move Log 
-Cpy%Sync Convert
- ??? lv1? vgtest2 -wi-a----- 2.00g
- ??? lv2? vgtest2 -wi-a----- 1.00g
-"""
-
-or
-
-"""
-tw1:~ # vgchange -an vgtest2
- ??? 0 logical volume(s) in volume group "vgtest2" now active
-tw1:~ # vgchange -ay vgtest2
- ??? 2 logical volume(s) in volume group "vgtest2" now active
-tw1:~ # lvs
- ??? LV?? VG????? Attr?????? LSize Pool Origin Data%? Meta%? Move Log 
-Cpy%Sync Convert
- ??? lv1? vgtest2 -wi-a----- 2.00g
- ??? lv2? vgtest2 -wi-a----- 1.00g
-tw1:~ # pvmove /dev/vdb2
- ??? Cannot move in clustered VG vgtest2, clustered mirror (cmirror) not 
-detected and LVs are activated non-exclusively.
-
-
-tw2:~ # lvs
- ??? LV?? VG????? Attr?????? LSize Pool Origin Data%? Meta%? Move Log 
-Cpy%Sync Convert
- ??? lv1? vgtest2 -wi-a----- 2.00g
- ??? lv2? vgtest2 -wi-a----- 1.00g
-"""
-
->
->
-> ---
->
->
-> But then there is 'fuzzy' world - where LVs are active non-exclusively 
-> - but we don't exactly know on how many nodes (we can count them - but 
-> it's not currently done this way)
->
-> So in this fuzzy world -? lvm2 previously actually tried to active 
-> those LVs everywhere - but this was not correct - since if user didn't 
-> activated LV
-> on node X - lvm2 should not active LV there just because of pvmove.
-
-Got it.
-
->
->>
->> Do I understand it right?
->>
->> But it still cannot work in such case that doing pvmove the 
->> inactive-LV node.
->
->
-> Yep - current lvm2 logic does not allow? pvmoving extents for 
-> inactive? LV segments.
->
-> My long-term plan is to actually add support for this - as this would 
-> effectively resolve several problem - but it's very complicated rework
-> internally.
-
-Got it, thanks!
-
->
->
->>
->> It even cannot work on the node that the LV is exclusively activated:
->> ...
->
-> You really need to use? 'exclusively' activated LVs.
->
-> -aly is just a local activation (so any node can grab one)
->
-> -aey is your wanted exclusive activation you should actually use here.
-
-Yes, I meant -aey, sorry!
-
->
-> Also note - many target type can by activated only exclusively anyway 
-> - so they do take exclusive lock for 'local' one anyway.
->
-> So it's just? linear/strip + mirror where you can play with real
-> cluster-wide multinode activation.
-
-I know as you've told me on IRC times ago, thanks.
-
->
->>> it still possible we can use such LV for pvmove - although during
->>> pvmove 'restart' it? will be only? 'exclusively' activated.
->>
->> Yes, I also noticed this interesting behavior - I'm doubt that it 
->> might bring
->> trouble in HA cluster if cluster FS is sitting on that LV.
->
-> Main question here I'd have is -
->
-> Why do you actually need to use? -aly for this case instead of -aey ??
-
-Actually, I am expecting pvmove can be used on LVs that are active on 
-all nodes, as
-you also mentioned above. "-aly" is my mistake, sorry :)
-
->
->
-> Solving '-aly' properly is not very simple - I'll need to think about
-> tree activation logic here for a while.
->
-> So is there a case in your? HA setup where you need to activate
-> at the same time? LV on both nodes with -aly ?
-> (since clearly? -aey will not let you do this).
-
-No, It's not what I am pursuing here. What I expect is:
-
-there should be no downtime during pvmove when I use cluster FS on the LV.
-
-Thanks a lot!
-Eric
-
-
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 197adc3..bf46281 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.178 - 
+ =====================================
++  Do not reopen output streams for multithreaded users of liblvm.
+   Use versionsort to fix archive file expiry beyond 100000 files.
+   Add devices/use_aio, aio_max, aio_memory to configure AIO limits.
+   Support asynchronous I/O when scanning devices.
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 0080a68..ba757dd 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -46,6 +46,7 @@
+ 
+ #include <locale.h>
+ #include <sys/stat.h>
++#include <sys/syscall.h>
+ #include <sys/utsname.h>
+ #include <syslog.h>
+ #include <time.h>
+@@ -1883,7 +1884,13 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 
+ #ifndef VALGRIND_POOL
+ 	/* Set in/out stream buffering before glibc */
+-	if (set_buffering) {
++	if (set_buffering
++#ifdef SYS_gettid
++	    /* For threaded programs no changes of streams */
++            /* On linux gettid() is implemented only via syscall */
++	    && (syscall(SYS_gettid) == getpid())
++#endif
++	   ) {
+ 		/* Allocate 2 buffers */
+ 		if (!(cmd->linebuffer = dm_malloc(2 * _linebuffer_size))) {
+ 			log_error("Failed to allocate line buffer.");
+@@ -1914,7 +1921,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 			}
+ 		}
+ 		/* Buffers are used for lines without '\n' */
+-	} else
++	} else if (!set_buffering)
+ 		/* Without buffering, must not use stdin/stdout */
+ 		init_silent(1);
+ #endif
 
 
