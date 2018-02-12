@@ -1,77 +1,230 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Mon, 12 Feb 2018 16:20:25 -0500
-Subject: master - toolcontext: light context missed to set-up mem mempool
-Message-ID: <201802122120.w1CLKPGu023642@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - libdm-stats: correct checking of dm_snprintf error
+Message-ID: <201802122120.w1CLKPW1023643@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=afdbb28f7222b3a5a38964d47d750aad8aec12f6
-Commit:        afdbb28f7222b3a5a38964d47d750aad8aec12f6
-Parent:        34a9e3d3cdde5771e30fbd686b20ffba1647a497
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=60b61f2db3d6e98329213e11b65581ea1ee080a5
+Commit:        60b61f2db3d6e98329213e11b65581ea1ee080a5
+Parent:        afdbb28f7222b3a5a38964d47d750aad8aec12f6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Feb 9 15:39:14 2018 +0100
+AuthorDate:    Mon Feb 12 10:27:16 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 12 22:13:53 2018 +0100
+CommitterDate: Mon Feb 12 22:13:57 2018 +0100
 
-toolcontext: light context missed to set-up mem mempool
+libdm-stats: correct checking of dm_snprintf error
 
-If cmd->mem was null, then systemd generator was failing on:
-
-(gdb) bt
-dm_pool_alloc_aligned (p=0x0, s=96, alignment=8) at mm/pool-fast.c:95
-dm_pool_alloc (p=0x0, s=96) at mm/pool-fast.c:90
-dm_pool_zalloc (p=0x0, s=96) at mm/pool.c:74
-config_file_read_fd (mem=0x0, cft=0x55f4339dbad0, dev=0x55f4339dfac0, reason=DEV_IO_MDA_CONTENT, offset=0, size=82293, offset2=0, size2=0,
-    checksum_fn=0x0, checksum=0, checksum_only=0, no_dup_node_check=0, ioflags=0, config_file_read_fd_callback=0x0, config_file_read_fd_context=0x0) at config/config.c:567
-config_file_read (mem=0x0, cft=0x55f4339dbad0) at config/config.c:658
-config_file_open_and_read (config_file=0x7f49aef14540 <config_file> "/var/tmp/lvm/etc/lvm/lvm.conf", source=CONFIG_FILE, cmd=0x55f4339d6260)
-    at config/config.c:282
-_load_config_file (cmd=0x55f4339d6260, tag=0x7f49aeca15da "", local=0) at commands/toolcontext.c:824
-_init_lvm_conf (cmd=0x55f4339d6260) at commands/toolcontext.c:853
-create_config_context () at commands/toolcontext.c:1814
-lvm_config_find_bool (libh=0x0, config_path=0x55f431a884ad "global/use_lvmetad", fail=0) at lvm_base.c:144
-main ()
+Function dm_snprintf returns -1 on error, while 0 is still
+considered valid result code so correcting error path testing.
 ---
- WHATS_NEW                  |    1 +
- lib/commands/toolcontext.c |    5 +++++
- 2 files changed, 6 insertions(+), 0 deletions(-)
+ WHATS_NEW_DM        |    1 +
+ libdm/libdm-stats.c |   36 ++++++++++++++++++------------------
+ tools/dmsetup.c     |   22 +++++++++++-----------
+ 3 files changed, 30 insertions(+), 29 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index bf46281..74f9616 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index bf3ae19..52593c5 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
 @@ -1,5 +1,6 @@
- Version 2.02.178 - 
+ Version 1.02.147 - 
  =====================================
-+  Add missing initialisation of mem pool in systemd generator.
-   Do not reopen output streams for multithreaded users of liblvm.
-   Use versionsort to fix archive file expiry beyond 100000 files.
-   Add devices/use_aio, aio_max, aio_memory to configure AIO limits.
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index ba757dd..b613b8f 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1792,6 +1792,8 @@ void destroy_config_context(struct cmd_context *cmd)
- /*
-  * A "config context" is a very light weight toolcontext that
-  * is only used for reading config settings from lvm.conf.
-+ *
-+ * FIXME: this needs to go back to parametrized create_toolcontext()
-  */
- struct cmd_context *create_config_context(void)
- {
-@@ -1808,6 +1810,9 @@ struct cmd_context *create_config_context(void)
- 	if (!(cmd->libmem = dm_pool_create("library", 4 * 1024)))
- 		goto_out;
++  Fix tests for failing dm_snprintf() in stats code.
+   Parsing mirror status accepts 'userspace' keyword in status.
+   Introduce dm_malloc_aligned for page alignment of buffers.
  
-+	if (!(cmd->mem = dm_pool_create("command", 4 * 1024)))
-+		goto out;
-+
- 	dm_list_init(&cmd->config_files);
- 	dm_list_init(&cmd->tags);
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index bc49867..c74444a 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -1894,10 +1894,10 @@ static int _stats_set_aux(struct dm_stats *dms,
+ 		}
+ 	}
  
+-	if (!dm_snprintf(msg, sizeof(msg), "@stats_set_aux " FMTu64 " %s%s%s ",
+-			 region_id, (group_tag) ? group_tag : "",
+-			 (group_tag) ? DMS_AUX_SEP : "",
+-			 (strlen(aux_data)) ? aux_data : "-")) {
++	if (dm_snprintf(msg, sizeof(msg), "@stats_set_aux " FMTu64 " %s%s%s ",
++			region_id, (group_tag) ? group_tag : "",
++			(group_tag) ? DMS_AUX_SEP : "",
++			(strlen(aux_data)) ? aux_data : "-") < 0) {
+ 		log_error("Could not prepare @stats_set_aux message");
+ 		goto bad;
+ 	}
+@@ -1940,8 +1940,8 @@ static int _stats_create_region(struct dm_stats *dms, uint64_t *region_id,
+ 		program_id = dms->program_id;
+ 
+ 	if (start || len) {
+-		if (!dm_snprintf(range, sizeof(range), FMTu64 "+" FMTu64,
+-				 start, len)) {
++		if (dm_snprintf(range, sizeof(range), FMTu64 "+" FMTu64,
++				start, len) < 0) {
+ 			log_error(err_fmt, "range");
+ 			return 0;
+ 		}
+@@ -1971,11 +1971,11 @@ static int _stats_create_region(struct dm_stats *dms, uint64_t *region_id,
+ 	} else
+ 		opt_args = dm_strdup("");
+ 
+-	if (!dm_snprintf(msg, sizeof(msg), "@stats_create %s %s" FMTu64
+-			 " %s %s %s", (start || len) ? range : "-",
+-			 (step < 0) ? "/" : "",
+-			 (uint64_t)llabs(step),
+-			 opt_args, program_id, aux_data)) {
++	if (dm_snprintf(msg, sizeof(msg), "@stats_create %s %s" FMTu64
++			" %s %s %s", (start || len) ? range : "-",
++			(step < 0) ? "/" : "",
++			(uint64_t)llabs(step),
++			opt_args, program_id, aux_data) < 0) {
+ 		log_error(err_fmt, "message");
+ 		dm_free((void *) opt_args);
+ 		return 0;
+@@ -2079,7 +2079,7 @@ static int _stats_delete_region(struct dm_stats *dms, uint64_t region_id)
+ 			return 0;
+ 		}
+ 
+-	if (!dm_snprintf(msg, sizeof(msg), "@stats_delete " FMTu64, region_id)) {
++	if (dm_snprintf(msg, sizeof(msg), "@stats_delete " FMTu64, region_id) < 0) {
+ 		log_error("Could not prepare @stats_delete message.");
+ 		return 0;
+ 	}
+@@ -2163,7 +2163,7 @@ int dm_stats_clear_region(struct dm_stats *dms, uint64_t region_id)
+ 	if (!_stats_bound(dms))
+ 		return_0;
+ 
+-	if (!dm_snprintf(msg, sizeof(msg), "@stats_clear " FMTu64, region_id)) {
++	if (dm_snprintf(msg, sizeof(msg), "@stats_clear " FMTu64, region_id) < 0) {
+ 		log_error("Could not prepare @stats_clear message.");
+ 		return 0;
+ 	}
+@@ -2188,15 +2188,15 @@ static struct dm_task *_stats_print_region(struct dm_stats *dms,
+ 	struct dm_task *dmt = NULL;
+ 
+ 	if (start_line || num_lines)
+-		if (!dm_snprintf(lines, sizeof(lines),
+-				 "%u %u", start_line, num_lines)) {
++		if (dm_snprintf(lines, sizeof(lines),
++				"%u %u", start_line, num_lines) < 0) {
+ 			log_error(err_fmt, "row specification");
+ 			return NULL;
+ 		}
+ 
+-	if (!dm_snprintf(msg, sizeof(msg), "@stats_print%s " FMTu64 " %s",
+-			 (clear) ? "_clear" : "",
+-			 region_id, (start_line || num_lines) ? lines : "")) {
++	if (dm_snprintf(msg, sizeof(msg), "@stats_print%s " FMTu64 " %s",
++			(clear) ? "_clear" : "",
++			region_id, (start_line || num_lines) ? lines : "") < 0) {
+ 		log_error(err_fmt, "message");
+ 		return NULL;
+ 	}
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index e85680f..cc47d11 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -4051,7 +4051,7 @@ static int _dm_stats_rrqm_disp(struct dm_report *rh,
+ 					    DM_STATS_AREA_CURRENT))
+ 		return_0;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", rrqm))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", rrqm) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4082,7 +4082,7 @@ static int _dm_stats_wrqm_disp(struct dm_report *rh,
+ 					    DM_STATS_AREA_CURRENT))
+ 		return_0;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", wrqm))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", wrqm) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4113,7 +4113,7 @@ static int _dm_stats_rs_disp(struct dm_report *rh,
+ 					DM_STATS_AREA_CURRENT))
+ 		return_0;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", rs))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", rs) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4144,7 +4144,7 @@ static int _dm_stats_ws_disp(struct dm_report *rh,
+ 					 DM_STATS_AREA_CURRENT))
+ 		return_0;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", ws))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", ws) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4265,7 +4265,7 @@ static int _dm_stats_qusz_disp(struct dm_report *rh,
+ 					     DM_STATS_AREA_CURRENT))
+ 		return_0;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", qusz))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", qusz) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4299,7 +4299,7 @@ static int _dm_stats_await_disp(struct dm_report *rh,
+ 	/* display in msecs */
+ 	await /= NSEC_PER_MSEC;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", await))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", await) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4333,7 +4333,7 @@ static int _dm_stats_r_await_disp(struct dm_report *rh,
+ 	/* display in msecs */
+ 	r_await /= NSEC_PER_MSEC;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", r_await))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", r_await) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4367,7 +4367,7 @@ static int _dm_stats_w_await_disp(struct dm_report *rh,
+ 	/* display in msecs */
+ 	w_await /= NSEC_PER_MSEC;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", w_await))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", w_await) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4397,7 +4397,7 @@ static int _dm_stats_tput_disp(struct dm_report *rh,
+ 				     DM_STATS_AREA_CURRENT))
+ 		return_0;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", tput))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", tput) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4431,7 +4431,7 @@ static int _dm_stats_svctm_disp(struct dm_report *rh,
+ 	/* display in msecs */
+ 	svctm /= NSEC_PER_MSEC;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%.2f", svctm))
++	if (dm_snprintf(buf, sizeof(buf), "%.2f", svctm) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
+@@ -4487,7 +4487,7 @@ static int _dm_stats_sample_interval_disp(struct dm_report *rh,
+ 
+ 	*sortval = (double)_last_interval / (double) NSEC_PER_SEC;
+ 
+-	if (!dm_snprintf(buf, sizeof(buf), "%2.6f", *sortval))
++	if (dm_snprintf(buf, sizeof(buf), "%2.6f", *sortval) < 0)
+ 		return_0;
+ 
+ 	if (!(repstr = dm_pool_strdup(mem, buf)))
 
 
