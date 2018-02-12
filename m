@@ -1,182 +1,77 @@
-From: Eric Ren <zren@suse.com>
-Date: Fri, 9 Feb 2018 21:29:33 +0800
-Subject: master - pvmove: reinstantiate clustered pvmove
-In-Reply-To: <f3a6de00-6421-9fda-a4ff-3afb2bab0d5e@redhat.com>
-References: <201802012058.w11KwnMa018375@lists01.pubmisc.prod.ext.phx2.redhat.com>
-	<5cecc671-dbc2-c0d7-e1a9-64d4bcb68860@suse.com>
-	<d278fca1-00a6-d29b-925f-047aed4c949e@redhat.com>
-	<8bec25ed-2510-a31e-ba01-6bfd26257b52@suse.com>
-	<b77058d3-386c-707e-a0e2-ef4f6c3e9ad6@redhat.com>
-	<e26d3670-c6c5-ca07-eaf2-bbb3352bf28f@suse.com>
-	<f3a6de00-6421-9fda-a4ff-3afb2bab0d5e@redhat.com>
-Message-ID: <df116b7f-2d69-38aa-a418-95137ba7e9b0@suse.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 12 Feb 2018 16:20:25 -0500
+Subject: master - toolcontext: light context missed to set-up mem mempool
+Message-ID: <201802122120.w1CLKPGu023642@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Zdeneck,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=afdbb28f7222b3a5a38964d47d750aad8aec12f6
+Commit:        afdbb28f7222b3a5a38964d47d750aad8aec12f6
+Parent:        34a9e3d3cdde5771e30fbd686b20ffba1647a497
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Feb 9 15:39:14 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Feb 12 22:13:53 2018 +0100
 
-I tested with LVM 2.02.177, and with the following patches backported:
+toolcontext: light context missed to set-up mem mempool
 
- ? + 0001-pvmove-fix-_remove_sibling_pvs_from_trim_list.patch
- ? + 0002-pvmove-better-check-for-exclusive-LV.patch
- ? + 0003-pvmove-drop-misleading-pvmove-restriction-for-cluste.patch
- ? + 0004-cleanup-enhance-messages.patch
- ? + 0005-cleanup-drop-unused-code.patch
- ? + 0006-activation-guard-exclusive-activation.patch
- ? + 0007-activation-move-check-later.patch
- ? + 0008-pvmove-reinstantiate-clustered-pvmove.patch
+If cmd->mem was null, then systemd generator was failing on:
 
-So the problem might be only on my side, if your testing is fine with 
-the latest
-upstream. I am just waiting for the 2.02.178 to come out and try it again.
+(gdb) bt
+dm_pool_alloc_aligned (p=0x0, s=96, alignment=8) at mm/pool-fast.c:95
+dm_pool_alloc (p=0x0, s=96) at mm/pool-fast.c:90
+dm_pool_zalloc (p=0x0, s=96) at mm/pool.c:74
+config_file_read_fd (mem=0x0, cft=0x55f4339dbad0, dev=0x55f4339dfac0, reason=DEV_IO_MDA_CONTENT, offset=0, size=82293, offset2=0, size2=0,
+    checksum_fn=0x0, checksum=0, checksum_only=0, no_dup_node_check=0, ioflags=0, config_file_read_fd_callback=0x0, config_file_read_fd_context=0x0) at config/config.c:567
+config_file_read (mem=0x0, cft=0x55f4339dbad0) at config/config.c:658
+config_file_open_and_read (config_file=0x7f49aef14540 <config_file> "/var/tmp/lvm/etc/lvm/lvm.conf", source=CONFIG_FILE, cmd=0x55f4339d6260)
+    at config/config.c:282
+_load_config_file (cmd=0x55f4339d6260, tag=0x7f49aeca15da "", local=0) at commands/toolcontext.c:824
+_init_lvm_conf (cmd=0x55f4339d6260) at commands/toolcontext.c:853
+create_config_context () at commands/toolcontext.c:1814
+lvm_config_find_bool (libh=0x0, config_path=0x55f431a884ad "global/use_lvmetad", fail=0) at lvm_base.c:144
+main ()
+---
+ WHATS_NEW                  |    1 +
+ lib/commands/toolcontext.c |    5 +++++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
 
-I will be on vacation for the coming Chinese New Year. I will try more 
-carefully
-as you suggested after coming back :)
-
-On 02/09/2018 08:05 PM, Zdenek Kabelac wrote:
-> Dne 9.2.2018 v 03:21 Eric Ren napsal(a):
->> Hi Zdeneck,
->>
->> Thanks for your kind response!
->>>> You mean so far pvmove can only work like this:
->>>>
->>>> - pvmove on the node that the LV is _not_active, but the LV can
->>>> ??be active on another node, so that users will not suffer downtime
->>>> ??issue
->>>
->>>
->>> The problem with just locally active LVs is - they can be active on 
->>> any node.
->>>
->>> Current logic of PV knows only 2 states:
->>>
->>> 1. Either set of LVs is active exclusively - then pvmove can run in 
->>> exclusive (no-clustered) mode locally on 1 node.
->>
->> Got it. My fault! I meant to use 'vgchange -aey', not 'vgchange 
->> -aly'. Yeah, it works:
->>
->> tw1:~ # vgchange -aey vgtest2
->> ???? 2 logical volume(s) in volume group "vgtest2" now active
->> tw1:~ # pvmove /dev/vdb1
->> ???? Increasing mirror region size from 0??? to 2.00 KiB
->
-> ^^^^ this is actually somewhat suspicious.... I'll need to check how 
-> that happens? - it should be at least 1/2 MiB by default I think.
-
-In my lvm.conf:
-
-""""
- ??? # For RAID or 'mirror' segment types, 'raid_region_size' is the
- ??? # size (in KiB) of each:
- ??? # - synchronization operation when initializing
- ??? # - each copy operation when performing a 'pvmove' (using 'mirror' 
-segtype)
- ??? # This setting has replaced 'mirror_region_size' since version 2.02.99
- ??? raid_region_size = 512
-""""
-
->
-> Do you have 'cmirrord' properly configured & running ?
-
-'cmirrord' and 'clvmd' are running, but I don't know how to configure 
-'cmirrord':
-
-"""
-tw1:~ # pgrep -a cmirrord
-11931 cmirrord
-tw1:~ # pgrep -a clvmd
-11748 /usr/sbin/clvmd -T90 -d0
-
-"""
-
->
-> Can you capture log from this tool (i.e. running in foreground and 
-> grabbing its output)
-
-Hmm, I had a quick testing:
-
-Terminal 1, without anything ouput during pvmove:
-"""
-tw1:~ # cmirrord -f
-Starting cmirrord:
-"""
-
-Terminal 2:
-"""
-tw1:~ # pvmove /dev/vdb2 -v
- ??? ? Cluster mirror log daemon not included in build.
- ??? ? Wiping internal VG cache
- ??? ? Wiping cache of LVM-capable devices
- ??? ? Skipping foreign volume group vgtest3
- ??? ? Archiving volume group "vgtest2" metadata (seqno 25).
- ??? ? Creating logical volume pvmove0
- ??? Cannot move in clustered VG vgtest2, clustered mirror (cmirror) not 
-detected and LVs are activated non-exclusively.
-"""
-
-Hmm, what does "Cluster mirror log daemon not included in build." mean?
-
-There should be two daemons: cmirrord and the cluster mirror log? I think
-cmirrord is Cluster mirror log daemon?
-
-Ah, I think I know what is going wrong... our package team splat 
-lvm2.spec into lvm2.spec,
-lvm2-clvm.spec and device-mapper.spec.
-
-In lvm2.spec, they don't configure "--enable-cmirrord". Even though they 
-have it in lvm2-clvm.spec,
-they finally only ships the cluster-related binaries, and drop the main 
-'lvm' binary built with "--enable-cmirrord".
-I hate that hacking stuff, but...
-
-Sorry for the noise, I will fix up it and try again. Thanks for your help!
-
-
->
->
->>> But then there is 'fuzzy' world - where LVs are active 
->>> non-exclusively - but we don't exactly know on how many nodes (we 
->>> can count them - but it's not currently done this way)
->>>
->>> So in this fuzzy world -? lvm2 previously actually tried to active 
->>> those LVs everywhere - but this was not correct - since if user 
->>> didn't activated LV
->>> on node X - lvm2 should not active LV there just because of pvmove.
->>
->> Got it.
->
-> We did some more 'brainstorming' - with a result, that it actually 
-> doesn't
-> matter if LV is activate on more nodes - as long as there is cmirrord 
-> running,
-> and lvm2 is able to activate LV on multiple nodes - it should be always
-> possible to create proper tree mapping.
->
-> But let's just see how it will work in reality - it will require some 
-> more thinking....
->
->>> Why do you actually need to use? -aly for this case instead of -aey ??
->>
->> Actually, I am expecting pvmove can be used on LVs that are active on 
->> all nodes, as
->> you also mentioned above. "-aly" is my mistake, sorry :)
->
-> This case should 'mostly' work - except there are still bugs in proper 
-> recognizing which LVs can be processed in which mode.
->
-> Use may need to run 2 pvmoves - one for? cluster-wide active LVs,
-> and 2nd. for exclusively activated ones - we can't handle ATM both at 
-> once.
-
-Thanks!
-
-Regards,
-Eric
-
+diff --git a/WHATS_NEW b/WHATS_NEW
+index bf46281..74f9616 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.178 - 
+ =====================================
++  Add missing initialisation of mem pool in systemd generator.
+   Do not reopen output streams for multithreaded users of liblvm.
+   Use versionsort to fix archive file expiry beyond 100000 files.
+   Add devices/use_aio, aio_max, aio_memory to configure AIO limits.
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index ba757dd..b613b8f 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1792,6 +1792,8 @@ void destroy_config_context(struct cmd_context *cmd)
+ /*
+  * A "config context" is a very light weight toolcontext that
+  * is only used for reading config settings from lvm.conf.
++ *
++ * FIXME: this needs to go back to parametrized create_toolcontext()
+  */
+ struct cmd_context *create_config_context(void)
+ {
+@@ -1808,6 +1810,9 @@ struct cmd_context *create_config_context(void)
+ 	if (!(cmd->libmem = dm_pool_create("library", 4 * 1024)))
+ 		goto_out;
+ 
++	if (!(cmd->mem = dm_pool_create("command", 4 * 1024)))
++		goto out;
++
+ 	dm_list_init(&cmd->config_files);
+ 	dm_list_init(&cmd->tags);
+ 
 
 
