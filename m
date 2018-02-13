@@ -1,73 +1,128 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 12 Feb 2018 16:20:58 -0500
-Subject: master - debug: add stack tracking
-Message-ID: <201802122120.w1CLKw6q023782@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 13 Feb 2018 13:12:14 -0500
+Subject: master - segtype: replace mempool allocation
+Message-ID: <201802131812.w1DICEBE028531@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e40768ac32e6de5e6f9614ae0ad702c93a4e1330
-Commit:        e40768ac32e6de5e6f9614ae0ad702c93a4e1330
-Parent:        27399755fd1b1292cc93f6469162c0855b7231c2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=32febed8d55d0761fdbe86015c02da90e026b359
+Commit:        32febed8d55d0761fdbe86015c02da90e026b359
+Parent:        e40768ac32e6de5e6f9614ae0ad702c93a4e1330
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Feb 8 11:03:06 2018 +0100
+AuthorDate:    Tue Feb 13 19:00:47 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 12 22:15:03 2018 +0100
+CommitterDate: Tue Feb 13 19:11:28 2018 +0100
 
-debug: add stack tracking
+segtype: replace mempool allocation
 
+So this is a bit more complex and possibly worth futher checking.
+
+ATM  clvmd drops  cmd->mem  mempool AFTER refresh of cmd.
+So anything allocating from cmd->mem during toolcontext init
+will likely die at some point in time.
+
+As a quick fix - just use regular malloc/free for 'dso' alloction.
+
+It's worth to note -  cmd->libmem seems to be often misused
+causing hidden memleaking for clvmd.
 ---
- lib/locking/cluster_locking.c |   15 +++++++--------
- 1 files changed, 7 insertions(+), 8 deletions(-)
+ lib/activate/activate.c |    2 +-
+ lib/mirror/mirrored.c   |    1 +
+ lib/raid/raid.c         |    8 ++++++--
+ lib/snapshot/snapshot.c |    1 +
+ lib/thin/thin.c         |    1 +
+ 5 files changed, 10 insertions(+), 3 deletions(-)
 
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index e2f8123..038f6b6 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -211,11 +211,10 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index bd1dc18..1b870f7 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1692,7 +1692,7 @@ char *get_monitor_dso_path(struct cmd_context *cmd, int id)
  
- 	*num = 0;
+ 	get_shared_library_path(cmd, libpath, path, sizeof(path));
  
--	if (_clvmd_sock == -1)
--		_clvmd_sock = _open_local_sock(0);
--
--	if (_clvmd_sock == -1)
--		return 0;
-+	if (_clvmd_sock == -1) {
-+		if ((_clvmd_sock = _open_local_sock(0)) == -1)
-+			return_0;
-+	}
+-	return dm_pool_strdup(cmd->mem, path);
++	return dm_strdup(path);
+ }
  
- 	/* 1 byte is used from struct clvm_header.args[1], so -> len - 1 */
- 	_build_header(head, clvmd_cmd, node, len - 1);
-@@ -224,7 +223,7 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
- 	status = _send_request(outbuf, sizeof(struct clvm_header) +
- 			      strlen(head->node) + len - 1, &retbuf);
- 	if (!status)
--		goto out;
-+		goto_out;
+ static char *_build_target_uuid(struct cmd_context *cmd, const struct logical_volume *lv)
+diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
+index 2d9c3de..1a8f1bb 100644
+--- a/lib/mirror/mirrored.c
++++ b/lib/mirror/mirrored.c
+@@ -531,6 +531,7 @@ static int _mirrored_modules_needed(struct dm_pool *mem,
  
- 	/* Count the number of responses we got */
- 	head = (struct clvm_header *) retbuf;
-@@ -245,7 +244,7 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
- 	if (!(rarray = dm_malloc(sizeof(lvm_response_t) * num_responses))) {
- 		errno = ENOMEM;
- 		status = 0;
--		goto out;
-+		goto_out;
+ static void _mirrored_destroy(struct segment_type *segtype)
+ {
++	dm_free(segtype->dso);
+ 	dm_free(segtype);
+ }
+ 
+diff --git a/lib/raid/raid.c b/lib/raid/raid.c
+index e835160..8ae679e 100644
+--- a/lib/raid/raid.c
++++ b/lib/raid/raid.c
+@@ -363,6 +363,7 @@ static int _raid_target_status_compatible(const char *type)
+ 
+ static void _raid_destroy(struct segment_type *segtype)
+ {
++	dm_free(segtype->dso);
+ 	dm_free((void *) segtype);
+ }
+ 
+@@ -629,7 +630,8 @@ static struct segment_type *_init_raid_segtype(struct cmd_context *cmd,
+ 	segtype->flags = SEG_RAID | SEG_ONLY_EXCLUSIVE | rt->extra_flags;
+ 
+ 	/* Never monitor raid0 or raid0_meta LVs */
+-	if (!segtype_is_any_raid0(segtype)) {
++	if (!segtype_is_any_raid0(segtype) &&
++	    dso && (dso = dm_strdup(dso))) {
+ 		segtype->dso = dso;
+ 		segtype->flags |= monitored;
  	}
+@@ -650,7 +652,7 @@ int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *segl
+ #endif
+ {
+ 	struct segment_type *segtype;
+-	const char *dso;
++	const char *dso = NULL;
+ 	unsigned i;
+ 	uint64_t monitored = 0;
  
- 	/* Unpack the response into an lvm_response_t array */
-@@ -267,7 +266,7 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
- 			dm_free(rarray);
- 			errno = ENOMEM;
- 			status = 0;
--			goto out;
-+			goto_out;
- 		}
+@@ -669,5 +671,7 @@ int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *segl
+ 			/* segtype is already destroyed */
+ 			return_0;
  
- 		strcpy(rarray[i].response, inptr);
++	dm_free(dso);
++
+ 	return 1;
+ }
+diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
+index 1105204..e99acf1 100644
+--- a/lib/snapshot/snapshot.c
++++ b/lib/snapshot/snapshot.c
+@@ -224,6 +224,7 @@ static int _snap_modules_needed(struct dm_pool *mem,
+ 
+ static void _snap_destroy(struct segment_type *segtype)
+ {
++	dm_free(segtype->dso);
+ 	dm_free(segtype);
+ }
+ 
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index dad1bf2..a679784 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -745,6 +745,7 @@ static int _thin_target_present(struct cmd_context *cmd,
+ 
+ static void _thin_destroy(struct segment_type *segtype)
+ {
++	dm_free(segtype->dso);
+ 	dm_free(segtype);
+ }
+ 
 
 
