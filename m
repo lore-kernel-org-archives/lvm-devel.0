@@ -1,90 +1,54 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Mon, 19 Feb 2018 10:46:28 -0500
-Subject: master - locking: move cache dropping to primary locking code
-Message-ID: <201802191546.w1JFkSq6026202@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - debug: capture internal error for too long resource name
+Message-ID: <201802191546.w1JFkSPG026204@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c3bb2b29d441f27d7e1d88f71d934ba8c955b26d
-Commit:        c3bb2b29d441f27d7e1d88f71d934ba8c955b26d
-Parent:        e87fa7c9cef53013efa46033ad037822c70c1bb9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e7f1329cae118ccbfded213eee4895d99d79120b
+Commit:        e7f1329cae118ccbfded213eee4895d99d79120b
+Parent:        c3bb2b29d441f27d7e1d88f71d934ba8c955b26d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 19 16:31:52 2018 +0100
+AuthorDate:    Mon Feb 19 15:30:55 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 19 16:45:05 2018 +0100
+CommitterDate: Mon Feb 19 16:45:10 2018 +0100
 
-locking: move cache dropping to primary locking code
+debug: capture internal error for too long resource name
 
-While 'file-locking' code always dropped cached VG before
-lock was taken - other locking types actually missed this.
-
-So while the cache dropping has been implement for i.e. clvmd,
-actually running command in cluster keept using cache even
-when the lock has been i.e. dropped and taken again.
-
-This rather 'hard-to-hit' error was noticable in some
-tests running in cluster where content of PV has been
-changed (metadata-balance.sh)
-
-Fix the code by moving cache dropping directly lock_vol() function.
-
-TODO: it's kind of strange we should ever need drop_cached_metadata()
-used in several places - this all should happen automatically
-this some futher thinking here is likely needed.
+Should never happen, so just put in internal error instead of silently
+passing some shortened resource name.
 ---
- WHATS_NEW                  |    1 +
- lib/locking/file_locking.c |    5 +----
- lib/locking/locking.c      |    7 +++++++
- 3 files changed, 9 insertions(+), 4 deletions(-)
+ lib/locking/locking.c |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b11de8c..5791930 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.178 - 
- =====================================
-+  Ensure cluster commands drop their device cache before locking VG.
-   Do not report LV as remotely active when it's locally exclusive in cluster.
-   Add deprecate messages for usage of mirrors with mirrorlog.
-   Separate reporting of monitoring status and error status.
-diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
-index 245892e..517a64f 100644
---- a/lib/locking/file_locking.c
-+++ b/lib/locking/file_locking.c
-@@ -60,11 +60,8 @@ static int _file_lock_resource(struct cmd_context *cmd, const char *resource,
- 			return_0;
- 		break;
- 	case LCK_VG:
--		if (!strcmp(resource, VG_SYNC_NAMES)) {
-+		if (!strcmp(resource, VG_SYNC_NAMES))
- 			fs_unlock();
--		} else if (strcmp(resource, VG_GLOBAL))
--			/* Skip cache refresh for VG_GLOBAL - the caller handles it */
--			lvmcache_drop_metadata(resource, 0);
- 
- 		/* LCK_CACHE does not require a real lock */
- 		if (flags & LCK_CACHE)
 diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 1a3ce9d..d61aa35 100644
+index d61aa35..1e1be56 100644
 --- a/lib/locking/locking.c
 +++ b/lib/locking/locking.c
-@@ -336,6 +336,13 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
- 		    !lvmcache_verify_lock_order(vol))
- 			return_0;
+@@ -264,7 +264,7 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
+ 	}
  
-+		if ((flags == LCK_VG_DROP_CACHE) ||
-+		    (strcmp(vol, VG_GLOBAL) && strcmp(vol, VG_SYNC_NAMES))) {
-+			/* Skip dropping cache for internal VG names #global, #sync_names */
-+			log_debug_locking("Dropping cache for %s.", vol);
-+			lvmcache_drop_metadata(vol, 0);
-+		}
-+
- 		/* Lock VG to change on-disk metadata. */
- 		/* If LVM1 driver knows about the VG, it can't be accessed. */
- 		if (!check_lvm1_vg_inactive(cmd, vol))
+ 	if ((is_orphan_vg(resource) || is_global_vg(resource)) && (flags & LCK_CACHE)) {
+-		log_error(INTERNAL_ERROR "P_%s referenced", resource);
++		log_error(INTERNAL_ERROR "P_%s referenced.", resource);
+ 		goto out;
+ 	}
+ 
+@@ -358,8 +358,10 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
+ 		return 0;
+ 	}
+ 
+-	strncpy(resource, vol, sizeof(resource) - 1);
+-	resource[sizeof(resource) - 1] = '\0';
++	if (!dm_strncpy(resource, vol, sizeof(resource))) {
++		log_error(INTERNAL_ERROR "Resource name %s is too long.", vol);
++		return 0;
++	}
+ 
+ 	if (!_lock_vol(cmd, resource, flags, lv_op, lv))
+ 		return_0;
 
 
