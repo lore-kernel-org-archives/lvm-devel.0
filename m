@@ -1,62 +1,70 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 19 Feb 2018 10:46:31 -0500
-Subject: master - tests: correct usage of pipe
-Message-ID: <201802191546.w1JFkVbF026242@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Ren <zren@suse.com>
+Date: Fri, 23 Feb 2018 16:40:34 +0800
+Subject: master - pvmove: reinstantiate clustered pvmove
+In-Reply-To: <12467e01-27ba-a4c3-2499-b5295b8c4c7b@redhat.com>
+References: <201802012058.w11KwnMa018375@lists01.pubmisc.prod.ext.phx2.redhat.com>
+	<5cecc671-dbc2-c0d7-e1a9-64d4bcb68860@suse.com>
+	<d278fca1-00a6-d29b-925f-047aed4c949e@redhat.com>
+	<8bec25ed-2510-a31e-ba01-6bfd26257b52@suse.com>
+	<b77058d3-386c-707e-a0e2-ef4f6c3e9ad6@redhat.com>
+	<e26d3670-c6c5-ca07-eaf2-bbb3352bf28f@suse.com>
+	<f3a6de00-6421-9fda-a4ff-3afb2bab0d5e@redhat.com>
+	<df116b7f-2d69-38aa-a418-95137ba7e9b0@suse.com>
+	<12467e01-27ba-a4c3-2499-b5295b8c4c7b@redhat.com>
+Message-ID: <f9f6bc31-fae2-10c4-4596-872c9969ee25@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e5305f630be818e677572e4c43d2c728a89f54f
-Commit:        8e5305f630be818e677572e4c43d2c728a89f54f
-Parent:        e7f1329cae118ccbfded213eee4895d99d79120b
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 17 11:24:32 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 19 16:45:10 2018 +0100
 
-tests: correct usage of pipe
 
-This is somewhat tricky - for test suite we keep using
-'set -e -o pipefail'  - the effect here is - we get error report
-from any 'failing' command in whole pipeline - thus when something
-like this:   'lvs | head -1'  is used - and  'head' finishes before
-lead 'lvs' is done - it recieves SIGPIPE and exits with error,
-and somewhat misleading gets occasionally reported depending
-of speed of commands.
+On 02/15/2018 09:20 PM, Zdenek Kabelac wrote:
+>> Got it.
+>>>
+>>> We did some more 'brainstorming' - with a result, that it actually 
+>>> doesn't
+>>> matter if LV is activate on more nodes - as long as there is 
+>>> cmirrord running,
+>>> and lvm2 is able to activate LV on multiple nodes - it should be always
+>>> possible to create proper tree mapping.
+>>>
+>>> But let's just see how it will work in reality - it will require 
+>>> some more thinking....
+>>>
+>
+>
+> Hi
+>
+> I've pushed 2 new commits for pvmove and its clustered use-case.
+>
+> So please give them some testing if you can spot something strange or 
+> if you think there could be some better logic behind it.
 
-For this case we have to avoid using standard pipes and rather
-switch to using streamed results with temporary output file.
-This is all nicely handled with bash feature '< <()'.
+Hi Zdenek,
 
-For more info:
-https://stackoverflow.com/questions/41516177/bash-zcat-head-causes-pipefail
----
- test/lib/get.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+Thanks very much. I am just back from holiday today, will find time to 
+have a try.
 
-diff --git a/test/lib/get.sh b/test/lib/get.sh
-index e7139dc..afc10bc 100644
---- a/test/lib/get.sh
-+++ b/test/lib/get.sh
-@@ -47,7 +47,7 @@ lv_field() {
- 
- lv_first_seg_field() {
- 	local r
--	r=$(lvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1" | head -1)
-+	r=$(head -1 < <(lvs --config 'log{prefix=""}' --unbuffered --noheadings -o "$2" "${@:3}" "$1"))
- 	trim_ "$r"
- }
- 
-@@ -74,7 +74,7 @@ lv_field_lv_() {
- lv_tree_devices_() {
- 	local lv="$1/$2"
- 	local type
--	type=$(lv_field "$lv" segtype -a --unbuffered | head -n 1)
-+	type=$(lv_first_seg_field "$lv" segtype -a)
- 	#local orig
- 	#orig=$(lv_field_lv_ "$lv" origin)
- 	# FIXME: should we count in also origins ?
+Regards,
+Eric
+
+>
+> I've tried to accept wider range of active LVs - but it's for
+> further testing still whether it's got any better.
+>
+> https://www.redhat.com/archives/lvm-devel/2018-February/msg00038.html
+> https://www.redhat.com/archives/lvm-devel/2018-February/msg00039.html
+>
+> Regards
+>
+> Zdenek
+>
+> -- 
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
+>
 
 
