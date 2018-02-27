@@ -1,70 +1,54 @@
-From: Eric Ren <zren@suse.com>
-Date: Fri, 23 Feb 2018 16:40:34 +0800
-Subject: master - pvmove: reinstantiate clustered pvmove
-In-Reply-To: <12467e01-27ba-a4c3-2499-b5295b8c4c7b@redhat.com>
-References: <201802012058.w11KwnMa018375@lists01.pubmisc.prod.ext.phx2.redhat.com>
-	<5cecc671-dbc2-c0d7-e1a9-64d4bcb68860@suse.com>
-	<d278fca1-00a6-d29b-925f-047aed4c949e@redhat.com>
-	<8bec25ed-2510-a31e-ba01-6bfd26257b52@suse.com>
-	<b77058d3-386c-707e-a0e2-ef4f6c3e9ad6@redhat.com>
-	<e26d3670-c6c5-ca07-eaf2-bbb3352bf28f@suse.com>
-	<f3a6de00-6421-9fda-a4ff-3afb2bab0d5e@redhat.com>
-	<df116b7f-2d69-38aa-a418-95137ba7e9b0@suse.com>
-	<12467e01-27ba-a4c3-2499-b5295b8c4c7b@redhat.com>
-Message-ID: <f9f6bc31-fae2-10c4-4596-872c9969ee25@suse.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Tue, 27 Feb 2018 08:38:36 -0500
+Subject: master - tests: check vgsplit thin-data and ext.origin
+Message-ID: <201802271338.w1RDcaCe012259@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=32bcdd90ae7c847e7b4fc5cc5184c581a4f6484a
+Commit:        32bcdd90ae7c847e7b4fc5cc5184c581a4f6484a
+Parent:        8e5305f630be818e677572e4c43d2c728a89f54f
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Feb 27 13:45:39 2018 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Feb 27 14:37:47 2018 +0100
 
+tests: check vgsplit thin-data and ext.origin
 
-On 02/15/2018 09:20 PM, Zdenek Kabelac wrote:
->> Got it.
->>>
->>> We did some more 'brainstorming' - with a result, that it actually 
->>> doesn't
->>> matter if LV is activate on more nodes - as long as there is 
->>> cmirrord running,
->>> and lvm2 is able to activate LV on multiple nodes - it should be always
->>> possible to create proper tree mapping.
->>>
->>> But let's just see how it will work in reality - it will require 
->>> some more thinking....
->>>
->
->
-> Hi
->
-> I've pushed 2 new commits for pvmove and its clustered use-case.
->
-> So please give them some testing if you can spot something strange or 
-> if you think there could be some better logic behind it.
+---
+ test/shell/vgsplit-thin.sh |   20 ++++++++++++++++++++
+ 1 files changed, 20 insertions(+), 0 deletions(-)
 
-Hi Zdenek,
-
-Thanks very much. I am just back from holiday today, will find time to 
-have a try.
-
-Regards,
-Eric
-
->
-> I've tried to accept wider range of active LVs - but it's for
-> further testing still whether it's got any better.
->
-> https://www.redhat.com/archives/lvm-devel/2018-February/msg00038.html
-> https://www.redhat.com/archives/lvm-devel/2018-February/msg00039.html
->
-> Regards
->
-> Zdenek
->
-> -- 
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
->
+diff --git a/test/shell/vgsplit-thin.sh b/test/shell/vgsplit-thin.sh
+index 0e4572e..a2d0a0b 100644
+--- a/test/shell/vgsplit-thin.sh
++++ b/test/shell/vgsplit-thin.sh
+@@ -44,3 +44,23 @@ lvs -a -o+devices $vg1 $vg2
+ vgmerge $vg1 $vg2
+ 
+ vgremove -ff $vg1
++
++# Test vgsplit with ext.origin:
++if aux have_thin 1 5 0; then
++vgcreate "$vg1" "${DEVICES[@]}"
++lvcreate -T -L8M $vg1/pool1 -V10M -n $lv1 "$dev1" "$dev2"
++lvcreate -l1 -an -pr -n $lv2 $vg1 "$dev3"
++lvcreate -s $vg1/$lv2 -n $lv3 --thinpool $vg1/pool1
++lvcreate -l1 -n $lv4 $vg1 "$dev4"
++vgchange -an $vg1
++
++# Can not split ext.origin from thin-data:
++not vgsplit $vg1 $vg2 "$dev1" "$dev2"
++not vgsplit $vg1 $vg2 "$dev3"
++
++vgsplit $vg1 $vg2 "$dev1" "$dev2" "$dev3"
++
++vgmerge $vg1 $vg2
++
++vgremove -ff $vg1
++fi
 
 
