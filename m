@@ -1,67 +1,48 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Mar 2018 12:26:07 -0400
-Subject: master - tests: shellcheck misc
-Message-ID: <201803231626.w2NGQ7uV032008@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 6 Mar 2018 09:46:06 -0500
+Subject: master - lvremove: validate removed component LV is not active
+Message-ID: <201803061446.w26Ek6Rp026718@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a48fb47b771c3f4db4222f0fdaf5eb462803ac5
-Commit:        3a48fb47b771c3f4db4222f0fdaf5eb462803ac5
-Parent:        1507956383b9b28e52051ecf56d754e8cda6e025
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=73e93ef5e5e42018c701149a51db17e247dbb9a6
+Commit:        73e93ef5e5e42018c701149a51db17e247dbb9a6
+Parent:        ca9cbd92c40affa5ea5597de2d0ebd18382d9dab
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 23 17:01:13 2018 +0100
+AuthorDate:    Fri Mar 2 16:32:05 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 23 17:25:00 2018 +0100
+CommitterDate: Tue Mar 6 15:42:07 2018 +0100
 
-tests: shellcheck misc
+lvremove: validate removed component LV is not active
 
-Few more minor complains from ShellCheck.
+This is the 'last' place where a LV is present in metadata.
+Any removed device should not be left active in dm table.
+So this check is an extra validation protection to capture any
+forgotten deactivation (adding 1 extra ioctl into lvremove path)
 ---
- test/lib/check.sh |    4 ++--
- test/lib/utils.sh |    4 ++--
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ lib/metadata/lv_manip.c |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index 3c7b81a..ed4f8d7 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -240,10 +240,10 @@ in_sync() {
- 	fi
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 915a032..ff82b2d 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1518,6 +1518,13 @@ int lv_reduce(struct logical_volume *lv, uint32_t extents)
+ 	if (lv_is_raid(lv) && extents != lv->le_count)
+ 		extents =_round_to_stripe_boundary(lv->vg, extents,
+ 						   seg_is_raid1(seg) ? 0 : _raid_stripes_count(seg), 0);
++
++	if ((extents == lv->le_count) && lv_is_component(lv) && lv_is_active(lv)) {
++		/* When LV is removed, make sure it is inactive */
++		log_error(INTERNAL_ERROR "Removing still active LV %s.", display_lvname(lv));
++		return 0;
++	}
++
+ 	return _lv_reduce(lv, extents, 1);
+ }
  
- 	if [[ ${a[$(( idx - 1 ))]} =~ a ]] ; then
--		[ $ignore_a -eq 0 ] && \
-+		[ "$ignore_a" = 0 ] && \
- 			die "$lvm_name ($type$snap) in-sync, but 'a' characters in health status"
- 		echo "$lvm_name ($type$snap) is not in-sync"
--		[ $ignore_a -eq 1 ] && return 0
-+		[ "$ignore_a" = 1 ] && return 0
- 		return 1
- 	fi
- 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index f2a4bde..36fbf06 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -39,7 +39,7 @@ rand_bytes() {
- 
- 	# Ensure that $data has length at least 50+$n
- 	while :; do
--		len=$(echo "$data" | wc -c)
-+		len=${#data} # number of chars in $data
- 		test "$n_plus_50" -le "$len" && break;
- 		data=$( (echo "$data"; eval "$cmds") 2>&1 | gzip )
- 	done
-@@ -112,7 +112,7 @@ stacktrace() {
- 	# i=1 - ignoring innermost frame - it is always stacktrace function
- 	local i=1 n=${#BASH_LINENO[*]}
- 	# n-=1 - ignoring last frame as well - it is not interesting
--	let n-=1
-+	n=$(( n - 1 ))
- 
- 	echo "## - $0:${BASH_LINENO[$((n-1))]}"
- 	while [[ $i -lt $n ]]; do
 
 
