@@ -1,64 +1,53 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 13 Mar 2018 08:13:07 -0400
-Subject: master - cleanup: use path on stack
-Message-ID: <201803131213.w2DCD79O004731@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 6 Mar 2018 09:45:50 -0500
+Subject: master - lvcreate: fix activation of cached LV
+Message-ID: <201803061445.w26EjoDT026647@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e095586d9e280877be336ed312368e657114ce14
-Commit:        e095586d9e280877be336ed312368e657114ce14
-Parent:        0edd89fadc3725080136e3d5a638d7df4abe9b95
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=23de09aeb87ec10bd1a553ea8868e2f946117232
+Commit:        23de09aeb87ec10bd1a553ea8868e2f946117232
+Parent:        b2f1254c14b7b86789e542be14041252a652eec2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 9 12:59:13 2018 +0100
+AuthorDate:    Mon Mar 5 12:54:39 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 13 12:57:08 2018 +0100
+CommitterDate: Tue Mar 6 15:39:27 2018 +0100
 
-cleanup: use path on stack
+lvcreate: fix activation of cached LV
 
+Since LV for caching can be already a stacked LV, proper activation
+needs to use lock holding LV.
 ---
- lib/metadata/mirror.c |   16 +++++-----------
- 1 files changed, 5 insertions(+), 11 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/lvcreate.c |    2 ++
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 4a0e99f..6419b5c 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -270,7 +270,7 @@ int shift_mirror_images(struct lv_segment *mirrored_seg, unsigned mimage)
- static int _write_log_header(struct cmd_context *cmd, struct logical_volume *lv)
- {
- 	struct device *dev;
--	char *name;
-+	char name[PATH_MAX];
- 	struct { /* The mirror log header */
- 		uint32_t magic;
- 		uint32_t version;
-@@ -281,20 +281,14 @@ static int _write_log_header(struct cmd_context *cmd, struct logical_volume *lv)
- 	log_header.version = xlate32(MIRROR_DISK_VERSION);
- 	log_header.nr_regions = xlate64((uint64_t)-1);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 49b995e..3ed3e5a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.178 - 
+ =====================================
++  Activate correct lock holding LV when it is cached.
+   Do not modify archived metadata when removing striped raid.
+   Fix memleak on error path when obtaining lv_raid_data_offset.
+   Fix compatibility size test of extended external origin.
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 7f86a37..e901968 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -1222,6 +1222,8 @@ static int _determine_cache_argument(struct volume_group *vg,
+ 			return_0; /* FIXME */
  
--	if (!(name = dm_pool_alloc(cmd->mem, PATH_MAX))) {
--		log_error("Name allocation failed - log header not written (%s).",
-+	if (dm_snprintf(name, sizeof(name), "%s%s/%s", cmd->dev_dir,
-+			lv->vg->name, lv->name) < 0) {
-+		log_error("Device path name too long - log header not written (%s).",
- 			  display_lvname(lv));
- 		return 0;
- 	}
- 
--	if (dm_snprintf(name, PATH_MAX, "%s%s/%s", cmd->dev_dir,
--			 lv->vg->name, lv->name) < 0) {
--		log_error("Name too long - log header not written (%s).",
--			  display_lvname(lv));
--		return 0;
--	}
--
--	log_verbose("Writing log header to device %s.", display_lvname(lv));
-+	log_verbose("Writing log header for LV %s to device %s.", display_lvname(lv), name);
- 
- 	if (!(dev = dev_cache_get(name, NULL))) {
- 		log_error("%s: not found: log header not written.", name);
+ 		/* Put origin into resulting activation state first */
++		lv = (struct logical_volume *)lv_lock_holder(lv);
++
+ 		if (is_change_activating(lp->activate)) {
+ 			if ((lp->activate == CHANGE_AAY) &&
+ 			    !lv_passes_auto_activation_filter(cmd, lv)) {
 
 
